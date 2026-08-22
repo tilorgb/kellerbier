@@ -8,6 +8,7 @@ import {
   setActionDown,
 } from '../../src/sim/input/frame.js';
 import { RoomGeometry } from '../../src/sim/room/geometry.js';
+import { stepCollision } from '../../src/sim/systems/collision.js';
 
 /**
  * The pooled hot loop, measured the same way `ecs-allocation.test.ts` measures
@@ -109,4 +110,40 @@ describe('projectile pool allocation behaviour', () => {
     expect(String(warn.mock.calls[0]?.[0])).toMatch(/projectiles/);
     warn.mockRestore();
   });
+});
+
+describe('collision allocation behaviour', () => {
+  it('resolves a full field without allocating', () => {
+    const gc = requireGc();
+    const sim = new GameSim({ capacity: 4096, projectileCapacity: 2000 });
+    for (let enemy = 0; enemy < 100; enemy++) {
+      sim.spawnTarget(60 + (enemy % 10) * 50, 60 + Math.floor(enemy / 10) * 25, 8);
+    }
+    sim.world.flush();
+
+    const shots = sim.projectiles;
+    const pass = (): void => {
+      shots.clear();
+      for (let shot = 0; shot < 2000; shot++) {
+        shots.spawn(40 + (shot % 100) * 5, 40 + ((shot / 100) | 0) * 15, 1, 0, 3, 1, 600, 0);
+      }
+      sim.events.clear();
+      stepCollision(sim);
+    };
+
+    for (let warm = 0; warm < 30; warm++) {
+      pass();
+    }
+
+    gc();
+    const before = process.memoryUsage().heapUsed;
+    for (let round = 0; round < 20; round++) {
+      pass();
+    }
+    const perPass = (process.memoryUsage().heapUsed - before) / 20;
+
+    expect(perPass, `${(perPass / 1024).toFixed(1)} KB per full-field collision pass`).toBeLessThan(
+      ZERO_ALLOCATION_BUDGET_BYTES,
+    );
+  }, 30_000);
 });

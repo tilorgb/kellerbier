@@ -1,12 +1,14 @@
 import { Container, Sprite, type Texture } from 'pixi.js';
 import type { GameSim } from '../sim/game/sim.js';
 import { lerp } from '../sim/math.js';
+import { EntityView } from './entities.js';
 import { ProjectileView } from './projectiles.js';
 import { createRoomView } from './room.js';
 
 export interface GameViewTextures {
   readonly player: Texture;
   readonly projectile: Texture;
+  readonly entity: Texture;
 }
 
 /**
@@ -26,10 +28,14 @@ export class GameView {
   private readonly sim: GameSim;
   private readonly player: Sprite;
   private readonly projectiles: ProjectileView;
+  private readonly entities: EntityView;
 
   constructor(sim: GameSim, textures: GameViewTextures) {
     this.sim = sim;
     this.stage.addChild(createRoomView(sim.room));
+
+    this.entities = new EntityView(sim, textures.entity);
+    this.stage.addChild(this.entities.container);
 
     this.projectiles = new ProjectileView(sim.projectiles, textures.projectile);
     this.stage.addChild(this.projectiles.container);
@@ -41,6 +47,7 @@ export class GameView {
 
   /** `alpha` is the fraction of a tick elapsed since the last simulation step. */
   sync(alpha: number): void {
+    this.entities.sync(alpha);
     this.projectiles.sync(alpha);
 
     const index = this.sim.playerIndex;

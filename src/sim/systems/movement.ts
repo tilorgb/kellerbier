@@ -1,6 +1,7 @@
 import type { GameSim } from '../game/sim.js';
 import { type InputFrame, axisToUnit } from '../input/frame.js';
 import { type MovementTuning, accelerationOf, decelerationOf } from '../tuning.js';
+import { vectorLength } from '../math.js';
 import {
   BLOCKED_X,
   BLOCKED_Y,
@@ -52,7 +53,7 @@ export function stepPlayerMovement(sim: GameSim, input: Readonly<InputFrame>): v
 
   // The sampler already scales a diagonal stick or key pair to unit length, so
   // this only trims the overshoot a mid-turn direction change can produce.
-  const speed = Math.hypot(velocityX, velocityY);
+  const speed = vectorLength(velocityX, velocityY);
   if (speed > tuning.maxSpeed) {
     const scale = tuning.maxSpeed / speed;
     velocityX *= scale;
@@ -112,7 +113,7 @@ export function addPush(sim: GameSim, index: number, x: number, y: number): void
   // compound without limit. Nothing does that today; an item that pushes fire
   // rate very high would, and that item is on the roadmap.
   const limit = sim.tuning.movement.maxPush;
-  const magnitude = Math.hypot(pushX, pushY);
+  const magnitude = vectorLength(pushX, pushY);
   if (magnitude > limit) {
     pushX = (pushX / magnitude) * limit;
     pushY = (pushY / magnitude) * limit;
