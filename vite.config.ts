@@ -25,7 +25,10 @@ export default defineConfig({
   },
   test: {
     include: ['tests/**/*.test.ts'],
-    exclude: ['tests/lint/fixtures/**'],
+    // The benchmark is its own pipeline stage and its own command: it is
+    // timing-sensitive, and running it alongside the rest of the suite means
+    // measuring a machine that is busy doing something else.
+    exclude: ['tests/lint/fixtures/**', 'tests/bench/**'],
     // The tree-shaking test runs a real production build.
     testTimeout: 180_000,
     environment: 'node',

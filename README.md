@@ -44,9 +44,22 @@ in the frame loop, spatial-hash broadphase. Target budget is **5,000 active proj
 npm install
 npm run dev        # Vite dev server with hot reload
 npm run test       # Vitest — headless simulation and content-validation tests
-npm run bench      # frame-time benchmark against the entity budget
+npm run bench      # performance budget, run on its own so the timings mean something
+npm run lint       # ESLint, including the architecture rules, plus Prettier
+npm run typecheck  # tsc --noEmit
 npm run build      # production static build
 ```
+
+**Controls:** `WASD` to move, mouse or the arrow keys to aim and fire. `F1` opens the debug
+overlay — frame graph, entity and pool counts, draw calls, hitboxes (`H`) and the spatial-hash
+grid (`G`). Middle-drag pans the camera, `0` recentres, `C` copies the run's seed and tick for
+a bug report.
+
+## Continuous integration
+
+Every push and pull request runs typecheck, lint, the full test suite, the performance budget
+and a production build. Pull requests from this repository also get a **playable preview link**
+posted as a comment — a game is judged by feel, and feel cannot be reviewed in a diff.
 
 ## A note on tone
 
