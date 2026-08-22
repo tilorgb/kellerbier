@@ -1,5 +1,9 @@
 # Kellerbier — Backlog Index
 
+> **Looking for live status?** The [roadmap issue](../../issues?q=is%3Aissue+label%3Aroadmap)
+> is generated from the issue list and shows what is done and what is next. This file is the
+> static index of the original planning backlog; the roadmap issue is the thing to check daily.
+
 60 issues across ten milestones. GitHub milestones are not available through this repo's
 tooling, so milestones are **labels** (`M0`–`M9`) plus a title prefix.
 
@@ -147,3 +151,29 @@ Type: `engine`, `gameplay`, `content`, `art`, `audio`, `tooling`, `perf`, `infra
 
 Labels were auto-created by the API without colours; assigning colours and descriptions is
 part of #60.
+
+The `roadmap` label marks the generated tracking issue. It is excluded from its own counts,
+and only one open issue should ever carry it.
+
+## The roadmap issue
+
+[`.github/workflows/roadmap.yml`](../.github/workflows/roadmap.yml) runs
+[`tools/roadmap/update-roadmap.mjs`](../tools/roadmap/update-roadmap.mjs) on every issue
+event and regenerates the roadmap issue body from the live issue list.
+
+- **Closing** an issue ticks its box and advances its milestone bar.
+- **Opening** an issue adds it automatically. Label it `M0`–`M9` to file it under a milestone;
+  without one it appears under **Needs triage** until labelled.
+- **Relabelling** moves an issue between milestones.
+- Milestone names, exit criteria and the critical path live in
+  [`tools/roadmap/plan.json`](../tools/roadmap/plan.json) — edit that to change the page's shape.
+
+Preview locally without writing anything:
+
+```bash
+node tools/roadmap/update-roadmap.mjs --dry-run          # needs GITHUB_TOKEN + GITHUB_REPOSITORY
+node tools/roadmap/update-roadmap.mjs --render fix.json  # fully offline, from a fixture
+```
+
+The rendered body is deterministic — no timestamps — and the script only writes when the body
+actually changed, so the issue cannot edit-loop on itself.

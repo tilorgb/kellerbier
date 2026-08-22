@@ -17,6 +17,9 @@ a tuba player who shoots sound rings, and König Ludwig II in a swan boat.
 Pre-production. Design docs are in [`docs/`](docs/); the work is tracked in
 [issues](../../issues), grouped by milestone label `M0`–`M9`.
 
+**Current state and what's next: the [roadmap issue](../../issues?q=is%3Aissue+label%3Aroadmap)**,
+regenerated automatically from the issue list on every issue event.
+
 ## Documentation
 
 | Doc | What's in it |
