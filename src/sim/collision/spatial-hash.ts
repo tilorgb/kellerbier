@@ -290,6 +290,21 @@ export class SpatialHash {
     return this.queryStamp;
   }
 
+  /**
+   * Bodies indexed in one cell after the last `build`.
+   *
+   * Only the debug overlay asks. A grid whose occupancy is invisible is a grid
+   * whose cell size is chosen by argument rather than by looking — and cell
+   * size is the one number that decides whether a broadphase is worth having.
+   */
+  occupancyAt(column: number, row: number): number {
+    if (column < 0 || column >= this.columns || row < 0 || row >= this.rows) {
+      return 0;
+    }
+    const cell = row * this.columns + column;
+    return (this.cellStart[cell + 1] ?? 0) - (this.cellStart[cell] ?? 0);
+  }
+
   private columnOf(x: number): number {
     const column = Math.floor(x / this.cellSize);
     return column < 0 ? 0 : column >= this.columns ? this.columns - 1 : column;
