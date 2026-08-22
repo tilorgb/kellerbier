@@ -1,44 +1,12 @@
-import { Assets, Sprite, Text, type Texture } from 'pixi.js';
+import { Assets, Text, type Texture } from 'pixi.js';
 import massUrl from '../../assets/sprites/mass.png';
-import { lerp } from '../sim/math.js';
+import { GameSim } from '../sim/game/sim.js';
 import { TICKS_PER_SECOND } from '../sim/time.js';
 import { createRenderer, trackWindowSize } from '../render/app.js';
 import { INTERNAL_HEIGHT, INTERNAL_WIDTH } from '../render/resolution.js';
+import { GameView } from '../render/view.js';
+import { InputSampler } from './input/sampler.js';
 import { FixedTimestepLoop, runAnimationFrameLoop } from './loop.js';
-
-const SPRITE_SIZE = 16;
-const SPRITE_SCALE = 3;
-
-/**
- * Scaffold scene. A single mug bouncing around the room, integrated at a fixed
- * 60 Hz and drawn interpolated, so the loop's behaviour is visible rather than
- * merely asserted. It is replaced wholesale by the ECS in M1.
- */
-interface ScaffoldState {
-  x: number;
-  y: number;
-  previousX: number;
-  previousY: number;
-  velocityX: number;
-  velocityY: number;
-}
-
-function stepScaffold(state: ScaffoldState): void {
-  state.previousX = state.x;
-  state.previousY = state.y;
-  state.x += state.velocityX;
-  state.y += state.velocityY;
-
-  const halfWidth = (SPRITE_SIZE * SPRITE_SCALE) / 2;
-  if (state.x < halfWidth || state.x > INTERNAL_WIDTH - halfWidth) {
-    state.velocityX = -state.velocityX;
-    state.x += state.velocityX;
-  }
-  if (state.y < halfWidth || state.y > INTERNAL_HEIGHT - halfWidth) {
-    state.velocityY = -state.velocityY;
-    state.y += state.velocityY;
-  }
-}
 
 async function boot(): Promise<void> {
   const host = document.getElementById('game');
@@ -49,12 +17,20 @@ async function boot(): Promise<void> {
   const app = await createRenderer(host);
   trackWindowSize(app.canvas);
 
-  const texture = await Assets.load<Texture>({ src: massUrl, data: { scaleMode: 'nearest' } });
+  const playerTexture = await Assets.load<Texture>({
+    src: massUrl,
+    data: { scaleMode: 'nearest' },
+  });
 
-  const mug = new Sprite(texture);
-  mug.scale.set(SPRITE_SCALE);
-  mug.anchor.set(0.5);
-  app.stage.addChild(mug);
+  // The run seed is fixed until seeded runs land in #48. Everything downstream
+  // of it already behaves as though it were chosen, which is the point.
+  const sim = new GameSim({ seed: 1 });
+  const view = new GameView(sim, { player: playerTexture });
+  app.stage.addChild(view.stage);
+
+  const input = new InputSampler();
+  input.keyboard.attach(window, app.canvas, INTERNAL_WIDTH, INTERNAL_HEIGHT);
+  input.gamepad.attach(window);
 
   const hud = new Text({
     text: '',
@@ -63,24 +39,16 @@ async function boot(): Promise<void> {
   hud.position.set(8, 8);
   app.stage.addChild(hud);
 
-  const state: ScaffoldState = {
-    x: INTERNAL_WIDTH / 2,
-    y: INTERNAL_HEIGHT / 2,
-    previousX: INTERNAL_WIDTH / 2,
-    previousY: INTERNAL_HEIGHT / 2,
-    velocityX: 2.7,
-    velocityY: 1.7,
-  };
-
   const loop = new FixedTimestepLoop({
     step: () => {
-      stepScaffold(state);
+      // Mouse aim is measured from the player, so the sampler is told where the
+      // player is before it reads the pointer.
+      const index = sim.playerIndex;
+      input.setAimOrigin(sim.positionX(index), sim.positionY(index));
+      sim.step(input.sample());
     },
     render: (alpha) => {
-      mug.position.set(
-        lerp(state.previousX, state.x, alpha),
-        lerp(state.previousY, state.y, alpha),
-      );
+      view.sync(alpha);
     },
   });
 
@@ -90,7 +58,7 @@ async function boot(): Promise<void> {
     const seconds = (loop.tick / TICKS_PER_SECOND).toFixed(2);
     const scale = loop.timeScale.toFixed(2);
     hud.text = `tick ${String(loop.tick)}  ${seconds}s  x${scale}${loop.paused ? '  PAUSED' : ''}
-P pause   . step   [ ] time scale   R reset`;
+WASD move   P pause   . step   [ ] time scale`;
   };
   refreshHud();
 
@@ -109,10 +77,6 @@ P pause   . step   [ ] time scale   R reset`;
       case ']':
         loop.timeScale = Math.min(8, loop.timeScale * 2);
         break;
-      case 'r':
-      case 'R':
-        loop.reset();
-        break;
       default:
         return;
     }
@@ -122,33 +86,33 @@ P pause   . step   [ ] time scale   R reset`;
   runAnimationFrameLoop(loop);
   window.setInterval(refreshHud, 100);
 
-  exposeDebugHandle(loop);
+  exposeDebugHandle(loop, sim);
 }
 
 /**
- * Debug handle for measuring the loop against a real clock from the console.
+ * Debug handle, dev builds only — compiled out of a production bundle.
  *
- * Dev builds only — it is compiled out of a production bundle. The real debug
- * surface arrives with the overlay in #8; this is the minimum needed to check
- * the tick rate on hardware, where the tab is actually visible and
- * requestAnimationFrame is not throttled:
+ * `__kellerbier.tuning.movement` is the live tuning object. Assigning to a
+ * field on it changes how the player moves on the very next tick, with no
+ * rebuild, which is what makes tuning by feel practical before the debug
+ * overlay's sliders arrive in #8:
  *
- *   const l = __kellerbier.loop, t0 = l.tick, w0 = performance.now();
- *   setTimeout(() => {
- *     const s = (performance.now() - w0) / 1000;
- *     console.log((l.tick - t0) / s, 'ticks/second over', s, 'seconds');
- *   }, 60_000);
+ *   __kellerbier.tuning.movement.maxSpeed = 4;
  */
 interface DebugHost {
-  __kellerbier?: { loop: FixedTimestepLoop };
+  __kellerbier?: {
+    loop: FixedTimestepLoop;
+    sim: GameSim;
+    tuning: GameSim['tuning'];
+  };
 }
 
-function exposeDebugHandle(loop: FixedTimestepLoop): void {
+function exposeDebugHandle(loop: FixedTimestepLoop, sim: GameSim): void {
   if (!import.meta.env.DEV) {
     return;
   }
-  (globalThis as unknown as DebugHost).__kellerbier = { loop };
-  console.warn('__kellerbier.loop is exposed for debugging (dev build only)');
+  (globalThis as unknown as DebugHost).__kellerbier = { loop, sim, tuning: sim.tuning };
+  console.warn('__kellerbier is exposed for debugging (dev build only)');
 }
 
 void boot().catch((error: unknown) => {
