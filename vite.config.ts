@@ -26,5 +26,9 @@ export default defineConfig({
   test: {
     include: ['tests/**/*.test.ts'],
     environment: 'node',
+    // The allocation-delta test needs to force a collection before and after
+    // the hot loop, otherwise it is measuring GC timing rather than garbage.
+    pool: 'forks',
+    execArgv: ['--expose-gc'],
   },
 });
