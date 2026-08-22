@@ -20,10 +20,14 @@ import { World } from '../../src/sim/ecs/world.js';
  *
  * V8 also removes allocations it can prove do not escape, which makes a naive
  * "allocate and drop it" control silently optimise away and the test pass for
- * the wrong reason. The control below retains its objects for the duration of a
- * pass, which defeats scalar replacement — and the control is asserted on, so
- * if V8 ever does learn to elide it, this suite fails loudly instead of going
- * quietly vacuous.
+ * the wrong reason. The control below retains its objects, which defeats scalar
+ * replacement — and the control is asserted on, so if V8 ever does learn to
+ * elide it, this suite fails loudly instead of going quietly vacuous.
+ *
+ * It retains them for the whole measured window rather than for one pass. A
+ * scavenge landing mid-window would otherwise reclaim earlier passes' objects
+ * and the control would measure a fraction of what it allocated — which is how
+ * an allocation guard becomes flaky, and a flaky guard is one that gets muted.
  */
 
 const forceGc = (globalThis as { gc?: () => void }).gc;
@@ -45,8 +49,14 @@ function requireGc(): () => void {
   return forceGc;
 }
 
-/** Heap bytes allocated per call of `pass`, measured with nothing reclaimed in between. */
-function bytesPerPass(pass: () => void): number {
+/**
+ * Heap bytes allocated per call of `pass`, measured with nothing reclaimed in
+ * between.
+ *
+ * `prepare` runs after warm-up and before the forced collection, for a pass
+ * that needs somewhere to retain the window's output.
+ */
+function bytesPerPass(pass: () => void, prepare?: () => void): number {
   const gc = requireGc();
 
   // Let V8 tier up to optimised code first; the tiering itself allocates, and
@@ -55,6 +65,7 @@ function bytesPerPass(pass: () => void): number {
     pass();
   }
 
+  prepare?.();
   gc();
   const before = process.memoryUsage().heapUsed;
   for (let i = 0; i < PASSES; i++) {
@@ -64,7 +75,15 @@ function bytesPerPass(pass: () => void): number {
   return (after - before) / PASSES;
 }
 
-function buildWorld(): { world: World; integrate: () => void; integrateWithGarbage: () => void } {
+interface WorldHarness {
+  readonly world: World;
+  readonly integrate: () => void;
+  readonly integrateWithGarbage: () => void;
+  /** Gives the control a fresh, empty place to retain the measured window. */
+  readonly retainWindow: () => void;
+}
+
+function buildWorld(): WorldHarness {
   const world = new World({ capacity: ENTITY_COUNT });
   const position = world.defineComponent('position', Float32Array, 2);
   const velocity = world.defineComponent('velocity', Float32Array, 2);
@@ -100,9 +119,18 @@ function buildWorld(): { world: World; integrate: () => void; integrateWithGarba
     }
   }
 
-  // The control: the same work written the way that ruins JS games. Objects are
-  // retained for the pass so V8 cannot scalar-replace them out of existence.
-  const retained = new Array<{ x: number; y: number }>(ENTITY_COUNT);
+  // The control: the same work written the way that ruins JS games. Every
+  // object produced is retained, so V8 cannot scalar-replace them away and a
+  // scavenge inside the measured window promotes them rather than reclaiming
+  // them.
+  let retained = new Array<{ x: number; y: number }>(ENTITY_COUNT);
+  let retainCursor = 0;
+
+  function retainWindow(): void {
+    retained = new Array<{ x: number; y: number }>(ENTITY_COUNT * PASSES);
+    retainCursor = 0;
+  }
+
   function integrateWithGarbage(): void {
     const states = world.states;
     const masks = world.masks;
@@ -122,13 +150,14 @@ function buildWorld(): { world: World; integrate: () => void; integrateWithGarba
         x: (px[offset] ?? 0) + (vx[offset] ?? 0),
         y: (px[offset + 1] ?? 0) + (vx[offset + 1] ?? 0),
       };
-      retained[index] = next;
+      retained[retainCursor] = next;
+      retainCursor = (retainCursor + 1) % retained.length;
       px[offset] = next.x;
       px[offset + 1] = next.y;
     }
   }
 
-  return { world, integrate, integrateWithGarbage };
+  return { world, integrate, integrateWithGarbage, retainWindow };
 }
 
 describe('ECS allocation behaviour', () => {
@@ -144,8 +173,8 @@ describe('ECS allocation behaviour', () => {
   }, 30_000);
 
   it('detects allocation when it is there, so the measurement above means something', () => {
-    const { integrateWithGarbage } = buildWorld();
-    const perPass = bytesPerPass(integrateWithGarbage);
+    const { integrateWithGarbage, retainWindow } = buildWorld();
+    const perPass = bytesPerPass(integrateWithGarbage, retainWindow);
 
     expect(
       perPass,
