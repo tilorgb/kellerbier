@@ -1,0 +1,38 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# build output
+dist/
+dist-ssr/
+build/
+*.local
+
+# test & coverage
+coverage/
+.vitest/
+
+# benchmark artifacts
+bench-results/*.json
+!bench-results/baseline.json
+
+# generated assets
+assets/atlases/*.png
+assets/atlases/*.json
+
+# editor
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+
+# os
+.DS_Store
+Thumbs.db
+
+# logs
+*.log
+npm-debug.log*
+yarn-error.log*
