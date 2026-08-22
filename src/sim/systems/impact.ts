@@ -16,6 +16,9 @@ import { addPush } from './movement.js';
  * It reads the event queue rather than being called by collision, which is what
  * lets any of it be retuned, weakened for accessibility, or switched off
  * entirely without touching the code that decided a hit happened.
+ *
+ * @hot — runs in the frame loop. Nothing in here may allocate; see the
+ * `no-hot-allocation` rule in tools/eslint/.
  */
 export function stepImpact(sim: GameSim): void {
   const events = sim.events;

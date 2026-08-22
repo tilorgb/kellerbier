@@ -10,6 +10,9 @@ import { NO_SLOT, SlotPool } from '../pool/slot-pool.js';
  * a pool over flat typed arrays gives.
  *
  * Storage is fixed at construction and never grows.
+ *
+ * @hot — runs in the frame loop. Nothing in here may allocate; see the
+ * `no-hot-allocation` rule in tools/eslint/.
  */
 
 /** The performance budget, straight from docs/TECH_STACK.md §3. */

@@ -17,6 +17,9 @@
  * Every array is sized at construction. The build is a counting sort: count how
  * many entries land in each cell, prefix-sum the counts into offsets, then fill
  * a single flat entry array. No per-cell arrays, no push, nothing to collect.
+ *
+ * @hot — runs in the frame loop. Nothing in here may allocate; see the
+ * `no-hot-allocation` rule in tools/eslint/.
  */
 
 /** Grid cell size. Sized to the largest common collider so a body spans few cells. */

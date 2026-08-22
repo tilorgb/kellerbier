@@ -1,11 +1,20 @@
 import js from '@eslint/js';
+import { architectureRules } from './tools/eslint/architecture.js';
 import prettier from 'eslint-config-prettier';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['dist/**', 'coverage/**', 'node_modules/**', 'assets/atlases/**'],
+    ignores: [
+      'dist/**',
+      'coverage/**',
+      'node_modules/**',
+      'assets/atlases/**',
+      // Deliberate rule violations, linted by the architecture test rather than
+      // by the project lint — they exist to fail.
+      'tests/lint/fixtures/**',
+    ],
   },
   js.configs.recommended,
   {
@@ -51,42 +60,6 @@ export default tseslint.config(
       'no-console': 'off',
     },
   },
-  {
-    // The simulation must be a pure function of its seed and its input log.
-    // Any of these would make a run unreproducible, which takes seeded runs,
-    // the daily run, replays and reproducible bug reports down with it.
-    files: ['src/sim/**/*.ts'],
-    rules: {
-      'no-restricted-properties': [
-        'error',
-        {
-          object: 'Math',
-          property: 'random',
-          message:
-            'Math.random is banned in src/sim/. Draw from a seeded Rng stream instead — see src/sim/rng/streams.ts.',
-        },
-        {
-          object: 'Date',
-          property: 'now',
-          message:
-            'src/sim/ must not read the wall clock. Simulation time is the integer tick counter — see src/sim/time.ts.',
-        },
-        {
-          object: 'performance',
-          property: 'now',
-          message:
-            'src/sim/ must not read the wall clock. Simulation time is the integer tick counter — see src/sim/time.ts.',
-        },
-      ],
-      'no-restricted-globals': [
-        'error',
-        {
-          name: 'Date',
-          message:
-            'src/sim/ must not read the wall clock. Simulation time is the integer tick counter.',
-        },
-      ],
-    },
-  },
+  ...architectureRules,
   prettier,
 );

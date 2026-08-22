@@ -10,6 +10,9 @@ import { BLOCK_STRIDE, type RoomGeometry } from '../room/geometry.js';
  *
  * Shared by the player, and by every enemy once they arrive: anything that
  * walks obeys the same wall rules, so there is one implementation of them.
+ *
+ * @hot — runs in the frame loop. Nothing in here may allocate; see the
+ * `no-hot-allocation` rule in tools/eslint/.
  */
 
 /** Bits returned by `moveBody`, saying which axes ran into something. */

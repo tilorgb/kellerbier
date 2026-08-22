@@ -6,6 +6,9 @@
  * general-purpose physics — see docs/TECH_STACK.md §2.
  *
  * Every function here takes and returns numbers. Nothing allocates.
+ *
+ * @hot — runs in the frame loop. Nothing in here may allocate; see the
+ * `no-hot-allocation` rule in tools/eslint/.
  */
 
 /** True when the circle and the box overlap at all. */
