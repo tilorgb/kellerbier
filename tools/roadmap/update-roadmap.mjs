@@ -263,9 +263,14 @@ if (renderIdx !== -1) {
     process.exit(0);
   }
 
-  // Guard: an edit we make must never be the thing that triggers the next run.
-  if (process.env.TRIGGERING_ISSUE === String(roadmap.number)) {
-    console.log(`Triggered by the roadmap issue itself (#${roadmap.number}); nothing to do.`);
+  // Guard: our own PATCH fires an `edited` event on the roadmap issue, so ignore that one
+  // case. Scoped to `edited` deliberately — the roadmap issue's own `opened` and `labeled`
+  // events are how it first gets populated, and must not be suppressed.
+  if (
+    process.env.TRIGGERING_ISSUE === String(roadmap.number) &&
+    process.env.TRIGGERING_ACTION === 'edited'
+  ) {
+    console.log(`Triggered by our own edit to roadmap #${roadmap.number}; nothing to do.`);
     process.exit(0);
   }
 

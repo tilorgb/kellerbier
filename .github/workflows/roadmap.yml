@@ -36,6 +36,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          # Guard against an edit-loop: if this run was triggered by the roadmap issue
-          # itself, the script exits without writing.
+          # Guard against an edit-loop: our own PATCH fires an `edited` event on the
+          # roadmap issue. The script ignores that one combination, and only that one —
+          # the roadmap issue's own `opened`/`labeled` events are how it first fills in.
           TRIGGERING_ISSUE: ${{ github.event.issue.number }}
+          TRIGGERING_ACTION: ${{ github.event.action }}
