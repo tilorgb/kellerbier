@@ -35,6 +35,11 @@ export interface GameViewTextures {
 export class GameView {
   readonly stage = new Container();
 
+  /** The container everything in the room lives in. The overlay draws into it. */
+  get worldLayer(): Container {
+    return this.world;
+  }
+
   private readonly sim: GameSim;
   private readonly player: Sprite;
   private readonly projectiles: ProjectileView;
@@ -52,6 +57,16 @@ export class GameView {
    * unbearable.
    */
   private readonly world = new Container();
+
+  /**
+   * Free-camera offset, in pixels.
+   *
+   * Zero in a normal run. The debug overlay drives it so a scene can be looked
+   * at from outside the room — which is how a collider sitting where nothing is
+   * drawn gets found.
+   */
+  cameraX = 0;
+  cameraY = 0;
 
   constructor(sim: GameSim, textures: GameViewTextures) {
     this.sim = sim;
@@ -98,6 +113,9 @@ export class GameView {
     // Rounded to whole pixels. A camera offset by a fraction of a pixel makes
     // every sprite in the room resample, which on pixel art looks like the
     // whole screen crawling.
-    this.world.position.set(Math.round(this.sim.shakeX), Math.round(this.sim.shakeY));
+    this.world.position.set(
+      Math.round(this.sim.shakeX + this.cameraX),
+      Math.round(this.sim.shakeY + this.cameraY),
+    );
   }
 }

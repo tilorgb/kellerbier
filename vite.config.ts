@@ -26,6 +26,8 @@ export default defineConfig({
   test: {
     include: ['tests/**/*.test.ts'],
     exclude: ['tests/lint/fixtures/**'],
+    // The tree-shaking test runs a real production build.
+    testTimeout: 180_000,
     environment: 'node',
     // The allocation-delta test needs to force a collection before and after
     // the hot loop, otherwise it is measuring GC timing rather than garbage.

@@ -48,22 +48,49 @@ async function boot(): Promise<void> {
 
   const hud = new Text({
     text: '',
-    style: { fill: 0x8a7f74, fontFamily: 'monospace', fontSize: 12 },
+    style: { fill: 0x8a7f74, fontFamily: 'monospace', fontSize: 9 },
   });
-  hud.position.set(8, 8);
+  // Bottom-left, out of the debug overlay's panel column. The overlay is the
+  // tool that gets looked at; this line is just the controls.
+  hud.position.set(6, INTERNAL_HEIGHT - 34);
   app.stage.addChild(hud);
+
+  // The overlay is created asynchronously and may never arrive — in a
+  // production build the import below is never reached and the whole of
+  // `src/debug/` is dropped from the bundle.
+  let overlay: DebugOverlayHandle | null = null;
+
+  let simMs = 0;
+  // Milliseconds of deliberate stall to burn on the next step. The debug handle
+  // sets it; it is how the frame graph gets checked against a known spike
+  // rather than against a hope that one will turn up.
+  let stallMs = 0;
 
   const loop = new FixedTimestepLoop({
     step: () => {
+      const started = performance.now();
+      if (stallMs > 0) {
+        const until = started + stallMs;
+        stallMs = 0;
+        while (performance.now() < until) {
+          // Busy-wait: a stall has to be spent inside the step being measured.
+        }
+      }
       // Mouse aim is measured from the player, so the sampler is told where the
       // player is before it reads the pointer.
       const index = sim.playerIndex;
       input.setAimOrigin(sim.positionX(index), sim.positionY(index));
       sim.step(input.sample());
       playImpactAudio(sim, SILENT_AUDIO);
+      simMs += performance.now() - started;
     },
     render: (alpha) => {
+      const started = performance.now();
+      overlay?.drawCalls.beginFrame();
       view.sync(alpha);
+      overlay?.sync(alpha);
+      overlay?.record(simMs, performance.now() - started, 0);
+      simMs = 0;
     },
   });
 
@@ -78,7 +105,7 @@ async function boot(): Promise<void> {
 shots ${String(shots.liveCount)}/${String(shots.capacity)}  particles ${String(
       particles.liveCount,
     )}/${String(particles.capacity)}${shots.overflows > 0 ? '  SHOT OVERFLOW' : ''}
-WASD move   arrows/mouse aim and fire   P pause   . step   [ ] time scale`;
+WASD move   arrows/mouse aim and fire   F1 debug   P pause   . step   [ ] time scale`;
   };
   refreshHud();
 
@@ -106,7 +133,47 @@ WASD move   arrows/mouse aim and fire   P pause   . step   [ ] time scale`;
   runAnimationFrameLoop(loop);
   window.setInterval(refreshHud, 100);
 
-  exposeDebugHandle(loop, sim);
+  overlay = await mountDebugOverlay(sim, view, app);
+  exposeDebugHandle(loop, sim, (ms) => {
+    stallMs = ms;
+  });
+}
+
+/**
+ * The half of the overlay this module needs to know about.
+ *
+ * Declared structurally rather than imported, so that naming the overlay here
+ * does not pull `src/debug/` into the production bundle.
+ */
+interface DebugOverlayHandle {
+  sync(alpha: number): void;
+  record(simMs: number, renderMs: number, steps: number): void;
+  readonly drawCalls: { beginFrame(): void };
+}
+
+/**
+ * Loads the debug overlay, in dev builds only.
+ *
+ * The import is dynamic and inside the guard, which is what actually removes
+ * it: `import.meta.env.DEV` is replaced by `false` at build time, the branch
+ * becomes unreachable, and Rollup drops the chunk rather than shipping a module
+ * nobody can reach. A static import would be bundled whatever the flag says.
+ */
+async function mountDebugOverlay(
+  sim: GameSim,
+  view: GameView,
+  app: Awaited<ReturnType<typeof createRenderer>>,
+): Promise<DebugOverlayHandle | null> {
+  if (!import.meta.env.DEV) {
+    return null;
+  }
+  const { createDebugOverlay } = await import('../debug/index.js');
+  return createDebugOverlay({
+    sim,
+    view,
+    canvas: app.canvas,
+    gl: (app.renderer as unknown as { gl?: unknown }).gl ?? null,
+  });
 }
 
 /**
@@ -124,14 +191,20 @@ interface DebugHost {
     loop: FixedTimestepLoop;
     sim: GameSim;
     tuning: GameSim['tuning'];
+    /** Burns `ms` inside the next simulation step, to test the frame graph. */
+    stall: (ms: number) => void;
   };
 }
 
-function exposeDebugHandle(loop: FixedTimestepLoop, sim: GameSim): void {
+function exposeDebugHandle(
+  loop: FixedTimestepLoop,
+  sim: GameSim,
+  stall: (ms: number) => void,
+): void {
   if (!import.meta.env.DEV) {
     return;
   }
-  (globalThis as unknown as DebugHost).__kellerbier = { loop, sim, tuning: sim.tuning };
+  (globalThis as unknown as DebugHost).__kellerbier = { loop, sim, tuning: sim.tuning, stall };
   console.warn('__kellerbier is exposed for debugging (dev build only)');
 }
 
