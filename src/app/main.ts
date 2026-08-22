@@ -121,6 +121,34 @@ P pause   . step   [ ] time scale   R reset`;
 
   runAnimationFrameLoop(loop);
   window.setInterval(refreshHud, 100);
+
+  exposeDebugHandle(loop);
+}
+
+/**
+ * Debug handle for measuring the loop against a real clock from the console.
+ *
+ * Dev builds only — it is compiled out of a production bundle. The real debug
+ * surface arrives with the overlay in #8; this is the minimum needed to check
+ * the tick rate on hardware, where the tab is actually visible and
+ * requestAnimationFrame is not throttled:
+ *
+ *   const l = __kellerbier.loop, t0 = l.tick, w0 = performance.now();
+ *   setTimeout(() => {
+ *     const s = (performance.now() - w0) / 1000;
+ *     console.log((l.tick - t0) / s, 'ticks/second over', s, 'seconds');
+ *   }, 60_000);
+ */
+interface DebugHost {
+  __kellerbier?: { loop: FixedTimestepLoop };
+}
+
+function exposeDebugHandle(loop: FixedTimestepLoop): void {
+  if (!import.meta.env.DEV) {
+    return;
+  }
+  (globalThis as unknown as DebugHost).__kellerbier = { loop };
+  console.warn('__kellerbier.loop is exposed for debugging (dev build only)');
 }
 
 void boot().catch((error: unknown) => {
