@@ -6,6 +6,7 @@ import { createRenderer, trackWindowSize } from '../render/app.js';
 import { createBlobTexture } from '../render/placeholder-art.js';
 import { INTERNAL_HEIGHT, INTERNAL_WIDTH } from '../render/resolution.js';
 import { GameView } from '../render/view.js';
+import { SILENT_AUDIO, playImpactAudio } from './audio/impact.js';
 import { InputSampler } from './input/sampler.js';
 import { FixedTimestepLoop, runAnimationFrameLoop } from './loop.js';
 
@@ -30,6 +31,14 @@ async function boot(): Promise<void> {
     player: playerTexture,
     projectile: createBlobTexture(app.renderer, sim.tuning.shooting.shotRadius, 0xf0c46a, 0xfff3d0),
     entity: createBlobTexture(app.renderer, MAX_COLLIDER_RADIUS, 0x7d5a3c, 0xb08056),
+    entityFlash: createBlobTexture(app.renderer, MAX_COLLIDER_RADIUS, 0xffffff, 0xffffff),
+    foam: createBlobTexture(app.renderer, 2, 0xfff4dc, 0xffffff),
+    splash: createBlobTexture(app.renderer, 2, 0xd9a441, 0xf6d08a),
+    // Dark and wet, not another body. A splash the same brown as a target
+    // reads as "something is still standing there", which is the one thing a
+    // corpse marker must not do.
+    decal: createBlobTexture(app.renderer, 8, 0x3a2a12, 0x4a3618),
+    numberFont: 'monospace',
   });
   app.stage.addChild(view.stage);
 
@@ -51,6 +60,7 @@ async function boot(): Promise<void> {
       const index = sim.playerIndex;
       input.setAimOrigin(sim.positionX(index), sim.positionY(index));
       sim.step(input.sample());
+      playImpactAudio(sim, SILENT_AUDIO);
     },
     render: (alpha) => {
       view.sync(alpha);
@@ -63,10 +73,11 @@ async function boot(): Promise<void> {
     const seconds = (loop.tick / TICKS_PER_SECOND).toFixed(2);
     const scale = loop.timeScale.toFixed(2);
     const shots = sim.projectiles;
+    const particles = sim.particles;
     hud.text = `tick ${String(loop.tick)}  ${seconds}s  x${scale}${loop.paused ? '  PAUSED' : ''}
-shots ${String(shots.liveCount)}/${String(shots.capacity)}  peak ${String(shots.peakLive)}${
-      shots.overflows > 0 ? `  OVERFLOW x${String(shots.overflows)}` : ''
-    }
+shots ${String(shots.liveCount)}/${String(shots.capacity)}  particles ${String(
+      particles.liveCount,
+    )}/${String(particles.capacity)}${shots.overflows > 0 ? '  SHOT OVERFLOW' : ''}
 WASD move   arrows/mouse aim and fire   P pause   . step   [ ] time scale`;
   };
   refreshHud();

@@ -89,9 +89,74 @@ export interface ShootingTuning {
   kickback: number;
 }
 
+/**
+ * Impact feel.
+ *
+ * The most consequential numbers in the project. Every one of them is small,
+ * none of them is expensive, and together they are the difference between
+ * shooting something and *hitting* it. Budget real time here and expect to move
+ * these by feel rather than by argument.
+ */
+export interface ImpactTuning {
+  /**
+   * Ticks the whole simulation freezes on a hit, plus a scaling term.
+   *
+   * Hitstop costs nothing and is felt enormously. It reads as the hit having
+   * weight, because for two frames the game agrees that something happened.
+   * Capped hard: past about four ticks it stops reading as impact and starts
+   * reading as a dropped frame.
+   */
+  hitstopTicks: number;
+  hitstopPerDamage: number;
+  maxHitstopTicks: number;
+  /** A kill earns a longer freeze than a hit. */
+  deathHitstopTicks: number;
+
+  /** Ticks a struck body renders solid white. One tick is the whole effect. */
+  flashTicks: number;
+  deathFlashTicks: number;
+
+  /**
+   * Knockback impulse per point of damage, at mass 1.
+   *
+   * Divided by the body's mass, so a heavy enemy shrugs off what throws a light
+   * one across the room — which is how mass becomes something the player reads
+   * off the screen rather than out of a stat block.
+   */
+  knockback: number;
+
+  /** Screenshake, in pixels of camera offset. */
+  shakePerDamage: number;
+  deathShake: number;
+  /**
+   * Hard cap on shake.
+   *
+   * Not a suggestion. Shake that scales without a ceiling turns a good moment
+   * into motion sickness, and the player who suffers most is the one having the
+   * best run.
+   */
+  maxShake: number;
+  /** Per-tick survival of the shake. */
+  shakeDamping: number;
+
+  particlesPerHit: number;
+  particlesOnDeath: number;
+  particleSpeed: number;
+  /** Half-angle of the spray around the impact normal, in radians. */
+  particleSpread: number;
+  particleLifeTicks: number;
+  /** Per-tick survival of a particle's velocity. */
+  particleDrag: number;
+
+  /** Off by default. See `DamageNumberStore` for why. */
+  damageNumbers: boolean;
+  damageNumberLifeTicks: number;
+}
+
 export interface SimTuning {
   readonly movement: MovementTuning;
   readonly shooting: ShootingTuning;
+  readonly impact: ImpactTuning;
 }
 
 export const DEFAULT_MOVEMENT_TUNING: Readonly<MovementTuning> = {
@@ -110,17 +175,45 @@ export const DEFAULT_SHOOTING_TUNING: Readonly<ShootingTuning> = {
   shotSpeed: 6,
   shotRadius: 3,
   shotDamage: 1,
-  shotLifetimeTicks: 48,
+  shotLifetimeTicks: 64,
   muzzleOffset: 8,
   velocityInheritance: 0.35,
   kickback: 0.6,
 };
 
 /** A fresh, mutable copy of every default. */
+export const DEFAULT_IMPACT_TUNING: Readonly<ImpactTuning> = {
+  hitstopTicks: 2,
+  hitstopPerDamage: 0.6,
+  maxHitstopTicks: 4,
+  deathHitstopTicks: 6,
+
+  flashTicks: 1,
+  deathFlashTicks: 3,
+
+  knockback: 2.6,
+
+  shakePerDamage: 1.1,
+  deathShake: 3,
+  maxShake: 5,
+  shakeDamping: 0.78,
+
+  particlesPerHit: 8,
+  particlesOnDeath: 26,
+  particleSpeed: 2.4,
+  particleSpread: 0.9,
+  particleLifeTicks: 22,
+  particleDrag: 0.9,
+
+  damageNumbers: false,
+  damageNumberLifeTicks: 36,
+};
+
 export function createTuning(): SimTuning {
   return {
     movement: { ...DEFAULT_MOVEMENT_TUNING },
     shooting: { ...DEFAULT_SHOOTING_TUNING },
+    impact: { ...DEFAULT_IMPACT_TUNING },
   };
 }
 

@@ -1,0 +1,268 @@
+import { describe, expect, it } from 'vitest';
+import { EventKind } from '../../src/sim/events/queue.js';
+import { GameSim, TARGET_HEALTH, TARGET_RESPAWN_TICKS } from '../../src/sim/game/sim.js';
+import {
+  type InputFrame,
+  InputAction,
+  createInputFrame,
+  quantiseAxis,
+  setActionDown,
+} from '../../src/sim/input/frame.js';
+import { DEFAULT_IMPACT_TUNING } from '../../src/sim/tuning.js';
+
+const IDLE = createInputFrame();
+
+function aiming(aimX: number, aimY: number): InputFrame {
+  const frame = createInputFrame();
+  frame.aimX = quantiseAxis(aimX);
+  frame.aimY = quantiseAxis(aimY);
+  setActionDown(frame, InputAction.Fire, true);
+  return frame;
+}
+
+/** The left-hand training target, which sits level with the player's spawn. */
+const TARGET = 1;
+
+/** Hit events reported by the step that just ran. */
+function hitsThisTick(sim: GameSim): number {
+  let hits = 0;
+  sim.events.forEach((slot) => {
+    if (sim.events.kind[slot] === EventKind.ProjectileHit) {
+      hits += 1;
+    }
+  });
+  return hits;
+}
+
+/** Fires one shot leftward and runs until it lands. Returns the tick it landed on. */
+function landOneShot(sim: GameSim): number {
+  sim.step(aiming(-1, 0));
+  for (let tick = 0; tick < 90; tick++) {
+    sim.step(IDLE);
+    if (hitsThisTick(sim) > 0) {
+      return sim.tick;
+    }
+  }
+  throw new Error('the shot never landed');
+}
+
+describe('impact feel', () => {
+  it('flashes the struck body white for exactly the tuned number of ticks', () => {
+    const sim = new GameSim();
+    landOneShot(sim);
+    expect(sim.flash.data[TARGET]).toBe(DEFAULT_IMPACT_TUNING.flashTicks);
+
+    // The freeze holds the white frame up before anything ages.
+    while (sim.frozen) {
+      sim.step(IDLE);
+      expect(sim.flash.data[TARGET]).toBe(DEFAULT_IMPACT_TUNING.flashTicks);
+    }
+    sim.step(IDLE);
+    expect(sim.flash.data[TARGET]).toBe(0);
+  });
+
+  it('freezes the simulation on a hit, and unfreezes on its own', () => {
+    const sim = new GameSim();
+    landOneShot(sim);
+    expect(sim.frozen).toBe(true);
+    expect(sim.hitstop).toBeGreaterThan(0);
+    expect(sim.hitstop).toBeLessThanOrEqual(DEFAULT_IMPACT_TUNING.maxHitstopTicks);
+
+    const frozenFor = sim.hitstop;
+    for (let tick = 0; tick < frozenFor; tick++) {
+      sim.step(IDLE);
+    }
+    expect(sim.frozen).toBe(false);
+  });
+
+  it('does not move the world while frozen, and does not lose a tick either', () => {
+    const sim = new GameSim();
+    landOneShot(sim);
+
+    const tickBefore = sim.tick;
+    const xBefore = sim.positionX(sim.playerIndex);
+    const held = aiming(1, 0);
+    const shotsBefore = sim.projectiles.liveCount;
+
+    let frozenTicks = 0;
+    while (sim.frozen) {
+      sim.step(held);
+      frozenTicks += 1;
+    }
+
+    // The clock keeps running — the fixed timestep is untouched — but nothing
+    // in the world moved and the held fire button banked nothing.
+    expect(sim.tick).toBe(tickBefore + frozenTicks);
+    expect(sim.positionX(sim.playerIndex)).toBe(xBefore);
+    expect(sim.projectiles.liveCount).toBe(shotsBefore);
+  });
+
+  it('caps hitstop however much damage arrives', () => {
+    const sim = new GameSim();
+    // Survives the hit, so this measures the cap on a hit rather than the
+    // deliberately longer freeze a kill earns.
+    sim.health.data[TARGET * 2] = 30_000;
+    sim.tuning.shooting.shotDamage = 1000;
+    landOneShot(sim);
+    expect(sim.hitstop).toBeLessThanOrEqual(DEFAULT_IMPACT_TUNING.maxHitstopTicks);
+    expect(sim.hitstop).toBeGreaterThan(0);
+  });
+
+  it('knocks the struck body along the shot, and less so the heavier it is', () => {
+    const light = new GameSim();
+    light.body.data[TARGET * 2 + 1] = 1;
+    const lightStart = light.positionX(TARGET);
+    landOneShot(light);
+    for (let tick = 0; tick < 40; tick++) {
+      light.step(IDLE);
+    }
+    const lightMoved = lightStart - light.positionX(TARGET);
+
+    const heavy = new GameSim();
+    heavy.body.data[TARGET * 2 + 1] = 8;
+    const heavyStart = heavy.positionX(TARGET);
+    landOneShot(heavy);
+    for (let tick = 0; tick < 40; tick++) {
+      heavy.step(IDLE);
+    }
+    const heavyMoved = heavyStart - heavy.positionX(TARGET);
+
+    // Shot from the right, so both are pushed left.
+    expect(lightMoved).toBeGreaterThan(0);
+    expect(heavyMoved).toBeGreaterThan(0);
+    expect(heavyMoved).toBeLessThan(lightMoved / 2);
+  });
+
+  it('shakes the camera, caps it, and settles back to nothing', () => {
+    const sim = new GameSim();
+    landOneShot(sim);
+    expect(sim.shake).toBeGreaterThan(0);
+    expect(sim.shake).toBeLessThanOrEqual(DEFAULT_IMPACT_TUNING.maxShake);
+
+    for (let tick = 0; tick < 120; tick++) {
+      sim.step(IDLE);
+      expect(sim.shake).toBeLessThanOrEqual(DEFAULT_IMPACT_TUNING.maxShake);
+    }
+    expect(sim.shake).toBe(0);
+  });
+
+  it('never exceeds the cap however many hits land at once', () => {
+    const sim = new GameSim();
+    for (let hit = 0; hit < 50; hit++) {
+      sim.addShake(1, 0, 100);
+    }
+    expect(sim.shake).toBe(DEFAULT_IMPACT_TUNING.maxShake);
+  });
+
+  it('has an accessibility scale that reaches actual zero', () => {
+    const sim = new GameSim();
+    landOneShot(sim);
+    expect(Math.abs(sim.shakeX) + Math.abs(sim.shakeY)).toBeGreaterThan(0);
+
+    sim.screenShakeScale = 0;
+    expect(Math.abs(sim.shakeX)).toBe(0);
+    expect(Math.abs(sim.shakeY)).toBe(0);
+
+    // And it is a scale, not a switch.
+    sim.screenShakeScale = 0.5;
+    const halved = Math.abs(sim.shakeX);
+    sim.screenShakeScale = 1;
+    expect(halved).toBeCloseTo(Math.abs(sim.shakeX) / 2, 6);
+  });
+
+  it('sprays foam from the impact', () => {
+    const sim = new GameSim();
+    expect(sim.particles.liveCount).toBe(0);
+    landOneShot(sim);
+    expect(sim.particles.liveCount).toBe(DEFAULT_IMPACT_TUNING.particlesPerHit);
+  });
+
+  it('throws a heavier burst on a kill than on a hit', () => {
+    const sim = new GameSim();
+    landOneShot(sim);
+    const afterHit = sim.particles.liveCount;
+
+    // Enough damage to finish it on the next shot.
+    sim.tuning.shooting.shotDamage = TARGET_HEALTH;
+    while (sim.frozen) {
+      sim.step(IDLE);
+    }
+    landOneShot(sim);
+    expect(sim.particles.liveCount - afterHit).toBeGreaterThan(
+      DEFAULT_IMPACT_TUNING.particlesPerHit,
+    );
+  });
+
+  it('keeps damage numbers off unless they are asked for', () => {
+    const sim = new GameSim();
+    landOneShot(sim);
+    expect(sim.damageNumbers.liveCount).toBe(0);
+
+    const opted = new GameSim();
+    opted.tuning.impact.damageNumbers = true;
+    landOneShot(opted);
+    expect(opted.damageNumbers.liveCount).toBe(1);
+  });
+});
+
+describe('death', () => {
+  it('takes exactly as many shots as the body has health', () => {
+    const sim = new GameSim();
+    for (let shot = 0; shot < TARGET_HEALTH - 1; shot++) {
+      landOneShot(sim);
+      while (sim.frozen) {
+        sim.step(IDLE);
+      }
+      expect(sim.world.isAlive(sim.world.entityAt(TARGET))).toBe(true);
+    }
+
+    landOneShot(sim);
+    let deaths = 0;
+    sim.events.forEach((slot) => {
+      if (sim.events.kind[slot] === EventKind.Death) {
+        deaths += 1;
+      }
+    });
+    expect(deaths).toBe(1);
+  });
+
+  it('freezes longer for a kill than for a hit', () => {
+    const hit = new GameSim();
+    landOneShot(hit);
+    const hitFreeze = hit.hitstop;
+
+    const kill = new GameSim();
+    kill.tuning.shooting.shotDamage = TARGET_HEALTH;
+    landOneShot(kill);
+    expect(kill.hitstop).toBeGreaterThan(hitFreeze);
+  });
+
+  it('leaves a splash on the floor that stays there', () => {
+    const sim = new GameSim();
+    sim.tuning.shooting.shotDamage = TARGET_HEALTH;
+    expect(sim.decals.liveCount).toBe(0);
+    landOneShot(sim);
+    expect(sim.decals.liveCount).toBe(1);
+
+    for (let tick = 0; tick < 600; tick++) {
+      sim.step(IDLE);
+    }
+    expect(sim.decals.liveCount).toBe(1);
+  });
+
+  it('brings the training target back, so tuning by feel is not a chore', () => {
+    const sim = new GameSim();
+    sim.tuning.shooting.shotDamage = TARGET_HEALTH;
+    landOneShot(sim);
+    while (sim.frozen) {
+      sim.step(IDLE);
+    }
+    sim.world.flush();
+    const afterDeath = sim.world.count;
+
+    for (let tick = 0; tick < TARGET_RESPAWN_TICKS + 5; tick++) {
+      sim.step(IDLE);
+    }
+    expect(sim.world.count).toBe(afterDeath + 1);
+  });
+});
