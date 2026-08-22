@@ -17,11 +17,20 @@ export class EntityView {
 
   private readonly sim: GameSim;
   private readonly texture: Texture;
+  /**
+   * The same shape, solid white.
+   *
+   * Swapping the texture rather than tinting, because a tint multiplies and
+   * cannot make a dark sprite white. The flash is the single cheapest piece of
+   * impact feel and it has to actually be white to read.
+   */
+  private readonly flashTexture: Texture;
   private readonly sprites: Sprite[] = [];
 
-  constructor(sim: GameSim, texture: Texture) {
+  constructor(sim: GameSim, texture: Texture, flashTexture: Texture) {
     this.sim = sim;
     this.texture = texture;
+    this.flashTexture = flashTexture;
   }
 
   sync(alpha: number): void {
@@ -32,6 +41,7 @@ export class EntityView {
     const required = sim.collidableMask;
     const collision = sim.collision.data;
     const body = sim.body.data;
+    const flash = sim.flash.data;
 
     let used = 0;
     const highWater = world.highWater;
@@ -49,6 +59,7 @@ export class EntityView {
       const sprite = this.spriteAt(used);
       used += 1;
       sprite.visible = true;
+      sprite.texture = (flash[index] ?? 0) > 0 ? this.flashTexture : this.texture;
       // The texture is drawn at a fixed size; scaling it to the collider is
       // what keeps the sprite and the hitbox describing the same object.
       sprite.scale.set((body[index * 2] ?? 1) / (this.texture.width / 2));

@@ -50,7 +50,10 @@ describe('shooting', () => {
 
   it('produces an evenly spaced stream while fire is held', () => {
     const sim = new GameSim({ room: openRoom() });
-    const ticks = fireTicks(sim, aiming(1, 0), 120);
+    // Aimed at bare wall rather than at a training target: a hit freezes the
+    // simulation for a few ticks by design, and that freeze would show up here
+    // as an irregular gap when what is being measured is the fire rhythm.
+    const ticks = fireTicks(sim, aiming(0, -1), 120);
     expect(ticks.length).toBeGreaterThan(5);
 
     const gaps = ticks.slice(1).map((tick, i) => tick - (ticks[i] ?? 0));

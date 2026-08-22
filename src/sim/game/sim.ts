@@ -9,9 +9,14 @@ import { type SimTuning, createTuning } from '../tuning.js';
 import { type CollisionLayerId, CollisionLayer, collisionMaskFor } from '../collision/layers.js';
 import { SpatialHash } from '../collision/spatial-hash.js';
 import { EventQueue } from '../events/queue.js';
+import { DamageNumberStore } from '../particle/damage-numbers.js';
+import { DecalStore } from '../particle/decals.js';
+import { ParticleStore } from '../particle/store.js';
 import { ProjectileStore } from '../projectile/store.js';
 import { stepPlayerMovement } from '../systems/movement.js';
+import { stepBodies } from '../systems/bodies.js';
 import { stepCollision } from '../systems/collision.js';
+import { stepImpact, stepParticles } from '../systems/impact.js';
 import { stepProjectiles, stepShooting } from '../systems/shooting.js';
 
 /** Entity slots reserved up front. Sized well above M1's population. */
@@ -32,12 +37,19 @@ export const TARGET_RADIUS = 10;
  */
 export const MAX_COLLIDER_RADIUS = 16;
 
+/** Hit points of a training target. Four shots, so a kill is a small commitment. */
+export const TARGET_HEALTH = 4;
+
+/** Ticks before a killed training target comes back. Two and a half seconds. */
+export const TARGET_RESPAWN_TICKS = 150;
+
 export interface GameSimOptions {
   readonly seed?: number;
   readonly capacity?: number;
   readonly room?: RoomGeometry;
   /** Projectile pool size. Lowered by tests that want to watch it overflow. */
   readonly projectileCapacity?: number;
+  readonly particleCapacity?: number;
 }
 
 /**
@@ -70,6 +82,15 @@ export class GameSim {
   readonly push: Component<Float32Array>;
   /** Collision layer and the mask of layers it interacts with. */
   readonly collision: Component<Uint16Array>;
+  /** Current and maximum hit points. Maximum 0 means the body cannot be hurt. */
+  readonly health: Component<Int16Array>;
+  /**
+   * Ticks left of the white hit flash.
+   *
+   * Presentation state, kept in the simulation on purpose: a replay that draws
+   * a different flash than the run it recorded is not evidence of anything.
+   */
+  readonly flash: Component<Uint8Array>;
 
   /** Rebuilt from the position arrays every tick. */
   readonly broadphase: SpatialHash;
@@ -79,6 +100,15 @@ export class GameSim {
 
   /** Everything in flight. Pooled, fixed capacity, never grows. */
   readonly projectiles: ProjectileStore;
+
+  /** Foam and splash. Pooled, and drawn from the seeded cosmetic stream. */
+  readonly particles: ParticleStore;
+
+  /** Floating damage numbers. Off by default — see the store for why. */
+  readonly damageNumbers: DamageNumberStore;
+
+  /** Splashes left where something died. They persist for the room. */
+  readonly decals: DecalStore;
 
   /**
    * This tick's events.
@@ -91,6 +121,32 @@ export class GameSim {
   /** Ticks until the player may fire again. */
   fireCooldown = 0;
 
+  /**
+   * Ticks the simulation is frozen for.
+   *
+   * Hitstop lives here rather than in the loop. Freezing the loop would stop
+   * the clock and desynchronise the fixed timestep; freezing *inside* a tick
+   * keeps ticks running at exactly 60 a second, keeps input frames being
+   * consumed in lockstep, and keeps the whole thing a pure function of the
+   * seed and the input log — so a replay freezes in the same places.
+   */
+  private hitstopTicks = 0;
+
+  /** Current screenshake offset, in pixels, and the direction it points. */
+  private shakeMagnitude = 0;
+  private shakeDirectionX = 0;
+  private shakeDirectionY = 0;
+
+  /**
+   * Accessibility scale on screenshake, 0 to 1.
+   *
+   * Reaches zero, and zero means no camera motion at all rather than a little
+   * less of it. The full accessibility suite is #53; this one is here now
+   * because shipping shake without an off switch is not a thing to do
+   * temporarily.
+   */
+  screenShakeScale = 1;
+
   /** Ticks run since construction. */
   private currentTick = 0;
 
@@ -98,6 +154,18 @@ export class GameSim {
 
   /** Neutral input, used when a caller steps without supplying a frame. */
   private readonly idleInput = createInputFrame();
+
+  /**
+   * Where the training targets stand, and how long until a dead one returns.
+   *
+   * Respawning is a playground affordance, not a game rule. Tuning impact feel
+   * means killing the same thing several hundred times, and a room that empties
+   * after three kills makes that a chore. Room content, and what actually
+   * populates a room, is #18 and #35.
+   */
+  private readonly targetSpawnX: number[] = [];
+  private readonly targetSpawnY: number[] = [];
+  private readonly targetRespawnAt: number[] = [];
 
   constructor(options: GameSimOptions = {}) {
     this.seed = options.seed ?? 0;
@@ -111,6 +179,8 @@ export class GameSim {
     this.body = this.world.defineComponent('body', Float32Array, 2);
     this.push = this.world.defineComponent('push', Float32Array, 2);
     this.collision = this.world.defineComponent('collision', Uint16Array, 2);
+    this.health = this.world.defineComponent('health', Int16Array, 2);
+    this.flash = this.world.defineComponent('flash', Uint8Array, 1);
     this.collidableMask = this.world.maskOf(this.transform, this.body, this.collision);
 
     this.broadphase = new SpatialHash({
@@ -123,6 +193,9 @@ export class GameSim {
     });
 
     this.projectiles = new ProjectileStore(options.projectileCapacity);
+    this.particles = new ParticleStore(options.particleCapacity);
+    this.damageNumbers = new DamageNumberStore();
+    this.decals = new DecalStore();
     this.events = new EventQueue();
 
     this.playerHandle = this.spawnPlayer();
@@ -144,17 +217,122 @@ export class GameSim {
   }
 
   /** Advances the simulation exactly one tick. */
+  /** True while the simulation is frozen by hitstop. */
+  get frozen(): boolean {
+    return this.hitstopTicks > 0;
+  }
+
+  get hitstop(): number {
+    return this.hitstopTicks;
+  }
+
+  /** Camera offset for this tick, after the accessibility scale. */
+  get shakeX(): number {
+    return this.shakeDirectionX * this.shakeMagnitude * this.screenShakeScale;
+  }
+
+  get shakeY(): number {
+    return this.shakeDirectionY * this.shakeMagnitude * this.screenShakeScale;
+  }
+
+  /** Unscaled shake magnitude, for the debug overlay. */
+  get shake(): number {
+    return this.shakeMagnitude;
+  }
+
+  /**
+   * Freezes the simulation for up to `ticks`.
+   *
+   * The longest request wins rather than the sum: two enemies dying on the same
+   * tick should feel like one big hit, not like the game stalling twice.
+   */
+  requestHitstop(ticks: number): void {
+    if (ticks > this.hitstopTicks) {
+      this.hitstopTicks = ticks;
+    }
+  }
+
+  /**
+   * Adds directional screenshake, capped hard.
+   *
+   * The cap is not a suggestion. Shake that scales without a ceiling turns the
+   * best moment of a run into motion sickness.
+   */
+  addShake(directionX: number, directionY: number, magnitude: number): void {
+    const cap = this.tuning.impact.maxShake;
+    this.shakeMagnitude = Math.min(cap, this.shakeMagnitude + magnitude);
+    // The newest hit sets the direction; a shake is a punch, not an average.
+    if (directionX !== 0 || directionY !== 0) {
+      this.shakeDirectionX = directionX;
+      this.shakeDirectionY = directionY;
+    }
+  }
+
+  /**
+   * Removes a body from the world, leaving a splash where it stood.
+   *
+   * The splash persists for the room. A floor that gradually becomes a record
+   * of the fight is worth one sprite per kill.
+   */
+  kill(index: number): void {
+    const random = this.random.cosmetic;
+    this.decals.spawn(
+      this.positionX(index),
+      this.positionY(index),
+      (this.body.data[index * 2] ?? 8) * (1.4 + random.nextFloat() * 0.6),
+      random.nextFloat() * Math.PI * 2,
+    );
+    this.scheduleRespawn(index, TARGET_RESPAWN_TICKS);
+    this.world.destroy(this.world.entityAt(index));
+  }
+
   step(input: Readonly<InputFrame> = this.idleInput): void {
+    this.events.clear();
+
+    // Hitstop freezes everything, including the flash that caused it — which is
+    // the point: the white frame is held up for the player to see.
+    if (this.hitstopTicks > 0) {
+      this.hitstopTicks -= 1;
+      this.currentTick += 1;
+      return;
+    }
+
+    // Presentation decays at the start of a tick, so an effect started at the
+    // end of this one survives to be drawn.
+    this.decayPresentation();
+
     // Order matters and is fixed: the player moves, then fires from where they
     // now are, then everything already in flight advances. Anything else and a
     // shot appears a tick behind the player who fired it.
-    this.events.clear();
     stepPlayerMovement(this, input);
+    stepBodies(this);
     stepShooting(this, input);
     stepProjectiles(this);
     stepCollision(this);
+    stepImpact(this);
+    stepParticles(this);
+    this.stepTargetRespawns();
+
     this.world.flush();
     this.currentTick += 1;
+  }
+
+  /** Ages the flash on every body and bleeds the shake down. */
+  private decayPresentation(): void {
+    const flash = this.flash.data;
+    const highWater = this.world.highWater;
+    for (let index = 0; index < highWater; index++) {
+      const ticks = flash[index] ?? 0;
+      if (ticks > 0) {
+        flash[index] = ticks - 1;
+      }
+    }
+
+    this.shakeMagnitude *= this.tuning.impact.shakeDamping;
+    // Below a fifth of a pixel the camera is not moving, it is jittering.
+    if (this.shakeMagnitude < 0.2) {
+      this.shakeMagnitude = 0;
+    }
   }
 
   /** Reads a transform field without the index arithmetic at every call site. */
@@ -181,6 +359,8 @@ export class GameSim {
     this.world.add(entity, this.body);
     this.world.add(entity, this.push);
     this.world.add(entity, this.collision);
+    this.world.add(entity, this.health);
+    this.world.add(entity, this.flash);
 
     const index = entityIndex(entity);
     const startX = (this.room.minX + this.room.maxX) / 2;
@@ -209,9 +389,56 @@ export class GameSim {
    */
   private spawnTrainingTargets(): void {
     const midY = (this.room.minY + this.room.maxY) / 2;
-    this.spawnTarget(this.room.minX + 90, midY);
-    this.spawnTarget(this.room.maxX - 90, midY - 70);
-    this.spawnTarget(this.room.maxX - 90, midY + 70);
+    this.addTrainingTarget(this.room.minX + 90, midY);
+    this.addTrainingTarget(this.room.maxX - 90, midY - 70);
+    this.addTrainingTarget(this.room.maxX - 90, midY + 70);
+  }
+
+  private addTrainingTarget(x: number, y: number): void {
+    this.targetSpawnX.push(x);
+    this.targetSpawnY.push(y);
+    this.targetRespawnAt.push(-1);
+    this.spawnTarget(x, y);
+  }
+
+  /** Brings back a training target a couple of seconds after it was killed. */
+  private stepTargetRespawns(): void {
+    for (let post = 0; post < this.targetRespawnAt.length; post++) {
+      const due = this.targetRespawnAt[post] ?? -1;
+      if (due < 0 || this.currentTick < due) {
+        continue;
+      }
+      this.targetRespawnAt[post] = -1;
+      this.spawnTarget(this.targetSpawnX[post] ?? 0, this.targetSpawnY[post] ?? 0);
+    }
+  }
+
+  /**
+   * Schedules the return of whichever post the body at `index` was standing on.
+   *
+   * Matched by position, because the entity is on its way out and its slot is
+   * about to be recycled.
+   */
+  private scheduleRespawn(index: number, delayTicks: number): void {
+    const x = this.positionX(index);
+    const y = this.positionY(index);
+    let closest = -1;
+    let closestDistance = Number.POSITIVE_INFINITY;
+    for (let post = 0; post < this.targetSpawnX.length; post++) {
+      if ((this.targetRespawnAt[post] ?? -1) >= 0) {
+        continue;
+      }
+      const dx = x - (this.targetSpawnX[post] ?? 0);
+      const dy = y - (this.targetSpawnY[post] ?? 0);
+      const distance = dx * dx + dy * dy;
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closest = post;
+      }
+    }
+    if (closest >= 0) {
+      this.targetRespawnAt[closest] = this.currentTick + delayTicks;
+    }
   }
 
   /**
@@ -227,6 +454,8 @@ export class GameSim {
     this.world.add(entity, this.body);
     this.world.add(entity, this.push);
     this.world.add(entity, this.collision);
+    this.world.add(entity, this.health);
+    this.world.add(entity, this.flash);
 
     const index = entityIndex(entity);
     const transform = this.transform.data;
@@ -238,6 +467,10 @@ export class GameSim {
     const body = this.body.data;
     body[index * 2] = radius;
     body[index * 2 + 1] = 3;
+
+    const health = this.health.data;
+    health[index * 2] = TARGET_HEALTH;
+    health[index * 2 + 1] = TARGET_HEALTH;
 
     this.setCollisionLayer(index, CollisionLayer.Obstacle);
     return entity;
