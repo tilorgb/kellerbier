@@ -20,6 +20,9 @@ import {
  * accelerating into a direction and sliding out of it makes it a commitment,
  * and that difference is most of why the genre feels the way it does. Every
  * constant behind it lives in `tuning.ts` and can be moved while the game runs.
+ *
+ * @hot — runs in the frame loop. Nothing in here may allocate; see the
+ * `no-hot-allocation` rule in tools/eslint/.
  */
 export function stepPlayerMovement(sim: GameSim, input: Readonly<InputFrame>): void {
   const index = sim.playerIndex;

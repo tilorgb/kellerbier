@@ -12,6 +12,9 @@ import { addPush } from './movement.js';
  * Aim is fully independent of movement — the whole point of a twin-stick
  * shooter is that where you are going and where you are shooting are two
  * separate decisions.
+ *
+ * @hot — runs in the frame loop. Nothing in here may allocate; see the
+ * `no-hot-allocation` rule in tools/eslint/.
  */
 export function stepShooting(sim: GameSim, input: Readonly<InputFrame>): void {
   const aimX = axisToUnit(input.aimX);

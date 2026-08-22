@@ -10,6 +10,9 @@ import { BLOCKED_X, BLOCKED_Y, moveBody } from './motion.js';
  * It is written as a general body integrator rather than as target-shoving
  * because enemies in #14 need exactly this and nothing more: velocity, an
  * external push, and walls that stop them.
+ *
+ * @hot — runs in the frame loop. Nothing in here may allocate; see the
+ * `no-hot-allocation` rule in tools/eslint/.
  */
 export function stepBodies(sim: GameSim): void {
   const world = sim.world;

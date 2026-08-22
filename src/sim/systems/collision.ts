@@ -22,6 +22,9 @@ import { ProjectileTeam } from '../projectile/store.js';
  * this file is that it can run five thousand times a tick without producing
  * anything for the collector. It reads worse than the closure version; the
  * frame graph reads better.
+ *
+ * @hot — runs in the frame loop. Nothing in here may allocate; see the
+ * `no-hot-allocation` rule in tools/eslint/.
  */
 
 let activeSim: GameSim | null = null;

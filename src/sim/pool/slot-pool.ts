@@ -10,6 +10,9 @@
  * Slots are tracked in two structures: a free stack, so acquiring is O(1), and
  * an intrusive age list threaded through the live slots, so "the oldest live
  * slot" is also O(1). The age list is what makes the overflow policy possible.
+ *
+ * @hot — runs in the frame loop. Nothing in here may allocate; see the
+ * `no-hot-allocation` rule in tools/eslint/.
  */
 
 /** No slot. Returned by `acquire` under a rejecting overflow policy. */

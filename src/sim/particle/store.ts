@@ -9,6 +9,9 @@ import { NO_SLOT, SlotPool } from '../pool/slot-pool.js';
  * first time — the run is still correct, but it no longer looks like the thing
  * that was recorded, and a replay that does not match is not evidence of
  * anything.
+ *
+ * @hot — runs in the frame loop. Nothing in here may allocate; see the
+ * `no-hot-allocation` rule in tools/eslint/.
  */
 
 /** The budget from docs/TECH_STACK.md §3. */

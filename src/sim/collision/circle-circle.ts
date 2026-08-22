@@ -3,6 +3,9 @@
  *
  * Everything that collides in this game is a circle. There is no rotation, no
  * polygon clipping and no general-purpose physics — see docs/TECH_STACK.md §2.
+ *
+ * @hot — runs in the frame loop. Nothing in here may allocate; see the
+ * `no-hot-allocation` rule in tools/eslint/.
  */
 
 /** True when two circles overlap. */
