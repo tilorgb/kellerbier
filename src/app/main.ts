@@ -1,6 +1,6 @@
 import { Assets, Text, type Texture } from 'pixi.js';
 import massUrl from '../../assets/sprites/mass.png';
-import { GameSim } from '../sim/game/sim.js';
+import { GameSim, MAX_COLLIDER_RADIUS } from '../sim/game/sim.js';
 import { TICKS_PER_SECOND } from '../sim/time.js';
 import { createRenderer, trackWindowSize } from '../render/app.js';
 import { createBlobTexture } from '../render/placeholder-art.js';
@@ -29,6 +29,7 @@ async function boot(): Promise<void> {
   const view = new GameView(sim, {
     player: playerTexture,
     projectile: createBlobTexture(app.renderer, sim.tuning.shooting.shotRadius, 0xf0c46a, 0xfff3d0),
+    entity: createBlobTexture(app.renderer, MAX_COLLIDER_RADIUS, 0x7d5a3c, 0xb08056),
   });
   app.stage.addChild(view.stage);
 

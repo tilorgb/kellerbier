@@ -1,5 +1,6 @@
 import { EventKind } from '../events/queue.js';
 import type { GameSim } from '../game/sim.js';
+import { vectorLength } from '../math.js';
 import { type InputFrame, InputAction, axisToUnit, isActionDown } from '../input/frame.js';
 import { NO_SLOT } from '../pool/slot-pool.js';
 import { ProjectileTeam } from '../projectile/store.js';
@@ -33,7 +34,7 @@ export function stepShooting(sim: GameSim, input: Readonly<InputFrame>): void {
 
 function fire(sim: GameSim, aimX: number, aimY: number): void {
   const tuning = sim.tuning.shooting;
-  const length = Math.hypot(aimX, aimY);
+  const length = vectorLength(aimX, aimY);
   const directionX = aimX / length;
   const directionY = aimY / length;
 
@@ -64,55 +65,71 @@ function fire(sim: GameSim, aimX: number, aimY: number): void {
  *
  * A projectile ends in one of three ways: it runs out of lifetime, which is
  * what gives a weapon its range; it meets a wall; or something hits it, which
- * is collision's business and arrives in #11.
+ * is collision's business.
+ *
+ * The per-projectile work is a hoisted module function rather than an arrow at
+ * the call site, for the same reason the collision system is written that way:
+ * an arrow function inside a system is a fresh object every tick, and this loop
+ * exists to run thousands of times a tick without producing anything for the
+ * collector.
  */
+let flightSim: GameSim | null = null;
+
 export function stepProjectiles(sim: GameSim): void {
+  flightSim = sim;
+  sim.projectiles.forEachLive(advanceProjectile);
+  flightSim = null;
+}
+
+function advanceProjectile(index: number): void {
+  const sim = flightSim;
+  if (sim === null) {
+    return;
+  }
   const projectiles = sim.projectiles;
   const room = sim.room;
 
-  projectiles.forEachLive((index) => {
-    const x = projectiles.x[index] ?? 0;
-    const y = projectiles.y[index] ?? 0;
-    projectiles.previousX[index] = x;
-    projectiles.previousY[index] = y;
+  const x = projectiles.x[index] ?? 0;
+  const y = projectiles.y[index] ?? 0;
+  projectiles.previousX[index] = x;
+  projectiles.previousY[index] = y;
 
-    const remaining = (projectiles.lifetime[index] ?? 0) - 1;
-    if (remaining <= 0) {
-      spend(sim, index, x, y, 0, 0);
+  const remaining = (projectiles.lifetime[index] ?? 0) - 1;
+  if (remaining <= 0) {
+    spend(sim, index, x, y, 0, 0);
+    return;
+  }
+  projectiles.lifetime[index] = remaining;
+
+  const velocityX = projectiles.velocityX[index] ?? 0;
+  const velocityY = projectiles.velocityY[index] ?? 0;
+  const radius = projectiles.radius[index] ?? 0;
+
+  // The step is walked rather than jumped. A fast shot moves further in one
+  // tick than a wall is thick, and testing only the endpoint would let it pass
+  // straight through — a bug that appears the first time an item raises shot
+  // speed and is maddening to attribute after the fact.
+  const distance = vectorLength(velocityX, velocityY);
+  const substeps = Math.max(1, Math.ceil(distance / Math.max(1, radius)));
+  let currentX = x;
+  let currentY = y;
+  for (let substep = 0; substep < substeps; substep++) {
+    const stepX = currentX + velocityX / substeps;
+    const stepY = currentY + velocityY / substeps;
+    if (!room.isClear(stepX, stepY, radius)) {
+      // The impact normal points back the way the shot came, which is the
+      // direction a spray of foam should leave the wall in.
+      const normalX = distance === 0 ? 0 : -velocityX / distance;
+      const normalY = distance === 0 ? 0 : -velocityY / distance;
+      spend(sim, index, currentX, currentY, normalX, normalY);
       return;
     }
-    projectiles.lifetime[index] = remaining;
+    currentX = stepX;
+    currentY = stepY;
+  }
 
-    const velocityX = projectiles.velocityX[index] ?? 0;
-    const velocityY = projectiles.velocityY[index] ?? 0;
-    const radius = projectiles.radius[index] ?? 0;
-
-    // The step is walked rather than jumped. A fast shot moves further in one
-    // tick than a wall is thick, and testing only the endpoint would let it
-    // pass straight through — a bug that appears the first time an item raises
-    // shot speed and is maddening to attribute after the fact.
-    const distance = Math.hypot(velocityX, velocityY);
-    const substeps = Math.max(1, Math.ceil(distance / Math.max(1, radius)));
-    let currentX = x;
-    let currentY = y;
-    for (let substep = 0; substep < substeps; substep++) {
-      const stepX = currentX + velocityX / substeps;
-      const stepY = currentY + velocityY / substeps;
-      if (!room.isClear(stepX, stepY, radius)) {
-        // The impact normal points back the way the shot came, which is the
-        // direction a spray of foam should leave the wall in.
-        const normalX = distance === 0 ? 0 : -velocityX / distance;
-        const normalY = distance === 0 ? 0 : -velocityY / distance;
-        spend(sim, index, currentX, currentY, normalX, normalY);
-        return;
-      }
-      currentX = stepX;
-      currentY = stepY;
-    }
-
-    projectiles.x[index] = currentX;
-    projectiles.y[index] = currentY;
-  });
+  projectiles.x[index] = currentX;
+  projectiles.y[index] = currentY;
 }
 
 /** Ends a projectile and reports it, so whatever draws the puff can hear about it. */
