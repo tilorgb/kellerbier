@@ -1,0 +1,41 @@
+name: Roadmap
+
+# Keeps the roadmap tracking issue in sync with the issue list: closing an issue ticks
+# its box, opening one adds it, relabelling moves it between milestones.
+
+on:
+  issues:
+    types: [opened, closed, reopened, edited, labeled, unlabeled, deleted, transferred]
+  workflow_dispatch:
+  schedule:
+    # Weekly reconcile, to catch anything a missed or out-of-order webhook left stale.
+    - cron: '17 6 * * 1'
+
+permissions:
+  contents: read
+  issues: write
+
+# Never run two updates at once — the later one would race the earlier one's PATCH.
+# Queue instead of cancelling, so no event is silently dropped.
+concurrency:
+  group: roadmap
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Regenerate roadmap issue
+        run: node tools/roadmap/update-roadmap.mjs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          # Guard against an edit-loop: if this run was triggered by the roadmap issue
+          # itself, the script exits without writing.
+          TRIGGERING_ISSUE: ${{ github.event.issue.number }}

@@ -1,0 +1,57 @@
+{
+  "roadmapLabel": "roadmap",
+  "milestones": [
+    {
+      "id": "M0",
+      "name": "Foundations",
+      "exit": "`npm run dev` opens a window with a fixed-timestep loop running, and CI is green."
+    },
+    {
+      "id": "M1",
+      "name": "Game feel",
+      "exit": "One room, one enemy type, and it is **fun to shoot things** — verified by someone else playing it without being told what to do."
+    },
+    {
+      "id": "M2",
+      "name": "Rooms and floors",
+      "exit": "A full procedurally generated floor, walkable start to boss room, with a minimap."
+    },
+    {
+      "id": "M3",
+      "name": "Items and synergy",
+      "exit": "25+ items in pools, and two randomly chosen items produce a combination nobody explicitly authored."
+    },
+    {
+      "id": "M4",
+      "name": "Promille",
+      "exit": "Promille is a decision the player thinks about, not a bar they ignore."
+    },
+    {
+      "id": "M5",
+      "name": "Floors 1 & 2",
+      "exit": "Two finished chapters — art, audio, enemies and bosses — a coherent 15-minute game."
+    },
+    {
+      "id": "M6",
+      "name": "Floors 3-7",
+      "exit": "A complete run from cellar to Die Bavaria."
+    },
+    {
+      "id": "M7",
+      "name": "Meta-progression",
+      "exit": "Losing a run makes you want to start another one immediately."
+    },
+    {
+      "id": "M8",
+      "name": "Polish",
+      "exit": "It looks and sounds like a finished commercial game."
+    },
+    {
+      "id": "M9",
+      "name": "Release",
+      "exit": "Strangers are playing it."
+    }
+  ],
+  "criticalPath": [1, 2, 3, 9, 10, 11, 13],
+  "criticalPathNote": "Critical path to a playable build — the point where the only question that matters, *is this fun?*, becomes answerable."
+}
