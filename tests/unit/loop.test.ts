@@ -100,6 +100,45 @@ describe('FixedTimestepLoop', () => {
     expect(loop.alpha).toBeLessThan(1);
   });
 
+  it('accounts for every tick the clamp discards', () => {
+    const { loop } = makeLoop();
+    loop.advance(0);
+    expect(loop.clampedFrames).toBe(0);
+    expect(loop.droppedTicks).toBe(0);
+
+    // 500 ms is 30 ticks of work; the clamp runs 5 and discards the other 25.
+    loop.advance(500);
+    expect(loop.clampedFrames).toBe(1);
+    expect(loop.droppedTicks).toBe(25);
+
+    // A wall-clock shortfall is exactly the dropped-tick count, which is what
+    // makes a long measurement explainable instead of mysterious.
+    // Note the formula: dividing by a nominal tick duration gives 29 here,
+    // because 500 / (1000/60) lands at 29.999999999999996 in binary floating
+    // point. Multiplying first is exact. This is the whole reason the loop
+    // derives its tick target the way it does.
+    const expectedTicks = Math.floor((500 * TICKS_PER_SECOND) / 1000);
+    expect(loop.tick + loop.droppedTicks).toBe(expectedTicks);
+  });
+
+  it('counts no clamped frames when the machine keeps up', () => {
+    const { loop } = makeLoop();
+    runAtRefreshRate(loop, 144, 10);
+    expect(loop.clampedFrames).toBe(0);
+    expect(loop.droppedTicks).toBe(0);
+    expect(loop.tick).toBe(TICKS_PER_SECOND * 10);
+  });
+
+  it('clears the clamp accounting on reset', () => {
+    const { loop } = makeLoop();
+    loop.advance(0);
+    loop.advance(500);
+    expect(loop.droppedTicks).toBeGreaterThan(0);
+    loop.reset();
+    expect(loop.clampedFrames).toBe(0);
+    expect(loop.droppedTicks).toBe(0);
+  });
+
   it('recovers to real time after a stall rather than accumulating a debt', () => {
     const { loop } = makeLoop();
     loop.advance(0);

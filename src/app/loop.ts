@@ -37,6 +37,8 @@ export class FixedTimestepLoop {
   private simTimeMs = 0;
   private lastNowMs: number | null = null;
   private currentTick = 0;
+  private clampedFrameCount = 0;
+  private droppedTickCount = 0;
 
   /** When paused, `advance` still renders but runs no steps. */
   paused = false;
@@ -54,6 +56,28 @@ export class FixedTimestepLoop {
   /** Number of simulation ticks run since construction or the last `reset`. */
   get tick(): number {
     return this.currentTick;
+  }
+
+  /**
+   * Frames whose backlog hit the clamp. Non-zero means the machine could not
+   * keep up on that frame and the game ran briefly in slow motion.
+   */
+  get clampedFrames(): number {
+    return this.clampedFrameCount;
+  }
+
+  /**
+   * Simulation ticks discarded by the clamp since construction or the last
+   * reset.
+   *
+   * This is the honest accounting for why a long measurement can come up a few
+   * ticks short of `seconds * 60`: a single 130 ms hitch costs about three
+   * ticks. It is wall-clock slippage, not drift, and it does not affect
+   * determinism — a replay replays ticks, not seconds, so the tick sequence is
+   * identical either way.
+   */
+  get droppedTicks(): number {
+    return this.droppedTickCount;
   }
 
   /** Fraction of a tick elapsed since the last step, in [0, 1). */
@@ -99,6 +123,8 @@ export class FixedTimestepLoop {
       // instead of spiralling. Dropping the leftover fraction too keeps alpha
       // in range on the frame after a stall.
       if (this.currentTick < target) {
+        this.clampedFrameCount += 1;
+        this.droppedTickCount += target - this.currentTick;
         this.simTimeMs = (this.currentTick * 1000) / this.ticksPerSecond;
       }
     }
@@ -123,6 +149,8 @@ export class FixedTimestepLoop {
     this.simTimeMs = 0;
     this.lastNowMs = null;
     this.currentTick = 0;
+    this.clampedFrameCount = 0;
+    this.droppedTickCount = 0;
   }
 
   /**
