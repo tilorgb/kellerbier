@@ -92,7 +92,9 @@ export function renderBody(issues, plan = PLAN) {
       'Do not edit by hand; edits are overwritten on the next issue event.',
   );
   out.push('');
-  out.push(`\`${bar(doneAll, tracked.length, 28)}\`  **${doneAll} of ${tracked.length} issues closed**`);
+  out.push(
+    `\`${bar(doneAll, tracked.length, 28)}\`  **${doneAll} of ${tracked.length} issues closed**`,
+  );
   out.push('');
 
   /* summary table */
@@ -109,9 +111,7 @@ export function renderBody(issues, plan = PLAN) {
   out.push('');
 
   /* next up */
-  const nextCritical = plan.criticalPath
-    .map((n) => byNumber.get(n))
-    .filter((i) => i && open(i));
+  const nextCritical = plan.criticalPath.map((n) => byNumber.get(n)).filter((i) => i && open(i));
 
   out.push('## Next up');
   out.push('');
@@ -218,7 +218,8 @@ async function api(path, options = {}) {
       ...options.headers,
     },
   });
-  if (!res.ok) throw new Error(`${options.method ?? 'GET'} ${path} → ${res.status} ${await res.text()}`);
+  if (!res.ok)
+    throw new Error(`${options.method ?? 'GET'} ${path} → ${res.status} ${await res.text()}`);
   return res.status === 204 ? null : res.json();
 }
 

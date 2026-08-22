@@ -1,0 +1,9 @@
+dist/
+coverage/
+node_modules/
+package-lock.json
+assets/atlases/
+
+# Prose is hand-wrapped on purpose; Prettier reflows tables and lists in ways
+# that make design-doc diffs unreadable.
+*.md

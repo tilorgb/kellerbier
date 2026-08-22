@@ -1,0 +1,11 @@
+# One line ending everywhere. Determinism starts with the repo itself.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.ogg binary
+*.wav binary
+*.ttf binary
+*.woff2 binary
+
+package-lock.json linguist-generated=true -diff
