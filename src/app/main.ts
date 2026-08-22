@@ -3,6 +3,7 @@ import massUrl from '../../assets/sprites/mass.png';
 import { GameSim } from '../sim/game/sim.js';
 import { TICKS_PER_SECOND } from '../sim/time.js';
 import { createRenderer, trackWindowSize } from '../render/app.js';
+import { createBlobTexture } from '../render/placeholder-art.js';
 import { INTERNAL_HEIGHT, INTERNAL_WIDTH } from '../render/resolution.js';
 import { GameView } from '../render/view.js';
 import { InputSampler } from './input/sampler.js';
@@ -25,7 +26,10 @@ async function boot(): Promise<void> {
   // The run seed is fixed until seeded runs land in #48. Everything downstream
   // of it already behaves as though it were chosen, which is the point.
   const sim = new GameSim({ seed: 1 });
-  const view = new GameView(sim, { player: playerTexture });
+  const view = new GameView(sim, {
+    player: playerTexture,
+    projectile: createBlobTexture(app.renderer, sim.tuning.shooting.shotRadius, 0xf0c46a, 0xfff3d0),
+  });
   app.stage.addChild(view.stage);
 
   const input = new InputSampler();
@@ -57,8 +61,12 @@ async function boot(): Promise<void> {
   const refreshHud = (): void => {
     const seconds = (loop.tick / TICKS_PER_SECOND).toFixed(2);
     const scale = loop.timeScale.toFixed(2);
+    const shots = sim.projectiles;
     hud.text = `tick ${String(loop.tick)}  ${seconds}s  x${scale}${loop.paused ? '  PAUSED' : ''}
-WASD move   P pause   . step   [ ] time scale`;
+shots ${String(shots.liveCount)}/${String(shots.capacity)}  peak ${String(shots.peakLive)}${
+      shots.overflows > 0 ? `  OVERFLOW x${String(shots.overflows)}` : ''
+    }
+WASD move   arrows/mouse aim and fire   P pause   . step   [ ] time scale`;
   };
   refreshHud();
 

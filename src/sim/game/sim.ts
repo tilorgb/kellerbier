@@ -6,7 +6,10 @@ import { type RunRandom, createRunRandom } from '../rng/streams.js';
 import type { RoomGeometry } from '../room/geometry.js';
 import { createPlaygroundRoom } from '../room/playground.js';
 import { type SimTuning, createTuning } from '../tuning.js';
+import { EventQueue } from '../events/queue.js';
+import { ProjectileStore } from '../projectile/store.js';
 import { stepPlayerMovement } from '../systems/movement.js';
+import { stepProjectiles, stepShooting } from '../systems/shooting.js';
 
 /** Entity slots reserved up front. Sized well above M1's population. */
 const DEFAULT_CAPACITY = 8192;
@@ -18,6 +21,8 @@ export interface GameSimOptions {
   readonly seed?: number;
   readonly capacity?: number;
   readonly room?: RoomGeometry;
+  /** Projectile pool size. Lowered by tests that want to watch it overflow. */
+  readonly projectileCapacity?: number;
 }
 
 /**
@@ -41,6 +46,27 @@ export class GameSim {
   readonly velocity: Component<Float32Array>;
   /** Collider radius and mass. Mass is what knockback is divided by. */
   readonly body: Component<Float32Array>;
+  /**
+   * External impulses — firing kickback, and knockback once things can be hit.
+   *
+   * Kept out of velocity so that clamping a body to its top speed does not
+   * silently eat every push the game applies to it.
+   */
+  readonly push: Component<Float32Array>;
+
+  /** Everything in flight. Pooled, fixed capacity, never grows. */
+  readonly projectiles: ProjectileStore;
+
+  /**
+   * This tick's events.
+   *
+   * Cleared at the *start* of a step rather than the end, so that whatever ran
+   * the step — a renderer, a test — can read what happened during it.
+   */
+  readonly events: EventQueue;
+
+  /** Ticks until the player may fire again. */
+  fireCooldown = 0;
 
   /** Ticks run since construction. */
   private currentTick = 0;
@@ -60,6 +86,10 @@ export class GameSim {
     this.transform = this.world.defineComponent('transform', Float32Array, 4);
     this.velocity = this.world.defineComponent('velocity', Float32Array, 2);
     this.body = this.world.defineComponent('body', Float32Array, 2);
+    this.push = this.world.defineComponent('push', Float32Array, 2);
+
+    this.projectiles = new ProjectileStore(options.projectileCapacity);
+    this.events = new EventQueue();
 
     this.playerHandle = this.spawnPlayer();
     this.world.flush();
@@ -80,7 +110,13 @@ export class GameSim {
 
   /** Advances the simulation exactly one tick. */
   step(input: Readonly<InputFrame> = this.idleInput): void {
+    // Order matters and is fixed: the player moves, then fires from where they
+    // now are, then everything already in flight advances. Anything else and a
+    // shot appears a tick behind the player who fired it.
+    this.events.clear();
     stepPlayerMovement(this, input);
+    stepShooting(this, input);
+    stepProjectiles(this);
     this.world.flush();
     this.currentTick += 1;
   }
@@ -107,6 +143,7 @@ export class GameSim {
     this.world.add(entity, this.transform);
     this.world.add(entity, this.velocity);
     this.world.add(entity, this.body);
+    this.world.add(entity, this.push);
 
     const index = entityIndex(entity);
     const startX = (this.room.minX + this.room.maxX) / 2;
