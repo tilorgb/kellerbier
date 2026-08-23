@@ -174,7 +174,8 @@ const GROUPS: readonly GroupSpec[] = [
       { key: 'maxDrift', min: 0, max: 2, step: 0.05, hint: 'sluggishness at full ramp' },
       { key: 'maxWobble', min: 0, max: 0.6, step: 0.01, hint: 'aim wobble, radians' },
       { key: 'maxSway', min: 0, max: 20, step: 0.5, hint: 'camera sway, px' },
-      { key: 'swayPeriodTicks', min: 10, max: 300, step: 5, hint: 'ticks per sway cycle' },
+      { key: 'wobblePeriodTicks', min: 10, max: 300, step: 5, hint: 'ticks per wobble sweep' },
+      { key: 'swayPeriodTicks', min: 10, max: 600, step: 10, hint: 'ticks per sway loop' },
       {
         key: 'umgfallnKnockdownTicks',
         min: 0,

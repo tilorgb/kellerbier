@@ -336,9 +336,16 @@ export interface PromilleTuning {
   maxDrift: number;
   /** Aim wobble amplitude at full ramp, in radians. */
   maxWobble: number;
+  /**
+   * Ticks per full wobble sweep. Deliberately its own field rather than
+   * reusing `swayPeriodTicks` — the miss-rate calibration on `maxWobble`
+   * doesn't depend on sweep speed, but sway wants to run much slower than
+   * wobble to read as a smooth drift instead of a jitter.
+   */
+  wobblePeriodTicks: number;
   /** Camera sway at full ramp, in pixels. */
   maxSway: number;
-  /** Ticks per full sway oscillation. */
+  /** Ticks per full sway loop — slow, so it reads as drifting rather than jittering. */
   swayPeriodTicks: number;
 
   /** How long the Umgfalln knockdown holds the player still and invulnerable. */
@@ -450,8 +457,15 @@ export const DEFAULT_PROMILLE_TUNING: Readonly<PromilleTuning> = {
   // the same place, so a player who reads the sweep can still time a burst
   // to the zero-crossings. That's the "deterministic spray" #17 asks for.
   maxWobble: 0.3,
+  /** Ticks per full wobble sweep. Kept separate from `swayPeriodTicks` — the
+   * miss-rate calibration above doesn't depend on how fast the sweep runs,
+   * but sway wants to be much slower than wobble to read as smooth rather
+   * than jittery, and coupling the two would fight both goals. */
+  wobblePeriodTicks: 90,
   maxSway: 6,
-  swayPeriodTicks: 90,
+  /** Ticks per full sway loop. Slow on purpose — this is what separates a
+   * gentle drift from a jitter that gets mistaken for hit-shake. */
+  swayPeriodTicks: 220,
 
   umgfallnKnockdownTicks: 90,
   umgfallnWakePromille: 1.5,

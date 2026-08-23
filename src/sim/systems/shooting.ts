@@ -60,7 +60,7 @@ function fire(sim: GameSim, aimX: number, aimY: number, analogAim: boolean): voi
   const wobbleAmplitude = sim.promilleWobbleAmplitude;
   if (wobbleAmplitude > 0) {
     const wobbleAngle =
-      Math.sin((sim.tick / sim.tuning.promille.swayPeriodTicks) * Math.PI * 2) * wobbleAmplitude;
+      Math.sin((sim.tick / sim.tuning.promille.wobblePeriodTicks) * Math.PI * 2) * wobbleAmplitude;
     const angle = Math.atan2(directionY, directionX) + wobbleAngle;
     directionX = Math.cos(angle);
     directionY = Math.sin(angle);

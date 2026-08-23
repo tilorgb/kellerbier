@@ -614,14 +614,17 @@ export class GameSim {
    * stream to do that.
    */
   get swayX(): number {
-    return Math.sin(this.swayPhase()) * this.swayMagnitude();
+    return Math.cos(this.swayPhase()) * this.swayMagnitude();
   }
 
   get swayY(): number {
-    // Phase-shifted and at half the frequency of X, so the path traced is a
-    // loose loop rather than a side-to-side twitch — closer to swaying than
-    // to vibrating.
-    return Math.sin(this.swayPhase() * 0.5 + Math.PI / 3) * this.swayMagnitude() * 0.6;
+    // Same phase, same frequency as X — a sine/cosine pair traces a circle at
+    // constant angular speed, so the camera drifts in one continuous loop
+    // rather than a two-frequency Lissajous figure whose direction reverses
+    // sharply at the crossing points. That reversal read as clunky; a plain
+    // circle reads as swaying. Flattened slightly on Y since a room is wider
+    // than it is tall.
+    return Math.sin(this.swayPhase()) * this.swayMagnitude() * 0.7;
   }
 
   private swayPhase(): number {

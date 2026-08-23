@@ -118,8 +118,14 @@ export class GameView {
     this.world.addChild(this.damageNumbers.container);
   }
 
-  /** `alpha` is the fraction of a tick elapsed since the last simulation step. */
-  sync(alpha: number): void {
+  /**
+   * `alpha` is the fraction of a tick elapsed since the last simulation step.
+   *
+   * `outerZoom` is the whole-number scale `main.ts` fits the game to the
+   * window at (`GameLayout.scale`) — see the rounding comment below for why
+   * `sync` needs to know it.
+   */
+  sync(alpha: number, outerZoom = 1): void {
     this.decals.sync();
     this.entities.sync(alpha);
     this.projectiles.sync(alpha);
@@ -132,14 +138,40 @@ export class GameView {
       lerp(this.sim.previousY(index), this.sim.positionY(index), alpha),
     );
 
-    // Rounded to whole pixels. A camera offset by a fraction of a pixel makes
-    // every sprite in the room resample, which on pixel art looks like the
-    // whole screen crawling. Sway (#17) is additive alongside shake — both
-    // land in the same offset, but they come from separate accumulators with
-    // separate accessibility scales, so zeroing one never touches the other.
+    // Rounded, not left fractional — a camera offset by a fraction of a real
+    // screen pixel makes every sprite in the room resample, which on pixel
+    // art looks like the whole screen crawling. But rounded to the nearest
+    // *screen* pixel, not the nearest *room* pixel: a room pixel is already
+    // `WORLD_ZOOM * outerZoom` screen pixels wide, so rounding at room-pixel
+    // granularity throws away most of the resolution a slow, small motion
+    // like Promille sway (#17) actually needs to read as smooth rather than
+    // as a handful of visible steps a second. Shake never noticed, because a
+    // hit's shake is fast and large enough that the coarser grid was already
+    // below the threshold of "looks stepped" — sway lives exactly at that
+    // threshold, which is what made it look choppy.
+    const zoom = WORLD_ZOOM * Math.max(1, outerZoom);
+    const roundToScreenPixel = (value: number): number => Math.round(value * zoom) / zoom;
     this.world.position.set(
-      Math.round(this.sim.shakeX + this.sim.swayX + this.cameraX),
-      Math.round(this.sim.shakeY + this.sim.swayY + this.cameraY),
+      roundToScreenPixel(this.sim.shakeX + this.sim.swayX + this.cameraX),
+      roundToScreenPixel(this.sim.shakeY + this.sim.swayY + this.cameraY),
     );
+  }
+
+  /**
+   * Where the player sprite actually lands on screen, in the same pixel
+   * space `app.stage` renders into — after `world`'s shake/sway offset,
+   * after `WORLD_ZOOM`, after every ancestor's own transform.
+   *
+   * `getGlobalPosition` walks the whole display-list chain rather than this
+   * class re-deriving it by hand, which is what keeps it correct if a
+   * container between here and the stage ever gets rescaled or repositioned
+   * for an unrelated reason. Call after `sync`, so it reflects this frame's
+   * layout — the vignette (#17) is the reason this exists: it has to follow
+   * the player, and this room has no camera-follow of its own to piggyback
+   * on.
+   */
+  playerScreenPosition(): { readonly x: number; readonly y: number } {
+    const point = this.player.getGlobalPosition();
+    return { x: point.x, y: point.y };
   }
 }

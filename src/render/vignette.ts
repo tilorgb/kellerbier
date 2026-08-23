@@ -38,6 +38,18 @@ function createVignetteTexture(): Texture {
 }
 
 /**
+ * Oversize factor on the vignette sprite, relative to the viewport.
+ *
+ * The vignette follows the player rather than sitting fixed at screen
+ * centre (this room has no camera-follow of its own — the whole room is
+ * always on screen, so "centred on screen" and "centred on the player" are
+ * two different things the moment the player isn't standing in the middle
+ * of the room). Sized generously past 1x so the opaque outer edge still
+ * reaches every screen corner even when the player is off in one of them.
+ */
+const COVERAGE = 2.2;
+
+/**
  * Tunnel vision (#17): the game-feel half of Promille, alongside camera sway
  * — "the visual exaggeration should outrun the mechanical penalty" per
  * `docs/GAME_DESIGN.md` §5's own guardrail. Purely opacity-driven rather
@@ -46,7 +58,8 @@ function createVignetteTexture(): Texture {
  *
  * Screen-space, in `uiLayer` — same reasoning as `GameOverScreen` and
  * `HealthHud`: never inside anything the camera shakes or sways, or the
- * vignette itself would visibly jitter.
+ * vignette itself would visibly jitter independently of following the
+ * player.
  */
 export class Vignette {
   readonly view: Sprite;
@@ -57,21 +70,24 @@ export class Vignette {
     this.view.alpha = 0;
   }
 
-  sync(sim: GameSim): void {
+  /**
+   * `screenX`/`screenY` are where the player actually renders this frame —
+   * `GameView.playerScreenPosition()` — so the clear centre of the tunnel
+   * tracks the player exactly, camera shake/sway and all.
+   */
+  sync(sim: GameSim, screenX: number, screenY: number): void {
     const intensity = Math.min(1, sim.promille / 5);
     this.view.alpha = intensity * MAX_ALPHA;
+    this.view.position.set(screenX, screenY);
   }
 
   /** Call on every resize, same as the HUD's own `positionHud`. */
   resize(layout: GameLayout): void {
-    const width = INTERNAL_WIDTH * layout.scale;
-    const height = INTERNAL_HEIGHT * layout.scale;
-    this.view.position.set(layout.originX + width / 2, layout.originY + height / 2);
     // Independent width/height rather than a uniform scale: the gradient
     // stretches to the room's aspect ratio, which is what makes it cover a
     // landscape viewport corner to corner instead of leaving the top and
     // bottom unshaded.
-    this.view.width = width;
-    this.view.height = height;
+    this.view.width = INTERNAL_WIDTH * layout.scale * COVERAGE;
+    this.view.height = INTERNAL_HEIGHT * layout.scale * COVERAGE;
   }
 }

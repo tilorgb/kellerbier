@@ -213,9 +213,10 @@ async function boot(): Promise<void> {
     render: (alpha) => {
       const started = performance.now();
       overlay?.drawCalls.beginFrame();
-      view.sync(alpha);
+      view.sync(alpha, layout.scale);
       healthHud.sync(sim);
-      vignette.sync(sim);
+      const playerScreen = view.playerScreenPosition();
+      vignette.sync(sim, playerScreen.x, playerScreen.y);
       overlay?.sync(alpha);
       overlay?.record(simMs, performance.now() - started, 0);
       simMs = 0;
