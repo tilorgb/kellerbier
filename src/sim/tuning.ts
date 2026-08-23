@@ -99,15 +99,35 @@ export interface ShootingTuning {
   /** How far from the player's centre a shot appears, along the aim direction. */
   muzzleOffset: number;
   /**
-   * Fraction of the player's velocity a shot inherits.
+   * Fraction of the player's velocity a shot inherits, aiming with keys.
    *
    * Subtle and important. Without it, strafing while shooting feels wrong in a
    * way players notice and cannot name: the shots trail behind the motion that
-   * produced them. High enough to be read as sway — running right while firing
-   * up should visibly bend the stream to the right — and low enough that the
-   * shot still goes broadly where it was aimed.
+   * produced them. Running right while firing up should visibly bend the stream
+   * to the right, the way Isaac's does — that sway is the feature.
+   *
+   * This is the value for eight-way aim, and it can afford to be generous: with
+   * keys, the angle between where the player is running and where they are
+   * aiming holds still while they strafe, so the bend is a constant slant they
+   * learn in about ten seconds and then shoot through.
    */
   velocityInheritance: number;
+  /**
+   * The same, for aim that comes from a mouse or a stick.
+   *
+   * Lower, and the reason is the device rather than the taste. With keys, aim
+   * is a *direction*; with a mouse or a stick it is a *point*, and the angle
+   * between running and aiming rotates continuously as the player circles that
+   * point. The sway then slides through zero and changes sign under their
+   * hands, which reads as wobble rather than as momentum — and because they are
+   * aiming at a spot rather than along a line, the deflection reads as the gun
+   * being inaccurate rather than as the player being in motion.
+   *
+   * The game is meant to be played on a mouse or a stick, so this is the number
+   * most runs will feel. It is chosen against `velocityInheritance` rather than
+   * on its own: same sway, less of it.
+   */
+  analogVelocityInheritance: number;
   /**
    * Push applied to the player, opposite the shot. Felt, not disruptive.
    *
@@ -163,6 +183,17 @@ export interface ImpactTuning {
   shakePerDamage: number;
   deathShake: number;
   /**
+   * Shake for a hit on the *player*, whatever caused it.
+   *
+   * Deliberately the largest shake in the game, and deliberately not the same
+   * number as the shake for hitting an enemy. A player having a good run hits
+   * something every few ticks, and a camera that jumps on every one of those
+   * never settles: the motion stops meaning anything and becomes noise laid
+   * over the run going well. Being hurt is the rare event, so it is the one
+   * worth moving the camera for.
+   */
+  playerHitShake: number;
+  /**
    * Hard cap on shake.
    *
    * Not a suggestion. Shake that scales without a ceiling turns a good moment
@@ -210,10 +241,48 @@ export interface ImpactTuning {
   damageNumberLifeTicks: number;
 }
 
+/**
+ * Enemy feel, above the numbers each enemy states for itself.
+ *
+ * Speeds, fire rates and telegraph lengths belong to the enemy, in
+ * `src/content/enemies/` — that is the point of the data format. What lives
+ * here is the handful of *global* scalars that a balance pass moves once and
+ * every enemy on every floor feels: how fast the roster is, how long it warns
+ * you for, how often it shoots. Difficulty, and the accessibility knob for
+ * telegraph length, are both this row of numbers.
+ */
+export interface EnemyTuning {
+  /** Multiplier on every enemy's movement speed. */
+  speedScale: number;
+  /**
+   * Multiplier on every telegraph's length.
+   *
+   * Above 1 is more warning, which is the accessibility direction; below 1 is
+   * the difficulty one. Never 0 — an attack with no telegraph at all is not
+   * hard, it is arbitrary, so it clamps to one tick.
+   */
+  telegraphScale: number;
+  /** Multiplier on the gap between volleys. Above 1 is slower firing. */
+  fireIntervalScale: number;
+  /** Multiplier on the speed of everything enemies fire. */
+  projectileSpeedScale: number;
+  /**
+   * Foam thrown by a shot that splashed off something invulnerable.
+   *
+   * A bullet that vanishes into a curled Kellerassel reads as the game having
+   * dropped it. This is how the player is told the shot arrived and did
+   * nothing, which is a different thing from a miss.
+   */
+  deflectParticles: number;
+  /** Shake for that splash. Small: nothing actually happened. */
+  deflectShake: number;
+}
+
 export interface SimTuning {
   readonly movement: MovementTuning;
   readonly shooting: ShootingTuning;
   readonly impact: ImpactTuning;
+  readonly enemy: EnemyTuning;
 }
 
 export const DEFAULT_MOVEMENT_TUNING: Readonly<MovementTuning> = {
@@ -236,6 +305,7 @@ export const DEFAULT_SHOOTING_TUNING: Readonly<ShootingTuning> = {
   shotLifetimeTicks: 26,
   muzzleOffset: 8,
   velocityInheritance: 0.85,
+  analogVelocityInheritance: 0.35,
   kickback: 0.3,
 };
 
@@ -251,8 +321,9 @@ export const DEFAULT_IMPACT_TUNING: Readonly<ImpactTuning> = {
 
   knockback: 4,
 
-  shakePerDamage: 0.6,
-  deathShake: 1.4,
+  shakePerDamage: 0.08,
+  deathShake: 0.3,
+  playerHitShake: 2.4,
   maxShake: 2.5,
   shakeDamping: 0.78,
 
@@ -273,11 +344,21 @@ export const DEFAULT_IMPACT_TUNING: Readonly<ImpactTuning> = {
   damageNumberLifeTicks: 36,
 };
 
+export const DEFAULT_ENEMY_TUNING: Readonly<EnemyTuning> = {
+  speedScale: 1,
+  telegraphScale: 1,
+  fireIntervalScale: 1,
+  projectileSpeedScale: 1,
+  deflectParticles: 6,
+  deflectShake: 0.3,
+};
+
 export function createTuning(): SimTuning {
   return {
     movement: { ...DEFAULT_MOVEMENT_TUNING },
     shooting: { ...DEFAULT_SHOOTING_TUNING },
     impact: { ...DEFAULT_IMPACT_TUNING },
+    enemy: { ...DEFAULT_ENEMY_TUNING },
   };
 }
 

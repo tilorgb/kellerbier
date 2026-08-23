@@ -1,5 +1,6 @@
 import type { SimTuning } from '../sim/tuning.js';
 import {
+  DEFAULT_ENEMY_TUNING,
   DEFAULT_IMPACT_TUNING,
   DEFAULT_MOVEMENT_TUNING,
   DEFAULT_SHOOTING_TUNING,
@@ -36,7 +37,7 @@ interface FieldSpec {
 
 interface GroupSpec {
   readonly title: string;
-  readonly group: 'movement' | 'shooting' | 'impact';
+  readonly group: 'movement' | 'shooting' | 'impact' | 'enemy';
   readonly fields: readonly FieldSpec[];
 }
 
@@ -74,7 +75,14 @@ const GROUPS: readonly GroupSpec[] = [
       { key: 'shotDamage', min: 0.5, max: 10, step: 0.5, hint: 'half-Maß per shot' },
       { key: 'shotLifetimeTicks', min: 6, max: 120, step: 1, hint: 'range, in ticks' },
       { key: 'muzzleOffset', min: 0, max: 24, step: 1, hint: 'px ahead of the player' },
-      { key: 'velocityInheritance', min: 0, max: 1.5, step: 0.05, hint: 'sway from running' },
+      { key: 'velocityInheritance', min: 0, max: 1.5, step: 0.05, hint: 'sway, aiming with keys' },
+      {
+        key: 'analogVelocityInheritance',
+        min: 0,
+        max: 1.5,
+        step: 0.05,
+        hint: 'sway, mouse or stick',
+      },
       { key: 'kickback', min: 0, max: 3, step: 0.05, hint: 'push per shot' },
     ],
   },
@@ -91,6 +99,7 @@ const GROUPS: readonly GroupSpec[] = [
       { key: 'knockback', min: 0, max: 10, step: 0.1, hint: 'throw per damage' },
       { key: 'shakePerDamage', min: 0, max: 4, step: 0.05, hint: 'shake on a hit' },
       { key: 'deathShake', min: 0, max: 8, step: 0.1, hint: 'shake on a kill' },
+      { key: 'playerHitShake', min: 0, max: 8, step: 0.1, hint: 'shake when you are hurt' },
       { key: 'maxShake', min: 0, max: 12, step: 0.1, hint: 'shake ceiling' },
       { key: 'shakeDamping', min: 0.5, max: 0.98, step: 0.01, hint: 'how long shake lasts' },
       { key: 'particlesPerHit', min: 0, max: 40, step: 1, hint: 'foam on a hit' },
@@ -112,12 +121,25 @@ const GROUPS: readonly GroupSpec[] = [
       { key: 'contactKnockback', min: 0, max: 12, step: 0.1, hint: 'thrown clear on contact' },
     ],
   },
+  {
+    title: 'enemy',
+    group: 'enemy',
+    fields: [
+      { key: 'speedScale', min: 0.25, max: 3, step: 0.05, hint: 'how fast the roster is' },
+      { key: 'telegraphScale', min: 0.25, max: 3, step: 0.05, hint: 'how long it warns you' },
+      { key: 'fireIntervalScale', min: 0.25, max: 4, step: 0.05, hint: 'gap between volleys' },
+      { key: 'projectileSpeedScale', min: 0.25, max: 3, step: 0.05, hint: 'how fast they shoot' },
+      { key: 'deflectParticles', min: 0, max: 30, step: 1, hint: 'foam off a shell' },
+      { key: 'deflectShake', min: 0, max: 3, step: 0.05, hint: 'shake off a shell' },
+    ],
+  },
 ];
 
 const DEFAULTS = {
   movement: DEFAULT_MOVEMENT_TUNING,
   shooting: DEFAULT_SHOOTING_TUNING,
   impact: DEFAULT_IMPACT_TUNING,
+  enemy: DEFAULT_ENEMY_TUNING,
 } as const;
 
 const STYLE = `

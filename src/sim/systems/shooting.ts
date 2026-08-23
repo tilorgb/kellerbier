@@ -30,12 +30,12 @@ export function stepShooting(sim: GameSim, input: Readonly<InputFrame>): void {
   }
 
   if (wantsToFire && sim.fireCooldown === 0) {
-    fire(sim, aimX, aimY);
+    fire(sim, aimX, aimY, input.analogAim);
     sim.fireCooldown += Math.max(1, Math.round(sim.tuning.shooting.fireDelayTicks));
   }
 }
 
-function fire(sim: GameSim, aimX: number, aimY: number): void {
+function fire(sim: GameSim, aimX: number, aimY: number, analogAim: boolean): void {
   const tuning = sim.tuning.shooting;
   const length = vectorLength(aimX, aimY);
   const directionX = aimX / length;
@@ -62,11 +62,18 @@ function fire(sim: GameSim, aimX: number, aimY: number): void {
     muzzleY = centreY;
   }
 
+  // How much of the player's motion the shot carries depends on how they are
+  // aiming. Eight-way aim holds the angle between running and aiming still, so
+  // the sway is a constant slant a player reads and shoots through; aim that
+  // tracks a point rotates that angle continuously, and the same sway becomes
+  // wobble. Same feature, two numbers — see the tuning docs.
+  const inheritance = analogAim ? tuning.analogVelocityInheritance : tuning.velocityInheritance;
+
   const slot = sim.projectiles.spawn(
     muzzleX,
     muzzleY,
-    directionX * tuning.shotSpeed + playerVelocityX * tuning.velocityInheritance,
-    directionY * tuning.shotSpeed + playerVelocityY * tuning.velocityInheritance,
+    directionX * tuning.shotSpeed + playerVelocityX * inheritance,
+    directionY * tuning.shotSpeed + playerVelocityY * inheritance,
     tuning.shotRadius,
     tuning.shotDamage,
     Math.max(1, Math.round(tuning.shotLifetimeTicks)),

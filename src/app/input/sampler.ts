@@ -178,6 +178,8 @@ export class InputSampler {
     this.gamepad.readStick(GamepadAxis.RightStickX, GamepadAxis.RightStickY);
     this.current.aimX = quantiseAxis(this.gamepad.lastStickX);
     this.current.aimY = quantiseAxis(this.gamepad.lastStickY);
+    // A stick aims at a point, not along one of eight directions.
+    this.current.analogAim = true;
 
     this.sampleButtons(true);
 
@@ -218,6 +220,7 @@ export class InputSampler {
       this.current.aimX = quantiseAxis(scratchX);
       this.current.aimY = quantiseAxis(scratchY);
       this.current.buttons |= 1 << InputAction.Fire;
+      this.current.analogAim = false;
       return;
     }
 
@@ -229,6 +232,7 @@ export class InputSampler {
       if (distance > 0) {
         this.current.aimX = quantiseAxis(dx / distance);
         this.current.aimY = quantiseAxis(dy / distance);
+        this.current.analogAim = true;
         if (this.keyboard.isMouseButtonDown(MOUSE_FIRE_BUTTON)) {
           this.current.buttons |= 1 << InputAction.Fire;
         }

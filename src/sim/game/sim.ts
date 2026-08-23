@@ -1,5 +1,9 @@
 import { type Component, World } from '../ecs/world.js';
 import { type Entity, entityIndex } from '../ecs/entity.js';
+import { ENEMY_DEFINITIONS } from '../../content/enemies/index.js';
+import type { EnemyDefinition } from '../enemy/definition.js';
+import { EnemyRegistry } from '../enemy/registry.js';
+import { ENEMY_PROFILES, EnemySize, type EnemySizeId } from '../enemy/size.js';
 import type { InputFrame } from '../input/frame.js';
 import { createInputFrame } from '../input/frame.js';
 import { type RunRandom, createRunRandom } from '../rng/streams.js';
@@ -17,6 +21,12 @@ import { stepPlayerMovement } from '../systems/movement.js';
 import { stepBodies } from '../systems/bodies.js';
 import { stepCollision } from '../systems/collision.js';
 import { stepContacts } from '../systems/contact.js';
+import {
+  ENEMY_MOTION_STRIDE,
+  ENEMY_STRIDE,
+  stepEnemies,
+  stepEnemyDeaths,
+} from '../systems/enemy.js';
 import { stepImpact, stepParticles } from '../systems/impact.js';
 import { stepProjectiles, stepShooting } from '../systems/shooting.js';
 
@@ -26,8 +36,8 @@ const DEFAULT_CAPACITY = 8192;
 /** Collider radius of the player, in pixels. */
 export const PLAYER_RADIUS = 7;
 
-/** Collider radius of a training target. */
-export const TARGET_RADIUS = 10;
+/** Collider radius of a training target — a mid-size body. */
+export const TARGET_RADIUS = ENEMY_PROFILES[EnemySize.Mid].radius;
 
 /**
  * The largest collider the broadphase grid is sized for.
@@ -39,57 +49,31 @@ export const TARGET_RADIUS = 10;
 export const MAX_COLLIDER_RADIUS = 16;
 
 /** Hit points of a training target. Four shots, so a kill is a small commitment. */
-export const TARGET_HEALTH = 4;
+export const TARGET_HEALTH = ENEMY_PROFILES[EnemySize.Mid].health;
 
 /** Hit points the player starts a run with, in half-Maß. */
 export const PLAYER_HEALTH = 6;
 
-/**
- * Enemy size classes.
- *
- * Three of them, because size is the first thing a player reads about something
- * walking at them and it has to mean something consistent: how hard it is to
- * hit, how far it flies when hit, whether it can be walked through, and what it
- * costs to touch. The names are the reference points — a mini is an Isaac fly,
- * a normal is a worm, a mid is heavy enough to stop you.
- */
-export const EnemySize = {
-  Mini: 0,
-  Normal: 1,
-  Mid: 2,
-} as const;
+export { ENEMY_PROFILES, EnemySize, type EnemyProfile, type EnemySizeId } from '../enemy/size.js';
 
-export type EnemySizeId = (typeof EnemySize)[keyof typeof EnemySize];
-
-export interface EnemyProfile {
-  readonly radius: number;
-  /** What knockback and contact separation are divided by. */
-  readonly mass: number;
-  readonly health: number;
-  /**
-   * Damage dealt by touching it, in half-Maß. Zero for the ones that are only
-   * in the way — not everything that can be walked into is a threat, and a room
-   * where every body hurts is a room with nowhere to stand.
-   */
-  readonly contactDamage: number;
-}
-
-/**
- * Masses are relative to the player's 1, and every one of them is above it.
- *
- * Even the smallest: a body light enough to walk through is a body that cannot
- * hold the player anywhere, and holding the player somewhere is the entire job
- * of a swarm. Three gnats at 1.2 each stop a run cold between them, which is
- * what makes the thing shooting from across the room dangerous.
- */
-export const ENEMY_PROFILES: Readonly<Record<EnemySizeId, EnemyProfile>> = {
-  [EnemySize.Mini]: { radius: 4, mass: 1.2, health: 1, contactDamage: 1 },
-  [EnemySize.Normal]: { radius: 7, mass: 3, health: 2, contactDamage: 0 },
-  [EnemySize.Mid]: { radius: TARGET_RADIUS, mass: 6, health: TARGET_HEALTH, contactDamage: 2 },
-};
-
-/** Ticks before a killed training target comes back. Two and a half seconds. */
+/** Ticks before a killed body on a spawn post comes back. Two and a half seconds. */
 export const TARGET_RESPAWN_TICKS = 150;
+
+/**
+ * What the room is populated with.
+ *
+ * Two placeholder rigs, both replaced by room templates in #18.
+ *
+ * `targets` is the impact-tuning rig: inert bodies that stand where they are
+ * put and come back a couple of seconds after they are killed. Tuning impact
+ * feel means killing the same thing several hundred times, and a target that
+ * walks away mid-tune is a target that measures something else.
+ *
+ * `enemies` is the game: authored definitions out of `src/content/enemies/`,
+ * behaving. It is what `npm run dev` starts, and what the milestone's question
+ * — is it fun to shoot things — is actually asked of.
+ */
+export type RoomPopulation = 'targets' | 'enemies';
 
 export interface GameSimOptions {
   readonly seed?: number;
@@ -98,6 +82,10 @@ export interface GameSimOptions {
   /** Projectile pool size. Lowered by tests that want to watch it overflow. */
   readonly projectileCapacity?: number;
   readonly particleCapacity?: number;
+  /** Defaults to `targets`; see `RoomPopulation`. */
+  readonly population?: RoomPopulation;
+  /** Enemy data. Defaults to everything in `src/content/enemies/`. */
+  readonly enemies?: readonly EnemyDefinition[];
 }
 
 /**
@@ -141,12 +129,37 @@ export class GameSim {
    * a different flash than the run it recorded is not evidence of anything.
    */
   readonly flash: Component<Uint8Array>;
+  /**
+   * Which enemy definition, which of its states, how long it has been in it,
+   * and the flags a transition reads — hit, and blocked by a wall.
+   *
+   * The tick counter is the only behaviour timer in the game. Telegraphs,
+   * invulnerability windows, fire rates and burst spacing are all derived from
+   * it, so there is never a second clock to keep in step with the first.
+   */
+  readonly enemy: Component<Int16Array>;
+  /** Current heading, then the point the body was spawned at, for `orbitPoint`. */
+  readonly enemyMotion: Component<Float32Array>;
+  /**
+   * Which spawn post a body belongs to, or -1.
+   *
+   * A post brings its body back a couple of seconds after it dies. Anything
+   * that was not put there by one — a Schimmelfleck's spores, a future room's
+   * reinforcements — carries -1 and stays dead.
+   */
+  readonly spawnPost: Component<Int16Array>;
 
   /** Rebuilt from the position arrays every tick. */
   readonly broadphase: SpatialHash;
 
   /** Component mask an entity needs before the broadphase will index it. */
   readonly collidableMask: number;
+
+  /** Component mask that marks a body as running an authored behaviour. */
+  readonly enemyMask: number;
+
+  /** Every enemy definition, validated and compiled once at construction. */
+  readonly enemies: EnemyRegistry;
 
   /** Everything in flight. Pooled, fixed capacity, never grows. */
   readonly projectiles: ProjectileStore;
@@ -215,18 +228,25 @@ export class GameSim {
   private readonly idleInput = createInputFrame();
 
   /**
-   * Where the training targets stand, and how long until a dead one returns.
+   * Where the room's bodies stand, and how long until a dead one returns.
    *
-   * Respawning is a playground affordance, not a game rule. Tuning impact feel
+   * Respawning is a playground affordance, not a game rule. Tuning by feel
    * means killing the same thing several hundred times, and a room that empties
    * after three kills makes that a chore. Room content, and what actually
-   * populates a room, is #18 and #35.
+   * populates a room, is #18 and #35 — at which point posts go away and the
+   * room template says what stands where.
+   *
+   * Only a body that a post put there comes back. Anything else — the spores a
+   * Schimmelfleck leaves behind, whatever a future item summons — carries -1 in
+   * its `spawnPost` and stays dead.
    */
-  private readonly targetSpawnX: number[] = [];
-  private readonly targetSpawnY: number[] = [];
-  private readonly targetRespawnAt: number[] = [];
-  /** Size class each respawn post brings back. */
-  private readonly targetSize: EnemySizeId[] = [];
+  private readonly postX: number[] = [];
+  private readonly postY: number[] = [];
+  private readonly postRespawnAt: number[] = [];
+  /** Size class a post brings back, when it holds no definition. */
+  private readonly postSize: EnemySizeId[] = [];
+  /** Enemy definition a post brings back, or -1 for a plain training target. */
+  private readonly postDefinition: number[] = [];
 
   constructor(options: GameSimOptions = {}) {
     this.seed = options.seed ?? 0;
@@ -243,7 +263,13 @@ export class GameSim {
     this.health = this.world.defineComponent('health', Int16Array, 2);
     this.flash = this.world.defineComponent('flash', Uint8Array, 1);
     this.contactDamage = this.world.defineComponent('contactDamage', Int16Array, 1);
+    this.enemy = this.world.defineComponent('enemy', Int16Array, ENEMY_STRIDE);
+    this.enemyMotion = this.world.defineComponent('enemyMotion', Float32Array, ENEMY_MOTION_STRIDE);
+    this.spawnPost = this.world.defineComponent('spawnPost', Int16Array, 1);
     this.collidableMask = this.world.maskOf(this.transform, this.body, this.collision);
+    this.enemyMask = this.world.maskOf(this.enemy, this.enemyMotion);
+
+    this.enemies = new EnemyRegistry(options.enemies ?? ENEMY_DEFINITIONS);
 
     this.broadphase = new SpatialHash({
       // The grid spans the room from the origin. Coordinates outside it clamp
@@ -261,7 +287,11 @@ export class GameSim {
     this.events = new EventQueue();
 
     this.playerHandle = this.spawnPlayer();
-    this.spawnTrainingTargets();
+    if ((options.population ?? 'targets') === 'enemies') {
+      this.spawnEnemyRoom();
+    } else {
+      this.spawnTrainingTargets();
+    }
     this.world.flush();
   }
 
@@ -356,6 +386,13 @@ export class GameSim {
    * of the fight is worth one sprite per kill.
    */
   kill(index: number): void {
+    if (index === this.playerIndex) {
+      // The player's slot is the one thing in the world that has to outlive
+      // everything else: the camera, the input and every system that says
+      // "the player" resolve through it, and a freed slot is handed to the
+      // next body that spawns. Losing a run is #15, and it will not be this.
+      throw new Error('The player entity cannot be killed');
+    }
     const random = this.random.cosmetic;
     this.decals.spawn(
       this.positionX(index),
@@ -388,14 +425,20 @@ export class GameSim {
     // now are, then everything already in flight advances. Anything else and a
     // shot appears a tick behind the player who fired it.
     stepPlayerMovement(this, input);
+    // Enemies decide after the player has moved and before bodies integrate, so
+    // a body moves on the same tick as the decision that moved it.
+    stepEnemies(this);
     stepBodies(this);
     stepShooting(this, input);
     stepProjectiles(this);
     stepCollision(this);
     stepContacts(this);
     stepImpact(this);
+    // After impact, because impact is what pushes the death events a split
+    // reads. A body that splits does so on the tick it died.
+    stepEnemyDeaths(this);
     stepParticles(this);
-    this.stepTargetRespawns();
+    this.stepRespawns();
 
     this.world.flush();
     this.currentTick += 1;
@@ -471,88 +514,140 @@ export class GameSim {
   }
 
   /**
-   * Three things to shoot at.
+   * Six things to shoot at, none of which shoot back.
    *
-   * Placeholders, and deliberately the smallest ones that make the collision
-   * pipeline visible end to end. The first real enemy — with behaviour, health
-   * and a reason to exist — is #14.
+   * The impact rig: one of each size class in reach of the middle of the room,
+   * so the three read against each other rather than against a memory of the
+   * last one. Nothing here behaves — that is what `spawnEnemyRoom` is for.
    */
   private spawnTrainingTargets(): void {
     const midX = (this.room.minX + this.room.maxX) / 2;
     const midY = (this.room.minY + this.room.maxY) / 2;
-    // One of each size in reach of the middle of the room, so the three read
-    // against each other rather than against a memory of the last one.
-    this.addTrainingTarget(this.room.minX + 45, midY, EnemySize.Mid);
-    this.addTrainingTarget(this.room.maxX - 45, midY - 35, EnemySize.Mid);
-    this.addTrainingTarget(this.room.maxX - 45, midY + 35, EnemySize.Normal);
-    this.addTrainingTarget(midX - 55, this.room.minY + 30, EnemySize.Normal);
-    this.addTrainingTarget(midX - 30, this.room.maxY - 30, EnemySize.Mini);
-    this.addTrainingTarget(midX + 30, this.room.maxY - 30, EnemySize.Mini);
+    this.addPost(this.room.minX + 45, midY, EnemySize.Mid, -1);
+    this.addPost(this.room.maxX - 45, midY - 35, EnemySize.Mid, -1);
+    this.addPost(this.room.maxX - 45, midY + 35, EnemySize.Normal, -1);
+    this.addPost(midX - 55, this.room.minY + 30, EnemySize.Normal, -1);
+    this.addPost(midX - 30, this.room.maxY - 30, EnemySize.Mini, -1);
+    this.addPost(midX + 30, this.room.maxY - 30, EnemySize.Mini, -1);
   }
 
-  private addTrainingTarget(x: number, y: number, size: EnemySizeId): void {
-    this.targetSpawnX.push(x);
-    this.targetSpawnY.push(y);
-    this.targetSize.push(size);
-    this.targetRespawnAt.push(-1);
-    this.spawnEnemy(x, y, size);
+  /**
+   * The floor-one roster, hand-placed until room templates land in #18.
+   *
+   * One of each authored enemy, arranged so that what each of them teaches is
+   * legible on its own: the Kellerasseln come at the player from opposite
+   * corners, the Bierratten from the other two, the Schimmelfleck sits where it
+   * cannot be ignored, and the Zapfhahn covers the right-hand wall the player
+   * has to cross in front of.
+   */
+  private spawnEnemyRoom(): void {
+    const midX = (this.room.minX + this.room.maxX) / 2;
+    const midY = (this.room.minY + this.room.maxY) / 2;
+    this.addEnemyPost('kellerassel', this.room.minX + 40, this.room.minY + 30);
+    this.addEnemyPost('kellerassel', this.room.maxX - 60, this.room.maxY - 30);
+    this.addEnemyPost('bierratte', this.room.maxX - 40, this.room.minY + 26);
+    this.addEnemyPost('bierratte', this.room.minX + 36, this.room.maxY - 26);
+    this.addEnemyPost('schimmelfleck', midX, this.room.minY + 24);
+    // Against the right-hand wall, since it is a tap in one.
+    this.addEnemyPost('zapfhahn', this.room.maxX - 10, midY);
   }
 
-  /** Brings back a training target a couple of seconds after it was killed. */
-  private stepTargetRespawns(): void {
-    for (let post = 0; post < this.targetRespawnAt.length; post++) {
-      const due = this.targetRespawnAt[post] ?? -1;
+  /** Puts an authored enemy on a post, by the id its definition states. */
+  private addEnemyPost(id: string, x: number, y: number): void {
+    this.addPost(x, y, EnemySize.Normal, this.enemies.indexOf(id));
+  }
+
+  /**
+   * Adds a post and the body standing on it.
+   *
+   * A post holding a definition index brings that enemy back; one holding -1
+   * brings back a plain training target of its size class.
+   */
+  private addPost(x: number, y: number, size: EnemySizeId, definition: number): void {
+    this.postX.push(x);
+    this.postY.push(y);
+    this.postSize.push(size);
+    this.postDefinition.push(definition);
+    this.postRespawnAt.push(-1);
+    this.spawnOnPost(this.postX.length - 1);
+  }
+
+  /** Puts what a post holds back on it, and tells the body which post that is. */
+  private spawnOnPost(post: number): void {
+    const x = this.postX[post] ?? 0;
+    const y = this.postY[post] ?? 0;
+    const definition = this.postDefinition[post] ?? -1;
+    const entity =
+      definition >= 0
+        ? this.spawnEnemyKind(definition, x, y)
+        : this.spawnEnemy(x, y, this.postSize[post] ?? EnemySize.Mid);
+    this.spawnPost.data[entityIndex(entity)] = post;
+  }
+
+  /**
+   * Brings back what stood on a post a couple of seconds after it died.
+   *
+   * A post the player is standing on waits, and keeps waiting, rather than
+   * spawning a body inside them. Contact separation would sort it out over the
+   * next few ticks, and every one of those ticks looks like the player being
+   * born out of an enemy — or, for something heavy, like the player shoving a
+   * wall-mounted tap off its wall.
+   */
+  private stepRespawns(): void {
+    for (let post = 0; post < this.postRespawnAt.length; post++) {
+      const due = this.postRespawnAt[post] ?? -1;
       if (due < 0 || this.currentTick < due) {
         continue;
       }
-      this.targetRespawnAt[post] = -1;
-      this.spawnEnemy(
-        this.targetSpawnX[post] ?? 0,
-        this.targetSpawnY[post] ?? 0,
-        this.targetSize[post] ?? EnemySize.Mid,
-      );
-    }
-  }
-
-  /**
-   * Schedules the return of whichever post the body at `index` was standing on.
-   *
-   * Matched by position, because the entity is on its way out and its slot is
-   * about to be recycled.
-   */
-  private scheduleRespawn(index: number, delayTicks: number): void {
-    const x = this.positionX(index);
-    const y = this.positionY(index);
-    let closest = -1;
-    let closestDistance = Number.POSITIVE_INFINITY;
-    for (let post = 0; post < this.targetSpawnX.length; post++) {
-      if ((this.targetRespawnAt[post] ?? -1) >= 0) {
+      if (!this.postClearOfPlayer(post)) {
         continue;
       }
-      const dx = x - (this.targetSpawnX[post] ?? 0);
-      const dy = y - (this.targetSpawnY[post] ?? 0);
-      const distance = dx * dx + dy * dy;
-      if (distance < closestDistance) {
-        closestDistance = distance;
-        closest = post;
-      }
-    }
-    if (closest >= 0) {
-      this.targetRespawnAt[closest] = this.currentTick + delayTicks;
+      this.postRespawnAt[post] = -1;
+      this.spawnOnPost(post);
     }
   }
 
+  /** True when the body a post holds would not appear inside the player. */
+  private postClearOfPlayer(post: number): boolean {
+    const definition = this.postDefinition[post] ?? -1;
+    const radius =
+      definition >= 0
+        ? this.enemies.at(definition).radius
+        : ENEMY_PROFILES[this.postSize[post] ?? EnemySize.Mid].radius;
+
+    const player = this.playerIndex;
+    const dx = (this.postX[post] ?? 0) - this.positionX(player);
+    const dy = (this.postY[post] ?? 0) - this.positionY(player);
+    const reach = radius + (this.body.data[player * 2] ?? 0);
+    return dx * dx + dy * dy > reach * reach;
+  }
+
   /**
-   * Adds one shootable body.
+   * Schedules the return of the post the body at `index` was standing on.
    *
-   * Public because the stress scene and the collision tests need to build a
-   * populated room, and because it is what #14 will grow into.
+   * Read off the body rather than matched by position: a Kellerassel dies a
+   * long walk from where it started, and a body that was never on a post — the
+   * spores a Schimmelfleck leaves, whatever a future item summons — carries -1
+   * and stays dead.
    */
+  private scheduleRespawn(index: number, delayTicks: number): void {
+    const post = this.spawnPost.data[index] ?? -1;
+    if (post < 0 || post >= this.postRespawnAt.length) {
+      return;
+    }
+    if ((this.postRespawnAt[post] ?? -1) >= 0) {
+      return;
+    }
+    this.postRespawnAt[post] = this.currentTick + delayTicks;
+  }
+
   /**
-   * Adds one body of a named size class.
+   * Adds one shootable body of a named size class.
    *
    * The size decides everything about it that the player can feel, which is the
-   * point of having classes at all rather than four numbers per spawn call.
+   * point of having classes at all rather than four numbers per spawn call. It
+   * does not behave: this is the body an authored enemy is built on, and what
+   * the stress scene and the collision tests populate a room with.
    */
   spawnEnemy(x: number, y: number, size: EnemySizeId): Entity {
     const profile = ENEMY_PROFILES[size];
@@ -570,6 +665,45 @@ export class GameSim {
     return entity;
   }
 
+  /**
+   * Adds one authored enemy, by its index in the registry.
+   *
+   * An index rather than an id, because this is called from the enemy system
+   * while a body is splitting, and a string lookup in the frame loop is one the
+   * registry already did at construction.
+   */
+  spawnEnemyKind(definition: number, x: number, y: number): Entity {
+    const compiled = this.enemies.at(definition);
+    const entity = this.spawnTarget(x, y, compiled.radius);
+    const index = entityIndex(entity);
+
+    this.world.add(entity, this.enemy);
+    this.world.add(entity, this.enemyMotion);
+
+    const body = this.body.data;
+    body[index * 2 + 1] = compiled.mass;
+
+    const health = this.health.data;
+    health[index * 2] = compiled.health;
+    health[index * 2 + 1] = compiled.health;
+    this.contactDamage.data[index] = compiled.contactDamage;
+
+    // `add` zeroed both components, which is most of the state a body starts
+    // in: no ticks in the state, and none of the flags a transition reads.
+    const enemy = this.enemy.data;
+    enemy[index * ENEMY_STRIDE] = definition;
+    enemy[index * ENEMY_STRIDE + 1] = compiled.initialState;
+
+    // Heading east, and the spawn point `orbitPoint` circles.
+    const motion = this.enemyMotion.data;
+    const motionBase = index * ENEMY_MOTION_STRIDE;
+    motion[motionBase] = 1;
+    motion[motionBase + 2] = x;
+    motion[motionBase + 3] = y;
+
+    return entity;
+  }
+
   spawnTarget(x: number, y: number, radius: number = TARGET_RADIUS): Entity {
     const entity = this.world.create();
     this.world.add(entity, this.transform);
@@ -580,6 +714,7 @@ export class GameSim {
     this.world.add(entity, this.health);
     this.world.add(entity, this.contactDamage);
     this.world.add(entity, this.flash);
+    this.world.add(entity, this.spawnPost);
 
     const index = entityIndex(entity);
     const transform = this.transform.data;
@@ -600,6 +735,8 @@ export class GameSim {
     // inherited the contact damage of whatever last used its slot is a bug that
     // only shows up after something died.
     this.contactDamage.data[index] = 0;
+    // Nothing brings this one back unless a post claims it.
+    this.spawnPost.data[index] = -1;
 
     this.setCollisionLayer(index, CollisionLayer.Obstacle);
     return entity;

@@ -253,6 +253,13 @@ describe('replaying a recorded run', () => {
     }
 
     expect(playback.finished).toBe(true);
-    expect(playback.next()).toEqual({ moveX: 0, moveY: 0, aimX: 0, aimY: 0, buttons: 0 });
+    expect(playback.next()).toEqual({
+      moveX: 0,
+      moveY: 0,
+      aimX: 0,
+      aimY: 0,
+      buttons: 0,
+      analogAim: false,
+    });
   });
 });

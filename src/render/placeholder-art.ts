@@ -9,6 +9,21 @@ import { Graphics, type Renderer, type Texture } from 'pixi.js';
  * the draw-call budget along with it.
  */
 
+/**
+ * A hollow ring, drawn once and scaled per telegraph.
+ *
+ * Generated at a generous radius and scaled down rather than up, because a ring
+ * scaled past its own resolution is a ring with a soft edge, and a soft warning
+ * is one the player reads late.
+ */
+export function createRingTexture(renderer: Renderer, radius: number, color: number): Texture {
+  const graphics = new Graphics();
+  graphics.circle(radius, radius, radius - 1).stroke({ width: 2, color });
+  const texture = renderer.generateTexture({ target: graphics, resolution: 1 });
+  graphics.destroy();
+  return texture;
+}
+
 /** A filled circle with a lighter rim, the size a projectile is drawn at. */
 export function createBlobTexture(
   renderer: Renderer,

@@ -24,6 +24,8 @@ export interface GameViewTextures {
   readonly entity: Texture;
   /** The entity shape in solid white, for the one-tick hit flash. */
   readonly entityFlash: Texture;
+  /** The ring an enemy telegraphs an attack with. */
+  readonly telegraph: Texture;
   readonly foam: Texture;
   readonly splash: Texture;
   readonly decal: Texture;
@@ -91,7 +93,7 @@ export class GameView {
     this.decals = new DecalView(sim.decals, textures.decal);
     this.world.addChild(this.decals.container);
 
-    this.entities = new EntityView(sim, textures.entity, textures.entityFlash);
+    this.entities = new EntityView(sim, textures.entity, textures.entityFlash, textures.telegraph);
     this.world.addChild(this.entities.container);
 
     this.player = new Sprite(textures.player);

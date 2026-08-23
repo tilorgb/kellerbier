@@ -38,8 +38,11 @@ export const ALL_INPUT_ACTIONS: readonly InputActionId[] = [
   InputAction.Pause,
 ];
 
-/** Bytes one frame occupies in a recording: four axes and a button mask. */
-export const INPUT_FRAME_BYTES = 5;
+/**
+ * Bytes one frame occupies in a recording: four axes, a button mask, and the
+ * flag saying how aim was produced.
+ */
+export const INPUT_FRAME_BYTES = 6;
 
 /**
  * One tick of player intent.
@@ -54,10 +57,24 @@ export interface InputFrame {
   aimY: number;
   /** Bit set of `InputAction` values. */
   buttons: number;
+  /**
+   * True when aim came from a mouse or a stick rather than from aim keys.
+   *
+   * The one thing in the frame that is not what the player did, but how they
+   * said it — and it is here rather than in the sampler because the simulation
+   * acts on it: a shot inherits less of the player's velocity when aim is a
+   * point being tracked than when it is one of eight fixed directions. See
+   * `analogVelocityInheritance` in tuning.ts for why the two differ.
+   *
+   * Being in the frame is what keeps that deterministic: a replay carries the
+   * device it was played on, so it reproduces the shots it recorded rather than
+   * the shots the machine replaying it would have fired.
+   */
+  analogAim: boolean;
 }
 
 export function createInputFrame(): InputFrame {
-  return { moveX: 0, moveY: 0, aimX: 0, aimY: 0, buttons: 0 };
+  return { moveX: 0, moveY: 0, aimX: 0, aimY: 0, buttons: 0, analogAim: false };
 }
 
 export function clearInputFrame(frame: InputFrame): void {
@@ -66,6 +83,7 @@ export function clearInputFrame(frame: InputFrame): void {
   frame.aimX = 0;
   frame.aimY = 0;
   frame.buttons = 0;
+  frame.analogAim = false;
 }
 
 export function copyInputFrame(from: Readonly<InputFrame>, to: InputFrame): void {
@@ -74,6 +92,7 @@ export function copyInputFrame(from: Readonly<InputFrame>, to: InputFrame): void
   to.aimX = from.aimX;
   to.aimY = from.aimY;
   to.buttons = from.buttons;
+  to.analogAim = from.analogAim;
 }
 
 export function inputFramesEqual(a: Readonly<InputFrame>, b: Readonly<InputFrame>): boolean {
@@ -82,7 +101,8 @@ export function inputFramesEqual(a: Readonly<InputFrame>, b: Readonly<InputFrame
     a.moveY === b.moveY &&
     a.aimX === b.aimX &&
     a.aimY === b.aimY &&
-    a.buttons === b.buttons
+    a.buttons === b.buttons &&
+    a.analogAim === b.analogAim
   );
 }
 

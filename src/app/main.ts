@@ -3,7 +3,7 @@ import massUrl from '../../assets/sprites/mass.png';
 import { GameSim, MAX_COLLIDER_RADIUS } from '../sim/game/sim.js';
 import { TICKS_PER_SECOND } from '../sim/time.js';
 import { createRenderer, trackWindowSize } from '../render/app.js';
-import { createBlobTexture } from '../render/placeholder-art.js';
+import { createBlobTexture, createRingTexture } from '../render/placeholder-art.js';
 import {
   type GameLayout,
   INTERNAL_HEIGHT,
@@ -11,6 +11,7 @@ import {
   computeGameLayout,
   roomUnitsPerPixel,
 } from '../render/resolution.js';
+import { EntityView } from '../render/entities.js';
 import { GameView } from '../render/view.js';
 import { SILENT_AUDIO, playImpactAudio } from './audio/impact.js';
 import { InputSampler } from './input/sampler.js';
@@ -31,12 +32,18 @@ async function boot(): Promise<void> {
 
   // The run seed is fixed until seeded runs land in #48. Everything downstream
   // of it already behaves as though it were chosen, which is the point.
-  const sim = new GameSim({ seed: 1 });
+  //
+  // The room is populated with the authored roster rather than the training
+  // targets: the targets are the rig impact feel was tuned against, and the
+  // game is the thing with enemies in it.
+  const sim = new GameSim({ seed: 1, population: 'enemies' });
   const view = new GameView(sim, {
     player: playerTexture,
     projectile: createBlobTexture(app.renderer, sim.tuning.shooting.shotRadius, 0xf0c46a, 0xfff3d0),
     entity: createBlobTexture(app.renderer, MAX_COLLIDER_RADIUS, 0x7d5a3c, 0xb08056),
     entityFlash: createBlobTexture(app.renderer, MAX_COLLIDER_RADIUS, 0xffffff, 0xffffff),
+    // White, and tinted where it is drawn — one texture for every telegraph.
+    telegraph: createRingTexture(app.renderer, EntityView.telegraphTextureRadius, 0xffffff),
     foam: createBlobTexture(app.renderer, 2, 0xfff4dc, 0xffffff),
     splash: createBlobTexture(app.renderer, 2, 0xd9a441, 0xf6d08a),
     // Dark and wet, not another body. A splash the same brown as a target
