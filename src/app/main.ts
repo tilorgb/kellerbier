@@ -12,10 +12,13 @@ import {
   roomUnitsPerPixel,
 } from '../render/resolution.js';
 import { EntityView } from '../render/entities.js';
+import { GameOverScreen } from '../render/game-over.js';
+import { HealthHud } from '../render/health-hud.js';
 import { GameView } from '../render/view.js';
 import { SILENT_AUDIO, playImpactAudio } from './audio/impact.js';
 import { InputSampler } from './input/sampler.js';
 import { FixedTimestepLoop, runAnimationFrameLoop } from './loop.js';
+import { RunSummaryTracker } from './run-summary.js';
 
 async function boot(): Promise<void> {
   const host = document.getElementById('game');
@@ -79,6 +82,69 @@ async function boot(): Promise<void> {
     hud.position.set(applied.originX + 8, applied.originY + INTERNAL_HEIGHT * applied.scale - 8);
   };
 
+  const gameOverScreen = new GameOverScreen();
+  uiLayer.addChild(gameOverScreen.view);
+
+  const healthHud = new HealthHud(app.renderer);
+  uiLayer.addChild(healthHud.view);
+  // Screen pixels, not scaled — the same choice `hud` (the debug text) makes,
+  // and for the same reason: `uiLayer` is drawn at display resolution, and a
+  // fixed-size icon scaled up with the game's integer zoom would go blocky
+  // exactly when the window is large enough that it would otherwise be able
+  // to look its best.
+  const positionHealthHud = (applied: GameLayout): void => {
+    healthHud.view.position.set(applied.originX + 8, applied.originY + 8);
+  };
+
+  const summary = new RunSummaryTracker();
+  /**
+   * Where the run is, once the player dies.
+   *
+   * 'freezing' and 'slowmo' still call `sim.step()` every tick — the freeze
+   * is `sim.requestHitstop` (the same mechanism every other hit already
+   * uses, just held longer) and the slow-motion beat is `loop.timeScale`
+   * (the same knob the debug `[`/`]` keys already drive), not a second
+   * mechanism. Only 'over' stops stepping: by then there is nothing left to
+   * simulate, and the screen is showing the frozen tableau underneath it.
+   */
+  let deathPhase: 'alive' | 'freezing' | 'slowmo' | 'over' = 'alive';
+  let deathPhaseTicks = 0;
+
+  /** Called once per real `sim.step()`, right after it, to drive `deathPhase` forward. */
+  function advanceDeathSequence(): void {
+    const tuning = sim.tuning.impact;
+    if (deathPhase === 'alive') {
+      if (sim.playerDead) {
+        deathPhase = 'freezing';
+        sim.requestHitstop(Math.round(tuning.deathFreezeTicks));
+      }
+      return;
+    }
+    if (deathPhase === 'freezing') {
+      if (!sim.frozen) {
+        deathPhase = 'slowmo';
+        deathPhaseTicks = 0;
+        loop.timeScale = tuning.deathSlowmoScale;
+      }
+      return;
+    }
+    if (deathPhase === 'slowmo') {
+      deathPhaseTicks += 1;
+      if (deathPhaseTicks >= tuning.deathSlowmoTicks) {
+        deathPhase = 'over';
+        loop.timeScale = 1;
+        gameOverScreen.show({
+          word: sim.deathWord ?? 'Umgfalln',
+          seconds: sim.playerDeathTick / TICKS_PER_SECOND,
+          kills: summary.kills,
+          // Matches src/debug/panels/run-info.ts's placeholder verbatim —
+          // real floor/room content is #20.
+          floor: 'floor 0  room playground',
+        });
+      }
+    }
+  }
+
   // The pointer is reported in room coordinates, not screen ones: mouse aim is
   // measured against the player's simulation position, and the room sits scaled
   // and letterboxed inside a full-window canvas. Updated on every resize, and
@@ -92,6 +158,8 @@ async function boot(): Promise<void> {
     pointerMapping.originY = applied.originY;
     pointerMapping.unitsPerPixel = roomUnitsPerPixel(applied);
     positionHud(applied);
+    positionHealthHud(applied);
+    gameOverScreen.resize(applied);
   });
 
   const input = new InputSampler();
@@ -119,18 +187,23 @@ async function boot(): Promise<void> {
           // Busy-wait: a stall has to be spent inside the step being measured.
         }
       }
-      // Mouse aim is measured from the player, so the sampler is told where the
-      // player is before it reads the pointer.
-      const index = sim.playerIndex;
-      input.setAimOrigin(sim.positionX(index), sim.positionY(index));
-      sim.step(input.sample());
-      playImpactAudio(sim, SILENT_AUDIO);
+      if (deathPhase !== 'over') {
+        // Mouse aim is measured from the player, so the sampler is told where
+        // the player is before it reads the pointer.
+        const index = sim.playerIndex;
+        input.setAimOrigin(sim.positionX(index), sim.positionY(index));
+        sim.step(input.sample());
+        playImpactAudio(sim, SILENT_AUDIO);
+        summary.recordTick(sim);
+        advanceDeathSequence();
+      }
       simMs += performance.now() - started;
     },
     render: (alpha) => {
       const started = performance.now();
       overlay?.drawCalls.beginFrame();
       view.sync(alpha);
+      healthHud.sync(sim);
       overlay?.sync(alpha);
       overlay?.record(simMs, performance.now() - started, 0);
       simMs = 0;
@@ -148,8 +221,9 @@ async function boot(): Promise<void> {
     const hearts = sim.health.data[playerSlot * 2] ?? 0;
     const maxHearts = sim.health.data[playerSlot * 2 + 1] ?? 0;
     const invulnerable = sim.playerInvulnerableTicks > 0 ? '  INVULN' : '';
+    const dead = sim.playerDead ? '  DEAD' : '';
     hud.text = `tick ${String(loop.tick)}  ${seconds}s  x${scale}${loop.paused ? '  PAUSED' : ''}
-hp ${String(hearts)}/${String(maxHearts)}${invulnerable}
+hp ${String(hearts)}/${String(maxHearts)}  soul ${String(sim.playerSoulHealth)}  eternal ${String(sim.playerEternalHealth)}${invulnerable}${dead}
 shots ${String(shots.liveCount)}/${String(shots.capacity)}  particles ${String(
       particles.liveCount,
     )}/${String(particles.capacity)}${shots.overflows > 0 ? '  SHOT OVERFLOW' : ''}
