@@ -1,0 +1,45 @@
+name: Content
+description: An item, an enemy, a room, a floor or its text.
+labels: [content]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Content is **data**. If this needs an engine change to exist, it is a feature issue with
+        a content issue behind it — please file both, so the engine work does not disappear
+        inside the content work.
+
+        Names and tone follow [`docs/CONTENT_BIBLE.md`](../blob/main/docs/CONTENT_BIBLE.md).
+        No real brewery trademarks, logos or brands, anywhere, ever.
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What kind
+      options: [Item, Enemy, Boss, Room, Floor, Pickup, Text or flavour, Other]
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What it is
+      description: The idea, in the terms a player would experience it.
+    validations:
+      required: true
+
+  - type: textarea
+    id: mechanics
+    attributes:
+      label: How it works
+      description: |
+        Numbers where you have them, and which existing behaviour primitives or item hooks it
+        composes from. "Needs a new primitive" is a fine answer — say which.
+
+  - type: textarea
+    id: synergies
+    attributes:
+      label: What it combines with
+      description: |
+        The interesting part. What does this do alongside things that already exist, including
+        the combinations nobody would author deliberately?

@@ -1,0 +1,39 @@
+name: Labels
+
+# Applies the label scheme in tools/labels/labels.json.
+#
+# Run from the Actions tab, or automatically when the scheme itself changes —
+# so the labels on the repository and the file describing them cannot drift.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/labels/**'
+      - '.github/workflows/labels.yml'
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: labels
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      - name: Apply labels
+        run: node tools/labels/apply-labels.mjs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
