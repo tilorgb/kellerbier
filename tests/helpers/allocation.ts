@@ -10,20 +10,43 @@
  *
  * Forcing a collection *after* the loop and reading `heapUsed` measures what
  * survived, not what was allocated — a loop producing megabytes of immediately
- * collectable garbage reads as zero growth. So instead: collect once before,
- * run few enough passes that the total stays inside V8's young generation, and
- * read `heapUsed` with no collection in between. Nothing is reclaimed during
- * the window, so the delta is the allocation.
+ * collectable garbage reads as zero growth. What is wanted is the opposite: the
+ * bytes handed out, whether or not they lived.
  *
- * The window is measured several times and the **smallest** result is kept.
+ * So `heapUsed` is sampled after every pass, and the measurement is the sum of
+ * the **rises** between consecutive samples. Between two collections `heapUsed`
+ * only moves one way, so a rise is allocation; a fall is a collection, and a
+ * collection is not evidence about the loop at all. Counting rises therefore
+ * survives a scavenge landing in the middle of the window, which at these
+ * populations is not an edge case but the normal outcome — a full frame hands
+ * out enough to fill V8's young generation in a couple of dozen passes.
+ *
+ * What it costs is the allocation between the last sample before a collection
+ * and the collection itself, which is at most one pass's worth per collection
+ * and there are one or two per window. Calibrated against known loops: an empty
+ * pass reads 0.28 KB, six thousand typed-array writes read 0.19 KB, and a
+ * thousand `{x, y}` objects read 39.25 KB — 40.2 bytes each, which is what a
+ * two-field object costs. The floor of about a quarter of a kilobyte is the
+ * instrument itself: `process.memoryUsage()` returns an object, once per pass.
+ *
+ * ## Why the smallest window wins
+ *
+ * The window is measured several times and the smallest result is kept.
  * Everything else in the process allocates too — the test runner, timers, the
  * reporter — and whatever of that lands inside a window is added to whatever
- * the loop did. Noise can only push the number up, so the minimum across rounds
- * is the closest estimate of the loop's own cost. Averaging would fold the
- * noise in, and a single window is at the mercy of whatever the machine happened
- * to be doing: the ECS measurement reads 0.2 KB across rounds, read 16 KB from
- * one window locally, and failed CI at 141 KB against a 128 KB budget. All three
- * were the same loop allocating the same nothing.
+ * the loop did. That noise can only push the number up, so the minimum across
+ * rounds is the closest estimate of the loop's own cost. Averaging would fold
+ * the noise in, and a single window is at the mercy of whatever the machine
+ * happened to be doing: the ECS measurement reads 0.2 KB across rounds, read
+ * 16 KB from one window locally, and failed CI at 141 KB against a 128 KB
+ * budget. All three were the same loop allocating the same nothing.
+ *
+ * A previous version of this file took that minimum over *net* deltas, which
+ * inverts the argument the moment a collection lands inside a window: a
+ * scavenge pushes a window's number down, and against a minimum the most
+ * corrupted window always wins. The frame-time benchmark's deliberate
+ * regression — 310 KB an object at a time — measured 10 KB that way, and passed
+ * a gate set at 64 KB.
  */
 
 const forceGc = (globalThis as { gc?: () => void }).gc;
@@ -51,7 +74,13 @@ export interface MeasureOptions {
   readonly warmUpPasses?: number;
 }
 
-/** Heap bytes allocated per call of `pass`, with nothing reclaimed in between. */
+/**
+ * Heap bytes handed out per call of `pass`.
+ *
+ * Reads about 0.3 KB for a loop that allocates nothing — see the note on the
+ * instrument's own floor above. Budgets built on this should sit far enough
+ * above that floor to ignore it.
+ */
 export function bytesPerPass(pass: () => void, options: MeasureOptions = {}): number {
   const gc = requireGc();
   const passes = options.passes ?? PASSES_PER_WINDOW;
@@ -66,13 +95,22 @@ export function bytesPerPass(pass: () => void, options: MeasureOptions = {}): nu
   let smallest = Number.POSITIVE_INFINITY;
   for (let round = 0; round < rounds; round++) {
     options.prepare?.();
+    // Not because the window needs an empty heap — it does not, rises are
+    // counted either way — but so that every round starts from the same place
+    // and a round is not handed the previous one's pending collection.
     gc();
-    const before = process.memoryUsage().heapUsed;
+
+    let previous = process.memoryUsage().heapUsed;
+    let grown = 0;
     for (let i = 0; i < passes; i++) {
       pass();
+      const sample = process.memoryUsage().heapUsed;
+      if (sample > previous) {
+        grown += sample - previous;
+      }
+      previous = sample;
     }
-    const after = process.memoryUsage().heapUsed;
-    smallest = Math.min(smallest, (after - before) / passes);
+    smallest = Math.min(smallest, grown / passes);
   }
   return smallest;
 }

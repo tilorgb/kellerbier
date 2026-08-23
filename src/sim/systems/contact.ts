@@ -38,11 +38,26 @@ import { addPush } from './movement.js';
 const SOLID_LAYERS = CollisionLayer.Enemy | CollisionLayer.Obstacle;
 
 let activeSim: GameSim | null = null;
-let playerIndex = 0;
-let playerX = 0;
-let playerY = 0;
-let playerRadius = 0;
-let playerMass = 1;
+
+/**
+ * The player's own numbers for the tick being resolved.
+ *
+ * Typed arrays rather than module-level `let`s, and the reason is the same one
+ * the collision system carries: a module binding is a tagged slot, so storing a
+ * double into one boxes a `HeapNumber` every time. Five stores a tick is not
+ * what makes this worth doing — the separation loop writes the position back
+ * on every body the player is standing in — but the rule is not worth having
+ * with exceptions in it.
+ */
+const PLAYER_X = 0;
+const PLAYER_Y = 1;
+const PLAYER_RADIUS = 2;
+const PLAYER_MASS = 3;
+const PLAYER_SLOTS = 4;
+const player = new Float64Array(PLAYER_SLOTS);
+
+/** The player entity, kept beside the doubles for the same reason. */
+const playerSlot = new Int32Array(1);
 
 export function stepContacts(sim: GameSim): void {
   if (sim.playerInvulnerableTicks > 0) {
@@ -51,22 +66,29 @@ export function stepContacts(sim: GameSim): void {
 
   const index = sim.playerIndex;
   activeSim = sim;
-  playerIndex = index;
-  playerX = sim.positionX(index);
-  playerY = sim.positionY(index);
-  playerRadius = sim.body.data[index * 2] ?? 0;
-  playerMass = Math.max(0.01, sim.body.data[index * 2 + 1] ?? 1);
+  playerSlot[0] = index;
+  player[PLAYER_X] = sim.positionX(index);
+  player[PLAYER_Y] = sim.positionY(index);
+  player[PLAYER_RADIUS] = sim.body.data[index * 2] ?? 0;
+  player[PLAYER_MASS] = Math.max(0.01, sim.body.data[index * 2 + 1] ?? 1);
 
-  sim.broadphase.query(playerX, playerY, playerRadius, resolveAgainstPlayer);
+  sim.broadphase.query(
+    player[PLAYER_X],
+    player[PLAYER_Y],
+    player[PLAYER_RADIUS],
+    resolveAgainstPlayer,
+  );
 
   activeSim = null;
 }
 
 function resolveAgainstPlayer(other: number): void {
   const sim = activeSim;
-  if (sim === null || other === playerIndex) {
+  const index = playerSlot[0] ?? 0;
+  if (sim === null || other === index) {
     return;
   }
+  const radius = player[PLAYER_RADIUS] ?? 0;
   const layer = sim.collision.data[other * 2] ?? 0;
   if ((layer & SOLID_LAYERS) === 0) {
     return;
@@ -76,13 +98,15 @@ function resolveAgainstPlayer(other: number): void {
   const otherRadius = body[other * 2] ?? 0;
   const otherX = sim.positionX(other);
   const otherY = sim.positionY(other);
-  if (!circlesOverlap(playerX, playerY, playerRadius, otherX, otherY, otherRadius)) {
+  let x = player[PLAYER_X] ?? 0;
+  let y = player[PLAYER_Y] ?? 0;
+  if (!circlesOverlap(x, y, radius, otherX, otherY, otherRadius)) {
     return;
   }
 
-  const reach = playerRadius + otherRadius;
-  let awayX = playerX - otherX;
-  let awayY = playerY - otherY;
+  const reach = radius + otherRadius;
+  let awayX = x - otherX;
+  let awayY = y - otherY;
   const distance = vectorLength(awayX, awayY);
   if (distance === 0) {
     // Exactly concentric, which happens when something spawns on top of the
@@ -99,14 +123,12 @@ function resolveAgainstPlayer(other: number): void {
   // is shoved aside entirely, and one much heavier than the player moves the
   // player instead of moving.
   const otherMass = Math.max(0.01, body[other * 2 + 1] ?? 1);
-  const playerShare = otherMass / (playerMass + otherMass);
+  const playerShare = otherMass / ((player[PLAYER_MASS] ?? 0) + otherMass);
 
   const playerWanted = overlap * playerShare;
-  let owed =
-    playerWanted -
-    moveClear(sim, playerIndex, playerRadius, playerX, playerY, awayX, awayY, playerWanted);
-  playerX = sim.positionX(playerIndex);
-  playerY = sim.positionY(playerIndex);
+  let owed = playerWanted - moveClear(sim, index, radius, x, y, awayX, awayY, playerWanted);
+  x = sim.positionX(index);
+  y = sim.positionY(index);
 
   // Whatever a wall would not let the player take, the other body owes instead.
   const otherWanted = overlap - playerWanted + owed;
@@ -116,9 +138,9 @@ function resolveAgainstPlayer(other: number): void {
   // And if it is against a wall too, back to the player, who at least has an
   // input telling them why they are not moving.
   if (owed > 0) {
-    moveClear(sim, playerIndex, playerRadius, playerX, playerY, awayX, awayY, owed);
-    playerX = sim.positionX(playerIndex);
-    playerY = sim.positionY(playerIndex);
+    moveClear(sim, index, radius, x, y, awayX, awayY, owed);
+    x = sim.positionX(index);
+    y = sim.positionY(index);
   }
 
   slowPlayerInto(sim, awayX, awayY, playerShare);
@@ -133,8 +155,13 @@ function resolveAgainstPlayer(other: number): void {
   if (damage > 0 && sim.playerInvulnerableTicks === 0) {
     // The normal points back at whatever was touched, matching the convention
     // every other impact event uses: away from the thing that caused it.
-    sim.events.push(EventKind.Contact, playerIndex, other, playerX, playerY, awayX, awayY, damage);
+    sim.events.push(EventKind.Contact, index, other, x, y, awayX, awayY, damage);
   }
+
+  // Written back for the next candidate: the separation above moved the player,
+  // and the body after this one has to be resolved against where they are now.
+  player[PLAYER_X] = x;
+  player[PLAYER_Y] = y;
 }
 
 /**
@@ -153,7 +180,7 @@ function slowPlayerInto(sim: GameSim, awayX: number, awayY: number, share: numbe
     return;
   }
   const velocity = sim.velocity.data;
-  const base = playerIndex * 2;
+  const base = (playerSlot[0] ?? 0) * 2;
   const velocityX = velocity[base] ?? 0;
   const velocityY = velocity[base + 1] ?? 0;
 

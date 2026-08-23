@@ -72,8 +72,13 @@ export const TARGET_RESPAWN_TICKS = 150;
  * `enemies` is the game: authored definitions out of `src/content/enemies/`,
  * behaving. It is what `npm run dev` starts, and what the milestone's question
  * — is it fun to shoot things — is actually asked of.
+ *
+ * `empty` is a room holding the player and nothing else, for a caller that
+ * populates it itself. The performance stress scene is the one that does: its
+ * whole point is a population stated exactly — 200 enemies, not 200 plus
+ * whichever six bodies a placeholder rig happened to leave standing there.
  */
-export type RoomPopulation = 'targets' | 'enemies';
+export type RoomPopulation = 'targets' | 'enemies' | 'empty';
 
 export interface GameSimOptions {
   readonly seed?: number;
@@ -287,9 +292,10 @@ export class GameSim {
     this.events = new EventQueue();
 
     this.playerHandle = this.spawnPlayer();
-    if ((options.population ?? 'targets') === 'enemies') {
+    const population = options.population ?? 'targets';
+    if (population === 'enemies') {
       this.spawnEnemyRoom();
-    } else {
+    } else if (population === 'targets') {
       this.spawnTrainingTargets();
     }
     this.world.flush();

@@ -13,9 +13,8 @@ build/
 coverage/
 .vitest/
 
-# benchmark artifacts
-bench-results/*.json
-!bench-results/baseline.json
+# benchmark artifacts — the run is per-machine, the history is the record
+bench/results.json
 
 # generated assets
 assets/atlases/*.png

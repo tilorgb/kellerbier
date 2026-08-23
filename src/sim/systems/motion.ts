@@ -133,9 +133,14 @@ export function resolveAxisY(
  * The extent of a solid found at a probe point, reported through module-level
  * scratch rather than a returned object — this runs inside the frame loop, and
  * the frame loop does not allocate.
+ *
+ * A `Float64Array` and not two `let`s: a module binding is a tagged slot, so
+ * every store of a double into one boxes a `HeapNumber`. See the
+ * `no-hot-allocation` rule, which is where that is written down.
  */
-let edgeMin = 0;
-let edgeMax = 0;
+const EDGE_MIN = 0;
+const EDGE_MAX = 1;
+const edge = new Float64Array(2);
 
 /** True when a block spans `probeX` and overlaps the body's vertical extent. */
 export function findBlockingEdgeY(
@@ -157,8 +162,8 @@ export function findBlockingEdgeY(
     if (centreY + radius <= minY || centreY - radius >= maxY) {
       continue;
     }
-    edgeMin = minY;
-    edgeMax = maxY;
+    edge[EDGE_MIN] = minY;
+    edge[EDGE_MAX] = maxY;
     return true;
   }
   return false;
@@ -184,8 +189,8 @@ export function findBlockingEdgeX(
     if (centreX + radius <= minX || centreX - radius >= maxX) {
       continue;
     }
-    edgeMin = minX;
-    edgeMax = maxX;
+    edge[EDGE_MIN] = minX;
+    edge[EDGE_MAX] = maxX;
     return true;
   }
   return false;
@@ -193,10 +198,10 @@ export function findBlockingEdgeX(
 
 /** The lower bound of the edge found by the last successful `findBlockingEdge*`. */
 export function blockingEdgeMin(): number {
-  return edgeMin;
+  return edge[EDGE_MIN] ?? 0;
 }
 
 /** The upper bound of the edge found by the last successful `findBlockingEdge*`. */
 export function blockingEdgeMax(): number {
-  return edgeMax;
+  return edge[EDGE_MAX] ?? 0;
 }

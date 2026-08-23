@@ -48,6 +48,9 @@ jobs:
       - name: Test
         run: npm run test
 
+      # The budget as a gate. This asserts the absolute numbers from
+      # docs/TECH_STACK.md §3; whether the pull request made anything *slower*
+      # is a different question, and the `benchmark` job below answers it.
       - name: Benchmark
         run: npm run bench
 
@@ -60,6 +63,129 @@ jobs:
           name: build-${{ github.sha }}
           path: dist
           retention-days: 7
+
+  benchmark:
+    name: frame-time delta
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Both numbers come off one runner, minutes apart. Comparing a pull request
+    # against a figure recorded on some other machine last week measures the
+    # fleet rather than the diff — a shared runner's absolute numbers move by a
+    # third between mornings — and the tolerance band that would absorb that is
+    # wide enough to hide any regression worth catching.
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # The merge base is checked out into a worktree below, so the history
+          # has to actually be here.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Benchmark this branch
+        run: |
+          npm run bench
+          cp bench/results.json head.json
+
+      # The merge base, built and measured the same way. A worktree rather than
+      # a checkout, so this job keeps the tree it was given: `npm ci` in the
+      # worktree gets that commit's own dependencies, and the benchmark there is
+      # that commit's own scene definition, which is what "did this change make
+      # it slower" means.
+      - name: Benchmark the merge base
+        id: base
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          base="${{ github.event.pull_request.base.sha }}"
+          git worktree add ../base "${base}"
+          cd ../base
+          npm ci
+          npm run bench
+          cp bench/results.json "${GITHUB_WORKSPACE}/base.json"
+
+      - name: Compare
+        id: compare
+        run: |
+          if [ -f base.json ]; then
+            node tools/bench/compare.mjs base.json head.json --out bench-comment.md
+          else
+            # A pull request whose base predates the benchmark, or a base whose
+            # run failed. Report the absolute numbers rather than failing on a
+            # comparison that was never possible.
+            node tools/bench/compare.mjs none head.json --out bench-comment.md
+          fi
+
+      # Always, so a regression is explained in the comment rather than only in
+      # a red cross on a log nobody opens.
+      - name: Comment the delta
+        if: always() && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BENCH_COMMENT_PATH: bench-comment.md
+        run: node tools/ci/comment-bench.mjs
+
+  history:
+    name: benchmark history
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Only on `main`, and only the numbers that were actually merged. A trend
+    # made of pull-request runs is a trend of branches that mostly no longer
+    # exist.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    concurrency:
+      group: bench-history
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # `git pull --rebase` at the end needs something to rebase onto.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Benchmark
+        run: npm run bench
+
+      # A push made with GITHUB_TOKEN does not start another workflow run, which
+      # is the only reason a job that commits to the branch that triggered it is
+      # not a loop.
+      - name: Append and commit
+        run: |
+          set -euo pipefail
+          node tools/bench/record-history.mjs
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add bench/history.jsonl
+          if git diff --cached --quiet; then
+            echo "nothing to record"
+          else
+            git commit -m "chore(bench): record ${GITHUB_SHA:0:7}"
+            # Rebase rather than force: another merge may have landed while this
+            # ran, and its history line is as real as this one.
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
 
   preview:
     name: playable preview
