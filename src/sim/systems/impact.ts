@@ -30,7 +30,7 @@ export function stepImpact(sim: GameSim): void {
   // how a system ends up processing its own output.
   collect(sim);
 
-  const hits = collectedHits;
+  const hits = collected[COLLECTED_HITS] ?? 0;
   for (let entry = 0; entry < hits; entry++) {
     const slot = hitSlots[entry] ?? 0;
     if (slot >= count) {
@@ -42,7 +42,7 @@ export function stepImpact(sim: GameSim): void {
   // Contacts and spends are read after hits and from their own buffers, because
   // the hit pass appends deaths to the queue while it runs and a single walk
   // would be reading a list it is still writing.
-  const contacts = collectedContacts;
+  const contacts = collected[COLLECTED_CONTACTS] ?? 0;
   for (let entry = 0; entry < contacts; entry++) {
     const slot = contactSlots[entry] ?? 0;
     if (slot >= count) {
@@ -51,7 +51,7 @@ export function stepImpact(sim: GameSim): void {
     applyContact(sim, slot);
   }
 
-  const spends = collectedSpends;
+  const spends = collected[COLLECTED_SPENDS] ?? 0;
   for (let entry = 0; entry < spends; entry++) {
     const slot = spentSlots[entry] ?? 0;
     if (slot >= count) {
@@ -74,15 +74,25 @@ const spentSlots = new Int32Array(1024);
 /** And for bodies that touched something that hurts. */
 const contactSlots = new Int32Array(256);
 let collectSim: GameSim | null = null;
-let collectedHits = 0;
-let collectedSpends = 0;
-let collectedContacts = 0;
+
+/**
+ * How many of each landed in the buffers above.
+ *
+ * An `Int32Array` rather than three `let`s. A small integer in a module binding
+ * is not boxed today, but nothing here says these are integers, and a double
+ * stored into a module binding allocates a `HeapNumber` every time — which is
+ * why the `no-hot-allocation` rule bans the shape rather than the bug.
+ */
+const COLLECTED_HITS = 0;
+const COLLECTED_SPENDS = 1;
+const COLLECTED_CONTACTS = 2;
+const collected = new Int32Array(3);
 
 function collect(sim: GameSim): void {
   collectSim = sim;
-  collectedHits = 0;
-  collectedSpends = 0;
-  collectedContacts = 0;
+  collected[COLLECTED_HITS] = 0;
+  collected[COLLECTED_SPENDS] = 0;
+  collected[COLLECTED_CONTACTS] = 0;
   sim.events.forEach(collectEvent);
   collectSim = null;
 }
@@ -94,22 +104,24 @@ function collectEvent(slot: number): void {
   }
   const kind = sim.events.kind[slot];
   if (kind === EventKind.ProjectileHit) {
-    if (collectedHits < hitSlots.length) {
-      hitSlots[collectedHits] = slot;
-      collectedHits += 1;
-    }
+    append(hitSlots, COLLECTED_HITS, slot);
     return;
   }
   if (kind === EventKind.ProjectileSpent) {
-    if (collectedSpends < spentSlots.length) {
-      spentSlots[collectedSpends] = slot;
-      collectedSpends += 1;
-    }
+    append(spentSlots, COLLECTED_SPENDS, slot);
     return;
   }
-  if (kind === EventKind.Contact && collectedContacts < contactSlots.length) {
-    contactSlots[collectedContacts] = slot;
-    collectedContacts += 1;
+  if (kind === EventKind.Contact) {
+    append(contactSlots, COLLECTED_CONTACTS, slot);
+  }
+}
+
+/** Appends to one of the buffers, or drops the event if it is full. */
+function append(buffer: Int32Array, counter: number, slot: number): void {
+  const count = collected[counter] ?? 0;
+  if (count < buffer.length) {
+    buffer[count] = slot;
+    collected[counter] = count + 1;
   }
 }
 
@@ -309,6 +321,21 @@ function applySpend(sim: GameSim, slot: number): void {
  * subsequent draw in the run, so adding one spark would silently rewrite every
  * floor layout in the game.
  */
+/**
+ * The four draws one particle needs, taken in one call.
+ *
+ * `nextFloat` hands a double back across a call boundary, and V8 boxes one it
+ * does not inline. At four a particle and thousands of particles a tick that
+ * was 83 KB of garbage per tick on the stress scene — see `Rng.nextFloats`,
+ * which exists for this call site.
+ */
+const DRAW_ANGLE = 0;
+const DRAW_SPEED = 1;
+const DRAW_LIFE = 2;
+const DRAW_SIZE = 3;
+const DRAWS_PER_PARTICLE = 4;
+const draws = new Float64Array(DRAWS_PER_PARTICLE);
+
 function spray(
   sim: GameSim,
   x: number,
@@ -327,15 +354,16 @@ function spray(
   const baseAngle = length === 0 ? 0 : Math.atan2(normalY, normalX);
 
   for (let particle = 0; particle < count; particle++) {
-    const angle = baseAngle + (random.nextFloat() * 2 - 1) * spread;
-    const speed = tuning.particleSpeed * speedScale * (0.4 + random.nextFloat() * 0.8);
+    random.nextFloats(draws, DRAWS_PER_PARTICLE);
+    const angle = baseAngle + ((draws[DRAW_ANGLE] ?? 0) * 2 - 1) * spread;
+    const speed = tuning.particleSpeed * speedScale * (0.4 + (draws[DRAW_SPEED] ?? 0) * 0.8);
     sim.particles.spawn(
       x,
       y,
       Math.cos(angle) * speed,
       Math.sin(angle) * speed,
-      Math.round(tuning.particleLifeTicks * (0.6 + random.nextFloat() * 0.6)),
-      tuning.particleSize * (1 + random.nextFloat() * 1.5),
+      Math.round(tuning.particleLifeTicks * (0.6 + (draws[DRAW_LIFE] ?? 0) * 0.6)),
+      tuning.particleSize * (1 + (draws[DRAW_SIZE] ?? 0) * 1.5),
       kind === ParticleKind.Splash ? ParticleKind.Splash : ParticleKind.Foam,
     );
   }

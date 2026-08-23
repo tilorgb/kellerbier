@@ -82,6 +82,28 @@ export class Rng {
   }
 
   /**
+   * Fills `out[0..count)` with floats in [0, 1).
+   *
+   * The bulk form exists for one reason, and it is not convenience. A double
+   * returned across a call boundary that V8 declines to inline is a boxed
+   * `HeapNumber` — sixteen bytes, per draw, collected later. In cold code that
+   * is invisible. In the particle spray it is four draws per particle at
+   * several thousand particles a tick, and it measured 83 KB of garbage per
+   * tick on the stress scene — two thirds of everything the simulation
+   * allocated. Written straight into a `Float64Array` the values are never
+   * tagged at all, and the same loop measures flat.
+   *
+   * Callers keep one scratch array and reuse it. `nextFloat` is still the
+   * right thing to call from anywhere that runs once, or a handful of times,
+   * a tick.
+   */
+  nextFloats(out: Float64Array, count: number): void {
+    for (let draw = 0; draw < count; draw++) {
+      out[draw] = this.nextUint32() * 2.3283064365386963e-10;
+    }
+  }
+
+  /**
    * An integer in [minInclusive, maxExclusive).
    *
    * Exclusive upper bound, matching array indexing — `nextInt(0, items.length)`

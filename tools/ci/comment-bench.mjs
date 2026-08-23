@@ -1,22 +1,27 @@
 /**
- * Posts (or updates) the preview comment on a pull request.
+ * Posts (or updates) the benchmark comment on a pull request.
  *
- * One comment, edited in place, rather than a new one per push. A PR with
- * fifteen identical bot comments on it is a PR whose review conversation has
- * been buried by its own infrastructure.
+ * The body is written by `tools/bench/compare.mjs`; this only carries it to
+ * GitHub. Split that way because the comparison is the part worth running
+ * locally, and it should not need a token to do it.
+ *
+ * One comment, edited in place, for the reason the preview comment gives: a PR
+ * with fifteen identical bot comments on it is a PR whose review conversation
+ * has been buried by its own infrastructure.
  */
+
+import { readFile } from 'node:fs/promises';
 
 const token = process.env.GITHUB_TOKEN;
 const repository = process.env.GITHUB_REPOSITORY;
-const url = process.env.PREVIEW_URL;
 const eventPath = process.env.GITHUB_EVENT_PATH;
+const bodyPath = process.env.BENCH_COMMENT_PATH;
 
-if (!token || !repository || !url || !eventPath) {
-  console.error('missing GITHUB_TOKEN, GITHUB_REPOSITORY, PREVIEW_URL or GITHUB_EVENT_PATH');
+if (!token || !repository || !eventPath || !bodyPath) {
+  console.error('missing GITHUB_TOKEN, GITHUB_REPOSITORY, GITHUB_EVENT_PATH or BENCH_COMMENT_PATH');
   process.exit(1);
 }
 
-const { readFile } = await import('node:fs/promises');
 const event = JSON.parse(await readFile(eventPath, 'utf8'));
 const number = event.pull_request?.number;
 if (number === undefined) {
@@ -25,7 +30,7 @@ if (number === undefined) {
 }
 
 /** Marker that lets a later run find the comment it left last time. */
-const MARKER = '<!-- kellerbier-preview -->';
+const MARKER = '<!-- kellerbier-bench -->';
 
 const api = async (path, init = {}) => {
   const response = await fetch(`https://api.github.com${path}`, {
@@ -49,19 +54,9 @@ const api = async (path, init = {}) => {
 const sha = (event.pull_request?.head?.sha ?? '').slice(0, 7);
 const body = [
   MARKER,
-  '### ▶ Playable preview',
+  await readFile(bodyPath, 'utf8'),
   '',
-  `**${url}**`,
-  '',
-  `Built from \`${sha}\`. A game is judged by feel, and feel cannot be reviewed in a diff —`,
-  'click the link and play the change.',
-  '',
-  '| | |',
-  '|---|---|',
-  '| Controls | `WASD` move · mouse or arrows aim and fire |',
-  '| Debug overlay | `F1` — frame graph, hitboxes (`H`), spatial grid (`G`) |',
-  '',
-  '_Frame-time deltas are in the benchmark comment below._',
+  `Measured on this runner from \`${sha}\`, against the merge base built and run beside it.`,
 ].join('\n');
 
 const comments = await api(`/repos/${repository}/issues/${number}/comments?per_page=100`);
@@ -72,11 +67,11 @@ if (existing) {
     method: 'PATCH',
     body: JSON.stringify({ body }),
   });
-  console.log(`updated preview comment ${existing.id}`);
+  console.log(`updated benchmark comment ${existing.id}`);
 } else {
   await api(`/repos/${repository}/issues/${number}/comments`, {
     method: 'POST',
     body: JSON.stringify({ body }),
   });
-  console.log('posted preview comment');
+  console.log('posted benchmark comment');
 }

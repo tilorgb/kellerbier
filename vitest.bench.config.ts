@@ -13,8 +13,10 @@ import baseConfig from './vite.config.js';
  * concatenates arrays — merging would append the benchmark's include list to
  * the suite's and run everything twice.
  *
- * The frame-time benchmark and its regression gate are #16. This is what that
- * will grow into.
+ * What runs here is the frame-time benchmark and the collision benchmark. The
+ * regression gate on top of them lives in CI, which runs this twice on one
+ * runner — the pull request and its merge base — and compares the two; see
+ * `tools/bench/compare.mjs`.
  */
 export default defineConfig({
   ...baseConfig,
@@ -22,6 +24,14 @@ export default defineConfig({
     ...baseConfig.test,
     include: ['tests/bench/**/*.test.ts'],
     exclude: [],
+    // `--expose-gc` is what the allocation helper needs; the young generation
+    // is raised because of what the benchmark measures with it. A heap window
+    // is only readable while nothing inside it is collected, and the deliberate
+    // regression the benchmark proves it can catch — an object per projectile
+    // per tick — produces several megabytes across a window. At the default
+    // semi-space size V8 scavenges partway through, the delta comes back near
+    // zero, and the gate reports that a regression it was staring at is fine.
+    execArgv: ['--expose-gc', '--max-semi-space-size=64'],
     // One file at a time. Parallel workers competing for cores is exactly the
     // interference this config exists to avoid.
     fileParallelism: false,

@@ -78,13 +78,40 @@ These are commitments, not aspirations. They are checked in CI.
 |---|---|
 | Simulation tick | **≤ 4 ms** at 5,000 projectiles + 200 enemies + 1,000 particles |
 | Full frame (sim + render) | **≤ 12 ms** in the same scene — a 40% headroom margin on 60 fps |
-| Steady-state heap growth | **0 bytes/frame** in the stress scene (allowing GC noise tolerance) |
+| Steady-state heap growth | **0 bytes/frame** in the stress scene — gated at 128 KB/tick, see below |
 | Draw calls | **≤ 20** in a typical combat room |
 | Cold load to playable | **≤ 3 s** on a mid-range laptop over broadband |
 | Input-to-photon latency | **≤ 2 frames** |
 
 A dedicated stress scene reproduces the budget scenario. `npm run bench` runs it headless and
-**fails the build on regression** past a tolerance. Every PR reports its frame-time delta.
+asserts the absolute numbers above. Every PR also gets its **frame-time delta**: CI runs the
+benchmark twice on one runner, once on the pull request and once on its merge base, compares
+the two, fails on a regression past a tolerance band, and posts the table as a comment. Both
+numbers coming off the same machine minutes apart is what makes the band narrow enough to
+be worth having. Runs on `main` are appended to `bench/history.jsonl`, which is the long trend
+no single comparison can show.
+
+### On the heap row
+
+Zero is the design, and the design holds: nothing in a system allocates an object, storage is
+pooled, components are Structure-of-Arrays. What is measured on a full field is about 54 KB a
+tick, and every byte of it is V8 boxing a double rather than the game producing garbage.
+
+Two shapes cause it, neither visible in the source:
+
+- **A double stored into a module-level `let`.** A module binding is a tagged slot and cannot
+  hold a raw double, so every store allocates a 16-byte `HeapNumber`. The collision system kept
+  six such bindings and wrote all six per projectile: 490 KB a tick. Banned by the
+  `no-hot-allocation` lint rule; the fix is a module-level typed array with named indices.
+- **A double returned across a call boundary V8 declines to inline.** The particle spray drew
+  four random floats per particle through `Rng.nextFloat`: 83 KB a tick. The fix is a bulk form
+  that fills a `Float64Array`, so the values are never tagged.
+
+What remains is `sweptCircleHit` handing a hit time back to the collision system, about 35 KB a
+tick. It is written down rather than fixed, because turning a pure function into an
+out-parameter one costs a reader more than 35 KB costs the collector. The gate sits at 128 KB —
+above the baseline by enough not to flicker, and far below the 300-plus KB that one small object
+per projectile per tick would cost, which is the regression it exists to catch.
 
 ## 4. Architecture
 

@@ -14,6 +14,22 @@
  * Constructors are exempt. Preallocating storage is the entire point of the
  * pooling design; it happens once, at setup, and banning it there would ban
  * the fix along with the problem.
+ *
+ * ## The one that is not a literal
+ *
+ * A module-level `let` holding a number is also banned, and it is the reason
+ * this rule grew: it is the only entry on the list that allocates without
+ * anything in the source looking like an allocation. A module binding is a
+ * tagged slot and cannot hold a raw double, so every store of one boxes a
+ * sixteen-byte `HeapNumber`. The collision system kept six of them and wrote
+ * all six per projectile — half a megabyte of garbage a tick at the budget
+ * population, from a file whose header says it produces none. A module-level
+ * typed array with named index constants is the same code to read and boxes
+ * nothing, because the array stores raw numbers.
+ *
+ * Small integers are not boxed today, so the ban is wider than the bug. That is
+ * deliberate: nothing marks which of these holds an integer, the answer changes
+ * with one tuning edit, and the failure is silent.
  */
 
 const DOCS = 'docs/TECH_STACK.md §2';
@@ -56,6 +72,11 @@ export const noHotAllocation = {
         'Allocation in a @hot file: {{what}}. The frame loop must not produce garbage — ' +
         'the collection lands exactly when the screen is busiest. Preallocate it, ' +
         `or hoist it out of the call. See ${DOCS}.`,
+      moduleNumber:
+        'Module-level mutable binding {{name}} holds a number in a @hot file. A module ' +
+        'binding is a tagged slot, so every store boxes a HeapNumber — invisible in the ' +
+        'source, and hundreds of kilobytes a tick out of a hot loop. Put it in a ' +
+        `module-level typed array with a named index instead. See ${DOCS}.`,
     },
   },
 
@@ -74,6 +95,25 @@ export const noHotAllocation = {
     };
 
     return {
+      VariableDeclaration: (node) => {
+        if (node.kind === 'const' || isInsideFunction(node)) {
+          return;
+        }
+        for (const declarator of node.declarations) {
+          if (
+            declarator.id.type === 'Identifier' &&
+            declarator.init &&
+            declarator.init.type === 'Literal' &&
+            typeof declarator.init.value === 'number'
+          ) {
+            context.report({
+              node: declarator,
+              messageId: 'moduleNumber',
+              data: { name: declarator.id.name },
+            });
+          }
+        }
+      },
       ArrayExpression: (node) => {
         report(node, 'an array literal');
       },

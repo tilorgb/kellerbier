@@ -23,6 +23,22 @@ import { ProjectileTeam } from '../projectile/store.js';
  * anything for the collector. It reads worse than the closure version; the
  * frame graph reads better.
  *
+ * ## Why that state is in typed arrays and not in `let`s
+ *
+ * Because a module-level `let` holding a double is not a register, it is a heap
+ * slot — and V8 cannot store a double in one. Every assignment boxes a fresh
+ * `HeapNumber`, so `projectileFromX = ...` allocates sixteen bytes each time it
+ * runs. Six of those per projectile, five thousand projectiles a tick, is
+ * roughly half a megabyte of garbage per tick from a file whose entire premise
+ * is that it produces none. The stress benchmark measured 490 KB a tick here,
+ * all of it this.
+ *
+ * A `Float64Array` slot is exactly the same thing to read and write and boxes
+ * nothing, because the array already stores raw doubles. The integers are in an
+ * `Int32Array` for the same reason and one more: a small integer is not boxed
+ * *today*, but nothing in the type system stops a tuning change from making one
+ * of these fractional, and the failure mode is silent.
+ *
  * @hot — runs in the frame loop. Nothing in here may allocate; see the
  * `no-hot-allocation` rule in tools/eslint/.
  */
@@ -40,16 +56,24 @@ let activeTransform: Float32Array = new Float32Array(0);
 let activeBody: Float32Array = new Float32Array(0);
 let activeCollisionLayers: Uint16Array = new Uint16Array(0);
 
+/** Slots in `state`, the double half of the projectile being resolved. */
+const FROM_X = 0;
+const FROM_Y = 1;
+const TO_X = 2;
+const TO_Y = 3;
+const RADIUS = 4;
+const BEST_HIT_TIME = 5;
+const STATE_SLOTS = 6;
+
+/** Slots in `slots`, the integer half. */
+const PROJECTILE_SLOT = 0;
+const PROJECTILE_MASK = 1;
+const BEST_HIT_TARGET = 2;
+const SLOT_COUNT = 3;
+
 /** The projectile currently being resolved, and the best hit found for it. */
-let projectileSlot = 0;
-let projectileFromX = 0;
-let projectileFromY = 0;
-let projectileToX = 0;
-let projectileToY = 0;
-let projectileRadius = 0;
-let projectileMask = 0;
-let bestHitTime = 0;
-let bestHitTarget = -1;
+const state = new Float64Array(STATE_SLOTS);
+const slots = new Int32Array(SLOT_COUNT);
 
 export function stepCollision(sim: GameSim): void {
   activeSim = sim;
@@ -105,30 +129,29 @@ function resolveProjectile(slot: number): void {
   }
   const projectiles = sim.projectiles;
 
-  projectileSlot = slot;
-  projectileFromX = projectiles.previousX[slot] ?? 0;
-  projectileFromY = projectiles.previousY[slot] ?? 0;
-  projectileToX = projectiles.x[slot] ?? 0;
-  projectileToY = projectiles.y[slot] ?? 0;
-  projectileRadius = projectiles.radius[slot] ?? 0;
-  projectileMask =
+  slots[PROJECTILE_SLOT] = slot;
+  const fromX = projectiles.previousX[slot] ?? 0;
+  const fromY = projectiles.previousY[slot] ?? 0;
+  const toX = projectiles.x[slot] ?? 0;
+  const toY = projectiles.y[slot] ?? 0;
+  const radius = projectiles.radius[slot] ?? 0;
+  state[FROM_X] = fromX;
+  state[FROM_Y] = fromY;
+  state[TO_X] = toX;
+  state[TO_Y] = toY;
+  state[RADIUS] = radius;
+  slots[PROJECTILE_MASK] =
     projectiles.team[slot] === ProjectileTeam.Player
       ? CollisionLayer.Enemy | CollisionLayer.Obstacle
       : CollisionLayer.Player | CollisionLayer.Obstacle;
 
-  bestHitTime = Number.POSITIVE_INFINITY;
-  bestHitTarget = -1;
+  state[BEST_HIT_TIME] = Number.POSITIVE_INFINITY;
+  slots[BEST_HIT_TARGET] = -1;
 
-  sim.broadphase.querySwept(
-    projectileFromX,
-    projectileFromY,
-    projectileToX,
-    projectileToY,
-    projectileRadius,
-    testCandidate,
-  );
+  sim.broadphase.querySwept(fromX, fromY, toX, toY, radius, testCandidate);
 
-  if (bestHitTarget === -1) {
+  const target = slots[BEST_HIT_TARGET];
+  if (target === -1) {
     return;
   }
 
@@ -136,10 +159,11 @@ function resolveProjectile(slot: number): void {
   // tick happened to leave it. Everything downstream — the foam, the knockback
   // direction, the damage number — is placed from this, and placing it at the
   // end of the step puts the effect visibly inside the enemy.
-  const hitX = projectileFromX + (projectileToX - projectileFromX) * bestHitTime;
-  const hitY = projectileFromY + (projectileToY - projectileFromY) * bestHitTime;
+  const hitTime = state[BEST_HIT_TIME];
+  const hitX = fromX + (toX - fromX) * hitTime;
+  const hitY = fromY + (toY - fromY) * hitTime;
 
-  const targetBase = bestHitTarget * 4;
+  const targetBase = target * 4;
   const towardsX = hitX - (activeTransform[targetBase] ?? 0);
   const towardsY = hitY - (activeTransform[targetBase + 1] ?? 0);
   const length = vectorLength(towardsX, towardsY);
@@ -148,8 +172,8 @@ function resolveProjectile(slot: number): void {
 
   sim.events.push(
     EventKind.ProjectileHit,
-    bestHitTarget,
-    projectileSlot,
+    target,
+    slots[PROJECTILE_SLOT],
     hitX,
     hitY,
     normalX,
@@ -162,23 +186,23 @@ function resolveProjectile(slot: number): void {
 /** Exact test for one broadphase candidate. Keeps the earliest hit found. */
 function testCandidate(index: number): void {
   const layer = activeCollisionLayers[index * 2] ?? 0;
-  if ((layer & projectileMask) === 0) {
+  if ((layer & (slots[PROJECTILE_MASK] ?? 0)) === 0) {
     return;
   }
 
   const time = sweptCircleHit(
-    projectileFromX,
-    projectileFromY,
-    projectileToX,
-    projectileToY,
-    projectileRadius,
+    state[FROM_X] ?? 0,
+    state[FROM_Y] ?? 0,
+    state[TO_X] ?? 0,
+    state[TO_Y] ?? 0,
+    state[RADIUS] ?? 0,
     activeTransform[index * 4] ?? 0,
     activeTransform[index * 4 + 1] ?? 0,
     activeBody[index * 2] ?? 0,
   );
-  if (time === NO_HIT || time >= bestHitTime) {
+  if (time === NO_HIT || time >= (state[BEST_HIT_TIME] ?? 0)) {
     return;
   }
-  bestHitTime = time;
-  bestHitTarget = index;
+  state[BEST_HIT_TIME] = time;
+  slots[BEST_HIT_TARGET] = index;
 }
