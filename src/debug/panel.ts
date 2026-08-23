@@ -30,7 +30,21 @@ export interface DebugPanel {
   update(context: DebugContext): void;
 }
 
-export const PANEL_WIDTH = 168;
+/**
+ * Panel geometry, in screen pixels.
+ *
+ * Screen pixels, not game pixels: the panel layer sits outside the scaled game
+ * container, so these are the sizes they are actually drawn at, on any window
+ * and at any zoom. A panel that was sized to fit a 640x360 buffer had eight
+ * pixels of glyph height whatever the display could do with them.
+ */
+export const PANEL_WIDTH = 248;
+export const PANEL_FONT_SIZE = 13;
+/** Baseline spacing between lines of panel text. */
+export const PANEL_LINE_HEIGHT = 16;
+/** Where a panel's first line of content starts, below its title. */
+export const PANEL_CONTENT_TOP = 24;
+export const PANEL_PADDING = 6;
 export const PANEL_TEXT_COLOUR = 0xd8cfc4;
 export const PANEL_DIM_COLOUR = 0x8a7f74;
 export const PANEL_WARN_COLOUR = 0xe0703a;
@@ -49,7 +63,7 @@ export function createPanelFrame(title: string, height: number): Container {
   container.addChild(plate);
 
   const heading = createLabel(title, PANEL_DIM_COLOUR);
-  heading.position.set(4, 3);
+  heading.position.set(PANEL_PADDING, 5);
   container.addChild(heading);
 
   return container;
@@ -66,6 +80,6 @@ export function createPanelFrame(title: string, height: number): Container {
 export function createLabel(text: string, colour: number = PANEL_TEXT_COLOUR): BitmapText {
   return new BitmapText({
     text,
-    style: { fontFamily: 'monospace', fontSize: 8, fill: colour },
+    style: { fontFamily: 'monospace', fontSize: PANEL_FONT_SIZE, fill: colour },
   });
 }

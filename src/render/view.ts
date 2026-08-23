@@ -7,6 +7,16 @@ import { EntityView } from './entities.js';
 import { ParticleView } from './particles.js';
 import { ProjectileView } from './projectiles.js';
 import { createRoomView } from './room.js';
+import { WORLD_ZOOM } from './resolution.js';
+
+/**
+ * Where the player sprite's anchor sits in its texture.
+ *
+ * Measured off the art rather than assumed: the opaque pixels of `mass.png`
+ * span x 2-12 and y 1-14 of a 16x16 texture, so the mug's centre is (7.5, 8).
+ */
+const PLAYER_ANCHOR_X = 7.5 / 16;
+const PLAYER_ANCHOR_Y = 8 / 16;
 
 export interface GameViewTextures {
   readonly player: Texture;
@@ -71,6 +81,11 @@ export class GameView {
   constructor(sim: GameSim, textures: GameViewTextures) {
     this.sim = sim;
     this.stage.addChild(this.world);
+    // The room is authored at half the internal resolution and blown up here,
+    // which is the whole of the camera for now. Scaling the container rather
+    // than every sprite keeps the debug overlay's world layer — hitboxes, the
+    // broadphase grid — lined up with what it is drawing over for free.
+    this.world.scale.set(WORLD_ZOOM);
     this.world.addChild(createRoomView(sim.room));
 
     this.decals = new DecalView(sim.decals, textures.decal);
@@ -80,7 +95,12 @@ export class GameView {
     this.world.addChild(this.entities.container);
 
     this.player = new Sprite(textures.player);
-    this.player.anchor.set(0.5);
+    // Not 0.5. The mug is drawn across columns 2-12 of a 16px texture, so its
+    // centre is at 7.5 and a centred anchor hangs the art half a pixel left of
+    // the body it belongs to. Half a pixel was invisible before the room was
+    // zoomed; at 2x it is a whole screen pixel of the collider poking out on
+    // one side and a gap on the other.
+    this.player.anchor.set(PLAYER_ANCHOR_X, PLAYER_ANCHOR_Y);
     this.world.addChild(this.player);
 
     this.projectiles = new ProjectileView(sim.projectiles, textures.projectile);

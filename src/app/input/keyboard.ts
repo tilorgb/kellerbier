@@ -6,10 +6,25 @@
  * it is also what lets a replay drive the same code path as a live run.
  */
 
-/** Where the mouse pointer is, in the 640x360 internal space. */
+/** Where the mouse pointer is, in room coordinates. */
 export interface PointerPosition {
   x: number;
   y: number;
+}
+
+/**
+ * How to turn a client pixel into a room coordinate.
+ *
+ * Read on every pointer move rather than captured once, because the window can
+ * be resized and the game re-centred underneath a stationary mouse. The caller
+ * owns the object and updates it in place; nothing here writes to it.
+ */
+export interface PointerMapping {
+  /** Top-left of the game inside the canvas, in client pixels. */
+  readonly originX: number;
+  readonly originY: number;
+  /** Room units covered by one client pixel. */
+  readonly unitsPerPixel: number;
 }
 
 export class KeyboardMouseSource {
@@ -67,7 +82,7 @@ export class KeyboardMouseSource {
     this.mouseButtonsDown.delete(button);
   }
 
-  /** Reports the pointer in internal 640x360 coordinates. */
+  /** Reports the pointer in room coordinates. */
   movePointer(x: number, y: number): void {
     if (this.pointer.x !== x || this.pointer.y !== y) {
       this.activity += 1;
@@ -94,12 +109,7 @@ export class KeyboardMouseSource {
    * `event.code` rather than `event.key`, so bindings follow physical key
    * positions and survive a layout change.
    */
-  attach(
-    target: Window,
-    canvas: HTMLCanvasElement,
-    internalWidth: number,
-    internalHeight: number,
-  ): () => void {
+  attach(target: Window, canvas: HTMLCanvasElement, mapping: PointerMapping): () => void {
     const onKeyDown = (event: KeyboardEvent): void => {
       this.keyDown(event.code);
       // Tab and the arrow keys scroll or move focus otherwise, which fights
@@ -123,8 +133,8 @@ export class KeyboardMouseSource {
         return;
       }
       this.movePointer(
-        ((event.clientX - bounds.left) / bounds.width) * internalWidth,
-        ((event.clientY - bounds.top) / bounds.height) * internalHeight,
+        (event.clientX - bounds.left - mapping.originX) * mapping.unitsPerPixel,
+        (event.clientY - bounds.top - mapping.originY) * mapping.unitsPerPixel,
       );
     };
     const onBlur = (): void => {

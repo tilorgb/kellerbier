@@ -36,7 +36,10 @@ function firing(): InputFrame {
   const frame = createInputFrame();
   frame.moveX = quantiseAxis(0.7);
   frame.moveY = quantiseAxis(-0.7);
-  frame.aimX = quantiseAxis(1);
+  // Aimed away from the corner the movement drives into. Firing into a wall
+  // from against it is a real case, but it is the wrong one for a test about
+  // how many projectiles the pool is holding.
+  frame.aimX = quantiseAxis(-1);
   setActionDown(frame, InputAction.Fire, true);
   return frame;
 }

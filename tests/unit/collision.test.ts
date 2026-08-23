@@ -108,8 +108,9 @@ describe('projectiles against the world', () => {
 
   it('never passes a fast shot through a target', () => {
     const sim = new GameSim();
-    // Far faster than a tick's worth of the target's diameter.
-    sim.tuning.shooting.shotSpeed = 120;
+    // Three times the target's diameter in a single tick: an endpoint-only
+    // test would step straight over it.
+    sim.tuning.shooting.shotSpeed = 60;
     sim.step(aiming(-1, 0));
 
     let hits = 0;

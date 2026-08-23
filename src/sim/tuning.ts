@@ -49,6 +49,19 @@ export interface MovementTuning {
    */
   pushDamping: number;
   /**
+   * How much of the player's speed a body they walk into takes away.
+   *
+   * Separating two overlapping circles corrects where they are and says nothing
+   * about where they were going, so on its own it lets the player keep walking
+   * into a crowd at full speed while the crowd is shuffled aside a pixel at a
+   * time. This bleeds off the part of their velocity that is heading *into* the
+   * body, in the same mass proportion the separation uses, which is what turns
+   * a group of small enemies into something that holds someone still long
+   * enough for the rest of the room to act. 1 stops that motion outright
+   * against a heavy body; 0 restores the old walk-through.
+   */
+  contactDrag: number;
+  /**
    * Largest push a body may be carrying, in pixels per tick.
    *
    * Impulses that arrive faster than they decay would otherwise compound
@@ -73,7 +86,15 @@ export interface ShootingTuning {
   shotRadius: number;
   /** Damage one projectile deals, in half-Maß units. */
   shotDamage: number;
-  /** Ticks a projectile lives. Speed times lifetime is the weapon's range. */
+  /**
+   * Ticks a projectile lives. Speed times lifetime is the weapon's range.
+   *
+   * Deliberately about half the room. A range that reaches the far wall lets
+   * the player clear a room from the doorway, which turns positioning — the
+   * decision the whole genre is built on — into something they never have to
+   * make. Standing in the corner has to be the wrong answer until an item makes
+   * it the right one.
+   */
   shotLifetimeTicks: number;
   /** How far from the player's centre a shot appears, along the aim direction. */
   muzzleOffset: number;
@@ -82,10 +103,18 @@ export interface ShootingTuning {
    *
    * Subtle and important. Without it, strafing while shooting feels wrong in a
    * way players notice and cannot name: the shots trail behind the motion that
-   * produced them.
+   * produced them. High enough to be read as sway — running right while firing
+   * up should visibly bend the stream to the right — and low enough that the
+   * shot still goes broadly where it was aimed.
    */
   velocityInheritance: number;
-  /** Push applied to the player, opposite the shot. Felt, not disruptive. */
+  /**
+   * Push applied to the player, opposite the shot. Felt, not disruptive.
+   *
+   * The failure mode is a player who fires from a standstill and finds
+   * themselves somewhere else: kickback that fights movement stops reading as
+   * the weapon having weight and starts reading as drift.
+   */
   kickback: number;
 }
 
@@ -125,7 +154,12 @@ export interface ImpactTuning {
    */
   knockback: number;
 
-  /** Screenshake, in pixels of camera offset. */
+  /**
+   * Screenshake, in pixels of camera offset.
+   *
+   * Screen pixels, not room units: the offset is applied to the room container
+   * from outside it, so the zoom the room is drawn at does not multiply it.
+   */
   shakePerDamage: number;
   deathShake: number;
   /**
@@ -141,12 +175,35 @@ export interface ImpactTuning {
 
   particlesPerHit: number;
   particlesOnDeath: number;
+  /** Base particle size in pixels, before the per-particle jitter. */
+  particleSize: number;
+  /**
+   * Particles a shot leaves when it ends without hitting anything.
+   *
+   * Fewer than a hit, on purpose. This fires on every shot that misses, which
+   * during a held-down stream is most of them, and a miss that reads as loudly
+   * as a hit trains the player to stop believing the hit.
+   */
+  particlesOnSpend: number;
+  /** Particle speed multiplier for a shot that ran out of range rather than being stopped. */
+  spentSpeedScale: number;
   particleSpeed: number;
   /** Half-angle of the spray around the impact normal, in radians. */
   particleSpread: number;
   particleLifeTicks: number;
   /** Per-tick survival of a particle's velocity. */
   particleDrag: number;
+
+  /**
+   * Ticks the player cannot be hurt by contact again.
+   *
+   * A second. Long enough to walk out of whatever is touching them, which is
+   * the only thing standing between "an enemy is on me" and an emptied health
+   * bar at sixty damage a second.
+   */
+  contactInvulnerabilityTicks: number;
+  /** How hard a contact hit throws the player off whatever hurt them. */
+  contactKnockback: number;
 
   /** Off by default. See `DamageNumberStore` for why. */
   damageNumbers: boolean;
@@ -166,6 +223,7 @@ export const DEFAULT_MOVEMENT_TUNING: Readonly<MovementTuning> = {
   turnBoost: 1.6,
   cornerForgiveness: 5,
   cornerNudgeSpeed: 1.5,
+  contactDrag: 1,
   pushDamping: 0.82,
   maxPush: 6,
 };
@@ -175,10 +233,10 @@ export const DEFAULT_SHOOTING_TUNING: Readonly<ShootingTuning> = {
   shotSpeed: 6,
   shotRadius: 3,
   shotDamage: 1,
-  shotLifetimeTicks: 64,
+  shotLifetimeTicks: 26,
   muzzleOffset: 8,
-  velocityInheritance: 0.35,
-  kickback: 0.6,
+  velocityInheritance: 0.85,
+  kickback: 0.3,
 };
 
 /** A fresh, mutable copy of every default. */
@@ -191,19 +249,25 @@ export const DEFAULT_IMPACT_TUNING: Readonly<ImpactTuning> = {
   flashTicks: 1,
   deathFlashTicks: 3,
 
-  knockback: 2.6,
+  knockback: 4,
 
-  shakePerDamage: 1.1,
-  deathShake: 3,
-  maxShake: 5,
+  shakePerDamage: 0.6,
+  deathShake: 1.4,
+  maxShake: 2.5,
   shakeDamping: 0.78,
 
   particlesPerHit: 8,
-  particlesOnDeath: 26,
-  particleSpeed: 2.4,
+  particlesOnDeath: 18,
+  particleSize: 0.7,
+  particlesOnSpend: 5,
+  spentSpeedScale: 0.45,
+  particleSpeed: 1.5,
   particleSpread: 0.9,
   particleLifeTicks: 22,
   particleDrag: 0.9,
+
+  contactInvulnerabilityTicks: 60,
+  contactKnockback: 3.5,
 
   damageNumbers: false,
   damageNumberLifeTicks: 36,

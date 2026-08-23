@@ -6,16 +6,23 @@ import { RoomGeometry } from './geometry.js';
  * One room, hand-placed, existing purely so movement, shooting and impact can be
  * tuned against something. It is replaced by the room template format in #18.
  *
- * Its coordinate space is the same 640x360 space the renderer draws at (see
- * `render/resolution.ts`) — the simulation cannot import that constant, since
- * `sim/` never imports from `render/`, so the two are stated independently and
- * a test pins them together.
+ * Its coordinate space is the 320x180 the renderer blows up to its 640x360
+ * internal resolution (see `WORLD_ZOOM` in `render/resolution.ts`) — the
+ * simulation cannot import that constant, since `sim/` never imports from
+ * `render/`, so the two are stated independently and a test pins them together.
+ *
+ * The room is authored at half the internal resolution rather than at it
+ * because that is what sets the player's size against the room. Every distance
+ * in here is half what it was when the room was 640x360, so the walls and
+ * pillars land on exactly the same screen pixels as before; what changed is
+ * that a body of a fixed size now covers twice as much of the room, and crosses
+ * it in half the time at the same speed.
  */
-export const PLAYFIELD_WIDTH = 640;
-export const PLAYFIELD_HEIGHT = 360;
+export const PLAYFIELD_WIDTH = 320;
+export const PLAYFIELD_HEIGHT = 180;
 
 /** Thickness of the wall band drawn around the room. */
-export const WALL_THICKNESS = 20;
+export const WALL_THICKNESS = 10;
 
 export function createPlaygroundRoom(): RoomGeometry {
   const room = new RoomGeometry(
@@ -27,8 +34,8 @@ export function createPlaygroundRoom(): RoomGeometry {
 
   // Two pillars, placed to give both a flat wall to slide along and an exposed
   // corner to clip — the two cases wall handling has to get right.
-  room.addBlock(148, 108, 188, 148);
-  room.addBlock(452, 212, 492, 252);
+  room.addBlock(74, 54, 94, 74);
+  room.addBlock(226, 106, 246, 126);
 
   return room;
 }

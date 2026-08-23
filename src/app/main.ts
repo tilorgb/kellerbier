@@ -1,10 +1,16 @@
-import { Assets, Text, type Texture } from 'pixi.js';
+import { Assets, Container, Text, type Texture } from 'pixi.js';
 import massUrl from '../../assets/sprites/mass.png';
 import { GameSim, MAX_COLLIDER_RADIUS } from '../sim/game/sim.js';
 import { TICKS_PER_SECOND } from '../sim/time.js';
 import { createRenderer, trackWindowSize } from '../render/app.js';
 import { createBlobTexture } from '../render/placeholder-art.js';
-import { INTERNAL_HEIGHT, INTERNAL_WIDTH } from '../render/resolution.js';
+import {
+  type GameLayout,
+  INTERNAL_HEIGHT,
+  WORLD_ZOOM,
+  computeGameLayout,
+  roomUnitsPerPixel,
+} from '../render/resolution.js';
 import { GameView } from '../render/view.js';
 import { SILENT_AUDIO, playImpactAudio } from './audio/impact.js';
 import { InputSampler } from './input/sampler.js';
@@ -17,7 +23,6 @@ async function boot(): Promise<void> {
   }
 
   const app = await createRenderer(host);
-  trackWindowSize(app.canvas);
 
   const playerTexture = await Assets.load<Texture>({
     src: massUrl,
@@ -40,20 +45,51 @@ async function boot(): Promise<void> {
     decal: createBlobTexture(app.renderer, 8, 0x3a2a12, 0x4a3618),
     numberFont: 'monospace',
   });
-  app.stage.addChild(view.stage);
+  // Everything drawn at the game's own resolution goes in here, and this is the
+  // only thing that ever gets scaled. Anything added to `app.stage` instead is
+  // drawn at the display's resolution, which is what the debug panels want.
+  const game = new Container();
+  game.addChild(view.stage);
+  app.stage.addChild(game);
 
-  const input = new InputSampler();
-  input.keyboard.attach(window, app.canvas, INTERNAL_WIDTH, INTERNAL_HEIGHT);
-  input.gamepad.attach(window);
+  // Drawn over the game rather than inside it, so its text is not made of game
+  // pixels. Kept above everything the game adds.
+  const uiLayer = new Container();
+  app.stage.addChild(uiLayer);
 
   const hud = new Text({
     text: '',
-    style: { fill: 0x8a7f74, fontFamily: 'monospace', fontSize: 9 },
+    style: { fill: 0x8a7f74, fontFamily: 'monospace', fontSize: 13 },
   });
-  // Bottom-left, out of the debug overlay's panel column. The overlay is the
-  // tool that gets looked at; this line is just the controls.
-  hud.position.set(6, INTERNAL_HEIGHT - 34);
-  app.stage.addChild(hud);
+  // In the screen layer rather than the game, for the reason the debug panels
+  // are: this is text, and text made of game pixels is text nobody can read.
+  // Anchored bottom-left so it stays put as lines are added to it, and pinned
+  // to the game's own bottom-left corner rather than the window's, so it does
+  // not drift out into the letterbox.
+  hud.anchor.set(0, 1);
+  uiLayer.addChild(hud);
+  const positionHud = (applied: GameLayout): void => {
+    hud.position.set(applied.originX + 8, applied.originY + INTERNAL_HEIGHT * applied.scale - 8);
+  };
+
+  // The pointer is reported in room coordinates, not screen ones: mouse aim is
+  // measured against the player's simulation position, and the room sits scaled
+  // and letterboxed inside a full-window canvas. Updated on every resize, and
+  // read — never replaced — by whoever needs to convert a client pixel.
+  const pointerMapping = { originX: 0, originY: 0, unitsPerPixel: 1 / WORLD_ZOOM };
+  let layout = computeGameLayout(window.innerWidth, window.innerHeight, window.devicePixelRatio);
+
+  trackWindowSize(app, game, (applied) => {
+    layout = applied;
+    pointerMapping.originX = applied.originX;
+    pointerMapping.originY = applied.originY;
+    pointerMapping.unitsPerPixel = roomUnitsPerPixel(applied);
+    positionHud(applied);
+  });
+
+  const input = new InputSampler();
+  input.keyboard.attach(window, app.canvas, pointerMapping);
+  input.gamepad.attach(window);
 
   // The overlay is created asynchronously and may never arrive — in a
   // production build the import below is never reached and the whole of
@@ -101,13 +137,20 @@ async function boot(): Promise<void> {
     const scale = loop.timeScale.toFixed(2);
     const shots = sim.projectiles;
     const particles = sim.particles;
+    const playerSlot = sim.playerIndex;
+    const hearts = sim.health.data[playerSlot * 2] ?? 0;
+    const maxHearts = sim.health.data[playerSlot * 2 + 1] ?? 0;
+    const invulnerable = sim.playerInvulnerableTicks > 0 ? '  INVULN' : '';
     hud.text = `tick ${String(loop.tick)}  ${seconds}s  x${scale}${loop.paused ? '  PAUSED' : ''}
+hp ${String(hearts)}/${String(maxHearts)}${invulnerable}
 shots ${String(shots.liveCount)}/${String(shots.capacity)}  particles ${String(
       particles.liveCount,
     )}/${String(particles.capacity)}${shots.overflows > 0 ? '  SHOT OVERFLOW' : ''}
-WASD move   arrows/mouse aim and fire   F1 debug   P pause   . step   [ ] time scale`;
+WASD move   arrows/mouse aim and fire
+F1 debug   F2 tuning   P pause   . step   [ ] time scale`;
   };
   refreshHud();
+  positionHud(layout);
 
   window.addEventListener('keydown', (event: KeyboardEvent) => {
     switch (event.key) {
@@ -133,7 +176,7 @@ WASD move   arrows/mouse aim and fire   F1 debug   P pause   . step   [ ] time s
   runAnimationFrameLoop(loop);
   window.setInterval(refreshHud, 100);
 
-  overlay = await mountDebugOverlay(sim, view, app);
+  overlay = await mountDebugOverlay(sim, view, app, uiLayer, () => layout.scale);
   exposeDebugHandle(loop, sim, (ms) => {
     stallMs = ms;
   });
@@ -163,6 +206,8 @@ async function mountDebugOverlay(
   sim: GameSim,
   view: GameView,
   app: Awaited<ReturnType<typeof createRenderer>>,
+  uiLayer: Container,
+  gameScale: () => number,
 ): Promise<DebugOverlayHandle | null> {
   if (!import.meta.env.DEV) {
     return null;
@@ -171,6 +216,8 @@ async function mountDebugOverlay(
   return createDebugOverlay({
     sim,
     view,
+    uiLayer,
+    gameScale,
     canvas: app.canvas,
     gl: (app.renderer as unknown as { gl?: unknown }).gl ?? null,
   });

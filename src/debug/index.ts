@@ -1,6 +1,8 @@
+import type { Container } from 'pixi.js';
 import type { GameSim } from '../sim/game/sim.js';
 import type { GameView } from '../render/view.js';
 import { DebugOverlay } from './overlay.js';
+import { createTuningWindow } from './tuning-window.js';
 
 export { DebugOverlay } from './overlay.js';
 export { FRAME_BUDGET_MS, FrameMetrics } from './metrics.js';
@@ -9,6 +11,14 @@ export type { DebugPanel, DebugContext } from './panel.js';
 export interface DebugOverlayHost {
   readonly sim: GameSim;
   readonly view: GameView;
+  /**
+   * The layer panels are drawn into: outside the scaled game, at the display's
+   * own resolution. Panels drawn inside the game get eight pixels of glyph
+   * height blown up by the game's scale, which is legible only by accident.
+   */
+  readonly uiLayer: Container;
+  /** The game's current whole-number scale, for turning screen drags into room pans. */
+  readonly gameScale: () => number;
   readonly canvas: HTMLCanvasElement;
   /** The WebGL context to count draw calls on, if the renderer has one. */
   readonly gl: unknown;
@@ -22,8 +32,12 @@ export interface DebugOverlayHost {
  * the lot. See `mountDebugOverlay` in `src/app/main.ts`.
  */
 export function createDebugOverlay(host: DebugOverlayHost): DebugOverlay {
-  const overlay = new DebugOverlay(host.sim, host.view);
+  const overlay = new DebugOverlay(host.sim, host.view, host.uiLayer, host.gameScale);
   overlay.drawCalls.attach(host.gl);
   overlay.attach(window, host.canvas);
+  // Independent of the F1 overlay on purpose: the panels are for watching what
+  // the game is doing, and this is for changing it. They get used at different
+  // moments and neither should force the other onto the screen.
+  overlay.ownTuningWindow(createTuningWindow(host.sim.tuning));
   return overlay;
 }

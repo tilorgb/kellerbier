@@ -21,8 +21,8 @@ const LAYER_COLOURS: readonly (readonly [number, number])[] = [
   [CollisionLayer.Obstacle, 0xf29b6f],
 ];
 
-const PANEL_GAP = 3;
-const PANEL_MARGIN = 3;
+const PANEL_GAP = 6;
+const PANEL_MARGIN = 8;
 
 /**
  * The tool we will look at more than any other.
@@ -40,6 +40,7 @@ export class DebugOverlay {
 
   private readonly sim: GameSim;
   private readonly view: GameView;
+  private readonly gameScale: () => number;
 
   /** Panel plates, pinned to the screen. */
   private readonly panelLayer = new Container();
@@ -58,15 +59,19 @@ export class DebugOverlay {
   private frame = 0;
 
   private detachInput: (() => void) | null = null;
+  private tuningWindow: { destroy(): void } | null = null;
 
-  constructor(sim: GameSim, view: GameView) {
+  constructor(sim: GameSim, view: GameView, uiLayer: Container, gameScale: () => number) {
     this.sim = sim;
     this.view = view;
+    this.gameScale = gameScale;
 
     this.worldLayer.addChild(this.grid);
     this.worldLayer.addChild(this.hitboxes);
     view.worldLayer.addChild(this.worldLayer);
-    view.stage.addChild(this.panelLayer);
+    // Panels go to the screen layer, not into the game: they are text, and text
+    // made of game pixels is text nobody can read.
+    uiLayer.addChild(this.panelLayer);
 
     this.addPanel(new FrameGraphPanel());
     this.addPanel(new CountsPanel());
@@ -190,8 +195,10 @@ export class DebugOverlay {
       if (!panning) {
         return;
       }
-      const bounds = canvas.getBoundingClientRect();
-      const scale = bounds.width === 0 ? 1 : bounds.width / canvas.width;
+      // The camera offset lives inside the scaled game, so a drag measured in
+      // screen pixels has to be divided by that scale to move the room by the
+      // distance the pointer actually travelled.
+      const scale = this.gameScale();
       this.view.cameraX += (event.clientX - panFromX) / scale;
       this.view.cameraY += (event.clientY - panFromY) / scale;
       panFromX = event.clientX;
@@ -214,9 +221,16 @@ export class DebugOverlay {
     };
   }
 
+  /** Takes ownership of the tuning window, so one `destroy` tears down both. */
+  ownTuningWindow(window: { destroy(): void }): void {
+    this.tuningWindow = window;
+  }
+
   destroy(): void {
     this.detachInput?.();
     this.detachInput = null;
+    this.tuningWindow?.destroy();
+    this.tuningWindow = null;
     this.drawCalls.detach();
   }
 
