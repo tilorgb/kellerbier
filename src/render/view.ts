@@ -1,5 +1,6 @@
 import { Container, Sprite, type Texture } from 'pixi.js';
 import type { GameSim } from '../sim/game/sim.js';
+import type { RoomGeometry } from '../sim/room/geometry.js';
 import { lerp } from '../sim/math.js';
 import { DamageNumberView } from './damage-numbers.js';
 import { DecalView } from './decals.js';
@@ -59,6 +60,8 @@ export class GameView {
   private readonly particles: ParticleView;
   private readonly decals: DecalView;
   private readonly damageNumbers: DamageNumberView;
+  private roomGeometry: RoomGeometry;
+  private roomView: Container;
 
   /**
    * Everything the camera shakes.
@@ -88,7 +91,9 @@ export class GameView {
     // than every sprite keeps the debug overlay's world layer — hitboxes, the
     // broadphase grid — lined up with what it is drawing over for free.
     this.world.scale.set(WORLD_ZOOM);
-    this.world.addChild(createRoomView(sim.room));
+    this.roomGeometry = sim.room;
+    this.roomView = createRoomView(sim.room);
+    this.world.addChild(this.roomView);
 
     this.decals = new DecalView(sim.decals, textures.decal);
     this.world.addChild(this.decals.container);
@@ -126,6 +131,13 @@ export class GameView {
    * `sync` needs to know it.
    */
   sync(alpha: number, outerZoom = 1): void {
+    if (this.sim.room !== this.roomGeometry) {
+      this.world.removeChild(this.roomView);
+      this.roomView.destroy();
+      this.roomGeometry = this.sim.room;
+      this.roomView = createRoomView(this.roomGeometry);
+      this.world.addChildAt(this.roomView, 0);
+    }
     this.decals.sync();
     this.entities.sync(alpha);
     this.projectiles.sync(alpha);

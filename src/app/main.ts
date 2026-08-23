@@ -1,5 +1,6 @@
 import { Assets, Container, Text, type Texture } from 'pixi.js';
 import massUrl from '../../assets/sprites/mass.png';
+import cellarCrossroads from '../content/rooms/cellar.json';
 import { GameSim, MAX_COLLIDER_RADIUS } from '../sim/game/sim.js';
 import { promilleTierName } from '../sim/game/promille.js';
 import { TICKS_PER_SECOND } from '../sim/time.js';
@@ -42,7 +43,7 @@ async function boot(): Promise<void> {
   // The room is populated with the authored roster rather than the training
   // targets: the targets are the rig impact feel was tuned against, and the
   // game is the thing with enemies in it.
-  const sim = new GameSim({ seed: 1, population: 'enemies' });
+  const sim = new GameSim({ seed: 1, roomTemplate: cellarCrossroads, floor: 1 });
   const view = new GameView(sim, {
     player: playerTexture,
     projectile: createBlobTexture(app.renderer, sim.tuning.shooting.shotRadius, 0xf0c46a, 0xfff3d0),
