@@ -1,10 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import { ENEMY_DEFINITIONS } from '../../src/content/enemies/index.js';
 import cellarCrossroads from '../../src/content/rooms/cellar.json';
+import { ROOM_TEMPLATES } from '../../src/content/rooms/index.js';
 import { ROOM_COLUMNS, ROOM_ROWS, ROOM_TILE_UNITS } from '../../src/content/rooms/definition.js';
 import { compileRoomTemplate, validateRoomTemplate } from '../../src/sim/room/template.js';
 
 describe('room templates', () => {
+  it('validates every registered authored room', () => {
+    expect(ROOM_TEMPLATES).toHaveLength(2);
+    for (const [index, room] of ROOM_TEMPLATES.entries()) {
+      expect(() =>
+        validateRoomTemplate(room, `room[${String(index)}].json`, ENEMY_DEFINITIONS),
+      ).not.toThrow();
+    }
+  });
+
   it('loads the hand-authored JSON at the standard dimensions', () => {
     const template = validateRoomTemplate(cellarCrossroads, 'cellar.json', ENEMY_DEFINITIONS);
 

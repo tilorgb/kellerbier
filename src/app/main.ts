@@ -1,6 +1,7 @@
 import { Assets, Container, Text, type Texture } from 'pixi.js';
 import massUrl from '../../assets/sprites/mass.png';
 import cellarCrossroads from '../content/rooms/cellar.json';
+import cellarHall from '../content/rooms/cellar-hall.json';
 import { GameSim, MAX_COLLIDER_RADIUS } from '../sim/game/sim.js';
 import { promilleTierName } from '../sim/game/promille.js';
 import { TICKS_PER_SECOND } from '../sim/time.js';
@@ -237,14 +238,17 @@ async function boot(): Promise<void> {
     const invulnerable = sim.playerInvulnerableTicks > 0 ? '  INVULN' : '';
     const dead = sim.playerDead ? '  DEAD' : '';
     const knockedDown = sim.umgfallnTicks > 0 ? '  KNOCKDOWN' : '';
-    hud.text = `tick ${String(loop.tick)}  ${seconds}s  x${scale}${loop.paused ? '  PAUSED' : ''}
+    const roomState = sim.doorsLocked ? 'LOCKED' : 'OPEN';
+    hud.text = `room ${sim.roomId}  doors ${roomState}  enemies ${String(sim.liveEnemyCount)}
+  tick ${String(loop.tick)}  ${seconds}s  x${scale}${loop.paused ? '  PAUSED' : ''}
 hp ${String(hearts)}/${String(maxHearts)}  soul ${String(sim.playerSoulHealth)}  eternal ${String(sim.playerEternalHealth)}${invulnerable}${dead}
 promille ${sim.promille.toFixed(2)} ${promilleTierName(sim.promilleTier)}${knockedDown}
 shots ${String(shots.liveCount)}/${String(shots.capacity)}  particles ${String(
       particles.liveCount,
     )}/${String(particles.capacity)}${shots.overflows > 0 ? '  SHOT OVERFLOW' : ''}
 WASD move   arrows/mouse aim and fire
-F1 debug   F2 tuning   P pause   . step   [ ] time scale`;
+  F1 debug   F2 tuning   P pause   . step   [ ] time scale
+  N next room (after clear)`;
   };
   refreshHud();
   positionHud(layout);
@@ -263,6 +267,10 @@ F1 debug   F2 tuning   P pause   . step   [ ] time scale`;
         break;
       case ']':
         loop.timeScale = Math.min(8, loop.timeScale * 2);
+        break;
+      case 'n':
+      case 'N':
+        sim.transitionTo(cellarHall, 1, 'north');
         break;
       default:
         return;
