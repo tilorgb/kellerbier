@@ -9,32 +9,28 @@ import {
 } from '../../src/sim/input/frame.js';
 import { RoomGeometry } from '../../src/sim/room/geometry.js';
 import { stepCollision } from '../../src/sim/systems/collision.js';
+import { bytesPerPass } from '../helpers/allocation.js';
 
 /**
- * The pooled hot loop, measured the same way `ecs-allocation.test.ts` measures
- * the ECS: collect once, run a bounded window with nothing reclaimed inside it,
- * and read the heap delta.
+ * The pooled hot loop, measured the way `tests/helpers/allocation.ts` describes.
  *
  * This is the test behind the flat-heap criterion on #12. A pool that quietly
  * started allocating — a closure per projectile, an array literal in the
  * despawn path — would show up here as a sawtooth in the profiler and as frame
- * spikes in the game, at exactly the moment the screen is fullest.
+ * spikes in the game, at exactly the moment the screen is fullest. It has
+ * caught two: `Math.hypot` building an arguments object per call, and an arrow
+ * function passed to the projectile loop.
  */
-
-const forceGc = (globalThis as { gc?: () => void }).gc;
 
 /** One measured pass is a second of simulation at 60 ticks. */
 const TICKS_PER_PASS = 60;
-const PASSES = 20;
-/** Measurement overhead reads as a few KB per pass. Real garbage reads far above this. */
-const ZERO_ALLOCATION_BUDGET_BYTES = 96 * 1024;
-
-function requireGc(): () => void {
-  if (forceGc === undefined) {
-    throw new Error('Run vitest with --expose-gc — see test.execArgv in vite.config.ts');
-  }
-  return forceGc;
-}
+/**
+ * The budget.
+ *
+ * Well above what the loop measures, and far below what one object per
+ * projectile per tick would cost — which is the regression it is here to catch.
+ */
+const ZERO_ALLOCATION_BUDGET_BYTES = 64 * 1024;
 
 function firing(): InputFrame {
   const frame = createInputFrame();
@@ -63,7 +59,6 @@ describe('projectile pool allocation behaviour', () => {
   });
 
   it('holds a flat heap across a second of continuous fire', () => {
-    const gc = requireGc();
     const sim = new GameSim({ room: new RoomGeometry(0, 0, 640, 360) });
     sim.tuning.shooting.fireDelayTicks = 2;
     const input = firing();
@@ -74,23 +69,15 @@ describe('projectile pool allocation behaviour', () => {
       }
     };
 
-    // Warm up into optimised code and into the steady-state population first.
-    for (let i = 0; i < 20; i++) {
-      pass();
-    }
-
-    gc();
-    const before = process.memoryUsage().heapUsed;
-    for (let i = 0; i < PASSES; i++) {
-      pass();
-    }
-    const perPass = (process.memoryUsage().heapUsed - before) / PASSES;
+    // A pass here is sixty ticks, so far fewer of them are needed to see the
+    // signal — and the warm-up also has to reach the steady-state population.
+    const perPass = bytesPerPass(pass, { warmUpPasses: 20, passes: 5 });
 
     expect(
       perPass,
       `${(perPass / 1024).toFixed(1)} KB per simulated second of continuous fire`,
     ).toBeLessThan(ZERO_ALLOCATION_BUDGET_BYTES);
-  }, 30_000);
+  }, 60_000);
 
   it('degrades gracefully and visibly when the pool is exhausted', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
@@ -114,7 +101,6 @@ describe('projectile pool allocation behaviour', () => {
 
 describe('collision allocation behaviour', () => {
   it('resolves a full field without allocating', () => {
-    const gc = requireGc();
     const sim = new GameSim({ capacity: 4096, projectileCapacity: 2000 });
     for (let enemy = 0; enemy < 100; enemy++) {
       sim.spawnTarget(60 + (enemy % 10) * 50, 60 + Math.floor(enemy / 10) * 25, 8);
@@ -131,19 +117,10 @@ describe('collision allocation behaviour', () => {
       stepCollision(sim);
     };
 
-    for (let warm = 0; warm < 30; warm++) {
-      pass();
-    }
-
-    gc();
-    const before = process.memoryUsage().heapUsed;
-    for (let round = 0; round < 20; round++) {
-      pass();
-    }
-    const perPass = (process.memoryUsage().heapUsed - before) / 20;
+    const perPass = bytesPerPass(pass, { warmUpPasses: 30, passes: 10 });
 
     expect(perPass, `${(perPass / 1024).toFixed(1)} KB per full-field collision pass`).toBeLessThan(
       ZERO_ALLOCATION_BUDGET_BYTES,
     );
-  }, 30_000);
+  }, 60_000);
 });

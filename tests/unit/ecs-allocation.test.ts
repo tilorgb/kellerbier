@@ -1,24 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { World } from '../../src/sim/ecs/world.js';
+import { PASSES_PER_WINDOW, bytesPerPass } from '../helpers/allocation.js';
 
 /**
  * The allocation-delta test from `docs/TECH_STACK.md` §2.
  *
- * GC spikes are the defining failure mode of a JavaScript bullet hell: a
- * `{x, y}` allocated inside the frame loop becomes a periodic frame spike that
- * lands exactly when the screen is busiest. Structure-of-Arrays storage is the
- * fix; this is the test that proves the fix is still in force.
+ * Structure-of-Arrays storage is what keeps the frame loop from producing
+ * garbage; this is the test that proves it is still in force. How the
+ * measurement itself works — and why it takes the minimum across several
+ * windows — is documented in `tests/helpers/allocation.ts`.
  *
- * ## How the measurement works, and why it is shaped this way
- *
- * Forcing a collection *after* the loop and reading `heapUsed` measures what
- * survived, not what was allocated — a loop producing megabytes of garbage that
- * is immediately collectable reads as zero growth. So instead: collect once
- * before, then run few enough passes that the total stays inside V8's young
- * generation, and read `heapUsed` with no collection in between. Nothing is
- * reclaimed during the window, so the delta is the allocation.
- *
- * V8 also removes allocations it can prove do not escape, which makes a naive
+ * V8 removes allocations it can prove do not escape, which makes a naive
  * "allocate and drop it" control silently optimise away and the test pass for
  * the wrong reason. The control below retains its objects, which defeats scalar
  * replacement — and the control is asserted on, so if V8 ever does learn to
@@ -30,50 +22,18 @@ import { World } from '../../src/sim/ecs/world.js';
  * an allocation guard becomes flaky, and a flaky guard is one that gets muted.
  */
 
-const forceGc = (globalThis as { gc?: () => void }).gc;
-
 const ENTITY_COUNT = 10_000;
-/** Small enough that ~14 MB of control garbage still fits the young generation. */
-const PASSES = 20;
-/** Structure-of-Arrays measures ~16 KB per pass, which is measurement overhead, not per-entity garbage. */
-const ZERO_ALLOCATION_BUDGET_BYTES = 128 * 1024;
-/** The control measures ~700 KB per pass. Anything below this means the control stopped allocating. */
-const CONTROL_FLOOR_BYTES = 256 * 1024;
-
-function requireGc(): () => void {
-  if (forceGc === undefined) {
-    // Deliberately a failure rather than a skip: a silently skipped allocation
-    // test is how this guarantee gets lost without anyone noticing.
-    throw new Error('Run vitest with --expose-gc — see test.execArgv in vite.config.ts');
-  }
-  return forceGc;
-}
-
 /**
- * Heap bytes allocated per call of `pass`, measured with nothing reclaimed in
- * between.
+ * The budget.
  *
- * `prepare` runs after warm-up and before the forced collection, for a pass
- * that needs somewhere to retain the window's output.
+ * The loop measures 0.2 KB per pass — effectively the measurement floor. This
+ * is set far above that rather than at it, because CI hardware is unknown; it
+ * is still tight enough to catch the regression it exists for, since one
+ * object per entity would be several hundred KB.
  */
-function bytesPerPass(pass: () => void, prepare?: () => void): number {
-  const gc = requireGc();
-
-  // Let V8 tier up to optimised code first; the tiering itself allocates, and
-  // that is not what is being measured.
-  for (let i = 0; i < 300; i++) {
-    pass();
-  }
-
-  prepare?.();
-  gc();
-  const before = process.memoryUsage().heapUsed;
-  for (let i = 0; i < PASSES; i++) {
-    pass();
-  }
-  const after = process.memoryUsage().heapUsed;
-  return (after - before) / PASSES;
-}
+const ZERO_ALLOCATION_BUDGET_BYTES = 64 * 1024;
+/** The control measures ~700 KB per pass. Below this, the control stopped allocating. */
+const CONTROL_FLOOR_BYTES = 256 * 1024;
 
 interface WorldHarness {
   readonly world: World;
@@ -127,7 +87,7 @@ function buildWorld(): WorldHarness {
   let retainCursor = 0;
 
   function retainWindow(): void {
-    retained = new Array<{ x: number; y: number }>(ENTITY_COUNT * PASSES);
+    retained = new Array<{ x: number; y: number }>(ENTITY_COUNT * PASSES_PER_WINDOW);
     retainCursor = 0;
   }
 
@@ -174,7 +134,7 @@ describe('ECS allocation behaviour', () => {
 
   it('detects allocation when it is there, so the measurement above means something', () => {
     const { integrateWithGarbage, retainWindow } = buildWorld();
-    const perPass = bytesPerPass(integrateWithGarbage, retainWindow);
+    const perPass = bytesPerPass(integrateWithGarbage, { prepare: retainWindow });
 
     expect(
       perPass,
