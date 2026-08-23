@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kellerbier</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background: #0b0a0d;
+        overflow: hidden;
+      }
+      #game {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100vw;
+        height: 100vh;
+      }
+      /* Belt and braces: the renderer is nearest-neighbour, and so is any
+         browser-side scaling of the canvas element itself. */
+      #game canvas {
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;
+      }
+    </style>
+    <script type="module" crossorigin src="./assets/index-BU46KnTp.js"></script>
+    <link rel="modulepreload" crossorigin href="./assets/Geometry-CZGVBKwE.js">
+    <link rel="modulepreload" crossorigin href="./assets/Filter-DM8SVgg4.js">
+    <link rel="modulepreload" crossorigin href="./assets/canvasUtils-BwcAxi36.js">
+    <link rel="modulepreload" crossorigin href="./assets/Cache-DOCLyTZt.js">
+    <link rel="modulepreload" crossorigin href="./assets/GCManagedHash-1mXRsHGx.js">
+    <link rel="modulepreload" crossorigin href="./assets/RenderTargetSystem-D72Pqw4w.js">
+    <link rel="modulepreload" crossorigin href="./assets/getTextureBatchBindGroup-CCNGb0nl.js">
+    <link rel="modulepreload" crossorigin href="./assets/GraphicsContext-2oHUVbLl.js">
+    <link rel="modulepreload" crossorigin href="./assets/CanvasPool-BaexORx5.js">
+    <link rel="modulepreload" crossorigin href="./assets/BufferResource-BxCDYwYw.js">
+  </head>
+  <body>
+    <div id="game"></div>
+  </body>
+</html>
