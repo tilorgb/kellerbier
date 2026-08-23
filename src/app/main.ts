@@ -83,13 +83,26 @@ async function boot(): Promise<void> {
   // floor below is generated from this same seed's `RngStream.Floor` stream
   // (see `src/sim/rng/streams.ts`), so it is exactly as reproducible as the
   // rest of the run.
-  const RUN_SEED = 1;
+  //
+  // Seed 5 specifically, not 1: template selection is genuinely unbiased (a
+  // 200-seed sweep of floor 1 puts a same-template run of 1x1 rooms at roughly
+  // 1 floor in 50), but seed 1 was one of the unlucky ones, and a dev demo
+  // that only ever shows one room layout does not showcase #20. Seed 5 uses
+  // every authored template at least once.
+  const RUN_SEED = 5;
   const floorPlan = generateFloor(
     createStreamRng(RUN_SEED, RngStream.Floor),
     floorConfig(1),
     ROOM_TEMPLATE_POOL,
   );
   let currentRoomId = floorPlan.startRoomId;
+  // Rooms `N` has already stepped into. Preferring an unvisited neighbour
+  // over the fixed north/east/south/west priority order turns the walk into
+  // a real depth-first tour of the floor — without it, standing in any dead
+  // end (a treasure or shop room always is one) makes `N` just bounce back
+  // to wherever it came from, which reads as "the generator only has one
+  // room" even though the floor behind it is not.
+  const visitedRoomIds = new Set([currentRoomId]);
 
   // The room is populated with the authored roster rather than the training
   // targets: the targets are the rig impact feel was tuned against, and the
@@ -326,14 +339,20 @@ WASD move   arrows/mouse aim and fire
         break;
       case 'n':
       case 'N': {
-        // Walks through the first available door of the generated floor, in a
-        // fixed north/east/south/west priority — one key, same as before #20,
-        // now stepping through a real floor instead of one hardcoded room.
+        // Walks the generated floor depth-first: an unvisited door over a
+        // fixed north/east/south/west priority, backtracking through an
+        // already-seen room only once every door from here has been used.
+        // One key, same as before #20, now touring a real floor instead of
+        // one hardcoded room.
         const room = planRoom(floorPlan, currentRoomId);
         const directions = ['north', 'east', 'south', 'west'] as const;
-        const direction: RoomDirection | undefined = directions.find(
-          (candidate) => room.neighbors[candidate] !== undefined,
-        );
+        const unvisitedDirection = directions.find((candidate) => {
+          const id = room.neighbors[candidate];
+          return id !== undefined && !visitedRoomIds.has(id);
+        });
+        const direction: RoomDirection | undefined =
+          unvisitedDirection ??
+          directions.find((candidate) => room.neighbors[candidate] !== undefined);
         const neighborId = direction === undefined ? undefined : room.neighbors[direction];
         if (
           direction !== undefined &&
@@ -345,6 +364,7 @@ WASD move   arrows/mouse aim and fire
           )
         ) {
           currentRoomId = neighborId;
+          visitedRoomIds.add(neighborId);
         }
         break;
       }
