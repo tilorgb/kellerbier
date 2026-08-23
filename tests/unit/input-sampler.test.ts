@@ -84,7 +84,7 @@ describe('keyboard sampling', () => {
   it('starts idle', () => {
     const { sampler } = harness();
     const frame = sampler.sample();
-    expect(frame).toEqual({ moveX: 0, moveY: 0, aimX: 0, aimY: 0, buttons: 0 });
+    expect(frame).toEqual({ moveX: 0, moveY: 0, aimX: 0, aimY: 0, buttons: 0, analogAim: false });
   });
 
   it('moves on WASD, with screen-space signs', () => {
@@ -351,7 +351,7 @@ describe('hot-plug', () => {
 
     pad.connected = false;
     const frame = sampler.sample();
-    expect(frame).toEqual({ moveX: 0, moveY: 0, aimX: 0, aimY: 0, buttons: 0 });
+    expect(frame).toEqual({ moveX: 0, moveY: 0, aimX: 0, aimY: 0, buttons: 0, analogAim: false });
   });
 
   it('picks the pad up again when it comes back', () => {

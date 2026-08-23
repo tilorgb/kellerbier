@@ -17,8 +17,9 @@ function frameOf(
   aimX: number,
   aimY: number,
   buttons: number,
+  analogAim = false,
 ): InputFrame {
-  return { moveX, moveY, aimX, aimY, buttons };
+  return { moveX, moveY, aimX, aimY, buttons, analogAim };
 }
 
 describe('input recording', () => {
@@ -57,6 +58,21 @@ describe('input recording', () => {
     expect(out.buttons).toBe(frame.buttons);
   });
 
+  it('remembers which device aim came from', () => {
+    const recording = new InputRecording(2);
+    recording.push(frameOf(0, 0, 127, 0, 0b1, true));
+    recording.push(frameOf(0, 0, 127, 0, 0b1, false));
+
+    const out = createInputFrame();
+    recording.read(0, out);
+    // A shot inherits a different amount of the player's velocity depending on
+    // this, so a replay that lost it would reproduce different shots than the
+    // run it recorded.
+    expect(out.analogAim).toBe(true);
+    recording.read(1, out);
+    expect(out.analogAim).toBe(false);
+  });
+
   it('grows past its initial capacity without losing anything', () => {
     const recording = new InputRecording(2);
     for (let tick = 0; tick < 500; tick++) {
@@ -92,9 +108,9 @@ describe('input recording', () => {
 
     const out = createInputFrame();
     recording.read(5, out);
-    expect(out).toEqual({ moveX: 0, moveY: 0, aimX: 0, aimY: 0, buttons: 0 });
+    expect(out).toEqual({ moveX: 0, moveY: 0, aimX: 0, aimY: 0, buttons: 0, analogAim: false });
     recording.read(-1, out);
-    expect(out).toEqual({ moveX: 0, moveY: 0, aimX: 0, aimY: 0, buttons: 0 });
+    expect(out).toEqual({ moveX: 0, moveY: 0, aimX: 0, aimY: 0, buttons: 0, analogAim: false });
   });
 
   it('survives a trip through bytes', () => {
@@ -164,7 +180,7 @@ describe('input playback', () => {
     const playback = new InputPlayback(recording);
     playback.next();
     const after = playback.next();
-    expect(after).toEqual({ moveX: 0, moveY: 0, aimX: 0, aimY: 0, buttons: 0 });
+    expect(after).toEqual({ moveX: 0, moveY: 0, aimX: 0, aimY: 0, buttons: 0, analogAim: false });
   });
 
   it('rewinds to the start', () => {
