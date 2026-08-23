@@ -52,7 +52,7 @@ Filter by label: [`M0`](../../labels/M0) · [`M1`](../../labels/M1) · [`M2`](..
 | 19 | Room loading, door locking and transitions |
 | 20 | Floor generation with layout validation |
 | 21 | Minimap and run HUD |
-| 22 | Pickups: Maß, Biermarken, Böller, Schlüssel, food |
+| 22 | Pickups: Maß, Biermarken, Bierfassl, Schlüssel, food |
 | 23 | Special rooms: Treasure, Shop, Boss, Secret |
 | 24 | Room editor tool |
 

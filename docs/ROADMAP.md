@@ -45,6 +45,9 @@ Full tiers, drift and sway, the Kater debuff, sober/rausch item gating, food, th
 accessibility toggles, and a genuine balance pass. Or the honest alternative: the evidence
 that it does not work, and its removal.
 
+Promille is finished here but not *met* here: it is unlocked rather than on from the first run,
+and the gate itself ships with the hub and the save system in M7.
+
 ## M5 — Floors 1 & 2 complete
 *Exit: two finished chapters, art, audio, enemies and bosses — a coherent 15-minute game.*
 
@@ -60,7 +63,9 @@ every boss, every floor hazard. The bulk of the content work.
 *Exit: losing a run makes you want to start another one immediately.*
 
 Save system, the Stammtisch hub, unlocks, additional characters, achievements, seeded runs,
-the daily run, challenge runs, curses, devil and angel rooms.
+the daily run, challenge runs, curses, devil and angel rooms. The first unlock is Promille
+itself, granted for beating Der Stier — which makes the hub load-bearing earlier than the rest
+of this milestone implies.
 
 ## M8 — Polish
 *Exit: it looks and sounds like a finished commercial game.*

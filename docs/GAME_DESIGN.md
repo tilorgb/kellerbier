@@ -84,7 +84,8 @@ Isaac's skeleton, kept deliberately familiar:
 the riskiest one, so it gets prototyped inside the first playable slice and cut without
 sentiment if it does not feel good.
 
-A second meter beside health, measured in **Promille** (0.0 – 5.0).
+A second meter beside health, measured in **Promille** (0.0 – 5.0) — and one a new player
+does not meet on their first run. See *When it turns on*, below.
 
 **Going up:** drinking beer pickups, certain items, boss rewards, some devil pacts.
 **Coming down:** time (slow, continuous decay), eating (Brezn, Obazda, Radi), water fountains,
@@ -102,6 +103,27 @@ being hit.
 
 **Kater (hangover)** is the punish: a timed debuff that drops damage and speed until you eat
 something. It is survivable and it is your own fault, which is the correct emotional note.
+
+### When it turns on
+
+Promille is **unlocked, not on from the start**. The first runs are sober: no meter, no HUD
+element, no drift, no wobble, no sway, no tier bonuses, and the beer pickup does not drop at
+all. Maß, Weißbier and Schwarzbier are health and are unaffected; the food items keep their
+heal and simply have nothing to lower. The `sober` and `rausch` items are filtered out of the
+pools, since a requirement that can never be evaluated is not a build decision.
+
+The unlock is granted the first time the player beats **Der Stier**, and it is announced at the
+Stammtisch: a new regular arrives, says what he brought, and the beer is on the table from the
+next run on.
+
+The reason is pacing. The opening should read as a familiar twin-stick roguelite — shoot,
+dodge, pick things up — so that the game teaches one mechanic at a time rather than all of them
+at once. It also makes the unlock worth having: a player who has already played the sober game
+understands exactly what the beer is changing, which is not true of a mechanic that was
+switched on before they knew what the baseline was.
+
+The failure mode to watch for is a sober run that feels like the real game with a feature
+missing. It has to be complete on its own terms, which is mostly a drop-table question.
 
 ### Why this works
 
@@ -146,7 +168,7 @@ can explain exactly why the player's damage is 47.3.
 | Soul heart | **Weißbier** | Blue-white, spent before red. |
 | Eternal heart | **Schwarzbier** | |
 | Coin | **Biermarke** | Festival beer token. |
-| Bomb | **Böller** | Real Bavarian firecracker tradition. |
+| Bomb | **Bierfassl** | A small keg, set down or rolled: the hoops give way and it bursts. A firecracker is a nuisance, not a thing you are pleased to find — Böller belong to the enemies who throw them. |
 | Key | **Kellerschlüssel** | |
 | Food (lowers Promille) | **Brezn**, **Obazda**, **Radi** | Also small heals. |
 
