@@ -1,0 +1,71 @@
+name: Bug
+description: Something behaves wrongly, crashes, or feels broken.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **The seed is the important field.** In a procedurally generated game, a bug report
+        without one is frequently unactionable — nobody can reach the room you were standing in.
+
+        Press `F1` to open the debug overlay, then `C` to copy the run's identity. Paste it below.
+
+  - type: textarea
+    id: run
+    attributes:
+      label: Run identity
+      description: The line the debug overlay's `C` key copies. Seed, tick, floor, room.
+      placeholder: kellerbier seed=bee22026 tick=4183 floor=0 room=playground
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to get there
+      description: |
+        From the seed above, what did you do? Rooms entered, items taken, what you were doing
+        when it went wrong.
+    validations:
+      required: true
+
+  - type: input
+    id: replay
+    attributes:
+      label: Replay file
+      description: |
+        Attach it by dragging it into this field, once replay recording lands (#48). A replay
+        plus a seed reproduces a bug exactly, on any machine, every time.
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: How bad is it
+      options:
+        - Crashes or loses the run
+        - Wrong behaviour, run continues
+        - Visual or audio only
+        - Feels wrong but may be intended
+    validations:
+      required: true
+
+  - type: input
+    id: build
+    attributes:
+      label: Where you played it
+      description: A preview link, a commit, or "local dev".
+
+  - type: input
+    id: platform
+    attributes:
+      label: Browser and OS
+      placeholder: Firefox 141 on Linux

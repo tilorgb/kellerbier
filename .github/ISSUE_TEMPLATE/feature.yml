@@ -1,0 +1,42 @@
+name: Feature
+description: A system, a mechanic or a piece of engine work.
+labels: [feature]
+body:
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: What is being built. Bullet points are fine — this is a work order, not a spec.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: |
+        How anyone can tell it is done, written so that each line can be checked rather than
+        argued about. For anything with `feel`, at least one criterion should be about how it
+        feels when played, not about what the code does.
+      value: |
+        - [ ]
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: Why, and what it costs
+      description: |
+        What this buys, and what it constrains afterwards. If a decision here will limit
+        something else, say so — it likely belongs in `docs/DECISIONS.md`.
+
+  - type: dropdown
+    id: milestone
+    attributes:
+      label: Milestone
+      options: ['M0', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9', 'not sure yet']
+    validations:
+      required: true

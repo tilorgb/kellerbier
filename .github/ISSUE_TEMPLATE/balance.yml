@@ -1,0 +1,45 @@
+name: Balance
+description: Something is too strong, too weak, too swingy or not a decision.
+labels: [design]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Balance reports are most useful with a seed attached, the same as bugs — `F1` then `C`.
+
+  - type: input
+    id: subject
+    attributes:
+      label: What
+      description: The item, enemy, floor, weapon or number.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: direction
+    attributes:
+      label: Which way
+      options:
+        - Too strong
+        - Too weak
+        - Too swingy — sometimes trivial, sometimes impossible
+        - Not a decision — there is only one sensible choice
+        - Feels bad even though the numbers are fine
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: What you saw
+      description: |
+        Runs, seeds, numbers, or the moment it went wrong. "It felt bad" is a legitimate report
+        — say what you were doing when it did.
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: What you would change
+      description: Optional. A diagnosis is worth more than a prescription, but both are welcome.

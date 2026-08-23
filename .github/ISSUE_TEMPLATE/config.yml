@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: How this project works
+    url: https://github.com/tilorgb/kellerbier/blob/main/CONTRIBUTING.md
+    about: Branches, commits, the definition of done for each kind of work, and the labels.
+  - name: Current state and what is next
+    url: https://github.com/tilorgb/kellerbier/issues?q=is%3Aissue+label%3Aroadmap
+    about: The roadmap issue, regenerated from the issue list on every change.

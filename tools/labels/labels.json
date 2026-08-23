@@ -1,0 +1,51 @@
+{
+  "milestones": {
+    "M0": { "color": "1f3f66", "description": "Foundations — the loop runs and CI is green" },
+    "M1": {
+      "color": "24507f",
+      "description": "Game feel — one room, one enemy, fun to shoot things"
+    },
+    "M2": {
+      "color": "2a6199",
+      "description": "Rooms and floors — a generated floor, start to boss"
+    },
+    "M3": { "color": "3272b2", "description": "Items and synergy — combinations nobody authored" },
+    "M4": { "color": "4a7fb8", "description": "Promille — a decision, not a bar to ignore" },
+    "M5": { "color": "6a5fa8", "description": "Floors 1 & 2 — a coherent fifteen-minute game" },
+    "M6": { "color": "7f5aa8", "description": "Floors 3–7 — cellar to Die Bavaria" },
+    "M7": { "color": "9455a8", "description": "Meta-progression — losing makes you start again" },
+    "M8": { "color": "a85095", "description": "Polish — looks and sounds finished" },
+    "M9": { "color": "b8465f", "description": "Release — strangers are playing it" }
+  },
+  "types": {
+    "engine": { "color": "5b3a8f", "description": "Simulation, ECS, collision, pooling" },
+    "gameplay": { "color": "2e7d5b", "description": "Rules and systems the player interacts with" },
+    "feel": {
+      "color": "d4762a",
+      "description": "How something feels — movement, impact, response"
+    },
+    "content": { "color": "b58900", "description": "Items, enemies, rooms, floors, text" },
+    "art": { "color": "c2557a", "description": "Sprites, atlases, palette, effects" },
+    "audio": { "color": "8a6fb5", "description": "Music and sound" },
+    "tooling": {
+      "color": "4f6d7a",
+      "description": "Editors, harnesses, generators, the debug overlay"
+    },
+    "perf": { "color": "a83232", "description": "Budgets, benchmarks, optimisation" },
+    "infra": { "color": "44546a", "description": "CI, build, release, dependencies" },
+    "design": { "color": "3a8f8f", "description": "Balance and design decisions" },
+    "a11y": { "color": "2f8f4a", "description": "Accessibility" },
+    "epic": { "color": "6f42c1", "description": "A body of work with sub-issues" },
+    "roadmap": {
+      "color": "0e8a16",
+      "description": "The generated tracking issue — do not edit by hand"
+    }
+  },
+  "reports": {
+    "bug": { "color": "b60205", "description": "Behaves wrongly, crashes, or feels broken" },
+    "feature": {
+      "color": "0e6fbf",
+      "description": "A system, a mechanic or a piece of engine work"
+    }
+  }
+}
