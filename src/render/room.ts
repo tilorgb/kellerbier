@@ -1,6 +1,6 @@
 import { Container, Graphics } from 'pixi.js';
 import type { RoomDirection } from '../sim/game/sim.js';
-import { BLOCK_STRIDE, type RoomGeometry } from '../sim/room/geometry.js';
+import { BLOCK_STRIDE, DOOR_SPAN, type RoomGeometry } from '../sim/room/geometry.js';
 import { PLAYFIELD_HEIGHT, PLAYFIELD_WIDTH } from '../sim/room/playground.js';
 
 /** Placeholder cellar palette. Real tilesets arrive with the art pipeline in #34. */
@@ -13,9 +13,6 @@ const BLOCK_EDGE_COLOUR = 0x6d5540;
 /** A locked door reads as cold and shut; an open one picks up the floor's amber light. */
 const DOOR_LOCKED_COLOUR = 0x5a2a2a;
 const DOOR_OPEN_COLOUR = 0xd9a441;
-
-/** How wide a door gap is cut into the wall band, in room units. */
-const DOOR_SPAN = 24;
 
 /**
  * Draws a room once, into a static container.

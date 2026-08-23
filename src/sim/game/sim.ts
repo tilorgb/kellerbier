@@ -19,7 +19,7 @@ import {
   promilleWobbleAmplitude,
   promilleSwayMagnitude,
 } from './promille.js';
-import type { RoomGeometry } from '../room/geometry.js';
+import { DOOR_SPAN, type RoomGeometry } from '../room/geometry.js';
 import { createPlaygroundRoom } from '../room/playground.js';
 import { compileRoomTemplate } from '../room/template.js';
 import { TICKS_PER_SECOND } from '../time.js';
@@ -80,6 +80,22 @@ export const TARGET_RESPAWN_TICKS = 150;
 
 /** A room transition is immediate in simulation and presented over this many frames. */
 export const ROOM_TRANSITION_TICKS = 12;
+
+/**
+ * How long enemies stay inert after a room loads, in ticks (0.4s at 60
+ * ticks/second) — long enough to register what just spawned before anything
+ * moves or fires. See `stepEnemies` (`src/sim/systems/enemy.ts`), which
+ * skips its whole loop while `roomWarmupTicks > 0`.
+ */
+export const ROOM_WARMUP_TICKS = 24;
+
+/**
+ * How far from the door the player just walked through a spawn has to be,
+ * in room units, to be allowed to spawn at all — anything the room template
+ * authored closer than this is dropped for that load rather than repositioned,
+ * so a run never spawns something already touching the player on arrival.
+ */
+const DOOR_SPAWN_SAFETY_RADIUS = 48;
 
 export type RoomDirection = 'north' | 'east' | 'south' | 'west';
 
@@ -227,6 +243,8 @@ export class GameSim {
   /** Ticks remaining in the presentation transition after a room load. */
   roomTransitionTicks = 0;
   roomTransitionDirection: RoomDirection | null = null;
+  /** Ticks remaining before enemies loaded into the current room may act. */
+  roomWarmupTicks = 0;
 
   /** Ticks until the player may fire again. */
   fireCooldown = 0;
@@ -420,6 +438,60 @@ export class GameSim {
     return this.roomDoors;
   }
 
+  /**
+   * The door the player is currently standing in the gap of, or `null`.
+   *
+   * The player is always clamped to the room's interior rectangle (see
+   * `resolveAxis` in `systems/motion.ts`) — there is no physical gap in the
+   * wall to walk through — so "walking through a door" is this: touching the
+   * boundary at the point a door is drawn (`render/room.ts`'s `DOOR_SPAN`
+   * band, centred on the wall), with that door unlocked. The caller (the app
+   * layer, which owns the floor plan and room templates) polls this once a
+   * tick and calls `transitionTo` when it isn't `null` — the same call the
+   * dev "N" shortcut in `main.ts` already makes.
+   */
+  get doorContact(): RoomDirection | null {
+    if (!this.roomTemplateLoaded || this.doorsLocked) {
+      return null;
+    }
+    const index = this.playerIndex;
+    const x = this.positionX(index);
+    const y = this.positionY(index);
+    const half = DOOR_SPAN / 2;
+    const centreX = (this.room.minX + this.room.maxX) / 2;
+    const centreY = (this.room.minY + this.room.maxY) / 2;
+
+    if (
+      this.roomDoors.north &&
+      y <= this.room.minY + PLAYER_RADIUS &&
+      Math.abs(x - centreX) <= half
+    ) {
+      return 'north';
+    }
+    if (
+      this.roomDoors.south &&
+      y >= this.room.maxY - PLAYER_RADIUS &&
+      Math.abs(x - centreX) <= half
+    ) {
+      return 'south';
+    }
+    if (
+      this.roomDoors.west &&
+      x <= this.room.minX + PLAYER_RADIUS &&
+      Math.abs(y - centreY) <= half
+    ) {
+      return 'west';
+    }
+    if (
+      this.roomDoors.east &&
+      x >= this.room.maxX - PLAYER_RADIUS &&
+      Math.abs(y - centreY) <= half
+    ) {
+      return 'east';
+    }
+    return null;
+  }
+
   get roomCleared(): boolean {
     return (
       this.roomTemplateLoaded && (this.roomEnemyCount === 0 || this.roomClearedIds.has(this.roomId))
@@ -436,11 +508,25 @@ export class GameSim {
     this.roomTemplateLoaded = true;
     this.roomTransitionTicks = direction === null ? 0 : ROOM_TRANSITION_TICKS;
     this.roomTransitionDirection = direction;
+    this.roomWarmupTicks = ROOM_WARMUP_TICKS;
     this.roomEnemyCount = 0;
     const alreadyCleared = this.roomClearedIds.has(this.roomId);
     this.positionPlayerAtDoor(direction);
     if (!alreadyCleared) {
+      // A room entered through a door (not the run's very first room) never
+      // spawns something already touching the player at the door they just
+      // walked through — that door is the one entry point every run of this
+      // room is guaranteed to arrive at, so it is the one spot an author's
+      // spawn placement can't account for the player already standing on.
+      const entry = direction === null ? null : this.doorEntryPoint(direction);
       for (const spawn of compiled.enemySpawns) {
+        if (entry !== null) {
+          const dx = spawn.x - entry.x;
+          const dy = spawn.y - entry.y;
+          if (dx * dx + dy * dy < DOOR_SPAWN_SAFETY_RADIUS * DOOR_SPAWN_SAFETY_RADIUS) {
+            continue;
+          }
+        }
         const definition = this.enemies.indexOf(spawn.enemyId);
         if (definition < 0) {
           throw new Error(`room template enemy "${spawn.enemyId}" is not registered`);
@@ -493,7 +579,13 @@ export class GameSim {
     this.postDefinition.length = 0;
   }
 
-  private positionPlayerAtDoor(direction: RoomDirection | null): void {
+  /**
+   * Where the player (and, via `DOOR_SPAWN_SAFETY_RADIUS`, nothing else)
+   * lands when entering the room from `direction` — the door on the wall
+   * `direction` names, or the room's centre for the very first room of a run
+   * (`direction === null`, no door was walked through).
+   */
+  private doorEntryPoint(direction: RoomDirection | null): { x: number; y: number } {
     let x = (this.room.minX + this.room.maxX) / 2;
     let y = (this.room.minY + this.room.maxY) / 2;
     if (direction === 'north') {
@@ -505,6 +597,11 @@ export class GameSim {
     } else if (direction === 'west') {
       x = this.room.maxX - PLAYER_RADIUS - 1;
     }
+    return { x, y };
+  }
+
+  private positionPlayerAtDoor(direction: RoomDirection | null): void {
+    const { x, y } = this.doorEntryPoint(direction);
     const index = this.playerIndex;
     this.transform.data[index * 4] = x;
     this.transform.data[index * 4 + 1] = y;
@@ -872,6 +969,9 @@ export class GameSim {
 
     if (this.roomTransitionTicks > 0) {
       this.roomTransitionTicks -= 1;
+    }
+    if (this.roomWarmupTicks > 0) {
+      this.roomWarmupTicks -= 1;
     }
 
     this.world.flush();

@@ -11,6 +11,16 @@
 /** Boxes one room may hold. Well above what a hand-authored room needs. */
 export const MAX_ROOM_BLOCKS = 64;
 
+/**
+ * How wide a door gap is, in room units, centred on its wall.
+ *
+ * Single source of truth for both the door's drawn gap (`render/room.ts`) and
+ * the door-contact trigger (`GameSim.doorContact`) — they have to agree on
+ * where the gap is, or the wall would visibly open somewhere the player
+ * can't actually walk through.
+ */
+export const DOOR_SPAN = 24;
+
 /** Numbers per block: minX, minY, maxX, maxY. */
 export const BLOCK_STRIDE = 4;
 
