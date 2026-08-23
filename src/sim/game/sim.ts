@@ -327,7 +327,7 @@ export class GameSim {
    * Respawning is a playground affordance, not a game rule. Tuning by feel
    * means killing the same thing several hundred times, and a room that empties
    * after three kills makes that a chore. Room content, and what actually
-  * populates a room, is #19 and #35 — at which point posts go away and the
+   * populates a room, is #19 and #35 — at which point posts go away and the
    * room template says what stands where.
    *
    * Only a body that a post put there comes back. Anything else — the spores a
@@ -961,7 +961,7 @@ export class GameSim {
   }
 
   /**
-  * The floor-one roster, retained for the tuning fallback; authored rooms use #19.
+   * The floor-one roster, retained for the tuning fallback; authored rooms use #19.
    *
    * One of each authored enemy, arranged so that what each of them teaches is
    * legible on its own: the Kellerasseln come at the player from opposite
