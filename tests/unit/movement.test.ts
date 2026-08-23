@@ -58,7 +58,10 @@ describe('player movement', () => {
       expect(speedOf(sim)).toBeGreaterThan(0);
     }
     sim.step(IDLE);
-    expect(speedOf(sim)).toBe(0);
+    // Not a strict toBe(0): the deceleration step is `Math.max(0, speed -
+    // decel)`, and depending on the tuned numbers the last subtraction can
+    // land a hair above zero in floating point rather than exactly on it.
+    expect(speedOf(sim)).toBeCloseTo(0, 6);
 
     // The slide is a real distance, not a rounding artefact. Summing the
     // velocity over a linear ramp down gives maxSpeed * (ticks - 1) / 2.

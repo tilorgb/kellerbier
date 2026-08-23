@@ -7,6 +7,7 @@ import {
   quantiseAxis,
   setActionDown,
 } from '../../src/sim/input/frame.js';
+import { DEFAULT_SHOOTING_TUNING } from '../../src/sim/tuning.js';
 
 /**
  * Hitstop is the one piece of impact feel that could plausibly break
@@ -49,7 +50,14 @@ function scriptedLog(variantFrom = -1): InputFrame[] {
     // converges, so a one-step axis difference is absorbed the moment that axis
     // reaches its target and genuinely leaves no trace. A shot that was never
     // fired cannot be absorbed by anything.
-    if (variantFrom >= 0 && tick >= variantFrom && tick < variantFrom + 16) {
+    //
+    // The window is derived from `fireDelayTicks` rather than a fixed tick
+    // count: it has to span at least one full fire cycle to be guaranteed to
+    // suppress a shot regardless of how the cooldown is tuned, or a release
+    // window shorter than the cooldown can land entirely between two shots
+    // and change nothing.
+    const releaseWindow = DEFAULT_SHOOTING_TUNING.fireDelayTicks + 4;
+    if (variantFrom >= 0 && tick >= variantFrom && tick < variantFrom + releaseWindow) {
       setActionDown(frame, InputAction.Fire, false);
     }
     frames.push(frame);

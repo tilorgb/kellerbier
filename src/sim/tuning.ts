@@ -363,7 +363,7 @@ export interface SimTuning {
 }
 
 export const DEFAULT_MOVEMENT_TUNING: Readonly<MovementTuning> = {
-  maxSpeed: 2.6,
+  maxSpeed: 1.8,
   ticksToTopSpeed: 8,
   ticksToStop: 11,
   turnBoost: 1.6,
@@ -375,11 +375,11 @@ export const DEFAULT_MOVEMENT_TUNING: Readonly<MovementTuning> = {
 };
 
 export const DEFAULT_SHOOTING_TUNING: Readonly<ShootingTuning> = {
-  fireDelayTicks: 13,
-  shotSpeed: 6,
+  fireDelayTicks: 20,
+  shotSpeed: 3.5,
   shotRadius: 3,
   shotDamage: 1,
-  shotLifetimeTicks: 26,
+  shotLifetimeTicks: 30,
   muzzleOffset: 8,
   velocityInheritance: 0.85,
   analogVelocityInheritance: 0.35,
@@ -461,8 +461,8 @@ export const DEFAULT_PROMILLE_TUNING: Readonly<PromilleTuning> = {
    * miss-rate calibration above doesn't depend on how fast the sweep runs,
    * but sway wants to be much slower than wobble to read as smooth rather
    * than jittery, and coupling the two would fight both goals. */
-  wobblePeriodTicks: 90,
-  maxSway: 6,
+  wobblePeriodTicks: 145,
+  maxSway: 12,
   /** Ticks per full sway loop. Slow on purpose — this is what separates a
    * gentle drift from a jitter that gets mistaken for hit-shake. */
   swayPeriodTicks: 220,
