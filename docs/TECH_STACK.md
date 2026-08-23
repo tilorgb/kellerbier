@@ -78,7 +78,7 @@ These are commitments, not aspirations. They are checked in CI.
 |---|---|
 | Simulation tick | **≤ 4 ms** at 5,000 projectiles + 200 enemies + 1,000 particles |
 | Full frame (sim + render) | **≤ 12 ms** in the same scene — a 40% headroom margin on 60 fps |
-| Steady-state heap growth | **0 bytes/frame** in the stress scene — gated at 128 KB/tick, see below |
+| Steady-state heap growth | **0 bytes/frame** in the stress scene — gated at 512 KB/tick, see below |
 | Draw calls | **≤ 20** in a typical combat room |
 | Cold load to playable | **≤ 3 s** on a mid-range laptop over broadband |
 | Input-to-photon latency | **≤ 2 frames** |
@@ -107,11 +107,22 @@ Two shapes cause it, neither visible in the source:
   four random floats per particle through `Rng.nextFloat`: 83 KB a tick. The fix is a bulk form
   that fills a `Float64Array`, so the values are never tagged.
 
-What remains is `sweptCircleHit` handing a hit time back to the collision system, about 35 KB a
-tick. It is written down rather than fixed, because turning a pure function into an
-out-parameter one costs a reader more than 35 KB costs the collector. The gate sits at 128 KB —
-above the baseline by enough not to flicker, and far below the 300-plus KB that one small object
-per projectile per tick would cost, which is the regression it exists to catch.
+What remains is `sweptCircleHit` handing a hit time back to the collision system. It is written
+down rather than fixed, because turning a pure function into an out-parameter one costs a reader
+more than the bytes cost the collector.
+
+**The byte count belongs to the engine, not to the game.** The same commit and the same scene
+measure 54 KB a tick on Node 24 and 351 KB on the Node 22 that CI pins — a sixfold spread from
+inlining decisions made inside TurboFan, with no change to the simulation. So the absolute gate
+is a ceiling and not a target: 512 KB, set to catch the simulation starting to allocate in
+earnest on any engine anyone runs it on, and set wide enough that a runner image upgrade does
+not fire it. A gate that fires on a runner image upgrade is a gate that gets muted.
+
+The sharp instrument is the pull-request comparison, where the engine is held fixed and a
+quarter above the base is a real move. And the benchmark proves it can still see the bug it
+exists to see: a companion test adds one small object per projectile per tick and requires the
+measurement to resolve at least 128 KB of it — a delta rather than an absolute, for the same
+reason the ceiling is generous.
 
 ## 4. Architecture
 

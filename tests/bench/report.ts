@@ -21,29 +21,50 @@ export const FRAME_BUDGET_MS = 12;
  *
  * The budget in the tech stack says zero, and zero is the design: pooled
  * stores, Structure-of-Arrays components, nothing allocated in a system. What
- * is measured on a full field is about fifty kilobytes a tick, and none of it
- * is the game producing objects. All of it is V8 boxing doubles.
+ * is measured on a full field is not zero, and none of it is the game producing
+ * objects. All of it is V8 boxing doubles.
  *
  * That is worth being precise about, because it decides where this line sits.
  * A double that crosses a call boundary V8 declines to inline comes back as a
  * sixteen-byte `HeapNumber`, and so does every store of a double into a
  * module-level `let` — a context slot holds tagged values and cannot hold a
- * raw double. Neither is visible in the source; both are invisible until
- * something measures them. Chasing the last of it means turning pure functions
- * into out-parameter ones, which is a real cost in a codebase people have to
- * read, and the two that were worth it have been done: the collision system's
- * per-projectile state (490 KB a tick) and the particle spray's random draws
- * (83 KB a tick). What is left is `sweptCircleHit` handing a hit time back,
- * about 35 KB a tick, and it is written down rather than fixed.
+ * raw double. Neither is visible in the source. The two worth fixing have been
+ * fixed: the collision system's per-projectile state (490 KB a tick) and the
+ * particle spray's random draws (83 KB a tick).
  *
- * So the gate is set where it catches the regression it exists to catch. One
- * small object per projectile per tick — the classic version of this bug, and
- * the one the acceptance criteria on #16 name — costs upward of three hundred
- * kilobytes a tick at the budget population. This sits between the two, far
- * enough above the baseline that it does not flicker and far enough below the
- * failure that the failure cannot hide under it.
+ * ## Why the number is this generous
+ *
+ * Because which doubles get boxed is a property of the V8 the benchmark runs
+ * on, not of the game. The same commit and the same scene measure 54 KB a tick
+ * on Node 24 and 351 KB on the Node 22 that CI pins — a sixfold spread with no
+ * change to the simulation, from inlining decisions made somewhere inside
+ * TurboFan. A gate set snugly around either figure is a gate that fires on a
+ * runner image upgrade, and one that fires on a runner image upgrade is one
+ * that gets muted.
+ *
+ * So this is a ceiling and not a target: it catches the simulation starting to
+ * allocate in earnest, on any engine anyone runs it on. The sharp instrument
+ * is elsewhere — `tools/bench/compare.mjs` compares a pull request against its
+ * merge base on one runner, where the engine is held fixed and a 25% move is a
+ * real move.
  */
-export const SIM_HEAP_BUDGET_BYTES = 128 * 1024;
+export const SIM_HEAP_BUDGET_BYTES = 512 * 1024;
+
+/**
+ * The size of allocation regression the benchmark must be able to resolve.
+ *
+ * The acceptance criterion on #16 is that a deliberate allocation in the
+ * projectile update fails the benchmark, and the honest form of that check is
+ * a delta rather than an absolute: the baseline moves sixfold between engines,
+ * so a fixed threshold that proves something on one of them proves nothing on
+ * the other.
+ *
+ * 128 KB is a stricter demand than the pull-request gate's own band — that
+ * fires on a quarter above the base, which at any baseline this simulation has
+ * measured is well under 128 KB. A regression the benchmark resolves at this
+ * size is therefore one the gate is certain to report.
+ */
+export const SIM_HEAP_REGRESSION_BYTES = 128 * 1024;
 
 export interface Measurement {
   readonly medianMs: number;
