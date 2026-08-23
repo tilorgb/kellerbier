@@ -19,6 +19,14 @@ import { addPush } from './movement.js';
  * number knockback divides by, which is what makes mass one property the player
  * can read off the screen instead of several that happen to agree.
  *
+ * Both halves of that share are applied now, as position, and a half that a
+ * wall refuses is handed to the other body rather than dropped. Correcting one
+ * body now and the other one over the next few ticks looks fine until the other
+ * body is walking at you: an enemy re-aims every tick, so it spends the
+ * correction it was given walking straight back in, and settles a fifth of the
+ * way inside the player — worst for exactly the light, fast bodies a swarm is
+ * made of.
+ *
  * It runs after `stepCollision` so it can reuse the broadphase that was built
  * there; nothing between them moves anything.
  *
@@ -93,12 +101,31 @@ function resolveAgainstPlayer(other: number): void {
   const otherMass = Math.max(0.01, body[other * 2 + 1] ?? 1);
   const playerShare = otherMass / (playerMass + otherMass);
 
-  movePlayerClear(sim, awayX * overlap * playerShare, awayY * overlap * playerShare);
+  const playerWanted = overlap * playerShare;
+  let owed =
+    playerWanted -
+    moveClear(sim, playerIndex, playerRadius, playerX, playerY, awayX, awayY, playerWanted);
+  playerX = sim.positionX(playerIndex);
+  playerY = sim.positionY(playerIndex);
+
+  // Whatever a wall would not let the player take, the other body owes instead.
+  const otherWanted = overlap - playerWanted + owed;
+  owed =
+    otherWanted + moveClear(sim, other, otherRadius, otherX, otherY, -awayX, -awayY, otherWanted);
+
+  // And if it is against a wall too, back to the player, who at least has an
+  // input telling them why they are not moving.
+  if (owed > 0) {
+    moveClear(sim, playerIndex, playerRadius, playerX, playerY, awayX, awayY, owed);
+    playerX = sim.positionX(playerIndex);
+    playerY = sim.positionY(playerIndex);
+  }
+
   slowPlayerInto(sim, awayX, awayY, playerShare);
 
-  // The other body is displaced through its push channel rather than by writing
-  // its position, so it slides out of the way over a few ticks and walls still
-  // stop it. Shoving something into a wall must not push it through one.
+  // A shove on top of the separation, so shouldering something light reads as
+  // having shoved it rather than as having stopped touching it. It is feel
+  // rather than geometry — the overlap above is already gone.
   const otherShare = overlap * (1 - playerShare);
   addPush(sim, other, -awayX * otherShare, -awayY * otherShare);
 
@@ -143,35 +170,51 @@ function slowPlayerInto(sim: GameSim, awayX: number, awayY: number, share: numbe
 }
 
 /**
- * Moves the player out of an overlap without moving them into a wall.
+ * Moves a body `distance` along a unit direction, and reports how far it got.
  *
  * Written straight into the transform rather than through the push channel: an
  * overlap is a state that should not exist, and correcting it over several
- * ticks is several ticks of standing inside an enemy.
+ * ticks is several ticks of standing inside an enemy. Walls still win — the
+ * destination is tested for clearance first — and the distance that a wall
+ * refused comes back, so the pair's other body can take it on instead of it
+ * quietly going missing.
  */
-function movePlayerClear(sim: GameSim, deltaX: number, deltaY: number): void {
+function moveClear(
+  sim: GameSim,
+  index: number,
+  radius: number,
+  x: number,
+  y: number,
+  directionX: number,
+  directionY: number,
+  distance: number,
+): number {
+  if (distance <= 0) {
+    return 0;
+  }
   const transform = sim.transform.data;
-  const base = playerIndex * 4;
-  const wantedX = playerX + deltaX;
-  const wantedY = playerY + deltaY;
+  const base = index * 4;
+  const deltaX = directionX * distance;
+  const deltaY = directionY * distance;
+  const wantedX = x + deltaX;
+  const wantedY = y + deltaY;
 
-  if (sim.room.isClear(wantedX, wantedY, playerRadius)) {
+  if (sim.room.isClear(wantedX, wantedY, radius)) {
     transform[base] = wantedX;
     transform[base + 1] = wantedY;
-    playerX = wantedX;
-    playerY = wantedY;
-    return;
+    return distance;
   }
   // Cornered. Take whichever single axis is still free rather than refusing to
   // move at all, which is what leaves a player wedged between a wall and
-  // something walking into them.
-  if (sim.room.isClear(wantedX, playerY, playerRadius)) {
+  // something walking into them. What arrives is the part of the step that
+  // actually happened, projected back onto the direction asked for.
+  if (sim.room.isClear(wantedX, y, radius)) {
     transform[base] = wantedX;
-    playerX = wantedX;
-    return;
+    return deltaX * directionX;
   }
-  if (sim.room.isClear(playerX, wantedY, playerRadius)) {
+  if (sim.room.isClear(x, wantedY, radius)) {
     transform[base + 1] = wantedY;
-    playerY = wantedY;
+    return deltaY * directionY;
   }
+  return 0;
 }

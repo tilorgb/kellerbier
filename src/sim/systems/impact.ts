@@ -2,6 +2,7 @@ import { EventKind } from '../events/queue.js';
 import type { GameSim } from '../game/sim.js';
 import { vectorLength } from '../math.js';
 import { ParticleKind } from '../particle/store.js';
+import { isEnemyInvulnerable, markEnemyHit } from './enemy.js';
 import { addPush } from './movement.js';
 
 /**
@@ -144,7 +145,7 @@ function applyContact(sim: GameSim, slot: number): void {
   const normalY = events.normalY[slot] ?? 0;
   addPush(sim, victim, normalX * tuning.contactKnockback, normalY * tuning.contactKnockback);
 
-  sim.addShake(normalX, normalY, tuning.deathShake);
+  sim.addShake(normalX, normalY, tuning.playerHitShake);
   events.push(EventKind.Damage, victim, events.other[slot] ?? 0, 0, 0, normalX, normalY, damage);
 }
 
@@ -159,9 +160,26 @@ function applyHit(sim: GameSim, slot: number): void {
   const normalX = events.normalX[slot] ?? 0;
   const normalY = events.normalY[slot] ?? 0;
 
+  // A shot that arrives while the body is curled up splashes off it. The player
+  // has to be able to tell that from a miss and from a hit that did nothing:
+  // foam comes off it, the screen barely moves, and no health changes.
+  if (isEnemyInvulnerable(sim, target)) {
+    deflect(sim, hitX, hitY, normalX, normalY);
+    return;
+  }
+
+  // Told to the body before its health changes, so a state machine sees the hit
+  // whether or not the hit killed it.
+  markEnemyHit(sim, target);
+
   const health = sim.health.data;
   const remaining = (health[target * 2] ?? 0) - damage;
-  const killed = (health[target * 2 + 1] ?? 0) > 0 && remaining <= 0;
+  // The player is never removed from the world. What happens when their last
+  // half-Maß goes is #15; until then a run at zero health keeps running, which
+  // is the same thing contact damage has always done. Destroying them would
+  // free their entity slot for the next enemy to spawn into, and the camera
+  // would follow whatever landed in it.
+  const killed = (health[target * 2 + 1] ?? 0) > 0 && remaining <= 0 && target !== sim.playerIndex;
   health[target * 2] = Math.max(0, remaining);
 
   // Flash. One tick of solid white, and the whole read of "that connected".
@@ -184,8 +202,16 @@ function applyHit(sim: GameSim, slot: number): void {
   const impulse = (damage * tuning.knockback) / mass;
   addPush(sim, target, -normalX * impulse, -normalY * impulse);
 
-  // Screenshake, directional and capped.
-  sim.addShake(-normalX, -normalY, killed ? tuning.deathShake : damage * tuning.shakePerDamage);
+  // Screenshake, directional and capped. Hitting something is what the player
+  // does constantly on a run that is going well, so it is the cheapest of the
+  // three: a kill earns more, and being hurt earns the most.
+  const shake =
+    target === sim.playerIndex
+      ? tuning.playerHitShake
+      : killed
+        ? tuning.deathShake
+        : damage * tuning.shakePerDamage;
+  sim.addShake(-normalX, -normalY, shake);
 
   spray(
     sim,
@@ -214,6 +240,30 @@ function applyHit(sim: GameSim, slot: number): void {
     events.push(EventKind.Death, target, events.other[slot] ?? 0, hitX, hitY, normalX, normalY, 0);
     sim.kill(target);
   }
+}
+
+/**
+ * What a shot that hit something invulnerable does.
+ *
+ * Everything a hit does except the parts that mean it landed: no damage, no
+ * flash, no hitstop, no knockback. A bullet that simply vanished into a curled
+ * Kellerassel would read as the game having dropped it, which is the one thing
+ * this must not look like.
+ */
+function deflect(sim: GameSim, x: number, y: number, normalX: number, normalY: number): void {
+  const tuning = sim.tuning.enemy;
+  spray(
+    sim,
+    x,
+    y,
+    normalX,
+    normalY,
+    Math.round(tuning.deflectParticles),
+    ParticleKind.Foam,
+    sim.tuning.impact.particleSpread,
+    1,
+  );
+  sim.addShake(-normalX, -normalY, tuning.deflectShake);
 }
 
 /**

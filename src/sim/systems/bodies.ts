@@ -1,15 +1,16 @@
 import { CollisionLayer } from '../collision/layers.js';
 import { World } from '../ecs/world.js';
 import type { GameSim } from '../game/sim.js';
+import { markEnemyBlocked } from './enemy.js';
 import { BLOCKED_X, BLOCKED_Y, moveBody } from './motion.js';
 
 /**
  * Everything that moves and is not the player.
  *
- * Right now that is a knocked-back training target sliding across the floor.
- * It is written as a general body integrator rather than as target-shoving
- * because enemies in #14 need exactly this and nothing more: velocity, an
- * external push, and walls that stop them.
+ * A knocked-back training target sliding across the floor, and every enemy: the
+ * enemy system writes a velocity, this integrates it, and the walls stop it.
+ * The one thing it reports back is having been stopped, which is what ends a
+ * charge — see `markEnemyBlocked`.
  *
  * @hot — runs in the frame loop. Nothing in here may allocate; see the
  * `no-hot-allocation` rule in tools/eslint/.
@@ -70,6 +71,11 @@ export function stepBodies(sim: GameSim): void {
     if ((blocked & BLOCKED_Y) !== 0) {
       velocity[pairBase + 1] = 0;
       push[pairBase + 1] = 0;
+    }
+    // Read on the next tick by an `onBlocked` transition, which is how a charge
+    // ends against a wall rather than grinding along it until its timer runs out.
+    if (blocked !== 0 && ((masks[index] ?? 0) & sim.enemyMask) === sim.enemyMask) {
+      markEnemyBlocked(sim, index);
     }
 
     const decayedX = (push[pairBase] ?? 0) * damping;
