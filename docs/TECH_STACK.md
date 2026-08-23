@@ -111,18 +111,22 @@ What remains is `sweptCircleHit` handing a hit time back to the collision system
 down rather than fixed, because turning a pure function into an out-parameter one costs a reader
 more than the bytes cost the collector.
 
-**The byte count belongs to the engine, not to the game.** The same commit and the same scene
-measure 54 KB a tick on Node 24 and 351 KB on the Node 22 that CI pins — a sixfold spread from
-inlining decisions made inside TurboFan, with no change to the simulation. So the absolute gate
-is a ceiling and not a target: 512 KB, set to catch the simulation starting to allocate in
-earnest on any engine anyone runs it on, and set wide enough that a runner image upgrade does
-not fire it. A gate that fires on a runner image upgrade is a gate that gets muted.
+**The byte count is bimodal, and the two modes are six times apart.** The same commit, the same
+scene and the same runner image measured 47.9 KB a tick on one CI run and 350.8 KB on the next,
+minutes later; a desk reads the low mode almost always. Nothing about the simulation differs
+between them — it is TurboFan reaching a different inlining decision on a machine with different
+neighbours, and which doubles get boxed follows from that.
 
-The sharp instrument is the pull-request comparison, where the engine is held fixed and a
-quarter above the base is a real move. And the benchmark proves it can still see the bug it
-exists to see: a companion test adds one small object per projectile per tick and requires the
-measurement to resolve at least 128 KB of it — a delta rather than an absolute, for the same
-reason the ceiling is generous.
+So the absolute gate is a ceiling and not a target: 512 KB, set to catch the simulation starting
+to allocate in earnest in either mode. Set snugly around the low mode it would fail one CI run
+in a few, and a gate that does that is a gate that gets muted.
+
+What does hold is the *delta*. The benchmark proves it can still see the bug it exists to see: a
+companion test adds one small object per projectile per tick and requires the measurement to
+resolve at least 128 KB of it. Across the two modes that same sabotage resolved 253.0 KB and
+229.4 KB — stable where the baseline is not, which is why the criterion is written as a delta.
+The sharp instrument for a change is still the pull-request comparison, where both runs come off
+one runner minutes apart and are far more likely to land in the same mode.
 
 ## 4. Architecture
 
