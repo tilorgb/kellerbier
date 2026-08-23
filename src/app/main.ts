@@ -9,11 +9,13 @@ import { type FloorPlan, type FloorPlanRoom, generateFloor } from '../sim/room/f
 import { validateRoomTemplate } from '../sim/room/template.js';
 import { RngStream, createStreamRng } from '../sim/rng/streams.js';
 import { TICKS_PER_SECOND } from '../sim/time.js';
+import { InputAction, isActionDown } from '../sim/input/frame.js';
 import { createRenderer, trackWindowSize } from '../render/app.js';
 import { createBlobTexture, createRingTexture } from '../render/placeholder-art.js';
 import {
   type GameLayout,
   INTERNAL_HEIGHT,
+  INTERNAL_WIDTH,
   WORLD_ZOOM,
   computeGameLayout,
   roomUnitsPerPixel,
@@ -21,6 +23,8 @@ import {
 import { EntityView } from '../render/entities.js';
 import { GameOverScreen } from '../render/game-over.js';
 import { HealthHud } from '../render/health-hud.js';
+import { MinimapHud } from '../render/minimap-hud.js';
+import { PromilleHud } from '../render/promille-hud.js';
 import { Vignette } from '../render/vignette.js';
 import { GameView } from '../render/view.js';
 import { SILENT_AUDIO, playImpactAudio } from './audio/impact.js';
@@ -96,6 +100,7 @@ async function boot(): Promise<void> {
     ROOM_TEMPLATE_POOL,
   );
   let currentRoomId = floorPlan.startRoomId;
+  const directions = ['north', 'east', 'south', 'west'] as const;
   // Rooms `N` has already stepped into. Preferring an unvisited neighbour
   // over the fixed north/east/south/west priority order turns the walk into
   // a real depth-first tour of the floor — without it, standing in any dead
@@ -174,6 +179,29 @@ async function boot(): Promise<void> {
     healthHud.view.position.set(applied.originX + 8, applied.originY + 8);
   };
 
+  const promilleHud = new PromilleHud(app.renderer);
+  uiLayer.addChild(promilleHud.view);
+  // Stacked directly under the health row, same corner.
+  const positionPromilleHud = (applied: GameLayout): void => {
+    promilleHud.view.position.set(applied.originX + 8, applied.originY + 30);
+  };
+
+  const minimapHud = new MinimapHud(app.renderer);
+  uiLayer.addChild(minimapHud.view);
+  // The overlay is centred over the game, not the window — it should stay
+  // aligned with the room even in a letterboxed viewport.
+  uiLayer.addChild(minimapHud.overlayView);
+  const positionMinimapHud = (applied: GameLayout): void => {
+    minimapHud.view.position.set(
+      applied.originX + INTERNAL_WIDTH * applied.scale - 8,
+      applied.originY + 8,
+    );
+    minimapHud.overlayView.position.set(
+      applied.originX + (INTERNAL_WIDTH * applied.scale) / 2,
+      applied.originY + (INTERNAL_HEIGHT * applied.scale) / 2,
+    );
+  };
+
   const summary = new RunSummaryTracker();
   /**
    * Where the run is, once the player dies.
@@ -238,9 +266,13 @@ async function boot(): Promise<void> {
     pointerMapping.unitsPerPixel = roomUnitsPerPixel(applied);
     positionHud(applied);
     positionHealthHud(applied);
+    positionPromilleHud(applied);
+    positionMinimapHud(applied);
     gameOverScreen.resize(applied);
     vignette.resize(applied);
   });
+
+  minimapHud.rebuild(floorPlan, currentRoomId, visitedRoomIds);
 
   const input = new InputSampler();
   input.keyboard.attach(window, app.canvas, pointerMapping);
@@ -277,6 +309,10 @@ async function boot(): Promise<void> {
         playRumble(sim, input.gamepad);
         summary.recordTick(sim);
         advanceDeathSequence();
+        const doorDirection = sim.doorContact;
+        if (doorDirection !== null) {
+          enterNeighbor(doorDirection);
+        }
       }
       simMs += performance.now() - started;
     },
@@ -285,6 +321,8 @@ async function boot(): Promise<void> {
       overlay?.drawCalls.beginFrame();
       view.sync(alpha, layout.scale);
       healthHud.sync(sim);
+      promilleHud.sync(sim);
+      minimapHud.setMapOpen(isActionDown(input.frame, InputAction.Map));
       const playerScreen = view.playerScreenPosition();
       vignette.sync(sim, playerScreen.x, playerScreen.y);
       overlay?.sync(alpha);
@@ -307,8 +345,9 @@ async function boot(): Promise<void> {
     const dead = sim.playerDead ? '  DEAD' : '';
     const knockedDown = sim.umgfallnTicks > 0 ? '  KNOCKDOWN' : '';
     const roomState = sim.doorsLocked ? 'LOCKED' : 'OPEN';
+    const warmup = sim.roomWarmupTicks > 0 ? '  WARMUP' : '';
     const currentRole = planRoom(floorPlan, currentRoomId).role;
-    hud.text = `${floorPlan.floorName}  room ${sim.roomId} (${currentRole})  doors ${roomState}  enemies ${String(sim.liveEnemyCount)}
+    hud.text = `${floorPlan.floorName}  room ${sim.roomId} (${currentRole})  doors ${roomState}${warmup}  enemies ${String(sim.liveEnemyCount)}
   tick ${String(loop.tick)}  ${seconds}s  x${scale}${loop.paused ? '  PAUSED' : ''}
 hp ${String(hearts)}/${String(maxHearts)}  soul ${String(sim.playerSoulHealth)}  eternal ${String(sim.playerEternalHealth)}${invulnerable}${dead}
 promille ${sim.promille.toFixed(2)} ${promilleTierName(sim.promilleTier)}${knockedDown}
@@ -321,6 +360,30 @@ WASD move   arrows/mouse aim and fire
   };
   refreshHud();
   positionHud(layout);
+
+  /**
+   * Moves the player into the room adjacent in `direction`, if the current
+   * room has a door there and it's unlocked. Shared by the `N` debug tour
+   * and `sim.doorContact` (walking into the door for real) — both just need
+   * "cross this door", the same `transitionTo` call #19 already built.
+   */
+  function enterNeighbor(direction: RoomDirection): boolean {
+    const room = planRoom(floorPlan, currentRoomId);
+    const neighborId = room.neighbors[direction];
+    if (neighborId === undefined) {
+      return false;
+    }
+    if (
+      !sim.transitionTo(planTemplate(planRoom(floorPlan, neighborId)), floorPlan.floor, direction)
+    ) {
+      return false;
+    }
+    currentRoomId = neighborId;
+    visitedRoomIds.add(neighborId);
+    minimapHud.rebuild(floorPlan, currentRoomId, visitedRoomIds);
+    refreshHud();
+    return true;
+  }
 
   window.addEventListener('keydown', (event: KeyboardEvent) => {
     switch (event.key) {
@@ -342,10 +405,10 @@ WASD move   arrows/mouse aim and fire
         // Walks the generated floor depth-first: an unvisited door over a
         // fixed north/east/south/west priority, backtracking through an
         // already-seen room only once every door from here has been used.
-        // One key, same as before #20, now touring a real floor instead of
-        // one hardcoded room.
+        // Now that `sim.doorContact` triggers a real transition on its own,
+        // this is a dev shortcut for touring the floor without walking it —
+        // both go through the same `enterNeighbor`.
         const room = planRoom(floorPlan, currentRoomId);
-        const directions = ['north', 'east', 'south', 'west'] as const;
         const unvisitedDirection = directions.find((candidate) => {
           const id = room.neighbors[candidate];
           return id !== undefined && !visitedRoomIds.has(id);
@@ -353,18 +416,8 @@ WASD move   arrows/mouse aim and fire
         const direction: RoomDirection | undefined =
           unvisitedDirection ??
           directions.find((candidate) => room.neighbors[candidate] !== undefined);
-        const neighborId = direction === undefined ? undefined : room.neighbors[direction];
-        if (
-          direction !== undefined &&
-          neighborId !== undefined &&
-          sim.transitionTo(
-            planTemplate(planRoom(floorPlan, neighborId)),
-            floorPlan.floor,
-            direction,
-          )
-        ) {
-          currentRoomId = neighborId;
-          visitedRoomIds.add(neighborId);
+        if (direction !== undefined) {
+          enterNeighbor(direction);
         }
         break;
       }

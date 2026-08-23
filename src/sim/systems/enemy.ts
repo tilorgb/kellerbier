@@ -62,6 +62,12 @@ export function stepEnemies(sim: GameSim): void {
   if (registry.count === 0) {
     return;
   }
+  // Room-entry warmup (`GameSim.loadRoom`): enemies stay fully inert — no
+  // state transitions, no movement, no firing — until it runs out, so the
+  // player has a beat to see what just loaded before anything reacts to them.
+  if (sim.roomWarmupTicks > 0) {
+    return;
+  }
 
   const world = sim.world;
   const states = world.states;

@@ -51,6 +51,69 @@ export function createMugTexture(
   return texture;
 }
 
+/** A thin rectangular outline — the frame for a fill bar (Promille meter, later cooldowns). */
+export function createBarOutlineTexture(
+  renderer: Renderer,
+  width: number,
+  height: number,
+): Texture {
+  const graphics = new Graphics();
+  graphics.roundRect(0.5, 0.5, width - 1, height - 1, 1).stroke({ width: 1, color: 0xffffff });
+  const texture = renderer.generateTexture({ target: graphics, resolution: 1 });
+  graphics.destroy();
+  return texture;
+}
+
+/**
+ * A 1x1 solid square, meant to be stretched. A bar fill is a `Sprite` whose
+ * `width` is set per-frame rather than a `Graphics` redrawn per-frame, so the
+ * bar reads the way the rest of this file batches: one draw call, not one
+ * shape rebuild, every tick the value changes.
+ */
+export function createSolidTexture(renderer: Renderer): Texture {
+  const graphics = new Graphics();
+  graphics.rect(0, 0, 1, 1).fill({ color: 0xffffff });
+  const texture = renderer.generateTexture({ target: graphics, resolution: 1 });
+  graphics.destroy();
+  return texture;
+}
+
+/**
+ * A filled diamond (rotated square) — the minimap's treasure-room icon.
+ *
+ * Distinct silhouette from the boss triangle and shop circle on purpose: the
+ * "no information by colour alone" acceptance criterion on #21 applies to
+ * icons as much as to fills, so shape carries the meaning and colour is
+ * decoration on top of it.
+ */
+export function createDiamondTexture(renderer: Renderer, radius: number, color: number): Texture {
+  const graphics = new Graphics();
+  graphics
+    .moveTo(radius, 0)
+    .lineTo(radius * 2, radius)
+    .lineTo(radius, radius * 2)
+    .lineTo(0, radius)
+    .closePath()
+    .fill({ color });
+  const texture = renderer.generateTexture({ target: graphics, resolution: 1 });
+  graphics.destroy();
+  return texture;
+}
+
+/** A filled upward triangle — the minimap's boss-room icon. */
+export function createTriangleTexture(renderer: Renderer, radius: number, color: number): Texture {
+  const graphics = new Graphics();
+  graphics
+    .moveTo(radius, 0)
+    .lineTo(radius * 2, radius * 2)
+    .lineTo(0, radius * 2)
+    .closePath()
+    .fill({ color });
+  const texture = renderer.generateTexture({ target: graphics, resolution: 1 });
+  graphics.destroy();
+  return texture;
+}
+
 /** A filled circle with a lighter rim, the size a projectile is drawn at. */
 export function createBlobTexture(
   renderer: Renderer,
