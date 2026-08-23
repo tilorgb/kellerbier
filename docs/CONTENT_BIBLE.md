@@ -48,8 +48,11 @@ boss. Two rooms of any floor should be instantly distinguishable from two rooms 
 Damp stone, wooden racks, puddles, a single bare bulb. Palette: browns, cold greys, one warm
 amber light source.
 - **Hazard:** slick puddles that carry your momentum.
-- **Teaching job:** this floor is the tutorial. Movement, shooting, doors, the first item, the
-  first Promille sip. It must be beatable by someone who has never played the genre.
+- **Teaching job:** this floor is the tutorial. Movement, shooting, doors, the first item. It
+  must be beatable by someone who has never played the genre — and on an early run it is
+  sober, since Promille is unlocked rather than on from the start (see
+  [GAME_DESIGN.md §5](GAME_DESIGN.md)). Once it is unlocked, this is also where the first sip
+  happens.
 
 ### Floor 2 — Dorf & Acker
 Village square, hop fields, a maypole, tractors, cow pasture. Palette: green, sky blue,
@@ -218,6 +221,10 @@ Roughly 30 to start; target **120+ by v1**. Every one changes how you play.
 | **Weiß-blaue Rauten** | Every eighth shot fires in the lozenge pattern of the Bavarian flag. |
 
 ### Promille-gated
+
+None of these appear in a run where Promille has not been unlocked yet — an item whose
+requirement cannot be evaluated is a stat stick rather than a build decision.
+
 | Item | Requirement | Effect |
 |---|---|---|
 | **Maßkrugstemmen** | `rausch` | Hold fire to charge; damage scales with hold time. Your arms shake — accuracy falls as damage rises. |
