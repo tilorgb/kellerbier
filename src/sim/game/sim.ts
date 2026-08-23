@@ -21,6 +21,7 @@ import {
 } from './promille.js';
 import type { RoomGeometry } from '../room/geometry.js';
 import { createPlaygroundRoom } from '../room/playground.js';
+import { compileRoomTemplate } from '../room/template.js';
 import { TICKS_PER_SECOND } from '../time.js';
 import { type SimTuning, createTuning } from '../tuning.js';
 import { type CollisionLayerId, CollisionLayer, collisionMaskFor } from '../collision/layers.js';
@@ -77,6 +78,11 @@ export { ENEMY_PROFILES, EnemySize, type EnemyProfile, type EnemySizeId } from '
 /** Ticks before a killed body on a spawn post comes back. Two and a half seconds. */
 export const TARGET_RESPAWN_TICKS = 150;
 
+/** A room transition is immediate in simulation and presented over this many frames. */
+export const ROOM_TRANSITION_TICKS = 12;
+
+export type RoomDirection = 'north' | 'east' | 'south' | 'west';
+
 /**
  * What the room is populated with.
  *
@@ -102,6 +108,9 @@ export interface GameSimOptions {
   readonly seed?: number;
   readonly capacity?: number;
   readonly room?: RoomGeometry;
+  /** Loads this authored room instead of the playground population. */
+  readonly roomTemplate?: unknown;
+  readonly floor?: number;
   /** Projectile pool size. Lowered by tests that want to watch it overflow. */
   readonly projectileCapacity?: number;
   readonly particleCapacity?: number;
@@ -131,7 +140,7 @@ export interface GameSimOptions {
 export class GameSim {
   readonly world: World;
   readonly random: RunRandom;
-  readonly room: RoomGeometry;
+  room: RoomGeometry;
   readonly tuning: SimTuning;
   readonly seed: number;
 
@@ -212,6 +221,12 @@ export class GameSim {
    * the step — a renderer, a test — can read what happened during it.
    */
   readonly events: EventQueue;
+
+  /** The loaded room's stable content id, or empty for the tuning playground. */
+  roomId = '';
+  /** Ticks remaining in the presentation transition after a room load. */
+  roomTransitionTicks = 0;
+  roomTransitionDirection: RoomDirection | null = null;
 
   /** Ticks until the player may fire again. */
   fireCooldown = 0;
@@ -312,7 +327,7 @@ export class GameSim {
    * Respawning is a playground affordance, not a game rule. Tuning by feel
    * means killing the same thing several hundred times, and a room that empties
    * after three kills makes that a chore. Room content, and what actually
-   * populates a room, is #18 and #35 — at which point posts go away and the
+   * populates a room, is #19 and #35 — at which point posts go away and the
    * room template says what stands where.
    *
    * Only a body that a post put there comes back. Anything else — the spores a
@@ -326,6 +341,10 @@ export class GameSim {
   private readonly postSize: EnemySizeId[] = [];
   /** Enemy definition a post brings back, or -1 for a plain training target. */
   private readonly postDefinition: number[] = [];
+  private roomEnemyCount = 0;
+  private roomClearedIds = new Set<string>();
+  private roomTemplateLoaded = false;
+  private roomDoors = { north: false, east: false, south: false, west: false };
 
   constructor(options: GameSimOptions = {}) {
     this.seed = options.seed ?? 0;
@@ -367,11 +386,15 @@ export class GameSim {
     this.events = new EventQueue();
 
     this.playerHandle = this.spawnPlayer();
-    const population = options.population ?? 'targets';
-    if (population === 'enemies') {
-      this.spawnEnemyRoom();
-    } else if (population === 'targets') {
-      this.spawnTrainingTargets();
+    if (options.roomTemplate !== undefined) {
+      this.loadRoom(options.roomTemplate, options.floor ?? 1);
+    } else {
+      const population = options.population ?? 'targets';
+      if (population === 'enemies') {
+        this.spawnEnemyRoom();
+      } else if (population === 'targets') {
+        this.spawnTrainingTargets();
+      }
     }
     this.world.flush();
   }
@@ -382,6 +405,110 @@ export class GameSim {
 
   get player(): Entity {
     return this.playerHandle;
+  }
+
+  get liveEnemyCount(): number {
+    return this.roomEnemyCount;
+  }
+
+  get doorsLocked(): boolean {
+    return this.roomTemplateLoaded && this.roomEnemyCount > 0;
+  }
+
+  get roomCleared(): boolean {
+    return (
+      this.roomTemplateLoaded && (this.roomEnemyCount === 0 || this.roomClearedIds.has(this.roomId))
+    );
+  }
+
+  /** Loads one room, preserving the player and run state while replacing its contents. */
+  loadRoom(template: unknown, floor = 1, direction: RoomDirection | null = null): void {
+    const compiled = compileRoomTemplate(template, floor, 'room template', ENEMY_DEFINITIONS);
+    this.clearRoomEntities();
+    this.room = compiled.geometry;
+    this.roomId = compiled.source.id;
+    this.roomDoors = compiled.source.metadata.doors;
+    this.roomTemplateLoaded = true;
+    this.roomTransitionTicks = direction === null ? 0 : ROOM_TRANSITION_TICKS;
+    this.roomTransitionDirection = direction;
+    this.roomEnemyCount = 0;
+    const alreadyCleared = this.roomClearedIds.has(this.roomId);
+    this.positionPlayerAtDoor(direction);
+    if (!alreadyCleared) {
+      for (const spawn of compiled.enemySpawns) {
+        const definition = this.enemies.indexOf(spawn.enemyId);
+        if (definition < 0) {
+          throw new Error(`room template enemy "${spawn.enemyId}" is not registered`);
+        }
+        this.spawnEnemyKind(definition, spawn.x, spawn.y);
+      }
+      for (const pickup of compiled.source.pickupSpawns) {
+        if (pickup.type === 'mass') {
+          this.spawnBeerPickup(this.room.minX + pickup.x, this.room.minY + pickup.y);
+        }
+      }
+    }
+    if (this.roomEnemyCount === 0) {
+      this.roomClearedIds.add(this.roomId);
+    }
+    this.world.flush();
+  }
+
+  /** Loads the next room only when its matching door exists and this room is clear. */
+  transitionTo(template: unknown, floor: number, direction: RoomDirection): boolean {
+    if (!this.roomTemplateLoaded || this.doorsLocked || !this.hasDoor(direction)) {
+      return false;
+    }
+    this.roomClearedIds.add(this.roomId);
+    this.loadRoom(template, floor, direction);
+    return true;
+  }
+
+  private hasDoor(direction: RoomDirection): boolean {
+    return this.roomDoors[direction];
+  }
+
+  private clearRoomEntities(): void {
+    for (let index = 0; index < this.world.highWater; index++) {
+      if (index === this.playerIndex || !this.world.isAlive(this.world.entityAt(index))) {
+        continue;
+      }
+      this.world.destroy(this.world.entityAt(index));
+    }
+    this.world.flush();
+    this.projectiles.clear();
+    this.particles.clear();
+    this.damageNumbers.clear();
+    this.decals.clear();
+    this.events.clear();
+    this.postX.length = 0;
+    this.postY.length = 0;
+    this.postRespawnAt.length = 0;
+    this.postSize.length = 0;
+    this.postDefinition.length = 0;
+  }
+
+  private positionPlayerAtDoor(direction: RoomDirection | null): void {
+    let x = (this.room.minX + this.room.maxX) / 2;
+    let y = (this.room.minY + this.room.maxY) / 2;
+    if (direction === 'north') {
+      y = this.room.maxY - PLAYER_RADIUS - 1;
+    } else if (direction === 'east') {
+      x = this.room.minX + PLAYER_RADIUS + 1;
+    } else if (direction === 'south') {
+      y = this.room.minY + PLAYER_RADIUS + 1;
+    } else if (direction === 'west') {
+      x = this.room.maxX - PLAYER_RADIUS - 1;
+    }
+    const index = this.playerIndex;
+    this.transform.data[index * 4] = x;
+    this.transform.data[index * 4 + 1] = y;
+    this.transform.data[index * 4 + 2] = x;
+    this.transform.data[index * 4 + 3] = y;
+    this.velocity.data[index * 2] = 0;
+    this.velocity.data[index * 2 + 1] = 0;
+    this.push.data[index * 2] = 0;
+    this.push.data[index * 2 + 1] = 0;
   }
 
   /** The player's storage slot. Stable for the lifetime of the run. */
@@ -687,8 +814,13 @@ export class GameSim {
       (this.body.data[index * 2] ?? 8) * (0.7 + random.nextFloat() * 0.4),
       random.nextFloat() * Math.PI * 2,
     );
-    this.scheduleRespawn(index, TARGET_RESPAWN_TICKS);
-    this.world.destroy(this.world.entityAt(index));
+    if (this.world.destroy(this.world.entityAt(index))) {
+      if (this.roomTemplateLoaded) {
+        this.roomEnemyCount = Math.max(0, this.roomEnemyCount - 1);
+      } else {
+        this.scheduleRespawn(index, TARGET_RESPAWN_TICKS);
+      }
+    }
   }
 
   step(input: Readonly<InputFrame> = this.idleInput): void {
@@ -727,8 +859,15 @@ export class GameSim {
     // After impact, because impact is what pushes the death events a split
     // reads. A body that splits does so on the tick it died.
     stepEnemyDeaths(this);
+    if (this.roomTemplateLoaded && this.roomEnemyCount === 0) {
+      this.roomClearedIds.add(this.roomId);
+    }
     stepParticles(this);
     this.stepRespawns();
+
+    if (this.roomTransitionTicks > 0) {
+      this.roomTransitionTicks -= 1;
+    }
 
     this.world.flush();
     this.currentTick += 1;
@@ -822,7 +961,7 @@ export class GameSim {
   }
 
   /**
-   * The floor-one roster, hand-placed until room templates land in #18.
+   * The floor-one roster, retained for the tuning fallback; authored rooms use #19.
    *
    * One of each authored enemy, arranged so that what each of them teaches is
    * legible on its own: the Kellerasseln come at the player from opposite
@@ -1014,6 +1153,10 @@ export class GameSim {
     motion[motionBase] = 1;
     motion[motionBase + 2] = x;
     motion[motionBase + 3] = y;
+
+    if (this.roomTemplateLoaded) {
+      this.roomEnemyCount += 1;
+    }
 
     return entity;
   }

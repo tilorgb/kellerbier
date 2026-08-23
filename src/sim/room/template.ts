@@ -13,6 +13,11 @@ export const ROOM_FRAME_HEIGHT = 180;
 export interface CompiledRoomTemplate {
   readonly source: RoomTemplate;
   readonly geometry: RoomGeometry;
+  readonly enemySpawns: readonly {
+    readonly x: number;
+    readonly y: number;
+    readonly enemyId: string;
+  }[];
   readonly enemyIds: readonly string[];
 }
 
@@ -133,7 +138,7 @@ export function compileRoomTemplate(
       offsetY + obstacle.y + obstacle.height,
     );
   }
-  const enemyIds = template.enemySpawns.flatMap((spawn) => {
+  const enemySpawns = template.enemySpawns.flatMap((spawn) => {
     const group = template.spawnGroups.find((candidate) => candidate.id === spawn.group);
     if (group === undefined) {
       throw new Error(
@@ -148,12 +153,18 @@ export function compileRoomTemplate(
         `${source}.spawnGroups[${group.id}] has no enemy eligible on floor ${String(floor)}`,
       );
     }
-    return Array.from(
-      { length: group.count },
-      (_, index) => eligible[index % eligible.length]?.enemyId ?? '',
-    );
+    return Array.from({ length: group.count }, (_, index) => ({
+      x: offsetX + spawn.x + (index - (group.count - 1) / 2) * 8,
+      y: offsetY + spawn.y,
+      enemyId: eligible[index % eligible.length]?.enemyId ?? '',
+    }));
   });
-  return { source: template, geometry, enemyIds };
+  return {
+    source: template,
+    geometry,
+    enemySpawns,
+    enemyIds: enemySpawns.map((spawn) => spawn.enemyId),
+  };
 }
 
 function spawnGroup(
