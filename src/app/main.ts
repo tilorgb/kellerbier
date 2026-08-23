@@ -17,6 +17,7 @@ import { HealthHud } from '../render/health-hud.js';
 import { GameView } from '../render/view.js';
 import { SILENT_AUDIO, playImpactAudio } from './audio/impact.js';
 import { InputSampler } from './input/sampler.js';
+import { playRumble } from './input/rumble.js';
 import { FixedTimestepLoop, runAnimationFrameLoop } from './loop.js';
 import { RunSummaryTracker } from './run-summary.js';
 
@@ -194,6 +195,7 @@ async function boot(): Promise<void> {
         input.setAimOrigin(sim.positionX(index), sim.positionY(index));
         sim.step(input.sample());
         playImpactAudio(sim, SILENT_AUDIO);
+        playRumble(sim, input.gamepad);
         summary.recordTick(sim);
         advanceDeathSequence();
       }

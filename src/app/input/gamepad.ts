@@ -14,6 +14,15 @@
  *   that press rather than reporting an absence.
  */
 
+/**
+ * The one shape of haptic actuator this code calls. Structural rather than
+ * the full lib.dom `GamepadHapticActuator`, matching `GamepadLike` itself —
+ * a test double only has to shape up to what is actually used.
+ */
+export interface GamepadHapticActuatorLike {
+  playEffect(type: string, params: Record<string, number>): Promise<unknown>;
+}
+
 /** The subset of `Gamepad` this code uses, so tests can supply their own. */
 export interface GamepadLike {
   readonly index: number;
@@ -22,6 +31,8 @@ export interface GamepadLike {
   readonly mapping: string;
   readonly axes: readonly number[];
   readonly buttons: readonly { readonly pressed: boolean; readonly value: number }[];
+  /** Absent on pads or browsers that do not support rumble. */
+  readonly vibrationActuator?: GamepadHapticActuatorLike;
 }
 
 export type GamepadPoller = () => readonly (GamepadLike | null)[];
@@ -140,6 +151,32 @@ export class GamepadSource {
     }
     // Triggers report analog values and only sometimes set `pressed`.
     return button.pressed || button.value > TRIGGER_THRESHOLD;
+  }
+
+  /**
+   * Best-effort rumble. Silently does nothing on a pad or browser without
+   * `vibrationActuator.playEffect` — Firefox and older Chromium both lack it
+   * — rather than throwing or falling back to the older, now-removed
+   * `vibrate()` method.
+   *
+   * `strong`/`weak` are 0–1, matching the Gamepad API's own `dual-rumble`
+   * parameters.
+   */
+  rumble(strong: number, weak: number, durationMs: number): void {
+    const actuator = this.active?.vibrationActuator;
+    if (actuator === undefined) {
+      return;
+    }
+    actuator
+      .playEffect('dual-rumble', {
+        duration: durationMs,
+        strongMagnitude: Math.max(0, Math.min(1, strong)),
+        weakMagnitude: Math.max(0, Math.min(1, weak)),
+      })
+      .catch(() => {
+        // A rejected promise here is the pad refusing the effect, not a bug
+        // worth surfacing — rumble is feel, not a thing a run depends on.
+      });
   }
 
   /**

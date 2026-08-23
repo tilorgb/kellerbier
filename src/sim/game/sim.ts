@@ -226,6 +226,15 @@ export class GameSim {
   screenShakeScale = 1;
 
   /**
+   * Accessibility scale on controller rumble, 0 to 1.
+   *
+   * Same precedent as `screenShakeScale`: the full accessibility suite is
+   * #53, and this is here now because shipping rumble without an off switch
+   * is not a thing to do temporarily.
+   */
+  rumbleScale = 1;
+
+  /**
    * Ticks left before the player may be hurt by contact again.
    *
    * Without it a body touching the player empties them at sixty damage a

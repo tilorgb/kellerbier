@@ -210,6 +210,19 @@ function applyHit(sim: GameSim, slot: number): void {
     // the camera would follow whatever landed there.
     sim.applyPlayerDamage(damage);
     sim.makePlayerInvulnerable(Math.round(tuning.projectileInvulnerabilityTicks));
+    // One signal for "the player took damage" regardless of source — matches
+    // what `applyContact` already pushes for a contact hit, so audio and
+    // rumble (#15) have a single event kind to listen for either.
+    events.push(
+      EventKind.Damage,
+      target,
+      events.other[slot] ?? 0,
+      hitX,
+      hitY,
+      normalX,
+      normalY,
+      damage,
+    );
   } else {
     const remaining = (health[target * 2] ?? 0) - damage;
     killed = (health[target * 2 + 1] ?? 0) > 0 && remaining <= 0;
