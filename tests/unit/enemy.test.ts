@@ -387,6 +387,15 @@ describe('enemies against the player', () => {
       frame.moveX = quantiseAxis(Math.cos(angle));
       frame.moveY = quantiseAxis(Math.sin(angle));
       sim.step(frame);
+      // Death (#15) is a real state now: the run stops, main.ts stops calling
+      // step, and the game moves to the death sequence. Simulating hundreds of
+      // ticks past that point is not a scenario the real game produces, and
+      // separation is not tuned to hold indefinitely once nothing is left
+      // clearing the pile of enemies that gathers on a body nobody is steering
+      // out of the way anymore.
+      if (sim.playerDead) {
+        break;
+      }
 
       for (let index = 0; index < sim.world.highWater; index++) {
         if (sim.world.states[index] !== World.ALIVE) {
@@ -412,9 +421,9 @@ describe('enemies against the player', () => {
     for (let tick = 0; tick < 2000; tick++) {
       sim.step(IDLE);
     }
-    // Their health can reach zero — losing a run is #15 — but their entity slot
-    // has to survive it. A freed slot is handed to the next body that spawns,
-    // and the camera follows whatever lands in it.
+    // Their health can reach zero and the run can end (#15), but their entity
+    // slot has to survive it. A freed slot is handed to the next body that
+    // spawns, and the camera follows whatever lands in it.
     expect(sim.playerIndex).toBe(player);
     expect(sim.body.data[player * 2]).toBe(PLAYER_RADIUS);
     expect(health(sim, player)).toBeGreaterThanOrEqual(0);

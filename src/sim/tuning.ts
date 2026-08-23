@@ -236,9 +236,31 @@ export interface ImpactTuning {
   /** How hard a contact hit throws the player off whatever hurt them. */
   contactKnockback: number;
 
+  /**
+   * Ticks the player cannot be hurt by a projectile again.
+   *
+   * Deliberately shorter than `contactInvulnerabilityTicks`: contact needs to
+   * last long enough to walk out of whatever is touching them, but a shot is
+   * instantaneous — this only needs to cover pellets from the same volley
+   * arriving on the same tick, not the gap until an enemy's next volley, or a
+   * ranged enemy that can only ever land its first hit stops being a threat.
+   */
+  projectileInvulnerabilityTicks: number;
+
   /** Off by default. See `DamageNumberStore` for why. */
   damageNumbers: boolean;
   damageNumberLifeTicks: number;
+
+  /**
+   * The freeze on the player's fatal hit, in ticks. Reuses `requestHitstop` —
+   * a longer version of the same freeze every other hit already gets, not a
+   * second mechanism.
+   */
+  deathFreezeTicks: number;
+  /** Ticks of the slow-motion beat that follows the freeze, before the game-over screen. */
+  deathSlowmoTicks: number;
+  /** `loop.timeScale` during the slow-motion beat. 1 is normal speed, 0 is stopped. */
+  deathSlowmoScale: number;
 }
 
 /**
@@ -339,9 +361,14 @@ export const DEFAULT_IMPACT_TUNING: Readonly<ImpactTuning> = {
 
   contactInvulnerabilityTicks: 60,
   contactKnockback: 3.5,
+  projectileInvulnerabilityTicks: 20,
 
   damageNumbers: false,
   damageNumberLifeTicks: 36,
+
+  deathFreezeTicks: 20,
+  deathSlowmoTicks: 30,
+  deathSlowmoScale: 0.4,
 };
 
 export const DEFAULT_ENEMY_TUNING: Readonly<EnemyTuning> = {

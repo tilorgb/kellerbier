@@ -24,6 +24,33 @@ export function createRingTexture(renderer: Renderer, radius: number, color: num
   return texture;
 }
 
+/**
+ * A mug outline, filled from the bottom by `fill`.
+ *
+ * White throughout, like the ring and blob above — the HUD tints it per pool
+ * (red, soul, eternal) rather than generating a texture per colour. `fill` is
+ * one of exactly three values because the health it draws is half-Maß
+ * granular: a mug is empty, half, or full, never anything between.
+ */
+export function createMugTexture(
+  renderer: Renderer,
+  width: number,
+  height: number,
+  fill: 'empty' | 'half' | 'full',
+): Texture {
+  const graphics = new Graphics();
+  graphics.roundRect(0.5, 0.5, width - 1, height - 1, 1.5).stroke({ width: 1, color: 0xffffff });
+  if (fill !== 'empty') {
+    const fillHeight = fill === 'full' ? height - 3 : (height - 3) / 2;
+    graphics
+      .roundRect(2, height - 1.5 - fillHeight, width - 4, fillHeight, 1)
+      .fill({ color: 0xffffff });
+  }
+  const texture = renderer.generateTexture({ target: graphics, resolution: 1 });
+  graphics.destroy();
+  return texture;
+}
+
 /** A filled circle with a lighter rim, the size a projectile is drawn at. */
 export function createBlobTexture(
   renderer: Renderer,

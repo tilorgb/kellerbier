@@ -16,12 +16,18 @@ import type { GameSim } from '../../sim/game/sim.js';
 export interface ImpactAudio {
   onHit(x: number, y: number, damage: number): void;
   onDeath(x: number, y: number): void;
+  /** The player took damage, from any source — contact or a shot. */
+  onPlayerHit(damage: number): void;
+  /** The player's last half-Maß just went, with no eternal heart left to spend it (#15). */
+  onPlayerDeath(): void;
 }
 
 /** The implementation until #51. Deliberately silent, deliberately present. */
 export const SILENT_AUDIO: ImpactAudio = {
   onHit: () => undefined,
   onDeath: () => undefined,
+  onPlayerHit: () => undefined,
+  onPlayerDeath: () => undefined,
 };
 
 /**
@@ -31,6 +37,7 @@ export const SILENT_AUDIO: ImpactAudio = {
  */
 export function playImpactAudio(sim: GameSim, audio: ImpactAudio): void {
   const events = sim.events;
+  const player = sim.playerIndex;
   events.forEach((slot) => {
     const x = events.x[slot] ?? 0;
     const y = events.y[slot] ?? 0;
@@ -38,8 +45,16 @@ export function playImpactAudio(sim: GameSim, audio: ImpactAudio): void {
       case EventKind.ProjectileHit:
         audio.onHit(x, y, events.value[slot] ?? 0);
         break;
+      case EventKind.Damage:
+        // Only ever pushed for the player — see `applyContact`/`applyHit`.
+        audio.onPlayerHit(events.value[slot] ?? 0);
+        break;
       case EventKind.Death:
-        audio.onDeath(x, y);
+        if (events.subject[slot] === player) {
+          audio.onPlayerDeath();
+        } else {
+          audio.onDeath(x, y);
+        }
         break;
       default:
         break;

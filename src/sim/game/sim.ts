@@ -7,6 +7,7 @@ import { ENEMY_PROFILES, EnemySize, type EnemySizeId } from '../enemy/size.js';
 import type { InputFrame } from '../input/frame.js';
 import { createInputFrame } from '../input/frame.js';
 import { type RunRandom, createRunRandom } from '../rng/streams.js';
+import { drawDeathWord } from './death-word.js';
 import type { RoomGeometry } from '../room/geometry.js';
 import { createPlaygroundRoom } from '../room/playground.js';
 import { type SimTuning, createTuning } from '../tuning.js';
@@ -91,6 +92,15 @@ export interface GameSimOptions {
   readonly population?: RoomPopulation;
   /** Enemy data. Defaults to everything in `src/content/enemies/`. */
   readonly enemies?: readonly EnemyDefinition[];
+  /**
+   * The headline word the *previous* run's death screen showed, if any.
+   *
+   * Passed in rather than tracked as global state inside the sim: a run's own
+   * death-word draw has to stay a pure function of its seed and this value, or
+   * two runs sharing a seed would stop producing the same word. Cross-run
+   * memory belongs to whatever is starting runs, not to the run itself.
+   */
+  readonly previousDeathWord?: string;
 }
 
 /**
@@ -216,6 +226,15 @@ export class GameSim {
   screenShakeScale = 1;
 
   /**
+   * Accessibility scale on controller rumble, 0 to 1.
+   *
+   * Same precedent as `screenShakeScale`: the full accessibility suite is
+   * #53, and this is here now because shipping rumble without an off switch
+   * is not a thing to do temporarily.
+   */
+  rumbleScale = 1;
+
+  /**
    * Ticks left before the player may be hurt by contact again.
    *
    * Without it a body touching the player empties them at sixty damage a
@@ -223,6 +242,26 @@ export class GameSim {
    * extra steps.
    */
   private invulnerableTicks = 0;
+
+  /**
+   * The player's soul and eternal pools, in half-Maß.
+   *
+   * Red health stays in the `health` component every entity carries, since
+   * enemies and targets need it too. Soul and eternal are player-only, so they
+   * live here instead of on a component the rest of the world never reads —
+   * the same reasoning `screenShakeScale` and `invulnerableTicks` are plain
+   * fields rather than components.
+   */
+  private soulHp = 0;
+  private eternalHp = 0;
+
+  /** Set once, the tick every pool empties with no eternal heart to spend. */
+  private playerDeadFlag = false;
+  private playerDeathTick_ = -1;
+  private deathWordValue: string | undefined;
+
+  /** Carried in from `GameSimOptions`, and never written after construction. */
+  private readonly previousDeathWord: string | undefined;
 
   /** Ticks run since construction. */
   private currentTick = 0;
@@ -259,6 +298,7 @@ export class GameSim {
     this.random = createRunRandom(this.seed);
     this.room = options.room ?? createPlaygroundRoom();
     this.tuning = createTuning();
+    this.previousDeathWord = options.previousDeathWord;
 
     this.transform = this.world.defineComponent('transform', Float32Array, 4);
     this.velocity = this.world.defineComponent('velocity', Float32Array, 2);
@@ -331,6 +371,105 @@ export class GameSim {
   makePlayerInvulnerable(ticks: number): void {
     if (ticks > this.invulnerableTicks) {
       this.invulnerableTicks = ticks;
+    }
+  }
+
+  /** Red Maß, current and max — the pool every other entity's `health` also carries. */
+  get playerHealth(): number {
+    return this.health.data[this.playerIndex * 2] ?? 0;
+  }
+
+  /** Weißbier, in half-Maß. Spent before red. */
+  get playerSoulHealth(): number {
+    return this.soulHp;
+  }
+
+  /** Schwarzbier banked. Not spent by ordinary damage — see `applyPlayerDamage`. */
+  get playerEternalHealth(): number {
+    return this.eternalHp;
+  }
+
+  /** Grants soul hearts. There is no pickup to drop these yet (#22); tests and the debug window call this directly. */
+  addSoulHealth(amount: number): void {
+    if (amount > 0) {
+      this.soulHp += amount;
+    }
+  }
+
+  /** Grants eternal hearts. Same caveat as `addSoulHealth`. */
+  addEternalHealth(amount: number): void {
+    if (amount > 0) {
+      this.eternalHp += amount;
+    }
+  }
+
+  /** True once every pool has emptied with no eternal heart left to spend. */
+  get playerDead(): boolean {
+    return this.playerDeadFlag;
+  }
+
+  /** The tick death happened on, or -1 while the player is alive. */
+  get playerDeathTick(): number {
+    return this.playerDeathTick_;
+  }
+
+  /**
+   * The game-over screen's headline word, drawn once at the moment of death
+   * and memoised — the pool draw is a real consumption of the cosmetic
+   * stream, so reading this twice must not draw twice.
+   */
+  get deathWord(): string | undefined {
+    return this.deathWordValue;
+  }
+
+  /**
+   * Applies damage to the player, spending soul before red and reaching for an
+   * eternal heart only when the hit would otherwise be lethal.
+   *
+   * This is the one place player health changes. `applyContact` and the
+   * player branch of `applyHit` (`src/sim/systems/impact.ts`) both route
+   * through it rather than writing `health.data` directly, which is what
+   * makes the soul-before-red-before-eternal order (and the death check)
+   * apply the same way regardless of what caused the hit.
+   */
+  applyPlayerDamage(amount: number): void {
+    if (amount <= 0 || this.playerDeadFlag) {
+      return;
+    }
+
+    const health = this.health.data;
+    const index = this.playerIndex;
+    const red = health[index * 2] ?? 0;
+
+    // Reaching exactly zero is lethal, same as going below it — a hit does
+    // not need to overkill to end a run, it only needs to use up what is left.
+    if (amount >= this.soulHp + red) {
+      if (this.eternalHp > 0) {
+        // A killing blow with a heart banked: the heart is spent instead of
+        // the run, and comes back as the one half-Maß a player needs to keep
+        // standing rather than as a full refill — an eternal heart is a save,
+        // not a heal.
+        this.eternalHp -= 1;
+        this.soulHp = 0;
+        health[index * 2] = 1;
+      } else {
+        this.soulHp = 0;
+        health[index * 2] = 0;
+        this.playerDeadFlag = true;
+        this.playerDeathTick_ = this.currentTick;
+        this.deathWordValue = drawDeathWord(this.random.cosmetic, this.previousDeathWord);
+      }
+      return;
+    }
+
+    let remaining = amount;
+    if (this.soulHp > 0) {
+      const spend = Math.min(this.soulHp, remaining);
+      this.soulHp -= spend;
+      remaining -= spend;
+    }
+    if (remaining > 0) {
+      health[index * 2] = red - remaining;
     }
   }
 
