@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  SEPARATION_EPSILON,
   circleOverlapsAabb,
   resolveCircleAabbX,
   resolveCircleAabbY,
@@ -45,16 +46,26 @@ describe('circleOverlapsAabb', () => {
 
 describe('resolveCircleAabbX', () => {
   it('pushes a body level with the face out by its full radius', () => {
-    expect(resolveCircleAabbX(98, 110, 5, BOX.minX, BOX.minY, BOX.maxX, BOX.maxY, true)).toBe(95);
-    expect(resolveCircleAabbX(122, 110, 5, BOX.minX, BOX.minY, BOX.maxX, BOX.maxY, false)).toBe(
-      125,
+    // A hair further than the radius, never less: see `SEPARATION_EPSILON`.
+    expect(resolveCircleAabbX(98, 110, 5, BOX.minX, BOX.minY, BOX.maxX, BOX.maxY, true)).toBe(
+      95 - SEPARATION_EPSILON,
     );
+    expect(resolveCircleAabbX(122, 110, 5, BOX.minX, BOX.minY, BOX.maxX, BOX.maxY, false)).toBe(
+      125 + SEPARATION_EPSILON,
+    );
+  });
+
+  it('leaves a resolved body outside the box, not exactly touching it', () => {
+    // The reason the epsilon exists: exact tangency is the one answer floating
+    // point cannot represent, and every overlap test in the game uses `<`.
+    const resolved = resolveCircleAabbX(98, 97, 5, BOX.minX, BOX.minY, BOX.maxX, BOX.maxY, true);
+    expect(circleOverlapsAabb(resolved, 97, 5, BOX.minX, BOX.minY, BOX.maxX, BOX.maxY)).toBe(false);
   });
 
   it('pushes a body past the corner out by less, so corners are not padded', () => {
     // Three units above the box's top edge: clearance is sqrt(25 - 9) = 4.
     const resolved = resolveCircleAabbX(98, 97, 5, BOX.minX, BOX.minY, BOX.maxX, BOX.maxY, true);
-    expect(resolved).toBeCloseTo(96, 6);
+    expect(resolved).toBeCloseTo(96 - SEPARATION_EPSILON, 6);
   });
 
   it('leaves a body alone when it is further from the corner than its radius', () => {
@@ -64,12 +75,14 @@ describe('resolveCircleAabbX', () => {
 
 describe('resolveCircleAabbY', () => {
   it('mirrors the X resolution on the other axis', () => {
-    expect(resolveCircleAabbY(110, 98, 5, BOX.minX, BOX.minY, BOX.maxX, BOX.maxY, true)).toBe(95);
+    expect(resolveCircleAabbY(110, 98, 5, BOX.minX, BOX.minY, BOX.maxX, BOX.maxY, true)).toBe(
+      95 - SEPARATION_EPSILON,
+    );
     expect(resolveCircleAabbY(110, 122, 5, BOX.minX, BOX.minY, BOX.maxX, BOX.maxY, false)).toBe(
-      125,
+      125 + SEPARATION_EPSILON,
     );
     expect(resolveCircleAabbY(97, 98, 5, BOX.minX, BOX.minY, BOX.maxX, BOX.maxY, true)).toBeCloseTo(
-      96,
+      96 - SEPARATION_EPSILON,
       6,
     );
   });

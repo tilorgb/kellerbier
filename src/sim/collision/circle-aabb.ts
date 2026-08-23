@@ -11,6 +11,17 @@
  * `no-hot-allocation` rule in tools/eslint/.
  */
 
+/**
+ * How far past touching a resolved body is placed.
+ *
+ * Resolution puts the circle exactly tangent to the box, and exactly tangent is
+ * the one answer floating point cannot represent: the square root comes back a
+ * few bits short and every overlap test that uses a strict `<` then reports the
+ * body as still inside the wall. A thousandth of a pixel is invisible, is far
+ * larger than the error, and makes "resolved" mean resolved.
+ */
+export const SEPARATION_EPSILON = 0.001;
+
 /** True when the circle and the box overlap at all. */
 export function circleOverlapsAabb(
   centreX: number,
@@ -56,7 +67,7 @@ export function resolveCircleAabbX(
   if (dy >= radius) {
     return centreX;
   }
-  const clearance = Math.sqrt(radius * radius - dy * dy);
+  const clearance = Math.sqrt(radius * radius - dy * dy) + SEPARATION_EPSILON;
   return movingRight ? minX - clearance : maxX + clearance;
 }
 
@@ -75,6 +86,6 @@ export function resolveCircleAabbY(
   if (dx >= radius) {
     return centreY;
   }
-  const clearance = Math.sqrt(radius * radius - dx * dx);
+  const clearance = Math.sqrt(radius * radius - dx * dx) + SEPARATION_EPSILON;
   return movingDown ? minY - clearance : maxY + clearance;
 }
