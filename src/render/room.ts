@@ -1,4 +1,5 @@
 import { Container, Graphics } from 'pixi.js';
+import type { RoomDirection } from '../sim/game/sim.js';
 import { BLOCK_STRIDE, type RoomGeometry } from '../sim/room/geometry.js';
 import { PLAYFIELD_HEIGHT, PLAYFIELD_WIDTH } from '../sim/room/playground.js';
 
@@ -8,6 +9,13 @@ const WALL_COLOUR = 0x3a2f45;
 const WALL_EDGE_COLOUR = 0x54445f;
 const BLOCK_COLOUR = 0x4a3a2c;
 const BLOCK_EDGE_COLOUR = 0x6d5540;
+
+/** A locked door reads as cold and shut; an open one picks up the floor's amber light. */
+const DOOR_LOCKED_COLOUR = 0x5a2a2a;
+const DOOR_OPEN_COLOUR = 0xd9a441;
+
+/** How wide a door gap is cut into the wall band, in room units. */
+const DOOR_SPAN = 24;
 
 /**
  * Draws a room once, into a static container.
@@ -41,4 +49,39 @@ export function createRoomView(room: RoomGeometry): Container {
   container.addChild(blocks);
 
   return container;
+}
+
+/**
+ * Draws a marker in the wall band for each door the room's metadata declares,
+ * coloured by whether it is locked.
+ *
+ * Kept separate from `createRoomView` because door colour changes the instant
+ * the last enemy dies — redrawing four small rects on that is cheap, redrawing
+ * the whole room (floor, blocks) every time the lock state flips is not.
+ */
+export function createDoorView(
+  room: RoomGeometry,
+  doors: Readonly<Record<RoomDirection, boolean>>,
+  locked: boolean,
+): Graphics {
+  const graphics = new Graphics();
+  const colour = locked ? DOOR_LOCKED_COLOUR : DOOR_OPEN_COLOUR;
+  const centreX = (room.minX + room.maxX) / 2;
+  const centreY = (room.minY + room.maxY) / 2;
+  const half = DOOR_SPAN / 2;
+
+  if (doors.north) {
+    graphics.rect(centreX - half, 0, DOOR_SPAN, room.minY).fill(colour);
+  }
+  if (doors.south) {
+    graphics.rect(centreX - half, room.maxY, DOOR_SPAN, PLAYFIELD_HEIGHT - room.maxY).fill(colour);
+  }
+  if (doors.west) {
+    graphics.rect(0, centreY - half, room.minX, DOOR_SPAN).fill(colour);
+  }
+  if (doors.east) {
+    graphics.rect(room.maxX, centreY - half, PLAYFIELD_WIDTH - room.maxX, DOOR_SPAN).fill(colour);
+  }
+
+  return graphics;
 }

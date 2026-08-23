@@ -1,13 +1,14 @@
-import { Container, Sprite, type Texture } from 'pixi.js';
-import type { GameSim } from '../sim/game/sim.js';
+import { Container, Sprite, type Graphics, type Texture } from 'pixi.js';
+import { ROOM_TRANSITION_TICKS, type GameSim } from '../sim/game/sim.js';
 import type { RoomGeometry } from '../sim/room/geometry.js';
+import { PLAYFIELD_HEIGHT, PLAYFIELD_WIDTH } from '../sim/room/playground.js';
 import { lerp } from '../sim/math.js';
 import { DamageNumberView } from './damage-numbers.js';
 import { DecalView } from './decals.js';
 import { EntityView } from './entities.js';
 import { ParticleView } from './particles.js';
 import { ProjectileView } from './projectiles.js';
-import { createRoomView } from './room.js';
+import { createDoorView, createRoomView } from './room.js';
 import { WORLD_ZOOM } from './resolution.js';
 
 /**
@@ -62,6 +63,8 @@ export class GameView {
   private readonly damageNumbers: DamageNumberView;
   private roomGeometry: RoomGeometry;
   private roomView: Container;
+  private doorView: Graphics;
+  private doorsLocked: boolean;
 
   /**
    * Everything the camera shakes.
@@ -94,6 +97,9 @@ export class GameView {
     this.roomGeometry = sim.room;
     this.roomView = createRoomView(sim.room);
     this.world.addChild(this.roomView);
+    this.doorsLocked = sim.doorsLocked;
+    this.doorView = createDoorView(sim.room, sim.doors, this.doorsLocked);
+    this.world.addChild(this.doorView);
 
     this.decals = new DecalView(sim.decals, textures.decal);
     this.world.addChild(this.decals.container);
@@ -131,12 +137,22 @@ export class GameView {
    * `sync` needs to know it.
    */
   sync(alpha: number, outerZoom = 1): void {
-    if (this.sim.room !== this.roomGeometry) {
+    const roomChanged = this.sim.room !== this.roomGeometry;
+    if (roomChanged) {
       this.world.removeChild(this.roomView);
       this.roomView.destroy();
       this.roomGeometry = this.sim.room;
       this.roomView = createRoomView(this.roomGeometry);
       this.world.addChildAt(this.roomView, 0);
+    }
+    // Rebuilt on room change too: a fresh room's door state is not necessarily
+    // "locked", e.g. a cleared room re-entered still has none of its own enemies.
+    if (roomChanged || this.sim.doorsLocked !== this.doorsLocked) {
+      this.world.removeChild(this.doorView);
+      this.doorView.destroy();
+      this.doorsLocked = this.sim.doorsLocked;
+      this.doorView = createDoorView(this.roomGeometry, this.sim.doors, this.doorsLocked);
+      this.world.addChildAt(this.doorView, 1);
     }
     this.decals.sync();
     this.entities.sync(alpha);
@@ -163,10 +179,43 @@ export class GameView {
     // threshold, which is what made it look choppy.
     const zoom = WORLD_ZOOM * Math.max(1, outerZoom);
     const roundToScreenPixel = (value: number): number => Math.round(value * zoom) / zoom;
+    const slide = this.transitionSlideOffset(alpha);
     this.world.position.set(
-      roundToScreenPixel(this.sim.shakeX + this.sim.swayX + this.cameraX),
-      roundToScreenPixel(this.sim.shakeY + this.sim.swayY + this.cameraY),
+      roundToScreenPixel(this.sim.shakeX + this.sim.swayX + this.cameraX + slide.x),
+      roundToScreenPixel(this.sim.shakeY + this.sim.swayY + this.cameraY + slide.y),
     );
+  }
+
+  /**
+   * Offset that slides a just-loaded room in from the direction travelled.
+   *
+   * `roomTransitionTicks` counts down from `ROOM_TRANSITION_TICKS` to 0; `alpha`
+   * fills the gap between ticks so the slide doesn't step at the sim's tick
+   * rate. The room the player is sliding *out of* is already gone by the time
+   * this runs — it's destroyed by `transitionTo` the same tick — so this only
+   * ever animates the incoming room sliding into place, not a two-room wipe.
+   */
+  private transitionSlideOffset(alpha: number): { readonly x: number; readonly y: number } {
+    const ticksLeft = this.sim.roomTransitionTicks - alpha;
+    if (ticksLeft <= 0) {
+      return { x: 0, y: 0 };
+    }
+    // Eased out, not linear: the "quick" in #96's brief reads as a fast start
+    // that settles, not a constant crawl for the entire budget.
+    const remaining = Math.min(1, ticksLeft / ROOM_TRANSITION_TICKS);
+    const eased = remaining * remaining;
+    switch (this.sim.roomTransitionDirection) {
+      case 'north':
+        return { x: 0, y: -PLAYFIELD_HEIGHT * eased };
+      case 'south':
+        return { x: 0, y: PLAYFIELD_HEIGHT * eased };
+      case 'east':
+        return { x: PLAYFIELD_WIDTH * eased, y: 0 };
+      case 'west':
+        return { x: -PLAYFIELD_WIDTH * eased, y: 0 };
+      default:
+        return { x: 0, y: 0 };
+    }
   }
 
   /**
