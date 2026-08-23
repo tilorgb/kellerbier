@@ -1,0 +1,39 @@
+{
+  "id": "cellar-crossroads",
+  "tileGrid": [
+    "###############",
+    "#.............#",
+    "#.............#",
+    "#....###......#",
+    "#....#.#......#",
+    "#....###......#",
+    "#.............#",
+    "#.............#",
+    "###############"
+  ],
+  "obstacles": [{ "x": 64, "y": 48, "width": 48, "height": 48 }],
+  "enemySpawns": [
+    { "x": 176, "y": 64, "group": "melee" },
+    { "x": 208, "y": 112, "group": "melee" }
+  ],
+  "spawnGroups": [
+    {
+      "id": "melee",
+      "count": 3,
+      "choices": [
+        { "enemyId": "kellerassel", "minFloor": 1, "maxFloor": 2 },
+        { "enemyId": "bierratte", "minFloor": 3, "maxFloor": 7 }
+      ]
+    }
+  ],
+  "pickupSpawns": [{ "x": 208, "y": 64, "type": "mass" }],
+  "hazards": [],
+  "decorativeProps": [{ "x": 48, "y": 48, "type": "barrel" }],
+  "metadata": {
+    "floorTags": ["cellar", "rural"],
+    "shape": "1x1",
+    "doors": { "north": true, "east": true, "south": true, "west": true },
+    "difficultyTier": 1,
+    "weight": 1
+  }
+}
