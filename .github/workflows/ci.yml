@@ -1,0 +1,154 @@
+name: CI
+
+# The gate, and the thing that makes a change reviewable: a link you can click
+# and play. A game is judged by feel, and feel cannot be reviewed in a diff.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One run per branch. A superseded run is cancelled rather than queued — its
+# preview would be overwritten by the newer one anyway.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: typecheck, lint, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          # Pinned. "Whatever is latest" is how a build starts failing on a
+          # morning nobody changed anything.
+          node-version: '22'
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      # Unit, determinism, content-validation and architecture tests. One
+      # command, because splitting them into separate jobs would cost a fresh
+      # install each and buy nothing but a prettier status list.
+      - name: Test
+        run: npm run test
+
+      - name: Benchmark
+        run: npm run bench
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ github.sha }}
+          path: dist
+          retention-days: 7
+
+  preview:
+    name: playable preview
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # A pull request from a fork gets a read-only token and no secrets, so
+    # there is nothing to deploy with. Skipped rather than failed: a
+    # contributor's first PR should not open with a red cross they cannot fix.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: write
+      pull-requests: write
+    # Two runs pushing to gh-pages at once would reject each other. Queue.
+    concurrency:
+      group: preview-pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Download build
+        uses: actions/download-artifact@v4
+        with:
+          name: build-${{ github.sha }}
+          path: build
+
+      - name: Publish to GitHub Pages
+        id: publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            target="pr/${{ github.event.pull_request.number }}"
+          else
+            target="."
+          fi
+
+          # A shallow worktree of the pages branch, created if it does not
+          # exist yet. Everything here is plain git on purpose: the deploy
+          # holds a write token, and it should be readable by whoever is
+          # wondering what it did.
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
+            git fetch --depth 1 origin gh-pages
+            git worktree add pages origin/gh-pages
+          else
+            git worktree add --detach pages
+            git -C pages checkout --orphan gh-pages
+            git -C pages rm -rf . >/dev/null 2>&1 || true
+          fi
+
+          mkdir -p "pages/${target}"
+          # Clear the target only, so a PR preview never disturbs another one
+          # or the build at the root. `.git` is the worktree's own link file
+          # and `pr` holds every other preview — deleting either would be a
+          # very confusing morning.
+          find "pages/${target}" -mindepth 1 -maxdepth 1 \
+            ! -name pr ! -name .git ! -name .nojekyll -exec rm -rf {} +
+          cp -r build/. "pages/${target}/"
+          # Pages runs Jekyll otherwise, which drops files beginning with an
+          # underscore — and a bundler will produce one eventually.
+          touch pages/.nojekyll
+
+          cd pages
+          git add -A
+          if git diff --cached --quiet; then
+            echo "nothing changed"
+          else
+            git commit -m "preview: ${{ github.sha }} -> ${target}"
+            git push origin HEAD:gh-pages
+          fi
+
+          owner="${{ github.repository_owner }}"
+          repo="${{ github.event.repository.name }}"
+          if [ "${target}" = "." ]; then
+            echo "url=https://${owner}.github.io/${repo}/" >> "$GITHUB_OUTPUT"
+          else
+            echo "url=https://${owner}.github.io/${repo}/${target}/" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Comment the preview link
+        if: github.event_name == 'pull_request'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PREVIEW_URL: ${{ steps.publish.outputs.url }}
+        run: node tools/ci/comment-preview.mjs
