@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { GameSim } from '../../src/sim/game/sim.js';
 import { ProjectileTeam } from '../../src/sim/projectile/store.js';
-import { PLAYFIELD_HEIGHT, PLAYFIELD_WIDTH } from '../../src/sim/room/playground.js';
+import { RoomGeometry } from '../../src/sim/room/geometry.js';
 import { RngStream, createStreamRng } from '../../src/sim/rng/streams.js';
 import { stepCollision } from '../../src/sim/systems/collision.js';
 
@@ -14,6 +14,19 @@ import { stepCollision } from '../../src/sim/systems/collision.js';
  * because a quadratic sweep is roughly a thousand times slower and no amount of
  * later benchmarking recovers a design that shipped without a broadphase.
  */
+
+/**
+ * The field the budget is measured on.
+ *
+ * Its own arena rather than the playground room, because the two are sized for
+ * different things. The playground is sized so the player reads large against
+ * it; the budget is a throughput commitment — 200 enemies and 5,000 shots — and
+ * 200 enemies do not fit in a playground room without standing inside each
+ * other, which measures the hit path rather than the broadphase. Shrinking the
+ * playground must not quietly change what this number means.
+ */
+const ARENA_WIDTH = 640;
+const ARENA_HEIGHT = 360;
 
 const ENEMY_COUNT = 200;
 const PROJECTILE_COUNT = 5000;
@@ -51,14 +64,18 @@ interface Scene {
  * happens.
  */
 function buildScene(enemyCount: number = ENEMY_COUNT): Scene {
-  const sim = new GameSim({ capacity: 8192, projectileCapacity: PROJECTILE_COUNT });
+  const sim = new GameSim({
+    capacity: 8192,
+    projectileCapacity: PROJECTILE_COUNT,
+    room: new RoomGeometry(0, 0, ARENA_WIDTH, ARENA_HEIGHT),
+  });
   const random = createStreamRng(7, RngStream.Enemies);
 
   const enemyX: number[] = [];
   const enemyY: number[] = [];
   for (let enemy = 0; enemy < enemyCount; enemy++) {
-    const x = 40 + random.nextFloat() * (PLAYFIELD_WIDTH - 80);
-    const y = 40 + random.nextFloat() * (PLAYFIELD_HEIGHT - 80);
+    const x = 40 + random.nextFloat() * (ARENA_WIDTH - 80);
+    const y = 40 + random.nextFloat() * (ARENA_HEIGHT - 80);
     enemyX.push(x);
     enemyY.push(y);
     sim.spawnTarget(x, y, ENEMY_RADIUS);
@@ -72,8 +89,8 @@ function buildScene(enemyCount: number = ENEMY_COUNT): Scene {
     let x = 0;
     let y = 0;
     for (let attempt = 0; attempt < 64; attempt++) {
-      x = 40 + random.nextFloat() * (PLAYFIELD_WIDTH - 80);
-      y = 40 + random.nextFloat() * (PLAYFIELD_HEIGHT - 80);
+      x = 40 + random.nextFloat() * (ARENA_WIDTH - 80);
+      y = 40 + random.nextFloat() * (ARENA_HEIGHT - 80);
       let clear = true;
       for (let enemy = 0; enemy < enemyCount; enemy++) {
         const dx = x - (enemyX[enemy] ?? 0);

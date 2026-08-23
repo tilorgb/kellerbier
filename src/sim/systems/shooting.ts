@@ -46,9 +46,25 @@ function fire(sim: GameSim, aimX: number, aimY: number): void {
   const playerVelocityX = sim.velocity.data[playerBase] ?? 0;
   const playerVelocityY = sim.velocity.data[playerBase + 1] ?? 0;
 
+  // The muzzle sits further from the player's centre than the player's own
+  // radius, so a player standing against a wall and firing into it puts the
+  // spawn point inside the wall: the shot dies on its first tick and firing
+  // produces nothing at all — no shot, no splash, no sound. Falling back to the
+  // player's centre costs one clearance test and turns that case into a shot
+  // that leaves the barrel and immediately splashes off the wall, which is what
+  // it looks like it should do.
+  const centreX = sim.positionX(playerIndex);
+  const centreY = sim.positionY(playerIndex);
+  let muzzleX = centreX + directionX * tuning.muzzleOffset;
+  let muzzleY = centreY + directionY * tuning.muzzleOffset;
+  if (!sim.room.isClear(muzzleX, muzzleY, tuning.shotRadius)) {
+    muzzleX = centreX;
+    muzzleY = centreY;
+  }
+
   const slot = sim.projectiles.spawn(
-    sim.positionX(playerIndex) + directionX * tuning.muzzleOffset,
-    sim.positionY(playerIndex) + directionY * tuning.muzzleOffset,
+    muzzleX,
+    muzzleY,
     directionX * tuning.shotSpeed + playerVelocityX * tuning.velocityInheritance,
     directionY * tuning.shotSpeed + playerVelocityY * tuning.velocityInheritance,
     tuning.shotRadius,

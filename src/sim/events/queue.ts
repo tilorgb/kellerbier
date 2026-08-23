@@ -25,6 +25,11 @@ export const EventKind = {
   Damage: 3,
   /** Something died. a: victim slot. */
   Death: 4,
+  /**
+   * A body touched something that hurts. a: victim slot, b: what it touched,
+   * value: damage, normal: away from what was touched.
+   */
+  Contact: 5,
 } as const;
 
 export type EventKindId = (typeof EventKind)[keyof typeof EventKind];

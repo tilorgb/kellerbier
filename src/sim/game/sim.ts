@@ -16,6 +16,7 @@ import { ProjectileStore } from '../projectile/store.js';
 import { stepPlayerMovement } from '../systems/movement.js';
 import { stepBodies } from '../systems/bodies.js';
 import { stepCollision } from '../systems/collision.js';
+import { stepContacts } from '../systems/contact.js';
 import { stepImpact, stepParticles } from '../systems/impact.js';
 import { stepProjectiles, stepShooting } from '../systems/shooting.js';
 
@@ -39,6 +40,53 @@ export const MAX_COLLIDER_RADIUS = 16;
 
 /** Hit points of a training target. Four shots, so a kill is a small commitment. */
 export const TARGET_HEALTH = 4;
+
+/** Hit points the player starts a run with, in half-Maß. */
+export const PLAYER_HEALTH = 6;
+
+/**
+ * Enemy size classes.
+ *
+ * Three of them, because size is the first thing a player reads about something
+ * walking at them and it has to mean something consistent: how hard it is to
+ * hit, how far it flies when hit, whether it can be walked through, and what it
+ * costs to touch. The names are the reference points — a mini is an Isaac fly,
+ * a normal is a worm, a mid is heavy enough to stop you.
+ */
+export const EnemySize = {
+  Mini: 0,
+  Normal: 1,
+  Mid: 2,
+} as const;
+
+export type EnemySizeId = (typeof EnemySize)[keyof typeof EnemySize];
+
+export interface EnemyProfile {
+  readonly radius: number;
+  /** What knockback and contact separation are divided by. */
+  readonly mass: number;
+  readonly health: number;
+  /**
+   * Damage dealt by touching it, in half-Maß. Zero for the ones that are only
+   * in the way — not everything that can be walked into is a threat, and a room
+   * where every body hurts is a room with nowhere to stand.
+   */
+  readonly contactDamage: number;
+}
+
+/**
+ * Masses are relative to the player's 1, and every one of them is above it.
+ *
+ * Even the smallest: a body light enough to walk through is a body that cannot
+ * hold the player anywhere, and holding the player somewhere is the entire job
+ * of a swarm. Three gnats at 1.2 each stop a run cold between them, which is
+ * what makes the thing shooting from across the room dangerous.
+ */
+export const ENEMY_PROFILES: Readonly<Record<EnemySizeId, EnemyProfile>> = {
+  [EnemySize.Mini]: { radius: 4, mass: 1.2, health: 1, contactDamage: 1 },
+  [EnemySize.Normal]: { radius: 7, mass: 3, health: 2, contactDamage: 0 },
+  [EnemySize.Mid]: { radius: TARGET_RADIUS, mass: 6, health: TARGET_HEALTH, contactDamage: 2 },
+};
 
 /** Ticks before a killed training target comes back. Two and a half seconds. */
 export const TARGET_RESPAWN_TICKS = 150;
@@ -84,6 +132,8 @@ export class GameSim {
   readonly collision: Component<Uint16Array>;
   /** Current and maximum hit points. Maximum 0 means the body cannot be hurt. */
   readonly health: Component<Int16Array>;
+  /** Damage dealt by touching a body. Zero on everything harmless. */
+  readonly contactDamage: Component<Int16Array>;
   /**
    * Ticks left of the white hit flash.
    *
@@ -147,6 +197,15 @@ export class GameSim {
    */
   screenShakeScale = 1;
 
+  /**
+   * Ticks left before the player may be hurt by contact again.
+   *
+   * Without it a body touching the player empties them at sixty damage a
+   * second, which is not a difficulty setting, it is an instant death with
+   * extra steps.
+   */
+  private invulnerableTicks = 0;
+
   /** Ticks run since construction. */
   private currentTick = 0;
 
@@ -166,6 +225,8 @@ export class GameSim {
   private readonly targetSpawnX: number[] = [];
   private readonly targetSpawnY: number[] = [];
   private readonly targetRespawnAt: number[] = [];
+  /** Size class each respawn post brings back. */
+  private readonly targetSize: EnemySizeId[] = [];
 
   constructor(options: GameSimOptions = {}) {
     this.seed = options.seed ?? 0;
@@ -181,6 +242,7 @@ export class GameSim {
     this.collision = this.world.defineComponent('collision', Uint16Array, 2);
     this.health = this.world.defineComponent('health', Int16Array, 2);
     this.flash = this.world.defineComponent('flash', Uint8Array, 1);
+    this.contactDamage = this.world.defineComponent('contactDamage', Int16Array, 1);
     this.collidableMask = this.world.maskOf(this.transform, this.body, this.collision);
 
     this.broadphase = new SpatialHash({
@@ -217,6 +279,25 @@ export class GameSim {
   }
 
   /** Advances the simulation exactly one tick. */
+  /** Ticks left of the player's contact invulnerability. Zero means they can be hurt. */
+  get playerInvulnerableTicks(): number {
+    return this.invulnerableTicks;
+  }
+
+  /** Ages the invulnerability by one tick. Called once a tick by the contact system. */
+  tickPlayerInvulnerability(): void {
+    if (this.invulnerableTicks > 0) {
+      this.invulnerableTicks -= 1;
+    }
+  }
+
+  /** Starts the player's invulnerability window. Never shortens one already running. */
+  makePlayerInvulnerable(ticks: number): void {
+    if (ticks > this.invulnerableTicks) {
+      this.invulnerableTicks = ticks;
+    }
+  }
+
   /** True while the simulation is frozen by hitstop. */
   get frozen(): boolean {
     return this.hitstopTicks > 0;
@@ -279,7 +360,9 @@ export class GameSim {
     this.decals.spawn(
       this.positionX(index),
       this.positionY(index),
-      (this.body.data[index * 2] ?? 8) * (1.4 + random.nextFloat() * 0.6),
+      // Smaller than the body that left it. A splash wider than the thing that
+      // died reads as the floor having been painted rather than as a corpse.
+      (this.body.data[index * 2] ?? 8) * (0.7 + random.nextFloat() * 0.4),
       random.nextFloat() * Math.PI * 2,
     );
     this.scheduleRespawn(index, TARGET_RESPAWN_TICKS);
@@ -309,6 +392,7 @@ export class GameSim {
     stepShooting(this, input);
     stepProjectiles(this);
     stepCollision(this);
+    stepContacts(this);
     stepImpact(this);
     stepParticles(this);
     this.stepTargetRespawns();
@@ -360,6 +444,7 @@ export class GameSim {
     this.world.add(entity, this.push);
     this.world.add(entity, this.collision);
     this.world.add(entity, this.health);
+    this.world.add(entity, this.contactDamage);
     this.world.add(entity, this.flash);
 
     const index = entityIndex(entity);
@@ -375,6 +460,11 @@ export class GameSim {
     body[index * 2] = PLAYER_RADIUS;
     body[index * 2 + 1] = 1;
 
+    const health = this.health.data;
+    health[index * 2] = PLAYER_HEALTH;
+    health[index * 2 + 1] = PLAYER_HEALTH;
+    this.contactDamage.data[index] = 0;
+
     this.setCollisionLayer(index, CollisionLayer.Player);
 
     return entity;
@@ -388,17 +478,24 @@ export class GameSim {
    * and a reason to exist — is #14.
    */
   private spawnTrainingTargets(): void {
+    const midX = (this.room.minX + this.room.maxX) / 2;
     const midY = (this.room.minY + this.room.maxY) / 2;
-    this.addTrainingTarget(this.room.minX + 90, midY);
-    this.addTrainingTarget(this.room.maxX - 90, midY - 70);
-    this.addTrainingTarget(this.room.maxX - 90, midY + 70);
+    // One of each size in reach of the middle of the room, so the three read
+    // against each other rather than against a memory of the last one.
+    this.addTrainingTarget(this.room.minX + 45, midY, EnemySize.Mid);
+    this.addTrainingTarget(this.room.maxX - 45, midY - 35, EnemySize.Mid);
+    this.addTrainingTarget(this.room.maxX - 45, midY + 35, EnemySize.Normal);
+    this.addTrainingTarget(midX - 55, this.room.minY + 30, EnemySize.Normal);
+    this.addTrainingTarget(midX - 30, this.room.maxY - 30, EnemySize.Mini);
+    this.addTrainingTarget(midX + 30, this.room.maxY - 30, EnemySize.Mini);
   }
 
-  private addTrainingTarget(x: number, y: number): void {
+  private addTrainingTarget(x: number, y: number, size: EnemySizeId): void {
     this.targetSpawnX.push(x);
     this.targetSpawnY.push(y);
+    this.targetSize.push(size);
     this.targetRespawnAt.push(-1);
-    this.spawnTarget(x, y);
+    this.spawnEnemy(x, y, size);
   }
 
   /** Brings back a training target a couple of seconds after it was killed. */
@@ -409,7 +506,11 @@ export class GameSim {
         continue;
       }
       this.targetRespawnAt[post] = -1;
-      this.spawnTarget(this.targetSpawnX[post] ?? 0, this.targetSpawnY[post] ?? 0);
+      this.spawnEnemy(
+        this.targetSpawnX[post] ?? 0,
+        this.targetSpawnY[post] ?? 0,
+        this.targetSize[post] ?? EnemySize.Mid,
+      );
     }
   }
 
@@ -447,6 +548,28 @@ export class GameSim {
    * Public because the stress scene and the collision tests need to build a
    * populated room, and because it is what #14 will grow into.
    */
+  /**
+   * Adds one body of a named size class.
+   *
+   * The size decides everything about it that the player can feel, which is the
+   * point of having classes at all rather than four numbers per spawn call.
+   */
+  spawnEnemy(x: number, y: number, size: EnemySizeId): Entity {
+    const profile = ENEMY_PROFILES[size];
+    const entity = this.spawnTarget(x, y, profile.radius);
+    const index = entityIndex(entity);
+
+    const body = this.body.data;
+    body[index * 2 + 1] = profile.mass;
+
+    const health = this.health.data;
+    health[index * 2] = profile.health;
+    health[index * 2 + 1] = profile.health;
+
+    this.contactDamage.data[index] = profile.contactDamage;
+    return entity;
+  }
+
   spawnTarget(x: number, y: number, radius: number = TARGET_RADIUS): Entity {
     const entity = this.world.create();
     this.world.add(entity, this.transform);
@@ -455,6 +578,7 @@ export class GameSim {
     this.world.add(entity, this.push);
     this.world.add(entity, this.collision);
     this.world.add(entity, this.health);
+    this.world.add(entity, this.contactDamage);
     this.world.add(entity, this.flash);
 
     const index = entityIndex(entity);
@@ -471,6 +595,11 @@ export class GameSim {
     const health = this.health.data;
     health[index * 2] = TARGET_HEALTH;
     health[index * 2 + 1] = TARGET_HEALTH;
+
+    // Written rather than assumed clear: slots are recycled, and a body that
+    // inherited the contact damage of whatever last used its slot is a bug that
+    // only shows up after something died.
+    this.contactDamage.data[index] = 0;
 
     this.setCollisionLayer(index, CollisionLayer.Obstacle);
     return entity;

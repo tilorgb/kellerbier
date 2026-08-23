@@ -1,0 +1,378 @@
+import type { SimTuning } from '../sim/tuning.js';
+import {
+  DEFAULT_IMPACT_TUNING,
+  DEFAULT_MOVEMENT_TUNING,
+  DEFAULT_SHOOTING_TUNING,
+} from '../sim/tuning.js';
+
+/**
+ * The tuning window.
+ *
+ * Every number in `sim/tuning.ts` is one somebody has to feel their way to, and
+ * feeling your way to a number through an edit-save-reload cycle is feeling
+ * your way to roughly the first number that is not obviously wrong. Here they
+ * are sliders, bound straight to the live tuning objects, and the game is still
+ * running while they move.
+ *
+ * It is DOM rather than drawn into the canvas on purpose. A slider is a
+ * solved problem in HTML, it costs the frame loop nothing, and the whole of
+ * `src/debug/` is behind a dynamic import that a production build never
+ * reaches — so none of this ships.
+ *
+ * The values found here have to get back into the repository to survive a
+ * reload, which is what **Copy** is for: it puts the changed fields on the
+ * clipboard in the shape `tuning.ts` declares them, ready to be pasted over the
+ * defaults.
+ */
+
+interface FieldSpec {
+  readonly key: string;
+  readonly min: number;
+  readonly max: number;
+  readonly step: number;
+  /** What moving it does, in the words a player would use. */
+  readonly hint: string;
+}
+
+interface GroupSpec {
+  readonly title: string;
+  readonly group: 'movement' | 'shooting' | 'impact';
+  readonly fields: readonly FieldSpec[];
+}
+
+/**
+ * Ranges, chosen so the whole slider is worth dragging.
+ *
+ * A range wide enough to contain every conceivable value spends most of its
+ * travel on values nobody wants. These are roughly a quarter to four times the
+ * current default: far enough to find out that the default is wrong, close
+ * enough that a pixel of drag is a change you can feel.
+ */
+const GROUPS: readonly GroupSpec[] = [
+  {
+    title: 'movement',
+    group: 'movement',
+    fields: [
+      { key: 'maxSpeed', min: 0.5, max: 8, step: 0.1, hint: 'top speed, px/tick' },
+      { key: 'ticksToTopSpeed', min: 1, max: 30, step: 1, hint: 'ticks to reach it' },
+      { key: 'ticksToStop', min: 1, max: 40, step: 1, hint: 'ticks to slide to rest' },
+      { key: 'turnBoost', min: 1, max: 4, step: 0.1, hint: 'help when reversing' },
+      { key: 'cornerForgiveness', min: 0, max: 12, step: 0.5, hint: 'px nudged around a corner' },
+      { key: 'cornerNudgeSpeed', min: 0.25, max: 4, step: 0.25, hint: 'px/tick of that nudge' },
+      { key: 'contactDrag', min: 0, max: 1, step: 0.05, hint: 'how hard bodies hold you' },
+      { key: 'pushDamping', min: 0.5, max: 0.98, step: 0.01, hint: 'how long a shove lasts' },
+      { key: 'maxPush', min: 1, max: 16, step: 0.5, hint: 'largest shove carried' },
+    ],
+  },
+  {
+    title: 'shooting',
+    group: 'shooting',
+    fields: [
+      { key: 'fireDelayTicks', min: 1, max: 40, step: 1, hint: 'ticks between shots' },
+      { key: 'shotSpeed', min: 1, max: 20, step: 0.5, hint: 'px/tick' },
+      { key: 'shotRadius', min: 1, max: 10, step: 0.5, hint: 'collider size' },
+      { key: 'shotDamage', min: 0.5, max: 10, step: 0.5, hint: 'half-Maß per shot' },
+      { key: 'shotLifetimeTicks', min: 6, max: 120, step: 1, hint: 'range, in ticks' },
+      { key: 'muzzleOffset', min: 0, max: 24, step: 1, hint: 'px ahead of the player' },
+      { key: 'velocityInheritance', min: 0, max: 1.5, step: 0.05, hint: 'sway from running' },
+      { key: 'kickback', min: 0, max: 3, step: 0.05, hint: 'push per shot' },
+    ],
+  },
+  {
+    title: 'impact',
+    group: 'impact',
+    fields: [
+      { key: 'hitstopTicks', min: 0, max: 8, step: 1, hint: 'freeze on a hit' },
+      { key: 'hitstopPerDamage', min: 0, max: 3, step: 0.1, hint: 'extra freeze per damage' },
+      { key: 'maxHitstopTicks', min: 0, max: 12, step: 1, hint: 'freeze ceiling' },
+      { key: 'deathHitstopTicks', min: 0, max: 20, step: 1, hint: 'freeze on a kill' },
+      { key: 'flashTicks', min: 0, max: 6, step: 1, hint: 'white frames on a hit' },
+      { key: 'deathFlashTicks', min: 0, max: 12, step: 1, hint: 'white frames on a kill' },
+      { key: 'knockback', min: 0, max: 10, step: 0.1, hint: 'throw per damage' },
+      { key: 'shakePerDamage', min: 0, max: 4, step: 0.05, hint: 'shake on a hit' },
+      { key: 'deathShake', min: 0, max: 8, step: 0.1, hint: 'shake on a kill' },
+      { key: 'maxShake', min: 0, max: 12, step: 0.1, hint: 'shake ceiling' },
+      { key: 'shakeDamping', min: 0.5, max: 0.98, step: 0.01, hint: 'how long shake lasts' },
+      { key: 'particlesPerHit', min: 0, max: 40, step: 1, hint: 'foam on a hit' },
+      { key: 'particlesOnDeath', min: 0, max: 80, step: 1, hint: 'splash on a kill' },
+      { key: 'particlesOnSpend', min: 0, max: 20, step: 1, hint: 'splash on a miss' },
+      { key: 'particleSpeed', min: 0.2, max: 8, step: 0.1, hint: 'how far they fly' },
+      { key: 'particleSize', min: 0.2, max: 4, step: 0.05, hint: 'how big they are' },
+      { key: 'spentSpeedScale', min: 0, max: 2, step: 0.05, hint: 'miss splash, vs a hit' },
+      { key: 'particleSpread', min: 0, max: 3.2, step: 0.05, hint: 'cone half-angle, radians' },
+      { key: 'particleLifeTicks', min: 2, max: 60, step: 1, hint: 'how long they last' },
+      { key: 'particleDrag', min: 0.5, max: 0.99, step: 0.01, hint: 'how fast they slow' },
+      {
+        key: 'contactInvulnerabilityTicks',
+        min: 0,
+        max: 180,
+        step: 5,
+        hint: 'ticks safe after being touched',
+      },
+      { key: 'contactKnockback', min: 0, max: 12, step: 0.1, hint: 'thrown clear on contact' },
+    ],
+  },
+];
+
+const DEFAULTS = {
+  movement: DEFAULT_MOVEMENT_TUNING,
+  shooting: DEFAULT_SHOOTING_TUNING,
+  impact: DEFAULT_IMPACT_TUNING,
+} as const;
+
+const STYLE = `
+.kb-tuning-toggle {
+  position: fixed; right: 12px; bottom: 12px; z-index: 30;
+  font: 12px/1.4 ui-monospace, monospace; color: #d8cfc4;
+  background: #1b1622; border: 1px solid #3d3348; border-radius: 4px;
+  padding: 6px 10px; cursor: pointer;
+}
+.kb-tuning-toggle:hover { background: #241d2e; }
+.kb-tuning {
+  position: fixed; right: 12px; bottom: 48px; z-index: 30;
+  width: 320px; max-height: calc(100vh - 72px); overflow-y: auto;
+  font: 12px/1.5 ui-monospace, monospace; color: #d8cfc4;
+  background: rgba(18, 15, 22, 0.96); border: 1px solid #3d3348; border-radius: 4px;
+  padding: 10px 12px 12px;
+}
+.kb-tuning[hidden] { display: none; }
+.kb-tuning h2 {
+  margin: 12px 0 6px; font-size: 11px; letter-spacing: 0.08em;
+  text-transform: uppercase; color: #8a7f74; font-weight: normal;
+}
+.kb-tuning h2:first-child { margin-top: 0; }
+.kb-tuning label { display: block; margin-bottom: 7px; }
+.kb-tuning .kb-row { display: flex; justify-content: space-between; gap: 8px; }
+.kb-tuning .kb-name { color: #d8cfc4; }
+.kb-tuning .kb-value {
+  color: #f0c46a; font: inherit; font-variant-numeric: tabular-nums;
+  background: none; border: 0; padding: 0; cursor: pointer;
+}
+.kb-tuning .kb-value:hover { color: #fff3d0; }
+.kb-tuning .kb-value.kb-changed::after { content: ' *'; color: #e0703a; }
+.kb-tuning .kb-hint { color: #6f6559; font-size: 11px; }
+.kb-tuning input[type='range'] { width: 100%; margin: 2px 0 0; accent-color: #f0c46a; }
+.kb-tuning .kb-actions { display: flex; gap: 8px; margin-top: 12px; }
+.kb-tuning .kb-actions button {
+  flex: 1; font: 12px ui-monospace, monospace; color: #d8cfc4;
+  background: #241d2e; border: 1px solid #3d3348; border-radius: 3px;
+  padding: 5px 0; cursor: pointer;
+}
+.kb-tuning .kb-actions button:hover { background: #2f2639; }
+.kb-tuning .kb-status { margin-top: 8px; color: #8a7f74; min-height: 1.4em; }
+`;
+
+type MutableTuning = Record<string, Record<string, number>>;
+
+export interface TuningWindowHandle {
+  destroy(): void;
+}
+
+/**
+ * Builds the window and attaches it to the document.
+ *
+ * Nothing is polled: a slider writes into the tuning object the simulation is
+ * already reading, and the next tick uses it.
+ */
+export function createTuningWindow(tuning: SimTuning): TuningWindowHandle {
+  const style = document.createElement('style');
+  style.textContent = STYLE;
+  document.head.appendChild(style);
+
+  const panel = document.createElement('div');
+  panel.className = 'kb-tuning';
+  panel.hidden = true;
+
+  const toggle = document.createElement('button');
+  toggle.className = 'kb-tuning-toggle';
+  toggle.type = 'button';
+  toggle.textContent = 'tuning';
+
+  const live = tuning as unknown as MutableTuning;
+  const refreshers: (() => void)[] = [];
+
+  for (const spec of GROUPS) {
+    const heading = document.createElement('h2');
+    heading.textContent = spec.title;
+    panel.appendChild(heading);
+    for (const field of spec.fields) {
+      const target = live[spec.group];
+      if (target === undefined || typeof target[field.key] !== 'number') {
+        continue;
+      }
+      panel.appendChild(createSlider(target, spec.group, field, refreshers));
+    }
+  }
+
+  const status = document.createElement('p');
+  status.className = 'kb-status';
+
+  const actions = document.createElement('div');
+  actions.className = 'kb-actions';
+
+  const copyButton = document.createElement('button');
+  copyButton.type = 'button';
+  copyButton.textContent = 'copy changed';
+  copyButton.addEventListener('click', () => {
+    const text = changedValuesAsSource(live);
+    if (text === '') {
+      status.textContent = 'nothing changed yet';
+      return;
+    }
+    void navigator.clipboard.writeText(text).then(
+      () => {
+        status.textContent = 'copied — paste it into src/sim/tuning.ts';
+      },
+      () => {
+        status.textContent = 'clipboard refused; the values are in the console';
+        console.warn(text);
+      },
+    );
+  });
+
+  const resetButton = document.createElement('button');
+  resetButton.type = 'button';
+  resetButton.textContent = 'reset';
+  resetButton.addEventListener('click', () => {
+    for (const group of Object.keys(DEFAULTS) as (keyof typeof DEFAULTS)[]) {
+      const defaults = DEFAULTS[group] as unknown as Record<string, number>;
+      const target = live[group];
+      if (target === undefined) {
+        continue;
+      }
+      for (const key of Object.keys(defaults)) {
+        const value = defaults[key];
+        if (typeof value === 'number') {
+          target[key] = value;
+        }
+      }
+    }
+    for (const refresh of refreshers) {
+      refresh();
+    }
+    status.textContent = 'back to the values in the repository';
+  });
+
+  actions.append(copyButton, resetButton);
+  panel.append(actions, status);
+
+  toggle.addEventListener('click', () => {
+    panel.hidden = !panel.hidden;
+  });
+
+  // F2 as well as the button, because the button is on the far side of the
+  // screen from the hand that is playing.
+  const onKeyDown = (event: KeyboardEvent): void => {
+    if (event.code === 'F2') {
+      event.preventDefault();
+      panel.hidden = !panel.hidden;
+    }
+  };
+  window.addEventListener('keydown', onKeyDown);
+
+  document.body.append(toggle, panel);
+
+  return {
+    destroy(): void {
+      window.removeEventListener('keydown', onKeyDown);
+      toggle.remove();
+      panel.remove();
+      style.remove();
+    },
+  };
+}
+
+function createSlider(
+  target: Record<string, number>,
+  group: string,
+  field: FieldSpec,
+  refreshers: (() => void)[],
+): HTMLLabelElement {
+  const label = document.createElement('label');
+
+  const row = document.createElement('span');
+  row.className = 'kb-row';
+  const name = document.createElement('span');
+  name.className = 'kb-name';
+  name.textContent = field.key;
+  const value = document.createElement('button');
+  value.type = 'button';
+  value.className = 'kb-value';
+  row.append(name, value);
+
+  const hint = document.createElement('span');
+  hint.className = 'kb-hint';
+  hint.textContent = field.hint;
+
+  const slider = document.createElement('input');
+  slider.type = 'range';
+  slider.min = String(field.min);
+  slider.max = String(field.max);
+  slider.step = String(field.step);
+
+  const defaults = DEFAULTS[group as keyof typeof DEFAULTS] as unknown as Record<string, number>;
+  /** What the repository says. What "reset" means, for one field or for all. */
+  const original = defaults[field.key] ?? 0;
+
+  const refresh = (): void => {
+    const current = target[field.key] ?? 0;
+    slider.value = String(current);
+    value.textContent = format(current);
+    value.classList.toggle('kb-changed', current !== original);
+  };
+
+  slider.addEventListener('input', () => {
+    target[field.key] = Number(slider.value);
+    refresh();
+  });
+
+  // Double-clicking the number puts that one field back. Ten sliders moved and
+  // one of them wrong is the normal state of tuning by feel, and the global
+  // reset is the wrong tool for it — it throws away the nine that were right.
+  value.title = 'double-click to reset this one';
+  value.addEventListener('dblclick', () => {
+    target[field.key] = original;
+    refresh();
+  });
+
+  refresh();
+  refreshers.push(refresh);
+
+  label.append(row, slider, hint);
+  return label;
+}
+
+/**
+ * The changed fields, written the way `tuning.ts` declares them.
+ *
+ * Only what moved. A dump of every field is a diff nobody can read, and the
+ * point of the window is to find the two or three numbers that were wrong.
+ */
+function changedValuesAsSource(live: MutableTuning): string {
+  const blocks: string[] = [];
+  for (const group of Object.keys(DEFAULTS) as (keyof typeof DEFAULTS)[]) {
+    const defaults = DEFAULTS[group] as unknown as Record<string, number>;
+    const target = live[group];
+    if (target === undefined) {
+      continue;
+    }
+    const lines: string[] = [];
+    for (const key of Object.keys(defaults)) {
+      const before = defaults[key];
+      const after = target[key];
+      if (typeof before !== 'number' || typeof after !== 'number' || before === after) {
+        continue;
+      }
+      lines.push(`  ${key}: ${format(after)}, // was ${format(before)}`);
+    }
+    if (lines.length > 0) {
+      blocks.push(`${group}:\n${lines.join('\n')}`);
+    }
+  }
+  return blocks.join('\n\n');
+}
+
+/** Short enough to read at a glance, exact enough to paste. */
+function format(value: number): string {
+  return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(3)));
+}

@@ -5,7 +5,7 @@ import {
   PLAYFIELD_WIDTH,
   createPlaygroundRoom,
 } from '../../src/sim/room/playground.js';
-import { INTERNAL_HEIGHT, INTERNAL_WIDTH } from '../../src/render/resolution.js';
+import { INTERNAL_HEIGHT, INTERNAL_WIDTH, WORLD_ZOOM } from '../../src/render/resolution.js';
 
 describe('RoomGeometry', () => {
   it('reports a circle clear only when it is inside the bounds and off every block', () => {
@@ -33,11 +33,14 @@ describe('RoomGeometry', () => {
 });
 
 describe('the playground room', () => {
-  it('is stated in the same space the renderer draws at', () => {
+  it('fills the internal resolution exactly at the zoom it is drawn at', () => {
     // `sim/` cannot import `render/`, so the two constants are declared
-    // independently. This is the seam where a drift between them would show up.
-    expect(PLAYFIELD_WIDTH).toBe(INTERNAL_WIDTH);
-    expect(PLAYFIELD_HEIGHT).toBe(INTERNAL_HEIGHT);
+    // independently. This is the seam where a drift between them would show up:
+    // a room that does not divide the screen by a whole number either leaves a
+    // strip of it empty or spills off the edge.
+    expect(PLAYFIELD_WIDTH * WORLD_ZOOM).toBe(INTERNAL_WIDTH);
+    expect(PLAYFIELD_HEIGHT * WORLD_ZOOM).toBe(INTERNAL_HEIGHT);
+    expect(Number.isInteger(WORLD_ZOOM)).toBe(true);
   });
 
   it('leaves the centre of the room open for the player to spawn into', () => {

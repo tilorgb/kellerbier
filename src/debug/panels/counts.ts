@@ -2,6 +2,9 @@ import type { Container } from 'pixi.js';
 import {
   type DebugContext,
   type DebugPanel,
+  PANEL_CONTENT_TOP,
+  PANEL_LINE_HEIGHT,
+  PANEL_PADDING,
   PANEL_DIM_COLOUR,
   PANEL_WARN_COLOUR,
   createLabel,
@@ -9,7 +12,7 @@ import {
 } from '../panel.js';
 
 const LINES = 8;
-const PANEL_HEIGHT = 14 + LINES * 9 + 3;
+const PANEL_HEIGHT = PANEL_CONTENT_TOP + LINES * PANEL_LINE_HEIGHT + PANEL_PADDING;
 
 /**
  * What is alive, and what the pools think of it.
@@ -29,7 +32,7 @@ export class CountsPanel implements DebugPanel {
     this.view = createPanelFrame(this.title, PANEL_HEIGHT);
     for (let line = 0; line < LINES; line++) {
       const label = createLabel('');
-      label.position.set(4, 14 + line * 9);
+      label.position.set(PANEL_PADDING, PANEL_CONTENT_TOP + line * PANEL_LINE_HEIGHT);
       this.lines.push(label);
       this.view.addChild(label);
     }

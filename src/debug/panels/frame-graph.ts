@@ -2,6 +2,9 @@ import { type Container, Graphics } from 'pixi.js';
 import {
   type DebugContext,
   type DebugPanel,
+  PANEL_CONTENT_TOP,
+  PANEL_LINE_HEIGHT,
+  PANEL_PADDING,
   PANEL_DIM_COLOUR,
   PANEL_WARN_COLOUR,
   PANEL_WIDTH,
@@ -10,10 +13,10 @@ import {
 } from '../panel.js';
 import { FRAME_BUDGET_MS, SIM_BUDGET_MS } from '../metrics.js';
 
-const GRAPH_HEIGHT = 46;
-const PANEL_HEIGHT = GRAPH_HEIGHT + 32;
-const GRAPH_TOP = 14;
-const GRAPH_LEFT = 3;
+const GRAPH_HEIGHT = 64;
+const PANEL_HEIGHT = PANEL_CONTENT_TOP + GRAPH_HEIGHT + PANEL_LINE_HEIGHT * 2 + PANEL_PADDING;
+const GRAPH_TOP = PANEL_CONTENT_TOP;
+const GRAPH_LEFT = PANEL_PADDING;
 
 const SIM_COLOUR = 0x6fa8dc;
 const RENDER_COLOUR = 0xa8dc6f;
@@ -45,10 +48,10 @@ export class FrameGraphPanel implements DebugPanel {
     this.view.addChild(this.bars);
     this.view.addChild(this.budgetLine);
 
-    this.summary.position.set(4, GRAPH_TOP + GRAPH_HEIGHT + 2);
+    this.summary.position.set(PANEL_PADDING, GRAPH_TOP + GRAPH_HEIGHT + 3);
     this.view.addChild(this.summary);
 
-    this.scaleLabel.position.set(4, GRAPH_TOP + GRAPH_HEIGHT + 11);
+    this.scaleLabel.position.set(PANEL_PADDING, GRAPH_TOP + GRAPH_HEIGHT + 3 + PANEL_LINE_HEIGHT);
     this.view.addChild(this.scaleLabel);
   }
 
