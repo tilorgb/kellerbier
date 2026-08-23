@@ -17,6 +17,13 @@ import { addPush } from './movement.js';
  * `no-hot-allocation` rule in tools/eslint/.
  */
 export function stepShooting(sim: GameSim, input: Readonly<InputFrame>): void {
+  // Umgfalln (#17): knocked down, cannot fire. The cooldown simply does not
+  // age this tick — nothing is lost, firing just resumes where it left off
+  // once the player is back up.
+  if (sim.umgfallnTicks > 0) {
+    return;
+  }
+
   const aimX = axisToUnit(input.aimX);
   const aimY = axisToUnit(input.aimY);
   const wantsToFire = isActionDown(input, InputAction.Fire) && (aimX !== 0 || aimY !== 0);
@@ -31,15 +38,33 @@ export function stepShooting(sim: GameSim, input: Readonly<InputFrame>): void {
 
   if (wantsToFire && sim.fireCooldown === 0) {
     fire(sim, aimX, aimY, input.analogAim);
-    sim.fireCooldown += Math.max(1, Math.round(sim.tuning.shooting.fireDelayTicks));
+    // Promille fire rate (#17): the multiplier shrinks the delay rather than
+    // growing a rate, so it composes with the existing zero-guard below for
+    // free — a multiplier of, say, 1.5 cannot produce a negative delay.
+    const delay = sim.tuning.shooting.fireDelayTicks / sim.promilleFireRateMultiplier;
+    sim.fireCooldown += Math.max(1, Math.round(delay));
   }
 }
 
 function fire(sim: GameSim, aimX: number, aimY: number, analogAim: boolean): void {
   const tuning = sim.tuning.shooting;
   const length = vectorLength(aimX, aimY);
-  const directionX = aimX / length;
-  const directionY = aimY / length;
+  let directionX = aimX / length;
+  let directionY = aimY / length;
+
+  // Promille aim wobble (#17): a slow, deterministic sinusoid rotates the
+  // shot direction — everything below reads `directionX`/`directionY`, so
+  // muzzle position, projectile velocity and kickback all pick up the same
+  // rotated aim consistently. Driven by tick count rather than RNG, since a
+  // "slow sinusoidal offset" is exactly what a sine already is.
+  const wobbleAmplitude = sim.promilleWobbleAmplitude;
+  if (wobbleAmplitude > 0) {
+    const wobbleAngle =
+      Math.sin((sim.tick / sim.tuning.promille.swayPeriodTicks) * Math.PI * 2) * wobbleAmplitude;
+    const angle = Math.atan2(directionY, directionX) + wobbleAngle;
+    directionX = Math.cos(angle);
+    directionY = Math.sin(angle);
+  }
 
   const playerIndex = sim.playerIndex;
   const playerBase = playerIndex * 2;
@@ -69,13 +94,18 @@ function fire(sim: GameSim, aimX: number, aimY: number, analogAim: boolean): voi
   // wobble. Same feature, two numbers — see the tuning docs.
   const inheritance = analogAim ? tuning.analogVelocityInheritance : tuning.velocityInheritance;
 
+  // Promille damage (#17): baked in here rather than read live at impact —
+  // damage is written once into the projectile at spawn (`ProjectileStore.
+  // spawn`) and never re-read, so firing is the only correct hook point.
+  const damage = Math.round(tuning.shotDamage * sim.promilleDamageMultiplier);
+
   const slot = sim.projectiles.spawn(
     muzzleX,
     muzzleY,
     directionX * tuning.shotSpeed + playerVelocityX * inheritance,
     directionY * tuning.shotSpeed + playerVelocityY * inheritance,
     tuning.shotRadius,
-    tuning.shotDamage,
+    damage,
     Math.max(1, Math.round(tuning.shotLifetimeTicks)),
     ProjectileTeam.Player,
   );

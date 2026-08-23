@@ -300,11 +300,59 @@ export interface EnemyTuning {
   deflectShake: number;
 }
 
+/**
+ * The Promille prototype (#17). Deliberately rough — the whole point of this
+ * milestone is to answer "does being drunk feel good to play?" before more is
+ * built on top of it.
+ *
+ * `current` is simulation state, not a dial — the one exception in this file.
+ * It lives here anyway because the issue's own guidance is to put it here:
+ * the F2 tuning window already binds a slider straight to any numeric field
+ * on a `SimTuning` group, so this is the entire cost of "a debug slider that
+ * sets it directly." No replay system exists yet (#48) for this to break.
+ */
+export interface PromilleTuning {
+  /** Current Promille, 0–5. The debug slider drives this field directly. */
+  current: number;
+  /** Promille lost per second, pure time decay — no eating/water/being-hit yet (#31). */
+  decayPerSecond: number;
+  /** Promille one beer pickup adds. */
+  beerAmount: number;
+
+  angeheitertDamageBonus: number;
+  angeheitertFireRateBonus: number;
+  beduseltDamageBonus: number;
+  beduseltFireRateBonus: number;
+  vollrauschDamageBonus: number;
+  vollrauschFireRateBonus: number;
+
+  /**
+   * Drift, wobble and sway are a continuous ramp from the Promille value
+   * rather than five more stepped tiers — the design doc only gives exact
+   * numbers for damage and fire rate; drift/wobble/sway are described
+   * qualitatively ("heavy", "very slight"), so one intensity knob each
+   * reaches the same shape with far less to hand-tune.
+   */
+  maxDrift: number;
+  /** Aim wobble amplitude at full ramp, in radians. */
+  maxWobble: number;
+  /** Camera sway at full ramp, in pixels. */
+  maxSway: number;
+  /** Ticks per full sway oscillation. */
+  swayPeriodTicks: number;
+
+  /** How long the Umgfalln knockdown holds the player still and invulnerable. */
+  umgfallnKnockdownTicks: number;
+  /** Promille the player wakes at, after the knockdown ends. */
+  umgfallnWakePromille: number;
+}
+
 export interface SimTuning {
   readonly movement: MovementTuning;
   readonly shooting: ShootingTuning;
   readonly impact: ImpactTuning;
   readonly enemy: EnemyTuning;
+  readonly promille: PromilleTuning;
 }
 
 export const DEFAULT_MOVEMENT_TUNING: Readonly<MovementTuning> = {
@@ -380,12 +428,42 @@ export const DEFAULT_ENEMY_TUNING: Readonly<EnemyTuning> = {
   deflectShake: 0.3,
 };
 
+export const DEFAULT_PROMILLE_TUNING: Readonly<PromilleTuning> = {
+  current: 0,
+  decayPerSecond: 0.05,
+  beerAmount: 0.8,
+
+  angeheitertDamageBonus: 0.15,
+  angeheitertFireRateBonus: 0.1,
+  beduseltDamageBonus: 0.35,
+  beduseltFireRateBonus: 0.25,
+  vollrauschDamageBonus: 0.7,
+  vollrauschFireRateBonus: 0.5,
+
+  maxDrift: 0.6,
+  // Measured against a Normal enemy (radius 7, `src/sim/enemy/size.ts`) at a
+  // ~70px engagement range, firing continuously and reading where the shots
+  // actually land relative to a dead-on aim: 0% miss through Beduselt and
+  // into the start of Vollrausch, climbing through the low-to-mid 3.0s of
+  // Promille, and roughly 60% miss by the top of Vollrausch and beyond. A
+  // sine, not RNG — the same shot fired at the same tick count always lands
+  // the same place, so a player who reads the sweep can still time a burst
+  // to the zero-crossings. That's the "deterministic spray" #17 asks for.
+  maxWobble: 0.3,
+  maxSway: 6,
+  swayPeriodTicks: 90,
+
+  umgfallnKnockdownTicks: 90,
+  umgfallnWakePromille: 1.5,
+};
+
 export function createTuning(): SimTuning {
   return {
     movement: { ...DEFAULT_MOVEMENT_TUNING },
     shooting: { ...DEFAULT_SHOOTING_TUNING },
     impact: { ...DEFAULT_IMPACT_TUNING },
     enemy: { ...DEFAULT_ENEMY_TUNING },
+    promille: { ...DEFAULT_PROMILLE_TUNING },
   };
 }
 

@@ -134,10 +134,12 @@ export class GameView {
 
     // Rounded to whole pixels. A camera offset by a fraction of a pixel makes
     // every sprite in the room resample, which on pixel art looks like the
-    // whole screen crawling.
+    // whole screen crawling. Sway (#17) is additive alongside shake — both
+    // land in the same offset, but they come from separate accumulators with
+    // separate accessibility scales, so zeroing one never touches the other.
     this.world.position.set(
-      Math.round(this.sim.shakeX + this.cameraX),
-      Math.round(this.sim.shakeY + this.cameraY),
+      Math.round(this.sim.shakeX + this.sim.swayX + this.cameraX),
+      Math.round(this.sim.shakeY + this.sim.swayY + this.cameraY),
     );
   }
 }

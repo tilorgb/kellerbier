@@ -8,8 +8,20 @@ import type { InputFrame } from '../input/frame.js';
 import { createInputFrame } from '../input/frame.js';
 import { type RunRandom, createRunRandom } from '../rng/streams.js';
 import { drawDeathWord } from './death-word.js';
+import {
+  PROMILLE_MAX,
+  PromilleTier,
+  type PromilleTierId,
+  promilleDamageMultiplier,
+  promilleDriftScale,
+  promilleFireRateMultiplier,
+  promilleTierOf,
+  promilleWobbleAmplitude,
+  promilleSwayMagnitude,
+} from './promille.js';
 import type { RoomGeometry } from '../room/geometry.js';
 import { createPlaygroundRoom } from '../room/playground.js';
+import { TICKS_PER_SECOND } from '../time.js';
 import { type SimTuning, createTuning } from '../tuning.js';
 import { type CollisionLayerId, CollisionLayer, collisionMaskFor } from '../collision/layers.js';
 import { SpatialHash } from '../collision/spatial-hash.js';
@@ -29,6 +41,8 @@ import {
   stepEnemyDeaths,
 } from '../systems/enemy.js';
 import { stepImpact, stepParticles } from '../systems/impact.js';
+import { stepPickups } from '../systems/pickup.js';
+import { stepPromille } from '../systems/promille.js';
 import { stepProjectiles, stepShooting } from '../systems/shooting.js';
 
 /** Entity slots reserved up front. Sized well above M1's population. */
@@ -39,6 +53,9 @@ export const PLAYER_RADIUS = 7;
 
 /** Collider radius of a training target — a mid-size body. */
 export const TARGET_RADIUS = ENEMY_PROFILES[EnemySize.Mid].radius;
+
+/** Collider radius of a beer pickup (#17). Small — it's a mug, not a body. */
+export const BEER_PICKUP_RADIUS = 4;
 
 /**
  * The largest collider the broadphase grid is sized for.
@@ -233,6 +250,24 @@ export class GameSim {
    * is not a thing to do temporarily.
    */
   rumbleScale = 1;
+
+  /**
+   * Accessibility scale on Promille camera sway, 0 to 1.
+   *
+   * Same precedent as `screenShakeScale` and `rumbleScale`, and required by
+   * #17's own acceptance criteria: sway has to be reducible to zero without
+   * touching the damage/fire-rate bonuses, which is exactly what a separate
+   * scale on a separate accumulator (see `swayX`/`swayY`) buys for free.
+   */
+  swayScale = 1;
+
+  /**
+   * Ticks left of the Umgfalln knockdown — set by `addPromille` when a raise
+   * crosses the top tier. Movement and firing both check this directly rather
+   * than going through a generic "stunned" flag, since nothing else stuns the
+   * player yet.
+   */
+  private umgfallnTicksValue = 0;
 
   /**
    * Ticks left before the player may be hurt by contact again.
@@ -473,6 +508,78 @@ export class GameSim {
     }
   }
 
+  /** Current Promille, 0–5. Backed by `tuning.promille.current` — see `tuning.ts`. */
+  get promille(): number {
+    return this.tuning.promille.current;
+  }
+
+  get promilleTier(): PromilleTierId {
+    return promilleTierOf(this.promille);
+  }
+
+  /** Ticks left of the Umgfalln knockdown. Zero means the player can move and fire. */
+  get umgfallnTicks(): number {
+    return this.umgfallnTicksValue;
+  }
+
+  get promilleDamageMultiplier(): number {
+    return promilleDamageMultiplier(this.promilleTier, this.tuning.promille);
+  }
+
+  get promilleFireRateMultiplier(): number {
+    return promilleFireRateMultiplier(this.promilleTier, this.tuning.promille);
+  }
+
+  get promilleDriftScale(): number {
+    return promilleDriftScale(this.promille, this.tuning.promille);
+  }
+
+  get promilleWobbleAmplitude(): number {
+    return promilleWobbleAmplitude(this.promille, this.tuning.promille);
+  }
+
+  /**
+   * Raises Promille, clamped at `PROMILLE_MAX`. The one place it goes up —
+   * beer pickups (#17) and the debug slider (which writes `tuning.promille.
+   * current` directly, bypassing this) are the only sources today.
+   *
+   * Crossing the Umgfalln threshold starts the knockdown here rather than in
+   * whatever called this, the same reason `applyPlayerDamage` owns the death
+   * check: one chokepoint, so every raise — pickup or otherwise — behaves
+   * the same way.
+   */
+  addPromille(amount: number): void {
+    if (amount <= 0) {
+      return;
+    }
+    const tuning = this.tuning.promille;
+    const wasUmgfalln = promilleTierOf(tuning.current) === PromilleTier.Umgfalln;
+    tuning.current = Math.min(PROMILLE_MAX, tuning.current + amount);
+    if (!wasUmgfalln && promilleTierOf(tuning.current) === PromilleTier.Umgfalln) {
+      this.umgfallnTicksValue = Math.round(tuning.umgfallnKnockdownTicks);
+      this.makePlayerInvulnerable(this.umgfallnTicksValue);
+    }
+  }
+
+  /** Ages the Umgfalln knockdown by one tick. Called once a tick by `stepPromille`. */
+  tickUmgfalln(): void {
+    if (this.umgfallnTicksValue <= 0) {
+      return;
+    }
+    this.umgfallnTicksValue -= 1;
+    if (this.umgfallnTicksValue === 0) {
+      // Woken up short of sober — the whole point of a knockdown is that it
+      // costs you the drink, not that it costs you the tier.
+      this.tuning.promille.current = this.tuning.promille.umgfallnWakePromille;
+    }
+  }
+
+  /** Decays Promille toward zero. Called once a tick by `stepPromille`, skipped during knockdown. */
+  decayPromille(): void {
+    const tuning = this.tuning.promille;
+    tuning.current = Math.max(0, tuning.current - tuning.decayPerSecond / TICKS_PER_SECOND);
+  }
+
   /** True while the simulation is frozen by hitstop. */
   get frozen(): boolean {
     return this.hitstopTicks > 0;
@@ -494,6 +601,36 @@ export class GameSim {
   /** Unscaled shake magnitude, for the debug overlay. */
   get shake(): number {
     return this.shakeMagnitude;
+  }
+
+  /**
+   * Promille camera sway, in pixels — additive alongside `shakeX`/`shakeY`
+   * (`render/view.ts` sums both into one camera offset) but with its own
+   * accumulator and its own accessibility scale, so `swayScale = 0` never
+   * touches a hit's shake.
+   *
+   * A fixed sinusoid off the tick count rather than anything random: sway is
+   * cosmetic but still has to replay identically, and a sine needs no RNG
+   * stream to do that.
+   */
+  get swayX(): number {
+    return Math.sin(this.swayPhase()) * this.swayMagnitude();
+  }
+
+  get swayY(): number {
+    // Phase-shifted and at half the frequency of X, so the path traced is a
+    // loose loop rather than a side-to-side twitch — closer to swaying than
+    // to vibrating.
+    return Math.sin(this.swayPhase() * 0.5 + Math.PI / 3) * this.swayMagnitude() * 0.6;
+  }
+
+  private swayPhase(): number {
+    const period = Math.max(1, this.tuning.promille.swayPeriodTicks);
+    return (this.currentTick / period) * Math.PI * 2;
+  }
+
+  private swayMagnitude(): number {
+    return promilleSwayMagnitude(this.promille, this.tuning.promille) * this.swayScale;
   }
 
   /**
@@ -566,6 +703,10 @@ export class GameSim {
     // end of this one survives to be drawn.
     this.decayPresentation();
 
+    // Promille first: movement and shooting both read this tick's tier/drift/
+    // wobble, so it has to be settled before either runs.
+    stepPromille(this);
+
     // Order matters and is fixed: the player moves, then fires from where they
     // now are, then everything already in flight advances. Anything else and a
     // shot appears a tick behind the player who fired it.
@@ -578,6 +719,7 @@ export class GameSim {
     stepProjectiles(this);
     stepCollision(this);
     stepContacts(this);
+    stepPickups(this);
     stepImpact(this);
     // After impact, because impact is what pushes the death events a split
     // reads. A body that splits does so on the tick it died.
@@ -695,6 +837,17 @@ export class GameSim {
     this.addEnemyPost('schimmelfleck', midX, this.room.minY + 24);
     // Against the right-hand wall, since it is a tap in one.
     this.addEnemyPost('zapfhahn', this.room.maxX - 10, midY);
+
+    // Hand-placed clear of the pillars and the posts above, same "replaced
+    // by #18/#20" spirit as the rest of this room. Unlike a post, a
+    // collected pickup does not come back — there's no need for one yet.
+    // None of these sit at (midX, midY) — that's the player's own spawn
+    // point (see `spawnPlayer`), and a pickup there is collected before the
+    // player has done anything to earn it.
+    this.spawnBeerPickup(midX + 30, midY - 30);
+    this.spawnBeerPickup(this.room.minX + 100, this.room.maxY - 30);
+    this.spawnBeerPickup(this.room.maxX - 100, this.room.minY + 40);
+    this.spawnBeerPickup(this.room.minX + 50, midY + 10);
   }
 
   /** Puts an authored enemy on a post, by the id its definition states. */
@@ -884,6 +1037,35 @@ export class GameSim {
     this.spawnPost.data[index] = -1;
 
     this.setCollisionLayer(index, CollisionLayer.Obstacle);
+    return entity;
+  }
+
+  /**
+   * A beer pickup (#17) — deliberately the leanest entity in the world.
+   *
+   * `spawnTarget` adds health, contact damage, flash and a respawn post,
+   * none of which a pickup needs; this carries only what `stepPickups`
+   * (overlap detection) and `EntityView` (rendering, via `collidableMask`)
+   * actually read. It never moves, so it carries no `velocity` either.
+   */
+  spawnBeerPickup(x: number, y: number): Entity {
+    const entity = this.world.create();
+    this.world.add(entity, this.transform);
+    this.world.add(entity, this.body);
+    this.world.add(entity, this.collision);
+
+    const index = entityIndex(entity);
+    const transform = this.transform.data;
+    transform[index * 4] = x;
+    transform[index * 4 + 1] = y;
+    transform[index * 4 + 2] = x;
+    transform[index * 4 + 3] = y;
+
+    const body = this.body.data;
+    body[index * 2] = BEER_PICKUP_RADIUS;
+    body[index * 2 + 1] = 1;
+
+    this.setCollisionLayer(index, CollisionLayer.Pickup);
     return entity;
   }
 

@@ -23,6 +23,9 @@ const TELEGRAPH_TEXTURE_RADIUS = 24;
 /** What an invulnerable body is tinted. Cold and dull: nothing is getting in. */
 const SHELL_TINT = 0x8fa2b8;
 
+/** What a beer pickup (#17) is tinted, so it doesn't read as another body. */
+const BEER_TINT = 0xf0c46a;
+
 /**
  * Draws the collidable things that are not the player: targets, enemies, and
  * the ring an enemy warns with before it attacks.
@@ -99,9 +102,10 @@ export class EntityView {
       used += 1;
       sprite.visible = true;
       sprite.texture = (flash[index] ?? 0) > 0 ? this.flashTexture : this.texture;
+      const isPickup = ((collision[index * 2] ?? 0) & CollisionLayer.Pickup) !== 0;
       // A curled body has to look like one. Without this the player is told
       // their shots are doing nothing only by the shots doing nothing.
-      sprite.tint = isEnemyInvulnerable(sim, index) ? SHELL_TINT : 0xffffff;
+      sprite.tint = isPickup ? BEER_TINT : isEnemyInvulnerable(sim, index) ? SHELL_TINT : 0xffffff;
       // The texture is drawn at a fixed size; scaling it to the collider is
       // what keeps the sprite and the hitbox describing the same object.
       sprite.scale.set(radius / (this.texture.width / 2));
