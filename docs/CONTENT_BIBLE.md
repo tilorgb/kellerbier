@@ -115,6 +115,10 @@ exactly one idea. Complexity comes from combinations of enemies, not from comple
 - **Gartenzwerg** — garden gnome, plays dead until you turn your back. Throws his own hat.
 - **Blaskapellist** — tuba player, fires expanding sound rings on the beat of the floor music.
 - **Traktor** — slow, tanky, leaves an exhaust cloud that blocks vision.
+- **Böllerschmeißer** — lobs a lit Böller in a telegraphed arc. The fuse is the whole enemy:
+  the throw is readable, the landing spot is marked, and the player has about a second to not
+  be standing there. This is the only place a Böller appears — it is something thrown at you,
+  never something you pick up.
 
 **Floor 3 — Der Wald**
 - **Wolpertinger** — the mythical hybrid. Erratic, teleports short distances, drops rare loot.
@@ -228,7 +232,7 @@ Roughly 30 to start; target **120+ by v1**. Every one changes how you play.
 |---|---|
 | **Föhn** | The alpine headache wind blows across every room, pushing *all* projectiles — yours and theirs — in a slowly rotating direction. Interacts with homing, bouncing and arcing in ways we cannot fully predict. That is the point. |
 | **Obazda** | Leaves a cheese puddle wherever you walk. Slows enemies. Some enemies refuse to enter it at all. |
-| **Böllerschütze** | Bombs also fire projectiles in four directions on detonation. |
+| **Fassldauben** | The keg's staves fly out in four directions when it bursts. |
 | **Alpenglühen** | Shots gain `burning`. At high Promille, so do you. |
 | **Bierzelt-Garnitur** | Deploy a beer-tent bench as destructible cover. |
 | **Lebkuchenherz** | Displays a slogan over your head. The slogan is randomly chosen and has a randomly chosen mechanical effect. |

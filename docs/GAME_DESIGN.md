@@ -146,7 +146,7 @@ can explain exactly why the player's damage is 47.3.
 | Soul heart | **Weißbier** | Blue-white, spent before red. |
 | Eternal heart | **Schwarzbier** | |
 | Coin | **Biermarke** | Festival beer token. |
-| Bomb | **Böller** | Real Bavarian firecracker tradition. |
+| Bomb | **Bierfassl** | A small keg, set down or rolled: the hoops give way and it bursts. A firecracker is a nuisance, not a thing you are pleased to find — Böller belong to the enemies who throw them. |
 | Key | **Kellerschlüssel** | |
 | Food (lowers Promille) | **Brezn**, **Obazda**, **Radi** | Also small heals. |
 
