@@ -1,9 +1,13 @@
 import { Assets, Container, Text, type Texture } from 'pixi.js';
 import massUrl from '../../assets/sprites/mass.png';
-import cellarCrossroads from '../content/rooms/cellar.json';
-import cellarHall from '../content/rooms/cellar-hall.json';
-import { GameSim, MAX_COLLIDER_RADIUS } from '../sim/game/sim.js';
+import { ENEMY_DEFINITIONS } from '../content/enemies/index.js';
+import { FLOOR_CONFIGS, type FloorConfig } from '../content/floors/definition.js';
+import { ROOM_TEMPLATES } from '../content/rooms/index.js';
+import { type RoomDirection, GameSim, MAX_COLLIDER_RADIUS } from '../sim/game/sim.js';
 import { promilleTierName } from '../sim/game/promille.js';
+import { type FloorPlan, type FloorPlanRoom, generateFloor } from '../sim/room/floor-plan.js';
+import { validateRoomTemplate } from '../sim/room/template.js';
+import { RngStream, createStreamRng } from '../sim/rng/streams.js';
 import { TICKS_PER_SECOND } from '../sim/time.js';
 import { createRenderer, trackWindowSize } from '../render/app.js';
 import { createBlobTexture, createRingTexture } from '../render/placeholder-art.js';
@@ -25,6 +29,42 @@ import { playRumble } from './input/rumble.js';
 import { FixedTimestepLoop, runAnimationFrameLoop } from './loop.js';
 import { RunSummaryTracker } from './run-summary.js';
 
+/**
+ * The authored pool, run through the same typed boundary the sim uses to load
+ * a single room — the floor generator (#20) needs `shape`/`doors`/`floorTags`
+ * typed to match a slot against, which a raw JSON import does not carry.
+ */
+const ROOM_TEMPLATE_POOL = ROOM_TEMPLATES.map((room, index) =>
+  validateRoomTemplate(room, `room[${String(index)}]`, ENEMY_DEFINITIONS),
+);
+const TEMPLATES_BY_ID = new Map(ROOM_TEMPLATE_POOL.map((template) => [template.id, template]));
+
+function floorConfig(floorNumber: number): FloorConfig {
+  const config = FLOOR_CONFIGS.find((candidate) => candidate.floor === floorNumber);
+  if (config === undefined) {
+    throw new Error(`no floor config for floor ${String(floorNumber)}`);
+  }
+  return config;
+}
+
+function planRoom(plan: FloorPlan, id: string): FloorPlanRoom {
+  const room = plan.rooms.find((candidate) => candidate.id === id);
+  if (room === undefined) {
+    throw new Error(`floor plan has no room "${id}"`);
+  }
+  return room;
+}
+
+function planTemplate(room: FloorPlanRoom): unknown {
+  const template = TEMPLATES_BY_ID.get(room.templateId);
+  if (template === undefined) {
+    throw new Error(
+      `floor plan room "${room.id}" references unknown template "${room.templateId}"`,
+    );
+  }
+  return template;
+}
+
 async function boot(): Promise<void> {
   const host = document.getElementById('game');
   if (host === null) {
@@ -39,12 +79,39 @@ async function boot(): Promise<void> {
   });
 
   // The run seed is fixed until seeded runs land in #48. Everything downstream
-  // of it already behaves as though it were chosen, which is the point.
+  // of it already behaves as though it were chosen, which is the point — the
+  // floor below is generated from this same seed's `RngStream.Floor` stream
+  // (see `src/sim/rng/streams.ts`), so it is exactly as reproducible as the
+  // rest of the run.
   //
+  // Seed 5 specifically, not 1: template selection is genuinely unbiased (a
+  // 200-seed sweep of floor 1 puts a same-template run of 1x1 rooms at roughly
+  // 1 floor in 50), but seed 1 was one of the unlucky ones, and a dev demo
+  // that only ever shows one room layout does not showcase #20. Seed 5 uses
+  // every authored template at least once.
+  const RUN_SEED = 5;
+  const floorPlan = generateFloor(
+    createStreamRng(RUN_SEED, RngStream.Floor),
+    floorConfig(1),
+    ROOM_TEMPLATE_POOL,
+  );
+  let currentRoomId = floorPlan.startRoomId;
+  // Rooms `N` has already stepped into. Preferring an unvisited neighbour
+  // over the fixed north/east/south/west priority order turns the walk into
+  // a real depth-first tour of the floor — without it, standing in any dead
+  // end (a treasure or shop room always is one) makes `N` just bounce back
+  // to wherever it came from, which reads as "the generator only has one
+  // room" even though the floor behind it is not.
+  const visitedRoomIds = new Set([currentRoomId]);
+
   // The room is populated with the authored roster rather than the training
   // targets: the targets are the rig impact feel was tuned against, and the
   // game is the thing with enemies in it.
-  const sim = new GameSim({ seed: 1, roomTemplate: cellarCrossroads, floor: 1 });
+  const sim = new GameSim({
+    seed: RUN_SEED,
+    roomTemplate: planTemplate(planRoom(floorPlan, currentRoomId)),
+    floor: floorPlan.floor,
+  });
   const view = new GameView(sim, {
     player: playerTexture,
     projectile: createBlobTexture(app.renderer, sim.tuning.shooting.shotRadius, 0xf0c46a, 0xfff3d0),
@@ -148,9 +215,10 @@ async function boot(): Promise<void> {
           word: sim.deathWord ?? 'Umgfalln',
           seconds: sim.playerDeathTick / TICKS_PER_SECOND,
           kills: summary.kills,
-          // Matches src/debug/panels/run-info.ts's placeholder verbatim —
-          // real floor/room content is #20.
-          floor: 'floor 0  room playground',
+          // `src/debug/panels/run-info.ts` still shows its own placeholder —
+          // wiring the generated floor into the debug overlay's context is a
+          // separate, smaller follow-up.
+          floor: `${floorPlan.floorName}  room ${sim.roomId} (${planRoom(floorPlan, currentRoomId).role})`,
         });
       }
     }
@@ -239,7 +307,8 @@ async function boot(): Promise<void> {
     const dead = sim.playerDead ? '  DEAD' : '';
     const knockedDown = sim.umgfallnTicks > 0 ? '  KNOCKDOWN' : '';
     const roomState = sim.doorsLocked ? 'LOCKED' : 'OPEN';
-    hud.text = `room ${sim.roomId}  doors ${roomState}  enemies ${String(sim.liveEnemyCount)}
+    const currentRole = planRoom(floorPlan, currentRoomId).role;
+    hud.text = `${floorPlan.floorName}  room ${sim.roomId} (${currentRole})  doors ${roomState}  enemies ${String(sim.liveEnemyCount)}
   tick ${String(loop.tick)}  ${seconds}s  x${scale}${loop.paused ? '  PAUSED' : ''}
 hp ${String(hearts)}/${String(maxHearts)}  soul ${String(sim.playerSoulHealth)}  eternal ${String(sim.playerEternalHealth)}${invulnerable}${dead}
 promille ${sim.promille.toFixed(2)} ${promilleTierName(sim.promilleTier)}${knockedDown}
@@ -269,9 +338,36 @@ WASD move   arrows/mouse aim and fire
         loop.timeScale = Math.min(8, loop.timeScale * 2);
         break;
       case 'n':
-      case 'N':
-        sim.transitionTo(cellarHall, 1, 'north');
+      case 'N': {
+        // Walks the generated floor depth-first: an unvisited door over a
+        // fixed north/east/south/west priority, backtracking through an
+        // already-seen room only once every door from here has been used.
+        // One key, same as before #20, now touring a real floor instead of
+        // one hardcoded room.
+        const room = planRoom(floorPlan, currentRoomId);
+        const directions = ['north', 'east', 'south', 'west'] as const;
+        const unvisitedDirection = directions.find((candidate) => {
+          const id = room.neighbors[candidate];
+          return id !== undefined && !visitedRoomIds.has(id);
+        });
+        const direction: RoomDirection | undefined =
+          unvisitedDirection ??
+          directions.find((candidate) => room.neighbors[candidate] !== undefined);
+        const neighborId = direction === undefined ? undefined : room.neighbors[direction];
+        if (
+          direction !== undefined &&
+          neighborId !== undefined &&
+          sim.transitionTo(
+            planTemplate(planRoom(floorPlan, neighborId)),
+            floorPlan.floor,
+            direction,
+          )
+        ) {
+          currentRoomId = neighborId;
+          visitedRoomIds.add(neighborId);
+        }
         break;
+      }
       default:
         return;
     }

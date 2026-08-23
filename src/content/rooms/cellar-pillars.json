@@ -1,0 +1,46 @@
+{
+  "id": "cellar-pillars",
+  "tileGrid": [
+    "###############",
+    "#.............#",
+    "#..#.......#..#",
+    "#.............#",
+    "#.....#.#.....#",
+    "#.............#",
+    "#..#.......#..#",
+    "#.............#",
+    "###############"
+  ],
+  "obstacles": [
+    { "x": 32, "y": 16, "width": 16, "height": 16 },
+    { "x": 176, "y": 16, "width": 16, "height": 16 },
+    { "x": 96, "y": 48, "width": 16, "height": 16 },
+    { "x": 128, "y": 48, "width": 16, "height": 16 },
+    { "x": 32, "y": 96, "width": 16, "height": 16 },
+    { "x": 176, "y": 96, "width": 16, "height": 16 }
+  ],
+  "enemySpawns": [
+    { "x": 112, "y": 24, "group": "pillar-guard" },
+    { "x": 112, "y": 128, "group": "pillar-guard" }
+  ],
+  "spawnGroups": [
+    {
+      "id": "pillar-guard",
+      "count": 1,
+      "choices": [
+        { "enemyId": "kellerassel", "minFloor": 1, "maxFloor": 2 },
+        { "enemyId": "bierratte", "minFloor": 3, "maxFloor": 7 }
+      ]
+    }
+  ],
+  "pickupSpawns": [],
+  "hazards": [],
+  "decorativeProps": [{ "x": 224, "y": 72, "type": "barrel" }],
+  "metadata": {
+    "floorTags": ["cellar", "rural"],
+    "shape": "1x1",
+    "doors": { "north": true, "east": true, "south": true, "west": true },
+    "difficultyTier": 1,
+    "weight": 1
+  }
+}
