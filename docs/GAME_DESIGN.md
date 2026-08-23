@@ -40,6 +40,19 @@ enough beer for six million Wiesn visitors, and the shortcut ate the soul of the
 final boss, **Die Bavaria**, is the bronze statue over the Theresienwiese animated by all of
 it — the personification of Bavaria herself, poisoned by her own festival.
 
+**The second layer, and how far to push it.** Isaac's trick is the model: the surface is fun
+and gross and lets you laugh at the costume, and the thing underneath is only there for
+whoever keeps looking. Ours is sitting in plain sight already — a festival marketed as
+family-friendly Kultur that is, structurally, six million people getting very drunk together,
+and a culture with enough affection for beer that the line between tradition and a drinking
+problem gets genuinely hard to see. Die Bavaria being poisoned by her own festival already
+carries that if it's played straight at the right beat; the job is not to add a moral, it's to
+not flinch away from the one the premise already has. Concretely: a boss intro plate, an item
+description, an environmental detail can sit right up against the real thing (see
+`CONTENT_BIBLE.md`'s Floor 7 entry for one) without a single line of dialogue ever saying it
+out loud. The moment anything *says* "drinking is bad," we've lost the joke and the point
+both — see `CONTENT_BIBLE.md` §0's tone rule on this exact line.
+
 ## 3. Characters
 
 Sepp is available from the start; the rest unlock through play. Each is a different *verb*,

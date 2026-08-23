@@ -95,8 +95,11 @@ jobs:
 
       - name: Benchmark this branch
         run: |
-          npm run bench
-          cp bench/results.json head.json
+          for run in 1 2 3; do
+            npm run bench
+            cp bench/results.json "head-${run}.json"
+          done
+          node tools/bench/select.mjs head-*.json --out head.json
 
       # The merge base, built and measured the same way. A worktree rather than
       # a checkout, so this job keeps the tree it was given: `npm ci` in the
@@ -112,8 +115,11 @@ jobs:
           git worktree add ../base "${base}"
           cd ../base
           npm ci
-          npm run bench
-          cp bench/results.json "${GITHUB_WORKSPACE}/base.json"
+          for run in 1 2 3; do
+            npm run bench
+            cp bench/results.json "${GITHUB_WORKSPACE}/base-${run}.json"
+          done
+          node tools/bench/select.mjs "${GITHUB_WORKSPACE}"/base-*.json --out "${GITHUB_WORKSPACE}/base.json"
 
       - name: Compare
         id: compare

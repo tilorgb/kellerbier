@@ -1,6 +1,7 @@
 import { Assets, Container, Text, type Texture } from 'pixi.js';
 import massUrl from '../../assets/sprites/mass.png';
 import { GameSim, MAX_COLLIDER_RADIUS } from '../sim/game/sim.js';
+import { promilleTierName } from '../sim/game/promille.js';
 import { TICKS_PER_SECOND } from '../sim/time.js';
 import { createRenderer, trackWindowSize } from '../render/app.js';
 import { createBlobTexture, createRingTexture } from '../render/placeholder-art.js';
@@ -14,6 +15,7 @@ import {
 import { EntityView } from '../render/entities.js';
 import { GameOverScreen } from '../render/game-over.js';
 import { HealthHud } from '../render/health-hud.js';
+import { Vignette } from '../render/vignette.js';
 import { GameView } from '../render/view.js';
 import { SILENT_AUDIO, playImpactAudio } from './audio/impact.js';
 import { InputSampler } from './input/sampler.js';
@@ -67,6 +69,12 @@ async function boot(): Promise<void> {
   // pixels. Kept above everything the game adds.
   const uiLayer = new Container();
   app.stage.addChild(uiLayer);
+
+  // Added before everything else in `uiLayer`, so it darkens the game world
+  // underneath without ever covering the HUD text, health row or game-over
+  // screen drawn after it.
+  const vignette = new Vignette();
+  uiLayer.addChild(vignette.view);
 
   const hud = new Text({
     text: '',
@@ -161,6 +169,7 @@ async function boot(): Promise<void> {
     positionHud(applied);
     positionHealthHud(applied);
     gameOverScreen.resize(applied);
+    vignette.resize(applied);
   });
 
   const input = new InputSampler();
@@ -204,8 +213,10 @@ async function boot(): Promise<void> {
     render: (alpha) => {
       const started = performance.now();
       overlay?.drawCalls.beginFrame();
-      view.sync(alpha);
+      view.sync(alpha, layout.scale);
       healthHud.sync(sim);
+      const playerScreen = view.playerScreenPosition();
+      vignette.sync(sim, playerScreen.x, playerScreen.y);
       overlay?.sync(alpha);
       overlay?.record(simMs, performance.now() - started, 0);
       simMs = 0;
@@ -224,8 +235,10 @@ async function boot(): Promise<void> {
     const maxHearts = sim.health.data[playerSlot * 2 + 1] ?? 0;
     const invulnerable = sim.playerInvulnerableTicks > 0 ? '  INVULN' : '';
     const dead = sim.playerDead ? '  DEAD' : '';
+    const knockedDown = sim.umgfallnTicks > 0 ? '  KNOCKDOWN' : '';
     hud.text = `tick ${String(loop.tick)}  ${seconds}s  x${scale}${loop.paused ? '  PAUSED' : ''}
 hp ${String(hearts)}/${String(maxHearts)}  soul ${String(sim.playerSoulHealth)}  eternal ${String(sim.playerEternalHealth)}${invulnerable}${dead}
+promille ${sim.promille.toFixed(2)} ${promilleTierName(sim.promilleTier)}${knockedDown}
 shots ${String(shots.liveCount)}/${String(shots.capacity)}  particles ${String(
       particles.liveCount,
     )}/${String(particles.capacity)}${shots.overflows > 0 ? '  SHOT OVERFLOW' : ''}

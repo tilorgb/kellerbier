@@ -29,7 +29,12 @@ Read this before authoring any content.
 - The Wild Hunt, Perchten and Krampus are winter-folklore figures. They can be genuinely
   frightening; that is period-accurate.
 - Drinking is funny; consequences exist. The Kater debuff is not moralising, it is a punchline
-  with mechanics attached.
+  with mechanics attached. Nobody in-game ever delivers a message about drinking — no NPC
+  line, no item text, no boss quote says anything a PSA would say. What's allowed, and worth
+  doing well: a detail that is simply *accurate* about what a Volksfest actually is once
+  you're standing in the middle of one, played completely straight and never called out. See
+  `GAME_DESIGN.md` §2 ("The second layer") and Floor 7's entry below for the standard this
+  sets — the fun stays the fun, the honesty sits under it for whoever looks.
 
 **Language.**
 - Content is authored in Bavarian/German names with English descriptions.
@@ -90,6 +95,14 @@ Beer tents, rides, gingerbread hearts, crowds, night, neon. Palette: everything 
 gaudy, over-lit.
 - **Hazard:** the crowd — a moving mass you cannot shoot through; carousel arms; the
   Schießbude gallery.
+- **Environmental detail, played completely straight:** a rise behind the tents where NPC
+  bodies lie scattered in the grass, sleeping it off or worse for wear, families walking past
+  without a second look because everyone here knows what this hill is for. No name on the map,
+  no NPC comment, no prompt — the real one at the real Theresienwiese doesn't get a plaque
+  either. It's an environmental prop, not a joke and not a lecture: the one moment on this
+  floor where "over-lit and gaudy" briefly isn't the whole truth of the place, and nothing in
+  the game points a finger at it. Position it somewhere a player has to walk past, not somewhere
+  they have to visit.
 
 ### Secret areas
 - **Walhalla** — the real neoclassical hall of heroes above the Danube. Superboss arena: the

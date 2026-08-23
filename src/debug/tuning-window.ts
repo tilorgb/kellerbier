@@ -3,6 +3,7 @@ import {
   DEFAULT_ENEMY_TUNING,
   DEFAULT_IMPACT_TUNING,
   DEFAULT_MOVEMENT_TUNING,
+  DEFAULT_PROMILLE_TUNING,
   DEFAULT_SHOOTING_TUNING,
 } from '../sim/tuning.js';
 
@@ -37,7 +38,7 @@ interface FieldSpec {
 
 interface GroupSpec {
   readonly title: string;
-  readonly group: 'movement' | 'shooting' | 'impact' | 'enemy';
+  readonly group: 'movement' | 'shooting' | 'impact' | 'enemy' | 'promille';
   readonly fields: readonly FieldSpec[];
 }
 
@@ -143,6 +144,48 @@ const GROUPS: readonly GroupSpec[] = [
       { key: 'deflectShake', min: 0, max: 3, step: 0.05, hint: 'shake off a shell' },
     ],
   },
+  {
+    title: 'promille',
+    group: 'promille',
+    fields: [
+      // The debug slider #17's acceptance criteria asks for: drag this and
+      // every tier, bonus, drift, wobble and sway reacts on the next tick.
+      { key: 'current', min: 0, max: 5, step: 0.1, hint: 'current Promille — the slider' },
+      { key: 'decayPerSecond', min: 0, max: 0.5, step: 0.01, hint: 'Promille lost per second' },
+      { key: 'beerAmount', min: 0, max: 3, step: 0.1, hint: 'Promille per beer' },
+      { key: 'angeheitertDamageBonus', min: 0, max: 1, step: 0.05, hint: '+dmg, Angeheitert' },
+      {
+        key: 'angeheitertFireRateBonus',
+        min: 0,
+        max: 1,
+        step: 0.05,
+        hint: '+fire rate, Angeheitert',
+      },
+      { key: 'beduseltDamageBonus', min: 0, max: 1.5, step: 0.05, hint: '+dmg, Beduselt' },
+      { key: 'beduseltFireRateBonus', min: 0, max: 1.5, step: 0.05, hint: '+fire rate, Beduselt' },
+      { key: 'vollrauschDamageBonus', min: 0, max: 2, step: 0.05, hint: '+dmg, Vollrausch+' },
+      {
+        key: 'vollrauschFireRateBonus',
+        min: 0,
+        max: 2,
+        step: 0.05,
+        hint: '+fire rate, Vollrausch+',
+      },
+      { key: 'maxDrift', min: 0, max: 2, step: 0.05, hint: 'sluggishness at full ramp' },
+      { key: 'maxWobble', min: 0, max: 0.6, step: 0.01, hint: 'aim wobble, radians' },
+      { key: 'maxSway', min: 0, max: 20, step: 0.5, hint: 'camera sway, px' },
+      { key: 'wobblePeriodTicks', min: 10, max: 300, step: 5, hint: 'ticks per wobble sweep' },
+      { key: 'swayPeriodTicks', min: 10, max: 600, step: 10, hint: 'ticks per sway loop' },
+      {
+        key: 'umgfallnKnockdownTicks',
+        min: 0,
+        max: 240,
+        step: 5,
+        hint: 'Umgfalln knockdown length',
+      },
+      { key: 'umgfallnWakePromille', min: 0, max: 5, step: 0.1, hint: 'Promille after waking up' },
+    ],
+  },
 ];
 
 const DEFAULTS = {
@@ -150,6 +193,7 @@ const DEFAULTS = {
   shooting: DEFAULT_SHOOTING_TUNING,
   impact: DEFAULT_IMPACT_TUNING,
   enemy: DEFAULT_ENEMY_TUNING,
+  promille: DEFAULT_PROMILLE_TUNING,
 } as const;
 
 const STYLE = `

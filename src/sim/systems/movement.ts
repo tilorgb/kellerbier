@@ -45,14 +45,20 @@ export function stepPlayerMovement(sim: GameSim, input: Readonly<InputFrame>): v
   transform[transformBase + 2] = x;
   transform[transformBase + 3] = y;
 
-  const inputX = axisToUnit(input.moveX);
-  const inputY = axisToUnit(input.moveY);
+  // Umgfalln (#17): a knocked-down player cannot steer. Zeroing input here
+  // also quiets the corner-forgiveness nudge further down, which only acts
+  // on a held direction — appropriate, since nobody is steering into a
+  // corner to be forgiven for.
+  const knockedDown = sim.umgfallnTicks > 0;
+  const inputX = knockedDown ? 0 : axisToUnit(input.moveX);
+  const inputY = knockedDown ? 0 : axisToUnit(input.moveY);
 
   let velocityX = velocity[pairBase] ?? 0;
   let velocityY = velocity[pairBase + 1] ?? 0;
 
-  velocityX = approachAxis(velocityX, inputX * tuning.maxSpeed, inputX !== 0, tuning);
-  velocityY = approachAxis(velocityY, inputY * tuning.maxSpeed, inputY !== 0, tuning);
+  const driftScale = sim.promilleDriftScale;
+  velocityX = approachAxis(velocityX, inputX * tuning.maxSpeed, inputX !== 0, tuning, driftScale);
+  velocityY = approachAxis(velocityY, inputY * tuning.maxSpeed, inputY !== 0, tuning, driftScale);
 
   // The sampler already scales a diagonal stick or key pair to unit length, so
   // this only trims the overshoot a mid-turn direction change can produce.
@@ -149,10 +155,18 @@ function approachAxis(
   target: number,
   held: boolean,
   tuning: Readonly<MovementTuning>,
+  driftScale: number,
 ): number {
   let rate = held ? accelerationOf(tuning) : decelerationOf(tuning);
   if (held && current * target < 0) {
     rate *= tuning.turnBoost;
+  }
+  // Promille drift (#17): both acceleration and deceleration slow down, which
+  // is what "momentum and steering degrade" means — a sluggish, sliding feel
+  // rather than a lower top speed. 0 at Nüchtern/Angeheitert, ramping from
+  // Beduselt — see `sim.promilleDriftScale`.
+  if (driftScale > 0) {
+    rate /= 1 + driftScale;
   }
 
   const delta = target - current;
