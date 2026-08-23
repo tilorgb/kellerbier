@@ -239,10 +239,11 @@ export interface ImpactTuning {
   /**
    * Ticks the player cannot be hurt by a projectile again.
    *
-   * A separate number from `contactInvulnerabilityTicks` rather than reusing
-   * it, since a ranged encounter may want this to diverge from the contact
-   * window once there's enough content to feel the difference — defaults to
-   * the same value.
+   * Deliberately shorter than `contactInvulnerabilityTicks`: contact needs to
+   * last long enough to walk out of whatever is touching them, but a shot is
+   * instantaneous — this only needs to cover pellets from the same volley
+   * arriving on the same tick, not the gap until an enemy's next volley, or a
+   * ranged enemy that can only ever land its first hit stops being a threat.
    */
   projectileInvulnerabilityTicks: number;
 
@@ -360,14 +361,14 @@ export const DEFAULT_IMPACT_TUNING: Readonly<ImpactTuning> = {
 
   contactInvulnerabilityTicks: 60,
   contactKnockback: 3.5,
-  projectileInvulnerabilityTicks: 60,
+  projectileInvulnerabilityTicks: 20,
 
   damageNumbers: false,
   damageNumberLifeTicks: 36,
 
-  deathFreezeTicks: 40,
-  deathSlowmoTicks: 90,
-  deathSlowmoScale: 0.25,
+  deathFreezeTicks: 20,
+  deathSlowmoTicks: 30,
+  deathSlowmoScale: 0.4,
 };
 
 export const DEFAULT_ENEMY_TUNING: Readonly<EnemyTuning> = {
