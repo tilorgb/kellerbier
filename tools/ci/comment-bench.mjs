@@ -56,7 +56,7 @@ const body = [
   MARKER,
   await readFile(bodyPath, 'utf8'),
   '',
-  `Measured on this runner from \`${sha}\`, against the merge base built and run beside it.`,
+  `Measured on this runner from \`${sha}\`.`,
 ].join('\n');
 
 const comments = await api(`/repos/${repository}/issues/${number}/comments?per_page=100`);
