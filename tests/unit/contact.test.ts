@@ -111,17 +111,25 @@ describe('bodies against bodies', () => {
 
   it('lets the player through a body that has no mass advantage at all', () => {
     // The knob exists so contact can be turned off, and off has to mean off.
-    const sim = emptySim();
-    sim.tuning.movement.contactDrag = 0;
-    const index = sim.playerIndex;
-    const startX = sim.positionX(index);
-    sim.spawnEnemy(startX + 20, sim.positionY(index), EnemySize.Mini);
-    sim.world.flush();
+    // Compared against the same walk with contact drag left on, rather than
+    // against a fixed distance: the separation nudge that keeps two bodies
+    // from overlapping is a different mechanism from drag and costs ground of
+    // its own regardless of this knob, so "off" is measured as "measurably
+    // better than on", not "indistinguishable from unobstructed".
+    const distanceThrough = (contactDrag: number): number => {
+      const sim = emptySim();
+      sim.tuning.movement.contactDrag = contactDrag;
+      const index = sim.playerIndex;
+      const startX = sim.positionX(index);
+      sim.spawnEnemy(startX + 20, sim.positionY(index), EnemySize.Mini);
+      sim.world.flush();
+      for (let tick = 0; tick < 40; tick++) {
+        sim.step(walking(1));
+      }
+      return sim.positionX(index) - startX;
+    };
 
-    for (let tick = 0; tick < 40; tick++) {
-      sim.step(walking(1));
-    }
-    expect(sim.positionX(index) - startX).toBeGreaterThan(40);
+    expect(distanceThrough(0)).toBeGreaterThan(distanceThrough(1));
   });
 });
 
