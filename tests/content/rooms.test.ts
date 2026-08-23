@@ -29,22 +29,8 @@ describe('room templates', () => {
     const floorOne = compileRoomTemplate(cellarCrossroads, 1, 'cellar.json', ENEMY_DEFINITIONS);
     const floorFive = compileRoomTemplate(cellarCrossroads, 5, 'cellar.json', ENEMY_DEFINITIONS);
 
-    expect(floorOne.enemyIds).toEqual([
-      'kellerassel',
-      'kellerassel',
-      'kellerassel',
-      'kellerassel',
-      'kellerassel',
-      'kellerassel',
-    ]);
-    expect(floorFive.enemyIds).toEqual([
-      'bierratte',
-      'bierratte',
-      'bierratte',
-      'bierratte',
-      'bierratte',
-      'bierratte',
-    ]);
+    expect(floorOne.enemyIds).toEqual(['kellerassel', 'kellerassel']);
+    expect(floorFive.enemyIds).toEqual(['bierratte', 'bierratte']);
     expect(floorOne.geometry.maxX - floorOne.geometry.minX).toBe(ROOM_COLUMNS * ROOM_TILE_UNITS);
     expect(floorOne.geometry.maxY - floorOne.geometry.minY).toBe(ROOM_ROWS * ROOM_TILE_UNITS);
   });

@@ -16,8 +16,8 @@ describe('room lifecycle', () => {
     const enemies: number[] = [];
     sim.world.forEach(sim.enemyMask, (index) => enemies.push(index));
 
-    expect(enemies).toHaveLength(6);
-    expect(sim.liveEnemyCount).toBe(6);
+    expect(enemies).toHaveLength(2);
+    expect(sim.liveEnemyCount).toBe(2);
     expect(sim.doorsLocked).toBe(true);
     expect(sim.transitionTo(cellarCrossroads, 1, 'north')).toBe(false);
 

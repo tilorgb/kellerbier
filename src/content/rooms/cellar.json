@@ -19,7 +19,7 @@
   "spawnGroups": [
     {
       "id": "melee",
-      "count": 3,
+      "count": 1,
       "choices": [
         { "enemyId": "kellerassel", "minFloor": 1, "maxFloor": 2 },
         { "enemyId": "bierratte", "minFloor": 3, "maxFloor": 7 }
