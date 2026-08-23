@@ -851,6 +851,19 @@ export class GameSim {
     this.spawnBeerPickup(this.room.minX + 100, this.room.maxY - 30);
     this.spawnBeerPickup(this.room.maxX - 100, this.room.minY + 40);
     this.spawnBeerPickup(this.room.minX + 50, midY + 10);
+    // A dozen total, well past PROMILLE_MAX even accounting for decay and
+    // travel time between them — a full "beer crawl" across the room lets a
+    // playtester walk every tier, including Umgfalln, in one lap rather than
+    // reaching only partway up Beduselt. Dev/testing convenience; the real
+    // drop table is #22.
+    this.spawnBeerPickup(this.room.minX + 20, midY - 30);
+    this.spawnBeerPickup(this.room.minX + 90, this.room.minY + 30);
+    this.spawnBeerPickup(midX - 10, this.room.maxY - 20);
+    this.spawnBeerPickup(this.room.maxX - 110, midY + 45);
+    this.spawnBeerPickup(this.room.maxX - 55, this.room.minY + 10);
+    this.spawnBeerPickup(this.room.maxX - 20, this.room.maxY - 20);
+    this.spawnBeerPickup(midX + 20, this.room.maxY - 40);
+    this.spawnBeerPickup(midX - 30, this.room.minY + 20);
   }
 
   /** Puts an authored enemy on a post, by the id its definition states. */
