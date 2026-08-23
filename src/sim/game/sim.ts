@@ -415,6 +415,11 @@ export class GameSim {
     return this.roomTemplateLoaded && this.roomEnemyCount > 0;
   }
 
+  /** Which walls of the current room have a door, per the room's authored metadata. */
+  get doors(): Readonly<Record<RoomDirection, boolean>> {
+    return this.roomDoors;
+  }
+
   get roomCleared(): boolean {
     return (
       this.roomTemplateLoaded && (this.roomEnemyCount === 0 || this.roomClearedIds.has(this.roomId))
