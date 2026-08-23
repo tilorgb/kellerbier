@@ -54,7 +54,10 @@ export class GameOverScreen {
     this.view.addChild(this.summary);
 
     this.hint = new Text({
-      text: 'R to try again',
+      // No in-run restart yet — there is no run-management layer to rebuild
+      // the sim/view/debug-overlay bindings against (that is #46 territory,
+      // not #15). Reload is the honest instruction until one exists.
+      text: 'reload to try again',
       style: { fill: 0x8a7f74, fontFamily: 'monospace', fontSize: 13 },
     });
     this.hint.anchor.set(0.5, 0);
