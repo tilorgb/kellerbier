@@ -158,7 +158,10 @@ tools/
 - **GitHub Actions**: typecheck → lint → test → content-validate → bench → build → deploy
   preview to GitHub Pages. Every PR gets a **playable link**.
 - **Debug overlay** (F1): entity counts, frame graph, hitbox display, the stat inspector that
-  explains every modifier's contribution, room warp, item spawner, Promille slider.
+  explains every modifier's contribution, room warp, item spawner.
+- **Tuning window** (F2): every number in `sim/tuning.ts` on a slider bound to the live object,
+  with a per-field reset and a copy that writes back only what moved. Tuning by feel through an
+  edit-and-reload cycle finds the first value that is not obviously wrong, and stops there.
 
 ## 7. Non-goals
 

@@ -239,8 +239,13 @@ Roughly 30 to start; target **120+ by v1**. Every one changes how you play.
 
 - **16-bit era**, not 8-bit. Readability with a screen full of projectiles requires more
   colours and more silhouette detail than an NES palette allows.
-- **32×32 tiles**, characters roughly 24×32, bosses up to 96×96.
-- **Internal resolution 640×360**, integer-scaled: 2× = 720p, 3× = 1080p. Never non-integer.
+- **16×16 tiles**, characters roughly 12×16, bosses up to 48×48 — as authored. Sprites live in
+  simulation units and the room is drawn at `WORLD_ZOOM`, so on screen those are 32×32, ~24×32
+  and 96×96.
+- **Internal resolution 640×360** for the game layer, scaled by a whole number of device
+  pixels. Never non-integer: a sprite drawn at 1.5× has some pixels one screen pixel wide and
+  some two. Menus, HUD text and anything else made of words are drawn outside that layer at
+  the display's own resolution, and are not held to 640×360.
 - **Palette capped at ~40 colours** overall, with a per-floor sub-palette so each chapter has
   its own mood while staying visually one game.
 - **Projectile legibility is a hard constraint that overrides beauty.** Player shots and enemy
