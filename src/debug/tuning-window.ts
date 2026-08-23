@@ -119,6 +119,16 @@ const GROUPS: readonly GroupSpec[] = [
         hint: 'ticks safe after being touched',
       },
       { key: 'contactKnockback', min: 0, max: 12, step: 0.1, hint: 'thrown clear on contact' },
+      {
+        key: 'projectileInvulnerabilityTicks',
+        min: 0,
+        max: 180,
+        step: 5,
+        hint: 'ticks safe after being shot',
+      },
+      { key: 'deathFreezeTicks', min: 0, max: 120, step: 5, hint: 'freeze on the fatal hit' },
+      { key: 'deathSlowmoTicks', min: 0, max: 240, step: 5, hint: 'slow-motion beat length' },
+      { key: 'deathSlowmoScale', min: 0, max: 1, step: 0.05, hint: 'how slow, 0 is stopped' },
     ],
   },
   {

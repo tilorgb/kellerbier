@@ -144,8 +144,7 @@ function applyContact(sim: GameSim, slot: number): void {
     return;
   }
 
-  const health = sim.health.data;
-  health[victim * 2] = Math.max(0, (health[victim * 2] ?? 0) - damage);
+  sim.applyPlayerDamage(damage);
 
   sim.flash.data[victim] = Math.min(255, Math.round(tuning.deathFlashTicks));
   sim.requestHitstop(Math.round(tuning.deathHitstopTicks));
@@ -159,6 +158,10 @@ function applyContact(sim: GameSim, slot: number): void {
 
   sim.addShake(normalX, normalY, tuning.playerHitShake);
   events.push(EventKind.Damage, victim, events.other[slot] ?? 0, 0, 0, normalX, normalY, damage);
+
+  if (sim.playerDead) {
+    events.push(EventKind.Death, victim, events.other[slot] ?? 0, 0, 0, normalX, normalY, 0);
+  }
 }
 
 function applyHit(sim: GameSim, slot: number): void {
@@ -172,27 +175,46 @@ function applyHit(sim: GameSim, slot: number): void {
   const normalX = events.normalX[slot] ?? 0;
   const normalY = events.normalY[slot] ?? 0;
 
-  // A shot that arrives while the body is curled up splashes off it. The player
-  // has to be able to tell that from a miss and from a hit that did nothing:
-  // foam comes off it, the screen barely moves, and no health changes.
-  if (isEnemyInvulnerable(sim, target)) {
-    deflect(sim, hitX, hitY, normalX, normalY);
+  const isPlayer = target === sim.playerIndex;
+
+  // A shot that lands during the player's i-frames does nothing at all —
+  // matching `applyContact` exactly, so a body's contact hit and an enemy's
+  // shot can't stack inside the same invulnerability window. Enemies have no
+  // such window; being "invulnerable" for an enemy means curled up, which
+  // `isEnemyInvulnerable` below covers instead.
+  if (isPlayer && sim.playerInvulnerableTicks > 0) {
     return;
   }
 
-  // Told to the body before its health changes, so a state machine sees the hit
-  // whether or not the hit killed it.
-  markEnemyHit(sim, target);
+  if (!isPlayer) {
+    // A shot that arrives while the body is curled up splashes off it. The player
+    // has to be able to tell that from a miss and from a hit that did nothing:
+    // foam comes off it, the screen barely moves, and no health changes.
+    if (isEnemyInvulnerable(sim, target)) {
+      deflect(sim, hitX, hitY, normalX, normalY);
+      return;
+    }
+
+    // Told to the body before its health changes, so a state machine sees the hit
+    // whether or not the hit killed it.
+    markEnemyHit(sim, target);
+  }
 
   const health = sim.health.data;
-  const remaining = (health[target * 2] ?? 0) - damage;
-  // The player is never removed from the world. What happens when their last
-  // half-Maß goes is #15; until then a run at zero health keeps running, which
-  // is the same thing contact damage has always done. Destroying them would
-  // free their entity slot for the next enemy to spawn into, and the camera
-  // would follow whatever landed in it.
-  const killed = (health[target * 2 + 1] ?? 0) > 0 && remaining <= 0 && target !== sim.playerIndex;
-  health[target * 2] = Math.max(0, remaining);
+  let killed = false;
+  if (isPlayer) {
+    // Soul, then red, then an eternal heart if one is banked — see
+    // `GameSim.applyPlayerDamage`. Never removed from the world even at zero:
+    // death is `sim.playerDead` becoming true, not the entity going away.
+    // Destroying it would free the slot for the next enemy to spawn into, and
+    // the camera would follow whatever landed there.
+    sim.applyPlayerDamage(damage);
+    sim.makePlayerInvulnerable(Math.round(tuning.projectileInvulnerabilityTicks));
+  } else {
+    const remaining = (health[target * 2] ?? 0) - damage;
+    killed = (health[target * 2 + 1] ?? 0) > 0 && remaining <= 0;
+    health[target * 2] = Math.max(0, remaining);
+  }
 
   // Flash. One tick of solid white, and the whole read of "that connected".
   sim.flash.data[target] = Math.min(
@@ -251,6 +273,8 @@ function applyHit(sim: GameSim, slot: number): void {
   if (killed) {
     events.push(EventKind.Death, target, events.other[slot] ?? 0, hitX, hitY, normalX, normalY, 0);
     sim.kill(target);
+  } else if (isPlayer && sim.playerDead) {
+    events.push(EventKind.Death, target, events.other[slot] ?? 0, hitX, hitY, normalX, normalY, 0);
   }
 }
 
