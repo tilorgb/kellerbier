@@ -266,3 +266,41 @@ Roughly 30 to start; target **120+ by v1**. Every one changes how you play.
 - Bavarian voice barks, heavily compressed and short: "*Sauber!*", "*Geh weida!*", "*Passt scho.*"
 - Every impact needs a sound. Silence on a hit is the single fastest way to make a game feel
   cheap.
+
+## 7. Death screen wording
+
+The game-over screen does not use one fixed word. It draws a Boarisch word for "collapsed /
+finished" from a pool, so that a run's ending has a small amount of variety and the screen
+stays worth reading after fifty deaths.
+
+**The pool.**
+
+| Word | Sense |
+|---|---|
+| **Umgfalln** | Fell over. The plain one, and the same word as the top Promille tier. |
+| **Hi** | Done for, gone. Short and blunt. |
+| **Z'legt** | Laid out flat. |
+| **f'reckt** | Croaked. Coarser; kept lowercase, see below. |
+| **dakerbelt** | Snuffed it. |
+
+**Rules for drawing one.**
+
+- Draw from the **cosmetic RNG stream** (`RngStream.Cosmetic`, `sim.random.cosmetic` — see
+  [`src/sim/rng/streams.ts`](../blob/main/src/sim/rng/streams.ts)), never from the shared or
+  gameplay streams. A draw taken from the enemy or floor stream would advance it and change
+  every later gameplay roll, which silently breaks seeded runs and replays. On the cosmetic
+  stream the pool can be extended later without invalidating any seed.
+- Reject the previous run's word before rolling, so the same word never appears twice in a
+  row. A five-word pool rolled freely repeats back to back roughly one run in five, and a
+  repeat reads as a bug rather than as randomness.
+- The pool is data, not code. Adding a word must not require touching the death screen.
+
+**Two open questions, to settle when the death screen is built.**
+
+- *Capitalisation.* **f'reckt** and **dakerbelt** are lowercase against **Hi**, **Z'legt** and
+  **Umgfalln**. Either that is a deliberate typographic joke and the screen must not
+  upper-case the pool, or the whole pool normalises to one case. Decide before these words
+  are drawn as a headline.
+- *Locale behaviour.* Either these words stay Boarisch in every locale as flavour — the same
+  argument that keeps item names Bavarian everywhere — or English and German get their own
+  parallel pools. See [§0 Language](#0-naming-tone-and-legal-rules) and the localisation work.
