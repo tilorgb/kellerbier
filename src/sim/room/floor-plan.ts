@@ -186,16 +186,70 @@ function shapeFootprints(shape: RoomShape): readonly (readonly Cell[])[] {
       }
       return variants;
     }
+    case 'T': {
+      // Four orientations of a 3x3-box "T" (a bar of 3 plus a stem of 2,
+      // rotated to each side), each hand-listed in box coordinates rather
+      // than derived like `L` — there's no smaller shape a `T` is "minus a
+      // cell" from. For each orientation, every one of its 5 cells gets a
+      // turn as the anchor (translated to `{0, 0}`), the same guarantee
+      // every other shape's variant list gives `placeShape`: whichever cell
+      // ends up touching the existing floor, some variant has it at the
+      // anchor.
+      const orientations: Cell[][] = [
+        [
+          { x: 0, y: 0 },
+          { x: 1, y: 0 },
+          { x: 2, y: 0 },
+          { x: 1, y: 1 },
+          { x: 1, y: 2 },
+        ],
+        [
+          { x: 0, y: 2 },
+          { x: 1, y: 2 },
+          { x: 2, y: 2 },
+          { x: 1, y: 1 },
+          { x: 1, y: 0 },
+        ],
+        [
+          { x: 0, y: 0 },
+          { x: 0, y: 1 },
+          { x: 0, y: 2 },
+          { x: 1, y: 1 },
+          { x: 2, y: 1 },
+        ],
+        [
+          { x: 2, y: 0 },
+          { x: 2, y: 1 },
+          { x: 2, y: 2 },
+          { x: 1, y: 1 },
+          { x: 0, y: 1 },
+        ],
+      ];
+      const variants: Cell[][] = [];
+      for (const orientation of orientations) {
+        for (const anchor of orientation) {
+          variants.push(
+            orientation.map((cell) => ({ x: cell.x - anchor.x, y: cell.y - anchor.y })),
+          );
+        }
+      }
+      return variants;
+    }
   }
 }
 
-/** `1x1` always wins by weight — most of a floor is plain rooms, not landmarks. */
+/**
+ * `1x1` always wins by weight — most of a floor is plain rooms, not
+ * landmarks. `T` is the rarest: a 3x3 landmark room should read as a genuine
+ * find, not a shape a player sees every floor (#107).
+ */
 function chooseShape(rng: Rng): RoomShape {
   return rng.weightedPick<RoomShape>([
-    { value: '1x1', weight: 0.6 },
+    { value: '1x1', weight: 0.55 },
     { value: '1x2', weight: 0.2 },
     { value: 'L', weight: 0.1 },
     { value: '2x2', weight: 0.1 },
+    { value: 'T', weight: 0.05 },
   ]);
 }
 

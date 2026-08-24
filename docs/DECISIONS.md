@@ -157,3 +157,31 @@ not running, rather than the system running with its numbers set to zero. Drop t
 pools are selectable per run state, which is a reason for both to be data. The state is part of
 a run's parameters, so a shared seed reproduces the run it recorded rather than the run the
 player receiving it happens to have unlocked.
+
+## 10. A diagonal room is not a `RoomShape` — it needs its own geometry, tracked separately
+
+**Decided:** M2. **Issue:** #107, follow-up tracked as #112.
+
+#107 asked whether the room system should also support a diagonal shape — an `X` or a `/` —
+alongside the axis-aligned `1x1`/`1x2`/`2x2`/`L`/`T` family that shipped with it. It is **not**
+built as a `RoomShape` the way `T` was: every part of the room and floor system a `RoomShape`
+touches assumes axis-aligned floor-grid adjacency. `RoomDoor` (`sim/room/floor-plan.ts`) is a
+`(cell, direction)` pair where `direction` is one of north/east/south/west; a diagonal neighbour
+has no `DoorDirection` to be. Two floor-grid cells offset diagonally (`(+1, -1)`) share a single
+*point* in `RoomGeometry`'s rectangle-per-cell layout, not an edge the way every glued shape
+today does — zero area for a nonzero-radius player to walk through. And the natural fix (the
+same bounding-box-minus-voids approach `T` uses) blows the fixed `MAX_ROOM_BLOCKS = 64` for a
+staircase of any real length, since an *N*-step diagonal needs roughly an *N×N* box of voids.
+
+The idea is not dead, though: overlapping consecutive screens by *less than* a full
+screen-width/height per step (rather than a full floor-grid cell) gives real shared edge area
+instead of a corner touch, and sidesteps the void-block explosion entirely — but that is a
+purpose-built stair polyline, not a shape carved out of a grid rectangle, and has no
+floor-grid-cell adjacency for doors to derive from the way `L`/`T`/`2x2` do. That is different
+enough from the `RoomShape` model to need its own geometry representation and its own decision
+on whether it is even a `RoomShape` at all (procedurally placed) versus a hand-placed set-piece
+room — see #112 for the full design questions.
+
+**Constrains:** nothing in #107 is built toward this — no new `RoomShape`, no `RoomGeometry`
+change beyond the rectangle-list `voidRects` generalization `T` needed. #112 owns the actual
+geometry/door design before any of it is implemented.

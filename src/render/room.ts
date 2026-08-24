@@ -50,12 +50,12 @@ export function createRoomView(room: RoomGeometry): Container {
   }
   container.addChild(blocks);
 
-  // An `L` room's dropped corner (#100/#20) is a real `blocks` entry too (for
-  // collision), but drawn over in the wall's own colour rather than left as
-  // an obstacle — it reads as the rest of the room's boundary, not as some
-  // pillar the size of an entire sub-room sitting in the middle of it.
-  if (room.voidRect !== null) {
-    const voidRect = room.voidRect;
+  // A shape's dropped cells (`L`'s one corner from #100/#20, `T`'s four from
+  // #107) are real `blocks` entries too (for collision), but drawn over in
+  // the wall's own colour rather than left as obstacles — they read as the
+  // rest of the room's boundary, not as pillars the size of a sub-room
+  // sitting in the middle of it.
+  for (const voidRect of room.voidRects) {
     container
       .addChild(new Graphics())
       .rect(
