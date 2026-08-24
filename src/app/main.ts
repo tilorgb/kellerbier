@@ -193,12 +193,18 @@ async function boot(): Promise<void> {
   // (see `src/sim/rng/streams.ts`), so it is exactly as reproducible as the
   // rest of the run.
   //
-  // Seed 5 specifically, not 1: template selection is genuinely unbiased (a
-  // 200-seed sweep of floor 1 puts a same-template run of 1x1 rooms at roughly
-  // 1 floor in 50), but seed 1 was one of the unlucky ones, and a dev demo
-  // that only ever shows one room layout does not showcase #20. Seed 5 uses
-  // every authored template at least once.
-  const RUN_SEED = 5;
+  // Seed 15 specifically: a 50-seed sweep of floor 1 against the full
+  // authored pool (#20's shapes plus #23's special-role content) puts most
+  // seeds at a decent shape mix, but the pool's new constraints (#23's
+  // specialRole matching) make a couple of seeds — 5 among them — fail to
+  // generate within the retry budget outright, and a dev demo that crashes
+  // on boot is worse than one that only shows one room shape. Seed 15 is the
+  // first sweep hit that also rolls all four shapes — 1x1, 1x2, 2x2 and L —
+  // on floor 1, showcasing both #20 and #100's camera-follow. Re-sweep if a
+  // future content or generator change ever makes this seed specifically
+  // fail (`tests/unit/floor-plan.test.ts`'s "the dev demo's fixed seed
+  // generates a valid floor 1" guards exactly that).
+  const RUN_SEED = 15;
   const floorPlan = generateFloor(
     createStreamRng(RUN_SEED, RngStream.Floor),
     floorConfig(1),
