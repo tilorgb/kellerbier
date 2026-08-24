@@ -11,6 +11,7 @@ import {
   type RoomTemplate,
 } from '../../content/rooms/definition.js';
 import { RoomGeometry } from './geometry.js';
+import { computeVoidCells } from './void-cells.js';
 
 export const ROOM_FRAME_WIDTH = 320;
 export const ROOM_FRAME_HEIGHT = 180;
@@ -307,19 +308,13 @@ export function compileRoomTemplate(
 
   const gridCols = Math.max(...placement.cells.map((cell) => cell.col)) + 1;
   const gridRows = Math.max(...placement.cells.map((cell) => cell.row)) + 1;
-  const present = new Set(placement.cells.map((cell) => cellKey(cell.col, cell.row)));
 
   // Every grid slot the shape's bounding box doesn't claim — none for a
   // fully-rectangular shape, one for `L` (#20's footprint: `2x2` minus a
   // corner), four for `T` (#107: a 3x3 box minus 4 corners).
-  const voidCells: { readonly col: number; readonly row: number }[] = [];
-  for (let row = 0; row < gridRows; row++) {
-    for (let col = 0; col < gridCols; col++) {
-      if (!present.has(cellKey(col, row))) {
-        voidCells.push({ col, row });
-      }
-    }
-  }
+  const voidCells = computeVoidCells(
+    placement.cells.map((cell) => ({ x: cell.col, y: cell.row })),
+  ).map((cell) => ({ col: cell.x, row: cell.y }));
   const voidCellKeys = new Set(voidCells.map((cell) => cellKey(cell.col, cell.row)));
 
   const offsetX = ROOM_MARGIN_X;
