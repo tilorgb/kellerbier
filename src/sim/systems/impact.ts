@@ -166,7 +166,6 @@ function applyContact(sim: GameSim, slot: number): void {
 
 function applyHit(sim: GameSim, slot: number): void {
   const events = sim.events;
-  const tuning = sim.tuning.impact;
 
   const target = events.subject[slot] ?? 0;
   const damage = events.value[slot] ?? 0;
@@ -200,6 +199,36 @@ function applyHit(sim: GameSim, slot: number): void {
     markEnemyHit(sim, target);
   }
 
+  applyDamageAt(sim, target, damage, hitX, hitY, normalX, normalY, events.other[slot] ?? 0);
+}
+
+/**
+ * The package a landed hit fires — health, flash, hitstop, knockback, shake,
+ * foam, a damage number, and the kill itself when it's lethal.
+ *
+ * Split out of `applyHit` so a Bierfassl's blast (`systems/bombs.ts`) fires
+ * the exact same package a shot does, without going through a fake
+ * `ProjectileHit` event to get there. `applyHit` still owns what `applyHit`
+ * alone needs first — the player's i-frame check, an enemy's curled-up
+ * deflect, and telling the enemy state machine it was hit — none of which a
+ * blast goes through: a Bierfassl going off next to a curled Kellerassel is
+ * not a shot missing, it is an explosion, and nothing in the room is spared
+ * one for having its shell up.
+ */
+export function applyDamageAt(
+  sim: GameSim,
+  target: number,
+  damage: number,
+  hitX: number,
+  hitY: number,
+  normalX: number,
+  normalY: number,
+  cause: number,
+): void {
+  const events = sim.events;
+  const tuning = sim.tuning.impact;
+  const isPlayer = target === sim.playerIndex;
+
   const health = sim.health.data;
   let killed = false;
   if (isPlayer) {
@@ -213,16 +242,7 @@ function applyHit(sim: GameSim, slot: number): void {
     // One signal for "the player took damage" regardless of source — matches
     // what `applyContact` already pushes for a contact hit, so audio and
     // rumble (#15) have a single event kind to listen for either.
-    events.push(
-      EventKind.Damage,
-      target,
-      events.other[slot] ?? 0,
-      hitX,
-      hitY,
-      normalX,
-      normalY,
-      damage,
-    );
+    events.push(EventKind.Damage, target, cause, hitX, hitY, normalX, normalY, damage);
   } else {
     const remaining = (health[target * 2] ?? 0) - damage;
     killed = (health[target * 2 + 1] ?? 0) > 0 && remaining <= 0;
@@ -284,10 +304,10 @@ function applyHit(sim: GameSim, slot: number): void {
   }
 
   if (killed) {
-    events.push(EventKind.Death, target, events.other[slot] ?? 0, hitX, hitY, normalX, normalY, 0);
+    events.push(EventKind.Death, target, cause, hitX, hitY, normalX, normalY, 0);
     sim.kill(target);
   } else if (isPlayer && sim.playerDead) {
-    events.push(EventKind.Death, target, events.other[slot] ?? 0, hitX, hitY, normalX, normalY, 0);
+    events.push(EventKind.Death, target, cause, hitX, hitY, normalX, normalY, 0);
   }
 }
 

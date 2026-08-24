@@ -181,7 +181,7 @@ describe('beer pickups', () => {
     const sim = emptySim();
     const index = sim.playerIndex;
     sim.tuning.promille.beerAmount = 0.5;
-    const beer = sim.spawnBeerPickup(sim.positionX(index), sim.positionY(index));
+    const beer = sim.spawnPickup('beer', sim.positionX(index), sim.positionY(index));
     sim.world.flush();
     const beerIndex = entityIndex(beer);
 
@@ -194,7 +194,7 @@ describe('beer pickups', () => {
   it('does not raise Promille from a pickup nowhere near the player', () => {
     const sim = emptySim();
     const index = sim.playerIndex;
-    sim.spawnBeerPickup(sim.positionX(index) + 200, sim.positionY(index) + 200);
+    sim.spawnPickup('beer', sim.positionX(index) + 200, sim.positionY(index) + 200);
     sim.world.flush();
     sim.step(idle());
     expect(sim.promille).toBe(0);

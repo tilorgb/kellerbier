@@ -81,6 +81,7 @@ export interface CompiledEnemy {
   readonly contactDamage: number;
   readonly initialState: number;
   readonly states: readonly CompiledState[];
+  readonly lootTier: 'weak' | 'normal' | 'tough';
 }
 
 export class EnemyRegistry {
@@ -176,6 +177,7 @@ export class EnemyRegistry {
       contactDamage: definition.contactDamage,
       initialState,
       states,
+      lootTier: definition.lootTier ?? 'normal',
     };
   }
 

@@ -31,7 +31,7 @@
       ]
     }
   ],
-  "pickupSpawns": [{ "x": 128, "y": 80, "type": "mass" }],
+  "pickupSpawns": [{ "x": 128, "y": 80, "type": "mass-half" }],
   "hazards": [],
   "decorativeProps": [
     { "x": 224, "y": 32, "type": "barrel" },

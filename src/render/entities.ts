@@ -1,4 +1,4 @@
-import { Container, Sprite, type Texture } from 'pixi.js';
+import { Container, Sprite, Text, type Texture } from 'pixi.js';
 import { CollisionLayer } from '../sim/collision/layers.js';
 import { World } from '../sim/ecs/world.js';
 import type { GameSim } from '../sim/game/sim.js';
@@ -23,8 +23,8 @@ const TELEGRAPH_TEXTURE_RADIUS = 24;
 /** What an invulnerable body is tinted. Cold and dull: nothing is getting in. */
 const SHELL_TINT = 0x8fa2b8;
 
-/** What a beer pickup (#17) is tinted, so it doesn't read as another body. */
-const BEER_TINT = 0xf0c46a;
+/** Tint for a pickup whose kind failed to resolve. Should never be seen; a loud colour if it is. */
+const UNKNOWN_PICKUP_TINT = 0xff00ff;
 
 /**
  * Draws the collidable things that are not the player: targets, enemies, and
@@ -50,16 +50,22 @@ export class EntityView {
   private readonly telegraphTexture: Texture;
   private readonly sprites: Sprite[] = [];
   private readonly rings: Sprite[] = [];
+  private readonly labels: Text[] = [];
 
   /**
-   * Rings live in their own layer, under the bodies.
+   * Rings live in their own layer, under the bodies; labels live above them.
    *
-   * Two pools drawn from one container would interleave as the population
-   * changes, and a warning that flickers in front of and behind the thing
-   * making it is a warning that reads as a glitch.
+   * Three pools drawn from one container would interleave as the population
+   * changes, and a warning (or a label) that flickers in front of and behind
+   * the thing making it is one that reads as a glitch.
    */
   private readonly ringLayer = new Container();
   private readonly bodyLayer = new Container();
+  private readonly labelLayer = new Container();
+
+  /** Tint and label per pickup kind, indexed the same way `pickupKind` component values are. */
+  private readonly pickupTints: readonly number[];
+  private readonly pickupLabels: readonly string[];
 
   constructor(sim: GameSim, texture: Texture, flashTexture: Texture, telegraphTexture: Texture) {
     this.sim = sim;
@@ -68,6 +74,9 @@ export class EntityView {
     this.telegraphTexture = telegraphTexture;
     this.container.addChild(this.ringLayer);
     this.container.addChild(this.bodyLayer);
+    this.container.addChild(this.labelLayer);
+    this.pickupTints = sim.pickups.all.map((definition) => definition.tint);
+    this.pickupLabels = sim.pickups.all.map((definition) => definition.label);
   }
 
   sync(alpha: number): void {
@@ -82,6 +91,7 @@ export class EntityView {
 
     let used = 0;
     let ringsUsed = 0;
+    let labelsUsed = 0;
     const highWater = world.highWater;
     for (let index = 0; index < highWater; index++) {
       if (states[index] !== World.ALIVE) {
@@ -101,15 +111,40 @@ export class EntityView {
       const sprite = this.spriteAt(used);
       used += 1;
       sprite.visible = true;
-      sprite.texture = (flash[index] ?? 0) > 0 ? this.flashTexture : this.texture;
       const isPickup = ((collision[index * 2] ?? 0) & CollisionLayer.Pickup) !== 0;
+      // Pickups always draw off the white-fill texture (the same one the hit
+      // flash uses), never the shared brown-fill body texture: a tint
+      // multiplies the texture underneath it, and a bright tint over a dark
+      // brown base is exactly what read as "everything is a brown blob" —
+      // white is the one base a tint reproduces exactly.
+      sprite.texture = isPickup || (flash[index] ?? 0) > 0 ? this.flashTexture : this.texture;
       // A curled body has to look like one. Without this the player is told
       // their shots are doing nothing only by the shots doing nothing.
-      sprite.tint = isPickup ? BEER_TINT : isEnemyInvulnerable(sim, index) ? SHELL_TINT : 0xffffff;
+      const pickupKindIndex = sim.pickupKind.data[index] ?? -1;
+      sprite.tint = isPickup
+        ? (this.pickupTints[pickupKindIndex] ?? UNKNOWN_PICKUP_TINT)
+        : isEnemyInvulnerable(sim, index)
+          ? SHELL_TINT
+          : 0xffffff;
       // The texture is drawn at a fixed size; scaling it to the collider is
       // what keeps the sprite and the hitbox describing the same object.
-      sprite.scale.set(radius / (this.texture.width / 2));
+      // A pickup pops in on spawn — a cosmetic-only bump read off the same
+      // countdown `stepPickups`' collection never touches, so it never
+      // affects the hitbox it's drawn over.
+      const bounceTicks = sim.spawnBounce.data[index] ?? 0;
+      const bounceMax = Math.max(1, sim.tuning.pickup.spawnBounceTicks);
+      const bounceProgress = bounceTicks / bounceMax;
+      const pop = bounceTicks > 0 ? 1 + 0.4 * Math.sin(bounceProgress * Math.PI) : 1;
+      sprite.scale.set((radius / (this.texture.width / 2)) * pop);
       sprite.position.set(x, y);
+
+      if (isPickup) {
+        const label = this.labelAt(labelsUsed);
+        labelsUsed += 1;
+        label.visible = true;
+        label.text = this.pickupLabels[pickupKindIndex] ?? '?';
+        label.position.set(x, y);
+      }
 
       const progress = enemyTelegraphProgress(sim, index);
       if (progress > 0) {
@@ -139,6 +174,13 @@ export class EntityView {
         ring.visible = false;
       }
     }
+
+    for (let slot = labelsUsed; slot < this.labels.length; slot++) {
+      const label = this.labels[slot];
+      if (label !== undefined) {
+        label.visible = false;
+      }
+    }
   }
 
   private spriteAt(slot: number): Sprite {
@@ -163,6 +205,26 @@ export class EntityView {
     created.tint = TELEGRAPH_COLOUR;
     this.rings.push(created);
     this.ringLayer.addChild(created);
+    return created;
+  }
+
+  private labelAt(slot: number): Text {
+    const existing = this.labels[slot];
+    if (existing !== undefined) {
+      return existing;
+    }
+    const created = new Text({
+      text: '',
+      style: { fill: 0x1b1622, fontFamily: 'monospace', fontSize: 6, fontWeight: 'bold' },
+    });
+    // Dark text on a light pickup reads at this size where a light outline
+    // on a dark fill would not — the fill colours here are pastel/bright by
+    // design (see `content/pickups/pickups.ts`), so this is the one label
+    // colour that works across all of them without per-kind styling.
+    created.anchor.set(0.5);
+    created.resolution = 2;
+    this.labels.push(created);
+    this.labelLayer.addChild(created);
     return created;
   }
 

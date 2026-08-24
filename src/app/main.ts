@@ -25,6 +25,7 @@ import { GameOverScreen } from '../render/game-over.js';
 import { HealthHud } from '../render/health-hud.js';
 import { MinimapHud } from '../render/minimap-hud.js';
 import { PromilleHud } from '../render/promille-hud.js';
+import { WalletHud } from '../render/wallet-hud.js';
 import { Vignette } from '../render/vignette.js';
 import { GameView } from '../render/view.js';
 import { SILENT_AUDIO, playImpactAudio } from './audio/impact.js';
@@ -186,6 +187,13 @@ async function boot(): Promise<void> {
     promilleHud.view.position.set(applied.originX + 8, applied.originY + 30);
   };
 
+  const walletHud = new WalletHud();
+  uiLayer.addChild(walletHud.view);
+  // Stacked directly under the Promille bar, same corner.
+  const positionWalletHud = (applied: GameLayout): void => {
+    walletHud.view.position.set(applied.originX + 8, applied.originY + 42);
+  };
+
   const minimapHud = new MinimapHud(app.renderer);
   uiLayer.addChild(minimapHud.view);
   // The overlay is centred over the game, not the window — it should stay
@@ -267,6 +275,7 @@ async function boot(): Promise<void> {
     positionHud(applied);
     positionHealthHud(applied);
     positionPromilleHud(applied);
+    positionWalletHud(applied);
     positionMinimapHud(applied);
     gameOverScreen.resize(applied);
     vignette.resize(applied);
@@ -322,6 +331,7 @@ async function boot(): Promise<void> {
       view.sync(alpha, layout.scale);
       healthHud.sync(sim);
       promilleHud.sync(sim);
+      walletHud.sync(sim);
       minimapHud.setMapOpen(isActionDown(input.frame, InputAction.Map));
       const playerScreen = view.playerScreenPosition();
       vignette.sync(sim, playerScreen.x, playerScreen.y);

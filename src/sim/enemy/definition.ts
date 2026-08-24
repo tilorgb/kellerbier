@@ -218,6 +218,8 @@ export interface EnemyDefinition {
   /** The `name` of the state it spawns in. */
   readonly initial: string;
   readonly states: readonly EnemyState[];
+  /** Which drop table (`content/pickups/drop-tables.ts`) its death rolls from. Defaults to `'normal'`. */
+  readonly lootTier?: 'weak' | 'normal' | 'tough';
 }
 
 /** Primitives that decide where a body goes. Exactly one per state. */
