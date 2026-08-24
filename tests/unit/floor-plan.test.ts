@@ -3,10 +3,11 @@ import { ENEMY_DEFINITIONS } from '../../src/content/enemies/index.js';
 import { FLOOR_CONFIGS, type FloorConfig } from '../../src/content/floors/definition.js';
 import { ROOM_TEMPLATES } from '../../src/content/rooms/index.js';
 import {
+  DIRECTION_OFFSET,
   MULTI_CELL_COUNT,
   ROOM_COLUMNS,
   ROOM_ROWS,
-  type RoomShape,
+  ROOM_SHAPES,
   type RoomSpecialRole,
   type RoomSubLayout,
   type RoomTemplate,
@@ -26,16 +27,6 @@ import { RngStream, createStreamRng } from '../../src/sim/rng/streams.js';
 const CELLAR_TEMPLATES: readonly RoomTemplate[] = ROOM_TEMPLATES.map((room, index) =>
   validateRoomTemplate(room, `room[${String(index)}]`, ENEMY_DEFINITIONS),
 );
-
-/** `floor-plan.ts`'s own `OFFSET` isn't exported — this is just for reading its output. */
-const DIRECTION_TEST_OFFSET: Readonly<
-  Record<'north' | 'south' | 'east' | 'west', { readonly x: number; readonly y: number }>
-> = {
-  north: { x: 0, y: -1 },
-  south: { x: 0, y: 1 },
-  east: { x: 1, y: 0 },
-  west: { x: -1, y: 0 },
-};
 
 function floorConfig(index: number): FloorConfig {
   const config = FLOOR_CONFIGS[index];
@@ -73,7 +64,7 @@ function syntheticPool(): RoomTemplate[] {
     hazards: [],
     decorativeProps: [],
   };
-  const shapes: readonly RoomShape[] = ['1x1', '1x2', '2x2', 'L', 'T'];
+  const shapes = ROOM_SHAPES;
   const specialRoles: readonly (RoomSpecialRole | undefined)[] = [
     undefined,
     'boss',
@@ -179,7 +170,7 @@ describe('floor generation', () => {
 
     expect(validateFloorPlan(plan, CELLAR_TEMPLATES)).toEqual([]);
     const shapes = new Set(plan.rooms.map((room) => room.shape));
-    expect([...shapes].sort()).toEqual(['1x1', '1x2', '2x2', 'L', 'T']);
+    expect([...shapes].sort()).toEqual([...ROOM_SHAPES].sort());
   });
 
   it('validates a real floor 1 layout against the authored template pool', () => {
@@ -256,7 +247,7 @@ describe('floor generation', () => {
           if (cell === undefined) {
             continue;
           }
-          const offset = DIRECTION_TEST_OFFSET[door.direction];
+          const offset = DIRECTION_OFFSET[door.direction];
           const neighborKey = voidCellKey({ x: cell.x + offset.x, y: cell.y + offset.y });
           expect(
             voidKeys.has(neighborKey),
@@ -370,6 +361,38 @@ describe('floor generation with a staircase pool (#112)', () => {
         expect(cellIndices, `seed ${String(seed)}, room ${room.id}`).toEqual(
           new Set([0, room.cells.length - 1]),
         );
+      }
+    }
+    expect(checkedAny).toBe(true);
+  });
+
+  it('carries a real pixel centre for both of its doors, precomputed at placement time (#117)', () => {
+    // `app/main.ts`'s `hiddenDoorsFor`/`crackHintsFor` read `doorCentres`
+    // directly rather than compiling the staircase room themselves — this
+    // is the regression that guard would miss: `doorCentres` has to
+    // actually be there, with one entry per real door, matching the
+    // direction that door was placed on.
+    const pool = syntheticPool();
+    const staircasePool = syntheticStaircasePool();
+    let checkedAny = false;
+    for (let seed = 0; seed < 500; seed++) {
+      const config = floorConfig(seed % FLOOR_CONFIGS.length);
+      const plan = generateFloor(new Rng(seed), config, pool, staircasePool);
+      for (const room of plan.rooms) {
+        if (room.staircaseTemplateId === undefined) {
+          continue;
+        }
+        checkedAny = true;
+        const centres = room.doorCentres ?? [];
+        expect(centres, `seed ${String(seed)}, room ${room.id}`).toHaveLength(2);
+        for (const centre of centres) {
+          expect(Number.isFinite(centre.x), `seed ${String(seed)}, room ${room.id}`).toBe(true);
+          expect(Number.isFinite(centre.y), `seed ${String(seed)}, room ${room.id}`).toBe(true);
+        }
+        expect(
+          new Set(centres.map((centre) => centre.direction)),
+          `seed ${String(seed)}, room ${room.id}`,
+        ).toEqual(new Set(room.doors.map((door) => door.direction)));
       }
     }
     expect(checkedAny).toBe(true);
