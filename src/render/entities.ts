@@ -142,7 +142,14 @@ export class EntityView {
         const label = this.labelAt(labelsUsed);
         labelsUsed += 1;
         label.visible = true;
-        label.text = this.pickupLabels[pickupKindIndex] ?? '?';
+        const priced = ((masks[index] ?? 0) & sim.pickupPrice.bit) !== 0;
+        const kindLabel = this.pickupLabels[pickupKindIndex] ?? '?';
+        // A shop's stock reads its price the same way everything else in the
+        // wallet reads Biermarken — a plain number, no currency glyph — so
+        // this is legible before the player has ever seen a shop.
+        label.text = priced
+          ? `${kindLabel} · ${String(sim.pickupPrice.data[index] ?? 0)}`
+          : kindLabel;
         label.position.set(x, y);
       }
 

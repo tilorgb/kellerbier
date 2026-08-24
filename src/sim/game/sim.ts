@@ -138,6 +138,8 @@ export interface GameSimOptions {
   /** Loads this authored room instead of the playground population. */
   readonly roomTemplate?: unknown;
   readonly floor?: number;
+  /** Door directions to load hidden — see `loadRoom`'s `hiddenDoors` parameter. */
+  readonly hiddenDoors?: readonly RoomDirection[];
   /** Projectile pool size. Lowered by tests that want to watch it overflow. */
   readonly projectileCapacity?: number;
   readonly particleCapacity?: number;
@@ -411,6 +413,14 @@ export class GameSim {
   private roomClearedIds = new Set<string>();
   private roomTemplateLoaded = false;
   private roomDoors = { north: false, east: false, south: false, west: false };
+  /**
+   * Door directions this room load hid (see `loadRoom`'s `hiddenDoors`) that
+   * a nearby Bierfassl blast has not yet revealed. `revealBombableWalls`
+   * removes an entry the instant its wall opens; cleared and rebuilt fresh
+   * on every `loadRoom`, since which walls are bombable is per-instance
+   * (decided by the caller, not the template).
+   */
+  private readonly bombableWalls = new Set<RoomDirection>();
   /** The loaded room's `metadata.specialRole`, or `undefined` for a normal room. */
   private roomSpecialRole: RoomSpecialRole | undefined = undefined;
 
@@ -461,7 +471,7 @@ export class GameSim {
 
     this.playerHandle = this.spawnPlayer();
     if (options.roomTemplate !== undefined) {
-      this.loadRoom(options.roomTemplate, options.floor ?? 1);
+      this.loadRoom(options.roomTemplate, options.floor ?? 1, null, options.hiddenDoors ?? []);
     } else {
       const population = options.population ?? 'targets';
       if (population === 'enemies') {
@@ -489,9 +499,46 @@ export class GameSim {
     return this.roomTemplateLoaded && this.roomEnemyCount > 0;
   }
 
-  /** Which walls of the current room have a door, per the room's authored metadata. */
+  /**
+   * Which walls of the current room have a door — a hidden/bombable one
+   * reads `false` here (a solid wall) until `revealBombableWalls` opens it.
+   */
   get doors(): Readonly<Record<RoomDirection, boolean>> {
     return this.roomDoors;
+  }
+
+  /**
+   * Opens any bombable wall within `radius` of `(x, y)`. Called once per
+   * explosion by `stepBombs` (`sim/systems/bombs.ts`) with the blast's own
+   * position and radius — "close enough to reveal" is exactly "close enough
+   * to damage," the same blast, no separate concept of range.
+   *
+   * A wall's distance is measured to the point on the room boundary its door
+   * gap is centred on (`render/room.ts`'s `createDoorView` draws the same
+   * point), not to the room's centre — a boss-sized room makes the far wall
+   * of a `2x2` slot unreachable by a blast measured from the middle.
+   */
+  revealBombableWalls(x: number, y: number, radius: number): void {
+    if (this.bombableWalls.size === 0) {
+      return;
+    }
+    const centreX = (this.room.minX + this.room.maxX) / 2;
+    const centreY = (this.room.minY + this.room.maxY) / 2;
+    const wallPoint: Readonly<Record<RoomDirection, { x: number; y: number }>> = {
+      north: { x: centreX, y: this.room.minY },
+      south: { x: centreX, y: this.room.maxY },
+      west: { x: this.room.minX, y: centreY },
+      east: { x: this.room.maxX, y: centreY },
+    };
+    for (const direction of this.bombableWalls) {
+      const point = wallPoint[direction];
+      const dx = point.x - x;
+      const dy = point.y - y;
+      if (dx * dx + dy * dy <= radius * radius) {
+        this.roomDoors = { ...this.roomDoors, [direction]: true };
+        this.bombableWalls.delete(direction);
+      }
+    }
   }
 
   /**
@@ -554,13 +601,37 @@ export class GameSim {
     );
   }
 
-  /** Loads one room, preserving the player and run state while replacing its contents. */
-  loadRoom(template: unknown, floor = 1, direction: RoomDirection | null = null): void {
+  /**
+   * Loads one room, preserving the player and run state while replacing its
+   * contents.
+   *
+   * `hiddenDoors` — directions the template itself has a door on, but which
+   * load closed and solid rather than open, and remembered in
+   * `bombableWalls` so a nearby Bierfassl blast can reveal them
+   * (`revealBombableWalls`, called from `sim/systems/bombs.ts`). This is how
+   * a secret/supersecret room connects: not a different door shape, the same
+   * door drawn shut until bombed. The caller (`app/main.ts`, which owns the
+   * floor plan) decides which directions those are for the room it's
+   * loading — `GameSim` only knows one room's template at a time.
+   */
+  loadRoom(
+    template: unknown,
+    floor = 1,
+    direction: RoomDirection | null = null,
+    hiddenDoors: readonly RoomDirection[] = [],
+  ): void {
     const compiled = compileRoomTemplate(template, floor, 'room template', ENEMY_DEFINITIONS);
     this.clearRoomEntities();
     this.room = compiled.geometry;
     this.roomId = compiled.source.id;
     this.roomDoors = compiled.source.metadata.doors;
+    this.bombableWalls.clear();
+    for (const hidden of hiddenDoors) {
+      if (this.roomDoors[hidden]) {
+        this.roomDoors = { ...this.roomDoors, [hidden]: false };
+        this.bombableWalls.add(hidden);
+      }
+    }
     this.roomSpecialRole = compiled.source.metadata.specialRole;
     this.roomTemplateLoaded = true;
     this.roomTransitionTicks = direction === null ? 0 : ROOM_TRANSITION_TICKS;
@@ -625,7 +696,12 @@ export class GameSim {
    * a blocked transition (wrong direction, enemies still up, no key) never
    * costs one.
    */
-  transitionTo(template: unknown, floor: number, direction: RoomDirection): boolean {
+  transitionTo(
+    template: unknown,
+    floor: number,
+    direction: RoomDirection,
+    hiddenDoors: readonly RoomDirection[] = [],
+  ): boolean {
     if (!this.roomTemplateLoaded || this.doorsLocked || !this.hasDoor(direction)) {
       return false;
     }
@@ -634,7 +710,7 @@ export class GameSim {
       return false;
     }
     this.roomClearedIds.add(this.roomId);
-    this.loadRoom(template, floor, direction);
+    this.loadRoom(template, floor, direction, hiddenDoors);
     return true;
   }
 

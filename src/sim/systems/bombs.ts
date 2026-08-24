@@ -86,6 +86,11 @@ function explode(sim: GameSim, index: number): void {
   sim.broadphase.query(x, y, tuning.bombBlastRadius, blastCandidate);
   activeSim = null;
 
+  // Same blast, same reach as the damage above — a secret room's wall opens
+  // exactly when a Bierfassl set off near it would also have hurt something
+  // standing there.
+  sim.revealBombableWalls(x, y, tuning.bombBlastRadius);
+
   sim.addShake(0, -1, tuning.bombBlastDamage);
   sim.world.destroy(sim.world.entityAt(index));
 }
