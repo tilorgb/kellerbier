@@ -1,0 +1,38 @@
+{
+  "id": "cellar-shop-vorrat",
+  "tileGrid": [
+    "###############",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "###############"
+  ],
+  "obstacles": [],
+  "enemySpawns": [{ "x": 120, "y": 40, "group": "wirt" }],
+  "spawnGroups": [
+    {
+      "id": "wirt",
+      "count": 1,
+      "choices": [{ "enemyId": "shopkeeper", "minFloor": 1, "maxFloor": 7 }]
+    }
+  ],
+  "pickupSpawns": [
+    { "x": 64, "y": 100, "type": "obazda", "price": 2 },
+    { "x": 120, "y": 100, "type": "weissbier", "price": 8 },
+    { "x": 176, "y": 100, "type": "kellerschluessel-ring", "price": 9 }
+  ],
+  "hazards": [],
+  "decorativeProps": [{ "x": 120, "y": 40, "type": "shopkeeper-stand" }],
+  "metadata": {
+    "floorTags": ["cellar", "rural"],
+    "shape": "1x1",
+    "doors": { "north": true, "east": true, "south": true, "west": true },
+    "difficultyTier": 1,
+    "weight": 1,
+    "specialRole": "shop"
+  }
+}

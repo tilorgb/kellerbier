@@ -1,0 +1,28 @@
+{
+  "id": "cellar-treasure",
+  "tileGrid": [
+    "###############",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#......#......#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "###############"
+  ],
+  "obstacles": [],
+  "enemySpawns": [],
+  "spawnGroups": [],
+  "pickupSpawns": [{ "x": 120, "y": 72, "type": "bierfassl-pack" }],
+  "hazards": [],
+  "decorativeProps": [{ "x": 120, "y": 72, "type": "pedestal" }],
+  "metadata": {
+    "floorTags": ["cellar", "rural"],
+    "shape": "1x1",
+    "doors": { "north": true, "east": true, "south": true, "west": true },
+    "difficultyTier": 1,
+    "weight": 1,
+    "specialRole": "treasure"
+  }
+}

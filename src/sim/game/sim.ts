@@ -1040,8 +1040,13 @@ export class GameSim {
     // cleared until `flush`, but a destructible barrel (#22) is not an
     // authored enemy, and `roomEnemyCount` must only ever count those:
     // decrementing it for anything killed in a loaded room, barrel included,
-    // would clear the room — and unlock its doors — one kill early.
-    const wasEnemy = ((this.world.masks[index] ?? 0) & this.enemyMask) === this.enemyMask;
+    // would clear the room — and unlock its doors — one kill early. Same
+    // reasoning excludes an enemy whose definition opted out of
+    // `locksRoom` (the shopkeeper, `content/enemies/shopkeeper.ts`) — it was
+    // never counted in, so killing it must not count it out.
+    const enemyMasked = ((this.world.masks[index] ?? 0) & this.enemyMask) === this.enemyMask;
+    const wasEnemy =
+      enemyMasked && this.enemies.at(this.enemy.data[index * ENEMY_STRIDE] ?? -1).locksRoom;
     const random = this.random.cosmetic;
     this.decals.spawn(
       this.positionX(index),
@@ -1418,7 +1423,7 @@ export class GameSim {
     motion[motionBase + 2] = x;
     motion[motionBase + 3] = y;
 
-    if (this.roomTemplateLoaded) {
+    if (this.roomTemplateLoaded && compiled.locksRoom) {
       this.roomEnemyCount += 1;
     }
 

@@ -82,6 +82,7 @@ export interface CompiledEnemy {
   readonly initialState: number;
   readonly states: readonly CompiledState[];
   readonly lootTier: 'weak' | 'normal' | 'tough';
+  readonly locksRoom: boolean;
 }
 
 export class EnemyRegistry {
@@ -178,6 +179,7 @@ export class EnemyRegistry {
       initialState,
       states,
       lootTier: definition.lootTier ?? 'normal',
+      locksRoom: definition.locksRoom ?? true,
     };
   }
 

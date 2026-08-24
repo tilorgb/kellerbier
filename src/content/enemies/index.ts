@@ -2,6 +2,7 @@ import type { EnemyDefinition } from '../../sim/enemy/definition.js';
 import { bierratte } from './bierratte.js';
 import { kellerassel } from './kellerassel.js';
 import { schimmelfleck, schimmelspore } from './schimmelfleck.js';
+import { shopkeeper } from './shopkeeper.js';
 import { zapfhahn } from './zapfhahn.js';
 
 /**
@@ -21,6 +22,7 @@ export const ENEMY_DEFINITIONS: readonly EnemyDefinition[] = [
   schimmelfleck,
   schimmelspore,
   zapfhahn,
+  shopkeeper,
 ];
 
-export { bierratte, kellerassel, schimmelfleck, schimmelspore, zapfhahn };
+export { bierratte, kellerassel, schimmelfleck, schimmelspore, shopkeeper, zapfhahn };
