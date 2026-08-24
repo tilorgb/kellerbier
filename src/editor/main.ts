@@ -1,4 +1,5 @@
 import type { RoomShape } from '../content/rooms/definition.js';
+import { injectDevUiTokens } from '../dev-ui/tokens.js';
 import { saveRoom } from './api-client.js';
 import { createBrowsePanel } from './panels/browse.js';
 import { createMetadataPanel } from './panels/metadata.js';
@@ -12,8 +13,8 @@ import { EditorState, createBlankDraft, fromRoomTemplate, toTemplateJSON } from 
 const STYLE = `
 .kb-editor-root {
   display: flex; gap: 16px; padding: 12px; box-sizing: border-box;
-  min-height: 100vh; font: 13px/1.4 ui-monospace, monospace; color: #d8cfc4;
-  background: #14101a;
+  min-height: 100vh; font: 13px/1.4 var(--kb-font-mono); color: var(--kb-color-text);
+  background: var(--kb-color-surface-1);
 }
 .kb-editor-root * { box-sizing: border-box; }
 .kb-editor-column { display: flex; flex-direction: column; gap: 12px; }
@@ -21,68 +22,92 @@ const STYLE = `
 .kb-editor-right { flex: 1 1 320px; min-width: 280px; max-width: 420px; overflow-y: auto; max-height: 100vh; }
 
 .kb-editor-panel {
-  background: rgba(27, 22, 34, 0.9); border: 1px solid #3d3348; border-radius: 4px; padding: 10px 12px;
+  background: var(--kb-color-panel-editor); border: 1px solid var(--kb-color-surface-4);
+  border-radius: var(--kb-radius-md); padding: 10px 12px;
 }
 .kb-editor-panel h2 {
-  margin: 0 0 8px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #8a7f74;
-  font-weight: normal;
+  margin: 0 0 8px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--kb-color-text-dim); font-weight: normal;
 }
 .kb-editor-panel label { display: block; margin-bottom: 6px; }
 .kb-editor-panel input[type='text'], .kb-editor-panel input[type='number'], .kb-editor-panel select {
-  width: 100%; background: #241d2e; color: #d8cfc4; border: 1px solid #3d3348; border-radius: 3px;
+  width: 100%; background: var(--kb-color-surface-3); color: var(--kb-color-text);
+  border: 1px solid var(--kb-color-surface-4); border-radius: var(--kb-radius-sm);
   padding: 3px 5px; font: inherit; margin-top: 2px;
 }
 .kb-editor-panel button {
-  font: inherit; color: #d8cfc4; background: #241d2e; border: 1px solid #3d3348; border-radius: 3px;
+  font: inherit; color: var(--kb-color-text); background: var(--kb-color-surface-3);
+  border: 1px solid var(--kb-color-surface-4); border-radius: var(--kb-radius-sm);
   padding: 4px 8px; cursor: pointer;
 }
-.kb-editor-panel button:hover { background: #2f2639; }
+.kb-editor-panel button:hover { background: var(--kb-color-surface-3-hover); }
 .kb-editor-doors { display: flex; gap: 10px; margin-bottom: 8px; }
 .kb-editor-doors label { display: flex; align-items: center; gap: 4px; margin: 0; }
 
 .kb-editor-cell-tabs { display: flex; gap: 6px; }
-.kb-editor-cell-tabs button.kb-editor-tab-active { background: #3d3348; }
+.kb-editor-cell-tabs button.kb-editor-tab-active { background: var(--kb-color-surface-4); }
 
-.kb-editor-grid-panel { background: rgba(27, 22, 34, 0.9); border: 1px solid #3d3348; border-radius: 4px; padding: 10px; }
+.kb-editor-grid-panel {
+  background: var(--kb-color-panel-editor); border: 1px solid var(--kb-color-surface-4);
+  border-radius: var(--kb-radius-md); padding: 10px;
+}
 .kb-editor-toolbar { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
-.kb-editor-tool { font: inherit; color: #d8cfc4; background: #241d2e; border: 1px solid #3d3348; border-radius: 3px; padding: 4px 8px; cursor: pointer; }
-.kb-editor-tool:hover { background: #2f2639; }
-.kb-editor-tool-active { background: #f0c46a; color: #14101a; border-color: #f0c46a; }
-.kb-editor-tool-option { font: inherit; background: #241d2e; color: #d8cfc4; border: 1px solid #3d3348; border-radius: 3px; padding: 3px 5px; }
+.kb-editor-tool {
+  font: inherit; color: var(--kb-color-text); background: var(--kb-color-surface-3);
+  border: 1px solid var(--kb-color-surface-4); border-radius: var(--kb-radius-sm);
+  padding: 4px 8px; cursor: pointer;
+}
+.kb-editor-tool:hover { background: var(--kb-color-surface-3-hover); }
+.kb-editor-tool-active {
+  background: var(--kb-color-accent); color: var(--kb-color-surface-1);
+  border-color: var(--kb-color-accent);
+}
+.kb-editor-tool-option {
+  font: inherit; background: var(--kb-color-surface-3); color: var(--kb-color-text);
+  border: 1px solid var(--kb-color-surface-4); border-radius: var(--kb-radius-sm); padding: 3px 5px;
+}
 
 .kb-editor-grid-wrap { position: relative; }
-.kb-editor-tile-layer { position: relative; background: #0b0a0d; }
-.kb-editor-tile { position: absolute; background: #241d2e; border: 1px solid #1b1622; cursor: crosshair; }
-.kb-editor-tile-wall { background: #4a3f57; }
-.kb-editor-tile-drag { outline: 2px solid #f0c46a; outline-offset: -2px; }
+.kb-editor-tile-layer { position: relative; background: var(--kb-color-surface-0); }
+.kb-editor-tile {
+  position: absolute; background: var(--kb-color-surface-3); border: 1px solid var(--kb-color-surface-2);
+  cursor: crosshair;
+}
+.kb-editor-tile-wall { background: var(--kb-color-surface-4-alt); }
+.kb-editor-tile-drag { outline: 2px solid var(--kb-color-accent); outline-offset: -2px; }
 .kb-editor-marker-layer { position: absolute; top: 0; left: 0; pointer-events: none; }
 .kb-editor-marker { position: absolute; width: 10px; height: 10px; border-radius: 50%; }
-.kb-editor-marker-enemy { background: #e0703a; }
-.kb-editor-marker-pickup { background: #6ab0c9; }
-.kb-editor-marker-prop { background: #b08056; }
-.kb-editor-marker-hazard { position: absolute; background: rgba(224, 112, 58, 0.35); border: 1px solid #e0703a; border-radius: 0; width: auto; height: auto; }
+.kb-editor-marker-enemy { background: var(--kb-color-warn); }
+.kb-editor-marker-pickup { background: var(--kb-color-marker-pickup); }
+.kb-editor-marker-prop { background: var(--kb-color-marker-prop); }
+.kb-editor-marker-hazard {
+  position: absolute; background: var(--kb-color-warn-bg); border: 1px solid var(--kb-color-warn);
+  border-radius: 0; width: auto; height: auto;
+}
 
-.kb-editor-spawn-group { border-top: 1px solid #3d3348; padding-top: 8px; margin-top: 8px; }
+.kb-editor-spawn-group { border-top: 1px solid var(--kb-color-surface-4); padding-top: 8px; margin-top: 8px; }
 .kb-editor-spawn-choice { display: flex; gap: 6px; align-items: center; margin: 4px 0; }
-.kb-editor-inline-label { display: flex; align-items: center; gap: 4px; margin: 0; font-size: 11px; color: #8a7f74; }
+.kb-editor-inline-label {
+  display: flex; align-items: center; gap: 4px; margin: 0; font-size: 11px; color: var(--kb-color-text-dim);
+}
 .kb-editor-inline-label select, .kb-editor-inline-label input { width: auto; }
 
 .kb-editor-browse-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
 .kb-editor-browse-row span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.kb-editor-validation-ok { color: #8fbf7a; }
-.kb-editor-validation-error { color: #e0703a; }
+.kb-editor-validation-ok { color: var(--kb-color-ok); }
+.kb-editor-validation-error { color: var(--kb-color-warn); }
 
 .kb-editor-actions { display: flex; gap: 8px; }
-.kb-editor-status { min-height: 1.4em; color: #8a7f74; }
+.kb-editor-status { min-height: 1.4em; color: var(--kb-color-text-dim); }
 
 .kb-editor-playtest-overlay {
-  position: fixed; inset: 0; z-index: 50; background: #0b0a0d;
+  position: fixed; inset: 0; z-index: 50; background: var(--kb-color-surface-0);
 }
 .kb-editor-playtest-exit {
-  position: fixed; top: 10px; right: 10px; z-index: 51; font: 12px ui-monospace, monospace;
-  color: #d8cfc4; background: #241d2e; border: 1px solid #3d3348; border-radius: 3px; padding: 6px 10px;
-  cursor: pointer;
+  position: fixed; top: 10px; right: 10px; z-index: 51; font: 12px var(--kb-font-mono);
+  color: var(--kb-color-text); background: var(--kb-color-surface-3); border: 1px solid var(--kb-color-surface-4);
+  border-radius: var(--kb-radius-sm); padding: 6px 10px; cursor: pointer;
 }
 `;
 
@@ -91,6 +116,8 @@ function boot(): void {
   if (host === null) {
     throw new Error('Missing #editor host element in editor.html');
   }
+
+  injectDevUiTokens();
 
   const style = document.createElement('style');
   style.textContent = STYLE;

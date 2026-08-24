@@ -7,6 +7,7 @@ import {
   DEFAULT_PROMILLE_TUNING,
   DEFAULT_SHOOTING_TUNING,
 } from '../sim/tuning.js';
+import { injectDevUiTokens } from '../dev-ui/tokens.js';
 
 /**
  * The tuning window.
@@ -217,43 +218,43 @@ const DEFAULTS = {
 const STYLE = `
 .kb-tuning-toggle {
   position: fixed; right: 12px; bottom: 12px; z-index: 30;
-  font: 12px/1.4 ui-monospace, monospace; color: #d8cfc4;
-  background: #1b1622; border: 1px solid #3d3348; border-radius: 4px;
-  padding: 6px 10px; cursor: pointer;
+  font: 12px/1.4 var(--kb-font-mono); color: var(--kb-color-text);
+  background: var(--kb-color-surface-2); border: 1px solid var(--kb-color-surface-4);
+  border-radius: var(--kb-radius-md); padding: 6px 10px; cursor: pointer;
 }
-.kb-tuning-toggle:hover { background: #241d2e; }
+.kb-tuning-toggle:hover { background: var(--kb-color-surface-3); }
 .kb-tuning {
   position: fixed; right: 12px; bottom: 48px; z-index: 30;
   width: 320px; max-height: calc(100vh - 72px); overflow-y: auto;
-  font: 12px/1.5 ui-monospace, monospace; color: #d8cfc4;
-  background: rgba(18, 15, 22, 0.96); border: 1px solid #3d3348; border-radius: 4px;
-  padding: 10px 12px 12px;
+  font: 12px/1.5 var(--kb-font-mono); color: var(--kb-color-text);
+  background: var(--kb-color-panel-tuning); border: 1px solid var(--kb-color-surface-4);
+  border-radius: var(--kb-radius-md); padding: 10px 12px 12px;
 }
 .kb-tuning[hidden] { display: none; }
 .kb-tuning h2 {
   margin: 12px 0 6px; font-size: 11px; letter-spacing: 0.08em;
-  text-transform: uppercase; color: #8a7f74; font-weight: normal;
+  text-transform: uppercase; color: var(--kb-color-text-dim); font-weight: normal;
 }
 .kb-tuning h2:first-child { margin-top: 0; }
 .kb-tuning label { display: block; margin-bottom: 7px; }
 .kb-tuning .kb-row { display: flex; justify-content: space-between; gap: 8px; }
-.kb-tuning .kb-name { color: #d8cfc4; }
+.kb-tuning .kb-name { color: var(--kb-color-text); }
 .kb-tuning .kb-value {
-  color: #f0c46a; font: inherit; font-variant-numeric: tabular-nums;
+  color: var(--kb-color-accent); font: inherit; font-variant-numeric: tabular-nums;
   background: none; border: 0; padding: 0; cursor: pointer;
 }
-.kb-tuning .kb-value:hover { color: #fff3d0; }
-.kb-tuning .kb-value.kb-changed::after { content: ' *'; color: #e0703a; }
-.kb-tuning .kb-hint { color: #6f6559; font-size: 11px; }
-.kb-tuning input[type='range'] { width: 100%; margin: 2px 0 0; accent-color: #f0c46a; }
+.kb-tuning .kb-value:hover { color: var(--kb-color-accent-hover); }
+.kb-tuning .kb-value.kb-changed::after { content: ' *'; color: var(--kb-color-warn); }
+.kb-tuning .kb-hint { color: var(--kb-color-text-subtle); font-size: 11px; }
+.kb-tuning input[type='range'] { width: 100%; margin: 2px 0 0; accent-color: var(--kb-color-accent); }
 .kb-tuning .kb-actions { display: flex; gap: 8px; margin-top: 12px; }
 .kb-tuning .kb-actions button {
-  flex: 1; font: 12px ui-monospace, monospace; color: #d8cfc4;
-  background: #241d2e; border: 1px solid #3d3348; border-radius: 3px;
-  padding: 5px 0; cursor: pointer;
+  flex: 1; font: 12px var(--kb-font-mono); color: var(--kb-color-text);
+  background: var(--kb-color-surface-3); border: 1px solid var(--kb-color-surface-4);
+  border-radius: var(--kb-radius-sm); padding: 5px 0; cursor: pointer;
 }
-.kb-tuning .kb-actions button:hover { background: #2f2639; }
-.kb-tuning .kb-status { margin-top: 8px; color: #8a7f74; min-height: 1.4em; }
+.kb-tuning .kb-actions button:hover { background: var(--kb-color-surface-3-hover); }
+.kb-tuning .kb-status { margin-top: 8px; color: var(--kb-color-text-dim); min-height: 1.4em; }
 `;
 
 type MutableTuning = Record<string, Record<string, number>>;
@@ -269,6 +270,8 @@ export interface TuningWindowHandle {
  * already reading, and the next tick uses it.
  */
 export function createTuningWindow(tuning: SimTuning): TuningWindowHandle {
+  injectDevUiTokens();
+
   const style = document.createElement('style');
   style.textContent = STYLE;
   document.head.appendChild(style);
