@@ -1,0 +1,134 @@
+import { circlesOverlap } from '../collision/circle-circle.js';
+import { CollisionLayer } from '../collision/layers.js';
+import { World } from '../ecs/world.js';
+import type { GameSim } from '../game/sim.js';
+import { applyDamageAt } from './impact.js';
+
+/**
+ * The Bierfassl: a fuse that counts down, a roll that slows, and a blast that
+ * damages everything in reach.
+ *
+ * Runs after `stepCollision` (`GameSim.step`), which is what lets the blast
+ * reuse this tick's broadphase — the same grid `stepPickups` reuses right
+ * after it. Damage is applied through `applyDamageAt`
+ * (`systems/impact.ts`) — the exact package a shot lands, flash through
+ * knockback through the kill itself — so a crate dies through a blast
+ * exactly the way it dies to a shot, which is what "destroys destructible
+ * terrain" means in this engine: an `Obstacle`-layer entity with health,
+ * killed through the one damage chokepoint everything else already goes
+ * through.
+ *
+ * `stepBodies` only damps `push`, never `velocity` (see `bodies.ts`), so a
+ * rolled Bierfassl's own slowdown is this file's job, not `stepBodies`'s.
+ *
+ * @hot — runs in the frame loop. Nothing in here may allocate; see the
+ * `no-hot-allocation` rule in tools/eslint/.
+ */
+
+/** What a blast is allowed to reach. Blasts hit everything alive, not just what a shot could. */
+const BLAST_MASK = CollisionLayer.Enemy | CollisionLayer.Obstacle | CollisionLayer.Player;
+
+/** Below this speed a rolled Bierfassl reads as stopped, not as crawling forever. */
+const ROLL_STOP_SPEED = 0.02;
+
+let activeSim: GameSim | null = null;
+
+/** The bomb currently exploding: its position, and its own slot (excluded from its own blast). */
+const BOMB_X = 0;
+const BOMB_Y = 1;
+const BOMB_SELF = 2;
+const bomb = new Float64Array(3);
+
+export function stepBombs(sim: GameSim): void {
+  const world = sim.world;
+  const states = world.states;
+  const masks = world.masks;
+  const required = sim.bombFuse.bit;
+  const velocityBit = sim.velocity.bit;
+  const drag = sim.tuning.pickup.bombRollDrag;
+  const velocity = sim.velocity.data;
+  const fuse = sim.bombFuse.data;
+
+  const highWater = world.highWater;
+  for (let index = 0; index < highWater; index++) {
+    if (states[index] !== World.ALIVE) {
+      continue;
+    }
+    if (((masks[index] ?? 0) & required) !== required) {
+      continue;
+    }
+
+    if (((masks[index] ?? 0) & velocityBit) !== 0) {
+      const decayedX = (velocity[index * 2] ?? 0) * drag;
+      const decayedY = (velocity[index * 2 + 1] ?? 0) * drag;
+      velocity[index * 2] = Math.abs(decayedX) < ROLL_STOP_SPEED ? 0 : decayedX;
+      velocity[index * 2 + 1] = Math.abs(decayedY) < ROLL_STOP_SPEED ? 0 : decayedY;
+    }
+
+    const ticksLeft = fuse[index] ?? 0;
+    if (ticksLeft > 0) {
+      fuse[index] = ticksLeft - 1;
+      continue;
+    }
+    explode(sim, index);
+  }
+}
+
+function explode(sim: GameSim, index: number): void {
+  const x = sim.positionX(index);
+  const y = sim.positionY(index);
+  const tuning = sim.tuning.pickup;
+
+  activeSim = sim;
+  bomb[BOMB_X] = x;
+  bomb[BOMB_Y] = y;
+  bomb[BOMB_SELF] = index;
+  sim.broadphase.query(x, y, tuning.bombBlastRadius, blastCandidate);
+  activeSim = null;
+
+  sim.addShake(0, -1, tuning.bombBlastDamage);
+  sim.world.destroy(sim.world.entityAt(index));
+}
+
+function blastCandidate(index: number): void {
+  const sim = activeSim;
+  if (sim === null || index === (bomb[BOMB_SELF] ?? -1)) {
+    return;
+  }
+  const layer = sim.collision.data[index * 2] ?? 0;
+  if ((layer & BLAST_MASK) === 0) {
+    return;
+  }
+  // Matches `applyHit`'s own i-frame check — a blast landing during the
+  // player's invulnerability window does nothing, same as a shot would.
+  if (index === sim.playerIndex && sim.playerInvulnerableTicks > 0) {
+    return;
+  }
+
+  const bombX = bomb[BOMB_X] ?? 0;
+  const bombY = bomb[BOMB_Y] ?? 0;
+  const otherX = sim.positionX(index);
+  const otherY = sim.positionY(index);
+  const otherRadius = sim.body.data[index * 2] ?? 0;
+  const tuning = sim.tuning.pickup;
+  if (!circlesOverlap(bombX, bombY, tuning.bombBlastRadius, otherX, otherY, otherRadius)) {
+    return;
+  }
+
+  const dx = otherX - bombX;
+  const dy = otherY - bombY;
+  const length = Math.sqrt(dx * dx + dy * dy);
+  const normalX = length > 0 ? dx / length : 0;
+  const normalY = length > 0 ? dy / length : -1;
+
+  applyDamageAt(
+    sim,
+    index,
+    tuning.bombBlastDamage,
+    otherX,
+    otherY,
+    normalX,
+    normalY,
+    bomb[BOMB_SELF] ?? -1,
+  );
+}

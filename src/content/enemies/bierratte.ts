@@ -18,6 +18,7 @@ export const bierratte: EnemyDefinition = {
   size: 'mini',
   health: 1,
   contactDamage: 1,
+  lootTier: 'weak',
   initial: 'scurry',
   states: [
     {

@@ -1,11 +1,14 @@
 import { type Component, World } from '../ecs/world.js';
 import { type Entity, entityIndex } from '../ecs/entity.js';
 import { ENEMY_DEFINITIONS } from '../../content/enemies/index.js';
+import { PICKUP_DEFINITIONS, ROOM_CLEAR_DROP_TABLE } from '../../content/pickups/index.js';
 import type { EnemyDefinition } from '../enemy/definition.js';
 import { EnemyRegistry } from '../enemy/registry.js';
 import { ENEMY_PROFILES, EnemySize, type EnemySizeId } from '../enemy/size.js';
 import type { InputFrame } from '../input/frame.js';
 import { createInputFrame } from '../input/frame.js';
+import type { DropTable } from '../pickup/definition.js';
+import { PickupRegistry } from '../pickup/registry.js';
 import { type RunRandom, createRunRandom } from '../rng/streams.js';
 import { drawDeathWord } from './death-word.js';
 import {
@@ -41,7 +44,10 @@ import {
   stepEnemies,
   stepEnemyDeaths,
 } from '../systems/enemy.js';
+import { stepBombPlacement } from '../systems/bomb-placement.js';
+import { stepBombs } from '../systems/bombs.js';
 import { stepImpact, stepParticles } from '../systems/impact.js';
+import { stepLootDrops } from '../systems/loot.js';
 import { stepPickups } from '../systems/pickup.js';
 import { stepPromille } from '../systems/promille.js';
 import { stepProjectiles, stepShooting } from '../systems/shooting.js';
@@ -55,8 +61,8 @@ export const PLAYER_RADIUS = 7;
 /** Collider radius of a training target — a mid-size body. */
 export const TARGET_RADIUS = ENEMY_PROFILES[EnemySize.Mid].radius;
 
-/** Collider radius of a beer pickup (#17). Small — it's a mug, not a body. */
-export const BEER_PICKUP_RADIUS = 4;
+/** Collider radius of a placed Bierfassl. A small keg, not a mug. */
+export const BOMB_RADIUS = 6;
 
 /**
  * The largest collider the broadphase grid is sized for.
@@ -143,6 +149,8 @@ export interface GameSimOptions {
    * memory belongs to whatever is starting runs, not to the run itself.
    */
   readonly previousDeathWord?: string;
+  /** Defaults to `true` — see `GameSim.promilleUnlocked`. */
+  readonly promilleUnlocked?: boolean;
 }
 
 /**
@@ -205,6 +213,12 @@ export class GameSim {
    * reinforcements — carries -1 and stays dead.
    */
   readonly spawnPost: Component<Int16Array>;
+  /** Index into `pickups` — which `PickupDefinition` a pickup entity is. */
+  readonly pickupKind: Component<Int16Array>;
+  /** Ticks left before a placed Bierfassl explodes. Only ever added to a Bierfassl. */
+  readonly bombFuse: Component<Int16Array>;
+  /** Ticks left of the cosmetic spawn-bounce, on every pickup. Render-only. */
+  readonly spawnBounce: Component<Uint8Array>;
 
   /** Rebuilt from the position arrays every tick. */
   readonly broadphase: SpatialHash;
@@ -217,6 +231,9 @@ export class GameSim {
 
   /** Every enemy definition, validated and compiled once at construction. */
   readonly enemies: EnemyRegistry;
+
+  /** Every pickup definition, validated and compiled once at construction. */
+  readonly pickups: PickupRegistry;
 
   /** Everything in flight. Pooled, fixed capacity, never grows. */
   readonly projectiles: ProjectileStore;
@@ -323,6 +340,19 @@ export class GameSim {
   private soulHp = 0;
   private eternalHp = 0;
 
+  /** Biermarken banked, Kellerschlüssel held, and Bierfassl in inventory — see #22. */
+  private biermarkenCount = 0;
+  private keysCount = 0;
+  private bombsCount = 0;
+
+  /**
+   * Whether this run rolls the `promilled` half of every drop table, or the
+   * `sober` half — see DECISIONS.md §9 and #85. Persisted unlock state does
+   * not exist yet (#85 is M7); this defaults to unlocked so today's runs play
+   * exactly as before, with the branch point already in place for #85 to set.
+   */
+  readonly promilleUnlocked: boolean;
+
   /** Set once, the tick every pool empties with no eternal heart to spend. */
   private playerDeadFlag = false;
   private playerDeathTick_ = -1;
@@ -333,6 +363,12 @@ export class GameSim {
 
   /** Ticks run since construction. */
   private currentTick = 0;
+
+  /** The floor `loadRoom` was last called with. Drives the Weißwurst rule. */
+  private currentFloorValue = 1;
+
+  /** The previous tick's button mask, for `isActionPressed` edges — see `stepBombPlacement`. */
+  previousButtons = 0;
 
   private readonly playerHandle: Entity;
 
@@ -383,10 +419,15 @@ export class GameSim {
     this.enemy = this.world.defineComponent('enemy', Int16Array, ENEMY_STRIDE);
     this.enemyMotion = this.world.defineComponent('enemyMotion', Float32Array, ENEMY_MOTION_STRIDE);
     this.spawnPost = this.world.defineComponent('spawnPost', Int16Array, 1);
+    this.pickupKind = this.world.defineComponent('pickupKind', Int16Array, 1);
+    this.bombFuse = this.world.defineComponent('bombFuse', Int16Array, 1);
+    this.spawnBounce = this.world.defineComponent('spawnBounce', Uint8Array, 1);
     this.collidableMask = this.world.maskOf(this.transform, this.body, this.collision);
     this.enemyMask = this.world.maskOf(this.enemy, this.enemyMotion);
 
     this.enemies = new EnemyRegistry(options.enemies ?? ENEMY_DEFINITIONS);
+    this.pickups = new PickupRegistry(PICKUP_DEFINITIONS);
+    this.promilleUnlocked = options.promilleUnlocked ?? true;
 
     this.broadphase = new SpatialHash({
       // The grid spans the room from the origin. Coordinates outside it clamp
@@ -509,6 +550,7 @@ export class GameSim {
     this.roomTransitionTicks = direction === null ? 0 : ROOM_TRANSITION_TICKS;
     this.roomTransitionDirection = direction;
     this.roomWarmupTicks = ROOM_WARMUP_TICKS;
+    this.currentFloorValue = floor;
     this.roomEnemyCount = 0;
     const alreadyCleared = this.roomClearedIds.has(this.roomId);
     this.positionPlayerAtDoor(direction);
@@ -534,8 +576,23 @@ export class GameSim {
         this.spawnEnemyKind(definition, spawn.x, spawn.y);
       }
       for (const pickup of compiled.source.pickupSpawns) {
-        if (pickup.type === 'mass') {
-          this.spawnBeerPickup(this.room.minX + pickup.x, this.room.minY + pickup.y);
+        const definition = this.pickups.indexOf(pickup.type);
+        if (definition < 0) {
+          throw new Error(`room template pickup "${pickup.type}" is not registered`);
+        }
+        const safe = this.safeSpawnPoint(
+          this.room.minX + pickup.x,
+          this.room.minY + pickup.y,
+          this.pickups.at(definition).radius,
+        );
+        this.spawnPickup(pickup.type, safe.x, safe.y);
+      }
+      // Decorative props are art (#18) except one type: a barrel is a
+      // destructible obstacle, so a room author drops a Bierfassl at one for
+      // free and `npm run dev` always has something to demonstrate that on.
+      for (const prop of compiled.source.decorativeProps) {
+        if (prop.type === 'barrel') {
+          this.spawnTarget(this.room.minX + prop.x, this.room.minY + prop.y, TARGET_RADIUS);
         }
       }
     }
@@ -653,18 +710,76 @@ export class GameSim {
     return this.eternalHp;
   }
 
-  /** Grants soul hearts. There is no pickup to drop these yet (#22); tests and the debug window call this directly. */
+  /** Grants soul hearts (Weißbier) — collected via `spawnPickup`, or called directly by tests. */
   addSoulHealth(amount: number): void {
     if (amount > 0) {
       this.soulHp += amount;
     }
   }
 
-  /** Grants eternal hearts. Same caveat as `addSoulHealth`. */
+  /** Grants eternal hearts (Schwarzbier). Same caveat as `addSoulHealth`. */
   addEternalHealth(amount: number): void {
     if (amount > 0) {
       this.eternalHp += amount;
     }
+  }
+
+  /** Heals red Maß, clamped to the pool's max. The Maß/food half of the pickup economy. */
+  addPlayerHealth(amount: number): void {
+    if (amount <= 0) {
+      return;
+    }
+    const health = this.health.data;
+    const index = this.playerIndex;
+    const max = health[index * 2 + 1] ?? 0;
+    health[index * 2] = Math.min(max, (health[index * 2] ?? 0) + amount);
+  }
+
+  /** Biermarken banked. */
+  get biermarken(): number {
+    return this.biermarkenCount;
+  }
+
+  addBiermarken(amount: number): void {
+    if (amount > 0) {
+      this.biermarkenCount += amount;
+    }
+  }
+
+  /** Kellerschlüssel held. */
+  get keys(): number {
+    return this.keysCount;
+  }
+
+  addKeys(amount: number): void {
+    if (amount > 0) {
+      this.keysCount += amount;
+    }
+  }
+
+  /** Bierfassl in inventory, ready to place — distinct from one already ticking in the room. */
+  get bombs(): number {
+    return this.bombsCount;
+  }
+
+  addBombs(amount: number): void {
+    if (amount > 0) {
+      this.bombsCount += amount;
+    }
+  }
+
+  /** Spends one Bierfassl from inventory. False if there was none to spend. */
+  spendBomb(): boolean {
+    if (this.bombsCount <= 0) {
+      return false;
+    }
+    this.bombsCount -= 1;
+    return true;
+  }
+
+  /** The floor the current room was loaded on. Drives the Weißwurst rule. */
+  get currentFloor(): number {
+    return this.currentFloorValue;
   }
 
   /** True once every pool has emptied with no eternal heart left to spend. */
@@ -790,6 +905,20 @@ export class GameSim {
     }
   }
 
+  /**
+   * Lowers Promille, clamped at zero. Food's other half — Brezn, Obazda and
+   * Radi all heal *and* call this. Inert in a sober run only in effect, not in
+   * mechanism: Promille sits at zero the whole run, so subtracting from it
+   * does nothing to observe — no separate gate is needed here.
+   */
+  lowerPromille(amount: number): void {
+    if (amount <= 0) {
+      return;
+    }
+    const tuning = this.tuning.promille;
+    tuning.current = Math.max(0, tuning.current - amount);
+  }
+
   /** Ages the Umgfalln knockdown by one tick. Called once a tick by `stepPromille`. */
   tickUmgfalln(): void {
     if (this.umgfallnTicksValue <= 0) {
@@ -907,6 +1036,12 @@ export class GameSim {
       // next body that spawns. Losing a run is #15, and it will not be this.
       throw new Error('The player entity cannot be killed');
     }
+    // Read before `destroy` queues the slot dying — the mask itself is not
+    // cleared until `flush`, but a destructible barrel (#22) is not an
+    // authored enemy, and `roomEnemyCount` must only ever count those:
+    // decrementing it for anything killed in a loaded room, barrel included,
+    // would clear the room — and unlock its doors — one kill early.
+    const wasEnemy = ((this.world.masks[index] ?? 0) & this.enemyMask) === this.enemyMask;
     const random = this.random.cosmetic;
     this.decals.spawn(
       this.positionX(index),
@@ -918,7 +1053,9 @@ export class GameSim {
     );
     if (this.world.destroy(this.world.entityAt(index))) {
       if (this.roomTemplateLoaded) {
-        this.roomEnemyCount = Math.max(0, this.roomEnemyCount - 1);
+        if (wasEnemy) {
+          this.roomEnemyCount = Math.max(0, this.roomEnemyCount - 1);
+        }
       } else {
         this.scheduleRespawn(index, TARGET_RESPAWN_TICKS);
       }
@@ -948,6 +1085,10 @@ export class GameSim {
     // now are, then everything already in flight advances. Anything else and a
     // shot appears a tick behind the player who fired it.
     stepPlayerMovement(this, input);
+    // Placing a Bierfassl is a player action, same footing as moving — it has
+    // to happen before `stepBodies` integrates so a rolled one starts moving
+    // on the tick it was thrown, not a tick behind.
+    stepBombPlacement(this, input);
     // Enemies decide after the player has moved and before bodies integrate, so
     // a body moves on the same tick as the decision that moved it.
     stepEnemies(this);
@@ -956,11 +1097,23 @@ export class GameSim {
     stepProjectiles(this);
     stepCollision(this);
     stepContacts(this);
+    // After collision, because a blast query reads this tick's broadphase —
+    // the same grid `stepPickups` reuses just below.
+    stepBombs(this);
     stepPickups(this);
     stepImpact(this);
     // After impact, because impact is what pushes the death events a split
-    // reads. A body that splits does so on the tick it died.
+    // (and a loot roll) reads. A body that splits — or drops something — does
+    // so on the tick it died.
     stepEnemyDeaths(this);
+    stepLootDrops(this);
+    if (
+      this.roomTemplateLoaded &&
+      this.roomEnemyCount === 0 &&
+      !this.roomClearedIds.has(this.roomId)
+    ) {
+      this.rollRoomClearLoot();
+    }
     if (this.roomTemplateLoaded && this.roomEnemyCount === 0) {
       this.roomClearedIds.add(this.roomId);
     }
@@ -974,6 +1127,7 @@ export class GameSim {
       this.roomWarmupTicks -= 1;
     }
 
+    this.previousButtons = input.buttons;
     this.world.flush();
     this.currentTick += 1;
   }
@@ -981,11 +1135,16 @@ export class GameSim {
   /** Ages the flash on every body and bleeds the shake down. */
   private decayPresentation(): void {
     const flash = this.flash.data;
+    const spawnBounce = this.spawnBounce.data;
     const highWater = this.world.highWater;
     for (let index = 0; index < highWater; index++) {
       const ticks = flash[index] ?? 0;
       if (ticks > 0) {
         flash[index] = ticks - 1;
+      }
+      const bounce = spawnBounce[index] ?? 0;
+      if (bounce > 0) {
+        spawnBounce[index] = bounce - 1;
       }
     }
 
@@ -1091,23 +1250,23 @@ export class GameSim {
     // None of these sit at (midX, midY) — that's the player's own spawn
     // point (see `spawnPlayer`), and a pickup there is collected before the
     // player has done anything to earn it.
-    this.spawnBeerPickup(midX + 30, midY - 30);
-    this.spawnBeerPickup(this.room.minX + 100, this.room.maxY - 30);
-    this.spawnBeerPickup(this.room.maxX - 100, this.room.minY + 40);
-    this.spawnBeerPickup(this.room.minX + 50, midY + 10);
+    this.spawnPickup('beer', midX + 30, midY - 30);
+    this.spawnPickup('beer', this.room.minX + 100, this.room.maxY - 30);
+    this.spawnPickup('beer', this.room.maxX - 100, this.room.minY + 40);
+    this.spawnPickup('beer', this.room.minX + 50, midY + 10);
     // A dozen total, well past PROMILLE_MAX even accounting for decay and
     // travel time between them — a full "beer crawl" across the room lets a
     // playtester walk every tier, including Umgfalln, in one lap rather than
     // reaching only partway up Beduselt. Dev/testing convenience; the real
     // drop table is #22.
-    this.spawnBeerPickup(this.room.minX + 20, midY - 30);
-    this.spawnBeerPickup(this.room.minX + 90, this.room.minY + 30);
-    this.spawnBeerPickup(midX - 10, this.room.maxY - 20);
-    this.spawnBeerPickup(this.room.maxX - 110, midY + 45);
-    this.spawnBeerPickup(this.room.maxX - 55, this.room.minY + 10);
-    this.spawnBeerPickup(this.room.maxX - 20, this.room.maxY - 20);
-    this.spawnBeerPickup(midX + 20, this.room.maxY - 40);
-    this.spawnBeerPickup(midX - 30, this.room.minY + 20);
+    this.spawnPickup('beer', this.room.minX + 20, midY - 30);
+    this.spawnPickup('beer', this.room.minX + 90, this.room.minY + 30);
+    this.spawnPickup('beer', midX - 10, this.room.maxY - 20);
+    this.spawnPickup('beer', this.room.maxX - 110, midY + 45);
+    this.spawnPickup('beer', this.room.maxX - 55, this.room.minY + 10);
+    this.spawnPickup('beer', this.room.maxX - 20, this.room.maxY - 20);
+    this.spawnPickup('beer', midX + 20, this.room.maxY - 40);
+    this.spawnPickup('beer', midX - 30, this.room.minY + 20);
   }
 
   /** Puts an authored enemy on a post, by the id its definition states. */
@@ -1305,18 +1464,28 @@ export class GameSim {
   }
 
   /**
-   * A beer pickup (#17) — deliberately the leanest entity in the world.
+   * A pickup (#22) — deliberately the leanest entity in the world.
    *
-   * `spawnTarget` adds health, contact damage, flash and a respawn post,
-   * none of which a pickup needs; this carries only what `stepPickups`
-   * (overlap detection) and `EntityView` (rendering, via `collidableMask`)
-   * actually read. It never moves, so it carries no `velocity` either.
+   * `spawnTarget` adds health, contact damage, flash and a respawn post, none
+   * of which a pickup needs; this carries only what `stepPickups` (overlap
+   * detection, and the effect a collection resolves to) and `EntityView`
+   * (rendering, via `collidableMask`) actually read. It never moves through
+   * the physics integrator, so it carries no `velocity` — `stepPickups`
+   * nudges a magnetised one's `transform` directly instead.
    */
-  spawnBeerPickup(x: number, y: number): Entity {
+  spawnPickup(kindId: string, x: number, y: number): Entity {
+    const definitionIndex = this.pickups.indexOf(kindId);
+    if (definitionIndex < 0) {
+      throw new Error(`Unknown pickup kind "${kindId}"`);
+    }
+    const definition = this.pickups.at(definitionIndex);
+
     const entity = this.world.create();
     this.world.add(entity, this.transform);
     this.world.add(entity, this.body);
     this.world.add(entity, this.collision);
+    this.world.add(entity, this.pickupKind);
+    this.world.add(entity, this.spawnBounce);
 
     const index = entityIndex(entity);
     const transform = this.transform.data;
@@ -1326,11 +1495,175 @@ export class GameSim {
     transform[index * 4 + 3] = y;
 
     const body = this.body.data;
-    body[index * 2] = BEER_PICKUP_RADIUS;
+    body[index * 2] = definition.radius;
     body[index * 2 + 1] = 1;
+
+    this.pickupKind.data[index] = definitionIndex;
+    // Purely cosmetic — `EntityView` reads this down to pop the sprite on
+    // spawn, and nothing else in the simulation looks at it.
+    this.spawnBounce.data[index] = Math.round(this.tuning.pickup.spawnBounceTicks);
 
     this.setCollisionLayer(index, CollisionLayer.Pickup);
     return entity;
+  }
+
+  /**
+   * A Bierfassl, live and fused — placed or rolled from inventory by
+   * `stepBombPlacement`, never by a room template (a room-authored Bierfassl
+   * is the ordinary `spawnPickup('bierfassl', ...)` that adds to inventory,
+   * same as any other pickup).
+   *
+   * `rolling` decides "set down" from "rolled": a set-down keg carries no
+   * `velocity` at all, so `stepBodies` never touches its position; a rolled
+   * one gets one, and `stepBombs` applies its own drag to it every tick since
+   * `stepBodies` only damps `push`, not `velocity` (see `bodies.ts`).
+   */
+  spawnBierfassl(
+    x: number,
+    y: number,
+    rollDirX: number,
+    rollDirY: number,
+    rolling: boolean,
+  ): Entity {
+    const entity = this.world.create();
+    this.world.add(entity, this.transform);
+    this.world.add(entity, this.body);
+    this.world.add(entity, this.collision);
+    this.world.add(entity, this.bombFuse);
+    if (rolling) {
+      this.world.add(entity, this.velocity);
+    }
+
+    const index = entityIndex(entity);
+    const transform = this.transform.data;
+    transform[index * 4] = x;
+    transform[index * 4 + 1] = y;
+    transform[index * 4 + 2] = x;
+    transform[index * 4 + 3] = y;
+
+    const body = this.body.data;
+    body[index * 2] = BOMB_RADIUS;
+    body[index * 2 + 1] = 4;
+
+    if (rolling) {
+      const speed = this.tuning.pickup.bombRollSpeed;
+      this.velocity.data[index * 2] = rollDirX * speed;
+      this.velocity.data[index * 2 + 1] = rollDirY * speed;
+    }
+
+    this.bombFuse.data[index] = Math.round(this.tuning.pickup.bombFuseTicks);
+    this.setCollisionLayer(index, CollisionLayer.Obstacle);
+    return entity;
+  }
+
+  /**
+   * A spawn point clear of walls and obstacles, nudged toward the room's
+   * centre when the one asked for is not — the acceptance criterion "pickups
+   * cannot spawn inside walls or under obstacles," made a chokepoint every
+   * spawn site (loot rolls, room-clear rolls, room-authored `pickupSpawns`)
+   * routes through rather than re-implements.
+   *
+   * A few discrete steps toward the centre, not a search: a room is small
+   * enough that "closer to the middle" reliably finds daylight, and giving up
+   * and placing it exactly where asked (same as `splitFromEvent`'s corpse
+   * fallback in `systems/enemy.ts`) is a better failure than not spawning it.
+   */
+  private safeSpawnPoint(x: number, y: number, radius: number): { x: number; y: number } {
+    if (this.room.isClear(x, y, radius)) {
+      return { x, y };
+    }
+    const centreX = (this.room.minX + this.room.maxX) / 2;
+    const centreY = (this.room.minY + this.room.maxY) / 2;
+    for (let step = 1; step <= 4; step++) {
+      const t = step / 4;
+      const candidateX = x + (centreX - x) * t;
+      const candidateY = y + (centreY - y) * t;
+      if (this.room.isClear(candidateX, candidateY, radius)) {
+        return { x: candidateX, y: candidateY };
+      }
+    }
+    return { x, y };
+  }
+
+  /**
+   * Rolls one outcome from `table` and spawns it near `(x, y)`, or spawns
+   * nothing for the `null` "nothing drops" outcome. The one place a drop
+   * table is read: `stepLootDrops` (enemy deaths) and `rollRoomClearLoot`
+   * (room clear) both call this rather than rolling their own way, so
+   * sober/promilled selection and need-weighting only exist once.
+   */
+  dropLoot(table: DropTable, x: number, y: number): void {
+    const entries = this.promilleUnlocked ? table.promilled : table.sober;
+    let total = 0;
+    for (const entry of entries) {
+      total += entry.weight * this.needMultiplierFor(entry.pickupId);
+    }
+    if (total <= 0) {
+      return;
+    }
+    let roll = this.random.items.nextFloat() * total;
+    let chosen: string | null = null;
+    for (const entry of entries) {
+      roll -= entry.weight * this.needMultiplierFor(entry.pickupId);
+      if (roll < 0) {
+        chosen = entry.pickupId;
+        break;
+      }
+    }
+    if (chosen === null) {
+      return;
+    }
+    const radius = this.pickups.get(chosen).radius;
+    const safe = this.safeSpawnPoint(x, y, radius);
+    this.spawnPickup(chosen, safe.x, safe.y);
+  }
+
+  /**
+   * The multiplier a table entry's weight is scaled by: boosted when the
+   * player is low on whatever the pickup grants, otherwise 1. Reads the
+   * *resolved* `PickupDefinition.effect`, not the id string, so a new pickup
+   * that reuses an existing effect kind is weighted correctly with no change
+   * here — the whole point of keeping "what this grants" as data rather than
+   * as a name to pattern-match. The `null` "nothing drops" outcome has no
+   * need concept and is never boosted.
+   */
+  private needMultiplierFor(pickupId: string | null): number {
+    if (pickupId === null) {
+      return 1;
+    }
+    const tuning = this.tuning.pickup;
+    const effect = this.pickups.get(pickupId).effect;
+    let low = false;
+    if (effect.kind === 'health') {
+      low =
+        effect.pool === 'red'
+          ? this.playerHealth < PLAYER_HEALTH * tuning.needThreshold
+          : effect.pool === 'soul'
+            ? this.soulHp === 0
+            : this.eternalHp === 0;
+    } else if (effect.kind === 'food') {
+      low = this.playerHealth < PLAYER_HEALTH * tuning.needThreshold;
+    } else if (effect.kind === 'currency') {
+      low = this.biermarkenCount === 0;
+    } else if (effect.kind === 'bombs') {
+      low = this.bombsCount === 0;
+    } else if (effect.kind === 'keys') {
+      low = this.keysCount === 0;
+    }
+    return low ? tuning.needMultiplier : 1;
+  }
+
+  /**
+   * The room-clear roll: fired once, the first tick a room reads as cleared,
+   * from `step()` right before `roomClearedIds` records that it happened.
+   * Kept a private method rather than a system, unlike enemy-death loot —
+   * "has this room already paid out" is `roomClearedIds`, which nothing
+   * outside `GameSim` has a reason to see.
+   */
+  private rollRoomClearLoot(): void {
+    const centreX = (this.room.minX + this.room.maxX) / 2;
+    const centreY = (this.room.minY + this.room.maxY) / 2;
+    this.dropLoot(ROOM_CLEAR_DROP_TABLE, centreX, centreY);
   }
 
   private setCollisionLayer(index: number, layer: CollisionLayerId): void {

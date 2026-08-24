@@ -82,6 +82,24 @@ describe('player health pools', () => {
     sim.applyPlayerDamage(5);
     expect(sim.playerDeathTick).toBe(deathTick);
   });
+
+  it('addPlayerHealth heals red Maß, clamped to the pool max', () => {
+    const sim = emptySim();
+    sim.applyPlayerDamage(3);
+    expect(sim.playerHealth).toBe(PLAYER_HEALTH - 3);
+    sim.addPlayerHealth(1);
+    expect(sim.playerHealth).toBe(PLAYER_HEALTH - 2);
+    sim.addPlayerHealth(100);
+    expect(sim.playerHealth).toBe(PLAYER_HEALTH);
+  });
+
+  it('addPlayerHealth does nothing for a non-positive amount', () => {
+    const sim = emptySim();
+    sim.applyPlayerDamage(3);
+    sim.addPlayerHealth(0);
+    sim.addPlayerHealth(-5);
+    expect(sim.playerHealth).toBe(PLAYER_HEALTH - 3);
+  });
 });
 
 /** Fires one enemy shot two pixels short of the player, closing fast, aimed dead-on. */

@@ -9,6 +9,7 @@ import { FrameMetrics } from './metrics.js';
 import { type DebugContext, type DebugPanel, PANEL_WIDTH } from './panel.js';
 import { CountsPanel } from './panels/counts.js';
 import { FrameGraphPanel } from './panels/frame-graph.js';
+import { PickupsPanel } from './panels/pickups.js';
 import { RunInfoPanel } from './panels/run-info.js';
 
 /** Collider outline colours, by layer. */
@@ -76,6 +77,7 @@ export class DebugOverlay {
     this.addPanel(new FrameGraphPanel());
     this.addPanel(new CountsPanel());
     this.addPanel(this.runInfo);
+    this.addPanel(new PickupsPanel());
 
     this.setVisible(false);
   }

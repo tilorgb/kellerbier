@@ -3,6 +3,7 @@ import {
   DEFAULT_ENEMY_TUNING,
   DEFAULT_IMPACT_TUNING,
   DEFAULT_MOVEMENT_TUNING,
+  DEFAULT_PICKUP_TUNING,
   DEFAULT_PROMILLE_TUNING,
   DEFAULT_SHOOTING_TUNING,
 } from '../sim/tuning.js';
@@ -38,7 +39,7 @@ interface FieldSpec {
 
 interface GroupSpec {
   readonly title: string;
-  readonly group: 'movement' | 'shooting' | 'impact' | 'enemy' | 'promille';
+  readonly group: 'movement' | 'shooting' | 'impact' | 'enemy' | 'promille' | 'pickup';
   readonly fields: readonly FieldSpec[];
 }
 
@@ -186,6 +187,22 @@ const GROUPS: readonly GroupSpec[] = [
       { key: 'umgfallnWakePromille', min: 0, max: 5, step: 0.1, hint: 'Promille after waking up' },
     ],
   },
+  {
+    title: 'pickup',
+    group: 'pickup',
+    fields: [
+      { key: 'magnetRadius', min: 0, max: 100, step: 2, hint: 'px before a pickup drifts in' },
+      { key: 'magnetSpeed', min: 0, max: 6, step: 0.1, hint: 'px/tick it closes the gap by' },
+      { key: 'spawnBounceTicks', min: 0, max: 40, step: 1, hint: 'spawn-pop length' },
+      { key: 'needMultiplier', min: 1, max: 6, step: 0.25, hint: 'weight boost when you are low' },
+      { key: 'needThreshold', min: 0, max: 1, step: 0.05, hint: 'fraction of max counted as low' },
+      { key: 'bombFuseTicks', min: 10, max: 240, step: 5, hint: 'ticks before a Bierfassl blows' },
+      { key: 'bombBlastRadius', min: 8, max: 100, step: 2, hint: 'blast reach, px' },
+      { key: 'bombBlastDamage', min: 0.5, max: 12, step: 0.5, hint: 'half-Maß per blast' },
+      { key: 'bombRollSpeed', min: 0, max: 8, step: 0.1, hint: 'px/tick when rolled' },
+      { key: 'bombRollDrag', min: 0.5, max: 0.99, step: 0.01, hint: 'how fast a roll slows' },
+    ],
+  },
 ];
 
 const DEFAULTS = {
@@ -194,6 +211,7 @@ const DEFAULTS = {
   impact: DEFAULT_IMPACT_TUNING,
   enemy: DEFAULT_ENEMY_TUNING,
   promille: DEFAULT_PROMILLE_TUNING,
+  pickup: DEFAULT_PICKUP_TUNING,
 } as const;
 
 const STYLE = `

@@ -36,6 +36,7 @@ export const schimmelspore: EnemyDefinition = {
   size: 'mini',
   health: 1,
   contactDamage: 1,
+  lootTier: 'weak',
   initial: 'creep',
   states: [
     {

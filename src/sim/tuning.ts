@@ -354,12 +354,37 @@ export interface PromilleTuning {
   umgfallnWakePromille: number;
 }
 
+/** The pickup economy (#22): magnetism, spawn juice, need-weighting and the Bierfassl. */
+export interface PickupTuning {
+  /** How close a pickup has to be to the player before it starts drifting toward them. */
+  magnetRadius: number;
+  /** Pixels per tick a magnetised pickup closes the distance by. */
+  magnetSpeed: number;
+  /** Ticks the spawn-bounce visual runs for, purely cosmetic. */
+  spawnBounceTicks: number;
+  /** Weight multiplier applied to a drop-table entry the player is low on. */
+  needMultiplier: number;
+  /** Fraction of max (health) or a bare zero (bombs/keys/currency) counted as "low". */
+  needThreshold: number;
+  /** Ticks between a Bierfassl being placed and it exploding. */
+  bombFuseTicks: number;
+  /** Radius the blast damages and destroys destructible terrain within. */
+  bombBlastRadius: number;
+  /** Damage the blast deals to everything it reaches. */
+  bombBlastDamage: number;
+  /** Initial speed of a rolled Bierfassl, pixels per tick. */
+  bombRollSpeed: number;
+  /** Drag applied to a rolled Bierfassl every tick — see `stepBodies`. */
+  bombRollDrag: number;
+}
+
 export interface SimTuning {
   readonly movement: MovementTuning;
   readonly shooting: ShootingTuning;
   readonly impact: ImpactTuning;
   readonly enemy: EnemyTuning;
   readonly promille: PromilleTuning;
+  readonly pickup: PickupTuning;
 }
 
 export const DEFAULT_MOVEMENT_TUNING: Readonly<MovementTuning> = {
@@ -471,6 +496,19 @@ export const DEFAULT_PROMILLE_TUNING: Readonly<PromilleTuning> = {
   umgfallnWakePromille: 1.5,
 };
 
+export const DEFAULT_PICKUP_TUNING: Readonly<PickupTuning> = {
+  magnetRadius: 36,
+  magnetSpeed: 1.4,
+  spawnBounceTicks: 14,
+  needMultiplier: 2,
+  needThreshold: 0.5,
+  bombFuseTicks: 90,
+  bombBlastRadius: 40,
+  bombBlastDamage: 4,
+  bombRollSpeed: 2.6,
+  bombRollDrag: 0.9,
+};
+
 export function createTuning(): SimTuning {
   return {
     movement: { ...DEFAULT_MOVEMENT_TUNING },
@@ -478,6 +516,7 @@ export function createTuning(): SimTuning {
     impact: { ...DEFAULT_IMPACT_TUNING },
     enemy: { ...DEFAULT_ENEMY_TUNING },
     promille: { ...DEFAULT_PROMILLE_TUNING },
+    pickup: { ...DEFAULT_PICKUP_TUNING },
   };
 }
 
