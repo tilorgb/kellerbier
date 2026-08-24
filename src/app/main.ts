@@ -7,7 +7,7 @@ import { ROOM_TEMPLATES, STAIRCASE_TEMPLATES, type DoorDirection } from '../cont
 import { type RoomDirection, GameSim, MAX_COLLIDER_RADIUS } from '../sim/game/sim.js';
 import { promilleTierName } from '../sim/game/promille.js';
 import { type FloorPlan, type FloorPlanRoom, generateFloor } from '../sim/room/floor-plan.js';
-import { compileStaircaseRoom, validateStaircaseTemplate } from '../sim/room/staircase.js';
+import { validateStaircaseTemplate } from '../sim/room/staircase.js';
 import {
   type CompiledDoor,
   type RoomPlacement,
@@ -97,20 +97,18 @@ function planStaircaseTemplate(room: FloorPlanRoom): unknown {
 }
 
 /**
- * A staircase room's two doors, each with its real pixel centre
- * (`compileStaircaseRoom`'s `startDoor`/`endDoor`) — `hiddenDoorsFor`/
- * `crackHintsFor` need this because a staircase has no floor-grid cell for
- * `doorCentre`'s normal cell-relative formula to place a door against
- * (`CompiledDoor.centre`'s doc comment).
+ * A staircase room's two doors, each with its real pixel centre —
+ * `hiddenDoorsFor`/`crackHintsFor` need this because a staircase has no
+ * floor-grid cell for `doorCentre`'s normal cell-relative formula to place
+ * a door against (`CompiledDoor.centre`'s doc comment). Read straight off
+ * `FloorPlanRoom.doorCentres`, precomputed once by `floor-plan.ts`'s
+ * `staircaseDoorCentres` at placement time (#117) — this never compiles the
+ * staircase room itself.
  */
 function staircaseDoorCentres(
   room: FloorPlanRoom,
 ): ReadonlyMap<DoorDirection, { x: number; y: number }> {
-  const compiled = compileStaircaseRoom(validateStaircaseTemplate(planStaircaseTemplate(room)));
-  return new Map([
-    [compiled.startDoor.direction, { x: compiled.startDoor.x, y: compiled.startDoor.y }],
-    [compiled.endDoor.direction, { x: compiled.endDoor.x, y: compiled.endDoor.y }],
-  ]);
+  return new Map((room.doorCentres ?? []).map((door) => [door.direction, door]));
 }
 
 /**

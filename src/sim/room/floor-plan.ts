@@ -83,6 +83,19 @@ export interface FloorPlanRoom {
    * staircase is, compile one, or do this arithmetic itself.
    */
   readonly minimapRects?: readonly RoomRect[];
+  /**
+   * A staircase's two real door pixel centres (#112/#117), computed once by
+   * `staircaseDoorCentres` at placement time — set only for a staircase
+   * room. `app/main.ts`'s `hiddenDoorsFor`/`crackHintsFor` read this
+   * directly instead of compiling the staircase room just to ask it where
+   * its doors are, the same "computed once, upstream" shape `minimapRects`
+   * already uses.
+   */
+  readonly doorCentres?: readonly {
+    readonly direction: DoorDirection;
+    readonly x: number;
+    readonly y: number;
+  }[];
 }
 
 /** Every distinct room `doors` actually connects to — order not meaningful. */
@@ -328,6 +341,12 @@ interface PlacedRoom {
   readonly doorCells?: readonly { readonly cellIndex: number; readonly direction: DoorDirection }[];
   /** Set only for a staircase room — see `FloorPlanRoom.minimapRects`'s doc comment. */
   readonly minimapRects?: readonly RoomRect[];
+  /** Set only for a staircase room — see `FloorPlanRoom.doorCentres`'s doc comment. */
+  readonly doorCentres?: readonly {
+    readonly direction: DoorDirection;
+    readonly x: number;
+    readonly y: number;
+  }[];
 }
 
 interface Skeleton {
@@ -339,6 +358,11 @@ interface StaircasePlacement {
   readonly cells: readonly Cell[];
   readonly doorCells: readonly { readonly cellIndex: number; readonly direction: DoorDirection }[];
   readonly minimapRects: readonly RoomRect[];
+  readonly doorCentres: readonly {
+    readonly direction: DoorDirection;
+    readonly x: number;
+    readonly y: number;
+  }[];
   /**
    * The cell just past the staircase's *far* door — the one `anchor` isn't
    * on. The near end already has a real neighbour by construction (that's
@@ -395,6 +419,30 @@ export function staircaseMinimapRects(
     minY: originCell.y + (step.minY - originPixelY) / SCREEN_HEIGHT,
     maxY: originCell.y + (step.maxY - originPixelY) / SCREEN_HEIGHT,
   }));
+}
+
+/**
+ * A staircase's two real door pixel centres, computed once, here, at
+ * placement time, and carried on `FloorPlanRoom` as plain data
+ * (`doorCentres`) — the same "computed once, upstream" shape
+ * `staircaseMinimapRects` above already uses, applied to the sibling
+ * consumer that needs a staircase's doors instead of its walkable shape
+ * (#117: `app/main.ts`'s `hiddenDoorsFor`/`crackHintsFor` used to import
+ * `compileStaircaseRoom` themselves just to read these two points).
+ *
+ * Unlike `staircaseMinimapRects`, this needs no `originCell`: a door's
+ * pixel centre is entirely local to the compiled room's own geometry
+ * (`ROOM_MARGIN_X`/`ROOM_MARGIN_Y` plus the template's steps), never a
+ * function of where the room ends up on the floor grid.
+ */
+function staircaseDoorCentres(
+  template: StaircaseContentTemplate,
+): readonly { readonly direction: DoorDirection; readonly x: number; readonly y: number }[] {
+  const compiled = compileStaircaseRoom(template);
+  return [
+    { direction: compiled.startDoor.direction, x: compiled.startDoor.x, y: compiled.startDoor.y },
+    { direction: compiled.endDoor.direction, x: compiled.endDoor.x, y: compiled.endDoor.y },
+  ];
 }
 
 /**
@@ -516,6 +564,7 @@ function placeStaircase(
       { cellIndex: endCellIndex, direction: template.endDoor },
     ],
     minimapRects: staircaseMinimapRects(originCell, template),
+    doorCentres: staircaseDoorCentres(template),
     farNeighborCell,
   };
 }
@@ -551,6 +600,7 @@ function buildSkeleton(
       readonly templateId: string;
       readonly doorCells: StaircasePlacement['doorCells'];
       readonly minimapRects: StaircasePlacement['minimapRects'];
+      readonly doorCentres: StaircasePlacement['doorCentres'];
     },
   ): void => {
     const index = rooms.length;
@@ -564,6 +614,7 @@ function buildSkeleton(
             staircaseTemplateId: staircase.templateId,
             doorCells: staircase.doorCells,
             minimapRects: staircase.minimapRects,
+            doorCentres: staircase.doorCentres,
           }),
     });
     for (const cell of cells) {
@@ -613,6 +664,7 @@ function buildSkeleton(
           templateId: template.id,
           doorCells: staircasePlacement.doorCells,
           minimapRects: staircasePlacement.minimapRects,
+          doorCentres: staircasePlacement.doorCentres,
         });
         // The near end already has a real neighbour — that's `anchor`,
         // where this staircase grew from. Guarantee one at the far end too
@@ -1104,7 +1156,11 @@ function tryGenerateFloor(
       templateId,
       ...(room.staircaseTemplateId === undefined
         ? {}
-        : { staircaseTemplateId: room.staircaseTemplateId, minimapRects: room.minimapRects }),
+        : {
+            staircaseTemplateId: room.staircaseTemplateId,
+            minimapRects: room.minimapRects,
+            doorCentres: room.doorCentres,
+          }),
     });
   }
 
