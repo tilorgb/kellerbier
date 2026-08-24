@@ -6,6 +6,15 @@ import {
   type RoomShape,
   type RoomTemplate,
 } from '../../content/rooms/definition.js';
+import {
+  STAIR_STEP_OVERLAP,
+  STEP_SIGN,
+  compileStaircaseRoom,
+  type StaircaseContentTemplate,
+} from './staircase.js';
+import { SCREEN_HEIGHT, SCREEN_WIDTH } from './template.js';
+import type { RoomRect } from './geometry.js';
+import { computeVoidCells } from './void-cells.js';
 
 /**
  * Procedural floor layout: a grid of room slots grown outward from a start
@@ -25,7 +34,7 @@ import {
  * one per real neighbour, not a `{north,east,south,west}` bag.
  */
 
-interface Cell {
+export interface Cell {
   readonly x: number;
   readonly y: number;
 }
@@ -49,12 +58,29 @@ export interface RoomDoor {
 export interface FloorPlanRoom {
   readonly id: string;
   readonly cells: readonly Cell[];
-  readonly shape: RoomShape;
+  /**
+   * `'staircase'` for a diagonal staircase set-piece (#112) — deliberately
+   * not a `RoomShape` (`docs/DECISIONS.md` #11/#12): it is never chosen by
+   * `chooseShape`/placed by `placeShape`, and its `templateId` resolves
+   * through the floor's staircase pool, not `templatePool`. Check
+   * `staircaseTemplateId` to tell the two apart, not this field's value.
+   */
+  readonly shape: RoomShape | 'staircase';
   readonly role: RoomRole;
   readonly doors: readonly RoomDoor[];
   /** Room-graph distance from the start room, in doors walked through. */
   readonly distanceFromStart: number;
   readonly templateId: string;
+  /** Set only for a staircase room — see `shape`'s doc comment. */
+  readonly staircaseTemplateId?: string;
+  /**
+   * A staircase's real walkable steps (#112), pre-mapped into this same
+   * fractional floor-grid space by `staircaseMinimapRects` at placement
+   * time — set only for a staircase room. `render/minimap-hud.ts` draws
+   * these instead of `cells` when present; it never needs to know what a
+   * staircase is, compile one, or do this arithmetic itself.
+   */
+  readonly minimapRects?: readonly RoomRect[];
 }
 
 /** Every distinct room `doors` actually connects to — order not meaningful. */
@@ -294,12 +320,208 @@ function placeShape(
 interface PlacedRoom {
   readonly id: string;
   readonly cells: readonly Cell[];
-  readonly shape: RoomShape;
+  readonly shape: RoomShape | 'staircase';
+  /** Set only for a staircase room (#112) — see `FloorPlanRoom`'s doc comment. */
+  readonly staircaseTemplateId?: string;
+  /**
+   * The only `(cellIndex, direction)` pairs a staircase room is ever allowed
+   * a door on — `computeAdjacency` consults this instead of treating every
+   * geometric touch as a door. `undefined` for an ordinary room, which keeps
+   * today's "every touch is a door" behaviour exactly as before.
+   */
+  readonly doorCells?: readonly { readonly cellIndex: number; readonly direction: DoorDirection }[];
+  /** Set only for a staircase room — see `FloorPlanRoom.minimapRects`'s doc comment. */
+  readonly minimapRects?: readonly RoomRect[];
 }
 
 interface Skeleton {
   readonly rooms: PlacedRoom[];
   readonly occupied: Map<string, number>;
+}
+
+interface StaircasePlacement {
+  readonly cells: readonly Cell[];
+  readonly doorCells: readonly { readonly cellIndex: number; readonly direction: DoorDirection }[];
+  readonly minimapRects: readonly RoomRect[];
+  /**
+   * The cell just past the staircase's *far* door — the one `anchor` isn't
+   * on. The near end already has a real neighbour by construction (that's
+   * what `anchor` touched to grow from); this is guaranteed a real room too
+   * (`buildSkeleton`'s caller places one here immediately), because a
+   * staircase is the floor's single biggest room by walking time, and
+   * reaching the far door to find nothing there would feel like wasted
+   * effort rather than an arrival.
+   */
+  readonly farNeighborCell: Cell;
+}
+
+/**
+ * A staircase's real, compiled `stepRects` (room units), mapped into the
+ * same fractional floor-grid space every other room's integer cell
+ * coordinates already live in — one grid cell is exactly one `SCREEN_WIDTH`
+ * × `SCREEN_HEIGHT`, and `originCell` is exactly the same corner
+ * `stepRects[0]`'s own `minX`/`minY` is, because this function's own caller
+ * (`placeStaircase`) reserves the floor-grid block with the identical
+ * `STEP_SIGN` convention `compileStaircaseRoom` used to lay the steps out in
+ * room-unit space — the two are built from the same signed offset, just at
+ * different scales, so they can never drift apart.
+ *
+ * Computed once, here, at placement time, and carried on `FloorPlanRoom` as
+ * plain rectangles (`minimapRects`) — nothing downstream (`render/minimap-
+ * hud.ts` included) needs to know a staircase is a staircase, compile one,
+ * or do this arithmetic itself; it only ever draws whatever rects a room
+ * happens to carry.
+ *
+ * No snapping or edge-stretching here — both were tried and both drew a
+ * staircase that didn't match its own real shape (a whole rect snapped to
+ * its reserved cell detached from its neighbour step; stretching just one
+ * edge drew that step visibly longer than the rest). The real fix is
+ * `validateStaircaseTemplate`'s odd-`stepCount` requirement: it makes
+ * `placeStaircase`'s cell reservation and this function's real geometry
+ * agree exactly, so the *true*, undistorted shape mapped here already
+ * reaches the reserved block's own edges — nothing to correct after the
+ * fact.
+ */
+export function staircaseMinimapRects(
+  originCell: Cell,
+  template: StaircaseContentTemplate,
+): readonly RoomRect[] {
+  const stepRects = compileStaircaseRoom(template).geometry.stepRects;
+  const firstStep = stepRects[0];
+  if (firstStep === undefined) {
+    return [];
+  }
+  const originPixelX = firstStep.minX;
+  const originPixelY = firstStep.minY;
+  return stepRects.map((step) => ({
+    minX: originCell.x + (step.minX - originPixelX) / SCREEN_WIDTH,
+    maxX: originCell.x + (step.maxX - originPixelX) / SCREEN_WIDTH,
+    minY: originCell.y + (step.minY - originPixelY) / SCREEN_HEIGHT,
+    maxY: originCell.y + (step.maxY - originPixelY) / SCREEN_HEIGHT,
+  }));
+}
+
+/**
+ * Chance, per growth iteration, that the generator attempts a staircase
+ * instead of an ordinary `RoomShape` — small and content-gated (#112): only
+ * ever rolled when `staircasePool` actually has a template eligible for this
+ * floor's `floorTag`, so a floor with no staircase content generates exactly
+ * as it did before this existed.
+ */
+const STAIRCASE_CHANCE = 0.05;
+
+/**
+ * Tries to reserve `template`'s real screen-space footprint as floor-grid
+ * cells, anchored so one of its two ends lands on `anchor`.
+ *
+ * The footprint is a *square block* of `span` × `span` cells, not just the
+ * `stepCount` cells the steps themselves sit on — `span` is
+ * `1 + (stepCount - 1) * STAIR_STEP_OVERLAP` cells across (the true screen-
+ * space bounding box, in cell units), rounded **up**. A staircase's steps
+ * overlap by a fraction of a screen (`STAIR_STEP_OVERLAP`), not a whole one,
+ * so that span is very rarely a whole number of cells — rounding up over-
+ * reserves rather than under, which is the safe side to be wrong on: any
+ * other room placed in a cell this block doesn't strictly touch is merely a
+ * missed opportunity, but placing one in a cell the real geometry *does*
+ * touch would be a room the player can plainly see is impossible (#112).
+ * The first step always sits at one corner of this block and the last step
+ * at the diagonally opposite corner, regardless of `span` — only those two
+ * corner cells ever get a door; every other cell in the block, corner or
+ * interior, gets none (`doorCells`, consumed by `computeAdjacency`'s
+ * `buildDoorAllowance`).
+ *
+ * `anchor` must have exactly one occupied neighbour (the same rule the
+ * growth loop already enforces before calling this) — that neighbour's
+ * direction has to match either `template.startDoor` or `template.endDoor`,
+ * or there would be no door back to the room that grew this frontier cell in
+ * the first place. Every other cell in the block must land in-bounds,
+ * unoccupied, and (mirroring `placeShape`'s `extraCellsAreClean`) touch
+ * nothing already placed. The cell just past the *far* door — see
+ * `StaircasePlacement.farNeighborCell` — must also land in-bounds and
+ * unoccupied, so the caller can guarantee a real room there: rejecting the
+ * whole placement here, with the ordinary shape-placement fallback right
+ * behind it in the growth loop, is cheaper than only discovering a
+ * dead-end staircase once the whole floor fails `validateFloorPlan` and
+ * the generator has to retry from scratch.
+ */
+function placeStaircase(
+  occupied: ReadonlyMap<string, number>,
+  anchor: Cell,
+  template: StaircaseContentTemplate,
+  radius: number,
+): StaircasePlacement | null {
+  const requiredDirection = DIRECTIONS.find((direction) => {
+    const offset = OFFSET[direction];
+    return occupied.has(cellKey({ x: anchor.x + offset.x, y: anchor.y + offset.y }));
+  });
+  if (requiredDirection === undefined) {
+    return null;
+  }
+
+  const span = Math.max(1, Math.ceil(1 + (template.stepCount - 1) * STAIR_STEP_OVERLAP));
+  const lastIndex = span - 1;
+  const anchorCorner =
+    template.startDoor === requiredDirection
+      ? 0
+      : template.endDoor === requiredDirection
+        ? lastIndex
+        : null;
+  if (anchorCorner === null) {
+    return null;
+  }
+
+  const sign = STEP_SIGN[template.direction];
+  const originCell: Cell = {
+    x: anchor.x - anchorCorner * sign.x,
+    y: anchor.y - anchorCorner * sign.y,
+  };
+  const cells: Cell[] = [];
+  for (let row = 0; row < span; row++) {
+    for (let col = 0; col < span; col++) {
+      cells.push({ x: originCell.x + col * sign.x, y: originCell.y + row * sign.y });
+    }
+  }
+  // Row-major, so the start corner (row 0, col 0) is always index 0 and the
+  // end corner (row `lastIndex`, col `lastIndex`) is always the last index —
+  // true whichever corner `anchor` itself landed on.
+  const startCellIndex = 0;
+  const endCellIndex = cells.length - 1;
+  const anchorCellIndex = anchorCorner === 0 ? startCellIndex : endCellIndex;
+
+  if (!cells.every((cell) => inBounds(cell, radius))) {
+    return null;
+  }
+  if (cells.some((cell) => occupied.has(cellKey(cell)))) {
+    return null;
+  }
+  const extraCellsAreClean = cells
+    .filter((_cell, index) => index !== anchorCellIndex)
+    .every((cell) => neighborCount(occupied, cell) === 0);
+  if (!extraCellsAreClean) {
+    return null;
+  }
+
+  const farCellIndex = anchorCellIndex === startCellIndex ? endCellIndex : startCellIndex;
+  const farDoor = anchorCellIndex === startCellIndex ? template.endDoor : template.startDoor;
+  const farCell = cells[farCellIndex];
+  if (farCell === undefined) {
+    return null;
+  }
+  const farOffset = OFFSET[farDoor];
+  const farNeighborCell: Cell = { x: farCell.x + farOffset.x, y: farCell.y + farOffset.y };
+  if (!inBounds(farNeighborCell, radius) || occupied.has(cellKey(farNeighborCell))) {
+    return null;
+  }
+
+  return {
+    cells,
+    doorCells: [
+      { cellIndex: startCellIndex, direction: template.startDoor },
+      { cellIndex: endCellIndex, direction: template.endDoor },
+    ],
+    minimapRects: staircaseMinimapRects(originCell, template),
+    farNeighborCell,
+  };
 }
 
 /**
@@ -312,14 +534,42 @@ interface Skeleton {
  * on #20 that a floor has "a recognisable shape rather than always sprawling
  * into a blob".
  */
-function buildSkeleton(rng: Rng, config: FloorConfig, targetCount: number): Skeleton | null {
+function buildSkeleton(
+  rng: Rng,
+  config: FloorConfig,
+  targetCount: number,
+  staircasePool: readonly StaircaseContentTemplate[],
+): Skeleton | null {
   const occupied = new Map<string, number>();
   const rooms: PlacedRoom[] = [];
   const frontier: Cell[] = [];
 
-  const place = (cells: readonly Cell[], shape: RoomShape): void => {
+  const eligibleStaircases = staircasePool.filter((template) =>
+    template.floorTags.includes(config.floorTag),
+  );
+
+  const place = (
+    cells: readonly Cell[],
+    shape: RoomShape | 'staircase',
+    staircase?: {
+      readonly templateId: string;
+      readonly doorCells: StaircasePlacement['doorCells'];
+      readonly minimapRects: StaircasePlacement['minimapRects'];
+    },
+  ): void => {
     const index = rooms.length;
-    rooms.push({ id: `r${String(index)}`, cells, shape });
+    rooms.push({
+      id: `r${String(index)}`,
+      cells,
+      shape,
+      ...(staircase === undefined
+        ? {}
+        : {
+            staircaseTemplateId: staircase.templateId,
+            doorCells: staircase.doorCells,
+            minimapRects: staircase.minimapRects,
+          }),
+    });
     for (const cell of cells) {
       occupied.set(cellKey(cell), index);
     }
@@ -353,6 +603,31 @@ function buildSkeleton(rng: Rng, config: FloorConfig, targetCount: number): Skel
       continue;
     }
     if (neighborCount(occupied, anchor) > 1) {
+      continue;
+    }
+
+    let placedStaircase = false;
+    if (eligibleStaircases.length > 0 && rng.chance(STAIRCASE_CHANCE)) {
+      const template = rng.weightedPick(
+        eligibleStaircases.map((candidate) => ({ value: candidate, weight: candidate.weight })),
+      );
+      const staircasePlacement = placeStaircase(occupied, anchor, template, config.gridRadius);
+      if (staircasePlacement !== null) {
+        place(staircasePlacement.cells, 'staircase', {
+          templateId: template.id,
+          doorCells: staircasePlacement.doorCells,
+          minimapRects: staircasePlacement.minimapRects,
+        });
+        // The near end already has a real neighbour — that's `anchor`,
+        // where this staircase grew from. Guarantee one at the far end too
+        // (`placeStaircase` already checked the cell is free and in
+        // bounds), rather than leaving it to whatever the rest of growth
+        // happens to do — see `StaircasePlacement.farNeighborCell`.
+        place([staircasePlacement.farNeighborCell], '1x1');
+        placedStaircase = true;
+      }
+    }
+    if (placedStaircase) {
       continue;
     }
 
@@ -487,6 +762,65 @@ function placeSupersecretRoom(
   return id;
 }
 
+const OPPOSITE_DIRECTION: Readonly<Record<DoorDirection, DoorDirection>> = {
+  north: 'south',
+  south: 'north',
+  east: 'west',
+  west: 'east',
+};
+
+/**
+ * Which directions a cell is allowed a door on.
+ *
+ * A staircase's cells (#112) get an explicit, near-empty set built from
+ * their `doorCells`: only its start and end step, only the one fixed
+ * direction each was authored with — every other step, and every other
+ * direction on those two, allows none.
+ *
+ * Every other room gets every direction *except* one that points into that
+ * room's own void cell (`L`'s dropped corner, `T`'s four, #107) —
+ * `compileRoomTemplate` drops any door there unconditionally (see
+ * `template.ts`'s own comment on that), so registering one here would be a
+ * graph edge the compiled room can never actually open: `crossDoor`
+ * (`app/main.ts`) would still walk the player through it — the *source*
+ * room's own door is real, only the destination's isn't — landing them at
+ * an `entryCell` on a wall that was never really there, with no way back.
+ * This is the same rule the minimap already re-derives independently
+ * (`render/minimap-hud.ts`'s `doorSurvivesCompile`) to avoid *revealing*
+ * such a connection; this is what stops the floor plan from ever offering
+ * one to walk through in the first place, `computeVoidCells` being the one
+ * shared source of "void" both now agree with (see that function's own
+ * comment — this exact class of bug, graph and compiled reality drifting
+ * apart, already shipped once via the minimap alone).
+ */
+function buildDoorAllowance(rooms: readonly PlacedRoom[]): Map<string, ReadonlySet<DoorDirection>> {
+  const allowance = new Map<string, ReadonlySet<DoorDirection>>();
+  for (const room of rooms) {
+    if (room.doorCells !== undefined) {
+      room.cells.forEach((cell, cellIndex) => {
+        const allowed = new Set<DoorDirection>(
+          room.doorCells
+            ?.filter((door) => door.cellIndex === cellIndex)
+            .map((door) => door.direction) ?? [],
+        );
+        allowance.set(cellKey(cell), allowed);
+      });
+      continue;
+    }
+    const voidKeys = new Set(computeVoidCells(room.cells).map(cellKey));
+    for (const cell of room.cells) {
+      const allowed = new Set<DoorDirection>(
+        DIRECTIONS.filter((direction) => {
+          const offset = OFFSET[direction];
+          return !voidKeys.has(cellKey({ x: cell.x + offset.x, y: cell.y + offset.y }));
+        }),
+      );
+      allowance.set(cellKey(cell), allowed);
+    }
+  }
+  return allowance;
+}
+
 /**
  * Doors, derived from cell adjacency rather than tracked during growth — a
  * room's connections can grow after it is placed (the secret room attaches to
@@ -495,10 +829,15 @@ function placeSupersecretRoom(
  * incrementally correct through every mutation.
  *
  * One entry per `(cell, direction)` pair that actually borders a different
- * room — a multi-cell room's own cells never produce one against each other,
- * since they share `room.id` and are filtered out below, which is exactly
- * what "no wall between glued sub-rooms" falls out of: there was never a door
- * there to draw in the first place.
+ * room *and* that both sides allow (`buildDoorAllowance`) — a multi-cell
+ * room's own cells never produce one against each other, since they share
+ * `room.id` and are filtered out below, which is exactly what "no wall
+ * between glued sub-rooms" falls out of: there was never a door there to
+ * draw in the first place. A staircase's interior steps, and every direction
+ * but one on its start/end steps, are the other way a pair can touch without
+ * a door: both cells are real, occupied, and adjacent, but the allowance map
+ * says no — that reads as an ordinary solid wall (`render/room.ts` only ever
+ * draws a door where one is compiled, never assumes one from geometry alone).
  */
 function computeAdjacency(rooms: readonly PlacedRoom[]): Map<string, RoomDoor[]> {
   const owner = new Map<string, string>();
@@ -507,15 +846,26 @@ function computeAdjacency(rooms: readonly PlacedRoom[]): Map<string, RoomDoor[]>
       owner.set(cellKey(cell), room.id);
     }
   }
+  const allowance = buildDoorAllowance(rooms);
+  const isAllowed = (cell: Cell, direction: DoorDirection): boolean =>
+    allowance.get(cellKey(cell))?.has(direction) ?? true;
 
   const info = new Map<string, RoomDoor[]>();
   for (const room of rooms) {
     const doors: RoomDoor[] = [];
     room.cells.forEach((cell, cellIndex) => {
       for (const direction of DIRECTIONS) {
+        if (!isAllowed(cell, direction)) {
+          continue;
+        }
         const offset = OFFSET[direction];
-        const neighborRoomId = owner.get(cellKey({ x: cell.x + offset.x, y: cell.y + offset.y }));
-        if (neighborRoomId !== undefined && neighborRoomId !== room.id) {
+        const neighbor = { x: cell.x + offset.x, y: cell.y + offset.y };
+        const neighborRoomId = owner.get(cellKey(neighbor));
+        if (
+          neighborRoomId !== undefined &&
+          neighborRoomId !== room.id &&
+          isAllowed(neighbor, OPPOSITE_DIRECTION[direction])
+        ) {
           doors.push({ cellIndex, direction, neighborRoomId });
         }
       }
@@ -588,7 +938,14 @@ function assignRoles(
     distanceOf(b.id) - distanceOf(a.id);
 
   const candidates = rooms.filter(
-    (room) => room.id !== startId && room.id !== secretId && room.id !== supersecretId,
+    (room) =>
+      room.id !== startId &&
+      room.id !== secretId &&
+      room.id !== supersecretId &&
+      // A staircase (#112) carries no room content and only two, direction-
+      // fixed doors — it can never stand in for a boss/treasure/shop slot,
+      // which `eligibleTemplates` would need a matching authored template for.
+      room.staircaseTemplateId === undefined,
   );
   const deadEnds = candidates.filter((room) => degreeOf(room.id) === 1);
 
@@ -672,9 +1029,15 @@ function tryGenerateFloor(
   rng: Rng,
   config: FloorConfig,
   templatePool: readonly RoomTemplate[],
+  staircasePool: readonly StaircaseContentTemplate[],
 ): FloorPlan | null {
   const targetCount = rng.nextInt(config.minRooms, config.maxRooms + 1) - 1;
-  const skeleton = buildSkeleton(rng, config, Math.max(targetCount, MIN_ROOMS_FOR_ROLES));
+  const skeleton = buildSkeleton(
+    rng,
+    config,
+    Math.max(targetCount, MIN_ROOMS_FOR_ROLES),
+    staircasePool,
+  );
   if (skeleton === null) {
     return null;
   }
@@ -713,13 +1076,28 @@ function tryGenerateFloor(
     if (doors === undefined || role === undefined) {
       return null;
     }
-    const eligible = eligibleTemplates(templatePool, room.shape, config.floorTag, doors, role);
-    if (eligible.length === 0) {
-      return null;
+    // A staircase's template was already resolved at placement time
+    // (`buildSkeleton`'s `place` call) — it draws from `staircasePool`, not
+    // `templatePool`, and has no shape/door metadata `eligibleTemplates`
+    // could match against.
+    let templateId: string;
+    if (room.staircaseTemplateId !== undefined) {
+      templateId = room.staircaseTemplateId;
+    } else {
+      const eligible = eligibleTemplates(
+        templatePool,
+        room.shape as RoomShape,
+        config.floorTag,
+        doors,
+        role,
+      );
+      if (eligible.length === 0) {
+        return null;
+      }
+      templateId = rng.weightedPick(
+        eligible.map((template) => ({ value: template.id, weight: template.metadata.weight })),
+      );
     }
-    const templateId = rng.weightedPick(
-      eligible.map((template) => ({ value: template.id, weight: template.metadata.weight })),
-    );
     planRooms.push({
       id: room.id,
       cells: room.cells,
@@ -728,6 +1106,9 @@ function tryGenerateFloor(
       doors,
       distanceFromStart: distances.get(room.id) ?? 0,
       templateId,
+      ...(room.staircaseTemplateId === undefined
+        ? {}
+        : { staircaseTemplateId: room.staircaseTemplateId, minimapRects: room.minimapRects }),
     });
   }
 
@@ -776,9 +1157,10 @@ export function generateFloor(
   rng: Rng,
   config: FloorConfig,
   templatePool: readonly RoomTemplate[],
+  staircasePool: readonly StaircaseContentTemplate[] = [],
 ): FloorPlan {
   for (let attempt = 0; attempt < MAX_GENERATION_ATTEMPTS; attempt++) {
-    const plan = tryGenerateFloor(rng, config, templatePool);
+    const plan = tryGenerateFloor(rng, config, templatePool, staircasePool);
     if (plan !== null) {
       return plan;
     }
@@ -873,6 +1255,11 @@ export function validateFloorPlan(
   if (templatePool !== undefined) {
     const templatesById = new Map(templatePool.map((template) => [template.id, template] as const));
     for (const room of plan.rooms) {
+      // A staircase room's template lives in the caller's staircase pool, not
+      // `templatePool` — nothing to cross-check here (`docs/DECISIONS.md` #12).
+      if (room.staircaseTemplateId !== undefined) {
+        continue;
+      }
       const template = templatesById.get(room.templateId);
       if (template === undefined) {
         problems.push(`room ${room.id} references unknown template "${room.templateId}"`);

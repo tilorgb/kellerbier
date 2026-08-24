@@ -238,3 +238,113 @@ bounding box the way a `1x1`/`L`/`T` cell always is.
 without new code — nothing in `floor-plan.ts` accepts a non-`RoomShape` room today. Any future
 work that wants the floor generator to place staircases itself (rather than they being hand-wired
 set-pieces) is a new, separate design, not a natural extension of this one.
+
+**Superseded:** the "no `voidRects`/blocks... never touches `MAX_ROOM_BLOCKS`" claim above, and
+the "hand-placed only" framing of Constrains, are both revised by #12 — generator placement
+landed sooner than expected, and turned out to need real `voidRects`/blocks after all (a gap
+`isClear`'s union check alone didn't cover, see #12's "What broke" section).
+
+## 12. The floor generator places a staircase as a reserved bounding-box block, with real void blocks at every seam
+
+**Decided:** M2. **Issue:** #112, folded into the same PR after review, at the user's request, to
+land generator placement now rather than as a separate follow-up.
+
+**Placement:** a staircase's floor-grid footprint is a **`span` × `span` block** of cells
+(`floor-plan.ts`'s `placeStaircase`), not a single diagonal line of `stepCount` cells as first
+tried — `span = ceil(1 + (stepCount - 1) * STAIR_STEP_OVERLAP)`, always rounded **up**, so the
+reservation can only ever be equal to or larger than the real screen-space bounding box, never
+smaller. The first step always sits at one corner of that block and the last step at the
+diagonally opposite corner, whichever `span` is; every other cell in the block — corner or
+interior — gets no door, ever (`doorCells`, consumed by `computeAdjacency`'s new
+`buildDoorAllowance`, which is the first place a cell can touch a neighbour's cell without that
+becoming a door: both sides have to allow the specific direction, not just have something on the
+other side of it).
+
+A single line of cells (one per step) was the first attempt, and was wrong: two real floor-plan
+bugs came out of playtesting it — a secret room placed diagonally next to a staircase that its
+real (wider) geometry already physically overlapped, and the minimap drawing a solid block of
+full rooms in a line the staircase never actually is. Reserving only the true diagonal cells
+under-claims the grid relative to the real screen-space footprint whenever `STAIR_STEP_OVERLAP <
+1` (steps overlap by a fraction of a screen, not a whole one) — the fix is to reserve the whole
+bounding box, rounded up, even though most of that block is not real floor either.
+
+**What broke, and the second fix:** `RoomGeometry.isClear`'s `stepRects` union check (#11) is
+queried by every *other* system — spawn safety, corner-nudge, enemy-shot range — but not by the
+player/enemy wall resolver itself (`sim/systems/motion.ts`'s `resolveAxisX`/`resolveAxisY`, shared
+by `moveBody`), which only ever reads `minX`/`maxX`/`minY`/`maxY` and `blocks`, and has no idea
+`stepRects` exists. #11 built no blocks for a staircase at all (the whole point of the union
+design), so nothing stopped a player from walking straight through the slack between two steps —
+`isClear` correctly said "not clear" as a query, but nothing was ever asking it during ordinary
+movement. Fixed by `staircase.ts`'s `seamVoidRects`: for every consecutive pair of steps, the
+part of their combined bounding box outside *both* rects decomposes into exactly two axis-aligned
+rectangles (real wall), registered as ordinary `voidRects`/`addBlock` entries — the same mechanism
+`L`/`T` already use, just computed from step geometry instead of a dropped footprint cell. This
+also fixed a second, cosmetic bug the same underlying gap caused: `render/room.ts` had grown a
+staircase-specific per-step floor-fill (to avoid drawing the un-walkable slack as floor) that drew
+a visible seam line at every step's border, from stroking each step rect individually where they
+overlap. Reverted back to the ordinary single bounding-box fill plus `voidRects` painted over in
+wall colour — once the voids are real rects instead of an implicit union-complement, that ordinary
+path already draws a staircase correctly, seam-free, with no staircase-specific branch left in
+`render/room.ts` at all. `RoomGeometry.stepRects`/`isClear`'s union check stays as belt-and-
+suspenders on top: still exact for a direct "is this position legal" query, and unaffected by
+whether `seamVoidRects`' decomposition is itself ever slightly off.
+
+**Minimap:** `render/minimap-hud.ts` drew every reserved cell of a room as a full filled square
+with a solid outline — correct for a `RoomShape`, misleading for a staircase's mostly-non-floor
+block; a straight connecting line between its two doors was tried next and was truer but still
+hid the real steps and corners a player can actually run into, which normal rooms' walls are
+never hidden either. The real fix — and the reason this landed as its own pass rather than a
+tweak to the line — was moving the geometry out of `render/` entirely: `render/minimap-hud.ts`
+had grown an import of `compileStaircaseRoom` just to read four rects, coupling the render layer
+to a full room compiler for what is, to it, a schematic. `sim/room/floor-plan.ts`'s
+`staircaseMinimapRects` now does that compile-and-map **once, at placement time** (`placeStaircase`
+calls it right before returning), converting the compiled `stepRects` into the same fractional
+floor-grid space every room's integer cell coordinates already live in, and stores the result on
+`FloorPlanRoom.minimapRects`. `render/minimap-hud.ts` now only ever reads that field — no
+knowledge of what a staircase is, no `compileStaircaseRoom` import, no staircase-specific branch
+beyond "draw these rects instead of these cells if present." The same shape a future non-
+rectangular room (or a left-behind-drops marker) would need, without minimap code growing a new
+branch per room kind.
+
+**Doors, budget:** `computeAdjacency`'s `buildDoorAllowance` (see Placement above) makes "touching
+but no door" a real, general state for the first time — previously every geometric cell touch
+became a door unconditionally. Read as an ordinary solid wall, since `render/room.ts` only ever
+draws a door where one is actually compiled. `seamVoidRects` adds `2 * (stepCount - 1)` blocks per
+staircase, small enough that `MAX_ROOM_BLOCKS = 64` (#10) stays a non-issue for any realistic
+`stepCount`; #11's claim that a staircase "never touches `MAX_ROOM_BLOCKS`" regardless of length
+no longer holds unconditionally, just practically.
+
+**Content, dev-only surface area added alongside this:** a small `StaircaseContentTemplate` type
+and `validateStaircaseTemplate` (`staircase.ts`) — `floorTags`/`weight`, on top of everything
+`StaircaseRoomTemplate` already had — let the generator pick a staircase for a floor's tag the
+same way it picks a `RoomShape` template; two authored `up-right` variants
+(`cellar-staircase.json`, `south`/`north` doors, and `cellar-staircase-west-east.json`,
+`west`/`east`) prove it end to end and give the generator both legal door combinations for that
+direction to actually place, rather than only ever showing one. `generateFloor`'s new
+`staircasePool` parameter defaults to `[]`, so every existing caller —
+every test in this repo included — is unaffected unless it opts in. Separately (not #112 itself,
+but landed in the same pass at the user's request while iterating on this): `app/main.ts` no
+longer boots a hardcoded dev seed — it randomises one per load, accepts `?seed=`/`#seed-input` to
+pin one, and rebuilds the run in place (`startRun`) on the `R` key, Isaac-style, without a page
+reload; the run's very first room now always loads with `suppressRoomContent` (no enemies, no
+drops) so it reads as a tutorial beat. The debug overlay/tuning window/`__kellerbier` handle are
+not restart-aware yet — full in-run restart including those is still #46.
+
+**Found and fixed while playtesting the above:** (1) `sim/systems/motion.ts`'s primary wall
+resolver only ever reads `blocks`, never `stepRects` — `seamVoidRects` (`staircase.ts`) now
+registers the real gap at every seam as an ordinary block, the same mechanism `L`/`T` already use,
+so a player can no longer walk through the "slack" `isClear`'s union check alone only rejected as
+a query. (2) `computeAdjacency`'s `buildDoorAllowance` generalizes past staircases: an `L`/`T`
+room's own void-adjacent directions are excluded from every room now, not just registered and
+then silently dropped at compile time — the bug class `sim/room/void-cells.ts`'s own comment
+already named (graph and compiled reality disagreeing) had a second, unfixed instance here,
+found via a real seed where walking a staircase's door landed inside a wall with no door back.
+(3) `validateStaircaseTemplate` requires an odd `stepCount` — the minimap gap this whole pass
+kept fighting (and two failed attempts at fixing by distorting the drawn shape instead) turned
+out to be `stepCount: 4`'s real screen-space span (`2.5` cells) never landing on a whole number of
+floor-grid cells in the first place; odd `stepCount` makes it exact, so `staircaseMinimapRects`
+needs no snapping or stretching at all. #118 tracks lifting this once sub-cell reservation exists.
+(4) `placeStaircase` now guarantees a real room past the staircase's *far* door too, not just the
+end it grew from (`StaircasePlacement.farNeighborCell`, a forced `1x1` placed right after the
+staircase itself) — a staircase is the floor's single biggest room by walking time, and reaching
+the far end to find nothing there read as wasted effort rather than an arrival.

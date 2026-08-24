@@ -29,6 +29,20 @@ const globbedRooms = import.meta.glob('./*.json', { eager: true, import: 'defaul
 export const ROOM_TEMPLATES: readonly unknown[] = Object.values(globbedRooms);
 
 /**
+ * Staircase content (#112's generator-placement follow-up) lives in its own
+ * subfolder and its own glob, never `./*.json` above — a staircase is not a
+ * `RoomTemplate` (`docs/DECISIONS.md` #11/#12), so it must never reach
+ * `validateRoomTemplate`. Validated instead by `sim/room/staircase.ts`'s
+ * `validateStaircaseTemplate`.
+ */
+const globbedStaircases = import.meta.glob('./staircases/*.json', {
+  eager: true,
+  import: 'default',
+});
+
+export const STAIRCASE_TEMPLATES: readonly unknown[] = Object.values(globbedStaircases);
+
+/**
  * `cellarCorridor`/`cellarHallBig`/`cellarNook` are the `1x2`/`2x2`/`L` shapes
  * the floor generator (#20) needs a real pool to draw from — floor 1 would
  * otherwise have no template to place a multi-cell slot with, and every

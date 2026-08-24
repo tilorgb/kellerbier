@@ -17,6 +17,8 @@ import {
   validateFloorPlan,
 } from '../../src/sim/room/floor-plan.js';
 import { validateRoomTemplate } from '../../src/sim/room/template.js';
+import type { StaircaseContentTemplate } from '../../src/sim/room/staircase.js';
+import { computeVoidCells, voidCellKey } from '../../src/sim/room/void-cells.js';
 import { Rng } from '../../src/sim/rng/rng.js';
 import { RngStream, createStreamRng } from '../../src/sim/rng/streams.js';
 
@@ -24,6 +26,16 @@ import { RngStream, createStreamRng } from '../../src/sim/rng/streams.js';
 const CELLAR_TEMPLATES: readonly RoomTemplate[] = ROOM_TEMPLATES.map((room, index) =>
   validateRoomTemplate(room, `room[${String(index)}]`, ENEMY_DEFINITIONS),
 );
+
+/** `floor-plan.ts`'s own `OFFSET` isn't exported — this is just for reading its output. */
+const DIRECTION_TEST_OFFSET: Readonly<
+  Record<'north' | 'south' | 'east' | 'west', { readonly x: number; readonly y: number }>
+> = {
+  north: { x: 0, y: -1 },
+  south: { x: 0, y: 1 },
+  east: { x: 1, y: 0 },
+  west: { x: -1, y: 0 },
+};
 
 function floorConfig(index: number): FloorConfig {
   const config = FLOOR_CONFIGS[index];
@@ -109,6 +121,19 @@ function syntheticPool(): RoomTemplate[] {
   return templates;
 }
 
+/** One staircase template per floor tag — enough for the generator to have something to place (#112). */
+function syntheticStaircasePool(): StaircaseContentTemplate[] {
+  return FLOOR_CONFIGS.map((config) => ({
+    id: `synthetic-staircase-${config.floorTag}`,
+    stepCount: 5,
+    direction: 'up-right',
+    startDoor: 'south',
+    endDoor: 'north',
+    floorTags: [config.floorTag],
+    weight: 1,
+  }));
+}
+
 /** Floors generated across every config, for the stress test below. */
 const STRESS_FLOOR_COUNT = 10_000;
 
@@ -129,17 +154,22 @@ describe('floor generation', () => {
     expect(planB).not.toEqual(planA);
   });
 
-  it("the dev demo's fixed seed generates a valid floor 1", () => {
-    // `app/main.ts`'s `RUN_SEED` — hardcoded there (and duplicated here, not
-    // imported) so `npm run dev` always boots into the same reproducible
-    // run. This seed was hand-picked to succeed and to roll every shape
-    // (1x1/1x2/2x2/L/T) on floor 1; content or generator changes can shift
-    // which seeds succeed (that's exactly what broke seed 5 once #23's
-    // specialRole matching landed, and seed 15 once #107's `T` shape and
-    // rebalanced `chooseShape` weights landed), so this exists to catch that
-    // class of regression before it reaches `npm run dev` again rather than
-    // after.
-    const RUN_SEED = 11;
+  it('a known-good seed generates a valid floor 1 that rolls every shape', () => {
+    // `npm run dev` no longer boots into a fixed seed (it randomises one on
+    // every load, and `?seed=`/the `R` key can pin a specific one instead —
+    // see `app/main.ts`), so this seed is no longer "the dev demo's" in
+    // particular, just a known-good regression lock: hand-picked to succeed
+    // and to roll every shape (1x1/1x2/2x2/L/T) on floor 1. Content or
+    // generator changes can shift which seeds succeed (that's exactly what
+    // broke seed 5 once #23's specialRole matching landed, seed 15 once
+    // #107's `T` shape and rebalanced `chooseShape` weights landed, and
+    // seed 11 once #112's `buildDoorAllowance` started excluding an `L`/`T`
+    // room's own void-adjacent directions from `computeAdjacency` — a floor
+    // that only "validated" before because a void-doomed door was still
+    // counted as a real connection now correctly retries instead), so this
+    // exists to catch that class of regression on its own, decoupled from
+    // whatever seed a given `npm run dev` session happens to be using.
+    const RUN_SEED = 16;
     const config = floorConfig(0);
     const plan = generateFloor(
       createStreamRng(RUN_SEED, RngStream.Floor),
@@ -202,6 +232,42 @@ describe('floor generation', () => {
     }
   });
 
+  it('never gives an L/T room a door that points into its own void cell', () => {
+    // `compileRoomTemplate` drops any door pointing into a shape's own void
+    // cell (`L`'s dropped corner, `T`'s four, #107) unconditionally — a real
+    // instance of the abstract floor-plan graph disagreeing with that once
+    // sent the minimap in reveal a connection the compiled room could never
+    // actually open. `computeAdjacency`'s `buildDoorAllowance` is where that
+    // agreement is enforced now, for every room, not just re-derived by
+    // whichever downstream consumer happens to remember to check.
+    const pool = syntheticPool();
+    let checkedAny = false;
+    for (let seed = 0; seed < 500; seed++) {
+      const config = floorConfig(seed % FLOOR_CONFIGS.length);
+      const plan = generateFloor(new Rng(seed), config, pool);
+      for (const room of plan.rooms) {
+        if (room.shape !== 'L' && room.shape !== 'T') {
+          continue;
+        }
+        checkedAny = true;
+        const voidKeys = new Set(computeVoidCells(room.cells).map(voidCellKey));
+        for (const door of room.doors) {
+          const cell = room.cells[door.cellIndex];
+          if (cell === undefined) {
+            continue;
+          }
+          const offset = DIRECTION_TEST_OFFSET[door.direction];
+          const neighborKey = voidCellKey({ x: cell.x + offset.x, y: cell.y + offset.y });
+          expect(
+            voidKeys.has(neighborKey),
+            `seed ${String(seed)}, room ${room.id} (${room.shape}), door ${JSON.stringify(door)}`,
+          ).toBe(false);
+        }
+      }
+    }
+    expect(checkedAny).toBe(true);
+  });
+
   it('runs 10,000 floors across all seven floor configs, and every one validates', () => {
     const pool = syntheticPool();
     for (let seed = 0; seed < STRESS_FLOOR_COUNT; seed++) {
@@ -225,5 +291,87 @@ describe('floor generation', () => {
     const elapsed = performance.now() - started;
 
     expect(elapsed, `${elapsed.toFixed(3)} ms to generate one floor`).toBeLessThan(20);
+  });
+});
+
+describe('floor generation with a staircase pool (#112)', () => {
+  it('omitting staircasePool leaves generation exactly as before it existed', () => {
+    // The regression this whole feature must never cause: every existing
+    // caller (including this file's own tests above) doesn't pass a 4th
+    // argument at all, and `generateFloor` must produce byte-identical
+    // output to before `staircasePool` existed for the same seed.
+    const config = floorConfig(0);
+    const withoutArg = generateFloor(new Rng(7), config, CELLAR_TEMPLATES);
+    const withEmptyPool = generateFloor(new Rng(7), config, CELLAR_TEMPLATES, []);
+    expect(withEmptyPool).toEqual(withoutArg);
+  });
+
+  it('places a staircase without colliding with any other room, and keeps every room reachable', () => {
+    // `validateFloorPlan` already checks both of these generically (cell
+    // ownership uniqueness, and BFS reachability from the start room) — the
+    // only thing specific to this test is giving the generator a staircase
+    // pool with a real chance of firing, across enough seeds that at least
+    // one actually rolls one, so those generic checks are exercised on a
+    // floor that actually has one.
+    const pool = syntheticPool();
+    const staircasePool = syntheticStaircasePool();
+    let sawStaircase = false;
+    for (let seed = 0; seed < 500; seed++) {
+      const config = floorConfig(seed % FLOOR_CONFIGS.length);
+      const plan = generateFloor(new Rng(seed), config, pool, staircasePool);
+      expect(validateFloorPlan(plan, pool), `seed ${String(seed)}`).toEqual([]);
+      if (plan.rooms.some((room) => room.staircaseTemplateId !== undefined)) {
+        sawStaircase = true;
+      }
+    }
+    expect(sawStaircase).toBe(true);
+  });
+
+  it('never gives a staircase room a door anywhere but its own two ends', () => {
+    const pool = syntheticPool();
+    const staircasePool = syntheticStaircasePool();
+    let checkedAny = false;
+    for (let seed = 0; seed < 500; seed++) {
+      const config = floorConfig(seed % FLOOR_CONFIGS.length);
+      const plan = generateFloor(new Rng(seed), config, pool, staircasePool);
+      for (const room of plan.rooms) {
+        if (room.staircaseTemplateId === undefined) {
+          continue;
+        }
+        checkedAny = true;
+        const lastIndex = room.cells.length - 1;
+        for (const door of room.doors) {
+          expect([0, lastIndex], `seed ${String(seed)}, room ${room.id}`).toContain(door.cellIndex);
+        }
+      }
+    }
+    expect(checkedAny).toBe(true);
+  });
+
+  it('always has a real room on both ends, not just the one it grew from', () => {
+    // A staircase is the floor's single biggest room by walking time —
+    // reaching its far door only to find nothing there would read as
+    // wasted effort, not an arrival. The near end always has a room by
+    // construction (that's where it grew from); this is the guarantee for
+    // the far one (`floor-plan.ts`'s `placeStaircase`/`farNeighborCell`).
+    const pool = syntheticPool();
+    const staircasePool = syntheticStaircasePool();
+    let checkedAny = false;
+    for (let seed = 0; seed < 500; seed++) {
+      const config = floorConfig(seed % FLOOR_CONFIGS.length);
+      const plan = generateFloor(new Rng(seed), config, pool, staircasePool);
+      for (const room of plan.rooms) {
+        if (room.staircaseTemplateId === undefined) {
+          continue;
+        }
+        checkedAny = true;
+        expect(room.doors, `seed ${String(seed)}, room ${room.id}`).toHaveLength(2);
+        const cellIndices = new Set(room.doors.map((door) => door.cellIndex));
+        expect(cellIndices, `seed ${String(seed)}, room ${room.id}`).toEqual(
+          new Set([0, room.cells.length - 1]),
+        );
+      }
+    }
+    expect(checkedAny).toBe(true);
   });
 });

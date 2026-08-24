@@ -1,0 +1,9 @@
+{
+  "id": "cellar-staircase",
+  "stepCount": 5,
+  "direction": "up-right",
+  "startDoor": "south",
+  "endDoor": "north",
+  "floorTags": ["cellar"],
+  "weight": 1
+}
