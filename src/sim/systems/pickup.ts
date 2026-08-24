@@ -53,8 +53,11 @@ export function stepPickups(sim: GameSim): void {
   const count = collectedState[COLLECTED_COUNT];
   for (let entry = 0; entry < count; entry++) {
     const other = collected[entry] ?? 0;
-    collect(sim, other);
-    sim.world.destroy(sim.world.entityAt(other));
+    // A priced pickup the player can't afford is left in place — not
+    // collected, and not destroyed. Everything else is collected outright.
+    if (collect(sim, other)) {
+      sim.world.destroy(sim.world.entityAt(other));
+    }
   }
 }
 
@@ -98,11 +101,19 @@ function candidate(other: number): void {
   transform[other * 4 + 1] = otherY + (dy / distance) * step;
 }
 
-/** Resolves what collecting one pickup does, by the kind it was spawned as. */
-function collect(sim: GameSim, other: number): void {
+/**
+ * Resolves what collecting one pickup does, by the kind it was spawned as.
+ * Returns `false` — nothing applied, the entity survives — for a priced
+ * pickup the player cannot yet afford; `true` otherwise.
+ */
+function collect(sim: GameSim, other: number): boolean {
   const definitionIndex = sim.pickupKind.data[other] ?? -1;
   if (definitionIndex < 0) {
-    return;
+    return true;
+  }
+  const priced = ((sim.world.masks[other] ?? 0) & sim.pickupPrice.bit) !== 0;
+  if (priced && !sim.spendBiermarken(sim.pickupPrice.data[other] ?? 0)) {
+    return false;
   }
   const definition = sim.pickups.at(definitionIndex);
   const effect = definition.effect;
@@ -149,4 +160,5 @@ function collect(sim: GameSim, other: number): void {
       }
       break;
   }
+  return true;
 }

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import cellarCrossroads from '../../src/content/rooms/cellar.json';
 import { EventKind } from '../../src/sim/events/queue.js';
 import { GameSim } from '../../src/sim/game/sim.js';
+import { createInputFrame } from '../../src/sim/input/frame.js';
 import { ProjectileTeam } from '../../src/sim/projectile/store.js';
 import { ParticleKind } from '../../src/sim/particle/store.js';
 import { stepEnemyDeaths } from '../../src/sim/systems/enemy.js';
@@ -9,6 +10,8 @@ import { stepEnemyDeaths } from '../../src/sim/systems/enemy.js';
 function roomSim(): GameSim {
   return new GameSim({ roomTemplate: cellarCrossroads, floor: 1, population: 'empty' });
 }
+
+const idle = () => createInputFrame();
 
 describe('room lifecycle', () => {
   it('locks doors until the authoritative enemy count reaches zero', () => {
@@ -92,5 +95,111 @@ describe('room lifecycle', () => {
 
     expect(sim.liveEnemyCount).toBe(2);
     expect(sim.doorsLocked).toBe(true);
+  });
+});
+
+describe('key-locked treasure rooms', () => {
+  const lockedRoom = {
+    ...cellarCrossroads,
+    id: 'test-treasure-locked',
+    enemySpawns: [],
+    spawnGroups: [],
+    metadata: { ...cellarCrossroads.metadata, specialRole: 'treasure', keyLocked: true },
+  };
+
+  it('refuses the transition, and spends no key, with none held', () => {
+    const sim = new GameSim({
+      roomTemplate: { ...cellarCrossroads, enemySpawns: [], spawnGroups: [] },
+      floor: 1,
+      population: 'empty',
+    });
+
+    expect(sim.keys).toBe(0);
+    expect(sim.transitionTo(lockedRoom, 1, 'north')).toBe(false);
+    expect(sim.keys).toBe(0);
+    expect(sim.roomId).toBe('cellar-crossroads');
+  });
+
+  it('spends exactly one key and loads the room once one is held', () => {
+    const sim = new GameSim({
+      roomTemplate: { ...cellarCrossroads, enemySpawns: [], spawnGroups: [] },
+      floor: 1,
+      population: 'empty',
+    });
+    sim.addKeys(2);
+
+    expect(sim.transitionTo(lockedRoom, 1, 'north')).toBe(true);
+
+    expect(sim.keys).toBe(1);
+    expect(sim.roomId).toBe('test-treasure-locked');
+  });
+});
+
+describe('the shopkeeper', () => {
+  function shopSim(): GameSim {
+    const template = {
+      ...cellarCrossroads,
+      enemySpawns: [{ x: 176, y: 64, group: 'wirt' }],
+      spawnGroups: [
+        { id: 'wirt', count: 1, choices: [{ enemyId: 'shopkeeper', minFloor: 1, maxFloor: 7 }] },
+      ],
+    };
+    return new GameSim({ roomTemplate: template, floor: 1, population: 'empty' });
+  }
+
+  it('does not seal the doors just by standing there peacefully', () => {
+    const sim = shopSim();
+    let liveShopkeepers = 0;
+    sim.world.forEach(sim.enemyMask, () => {
+      liveShopkeepers += 1;
+    });
+
+    // Alive in the world (`locksRoom: false` never stopped it spawning) but
+    // not counted toward `roomEnemyCount` — the whole point of the flag.
+    expect(liveShopkeepers).toBe(1);
+    expect(sim.liveEnemyCount).toBe(0);
+    expect(sim.doorsLocked).toBe(false);
+    expect(sim.transitionTo(cellarCrossroads, 1, 'north')).toBe(true);
+  });
+
+  it('still does not seal the doors once killed', () => {
+    const sim = shopSim();
+    let shopkeeperIndex = -1;
+    sim.world.forEach(sim.enemyMask, (index) => {
+      shopkeeperIndex = index;
+    });
+
+    sim.kill(shopkeeperIndex);
+    sim.world.flush();
+
+    expect(sim.liveEnemyCount).toBe(0);
+    expect(sim.doorsLocked).toBe(false);
+  });
+});
+
+describe('boss room reward', () => {
+  it('rolls the boss table on clear, which — unlike the ordinary table — never drops nothing', () => {
+    const bossRoom = {
+      ...cellarCrossroads,
+      id: 'test-boss-room',
+      enemySpawns: [{ x: 176, y: 64, group: 'lone' }],
+      spawnGroups: [
+        { id: 'lone', count: 1, choices: [{ enemyId: 'kellerassel', minFloor: 1, maxFloor: 7 }] },
+      ],
+      metadata: { ...cellarCrossroads.metadata, specialRole: 'boss' },
+    };
+    const sim = new GameSim({ roomTemplate: bossRoom, floor: 1, population: 'empty' });
+    let enemyIndex = -1;
+    sim.world.forEach(sim.enemyMask, (index) => {
+      enemyIndex = index;
+    });
+
+    sim.kill(enemyIndex);
+    sim.world.flush();
+    sim.step(idle());
+
+    // Player plus at least one dropped pickup — `BOSS_REWARD_DROP_TABLE`
+    // never rolls its "nothing" outcome, unlike `ROOM_CLEAR_DROP_TABLE`.
+    expect(sim.world.count).toBeGreaterThan(1);
   });
 });
