@@ -220,6 +220,13 @@ export interface EnemyDefinition {
   readonly states: readonly EnemyState[];
   /** Which drop table (`content/pickups/drop-tables.ts`) its death rolls from. Defaults to `'normal'`. */
   readonly lootTier?: 'weak' | 'normal' | 'tough';
+  /**
+   * Whether its presence counts toward `GameSim.roomEnemyCount` — and so
+   * toward sealing the room's doors. Defaults to `true`; the shopkeeper
+   * (`content/enemies/shopkeeper.ts`) is the one exception today: a shop's
+   * doors must not seal just because it stands there peacefully.
+   */
+  readonly locksRoom?: boolean;
 }
 
 /** Primitives that decide where a body goes. Exactly one per state. */

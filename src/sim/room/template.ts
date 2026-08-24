@@ -87,6 +87,14 @@ export function validateRoomTemplate(
   if (weight <= 0) {
     fail(`${source}.metadata.weight`, 'must be greater than zero');
   }
+  const specialRole = optionalSpecialRole(metadata.specialRole, `${source}.metadata.specialRole`);
+  const keyLocked =
+    metadata.keyLocked === undefined
+      ? undefined
+      : boolean(metadata.keyLocked, `${source}.metadata.keyLocked`);
+  if (keyLocked !== undefined && specialRole !== 'treasure') {
+    fail(`${source}.metadata.keyLocked`, 'may only be set on a treasure-role template');
+  }
 
   return {
     id,
@@ -94,7 +102,7 @@ export function validateRoomTemplate(
     obstacles,
     enemySpawns,
     spawnGroups: groups,
-    pickupSpawns: positionsWithType(template.pickupSpawns, `${source}.pickupSpawns`),
+    pickupSpawns: pickupSpawns(template.pickupSpawns, `${source}.pickupSpawns`),
     hazards: records(template.hazards, `${source}.hazards`).map((item, index) => ({
       ...rectangle(item, `${source}.hazards[${String(index)}]`),
       type: requiredString(item.type, `${source}.hazards[${String(index)}].type`),
@@ -106,8 +114,25 @@ export function validateRoomTemplate(
       doors: doorValues,
       difficultyTier,
       weight,
+      ...(specialRole === undefined ? {} : { specialRole }),
+      ...(keyLocked === undefined ? {} : { keyLocked }),
     },
   };
+}
+
+const SPECIAL_ROLES = ['boss', 'treasure', 'shop', 'secret', 'supersecret'] as const;
+
+function optionalSpecialRole(
+  value: unknown,
+  source: string,
+): RoomTemplate['metadata']['specialRole'] {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== 'string' || !(SPECIAL_ROLES as readonly string[]).includes(value)) {
+    fail(source, `must be one of ${SPECIAL_ROLES.join(', ')}`);
+  }
+  return value as RoomTemplate['metadata']['specialRole'];
 }
 
 export function compileRoomTemplate(
@@ -209,6 +234,19 @@ function positionsWithType(value: unknown, source: string) {
       x: number(item.x, `${where}.x`),
       y: number(item.y, `${where}.y`),
       type: requiredString(item.type, `${where}.type`),
+    };
+  });
+}
+
+function pickupSpawns(value: unknown, source: string) {
+  return records(value, source).map((item, index) => {
+    const where = `${source}[${String(index)}]`;
+    const price = item.price === undefined ? undefined : positive(item.price, `${where}.price`);
+    return {
+      x: number(item.x, `${where}.x`),
+      y: number(item.y, `${where}.y`),
+      type: requiredString(item.type, `${where}.type`),
+      ...(price === undefined ? {} : { price }),
     };
   });
 }

@@ -1,7 +1,12 @@
 import { type Component, World } from '../ecs/world.js';
 import { type Entity, entityIndex } from '../ecs/entity.js';
 import { ENEMY_DEFINITIONS } from '../../content/enemies/index.js';
-import { PICKUP_DEFINITIONS, ROOM_CLEAR_DROP_TABLE } from '../../content/pickups/index.js';
+import {
+  BOSS_REWARD_DROP_TABLE,
+  PICKUP_DEFINITIONS,
+  ROOM_CLEAR_DROP_TABLE,
+} from '../../content/pickups/index.js';
+import type { RoomSpecialRole } from '../../content/rooms/definition.js';
 import type { EnemyDefinition } from '../enemy/definition.js';
 import { EnemyRegistry } from '../enemy/registry.js';
 import { ENEMY_PROFILES, EnemySize, type EnemySizeId } from '../enemy/size.js';
@@ -133,6 +138,8 @@ export interface GameSimOptions {
   /** Loads this authored room instead of the playground population. */
   readonly roomTemplate?: unknown;
   readonly floor?: number;
+  /** Door directions to load hidden — see `loadRoom`'s `hiddenDoors` parameter. */
+  readonly hiddenDoors?: readonly RoomDirection[];
   /** Projectile pool size. Lowered by tests that want to watch it overflow. */
   readonly projectileCapacity?: number;
   readonly particleCapacity?: number;
@@ -215,6 +222,13 @@ export class GameSim {
   readonly spawnPost: Component<Int16Array>;
   /** Index into `pickups` — which `PickupDefinition` a pickup entity is. */
   readonly pickupKind: Component<Int16Array>;
+  /**
+   * Biermarken cost. Present only on a priced pickup (a shop's stock) — its
+   * absence, not a zero value, is what `sim/systems/pickup.ts`'s `collect`
+   * reads as "free," the same optional-component convention `spawnBierfassl`
+   * uses for `rolling`'s `velocity`.
+   */
+  readonly pickupPrice: Component<Int16Array>;
   /** Ticks left before a placed Bierfassl explodes. Only ever added to a Bierfassl. */
   readonly bombFuse: Component<Int16Array>;
   /** Ticks left of the cosmetic spawn-bounce, on every pickup. Render-only. */
@@ -399,6 +413,16 @@ export class GameSim {
   private roomClearedIds = new Set<string>();
   private roomTemplateLoaded = false;
   private roomDoors = { north: false, east: false, south: false, west: false };
+  /**
+   * Door directions this room load hid (see `loadRoom`'s `hiddenDoors`) that
+   * a nearby Bierfassl blast has not yet revealed. `revealBombableWalls`
+   * removes an entry the instant its wall opens; cleared and rebuilt fresh
+   * on every `loadRoom`, since which walls are bombable is per-instance
+   * (decided by the caller, not the template).
+   */
+  private readonly bombableWalls = new Set<RoomDirection>();
+  /** The loaded room's `metadata.specialRole`, or `undefined` for a normal room. */
+  private roomSpecialRole: RoomSpecialRole | undefined = undefined;
 
   constructor(options: GameSimOptions = {}) {
     this.seed = options.seed ?? 0;
@@ -420,6 +444,7 @@ export class GameSim {
     this.enemyMotion = this.world.defineComponent('enemyMotion', Float32Array, ENEMY_MOTION_STRIDE);
     this.spawnPost = this.world.defineComponent('spawnPost', Int16Array, 1);
     this.pickupKind = this.world.defineComponent('pickupKind', Int16Array, 1);
+    this.pickupPrice = this.world.defineComponent('pickupPrice', Int16Array, 1);
     this.bombFuse = this.world.defineComponent('bombFuse', Int16Array, 1);
     this.spawnBounce = this.world.defineComponent('spawnBounce', Uint8Array, 1);
     this.collidableMask = this.world.maskOf(this.transform, this.body, this.collision);
@@ -446,7 +471,7 @@ export class GameSim {
 
     this.playerHandle = this.spawnPlayer();
     if (options.roomTemplate !== undefined) {
-      this.loadRoom(options.roomTemplate, options.floor ?? 1);
+      this.loadRoom(options.roomTemplate, options.floor ?? 1, null, options.hiddenDoors ?? []);
     } else {
       const population = options.population ?? 'targets';
       if (population === 'enemies') {
@@ -474,9 +499,46 @@ export class GameSim {
     return this.roomTemplateLoaded && this.roomEnemyCount > 0;
   }
 
-  /** Which walls of the current room have a door, per the room's authored metadata. */
+  /**
+   * Which walls of the current room have a door — a hidden/bombable one
+   * reads `false` here (a solid wall) until `revealBombableWalls` opens it.
+   */
   get doors(): Readonly<Record<RoomDirection, boolean>> {
     return this.roomDoors;
+  }
+
+  /**
+   * Opens any bombable wall within `radius` of `(x, y)`. Called once per
+   * explosion by `stepBombs` (`sim/systems/bombs.ts`) with the blast's own
+   * position and radius — "close enough to reveal" is exactly "close enough
+   * to damage," the same blast, no separate concept of range.
+   *
+   * A wall's distance is measured to the point on the room boundary its door
+   * gap is centred on (`render/room.ts`'s `createDoorView` draws the same
+   * point), not to the room's centre — a boss-sized room makes the far wall
+   * of a `2x2` slot unreachable by a blast measured from the middle.
+   */
+  revealBombableWalls(x: number, y: number, radius: number): void {
+    if (this.bombableWalls.size === 0) {
+      return;
+    }
+    const centreX = (this.room.minX + this.room.maxX) / 2;
+    const centreY = (this.room.minY + this.room.maxY) / 2;
+    const wallPoint: Readonly<Record<RoomDirection, { x: number; y: number }>> = {
+      north: { x: centreX, y: this.room.minY },
+      south: { x: centreX, y: this.room.maxY },
+      west: { x: this.room.minX, y: centreY },
+      east: { x: this.room.maxX, y: centreY },
+    };
+    for (const direction of this.bombableWalls) {
+      const point = wallPoint[direction];
+      const dx = point.x - x;
+      const dy = point.y - y;
+      if (dx * dx + dy * dy <= radius * radius) {
+        this.roomDoors = { ...this.roomDoors, [direction]: true };
+        this.bombableWalls.delete(direction);
+      }
+    }
   }
 
   /**
@@ -539,13 +601,38 @@ export class GameSim {
     );
   }
 
-  /** Loads one room, preserving the player and run state while replacing its contents. */
-  loadRoom(template: unknown, floor = 1, direction: RoomDirection | null = null): void {
+  /**
+   * Loads one room, preserving the player and run state while replacing its
+   * contents.
+   *
+   * `hiddenDoors` — directions the template itself has a door on, but which
+   * load closed and solid rather than open, and remembered in
+   * `bombableWalls` so a nearby Bierfassl blast can reveal them
+   * (`revealBombableWalls`, called from `sim/systems/bombs.ts`). This is how
+   * a secret/supersecret room connects: not a different door shape, the same
+   * door drawn shut until bombed. The caller (`app/main.ts`, which owns the
+   * floor plan) decides which directions those are for the room it's
+   * loading — `GameSim` only knows one room's template at a time.
+   */
+  loadRoom(
+    template: unknown,
+    floor = 1,
+    direction: RoomDirection | null = null,
+    hiddenDoors: readonly RoomDirection[] = [],
+  ): void {
     const compiled = compileRoomTemplate(template, floor, 'room template', ENEMY_DEFINITIONS);
     this.clearRoomEntities();
     this.room = compiled.geometry;
     this.roomId = compiled.source.id;
     this.roomDoors = compiled.source.metadata.doors;
+    this.bombableWalls.clear();
+    for (const hidden of hiddenDoors) {
+      if (this.roomDoors[hidden]) {
+        this.roomDoors = { ...this.roomDoors, [hidden]: false };
+        this.bombableWalls.add(hidden);
+      }
+    }
+    this.roomSpecialRole = compiled.source.metadata.specialRole;
     this.roomTemplateLoaded = true;
     this.roomTransitionTicks = direction === null ? 0 : ROOM_TRANSITION_TICKS;
     this.roomTransitionDirection = direction;
@@ -585,7 +672,7 @@ export class GameSim {
           this.room.minY + pickup.y,
           this.pickups.at(definition).radius,
         );
-        this.spawnPickup(pickup.type, safe.x, safe.y);
+        this.spawnPickup(pickup.type, safe.x, safe.y, pickup.price);
       }
       // Decorative props are art (#18) except one type: a barrel is a
       // destructible obstacle, so a room author drops a Bierfassl at one for
@@ -602,13 +689,28 @@ export class GameSim {
     this.world.flush();
   }
 
-  /** Loads the next room only when its matching door exists and this room is clear. */
-  transitionTo(template: unknown, floor: number, direction: RoomDirection): boolean {
+  /**
+   * Loads the next room only when its matching door exists, this room is
+   * clear, and — for a key-locked treasure room — a Kellerschlüssel is spent
+   * to open it. The key is spent only once every other check has passed, so
+   * a blocked transition (wrong direction, enemies still up, no key) never
+   * costs one.
+   */
+  transitionTo(
+    template: unknown,
+    floor: number,
+    direction: RoomDirection,
+    hiddenDoors: readonly RoomDirection[] = [],
+  ): boolean {
     if (!this.roomTemplateLoaded || this.doorsLocked || !this.hasDoor(direction)) {
       return false;
     }
+    const destination = compileRoomTemplate(template, floor, 'room template', ENEMY_DEFINITIONS);
+    if (destination.source.metadata.keyLocked === true && !this.spendKeys(1)) {
+      return false;
+    }
     this.roomClearedIds.add(this.roomId);
-    this.loadRoom(template, floor, direction);
+    this.loadRoom(template, floor, direction, hiddenDoors);
     return true;
   }
 
@@ -746,6 +848,15 @@ export class GameSim {
     }
   }
 
+  /** Spends Biermarken — a shop purchase. False, spending nothing, if there were not enough. */
+  spendBiermarken(amount: number): boolean {
+    if (amount <= 0 || this.biermarkenCount < amount) {
+      return false;
+    }
+    this.biermarkenCount -= amount;
+    return true;
+  }
+
   /** Kellerschlüssel held. */
   get keys(): number {
     return this.keysCount;
@@ -755,6 +866,15 @@ export class GameSim {
     if (amount > 0) {
       this.keysCount += amount;
     }
+  }
+
+  /** Spends Kellerschlüssel — a locked door. False, spending nothing, if there were not enough. */
+  spendKeys(amount: number): boolean {
+    if (amount <= 0 || this.keysCount < amount) {
+      return false;
+    }
+    this.keysCount -= amount;
+    return true;
   }
 
   /** Bierfassl in inventory, ready to place — distinct from one already ticking in the room. */
@@ -1040,8 +1160,13 @@ export class GameSim {
     // cleared until `flush`, but a destructible barrel (#22) is not an
     // authored enemy, and `roomEnemyCount` must only ever count those:
     // decrementing it for anything killed in a loaded room, barrel included,
-    // would clear the room — and unlock its doors — one kill early.
-    const wasEnemy = ((this.world.masks[index] ?? 0) & this.enemyMask) === this.enemyMask;
+    // would clear the room — and unlock its doors — one kill early. Same
+    // reasoning excludes an enemy whose definition opted out of
+    // `locksRoom` (the shopkeeper, `content/enemies/shopkeeper.ts`) — it was
+    // never counted in, so killing it must not count it out.
+    const enemyMasked = ((this.world.masks[index] ?? 0) & this.enemyMask) === this.enemyMask;
+    const wasEnemy =
+      enemyMasked && this.enemies.at(this.enemy.data[index * ENEMY_STRIDE] ?? -1).locksRoom;
     const random = this.random.cosmetic;
     this.decals.spawn(
       this.positionX(index),
@@ -1418,7 +1543,7 @@ export class GameSim {
     motion[motionBase + 2] = x;
     motion[motionBase + 3] = y;
 
-    if (this.roomTemplateLoaded) {
+    if (this.roomTemplateLoaded && compiled.locksRoom) {
       this.roomEnemyCount += 1;
     }
 
@@ -1472,13 +1597,19 @@ export class GameSim {
    * (rendering, via `collidableMask`) actually read. It never moves through
    * the physics integrator, so it carries no `velocity` — `stepPickups`
    * nudges a magnetised one's `transform` directly instead.
+   *
+   * `price`, when given and above zero, adds the `pickupPrice` component — a
+   * shop's stock. `sim/systems/pickup.ts`'s `collect` reads its *presence*
+   * as "this one must be paid for," not the value alone, so an omitted or
+   * zero price is indistinguishable from any other pickup in the game.
    */
-  spawnPickup(kindId: string, x: number, y: number): Entity {
+  spawnPickup(kindId: string, x: number, y: number, price?: number): Entity {
     const definitionIndex = this.pickups.indexOf(kindId);
     if (definitionIndex < 0) {
       throw new Error(`Unknown pickup kind "${kindId}"`);
     }
     const definition = this.pickups.at(definitionIndex);
+    const priced = price !== undefined && price > 0;
 
     const entity = this.world.create();
     this.world.add(entity, this.transform);
@@ -1486,6 +1617,9 @@ export class GameSim {
     this.world.add(entity, this.collision);
     this.world.add(entity, this.pickupKind);
     this.world.add(entity, this.spawnBounce);
+    if (priced) {
+      this.world.add(entity, this.pickupPrice);
+    }
 
     const index = entityIndex(entity);
     const transform = this.transform.data;
@@ -1502,6 +1636,9 @@ export class GameSim {
     // Purely cosmetic — `EntityView` reads this down to pop the sprite on
     // spawn, and nothing else in the simulation looks at it.
     this.spawnBounce.data[index] = Math.round(this.tuning.pickup.spawnBounceTicks);
+    if (priced) {
+      this.pickupPrice.data[index] = price;
+    }
 
     this.setCollisionLayer(index, CollisionLayer.Pickup);
     return entity;
@@ -1659,11 +1796,16 @@ export class GameSim {
    * Kept a private method rather than a system, unlike enemy-death loot —
    * "has this room already paid out" is `roomClearedIds`, which nothing
    * outside `GameSim` has a reason to see.
+   *
+   * A boss room's clear rolls `BOSS_REWARD_DROP_TABLE` instead of the
+   * ordinary one — a guaranteed, better payout for the room the floor's
+   * doors were sealed around, not just another kill.
    */
   private rollRoomClearLoot(): void {
     const centreX = (this.room.minX + this.room.maxX) / 2;
     const centreY = (this.room.minY + this.room.maxY) / 2;
-    this.dropLoot(ROOM_CLEAR_DROP_TABLE, centreX, centreY);
+    const table = this.roomSpecialRole === 'boss' ? BOSS_REWARD_DROP_TABLE : ROOM_CLEAR_DROP_TABLE;
+    this.dropLoot(table, centreX, centreY);
   }
 
   private setCollisionLayer(index: number, layer: CollisionLayerId): void {

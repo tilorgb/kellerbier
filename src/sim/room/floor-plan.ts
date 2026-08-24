@@ -28,7 +28,7 @@ interface Cell {
   readonly y: number;
 }
 
-export type RoomRole = 'start' | 'boss' | 'treasure' | 'shop' | 'secret' | 'normal';
+export type RoomRole = 'start' | 'boss' | 'treasure' | 'shop' | 'secret' | 'supersecret' | 'normal';
 
 export interface FloorPlanRoom {
   readonly id: string;
@@ -51,6 +51,7 @@ export interface FloorPlan {
   readonly treasureRoomId: string;
   readonly shopRoomId: string;
   readonly secretRoomId: string;
+  readonly supersecretRoomId: string;
   readonly rooms: readonly FloorPlanRoom[];
 }
 
@@ -75,7 +76,10 @@ const MAX_GENERATION_ATTEMPTS = 200;
 /** Guards the frontier walk against spinning forever on a starved grid. */
 const MAX_GROWTH_ITERATIONS = 5000;
 
-/** start + boss + treasure + shop + at least one plain room, before the secret room is added. */
+/**
+ * start + boss + treasure + shop + at least one plain room, before the secret
+ * and supersecret rooms are added by `placeSecretRoom`/`placeSupersecretRoom`.
+ */
 const MIN_ROOMS_FOR_ROLES = 5;
 
 function cellKey(cell: Cell): string {
@@ -291,19 +295,13 @@ function buildSkeleton(rng: Rng, config: FloorConfig, targetCount: number): Skel
   return rooms.length >= MIN_ROOMS_FOR_ROLES ? { rooms, occupied } : null;
 }
 
-/**
- * Finds the free cell touching the most distinct rooms, and claims it as the
- * secret room. `docs/GAME_DESIGN.md` §4 wants secret rooms "adjacent to as
- * many rooms as possible"; since there is no bombing mechanic yet, the secret
- * room is connected like any other (a real door, not a bombable wall) — a
- * gap #23 closes when the special-room content lands.
- */
-function placeSecretRoom(
-  rooms: PlacedRoom[],
-  occupied: Map<string, number>,
+/** Every open cell adjacent to something placed, and how many distinct rooms it touches. */
+function openCellTouchCounts(
+  rooms: readonly PlacedRoom[],
+  occupied: ReadonlyMap<string, number>,
   radius: number,
-): string | null {
-  let best: { cell: Cell; touching: number } | null = null;
+): { cell: Cell; touching: number }[] {
+  const results: { cell: Cell; touching: number }[] = [];
   const seen = new Set<string>();
 
   for (const room of rooms) {
@@ -327,10 +325,82 @@ function placeSecretRoom(
             touchingRooms.add(owner);
           }
         }
-        if (best === null || touchingRooms.size > best.touching) {
-          best = { cell: candidate, touching: touchingRooms.size };
-        }
+        results.push({ cell: candidate, touching: touchingRooms.size });
       }
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Minimum distinct rooms a secret room's cell must touch. `docs/GAME_DESIGN.md`
+ * §4 wants secret rooms "adjacent to as many rooms as possible"; the floor's
+ * acceptance criteria on #23 sharpen that to a hard floor of two, so a secret
+ * room is never a simple dead-end off a single corridor.
+ */
+const MIN_SECRET_ROOM_TOUCHING = 2;
+
+/**
+ * Finds the free cell touching the most distinct rooms — at least
+ * `MIN_SECRET_ROOM_TOUCHING`, or generation retries — and claims it as the
+ * secret room. Connected via a bombable wall rather than a normal door; see
+ * `GameSim`'s `bombableWalls` (`sim/game/sim.ts`) for the reveal mechanic
+ * this placement feeds.
+ */
+function placeSecretRoom(
+  rooms: PlacedRoom[],
+  occupied: Map<string, number>,
+  radius: number,
+): string | null {
+  let best: { cell: Cell; touching: number } | null = null;
+  for (const candidate of openCellTouchCounts(rooms, occupied, radius)) {
+    if (best === null || candidate.touching > best.touching) {
+      best = candidate;
+    }
+  }
+
+  if (best === null || best.touching < MIN_SECRET_ROOM_TOUCHING) {
+    return null;
+  }
+  const index = rooms.length;
+  const id = `r${String(index)}`;
+  rooms.push({ id, cells: [best.cell], shape: '1x1' });
+  occupied.set(cellKey(best.cell), index);
+  return id;
+}
+
+/**
+ * Finds the free cell touching the *fewest* distinct rooms — a plain dead
+ * end, ideally touching only one — and claims it as the supersecret room.
+ * "Deliberately obnoxious to find" (#23) is exactly the mirror of
+ * `placeSecretRoom`'s "as many rooms as possible": the least-connected spot
+ * on the floor, so it never sits somewhere a player stumbles into it while
+ * exploring normally. Excludes cells adjacent to the already-placed secret
+ * room's own cell, so the two special rooms don't stack next to each other.
+ */
+function placeSupersecretRoom(
+  rooms: PlacedRoom[],
+  occupied: Map<string, number>,
+  radius: number,
+  secretCell: Cell | null,
+): string | null {
+  const excluded = new Set<string>();
+  if (secretCell !== null) {
+    excluded.add(cellKey(secretCell));
+    for (const direction of DIRECTIONS) {
+      const offset = OFFSET[direction];
+      excluded.add(cellKey({ x: secretCell.x + offset.x, y: secretCell.y + offset.y }));
+    }
+  }
+
+  let best: { cell: Cell; touching: number } | null = null;
+  for (const candidate of openCellTouchCounts(rooms, occupied, radius)) {
+    if (excluded.has(cellKey(candidate.cell))) {
+      continue;
+    }
+    if (best === null || candidate.touching < best.touching) {
+      best = candidate;
     }
   }
 
@@ -423,25 +493,34 @@ function distinctNeighborCount(info: RoomGraphInfo | undefined): number {
  * distance, treasure and shop preferring dead ends. Returns `null` when the
  * skeleton is too thin to hold every required role — `tryGenerateFloor`
  * reads that as "retry", not as a bug.
+ *
+ * `secretId`/`supersecretId` are always already placed by the time this runs
+ * (`placeSecretRoom`/`placeSupersecretRoom`, called earlier in
+ * `tryGenerateFloor`) — a floor with nowhere to put either is itself a retry,
+ * not something this function papers over by relabelling an ordinary room.
  */
 function assignRoles(
   rooms: readonly PlacedRoom[],
   adjacency: ReadonlyMap<string, RoomGraphInfo>,
   distances: ReadonlyMap<string, number>,
   startId: string,
-  secretId: string | null,
+  secretId: string,
+  supersecretId: string,
 ): Map<string, RoomRole> | null {
-  const roles = new Map<string, RoomRole>([[startId, 'start']]);
-  if (secretId !== null) {
-    roles.set(secretId, 'secret');
-  }
+  const roles = new Map<string, RoomRole>([
+    [startId, 'start'],
+    [secretId, 'secret'],
+    [supersecretId, 'supersecret'],
+  ]);
 
   const distanceOf = (id: string): number => distances.get(id) ?? 0;
   const degreeOf = (id: string): number => distinctNeighborCount(adjacency.get(id));
   const byFarthestFirst = (a: PlacedRoom, b: PlacedRoom): number =>
     distanceOf(b.id) - distanceOf(a.id);
 
-  const candidates = rooms.filter((room) => room.id !== startId && room.id !== secretId);
+  const candidates = rooms.filter(
+    (room) => room.id !== startId && room.id !== secretId && room.id !== supersecretId,
+  );
   const deadEnds = candidates.filter((room) => degreeOf(room.id) === 1);
 
   const bossPool = (deadEnds.length > 0 ? deadEnds : candidates).slice().sort(byFarthestFirst);
@@ -466,16 +545,6 @@ function assignRoles(
   roles.set(treasure.id, 'treasure');
   roles.set(shop.id, 'shop');
 
-  if (secretId === null) {
-    const secretFallback = specialPool.find(
-      (room) => room.id !== treasure.id && room.id !== shop.id,
-    );
-    if (secretFallback === undefined) {
-      return null;
-    }
-    roles.set(secretFallback.id, 'secret');
-  }
-
   for (const room of rooms) {
     if (!roles.has(room.id)) {
       roles.set(room.id, 'normal');
@@ -484,16 +553,30 @@ function assignRoles(
   return roles;
 }
 
+/** The template `specialRole` a room's `role` requires — `undefined` for a generic template. */
+function requiredSpecialRole(role: RoomRole): RoomTemplate['metadata']['specialRole'] {
+  return role === 'boss' ||
+    role === 'treasure' ||
+    role === 'shop' ||
+    role === 'secret' ||
+    role === 'supersecret'
+    ? role
+    : undefined;
+}
+
 function eligibleTemplates(
   pool: readonly RoomTemplate[],
   shape: RoomShape,
   floorTag: string,
   doors: RoomDoorConfiguration,
+  role: RoomRole,
 ): RoomTemplate[] {
+  const specialRole = requiredSpecialRole(role);
   return pool.filter(
     (template) =>
       template.metadata.shape === shape &&
       template.metadata.floorTags.includes(floorTag) &&
+      template.metadata.specialRole === specialRole &&
       DIRECTIONS.every((direction) => !doors[direction] || template.metadata.doors[direction]),
   );
 }
@@ -511,6 +594,15 @@ function tryGenerateFloor(
   const { rooms, occupied } = skeleton;
 
   const secretId = placeSecretRoom(rooms, occupied, config.gridRadius);
+  if (secretId === null) {
+    return null;
+  }
+  const secretCell = rooms.find((room) => room.id === secretId)?.cells[0] ?? null;
+  const supersecretId = placeSupersecretRoom(rooms, occupied, config.gridRadius, secretCell);
+  if (supersecretId === null) {
+    return null;
+  }
+
   const adjacency = computeAdjacency(rooms);
   const startId = rooms[0]?.id;
   if (startId === undefined) {
@@ -522,7 +614,7 @@ function tryGenerateFloor(
     return null;
   }
 
-  const roles = assignRoles(rooms, adjacency, distances, startId, secretId);
+  const roles = assignRoles(rooms, adjacency, distances, startId, secretId, supersecretId);
   if (roles === null) {
     return null;
   }
@@ -534,7 +626,13 @@ function tryGenerateFloor(
     if (graphInfo === undefined || role === undefined) {
       return null;
     }
-    const eligible = eligibleTemplates(templatePool, room.shape, config.floorTag, graphInfo.doors);
+    const eligible = eligibleTemplates(
+      templatePool,
+      room.shape,
+      config.floorTag,
+      graphInfo.doors,
+      role,
+    );
     if (eligible.length === 0) {
       return null;
     }
@@ -559,11 +657,13 @@ function tryGenerateFloor(
   const treasureRoomId = findRole('treasure');
   const shopRoomId = findRole('shop');
   const secretRoomId = findRole('secret');
+  const supersecretRoomId = findRole('supersecret');
   if (
     bossRoomId === undefined ||
     treasureRoomId === undefined ||
     shopRoomId === undefined ||
-    secretRoomId === undefined
+    secretRoomId === undefined ||
+    supersecretRoomId === undefined
   ) {
     return null;
   }
@@ -576,6 +676,7 @@ function tryGenerateFloor(
     treasureRoomId,
     shopRoomId,
     secretRoomId,
+    supersecretRoomId,
     rooms: planRooms,
   };
 
@@ -672,12 +773,21 @@ export function validateFloorPlan(
   for (const room of plan.rooms) {
     roleCounts.set(room.role, (roleCounts.get(room.role) ?? 0) + 1);
   }
-  for (const role of ['start', 'boss', 'treasure', 'shop', 'secret'] as const) {
+  for (const role of ['start', 'boss', 'treasure', 'shop', 'secret', 'supersecret'] as const) {
     if ((roleCounts.get(role) ?? 0) !== 1) {
       problems.push(
         `floor must have exactly one ${role} room, has ${String(roleCounts.get(role) ?? 0)}`,
       );
     }
+  }
+
+  const secretRoom = byId.get(plan.secretRoomId);
+  const secretTouching = new Set(Object.values(secretRoom?.neighbors ?? {})).size;
+  if (secretTouching < MIN_SECRET_ROOM_TOUCHING) {
+    problems.push(
+      `secret room ${plan.secretRoomId} touches only ${String(secretTouching)} room(s), ` +
+        `needs at least ${String(MIN_SECRET_ROOM_TOUCHING)}`,
+    );
   }
 
   if (templatePool !== undefined) {
@@ -691,6 +801,12 @@ export function validateFloorPlan(
       if (template.metadata.shape !== room.shape) {
         problems.push(
           `room ${room.id} is shape ${room.shape} but its template "${room.templateId}" is ${template.metadata.shape}`,
+        );
+      }
+      if (template.metadata.specialRole !== requiredSpecialRole(room.role)) {
+        problems.push(
+          `room ${room.id} has role ${room.role} but its template "${room.templateId}" ` +
+            `declares specialRole ${String(template.metadata.specialRole)}`,
         );
       }
       for (const direction of DIRECTIONS) {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import cellarCrossroads from '../../src/content/rooms/cellar.json';
 import { entityIndex } from '../../src/sim/ecs/entity.js';
 import { GameSim, PLAYER_HEALTH, TARGET_RADIUS } from '../../src/sim/game/sim.js';
 import { RoomGeometry } from '../../src/sim/room/geometry.js';
@@ -105,5 +106,58 @@ describe('Bierfassl fuse and blast', () => {
       sim.step(idle());
     }
     expect(sim.playerHealth).toBeLessThan(PLAYER_HEALTH);
+  });
+});
+
+describe('bombable (hidden) walls', () => {
+  const template = { ...cellarCrossroads, enemySpawns: [], spawnGroups: [] };
+
+  it('loads a hidden direction closed even though the template has a door there', () => {
+    const sim = new GameSim({
+      roomTemplate: template,
+      floor: 1,
+      population: 'empty',
+      hiddenDoors: ['north'],
+    });
+
+    expect(sim.doors.north).toBe(false);
+    expect(sim.doors.east).toBe(true);
+  });
+
+  it('reveals it once a Bierfassl explodes near that wall, and stays revealed', () => {
+    const sim = new GameSim({
+      roomTemplate: template,
+      floor: 1,
+      population: 'empty',
+      hiddenDoors: ['north'],
+    });
+    const centreX = (sim.room.minX + sim.room.maxX) / 2;
+    sim.spawnBierfassl(centreX, sim.room.minY + 2, 0, 0, false);
+    sim.world.flush();
+
+    const fuseTicks = Math.round(sim.tuning.pickup.bombFuseTicks);
+    for (let tick = 0; tick <= fuseTicks; tick++) {
+      sim.step(createInputFrame());
+    }
+
+    expect(sim.doors.north).toBe(true);
+  });
+
+  it('a blast nowhere near the hidden wall leaves it hidden', () => {
+    const sim = new GameSim({
+      roomTemplate: template,
+      floor: 1,
+      population: 'empty',
+      hiddenDoors: ['north'],
+    });
+    sim.spawnBierfassl(sim.room.maxX - 2, sim.room.maxY - 2, 0, 0, false);
+    sim.world.flush();
+
+    const fuseTicks = Math.round(sim.tuning.pickup.bombFuseTicks);
+    for (let tick = 0; tick <= fuseTicks; tick++) {
+      sim.step(createInputFrame());
+    }
+
+    expect(sim.doors.north).toBe(false);
   });
 });
