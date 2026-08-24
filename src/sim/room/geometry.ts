@@ -40,22 +40,24 @@ export class RoomGeometry {
   readonly maxY: number;
 
   /**
-   * The one grid slot an `L` room's bounding box doesn't claim (#100's #20
-   * footprint: `2x2` minus a corner) — `null` for every other shape.
+   * The grid slots a shape's bounding box doesn't claim (#107) — empty for a
+   * fully-rectangular shape (`1x1`/`1x2`/`2x2`), one entry for `L` (#100's
+   * #20 footprint: `2x2` minus a corner), several for `T` (#107: a 3x3 box
+   * minus 4 corners).
    *
-   * Already carved out of `isClear`/collision as an ordinary block (see
+   * Already carved out of `isClear`/collision as ordinary blocks (see
    * `sim/room/template.ts`'s `compileRoomTemplate`); this is exposed
-   * separately so `render/room.ts`'s `createRoomView` can draw it in the
-   * wall's own colour instead of as a generic obstacle — it's the room's
-   * boundary standing in for the corner the floor-grid footprint didn't
-   * claim, not a pillar sitting in the middle of the room. Not used for
+   * separately so `render/room.ts`'s `createRoomView` can draw them in the
+   * wall's own colour instead of as generic obstacles — they're the room's
+   * boundary standing in for the cells the floor-grid footprint didn't
+   * claim, not pillars sitting in the middle of the room. Not used for
    * camera clamping (`render/view.ts`'s `GameView.followOffset`) — a screen
-   * is wider and taller than half of a `2x2`/`L` room, so the viewport can
-   * never avoid it anyway, and treating it like any other wall (visible at
-   * the screen edge near it, same as a `1x1` room's own margin) is both
-   * simpler and correct.
+   * is wider and taller than half of a `2x2`/`L`/`T` room, so the viewport
+   * can never avoid them anyway, and treating them like any other wall
+   * (visible at the screen edge near them, same as a `1x1` room's own
+   * margin) is both simpler and correct.
    */
-  readonly voidRect: RoomRect | null;
+  readonly voidRects: readonly RoomRect[];
 
   /** Flat `[minX, minY, maxX, maxY]` runs. Read `blockCount * BLOCK_STRIDE` of it. */
   readonly blocks = new Float32Array(MAX_ROOM_BLOCKS * BLOCK_STRIDE);
@@ -67,13 +69,13 @@ export class RoomGeometry {
     minY: number,
     maxX: number,
     maxY: number,
-    voidRect: RoomRect | null = null,
+    voidRects: readonly RoomRect[] = [],
   ) {
     this.minX = minX;
     this.minY = minY;
     this.maxX = maxX;
     this.maxY = maxY;
-    this.voidRect = voidRect;
+    this.voidRects = voidRects;
   }
 
   get blockCount(): number {

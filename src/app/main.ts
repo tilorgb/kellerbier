@@ -114,27 +114,34 @@ function edgeKey(roomA: string, roomB: string): string {
  * doesn't already know about, so a wall found once stays open for the rest
  * of the run, on both sides, everywhere the floor plan is asked again.
  *
- * Direction-only, not a specific `RoomDoor` (#100 has both a `cellIndex` and
- * a `direction`): a secret/supersecret room is always `1x1` today, so its
- * neighbour never has more than one door in a given direction anyway — see
- * `GameSim.bombableWalls`'s doc comment for the same call.
+ * Returns specific doors — `(cellCol, cellRow, direction)`, same shape as
+ * `crackHintsFor` below — not bare directions: a multi-cell room (#100) can
+ * have two doors sharing a direction on different cells, and hiding the one
+ * that borders a secret room must never also hide an unrelated door to a
+ * normal neighbour that happens to face the same way.
  */
 function hiddenDoorsFor(
   plan: FloorPlan,
   roomId: string,
   revealedEdges: ReadonlySet<string>,
-): RoomDirection[] {
+): CompiledDoor[] {
   const room = planRoom(plan, roomId);
   if (room.role === 'secret' || room.role === 'supersecret') {
     return [];
   }
-  const hidden: RoomDirection[] = [];
+  const placement = buildPlacement(room);
+  const hidden: CompiledDoor[] = [];
   for (const door of room.doors) {
     const neighbor = planRoom(plan, door.neighborRoomId);
     const isSecretEdge = neighbor.role === 'secret' || neighbor.role === 'supersecret';
-    if (isSecretEdge && !revealedEdges.has(edgeKey(roomId, door.neighborRoomId))) {
-      hidden.push(door.direction);
+    if (!isSecretEdge || revealedEdges.has(edgeKey(roomId, door.neighborRoomId))) {
+      continue;
     }
+    const cell = placement.cells[door.cellIndex];
+    if (cell === undefined) {
+      continue;
+    }
+    hidden.push({ direction: door.direction, cellCol: cell.col, cellRow: cell.row });
   }
   return hidden;
 }
@@ -193,18 +200,15 @@ async function boot(): Promise<void> {
   // (see `src/sim/rng/streams.ts`), so it is exactly as reproducible as the
   // rest of the run.
   //
-  // Seed 15 specifically: a 50-seed sweep of floor 1 against the full
-  // authored pool (#20's shapes plus #23's special-role content) puts most
-  // seeds at a decent shape mix, but the pool's new constraints (#23's
-  // specialRole matching) make a couple of seeds — 5 among them — fail to
-  // generate within the retry budget outright, and a dev demo that crashes
-  // on boot is worse than one that only shows one room shape. Seed 15 is the
-  // first sweep hit that also rolls all four shapes — 1x1, 1x2, 2x2 and L —
-  // on floor 1, showcasing both #20 and #100's camera-follow. Re-sweep if a
-  // future content or generator change ever makes this seed specifically
-  // fail (`tests/unit/floor-plan.test.ts`'s "the dev demo's fixed seed
-  // generates a valid floor 1" guards exactly that).
-  const RUN_SEED = 15;
+  // Seed 11 specifically: re-swept for #107, whose `T` shape and rebalanced
+  // `chooseShape` weights shifted which seeds roll what (the previous pick,
+  // seed 15, stopped rolling `L` under the new weights). Seed 11 is the
+  // first hit that rolls all five shapes — 1x1, 1x2, 2x2, L and T — on floor
+  // 1, showcasing #20, #100's camera-follow and #107's `T` room together.
+  // Re-sweep if a future content or generator change ever makes this seed
+  // specifically fail (`tests/unit/floor-plan.test.ts`'s "the dev demo's
+  // fixed seed generates a valid floor 1" guards exactly that).
+  const RUN_SEED = 11;
   const floorPlan = generateFloor(
     createStreamRng(RUN_SEED, RngStream.Floor),
     floorConfig(1),

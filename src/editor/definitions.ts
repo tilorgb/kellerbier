@@ -16,6 +16,7 @@ export const SHAPES: readonly ShapeInfo[] = [
   { shape: '1x2', cellCount: 2, label: '1x2 — two rooms glued' },
   { shape: 'L', cellCount: 3, label: 'L — three rooms, one corner missing' },
   { shape: '2x2', cellCount: 4, label: '2x2 — four rooms glued' },
+  { shape: 'T', cellCount: 5, label: 'T — five rooms, a plus-shape minus one arm' },
 ];
 
 export function shapeCellCount(shape: RoomShape): number {

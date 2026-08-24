@@ -1,5 +1,7 @@
 import { Container, Graphics, Sprite, Text, type Renderer, type Texture } from 'pixi.js';
-import type { FloorPlan, FloorPlanRoom, RoomRole } from '../sim/room/floor-plan.js';
+import type { FloorPlan, FloorPlanRoom, RoomDoor, RoomRole } from '../sim/room/floor-plan.js';
+import type { DoorDirection } from '../content/rooms/definition.js';
+import { computeVoidCells, voidCellKey } from '../sim/room/void-cells.js';
 import { cellBounds, roomOutlineSegments } from './room-outline.js';
 import {
   createBlobTexture,
@@ -30,14 +32,46 @@ interface RevealState {
   readonly revealed: ReadonlySet<string>;
 }
 
-function computeReveal(plan: FloorPlan, visitedRoomIds: ReadonlySet<string>): RevealState {
+const DOOR_OFFSET: Readonly<Record<DoorDirection, { readonly x: number; readonly y: number }>> = {
+  north: { x: 0, y: -1 },
+  south: { x: 0, y: 1 },
+  east: { x: 1, y: 0 },
+  west: { x: -1, y: 0 },
+};
+
+/**
+ * `true` when `door` actually opens in the compiled room — `false` when it
+ * points into one of `room`'s own void cells (`L`'s dropped corner, `T`'s
+ * four, #107) and `compileRoomTemplate` silently drops it. Recomputes the
+ * same rule `compileRoomTemplate` does, off `voidCellKey`/`computeVoidCells`
+ * (`sim/room/void-cells.ts`) rather than a separate approximation, so the
+ * minimap can never show a connection the compiled room doesn't have.
+ */
+function doorSurvivesCompile(
+  room: FloorPlanRoom,
+  door: RoomDoor,
+  voidKeys: ReadonlySet<string>,
+): boolean {
+  const cell = room.cells[door.cellIndex];
+  if (cell === undefined) {
+    return false;
+  }
+  const offset = DOOR_OFFSET[door.direction];
+  return !voidKeys.has(voidCellKey({ x: cell.x + offset.x, y: cell.y + offset.y }));
+}
+
+/** Exported for `tests/unit/minimap-reveal.test.ts` — pure logic, no Pixi involved. */
+export function computeReveal(plan: FloorPlan, visitedRoomIds: ReadonlySet<string>): RevealState {
   const revealed = new Set<string>(visitedRoomIds);
   for (const room of plan.rooms) {
     if (!visitedRoomIds.has(room.id)) {
       continue;
     }
+    const voidKeys = new Set(computeVoidCells(room.cells).map(voidCellKey));
     for (const door of room.doors) {
-      revealed.add(door.neighborRoomId);
+      if (doorSurvivesCompile(room, door, voidKeys)) {
+        revealed.add(door.neighborRoomId);
+      }
     }
   }
   return { visited: visitedRoomIds, revealed };

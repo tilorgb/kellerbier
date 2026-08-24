@@ -4,22 +4,24 @@ export const ROOM_COLUMNS = 15;
 export const ROOM_ROWS = 9;
 export const ROOM_TILE_UNITS = 16;
 
-export type RoomShape = '1x1' | '1x2' | '2x2' | 'L';
+export type RoomShape = '1x1' | '1x2' | '2x2' | 'L' | 'T';
 
 /** The non-`1x1` shapes — every one of them is several sub-rooms glued together (#100). */
-export type MultiCellRoomShape = '1x2' | '2x2' | 'L';
+export type MultiCellRoomShape = '1x2' | '2x2' | 'L' | 'T';
 
 /**
  * How many single-screen sub-rooms a multi-cell shape glues together, and how
  * many entries its `cells` array must have.
  *
  * `L` is `2x2` minus one corner (see #20's footprint: `shapeFootprints('L')`
- * drops one of `2x2`'s four cells) — three sub-rooms, not four.
+ * drops one of `2x2`'s four cells) — three sub-rooms, not four. `T` is a 3x3
+ * bounding box minus its four corners (#107) — five sub-rooms.
  */
 export const MULTI_CELL_COUNT: Readonly<Record<MultiCellRoomShape, number>> = {
   '1x2': 2,
   '2x2': 4,
   L: 3,
+  T: 5,
 };
 
 export type DoorDirection = 'north' | 'east' | 'south' | 'west';

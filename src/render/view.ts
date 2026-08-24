@@ -207,19 +207,19 @@ export class GameView {
    * away from the viewport and show empty space beyond them.
    *
    * A plain per-axis bounding-box clamp, deliberately — `L`'s dropped corner
-   * (#20's footprint) sits inside this clamp's range too, but that's fine
-   * left alone: the void is real `RoomGeometry` wall (see `RoomGeometry`'s
-   * `voidRect` doc comment and `render/room.ts`'s wall-coloured fill for it),
-   * so the viewport showing a slice of it near that corner reads exactly
-   * like standing near any other wall — no different from a `1x1` room
-   * showing its own margin at screen edge. An earlier version of this method
-   * pushed the viewport fully clear of the void whenever it detected an
-   * overlap; for a `2x2`/`L` room the viewport (one screen) is wider *and*
-   * taller than half the room, so that overlap check was true almost always,
-   * and which axis it "fixed" flipped with tiny player movements — the
-   * camera would suddenly snap across to the middle of the next glued
-   * sub-room. Not clamping around the void at all is both simpler and
-   * correct.
+   * (#20's footprint) and `T`'s four dropped corners (#107) sit inside this
+   * clamp's range too, but that's fine left alone: the voids are real
+   * `RoomGeometry` wall (see `RoomGeometry`'s `voidRects` doc comment and
+   * `render/room.ts`'s wall-coloured fill for them), so the viewport showing
+   * a slice of one reads exactly like standing near any other wall — no
+   * different from a `1x1` room showing its own margin at screen edge. An
+   * earlier version of this method pushed the viewport fully clear of the
+   * void whenever it detected an overlap; for a `2x2`/`L`/`T` room the
+   * viewport (one screen) is wider *and* taller than half the room, so that
+   * overlap check was true almost always, and which axis it "fixed" flipped
+   * with tiny player movements — the camera would suddenly snap across to
+   * the middle of the next glued sub-room. Not clamping around the voids at
+   * all is both simpler and correct.
    *
    * Composed additively with shake/sway/the debug free camera in `sync`
    * rather than owning `world.position` outright — that's what "doesn't

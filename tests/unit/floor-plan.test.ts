@@ -61,7 +61,7 @@ function syntheticPool(): RoomTemplate[] {
     hazards: [],
     decorativeProps: [],
   };
-  const shapes: readonly RoomShape[] = ['1x1', '1x2', '2x2', 'L'];
+  const shapes: readonly RoomShape[] = ['1x1', '1x2', '2x2', 'L', 'T'];
   const specialRoles: readonly (RoomSpecialRole | undefined)[] = [
     undefined,
     'boss',
@@ -133,11 +133,13 @@ describe('floor generation', () => {
     // `app/main.ts`'s `RUN_SEED` — hardcoded there (and duplicated here, not
     // imported) so `npm run dev` always boots into the same reproducible
     // run. This seed was hand-picked to succeed and to roll every shape
-    // (1x1/1x2/2x2/L) on floor 1; content or generator changes can shift
+    // (1x1/1x2/2x2/L/T) on floor 1; content or generator changes can shift
     // which seeds succeed (that's exactly what broke seed 5 once #23's
-    // specialRole matching landed), so this exists to catch that class of
-    // regression before it reaches `npm run dev` again rather than after.
-    const RUN_SEED = 15;
+    // specialRole matching landed, and seed 15 once #107's `T` shape and
+    // rebalanced `chooseShape` weights landed), so this exists to catch that
+    // class of regression before it reaches `npm run dev` again rather than
+    // after.
+    const RUN_SEED = 11;
     const config = floorConfig(0);
     const plan = generateFloor(
       createStreamRng(RUN_SEED, RngStream.Floor),
@@ -147,7 +149,7 @@ describe('floor generation', () => {
 
     expect(validateFloorPlan(plan, CELLAR_TEMPLATES)).toEqual([]);
     const shapes = new Set(plan.rooms.map((room) => room.shape));
-    expect([...shapes].sort()).toEqual(['1x1', '1x2', '2x2', 'L']);
+    expect([...shapes].sort()).toEqual(['1x1', '1x2', '2x2', 'L', 'T']);
   });
 
   it('validates a real floor 1 layout against the authored template pool', () => {

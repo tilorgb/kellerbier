@@ -11,6 +11,7 @@ import {
   type RoomTemplate,
 } from '../../content/rooms/definition.js';
 import { RoomGeometry } from './geometry.js';
+import { computeVoidCells } from './void-cells.js';
 
 export const ROOM_FRAME_WIDTH = 320;
 export const ROOM_FRAME_HEIGHT = 180;
@@ -132,8 +133,8 @@ export function validateRoomTemplate(
 
   const metadata = asRecord(template.metadata, `${source}.metadata`);
   const shape = requiredString(metadata.shape, `${source}.metadata.shape`);
-  if (!['1x1', '1x2', '2x2', 'L'].includes(shape)) {
-    fail(`${source}.metadata.shape`, 'must be 1x1, 1x2, 2x2, or L');
+  if (!['1x1', '1x2', '2x2', 'L', 'T'].includes(shape)) {
+    fail(`${source}.metadata.shape`, 'must be 1x1, 1x2, 2x2, L, or T');
   }
 
   const floorTags = requiredStringArray(metadata.floorTags, `${source}.metadata.floorTags`);
@@ -307,41 +308,33 @@ export function compileRoomTemplate(
 
   const gridCols = Math.max(...placement.cells.map((cell) => cell.col)) + 1;
   const gridRows = Math.max(...placement.cells.map((cell) => cell.row)) + 1;
-  const present = new Set(placement.cells.map((cell) => cellKey(cell.col, cell.row)));
 
-  // The one grid slot `L`'s bounding box doesn't claim (#20's footprint:
-  // `2x2` minus a corner) — `undefined` for every fully-rectangular shape.
-  let voidCell: { readonly col: number; readonly row: number } | undefined;
-  for (let row = 0; row < gridRows && voidCell === undefined; row++) {
-    for (let col = 0; col < gridCols; col++) {
-      if (!present.has(cellKey(col, row))) {
-        voidCell = { col, row };
-        break;
-      }
-    }
-  }
+  // Every grid slot the shape's bounding box doesn't claim — none for a
+  // fully-rectangular shape, one for `L` (#20's footprint: `2x2` minus a
+  // corner), four for `T` (#107: a 3x3 box minus 4 corners).
+  const voidCells = computeVoidCells(
+    placement.cells.map((cell) => ({ x: cell.col, y: cell.row })),
+  ).map((cell) => ({ col: cell.x, row: cell.y }));
+  const voidCellKeys = new Set(voidCells.map((cell) => cellKey(cell.col, cell.row)));
 
   const offsetX = ROOM_MARGIN_X;
   const offsetY = ROOM_MARGIN_Y;
   const playfieldWidth = gridCols * SCREEN_WIDTH;
   const playfieldHeight = gridRows * SCREEN_HEIGHT;
-  const voidRect =
-    voidCell === undefined
-      ? null
-      : {
-          minX: offsetX + voidCell.col * SCREEN_WIDTH,
-          minY: offsetY + voidCell.row * SCREEN_HEIGHT,
-          maxX: offsetX + (voidCell.col + 1) * SCREEN_WIDTH,
-          maxY: offsetY + (voidCell.row + 1) * SCREEN_HEIGHT,
-        };
+  const voidRects = voidCells.map((voidCell) => ({
+    minX: offsetX + voidCell.col * SCREEN_WIDTH,
+    minY: offsetY + voidCell.row * SCREEN_HEIGHT,
+    maxX: offsetX + (voidCell.col + 1) * SCREEN_WIDTH,
+    maxY: offsetY + (voidCell.row + 1) * SCREEN_HEIGHT,
+  }));
   const geometry = new RoomGeometry(
     offsetX,
     offsetY,
     offsetX + playfieldWidth,
     offsetY + playfieldHeight,
-    voidRect,
+    voidRects,
   );
-  if (voidRect !== null) {
+  for (const voidRect of voidRects) {
     geometry.addBlock(voidRect.minX, voidRect.minY, voidRect.maxX, voidRect.maxY);
   }
 
@@ -444,15 +437,12 @@ export function compileRoomTemplate(
     if (cell === undefined) {
       continue;
     }
-    // Never a real door into the void slot, even if the floor graph found a
-    // neighbour there (see `voidRect`'s doc comment on `RoomGeometry`) — a
+    // Never a real door into a void slot, even if the floor graph found a
+    // neighbour there (see `voidRects`' doc comment on `RoomGeometry`) — a
     // room later placed in that same floor-grid cell is still reachable
     // through its other doors, just not directly from this one.
     const offset = DIRECTION_OFFSET[door.direction];
-    if (
-      voidCell !== undefined &&
-      cellKey(cell.col + offset.x, cell.row + offset.y) === cellKey(voidCell.col, voidCell.row)
-    ) {
+    if (voidCellKeys.has(cellKey(cell.col + offset.x, cell.row + offset.y))) {
       continue;
     }
     doors.push({ direction: door.direction, cellCol: cell.col, cellRow: cell.row });

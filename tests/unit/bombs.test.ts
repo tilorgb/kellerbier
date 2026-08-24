@@ -4,6 +4,7 @@ import { entityIndex } from '../../src/sim/ecs/entity.js';
 import { GameSim, PLAYER_HEALTH, TARGET_RADIUS } from '../../src/sim/game/sim.js';
 import { RoomGeometry } from '../../src/sim/room/geometry.js';
 import { createInputFrame } from '../../src/sim/input/frame.js';
+import { ROOM_COLUMNS, ROOM_ROWS, type RoomSubLayout } from '../../src/content/rooms/definition.js';
 
 function bareRoom(): RoomGeometry {
   return new RoomGeometry(0, 0, 320, 180);
@@ -117,7 +118,7 @@ describe('bombable (hidden) walls', () => {
       roomTemplate: template,
       floor: 1,
       population: 'empty',
-      hiddenDoors: ['north'],
+      hiddenDoors: [{ direction: 'north', cellCol: 0, cellRow: 0 }],
     });
 
     expect(sim.doors.some((door) => door.direction === 'north')).toBe(false);
@@ -129,7 +130,7 @@ describe('bombable (hidden) walls', () => {
       roomTemplate: template,
       floor: 1,
       population: 'empty',
-      hiddenDoors: ['north'],
+      hiddenDoors: [{ direction: 'north', cellCol: 0, cellRow: 0 }],
     });
     const centreX = (sim.room.minX + sim.room.maxX) / 2;
     sim.spawnBierfassl(centreX, sim.room.minY + 2, 0, 0, false);
@@ -148,7 +149,7 @@ describe('bombable (hidden) walls', () => {
       roomTemplate: template,
       floor: 1,
       population: 'empty',
-      hiddenDoors: ['north'],
+      hiddenDoors: [{ direction: 'north', cellCol: 0, cellRow: 0 }],
     });
     sim.spawnBierfassl(sim.room.maxX - 2, sim.room.maxY - 2, 0, 0, false);
     sim.world.flush();
@@ -159,5 +160,63 @@ describe('bombable (hidden) walls', () => {
     }
 
     expect(sim.doors.some((door) => door.direction === 'north')).toBe(false);
+  });
+
+  /**
+   * Regression for a real bug found while testing #107's `T`/`L` rooms: a
+   * multi-cell room (#100) can have two doors sharing a direction on
+   * different cells — hiding the one that borders a secret room used to hide
+   * *every* door in that direction (`bombableWalls` was keyed by direction
+   * alone), soft-locking the player behind what looked like a normal door on
+   * the minimap.
+   */
+  it('hiding one door never hides an unrelated door sharing its direction on another cell', () => {
+    const blankRow = '#' + '.'.repeat(ROOM_COLUMNS - 2) + '#';
+    const wallRow = '#'.repeat(ROOM_COLUMNS);
+    const tileGrid = Array.from({ length: ROOM_ROWS }, (_row, index) =>
+      index === 0 || index === ROOM_ROWS - 1 ? wallRow : blankRow,
+    );
+    const subLayout: RoomSubLayout = {
+      tileGrid,
+      obstacles: [],
+      enemySpawns: [],
+      spawnGroups: [],
+      pickupSpawns: [],
+      hazards: [],
+      decorativeProps: [],
+    };
+    const oneByTwo = {
+      id: 'synthetic-1x2',
+      cells: [subLayout, subLayout],
+      metadata: { floorTags: ['test'], shape: '1x2', difficultyTier: 1, weight: 1 },
+    };
+    const placement = {
+      cells: [
+        { col: 0, row: 0 },
+        { col: 1, row: 0 },
+      ],
+      doors: [
+        { cellIndex: 0, direction: 'north' as const },
+        { cellIndex: 1, direction: 'north' as const },
+      ],
+    };
+
+    // The constructor's `roomTemplate` option never accepts a `placement`
+    // (it can't load a multi-cell draft — see `editor/playtest.ts`'s doc
+    // comment on the same limitation), so build an empty sim first and load
+    // the multi-cell room directly through `loadRoom`.
+    const sim = new GameSim({ population: 'empty' });
+    sim.loadRoom(
+      oneByTwo,
+      1,
+      null,
+      // Only cell 1's north door borders a secret room; cell 0's north door
+      // is a real neighbour and must stay walkable.
+      [{ direction: 'north', cellCol: 1, cellRow: 0 }],
+      placement,
+    );
+
+    expect(sim.doors.some((door) => door.direction === 'north' && door.cellCol === 0)).toBe(true);
+    expect(sim.doors.some((door) => door.direction === 'north' && door.cellCol === 1)).toBe(false);
   });
 });

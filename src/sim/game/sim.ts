@@ -118,6 +118,17 @@ const DOOR_SPAWN_SAFETY_RADIUS = 48;
 export type RoomDirection = 'north' | 'east' | 'south' | 'west';
 
 /**
+ * Identifies one specific door — `(cellCol, cellRow, direction)` — rather
+ * than just its direction. A multi-cell room (#100) can have two doors
+ * sharing a direction on different cells (a `1x2`/`L`/`T`/`2x2` room's two
+ * halves can each border a different neighbour to, say, the north); keying
+ * by direction alone would treat both as the same door.
+ */
+function doorKey(door: Pick<CompiledDoor, 'direction' | 'cellCol' | 'cellRow'>): string {
+  return `${door.direction}:${String(door.cellCol)},${String(door.cellRow)}`;
+}
+
+/**
  * What the room is populated with.
  *
  * Two placeholder rigs, both replaced by room templates in #18.
@@ -145,8 +156,8 @@ export interface GameSimOptions {
   /** Loads this authored room instead of the playground population. */
   readonly roomTemplate?: unknown;
   readonly floor?: number;
-  /** Door directions to load hidden — see `loadRoom`'s `hiddenDoors` parameter. */
-  readonly hiddenDoors?: readonly RoomDirection[];
+  /** Doors to load hidden — see `loadRoom`'s `hiddenDoors` parameter. */
+  readonly hiddenDoors?: readonly Pick<CompiledDoor, 'direction' | 'cellCol' | 'cellRow'>[];
   /** Projectile pool size. Lowered by tests that want to watch it overflow. */
   readonly projectileCapacity?: number;
   readonly particleCapacity?: number;
@@ -422,19 +433,15 @@ export class GameSim {
   /** Every real door the current room has (#100) — see the `doors` getter for the *visible* subset. */
   private roomDoors: readonly CompiledDoor[] = [];
   /**
-   * Door directions this room load hid (see `loadRoom`'s `hiddenDoors`) that
-   * a nearby Bierfassl blast has not yet revealed. `revealBombableWalls`
-   * removes an entry the instant its wall opens; cleared and rebuilt fresh
-   * on every `loadRoom`, since which walls are bombable is per-instance
-   * (decided by the caller, not the template).
-   *
-   * Direction-keyed, not per-`CompiledDoor`: a secret/supersecret room is
-   * always `1x1` today, so the room it hides behind never has more than one
-   * door per direction in practice. Hiding by direction reveals every door
-   * that direction has, which is exactly one, every time this is actually
-   * exercised.
+   * The specific doors this room load hid (see `loadRoom`'s `hiddenDoors`)
+   * that a nearby Bierfassl blast has not yet revealed, keyed by `doorKey`
+   * so a multi-cell room (#100) hiding one door never also hides an
+   * unrelated door that happens to share its direction on a different cell.
+   * `revealBombableWalls` removes an entry the instant its wall opens;
+   * cleared and rebuilt fresh on every `loadRoom`, since which walls are
+   * bombable is per-instance (decided by the caller, not the template).
    */
-  private readonly bombableWalls = new Set<RoomDirection>();
+  private readonly bombableWalls = new Map<string, CompiledDoor>();
   /** The loaded room's `metadata.specialRole`, or `undefined` for a normal room. */
   private roomSpecialRole: RoomSpecialRole | undefined = undefined;
   /**
@@ -528,13 +535,13 @@ export class GameSim {
   /**
    * Every door the current room actually shows and allows walking through —
    * up to eight for a `2x2` room (#100), one per `(cell, wall)` pair that
-   * borders a real neighbour. A hidden/bombable direction (`bombableWalls`)
-   * is excluded here — a solid wall, until `revealBombableWalls` opens it.
+   * borders a real neighbour. A hidden/bombable door (`bombableWalls`) is
+   * excluded here — a solid wall, until `revealBombableWalls` opens it.
    */
   get doors(): readonly CompiledDoor[] {
     return this.bombableWalls.size === 0
       ? this.roomDoors
-      : this.roomDoors.filter((door) => !this.bombableWalls.has(door.direction));
+      : this.roomDoors.filter((door) => !this.bombableWalls.has(doorKey(door)));
   }
 
   /**
@@ -552,16 +559,12 @@ export class GameSim {
     if (this.bombableWalls.size === 0) {
       return;
     }
-    for (const direction of this.bombableWalls) {
-      const door = this.roomDoors.find((candidate) => candidate.direction === direction);
-      if (door === undefined) {
-        continue;
-      }
+    for (const [key, door] of this.bombableWalls) {
       const point = doorCentre(this.room, door);
       const dx = point.x - x;
       const dy = point.y - y;
       if (dx * dx + dy * dy <= radius * radius) {
-        this.bombableWalls.delete(direction);
+        this.bombableWalls.delete(key);
       }
     }
   }
@@ -625,14 +628,17 @@ export class GameSim {
    * Loads one room, preserving the player and run state while replacing its
    * contents.
    *
-   * `hiddenDoors` — directions the template itself has a door on, but which
-   * load closed and solid rather than open, and remembered in
-   * `bombableWalls` so a nearby Bierfassl blast can reveal them
-   * (`revealBombableWalls`, called from `sim/systems/bombs.ts`). This is how
-   * a secret/supersecret room connects: not a different door shape, the same
-   * door drawn shut until bombed. The caller (`app/main.ts`, which owns the
-   * floor plan) decides which directions those are for the room it's
-   * loading — `GameSim` only knows one room's template at a time.
+   * `hiddenDoors` — specific doors the template itself has, but which load
+   * closed and solid rather than open, and remembered in `bombableWalls` so
+   * a nearby Bierfassl blast can reveal them (`revealBombableWalls`, called
+   * from `sim/systems/bombs.ts`). This is how a secret/supersecret room
+   * connects: not a different door shape, the same door drawn shut until
+   * bombed. The caller (`app/main.ts`, which owns the floor plan) decides
+   * which doors those are for the room it's loading — `GameSim` only knows
+   * one room's template at a time. Identified by `(cellCol, cellRow,
+   * direction)`, not direction alone: a multi-cell room (#100) can have two
+   * doors sharing a direction on different cells, and hiding one must never
+   * hide the other.
    *
    * `placement` and `entryCell` only matter for a multi-cell room (#100): the
    * app layer, which owns the floor plan, resolves the real floor-grid
@@ -646,7 +652,7 @@ export class GameSim {
     template: unknown,
     floor = 1,
     direction: RoomDirection | null = null,
-    hiddenDoors: readonly RoomDirection[] = [],
+    hiddenDoors: readonly Pick<CompiledDoor, 'direction' | 'cellCol' | 'cellRow'>[] = [],
     placement?: RoomPlacement,
     entryCell: { readonly col: number; readonly row: number } = { col: 0, row: 0 },
   ): void {
@@ -663,8 +669,14 @@ export class GameSim {
     this.roomDoors = compiled.doors;
     this.bombableWalls.clear();
     for (const hidden of hiddenDoors) {
-      if (this.roomDoors.some((door) => door.direction === hidden)) {
-        this.bombableWalls.add(hidden);
+      const match = this.roomDoors.find(
+        (door) =>
+          door.direction === hidden.direction &&
+          door.cellCol === hidden.cellCol &&
+          door.cellRow === hidden.cellRow,
+      );
+      if (match !== undefined) {
+        this.bombableWalls.set(doorKey(match), match);
       }
     }
     this.roomSpecialRole = compiled.source.metadata.specialRole;
@@ -731,7 +743,7 @@ export class GameSim {
     template: unknown,
     floor: number,
     direction: RoomDirection,
-    hiddenDoors: readonly RoomDirection[] = [],
+    hiddenDoors: readonly Pick<CompiledDoor, 'direction' | 'cellCol' | 'cellRow'>[] = [],
     placement?: RoomPlacement,
     entryCell?: { readonly col: number; readonly row: number },
   ): boolean {
