@@ -1,6 +1,8 @@
 import type { Rng } from '../rng/rng.js';
 import type { FloorConfig } from '../../content/floors/definition.js';
 import {
+  DIRECTION_OFFSET,
+  DOOR_DIRECTIONS,
   isMultiCellRoomTemplate,
   type DoorDirection,
   type RoomShape,
@@ -100,14 +102,8 @@ export interface FloorPlan {
   readonly rooms: readonly FloorPlanRoom[];
 }
 
-const DIRECTIONS: readonly DoorDirection[] = ['north', 'east', 'south', 'west'];
-
-const OFFSET: Readonly<Record<DoorDirection, Cell>> = {
-  north: { x: 0, y: -1 },
-  south: { x: 0, y: 1 },
-  east: { x: 1, y: 0 },
-  west: { x: -1, y: 0 },
-};
+const DIRECTIONS = DOOR_DIRECTIONS;
+const OFFSET = DIRECTION_OFFSET;
 
 /**
  * Generation attempts before giving up. `docs/GAME_DESIGN.md` §4: "Generation

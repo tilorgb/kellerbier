@@ -6,7 +6,7 @@ import {
   MULTI_CELL_COUNT,
   ROOM_COLUMNS,
   ROOM_ROWS,
-  type RoomShape,
+  ROOM_SHAPES,
   type RoomSpecialRole,
   type RoomSubLayout,
   type RoomTemplate,
@@ -73,7 +73,7 @@ function syntheticPool(): RoomTemplate[] {
     hazards: [],
     decorativeProps: [],
   };
-  const shapes: readonly RoomShape[] = ['1x1', '1x2', '2x2', 'L', 'T'];
+  const shapes = ROOM_SHAPES;
   const specialRoles: readonly (RoomSpecialRole | undefined)[] = [
     undefined,
     'boss',
@@ -179,7 +179,7 @@ describe('floor generation', () => {
 
     expect(validateFloorPlan(plan, CELLAR_TEMPLATES)).toEqual([]);
     const shapes = new Set(plan.rooms.map((room) => room.shape));
-    expect([...shapes].sort()).toEqual(['1x1', '1x2', '2x2', 'L', 'T']);
+    expect([...shapes].sort()).toEqual([...ROOM_SHAPES].sort());
   });
 
   it('validates a real floor 1 layout against the authored template pool', () => {

@@ -6,6 +6,17 @@ export const ROOM_TILE_UNITS = 16;
 
 export type RoomShape = '1x1' | '1x2' | '2x2' | 'L' | 'T';
 
+/**
+ * Every `RoomShape`, once — the enumerated counterpart to the type above.
+ * Anything that needs "all shapes" (validation, dev-seed sweeps, tests)
+ * reads this instead of hand-listing the five strings again, so adding a
+ * shape is one line here rather than an audit of every call site
+ * (`editor/state.ts`'s `isRoomShape` used to be exactly this kind of
+ * hand-listed copy, and had silently gone stale missing `'T'` until this
+ * list replaced it).
+ */
+export const ROOM_SHAPES: readonly RoomShape[] = ['1x1', '1x2', '2x2', 'L', 'T'];
+
 /** The non-`1x1` shapes — every one of them is several sub-rooms glued together (#100). */
 export type MultiCellRoomShape = '1x2' | '2x2' | 'L' | 'T';
 
@@ -25,6 +36,28 @@ export const MULTI_CELL_COUNT: Readonly<Record<MultiCellRoomShape, number>> = {
 };
 
 export type DoorDirection = 'north' | 'east' | 'south' | 'west';
+
+/** Every `DoorDirection`, once — see `ROOM_SHAPES`'s doc comment for why this exists. */
+export const DOOR_DIRECTIONS: readonly DoorDirection[] = ['north', 'east', 'south', 'west'];
+
+/**
+ * Cell offset each compass direction moves by, on any of this codebase's
+ * grids (the floor's room grid, a multi-cell room's local sub-cell grid).
+ * Hand-written independently in four places before this (`sim/room/floor-plan.ts`'s
+ * `OFFSET`, `sim/room/template.ts`'s `DIRECTION_OFFSET`, `render/minimap-hud.ts`'s
+ * `DOOR_OFFSET`, `app/main.ts`'s `DIRECTION_OFFSET`) — a typo in any one of
+ * those would have made only part of the system disagree about which way is
+ * which, exactly the class of bug `sim/room/void-cells.ts`'s doc comment
+ * warns about (#117).
+ */
+export const DIRECTION_OFFSET: Readonly<
+  Record<DoorDirection, { readonly x: number; readonly y: number }>
+> = {
+  north: { x: 0, y: -1 },
+  south: { x: 0, y: 1 },
+  east: { x: 1, y: 0 },
+  west: { x: -1, y: 0 },
+};
 
 export interface RoomDoorConfiguration {
   readonly north: boolean;

@@ -1,6 +1,7 @@
 import {
   ROOM_COLUMNS,
   ROOM_ROWS,
+  ROOM_SHAPES,
   ROOM_TILE_UNITS,
   type RoomDecorativeProp,
   type RoomDoorConfiguration,
@@ -225,7 +226,7 @@ function isArray<T>(value: unknown): value is T[] {
 }
 
 function isRoomShape(value: unknown): value is RoomShape {
-  return value === '1x1' || value === '1x2' || value === '2x2' || value === 'L';
+  return (ROOM_SHAPES as readonly unknown[]).includes(value);
 }
 
 function isSpecialRole(value: unknown): value is RoomSpecialRole {

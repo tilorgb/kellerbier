@@ -1,6 +1,6 @@
 import { Container, Graphics, Sprite, Text, type Renderer, type Texture } from 'pixi.js';
 import type { FloorPlan, FloorPlanRoom, RoomDoor, RoomRole } from '../sim/room/floor-plan.js';
-import type { DoorDirection } from '../content/rooms/definition.js';
+import { DIRECTION_OFFSET } from '../content/rooms/definition.js';
 import { computeVoidCells, voidCellKey } from '../sim/room/void-cells.js';
 import { cellBounds, roomOutlineSegments } from './room-outline.js';
 import {
@@ -32,13 +32,6 @@ interface RevealState {
   readonly revealed: ReadonlySet<string>;
 }
 
-const DOOR_OFFSET: Readonly<Record<DoorDirection, { readonly x: number; readonly y: number }>> = {
-  north: { x: 0, y: -1 },
-  south: { x: 0, y: 1 },
-  east: { x: 1, y: 0 },
-  west: { x: -1, y: 0 },
-};
-
 /**
  * `true` when `door` actually opens in the compiled room — `false` when it
  * points into one of `room`'s own void cells (`L`'s dropped corner, `T`'s
@@ -56,7 +49,7 @@ function doorSurvivesCompile(
   if (cell === undefined) {
     return false;
   }
-  const offset = DOOR_OFFSET[door.direction];
+  const offset = DIRECTION_OFFSET[door.direction];
   return !voidKeys.has(voidCellKey({ x: cell.x + offset.x, y: cell.y + offset.y }));
 }
 

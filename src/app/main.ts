@@ -2,6 +2,7 @@ import { Assets, Container, Text, type Texture } from 'pixi.js';
 import massUrl from '../../assets/sprites/mass.png';
 import { ENEMY_DEFINITIONS } from '../content/enemies/index.js';
 import { FLOOR_CONFIGS, type FloorConfig } from '../content/floors/definition.js';
+import { DIRECTION_OFFSET } from '../content/rooms/definition.js';
 import { ROOM_TEMPLATES, STAIRCASE_TEMPLATES, type DoorDirection } from '../content/rooms/index.js';
 import { type RoomDirection, GameSim, MAX_COLLIDER_RADIUS } from '../sim/game/sim.js';
 import { promilleTierName } from '../sim/game/promille.js';
@@ -111,16 +112,6 @@ function staircaseDoorCentres(
     [compiled.endDoor.direction, { x: compiled.endDoor.x, y: compiled.endDoor.y }],
   ]);
 }
-
-/** Cell offset each compass direction moves by, on the floor's own grid. */
-const DIRECTION_OFFSET: Readonly<
-  Record<RoomDirection, { readonly x: number; readonly y: number }>
-> = {
-  north: { x: 0, y: -1 },
-  south: { x: 0, y: 1 },
-  east: { x: 1, y: 0 },
-  west: { x: -1, y: 0 },
-};
 
 /**
  * `room`'s real floor-grid layout, translated into the local (0-indexed,

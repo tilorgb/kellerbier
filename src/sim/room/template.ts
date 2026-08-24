@@ -1,7 +1,10 @@
 import {
+  DIRECTION_OFFSET,
+  DOOR_DIRECTIONS,
   MULTI_CELL_COUNT,
   ROOM_COLUMNS,
   ROOM_ROWS,
+  ROOM_SHAPES,
   ROOM_TILE_UNITS,
   isMultiCellRoomTemplate,
   type DoorDirection,
@@ -34,13 +37,7 @@ export const SCREEN_HEIGHT = ROOM_ROWS * ROOM_TILE_UNITS;
 export const ROOM_MARGIN_X = (ROOM_FRAME_WIDTH - SCREEN_WIDTH) / 2;
 export const ROOM_MARGIN_Y = (ROOM_FRAME_HEIGHT - SCREEN_HEIGHT) / 2;
 
-const DIRECTIONS: readonly DoorDirection[] = ['north', 'east', 'south', 'west'];
-const DIRECTION_OFFSET: Readonly<Record<DoorDirection, { x: number; y: number }>> = {
-  north: { x: 0, y: -1 },
-  south: { x: 0, y: 1 },
-  east: { x: 1, y: 0 },
-  west: { x: -1, y: 0 },
-};
+const DIRECTIONS = DOOR_DIRECTIONS;
 
 export interface CompiledDoor {
   readonly direction: DoorDirection;
@@ -145,8 +142,8 @@ export function validateRoomTemplate(
 
   const metadata = asRecord(template.metadata, `${source}.metadata`);
   const shape = requiredString(metadata.shape, `${source}.metadata.shape`);
-  if (!['1x1', '1x2', '2x2', 'L', 'T'].includes(shape)) {
-    fail(`${source}.metadata.shape`, 'must be 1x1, 1x2, 2x2, L, or T');
+  if (!(ROOM_SHAPES as readonly string[]).includes(shape)) {
+    fail(`${source}.metadata.shape`, `must be one of ${ROOM_SHAPES.join(', ')}`);
   }
 
   const floorTags = requiredStringArray(metadata.floorTags, `${source}.metadata.floorTags`);
