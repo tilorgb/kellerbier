@@ -25,8 +25,7 @@ import cellarSupersecret from './cellar-supersecret.json';
  * templates being visually sparse besides) reads as "the generator always
  * shows the same room" even though the pick is genuinely unbiased. A third
  * option does not remove that possibility, but it cuts it a lot further.
- */
-/**
+ *
  * `cellarBoss`/`cellarTreasure(Locked)`/`cellarShop(Vorrat)`/`cellarSecret`/
  * `cellarSupersecret` are floor 1's special-room content (#23) — one per
  * `RoomSpecialRole`, with two variants each for treasure and shop so

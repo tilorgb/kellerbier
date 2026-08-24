@@ -25,6 +25,18 @@ export interface PointerMapping {
   readonly originY: number;
   /** Room units covered by one client pixel. */
   readonly unitsPerPixel: number;
+  /**
+   * The room's current on-screen offset (`GameView.worldOffset`), in room
+   * units — zero unless a camera-follow pan (#100), shake or sway is live.
+   *
+   * The rest of this mapping only accounts for the outer window scale and
+   * letterbox, which is everything that mattered before a room's camera
+   * could move. Once `world.position` can be nonzero, a client pixel maps to
+   * a *screen* room coordinate that is off from the *simulation* room
+   * coordinate mouse aim is measured against by exactly this much.
+   */
+  readonly cameraX: number;
+  readonly cameraY: number;
 }
 
 export class KeyboardMouseSource {
@@ -133,8 +145,8 @@ export class KeyboardMouseSource {
         return;
       }
       this.movePointer(
-        (event.clientX - bounds.left - mapping.originX) * mapping.unitsPerPixel,
-        (event.clientY - bounds.top - mapping.originY) * mapping.unitsPerPixel,
+        (event.clientX - bounds.left - mapping.originX) * mapping.unitsPerPixel - mapping.cameraX,
+        (event.clientY - bounds.top - mapping.originY) * mapping.unitsPerPixel - mapping.cameraY,
       );
     };
     const onBlur = (): void => {

@@ -1,15 +1,16 @@
 import { Container, Sprite, type Graphics, type Texture } from 'pixi.js';
-import { ROOM_TRANSITION_TICKS, type GameSim, type RoomDirection } from '../sim/game/sim.js';
-import type { RoomGeometry } from '../sim/room/geometry.js';
+import { ROOM_TRANSITION_TICKS, type GameSim } from '../sim/game/sim.js';
+import { roomFrameSize, type RoomGeometry } from '../sim/room/geometry.js';
 import { PLAYFIELD_HEIGHT, PLAYFIELD_WIDTH } from '../sim/room/playground.js';
-import { lerp } from '../sim/math.js';
+import type { CompiledDoor } from '../sim/room/template.js';
+import { clamp, lerp } from '../sim/math.js';
 import { DamageNumberView } from './damage-numbers.js';
 import { DecalView } from './decals.js';
 import { EntityView } from './entities.js';
 import { ParticleView } from './particles.js';
 import { ProjectileView } from './projectiles.js';
 import { createDoorView, createRoomView, createSecretHintView } from './room.js';
-import { WORLD_ZOOM } from './resolution.js';
+import { INTERNAL_HEIGHT, INTERNAL_WIDTH, WORLD_ZOOM } from './resolution.js';
 
 /**
  * Where the player sprite's anchor sits in its texture.
@@ -66,7 +67,7 @@ export class GameView {
   private doorView: Graphics;
   private doorsLocked: boolean;
   private secretHintView: Graphics;
-  private secretHintDirections: readonly RoomDirection[] = [];
+  private secretHintDoors: readonly CompiledDoor[] = [];
 
   /**
    * Everything the camera shakes.
@@ -165,7 +166,7 @@ export class GameView {
     if (roomChanged) {
       this.world.removeChild(this.secretHintView);
       this.secretHintView.destroy();
-      this.secretHintView = createSecretHintView(this.roomGeometry, this.secretHintDirections);
+      this.secretHintView = createSecretHintView(this.roomGeometry, this.secretHintDoors);
       this.world.addChildAt(this.secretHintView, 2);
     }
     this.decals.sync();
@@ -175,10 +176,10 @@ export class GameView {
     this.damageNumbers.sync(alpha);
 
     const index = this.sim.playerIndex;
-    this.player.position.set(
-      lerp(this.sim.previousX(index), this.sim.positionX(index), alpha),
-      lerp(this.sim.previousY(index), this.sim.positionY(index), alpha),
-    );
+    const playerX = lerp(this.sim.previousX(index), this.sim.positionX(index), alpha);
+    const playerY = lerp(this.sim.previousY(index), this.sim.positionY(index), alpha);
+    this.player.position.set(playerX, playerY);
+    const follow = this.followOffset(playerX, playerY);
 
     // Rounded, not left fractional — a camera offset by a fraction of a real
     // screen pixel makes every sprite in the room resample, which on pixel
@@ -195,9 +196,58 @@ export class GameView {
     const roundToScreenPixel = (value: number): number => Math.round(value * zoom) / zoom;
     const slide = this.transitionSlideOffset(alpha);
     this.world.position.set(
-      roundToScreenPixel(this.sim.shakeX + this.sim.swayX + this.cameraX + slide.x),
-      roundToScreenPixel(this.sim.shakeY + this.sim.swayY + this.cameraY + slide.y),
+      roundToScreenPixel(follow.x + this.sim.shakeX + this.sim.swayX + this.cameraX + slide.x),
+      roundToScreenPixel(follow.y + this.sim.shakeY + this.sim.swayY + this.cameraY + slide.y),
     );
+  }
+
+  /**
+   * Camera-follow offset (#100): keeps the player centred on screen inside a
+   * room bigger than one screen, clamped so the room's own edges never pull
+   * away from the viewport and show empty space beyond them.
+   *
+   * A plain per-axis bounding-box clamp, deliberately — `L`'s dropped corner
+   * (#20's footprint) sits inside this clamp's range too, but that's fine
+   * left alone: the void is real `RoomGeometry` wall (see `RoomGeometry`'s
+   * `voidRect` doc comment and `render/room.ts`'s wall-coloured fill for it),
+   * so the viewport showing a slice of it near that corner reads exactly
+   * like standing near any other wall — no different from a `1x1` room
+   * showing its own margin at screen edge. An earlier version of this method
+   * pushed the viewport fully clear of the void whenever it detected an
+   * overlap; for a `2x2`/`L` room the viewport (one screen) is wider *and*
+   * taller than half the room, so that overlap check was true almost always,
+   * and which axis it "fixed" flipped with tiny player movements — the
+   * camera would suddenly snap across to the middle of the next glued
+   * sub-room. Not clamping around the void at all is both simpler and
+   * correct.
+   *
+   * Composed additively with shake/sway/the debug free camera in `sync`
+   * rather than owning `world.position` outright — that's what "doesn't
+   * fight the existing camera shake/sway" (#100's acceptance criterion)
+   * means in practice: this just moves the baseline they jitter around.
+   *
+   * A `1x1` room's frame is exactly one screen (`INTERNAL_WIDTH`/`HEIGHT` at
+   * `WORLD_ZOOM`), so the clamp range below collapses to a single value and
+   * this returns a constant `{0, 0}` there — the pre-#100 "whole room always
+   * on screen, no camera movement" behaviour falls out of the general case
+   * rather than needing its own branch.
+   *
+   * Follows instantly rather than easing toward the player: this is a
+   * twin-stick dodge-'em-up (`docs/GAME_DESIGN.md` §1) where the player's
+   * on-screen position has to match their hitbox exactly, and a lagging
+   * camera would put visible daylight between the sprite an attack is
+   * telegraphed at and where the body actually is.
+   */
+  private followOffset(
+    playerX: number,
+    playerY: number,
+  ): { readonly x: number; readonly y: number } {
+    const viewWidth = INTERNAL_WIDTH / WORLD_ZOOM;
+    const viewHeight = INTERNAL_HEIGHT / WORLD_ZOOM;
+    const frame = roomFrameSize(this.roomGeometry);
+    const viewportX = clamp(playerX - viewWidth / 2, 0, Math.max(0, frame.width - viewWidth));
+    const viewportY = clamp(playerY - viewHeight / 2, 0, Math.max(0, frame.height - viewHeight));
+    return { x: -viewportX * WORLD_ZOOM, y: -viewportY * WORLD_ZOOM };
   }
 
   /**
@@ -240,11 +290,11 @@ export class GameView {
    * and not yet found) and again the moment it notices a hidden wall has
    * opened, so the crack disappears the same tick the door does.
    */
-  setSecretHints(directions: readonly RoomDirection[]): void {
-    this.secretHintDirections = directions;
+  setSecretHints(doors: readonly CompiledDoor[]): void {
+    this.secretHintDoors = doors;
     this.world.removeChild(this.secretHintView);
     this.secretHintView.destroy();
-    this.secretHintView = createSecretHintView(this.roomGeometry, directions);
+    this.secretHintView = createSecretHintView(this.roomGeometry, doors);
     this.world.addChildAt(this.secretHintView, 2);
   }
 
@@ -258,11 +308,26 @@ export class GameView {
    * container between here and the stage ever gets rescaled or repositioned
    * for an unrelated reason. Call after `sync`, so it reflects this frame's
    * layout — the vignette (#17) is the reason this exists: it has to follow
-   * the player, and this room has no camera-follow of its own to piggyback
-   * on.
+   * the player exactly, camera-follow (#100) included, rather than assume
+   * screen centre the way it could before a room could be bigger than one
+   * screen.
    */
   playerScreenPosition(): { readonly x: number; readonly y: number } {
     const point = this.player.getGlobalPosition();
     return { x: point.x, y: point.y };
+  }
+
+  /**
+   * `world`'s current offset, in internal-resolution pixels — everything
+   * `sync` folds into it: camera-follow (#100), shake, sway, the debug free
+   * camera and the room-transition slide.
+   *
+   * Mouse aim needs this: `app/main.ts`'s pointer mapping turns a client
+   * pixel into a room coordinate assuming the room sits at its untranslated
+   * position, which stopped being true the moment `world.position` could be
+   * anything but ~0. Read after `sync`, same as `playerScreenPosition`.
+   */
+  worldOffset(): { readonly x: number; readonly y: number } {
+    return { x: this.world.position.x, y: this.world.position.y };
   }
 }

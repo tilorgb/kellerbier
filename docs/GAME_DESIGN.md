@@ -91,6 +91,49 @@ Isaac's skeleton, kept deliberately familiar:
 - Every generated floor is validated: fully connected, boss reachable, no template placed in
   a slot whose doors it does not match. Generation failures retry, then hard-fail in tests.
 
+### Room shape and the camera
+
+A room's shape (`1x1`/`1x2`/`2x2`/`L`) is a real physical play-space size, not just a
+floor-grid packing and minimap concept. A `1x2`/`2x2`/`L` room is several single-screen
+sub-rooms glued together with no wall or door between them — genuinely one bigger continuous
+space, not a bigger minimap footprint that still plays like a `1x1` once you walk in — and a
+camera follows the player around inside it.
+
+- **Glued, not one big authored grid.** A multi-cell template is `MULTI_CELL_COUNT[shape]`
+  ordinary single-screen sub-layouts (`content/rooms/definition.ts`'s `RoomSubLayout` —
+  exactly what a `1x1` template already authors, minus doors) rather than one large hand-drawn
+  grid. At load time (`sim/room/template.ts`'s `compileRoomTemplate`) they're placed into the
+  room's *actual* floor-grid layout for that run — whichever cells the generator really grew
+  into — so a sub-layout carries no orientation or position of its own and is free to land in
+  any corner.
+- **Doors are derived, never authored, and there can be up to eight.** A `1x1` template still
+  authors its own `doors` (unchanged from before #100). A multi-cell room instead gets one
+  door per `(cell, wall)` pair that genuinely borders a different room on the floor grid
+  (`sim/room/floor-plan.ts`'s `RoomDoor`) — a `2x2` room can have two doors on a side (one per
+  sub-cell touching it), eight in total, each leading to whichever real neighbour is actually
+  there. Nothing is authored or guessed; the floor plan is the only source of truth.
+- **`L` is `2x2` minus one corner** (#20's footprint), and that one dropped corner is a
+  permanent solid wall in the compiled room, regardless of whether another room later ends up
+  occupying that same floor-grid cell — a true door into an *interior* edge would need room
+  geometry shaped as a real polygon, which this engine's rectangle-plus-blocks `RoomGeometry`
+  doesn't support. That neighbour, on the rare floor where this comes up, is still reachable
+  through its other doors (floor generation guarantees full connectivity); it just isn't
+  reachable directly from this one edge. Drawn in the wall's own colour, not as an obstacle —
+  it reads as part of the room's boundary, not as a pillar the size of a sub-room.
+- **The camera** keeps the player centred on screen, clamped so the room's own edges are never
+  pulled into view with nothing behind them — a plain per-axis bounding-box clamp. A `1x1`
+  room is exactly one screen, so the clamp collapses to "never moves" there — the original,
+  pre-camera feel is what a `1x1` room still plays like. It composes additively with
+  screenshake and Promille's camera sway (`render/vignette.ts` §5) rather than replacing them —
+  it only moves the baseline those jitter around, so a hit shake or a sway drift reads exactly
+  the same inside a big room as a `1x1` one. It does not additionally clamp around `L`'s
+  dropped corner: a screen is wider and taller than half of a `2x2`/`L` room, so the viewport
+  can never fully avoid that quadrant anyway, and an earlier attempt at forcing it to tried to
+  pick which axis to push clear and flipped between them on tiny player movements — the camera
+  would suddenly snap to the middle of the next glued sub-room. Since the dropped corner is
+  drawn as ordinary wall, showing a slice of it near that corner reads exactly like standing
+  near any other wall.
+
 ## 5. The Promille system
 
 **This is the mechanic that makes Kellerbier its own game rather than a reskin.** It is also

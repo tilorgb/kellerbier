@@ -120,8 +120,8 @@ describe('bombable (hidden) walls', () => {
       hiddenDoors: ['north'],
     });
 
-    expect(sim.doors.north).toBe(false);
-    expect(sim.doors.east).toBe(true);
+    expect(sim.doors.some((door) => door.direction === 'north')).toBe(false);
+    expect(sim.doors.some((door) => door.direction === 'east')).toBe(true);
   });
 
   it('reveals it once a Bierfassl explodes near that wall, and stays revealed', () => {
@@ -140,7 +140,7 @@ describe('bombable (hidden) walls', () => {
       sim.step(createInputFrame());
     }
 
-    expect(sim.doors.north).toBe(true);
+    expect(sim.doors.some((door) => door.direction === 'north')).toBe(true);
   });
 
   it('a blast nowhere near the hidden wall leaves it hidden', () => {
@@ -158,6 +158,6 @@ describe('bombable (hidden) walls', () => {
       sim.step(createInputFrame());
     }
 
-    expect(sim.doors.north).toBe(false);
+    expect(sim.doors.some((door) => door.direction === 'north')).toBe(false);
   });
 });

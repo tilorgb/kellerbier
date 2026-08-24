@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { GameSim, PLAYER_HEALTH } from '../../src/sim/game/sim.js';
+import { entityIndex } from '../../src/sim/ecs/entity.js';
 import { RoomGeometry } from '../../src/sim/room/geometry.js';
 import { createInputFrame } from '../../src/sim/input/frame.js';
 
@@ -95,6 +96,10 @@ describe('pickup collection', () => {
 describe('priced pickup', () => {
   it('is left in place, unspent, when the player cannot afford it', () => {
     const sim = emptySim();
+    // Magnetism defaults to off — it's meant to be an item unlock, not free
+    // from the start of a run — so this test, which is about the mechanism
+    // itself, opts in explicitly rather than relying on the default.
+    sim.tuning.pickup.magnetRadius = 36;
     const index = sim.playerIndex;
     sim.applyPlayerDamage(2);
     const damaged = sim.playerHealth;
@@ -167,6 +172,39 @@ describe('pickup magnetism', () => {
     }
     expect(sim.biermarken).toBe(1);
     expect(sim.world.isAlive(far)).toBe(true);
+  });
+});
+
+describe('pickup spawn clears residual motion', () => {
+  it('does not inherit velocity or push left in a recycled slot', () => {
+    const sim = emptySim();
+    const index = sim.playerIndex;
+    const px = sim.positionX(index);
+    const py = sim.positionY(index);
+
+    // A moving body that leaves the slot with a nonzero velocity and push —
+    // standing in for an enemy that was mid-knockback when it died, the same
+    // way a pickup dropped from a kill lands in whatever slot the enemy just
+    // vacated.
+    const ghost = sim.spawnTarget(px + 60, py, 6);
+    const ghostIndex = entityIndex(ghost);
+    sim.velocity.data[ghostIndex * 2] = 4;
+    sim.velocity.data[ghostIndex * 2 + 1] = -3;
+    sim.push.data[ghostIndex * 2] = 2;
+    sim.push.data[ghostIndex * 2 + 1] = 2;
+    sim.world.destroy(ghost);
+    sim.world.flush();
+
+    const pickup = sim.spawnPickup('biermarke-1', px + 60, py);
+    expect(entityIndex(pickup)).toBe(ghostIndex);
+    sim.world.flush();
+
+    const before = { x: sim.positionX(entityIndex(pickup)), y: sim.positionY(entityIndex(pickup)) };
+    for (let tick = 0; tick < 10; tick++) {
+      sim.step(idle());
+    }
+    const after = { x: sim.positionX(entityIndex(pickup)), y: sim.positionY(entityIndex(pickup)) };
+    expect(after).toEqual(before);
   });
 });
 

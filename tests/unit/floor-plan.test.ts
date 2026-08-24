@@ -3,15 +3,22 @@ import { ENEMY_DEFINITIONS } from '../../src/content/enemies/index.js';
 import { FLOOR_CONFIGS, type FloorConfig } from '../../src/content/floors/definition.js';
 import { ROOM_TEMPLATES } from '../../src/content/rooms/index.js';
 import {
+  MULTI_CELL_COUNT,
   ROOM_COLUMNS,
   ROOM_ROWS,
   type RoomShape,
   type RoomSpecialRole,
+  type RoomSubLayout,
   type RoomTemplate,
 } from '../../src/content/rooms/definition.js';
-import { generateFloor, validateFloorPlan } from '../../src/sim/room/floor-plan.js';
+import {
+  generateFloor,
+  neighborRoomIds,
+  validateFloorPlan,
+} from '../../src/sim/room/floor-plan.js';
 import { validateRoomTemplate } from '../../src/sim/room/template.js';
 import { Rng } from '../../src/sim/rng/rng.js';
+import { RngStream, createStreamRng } from '../../src/sim/rng/streams.js';
 
 /** The authored pool, run through the same typed boundary the sim uses. */
 const CELLAR_TEMPLATES: readonly RoomTemplate[] = ROOM_TEMPLATES.map((room, index) =>
@@ -45,6 +52,15 @@ function syntheticPool(): RoomTemplate[] {
   const tileGrid = Array.from({ length: ROOM_ROWS }, (_row, index) =>
     index === 0 || index === ROOM_ROWS - 1 ? wallRow : blankRow,
   );
+  const subLayout: RoomSubLayout = {
+    tileGrid,
+    obstacles: [],
+    enemySpawns: [],
+    spawnGroups: [],
+    pickupSpawns: [],
+    hazards: [],
+    decorativeProps: [],
+  };
   const shapes: readonly RoomShape[] = ['1x1', '1x2', '2x2', 'L'];
   const specialRoles: readonly (RoomSpecialRole | undefined)[] = [
     undefined,
@@ -59,22 +75,32 @@ function syntheticPool(): RoomTemplate[] {
   for (const config of FLOOR_CONFIGS) {
     for (const shape of shapes) {
       for (const specialRole of specialRoles) {
+        const id = `synthetic-${config.floorTag}-${shape}-${specialRole ?? 'normal'}`;
+        const specialRoleFields = specialRole === undefined ? {} : { specialRole };
+        if (shape === '1x1') {
+          templates.push({
+            id,
+            ...subLayout,
+            metadata: {
+              floorTags: [config.floorTag],
+              shape: '1x1',
+              doors: { north: true, east: true, south: true, west: true },
+              difficultyTier: 1,
+              weight: 1,
+              ...specialRoleFields,
+            },
+          });
+          continue;
+        }
         templates.push({
-          id: `synthetic-${config.floorTag}-${shape}-${specialRole ?? 'normal'}`,
-          tileGrid,
-          obstacles: [],
-          enemySpawns: [],
-          spawnGroups: [],
-          pickupSpawns: [],
-          hazards: [],
-          decorativeProps: [],
+          id,
+          cells: Array.from({ length: MULTI_CELL_COUNT[shape] }, () => subLayout),
           metadata: {
             floorTags: [config.floorTag],
             shape,
-            doors: { north: true, east: true, south: true, west: true },
             difficultyTier: 1,
             weight: 1,
-            ...(specialRole === undefined ? {} : { specialRole }),
+            ...specialRoleFields,
           },
         });
       }
@@ -103,6 +129,27 @@ describe('floor generation', () => {
     expect(planB).not.toEqual(planA);
   });
 
+  it("the dev demo's fixed seed generates a valid floor 1", () => {
+    // `app/main.ts`'s `RUN_SEED` — hardcoded there (and duplicated here, not
+    // imported) so `npm run dev` always boots into the same reproducible
+    // run. This seed was hand-picked to succeed and to roll every shape
+    // (1x1/1x2/2x2/L) on floor 1; content or generator changes can shift
+    // which seeds succeed (that's exactly what broke seed 5 once #23's
+    // specialRole matching landed), so this exists to catch that class of
+    // regression before it reaches `npm run dev` again rather than after.
+    const RUN_SEED = 15;
+    const config = floorConfig(0);
+    const plan = generateFloor(
+      createStreamRng(RUN_SEED, RngStream.Floor),
+      config,
+      CELLAR_TEMPLATES,
+    );
+
+    expect(validateFloorPlan(plan, CELLAR_TEMPLATES)).toEqual([]);
+    const shapes = new Set(plan.rooms.map((room) => room.shape));
+    expect([...shapes].sort()).toEqual(['1x1', '1x2', '2x2', 'L']);
+  });
+
   it('validates a real floor 1 layout against the authored template pool', () => {
     const config = floorConfig(0);
     const plan = generateFloor(new Rng(7), config, CELLAR_TEMPLATES);
@@ -122,7 +169,7 @@ describe('floor generation', () => {
       const config = floorConfig(seed % FLOOR_CONFIGS.length);
       const plan = generateFloor(new Rng(seed), config, syntheticPool());
       const secretRoom = plan.rooms.find((room) => room.id === plan.secretRoomId);
-      const touching = new Set(Object.values(secretRoom?.neighbors ?? {})).size;
+      const touching = neighborRoomIds(secretRoom?.doors ?? []).length;
       expect(touching, `seed ${String(seed)}`).toBeGreaterThanOrEqual(2);
     }
   });

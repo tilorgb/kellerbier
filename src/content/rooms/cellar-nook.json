@@ -1,35 +1,85 @@
 {
   "id": "cellar-nook",
-  "tileGrid": [
-    "###############",
-    "#.............#",
-    "#.............#",
-    "#....###......#",
-    "#....#.#......#",
-    "#....#.#......#",
-    "#.............#",
-    "#.............#",
-    "###############"
-  ],
-  "obstacles": [{ "x": 64, "y": 48, "width": 48, "height": 64 }],
-  "enemySpawns": [{ "x": 208, "y": 96, "group": "nook-lurker" }],
-  "spawnGroups": [
+  "cells": [
     {
-      "id": "nook-lurker",
-      "count": 1,
-      "choices": [
-        { "enemyId": "kellerassel", "minFloor": 1, "maxFloor": 2 },
-        { "enemyId": "schimmelfleck", "minFloor": 3, "maxFloor": 7 }
-      ]
+      "tileGrid": [
+        "###############",
+        "#.............#",
+        "#.............#",
+        "#...###.......#",
+        "#...###.......#",
+        "#...###.......#",
+        "#...###.......#",
+        "#.............#",
+        "###############"
+      ],
+      "obstacles": [{ "x": 64, "y": 48, "width": 48, "height": 64 }],
+      "enemySpawns": [{ "x": 208, "y": 96, "group": "nook-lurker" }],
+      "spawnGroups": [
+        {
+          "id": "nook-lurker",
+          "count": 1,
+          "choices": [
+            { "enemyId": "kellerassel", "minFloor": 1, "maxFloor": 2 },
+            { "enemyId": "schimmelfleck", "minFloor": 3, "maxFloor": 7 }
+          ]
+        }
+      ],
+      "pickupSpawns": [],
+      "hazards": [],
+      "decorativeProps": [{ "x": 48, "y": 48, "type": "barrel" }]
+    },
+    {
+      "tileGrid": [
+        "###############",
+        "#.............#",
+        "#.....#.......#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "###############"
+      ],
+      "obstacles": [{ "x": 96, "y": 32, "width": 16, "height": 16 }],
+      "enemySpawns": [],
+      "spawnGroups": [],
+      "pickupSpawns": [{ "x": 176, "y": 96, "type": "mass-half" }],
+      "hazards": [],
+      "decorativeProps": []
+    },
+    {
+      "tileGrid": [
+        "###############",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.#...........#",
+        "#.............#",
+        "###############"
+      ],
+      "obstacles": [{ "x": 32, "y": 96, "width": 16, "height": 16 }],
+      "enemySpawns": [{ "x": 176, "y": 64, "group": "nook-lurker" }],
+      "spawnGroups": [
+        {
+          "id": "nook-lurker",
+          "count": 1,
+          "choices": [
+            { "enemyId": "kellerassel", "minFloor": 1, "maxFloor": 2 },
+            { "enemyId": "schimmelfleck", "minFloor": 3, "maxFloor": 7 }
+          ]
+        }
+      ],
+      "pickupSpawns": [],
+      "hazards": [],
+      "decorativeProps": []
     }
   ],
-  "pickupSpawns": [],
-  "hazards": [],
-  "decorativeProps": [{ "x": 48, "y": 48, "type": "barrel" }],
   "metadata": {
     "floorTags": ["cellar", "rural"],
     "shape": "L",
-    "doors": { "north": true, "east": true, "south": true, "west": true },
     "difficultyTier": 1,
     "weight": 1
   }

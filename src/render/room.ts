@@ -1,7 +1,6 @@
 import { Container, Graphics } from 'pixi.js';
-import type { RoomDirection } from '../sim/game/sim.js';
-import { BLOCK_STRIDE, DOOR_SPAN, type RoomGeometry } from '../sim/room/geometry.js';
-import { PLAYFIELD_HEIGHT, PLAYFIELD_WIDTH } from '../sim/room/playground.js';
+import { BLOCK_STRIDE, DOOR_SPAN, roomFrameSize, type RoomGeometry } from '../sim/room/geometry.js';
+import { doorCentre, type CompiledDoor } from '../sim/room/template.js';
 
 /** Placeholder cellar palette. Real tilesets arrive with the art pipeline in #34. */
 const FLOOR_COLOUR = 0x241d2b;
@@ -28,8 +27,9 @@ const CRACK_SPAN = 10;
 export function createRoomView(room: RoomGeometry): Container {
   const container = new Container();
 
+  const frame = roomFrameSize(room);
   const floor = new Graphics();
-  floor.rect(0, 0, PLAYFIELD_WIDTH, PLAYFIELD_HEIGHT).fill(WALL_COLOUR);
+  floor.rect(0, 0, frame.width, frame.height).fill(WALL_COLOUR);
   floor
     .rect(room.minX, room.minY, room.maxX - room.minX, room.maxY - room.minY)
     .fill(FLOOR_COLOUR)
@@ -50,73 +50,89 @@ export function createRoomView(room: RoomGeometry): Container {
   }
   container.addChild(blocks);
 
+  // An `L` room's dropped corner (#100/#20) is a real `blocks` entry too (for
+  // collision), but drawn over in the wall's own colour rather than left as
+  // an obstacle — it reads as the rest of the room's boundary, not as some
+  // pillar the size of an entire sub-room sitting in the middle of it.
+  if (room.voidRect !== null) {
+    const voidRect = room.voidRect;
+    container
+      .addChild(new Graphics())
+      .rect(
+        voidRect.minX,
+        voidRect.minY,
+        voidRect.maxX - voidRect.minX,
+        voidRect.maxY - voidRect.minY,
+      )
+      .fill(WALL_COLOUR)
+      .stroke({ width: 1, color: WALL_EDGE_COLOUR, alignment: 0 });
+  }
+
   return container;
 }
 
 /**
- * Draws a marker in the wall band for each door the room's metadata declares,
- * coloured by whether it is locked.
+ * Draws a marker in the wall band for each of the room's real doors (#100:
+ * up to eight for a `2x2` room, one per `(cell, wall)` pair with a real
+ * neighbour), coloured by whether it is locked.
  *
  * Kept separate from `createRoomView` because door colour changes the instant
- * the last enemy dies — redrawing four small rects on that is cheap, redrawing
- * the whole room (floor, blocks) every time the lock state flips is not.
+ * the last enemy dies — redrawing a handful of small rects on that is cheap,
+ * redrawing the whole room (floor, blocks) every time the lock state flips is
+ * not.
  */
 export function createDoorView(
   room: RoomGeometry,
-  doors: Readonly<Record<RoomDirection, boolean>>,
+  doors: readonly CompiledDoor[],
   locked: boolean,
 ): Graphics {
   const graphics = new Graphics();
   const colour = locked ? DOOR_LOCKED_COLOUR : DOOR_OPEN_COLOUR;
-  const centreX = (room.minX + room.maxX) / 2;
-  const centreY = (room.minY + room.maxY) / 2;
+  const frame = roomFrameSize(room);
   const half = DOOR_SPAN / 2;
 
-  if (doors.north) {
-    graphics.rect(centreX - half, 0, DOOR_SPAN, room.minY).fill(colour);
-  }
-  if (doors.south) {
-    graphics.rect(centreX - half, room.maxY, DOOR_SPAN, PLAYFIELD_HEIGHT - room.maxY).fill(colour);
-  }
-  if (doors.west) {
-    graphics.rect(0, centreY - half, room.minX, DOOR_SPAN).fill(colour);
-  }
-  if (doors.east) {
-    graphics.rect(room.maxX, centreY - half, PLAYFIELD_WIDTH - room.maxX, DOOR_SPAN).fill(colour);
+  for (const door of doors) {
+    const centre = doorCentre(room, door);
+    switch (door.direction) {
+      case 'north':
+        graphics.rect(centre.x - half, 0, DOOR_SPAN, room.minY).fill(colour);
+        break;
+      case 'south':
+        graphics.rect(centre.x - half, room.maxY, DOOR_SPAN, frame.height - room.maxY).fill(colour);
+        break;
+      case 'west':
+        graphics.rect(0, centre.y - half, room.minX, DOOR_SPAN).fill(colour);
+        break;
+      case 'east':
+        graphics.rect(room.maxX, centre.y - half, frame.width - room.maxX, DOOR_SPAN).fill(colour);
+        break;
+    }
   }
 
   return graphics;
 }
 
 /**
- * Draws a crack in each wall direction given — the hint that a secret room
- * sits behind it, `docs/GAME_DESIGN.md` §4's "hinted by cracks in adjacent
- * room tiles." Drawn on the solid wall band itself (a hidden door has no
- * gap — see `GameSim.loadRoom`'s `hiddenDoors`), so a crack never overlaps
- * an actual doorway: a direction is either open (`createDoorView`) or
- * cracked (here), never both.
+ * Draws a crack on each door's wall given — the hint that a secret room sits
+ * behind it, `docs/GAME_DESIGN.md` §4's "hinted by cracks in adjacent room
+ * tiles." Drawn on the solid wall band itself (a hidden door has no gap —
+ * see `GameSim.loadRoom`'s `hiddenDoors`), so a crack never overlaps an
+ * actual doorway: a wall is either open (`createDoorView`) or cracked
+ * (here), never both.
  *
  * A supersecret room's wall is never passed here — no crack at all is the
  * whole of what "deliberately obnoxious to find" (#23) means for this view.
  */
-export function createSecretHintView(
-  room: RoomGeometry,
-  directions: readonly RoomDirection[],
-): Graphics {
+export function createSecretHintView(room: RoomGeometry, doors: readonly CompiledDoor[]): Graphics {
   const graphics = new Graphics();
-  const centreX = (room.minX + room.maxX) / 2;
-  const centreY = (room.minY + room.maxY) / 2;
   const half = CRACK_SPAN / 2;
 
-  for (const direction of directions) {
-    if (direction === 'north') {
-      drawCrack(graphics, centreX, room.minY, half, true);
-    } else if (direction === 'south') {
-      drawCrack(graphics, centreX, room.maxY, half, true);
-    } else if (direction === 'west') {
-      drawCrack(graphics, room.minX, centreY, half, false);
+  for (const door of doors) {
+    const centre = doorCentre(room, door);
+    if (door.direction === 'north' || door.direction === 'south') {
+      drawCrack(graphics, centre.x, centre.y, half, true);
     } else {
-      drawCrack(graphics, room.maxX, centreY, half, false);
+      drawCrack(graphics, centre.x, centre.y, half, false);
     }
   }
 

@@ -1,10 +1,10 @@
 import type { Rng } from '../rng/rng.js';
 import type { FloorConfig } from '../../content/floors/definition.js';
-import type {
-  DoorDirection,
-  RoomDoorConfiguration,
-  RoomShape,
-  RoomTemplate,
+import {
+  isMultiCellRoomTemplate,
+  type DoorDirection,
+  type RoomShape,
+  type RoomTemplate,
 } from '../../content/rooms/definition.js';
 
 /**
@@ -17,10 +17,12 @@ import type {
  * *cell* grid — this is where "boss at maximum distance" and "treasure prefers
  * a dead end" have to be computed, and cells are the only granularity fine
  * enough to carve 1×2/2×2/L footprints out of. Everything downstream of it
- * (doors, neighbours, roles, template choice) operates on *rooms* — a multi-
- * cell room is one slot with one template, matching how `compileRoomTemplate`
- * loads it: one `tileGrid`, one `RoomDoorConfiguration`, regardless of how
- * much space it claims on the floor's grid.
+ * (roles, template choice) operates on *rooms* — a multi-cell room is one slot
+ * with one template. Doors are the exception (#100): a multi-cell room is
+ * physically several single-screen sub-rooms glued together with no wall
+ * between them, so a door is a property of one *cell* of a room, not the room
+ * as a whole — `FloorPlanRoom.doors` is a list of `(cell, direction)` pairs,
+ * one per real neighbour, not a `{north,east,south,west}` bag.
  */
 
 interface Cell {
@@ -30,17 +32,34 @@ interface Cell {
 
 export type RoomRole = 'start' | 'boss' | 'treasure' | 'shop' | 'secret' | 'supersecret' | 'normal';
 
+/**
+ * One real door: `cellIndex` is into this room's own `cells` (which sub-room
+ * the door's wall belongs to — always `0` for a `1x1` room), `direction` is
+ * the wall it's on, and `neighborRoomId` is what's on the other side.
+ *
+ * There is no cap on how many of these a room has — a `2x2` room can have up
+ * to two per side (one per sub-cell touching that side), eight in total.
+ */
+export interface RoomDoor {
+  readonly cellIndex: number;
+  readonly direction: DoorDirection;
+  readonly neighborRoomId: string;
+}
+
 export interface FloorPlanRoom {
   readonly id: string;
   readonly cells: readonly Cell[];
   readonly shape: RoomShape;
   readonly role: RoomRole;
-  readonly doors: RoomDoorConfiguration;
-  /** The room reached by walking through each door this room has. */
-  readonly neighbors: Readonly<Partial<Record<DoorDirection, string>>>;
+  readonly doors: readonly RoomDoor[];
   /** Room-graph distance from the start room, in doors walked through. */
   readonly distanceFromStart: number;
   readonly templateId: string;
+}
+
+/** Every distinct room `doors` actually connects to — order not meaningful. */
+export function neighborRoomIds(doors: readonly RoomDoor[]): readonly string[] {
+  return Array.from(new Set(doors.map((door) => door.neighborRoomId)));
 }
 
 export interface FloorPlan {
@@ -414,19 +433,20 @@ function placeSupersecretRoom(
   return id;
 }
 
-interface RoomGraphInfo {
-  readonly neighbors: Partial<Record<DoorDirection, string>>;
-  readonly doors: RoomDoorConfiguration;
-}
-
 /**
- * Doors and neighbours, derived from cell adjacency rather than tracked
- * during growth — a room's connections can grow after it is placed (the
- * secret room attaches to whatever it lands next to, and a later branch can
- * end up beside an earlier one), so this is computed once, after the grid is
- * final, rather than kept incrementally correct through every mutation.
+ * Doors, derived from cell adjacency rather than tracked during growth — a
+ * room's connections can grow after it is placed (the secret room attaches to
+ * whatever it lands next to, and a later branch can end up beside an earlier
+ * one), so this is computed once, after the grid is final, rather than kept
+ * incrementally correct through every mutation.
+ *
+ * One entry per `(cell, direction)` pair that actually borders a different
+ * room — a multi-cell room's own cells never produce one against each other,
+ * since they share `room.id` and are filtered out below, which is exactly
+ * what "no wall between glued sub-rooms" falls out of: there was never a door
+ * there to draw in the first place.
  */
-function computeAdjacency(rooms: readonly PlacedRoom[]): Map<string, RoomGraphInfo> {
+function computeAdjacency(rooms: readonly PlacedRoom[]): Map<string, RoomDoor[]> {
   const owner = new Map<string, string>();
   for (const room of rooms) {
     for (const cell of room.cells) {
@@ -434,28 +454,26 @@ function computeAdjacency(rooms: readonly PlacedRoom[]): Map<string, RoomGraphIn
     }
   }
 
-  const info = new Map<string, RoomGraphInfo>();
+  const info = new Map<string, RoomDoor[]>();
   for (const room of rooms) {
-    const neighbors: Partial<Record<DoorDirection, string>> = {};
-    const doors = { north: false, east: false, south: false, west: false };
-    for (const cell of room.cells) {
+    const doors: RoomDoor[] = [];
+    room.cells.forEach((cell, cellIndex) => {
       for (const direction of DIRECTIONS) {
         const offset = OFFSET[direction];
-        const neighborId = owner.get(cellKey({ x: cell.x + offset.x, y: cell.y + offset.y }));
-        if (neighborId !== undefined && neighborId !== room.id) {
-          doors[direction] = true;
-          neighbors[direction] ??= neighborId;
+        const neighborRoomId = owner.get(cellKey({ x: cell.x + offset.x, y: cell.y + offset.y }));
+        if (neighborRoomId !== undefined && neighborRoomId !== room.id) {
+          doors.push({ cellIndex, direction, neighborRoomId });
         }
       }
-    }
-    info.set(room.id, { neighbors, doors });
+    });
+    info.set(room.id, doors);
   }
   return info;
 }
 
 function bfsDistances(
   startId: string,
-  adjacency: ReadonlyMap<string, RoomGraphInfo>,
+  adjacency: ReadonlyMap<string, readonly RoomDoor[]>,
 ): Map<string, number> {
   const distances = new Map<string, number>([[startId, 0]]);
   const queue = [startId];
@@ -467,11 +485,11 @@ function bfsDistances(
       continue;
     }
     const currentDistance = distances.get(current);
-    const info = adjacency.get(current);
-    if (info === undefined || currentDistance === undefined) {
+    const doors = adjacency.get(current);
+    if (doors === undefined || currentDistance === undefined) {
       continue;
     }
-    for (const neighborId of Object.values(info.neighbors)) {
+    for (const neighborId of neighborRoomIds(doors)) {
       if (!distances.has(neighborId)) {
         distances.set(neighborId, currentDistance + 1);
         queue.push(neighborId);
@@ -481,11 +499,8 @@ function bfsDistances(
   return distances;
 }
 
-function distinctNeighborCount(info: RoomGraphInfo | undefined): number {
-  if (info === undefined) {
-    return 0;
-  }
-  return new Set(Object.values(info.neighbors)).size;
+function distinctNeighborCount(doors: readonly RoomDoor[] | undefined): number {
+  return doors === undefined ? 0 : neighborRoomIds(doors).length;
 }
 
 /**
@@ -501,7 +516,7 @@ function distinctNeighborCount(info: RoomGraphInfo | undefined): number {
  */
 function assignRoles(
   rooms: readonly PlacedRoom[],
-  adjacency: ReadonlyMap<string, RoomGraphInfo>,
+  adjacency: ReadonlyMap<string, readonly RoomDoor[]>,
   distances: ReadonlyMap<string, number>,
   startId: string,
   secretId: string,
@@ -564,21 +579,39 @@ function requiredSpecialRole(role: RoomRole): RoomTemplate['metadata']['specialR
     : undefined;
 }
 
+/**
+ * Templates that fit a slot: right shape, right floor tag, right special
+ * role, and — `1x1` only — a door wherever the slot's single cell needs one.
+ *
+ * A multi-cell template carries no door metadata to check against: its doors
+ * are derived entirely from the real floor-grid adjacency at load time
+ * (#100), never authored, so shape, floor tag and special role are the whole
+ * test.
+ */
 function eligibleTemplates(
   pool: readonly RoomTemplate[],
   shape: RoomShape,
   floorTag: string,
-  doors: RoomDoorConfiguration,
+  doors: readonly RoomDoor[],
   role: RoomRole,
 ): RoomTemplate[] {
   const specialRole = requiredSpecialRole(role);
-  return pool.filter(
-    (template) =>
-      template.metadata.shape === shape &&
-      template.metadata.floorTags.includes(floorTag) &&
-      template.metadata.specialRole === specialRole &&
-      DIRECTIONS.every((direction) => !doors[direction] || template.metadata.doors[direction]),
-  );
+  const neededDirections = new Set(doors.map((door) => door.direction));
+  return pool.filter((template) => {
+    if (
+      template.metadata.shape !== shape ||
+      !template.metadata.floorTags.includes(floorTag) ||
+      template.metadata.specialRole !== specialRole
+    ) {
+      return false;
+    }
+    if (isMultiCellRoomTemplate(template)) {
+      return true;
+    }
+    return DIRECTIONS.every(
+      (direction) => !neededDirections.has(direction) || template.metadata.doors[direction],
+    );
+  });
 }
 
 function tryGenerateFloor(
@@ -621,18 +654,12 @@ function tryGenerateFloor(
 
   const planRooms: FloorPlanRoom[] = [];
   for (const room of rooms) {
-    const graphInfo = adjacency.get(room.id);
+    const doors = adjacency.get(room.id);
     const role = roles.get(room.id);
-    if (graphInfo === undefined || role === undefined) {
+    if (doors === undefined || role === undefined) {
       return null;
     }
-    const eligible = eligibleTemplates(
-      templatePool,
-      room.shape,
-      config.floorTag,
-      graphInfo.doors,
-      role,
-    );
+    const eligible = eligibleTemplates(templatePool, room.shape, config.floorTag, doors, role);
     if (eligible.length === 0) {
       return null;
     }
@@ -644,8 +671,7 @@ function tryGenerateFloor(
       cells: room.cells,
       shape: room.shape,
       role,
-      doors: graphInfo.doors,
-      neighbors: graphInfo.neighbors,
+      doors,
       distanceFromStart: distances.get(room.id) ?? 0,
       templateId,
     });
@@ -750,7 +776,7 @@ export function validateFloorPlan(
     if (room === undefined) {
       continue;
     }
-    for (const neighborId of Object.values(room.neighbors)) {
+    for (const neighborId of neighborRoomIds(room.doors)) {
       if (!visited.has(neighborId)) {
         visited.add(neighborId);
         queue.push(neighborId);
@@ -782,7 +808,7 @@ export function validateFloorPlan(
   }
 
   const secretRoom = byId.get(plan.secretRoomId);
-  const secretTouching = new Set(Object.values(secretRoom?.neighbors ?? {})).size;
+  const secretTouching = neighborRoomIds(secretRoom?.doors ?? []).length;
   if (secretTouching < MIN_SECRET_ROOM_TOUCHING) {
     problems.push(
       `secret room ${plan.secretRoomId} touches only ${String(secretTouching)} room(s), ` +
@@ -809,11 +835,17 @@ export function validateFloorPlan(
             `declares specialRole ${String(template.metadata.specialRole)}`,
         );
       }
-      for (const direction of DIRECTIONS) {
-        if (room.doors[direction] && !template.metadata.doors[direction]) {
-          problems.push(
-            `room ${room.id} needs a ${direction} door but template "${room.templateId}" does not have one`,
-          );
+      // Only a `1x1` template authors doors at all (#100) — a multi-cell
+      // room's doors are derived from the real floor-grid adjacency, so they
+      // always match by construction and there is nothing to check here.
+      if (template.metadata.shape === '1x1') {
+        const neededDirections = new Set(room.doors.map((door) => door.direction));
+        for (const direction of DIRECTIONS) {
+          if (neededDirections.has(direction) && !template.metadata.doors[direction]) {
+            problems.push(
+              `room ${room.id} needs a ${direction} door but template "${room.templateId}" does not have one`,
+            );
+          }
         }
       }
     }

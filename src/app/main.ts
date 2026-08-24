@@ -6,7 +6,11 @@ import { ROOM_TEMPLATES } from '../content/rooms/index.js';
 import { type RoomDirection, GameSim, MAX_COLLIDER_RADIUS } from '../sim/game/sim.js';
 import { promilleTierName } from '../sim/game/promille.js';
 import { type FloorPlan, type FloorPlanRoom, generateFloor } from '../sim/room/floor-plan.js';
-import { validateRoomTemplate } from '../sim/room/template.js';
+import {
+  type CompiledDoor,
+  type RoomPlacement,
+  validateRoomTemplate,
+} from '../sim/room/template.js';
 import { RngStream, createStreamRng } from '../sim/rng/streams.js';
 import { TICKS_PER_SECOND } from '../sim/time.js';
 import { InputAction, isActionDown } from '../sim/input/frame.js';
@@ -70,7 +74,29 @@ function planTemplate(room: FloorPlanRoom): unknown {
   return template;
 }
 
-const DIRECTIONS: readonly RoomDirection[] = ['north', 'east', 'south', 'west'];
+/** Cell offset each compass direction moves by, on the floor's own grid. */
+const DIRECTION_OFFSET: Readonly<
+  Record<RoomDirection, { readonly x: number; readonly y: number }>
+> = {
+  north: { x: 0, y: -1 },
+  south: { x: 0, y: 1 },
+  east: { x: 1, y: 0 },
+  west: { x: -1, y: 0 },
+};
+
+/**
+ * `room`'s real floor-grid layout, translated into the local (0-indexed,
+ * origin-agnostic) coordinates `compileRoomTemplate` needs (#100) — a `1x1`
+ * room's is always the trivial single-cell case.
+ */
+function buildPlacement(room: FloorPlanRoom): RoomPlacement {
+  const minX = Math.min(...room.cells.map((cell) => cell.x));
+  const minY = Math.min(...room.cells.map((cell) => cell.y));
+  return {
+    cells: room.cells.map((cell) => ({ col: cell.x - minX, row: cell.y - minY })),
+    doors: room.doors.map((door) => ({ cellIndex: door.cellIndex, direction: door.direction })),
+  };
+}
 
 /** Unordered pair key — an edge is the same whichever of its two rooms asks about it. */
 function edgeKey(roomA: string, roomB: string): string {
@@ -87,6 +113,11 @@ function edgeKey(roomA: string, roomB: string): string {
  * doc on `revealedEdges` below) — and only for an edge `revealedEdges`
  * doesn't already know about, so a wall found once stays open for the rest
  * of the run, on both sides, everywhere the floor plan is asked again.
+ *
+ * Direction-only, not a specific `RoomDoor` (#100 has both a `cellIndex` and
+ * a `direction`): a secret/supersecret room is always `1x1` today, so its
+ * neighbour never has more than one door in a given direction anyway — see
+ * `GameSim.bombableWalls`'s doc comment for the same call.
  */
 function hiddenDoorsFor(
   plan: FloorPlan,
@@ -98,37 +129,49 @@ function hiddenDoorsFor(
     return [];
   }
   const hidden: RoomDirection[] = [];
-  for (const direction of DIRECTIONS) {
-    const neighborId = room.neighbors[direction];
-    if (neighborId === undefined) {
-      continue;
-    }
-    const neighbor = planRoom(plan, neighborId);
+  for (const door of room.doors) {
+    const neighbor = planRoom(plan, door.neighborRoomId);
     const isSecretEdge = neighbor.role === 'secret' || neighbor.role === 'supersecret';
-    if (isSecretEdge && !revealedEdges.has(edgeKey(roomId, neighborId))) {
-      hidden.push(direction);
+    if (isSecretEdge && !revealedEdges.has(edgeKey(roomId, door.neighborRoomId))) {
+      hidden.push(door.direction);
     }
   }
   return hidden;
 }
 
 /**
- * Directions `hiddenDoorsFor` would hide for `roomId` that should draw a
+ * The doors `hiddenDoorsFor` would hide for `roomId` that should draw a
  * crack hint — every one of them except a supersecret's, which gets no hint
  * at all. "Deliberately obnoxious to find" (#23) is entirely this omission;
  * nothing else in the reveal mechanic treats a supersecret edge differently
  * from a secret one.
+ *
+ * Returns real `CompiledDoor`s (cell included), not bare directions — the
+ * crack has to land on the specific sub-cell's wall (#100), same as the door
+ * it stands in for.
  */
 function crackHintsFor(
   plan: FloorPlan,
   roomId: string,
   revealedEdges: ReadonlySet<string>,
-): RoomDirection[] {
+): CompiledDoor[] {
   const room = planRoom(plan, roomId);
-  return hiddenDoorsFor(plan, roomId, revealedEdges).filter((direction) => {
-    const neighborId = room.neighbors[direction];
-    return neighborId !== undefined && planRoom(plan, neighborId).role === 'secret';
-  });
+  const placement = buildPlacement(room);
+  const hints: CompiledDoor[] = [];
+  for (const door of room.doors) {
+    if (planRoom(plan, door.neighborRoomId).role !== 'secret') {
+      continue;
+    }
+    if (revealedEdges.has(edgeKey(roomId, door.neighborRoomId))) {
+      continue;
+    }
+    const cell = placement.cells[door.cellIndex];
+    if (cell === undefined) {
+      continue;
+    }
+    hints.push({ direction: door.direction, cellCol: cell.col, cellRow: cell.row });
+  }
+  return hints;
 }
 
 async function boot(): Promise<void> {
@@ -150,12 +193,18 @@ async function boot(): Promise<void> {
   // (see `src/sim/rng/streams.ts`), so it is exactly as reproducible as the
   // rest of the run.
   //
-  // Seed 5 specifically, not 1: template selection is genuinely unbiased (a
-  // 200-seed sweep of floor 1 puts a same-template run of 1x1 rooms at roughly
-  // 1 floor in 50), but seed 1 was one of the unlucky ones, and a dev demo
-  // that only ever shows one room layout does not showcase #20. Seed 5 uses
-  // every authored template at least once.
-  const RUN_SEED = 5;
+  // Seed 15 specifically: a 50-seed sweep of floor 1 against the full
+  // authored pool (#20's shapes plus #23's special-role content) puts most
+  // seeds at a decent shape mix, but the pool's new constraints (#23's
+  // specialRole matching) make a couple of seeds — 5 among them — fail to
+  // generate within the retry budget outright, and a dev demo that crashes
+  // on boot is worse than one that only shows one room shape. Seed 15 is the
+  // first sweep hit that also rolls all four shapes — 1x1, 1x2, 2x2 and L —
+  // on floor 1, showcasing both #20 and #100's camera-follow. Re-sweep if a
+  // future content or generator change ever makes this seed specifically
+  // fail (`tests/unit/floor-plan.test.ts`'s "the dev demo's fixed seed
+  // generates a valid floor 1" guards exactly that).
+  const RUN_SEED = 15;
   const floorPlan = generateFloor(
     createStreamRng(RUN_SEED, RngStream.Floor),
     floorConfig(1),
@@ -163,11 +212,11 @@ async function boot(): Promise<void> {
   );
   let currentRoomId = floorPlan.startRoomId;
   // Rooms `N` has already stepped into. Preferring an unvisited neighbour
-  // over the fixed north/east/south/west priority order turns the walk into
-  // a real depth-first tour of the floor — without it, standing in any dead
-  // end (a treasure or shop room always is one) makes `N` just bounce back
-  // to wherever it came from, which reads as "the generator only has one
-  // room" even though the floor behind it is not.
+  // over a fixed door order turns the walk into a real depth-first tour of
+  // the floor — without it, standing in any dead end (a treasure or shop
+  // room always is one) makes `N` just bounce back to wherever it came from,
+  // which reads as "the generator only has one room" even though the floor
+  // behind it is not.
   const visitedRoomIds = new Set([currentRoomId]);
 
   /**
@@ -363,7 +412,13 @@ async function boot(): Promise<void> {
   // measured against the player's simulation position, and the room sits scaled
   // and letterboxed inside a full-window canvas. Updated on every resize, and
   // read — never replaced — by whoever needs to convert a client pixel.
-  const pointerMapping = { originX: 0, originY: 0, unitsPerPixel: 1 / WORLD_ZOOM };
+  const pointerMapping = {
+    originX: 0,
+    originY: 0,
+    unitsPerPixel: 1 / WORLD_ZOOM,
+    cameraX: 0,
+    cameraY: 0,
+  };
   let layout = computeGameLayout(window.innerWidth, window.innerHeight, window.devicePixelRatio);
 
   trackWindowSize(app, game, (applied) => {
@@ -422,9 +477,9 @@ async function boot(): Promise<void> {
         if (keyHintTicks > 0) {
           keyHintTicks -= 1;
         }
-        const doorDirection = sim.doorContact;
-        if (doorDirection !== null) {
-          enterNeighbor(doorDirection);
+        const touchedDoor = sim.doorContact;
+        if (touchedDoor !== null) {
+          enterNeighbor(touchedDoor);
         }
       }
       simMs += performance.now() - started;
@@ -433,6 +488,11 @@ async function boot(): Promise<void> {
       const started = performance.now();
       overlay?.drawCalls.beginFrame();
       view.sync(alpha, layout.scale);
+      // Mouse aim has to invert whatever the camera did this frame (#100) —
+      // see `PointerMapping.cameraX`/`cameraY`'s doc comment.
+      const worldOffset = view.worldOffset();
+      pointerMapping.cameraX = worldOffset.x / WORLD_ZOOM;
+      pointerMapping.cameraY = worldOffset.y / WORLD_ZOOM;
       healthHud.sync(sim);
       promilleHud.sync(sim);
       walletHud.sync(sim);
@@ -484,22 +544,40 @@ WASD move   arrows/mouse aim and fire
   positionBossBanner(layout);
 
   /**
-   * Moves the player into the room adjacent in `direction`, if the current
-   * room has a door there and it's unlocked. Shared by the `N` debug tour
-   * and `sim.doorContact` (walking into the door for real) — both just need
-   * "cross this door", the same `transitionTo` call #19 already built.
+   * Crosses one specific door: resolves the real neighbour room on the other
+   * side of it, works out exactly which of *that* room's cells the player
+   * lands in (#100 — not always its first one), and hands both to
+   * `sim.transitionTo`. Shared by `enterNeighbor` (`sim.doorContact`, walking
+   * into a door for real) and the `N` debug tour, which already knows which
+   * `RoomDoor` it wants without needing to touch one.
    */
-  function enterNeighbor(direction: RoomDirection): boolean {
+  function crossDoor(
+    exitCellIndex: number,
+    direction: RoomDirection,
+    neighborRoomId: string,
+  ): boolean {
     const room = planRoom(floorPlan, currentRoomId);
-    const neighborId = room.neighbors[direction];
-    if (neighborId === undefined) {
+    const exitCell = room.cells[exitCellIndex];
+    if (exitCell === undefined) {
       return false;
     }
+    const neighborRoom = planRoom(floorPlan, neighborRoomId);
+    const neighborPlacement = buildPlacement(neighborRoom);
+    const offset = DIRECTION_OFFSET[direction];
+    const targetX = exitCell.x + offset.x;
+    const targetY = exitCell.y + offset.y;
+    const entryCellIndex = neighborRoom.cells.findIndex(
+      (cell) => cell.x === targetX && cell.y === targetY,
+    );
+    const entryCell = neighborPlacement.cells[entryCellIndex] ?? { col: 0, row: 0 };
+
     const succeeded = sim.transitionTo(
-      planTemplate(planRoom(floorPlan, neighborId)),
+      planTemplate(neighborRoom),
       floorPlan.floor,
       direction,
-      hiddenDoorsFor(floorPlan, neighborId, revealedEdges),
+      hiddenDoorsFor(floorPlan, neighborRoomId, revealedEdges),
+      neighborPlacement,
+      entryCell,
     );
     if (!succeeded) {
       // A heuristic, not a reason code out of `transitionTo`: the current
@@ -508,18 +586,33 @@ WASD move   arrows/mouse aim and fire
       // treasure room the player has no key for is enough to tell the two
       // apart without threading a discriminated failure reason through the
       // sim layer for one HUD line.
-      const neighborRole = planRoom(floorPlan, neighborId).role;
-      if (!sim.doorsLocked && neighborRole === 'treasure' && sim.keys <= 0) {
+      if (!sim.doorsLocked && neighborRoom.role === 'treasure' && sim.keys <= 0) {
         keyHintTicks = KEY_HINT_TICKS;
       }
       return false;
     }
-    currentRoomId = neighborId;
-    visitedRoomIds.add(neighborId);
+    currentRoomId = neighborRoomId;
+    visitedRoomIds.add(neighborRoomId);
     view.setSecretHints(crackHintsFor(floorPlan, currentRoomId, revealedEdges));
     minimapHud.rebuild(floorPlan, currentRoomId, visitedRoomIds);
     refreshHud();
     return true;
+  }
+
+  /** `sim.doorContact`'s door, translated into "which of this room's real cells did that come from". */
+  function enterNeighbor(exitDoor: CompiledDoor): boolean {
+    const room = planRoom(floorPlan, currentRoomId);
+    const placement = buildPlacement(room);
+    const exitCellIndex = placement.cells.findIndex(
+      (cell) => cell.col === exitDoor.cellCol && cell.row === exitDoor.cellRow,
+    );
+    const match = room.doors.find(
+      (door) => door.cellIndex === exitCellIndex && door.direction === exitDoor.direction,
+    );
+    if (match === undefined) {
+      return false;
+    }
+    return crossDoor(exitCellIndex, exitDoor.direction, match.neighborRoomId);
   }
 
   /**
@@ -531,15 +624,15 @@ WASD move   arrows/mouse aim and fire
   function checkSecretReveals(): void {
     const room = planRoom(floorPlan, currentRoomId);
     let changed = false;
-    for (const direction of DIRECTIONS) {
-      const neighborId = room.neighbors[direction];
-      if (neighborId === undefined) {
-        continue;
-      }
-      const neighbor = planRoom(floorPlan, neighborId);
+    for (const door of room.doors) {
+      const neighbor = planRoom(floorPlan, door.neighborRoomId);
       const isSecretEdge = neighbor.role === 'secret' || neighbor.role === 'supersecret';
-      const key = edgeKey(currentRoomId, neighborId);
-      if (isSecretEdge && sim.doors[direction] && !revealedEdges.has(key)) {
+      const key = edgeKey(currentRoomId, door.neighborRoomId);
+      if (
+        isSecretEdge &&
+        !revealedEdges.has(key) &&
+        sim.doors.some((visible) => visible.direction === door.direction)
+      ) {
         revealedEdges.add(key);
         changed = true;
       }
@@ -567,12 +660,11 @@ WASD move   arrows/mouse aim and fire
         break;
       case 'n':
       case 'N': {
-        // Walks the generated floor depth-first: an unvisited door over a
-        // fixed north/east/south/west priority, backtracking through an
-        // already-seen room only once every door from here has been used.
-        // Now that `sim.doorContact` triggers a real transition on its own,
-        // this is a dev shortcut for touring the floor without walking it —
-        // both go through the same `enterNeighbor`.
+        // Walks the generated floor depth-first: an unvisited door first,
+        // backtracking through an already-seen room only once every door
+        // from here has been used. Now that `sim.doorContact` triggers a
+        // real transition on its own, this is a dev shortcut for touring the
+        // floor without walking it — both go through the same `crossDoor`.
         //
         // Tries every candidate in priority order rather than picking one
         // and stopping: a neighbour existing in the floor-plan graph does
@@ -581,15 +673,10 @@ WASD move   arrows/mouse aim and fire
         // fall through to the next candidate rather than getting stuck
         // repeatedly failing to walk through a wall.
         const room = planRoom(floorPlan, currentRoomId);
-        const unvisited = DIRECTIONS.filter((candidate) => {
-          const id = room.neighbors[candidate];
-          return id !== undefined && !visitedRoomIds.has(id);
-        });
-        const visited = DIRECTIONS.filter(
-          (candidate) => room.neighbors[candidate] !== undefined && !unvisited.includes(candidate),
-        );
-        for (const candidate of [...unvisited, ...visited]) {
-          if (enterNeighbor(candidate)) {
+        const unvisited = room.doors.filter((door) => !visitedRoomIds.has(door.neighborRoomId));
+        const visited = room.doors.filter((door) => visitedRoomIds.has(door.neighborRoomId));
+        for (const door of [...unvisited, ...visited]) {
+          if (crossDoor(door.cellIndex, door.direction, door.neighborRoomId)) {
             break;
           }
         }
