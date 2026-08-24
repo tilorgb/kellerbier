@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { ENEMY_DEFINITIONS } from '../../src/content/enemies/index.js';
 import cellarCrossroads from '../../src/content/rooms/cellar.json';
 import { ROOM_TEMPLATES } from '../../src/content/rooms/index.js';
-import { ROOM_COLUMNS, ROOM_ROWS, ROOM_TILE_UNITS } from '../../src/content/rooms/definition.js';
+import {
+  ROOM_COLUMNS,
+  ROOM_ROWS,
+  ROOM_TILE_UNITS,
+  isMultiCellRoomTemplate,
+} from '../../src/content/rooms/definition.js';
 import { compileRoomTemplate, validateRoomTemplate } from '../../src/sim/room/template.js';
 
 describe('room templates', () => {
@@ -17,6 +22,9 @@ describe('room templates', () => {
 
   it('loads the hand-authored JSON at the standard dimensions', () => {
     const template = validateRoomTemplate(cellarCrossroads, 'cellar.json', ENEMY_DEFINITIONS);
+    if (isMultiCellRoomTemplate(template)) {
+      throw new Error('cellar.json is a 1x1 template');
+    }
 
     expect(template.tileGrid).toHaveLength(ROOM_ROWS);
     expect(template.tileGrid.every((row) => row.length === ROOM_COLUMNS)).toBe(true);

@@ -24,7 +24,14 @@ import {
 } from './promille.js';
 import { DOOR_SPAN, type RoomGeometry } from '../room/geometry.js';
 import { createPlaygroundRoom } from '../room/playground.js';
-import { compileRoomTemplate } from '../room/template.js';
+import {
+  SCREEN_HEIGHT,
+  SCREEN_WIDTH,
+  compileRoomTemplate,
+  doorCentre,
+  type CompiledDoor,
+  type RoomPlacement,
+} from '../room/template.js';
 import { TICKS_PER_SECOND } from '../time.js';
 import { type SimTuning, createTuning } from '../tuning.js';
 import { type CollisionLayerId, CollisionLayer, collisionMaskFor } from '../collision/layers.js';
@@ -398,7 +405,19 @@ export class GameSim {
   private roomEnemyCount = 0;
   private roomClearedIds = new Set<string>();
   private roomTemplateLoaded = false;
-  private roomDoors = { north: false, east: false, south: false, west: false };
+  private roomDoors: readonly CompiledDoor[] = [];
+  /**
+   * The Bierfassl just set down under the player, if any — `null` once the
+   * player has stepped clear of it once.
+   *
+   * An `Entity` handle rather than a raw index: the handle's generation makes
+   * a destroyed-and-recycled slot fail `isAlive` on its own, so this never
+   * needs an explicit clear on every place a Bierfassl can stop existing
+   * (fuse out, blown up early by another blast) — only the one place it
+   * needs to start being ignored (`spawnBierfassl`) and the one place that
+   * "ignored" ends (`stepContacts`, once the player is no longer touching it).
+   */
+  private freshBombEntity: Entity | null = null;
 
   constructor(options: GameSimOptions = {}) {
     this.seed = options.seed ?? 0;
@@ -474,8 +493,11 @@ export class GameSim {
     return this.roomTemplateLoaded && this.roomEnemyCount > 0;
   }
 
-  /** Which walls of the current room have a door, per the room's authored metadata. */
-  get doors(): Readonly<Record<RoomDirection, boolean>> {
+  /**
+   * Every door the current room actually has — up to eight for a `2x2` room
+   * (#100), one per `(cell, wall)` pair that borders a real neighbour.
+   */
+  get doors(): readonly CompiledDoor[] {
     return this.roomDoors;
   }
 
@@ -486,12 +508,12 @@ export class GameSim {
    * `resolveAxis` in `systems/motion.ts`) — there is no physical gap in the
    * wall to walk through — so "walking through a door" is this: touching the
    * boundary at the point a door is drawn (`render/room.ts`'s `DOOR_SPAN`
-   * band, centred on the wall), with that door unlocked. The caller (the app
-   * layer, which owns the floor plan and room templates) polls this once a
-   * tick and calls `transitionTo` when it isn't `null` — the same call the
-   * dev "N" shortcut in `main.ts` already makes.
+   * band, centred on that door's own cell), with that door unlocked. The
+   * caller (the app layer, which owns the floor plan and room templates)
+   * polls this once a tick and calls `transitionTo` when it isn't `null` —
+   * the same call the dev "N" shortcut in `main.ts` already makes.
    */
-  get doorContact(): RoomDirection | null {
+  get doorContact(): CompiledDoor | null {
     if (!this.roomTemplateLoaded || this.doorsLocked) {
       return null;
     }
@@ -499,36 +521,31 @@ export class GameSim {
     const x = this.positionX(index);
     const y = this.positionY(index);
     const half = DOOR_SPAN / 2;
-    const centreX = (this.room.minX + this.room.maxX) / 2;
-    const centreY = (this.room.minY + this.room.maxY) / 2;
 
-    if (
-      this.roomDoors.north &&
-      y <= this.room.minY + PLAYER_RADIUS &&
-      Math.abs(x - centreX) <= half
-    ) {
-      return 'north';
-    }
-    if (
-      this.roomDoors.south &&
-      y >= this.room.maxY - PLAYER_RADIUS &&
-      Math.abs(x - centreX) <= half
-    ) {
-      return 'south';
-    }
-    if (
-      this.roomDoors.west &&
-      x <= this.room.minX + PLAYER_RADIUS &&
-      Math.abs(y - centreY) <= half
-    ) {
-      return 'west';
-    }
-    if (
-      this.roomDoors.east &&
-      x >= this.room.maxX - PLAYER_RADIUS &&
-      Math.abs(y - centreY) <= half
-    ) {
-      return 'east';
+    for (const door of this.roomDoors) {
+      const centre = doorCentre(this.room, door);
+      switch (door.direction) {
+        case 'north':
+          if (y <= this.room.minY + PLAYER_RADIUS && Math.abs(x - centre.x) <= half) {
+            return door;
+          }
+          break;
+        case 'south':
+          if (y >= this.room.maxY - PLAYER_RADIUS && Math.abs(x - centre.x) <= half) {
+            return door;
+          }
+          break;
+        case 'west':
+          if (x <= this.room.minX + PLAYER_RADIUS && Math.abs(y - centre.y) <= half) {
+            return door;
+          }
+          break;
+        case 'east':
+          if (x >= this.room.maxX - PLAYER_RADIUS && Math.abs(y - centre.y) <= half) {
+            return door;
+          }
+          break;
+      }
     }
     return null;
   }
@@ -539,13 +556,36 @@ export class GameSim {
     );
   }
 
-  /** Loads one room, preserving the player and run state while replacing its contents. */
-  loadRoom(template: unknown, floor = 1, direction: RoomDirection | null = null): void {
-    const compiled = compileRoomTemplate(template, floor, 'room template', ENEMY_DEFINITIONS);
+  /**
+   * Loads one room, preserving the player and run state while replacing its
+   * contents.
+   *
+   * `placement` and `entryCell` only matter for a multi-cell room (#100): the
+   * app layer, which owns the floor plan, resolves the real floor-grid
+   * layout into `placement` (so `compileRoomTemplate` glues the right
+   * sub-rooms at the right positions with the right real doors) and picks
+   * `entryCell` (so the player lands on the correct sub-room's wall when
+   * walking in through a specific door, not always the room's first cell).
+   * Both default to the single-cell case, which is every `1x1` room.
+   */
+  loadRoom(
+    template: unknown,
+    floor = 1,
+    direction: RoomDirection | null = null,
+    placement?: RoomPlacement,
+    entryCell: { readonly col: number; readonly row: number } = { col: 0, row: 0 },
+  ): void {
+    const compiled = compileRoomTemplate(
+      template,
+      floor,
+      'room template',
+      ENEMY_DEFINITIONS,
+      placement,
+    );
     this.clearRoomEntities();
     this.room = compiled.geometry;
     this.roomId = compiled.source.id;
-    this.roomDoors = compiled.source.metadata.doors;
+    this.roomDoors = compiled.doors;
     this.roomTemplateLoaded = true;
     this.roomTransitionTicks = direction === null ? 0 : ROOM_TRANSITION_TICKS;
     this.roomTransitionDirection = direction;
@@ -553,14 +593,14 @@ export class GameSim {
     this.currentFloorValue = floor;
     this.roomEnemyCount = 0;
     const alreadyCleared = this.roomClearedIds.has(this.roomId);
-    this.positionPlayerAtDoor(direction);
+    this.positionPlayerAtDoor(direction, entryCell);
     if (!alreadyCleared) {
       // A room entered through a door (not the run's very first room) never
       // spawns something already touching the player at the door they just
       // walked through — that door is the one entry point every run of this
       // room is guaranteed to arrive at, so it is the one spot an author's
       // spawn placement can't account for the player already standing on.
-      const entry = direction === null ? null : this.doorEntryPoint(direction);
+      const entry = direction === null ? null : this.doorEntryPoint(direction, entryCell);
       for (const spawn of compiled.enemySpawns) {
         if (entry !== null) {
           const dx = spawn.x - entry.x;
@@ -575,24 +615,20 @@ export class GameSim {
         }
         this.spawnEnemyKind(definition, spawn.x, spawn.y);
       }
-      for (const pickup of compiled.source.pickupSpawns) {
+      for (const pickup of compiled.pickupSpawns) {
         const definition = this.pickups.indexOf(pickup.type);
         if (definition < 0) {
           throw new Error(`room template pickup "${pickup.type}" is not registered`);
         }
-        const safe = this.safeSpawnPoint(
-          this.room.minX + pickup.x,
-          this.room.minY + pickup.y,
-          this.pickups.at(definition).radius,
-        );
+        const safe = this.safeSpawnPoint(pickup.x, pickup.y, this.pickups.at(definition).radius);
         this.spawnPickup(pickup.type, safe.x, safe.y);
       }
       // Decorative props are art (#18) except one type: a barrel is a
       // destructible obstacle, so a room author drops a Bierfassl at one for
       // free and `npm run dev` always has something to demonstrate that on.
-      for (const prop of compiled.source.decorativeProps) {
+      for (const prop of compiled.decorativeProps) {
         if (prop.type === 'barrel') {
-          this.spawnTarget(this.room.minX + prop.x, this.room.minY + prop.y, TARGET_RADIUS);
+          this.spawnTarget(prop.x, prop.y, TARGET_RADIUS);
         }
       }
     }
@@ -603,17 +639,23 @@ export class GameSim {
   }
 
   /** Loads the next room only when its matching door exists and this room is clear. */
-  transitionTo(template: unknown, floor: number, direction: RoomDirection): boolean {
+  transitionTo(
+    template: unknown,
+    floor: number,
+    direction: RoomDirection,
+    placement?: RoomPlacement,
+    entryCell?: { readonly col: number; readonly row: number },
+  ): boolean {
     if (!this.roomTemplateLoaded || this.doorsLocked || !this.hasDoor(direction)) {
       return false;
     }
     this.roomClearedIds.add(this.roomId);
-    this.loadRoom(template, floor, direction);
+    this.loadRoom(template, floor, direction, placement, entryCell);
     return true;
   }
 
   private hasDoor(direction: RoomDirection): boolean {
-    return this.roomDoors[direction];
+    return this.roomDoors.some((door) => door.direction === direction);
   }
 
   private clearRoomEntities(): void {
@@ -638,27 +680,43 @@ export class GameSim {
 
   /**
    * Where the player (and, via `DOOR_SPAWN_SAFETY_RADIUS`, nothing else)
-   * lands when entering the room from `direction` — the door on the wall
-   * `direction` names, or the room's centre for the very first room of a run
-   * (`direction === null`, no door was walked through).
+   * lands when entering the room from `direction` — the door on
+   * `entryCell`'s wall facing `direction`, or the room's centre for the very
+   * first room of a run (`direction === null`, no door was walked through).
+   *
+   * `entryCell` only matters once a room can have more than one door per
+   * wall (#100): it says which of them the player is arriving through, the
+   * same way `doorContact` reports which one they left the old room by.
    */
-  private doorEntryPoint(direction: RoomDirection | null): { x: number; y: number } {
-    let x = (this.room.minX + this.room.maxX) / 2;
-    let y = (this.room.minY + this.room.maxY) / 2;
-    if (direction === 'north') {
-      y = this.room.maxY - PLAYER_RADIUS - 1;
-    } else if (direction === 'east') {
-      x = this.room.minX + PLAYER_RADIUS + 1;
-    } else if (direction === 'south') {
-      y = this.room.minY + PLAYER_RADIUS + 1;
-    } else if (direction === 'west') {
-      x = this.room.maxX - PLAYER_RADIUS - 1;
+  private doorEntryPoint(
+    direction: RoomDirection | null,
+    entryCell: { readonly col: number; readonly row: number },
+  ): { x: number; y: number } {
+    if (direction === null) {
+      return {
+        x: (this.room.minX + this.room.maxX) / 2,
+        y: (this.room.minY + this.room.maxY) / 2,
+      };
     }
-    return { x, y };
+    const cellCentreX = this.room.minX + entryCell.col * SCREEN_WIDTH + SCREEN_WIDTH / 2;
+    const cellCentreY = this.room.minY + entryCell.row * SCREEN_HEIGHT + SCREEN_HEIGHT / 2;
+    switch (direction) {
+      case 'north':
+        return { x: cellCentreX, y: this.room.maxY - PLAYER_RADIUS - 1 };
+      case 'east':
+        return { x: this.room.minX + PLAYER_RADIUS + 1, y: cellCentreY };
+      case 'south':
+        return { x: cellCentreX, y: this.room.minY + PLAYER_RADIUS + 1 };
+      case 'west':
+        return { x: this.room.maxX - PLAYER_RADIUS - 1, y: cellCentreY };
+    }
   }
 
-  private positionPlayerAtDoor(direction: RoomDirection | null): void {
-    const { x, y } = this.doorEntryPoint(direction);
+  private positionPlayerAtDoor(
+    direction: RoomDirection | null,
+    entryCell: { readonly col: number; readonly row: number },
+  ): void {
+    const { x, y } = this.doorEntryPoint(direction, entryCell);
     const index = this.playerIndex;
     this.transform.data[index * 4] = x;
     this.transform.data[index * 4 + 1] = y;
@@ -1498,6 +1556,25 @@ export class GameSim {
     body[index * 2] = definition.radius;
     body[index * 2 + 1] = 1;
 
+    // A recycled slot keeps whatever `velocity`/`push` a previous occupant
+    // left behind — most visibly the very enemy this pickup just dropped
+    // from, mid-knockback when it died. A pickup never adds either
+    // component (see this method's doc comment), but `stepBodies` moves
+    // anything matching `collidableMask` regardless, stale data included, so
+    // without this a dropped pickup can inherit a dead enemy's motion and
+    // drift indefinitely instead of landing where it dropped.
+    // A recycled slot keeps whatever `velocity`/`push` a previous occupant
+    // left behind — most visibly the very enemy this pickup just dropped
+    // from, mid-knockback when it died. A pickup never adds either
+    // component (see this method's doc comment), but `stepBodies` moves
+    // anything matching `collidableMask` regardless, stale data included, so
+    // without this a dropped pickup can inherit a dead enemy's motion and
+    // drift indefinitely instead of landing where it dropped.
+    this.velocity.data[index * 2] = 0;
+    this.velocity.data[index * 2 + 1] = 0;
+    this.push.data[index * 2] = 0;
+    this.push.data[index * 2 + 1] = 0;
+
     this.pickupKind.data[index] = definitionIndex;
     // Purely cosmetic — `EntityView` reads this down to pop the sprite on
     // spawn, and nothing else in the simulation looks at it.
@@ -1553,7 +1630,36 @@ export class GameSim {
 
     this.bombFuse.data[index] = Math.round(this.tuning.pickup.bombFuseTicks);
     this.setCollisionLayer(index, CollisionLayer.Obstacle);
+
+    // It spawns exactly where the player is standing — `stepContacts`
+    // otherwise reads that as two solid bodies dead-centre on each other and
+    // shoves the player off in `resolveAgainstPlayer`'s fixed concentric
+    // direction, which reads as the keg flinging them rather than as having
+    // set something down. Suspended until they step off it on their own.
+    this.freshBombEntity = entity;
     return entity;
+  }
+
+  /**
+   * Whether `other` is the Bierfassl just placed under the player and still
+   * touching them — `stepContacts` skips separation entirely while this is
+   * true, rather than shoving the player off what they just set down.
+   *
+   * `stillOverlapping` is the caller's own overlap test, done once already for
+   * its normal resolution — passed in rather than redone here. The moment it
+   * goes false, the suspension ends for good: `other` was only ever the one
+   * most-recently-placed bomb, and this is the one place that clears it.
+   */
+  suspendsPlayerContact(other: number, stillOverlapping: boolean): boolean {
+    const fresh = this.freshBombEntity;
+    if (fresh === null || !this.world.isAlive(fresh) || entityIndex(fresh) !== other) {
+      return false;
+    }
+    if (!stillOverlapping) {
+      this.freshBombEntity = null;
+      return false;
+    }
+    return true;
   }
 
   /**

@@ -1,38 +1,66 @@
 {
   "id": "cellar-corridor",
-  "tileGrid": [
-    "###############",
-    "#.............#",
-    "#.............#",
-    "#.............#",
-    "#.............#",
-    "#.............#",
-    "#.............#",
-    "#.............#",
-    "###############"
-  ],
-  "obstacles": [
-    { "x": 96, "y": 32, "width": 16, "height": 16 },
-    { "x": 128, "y": 96, "width": 16, "height": 16 }
-  ],
-  "enemySpawns": [{ "x": 192, "y": 72, "group": "corridor-watch" }],
-  "spawnGroups": [
+  "cells": [
     {
-      "id": "corridor-watch",
-      "count": 1,
-      "choices": [
-        { "enemyId": "kellerassel", "minFloor": 1, "maxFloor": 2 },
-        { "enemyId": "bierratte", "minFloor": 3, "maxFloor": 7 }
-      ]
+      "tileGrid": [
+        "###############",
+        "#.............#",
+        "#.....#.......#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "###############"
+      ],
+      "obstacles": [{ "x": 96, "y": 32, "width": 16, "height": 16 }],
+      "enemySpawns": [{ "x": 176, "y": 64, "group": "corridor-watch" }],
+      "spawnGroups": [
+        {
+          "id": "corridor-watch",
+          "count": 1,
+          "choices": [
+            { "enemyId": "kellerassel", "minFloor": 1, "maxFloor": 2 },
+            { "enemyId": "bierratte", "minFloor": 3, "maxFloor": 7 }
+          ]
+        }
+      ],
+      "pickupSpawns": [{ "x": 120, "y": 72, "type": "mass-half" }],
+      "hazards": [],
+      "decorativeProps": [{ "x": 48, "y": 112, "type": "barrel" }]
+    },
+    {
+      "tileGrid": [
+        "###############",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.......#.....#",
+        "#.............#",
+        "###############"
+      ],
+      "obstacles": [{ "x": 128, "y": 96, "width": 16, "height": 16 }],
+      "enemySpawns": [{ "x": 64, "y": 48, "group": "corridor-watch" }],
+      "spawnGroups": [
+        {
+          "id": "corridor-watch",
+          "count": 1,
+          "choices": [
+            { "enemyId": "kellerassel", "minFloor": 1, "maxFloor": 2 },
+            { "enemyId": "bierratte", "minFloor": 3, "maxFloor": 7 }
+          ]
+        }
+      ],
+      "pickupSpawns": [],
+      "hazards": [],
+      "decorativeProps": [{ "x": 192, "y": 112, "type": "barrel" }]
     }
   ],
-  "pickupSpawns": [],
-  "hazards": [],
-  "decorativeProps": [{ "x": 48, "y": 128, "type": "barrel" }],
   "metadata": {
     "floorTags": ["cellar", "rural"],
     "shape": "1x2",
-    "doors": { "north": true, "east": true, "south": true, "west": true },
     "difficultyTier": 1,
     "weight": 1
   }

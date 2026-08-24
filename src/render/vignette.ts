@@ -41,11 +41,14 @@ function createVignetteTexture(): Texture {
  * Oversize factor on the vignette sprite, relative to the viewport.
  *
  * The vignette follows the player rather than sitting fixed at screen
- * centre (this room has no camera-follow of its own — the whole room is
- * always on screen, so "centred on screen" and "centred on the player" are
- * two different things the moment the player isn't standing in the middle
- * of the room). Sized generously past 1x so the opaque outer edge still
- * reaches every screen corner even when the player is off in one of them.
+ * centre. Camera-follow (#100) keeps the player near screen centre inside a
+ * room bigger than one screen, but only ever exactly centred there when the
+ * follow isn't clamped against a room edge — near an edge "centred on
+ * screen" and "centred on the player" are still two different things, same
+ * as they always were in a `1x1` room the moment the player isn't standing
+ * in the middle of it. Sized generously past 1x so the opaque outer edge
+ * still reaches every screen corner even when the player is off in one of
+ * them.
  */
 const COVERAGE = 2.2;
 

@@ -100,7 +100,11 @@ function resolveAgainstPlayer(other: number): void {
   const otherY = sim.positionY(other);
   let x = player[PLAYER_X] ?? 0;
   let y = player[PLAYER_Y] ?? 0;
-  if (!circlesOverlap(x, y, radius, otherX, otherY, otherRadius)) {
+  const overlapping = circlesOverlap(x, y, radius, otherX, otherY, otherRadius);
+  if (sim.suspendsPlayerContact(other, overlapping)) {
+    return;
+  }
+  if (!overlapping) {
     return;
   }
 

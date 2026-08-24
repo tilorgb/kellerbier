@@ -31,8 +31,8 @@ function computeReveal(plan: FloorPlan, visitedRoomIds: ReadonlySet<string>): Re
     if (!visitedRoomIds.has(room.id)) {
       continue;
     }
-    for (const neighborId of Object.values(room.neighbors)) {
-      revealed.add(neighborId);
+    for (const door of room.doors) {
+      revealed.add(door.neighborRoomId);
     }
   }
   return { visited: visitedRoomIds, revealed };

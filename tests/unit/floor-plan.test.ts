@@ -3,9 +3,11 @@ import { ENEMY_DEFINITIONS } from '../../src/content/enemies/index.js';
 import { FLOOR_CONFIGS, type FloorConfig } from '../../src/content/floors/definition.js';
 import { ROOM_TEMPLATES } from '../../src/content/rooms/index.js';
 import {
+  MULTI_CELL_COUNT,
   ROOM_COLUMNS,
   ROOM_ROWS,
   type RoomShape,
+  type RoomSubLayout,
   type RoomTemplate,
 } from '../../src/content/rooms/definition.js';
 import { generateFloor, validateFloorPlan } from '../../src/sim/room/floor-plan.js';
@@ -40,24 +42,41 @@ function syntheticPool(): RoomTemplate[] {
   const tileGrid = Array.from({ length: ROOM_ROWS }, (_row, index) =>
     index === 0 || index === ROOM_ROWS - 1 ? wallRow : blankRow,
   );
+  const subLayout: RoomSubLayout = {
+    tileGrid,
+    obstacles: [],
+    enemySpawns: [],
+    spawnGroups: [],
+    pickupSpawns: [],
+    hazards: [],
+    decorativeProps: [],
+  };
   const shapes: readonly RoomShape[] = ['1x1', '1x2', '2x2', 'L'];
 
   const templates: RoomTemplate[] = [];
   for (const config of FLOOR_CONFIGS) {
     for (const shape of shapes) {
+      const id = `synthetic-${config.floorTag}-${shape}`;
+      if (shape === '1x1') {
+        templates.push({
+          id,
+          ...subLayout,
+          metadata: {
+            floorTags: [config.floorTag],
+            shape: '1x1',
+            doors: { north: true, east: true, south: true, west: true },
+            difficultyTier: 1,
+            weight: 1,
+          },
+        });
+        continue;
+      }
       templates.push({
-        id: `synthetic-${config.floorTag}-${shape}`,
-        tileGrid,
-        obstacles: [],
-        enemySpawns: [],
-        spawnGroups: [],
-        pickupSpawns: [],
-        hazards: [],
-        decorativeProps: [],
+        id,
+        cells: Array.from({ length: MULTI_CELL_COUNT[shape] }, () => subLayout),
         metadata: {
           floorTags: [config.floorTag],
           shape,
-          doors: { north: true, east: true, south: true, west: true },
           difficultyTier: 1,
           weight: 1,
         },

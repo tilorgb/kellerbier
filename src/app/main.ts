@@ -5,8 +5,17 @@ import { FLOOR_CONFIGS, type FloorConfig } from '../content/floors/definition.js
 import { ROOM_TEMPLATES } from '../content/rooms/index.js';
 import { type RoomDirection, GameSim, MAX_COLLIDER_RADIUS } from '../sim/game/sim.js';
 import { promilleTierName } from '../sim/game/promille.js';
-import { type FloorPlan, type FloorPlanRoom, generateFloor } from '../sim/room/floor-plan.js';
-import { validateRoomTemplate } from '../sim/room/template.js';
+import {
+  type FloorPlan,
+  type FloorPlanRoom,
+  type RoomDoor,
+  generateFloor,
+} from '../sim/room/floor-plan.js';
+import {
+  type CompiledDoor,
+  type RoomPlacement,
+  validateRoomTemplate,
+} from '../sim/room/template.js';
 import { RngStream, createStreamRng } from '../sim/rng/streams.js';
 import { TICKS_PER_SECOND } from '../sim/time.js';
 import { InputAction, isActionDown } from '../sim/input/frame.js';
@@ -70,6 +79,30 @@ function planTemplate(room: FloorPlanRoom): unknown {
   return template;
 }
 
+/** Cell offset each compass direction moves by, on the floor's own grid. */
+const DIRECTION_OFFSET: Readonly<
+  Record<RoomDirection, { readonly x: number; readonly y: number }>
+> = {
+  north: { x: 0, y: -1 },
+  south: { x: 0, y: 1 },
+  east: { x: 1, y: 0 },
+  west: { x: -1, y: 0 },
+};
+
+/**
+ * `room`'s real floor-grid layout, translated into the local (0-indexed,
+ * origin-agnostic) coordinates `compileRoomTemplate` needs (#100) — a `1x1`
+ * room's is always the trivial single-cell case.
+ */
+function buildPlacement(room: FloorPlanRoom): RoomPlacement {
+  const minX = Math.min(...room.cells.map((cell) => cell.x));
+  const minY = Math.min(...room.cells.map((cell) => cell.y));
+  return {
+    cells: room.cells.map((cell) => ({ col: cell.x - minX, row: cell.y - minY })),
+    doors: room.doors.map((door) => ({ cellIndex: door.cellIndex, direction: door.direction })),
+  };
+}
+
 async function boot(): Promise<void> {
   const host = document.getElementById('game');
   if (host === null) {
@@ -101,13 +134,12 @@ async function boot(): Promise<void> {
     ROOM_TEMPLATE_POOL,
   );
   let currentRoomId = floorPlan.startRoomId;
-  const directions = ['north', 'east', 'south', 'west'] as const;
   // Rooms `N` has already stepped into. Preferring an unvisited neighbour
-  // over the fixed north/east/south/west priority order turns the walk into
-  // a real depth-first tour of the floor — without it, standing in any dead
-  // end (a treasure or shop room always is one) makes `N` just bounce back
-  // to wherever it came from, which reads as "the generator only has one
-  // room" even though the floor behind it is not.
+  // over a fixed door order turns the walk into a real depth-first tour of
+  // the floor — without it, standing in any dead end (a treasure or shop
+  // room always is one) makes `N` just bounce back to wherever it came from,
+  // which reads as "the generator only has one room" even though the floor
+  // behind it is not.
   const visitedRoomIds = new Set([currentRoomId]);
 
   // The room is populated with the authored roster rather than the training
@@ -264,7 +296,13 @@ async function boot(): Promise<void> {
   // measured against the player's simulation position, and the room sits scaled
   // and letterboxed inside a full-window canvas. Updated on every resize, and
   // read — never replaced — by whoever needs to convert a client pixel.
-  const pointerMapping = { originX: 0, originY: 0, unitsPerPixel: 1 / WORLD_ZOOM };
+  const pointerMapping = {
+    originX: 0,
+    originY: 0,
+    unitsPerPixel: 1 / WORLD_ZOOM,
+    cameraX: 0,
+    cameraY: 0,
+  };
   let layout = computeGameLayout(window.innerWidth, window.innerHeight, window.devicePixelRatio);
 
   trackWindowSize(app, game, (applied) => {
@@ -318,9 +356,9 @@ async function boot(): Promise<void> {
         playRumble(sim, input.gamepad);
         summary.recordTick(sim);
         advanceDeathSequence();
-        const doorDirection = sim.doorContact;
-        if (doorDirection !== null) {
-          enterNeighbor(doorDirection);
+        const touchedDoor = sim.doorContact;
+        if (touchedDoor !== null) {
+          enterNeighbor(touchedDoor);
         }
       }
       simMs += performance.now() - started;
@@ -329,6 +367,11 @@ async function boot(): Promise<void> {
       const started = performance.now();
       overlay?.drawCalls.beginFrame();
       view.sync(alpha, layout.scale);
+      // Mouse aim has to invert whatever the camera did this frame (#100) —
+      // see `PointerMapping.cameraX`/`cameraY`'s doc comment.
+      const worldOffset = view.worldOffset();
+      pointerMapping.cameraX = worldOffset.x / WORLD_ZOOM;
+      pointerMapping.cameraY = worldOffset.y / WORLD_ZOOM;
       healthHud.sync(sim);
       promilleHud.sync(sim);
       walletHud.sync(sim);
@@ -372,27 +415,65 @@ WASD move   arrows/mouse aim and fire
   positionHud(layout);
 
   /**
-   * Moves the player into the room adjacent in `direction`, if the current
-   * room has a door there and it's unlocked. Shared by the `N` debug tour
-   * and `sim.doorContact` (walking into the door for real) — both just need
-   * "cross this door", the same `transitionTo` call #19 already built.
+   * Crosses one specific door: resolves the real neighbour room on the other
+   * side of it, works out exactly which of *that* room's cells the player
+   * lands in (#100 — not always its first one), and hands both to
+   * `sim.transitionTo`. Shared by `enterNeighbor` (`sim.doorContact`, walking
+   * into a door for real) and the `N` debug tour, which already knows which
+   * `RoomDoor` it wants without needing to touch one.
    */
-  function enterNeighbor(direction: RoomDirection): boolean {
+  function crossDoor(
+    exitCellIndex: number,
+    direction: RoomDirection,
+    neighborRoomId: string,
+  ): boolean {
     const room = planRoom(floorPlan, currentRoomId);
-    const neighborId = room.neighbors[direction];
-    if (neighborId === undefined) {
+    const exitCell = room.cells[exitCellIndex];
+    if (exitCell === undefined) {
       return false;
     }
+    const neighborRoom = planRoom(floorPlan, neighborRoomId);
+    const neighborPlacement = buildPlacement(neighborRoom);
+    const offset = DIRECTION_OFFSET[direction];
+    const targetX = exitCell.x + offset.x;
+    const targetY = exitCell.y + offset.y;
+    const entryCellIndex = neighborRoom.cells.findIndex(
+      (cell) => cell.x === targetX && cell.y === targetY,
+    );
+    const entryCell = neighborPlacement.cells[entryCellIndex] ?? { col: 0, row: 0 };
+
     if (
-      !sim.transitionTo(planTemplate(planRoom(floorPlan, neighborId)), floorPlan.floor, direction)
+      !sim.transitionTo(
+        planTemplate(neighborRoom),
+        floorPlan.floor,
+        direction,
+        neighborPlacement,
+        entryCell,
+      )
     ) {
       return false;
     }
-    currentRoomId = neighborId;
-    visitedRoomIds.add(neighborId);
+    currentRoomId = neighborRoomId;
+    visitedRoomIds.add(neighborRoomId);
     minimapHud.rebuild(floorPlan, currentRoomId, visitedRoomIds);
     refreshHud();
     return true;
+  }
+
+  /** `sim.doorContact`'s door, translated into "which of this room's real cells did that come from". */
+  function enterNeighbor(exitDoor: CompiledDoor): boolean {
+    const room = planRoom(floorPlan, currentRoomId);
+    const placement = buildPlacement(room);
+    const exitCellIndex = placement.cells.findIndex(
+      (cell) => cell.col === exitDoor.cellCol && cell.row === exitDoor.cellRow,
+    );
+    const match = room.doors.find(
+      (door) => door.cellIndex === exitCellIndex && door.direction === exitDoor.direction,
+    );
+    if (match === undefined) {
+      return false;
+    }
+    return crossDoor(exitCellIndex, exitDoor.direction, match.neighborRoomId);
   }
 
   window.addEventListener('keydown', (event: KeyboardEvent) => {
@@ -412,22 +493,16 @@ WASD move   arrows/mouse aim and fire
         break;
       case 'n':
       case 'N': {
-        // Walks the generated floor depth-first: an unvisited door over a
-        // fixed north/east/south/west priority, backtracking through an
-        // already-seen room only once every door from here has been used.
-        // Now that `sim.doorContact` triggers a real transition on its own,
-        // this is a dev shortcut for touring the floor without walking it —
-        // both go through the same `enterNeighbor`.
+        // Walks the generated floor depth-first: an unvisited door first,
+        // backtracking through an already-seen room only once every door
+        // from here has been used. Now that `sim.doorContact` triggers a
+        // real transition on its own, this is a dev shortcut for touring the
+        // floor without walking it — both go through the same `crossDoor`.
         const room = planRoom(floorPlan, currentRoomId);
-        const unvisitedDirection = directions.find((candidate) => {
-          const id = room.neighbors[candidate];
-          return id !== undefined && !visitedRoomIds.has(id);
-        });
-        const direction: RoomDirection | undefined =
-          unvisitedDirection ??
-          directions.find((candidate) => room.neighbors[candidate] !== undefined);
-        if (direction !== undefined) {
-          enterNeighbor(direction);
+        const chosenDoor: RoomDoor | undefined =
+          room.doors.find((door) => !visitedRoomIds.has(door.neighborRoomId)) ?? room.doors[0];
+        if (chosenDoor !== undefined) {
+          crossDoor(chosenDoor.cellIndex, chosenDoor.direction, chosenDoor.neighborRoomId);
         }
         break;
       }

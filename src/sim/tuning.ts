@@ -497,7 +497,12 @@ export const DEFAULT_PROMILLE_TUNING: Readonly<PromilleTuning> = {
 };
 
 export const DEFAULT_PICKUP_TUNING: Readonly<PickupTuning> = {
-  magnetRadius: 36,
+  // Zero, not #22's original 36: a base run has no magnetism at all — it's
+  // meant to be something an item grants later (`docs/GAME_DESIGN.md` §8's
+  // "items are modifiers with hooks"), not free from tick one. `magnetSpeed`
+  // stays tuned and ready; a future item just has to raise `magnetRadius`
+  // above zero to turn the pull on.
+  magnetRadius: 0,
   magnetSpeed: 1.4,
   spawnBounceTicks: 14,
   needMultiplier: 2,
