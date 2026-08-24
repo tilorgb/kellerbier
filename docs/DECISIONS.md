@@ -185,3 +185,56 @@ room — see #112 for the full design questions.
 **Constrains:** nothing in #107 is built toward this — no new `RoomShape`, no `RoomGeometry`
 change beyond the rectangle-list `voidRects` generalization `T` needed. #112 owns the actual
 geometry/door design before any of it is implemented.
+
+## 11. A diagonal staircase room is a hand-placed set-piece, geometry is a union of overlapping steps
+
+**Decided:** M2. **Issue:** #112, following on from #10's open questions.
+
+#112's design pass answers the three questions #10 left open.
+
+**Room kind:** a staircase is not a `RoomShape` the floor generator chooses and places. Every
+part of `sim/room/floor-plan.ts` that a `RoomShape` touches —
+`chooseShape`/`placeShape`/`computeAdjacency`, and `RoomDoor`'s `(cellIndex, direction)` pairs —
+assumes axis-aligned floor-grid-cell adjacency between *every* pair of glued cells, not just the
+two ends. A staircase has no such adjacency anywhere in its interior, so it sits entirely outside
+that system: it is a hand-placed set-piece room, compiled by its own function
+(`sim/room/staircase.ts`'s `compileStaircaseRoom`), never by `compileRoomTemplate`, never
+reachable through `chooseShape`. Wiring a staircase into a specific floor's layout — the "which
+two rooms sit past its two doors" question — is a level-authoring concern for whoever places one,
+the same way `sim/room/playground.ts`'s dev room is hand-wired rather than generated; #112 does
+not build that authoring path, only the geometry and compilation it would sit on top of.
+
+**Geometry:** `RoomGeometry` gains `stepRects` (`sim/room/geometry.ts`), a list of per-step screen
+rects read as a *union* instead of the single-rectangle `minX`/`minY`/`maxX`/`maxY` bound every
+other room uses. Each step overlaps the previous one by half a screen on both axes
+(`STAIR_STEP_OVERLAP` in `staircase.ts`) rather than gluing at a full floor-grid cell — that
+overlap is real shared edge area for a nonzero-radius player to cross, not the corner-touch point
+two diagonally-offset floor-grid cells would share. `isClear` accepts a circle when it fits
+entirely inside *any one* step rect; this is sound (never lets a circle poke through where there
+is no floor) even though it is conservative right at a seam, where a circle that straddles two
+steps without fitting fully in either is rejected even though the union technically covers it —
+a deliberate trade favouring "never clips through a wall" over "walkable right up to the union's
+true edge." No `voidRects`/blocks are needed to carve an exclusion out of a bounding box the way
+`L`/`T` do, so a staircase of any authored length never touches `MAX_ROOM_BLOCKS = 64` — the
+budget problem #10 flagged for the bounding-box-minus-voids approach doesn't apply here because
+there is no bounding-box-minus-voids at all, only the union itself. The outer `minX`/`maxX`/
+`minY`/`maxY` bound is kept too, set to the bounding box of every step, purely for
+`roomFrameSize`/the camera clamp (`render/view.ts`'s `GameView.followOffset`) and rendering frame
+— unwalkable slack inside that box (the parts of the bounding box no step covers) reads as an
+ordinary wall, the same precedent `voidRects` already established for `L`/`T`, so the camera
+clamp needed no change at all.
+
+**Doors:** only the first and last step get a door, each restricted to the two wall edges of that
+step which the interior overlap never reaches (`staircase.ts`'s `START_FREE_DOORS`/
+`END_FREE_DOORS`) — never the two edges the seam to the next step partially consumes, even where
+a sliver of that edge is technically still free, because a door's fixed `DOOR_SPAN` gap centred on
+the edge has no way to dodge a seam that only covers part of it. `compileStaircaseRoom` rejects
+any other direction outright. Each door is placed against its own step's rect
+(`stepDoorCentre`), not the room's overall bounding box the way `template.ts`'s `doorCentre` reads
+it for every other room shape — a staircase's end steps are smaller than, and not flush with, that
+bounding box the way a `1x1`/`L`/`T` cell always is.
+
+**Constrains:** a staircase room cannot be dropped into `eligibleTemplates`/`generateFloor`
+without new code — nothing in `floor-plan.ts` accepts a non-`RoomShape` room today. Any future
+work that wants the floor generator to place staircases itself (rather than they being hand-wired
+set-pieces) is a new, separate design, not a natural extension of this one.

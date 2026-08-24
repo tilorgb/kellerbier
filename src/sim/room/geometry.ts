@@ -59,6 +59,21 @@ export class RoomGeometry {
    */
   readonly voidRects: readonly RoomRect[];
 
+  /**
+   * A diagonal staircase room's walkable area (#112): the union of its
+   * per-step screen rects, each overlapping the next by real edge area
+   * (`sim/room/staircase.ts`'s `compileStaircaseRoom`) rather than the
+   * bounding-box-minus-voids `voidRects` above use. Empty for every other
+   * room. When non-empty, `isClear` requires the whole circle fit inside at
+   * least one step rect instead of inside the outer `minX`/`maxX` bound —
+   * see `isClear`'s comment for why that is sound even though it is
+   * conservative right at a seam between two steps. `minX`/`minY`/`maxX`/
+   * `maxY` still hold the bounding box of every step, for `roomFrameSize`
+   * and rendering — unwalkable slack inside that box reads as an ordinary
+   * wall, same precedent as `voidRects` (see that field's comment).
+   */
+  readonly stepRects: readonly RoomRect[];
+
   /** Flat `[minX, minY, maxX, maxY]` runs. Read `blockCount * BLOCK_STRIDE` of it. */
   readonly blocks = new Float32Array(MAX_ROOM_BLOCKS * BLOCK_STRIDE);
 
@@ -70,12 +85,14 @@ export class RoomGeometry {
     maxX: number,
     maxY: number,
     voidRects: readonly RoomRect[] = [],
+    stepRects: readonly RoomRect[] = [],
   ) {
     this.minX = minX;
     this.minY = minY;
     this.maxX = maxX;
     this.maxY = maxY;
     this.voidRects = voidRects;
+    this.stepRects = stepRects;
   }
 
   get blockCount(): number {
@@ -97,7 +114,33 @@ export class RoomGeometry {
 
   /** True when a circle is inside the interior bounds and clear of every block. */
   isClear(centreX: number, centreY: number, radius: number): boolean {
-    if (
+    if (this.stepRects.length > 0) {
+      // A staircase's interior bound is the *union* of its step rects, not
+      // one rectangle (#112) — checking the circle sits fully within any
+      // single step is sufficient (that step alone already contains it, so
+      // the union does too), even though it is conservative right at a
+      // seam: a circle straddling two steps without fitting fully inside
+      // either is rejected here even where the union actually covers it.
+      // That only ever costs a sliver of a step-and-a-half's overlap right
+      // at the transition, never lets a circle poke through where there is
+      // no floor at all, so it stays on the safe side of "no collision
+      // gaps."
+      let inAnyStep = false;
+      for (const step of this.stepRects) {
+        if (
+          centreX - radius >= step.minX &&
+          centreX + radius <= step.maxX &&
+          centreY - radius >= step.minY &&
+          centreY + radius <= step.maxY
+        ) {
+          inAnyStep = true;
+          break;
+        }
+      }
+      if (!inAnyStep) {
+        return false;
+      }
+    } else if (
       centreX - radius < this.minX ||
       centreX + radius > this.maxX ||
       centreY - radius < this.minY ||
