@@ -138,8 +138,15 @@ describe('priced pickup', () => {
 });
 
 describe('pickup magnetism', () => {
-  it('drifts a nearby pickup toward the player without touching one out of range', () => {
+  it('is off by default — a run starts with no drift at all', () => {
     const sim = emptySim();
+    expect(sim.tuning.pickup.magnetRadius).toBe(0);
+  });
+
+  it('drifts a nearby pickup toward the player without touching one out of range, once granted', () => {
+    const sim = emptySim();
+    // Stands in for the future item that grants this (#M3) — nothing does yet.
+    sim.tuning.pickup.magnetRadius = 36;
     const index = sim.playerIndex;
     const px = sim.positionX(index);
     const py = sim.positionY(index);
