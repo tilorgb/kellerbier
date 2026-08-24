@@ -114,27 +114,34 @@ function edgeKey(roomA: string, roomB: string): string {
  * doesn't already know about, so a wall found once stays open for the rest
  * of the run, on both sides, everywhere the floor plan is asked again.
  *
- * Direction-only, not a specific `RoomDoor` (#100 has both a `cellIndex` and
- * a `direction`): a secret/supersecret room is always `1x1` today, so its
- * neighbour never has more than one door in a given direction anyway — see
- * `GameSim.bombableWalls`'s doc comment for the same call.
+ * Returns specific doors — `(cellCol, cellRow, direction)`, same shape as
+ * `crackHintsFor` below — not bare directions: a multi-cell room (#100) can
+ * have two doors sharing a direction on different cells, and hiding the one
+ * that borders a secret room must never also hide an unrelated door to a
+ * normal neighbour that happens to face the same way.
  */
 function hiddenDoorsFor(
   plan: FloorPlan,
   roomId: string,
   revealedEdges: ReadonlySet<string>,
-): RoomDirection[] {
+): CompiledDoor[] {
   const room = planRoom(plan, roomId);
   if (room.role === 'secret' || room.role === 'supersecret') {
     return [];
   }
-  const hidden: RoomDirection[] = [];
+  const placement = buildPlacement(room);
+  const hidden: CompiledDoor[] = [];
   for (const door of room.doors) {
     const neighbor = planRoom(plan, door.neighborRoomId);
     const isSecretEdge = neighbor.role === 'secret' || neighbor.role === 'supersecret';
-    if (isSecretEdge && !revealedEdges.has(edgeKey(roomId, door.neighborRoomId))) {
-      hidden.push(door.direction);
+    if (!isSecretEdge || revealedEdges.has(edgeKey(roomId, door.neighborRoomId))) {
+      continue;
     }
+    const cell = placement.cells[door.cellIndex];
+    if (cell === undefined) {
+      continue;
+    }
+    hidden.push({ direction: door.direction, cellCol: cell.col, cellRow: cell.row });
   }
   return hidden;
 }
