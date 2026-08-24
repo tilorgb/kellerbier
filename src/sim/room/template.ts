@@ -47,6 +47,15 @@ export interface CompiledDoor {
   /** Which single-screen cell this door's wall segment belongs to, 0-indexed in the room's own local grid. */
   readonly cellCol: number;
   readonly cellRow: number;
+  /**
+   * A precomputed centre point, used instead of `cellCol`/`cellRow`/`room`'s
+   * grid math when present. Nothing in this module ever sets it — a
+   * staircase room's doors (#112, `sim/game/sim.ts`'s `loadStaircaseRoom`)
+   * are the one case that needs it: a staircase has no floor-grid cell of
+   * its own for `doorCentre`'s formula to place a door against, but already
+   * knows its exact door position from `compileStaircaseRoom`.
+   */
+  readonly centre?: { readonly x: number; readonly y: number };
 }
 
 /**
@@ -61,6 +70,9 @@ export interface CompiledDoor {
  * always in the last row, and so on.
  */
 export function doorCentre(room: RoomGeometry, door: CompiledDoor): { x: number; y: number } {
+  if (door.centre !== undefined) {
+    return door.centre;
+  }
   const cellCentreX = room.minX + door.cellCol * SCREEN_WIDTH + SCREEN_WIDTH / 2;
   const cellCentreY = room.minY + door.cellRow * SCREEN_HEIGHT + SCREEN_HEIGHT / 2;
   switch (door.direction) {

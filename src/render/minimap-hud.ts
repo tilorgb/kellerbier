@@ -111,24 +111,62 @@ function drawMap(
     const roomGraphics = new Graphics();
     target.addChild(roomGraphics);
 
-    if (fillColour !== undefined) {
-      for (const cell of room.cells) {
-        roomGraphics
-          .rect(
-            toPx(cell.x, bounds.minX, cellPx),
-            toPx(cell.y, bounds.minY, cellPx),
-            cellPx,
-            cellPx,
-          )
-          .fill(fillColour);
+    // A staircase (#112) reserves a whole block of floor-grid cells so
+    // nothing else can be placed anywhere its real screen-space footprint
+    // touches, but almost none of that block is real floor — filling every
+    // reserved cell, or outlining the block as one solid room the way an
+    // ordinary `RoomShape` is, would show a footprint on the minimap the
+    // player can never actually stand in, and a single straight connecting
+    // line hides the real steps and corners entirely. `minimapRects`
+    // (`sim/room/floor-plan.ts`'s `staircaseMinimapRects`, computed once at
+    // placement time) is the real walkable shape, already in this same
+    // fractional grid space — this module draws whatever a room hands it
+    // and never needs to know a staircase is a staircase, let alone compile
+    // one itself.
+    if (room.minimapRects !== undefined) {
+      // An unvisited-but-revealed staircase (a neighbour of something
+      // visited, same as any other room — `computeReveal`) still needs to
+      // show up as *something*, the same way an unvisited ordinary room's
+      // outline does with no fill. There is no cheap true outline for a
+      // union of overlapping rects the way `roomOutlineSegments` traces one
+      // for a set of whole cells, so every step gets a stroke too, not only
+      // a fill — a doubled line at a step's own overlap is a minor cost at
+      // minimap scale, unlike the full-size in-room render this would look
+      // wrong on (`render/room.ts` deliberately draws no such stroke).
+      for (const step of room.minimapRects) {
+        const pxMinX = toPx(step.minX, bounds.minX, cellPx);
+        const pxMinY = toPx(step.minY, bounds.minY, cellPx);
+        const graphics = roomGraphics.rect(
+          pxMinX,
+          pxMinY,
+          toPx(step.maxX, bounds.minX, cellPx) - pxMinX,
+          toPx(step.maxY, bounds.minY, cellPx) - pxMinY,
+        );
+        if (fillColour !== undefined) {
+          graphics.fill(fillColour);
+        }
+        graphics.stroke({ width: outlineWidth, color: outlineColour });
       }
-    }
+    } else {
+      if (fillColour !== undefined) {
+        for (const cell of room.cells) {
+          roomGraphics
+            .rect(
+              toPx(cell.x, bounds.minX, cellPx),
+              toPx(cell.y, bounds.minY, cellPx),
+              cellPx,
+              cellPx,
+            )
+            .fill(fillColour);
+        }
+      }
 
-    for (const segment of roomOutlineSegments(room.cells)) {
-      roomGraphics
-        .moveTo(toPx(segment.x1, bounds.minX, cellPx), toPx(segment.y1, bounds.minY, cellPx))
-        .lineTo(toPx(segment.x2, bounds.minX, cellPx), toPx(segment.y2, bounds.minY, cellPx))
-        .stroke({ width: outlineWidth, color: outlineColour });
+      for (const segment of roomOutlineSegments(room.cells)) {
+        roomGraphics
+          .moveTo(toPx(segment.x1, bounds.minX, cellPx), toPx(segment.y1, bounds.minY, cellPx))
+          .lineTo(toPx(segment.x2, bounds.minX, cellPx), toPx(segment.y2, bounds.minY, cellPx))
+          .stroke({ width: outlineWidth, color: outlineColour });
+      }
     }
 
     const icon = icons[room.role];

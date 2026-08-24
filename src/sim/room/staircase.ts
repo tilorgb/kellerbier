@@ -32,13 +32,20 @@ export type StaircaseDirection = 'up-right' | 'up-left' | 'down-right' | 'down-l
 /** Overlap between consecutive steps, as a fraction of a screen on each axis. */
 export const STAIR_STEP_OVERLAP = 0.5;
 
-const STEP_SIGN: Readonly<Record<StaircaseDirection, { readonly x: 1 | -1; readonly y: 1 | -1 }>> =
-  {
-    'up-right': { x: 1, y: -1 },
-    'up-left': { x: -1, y: -1 },
-    'down-right': { x: 1, y: 1 },
-    'down-left': { x: -1, y: 1 },
-  };
+/**
+ * Which way each step moves from the previous one, as a unit cell offset.
+ * Exported so the floor generator (`sim/room/floor-plan.ts`) can lay a
+ * staircase's cells out along the same diagonal its own screen geometry
+ * uses, without duplicating the four directions' signs.
+ */
+export const STEP_SIGN: Readonly<
+  Record<StaircaseDirection, { readonly x: 1 | -1; readonly y: 1 | -1 }>
+> = {
+  'up-right': { x: 1, y: -1 },
+  'up-left': { x: -1, y: -1 },
+  'down-right': { x: 1, y: 1 },
+  'down-left': { x: -1, y: 1 },
+};
 
 /**
  * The two wall edges of the *first* step that the interior overlap never
@@ -74,6 +81,90 @@ export interface StaircaseRoomTemplate {
   readonly endDoor: DoorDirection;
 }
 
+/**
+ * The content-authoring format for a staircase (#112's generator-placement
+ * follow-up): everything `StaircaseRoomTemplate` needs to compile, plus the
+ * same `floorTags`/`weight` metadata `RoomTemplate.metadata` carries — the
+ * floor generator (`sim/room/floor-plan.ts`) needs both to pick a staircase
+ * for a given floor's `floorTag` the same way it already picks a `RoomShape`
+ * template.
+ */
+export interface StaircaseContentTemplate extends StaircaseRoomTemplate {
+  readonly floorTags: readonly string[];
+  readonly weight: number;
+}
+
+/**
+ * Validates raw JSON content into a `StaircaseContentTemplate`. Mirrors
+ * `template.ts`'s `validateRoomTemplate` for the metadata fields every
+ * authored room shares (`id`/`floorTags`/`weight`); the staircase-specific
+ * fields (`stepCount`/`direction`/`startDoor`/`endDoor`) are validated by
+ * `compileStaircaseRoom` itself, called once here so there is exactly one
+ * place those rules live rather than a second copy — except `stepCount`'s
+ * parity, which only matters *here*, for the generator-placement path (see
+ * below), not for a hand-placed staircase compiled directly.
+ *
+ * `stepCount` must be **odd**. A staircase's real screen-space span is
+ * `1 + (stepCount - 1) * STAIR_STEP_OVERLAP` grid cells; `floor-plan.ts`'s
+ * `placeStaircase` reserves `Math.ceil` of that as whole floor-grid cells,
+ * so the two agree exactly only when that span is already a whole number —
+ * true iff `stepCount` is odd, given `STAIR_STEP_OVERLAP` is `0.5`. Get that
+ * wrong (as the first two authored templates did, at `stepCount: 4`) and the
+ * reservation has to round up half a cell past where the real geometry
+ * actually ends, which is exactly the gap a neighbouring room's door then
+ * shows on the minimap — no drawing fix closes that; only the sizes
+ * agreeing in the first place does.
+ */
+export function validateStaircaseTemplate(
+  value: unknown,
+  source = 'staircase template',
+): StaircaseContentTemplate {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error(`${source} must be an object`);
+  }
+  const record = value as Record<string, unknown>;
+
+  const id = record.id;
+  if (typeof id !== 'string' || id.trim() === '') {
+    throw new Error(`${source}.id must be a non-empty string`);
+  }
+
+  if (typeof record.stepCount === 'number' && record.stepCount % 2 === 0) {
+    throw new Error(
+      `${source}.stepCount must be odd (got ${String(record.stepCount)}) — an even stepCount ` +
+        `leaves the floor generator's cell reservation half a cell larger than the real ` +
+        `geometry, which draws as a gap to whatever room ends up past its door`,
+    );
+  }
+
+  const floorTags = record.floorTags;
+  if (
+    !Array.isArray(floorTags) ||
+    floorTags.length === 0 ||
+    floorTags.some((tag) => typeof tag !== 'string')
+  ) {
+    throw new Error(`${source}.floorTags must be a non-empty array of strings`);
+  }
+
+  const weight = record.weight;
+  if (typeof weight !== 'number' || !Number.isFinite(weight) || weight <= 0) {
+    throw new Error(`${source}.weight must be a finite number greater than zero`);
+  }
+
+  const template: StaircaseRoomTemplate = {
+    id,
+    stepCount: record.stepCount as number,
+    direction: record.direction as StaircaseDirection,
+    startDoor: record.startDoor as DoorDirection,
+    endDoor: record.endDoor as DoorDirection,
+  };
+  // Throws with a descriptive message on anything wrong with the
+  // staircase-specific fields — the one source of truth for those rules.
+  compileStaircaseRoom(template);
+
+  return { ...template, floorTags: floorTags as readonly string[], weight };
+}
+
 export interface CompiledStaircaseDoor {
   readonly direction: DoorDirection;
   readonly x: number;
@@ -85,6 +176,85 @@ export interface CompiledStaircaseRoom {
   readonly geometry: RoomGeometry;
   readonly startDoor: CompiledStaircaseDoor;
   readonly endDoor: CompiledStaircaseDoor;
+  /**
+   * Always empty for now — no staircase content has been authored with any
+   * of this yet (#112's own scope note). Present purely so `GameSim.loadRoom`
+   * can iterate a staircase's compiled room the same way it iterates a
+   * `CompiledRoomTemplate`'s, without a separate code path for "has no
+   * content."
+   */
+  readonly enemySpawns: readonly {
+    readonly x: number;
+    readonly y: number;
+    readonly enemyId: string;
+  }[];
+  readonly pickupSpawns: readonly {
+    readonly x: number;
+    readonly y: number;
+    readonly type: string;
+    readonly price?: number;
+  }[];
+  readonly decorativeProps: readonly {
+    readonly x: number;
+    readonly y: number;
+    readonly type: string;
+    readonly rotation?: number;
+  }[];
+  readonly hazards: readonly {
+    readonly x: number;
+    readonly y: number;
+    readonly width: number;
+    readonly height: number;
+    readonly type: string;
+  }[];
+}
+
+/**
+ * The two rectangles that are inside `a` and `b`'s combined bounding box but
+ * outside *both* rects — real wall, not floor, even though `isClear`'s own
+ * union check (below) already treats them as such.
+ *
+ * These are what `sim/systems/motion.ts`'s primary wall resolver
+ * (`resolveAxisX`/`resolveAxisY`) actually needs: unlike every other system
+ * that calls `RoomGeometry.isClear`, the player and enemy movement resolver
+ * only ever consults `minX`/`maxX`/`minY`/`maxY` and `blocks` — it has no
+ * idea `stepRects` exists, so without these two rects registered as real
+ * blocks (`geometry.addBlock`, below), nothing stops a body from walking
+ * straight through the "slack" between two steps despite `isClear` correctly
+ * rejecting it as a query.
+ *
+ * Because consecutive steps are the same size and offset by a constant
+ * diagonal step, the two gaps are always exactly the rectangle spanned
+ * between the rects' near corners and the rectangle spanned between their
+ * far corners — which pair of corners ("min/min + max/max" vs. "min/max +
+ * max/min") depends on whether the step direction moves both axes the same
+ * way or opposite ways, so this derives it from the rects themselves rather
+ * than switching on `StaircaseDirection`.
+ */
+function seamVoidRects(a: RoomRect, b: RoomRect): RoomRect[] {
+  const bboxMinX = Math.min(a.minX, b.minX);
+  const bboxMaxX = Math.max(a.maxX, b.maxX);
+  const bboxMinY = Math.min(a.minY, b.minY);
+  const bboxMaxY = Math.max(a.maxY, b.maxY);
+
+  const slices: readonly [minX: number, maxX: number, owner: RoomRect][] = [
+    [bboxMinX, Math.max(a.minX, b.minX), a.minX < b.minX ? a : b],
+    [Math.min(a.maxX, b.maxX), bboxMaxX, a.maxX > b.maxX ? a : b],
+  ];
+
+  const voids: RoomRect[] = [];
+  for (const [minX, maxX, owner] of slices) {
+    if (maxX <= minX) {
+      continue;
+    }
+    if (owner.minY > bboxMinY) {
+      voids.push({ minX, maxX, minY: bboxMinY, maxY: owner.minY });
+    }
+    if (owner.maxY < bboxMaxY) {
+      voids.push({ minX, maxX, minY: owner.maxY, maxY: bboxMaxY });
+    }
+  }
+  return voids;
 }
 
 export function compileStaircaseRoom(template: StaircaseRoomTemplate): CompiledStaircaseRoom {
@@ -136,14 +306,26 @@ export function compileStaircaseRoom(template: StaircaseRoomTemplate): CompiledS
     maxY: rect.maxY + shiftY,
   }));
 
+  const voidRects: RoomRect[] = [];
+  for (let step = 0; step < stepRects.length - 1; step++) {
+    const current = stepRects[step];
+    const next = stepRects[step + 1];
+    if (current !== undefined && next !== undefined) {
+      voidRects.push(...seamVoidRects(current, next));
+    }
+  }
+
   const geometry = new RoomGeometry(
     ROOM_MARGIN_X,
     ROOM_MARGIN_Y,
     boundMaxX - boundMinX + ROOM_MARGIN_X,
     boundMaxY - boundMinY + ROOM_MARGIN_Y,
-    [],
+    voidRects,
     stepRects,
   );
+  for (const voidRect of voidRects) {
+    geometry.addBlock(voidRect.minX, voidRect.minY, voidRect.maxX, voidRect.maxY);
+  }
 
   const firstStep = stepRects[0];
   const lastStep = stepRects[stepRects.length - 1];
@@ -156,6 +338,10 @@ export function compileStaircaseRoom(template: StaircaseRoomTemplate): CompiledS
     geometry,
     startDoor: { direction: template.startDoor, ...stepDoorCentre(firstStep, template.startDoor) },
     endDoor: { direction: template.endDoor, ...stepDoorCentre(lastStep, template.endDoor) },
+    enemySpawns: [],
+    pickupSpawns: [],
+    decorativeProps: [],
+    hazards: [],
   };
 }
 

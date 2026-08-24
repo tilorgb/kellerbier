@@ -16,8 +16,10 @@ import {
 import {
   STAIR_STEP_OVERLAP,
   compileStaircaseRoom,
+  validateStaircaseTemplate,
   type StaircaseRoomTemplate,
 } from '../../src/sim/room/staircase.js';
+import { resolveAxisX, resolveAxisY } from '../../src/sim/systems/motion.js';
 import {
   MULTI_CELL_COUNT,
   ROOM_COLUMNS,
@@ -283,5 +285,63 @@ describe('compileStaircaseRoom (#112)', () => {
 
   it('rejects fewer than two steps', () => {
     expect(() => compileStaircaseRoom({ ...template, stepCount: 1 })).toThrow(/stepCount/);
+  });
+
+  it('registers the gap at every seam as a real block, not just the isClear union check', () => {
+    // `isClear`'s stepRects union check is what every *other* system queries
+    // (spawning, corner nudges, shooting range), but the player/enemy wall
+    // resolver (`sim/systems/motion.ts`'s `resolveAxisX`/`resolveAxisY`,
+    // shared by `moveBody`) has no idea `stepRects` exists — it only ever
+    // consults `blocks`. Without a real block registered at every seam
+    // (`seamVoidRects`), nothing stops a body from walking straight through
+    // the "slack" between two steps despite `isClear` correctly rejecting it
+    // as a query.
+    const compiled = compileStaircaseRoom(template);
+    const { geometry } = compiled;
+    expect(geometry.blockCount).toBe(2 * (template.stepCount - 1));
+    expect(geometry.voidRects).toHaveLength(geometry.blockCount);
+
+    const radius = 8;
+    for (const voidRect of geometry.voidRects) {
+      const centreX = (voidRect.minX + voidRect.maxX) / 2;
+      const centreY = (voidRect.minY + voidRect.maxY) / 2;
+      // The same two-phase resolution `moveBody` runs: X first, then Y off
+      // whatever X already resolved to.
+      const resolvedX = resolveAxisX(geometry, centreX, centreY, radius, 1);
+      const resolvedY = resolveAxisY(geometry, resolvedX, centreY, radius, 1);
+      const clearOfVoidX =
+        resolvedX + radius <= voidRect.minX || resolvedX - radius >= voidRect.maxX;
+      const clearOfVoidY =
+        resolvedY + radius <= voidRect.minY || resolvedY - radius >= voidRect.maxY;
+      expect(clearOfVoidX || clearOfVoidY, `void ${JSON.stringify(voidRect)}`).toBe(true);
+    }
+  });
+});
+
+describe('validateStaircaseTemplate (#112)', () => {
+  const content = {
+    id: 'synthetic-staircase',
+    stepCount: 5,
+    direction: 'up-right',
+    startDoor: 'south',
+    endDoor: 'north',
+    floorTags: ['cellar'],
+    weight: 1,
+  };
+
+  it('accepts an odd stepCount', () => {
+    expect(() => validateStaircaseTemplate(content)).not.toThrow();
+  });
+
+  it('rejects an even stepCount', () => {
+    // The floor generator's cell reservation (`floor-plan.ts`'s
+    // `placeStaircase`, `Math.ceil` of the real screen-space span) only
+    // agrees exactly with the real geometry when that span is already a
+    // whole number of cells — true iff `stepCount` is odd, given
+    // `STAIR_STEP_OVERLAP` is `0.5`. An even `stepCount` leaves the
+    // reservation half a cell bigger than the real shape, which is exactly
+    // the gap a neighbouring room's door showed on the minimap before this
+    // existed.
+    expect(() => validateStaircaseTemplate({ ...content, stepCount: 4 })).toThrow(/stepCount/);
   });
 });

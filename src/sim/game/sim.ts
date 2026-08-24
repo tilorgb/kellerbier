@@ -29,6 +29,7 @@ import {
 } from './promille.js';
 import { DOOR_SPAN, type RoomGeometry } from '../room/geometry.js';
 import { createPlaygroundRoom } from '../room/playground.js';
+import { compileStaircaseRoom, validateStaircaseTemplate } from '../room/staircase.js';
 import {
   SCREEN_HEIGHT,
   SCREEN_WIDTH,
@@ -117,6 +118,14 @@ const DOOR_SPAWN_SAFETY_RADIUS = 48;
 
 export type RoomDirection = 'north' | 'east' | 'south' | 'west';
 
+/** Used only by `doorEntryPoint`'s staircase branch — see its doc comment. */
+const OPPOSITE_ROOM_DIRECTION: Readonly<Record<RoomDirection, RoomDirection>> = {
+  north: 'south',
+  south: 'north',
+  east: 'west',
+  west: 'east',
+};
+
 /**
  * Identifies one specific door — `(cellCol, cellRow, direction)` — rather
  * than just its direction. A multi-cell room (#100) can have two doors
@@ -158,6 +167,14 @@ export interface GameSimOptions {
   readonly floor?: number;
   /** Doors to load hidden — see `loadRoom`'s `hiddenDoors` parameter. */
   readonly hiddenDoors?: readonly Pick<CompiledDoor, 'direction' | 'cellCol' | 'cellRow'>[];
+  /**
+   * Loads `roomTemplate` with no enemies or pickups, whatever it authors —
+   * a run's very first room reads as a quick, safe tutorial beat rather than
+   * the first real encounter, without needing a separate authored template
+   * or role for it. Never applies to `transitionTo`/`loadStaircaseRoom` —
+   * only the room a fresh `GameSim` boots directly into.
+   */
+  readonly suppressRoomContent?: boolean;
   /** Projectile pool size. Lowered by tests that want to watch it overflow. */
   readonly projectileCapacity?: number;
   readonly particleCapacity?: number;
@@ -504,7 +521,15 @@ export class GameSim {
 
     this.playerHandle = this.spawnPlayer();
     if (options.roomTemplate !== undefined) {
-      this.loadRoom(options.roomTemplate, options.floor ?? 1, null, options.hiddenDoors ?? []);
+      this.loadRoom(
+        options.roomTemplate,
+        options.floor ?? 1,
+        null,
+        options.hiddenDoors ?? [],
+        undefined,
+        { col: 0, row: 0 },
+        options.suppressRoomContent ?? false,
+      );
     } else {
       const population = options.population ?? 'targets';
       if (population === 'enemies') {
@@ -655,6 +680,7 @@ export class GameSim {
     hiddenDoors: readonly Pick<CompiledDoor, 'direction' | 'cellCol' | 'cellRow'>[] = [],
     placement?: RoomPlacement,
     entryCell: { readonly col: number; readonly row: number } = { col: 0, row: 0 },
+    suppressContent = false,
   ): void {
     const compiled = compileRoomTemplate(
       template,
@@ -663,9 +689,176 @@ export class GameSim {
       ENEMY_DEFINITIONS,
       placement,
     );
+    this.applyCompiledRoom(
+      {
+        geometry: compiled.geometry,
+        id: compiled.source.id,
+        specialRole: compiled.source.metadata.specialRole,
+        doors: compiled.doors,
+        enemySpawns: suppressContent ? [] : compiled.enemySpawns,
+        pickupSpawns: suppressContent ? [] : compiled.pickupSpawns,
+        decorativeProps: compiled.decorativeProps,
+      },
+      floor,
+      direction,
+      hiddenDoors,
+      entryCell,
+    );
+  }
+
+  /**
+   * Loads the next room only when its matching door exists, this room is
+   * clear, and — for a key-locked treasure room — a Kellerschlüssel is spent
+   * to open it. The key is spent only once every other check has passed, so
+   * a blocked transition (wrong direction, enemies still up, no key) never
+   * costs one.
+   */
+  transitionTo(
+    template: unknown,
+    floor: number,
+    direction: RoomDirection,
+    hiddenDoors: readonly Pick<CompiledDoor, 'direction' | 'cellCol' | 'cellRow'>[] = [],
+    placement?: RoomPlacement,
+    entryCell?: { readonly col: number; readonly row: number },
+  ): boolean {
+    if (!this.roomTemplateLoaded || this.doorsLocked || !this.hasDoor(direction)) {
+      return false;
+    }
+    const destination = compileRoomTemplate(
+      template,
+      floor,
+      'room template',
+      ENEMY_DEFINITIONS,
+      placement,
+    );
+    if (destination.source.metadata.keyLocked === true && !this.spendKeys(1)) {
+      return false;
+    }
+    this.roomClearedIds.add(this.roomId);
+    this.loadRoom(template, floor, direction, hiddenDoors, placement, entryCell);
+    return true;
+  }
+
+  /**
+   * `loadRoom`'s staircase counterpart (#112) — a staircase is never a
+   * `RoomTemplate` (`docs/DECISIONS.md` #11/#12), so it compiles through
+   * `compileStaircaseRoom` instead, and it never carries a `RoomPlacement`
+   * or a non-default `entryCell` (it is never a multi-cell *shape*-family
+   * room and always has exactly one door per direction). Its two doors are
+   * synthesised as `CompiledDoor`s with a precomputed `centre` — see
+   * `CompiledDoor.centre`'s doc comment — so every other door-facing system
+   * (`doors`, `doorContact`, rendering) needs no staircase-specific branch of
+   * its own.
+   */
+  loadStaircaseRoom(
+    template: unknown,
+    floor = 1,
+    direction: RoomDirection | null = null,
+    hiddenDoors: readonly Pick<CompiledDoor, 'direction' | 'cellCol' | 'cellRow'>[] = [],
+  ): void {
+    const compiled = compileStaircaseRoom(
+      validateStaircaseTemplate(template, 'staircase template'),
+    );
+    this.applyCompiledRoom(
+      {
+        geometry: compiled.geometry,
+        id: compiled.source.id,
+        specialRole: undefined,
+        doors: [
+          {
+            direction: compiled.startDoor.direction,
+            cellCol: 0,
+            cellRow: 0,
+            centre: { x: compiled.startDoor.x, y: compiled.startDoor.y },
+          },
+          {
+            direction: compiled.endDoor.direction,
+            cellCol: 0,
+            cellRow: 0,
+            centre: { x: compiled.endDoor.x, y: compiled.endDoor.y },
+          },
+        ],
+        enemySpawns: compiled.enemySpawns,
+        pickupSpawns: compiled.pickupSpawns,
+        decorativeProps: compiled.decorativeProps,
+      },
+      floor,
+      direction,
+      hiddenDoors,
+      { col: 0, row: 0 },
+    );
+  }
+
+  /** `transitionTo`'s staircase counterpart — see `loadStaircaseRoom`. No staircase is ever key-locked (none is authored with any content yet). */
+  transitionToStaircase(
+    template: unknown,
+    floor: number,
+    direction: RoomDirection,
+    hiddenDoors: readonly Pick<CompiledDoor, 'direction' | 'cellCol' | 'cellRow'>[] = [],
+  ): boolean {
+    if (!this.roomTemplateLoaded || this.doorsLocked || !this.hasDoor(direction)) {
+      return false;
+    }
+    this.roomClearedIds.add(this.roomId);
+    this.loadStaircaseRoom(template, floor, direction, hiddenDoors);
+    return true;
+  }
+
+  /**
+   * Shared by `loadRoom` and `loadStaircaseRoom`: applies a compiled room's
+   * geometry/doors/content, whatever compiled it, preserving the player and
+   * run state while replacing the room's contents.
+   *
+   * `hiddenDoors` — specific doors the template itself has, but which load
+   * closed and solid rather than open, and remembered in `bombableWalls` so
+   * a nearby Bierfassl blast can reveal them (`revealBombableWalls`, called
+   * from `sim/systems/bombs.ts`). This is how a secret/supersecret room
+   * connects: not a different door shape, the same door drawn shut until
+   * bombed. The caller (`app/main.ts`, which owns the floor plan) decides
+   * which doors those are for the room it's loading — `GameSim` only knows
+   * one room's template at a time. Identified by `(cellCol, cellRow,
+   * direction)`, not direction alone: a multi-cell room (#100) can have two
+   * doors sharing a direction on different cells, and hiding one must never
+   * hide the other.
+   *
+   * `entryCell` only matters for a multi-cell `RoomShape` room (#100): the
+   * app layer, which owns the floor plan, picks it so the player lands on
+   * the correct sub-room's wall when walking in through a specific door, not
+   * always the room's first cell. `{ col: 0, row: 0 }` for every other room,
+   * staircase included.
+   */
+  private applyCompiledRoom(
+    compiled: {
+      readonly geometry: RoomGeometry;
+      readonly id: string;
+      readonly specialRole: RoomSpecialRole | undefined;
+      readonly doors: readonly CompiledDoor[];
+      readonly enemySpawns: readonly {
+        readonly x: number;
+        readonly y: number;
+        readonly enemyId: string;
+      }[];
+      readonly pickupSpawns: readonly {
+        readonly x: number;
+        readonly y: number;
+        readonly type: string;
+        readonly price?: number;
+      }[];
+      readonly decorativeProps: readonly {
+        readonly x: number;
+        readonly y: number;
+        readonly type: string;
+        readonly rotation?: number;
+      }[];
+    },
+    floor: number,
+    direction: RoomDirection | null,
+    hiddenDoors: readonly Pick<CompiledDoor, 'direction' | 'cellCol' | 'cellRow'>[],
+    entryCell: { readonly col: number; readonly row: number },
+  ): void {
     this.clearRoomEntities();
     this.room = compiled.geometry;
-    this.roomId = compiled.source.id;
+    this.roomId = compiled.id;
     this.roomDoors = compiled.doors;
     this.bombableWalls.clear();
     for (const hidden of hiddenDoors) {
@@ -679,7 +872,7 @@ export class GameSim {
         this.bombableWalls.set(doorKey(match), match);
       }
     }
-    this.roomSpecialRole = compiled.source.metadata.specialRole;
+    this.roomSpecialRole = compiled.specialRole;
     this.roomTemplateLoaded = true;
     this.roomTransitionTicks = direction === null ? 0 : ROOM_TRANSITION_TICKS;
     this.roomTransitionDirection = direction;
@@ -732,39 +925,6 @@ export class GameSim {
     this.world.flush();
   }
 
-  /**
-   * Loads the next room only when its matching door exists, this room is
-   * clear, and — for a key-locked treasure room — a Kellerschlüssel is spent
-   * to open it. The key is spent only once every other check has passed, so
-   * a blocked transition (wrong direction, enemies still up, no key) never
-   * costs one.
-   */
-  transitionTo(
-    template: unknown,
-    floor: number,
-    direction: RoomDirection,
-    hiddenDoors: readonly Pick<CompiledDoor, 'direction' | 'cellCol' | 'cellRow'>[] = [],
-    placement?: RoomPlacement,
-    entryCell?: { readonly col: number; readonly row: number },
-  ): boolean {
-    if (!this.roomTemplateLoaded || this.doorsLocked || !this.hasDoor(direction)) {
-      return false;
-    }
-    const destination = compileRoomTemplate(
-      template,
-      floor,
-      'room template',
-      ENEMY_DEFINITIONS,
-      placement,
-    );
-    if (destination.source.metadata.keyLocked === true && !this.spendKeys(1)) {
-      return false;
-    }
-    this.roomClearedIds.add(this.roomId);
-    this.loadRoom(template, floor, direction, hiddenDoors, placement, entryCell);
-    return true;
-  }
-
   private hasDoor(direction: RoomDirection): boolean {
     return this.doors.some((door) => door.direction === direction);
   }
@@ -808,6 +968,29 @@ export class GameSim {
         x: (this.room.minX + this.room.maxX) / 2,
         y: (this.room.minY + this.room.maxY) / 2,
       };
+    }
+    if (this.room.stepRects.length > 0) {
+      // A staircase (#112) has no floor-grid cell of its own for the normal
+      // `entryCell`-relative math below to land on — its own door already
+      // carries its exact position (`loadStaircaseRoom`'s `centre`), so use
+      // that directly. The door on the wall the player is walking *in*
+      // through faces the opposite compass way from `direction` (moving
+      // north means entering through this room's *south*-facing door) —
+      // same convention `doorCentre`'s own north/south/east/west cases use.
+      const wallDirection = OPPOSITE_ROOM_DIRECTION[direction];
+      const door = this.roomDoors.find((candidate) => candidate.direction === wallDirection);
+      if (door?.centre !== undefined) {
+        switch (wallDirection) {
+          case 'north':
+            return { x: door.centre.x, y: door.centre.y + PLAYER_RADIUS + 1 };
+          case 'south':
+            return { x: door.centre.x, y: door.centre.y - PLAYER_RADIUS - 1 };
+          case 'east':
+            return { x: door.centre.x - PLAYER_RADIUS - 1, y: door.centre.y };
+          case 'west':
+            return { x: door.centre.x + PLAYER_RADIUS + 1, y: door.centre.y };
+        }
+      }
     }
     const cellCentreX = this.room.minX + entryCell.col * SCREEN_WIDTH + SCREEN_WIDTH / 2;
     const cellCentreY = this.room.minY + entryCell.row * SCREEN_HEIGHT + SCREEN_HEIGHT / 2;

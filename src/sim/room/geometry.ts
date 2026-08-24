@@ -43,7 +43,10 @@ export class RoomGeometry {
    * The grid slots a shape's bounding box doesn't claim (#107) — empty for a
    * fully-rectangular shape (`1x1`/`1x2`/`2x2`), one entry for `L` (#100's
    * #20 footprint: `2x2` minus a corner), several for `T` (#107: a 3x3 box
-   * minus 4 corners).
+   * minus 4 corners), and for a diagonal staircase (#112) the two small
+   * corner gaps at every seam between consecutive steps
+   * (`sim/room/staircase.ts`'s `seamVoidRects`) — the slack `stepRects`'
+   * union doesn't cover but this rectangle's bounding box does.
    *
    * Already carved out of `isClear`/collision as ordinary blocks (see
    * `sim/room/template.ts`'s `compileRoomTemplate`); this is exposed
@@ -62,15 +65,17 @@ export class RoomGeometry {
   /**
    * A diagonal staircase room's walkable area (#112): the union of its
    * per-step screen rects, each overlapping the next by real edge area
-   * (`sim/room/staircase.ts`'s `compileStaircaseRoom`) rather than the
-   * bounding-box-minus-voids `voidRects` above use. Empty for every other
-   * room. When non-empty, `isClear` requires the whole circle fit inside at
-   * least one step rect instead of inside the outer `minX`/`maxX` bound —
-   * see `isClear`'s comment for why that is sound even though it is
-   * conservative right at a seam between two steps. `minX`/`minY`/`maxX`/
-   * `maxY` still hold the bounding box of every step, for `roomFrameSize`
-   * and rendering — unwalkable slack inside that box reads as an ordinary
-   * wall, same precedent as `voidRects` (see that field's comment).
+   * (`sim/room/staircase.ts`'s `compileStaircaseRoom`). Empty for every
+   * other room. When non-empty, `isClear` *additionally* requires the whole
+   * circle fit inside at least one step rect, on top of the ordinary
+   * `voidRects`-derived `blocks` check above — belt and suspenders: the
+   * `voidRects` gaps (`seamVoidRects`) are what `sim/systems/motion.ts`'s
+   * primary wall resolver actually reads (it knows nothing about
+   * `stepRects`), while this union check is what makes `isClear` itself
+   * exact rather than merely "not inside a known gap" for every other
+   * caller. Conservative right at a seam — see `isClear`'s comment. `minX`/
+   * `minY`/`maxX`/`maxY` still hold the bounding box of every step, for
+   * `roomFrameSize` and rendering.
    */
   readonly stepRects: readonly RoomRect[];
 

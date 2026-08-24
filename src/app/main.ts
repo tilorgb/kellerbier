@@ -2,10 +2,11 @@ import { Assets, Container, Text, type Texture } from 'pixi.js';
 import massUrl from '../../assets/sprites/mass.png';
 import { ENEMY_DEFINITIONS } from '../content/enemies/index.js';
 import { FLOOR_CONFIGS, type FloorConfig } from '../content/floors/definition.js';
-import { ROOM_TEMPLATES } from '../content/rooms/index.js';
+import { ROOM_TEMPLATES, STAIRCASE_TEMPLATES, type DoorDirection } from '../content/rooms/index.js';
 import { type RoomDirection, GameSim, MAX_COLLIDER_RADIUS } from '../sim/game/sim.js';
 import { promilleTierName } from '../sim/game/promille.js';
 import { type FloorPlan, type FloorPlanRoom, generateFloor } from '../sim/room/floor-plan.js';
+import { compileStaircaseRoom, validateStaircaseTemplate } from '../sim/room/staircase.js';
 import {
   type CompiledDoor,
   type RoomPlacement,
@@ -48,6 +49,14 @@ const ROOM_TEMPLATE_POOL = ROOM_TEMPLATES.map((room, index) =>
 );
 const TEMPLATES_BY_ID = new Map(ROOM_TEMPLATE_POOL.map((template) => [template.id, template]));
 
+/** The staircase content pool (#112), through the same typed boundary as `ROOM_TEMPLATE_POOL`. */
+const STAIRCASE_TEMPLATE_POOL = STAIRCASE_TEMPLATES.map((room, index) =>
+  validateStaircaseTemplate(room, `staircase[${String(index)}]`),
+);
+const STAIRCASE_TEMPLATES_BY_ID = new Map(
+  STAIRCASE_TEMPLATE_POOL.map((template) => [template.id, template]),
+);
+
 function floorConfig(floorNumber: number): FloorConfig {
   const config = FLOOR_CONFIGS.find((candidate) => candidate.floor === floorNumber);
   if (config === undefined) {
@@ -72,6 +81,35 @@ function planTemplate(room: FloorPlanRoom): unknown {
     );
   }
   return template;
+}
+
+/** `planTemplate`'s staircase counterpart (#112) — `room.staircaseTemplateId` must be set. */
+function planStaircaseTemplate(room: FloorPlanRoom): unknown {
+  const id = room.staircaseTemplateId;
+  const template = id === undefined ? undefined : STAIRCASE_TEMPLATES_BY_ID.get(id);
+  if (template === undefined) {
+    throw new Error(
+      `floor plan room "${room.id}" references unknown staircase template "${String(id)}"`,
+    );
+  }
+  return template;
+}
+
+/**
+ * A staircase room's two doors, each with its real pixel centre
+ * (`compileStaircaseRoom`'s `startDoor`/`endDoor`) — `hiddenDoorsFor`/
+ * `crackHintsFor` need this because a staircase has no floor-grid cell for
+ * `doorCentre`'s normal cell-relative formula to place a door against
+ * (`CompiledDoor.centre`'s doc comment).
+ */
+function staircaseDoorCentres(
+  room: FloorPlanRoom,
+): ReadonlyMap<DoorDirection, { x: number; y: number }> {
+  const compiled = compileStaircaseRoom(validateStaircaseTemplate(planStaircaseTemplate(room)));
+  return new Map([
+    [compiled.startDoor.direction, { x: compiled.startDoor.x, y: compiled.startDoor.y }],
+    [compiled.endDoor.direction, { x: compiled.endDoor.x, y: compiled.endDoor.y }],
+  ]);
 }
 
 /** Cell offset each compass direction moves by, on the floor's own grid. */
@@ -129,7 +167,15 @@ function hiddenDoorsFor(
   if (room.role === 'secret' || room.role === 'supersecret') {
     return [];
   }
-  const placement = buildPlacement(room);
+  // A staircase (#112) has no real floor-grid cell for `buildPlacement`'s
+  // col/row math to place a door against — its two doors are always
+  // `(cellCol: 0, cellRow: 0)` in `GameSim.loadStaircaseRoom`'s synthesised
+  // `CompiledDoor`s (see that method's doc comment), each with its real
+  // pixel `centre` (`staircaseDoorCentres`) instead — match and render off
+  // that directly rather than running them through `buildPlacement`.
+  const placement = room.staircaseTemplateId === undefined ? buildPlacement(room) : null;
+  const staircaseCentres =
+    room.staircaseTemplateId === undefined ? null : staircaseDoorCentres(room);
   const hidden: CompiledDoor[] = [];
   for (const door of room.doors) {
     const neighbor = planRoom(plan, door.neighborRoomId);
@@ -137,7 +183,17 @@ function hiddenDoorsFor(
     if (!isSecretEdge || revealedEdges.has(edgeKey(roomId, door.neighborRoomId))) {
       continue;
     }
-    const cell = placement.cells[door.cellIndex];
+    if (staircaseCentres !== null) {
+      const centre = staircaseCentres.get(door.direction);
+      hidden.push({
+        direction: door.direction,
+        cellCol: 0,
+        cellRow: 0,
+        ...(centre === undefined ? {} : { centre }),
+      });
+      continue;
+    }
+    const cell = placement?.cells[door.cellIndex];
     if (cell === undefined) {
       continue;
     }
@@ -163,7 +219,9 @@ function crackHintsFor(
   revealedEdges: ReadonlySet<string>,
 ): CompiledDoor[] {
   const room = planRoom(plan, roomId);
-  const placement = buildPlacement(room);
+  const placement = room.staircaseTemplateId === undefined ? buildPlacement(room) : null;
+  const staircaseCentres =
+    room.staircaseTemplateId === undefined ? null : staircaseDoorCentres(room);
   const hints: CompiledDoor[] = [];
   for (const door of room.doors) {
     if (planRoom(plan, door.neighborRoomId).role !== 'secret') {
@@ -172,7 +230,17 @@ function crackHintsFor(
     if (revealedEdges.has(edgeKey(roomId, door.neighborRoomId))) {
       continue;
     }
-    const cell = placement.cells[door.cellIndex];
+    if (staircaseCentres !== null) {
+      const centre = staircaseCentres.get(door.direction);
+      hints.push({
+        direction: door.direction,
+        cellCol: 0,
+        cellRow: 0,
+        ...(centre === undefined ? {} : { centre }),
+      });
+      continue;
+    }
+    const cell = placement?.cells[door.cellIndex];
     if (cell === undefined) {
       continue;
     }
@@ -194,35 +262,34 @@ async function boot(): Promise<void> {
     data: { scaleMode: 'nearest' },
   });
 
-  // The run seed is fixed until seeded runs land in #48. Everything downstream
-  // of it already behaves as though it were chosen, which is the point — the
-  // floor below is generated from this same seed's `RngStream.Floor` stream
-  // (see `src/sim/rng/streams.ts`), so it is exactly as reproducible as the
-  // rest of the run.
-  //
-  // Seed 11 specifically: re-swept for #107, whose `T` shape and rebalanced
-  // `chooseShape` weights shifted which seeds roll what (the previous pick,
-  // seed 15, stopped rolling `L` under the new weights). Seed 11 is the
-  // first hit that rolls all five shapes — 1x1, 1x2, 2x2, L and T — on floor
-  // 1, showcasing #20, #100's camera-follow and #107's `T` room together.
-  // Re-sweep if a future content or generator change ever makes this seed
-  // specifically fail (`tests/unit/floor-plan.test.ts`'s "the dev demo's
-  // fixed seed generates a valid floor 1" guards exactly that).
-  const RUN_SEED = 11;
-  const floorPlan = generateFloor(
-    createStreamRng(RUN_SEED, RngStream.Floor),
-    floorConfig(1),
-    ROOM_TEMPLATE_POOL,
-  );
-  let currentRoomId = floorPlan.startRoomId;
+  // The run seed: fixed via the page's `?seed=` query param when present,
+  // otherwise freshly randomised on every load — proper seeded runs are #48,
+  // this is the dev-only stopgap that makes "here's a seed that breaks"
+  // actionable before then. Everything downstream of it already behaves as
+  // though it were chosen, which is the point — the floor below is generated
+  // from this same seed's `RngStream.Floor` stream (see
+  // `src/sim/rng/streams.ts`), so it is exactly as reproducible as the rest
+  // of the run. The current seed is always shown in `hud` (`refreshHud`,
+  // below) so a run that misbehaves can be reported by seed number alone.
+  // `#seed-input` (`index.html`) and the `R` key (below) both restart the run
+  // in place via `startRun` — no page reload, so no `?seed=` URL/storage
+  // plumbing is needed for either.
+  const seedParam = new URLSearchParams(location.search).get('seed');
+  const parsedSeed = seedParam === null ? Number.NaN : Number(seedParam);
+  let RUN_SEED = Number.isFinite(parsedSeed)
+    ? Math.trunc(parsedSeed)
+    : Math.floor(Math.random() * 1_000_000);
+  const seedInput = document.getElementById('seed-input');
+
   // Rooms `N` has already stepped into. Preferring an unvisited neighbour
   // over a fixed door order turns the walk into a real depth-first tour of
   // the floor — without it, standing in any dead end (a treasure or shop
   // room always is one) makes `N` just bounce back to wherever it came from,
   // which reads as "the generator only has one room" even though the floor
   // behind it is not.
-  const visitedRoomIds = new Set([currentRoomId]);
-
+  let floorPlan: FloorPlan;
+  let currentRoomId: string;
+  let visitedRoomIds: Set<string>;
   /**
    * Edges of the floor's room graph a secret/supersecret wall has been
    * bombed open on, keyed by `edgeKey` so either side recognizes it. Lives
@@ -230,38 +297,28 @@ async function boot(): Promise<void> {
    * in here, so a wall found once stays open on every later visit, from
    * either room it touches.
    */
-  const revealedEdges = new Set<string>();
-
+  let revealedEdges: Set<string>;
   // The room is populated with the authored roster rather than the training
   // targets: the targets are the rig impact feel was tuned against, and the
   // game is the thing with enemies in it.
-  const sim = new GameSim({
-    seed: RUN_SEED,
-    roomTemplate: planTemplate(planRoom(floorPlan, currentRoomId)),
-    floor: floorPlan.floor,
-    hiddenDoors: hiddenDoorsFor(floorPlan, currentRoomId, revealedEdges),
-  });
-  const view = new GameView(sim, {
-    player: playerTexture,
-    projectile: createBlobTexture(app.renderer, sim.tuning.shooting.shotRadius, 0xf0c46a, 0xfff3d0),
-    entity: createBlobTexture(app.renderer, MAX_COLLIDER_RADIUS, 0x7d5a3c, 0xb08056),
-    entityFlash: createBlobTexture(app.renderer, MAX_COLLIDER_RADIUS, 0xffffff, 0xffffff),
-    // White, and tinted where it is drawn — one texture for every telegraph.
-    telegraph: createRingTexture(app.renderer, EntityView.telegraphTextureRadius, 0xffffff),
-    foam: createBlobTexture(app.renderer, 2, 0xfff4dc, 0xffffff),
-    splash: createBlobTexture(app.renderer, 2, 0xd9a441, 0xf6d08a),
-    // Dark and wet, not another body. A splash the same brown as a target
-    // reads as "something is still standing there", which is the one thing a
-    // corpse marker must not do.
-    decal: createBlobTexture(app.renderer, 8, 0x3a2a12, 0x4a3618),
-    numberFont: 'monospace',
-  });
-  view.setSecretHints(crackHintsFor(floorPlan, currentRoomId, revealedEdges));
+  // Definite-assignment (`!`): both are always set by `startRun`, called
+  // synchronously below before anything reads them — `tsc` cannot see through
+  // that function call, only direct assignment in this same scope.
+  let sim!: GameSim;
+  let view!: GameView;
+  /**
+   * The player/entity/projectile textures `view` draws with. Built once,
+   * from whichever `sim` exists first — every `GameSim`'s `tuning` defaults
+   * are the same fixed values (`createTuning`), never seed-dependent, so
+   * there is nothing to rebuild here on a later `startRun` restart, only a
+   * `GameView` to hand them to.
+   */
+  let viewTextures: ConstructorParameters<typeof GameView>[1] | undefined;
+
   // Everything drawn at the game's own resolution goes in here, and this is the
   // only thing that ever gets scaled. Anything added to `app.stage` instead is
   // drawn at the display's resolution, which is what the debug panels want.
   const game = new Container();
-  game.addChild(view.stage);
   app.stage.addChild(game);
 
   // Drawn over the game rather than inside it, so its text is not made of game
@@ -357,7 +414,7 @@ async function boot(): Promise<void> {
     );
   };
 
-  const summary = new RunSummaryTracker();
+  let summary = new RunSummaryTracker();
   /**
    * Where the run is, once the player dies.
    *
@@ -439,8 +496,6 @@ async function boot(): Promise<void> {
     gameOverScreen.resize(applied);
     vignette.resize(applied);
   });
-
-  minimapHud.rebuild(floorPlan, currentRoomId, visitedRoomIds);
 
   const input = new InputSampler();
   input.keyboard.attach(window, app.canvas, pointerMapping);
@@ -532,7 +587,7 @@ async function boot(): Promise<void> {
     const warmup = sim.roomWarmupTicks > 0 ? '  WARMUP' : '';
     const currentRole = planRoom(floorPlan, currentRoomId).role;
     const keyHint = keyHintTicks > 0 ? '  NEEDS A KELLERSCHLÜSSEL' : '';
-    hud.text = `${floorPlan.floorName}  room ${sim.roomId} (${currentRole})  doors ${roomState}${warmup}${keyHint}  enemies ${String(sim.liveEnemyCount)}
+    hud.text = `seed ${String(RUN_SEED)}  ${floorPlan.floorName}  room ${sim.roomId} (${currentRole})  doors ${roomState}${warmup}${keyHint}  enemies ${String(sim.liveEnemyCount)}
   tick ${String(loop.tick)}  ${seconds}s  x${scale}${loop.paused ? '  PAUSED' : ''}
 hp ${String(hearts)}/${String(maxHearts)}  soul ${String(sim.playerSoulHealth)}  eternal ${String(sim.playerEternalHealth)}${invulnerable}${dead}
 promille ${sim.promille.toFixed(2)} ${promilleTierName(sim.promilleTier)}${knockedDown}
@@ -541,11 +596,186 @@ shots ${String(shots.liveCount)}/${String(shots.capacity)}  particles ${String(
     )}/${String(particles.capacity)}${shots.overflows > 0 ? '  SHOT OVERFLOW' : ''}
 WASD move   arrows/mouse aim and fire
   F1 debug   F2 tuning   P pause   . step   [ ] time scale
-  N next room (after clear)`;
+  N next room (after clear)   R restart (new seed)`;
   };
-  refreshHud();
-  positionHud(layout);
-  positionBossBanner(layout);
+  /**
+   * (Re)starts the run on `seed`: regenerates the floor plan and rebuilds
+   * `sim`/`view` from scratch, in place — no page reload. Called once for
+   * the initial boot, and again by the `R` key / `#seed-input` (below) for a
+   * restart, the same way Isaac's own restart key works.
+   *
+   * Everything that outlives one run (the renderer, `app`, `playerTexture`,
+   * every screen-space HUD element, `loop`, `input`) is left alone; only the
+   * run-scoped state — `floorPlan`/`currentRoomId`/`visitedRoomIds`/
+   * `revealedEdges`/`sim`/`view`, plus death/summary/key-hint bookkeeping —
+   * is torn down and rebuilt.
+   *
+   * Known gap (deliberately not fixed here — full in-run restart, including
+   * this, is #46): the F1 debug overlay, its tuning window, and the
+   * `__kellerbier` debug handle are bound once, at the very end of `boot`,
+   * to whichever `sim`/`view` exist at that moment. A restart after that
+   * point leaves them pointed at the *previous* run — reload the page to
+   * reset them, same as before this existed.
+   */
+  function startRun(seed: number): void {
+    RUN_SEED = seed;
+    if (seedInput instanceof HTMLInputElement) {
+      seedInput.value = String(RUN_SEED);
+    }
+
+    floorPlan = generateFloor(
+      createStreamRng(RUN_SEED, RngStream.Floor),
+      floorConfig(1),
+      ROOM_TEMPLATE_POOL,
+      STAIRCASE_TEMPLATE_POOL,
+    );
+    currentRoomId = floorPlan.startRoomId;
+    visitedRoomIds = new Set([currentRoomId]);
+    revealedEdges = new Set<string>();
+
+    sim = new GameSim({
+      seed: RUN_SEED,
+      roomTemplate: planTemplate(planRoom(floorPlan, currentRoomId)),
+      floor: floorPlan.floor,
+      hiddenDoors: hiddenDoorsFor(floorPlan, currentRoomId, revealedEdges),
+      // The run's very first room reads as a quick, safe tutorial beat
+      // rather than the first real encounter — no enemies, no drops,
+      // whatever the chosen template itself authors.
+      suppressRoomContent: true,
+    });
+    viewTextures ??= {
+      player: playerTexture,
+      projectile: createBlobTexture(
+        app.renderer,
+        sim.tuning.shooting.shotRadius,
+        0xf0c46a,
+        0xfff3d0,
+      ),
+      entity: createBlobTexture(app.renderer, MAX_COLLIDER_RADIUS, 0x7d5a3c, 0xb08056),
+      entityFlash: createBlobTexture(app.renderer, MAX_COLLIDER_RADIUS, 0xffffff, 0xffffff),
+      // White, and tinted where it is drawn — one texture for every telegraph.
+      telegraph: createRingTexture(app.renderer, EntityView.telegraphTextureRadius, 0xffffff),
+      foam: createBlobTexture(app.renderer, 2, 0xfff4dc, 0xffffff),
+      splash: createBlobTexture(app.renderer, 2, 0xd9a441, 0xf6d08a),
+      // Dark and wet, not another body. A splash the same brown as a target
+      // reads as "something is still standing there", which is the one
+      // thing a corpse marker must not do.
+      decal: createBlobTexture(app.renderer, 8, 0x3a2a12, 0x4a3618),
+      numberFont: 'monospace',
+    };
+    view = new GameView(sim, viewTextures);
+    game.removeChildren();
+    game.addChild(view.stage);
+    view.setSecretHints(crackHintsFor(floorPlan, currentRoomId, revealedEdges));
+    minimapHud.rebuild(floorPlan, currentRoomId, visitedRoomIds);
+
+    summary = new RunSummaryTracker();
+    deathPhase = 'alive';
+    deathPhaseTicks = 0;
+    keyHintTicks = 0;
+    bossBannerShown = false;
+    bossBanner.visible = false;
+    gameOverScreen.hide();
+    loop.reset();
+    loop.timeScale = 1;
+    loop.paused = false;
+
+    refreshHud();
+    positionHud(layout);
+    positionBossBanner(layout);
+  }
+
+  startRun(RUN_SEED);
+
+  if (seedInput instanceof HTMLInputElement) {
+    seedInput.addEventListener('change', () => {
+      const next = Math.trunc(Number(seedInput.value));
+      if (Number.isFinite(next)) {
+        startRun(next);
+      }
+    });
+  }
+
+  /**
+   * `#seed-finder` (`index.html`): each checked filter has to match before a
+   * seed counts as found, so "staircase" + "all shapes" together finds a
+   * seed with both, not either. Add a filter here and a checkbox next to it
+   * in `index.html` to extend this — nothing else needs to change.
+   */
+  const SEED_FILTERS: readonly {
+    readonly checkboxId: string;
+    readonly matches: (plan: FloorPlan) => boolean;
+  }[] = [
+    {
+      checkboxId: 'filter-staircase',
+      // Within 2 doors of the start room — close enough to actually reach
+      // and check without a real playthrough, which is the only reason this
+      // filter exists.
+      matches: (candidate) =>
+        candidate.rooms.some(
+          (room) => room.staircaseTemplateId !== undefined && room.distanceFromStart <= 2,
+        ),
+    },
+    {
+      checkboxId: 'filter-all-shapes',
+      matches: (candidate) => {
+        const shapes = new Set(candidate.rooms.map((room) => room.shape));
+        return (['1x1', '1x2', '2x2', 'L', 'T'] as const).every((shape) => shapes.has(shape));
+      },
+    },
+  ];
+  /** How many seeds past the current one to try before giving up. */
+  const MAX_SEED_SEARCH = 5_000;
+
+  const seedFindButton = document.getElementById('seed-find-button');
+  if (seedFindButton instanceof HTMLButtonElement) {
+    seedFindButton.addEventListener('click', () => {
+      const activeFilters = SEED_FILTERS.filter((filter) => {
+        const checkbox = document.getElementById(filter.checkboxId);
+        return checkbox instanceof HTMLInputElement && checkbox.checked;
+      });
+      if (activeFilters.length === 0) {
+        return;
+      }
+      seedFindButton.disabled = true;
+      const originalLabel = 'find';
+      seedFindButton.textContent = 'searching…';
+      // Deferred one tick so the disabled/"searching…" state actually paints
+      // before the search itself — generateFloor is fast per call, but a
+      // few thousand of them in a row on the main thread still take a
+      // perceptible moment.
+      window.setTimeout(() => {
+        let found: number | null = null;
+        for (let seed = RUN_SEED + 1; seed <= RUN_SEED + MAX_SEED_SEARCH; seed++) {
+          let candidate: FloorPlan;
+          try {
+            candidate = generateFloor(
+              createStreamRng(seed, RngStream.Floor),
+              floorConfig(1),
+              ROOM_TEMPLATE_POOL,
+              STAIRCASE_TEMPLATE_POOL,
+            );
+          } catch {
+            continue;
+          }
+          if (activeFilters.every((filter) => filter.matches(candidate))) {
+            found = seed;
+            break;
+          }
+        }
+        seedFindButton.disabled = false;
+        if (found !== null) {
+          seedFindButton.textContent = originalLabel;
+          startRun(found);
+          return;
+        }
+        seedFindButton.textContent = 'no match';
+        window.setTimeout(() => {
+          seedFindButton.textContent = originalLabel;
+        }, 1500);
+      }, 0);
+    });
+  }
 
   /**
    * Crosses one specific door: resolves the real neighbour room on the other
@@ -566,23 +796,37 @@ WASD move   arrows/mouse aim and fire
       return false;
     }
     const neighborRoom = planRoom(floorPlan, neighborRoomId);
-    const neighborPlacement = buildPlacement(neighborRoom);
-    const offset = DIRECTION_OFFSET[direction];
-    const targetX = exitCell.x + offset.x;
-    const targetY = exitCell.y + offset.y;
-    const entryCellIndex = neighborRoom.cells.findIndex(
-      (cell) => cell.x === targetX && cell.y === targetY,
-    );
-    const entryCell = neighborPlacement.cells[entryCellIndex] ?? { col: 0, row: 0 };
-
-    const succeeded = sim.transitionTo(
-      planTemplate(neighborRoom),
-      floorPlan.floor,
-      direction,
-      hiddenDoorsFor(floorPlan, neighborRoomId, revealedEdges),
-      neighborPlacement,
-      entryCell,
-    );
+    // A staircase (#112) is never a multi-cell *shape*-family room —
+    // `RoomPlacement`/`entryCell` (#100's sub-cell gluing) don't apply to it,
+    // it always has exactly one door per direction, and it compiles through
+    // `compileStaircaseRoom`, not `compileRoomTemplate` — see
+    // `GameSim.transitionToStaircase`.
+    const succeeded =
+      neighborRoom.staircaseTemplateId !== undefined
+        ? sim.transitionToStaircase(
+            planStaircaseTemplate(neighborRoom),
+            floorPlan.floor,
+            direction,
+            hiddenDoorsFor(floorPlan, neighborRoomId, revealedEdges),
+          )
+        : (() => {
+            const neighborPlacement = buildPlacement(neighborRoom);
+            const offset = DIRECTION_OFFSET[direction];
+            const targetX = exitCell.x + offset.x;
+            const targetY = exitCell.y + offset.y;
+            const entryCellIndex = neighborRoom.cells.findIndex(
+              (cell) => cell.x === targetX && cell.y === targetY,
+            );
+            const entryCell = neighborPlacement.cells[entryCellIndex] ?? { col: 0, row: 0 };
+            return sim.transitionTo(
+              planTemplate(neighborRoom),
+              floorPlan.floor,
+              direction,
+              hiddenDoorsFor(floorPlan, neighborRoomId, revealedEdges),
+              neighborPlacement,
+              entryCell,
+            );
+          })();
     if (!succeeded) {
       // A heuristic, not a reason code out of `transitionTo`: the current
       // room's own enemies are the only other thing that blocks a
@@ -606,6 +850,18 @@ WASD move   arrows/mouse aim and fire
   /** `sim.doorContact`'s door, translated into "which of this room's real cells did that come from". */
   function enterNeighbor(exitDoor: CompiledDoor): boolean {
     const room = planRoom(floorPlan, currentRoomId);
+    // A staircase's own doors (#112) are always synthesised at
+    // `(cellCol: 0, cellRow: 0)` regardless of which of its two doors they
+    // are (`GameSim.loadStaircaseRoom`) — `buildPlacement`'s col/row math
+    // does not apply to it at all, and direction alone already identifies
+    // which door this is (it never has two doors sharing a direction).
+    if (room.staircaseTemplateId !== undefined) {
+      const match = room.doors.find((door) => door.direction === exitDoor.direction);
+      if (match === undefined) {
+        return false;
+      }
+      return crossDoor(match.cellIndex, exitDoor.direction, match.neighborRoomId);
+    }
     const placement = buildPlacement(room);
     const exitCellIndex = placement.cells.findIndex(
       (cell) => cell.col === exitDoor.cellCol && cell.row === exitDoor.cellRow,
@@ -661,6 +917,12 @@ WASD move   arrows/mouse aim and fire
         break;
       case ']':
         loop.timeScale = Math.min(8, loop.timeScale * 2);
+        break;
+      case 'r':
+      case 'R':
+        // A fresh random seed every press, same as Isaac's own restart key —
+        // `#seed-input` is what pins a specific one instead.
+        startRun(Math.floor(Math.random() * 1_000_000));
         break;
       case 'n':
       case 'N': {

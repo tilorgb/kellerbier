@@ -26,10 +26,76 @@
         image-rendering: pixelated;
         image-rendering: crisp-edges;
       }
+      #seed-control {
+        position: fixed;
+        top: 8px;
+        right: 8px;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-family: monospace;
+        font-size: 12px;
+        color: #cfc6bb;
+        background: rgba(11, 10, 13, 0.7);
+        border: 1px solid #3a2f45;
+        border-radius: 4px;
+        padding: 4px 6px;
+      }
+      #seed-control input[type='number'] {
+        width: 8ch;
+        font-family: monospace;
+        font-size: 12px;
+        background: #1c1720;
+        color: #cfc6bb;
+        border: 1px solid #54445f;
+        border-radius: 3px;
+        padding: 2px 4px;
+      }
+      #seed-finder {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding-left: 6px;
+        margin-left: 2px;
+        border-left: 1px solid #3a2f45;
+      }
+      #seed-finder label {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        white-space: nowrap;
+      }
+      #seed-finder button {
+        font-family: monospace;
+        font-size: 12px;
+        background: #241d2b;
+        color: #cfc6bb;
+        border: 1px solid #54445f;
+        border-radius: 3px;
+        padding: 2px 6px;
+        cursor: pointer;
+      }
+      #seed-finder button:hover {
+        background: #2f2636;
+      }
+      #seed-finder button:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
     </style>
   </head>
   <body>
     <div id="game"></div>
+    <div id="seed-control">
+      <label for="seed-input">seed</label>
+      <input id="seed-input" type="number" step="1" />
+      <div id="seed-finder">
+        <label><input type="checkbox" id="filter-staircase" /> staircase</label>
+        <label><input type="checkbox" id="filter-all-shapes" /> all shapes</label>
+        <button id="seed-find-button" type="button">find</button>
+      </div>
+    </div>
     <script type="module" src="/src/app/main.ts"></script>
   </body>
 </html>
