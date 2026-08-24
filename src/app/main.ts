@@ -573,16 +573,25 @@ WASD move   arrows/mouse aim and fire
         // Now that `sim.doorContact` triggers a real transition on its own,
         // this is a dev shortcut for touring the floor without walking it —
         // both go through the same `enterNeighbor`.
+        //
+        // Tries every candidate in priority order rather than picking one
+        // and stopping: a neighbour existing in the floor-plan graph does
+        // not mean its door is currently walkable — a secret/supersecret
+        // room's approach loads hidden until bombed (#23), so `N` has to
+        // fall through to the next candidate rather than getting stuck
+        // repeatedly failing to walk through a wall.
         const room = planRoom(floorPlan, currentRoomId);
-        const unvisitedDirection = DIRECTIONS.find((candidate) => {
+        const unvisited = DIRECTIONS.filter((candidate) => {
           const id = room.neighbors[candidate];
           return id !== undefined && !visitedRoomIds.has(id);
         });
-        const direction: RoomDirection | undefined =
-          unvisitedDirection ??
-          DIRECTIONS.find((candidate) => room.neighbors[candidate] !== undefined);
-        if (direction !== undefined) {
-          enterNeighbor(direction);
+        const visited = DIRECTIONS.filter(
+          (candidate) => room.neighbors[candidate] !== undefined && !unvisited.includes(candidate),
+        );
+        for (const candidate of [...unvisited, ...visited]) {
+          if (enterNeighbor(candidate)) {
+            break;
+          }
         }
         break;
       }
