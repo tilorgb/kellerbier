@@ -204,6 +204,12 @@ tools/
 - **Tuning window** (F2): every number in `sim/tuning.ts` on a slider bound to the live object,
   with a per-field reset and a copy that writes back only what moved. Tuning by feel through an
   edit-and-reload cycle finds the first value that is not obviously wrong, and stops there.
+- **Room editor** (#24, `npm run dev` → `/editor.html`): authors `src/content/rooms/*.json`
+  directly — tile/obstacle/spawn/pickup/hazard/prop placement, room metadata, inline schema
+  validation, and a live in-engine playtest of the room being edited, no rebuild. A second Vite
+  HTML entry plus a `configureServer` dev-only save endpoint (`tools/room-editor/`); neither
+  reaches a production build. M6 needs several hundred authored rooms — this is the tool built
+  ahead of that content, per `docs/ROADMAP.md`.
 
 ## 7. Non-goals
 

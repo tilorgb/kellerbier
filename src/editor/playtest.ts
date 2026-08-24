@@ -1,0 +1,168 @@
+import { Assets, Container, type Texture } from 'pixi.js';
+import massUrl from '../../assets/sprites/mass.png';
+import type { RoomShape } from '../content/rooms/definition.js';
+import { GameSim, MAX_COLLIDER_RADIUS } from '../sim/game/sim.js';
+import type { RoomPlacement } from '../sim/room/template.js';
+import { createRenderer, trackWindowSize } from '../render/app.js';
+import { createBlobTexture, createRingTexture } from '../render/placeholder-art.js';
+import { EntityView } from '../render/entities.js';
+import { GameView } from '../render/view.js';
+import { FixedTimestepLoop, runAnimationFrameLoop } from '../app/loop.js';
+import { InputSampler } from '../app/input/sampler.js';
+import { WORLD_ZOOM, computeGameLayout, roomUnitsPerPixel } from '../render/resolution.js';
+
+export interface PlaytestHandle {
+  destroy(): void;
+}
+
+/**
+ * Every multi-cell shape's canonical layout for playtesting, in the local
+ * (0-indexed) coordinates `compileRoomTemplate`'s `RoomPlacement` needs.
+ *
+ * There is no authored adjacency to read this from (`RoomSubLayout`'s doc
+ * comment on `src/content/rooms/definition.ts`) — in a real run, the floor
+ * generator picks where a multi-cell room's cells actually land
+ * (`src/sim/room/floor-plan.ts`'s `shapeFootprints`). A playtest is testing
+ * this room's own content, not the floor it might end up on, so any one
+ * legal layout does the job; these mirror `shapeFootprints`'s first variant
+ * for each shape. `L` drops the last of `2x2`'s four corners — one of
+ * `shapeFootprints('2x2')`'s corners removed, same as every `L` variant is
+ * built from there.
+ */
+const CANONICAL_MULTI_CELL_LAYOUT: Readonly<
+  Record<Exclude<RoomShape, '1x1'>, readonly { readonly col: number; readonly row: number }[]>
+> = {
+  '1x2': [
+    { col: 0, row: 0 },
+    { col: 1, row: 0 },
+  ],
+  '2x2': [
+    { col: 0, row: 0 },
+    { col: 1, row: 0 },
+    { col: 0, row: 1 },
+    { col: 1, row: 1 },
+  ],
+  L: [
+    { col: 0, row: 0 },
+    { col: 1, row: 0 },
+    { col: 0, row: 1 },
+  ],
+};
+
+function canonicalPlacement(shape: RoomShape): RoomPlacement | undefined {
+  if (shape === '1x1') {
+    return undefined;
+  }
+  return { cells: CANONICAL_MULTI_CELL_LAYOUT[shape] };
+}
+
+/**
+ * Drops into `templateJson` in-engine, no disk round-trip and no rebuild —
+ * the AC's "live playtest". Mounts as a fullscreen overlay over `host` (the
+ * same assumption `createRenderer`/`trackWindowSize` already make about
+ * sizing off the window) with its own `GameSim`/`GameView`/render loop,
+ * entirely independent of the editor's own state; `destroy()` tears all of
+ * it down and leaves the editor exactly as it was.
+ *
+ * Built via `GameSim`'s `population: 'empty'` plus a direct `loadRoom` call
+ * rather than the `roomTemplate` constructor option: the constructor's own
+ * path never accepts a `placement`, so it cannot load a multi-cell draft
+ * (whose `cells.length` will not match the single-cell default placement)
+ * — `loadRoom` is the same public method the app layer already uses for a
+ * room transition, just called once, directly, right after construction.
+ */
+export async function createPlaytest(
+  host: HTMLElement,
+  templateJson: unknown,
+  shape: RoomShape,
+  floor: number,
+): Promise<PlaytestHandle> {
+  const overlay = document.createElement('div');
+  overlay.className = 'kb-editor-playtest-overlay';
+  host.appendChild(overlay);
+
+  const exitButton = document.createElement('button');
+  exitButton.type = 'button';
+  exitButton.textContent = 'Exit playtest (Esc)';
+  exitButton.className = 'kb-editor-playtest-exit';
+  overlay.appendChild(exitButton);
+
+  const app = await createRenderer(overlay);
+
+  const playerTexture = await Assets.load<Texture>({
+    src: massUrl,
+    data: { scaleMode: 'nearest' },
+  });
+
+  const sim = new GameSim({ seed: 1, population: 'empty', floor });
+  sim.loadRoom(templateJson, floor, null, [], canonicalPlacement(shape));
+
+  const view = new GameView(sim, {
+    player: playerTexture,
+    projectile: createBlobTexture(app.renderer, sim.tuning.shooting.shotRadius, 0xf0c46a, 0xfff3d0),
+    entity: createBlobTexture(app.renderer, MAX_COLLIDER_RADIUS, 0x7d5a3c, 0xb08056),
+    entityFlash: createBlobTexture(app.renderer, MAX_COLLIDER_RADIUS, 0xffffff, 0xffffff),
+    telegraph: createRingTexture(app.renderer, EntityView.telegraphTextureRadius, 0xffffff),
+    foam: createBlobTexture(app.renderer, 2, 0xfff4dc, 0xffffff),
+    splash: createBlobTexture(app.renderer, 2, 0xd9a441, 0xf6d08a),
+    decal: createBlobTexture(app.renderer, 8, 0x3a2a12, 0x4a3618),
+    numberFont: 'monospace',
+  });
+  const game = new Container();
+  game.addChild(view.stage);
+  app.stage.addChild(game);
+
+  const pointerMapping = {
+    originX: 0,
+    originY: 0,
+    unitsPerPixel: 1 / WORLD_ZOOM,
+    cameraX: 0,
+    cameraY: 0,
+  };
+  let layout = computeGameLayout(window.innerWidth, window.innerHeight, window.devicePixelRatio);
+  const stopTrackingWindowSize = trackWindowSize(app, game, (applied) => {
+    layout = applied;
+    pointerMapping.originX = applied.originX;
+    pointerMapping.originY = applied.originY;
+    pointerMapping.unitsPerPixel = roomUnitsPerPixel(applied);
+  });
+
+  const input = new InputSampler();
+  const stopKeyboard = input.keyboard.attach(window, app.canvas, pointerMapping);
+  const stopGamepad = input.gamepad.attach(window);
+
+  const loop = new FixedTimestepLoop({
+    step: () => {
+      const index = sim.playerIndex;
+      input.setAimOrigin(sim.positionX(index), sim.positionY(index));
+      sim.step(input.sample());
+    },
+    render: (alpha) => {
+      view.sync(alpha, layout.scale);
+      const worldOffset = view.worldOffset();
+      pointerMapping.cameraX = worldOffset.x / WORLD_ZOOM;
+      pointerMapping.cameraY = worldOffset.y / WORLD_ZOOM;
+    },
+  });
+  const stopLoop = runAnimationFrameLoop(loop);
+
+  const onKeyDown = (event: KeyboardEvent): void => {
+    if (event.key === 'Escape') {
+      destroy();
+    }
+  };
+  window.addEventListener('keydown', onKeyDown);
+  exitButton.addEventListener('click', destroy);
+
+  function destroy(): void {
+    window.removeEventListener('keydown', onKeyDown);
+    stopLoop();
+    stopTrackingWindowSize();
+    stopKeyboard();
+    stopGamepad();
+    app.destroy(true, { children: true });
+    overlay.remove();
+  }
+
+  return { destroy };
+}

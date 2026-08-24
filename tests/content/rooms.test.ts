@@ -12,7 +12,11 @@ import { compileRoomTemplate, validateRoomTemplate } from '../../src/sim/room/te
 
 describe('room templates', () => {
   it('validates every registered authored room', () => {
-    expect(ROOM_TEMPLATES).toHaveLength(13);
+    // Not pinned to exactly 13: the room editor (#24) saves new templates
+    // straight into this directory, and `ROOM_TEMPLATES` picks them up via a
+    // glob (`src/content/rooms/index.ts`) — a floor of new content should not
+    // have to touch this assertion to keep passing.
+    expect(ROOM_TEMPLATES.length).toBeGreaterThanOrEqual(13);
     for (const [index, room] of ROOM_TEMPLATES.entries()) {
       expect(() =>
         validateRoomTemplate(room, `room[${String(index)}].json`, ENEMY_DEFINITIONS),

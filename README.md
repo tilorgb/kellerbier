@@ -58,6 +58,10 @@ overlay — frame graph, entity and pool counts, draw calls, hitboxes (`H`) and 
 grid (`G`). Middle-drag pans the camera, `0` recentres, `C` copies the run's seed and tick for
 a bug report.
 
+**Room editor:** with `npm run dev` running, open `/editor.html` to author room templates —
+grid, palette, metadata, inline validation, browse/duplicate, and a live in-engine playtest of
+the room you're editing. Dev-only; see `docs/TECH_STACK.md` §6.
+
 ## Continuous integration
 
 Every push and pull request runs typecheck, lint, the full test suite, the performance budget

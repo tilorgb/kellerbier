@@ -13,8 +13,22 @@ import cellarSecret from './cellar-secret.json';
 import cellarSupersecret from './cellar-supersecret.json';
 
 /**
- * Raw authored files. `validateRoomTemplate` is the typed content boundary.
+ * Every authored file in this directory, raw. `validateRoomTemplate` is the
+ * typed content boundary, not this list — a glob rather than a hand-maintained
+ * array of imports so a room the editor (#24) saves straight into this folder
+ * shows up here, and in the shipped game's pool, without a manual edit.
  *
+ * The 13 named exports below are still direct static imports, not read out of
+ * this glob: `tests/content/rooms.test.ts` and others import at least one of
+ * them by name, and a static import is also how each of those specific files
+ * stays reachable by name in the first place. Vite's module cache means a file
+ * imported both ways here is still only ever one module.
+ */
+const globbedRooms = import.meta.glob('./*.json', { eager: true, import: 'default' });
+
+export const ROOM_TEMPLATES: readonly unknown[] = Object.values(globbedRooms);
+
+/**
  * `cellarCorridor`/`cellarHallBig`/`cellarNook` are the `1x2`/`2x2`/`L` shapes
  * the floor generator (#20) needs a real pool to draw from — floor 1 would
  * otherwise have no template to place a multi-cell slot with, and every
@@ -36,22 +50,6 @@ import cellarSupersecret from './cellar-supersecret.json';
  * `npm run dev` has a real, doors-sealed, reward-dropping boss room to show
  * today, swapped for authored content later without any generator change.
  */
-export const ROOM_TEMPLATES = [
-  cellarCrossroads,
-  cellarHall,
-  cellarCorridor,
-  cellarHallBig,
-  cellarNook,
-  cellarPillars,
-  cellarBoss,
-  cellarTreasure,
-  cellarTreasureLocked,
-  cellarShop,
-  cellarShopVorrat,
-  cellarSecret,
-  cellarSupersecret,
-] as const;
-
 export {
   cellarCrossroads,
   cellarHall,

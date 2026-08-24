@@ -695,6 +695,7 @@ WASD move   arrows/mouse aim and fire
   exposeDebugHandle(loop, sim, (ms) => {
     stallMs = ms;
   });
+  mountRoomEditorLink();
 }
 
 /**
@@ -768,6 +769,43 @@ function exposeDebugHandle(
   }
   (globalThis as unknown as DebugHost).__kellerbier = { loop, sim, tuning: sim.tuning, stall };
   console.warn('__kellerbier is exposed for debugging (dev build only)');
+}
+
+/**
+ * A link to the room editor (#24) — dev builds only, same as the debug handle
+ * above, since `editor.html` is not wired into `build.rollupOptions.input`
+ * and is never bundled either way. A real link rather than only a console
+ * message, so reaching it never requires typing the URL by hand.
+ *
+ * Fixed bottom-left: the tuning toggle already owns bottom-right
+ * (`tuning-window.ts`), and every screen-space HUD element the game itself
+ * draws — health, Promille, wallet, minimap — lives top-left/top-right
+ * *inside* the Pixi canvas, not in the DOM, so bottom-left is the one corner
+ * nothing else is using.
+ */
+function mountRoomEditorLink(): void {
+  if (!import.meta.env.DEV) {
+    return;
+  }
+  const style = document.createElement('style');
+  style.textContent = `
+.kb-room-editor-link {
+  position: fixed; left: 12px; bottom: 12px; z-index: 30;
+  font: 12px/1.4 ui-monospace, monospace; color: #d8cfc4;
+  background: #1b1622; border: 1px solid #3d3348; border-radius: 4px;
+  padding: 6px 10px; text-decoration: none;
+}
+.kb-room-editor-link:hover { background: #241d2e; }
+`;
+  document.head.appendChild(style);
+
+  const link = document.createElement('a');
+  link.className = 'kb-room-editor-link';
+  link.href = '/editor.html';
+  link.target = '_blank';
+  link.rel = 'noopener';
+  link.textContent = 'room editor';
+  document.body.appendChild(link);
 }
 
 void boot().catch((error: unknown) => {
