@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_ROOM_BLOCKS, RoomGeometry } from '../../src/sim/room/geometry.js';
+import { MAX_ROOM_BLOCKS, RoomGeometry, roomFrameSize } from '../../src/sim/room/geometry.js';
 import {
   PLAYFIELD_HEIGHT,
   PLAYFIELD_WIDTH,
@@ -13,6 +13,11 @@ import {
   SCREEN_WIDTH,
   compileRoomTemplate,
 } from '../../src/sim/room/template.js';
+import {
+  STAIR_STEP_OVERLAP,
+  compileStaircaseRoom,
+  type StaircaseRoomTemplate,
+} from '../../src/sim/room/staircase.js';
 import {
   MULTI_CELL_COUNT,
   ROOM_COLUMNS,
@@ -171,5 +176,112 @@ describe('compileRoomTemplate void rects (#107)', () => {
         4,
       ),
     ).toBe(true);
+  });
+});
+
+/**
+ * #112: a diagonal staircase room is a hand-placed set-piece with its own
+ * compilation path (`compileStaircaseRoom`), not a `RoomShape` — its
+ * interior is a *union* of overlapping per-step rects (`RoomGeometry.stepRects`)
+ * rather than a bounding-box-minus-voids. These prove the union is real
+ * shared edge area (not a corner touch), that the whole stair is walkable
+ * end-to-end with no collision gap at any step, and that the door-direction
+ * restriction on the two end steps is enforced.
+ */
+/** Indexes an array the test already asserted has enough elements, without a non-null assertion. */
+function at<T>(values: readonly T[], index: number): T {
+  const value = values[index];
+  if (value === undefined) {
+    throw new Error(`expected an element at index ${String(index)}`);
+  }
+  return value;
+}
+
+describe('compileStaircaseRoom (#112)', () => {
+  const template: StaircaseRoomTemplate = {
+    id: 'synthetic-staircase',
+    stepCount: 4,
+    direction: 'up-right',
+    startDoor: 'south',
+    endDoor: 'north',
+  };
+
+  it('overlaps each consecutive pair of steps by real edge area, not a corner point', () => {
+    const compiled = compileStaircaseRoom(template);
+    expect(compiled.geometry.stepRects).toHaveLength(4);
+
+    const steps = compiled.geometry.stepRects;
+    for (let index = 0; index + 1 < steps.length; index++) {
+      const a = at(steps, index);
+      const b = at(steps, index + 1);
+      const overlapWidth = Math.min(a.maxX, b.maxX) - Math.max(a.minX, b.minX);
+      const overlapHeight = Math.min(a.maxY, b.maxY) - Math.max(a.minY, b.minY);
+      expect(overlapWidth).toBeCloseTo(SCREEN_WIDTH * STAIR_STEP_OVERLAP);
+      expect(overlapHeight).toBeCloseTo(SCREEN_HEIGHT * STAIR_STEP_OVERLAP);
+    }
+  });
+
+  it('is walkable end-to-end along the stair spine, with no collision gap at any step', () => {
+    const compiled = compileStaircaseRoom(template);
+    const steps = compiled.geometry.stepRects;
+    const first = at(steps, 0);
+    const last = at(steps, steps.length - 1);
+    const start = { x: (first.minX + first.maxX) / 2, y: (first.minY + first.maxY) / 2 };
+    const end = { x: (last.minX + last.maxX) / 2, y: (last.minY + last.maxY) / 2 };
+
+    const samples = 40;
+    for (let sample = 0; sample <= samples; sample++) {
+      const t = sample / samples;
+      const x = start.x + t * (end.x - start.x);
+      const y = start.y + t * (end.y - start.y);
+      expect(compiled.geometry.isClear(x, y, 8)).toBe(true);
+    }
+  });
+
+  it('rejects a circle that never fits inside any single step', () => {
+    const compiled = compileStaircaseRoom(template);
+    const { geometry } = compiled;
+    // Inside the overall bounding box, but in the notch neither the first
+    // nor the last step's rect reaches.
+    expect(geometry.isClear(geometry.maxX - 5, geometry.maxY - 5, 4)).toBe(false);
+    // Well outside the bounding box entirely.
+    expect(geometry.isClear(geometry.minX - 50, geometry.minY - 50, 4)).toBe(false);
+  });
+
+  it('places each end door against its own step, not the room bounding box', () => {
+    const compiled = compileStaircaseRoom(template);
+    const first = at(compiled.geometry.stepRects, 0);
+    const last = at(compiled.geometry.stepRects, compiled.geometry.stepRects.length - 1);
+
+    expect(compiled.startDoor).toEqual({
+      direction: 'south',
+      x: (first.minX + first.maxX) / 2,
+      y: first.maxY,
+    });
+    expect(compiled.endDoor).toEqual({
+      direction: 'north',
+      x: (last.minX + last.maxX) / 2,
+      y: last.minY,
+    });
+  });
+
+  it('keeps the equal-margin roomFrameSize invariant the camera clamp relies on', () => {
+    const compiled = compileStaircaseRoom(template);
+    const frame = roomFrameSize(compiled.geometry);
+    expect(frame.width).toBeCloseTo(compiled.geometry.minX + compiled.geometry.maxX);
+    expect(frame.height).toBeCloseTo(compiled.geometry.minY + compiled.geometry.maxY);
+  });
+
+  it('rejects a door direction the interior overlap would partially consume', () => {
+    expect(() => compileStaircaseRoom({ ...template, startDoor: 'north' })).toThrow(
+      /startDoor must be/,
+    );
+    expect(() => compileStaircaseRoom({ ...template, endDoor: 'south' })).toThrow(
+      /endDoor must be/,
+    );
+  });
+
+  it('rejects fewer than two steps', () => {
+    expect(() => compileStaircaseRoom({ ...template, stepCount: 1 })).toThrow(/stepCount/);
   });
 });

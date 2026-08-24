@@ -31,8 +31,8 @@ export const SCREEN_HEIGHT = ROOM_ROWS * ROOM_TILE_UNITS;
  * glued sub-rooms, which is what "no wall between them" (#100) means at the
  * geometry level — there was never a margin to remove.
  */
-const ROOM_MARGIN_X = (ROOM_FRAME_WIDTH - SCREEN_WIDTH) / 2;
-const ROOM_MARGIN_Y = (ROOM_FRAME_HEIGHT - SCREEN_HEIGHT) / 2;
+export const ROOM_MARGIN_X = (ROOM_FRAME_WIDTH - SCREEN_WIDTH) / 2;
+export const ROOM_MARGIN_Y = (ROOM_FRAME_HEIGHT - SCREEN_HEIGHT) / 2;
 
 const DIRECTIONS: readonly DoorDirection[] = ['north', 'east', 'south', 'west'];
 const DIRECTION_OFFSET: Readonly<Record<DoorDirection, { x: number; y: number }>> = {
