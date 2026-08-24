@@ -2,13 +2,14 @@ import { Container, Sprite, type Graphics, type Texture } from 'pixi.js';
 import { ROOM_TRANSITION_TICKS, type GameSim } from '../sim/game/sim.js';
 import { roomFrameSize, type RoomGeometry } from '../sim/room/geometry.js';
 import { PLAYFIELD_HEIGHT, PLAYFIELD_WIDTH } from '../sim/room/playground.js';
+import type { CompiledDoor } from '../sim/room/template.js';
 import { clamp, lerp } from '../sim/math.js';
 import { DamageNumberView } from './damage-numbers.js';
 import { DecalView } from './decals.js';
 import { EntityView } from './entities.js';
 import { ParticleView } from './particles.js';
 import { ProjectileView } from './projectiles.js';
-import { createDoorView, createRoomView } from './room.js';
+import { createDoorView, createRoomView, createSecretHintView } from './room.js';
 import { INTERNAL_HEIGHT, INTERNAL_WIDTH, WORLD_ZOOM } from './resolution.js';
 
 /**
@@ -65,6 +66,8 @@ export class GameView {
   private roomView: Container;
   private doorView: Graphics;
   private doorsLocked: boolean;
+  private secretHintView: Graphics;
+  private secretHintDoors: readonly CompiledDoor[] = [];
 
   /**
    * Everything the camera shakes.
@@ -100,6 +103,8 @@ export class GameView {
     this.doorsLocked = sim.doorsLocked;
     this.doorView = createDoorView(sim.room, sim.doors, this.doorsLocked);
     this.world.addChild(this.doorView);
+    this.secretHintView = createSecretHintView(sim.room, []);
+    this.world.addChild(this.secretHintView);
 
     this.decals = new DecalView(sim.decals, textures.decal);
     this.world.addChild(this.decals.container);
@@ -153,6 +158,16 @@ export class GameView {
       this.doorsLocked = this.sim.doorsLocked;
       this.doorView = createDoorView(this.roomGeometry, this.sim.doors, this.doorsLocked);
       this.world.addChildAt(this.doorView, 1);
+    }
+    // A bombed-open wall stops being a hint the same tick it stops being
+    // hidden — `setSecretHints` is what the caller (`app/main.ts`, which
+    // notices the reveal) calls to clear it; this only re-anchors the
+    // existing hint to a room that just changed under it.
+    if (roomChanged) {
+      this.world.removeChild(this.secretHintView);
+      this.secretHintView.destroy();
+      this.secretHintView = createSecretHintView(this.roomGeometry, this.secretHintDoors);
+      this.world.addChildAt(this.secretHintView, 2);
     }
     this.decals.sync();
     this.entities.sync(alpha);
@@ -265,6 +280,22 @@ export class GameView {
       default:
         return { x: 0, y: 0 };
     }
+  }
+
+  /**
+   * Which of the current room's walls to draw a secret-room crack hint on.
+   *
+   * Called by `app/main.ts` right after a room load (it owns the floor plan
+   * and is the one place that knows a neighbour is `secret`/`supersecret`
+   * and not yet found) and again the moment it notices a hidden wall has
+   * opened, so the crack disappears the same tick the door does.
+   */
+  setSecretHints(doors: readonly CompiledDoor[]): void {
+    this.secretHintDoors = doors;
+    this.world.removeChild(this.secretHintView);
+    this.secretHintView.destroy();
+    this.secretHintView = createSecretHintView(this.roomGeometry, doors);
+    this.world.addChildAt(this.secretHintView, 2);
   }
 
   /**

@@ -356,7 +356,15 @@ export interface PromilleTuning {
 
 /** The pickup economy (#22): magnetism, spawn juice, need-weighting and the Bierfassl. */
 export interface PickupTuning {
-  /** How close a pickup has to be to the player before it starts drifting toward them. */
+  /**
+   * How close a pickup has to be to the player before it starts drifting
+   * toward them. Zero by default — a run starts with no magnetism at all,
+   * the same "unlocked, not on from the start" shape Promille uses
+   * (`docs/GAME_DESIGN.md` §5) — and is meant to be raised by an item once
+   * items exist (#M3), not tuned as a baseline feel constant. The debug
+   * tuning window's slider (`debug/tuning-window.ts`) still reaches it for
+   * testing the drift itself.
+   */
   magnetRadius: number;
   /** Pixels per tick a magnetised pickup closes the distance by. */
   magnetSpeed: number;
@@ -497,11 +505,6 @@ export const DEFAULT_PROMILLE_TUNING: Readonly<PromilleTuning> = {
 };
 
 export const DEFAULT_PICKUP_TUNING: Readonly<PickupTuning> = {
-  // Zero, not #22's original 36: a base run has no magnetism at all — it's
-  // meant to be something an item grants later (`docs/GAME_DESIGN.md` §8's
-  // "items are modifiers with hooks"), not free from tick one. `magnetSpeed`
-  // stays tuned and ready; a future item just has to raise `magnetRadius`
-  // above zero to turn the pull on.
   magnetRadius: 0,
   magnetSpeed: 1.4,
   spawnBounceTicks: 14,

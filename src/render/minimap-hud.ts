@@ -16,7 +16,12 @@ const CURRENT_FILL = 0xe8dfd0;
 const CURRENT_OUTLINE = 0xffffff;
 const BACKDROP_COLOUR = 0x14101a;
 
-/** Icons keyed by role, once a room is revealed. Devil/Angel roles don't exist yet — see #23. */
+/**
+ * Icons keyed by role, once a room is revealed. `secret` and `supersecret`
+ * deliberately have none — a room found by bombing a wall (#23) should not
+ * be spoiled by a map icon before it's found. Devil/Angel roles don't exist
+ * yet (M7, `docs/GAME_DESIGN.md` §9).
+ */
 type RoomIcons = Partial<Record<RoomRole, Texture>>;
 
 interface RevealState {

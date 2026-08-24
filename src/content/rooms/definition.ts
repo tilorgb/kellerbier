@@ -60,7 +60,16 @@ export interface RoomPickupSpawn {
   readonly x: number;
   readonly y: number;
   readonly type: string;
+  /** Biermarken cost. Omitted (or absent) means free — see `sim/systems/pickup.ts`'s price gate. */
+  readonly price?: number;
 }
+
+/**
+ * The role a room's slot must have for this template to be eligible for it —
+ * see `RoomRole` in `sim/room/floor-plan.ts`. Omitted means the template is
+ * generic: only placed in a `'start'` or `'normal'` slot, never a special one.
+ */
+export type RoomSpecialRole = 'boss' | 'treasure' | 'shop' | 'secret' | 'supersecret';
 
 export interface RoomHazard {
   readonly x: number;
@@ -104,6 +113,10 @@ interface RoomTemplateMetadataBase {
   readonly floorTags: readonly string[];
   readonly difficultyTier: number;
   readonly weight: number;
+  /** See `RoomSpecialRole`. Omitted for an ordinary start/normal room. */
+  readonly specialRole?: RoomSpecialRole;
+  /** Treasure rooms only: entering spends one Kellerschlüssel, blocked at zero. */
+  readonly keyLocked?: boolean;
 }
 
 /**

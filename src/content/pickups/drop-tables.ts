@@ -117,3 +117,31 @@ export const ROOM_CLEAR_DROP_TABLE: DropTable = {
     { pickupId: 'bierfassl', weight: 8 },
   ],
 };
+
+/**
+ * Rolled once when a boss room's fight ends (`GameSim.rollRoomClearLoot`,
+ * gated on the cleared room's `specialRole` being `'boss'`) — in place of,
+ * not in addition to, `ROOM_CLEAR_DROP_TABLE`. `pickupId: null` never
+ * appears: a boss always pays out, and the weights lean hard toward the
+ * biggest denominations and the eternal heart no `ENEMY_DROP_TABLES` tier
+ * ever names.
+ */
+export const BOSS_REWARD_DROP_TABLE: DropTable = {
+  promilled: [
+    { pickupId: 'biermarke-10', weight: 25 },
+    { pickupId: 'mass-full', weight: 20 },
+    { pickupId: 'weissbier', weight: 15 },
+    { pickupId: 'schwarzbier', weight: 8 },
+    { pickupId: 'kellerschluessel-ring', weight: 15 },
+    { pickupId: 'bierfassl-pack', weight: 10 },
+    { pickupId: 'beer', weight: 7 },
+  ],
+  sober: [
+    { pickupId: 'biermarke-10', weight: 28 },
+    { pickupId: 'mass-full', weight: 22 },
+    { pickupId: 'weissbier', weight: 17 },
+    { pickupId: 'schwarzbier', weight: 8 },
+    { pickupId: 'kellerschluessel-ring', weight: 15 },
+    { pickupId: 'bierfassl-pack', weight: 10 },
+  ],
+};

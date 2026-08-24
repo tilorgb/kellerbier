@@ -13,6 +13,11 @@ const BLOCK_EDGE_COLOUR = 0x6d5540;
 const DOOR_LOCKED_COLOUR = 0x5a2a2a;
 const DOOR_OPEN_COLOUR = 0xd9a441;
 
+/** A crack in the wall, marking a bombable connection to a secret room. */
+const CRACK_COLOUR = 0x8a6a4a;
+/** Narrower than `DOOR_SPAN` — a hint, not a doorway. */
+const CRACK_SPAN = 10;
+
 /**
  * Draws a room once, into a static container.
  *
@@ -105,4 +110,65 @@ export function createDoorView(
   }
 
   return graphics;
+}
+
+/**
+ * Draws a crack on each door's wall given — the hint that a secret room sits
+ * behind it, `docs/GAME_DESIGN.md` §4's "hinted by cracks in adjacent room
+ * tiles." Drawn on the solid wall band itself (a hidden door has no gap —
+ * see `GameSim.loadRoom`'s `hiddenDoors`), so a crack never overlaps an
+ * actual doorway: a wall is either open (`createDoorView`) or cracked
+ * (here), never both.
+ *
+ * A supersecret room's wall is never passed here — no crack at all is the
+ * whole of what "deliberately obnoxious to find" (#23) means for this view.
+ */
+export function createSecretHintView(room: RoomGeometry, doors: readonly CompiledDoor[]): Graphics {
+  const graphics = new Graphics();
+  const half = CRACK_SPAN / 2;
+
+  for (const door of doors) {
+    const centre = doorCentre(room, door);
+    if (door.direction === 'north' || door.direction === 'south') {
+      drawCrack(graphics, centre.x, centre.y, half, true);
+    } else {
+      drawCrack(graphics, centre.x, centre.y, half, false);
+    }
+  }
+
+  return graphics;
+}
+
+/** One jagged mark, centred on `(x, y)`, running along the wall it's drawn on. */
+function drawCrack(
+  graphics: Graphics,
+  x: number,
+  y: number,
+  half: number,
+  horizontal: boolean,
+): void {
+  const zigzag = horizontal
+    ? [
+        [x - half, y],
+        [x - half / 2, y + 3],
+        [x, y - 3],
+        [x + half / 2, y + 3],
+        [x + half, y],
+      ]
+    : [
+        [x, y - half],
+        [x + 3, y - half / 2],
+        [x - 3, y],
+        [x + 3, y + half / 2],
+        [x, y + half],
+      ];
+  const [start, ...rest] = zigzag;
+  if (start === undefined) {
+    return;
+  }
+  graphics.moveTo(start[0] ?? 0, start[1] ?? 0);
+  for (const point of rest) {
+    graphics.lineTo(point[0] ?? 0, point[1] ?? 0);
+  }
+  graphics.stroke({ width: 1.5, color: CRACK_COLOUR });
 }

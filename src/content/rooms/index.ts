@@ -4,6 +4,13 @@ import cellarCorridor from './cellar-corridor.json';
 import cellarHallBig from './cellar-hall-big.json';
 import cellarNook from './cellar-nook.json';
 import cellarPillars from './cellar-pillars.json';
+import cellarBoss from './cellar-boss.json';
+import cellarTreasure from './cellar-treasure.json';
+import cellarTreasureLocked from './cellar-treasure-locked.json';
+import cellarShop from './cellar-shop.json';
+import cellarShopVorrat from './cellar-shop-vorrat.json';
+import cellarSecret from './cellar-secret.json';
+import cellarSupersecret from './cellar-supersecret.json';
 
 /**
  * Raw authored files. `validateRoomTemplate` is the typed content boundary.
@@ -18,6 +25,16 @@ import cellarPillars from './cellar-pillars.json';
  * templates being visually sparse besides) reads as "the generator always
  * shows the same room" even though the pick is genuinely unbiased. A third
  * option does not remove that possibility, but it cuts it a lot further.
+ *
+ * `cellarBoss`/`cellarTreasure(Locked)`/`cellarShop(Vorrat)`/`cellarSecret`/
+ * `cellarSupersecret` are floor 1's special-room content (#23) — one per
+ * `RoomSpecialRole`, with two variants each for treasure and shop so
+ * `generateFloor`'s weighted pick actually has something to choose between
+ * (a locked vs. free treasure, two different shop stock lists). The boss
+ * encounter spawns a small pack of already-authored enemies rather than a
+ * real boss — no boss is authored yet (that's M6, `docs/ROADMAP.md`) — so
+ * `npm run dev` has a real, doors-sealed, reward-dropping boss room to show
+ * today, swapped for authored content later without any generator change.
  */
 export const ROOM_TEMPLATES = [
   cellarCrossroads,
@@ -26,9 +43,30 @@ export const ROOM_TEMPLATES = [
   cellarHallBig,
   cellarNook,
   cellarPillars,
+  cellarBoss,
+  cellarTreasure,
+  cellarTreasureLocked,
+  cellarShop,
+  cellarShopVorrat,
+  cellarSecret,
+  cellarSupersecret,
 ] as const;
 
-export { cellarCrossroads, cellarHall, cellarCorridor, cellarHallBig, cellarNook, cellarPillars };
+export {
+  cellarCrossroads,
+  cellarHall,
+  cellarCorridor,
+  cellarHallBig,
+  cellarNook,
+  cellarPillars,
+  cellarBoss,
+  cellarTreasure,
+  cellarTreasureLocked,
+  cellarShop,
+  cellarShopVorrat,
+  cellarSecret,
+  cellarSupersecret,
+};
 export type {
   DoorDirection,
   RoomDecorativeProp,
@@ -40,5 +78,6 @@ export type {
   RoomShape,
   RoomSpawnChoice,
   RoomSpawnGroup,
+  RoomSpecialRole,
   RoomTemplate,
 } from './definition.js';

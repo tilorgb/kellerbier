@@ -5,12 +5,7 @@ import { FLOOR_CONFIGS, type FloorConfig } from '../content/floors/definition.js
 import { ROOM_TEMPLATES } from '../content/rooms/index.js';
 import { type RoomDirection, GameSim, MAX_COLLIDER_RADIUS } from '../sim/game/sim.js';
 import { promilleTierName } from '../sim/game/promille.js';
-import {
-  type FloorPlan,
-  type FloorPlanRoom,
-  type RoomDoor,
-  generateFloor,
-} from '../sim/room/floor-plan.js';
+import { type FloorPlan, type FloorPlanRoom, generateFloor } from '../sim/room/floor-plan.js';
 import {
   type CompiledDoor,
   type RoomPlacement,
@@ -103,6 +98,82 @@ function buildPlacement(room: FloorPlanRoom): RoomPlacement {
   };
 }
 
+/** Unordered pair key — an edge is the same whichever of its two rooms asks about it. */
+function edgeKey(roomA: string, roomB: string): string {
+  return roomA < roomB ? `${roomA}|${roomB}` : `${roomB}|${roomA}`;
+}
+
+/**
+ * Which of the *currently loading* room's doors should load hidden — a wall,
+ * not a doorway, until a nearby Bierfassl blast reveals it
+ * (`GameSim.revealBombableWalls`).
+ *
+ * Only ever computed for the plain-room side of a secret/supersecret edge —
+ * a secret room's own way back out is never itself hidden (see the module
+ * doc on `revealedEdges` below) — and only for an edge `revealedEdges`
+ * doesn't already know about, so a wall found once stays open for the rest
+ * of the run, on both sides, everywhere the floor plan is asked again.
+ *
+ * Direction-only, not a specific `RoomDoor` (#100 has both a `cellIndex` and
+ * a `direction`): a secret/supersecret room is always `1x1` today, so its
+ * neighbour never has more than one door in a given direction anyway — see
+ * `GameSim.bombableWalls`'s doc comment for the same call.
+ */
+function hiddenDoorsFor(
+  plan: FloorPlan,
+  roomId: string,
+  revealedEdges: ReadonlySet<string>,
+): RoomDirection[] {
+  const room = planRoom(plan, roomId);
+  if (room.role === 'secret' || room.role === 'supersecret') {
+    return [];
+  }
+  const hidden: RoomDirection[] = [];
+  for (const door of room.doors) {
+    const neighbor = planRoom(plan, door.neighborRoomId);
+    const isSecretEdge = neighbor.role === 'secret' || neighbor.role === 'supersecret';
+    if (isSecretEdge && !revealedEdges.has(edgeKey(roomId, door.neighborRoomId))) {
+      hidden.push(door.direction);
+    }
+  }
+  return hidden;
+}
+
+/**
+ * The doors `hiddenDoorsFor` would hide for `roomId` that should draw a
+ * crack hint — every one of them except a supersecret's, which gets no hint
+ * at all. "Deliberately obnoxious to find" (#23) is entirely this omission;
+ * nothing else in the reveal mechanic treats a supersecret edge differently
+ * from a secret one.
+ *
+ * Returns real `CompiledDoor`s (cell included), not bare directions — the
+ * crack has to land on the specific sub-cell's wall (#100), same as the door
+ * it stands in for.
+ */
+function crackHintsFor(
+  plan: FloorPlan,
+  roomId: string,
+  revealedEdges: ReadonlySet<string>,
+): CompiledDoor[] {
+  const room = planRoom(plan, roomId);
+  const placement = buildPlacement(room);
+  const hints: CompiledDoor[] = [];
+  for (const door of room.doors) {
+    if (planRoom(plan, door.neighborRoomId).role !== 'secret') {
+      continue;
+    }
+    if (revealedEdges.has(edgeKey(roomId, door.neighborRoomId))) {
+      continue;
+    }
+    const cell = placement.cells[door.cellIndex];
+    if (cell === undefined) {
+      continue;
+    }
+    hints.push({ direction: door.direction, cellCol: cell.col, cellRow: cell.row });
+  }
+  return hints;
+}
+
 async function boot(): Promise<void> {
   const host = document.getElementById('game');
   if (host === null) {
@@ -142,6 +213,15 @@ async function boot(): Promise<void> {
   // behind it is not.
   const visitedRoomIds = new Set([currentRoomId]);
 
+  /**
+   * Edges of the floor's room graph a secret/supersecret wall has been
+   * bombed open on, keyed by `edgeKey` so either side recognizes it. Lives
+   * for the run: `hiddenDoorsFor` never hides a direction once its edge is
+   * in here, so a wall found once stays open on every later visit, from
+   * either room it touches.
+   */
+  const revealedEdges = new Set<string>();
+
   // The room is populated with the authored roster rather than the training
   // targets: the targets are the rig impact feel was tuned against, and the
   // game is the thing with enemies in it.
@@ -149,6 +229,7 @@ async function boot(): Promise<void> {
     seed: RUN_SEED,
     roomTemplate: planTemplate(planRoom(floorPlan, currentRoomId)),
     floor: floorPlan.floor,
+    hiddenDoors: hiddenDoorsFor(floorPlan, currentRoomId, revealedEdges),
   });
   const view = new GameView(sim, {
     player: playerTexture,
@@ -165,6 +246,7 @@ async function boot(): Promise<void> {
     decal: createBlobTexture(app.renderer, 8, 0x3a2a12, 0x4a3618),
     numberFont: 'monospace',
   });
+  view.setSecretHints(crackHintsFor(floorPlan, currentRoomId, revealedEdges));
   // Everything drawn at the game's own resolution goes in here, and this is the
   // only thing that ever gets scaled. Anything added to `app.stage` instead is
   // drawn at the display's resolution, which is what the debug panels want.
@@ -200,6 +282,29 @@ async function boot(): Promise<void> {
 
   const gameOverScreen = new GameOverScreen();
   uiLayer.addChild(gameOverScreen.view);
+
+  /**
+   * The boss room's intro plate (#23): a plain banner shown for the room's
+   * warmup window (`sim.roomWarmupTicks`, the same "enemies stand inert"
+   * beat every room already gets) whenever that room's role is `'boss'`.
+   * Toggled, not redrawn, every frame — `text` is only ever set on the edge
+   * it becomes visible, the same restraint `hud`'s own slow-cadence comment
+   * argues for, just event-driven instead of timed.
+   */
+  const bossBanner = new Text({
+    text: 'BOSSRAUM',
+    style: { fill: 0xd9a441, fontFamily: 'monospace', fontSize: 18, fontWeight: 'bold' },
+  });
+  bossBanner.anchor.set(0.5);
+  bossBanner.visible = false;
+  uiLayer.addChild(bossBanner);
+  const positionBossBanner = (applied: GameLayout): void => {
+    bossBanner.position.set(
+      applied.originX + (INTERNAL_WIDTH * applied.scale) / 2,
+      applied.originY + INTERNAL_HEIGHT * applied.scale * 0.3,
+    );
+  };
+  let bossBannerShown = false;
 
   const healthHud = new HealthHud(app.renderer);
   uiLayer.addChild(healthHud.view);
@@ -255,6 +360,11 @@ async function boot(): Promise<void> {
    */
   let deathPhase: 'alive' | 'freezing' | 'slowmo' | 'over' = 'alive';
   let deathPhaseTicks = 0;
+
+  /** Ticks left to show the "needs a key" HUD line — see `enterNeighbor`. */
+  let keyHintTicks = 0;
+  /** Three seconds at 60 ticks/second — long enough to read, short enough not to linger. */
+  const KEY_HINT_TICKS = 180;
 
   /** Called once per real `sim.step()`, right after it, to drive `deathPhase` forward. */
   function advanceDeathSequence(): void {
@@ -315,6 +425,7 @@ async function boot(): Promise<void> {
     positionPromilleHud(applied);
     positionWalletHud(applied);
     positionMinimapHud(applied);
+    positionBossBanner(applied);
     gameOverScreen.resize(applied);
     vignette.resize(applied);
   });
@@ -356,6 +467,10 @@ async function boot(): Promise<void> {
         playRumble(sim, input.gamepad);
         summary.recordTick(sim);
         advanceDeathSequence();
+        checkSecretReveals();
+        if (keyHintTicks > 0) {
+          keyHintTicks -= 1;
+        }
         const touchedDoor = sim.doorContact;
         if (touchedDoor !== null) {
           enterNeighbor(touchedDoor);
@@ -376,6 +491,12 @@ async function boot(): Promise<void> {
       promilleHud.sync(sim);
       walletHud.sync(sim);
       minimapHud.setMapOpen(isActionDown(input.frame, InputAction.Map));
+      const showBossBanner =
+        sim.roomWarmupTicks > 0 && planRoom(floorPlan, currentRoomId).role === 'boss';
+      if (showBossBanner !== bossBannerShown) {
+        bossBannerShown = showBossBanner;
+        bossBanner.visible = showBossBanner;
+      }
       const playerScreen = view.playerScreenPosition();
       vignette.sync(sim, playerScreen.x, playerScreen.y);
       overlay?.sync(alpha);
@@ -400,7 +521,8 @@ async function boot(): Promise<void> {
     const roomState = sim.doorsLocked ? 'LOCKED' : 'OPEN';
     const warmup = sim.roomWarmupTicks > 0 ? '  WARMUP' : '';
     const currentRole = planRoom(floorPlan, currentRoomId).role;
-    hud.text = `${floorPlan.floorName}  room ${sim.roomId} (${currentRole})  doors ${roomState}${warmup}  enemies ${String(sim.liveEnemyCount)}
+    const keyHint = keyHintTicks > 0 ? '  NEEDS A KELLERSCHLÜSSEL' : '';
+    hud.text = `${floorPlan.floorName}  room ${sim.roomId} (${currentRole})  doors ${roomState}${warmup}${keyHint}  enemies ${String(sim.liveEnemyCount)}
   tick ${String(loop.tick)}  ${seconds}s  x${scale}${loop.paused ? '  PAUSED' : ''}
 hp ${String(hearts)}/${String(maxHearts)}  soul ${String(sim.playerSoulHealth)}  eternal ${String(sim.playerEternalHealth)}${invulnerable}${dead}
 promille ${sim.promille.toFixed(2)} ${promilleTierName(sim.promilleTier)}${knockedDown}
@@ -413,6 +535,7 @@ WASD move   arrows/mouse aim and fire
   };
   refreshHud();
   positionHud(layout);
+  positionBossBanner(layout);
 
   /**
    * Crosses one specific door: resolves the real neighbour room on the other
@@ -442,19 +565,29 @@ WASD move   arrows/mouse aim and fire
     );
     const entryCell = neighborPlacement.cells[entryCellIndex] ?? { col: 0, row: 0 };
 
-    if (
-      !sim.transitionTo(
-        planTemplate(neighborRoom),
-        floorPlan.floor,
-        direction,
-        neighborPlacement,
-        entryCell,
-      )
-    ) {
+    const succeeded = sim.transitionTo(
+      planTemplate(neighborRoom),
+      floorPlan.floor,
+      direction,
+      hiddenDoorsFor(floorPlan, neighborRoomId, revealedEdges),
+      neighborPlacement,
+      entryCell,
+    );
+    if (!succeeded) {
+      // A heuristic, not a reason code out of `transitionTo`: the current
+      // room's own enemies are the only other thing that blocks a
+      // transition, so ruling that out and checking the target is a
+      // treasure room the player has no key for is enough to tell the two
+      // apart without threading a discriminated failure reason through the
+      // sim layer for one HUD line.
+      if (!sim.doorsLocked && neighborRoom.role === 'treasure' && sim.keys <= 0) {
+        keyHintTicks = KEY_HINT_TICKS;
+      }
       return false;
     }
     currentRoomId = neighborRoomId;
     visitedRoomIds.add(neighborRoomId);
+    view.setSecretHints(crackHintsFor(floorPlan, currentRoomId, revealedEdges));
     minimapHud.rebuild(floorPlan, currentRoomId, visitedRoomIds);
     refreshHud();
     return true;
@@ -474,6 +607,34 @@ WASD move   arrows/mouse aim and fire
       return false;
     }
     return crossDoor(exitCellIndex, exitDoor.direction, match.neighborRoomId);
+  }
+
+  /**
+   * Notices when a Bierfassl blast has opened a hidden wall
+   * (`GameSim.revealBombableWalls` flips `sim.doors` the instant it does)
+   * and remembers the edge for the rest of the run, so no later load of
+   * either room this secret touches hides that direction again.
+   */
+  function checkSecretReveals(): void {
+    const room = planRoom(floorPlan, currentRoomId);
+    let changed = false;
+    for (const door of room.doors) {
+      const neighbor = planRoom(floorPlan, door.neighborRoomId);
+      const isSecretEdge = neighbor.role === 'secret' || neighbor.role === 'supersecret';
+      const key = edgeKey(currentRoomId, door.neighborRoomId);
+      if (
+        isSecretEdge &&
+        !revealedEdges.has(key) &&
+        sim.doors.some((visible) => visible.direction === door.direction)
+      ) {
+        revealedEdges.add(key);
+        changed = true;
+      }
+    }
+    if (changed) {
+      view.setSecretHints(crackHintsFor(floorPlan, currentRoomId, revealedEdges));
+      minimapHud.rebuild(floorPlan, currentRoomId, visitedRoomIds);
+    }
   }
 
   window.addEventListener('keydown', (event: KeyboardEvent) => {
@@ -498,11 +659,20 @@ WASD move   arrows/mouse aim and fire
         // from here has been used. Now that `sim.doorContact` triggers a
         // real transition on its own, this is a dev shortcut for touring the
         // floor without walking it — both go through the same `crossDoor`.
+        //
+        // Tries every candidate in priority order rather than picking one
+        // and stopping: a neighbour existing in the floor-plan graph does
+        // not mean its door is currently walkable — a secret/supersecret
+        // room's approach loads hidden until bombed (#23), so `N` has to
+        // fall through to the next candidate rather than getting stuck
+        // repeatedly failing to walk through a wall.
         const room = planRoom(floorPlan, currentRoomId);
-        const chosenDoor: RoomDoor | undefined =
-          room.doors.find((door) => !visitedRoomIds.has(door.neighborRoomId)) ?? room.doors[0];
-        if (chosenDoor !== undefined) {
-          crossDoor(chosenDoor.cellIndex, chosenDoor.direction, chosenDoor.neighborRoomId);
+        const unvisited = room.doors.filter((door) => !visitedRoomIds.has(door.neighborRoomId));
+        const visited = room.doors.filter((door) => visitedRoomIds.has(door.neighborRoomId));
+        for (const door of [...unvisited, ...visited]) {
+          if (crossDoor(door.cellIndex, door.direction, door.neighborRoomId)) {
+            break;
+          }
         }
         break;
       }

@@ -12,7 +12,7 @@ import { compileRoomTemplate, validateRoomTemplate } from '../../src/sim/room/te
 
 describe('room templates', () => {
   it('validates every registered authored room', () => {
-    expect(ROOM_TEMPLATES).toHaveLength(6);
+    expect(ROOM_TEMPLATES).toHaveLength(13);
     for (const [index, room] of ROOM_TEMPLATES.entries()) {
       expect(() =>
         validateRoomTemplate(room, `room[${String(index)}].json`, ENEMY_DEFINITIONS),

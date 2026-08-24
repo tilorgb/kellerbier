@@ -105,6 +105,7 @@ export interface CompiledRoomTemplate {
     readonly x: number;
     readonly y: number;
     readonly type: string;
+    readonly price?: number;
   }[];
   readonly decorativeProps: readonly {
     readonly x: number;
@@ -144,6 +145,18 @@ export function validateRoomTemplate(
   if (weight <= 0) {
     fail(`${source}.metadata.weight`, 'must be greater than zero');
   }
+  const specialRole = optionalSpecialRole(metadata.specialRole, `${source}.metadata.specialRole`);
+  const keyLocked =
+    metadata.keyLocked === undefined
+      ? undefined
+      : boolean(metadata.keyLocked, `${source}.metadata.keyLocked`);
+  if (keyLocked !== undefined && specialRole !== 'treasure') {
+    fail(`${source}.metadata.keyLocked`, 'may only be set on a treasure-role template');
+  }
+  const specialRoleFields = {
+    ...(specialRole === undefined ? {} : { specialRole }),
+    ...(keyLocked === undefined ? {} : { keyLocked }),
+  };
 
   if (shape === '1x1') {
     const layout = validateSubLayout(template, source, enemyCatalog);
@@ -157,7 +170,7 @@ export function validateRoomTemplate(
     return {
       id,
       ...layout,
-      metadata: { floorTags, shape: '1x1', doors, difficultyTier, weight },
+      metadata: { floorTags, shape: '1x1', doors, difficultyTier, weight, ...specialRoleFields },
     };
   }
 
@@ -175,8 +188,29 @@ export function validateRoomTemplate(
   return {
     id,
     cells,
-    metadata: { floorTags, shape: multiCellShape, difficultyTier, weight },
+    metadata: {
+      floorTags,
+      shape: multiCellShape,
+      difficultyTier,
+      weight,
+      ...specialRoleFields,
+    },
   };
+}
+
+const SPECIAL_ROLES = ['boss', 'treasure', 'shop', 'secret', 'supersecret'] as const;
+
+function optionalSpecialRole(
+  value: unknown,
+  source: string,
+): RoomTemplate['metadata']['specialRole'] {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== 'string' || !(SPECIAL_ROLES as readonly string[]).includes(value)) {
+    fail(source, `must be one of ${SPECIAL_ROLES.join(', ')}`);
+  }
+  return value as RoomTemplate['metadata']['specialRole'];
 }
 
 /**
@@ -235,7 +269,7 @@ function validateSubLayout(
     obstacles,
     enemySpawns,
     spawnGroups: groups,
-    pickupSpawns: positionsWithType(record.pickupSpawns, `${source}.pickupSpawns`),
+    pickupSpawns: pickupSpawns(record.pickupSpawns, `${source}.pickupSpawns`),
     hazards: records(record.hazards, `${source}.hazards`).map((item, index) => ({
       ...rectangle(item, `${source}.hazards[${String(index)}]`),
       type: requiredString(item.type, `${source}.hazards[${String(index)}].type`),
@@ -324,7 +358,7 @@ export function compileRoomTemplate(
     });
 
   const enemySpawns: { x: number; y: number; enemyId: string }[] = [];
-  const pickupSpawns: { x: number; y: number; type: string }[] = [];
+  const pickupSpawns: { x: number; y: number; type: string; price?: number }[] = [];
   const decorativeProps: { x: number; y: number; type: string; rotation?: number }[] = [];
   const hazards: { x: number; y: number; width: number; height: number; type: string }[] = [];
   order.forEach((placementIndex, rank) => {
@@ -374,6 +408,7 @@ export function compileRoomTemplate(
         x: cellOffsetX + pickup.x,
         y: cellOffsetY + pickup.y,
         type: pickup.type,
+        ...(pickup.price === undefined ? {} : { price: pickup.price }),
       });
     }
     for (const prop of layout.decorativeProps) {
@@ -481,6 +516,19 @@ function positionsWithType(value: unknown, source: string) {
       x: number(item.x, `${where}.x`),
       y: number(item.y, `${where}.y`),
       type: requiredString(item.type, `${where}.type`),
+    };
+  });
+}
+
+function pickupSpawns(value: unknown, source: string) {
+  return records(value, source).map((item, index) => {
+    const where = `${source}[${String(index)}]`;
+    const price = item.price === undefined ? undefined : positive(item.price, `${where}.price`);
+    return {
+      x: number(item.x, `${where}.x`),
+      y: number(item.y, `${where}.y`),
+      type: requiredString(item.type, `${where}.type`),
+      ...(price === undefined ? {} : { price }),
     };
   });
 }

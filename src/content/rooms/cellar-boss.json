@@ -1,0 +1,115 @@
+{
+  "id": "cellar-boss",
+  "cells": [
+    {
+      "tileGrid": [
+        "###############",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "###############"
+      ],
+      "obstacles": [],
+      "enemySpawns": [{ "x": 120, "y": 60, "group": "keller-brut" }],
+      "spawnGroups": [
+        {
+          "id": "keller-brut",
+          "count": 1,
+          "choices": [
+            { "enemyId": "kellerassel", "minFloor": 1, "maxFloor": 2 },
+            { "enemyId": "bierratte", "minFloor": 1, "maxFloor": 7 }
+          ]
+        }
+      ],
+      "pickupSpawns": [],
+      "hazards": [],
+      "decorativeProps": [{ "x": 120, "y": 20, "type": "boss-plate" }]
+    },
+    {
+      "tileGrid": [
+        "###############",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "###############"
+      ],
+      "obstacles": [],
+      "enemySpawns": [{ "x": 100, "y": 72, "group": "keller-brut" }],
+      "spawnGroups": [
+        {
+          "id": "keller-brut",
+          "count": 1,
+          "choices": [
+            { "enemyId": "kellerassel", "minFloor": 1, "maxFloor": 2 },
+            { "enemyId": "bierratte", "minFloor": 1, "maxFloor": 7 }
+          ]
+        }
+      ],
+      "pickupSpawns": [],
+      "hazards": [],
+      "decorativeProps": []
+    },
+    {
+      "tileGrid": [
+        "###############",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "###############"
+      ],
+      "obstacles": [],
+      "enemySpawns": [{ "x": 140, "y": 72, "group": "keller-brut" }],
+      "spawnGroups": [
+        {
+          "id": "keller-brut",
+          "count": 1,
+          "choices": [
+            { "enemyId": "kellerassel", "minFloor": 1, "maxFloor": 2 },
+            { "enemyId": "bierratte", "minFloor": 1, "maxFloor": 7 }
+          ]
+        }
+      ],
+      "pickupSpawns": [],
+      "hazards": [],
+      "decorativeProps": []
+    },
+    {
+      "tileGrid": [
+        "###############",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "###############"
+      ],
+      "obstacles": [],
+      "enemySpawns": [],
+      "spawnGroups": [],
+      "pickupSpawns": [],
+      "hazards": [],
+      "decorativeProps": []
+    }
+  ],
+  "metadata": {
+    "floorTags": ["cellar", "rural"],
+    "shape": "2x2",
+    "difficultyTier": 5,
+    "weight": 1,
+    "specialRole": "boss"
+  }
+}

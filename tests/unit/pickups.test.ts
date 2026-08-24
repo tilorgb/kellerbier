@@ -93,12 +93,64 @@ describe('pickup collection', () => {
   });
 });
 
-describe('pickup magnetism', () => {
-  it('drifts a nearby pickup toward the player without touching one out of range', () => {
+describe('priced pickup', () => {
+  it('is left in place, unspent, when the player cannot afford it', () => {
     const sim = emptySim();
     // Magnetism defaults to off — it's meant to be an item unlock, not free
     // from the start of a run — so this test, which is about the mechanism
     // itself, opts in explicitly rather than relying on the default.
+    sim.tuning.pickup.magnetRadius = 36;
+    const index = sim.playerIndex;
+    sim.applyPlayerDamage(2);
+    const damaged = sim.playerHealth;
+    sim.spawnPickup('mass-full', sim.positionX(index), sim.positionY(index), 5);
+    sim.world.flush();
+
+    sim.step(idle());
+
+    expect(sim.biermarken).toBe(0);
+    // Not healed — the pickup's effect never applied — and still standing on
+    // it, so if the price gate were broken this would resolve on the very
+    // next tick too, not just fail to resolve on this one.
+    expect(sim.playerHealth).toBe(damaged);
+  });
+
+  it('is bought — Biermarken spent, effect applied — once affordable', () => {
+    const sim = emptySim();
+    sim.addBiermarken(5);
+    const index = sim.playerIndex;
+    sim.applyPlayerDamage(2);
+    sim.spawnPickup('mass-full', sim.positionX(index), sim.positionY(index), 5);
+    sim.world.flush();
+
+    sim.step(idle());
+
+    expect(sim.biermarken).toBe(0);
+    expect(sim.playerHealth).toBe(PLAYER_HEALTH);
+  });
+
+  it('an unpriced pickup is free regardless of Biermarken held', () => {
+    const sim = emptySim();
+    const index = sim.playerIndex;
+    sim.spawnPickup('mass-full', sim.positionX(index), sim.positionY(index));
+    sim.world.flush();
+
+    sim.step(idle());
+
+    expect(sim.biermarken).toBe(0);
+    expect(sim.playerHealth).toBe(PLAYER_HEALTH);
+  });
+});
+
+describe('pickup magnetism', () => {
+  it('is off by default — a run starts with no drift at all', () => {
+    const sim = emptySim();
+    expect(sim.tuning.pickup.magnetRadius).toBe(0);
+  });
+
+  it('drifts a nearby pickup toward the player without touching one out of range, once granted', () => {
+    const sim = emptySim();
+    // Stands in for the future item that grants this (#M3) — nothing does yet.
     sim.tuning.pickup.magnetRadius = 36;
     const index = sim.playerIndex;
     const px = sim.positionX(index);
