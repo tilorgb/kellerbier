@@ -362,6 +362,33 @@ async function boot(): Promise<void> {
   };
   let bossBannerShown = false;
 
+  /**
+   * "What did I just pick up" toast (#26): the German name of whatever was
+   * just collected — a pickup or an item — plus a short plain-language
+   * translation of what it does ("Bierfassl — Bomb +1"). Driven by
+   * `sim.pickupToast`, which is presentation state that lives in the
+   * simulation (ticks down in `decayPresentation`) rather than a wall-clock
+   * timer here, for the same replay-determinism reason `bossBanner` reads
+   * `sim.roomWarmupTicks` instead of its own clock.
+   */
+  const pickupToast = new Text({
+    text: '',
+    style: { fill: 0xe8c94a, fontFamily: 'monospace', fontSize: 14, fontWeight: 'bold' },
+  });
+  pickupToast.anchor.set(0.5);
+  pickupToast.visible = false;
+  uiLayer.addChild(pickupToast);
+  const positionPickupToast = (applied: GameLayout): void => {
+    pickupToast.position.set(
+      applied.originX + (INTERNAL_WIDTH * applied.scale) / 2,
+      // Clear of the top-left HUD stack (health/Promille/wallet, the last of
+      // which sits at a fixed `originY + 42` screen pixels) even at a small
+      // window scale, and still well above `bossBanner`'s 0.3.
+      applied.originY + INTERNAL_HEIGHT * applied.scale * 0.22,
+    );
+  };
+  let pickupToastLabel = '';
+
   const healthHud = new HealthHud(app.renderer);
   uiLayer.addChild(healthHud.view);
   // Screen pixels, not scaled — the same choice `hud` (the debug text) makes,
@@ -482,6 +509,7 @@ async function boot(): Promise<void> {
     positionWalletHud(applied);
     positionMinimapHud(applied);
     positionBossBanner(applied);
+    positionPickupToast(applied);
     gameOverScreen.resize(applied);
     vignette.resize(applied);
   });
@@ -550,6 +578,18 @@ async function boot(): Promise<void> {
       if (showBossBanner !== bossBannerShown) {
         bossBannerShown = showBossBanner;
         bossBanner.visible = showBossBanner;
+      }
+      const toast = sim.pickupToast;
+      if (toast !== null) {
+        const label = `${toast.name} — ${toast.description}`;
+        if (label !== pickupToastLabel) {
+          pickupToastLabel = label;
+          pickupToast.text = label;
+        }
+        pickupToast.visible = true;
+      } else if (pickupToast.visible) {
+        pickupToast.visible = false;
+        pickupToastLabel = '';
       }
       const playerScreen = view.playerScreenPosition();
       vignette.sync(sim, playerScreen.x, playerScreen.y);
@@ -664,6 +704,8 @@ WASD move   arrows/mouse aim and fire
     keyHintTicks = 0;
     bossBannerShown = false;
     bossBanner.visible = false;
+    pickupToastLabel = '';
+    pickupToast.visible = false;
     gameOverScreen.hide();
     loop.reset();
     loop.timeScale = 1;

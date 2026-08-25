@@ -166,6 +166,12 @@ export interface ItemDefinition {
   readonly id: string;
   /** The name a player would see. German, per docs/CONTENT_BIBLE.md. */
   readonly name: string;
+  /**
+   * A short, plain-language translation of what it does — "Damage +1 per
+   * stack", not a sentence of flavour text. Shown alongside `name` on the
+   * pickup toast (`GameSim.pickupToast`/`reportCollected`), the same
+   * short-and-literal convention `PickupDefinition.description` uses.
+   */
   readonly description: string;
   /** Placeholder-art key until real icons exist (#34), same convention as `PickupDefinition.label`. */
   readonly sprite: string;

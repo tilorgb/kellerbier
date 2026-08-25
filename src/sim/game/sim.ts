@@ -449,6 +449,19 @@ export class GameSim {
   private soulHp = 0;
   private eternalHp = 0;
 
+  /**
+   * What the pickup toast (#26) is currently showing — the name and short
+   * translation of the most recently collected pickup or item — and how many
+   * ticks are left before it hides. Presentation state kept in the
+   * simulation rather than a render-layer wall-clock timer, the same
+   * reasoning DECISIONS.md #2 gives for the hit flash and screenshake: a
+   * replay has to show the same toast for the same duration, not whatever a
+   * setTimeout on the machine replaying it happens to produce.
+   */
+  private toastName = '';
+  private toastDescription = '';
+  private toastTicks = 0;
+
   /** Biermarken banked, Kellerschlüssel held, and Bierfassl in inventory — see #22. */
   private biermarkenCount = 0;
   private keysCount = 0;
@@ -1156,6 +1169,31 @@ export class GameSim {
     health[index * 2] = Math.min(max, (health[index * 2] ?? 0) + amount);
   }
 
+  /**
+   * The pickup toast currently on screen, or `null` once it has aged out —
+   * see `toastTicks`'s doc comment. Read by the render layer once a frame,
+   * the same pattern `roomWarmupTicks`/the boss banner already use.
+   */
+  get pickupToast(): { readonly name: string; readonly description: string } | null {
+    if (this.toastTicks <= 0) {
+      return null;
+    }
+    return { name: this.toastName, description: this.toastDescription };
+  }
+
+  /**
+   * Starts (or restarts) the pickup toast — called once per collection, by
+   * `sim/systems/pickup.ts`'s `collect` for an ordinary pickup and by
+   * `pickUpItem` for an item. A second collection while one toast is still
+   * showing replaces it outright rather than queuing, the same "newest wins"
+   * choice `addShake` already makes for screenshake direction.
+   */
+  reportCollected(name: string, description: string): void {
+    this.toastName = name;
+    this.toastDescription = description;
+    this.toastTicks = Math.round(this.tuning.pickup.toastTicks);
+  }
+
   /** Biermarken banked. */
   get biermarken(): number {
     return this.biermarkenCount;
@@ -1462,7 +1500,9 @@ export class GameSim {
     const state = this.inventory.pickUp(index);
     this.markItemStatsDirty(index);
     this.syncItemStatModifiers();
-    this.items.at(index).hooks.onPickup?.({ sim: this, itemId: id, state });
+    const item = this.items.at(index);
+    this.reportCollected(item.name, item.description);
+    item.hooks.onPickup?.({ sim: this, itemId: id, state });
     return state;
   }
 
@@ -1808,6 +1848,10 @@ export class GameSim {
     // Below a fifth of a pixel the camera is not moving, it is jittering.
     if (this.shakeMagnitude < 0.2) {
       this.shakeMagnitude = 0;
+    }
+
+    if (this.toastTicks > 0) {
+      this.toastTicks -= 1;
     }
   }
 

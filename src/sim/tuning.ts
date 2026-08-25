@@ -384,6 +384,14 @@ export interface PickupTuning {
   bombRollSpeed: number;
   /** Drag applied to a rolled Bierfassl every tick — see `stepBodies`. */
   bombRollDrag: number;
+  /**
+   * Ticks the "what did I just pick up" HUD toast (#26) stays on screen after
+   * a pickup or an item is collected. Presentation state, but tick-driven
+   * rather than a wall-clock timer in the render layer — the same reasoning
+   * `flash`/`spawnBounce` are ticks rather than milliseconds — so the same
+   * seed and input log show the same toast for the same duration on replay.
+   */
+  toastTicks: number;
 }
 
 export interface SimTuning {
@@ -515,6 +523,7 @@ export const DEFAULT_PICKUP_TUNING: Readonly<PickupTuning> = {
   bombBlastDamage: 4,
   bombRollSpeed: 2.6,
   bombRollDrag: 0.9,
+  toastTicks: 120,
 };
 
 export function createTuning(): SimTuning {

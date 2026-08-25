@@ -208,6 +208,42 @@ describe('pickup spawn clears residual motion', () => {
   });
 });
 
+describe('pickup toast', () => {
+  it('is empty before anything is collected', () => {
+    const sim = emptySim();
+    expect(sim.pickupToast).toBeNull();
+  });
+
+  it('shows the collected pickup name and description, then ages out', () => {
+    const sim = emptySim();
+    const index = sim.playerIndex;
+    sim.spawnPickup('bierfassl', sim.positionX(index), sim.positionY(index));
+    sim.world.flush();
+
+    sim.step(idle());
+    expect(sim.pickupToast).toEqual({ name: 'Bierfassl', description: 'Bomb +1' });
+
+    for (let tick = 0; tick < sim.tuning.pickup.toastTicks; tick++) {
+      sim.step(idle());
+    }
+    expect(sim.pickupToast).toBeNull();
+  });
+
+  it('the newest collection replaces an older toast still on screen', () => {
+    const sim = emptySim();
+    const index = sim.playerIndex;
+    sim.spawnPickup('kellerschluessel', sim.positionX(index), sim.positionY(index));
+    sim.world.flush();
+    sim.step(idle());
+    expect(sim.pickupToast?.name).toBe('Kellerschlüssel');
+
+    sim.spawnPickup('biermarke-1', sim.positionX(index), sim.positionY(index));
+    sim.world.flush();
+    sim.step(idle());
+    expect(sim.pickupToast).toEqual({ name: 'Biermarke', description: 'Currency +1' });
+  });
+});
+
 function minimalRoom(): unknown {
   return {
     id: 'test-room',

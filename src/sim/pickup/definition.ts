@@ -9,6 +9,10 @@
 export interface PickupDefinition {
   /** Unique, lower case, no spaces. Used by room templates and drop tables. */
   readonly id: string;
+  /** The name a player would see. German, per docs/CONTENT_BIBLE.md. */
+  readonly name: string;
+  /** A short, plain-language translation of what it does — "Bomb", "Currency +5". Shown on the pickup toast (#26). */
+  readonly description: string;
   readonly radius: number;
   readonly tint: number;
   /**

@@ -223,6 +223,15 @@ describe('GameSim.pickUpItem / removeItem — stat pipeline integration', () => 
     expect(() => sim.pickUpItem('does-not-exist')).toThrow(/no item definition/i);
     expect(() => sim.removeItem('does-not-exist')).toThrow(/no item definition/i);
   });
+
+  it('picking up an item shows its name and description on the pickup toast', () => {
+    const item = baseItem('krug', { name: 'Bierkrug', description: 'Damage up' });
+    const sim = new GameSim({ room: bareRoom(), items: [item] });
+
+    expect(sim.pickupToast).toBeNull();
+    sim.pickUpItem('krug');
+    expect(sim.pickupToast).toEqual({ name: 'Bierkrug', description: 'Damage up' });
+  });
 });
 
 describe('GameSim.pickUpItem / removeItem — onPickup/onRemove lifecycle', () => {

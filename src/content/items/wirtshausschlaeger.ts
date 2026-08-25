@@ -10,7 +10,7 @@ import type { ItemDefinition } from '../../sim/item/definition.js';
 export const wirtshausschlaeger: ItemDefinition = {
   id: 'wirtshausschlaeger',
   name: 'Wirtshausschläger',
-  description: 'Every kill in the room pays out a Biermarke.',
+  description: 'Kill: currency +1',
   sprite: 'wirtshausschlaeger',
   pools: ['treasure', 'boss'],
   quality: 1,

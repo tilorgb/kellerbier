@@ -14,7 +14,7 @@ import type { ItemDefinition } from '../../sim/item/definition.js';
 export const feuerwasser: ItemDefinition = {
   id: 'feuerwasser',
   name: 'Feuerwasser',
-  description: 'Charges as the floor goes on. Fully heals, then burns out.',
+  description: 'Active: full heal, one use',
   sprite: 'feuerwasser',
   pools: ['shop', 'secret'],
   quality: 2,

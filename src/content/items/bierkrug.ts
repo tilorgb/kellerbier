@@ -12,7 +12,7 @@ import type { ItemDefinition } from '../../sim/item/definition.js';
 export const bierkrug: ItemDefinition = {
   id: 'bierkrug',
   name: 'Bierkrug',
-  description: 'A stone mug. Heavier every round, and it hits like it.',
+  description: 'Damage +1 per stack',
   sprite: 'bierkrug',
   pools: ['treasure', 'shop'],
   quality: 0,
