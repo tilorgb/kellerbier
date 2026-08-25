@@ -225,8 +225,8 @@ export function buildStressScene(): StressScene {
  * that has to run in CI.
  *
  * What cannot be measured here is the other half: draw calls and GPU time need
- * a real context. Those stay in the F1 overlay, which counts them in the
- * browser against the same budget.
+ * a real context. Those stay in the debug overlay (`O`), which counts them in
+ * the browser against the same budget.
  */
 export function buildHeadlessView(sim: GameSim): GameView {
   return new GameView(sim, {

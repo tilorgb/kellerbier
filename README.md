@@ -52,11 +52,13 @@ npm run typecheck  # tsc --noEmit
 npm run build      # production static build
 ```
 
-**Controls:** `WASD` to move, mouse or the arrow keys to aim and fire. `F2` opens the tuning
-window — every feel constant on a slider, changed while the game runs. `F1` opens the debug
+**Controls:** `WASD` to move, mouse or the arrow keys to aim and fire. `T` opens the tuning
+window — every feel constant on a slider, changed while the game runs. `O` opens the debug
 overlay — frame graph, entity and pool counts, draw calls, hitboxes (`H`) and the spatial-hash
 grid (`G`). Middle-drag pans the camera, `0` recentres, `C` copies the run's seed and tick for
-a bug report.
+a bug report. (Plain letters rather than F-keys or punctuation — a hosted preview's browser
+chrome claims F-keys as its own shortcuts, and punctuation-row keys can land on a dead accent
+key on a non-US keyboard layout.)
 
 **Room editor:** with `npm run dev` running, open `/editor.html` to author room templates —
 grid, palette, metadata, inline validation, browse/duplicate, and a live in-engine playtest of

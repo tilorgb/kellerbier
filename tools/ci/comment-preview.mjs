@@ -59,7 +59,7 @@ const body = [
   '| | |',
   '|---|---|',
   '| Controls | `WASD` move · mouse or arrows aim and fire |',
-  '| Debug overlay | `F1` — frame graph, hitboxes (`H`), spatial grid (`G`) |',
+  '| Debug overlay | `O` — frame graph, hitboxes (`H`), spatial grid (`G`) |',
   '',
   '_Frame-time deltas are in the benchmark comment below._',
 ].join('\n');

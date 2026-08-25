@@ -26,9 +26,9 @@ import {
  * `docs/TECH_STACK.md` §3 states the numbers the game commits to. Three of them
  * can be measured on a machine with no display server, and are, here:
  * simulation tick, full frame, and heap growth. The fourth — draw calls — needs
- * a real graphics context, and is counted in the browser by the F1 overlay; the
- * report carries an explicit null for it rather than quietly leaving the row
- * out and reading as though it had been met.
+ * a real graphics context, and is counted in the browser by the debug overlay
+ * (`O`); the report carries an explicit null for it rather than quietly
+ * leaving the row out and reading as though it had been met.
  *
  * This is #16. A budget nobody measures is a wish, and the moment to install
  * the measurement is while the scene is cheap to build rather than in M8, when
@@ -194,7 +194,7 @@ function printSummary(report: BenchReport, path: string): void {
       ),
       `  ${'sim heap'.padEnd(12)} ${(report.simHeapBytesPerTick / 1024).toFixed(1).padStart(8)} KB per tick` +
         `                    budget ${String(SIM_HEAP_BUDGET_BYTES / 1024)} KB`,
-      `  ${'draw calls'.padEnd(12)} not measurable headless — counted in the browser by F1`,
+      `  ${'draw calls'.padEnd(12)} not measurable headless — counted in the browser by the debug overlay`,
       `  written to ${path}`,
       '',
     ].join('\n'),

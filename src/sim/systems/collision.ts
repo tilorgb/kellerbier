@@ -56,6 +56,8 @@ let activeSim: GameSim | null = null;
 let activeTransform: Float32Array = new Float32Array(0);
 let activeBody: Float32Array = new Float32Array(0);
 let activeCollisionLayers: Uint16Array = new Uint16Array(0);
+/** `sim.projectiles.lastHitTarget` — see `testCandidate`'s use of it, and the same reasoning above. */
+let activeLastHitTarget: Int32Array = new Int32Array(0);
 
 /** Slots in `state`, the double half of the projectile being resolved. */
 const FROM_X = 0;
@@ -81,6 +83,7 @@ export function stepCollision(sim: GameSim): void {
   activeTransform = sim.transform.data;
   activeBody = sim.body.data;
   activeCollisionLayers = sim.collision.data;
+  activeLastHitTarget = sim.projectiles.lastHitTarget;
 
   buildBroadphase(sim);
   sim.projectiles.forEachLive(resolveProjectile);
@@ -203,7 +206,7 @@ function testCandidate(index: number): void {
   // A `piercing`/`bouncing` shot that survived a hit last tick does not
   // re-register a hit against the very same body this tick before it has
   // physically cleared it — see `ProjectileStore.lastHitTarget`'s doc comment.
-  if (index === (activeSim?.projectiles.lastHitTarget[slots[PROJECTILE_SLOT] ?? 0] ?? -1)) {
+  if (index === (activeLastHitTarget[slots[PROJECTILE_SLOT] ?? 0] ?? -1)) {
     return;
   }
 

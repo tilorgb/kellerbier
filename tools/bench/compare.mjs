@@ -136,7 +136,9 @@ if (base === undefined) {
 }
 
 lines.push('');
-lines.push('_Draw calls are not measurable headless; the F1 overlay counts them in the browser._');
+lines.push(
+  '_Draw calls are not measurable headless; the debug overlay (`O`) counts them in the browser._',
+);
 
 const body = lines.join('\n');
 console.log(body);
