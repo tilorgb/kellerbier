@@ -1,6 +1,6 @@
 {
   "id": "cellar-staircase-west-east",
-  "stepCount": 5,
+  "stepCount": 4,
   "direction": "up-right",
   "startDoor": "west",
   "endDoor": "east",

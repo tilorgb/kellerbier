@@ -104,16 +104,16 @@ export interface StaircaseContentTemplate extends StaircaseRoomTemplate {
  * parity, which only matters *here*, for the generator-placement path (see
  * below), not for a hand-placed staircase compiled directly.
  *
- * `stepCount` must be **odd**. A staircase's real screen-space span is
- * `1 + (stepCount - 1) * STAIR_STEP_OVERLAP` grid cells; `floor-plan.ts`'s
- * `placeStaircase` reserves `Math.ceil` of that as whole floor-grid cells,
- * so the two agree exactly only when that span is already a whole number —
- * true iff `stepCount` is odd, given `STAIR_STEP_OVERLAP` is `0.5`. Get that
- * wrong (as the first two authored templates did, at `stepCount: 4`) and the
- * reservation has to round up half a cell past where the real geometry
- * actually ends, which is exactly the gap a neighbouring room's door then
- * shows on the minimap — no drawing fix closes that; only the sizes
- * agreeing in the first place does.
+ * `stepCount` must be **even** (#118). `floor-plan.ts`'s `placeStaircase`
+ * reserves the real, exact fractional footprint now — no rounding — as a
+ * grid of `STAIR_STEP_OVERLAP`-sized reservation sub-cells, with the
+ * staircase's two real doors sitting `stepCount * STAIR_STEP_OVERLAP` cells
+ * apart. Both doors have to land back on the ordinary integer cell grid —
+ * they are real rooms, bordering a real neighbour — which only happens when
+ * that offset is a whole number of cells, true iff `stepCount` is even,
+ * given `STAIR_STEP_OVERLAP` is `0.5`. Get that wrong and one of the two
+ * doors would sit half a cell off the grid, with no real room there for it
+ * to open into.
  */
 export function validateStaircaseTemplate(
   value: unknown,
@@ -129,11 +129,11 @@ export function validateStaircaseTemplate(
     throw new Error(`${source}.id must be a non-empty string`);
   }
 
-  if (typeof record.stepCount === 'number' && record.stepCount % 2 === 0) {
+  if (typeof record.stepCount === 'number' && record.stepCount % 2 !== 0) {
     throw new Error(
-      `${source}.stepCount must be odd (got ${String(record.stepCount)}) — an even stepCount ` +
-        `leaves the floor generator's cell reservation half a cell larger than the real ` +
-        `geometry, which draws as a gap to whatever room ends up past its door`,
+      `${source}.stepCount must be even (got ${String(record.stepCount)}) — an odd stepCount ` +
+        `leaves one of the staircase's two doors half a cell off the ordinary floor-grid, ` +
+        `with no real room there for it to open into`,
     );
   }
 

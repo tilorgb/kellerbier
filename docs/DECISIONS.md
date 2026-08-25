@@ -348,3 +348,73 @@ needs no snapping or stretching at all. #118 tracks lifting this once sub-cell r
 end it grew from (`StaircasePlacement.farNeighborCell`, a forced `1x1` placed right after the
 staircase itself) — a staircase is the floor's single biggest room by walking time, and reaching
 the far end to find nothing there read as wasted effort rather than an arrival.
+
+## 13. Staircase reservation is exact, at `STAIR_STEP_OVERLAP` sub-cell granularity — `stepCount` must be even, not odd
+
+**Decided:** M2. **Issue:** #118. **Supersedes:** #12's `span = ceil(...)` whole-cell rounding,
+and its found-while-playtesting note (3) requiring an odd `stepCount`.
+
+**Reservation:** `placeStaircase` (`floor-plan.ts`) no longer rounds a staircase's real
+screen-space span up to the next whole cell. It reserves a `subcellCount` × `subcellCount` grid of
+`STAIR_STEP_OVERLAP`-wide (half-cell) reservation sub-cells instead, where `subcellCount` is
+`template.stepCount + 1` — this tiles the true span (`1 + (stepCount - 1) * STAIR_STEP_OVERLAP`
+cells) exactly, with no slack on any edge, because that span is always a whole multiple of
+`STAIR_STEP_OVERLAP` regardless of `stepCount`'s parity. Only two of these sub-cells are ever real
+rooms (the start/end corners, `cells[0]`/`cells[cells.length - 1]`); every other one exists purely
+to correctly claim the fractional footprint, exactly as #12's whole-cell interior padding did, just
+at finer resolution.
+
+**Why `stepCount` flips from odd to even:** a staircase's two doors are real rooms and have to land
+back on the ordinary integer floor-grid every other room's cells live on. The offset between them
+is `stepCount * STAIR_STEP_OVERLAP` cells — a whole number iff `stepCount` is even, given
+`STAIR_STEP_OVERLAP` is `0.5`. #12's whole-cell-only reservation needed the *opposite* parity for
+an unrelated reason (rounding `Math.ceil` of the span up to a whole cell only ever agreed with the
+real geometry when that span was already whole, which took an odd `stepCount`); now that the
+reservation itself is exact at half-cell resolution, the constraint moves from "make the rounded
+span exact" to "make both doors land on the coarse grid", and those are opposite parities.
+`validateStaircaseTemplate` now rejects odd instead of even; `placeStaircase` carries the same
+check itself, defensively, for a template handed to it some other way. Both authored templates
+(`cellar-staircase.json`, `cellar-staircase-west-east.json`) moved from `stepCount: 5` to `4`.
+
+**Mixed-resolution occupancy:** `occupied` (and `PlacedRoom.cells`) now holds two different sizes
+of entry in the same map — an ordinary room's cells are still real, whole cells; a staircase's own
+sub-cells are `STAIR_STEP_OVERLAP` wide. `neighborCount`'s ±1 whole-cell check (unchanged, still
+what every ordinary `RoomShape` and a staircase's two corners use — corners are real rooms too) can
+no longer answer "does this sub-cell touch anything already placed" on its own, since a fractional
+sub-cell's true neighbours are half a cell away, not a whole one. `reservedCellTouchesOccupied` is
+the general fix: a closed-interval rectangle-touch test, sized per entry from what actually placed
+it (`isReservedAtSubcellGranularity`) rather than assuming every `occupied` entry is the same size.
+Only `placeStaircase` needs this — every other room kind is still whole-cell-only and
+`neighborCount` keeps working for it unchanged.
+
+**Frontier growth and secret placement never anchor on a fractional cell:** `buildSkeleton`'s
+frontier-push and `openCellTouchCounts` (feeding `placeSecretRoom`/`placeSupersecretRoom`) both
+walk every placed room's own cells with the same ±1 whole-cell `OFFSET` ordinary rooms use — pushed
+or scanned from a staircase's fractional interior sub-cells, that offset would produce fractional
+candidates, and either function handing one to its caller would place an ordinary `1x1` room (ever
+only real, whole cells) at a coordinate that isn't a real screen. Both now skip a non-integer source
+cell before ever computing an offset from it. A staircase's two corners are integer and still
+contribute frontier growth and touch-count candidates exactly as before; only its never-a-door
+interior sub-cells stop — which cost nothing real, since nothing could ever open a door onto them
+anyway.
+
+**What #118 does not do:** this is still whole/half-cell reservation sized to what a diagonal
+staircase's `STAIR_STEP_OVERLAP = 0.5` actually needs, not a general arbitrary-fraction floor-grid.
+The issue's other two motivating cases (a quarter-cell diagonal shortcut, a quarter-cell wedge-in
+threshold room) would need finer-than-half-cell resolution and their own design pass — nothing here
+prevents that later, but nothing here builds it either.
+
+It also does not make the far neighbour's minimap square flush with the staircase's real last-step
+edge. `computeAdjacency` finds every door — a staircase's two corners included — with the same
+whole-cell `OFFSET` step every ordinary room's adjacency uses, unchanged by this issue, so
+`farNeighborCell` has to sit exactly one whole cell from `cells[farCellIndex]`. The near end (the
+pre-existing room the staircase grew from) is always exactly flush — no approximation, it was
+already there. The far end's real last-step edge, though, is `STAIR_STEP_OVERLAP` short of
+`cells[farCellIndex]`'s own position (`stepCount * STAIR_STEP_OVERLAP` cells from the anchor,
+against the real step's `(stepCount - 1) * STAIR_STEP_OVERLAP`) — a fixed, cosmetic half-cell gap
+on the minimap between the last drawn step and its neighbour's square, present for every `stepCount`
+this system now accepts (all even). Not a gameplay bug: the real door position (`doorCentres`) is
+exact regardless, only the schematic has the gap. Closing it for good needs `computeAdjacency`
+itself to understand a staircase-specific, sub-cell-offset door — out of scope here; #118 fixes the
+over-reservation that blocked *other* rooms (its actual motivating bug) and lets `stepCount: 4` be
+authored at all, not the minimap's pixel-perfect fit to a newly-placed neighbour.

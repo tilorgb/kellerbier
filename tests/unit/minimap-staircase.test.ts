@@ -15,13 +15,13 @@ import {
  * mapping is faithful to the real geometry, touches the reserved block's
  * own edges exactly (no gap, no stretched step), and never needs any
  * special-casing of the first/last step to do it — that's the payoff of
- * `validateStaircaseTemplate`'s odd-`stepCount` requirement, tested
- * separately in `staircase.test.ts`.
+ * `placeStaircase`'s exact, sub-cell-granularity reservation (#118), tested
+ * separately in `staircase.test.ts`/`floor-plan.test.ts`.
  */
 describe('staircaseMinimapRects (#112)', () => {
   const template: StaircaseContentTemplate = {
     id: 'synthetic-staircase',
-    stepCount: 5,
+    stepCount: 4,
     direction: 'up-right',
     startDoor: 'south',
     endDoor: 'north',
@@ -29,20 +29,21 @@ describe('staircaseMinimapRects (#112)', () => {
     weight: 1,
   };
 
-  /** The same `endCell` `sim/room/floor-plan.ts`'s `placeStaircase` derives for `template`, given `originCell`. */
+  /** The same `endCell` `sim/room/floor-plan.ts`'s `placeStaircase` derives for `template`, given `originCell` (#118: exact, no rounding). */
   function endCellFor(originCell: { x: number; y: number }): { x: number; y: number } {
-    const span = Math.ceil(1 + (template.stepCount - 1) * STAIR_STEP_OVERLAP);
     const sign = STEP_SIGN[template.direction];
-    return { x: originCell.x + (span - 1) * sign.x, y: originCell.y + (span - 1) * sign.y };
+    return {
+      x: originCell.x + template.stepCount * STAIR_STEP_OVERLAP * sign.x,
+      y: originCell.y + template.stepCount * STAIR_STEP_OVERLAP * sign.y,
+    };
   }
 
-  it('maps the first and last step onto exactly one grid cell each, with no gap to the reserved end cell', () => {
-    // An odd `stepCount` (#112, `validateStaircaseTemplate`) makes the real
-    // screen-space span exactly a whole number of grid cells, so
-    // `placeStaircase`'s reservation and this mapping agree exactly — no
-    // snapping or stretching needed to reach the reserved block's own edge.
+  it('maps the first step onto exactly the origin cell, with no gap to the anchor', () => {
+    // The near end is always exactly flush: `originCell` *is* the
+    // pre-existing room `placeStaircase` grew from, no approximation
+    // involved, whichever corner of the reservation block it turned out to
+    // be (#118).
     const originCell = { x: 5, y: 5 };
-    const endCell = endCellFor(originCell);
     const gridSteps = staircaseMinimapRects(originCell, template);
 
     expect(gridSteps[0]).toEqual({
@@ -51,12 +52,29 @@ describe('staircaseMinimapRects (#112)', () => {
       maxX: originCell.x + 1,
       maxY: originCell.y + 1,
     });
-    expect(gridSteps[gridSteps.length - 1]).toEqual({
-      minX: endCell.x,
-      minY: endCell.y,
-      maxX: endCell.x + 1,
-      maxY: endCell.y + 1,
-    });
+  });
+
+  it('leaves exactly STAIR_STEP_OVERLAP between the real last step and the reservation block it grew (#118)', () => {
+    // `placeStaircase`'s reservation block's far corner (`endCellFor`, the
+    // same math `floor-plan.ts` uses to place `farNeighborCell`) sits
+    // `STAIR_STEP_OVERLAP` further out than the real last step's own
+    // position mapped here — an even `stepCount` (the only kind
+    // `placeStaircase` accepts, #118) can never make those two agree
+    // exactly, because `computeAdjacency` finds a staircase's doors with
+    // the same whole-cell step every ordinary room's adjacency uses. This
+    // is the accepted, cosmetic trade documented on `placeStaircase`'s own
+    // doc comment and in `docs/DECISIONS.md` #13 — the real door position
+    // (`doorCentres`) is unaffected.
+    const originCell = { x: 5, y: 5 };
+    const endCell = endCellFor(originCell);
+    const gridSteps = staircaseMinimapRects(originCell, template);
+    const lastStep = gridSteps[gridSteps.length - 1];
+    if (lastStep === undefined) {
+      throw new Error('expected a last step');
+    }
+
+    expect(Math.abs(endCell.x - lastStep.minX)).toBeCloseTo(STAIR_STEP_OVERLAP);
+    expect(Math.abs(endCell.y - lastStep.minY)).toBeCloseTo(STAIR_STEP_OVERLAP);
   });
 
   it('keeps every consecutive pair of steps overlapping by exactly the true fraction, ends included', () => {

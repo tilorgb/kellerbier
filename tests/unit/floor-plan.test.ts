@@ -116,7 +116,7 @@ function syntheticPool(): RoomTemplate[] {
 function syntheticStaircasePool(): StaircaseContentTemplate[] {
   return FLOOR_CONFIGS.map((config) => ({
     id: `synthetic-staircase-${config.floorTag}`,
-    stepCount: 5,
+    stepCount: 4,
     direction: 'up-right',
     startDoor: 'south',
     endDoor: 'north',

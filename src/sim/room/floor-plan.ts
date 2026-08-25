@@ -396,11 +396,10 @@ interface StaircasePlacement {
  * staircase that didn't match its own real shape (a whole rect snapped to
  * its reserved cell detached from its neighbour step; stretching just one
  * edge drew that step visibly longer than the rest). The real fix is
- * `validateStaircaseTemplate`'s odd-`stepCount` requirement: it makes
- * `placeStaircase`'s cell reservation and this function's real geometry
- * agree exactly, so the *true*, undistorted shape mapped here already
- * reaches the reserved block's own edges — nothing to correct after the
- * fact.
+ * `placeStaircase`'s exact, sub-cell-granularity reservation (#118): it
+ * makes the cell block it reserves and this function's real geometry agree
+ * exactly, so the *true*, undistorted shape mapped here already reaches the
+ * reserved block's own edges — nothing to correct after the fact.
  */
 export function staircaseMinimapRects(
   originCell: Cell,
@@ -455,45 +454,145 @@ function staircaseDoorCentres(
 const STAIRCASE_CHANCE = 0.05;
 
 /**
+ * The true size (in cell units) of the room cell at `(x, y)`, owned by
+ * `rooms[roomIndex]` — `1` for a real whole cell, `STAIR_STEP_OVERLAP` for
+ * one of a staircase's own non-door reservation sub-cells (`placeStaircase`).
+ * A staircase's own two door cells (its real start/end steps) are whole
+ * cells too, exactly like any other real room — only the padding in
+ * between is sized down, so this checks `room.doorCells` rather than just
+ * `room.shape === 'staircase'`.
+ */
+function occupiedCellSize(
+  rooms: readonly PlacedRoom[],
+  roomIndex: number,
+  x: number,
+  y: number,
+): number {
+  const room = rooms[roomIndex];
+  if (room?.doorCells === undefined) {
+    return 1;
+  }
+  const isDoorCell = room.doorCells.some((door) => {
+    const doorCell = room.cells[door.cellIndex];
+    return doorCell?.x === x && doorCell.y === y;
+  });
+  return isDoorCell ? 1 : STAIR_STEP_OVERLAP;
+}
+
+/**
+ * Whether `cell` (of size `cellSize`, in cell units — `1` for a real whole
+ * cell, `STAIR_STEP_OVERLAP` for one of a staircase's own reservation
+ * sub-cells, see `placeStaircase`) overlaps or shares an edge with anything
+ * already in `occupied`, sizing each occupied entry from what actually
+ * placed it (`occupiedCellSize`) rather than assuming every entry is a whole
+ * cell — a staircase's own non-door sub-cells are not.
+ *
+ * A closed-interval rectangle test (`<=`/`>=`) on purpose: sharing just an
+ * edge counts as "touches", the same thing `neighborCount`'s ±1 whole-cell
+ * check means for an ordinary shape's `extraCellsAreClean` — this is that
+ * same rule, generalized to a mixed grid where not every entry is the same
+ * size.
+ */
+function reservedCellTouchesOccupied(
+  cell: Cell,
+  cellSize: number,
+  occupied: ReadonlyMap<string, number>,
+  rooms: readonly PlacedRoom[],
+): boolean {
+  for (const [key, roomIndex] of occupied) {
+    const separator = key.indexOf(',');
+    const otherX = Number(key.slice(0, separator));
+    const otherY = Number(key.slice(separator + 1));
+    const otherSize = occupiedCellSize(rooms, roomIndex, otherX, otherY);
+    if (
+      cell.x <= otherX + otherSize &&
+      cell.x + cellSize >= otherX &&
+      cell.y <= otherY + otherSize &&
+      cell.y + cellSize >= otherY
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Tries to reserve `template`'s real screen-space footprint as floor-grid
  * cells, anchored so one of its two ends lands on `anchor`.
  *
- * The footprint is a *square block* of `span` × `span` cells, not just the
- * `stepCount` cells the steps themselves sit on — `span` is
- * `1 + (stepCount - 1) * STAIR_STEP_OVERLAP` cells across (the true screen-
- * space bounding box, in cell units), rounded **up**. A staircase's steps
- * overlap by a fraction of a screen (`STAIR_STEP_OVERLAP`), not a whole one,
- * so that span is very rarely a whole number of cells — rounding up over-
- * reserves rather than under, which is the safe side to be wrong on: any
- * other room placed in a cell this block doesn't strictly touch is merely a
- * missed opportunity, but placing one in a cell the real geometry *does*
- * touch would be a room the player can plainly see is impossible (#112).
- * The first step always sits at one corner of this block and the last step
- * at the diagonally opposite corner, regardless of `span` — only those two
- * corner cells ever get a door; every other cell in the block, corner or
- * interior, gets none (`doorCells`, consumed by `computeAdjacency`'s
- * `buildDoorAllowance`).
+ * The footprint is a *square block* of `subcellCount` × `subcellCount`
+ * reservation sub-cells, not just the `stepCount` cells the steps
+ * themselves sit on — each sub-cell is `STAIR_STEP_OVERLAP` (half a screen)
+ * across, and `subcellCount` is `template.stepCount + 1`, which tiles the
+ * true screen-space bounding box (`1 + (stepCount - 1) * STAIR_STEP_OVERLAP`
+ * cells) **exactly**, with no rounding either way (#118) — unlike the whole-
+ * cell block this used to round up to, over-reserving by up to half a cell
+ * on two edges. Only two of these sub-cells are ever real rooms — the start
+ * and end corners, `cells[0]` and `cells[cells.length - 1]` — every other
+ * sub-cell exists purely to correctly claim the true fractional footprint so
+ * nothing else can be placed anywhere the real diagonal geometry touches; a
+ * missed cell there would be a room the player can plainly see is
+ * impossible (#112). Only those two corners ever get a door; every other
+ * sub-cell, corner or interior, gets none (`doorCells`, consumed by
+ * `computeAdjacency`'s `buildDoorAllowance`).
+ *
+ * Both corners have to land back on the ordinary integer cell grid — they
+ * are real rooms, bordering a real neighbour — which happens only when
+ * `template.stepCount` is **even**: the offset between the two corners is
+ * `stepCount * STAIR_STEP_OVERLAP` cells, a whole number iff `stepCount` is
+ * even, given `STAIR_STEP_OVERLAP` is `0.5`. `validateStaircaseTemplate`
+ * enforces this on authored content; the guard below is this function's own
+ * defence against being handed a template some other way (a test fixture,
+ * say) that skipped that gate.
  *
  * `anchor` must have exactly one occupied neighbour (the same rule the
  * growth loop already enforces before calling this) — that neighbour's
  * direction has to match either `template.startDoor` or `template.endDoor`,
  * or there would be no door back to the room that grew this frontier cell in
- * the first place. Every other cell in the block must land in-bounds,
- * unoccupied, and (mirroring `placeShape`'s `extraCellsAreClean`) touch
- * nothing already placed. The cell just past the *far* door — see
- * `StaircasePlacement.farNeighborCell` — must also land in-bounds and
- * unoccupied, so the caller can guarantee a real room there: rejecting the
- * whole placement here, with the ordinary shape-placement fallback right
- * behind it in the growth loop, is cheaper than only discovering a
- * dead-end staircase once the whole floor fails `validateFloorPlan` and
- * the generator has to retry from scratch.
+ * the first place. Every other sub-cell in the block must land in-bounds,
+ * unoccupied, and (mirroring `placeShape`'s `extraCellsAreClean`, via
+ * `reservedCellTouchesOccupied`) touch nothing already placed. The cell just
+ * past the *far* door — see `StaircasePlacement.farNeighborCell` — must also
+ * land in-bounds and unoccupied, so the caller can guarantee a real room
+ * there: rejecting the whole placement here, with the ordinary
+ * shape-placement fallback right behind it in the growth loop, is cheaper
+ * than only discovering a dead-end staircase once the whole floor fails
+ * `validateFloorPlan` and the generator has to retry from scratch.
+ *
+ * `farNeighborCell` is always exactly one *whole* cell past
+ * `cells[farCellIndex]` — `computeAdjacency` finds every door, staircase
+ * corners included, with that same whole-cell `OFFSET` step, unchanged by
+ * #118. The anchor end is always gapless on the minimap (it *is* the
+ * pre-existing neighbour placed before this function ever runs, no
+ * approximation involved) — but the far end's real last-step edge sits
+ * `STAIR_STEP_OVERLAP` (half a cell) short of `cells[farCellIndex]`'s own
+ * position, because that position is `stepCount * STAIR_STEP_OVERLAP` cells
+ * from the anchor while the real step is `(stepCount - 1) * STAIR_STEP_OVERLAP`
+ * — one sub-cell less. That reads as a fixed, cosmetic half-cell gap on the
+ * minimap between the last drawn step (`minimapRects`, unaffected — it
+ * always draws the true, undistorted geometry) and `farNeighborCell`'s own
+ * square, not a gameplay one: the real door position (`doorCentres`) is
+ * exact regardless. Closing it for good would mean `computeAdjacency`
+ * understanding a staircase-specific, sub-cell-offset door — a bigger
+ * change than #118 scopes; this is the same trade `stepCount`'s odd-only
+ * predecessor made for its own near end before #118 existed, just now on
+ * the far end instead.
  */
 function placeStaircase(
   occupied: ReadonlyMap<string, number>,
+  rooms: readonly PlacedRoom[],
   anchor: Cell,
   template: StaircaseContentTemplate,
   radius: number,
 ): StaircasePlacement | null {
+  if (
+    !Number.isInteger(template.stepCount) ||
+    template.stepCount < 2 ||
+    template.stepCount % 2 !== 0
+  ) {
+    return null;
+  }
+
   const requiredDirection = DIRECTIONS.find((direction) => {
     const offset = OFFSET[direction];
     return occupied.has(cellKey({ x: anchor.x + offset.x, y: anchor.y + offset.y }));
@@ -502,8 +601,8 @@ function placeStaircase(
     return null;
   }
 
-  const span = Math.max(1, Math.ceil(1 + (template.stepCount - 1) * STAIR_STEP_OVERLAP));
-  const lastIndex = span - 1;
+  const subcellCount = template.stepCount + 1;
+  const lastIndex = subcellCount - 1;
   const anchorCorner =
     template.startDoor === requiredDirection
       ? 0
@@ -515,14 +614,21 @@ function placeStaircase(
   }
 
   const sign = STEP_SIGN[template.direction];
+  // `anchorCorner * STAIR_STEP_OVERLAP` is always a whole number of cells
+  // (0 or `stepCount / 2`), so `originCell` lands on the same integer grid
+  // every other room's cells use — never fractional, whichever corner
+  // `anchor` turned out to be.
   const originCell: Cell = {
-    x: anchor.x - anchorCorner * sign.x,
-    y: anchor.y - anchorCorner * sign.y,
+    x: anchor.x - anchorCorner * STAIR_STEP_OVERLAP * sign.x,
+    y: anchor.y - anchorCorner * STAIR_STEP_OVERLAP * sign.y,
   };
   const cells: Cell[] = [];
-  for (let row = 0; row < span; row++) {
-    for (let col = 0; col < span; col++) {
-      cells.push({ x: originCell.x + col * sign.x, y: originCell.y + row * sign.y });
+  for (let row = 0; row < subcellCount; row++) {
+    for (let col = 0; col < subcellCount; col++) {
+      cells.push({
+        x: originCell.x + col * STAIR_STEP_OVERLAP * sign.x,
+        y: originCell.y + row * STAIR_STEP_OVERLAP * sign.y,
+      });
     }
   }
   // Row-major, so the start corner (row 0, col 0) is always index 0 and the
@@ -538,11 +644,20 @@ function placeStaircase(
   if (cells.some((cell) => occupied.has(cellKey(cell)))) {
     return null;
   }
-  const extraCellsAreClean = cells
-    .filter((_cell, index) => index !== anchorCellIndex)
-    .every((cell) => neighborCount(occupied, cell) === 0);
-  if (!extraCellsAreClean) {
-    return null;
+  for (let index = 0; index < cells.length; index++) {
+    if (index === anchorCellIndex) {
+      continue;
+    }
+    const cell = cells[index];
+    if (cell === undefined) {
+      continue;
+    }
+    // A corner is a real whole cell (size `1`); every other sub-cell is
+    // only ever `STAIR_STEP_OVERLAP` wide — see `reservedCellTouchesOccupied`.
+    const cellSize = index === startCellIndex || index === endCellIndex ? 1 : STAIR_STEP_OVERLAP;
+    if (reservedCellTouchesOccupied(cell, cellSize, occupied, rooms)) {
+      return null;
+    }
   }
 
   const farCellIndex = anchorCellIndex === startCellIndex ? endCellIndex : startCellIndex;
@@ -621,6 +736,18 @@ function buildSkeleton(
       occupied.set(cellKey(cell), index);
     }
     for (const cell of cells) {
+      // Only a real, integer-celled cell ever grows the frontier — a
+      // staircase's interior reservation sub-cells (#118) sit at fractional
+      // (`STAIR_STEP_OVERLAP`) coordinates that no `RoomShape` can ever
+      // anchor on, and `OFFSET` is a whole-cell step either way, so a
+      // fractional source cell would only ever push fractional neighbours.
+      // Skipping them here is what keeps every `anchor` this loop later
+      // draws from `frontier` on the ordinary integer grid — they never had
+      // a door anyway (only a staircase's two corners do), so nothing
+      // reachable through a door is lost by not growing from them.
+      if (!Number.isInteger(cell.x) || !Number.isInteger(cell.y)) {
+        continue;
+      }
       for (const direction of DIRECTIONS) {
         const offset = OFFSET[direction];
         const neighbor = { x: cell.x + offset.x, y: cell.y + offset.y };
@@ -658,7 +785,13 @@ function buildSkeleton(
       const template = rng.weightedPick(
         eligibleStaircases.map((candidate) => ({ value: candidate, weight: candidate.weight })),
       );
-      const staircasePlacement = placeStaircase(occupied, anchor, template, config.gridRadius);
+      const staircasePlacement = placeStaircase(
+        occupied,
+        rooms,
+        anchor,
+        template,
+        config.gridRadius,
+      );
       if (staircasePlacement !== null) {
         place(staircasePlacement.cells, 'staircase', {
           templateId: template.id,
@@ -702,6 +835,14 @@ function openCellTouchCounts(
 
   for (const room of rooms) {
     for (const cell of room.cells) {
+      // A staircase's interior reservation sub-cells (#118) sit at
+      // fractional (`STAIR_STEP_OVERLAP`) coordinates — never a real cell a
+      // secret/supersecret room (always a whole `1x1`) could be placed at,
+      // so they never contribute a candidate here. Its two real corners are
+      // integer and still do.
+      if (!Number.isInteger(cell.x) || !Number.isInteger(cell.y)) {
+        continue;
+      }
       for (const direction of DIRECTIONS) {
         const offset = OFFSET[direction];
         const candidate = { x: cell.x + offset.x, y: cell.y + offset.y };

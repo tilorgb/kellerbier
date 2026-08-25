@@ -329,19 +329,20 @@ describe('validateStaircaseTemplate (#112)', () => {
     weight: 1,
   };
 
-  it('accepts an odd stepCount', () => {
-    expect(() => validateStaircaseTemplate(content)).not.toThrow();
+  it('accepts an even stepCount', () => {
+    expect(() => validateStaircaseTemplate({ ...content, stepCount: 4 })).not.toThrow();
   });
 
-  it('rejects an even stepCount', () => {
+  it('rejects an odd stepCount', () => {
     // The floor generator's cell reservation (`floor-plan.ts`'s
-    // `placeStaircase`, `Math.ceil` of the real screen-space span) only
-    // agrees exactly with the real geometry when that span is already a
-    // whole number of cells — true iff `stepCount` is odd, given
-    // `STAIR_STEP_OVERLAP` is `0.5`. An even `stepCount` leaves the
-    // reservation half a cell bigger than the real shape, which is exactly
-    // the gap a neighbouring room's door showed on the minimap before this
-    // existed.
-    expect(() => validateStaircaseTemplate({ ...content, stepCount: 4 })).toThrow(/stepCount/);
+    // `placeStaircase`, #118) reserves the real screen-space span exactly,
+    // at `STAIR_STEP_OVERLAP` sub-cell granularity — no rounding. Both of a
+    // staircase's real doors have to land back on the ordinary integer
+    // floor-grid, which only happens when the offset between them
+    // (`stepCount * STAIR_STEP_OVERLAP` cells) is a whole number — true iff
+    // `stepCount` is even, given `STAIR_STEP_OVERLAP` is `0.5`. An odd
+    // `stepCount` would leave one door half a cell off that grid, with no
+    // real room there for it to open into.
+    expect(() => validateStaircaseTemplate(content)).toThrow(/stepCount/);
   });
 });
