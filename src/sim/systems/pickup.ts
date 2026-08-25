@@ -117,6 +117,7 @@ function collect(sim: GameSim, other: number): boolean {
   }
   const definition = sim.pickups.at(definitionIndex);
   const effect = definition.effect;
+  sim.reportCollected(definition.name, definition.description);
 
   switch (effect.kind) {
     case 'health':

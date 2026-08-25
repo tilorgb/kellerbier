@@ -12,6 +12,8 @@ const RADIUS = 4;
  */
 export const massFull: PickupDefinition = {
   id: 'mass-full',
+  name: 'Maß',
+  description: 'Health +2',
   radius: RADIUS,
   tint: 0xd9403a,
   label: 'M+',
@@ -20,6 +22,8 @@ export const massFull: PickupDefinition = {
 
 export const massHalf: PickupDefinition = {
   id: 'mass-half',
+  name: 'Halbe Maß',
+  description: 'Health +1',
   radius: RADIUS,
   tint: 0xd9403a,
   label: 'M',
@@ -28,6 +32,8 @@ export const massHalf: PickupDefinition = {
 
 export const weissbier: PickupDefinition = {
   id: 'weissbier',
+  name: 'Weißbier',
+  description: 'Soul heart +2',
   radius: RADIUS,
   tint: 0x6fa8dc,
   label: 'W',
@@ -36,17 +42,21 @@ export const weissbier: PickupDefinition = {
 
 export const schwarzbier: PickupDefinition = {
   id: 'schwarzbier',
-  radius: RADIUS,
+  name: 'Schwarzbier',
+  description: 'Eternal heart +1',
   // Dark, "eternal" tint, but still visible against the room's own dark
   // background — the whole point of a Schwarzbier drop is that it reads on
   // sight.
   tint: 0x6a5a78,
+  radius: RADIUS,
   label: 'S',
   effect: { kind: 'health', pool: 'eternal', amount: 1 },
 };
 
 export const biermarke1: PickupDefinition = {
   id: 'biermarke-1',
+  name: 'Biermarke',
+  description: 'Currency +1',
   radius: RADIUS,
   tint: 0xd4af37,
   label: '1',
@@ -55,6 +65,8 @@ export const biermarke1: PickupDefinition = {
 
 export const biermarke5: PickupDefinition = {
   id: 'biermarke-5',
+  name: 'Biermarke',
+  description: 'Currency +5',
   radius: RADIUS,
   tint: 0xe8c94a,
   label: '5',
@@ -63,6 +75,8 @@ export const biermarke5: PickupDefinition = {
 
 export const biermarke10: PickupDefinition = {
   id: 'biermarke-10',
+  name: 'Biermarke',
+  description: 'Currency +10',
   radius: RADIUS,
   tint: 0xf5de6b,
   label: '10',
@@ -71,6 +85,8 @@ export const biermarke10: PickupDefinition = {
 
 export const bierfassl: PickupDefinition = {
   id: 'bierfassl',
+  name: 'Bierfassl',
+  description: 'Bomb +1',
   radius: RADIUS,
   tint: 0xb5651d,
   label: 'Fa',
@@ -79,6 +95,8 @@ export const bierfassl: PickupDefinition = {
 
 export const bierfasslPack: PickupDefinition = {
   id: 'bierfassl-pack',
+  name: 'Bierfassl-Packerl',
+  description: 'Bomb +3',
   radius: RADIUS,
   tint: 0xb5651d,
   label: 'Fa+',
@@ -87,6 +105,8 @@ export const bierfasslPack: PickupDefinition = {
 
 export const kellerschluessel: PickupDefinition = {
   id: 'kellerschluessel',
+  name: 'Kellerschlüssel',
+  description: 'Key +1',
   radius: RADIUS,
   tint: 0xc9c9d4,
   label: 'K',
@@ -95,6 +115,8 @@ export const kellerschluessel: PickupDefinition = {
 
 export const kellerschluesselRing: PickupDefinition = {
   id: 'kellerschluessel-ring',
+  name: 'Schlüsselbund',
+  description: 'Key +3',
   radius: RADIUS,
   tint: 0xc9c9d4,
   label: 'K+',
@@ -103,6 +125,8 @@ export const kellerschluesselRing: PickupDefinition = {
 
 export const brezn: PickupDefinition = {
   id: 'brezn',
+  name: 'Brezn',
+  description: 'Heal, lowers Promille',
   radius: RADIUS,
   tint: 0xa9702f,
   label: 'Br',
@@ -111,6 +135,8 @@ export const brezn: PickupDefinition = {
 
 export const obazda: PickupDefinition = {
   id: 'obazda',
+  name: 'Obazda',
+  description: 'Heal, lowers Promille',
   radius: RADIUS,
   tint: 0xe8b23d,
   label: 'Oz',
@@ -119,6 +145,8 @@ export const obazda: PickupDefinition = {
 
 export const radi: PickupDefinition = {
   id: 'radi',
+  name: 'Radi',
+  description: 'Heal, lowers Promille',
   radius: RADIUS,
   tint: 0x9fd6a0,
   label: 'Ra',
@@ -127,6 +155,8 @@ export const radi: PickupDefinition = {
 
 export const beer: PickupDefinition = {
   id: 'beer',
+  name: 'Bier',
+  description: 'Heal, raises Promille',
   radius: RADIUS,
   tint: 0xf0c46a,
   label: 'Bi',
@@ -140,6 +170,8 @@ export const beer: PickupDefinition = {
  */
 export const weisswurst: PickupDefinition = {
   id: 'weisswurst',
+  name: 'Weißwurst',
+  description: 'Heal — spoils after floor 3',
   radius: RADIUS,
   tint: 0xecdcc0,
   label: 'Ww',

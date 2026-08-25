@@ -27,6 +27,9 @@ describe('the pickup roster', () => {
       expect(registry.get(definition.id).id).toBe(definition.id);
       expect(definition.id).toBe(definition.id.toLowerCase().trim());
       expect(definition.id).not.toContain(' ');
+      expect(definition.name.length).toBeGreaterThan(0);
+      // The pickup toast's (#26) plain-language half — "what did that do".
+      expect(definition.description.length).toBeGreaterThan(0);
       expect(definition.radius).toBeGreaterThan(0);
       // Drawn on the pickup itself (`render/entities.ts`) — long enough to
       // say something, short enough to fit on a four-pixel-radius blob.

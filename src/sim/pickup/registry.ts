@@ -17,6 +17,12 @@ export class PickupRegistry {
       if (definition.id.trim() === '' || definition.id !== definition.id.toLowerCase()) {
         throw new Error(`pickup "${definition.id}" must have a non-empty, lower-case id`);
       }
+      if (definition.name.trim() === '') {
+        throw new Error(`pickup "${definition.id}" must have a name`);
+      }
+      if (definition.description.trim() === '') {
+        throw new Error(`pickup "${definition.id}" must have a description`);
+      }
       if (this.byId.has(definition.id)) {
         throw new Error(`Two pickups share the id "${definition.id}"`);
       }
