@@ -23,6 +23,7 @@ import {
   promilleDamageMultiplier,
   promilleDriftScale,
   promilleFireRateMultiplier,
+  promilleTierName,
   promilleTierOf,
   promilleWobbleAmplitude,
   promilleSwayMagnitude,
@@ -40,6 +41,10 @@ import {
 } from '../room/template.js';
 import { TICKS_PER_SECOND } from '../time.js';
 import { type SimTuning, createTuning } from '../tuning.js';
+import { StatPipeline } from '../stats/cache.js';
+import { DEFAULT_STAT_CAPS } from '../stats/caps.js';
+import { StatId, type BaseStats } from '../stats/definition.js';
+import type { StatModifier } from '../stats/modifiers.js';
 import { type CollisionLayerId, CollisionLayer, collisionMaskFor } from '../collision/layers.js';
 import { SpatialHash } from '../collision/spatial-hash.js';
 import { EventQueue } from '../events/queue.js';
@@ -209,6 +214,31 @@ export class GameSim {
   room: RoomGeometry;
   readonly tuning: SimTuning;
   readonly seed: number;
+  /**
+   * The stat pipeline (#25): `base → flat additions → multipliers → caps →
+   * final`, cached and recomputed only when a source's modifiers change.
+   * Today the only registered source is Promille (`syncPromilleModifiers`);
+   * items, curses and character modifiers are later issues, and will register
+   * the same way.
+   */
+  readonly stats: StatPipeline;
+  /** The Promille tier `stats` last had modifiers built for. See `syncPromilleModifiers`. */
+  private lastPromilleTier: PromilleTierId | null = null;
+  /**
+   * Scratch object `baseStats()` writes into and returns, rather than
+   * allocating a fresh one. `baseStats()` runs on the firing path (twice a
+   * shot, through `stats.value`), and `StatPipeline` already only reads it
+   * to detect a change — handing it a new object every call would be exactly
+   * the per-shot garbage the pipeline's cache exists to avoid.
+   */
+  private readonly baseStatsBuffer: Record<StatId, number> = {
+    [StatId.Stammwuerze]: 0,
+    [StatId.Schluckfrequenz]: 0,
+    [StatId.Reichweite]: 0,
+    [StatId.Wurfkraft]: 0,
+    [StatId.Gschwindigkeit]: 0,
+    [StatId.Dusel]: 0,
+  };
 
   /** Position and the previous tick's position, for render interpolation. */
   readonly transform: Component<Float32Array>;
@@ -480,6 +510,7 @@ export class GameSim {
     this.random = createRunRandom(this.seed);
     this.room = options.room ?? createPlaygroundRoom();
     this.tuning = createTuning();
+    this.stats = new StatPipeline(() => this.baseStats(), DEFAULT_STAT_CAPS);
     this.previousDeathWord = options.previousDeathWord;
 
     this.transform = this.world.defineComponent('transform', Float32Array, 4);
@@ -1236,20 +1267,75 @@ export class GameSim {
     return this.umgfallnTicksValue;
   }
 
-  get promilleDamageMultiplier(): number {
-    return promilleDamageMultiplier(this.promilleTier, this.tuning.promille);
-  }
-
-  get promilleFireRateMultiplier(): number {
-    return promilleFireRateMultiplier(this.promilleTier, this.tuning.promille);
-  }
-
   get promilleDriftScale(): number {
     return promilleDriftScale(this.promille, this.tuning.promille);
   }
 
   get promilleWobbleAmplitude(): number {
     return promilleWobbleAmplitude(this.promille, this.tuning.promille);
+  }
+
+  /**
+   * The stat pipeline's starting point (#25): today just what `tuning` says
+   * before any modifier runs. `Dusel` has no design-doc default yet — nothing
+   * reads it — so it starts at zero rather than a number invented for it.
+   */
+  private baseStats(): BaseStats {
+    const buffer = this.baseStatsBuffer;
+    buffer[StatId.Stammwuerze] = this.tuning.shooting.shotDamage;
+    buffer[StatId.Schluckfrequenz] = this.tuning.shooting.fireDelayTicks;
+    buffer[StatId.Reichweite] = this.tuning.shooting.shotLifetimeTicks;
+    buffer[StatId.Wurfkraft] = this.tuning.shooting.shotSpeed;
+    buffer[StatId.Gschwindigkeit] = this.tuning.movement.maxSpeed;
+    buffer[StatId.Dusel] = 0;
+    return buffer;
+  }
+
+  /**
+   * Registers Promille's contribution to the stat pipeline as a source named
+   * `'promille'`, replacing it whenever the tier actually changes — a cheap
+   * check every tick, a rebuild only on the rare tick a tier boundary is
+   * crossed. `promilleFireRateMultiplier` is a rate; Schluckfrequenz is a
+   * delay, so its factor is inverted (a 1.5x rate multiplier is a 1/1.5
+   * delay multiplier) rather than teaching the pipeline to divide.
+   *
+   * Called at the top of `step()`, after `stepPromille` has settled this
+   * tick's tier — including the case where the debug slider or a test wrote
+   * `tuning.promille.current` directly rather than going through
+   * `addPromille`/`decayPromille`.
+   */
+  private syncPromilleModifiers(): void {
+    const tier = this.promilleTier;
+    if (tier === this.lastPromilleTier) {
+      return;
+    }
+    this.lastPromilleTier = tier;
+
+    if (tier === PromilleTier.Nuchtern) {
+      this.stats.clearSource('promille');
+      return;
+    }
+
+    const source = {
+      kind: 'promille' as const,
+      id: promilleTierName(tier),
+      label: promilleTierName(tier),
+    };
+    const modifiers: StatModifier[] = [
+      {
+        stat: StatId.Stammwuerze,
+        op: 'multiply',
+        value: promilleDamageMultiplier(tier, this.tuning.promille),
+        source,
+      },
+      {
+        stat: StatId.Schluckfrequenz,
+        op: 'multiply',
+        value: 1 / promilleFireRateMultiplier(tier, this.tuning.promille),
+        source,
+      },
+    ];
+    this.stats.setSourceModifiers('promille', modifiers);
   }
 
   /**
@@ -1455,6 +1541,7 @@ export class GameSim {
     // Promille first: movement and shooting both read this tick's tier/drift/
     // wobble, so it has to be settled before either runs.
     stepPromille(this);
+    this.syncPromilleModifiers();
 
     // Order matters and is fixed: the player moves, then fires from where they
     // now are, then everything already in flight advances. Anything else and a
