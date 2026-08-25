@@ -13,6 +13,7 @@ export const bierkrug: ItemDefinition = {
   id: 'bierkrug',
   name: 'Bierkrug',
   description: 'Damage +1 per stack',
+  flavourText: 'One in each hand is not a stack. It is a lifestyle.',
   sprite: 'bierkrug',
   pools: ['treasure', 'shop'],
   quality: 0,

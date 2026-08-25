@@ -31,7 +31,7 @@ export class ItemInventory {
     this.isHeld = new Uint8Array(registry.count);
     this.states = [];
     for (let index = 0; index < registry.count; index++) {
-      this.states.push({ count: 0, charge: 0 });
+      this.states.push({ count: 0, charge: 0, timer: 0 });
     }
   }
 
@@ -93,6 +93,7 @@ export class ItemInventory {
     if (state.count === 0) {
       this.isHeld[index] = 0;
       state.charge = 0;
+      state.timer = 0;
       for (let position = 0; position < this.heldCount; position++) {
         if (this.heldOrder[position] === index) {
           for (let shift = position; shift < this.heldCount - 1; shift++) {

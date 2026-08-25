@@ -11,6 +11,7 @@ export const wirtshausschlaeger: ItemDefinition = {
   id: 'wirtshausschlaeger',
   name: 'Wirtshausschläger',
   description: 'Kill: currency +1',
+  flavourText: 'The house always wins. Tonight the house is you.',
   sprite: 'wirtshausschlaeger',
   pools: ['treasure', 'boss'],
   quality: 1,

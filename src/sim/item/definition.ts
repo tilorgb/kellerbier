@@ -81,6 +81,19 @@ export interface ItemStatModifier {
 export interface ItemRuntimeState {
   count: number;
   charge: number;
+  /**
+   * A second scratch number, free for a hook to use however it needs.
+   * `charge` already carries the active-item meter's meaning, and a passive
+   * item is free to borrow it as its own single counter (several of #29's
+   * do) — but the first items whose *passive* behaviour needs two
+   * independent numbers at once (a decay countdown alongside a stack count,
+   * say) showed up in that same batch, which is what this field is for.
+   * Reset to 0 alongside `charge` whenever the last copy of a stack leaves
+   * the inventory (`ItemInventory.remove`), for the same "losing an item
+   * returns it to exactly the prior state" reason `charge` already resets
+   * for.
+   */
+  timer: number;
 }
 
 /**
@@ -117,6 +130,17 @@ export type ItemHitHook = (
 export type ItemKillHook = (ctx: ItemHookContext & { readonly target: number }) => void;
 export type ItemDamageTakenHook = (ctx: ItemHookContext & { readonly amount: number }) => void;
 export type ItemFloorStartHook = (ctx: ItemHookContext & { readonly floor: number }) => void;
+/**
+ * Fires when a Bierfassl the player is standing near goes off (#29,
+ * `sim/systems/bombs.ts`'s `explode`) — the moment `Fassldauben` needs to add
+ * its staves to the blast. Not in #26's original nine; a bomb detonating
+ * turned out to be exactly the kind of named moment the others are, so it
+ * gets the same broadcast-to-every-held-item treatment rather than a
+ * bomb-specific special case.
+ */
+export type ItemBombDetonateHook = (
+  ctx: ItemHookContext & { readonly x: number; readonly y: number },
+) => void;
 
 /**
  * Every hook an item can declare, per `docs/GAME_DESIGN.md` §8's list plus
@@ -143,6 +167,7 @@ export interface ItemHooks {
   readonly onTick?: ItemHook;
   /** Runs once when an active item is used — see `GameSim.useActiveItem`. */
   readonly onActivate?: ItemHook;
+  readonly onBombDetonate?: ItemBombDetonateHook;
 }
 
 /**
@@ -173,6 +198,14 @@ export interface ItemDefinition {
    * short-and-literal convention `PickupDefinition.description` uses.
    */
   readonly description: string;
+  /**
+   * Funny, in-character text — #29's "flavour text that is funny" acceptance
+   * criterion. Never shown by any system yet (that is #58's job); it exists
+   * now so it is authored alongside the item rather than bolted on after the
+   * fact, the same reason a localisation key is reserved on day one even
+   * before #52 wires up the layer that reads it.
+   */
+  readonly flavourText?: string;
   /** Placeholder-art key until real icons exist (#34), same convention as `PickupDefinition.label`. */
   readonly sprite: string;
   /** Which pools (`docs/GAME_DESIGN.md` §8) this item can be offered from. At least one. */

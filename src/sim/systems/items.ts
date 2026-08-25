@@ -41,12 +41,14 @@ interface DispatchScratch {
   hitY: number;
   amount: number;
   floor: number;
+  x: number;
+  y: number;
 }
 
 const scratch: DispatchScratch = {
   sim: null as unknown as GameSim,
   itemId: '',
-  state: { count: 0, charge: 0 },
+  state: { count: 0, charge: 0, timer: 0 },
   directionX: 0,
   directionY: 0,
   projectile: 0,
@@ -56,6 +58,8 @@ const scratch: DispatchScratch = {
   hitY: 0,
   amount: 0,
   floor: 0,
+  x: 0,
+  y: 0,
 };
 
 /** Set for the duration of one dispatch call, same pattern as `impact.ts`'s `collectSim`. */
@@ -258,5 +262,30 @@ export function dispatchItemFloorStart(sim: GameSim, floor: number): void {
   scratch.sim = sim;
   scratch.floor = floor;
   sim.inventory.forEachHeld(visitFloorStart);
+  dispatchSim = null;
+}
+
+function visitBombDetonate(index: number, state: ItemRuntimeState): void {
+  const sim = dispatchSim;
+  if (sim === null) {
+    return;
+  }
+  const item = sim.items.at(index);
+  const hook = item.hooks.onBombDetonate;
+  if (hook === undefined) {
+    return;
+  }
+  scratch.itemId = item.id;
+  scratch.state = state;
+  hook(scratch);
+}
+
+/** Fires when a Bierfassl goes off — see `sim/systems/bombs.ts`'s `explode`. */
+export function dispatchItemBombDetonate(sim: GameSim, x: number, y: number): void {
+  dispatchSim = sim;
+  scratch.sim = sim;
+  scratch.x = x;
+  scratch.y = y;
+  sim.inventory.forEachHeld(visitBombDetonate);
   dispatchSim = null;
 }

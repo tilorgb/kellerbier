@@ -13,6 +13,7 @@ export interface CompiledItem {
   readonly id: string;
   readonly name: string;
   readonly description: string;
+  readonly flavourText: string;
   readonly sprite: string;
   readonly pools: readonly ItemPoolId[];
   readonly quality: ItemQuality;
@@ -126,6 +127,7 @@ export class ItemRegistry {
       id: definition.id,
       name: definition.name,
       description: definition.description,
+      flavourText: definition.flavourText ?? '',
       sprite: definition.sprite,
       pools: definition.pools,
       quality: definition.quality,

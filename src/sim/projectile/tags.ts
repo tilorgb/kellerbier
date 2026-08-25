@@ -110,3 +110,34 @@ export function addProjectileTag(
 ): void {
   projectiles.tags[slot] = (projectiles.tags[slot] ?? 0) | tag;
 }
+
+/**
+ * The lower-case spelling of every tag, exactly `docs/GAME_DESIGN.md` §8's
+ * names — what #29's content actually reaches for.
+ *
+ * `content-is-data` (`tools/eslint/architecture.js`) bans `src/content/**`
+ * from importing anything but a type from `src/sim/**`, which means an item
+ * cannot import `ProjectileTag` itself to say which bit it means — the whole
+ * reason this function's own doc comment above promised item hooks would
+ * "reach for" it turned out to need one more piece: a string name a hook can
+ * write as a literal, typed against `ProjectileTagName` without importing the
+ * value it resolves to. `GameSim.addProjectileTag` (`sim/game/sim.ts`) is the
+ * method that actually does the resolving, one layer over this map, so a
+ * hook body never touches `ProjectileTag` at all — only `ctx.sim`.
+ */
+export const PROJECTILE_TAG_BY_NAME = {
+  homing: ProjectileTag.Homing,
+  piercing: ProjectileTag.Piercing,
+  bouncing: ProjectileTag.Bouncing,
+  splitting: ProjectileTag.Splitting,
+  sticky: ProjectileTag.Sticky,
+  arcing: ProjectileTag.Arcing,
+  burning: ProjectileTag.Burning,
+  freezing: ProjectileTag.Freezing,
+  poison: ProjectileTag.Poison,
+  spectral: ProjectileTag.Spectral,
+  returning: ProjectileTag.Returning,
+  orbiting: ProjectileTag.Orbiting,
+} as const satisfies Record<string, ProjectileTagId>;
+
+export type ProjectileTagName = keyof typeof PROJECTILE_TAG_BY_NAME;
