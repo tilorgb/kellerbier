@@ -16,6 +16,9 @@ coverage/
 # benchmark artifacts — the run is per-machine, the history is the record
 bench/results.json
 
+# fuzz harness artifacts — same reasoning as bench/results.json
+fuzz/results.json
+
 # generated assets
 assets/atlases/*.png
 assets/atlases/*.json
