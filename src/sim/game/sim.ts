@@ -17,10 +17,12 @@ import { PickupRegistry } from '../pickup/registry.js';
 import { ITEM_DEFINITIONS } from '../../content/items/index.js';
 import {
   type ItemDefinition,
+  type ItemPoolId,
   type ItemRuntimeState,
   itemStatSourceKey,
 } from '../item/definition.js';
 import { ItemInventory } from '../item/inventory.js';
+import { selectItemOffer } from '../item/pool.js';
 import { ItemRegistry } from '../item/registry.js';
 import { type RunRandom, createRunRandom } from '../rng/streams.js';
 import { drawDeathWord } from './death-word.js';
@@ -75,6 +77,7 @@ import { stepBombs } from '../systems/bombs.js';
 import { stepImpact, stepParticles } from '../systems/impact.js';
 import { stepLootDrops } from '../systems/loot.js';
 import { dispatchItemFloorStart, dispatchItemRoomClear, stepItemTick } from '../systems/items.js';
+import { stepPedestal } from '../systems/pedestal.js';
 import { stepPickups } from '../systems/pickup.js';
 import { stepPromille } from '../systems/promille.js';
 import { stepProjectiles, stepShooting } from '../systems/shooting.js';
@@ -150,6 +153,47 @@ const OPPOSITE_ROOM_DIRECTION: Readonly<Record<RoomDirection, RoomDirection>> = 
  */
 function doorKey(door: Pick<CompiledDoor, 'direction' | 'cellCol' | 'cellRow'>): string {
   return `${door.direction}:${String(door.cellCol)},${String(door.cellRow)}`;
+}
+
+/**
+ * A live pedestal (#28): a spot a room's `decorativeProps` marked `pedestal`,
+ * holding one item drawn from a pool at room-load time.
+ *
+ * Not an ECS entity — a room has at most a handful of these, `stepPedestal`
+ * only ever needs the nearest one to the player, and none of it collides or
+ * moves through the physics integrator, so the bookkeeping every ECS
+ * component/mask buys elsewhere would cost more than it returns here. Held
+ * on `GameSim` the same way `bombableWalls` is: plain per-room state,
+ * rebuilt on every room load.
+ */
+interface PedestalRuntime {
+  readonly x: number;
+  readonly y: number;
+  /** Registry index of the offered item, or -1 once taken or never filled (pool exhaustion). */
+  itemIndex: number;
+}
+
+/**
+ * Which pool a room's pedestal draws from, by the room's own special role.
+ *
+ * `shop`/`supersecret` have no live pedestal spawn site today (no room JSON
+ * places a `pedestal` prop in either) — the fallback below is defensive, not
+ * reachable in practice, since live shop stocking from the `shop` pool is
+ * its own follow-up (#28 only wires the pools that already have a room to
+ * offer from: treasure, boss, secret).
+ */
+function pedestalPoolForRole(role: RoomSpecialRole | undefined): ItemPoolId {
+  switch (role) {
+    case 'boss':
+      return 'boss';
+    case 'secret':
+    case 'supersecret':
+      return 'secret';
+    case 'treasure':
+    case 'shop':
+    default:
+      return 'treasure';
+  }
 }
 
 /**
@@ -545,6 +589,20 @@ export class GameSim {
   private readonly bombableWalls = new Map<string, CompiledDoor>();
   /** The loaded room's `metadata.specialRole`, or `undefined` for a normal room. */
   private roomSpecialRole: RoomSpecialRole | undefined = undefined;
+  /** Every pedestal in the current room. Rebuilt on every room load — see `PedestalRuntime`. */
+  private pedestalList: PedestalRuntime[] = [];
+  /**
+   * Item ids this run has actually taken from a pedestal — #28's "no item
+   * appears twice in a run." Populated only by `takePedestalItem`, never by
+   * a mere offer, so refusing an offered item never removes it from future
+   * pools. Not cleared on room load: it is run-scoped, the same lifetime as
+   * `inventory`.
+   */
+  private readonly takenItemIds = new Set<string>();
+  /** Ticks left showing the pedestal pickup/swap reveal panel. See `pedestalReveal`. */
+  private pedestalRevealTicks = 0;
+  private pedestalRevealName = '';
+  private pedestalRevealDescription = '';
   /**
    * The Bierfassl just set down under the player, if any — `null` once the
    * player has stepped clear of it once.
@@ -955,6 +1013,7 @@ export class GameSim {
     this.roomId = compiled.id;
     this.roomDoors = compiled.doors;
     this.bombableWalls.clear();
+    this.pedestalList = [];
     for (const hidden of hiddenDoors) {
       const match = this.roomDoors.find(
         (door) =>
@@ -1008,12 +1067,16 @@ export class GameSim {
         const safe = this.safeSpawnPoint(pickup.x, pickup.y, this.pickups.at(definition).radius);
         this.spawnPickup(pickup.type, safe.x, safe.y, pickup.price);
       }
-      // Decorative props are art (#18) except one type: a barrel is a
+      // Decorative props are art (#18) except two types: a barrel is a
       // destructible obstacle, so a room author drops a Bierfassl at one for
-      // free and `npm run dev` always has something to demonstrate that on.
+      // free and `npm run dev` always has something to demonstrate that on;
+      // a pedestal (#28) draws a real item from a pool chosen by the room's
+      // own special role (`pedestalPoolForRole`) rather than sitting inert.
       for (const prop of compiled.decorativeProps) {
         if (prop.type === 'barrel') {
           this.spawnTarget(prop.x, prop.y, TARGET_RADIUS);
+        } else if (prop.type === 'pedestal') {
+          this.spawnPedestal(prop.x, prop.y);
         }
       }
     }
@@ -1592,6 +1655,155 @@ export class GameSim {
     return true;
   }
 
+  /**
+   * Draws one item from `pool` (`sim/item/pool.ts`'s `selectItemOffer`) and
+   * places it on a new pedestal at `(x, y)` — called from `applyCompiledRoom`
+   * for every `decorativeProps` entry of type `'pedestal'`, which room
+   * templates author positioned but never filled (#28 is what fills them).
+   *
+   * Draws from `random.items`, the stream `sim/rng/streams.ts` reserves for
+   * exactly this — which, together with `taken` only ever growing through
+   * `takePedestalItem`, is the whole mechanism behind "the same seed with the
+   * same route yields identical item offers": the draw depends on nothing
+   * but the run's own deterministic state at the moment the room loads.
+   *
+   * Pool exhaustion (`selectItemOffer` returning `undefined`) is not an
+   * error here either — the pedestal is simply created empty (`itemIndex:
+   * -1`), which `activePedestals`/rendering already treat as "nothing to
+   * show."
+   */
+  private spawnPedestal(x: number, y: number): void {
+    const pool = pedestalPoolForRole(this.roomSpecialRole);
+    const offer = selectItemOffer(
+      this.items,
+      pool,
+      {
+        promilleUnlocked: this.promilleUnlocked,
+        floor: this.currentFloorValue,
+        dusel: this.stats.value(StatId.Dusel),
+        taken: this.takenItemIds,
+      },
+      this.tuning.itemPool,
+      this.random.items,
+    );
+    this.pedestalList.push({
+      x,
+      y,
+      itemIndex: offer === undefined ? -1 : this.items.indexOf(offer.id),
+    });
+  }
+
+  /** Every pedestal in the current room, for rendering. Read-only — mutate through `takePedestalItem`. */
+  get activePedestals(): readonly PedestalRuntime[] {
+    return this.pedestalList;
+  }
+
+  /**
+   * The pedestal/pickup name+description reveal panel, or `null` once it has
+   * aged out — set by `takePedestalItem`, decremented in `decayPresentation`
+   * the same way `pickupToast` is, and deliberately separate from it: a
+   * pedestal's reveal is a longer, deliberate beat (#28's "brief pause, the
+   * item held aloft"), not the quick float-past-loot toast every ordinary
+   * pickup gets.
+   */
+  get pedestalReveal(): { readonly name: string; readonly description: string } | null {
+    if (this.pedestalRevealTicks <= 0) {
+      return null;
+    }
+    return { name: this.pedestalRevealName, description: this.pedestalRevealDescription };
+  }
+
+  /**
+   * The index into `activePedestals` of the nearest pedestal within
+   * `tuning.itemPool.interactRadius` that still holds an item, or -1.
+   *
+   * A plain linear scan rather than a broadphase query: a room holds at most
+   * a handful of pedestals, this only runs once a tick (`stepPedestal`), and
+   * pedestals don't have colliders for the broadphase to index in the first
+   * place (see `PedestalRuntime`'s doc comment).
+   */
+  nearestAvailablePedestal(): number {
+    const playerX = this.positionX(this.playerIndex);
+    const playerY = this.positionY(this.playerIndex);
+    const radius = this.tuning.itemPool.interactRadius;
+    const radiusSq = radius * radius;
+    let best = -1;
+    let bestDistanceSq = radiusSq;
+    for (let index = 0; index < this.pedestalList.length; index++) {
+      const pedestal = this.pedestalList[index];
+      if (pedestal === undefined || pedestal.itemIndex < 0) {
+        continue;
+      }
+      const dx = pedestal.x - playerX;
+      const dy = pedestal.y - playerY;
+      const distanceSq = dx * dx + dy * dy;
+      if (distanceSq <= bestDistanceSq) {
+        bestDistanceSq = distanceSq;
+        best = index;
+      }
+    }
+    return best;
+  }
+
+  /**
+   * The id of whichever active item the run currently holds, or `null`.
+   *
+   * At most one is ever held in practice — `takePedestalItem` removes the
+   * old one before adding a new one (#28's "swapping active items") — so a
+   * plain forward walk that returns the first match is exact, not just an
+   * approximation of "the" active item.
+   */
+  heldActiveItemId(): string | null {
+    let found: string | null = null;
+    this.inventory.forEachHeld((index) => {
+      if (found !== null) {
+        return;
+      }
+      if (this.items.at(index).active !== undefined) {
+        found = this.items.at(index).id;
+      }
+    });
+    return found;
+  }
+
+  /**
+   * Takes (or swaps for) the item on pedestal `pedestalIndex` — `use` near
+   * an available pedestal, dispatched by `sim/systems/pedestal.ts`. A no-op
+   * if the pedestal has no item (already taken, or spawned empty).
+   *
+   * An active item already held is removed outright first — the swap loses
+   * it rather than returning it to the pedestal or any pool, the same
+   * footing as any other choice a run makes under pressure. Never marks the
+   * *old* item as "taken": it was taken once already, when it was first
+   * picked up, and swapping it away does not put it back in circulation for
+   * this run to draw again.
+   */
+  takePedestalItem(pedestalIndex: number): void {
+    const pedestal = this.pedestalList[pedestalIndex];
+    if (pedestal === undefined || pedestal.itemIndex < 0) {
+      return;
+    }
+    const item = this.items.at(pedestal.itemIndex);
+    if (item.active !== undefined) {
+      const held = this.heldActiveItemId();
+      if (held !== null && held !== item.id) {
+        this.removeItem(held);
+      }
+    }
+    this.pickUpItem(item.id);
+    this.takenItemIds.add(item.id);
+    pedestal.itemIndex = -1;
+    this.requestHitstop(Math.round(this.tuning.itemPool.pickupPauseTicks));
+    // `pickUpItem` already started the ordinary quick toast — suppressed
+    // here in favour of the pedestal's own longer, more deliberate reveal
+    // below, which says the same name and description. Showing both at once
+    // reads as a UI glitch, not as two separate pieces of news.
+    this.toastTicks = 0;
+    this.pedestalRevealName = item.name;
+    this.pedestalRevealDescription = item.description;
+    this.pedestalRevealTicks = Math.round(this.tuning.itemPool.revealHoldTicks);
+  }
+
   /** Marks an item's `modifyStats` output stale — drained by `syncItemStatModifiers`. */
   private markItemStatsDirty(index: number): void {
     if ((this.itemStatsDirty[index] ?? 0) !== 0) {
@@ -1796,6 +2008,9 @@ export class GameSim {
     // to happen before `stepBodies` integrates so a rolled one starts moving
     // on the tick it was thrown, not a tick behind.
     stepBombPlacement(this, input);
+    // Same footing as placing a Bierfassl — a player action gated on the same
+    // button edge, resolved before anything else this tick.
+    stepPedestal(this, input);
     // Enemies decide after the player has moved and before bodies integrate, so
     // a body moves on the same tick as the decision that moved it.
     stepEnemies(this);
@@ -1874,6 +2089,9 @@ export class GameSim {
 
     if (this.toastTicks > 0) {
       this.toastTicks -= 1;
+    }
+    if (this.pedestalRevealTicks > 0) {
+      this.pedestalRevealTicks -= 1;
     }
   }
 

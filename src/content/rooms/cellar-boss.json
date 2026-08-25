@@ -102,7 +102,7 @@
       "spawnGroups": [],
       "pickupSpawns": [],
       "hazards": [],
-      "decorativeProps": []
+      "decorativeProps": [{ "x": 120, "y": 72, "type": "pedestal" }]
     }
   ],
   "metadata": {

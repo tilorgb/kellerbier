@@ -14,7 +14,7 @@
   "obstacles": [],
   "enemySpawns": [],
   "spawnGroups": [],
-  "pickupSpawns": [{ "x": 120, "y": 72, "type": "bierfassl-pack" }],
+  "pickupSpawns": [],
   "hazards": [],
   "decorativeProps": [{ "x": 120, "y": 72, "type": "pedestal" }],
   "metadata": {

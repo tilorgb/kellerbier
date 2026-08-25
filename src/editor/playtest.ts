@@ -4,7 +4,11 @@ import type { RoomShape } from '../content/rooms/definition.js';
 import { GameSim, MAX_COLLIDER_RADIUS } from '../sim/game/sim.js';
 import type { RoomPlacement } from '../sim/room/template.js';
 import { createRenderer, trackWindowSize } from '../render/app.js';
-import { createBlobTexture, createRingTexture } from '../render/placeholder-art.js';
+import {
+  createBlobTexture,
+  createRingTexture,
+  createSolidTexture,
+} from '../render/placeholder-art.js';
 import { EntityView } from '../render/entities.js';
 import { GameView } from '../render/view.js';
 import { FixedTimestepLoop, runAnimationFrameLoop } from '../app/loop.js';
@@ -114,6 +118,8 @@ export async function createPlaytest(
     splash: createBlobTexture(app.renderer, 2, 0xd9a441, 0xf6d08a),
     decal: createBlobTexture(app.renderer, 8, 0x3a2a12, 0x4a3618),
     numberFont: 'monospace',
+    pedestalItem: createBlobTexture(app.renderer, 5, 0xffffff, 0xffffff),
+    pedestalBeam: createSolidTexture(app.renderer),
   });
   const game = new Container();
   game.addChild(view.stage);

@@ -17,7 +17,11 @@ import { RngStream, createStreamRng } from '../sim/rng/streams.js';
 import { TICKS_PER_SECOND } from '../sim/time.js';
 import { InputAction, isActionDown } from '../sim/input/frame.js';
 import { createRenderer, trackWindowSize } from '../render/app.js';
-import { createBlobTexture, createRingTexture } from '../render/placeholder-art.js';
+import {
+  createBlobTexture,
+  createRingTexture,
+  createSolidTexture,
+} from '../render/placeholder-art.js';
 import {
   type GameLayout,
   INTERNAL_HEIGHT,
@@ -389,6 +393,58 @@ async function boot(): Promise<void> {
   };
   let pickupToastLabel = '';
 
+  /**
+   * A pedestal's name plate "on approach" (#28) — the item's name only (the
+   * full description waits for the reveal panel below, once it's actually
+   * taken). Anchored to the pedestal's own screen position each frame
+   * (`view.pedestalScreenPosition`) rather than a fixed HUD slot, so it
+   * reads as belonging to the pedestal it floats over. Drawn in `uiLayer`,
+   * at the display's own resolution rather than the low-res game layer, the
+   * same choice `pickupToast`/`bossBanner` already make — the acceptance
+   * criterion that the name and description stay readable at internal
+   * resolution is what that choice is for.
+   */
+  const pedestalNamePlate = new Text({
+    text: '',
+    style: { fill: 0xffffff, fontFamily: 'monospace', fontSize: 10, fontWeight: 'bold' },
+  });
+  pedestalNamePlate.anchor.set(0.5, 1);
+  pedestalNamePlate.visible = false;
+  uiLayer.addChild(pedestalNamePlate);
+  let pedestalNamePlateLabel = '';
+
+  /**
+   * The pedestal pickup/swap reveal panel — #28's "a brief pause, the item
+   * held aloft, name and description shown, then the effect." The pause
+   * itself is `GameSim.requestHitstop` (called the same tick this becomes
+   * non-null); this panel is what fills the pause and lingers a little past
+   * it, driven by `sim.pedestalReveal`/`pedestalRevealTicks` the same way
+   * `pickupToast`/`toastTicks` already work, just longer and worth reading
+   * in full rather than skimming.
+   */
+  const pedestalReveal = new Text({
+    text: '',
+    style: {
+      fill: 0xffffff,
+      fontFamily: 'monospace',
+      fontSize: 16,
+      fontWeight: 'bold',
+      align: 'center',
+      wordWrap: true,
+      wordWrapWidth: 420,
+    },
+  });
+  pedestalReveal.anchor.set(0.5);
+  pedestalReveal.visible = false;
+  uiLayer.addChild(pedestalReveal);
+  const positionPedestalReveal = (applied: GameLayout): void => {
+    pedestalReveal.position.set(
+      applied.originX + (INTERNAL_WIDTH * applied.scale) / 2,
+      applied.originY + (INTERNAL_HEIGHT * applied.scale) / 2,
+    );
+  };
+  let pedestalRevealLabel = '';
+
   const healthHud = new HealthHud(app.renderer);
   uiLayer.addChild(healthHud.view);
   // Screen pixels, not scaled — the same choice `hud` (the debug text) makes,
@@ -510,6 +566,7 @@ async function boot(): Promise<void> {
     positionMinimapHud(applied);
     positionBossBanner(applied);
     positionPickupToast(applied);
+    positionPedestalReveal(applied);
     gameOverScreen.resize(applied);
     vignette.resize(applied);
   });
@@ -590,6 +647,34 @@ async function boot(): Promise<void> {
       } else if (pickupToast.visible) {
         pickupToast.visible = false;
         pickupToastLabel = '';
+      }
+      const nearbyPedestal = sim.nearestAvailablePedestal();
+      const nameplateScreen =
+        nearbyPedestal >= 0 ? view.pedestalScreenPosition(nearbyPedestal) : null;
+      if (nameplateScreen !== null) {
+        const item = sim.items.at(sim.activePedestals[nearbyPedestal]?.itemIndex ?? -1);
+        const label = `${item.name}  [use]`;
+        if (label !== pedestalNamePlateLabel) {
+          pedestalNamePlateLabel = label;
+          pedestalNamePlate.text = label;
+        }
+        pedestalNamePlate.position.set(nameplateScreen.x, nameplateScreen.y - 14);
+        pedestalNamePlate.visible = true;
+      } else if (pedestalNamePlate.visible) {
+        pedestalNamePlate.visible = false;
+        pedestalNamePlateLabel = '';
+      }
+      const reveal = sim.pedestalReveal;
+      if (reveal !== null) {
+        const label = `${reveal.name}\n${reveal.description}`;
+        if (label !== pedestalRevealLabel) {
+          pedestalRevealLabel = label;
+          pedestalReveal.text = label;
+        }
+        pedestalReveal.visible = true;
+      } else if (pedestalReveal.visible) {
+        pedestalReveal.visible = false;
+        pedestalRevealLabel = '';
       }
       const playerScreen = view.playerScreenPosition();
       vignette.sync(sim, playerScreen.x, playerScreen.y);
@@ -691,6 +776,11 @@ WASD move   arrows/mouse aim and fire
       // thing a corpse marker must not do.
       decal: createBlobTexture(app.renderer, 8, 0x3a2a12, 0x4a3618),
       numberFont: 'monospace',
+      // Placeholder art (#34) — a plain bright disc and a soft vertical bar
+      // are enough to read as "an item floating on light" until real sprites
+      // land; `PedestalView` tints both per quality.
+      pedestalItem: createBlobTexture(app.renderer, 5, 0xffffff, 0xffffff),
+      pedestalBeam: createSolidTexture(app.renderer),
     };
     view = new GameView(sim, viewTextures);
     game.removeChildren();
@@ -706,6 +796,10 @@ WASD move   arrows/mouse aim and fire
     bossBanner.visible = false;
     pickupToastLabel = '';
     pickupToast.visible = false;
+    pedestalNamePlateLabel = '';
+    pedestalNamePlate.visible = false;
+    pedestalRevealLabel = '';
+    pedestalReveal.visible = false;
     gameOverScreen.hide();
     loop.reset();
     loop.timeScale = 1;
