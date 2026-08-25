@@ -321,9 +321,10 @@ export interface EnemyTuning {
  *
  * `current` is simulation state, not a dial — the one exception in this file.
  * It lives here anyway because the issue's own guidance is to put it here:
- * the F2 tuning window already binds a slider straight to any numeric field
- * on a `SimTuning` group, so this is the entire cost of "a debug slider that
- * sets it directly." No replay system exists yet (#48) for this to break.
+ * the tuning window (`src/debug/tuning-window.ts`) already binds a slider
+ * straight to any numeric field on a `SimTuning` group, so this is the
+ * entire cost of "a debug slider that sets it directly." No replay system
+ * exists yet (#48) for this to break.
  */
 export interface PromilleTuning {
   /** Current Promille, 0–5. The debug slider drives this field directly. */

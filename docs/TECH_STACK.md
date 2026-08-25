@@ -199,11 +199,14 @@ tools/
 - **TypeScript strict mode**, `noUncheckedIndexedAccess` on. Non-negotiable.
 - **GitHub Actions**: typecheck → lint → test → content-validate → bench → build → deploy
   preview to GitHub Pages. Every PR gets a **playable link**.
-- **Debug overlay** (F1): entity counts, frame graph, hitbox display, the stat inspector that
+- **Debug overlay** (O): entity counts, frame graph, hitbox display, the stat inspector that
   explains every modifier's contribution, room warp, item spawner.
-- **Tuning window** (F2): every number in `sim/tuning.ts` on a slider bound to the live object,
+- **Tuning window** (T): every number in `sim/tuning.ts` on a slider bound to the live object,
   with a per-field reset and a copy that writes back only what moved. Tuning by feel through an
   edit-and-reload cycle finds the first value that is not obviously wrong, and stops there.
+  (Not F-keys, and not punctuation keys — a hosted preview's browser chrome claims F-keys as
+  its own shortcuts, and a punctuation key can land on a dead accent key on a non-US keyboard
+  layout. See `src/debug/overlay.ts`'s doc comment.)
 - **Room editor** (#24, `npm run dev` → `/editor.html`): authors `src/content/rooms/*.json`
   directly — tile/obstacle/spawn/pickup/hazard/prop placement, room metadata, inline schema
   validation, and a live in-engine playtest of the room being edited, no rebuild. A second Vite

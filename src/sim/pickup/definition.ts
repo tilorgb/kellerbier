@@ -41,9 +41,9 @@ export type PickupEffect =
   /**
    * Beer: the one pickup that raises Promille. Never rolled in a sober run's
    * tables. No `amount` field — the raise reads `tuning.promille.beerAmount`
-   * at collection time, the same tunable value the F2 debug window already
-   * binds a slider to, so there is exactly one number that says how much one
-   * beer is worth.
+   * at collection time, the same tunable value the debug tuning window
+   * already binds a slider to, so there is exactly one number that says how
+   * much one beer is worth.
    */
   | { readonly kind: 'promille'; readonly heal: number }
   /**

@@ -96,7 +96,7 @@ export function createProjectileTagChooser(tuning: SimTuning): ProjectileTagChoo
   toggle.textContent = 'tags';
 
   const heading = document.createElement('h2');
-  heading.textContent = 'shot tags — =';
+  heading.textContent = 'shot tags — I';
   panel.appendChild(heading);
 
   const shooting = tuning.shooting;
@@ -150,13 +150,13 @@ export function createProjectileTagChooser(tuning: SimTuning): ProjectileTagChoo
     panel.hidden = !panel.hidden;
   });
 
-  // Equal rather than F3: a hosted preview runs inside another page's
-  // iframe/webview, and the browser chrome around it claims F-keys as its
-  // own shortcuts (F3 is "find next" in several browsers) before a
-  // `keydown` handler here ever sees them — see `overlay.ts`'s doc comment
-  // for the full reasoning behind this row of keys.
+  // I rather than F3, and rather than a punctuation key — see `overlay.ts`'s
+  // doc comment for why the debug tools live on plain letters: an F-key is
+  // claimed by the browser chrome around a hosted preview before a
+  // `keydown` handler here ever sees it, and a punctuation key can land on a
+  // dead key (accent composition) on a non-US layout instead of firing one.
   const onKeyDown = (event: KeyboardEvent): void => {
-    if (event.code === 'Equal') {
+    if (event.code === 'KeyI') {
       event.preventDefault();
       panel.hidden = !panel.hidden;
     }

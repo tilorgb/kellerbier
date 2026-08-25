@@ -40,9 +40,9 @@ export function createDebugOverlay(host: DebugOverlayHost): DebugOverlay {
   // what the game is doing, and this is for changing it. They get used at
   // different moments and neither should force the other onto the screen.
   overlay.ownDomTool(createTuningWindow(host.sim.tuning));
-  // Same reasoning, and its own key (Equal) rather than folded into the
-  // tuning window: this is toggled far more often mid-run than any slider
-  // is, while testing one specific combination of #27's tags.
+  // Same reasoning, and its own key (I) rather than folded into the tuning
+  // window: this is toggled far more often mid-run than any slider is,
+  // while testing one specific combination of #27's tags.
   overlay.ownDomTool(createProjectileTagChooser(host.sim.tuning));
   return overlay;
 }

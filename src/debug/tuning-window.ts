@@ -357,14 +357,12 @@ export function createTuningWindow(tuning: SimTuning): TuningWindowHandle {
     panel.hidden = !panel.hidden;
   });
 
-  // Minus as well as the button, because the button is on the far side of
-  // the screen from the hand that is playing. Not F2: a hosted preview runs
-  // inside another page's iframe/webview, and the browser chrome around it
-  // claims F-keys as its own shortcuts before a `keydown` handler here ever
-  // sees them — see `overlay.ts`'s doc comment for the full reasoning behind
-  // this row of keys.
+  // T as well as the button, because the button is on the far side of the
+  // screen from the hand that is playing. Not F2, and not a punctuation key
+  // either — see `overlay.ts`'s doc comment for why the debug tools live on
+  // plain letters instead.
   const onKeyDown = (event: KeyboardEvent): void => {
-    if (event.code === 'Minus') {
+    if (event.code === 'KeyT') {
       event.preventDefault();
       panel.hidden = !panel.hidden;
     }

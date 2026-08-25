@@ -624,7 +624,7 @@ shots ${String(shots.liveCount)}/${String(shots.capacity)}  particles ${String(
       particles.liveCount,
     )}/${String(particles.capacity)}${shots.overflows > 0 ? '  SHOT OVERFLOW' : ''}
 WASD move   arrows/mouse aim and fire
-  \` debug   - tuning   = shot tags   P pause   . step   [ ] time scale
+  O debug   T tuning   I shot tags   P pause   . step   [ ] time scale
   N next room (after clear)   R restart (new seed)`;
   };
   /**
