@@ -2,6 +2,7 @@ import type { Container } from 'pixi.js';
 import type { GameSim } from '../sim/game/sim.js';
 import type { GameView } from '../render/view.js';
 import { DebugOverlay } from './overlay.js';
+import { createProjectileTagChooser } from './projectile-tag-chooser.js';
 import { createTuningWindow } from './tuning-window.js';
 
 export { DebugOverlay } from './overlay.js';
@@ -38,6 +39,10 @@ export function createDebugOverlay(host: DebugOverlayHost): DebugOverlay {
   // Independent of the F1 overlay on purpose: the panels are for watching what
   // the game is doing, and this is for changing it. They get used at different
   // moments and neither should force the other onto the screen.
-  overlay.ownTuningWindow(createTuningWindow(host.sim.tuning));
+  overlay.ownDomTool(createTuningWindow(host.sim.tuning));
+  // Same reasoning, and its own key (F3) rather than folded into the tuning
+  // window: this is toggled far more often mid-run than any slider is, while
+  // testing one specific combination of #27's tags.
+  overlay.ownDomTool(createProjectileTagChooser(host.sim.tuning));
   return overlay;
 }

@@ -61,7 +61,8 @@ export class DebugOverlay {
   private frame = 0;
 
   private detachInput: (() => void) | null = null;
-  private tuningWindow: { destroy(): void } | null = null;
+  /** DOM-based dev tools (the tuning window, the projectile tag chooser) the overlay tears down alongside itself. */
+  private readonly domTools: { destroy(): void }[] = [];
 
   constructor(sim: GameSim, view: GameView, uiLayer: Container, gameScale: () => number) {
     this.sim = sim;
@@ -226,16 +227,22 @@ export class DebugOverlay {
     };
   }
 
-  /** Takes ownership of the tuning window, so one `destroy` tears down both. */
-  ownTuningWindow(window: { destroy(): void }): void {
-    this.tuningWindow = window;
+  /**
+   * Takes ownership of a DOM-based dev tool (the tuning window, the
+   * projectile tag chooser) so one `destroy` tears every one of them down
+   * along with the overlay itself.
+   */
+  ownDomTool(tool: { destroy(): void }): void {
+    this.domTools.push(tool);
   }
 
   destroy(): void {
     this.detachInput?.();
     this.detachInput = null;
-    this.tuningWindow?.destroy();
-    this.tuningWindow = null;
+    for (const tool of this.domTools) {
+      tool.destroy();
+    }
+    this.domTools.length = 0;
     this.drawCalls.detach();
   }
 

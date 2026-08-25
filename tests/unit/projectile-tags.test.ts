@@ -277,3 +277,39 @@ describe('an item granting a tag through onProjectileSpawn (#27 x #26)', () => {
     expect(turnedAngle).not.toBeCloseTo(initialAngle, 5);
   });
 });
+
+describe("tuning.shooting.forcedTags — the debug projectile tag chooser's write target", () => {
+  it('reaches every shot the player fires, composed through the normal finalize path', () => {
+    const sim = new GameSim({ room: openRoom(), population: 'empty', projectileCapacity: 64 });
+    sim.tuning.shooting.fireDelayTicks = 1;
+    sim.spawnTarget(200, 100, 8);
+    sim.world.flush();
+
+    sim.tuning.shooting.forcedTags = ProjectileTag.Piercing | ProjectileTag.Bouncing;
+    sim.step(aiming(1, 0));
+
+    let slot = -1;
+    sim.projectiles.forEachLive((index) => {
+      slot = index;
+    });
+    expect(slot).toBeGreaterThanOrEqual(0);
+    expect(sim.projectiles.tags[slot]).toBe(ProjectileTag.Piercing | ProjectileTag.Bouncing);
+    // Set by `finalizeProjectileTags`, exactly as it would be for a tag an
+    // item granted — the chooser has no counter-setting logic of its own.
+    expect(sim.projectiles.pierceRemaining[slot]).toBe(sim.tuning.projectileTags.pierceMaxTargets);
+
+    // Clearing it (the chooser's "clear all") only affects the next shot.
+    sim.tuning.shooting.forcedTags = 0;
+    sim.step(aiming(1, 0));
+    let secondSlot = -1;
+    let count = 0;
+    sim.projectiles.forEachLive((index) => {
+      count += 1;
+      if (index !== slot) {
+        secondSlot = index;
+      }
+    });
+    expect(count).toBe(2);
+    expect(sim.projectiles.tags[secondSlot]).toBe(0);
+  });
+});

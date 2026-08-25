@@ -136,6 +136,20 @@ export interface ShootingTuning {
    * the weapon having weight and starts reading as drift.
    */
   kickback: number;
+  /**
+   * `ProjectileTag` (#27, `sim/projectile/tags.ts`) bitmask applied to every
+   * shot the player fires, before any item hook runs.
+   *
+   * Simulation state living in tuning rather than a dial, the same exception
+   * `PromilleTuning.current` documents for itself: no character grants an
+   * innate tag yet (`docs/GAME_DESIGN.md`'s roster table — Resi's arcing and
+   * returning Brezn, König Ludwig's homing swans — is a later issue), and this
+   * is where that will eventually be read from. Until then it is the debug
+   * projectile tag chooser's (`src/debug/projectile-tag-chooser.ts`) one write
+   * target: checking a box ORs its bit in, live, exactly the way a tuning
+   * slider already writes any other field here.
+   */
+  forcedTags: number;
 }
 
 /**
@@ -477,6 +491,7 @@ export const DEFAULT_SHOOTING_TUNING: Readonly<ShootingTuning> = {
   velocityInheritance: 0.85,
   analogVelocityInheritance: 0.35,
   kickback: 0.3,
+  forcedTags: 0,
 };
 
 /** A fresh, mutable copy of every default. */

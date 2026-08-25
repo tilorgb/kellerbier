@@ -123,6 +123,10 @@ function fire(sim: GameSim, aimX: number, aimY: number, analogAim: boolean): voi
     damage,
     Math.max(1, Math.round(tuning.shotLifetimeTicks)),
     ProjectileTeam.Player,
+    // `tuning.forcedTags`: nothing yet (no character grants an innate tag),
+    // and the debug projectile tag chooser's one write target until one does
+    // — see the field's own doc comment.
+    tuning.forcedTags,
   );
   if (slot === NO_SLOT) {
     return;
