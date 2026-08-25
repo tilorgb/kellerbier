@@ -357,10 +357,12 @@ export function createTuningWindow(tuning: SimTuning): TuningWindowHandle {
     panel.hidden = !panel.hidden;
   });
 
-  // F2 as well as the button, because the button is on the far side of the
-  // screen from the hand that is playing.
+  // T as well as the button, because the button is on the far side of the
+  // screen from the hand that is playing. Not F2, and not a punctuation key
+  // either — see `overlay.ts`'s doc comment for why the debug tools live on
+  // plain letters instead.
   const onKeyDown = (event: KeyboardEvent): void => {
-    if (event.code === 'F2') {
+    if (event.code === 'KeyT') {
       event.preventDefault();
       panel.hidden = !panel.hidden;
     }

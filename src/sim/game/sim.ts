@@ -78,6 +78,7 @@ import { dispatchItemFloorStart, dispatchItemRoomClear, stepItemTick } from '../
 import { stepPickups } from '../systems/pickup.js';
 import { stepPromille } from '../systems/promille.js';
 import { stepProjectiles, stepShooting } from '../systems/shooting.js';
+import { STATUS_EFFECT_STRIDE, stepStatusEffects } from '../systems/status-effects.js';
 
 /** Entity slots reserved up front. Sized well above M1's population. */
 const DEFAULT_CAPACITY = 8192;
@@ -309,6 +310,16 @@ export class GameSim {
   readonly bombFuse: Component<Int16Array>;
   /** Ticks left of the cosmetic spawn-bounce, on every pickup. Render-only. */
   readonly spawnBounce: Component<Uint8Array>;
+  /**
+   * Burn/poison/freeze durations, in ticks — `[burnTicks, poisonTicks, freezeTicks]`
+   * per slot (`sim/systems/status-effects.ts`'s `STATUS_*` constants).
+   * Written by a `ProjectileTag` (#27) landing a hit, aged and spent by
+   * `stepStatusEffects`. Indexed by slot directly, the same convention
+   * `flash`/`spawnBounce` already use, rather than gated behind the ECS
+   * component mask — nothing here needs to query "everything burning," only
+   * to read three numbers for a slot a hit already named.
+   */
+  readonly statusEffect: Component<Int16Array>;
 
   /** Rebuilt from the position arrays every tick. */
   readonly broadphase: SpatialHash;
@@ -571,6 +582,11 @@ export class GameSim {
     this.pickupPrice = this.world.defineComponent('pickupPrice', Int16Array, 1);
     this.bombFuse = this.world.defineComponent('bombFuse', Int16Array, 1);
     this.spawnBounce = this.world.defineComponent('spawnBounce', Uint8Array, 1);
+    this.statusEffect = this.world.defineComponent(
+      'statusEffect',
+      Int16Array,
+      STATUS_EFFECT_STRIDE,
+    );
     this.collidableMask = this.world.maskOf(this.transform, this.body, this.collision);
     this.enemyMask = this.world.maskOf(this.enemy, this.enemyMotion);
 
@@ -1783,6 +1799,12 @@ export class GameSim {
     // Enemies decide after the player has moved and before bodies integrate, so
     // a body moves on the same tick as the decision that moved it.
     stepEnemies(this);
+    // Before `stepBodies`, deliberately: `freezing` (#27) scales velocity
+    // down, and that only slows this tick's movement if it runs before the
+    // integration that reads velocity. Burn/poison damage has no such
+    // ordering requirement — it rides along here rather than earning a
+    // second call site.
+    stepStatusEffects(this);
     stepBodies(this);
     stepShooting(this, input);
     stepProjectiles(this);

@@ -8,7 +8,7 @@ body:
         **The seed is the important field.** In a procedurally generated game, a bug report
         without one is frequently unactionable — nobody can reach the room you were standing in.
 
-        Press `F1` to open the debug overlay, then `C` to copy the run's identity. Paste it below.
+        Press `O` to open the debug overlay, then `C` to copy the run's identity. Paste it below.
 
   - type: textarea
     id: run

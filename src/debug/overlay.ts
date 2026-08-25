@@ -29,9 +29,23 @@ const PANEL_MARGIN = 8;
 /**
  * The tool we will look at more than any other.
  *
- * Hidden by default, toggled with F1, and compiled out of a production build
- * entirely — the module is behind a dynamic import that only a dev build ever
- * reaches, so none of this reaches a player's download.
+ * Hidden by default, toggled with the O key, and compiled out of a
+ * production build entirely — the module is behind a dynamic import that
+ * only a dev build ever reaches, so none of this reaches a player's download.
+ *
+ * Not an F-key: a hosted preview typically runs inside another page's
+ * `iframe`/webview, where the browser chrome around it treats F1/F2/F3 as its
+ * own shortcuts (help, find, …) before a `keydown` handler ever sees them —
+ * `preventDefault` on our end is too late to stop that.
+ *
+ * Not a punctuation key either, for the same reason a second time: `code`
+ * identifies a *physical* key, and the physical key at the US Backquote/
+ * Minus/Equal positions carries a different — sometimes dead — key on other
+ * layouts (a German QWERTZ keyboard puts `^`, `ß` and the dead `´` there).
+ * `KeyO`/`KeyT`/`KeyI` (`tuning-window.ts`, `projectile-tag-chooser.ts`) sit
+ * on the unshifted letter row instead: the one part of the keyboard QWERTY,
+ * QWERTZ and AZERTY all agree on the physical position of, and nothing
+ * `src/app/input/bindings.ts` binds a player action to claims any of them.
  *
  * When hidden it costs one boolean check per frame. Panels are only updated,
  * and colliders only drawn, while it is actually on screen.
@@ -61,7 +75,8 @@ export class DebugOverlay {
   private frame = 0;
 
   private detachInput: (() => void) | null = null;
-  private tuningWindow: { destroy(): void } | null = null;
+  /** DOM-based dev tools (the tuning window, the projectile tag chooser) the overlay tears down alongside itself. */
+  private readonly domTools: { destroy(): void }[] = [];
 
   constructor(sim: GameSim, view: GameView, uiLayer: Container, gameScale: () => number) {
     this.sim = sim;
@@ -153,7 +168,7 @@ export class DebugOverlay {
   attach(target: Window, canvas: HTMLCanvasElement): void {
     const onKeyDown = (event: KeyboardEvent): void => {
       switch (event.code) {
-        case 'F1':
+        case 'KeyO':
           event.preventDefault();
           this.setVisible(!this.visible);
           return;
@@ -226,16 +241,22 @@ export class DebugOverlay {
     };
   }
 
-  /** Takes ownership of the tuning window, so one `destroy` tears down both. */
-  ownTuningWindow(window: { destroy(): void }): void {
-    this.tuningWindow = window;
+  /**
+   * Takes ownership of a DOM-based dev tool (the tuning window, the
+   * projectile tag chooser) so one `destroy` tears every one of them down
+   * along with the overlay itself.
+   */
+  ownDomTool(tool: { destroy(): void }): void {
+    this.domTools.push(tool);
   }
 
   destroy(): void {
     this.detachInput?.();
     this.detachInput = null;
-    this.tuningWindow?.destroy();
-    this.tuningWindow = null;
+    for (const tool of this.domTools) {
+      tool.destroy();
+    }
+    this.domTools.length = 0;
     this.drawCalls.detach();
   }
 

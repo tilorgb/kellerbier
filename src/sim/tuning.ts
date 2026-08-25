@@ -136,6 +136,20 @@ export interface ShootingTuning {
    * the weapon having weight and starts reading as drift.
    */
   kickback: number;
+  /**
+   * `ProjectileTag` (#27, `sim/projectile/tags.ts`) bitmask applied to every
+   * shot the player fires, before any item hook runs.
+   *
+   * Simulation state living in tuning rather than a dial, the same exception
+   * `PromilleTuning.current` documents for itself: no character grants an
+   * innate tag yet (`docs/GAME_DESIGN.md`'s roster table — Resi's arcing and
+   * returning Brezn, König Ludwig's homing swans — is a later issue), and this
+   * is where that will eventually be read from. Until then it is the debug
+   * projectile tag chooser's (`src/debug/projectile-tag-chooser.ts`) one write
+   * target: checking a box ORs its bit in, live, exactly the way a tuning
+   * slider already writes any other field here.
+   */
+  forcedTags: number;
 }
 
 /**
@@ -307,9 +321,10 @@ export interface EnemyTuning {
  *
  * `current` is simulation state, not a dial — the one exception in this file.
  * It lives here anyway because the issue's own guidance is to put it here:
- * the F2 tuning window already binds a slider straight to any numeric field
- * on a `SimTuning` group, so this is the entire cost of "a debug slider that
- * sets it directly." No replay system exists yet (#48) for this to break.
+ * the tuning window (`src/debug/tuning-window.ts`) already binds a slider
+ * straight to any numeric field on a `SimTuning` group, so this is the
+ * entire cost of "a debug slider that sets it directly." No replay system
+ * exists yet (#48) for this to break.
  */
 export interface PromilleTuning {
   /** Current Promille, 0–5. The debug slider drives this field directly. */
@@ -352,6 +367,57 @@ export interface PromilleTuning {
   umgfallnKnockdownTicks: number;
   /** Promille the player wakes at, after the knockdown ends. */
   umgfallnWakePromille: number;
+}
+
+/**
+ * Projectile tag composition (#27): every numeric knob a tag's behaviour needs.
+ *
+ * One flat interface rather than one per tag, on purpose — a dozen `interface`
+ * blocks of one or two fields each would scatter what is, in practice, a single
+ * balance pass over `sim/projectile/behavior.ts`. The comment on each field
+ * says which tag reads it.
+ */
+export interface ProjectileTagTuning {
+  /** `piercing`: enemies a shot may fly through before it is finally stopped. */
+  pierceMaxTargets: number;
+  /** `bouncing`: bounces (off a wall or an enemy) a shot has before it despawns like a plain one. */
+  bounceMaxCount: number;
+  /** `splitting`: generations of children a hit may spawn — 1 means the root shot splits once and its children do not. */
+  splitMaxDepth: number;
+  /** `splitting`: children spawned per split. */
+  splitCount: number;
+  /** `splitting`: full angular spread the children fan across, in radians, centred on the hit's own direction of travel. */
+  splitSpreadRadians: number;
+  /** `splitting`: damage multiplier applied to a split child relative to what split it. */
+  splitDamageScale: number;
+  /** `splitting`: lifetime multiplier applied to a split child relative to what split it. */
+  splitLifetimeScale: number;
+  /** `homing`: how sharply a shot may turn toward its target, in radians per tick. */
+  homingTurnRadiansPerTick: number;
+  /** `homing`: how far away a target may be and still be picked up. Zero means unlimited. */
+  homingRange: number;
+  /** `arcing`: constant rotation applied to velocity every tick, in radians — positive curves clockwise. */
+  arcingTurnRadiansPerTick: number;
+  /** `orbiting`: radius of the circle a shot holds around its spawn point, in pixels. */
+  orbitRadius: number;
+  /** `orbiting`: angular speed around that circle, in radians per tick. */
+  orbitAngularVelocity: number;
+  /** `returning`: ticks a shot flies outward before it turns back toward where it was fired from. */
+  returningTurnTicks: number;
+  /** `burning`: ticks between damage applications while the status is active. */
+  burnTickInterval: number;
+  /** `burning`: damage dealt on each application. */
+  burnDamagePerTick: number;
+  /** `burning`: ticks the status lasts. A later hit refreshes rather than stacks — see `behavior.ts`. */
+  burnDurationTicks: number;
+  /** `poison`: the same three knobs as `burning`, kept separate so a future item can react to one and not the other. */
+  poisonTickInterval: number;
+  poisonDamagePerTick: number;
+  poisonDurationTicks: number;
+  /** `freezing`: velocity is multiplied by this every tick the status is active. */
+  freezeSlowFactor: number;
+  /** `freezing`: ticks the status lasts. */
+  freezeDurationTicks: number;
 }
 
 /** The pickup economy (#22): magnetism, spawn juice, need-weighting and the Bierfassl. */
@@ -401,6 +467,7 @@ export interface SimTuning {
   readonly enemy: EnemyTuning;
   readonly promille: PromilleTuning;
   readonly pickup: PickupTuning;
+  readonly projectileTags: ProjectileTagTuning;
 }
 
 export const DEFAULT_MOVEMENT_TUNING: Readonly<MovementTuning> = {
@@ -425,6 +492,7 @@ export const DEFAULT_SHOOTING_TUNING: Readonly<ShootingTuning> = {
   velocityInheritance: 0.85,
   analogVelocityInheritance: 0.35,
   kickback: 0.3,
+  forcedTags: 0,
 };
 
 /** A fresh, mutable copy of every default. */
@@ -526,6 +594,38 @@ export const DEFAULT_PICKUP_TUNING: Readonly<PickupTuning> = {
   toastTicks: 120,
 };
 
+/**
+ * Split children deal less and range less than the shot that made them —
+ * otherwise a splitting weapon's total damage output scales with its split
+ * count for free, which is not a balance decision this file should be the one
+ * making. Homing turns briskly enough to visibly curve onto a target within a
+ * few ticks without snapping instantly; orbiting and returning are both sized
+ * against the training room's own scale, `docs/TECH_STACK.md`'s 640×360 room.
+ */
+export const DEFAULT_PROJECTILE_TAG_TUNING: Readonly<ProjectileTagTuning> = {
+  pierceMaxTargets: 2,
+  bounceMaxCount: 2,
+  splitMaxDepth: 1,
+  splitCount: 2,
+  splitSpreadRadians: Math.PI / 3,
+  splitDamageScale: 0.6,
+  splitLifetimeScale: 0.7,
+  homingTurnRadiansPerTick: 0.12,
+  homingRange: 220,
+  arcingTurnRadiansPerTick: 0.05,
+  orbitRadius: 36,
+  orbitAngularVelocity: 0.15,
+  returningTurnTicks: 18,
+  burnTickInterval: 15,
+  burnDamagePerTick: 1,
+  burnDurationTicks: 90,
+  poisonTickInterval: 20,
+  poisonDamagePerTick: 1,
+  poisonDurationTicks: 120,
+  freezeSlowFactor: 0.15,
+  freezeDurationTicks: 45,
+};
+
 export function createTuning(): SimTuning {
   return {
     movement: { ...DEFAULT_MOVEMENT_TUNING },
@@ -534,6 +634,7 @@ export function createTuning(): SimTuning {
     enemy: { ...DEFAULT_ENEMY_TUNING },
     promille: { ...DEFAULT_PROMILLE_TUNING },
     pickup: { ...DEFAULT_PICKUP_TUNING },
+    projectileTags: { ...DEFAULT_PROJECTILE_TAG_TUNING },
   };
 }
 

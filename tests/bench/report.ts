@@ -100,8 +100,8 @@ export interface BenchReport {
    *
    * Always null here, and deliberately present rather than omitted: the budget
    * has a row for it, and a report that quietly leaves the row out reads as
-   * though the row were met. It is counted in the browser by the F1 overlay,
-   * against the same number.
+   * though the row were met. It is counted in the browser by the debug
+   * overlay (`O`), against the same number.
    */
   readonly drawCalls: null;
 }

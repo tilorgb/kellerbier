@@ -25,7 +25,7 @@ Filter by label: [`M0`](../../labels/M0) · [`M1`](../../labels/M1) · [`M2`](..
 | 5 | Input system: keyboard, mouse and gamepad with full rebinding |
 | 6 | CI pipeline with a playable preview link on every PR |
 | 7 | Architecture lint rules: `sim/` must not import `render/` |
-| 8 | Debug overlay (F1): frame graph, entity counts, hitbox display |
+| 8 | Debug overlay (O): frame graph, entity counts, hitbox display |
 | 60 | Project conventions: CONTRIBUTING, definition of done, issue templates |
 
 ## M1 — Game feel
