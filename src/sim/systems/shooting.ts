@@ -3,7 +3,14 @@ import type { GameSim } from '../game/sim.js';
 import { vectorLength } from '../math.js';
 import { type InputFrame, InputAction, axisToUnit, isActionDown } from '../input/frame.js';
 import { NO_SLOT } from '../pool/slot-pool.js';
+import {
+  advanceStuckProjectile,
+  applyProjectileMotionTags,
+  finalizeProjectileTags,
+  reflectVelocity,
+} from '../projectile/behavior.js';
 import { ProjectileTeam } from '../projectile/store.js';
+import { ProjectileTag, hasTag } from '../projectile/tags.js';
 import { StatId } from '../stats/definition.js';
 import { dispatchItemProjectileSpawn, dispatchItemShoot } from './items.js';
 import { addPush } from './movement.js';
@@ -121,6 +128,11 @@ function fire(sim: GameSim, aimX: number, aimY: number, analogAim: boolean): voi
     return;
   }
   dispatchItemProjectileSpawn(sim, slot);
+  // After the hook, not before: an item can still add a tag to this shot from
+  // `onProjectileSpawn`, and the counters `finalizeProjectileTags` derives
+  // (pierce/bounce budgets, split depth) have to be derived from the mask the
+  // shot actually ends up carrying.
+  finalizeProjectileTags(sim, slot);
 
   addPush(sim, playerIndex, -directionX * tuning.kickback, -directionY * tuning.kickback);
 }
@@ -154,6 +166,16 @@ function advanceProjectile(index: number): void {
   const projectiles = sim.projectiles;
   const room = sim.room;
 
+  // A `sticky` shot that has already landed rides its target instead of
+  // moving or colliding on its own — see `advanceStuckProjectile`'s doc
+  // comment. Checked first and unconditionally: cheap on every other
+  // projectile (one array read, default -1), and every codepath below this
+  // assumes the shot is still actually in flight.
+  if ((projectiles.stickyTarget[index] ?? -1) !== -1) {
+    advanceStuckProjectile(sim, index);
+    return;
+  }
+
   const x = projectiles.x[index] ?? 0;
   const y = projectiles.y[index] ?? 0;
   projectiles.previousX[index] = x;
@@ -166,9 +188,20 @@ function advanceProjectile(index: number): void {
   }
   projectiles.lifetime[index] = remaining;
 
+  // Tag-driven steering (#27) — homing, arcing, returning, orbiting — runs
+  // before velocity is read into the locals below, so whatever it changes is
+  // what this tick's movement actually uses.
+  applyProjectileMotionTags(sim, index);
+
   const velocityX = projectiles.velocityX[index] ?? 0;
   const velocityY = projectiles.velocityY[index] ?? 0;
   const radius = projectiles.radius[index] ?? 0;
+  const tags = projectiles.tags[index] ?? 0;
+  // `spectral`: passes through walls entirely rather than ending or bouncing
+  // at one — the shot still collides with whatever it is allowed to hit
+  // (`stepCollision` never even learns it is spectral), only terrain stops
+  // treating it as solid.
+  const spectral = tags !== 0 && hasTag(tags, ProjectileTag.Spectral);
 
   // The step is walked rather than jumped. A fast shot moves further in one
   // tick than a wall is thick, and testing only the endpoint would let it pass
@@ -181,11 +214,24 @@ function advanceProjectile(index: number): void {
   for (let substep = 0; substep < substeps; substep++) {
     const stepX = currentX + velocityX / substeps;
     const stepY = currentY + velocityY / substeps;
-    if (!room.isClear(stepX, stepY, radius)) {
+    if (!spectral && !room.isClear(stepX, stepY, radius)) {
       // The impact normal points back the way the shot came, which is the
-      // direction a spray of foam should leave the wall in.
+      // direction a spray of foam should leave the wall in — and, per
+      // `reflectVelocity`'s doc comment, exactly the normal a wall bounce
+      // reflects off of.
       const normalX = distance === 0 ? 0 : -velocityX / distance;
       const normalY = distance === 0 ? 0 : -velocityY / distance;
+      if (
+        tags !== 0 &&
+        hasTag(tags, ProjectileTag.Bouncing) &&
+        (projectiles.bounceRemaining[index] ?? 0) > 0
+      ) {
+        projectiles.bounceRemaining[index] = (projectiles.bounceRemaining[index] ?? 0) - 1;
+        reflectVelocity(projectiles, index, normalX, normalY);
+        projectiles.x[index] = currentX;
+        projectiles.y[index] = currentY;
+        return;
+      }
       spend(sim, index, currentX, currentY, normalX, normalY);
       return;
     }

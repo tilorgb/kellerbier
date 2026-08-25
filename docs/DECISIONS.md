@@ -516,3 +516,37 @@ primitive interpreter) is the natural next step, the same way `addPush`/`applyDa
 are for systems code. `onTick`'s budget — under 0.5 ms for 40 held items — is proven directly
 (`tests/unit/item-hooks.test.ts`) against `stepItemTick`, not folded into the whole-game
 stress-scene benchmark (`docs/TECH_STACK.md` §3), since the stress scene carries no items yet.
+
+## 16. Tag conflicts resolve through two fixed priority orders, not a synergy table
+
+**Decided:** M3. **Issue:** #27.
+
+A projectile carries a bitmask of behaviour tags (`sim/projectile/tags.ts`) rather than a
+discriminated kind, because the whole point — per #27's own framing, and `docs/GAME_DESIGN.md`
+§8 — is that a bouncing, splitting, homing shot has to simply work without either item that
+granted those tags ever knowing about the other. Most tags never interact, but two decisions
+are not free: what a shot does when it survives a hit (nothing, or `bouncing`, or `piercing`, or
+`sticky`) and what owns its position each tick (velocity nudged by up to three tags, or
+`orbiting` replacing position outright). An N×N table answering those for every pair does not
+scale past a handful of tags — the acceptance criterion "adding a tag does not require touching
+existing tags" rules it out directly. Each of the two questions instead resolves through one
+fixed priority order, chosen once: `sticky` beats `piercing` beats `bouncing` beats nothing, and
+`orbiting` beats `homing`/`returning`/`arcing`, which compose with each other in that order
+rather than competing. `splitting` and the three status tags (`burning`, `freezing`, `poison`)
+never entered either order — they are `sim/projectile/behavior.ts`'s `resolveProjectileHit`
+firing an out-of-band effect (spawn children, set a duration) rather than deciding what happens
+to the shot itself, so they compose with every other tag for free. The full reasoning for each
+order, including why `piercing` beats `bouncing` specifically — the pair the issue names by
+name — is written where it is used, in `sim/projectile/tags.ts`'s doc comment, rather than
+duplicated here.
+
+**Constrains:** a thirteenth tag joining one of the two families only has to say where in that
+family's fixed order it slots in; a tag that does neither (fires on a hit, or ticks every frame,
+like `splitting`/`burning`/`freezing`/`poison`) needs no order at all. #29 (authoring items) is
+what will actually grant these — an item's `onProjectileSpawn` hook mutates the shot it is
+handed exactly the way any other hook does (`addProjectileTag`, `sim/projectile/tags.ts`), so
+this issue never had to grow `ItemHooks` a new member. Burning/freezing/poison read and write a
+new `GameSim.statusEffect` field, indexed by slot the same way `flash`/`spawnBounce` already
+are rather than gated behind the ECS component mask — the first status-effect state the engine
+has, and the shape a later item that cleanses or reacts to one specifically would extend rather
+than replace.

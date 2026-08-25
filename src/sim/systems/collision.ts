@@ -4,6 +4,7 @@ import { World } from '../ecs/world.js';
 import { EventKind } from '../events/queue.js';
 import type { GameSim } from '../game/sim.js';
 import { vectorLength } from '../math.js';
+import { resolveProjectileHit } from '../projectile/behavior.js';
 import { ProjectileTeam } from '../projectile/store.js';
 
 /**
@@ -152,6 +153,12 @@ function resolveProjectile(slot: number): void {
 
   const target = slots[BEST_HIT_TARGET];
   if (target === -1) {
+    // Nothing found this tick — the shot has physically cleared whatever it
+    // hit last, so a `piercing`/`bouncing` shot's exclusion on re-hitting the
+    // same body (see `testCandidate`) is free to lapse. Without this a shot
+    // that pierces the same body twice, ticks apart (an orbiting one lapping
+    // past it, say), would stay excluded from it forever.
+    projectiles.lastHitTarget[slot] = -1;
     return;
   }
 
@@ -180,13 +187,23 @@ function resolveProjectile(slot: number): void {
     normalY,
     projectiles.damage[slot] ?? 0,
   );
-  projectiles.despawn(slot);
+  // Whether the shot despawns here, pierces through, bounces off, embeds
+  // itself, and/or spawns split children is #27's business, not this file's
+  // — see `resolveProjectileHit`'s own doc comment for the priority a mask
+  // with more than one of those tags resolves through.
+  resolveProjectileHit(sim, slot, target, hitX, hitY, normalX, normalY);
 }
 
 /** Exact test for one broadphase candidate. Keeps the earliest hit found. */
 function testCandidate(index: number): void {
   const layer = activeCollisionLayers[index * 2] ?? 0;
   if ((layer & (slots[PROJECTILE_MASK] ?? 0)) === 0) {
+    return;
+  }
+  // A `piercing`/`bouncing` shot that survived a hit last tick does not
+  // re-register a hit against the very same body this tick before it has
+  // physically cleared it — see `ProjectileStore.lastHitTarget`'s doc comment.
+  if (index === (activeSim?.projectiles.lastHitTarget[slots[PROJECTILE_SLOT] ?? 0] ?? -1)) {
     return;
   }
 

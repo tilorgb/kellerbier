@@ -47,6 +47,37 @@ export class ProjectileStore {
    */
   readonly generation: Uint32Array;
 
+  /** Bitmask of `ProjectileTag` (#27, `sim/projectile/tags.ts`). Zero on a plain shot. */
+  readonly tags: Uint32Array;
+  /**
+   * Where this shot was fired from — the centre `orbiting` circles and the
+   * point `returning` flies back to. Written once at spawn and never moved,
+   * so both tags read it as a fixed reference point regardless of how far the
+   * shot has since travelled.
+   */
+  readonly spawnX: Float32Array;
+  readonly spawnY: Float32Array;
+  /** Ticks this shot has been in flight. Only `returning` reads it today. */
+  readonly ticksAlive: Int16Array;
+  /** Enemies a `piercing` shot may still fly through before it is stopped for good. */
+  readonly pierceRemaining: Int16Array;
+  /** Bounces a `bouncing` shot has left. */
+  readonly bounceRemaining: Int16Array;
+  /** Generations of `splitting` left. A split child is spawned with one fewer, which is what bounds the recursion. */
+  readonly splitDepth: Uint8Array;
+  /** The body a `sticky` shot has embedded itself in, or -1 if it has not stuck to anything. */
+  readonly stickyTarget: Int32Array;
+  /**
+   * The body most recently hit, or -1.
+   *
+   * Exists only so a `piercing`/`bouncing` shot that survives a hit does not
+   * register a second hit against the same body next tick before it has
+   * physically cleared it — see `sim/systems/collision.ts`'s `testCandidate`.
+   * Cleared the moment a tick's sweep finds nothing, which is what lets the
+   * same body be hit again later (an orbiting shot lapping past it, say).
+   */
+  readonly lastHitTarget: Int32Array;
+
   private readonly pool: SlotPool;
 
   constructor(capacity: number = PROJECTILE_CAPACITY) {
@@ -62,6 +93,15 @@ export class ProjectileStore {
     this.lifetime = new Int16Array(capacity);
     this.team = new Uint8Array(capacity);
     this.generation = new Uint32Array(capacity);
+    this.tags = new Uint32Array(capacity);
+    this.spawnX = new Float32Array(capacity);
+    this.spawnY = new Float32Array(capacity);
+    this.ticksAlive = new Int16Array(capacity);
+    this.pierceRemaining = new Int16Array(capacity);
+    this.bounceRemaining = new Int16Array(capacity);
+    this.splitDepth = new Uint8Array(capacity);
+    this.stickyTarget = new Int32Array(capacity);
+    this.lastHitTarget = new Int32Array(capacity);
 
     // Recycling the oldest is what keeps the player's own shots appearing in a
     // room already full of bullets: the shot being fired right now is never the
@@ -102,6 +142,7 @@ export class ProjectileStore {
     damage: number,
     lifetime: number,
     team: ProjectileTeamId,
+    tags = 0,
   ): number {
     const index = this.pool.acquire();
     if (index === NO_SLOT) {
@@ -118,6 +159,22 @@ export class ProjectileStore {
     this.lifetime[index] = lifetime;
     this.team[index] = team;
     this.generation[index] = ((this.generation[index] ?? 0) + 1) >>> 0;
+    // Tag composition state. `tags` may still change after this — an item's
+    // `onProjectileSpawn` hook can add more before the shot is finalised — so
+    // `finalizeProjectileTags` (`sim/projectile/behavior.ts`) is what actually
+    // derives `pierceRemaining`/`bounceRemaining`/`splitDepth` from whatever
+    // the mask ends up being; this only has to seed the fields every path
+    // needs regardless of tags, the same "everything written here" reasoning
+    // as every field above.
+    this.tags[index] = tags;
+    this.spawnX[index] = x;
+    this.spawnY[index] = y;
+    this.ticksAlive[index] = 0;
+    this.pierceRemaining[index] = 0;
+    this.bounceRemaining[index] = 0;
+    this.splitDepth[index] = 0;
+    this.stickyTarget[index] = -1;
+    this.lastHitTarget[index] = -1;
     return index;
   }
 
