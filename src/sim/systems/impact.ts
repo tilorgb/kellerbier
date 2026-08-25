@@ -3,6 +3,7 @@ import type { GameSim } from '../game/sim.js';
 import { vectorLength } from '../math.js';
 import { ParticleKind } from '../particle/store.js';
 import { isEnemyInvulnerable, markEnemyHit } from './enemy.js';
+import { dispatchItemDamageTaken, dispatchItemHit, dispatchItemKill } from './items.js';
 import { addPush } from './movement.js';
 
 /**
@@ -145,6 +146,7 @@ function applyContact(sim: GameSim, slot: number): void {
   }
 
   sim.applyPlayerDamage(damage);
+  dispatchItemDamageTaken(sim, damage);
 
   sim.flash.data[victim] = Math.min(255, Math.round(tuning.deathFlashTicks));
   sim.requestHitstop(Math.round(tuning.deathHitstopTicks));
@@ -238,6 +240,7 @@ export function applyDamageAt(
     // Destroying it would free the slot for the next enemy to spawn into, and
     // the camera would follow whatever landed there.
     sim.applyPlayerDamage(damage);
+    dispatchItemDamageTaken(sim, damage);
     sim.makePlayerInvulnerable(Math.round(tuning.projectileInvulnerabilityTicks));
     // One signal for "the player took damage" regardless of source — matches
     // what `applyContact` already pushes for a contact hit, so audio and
@@ -247,6 +250,9 @@ export function applyDamageAt(
     const remaining = (health[target * 2] ?? 0) - damage;
     killed = (health[target * 2 + 1] ?? 0) > 0 && remaining <= 0;
     health[target * 2] = Math.max(0, remaining);
+    // A player's shot (or blast) landing on something else — #26's onHit,
+    // fired whether or not this hit was the kill.
+    dispatchItemHit(sim, target, damage, hitX, hitY);
   }
 
   // Flash. One tick of solid white, and the whole read of "that connected".
@@ -305,6 +311,7 @@ export function applyDamageAt(
 
   if (killed) {
     events.push(EventKind.Death, target, cause, hitX, hitY, normalX, normalY, 0);
+    dispatchItemKill(sim, target);
     sim.kill(target);
   } else if (isPlayer && sim.playerDead) {
     events.push(EventKind.Death, target, cause, hitX, hitY, normalX, normalY, 0);

@@ -463,3 +463,56 @@ apply a bonus. Promille's damage and fire-rate bonuses (`syncPromilleModifiers` 
 the pipeline's first real consumer, replacing the multiplier getters `stepShooting` used to read
 directly; nothing else should reach around the pipeline to read `tuning.shooting.shotDamage` (or
 any other stat's base tuning field) expecting it to be the final value.
+
+## 15. An item's hooks are real functions, not an interpreted primitive set — and dispatch order is id order, never pickup order
+
+**Decided:** M3. **Issue:** #26.
+
+`docs/GAME_DESIGN.md` §8 calls an item "data plus hooks": `modifyStats`, `onShoot`,
+`onProjectileSpawn`, `onHit`, `onKill`, `onDamageTaken`, `onRoomClear`, `onFloorStart`, `onTick`
+(`sim/item/definition.ts`, plus `onPickup`/`onRemove`/`onActivate` for lifecycle). This is
+deliberately **not** built the way an enemy is (#7/#14: named behaviour primitives an engine
+interpreter runs) — a primitive per possible item effect is a primitive added every time #29
+authors one, the exact scaling failure #7 built primitives to avoid for enemies, just moved one
+layer over. Instead a hook is a real function, and the `content-is-data` lint rule still holds
+for the *file*: a content item imports only types (`ItemDefinition`, `ItemHookContext` and
+friends), never a value, so adding an item is still mechanically a data change even though the
+data now contains function values. A hook's body is free to call anything on the `sim: GameSim`
+it's handed (structurally typed — `sim/item/definition.ts` imports `GameSim` with `import type`
+only, so there is no runtime circular import even though `GameSim` itself imports `ItemRegistry`/
+`ItemInventory`), which is the same access every engine-owned system already has; an item hook is
+effectively a tiny system an author writes once per item instead of once per feature.
+
+`modifyStats` is the one hook kept pure — `(state: ItemRuntimeState) => ItemStatModifier[]`, no
+`sim` — so it stays inspectable without a running simulation and resolves through #14's stat
+pipeline under the source key `item:<id>` (`itemStatSourceKey`). `GameSim.pickUpItem`/
+`removeItem` mark the item's contribution dirty and re-fold it immediately; a hook that changes
+`state.count` mid-tick (stacking on kill, say) can also mark it dirty for `GameSim` to pick up at
+the top of the next `step()`, the same two-writers pattern `syncPromilleModifiers` already used
+for Promille's tier. Removing an item's last copy clears its stat source outright rather than
+registering an empty modifier list, which combined with `modifyStats` being pure is what makes
+losing an item **exactly** restore the prior value (#26 acceptance criteria) rather than
+approximately.
+
+**Deterministic hook ordering** — the issue's own flagged risk, and the reason a naive "dispatch
+in pickup order" design was rejected outright: two items both modifying the same stat, or both
+reacting to the same kill, must resolve the same way regardless of which one a run picked up
+first, or a shared seed stops reproducing the run it recorded. `ItemRegistry` sorts every
+definition by `id` at construction, once, never touched again — registry index is id order by
+construction. `ItemInventory` keeps the ids a run actually holds (`heldOrder`) in ascending
+registry-index order at all times, an insertion-sort/shift on pickup/removal rather than a
+sort-on-read, so `forEachHeld` — what every broadcast hook (`onTick` and the seven event hooks in
+`sim/systems/items.ts`) walks — is always id order, never acquisition order, with no per-dispatch
+sort cost.
+
+**Constrains:** #27 (projectile tags) is the composition layer above this — tags live on
+projectiles, not as another item hook, and this issue does not touch them. #28 (pools, pedestals,
+pickup UI) owns actually offering an item to a run and putting `GameSim.pickUpItem`/
+`useActiveItem` behind a button; #26 only had to make the mechanism correct and cheap. #29
+(authoring 25+ items) will be the first real pressure test of whether "a hook function" is
+enough expressiveness without becoming "a hook function that reaches around `sim` into private
+state" — if a pattern repeats often enough there, extracting a couple of shared helpers (not a
+primitive interpreter) is the natural next step, the same way `addPush`/`applyDamageAt` already
+are for systems code. `onTick`'s budget — under 0.5 ms for 40 held items — is proven directly
+(`tests/unit/item-hooks.test.ts`) against `stepItemTick`, not folded into the whole-game
+stress-scene benchmark (`docs/TECH_STACK.md` §3), since the stress scene carries no items yet.

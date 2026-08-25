@@ -14,6 +14,14 @@ import type { InputFrame } from '../input/frame.js';
 import { createInputFrame } from '../input/frame.js';
 import type { DropTable } from '../pickup/definition.js';
 import { PickupRegistry } from '../pickup/registry.js';
+import { ITEM_DEFINITIONS } from '../../content/items/index.js';
+import {
+  type ItemDefinition,
+  type ItemRuntimeState,
+  itemStatSourceKey,
+} from '../item/definition.js';
+import { ItemInventory } from '../item/inventory.js';
+import { ItemRegistry } from '../item/registry.js';
 import { type RunRandom, createRunRandom } from '../rng/streams.js';
 import { drawDeathWord } from './death-word.js';
 import {
@@ -66,6 +74,7 @@ import { stepBombPlacement } from '../systems/bomb-placement.js';
 import { stepBombs } from '../systems/bombs.js';
 import { stepImpact, stepParticles } from '../systems/impact.js';
 import { stepLootDrops } from '../systems/loot.js';
+import { dispatchItemFloorStart, dispatchItemRoomClear, stepItemTick } from '../systems/items.js';
 import { stepPickups } from '../systems/pickup.js';
 import { stepPromille } from '../systems/promille.js';
 import { stepProjectiles, stepShooting } from '../systems/shooting.js';
@@ -187,6 +196,8 @@ export interface GameSimOptions {
   readonly population?: RoomPopulation;
   /** Enemy data. Defaults to everything in `src/content/enemies/`. */
   readonly enemies?: readonly EnemyDefinition[];
+  /** Item data. Defaults to everything in `src/content/items/`. */
+  readonly items?: readonly ItemDefinition[];
   /**
    * The headline word the *previous* run's death screen showed, if any.
    *
@@ -313,6 +324,25 @@ export class GameSim {
 
   /** Every pickup definition, validated and compiled once at construction. */
   readonly pickups: PickupRegistry;
+
+  /** Every item definition, validated, sorted by id and compiled once at construction (#26). */
+  readonly items: ItemRegistry;
+
+  /** Which items this run holds, and their per-item runtime state. */
+  readonly inventory: ItemInventory;
+
+  /**
+   * Registry indices whose `modifyStats` contribution needs to be re-folded
+   * into the stat pipeline — set by `markItemStatsDirty`, drained by
+   * `syncItemStatModifiers`. Sized to `items.count` and allocated once, the
+   * same "fixed capacity, never grown" reasoning as everything else transient.
+   */
+  private readonly itemStatsDirty: Uint8Array;
+  private readonly dirtyItemIndices: Int32Array;
+  private dirtyItemCount = 0;
+
+  /** The floor `dispatchItemFloorStart` was last fired for. 0 is not a real floor, so floor 1 still fires once. */
+  private lastFloorStartDispatched = 0;
 
   /** Everything in flight. Pooled, fixed capacity, never grows. */
   readonly projectiles: ProjectileStore;
@@ -533,6 +563,10 @@ export class GameSim {
 
     this.enemies = new EnemyRegistry(options.enemies ?? ENEMY_DEFINITIONS);
     this.pickups = new PickupRegistry(PICKUP_DEFINITIONS);
+    this.items = new ItemRegistry(options.items ?? ITEM_DEFINITIONS);
+    this.inventory = new ItemInventory(this.items);
+    this.itemStatsDirty = new Uint8Array(this.items.count);
+    this.dirtyItemIndices = new Int32Array(this.items.count);
     this.promilleUnlocked = options.promilleUnlocked ?? true;
 
     this.broadphase = new SpatialHash({
@@ -908,6 +942,10 @@ export class GameSim {
     this.roomTransitionTicks = direction === null ? 0 : ROOM_TRANSITION_TICKS;
     this.roomTransitionDirection = direction;
     this.roomWarmupTicks = ROOM_WARMUP_TICKS;
+    if (floor !== this.lastFloorStartDispatched) {
+      this.lastFloorStartDispatched = floor;
+      dispatchItemFloorStart(this, floor);
+    }
     this.currentFloorValue = floor;
     this.roomEnemyCount = 0;
     const alreadyCleared = this.roomClearedIds.has(this.roomId);
@@ -1394,6 +1432,153 @@ export class GameSim {
     tuning.current = Math.max(0, tuning.current - tuning.decayPerSecond / TICKS_PER_SECOND);
   }
 
+  /** Whether the run currently holds at least one copy of an item. */
+  hasItem(id: string): boolean {
+    const index = this.items.indexOf(id);
+    return index >= 0 && this.inventory.has(index);
+  }
+
+  /** An item's runtime state (stack count, active charge). Throws for an unknown id. */
+  itemState(id: string): ItemRuntimeState {
+    const index = this.items.indexOf(id);
+    if (index < 0) {
+      throw new Error(`No item definition with id "${id}"`);
+    }
+    return this.inventory.stateOf(index);
+  }
+
+  /**
+   * Adds one copy of an item to the run: bumps its stack count, folds its
+   * `modifyStats` output into the stat pipeline under its own source key
+   * (`itemStatSourceKey`), and fires `onPickup` once. Pairs with
+   * `removeItem` — see #26's "picking up and losing an item returns the
+   * player to exactly the prior state" acceptance criterion.
+   */
+  pickUpItem(id: string): ItemRuntimeState {
+    const index = this.items.indexOf(id);
+    if (index < 0) {
+      throw new Error(`No item definition with id "${id}"`);
+    }
+    const state = this.inventory.pickUp(index);
+    this.markItemStatsDirty(index);
+    this.syncItemStatModifiers();
+    this.items.at(index).hooks.onPickup?.({ sim: this, itemId: id, state });
+    return state;
+  }
+
+  /**
+   * Removes one copy. Only once the last copy of a stack leaves does this
+   * clear the item's stat-pipeline source and fire `onRemove` — a stack of
+   * three losing one copy is still held, and its stat contribution (if
+   * `modifyStats` reads `state.count`) is re-resolved, not zeroed.
+   *
+   * Returns whether the item is still held afterward.
+   */
+  removeItem(id: string): boolean {
+    const index = this.items.indexOf(id);
+    if (index < 0) {
+      throw new Error(`No item definition with id "${id}"`);
+    }
+    const item = this.items.at(index);
+    const state = this.inventory.stateOf(index);
+    const stillHeld = this.inventory.remove(index);
+    this.markItemStatsDirty(index);
+    this.syncItemStatModifiers();
+    if (!stillHeld) {
+      item.hooks.onRemove?.({ sim: this, itemId: id, state });
+    }
+    return stillHeld;
+  }
+
+  /** Adds charge to a held active item, capped at its `maxCharge`. A no-op for an item that is not held or not active. */
+  chargeActiveItem(id: string, amount: number): void {
+    if (amount <= 0) {
+      return;
+    }
+    const index = this.items.indexOf(id);
+    if (index < 0 || !this.inventory.has(index)) {
+      return;
+    }
+    const active = this.items.at(index).active;
+    if (active === undefined) {
+      return;
+    }
+    const state = this.inventory.stateOf(index);
+    state.charge = Math.min(active.maxCharge, state.charge + amount);
+  }
+
+  /**
+   * Spends a fully-charged active item: resets its charge to zero and runs
+   * `onActivate`. A `consumable` item is removed from the inventory the same
+   * call, through `removeItem`, so a single-use item leaves no charge and no
+   * stat contribution behind. Returns `false` without effect if the item is
+   * not held, is not active, or has not reached `maxCharge`.
+   */
+  useActiveItem(id: string): boolean {
+    const index = this.items.indexOf(id);
+    if (index < 0 || !this.inventory.has(index)) {
+      return false;
+    }
+    const item = this.items.at(index);
+    const active = item.active;
+    if (active === undefined) {
+      return false;
+    }
+    const state = this.inventory.stateOf(index);
+    if (state.charge < active.maxCharge) {
+      return false;
+    }
+    state.charge = 0;
+    item.hooks.onActivate?.({ sim: this, itemId: id, state });
+    if (active.consumable === true) {
+      this.removeItem(id);
+    }
+    return true;
+  }
+
+  /** Marks an item's `modifyStats` output stale — drained by `syncItemStatModifiers`. */
+  private markItemStatsDirty(index: number): void {
+    if ((this.itemStatsDirty[index] ?? 0) !== 0) {
+      return;
+    }
+    this.itemStatsDirty[index] = 1;
+    this.dirtyItemIndices[this.dirtyItemCount] = index;
+    this.dirtyItemCount += 1;
+  }
+
+  /**
+   * Re-resolves every dirty item's contribution to the stat pipeline.
+   *
+   * A no-op source (no `modifyStats` hook, or the item is no longer held)
+   * clears its source outright rather than registering an empty modifier
+   * list — cheaper for `StatPipeline` to skip entirely, and what makes losing
+   * an item's stat effect exact: the source disappears, rather than staying
+   * registered with nothing in it.
+   */
+  private syncItemStatModifiers(): void {
+    for (let cursor = 0; cursor < this.dirtyItemCount; cursor++) {
+      const index = this.dirtyItemIndices[cursor] ?? 0;
+      this.itemStatsDirty[index] = 0;
+      const item = this.items.at(index);
+      const key = itemStatSourceKey(item.id);
+      if (!this.inventory.has(index) || item.hooks.modifyStats === undefined) {
+        this.stats.clearSource(key);
+        continue;
+      }
+      const state = this.inventory.stateOf(index);
+      const source = { kind: 'item' as const, id: item.id, label: item.name };
+      const modifiers: StatModifier[] = item.hooks
+        .modifyStats(state)
+        .map((modifier) => ({ ...modifier, source }));
+      if (modifiers.length === 0) {
+        this.stats.clearSource(key);
+      } else {
+        this.stats.setSourceModifiers(key, modifiers);
+      }
+    }
+    this.dirtyItemCount = 0;
+  }
+
   /** True while the simulation is frozen by hitstop. */
   get frozen(): boolean {
     return this.hitstopTicks > 0;
@@ -1542,6 +1727,10 @@ export class GameSim {
     // wobble, so it has to be settled before either runs.
     stepPromille(this);
     this.syncPromilleModifiers();
+    // Any item stat contribution a hook changed since the last tick (a stack
+    // gained on kill, say) is folded in before anything reads `stats` this
+    // tick — same reasoning as Promille just above.
+    this.syncItemStatModifiers();
 
     // Order matters and is fixed: the player moves, then fires from where they
     // now are, then everything already in flight advances. Anything else and a
@@ -1575,10 +1764,15 @@ export class GameSim {
       !this.roomClearedIds.has(this.roomId)
     ) {
       this.rollRoomClearLoot();
+      dispatchItemRoomClear(this);
     }
     if (this.roomTemplateLoaded && this.roomEnemyCount === 0) {
       this.roomClearedIds.add(this.roomId);
     }
+    // Every held item's onTick, once this tick's outcomes (hits, kills, the
+    // room-clear check above) have all already happened — an item reacting
+    // to "this tick" sees the whole of it, not a partial slice.
+    stepItemTick(this);
     stepParticles(this);
     this.stepRespawns();
 

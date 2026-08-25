@@ -5,6 +5,7 @@ import { type InputFrame, InputAction, axisToUnit, isActionDown } from '../input
 import { NO_SLOT } from '../pool/slot-pool.js';
 import { ProjectileTeam } from '../projectile/store.js';
 import { StatId } from '../stats/definition.js';
+import { dispatchItemProjectileSpawn, dispatchItemShoot } from './items.js';
 import { addPush } from './movement.js';
 
 /**
@@ -95,11 +96,15 @@ function fire(sim: GameSim, aimX: number, aimY: number, analogAim: boolean): voi
   // wobble. Same feature, two numbers — see the tuning docs.
   const inheritance = analogAim ? tuning.analogVelocityInheritance : tuning.velocityInheritance;
 
-  // Stammwürze (#25): resolved through the stat pipeline — base damage plus
-  // Promille's tier bonus today, an item's `modifyStats` hook once #25's
-  // consumers exist. Baked in here rather than read live at impact — damage
-  // is written once into the projectile at spawn (`ProjectileStore.spawn`)
-  // and never re-read, so firing is the only correct hook point.
+  // Items react to the shot before it exists (#26) — the same moment the
+  // stat pipeline already resolves damage from, one line below.
+  dispatchItemShoot(sim, directionX, directionY);
+
+  // Stammwürze (#25): resolved through the stat pipeline — Promille's tier
+  // bonus and every held item's `modifyStats` contribution (#26) folded in
+  // already. Baked in here rather than read live at impact — damage is
+  // written once into the projectile at spawn (`ProjectileStore.spawn`) and
+  // never re-read, so firing is the only correct hook point.
   const damage = Math.round(sim.stats.value(StatId.Stammwuerze));
 
   const slot = sim.projectiles.spawn(
@@ -115,6 +120,7 @@ function fire(sim: GameSim, aimX: number, aimY: number, analogAim: boolean): voi
   if (slot === NO_SLOT) {
     return;
   }
+  dispatchItemProjectileSpawn(sim, slot);
 
   addPush(sim, playerIndex, -directionX * tuning.kickback, -directionY * tuning.kickback);
 }
