@@ -7,8 +7,8 @@ import type { DrawCallCounter } from './draw-calls.js';
  * Everything a panel is allowed to look at.
  *
  * Passed in rather than reached for, so a panel added by a later issue — the
- * stat inspector in #25, the room warp in #20, the item spawner in #29, the
- * Promille slider in #17 — declares what it needs by using it, and adding one
+ * stat inspector (#25), the room warp (#20), the item spawner (#29), the
+ * Promille slider (#17) — declares what it needs by using it, and adding one
  * is writing a class rather than wiring anything up.
  */
 export interface DebugContext {

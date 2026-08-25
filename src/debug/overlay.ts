@@ -11,6 +11,7 @@ import { CountsPanel } from './panels/counts.js';
 import { FrameGraphPanel } from './panels/frame-graph.js';
 import { PickupsPanel } from './panels/pickups.js';
 import { RunInfoPanel } from './panels/run-info.js';
+import { StatsPanel } from './panels/stats.js';
 
 /** Collider outline colours, by layer. */
 const LAYER_COLOURS: readonly (readonly [number, number])[] = [
@@ -78,6 +79,7 @@ export class DebugOverlay {
     this.addPanel(new CountsPanel());
     this.addPanel(this.runInfo);
     this.addPanel(new PickupsPanel());
+    this.addPanel(new StatsPanel());
 
     this.setVisible(false);
   }
@@ -85,9 +87,10 @@ export class DebugOverlay {
   /**
    * Adds a panel to the stack.
    *
-   * This is the extension point the later issues use — the stat inspector
-   * (#25), room warp (#20), item spawner (#29) and Promille slider (#17) are
-   * each a class with a `view` and an `update`, and nothing else has to change.
+   * This is the extension point later issues use — the stat inspector (#25,
+   * landed) worked this way, and the room warp (#20), item spawner (#29) and
+   * Promille slider (#17) are each just a class with a `view` and an
+   * `update`, and nothing else has to change.
    */
   addPanel(panel: DebugPanel): void {
     this.panels.push(panel);

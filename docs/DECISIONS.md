@@ -435,3 +435,31 @@ staircase's far side can be (never itself a branch point toward more of the floo
 cosmetic; #118's other two motivating cases (a quarter-cell diagonal shortcut, a quarter-cell
 wedge-in threshold room) remain their own design pass regardless, needing resolution finer than
 `STAIR_STEP_OVERLAP` gives.
+
+## 14. Stat modifiers are sourced and registered, never applied inline
+
+**Decided:** M3. **Issue:** #25.
+
+The six stats (`docs/GAME_DESIGN.md` §6) resolve through one pure function,
+`resolveStats` (`src/sim/stats/pipeline.ts`): `base → flat additions → multipliers → caps →
+final`, flat before multiply regardless of the order modifiers are given in, with a cap step
+appended to the trace only when a cap actually changes the value. Every modifier carries a
+`ModifierSource` — an item, a Promille tier, a curse, a character — and the trace records that
+source against the step it produced, which is the entire mechanism behind the debug overlay's
+stat panel answering "why is my damage 47.3" instead of just stating it.
+
+Gameplay code never computes a stat inline (`shotDamage * someBonus`) and never mutates a
+tuning field to represent a temporary bonus. It registers a `StatModifier[]` under a source key
+through `GameSim.stats.setSourceModifiers(sourceKey, modifiers)`, and removes exactly that
+source with `clearSource(sourceKey)` when the bonus ends. `StatPipeline` (`src/sim/stats/
+cache.ts`) caches the resolved traces and only re-runs `resolveStats` when a source's modifiers
+actually changed or a base stat did (tuning is live-editable, so a debug-window slider has to
+take effect immediately) — comparison against the last-seen base is against a reused scratch
+object, not a fresh allocation, because this runs on the firing path.
+
+**Constrains:** the item system (#M3, not yet built), curses and character passives all plug in
+the same way — a source key and a modifier list — rather than each inventing its own place to
+apply a bonus. Promille's damage and fire-rate bonuses (`syncPromilleModifiers` in `sim.ts`) are
+the pipeline's first real consumer, replacing the multiplier getters `stepShooting` used to read
+directly; nothing else should reach around the pipeline to read `tuning.shooting.shotDamage` (or
+any other stat's base tuning field) expecting it to be the final value.

@@ -4,6 +4,7 @@ import { vectorLength } from '../math.js';
 import { type InputFrame, InputAction, axisToUnit, isActionDown } from '../input/frame.js';
 import { NO_SLOT } from '../pool/slot-pool.js';
 import { ProjectileTeam } from '../projectile/store.js';
+import { StatId } from '../stats/definition.js';
 import { addPush } from './movement.js';
 
 /**
@@ -38,11 +39,11 @@ export function stepShooting(sim: GameSim, input: Readonly<InputFrame>): void {
 
   if (wantsToFire && sim.fireCooldown === 0) {
     fire(sim, aimX, aimY, input.analogAim);
-    // Promille fire rate (#17): the multiplier shrinks the delay rather than
-    // growing a rate, so it composes with the existing zero-guard below for
-    // free — a multiplier of, say, 1.5 cannot produce a negative delay.
-    const delay = sim.tuning.shooting.fireDelayTicks / sim.promilleFireRateMultiplier;
-    sim.fireCooldown += Math.max(1, Math.round(delay));
+    // Schluckfrequenz (#25): resolved through the stat pipeline, which is
+    // what applies Promille's fire-rate bonus and floors the result at one
+    // tick — the zero-guard a delay-based fire rate needs lives in the cap,
+    // not here.
+    sim.fireCooldown += Math.round(sim.stats.value(StatId.Schluckfrequenz));
   }
 }
 
@@ -94,10 +95,12 @@ function fire(sim: GameSim, aimX: number, aimY: number, analogAim: boolean): voi
   // wobble. Same feature, two numbers — see the tuning docs.
   const inheritance = analogAim ? tuning.analogVelocityInheritance : tuning.velocityInheritance;
 
-  // Promille damage (#17): baked in here rather than read live at impact —
-  // damage is written once into the projectile at spawn (`ProjectileStore.
-  // spawn`) and never re-read, so firing is the only correct hook point.
-  const damage = Math.round(tuning.shotDamage * sim.promilleDamageMultiplier);
+  // Stammwürze (#25): resolved through the stat pipeline — base damage plus
+  // Promille's tier bonus today, an item's `modifyStats` hook once #25's
+  // consumers exist. Baked in here rather than read live at impact — damage
+  // is written once into the projectile at spawn (`ProjectileStore.spawn`)
+  // and never re-read, so firing is the only correct hook point.
+  const damage = Math.round(sim.stats.value(StatId.Stammwuerze));
 
   const slot = sim.projectiles.spawn(
     muzzleX,
