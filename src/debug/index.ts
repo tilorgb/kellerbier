@@ -36,13 +36,13 @@ export function createDebugOverlay(host: DebugOverlayHost): DebugOverlay {
   const overlay = new DebugOverlay(host.sim, host.view, host.uiLayer, host.gameScale);
   overlay.drawCalls.attach(host.gl);
   overlay.attach(window, host.canvas);
-  // Independent of the F1 overlay on purpose: the panels are for watching what
-  // the game is doing, and this is for changing it. They get used at different
-  // moments and neither should force the other onto the screen.
+  // Independent of the debug overlay on purpose: the panels are for watching
+  // what the game is doing, and this is for changing it. They get used at
+  // different moments and neither should force the other onto the screen.
   overlay.ownDomTool(createTuningWindow(host.sim.tuning));
-  // Same reasoning, and its own key (F3) rather than folded into the tuning
-  // window: this is toggled far more often mid-run than any slider is, while
-  // testing one specific combination of #27's tags.
+  // Same reasoning, and its own key (Equal) rather than folded into the
+  // tuning window: this is toggled far more often mid-run than any slider
+  // is, while testing one specific combination of #27's tags.
   overlay.ownDomTool(createProjectileTagChooser(host.sim.tuning));
   return overlay;
 }

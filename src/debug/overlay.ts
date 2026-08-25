@@ -29,9 +29,18 @@ const PANEL_MARGIN = 8;
 /**
  * The tool we will look at more than any other.
  *
- * Hidden by default, toggled with F1, and compiled out of a production build
- * entirely — the module is behind a dynamic import that only a dev build ever
- * reaches, so none of this reaches a player's download.
+ * Hidden by default, toggled with the backquote key (`` ` ``, above Tab), and
+ * compiled out of a production build entirely — the module is behind a
+ * dynamic import that only a dev build ever reaches, so none of this reaches
+ * a player's download.
+ *
+ * Not an F-key: a hosted preview typically runs inside another page's
+ * `iframe`/webview, where the browser chrome around it treats F1/F2/F3 as its
+ * own shortcuts (help, find, …) before a `keydown` handler ever sees them —
+ * `preventDefault` on our end is too late to stop that. Backquote and the two
+ * keys beside it (`tuning-window.ts`'s Minus, `projectile-tag-chooser.ts`'s
+ * Equal) sit on a row no browser reserves, and nothing `src/app/input/
+ * bindings.ts` binds a player action to claims any of the three either.
  *
  * When hidden it costs one boolean check per frame. Panels are only updated,
  * and colliders only drawn, while it is actually on screen.
@@ -154,7 +163,7 @@ export class DebugOverlay {
   attach(target: Window, canvas: HTMLCanvasElement): void {
     const onKeyDown = (event: KeyboardEvent): void => {
       switch (event.code) {
-        case 'F1':
+        case 'Backquote':
           event.preventDefault();
           this.setVisible(!this.visible);
           return;

@@ -96,7 +96,7 @@ export function createProjectileTagChooser(tuning: SimTuning): ProjectileTagChoo
   toggle.textContent = 'tags';
 
   const heading = document.createElement('h2');
-  heading.textContent = 'shot tags — F3';
+  heading.textContent = 'shot tags — =';
   panel.appendChild(heading);
 
   const shooting = tuning.shooting;
@@ -150,8 +150,13 @@ export function createProjectileTagChooser(tuning: SimTuning): ProjectileTagChoo
     panel.hidden = !panel.hidden;
   });
 
+  // Equal rather than F3: a hosted preview runs inside another page's
+  // iframe/webview, and the browser chrome around it claims F-keys as its
+  // own shortcuts (F3 is "find next" in several browsers) before a
+  // `keydown` handler here ever sees them — see `overlay.ts`'s doc comment
+  // for the full reasoning behind this row of keys.
   const onKeyDown = (event: KeyboardEvent): void => {
-    if (event.code === 'F3') {
+    if (event.code === 'Equal') {
       event.preventDefault();
       panel.hidden = !panel.hidden;
     }

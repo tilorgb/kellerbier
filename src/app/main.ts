@@ -624,7 +624,7 @@ shots ${String(shots.liveCount)}/${String(shots.capacity)}  particles ${String(
       particles.liveCount,
     )}/${String(particles.capacity)}${shots.overflows > 0 ? '  SHOT OVERFLOW' : ''}
 WASD move   arrows/mouse aim and fire
-  F1 debug   F2 tuning   F3 shot tags   P pause   . step   [ ] time scale
+  \` debug   - tuning   = shot tags   P pause   . step   [ ] time scale
   N next room (after clear)   R restart (new seed)`;
   };
   /**
@@ -640,7 +640,7 @@ WASD move   arrows/mouse aim and fire
    * is torn down and rebuilt.
    *
    * Known gap (deliberately not fixed here — full in-run restart, including
-   * this, is #46): the F1 debug overlay, its tuning window, and the
+   * this, is #46): the debug overlay, its tuning window, and the
    * `__kellerbier` debug handle are bound once, at the very end of `boot`,
    * to whichever `sim`/`view` exist at that moment. A restart after that
    * point leaves them pointed at the *previous* run — reload the page to

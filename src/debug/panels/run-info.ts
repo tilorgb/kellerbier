@@ -59,7 +59,7 @@ export class RunInfoPanel implements DebugPanel {
     // the shape of a bug report does not change when they arrive.
     this.setLine(2, 'floor  0  room playground');
     this.setLine(3, `hitstop ${String(sim.hitstop)}  shake ${sim.shake.toFixed(2)}`);
-    this.setLine(4, 'F1 hide  H hitboxes  G grid  C copy');
+    this.setLine(4, '` hide  H hitboxes  G grid  C copy');
 
     this.summary =
       `kellerbier seed=${sim.seed.toString(16)} tick=${String(sim.tick)} ` +
