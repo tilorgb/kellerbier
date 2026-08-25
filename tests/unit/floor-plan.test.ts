@@ -116,7 +116,7 @@ function syntheticPool(): RoomTemplate[] {
 function syntheticStaircasePool(): StaircaseContentTemplate[] {
   return FLOOR_CONFIGS.map((config) => ({
     id: `synthetic-staircase-${config.floorTag}`,
-    stepCount: 5,
+    stepCount: 4,
     direction: 'up-right',
     startDoor: 'south',
     endDoor: 'north',
@@ -396,5 +396,81 @@ describe('floor generation with a staircase pool (#112)', () => {
       }
     }
     expect(checkedAny).toBe(true);
+  });
+
+  it("draws a staircase's minimap steps flush against its real neighbours, with no gap (#118)", () => {
+    // The whole point of exact sub-cell reservation: the minimap should
+    // show exactly the rooms the player can walk, with no visible gap
+    // between a staircase's real steps and the ordinary rooms on either
+    // end. `minimapRects`' first/last step and the corresponding
+    // neighbour's own cell (found the same way `computeAdjacency` did, off
+    // `room.doors`) must share an edge exactly — zero gap, zero overlap.
+    const pool = syntheticPool();
+    const staircasePool = syntheticStaircasePool();
+    let checkedDoors = 0;
+    for (let seed = 0; seed < 500; seed++) {
+      const config = floorConfig(seed % FLOOR_CONFIGS.length);
+      const plan = generateFloor(new Rng(seed), config, pool, staircasePool);
+      const byId = new Map(plan.rooms.map((room) => [room.id, room] as const));
+      for (const room of plan.rooms) {
+        if (room.staircaseTemplateId === undefined || room.minimapRects === undefined) {
+          continue;
+        }
+        for (const door of room.doors) {
+          const doorCell = room.cells[door.cellIndex];
+          const neighbor = byId.get(door.neighborRoomId);
+          if (doorCell === undefined || neighbor === undefined) {
+            continue;
+          }
+          const offset = DIRECTION_OFFSET[door.direction];
+          const expectedNeighborCell = { x: doorCell.x + offset.x, y: doorCell.y + offset.y };
+          const neighborHasCell = neighbor.cells.some(
+            (cell) => cell.x === expectedNeighborCell.x && cell.y === expectedNeighborCell.y,
+          );
+          expect(
+            neighborHasCell,
+            `seed ${String(seed)}, room ${room.id}, door ${JSON.stringify(door)}`,
+          ).toBe(true);
+
+          const step = door.cellIndex === 0 ? room.minimapRects[0] : room.minimapRects.at(-1);
+          if (step === undefined) {
+            continue;
+          }
+          checkedDoors++;
+          const neighborRect = {
+            minX: expectedNeighborCell.x,
+            maxX: expectedNeighborCell.x + 1,
+            minY: expectedNeighborCell.y,
+            maxY: expectedNeighborCell.y + 1,
+          };
+          // Sharing exactly one edge (the door's own wall), zero gap and
+          // zero overlap on that axis; fully aligned on the other axis.
+          const context = `seed ${String(seed)}, room ${room.id}, door ${JSON.stringify(door)}`;
+          switch (door.direction) {
+            case 'north':
+              expect(step.minY, context).toBeCloseTo(neighborRect.maxY);
+              expect(step.minX, context).toBeCloseTo(neighborRect.minX);
+              expect(step.maxX, context).toBeCloseTo(neighborRect.maxX);
+              break;
+            case 'south':
+              expect(step.maxY, context).toBeCloseTo(neighborRect.minY);
+              expect(step.minX, context).toBeCloseTo(neighborRect.minX);
+              expect(step.maxX, context).toBeCloseTo(neighborRect.maxX);
+              break;
+            case 'east':
+              expect(step.maxX, context).toBeCloseTo(neighborRect.minX);
+              expect(step.minY, context).toBeCloseTo(neighborRect.minY);
+              expect(step.maxY, context).toBeCloseTo(neighborRect.maxY);
+              break;
+            case 'west':
+              expect(step.minX, context).toBeCloseTo(neighborRect.maxX);
+              expect(step.minY, context).toBeCloseTo(neighborRect.minY);
+              expect(step.maxY, context).toBeCloseTo(neighborRect.maxY);
+              break;
+          }
+        }
+      }
+    }
+    expect(checkedDoors).toBeGreaterThan(0);
   });
 });

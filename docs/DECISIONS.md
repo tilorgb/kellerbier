@@ -348,3 +348,90 @@ needs no snapping or stretching at all. #118 tracks lifting this once sub-cell r
 end it grew from (`StaircasePlacement.farNeighborCell`, a forced `1x1` placed right after the
 staircase itself) — a staircase is the floor's single biggest room by walking time, and reaching
 the far end to find nothing there read as wasted effort rather than an arrival.
+
+## 13. Staircase reservation is exact, at `STAIR_STEP_OVERLAP` sub-cell granularity — `stepCount` must be even, not odd
+
+**Decided:** M2. **Issue:** #118. **Supersedes:** #12's `span = ceil(...)` whole-cell rounding,
+and its found-while-playtesting note (3) requiring an odd `stepCount`.
+
+**Reservation:** `placeStaircase` (`floor-plan.ts`) no longer rounds a staircase's real
+screen-space span up to the next whole cell. It reserves a `subcellCount` × `subcellCount` grid of
+`STAIR_STEP_OVERLAP`-wide (half-cell) padding cells instead, where `subcellCount` is
+`template.stepCount + 1` — this tiles the true span (`1 + (stepCount - 1) * STAIR_STEP_OVERLAP`
+cells) exactly, with no slack on any edge, because that span is always a whole multiple of
+`STAIR_STEP_OVERLAP` regardless of `stepCount`'s parity. Two cells of that grid are real rooms, not
+padding — the start and end steps, always `cells[0]`/`cells[cells.length - 1]` — sitting at their
+*true* screen-space positions (`0` and `(stepCount - 1) * STAIR_STEP_OVERLAP` cells from
+`originCell`), not at the grid's own outer corners. Every other cell is `STAIR_STEP_OVERLAP`-wide
+padding that exists purely to correctly claim the rest of the fractional footprint, exactly as #12's
+whole-cell interior padding did, just at finer resolution.
+
+**Why `stepCount` flips from odd to even:** a staircase's two doors are real rooms and have to land
+back on the ordinary integer floor-grid every other room's cells live on. The *near* one always does
+— it's `anchor`, a pre-existing room, never approximated. The *far* one's offset from the near one is
+`(stepCount - 1) * STAIR_STEP_OVERLAP` cells — a whole number iff `stepCount` is even, given
+`STAIR_STEP_OVERLAP` is `0.5`. #12's whole-cell-only reservation needed the *opposite* parity for an
+unrelated reason (rounding `Math.ceil` of the span up to a whole cell only ever agreed with the real
+geometry when that span was already whole, which took an odd `stepCount`); now that both real steps
+sit at their true positions, the constraint moves from "make the rounded span exact" to "make the
+far step land on the coarse grid", and those are opposite parities. `validateStaircaseTemplate` now
+rejects odd instead of even; `placeStaircase` carries the same check itself, defensively, for a
+template handed to it some other way. Both authored templates (`cellar-staircase.json`,
+`cellar-staircase-west-east.json`) moved from `stepCount: 5` to `4`.
+
+**The far step's own neighbour can land off the integer grid too, and that's fine:**
+`farNeighborCell` is placed one whole cell past the far step's *true* position, not past the
+reservation grid's outer corner — so it's flush with the far step's real edge on the minimap, no
+gap, the actual point of this issue. But the far step's true position is only guaranteed integer on
+the *anchor's own axis* — the offset along the diagonal, `(stepCount - 1) * STAIR_STEP_OVERLAP`, is
+whole for `stepCount` even, but `farNeighborCell` is one *more* whole-cell step out from there, which
+can land back on a half-integer coordinate depending on `template.direction`/door and the parity
+arithmetic. That's not a bug: `buildSkeleton`'s frontier-push and `openCellTouchCounts` already skip
+any non-integer source cell (the same guard that protects a staircase's own interior padding),
+so a fractional `farNeighborCell` simply never grows further and never becomes a secret/supersecret
+candidate — it stays a real, ordinary `1x1` room (same template pool, same role eligibility; a
+degree-1 dead end is `assignRoles`' *preferred* boss/treasure/shop slot), just guaranteed to be a
+leaf of the room graph rather than a branch point. Nothing elsewhere in the floor plan can ever be
+adjacent to it without going through that one door, so this costs nothing a normal leaf room
+wouldn't already cost.
+
+**Mixed-resolution occupancy:** `occupied` (and `PlacedRoom.cells`) now holds two different sizes
+of entry in the same map — an ordinary room's cells, and a staircase's two real steps, are whole
+cells; a staircase's padding cells are `STAIR_STEP_OVERLAP` wide. `neighborCount`'s ±1 whole-cell
+check (unchanged, still what every ordinary `RoomShape` uses) can no longer answer "does this cell
+touch anything already placed" on its own for a staircase's own reservation, since a padding cell's
+true neighbours can be half a cell away, not a whole one. `reservedCellTouchesOccupied` is the
+general fix: a closed-interval rectangle-touch test, sized per entry from what actually placed it
+(`occupiedCellSize`, which checks a staircase's own `doorCells` to tell its two real steps from its
+padding) rather than assuming every `occupied` entry is the same size. `placeStaircase` uses this for
+every cell it places, `farNeighborCell` included (an ordinary room, but possibly landing close to
+another staircase's padding); every other room kind is still whole-cell-only and `neighborCount`
+keeps working for it unchanged.
+
+**Frontier growth and secret placement never anchor on a fractional cell:** `buildSkeleton`'s
+frontier-push and `openCellTouchCounts` (feeding `placeSecretRoom`/`placeSupersecretRoom`) both
+walk every placed room's own cells with the same ±1 whole-cell `OFFSET` ordinary rooms use — pushed
+or scanned from a staircase's fractional interior sub-cells, that offset would produce fractional
+candidates, and either function handing one to its caller would place an ordinary `1x1` room (ever
+only real, whole cells) at a coordinate that isn't a real screen. Both now skip a non-integer source
+cell before ever computing an offset from it. A staircase's two corners are integer and still
+contribute frontier growth and touch-count candidates exactly as before; only its never-a-door
+interior sub-cells stop — which cost nothing real, since nothing could ever open a door onto them
+anyway.
+
+**What #118 does not do:** this is still whole/half-cell reservation sized to what a diagonal
+staircase's `STAIR_STEP_OVERLAP = 0.5` actually needs, not a general arbitrary-fraction floor-grid.
+The issue's other two motivating cases (a quarter-cell diagonal shortcut, a quarter-cell wedge-in
+threshold room) would need finer-than-half-cell resolution and their own design pass — nothing here
+prevents that later, but nothing here builds it either.
+
+Both real steps sit at their true screen-space position (not the padding grid's outer corners), so
+both ends are flush on the minimap with zero gap — `tests/unit/floor-plan.test.ts`'s "draws a
+staircase's minimap steps flush against its real neighbours" checks this directly, against real
+generated floors, not just the mapping function in isolation. The trade for the far end being exact
+is that `farNeighborCell` can itself land on a fractional coordinate (see above) and is therefore
+always a graph leaf — nothing grows from it. That is a real, if narrow, constraint on what a
+staircase's far side can be (never itself a branch point toward more of the floor), not merely
+cosmetic; #118's other two motivating cases (a quarter-cell diagonal shortcut, a quarter-cell
+wedge-in threshold room) remain their own design pass regardless, needing resolution finer than
+`STAIR_STEP_OVERLAP` gives.

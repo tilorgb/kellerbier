@@ -15,13 +15,15 @@ import {
  * mapping is faithful to the real geometry, touches the reserved block's
  * own edges exactly (no gap, no stretched step), and never needs any
  * special-casing of the first/last step to do it — that's the payoff of
- * `validateStaircaseTemplate`'s odd-`stepCount` requirement, tested
- * separately in `staircase.test.ts`.
+ * `placeStaircase`'s exact, sub-cell-granularity reservation, anchoring its
+ * two real rooms at their true screen-space positions rather than a rounded
+ * or padded-out approximation (#118), tested separately in
+ * `staircase.test.ts`/`floor-plan.test.ts`.
  */
 describe('staircaseMinimapRects (#112)', () => {
   const template: StaircaseContentTemplate = {
     id: 'synthetic-staircase',
-    stepCount: 5,
+    stepCount: 4,
     direction: 'up-right',
     startDoor: 'south',
     endDoor: 'north',
@@ -29,20 +31,29 @@ describe('staircaseMinimapRects (#112)', () => {
     weight: 1,
   };
 
-  /** The same `endCell` `sim/room/floor-plan.ts`'s `placeStaircase` derives for `template`, given `originCell`. */
-  function endCellFor(originCell: { x: number; y: number }): { x: number; y: number } {
-    const span = Math.ceil(1 + (template.stepCount - 1) * STAIR_STEP_OVERLAP);
+  /**
+   * The same `farStepCell` `sim/room/floor-plan.ts`'s `placeStaircase`
+   * derives for `template`, given `originCell` — the *real* last step's own
+   * position, `(stepCount - 1) * STAIR_STEP_OVERLAP` cells from `originCell`
+   * (#118: exact, no rounding, no padding beyond the real step itself).
+   */
+  function farStepCellFor(originCell: { x: number; y: number }): { x: number; y: number } {
     const sign = STEP_SIGN[template.direction];
-    return { x: originCell.x + (span - 1) * sign.x, y: originCell.y + (span - 1) * sign.y };
+    const realFarOffset = template.stepCount - 1;
+    return {
+      x: originCell.x + realFarOffset * STAIR_STEP_OVERLAP * sign.x,
+      y: originCell.y + realFarOffset * STAIR_STEP_OVERLAP * sign.y,
+    };
   }
 
   it('maps the first and last step onto exactly one grid cell each, with no gap to the reserved end cell', () => {
-    // An odd `stepCount` (#112, `validateStaircaseTemplate`) makes the real
-    // screen-space span exactly a whole number of grid cells, so
-    // `placeStaircase`'s reservation and this mapping agree exactly — no
-    // snapping or stretching needed to reach the reserved block's own edge.
+    // Both real rooms — the start step (always `originCell`, the
+    // pre-existing anchor) and the end step (`farStepCellFor`) — sit at
+    // their true screen-space position, so this mapping and
+    // `placeStaircase`'s own reservation agree exactly at both ends, no
+    // snapping or stretching needed (#118).
     const originCell = { x: 5, y: 5 };
-    const endCell = endCellFor(originCell);
+    const farStepCell = farStepCellFor(originCell);
     const gridSteps = staircaseMinimapRects(originCell, template);
 
     expect(gridSteps[0]).toEqual({
@@ -52,10 +63,10 @@ describe('staircaseMinimapRects (#112)', () => {
       maxY: originCell.y + 1,
     });
     expect(gridSteps[gridSteps.length - 1]).toEqual({
-      minX: endCell.x,
-      minY: endCell.y,
-      maxX: endCell.x + 1,
-      maxY: endCell.y + 1,
+      minX: farStepCell.x,
+      minY: farStepCell.y,
+      maxX: farStepCell.x + 1,
+      maxY: farStepCell.y + 1,
     });
   });
 
