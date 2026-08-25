@@ -460,6 +460,55 @@ export interface PickupTuning {
   toastTicks: number;
 }
 
+/**
+ * Item pools (#28): how an offer is weighted, and how a pedestal presents it.
+ *
+ * `qualityWeight0..3` are a plain per-tier base weight rather than an array —
+ * an array field can't be a debug-window slider (`FieldSpec.key` indexes a
+ * flat `Record<string, number>`), and quality only ever has the four tiers
+ * `ItemQuality` already fixes. Quality 0 is the most common by a wide margin,
+ * the same top-heavy curve Isaac's own pool weighting uses: a run seeing
+ * mostly small items with the occasional strong one reads as a curve, a run
+ * seeing them in equal proportion reads as noise.
+ */
+export interface ItemPoolTuning {
+  readonly qualityWeight0: number;
+  readonly qualityWeight1: number;
+  readonly qualityWeight2: number;
+  readonly qualityWeight3: number;
+  /**
+   * Per floor, per quality tier, added on top of that tier's base weight —
+   * deeper floors skew the curve toward the items worth taking a run further
+   * into (#28's "weighted... by floor depth"). Tier 0 is unaffected in
+   * practice (`quality * bias` is 0), which is the point: the floor should
+   * make the rare tiers *more* likely to show up, not make the common tier
+   * rarer than it already reads.
+   */
+  floorQualityBias: number;
+  /** Same shape as `floorQualityBias`, driven by the player's resolved Dusel stat instead of floor depth. */
+  duselQualityBias: number;
+  /** Radius (px) inside which a pedestal shows its name plate and accepts the `use` button. */
+  interactRadius: number;
+  /**
+   * Ticks of hitstop (`GameSim.requestHitstop`) a pedestal pickup/swap holds
+   * the whole simulation for — the "brief pause" itself. Longer than an
+   * ordinary hit's freeze on purpose: this is a moment the run is meant to
+   * notice, not an impact to sell.
+   */
+  pickupPauseTicks: number;
+  /**
+   * Ticks the name+description reveal panel stays up *after* the pause ends
+   * — decremented in `decayPresentation`, so it never counts down while
+   * `pickupPauseTicks` still has the game frozen, the same relationship
+   * `toastTicks` already has to hitstop.
+   */
+  revealHoldTicks: number;
+  /** Vertical bob amplitude, px. */
+  bobAmplitude: number;
+  /** Ticks per full bob cycle. */
+  bobPeriodTicks: number;
+}
+
 export interface SimTuning {
   readonly movement: MovementTuning;
   readonly shooting: ShootingTuning;
@@ -468,6 +517,7 @@ export interface SimTuning {
   readonly promille: PromilleTuning;
   readonly pickup: PickupTuning;
   readonly projectileTags: ProjectileTagTuning;
+  readonly itemPool: ItemPoolTuning;
 }
 
 export const DEFAULT_MOVEMENT_TUNING: Readonly<MovementTuning> = {
@@ -594,6 +644,20 @@ export const DEFAULT_PICKUP_TUNING: Readonly<PickupTuning> = {
   toastTicks: 120,
 };
 
+export const DEFAULT_ITEM_POOL_TUNING: Readonly<ItemPoolTuning> = {
+  qualityWeight0: 100,
+  qualityWeight1: 55,
+  qualityWeight2: 25,
+  qualityWeight3: 8,
+  floorQualityBias: 0.06,
+  duselQualityBias: 0.05,
+  interactRadius: 28,
+  pickupPauseTicks: 30,
+  revealHoldTicks: 90,
+  bobAmplitude: 3,
+  bobPeriodTicks: 90,
+};
+
 /**
  * Split children deal less and range less than the shot that made them —
  * otherwise a splitting weapon's total damage output scales with its split
@@ -635,6 +699,7 @@ export function createTuning(): SimTuning {
     promille: { ...DEFAULT_PROMILLE_TUNING },
     pickup: { ...DEFAULT_PICKUP_TUNING },
     projectileTags: { ...DEFAULT_PROJECTILE_TAG_TUNING },
+    itemPool: { ...DEFAULT_ITEM_POOL_TUNING },
   };
 }
 

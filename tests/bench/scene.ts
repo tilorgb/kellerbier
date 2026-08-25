@@ -239,5 +239,7 @@ export function buildHeadlessView(sim: GameSim): GameView {
     splash: Texture.EMPTY,
     decal: Texture.EMPTY,
     numberFont: 'monospace',
+    pedestalItem: Texture.EMPTY,
+    pedestalBeam: Texture.EMPTY,
   });
 }

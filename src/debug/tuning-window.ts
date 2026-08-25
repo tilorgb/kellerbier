@@ -2,6 +2,7 @@ import type { SimTuning } from '../sim/tuning.js';
 import {
   DEFAULT_ENEMY_TUNING,
   DEFAULT_IMPACT_TUNING,
+  DEFAULT_ITEM_POOL_TUNING,
   DEFAULT_MOVEMENT_TUNING,
   DEFAULT_PICKUP_TUNING,
   DEFAULT_PROMILLE_TUNING,
@@ -40,7 +41,7 @@ interface FieldSpec {
 
 interface GroupSpec {
   readonly title: string;
-  readonly group: 'movement' | 'shooting' | 'impact' | 'enemy' | 'promille' | 'pickup';
+  readonly group: 'movement' | 'shooting' | 'impact' | 'enemy' | 'promille' | 'pickup' | 'itemPool';
   readonly fields: readonly FieldSpec[];
 }
 
@@ -204,6 +205,29 @@ const GROUPS: readonly GroupSpec[] = [
       { key: 'bombRollDrag', min: 0.5, max: 0.99, step: 0.01, hint: 'how fast a roll slows' },
     ],
   },
+  {
+    title: 'item pool',
+    group: 'itemPool',
+    fields: [
+      { key: 'qualityWeight0', min: 0, max: 200, step: 5, hint: 'base weight, quality 0' },
+      { key: 'qualityWeight1', min: 0, max: 200, step: 5, hint: 'base weight, quality 1' },
+      { key: 'qualityWeight2', min: 0, max: 200, step: 5, hint: 'base weight, quality 2' },
+      { key: 'qualityWeight3', min: 0, max: 200, step: 5, hint: 'base weight, quality 3' },
+      {
+        key: 'floorQualityBias',
+        min: 0,
+        max: 0.5,
+        step: 0.01,
+        hint: 'floor depth skews toward rarity',
+      },
+      { key: 'duselQualityBias', min: 0, max: 0.5, step: 0.01, hint: 'Dusel skews toward rarity' },
+      { key: 'interactRadius', min: 8, max: 80, step: 2, hint: 'px to read/take a pedestal' },
+      { key: 'pickupPauseTicks', min: 0, max: 90, step: 2, hint: 'freeze on take/swap' },
+      { key: 'revealHoldTicks', min: 0, max: 240, step: 5, hint: 'name+description panel length' },
+      { key: 'bobAmplitude', min: 0, max: 10, step: 0.5, hint: 'pedestal item bob height, px' },
+      { key: 'bobPeriodTicks', min: 10, max: 300, step: 5, hint: 'ticks per bob cycle' },
+    ],
+  },
 ];
 
 const DEFAULTS = {
@@ -213,6 +237,7 @@ const DEFAULTS = {
   enemy: DEFAULT_ENEMY_TUNING,
   promille: DEFAULT_PROMILLE_TUNING,
   pickup: DEFAULT_PICKUP_TUNING,
+  itemPool: DEFAULT_ITEM_POOL_TUNING,
 } as const;
 
 const STYLE = `

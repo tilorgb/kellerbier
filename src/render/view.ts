@@ -8,6 +8,7 @@ import { DamageNumberView } from './damage-numbers.js';
 import { DecalView } from './decals.js';
 import { EntityView } from './entities.js';
 import { ParticleView } from './particles.js';
+import { PedestalView } from './pedestal-view.js';
 import { ProjectileView } from './projectiles.js';
 import { createDoorView, createRoomView, createSecretHintView } from './room.js';
 import { INTERNAL_HEIGHT, INTERNAL_WIDTH, WORLD_ZOOM } from './resolution.js';
@@ -34,6 +35,10 @@ export interface GameViewTextures {
   readonly decal: Texture;
   /** Font family for damage numbers. */
   readonly numberFont: string;
+  /** A pedestal's floating item icon (#28). */
+  readonly pedestalItem: Texture;
+  /** A pedestal's light beam. */
+  readonly pedestalBeam: Texture;
 }
 
 /**
@@ -59,6 +64,7 @@ export class GameView {
   private readonly player: Sprite;
   private readonly projectiles: ProjectileView;
   private readonly entities: EntityView;
+  private readonly pedestals: PedestalView;
   private readonly particles: ParticleView;
   private readonly decals: DecalView;
   private readonly damageNumbers: DamageNumberView;
@@ -111,6 +117,9 @@ export class GameView {
 
     this.entities = new EntityView(sim, textures.entity, textures.entityFlash, textures.telegraph);
     this.world.addChild(this.entities.container);
+
+    this.pedestals = new PedestalView(sim, textures.pedestalItem, textures.pedestalBeam);
+    this.world.addChild(this.pedestals.container);
 
     this.player = new Sprite(textures.player);
     // Not 0.5. The mug is drawn across columns 2-12 of a 16px texture, so its
@@ -171,6 +180,7 @@ export class GameView {
     }
     this.decals.sync();
     this.entities.sync(alpha);
+    this.pedestals.sync();
     this.projectiles.sync(alpha);
     this.particles.sync(alpha);
     this.damageNumbers.sync(alpha);
@@ -315,6 +325,15 @@ export class GameView {
   playerScreenPosition(): { readonly x: number; readonly y: number } {
     const point = this.player.getGlobalPosition();
     return { x: point.x, y: point.y };
+  }
+
+  /**
+   * Where pedestal `pedestalIndex`'s item icon lands on screen, for the
+   * approach name plate (#28) — `null` while it has nothing to show (empty,
+   * or not drawn this frame). Call after `sync`, same as `playerScreenPosition`.
+   */
+  pedestalScreenPosition(pedestalIndex: number): { readonly x: number; readonly y: number } | null {
+    return this.pedestals.screenPositionFor(pedestalIndex);
   }
 
   /**
