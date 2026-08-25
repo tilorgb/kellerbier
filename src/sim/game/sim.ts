@@ -61,8 +61,16 @@ import { EventQueue } from '../events/queue.js';
 import { DamageNumberStore } from '../particle/damage-numbers.js';
 import { DecalStore } from '../particle/decals.js';
 import { ParticleStore } from '../particle/store.js';
-import { ProjectileStore } from '../projectile/store.js';
-import { stepPlayerMovement } from '../systems/movement.js';
+import { ProjectileStore, ProjectileTeam } from '../projectile/store.js';
+import { finalizeProjectileTags } from '../projectile/behavior.js';
+import {
+  addProjectileTag as grantProjectileTag,
+  PROJECTILE_TAG_BY_NAME,
+  type ProjectileTagName,
+} from '../projectile/tags.js';
+import { NO_SLOT } from '../pool/slot-pool.js';
+import { vectorLength } from '../math.js';
+import { addPush, stepPlayerMovement } from '../systems/movement.js';
 import { stepBodies } from '../systems/bodies.js';
 import { stepCollision } from '../systems/collision.js';
 import { stepContacts } from '../systems/contact.js';
@@ -74,14 +82,25 @@ import {
 } from '../systems/enemy.js';
 import { stepBombPlacement } from '../systems/bomb-placement.js';
 import { stepBombs } from '../systems/bombs.js';
-import { stepImpact, stepParticles } from '../systems/impact.js';
+import { applyDamageAt, stepImpact, stepParticles } from '../systems/impact.js';
 import { stepLootDrops } from '../systems/loot.js';
-import { dispatchItemFloorStart, dispatchItemRoomClear, stepItemTick } from '../systems/items.js';
+import {
+  dispatchItemFloorStart,
+  dispatchItemProjectileSpawn,
+  dispatchItemRoomClear,
+  stepItemTick,
+} from '../systems/items.js';
 import { stepPedestal } from '../systems/pedestal.js';
 import { stepPickups } from '../systems/pickup.js';
 import { stepPromille } from '../systems/promille.js';
 import { stepProjectiles, stepShooting } from '../systems/shooting.js';
-import { STATUS_EFFECT_STRIDE, stepStatusEffects } from '../systems/status-effects.js';
+import {
+  STATUS_BURN,
+  STATUS_EFFECT_STRIDE,
+  STATUS_FREEZE,
+  STATUS_POISON,
+  stepStatusEffects,
+} from '../systems/status-effects.js';
 
 /** Entity slots reserved up front. Sized well above M1's population. */
 const DEFAULT_CAPACITY = 8192;
@@ -1653,6 +1672,220 @@ export class GameSim {
       this.removeItem(id);
     }
     return true;
+  }
+
+  /**
+   * Bans an item id from ever being offered again this run — the same
+   * exclusion `takePedestalItem` already applies to whatever it hands the
+   * player (`takenItemIds`), exposed as its own entry point for #29's
+   * Reinheitsgebot 1516, which needs to close off a whole *category* of
+   * items — every "impure" one — the instant it is picked up, rather than
+   * one pedestal at a time.
+   */
+  banItemFromPool(id: string): void {
+    this.takenItemIds.add(id);
+  }
+
+  /**
+   * Re-resolves one item's `modifyStats` output immediately, rather than
+   * waiting for the next tick's `syncItemStatModifiers` pass to notice it is
+   * dirty.
+   *
+   * `markItemStatsDirty` only ever ran from `pickUpItem`/`removeItem`
+   * because `state.count` — the one thing #26's three items' `modifyStats`
+   * hooks read — only ever changed there. #29 is where the first items whose
+   * `modifyStats` output depends on something a *hook* changes mid-run
+   * showed up: a stacking buff that grows on a kill, a charge that ticks
+   * toward a timed burst. `ctx.sim` is all a hook body may call back into
+   * (`content-is-data`, `tools/eslint/architecture.js`), so this is the
+   * content-safe way for one of them to say "read me again" the moment its
+   * own state changes, instead of a stale value surviving up to a tick late.
+   */
+  refreshItemStats(id: string): void {
+    const index = this.items.indexOf(id);
+    if (index < 0) {
+      return;
+    }
+    this.markItemStatsDirty(index);
+    this.syncItemStatModifiers();
+  }
+
+  /**
+   * Grants a projectile tag by name (#27, #29) — the content-safe entry
+   * point `sim/projectile/tags.ts`'s `addProjectileTag` was documented as
+   * existing for, before `content-is-data` turned out to also block the
+   * value import that would have taken. An item's `onProjectileSpawn` hook
+   * reaches for this instead of the bit itself.
+   */
+  addProjectileTag(projectile: number, tag: ProjectileTagName): void {
+    grantProjectileTag(this.projectiles, projectile, PROJECTILE_TAG_BY_NAME[tag]);
+  }
+
+  /**
+   * Spawns an ordinary player-team projectile at an explicit origin, run
+   * through the same item-hook/tag pipeline `sim/systems/shooting.ts`'s
+   * `fire` uses for the shot it spawns directly (#29) — the primitive a
+   * multi-shot item (Spezi's second, diverging shot) or a detonation item
+   * (Fassldauben's staves) reaches for from its own hook, rather than
+   * duplicating `fire`'s muzzle/tag bookkeeping in content. Damage defaults
+   * to the resolved Stammwürze; direction is normalised, so a caller handing
+   * in a unit vector or a raw offset both work. Returns the projectile's
+   * slot, or `NO_SLOT` if the pool was full.
+   */
+  spawnItemProjectile(
+    x: number,
+    y: number,
+    directionX: number,
+    directionY: number,
+    options: {
+      readonly damage?: number;
+      readonly speedScale?: number;
+      readonly radiusScale?: number;
+      readonly lifetimeScale?: number;
+    } = {},
+  ): number {
+    const tuning = this.tuning.shooting;
+    const length = vectorLength(directionX, directionY) || 1;
+    const dirX = directionX / length;
+    const dirY = directionY / length;
+    const speedScale = options.speedScale ?? 1;
+    const damage = options.damage ?? Math.round(this.stats.value(StatId.Stammwuerze));
+    const slot = this.projectiles.spawn(
+      x,
+      y,
+      dirX * tuning.shotSpeed * speedScale,
+      dirY * tuning.shotSpeed * speedScale,
+      tuning.shotRadius * (options.radiusScale ?? 1),
+      damage,
+      Math.max(1, Math.round(tuning.shotLifetimeTicks * (options.lifetimeScale ?? 1))),
+      ProjectileTeam.Player,
+    );
+    if (slot === NO_SLOT) {
+      return NO_SLOT;
+    }
+    dispatchItemProjectileSpawn(this, slot);
+    // After the hook, not before — same ordering `fire` itself uses, and for
+    // the same reason: an item can still add a tag to this shot from
+    // `onProjectileSpawn`, and the counters `finalizeProjectileTags` derives
+    // have to be derived from the mask the shot actually ends up carrying.
+    finalizeProjectileTags(this, slot);
+    return slot;
+  }
+
+  /**
+   * Area damage centred on a point, through the same `applyDamageAt`
+   * chokepoint a Bierfassl blast uses (`systems/bombs.ts`'s `blastCandidate`)
+   * — an item's own splash, bite or shatter (#29) landing the exact same
+   * flash/knockback/kill package a real hit does, rather than a second,
+   * poorer copy of it. `excludeIndex` is skipped entirely — the target a
+   * shot already hit directly, say, so a splash never double-counts its own
+   * trigger.
+   */
+  applySplashDamage(x: number, y: number, radius: number, damage: number, excludeIndex = -1): void {
+    if (damage <= 0 || radius <= 0) {
+      return;
+    }
+    const mask = CollisionLayer.Enemy | CollisionLayer.Obstacle | CollisionLayer.Player;
+    this.broadphase.query(x, y, radius, (index) => {
+      if (index === excludeIndex) {
+        return;
+      }
+      const layer = this.collision.data[index * 2] ?? 0;
+      if ((layer & mask) === 0) {
+        return;
+      }
+      if ((this.health.data[index * 2] ?? 0) <= 0) {
+        return;
+      }
+      if (index === this.playerIndex && this.playerInvulnerableTicks > 0) {
+        return;
+      }
+      const otherX = this.positionX(index);
+      const otherY = this.positionY(index);
+      const dx = otherX - x;
+      const dy = otherY - y;
+      const distance = vectorLength(dx, dy);
+      const normalX = distance > 0 ? dx / distance : 0;
+      const normalY = distance > 0 ? dy / distance : -1;
+      applyDamageAt(this, index, damage, otherX, otherY, normalX, normalY, excludeIndex);
+    });
+  }
+
+  /**
+   * Sets (or refreshes) a status duration directly — burn, poison or freeze
+   * — bypassing the tag-on-hit path (`applyStatusTagsOnHit`,
+   * `sim/projectile/behavior.ts`) that normally sets one, for an item (#29)
+   * that applies a status without a shot landing at all: a continuous aura,
+   * a self-inflicted burn. Never shortens an existing duration, same as the
+   * tag-on-hit path.
+   */
+  applyStatusEffect(target: number, status: 'burn' | 'poison' | 'freeze', ticks: number): void {
+    if (ticks <= 0) {
+      return;
+    }
+    const data = this.statusEffect.data;
+    const base = target * STATUS_EFFECT_STRIDE;
+    const slot =
+      status === 'burn' ? STATUS_BURN : status === 'poison' ? STATUS_POISON : STATUS_FREEZE;
+    data[base + slot] = Math.max(data[base + slot] ?? 0, Math.round(ticks));
+  }
+
+  /**
+   * Applies `freeze` (#27's slow) to every enemy within `radius` of a point
+   * — an item's continuous aura (#29's Obazda) rather than the one-shot
+   * duration a hit's own tag sets.
+   *
+   * Matches on `Enemy | Obstacle`, not `Enemy` alone — the same mask
+   * `systems/bombs.ts`'s blast and `findNearestTarget`
+   * (`sim/projectile/behavior.ts`) already use. Every enemy in the game
+   * today is spawned through `spawnTarget`, which tags it `Obstacle`
+   * (`CollisionLayer.Enemy` is reserved but nothing sets it yet); matching
+   * `Enemy` alone would make this a no-op against every enemy that exists.
+   */
+  slowEnemiesNear(x: number, y: number, radius: number, ticks: number): void {
+    if (ticks <= 0 || radius <= 0) {
+      return;
+    }
+    const mask = CollisionLayer.Enemy | CollisionLayer.Obstacle;
+    this.broadphase.query(x, y, radius, (index) => {
+      const layer = this.collision.data[index * 2] ?? 0;
+      if ((layer & mask) === 0) {
+        return;
+      }
+      if ((this.health.data[index * 2] ?? 0) <= 0) {
+        return;
+      }
+      this.applyStatusEffect(index, 'freeze', ticks);
+    });
+  }
+
+  /**
+   * Pushes every enemy within `radius` of a point directly away from it
+   * (#29's Der Ordner) — through the same `push` component a hit's own
+   * knockback already uses (`addPush`, `systems/movement.js`), so it bleeds
+   * off the same way and stacks with everything else pushing that enemy.
+   *
+   * Same `Enemy | Obstacle` mask as `slowEnemiesNear`, for the same reason.
+   */
+  pushEnemiesNear(x: number, y: number, radius: number, strength: number): void {
+    if (strength <= 0 || radius <= 0) {
+      return;
+    }
+    const mask = CollisionLayer.Enemy | CollisionLayer.Obstacle;
+    this.broadphase.query(x, y, radius, (index) => {
+      const layer = this.collision.data[index * 2] ?? 0;
+      if ((layer & mask) === 0) {
+        return;
+      }
+      const otherX = this.positionX(index);
+      const otherY = this.positionY(index);
+      const dx = otherX - x;
+      const dy = otherY - y;
+      const distance = vectorLength(dx, dy);
+      const dirX = distance > 0 ? dx / distance : 1;
+      const dirY = distance > 0 ? dy / distance : 0;
+      addPush(this, index, dirX * strength, dirY * strength);
+    });
   }
 
   /**

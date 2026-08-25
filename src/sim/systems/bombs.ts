@@ -3,6 +3,7 @@ import { CollisionLayer } from '../collision/layers.js';
 import { World } from '../ecs/world.js';
 import type { GameSim } from '../game/sim.js';
 import { applyDamageAt } from './impact.js';
+import { dispatchItemBombDetonate } from './items.js';
 
 /**
  * The Bierfassl: a fuse that counts down, a roll that slows, and a blast that
@@ -90,6 +91,12 @@ function explode(sim: GameSim, index: number): void {
   // exactly when a Bierfassl set off near it would also have hurt something
   // standing there.
   sim.revealBombableWalls(x, y, tuning.bombBlastRadius);
+
+  // #29: an item that changes what a detonation does (Fassldauben's staves)
+  // hears about it here, after the blast itself is queried but before the
+  // bomb entity is gone — same "broadcast to every held item" shape as any
+  // other item hook, just for a moment #26 did not originally name.
+  dispatchItemBombDetonate(sim, x, y);
 
   sim.addShake(0, -1, tuning.bombBlastDamage);
   sim.world.destroy(sim.world.entityAt(index));

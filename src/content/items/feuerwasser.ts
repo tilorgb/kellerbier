@@ -15,6 +15,7 @@ export const feuerwasser: ItemDefinition = {
   id: 'feuerwasser',
   name: 'Feuerwasser',
   description: 'Active: full heal, one use',
+  flavourText: 'Distilled by someone who was not asked to distill it.',
   sprite: 'feuerwasser',
   pools: ['shop', 'secret'],
   quality: 2,
