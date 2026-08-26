@@ -1,9 +1,11 @@
 import type { ItemDefinition } from '../../sim/item/definition.js';
+import { ahnenbueste } from './ahnenbueste.js';
 import { almabtrieb } from './almabtrieb.js';
 import { almhuettnJodler } from './almhuettn-jodler.js';
 import { almrausch } from './almrausch.js';
 import { alpengluehen } from './alpengluehen.js';
 import { alpenkroneKronkorken } from './alpenkrone-kronkorken.js';
+import { bedienungTablett } from './bedienung-tablett.js';
 import { bergrettung } from './bergrettung.js';
 import { bierdeckel } from './bierdeckel.js';
 import { bierkrug } from './bierkrug.js';
@@ -23,7 +25,9 @@ import { gamsohr } from './gamsohr.js';
 import { haferlschuh } from './haferlschuh.js';
 import { jagdhorn } from './jagdhorn.js';
 import { kartoffelsalat } from './kartoffelsalat.js';
+import { karussell } from './karussell.js';
 import { kastenschieber } from './kastenschieber.js';
+import { kerzenwachs } from './kerzenwachs.js';
 import { kirchweihKranzl } from './kirchweih-kranzl.js';
 import { kirchweihRatschn } from './kirchweih-ratschn.js';
 import { kirtahutschn } from './kirtahutschn.js';
@@ -41,15 +45,19 @@ import { murmeltierpfiff } from './murmeltierpfiff.js';
 import { neuschwansteinBauplan } from './neuschwanstein-bauplan.js';
 import { nikolausgabe } from './nikolausgabe.js';
 import { obazda } from './obazda.js';
+import { opernarie } from './opernarie.js';
 import { peitschn } from './peitschn.js';
 import { perchtenrute } from './perchtenrute.js';
 import { radi } from './radi.js';
 import { radler } from './radler.js';
 import { reinheitsgebot1516 } from './reinheitsgebot-1516.js';
+import { ritterschild } from './ritterschild.js';
 import { ruhigeHand } from './ruhige-hand.js';
 import { russn } from './russn.js';
 import { sanktAnzelmKlostersud } from './sankt-anzelm-klostersud.js';
 import { sauwetter } from './sauwetter.js';
+import { scherbenhaufen } from './scherbenhaufen.js';
+import { schiessbudenfigur } from './schiessbudenfigur.js';
 import { schmalzler } from './schmalzler.js';
 import { schuhplattler } from './schuhplattler.js';
 import { schutzengerl } from './schutzengerl.js';
@@ -57,8 +65,10 @@ import { seilbahn } from './seilbahn.js';
 import { sonnwendfeuer } from './sonnwendfeuer.js';
 import { spatenstich } from './spatenstich.js';
 import { spezi } from './spezi.js';
+import { spiegelsaal } from './spiegelsaal.js';
 import { steinkrug } from './steinkrug.js';
 import { teufelsbraten } from './teufelsbraten.js';
+import { teufelstrittstein } from './teufelstrittstein.js';
 import { wadlbeisser } from './wadlbeisser.js';
 import { watschn } from './watschn.js';
 import { watzmannkraxn } from './watzmannkraxn.js';
@@ -92,7 +102,11 @@ import { zwoaDreiGsuffa } from './zwoa-drei-gsuffa.js';
  * drawn from Floor 4 (Die Alpen), Floor 6 (Die Brauerei) and the Almhütte
  * secret area, adds Almrausch, Gamsohr, Lawine, Seilbahn, Murmeltierpfiff,
  * Braumeister-Visier, Kastenschieber, Zuckerrohrsirup, Feierabendbier and
- * Almhüttn-Jodler.
+ * Almhüttn-Jodler. #59's fifth batch, drawn from Floor 5 (Schloss
+ * Neuschwanstein), Floor 7 (Die Wiesn) and the Walhalla/Teufelstritt secret
+ * areas, adds Opernarie, Kerzenwachs, Scherbenhaufen, Spiegelsaal (the
+ * roster's first `splitting`-tagged item), Ritterschild, Bedienung-Tablett,
+ * Schießbudenfigur, Karussell, Ahnenbüste and Teufelstrittstein.
  */
 export const ITEM_DEFINITIONS: readonly ItemDefinition[] = [
   bierkrug,
@@ -164,14 +178,26 @@ export const ITEM_DEFINITIONS: readonly ItemDefinition[] = [
   zuckerrohrsirup,
   feierabendbier,
   almhuettnJodler,
+  opernarie,
+  kerzenwachs,
+  scherbenhaufen,
+  spiegelsaal,
+  ritterschild,
+  bedienungTablett,
+  schiessbudenfigur,
+  karussell,
+  ahnenbueste,
+  teufelstrittstein,
 ];
 
 export {
+  ahnenbueste,
   almabtrieb,
   almhuettnJodler,
   almrausch,
   alpengluehen,
   alpenkroneKronkorken,
+  bedienungTablett,
   bergrettung,
   bierdeckel,
   bierkrug,
@@ -191,7 +217,9 @@ export {
   haferlschuh,
   jagdhorn,
   kartoffelsalat,
+  karussell,
   kastenschieber,
+  kerzenwachs,
   kirchweihKranzl,
   kirchweihRatschn,
   kirtahutschn,
@@ -209,15 +237,19 @@ export {
   neuschwansteinBauplan,
   nikolausgabe,
   obazda,
+  opernarie,
   peitschn,
   perchtenrute,
   radi,
   radler,
   reinheitsgebot1516,
+  ritterschild,
   ruhigeHand,
   russn,
   sanktAnzelmKlostersud,
   sauwetter,
+  scherbenhaufen,
+  schiessbudenfigur,
   schmalzler,
   schuhplattler,
   schutzengerl,
@@ -225,8 +257,10 @@ export {
   sonnwendfeuer,
   spatenstich,
   spezi,
+  spiegelsaal,
   steinkrug,
   teufelsbraten,
+  teufelstrittstein,
   wadlbeisser,
   watschn,
   watzmannkraxn,
