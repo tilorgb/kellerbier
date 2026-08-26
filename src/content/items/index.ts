@@ -5,11 +5,13 @@ import { almhuettnJodler } from './almhuettn-jodler.js';
 import { almrausch } from './almrausch.js';
 import { alpengluehen } from './alpengluehen.js';
 import { alpenkroneKronkorken } from './alpenkrone-kronkorken.js';
+import { bauernMistgabel } from './bauern-mistgabel.js';
 import { bedienungTablett } from './bedienung-tablett.js';
 import { bergrettung } from './bergrettung.js';
 import { bierdeckel } from './bierdeckel.js';
 import { bierkrug } from './bierkrug.js';
 import { blaskapelle } from './blaskapelle.js';
+import { boellerschmeisser } from './boellerschmeisser.js';
 import { braumeisterVisier } from './braumeister-visier.js';
 import { brezn } from './brezn.js';
 import { colaweizen } from './colaweizen.js';
@@ -22,6 +24,9 @@ import { fingerhakeln } from './fingerhakeln.js';
 import { foehn } from './foehn.js';
 import { gamsbart } from './gamsbart.js';
 import { gamsohr } from './gamsohr.js';
+import { gartenzwergHut } from './gartenzwerg-hut.js';
+import { gluehbirn } from './gluehbirn.js';
+import { gockelkamm } from './gockelkamm.js';
 import { haferlschuh } from './haferlschuh.js';
 import { jagdhorn } from './jagdhorn.js';
 import { kartoffelsalat } from './kartoffelsalat.js';
@@ -33,6 +38,7 @@ import { kirchweihRatschn } from './kirchweih-ratschn.js';
 import { kirtahutschn } from './kirtahutschn.js';
 import { kraftbier } from './kraftbier.js';
 import { kuhschelle } from './kuhschelle.js';
+import { kuhweide } from './kuhweide.js';
 import { lawine } from './lawine.js';
 import { lebkuchenherz } from './lebkuchenherz.js';
 import { lederhosn } from './lederhosn.js';
@@ -52,12 +58,14 @@ import { radi } from './radi.js';
 import { radler } from './radler.js';
 import { reinheitsgebot1516 } from './reinheitsgebot-1516.js';
 import { ritterschild } from './ritterschild.js';
+import { rollfassReifen } from './rollfass-reifen.js';
 import { ruhigeHand } from './ruhige-hand.js';
 import { russn } from './russn.js';
 import { sanktAnzelmKlostersud } from './sankt-anzelm-klostersud.js';
 import { sauwetter } from './sauwetter.js';
 import { scherbenhaufen } from './scherbenhaufen.js';
 import { schiessbudenfigur } from './schiessbudenfigur.js';
+import { schimmelsplitter } from './schimmelsplitter.js';
 import { schmalzler } from './schmalzler.js';
 import { schuhplattler } from './schuhplattler.js';
 import { schutzengerl } from './schutzengerl.js';
@@ -69,9 +77,11 @@ import { spiegelsaal } from './spiegelsaal.js';
 import { steinkrug } from './steinkrug.js';
 import { teufelsbraten } from './teufelsbraten.js';
 import { teufelstrittstein } from './teufelstrittstein.js';
+import { traktorAuspuff } from './traktor-auspuff.js';
 import { wadlbeisser } from './wadlbeisser.js';
 import { watschn } from './watschn.js';
 import { watzmannkraxn } from './watzmannkraxn.js';
+import { weidezaun } from './weidezaun.js';
 import { weissblaueRauten } from './weissblaue-rauten.js';
 import { wildschuetz } from './wildschuetz.js';
 import { wirtshausschlaeger } from './wirtshausschlaeger.js';
@@ -106,7 +116,11 @@ import { zwoaDreiGsuffa } from './zwoa-drei-gsuffa.js';
  * Neuschwanstein), Floor 7 (Die Wiesn) and the Walhalla/Teufelstritt secret
  * areas, adds Opernarie, Kerzenwachs, Scherbenhaufen, Spiegelsaal (the
  * roster's first `splitting`-tagged item), Ritterschild, Bedienung-Tablett,
- * Schießbudenfigur, Karussell, Ahnenbüste and Teufelstrittstein.
+ * Schießbudenfigur, Karussell, Ahnenbüste and Teufelstrittstein. #59's sixth
+ * batch, drawn from Floor 1 (Der Keller) and Floor 2 (Dorf & Acker), adds
+ * Glühbirn, Schimmelsplitter, Rollfass-Reifen, Bauern-Mistgabel, Gockelkamm,
+ * Gartenzwerg-Hut, Traktor-Auspuff (the roster's third `curse`-pooled item),
+ * Böllerschmeißer, Kuhweide and Weidezaun.
  */
 export const ITEM_DEFINITIONS: readonly ItemDefinition[] = [
   bierkrug,
@@ -188,6 +202,16 @@ export const ITEM_DEFINITIONS: readonly ItemDefinition[] = [
   karussell,
   ahnenbueste,
   teufelstrittstein,
+  gluehbirn,
+  schimmelsplitter,
+  rollfassReifen,
+  bauernMistgabel,
+  gockelkamm,
+  gartenzwergHut,
+  traktorAuspuff,
+  boellerschmeisser,
+  kuhweide,
+  weidezaun,
 ];
 
 export {
@@ -197,11 +221,13 @@ export {
   almrausch,
   alpengluehen,
   alpenkroneKronkorken,
+  bauernMistgabel,
   bedienungTablett,
   bergrettung,
   bierdeckel,
   bierkrug,
   blaskapelle,
+  boellerschmeisser,
   braumeisterVisier,
   brezn,
   colaweizen,
@@ -214,6 +240,9 @@ export {
   foehn,
   gamsbart,
   gamsohr,
+  gartenzwergHut,
+  gluehbirn,
+  gockelkamm,
   haferlschuh,
   jagdhorn,
   kartoffelsalat,
@@ -225,6 +254,7 @@ export {
   kirtahutschn,
   kraftbier,
   kuhschelle,
+  kuhweide,
   lawine,
   lebkuchenherz,
   lederhosn,
@@ -244,12 +274,14 @@ export {
   radler,
   reinheitsgebot1516,
   ritterschild,
+  rollfassReifen,
   ruhigeHand,
   russn,
   sanktAnzelmKlostersud,
   sauwetter,
   scherbenhaufen,
   schiessbudenfigur,
+  schimmelsplitter,
   schmalzler,
   schuhplattler,
   schutzengerl,
@@ -261,9 +293,11 @@ export {
   steinkrug,
   teufelsbraten,
   teufelstrittstein,
+  traktorAuspuff,
   wadlbeisser,
   watschn,
   watzmannkraxn,
+  weidezaun,
   weissblaueRauten,
   wildschuetz,
   wirtshausschlaeger,
