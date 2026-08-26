@@ -823,6 +823,31 @@ export class GameSim {
   }
 
   /**
+   * Forgets every room this `GameSim` has ever marked cleared
+   * (`roomClearedIds`) — call this once, before loading the first room of a
+   * freshly *generated* floor layout, never for an ordinary same-floor
+   * `loadRoom`/`transitionTo`.
+   *
+   * `roomId` (and so `roomClearedIds`'s key) is the *authored template's*
+   * own id (`compiled.source.id` in `loadRoom`/`applyCompiledRoom`), not a
+   * per-instance id from the floor plan — two different physical rooms that
+   * happen to draw the same template share one `roomClearedIds` entry.
+   * Every floor a normal run generates draws from a different `floorTag`'s
+   * template pool, so that collision stays rare; the dev-only endless loop
+   * (`app/main.ts`'s `advanceFloor`) always regenerates from the *same*
+   * `floorConfig(1)` pool — currently just the ~14 "cellar"/"rural"
+   * templates — onto this same `GameSim`, so `roomClearedIds` only grows.
+   * By the second or third loop most of that small pool has already been
+   * used somewhere and is wrongly treated as pre-cleared: `applyCompiledRoom`
+   * skips spawning enemies/pickups/props for it, and `step` skips its clear
+   * loot too. Without a reset, "the further a run goes, the fewer enemies
+   * spawn" is exactly what falls out of this.
+   */
+  clearFloorProgress(): void {
+    this.roomClearedIds.clear();
+  }
+
+  /**
    * The door the player is currently standing in the gap of, or `null`.
    *
    * The player is always clamped to the room's interior rectangle (see

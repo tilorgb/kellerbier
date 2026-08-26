@@ -267,3 +267,49 @@ describe('the boss room "next floor" exit', () => {
     expect(sim.nextFloorDoor).toBeNull();
   });
 });
+
+describe('clearFloorProgress', () => {
+  function clearedRoomSim(): GameSim {
+    const sim = roomSim();
+    const enemies: number[] = [];
+    sim.world.forEach(sim.enemyMask, (index) => enemies.push(index));
+    for (const index of enemies) {
+      sim.kill(index);
+    }
+    sim.world.flush();
+    // `roomClearedIds` only records a room's template id once `step` (or
+    // `transitionTo`, leaving through a real door) actually observes
+    // `roomEnemyCount === 0` — `kill` alone decrements the count but never
+    // touches the set. One idle tick is what a real clear looks like.
+    sim.step(idle());
+    expect(sim.roomCleared).toBe(true);
+    return sim;
+  }
+
+  // `roomId` is keyed by the authored template's own id, not a per-instance
+  // floor-plan id (`GameSim.clearFloorProgress`'s doc comment) — reloading
+  // `cellarCrossroads` here stands in for a *different* physical room, in a
+  // freshly generated floor, that happens to draw the same template.
+  it('without it, a fresh floor drawing an already-cleared template spawns nothing', () => {
+    const sim = clearedRoomSim();
+
+    sim.loadRoom(cellarCrossroads, 1, null, [], undefined, { col: 0, row: 0 }, false);
+
+    const respawned: number[] = [];
+    sim.world.forEach(sim.enemyMask, (index) => respawned.push(index));
+    expect(respawned).toHaveLength(0);
+    expect(sim.liveEnemyCount).toBe(0);
+  });
+
+  it('lets a fresh floor drawing an already-cleared template spawn its content again', () => {
+    const sim = clearedRoomSim();
+
+    sim.clearFloorProgress();
+    sim.loadRoom(cellarCrossroads, 1, null, [], undefined, { col: 0, row: 0 }, false);
+
+    const respawned: number[] = [];
+    sim.world.forEach(sim.enemyMask, (index) => respawned.push(index));
+    expect(respawned).toHaveLength(2);
+    expect(sim.liveEnemyCount).toBe(2);
+  });
+});

@@ -996,6 +996,13 @@ WASD move   arrows/mouse aim and fire
     currentRoomId = floorPlan.startRoomId;
     visitedRoomIds = new Set([currentRoomId]);
     revealedEdges = new Set<string>();
+    // `sim` itself is never recreated here, and every loop regenerates from
+    // the same small `floorConfig(1)` template pool — without this, the
+    // previous loop's `roomClearedIds` would wrongly mark an increasing
+    // share of the new floor's rooms (they can share a template with an
+    // already-cleared one) as already cleared. See
+    // `GameSim.clearFloorProgress`'s doc comment.
+    sim.clearFloorProgress();
     sim.loadRoom(
       planTemplate(planRoom(floorPlan, currentRoomId)),
       floorPlan.floor,
