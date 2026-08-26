@@ -34,6 +34,7 @@ import { ActiveItemHud } from '../render/active-item-hud.js';
 import { EntityView } from '../render/entities.js';
 import { GameOverScreen } from '../render/game-over.js';
 import { HealthHud } from '../render/health-hud.js';
+import { ItemGateHud } from '../render/item-gate-hud.js';
 import { MinimapHud } from '../render/minimap-hud.js';
 import { PromilleHud } from '../render/promille-hud.js';
 import { WalletHud } from '../render/wallet-hud.js';
@@ -511,6 +512,17 @@ async function boot(): Promise<void> {
     activeItemHud.view.position.set(applied.originX + 8, applied.originY + 54);
   };
 
+  const itemGateHud = new ItemGateHud(app.renderer);
+  uiLayer.addChild(itemGateHud.view);
+  // Stacked directly under the active-item row, same corner — #32's "item
+  // activation state is unambiguous in the HUD" acceptance criterion for
+  // every held `sober`/`rausch` passive item. Rows past the held gated set
+  // stay hidden (`ItemGateHud.sync`), so a run holding none of them shows
+  // nothing here at all.
+  const positionItemGateHud = (applied: GameLayout): void => {
+    itemGateHud.view.position.set(applied.originX + 8, applied.originY + 66);
+  };
+
   const minimapHud = new MinimapHud(app.renderer);
   uiLayer.addChild(minimapHud.view);
   // The overlay is centred over the game, not the window — it should stay
@@ -605,6 +617,7 @@ async function boot(): Promise<void> {
     positionPromilleHud(applied);
     positionWalletHud(applied);
     positionActiveItemHud(applied);
+    positionItemGateHud(applied);
     positionMinimapHud(applied);
     positionBossBanner(applied);
     positionPickupToast(applied);
@@ -682,6 +695,7 @@ async function boot(): Promise<void> {
       const device = input.activeDevice === 'keyboard' ? 'keyboard' : 'gamepad';
       const activatePrompt = actionPrompt(input.bindings, Bindable.Use, device, glyphSet);
       activeItemHud.sync(sim, activatePrompt);
+      itemGateHud.sync(sim);
       minimapHud.setMapOpen(isActionDown(input.frame, InputAction.Map));
       const showBossBanner =
         sim.roomWarmupTicks > 0 && planRoom(floorPlan, currentRoomId).role === 'boss';
