@@ -38,6 +38,20 @@ driving) and look at the result, the same standard `docs/GAME_DESIGN.md` and thi
 review culture already hold gameplay work to. It's a game: a feature nobody can experience isn't
 finished, no matter how thoroughly it's unit-tested.
 
+## Component-library lessons, for work outside this repo
+
+[`docs/COMPONENT_LIBRARY_LESSONS.md`](docs/COMPONENT_LIBRARY_LESSONS.md) is not about Kellerbier
+— it's a set of engineering-practice notes mined from this repo for a different project: a
+TypeScript/React UI component library. It has no bearing on gameplay, engine or content work
+*in this repo*.
+
+The instruction is for the other side of that: whenever an agent is implementing a feature,
+fixing a bug, or making a tooling/process decision **on that component library** (not on
+Kellerbier), check that doc first for a relevant precedent — an architecture-boundary lint rule,
+a decision-log entry, a token/theming pattern, a CI or definition-of-done idea — before designing
+one from scratch. If the work turns up a new pattern worth carrying back the other way, add it to
+the doc rather than letting it live only in that session's memory.
+
 ## Closing issues from a PR
 
 `CONTRIBUTING.md` already says this, but it's easy to miss under a title that merely *mentions*
