@@ -9,6 +9,7 @@ import { alpenkroneKronkorken } from './alpenkrone-kronkorken.js';
 import { bauernMistgabel } from './bauern-mistgabel.js';
 import { bedienungTablett } from './bedienung-tablett.js';
 import { bergrettung } from './bergrettung.js';
+import { betrunkenentaumel } from './betrunkenentaumel.js';
 import { bierbank } from './bierbank.js';
 import { bierdeckel } from './bierdeckel.js';
 import { bierkrug } from './bierkrug.js';
@@ -23,6 +24,8 @@ import { drudmaske } from './drudmaske.js';
 import { enzian } from './enzian.js';
 import { fassldauben } from './fassldauben.js';
 import { feierabendbier } from './feierabendbier.js';
+import { feiertagsruhe } from './feiertagsruhe.js';
+import { feuerschlucker } from './feuerschlucker.js';
 import { feuerwasser } from './feuerwasser.js';
 import { fingerhakeln } from './fingerhakeln.js';
 import { foehn } from './foehn.js';
@@ -40,9 +43,11 @@ import { jagdhorn } from './jagdhorn.js';
 import { kartoffelsalat } from './kartoffelsalat.js';
 import { karussell } from './karussell.js';
 import { kastenschieber } from './kastenschieber.js';
+import { kegelbahn } from './kegelbahn.js';
 import { kerzenwachs } from './kerzenwachs.js';
 import { kirchturmuhr } from './kirchturmuhr.js';
 import { kirchweihKranzl } from './kirchweih-kranzl.js';
+import { kirchweihKrapfen } from './kirchweih-krapfen.js';
 import { kirchweihRatschn } from './kirchweih-ratschn.js';
 import { kirtahutschn } from './kirtahutschn.js';
 import { kraftbier } from './kraftbier.js';
@@ -54,10 +59,13 @@ import { lederhosn } from './lederhosn.js';
 import { lichterkette } from './lichterkette.js';
 import { loewenbrunnDoppelbock } from './loewenbrunn-doppelbock.js';
 import { ludwigsSchwan } from './ludwigs-schwan.js';
+import { marktstand } from './marktstand.js';
 import { marktweib } from './marktweib.js';
 import { mass } from './mass.js';
 import { masskrugstemmen } from './masskrugstemmen.js';
 import { murmeltierpfiff } from './murmeltierpfiff.js';
+import { nachschank } from './nachschank.js';
+import { nachtwache } from './nachtwache.js';
 import { nebellaterne } from './nebellaterne.js';
 import { neuschwansteinBauplan } from './neuschwanstein-bauplan.js';
 import { nikolausgabe } from './nikolausgabe.js';
@@ -70,6 +78,7 @@ import { platzangst } from './platzangst.js';
 import { radi } from './radi.js';
 import { radler } from './radler.js';
 import { reinheitsgebot1516 } from './reinheitsgebot-1516.js';
+import { riesenrad } from './riesenrad.js';
 import { ritterschild } from './ritterschild.js';
 import { rollfassReifen } from './rollfass-reifen.js';
 import { ruhigeHand } from './ruhige-hand.js';
@@ -79,6 +88,7 @@ import { sauwetter } from './sauwetter.js';
 import { scherbenhaufen } from './scherbenhaufen.js';
 import { schiessbudenfigur } from './schiessbudenfigur.js';
 import { schimmelsplitter } from './schimmelsplitter.js';
+import { schluesselbund } from './schluesselbund.js';
 import { schmalzler } from './schmalzler.js';
 import { schnapsleiche } from './schnapsleiche.js';
 import { schuhplattler } from './schuhplattler.js';
@@ -149,7 +159,10 @@ import { zwoaDreiGsuffa } from './zwoa-drei-gsuffa.js';
  * and customs rather than one floor's own lore, adds Weißwurst, Steckerlfisch,
  * Bierbank, Brotzeitbrett, Hendlgeruch, Platzangst (the roster's fifth
  * `curse`-pooled item), Glücksklee (the second `angel`-pool item),
- * Kirchturmuhr, Lichterkette and Schnapsleiche.
+ * Kirchturmuhr, Lichterkette and Schnapsleiche. #59's ninth batch adds
+ * Betrunkenentaumel, Nachtwache, Nachschank, Feuerschlucker, Kegelbahn,
+ * Riesenrad (a second orbiting familiar, tuned wider and slower than
+ * Brezn), Marktstand, Schlüsselbund, Kirchweih-Krapfen and Feiertagsruhe.
  */
 export const ITEM_DEFINITIONS: readonly ItemDefinition[] = [
   bierkrug,
@@ -261,6 +274,16 @@ export const ITEM_DEFINITIONS: readonly ItemDefinition[] = [
   kirchturmuhr,
   lichterkette,
   schnapsleiche,
+  betrunkenentaumel,
+  nachtwache,
+  nachschank,
+  feuerschlucker,
+  kegelbahn,
+  riesenrad,
+  marktstand,
+  schluesselbund,
+  kirchweihKrapfen,
+  feiertagsruhe,
 ];
 
 export {
@@ -274,6 +297,7 @@ export {
   bauernMistgabel,
   bedienungTablett,
   bergrettung,
+  betrunkenentaumel,
   bierbank,
   bierdeckel,
   bierkrug,
@@ -288,6 +312,8 @@ export {
   enzian,
   fassldauben,
   feierabendbier,
+  feiertagsruhe,
+  feuerschlucker,
   feuerwasser,
   fingerhakeln,
   foehn,
@@ -305,9 +331,11 @@ export {
   kartoffelsalat,
   karussell,
   kastenschieber,
+  kegelbahn,
   kerzenwachs,
   kirchturmuhr,
   kirchweihKranzl,
+  kirchweihKrapfen,
   kirchweihRatschn,
   kirtahutschn,
   kraftbier,
@@ -319,10 +347,13 @@ export {
   lichterkette,
   loewenbrunnDoppelbock,
   ludwigsSchwan,
+  marktstand,
   marktweib,
   mass,
   masskrugstemmen,
   murmeltierpfiff,
+  nachschank,
+  nachtwache,
   nebellaterne,
   neuschwansteinBauplan,
   nikolausgabe,
@@ -335,6 +366,7 @@ export {
   radi,
   radler,
   reinheitsgebot1516,
+  riesenrad,
   ritterschild,
   rollfassReifen,
   ruhigeHand,
@@ -344,6 +376,7 @@ export {
   scherbenhaufen,
   schiessbudenfigur,
   schimmelsplitter,
+  schluesselbund,
   schmalzler,
   schnapsleiche,
   schuhplattler,
