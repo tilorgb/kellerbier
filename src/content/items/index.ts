@@ -1,8 +1,11 @@
 import type { ItemDefinition } from '../../sim/item/definition.js';
+import { almabtrieb } from './almabtrieb.js';
 import { alpengluehen } from './alpengluehen.js';
 import { alpenkroneKronkorken } from './alpenkrone-kronkorken.js';
+import { bergrettung } from './bergrettung.js';
 import { bierdeckel } from './bierdeckel.js';
 import { bierkrug } from './bierkrug.js';
+import { blaskapelle } from './blaskapelle.js';
 import { brezn } from './brezn.js';
 import { colaweizen } from './colaweizen.js';
 import { derOrdner } from './der-ordner.js';
@@ -13,28 +16,45 @@ import { fingerhakeln } from './fingerhakeln.js';
 import { foehn } from './foehn.js';
 import { gamsbart } from './gamsbart.js';
 import { haferlschuh } from './haferlschuh.js';
+import { jagdhorn } from './jagdhorn.js';
+import { kartoffelsalat } from './kartoffelsalat.js';
 import { kirchweihKranzl } from './kirchweih-kranzl.js';
 import { kirchweihRatschn } from './kirchweih-ratschn.js';
+import { kirtahutschn } from './kirtahutschn.js';
 import { kraftbier } from './kraftbier.js';
+import { kuhschelle } from './kuhschelle.js';
 import { lebkuchenherz } from './lebkuchenherz.js';
 import { lederhosn } from './lederhosn.js';
 import { loewenbrunnDoppelbock } from './loewenbrunn-doppelbock.js';
 import { ludwigsSchwan } from './ludwigs-schwan.js';
+import { marktweib } from './marktweib.js';
 import { mass } from './mass.js';
 import { masskrugstemmen } from './masskrugstemmen.js';
 import { neuschwansteinBauplan } from './neuschwanstein-bauplan.js';
+import { nikolausgabe } from './nikolausgabe.js';
 import { obazda } from './obazda.js';
+import { peitschn } from './peitschn.js';
+import { perchtenrute } from './perchtenrute.js';
 import { radi } from './radi.js';
 import { radler } from './radler.js';
 import { reinheitsgebot1516 } from './reinheitsgebot-1516.js';
 import { ruhigeHand } from './ruhige-hand.js';
 import { russn } from './russn.js';
 import { sanktAnzelmKlostersud } from './sankt-anzelm-klostersud.js';
+import { sauwetter } from './sauwetter.js';
+import { schmalzler } from './schmalzler.js';
 import { schuhplattler } from './schuhplattler.js';
+import { schutzengerl } from './schutzengerl.js';
+import { sonnwendfeuer } from './sonnwendfeuer.js';
+import { spatenstich } from './spatenstich.js';
 import { spezi } from './spezi.js';
 import { steinkrug } from './steinkrug.js';
+import { teufelsbraten } from './teufelsbraten.js';
 import { wadlbeisser } from './wadlbeisser.js';
+import { watschn } from './watschn.js';
+import { watzmannkraxn } from './watzmannkraxn.js';
 import { weissblaueRauten } from './weissblaue-rauten.js';
+import { wildschuetz } from './wildschuetz.js';
 import { wirtshausschlaeger } from './wirtshausschlaeger.js';
 import { wolpertingerImRucksack } from './wolpertinger-im-rucksack.js';
 import { zwoaDreiGsuffa } from './zwoa-drei-gsuffa.js';
@@ -53,7 +73,12 @@ import { zwoaDreiGsuffa } from './zwoa-drei-gsuffa.js';
  * Ludwigs Schwan, Wolpertinger im Rucksack, Schuhplattler, Fingerhakeln and
  * Lebkuchenherz from the seed list, plus five new items in the same
  * categories: Löwenbrunn Doppelbock, Sankt Anzelm Klostersud, Alpenkrone
- * Kronkorken, Kirchweih-Kranzl and Kirchweih-Ratsch'n.
+ * Kronkorken, Kirchweih-Kranzl and Kirchweih-Ratsch'n. #59's second batch
+ * adds Peitschn, Sauwetter, Kuhschelle, Wildschütz, Watschn, Kartoffelsalat,
+ * Nikolausgabe, Sonnwendfeuer, Bergrettung and Blaskapelle. #59's third
+ * batch adds Spatenstich, Almabtrieb, Perchtenrute, Kirtahutschn,
+ * Marktweib, Jagdhorn, Schmalzler, Watzmannkraxn, Schutzengerl (the
+ * roster's first `angel`-pool item) and Teufelsbraten.
  */
 export const ITEM_DEFINITIONS: readonly ItemDefinition[] = [
   bierkrug,
@@ -95,13 +120,36 @@ export const ITEM_DEFINITIONS: readonly ItemDefinition[] = [
   alpenkroneKronkorken,
   kirchweihKranzl,
   kirchweihRatschn,
+  peitschn,
+  sauwetter,
+  kuhschelle,
+  wildschuetz,
+  watschn,
+  kartoffelsalat,
+  nikolausgabe,
+  sonnwendfeuer,
+  bergrettung,
+  blaskapelle,
+  spatenstich,
+  almabtrieb,
+  perchtenrute,
+  kirtahutschn,
+  marktweib,
+  jagdhorn,
+  schmalzler,
+  watzmannkraxn,
+  schutzengerl,
+  teufelsbraten,
 ];
 
 export {
+  almabtrieb,
   alpengluehen,
   alpenkroneKronkorken,
+  bergrettung,
   bierdeckel,
   bierkrug,
+  blaskapelle,
   brezn,
   colaweizen,
   derOrdner,
@@ -112,28 +160,45 @@ export {
   foehn,
   gamsbart,
   haferlschuh,
+  jagdhorn,
+  kartoffelsalat,
   kirchweihKranzl,
   kirchweihRatschn,
+  kirtahutschn,
   kraftbier,
+  kuhschelle,
   lebkuchenherz,
   lederhosn,
   loewenbrunnDoppelbock,
   ludwigsSchwan,
+  marktweib,
   mass,
   masskrugstemmen,
   neuschwansteinBauplan,
+  nikolausgabe,
   obazda,
+  peitschn,
+  perchtenrute,
   radi,
   radler,
   reinheitsgebot1516,
   ruhigeHand,
   russn,
   sanktAnzelmKlostersud,
+  sauwetter,
+  schmalzler,
   schuhplattler,
+  schutzengerl,
+  sonnwendfeuer,
+  spatenstich,
   spezi,
   steinkrug,
+  teufelsbraten,
   wadlbeisser,
+  watschn,
+  watzmannkraxn,
   weissblaueRauten,
+  wildschuetz,
   wirtshausschlaeger,
   wolpertingerImRucksack,
   zwoaDreiGsuffa,
