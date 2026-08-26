@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { GameSim, PLAYER_HEALTH } from '../../src/sim/game/sim.js';
 import { entityIndex } from '../../src/sim/ecs/entity.js';
 import { RoomGeometry } from '../../src/sim/room/geometry.js';
-import { createInputFrame } from '../../src/sim/input/frame.js';
+import { InputAction, createInputFrame, setActionDown } from '../../src/sim/input/frame.js';
 
 function bareRoom(): RoomGeometry {
   return new RoomGeometry(0, 0, 320, 180);
@@ -26,6 +26,12 @@ function emptySim(): GameSim {
 }
 
 const idle = () => createInputFrame();
+
+function pressUse(): ReturnType<typeof createInputFrame> {
+  const frame = createInputFrame();
+  setActionDown(frame, InputAction.Use, true);
+  return frame;
+}
 
 describe('pickup collection', () => {
   it('a currency pickup adds to Biermarken and removes itself', () => {
@@ -109,19 +115,40 @@ describe('pickup collection', () => {
 });
 
 describe('priced pickup', () => {
-  it('is left in place, unspent, when the player cannot afford it', () => {
+  it('is never bought by touching it — only a preview, no matter how long you stand there', () => {
     const sim = emptySim();
-    // Magnetism defaults to off — it's meant to be an item unlock, not free
-    // from the start of a run — so this test, which is about the mechanism
-    // itself, opts in explicitly rather than relying on the default.
-    sim.tuning.pickup.magnetRadius = 36;
+    sim.addBiermarken(5);
     const index = sim.playerIndex;
     sim.applyPlayerDamage(2);
     const damaged = sim.playerHealth;
     sim.spawnPickup('mass-full', sim.positionX(index), sim.positionY(index), 5);
     sim.world.flush();
 
+    for (let tick = 0; tick < 5; tick++) {
+      sim.step(idle());
+    }
+
+    expect(sim.biermarken).toBe(5);
+    expect(sim.playerHealth).toBe(damaged);
+    expect(sim.shopPreview).toEqual({
+      name: 'Maß',
+      description: 'Health +2',
+      price: 5,
+      affordable: true,
+    });
+  });
+
+  it('is left in place, unspent, when the player presses use but cannot afford it', () => {
+    const sim = emptySim();
+    const index = sim.playerIndex;
+    sim.applyPlayerDamage(2);
+    const damaged = sim.playerHealth;
+    sim.spawnPickup('mass-full', sim.positionX(index), sim.positionY(index), 5);
+    sim.world.flush();
     sim.step(idle());
+
+    expect(sim.shopPreview?.affordable).toBe(false);
+    sim.step(pressUse());
 
     expect(sim.biermarken).toBe(0);
     // Not healed — the pickup's effect never applied — and still standing on
@@ -130,7 +157,7 @@ describe('priced pickup', () => {
     expect(sim.playerHealth).toBe(damaged);
   });
 
-  it('is bought — Biermarken spent, effect applied — once affordable', () => {
+  it('is bought — Biermarken spent, effect applied — on an explicit use press', () => {
     const sim = emptySim();
     sim.addBiermarken(5);
     const index = sim.playerIndex;
@@ -139,9 +166,12 @@ describe('priced pickup', () => {
     sim.world.flush();
 
     sim.step(idle());
+    expect(sim.biermarken).toBe(5); // still untouched — just standing on it
+    sim.step(pressUse());
 
     expect(sim.biermarken).toBe(0);
     expect(sim.playerHealth).toBe(PLAYER_HEALTH);
+    expect(sim.shopPreview).toBeNull();
   });
 
   it('an unpriced pickup is free regardless of Biermarken held', () => {

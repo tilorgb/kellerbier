@@ -29,11 +29,12 @@ const PEDESTAL_Y = 90;
 
 /**
  * A bare, open `1x1` room with one pedestal, authored to `compileRoomTemplate`'s
- * expected shape. `id` must differ across rooms loaded into the same run — a
- * room with no enemies is marked cleared (`roomClearedIds`) the instant it
- * first loads, and a second load under the *same* id would be treated as a
- * re-entry into an already-cleared room, which never re-spawns a pedestal
- * (matching how a cleared room's pickups don't reappear either).
+ * expected shape. `id` must differ across rooms loaded into the same run when
+ * the test wants a *different* room — reloading the same id instead re-enters
+ * the same one, which now restores its pedestal/pickup state from
+ * `GameSim.roomLootSnapshots` rather than rolling a fresh offer (see
+ * `tests/unit/room-loot-persistence.test.ts`). These tests want a fresh
+ * second room, so they use a new id.
  */
 function pedestalRoom(
   specialRole: RoomSpecialRole | undefined,

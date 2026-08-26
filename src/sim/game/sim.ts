@@ -227,6 +227,23 @@ interface PedestalRuntime {
 }
 
 /**
+ * What a room still owes the player, captured the moment they leave it —
+ * see `GameSim.snapshotRoomLoot`. Restoring from this instead of re-rolling
+ * the template is what makes loot (and a shop's stock, and an unclaimed
+ * pedestal item) still there on a return trip, rather than gone the moment
+ * the room unloads.
+ */
+interface RoomLootSnapshot {
+  readonly pickups: readonly {
+    readonly x: number;
+    readonly y: number;
+    readonly type: string;
+    readonly price?: number;
+  }[];
+  readonly pedestals: readonly PedestalRuntime[];
+}
+
+/**
  * Which pool a room's pedestal draws from, by the room's own special role.
  *
  * `shop`/`supersecret` have no live pedestal spawn site today (no room JSON
@@ -664,6 +681,22 @@ export class GameSim {
   /** Every pedestal in the current room. Rebuilt on every room load — see `PedestalRuntime`. */
   private pedestalList: PedestalRuntime[] = [];
   /**
+   * Leftover loot from a room the player has already left, keyed the same
+   * way `roomClearedIds` is — by the authored template's own id, not a
+   * per-instance floor-plan id (see `clearFloorProgress`'s doc comment for
+   * why, and why this map is cleared there too). Written by
+   * `snapshotRoomLoot`, read by `applyCompiledRoom` in place of re-rolling
+   * the template once an entry exists.
+   */
+  private roomLootSnapshots = new Map<string, RoomLootSnapshot>();
+  /**
+   * Slot of the priced pickup currently touching the player, or -1. Written
+   * once a tick by `sim/systems/pickup.ts`'s `stepPickups` (`setNearbyShopPickup`)
+   * — a priced pickup is never auto-collected on touch, only queued here for
+   * `shopPreview`/`stepPedestal`'s Use-button purchase (`attemptShopPurchase`).
+   */
+  private nearbyShopPickupSlot = -1;
+  /**
    * Item ids this run has actually taken from a pedestal — #28's "no item
    * appears twice in a run." Populated only by `takePedestalItem`, never by
    * a mere offer, so refusing an offered item never removes it from future
@@ -857,6 +890,10 @@ export class GameSim {
    */
   clearFloorProgress(): void {
     this.roomClearedIds.clear();
+    // Same reasoning as `roomClearedIds` above, and the same key — leftover
+    // loot from a room on the *previous* floor's draw of this template must
+    // not leak into a different physical room that happens to reuse it.
+    this.roomLootSnapshots.clear();
   }
 
   /**
@@ -1121,12 +1158,16 @@ export class GameSim {
     hiddenDoors: readonly Pick<CompiledDoor, 'direction' | 'cellCol' | 'cellRow'>[],
     entryCell: { readonly col: number; readonly row: number },
   ): void {
+    if (this.roomTemplateLoaded) {
+      this.snapshotRoomLoot();
+    }
     this.clearRoomEntities();
     this.room = compiled.geometry;
     this.roomId = compiled.id;
     this.roomDoors = compiled.doors;
     this.bombableWalls.clear();
     this.pedestalList = [];
+    this.nearbyShopPickupSlot = -1;
     for (const hidden of hiddenDoors) {
       const match = this.roomDoors.find(
         (door) =>
@@ -1174,31 +1215,114 @@ export class GameSim {
         }
         this.spawnEnemyKind(definition, spawn.x, spawn.y);
       }
-      for (const pickup of compiled.pickupSpawns) {
-        const definition = this.pickups.indexOf(pickup.type);
-        if (definition < 0) {
-          throw new Error(`room template pickup "${pickup.type}" is not registered`);
-        }
-        const safe = this.safeSpawnPoint(pickup.x, pickup.y, this.pickups.at(definition).radius);
-        this.spawnPickup(pickup.type, safe.x, safe.y, pickup.price);
-      }
-      // Decorative props are art (#18) except two types: a barrel is a
-      // destructible obstacle, so a room author drops a Bierfassl at one for
-      // free and `npm run dev` always has something to demonstrate that on;
-      // a pedestal (#28) draws a real item from a pool chosen by the room's
-      // own special role (`pedestalPoolForRole`) rather than sitting inert.
+      // Decorative props are art (#18) except a barrel, a destructible
+      // obstacle a room author drops a Bierfassl at for free — `npm run dev`
+      // always has something to demonstrate that on. A barrel is not loot:
+      // once broken (or the room otherwise cleared), it does not come back,
+      // the same as an enemy doesn't. Pedestals are handled below, in
+      // `restoreOrSpawnRoomLoot` — they're loot, not decoration.
       for (const prop of compiled.decorativeProps) {
         if (prop.type === 'barrel') {
           this.spawnTarget(prop.x, prop.y, TARGET_RADIUS);
-        } else if (prop.type === 'pedestal') {
-          this.spawnPedestal(prop.x, prop.y);
         }
       }
     }
+    this.restoreOrSpawnRoomLoot(compiled);
     if (this.roomEnemyCount === 0) {
       this.roomClearedIds.add(this.roomId);
     }
     this.world.flush();
+  }
+
+  /**
+   * Puts back whatever loot the player left behind on a previous visit
+   * (`roomLootSnapshots`), or — on a genuine first visit — rolls it fresh
+   * from the template. Deliberately independent of `roomClearedIds`/
+   * `alreadyCleared`: a room being "cleared" (its enemies handled) says
+   * nothing about whether its loot was collected, and unlike enemies, loot
+   * left on the floor should still be there next time.
+   *
+   * Restoring a pedestal from the snapshot, rather than calling
+   * `spawnPedestal` again, matters beyond not losing the item: `spawnPedestal`
+   * draws from `this.random.items`, so calling it a second time for the same
+   * room would advance that stream and hand back a *different* item than the
+   * one already offered — breaking "same seed, same route, same offers."
+   */
+  private restoreOrSpawnRoomLoot(compiled: {
+    readonly pickupSpawns: readonly {
+      readonly x: number;
+      readonly y: number;
+      readonly type: string;
+      readonly price?: number;
+    }[];
+    readonly decorativeProps: readonly {
+      readonly x: number;
+      readonly y: number;
+      readonly type: string;
+      readonly rotation?: number;
+    }[];
+  }): void {
+    const snapshot = this.roomLootSnapshots.get(this.roomId);
+    if (snapshot !== undefined) {
+      for (const pickup of snapshot.pickups) {
+        if (this.pickups.indexOf(pickup.type) < 0) {
+          continue;
+        }
+        this.spawnPickup(pickup.type, pickup.x, pickup.y, pickup.price);
+      }
+      this.pedestalList = snapshot.pedestals.map((pedestal) => ({ ...pedestal }));
+      return;
+    }
+    if (this.roomClearedIds.has(this.roomId)) {
+      // Cleared before this feature existed, or never held loot in the
+      // first place — nothing to roll and nothing to restore.
+      return;
+    }
+    for (const pickup of compiled.pickupSpawns) {
+      const definition = this.pickups.indexOf(pickup.type);
+      if (definition < 0) {
+        throw new Error(`room template pickup "${pickup.type}" is not registered`);
+      }
+      const safe = this.safeSpawnPoint(pickup.x, pickup.y, this.pickups.at(definition).radius);
+      this.spawnPickup(pickup.type, safe.x, safe.y, pickup.price);
+    }
+    // A pedestal (#28) draws a real item from a pool chosen by the room's
+    // own special role (`pedestalPoolForRole`) rather than sitting inert.
+    for (const prop of compiled.decorativeProps) {
+      if (prop.type === 'pedestal') {
+        this.spawnPedestal(prop.x, prop.y);
+      }
+    }
+  }
+
+  /**
+   * Captures whatever loot the room being left still has on the ground —
+   * pickups of any origin (template-authored, an enemy's own drop, the
+   * room-clear roll) and pedestal state alike — so `restoreOrSpawnRoomLoot`
+   * can put it back exactly as left, rather than the room quietly voiding it
+   * the moment `clearRoomEntities` runs. Called from `applyCompiledRoom`
+   * before that happens, while `this.roomId`/`this.pedestalList` still name
+   * the *outgoing* room.
+   */
+  private snapshotRoomLoot(): void {
+    const pickups: { x: number; y: number; type: string; price?: number }[] = [];
+    this.world.forEach(this.pickupKind.bit, (index) => {
+      const definitionIndex = this.pickupKind.data[index] ?? -1;
+      if (definitionIndex < 0) {
+        return;
+      }
+      const priced = ((this.world.masks[index] ?? 0) & this.pickupPrice.bit) !== 0;
+      pickups.push({
+        x: this.positionX(index),
+        y: this.positionY(index),
+        type: this.pickups.at(definitionIndex).id,
+        ...(priced ? { price: this.pickupPrice.data[index] ?? 0 } : {}),
+      });
+    });
+    this.roomLootSnapshots.set(this.roomId, {
+      pickups,
+      pedestals: this.pedestalList.map((pedestal) => ({ ...pedestal })),
+    });
   }
 
   private hasDoor(direction: RoomDirection): boolean {
@@ -1391,6 +1515,46 @@ export class GameSim {
   /** Biermarken banked. */
   get biermarken(): number {
     return this.biermarkenCount;
+  }
+
+  /** Slot of the priced pickup currently touching the player, or -1. */
+  get nearbyShopPickup(): number {
+    return this.nearbyShopPickupSlot;
+  }
+
+  /** Written once a tick by `stepPickups` — not meant to be called from anywhere else. */
+  setNearbyShopPickup(slot: number): void {
+    this.nearbyShopPickupSlot = slot;
+  }
+
+  /**
+   * What to show for the priced pickup the player is currently touching —
+   * "here is what this is," the half of a shop purchase that used to be
+   * skipped straight past on the way to spending the player's Biermarken for
+   * them. `null` while nothing priced is underfoot.
+   */
+  get shopPreview(): {
+    readonly name: string;
+    readonly description: string;
+    readonly price: number;
+    readonly affordable: boolean;
+  } | null {
+    const slot = this.nearbyShopPickupSlot;
+    if (slot < 0) {
+      return null;
+    }
+    const definitionIndex = this.pickupKind.data[slot] ?? -1;
+    if (definitionIndex < 0) {
+      return null;
+    }
+    const definition = this.pickups.at(definitionIndex);
+    const price = this.pickupPrice.data[slot] ?? 0;
+    return {
+      name: definition.name,
+      description: definition.description,
+      price,
+      affordable: this.biermarkenCount >= price,
+    };
   }
 
   addBiermarken(amount: number): void {

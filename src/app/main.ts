@@ -397,6 +397,35 @@ async function boot(): Promise<void> {
   let pickupToastLabel = '';
 
   /**
+   * A shop item's preview — "here is what this is," on touch, not a purchase.
+   * Fixed HUD position rather than anchored to the item itself the way the
+   * pedestal name plate is: a shop room is a bare floor with a handful of
+   * items, not a room complex enough that "belongs to the thing it floats
+   * over" is doing any work, and this stays simple the same reason
+   * `pickupToast` is fixed rather than anchored to the pickup that triggered
+   * it. Driven by `sim.shopPreview`, itself driven by `sim.nearbyShopPickup`
+   * (`sim/systems/pickup.ts`'s `stepPickups`) — touching a priced pickup no
+   * longer buys it outright, this is what tells the player what pressing
+   * `use` would.
+   */
+  const shopPreview = new Text({
+    text: '',
+    style: { fill: 0xe8c94a, fontFamily: 'monospace', fontSize: 13, fontWeight: 'bold' },
+  });
+  shopPreview.anchor.set(0.5);
+  shopPreview.visible = false;
+  uiLayer.addChild(shopPreview);
+  const positionShopPreview = (applied: GameLayout): void => {
+    shopPreview.position.set(
+      applied.originX + (INTERNAL_WIDTH * applied.scale) / 2,
+      // Below `bossBanner`'s 0.3 and clear of the room itself for any window
+      // scale — this is a floor-reading prompt, not a mid-room callout.
+      applied.originY + INTERNAL_HEIGHT * applied.scale * 0.88,
+    );
+  };
+  let shopPreviewLabel = '';
+
+  /**
    * A pedestal's name plate "on approach" (#28) — the item's name only (the
    * full description waits for the reveal panel below, once it's actually
    * taken). Anchored to the pedestal's own screen position each frame
@@ -579,6 +608,7 @@ async function boot(): Promise<void> {
     positionMinimapHud(applied);
     positionBossBanner(applied);
     positionPickupToast(applied);
+    positionShopPreview(applied);
     positionPedestalReveal(applied);
     gameOverScreen.resize(applied);
     vignette.resize(applied);
@@ -670,6 +700,22 @@ async function boot(): Promise<void> {
       } else if (pickupToast.visible) {
         pickupToast.visible = false;
         pickupToastLabel = '';
+      }
+      const preview = sim.shopPreview;
+      if (preview !== null) {
+        const price = `${String(preview.price)} Biermarken`;
+        const label = preview.affordable
+          ? `${preview.name} — ${preview.description} — ${price}  [use]`
+          : `${preview.name} — ${preview.description} — ${price} (not enough)`;
+        if (label !== shopPreviewLabel) {
+          shopPreviewLabel = label;
+          shopPreview.text = label;
+        }
+        shopPreview.tint = preview.affordable ? 0xffffff : 0x8a8a8a;
+        shopPreview.visible = true;
+      } else if (shopPreview.visible) {
+        shopPreview.visible = false;
+        shopPreviewLabel = '';
       }
       const nearbyPedestal = sim.nearestAvailablePedestal();
       const nameplateScreen =
@@ -819,6 +865,8 @@ WASD move   arrows/mouse aim and fire
     bossBanner.visible = false;
     pickupToastLabel = '';
     pickupToast.visible = false;
+    shopPreviewLabel = '';
+    shopPreview.visible = false;
     pedestalNamePlateLabel = '';
     pedestalNamePlate.visible = false;
     pedestalRevealLabel = '';

@@ -32,6 +32,10 @@ const collected = new Int32Array(MAX_COLLECTED);
 const COLLECTED_COUNT = 0;
 const collectedState = new Int32Array(1);
 
+/** The priced pickup found touching the player this tick, or -1. A typed slot for the same reason `collectedState` is one. */
+const SHOP_TOUCH_SLOT = 0;
+const shopTouchState = new Int32Array(1);
+
 let activeSim: GameSim | null = null;
 
 export function stepPickups(sim: GameSim): void {
@@ -42,6 +46,7 @@ export function stepPickups(sim: GameSim): void {
 
   activeSim = sim;
   collectedState[COLLECTED_COUNT] = 0;
+  shopTouchState[SHOP_TOUCH_SLOT] = -1;
   player[PLAYER_X] = x;
   player[PLAYER_Y] = y;
   player[PLAYER_RADIUS] = radius;
@@ -53,12 +58,11 @@ export function stepPickups(sim: GameSim): void {
   const count = collectedState[COLLECTED_COUNT];
   for (let entry = 0; entry < count; entry++) {
     const other = collected[entry] ?? 0;
-    // A priced pickup the player can't afford is left in place — not
-    // collected, and not destroyed. Everything else is collected outright.
     if (collect(sim, other)) {
       sim.world.destroy(sim.world.entityAt(other));
     }
   }
+  sim.setNearbyShopPickup(shopTouchState[SHOP_TOUCH_SLOT]);
 }
 
 /** Either queues a touching pickup for collection, or nudges a nearby one toward the player. */
@@ -79,6 +83,15 @@ function candidate(other: number): void {
   const playerRadius = player[PLAYER_RADIUS] ?? 0;
 
   if (circlesOverlap(playerX, playerY, playerRadius, otherX, otherY, otherRadius)) {
+    // A priced pickup is a shop's stock, not a free pickup: touching it only
+    // surfaces what it is (`GameSim.shopPreview`) and lets the Use button buy
+    // it (`attemptShopPurchase`, from `sim/systems/pedestal.ts`) — it is
+    // never collected by walking over it.
+    const priced = ((sim.world.masks[other] ?? 0) & sim.pickupPrice.bit) !== 0;
+    if (priced) {
+      shopTouchState[SHOP_TOUCH_SLOT] = other;
+      return;
+    }
     const count = collectedState[COLLECTED_COUNT] ?? 0;
     if (count < MAX_COLLECTED) {
       collected[count] = other;
@@ -104,7 +117,9 @@ function candidate(other: number): void {
 /**
  * Resolves what collecting one pickup does, by the kind it was spawned as.
  * Returns `false` — nothing applied, the entity survives — for a priced
- * pickup the player cannot yet afford; `true` otherwise.
+ * pickup the player cannot afford; `true` otherwise. Reached two ways: an
+ * ordinary pickup collected on touch (`stepPickups`, below), or a priced one
+ * bought on purpose (`attemptShopPurchase`).
  */
 function collect(sim: GameSim, other: number): boolean {
   const definitionIndex = sim.pickupKind.data[other] ?? -1;
@@ -164,4 +179,22 @@ function collect(sim: GameSim, other: number): boolean {
       break;
   }
   return true;
+}
+
+/**
+ * Buys the priced pickup the player is currently touching (`sim.nearbyShopPickup`),
+ * on the Use button — called from `sim/systems/pedestal.ts`'s Use-button
+ * priority chain, the one place that resolves what `Use` does this tick.
+ * A no-op with nothing touching, and (via `collect`'s own check) a no-op the
+ * player can't afford: either way the pickup stays put for another look.
+ */
+export function attemptShopPurchase(sim: GameSim): void {
+  const slot = sim.nearbyShopPickup;
+  if (slot < 0) {
+    return;
+  }
+  if (collect(sim, slot)) {
+    sim.world.destroy(sim.world.entityAt(slot));
+    sim.setNearbyShopPickup(-1);
+  }
 }
