@@ -141,9 +141,11 @@ function collect(sim: GameSim, other: number): boolean {
     case 'food':
       // Inert in a sober run is true of every food pickup, by construction:
       // Promille sits at zero the whole run, so `lowerPromille` has nothing
-      // to lower. No gate is needed here — see `GameSim.lowerPromille`.
+      // to lower, and Kater is never running to clear. No gate is needed
+      // here — see `GameSim.lowerPromille`.
       sim.addPlayerHealth(effect.heal);
       sim.lowerPromille(effect.promille);
+      sim.clearKater();
       break;
     case 'promille':
       // Reads the live tunable rather than a value baked into content — see

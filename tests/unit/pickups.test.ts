@@ -72,6 +72,21 @@ describe('pickup collection', () => {
     expect(sim.promille).toBeCloseTo(0.5, 1);
   });
 
+  it('food clears an active Kater debuff', () => {
+    const sim = emptySim();
+    const index = sim.playerIndex;
+    sim.tuning.promille.umgfallnKnockdownTicks = 1;
+    sim.addPromille(5);
+    sim.step(idle()); // wake, Kater starts
+    expect(sim.hasKater).toBe(true);
+
+    sim.spawnPickup('obazda', sim.positionX(index), sim.positionY(index));
+    sim.world.flush();
+    sim.step(idle());
+
+    expect(sim.hasKater).toBe(false);
+  });
+
   it('Weißwurst heals generously below the floor threshold', () => {
     const sim = new GameSim({ room: bareRoom(), roomTemplate: minimalRoom(), floor: 3 });
     const index = sim.playerIndex;

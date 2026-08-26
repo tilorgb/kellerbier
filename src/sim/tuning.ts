@@ -367,6 +367,18 @@ export interface PromilleTuning {
   umgfallnKnockdownTicks: number;
   /** Promille the player wakes at, after the knockdown ends. */
   umgfallnWakePromille: number;
+
+  /**
+   * Kater (hangover): started when the Umgfalln knockdown ends, ticking down
+   * on its own clock rather than riding Promille back down — the punish is
+   * "you fell over," not "you happened to still be drunk," so it survives a
+   * player sobering up faster than usual. Cleared early by eating.
+   */
+  katerDurationTicks: number;
+  /** Stammwürze multiplier while Kater is active — a flat penalty, not a ramp. */
+  katerStammwuerzeMultiplier: number;
+  /** Gschwindigkeit multiplier while Kater is active. */
+  katerGschwindigkeitMultiplier: number;
 }
 
 /**
@@ -625,6 +637,12 @@ export const DEFAULT_PROMILLE_TUNING: Readonly<PromilleTuning> = {
 
   umgfallnKnockdownTicks: 90,
   umgfallnWakePromille: 1.5,
+
+  // 12 seconds at 60 ticks/second — long enough to matter, short enough that
+  // a room or two of caution clears it rather than making the player wait.
+  katerDurationTicks: 720,
+  katerStammwuerzeMultiplier: 0.8,
+  katerGschwindigkeitMultiplier: 0.85,
 };
 
 export const DEFAULT_PICKUP_TUNING: Readonly<PickupTuning> = {

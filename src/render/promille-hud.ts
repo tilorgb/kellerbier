@@ -22,6 +22,14 @@ const TIER_COLOR: Readonly<Record<PromilleTierId, number>> = {
 };
 
 /**
+ * Kater overrides the tier colour entirely rather than blending with it —
+ * the debuff outlasts the tier that caused it (a player can sober all the
+ * way to Nüchtern and still be hungover), so the bar has to read "Kater" on
+ * its own rather than as a tint on whatever tier happens to be current.
+ */
+const KATER_COLOR = 0x5a4a6a;
+
+/**
  * The Promille meter: a fill bar plus its tier name as text.
  *
  * Screen-space, in `uiLayer`, positioned directly under `HealthHud` — same
@@ -58,7 +66,8 @@ export class PromilleHud {
   sync(sim: GameSim): void {
     const ratio = Math.min(1, Math.max(0, sim.promille / PROMILLE_MAX));
     this.fill.width = Math.max(0, (BAR_WIDTH - BAR_PADDING * 2) * ratio);
-    this.fill.tint = TIER_COLOR[sim.promilleTier];
-    this.label.text = `${promilleTierName(sim.promilleTier)} ${sim.promille.toFixed(1)}‰`;
+    this.fill.tint = sim.hasKater ? KATER_COLOR : TIER_COLOR[sim.promilleTier];
+    const tierText = `${promilleTierName(sim.promilleTier)} ${sim.promille.toFixed(1)}‰`;
+    this.label.text = sim.hasKater ? `${tierText} Kater` : tierText;
   }
 }

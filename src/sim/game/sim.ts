@@ -333,6 +333,8 @@ export class GameSim {
   readonly stats: StatPipeline;
   /** The Promille tier `stats` last had modifiers built for. See `syncPromilleModifiers`. */
   private lastPromilleTier: PromilleTierId | null = null;
+  /** Whether `stats` last had Kater's modifiers built in. See `syncKaterModifiers`. */
+  private lastKaterActive = false;
   /**
    * Scratch object `baseStats()` writes into and returns, rather than
    * allocating a fresh one. `baseStats()` runs on the firing path (twice a
@@ -535,6 +537,16 @@ export class GameSim {
    * player yet.
    */
   private umgfallnTicksValue = 0;
+
+  /**
+   * Ticks left of the Kater debuff — started by `tickUmgfalln` when the
+   * knockdown ends, cleared early by eating (`GameSim.clearKater`, called
+   * from the `food` pickup effect). Its own counter rather than a Promille
+   * range, per the design doc: waking up short of sober is the Umgfalln
+   * punish, Kater is a second, independent one that outlasts sobering up
+   * faster than usual.
+   */
+  private katerTicksValue = 0;
 
   /**
    * Ticks left before the player may be hurt by contact again.
@@ -1525,6 +1537,15 @@ export class GameSim {
     return this.umgfallnTicksValue;
   }
 
+  /** Ticks left of the Kater debuff. Zero means it isn't active. */
+  get katerTicks(): number {
+    return this.katerTicksValue;
+  }
+
+  get hasKater(): boolean {
+    return this.katerTicksValue > 0;
+  }
+
   get promilleDriftScale(): number {
     return promilleDriftScale(this.promille, this.tuning.promille);
   }
@@ -1597,6 +1618,44 @@ export class GameSim {
   }
 
   /**
+   * Registers or clears Kater's stat contribution, as its own source — kept
+   * separate from `syncPromilleModifiers` because Kater's on/off edge is
+   * "did `katerTicksValue` reach zero," not a tier boundary, and the two can
+   * be true or false in any combination (hungover and freshly sober is the
+   * whole point of the debuff).
+   */
+  private syncKaterModifiers(): void {
+    const active = this.hasKater;
+    if (active === this.lastKaterActive) {
+      return;
+    }
+    this.lastKaterActive = active;
+
+    if (!active) {
+      this.stats.clearSource('kater');
+      return;
+    }
+
+    const tuning = this.tuning.promille;
+    const source = { kind: 'kater' as const, id: 'kater', label: 'Kater' };
+    const modifiers: StatModifier[] = [
+      {
+        stat: StatId.Stammwuerze,
+        op: 'multiply',
+        value: tuning.katerStammwuerzeMultiplier,
+        source,
+      },
+      {
+        stat: StatId.Gschwindigkeit,
+        op: 'multiply',
+        value: tuning.katerGschwindigkeitMultiplier,
+        source,
+      },
+    ];
+    this.stats.setSourceModifiers('kater', modifiers);
+  }
+
+  /**
    * Raises Promille, clamped at `PROMILLE_MAX`. The one place it goes up —
    * beer pickups (#17) and the debug slider (which writes `tuning.promille.
    * current` directly, bypassing this) are the only sources today.
@@ -1643,6 +1702,7 @@ export class GameSim {
       // Woken up short of sober — the whole point of a knockdown is that it
       // costs you the drink, not that it costs you the tier.
       this.tuning.promille.current = this.tuning.promille.umgfallnWakePromille;
+      this.startKater();
     }
   }
 
@@ -1650,6 +1710,29 @@ export class GameSim {
   decayPromille(): void {
     const tuning = this.tuning.promille;
     tuning.current = Math.max(0, tuning.current - tuning.decayPerSecond / TICKS_PER_SECOND);
+  }
+
+  /** Starts (or restarts) the Kater debuff. Called by `tickUmgfalln` on waking. */
+  private startKater(): void {
+    this.katerTicksValue = Math.round(this.tuning.promille.katerDurationTicks);
+  }
+
+  /**
+   * Ages the Kater debuff by one tick, independent of the Umgfalln/decay
+   * branch in `stepPromille` — Kater keeps counting down through both a
+   * still-running knockdown (there is none, by construction: it only starts
+   * once the knockdown ends) and ordinary post-wake decay.
+   */
+  tickKater(): void {
+    if (this.katerTicksValue <= 0) {
+      return;
+    }
+    this.katerTicksValue -= 1;
+  }
+
+  /** Clears the Kater debuff early. Called by the `food` pickup effect — "cleared by eating". */
+  clearKater(): void {
+    this.katerTicksValue = 0;
   }
 
   /** Whether the run currently holds at least one copy of an item. */
@@ -2344,6 +2427,7 @@ export class GameSim {
     // wobble, so it has to be settled before either runs.
     stepPromille(this);
     this.syncPromilleModifiers();
+    this.syncKaterModifiers();
     // Any item stat contribution a hook changed since the last tick (a stack
     // gained on kill, say) is folded in before anything reads `stats` this
     // tick — same reasoning as Promille just above.
