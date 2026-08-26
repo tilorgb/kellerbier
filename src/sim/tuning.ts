@@ -490,17 +490,14 @@ export interface ItemPoolTuning {
   /** Radius (px) inside which a pedestal shows its name plate and accepts the `use` button. */
   interactRadius: number;
   /**
-   * Ticks of hitstop (`GameSim.requestHitstop`) a pedestal pickup/swap holds
-   * the whole simulation for — the "brief pause" itself. Longer than an
-   * ordinary hit's freeze on purpose: this is a moment the run is meant to
-   * notice, not an impact to sell.
-   */
-  pickupPauseTicks: number;
-  /**
-   * Ticks the name+description reveal panel stays up *after* the pause ends
-   * — decremented in `decayPresentation`, so it never counts down while
-   * `pickupPauseTicks` still has the game frozen, the same relationship
-   * `toastTicks` already has to hitstop.
+   * Ticks the name+description reveal panel stays up after a pedestal
+   * pickup/swap — decremented in `decayPresentation`. Deliberately longer
+   * than `toastTicks`: a pedestal pickup is a moment the run is meant to
+   * notice and actually read, not the quick float-past-loot toast an
+   * ordinary pickup gets. A pedestal pickup used to also freeze the sim for
+   * a `pickupPauseTicks` hitstop while this panel came up; playtesting found
+   * the freeze itself was the part that read as friction, so it is gone —
+   * this field alone now carries the "give the player time to read it" job.
    */
   revealHoldTicks: number;
   /** Vertical bob amplitude, px. */
@@ -652,8 +649,7 @@ export const DEFAULT_ITEM_POOL_TUNING: Readonly<ItemPoolTuning> = {
   floorQualityBias: 0.06,
   duselQualityBias: 0.05,
   interactRadius: 28,
-  pickupPauseTicks: 30,
-  revealHoldTicks: 90,
+  revealHoldTicks: 180,
   bobAmplitude: 3,
   bobPeriodTicks: 90,
 };

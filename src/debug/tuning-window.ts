@@ -222,7 +222,6 @@ const GROUPS: readonly GroupSpec[] = [
       },
       { key: 'duselQualityBias', min: 0, max: 0.5, step: 0.01, hint: 'Dusel skews toward rarity' },
       { key: 'interactRadius', min: 8, max: 80, step: 2, hint: 'px to read/take a pedestal' },
-      { key: 'pickupPauseTicks', min: 0, max: 90, step: 2, hint: 'freeze on take/swap' },
       { key: 'revealHoldTicks', min: 0, max: 240, step: 5, hint: 'name+description panel length' },
       { key: 'bobAmplitude', min: 0, max: 10, step: 0.5, hint: 'pedestal item bob height, px' },
       { key: 'bobPeriodTicks', min: 10, max: 300, step: 5, hint: 'ticks per bob cycle' },

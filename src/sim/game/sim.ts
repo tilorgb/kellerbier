@@ -2139,11 +2139,14 @@ export class GameSim {
     this.pickUpItem(item.id);
     this.takenItemIds.add(item.id);
     pedestal.itemIndex = -1;
-    this.requestHitstop(Math.round(this.tuning.itemPool.pickupPauseTicks));
     // `pickUpItem` already started the ordinary quick toast — suppressed
     // here in favour of the pedestal's own longer, more deliberate reveal
     // below, which says the same name and description. Showing both at once
-    // reads as a UI glitch, not as two separate pieces of news.
+    // reads as a UI glitch, not as two separate pieces of news. No hitstop:
+    // a pedestal pickup/swap used to freeze the sim for `pickupPauseTicks`
+    // while the reveal panel came up, but playtesting found the pause itself
+    // read as friction rather than as a beat worth noticing — the panel
+    // alone, held up longer, does that job instead.
     this.toastTicks = 0;
     this.pedestalRevealName = item.name;
     this.pedestalRevealDescription = item.description;
