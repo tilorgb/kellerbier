@@ -6,6 +6,17 @@ import { INTERNAL_HEIGHT, INTERNAL_WIDTH, type GameLayout } from './resolution.j
 const MAX_ALPHA = 0.8;
 
 /**
+ * How much of `sim.promilleScreenDistortion` (#92) actually gets spent on
+ * the extra pulsing alpha, so a Filmriss-deep distortion value (which can
+ * run well past `1`) still reads as "worse," not as the vignette breaking.
+ * The ramp itself is left uncapped in `sim/game/promille.ts` — this is the
+ * one place that decides how far a renderer is willing to push it.
+ */
+const MAX_DISTORTION_ALPHA = 0.18;
+/** The reddening the vignette tints toward as distortion climbs — pure white is "no distortion." */
+const DISTORTION_TINT = 0xff5555;
+
+/**
  * A radial gradient, transparent centre to opaque edge, generated once via
  * `<canvas>` rather than pixi `Graphics` — a soft radial fade is a Canvas 2D
  * gradient, not a shape, and there is no reason to reach for a shader for it.
@@ -59,6 +70,12 @@ const COVERAGE = 2.2;
  * than an animated inner radius: simpler to get right, and a vignette
  * darkening in is already what "tunnel vision" reads as.
  *
+ * #92 layers Trinkfest's own screen-distortion penalty onto the same sprite
+ * — a red pulse on top of the fade — rather than adding a second full-screen
+ * effect: one thing the player's eye already reads as "how drunk am I"
+ * getting worse is more legible than two independent overlays competing for
+ * the same attention.
+ *
  * Screen-space, in `uiLayer` — same reasoning as `GameOverScreen` and
  * `HealthHud`: never inside anything the camera shakes or sways, or the
  * vignette itself would visibly jitter independently of following the
@@ -80,7 +97,27 @@ export class Vignette {
    */
   sync(sim: GameSim, screenX: number, screenY: number): void {
     const intensity = Math.min(1, sim.promille / 5);
-    this.view.alpha = intensity * MAX_ALPHA;
+    // Screen distortion (#92): a fast, deterministic pulse layered on top of
+    // the ordinary tunnel-vision fade, plus a red tint — the third readable
+    // penalty the issue asks for, alongside sway and aim wobble. Zero (and
+    // pure white) below Vollrausch, since `sim.promilleScreenDistortion` is;
+    // a sine rather than RNG for the same "same tick, same frame, every
+    // replay" reason `shooting.ts`'s aim wobble already is one.
+    const distortion = sim.promilleScreenDistortion;
+    // The pulse itself speeds up past `1` (the pre-#92 ceiling) rather than
+    // only the alpha climbing and then flattening out — a faster flicker is
+    // still legibly "worse" once the alpha spend below is already capped,
+    // which is how the Trinkfest stages keep escalating past Vollrausch's
+    // own top instead of looking identical to it.
+    const period = Math.max(
+      1,
+      sim.tuning.promille.screenDistortionPeriodTicks / Math.max(1, distortion),
+    );
+    const pulse = distortion > 0 ? (Math.sin((sim.tick / period) * Math.PI * 2) + 1) / 2 : 0;
+    const distortionAlpha =
+      Math.min(MAX_DISTORTION_ALPHA, distortion * MAX_DISTORTION_ALPHA) * pulse;
+    this.view.alpha = Math.min(1, intensity * MAX_ALPHA + distortionAlpha);
+    this.view.tint = distortion > 0 ? DISTORTION_TINT : 0xffffff;
     this.view.position.set(screenX, screenY);
   }
 
