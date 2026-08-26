@@ -165,6 +165,12 @@ describe('#59 — batch 9 of ten toward 120+', () => {
   });
 });
 
+describe('#59 — batch 10 of ten toward 120+', () => {
+  it('reaches the 120+ milestone', () => {
+    expect(ITEM_DEFINITIONS.length).toBeGreaterThanOrEqual(120);
+  });
+});
+
 function aiming(angleRadians: number): ReturnType<typeof createInputFrame> {
   const frame = createInputFrame();
   frame.aimX = quantiseAxis(Math.cos(angleRadians));

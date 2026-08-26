@@ -4,6 +4,8 @@ import { almabtrieb } from './almabtrieb.js';
 import { almhuettnFeuer } from './almhuettn-feuer.js';
 import { almhuettnJodler } from './almhuettn-jodler.js';
 import { almrausch } from './almrausch.js';
+import { almrosenkranz } from './almrosenkranz.js';
+import { alpensegen } from './alpensegen.js';
 import { alpengluehen } from './alpengluehen.js';
 import { alpenkroneKronkorken } from './alpenkrone-kronkorken.js';
 import { bauernMistgabel } from './bauern-mistgabel.js';
@@ -22,11 +24,13 @@ import { colaweizen } from './colaweizen.js';
 import { derOrdner } from './der-ordner.js';
 import { drudmaske } from './drudmaske.js';
 import { enzian } from './enzian.js';
+import { fassanstich } from './fassanstich.js';
 import { fassldauben } from './fassldauben.js';
 import { feierabendbier } from './feierabendbier.js';
 import { feiertagsruhe } from './feiertagsruhe.js';
 import { feuerschlucker } from './feuerschlucker.js';
 import { feuerwasser } from './feuerwasser.js';
+import { feuerwehrhelm } from './feuerwehrhelm.js';
 import { fingerhakeln } from './fingerhakeln.js';
 import { foehn } from './foehn.js';
 import { gamsbart } from './gamsbart.js';
@@ -45,20 +49,25 @@ import { karussell } from './karussell.js';
 import { kastenschieber } from './kastenschieber.js';
 import { kegelbahn } from './kegelbahn.js';
 import { kerzenwachs } from './kerzenwachs.js';
+import { kesseltreiben } from './kesseltreiben.js';
 import { kirchturmuhr } from './kirchturmuhr.js';
 import { kirchweihKranzl } from './kirchweih-kranzl.js';
 import { kirchweihKrapfen } from './kirchweih-krapfen.js';
 import { kirchweihRatschn } from './kirchweih-ratschn.js';
 import { kirtahutschn } from './kirtahutschn.js';
+import { kletterseil } from './kletterseil.js';
 import { kraftbier } from './kraftbier.js';
+import { krautstampfer } from './krautstampfer.js';
 import { kuhschelle } from './kuhschelle.js';
 import { kuhweide } from './kuhweide.js';
 import { lawine } from './lawine.js';
 import { lebkuchenherz } from './lebkuchenherz.js';
 import { lederhosn } from './lederhosn.js';
 import { lichterkette } from './lichterkette.js';
+import { lodenmantel } from './lodenmantel.js';
 import { loewenbrunnDoppelbock } from './loewenbrunn-doppelbock.js';
 import { ludwigsSchwan } from './ludwigs-schwan.js';
+import { luftballon } from './luftballon.js';
 import { marktstand } from './marktstand.js';
 import { marktweib } from './marktweib.js';
 import { mass } from './mass.js';
@@ -98,6 +107,7 @@ import { sonnwendfeuer } from './sonnwendfeuer.js';
 import { spatenstich } from './spatenstich.js';
 import { spezi } from './spezi.js';
 import { spiegelsaal } from './spiegelsaal.js';
+import { standlkasse } from './standlkasse.js';
 import { steckerlfisch } from './steckerlfisch.js';
 import { steinkrug } from './steinkrug.js';
 import { teufelsbraten } from './teufelsbraten.js';
@@ -163,6 +173,10 @@ import { zwoaDreiGsuffa } from './zwoa-drei-gsuffa.js';
  * Betrunkenentaumel, Nachtwache, Nachschank, Feuerschlucker, Kegelbahn,
  * Riesenrad (a second orbiting familiar, tuned wider and slower than
  * Brezn), Marktstand, Schlüsselbund, Kirchweih-Krapfen and Feiertagsruhe.
+ * #59's tenth batch closes the roster out past 120+: Lodenmantel, Luftballon,
+ * Kletterseil, Alpensegen (the third `angel`-pool item), Kesseltreiben (the
+ * sixth `curse`-pooled item), Fassanstich, Krautstampfer, Feuerwehrhelm,
+ * Standlkasse (the fifth `devil`-pool item) and Almrosenkranz.
  */
 export const ITEM_DEFINITIONS: readonly ItemDefinition[] = [
   bierkrug,
@@ -284,6 +298,16 @@ export const ITEM_DEFINITIONS: readonly ItemDefinition[] = [
   schluesselbund,
   kirchweihKrapfen,
   feiertagsruhe,
+  lodenmantel,
+  luftballon,
+  kletterseil,
+  alpensegen,
+  kesseltreiben,
+  fassanstich,
+  krautstampfer,
+  feuerwehrhelm,
+  standlkasse,
+  almrosenkranz,
 ];
 
 export {
@@ -292,8 +316,10 @@ export {
   almhuettnFeuer,
   almhuettnJodler,
   almrausch,
+  almrosenkranz,
   alpengluehen,
   alpenkroneKronkorken,
+  alpensegen,
   bauernMistgabel,
   bedienungTablett,
   bergrettung,
@@ -310,11 +336,13 @@ export {
   derOrdner,
   drudmaske,
   enzian,
+  fassanstich,
   fassldauben,
   feierabendbier,
   feiertagsruhe,
   feuerschlucker,
   feuerwasser,
+  feuerwehrhelm,
   fingerhakeln,
   foehn,
   gamsbart,
@@ -333,20 +361,25 @@ export {
   kastenschieber,
   kegelbahn,
   kerzenwachs,
+  kesseltreiben,
   kirchturmuhr,
   kirchweihKranzl,
   kirchweihKrapfen,
   kirchweihRatschn,
   kirtahutschn,
+  kletterseil,
   kraftbier,
+  krautstampfer,
   kuhschelle,
   kuhweide,
   lawine,
   lebkuchenherz,
   lederhosn,
   lichterkette,
+  lodenmantel,
   loewenbrunnDoppelbock,
   ludwigsSchwan,
+  luftballon,
   marktstand,
   marktweib,
   mass,
@@ -386,6 +419,7 @@ export {
   spatenstich,
   spezi,
   spiegelsaal,
+  standlkasse,
   steckerlfisch,
   steinkrug,
   teufelsbraten,
