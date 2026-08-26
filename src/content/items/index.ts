@@ -58,6 +58,7 @@ import { kirchweihKrapfen } from './kirchweih-krapfen.js';
 import { kirchweihRatschn } from './kirchweih-ratschn.js';
 import { kirtahutschn } from './kirtahutschn.js';
 import { kletterseil } from './kletterseil.js';
+import { konterbier } from './konterbier.js';
 import { kraftbier } from './kraftbier.js';
 import { krautstampfer } from './krautstampfer.js';
 import { kuhschelle } from './kuhschelle.js';
@@ -180,7 +181,9 @@ import { zwoaDreiGsuffa } from './zwoa-drei-gsuffa.js';
  * sixth `curse`-pooled item), Fassanstich, Krautstampfer, Feuerwehrhelm,
  * Standlkasse (the fifth `devil`-pool item) and Almrosenkranz. #92 adds
  * Bierbauch and Halbe Portion, the roster's first pair to raise/lower
- * Trinkfest.
+ * Trinkfest. #32 adds Konterbier, the last item named in §4's
+ * Promille-gated table (Ruhige Hand, Maßkrugstemmen, Fingerhakeln and Zwoa,
+ * drei, gsuffa were already here from earlier batches).
  */
 export const ITEM_DEFINITIONS: readonly ItemDefinition[] = [
   bierkrug,
@@ -314,6 +317,7 @@ export const ITEM_DEFINITIONS: readonly ItemDefinition[] = [
   almrosenkranz,
   bierbauch,
   halbePortion,
+  konterbier,
 ];
 
 export {
@@ -376,6 +380,7 @@ export {
   kirchweihRatschn,
   kirtahutschn,
   kletterseil,
+  konterbier,
   kraftbier,
   krautstampfer,
   kuhschelle,

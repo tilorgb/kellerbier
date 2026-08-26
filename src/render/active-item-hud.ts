@@ -1,5 +1,6 @@
 import { Container, Sprite, Text, type Renderer } from 'pixi.js';
 import type { GameSim } from '../sim/game/sim.js';
+import { promilleRequirementMet } from '../sim/game/promille.js';
 import { createBarOutlineTexture, createSolidTexture } from './placeholder-art.js';
 
 const BAR_WIDTH = 40;
@@ -10,6 +11,8 @@ const ICON_GAP = 4;
 
 const CHARGING_TINT = 0xa89a6a;
 const READY_TINT = 0xe8c65a;
+/** #32: a `rausch`/`sober` active item outside its tier — grey, distinct from either charging shade above, backed by its own text ("sober only"/"rausch only") rather than colour alone. */
+const DORMANT_TINT = 0x6a6a6a;
 
 /**
  * The held active item's readout: a placeholder icon, a charge/"buildup"
@@ -87,15 +90,27 @@ export class ActiveItemHud {
     const maxCharge = item.active?.maxCharge ?? 1;
     const charge = Math.max(0, sim.itemState(id).charge);
     const ratio = Math.min(1, charge / maxCharge);
-    const ready = ratio >= 1;
+    // #32: a `rausch`/`sober` active item outside its own tier cannot fire —
+    // `GameSim.useActiveItem` gates it the same way every other hook is
+    // gated — so "ready" has to mean "charged AND currently allowed to go
+    // off," not charge alone, or this bar would read "press now" for a
+    // button press that does nothing.
+    const requirementMet = promilleRequirementMet(item.promilleRequirement, sim.promilleTier);
+    const ready = ratio >= 1 && requirementMet;
+    const dormant = !requirementMet;
 
     this.barFill.width = Math.max(0, (BAR_WIDTH - BAR_PADDING * 2) * ratio);
-    this.icon.tint = ready ? READY_TINT : CHARGING_TINT;
-    this.barFill.tint = ready ? READY_TINT : CHARGING_TINT;
+    const tint = dormant ? DORMANT_TINT : ready ? READY_TINT : CHARGING_TINT;
+    this.icon.tint = tint;
+    this.barFill.tint = tint;
 
     const prompt = activatePrompt ?? 'unbound';
     const percent = Math.round(ratio * 100);
-    this.label.text = ready ? `${item.name}  [${prompt}]` : `${item.name}  ${String(percent)}%`;
+    this.label.text = dormant
+      ? `${item.name}  (${item.promilleRequirement} only)`
+      : ready
+        ? `${item.name}  [${prompt}]`
+        : `${item.name}  ${String(percent)}%`;
   }
 
   /** The item this HUD is currently showing, or `null` — for tests. */

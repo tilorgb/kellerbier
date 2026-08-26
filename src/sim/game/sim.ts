@@ -34,6 +34,7 @@ import {
   promilleDamageMultiplier,
   promilleDriftScale,
   promilleFireRateMultiplier,
+  promilleRequirementMet,
   promilleScreenDistortion,
   promilleTierName,
   promilleTierOf,
@@ -354,6 +355,16 @@ export class GameSim {
   private lastPromilleTier: PromilleTierId | null = null;
   /** Whether `stats` last had Kater's modifiers built in. See `syncKaterModifiers`. */
   private lastKaterActive = false;
+  /**
+   * Whether the `sober`/`rausch` item gate (#32) was open last tick — `null`
+   * forces the first `syncItemPromilleGate` call to always run its check,
+   * the same reasoning `lastPromilleTier` starting `null` already uses.
+   * Two independent flags because a run can cross the sober boundary and the
+   * rausch boundary on unrelated ticks (drinking down from Nüchtern first
+   * passes through Angeheitert/Beduselt, neither of which is `rausch`).
+   */
+  private lastSoberGateActive: boolean | null = null;
+  private lastRauschGateActive: boolean | null = null;
   /**
    * Scratch object `baseStats()` writes into and returns, rather than
    * allocating a fresh one. `baseStats()` runs on the firing path (twice a
@@ -1854,6 +1865,53 @@ export class GameSim {
   }
 
   /**
+   * The `modifyStats` half of #32's generic Promille gate: marks every held
+   * `sober`/`rausch` item's stat contribution dirty the tick its gate
+   * actually flips, so `syncItemStatModifiers`'s own per-item check (which is
+   * what makes the contribution disappear) gets a chance to re-run even
+   * though nothing about the item itself changed — only the meter did.
+   *
+   * Every *other* held item's hook (`onTick`, `onShoot`, `onKill`, ...) is
+   * gated live, at the moment `sim/systems/items.ts` dispatches it, because
+   * those are called every time anyway. `modifyStats` is the one exception:
+   * it is cached (`itemStatsDirty`) and only re-read when something marks it
+   * dirty, so without this, an item picked up while its requirement was met
+   * would keep contributing its stat bonus forever after the meter moved on,
+   * with nothing ever telling `syncItemStatModifiers` to look again. Same
+   * "cheap check every tick, rebuild only on the rare tick a boundary is
+   * crossed" shape `syncPromilleModifiers` already uses just above.
+   */
+  private syncItemPromilleGate(): void {
+    const tier = this.promilleTier;
+    const soberActive = tier === PromilleTier.Nuchtern;
+    const rauschActive = tier >= PromilleTier.Vollrausch;
+    const soberChanged = soberActive !== this.lastSoberGateActive;
+    const rauschChanged = rauschActive !== this.lastRauschGateActive;
+    if (!soberChanged && !rauschChanged) {
+      return;
+    }
+    this.lastSoberGateActive = soberActive;
+    this.lastRauschGateActive = rauschActive;
+
+    const count = this.items.count;
+    for (let index = 0; index < count; index++) {
+      if (!this.inventory.has(index)) {
+        continue;
+      }
+      const item = this.items.at(index);
+      if (item.hooks.modifyStats === undefined) {
+        continue;
+      }
+      if (
+        (item.promilleRequirement === 'sober' && soberChanged) ||
+        (item.promilleRequirement === 'rausch' && rauschChanged)
+      ) {
+        this.markItemStatsDirty(index);
+      }
+    }
+  }
+
+  /**
    * Raises Promille, clamped at `promilleCapFor(trinkfest)` — `PROMILLE_MAX`
    * itself at baseline Trinkfest, further out once it is raised (#92). The
    * one place it goes up — beer pickups (#17) and the debug slider (which
@@ -2080,6 +2138,14 @@ export class GameSim {
     const item = this.items.at(index);
     const active = item.active;
     if (active === undefined) {
+      return false;
+    }
+    // #32: a `rausch` active item cannot be fired while sober, and vice
+    // versa — the same gate every other hook respects, applied here because
+    // `onActivate` is a direct call from this method rather than something
+    // `sim/systems/items.ts` broadcasts. Charge is left exactly where it was:
+    // pressing the button while dormant is a no-op, not a wasted charge.
+    if (!promilleRequirementMet(item.promilleRequirement, this.promilleTier)) {
       return false;
     }
     const state = this.inventory.stateOf(index);
@@ -2514,7 +2580,14 @@ export class GameSim {
       this.itemStatsDirty[index] = 0;
       const item = this.items.at(index);
       const key = itemStatSourceKey(item.id);
-      if (!this.inventory.has(index) || item.hooks.modifyStats === undefined) {
+      if (
+        !this.inventory.has(index) ||
+        item.hooks.modifyStats === undefined ||
+        // #32: a `sober`/`rausch` item's stat bonus is gone entirely outside
+        // its tier, the same as every other hook — see `syncItemPromilleGate`
+        // for what marks this dirty again the moment that stops being true.
+        !promilleRequirementMet(item.promilleRequirement, this.promilleTier)
+      ) {
         this.stats.clearSource(key);
         continue;
       }
@@ -2681,6 +2754,11 @@ export class GameSim {
     stepPromille(this);
     this.syncPromilleModifiers();
     this.syncKaterModifiers();
+    // The `sober`/`rausch` item gate (#32): before anything reads `stats`
+    // this tick, catch a tier boundary crossed since the last one so a held
+    // gated item's stat contribution appears or disappears the same tick the
+    // meter actually crosses it, not a tick late.
+    this.syncItemPromilleGate();
     // Any item stat contribution a hook changed since the last tick (a stack
     // gained on kill, say) is folded in before anything reads `stats` this
     // tick — same reasoning as Promille just above.
