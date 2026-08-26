@@ -1973,6 +1973,35 @@ export class GameSim {
   }
 
   /**
+   * Pulls every enemy within `radius` of a point directly toward it (#59's
+   * Fingerhakeln — Bavarian finger-wrestling, an item about dragging your
+   * opponent in rather than shoving them off). The exact mirror of
+   * `pushEnemiesNear`: same mask, same `addPush` chokepoint, only the
+   * direction sign flips, so a pull bleeds off and stacks with other pushes
+   * on the same enemy exactly the way a push does.
+   */
+  pullEnemiesNear(x: number, y: number, radius: number, strength: number): void {
+    if (strength <= 0 || radius <= 0) {
+      return;
+    }
+    const mask = CollisionLayer.Enemy | CollisionLayer.Obstacle;
+    this.broadphase.query(x, y, radius, (index) => {
+      const layer = this.collision.data[index * 2] ?? 0;
+      if ((layer & mask) === 0) {
+        return;
+      }
+      const otherX = this.positionX(index);
+      const otherY = this.positionY(index);
+      const dx = otherX - x;
+      const dy = otherY - y;
+      const distance = vectorLength(dx, dy);
+      const dirX = distance > 0 ? dx / distance : 1;
+      const dirY = distance > 0 ? dy / distance : 0;
+      addPush(this, index, -dirX * strength, -dirY * strength);
+    });
+  }
+
+  /**
    * Draws one item from `pool` (`sim/item/pool.ts`'s `selectItemOffer`) and
    * places it on a new pedestal at `(x, y)` — called from `applyCompiledRoom`
    * for every `decorativeProps` entry of type `'pedestal'`, which room
