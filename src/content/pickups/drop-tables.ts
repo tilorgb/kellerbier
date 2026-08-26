@@ -8,11 +8,21 @@ import type { DropTable, LootTier } from '../../sim/pickup/definition.js';
  * table is the matching `promilled` table with `beer`'s weight moved to
  * Biermarken, Kellerschlüssel and health rather than a different table
  * structure — so a future balance pass only ever edits numbers in this file.
+ *
+ * `null`'s weight is what actually sets the drop *rate* — the rest of a
+ * table only decides the mix once something has already dropped. Originally
+ * every tier dropped 45-80% of the time, on top of the guaranteed-ish
+ * `ROOM_CLEAR_DROP_TABLE` roll a room *also* pays on top of every kill in it
+ * — three stacking sources meant nothing individual one felt earned. `null`
+ * is scaled up per tier here to roughly weak 15% / normal 30% / tough 50%,
+ * leaving the relative mix of *what* drops untouched: a trash mob is now
+ * mostly a miss, a tough kill is still a coin flip in the player's favour,
+ * and the room-clear roll stays the moment that reliably pays out.
  */
 export const ENEMY_DROP_TABLES: Readonly<Record<LootTier, DropTable>> = {
   weak: {
     promilled: [
-      { pickupId: null, weight: 55 },
+      { pickupId: null, weight: 250 },
       { pickupId: 'biermarke-1', weight: 15 },
       { pickupId: 'brezn', weight: 8 },
       { pickupId: 'radi', weight: 8 },
@@ -22,7 +32,7 @@ export const ENEMY_DROP_TABLES: Readonly<Record<LootTier, DropTable>> = {
       { pickupId: 'bierfassl', weight: 1 },
     ],
     sober: [
-      { pickupId: null, weight: 55 },
+      { pickupId: null, weight: 250 },
       { pickupId: 'biermarke-1', weight: 17 },
       { pickupId: 'brezn', weight: 8 },
       { pickupId: 'radi', weight: 8 },
@@ -33,7 +43,7 @@ export const ENEMY_DROP_TABLES: Readonly<Record<LootTier, DropTable>> = {
   },
   normal: {
     promilled: [
-      { pickupId: null, weight: 45 },
+      { pickupId: null, weight: 140 },
       { pickupId: 'biermarke-1', weight: 15 },
       { pickupId: 'biermarke-5', weight: 5 },
       { pickupId: 'brezn', weight: 8 },
@@ -47,7 +57,7 @@ export const ENEMY_DROP_TABLES: Readonly<Record<LootTier, DropTable>> = {
       { pickupId: 'bierfassl', weight: 2 },
     ],
     sober: [
-      { pickupId: null, weight: 45 },
+      { pickupId: null, weight: 140 },
       { pickupId: 'biermarke-1', weight: 17 },
       { pickupId: 'biermarke-5', weight: 5 },
       { pickupId: 'brezn', weight: 8 },
@@ -62,7 +72,7 @@ export const ENEMY_DROP_TABLES: Readonly<Record<LootTier, DropTable>> = {
   },
   tough: {
     promilled: [
-      { pickupId: null, weight: 20 },
+      { pickupId: null, weight: 80 },
       { pickupId: 'biermarke-1', weight: 2 },
       { pickupId: 'biermarke-5', weight: 15 },
       { pickupId: 'biermarke-10', weight: 5 },
@@ -77,7 +87,7 @@ export const ENEMY_DROP_TABLES: Readonly<Record<LootTier, DropTable>> = {
       { pickupId: 'bierfassl-pack', weight: 5 },
     ],
     sober: [
-      { pickupId: null, weight: 20 },
+      { pickupId: null, weight: 80 },
       { pickupId: 'biermarke-1', weight: 2 },
       { pickupId: 'biermarke-5', weight: 18 },
       { pickupId: 'biermarke-10', weight: 5 },

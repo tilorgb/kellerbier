@@ -187,6 +187,21 @@ const GROUPS: readonly GroupSpec[] = [
         hint: 'Umgfalln knockdown length',
       },
       { key: 'umgfallnWakePromille', min: 0, max: 5, step: 0.1, hint: 'Promille after waking up' },
+      { key: 'katerDurationTicks', min: 0, max: 1800, step: 30, hint: 'Kater length after waking' },
+      {
+        key: 'katerStammwuerzeMultiplier',
+        min: 0.1,
+        max: 1,
+        step: 0.05,
+        hint: 'dmg mult while hungover',
+      },
+      {
+        key: 'katerGschwindigkeitMultiplier',
+        min: 0.1,
+        max: 1,
+        step: 0.05,
+        hint: 'speed mult while hungover',
+      },
     ],
   },
   {

@@ -227,6 +227,23 @@ interface PedestalRuntime {
 }
 
 /**
+ * What a room still owes the player, captured the moment they leave it —
+ * see `GameSim.snapshotRoomLoot`. Restoring from this instead of re-rolling
+ * the template is what makes loot (and a shop's stock, and an unclaimed
+ * pedestal item) still there on a return trip, rather than gone the moment
+ * the room unloads.
+ */
+interface RoomLootSnapshot {
+  readonly pickups: readonly {
+    readonly x: number;
+    readonly y: number;
+    readonly type: string;
+    readonly price?: number;
+  }[];
+  readonly pedestals: readonly PedestalRuntime[];
+}
+
+/**
  * Which pool a room's pedestal draws from, by the room's own special role.
  *
  * `shop`/`supersecret` have no live pedestal spawn site today (no room JSON
@@ -333,6 +350,8 @@ export class GameSim {
   readonly stats: StatPipeline;
   /** The Promille tier `stats` last had modifiers built for. See `syncPromilleModifiers`. */
   private lastPromilleTier: PromilleTierId | null = null;
+  /** Whether `stats` last had Kater's modifiers built in. See `syncKaterModifiers`. */
+  private lastKaterActive = false;
   /**
    * Scratch object `baseStats()` writes into and returns, rather than
    * allocating a fresh one. `baseStats()` runs on the firing path (twice a
@@ -537,6 +556,16 @@ export class GameSim {
   private umgfallnTicksValue = 0;
 
   /**
+   * Ticks left of the Kater debuff — started by `tickUmgfalln` when the
+   * knockdown ends, cleared early by eating (`GameSim.clearKater`, called
+   * from the `food` pickup effect). Its own counter rather than a Promille
+   * range, per the design doc: waking up short of sober is the Umgfalln
+   * punish, Kater is a second, independent one that outlasts sobering up
+   * faster than usual.
+   */
+  private katerTicksValue = 0;
+
+  /**
    * Ticks left before the player may be hurt by contact again.
    *
    * Without it a body touching the player empties them at sixty damage a
@@ -651,6 +680,22 @@ export class GameSim {
   private bossExitDoor: CompiledDoor | null = null;
   /** Every pedestal in the current room. Rebuilt on every room load — see `PedestalRuntime`. */
   private pedestalList: PedestalRuntime[] = [];
+  /**
+   * Leftover loot from a room the player has already left, keyed the same
+   * way `roomClearedIds` is — by the authored template's own id, not a
+   * per-instance floor-plan id (see `clearFloorProgress`'s doc comment for
+   * why, and why this map is cleared there too). Written by
+   * `snapshotRoomLoot`, read by `applyCompiledRoom` in place of re-rolling
+   * the template once an entry exists.
+   */
+  private roomLootSnapshots = new Map<string, RoomLootSnapshot>();
+  /**
+   * Slot of the priced pickup currently touching the player, or -1. Written
+   * once a tick by `sim/systems/pickup.ts`'s `stepPickups` (`setNearbyShopPickup`)
+   * — a priced pickup is never auto-collected on touch, only queued here for
+   * `shopPreview`/`stepPedestal`'s Use-button purchase (`attemptShopPurchase`).
+   */
+  private nearbyShopPickupSlot = -1;
   /**
    * Item ids this run has actually taken from a pedestal — #28's "no item
    * appears twice in a run." Populated only by `takePedestalItem`, never by
@@ -845,6 +890,10 @@ export class GameSim {
    */
   clearFloorProgress(): void {
     this.roomClearedIds.clear();
+    // Same reasoning as `roomClearedIds` above, and the same key — leftover
+    // loot from a room on the *previous* floor's draw of this template must
+    // not leak into a different physical room that happens to reuse it.
+    this.roomLootSnapshots.clear();
   }
 
   /**
@@ -1109,12 +1158,16 @@ export class GameSim {
     hiddenDoors: readonly Pick<CompiledDoor, 'direction' | 'cellCol' | 'cellRow'>[],
     entryCell: { readonly col: number; readonly row: number },
   ): void {
+    if (this.roomTemplateLoaded) {
+      this.snapshotRoomLoot();
+    }
     this.clearRoomEntities();
     this.room = compiled.geometry;
     this.roomId = compiled.id;
     this.roomDoors = compiled.doors;
     this.bombableWalls.clear();
     this.pedestalList = [];
+    this.nearbyShopPickupSlot = -1;
     for (const hidden of hiddenDoors) {
       const match = this.roomDoors.find(
         (door) =>
@@ -1162,31 +1215,114 @@ export class GameSim {
         }
         this.spawnEnemyKind(definition, spawn.x, spawn.y);
       }
-      for (const pickup of compiled.pickupSpawns) {
-        const definition = this.pickups.indexOf(pickup.type);
-        if (definition < 0) {
-          throw new Error(`room template pickup "${pickup.type}" is not registered`);
-        }
-        const safe = this.safeSpawnPoint(pickup.x, pickup.y, this.pickups.at(definition).radius);
-        this.spawnPickup(pickup.type, safe.x, safe.y, pickup.price);
-      }
-      // Decorative props are art (#18) except two types: a barrel is a
-      // destructible obstacle, so a room author drops a Bierfassl at one for
-      // free and `npm run dev` always has something to demonstrate that on;
-      // a pedestal (#28) draws a real item from a pool chosen by the room's
-      // own special role (`pedestalPoolForRole`) rather than sitting inert.
+      // Decorative props are art (#18) except a barrel, a destructible
+      // obstacle a room author drops a Bierfassl at for free — `npm run dev`
+      // always has something to demonstrate that on. A barrel is not loot:
+      // once broken (or the room otherwise cleared), it does not come back,
+      // the same as an enemy doesn't. Pedestals are handled below, in
+      // `restoreOrSpawnRoomLoot` — they're loot, not decoration.
       for (const prop of compiled.decorativeProps) {
         if (prop.type === 'barrel') {
           this.spawnTarget(prop.x, prop.y, TARGET_RADIUS);
-        } else if (prop.type === 'pedestal') {
-          this.spawnPedestal(prop.x, prop.y);
         }
       }
     }
+    this.restoreOrSpawnRoomLoot(compiled);
     if (this.roomEnemyCount === 0) {
       this.roomClearedIds.add(this.roomId);
     }
     this.world.flush();
+  }
+
+  /**
+   * Puts back whatever loot the player left behind on a previous visit
+   * (`roomLootSnapshots`), or — on a genuine first visit — rolls it fresh
+   * from the template. Deliberately independent of `roomClearedIds`/
+   * `alreadyCleared`: a room being "cleared" (its enemies handled) says
+   * nothing about whether its loot was collected, and unlike enemies, loot
+   * left on the floor should still be there next time.
+   *
+   * Restoring a pedestal from the snapshot, rather than calling
+   * `spawnPedestal` again, matters beyond not losing the item: `spawnPedestal`
+   * draws from `this.random.items`, so calling it a second time for the same
+   * room would advance that stream and hand back a *different* item than the
+   * one already offered — breaking "same seed, same route, same offers."
+   */
+  private restoreOrSpawnRoomLoot(compiled: {
+    readonly pickupSpawns: readonly {
+      readonly x: number;
+      readonly y: number;
+      readonly type: string;
+      readonly price?: number;
+    }[];
+    readonly decorativeProps: readonly {
+      readonly x: number;
+      readonly y: number;
+      readonly type: string;
+      readonly rotation?: number;
+    }[];
+  }): void {
+    const snapshot = this.roomLootSnapshots.get(this.roomId);
+    if (snapshot !== undefined) {
+      for (const pickup of snapshot.pickups) {
+        if (this.pickups.indexOf(pickup.type) < 0) {
+          continue;
+        }
+        this.spawnPickup(pickup.type, pickup.x, pickup.y, pickup.price);
+      }
+      this.pedestalList = snapshot.pedestals.map((pedestal) => ({ ...pedestal }));
+      return;
+    }
+    if (this.roomClearedIds.has(this.roomId)) {
+      // Cleared before this feature existed, or never held loot in the
+      // first place — nothing to roll and nothing to restore.
+      return;
+    }
+    for (const pickup of compiled.pickupSpawns) {
+      const definition = this.pickups.indexOf(pickup.type);
+      if (definition < 0) {
+        throw new Error(`room template pickup "${pickup.type}" is not registered`);
+      }
+      const safe = this.safeSpawnPoint(pickup.x, pickup.y, this.pickups.at(definition).radius);
+      this.spawnPickup(pickup.type, safe.x, safe.y, pickup.price);
+    }
+    // A pedestal (#28) draws a real item from a pool chosen by the room's
+    // own special role (`pedestalPoolForRole`) rather than sitting inert.
+    for (const prop of compiled.decorativeProps) {
+      if (prop.type === 'pedestal') {
+        this.spawnPedestal(prop.x, prop.y);
+      }
+    }
+  }
+
+  /**
+   * Captures whatever loot the room being left still has on the ground —
+   * pickups of any origin (template-authored, an enemy's own drop, the
+   * room-clear roll) and pedestal state alike — so `restoreOrSpawnRoomLoot`
+   * can put it back exactly as left, rather than the room quietly voiding it
+   * the moment `clearRoomEntities` runs. Called from `applyCompiledRoom`
+   * before that happens, while `this.roomId`/`this.pedestalList` still name
+   * the *outgoing* room.
+   */
+  private snapshotRoomLoot(): void {
+    const pickups: { x: number; y: number; type: string; price?: number }[] = [];
+    this.world.forEach(this.pickupKind.bit, (index) => {
+      const definitionIndex = this.pickupKind.data[index] ?? -1;
+      if (definitionIndex < 0) {
+        return;
+      }
+      const priced = ((this.world.masks[index] ?? 0) & this.pickupPrice.bit) !== 0;
+      pickups.push({
+        x: this.positionX(index),
+        y: this.positionY(index),
+        type: this.pickups.at(definitionIndex).id,
+        ...(priced ? { price: this.pickupPrice.data[index] ?? 0 } : {}),
+      });
+    });
+    this.roomLootSnapshots.set(this.roomId, {
+      pickups,
+      pedestals: this.pedestalList.map((pedestal) => ({ ...pedestal })),
+    });
   }
 
   private hasDoor(direction: RoomDirection): boolean {
@@ -1381,6 +1517,46 @@ export class GameSim {
     return this.biermarkenCount;
   }
 
+  /** Slot of the priced pickup currently touching the player, or -1. */
+  get nearbyShopPickup(): number {
+    return this.nearbyShopPickupSlot;
+  }
+
+  /** Written once a tick by `stepPickups` — not meant to be called from anywhere else. */
+  setNearbyShopPickup(slot: number): void {
+    this.nearbyShopPickupSlot = slot;
+  }
+
+  /**
+   * What to show for the priced pickup the player is currently touching —
+   * "here is what this is," the half of a shop purchase that used to be
+   * skipped straight past on the way to spending the player's Biermarken for
+   * them. `null` while nothing priced is underfoot.
+   */
+  get shopPreview(): {
+    readonly name: string;
+    readonly description: string;
+    readonly price: number;
+    readonly affordable: boolean;
+  } | null {
+    const slot = this.nearbyShopPickupSlot;
+    if (slot < 0) {
+      return null;
+    }
+    const definitionIndex = this.pickupKind.data[slot] ?? -1;
+    if (definitionIndex < 0) {
+      return null;
+    }
+    const definition = this.pickups.at(definitionIndex);
+    const price = this.pickupPrice.data[slot] ?? 0;
+    return {
+      name: definition.name,
+      description: definition.description,
+      price,
+      affordable: this.biermarkenCount >= price,
+    };
+  }
+
   addBiermarken(amount: number): void {
     if (amount > 0) {
       this.biermarkenCount += amount;
@@ -1525,6 +1701,15 @@ export class GameSim {
     return this.umgfallnTicksValue;
   }
 
+  /** Ticks left of the Kater debuff. Zero means it isn't active. */
+  get katerTicks(): number {
+    return this.katerTicksValue;
+  }
+
+  get hasKater(): boolean {
+    return this.katerTicksValue > 0;
+  }
+
   get promilleDriftScale(): number {
     return promilleDriftScale(this.promille, this.tuning.promille);
   }
@@ -1597,6 +1782,44 @@ export class GameSim {
   }
 
   /**
+   * Registers or clears Kater's stat contribution, as its own source — kept
+   * separate from `syncPromilleModifiers` because Kater's on/off edge is
+   * "did `katerTicksValue` reach zero," not a tier boundary, and the two can
+   * be true or false in any combination (hungover and freshly sober is the
+   * whole point of the debuff).
+   */
+  private syncKaterModifiers(): void {
+    const active = this.hasKater;
+    if (active === this.lastKaterActive) {
+      return;
+    }
+    this.lastKaterActive = active;
+
+    if (!active) {
+      this.stats.clearSource('kater');
+      return;
+    }
+
+    const tuning = this.tuning.promille;
+    const source = { kind: 'kater' as const, id: 'kater', label: 'Kater' };
+    const modifiers: StatModifier[] = [
+      {
+        stat: StatId.Stammwuerze,
+        op: 'multiply',
+        value: tuning.katerStammwuerzeMultiplier,
+        source,
+      },
+      {
+        stat: StatId.Gschwindigkeit,
+        op: 'multiply',
+        value: tuning.katerGschwindigkeitMultiplier,
+        source,
+      },
+    ];
+    this.stats.setSourceModifiers('kater', modifiers);
+  }
+
+  /**
    * Raises Promille, clamped at `PROMILLE_MAX`. The one place it goes up —
    * beer pickups (#17) and the debug slider (which writes `tuning.promille.
    * current` directly, bypassing this) are the only sources today.
@@ -1643,6 +1866,7 @@ export class GameSim {
       // Woken up short of sober — the whole point of a knockdown is that it
       // costs you the drink, not that it costs you the tier.
       this.tuning.promille.current = this.tuning.promille.umgfallnWakePromille;
+      this.startKater();
     }
   }
 
@@ -1650,6 +1874,29 @@ export class GameSim {
   decayPromille(): void {
     const tuning = this.tuning.promille;
     tuning.current = Math.max(0, tuning.current - tuning.decayPerSecond / TICKS_PER_SECOND);
+  }
+
+  /** Starts (or restarts) the Kater debuff. Called by `tickUmgfalln` on waking. */
+  private startKater(): void {
+    this.katerTicksValue = Math.round(this.tuning.promille.katerDurationTicks);
+  }
+
+  /**
+   * Ages the Kater debuff by one tick, independent of the Umgfalln/decay
+   * branch in `stepPromille` — Kater keeps counting down through both a
+   * still-running knockdown (there is none, by construction: it only starts
+   * once the knockdown ends) and ordinary post-wake decay.
+   */
+  tickKater(): void {
+    if (this.katerTicksValue <= 0) {
+      return;
+    }
+    this.katerTicksValue -= 1;
+  }
+
+  /** Clears the Kater debuff early. Called by the `food` pickup effect — "cleared by eating". */
+  clearKater(): void {
+    this.katerTicksValue = 0;
   }
 
   /** Whether the run currently holds at least one copy of an item. */
@@ -2344,6 +2591,7 @@ export class GameSim {
     // wobble, so it has to be settled before either runs.
     stepPromille(this);
     this.syncPromilleModifiers();
+    this.syncKaterModifiers();
     // Any item stat contribution a hook changed since the last tick (a stack
     // gained on kill, say) is folded in before anything reads `stats` this
     // tick — same reasoning as Promille just above.
@@ -2843,6 +3091,7 @@ export class GameSim {
     this.world.add(entity, this.body);
     this.world.add(entity, this.collision);
     this.world.add(entity, this.bombFuse);
+    this.world.add(entity, this.contactDamage);
     if (rolling) {
       this.world.add(entity, this.velocity);
     }
@@ -2863,6 +3112,15 @@ export class GameSim {
       this.velocity.data[index * 2] = rollDirX * speed;
       this.velocity.data[index * 2 + 1] = rollDirY * speed;
     }
+
+    // Written rather than assumed clear: slots are recycled, and a keg that
+    // inherited the contact damage of whatever last used its slot is a bug
+    // that only shows up after something died there — `stepContacts` reads
+    // this straight out of the shared array, not gated by whether the entity
+    // was ever given the component, so a fresh Bierfassl was hurting the
+    // player on touch before it ever exploded. Same fix `spawnTarget` already
+    // has, for the same reason.
+    this.contactDamage.data[index] = 0;
 
     this.bombFuse.data[index] = Math.round(this.tuning.pickup.bombFuseTicks);
     this.setCollisionLayer(index, CollisionLayer.Obstacle);

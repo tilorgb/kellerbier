@@ -2,6 +2,7 @@ import type { GameSim } from '../game/sim.js';
 import { type InputFrame, axisToUnit } from '../input/frame.js';
 import { type MovementTuning, accelerationOf, decelerationOf } from '../tuning.js';
 import { vectorLength } from '../math.js';
+import { StatId } from '../stats/definition.js';
 import {
   BLOCKED_X,
   BLOCKED_Y,
@@ -56,15 +57,25 @@ export function stepPlayerMovement(sim: GameSim, input: Readonly<InputFrame>): v
   let velocityX = velocity[pairBase] ?? 0;
   let velocityY = velocity[pairBase + 1] ?? 0;
 
+  // Read through the stat pipeline rather than `tuning.maxSpeed` directly, so
+  // a Gschwindigkeit modifier — Kater's penalty, or an item's like Gamsohr's
+  // — actually changes how fast the player moves instead of only showing up
+  // in the stat inspector. `baseStats()` seeds Gschwindigkeit from this same
+  // `tuning.maxSpeed`, so with no active modifier the value is identical to
+  // before this read through `sim.stats` existed. Acceleration and
+  // deceleration still time off the untouched `tuning.maxSpeed` below (via
+  // `accelerationOf`/`decelerationOf`) — a temporary top-speed penalty should
+  // not also warp how many ticks it takes to reach it.
+  const maxSpeed = sim.stats.value(StatId.Gschwindigkeit);
   const driftScale = sim.promilleDriftScale;
-  velocityX = approachAxis(velocityX, inputX * tuning.maxSpeed, inputX !== 0, tuning, driftScale);
-  velocityY = approachAxis(velocityY, inputY * tuning.maxSpeed, inputY !== 0, tuning, driftScale);
+  velocityX = approachAxis(velocityX, inputX * maxSpeed, inputX !== 0, tuning, driftScale);
+  velocityY = approachAxis(velocityY, inputY * maxSpeed, inputY !== 0, tuning, driftScale);
 
   // The sampler already scales a diagonal stick or key pair to unit length, so
   // this only trims the overshoot a mid-turn direction change can produce.
   const speed = vectorLength(velocityX, velocityY);
-  if (speed > tuning.maxSpeed) {
-    const scale = tuning.maxSpeed / speed;
+  if (speed > maxSpeed) {
+    const scale = maxSpeed / speed;
     velocityX *= scale;
     velocityY *= scale;
   }

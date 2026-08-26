@@ -21,6 +21,7 @@ import {
   setActionDown,
 } from '../../src/sim/input/frame.js';
 import { entityIndex } from '../../src/sim/ecs/entity.js';
+import { StatId } from '../../src/sim/stats/definition.js';
 
 function bareRoom(): RoomGeometry {
   return new RoomGeometry(0, 0, 320, 180);
@@ -173,6 +174,95 @@ describe('promille on GameSim', () => {
       sim.step(frame);
     }
     expect(sim.positionX(index)).toBeCloseTo(startX, 5);
+  });
+});
+
+describe('Kater', () => {
+  it('starts when Umgfalln wakes the player, and counts down on its own clock', () => {
+    const sim = emptySim();
+    sim.tuning.promille.umgfallnKnockdownTicks = 3;
+    sim.tuning.promille.katerDurationTicks = 5;
+    sim.addPromille(5);
+
+    expect(sim.hasKater).toBe(false);
+    for (let tick = 0; tick < 3; tick++) {
+      sim.step(idle());
+    }
+    expect(sim.umgfallnTicks).toBe(0);
+    expect(sim.hasKater).toBe(true);
+    expect(sim.katerTicks).toBe(5);
+
+    sim.step(idle());
+    expect(sim.katerTicks).toBe(4);
+  });
+
+  it('clears on its own once its duration elapses', () => {
+    const sim = emptySim();
+    sim.tuning.promille.umgfallnKnockdownTicks = 1;
+    sim.tuning.promille.katerDurationTicks = 2;
+    sim.addPromille(5);
+
+    sim.step(idle()); // wake, Kater starts at 2
+    sim.step(idle()); // 1
+    expect(sim.hasKater).toBe(true);
+    sim.step(idle()); // 0
+    expect(sim.hasKater).toBe(false);
+    expect(sim.katerTicks).toBe(0);
+  });
+
+  it('reduces Stammwürze and Gschwindigkeit while active', () => {
+    const sim = emptySim();
+    sim.tuning.promille.umgfallnKnockdownTicks = 1;
+    sim.tuning.promille.katerDurationTicks = 100;
+    sim.tuning.promille.katerStammwuerzeMultiplier = 0.5;
+    sim.tuning.promille.katerGschwindigkeitMultiplier = 0.6;
+    // Zeroed so the wake tier's own damage bonus (Beduselt, at 1.5) doesn't
+    // also stack into the number this test isolates Kater's effect on.
+    sim.tuning.promille.beduseltDamageBonus = 0;
+    sim.tuning.shooting.shotDamage = 4;
+    const baseMaxSpeed = sim.tuning.movement.maxSpeed;
+
+    sim.addPromille(5);
+    sim.step(idle()); // wake, Kater active
+
+    expect(sim.stats.value(StatId.Stammwuerze)).toBeCloseTo(4 * 0.5, 5);
+    expect(sim.stats.value(StatId.Gschwindigkeit)).toBeCloseTo(baseMaxSpeed * 0.6, 5);
+  });
+
+  it('actually slows the player, not just the inspected stat', () => {
+    const soberSim = emptySim();
+    const katerSim = emptySim();
+    katerSim.tuning.promille.umgfallnKnockdownTicks = 1;
+    katerSim.tuning.promille.katerDurationTicks = 100;
+    katerSim.tuning.promille.katerGschwindigkeitMultiplier = 0.5;
+    katerSim.addPromille(5);
+    katerSim.step(idle()); // wake, Kater active; also moves both sims one idle tick
+
+    const frame = createInputFrame();
+    frame.moveX = quantiseAxis(1);
+    const soberStart = soberSim.positionX(soberSim.playerIndex);
+    const katerStart = katerSim.positionX(katerSim.playerIndex);
+    for (let tick = 0; tick < 30; tick++) {
+      soberSim.step(frame);
+      katerSim.step(frame);
+    }
+    const soberDistance = soberSim.positionX(soberSim.playerIndex) - soberStart;
+    const katerDistance = katerSim.positionX(katerSim.playerIndex) - katerStart;
+
+    expect(katerDistance).toBeGreaterThan(0);
+    expect(katerDistance).toBeLessThan(soberDistance);
+  });
+
+  it('is cleared early by eating', () => {
+    const sim = emptySim();
+    sim.tuning.promille.umgfallnKnockdownTicks = 1;
+    sim.tuning.promille.katerDurationTicks = 100;
+    sim.addPromille(5);
+    sim.step(idle());
+    expect(sim.hasKater).toBe(true);
+
+    sim.clearKater();
+    expect(sim.hasKater).toBe(false);
   });
 });
 
