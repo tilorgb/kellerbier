@@ -13,6 +13,7 @@ import { bedienungTablett } from './bedienung-tablett.js';
 import { bergrettung } from './bergrettung.js';
 import { betrunkenentaumel } from './betrunkenentaumel.js';
 import { bierbank } from './bierbank.js';
+import { bierbauch } from './bierbauch.js';
 import { bierdeckel } from './bierdeckel.js';
 import { bierkrug } from './bierkrug.js';
 import { blaskapelle } from './blaskapelle.js';
@@ -40,6 +41,7 @@ import { gluecksklee } from './gluecksklee.js';
 import { gluehbirn } from './gluehbirn.js';
 import { gockelkamm } from './gockelkamm.js';
 import { haferlschuh } from './haferlschuh.js';
+import { halbePortion } from './halbe-portion.js';
 import { heldensaalFackel } from './heldensaal-fackel.js';
 import { hendlgeruch } from './hendlgeruch.js';
 import { hirschgeweih } from './hirschgeweih.js';
@@ -176,7 +178,9 @@ import { zwoaDreiGsuffa } from './zwoa-drei-gsuffa.js';
  * #59's tenth batch closes the roster out past 120+: Lodenmantel, Luftballon,
  * Kletterseil, Alpensegen (the third `angel`-pool item), Kesseltreiben (the
  * sixth `curse`-pooled item), Fassanstich, Krautstampfer, Feuerwehrhelm,
- * Standlkasse (the fifth `devil`-pool item) and Almrosenkranz.
+ * Standlkasse (the fifth `devil`-pool item) and Almrosenkranz. #92 adds
+ * Bierbauch and Halbe Portion, the roster's first pair to raise/lower
+ * Trinkfest.
  */
 export const ITEM_DEFINITIONS: readonly ItemDefinition[] = [
   bierkrug,
@@ -308,6 +312,8 @@ export const ITEM_DEFINITIONS: readonly ItemDefinition[] = [
   feuerwehrhelm,
   standlkasse,
   almrosenkranz,
+  bierbauch,
+  halbePortion,
 ];
 
 export {
@@ -325,6 +331,7 @@ export {
   bergrettung,
   betrunkenentaumel,
   bierbank,
+  bierbauch,
   bierdeckel,
   bierkrug,
   blaskapelle,
@@ -352,6 +359,7 @@ export {
   gluehbirn,
   gockelkamm,
   haferlschuh,
+  halbePortion,
   heldensaalFackel,
   hendlgeruch,
   hirschgeweih,
