@@ -972,8 +972,52 @@ WASD move   arrows/mouse aim and fire
     return true;
   }
 
+  /**
+   * Regenerates the floor in place once a cleared boss room's dev-only
+   * "next floor" exit (`GameSim.nextFloorDoor`) is walked through — an
+   * endless loop, not a real run reset: `sim` itself is never recreated, so
+   * the player's items, stats, promille and Biermarken all carry straight
+   * over, the same as any ordinary `sim.loadRoom` call.
+   *
+   * Every floor draws from `floorConfig(1)`, the only floor with authored
+   * room content today (`FLOOR_CONFIGS`'s doc comment) — this is what makes
+   * the loop endless rather than a dead end the moment a `npm run dev`
+   * playtest clears the one floor that exists, so item stacks can be tested
+   * across as many runs through it as needed.
+   */
+  function advanceFloor(): void {
+    const seed = Math.floor(Math.random() * 1_000_000);
+    floorPlan = generateFloor(
+      createStreamRng(seed, RngStream.Floor),
+      floorConfig(1),
+      ROOM_TEMPLATE_POOL,
+      STAIRCASE_TEMPLATE_POOL,
+    );
+    currentRoomId = floorPlan.startRoomId;
+    visitedRoomIds = new Set([currentRoomId]);
+    revealedEdges = new Set<string>();
+    sim.loadRoom(
+      planTemplate(planRoom(floorPlan, currentRoomId)),
+      floorPlan.floor,
+      null,
+      hiddenDoorsFor(floorPlan, currentRoomId, revealedEdges),
+      undefined,
+      { col: 0, row: 0 },
+      // Same "quick, safe tutorial beat" as the run's real first room
+      // (`startRun`) — a freshly reset floor starts safe too.
+      true,
+    );
+    view.setSecretHints(crackHintsFor(floorPlan, currentRoomId, revealedEdges));
+    minimapHud.rebuild(floorPlan, currentRoomId, visitedRoomIds);
+    refreshHud();
+  }
+
   /** `sim.doorContact`'s door, translated into "which of this room's real cells did that come from". */
   function enterNeighbor(exitDoor: CompiledDoor): boolean {
+    if (exitDoor === sim.nextFloorDoor) {
+      advanceFloor();
+      return true;
+    }
     const room = planRoom(floorPlan, currentRoomId);
     // A staircase's own doors (#112) are always synthesised at
     // `(cellCol: 0, cellRow: 0)` regardless of which of its two doors they

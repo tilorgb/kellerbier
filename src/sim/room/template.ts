@@ -48,9 +48,13 @@ export interface CompiledDoor {
    * A precomputed centre point, used instead of `cellCol`/`cellRow`/`room`'s
    * grid math when present. Nothing in this module ever sets it — a
    * staircase room's doors (#112, `sim/game/sim.ts`'s `loadStaircaseRoom`)
-   * are the one case that needs it: a staircase has no floor-grid cell of
-   * its own for `doorCentre`'s formula to place a door against, but already
-   * knows its exact door position from `compileStaircaseRoom`.
+   * are one case that needs it: a staircase has no floor-grid cell of its
+   * own for `doorCentre`'s formula to place a door against, but already
+   * knows its exact door position from `compileStaircaseRoom`. A cleared
+   * boss room's synthesised "next floor" exit (`sim/game/sim.ts`'s
+   * `nextFloorExitDoor`) is the other — it isn't a real cell/wall pairing
+   * from the floor plan either, just the first free wall of the room's own
+   * bounding box.
    */
   readonly centre?: { readonly x: number; readonly y: number };
 }
