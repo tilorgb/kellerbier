@@ -606,7 +606,13 @@ export const DEFAULT_ENEMY_TUNING: Readonly<EnemyTuning> = {
 export const DEFAULT_PROMILLE_TUNING: Readonly<PromilleTuning> = {
   current: 0,
   decayPerSecond: 0.05,
-  beerAmount: 0.8,
+  // Halved from the M1 prototype's 0.8 — one beer used to put a sober player
+  // most of the way to Angeheitert, and six landed Umgfalln with barely a
+  // decision along the way. At 0.4, Angeheitert takes two, Vollrausch eight,
+  // Umgfalln twelve — enough drinks apart, at this decay rate, that going up
+  // a tier is a choice made mid-fight rather than a side effect of picking
+  // up whatever a room happened to drop.
+  beerAmount: 0.4,
 
   angeheitertDamageBonus: 0.15,
   angeheitertFireRateBonus: 0.1,
