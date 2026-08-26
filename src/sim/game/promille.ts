@@ -158,6 +158,64 @@ export function promilleTierName(tier: PromilleTierId): string {
 }
 
 /**
+ * Neutral reskin (#33): the same seven tiers, named for a generic "power"
+ * meter instead of intoxication — `docs/GAME_DESIGN.md` §5's own "an option
+ * to relabel the meter as a generic 'Rausch/Power'" guardrail, worded in the
+ * issue as "Rausch" or "Kraft". Kraft is what this repo picked, since
+ * "Rausch" (rush/intoxication) still reads as drinking — see
+ * `promilleMeterLabel`.
+ *
+ * A parallel table rather than a parameter threaded through
+ * `promilleTierName` itself: that function's one other caller
+ * (`GameSim.syncPromilleModifiers`'s stat-modifier source label) feeds a
+ * dev-only debug panel (`src/debug/panels/stats.ts`) nobody but an engineer
+ * ever sees, and reads as an internal identity string more than a display
+ * string — see `docs/DECISIONS.md` for why that one stays unconditional
+ * rather than threading a rendering-only setting into `GameSim.step()`.
+ * Every consumer a player or a streamer can actually see —
+ * `PromilleHud` and the `O`-overlay debug text in `app/main.ts` — reads
+ * through `promilleTierDisplayName` below instead.
+ */
+const NEUTRAL_TIER_NAME: Readonly<Record<PromilleTierId, string>> = {
+  [PromilleTier.Nuchtern]: 'Ruhig',
+  [PromilleTier.Angeheitert]: 'Wach',
+  [PromilleTier.Beduselt]: 'Aufgeladen',
+  [PromilleTier.Vollrausch]: 'Kraftvoll',
+  [PromilleTier.Sturzbesoffen]: 'Übersteuert',
+  [PromilleTier.Filmriss]: 'Überladen',
+  [PromilleTier.Umgfalln]: 'Ausgeknockt',
+};
+
+/** `promilleTierName`, or its neutral-reskin equivalent — see `NEUTRAL_TIER_NAME`. */
+export function promilleTierDisplayName(tier: PromilleTierId, neutralReskin: boolean): string {
+  return neutralReskin ? NEUTRAL_TIER_NAME[tier] : promilleTierName(tier);
+}
+
+/** Kater's own display name under the neutral reskin — same reasoning as `NEUTRAL_TIER_NAME`. */
+export function promilleKaterLabel(neutralReskin: boolean): string {
+  return neutralReskin ? 'Erschöpft' : 'Kater';
+}
+
+/**
+ * What the meter itself is called: "Promille" normally, "Kraft" under the
+ * reskin. Read by the `O`-overlay debug text's line label in `app/main.ts` —
+ * `PromilleHud` never spells the meter's own name out, only its tier and
+ * value, so it has nothing here to switch.
+ */
+export function promilleMeterLabel(neutralReskin: boolean): string {
+  return neutralReskin ? 'Kraft' : 'Promille';
+}
+
+/**
+ * The unit suffix printed after the numeric value. `‰` (per mille) is
+ * literal blood-alcohol notation, so the reskin drops it rather than hunting
+ * for a neutral replacement — the bare number reads fine on its own.
+ */
+export function promilleUnitSuffix(neutralReskin: boolean): string {
+  return neutralReskin ? '' : '‰';
+}
+
+/**
  * Damage and fire-rate bonuses are the numbers the design doc states exactly,
  * per tier — stepped, not a curve, because that is how they're authored.
  */

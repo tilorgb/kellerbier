@@ -8,11 +8,17 @@ import {
   promilleDamageMultiplier,
   promilleDriftScale,
   promilleFireRateMultiplier,
+  promilleKaterLabel,
+  promilleMeterLabel,
   promilleRequirementMet,
   promilleScreenDistortion,
   promilleSwayMagnitude,
+  promilleTierDisplayName,
+  promilleTierName,
   promilleTierOf,
+  promilleUnitSuffix,
   promilleWobbleAmplitude,
+  type PromilleTierId,
 } from '../../src/sim/game/promille.js';
 import { DEFAULT_PROMILLE_TUNING, type PromilleTuning } from '../../src/sim/tuning.js';
 import { GameSim } from '../../src/sim/game/sim.js';
@@ -524,6 +530,190 @@ describe('beer pickups', () => {
     sim.world.flush();
     sim.step(idle());
     expect(sim.promille).toBe(0);
+  });
+});
+
+describe('accessibility (#33): sway slider reaches a genuine zero', () => {
+  it('produces exactly zero camera offset at swayScale 0, at any Promille', () => {
+    const sim = emptySim();
+    sim.tuning.promille.current = PROMILLE_MAX;
+    sim.swayScale = 0;
+    // Sway is a function of tick count (see `GameSim.swayPhase`), so this is
+    // swept across a full period rather than checked once — a single sample
+    // could land on a coincidental zero of the *unscaled* sinusoid and pass
+    // for the wrong reason.
+    for (let tick = 0; tick < sim.tuning.promille.swayPeriodTicks; tick++) {
+      sim.step(idle());
+      // `=== 0` rather than `toBe(0)`: `cos(phase) * 0` legitimately produces
+      // `-0` for some phases, and `-0 === 0` is `true` while `Object.is`
+      // (what `toBe` uses) says otherwise — a distinction that means nothing
+      // for "is the camera offset zero."
+      expect(sim.swayX === 0).toBe(true);
+      expect(sim.swayY === 0).toBe(true);
+    }
+  });
+
+  it('produces nonzero camera offset at swayScale 1 with Promille above zero', () => {
+    const sim = emptySim();
+    sim.tuning.promille.current = PROMILLE_MAX;
+    sim.swayScale = 1;
+    let sawNonzero = false;
+    for (let tick = 0; tick < sim.tuning.promille.swayPeriodTicks; tick++) {
+      sim.step(idle());
+      if (sim.swayX !== 0 || sim.swayY !== 0) {
+        sawNonzero = true;
+      }
+    }
+    expect(sawNonzero).toBe(true);
+  });
+
+  it('scales linearly in between, rather than only supporting the two ends', () => {
+    const sim = emptySim();
+    sim.tuning.promille.current = PROMILLE_MAX;
+    sim.step(idle());
+    sim.step(idle());
+    sim.step(idle());
+    sim.swayScale = 1;
+    const full = { x: sim.swayX, y: sim.swayY };
+    sim.swayScale = 0.5;
+    expect(sim.swayX).toBeCloseTo(full.x * 0.5, 10);
+    expect(sim.swayY).toBeCloseTo(full.y * 0.5, 10);
+  });
+});
+
+describe('accessibility (#33): no-drift mode', () => {
+  it('zeroes drift and wobble ramp output when the scales are zeroed', () => {
+    const sim = emptySim();
+    sim.tuning.promille.current = PROMILLE_MAX; // deep into ramp territory
+    sim.driftScale = 0;
+    sim.wobbleScale = 0;
+    expect(sim.promilleDriftScale).toBe(0);
+    expect(sim.promilleWobbleAmplitude).toBe(0);
+  });
+
+  it('leaves drift and wobble at their ordinary ramp values when the scales are 1 (the default)', () => {
+    const sim = emptySim();
+    sim.tuning.promille.current = PROMILLE_MAX;
+    expect(sim.driftScale).toBe(1);
+    expect(sim.wobbleScale).toBe(1);
+    expect(sim.promilleDriftScale).toBeCloseTo(
+      promilleDriftScale(PROMILLE_MAX, sim.tuning.promille),
+    );
+    expect(sim.promilleWobbleAmplitude).toBeCloseTo(
+      promilleWobbleAmplitude(PROMILLE_MAX, sim.tuning.promille),
+    );
+  });
+
+  it('never changes the damage or fire-rate stat bonus, on or off, at the same tier', () => {
+    // The issue's own acceptance criterion, made concrete: no-drift "keeps
+    // the Promille stat bonuses ... removes the movement and aim penalties."
+    const withDrift = emptySim();
+    const noDrift = emptySim();
+    withDrift.tuning.promille.current = 3.0; // Vollrausch
+    noDrift.tuning.promille.current = 3.0;
+    noDrift.driftScale = 0;
+    noDrift.wobbleScale = 0;
+
+    withDrift.step(idle());
+    noDrift.step(idle());
+
+    expect(noDrift.stats.value(StatId.Stammwuerze)).toBe(withDrift.stats.value(StatId.Stammwuerze));
+    expect(noDrift.stats.value(StatId.Schluckfrequenz)).toBe(
+      withDrift.stats.value(StatId.Schluckfrequenz),
+    );
+    // The penalties themselves did move, or the test above would be vacuous.
+    expect(noDrift.promilleDriftScale).not.toBe(withDrift.promilleDriftScale);
+    expect(noDrift.promilleWobbleAmplitude).not.toBe(withDrift.promilleWobbleAmplitude);
+  });
+
+  it('leaves screen distortion untouched — the "visual language" the issue says to keep', () => {
+    const sim = emptySim();
+    sim.tuning.promille.current = PROMILLE_MAX;
+    const before = sim.promilleScreenDistortion;
+    sim.driftScale = 0;
+    sim.wobbleScale = 0;
+    expect(sim.promilleScreenDistortion).toBe(before);
+    expect(sim.promilleScreenDistortion).toBeGreaterThan(0);
+  });
+
+  it('actually speeds up the player turning around, not just the inspected getter', () => {
+    const withDrift = emptySim();
+    const noDrift = emptySim();
+    withDrift.tuning.promille.current = 3.0; // Vollrausch — drift is well into its ramp
+    noDrift.tuning.promille.current = 3.0;
+    noDrift.driftScale = 0;
+
+    // Both sims start from the identical rightward velocity, set directly
+    // rather than accelerated into over several ticks — driftScale also
+    // slows *acceleration*, so ticking both up first would make the two
+    // starting velocities differ too, confounding the comparison below with
+    // something this test isn't trying to measure.
+    const withDriftIndex = withDrift.playerIndex;
+    const noDriftIndex = noDrift.playerIndex;
+    const maxSpeed = withDrift.tuning.movement.maxSpeed;
+    withDrift.velocity.data[withDriftIndex * 2] = maxSpeed;
+    noDrift.velocity.data[noDriftIndex * 2] = maxSpeed;
+
+    // A hard direction reversal is where drift (momentum resisting the
+    // turn) is most visible — `sim/systems/movement.ts`'s `approachAxis`.
+    const reverse = createInputFrame();
+    reverse.moveX = quantiseAxis(-1);
+    withDrift.step(reverse);
+    noDrift.step(reverse);
+
+    const withDriftVelocityX = withDrift.velocity.data[withDriftIndex * 2] ?? 0;
+    const noDriftVelocityX = noDrift.velocity.data[noDriftIndex * 2] ?? 0;
+    // No-drift turns at the undivided (faster) rate, so after one identical
+    // reversal tick it has moved at least as far toward the negative target
+    // as the drifting sim — i.e. ended up no greater than it.
+    expect(noDriftVelocityX).toBeLessThanOrEqual(withDriftVelocityX);
+    expect(noDriftVelocityX).toBeLessThan(maxSpeed);
+  });
+});
+
+describe('accessibility (#33): neutral reskin string layer', () => {
+  const ALL_TIERS: readonly PromilleTierId[] = [
+    PromilleTier.Nuchtern,
+    PromilleTier.Angeheitert,
+    PromilleTier.Beduselt,
+    PromilleTier.Vollrausch,
+    PromilleTier.Sturzbesoffen,
+    PromilleTier.Filmriss,
+    PromilleTier.Umgfalln,
+  ];
+
+  it('reproduces the classic name unconditionally when the flag is off', () => {
+    for (const tier of ALL_TIERS) {
+      expect(promilleTierDisplayName(tier, false)).toBe(promilleTierName(tier));
+    }
+  });
+
+  it('gives every tier a distinct, non-empty neutral name with no leakage back to the classic one', () => {
+    const seen = new Set<string>();
+    for (const tier of ALL_TIERS) {
+      const neutral = promilleTierDisplayName(tier, true);
+      expect(neutral.length).toBeGreaterThan(0);
+      expect(neutral).not.toBe(promilleTierName(tier));
+      expect(seen.has(neutral)).toBe(false);
+      seen.add(neutral);
+    }
+  });
+
+  it('switches the Kater label', () => {
+    expect(promilleKaterLabel(false)).toBe('Kater');
+    expect(promilleKaterLabel(true)).not.toBe('Kater');
+    expect(promilleKaterLabel(true).length).toBeGreaterThan(0);
+  });
+
+  it('switches the meter label', () => {
+    expect(promilleMeterLabel(false)).toBe('Promille');
+    expect(promilleMeterLabel(true)).not.toBe('Promille');
+    expect(promilleMeterLabel(true).length).toBeGreaterThan(0);
+  });
+
+  it('drops the per-mille (blood-alcohol) unit under the reskin', () => {
+    expect(promilleUnitSuffix(false)).toBe('‰');
+    expect(promilleUnitSuffix(true)).toBe('');
   });
 });
 

@@ -561,6 +561,24 @@ export class GameSim {
   swayScale = 1;
 
   /**
+   * No-drift mode (#33), part 1: accessibility scale on Promille's movement
+   * drift, 0 to 1. Same precedent as `swayScale` — a plain field rather than
+   * a `tuning` value, so a settings change never touches replay/determinism
+   * state (see `docs/DECISIONS.md`) — but driven by a boolean toggle in
+   * practice (`app/settings.ts`'s `noDrift`) rather than a slider: the issue
+   * asks for an on/off "no-drift mode", not a drift intensity dial.
+   *
+   * Deliberately does *not* touch `promilleScreenDistortion` — the issue's
+   * own words are "keeps the Promille stat bonuses and the visual language,
+   * removes the movement and aim penalties," and the screen distortion is
+   * the visual language, not a control penalty.
+   */
+  driftScale = 1;
+
+  /** No-drift mode (#33), part 2: the same scale, on Promille's aim wobble. See `driftScale`. */
+  wobbleScale = 1;
+
+  /**
    * Ticks left of the Umgfalln knockdown — set by `addPromille` when a raise
    * crosses the top tier. Movement and firing both check this directly rather
    * than going through a generic "stunned" flag, since nothing else stuns the
@@ -1733,11 +1751,11 @@ export class GameSim {
   }
 
   get promilleDriftScale(): number {
-    return promilleDriftScale(this.promille, this.tuning.promille);
+    return promilleDriftScale(this.promille, this.tuning.promille) * this.driftScale;
   }
 
   get promilleWobbleAmplitude(): number {
-    return promilleWobbleAmplitude(this.promille, this.tuning.promille);
+    return promilleWobbleAmplitude(this.promille, this.tuning.promille) * this.wobbleScale;
   }
 
   /** The screen-distortion penalty (#92) — see `promilleScreenDistortion`. Read by `render/vignette.ts`. */

@@ -5,7 +5,7 @@ import { FLOOR_CONFIGS, type FloorConfig } from '../content/floors/definition.js
 import { DIRECTION_OFFSET } from '../content/rooms/definition.js';
 import { ROOM_TEMPLATES, STAIRCASE_TEMPLATES, type DoorDirection } from '../content/rooms/index.js';
 import { type RoomDirection, GameSim, MAX_COLLIDER_RADIUS } from '../sim/game/sim.js';
-import { promilleTierName } from '../sim/game/promille.js';
+import { promilleMeterLabel, promilleTierDisplayName } from '../sim/game/promille.js';
 import { type FloorPlan, type FloorPlanRoom, generateFloor } from '../sim/room/floor-plan.js';
 import { validateStaircaseTemplate } from '../sim/room/staircase.js';
 import {
@@ -47,6 +47,13 @@ import { InputSampler } from './input/sampler.js';
 import { playRumble } from './input/rumble.js';
 import { FixedTimestepLoop, runAnimationFrameLoop } from './loop.js';
 import { RunSummaryTracker } from './run-summary.js';
+import { createAccessibilityPanel } from './accessibility-panel.js';
+import {
+  type AccessibilitySettings,
+  applySettingsToSim,
+  loadSettings,
+  saveSettings,
+} from './settings.js';
 
 /**
  * The authored pool, run through the same typed boundary the sim uses to load
@@ -253,6 +260,14 @@ async function boot(): Promise<void> {
   }
 
   const app = await createRenderer(host);
+
+  // Accessibility settings (#33): persisted across reloads in `localStorage`,
+  // read once here and mutated in place from then on — by the panel below,
+  // and re-applied to a fresh `sim` on every `startRun` (a restart rebuilds
+  // `sim` from scratch, and `swayScale`/`driftScale`/`wobbleScale` live on
+  // it, not in `tuning`). See `app/settings.ts` for why these live outside
+  // `GameSim`/replay state.
+  const settings = loadSettings();
 
   const playerTexture = await Assets.load<Texture>({
     src: massUrl,
@@ -683,7 +698,7 @@ async function boot(): Promise<void> {
       pointerMapping.cameraX = worldOffset.x / WORLD_ZOOM;
       pointerMapping.cameraY = worldOffset.y / WORLD_ZOOM;
       healthHud.sync(sim);
-      promilleHud.sync(sim);
+      promilleHud.sync(sim, settings.neutralReskin);
       walletHud.sync(sim);
       // `use` is dual-purpose (`stepPedestal`) — near a pedestal it takes the
       // item instead, but the prompt shown here is always the activation one:
@@ -787,15 +802,21 @@ async function boot(): Promise<void> {
     // Trinkfest (#92) only earns space on this line once it has actually
     // moved off baseline — same reasoning as `PromilleHud`'s own label.
     const trinkfest = sim.trinkfest !== 0 ? `  trinkfest ${String(sim.trinkfest)}` : '';
+    // Neutral reskin (#33): the meter's own name and its tier both switch —
+    // this line is reachable by a normal player (`O`) and is what a bug
+    // report's clipboard copy carries, so it gets the same treatment as
+    // `PromilleHud`'s label rather than staying the classic name always.
+    const meterLabel = promilleMeterLabel(settings.neutralReskin).toLowerCase();
+    const tierLabel = promilleTierDisplayName(sim.promilleTier, settings.neutralReskin);
     hud.text = `seed ${String(RUN_SEED)}  ${floorPlan.floorName}  room ${sim.roomId} (${currentRole})  doors ${roomState}${warmup}${keyHint}  enemies ${String(sim.liveEnemyCount)}
   tick ${String(loop.tick)}  ${seconds}s  x${scale}${loop.paused ? '  PAUSED' : ''}
 hp ${String(hearts)}/${String(maxHearts)}  soul ${String(sim.playerSoulHealth)}  eternal ${String(sim.playerEternalHealth)}${invulnerable}${dead}
-promille ${sim.promille.toFixed(2)} ${promilleTierName(sim.promilleTier)}${trinkfest}${knockedDown}
+${meterLabel} ${sim.promille.toFixed(2)} ${tierLabel}${trinkfest}${knockedDown}
 shots ${String(shots.liveCount)}/${String(shots.capacity)}  particles ${String(
       particles.liveCount,
     )}/${String(particles.capacity)}${shots.overflows > 0 ? '  SHOT OVERFLOW' : ''}
 WASD move   arrows/mouse aim and fire
-  O debug   T tuning   I shot tags   P pause   . step   [ ] time scale
+  O debug   T tuning   I shot tags   Y accessibility   P pause   . step   [ ] time scale
   N next room (after clear)   R restart (new seed)`;
   };
   /**
@@ -843,6 +864,11 @@ WASD move   arrows/mouse aim and fire
       // whatever the chosen template itself authors.
       suppressRoomContent: true,
     });
+    // A restart rebuilds `sim` from scratch, so the accessibility settings
+    // have to be re-applied to it every time — they live on the instance
+    // (`GameSim.swayScale`/`driftScale`/`wobbleScale`), not in `tuning`,
+    // which `viewTextures`'s own comment notes is otherwise never rebuilt.
+    applySettingsToSim(sim, settings);
     viewTextures ??= {
       player: playerTexture,
       projectile: createBlobTexture(
@@ -1221,11 +1247,36 @@ WASD move   arrows/mouse aim and fire
   runAnimationFrameLoop(loop);
   window.setInterval(refreshHud, 100);
 
+  // Re-applies the accessibility settings to whichever `GameSim` a restart
+  // has most recently built, and refreshes the two places that show a
+  // Promille label immediately, rather than waiting for their own next
+  // scheduled sync. Shared by the panel below and the headless debug setter,
+  // so both change paths behave identically.
+  const applyAccessibilityChange = (): void => {
+    applySettingsToSim(sim, settings);
+    promilleHud.sync(sim, settings.neutralReskin);
+    refreshHud();
+  };
+
   overlay = await mountDebugOverlay(sim, view, app, uiLayer, () => layout.scale);
-  exposeDebugHandle(loop, sim, (ms) => {
-    stallMs = ms;
-  });
+  exposeDebugHandle(
+    loop,
+    sim,
+    (ms) => {
+      stallMs = ms;
+    },
+    settings,
+    (patch) => {
+      Object.assign(settings, patch);
+      saveSettings(settings);
+      applyAccessibilityChange();
+    },
+  );
   mountRoomEditorLink();
+  // Not gated behind `import.meta.env.DEV` like `mountRoomEditorLink` — this
+  // is the player-facing half of #33, so it has to ship in a production
+  // build.
+  createAccessibilityPanel(settings, applyAccessibilityChange);
 }
 
 /**
@@ -1286,6 +1337,17 @@ interface DebugHost {
     tuning: GameSim['tuning'];
     /** Burns `ms` inside the next simulation step, to test the frame graph. */
     stall: (ms: number) => void;
+    /**
+     * The live accessibility settings (#33) — read directly for inspection,
+     * or changed through `setAccessibilitySettings` below rather than by
+     * assigning fields on this object directly, since a plain assignment
+     * would skip re-applying to `sim` and persisting to `localStorage`. The
+     * headless smoke check this issue's process asks for
+     * (`window.__kellerbier.setAccessibilitySettings({ swayScale: 0 })`,
+     * then screenshot) drives it through here.
+     */
+    settings: AccessibilitySettings;
+    setAccessibilitySettings: (patch: Partial<AccessibilitySettings>) => void;
   };
 }
 
@@ -1293,11 +1355,20 @@ function exposeDebugHandle(
   loop: FixedTimestepLoop,
   sim: GameSim,
   stall: (ms: number) => void,
+  settings: AccessibilitySettings,
+  setAccessibilitySettings: (patch: Partial<AccessibilitySettings>) => void,
 ): void {
   if (!import.meta.env.DEV) {
     return;
   }
-  (globalThis as unknown as DebugHost).__kellerbier = { loop, sim, tuning: sim.tuning, stall };
+  (globalThis as unknown as DebugHost).__kellerbier = {
+    loop,
+    sim,
+    tuning: sim.tuning,
+    stall,
+    settings,
+    setAccessibilitySettings,
+  };
   console.warn('__kellerbier is exposed for debugging (dev build only)');
 }
 
