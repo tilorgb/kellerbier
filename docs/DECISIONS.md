@@ -550,3 +550,48 @@ new `GameSim.statusEffect` field, indexed by slot the same way `flash`/`spawnBou
 are rather than gated behind the ECS component mask — the first status-effect state the engine
 has, and the shape a later item that cleanses or reacts to one specifically would extend rather
 than replace.
+
+## 17. Accessibility settings are app-layer state, never `GameSim`/replay state — and the neutral reskin is a display-layer switch, not a sim one
+
+**Decided:** M4. **Issue:** #33.
+
+Camera-sway intensity, no-drift mode and the neutral reskin all needed somewhere to live, and
+the tempting place — right next to `PromilleTuning`'s other knobs — is wrong: `tuning.promille`
+is read inside `GameSim.step()`, and a value read there has to either be part of the seed/input
+log contract (`docs/DECISIONS.md` #3) or be the one documented exception `PromilleTuning.current`
+already carves out for itself (the debug slider). A player's sway preference is neither — it must
+be free to change mid-run without being a desync risk, and two viewers of the same replay with
+different accessibility settings must see the same simulation regardless. So `GameSim` grows
+three plain instance fields instead — `swayScale` (already there, pre-#33), and this issue's own
+`driftScale`/`wobbleScale` — the same shape `screenShakeScale`/`rumbleScale` already established
+for exactly this reason. `app/settings.ts` owns the persisted source of truth (a versioned
+`localStorage` blob) and pushes it onto whichever `GameSim` is live; a restart's fresh `sim`
+gets it re-applied, same as `viewTextures`'s own note about what does and doesn't survive one.
+
+No-drift zeroes `driftScale`/`wobbleScale` only — `promilleDamageMultiplier`/
+`promilleFireRateMultiplier` never read either field, so the stat bonuses are provably untouched
+(`tests/unit/promille.test.ts`), which is this project's concrete reading of the issue's
+"does not change the difficulty balance enough to invalidate leaderboards" (no leaderboard exists
+yet to invalidate; the standard applied instead is that no-drift changes movement/aim feel and
+nothing else measurable). Screen distortion is deliberately excluded from `driftScale`'s scope:
+the issue's own words are "keeps the Promille stat bonuses and the visual language, removes the
+movement and aim penalties," and the distortion is the visual language, not a control penalty.
+
+The neutral reskin is display-only in the stronger sense: nothing in `sim/` even has a
+`neutralReskin` field. `sim/game/promille.ts` exports a parallel string table
+(`promilleTierDisplayName`/`promilleKaterLabel`/`promilleMeterLabel`/`promilleUnitSuffix`) that
+every player-visible call site — `PromilleHud`, the `O`-overlay debug text in `app/main.ts` —
+reads through with `settings.neutralReskin` as a plain argument. One call site deliberately keeps
+the classic name unconditionally: `GameSim.syncPromilleModifiers`'s stat-modifier source label,
+which only ever reaches the dev-only stat inspector (`src/debug/panels/stats.ts`) and functions
+as an internal identity string as much as a display one — threading a rendering setting into
+`GameSim.step()` for a debug-only label was judged not worth the boundary risk it would set as
+precedent. The death-word pool (`content/death-words.ts`) is out of scope for the same audit for
+a different reason: `'Umgfalln'` there is one of five general Boarisch death exclamations shown
+for *any* death, not a reference to the Promille tier of the same name — reskinning it would mean
+touching an unrelated content system, not closing a leak in this one.
+
+**Constrains:** the next accessibility toggle (#53's fuller suite) follows the same shape —
+a plain `GameSim` field if it changes per-tick math, a `settings.ts` flag read directly at the
+call site if it only changes a label, sprite key or colour. Neither kind is `tuning`, and neither
+kind needs a determinism story.
