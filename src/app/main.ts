@@ -30,6 +30,7 @@ import {
   computeGameLayout,
   roomUnitsPerPixel,
 } from '../render/resolution.js';
+import { ActiveItemHud } from '../render/active-item-hud.js';
 import { EntityView } from '../render/entities.js';
 import { GameOverScreen } from '../render/game-over.js';
 import { HealthHud } from '../render/health-hud.js';
@@ -39,6 +40,8 @@ import { WalletHud } from '../render/wallet-hud.js';
 import { Vignette } from '../render/vignette.js';
 import { GameView } from '../render/view.js';
 import { SILENT_AUDIO, playImpactAudio } from './audio/impact.js';
+import { Bindable } from './input/bindings.js';
+import { actionPrompt, detectGlyphSet } from './input/glyphs.js';
 import { InputSampler } from './input/sampler.js';
 import { playRumble } from './input/rumble.js';
 import { FixedTimestepLoop, runAnimationFrameLoop } from './loop.js';
@@ -470,6 +473,15 @@ async function boot(): Promise<void> {
     walletHud.view.position.set(applied.originX + 8, applied.originY + 42);
   };
 
+  const activeItemHud = new ActiveItemHud(app.renderer);
+  uiLayer.addChild(activeItemHud.view);
+  // Stacked directly under the wallet row, same corner. Hidden entirely
+  // (`ActiveItemHud.sync`) whenever no active item is held, so an ordinary
+  // run without one never shows an empty row here.
+  const positionActiveItemHud = (applied: GameLayout): void => {
+    activeItemHud.view.position.set(applied.originX + 8, applied.originY + 54);
+  };
+
   const minimapHud = new MinimapHud(app.renderer);
   uiLayer.addChild(minimapHud.view);
   // The overlay is centred over the game, not the window — it should stay
@@ -563,6 +575,7 @@ async function boot(): Promise<void> {
     positionHealthHud(applied);
     positionPromilleHud(applied);
     positionWalletHud(applied);
+    positionActiveItemHud(applied);
     positionMinimapHud(applied);
     positionBossBanner(applied);
     positionPickupToast(applied);
@@ -629,6 +642,16 @@ async function boot(): Promise<void> {
       healthHud.sync(sim);
       promilleHud.sync(sim);
       walletHud.sync(sim);
+      // `use` is dual-purpose (`stepPedestal`) — near a pedestal it takes the
+      // item instead, but the prompt shown here is always the activation one:
+      // the two are mutually exclusive in practice (`sim/systems/pedestal.ts`'s
+      // own doc comment), and a player standing on a pedestal with a charged
+      // active item already has the pedestal's own name plate telling them
+      // what `use` does there instead.
+      const glyphSet = detectGlyphSet(input.activeDevice, input.gamepad.id);
+      const device = input.activeDevice === 'keyboard' ? 'keyboard' : 'gamepad';
+      const activatePrompt = actionPrompt(input.bindings, Bindable.Use, device, glyphSet);
+      activeItemHud.sync(sim, activatePrompt);
       minimapHud.setMapOpen(isActionDown(input.frame, InputAction.Map));
       const showBossBanner =
         sim.roomWarmupTicks > 0 && planRoom(floorPlan, currentRoomId).role === 'boss';
