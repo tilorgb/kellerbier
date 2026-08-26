@@ -3,7 +3,9 @@ import type { GameSim } from '../sim/game/sim.js';
 import {
   PromilleTier,
   promilleCapFor,
-  promilleTierName,
+  promilleKaterLabel,
+  promilleTierDisplayName,
+  promilleUnitSuffix,
   type PromilleTierId,
 } from '../sim/game/promille.js';
 import { createBarOutlineTexture, createSolidTexture } from './placeholder-art.js';
@@ -35,6 +37,25 @@ const TIER_COLOR: Readonly<Record<PromilleTierId, number>> = {
  * its own rather than as a tint on whatever tier happens to be current.
  */
 const KATER_COLOR = 0x5a4a6a;
+
+/**
+ * Neutral reskin (#33): the same seven-step readable ordering as
+ * `TIER_COLOR`, but blue-through-magenta-to-red — a "power" ramp rather than
+ * beer's amber/gold. `Nuchtern`'s green is kept as-is: "all clear, nothing
+ * active" doesn't read as alcohol-specific either way.
+ */
+const NEUTRAL_TIER_COLOR: Readonly<Record<PromilleTierId, number>> = {
+  [PromilleTier.Nuchtern]: 0x6fae6f,
+  [PromilleTier.Angeheitert]: 0x5aa9c9,
+  [PromilleTier.Beduselt]: 0x5a7fc9,
+  [PromilleTier.Vollrausch]: 0x8a5ac9,
+  [PromilleTier.Sturzbesoffen]: 0xb23ac9,
+  [PromilleTier.Filmriss]: 0xd93a6a,
+  [PromilleTier.Umgfalln]: 0x8a3a3a,
+};
+
+/** Neutral reskin's `KATER_COLOR` — a cool grey rather than Kater's boozy purple. */
+const NEUTRAL_KATER_COLOR = 0x4a4a5a;
 
 /**
  * The Promille meter: a fill bar plus its tier name as text.
@@ -70,7 +91,12 @@ export class PromilleHud {
     this.view.addChild(this.label);
   }
 
-  sync(sim: GameSim): void {
+  /**
+   * `neutralReskin` (#33) is `app/settings.ts`'s own flag, read straight
+   * through rather than cached on the HUD: nothing here needs to know it
+   * changed, only what it currently is, the next time a frame syncs.
+   */
+  sync(sim: GameSim, neutralReskin: boolean): void {
     // The bar's own denominator is "how close to falling over," not a fixed
     // scale — at baseline Trinkfest that is `PROMILLE_MAX` exactly (unchanged
     // from pre-#92), and it grows with `promilleCapFor` once Trinkfest is
@@ -79,8 +105,10 @@ export class PromilleHud {
     const cap = promilleCapFor(sim.trinkfest, sim.tuning.promille);
     const ratio = Math.min(1, Math.max(0, sim.promille / cap));
     this.fill.width = Math.max(0, (BAR_WIDTH - BAR_PADDING * 2) * ratio);
-    this.fill.tint = sim.hasKater ? KATER_COLOR : TIER_COLOR[sim.promilleTier];
-    const tierText = `${promilleTierName(sim.promilleTier)} ${sim.promille.toFixed(1)}‰`;
+    const tierColor = neutralReskin ? NEUTRAL_TIER_COLOR : TIER_COLOR;
+    const katerColor = neutralReskin ? NEUTRAL_KATER_COLOR : KATER_COLOR;
+    this.fill.tint = sim.hasKater ? katerColor : tierColor[sim.promilleTier];
+    const tierText = `${promilleTierDisplayName(sim.promilleTier, neutralReskin)} ${sim.promille.toFixed(1)}${promilleUnitSuffix(neutralReskin)}`;
     // Trinkfest itself only earns HUD space once it has actually moved off
     // baseline — showing "Trinkfest 0" on every single run would be clutter
     // for a number that, at baseline, changes nothing about how the bar
@@ -90,7 +118,7 @@ export class PromilleHud {
     const trinkfestText =
       sim.trinkfest !== 0 ? ` T${sim.trinkfest > 0 ? '+' : ''}${String(sim.trinkfest)}` : '';
     this.label.text = sim.hasKater
-      ? `${tierText} Kater${trinkfestText}`
+      ? `${tierText} ${promilleKaterLabel(neutralReskin)}${trinkfestText}`
       : `${tierText}${trinkfestText}`;
   }
 }
