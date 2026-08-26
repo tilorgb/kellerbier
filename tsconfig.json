@@ -33,7 +33,14 @@
       "@debug/*": ["src/debug/*"]
     }
   },
-  "include": ["src", "tests", "tools", "vite.config.ts", "vitest.bench.config.ts"],
+  "include": [
+    "src",
+    "tests",
+    "tools",
+    "vite.config.ts",
+    "vitest.bench.config.ts",
+    "vitest.fuzz.config.ts"
+  ],
   // Deliberate rule violations. They are linted by the architecture test, which
   // reads them as text and hands them to ESLint at a pretend path — they are
   // not meant to compile, and several of them import modules that do not exist

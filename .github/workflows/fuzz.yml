@@ -1,0 +1,65 @@
+name: Synergy fuzz
+
+# #30: 10,000 randomised item combinations, played headless against the
+# game's scripted enemy roster, watched for a crash, a non-finite stat or
+# projectile, the projectile pool overflowing, a softlock, and a tick that
+# blows the frame budget — plus a balance report of the strongest and
+# weakest combinations found, and any that came out a statistical outlier.
+#
+# Deliberately not on every pull request: `tests/fuzz/heavy/synergy.test.ts`
+# is slow by design (that is the point of running 10,000 combinations), so
+# it runs nightly and on demand instead, per the issue's own acceptance
+# criteria — the same split `bench` already makes between the pull-request
+# gate and its own `npm run bench`.
+
+on:
+  schedule:
+    # Nightly, off the hour, same reasoning `roadmap.yml`'s cron gives for
+    # not firing on the hour: everyone else's cron does, and a shared runner
+    # fleet is calmer between those spikes.
+    - cron: '23 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: synergy-fuzz
+  cancel-in-progress: false
+
+jobs:
+  fuzz:
+    name: 10,000 item combinations
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Run the synergy fuzz harness
+        run: npm run fuzz
+
+      - name: Format the balance report
+        if: always()
+        run: node tools/fuzz/report.mjs fuzz/results.json --out fuzz-report.md
+
+      - name: Add to the job summary
+        if: always()
+        run: cat fuzz-report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the raw results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: synergy-fuzz-results
+          path: |
+            fuzz/results.json
+            fuzz-report.md
+          retention-days: 30

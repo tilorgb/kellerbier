@@ -47,6 +47,7 @@ npm install
 npm run dev        # Vite dev server with hot reload
 npm run test       # Vitest — headless simulation and content-validation tests
 npm run bench      # performance budget, run on its own so the timings mean something
+npm run fuzz       # synergy fuzz harness — 10,000 item combinations, nightly + on demand
 npm run lint       # ESLint, including the architecture rules, plus Prettier
 npm run typecheck  # tsc --noEmit
 npm run build      # production static build
@@ -69,6 +70,11 @@ the room you're editing. Dev-only; see `docs/TECH_STACK.md` §6.
 Every push and pull request runs typecheck, lint, the full test suite, the performance budget
 and a production build. Pull requests from this repository also get a **playable preview link**
 posted as a comment — a game is judged by feel, and feel cannot be reviewed in a diff.
+
+The **synergy fuzz harness** — 10,000 randomised item combinations played headless against the
+scripted enemy roster — runs nightly and on demand (`.github/workflows/fuzz.yml`), not on every
+pull request: it is slow by design, and it reports crashes, non-finite stats, softlocks and
+balance outliers rather than gating every commit on them.
 
 ## A note on tone
 

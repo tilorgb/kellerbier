@@ -17,7 +17,8 @@
     "test:watch": "vitest",
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
-    "bench": "vitest run --config vitest.bench.config.ts"
+    "bench": "vitest run --config vitest.bench.config.ts",
+    "fuzz": "vitest run --config vitest.fuzz.config.ts"
   },
   "dependencies": {
     "pixi.js": "^8.20.0"
