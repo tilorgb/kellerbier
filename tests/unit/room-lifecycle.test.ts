@@ -203,3 +203,67 @@ describe('boss room reward', () => {
     expect(sim.world.count).toBeGreaterThan(1);
   });
 });
+
+describe('the boss room "next floor" exit', () => {
+  function bossSim(doors: Partial<Record<'north' | 'east' | 'south' | 'west', boolean>>): GameSim {
+    const bossRoom = {
+      ...cellarCrossroads,
+      id: 'test-boss-exit-room',
+      enemySpawns: [{ x: 176, y: 64, group: 'lone' }],
+      spawnGroups: [
+        { id: 'lone', count: 1, choices: [{ enemyId: 'kellerassel', minFloor: 1, maxFloor: 7 }] },
+      ],
+      metadata: {
+        ...cellarCrossroads.metadata,
+        specialRole: 'boss',
+        doors: { north: false, east: false, south: false, west: false, ...doors },
+      },
+    };
+    return new GameSim({ roomTemplate: bossRoom, floor: 1, population: 'empty' });
+  }
+
+  function killBoss(sim: GameSim): void {
+    let enemyIndex = -1;
+    sim.world.forEach(sim.enemyMask, (index) => {
+      enemyIndex = index;
+    });
+    sim.kill(enemyIndex);
+    sim.world.flush();
+  }
+
+  it('stays hidden while the boss is still alive', () => {
+    const sim = bossSim({ north: true });
+    expect(sim.nextFloorDoor).toBeNull();
+    expect(sim.doors.some((door) => door.direction === 'south')).toBe(false);
+  });
+
+  it('opens on the first free wall once the boss dies', () => {
+    const sim = bossSim({ north: true });
+    killBoss(sim);
+
+    const exit = sim.nextFloorDoor;
+    expect(exit).not.toBeNull();
+    expect(exit?.direction).toBe('south');
+    expect(sim.doors).toContain(exit);
+  });
+
+  it('never appears on an ordinary cleared room', () => {
+    const sim = roomSim();
+    const enemies: number[] = [];
+    sim.world.forEach(sim.enemyMask, (index) => enemies.push(index));
+    for (const index of enemies) {
+      sim.kill(index);
+    }
+    sim.world.flush();
+
+    expect(sim.roomCleared).toBe(true);
+    expect(sim.nextFloorDoor).toBeNull();
+  });
+
+  it('stays hidden when every wall already has a real door', () => {
+    const sim = bossSim({ north: true, east: true, south: true, west: true });
+    killBoss(sim);
+
+    expect(sim.nextFloorDoor).toBeNull();
+  });
+});

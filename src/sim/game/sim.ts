@@ -174,6 +174,40 @@ function doorKey(door: Pick<CompiledDoor, 'direction' | 'cellCol' | 'cellRow'>):
   return `${door.direction}:${String(door.cellCol)},${String(door.cellRow)}`;
 }
 
+/** Preference order for `nextFloorExitDoor`'s free wall — arbitrary, just fixed so the same room always picks the same wall. */
+const NEXT_FLOOR_DOOR_DIRECTIONS: readonly RoomDirection[] = ['south', 'east', 'west', 'north'];
+
+/**
+ * Where a boss room's dev-only "next floor" exit sits, once it has one: the
+ * first wall in `NEXT_FLOOR_DOOR_DIRECTIONS` that none of the room's real
+ * doors already occupy, centred on that whole wall (`geometry`'s bounding
+ * box, not any one cell) the same way a staircase door's precomputed
+ * `centre` bypasses the normal per-cell math in `doorCentre`. `null` only
+ * when a boss room's real doors already cover all four walls, which no
+ * authored boss template does today.
+ */
+function nextFloorExitDoor(
+  geometry: RoomGeometry,
+  doors: readonly CompiledDoor[],
+): CompiledDoor | null {
+  const used = new Set(doors.map((door) => door.direction));
+  const direction = NEXT_FLOOR_DOOR_DIRECTIONS.find((candidate) => !used.has(candidate));
+  if (direction === undefined) {
+    return null;
+  }
+  const midX = (geometry.minX + geometry.maxX) / 2;
+  const midY = (geometry.minY + geometry.maxY) / 2;
+  const centre =
+    direction === 'north'
+      ? { x: midX, y: geometry.minY }
+      : direction === 'south'
+        ? { x: midX, y: geometry.maxY }
+        : direction === 'west'
+          ? { x: geometry.minX, y: midY }
+          : { x: geometry.maxX, y: midY };
+  return { direction, cellCol: 0, cellRow: 0, centre };
+}
+
 /**
  * A live pedestal (#28): a spot a room's `decorativeProps` marked `pedestal`,
  * holding one item drawn from a pool at room-load time.
@@ -608,6 +642,13 @@ export class GameSim {
   private readonly bombableWalls = new Map<string, CompiledDoor>();
   /** The loaded room's `metadata.specialRole`, or `undefined` for a normal room. */
   private roomSpecialRole: RoomSpecialRole | undefined = undefined;
+  /**
+   * A boss room's synthesised "next floor" exit (`nextFloorExitDoor`), or
+   * `null` outside a boss room. Recomputed by every `applyCompiledRoom` call,
+   * the same lifetime as `roomDoors` — only shown once the room is actually
+   * cleared, via the `nextFloorDoor` getter below, not here.
+   */
+  private bossExitDoor: CompiledDoor | null = null;
   /** Every pedestal in the current room. Rebuilt on every room load — see `PedestalRuntime`. */
   private pedestalList: PedestalRuntime[] = [];
   /**
@@ -735,9 +776,25 @@ export class GameSim {
    * excluded here — a solid wall, until `revealBombableWalls` opens it.
    */
   get doors(): readonly CompiledDoor[] {
-    return this.bombableWalls.size === 0
-      ? this.roomDoors
-      : this.roomDoors.filter((door) => !this.bombableWalls.has(doorKey(door)));
+    const real =
+      this.bombableWalls.size === 0
+        ? this.roomDoors
+        : this.roomDoors.filter((door) => !this.bombableWalls.has(doorKey(door)));
+    const exit = this.nextFloorDoor;
+    return exit === null ? real : [...real, exit];
+  }
+
+  /**
+   * The cleared boss room's dev-only "next floor" exit — `null` outside a
+   * boss room, or before its enemies are down. Distinct from every other
+   * entry in `doors`: it has no matching neighbour in the floor plan, so
+   * `app/main.ts`'s `enterNeighbor` checks for it (by identity — the same
+   * `CompiledDoor` instance `doorContact` would report back) before falling
+   * through to the normal floor-plan door lookup, and calls `loadRoom`
+   * directly with a freshly generated floor rather than `transitionTo`.
+   */
+  get nextFloorDoor(): CompiledDoor | null {
+    return this.roomSpecialRole === 'boss' && !this.doorsLocked ? this.bossExitDoor : null;
   }
 
   /**
@@ -1045,6 +1102,8 @@ export class GameSim {
       }
     }
     this.roomSpecialRole = compiled.specialRole;
+    this.bossExitDoor =
+      compiled.specialRole === 'boss' ? nextFloorExitDoor(compiled.geometry, compiled.doors) : null;
     this.roomTemplateLoaded = true;
     this.roomTransitionTicks = direction === null ? 0 : ROOM_TRANSITION_TICKS;
     this.roomTransitionDirection = direction;
