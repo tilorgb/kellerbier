@@ -20,6 +20,24 @@ their in-progress changes colliding in one working tree.
 - Any other tooling: `git worktree add ../kellerbier-issue-N -b feat/N-slug` (or `fix/N-slug`,
   per `CONTRIBUTING.md`'s branch prefixes) from the base checkout, same intent.
 
+## New features need to be visible in the dev app
+
+`CONTRIBUTING.md`'s Gameplay row already says "playable in the preview build" is part of done —
+this is the agent-specific corollary: don't consider a feature finished just because it's covered
+by tests and reachable by calling a sim method from a script or the console. If a person running
+`npm run dev` has no way to see or feel the thing (no HUD element, no on-screen state, nothing
+that changes when they play), it isn't actually shipped yet, however green the test suite is.
+
+When a feature has player-visible state, wire it into the dev app in the same change — a HUD
+element, a debug-overlay entry, a visible effect in the room, whatever fits. `ActiveItemHud`
+(`src/render/active-item-hud.ts`) is the shape to copy: a small `render/` component with a `view`
+and a `sync(sim)` method, wired into `app/main.ts` the same way `HealthHud`/`PromilleHud`/
+`WalletHud` already are. Before calling a feature like this done, actually run it — `npm run dev`
+plus a real interaction (playing it by hand, or a headless-browser script if a human isn't
+driving) and look at the result, the same standard `docs/GAME_DESIGN.md` and this project's own
+review culture already hold gameplay work to. It's a game: a feature nobody can experience isn't
+finished, no matter how thoroughly it's unit-tested.
+
 ## Closing issues from a PR
 
 `CONTRIBUTING.md` already says this, but it's easy to miss under a title that merely *mentions*
