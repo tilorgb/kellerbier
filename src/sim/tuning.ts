@@ -334,12 +334,48 @@ export interface PromilleTuning {
   /** Promille one beer pickup adds. */
   beerAmount: number;
 
+  /**
+   * Trinkfest (#92): tolerance. 0 is the baseline every run starts at — with
+   * `promilleTierOf`/`promilleCapFor` defined so that `trinkfest === 0`
+   * reproduces the pre-#92 tier boundaries and ceiling exactly, byte for
+   * byte. Positive raises the Umgfalln threshold (and the Promille ceiling
+   * along with it) and unlocks the post-Vollrausch stages one at a time;
+   * negative pulls the threshold in from below, inside Vollrausch's own
+   * range, so Umgfalln arrives before the tier is spent. Clamped to
+   * `[TRINKFEST_MIN, TRINKFEST_MAX]` (`sim/game/promille.ts`) by
+   * `GameSim.raiseTrinkfest`/`lowerTrinkfest` — the only two places gameplay
+   * is meant to move it. The debug slider writes this field directly, the
+   * same bypass `current` already allows.
+   *
+   * Deliberately **per-run, not a meta-progression unlock** — #92 leaves
+   * that door open (an item could `onFloorStart` a permanent-for-the-run
+   * raise just as easily as a temporary one), but persisting it across runs
+   * would mean plumbing it into the save blob (`docs/GAME_DESIGN.md` §11),
+   * which nothing else in this milestone needs and which the issue's own
+   * "smallest testable slice first" guidance argues against starting with.
+   */
+  trinkfest: number;
+  /**
+   * Promille width of one whole Trinkfest level — how far one level moves
+   * the Umgfalln threshold, up or down, and how wide each unlocked
+   * post-Vollrausch stage is. One number rather than one per stage: every
+   * stage is the same width, so widening the system later (a third stage)
+   * is a tier added to `PromilleTier`, not a new tuning field.
+   */
+  trinkfestStageWidth: number;
+
   angeheitertDamageBonus: number;
   angeheitertFireRateBonus: number;
   beduseltDamageBonus: number;
   beduseltFireRateBonus: number;
   vollrauschDamageBonus: number;
   vollrauschFireRateBonus: number;
+  /** Sturzbesoffen (Trinkfest level 1's stage): bigger than Vollrausch's own bonus, per #92's "unlocks higher damage than the current Vollrausch ceiling." */
+  sturzbesoffenDamageBonus: number;
+  sturzbesoffenFireRateBonus: number;
+  /** Filmriss (Trinkfest level 2's stage): the highest bonus in the game, paired with the worst readable penalties short of falling over. */
+  filmrissDamageBonus: number;
+  filmrissFireRateBonus: number;
 
   /**
    * Drift, wobble and sway are a continuous ramp from the Promille value
@@ -362,6 +398,20 @@ export interface PromilleTuning {
   maxSway: number;
   /** Ticks per full sway loop — slow, so it reads as drifting rather than jittering. */
   swayPeriodTicks: number;
+
+  /**
+   * The third penalty #92 asks for, alongside sway and aim wobble/spray:
+   * a readable screen distortion — see `promilleScreenDistortion` — that
+   * starts at zero at the top of Beduselt (Vollrausch's own opening, where
+   * the design doc's "Rausch-tier item effects activate" already begins),
+   * reaches `1` at the pre-#92 Promille ceiling, and keeps climbing past it
+   * through the Trinkfest stages. `render/vignette.ts` reads it to pulse the
+   * tunnel-vision vignette and tint it red once it is actually doing
+   * something, rather than adding a whole second full-screen effect.
+   */
+  maxScreenDistortion: number;
+  /** Ticks per full distortion pulse — fast and separate from sway/wobble's own periods, so it reads as a flicker, not another drift. */
+  screenDistortionPeriodTicks: number;
 
   /** How long the Umgfalln knockdown holds the player still and invulnerable. */
   umgfallnKnockdownTicks: number;
@@ -614,12 +664,27 @@ export const DEFAULT_PROMILLE_TUNING: Readonly<PromilleTuning> = {
   // up whatever a room happened to drop.
   beerAmount: 0.4,
 
+  // Baseline — see the field's own doc comment for why this has to be 0.
+  trinkfest: 0,
+  // One level buys one whole extra "beer or two" of headroom before Umgfalln
+  // — roughly what one stage's own damage/fire-rate jump is worth trading
+  // for, so raising Trinkfest reads as a real decision rather than a free
+  // stat stick.
+  trinkfestStageWidth: 1.0,
+
   angeheitertDamageBonus: 0.15,
   angeheitertFireRateBonus: 0.1,
   beduseltDamageBonus: 0.35,
   beduseltFireRateBonus: 0.25,
   vollrauschDamageBonus: 0.7,
   vollrauschFireRateBonus: 0.5,
+  // Meaningfully past Vollrausch's own numbers (#92's "unlocks higher damage
+  // than the current Vollrausch ceiling"), each stage a clear step up from
+  // the last — the whole point of paying for Trinkfest.
+  sturzbesoffenDamageBonus: 1.0,
+  sturzbesoffenFireRateBonus: 0.65,
+  filmrissDamageBonus: 1.4,
+  filmrissFireRateBonus: 0.8,
 
   maxDrift: 0.6,
   // Measured against a Normal enemy (radius 7, `src/sim/enemy/size.ts`) at a
@@ -640,6 +705,13 @@ export const DEFAULT_PROMILLE_TUNING: Readonly<PromilleTuning> = {
   /** Ticks per full sway loop. Slow on purpose — this is what separates a
    * gentle drift from a jitter that gets mistaken for hit-shake. */
   swayPeriodTicks: 220,
+
+  // 1 at the old ceiling, ~1.75 by the top of Filmriss (level 2) — a visible
+  // difference without the screen becoming unreadable; see `render/
+  // vignette.ts`'s `sync`, which caps how much of this it actually spends.
+  maxScreenDistortion: 1,
+  // Fast relative to sway (220) and wobble (145) — a flicker, not a drift.
+  screenDistortionPeriodTicks: 50,
 
   umgfallnKnockdownTicks: 90,
   umgfallnWakePromille: 1.5,

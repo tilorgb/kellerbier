@@ -770,10 +770,13 @@ async function boot(): Promise<void> {
     const warmup = sim.roomWarmupTicks > 0 ? '  WARMUP' : '';
     const currentRole = planRoom(floorPlan, currentRoomId).role;
     const keyHint = keyHintTicks > 0 ? '  NEEDS A KELLERSCHLÜSSEL' : '';
+    // Trinkfest (#92) only earns space on this line once it has actually
+    // moved off baseline — same reasoning as `PromilleHud`'s own label.
+    const trinkfest = sim.trinkfest !== 0 ? `  trinkfest ${String(sim.trinkfest)}` : '';
     hud.text = `seed ${String(RUN_SEED)}  ${floorPlan.floorName}  room ${sim.roomId} (${currentRole})  doors ${roomState}${warmup}${keyHint}  enemies ${String(sim.liveEnemyCount)}
   tick ${String(loop.tick)}  ${seconds}s  x${scale}${loop.paused ? '  PAUSED' : ''}
 hp ${String(hearts)}/${String(maxHearts)}  soul ${String(sim.playerSoulHealth)}  eternal ${String(sim.playerEternalHealth)}${invulnerable}${dead}
-promille ${sim.promille.toFixed(2)} ${promilleTierName(sim.promilleTier)}${knockedDown}
+promille ${sim.promille.toFixed(2)} ${promilleTierName(sim.promilleTier)}${trinkfest}${knockedDown}
 shots ${String(shots.liveCount)}/${String(shots.capacity)}  particles ${String(
       particles.liveCount,
     )}/${String(particles.capacity)}${shots.overflows > 0 ? '  SHOT OVERFLOW' : ''}

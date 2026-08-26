@@ -447,6 +447,70 @@ describe('#29 acceptance criteria', () => {
   });
 });
 
+describe('#92 acceptance criteria — items that move Trinkfest', () => {
+  it('Bierbauch raises Trinkfest on pickup and gives it back exactly on removal', async () => {
+    const { bierbauch } = await import('../../src/content/items/bierbauch.js');
+    const sim = new GameSim({ room: bareRoom(), items: [bierbauch], population: 'empty' });
+    expect(sim.trinkfest).toBe(0);
+
+    sim.pickUpItem('bierbauch');
+    expect(sim.trinkfest).toBe(1);
+
+    // A second copy must not double it — Bierbauch's own effect is
+    // non-stacking, guarded by `state.count === 1` in the item itself.
+    sim.pickUpItem('bierbauch');
+    expect(sim.trinkfest).toBe(1);
+
+    // Still held (two copies) — no `onRemove` yet.
+    sim.removeItem('bierbauch');
+    expect(sim.trinkfest).toBe(1);
+
+    // Last copy gone — the exact prior state comes back.
+    sim.removeItem('bierbauch');
+    expect(sim.trinkfest).toBe(0);
+  });
+
+  it('Halbe Portion lowers Trinkfest on pickup and gives it back exactly on removal', async () => {
+    const { halbePortion } = await import('../../src/content/items/halbe-portion.js');
+    const sim = new GameSim({ room: bareRoom(), items: [halbePortion], population: 'empty' });
+    expect(sim.trinkfest).toBe(0);
+
+    sim.pickUpItem('halbe-portion');
+    expect(sim.trinkfest).toBe(-1);
+
+    sim.removeItem('halbe-portion');
+    expect(sim.trinkfest).toBe(0);
+  });
+
+  it('two Trinkfest items held together net out, in either pickup order', async () => {
+    const { bierbauch } = await import('../../src/content/items/bierbauch.js');
+    const { halbePortion } = await import('../../src/content/items/halbe-portion.js');
+    const sim = new GameSim({
+      room: bareRoom(),
+      items: [bierbauch, halbePortion],
+      population: 'empty',
+    });
+    sim.pickUpItem('bierbauch');
+    sim.pickUpItem('halbe-portion');
+    expect(sim.trinkfest).toBe(0);
+
+    sim.removeItem('bierbauch');
+    expect(sim.trinkfest).toBe(-1);
+    sim.removeItem('halbe-portion');
+    expect(sim.trinkfest).toBe(0);
+  });
+
+  it('raising Trinkfest lets a run reach the Sturzbesoffen stage past the old Vollrausch ceiling', async () => {
+    const { bierbauch } = await import('../../src/content/items/bierbauch.js');
+    const { PromilleTier } = await import('../../src/sim/game/promille.js');
+    const sim = new GameSim({ room: bareRoom(), items: [bierbauch], population: 'empty' });
+    sim.pickUpItem('bierbauch');
+    sim.addPromille(4.5); // pre-#92, and at Trinkfest 0, this is already Umgfalln
+    expect(sim.promilleTier).toBe(PromilleTier.Sturzbesoffen);
+    expect(sim.umgfallnTicks).toBe(0);
+  });
+});
+
 /** The one live projectile a freshly-fired test shot produced. */
 function findLiveSlot(sim: GameSim): number {
   let found = -1;

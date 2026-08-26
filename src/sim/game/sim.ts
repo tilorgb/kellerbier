@@ -27,12 +27,14 @@ import { ItemRegistry } from '../item/registry.js';
 import { type RunRandom, createRunRandom } from '../rng/streams.js';
 import { drawDeathWord } from './death-word.js';
 import {
-  PROMILLE_MAX,
   PromilleTier,
   type PromilleTierId,
+  clampTrinkfest,
+  promilleCapFor,
   promilleDamageMultiplier,
   promilleDriftScale,
   promilleFireRateMultiplier,
+  promilleScreenDistortion,
   promilleTierName,
   promilleTierOf,
   promilleWobbleAmplitude,
@@ -1687,13 +1689,22 @@ export class GameSim {
     }
   }
 
-  /** Current Promille, 0–5. Backed by `tuning.promille.current` — see `tuning.ts`. */
+  /** Current Promille, 0–5 at baseline Trinkfest, higher once it is raised. Backed by `tuning.promille.current` — see `tuning.ts`. */
   get promille(): number {
     return this.tuning.promille.current;
   }
 
+  /**
+   * Trinkfest (#92): tolerance. 0 is baseline; see `PromilleTuning.trinkfest`
+   * for the full shape and `raiseTrinkfest`/`lowerTrinkfest` for the only two
+   * places gameplay is meant to move it.
+   */
+  get trinkfest(): number {
+    return this.tuning.promille.trinkfest;
+  }
+
   get promilleTier(): PromilleTierId {
-    return promilleTierOf(this.promille);
+    return promilleTierOf(this.promille, this.trinkfest, this.tuning.promille);
   }
 
   /** Ticks left of the Umgfalln knockdown. Zero means the player can move and fire. */
@@ -1716,6 +1727,11 @@ export class GameSim {
 
   get promilleWobbleAmplitude(): number {
     return promilleWobbleAmplitude(this.promille, this.tuning.promille);
+  }
+
+  /** The screen-distortion penalty (#92) — see `promilleScreenDistortion`. Read by `render/vignette.ts`. */
+  get promilleScreenDistortion(): number {
+    return promilleScreenDistortion(this.promille, this.tuning.promille);
   }
 
   /**
@@ -1820,26 +1836,81 @@ export class GameSim {
   }
 
   /**
-   * Raises Promille, clamped at `PROMILLE_MAX`. The one place it goes up —
-   * beer pickups (#17) and the debug slider (which writes `tuning.promille.
-   * current` directly, bypassing this) are the only sources today.
+   * Raises Promille, clamped at `promilleCapFor(trinkfest)` — `PROMILLE_MAX`
+   * itself at baseline Trinkfest, further out once it is raised (#92). The
+   * one place it goes up — beer pickups (#17) and the debug slider (which
+   * writes `tuning.promille.current` directly, bypassing this) are the only
+   * sources today.
    *
-   * Crossing the Umgfalln threshold starts the knockdown here rather than in
-   * whatever called this, the same reason `applyPlayerDamage` owns the death
-   * check: one chokepoint, so every raise — pickup or otherwise — behaves
-   * the same way.
+   * Crossing the Umgfalln threshold starts the knockdown via
+   * `maybeStartUmgfalln` rather than in whatever called this, the same
+   * reason `applyPlayerDamage` owns the death check: one chokepoint, so
+   * every raise — pickup or otherwise — behaves the same way.
    */
   addPromille(amount: number): void {
     if (amount <= 0) {
       return;
     }
     const tuning = this.tuning.promille;
-    const wasUmgfalln = promilleTierOf(tuning.current) === PromilleTier.Umgfalln;
-    tuning.current = Math.min(PROMILLE_MAX, tuning.current + amount);
-    if (!wasUmgfalln && promilleTierOf(tuning.current) === PromilleTier.Umgfalln) {
-      this.umgfallnTicksValue = Math.round(tuning.umgfallnKnockdownTicks);
-      this.makePlayerInvulnerable(this.umgfallnTicksValue);
+    tuning.current = Math.min(promilleCapFor(tuning.trinkfest, tuning), tuning.current + amount);
+    this.maybeStartUmgfalln();
+  }
+
+  /**
+   * Raises Trinkfest (#92), clamped to `[TRINKFEST_MIN, TRINKFEST_MAX]`.
+   * Never itself risks *triggering* Umgfalln — raising tolerance only ever
+   * pushes the threshold further away — so unlike `lowerTrinkfest` it does
+   * not need to re-check the knockdown.
+   */
+  raiseTrinkfest(amount: number): void {
+    if (amount <= 0) {
+      return;
     }
+    const tuning = this.tuning.promille;
+    tuning.trinkfest = clampTrinkfest(tuning.trinkfest + amount);
+  }
+
+  /**
+   * Lowers Trinkfest (#92), clamped the same way `raiseTrinkfest` is.
+   *
+   * Unlike raising it, this *can* pull the Umgfalln threshold down past the
+   * player's current Promille — dropping tolerance mid-binge is exactly the
+   * "make Umgfalln arrive sooner" acceptance criterion — so it has to run
+   * the same knockdown check `addPromille` does. Without it the player would
+   * sit at a Promille the new threshold says is Umgfalln without ever
+   * actually falling over: the corrupted-state failure mode #92 calls out
+   * by name ("Trinkfest changing mid-run must not corrupt Umgfalln/Kater
+   * state").
+   */
+  lowerTrinkfest(amount: number): void {
+    if (amount <= 0) {
+      return;
+    }
+    const tuning = this.tuning.promille;
+    tuning.trinkfest = clampTrinkfest(tuning.trinkfest - amount);
+    this.maybeStartUmgfalln();
+  }
+
+  /**
+   * Starts the Umgfalln knockdown if the current tier is Umgfalln and one
+   * is not already running. Shared by every path that can push the player
+   * into the tier without an intervening `step()` — a Promille raise, or
+   * Trinkfest dropping out from under an already-elevated Promille.
+   *
+   * `umgfallnTicksValue > 0` is the re-entry guard: while a knockdown is
+   * already running, `tuning.current` sits unchanged at whatever it was
+   * (`stepPromille` skips `decayPromille` for the duration), so the tier
+   * stays Umgfalln the whole time and this must not restart the countdown.
+   */
+  private maybeStartUmgfalln(): void {
+    if (this.umgfallnTicksValue > 0) {
+      return;
+    }
+    if (this.promilleTier !== PromilleTier.Umgfalln) {
+      return;
+    }
+    this.umgfallnTicksValue = Math.round(this.tuning.promille.umgfallnKnockdownTicks);
+    this.makePlayerInvulnerable(this.umgfallnTicksValue);
   }
 
   /**

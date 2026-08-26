@@ -12,12 +12,31 @@ export const PromilleTier = {
   Angeheitert: 1,
   Beduselt: 2,
   Vollrausch: 3,
-  Umgfalln: 4,
+  /** Trinkfest level 1's stage (#92) — see `promilleTierOf`. */
+  Sturzbesoffen: 4,
+  /** Trinkfest level 2's stage — the last stop before Umgfalln. */
+  Filmriss: 5,
+  Umgfalln: 6,
 } as const;
 
 export type PromilleTierId = (typeof PromilleTier)[keyof typeof PromilleTier];
 
+/**
+ * The pre-#92 Promille ceiling — still exactly what `trinkfest === 0`
+ * reproduces. With Trinkfest raised, the real reachable ceiling is
+ * `promilleCapFor`, not this constant; kept under its original name because
+ * every pre-#92 caller (and every pre-#92 test) means "the baseline max"
+ * when it says this.
+ */
 export const PROMILLE_MAX = 5.0;
+
+/** Trinkfest is an integer-ish level; anything more than two stages past Vollrausch is more than #92 asks for. */
+export const TRINKFEST_MIN = -1;
+export const TRINKFEST_MAX = 2;
+
+export function clampTrinkfest(value: number): number {
+  return Math.min(TRINKFEST_MAX, Math.max(TRINKFEST_MIN, value));
+}
 
 /** Tier boundaries from the design doc's table, read as half-open ranges. */
 const ANGEHEITERT_AT = 0.5;
@@ -25,9 +44,53 @@ const BEDUSELT_AT = 1.5;
 const VOLLRAUSCH_AT = 3.0;
 const UMGFALLN_AT = 4.5;
 
-export function promilleTierOf(value: number): PromilleTierId {
-  if (value >= UMGFALLN_AT) {
+/**
+ * The Promille value at which Umgfalln triggers, for a given Trinkfest.
+ * `trinkfest === 0` gives back `UMGFALLN_AT` exactly, so the pre-#92 tier
+ * table is unchanged at baseline. Positive Trinkfest pushes it out past the
+ * old ceiling one `trinkfestStageWidth` at a time (unlocking Sturzbesoffen,
+ * then Filmriss, on the way there); negative pulls it in from below —
+ * always still inside Vollrausch's own 3.0–4.4 band at `TRINKFEST_MIN`, so
+ * lowering Trinkfest shortens a tier rather than skipping one entirely.
+ */
+export function umgfallnThresholdFor(trinkfest: number, tuning: PromilleTuning): number {
+  return UMGFALLN_AT + trinkfest * tuning.trinkfestStageWidth;
+}
+
+/**
+ * The highest Promille a run can actually reach at a given Trinkfest —
+ * what `GameSim.addPromille` clamps against. Never drops below the pre-#92
+ * ceiling: a negative Trinkfest makes Umgfalln arrive sooner (see
+ * `umgfallnThresholdFor`), it does not also shrink the meter itself, since
+ * the knockdown already caps the player's practical progress once the
+ * (lower) threshold is crossed.
+ */
+export function promilleCapFor(trinkfest: number, tuning: PromilleTuning): number {
+  return PROMILLE_MAX + Math.max(0, trinkfest) * tuning.trinkfestStageWidth;
+}
+
+/**
+ * `trinkfest` and `tuning` are what #92 adds: without them this is exactly
+ * the pre-#92 function, and `trinkfest === 0` reproduces its exact
+ * boundaries (the "baseline Trinkfest experiences the existing Promille
+ * behaviour unchanged" acceptance criterion) because `umgfallnThresholdFor`
+ * and every stage guard below key off `trinkfest` being at least 1.
+ */
+export function promilleTierOf(
+  value: number,
+  trinkfest: number,
+  tuning: PromilleTuning,
+): PromilleTierId {
+  const umgfallnAt = umgfallnThresholdFor(trinkfest, tuning);
+  if (value >= umgfallnAt) {
     return PromilleTier.Umgfalln;
+  }
+  const width = tuning.trinkfestStageWidth;
+  if (trinkfest >= 2 && value >= UMGFALLN_AT + width) {
+    return PromilleTier.Filmriss;
+  }
+  if (trinkfest >= 1 && value >= UMGFALLN_AT) {
+    return PromilleTier.Sturzbesoffen;
   }
   if (value >= VOLLRAUSCH_AT) {
     return PromilleTier.Vollrausch;
@@ -49,6 +112,10 @@ export function promilleTierName(tier: PromilleTierId): string {
       return 'Beduselt';
     case PromilleTier.Vollrausch:
       return 'Vollrausch';
+    case PromilleTier.Sturzbesoffen:
+      return 'Sturzbesoffen';
+    case PromilleTier.Filmriss:
+      return 'Filmriss';
     case PromilleTier.Umgfalln:
       return 'Umgfalln';
     default:
@@ -67,6 +134,16 @@ export function promilleDamageMultiplier(tier: PromilleTierId, tuning: PromilleT
     case PromilleTier.Beduselt:
       return 1 + tuning.beduseltDamageBonus;
     case PromilleTier.Vollrausch:
+      return 1 + tuning.vollrauschDamageBonus;
+    case PromilleTier.Sturzbesoffen:
+      return 1 + tuning.sturzbesoffenDamageBonus;
+    case PromilleTier.Filmriss:
+      return 1 + tuning.filmrissDamageBonus;
+    // Umgfalln keeps Vollrausch's numbers, same as pre-#92 — it never
+    // matters in play (a knocked-down player cannot fire, `stepShooting`
+    // returns before this is ever read), and picking a fixed fallback here
+    // rather than "whichever stage was active a tick ago" keeps this a pure
+    // function of the tier alone.
     case PromilleTier.Umgfalln:
       return 1 + tuning.vollrauschDamageBonus;
     default:
@@ -81,6 +158,11 @@ export function promilleFireRateMultiplier(tier: PromilleTierId, tuning: Promill
     case PromilleTier.Beduselt:
       return 1 + tuning.beduseltFireRateBonus;
     case PromilleTier.Vollrausch:
+      return 1 + tuning.vollrauschFireRateBonus;
+    case PromilleTier.Sturzbesoffen:
+      return 1 + tuning.sturzbesoffenFireRateBonus;
+    case PromilleTier.Filmriss:
+      return 1 + tuning.filmrissFireRateBonus;
     case PromilleTier.Umgfalln:
       return 1 + tuning.vollrauschFireRateBonus;
     default:
@@ -88,12 +170,19 @@ export function promilleFireRateMultiplier(tier: PromilleTierId, tuning: Promill
   }
 }
 
-/** 0 at and below the Beduselt threshold, ramping linearly to 1 at `PROMILLE_MAX`. */
+/**
+ * 0 at and below `start`, ramping linearly past `1` at `PROMILLE_MAX` rather
+ * than clamping there (the pre-#92 behaviour). That single change is what
+ * makes every ramp below escalate through the Trinkfest stages for free:
+ * `value` can only exceed `PROMILLE_MAX` when Trinkfest has actually raised
+ * the ceiling (`promilleCapFor`), and at `trinkfest === 0` `value` never
+ * does, so the ratio never exceeds 1 and every pre-#92 reading is unchanged.
+ */
 function rampFrom(value: number, start: number): number {
   if (value <= start) {
     return 0;
   }
-  return Math.min(1, (value - start) / (PROMILLE_MAX - start));
+  return (value - start) / (PROMILLE_MAX - start);
 }
 
 /**
@@ -110,8 +199,21 @@ export function promilleWobbleAmplitude(value: number, tuning: PromilleTuning): 
 
 /**
  * Sway starts immediately — Angeheitert's "very slight camera sway" is the
- * bottom of this ramp, not a separate on/off step.
+ * bottom of this ramp, not a separate on/off step. Uncapped past `1` for the
+ * same Trinkfest-escalation reason `rampFrom` is.
  */
 export function promilleSwayMagnitude(value: number, tuning: PromilleTuning): number {
-  return Math.min(1, value / PROMILLE_MAX) * tuning.maxSway;
+  return (value / PROMILLE_MAX) * tuning.maxSway;
+}
+
+/**
+ * The third penalty #92 asks for alongside sway and wobble: a readable
+ * screen distortion. Zero through Nüchtern/Angeheitert/Beduselt, starting
+ * exactly where Vollrausch does (the design doc's "Rausch-tier item effects
+ * activate" boundary), `1` at the pre-#92 ceiling, and — like every ramp
+ * above — climbing past `1` through the Trinkfest stages. `render/
+ * vignette.ts` is what actually spends this on a pulsing, reddening vignette.
+ */
+export function promilleScreenDistortion(value: number, tuning: PromilleTuning): number {
+  return rampFrom(value, VOLLRAUSCH_AT) * tuning.maxScreenDistortion;
 }
