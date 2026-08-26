@@ -141,6 +141,36 @@ describe('#59 — batch 5 of ten toward 120+', () => {
   });
 });
 
+describe('#59 — batch 6 of ten toward 120+', () => {
+  it('reaches at least sixty new items on top of #29 and #26', () => {
+    expect(ITEM_DEFINITIONS.length).toBeGreaterThanOrEqual(88);
+  });
+});
+
+describe('#59 — batch 7 of ten toward 120+', () => {
+  it('reaches at least seventy new items on top of #29 and #26', () => {
+    expect(ITEM_DEFINITIONS.length).toBeGreaterThanOrEqual(98);
+  });
+});
+
+describe('#59 — batch 8 of ten toward 120+', () => {
+  it('reaches at least eighty new items on top of #29 and #26', () => {
+    expect(ITEM_DEFINITIONS.length).toBeGreaterThanOrEqual(108);
+  });
+});
+
+describe('#59 — batch 9 of ten toward 120+', () => {
+  it('reaches at least ninety new items on top of #29 and #26', () => {
+    expect(ITEM_DEFINITIONS.length).toBeGreaterThanOrEqual(118);
+  });
+});
+
+describe('#59 — batch 10 of ten toward 120+', () => {
+  it('reaches the 120+ milestone', () => {
+    expect(ITEM_DEFINITIONS.length).toBeGreaterThanOrEqual(120);
+  });
+});
+
 function aiming(angleRadians: number): ReturnType<typeof createInputFrame> {
   const frame = createInputFrame();
   frame.aimX = quantiseAxis(Math.cos(angleRadians));
