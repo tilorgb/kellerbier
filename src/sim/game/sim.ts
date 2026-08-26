@@ -2927,6 +2927,7 @@ export class GameSim {
     this.world.add(entity, this.body);
     this.world.add(entity, this.collision);
     this.world.add(entity, this.bombFuse);
+    this.world.add(entity, this.contactDamage);
     if (rolling) {
       this.world.add(entity, this.velocity);
     }
@@ -2947,6 +2948,15 @@ export class GameSim {
       this.velocity.data[index * 2] = rollDirX * speed;
       this.velocity.data[index * 2 + 1] = rollDirY * speed;
     }
+
+    // Written rather than assumed clear: slots are recycled, and a keg that
+    // inherited the contact damage of whatever last used its slot is a bug
+    // that only shows up after something died there — `stepContacts` reads
+    // this straight out of the shared array, not gated by whether the entity
+    // was ever given the component, so a fresh Bierfassl was hurting the
+    // player on touch before it ever exploded. Same fix `spawnTarget` already
+    // has, for the same reason.
+    this.contactDamage.data[index] = 0;
 
     this.bombFuse.data[index] = Math.round(this.tuning.pickup.bombFuseTicks);
     this.setCollisionLayer(index, CollisionLayer.Obstacle);

@@ -3,7 +3,7 @@ import cellarCrossroads from '../../src/content/rooms/cellar.json';
 import { entityIndex } from '../../src/sim/ecs/entity.js';
 import { GameSim, PLAYER_HEALTH, TARGET_RADIUS } from '../../src/sim/game/sim.js';
 import { RoomGeometry } from '../../src/sim/room/geometry.js';
-import { createInputFrame } from '../../src/sim/input/frame.js';
+import { createInputFrame, quantiseAxis } from '../../src/sim/input/frame.js';
 import { ROOM_COLUMNS, ROOM_ROWS, type RoomSubLayout } from '../../src/content/rooms/definition.js';
 
 function bareRoom(): RoomGeometry {
@@ -107,6 +107,39 @@ describe('Bierfassl fuse and blast', () => {
       sim.step(idle());
     }
     expect(sim.playerHealth).toBeLessThan(PLAYER_HEALTH);
+  });
+
+  it('never hurts the player on contact, even set down in a slot a contact-damage enemy just vacated', () => {
+    const sim = emptySim();
+    const index = sim.playerIndex;
+    const x = sim.positionX(index) + 100;
+    const y = sim.positionY(index) + 100;
+
+    // `kellerassel` carries `contactDamage: 1` — kill it and free its slot so
+    // the entity pool's LIFO free list hands that exact slot to the
+    // Bierfassl spawned right after. Regression for a fresh Bierfassl
+    // inheriting whatever contact damage was last written into its reused
+    // slot, since it never had the component attached at all before.
+    const enemy = sim.spawnEnemyKind(sim.enemies.indexOf('kellerassel'), x, y);
+    sim.world.flush();
+    sim.world.destroy(enemy);
+    sim.world.flush();
+
+    // Placed clear of the player, not underfoot — `spawnBierfassl`'s own
+    // `freshBombEntity` mechanism suspends *all* player contact (`stepContacts`'s
+    // `suspendsPlayerContact`, damage included) for a bomb set down exactly
+    // where the player is standing, which would make this test pass whether
+    // or not the bug is fixed. Walking into it is what a real "touching a
+    // bomb to move it" does.
+    sim.spawnBierfassl(sim.positionX(index) + 30, sim.positionY(index), 0, 0, false);
+    sim.world.flush();
+
+    const frame = createInputFrame();
+    frame.moveX = quantiseAxis(1);
+    for (let tick = 0; tick < 60; tick++) {
+      sim.step(frame);
+    }
+    expect(sim.playerHealth).toBe(PLAYER_HEALTH);
   });
 });
 
