@@ -104,6 +104,19 @@ describe('#29 — the first 25 items', () => {
   });
 });
 
+/**
+ * #59's first batch of ten toward the 120+ target — tracked here rather than
+ * in a hundred separate issues, per the issue's own note. Bumped by ten (or
+ * whatever the next batch lands) each time, the same way #29's own
+ * milestone assertion above stayed in place as a floor once its count was
+ * reached.
+ */
+describe('#59 — batch 1 of ten toward 120+', () => {
+  it('reaches at least ten new items on top of #29 and #26', () => {
+    expect(ITEM_DEFINITIONS.length).toBeGreaterThanOrEqual(38);
+  });
+});
+
 function aiming(angleRadians: number): ReturnType<typeof createInputFrame> {
   const frame = createInputFrame();
   frame.aimX = quantiseAxis(Math.cos(angleRadians));
