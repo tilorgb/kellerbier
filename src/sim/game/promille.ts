@@ -1,4 +1,5 @@
 import type { PromilleTuning } from '../tuning.js';
+import type { PromilleRequirement } from '../item/definition.js';
 
 /**
  * The Promille tiers, per `docs/GAME_DESIGN.md` §5.
@@ -102,6 +103,39 @@ export function promilleTierOf(
     return PromilleTier.Angeheitert;
   }
   return PromilleTier.Nuchtern;
+}
+
+/**
+ * Whether an item's `PromilleRequirement` (#26/#32) currently holds, given
+ * the tier the meter reads right now — the one gate `sim/systems/items.ts`'s
+ * dispatch and `GameSim.syncItemStatModifiers`/`useActiveItem` all call,
+ * rather than each item re-deriving its own version of this check.
+ *
+ * `'sober'` is exactly the tier before the meter ever leaves baseline —
+ * Nüchtern — which is `value < ANGEHEITERT_AT` (0.5), the same number
+ * `ruhige-hand.ts` used to hardcode as its own bespoke threshold before this
+ * helper replaced it: the two were always the same boundary, not two
+ * independent numbers that happened to agree.
+ *
+ * `'rausch'` is Vollrausch *or anything further down the ladder Trinkfest
+ * unlocks* (Sturzbesoffen, Filmriss, #92) — `tier >= PromilleTier.Vollrausch`,
+ * never `=== Vollrausch`. Comparing for equality would silently turn a
+ * rausch item off the instant Trinkfest tolerance pushed the player from
+ * Vollrausch into Sturzbesoffen, which is the opposite of what "rausch" is
+ * supposed to mean once #92 gave the ladder more rungs.
+ */
+export function promilleRequirementMet(
+  requirement: PromilleRequirement,
+  tier: PromilleTierId,
+): boolean {
+  switch (requirement) {
+    case 'sober':
+      return tier === PromilleTier.Nuchtern;
+    case 'rausch':
+      return tier >= PromilleTier.Vollrausch;
+    default:
+      return true;
+  }
 }
 
 export function promilleTierName(tier: PromilleTierId): string {

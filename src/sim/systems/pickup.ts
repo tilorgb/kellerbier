@@ -1,6 +1,7 @@
 import { circlesOverlap } from '../collision/circle-circle.js';
 import { CollisionLayer } from '../collision/layers.js';
 import type { GameSim } from '../game/sim.js';
+import { dispatchItemBeerPickup } from './items.js';
 
 /**
  * The player against pickups.
@@ -167,6 +168,11 @@ function collect(sim: GameSim, other: number): boolean {
       // the `promille` variant's doc comment in `sim/pickup/definition.ts`.
       sim.addPromille(sim.tuning.promille.beerAmount);
       sim.addPlayerHealth(effect.heal);
+      // A beer never clears Kater on its own (that is `food`'s job, above) —
+      // Konterbier (#32) is what makes drinking through a hangover work, so
+      // every held item gets a look at this exact event rather than the
+      // engine special-casing one item's id here.
+      dispatchItemBeerPickup(sim);
       break;
     case 'weisswurst':
       // *"Nach zwölfe nimmer."* One definition, one tint — the branch changes

@@ -143,6 +143,19 @@ export type ItemBombDetonateHook = (
 ) => void;
 
 /**
+ * Fires when the player collects a beer pickup — a `promille`-kind
+ * `PickupEffect` (`sim/pickup/definition.ts`), the one pickup that raises
+ * Promille — from `sim/systems/pickup.ts`'s `collect`. Added for #32's
+ * Konterbier ("drinking while hungover clears the Kater"), the first item
+ * whose effect depends on *which* pickup was just collected rather than on
+ * a hit, a kill or a tick passing; named for the event a beer being drunk
+ * is, not for Konterbier itself, the same reasoning `onBombDetonate` (added
+ * for Fassldauben) is named for a Bierfassl going off rather than for that
+ * item.
+ */
+export type ItemBeerPickupHook = ItemHook;
+
+/**
  * Every hook an item can declare, per `docs/GAME_DESIGN.md` §8's list plus
  * `onPickup`/`onRemove` (the pairing acceptance criterion #4 — "picking up
  * and losing an item returns the player to exactly the prior state" — needs
@@ -168,6 +181,8 @@ export interface ItemHooks {
   /** Runs once when an active item is used — see `GameSim.useActiveItem`. */
   readonly onActivate?: ItemHook;
   readonly onBombDetonate?: ItemBombDetonateHook;
+  /** See `ItemBeerPickupHook`. */
+  readonly onBeerPickup?: ItemBeerPickupHook;
 }
 
 /**

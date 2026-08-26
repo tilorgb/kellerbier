@@ -13,6 +13,7 @@ import {
   setActionDown,
 } from '../../src/sim/input/frame.js';
 import {
+  dispatchItemBeerPickup,
   dispatchItemDamageTaken,
   dispatchItemFloorStart,
   dispatchItemHit,
@@ -481,5 +482,119 @@ describe('40 held items — hook dispatch stays inside its budget', () => {
     const perTick = elapsed / iterations;
 
     expect(perTick).toBeLessThan(0.5);
+  });
+});
+
+describe('item hooks respect promilleRequirement (#32)', () => {
+  it('a sober item ticks while Nüchtern and goes silent the instant Promille rises', () => {
+    const log: string[] = [];
+    const item = baseItem('fastenkur', {
+      promilleRequirement: 'sober',
+      hooks: { onTick: (ctx) => log.push(ctx.itemId) },
+    });
+    const sim = new GameSim({ room: bareRoom(), items: [item] });
+    sim.pickUpItem('fastenkur');
+
+    stepItemTick(sim);
+    expect(log).toEqual(['fastenkur']);
+
+    sim.tuning.promille.current = 0.5; // Angeheitert — no longer sober
+    stepItemTick(sim);
+    expect(log).toEqual(['fastenkur']); // the second tick never fired
+
+    sim.tuning.promille.current = 0; // back to Nüchtern
+    stepItemTick(sim);
+    expect(log).toEqual(['fastenkur', 'fastenkur']);
+  });
+
+  it('a rausch item stays silent below Vollrausch, and fires at or above it — the failure mode #32 exists to prevent', () => {
+    const log: number[] = [];
+    const item = baseItem('vollgas', {
+      promilleRequirement: 'rausch',
+      hooks: { onKill: (ctx) => log.push(ctx.target) },
+    });
+    const sim = new GameSim({ room: bareRoom(), items: [item] });
+    sim.pickUpItem('vollgas');
+
+    dispatchItemKill(sim, 7); // Nüchtern by default — not rausch, must not leak
+    expect(log).toEqual([]);
+
+    sim.tuning.promille.current = 3.0; // Vollrausch
+    dispatchItemKill(sim, 7);
+    expect(log).toEqual([7]);
+  });
+
+  it('never fires onActivate on a rausch item while sober even fully charged, and does the instant rausch is reached', () => {
+    const log: string[] = [];
+    const item = baseItem('stosstrupp', {
+      promilleRequirement: 'rausch',
+      active: { maxCharge: 1 },
+      hooks: { onActivate: (ctx) => log.push(ctx.itemId) },
+    });
+    const sim = new GameSim({ room: bareRoom(), items: [item] });
+    sim.pickUpItem('stosstrupp');
+    sim.chargeActiveItem('stosstrupp', 1);
+
+    expect(sim.useActiveItem('stosstrupp')).toBe(false); // charged, but sober
+    expect(log).toEqual([]);
+    // A dormant press spends nothing — the charge is exactly where it was.
+    expect(sim.itemState('stosstrupp').charge).toBe(1);
+
+    sim.tuning.promille.current = 3.0; // Vollrausch
+    expect(sim.useActiveItem('stosstrupp')).toBe(true);
+    expect(log).toEqual(['stosstrupp']);
+  });
+
+  it('modifyStats folds in only while the requirement is met, and the pipeline notices a tier crossing on its own', () => {
+    const item = baseItem('mutprobe', {
+      promilleRequirement: 'rausch',
+      hooks: { modifyStats: () => [{ stat: 'stammwuerze', op: 'add', value: 5 }] },
+    });
+    const sim = new GameSim({ room: bareRoom(), items: [item] });
+    const base = sim.stats.value(StatId.Stammwuerze);
+    sim.pickUpItem('mutprobe');
+
+    // Picked up while sober: the bonus never applies in the first place.
+    expect(sim.stats.value(StatId.Stammwuerze)).toBe(base);
+
+    // Nothing here calls `refreshItemStats` — crossing the tier boundary on
+    // its own is exactly what `syncItemPromilleGate` has to notice. 3.5 is
+    // comfortably inside Vollrausch, not on its 3.0 edge: the per-tick decay
+    // `stepPromille` runs at the top of every `step` would otherwise nudge a
+    // value sitting exactly on the boundary back under it before this same
+    // tick's gate ever reads it. The assertion is `>`, not an exact sum,
+    // because Vollrausch's own damage multiplier (a separate stat source,
+    // `syncPromilleModifiers`) also lands on `stammwuerze` here — this test
+    // only needs to show the item's own `add(5)` took effect, not pin down
+    // the two sources' combined arithmetic.
+    sim.tuning.promille.current = 3.5;
+    sim.step(IDLE);
+    expect(sim.stats.value(StatId.Stammwuerze)).toBeGreaterThan(base);
+
+    sim.tuning.promille.current = 0; // back to Nüchtern
+    sim.step(IDLE);
+    expect(sim.stats.value(StatId.Stammwuerze)).toBe(base);
+  });
+
+  it('dispatchItemBeerPickup fires for a held item, gated by promilleRequirement like every other hook', () => {
+    const log: string[] = [];
+    const anyItem = baseItem('konterbier-test', {
+      hooks: { onBeerPickup: (ctx) => log.push(ctx.itemId) },
+    });
+    const soberItem = baseItem('sober-drinker', {
+      promilleRequirement: 'sober',
+      hooks: { onBeerPickup: (ctx) => log.push(ctx.itemId) },
+    });
+    const sim = new GameSim({ room: bareRoom(), items: [anyItem, soberItem] });
+    sim.pickUpItem('konterbier-test');
+    sim.pickUpItem('sober-drinker');
+
+    dispatchItemBeerPickup(sim);
+    expect(log).toEqual(['konterbier-test', 'sober-drinker']);
+
+    log.length = 0;
+    sim.tuning.promille.current = 3.0; // Vollrausch — the sober one goes quiet
+    dispatchItemBeerPickup(sim);
+    expect(log).toEqual(['konterbier-test']);
   });
 });

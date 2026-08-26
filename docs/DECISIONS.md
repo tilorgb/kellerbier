@@ -550,3 +550,43 @@ new `GameSim.statusEffect` field, indexed by slot the same way `flash`/`spawnBou
 are rather than gated behind the ECS component mask — the first status-effect state the engine
 has, and the shape a later item that cleanses or reacts to one specifically would extend rather
 than replace.
+
+## 17. An item's Promille requirement is enforced once, at dispatch — never re-checked per item
+
+**Decided:** M4. **Issue:** #32.
+
+`ItemDefinition.promilleRequirement` (#26) existed before this issue as honest, checked data —
+`ItemRegistry` validates it, `sim/item/pool.ts` filters offers by it — but nothing made a held
+item's *hooks* actually turn off outside its tier. Before #32, exactly one item
+(`ruhige-hand.ts`) implemented this itself, with a bespoke `onTick` toggling `state.charge`
+against a hardcoded `0.5` constant; every other `sober`/`rausch` item (Maßkrugstemmen,
+Fingerhakeln, Zwoa-drei-gsuffa) ran its full effect unconditionally regardless of tier. Fixing
+that per item does not scale any better than #15's rejected per-effect primitive would have —
+every future gated item's author would have to remember, and get right, its own copy of the same
+tier check.
+
+Instead `promilleRequirementMet(requirement, tier)` (`sim/game/promille.ts`, alongside the other
+pure tier functions) is the one place the mapping lives — `'any'` always true, `'sober'` exactly
+`tier === PromilleTier.Nuchtern`, `'rausch'` exactly `tier >= PromilleTier.Vollrausch` (never
+`===`, so Trinkfest's Sturzbesoffen/Filmriss stages, #92, stay `rausch` too) — and every hook
+`sim/systems/items.ts` broadcasts checks it before invoking the item's hook at all. An item that
+never reads `ctx.sim.promille` still turns off correctly, because the engine never calls it
+outside its tier in the first place. `onPickup`/`onRemove` are deliberately exempt — they are not
+dispatched from `items.ts`, so they always run, which is what keeps "losing an item returns the
+player to exactly the prior state" (#26) true regardless of the tier at the moment it is lost.
+`onActivate` (a direct call from `GameSim.useActiveItem`, not a broadcast) gets the same check at
+its one call site instead, for the same reason. `modifyStats` is the one hook this cannot gate at
+call time alone, because #14/#15 already made it a cached, dirty-flagged source rather than
+something re-read every tick — `GameSim.syncItemPromilleGate` is the "cheap check every tick,
+rebuild only on the rare tick a boundary is crossed" companion (the same shape
+`syncPromilleModifiers` already uses for Promille's own contribution) that marks a held gated
+item's stat source dirty the tick its gate actually flips, so `syncItemStatModifiers`'s own
+per-item check has something to act on even when no hook ever calls `refreshItemStats`.
+
+**Constrains:** every `sober`/`rausch` item authored from here on is gated for free — the field
+already existing (#26) was the data half of this; #32 is what makes that data mean something at
+the engine level, so "add the next gated item" stays a pure content change, never an engine
+change. A future hook added to `ItemHooks` that is broadcast from `items.ts` inherits this gate
+automatically by living in that file's dispatch loop; one called directly from `GameSim` (the
+`onPickup`/`onRemove`/`onActivate` pattern) needs its own call to `promilleRequirementMet` at
+that call site, the same way `useActiveItem` does, if it is meant to be gated at all.

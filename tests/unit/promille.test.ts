@@ -8,6 +8,7 @@ import {
   promilleDamageMultiplier,
   promilleDriftScale,
   promilleFireRateMultiplier,
+  promilleRequirementMet,
   promilleScreenDistortion,
   promilleSwayMagnitude,
   promilleTierOf,
@@ -112,6 +113,38 @@ describe('promille tiers', () => {
     expect(promilleScreenDistortion(2.9, tuning)).toBe(0);
     expect(promilleScreenDistortion(3.0, tuning)).toBe(0);
     expect(promilleScreenDistortion(PROMILLE_MAX, tuning)).toBeCloseTo(tuning.maxScreenDistortion);
+  });
+});
+
+describe('promilleRequirementMet (#32)', () => {
+  it('is always met for "any", at every tier', () => {
+    expect(promilleRequirementMet('any', PromilleTier.Nuchtern)).toBe(true);
+    expect(promilleRequirementMet('any', PromilleTier.Angeheitert)).toBe(true);
+    expect(promilleRequirementMet('any', PromilleTier.Vollrausch)).toBe(true);
+    expect(promilleRequirementMet('any', PromilleTier.Umgfalln)).toBe(true);
+  });
+
+  it('"sober" is met only at Nüchtern, exactly the pre-#32 Ruhige Hand threshold', () => {
+    expect(promilleRequirementMet('sober', PromilleTier.Nuchtern)).toBe(true);
+    expect(promilleRequirementMet('sober', PromilleTier.Angeheitert)).toBe(false);
+    expect(promilleRequirementMet('sober', PromilleTier.Beduselt)).toBe(false);
+    expect(promilleRequirementMet('sober', PromilleTier.Vollrausch)).toBe(false);
+    // The boundary itself: tierOf(0.5) is Angeheitert, not Nüchtern (see
+    // 'promille tiers' above), so 0.5 Promille is already un-sober — the
+    // exact number `ruhige-hand.ts` used to hardcode before this replaced it.
+    expect(promilleRequirementMet('sober', tierOf(0.5))).toBe(false);
+    expect(promilleRequirementMet('sober', tierOf(0.49))).toBe(true);
+  });
+
+  it('"rausch" is met at Vollrausch and everything Trinkfest adds past it, never below', () => {
+    expect(promilleRequirementMet('rausch', PromilleTier.Beduselt)).toBe(false);
+    expect(promilleRequirementMet('rausch', PromilleTier.Vollrausch)).toBe(true);
+    // Sturzbesoffen and Filmriss (#92) extend the ladder past Vollrausch —
+    // a rausch item must stay on for both, per the merge note: compare
+    // `tier >= Vollrausch`, never `=== Vollrausch`.
+    expect(promilleRequirementMet('rausch', PromilleTier.Sturzbesoffen)).toBe(true);
+    expect(promilleRequirementMet('rausch', PromilleTier.Filmriss)).toBe(true);
+    expect(promilleRequirementMet('rausch', PromilleTier.Umgfalln)).toBe(true);
   });
 });
 
