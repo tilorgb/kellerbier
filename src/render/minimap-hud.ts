@@ -83,6 +83,17 @@ function drawMap(
   cellPx: number,
   icons: RoomIcons,
 ): { width: number; height: number } {
+  // `removeChildren()` alone only detaches the previous call's per-room
+  // `Graphics`/icon `Sprite`s from the display list — it does not free their
+  // GPU-side geometry, which Pixi only reclaims once `.destroy()` runs.
+  // `rebuild` fires on every room transition (`app/main.ts`), so without
+  // this every step through a run — and every floor of the dev-only endless
+  // loop, `advanceFloor` — leaks one `Graphics` per visible room. Plain
+  // `.destroy()` (no options) leaves the icon textures in `icons` alone —
+  // those are owned and shared by `MinimapHud`, not by the sprite.
+  for (const child of target.children) {
+    child.destroy();
+  }
   target.removeChildren();
 
   const bounds = cellBounds(plan.rooms.flatMap((room) => room.cells));
