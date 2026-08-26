@@ -9,12 +9,14 @@ import { alpenkroneKronkorken } from './alpenkrone-kronkorken.js';
 import { bauernMistgabel } from './bauern-mistgabel.js';
 import { bedienungTablett } from './bedienung-tablett.js';
 import { bergrettung } from './bergrettung.js';
+import { bierbank } from './bierbank.js';
 import { bierdeckel } from './bierdeckel.js';
 import { bierkrug } from './bierkrug.js';
 import { blaskapelle } from './blaskapelle.js';
 import { boellerschmeisser } from './boellerschmeisser.js';
 import { braumeisterVisier } from './braumeister-visier.js';
 import { brezn } from './brezn.js';
+import { brotzeitbrett } from './brotzeitbrett.js';
 import { colaweizen } from './colaweizen.js';
 import { derOrdner } from './der-ordner.js';
 import { drudmaske } from './drudmaske.js';
@@ -27,16 +29,19 @@ import { foehn } from './foehn.js';
 import { gamsbart } from './gamsbart.js';
 import { gamsohr } from './gamsohr.js';
 import { gartenzwergHut } from './gartenzwerg-hut.js';
+import { gluecksklee } from './gluecksklee.js';
 import { gluehbirn } from './gluehbirn.js';
 import { gockelkamm } from './gockelkamm.js';
 import { haferlschuh } from './haferlschuh.js';
 import { heldensaalFackel } from './heldensaal-fackel.js';
+import { hendlgeruch } from './hendlgeruch.js';
 import { hirschgeweih } from './hirschgeweih.js';
 import { jagdhorn } from './jagdhorn.js';
 import { kartoffelsalat } from './kartoffelsalat.js';
 import { karussell } from './karussell.js';
 import { kastenschieber } from './kastenschieber.js';
 import { kerzenwachs } from './kerzenwachs.js';
+import { kirchturmuhr } from './kirchturmuhr.js';
 import { kirchweihKranzl } from './kirchweih-kranzl.js';
 import { kirchweihRatschn } from './kirchweih-ratschn.js';
 import { kirtahutschn } from './kirtahutschn.js';
@@ -46,6 +51,7 @@ import { kuhweide } from './kuhweide.js';
 import { lawine } from './lawine.js';
 import { lebkuchenherz } from './lebkuchenherz.js';
 import { lederhosn } from './lederhosn.js';
+import { lichterkette } from './lichterkette.js';
 import { loewenbrunnDoppelbock } from './loewenbrunn-doppelbock.js';
 import { ludwigsSchwan } from './ludwigs-schwan.js';
 import { marktweib } from './marktweib.js';
@@ -60,6 +66,7 @@ import { opernarie } from './opernarie.js';
 import { peitschn } from './peitschn.js';
 import { perchtenrute } from './perchtenrute.js';
 import { pilzsporen } from './pilzsporen.js';
+import { platzangst } from './platzangst.js';
 import { radi } from './radi.js';
 import { radler } from './radler.js';
 import { reinheitsgebot1516 } from './reinheitsgebot-1516.js';
@@ -73,6 +80,7 @@ import { scherbenhaufen } from './scherbenhaufen.js';
 import { schiessbudenfigur } from './schiessbudenfigur.js';
 import { schimmelsplitter } from './schimmelsplitter.js';
 import { schmalzler } from './schmalzler.js';
+import { schnapsleiche } from './schnapsleiche.js';
 import { schuhplattler } from './schuhplattler.js';
 import { schutzengerl } from './schutzengerl.js';
 import { seilbahn } from './seilbahn.js';
@@ -80,6 +88,7 @@ import { sonnwendfeuer } from './sonnwendfeuer.js';
 import { spatenstich } from './spatenstich.js';
 import { spezi } from './spezi.js';
 import { spiegelsaal } from './spiegelsaal.js';
+import { steckerlfisch } from './steckerlfisch.js';
 import { steinkrug } from './steinkrug.js';
 import { teufelsbraten } from './teufelsbraten.js';
 import { teufelstrittRuss } from './teufelstritt-russ.js';
@@ -92,6 +101,7 @@ import { watschn } from './watschn.js';
 import { watzmannkraxn } from './watzmannkraxn.js';
 import { weidezaun } from './weidezaun.js';
 import { weissblaueRauten } from './weissblaue-rauten.js';
+import { weisswurst } from './weisswurst.js';
 import { wildeGjoadHorn } from './wilde-gjoad-horn.js';
 import { wildschuetz } from './wildschuetz.js';
 import { wirtshausschlaeger } from './wirtshausschlaeger.js';
@@ -135,7 +145,11 @@ import { zwoaDreiGsuffa } from './zwoa-drei-gsuffa.js';
  * adds Waldschrat-Knüppel, Drudmaske (the roster's fourth `curse`-pooled
  * item), Hirschgeweih, Pilzsporen, Nebellaterne, Wilde-Gjoad-Horn,
  * Heldensaal-Fackel, Almhüttn-Feuer, Teufelstritt-Ruß and Waldnebel (the
- * roster's first `spectral`-tagged item).
+ * roster's first `spectral`-tagged item). #59's eighth batch, Volksfest food
+ * and customs rather than one floor's own lore, adds Weißwurst, Steckerlfisch,
+ * Bierbank, Brotzeitbrett, Hendlgeruch, Platzangst (the roster's fifth
+ * `curse`-pooled item), Glücksklee (the second `angel`-pool item),
+ * Kirchturmuhr, Lichterkette and Schnapsleiche.
  */
 export const ITEM_DEFINITIONS: readonly ItemDefinition[] = [
   bierkrug,
@@ -237,6 +251,16 @@ export const ITEM_DEFINITIONS: readonly ItemDefinition[] = [
   almhuettnFeuer,
   teufelstrittRuss,
   waldnebel,
+  weisswurst,
+  steckerlfisch,
+  bierbank,
+  brotzeitbrett,
+  hendlgeruch,
+  platzangst,
+  gluecksklee,
+  kirchturmuhr,
+  lichterkette,
+  schnapsleiche,
 ];
 
 export {
@@ -250,12 +274,14 @@ export {
   bauernMistgabel,
   bedienungTablett,
   bergrettung,
+  bierbank,
   bierdeckel,
   bierkrug,
   blaskapelle,
   boellerschmeisser,
   braumeisterVisier,
   brezn,
+  brotzeitbrett,
   colaweizen,
   derOrdner,
   drudmaske,
@@ -268,16 +294,19 @@ export {
   gamsbart,
   gamsohr,
   gartenzwergHut,
+  gluecksklee,
   gluehbirn,
   gockelkamm,
   haferlschuh,
   heldensaalFackel,
+  hendlgeruch,
   hirschgeweih,
   jagdhorn,
   kartoffelsalat,
   karussell,
   kastenschieber,
   kerzenwachs,
+  kirchturmuhr,
   kirchweihKranzl,
   kirchweihRatschn,
   kirtahutschn,
@@ -287,6 +316,7 @@ export {
   lawine,
   lebkuchenherz,
   lederhosn,
+  lichterkette,
   loewenbrunnDoppelbock,
   ludwigsSchwan,
   marktweib,
@@ -301,6 +331,7 @@ export {
   peitschn,
   perchtenrute,
   pilzsporen,
+  platzangst,
   radi,
   radler,
   reinheitsgebot1516,
@@ -314,6 +345,7 @@ export {
   schiessbudenfigur,
   schimmelsplitter,
   schmalzler,
+  schnapsleiche,
   schuhplattler,
   schutzengerl,
   seilbahn,
@@ -321,6 +353,7 @@ export {
   spatenstich,
   spezi,
   spiegelsaal,
+  steckerlfisch,
   steinkrug,
   teufelsbraten,
   teufelstrittRuss,
@@ -333,6 +366,7 @@ export {
   watzmannkraxn,
   weidezaun,
   weissblaueRauten,
+  weisswurst,
   wildeGjoadHorn,
   wildschuetz,
   wirtshausschlaeger,

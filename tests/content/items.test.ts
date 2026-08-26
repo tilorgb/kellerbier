@@ -153,6 +153,12 @@ describe('#59 — batch 7 of ten toward 120+', () => {
   });
 });
 
+describe('#59 — batch 8 of ten toward 120+', () => {
+  it('reaches at least eighty new items on top of #29 and #26', () => {
+    expect(ITEM_DEFINITIONS.length).toBeGreaterThanOrEqual(108);
+  });
+});
+
 function aiming(angleRadians: number): ReturnType<typeof createInputFrame> {
   const frame = createInputFrame();
   frame.aimX = quantiseAxis(Math.cos(angleRadians));
