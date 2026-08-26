@@ -30,6 +30,10 @@ assets/atlases/*.json
 *.swp
 *.swo
 
+# Claude Code CLI's own per-issue worktree checkouts (CLAUDE.md's "one git
+# worktree per issue/branch") — a full nested checkout, never repo content.
+.claude/worktrees/
+
 # os
 .DS_Store
 Thumbs.db
