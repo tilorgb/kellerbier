@@ -175,22 +175,23 @@ export function createDoorView(
   const graphics = new Graphics();
   const colour = locked ? DOOR_LOCKED_COLOUR : DOOR_OPEN_COLOUR;
   const frame = roomFrameSize(room);
-  const half = DOOR_SPAN / 2;
 
   for (const door of doors) {
     const centre = doorCentre(room, door);
+    const span = door.span ?? DOOR_SPAN;
+    const half = span / 2;
     switch (door.direction) {
       case 'north':
-        graphics.rect(centre.x - half, 0, DOOR_SPAN, room.minY).fill(colour);
+        graphics.rect(centre.x - half, 0, span, room.minY).fill(colour);
         break;
       case 'south':
-        graphics.rect(centre.x - half, room.maxY, DOOR_SPAN, frame.height - room.maxY).fill(colour);
+        graphics.rect(centre.x - half, room.maxY, span, frame.height - room.maxY).fill(colour);
         break;
       case 'west':
-        graphics.rect(0, centre.y - half, room.minX, DOOR_SPAN).fill(colour);
+        graphics.rect(0, centre.y - half, room.minX, span).fill(colour);
         break;
       case 'east':
-        graphics.rect(room.maxX, centre.y - half, frame.width - room.maxX, DOOR_SPAN).fill(colour);
+        graphics.rect(room.maxX, centre.y - half, frame.width - room.maxX, span).fill(colour);
         break;
     }
   }

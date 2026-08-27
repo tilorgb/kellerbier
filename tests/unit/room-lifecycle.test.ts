@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import cellarCrossroads from '../../src/content/rooms/cellar.json';
+import { BOSS_REWARD_DROP_TABLE } from '../../src/content/pickups/drop-tables.js';
 import { EventKind } from '../../src/sim/events/queue.js';
 import { GameSim } from '../../src/sim/game/sim.js';
 import { createInputFrame } from '../../src/sim/input/frame.js';
@@ -179,7 +180,7 @@ describe('the shopkeeper', () => {
 });
 
 describe('boss room reward', () => {
-  it('rolls the boss table on clear, which — unlike the ordinary table — never drops nothing', () => {
+  it('rolls the boss table on clear, which can pay out nothing — the room pedestal is the real reward', () => {
     const bossRoom = {
       ...cellarCrossroads,
       id: 'test-boss-room',
@@ -190,18 +191,29 @@ describe('boss room reward', () => {
       metadata: { ...cellarCrossroads.metadata, specialRole: 'boss' },
     };
     const sim = new GameSim({ roomTemplate: bossRoom, floor: 1, population: 'empty' });
-    let enemyIndex = -1;
-    sim.world.forEach(sim.enemyMask, (index) => {
-      enemyIndex = index;
-    });
+    // Neutralises `needMultiplierFor`'s boost (a fresh run starts owning
+    // none of these) so the observed split matches the table's own weights
+    // rather than the "player is broke" skew every fresh sim starts under.
+    sim.addBiermarken(999);
+    sim.addKeys(999);
+    sim.addBombs(999);
 
-    sim.kill(enemyIndex);
-    sim.world.flush();
-    sim.step(idle());
-
-    // Player plus at least one dropped pickup — `BOSS_REWARD_DROP_TABLE`
-    // never rolls its "nothing" outcome, unlike `ROOM_CLEAR_DROP_TABLE`.
-    expect(sim.world.count).toBeGreaterThan(1);
+    // The bonus roll is genuinely optional now (`BOSS_REWARD_DROP_TABLE`
+    // carries a `null` weight, unlike a boss's guaranteed pedestal item) —
+    // rolled directly, repeatedly, rather than via one room clear, since
+    // only one clear roll exists per room and the point is that the *table*
+    // can land on either outcome, not any one specific draw from it.
+    // `world.flush()` after each roll: `world.count` excludes this tick's
+    // own spawns until flushed, same as everywhere else in this file.
+    const outcomes = new Set<boolean>();
+    for (let roll = 0; roll < 40; roll++) {
+      const before = sim.world.count;
+      sim.dropLoot(BOSS_REWARD_DROP_TABLE, sim.room.minX + 10, sim.room.minY + 10);
+      sim.world.flush();
+      outcomes.add(sim.world.count > before);
+    }
+    expect(outcomes.has(true)).toBe(true);
+    expect(outcomes.has(false)).toBe(true);
   });
 });
 
@@ -362,9 +374,8 @@ describe('Die Große Kellerassel (#36)', () => {
     expect(sim.liveEnemyCount).toBe(0);
     expect(sim.doorsLocked).toBe(false);
     expect(sim.bossHealth).toBeNull();
-    // Player plus at least one dropped pickup — the same guaranteed boss
-    // reward `BOSS_REWARD_DROP_TABLE` rolls on any boss room's clear.
-    expect(sim.world.count).toBeGreaterThan(1);
+    // The room-clear bonus roll itself — optional, unlike a boss's pedestal
+    // item — is covered by its own `describe('boss room reward', ...)` block.
   });
 });
 

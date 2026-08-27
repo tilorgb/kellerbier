@@ -208,7 +208,16 @@ function nextFloorExitDoor(
         : direction === 'west'
           ? { x: geometry.minX, y: midY }
           : { x: geometry.maxX, y: midY };
-  return { direction, cellCol: 0, cellRow: 0, centre };
+  // The whole wall, not `DOOR_SPAN`'s usual 24px: this door's `centre` sits
+  // on the room's overall bounding box rather than on one authored cell, so
+  // on a multi-cell boss room a narrow band can be a hundred-plus pixels
+  // from wherever the player actually approaches that wall from — which
+  // reads as a solid wall that swallows the room's own exit, not as a door.
+  const span =
+    direction === 'north' || direction === 'south'
+      ? geometry.maxX - geometry.minX
+      : geometry.maxY - geometry.minY;
+  return { direction, cellCol: 0, cellRow: 0, centre, span };
 }
 
 /**
@@ -996,10 +1005,10 @@ export class GameSim {
     const index = this.playerIndex;
     const x = this.positionX(index);
     const y = this.positionY(index);
-    const half = DOOR_SPAN / 2;
 
     for (const door of this.doors) {
       const centre = doorCentre(this.room, door);
+      const half = (door.span ?? DOOR_SPAN) / 2;
       switch (door.direction) {
         case 'north':
           if (y <= this.room.minY + PLAYER_RADIUS && Math.abs(x - centre.x) <= half) {
@@ -3500,8 +3509,10 @@ export class GameSim {
    * outside `GameSim` has a reason to see.
    *
    * A boss room's clear rolls `BOSS_REWARD_DROP_TABLE` instead of the
-   * ordinary one — a guaranteed, better payout for the room the floor's
-   * doors were sealed around, not just another kill.
+   * ordinary one — richer when it pays out, but a bonus on top of the room's
+   * own pedestal item (`pedestalPoolForRole`), not a second guaranteed
+   * reward stacked on it. The pedestal item is the boss reward; this can
+   * add a coin or a keg on top of it, or nothing at all.
    */
   private rollRoomClearLoot(): void {
     const centreX = (this.room.minX + this.room.maxX) / 2;
