@@ -62,6 +62,22 @@ describe('enemies against each other (#big-rooms follow-up)', () => {
     expect(gapBetween(sim, a, b)).toBeGreaterThan(reachBetween(sim, a, b) - 0.5);
   });
 
+  it('resolves a pair straddling a grid cell boundary, not just a pair sharing one cell', () => {
+    // The default grid cell is 32px; these two sit 4px apart but on opposite
+    // sides of the column-0/column-1 boundary, so they land in different
+    // cells — this is the cross-cell "forward neighbour" sweep, not the
+    // same-cell loop every other test in this file happens to exercise.
+    const sim = emptySim();
+    const a = place(sim, 'kellerassel', 30, 40);
+    const b = place(sim, 'kellerassel', 34, 40);
+
+    for (let tick = 0; tick < 20; tick++) {
+      sim.step(IDLE);
+    }
+
+    expect(gapBetween(sim, a, b)).toBeGreaterThan(reachBetween(sim, a, b) - 0.5);
+  });
+
   it('keeps three enemies split from the same point apart from each other', () => {
     // The exact shape of the reported bug: a boss splitting into several
     // bodies at once (`splitFromEvent`, `systems/enemy.ts`), all landing

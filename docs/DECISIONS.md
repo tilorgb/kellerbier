@@ -765,52 +765,61 @@ still-overlapping neighbour, which converges in practice. That correctness gap i
 can afford and `contact.ts` cannot: nobody reads an enemy's exact pixel against a wall the way
 they read the player's.
 
-**Three attempts at the broadphase question**, each one caught by a different metric on the
+**Four attempts at the broadphase question**, each one caught by a different metric on the
 frame-time benchmark's stress scene (200 enemies, all `walkTowardPlayer`, converging and staying
 clustered indefinitely — deliberately adversarial for whatever this pass does):
 
 1. Reuse the tick's `sim.broadphase.query(x, y, radius, visit)`, called once per enemy to find
    its neighbours — the obvious move, since `stepContacts` already does this for the player. Left
-   "Simulation heap" red: at 200 enemies that is up to 200 calls a tick into a function V8 does
-   not inline, each one boxing the three pixel doubles crossing it, the same cost `contact.ts`
-   pays exactly once for the player. Once for the player is the residual, accepted cost the
-   frame-time benchmark's own doc comments describe; two hundred times a tick is a different
-   budget.
+   "Simulation heap" red: 54.4 KB/tick against a 37.5 KB baseline, well past the gate's 16 KB
+   floor.
 2. Drop the broadphase and walk `world.highWater`/`world.masks` directly, comparing every enemy
    pair with a plain O(enemies²) nested loop — the same "hand-written system loop" shape
-   `bodies.ts`, `enemy.ts` and `collision.ts` already use, and no call boundary anywhere inside
-   it. This got "Simulation heap" green, but pushed "Simulation tick" past its own tolerance band:
-   at the clustered stress population, cells still meaningfully bound the broadphase's own
-   candidate count even when everyone is nearby, so an unconditional ~20,000-pair sweep does
-   measurably more comparisons than a grid ever would have — the timing cost of *not* partitioning
-   at all.
-3. What actually stuck: keep the grid, lose the doubles. `SpatialHash.queryBox` converts a pixel
-   centre/radius to a column/row range and then walks it; `queryCells` (the new method) is that
-   walk alone, taking the column/row range as arguments instead of computing it — the box-to-cell
-   conversion moved to the caller. `stepEnemyContacts` still walks `highWater`/`masks` directly for
-   the outer loop (attempt 2's win), but for each enemy computes its own column/row bounds inline,
-   in local doubles that never leave the function, and hands `queryCells` only integers. A small
-   integer is a V8 Smi — passed by value, never boxed, regardless of inlining — so the call
-   boundary that was the actual cost in attempt 1 is gone, while the grid still bounds the
-   candidate count the way attempt 2's unconditional sweep didn't. Both metrics green.
+   `bodies.ts`, `enemy.ts` and `collision.ts` already use. This got "Simulation heap" green (51.7
+   KB/tick, just under the floor) but pushed "Simulation tick" past its own tolerance band: at the
+   clustered stress population, cells still meaningfully bound the broadphase's own candidate
+   count even when everyone is nearby, so an unconditional ~20,000-pair sweep does measurably more
+   comparisons than a grid ever would have.
+3. Suspecting the heap cost in attempt 1 was pixel doubles boxing at the `query` call boundary,
+   `queryBox`'s cell-range walk was split out as its own method, `queryCells`, so a caller could
+   compute the column/row bounds itself in local doubles and hand the grid only integers — a small
+   integer is a V8 Smi, passed by value, never boxed regardless of inlining. This did not move the
+   number at all: 54.4 KB/tick again, to the same tenth of a kilobyte as attempt 1. The theory was
+   wrong — it was never about what crossed the boundary into `SpatialHash`, since integers and
+   doubles cost the same once there.
+4. What actually stuck: keep a grid, but stop calling into `SpatialHash` at all. `stepEnemyContacts`
+   now builds its own grid over enemies only, rebuilt fresh each tick — a counting sort into
+   `cellStart`/`bucketed`, the same technique `SpatialHash.build` uses, just scoped down and kept
+   out of the shared instance. Candidate pairs are found by walking every cell against itself and
+   its four "forward" neighbours (the standard half-neighbourhood sweep, visiting every unordered
+   cell pair exactly once) and resolved by calling `resolvePair` directly, by its own name, from
+   two fixed call sites — never through a stored callback parameter the way `SpatialHash.query`'s
+   `visit` argument works. That indirection — an unknown-until-runtime function reference, even
+   when it always turns out to be the same one — looks to be what attempts 1 and 3 were actually
+   paying for, not the doubles. Both metrics green: the grid still bounds the candidate count
+   (fixing what attempt 2 got wrong), and nothing routes through an indirect call at all (fixing
+   what attempts 1 and 3 got wrong).
 
-The general lesson, not just this file's: "boxing a double at a call boundary V8 won't inline" is
-about what crosses the boundary, not whether there is one. A function called a couple hundred
-times a tick is not automatically too expensive — it is too expensive if what is handed across it
-is doubles. The fix was never "call fewer functions," it was "make the frequent call cross only
-integers, and keep the doubles local."
+The general lesson, not just this file's: **"boxing a double at a call boundary V8 won't inline"
+was the wrong diagnosis for attempt 1**, confirmed wrong by attempt 3 changing exactly that
+variable and getting an identical number back. What actually seems to cost is calling a function
+through a stored reference — a callback parameter — rather than by its own static name, at a
+frequency in the hundreds per tick. A direct, statically-named call is trivial for V8 to
+devirtualise even called that often; an indirect one, even to the same underlying function every
+time, is not. Diagnosing a performance regression by theory rather than by changing one variable
+and re-measuring cost three CI round-trips here — the fix that actually worked was the one found
+by elimination, not the one that sounded most plausible first.
 
 **Constrains:** a future system that needs to tell a real enemy apart from an inert body
 (a training target, a pickup, an obstacle prop) reaches for the `enemyMask` component check
 first, not a collision layer — the layer only reliably distinguishes `Obstacle`-tagged bodies
 from projectiles, the player and pickups today, not enemies from non-enemies. And a future
-per-pair system called once per body in a population sized in the hundreds — enemies against each
-other is the case today — reaches for `SpatialHash.queryCells` over `query`/`queryBox` by default:
-compute the column/row bounds locally (the two-line clamped floor-division `enemy-contact.ts`
-duplicates from `SpatialHash`'s own private `columnOf`/`rowOf`) and hand the grid only integers.
-Reaching for `query`/`queryBox` themselves stays right for a call made once or a handful of times
-a tick — the player's own contact pass, a single explosion radius — where the pixel-double
-boundary they cross is exactly the residual, accepted cost the frame-time benchmark's doc comments
-describe. The frame-time benchmark is what tells a "once a tick" caller from a "once per body"
-one apart, and attempt 2 above is the reminder that skipping the grid altogether is its own
-failure mode, not a fallback to reach for by default.
+per-pair system called once per body in a population sized in the hundreds reaches for its own
+scoped grid, built with plain direct-call helpers the way `enemy-contact.ts` does, before reaching
+for `sim.broadphase` — `query`/`queryBox`/`queryCells` all stay right for a call made once or a
+handful of times a tick (the player's own contact pass, a single explosion radius), where whatever
+the indirect-callback cost turns out to be is the residual, accepted cost the frame-time
+benchmark's doc comments already describe; called once per body in a population sized in the
+hundreds, that same indirection stopped being residual, twice, regardless of what was handed
+across it. The frame-time benchmark is what tells those two calling frequencies apart — measure
+before trusting a theory about which part of a call is the expensive part.
