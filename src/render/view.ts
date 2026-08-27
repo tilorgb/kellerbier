@@ -40,11 +40,12 @@ export interface GameViewTextures {
   /** A pedestal's light beam. */
   readonly pedestalBeam: Texture;
   /**
-   * Real tile art (#35, #37), keyed by floor number. A floor with no entry
-   * here falls back to `createRoomView`'s flat palette fill — every floor
-   * but 1 and 2, today.
+   * Real tile art (#35, #37), keyed by floor number, one or more variants
+   * per floor (`render/room.ts`'s `pickTileVariant` picks between them per
+   * cell). A floor with no entry here falls back to `createRoomView`'s flat
+   * palette fill — every floor but 1 and 2, today.
    */
-  readonly floorTiles: Readonly<Record<number, Texture>>;
+  readonly floorTiles: Readonly<Record<number, readonly Texture[]>>;
   /**
    * Real character art (#35), keyed by `EnemyDefinition.id`. An enemy with
    * no entry here falls back to `entity`, the shared blob every enemy used
@@ -73,7 +74,7 @@ export class GameView {
   }
 
   private readonly sim: GameSim;
-  private readonly floorTiles: Readonly<Record<number, Texture>>;
+  private readonly floorTiles: Readonly<Record<number, readonly Texture[]>>;
   private readonly player: Sprite;
   private readonly projectiles: ProjectileView;
   private readonly entities: EntityView;

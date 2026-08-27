@@ -1,6 +1,33 @@
-import { Container, Graphics, TilingSprite, type Texture } from 'pixi.js';
+import { Container, Graphics, Sprite, type Texture } from 'pixi.js';
+import { ROOM_TILE_UNITS } from '../content/rooms/definition.js';
 import { BLOCK_STRIDE, DOOR_SPAN, roomFrameSize, type RoomGeometry } from '../sim/room/geometry.js';
 import { doorCentre, type CompiledDoor } from '../sim/room/template.js';
+
+/**
+ * Which of `variantCount` tile textures a floor cell at `(col, row)` draws —
+ * Floor 2's "living floor" (#37): several tile variants (`floor-art.ts`'s
+ * `RURAL_FLOOR_TILE_URLS`) mixed across the room instead of one texture
+ * tiled identically everywhere, so the ground doesn't read as a single
+ * repeating swatch.
+ *
+ * A hash of the cell's own position, not a random draw — `createRoomView`
+ * runs once at room load and never again (see its own doc comment), so
+ * nothing needs to be *stored* to keep a room's floor from reshuffling on a
+ * later redraw; reading off `(col, row)` already gives the same answer
+ * every time this cell is drawn, whether that's the same visit or a later
+ * one. It intentionally takes no room-specific seed either: two rooms that
+ * happen to place the same absolute cell see the same variant, which is a
+ * coincidence rather than a rule, and different rooms overwhelmingly don't
+ * share cells in the first place.
+ */
+function pickTileVariant(col: number, row: number, variantCount: number): number {
+  if (variantCount <= 1) {
+    return 0;
+  }
+  let hash = (col * 374761393 + row * 668265263) >>> 0;
+  hash = Math.imul(hash ^ (hash >>> 13), 1274126177) >>> 0;
+  return hash % variantCount;
+}
 
 /** Placeholder palette for a floor with no room palette of its own yet. Real tilesets arrive with the art pipeline in #34. */
 const DEFAULT_PALETTE: RoomPalette = {
@@ -108,7 +135,7 @@ const CRACK_SPAN = 10;
 export function createRoomView(
   room: RoomGeometry,
   floorNumber = 0,
-  floorTileTexture?: Texture,
+  floorTileTextures?: readonly Texture[],
 ): Container {
   const container = new Container();
   const palette = paletteFor(floorNumber);
@@ -122,19 +149,30 @@ export function createRoomView(
     .stroke({ width: 1, color: palette.wallEdge, alignment: 0 });
   container.addChild(floor);
 
-  // Real tile art (#35's `assets/sprites/floor-1-cellar/tiles/`), laid over
-  // the flat fill above rather than replacing it — the fill is what shows
-  // through a room shape's dropped cells and margin, and stays the fallback
-  // for every floor that has no tile art yet.
-  if (floorTileTexture !== undefined) {
-    const tiled = new TilingSprite({
-      texture: floorTileTexture,
-      x: room.minX,
-      y: room.minY,
-      width: room.maxX - room.minX,
-      height: room.maxY - room.minY,
-    });
-    container.addChild(tiled);
+  // Real tile art (#35's `assets/sprites/floor-1-cellar/tiles/`, #37's
+  // `floor-2-rural/tiles/`), laid over the flat fill above rather than
+  // replacing it — the fill is what shows through a room shape's dropped
+  // cells and margin, and stays the fallback for every floor that has no
+  // tile art yet. One sprite per 16-unit cell rather than a single tiled
+  // texture, each drawing whichever of `floorTileTextures` `pickTileVariant`
+  // lands on for that cell — with one texture (Floor 1, today) every cell
+  // picks index 0 and this is visually identical to the old single
+  // `TilingSprite`; with several (Floor 2) it's the "living floor" mix.
+  if (floorTileTextures !== undefined && floorTileTextures.length > 0) {
+    for (let y = room.minY; y < room.maxY; y += ROOM_TILE_UNITS) {
+      for (let x = room.minX; x < room.maxX; x += ROOM_TILE_UNITS) {
+        const col = Math.round(x / ROOM_TILE_UNITS);
+        const row = Math.round(y / ROOM_TILE_UNITS);
+        const variant = pickTileVariant(col, row, floorTileTextures.length);
+        const texture = floorTileTextures[variant] ?? floorTileTextures[0];
+        if (texture === undefined) {
+          continue;
+        }
+        const tile = new Sprite(texture);
+        tile.position.set(x, y);
+        container.addChild(tile);
+      }
+    }
   }
 
   const puddles = new Graphics();

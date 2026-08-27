@@ -38,6 +38,22 @@ driving) and look at the result, the same standard `docs/GAME_DESIGN.md` and thi
 review culture already hold gameplay work to. It's a game: a feature nobody can experience isn't
 finished, no matter how thoroughly it's unit-tested.
 
+## New pixel art needs sign-off before it's committed
+
+Whenever a change adds or replaces pixel art — a tile, a character sprite, a projectile, a boss,
+anything under `assets/sprites/` — don't just author one version and commit it. Generate a small
+set of design options (the Floor 1 tileset went through this as 4 candidate tile designs), show
+them to the user, and let them pick before the art lands in a commit. This holds even mid-session,
+even for placeholder-tier art: the *pattern/style choice* is what needs sign-off, not the pixel-
+perfect execution of it.
+
+In practice: render the options at a legible scale (upscaled, nearest-neighbour, no smoothing) and
+send them as an image rather than describing them in text. If the art has a "how it repeats" or
+"how it varies" question — a tileset that mixes several variants across a floor, say — show that
+mixed/tiled, not just the individual swatches, since that's what the option actually reads like in
+play. Once a direction is picked, iterating within it (fixing a rendering bug, tightening a shape)
+doesn't need another round of sign-off — only a genuinely new design choice does.
+
 ## Component-library lessons, for work outside this repo
 
 [`docs/COMPONENT_LIBRARY_LESSONS.md`](docs/COMPONENT_LIBRARY_LESSONS.md) is not about Kellerbier
