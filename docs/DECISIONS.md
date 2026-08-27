@@ -894,6 +894,30 @@ M5's criterion was narrowed to *content* complete and the finishing was given it
   from the headline bar, so deferring scope does not make the one number at the top of the
   roadmap go down. Deferred work is not work the project is failing to do.
 
+**Settled in the same session, once the shape was agreed:**
+
+- **The two-floor game ships.** M9 releases it on itch.io, free or name-your-price, honest on the
+  store page about being two chapters of seven — before M10 exists. This is the load-bearing half
+  of the refocus, not a consolation for it: parking five floors is only defensible if the two that
+  remain get in front of strangers, because the whole argument above is that the bar is discovered
+  rather than specified, and players are how it gets discovered. A refocus that deferred content
+  *and* deferred release would defer the evidence too.
+- **Steam and the desktop shell move with the floors.** #70-#72 and #57 want a paid store page, a
+  wishlist runway, and enough game to justify both; #57's own "revisit if" clause already named
+  this case. itch.io asks none of that and reaches strangers today.
+- **The story ends on a cliffhanger rather than moving its reveal down.** Der Stier closes chapter
+  two; "it was scale, not malice" stays on floor 6 where it was written to live. The alternative —
+  relocating the evidence into the cellar and the village — buys a complete arc at the cost of
+  the reveal M10 is built around, and spends writing that would then have to be undone. The risk
+  taken instead is execution risk, and it is real: to a stranger with no roadmap, a bad
+  cliffhanger and an unfinished game look identical. #58 carries an acceptance criterion that
+  makes the difference testable rather than assumed — a playtester who has never seen the roadmap
+  calls it a cliffhanger, unprompted, in a #159 session.
+- **M7's bet gets called on a date, not a metric.** When M7 closes, play it and judge whether a
+  second run is compelling; if not, unpark M10 rather than adding more meta-progression. A
+  threshold would be gameable and would arrive late (telemetry only exists after M8); a scheduled
+  judgement cannot slide quietly, which is the failure mode being guarded against.
+
 The alternative considered and rejected: build floors 3-7 to the current (placeholder-tier) bar
 and polish all seven together at the end. That is the plan that produces seven floors of art
 needing rework the day the art direction lands, and it is the plan that makes M6's own

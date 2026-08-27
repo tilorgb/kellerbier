@@ -30,7 +30,9 @@ What moved, concretely:
 | #137 | *untriaged* | **M7** | Item sets are replayability, which M7 now carries |
 | #51 | one epic | **#51 + #157** | Composition and mixer plumbing split; #51 now writes two floor themes, not seven |
 | #53 | one epic | **#53 + #158** | Screen flow split from settings and accessibility |
-| #52, #54, #58 | seven floors | rescoped | Two-floor curve, two-floor story arc, pixel font moved to #154 |
+| #52, #54, #58 | seven floors | rescoped | Two-floor curve, chapter-two cliffhanger, pixel font moved to #154 |
+| #57, #70–#72 | M9 | **M10** | Steam and the desktop shell need more game than two floors to be worth doing |
+| #55, #56 | seven-floor launch | rescoped | M9 is the itch.io release of a two-chapter game, priced and described as one |
 
 ---
 
@@ -161,26 +163,26 @@ used to — with five floors parked, the reason to replay cannot be "there is mo
 | 52 | Localisation: English, German and Boarisch |
 | 53 | Settings and the full accessibility suite |
 | 54 | Balance pass with playtest telemetry |
-| 58 | Story delivery: chapter cards, boss plates and flavour text |
+| 58 | Story delivery: chapter cards, boss plates and the chapter-two cliffhanger |
 | 157 | Audio engine: buses, mixing, ducking and Promille filtering |
 | 158 | Title screen, pause and the run flow around the game |
 | 159 | A structured playtest loop |
 
 ## M9 — Release
 
+*itch.io only, free or name-your-price.* The two-floor game ships and strangers play it; Steam
+waits for M10.
+
 | # | Issue |
 |---|---|
 | 55 | Legal review of names, landmarks and trademarks |
 | 56 | Web release build, itch.io page and trailer |
-| 57 | Desktop packaging with Electron |
-| 70 | Steamworks: achievements, cloud saves, rich presence and Steam Input |
-| 71 | Steam Deck: controller-first UI, performance and Verified |
-| 72 | Steam release: store page, build pipeline and wishlist runway |
 
 ## M10 — Floors 3–7 *(parked)*
 
-Not cancelled — deferred until the bar these five have to match has stopped moving. Epics; break
-each into sub-issues when they unpark.
+Not cancelled — deferred until the bar these five have to match has stopped moving, and until M9's
+players have said something about what they should be. Epics; break each into sub-issues when they
+unpark. Carries the Steam track, which needs more game than two floors to be worth doing.
 
 | # | Issue |
 |---|---|
@@ -190,6 +192,10 @@ each into sub-issues when they unpark.
 | 42 | Floor 6 — Die Brauerei and Die Abfüllanlage |
 | 43 | Floor 7 — Die Wiesn and Die Bavaria |
 | 44 | Secret areas: Walhalla and Der Teufelstritt |
+| 57 | Desktop packaging with Electron |
+| 70 | Steamworks: achievements, cloud saves, rich presence and Steam Input |
+| 71 | Steam Deck: controller-first UI, performance and Verified |
+| 72 | Steam release: store page, build pipeline and wishlist runway |
 | 98 | Huepfburg: a side-scrolling jump'n'run special room |
 
 ---

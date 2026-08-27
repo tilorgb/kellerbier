@@ -24,6 +24,12 @@ The trade this makes: a 15-minute game has to earn its replays from systems rath
 new scenery. That is what M7 is for, and it is why meta-progression stays in scope rather than
 deferring alongside the floors.
 
+And it ships. **M9 releases the two-floor game on itch.io before M10 exists** — free or
+name-your-price, honest on the store page about being two chapters of seven. That is not a
+compromise forced by the refocus; it is the point of it. Every hour of stranger playtime is
+evidence about what the remaining five floors should be, collected before they are built rather
+than after.
+
 ---
 
 ## M0 — Foundations
@@ -108,18 +114,26 @@ features, gamepad support, the story cards, and a serious balance pass against r
 telemetry.
 
 ## M9 — Release
-*Exit: strangers are playing it.*
+*Exit: strangers are playing it — the two-floor game is out on itch.io and feedback is coming
+back.*
 
-Web build on itch.io, a trailer, store copy, a legal review of every name and landmark, the
-Steam and desktop tracks, and a post-launch plan.
+Web build on itch.io, a trailer, store copy honest about the game being two chapters of seven,
+a legal review of every name that actually ships, and a post-launch plan. **Free or
+name-your-price**, which removes the "is fifteen minutes worth money" question rather than
+answering it.
+
+The Steam track (#70–#72) and the desktop shell (#57) are **not** here. Steam wants a paid store
+page, a wishlist runway and enough game to justify both, and two floors is not that. They move to
+M10, where #57's own "revisit if" clause points them anyway.
 
 ## M10 — Floors 3–7 *(parked)*
-*Exit: a complete run from cellar to Die Bavaria.*
+*Exit: a complete run from cellar to Die Bavaria, on Steam, worth charging for.*
 
 Der Wald, Die Alpen, Schloss Neuschwanstein, Die Brauerei, Die Wiesn. Every enemy roster,
-every boss, every floor hazard. Parked until floors 1 & 2 are finished, so that these five are
-built once, against a bar that has stopped moving, with the art and audio pipelines that M6–M8
-will have proved out.
+every boss, every floor hazard — plus the Steam release and the desktop build that need them to
+exist first. Parked until floors 1 & 2 are finished, so that these five are built once, against a
+bar that has stopped moving, with the art and audio pipelines M6–M8 will have proved out, and
+against real evidence from M9's players about what the remaining five floors should be.
 
 ---
 
@@ -135,9 +149,17 @@ will have proved out.
 - **M6 before M8, deliberately.** Art and animation change what the game needs from its sound
   and its menus; the reverse is much less true. Doing sound against placeholder art means
   scoring a game that does not exist yet.
-- **M7's scope is a bet.** Two floors is roughly fifteen minutes. If meta-progression does not
-  make a second run compelling, the honest response is not more meta-progression — it is
-  unparking M10 sooner.
+- **M7's scope is a bet, and it gets called at the end of M7.** Two floors is roughly fifteen
+  minutes. The decision point is fixed rather than metric-triggered: when M7 closes, play it and
+  judge whether a second run is genuinely compelling. If it is not, the honest response is not
+  more meta-progression — it is unparking M10 sooner. Being a *scheduled* decision is the whole
+  point; a bet with no date attached quietly becomes an assumption.
+- **The story ends on a cliffhanger, deliberately.** Der Stier closes chapter two rather than
+  revealing what is upstream — the "it was scale, not malice" reveal stays in M10 with floor 6,
+  where it was written to live. That puts real weight on execution (#58): a cliffhanger done well
+  is a promise, done badly it is indistinguishable from running out of content, and M9 puts it in
+  front of strangers who have no roadmap. The acceptance criterion is a playtester describing it
+  as a cliffhanger unprompted.
 - **M8's balance pass is cheap now and expensive later.** Balancing two floors against real
   telemetry, with the simulator from #54, is a tractable problem. The same work across seven
   floors is the thing that eats a schedule.
