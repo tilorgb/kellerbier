@@ -28,13 +28,13 @@
     },
     {
       "id": "M5",
-      "name": "Floors 1 & 2",
-      "exit": "Two finished chapters — art, audio, enemies and bosses — a coherent 15-minute game."
+      "name": "Floors 1 & 2 content",
+      "exit": "Both chapters playable end to end — tilesets, rooms, both enemy rosters and both bosses. Content complete, not yet finished."
     },
     {
       "id": "M6",
-      "name": "Floors 3-7",
-      "exit": "A complete run from cellar to Die Bavaria."
+      "name": "Look and motion",
+      "exit": "Nothing on screen is a placeholder and everything alive is animated — a stranger watching a clip cannot tell which parts are unfinished."
     },
     {
       "id": "M7",
@@ -43,13 +43,19 @@
     },
     {
       "id": "M8",
-      "name": "Polish",
+      "name": "Sound, menus and balance",
       "exit": "It looks and sounds like a finished commercial game."
     },
     {
       "id": "M9",
       "name": "Release",
       "exit": "Strangers are playing it."
+    },
+    {
+      "id": "M10",
+      "name": "Floors 3-7",
+      "exit": "A complete run from cellar to Die Bavaria.",
+      "parked": "deferred until floors 1 & 2 are finished to a commercial standard. Whatever quality bar M6-M8 set for two floors is the bar these five inherit, so building them first would mean building them twice."
     }
   ],
   "criticalPath": [1, 2, 3, 9, 10, 11, 13],

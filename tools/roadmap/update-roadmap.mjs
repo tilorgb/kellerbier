@@ -3,7 +3,7 @@
  * Regenerates the roadmap tracking issue from the current state of the issue list.
  *
  * Run by .github/workflows/roadmap.yml on every issue event. Issues are grouped by
- * their milestone label (M0-M9, defined in plan.json), so a newly created issue lands
+ * their milestone label (M0-M10, defined in plan.json), so a newly created issue lands
  * in the right section automatically as soon as it is labelled, and closing an issue
  * ticks its box.
  *
@@ -39,7 +39,7 @@ function bar(done, total, width) {
 
 /** Strip the "[M3] " prefix — the section heading already says which milestone. */
 function cleanTitle(title) {
-  return title.replace(/^\s*\[M\d\]\s*/, '').trim();
+  return title.replace(/^\s*\[M\d+\]\s*/, '').trim();
 }
 
 /**
@@ -82,7 +82,18 @@ export function renderBody(issues, plan = PLAN) {
   for (const list of groups.values()) list.sort((a, b) => a.number - b.number);
   triage.sort((a, b) => a.number - b.number);
 
-  const doneAll = tracked.filter((i) => !open(i)).length;
+  /**
+   * Parked milestones do not count towards the headline bar.
+   *
+   * A milestone that has been deliberately deferred past 1.0 is not work the
+   * project is failing to do, and counting its issues as outstanding turns the
+   * one number at the top of the page into a number that only ever goes down
+   * when scope is added. The parked section still renders in full — parked is
+   * "not now", not "not ever" — it just does not drag the bar.
+   */
+  const parkedIds = new Set(plan.milestones.filter((m) => m.parked).map((m) => m.id));
+  const scoped = tracked.filter((i) => !parkedIds.has(milestoneOf(i)));
+  const doneAll = scoped.filter((i) => !open(i)).length;
   const out = [];
 
   out.push(MARKER);
@@ -93,7 +104,8 @@ export function renderBody(issues, plan = PLAN) {
   );
   out.push('');
   out.push(
-    `\`${bar(doneAll, tracked.length, 28)}\`  **${doneAll} of ${tracked.length} issues closed**`,
+    `\`${bar(doneAll, scoped.length, 28)}\`  **${doneAll} of ${scoped.length} issues closed**` +
+      (parkedIds.size > 0 ? ' _(parked milestones excluded)_' : ''),
   );
   out.push('');
 
@@ -103,7 +115,15 @@ export function renderBody(issues, plan = PLAN) {
   for (const m of plan.milestones) {
     const list = groups.get(m.id);
     const done = list.filter((i) => !open(i)).length;
-    const state = list.length === 0 ? '·' : done === list.length ? '✅' : done > 0 ? '🔨' : '·';
+    const state = m.parked
+      ? '⏸️'
+      : list.length === 0
+        ? '·'
+        : done === list.length
+          ? '✅'
+          : done > 0
+            ? '🔨'
+            : '·';
     out.push(
       `| ${state} | **[${m.id}](#${slug(`${m.id} — ${m.name}`)}) ${m.name}** | \`${bar(done, list.length, 14)}\` | ${done}/${list.length} | ${m.exit.replace(/\*\*/g, '')} |`,
     );
@@ -126,6 +146,7 @@ export function renderBody(issues, plan = PLAN) {
   }
 
   const active = plan.milestones.find((m) => {
+    if (m.parked) return false;
     const list = groups.get(m.id);
     return list.length > 0 && list.some(open);
   });
@@ -155,6 +176,10 @@ export function renderBody(issues, plan = PLAN) {
     out.push('');
     out.push(`> **Exit:** ${m.exit}`);
     out.push('');
+    if (m.parked) {
+      out.push(`_Parked: ${m.parked}_`);
+      out.push('');
+    }
     if (list.length === 0) out.push('_No issues yet._');
     else for (const issue of list) out.push(line(issue));
     out.push('');
@@ -165,7 +190,7 @@ export function renderBody(issues, plan = PLAN) {
     out.push('## Needs triage');
     out.push('');
     out.push(
-      'These have no milestone label, so they have nowhere to sit. Add an `M0`–`M9` label and ' +
+      'These have no milestone label, so they have nowhere to sit. Add an `M0`–`M10` label and ' +
         'they move into the right section on the next event.',
     );
     out.push('');
@@ -185,7 +210,7 @@ export function renderBody(issues, plan = PLAN) {
   out.push('');
   out.push('- **Closing an issue** ticks its box and advances its milestone bar.');
   out.push(
-    '- **Opening an issue** adds it automatically — label it `M0`–`M9` to place it in a milestone, ' +
+    '- **Opening an issue** adds it automatically — label it `M0`–`M10` to place it in a milestone, ' +
       'or it appears under **Needs triage** until you do.',
   );
   out.push('- **Relabelling** an issue moves it between milestones.');

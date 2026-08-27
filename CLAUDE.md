@@ -57,8 +57,12 @@ reach a player as a frozen game. Floor 2 shipped with its boss room throwing on 
 specifically because its only boss choice was authored `maxFloor: 1`, back when only floor 1
 existed — an uncaught exception inside a
 door-transition stops the frame loop outright, which a player experiences as a freeze, not an
-error message. The schedule guarantees more of these: floors 3-7 (#39-#43) will each spend time
-with room content in place before their full roster lands.
+error message. The schedule still guarantees more of these. Floors 3-7 (#39-#43) are parked in
+M10 and will each spend time with room content in place before their full roster lands whenever
+they unpark — but the nearer case is now floors 1 and 2 themselves, which spend all of M6-M8
+having their content replaced underneath them: sprites swapped for animated ones, rosters
+extended with elite variants (#156), a run that gains an actual ending (#155). Content churning
+under a shipped floor is exactly the shape this section is about.
 
 When you hit this shape — something *chosen from several authored options* (a `spawnGroups`
 choice list is the concrete case today) has no option covering the situation actually
