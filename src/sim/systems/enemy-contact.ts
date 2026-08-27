@@ -57,9 +57,10 @@ function resolveNeighboursOf(index: number): void {
     return;
   }
   const body = sim.body.data;
+  const base = index * 4;
   currentSlot[0] = index;
-  current[CURRENT_X] = sim.positionX(index);
-  current[CURRENT_Y] = sim.positionY(index);
+  current[CURRENT_X] = sim.transform.data[base] ?? 0;
+  current[CURRENT_Y] = sim.transform.data[base + 1] ?? 0;
   current[CURRENT_RADIUS] = body[index * 2] ?? 0;
   current[CURRENT_MASS] = Math.max(0.01, body[index * 2 + 1] ?? 1);
 
@@ -91,12 +92,14 @@ function resolveAgainstCurrent(other: number): void {
   }
 
   const body = sim.body.data;
+  const transform = sim.transform.data;
   const radius = current[CURRENT_RADIUS] ?? 0;
   const otherRadius = body[other * 2] ?? 0;
   const x = current[CURRENT_X] ?? 0;
   const y = current[CURRENT_Y] ?? 0;
-  const otherX = sim.positionX(other);
-  const otherY = sim.positionY(other);
+  const otherBase = other * 4;
+  const otherX = transform[otherBase] ?? 0;
+  const otherY = transform[otherBase + 1] ?? 0;
 
   const deltaX = x - otherX;
   const deltaY = y - otherY;
@@ -131,7 +134,6 @@ function resolveAgainstCurrent(other: number): void {
   const wantedX = x + awayX * overlap * share;
   const wantedY = y + awayY * overlap * share;
   if (sim.room.isClear(wantedX, wantedY, radius)) {
-    const transform = sim.transform.data;
     const base = index * 4;
     transform[base] = wantedX;
     transform[base + 1] = wantedY;
@@ -143,8 +145,6 @@ function resolveAgainstCurrent(other: number): void {
   const otherWantedX = otherX - awayX * overlap * otherShare;
   const otherWantedY = otherY - awayY * overlap * otherShare;
   if (sim.room.isClear(otherWantedX, otherWantedY, otherRadius)) {
-    const transform = sim.transform.data;
-    const otherBase = other * 4;
     transform[otherBase] = otherWantedX;
     transform[otherBase + 1] = otherWantedY;
   }
