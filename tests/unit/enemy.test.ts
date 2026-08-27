@@ -618,6 +618,100 @@ describe('rollBounce (#35)', () => {
 });
 
 /**
+ * `lobTarget`/`detonateLobbedBomb` (#156, Böllerschmeißer): the position is
+ * captured when the throw begins, not wherever the player has moved to by
+ * the time it lands — the whole reason `docs/CONTENT_BIBLE.md`'s "the
+ * landing spot is marked" is dodgeable rather than a homing attack.
+ */
+describe('lobTarget / detonateLobbedBomb (#156)', () => {
+  const thrower: EnemyDefinition = {
+    id: 'thrower',
+    name: 'Thrower',
+    size: 'normal',
+    health: 5,
+    contactDamage: 0,
+    initial: 'idle',
+    states: [
+      {
+        name: 'idle',
+        behaviours: [{ behaviour: 'pause' }],
+        transitions: [{ to: 'wind', after: 1 }],
+      },
+      {
+        name: 'wind',
+        behaviours: [{ behaviour: 'pause' }, { behaviour: 'lobTarget' }],
+        transitions: [{ to: 'boom', after: 10 }],
+      },
+      {
+        name: 'boom',
+        behaviours: [
+          { behaviour: 'pause' },
+          { behaviour: 'detonateLobbedBomb', damage: 5, radius: 20 },
+        ],
+        transitions: [{ to: 'idle', after: 1 }],
+      },
+    ],
+  };
+
+  function teleportPlayer(sim: GameSim, x: number, y: number): void {
+    const player = sim.playerIndex;
+    const transform = sim.transform.data;
+    transform[player * 4] = x;
+    transform[player * 4 + 1] = y;
+    transform[player * 4 + 2] = x;
+    transform[player * 4 + 3] = y;
+  }
+
+  it('hits the player if they stay where they were when the throw began', () => {
+    const sim = emptySim({ enemies: [thrower] });
+    teleportPlayer(sim, 300, 90);
+    const enemy = place(sim, 'thrower', 100, 90);
+
+    const before = health(sim, sim.playerIndex);
+    for (let tick = 0; tick < 12 && stateName(sim, enemy) !== 'boom'; tick++) {
+      sim.step(IDLE);
+    }
+    // The player never moved, so wherever `lobTarget` captured is still
+    // where they are when `detonateLobbedBomb` reads it back.
+    expect(health(sim, sim.playerIndex)).toBeLessThan(before);
+  });
+
+  it('misses a player who left the captured spot before it went off', () => {
+    const sim = emptySim({ enemies: [thrower] });
+    teleportPlayer(sim, 300, 90);
+    const enemy = place(sim, 'thrower', 100, 90);
+
+    // Ride out `idle` into `wind` so `lobTarget` captures (300, 90).
+    for (let tick = 0; tick < 2 && stateName(sim, enemy) !== 'wind'; tick++) {
+      sim.step(IDLE);
+    }
+    expect(stateName(sim, enemy)).toBe('wind');
+
+    // Now get well clear of the captured spot before the fuse runs out.
+    teleportPlayer(sim, 300, 400);
+    const before = health(sim, sim.playerIndex);
+    for (let tick = 0; tick < 12 && stateName(sim, enemy) !== 'boom'; tick++) {
+      sim.step(IDLE);
+    }
+    expect(health(sim, sim.playerIndex)).toBe(before);
+  });
+
+  it('never catches the thrower in its own blast', () => {
+    const sim = emptySim({ enemies: [thrower] });
+    // Standing exactly where the bomb will land — the thrower is at the
+    // same point the player's own position gets captured at.
+    teleportPlayer(sim, 100, 90);
+    const enemy = place(sim, 'thrower', 100, 90);
+
+    const before = health(sim, enemy);
+    for (let tick = 0; tick < 12 && stateName(sim, enemy) !== 'boom'; tick++) {
+      sim.step(IDLE);
+    }
+    expect(health(sim, enemy)).toBe(before);
+  });
+});
+
+/**
  * `splitOnDeath`'s `atHealthBelow` (#36): Die Große Kellerassel's phase
  * change, written as data the same way the rest of this file's primitives
  * are, independent of `content/enemies/grosse-kellerassel.ts`'s own numbers.

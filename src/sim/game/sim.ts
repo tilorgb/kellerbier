@@ -1115,6 +1115,12 @@ export class GameSim {
       'room template',
       ENEMY_DEFINITIONS,
       placement,
+      // Real per-run variety (#156) for a `count: 1` group with more than
+      // one enemy simultaneously eligible for this floor — drawn from the
+      // enemy stream, and only the enemy stream, same reasoning as
+      // `wander`'s own turn direction: pulling from the shared generator
+      // here would shift every floor layout in the game.
+      (count) => Math.floor(this.random.enemies.nextFloat() * count),
     );
     this.applyCompiledRoom(
       {

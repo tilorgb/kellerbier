@@ -22,7 +22,8 @@
       "count": 1,
       "choices": [
         { "enemyId": "bauer", "minFloor": 1, "maxFloor": 7 },
-        { "enemyId": "gockel", "minFloor": 1, "maxFloor": 7 }
+        { "enemyId": "gockel", "minFloor": 1, "maxFloor": 7 },
+        { "enemyId": "boellerschmeisser", "minFloor": 2, "maxFloor": 7 }
       ]
     }
   ],

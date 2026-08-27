@@ -2,6 +2,7 @@ import type { EnemyDefinition } from '../../sim/enemy/definition.js';
 import { bauer } from './bauer.js';
 import { bierratte } from './bierratte.js';
 import { blaskapellist } from './blaskapellist.js';
+import { boellerschmeisser } from './boellerschmeisser.js';
 import { derStier, maibaumDieb } from './der-stier.js';
 import { gartenzwerg } from './gartenzwerg.js';
 import { gockel } from './gockel.js';
@@ -44,12 +45,14 @@ export const ENEMY_DEFINITIONS: readonly EnemyDefinition[] = [
   traktor,
   derStier,
   maibaumDieb,
+  boellerschmeisser,
 ];
 
 export {
   bauer,
   bierratte,
   blaskapellist,
+  boellerschmeisser,
   derStier,
   fasssplitter,
   gartenzwerg,

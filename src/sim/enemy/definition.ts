@@ -42,7 +42,9 @@ export type BehaviourName =
   | 'fireOnBeat'
   | 'splitOnDeath'
   | 'becomeInvulnerable'
-  | 'telegraph';
+  | 'telegraph'
+  | 'lobTarget'
+  | 'detonateLobbedBomb';
 
 /** Walks straight at the player, re-aiming every tick. The floor-one default. */
 export interface WalkTowardPlayerBehaviour {
@@ -219,6 +221,37 @@ export interface TelegraphBehaviour {
   readonly ticks: number;
 }
 
+/**
+ * Remembers where the player is standing, right now, for a
+ * `detonateLobbedBomb` later in the same state machine to read.
+ *
+ * Böllerschmeißer (#156, `docs/CONTENT_BIBLE.md` §2 — "the throw is
+ * readable, the landing spot is marked") is the enemy this exists for: a
+ * lobbed bomb has to land where the player *was* when it left the thrower's
+ * hand, not wherever they have moved to by the time it goes off, or the
+ * telegraph lied. Declared on the state the throw itself begins (the same
+ * state as its own `telegraph`, typically), stored in the body's own
+ * `enemyMotion` heading fields — safe to reuse them for an absolute
+ * position rather than a direction, since a state that captures a lob
+ * target moves with `pause` and never reads them as a heading.
+ */
+export interface LobTargetBehaviour {
+  readonly behaviour: 'lobTarget';
+}
+
+/**
+ * The other half of `lobTarget`: on entry, deals area damage at the
+ * position an earlier `lobTarget` in this state machine captured, through
+ * `GameSim.applySplashDamage` — the same chokepoint the player's own
+ * Böllerschmeißer item detonates through, so an enemy's bomb and the
+ * player's own read identically.
+ */
+export interface DetonateLobbedBombBehaviour {
+  readonly behaviour: 'detonateLobbedBomb';
+  readonly damage: number;
+  readonly radius: number;
+}
+
 export type EnemyBehaviour =
   | WalkTowardPlayerBehaviour
   | ChargeAtPlayerBehaviour
@@ -233,6 +266,8 @@ export type EnemyBehaviour =
   | FireOnBeatBehaviour
   | SplitOnDeathBehaviour
   | BecomeInvulnerableBehaviour
+  | LobTargetBehaviour
+  | DetonateLobbedBombBehaviour
   | TelegraphBehaviour;
 
 /**
@@ -297,7 +332,12 @@ export const MOVEMENT_BEHAVIOURS: readonly BehaviourName[] = [
 ];
 
 /** Primitives that run once, when the state is entered. */
-export const ENTRY_BEHAVIOURS: readonly BehaviourName[] = ['telegraph', 'becomeInvulnerable'];
+export const ENTRY_BEHAVIOURS: readonly BehaviourName[] = [
+  'telegraph',
+  'becomeInvulnerable',
+  'lobTarget',
+  'detonateLobbedBomb',
+];
 
 /** Primitives that run when the body dies in that state. */
 export const DEATH_BEHAVIOURS: readonly BehaviourName[] = ['splitOnDeath'];

@@ -318,6 +318,18 @@ export function compileRoomTemplate(
   source = 'room template',
   enemyCatalog: RoomEnemyCatalog = [],
   placement: RoomPlacement = SINGLE_CELL_PLACEMENT,
+  // Picks which of several *simultaneously eligible* choices a `count: 1`
+  // spawn group resolves to (#156) — defaulting to "always the first" keeps
+  // every existing caller (tests, the room editor, a floor-generation
+  // eligibility check) exactly as deterministic as before this parameter
+  // existed. `GameSim.loadRoom`/`transitionTo` are the one caller that
+  // passes a real one, drawn from the run's own seeded enemy stream, so two
+  // playthroughs of the same room can actually land a different one of its
+  // authored alternatives rather than always the same first-listed enemy.
+  // Never consulted when `count` is not exactly 1: a bigger cluster already
+  // gets its own mix via the `index % resolved.length` cycle below, which
+  // this does not touch.
+  chooseSpawnIndex: (count: number) => number = () => 0,
 ): CompiledRoomTemplate {
   if (!Number.isInteger(floor) || floor < 1) {
     throw new RangeError(`floor must be a positive integer, got ${String(floor)}`);
@@ -417,11 +429,23 @@ export function compileRoomTemplate(
       // `nearestFloorChoice`'s own doc comment for the reasoning and the
       // `SlotPool` overflow policy this mirrors.
       const resolved = eligible.length > 0 ? eligible : [nearestFloorChoice(source, group, floor)];
+      // A single-body group with more than one choice simultaneously
+      // eligible for this floor is exactly the shape this parameter exists
+      // for: `dorf-marktplatz.json`'s "market" group, say, authored as
+      // "bauer or gockel" — without this, `index % resolved.length` would
+      // always land on index 0 for a `count: 1` group (the loop below never
+      // reaches index 1), so the second choice could never actually be
+      // picked, only ever serve as a floor-fallback nobody triggers. A
+      // bigger cluster (`count > 1`) already gets a real mix from that same
+      // cycle, so this is left alone there.
+      const singleChoiceIndex =
+        group.count === 1 && resolved.length > 1 ? chooseSpawnIndex(resolved.length) : -1;
       for (let index = 0; index < group.count; index++) {
+        const choiceIndex = singleChoiceIndex >= 0 ? singleChoiceIndex : index % resolved.length;
         enemySpawns.push({
           x: cellOffsetX + spawn.x + (index - (group.count - 1) / 2) * 8,
           y: cellOffsetY + spawn.y,
-          enemyId: resolved[index % resolved.length]?.enemyId ?? '',
+          enemyId: resolved[choiceIndex]?.enemyId ?? '',
         });
       }
     }
