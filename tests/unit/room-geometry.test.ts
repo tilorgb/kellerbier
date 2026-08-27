@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_ROOM_BLOCKS, RoomGeometry, roomFrameSize } from '../../src/sim/room/geometry.js';
+import {
+  MAX_ROOM_BLOCKS,
+  MAX_ROOM_PUDDLES,
+  RoomGeometry,
+  roomFrameSize,
+} from '../../src/sim/room/geometry.js';
 import {
   PLAYFIELD_HEIGHT,
   PLAYFIELD_WIDTH,
@@ -49,6 +54,29 @@ describe('RoomGeometry', () => {
     expect(room.blockCount).toBe(MAX_ROOM_BLOCKS);
     expect(() => {
       room.addBlock(0, 0, 1, 1);
+    }).toThrow(/at most/);
+  });
+
+  it('reports a point on a puddle only inside a puddle zone (#35)', () => {
+    const room = new RoomGeometry(0, 0, 100, 100);
+    room.addPuddle(20, 20, 40, 40);
+
+    expect(room.puddleCount).toBe(1);
+    expect(room.isOnPuddle(30, 30)).toBe(true);
+    expect(room.isOnPuddle(20, 20)).toBe(true);
+    expect(room.isOnPuddle(40, 40)).toBe(true);
+    expect(room.isOnPuddle(10, 10)).toBe(false);
+    expect(room.isOnPuddle(50, 50)).toBe(false);
+  });
+
+  it('refuses to grow past its fixed puddle storage', () => {
+    const room = new RoomGeometry(0, 0, 100, 100);
+    for (let puddle = 0; puddle < MAX_ROOM_PUDDLES; puddle++) {
+      room.addPuddle(0, 0, 1, 1);
+    }
+    expect(room.puddleCount).toBe(MAX_ROOM_PUDDLES);
+    expect(() => {
+      room.addPuddle(0, 0, 1, 1);
     }).toThrow(/at most/);
   });
 });

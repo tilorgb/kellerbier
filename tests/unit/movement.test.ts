@@ -183,3 +183,78 @@ describe('player movement', () => {
     }
   });
 });
+
+/**
+ * Floor 1's slick-puddle hazard (#35, `docs/CONTENT_BIBLE.md`'s "carries
+ * your momentum"): a room-authored zone (`RoomGeometry.puddles`) that steals
+ * the player's acceleration and deceleration while they stand on it.
+ */
+describe('the slick puddle hazard', () => {
+  it('slides the player further after releasing input on a puddle than on dry floor', () => {
+    const dryRoom = openRoom();
+    const dry = new GameSim({ room: dryRoom });
+    const wetRoom = openRoom();
+    wetRoom.addPuddle(0, 0, 640, 360);
+    const wet = new GameSim({ room: wetRoom });
+
+    const input = held(1, 0);
+    for (let tick = 0; tick < 30; tick++) {
+      dry.step(input);
+      wet.step(input);
+    }
+    const dryReleasedAt = dry.positionX(dry.playerIndex);
+    const wetReleasedAt = wet.positionX(wet.playerIndex);
+
+    for (let tick = 0; tick < 90; tick++) {
+      dry.step(IDLE);
+      wet.step(IDLE);
+    }
+
+    const drySlid = dry.positionX(dry.playerIndex) - dryReleasedAt;
+    const wetSlid = wet.positionX(wet.playerIndex) - wetReleasedAt;
+    expect(wetSlid).toBeGreaterThan(drySlid);
+  });
+
+  it('reads the puddle at the position the tick began, not wherever the tick ends', () => {
+    const room = openRoom();
+    // A puddle nowhere near where the player stands: crossing dry floor must
+    // decelerate at the ordinary rate.
+    room.addPuddle(600, 0, 640, 360);
+    const sim = new GameSim({ room });
+    const input = held(1, 0);
+    for (let tick = 0; tick < 30; tick++) {
+      sim.step(input);
+    }
+    const releasedAt = sim.positionX(sim.playerIndex);
+    for (let tick = 0; tick < DEFAULT_MOVEMENT_TUNING.ticksToStop - 1; tick++) {
+      sim.step(IDLE);
+    }
+    sim.step(IDLE);
+    const slid = sim.positionX(sim.playerIndex) - releasedAt;
+    expect(slid).toBeCloseTo(
+      (DEFAULT_MOVEMENT_TUNING.maxSpeed * (DEFAULT_MOVEMENT_TUNING.ticksToStop - 1)) / 2,
+      3,
+    );
+  });
+
+  it('ignores the puddle while the player carries puddle immunity', () => {
+    const room = openRoom();
+    room.addPuddle(0, 0, 640, 360);
+    const sim = new GameSim({ room });
+    const input = held(1, 0);
+    for (let tick = 0; tick < 30; tick++) {
+      sim.step(input);
+    }
+    const releasedAt = sim.positionX(sim.playerIndex);
+    sim.puddleImmuneTicks = 999;
+    for (let tick = 0; tick < DEFAULT_MOVEMENT_TUNING.ticksToStop - 1; tick++) {
+      sim.step(IDLE);
+    }
+    sim.step(IDLE);
+    const slid = sim.positionX(sim.playerIndex) - releasedAt;
+    expect(slid).toBeCloseTo(
+      (DEFAULT_MOVEMENT_TUNING.maxSpeed * (DEFAULT_MOVEMENT_TUNING.ticksToStop - 1)) / 2,
+      3,
+    );
+  });
+});

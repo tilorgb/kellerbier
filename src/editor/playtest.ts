@@ -120,6 +120,10 @@ export async function createPlaytest(
     numberFont: 'monospace',
     pedestalItem: createBlobTexture(app.renderer, 5, 0xffffff, 0xffffff),
     pedestalBeam: createSolidTexture(app.renderer),
+    // No floor art loaded for the editor's playtest preview — every shape
+    // and floor is exercised here, not just floor 1, so it stays on
+    // `createRoomView`'s flat palette fill.
+    floorTiles: {},
   });
   const game = new Container();
   game.addChild(view.stage);

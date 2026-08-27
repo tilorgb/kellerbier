@@ -1,0 +1,43 @@
+{
+  "id": "cellar-flooded",
+  "tileGrid": [
+    "###############",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "###############"
+  ],
+  "obstacles": [
+    { "x": 16, "y": 16, "width": 16, "height": 16 },
+    { "x": 208, "y": 112, "width": 16, "height": 16 }
+  ],
+  "enemySpawns": [
+    { "x": 176, "y": 32, "group": "flood-swarm" },
+    { "x": 48, "y": 112, "group": "flood-swarm" },
+    { "x": 120, "y": 72, "group": "flood-swarm" }
+  ],
+  "spawnGroups": [
+    {
+      "id": "flood-swarm",
+      "count": 1,
+      "choices": [
+        { "enemyId": "kellerassel", "minFloor": 1, "maxFloor": 2 },
+        { "enemyId": "bierratte", "minFloor": 3, "maxFloor": 7 }
+      ]
+    }
+  ],
+  "pickupSpawns": [],
+  "hazards": [{ "x": 32, "y": 24, "width": 176, "height": 96, "type": "puddle" }],
+  "decorativeProps": [],
+  "metadata": {
+    "floorTags": ["cellar", "rural"],
+    "shape": "1x1",
+    "doors": { "north": true, "east": true, "south": true, "west": true },
+    "difficultyTier": 3,
+    "weight": 1
+  }
+}

@@ -4,7 +4,7 @@ import type { EnemyDefinition } from '../../sim/enemy/definition.js';
  * Bierratte — fast, erratic, one hit point.
  *
  * Written second, and written to prove a point: nothing in the engine was
- * touched to add it. It is the same twelve primitives the Kellerassel is built
+ * touched to add it. It is the same thirteen primitives the Kellerassel is built
  * from, arranged differently.
  *
  * Its one idea is leading your shots. It scurries in changing directions while

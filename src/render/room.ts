@@ -1,13 +1,59 @@
-import { Container, Graphics } from 'pixi.js';
+import { Container, Graphics, TilingSprite, type Texture } from 'pixi.js';
 import { BLOCK_STRIDE, DOOR_SPAN, roomFrameSize, type RoomGeometry } from '../sim/room/geometry.js';
 import { doorCentre, type CompiledDoor } from '../sim/room/template.js';
 
-/** Placeholder cellar palette. Real tilesets arrive with the art pipeline in #34. */
-const FLOOR_COLOUR = 0x241d2b;
-const WALL_COLOUR = 0x3a2f45;
-const WALL_EDGE_COLOUR = 0x54445f;
-const BLOCK_COLOUR = 0x4a3a2c;
-const BLOCK_EDGE_COLOUR = 0x6d5540;
+/** Placeholder palette for a floor with no room palette of its own yet. Real tilesets arrive with the art pipeline in #34. */
+const DEFAULT_PALETTE: RoomPalette = {
+  floor: 0x241d2b,
+  wall: 0x3a2f45,
+  wallEdge: 0x54445f,
+  block: 0x4a3a2c,
+  blockEdge: 0x6d5540,
+};
+
+interface RoomPalette {
+  readonly floor: number;
+  readonly wall: number;
+  readonly wallEdge: number;
+  readonly block: number;
+  readonly blockEdge: number;
+}
+
+/**
+ * Floor 1 — Der Keller (#35): "damp stone, wooden racks, puddles, one warm
+ * amber light source against cold greys" (`docs/CONTENT_BIBLE.md`). Drawn
+ * from the floor's own authored five-colour set
+ * (`tools/art/palette.mjs`'s `FLOOR_PALETTES.cellar`), not invented here —
+ * this is the same fence the real tileset (`assets/sprites/floor-1-cellar/`)
+ * is built inside, so the room's placeholder shapes and its pixel art read
+ * as one palette rather than two. `wallEdge`/`blockEdge` use the palette's
+ * one small-area accent (the amber light) rather than a background swatch —
+ * per `tools/art/palette.mjs`'s own `FLOOR_BACKGROUND_SWATCHES` comment, the
+ * accent is meant for exactly this: a highlight, not a fill.
+ */
+const FLOOR_PALETTES: Readonly<Record<number, RoomPalette>> = {
+  1: {
+    floor: 0x3a2a1c,
+    wall: 0x1c1a1f,
+    wallEdge: 0x5a6068,
+    block: 0x6b4a30,
+    blockEdge: 0x9c7b52,
+  },
+};
+
+function paletteFor(floor: number): RoomPalette {
+  return FLOOR_PALETTES[floor] ?? DEFAULT_PALETTE;
+}
+
+/**
+ * Floor 1's slick puddle (#35), drawn from the same cellar palette above —
+ * the cold-grey background swatch for the water itself, the amber accent
+ * for the light it catches (`docs/CONTENT_BIBLE.md`'s "one warm amber light
+ * source against cold greys") — rather than a colour invented for the
+ * hazard alone.
+ */
+const PUDDLE_COLOUR = 0x5a6068;
+const PUDDLE_EDGE_COLOUR = 0xd99a3f;
 
 /** A locked door reads as cold and shut; an open one picks up the floor's amber light. */
 const DOOR_LOCKED_COLOUR = 0x5a2a2a;
@@ -24,17 +70,51 @@ const CRACK_SPAN = 10;
  * Room geometry does not change while the room is loaded, so this is built at
  * load and never touched again — nothing here runs per frame.
  */
-export function createRoomView(room: RoomGeometry): Container {
+export function createRoomView(
+  room: RoomGeometry,
+  floorNumber = 0,
+  floorTileTexture?: Texture,
+): Container {
   const container = new Container();
+  const palette = paletteFor(floorNumber);
 
   const frame = roomFrameSize(room);
   const floor = new Graphics();
-  floor.rect(0, 0, frame.width, frame.height).fill(WALL_COLOUR);
+  floor.rect(0, 0, frame.width, frame.height).fill(palette.wall);
   floor
     .rect(room.minX, room.minY, room.maxX - room.minX, room.maxY - room.minY)
-    .fill(FLOOR_COLOUR)
-    .stroke({ width: 1, color: WALL_EDGE_COLOUR, alignment: 0 });
+    .fill(palette.floor)
+    .stroke({ width: 1, color: palette.wallEdge, alignment: 0 });
   container.addChild(floor);
+
+  // Real tile art (#35's `assets/sprites/floor-1-cellar/tiles/`), laid over
+  // the flat fill above rather than replacing it — the fill is what shows
+  // through a room shape's dropped cells and margin, and stays the fallback
+  // for every floor that has no tile art yet.
+  if (floorTileTexture !== undefined) {
+    const tiled = new TilingSprite({
+      texture: floorTileTexture,
+      x: room.minX,
+      y: room.minY,
+      width: room.maxX - room.minX,
+      height: room.maxY - room.minY,
+    });
+    container.addChild(tiled);
+  }
+
+  const puddles = new Graphics();
+  for (let puddle = 0; puddle < room.puddleCount; puddle++) {
+    const base = puddle * BLOCK_STRIDE;
+    const minX = room.puddles[base] ?? 0;
+    const minY = room.puddles[base + 1] ?? 0;
+    const maxX = room.puddles[base + 2] ?? 0;
+    const maxY = room.puddles[base + 3] ?? 0;
+    puddles
+      .rect(minX, minY, maxX - minX, maxY - minY)
+      .fill({ color: PUDDLE_COLOUR, alpha: 0.85 })
+      .stroke({ width: 1, color: PUDDLE_EDGE_COLOUR, alpha: 0.5, alignment: 0 });
+  }
+  container.addChild(puddles);
 
   const blocks = new Graphics();
   for (let block = 0; block < room.blockCount; block++) {
@@ -45,8 +125,8 @@ export function createRoomView(room: RoomGeometry): Container {
     const maxY = room.blocks[base + 3] ?? 0;
     blocks
       .rect(minX, minY, maxX - minX, maxY - minY)
-      .fill(BLOCK_COLOUR)
-      .stroke({ width: 1, color: BLOCK_EDGE_COLOUR, alignment: 0 });
+      .fill(palette.block)
+      .stroke({ width: 1, color: palette.blockEdge, alignment: 0 });
   }
   container.addChild(blocks);
 
@@ -64,8 +144,8 @@ export function createRoomView(room: RoomGeometry): Container {
         voidRect.maxX - voidRect.minX,
         voidRect.maxY - voidRect.minY,
       )
-      .fill(WALL_COLOUR)
-      .stroke({ width: 1, color: WALL_EDGE_COLOUR, alignment: 0 });
+      .fill(palette.wall)
+      .stroke({ width: 1, color: palette.wallEdge, alignment: 0 });
   }
 
   return container;

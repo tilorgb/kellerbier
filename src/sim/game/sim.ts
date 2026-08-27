@@ -512,6 +512,16 @@ export class GameSim {
   /** Ticks remaining before enemies loaded into the current room may act. */
   roomWarmupTicks = 0;
 
+  /**
+   * Ticks left of immunity to Floor 1's slick-puddle hazard (#35) —
+   * Haferlschuh's grip, refreshed every tick it is held
+   * (`content/items/haferlschuh.ts`'s `onTick`) rather than granted once, the
+   * same "held near, not owned once" shape `slowEnemiesNear`'s aura already
+   * uses. Read directly by `systems/movement.ts`'s `stepPlayerMovement`,
+   * public for the same reason `roomWarmupTicks` is: a system, not a method.
+   */
+  puddleImmuneTicks = 0;
+
   /** Ticks until the player may fire again. */
   fireCooldown = 0;
 
@@ -2822,6 +2832,9 @@ export class GameSim {
     }
     if (this.roomWarmupTicks > 0) {
       this.roomWarmupTicks -= 1;
+    }
+    if (this.puddleImmuneTicks > 0) {
+      this.puddleImmuneTicks -= 1;
     }
 
     this.previousButtons = input.buttons;

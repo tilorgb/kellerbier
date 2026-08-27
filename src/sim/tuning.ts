@@ -68,6 +68,20 @@ export interface MovementTuning {
    * without limit, and the resulting launch is not a shove — it is a bug.
    */
   maxPush: number;
+  /**
+   * Floor 1's slick-puddle hazard (#35): how much of the player's
+   * acceleration and deceleration a puddle steals, applied the same way
+   * `promilleDriftScale` already divides the rate — `rate / (1 + slip)`.
+   *
+   * The hazard's whole point is stated in `docs/CONTENT_BIBLE.md` as
+   * "carries your momentum": letting go of the stick on dry floor stops the
+   * player in `ticksToStop` ticks; on a puddle the same release keeps them
+   * sliding for roughly `ticksToStop * (1 + puddleSlip)` — visibly longer,
+   * so a player learns what a puddle does by walking into one on a floor
+   * with nothing in it to hurt them, per the floor's "teaches safely first"
+   * job (issue #35's acceptance criteria).
+   */
+  puddleSlip: number;
 }
 
 export interface ShootingTuning {
@@ -589,6 +603,10 @@ export const DEFAULT_MOVEMENT_TUNING: Readonly<MovementTuning> = {
   contactDrag: 1,
   pushDamping: 0.82,
   maxPush: 6,
+  // Roughly triples both the run-up to top speed and the slide to a stop —
+  // strong enough to read as "the floor changed" the instant a player's
+  // shoe touches one, short of throwing them somewhere they didn't aim.
+  puddleSlip: 2,
 };
 
 export const DEFAULT_SHOOTING_TUNING: Readonly<ShootingTuning> = {

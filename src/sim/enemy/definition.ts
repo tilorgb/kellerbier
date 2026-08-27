@@ -34,6 +34,7 @@ export type BehaviourName =
   | 'wander'
   | 'orbitPoint'
   | 'fleeFromPlayer'
+  | 'rollBounce'
   | 'pause'
   | 'fireAtPlayer'
   | 'fireBurst'
@@ -83,6 +84,24 @@ export interface OrbitPointBehaviour {
 export interface FleeFromPlayerBehaviour {
   readonly behaviour: 'fleeFromPlayer';
   readonly speed: number;
+}
+
+/**
+ * Rolls in a fixed direction along one axis, forever, ignoring the player.
+ *
+ * The direction is entirely the state's own — Rollfass (#35): a barrel that
+ * "rolls along one axis, bounces off walls" (`docs/CONTENT_BIBLE.md`). It
+ * does not turn on its own; a bounce is authored as a pair of states, one
+ * per direction, joined by an `onBlocked` transition each way — the same
+ * `ENEMY_FLAG_BLOCKED` signal `chargeAtPlayer`'s own wall-stop already reads,
+ * just consumed by content instead of by a special case in this primitive.
+ */
+export interface RollBounceBehaviour {
+  readonly behaviour: 'rollBounce';
+  readonly speed: number;
+  readonly axis: 'x' | 'y';
+  /** Which way along `axis` this state rolls: positive is east/south. */
+  readonly direction: 1 | -1;
 }
 
 /**
@@ -171,6 +190,7 @@ export type EnemyBehaviour =
   | WanderBehaviour
   | OrbitPointBehaviour
   | FleeFromPlayerBehaviour
+  | RollBounceBehaviour
   | PauseBehaviour
   | FireAtPlayerBehaviour
   | FireBurstBehaviour
@@ -236,6 +256,7 @@ export const MOVEMENT_BEHAVIOURS: readonly BehaviourName[] = [
   'wander',
   'orbitPoint',
   'fleeFromPlayer',
+  'rollBounce',
   'pause',
 ];
 

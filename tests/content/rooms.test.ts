@@ -56,6 +56,30 @@ describe('room templates', () => {
     ).toThrow(/broken-room\.json\.metadata\.weight: must be greater than zero/);
   });
 
+  it('compiles a "puddle" hazard into the room geometry\'s slick zone (#35)', () => {
+    const withPuddle = {
+      ...cellarCrossroads,
+      hazards: [{ x: 10, y: 20, width: 30, height: 40, type: 'puddle' }],
+    };
+    const compiled = compileRoomTemplate(withPuddle, 1, 'with-puddle.json', ENEMY_DEFINITIONS);
+    // Compiled coordinates carry the room's margin offset, the same as every
+    // other spawn/prop position `compileRoomTemplate` returns.
+    const [hazard] = compiled.hazards;
+    expect(hazard).toMatchObject({ width: 30, height: 40, type: 'puddle' });
+    expect(compiled.geometry.puddleCount).toBe(1);
+    expect(compiled.geometry.isOnPuddle((hazard?.x ?? 0) + 15, (hazard?.y ?? 0) + 20)).toBe(true);
+  });
+
+  it('round-trips a non-"puddle" hazard without giving it slick behaviour', () => {
+    const withDecor = {
+      ...cellarCrossroads,
+      hazards: [{ x: 10, y: 20, width: 30, height: 40, type: 'spikes' }],
+    };
+    const compiled = compileRoomTemplate(withDecor, 1, 'with-decor.json', ENEMY_DEFINITIONS);
+    expect(compiled.hazards).toMatchObject([{ width: 30, height: 40, type: 'spikes' }]);
+    expect(compiled.geometry.puddleCount).toBe(0);
+  });
+
   it('rejects an unknown enemy in a spawn group', () => {
     const broken = {
       ...cellarCrossroads,

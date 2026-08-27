@@ -11,7 +11,7 @@ import { ProjectileTeam } from '../projectile/store.js';
  *
  * The whole system is an interpreter for the data in `src/content/enemies/`.
  * Nothing in here knows what a Kellerassel is; it knows how to run a state
- * machine whose states are built out of twelve named primitives, and the
+ * machine whose states are built out of thirteen named primitives, and the
  * Kellerassel is one arrangement of them. That is the entire bet of #14 —
  * roughly thirty-five more enemies are coming, and every one of them that
  * needs engine work is a week M6 does not have.
@@ -221,6 +221,15 @@ function applyMovement(
       const speed = behaviour.speed * scale;
       velocity[base] = distance === 0 ? 0 : (-toPlayerX / distance) * speed;
       velocity[base + 1] = distance === 0 ? 0 : (-toPlayerY / distance) * speed;
+      return;
+    }
+    case 'rollBounce': {
+      // Fixed direction, every tick, no re-aim — a bounce is the *state*
+      // changing (via an `onBlocked` transition to the opposite direction's
+      // state), not this primitive noticing a wall itself.
+      const speed = behaviour.speed * behaviour.direction * scale;
+      velocity[base] = behaviour.axis === 'x' ? speed : 0;
+      velocity[base + 1] = behaviour.axis === 'y' ? speed : 0;
       return;
     }
     case 'chargeAtPlayer': {

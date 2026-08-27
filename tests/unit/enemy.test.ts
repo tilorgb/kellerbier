@@ -16,7 +16,9 @@ import {
   ENEMY_STRIDE,
   enemyTelegraphProgress,
   isEnemyInvulnerable,
+  stepEnemyDeaths,
 } from '../../src/sim/systems/enemy.js';
+import { applyDamageAt } from '../../src/sim/systems/impact.js';
 
 const IDLE = createInputFrame();
 
@@ -369,6 +371,111 @@ describe('primitives, authored as data', () => {
 
     expect(sim.velocity.data[enemy * 2]).toBeCloseTo(headingX, 5);
     expect(sim.velocity.data[enemy * 2 + 1]).toBeCloseTo(headingY, 5);
+  });
+});
+
+/**
+ * `rollBounce` (#35, Rollfass): a fixed direction along one axis, reversed
+ * entirely by content — a pair of states joined by an `onBlocked`
+ * transition each way — rather than by anything the primitive itself
+ * decides. These prove the bounce and the split are real engine behaviour,
+ * independent of `content/enemies/rollfass.ts`'s own numbers.
+ */
+describe('rollBounce (#35)', () => {
+  const barrel: EnemyDefinition = {
+    id: 'barrel',
+    name: 'Barrel',
+    size: 'mid',
+    health: 1,
+    contactDamage: 1,
+    initial: 'east',
+    states: [
+      {
+        name: 'east',
+        behaviours: [
+          { behaviour: 'rollBounce', speed: 1, axis: 'x', direction: 1 },
+          { behaviour: 'splitOnDeath', into: 'splinter', count: 2, spread: 6 },
+        ],
+        transitions: [{ to: 'west', onBlocked: true }],
+      },
+      {
+        name: 'west',
+        behaviours: [
+          { behaviour: 'rollBounce', speed: 1, axis: 'x', direction: -1 },
+          { behaviour: 'splitOnDeath', into: 'splinter', count: 2, spread: 6 },
+        ],
+        transitions: [{ to: 'east', onBlocked: true }],
+      },
+    ],
+  };
+  const splinter: EnemyDefinition = {
+    id: 'splinter',
+    name: 'Splinter',
+    size: 'mini',
+    health: 1,
+    contactDamage: 1,
+    initial: 'skitter',
+    states: [
+      { name: 'skitter', behaviours: [{ behaviour: 'wander', speed: 0.5, turnEveryTicks: 20 }] },
+    ],
+  };
+
+  /** A wall to the east of where the barrel spawns, none to the west. */
+  function boxedRoom(): RoomGeometry {
+    const room = new RoomGeometry(0, 0, 320, 180);
+    room.addBlock(200, 0, 220, 180);
+    return room;
+  }
+
+  it('never turns toward the player — it only reverses off a wall', () => {
+    const sim = emptySim({ room: boxedRoom(), enemies: [barrel, splinter] });
+    const player = sim.playerIndex;
+    // The player stands to the west; the barrel starts rolling east, away
+    // from them, and must keep doing so — a player-seeking primitive would
+    // turn around immediately.
+    const transform = sim.transform.data;
+    transform[player * 4] = 20;
+    transform[player * 4 + 2] = 20;
+    const enemy = place(sim, 'barrel', 100, 90);
+
+    sim.step(IDLE);
+    expect(sim.velocity.data[enemy * 2] ?? 0).toBeGreaterThan(0);
+  });
+
+  it('bounces back the other way off a wall, and keeps bouncing', () => {
+    const sim = emptySim({ room: boxedRoom(), enemies: [barrel, splinter] });
+    // Out of the barrel's way — this test is about the wall, not about the
+    // barrel running into the player standing at the room's own centre.
+    const player = sim.playerIndex;
+    const transform = sim.transform.data;
+    transform[player * 4] = 20;
+    transform[player * 4 + 1] = 20;
+    transform[player * 4 + 2] = 20;
+    transform[player * 4 + 3] = 20;
+    const enemy = place(sim, 'barrel', 100, 90);
+
+    const seen = new Set<string>();
+    for (let tick = 0; tick < 400; tick++) {
+      sim.step(IDLE);
+      seen.add(stateName(sim, enemy));
+    }
+    expect(seen.has('east')).toBe(true);
+    expect(seen.has('west')).toBe(true);
+  });
+
+  it('breaks into splinters when it dies, wherever in the bounce it happened', () => {
+    const sim = emptySim({ room: boxedRoom(), enemies: [barrel, splinter] });
+    const enemy = place(sim, 'barrel', 100, 90);
+
+    // The same call the impact system itself makes on a landed hit
+    // (`sim/systems/impact.ts`), followed by the same death sweep `sim.step`
+    // runs afterward — everything `sim.step` would do around this, without
+    // running a whole tick's worth of unrelated systems too.
+    applyDamageAt(sim, enemy, 5, sim.positionX(enemy), sim.positionY(enemy), 0, 0, -1);
+    stepEnemyDeaths(sim);
+    sim.world.flush();
+
+    expect(liveEnemies(sim, 'splinter')).toBe(2);
   });
 });
 
