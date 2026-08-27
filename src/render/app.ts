@@ -45,8 +45,9 @@ export async function createRenderer(host: HTMLElement): Promise<Application> {
 /**
  * Sizes and centres the game container for a window.
  *
- * Returns the layout it applied, because the same numbers convert a mouse
- * position into a place in the room and nothing else knows them.
+ * Returns the layout it applied, because the HUD and other screen-space
+ * overlays need the same numbers to position themselves and nothing else
+ * knows them.
  */
 export function applyGameLayout(
   game: Container,

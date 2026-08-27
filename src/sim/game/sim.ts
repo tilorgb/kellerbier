@@ -77,6 +77,7 @@ import { addPush, stepPlayerMovement } from '../systems/movement.js';
 import { stepBodies } from '../systems/bodies.js';
 import { stepCollision } from '../systems/collision.js';
 import { stepContacts } from '../systems/contact.js';
+import { stepEnemyContacts } from '../systems/enemy-contact.js';
 import {
   ENEMY_MOTION_STRIDE,
   ENEMY_STRIDE,
@@ -155,6 +156,15 @@ export const ROOM_WARMUP_TICKS = 24;
  * so a run never spawns something already touching the player on arrival.
  */
 const DOOR_SPAWN_SAFETY_RADIUS = 48;
+
+/**
+ * Clearance a pedestal's authored placement is checked against before it
+ * spawns — a pedestal carries no collider of its own (nothing pushes against
+ * it), so this exists purely to keep `safeSpawnPoint` off a void cell, not to
+ * describe a real physical size. Double a pickup's own radius (`RADIUS` in
+ * `content/pickups/pickups.ts`), since a pedestal reads visually larger.
+ */
+const PEDESTAL_RADIUS = 8;
 
 export type RoomDirection = 'north' | 'east' | 'south' | 'west';
 
@@ -305,6 +315,16 @@ export interface GameSimOptions {
   readonly room?: RoomGeometry;
   /** Loads this authored room instead of the playground population. */
   readonly roomTemplate?: unknown;
+  /**
+   * The `roomTemplate`'s real floor-grid placement — which directions
+   * actually have a neighbouring room, so its compiled doors match the
+   * floor plan instead of falling back to every direction the template's
+   * raw metadata allows. Omitted (the default `SINGLE_CELL_PLACEMENT`
+   * `compileRoomTemplate` uses) is only correct for a template with no
+   * doors that lead nowhere authored on it, or for a test that doesn't
+   * care which doors compile.
+   */
+  readonly roomPlacement?: RoomPlacement;
   readonly floor?: number;
   /** Doors to load hidden — see `loadRoom`'s `hiddenDoors` parameter. */
   readonly hiddenDoors?: readonly Pick<CompiledDoor, 'direction' | 'cellCol' | 'cellRow'>[];
@@ -846,7 +866,7 @@ export class GameSim {
         options.floor ?? 1,
         null,
         options.hiddenDoors ?? [],
-        undefined,
+        options.roomPlacement,
         { col: 0, row: 0 },
         options.suppressRoomContent ?? false,
       );
@@ -1402,10 +1422,17 @@ export class GameSim {
       if (prop.type !== 'pedestal') {
         continue;
       }
+      // An authored coordinate is only ever checked against the room's outer
+      // walls at compile time (`validateRoomTemplate` has no per-cell
+      // walkability check) — in an `L`/`T` room it can land inside the void
+      // cell the shape drops, same failure `pickupSpawns` above is already
+      // guarded against. Route through the same `safeSpawnPoint` nudge rather
+      // than trusting the authored point outright.
+      const safe = this.safeSpawnPoint(prop.x, prop.y, PEDESTAL_RADIUS);
       if (this.roomSpecialRole === 'boss' && this.roomEnemyCount > 0) {
-        this.pendingBossPedestals.push({ x: prop.x, y: prop.y });
+        this.pendingBossPedestals.push({ x: safe.x, y: safe.y });
       } else {
-        this.spawnPedestal(prop.x, prop.y);
+        this.spawnPedestal(safe.x, safe.y);
       }
     }
   }
@@ -1467,8 +1494,10 @@ export class GameSim {
   /**
    * Where the player (and, via `DOOR_SPAWN_SAFETY_RADIUS`, nothing else)
    * lands when entering the room from `direction` — the door on
-   * `entryCell`'s wall facing `direction`, or the room's centre for the very
-   * first room of a run (`direction === null`, no door was walked through).
+   * `entryCell`'s wall facing `direction`, or the room's centre (nudged off
+   * a block, if the centre itself sits on one — `findPlayerSpawnPoint`) for
+   * the very first room of a run (`direction === null`, no door was walked
+   * through).
    *
    * `entryCell` only matters once a room can have more than one door per
    * wall (#100): it says which of them the player is arriving through, the
@@ -1479,10 +1508,7 @@ export class GameSim {
     entryCell: { readonly col: number; readonly row: number },
   ): { x: number; y: number } {
     if (direction === null) {
-      return {
-        x: (this.room.minX + this.room.maxX) / 2,
-        y: (this.room.minY + this.room.maxY) / 2,
-      };
+      return this.findPlayerSpawnPoint(PLAYER_RADIUS);
     }
     if (this.room.stepRects.length > 0) {
       // A staircase (#112) has no floor-grid cell of its own for the normal
@@ -2892,6 +2918,10 @@ export class GameSim {
     stepProjectiles(this);
     stepCollision(this);
     stepContacts(this);
+    // Same broadphase, same reasoning as `stepContacts` — enemies pushing
+    // each other apart is a separate pass from enemies pushing the player,
+    // not a special case inside it.
+    stepEnemyContacts(this);
     // After collision, because a blast query reads this tick's broadphase —
     // the same grid `stepPickups` reuses just below.
     stepBombs(this);
@@ -2990,6 +3020,43 @@ export class GameSim {
     return this.transform.data[index * 4 + 3] ?? 0;
   }
 
+  /**
+   * Where the player lands when a room loads: the room's bounding-box
+   * centre, or the nearest clear point around it when that centre itself
+   * sits on a block — an obstacle authored there, or (in an `L`/`T` room) the
+   * shape's own void corner landing near the middle of the bounding box.
+   *
+   * `safeSpawnPoint`'s few-step nudge toward the room centre is no use
+   * here — the centre *is* the point already blocked, so nudging toward it
+   * is a no-op. This spirals outward in rings instead, which actually walks
+   * itself off the block rather than just toward it.
+   */
+  private findPlayerSpawnPoint(radius: number): { x: number; y: number } {
+    const centreX = (this.room.minX + this.room.maxX) / 2;
+    const centreY = (this.room.minY + this.room.maxY) / 2;
+    if (this.room.isClear(centreX, centreY, radius)) {
+      return { x: centreX, y: centreY };
+    }
+    const ringStep = 8;
+    const samplesPerRing = 12;
+    const maxRadius = Math.max(this.room.maxX - this.room.minX, this.room.maxY - this.room.minY);
+    for (let ringRadius = ringStep; ringRadius <= maxRadius; ringRadius += ringStep) {
+      for (let sample = 0; sample < samplesPerRing; sample++) {
+        const angle = (sample / samplesPerRing) * Math.PI * 2;
+        const x = centreX + Math.cos(angle) * ringRadius;
+        const y = centreY + Math.sin(angle) * ringRadius;
+        if (this.room.isClear(x, y, radius)) {
+          return { x, y };
+        }
+      }
+    }
+    // Every ring blocked is not a case any authored room should produce
+    // (`tests/content/rooms.test.ts` compiles every template), so this is
+    // the same "place it anyway rather than not spawn at all" fallback
+    // `safeSpawnPoint` uses.
+    return { x: centreX, y: centreY };
+  }
+
   private spawnPlayer(): Entity {
     const entity = this.world.create();
     this.world.add(entity, this.transform);
@@ -3002,8 +3069,9 @@ export class GameSim {
     this.world.add(entity, this.flash);
 
     const index = entityIndex(entity);
-    const startX = (this.room.minX + this.room.maxX) / 2;
-    const startY = (this.room.minY + this.room.maxY) / 2;
+    const spawnPoint = this.findPlayerSpawnPoint(PLAYER_RADIUS);
+    const startX = spawnPoint.x;
+    const startY = spawnPoint.y;
     const transform = this.transform.data;
     transform[index * 4] = startX;
     transform[index * 4 + 1] = startY;

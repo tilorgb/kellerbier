@@ -53,7 +53,7 @@ npm run typecheck  # tsc --noEmit
 npm run build      # production static build
 ```
 
-**Controls:** `WASD` to move, mouse or the arrow keys to aim and fire. `T` opens the tuning
+**Controls:** `WASD` to move, arrow keys to aim and fire. `T` opens the tuning
 window — every feel constant on a slider, changed while the game runs. `O` opens the debug
 overlay — frame graph, entity and pool counts, draw calls, hitboxes (`H`) and the spatial-hash
 grid (`G`). Middle-drag pans the camera, `0` recentres, `C` copies the run's seed and tick for

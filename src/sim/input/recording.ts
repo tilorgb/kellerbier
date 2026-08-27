@@ -61,7 +61,6 @@ export class InputRecording {
     this.buffer[offset + 2] = frame.aimX;
     this.buffer[offset + 3] = frame.aimY;
     this.buffer[offset + 4] = frame.buttons;
-    this.buffer[offset + 5] = frame.analogAim ? 1 : 0;
     this.frameCount += 1;
   }
 
@@ -83,7 +82,6 @@ export class InputRecording {
     out.aimY = this.buffer[offset + 3] ?? 0;
     // The button mask is stored in a signed byte; mask it back to unsigned.
     out.buttons = (this.buffer[offset + 4] ?? 0) & 0xff;
-    out.analogAim = (this.buffer[offset + 5] ?? 0) !== 0;
   }
 
   /** Discards everything recorded, keeping the buffer for reuse. */

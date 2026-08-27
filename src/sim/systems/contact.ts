@@ -137,7 +137,7 @@ function resolveAgainstPlayer(other: number): void {
   // Whatever a wall would not let the player take, the other body owes instead.
   const otherWanted = overlap - playerWanted + owed;
   owed =
-    otherWanted + moveClear(sim, other, otherRadius, otherX, otherY, -awayX, -awayY, otherWanted);
+    otherWanted - moveClear(sim, other, otherRadius, otherX, otherY, -awayX, -awayY, otherWanted);
 
   // And if it is against a wall too, back to the player, who at least has an
   // input telling them why they are not moving.

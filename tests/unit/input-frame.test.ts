@@ -85,7 +85,7 @@ describe('axis quantisation', () => {
 describe('input frame', () => {
   it('starts empty', () => {
     const frame = createInputFrame();
-    expect(frame).toEqual({ moveX: 0, moveY: 0, aimX: 0, aimY: 0, buttons: 0, analogAim: false });
+    expect(frame).toEqual({ moveX: 0, moveY: 0, aimX: 0, aimY: 0, buttons: 0 });
   });
 
   it('sets and clears each action independently', () => {

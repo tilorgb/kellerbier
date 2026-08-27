@@ -15,7 +15,7 @@ import { GameView } from '../render/view.js';
 import { loadFloorArt } from '../render/floor-art.js';
 import { FixedTimestepLoop, runAnimationFrameLoop } from '../app/loop.js';
 import { InputSampler } from '../app/input/sampler.js';
-import { WORLD_ZOOM, computeGameLayout, roomUnitsPerPixel } from '../render/resolution.js';
+import { computeGameLayout } from '../render/resolution.js';
 
 export interface PlaytestHandle {
   destroy(): void;
@@ -139,36 +139,21 @@ export async function createPlaytest(
   game.addChild(view.stage);
   app.stage.addChild(game);
 
-  const pointerMapping = {
-    originX: 0,
-    originY: 0,
-    unitsPerPixel: 1 / WORLD_ZOOM,
-    cameraX: 0,
-    cameraY: 0,
-  };
   let layout = computeGameLayout(window.innerWidth, window.innerHeight, window.devicePixelRatio);
   const stopTrackingWindowSize = trackWindowSize(app, game, (applied) => {
     layout = applied;
-    pointerMapping.originX = applied.originX;
-    pointerMapping.originY = applied.originY;
-    pointerMapping.unitsPerPixel = roomUnitsPerPixel(applied);
   });
 
   const input = new InputSampler();
-  const stopKeyboard = input.keyboard.attach(window, app.canvas, pointerMapping);
+  const stopKeyboard = input.keyboard.attach(window);
   const stopGamepad = input.gamepad.attach(window);
 
   const loop = new FixedTimestepLoop({
     step: () => {
-      const index = sim.playerIndex;
-      input.setAimOrigin(sim.positionX(index), sim.positionY(index));
       sim.step(input.sample());
     },
     render: (alpha) => {
       view.sync(alpha, layout.scale);
-      const worldOffset = view.worldOffset();
-      pointerMapping.cameraX = worldOffset.x / WORLD_ZOOM;
-      pointerMapping.cameraY = worldOffset.y / WORLD_ZOOM;
     },
   });
   const stopLoop = runAnimationFrameLoop(loop);

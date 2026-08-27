@@ -370,18 +370,4 @@ export class GameView {
   pedestalScreenPosition(pedestalIndex: number): { readonly x: number; readonly y: number } | null {
     return this.pedestals.screenPositionFor(pedestalIndex);
   }
-
-  /**
-   * `world`'s current offset, in internal-resolution pixels — everything
-   * `sync` folds into it: camera-follow (#100), shake, sway, the debug free
-   * camera and the room-transition slide.
-   *
-   * Mouse aim needs this: `app/main.ts`'s pointer mapping turns a client
-   * pixel into a room coordinate assuming the room sits at its untranslated
-   * position, which stopped being true the moment `world.position` could be
-   * anything but ~0. Read after `sync`, same as `playerScreenPosition`.
-   */
-  worldOffset(): { readonly x: number; readonly y: number } {
-    return { x: this.world.position.x, y: this.world.position.y };
-  }
 }

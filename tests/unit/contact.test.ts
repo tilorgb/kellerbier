@@ -109,6 +109,38 @@ describe('bodies against bodies', () => {
     expect(distanceThrough(EnemySize.Mid)).toBeLessThan(distanceThrough(EnemySize.Mini));
   });
 
+  it('resolves the overlap exactly, without overshooting when nothing is wall-blocked', () => {
+    // Regression: the "whatever a wall refused, the other body owes"
+    // fallback used to compute `otherWanted + moveClear(...)` instead of
+    // `otherWanted - moveClear(...)` — in the open-room case here, where
+    // nothing is blocked and `moveClear` always returns the full distance it
+    // was asked to move, that summed to double the correction rather than
+    // recognising nothing was refused, and shoved the player an extra,
+    // unwanted distance on every ordinary contact.
+    const sim = emptySim();
+    const index = sim.playerIndex;
+    const playerRadius = sim.body.data[index * 2] ?? 0;
+    const playerMass = sim.body.data[index * 2 + 1] ?? 1;
+    const startX = sim.positionX(index);
+    const startY = sim.positionY(index);
+
+    // Exactly concentric with the player, so `awayX/awayY` fall back to the
+    // fixed `(1, 0)` and the resulting displacement is fully predictable.
+    const enemy = sim.spawnEnemy(startX, startY, EnemySize.Mid);
+    sim.world.flush();
+    const enemyIndex = entityIndex(enemy);
+    const enemyRadius = sim.body.data[enemyIndex * 2] ?? 0;
+    const enemyMass = sim.body.data[enemyIndex * 2 + 1] ?? 1;
+
+    sim.step(walking(0));
+
+    const overlap = playerRadius + enemyRadius;
+    const playerShare = enemyMass / (playerMass + enemyMass);
+    expect(sim.positionX(index)).toBeCloseTo(startX + overlap * playerShare, 4);
+    expect(sim.positionY(index)).toBeCloseTo(startY, 4);
+    expect(sim.positionX(enemyIndex)).toBeCloseTo(startX - overlap * (1 - playerShare), 4);
+  });
+
   it('lets the player through a body that has no mass advantage at all', () => {
     // The knob exists so contact can be turned off, and off has to mean off.
     // Compared against the same walk with contact drag left on, rather than

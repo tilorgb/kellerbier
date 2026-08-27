@@ -43,8 +43,18 @@
         "###############"
       ],
       "obstacles": [{ "x": 96, "y": 32, "width": 16, "height": 16 }],
-      "enemySpawns": [],
-      "spawnGroups": [],
+      "enemySpawns": [{ "x": 48, "y": 112, "group": "nook-watch" }],
+      "spawnGroups": [
+        {
+          "id": "nook-watch",
+          "count": 1,
+          "choices": [
+            { "enemyId": "kellerassel", "minFloor": 1, "maxFloor": 1 },
+            { "enemyId": "bauer", "minFloor": 2, "maxFloor": 2 },
+            { "enemyId": "bierratte", "minFloor": 3, "maxFloor": 7 }
+          ]
+        }
+      ],
       "pickupSpawns": [{ "x": 176, "y": 96, "type": "mass-half" }],
       "hazards": [],
       "decorativeProps": []
@@ -82,7 +92,7 @@
   "metadata": {
     "floorTags": ["cellar", "rural"],
     "shape": "L",
-    "difficultyTier": 1,
+    "difficultyTier": 2,
     "weight": 1
   }
 }

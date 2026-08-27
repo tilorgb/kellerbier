@@ -13,16 +13,23 @@ import type { DropTable, LootTier } from '../../sim/pickup/definition.js';
  * table only decides the mix once something has already dropped. Originally
  * every tier dropped 45-80% of the time, on top of the guaranteed-ish
  * `ROOM_CLEAR_DROP_TABLE` roll a room *also* pays on top of every kill in it
- * — three stacking sources meant nothing individual one felt earned. `null`
- * is scaled up per tier here to roughly weak 15% / normal 30% / tough 50%,
- * leaving the relative mix of *what* drops untouched: a trash mob is now
- * mostly a miss, a tough kill is still a coin flip in the player's favour,
- * and the room-clear roll stays the moment that reliably pays out.
+ * — three stacking sources meant nothing individual one felt earned. A first
+ * pass scaled `null` up to roughly weak 15% / normal 30% / tough 50%, which
+ * turned out to still read as "almost every room drops something" once a
+ * room's several kills are added up (a room with four normal-tier kills
+ * clears something at least once about three times in four, even at a 30%
+ * per-kill rate) — the point of `needMultiplierFor`'s health/ammo boost
+ * (`GameSim.dropLoot`) is for a missing heart landing to feel earned because
+ * it was scarce, and a baseline this generous buries that under drops that
+ * would have landed anyway. Halved again here, to roughly weak 8% / normal
+ * 15% / tough 25%: a trash mob is now almost always a miss, a tough kill is
+ * a real one-in-four rather than a coin flip, and getting hit is meant to
+ * cost something a nearby kill won't just casually hand back.
  */
 export const ENEMY_DROP_TABLES: Readonly<Record<LootTier, DropTable>> = {
   weak: {
     promilled: [
-      { pickupId: null, weight: 250 },
+      { pickupId: null, weight: 500 },
       { pickupId: 'biermarke-1', weight: 15 },
       { pickupId: 'brezn', weight: 8 },
       { pickupId: 'radi', weight: 8 },
@@ -32,7 +39,7 @@ export const ENEMY_DROP_TABLES: Readonly<Record<LootTier, DropTable>> = {
       { pickupId: 'bierfassl', weight: 1 },
     ],
     sober: [
-      { pickupId: null, weight: 250 },
+      { pickupId: null, weight: 500 },
       { pickupId: 'biermarke-1', weight: 17 },
       { pickupId: 'brezn', weight: 8 },
       { pickupId: 'radi', weight: 8 },
@@ -43,7 +50,7 @@ export const ENEMY_DROP_TABLES: Readonly<Record<LootTier, DropTable>> = {
   },
   normal: {
     promilled: [
-      { pickupId: null, weight: 140 },
+      { pickupId: null, weight: 340 },
       { pickupId: 'biermarke-1', weight: 15 },
       { pickupId: 'biermarke-5', weight: 5 },
       { pickupId: 'brezn', weight: 8 },
@@ -57,7 +64,7 @@ export const ENEMY_DROP_TABLES: Readonly<Record<LootTier, DropTable>> = {
       { pickupId: 'bierfassl', weight: 2 },
     ],
     sober: [
-      { pickupId: null, weight: 140 },
+      { pickupId: null, weight: 340 },
       { pickupId: 'biermarke-1', weight: 17 },
       { pickupId: 'biermarke-5', weight: 5 },
       { pickupId: 'brezn', weight: 8 },
@@ -72,7 +79,7 @@ export const ENEMY_DROP_TABLES: Readonly<Record<LootTier, DropTable>> = {
   },
   tough: {
     promilled: [
-      { pickupId: null, weight: 80 },
+      { pickupId: null, weight: 240 },
       { pickupId: 'biermarke-1', weight: 2 },
       { pickupId: 'biermarke-5', weight: 15 },
       { pickupId: 'biermarke-10', weight: 5 },
@@ -87,7 +94,7 @@ export const ENEMY_DROP_TABLES: Readonly<Record<LootTier, DropTable>> = {
       { pickupId: 'bierfassl-pack', weight: 5 },
     ],
     sober: [
-      { pickupId: null, weight: 80 },
+      { pickupId: null, weight: 240 },
       { pickupId: 'biermarke-1', weight: 2 },
       { pickupId: 'biermarke-5', weight: 18 },
       { pickupId: 'biermarke-10', weight: 5 },
@@ -103,10 +110,18 @@ export const ENEMY_DROP_TABLES: Readonly<Record<LootTier, DropTable>> = {
   },
 };
 
-/** Rolled once when a room's last enemy falls, in addition to that enemy's own drop. */
+/**
+ * Rolled once when a room's last enemy falls, in addition to that enemy's own drop.
+ *
+ * `null`'s weight is the one place a room is allowed to clear and hand back
+ * nothing at all — deliberately still the minority outcome (about 30% of
+ * clears), so it reads as "this one didn't pay out" rather than as the
+ * common case, which would just feel like the game forgot to reward the
+ * player for clearing it.
+ */
 export const ROOM_CLEAR_DROP_TABLE: DropTable = {
   promilled: [
-    { pickupId: null, weight: 10 },
+    { pickupId: null, weight: 38 },
     { pickupId: 'biermarke-1', weight: 15 },
     { pickupId: 'biermarke-5', weight: 20 },
     { pickupId: 'mass-half', weight: 15 },
@@ -117,7 +132,7 @@ export const ROOM_CLEAR_DROP_TABLE: DropTable = {
     { pickupId: 'beer', weight: 4 },
   ],
   sober: [
-    { pickupId: null, weight: 10 },
+    { pickupId: null, weight: 38 },
     { pickupId: 'biermarke-1', weight: 15 },
     { pickupId: 'biermarke-5', weight: 22 },
     { pickupId: 'mass-half', weight: 16 },

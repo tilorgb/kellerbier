@@ -683,3 +683,164 @@ what's missing. It does not apply to a system with no sane fallback to reach for
 stock to sell is not "fall back to Floor 1's shop stock," it's a genuinely different bug) — this
 decision is about *data* gaps in a *chosen-from-several* shape, the same shape `SlotPool` and
 `spawnGroups` both already have, not a general license to swallow every runtime error.
+
+## 20. Aim is eight-way on every device — no mouse, no free-angle stick
+
+**Decided:** M6. **Supersedes:** #8's analog/digital split.
+
+Playtesting the floors that exist so far kept turning up the same complaint about the two aiming
+modes #8 built for: a mouse loses the twin-stick feel the arrow keys already have, and a free
+stick angle is hard to land precisely under time pressure — the exact "aiming at a point" cost #8
+already named as the reason analog aim needed its own, lower sway value in the first place. Isaac,
+this project's own reference for "feels good to shoot" (`docs/GAME_DESIGN.md` pillar 1), never had
+free-aim at all; adding it here bought a control scheme none of the roster or item design actually
+needed, at the cost of the frame carrying a flag whose only job was to make one input source feel
+less bad than it otherwise would.
+
+So aim is eight-way, full stop, on every device: arrow keys as before, and the gamepad's right
+stick now snaps to the nearest of the same eight directions (`app/input/sampler.ts`'s
+`snapToOctant`) rather than reporting a free angle. Mouse aim is removed rather than kept as an
+alternate input — a player who prefers the mouse undermines the exact contrast a future free-aim
+item (see below) would need to read as a change, and every input-only branch it justified
+(`KeyboardMouseSource`'s pointer tracking, `app/main.ts`'s pointer-to-room-coordinate mapping, the
+mouse fire button) went with it.
+
+This also retires #8's own reason for existing: with nothing left that produces a point-aimed
+shot, `InputFrame.analogAim` and `ShootingTuning.analogVelocityInheritance` are dead branches, not
+dormant ones, so both are gone rather than kept unused — `INPUT_FRAME_BYTES` drops from 6 to 5
+accordingly, an internal recording format with no persisted save files depending on the old shape.
+
+**Constrains:** a genuinely free-angle aim mode is still a legitimate thing for this game to have —
+the sway-wobble problem #8 described for a mouse or a stick is exactly what would make a rare,
+*bad* item ("your aim gets harder to control") land as a real downside rather than a strict
+upgrade. That item, when it's built, re-derives its own analog-aim plumbing from what it actually
+needs rather than resurrecting this decision's flag unchanged; nothing here is being kept dormant
+on the bet that the shape will still fit.
+
+## 21. Enemies push each other apart too, identified by `enemyMask`, not by collision layer
+
+**Decided:** M6. **Enforced by:** `sim/systems/enemy-contact.ts`.
+
+`sim/systems/contact.ts` already keeps the player from standing inside an enemy or obstacle;
+nothing did the same between two enemies, which is exactly why a boss split
+(`splitFromEvent`, `systems/enemy.ts`) spawns its children in a ring and then lets them drift
+back on top of each other forever. `stepEnemyContacts` is the same mass-split position
+correction, run as its own pass over every unordered pair of enemies rather than folded into
+`stepContacts` — reusing the same tick's broadphase, immediately after it.
+
+The one surprise: filtering candidates by `CollisionLayer.Enemy` — the obvious thing to try,
+since `contact.ts`'s own `SOLID_LAYERS` already names it — silently resolves nothing, because
+every body `spawnTarget` creates (a real, authored enemy included) is tagged
+`CollisionLayer.Obstacle`. `CollisionLayer.Enemy` is declared and reserved but nothing has ever
+set it. `stepEnemyContacts` instead identifies a real enemy the same way `stepEnemies` already
+iterates them: `(sim.world.masks[index] & sim.enemyMask) === sim.enemyMask`, the `enemy` +
+`enemyMotion` component pair. This sidesteps the layer gap rather than closing it — actually
+setting `CollisionLayer.Enemy` on every enemy is a separate, wider change (everything that reads
+`SOLID_LAYERS`/`DECLARED_PAIRS` would need auditing against a layer newly being real) that
+nothing here needed to make correct.
+
+**A second, pre-existing bug surfaced by building this**: `contact.ts`'s own separation math had
+`owed = otherWanted + moveClear(...)` where the first half of the same function correctly used
+`owed = wanted - moveClear(...)` — `moveClear` returns how far a body actually got, not how far
+a wall refused it, so the second `owed` should subtract the same way the first one does. Added
+instead of subtracted, `owed` came out strongly positive whenever the far side's move was
+unblocked (the ordinary open-room case) rather than zero, and the player then got shoved an
+extra, unwanted distance on top of their own already-correct share on every contact that wasn't
+against a wall. Fixed in `contact.ts` — `tests/unit/contact.test.ts`'s "resolves the overlap
+exactly, without overshooting" is the regression lock, added because the existing player-vs-enemy
+tests only checked the loose "stopped overlapping" invariant, which the overshoot still satisfied.
+
+**Deliberately not `moveClear`:** `stepEnemyContacts` does not share `contact.ts`'s own
+wall-aware move-with-fallback — an early version did, calling it up to three times per resolved
+pair (mirroring `resolveAgainstPlayer` exactly), and the frame-time benchmark's stress scene (200
+enemies, all `walkTowardPlayer`, converging and staying overlapped indefinitely) caught it: the
+extra cross-function-call arithmetic, paid per overlapping pair rather than once for the player,
+inflated the simulation's per-tick heap-allocation floor (`tools/bench/select.mjs`'s "least noisy
+of three runs" number — see `tests/bench/frame-time.test.ts`'s own doc comment on where that
+residual cost comes from: a `number` boxed at a call boundary V8 did not inline).
+`stepEnemyContacts` moves each body once, straight into the transform, gated on one inlined
+`room.isClear` check apiece — no wall-slide fallback, no "what a wall refused, the other body
+owes" redistribution. A body a wall blocks this tick just tries again next tick, against the same
+still-overlapping neighbour, which converges in practice. That correctness gap is one this file
+can afford and `contact.ts` cannot: nobody reads an enemy's exact pixel against a wall the way
+they read the player's.
+
+**Five attempts at the broadphase question**, on the frame-time benchmark's stress scene (200
+enemies, all `walkTowardPlayer`, converging and staying clustered indefinitely — deliberately
+adversarial for whatever this pass does). The first four went through CI, one theory at a time;
+each theory turned out wrong, confirmed wrong by the next attempt changing exactly the variable it
+named and getting either no change or a new failure back:
+
+1. Reuse the tick's `sim.broadphase.query(x, y, radius, visit)`, called once per enemy to find
+   its neighbours — the obvious move, since `stepContacts` already does this for the player. Left
+   "Simulation heap" red: 54.4 KB/tick against a 37.5 KB baseline, well past the gate's 16 KB
+   floor. Working theory: pixel doubles boxing at a call boundary V8 doesn't inline, the same
+   residual cost the benchmark's own doc comments already name — paid once a tick for the player,
+   paid 200 times here.
+2. Drop the broadphase and walk `world.highWater`/`world.masks` directly, comparing every enemy
+   pair with a plain O(enemies²) nested loop, fully inlined. This got "Simulation heap" green (51.7
+   KB/tick, just under the floor) but pushed "Simulation tick" past its own tolerance band: at the
+   clustered stress population, cells still meaningfully bound the broadphase's own candidate
+   count even when everyone is nearby, so an unconditional ~20,000-pair sweep does measurably more
+   comparisons than a grid ever would have.
+3. Testing attempt 1's theory directly: `queryBox`'s cell-range walk was split out as its own
+   method, `queryCells`, so a caller could compute the column/row bounds itself in local doubles
+   and hand the grid only integers — a Smi, never boxed regardless of inlining. This did not move
+   the number at all: 54.4 KB/tick again, to the same tenth of a kilobyte as attempt 1. **Theory 1
+   refuted** — argument type crossing into `SpatialHash` was never the variable.
+4. New theory: an *indirect* call through a stored reference — `query`'s `visit` parameter — costs
+   something a *direct*, statically-named call doesn't, at a couple-hundred-per-tick frequency.
+   `stepEnemyContacts` was rewritten to build its own grid over enemies only (a counting sort into
+   `cellStart`/`bucketed`, `SpatialHash.build`'s technique, scoped down and never touching the
+   shared instance), finding candidates via the standard self-plus-forward-four cell sweep, and
+   resolving each pair by calling a `resolvePair` function directly, by name — never through a
+   stored parameter. Still regressed heap (54.3 KB/tick). **Theory 2 refuted** — the call being
+   indirect was never the variable either; a direct call at this frequency cost the same.
+5. At this point CI round-trips (five pushes, each a two-to-three-minute cycle to learn one
+   number) had stopped being a productive way to find the actual variable, so the search moved
+   local: `sim.ts`'s call to `stepEnemyContacts` disabled, a harness built from
+   `tests/bench/scene.ts`'s real stress scene and `tests/helpers/allocation.ts`'s `bytesPerPass` —
+   the same instrument the real gate uses — measuring `stepEnemyContacts` added back in isolation,
+   several variants side by side in one process. That surfaced two things a single CI number never
+   could: first, run-to-run variance locally was large enough that a single measurement was as
+   likely to mislead as a single CI round-trip had been — `select.mjs`'s "two stable V8 modes"
+   comment, confirmed directly, meant every variant had to be measured several times and compared
+   by its low mode, not its first reading. Second, once that noise was controlled for, the ordering
+   was unambiguous and reproducible: a grid that only builds the counting sort and never resolves
+   a single pair measured statistically indistinguishable from zero (-2.9 KB, i.e. noise); the same
+   grid calling `resolvePair` per candidate measured +16.6 KB; the same grid with `resolvePair`'s
+   body inlined directly into both sweep loops instead of called measured +13.6 KB — under the 16 KB
+   floor, and close to the fully-inlined O(enemies²) loop's own +11.3 KB. **The actual variable was
+   never argument type or direct-vs-indirect — it was whether a separate function got called from
+   the pair-resolution path at all**, direct or indirect, doubles or integers. `stepEnemyContacts`'s
+   final shape keeps attempt 4's grid (still bounds the candidate count, fixing what attempt 2 got
+   wrong) but inlines `resolvePair`'s body into both loops instead of calling out to it — the two
+   near-identical copies are the cost of that, paid once in the source rather than every tick.
+
+The general lesson, not just this file's: **a plausible mechanism is not a measurement.** Four
+attempts here were each built on a specific, well-reasoned theory about *why* — and three of those
+four theories turned out to explain nothing, confirmed wrong only because the next attempt happened
+to isolate the named variable. A synthetic reproduction of the suspected shape (a toy object, a toy
+callback, called a few thousand times) also failed to reproduce the regression at all when tried in
+isolation — whatever V8 was actually doing depended on something about the real `GameSim`/real
+stress-scene scale that a small stand-in didn't carry, which is itself worth remembering next time
+a synthetic microbenchmark is tempting as a shortcut around the real one. What finally worked was
+building a same-process A/B harness against the real scene using the project's own measurement
+primitives, isolating one variable at a time, and reading the *low* mode across repeated runs
+rather than the first number that came back — the CI gate's own methodology (`select.mjs`), applied
+locally once CI itself had stopped being a productive way to iterate.
+
+**Constrains:** a future system that needs to tell a real enemy apart from an inert body
+(a training target, a pickup, an obstacle prop) reaches for the `enemyMask` component check
+first, not a collision layer — the layer only reliably distinguishes `Obstacle`-tagged bodies
+from projectiles, the player and pickups today, not enemies from non-enemies. And a future
+per-pair system called once per body in a population sized in the hundreds reaches for its own
+scoped grid, with the pair-resolution math inlined directly into the sweep rather than factored
+into a helper — direct or indirect, a separate function in that specific path measurably cost
+something here, for a reason still not fully explained by any one mechanism tried above.
+`sim.broadphase`'s `query`/`queryBox`/`queryCells` all stay right for a call made once or a
+handful of times a tick (the player's own contact pass, a single explosion radius); called once
+per body at a population in the hundreds, whatever that per-call cost is stopped being residual.
+Before spending another round of CI pushes on a theory about *why* a regression like this exists,
+reach for a local same-process A/B against the real scene first — it is faster, and, per every
+attempt above but the last, more likely to be right.

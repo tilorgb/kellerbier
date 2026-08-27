@@ -4,7 +4,6 @@ import {
   type InputFrame,
   InputAction,
   createInputFrame,
-  inputFramesEqual,
   quantiseAxis,
   setActionDown,
 } from '../../src/sim/input/frame.js';
@@ -212,13 +211,12 @@ describe('shooting', () => {
 /**
  * What a shot inherits from the player who fired it.
  *
- * Two numbers rather than one, because the two halves of the player's velocity
- * do different things to a shot. Along the shot it is momentum: it changes when
- * the shot arrives and never where. Across it, it bends the stream — and that
- * half is the one an aiming device can make unbearable, since a mouse or a
- * stick aims at a *point*, so the angle between running and aiming rotates
- * continuously as the player circles it and the bend changes sign under their
- * hands.
+ * Two different things happen to a shot depending on which half of the
+ * player's velocity it inherits. Along the shot it is momentum: it changes
+ * when the shot arrives and never where. Across it, it bends the stream —
+ * the sway a player learns to shoot through, made possible by aim being
+ * eight-way: the angle between running and aiming holds still while they
+ * strafe (`docs/DECISIONS.md` #20).
  */
 describe('velocity inheritance', () => {
   /** The velocity of the one shot in the air. */
@@ -232,13 +230,7 @@ describe('velocity inheritance', () => {
     return { x, y };
   }
 
-  /**
-   * Runs up to top speed downward, then fires once to the right.
-   *
-   * Which is the case the two numbers exist for: the player's motion is
-   * entirely across the shot, so all of what they inherit is sway.
-   */
-  function strafeShot(analogAim: boolean): { x: number; y: number } {
+  it('sways the stream with the player, which is the whole point of it', () => {
     const sim = new GameSim({ room: openRoom() });
 
     const running = createInputFrame();
@@ -247,36 +239,13 @@ describe('velocity inheritance', () => {
       sim.step(running);
     }
 
-    const firing = aiming(1, 0, 0, 1);
-    firing.analogAim = analogAim;
-    sim.step(firing);
-    return shotVelocity(sim);
-  }
-
-  it('sways the stream with the player, which is the whole point of it', () => {
-    const shot = strafeShot(false);
     // Running down while firing right bends the stream down, visibly. Without
     // this the shots trail behind the motion that produced them, and players
     // notice it without being able to name it.
+    sim.step(aiming(1, 0, 0, 1));
+    const shot = shotVelocity(sim);
     expect(shot.y).toBeGreaterThan(1);
     expect(Math.atan2(shot.y, shot.x)).toBeGreaterThan((15 * Math.PI) / 180);
-  });
-
-  it('sways less when aim tracks a point than when it is one of eight directions', () => {
-    const keys = strafeShot(false);
-    const analog = strafeShot(true);
-
-    // Both sway — the feature is the same on every device. The mouse and the
-    // stick simply get less of it: aiming at a point rotates the angle between
-    // running and aiming continuously, so a keyboard-sized sway slides through
-    // zero under the player's hands and reads as wobble.
-    expect(analog.y).toBeGreaterThan(0);
-    expect(analog.y).toBeLessThan(keys.y);
-    expect(analog.y / keys.y).toBeCloseTo(
-      DEFAULT_SHOOTING_TUNING.analogVelocityInheritance /
-        DEFAULT_SHOOTING_TUNING.velocityInheritance,
-      2,
-    );
   });
 
   it('carries momentum along the shot as well as across it', () => {
@@ -292,24 +261,5 @@ describe('velocity inheritance', () => {
     const shot = shotVelocity(sim);
     expect(shot.x).toBeGreaterThan(DEFAULT_SHOOTING_TUNING.shotSpeed);
     expect(shot.y).toBeCloseTo(0, 6);
-  });
-
-  it('reads the device off the frame, so a replay fires what it recorded', () => {
-    const sim = new GameSim({ room: openRoom() });
-    const keys = aiming(1, 0, 0, 1);
-    const mouse = aiming(1, 0, 0, 1);
-    mouse.analogAim = true;
-    // Nothing outside the frame decides this. Two frames that differ only in
-    // how aim was produced are two different frames, and both are recorded.
-    expect(inputFramesEqual(keys, mouse)).toBe(false);
-
-    sim.tuning.shooting.analogVelocityInheritance = 0;
-    const running = createInputFrame();
-    running.moveY = quantiseAxis(1);
-    for (let tick = 0; tick < 30; tick++) {
-      sim.step(running);
-    }
-    sim.step(mouse);
-    expect(shotVelocity(sim).y).toBeCloseTo(0, 6);
   });
 });

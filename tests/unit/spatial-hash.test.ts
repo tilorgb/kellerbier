@@ -53,6 +53,32 @@ describe('SpatialHash', () => {
     expect(candidates(hash, 100, 100, 4)).toEqual([1]);
   });
 
+  it('queryCells finds the same candidates as queryBox given the equivalent cell range', () => {
+    // Straddles the corner shared by columns 3/4 and rows 3/4 (cell size 32).
+    const hash = build([
+      [1, 128, 128, 12],
+      [2, 100, 100, 8],
+      [3, 400, 300, 8],
+    ]);
+    const found: number[] = [];
+    // Columns/rows 3-4 is exactly the range `queryBox(128, 128, 12, 12, ...)`
+    // would derive itself — the point of `queryCells` is a caller supplying
+    // that range directly instead of pixel bounds for this to convert.
+    hash.queryCells(3, 4, 3, 4, (index) => {
+      found.push(index);
+    });
+    expect(found.sort((a, b) => a - b)).toEqual([1, 2]);
+  });
+
+  it('queryCells reports a body once even when it straddles every cell in the range', () => {
+    const hash = build([[5, 128, 128, 12]]);
+    const found: number[] = [];
+    hash.queryCells(3, 4, 3, 4, (index) => {
+      found.push(index);
+    });
+    expect(found).toEqual([5]);
+  });
+
   it('sweeps the whole path, not just where the move ended', () => {
     const hash = build([[5, 100, 100, 6]]);
     const found: number[] = [];

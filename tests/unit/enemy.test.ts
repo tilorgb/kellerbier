@@ -289,6 +289,67 @@ describe('authored behaviour', () => {
   });
 });
 
+describe('Große Kellerassel boss (#36 follow-up)', () => {
+  it('reaches spit even under continuous fire, instead of curling forever', () => {
+    // The bug: `onHit` re-curled it from `crawl` every single time, and a
+    // player holding the trigger down lands a hit within a tick or two of
+    // every window the boss is vulnerable — so `crawl`'s own wind-up timer
+    // could never accumulate enough ticks to reach `wind`/`spit` at all.
+    const sim = emptySim();
+    const player = sim.playerIndex;
+    const enemy = place(
+      sim,
+      'grosse-kellerassel',
+      sim.positionX(player) + 40,
+      sim.positionY(player),
+    );
+
+    let reachedSpit = false;
+    let reachedCurl = false;
+    for (let tick = 0; tick < 500 && !reachedSpit; tick++) {
+      sim.step(aiming(1, 0));
+      const state = stateName(sim, enemy);
+      reachedCurl ||= state === 'curl';
+      reachedSpit = state === 'spit';
+    }
+
+    // Curling is still the fight's identity — a hit still curls it — but it
+    // no longer traps the boss forever: `spit` gets a turn regardless.
+    expect(reachedCurl).toBe(true);
+    expect(reachedSpit).toBe(true);
+  });
+
+  it('does not re-curl while advancing after a curl — only `crawl` listens for a hit', () => {
+    const sim = emptySim();
+    const player = sim.playerIndex;
+    const enemy = place(
+      sim,
+      'grosse-kellerassel',
+      sim.positionX(player) + 40,
+      sim.positionY(player),
+    );
+
+    landShot(sim);
+    for (let tick = 0; tick < 10 && stateName(sim, enemy) !== 'curl'; tick++) {
+      sim.step(IDLE);
+    }
+    expect(stateName(sim, enemy)).toBe('curl');
+
+    // Ride out the curl into `advance`, still firing continuously.
+    for (let tick = 0; tick < 60 && stateName(sim, enemy) === 'curl'; tick++) {
+      sim.step(aiming(1, 0));
+    }
+    expect(stateName(sim, enemy)).toBe('advance');
+
+    // Kept firing all the way through it — `advance` has no `onHit`
+    // transition, so it never bounces back to `curl`.
+    for (let tick = 0; tick < 150 && stateName(sim, enemy) === 'advance'; tick++) {
+      sim.step(aiming(1, 0));
+      expect(stateName(sim, enemy)).not.toBe('curl');
+    }
+  });
+});
+
 /**
  * Primitives the shipped roster does not use yet.
  *

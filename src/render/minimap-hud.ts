@@ -55,6 +55,7 @@ function doorSurvivesCompile(
 
 /** Exported for `tests/unit/minimap-reveal.test.ts` — pure logic, no Pixi involved. */
 export function computeReveal(plan: FloorPlan, visitedRoomIds: ReadonlySet<string>): RevealState {
+  const roleById = new Map(plan.rooms.map((room) => [room.id, room.role]));
   const revealed = new Set<string>(visitedRoomIds);
   for (const room of plan.rooms) {
     if (!visitedRoomIds.has(room.id)) {
@@ -62,9 +63,18 @@ export function computeReveal(plan: FloorPlan, visitedRoomIds: ReadonlySet<strin
     }
     const voidKeys = new Set(computeVoidCells(room.cells).map(voidCellKey));
     for (const door of room.doors) {
-      if (doorSurvivesCompile(room, door, voidKeys)) {
-        revealed.add(door.neighborRoomId);
+      if (!doorSurvivesCompile(room, door, voidKeys)) {
+        continue;
       }
+      // A secret/supersecret room is found by bombing a wall (#23) or
+      // walking into it, not by standing next to it — adjacency alone
+      // must never reveal one, the same way its icon is already withheld
+      // below. Only an unlock item gets to lift this (none exists yet).
+      const neighborRole = roleById.get(door.neighborRoomId);
+      if (neighborRole === 'secret' || neighborRole === 'supersecret') {
+        continue;
+      }
+      revealed.add(door.neighborRoomId);
     }
   }
   return { visited: visitedRoomIds, revealed };

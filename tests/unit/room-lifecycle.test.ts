@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import cellarCrossroads from '../../src/content/rooms/cellar.json';
 import { BOSS_REWARD_DROP_TABLE } from '../../src/content/pickups/drop-tables.js';
 import { EventKind } from '../../src/sim/events/queue.js';
-import { GameSim } from '../../src/sim/game/sim.js';
+import { GameSim, PLAYER_RADIUS } from '../../src/sim/game/sim.js';
 import { createInputFrame } from '../../src/sim/input/frame.js';
 import { ProjectileTeam } from '../../src/sim/projectile/store.js';
 import { ParticleKind } from '../../src/sim/particle/store.js';
@@ -62,6 +62,52 @@ describe('room lifecycle', () => {
     expect(sim.playerIndex).toBe(player);
     expect(sim.playerHealth).toBe(healthBefore);
     expect(sim.positionY(player)).toBeCloseTo(sim.room.maxY - 8);
+  });
+
+  it('only compiles doors the placement actually gives it, not every direction the template authors', () => {
+    // `cellarCrossroads`'s own metadata authors all four directions as
+    // possible doors — the floor plan's real neighbour graph is what should
+    // narrow that down, via `roomPlacement`. With none given at all, every
+    // direction the template allows still compiles (`SINGLE_CELL_PLACEMENT`
+    // has no `doors` to override it with) — the exact bug a start room
+    // loaded with no placement used to hit.
+    const wideOpen = new GameSim({ roomTemplate: cellarCrossroads, floor: 1, population: 'empty' });
+    expect(wideOpen.doors.map((door) => door.direction).sort()).toEqual([
+      'east',
+      'north',
+      'south',
+      'west',
+    ]);
+
+    const narrow = new GameSim({
+      roomTemplate: cellarCrossroads,
+      floor: 1,
+      population: 'empty',
+      roomPlacement: {
+        cells: [{ col: 0, row: 0 }],
+        doors: [{ cellIndex: 0, direction: 'north' }],
+      },
+    });
+    expect(narrow.doors.map((door) => door.direction)).toEqual(['north']);
+  });
+
+  it('spawns the player on a walkable tile even when an obstacle sits at the room centre', () => {
+    // The room's geometric centre — where `spawnPlayer` starts from — is
+    // exactly what a hand-authored obstacle box can also cover, which used
+    // to spawn the player stuck inside it.
+    const template = {
+      ...cellarCrossroads,
+      enemySpawns: [],
+      spawnGroups: [],
+      obstacles: [{ x: 104, y: 56, width: 32, height: 32 }],
+    };
+    const sim = new GameSim({ roomTemplate: template, floor: 1, population: 'empty' });
+    const player = sim.playerIndex;
+    const x = sim.positionX(player);
+    const y = sim.positionY(player);
+
+    expect(sim.room.isClear(x, y, PLAYER_RADIUS)).toBe(true);
+    expect(x < 104 || x > 136 || y < 56 || y > 88).toBe(true);
   });
 
   it('keeps doors locked while a death split is still alive', () => {

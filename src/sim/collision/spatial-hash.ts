@@ -244,17 +244,36 @@ export class SpatialHash {
     halfHeight: number,
     visit: (index: number) => void,
   ): void {
-    const stamp = this.nextStamp();
-
     const minCol = this.columnOf(centreX - halfWidth);
     const maxCol = this.columnOf(centreX + halfWidth);
     const minRow = this.rowOf(centreY - halfHeight);
     const maxRow = this.rowOf(centreY + halfHeight);
+    this.queryCells(minCol, maxCol, minRow, maxRow, visit);
+  }
+
+  /**
+   * The cell-range form of `queryBox`, for a caller that already has its own
+   * column/row bounds in hand — because it is about to call this once per
+   * body in a population sized in the hundreds, and does not want to pay for
+   * handing pixel doubles back across a call boundary just to have this
+   * immediately recompute the same bounds from them (`enemy-contact.ts` is
+   * that caller; see its own doc comment for why the boundary itself is the
+   * cost). Same dedup, same candidates as `queryBox` over the equivalent
+   * pixel box — just skips the box-to-cell conversion.
+   */
+  queryCells(
+    minColumn: number,
+    maxColumn: number,
+    minRow: number,
+    maxRow: number,
+    visit: (index: number) => void,
+  ): void {
+    const stamp = this.nextStamp();
 
     let reported = 0;
     for (let row = minRow; row <= maxRow; row++) {
       const base = row * this.columns;
-      for (let column = minCol; column <= maxCol; column++) {
+      for (let column = minColumn; column <= maxColumn; column++) {
         const cell = base + column;
         const start = this.cellStart[cell] ?? 0;
         const end = this.cellStart[cell + 1] ?? 0;

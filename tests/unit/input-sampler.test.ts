@@ -9,7 +9,7 @@ import {
 } from '../../src/sim/input/frame.js';
 import { GamepadButton, createDefaultBindings } from '../../src/app/input/bindings.js';
 import { DEFAULT_DEAD_ZONE, GamepadSource, type GamepadLike } from '../../src/app/input/gamepad.js';
-import { KeyboardMouseSource } from '../../src/app/input/keyboard.js';
+import { KeyboardSource } from '../../src/app/input/keyboard.js';
 import { InputSampler } from '../../src/app/input/sampler.js';
 
 interface PadState {
@@ -53,14 +53,14 @@ function padSource(state: PadState): GamepadSource {
 
 interface Harness {
   sampler: InputSampler;
-  keyboard: KeyboardMouseSource;
+  keyboard: KeyboardSource;
   gamepad: GamepadSource;
   pad: PadState;
 }
 
 function harness(): Harness {
   const pad = createPadState();
-  const keyboard = new KeyboardMouseSource();
+  const keyboard = new KeyboardSource();
   const gamepad = padSource(pad);
   const sampler = new InputSampler({ bindings: createDefaultBindings(), keyboard, gamepad });
   return { sampler, keyboard, gamepad, pad };
@@ -84,7 +84,7 @@ describe('keyboard sampling', () => {
   it('starts idle', () => {
     const { sampler } = harness();
     const frame = sampler.sample();
-    expect(frame).toEqual({ moveX: 0, moveY: 0, aimX: 0, aimY: 0, buttons: 0, analogAim: false });
+    expect(frame).toEqual({ moveX: 0, moveY: 0, aimX: 0, aimY: 0, buttons: 0 });
   });
 
   it('moves on WASD, with screen-space signs', () => {
@@ -168,57 +168,6 @@ describe('keyboard sampling', () => {
 
     keyboard.clear();
     expect(sampler.sample().moveX).toBe(0);
-  });
-});
-
-describe('mouse aiming', () => {
-  it('aims from the player towards the pointer', () => {
-    const { sampler, keyboard } = harness();
-    sampler.setAimOrigin(320, 180);
-    keyboard.movePointer(420, 180);
-
-    const frame = sampler.sample();
-    expect(frame.aimX).toBe(AXIS_RESOLUTION);
-    expect(frame.aimY).toBe(0);
-  });
-
-  it('reports a unit vector regardless of pointer distance', () => {
-    const { sampler, keyboard } = harness();
-    sampler.setAimOrigin(320, 180);
-    keyboard.movePointer(322, 182);
-
-    const near = sampler.sample();
-    const nearMagnitude = Math.hypot(axisToUnit(near.aimX), axisToUnit(near.aimY));
-    expect(nearMagnitude).toBeGreaterThan(0.99);
-    expect(nearMagnitude).toBeLessThan(1.01);
-  });
-
-  it('fires only while the mouse button is held', () => {
-    const { sampler, keyboard } = harness();
-    sampler.setAimOrigin(320, 180);
-    keyboard.movePointer(420, 180);
-    expect(isActionDown(sampler.sample(), InputAction.Fire)).toBe(false);
-
-    keyboard.mouseDown(0);
-    expect(isActionDown(sampler.sample(), InputAction.Fire)).toBe(true);
-
-    keyboard.mouseUp(0);
-    expect(isActionDown(sampler.sample(), InputAction.Fire)).toBe(false);
-  });
-
-  it('lets the arrow keys win over the pointer', () => {
-    const { sampler, keyboard } = harness();
-    sampler.setAimOrigin(320, 180);
-    keyboard.movePointer(420, 180);
-    keyboard.keyDown('ArrowLeft');
-
-    expect(sampler.sample().aimX).toBe(-AXIS_RESOLUTION);
-  });
-
-  it('ignores the pointer until it has moved once', () => {
-    const { sampler } = harness();
-    sampler.setAimOrigin(320, 180);
-    expect(sampler.sample().aimX).toBe(0);
   });
 });
 
@@ -318,6 +267,41 @@ describe('gamepad sampling', () => {
     expect(isActionDown(sampler.sample(), InputAction.Fire)).toBe(true);
   });
 
+  it('snaps the aim stick to the nearest of eight directions rather than a free angle', () => {
+    // A shallow angle off due east snaps to due east — the same eight-way aim
+    // arrow keys produce (docs/DECISIONS.md #20), not the free angle a stick
+    // can otherwise report.
+    const { sampler, pad } = harness();
+    pad.axes = [0, 0, 0.9, 0.3];
+
+    const frame = sampler.sample();
+    expect(frame.aimX).toBe(AXIS_RESOLUTION);
+    expect(frame.aimY).toBe(0);
+  });
+
+  it('snaps to a diagonal when the angle sits between two cardinals', () => {
+    const { sampler, pad } = harness();
+    pad.axes = [0, 0, 0.7, 0.9];
+
+    const frame = sampler.sample();
+    expect(frame.aimX).toBe(frame.aimY);
+    expect(frame.aimX).toBeGreaterThan(0);
+    const magnitude = Math.hypot(axisToUnit(frame.aimX), axisToUnit(frame.aimY));
+    expect(magnitude).toBeGreaterThan(0.99);
+    expect(magnitude).toBeLessThan(1.01);
+  });
+
+  it('leaves aim at rest inside the dead zone rather than snapping to a direction', () => {
+    const rig = harness();
+    const { sampler, pad } = rig;
+    selectGamepad(rig);
+    pad.axes = [0, 0, DEFAULT_DEAD_ZONE * 0.5, DEFAULT_DEAD_ZONE * 0.5];
+
+    const frame = sampler.sample();
+    expect(frame.aimX).toBe(0);
+    expect(frame.aimY).toBe(0);
+  });
+
   it('reports the pad id for glyph selection', () => {
     const { sampler, pad } = harness();
     pad.axes = [1, 0, 0, 0];
@@ -351,7 +335,7 @@ describe('hot-plug', () => {
 
     pad.connected = false;
     const frame = sampler.sample();
-    expect(frame).toEqual({ moveX: 0, moveY: 0, aimX: 0, aimY: 0, buttons: 0, analogAim: false });
+    expect(frame).toEqual({ moveX: 0, moveY: 0, aimX: 0, aimY: 0, buttons: 0 });
   });
 
   it('picks the pad up again when it comes back', () => {
@@ -368,7 +352,7 @@ describe('hot-plug', () => {
   it('survives a pad list of nulls', () => {
     // Chromium pads the list to four entries, most of them null.
     const source = new GamepadSource(() => [null, null, null, null]);
-    const sampler = new InputSampler({ keyboard: new KeyboardMouseSource(), gamepad: source });
+    const sampler = new InputSampler({ keyboard: new KeyboardSource(), gamepad: source });
     expect(() => sampler.sample()).not.toThrow();
     expect(sampler.activeDevice).toBe('keyboard');
   });

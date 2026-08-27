@@ -9,12 +9,20 @@ import type { EnemyDefinition, SplitOnDeathBehaviour } from '../../sim/enemy/def
  *
  * Phase one is the ordinary Kellerassel's own crawl/curl loop, scaled up —
  * "teaches attack timing, which the floor's basic Kellerassel has been
- * rehearsing" (the issue's own words). Its one addition is `spit`, a
- * telegraphed cone the crawl can wind into on a timer, so there is at least
- * one attack in the fight with a telegraph to read rather than none at all —
- * getting hit still curls it immediately (declared first, so a hit always
- * wins the race against the timer), which both rewards landing shots and
- * means a player who keeps it curled never has to deal with `spit` at all.
+ * rehearsing" (the issue's own words) — plus `spit`, a telegraphed cone that
+ * has to be an actual, reachable part of the fight, not just a state nobody
+ * ever sees. The first version curled on every single hit, `onHit` declared
+ * first so a hit always won the race against `crawl`'s own wind-up timer —
+ * which meant a player who just held the trigger down kept it curled
+ * forever and never had to deal with `spit` at all, since the timer could
+ * never accumulate the ticks it needed. `curl` still fires the instant
+ * `crawl` takes a hit — that reaction is the fight's whole identity, same as
+ * the ordinary Kellerassel's — but coming out of it now lands in `advance`,
+ * a state with no `onHit` transition at all: hits still land and damage it
+ * there, they just cannot curl it again. That guarantees `wind`/`spit` a
+ * real turn every cycle regardless of how continuously the player fires,
+ * and only re-arms `curl` once the boss is back in `crawl` after its own
+ * attack.
  *
  * At exactly half health it shatters into three `kellerasselSegment`s
  * instead of waiting to actually die — `PHASE_TWO_SPLIT`'s `atHealthBelow`,
@@ -22,7 +30,8 @@ import type { EnemyDefinition, SplitOnDeathBehaviour } from '../../sim/enemy/def
  * definition.ts`'s `SplitOnDeathBehaviour`). Declared on every phase-one
  * state rather than only `crawl`: the split reads off whichever state was
  * current the tick the threshold was crossed, and that tick can land while
- * curled, mid-telegraph, or mid-spray just as easily as while crawling.
+ * curled, mid-advance, mid-telegraph or mid-spray just as easily as while
+ * crawling.
  *
  * The numbers are chosen so the fight's total health budget does not change
  * between phases: 18 in phase one, threshold at 9, then three segments at 3
@@ -53,9 +62,12 @@ export const grosseKellerassel: EnemyDefinition = {
       name: 'crawl',
       behaviours: [{ behaviour: 'walkTowardPlayer', speed: 0.5 }, PHASE_TWO_SPLIT],
       transitions: [
-        // Checked first: a hit always curls it, even on the tick the wind-up
-        // timer below would otherwise have fired.
+        // Checked first: a hit always curls it. Only reachable here and
+        // nowhere else in the loop — this is the one moment sustained fire
+        // can curl it again, once per cycle, not once per shot.
         { to: 'curl', onHit: true },
+        // A fallback ceiling for the (rare) case nothing ever hits it at
+        // all, so an untouched fight still eventually reaches `wind`.
         { to: 'wind', after: 150 },
       ],
     },
@@ -69,7 +81,16 @@ export const grosseKellerassel: EnemyDefinition = {
         { behaviour: 'becomeInvulnerable', ticks: 40 },
         PHASE_TWO_SPLIT,
       ],
-      transitions: [{ to: 'crawl', after: 40 }],
+      transitions: [{ to: 'advance', after: 40 }],
+    },
+    {
+      // Curl-immune, deliberately: no `onHit` transition at all, so a shot
+      // landing here damages it same as ever but cannot curl it again — the
+      // only way `wind`/`spit` gets a guaranteed turn regardless of how
+      // continuously the player is firing.
+      name: 'advance',
+      behaviours: [{ behaviour: 'walkTowardPlayer', speed: 0.5 }, PHASE_TWO_SPLIT],
+      transitions: [{ to: 'wind', after: 110 }],
     },
     {
       name: 'wind',

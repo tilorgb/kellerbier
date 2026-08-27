@@ -31,12 +31,12 @@ function tRoom(): FloorPlanRoom {
   };
 }
 
-function bareRoom(id: string): FloorPlanRoom {
+function bareRoom(id: string, role: FloorPlanRoom['role'] = 'normal'): FloorPlanRoom {
   return {
     id,
     cells: [{ x: 99, y: 99 }],
     shape: '1x1',
-    role: 'normal',
+    role,
     doors: [],
     distanceFromStart: 2,
     templateId: 'bare-template',
@@ -92,5 +92,29 @@ describe('minimap reveal (#107 follow-up)', () => {
     // of its own in this synthetic plan. This asserts the void door stays
     // dropped specifically, not that it can never appear by any path.
     expect(reveal.revealed.has('void-swallowed-neighbor')).toBe(false);
+  });
+
+  it('never reveals a secret or supersecret neighbour by adjacency alone', () => {
+    const t = tRoom();
+    const floorPlan = plan([
+      t,
+      bareRoom('bar-left-neighbor', 'secret'),
+      bareRoom('bar-right-neighbor', 'supersecret'),
+      bareRoom('void-swallowed-neighbor'),
+    ]);
+
+    const reveal = computeReveal(floorPlan, new Set(['t']));
+
+    expect(reveal.revealed.has('bar-left-neighbor')).toBe(false);
+    expect(reveal.revealed.has('bar-right-neighbor')).toBe(false);
+  });
+
+  it('still shows a secret room once the player has actually visited it', () => {
+    const t = tRoom();
+    const floorPlan = plan([t, bareRoom('bar-left-neighbor', 'secret')]);
+
+    const reveal = computeReveal(floorPlan, new Set(['t', 'bar-left-neighbor']));
+
+    expect(reveal.revealed.has('bar-left-neighbor')).toBe(true);
   });
 });

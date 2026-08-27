@@ -46,7 +46,7 @@ export function stepShooting(sim: GameSim, input: Readonly<InputFrame>): void {
   }
 
   if (wantsToFire && sim.fireCooldown === 0) {
-    fire(sim, aimX, aimY, input.analogAim);
+    fire(sim, aimX, aimY);
     // Schluckfrequenz (#25): resolved through the stat pipeline, which is
     // what applies Promille's fire-rate bonus and floors the result at one
     // tick — the zero-guard a delay-based fire rate needs lives in the cap,
@@ -55,7 +55,7 @@ export function stepShooting(sim: GameSim, input: Readonly<InputFrame>): void {
   }
 }
 
-function fire(sim: GameSim, aimX: number, aimY: number, analogAim: boolean): void {
+function fire(sim: GameSim, aimX: number, aimY: number): void {
   const tuning = sim.tuning.shooting;
   const length = vectorLength(aimX, aimY);
   let directionX = aimX / length;
@@ -96,12 +96,10 @@ function fire(sim: GameSim, aimX: number, aimY: number, analogAim: boolean): voi
     muzzleY = centreY;
   }
 
-  // How much of the player's motion the shot carries depends on how they are
-  // aiming. Eight-way aim holds the angle between running and aiming still, so
-  // the sway is a constant slant a player reads and shoots through; aim that
-  // tracks a point rotates that angle continuously, and the same sway becomes
-  // wobble. Same feature, two numbers — see the tuning docs.
-  const inheritance = analogAim ? tuning.analogVelocityInheritance : tuning.velocityInheritance;
+  // Eight-way aim holds the angle between running and aiming still while the
+  // player strafes, so the shot carries a fraction of their velocity as a
+  // constant slant they read and shoot through — see the tuning docs.
+  const inheritance = tuning.velocityInheritance;
 
   // Items react to the shot before it exists (#26) — the same moment the
   // stat pipeline already resolves damage from, one line below.

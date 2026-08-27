@@ -254,4 +254,25 @@ describe('pedestal pickup (#28)', () => {
     // `consumable: true` removes it the instant it fires.
     expect(sim.inventory.has(index)).toBe(false);
   });
+
+  it('nudges a pedestal off an authored coordinate that lands on a blocked cell', () => {
+    // The same failure an L/T room's dropped void corner can produce
+    // (nothing validates a `decorativeProps` coordinate against the room's
+    // walkable footprint) — an obstacle box is the simplest way to
+    // reproduce "authored point is not clear" without standing up a full
+    // multi-cell room.
+    const room = pedestalRoom('treasure');
+    const blocked = {
+      ...room,
+      obstacles: [{ x: PEDESTAL_X - 16, y: PEDESTAL_Y - 16, width: 32, height: 32 }],
+    };
+    const sim = new GameSim({ seed: 1, roomTemplate: blocked, items: [baseItem('a')] });
+
+    const pedestal = sim.activePedestals[0];
+    if (pedestal === undefined) {
+      throw new Error('room should still have a pedestal to check');
+    }
+    expect(pedestal.x !== PEDESTAL_X || pedestal.y !== PEDESTAL_Y).toBe(true);
+    expect(sim.room.isClear(pedestal.x, pedestal.y, 8)).toBe(true);
+  });
 });
