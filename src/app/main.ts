@@ -20,6 +20,7 @@ import { createRenderer, trackWindowSize } from '../render/app.js';
 import {
   createBlobTexture,
   createRingTexture,
+  createSilhouetteTexture,
   createSolidTexture,
 } from '../render/placeholder-art.js';
 import {
@@ -75,6 +76,16 @@ const STAIRCASE_TEMPLATE_POOL = STAIRCASE_TEMPLATES.map((room, index) =>
 const STAIRCASE_TEMPLATES_BY_ID = new Map(
   STAIRCASE_TEMPLATE_POOL.map((template) => [template.id, template]),
 );
+
+/**
+ * The highest floor number with a real room pool to draw from, today — see
+ * `advanceFloor`'s doc comment for why this is separate from `FLOOR_CONFIGS`
+ * simply listing floors 1-7. Bump this the moment a floor's room templates
+ * land (its `floorTag` shows up in at least a start/boss/treasure/shop/
+ * secret/supersecret template — see `sim/room/floor-plan.ts`'s
+ * `MIN_ROOMS_FOR_ROLES`), not before.
+ */
+const HIGHEST_PLAYABLE_FLOOR = 2;
 
 function floorConfig(floorNumber: number): FloorConfig {
   const config = FLOOR_CONFIGS.find((candidate) => candidate.floor === floorNumber);
@@ -929,6 +940,12 @@ WASD move   arrows/mouse aim and fire
       pedestalBeam: createSolidTexture(app.renderer),
       floorTiles,
       enemyArt,
+      enemyFlash: Object.fromEntries(
+        Object.entries(enemyArt).map(([id, texture]) => [
+          id,
+          createSilhouetteTexture(app.renderer, texture),
+        ]),
+      ),
     };
     view = new GameView(sim, viewTextures);
     game.removeChildren();
@@ -1129,17 +1146,24 @@ WASD move   arrows/mouse aim and fire
    * the player's items, stats, promille and Biermarken all carry straight
    * over, the same as any ordinary `sim.loadRoom` call.
    *
-   * Every floor draws from `floorConfig(1)`, the only floor with authored
-   * room content today (`FLOOR_CONFIGS`'s doc comment) — this is what makes
-   * the loop endless rather than a dead end the moment a `npm run dev`
-   * playtest clears the one floor that exists, so item stacks can be tested
-   * across as many runs through it as needed.
+   * Advances to `floorPlan.floor + 1`, wrapping back to floor 1 once it
+   * passes `HIGHEST_PLAYABLE_FLOOR` — the highest floor `generateFloor` can
+   * actually build a plan for today. `FLOOR_CONFIGS` already lists floors up
+   * to 7 (#37's doc comment), but a floor's config being *present* isn't the
+   * same as its room pool being non-empty: floors 3-7 have zero templates
+   * tagged for their `floorTag` (`wald`/`alpen`/`schloss`/`brauerei`/`wiesn`),
+   * so `generateFloor` would throw the moment it tried to place a start or
+   * boss room. Bump `HIGHEST_PLAYABLE_FLOOR` as each new floor's content
+   * lands — this is what keeps the loop endless rather than a dead end the
+   * moment a `npm run dev` playtest clears the last floor that exists, so
+   * item stacks can be tested across as many runs through them as needed.
    */
   function advanceFloor(): void {
+    const nextFloor = floorPlan.floor >= HIGHEST_PLAYABLE_FLOOR ? 1 : floorPlan.floor + 1;
     const seed = Math.floor(Math.random() * 1_000_000);
     floorPlan = generateFloor(
       createStreamRng(seed, RngStream.Floor),
-      floorConfig(1),
+      floorConfig(nextFloor),
       ROOM_TEMPLATE_POOL,
       STAIRCASE_TEMPLATE_POOL,
     );

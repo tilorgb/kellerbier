@@ -19,7 +19,7 @@
         {
           "id": "boss",
           "count": 1,
-          "choices": [{ "enemyId": "grosse-kellerassel", "minFloor": 1, "maxFloor": 1 }]
+          "choices": [{ "enemyId": "grosse-kellerassel", "minFloor": 1, "maxFloor": 2 }]
         }
       ],
       "pickupSpawns": [],

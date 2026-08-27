@@ -1,10 +1,16 @@
 import type { EnemyDefinition } from '../../sim/enemy/definition.js';
+import { bauer } from './bauer.js';
 import { bierratte } from './bierratte.js';
+import { blaskapellist } from './blaskapellist.js';
+import { gartenzwerg } from './gartenzwerg.js';
+import { gockel } from './gockel.js';
 import { grosseKellerassel, kellerasselSegment } from './grosse-kellerassel.js';
 import { kellerassel } from './kellerassel.js';
+import { kuh } from './kuh.js';
 import { fasssplitter, rollfass } from './rollfass.js';
 import { schimmelfleck, schimmelspore } from './schimmelfleck.js';
 import { shopkeeper } from './shopkeeper.js';
+import { traktor } from './traktor.js';
 import { zapfhahn } from './zapfhahn.js';
 
 /**
@@ -29,17 +35,29 @@ export const ENEMY_DEFINITIONS: readonly EnemyDefinition[] = [
   shopkeeper,
   grosseKellerassel,
   kellerasselSegment,
+  bauer,
+  kuh,
+  gockel,
+  gartenzwerg,
+  blaskapellist,
+  traktor,
 ];
 
 export {
+  bauer,
   bierratte,
+  blaskapellist,
   fasssplitter,
+  gartenzwerg,
+  gockel,
   grosseKellerassel,
   kellerassel,
   kellerasselSegment,
+  kuh,
   rollfass,
   schimmelfleck,
   schimmelspore,
   shopkeeper,
+  traktor,
   zapfhahn,
 };

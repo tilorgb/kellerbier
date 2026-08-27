@@ -1,0 +1,39 @@
+{
+  "id": "acker-scheunentor",
+  "tileGrid": [
+    "###############",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "###############"
+  ],
+  "obstacles": [{ "x": 96, "y": 16, "width": 16, "height": 32 }],
+  "enemySpawns": [
+    { "x": 40, "y": 96, "group": "gate" },
+    { "x": 176, "y": 96, "group": "gate" }
+  ],
+  "spawnGroups": [
+    {
+      "id": "gate",
+      "count": 1,
+      "choices": [
+        { "enemyId": "bauer", "minFloor": 1, "maxFloor": 7 },
+        { "enemyId": "kuh", "minFloor": 1, "maxFloor": 7 }
+      ]
+    }
+  ],
+  "pickupSpawns": [],
+  "hazards": [{ "x": 16, "y": 88, "width": 48, "height": 16, "type": "trellis" }],
+  "decorativeProps": [{ "x": 24, "y": 88, "type": "hop-trellis" }],
+  "metadata": {
+    "floorTags": ["rural"],
+    "shape": "1x1",
+    "doors": { "north": true, "east": true, "south": true, "west": true },
+    "difficultyTier": 2,
+    "weight": 1
+  }
+}

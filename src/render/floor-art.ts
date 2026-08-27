@@ -7,10 +7,30 @@ import schimmelsporeUrl from '../../assets/sprites/floor-1-cellar/characters/sch
 import zapfhahnUrl from '../../assets/sprites/floor-1-cellar/characters/zapfhahn.png';
 import rollfassUrl from '../../assets/sprites/floor-1-cellar/characters/rollfass.png';
 import fasssplitterUrl from '../../assets/sprites/floor-1-cellar/characters/fasssplitter.png';
+import ruralFloorTile1Url from '../../assets/sprites/floor-2-rural/tiles/rural-floor-1.png';
+import ruralFloorTile2Url from '../../assets/sprites/floor-2-rural/tiles/rural-floor-2.png';
+import ruralFloorTile3Url from '../../assets/sprites/floor-2-rural/tiles/rural-floor-3.png';
+import ruralFloorTile4Url from '../../assets/sprites/floor-2-rural/tiles/rural-floor-4.png';
+import bauerUrl from '../../assets/sprites/floor-2-rural/characters/bauer.png';
+import kuhUrl from '../../assets/sprites/floor-2-rural/characters/kuh.png';
+import gockelUrl from '../../assets/sprites/floor-2-rural/characters/gockel.png';
+import gartenzwergUrl from '../../assets/sprites/floor-2-rural/characters/gartenzwerg.png';
+import blaskapellistUrl from '../../assets/sprites/floor-2-rural/characters/blaskapellist.png';
+import traktorUrl from '../../assets/sprites/floor-2-rural/characters/traktor.png';
 
-/** The two per-floor art maps `GameViewTextures` needs (#35). */
+/**
+ * The two per-floor art maps `GameViewTextures` needs (#35).
+ *
+ * `floorTiles` holds one or more tile variants per floor — Floor 2's "living
+ * floor" (#37) draws from four, one of them picked per floor cell by a
+ * deterministic hash of that cell's position (`render/room.ts`'s
+ * `pickTileVariant`) rather than tiling one texture, so two cells never look
+ * identical by coincidence the way a single repeating texture guarantees.
+ * The pick happens once, when the room is built — nothing re-rolls it on a
+ * later redraw, so a room's floor stays exactly as it was drawn.
+ */
 export interface FloorArt {
-  readonly floorTiles: Readonly<Record<number, Texture>>;
+  readonly floorTiles: Readonly<Record<number, readonly Texture[]>>;
   readonly enemyArt: Readonly<Record<string, Texture>>;
 }
 
@@ -22,12 +42,18 @@ const ENEMY_SPRITE_URLS = [
   ['zapfhahn', zapfhahnUrl],
   ['rollfass', rollfassUrl],
   ['fasssplitter', fasssplitterUrl],
+  ['bauer', bauerUrl],
+  ['kuh', kuhUrl],
+  ['gockel', gockelUrl],
+  ['gartenzwerg', gartenzwergUrl],
+  ['blaskapellist', blaskapellistUrl],
+  ['traktor', traktorUrl],
 ] as const;
 
 /**
- * Loads every floor's authored art — today, just Floor 1's tile and
- * Der Keller's enemy roster (#35) — and returns it shaped for
- * `GameViewTextures.floorTiles`/`enemyArt`.
+ * Loads every floor's authored art — today, Floor 1's tile and Der Keller's
+ * enemy roster (#35), plus Floor 2's tile and the Dorf & Acker roster (#37)
+ * — and returns it shaped for `GameViewTextures.floorTiles`/`enemyArt`.
  *
  * One shared loader rather than each entry point (`app/main.ts`,
  * `editor/playtest.ts`) repeating the same `Assets.load` calls: both want
@@ -39,9 +65,21 @@ const ENEMY_SPRITE_URLS = [
  * number or enemy id that this bundle actually has an entry for, so a
  * floor-3 preview simply never touches any of it.
  */
+const RURAL_FLOOR_TILE_URLS = [
+  ruralFloorTile1Url,
+  ruralFloorTile2Url,
+  ruralFloorTile3Url,
+  ruralFloorTile4Url,
+] as const;
+
+async function loadTile(src: string): Promise<Texture> {
+  return Assets.load<Texture>({ src, data: { scaleMode: 'nearest' } });
+}
+
 export async function loadFloorArt(): Promise<FloorArt> {
-  const [floorTexture, enemyEntries] = await Promise.all([
-    Assets.load<Texture>({ src: cellarFloorTileUrl, data: { scaleMode: 'nearest' } }),
+  const [cellarFloorTexture, ruralFloorTextures, enemyEntries] = await Promise.all([
+    loadTile(cellarFloorTileUrl),
+    Promise.all(RURAL_FLOOR_TILE_URLS.map(loadTile)),
     Promise.all(
       ENEMY_SPRITE_URLS.map(
         async ([id, src]) =>
@@ -50,7 +88,7 @@ export async function loadFloorArt(): Promise<FloorArt> {
     ),
   ]);
   return {
-    floorTiles: { 1: floorTexture },
+    floorTiles: { 1: [cellarFloorTexture], 2: ruralFloorTextures },
     enemyArt: Object.fromEntries(enemyEntries),
   };
 }

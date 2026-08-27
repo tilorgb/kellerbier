@@ -19,7 +19,10 @@
         {
           "id": "annex-tap",
           "count": 1,
-          "choices": [{ "enemyId": "zapfhahn", "minFloor": 1, "maxFloor": 7 }]
+          "choices": [
+            { "enemyId": "zapfhahn", "minFloor": 1, "maxFloor": 1 },
+            { "enemyId": "blaskapellist", "minFloor": 2, "maxFloor": 7 }
+          ]
         }
       ],
       "pickupSpawns": [],

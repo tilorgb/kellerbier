@@ -65,6 +65,13 @@ export class EntityView {
    * impact feel and it has to actually be white to read.
    */
   private readonly flashTexture: Texture;
+  /**
+   * Each enemy's own hit-flash silhouette (#37), keyed the same way
+   * `enemyTextures` is. An id with no entry — the same ones that fall back
+   * to `texture` for `bodyTexture` — falls back to `flashTexture`, the
+   * generic circle, for its flash too.
+   */
+  private readonly enemyFlashTextures: Readonly<Record<string, Texture>>;
   private readonly telegraphTexture: Texture;
   private readonly sprites: Sprite[] = [];
   private readonly rings: Sprite[] = [];
@@ -91,11 +98,13 @@ export class EntityView {
     flashTexture: Texture,
     telegraphTexture: Texture,
     enemyTextures: Readonly<Record<string, Texture>> = {},
+    enemyFlashTextures: Readonly<Record<string, Texture>> = {},
   ) {
     this.sim = sim;
     this.texture = texture;
     this.enemyTextures = enemyTextures;
     this.flashTexture = flashTexture;
+    this.enemyFlashTextures = enemyFlashTextures;
     this.telegraphTexture = telegraphTexture;
     this.container.addChild(this.ringLayer);
     this.container.addChild(this.bodyLayer);
@@ -153,7 +162,20 @@ export class EntityView {
       // underneath it, and a bright tint over a dark base is exactly what
       // read as "everything is a brown blob" — white is the one base a tint
       // reproduces exactly.
-      sprite.texture = isPickup || (flash[index] ?? 0) > 0 ? this.flashTexture : bodyTexture;
+      //
+      // A hit flash, by contrast, is that enemy's own shape (#37's bug
+      // report — it used to be `flashTexture`'s generic circle for every
+      // enemy, wider than most of them): `enemyFlashTextures` is keyed the
+      // same way `enemyTextures` is, so an id with no dedicated art falls
+      // back to `flashTexture` the same way `bodyTexture` falls back to
+      // `texture`.
+      sprite.texture = isPickup
+        ? this.flashTexture
+        : (flash[index] ?? 0) > 0
+          ? enemyId === null
+            ? this.flashTexture
+            : (this.enemyFlashTextures[enemyId] ?? this.flashTexture)
+          : bodyTexture;
       // A curled body has to look like one. Without this the player is told
       // their shots are doing nothing only by the shots doing nothing.
       const pickupKindIndex = sim.pickupKind.data[index] ?? -1;

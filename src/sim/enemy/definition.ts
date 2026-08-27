@@ -39,6 +39,7 @@ export type BehaviourName =
   | 'fireAtPlayer'
   | 'fireBurst'
   | 'fireSpread'
+  | 'fireOnBeat'
   | 'splitOnDeath'
   | 'becomeInvulnerable'
   | 'telegraph';
@@ -149,6 +150,29 @@ export interface FireSpreadBehaviour extends FiringBehaviourBase {
   readonly arc: number;
 }
 
+/**
+ * A full ring of shots, timed to `sim.tick` instead of the state's own
+ * ticks-in-state counter.
+ *
+ * Every other firing primitive counts from the moment its state began, which
+ * is right for an enemy reacting to the player but wrong for the
+ * Blaskapellist (`docs/CONTENT_BIBLE.md`'s Floor 2 roster): its sound rings
+ * are supposed to land on the beat of the floor's music, and two
+ * Blaskapellisten in the same room have to ring together regardless of when
+ * each one entered its firing state. `everyTicks` here means "ticks per
+ * beat" against the simulation's one deterministic clock (`sim/time.ts`,
+ * `GameSim.tick`) rather than against audio playback position — there is no
+ * real audio track yet (`app/audio/ambience.ts`'s stub, M8's job), so this is
+ * the clock reference for one to plug into later, already correct today
+ * (#37's own notes: "drive it from the tick counter, not from audio playback
+ * position").
+ */
+export interface FireOnBeatBehaviour extends FiringBehaviourBase {
+  readonly behaviour: 'fireOnBeat';
+  /** Shots evenly spaced around a full circle — a ring, not an aimed fan. */
+  readonly shots: number;
+}
+
 /** Leaves smaller things behind. The state it is declared on is the one that splits. */
 export interface SplitOnDeathBehaviour {
   readonly behaviour: 'splitOnDeath';
@@ -206,6 +230,7 @@ export type EnemyBehaviour =
   | FireAtPlayerBehaviour
   | FireBurstBehaviour
   | FireSpreadBehaviour
+  | FireOnBeatBehaviour
   | SplitOnDeathBehaviour
   | BecomeInvulnerableBehaviour
   | TelegraphBehaviour;
@@ -282,4 +307,5 @@ export const FIRING_BEHAVIOURS: readonly BehaviourName[] = [
   'fireAtPlayer',
   'fireBurst',
   'fireSpread',
+  'fireOnBeat',
 ];

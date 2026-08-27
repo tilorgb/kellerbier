@@ -1,0 +1,44 @@
+{
+  "id": "kuhstall",
+  "tileGrid": [
+    "###############",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "###############"
+  ],
+  "obstacles": [
+    { "x": 16, "y": 16, "width": 16, "height": 16 },
+    { "x": 192, "y": 16, "width": 16, "height": 16 },
+    { "x": 16, "y": 96, "width": 16, "height": 16 },
+    { "x": 192, "y": 96, "width": 16, "height": 16 }
+  ],
+  "enemySpawns": [
+    { "x": 88, "y": 32, "group": "stall" },
+    { "x": 136, "y": 96, "group": "stall" }
+  ],
+  "spawnGroups": [
+    {
+      "id": "stall",
+      "count": 1,
+      "choices": [{ "enemyId": "kuh", "minFloor": 1, "maxFloor": 7 }]
+    }
+  ],
+  "pickupSpawns": [{ "x": 112, "y": 64, "type": "mass-half" }],
+  "hazards": [],
+  "decorativeProps": [
+    { "x": 24, "y": 56, "type": "trough" },
+    { "x": 192, "y": 56, "type": "trough" }
+  ],
+  "metadata": {
+    "floorTags": ["rural"],
+    "shape": "1x1",
+    "doors": { "north": true, "east": true, "south": true, "west": true },
+    "difficultyTier": 3,
+    "weight": 1
+  }
+}

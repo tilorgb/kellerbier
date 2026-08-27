@@ -1,6 +1,33 @@
-import { Container, Graphics, TilingSprite, type Texture } from 'pixi.js';
+import { Container, Graphics, Sprite, type Texture } from 'pixi.js';
+import { ROOM_TILE_UNITS } from '../content/rooms/definition.js';
 import { BLOCK_STRIDE, DOOR_SPAN, roomFrameSize, type RoomGeometry } from '../sim/room/geometry.js';
 import { doorCentre, type CompiledDoor } from '../sim/room/template.js';
+
+/**
+ * Which of `variantCount` tile textures a floor cell at `(col, row)` draws —
+ * Floor 2's "living floor" (#37): several tile variants (`floor-art.ts`'s
+ * `RURAL_FLOOR_TILE_URLS`) mixed across the room instead of one texture
+ * tiled identically everywhere, so the ground doesn't read as a single
+ * repeating swatch.
+ *
+ * A hash of the cell's own position, not a random draw — `createRoomView`
+ * runs once at room load and never again (see its own doc comment), so
+ * nothing needs to be *stored* to keep a room's floor from reshuffling on a
+ * later redraw; reading off `(col, row)` already gives the same answer
+ * every time this cell is drawn, whether that's the same visit or a later
+ * one. It intentionally takes no room-specific seed either: two rooms that
+ * happen to place the same absolute cell see the same variant, which is a
+ * coincidence rather than a rule, and different rooms overwhelmingly don't
+ * share cells in the first place.
+ */
+function pickTileVariant(col: number, row: number, variantCount: number): number {
+  if (variantCount <= 1) {
+    return 0;
+  }
+  let hash = (col * 374761393 + row * 668265263) >>> 0;
+  hash = Math.imul(hash ^ (hash >>> 13), 1274126177) >>> 0;
+  return hash % variantCount;
+}
 
 /** Placeholder palette for a floor with no room palette of its own yet. Real tilesets arrive with the art pipeline in #34. */
 const DEFAULT_PALETTE: RoomPalette = {
@@ -35,6 +62,16 @@ interface RoomPalette {
  * bulb is a low-contrast room, and far-apart values read as a checkerboard
  * the instant they fill a whole floor.
  */
+/**
+ * Floor 2 — Dorf & Acker (#37): green, sky blue, white-and-blue bunting
+ * (`docs/CONTENT_BIBLE.md`). Drawn from the floor's own authored sub-palette
+ * (`tools/art/palette.mjs`'s `FLOOR_PALETTES.rural`), the same fence Floor
+ * 1's entry above is built inside — `floor`/`wall` are the two grass greens,
+ * `wallEdge` the sky blue as a highlight so the boundary between an outdoor
+ * room and its wall band reads as a hedge rather than a second floor
+ * material; `block` (an obstacle — a fence post, a hay bale) takes the deep
+ * blue accent, edged in the same sky blue.
+ */
 const FLOOR_PALETTES: Readonly<Record<number, RoomPalette>> = {
   1: {
     floor: 0x4a4d50,
@@ -42,6 +79,13 @@ const FLOOR_PALETTES: Readonly<Record<number, RoomPalette>> = {
     wallEdge: 0x5b5f63,
     block: 0x54402e,
     blockEdge: 0x5b5f63,
+  },
+  2: {
+    floor: 0x3f7a3a,
+    wall: 0x2e4f8c,
+    wallEdge: 0x6ab0d9,
+    block: 0x2e4f8c,
+    blockEdge: 0x6ab0d9,
   },
 };
 
@@ -61,6 +105,18 @@ function paletteFor(floor: number): RoomPalette {
 const PUDDLE_COLOUR = 0x3c3e40;
 const PUDDLE_EDGE_COLOUR = 0xd99a3f;
 
+/**
+ * Floor 2's hop trellis (#37): drawn from the rural sub-palette
+ * (`tools/art/palette.mjs`'s `FLOOR_PALETTES.rural`) — the darker leaf green
+ * for the lattice itself, the lighter one as an edge highlight — rather than
+ * a floor-specific `RoomPalette` entry, since a sight-blocking hazard is a
+ * fixed idea (trellis foliage) independent of which floor's `paletteFor`
+ * happens to be active, unlike `floor`/`wall`/`block` which are genuinely
+ * reskinned per floor.
+ */
+const TRELLIS_COLOUR = 0x3f7a3a;
+const TRELLIS_EDGE_COLOUR = 0x7fbf6a;
+
 /** A locked door reads as cold and shut; an open one picks up the floor's amber light. */
 const DOOR_LOCKED_COLOUR = 0x5a2a2a;
 const DOOR_OPEN_COLOUR = 0xd9a441;
@@ -79,7 +135,7 @@ const CRACK_SPAN = 10;
 export function createRoomView(
   room: RoomGeometry,
   floorNumber = 0,
-  floorTileTexture?: Texture,
+  floorTileTextures?: readonly Texture[],
 ): Container {
   const container = new Container();
   const palette = paletteFor(floorNumber);
@@ -93,19 +149,30 @@ export function createRoomView(
     .stroke({ width: 1, color: palette.wallEdge, alignment: 0 });
   container.addChild(floor);
 
-  // Real tile art (#35's `assets/sprites/floor-1-cellar/tiles/`), laid over
-  // the flat fill above rather than replacing it — the fill is what shows
-  // through a room shape's dropped cells and margin, and stays the fallback
-  // for every floor that has no tile art yet.
-  if (floorTileTexture !== undefined) {
-    const tiled = new TilingSprite({
-      texture: floorTileTexture,
-      x: room.minX,
-      y: room.minY,
-      width: room.maxX - room.minX,
-      height: room.maxY - room.minY,
-    });
-    container.addChild(tiled);
+  // Real tile art (#35's `assets/sprites/floor-1-cellar/tiles/`, #37's
+  // `floor-2-rural/tiles/`), laid over the flat fill above rather than
+  // replacing it — the fill is what shows through a room shape's dropped
+  // cells and margin, and stays the fallback for every floor that has no
+  // tile art yet. One sprite per 16-unit cell rather than a single tiled
+  // texture, each drawing whichever of `floorTileTextures` `pickTileVariant`
+  // lands on for that cell — with one texture (Floor 1, today) every cell
+  // picks index 0 and this is visually identical to the old single
+  // `TilingSprite`; with several (Floor 2) it's the "living floor" mix.
+  if (floorTileTextures !== undefined && floorTileTextures.length > 0) {
+    for (let y = room.minY; y < room.maxY; y += ROOM_TILE_UNITS) {
+      for (let x = room.minX; x < room.maxX; x += ROOM_TILE_UNITS) {
+        const col = Math.round(x / ROOM_TILE_UNITS);
+        const row = Math.round(y / ROOM_TILE_UNITS);
+        const variant = pickTileVariant(col, row, floorTileTextures.length);
+        const texture = floorTileTextures[variant] ?? floorTileTextures[0];
+        if (texture === undefined) {
+          continue;
+        }
+        const tile = new Sprite(texture);
+        tile.position.set(x, y);
+        container.addChild(tile);
+      }
+    }
   }
 
   const puddles = new Graphics();
@@ -121,6 +188,20 @@ export function createRoomView(
       .stroke({ width: 1, color: PUDDLE_EDGE_COLOUR, alpha: 0.5, alignment: 0 });
   }
   container.addChild(puddles);
+
+  const trellises = new Graphics();
+  for (let block = 0; block < room.sightBlockCount; block++) {
+    const base = block * BLOCK_STRIDE;
+    const minX = room.sightBlocks[base] ?? 0;
+    const minY = room.sightBlocks[base + 1] ?? 0;
+    const maxX = room.sightBlocks[base + 2] ?? 0;
+    const maxY = room.sightBlocks[base + 3] ?? 0;
+    trellises
+      .rect(minX, minY, maxX - minX, maxY - minY)
+      .fill({ color: TRELLIS_COLOUR, alpha: 0.75 })
+      .stroke({ width: 1, color: TRELLIS_EDGE_COLOUR, alpha: 0.6, alignment: 0 });
+  }
+  container.addChild(trellises);
 
   const blocks = new Graphics();
   for (let block = 0; block < room.blockCount; block++) {

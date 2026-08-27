@@ -731,6 +731,19 @@ export class GameSim {
   /** Every pedestal in the current room. Rebuilt on every room load — see `PedestalRuntime`. */
   private pedestalList: PedestalRuntime[] = [];
   /**
+   * A boss room's own pedestal(s), authored in its `decorativeProps` the
+   * same way any other room's are, held back from `spawnPedestal` until the
+   * boss actually dies — `restoreOrSpawnRoomLoot`'s doc comment on why a
+   * boss room is the one case that can't spawn its pedestal eagerly the way
+   * every other room does: the reward for beating a boss should not already
+   * be sitting on its plinth while the fight is still on. Populated by
+   * `restoreOrSpawnRoomLoot` on a fresh boss-room visit, drained by `step`'s
+   * room-clear check the tick the boss dies, and reset to empty on every
+   * room load — a room already cleared restores its pedestal from
+   * `roomLootSnapshots` instead, same as any other room's loot.
+   */
+  private pendingBossPedestals: { readonly x: number; readonly y: number }[] = [];
+  /**
    * Leftover loot from a room the player has already left, keyed the same
    * way `roomClearedIds` is — by the authored template's own id, not a
    * per-instance floor-plan id (see `clearFloorProgress`'s doc comment for
@@ -1257,6 +1270,7 @@ export class GameSim {
     this.roomDoors = compiled.doors;
     this.bombableWalls.clear();
     this.pedestalList = [];
+    this.pendingBossPedestals = [];
     this.nearbyShopPickupSlot = -1;
     for (const hidden of hiddenDoors) {
       const match = this.roomDoors.find(
@@ -1377,9 +1391,20 @@ export class GameSim {
       this.spawnPickup(pickup.type, safe.x, safe.y, pickup.price);
     }
     // A pedestal (#28) draws a real item from a pool chosen by the room's
-    // own special role (`pedestalPoolForRole`) rather than sitting inert.
+    // own special role (`pedestalPoolForRole`) rather than sitting inert —
+    // except in a boss room, where it is the boss's own reward and has to
+    // wait for the boss to actually die (`pendingBossPedestals`'s doc
+    // comment). `roomEnemyCount` already reflects the boss just spawned
+    // above in `applyCompiledRoom`, so this is "boss room, still up," not
+    // "boss room, already cleared" — that case never reaches here at all
+    // (the `roomClearedIds.has` branch above returns before this point).
     for (const prop of compiled.decorativeProps) {
-      if (prop.type === 'pedestal') {
+      if (prop.type !== 'pedestal') {
+        continue;
+      }
+      if (this.roomSpecialRole === 'boss' && this.roomEnemyCount > 0) {
+        this.pendingBossPedestals.push({ x: prop.x, y: prop.y });
+      } else {
         this.spawnPedestal(prop.x, prop.y);
       }
     }
@@ -2884,6 +2909,14 @@ export class GameSim {
     ) {
       this.rollRoomClearLoot();
       dispatchItemRoomClear(this);
+      // The boss's own reward pedestal (`pendingBossPedestals`'s doc
+      // comment) — held back until this exact tick rather than spawned the
+      // moment the room loaded, so it is not already sitting there during
+      // the fight.
+      for (const pending of this.pendingBossPedestals) {
+        this.spawnPedestal(pending.x, pending.y);
+      }
+      this.pendingBossPedestals = [];
     }
     if (this.roomTemplateLoaded && this.roomEnemyCount === 0) {
       this.roomClearedIds.add(this.roomId);

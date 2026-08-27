@@ -26,6 +26,7 @@
       "count": 2,
       "choices": [
         { "enemyId": "bierratte", "minFloor": 1, "maxFloor": 2 },
+        { "enemyId": "gockel", "minFloor": 2, "maxFloor": 2 },
         { "enemyId": "zapfhahn", "minFloor": 3, "maxFloor": 7 }
       ]
     }

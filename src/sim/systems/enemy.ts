@@ -331,22 +331,38 @@ function applyFiring(
 
   for (const shot of state.firing) {
     const interval = Math.max(1, Math.round(shot.everyTicks * scale));
+
+    if (shot.behaviour === 'fireOnBeat') {
+      if (sim.tick % interval === 0) {
+        const shots = Math.max(1, Math.round(shot.shots));
+        const step = (Math.PI * 2) / shots;
+        for (let ray = 0; ray < shots; ray++) {
+          fireOne(sim, index, step * ray, shot);
+        }
+      }
+      continue;
+    }
+
     const phase = ticks % interval;
 
     if (shot.behaviour === 'fireAtPlayer') {
-      if (phase === 0) {
+      if (phase === 0 && isSighted(sim, index, toPlayerX, toPlayerY)) {
         fireOne(sim, index, aim, shot);
       }
       continue;
     }
     if (shot.behaviour === 'fireBurst') {
       const gap = Math.max(1, Math.round(shot.gapTicks));
-      if (phase % gap === 0 && phase / gap < shot.shots) {
+      if (
+        phase % gap === 0 &&
+        phase / gap < shot.shots &&
+        isSighted(sim, index, toPlayerX, toPlayerY)
+      ) {
         fireOne(sim, index, aim, shot);
       }
       continue;
     }
-    if (phase === 0) {
+    if (phase === 0 && isSighted(sim, index, toPlayerX, toPlayerY)) {
       const shots = Math.max(1, Math.round(shot.shots));
       const step = shot.arc / Math.max(1, shots - 1);
       const start = aim - shot.arc / 2;
@@ -355,6 +371,29 @@ function applyFiring(
       }
     }
   }
+}
+
+/**
+ * False when a hop trellis (#37) sits between the shooter and the player —
+ * gates the three aimed firing primitives (`fireAtPlayer`/`fireBurst`/
+ * `fireSpread`), not `fireOnBeat`: a sound ring is a room-filling shape, not
+ * a shot aimed at where the player is standing.
+ *
+ * Called only on the tick a shot would actually fire (each caller's own
+ * `phase === 0` — or, for `fireBurst`, its own gap check — comes first), not
+ * once per enemy per tick: an aimed enemy fires far less often than it
+ * thinks about firing, and there is no reason to pay for a sight check on
+ * every one of the ticks in between. `sightBlockCount === 0` short-circuits
+ * the segment test itself on every floor that has none (every floor but
+ * Dorf & Acker, today), so this costs nothing where it doesn't apply.
+ */
+function isSighted(sim: GameSim, index: number, toPlayerX: number, toPlayerY: number): boolean {
+  if (sim.room.sightBlockCount === 0) {
+    return true;
+  }
+  const shooterX = sim.positionX(index);
+  const shooterY = sim.positionY(index);
+  return !sim.room.blocksSight(shooterX, shooterY, shooterX + toPlayerX, shooterY + toPlayerY);
 }
 
 /**
