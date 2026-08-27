@@ -479,6 +479,76 @@ describe('rollBounce (#35)', () => {
   });
 });
 
+/**
+ * `splitOnDeath`'s `atHealthBelow` (#36): Die Große Kellerassel's phase
+ * change, written as data the same way the rest of this file's primitives
+ * are, independent of `content/enemies/grosse-kellerassel.ts`'s own numbers.
+ */
+describe('splitOnDeath at a health threshold (#36)', () => {
+  const shatterer: EnemyDefinition = {
+    id: 'shatterer',
+    name: 'Shatterer',
+    size: 'mid',
+    health: 10,
+    contactDamage: 0,
+    initial: 'idle',
+    states: [
+      {
+        name: 'idle',
+        behaviours: [
+          { behaviour: 'pause' },
+          { behaviour: 'splitOnDeath', into: 'shard', count: 3, spread: 6, atHealthBelow: 0.5 },
+        ],
+      },
+    ],
+  };
+  const shard: EnemyDefinition = {
+    id: 'shard',
+    name: 'Shard',
+    size: 'mini',
+    health: 1,
+    contactDamage: 0,
+    initial: 'skitter',
+    states: [
+      { name: 'skitter', behaviours: [{ behaviour: 'wander', speed: 0.5, turnEveryTicks: 20 }] },
+    ],
+  };
+
+  it('splits the instant health crosses the threshold, without waiting for zero', () => {
+    const sim = emptySim({ enemies: [shatterer, shard] });
+    const player = sim.playerIndex;
+    const enemy = place(sim, 'shatterer', sim.positionX(player) + 200, sim.positionY(player));
+
+    // 10 -> 6: still above the 5-health threshold.
+    applyDamageAt(sim, enemy, 4, sim.positionX(enemy), sim.positionY(enemy), 0, 0, -1);
+    for (let tick = 0; tick < 20; tick++) {
+      sim.step(IDLE);
+    }
+    expect(liveEnemies(sim, 'shatterer')).toBe(1);
+    expect(liveEnemies(sim, 'shard')).toBe(0);
+
+    // 6 -> 4: at or below it now, and nothing shot it for the rest.
+    applyDamageAt(sim, enemy, 2, sim.positionX(enemy), sim.positionY(enemy), 0, 0, -1);
+    for (let tick = 0; tick < 20; tick++) {
+      sim.step(IDLE);
+    }
+    expect(liveEnemies(sim, 'shatterer')).toBe(0);
+    expect(liveEnemies(sim, 'shard')).toBe(3);
+  });
+
+  it('never fires while health is still above the threshold', () => {
+    const sim = emptySim({ enemies: [shatterer, shard] });
+    const player = sim.playerIndex;
+    place(sim, 'shatterer', sim.positionX(player) + 200, sim.positionY(player));
+
+    for (let tick = 0; tick < 120; tick++) {
+      sim.step(IDLE);
+    }
+    expect(liveEnemies(sim, 'shatterer')).toBe(1);
+    expect(liveEnemies(sim, 'shard')).toBe(0);
+  });
+});
+
 describe('enemies against the player', () => {
   it('never ends a tick inside the player', () => {
     const sim = new GameSim({ seed: 1, population: 'enemies' });

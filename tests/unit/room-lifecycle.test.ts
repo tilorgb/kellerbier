@@ -6,6 +6,7 @@ import { createInputFrame } from '../../src/sim/input/frame.js';
 import { ProjectileTeam } from '../../src/sim/projectile/store.js';
 import { ParticleKind } from '../../src/sim/particle/store.js';
 import { stepEnemyDeaths } from '../../src/sim/systems/enemy.js';
+import { applyDamageAt } from '../../src/sim/systems/impact.js';
 
 function roomSim(): GameSim {
   return new GameSim({ roomTemplate: cellarCrossroads, floor: 1, population: 'empty' });
@@ -265,6 +266,105 @@ describe('the boss room "next floor" exit', () => {
     killBoss(sim);
 
     expect(sim.nextFloorDoor).toBeNull();
+  });
+});
+
+describe('Die Große Kellerassel (#36)', () => {
+  function bossFightSim(): GameSim {
+    const bossRoom = {
+      ...cellarCrossroads,
+      id: 'test-grosse-kellerassel',
+      enemySpawns: [{ x: 176, y: 64, group: 'boss' }],
+      spawnGroups: [
+        {
+          id: 'boss',
+          count: 1,
+          choices: [{ enemyId: 'grosse-kellerassel', minFloor: 1, maxFloor: 1 }],
+        },
+      ],
+      metadata: { ...cellarCrossroads.metadata, specialRole: 'boss' },
+    };
+    return new GameSim({ roomTemplate: bossRoom, floor: 1, population: 'empty' });
+  }
+
+  /** The one enemy alive right after the room loads: the boss body itself. */
+  function bossIndex(sim: GameSim): number {
+    let index = -1;
+    sim.world.forEach(sim.enemyMask, (found) => {
+      index = found;
+    });
+    return index;
+  }
+
+  function liveSegments(sim: GameSim): number {
+    let count = 0;
+    sim.world.forEach(sim.enemyMask, () => {
+      count += 1;
+    });
+    return count;
+  }
+
+  it('shows a combined health bar the instant the room loads, and hides it once cleared', () => {
+    const sim = bossFightSim();
+    const health = sim.bossHealth;
+    expect(health).not.toBeNull();
+    expect(health?.current).toBe(health?.max);
+
+    sim.kill(bossIndex(sim));
+    sim.world.flush();
+    expect(sim.bossHealth).toBeNull();
+  });
+
+  it('splits into three segments at half health, and the door stays locked through the split', () => {
+    const sim = bossFightSim();
+    const boss = bossIndex(sim);
+    const fullHealth = sim.bossHealth?.current ?? 0;
+
+    // Exactly the phase-two threshold, not zero — the split has to happen
+    // before the body would otherwise die of the hit.
+    applyDamageAt(sim, boss, fullHealth / 2, sim.positionX(boss), sim.positionY(boss), 0, 0, -1);
+    // Past the room's own warmup (`ROOM_WARMUP_TICKS`, during which nothing
+    // decides anything) plus the hitstop the hit itself asked for.
+    for (let tick = 0; tick < 60; tick++) {
+      sim.step(idle());
+    }
+
+    expect(liveSegments(sim)).toBe(3);
+    expect(sim.doorsLocked).toBe(true);
+    expect(sim.transitionTo(cellarCrossroads, 1, 'north')).toBe(false);
+    // The fight's total health budget is unchanged by the split.
+    const afterSplit = sim.bossHealth;
+    expect(afterSplit?.max).toBe(fullHealth / 2);
+    expect(afterSplit?.current).toBe(fullHealth / 2);
+  });
+
+  it('unlocks the doors and rolls a guaranteed reward once every segment is down', () => {
+    const sim = bossFightSim();
+    const boss = bossIndex(sim);
+    const fullHealth = sim.bossHealth?.current ?? 0;
+
+    applyDamageAt(sim, boss, fullHealth / 2, sim.positionX(boss), sim.positionY(boss), 0, 0, -1);
+    // Past the room's own warmup (`ROOM_WARMUP_TICKS`, during which nothing
+    // decides anything) plus the hitstop the hit itself asked for.
+    for (let tick = 0; tick < 60; tick++) {
+      sim.step(idle());
+    }
+    expect(liveSegments(sim)).toBe(3);
+
+    const segments: number[] = [];
+    sim.world.forEach(sim.enemyMask, (index) => segments.push(index));
+    for (const index of segments) {
+      sim.kill(index);
+    }
+    sim.world.flush();
+    sim.step(idle());
+
+    expect(sim.liveEnemyCount).toBe(0);
+    expect(sim.doorsLocked).toBe(false);
+    expect(sim.bossHealth).toBeNull();
+    // Player plus at least one dropped pickup — the same guaranteed boss
+    // reward `BOSS_REWARD_DROP_TABLE` rolls on any boss room's clear.
+    expect(sim.world.count).toBeGreaterThan(1);
   });
 });
 

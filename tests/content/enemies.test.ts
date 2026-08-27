@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { ENEMY_DEFINITIONS, kellerassel } from '../../src/content/enemies/index.js';
+import {
+  ENEMY_DEFINITIONS,
+  grosseKellerassel,
+  kellerassel,
+} from '../../src/content/enemies/index.js';
 import type { EnemyDefinition } from '../../src/sim/enemy/definition.js';
 import { EnemyRegistry } from '../../src/sim/enemy/registry.js';
 
@@ -92,6 +96,32 @@ describe('the enemy roster', () => {
     }
     expect([...rest].some((name) => !first.has(name))).toBe(true);
     expect(registry.count).toBeGreaterThan(1);
+  });
+
+  it('gives the boss a phase-two split declared on every phase-one state (#36)', () => {
+    const registry = new EnemyRegistry(ENEMY_DEFINITIONS);
+    const compiled = registry.get('grosse-kellerassel');
+    const segment = registry.get('kellerassel-segment');
+
+    // Every state reachable in phase one carries the same split, so wherever
+    // the threshold is crossed the boss actually splits rather than quietly
+    // vanishing in whichever state has no `splitOnDeath` of its own.
+    for (const state of compiled.states) {
+      expect(
+        state.splits.some(
+          (split) =>
+            split.definition === registry.indexOf('kellerassel-segment') &&
+            split.atHealthBelow === 0.5,
+        ),
+        `"${state.name}" is missing the phase-two split`,
+      ).toBe(true);
+    }
+    // Phase two is the same curl loop the tutorial boss's own phase one is,
+    // just quicker — the lesson does not change, only the count of bodies
+    // asking for it at once.
+    const segmentCurl = segment.states.find((state) => state.name === 'curl');
+    expect(segmentCurl?.invulnerableTicks).toBeGreaterThan(0);
+    expect(grosseKellerassel.states.some((state) => state.name === 'wind')).toBe(true);
   });
 });
 
@@ -202,5 +232,25 @@ describe('broken content', () => {
 
   it('rejects a body that cannot be killed', () => {
     expect(build({ ...walker, health: 0 })).toThrow(/health above zero/i);
+  });
+
+  it('rejects an atHealthBelow that is not a fraction between 0 and 1', () => {
+    expect(
+      build(
+        {
+          ...walker,
+          states: [
+            {
+              name: 'go',
+              behaviours: [
+                { behaviour: 'pause' },
+                { behaviour: 'splitOnDeath', into: 'shard', count: 2, atHealthBelow: 1.5 },
+              ],
+            },
+          ],
+        },
+        { ...walker, id: 'shard' },
+      ),
+    ).toThrow(/atHealthBelow/);
   });
 });

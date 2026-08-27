@@ -1,5 +1,6 @@
 import type { EnemyDefinition } from '../../sim/enemy/definition.js';
 import { bierratte } from './bierratte.js';
+import { grosseKellerassel, kellerasselSegment } from './grosse-kellerassel.js';
 import { kellerassel } from './kellerassel.js';
 import { fasssplitter, rollfass } from './rollfass.js';
 import { schimmelfleck, schimmelspore } from './schimmelfleck.js';
@@ -26,12 +27,16 @@ export const ENEMY_DEFINITIONS: readonly EnemyDefinition[] = [
   rollfass,
   fasssplitter,
   shopkeeper,
+  grosseKellerassel,
+  kellerasselSegment,
 ];
 
 export {
   bierratte,
   fasssplitter,
+  grosseKellerassel,
   kellerassel,
+  kellerasselSegment,
   rollfass,
   schimmelfleck,
   schimmelspore,

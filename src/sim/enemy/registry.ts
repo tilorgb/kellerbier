@@ -54,6 +54,8 @@ export interface CompiledSplit {
   readonly definition: number;
   readonly count: number;
   readonly spread: number;
+  /** Fraction of max health that force-triggers the split early. Zero: never. */
+  readonly atHealthBelow: number;
 }
 
 export type FiringBehaviour = FireAtPlayerBehaviour | FireBurstBehaviour | FireSpreadBehaviour;
@@ -234,7 +236,18 @@ export class EnemyRegistry {
             `${where} splits into itself, which never stops. Split into a smaller enemy.`,
           );
         }
-        splits.push({ definition: into, count: behaviour.count, spread: behaviour.spread ?? 6 });
+        const atHealthBelow = behaviour.atHealthBelow ?? 0;
+        if (atHealthBelow < 0 || atHealthBelow > 1) {
+          throw new Error(
+            `${where} has atHealthBelow of ${String(atHealthBelow)}, which is not a fraction between 0 and 1`,
+          );
+        }
+        splits.push({
+          definition: into,
+          count: behaviour.count,
+          spread: behaviour.spread ?? 6,
+          atHealthBelow,
+        });
         continue;
       }
       throw new Error(`${where} uses the unknown behaviour "${name}"`);

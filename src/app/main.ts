@@ -31,6 +31,7 @@ import {
   roomUnitsPerPixel,
 } from '../render/resolution.js';
 import { ActiveItemHud } from '../render/active-item-hud.js';
+import { BossHealthHud } from '../render/boss-health-hud.js';
 import { EntityView } from '../render/entities.js';
 import { GameOverScreen } from '../render/game-over.js';
 import { HealthHud } from '../render/health-hud.js';
@@ -395,6 +396,22 @@ async function boot(): Promise<void> {
   let bossBannerShown = false;
 
   /**
+   * The boss room's own health bar (#36) — see `render/boss-health-hud.ts`'s
+   * doc comment for why it reads `sim.bossHealth` rather than anything named
+   * after this specific boss. Positioned just above `bossBanner`'s own text
+   * so the two never overlap while both happen to be visible during the
+   * room's warmup beat.
+   */
+  const bossHealthHud = new BossHealthHud(app.renderer);
+  uiLayer.addChild(bossHealthHud.view);
+  const positionBossHealthHud = (applied: GameLayout): void => {
+    bossHealthHud.view.position.set(
+      applied.originX + (INTERNAL_WIDTH * applied.scale) / 2,
+      applied.originY + 12,
+    );
+  };
+
+  /**
    * "What did I just pick up" toast (#26): the German name of whatever was
    * just collected — a pickup or an item — plus a short plain-language
    * translation of what it does ("Bierfassl — Bomb +1"). Driven by
@@ -644,6 +661,7 @@ async function boot(): Promise<void> {
     positionItemGateHud(applied);
     positionMinimapHud(applied);
     positionBossBanner(applied);
+    positionBossHealthHud(applied);
     positionPickupToast(applied);
     positionShopPreview(applied);
     positionPedestalReveal(applied);
@@ -726,6 +744,7 @@ async function boot(): Promise<void> {
       const activatePrompt = actionPrompt(input.bindings, Bindable.Use, device, glyphSet);
       activeItemHud.sync(sim, activatePrompt);
       itemGateHud.sync(sim);
+      bossHealthHud.sync(sim);
       minimapHud.setMapOpen(isActionDown(input.frame, InputAction.Map));
       const showBossBanner =
         sim.roomWarmupTicks > 0 && planRoom(floorPlan, currentRoomId).role === 'boss';
