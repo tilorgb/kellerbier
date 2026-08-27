@@ -103,7 +103,15 @@ Work is done when the row for its kind is fully true. Not when it works on your 
 
 ## Labels
 
-**Milestone**, exactly one: `M0`–`M9`.
+**Milestone**, exactly one: `M0`–`M10`.
+
+A milestone can be **parked** — deferred deliberately rather than merely not started. `M10`
+(floors 3–7) is parked today. A parked milestone still renders in full on the roadmap issue, with
+a ⏸️ marker and the reason, but its issues are excluded from the headline progress bar: deferred
+scope is not work the project is failing to do, and counting it as outstanding turns the one
+number at the top of the page into a number that only ever falls when scope is added. Parking is
+declared in [`tools/roadmap/plan.json`](../tools/roadmap/plan.json) by giving the milestone a
+`parked` string explaining why.
 
 **Type**, one or more:
 

@@ -844,3 +844,82 @@ per body at a population in the hundreds, whatever that per-call cost is stopped
 Before spending another round of CI pushes on a theory about *why* a regression like this exists,
 reach for a local same-process A/B against the real scene first — it is faster, and, per every
 attempt above but the last, more likely to be right.
+
+---
+
+## 22. Content stops at two floors until those two are finished — floors 3-7 are parked, not cancelled
+
+**Decided:** end of M5. **Supersedes:** the M5→M6 sequencing in the original
+[`ROADMAP.md`](ROADMAP.md). **Issues:** #39-#44 and #98 relabelled `M10`.
+
+The original plan built all seven floors (M6) and polished afterwards (M8). It no longer does.
+Content stops at Der Keller and Dorf & Acker, and M6 through M8 finish *those two* — look and
+motion, meta-progression, sound and menus, balance — before a third floor exists.
+
+The reason is a sentence the old roadmap already contained and then sequenced against:
+*"whatever polish level floor 1 reaches becomes the standard every later floor must match."*
+That standard is not knowable in advance and does not hold still. Every decision M6 makes — how
+many frames a walk cycle has, what a hit flash costs, how much a room's props carry, what the
+palette permits — is a decision every authored floor has to match, and each one that moves after
+the fact is rework multiplied by the number of floors already built. Discovering the animation
+budget on two floors costs two floors of rework. Discovering it on seven costs seven, and the
+discovery is guaranteed, because M6 is the milestone that finds out.
+
+The evidence that the bar had not in fact been set: at the point this was decided, M5 was 4/7
+and its exit criterion claimed *"two finished chapters, art, audio, enemies and bosses."* The
+build had no animation system at all, no player sprite (Sepp was drawn by
+`render/placeholder-art.ts`, explicitly a stand-in "until #34"), no boss art, no projectile art,
+no wall tiles, no audio behind `app/audio/`'s two deliberately-silent seams, no title screen, no
+pause, and no way to win — `advanceFloor` wrapped floor 2 back to floor 1 forever. A milestone
+whose exit criterion says "finished" over that gap is a milestone measuring the wrong thing, so
+M5's criterion was narrowed to *content* complete and the finishing was given its own milestones.
+
+**What this constrains:**
+
+- **M6 sets the bar M10 inherits.** Frame counts, sprite sizes, palette discipline, effect
+  density — write down the budget along with the decision, because five parked floors will be
+  authored against it and "we'll see what floor 3 needs" is exactly the deferral this entry
+  exists to stop.
+- **Replayability has to come from systems, not scenery.** Two floors is roughly fifteen
+  minutes. M7 stops being the milestone that adds nice-to-haves after the content and becomes
+  load-bearing: unlocks, characters, curses, item sets and a run that can actually be won are
+  now the entire answer to "why start a second run". If that answer turns out to be
+  insufficient, the honest response is unparking M10 sooner, not adding more meta-progression.
+- **Anything scoped "per floor" is scoped to two.** #51 writes two floor themes, #54 tunes a
+  two-floor difficulty curve, #58 tells a story that opens in the cellar and lands on Der Stier
+  rather than on Die Bavaria. Each of those is a rewrite rather than a trim, and each parked
+  floor brings its own share back when it unparks.
+- **Parked is a first-class state in the tooling, not a note.** `tools/roadmap/plan.json` marks
+  a milestone `parked` with the reason; `update-roadmap.mjs` renders it with ⏸️ and excludes it
+  from the headline bar, so deferring scope does not make the one number at the top of the
+  roadmap go down. Deferred work is not work the project is failing to do.
+
+**Settled in the same session, once the shape was agreed:**
+
+- **The two-floor game ships.** M9 releases it on itch.io, free or name-your-price, honest on the
+  store page about being two chapters of seven — before M10 exists. This is the load-bearing half
+  of the refocus, not a consolation for it: parking five floors is only defensible if the two that
+  remain get in front of strangers, because the whole argument above is that the bar is discovered
+  rather than specified, and players are how it gets discovered. A refocus that deferred content
+  *and* deferred release would defer the evidence too.
+- **Steam and the desktop shell move with the floors.** #70-#72 and #57 want a paid store page, a
+  wishlist runway, and enough game to justify both; #57's own "revisit if" clause already named
+  this case. itch.io asks none of that and reaches strangers today.
+- **The story ends on a cliffhanger rather than moving its reveal down.** Der Stier closes chapter
+  two; "it was scale, not malice" stays on floor 6 where it was written to live. The alternative —
+  relocating the evidence into the cellar and the village — buys a complete arc at the cost of
+  the reveal M10 is built around, and spends writing that would then have to be undone. The risk
+  taken instead is execution risk, and it is real: to a stranger with no roadmap, a bad
+  cliffhanger and an unfinished game look identical. #58 carries an acceptance criterion that
+  makes the difference testable rather than assumed — a playtester who has never seen the roadmap
+  calls it a cliffhanger, unprompted, in a #159 session.
+- **M7's bet gets called on a date, not a metric.** When M7 closes, play it and judge whether a
+  second run is compelling; if not, unpark M10 rather than adding more meta-progression. A
+  threshold would be gameable and would arrive late (telemetry only exists after M8); a scheduled
+  judgement cannot slide quietly, which is the failure mode being guarded against.
+
+The alternative considered and rejected: build floors 3-7 to the current (placeholder-tier) bar
+and polish all seven together at the end. That is the plan that produces seven floors of art
+needing rework the day the art direction lands, and it is the plan that makes M6's own
+sequencing note — *"this is where the schedule goes wrong on projects like this"* — come true
+rather than avoided.

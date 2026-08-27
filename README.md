@@ -15,7 +15,7 @@ a tuba player who shoots sound rings, and König Ludwig II in a swan boat.
 ## Status
 
 Pre-production. Design docs are in [`docs/`](docs/); the work is tracked in
-[issues](../../issues), grouped by milestone label `M0`–`M9`.
+[issues](../../issues), grouped by milestone label `M0`–`M10`.
 
 **Current state and what's next: the [roadmap issue](../../issues?q=is%3Aissue+label%3Aroadmap)**,
 regenerated automatically from the issue list on every issue event.
@@ -27,7 +27,7 @@ regenerated automatically from the issue list on every issue event.
 | [docs/GAME_DESIGN.md](docs/GAME_DESIGN.md) | Pillars, story, run structure, the Promille mechanic, economy, meta-progression |
 | [docs/CONTENT_BIBLE.md](docs/CONTENT_BIBLE.md) | Floors, enemy rosters, bosses, item seeds, naming and tone rules |
 | [docs/TECH_STACK.md](docs/TECH_STACK.md) | Engine choice, performance architecture and budgets, project layout, testing |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | Milestones M0–M9 and what "done" means for each |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | Milestones M0–M10 and what "done" means for each |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | Architectural decisions and the reasoning behind them |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Branches, commits, the definition of done, labels, bug reports |
 

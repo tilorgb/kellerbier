@@ -37,6 +37,6 @@ body:
     id: milestone
     attributes:
       label: Milestone
-      options: ['M0', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9', 'not sure yet']
+      options: ['M0', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9', 'M10', 'not sure yet']
     validations:
       required: true
