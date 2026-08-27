@@ -71,8 +71,10 @@ not a stat spread.
 
 Isaac's skeleton, kept deliberately familiar:
 
-- **Twin-stick controls.** WASD/left stick to move, arrow keys/mouse/right stick to shoot.
-  Shooting and moving are fully independent. Full gamepad and full rebinding.
+- **Twin-stick controls, eight-way.** WASD/left stick to move, arrow keys/right stick to shoot
+  — the right stick snaps to the same eight directions the keys produce, rather than free-aiming
+  at a point. No mouse aim (`docs/DECISIONS.md` #20). Shooting and moving are fully independent.
+  Full gamepad and full rebinding.
 - **Floors** are a grid of rooms, procedurally arranged from hand-authored room templates.
 - **Doors lock** on entering a room with live enemies and open on clear. Cleared rooms stay
   cleared.

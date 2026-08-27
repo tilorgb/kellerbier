@@ -101,13 +101,3 @@ export function computeGameLayout(
     originY: Math.round(viewport.letterboxY / 2) / ratio,
   };
 }
-
-/**
- * Room units per client pixel, for turning a mouse position into a place in the
- * room. The game's scale and the zoom the room is drawn at both sit between the
- * two, and forgetting either is an aim that drifts further off the further the
- * pointer is from the centre.
- */
-export function roomUnitsPerPixel(layout: GameLayout): number {
-  return 1 / (layout.scale * WORLD_ZOOM);
-}

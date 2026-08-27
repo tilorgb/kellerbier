@@ -12,7 +12,7 @@ import { InputPlayback, InputRecording } from '../../src/sim/input/recording.js'
 import { RngStream, createStreamRng } from '../../src/sim/rng/streams.js';
 import { createDefaultBindings } from '../../src/app/input/bindings.js';
 import { GamepadSource, type GamepadLike } from '../../src/app/input/gamepad.js';
-import { KeyboardMouseSource } from '../../src/app/input/keyboard.js';
+import { KeyboardSource } from '../../src/app/input/keyboard.js';
 import { InputSampler } from '../../src/app/input/sampler.js';
 
 /**
@@ -94,26 +94,23 @@ function scriptPad(tick: number, pad: PadState, jitter: number): void {
   pad.pressed = tick % 7 === 0 ? [7] : tick % 11 === 0 ? [6, 9] : [];
 }
 
-function scriptKeyboard(tick: number, keyboard: KeyboardMouseSource): void {
+function scriptKeyboard(tick: number, keyboard: KeyboardSource): void {
   if (tick < UNPLUG_TICK) {
     return;
   }
-  // Movement keys on a rhythm, plus mouse aim, once the pad is gone.
+  // Movement and aim keys on a rhythm, once the pad is gone.
   keyboard.keyUp('KeyW');
   keyboard.keyUp('KeyA');
   keyboard.keyDown(tick % 5 < 3 ? 'KeyW' : 'KeyA');
-  keyboard.movePointer(320 + Math.sin(tick / 9) * 100, 180 + Math.cos(tick / 9) * 100);
-  if (tick % 3 === 0) {
-    keyboard.mouseDown(0);
-  } else {
-    keyboard.mouseUp(0);
-  }
+  keyboard.keyUp('ArrowUp');
+  keyboard.keyUp('ArrowRight');
+  keyboard.keyDown(tick % 3 === 0 ? 'ArrowUp' : 'ArrowRight');
 }
 
 /** Plays the scripted run through the real sampler and records every frame. */
 function recordScriptedRun(jitter = 0): { recording: InputRecording; state: SimState } {
   const pad: PadState = { axes: [0, 0, 0, 0], pressed: [], connected: true };
-  const keyboard = new KeyboardMouseSource();
+  const keyboard = new KeyboardSource();
   const gamepad = new GamepadSource(() => {
     if (!pad.connected) {
       return [null, null];
@@ -140,7 +137,6 @@ function recordScriptedRun(jitter = 0): { recording: InputRecording; state: SimS
   for (let tick = 0; tick < TICKS; tick++) {
     scriptPad(tick, pad, jitter);
     scriptKeyboard(tick, keyboard);
-    sampler.setAimOrigin(state.x, state.y);
 
     const frame = sampler.sample();
     recording.push(frame);
@@ -215,13 +211,18 @@ describe('replaying a recorded run', () => {
     const here = original.recording.toBytes();
     const there = elsewhere.recording.toBytes();
     expect(there.length).toBe(here.length);
-    // Only the gamepad half of the run: past the unplug, aim is measured from
-    // the player's position, so the two runs feed their own drift back in and
-    // the bound stops being about quantisation at all.
-    const gamepadBytes = UNPLUG_TICK * INPUT_FRAME_BYTES;
-    for (let index = 0; index < gamepadBytes; index++) {
-      const drift = Math.abs((there[index] ?? 0) - (here[index] ?? 0));
-      expect(drift, `byte ${String(index)}`).toBeLessThanOrEqual(1);
+    // Only the gamepad half of the run, and only the move axes: aim is
+    // snapped to one of eight directions (docs/DECISIONS.md #20), a
+    // discontinuous function of the stick angle that a jitter can
+    // occasionally tip across a boundary. The move axes stay continuous,
+    // quantised straight off the stick, and that is where the Lipschitz
+    // drift bound still holds.
+    for (let tick = 0; tick < UNPLUG_TICK; tick++) {
+      for (const offset of [0, 1]) {
+        const index = tick * INPUT_FRAME_BYTES + offset;
+        const drift = Math.abs((there[index] ?? 0) - (here[index] ?? 0));
+        expect(drift, `tick ${String(tick)} byte ${String(offset)}`).toBeLessThanOrEqual(1);
+      }
     }
 
     expect(hashState(runSim(replayFrames(elsewhere.recording)))).toBe(hashState(elsewhere.state));
@@ -259,7 +260,6 @@ describe('replaying a recorded run', () => {
       aimX: 0,
       aimY: 0,
       buttons: 0,
-      analogAim: false,
     });
   });
 });

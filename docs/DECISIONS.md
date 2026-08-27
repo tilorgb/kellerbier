@@ -683,3 +683,36 @@ what's missing. It does not apply to a system with no sane fallback to reach for
 stock to sell is not "fall back to Floor 1's shop stock," it's a genuinely different bug) — this
 decision is about *data* gaps in a *chosen-from-several* shape, the same shape `SlotPool` and
 `spawnGroups` both already have, not a general license to swallow every runtime error.
+
+## 20. Aim is eight-way on every device — no mouse, no free-angle stick
+
+**Decided:** M6. **Supersedes:** #8's analog/digital split.
+
+Playtesting the floors that exist so far kept turning up the same complaint about the two aiming
+modes #8 built for: a mouse loses the twin-stick feel the arrow keys already have, and a free
+stick angle is hard to land precisely under time pressure — the exact "aiming at a point" cost #8
+already named as the reason analog aim needed its own, lower sway value in the first place. Isaac,
+this project's own reference for "feels good to shoot" (`docs/GAME_DESIGN.md` pillar 1), never had
+free-aim at all; adding it here bought a control scheme none of the roster or item design actually
+needed, at the cost of the frame carrying a flag whose only job was to make one input source feel
+less bad than it otherwise would.
+
+So aim is eight-way, full stop, on every device: arrow keys as before, and the gamepad's right
+stick now snaps to the nearest of the same eight directions (`app/input/sampler.ts`'s
+`snapToOctant`) rather than reporting a free angle. Mouse aim is removed rather than kept as an
+alternate input — a player who prefers the mouse undermines the exact contrast a future free-aim
+item (see below) would need to read as a change, and every input-only branch it justified
+(`KeyboardMouseSource`'s pointer tracking, `app/main.ts`'s pointer-to-room-coordinate mapping, the
+mouse fire button) went with it.
+
+This also retires #8's own reason for existing: with nothing left that produces a point-aimed
+shot, `InputFrame.analogAim` and `ShootingTuning.analogVelocityInheritance` are dead branches, not
+dormant ones, so both are gone rather than kept unused — `INPUT_FRAME_BYTES` drops from 6 to 5
+accordingly, an internal recording format with no persisted save files depending on the old shape.
+
+**Constrains:** a genuinely free-angle aim mode is still a legitimate thing for this game to have —
+the sway-wobble problem #8 described for a mouse or a stick is exactly what would make a rare,
+*bad* item ("your aim gets harder to control") land as a real downside rather than a strict
+upgrade. That item, when it's built, re-derives its own analog-aim plumbing from what it actually
+needs rather than resurrecting this decision's flag unchanged; nothing here is being kept dormant
+on the bet that the shape will still fit.

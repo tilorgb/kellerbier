@@ -9,17 +9,14 @@ import {
 } from '../../sim/input/frame.js';
 import { type BindableAction, type Bindings, createDefaultBindings } from './bindings.js';
 import { GamepadAxis, GamepadSource } from './gamepad.js';
-import { KeyboardMouseSource } from './keyboard.js';
+import { KeyboardSource } from './keyboard.js';
 
 /** Which family of device the player last touched, for on-screen glyphs. */
 export type ActiveDevice = 'keyboard' | 'gamepad';
 
-/** Mouse button that fires, when aiming with the mouse. */
-const MOUSE_FIRE_BUTTON = 0;
-
 export interface InputSamplerOptions {
   readonly bindings?: Bindings;
-  readonly keyboard?: KeyboardMouseSource;
+  readonly keyboard?: KeyboardSource;
   readonly gamepad?: GamepadSource;
 }
 
@@ -31,7 +28,7 @@ export interface InputSamplerOptions {
  * is what makes keyboard and gamepad interchangeable and a run reproducible.
  */
 export class InputSampler {
-  readonly keyboard: KeyboardMouseSource;
+  readonly keyboard: KeyboardSource;
   readonly gamepad: GamepadSource;
   bindings: Bindings;
 
@@ -42,13 +39,9 @@ export class InputSampler {
   private lastGamepadActivity = 0;
   private device: ActiveDevice = 'keyboard';
 
-  /** Where aim is measured from, in internal coordinates: the player. */
-  private aimOriginX = 0;
-  private aimOriginY = 0;
-
   constructor(options: InputSamplerOptions = {}) {
     this.bindings = options.bindings ?? createDefaultBindings();
-    this.keyboard = options.keyboard ?? new KeyboardMouseSource();
+    this.keyboard = options.keyboard ?? new KeyboardSource();
     this.gamepad = options.gamepad ?? new GamepadSource();
   }
 
@@ -68,15 +61,6 @@ export class InputSampler {
   }
 
   /**
-   * Sets the point mouse aim is measured from — normally the player's position
-   * in internal coordinates.
-   */
-  setAimOrigin(x: number, y: number): void {
-    this.aimOriginX = x;
-    this.aimOriginY = y;
-  }
-
-  /**
    * Samples every device into a fresh frame. Call once per simulation tick.
    *
    * Allocation-free: both frames are owned by the sampler and reused.
@@ -91,7 +75,7 @@ export class InputSampler {
     if (this.device === 'gamepad') {
       this.sampleGamepad();
     } else {
-      this.sampleKeyboardMouse();
+      this.sampleKeyboard();
     }
 
     return this.current;
@@ -176,10 +160,11 @@ export class InputSampler {
     this.current.moveY = quantiseAxis(moveY);
 
     this.gamepad.readStick(GamepadAxis.RightStickX, GamepadAxis.RightStickY);
-    this.current.aimX = quantiseAxis(this.gamepad.lastStickX);
-    this.current.aimY = quantiseAxis(this.gamepad.lastStickY);
-    // A stick aims at a point, not along one of eight directions.
-    this.current.analogAim = true;
+    // Snapped to the same eight directions as aim keys, rather than a free
+    // angle — docs/DECISIONS.md #20.
+    snapToOctant(this.gamepad.lastStickX, this.gamepad.lastStickY);
+    this.current.aimX = quantiseAxis(scratchX);
+    this.current.aimY = quantiseAxis(scratchY);
 
     this.sampleButtons(true);
 
@@ -190,7 +175,7 @@ export class InputSampler {
     }
   }
 
-  private sampleKeyboardMouse(): void {
+  private sampleKeyboard(): void {
     const moveX = digitalAxis(
       this.isKeyboardActionDown('moveLeft'),
       this.isKeyboardActionDown('moveRight'),
@@ -214,30 +199,15 @@ export class InputSampler {
 
     this.sampleButtons(false);
 
-    if (aimX !== 0 || aimY !== 0) {
-      // Arrow keys aim, and aiming fires — the Isaac convention.
-      normaliseDiagonal(aimX, aimY);
-      this.current.aimX = quantiseAxis(scratchX);
-      this.current.aimY = quantiseAxis(scratchY);
-      this.current.buttons |= 1 << InputAction.Fire;
-      this.current.analogAim = false;
+    if (aimX === 0 && aimY === 0) {
       return;
     }
 
-    // Mouse aim: a unit vector from the player towards the pointer.
-    if (this.keyboard.hasPointer) {
-      const dx = this.keyboard.pointerX - this.aimOriginX;
-      const dy = this.keyboard.pointerY - this.aimOriginY;
-      const distance = Math.hypot(dx, dy);
-      if (distance > 0) {
-        this.current.aimX = quantiseAxis(dx / distance);
-        this.current.aimY = quantiseAxis(dy / distance);
-        this.current.analogAim = true;
-        if (this.keyboard.isMouseButtonDown(MOUSE_FIRE_BUTTON)) {
-          this.current.buttons |= 1 << InputAction.Fire;
-        }
-      }
-    }
+    // Arrow keys aim, and aiming fires — the Isaac convention.
+    normaliseDiagonal(aimX, aimY);
+    this.current.aimX = quantiseAxis(scratchX);
+    this.current.aimY = quantiseAxis(scratchY);
+    this.current.buttons |= 1 << InputAction.Fire;
   }
 }
 
@@ -265,4 +235,25 @@ function normaliseDiagonal(x: number, y: number): void {
   }
   scratchX = x;
   scratchY = y;
+}
+
+/** The eight aim directions a key press can produce, by octant index. */
+const OCTANT_X = [1, Math.SQRT1_2, 0, -Math.SQRT1_2, -1, -Math.SQRT1_2, 0, Math.SQRT1_2];
+const OCTANT_Y = [0, Math.SQRT1_2, 1, Math.SQRT1_2, 0, -Math.SQRT1_2, -1, -Math.SQRT1_2];
+
+/**
+ * Snaps a stick deflection to the nearest of the same eight directions aim
+ * keys produce, so a controller's right stick reads as an eight-way input
+ * rather than a free angle (`docs/DECISIONS.md` #20). Zero deflection stays
+ * zero rather than snapping to an arbitrary direction.
+ */
+function snapToOctant(x: number, y: number): void {
+  if (x === 0 && y === 0) {
+    scratchX = 0;
+    scratchY = 0;
+    return;
+  }
+  const octant = (Math.round(Math.atan2(y, x) / (Math.PI / 4)) + 8) % 8;
+  scratchX = OCTANT_X[octant] ?? 0;
+  scratchY = OCTANT_Y[octant] ?? 0;
 }

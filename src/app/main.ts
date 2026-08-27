@@ -27,9 +27,7 @@ import {
   type GameLayout,
   INTERNAL_HEIGHT,
   INTERNAL_WIDTH,
-  WORLD_ZOOM,
   computeGameLayout,
-  roomUnitsPerPixel,
 } from '../render/resolution.js';
 import { ActiveItemHud } from '../render/active-item-hud.js';
 import { BossHealthHud } from '../render/boss-health-hud.js';
@@ -646,24 +644,10 @@ async function boot(): Promise<void> {
     }
   }
 
-  // The pointer is reported in room coordinates, not screen ones: mouse aim is
-  // measured against the player's simulation position, and the room sits scaled
-  // and letterboxed inside a full-window canvas. Updated on every resize, and
-  // read — never replaced — by whoever needs to convert a client pixel.
-  const pointerMapping = {
-    originX: 0,
-    originY: 0,
-    unitsPerPixel: 1 / WORLD_ZOOM,
-    cameraX: 0,
-    cameraY: 0,
-  };
   let layout = computeGameLayout(window.innerWidth, window.innerHeight, window.devicePixelRatio);
 
   trackWindowSize(app, game, (applied) => {
     layout = applied;
-    pointerMapping.originX = applied.originX;
-    pointerMapping.originY = applied.originY;
-    pointerMapping.unitsPerPixel = roomUnitsPerPixel(applied);
     positionHud(applied);
     positionHealthHud(applied);
     positionPromilleHud(applied);
@@ -681,7 +665,7 @@ async function boot(): Promise<void> {
   });
 
   const input = new InputSampler();
-  input.keyboard.attach(window, app.canvas, pointerMapping);
+  input.keyboard.attach(window);
   input.gamepad.attach(window);
 
   // Floor music and room ambience's seam (#35, `audio/ambience.ts`) — silent
@@ -711,10 +695,6 @@ async function boot(): Promise<void> {
         }
       }
       if (deathPhase !== 'over') {
-        // Mouse aim is measured from the player, so the sampler is told where
-        // the player is before it reads the pointer.
-        const index = sim.playerIndex;
-        input.setAimOrigin(sim.positionX(index), sim.positionY(index));
         sim.step(input.sample());
         playImpactAudio(sim, SILENT_AUDIO);
         ambience.sync(sim, SILENT_AMBIENCE);
@@ -736,11 +716,6 @@ async function boot(): Promise<void> {
       const started = performance.now();
       overlay?.drawCalls.beginFrame();
       view.sync(alpha, layout.scale);
-      // Mouse aim has to invert whatever the camera did this frame (#100) —
-      // see `PointerMapping.cameraX`/`cameraY`'s doc comment.
-      const worldOffset = view.worldOffset();
-      pointerMapping.cameraX = worldOffset.x / WORLD_ZOOM;
-      pointerMapping.cameraY = worldOffset.y / WORLD_ZOOM;
       healthHud.sync(sim);
       promilleHud.sync(sim, settings.neutralReskin);
       walletHud.sync(sim);
@@ -860,7 +835,7 @@ ${meterLabel} ${sim.promille.toFixed(2)} ${tierLabel}${trinkfest}${knockedDown}
 shots ${String(shots.liveCount)}/${String(shots.capacity)}  particles ${String(
       particles.liveCount,
     )}/${String(particles.capacity)}${shots.overflows > 0 ? '  SHOT OVERFLOW' : ''}
-WASD move   arrows/mouse aim and fire
+WASD move   arrows aim and fire
   O debug   T tuning   I shot tags   Y accessibility   P pause   . step   [ ] time scale
   N next room (after clear)   R restart (new seed)`;
   };

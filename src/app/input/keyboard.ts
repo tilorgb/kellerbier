@@ -1,75 +1,21 @@
 /**
- * Keyboard and mouse state.
+ * Keyboard state.
  *
  * The state is driven by plain method calls; `attach` only wires DOM events to
  * those methods. That split keeps the whole thing testable without a DOM, and
  * it is also what lets a replay drive the same code path as a live run.
  */
-
-/** Where the mouse pointer is, in room coordinates. */
-export interface PointerPosition {
-  x: number;
-  y: number;
-}
-
-/**
- * How to turn a client pixel into a room coordinate.
- *
- * Read on every pointer move rather than captured once, because the window can
- * be resized and the game re-centred underneath a stationary mouse. The caller
- * owns the object and updates it in place; nothing here writes to it.
- */
-export interface PointerMapping {
-  /** Top-left of the game inside the canvas, in client pixels. */
-  readonly originX: number;
-  readonly originY: number;
-  /** Room units covered by one client pixel. */
-  readonly unitsPerPixel: number;
-  /**
-   * The room's current on-screen offset (`GameView.worldOffset`), in room
-   * units — zero unless a camera-follow pan (#100), shake or sway is live.
-   *
-   * The rest of this mapping only accounts for the outer window scale and
-   * letterbox, which is everything that mattered before a room's camera
-   * could move. Once `world.position` can be nonzero, a client pixel maps to
-   * a *screen* room coordinate that is off from the *simulation* room
-   * coordinate mouse aim is measured against by exactly this much.
-   */
-  readonly cameraX: number;
-  readonly cameraY: number;
-}
-
-export class KeyboardMouseSource {
+export class KeyboardSource {
   private readonly keysDown = new Set<string>();
-  private readonly mouseButtonsDown = new Set<number>();
-  private readonly pointer: PointerPosition = { x: 0, y: 0 };
-  private pointerSeen = false;
   private activity = 0;
 
-  /** Increments whenever the player touches keyboard or mouse. */
+  /** Increments whenever the player touches the keyboard. */
   get activityCounter(): number {
     return this.activity;
   }
 
-  /** True once the pointer has been somewhere, so aim can trust it. */
-  get hasPointer(): boolean {
-    return this.pointerSeen;
-  }
-
-  get pointerX(): number {
-    return this.pointer.x;
-  }
-
-  get pointerY(): number {
-    return this.pointer.y;
-  }
-
   isKeyDown(code: string): boolean {
     return this.keysDown.has(code);
-  }
-
-  isMouseButtonDown(button: number): boolean {
-    return this.mouseButtonsDown.has(button);
   }
 
   keyDown(code: string): void {
@@ -83,27 +29,6 @@ export class KeyboardMouseSource {
     this.keysDown.delete(code);
   }
 
-  mouseDown(button: number): void {
-    if (!this.mouseButtonsDown.has(button)) {
-      this.mouseButtonsDown.add(button);
-      this.activity += 1;
-    }
-  }
-
-  mouseUp(button: number): void {
-    this.mouseButtonsDown.delete(button);
-  }
-
-  /** Reports the pointer in room coordinates. */
-  movePointer(x: number, y: number): void {
-    if (this.pointer.x !== x || this.pointer.y !== y) {
-      this.activity += 1;
-    }
-    this.pointer.x = x;
-    this.pointer.y = y;
-    this.pointerSeen = true;
-  }
-
   /**
    * Releases everything.
    *
@@ -112,7 +37,6 @@ export class KeyboardMouseSource {
    */
   clear(): void {
     this.keysDown.clear();
-    this.mouseButtonsDown.clear();
   }
 
   /**
@@ -121,7 +45,7 @@ export class KeyboardMouseSource {
    * `event.code` rather than `event.key`, so bindings follow physical key
    * positions and survive a layout change.
    */
-  attach(target: Window, canvas: HTMLCanvasElement, mapping: PointerMapping): () => void {
+  attach(target: Window): () => void {
     const onKeyDown = (event: KeyboardEvent): void => {
       this.keyDown(event.code);
       // Tab and the arrow keys scroll or move focus otherwise, which fights
@@ -133,46 +57,18 @@ export class KeyboardMouseSource {
     const onKeyUp = (event: KeyboardEvent): void => {
       this.keyUp(event.code);
     };
-    const onMouseDown = (event: MouseEvent): void => {
-      this.mouseDown(event.button);
-    };
-    const onMouseUp = (event: MouseEvent): void => {
-      this.mouseUp(event.button);
-    };
-    const onMouseMove = (event: MouseEvent): void => {
-      const bounds = canvas.getBoundingClientRect();
-      if (bounds.width === 0 || bounds.height === 0) {
-        return;
-      }
-      this.movePointer(
-        (event.clientX - bounds.left - mapping.originX) * mapping.unitsPerPixel - mapping.cameraX,
-        (event.clientY - bounds.top - mapping.originY) * mapping.unitsPerPixel - mapping.cameraY,
-      );
-    };
     const onBlur = (): void => {
       this.clear();
-    };
-    const onContextMenu = (event: MouseEvent): void => {
-      // Right-click is a game button, not a menu.
-      event.preventDefault();
     };
 
     target.addEventListener('keydown', onKeyDown);
     target.addEventListener('keyup', onKeyUp);
     target.addEventListener('blur', onBlur);
-    canvas.addEventListener('mousedown', onMouseDown);
-    target.addEventListener('mouseup', onMouseUp);
-    target.addEventListener('mousemove', onMouseMove);
-    canvas.addEventListener('contextmenu', onContextMenu);
 
     return () => {
       target.removeEventListener('keydown', onKeyDown);
       target.removeEventListener('keyup', onKeyUp);
       target.removeEventListener('blur', onBlur);
-      canvas.removeEventListener('mousedown', onMouseDown);
-      target.removeEventListener('mouseup', onMouseUp);
-      target.removeEventListener('mousemove', onMouseMove);
-      canvas.removeEventListener('contextmenu', onContextMenu);
     };
   }
 }

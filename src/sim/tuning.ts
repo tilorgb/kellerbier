@@ -113,35 +113,21 @@ export interface ShootingTuning {
   /** How far from the player's centre a shot appears, along the aim direction. */
   muzzleOffset: number;
   /**
-   * Fraction of the player's velocity a shot inherits, aiming with keys.
+   * Fraction of the player's velocity a shot inherits.
    *
    * Subtle and important. Without it, strafing while shooting feels wrong in a
    * way players notice and cannot name: the shots trail behind the motion that
    * produced them. Running right while firing up should visibly bend the stream
    * to the right, the way Isaac's does — that sway is the feature.
    *
-   * This is the value for eight-way aim, and it can afford to be generous: with
-   * keys, the angle between where the player is running and where they are
-   * aiming holds still while they strafe, so the bend is a constant slant they
-   * learn in about ten seconds and then shoot through.
+   * It can afford to be generous because aim is eight-way: the angle between
+   * where the player is running and where they are aiming holds still while
+   * they strafe, so the bend is a constant slant they learn in about ten
+   * seconds and then shoot through, rather than a point-aim's continuously
+   * rotating angle, which would read as wobble instead (`docs/DECISIONS.md`
+   * #20).
    */
   velocityInheritance: number;
-  /**
-   * The same, for aim that comes from a mouse or a stick.
-   *
-   * Lower, and the reason is the device rather than the taste. With keys, aim
-   * is a *direction*; with a mouse or a stick it is a *point*, and the angle
-   * between running and aiming rotates continuously as the player circles that
-   * point. The sway then slides through zero and changes sign under their
-   * hands, which reads as wobble rather than as momentum — and because they are
-   * aiming at a spot rather than along a line, the deflection reads as the gun
-   * being inaccurate rather than as the player being in motion.
-   *
-   * The game is meant to be played on a mouse or a stick, so this is the number
-   * most runs will feel. It is chosen against `velocityInheritance` rather than
-   * on its own: same sway, less of it.
-   */
-  analogVelocityInheritance: number;
   /**
    * Push applied to the player, opposite the shot. Felt, not disruptive.
    *
@@ -617,7 +603,6 @@ export const DEFAULT_SHOOTING_TUNING: Readonly<ShootingTuning> = {
   shotLifetimeTicks: 30,
   muzzleOffset: 8,
   velocityInheritance: 0.85,
-  analogVelocityInheritance: 0.35,
   kickback: 0.3,
   forcedTags: 0,
 };
