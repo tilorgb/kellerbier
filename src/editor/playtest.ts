@@ -7,6 +7,7 @@ import { createRenderer, trackWindowSize } from '../render/app.js';
 import {
   createBlobTexture,
   createRingTexture,
+  createSilhouetteTexture,
   createSolidTexture,
 } from '../render/placeholder-art.js';
 import { EntityView } from '../render/entities.js';
@@ -127,6 +128,12 @@ export async function createPlaytest(
     pedestalBeam: createSolidTexture(app.renderer),
     floorTiles,
     enemyArt,
+    enemyFlash: Object.fromEntries(
+      Object.entries(enemyArt).map(([id, texture]) => [
+        id,
+        createSilhouetteTexture(app.renderer, texture),
+      ]),
+    ),
   });
   const game = new Container();
   game.addChild(view.stage);

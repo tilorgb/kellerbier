@@ -52,6 +52,15 @@ export interface GameViewTextures {
    * to draw as — every enemy floors 2-7 haven't been drawn yet, today.
    */
   readonly enemyArt: Readonly<Record<string, Texture>>;
+  /**
+   * Each `enemyArt` entry's own hit-flash silhouette (#37's bug report) —
+   * `render/placeholder-art.ts`'s `createSilhouetteTexture`, one per id,
+   * built from that same texture so the flash is always that enemy's actual
+   * shape rather than `entityFlash`'s generic circle. An enemy with no
+   * `enemyArt` entry has no entry here either and falls back to
+   * `entityFlash`, the same fallback `enemyArt` itself uses for `entity`.
+   */
+  readonly enemyFlash: Readonly<Record<string, Texture>>;
 }
 
 /**
@@ -136,6 +145,7 @@ export class GameView {
       textures.entityFlash,
       textures.telegraph,
       textures.enemyArt,
+      textures.enemyFlash,
     );
     this.world.addChild(this.entities.container);
 

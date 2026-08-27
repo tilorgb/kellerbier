@@ -1,4 +1,4 @@
-import { Graphics, type Renderer, type Texture } from 'pixi.js';
+import { Container, Graphics, Sprite, type Renderer, type Texture } from 'pixi.js';
 
 /**
  * Placeholder art, generated rather than drawn.
@@ -21,6 +21,33 @@ export function createRingTexture(renderer: Renderer, radius: number, color: num
   graphics.circle(radius, radius, radius - 1).stroke({ width: 2, color });
   const texture = renderer.generateTexture({ target: graphics, resolution: 1 });
   graphics.destroy();
+  return texture;
+}
+
+/**
+ * A solid-white cutout of `source`, same size and same silhouette — an
+ * enemy's own hit flash, rather than the generic round `entityFlash` blob
+ * every enemy used to flash as regardless of its actual shape (#37's bug
+ * report: Kellerassel and Traktor both flash as a circle wider than either
+ * of them). `mask` reads `source`'s alpha channel, so a narrow sprite like
+ * Bierratte's stays narrow when it flashes, and only its own opaque pixels
+ * turn white rather than its whole bounding box.
+ *
+ * Tint can't do this — it multiplies the texture underneath, and a
+ * multiply can only ever make a colour darker toward the tint, never turn a
+ * dark pixel white — which is `flashTexture`'s own doc comment on why the
+ * game swaps textures for a flash instead of tinting one. The same
+ * reasoning extends here: every enemy needs a *real* white texture of its
+ * own shape, not a tint of its real one.
+ */
+export function createSilhouetteTexture(renderer: Renderer, source: Texture): Texture {
+  const fill = new Graphics().rect(0, 0, source.width, source.height).fill(0xffffff);
+  const mask = new Sprite(source);
+  fill.mask = mask;
+  const container = new Container();
+  container.addChild(fill, mask);
+  const texture = renderer.generateTexture({ target: container, resolution: 1 });
+  container.destroy({ children: true });
   return texture;
 }
 

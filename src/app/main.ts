@@ -20,6 +20,7 @@ import { createRenderer, trackWindowSize } from '../render/app.js';
 import {
   createBlobTexture,
   createRingTexture,
+  createSilhouetteTexture,
   createSolidTexture,
 } from '../render/placeholder-art.js';
 import {
@@ -939,6 +940,12 @@ WASD move   arrows/mouse aim and fire
       pedestalBeam: createSolidTexture(app.renderer),
       floorTiles,
       enemyArt,
+      enemyFlash: Object.fromEntries(
+        Object.entries(enemyArt).map(([id, texture]) => [
+          id,
+          createSilhouetteTexture(app.renderer, texture),
+        ]),
+      ),
     };
     view = new GameView(sim, viewTextures);
     game.removeChildren();
