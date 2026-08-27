@@ -7,6 +7,13 @@ import schimmelsporeUrl from '../../assets/sprites/floor-1-cellar/characters/sch
 import zapfhahnUrl from '../../assets/sprites/floor-1-cellar/characters/zapfhahn.png';
 import rollfassUrl from '../../assets/sprites/floor-1-cellar/characters/rollfass.png';
 import fasssplitterUrl from '../../assets/sprites/floor-1-cellar/characters/fasssplitter.png';
+import ruralFloorTileUrl from '../../assets/sprites/floor-2-rural/tiles/rural-floor.png';
+import bauerUrl from '../../assets/sprites/floor-2-rural/characters/bauer.png';
+import kuhUrl from '../../assets/sprites/floor-2-rural/characters/kuh.png';
+import gockelUrl from '../../assets/sprites/floor-2-rural/characters/gockel.png';
+import gartenzwergUrl from '../../assets/sprites/floor-2-rural/characters/gartenzwerg.png';
+import blaskapellistUrl from '../../assets/sprites/floor-2-rural/characters/blaskapellist.png';
+import traktorUrl from '../../assets/sprites/floor-2-rural/characters/traktor.png';
 
 /** The two per-floor art maps `GameViewTextures` needs (#35). */
 export interface FloorArt {
@@ -22,12 +29,18 @@ const ENEMY_SPRITE_URLS = [
   ['zapfhahn', zapfhahnUrl],
   ['rollfass', rollfassUrl],
   ['fasssplitter', fasssplitterUrl],
+  ['bauer', bauerUrl],
+  ['kuh', kuhUrl],
+  ['gockel', gockelUrl],
+  ['gartenzwerg', gartenzwergUrl],
+  ['blaskapellist', blaskapellistUrl],
+  ['traktor', traktorUrl],
 ] as const;
 
 /**
- * Loads every floor's authored art — today, just Floor 1's tile and
- * Der Keller's enemy roster (#35) — and returns it shaped for
- * `GameViewTextures.floorTiles`/`enemyArt`.
+ * Loads every floor's authored art — today, Floor 1's tile and Der Keller's
+ * enemy roster (#35), plus Floor 2's tile and the Dorf & Acker roster (#37)
+ * — and returns it shaped for `GameViewTextures.floorTiles`/`enemyArt`.
  *
  * One shared loader rather than each entry point (`app/main.ts`,
  * `editor/playtest.ts`) repeating the same `Assets.load` calls: both want
@@ -40,8 +53,9 @@ const ENEMY_SPRITE_URLS = [
  * floor-3 preview simply never touches any of it.
  */
 export async function loadFloorArt(): Promise<FloorArt> {
-  const [floorTexture, enemyEntries] = await Promise.all([
+  const [cellarFloorTexture, ruralFloorTexture, enemyEntries] = await Promise.all([
     Assets.load<Texture>({ src: cellarFloorTileUrl, data: { scaleMode: 'nearest' } }),
+    Assets.load<Texture>({ src: ruralFloorTileUrl, data: { scaleMode: 'nearest' } }),
     Promise.all(
       ENEMY_SPRITE_URLS.map(
         async ([id, src]) =>
@@ -50,7 +64,7 @@ export async function loadFloorArt(): Promise<FloorArt> {
     ),
   ]);
   return {
-    floorTiles: { 1: floorTexture },
+    floorTiles: { 1: cellarFloorTexture, 2: ruralFloorTexture },
     enemyArt: Object.fromEntries(enemyEntries),
   };
 }

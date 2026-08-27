@@ -8,6 +8,7 @@ import {
   type EnemyState,
   type FireAtPlayerBehaviour,
   type FireBurstBehaviour,
+  type FireOnBeatBehaviour,
   type FireSpreadBehaviour,
   MOVEMENT_BEHAVIOURS,
 } from './definition.js';
@@ -58,7 +59,8 @@ export interface CompiledSplit {
   readonly atHealthBelow: number;
 }
 
-export type FiringBehaviour = FireAtPlayerBehaviour | FireBurstBehaviour | FireSpreadBehaviour;
+export type FiringBehaviour =
+  FireAtPlayerBehaviour | FireBurstBehaviour | FireSpreadBehaviour | FireOnBeatBehaviour;
 
 export interface CompiledState {
   readonly name: string;

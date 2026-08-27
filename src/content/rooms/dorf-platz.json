@@ -1,0 +1,39 @@
+{
+  "id": "dorf-platz",
+  "tileGrid": [
+    "###############",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "###############"
+  ],
+  "obstacles": [{ "x": 96, "y": 48, "width": 16, "height": 16 }],
+  "enemySpawns": [
+    { "x": 40, "y": 32, "group": "farmhands" },
+    { "x": 176, "y": 96, "group": "farmhands" }
+  ],
+  "spawnGroups": [
+    {
+      "id": "farmhands",
+      "count": 2,
+      "choices": [{ "enemyId": "bauer", "minFloor": 1, "maxFloor": 7 }]
+    }
+  ],
+  "pickupSpawns": [],
+  "hazards": [],
+  "decorativeProps": [
+    { "x": 96, "y": 20, "type": "bunting" },
+    { "x": 40, "y": 100, "type": "bunting" }
+  ],
+  "metadata": {
+    "floorTags": ["rural"],
+    "shape": "1x1",
+    "doors": { "north": true, "east": true, "south": true, "west": true },
+    "difficultyTier": 1,
+    "weight": 1
+  }
+}

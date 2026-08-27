@@ -328,25 +328,51 @@ function applyFiring(
 ): void {
   const scale = sim.tuning.enemy.fireIntervalScale;
   const aim = distance === 0 ? 0 : Math.atan2(toPlayerY, toPlayerX);
+  // A hop trellis (#37) blocks aimed fire, not an omnidirectional ring —
+  // `fireOnBeat` is a room-filling sound, not a shot aimed at where the
+  // player is standing, so it alone reads `sighted`. `sightBlockCount === 0`
+  // short-circuits the segment test on every floor that has none (every
+  // floor but Dorf & Acker, today), so this costs nothing where it doesn't
+  // apply.
+  const sighted =
+    sim.room.sightBlockCount === 0 ||
+    !sim.room.blocksSight(
+      sim.positionX(index),
+      sim.positionY(index),
+      sim.positionX(index) + toPlayerX,
+      sim.positionY(index) + toPlayerY,
+    );
 
   for (const shot of state.firing) {
     const interval = Math.max(1, Math.round(shot.everyTicks * scale));
+
+    if (shot.behaviour === 'fireOnBeat') {
+      if (sim.tick % interval === 0) {
+        const shots = Math.max(1, Math.round(shot.shots));
+        const step = (Math.PI * 2) / shots;
+        for (let ray = 0; ray < shots; ray++) {
+          fireOne(sim, index, step * ray, shot);
+        }
+      }
+      continue;
+    }
+
     const phase = ticks % interval;
 
     if (shot.behaviour === 'fireAtPlayer') {
-      if (phase === 0) {
+      if (phase === 0 && sighted) {
         fireOne(sim, index, aim, shot);
       }
       continue;
     }
     if (shot.behaviour === 'fireBurst') {
       const gap = Math.max(1, Math.round(shot.gapTicks));
-      if (phase % gap === 0 && phase / gap < shot.shots) {
+      if (phase % gap === 0 && phase / gap < shot.shots && sighted) {
         fireOne(sim, index, aim, shot);
       }
       continue;
     }
-    if (phase === 0) {
+    if (phase === 0 && sighted) {
       const shots = Math.max(1, Math.round(shot.shots));
       const step = shot.arc / Math.max(1, shots - 1);
       const start = aim - shot.arc / 2;

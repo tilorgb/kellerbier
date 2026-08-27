@@ -40,9 +40,9 @@ export interface GameViewTextures {
   /** A pedestal's light beam. */
   readonly pedestalBeam: Texture;
   /**
-   * Real tile art (#35), keyed by floor number. A floor with no entry here
-   * falls back to `createRoomView`'s flat palette fill — every floor but 1,
-   * today.
+   * Real tile art (#35, #37), keyed by floor number. A floor with no entry
+   * here falls back to `createRoomView`'s flat palette fill — every floor
+   * but 1 and 2, today.
    */
   readonly floorTiles: Readonly<Record<number, Texture>>;
   /**

@@ -35,6 +35,16 @@ interface RoomPalette {
  * bulb is a low-contrast room, and far-apart values read as a checkerboard
  * the instant they fill a whole floor.
  */
+/**
+ * Floor 2 — Dorf & Acker (#37): green, sky blue, white-and-blue bunting
+ * (`docs/CONTENT_BIBLE.md`). Drawn from the floor's own authored sub-palette
+ * (`tools/art/palette.mjs`'s `FLOOR_PALETTES.rural`), the same fence Floor
+ * 1's entry above is built inside — `floor`/`wall` are the two grass greens,
+ * `wallEdge` the sky blue as a highlight so the boundary between an outdoor
+ * room and its wall band reads as a hedge rather than a second floor
+ * material; `block` (an obstacle — a fence post, a hay bale) takes the deep
+ * blue accent, edged in the same sky blue.
+ */
 const FLOOR_PALETTES: Readonly<Record<number, RoomPalette>> = {
   1: {
     floor: 0x4a4d50,
@@ -42,6 +52,13 @@ const FLOOR_PALETTES: Readonly<Record<number, RoomPalette>> = {
     wallEdge: 0x5b5f63,
     block: 0x54402e,
     blockEdge: 0x5b5f63,
+  },
+  2: {
+    floor: 0x3f7a3a,
+    wall: 0x2e4f8c,
+    wallEdge: 0x6ab0d9,
+    block: 0x2e4f8c,
+    blockEdge: 0x6ab0d9,
   },
 };
 
@@ -60,6 +77,18 @@ function paletteFor(floor: number): RoomPalette {
  */
 const PUDDLE_COLOUR = 0x3c3e40;
 const PUDDLE_EDGE_COLOUR = 0xd99a3f;
+
+/**
+ * Floor 2's hop trellis (#37): drawn from the rural sub-palette
+ * (`tools/art/palette.mjs`'s `FLOOR_PALETTES.rural`) — the darker leaf green
+ * for the lattice itself, the lighter one as an edge highlight — rather than
+ * a floor-specific `RoomPalette` entry, since a sight-blocking hazard is a
+ * fixed idea (trellis foliage) independent of which floor's `paletteFor`
+ * happens to be active, unlike `floor`/`wall`/`block` which are genuinely
+ * reskinned per floor.
+ */
+const TRELLIS_COLOUR = 0x3f7a3a;
+const TRELLIS_EDGE_COLOUR = 0x7fbf6a;
 
 /** A locked door reads as cold and shut; an open one picks up the floor's amber light. */
 const DOOR_LOCKED_COLOUR = 0x5a2a2a;
@@ -121,6 +150,20 @@ export function createRoomView(
       .stroke({ width: 1, color: PUDDLE_EDGE_COLOUR, alpha: 0.5, alignment: 0 });
   }
   container.addChild(puddles);
+
+  const trellises = new Graphics();
+  for (let block = 0; block < room.sightBlockCount; block++) {
+    const base = block * BLOCK_STRIDE;
+    const minX = room.sightBlocks[base] ?? 0;
+    const minY = room.sightBlocks[base + 1] ?? 0;
+    const maxX = room.sightBlocks[base + 2] ?? 0;
+    const maxY = room.sightBlocks[base + 3] ?? 0;
+    trellises
+      .rect(minX, minY, maxX - minX, maxY - minY)
+      .fill({ color: TRELLIS_COLOUR, alpha: 0.75 })
+      .stroke({ width: 1, color: TRELLIS_EDGE_COLOUR, alpha: 0.6, alignment: 0 });
+  }
+  container.addChild(trellises);
 
   const blocks = new Graphics();
   for (let block = 0; block < room.blockCount; block++) {

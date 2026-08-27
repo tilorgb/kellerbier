@@ -14,6 +14,9 @@ export const MAX_ROOM_BLOCKS = 64;
 /** Puddle zones one room may hold. A handful per room is already generous. */
 export const MAX_ROOM_PUDDLES = 16;
 
+/** Sight-blocking zones one room may hold. Same headroom as puddles. */
+export const MAX_ROOM_SIGHT_BLOCKS = 16;
+
 /**
  * How wide a door gap is, in room units, centred on its wall.
  *
@@ -104,6 +107,18 @@ export class RoomGeometry {
 
   private puddles_ = 0;
 
+  /**
+   * Floor 2's hop-trellis hazard (#37): rectangles that block an aimed shot
+   * without blocking movement — a trellis is dense enough to hide behind but
+   * not solid, so it has nothing in common with `blocks`, and it is about a
+   * line between two points rather than a point sitting inside a zone, so it
+   * has nothing in common with `puddles` either. Its own array, same reason
+   * as the puddle doc comment above gives for not tagging `blocks` instead.
+   */
+  readonly sightBlocks = new Float32Array(MAX_ROOM_SIGHT_BLOCKS * BLOCK_STRIDE);
+
+  private sightBlocks_ = 0;
+
   constructor(
     minX: number,
     minY: number,
@@ -171,6 +186,56 @@ export class RoomGeometry {
     return false;
   }
 
+  /** Adds a sight-blocking zone. Setup-time only, same contract as `addBlock`. */
+  addSightBlock(minX: number, minY: number, maxX: number, maxY: number): void {
+    if (this.sightBlocks_ >= MAX_ROOM_SIGHT_BLOCKS) {
+      throw new RangeError(`A room holds at most ${String(MAX_ROOM_SIGHT_BLOCKS)} sight blocks`);
+    }
+    const base = this.sightBlocks_ * BLOCK_STRIDE;
+    this.sightBlocks[base] = minX;
+    this.sightBlocks[base + 1] = minY;
+    this.sightBlocks[base + 2] = maxX;
+    this.sightBlocks[base + 3] = maxY;
+    this.sightBlocks_ += 1;
+  }
+
+  get sightBlockCount(): number {
+    return this.sightBlocks_;
+  }
+
+  /**
+   * True when the segment from `(x0, y0)` to `(x1, y1)` crosses any
+   * sight-blocking zone.
+   *
+   * Hot path: read by `sim/systems/enemy.ts`'s `applyFiring` every tick an
+   * enemy with an aimed firing behaviour is in a room that has any sight
+   * blocks at all. No allocation: `segmentIntersectsRect` below is written
+   * out plane by plane rather than looping an array of clip coefficients,
+   * for the same no-hot-allocation reason `isOnPuddle` and `isClear` avoid
+   * one.
+   */
+  blocksSight(x0: number, y0: number, x1: number, y1: number): boolean {
+    const blocks = this.sightBlocks;
+    for (let block = 0; block < this.sightBlocks_; block++) {
+      const base = block * BLOCK_STRIDE;
+      if (
+        segmentIntersectsRect(
+          x0,
+          y0,
+          x1,
+          y1,
+          blocks[base] ?? 0,
+          blocks[base + 1] ?? 0,
+          blocks[base + 2] ?? 0,
+          blocks[base + 3] ?? 0,
+        )
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   /** True when a circle is inside the interior bounds and clear of every block. */
   isClear(centreX: number, centreY: number, radius: number): boolean {
     if (this.stepRects.length > 0) {
@@ -224,6 +289,98 @@ export class RoomGeometry {
 
 function clampTo(value: number, min: number, max: number): number {
   return value < min ? min : value > max ? max : value;
+}
+
+/**
+ * True when the segment `(x0, y0)`-`(x1, y1)` overlaps the axis-aligned
+ * rectangle at all — Liang-Barsky clipping, the four half-plane checks
+ * written out individually rather than looped over an array of clip
+ * coefficients or factored through a closure, so `blocksSight` above (its
+ * one caller, from the hot per-tick firing decision) never allocates.
+ */
+function segmentIntersectsRect(
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  minX: number,
+  minY: number,
+  maxX: number,
+  maxY: number,
+): boolean {
+  const dx = x1 - x0;
+  const dy = y1 - y0;
+  let t0 = 0;
+  let t1 = 1;
+  let p: number;
+  let q: number;
+  let r: number;
+
+  // Left plane: x >= minX.
+  p = -dx;
+  q = x0 - minX;
+  if (p === 0) {
+    if (q < 0) return false;
+  } else {
+    r = q / p;
+    if (p < 0) {
+      if (r > t1) return false;
+      if (r > t0) t0 = r;
+    } else {
+      if (r < t0) return false;
+      if (r < t1) t1 = r;
+    }
+  }
+
+  // Right plane: x <= maxX.
+  p = dx;
+  q = maxX - x0;
+  if (p === 0) {
+    if (q < 0) return false;
+  } else {
+    r = q / p;
+    if (p < 0) {
+      if (r > t1) return false;
+      if (r > t0) t0 = r;
+    } else {
+      if (r < t0) return false;
+      if (r < t1) t1 = r;
+    }
+  }
+
+  // Top plane: y >= minY.
+  p = -dy;
+  q = y0 - minY;
+  if (p === 0) {
+    if (q < 0) return false;
+  } else {
+    r = q / p;
+    if (p < 0) {
+      if (r > t1) return false;
+      if (r > t0) t0 = r;
+    } else {
+      if (r < t0) return false;
+      if (r < t1) t1 = r;
+    }
+  }
+
+  // Bottom plane: y <= maxY.
+  p = dy;
+  q = maxY - y0;
+  if (p === 0) {
+    if (q < 0) return false;
+  } else {
+    r = q / p;
+    if (p < 0) {
+      if (r > t1) return false;
+      if (r > t0) t0 = r;
+    } else {
+      if (r < t0) return false;
+      if (r < t1) t1 = r;
+    }
+  }
+
+  return true;
 }
 
 /**

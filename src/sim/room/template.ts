@@ -445,11 +445,19 @@ export function compileRoomTemplate(
         height: hazard.height,
         type: hazard.type,
       });
-      // "puddle" is the one hazard type with sim behaviour today (#35) — see
-      // `RoomGeometry.puddles`. Anything else round-trips through `hazards`
-      // above for the editor and render layer, and waits for its own system.
+      // "puddle" (#35) and "trellis" (#37) are the hazard types with sim
+      // behaviour today — see `RoomGeometry.puddles`/`.sightBlocks`. Anything
+      // else round-trips through `hazards` above for the editor and render
+      // layer, and waits for its own system.
       if (hazard.type === 'puddle') {
         geometry.addPuddle(
+          cellOffsetX + hazard.x,
+          cellOffsetY + hazard.y,
+          cellOffsetX + hazard.x + hazard.width,
+          cellOffsetY + hazard.y + hazard.height,
+        );
+      } else if (hazard.type === 'trellis') {
+        geometry.addSightBlock(
           cellOffsetX + hazard.x,
           cellOffsetY + hazard.y,
           cellOffsetX + hazard.x + hazard.width,
