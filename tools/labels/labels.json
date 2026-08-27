@@ -11,11 +11,24 @@
     },
     "M3": { "color": "3272b2", "description": "Items and synergy — combinations nobody authored" },
     "M4": { "color": "4a7fb8", "description": "Promille — a decision, not a bar to ignore" },
-    "M5": { "color": "6a5fa8", "description": "Floors 1 & 2 — a coherent fifteen-minute game" },
-    "M6": { "color": "7f5aa8", "description": "Floors 3–7 — cellar to Die Bavaria" },
+    "M5": {
+      "color": "6a5fa8",
+      "description": "Floors 1 & 2 content — both chapters, start to boss"
+    },
+    "M6": {
+      "color": "7f5aa8",
+      "description": "Look and motion — no placeholders, everything animated"
+    },
     "M7": { "color": "9455a8", "description": "Meta-progression — losing makes you start again" },
-    "M8": { "color": "a85095", "description": "Polish — looks and sounds finished" },
-    "M9": { "color": "b8465f", "description": "Release — strangers are playing it" }
+    "M8": {
+      "color": "a85095",
+      "description": "Sound, menus and balance — looks and sounds finished"
+    },
+    "M9": { "color": "b8465f", "description": "Release — the two-floor game is out on itch.io" },
+    "M10": {
+      "color": "6e7781",
+      "description": "Floors 3–7 (parked) — cellar to Die Bavaria, on Steam"
+    }
   },
   "types": {
     "engine": { "color": "5b3a8f", "description": "Simulation, ECS, collision, pooling" },

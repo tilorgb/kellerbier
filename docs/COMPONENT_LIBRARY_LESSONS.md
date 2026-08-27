@@ -215,6 +215,40 @@ don't just protect its own source — `noUncheckedIndexedAccess` and strict null
 `.d.ts` a consumer's own type-checker inherits. Loosening them locally to make the library easier
 to write pushes the cost onto every consumer instead of removing it.
 
+## 12. Deferred scope is a state, not a silence — and it must not move the headline number
+
+Kellerbier's roadmap issue is generated from the live issue list on every issue event: milestones
+are labels, exit criteria live in a JSON plan file, and closing an issue ticks its box. The
+interesting part is what happened when a whole milestone was deliberately deferred — five of seven
+game floors, parked so the first two could be finished properly first.
+
+The naive options were both bad. Closing the deferred issues as "not planned" throws away the
+work already written into them and quietly rewrites history. Leaving them open and untouched makes
+the top-line progress bar read *48 of 88* when the actual near-term scope is *48 of 81* — a number
+that falls whenever anyone thinks of new work, and which therefore stops meaning anything.
+
+What worked: make **parked** a first-class state in the plan file, as a string explaining *why*
+rather than a boolean. The generator renders a parked milestone in full — every issue, its own
+bar, a ⏸️ marker and the reason — and excludes it from the headline count. Nothing is hidden and
+nothing is lost, but the one number a reader actually looks at describes what is being worked on.
+
+For a component library the shape recurs constantly: components specced but deferred to a later
+major, a11y work scheduled behind a design-system refresh, framework adapters (Vue, Svelte)
+planned but not started. All three will otherwise sit in a backlog making the project look
+permanently 60% done.
+
+Two details that made it work:
+
+- **The reason is the data.** A boolean `parked: true` invites "why is this parked?" six months
+  later, and nobody remembers. A required sentence renders directly onto the status page.
+- **It stays in the generator, not in the issues.** No labels to keep in sync, no bodies to edit,
+  no chance of an issue being parked in one place and not another. One line in the plan file moved
+  eleven issues into a parked milestone and re-rendered the whole page correctly.
+
+Same lesson as #10, applied to *status* rather than *metadata*: the shape of the roadmap is a
+reviewable file, so changing what the project is committed to is a pull request someone can
+disagree with, rather than a project-board column somebody dragged.
+
 ## What doesn't transfer, and why it's still useful to have read
 
 Most of this repo's actual performance engineering — zero-allocation frame loops, Structure-of-
