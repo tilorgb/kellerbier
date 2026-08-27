@@ -20,7 +20,8 @@
           "id": "t-guard",
           "count": 1,
           "choices": [
-            { "enemyId": "kellerassel", "minFloor": 1, "maxFloor": 2 },
+            { "enemyId": "kellerassel", "minFloor": 1, "maxFloor": 1 },
+            { "enemyId": "bauer", "minFloor": 2, "maxFloor": 2 },
             { "enemyId": "schimmelfleck", "minFloor": 3, "maxFloor": 7 }
           ]
         }
@@ -67,7 +68,8 @@
           "id": "t-guard",
           "count": 1,
           "choices": [
-            { "enemyId": "kellerassel", "minFloor": 1, "maxFloor": 2 },
+            { "enemyId": "kellerassel", "minFloor": 1, "maxFloor": 1 },
+            { "enemyId": "bauer", "minFloor": 2, "maxFloor": 2 },
             { "enemyId": "schimmelfleck", "minFloor": 3, "maxFloor": 7 }
           ]
         }

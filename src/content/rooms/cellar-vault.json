@@ -34,13 +34,17 @@
       "count": 2,
       "choices": [
         { "enemyId": "kellerassel", "minFloor": 1, "maxFloor": 2 },
+        { "enemyId": "bauer", "minFloor": 2, "maxFloor": 2 },
         { "enemyId": "bierratte", "minFloor": 3, "maxFloor": 7 }
       ]
     },
     {
       "id": "tap",
       "count": 1,
-      "choices": [{ "enemyId": "zapfhahn", "minFloor": 1, "maxFloor": 7 }]
+      "choices": [
+        { "enemyId": "zapfhahn", "minFloor": 1, "maxFloor": 1 },
+        { "enemyId": "blaskapellist", "minFloor": 2, "maxFloor": 7 }
+      ]
     }
   ],
   "pickupSpawns": [{ "x": 120, "y": 24, "type": "mass-full" }],

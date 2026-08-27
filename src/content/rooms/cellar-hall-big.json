@@ -23,7 +23,8 @@
           "id": "hall-guard",
           "count": 1,
           "choices": [
-            { "enemyId": "bierratte", "minFloor": 1, "maxFloor": 2 },
+            { "enemyId": "bierratte", "minFloor": 1, "maxFloor": 1 },
+            { "enemyId": "gockel", "minFloor": 2, "maxFloor": 2 },
             { "enemyId": "zapfhahn", "minFloor": 3, "maxFloor": 7 }
           ]
         }
@@ -54,7 +55,8 @@
           "id": "hall-guard",
           "count": 1,
           "choices": [
-            { "enemyId": "bierratte", "minFloor": 1, "maxFloor": 2 },
+            { "enemyId": "bierratte", "minFloor": 1, "maxFloor": 1 },
+            { "enemyId": "gockel", "minFloor": 2, "maxFloor": 2 },
             { "enemyId": "zapfhahn", "minFloor": 3, "maxFloor": 7 }
           ]
         }
@@ -82,7 +84,8 @@
           "id": "hall-guard",
           "count": 1,
           "choices": [
-            { "enemyId": "bierratte", "minFloor": 1, "maxFloor": 2 },
+            { "enemyId": "bierratte", "minFloor": 1, "maxFloor": 1 },
+            { "enemyId": "gockel", "minFloor": 2, "maxFloor": 2 },
             { "enemyId": "zapfhahn", "minFloor": 3, "maxFloor": 7 }
           ]
         }
@@ -117,7 +120,8 @@
           "id": "hall-guard",
           "count": 1,
           "choices": [
-            { "enemyId": "bierratte", "minFloor": 1, "maxFloor": 2 },
+            { "enemyId": "bierratte", "minFloor": 1, "maxFloor": 1 },
+            { "enemyId": "gockel", "minFloor": 2, "maxFloor": 2 },
             { "enemyId": "zapfhahn", "minFloor": 3, "maxFloor": 7 }
           ]
         }
