@@ -1,6 +1,5 @@
 import { Assets, Container, Text, type Texture } from 'pixi.js';
 import massUrl from '../../assets/sprites/mass.png';
-import cellarFloorTileUrl from '../../assets/sprites/floor-1-cellar/tiles/cellar-floor.png';
 import { ENEMY_DEFINITIONS } from '../content/enemies/index.js';
 import { FLOOR_CONFIGS, type FloorConfig } from '../content/floors/definition.js';
 import { DIRECTION_OFFSET } from '../content/rooms/definition.js';
@@ -41,6 +40,7 @@ import { PromilleHud } from '../render/promille-hud.js';
 import { WalletHud } from '../render/wallet-hud.js';
 import { Vignette } from '../render/vignette.js';
 import { GameView } from '../render/view.js';
+import { loadFloorArt } from '../render/floor-art.js';
 import { AmbienceTracker, SILENT_AMBIENCE } from './audio/ambience.js';
 import { SILENT_AUDIO, playImpactAudio } from './audio/impact.js';
 import { Bindable } from './input/bindings.js';
@@ -275,15 +275,13 @@ async function boot(): Promise<void> {
     src: massUrl,
     data: { scaleMode: 'nearest' },
   });
-  // Floor 1's real tile art (#35) — see `assets/sprites/README.md`'s
-  // "nothing under here is loaded by the game directly" for why this is a
-  // plain static import rather than going through the atlas the pipeline
-  // builds: nothing in `render/` consumes that atlas yet, so this loads the
-  // source PNG the same way `playerTexture` above already does.
-  const cellarFloorTexture = await Assets.load<Texture>({
-    src: cellarFloorTileUrl,
-    data: { scaleMode: 'nearest' },
-  });
+  // Floor 1's real tile and character art (#35) — see
+  // `assets/sprites/README.md`'s "nothing under here is loaded by the game
+  // directly" for why this goes through plain static imports rather than
+  // the atlas the pipeline builds: nothing in `render/` consumes that atlas
+  // yet, so `loadFloorArt` loads the source PNGs the same way `playerTexture`
+  // above already does.
+  const { floorTiles, enemyArt } = await loadFloorArt();
 
   // The run seed: fixed via the page's `?seed=` query param when present,
   // otherwise freshly randomised on every load — proper seeded runs are #48,
@@ -910,7 +908,8 @@ WASD move   arrows/mouse aim and fire
       // land; `PedestalView` tints both per quality.
       pedestalItem: createBlobTexture(app.renderer, 5, 0xffffff, 0xffffff),
       pedestalBeam: createSolidTexture(app.renderer),
-      floorTiles: { 1: cellarFloorTexture },
+      floorTiles,
+      enemyArt,
     };
     view = new GameView(sim, viewTextures);
     game.removeChildren();

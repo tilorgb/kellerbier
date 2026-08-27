@@ -242,5 +242,6 @@ export function buildHeadlessView(sim: GameSim): GameView {
     pedestalItem: Texture.EMPTY,
     pedestalBeam: Texture.EMPTY,
     floorTiles: {},
+    enemyArt: {},
   });
 }

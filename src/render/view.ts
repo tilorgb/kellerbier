@@ -45,6 +45,12 @@ export interface GameViewTextures {
    * today.
    */
   readonly floorTiles: Readonly<Record<number, Texture>>;
+  /**
+   * Real character art (#35), keyed by `EnemyDefinition.id`. An enemy with
+   * no entry here falls back to `entity`, the shared blob every enemy used
+   * to draw as — every enemy floors 2-7 haven't been drawn yet, today.
+   */
+  readonly enemyArt: Readonly<Record<string, Texture>>;
 }
 
 /**
@@ -123,7 +129,13 @@ export class GameView {
     this.decals = new DecalView(sim.decals, textures.decal);
     this.world.addChild(this.decals.container);
 
-    this.entities = new EntityView(sim, textures.entity, textures.entityFlash, textures.telegraph);
+    this.entities = new EntityView(
+      sim,
+      textures.entity,
+      textures.entityFlash,
+      textures.telegraph,
+      textures.enemyArt,
+    );
     this.world.addChild(this.entities.container);
 
     this.pedestals = new PedestalView(sim, textures.pedestalItem, textures.pedestalBeam);
