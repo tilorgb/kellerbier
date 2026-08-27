@@ -20,6 +20,13 @@ function aiming(aimX: number, aimY: number): InputFrame {
   return frame;
 }
 
+/** Fires rightward while also holding the move stick, independent of aim. */
+function movingWhileFiring(): InputFrame {
+  const frame = aiming(1, 0);
+  frame.moveY = quantiseAxis(-1);
+  return frame;
+}
+
 /** The left-hand training target, which sits level with the player's spawn. */
 const TARGET = 1;
 
@@ -47,13 +54,14 @@ function landOneShot(sim: GameSim): number {
 }
 
 describe('impact feel', () => {
-  it('flashes the struck body white for exactly the tuned number of ticks', () => {
+  it('flashes the struck body white, holds it while staggered, then lets it decay', () => {
     const sim = new GameSim();
     landOneShot(sim);
     expect(sim.flash.data[TARGET]).toBe(DEFAULT_IMPACT_TUNING.flashTicks);
 
-    // The freeze holds the white frame up before anything ages.
-    while (sim.frozen) {
+    // The stagger holds the white frame up before it starts ageing — see
+    // `GameSim.decayPresentation`.
+    while ((sim.hitStun.data[TARGET] ?? 0) > 0) {
       sim.step(IDLE);
       expect(sim.flash.data[TARGET]).toBe(DEFAULT_IMPACT_TUNING.flashTicks);
     }
@@ -61,51 +69,56 @@ describe('impact feel', () => {
     expect(sim.flash.data[TARGET]).toBe(0);
   });
 
-  it('freezes the simulation on a hit, and unfreezes on its own', () => {
+  it('staggers the struck body on a hit, and it recovers on its own — without freezing the game', () => {
     const sim = new GameSim();
     landOneShot(sim);
-    expect(sim.frozen).toBe(true);
-    expect(sim.hitstop).toBeGreaterThan(0);
-    expect(sim.hitstop).toBeLessThanOrEqual(DEFAULT_IMPACT_TUNING.maxHitstopTicks);
-
-    const frozenFor = sim.hitstop;
-    for (let tick = 0; tick < frozenFor; tick++) {
-      sim.step(IDLE);
-    }
+    expect(sim.hitStun.data[TARGET]).toBeGreaterThan(0);
+    expect(sim.hitStun.data[TARGET]).toBeLessThanOrEqual(DEFAULT_IMPACT_TUNING.maxHitstunTicks);
+    // The whole point of the redesign: nothing global happened.
     expect(sim.frozen).toBe(false);
+
+    const stunnedFor = sim.hitStun.data[TARGET] ?? 0;
+    for (let tick = 0; tick < stunnedFor; tick++) {
+      sim.step(IDLE);
+      expect(sim.frozen).toBe(false);
+    }
+    expect(sim.hitStun.data[TARGET]).toBe(0);
   });
 
-  it('does not move the world while frozen, and does not lose a tick either', () => {
+  it('keeps the rest of the game running while the struck body is staggered', () => {
     const sim = new GameSim();
+    // Short enough that a second shot has time to fire inside even a brief
+    // stagger window — the point being tested is that it can, at all.
+    sim.tuning.shooting.fireDelayTicks = 1;
     landOneShot(sim);
+    expect(sim.hitStun.data[TARGET]).toBeGreaterThan(0);
 
-    const tickBefore = sim.tick;
-    const xBefore = sim.positionX(sim.playerIndex);
-    const held = aiming(1, 0);
+    const yBefore = sim.positionY(sim.playerIndex);
     const shotsBefore = sim.projectiles.liveCount;
+    const input = movingWhileFiring();
 
-    let frozenTicks = 0;
-    while (sim.frozen) {
-      sim.step(held);
-      frozenTicks += 1;
+    let stunnedTicks = 0;
+    while ((sim.hitStun.data[TARGET] ?? 0) > 0) {
+      sim.step(input);
+      stunnedTicks += 1;
     }
 
-    // The clock keeps running — the fixed timestep is untouched — but nothing
-    // in the world moved and the held fire button banked nothing.
-    expect(sim.tick).toBe(tickBefore + frozenTicks);
-    expect(sim.positionX(sim.playerIndex)).toBe(xBefore);
-    expect(sim.projectiles.liveCount).toBe(shotsBefore);
+    // The player kept moving and kept firing while the struck body was still
+    // staggered — neither was possible under the old whole-sim freeze.
+    expect(stunnedTicks).toBeGreaterThan(0);
+    expect(sim.positionY(sim.playerIndex)).not.toBe(yBefore);
+    expect(sim.projectiles.liveCount).toBeGreaterThan(shotsBefore);
   });
 
-  it('caps hitstop however much damage arrives', () => {
+  it('caps hitstun however much damage arrives', () => {
     const sim = new GameSim();
-    // Survives the hit, so this measures the cap on a hit rather than the
-    // deliberately longer freeze a kill earns.
+    // Survives the hit, so this measures the cap on a hit rather than the "no
+    // stagger at all" a kill gets.
     sim.health.data[TARGET * 2] = 30_000;
     sim.tuning.shooting.shotDamage = 1000;
     landOneShot(sim);
-    expect(sim.hitstop).toBeLessThanOrEqual(DEFAULT_IMPACT_TUNING.maxHitstopTicks);
-    expect(sim.hitstop).toBeGreaterThan(0);
+    expect(sim.hitStun.data[TARGET]).toBeLessThanOrEqual(DEFAULT_IMPACT_TUNING.maxHitstunTicks);
+    expect(sim.hitStun.data[TARGET]).toBeGreaterThan(0);
   });
 
   it('knocks the struck body along the shot, and less so the heavier it is', () => {
@@ -182,11 +195,9 @@ describe('impact feel', () => {
     landOneShot(sim);
     const afterHit = sim.particles.liveCount;
 
-    // Enough damage to finish it on the next shot.
+    // Enough damage to finish it on the next shot. No stagger to wait out
+    // between the two — a struck-but-alive body stays hittable regardless.
     sim.tuning.shooting.shotDamage = TARGET_HEALTH;
-    while (sim.frozen) {
-      sim.step(IDLE);
-    }
     landOneShot(sim);
     expect(sim.particles.liveCount - afterHit).toBeGreaterThan(
       DEFAULT_IMPACT_TUNING.particlesPerHit,
@@ -210,9 +221,6 @@ describe('death', () => {
     const sim = new GameSim();
     for (let shot = 0; shot < TARGET_HEALTH - 1; shot++) {
       landOneShot(sim);
-      while (sim.frozen) {
-        sim.step(IDLE);
-      }
       expect(sim.world.isAlive(sim.world.entityAt(TARGET))).toBe(true);
     }
 
@@ -226,15 +234,18 @@ describe('death', () => {
     expect(deaths).toBe(1);
   });
 
-  it('freezes longer for a kill than for a hit', () => {
+  it('flashes brighter for a kill than for a hit, and asks for no stagger on the body it removes', () => {
     const hit = new GameSim();
     landOneShot(hit);
-    const hitFreeze = hit.hitstop;
+    const hitFlash = hit.flash.data[TARGET] ?? 0;
+    expect(hit.hitStun.data[TARGET]).toBeGreaterThan(0);
 
     const kill = new GameSim();
     kill.tuning.shooting.shotDamage = TARGET_HEALTH;
     landOneShot(kill);
-    expect(kill.hitstop).toBeGreaterThan(hitFreeze);
+    expect(kill.flash.data[TARGET]).toBeGreaterThan(hitFlash);
+    // Nothing to stagger — the body is on its way out of the world.
+    expect(kill.hitStun.data[TARGET]).toBe(0);
   });
 
   it('leaves a splash on the floor that stays there', () => {
@@ -254,9 +265,6 @@ describe('death', () => {
     const sim = new GameSim();
     sim.tuning.shooting.shotDamage = TARGET_HEALTH;
     landOneShot(sim);
-    while (sim.frozen) {
-      sim.step(IDLE);
-    }
     sim.world.flush();
     const afterDeath = sim.world.count;
 

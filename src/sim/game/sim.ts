@@ -437,6 +437,23 @@ export class GameSim {
    */
   readonly flash: Component<Uint8Array>;
   /**
+   * Ticks left of a body's own hit-stagger — it holds still, mid-knockback,
+   * unable to act.
+   *
+   * Deliberately *not* the same mechanism as `requestHitstop`/`hitstopTicks`:
+   * that one halts the whole simulation and exists for the rare, singular
+   * beat of the player's own death cinematic (`app/main.ts`). Routing every
+   * ordinary hit through it does not scale — a burn tick landing on several
+   * bodies at once, or just a held trigger against a small cluster, syncs
+   * into a global freeze several times a second (measured: ~12% of ticks
+   * frozen against an 8-enemy cluster at the base fire rate, worse with any
+   * fire-rate item). A hit reads as a hit without stopping the world for it:
+   * this pauses only the body that was struck — `stepEnemies` skips its own
+   * decision-making while it counts down — so the flinch is local and the
+   * rest of the room keeps moving.
+   */
+  readonly hitStun: Component<Uint8Array>;
+  /**
    * Which enemy definition, which of its states, how long it has been in it,
    * and the flags a transition reads — hit, and blocked by a wall.
    *
@@ -820,6 +837,7 @@ export class GameSim {
     this.collision = this.world.defineComponent('collision', Uint16Array, 2);
     this.health = this.world.defineComponent('health', Int16Array, 2);
     this.flash = this.world.defineComponent('flash', Uint8Array, 1);
+    this.hitStun = this.world.defineComponent('hitStun', Uint8Array, 1);
     this.contactDamage = this.world.defineComponent('contactDamage', Int16Array, 1);
     this.enemy = this.world.defineComponent('enemy', Int16Array, ENEMY_STRIDE);
     this.enemyMotion = this.world.defineComponent('enemyMotion', Float32Array, ENEMY_MOTION_STRIDE);
@@ -2784,6 +2802,19 @@ export class GameSim {
   }
 
   /**
+   * Staggers one body for up to `ticks` — see `hitStun`'s doc comment for why
+   * this exists instead of another `requestHitstop` call. The longest request
+   * wins, same reasoning as `requestHitstop`: a body already reeling from one
+   * hit does not get a second, shorter stagger layered under it.
+   */
+  requestHitStun(index: number, ticks: number): void {
+    const current = this.hitStun.data[index] ?? 0;
+    if (ticks > current) {
+      this.hitStun.data[index] = ticks;
+    }
+  }
+
+  /**
    * Adds directional screenshake, capped hard.
    *
    * The cap is not a suggestion. Shake that scales without a ceiling turns the
@@ -2846,7 +2877,7 @@ export class GameSim {
 
   /**
    * Kills an enemy immediately through the same chokepoint a landed shot
-   * uses — flash, hitstop, knockback, shake, foam, its own loot and, notably,
+   * uses — flash, knockback, shake, foam, its own loot and, notably,
    * whatever `splitOnDeath` its current state declares — rather than a
    * second, poorer "just remove it" path.
    *
@@ -2977,15 +3008,24 @@ export class GameSim {
   private decayPresentation(): void {
     const flash = this.flash.data;
     const spawnBounce = this.spawnBounce.data;
+    const hitStun = this.hitStun.data;
     const highWater = this.world.highWater;
     for (let index = 0; index < highWater; index++) {
+      // Read before either ages this tick: a body still staggered holds its
+      // white flash right up to the moment it recovers, the local echo of
+      // what a global freeze used to give every flash for free.
+      const stun = hitStun[index] ?? 0;
+
       const ticks = flash[index] ?? 0;
-      if (ticks > 0) {
+      if (ticks > 0 && stun === 0) {
         flash[index] = ticks - 1;
       }
       const bounce = spawnBounce[index] ?? 0;
       if (bounce > 0) {
         spawnBounce[index] = bounce - 1;
+      }
+      if (stun > 0) {
+        hitStun[index] = stun - 1;
       }
     }
 

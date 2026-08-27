@@ -87,6 +87,12 @@ export function stepEnemies(sim: GameSim): void {
     if (((masks[index] ?? 0) & required) !== required) {
       continue;
     }
+    // Staggered by a hit landing (`GameSim.hitStun`, `systems/impact.ts`):
+    // holds still, mid-knockback, unable to decide anything this tick. Local
+    // to this one body — every other enemy in the loop still acts normally.
+    if ((sim.hitStun.data[index] ?? 0) > 0) {
+      continue;
+    }
 
     const base = index * ENEMY_STRIDE;
     const compiled = registry.at(enemy[base] ?? 0);

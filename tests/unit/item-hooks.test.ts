@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { EventKind } from '../../src/sim/events/queue.js';
 import { GameSim, TARGET_HEALTH } from '../../src/sim/game/sim.js';
 import type { ItemDefinition } from '../../src/sim/item/definition.js';
 import { ItemInventory } from '../../src/sim/item/inventory.js';
@@ -52,15 +53,25 @@ function baseItem(id: string, overrides: Partial<ItemDefinition> = {}): ItemDefi
   };
 }
 
+/** Hit events reported by the step that just ran. Mirrors `tests/unit/impact.test.ts`. */
+function hitsThisTick(sim: GameSim): number {
+  let hits = 0;
+  sim.events.forEach((slot) => {
+    if (sim.events.kind[slot] === EventKind.ProjectileHit) {
+      hits += 1;
+    }
+  });
+  return hits;
+}
+
 /** Fires one shot leftward and runs until it lands. Mirrors `tests/unit/impact.test.ts`. */
 function landOneShot(sim: GameSim): void {
   sim.step(aiming(-1, 0));
   for (let tick = 0; tick < 90; tick++) {
     sim.step(IDLE);
-    if (sim.frozen) {
+    if (hitsThisTick(sim) > 0) {
       // `applyDamageAt` (and the item dispatch inside it) already ran
-      // synchronously on the tick that detected the hit — hitstop starting
-      // is the observable sign the hit landed.
+      // synchronously on the tick that detected the hit.
       return;
     }
   }

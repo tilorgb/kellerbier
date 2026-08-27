@@ -91,12 +91,11 @@ export interface StressScene {
 /**
  * Builds the scene.
  *
- * Hitstop is turned off in it, and that is the one deliberate distortion in the
- * measurement. Hitstop is a *stall*: `GameSim.step` returns immediately while
- * one is running. A scene with hundreds of hits a tick would spend most of its
- * ticks frozen, and the median of a window mostly made of skipped ticks is the
- * cost of an early return rather than the cost of a frame. Everything hitstop
- * would have delayed is still measured; only the freeze is removed.
+ * No hitstop distortion to correct for here: a hit's reaction (`GameSim.hitStun`)
+ * is local to the body that was struck rather than a stall of `GameSim.step`
+ * itself, so a scene with hundreds of hits a tick still measures a real frame —
+ * see `hitStun`'s doc comment on `GameSim` for why combat no longer goes
+ * through the whole-simulation freeze at all.
  */
 export function buildStressScene(): StressScene {
   const sim = new GameSim({
@@ -107,10 +106,6 @@ export function buildStressScene(): StressScene {
     room: new RoomGeometry(0, 0, ARENA_WIDTH, ARENA_HEIGHT),
     population: 'empty',
   });
-  sim.tuning.impact.hitstopTicks = 0;
-  sim.tuning.impact.hitstopPerDamage = 0;
-  sim.tuning.impact.maxHitstopTicks = 0;
-  sim.tuning.impact.deathHitstopTicks = 0;
 
   const random = createStreamRng(SCENE_SEED, RngStream.Enemies);
 

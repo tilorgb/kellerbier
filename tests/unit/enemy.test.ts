@@ -144,8 +144,9 @@ describe('authored behaviour', () => {
 
     landShot(sim);
     // The hit is read on the tick after it lands — impact runs after the enemy
-    // system — and the hitstop the hit asked for sits in between, during which
-    // nothing decides anything. A handful of ticks covers both.
+    // system — and the local stagger the hit asked for (`GameSim.hitStun`)
+    // sits in between, during which this body decides nothing. A handful of
+    // ticks covers both.
     for (let tick = 0; tick < 10 && stateName(sim, enemy) !== 'curl'; tick++) {
       sim.step(IDLE);
     }
@@ -650,7 +651,7 @@ describe('enemies against the player', () => {
     // what a separation applied to one of the pair and deferred on the other
     // produces the moment the other one walks.
     //
-    // The budget is 0.75, not the tighter number this used to hold to:
+    // The budget is 1.1, not the tighter number this used to hold to:
     // `population: 'enemies'` scatters a dozen dev-convenience beers
     // (`spawnEnemyRoom`) the circling path below walks over, and Promille's
     // own movement drift (only above the Beduselt threshold) had been
@@ -659,9 +660,18 @@ describe('enemies against the player', () => {
     // fully resolve every tick. Slower Promille pacing means this room's
     // beers no longer reliably reach that threshold, so the drift-free,
     // full-precision case — a sober player circling as tight as input allows
-    // — is what this test now actually measures, and its real worst case is
-    // a few tenths of a pixel, not zero.
-    expect(worst).toBeLessThan(0.75);
+    // — is what this test measured for a while, at a few tenths of a pixel.
+    //
+    // #23 widened it again: touching a hazard used to trigger a whole-simulation
+    // freeze (`requestHitstop`, from `applyContact`), which incidentally gave
+    // separation a few free ticks of settling time — with the player's own
+    // steering paused too — every time contact damage landed on this circling
+    // path. That freeze is gone (player-as-victim gets i-frames, knockback,
+    // flash and shake instead — see `GameSim.hitStun`'s doc comment), so the
+    // player's steering never pauses, and the real worst case with nothing
+    // pausing it is close to a pixel rather than a few tenths of one. Still a
+    // fraction of either body's radius, not an enemy settling inside the player.
+    expect(worst).toBeLessThan(1.1);
   });
 
   it('never removes the player from the world, whatever kills them', () => {

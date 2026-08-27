@@ -44,11 +44,6 @@ describe('projectile tag performance (#27 acceptance criteria)', () => {
       capacity: 8192,
       projectileCapacity: PROJECTILE_COUNT + 1000,
     });
-    sim.tuning.impact.hitstopTicks = 0;
-    sim.tuning.impact.hitstopPerDamage = 0;
-    sim.tuning.impact.maxHitstopTicks = 0;
-    sim.tuning.impact.deathHitstopTicks = 0;
-
     for (let enemy = 0; enemy < ENEMY_COUNT; enemy++) {
       const x = 40 + ((enemy * 53) % 560);
       const y = 40 + ((enemy * 37) % 280);

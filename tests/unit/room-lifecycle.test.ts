@@ -382,7 +382,7 @@ describe('Die Große Kellerassel (#36)', () => {
     // before the body would otherwise die of the hit.
     applyDamageAt(sim, boss, fullHealth / 2, sim.positionX(boss), sim.positionY(boss), 0, 0, -1);
     // Past the room's own warmup (`ROOM_WARMUP_TICKS`, during which nothing
-    // decides anything) plus the hitstop the hit itself asked for.
+    // decides anything) plus the local stagger the hit itself asked for.
     for (let tick = 0; tick < 60; tick++) {
       sim.step(idle());
     }
@@ -403,7 +403,7 @@ describe('Die Große Kellerassel (#36)', () => {
 
     applyDamageAt(sim, boss, fullHealth / 2, sim.positionX(boss), sim.positionY(boss), 0, 0, -1);
     // Past the room's own warmup (`ROOM_WARMUP_TICKS`, during which nothing
-    // decides anything) plus the hitstop the hit itself asked for.
+    // decides anything) plus the local stagger the hit itself asked for.
     for (let tick = 0; tick < 60; tick++) {
       sim.step(idle());
     }

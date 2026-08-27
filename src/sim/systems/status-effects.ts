@@ -73,7 +73,7 @@ export function stepStatusEffects(sim: GameSim): void {
  *
  * Guarded on current health rather than only on `killed`: burning and poison
  * can both come due on the same tick, and without this a body already put to
- * zero by the first would take a second `applyDamageAt` — flash, hitstop,
+ * zero by the first would take a second `applyDamageAt` — flash, stagger,
  * knockback and all — and a second `Death`/kill dispatch, from the second.
  * `cause` is -1: a status tick has no projectile behind it to attribute to.
  */
