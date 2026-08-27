@@ -38,6 +38,17 @@ driving) and look at the result, the same standard `docs/GAME_DESIGN.md` and thi
 review culture already hold gameplay work to. It's a game: a feature nobody can experience isn't
 finished, no matter how thoroughly it's unit-tested.
 
+**"Reachable" means through the real progression, not just through a direct load.** A
+`window.__kellerbier.sim.loadRoom(...)`/`sim.step` console call proves the content *renders*, not
+that a player *gets there*. A new floor is the concrete recurring case: its tileset, rooms and
+roster can be fully wired and still be unreachable in `npm run dev`, because `app/main.ts`'s
+`advanceFloor` — the dev-only "next floor" loop off a cleared boss room — only advances up to
+`HIGHEST_PLAYABLE_FLOOR`. Adding floor N's content means bumping that constant in the same change,
+and then actually walking (or scripting) the real clear-boss-room → next-floor-exit path to confirm
+it lands there — not just confirming the new tiles/enemies render when loaded directly. The general
+version of this for anything else gated behind its own unlock/progression logic: check that the
+gate itself was updated, not only that the content behind it works once reached.
+
 ## New pixel art needs sign-off before it's committed
 
 Whenever a change adds or replaces pixel art — a tile, a character sprite, a projectile, a boss,
