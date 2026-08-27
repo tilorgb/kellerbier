@@ -145,4 +145,91 @@ describe('room templates', () => {
       'bierratte',
     ]);
   });
+
+  it('defaults to the first choice, but lets a caller pick between several simultaneously-eligible ones (#156)', () => {
+    // Two choices both eligible for the same floor, on a `count: 1` group —
+    // `dorf-marktplatz.json`'s own "market" shape, authored as "bauer or
+    // gockel here" but, before this parameter existed, only ever able to
+    // produce "bauer": `index % resolved.length` never reaches index 1 when
+    // `count` is 1, so the second choice was dead weight, not a real
+    // alternative.
+    const template = {
+      ...cellarCrossroads,
+      spawnGroups: [
+        {
+          id: 'melee',
+          count: 1,
+          choices: [
+            { enemyId: 'kellerassel', minFloor: 1, maxFloor: 7 },
+            { enemyId: 'bierratte', minFloor: 1, maxFloor: 7 },
+          ],
+        },
+      ],
+    };
+
+    // No callback: exactly the old behaviour, so every existing caller
+    // (this file's own tests included) stays exactly as deterministic.
+    expect(compileRoomTemplate(template, 1, 'two-choice.json', ENEMY_DEFINITIONS).enemyIds).toEqual(
+      ['kellerassel', 'kellerassel'],
+    );
+
+    // A callback that always picks the last option reaches the choice the
+    // default path never could.
+    expect(
+      compileRoomTemplate(
+        template,
+        1,
+        'two-choice.json',
+        ENEMY_DEFINITIONS,
+        undefined,
+        (count) => count - 1,
+      ).enemyIds,
+    ).toEqual(['bierratte', 'bierratte']);
+  });
+
+  it('never consults the picker for a group with only one eligible choice, or a cluster bigger than one', () => {
+    let calls = 0;
+    const countingPicker = (count: number): number => {
+      calls += 1;
+      return count - 1;
+    };
+
+    // `cellarCrossroads`'s own "melee" group: one choice, count 1 — nothing
+    // to pick between, so the picker must never even be called.
+    compileRoomTemplate(
+      cellarCrossroads,
+      1,
+      'single-choice.json',
+      ENEMY_DEFINITIONS,
+      undefined,
+      countingPicker,
+    );
+    expect(calls).toBe(0);
+
+    // A cluster (`count > 1`) keeps its own `index % resolved.length` mix —
+    // the picker is for a single-body group's dead alternative, not this.
+    const clustered = {
+      ...cellarCrossroads,
+      spawnGroups: [
+        {
+          id: 'melee',
+          count: 2,
+          choices: [
+            { enemyId: 'kellerassel', minFloor: 1, maxFloor: 7 },
+            { enemyId: 'bierratte', minFloor: 1, maxFloor: 7 },
+          ],
+        },
+      ],
+    };
+    const compiled = compileRoomTemplate(
+      clustered,
+      1,
+      'clustered.json',
+      ENEMY_DEFINITIONS,
+      undefined,
+      countingPicker,
+    );
+    expect(calls).toBe(0);
+    expect(compiled.enemyIds).toEqual(['kellerassel', 'bierratte', 'kellerassel', 'bierratte']);
+  });
 });

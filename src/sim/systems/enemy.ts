@@ -1,6 +1,11 @@
 import { World } from '../ecs/world.js';
 import type { EnemyBehaviour } from '../enemy/definition.js';
-import { type CompiledState, type FiringBehaviour, TransitionTrigger } from '../enemy/registry.js';
+import {
+  type CompiledDetonation,
+  type CompiledState,
+  type FiringBehaviour,
+  TransitionTrigger,
+} from '../enemy/registry.js';
 import { EventKind } from '../events/queue.js';
 import type { GameSim } from '../game/sim.js';
 import { clamp, vectorLength } from '../math.js';
@@ -117,6 +122,12 @@ export function stepEnemies(sim: GameSim): void {
         stateIndex = next;
         state = entered;
         ticks = 0;
+        if (entered.capturesLobTarget) {
+          captureLobTarget(sim, index);
+        }
+        if (entered.detonate !== null) {
+          detonateLobbedBomb(sim, index, entered.detonate);
+        }
       }
     }
 
@@ -437,6 +448,35 @@ function fireOne(sim: GameSim, index: number, angle: number, shot: FiringBehavio
     Math.max(1, Math.round(shot.lifetimeTicks)),
     ProjectileTeam.Enemy,
   );
+}
+
+/**
+ * Remembers the player's current position in the body's own `enemyMotion`
+ * heading fields (#156, Böllerschmeißer) — safe to reuse for an absolute
+ * position rather than a direction, since a state that captures a lob
+ * target moves with `pause` and `applyMovement`'s `'pause'` case never
+ * touches `motion`.
+ */
+function captureLobTarget(sim: GameSim, index: number): void {
+  const motion = sim.enemyMotion.data;
+  const motionBase = index * ENEMY_MOTION_STRIDE;
+  motion[motionBase] = sim.positionX(sim.playerIndex);
+  motion[motionBase + 1] = sim.positionY(sim.playerIndex);
+}
+
+/**
+ * The other half of `captureLobTarget`: area damage at the position an
+ * earlier state in this same body's life stored, through
+ * `GameSim.applySplashDamage` — the same chokepoint the player's own
+ * Böllerschmeißer item detonates through. `excludeIndex` is the thrower
+ * itself, so a lobbed bomb never catches its own thrower in its blast.
+ */
+function detonateLobbedBomb(sim: GameSim, index: number, detonation: CompiledDetonation): void {
+  const motion = sim.enemyMotion.data;
+  const motionBase = index * ENEMY_MOTION_STRIDE;
+  const x = motion[motionBase] ?? sim.positionX(index);
+  const y = motion[motionBase + 1] ?? sim.positionY(index);
+  sim.applySplashDamage(x, y, detonation.radius, detonation.damage, index);
 }
 
 /**

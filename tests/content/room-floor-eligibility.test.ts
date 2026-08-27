@@ -4,6 +4,8 @@ import { FLOOR_CONFIGS } from '../../src/content/floors/definition.js';
 import { ROOM_TEMPLATES } from '../../src/content/rooms/index.js';
 import type { RoomShape } from '../../src/content/rooms/definition.js';
 import { compileRoomTemplate, validateRoomTemplate } from '../../src/sim/room/template.js';
+import { generateFloor } from '../../src/sim/room/floor-plan.js';
+import { Rng } from '../../src/sim/rng/rng.js';
 
 /**
  * A placement with the right cell *count* for each shape, real footprints
@@ -83,4 +85,67 @@ describe('every room template compiles on every floor it is tagged for', () => {
       });
     }
   }
+});
+
+/**
+ * #156's own acceptance criteria, checked directly against content rather
+ * than by playing it: "no single enemy appears in every room of its floor"
+ * and "two consecutive runs of the same floor present visibly different
+ * encounters."
+ */
+describe('encounter diversity across a floor (#156)', () => {
+  const templates = ROOM_TEMPLATES.map((room, index) =>
+    validateRoomTemplate(room, `room[${String(index)}]`, ENEMY_DEFINITIONS),
+  );
+
+  for (const config of FLOOR_CONFIGS) {
+    const ordinaryRooms = templates.filter(
+      (template) =>
+        template.metadata.floorTags.includes(config.floorTag) &&
+        template.metadata.specialRole === undefined,
+    );
+    if (ordinaryRooms.length === 0) {
+      // Floors 3-7 have no authored content yet (#39-#43, parked in M10) —
+      // nothing to assert here until they unpark.
+      continue;
+    }
+
+    it(`no enemy is in every ordinary room template on floor ${String(config.floor)}`, () => {
+      const rosters = ordinaryRooms.map((template) => {
+        const placement = PLACEMENT_BY_SHAPE[template.metadata.shape];
+        const compiled = compileRoomTemplate(
+          template,
+          config.floor,
+          template.id,
+          ENEMY_DEFINITIONS,
+          placement,
+        );
+        return new Set(compiled.enemyIds);
+      });
+
+      const everyEnemyIdSeen = new Set(rosters.flatMap((roster) => [...roster]));
+      for (const enemyId of everyEnemyIdSeen) {
+        const inEveryRoom = rosters.every((roster) => roster.has(enemyId));
+        expect(
+          inEveryRoom,
+          `"${enemyId}" appears in every ordinary room on floor ${String(config.floor)}`,
+        ).toBe(false);
+      }
+    });
+  }
+
+  it('generates a different room sequence for two different seeds, on Floor 2', () => {
+    const config = FLOOR_CONFIGS.find((entry) => entry.floor === 2);
+    if (config === undefined) throw new Error('missing Floor 2 config');
+
+    const planA = generateFloor(new Rng(1), config, templates);
+    const planB = generateFloor(new Rng(2), config, templates);
+    const sequenceA = planA.rooms.map((room) => room.templateId);
+    const sequenceB = planB.rooms.map((room) => room.templateId);
+
+    // Not merely a different room *count* or *order* — a genuinely
+    // different multiset, the same "did the roster actually change"
+    // question a player asks between two runs.
+    expect([...sequenceA].sort()).not.toEqual([...sequenceB].sort());
+  });
 });

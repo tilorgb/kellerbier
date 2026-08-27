@@ -62,6 +62,12 @@ export interface CompiledSplit {
 export type FiringBehaviour =
   FireAtPlayerBehaviour | FireBurstBehaviour | FireSpreadBehaviour | FireOnBeatBehaviour;
 
+/** A `detonateLobbedBomb` resolved and validated once, at compile time. */
+export interface CompiledDetonation {
+  readonly damage: number;
+  readonly radius: number;
+}
+
 export interface CompiledState {
   readonly name: string;
   /** Exactly one, guaranteed by validation. */
@@ -71,6 +77,10 @@ export interface CompiledState {
   readonly telegraphTicks: number;
   /** Ticks of invulnerability from the moment the state begins. Zero for none. */
   readonly invulnerableTicks: number;
+  /** True for a state whose entry stores the player's position for a later `detonateLobbedBomb` to read (Böllerschmeißer, #156). */
+  readonly capturesLobTarget: boolean;
+  /** Set for a state whose entry deals area damage at an earlier `lobTarget`'s captured position. `null` for every other state. */
+  readonly detonate: CompiledDetonation | null;
   readonly splits: readonly CompiledSplit[];
   readonly transitions: readonly CompiledTransition[];
 }
@@ -199,6 +209,8 @@ export class EnemyRegistry {
     const splits: CompiledSplit[] = [];
     let telegraphTicks = 0;
     let invulnerableTicks = 0;
+    let capturesLobTarget = false;
+    let detonate: CompiledDetonation | null = null;
 
     for (const behaviour of state.behaviours) {
       const name: BehaviourName = behaviour.behaviour;
@@ -225,6 +237,13 @@ export class EnemyRegistry {
           telegraphTicks = Math.max(telegraphTicks, behaviour.ticks);
         } else if (behaviour.behaviour === 'becomeInvulnerable') {
           invulnerableTicks = Math.max(invulnerableTicks, behaviour.ticks);
+        } else if (behaviour.behaviour === 'lobTarget') {
+          capturesLobTarget = true;
+        } else if (behaviour.behaviour === 'detonateLobbedBomb') {
+          if (!(behaviour.damage > 0) || !(behaviour.radius > 0)) {
+            throw new Error(`${where}: "detonateLobbedBomb" needs damage and radius above zero`);
+          }
+          detonate = { damage: behaviour.damage, radius: behaviour.radius };
         }
         continue;
       }
@@ -299,6 +318,8 @@ export class EnemyRegistry {
       firing,
       telegraphTicks,
       invulnerableTicks,
+      capturesLobTarget,
+      detonate,
       splits,
       transitions,
     };
