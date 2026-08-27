@@ -965,3 +965,39 @@ pausing the game for a beat) — combat is simply the one thing that no longer g
 (`stepEnemies` is the only one that does today) rather than assuming a hit implies the whole tick
 did nothing; a system that wants "the whole game paused for a beat" for a rare, singular reason
 still reaches for `requestHitstop`, but combat is never that reason again.
+
+## 24. Pixel art is authored in a custom in-browser tool, not an off-the-shelf editor plus a lint pass
+
+**Decided:** M6, issue #108, weighed against #34's art pipeline and #24's "build the tool before
+the content" precedent (room editor).
+
+#108 posed this as a real build-vs-buy question: Aseprite or Piskel already draw pixels well, and
+palette/size/legibility enforcement could instead be a lint pass run over files authored anywhere.
+That would have been the right call if enforcement were the expensive part. It is not, because #34
+already built it — `tools/art/spec.mjs`, `palette.mjs`, `validate.mjs` and `contrast.mjs` are pure
+functions with no filesystem or Node dependency, written expressly so a build step and a test
+suite could both call them without duplicating logic. A custom tool does not re-implement
+palette/size/legibility checking; it imports those same four modules straight into the browser
+bundle and calls them live, on every keystroke, instead of after a save. That turns #34's
+after-the-fact build failure into something stronger: a canvas that is *fixed* at each category's
+maximum size (`CATEGORY_SPECS`), so an out-of-spec sprite cannot be drawn in the first place rather
+than merely rejected, and a palette swatch strip sourced from `allowedColorsFor(bucketId)` that is
+the *only* colour a pen tool can lay down — there is no off-palette pixel to lint for after the
+fact, because the picker never offers one. A lint pass over files from an arbitrary editor cannot
+make either guarantee; it can only catch the mistake later, the same way #34 already does for
+anything authored outside this tool.
+
+The precedent from #24 (room editor) generalises directly: this project already treats "the tool
+that authors the content" as its own build-before-content deliverable, with a working pattern for
+it — a small Vite dev-server plugin exposing one save endpoint, a browser SPA next to it, dev-only
+by construction because `configureServer` middleware never runs under a production build. The
+pixel-art tool (`pixel-editor.html`, `src/pixel-editor/`, `tools/pixel-editor/server.mjs`) is a
+second instance of exactly that shape, not a new one.
+
+**Constrains:** the tool's client bundle may only import the dependency-free modules under
+`tools/art/` (`spec.mjs`, `palette.mjs`, `validate.mjs`, `contrast.mjs`); `png.mjs`
+(a `pngjs`/Node dependency) and file-writing stay server-side, in the dev-plugin's save endpoint,
+the same split `build.mjs` already draws between decoding and validation. Adding a sprite category
+or changing a floor's palette means editing `tools/art/spec.mjs`/`palette.mjs` once, and both the
+build pipeline and the authoring tool pick it up — there is deliberately nowhere else those
+numbers are allowed to live.

@@ -1,6 +1,7 @@
 import { fileURLToPath, URL } from 'node:url';
 import { defineConfig } from 'vitest/config';
 import { artPipelineDevPlugin } from './tools/art/dev-plugin.mjs';
+import { pixelEditorServerPlugin } from './tools/pixel-editor/server.mjs';
 import { roomEditorServerPlugin } from './tools/room-editor/server.mjs';
 
 const resolvePath = (relative: string): string => fileURLToPath(new URL(relative, import.meta.url));
@@ -10,8 +11,9 @@ export default defineConfig({
   // and from any static host served out of a subdirectory.
   base: './',
   // Dev-only: `configureServer` middleware never runs under `vite build`, so
-  // the room editor's save endpoint (#24) never reaches a production bundle.
-  plugins: [artPipelineDevPlugin(), roomEditorServerPlugin()],
+  // the room editor's (#24) and pixel editor's (#108) save endpoints never
+  // reach a production bundle.
+  plugins: [artPipelineDevPlugin(), roomEditorServerPlugin(), pixelEditorServerPlugin()],
   resolve: {
     alias: {
       '@sim': resolvePath('./src/sim'),
