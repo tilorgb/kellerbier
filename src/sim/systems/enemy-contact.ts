@@ -1,7 +1,4 @@
-import { circlesOverlap } from '../collision/circle-circle.js';
 import type { GameSim } from '../game/sim.js';
-import { vectorLength } from '../math.js';
-import { moveClear } from './contact.js';
 
 /**
  * Enemies against each other.
@@ -13,6 +10,19 @@ import { moveClear } from './contact.js';
  * point but nothing has ever stopped them drifting back onto one another
  * since. Separation is shared out by mass, same as the player's own: a Mini
  * gets shouldered out of a Mid's way, not the other way round.
+ *
+ * Deliberately not `contact.ts`'s own `moveClear` (a wall-aware move with a
+ * corner-slide fallback and a "whatever a wall refuses, the other body owes
+ * instead" redistribution) — that shape is worth it for the player, who has
+ * to feel exactly right against a wall of enemies, but between two enemies
+ * it is a lot of extra cross-function-call arithmetic to spend on a body
+ * nobody is looking that closely at. A blocked half-step here just tries
+ * again next tick, the same pair still being overlapped — which it will be,
+ * since nothing here removed the reason they overlapped in the first place.
+ * The frame-time benchmark's stress scene (200 enemies, all chasing the same
+ * point) is exactly the case this matters for: every arithmetic op saved
+ * here is saved as many times as there are overlapping pairs a tick, and at
+ * that population it is a lot of pairs.
  *
  * Runs after `stepContacts` so it reuses the broadphase `stepCollision`
  * already built this tick — nothing between them moves anything.
@@ -87,43 +97,55 @@ function resolveAgainstCurrent(other: number): void {
   const y = current[CURRENT_Y] ?? 0;
   const otherX = sim.positionX(other);
   const otherY = sim.positionY(other);
-  if (!circlesOverlap(x, y, radius, otherX, otherY, otherRadius)) {
+
+  const deltaX = x - otherX;
+  const deltaY = y - otherY;
+  const reach = radius + otherRadius;
+  // Squared, so the overlap test itself never calls into `Math.sqrt` — only
+  // an actual overlap (rare against 200 bodies spread over a real room, the
+  // common case at the benchmark's stress population too) pays for one.
+  const distanceSquared = deltaX * deltaX + deltaY * deltaY;
+  if (distanceSquared >= reach * reach) {
     return;
   }
 
-  const reach = radius + otherRadius;
-  let awayX = x - otherX;
-  let awayY = y - otherY;
-  const distance = vectorLength(awayX, awayY);
+  const distance = Math.sqrt(distanceSquared);
+  let awayX: number;
+  let awayY: number;
   if (distance === 0) {
     // Exactly concentric — the fresh-split case. Any direction will do; a
     // fixed one keeps this deterministic.
     awayX = 1;
     awayY = 0;
   } else {
-    awayX /= distance;
-    awayY /= distance;
+    awayX = deltaX / distance;
+    awayY = deltaY / distance;
   }
   const overlap = reach - distance;
 
+  // Split by mass: the lighter body gives way, same as the player's own.
   const mass = current[CURRENT_MASS] ?? 0.01;
   const otherMass = Math.max(0.01, body[other * 2 + 1] ?? 1);
   const share = otherMass / (mass + otherMass);
 
-  const wanted = overlap * share;
-  let owed = wanted - moveClear(sim, index, radius, x, y, awayX, awayY, wanted);
-  current[CURRENT_X] = sim.positionX(index);
-  current[CURRENT_Y] = sim.positionY(index);
+  const wantedX = x + awayX * overlap * share;
+  const wantedY = y + awayY * overlap * share;
+  if (sim.room.isClear(wantedX, wantedY, radius)) {
+    const transform = sim.transform.data;
+    const base = index * 4;
+    transform[base] = wantedX;
+    transform[base + 1] = wantedY;
+    current[CURRENT_X] = wantedX;
+    current[CURRENT_Y] = wantedY;
+  }
 
-  // Whatever a wall would not let this one take, the other owes instead.
-  const otherWanted = overlap - wanted + owed;
-  owed =
-    otherWanted - moveClear(sim, other, otherRadius, otherX, otherY, -awayX, -awayY, otherWanted);
-
-  // And if it is against a wall too, back to this one, same as `contact.ts`.
-  if (owed > 0) {
-    moveClear(sim, index, radius, current[CURRENT_X], current[CURRENT_Y], awayX, awayY, owed);
-    current[CURRENT_X] = sim.positionX(index);
-    current[CURRENT_Y] = sim.positionY(index);
+  const otherShare = 1 - share;
+  const otherWantedX = otherX - awayX * overlap * otherShare;
+  const otherWantedY = otherY - awayY * overlap * otherShare;
+  if (sim.room.isClear(otherWantedX, otherWantedY, otherRadius)) {
+    const transform = sim.transform.data;
+    const otherBase = other * 4;
+    transform[otherBase] = otherWantedX;
+    transform[otherBase + 1] = otherWantedY;
   }
 }
