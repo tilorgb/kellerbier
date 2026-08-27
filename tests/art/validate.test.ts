@@ -1,0 +1,135 @@
+import { describe, expect, it } from 'vitest';
+import {
+  brightestOpaqueColor,
+  findOffPalettePixel,
+  validateAnimation,
+  validateSpriteSize,
+} from '../../tools/art/validate.mjs';
+import { relativeLuminance } from '../../tools/art/contrast.mjs';
+
+function pixel(r: number, g: number, b: number, a: number): [number, number, number, number] {
+  return [r, g, b, a];
+}
+
+function buildPixels(
+  width: number,
+  height: number,
+  colorAt: (x: number, y: number) => [number, number, number, number],
+): Buffer {
+  const pixels = Buffer.alloc(width * height * 4);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const index = (y * width + x) * 4;
+      const [r, g, b, a] = colorAt(x, y);
+      pixels[index] = r;
+      pixels[index + 1] = g;
+      pixels[index + 2] = b;
+      pixels[index + 3] = a;
+    }
+  }
+  return pixels;
+}
+
+describe('validateSpriteSize', () => {
+  it('accepts an exact 16x16 tile', () => {
+    expect(validateSpriteSize('tile', 16, 16)).toBeNull();
+  });
+
+  it('rejects a tile of any other size', () => {
+    expect(validateSpriteSize('tile', 32, 32)).toMatch(/outside the "tile" spec/);
+    expect(validateSpriteSize('tile', 17, 16)).not.toBeNull();
+  });
+
+  it('accepts a 12x16 character and rejects a short one', () => {
+    expect(validateSpriteSize('character', 12, 16)).toBeNull();
+    expect(validateSpriteSize('character', 12, 10)).not.toBeNull();
+  });
+
+  it('accepts a boss up to 48x48 and rejects an oversized one', () => {
+    expect(validateSpriteSize('boss', 48, 48)).toBeNull();
+    expect(validateSpriteSize('boss', 49, 40)).not.toBeNull();
+  });
+
+  it('divides a strip by its frame count before checking each frame', () => {
+    // 4 frames of a 12x16 character strip.
+    expect(validateSpriteSize('character', 48, 16, 4)).toBeNull();
+    // Same total width, wrong frame count: each "frame" would be 24 wide.
+    expect(validateSpriteSize('character', 48, 16, 2)).toMatch(/frame size 24x16/);
+  });
+
+  it('rejects a strip whose width does not divide evenly', () => {
+    expect(validateSpriteSize('character', 50, 16, 4)).toMatch(/does not divide evenly/);
+  });
+
+  it('rejects an unknown category', () => {
+    expect(validateSpriteSize('vehicle', 16, 16)).toMatch(/unknown sprite category/);
+  });
+});
+
+describe('findOffPalettePixel', () => {
+  const allowed = new Set([0x102030]);
+
+  it('finds nothing when every opaque pixel is on-palette', () => {
+    const pixels = buildPixels(2, 2, () => pixel(0x10, 0x20, 0x30, 255));
+    expect(findOffPalettePixel(pixels, 2, 2, allowed)).toBeNull();
+  });
+
+  it('reports the coordinates and colour of the first off-palette pixel', () => {
+    const pixels = buildPixels(2, 2, (x, y) =>
+      x === 1 && y === 1 ? pixel(0xff, 0x00, 0x00, 255) : pixel(0x10, 0x20, 0x30, 255),
+    );
+    expect(findOffPalettePixel(pixels, 2, 2, allowed)).toEqual({ x: 1, y: 1, color: 0xff0000 });
+  });
+
+  it('ignores fully transparent pixels regardless of their stored colour', () => {
+    const pixels = buildPixels(2, 2, () => pixel(0xff, 0x00, 0x00, 0));
+    expect(findOffPalettePixel(pixels, 2, 2, allowed)).toBeNull();
+  });
+});
+
+describe('brightestOpaqueColor', () => {
+  it('picks the highest-luminance opaque pixel', () => {
+    const pixels = buildPixels(2, 1, (x) =>
+      x === 0 ? pixel(0x10, 0x10, 0x10, 255) : pixel(0xff, 0xff, 0xff, 255),
+    );
+    expect(brightestOpaqueColor(pixels, 2, 1, relativeLuminance)).toBe(0xffffff);
+  });
+
+  it('skips transparent pixels even if they would otherwise win', () => {
+    const pixels = buildPixels(2, 1, (x) =>
+      x === 0 ? pixel(0xff, 0xff, 0xff, 0) : pixel(0x40, 0x40, 0x40, 255),
+    );
+    expect(brightestOpaqueColor(pixels, 2, 1, relativeLuminance)).toBe(0x404040);
+  });
+
+  it('returns null for a fully transparent sprite', () => {
+    const pixels = buildPixels(2, 1, () => pixel(0xff, 0xff, 0xff, 0));
+    expect(brightestOpaqueColor(pixels, 2, 1, relativeLuminance)).toBeNull();
+  });
+});
+
+describe('validateAnimation', () => {
+  it('accepts a well-formed sidecar with a shared frame duration', () => {
+    expect(validateAnimation({ frames: 4, frameDurationMs: 120, loop: true })).toBeNull();
+  });
+
+  it('accepts one duration per frame', () => {
+    expect(
+      validateAnimation({ frames: 3, frameDurationMs: [100, 100, 140], loop: false }),
+    ).toBeNull();
+  });
+
+  it('rejects a duration array with the wrong length', () => {
+    expect(validateAnimation({ frames: 4, frameDurationMs: [100, 100], loop: true })).toMatch(
+      /frameDurationMs.*2 entries for 4 frames/,
+    );
+  });
+
+  it('rejects a non-positive frame count', () => {
+    expect(validateAnimation({ frames: 0, frameDurationMs: 100, loop: true })).toMatch(/frames/);
+  });
+
+  it('rejects a missing loop flag', () => {
+    expect(validateAnimation({ frames: 2, frameDurationMs: 100 })).toMatch(/loop/);
+  });
+});
