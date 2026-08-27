@@ -1,5 +1,5 @@
 {
-  "id": "cellar-boss",
+  "id": "dorf-boss",
   "tileGrid": [
     "###############",
     "#.............#",
@@ -17,17 +17,18 @@
     {
       "id": "boss",
       "count": 1,
-      "choices": [{ "enemyId": "grosse-kellerassel", "minFloor": 1, "maxFloor": 1 }]
+      "choices": [{ "enemyId": "der-stier", "minFloor": 2, "maxFloor": 2 }]
     }
   ],
   "pickupSpawns": [],
   "hazards": [],
   "decorativeProps": [
     { "x": 120, "y": 20, "type": "boss-plate" },
+    { "x": 168, "y": 72, "type": "maypole" },
     { "x": 120, "y": 100, "type": "pedestal" }
   ],
   "metadata": {
-    "floorTags": ["cellar"],
+    "floorTags": ["rural"],
     "shape": "1x1",
     "doors": { "north": true, "east": true, "south": true, "west": true },
     "difficultyTier": 5,

@@ -58,11 +58,10 @@ export const STAIRCASE_TEMPLATES: readonly unknown[] = Object.values(globbedStai
  * `cellarSupersecret` are floor 1's special-room content (#23) — one per
  * `RoomSpecialRole`, with two variants each for treasure and shop so
  * `generateFloor`'s weighted pick actually has something to choose between
- * (a locked vs. free treasure, two different shop stock lists). The boss
- * encounter spawns a small pack of already-authored enemies rather than a
- * real boss — no boss is authored yet (that's M6, `docs/ROADMAP.md`) — so
- * `npm run dev` has a real, doors-sealed, reward-dropping boss room to show
- * today, swapped for authored content later without any generator change.
+ * (a locked vs. free treasure, two different shop stock lists). `cellarBoss`
+ * now holds Die Große Kellerassel (#36) and floor 2 has its own boss room,
+ * `dorf-boss.json` (#38), reached through the glob above rather than a named
+ * export — nothing here needs it by name the way the floor-1 specials are.
  */
 export {
   cellarCrossroads,

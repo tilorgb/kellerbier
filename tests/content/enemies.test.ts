@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   ENEMY_DEFINITIONS,
+  derStier,
   grosseKellerassel,
   kellerassel,
 } from '../../src/content/enemies/index.js';
@@ -122,6 +123,33 @@ describe('the enemy roster', () => {
     const segmentCurl = segment.states.find((state) => state.name === 'curl');
     expect(segmentCurl?.invulnerableTicks).toBeGreaterThan(0);
     expect(grosseKellerassel.states.some((state) => state.name === 'wind')).toBe(true);
+  });
+
+  it('gives Der Stier a phase-two split into the mounted Maibaum-Dieb, on every state (#38)', () => {
+    const registry = new EnemyRegistry(ENEMY_DEFINITIONS);
+    const maibaumDiebIndex = registry.indexOf('der-stier-maibaum-dieb');
+
+    for (const state of registry.get('der-stier').states) {
+      expect(
+        state.splits.some(
+          (split) => split.definition === maibaumDiebIndex && split.atHealthBelow === 0.5,
+        ),
+        `"${state.name}" is missing the phase-two split`,
+      ).toBe(true);
+    }
+
+    // The total health budget does not change across the split, same as
+    // Die Große Kellerassel's own 18-then-9-times-three: 24 in phase one,
+    // threshold at half (12), 12 left for the Maibaum-Dieb.
+    const maibaumDieb = registry.get('der-stier-maibaum-dieb');
+    expect(derStier.health / 2).toBe(maibaumDieb.health);
+
+    // Phase two chains a charge and a ranged swing into one fixed cycle
+    // rather than either running on its own timer, so the fight gains a
+    // second, differently-timed threat instead of just more damage.
+    const swing = maibaumDieb.states.find((state) => state.name === 'swing');
+    expect(swing?.firing.some((shot) => shot.behaviour === 'fireSpread')).toBe(true);
+    expect(maibaumDieb.states.some((state) => state.name === 'charge')).toBe(true);
   });
 });
 
