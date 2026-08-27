@@ -765,29 +765,52 @@ still-overlapping neighbour, which converges in practice. That correctness gap i
 can afford and `contact.ts` cannot: nobody reads an enemy's exact pixel against a wall the way
 they read the player's.
 
-**Deliberately not the broadphase either**, unlike everything else in `systems/`. The first
-version reused the tick's `sim.broadphase.query` — the obvious move, since `stepContacts` already
-does — called once per enemy to find its neighbours. That still left the benchmark's "Simulation
-heap" metric red: at 200 enemies that is up to 200 calls a tick into a function V8 does not
-inline, each one boxing the doubles crossing it, the same cost `contact.ts` pays exactly once for
-the player. Once for the player is the residual, accepted cost the frame-time benchmark's own doc
-comments describe; two hundred times a tick is a different budget. `stepEnemyContacts` now walks
-`world.highWater`/`world.masks` directly and compares every enemy pair with a plain nested loop —
-the same "hand-written system loop" shape `bodies.ts`, `enemy.ts` and `collision.ts` already use
-for exactly this reason. At the benchmark's own population that is at most ~20,000 pure-arithmetic
-pair checks, no function-call boundary anywhere inside the loop, well inside the 4ms sim budget —
-`sim.room.isClear` is still called through, but only for a pair that is actually overlapping,
-which stays rare even at this population. Broadphase-vs-direct-loop is a population question, not
-a house style: the broadphase earns its keep against thousands of projectiles, where a pairwise
-sweep really would be a million tests, but at a population sized in the hundreds a direct double
-loop is both simpler and cheaper.
+**Three attempts at the broadphase question**, each one caught by a different metric on the
+frame-time benchmark's stress scene (200 enemies, all `walkTowardPlayer`, converging and staying
+clustered indefinitely — deliberately adversarial for whatever this pass does):
+
+1. Reuse the tick's `sim.broadphase.query(x, y, radius, visit)`, called once per enemy to find
+   its neighbours — the obvious move, since `stepContacts` already does this for the player. Left
+   "Simulation heap" red: at 200 enemies that is up to 200 calls a tick into a function V8 does
+   not inline, each one boxing the three pixel doubles crossing it, the same cost `contact.ts`
+   pays exactly once for the player. Once for the player is the residual, accepted cost the
+   frame-time benchmark's own doc comments describe; two hundred times a tick is a different
+   budget.
+2. Drop the broadphase and walk `world.highWater`/`world.masks` directly, comparing every enemy
+   pair with a plain O(enemies²) nested loop — the same "hand-written system loop" shape
+   `bodies.ts`, `enemy.ts` and `collision.ts` already use, and no call boundary anywhere inside
+   it. This got "Simulation heap" green, but pushed "Simulation tick" past its own tolerance band:
+   at the clustered stress population, cells still meaningfully bound the broadphase's own
+   candidate count even when everyone is nearby, so an unconditional ~20,000-pair sweep does
+   measurably more comparisons than a grid ever would have — the timing cost of *not* partitioning
+   at all.
+3. What actually stuck: keep the grid, lose the doubles. `SpatialHash.queryBox` converts a pixel
+   centre/radius to a column/row range and then walks it; `queryCells` (the new method) is that
+   walk alone, taking the column/row range as arguments instead of computing it — the box-to-cell
+   conversion moved to the caller. `stepEnemyContacts` still walks `highWater`/`masks` directly for
+   the outer loop (attempt 2's win), but for each enemy computes its own column/row bounds inline,
+   in local doubles that never leave the function, and hands `queryCells` only integers. A small
+   integer is a V8 Smi — passed by value, never boxed, regardless of inlining — so the call
+   boundary that was the actual cost in attempt 1 is gone, while the grid still bounds the
+   candidate count the way attempt 2's unconditional sweep didn't. Both metrics green.
+
+The general lesson, not just this file's: "boxing a double at a call boundary V8 won't inline" is
+about what crosses the boundary, not whether there is one. A function called a couple hundred
+times a tick is not automatically too expensive — it is too expensive if what is handed across it
+is doubles. The fix was never "call fewer functions," it was "make the frequent call cross only
+integers, and keep the doubles local."
 
 **Constrains:** a future system that needs to tell a real enemy apart from an inert body
 (a training target, a pickup, an obstacle prop) reaches for the `enemyMask` component check
 first, not a collision layer — the layer only reliably distinguishes `Obstacle`-tagged bodies
 from projectiles, the player and pickups today, not enemies from non-enemies. And a future
-per-pair system over a bounded, sub-thousand population (enemies against each other is the case
-today) reaches for this file's direct `highWater`/`masks` loop before reaching for the broadphase
-by default — the broadphase wins only once the population, or the candidates found per query,
-gets large enough that an all-pairs sweep would actually cost more than the calls to reach it do.
-The frame-time benchmark is what tells those two cases apart.
+per-pair system called once per body in a population sized in the hundreds — enemies against each
+other is the case today — reaches for `SpatialHash.queryCells` over `query`/`queryBox` by default:
+compute the column/row bounds locally (the two-line clamped floor-division `enemy-contact.ts`
+duplicates from `SpatialHash`'s own private `columnOf`/`rowOf`) and hand the grid only integers.
+Reaching for `query`/`queryBox` themselves stays right for a call made once or a handful of times
+a tick — the player's own contact pass, a single explosion radius — where the pixel-double
+boundary they cross is exactly the residual, accepted cost the frame-time benchmark's doc comments
+describe. The frame-time benchmark is what tells a "once a tick" caller from a "once per body"
+one apart, and attempt 2 above is the reminder that skipping the grid altogether is its own
+failure mode, not a fallback to reach for by default.
