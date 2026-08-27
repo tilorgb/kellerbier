@@ -49,6 +49,37 @@ it lands there — not just confirming the new tiles/enemies render when loaded 
 version of this for anything else gated behind its own unlock/progression logic: check that the
 gate itself was updated, not only that the content behind it works once reached.
 
+## A content gap degrades gracefully at runtime — and still fails loudly in CI
+
+`docs/DECISIONS.md` #19, from the same "floor 2 froze" incident the "reachable" section above
+comes from: a room, a floor, an enemy roster whose content isn't fully authored yet must never
+reach a player as a frozen game. Floor 2 shipped with its boss room throwing on floor 2
+specifically because its only boss choice was authored `maxFloor: 1`, back when only floor 1
+existed — an uncaught exception inside a
+door-transition stops the frame loop outright, which a player experiences as a freeze, not an
+error message. The schedule guarantees more of these: floors 3-7 (#39-#43) will each spend time
+with room content in place before their full roster lands.
+
+When you hit this shape — something *chosen from several authored options* (a `spawnGroups`
+choice list is the concrete case today) has no option covering the situation actually
+encountered — reach for `sim/room/template.ts`'s `nearestFloorChoice` pattern before inventing a
+new one: fall back to the closest authored alternative, log it once via `console.warn` gated
+behind `import.meta.env.DEV` (dev builds only, once per distinct gap so a revisited room doesn't
+spam the console), and let the run continue. This mirrors `SlotPool`'s pool-overflow policy
+(`docs/DECISIONS.md` #4) — a design gap and a capacity gap are both "something the content isn't
+ready for," and both get graceful, logged degradation instead of taking the run down.
+
+This is not a license to swallow real bugs. An enemy id that doesn't resolve, a transition to a
+state that doesn't exist, a room shape whose cell count is wrong — these stay exactly as loud as
+`docs/DECISIONS.md` #7 already made content validation: thrown at compile/construction time,
+failing the build. The distinction is whether the *data itself* is trustworthy (a gap: nothing
+authored for this case yet) or wrong (a bug: what's there doesn't make sense). Add the runtime
+fallback for the former; never add one to paper over the latter. And a graceful runtime fallback
+is never a substitute for catching the gap in CI in the first place —
+`tests/content/room-floor-eligibility.test.ts` (compiles every room template against every floor
+its tags claim it works on) is what should catch this class of gap on a pull request; the runtime
+fallback is what protects a player on the rare gap that reaches them anyway.
+
 ## New pixel art needs sign-off before it's committed
 
 Whenever a change adds or replaces pixel art — a tile, a character sprite, a projectile, a boss,

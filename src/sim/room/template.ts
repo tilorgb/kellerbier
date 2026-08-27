@@ -10,6 +10,8 @@ import {
   type DoorDirection,
   type MultiCellRoomShape,
   type RoomEnemyCatalog,
+  type RoomSpawnChoice,
+  type RoomSpawnGroup,
   type RoomSubLayout,
   type RoomTemplate,
 } from '../../content/rooms/definition.js';
@@ -407,16 +409,19 @@ export function compileRoomTemplate(
       const eligible = group.choices.filter(
         (choice) => floor >= choice.minFloor && floor <= choice.maxFloor,
       );
-      if (eligible.length === 0) {
-        throw new Error(
-          `${source}.spawnGroups[${group.id}] has no enemy eligible on floor ${String(floor)}`,
-        );
-      }
+      // A floor with no choice authored for it yet is a real content gap
+      // (Floor 2 had no boss until #38 landed one), not a content bug the
+      // way an unregistered enemy id is — and a content gap is exactly the
+      // thing that must never reach a player as a frozen game. `resolved`
+      // falls back to the closest-floor choice instead of throwing; see
+      // `nearestFloorChoice`'s own doc comment for the reasoning and the
+      // `SlotPool` overflow policy this mirrors.
+      const resolved = eligible.length > 0 ? eligible : [nearestFloorChoice(source, group, floor)];
       for (let index = 0; index < group.count; index++) {
         enemySpawns.push({
           x: cellOffsetX + spawn.x + (index - (group.count - 1) / 2) * 8,
           y: cellOffsetY + spawn.y,
-          enemyId: eligible[index % eligible.length]?.enemyId ?? '',
+          enemyId: resolved[index % resolved.length]?.enemyId ?? '',
         });
       }
     }
@@ -506,6 +511,74 @@ export function compileRoomTemplate(
 
 function cellKey(col: number, row: number): string {
   return `${String(col)},${String(row)}`;
+}
+
+/**
+ * Already-warned `${source}:${group.id}:${floor}` keys, so a room a player
+ * revisits (or a dev server left running against a broken content change)
+ * logs the gap once rather than once per room load — the same "loud, but
+ * only the first time" reasoning `sim/pool/slot-pool.ts`'s `warnOnce`
+ * already established for pool overflow, and for the same reason: a warning
+ * that repeats forever gets tuned out, and it is not free to produce.
+ */
+const warnedAboutMissingFloorChoice = new Set<string>();
+
+/**
+ * What a spawn group falls back to when nothing in it is authored for the
+ * floor actually being built.
+ *
+ * A floor generation issue landing before its enemy roster does is not a
+ * hypothetical — Floor 2 shipped with a working boss room, a token
+ * `Die Große Kellerassel` (Floor 1's boss) filling in until #38 authors
+ * Der Stier, rather than a broken one, and every other spawn group on this
+ * floor took the same fix. This is that fix generalised: a content gap must
+ * never reach a player as a frozen game, the same standard `SlotPool`'s
+ * overflow policy already holds resource exhaustion to (recycle the oldest
+ * projectile rather than crash the frame) — a *design* gap is not
+ * meaningfully different from a *capacity* one here, both are "something
+ * the content isn't ready for yet," and both get a graceful, logged
+ * fallback instead of taking the whole run down with them.
+ *
+ * `validateRoomTemplate` already guarantees `group.choices` is non-empty
+ * (`spawnGroup`'s own `fail` below), so there is always something to fall
+ * back to — the choice whose floor range is *closest* to the floor actually
+ * being built, which in practice means "the nearest floor below that
+ * actually has content," the same call a room author would make by hand.
+ * `console.warn` is dev-only and fires once per `(source, group, floor)`
+ * combination (`warnedAboutMissingFloorChoice`) — loud enough that this
+ * never ships unnoticed, quiet enough that a room a player keeps
+ * revisiting doesn't spam the console every load.
+ */
+function nearestFloorChoice(source: string, group: RoomSpawnGroup, floor: number): RoomSpawnChoice {
+  // `reduce` with no seed uses `choices[0]` as the initial accumulator,
+  // which is exactly the fallback this needs if nothing beats it — and
+  // needs no null-check, since `validateRoomTemplate` already rejects an
+  // empty `choices` array before this function is ever reachable.
+  const fallback = group.choices.reduce((closest, choice) =>
+    floorRangeDistance(floor, choice) < floorRangeDistance(floor, closest) ? choice : closest,
+  );
+
+  const warnKey = `${source}:${group.id}:${String(floor)}`;
+  if (import.meta.env.DEV && !warnedAboutMissingFloorChoice.has(warnKey)) {
+    warnedAboutMissingFloorChoice.add(warnKey);
+    console.warn(
+      `${source}.spawnGroups[${group.id}] has no enemy eligible on floor ${String(floor)} — ` +
+        `falling back to "${fallback.enemyId}" (authored for floors ${String(fallback.minFloor)}-` +
+        `${String(fallback.maxFloor)}) instead of leaving the room unable to load. Author a ` +
+        `floor-${String(floor)} choice for this group when the real content is ready.`,
+    );
+  }
+  return fallback;
+}
+
+function floorRangeDistance(floor: number, choice: RoomSpawnChoice): number {
+  if (floor < choice.minFloor) {
+    return choice.minFloor - floor;
+  }
+  if (floor > choice.maxFloor) {
+    return floor - choice.maxFloor;
+  }
+  return 0;
 }
 
 function spawnGroup(

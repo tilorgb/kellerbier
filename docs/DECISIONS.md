@@ -635,3 +635,51 @@ touching an unrelated content system, not closing a leak in this one.
 a plain `GameSim` field if it changes per-tick math, a `settings.ts` flag read directly at the
 call site if it only changes a label, sprite key or colour. Neither kind is `tuning`, and neither
 kind needs a determinism story.
+
+## 19. A content gap degrades gracefully, logged, at runtime — and still fails loudly in CI
+
+**Decided:** M5. **Issue:** #37's follow-up. **Generalises:** #4's pool overflow policy.
+
+Floor 2 shipped with a room whose boss spawn group had exactly one choice, `grosse-kellerassel`
+(Floor 1's boss), authored `maxFloor: 1` — correct the day it was written, since Floor 2 was not
+yet reachable, and silently wrong the moment a later change made it reachable for real:
+`compileRoomTemplate` threw from inside `app/main.ts`'s door-transition code, uncaught, which
+stops the frame loop entirely. A player mid-run does not see an error message; they see the game
+freeze. The schedule guarantees this keeps happening — #38-#43 are six more floors' worth of
+bosses and rosters landing on their own timeline, each one a window where a floor's room content
+exists before its full roster does.
+
+The fix is not "author content faster." It is that a *content gap* — something not authored yet,
+as opposed to something authored wrong — must never reach a player as a dead end, the same
+standard #4 already holds resource exhaustion to: `SlotPool`'s overflow policy recycles the
+oldest projectile rather than crash the frame, logging once via `warnOnce` so the gap stays
+visible without spamming every tick it recurs. `sim/room/template.ts`'s `nearestFloorChoice` is
+that policy applied to authored-content gaps: when a spawn group has no choice covering the
+floor being built, it does not throw — it falls back to the choice whose floor range is closest
+(Floor 2's boss room falls back to Floor 1's boss until #38 lands Der Stier), and logs once per
+`(room, group, floor)` combination, dev-build only, naming exactly what to author to make the
+warning go away.
+
+**The boundary this does not cross:** a content gap earns a graceful fallback because the *shape*
+of the data is still trustworthy — the choices that exist are real, registered enemies, just not
+enough of them yet. An actual content bug — an enemy id that doesn't resolve
+(`sim/enemy/registry.ts`), a transition to a state that doesn't exist, a room's `cells.length`
+not matching its declared shape — stays exactly as loud as decision #7 already made it: thrown at
+compile/construction time, failing the build, never silently absorbed. The test in the room-load
+path this decision protects (`tests/content/rooms.test.ts`'s "rejects an unknown enemy in a spawn
+group") is right next to the one proving the fallback (`"falls back to the nearest-floor
+choice..."`) for exactly this reason — the two are meant to read side by side as where the line
+sits. Runtime grace is not a substitute for CI catching the gap in the first place, either:
+`tests/content/room-floor-eligibility.test.ts` compiles every room template against every floor
+its `floorTags` claim it works on, so this exact class of gap still fails a pull request's tests
+— the runtime fallback is what happens on the rare gap that reaches a player anyway (a floor
+that was never test-covered, a future case the eligibility test's own coverage doesn't reach),
+not a reason to stop treating a missing choice as a bug to fix.
+
+**Constrains:** a future "is X ready for floor N" question in the engine — a boss encounter, a
+hazard, a set piece with no per-floor authored version yet — reaches for this same shape before
+inventing a new one: fall back to the nearest authored alternative, log once, dev-only, naming
+what's missing. It does not apply to a system with no sane fallback to reach for (a shop with no
+stock to sell is not "fall back to Floor 1's shop stock," it's a genuinely different bug) — this
+decision is about *data* gaps in a *chosen-from-several* shape, the same shape `SlotPool` and
+`spawnGroups` both already have, not a general license to swallow every runtime error.

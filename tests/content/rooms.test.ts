@@ -93,4 +93,56 @@ describe('room templates', () => {
       /broken-room\.json\.spawnGroups\[0\]\.choices\[0\]\.enemyId: does not name a registered enemy/,
     );
   });
+
+  it('falls back to the nearest-floor choice instead of throwing when no choice covers the floor (#37)', () => {
+    // A floor with no roster of its own authored yet — Floor 2 before #38's
+    // boss landed was exactly this shape for one room. Compiling must not
+    // throw: a content gap like this has to reach a player as *something*,
+    // never as a frozen game.
+    const template = {
+      ...cellarCrossroads,
+      spawnGroups: [
+        {
+          id: 'melee',
+          count: 1,
+          choices: [{ enemyId: 'kellerassel', minFloor: 1, maxFloor: 1 }],
+        },
+      ],
+    };
+
+    const compiled = compileRoomTemplate(template, 5, 'gap-room.json', ENEMY_DEFINITIONS);
+    // The only authored choice, even though its own range (1-1) doesn't
+    // cover floor 5 — the nearest floor with real content, not a crash.
+    // cellarCrossroads' "melee" group is placed twice (two enemySpawns
+    // entries), hence two identical results.
+    expect(compiled.enemyIds).toEqual(['kellerassel', 'kellerassel']);
+  });
+
+  it('picks whichever authored choice is nearest the requested floor, either direction', () => {
+    const template = {
+      ...cellarCrossroads,
+      spawnGroups: [
+        {
+          id: 'melee',
+          count: 1,
+          choices: [
+            { enemyId: 'kellerassel', minFloor: 1, maxFloor: 2 },
+            { enemyId: 'bierratte', minFloor: 6, maxFloor: 7 },
+          ],
+        },
+      ],
+    };
+
+    // Floor 4 sits closer to the "1-2" choice's upper edge (distance 2) than
+    // to the "6-7" choice's lower edge (distance 2 too — a tie, resolved by
+    // declaration order) and floor 5 sits strictly closer to "6-7".
+    expect(compileRoomTemplate(template, 4, 'gap-room.json', ENEMY_DEFINITIONS).enemyIds).toEqual([
+      'kellerassel',
+      'kellerassel',
+    ]);
+    expect(compileRoomTemplate(template, 5, 'gap-room.json', ENEMY_DEFINITIONS).enemyIds).toEqual([
+      'bierratte',
+      'bierratte',
+    ]);
+  });
 });
