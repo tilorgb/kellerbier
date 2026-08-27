@@ -755,21 +755,39 @@ wall-aware move-with-fallback — an early version did, calling it up to three t
 pair (mirroring `resolveAgainstPlayer` exactly), and the frame-time benchmark's stress scene (200
 enemies, all `walkTowardPlayer`, converging and staying overlapped indefinitely) caught it: the
 extra cross-function-call arithmetic, paid per overlapping pair rather than once for the player,
-roughly doubled the simulation's per-tick heap-allocation floor (`tools/bench/select.mjs`'s
-"least noisy of three runs" number — see `tests/bench/frame-time.test.ts`'s own doc comment on
-where that residual cost comes from: a `number` return boxed at a call boundary V8 did not
-inline). `stepEnemyContacts` now moves each body once, straight into the transform, gated on one
-inlined `room.isClear` check apiece — no wall-slide fallback, no "what a wall refused, the other
-body owes" redistribution. A body a wall blocks this tick just tries again next tick, against the
-same still-overlapping neighbour, which converges in practice. That correctness gap is one this
-file can afford and `contact.ts` cannot: nobody reads an enemy's exact pixel against a wall the
-way they read the player's.
+inflated the simulation's per-tick heap-allocation floor (`tools/bench/select.mjs`'s "least noisy
+of three runs" number — see `tests/bench/frame-time.test.ts`'s own doc comment on where that
+residual cost comes from: a `number` boxed at a call boundary V8 did not inline).
+`stepEnemyContacts` moves each body once, straight into the transform, gated on one inlined
+`room.isClear` check apiece — no wall-slide fallback, no "what a wall refused, the other body
+owes" redistribution. A body a wall blocks this tick just tries again next tick, against the same
+still-overlapping neighbour, which converges in practice. That correctness gap is one this file
+can afford and `contact.ts` cannot: nobody reads an enemy's exact pixel against a wall the way
+they read the player's.
+
+**Deliberately not the broadphase either**, unlike everything else in `systems/`. The first
+version reused the tick's `sim.broadphase.query` — the obvious move, since `stepContacts` already
+does — called once per enemy to find its neighbours. That still left the benchmark's "Simulation
+heap" metric red: at 200 enemies that is up to 200 calls a tick into a function V8 does not
+inline, each one boxing the doubles crossing it, the same cost `contact.ts` pays exactly once for
+the player. Once for the player is the residual, accepted cost the frame-time benchmark's own doc
+comments describe; two hundred times a tick is a different budget. `stepEnemyContacts` now walks
+`world.highWater`/`world.masks` directly and compares every enemy pair with a plain nested loop —
+the same "hand-written system loop" shape `bodies.ts`, `enemy.ts` and `collision.ts` already use
+for exactly this reason. At the benchmark's own population that is at most ~20,000 pure-arithmetic
+pair checks, no function-call boundary anywhere inside the loop, well inside the 4ms sim budget —
+`sim.room.isClear` is still called through, but only for a pair that is actually overlapping,
+which stays rare even at this population. Broadphase-vs-direct-loop is a population question, not
+a house style: the broadphase earns its keep against thousands of projectiles, where a pairwise
+sweep really would be a million tests, but at a population sized in the hundreds a direct double
+loop is both simpler and cheaper.
 
 **Constrains:** a future system that needs to tell a real enemy apart from an inert body
 (a training target, a pickup, an obstacle prop) reaches for the `enemyMask` component check
 first, not a collision layer — the layer only reliably distinguishes `Obstacle`-tagged bodies
 from projectiles, the player and pickups today, not enemies from non-enemies. And a future
-per-pair enemy system reads this entry before reaching for `contact.ts`'s `moveClear`-shaped
-correction by default — at real room populations either shape costs nothing worth measuring, but
-"cheap enough for one player" and "cheap enough for two hundred enemies" are different budgets,
-and the frame-time benchmark is what tells them apart.
+per-pair system over a bounded, sub-thousand population (enemies against each other is the case
+today) reaches for this file's direct `highWater`/`masks` loop before reaching for the broadphase
+by default — the broadphase wins only once the population, or the candidates found per query,
+gets large enough that an all-pairs sweep would actually cost more than the calls to reach it do.
+The frame-time benchmark is what tells those two cases apart.
