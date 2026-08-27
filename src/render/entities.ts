@@ -3,7 +3,7 @@ import { CollisionLayer } from '../sim/collision/layers.js';
 import { World } from '../sim/ecs/world.js';
 import type { GameSim } from '../sim/game/sim.js';
 import { lerp } from '../sim/math.js';
-import { enemyTelegraphProgress, isEnemyInvulnerable } from '../sim/systems/enemy.js';
+import { ENEMY_STRIDE, enemyTelegraphProgress, isEnemyInvulnerable } from '../sim/systems/enemy.js';
 
 /**
  * How much wider than the body a telegraph ring ends up.
@@ -27,6 +27,17 @@ const SHELL_TINT = 0x8fa2b8;
 const UNKNOWN_PICKUP_TINT = 0xff00ff;
 
 /**
+ * Every `character`-category sprite is exactly this tall
+ * (`assets/sprites/README.md`'s size table; enforced at build time by
+ * `tools/art/spec.mjs`), unlike its width, which is free to vary from
+ * creature to creature. Used as the scale reference for any enemy with its
+ * own art, instead of the shared blob texture's own (square) width — so a
+ * narrower sprite like Bierratte's stays visually narrower rather than
+ * being stretched to a circle's width.
+ */
+const CHARACTER_SPRITE_HEIGHT = 16;
+
+/**
  * Draws the collidable things that are not the player: targets, enemies, and
  * the ring an enemy warns with before it attacks.
  *
@@ -39,6 +50,13 @@ export class EntityView {
 
   private readonly sim: GameSim;
   private readonly texture: Texture;
+  /**
+   * Per-enemy character art (#35), keyed by `EnemyDefinition.id`. An id with
+   * no entry — every enemy floors 2-7 haven't been drawn yet, plus the
+   * training target and the shopkeeper — falls back to `texture`, the
+   * shared blob every enemy used to draw as before this.
+   */
+  private readonly enemyTextures: Readonly<Record<string, Texture>>;
   /**
    * The same shape, solid white.
    *
@@ -67,9 +85,16 @@ export class EntityView {
   private readonly pickupTints: readonly number[];
   private readonly pickupLabels: readonly string[];
 
-  constructor(sim: GameSim, texture: Texture, flashTexture: Texture, telegraphTexture: Texture) {
+  constructor(
+    sim: GameSim,
+    texture: Texture,
+    flashTexture: Texture,
+    telegraphTexture: Texture,
+    enemyTextures: Readonly<Record<string, Texture>> = {},
+  ) {
     this.sim = sim;
     this.texture = texture;
+    this.enemyTextures = enemyTextures;
     this.flashTexture = flashTexture;
     this.telegraphTexture = telegraphTexture;
     this.container.addChild(this.ringLayer);
@@ -112,12 +137,23 @@ export class EntityView {
       used += 1;
       sprite.visible = true;
       const isPickup = ((collision[index * 2] ?? 0) & CollisionLayer.Pickup) !== 0;
+      // An enemy with its own art (#35) draws off that instead of the
+      // shared blob — everything else (the training target, the
+      // shopkeeper, and every enemy floors 2-7 haven't been drawn yet)
+      // still falls back to it, the same texture this whole view used to
+      // draw every enemy from.
+      const isEnemyBody = ((masks[index] ?? 0) & sim.enemyMask) === sim.enemyMask;
+      const enemyId = isEnemyBody
+        ? sim.enemies.at(sim.enemy.data[index * ENEMY_STRIDE] ?? 0).id
+        : null;
+      const bodyTexture =
+        enemyId === null ? this.texture : (this.enemyTextures[enemyId] ?? this.texture);
       // Pickups always draw off the white-fill texture (the same one the hit
-      // flash uses), never the shared brown-fill body texture: a tint
-      // multiplies the texture underneath it, and a bright tint over a dark
-      // brown base is exactly what read as "everything is a brown blob" —
-      // white is the one base a tint reproduces exactly.
-      sprite.texture = isPickup || (flash[index] ?? 0) > 0 ? this.flashTexture : this.texture;
+      // flash uses), never the body texture: a tint multiplies the texture
+      // underneath it, and a bright tint over a dark base is exactly what
+      // read as "everything is a brown blob" — white is the one base a tint
+      // reproduces exactly.
+      sprite.texture = isPickup || (flash[index] ?? 0) > 0 ? this.flashTexture : bodyTexture;
       // A curled body has to look like one. Without this the player is told
       // their shots are doing nothing only by the shots doing nothing.
       const pickupKindIndex = sim.pickupKind.data[index] ?? -1;
@@ -128,6 +164,13 @@ export class EntityView {
           : 0xffffff;
       // The texture is drawn at a fixed size; scaling it to the collider is
       // what keeps the sprite and the hitbox describing the same object.
+      // Read off `bodyTexture` (what's drawn most of the time) rather than
+      // `sprite.texture` (which is the flash texture for one tick out of
+      // sixty) — otherwise the one flash tick would render at a different
+      // size than every frame around it, since dedicated character art and
+      // the shared flash blob are not the same shape.
+      const referenceHeight =
+        bodyTexture === this.texture ? this.texture.height : CHARACTER_SPRITE_HEIGHT;
       // A pickup pops in on spawn — a cosmetic-only bump read off the same
       // countdown `stepPickups`' collection never touches, so it never
       // affects the hitbox it's drawn over.
@@ -135,7 +178,7 @@ export class EntityView {
       const bounceMax = Math.max(1, sim.tuning.pickup.spawnBounceTicks);
       const bounceProgress = bounceTicks / bounceMax;
       const pop = bounceTicks > 0 ? 1 + 0.4 * Math.sin(bounceProgress * Math.PI) : 1;
-      sprite.scale.set((radius / (this.texture.width / 2)) * pop);
+      sprite.scale.set((radius / (referenceHeight / 2)) * pop);
       sprite.position.set(x, y);
 
       if (isPickup) {

@@ -11,6 +11,7 @@ import {
 } from '../render/placeholder-art.js';
 import { EntityView } from '../render/entities.js';
 import { GameView } from '../render/view.js';
+import { loadFloorArt } from '../render/floor-art.js';
 import { FixedTimestepLoop, runAnimationFrameLoop } from '../app/loop.js';
 import { InputSampler } from '../app/input/sampler.js';
 import { WORLD_ZOOM, computeGameLayout, roomUnitsPerPixel } from '../render/resolution.js';
@@ -104,6 +105,10 @@ export async function createPlaytest(
     src: massUrl,
     data: { scaleMode: 'nearest' },
   });
+  // Real floor/enemy art (#35) — a room author checking their layout in
+  // Playtest has the exact same "which blob was that" problem a real run
+  // does, so this preview gets the same art a run would.
+  const { floorTiles, enemyArt } = await loadFloorArt();
 
   const sim = new GameSim({ seed: 1, population: 'empty', floor });
   sim.loadRoom(templateJson, floor, null, [], canonicalPlacement(shape));
@@ -120,10 +125,8 @@ export async function createPlaytest(
     numberFont: 'monospace',
     pedestalItem: createBlobTexture(app.renderer, 5, 0xffffff, 0xffffff),
     pedestalBeam: createSolidTexture(app.renderer),
-    // No floor art loaded for the editor's playtest preview — every shape
-    // and floor is exercised here, not just floor 1, so it stays on
-    // `createRoomView`'s flat palette fill.
-    floorTiles: {},
+    floorTiles,
+    enemyArt,
   });
   const game = new Container();
   game.addChild(view.stage);
