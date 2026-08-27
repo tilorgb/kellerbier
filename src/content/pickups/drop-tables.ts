@@ -131,13 +131,17 @@ export const ROOM_CLEAR_DROP_TABLE: DropTable = {
 /**
  * Rolled once when a boss room's fight ends (`GameSim.rollRoomClearLoot`,
  * gated on the cleared room's `specialRole` being `'boss'`) — in place of,
- * not in addition to, `ROOM_CLEAR_DROP_TABLE`. `pickupId: null` never
- * appears: a boss always pays out, and the weights lean hard toward the
- * biggest denominations and the eternal heart no `ENEMY_DROP_TABLES` tier
- * ever names.
+ * not in addition to, `ROOM_CLEAR_DROP_TABLE`. The room's pedestal (drawn
+ * from the `'boss'` item pool, `GameSim.pedestalPoolForRole`) is *the* boss
+ * reward; this is a bonus on top of it, so `pickupId: null` gets an even
+ * weight against the rest of the table — a coin or a keg is a nice extra a
+ * boss fight can pay out, not something the fight owes on top of the item.
+ * The non-null weights still lean hard toward the biggest denominations and
+ * the eternal heart no `ENEMY_DROP_TABLES` tier ever names, same as before.
  */
 export const BOSS_REWARD_DROP_TABLE: DropTable = {
   promilled: [
+    { pickupId: null, weight: 100 },
     { pickupId: 'biermarke-10', weight: 25 },
     { pickupId: 'mass-full', weight: 20 },
     { pickupId: 'weissbier', weight: 15 },
@@ -147,6 +151,7 @@ export const BOSS_REWARD_DROP_TABLE: DropTable = {
     { pickupId: 'beer', weight: 7 },
   ],
   sober: [
+    { pickupId: null, weight: 100 },
     { pickupId: 'biermarke-10', weight: 28 },
     { pickupId: 'mass-full', weight: 22 },
     { pickupId: 'weissbier', weight: 17 },

@@ -119,6 +119,15 @@ export function stepEnemies(sim: GameSim): void {
     enemy[base + 1] = stateIndex;
     enemy[base + 3] = flags & ~(ENEMY_FLAG_HIT | ENEMY_FLAG_BLOCKED);
 
+    if (crossesSplitThreshold(sim, index, state)) {
+      // Ages the body into its next phase right now rather than waiting for
+      // combat to land the killing blow — `forceEnemyDeath` runs the same
+      // package a real kill does, so `stepEnemyDeaths` sees an ordinary
+      // death in this state and splits it exactly as `state.splits` says.
+      sim.forceEnemyDeath(index);
+      continue;
+    }
+
     applyMovement(sim, index, state.movement, ticks, toPlayerX, toPlayerY, distance);
     if (state.firing.length > 0) {
       applyFiring(sim, index, state, ticks, toPlayerX, toPlayerY, distance);
@@ -187,6 +196,30 @@ function stateDuration(sim: GameSim, state: CompiledState, ticks: number): numbe
     return ticks;
   }
   return Math.max(1, Math.round(ticks * sim.tuning.enemy.telegraphScale));
+}
+
+/**
+ * True the tick a body's health falls at or below one of its current state's
+ * `splitOnDeath.atHealthBelow` thresholds — Die Große Kellerassel's (#36)
+ * phase change. Checked every tick rather than only on a hit, since a status
+ * effect's own damage tick (burn, poison) can cross the threshold too.
+ */
+function crossesSplitThreshold(sim: GameSim, index: number, state: CompiledState): boolean {
+  if (state.splits.length === 0) {
+    return false;
+  }
+  const healthBase = index * 2;
+  const current = sim.health.data[healthBase] ?? 0;
+  const max = sim.health.data[healthBase + 1] ?? 0;
+  if (current <= 0 || max <= 0) {
+    return false;
+  }
+  for (const split of state.splits) {
+    if (split.atHealthBelow > 0 && current <= split.atHealthBelow * max) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /** Where the body goes this tick. Exactly one of these runs per state. */

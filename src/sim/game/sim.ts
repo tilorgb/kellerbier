@@ -208,7 +208,16 @@ function nextFloorExitDoor(
         : direction === 'west'
           ? { x: geometry.minX, y: midY }
           : { x: geometry.maxX, y: midY };
-  return { direction, cellCol: 0, cellRow: 0, centre };
+  // The whole wall, not `DOOR_SPAN`'s usual 24px: this door's `centre` sits
+  // on the room's overall bounding box rather than on one authored cell, so
+  // on a multi-cell boss room a narrow band can be a hundred-plus pixels
+  // from wherever the player actually approaches that wall from — which
+  // reads as a solid wall that swallows the room's own exit, not as a door.
+  const span =
+    direction === 'north' || direction === 'south'
+      ? geometry.maxX - geometry.minX
+      : geometry.maxY - geometry.minY;
+  return { direction, cellCol: 0, cellRow: 0, centre, span };
 }
 
 /**
@@ -884,6 +893,46 @@ export class GameSim {
   }
 
   /**
+   * Combined current/max health across every enemy still counted toward
+   * `roomEnemyCount` in a boss room — `null` outside one, or once it is
+   * cleared. The same "presence locks the door" rule read as "presence
+   * fills the bar," which is what makes this framework-level rather than
+   * Die Große Kellerassel's own: a boss with no split (#38's Stier, say) or
+   * one with several segments alive at once both just sum correctly, with
+   * nothing here naming either of them.
+   *
+   * Not cached — `render/boss-health-hud.ts`'s `sync` is the only caller,
+   * once a frame, and a boss room never holds enough bodies for the walk to
+   * register.
+   */
+  get bossHealth(): { readonly current: number; readonly max: number } | null {
+    if (this.roomSpecialRole !== 'boss') {
+      return null;
+    }
+    let current = 0;
+    let max = 0;
+    let any = false;
+    const states = this.world.states;
+    const masks = this.world.masks;
+    for (let index = 0; index < this.world.highWater; index++) {
+      if (states[index] !== World.ALIVE) {
+        continue;
+      }
+      if (((masks[index] ?? 0) & this.enemyMask) !== this.enemyMask) {
+        continue;
+      }
+      const definition = this.enemies.at(this.enemy.data[index * ENEMY_STRIDE] ?? 0);
+      if (!definition.locksRoom) {
+        continue;
+      }
+      any = true;
+      current += this.health.data[index * 2] ?? 0;
+      max += this.health.data[index * 2 + 1] ?? 0;
+    }
+    return any ? { current, max } : null;
+  }
+
+  /**
    * Opens any bombable wall within `radius` of `(x, y)`. Called once per
    * explosion by `stepBombs` (`sim/systems/bombs.ts`) with the blast's own
    * position and radius — "close enough to reveal" is exactly "close enough
@@ -956,10 +1005,10 @@ export class GameSim {
     const index = this.playerIndex;
     const x = this.positionX(index);
     const y = this.positionY(index);
-    const half = DOOR_SPAN / 2;
 
     for (const door of this.doors) {
       const centre = doorCentre(this.room, door);
+      const half = (door.span ?? DOOR_SPAN) / 2;
       switch (door.direction) {
         case 'north':
           if (y <= this.room.minY + PLAYER_RADIUS && Math.abs(x - centre.x) <= half) {
@@ -2744,6 +2793,25 @@ export class GameSim {
     }
   }
 
+  /**
+   * Kills an enemy immediately through the same chokepoint a landed shot
+   * uses — flash, hitstop, knockback, shake, foam, its own loot and, notably,
+   * whatever `splitOnDeath` its current state declares — rather than a
+   * second, poorer "just remove it" path.
+   *
+   * `sim/systems/enemy.ts`'s `crossesSplitThreshold` is the one caller today:
+   * it is what ages Die Große Kellerassel (#36) into its next phase at a
+   * health fraction instead of at zero. Dealing exactly its own remaining
+   * health guarantees `applyDamageAt` takes the `killed` branch.
+   */
+  forceEnemyDeath(index: number): void {
+    const remaining = this.health.data[index * 2] ?? 0;
+    if (remaining <= 0) {
+      return;
+    }
+    applyDamageAt(this, index, remaining, this.positionX(index), this.positionY(index), 0, -1, -1);
+  }
+
   step(input: Readonly<InputFrame> = this.idleInput): void {
     this.events.clear();
 
@@ -3441,8 +3509,10 @@ export class GameSim {
    * outside `GameSim` has a reason to see.
    *
    * A boss room's clear rolls `BOSS_REWARD_DROP_TABLE` instead of the
-   * ordinary one — a guaranteed, better payout for the room the floor's
-   * doors were sealed around, not just another kill.
+   * ordinary one — richer when it pays out, but a bonus on top of the room's
+   * own pedestal item (`pedestalPoolForRole`), not a second guaranteed
+   * reward stacked on it. The pedestal item is the boss reward; this can
+   * add a coin or a keg on top of it, or nothing at all.
    */
   private rollRoomClearLoot(): void {
     const centreX = (this.room.minX + this.room.maxX) / 2;

@@ -57,6 +57,18 @@ export interface CompiledDoor {
    * bounding box.
    */
   readonly centre?: { readonly x: number; readonly y: number };
+  /**
+   * Overrides `DOOR_SPAN` for this one door's walkable/drawn width, when
+   * present. Nothing in this module ever sets it — same as `centre` above,
+   * the boss room's synthesised "next floor" exit is the one case that needs
+   * it: it sits on the room's *whole* bounding box rather than one authored
+   * cell, so a `DOOR_SPAN`-wide band can be far from wherever the player
+   * actually approaches that wall from. Spanning the whole wall instead
+   * turns "walk into this specific 24px strip of a 480px wall" into "walk
+   * into this wall," which is the only sense in which a dev-only shortcut
+   * needs to be findable at all.
+   */
+  readonly span?: number;
 }
 
 /**

@@ -157,6 +157,17 @@ export interface SplitOnDeathBehaviour {
   readonly count: number;
   /** Pixels from the death point the children appear at. */
   readonly spread?: number;
+  /**
+   * Forces the split early, at this fraction (0 exclusive, 1 inclusive) of
+   * max health, instead of waiting for the body to actually reach zero.
+   *
+   * Die Große Kellerassel's (#36) phase two: the same primitive Schimmelfleck
+   * dies with, just triggered by a health gate rather than by combat finally
+   * landing the last hit. Declare it on every state the body might be in when
+   * the threshold is crossed — not only the one it is likeliest to be in —
+   * since the split reads off whichever state was current at the moment.
+   */
+  readonly atHealthBelow?: number;
 }
 
 /**
