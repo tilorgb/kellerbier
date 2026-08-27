@@ -20,24 +20,25 @@ interface RoomPalette {
 }
 
 /**
- * Floor 1 — Der Keller (#35): "damp stone, wooden racks, puddles, one warm
- * amber light source against cold greys" (`docs/CONTENT_BIBLE.md`). Drawn
- * from the floor's own authored five-colour set
- * (`tools/art/palette.mjs`'s `FLOOR_PALETTES.cellar`), not invented here —
- * this is the same fence the real tileset (`assets/sprites/floor-1-cellar/`)
+ * Floor 1 — Der Keller (#35): bare concrete, not timber — a German Keller is
+ * poured or block concrete, so cold grey is the base material and brown is
+ * only the wooden racks sitting in the room, not the room itself
+ * (`docs/CONTENT_BIBLE.md`). Drawn from the floor's own authored five-colour
+ * set (`tools/art/palette.mjs`'s `FLOOR_PALETTES.cellar`), not invented here
+ * — this is the same fence the real tileset (`assets/sprites/floor-1-cellar/`)
  * is built inside, so the room's placeholder shapes and its pixel art read
- * as one palette rather than two. `wallEdge`/`blockEdge` use the palette's
- * one small-area accent (the amber light) rather than a background swatch —
- * per `tools/art/palette.mjs`'s own `FLOOR_BACKGROUND_SWATCHES` comment, the
- * accent is meant for exactly this: a highlight, not a fill.
+ * as one palette rather than two. `floor`/`wall` are the two darker concrete
+ * greys, `wallEdge` the lightest one as a highlight; `block` (an obstacle —
+ * usually a rack or a crate) is the one wood accent, with the same light
+ * concrete grey as its edge rather than a second, invented wood tone.
  */
 const FLOOR_PALETTES: Readonly<Record<number, RoomPalette>> = {
   1: {
-    floor: 0x3a2a1c,
-    wall: 0x1c1a1f,
-    wallEdge: 0x5a6068,
-    block: 0x6b4a30,
-    blockEdge: 0x9c7b52,
+    floor: 0x53585c,
+    wall: 0x35383a,
+    wallEdge: 0x787e83,
+    block: 0x5a4230,
+    blockEdge: 0x787e83,
   },
 };
 
@@ -46,13 +47,13 @@ function paletteFor(floor: number): RoomPalette {
 }
 
 /**
- * Floor 1's slick puddle (#35), drawn from the same cellar palette above —
- * the cold-grey background swatch for the water itself, the amber accent
- * for the light it catches (`docs/CONTENT_BIBLE.md`'s "one warm amber light
- * source against cold greys") — rather than a colour invented for the
- * hazard alone.
+ * Floor 1's slick puddle (#35): the darkest concrete grey for a deep,
+ * standing pool, the amber accent for the light it catches
+ * (`docs/CONTENT_BIBLE.md`'s "one warm amber light source") — the one place
+ * on this floor amber is meant to show up at all, which is also why it
+ * isn't used for the wall/block edges above.
  */
-const PUDDLE_COLOUR = 0x5a6068;
+const PUDDLE_COLOUR = 0x35383a;
 const PUDDLE_EDGE_COLOUR = 0xd99a3f;
 
 /** A locked door reads as cold and shut; an open one picks up the floor's amber light. */

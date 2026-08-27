@@ -23,7 +23,7 @@ describe('scanSprites', () => {
   it('finds a plain sprite under a known bucket and category', async () => {
     const dir = path.join(root, 'floor-1-cellar', 'tiles');
     await mkdir(dir, { recursive: true });
-    await writeFile(path.join(dir, 'floor.png'), solidPng(16, 16, 0x3a2a1c));
+    await writeFile(path.join(dir, 'floor.png'), solidPng(16, 16, 0x35383a));
 
     const sprites = await scanSprites(root);
     expect(sprites).toEqual([

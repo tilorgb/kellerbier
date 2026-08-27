@@ -44,8 +44,8 @@ describe('buildAtlases', () => {
   });
 
   it('packs on-palette sprites into an atlas and reports its size and memory', async () => {
-    await writeSprite(root, 'floor-1-cellar', 'tiles', 'floor', solidPng(16, 16, 0x3a2a1c));
-    await writeSprite(root, 'floor-1-cellar', 'tiles', 'wall', solidPng(16, 16, 0x6b4a30));
+    await writeSprite(root, 'floor-1-cellar', 'tiles', 'floor', solidPng(16, 16, 0x35383a));
+    await writeSprite(root, 'floor-1-cellar', 'tiles', 'wall', solidPng(16, 16, 0x5a4230));
 
     const report = await buildAtlases({ rootDir: root, outDir: out, write: true });
     expect(report.atlasCount).toBe(1);
@@ -73,7 +73,7 @@ describe('buildAtlases', () => {
   it('fails the build on an off-palette pixel, naming the file and the pixel', async () => {
     // 0xd92b3c is only legal on floor-7-wiesn, not floor-1-cellar.
     const bad = makePng(16, 16, (x, y) =>
-      x === 5 && y === 9 ? [0xd9, 0x2b, 0x3c, 255] : [0x3a, 0x2a, 0x1c, 255],
+      x === 5 && y === 9 ? [0xd9, 0x2b, 0x3c, 255] : [0x35, 0x38, 0x3a, 255],
     );
     await writeSprite(root, 'floor-1-cellar', 'tiles', 'bad', bad);
 
@@ -88,7 +88,7 @@ describe('buildAtlases', () => {
   });
 
   it('fails the build on a sprite outside its category size spec', async () => {
-    await writeSprite(root, 'floor-1-cellar', 'tiles', 'oversized', solidPng(20, 20, 0x3a2a1c));
+    await writeSprite(root, 'floor-1-cellar', 'tiles', 'oversized', solidPng(20, 20, 0x35383a));
 
     const failure = await buildAtlases({ rootDir: root, outDir: out, write: false }).catch(
       (error: unknown) => error,
