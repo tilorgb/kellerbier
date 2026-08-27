@@ -312,6 +312,29 @@ export interface EnemyTuning {
   deflectParticles: number;
   /** Shake for that splash. Small: nothing actually happened. */
   deflectShake: number;
+  /**
+   * Chance a normal-room spawn (#156) is upgraded to an elite on Floor 1,
+   * before `eliteChancePerExtraFloor` is added for every floor past it.
+   * Never rolled for a special-room encounter (boss, treasure, shop,
+   * secret) — a modifier layer for the ordinary roster, not for the
+   * fights already authored to be harder on their own.
+   */
+  eliteChanceBase: number;
+  /** Added to `eliteChanceBase` per floor past Floor 1 — the difficulty-rises-across-floors half of #156, cheaper than authoring a fourteenth enemy. */
+  eliteChancePerExtraFloor: number;
+  /** Hard ceiling on the rolled chance, however many floors deep this ever reaches. */
+  eliteChanceMax: number;
+  /** What an elite's health is multiplied by. "Tougher" — #156's own first example. */
+  eliteHealthMultiplier: number;
+  /** What an elite's contact damage is multiplied by. Smaller than the health multiplier: a body worth shooting more, not a room worth avoiding entirely. */
+  eliteContactDamageMultiplier: number;
+  /**
+   * What an elite's collider radius (and mass, matched to it) is multiplied
+   * by — "elite variants read as elite at a glance, without needing a
+   * health bar to tell you" (#156's acceptance criterion) is a size
+   * difference before it is a colour one.
+   */
+  eliteRadiusMultiplier: number;
 }
 
 /**
@@ -654,6 +677,15 @@ export const DEFAULT_ENEMY_TUNING: Readonly<EnemyTuning> = {
   projectileSpeedScale: 1,
   deflectParticles: 6,
   deflectShake: 0.3,
+  // 8% on Floor 1, 14% on Floor 2 — noticeable without every third room
+  // being an elite encounter. #54's own telemetry-driven pass is what
+  // actually earns these numbers; this is a starting point, not a verdict.
+  eliteChanceBase: 0.08,
+  eliteChancePerExtraFloor: 0.06,
+  eliteChanceMax: 0.35,
+  eliteHealthMultiplier: 1.8,
+  eliteContactDamageMultiplier: 1.3,
+  eliteRadiusMultiplier: 1.2,
 };
 
 export const DEFAULT_PROMILLE_TUNING: Readonly<PromilleTuning> = {
