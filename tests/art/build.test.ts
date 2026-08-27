@@ -4,7 +4,27 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AtlasBuildError, buildAtlases } from '../../tools/art/build.mjs';
 import { decodePng } from '../../tools/art/png.mjs';
+import { FLOOR_PALETTES } from '../../tools/art/palette.mjs';
 import { makePng, solidPng } from './helpers.js';
+
+// Two arbitrary on-palette cellar colours, read from the real palette rather
+// than hardcoded here a second time — a hex value copy-pasted as "some legal
+// colour" is exactly what quietly went stale (twice) when the cellar palette
+// itself was tuned for contrast (#35).
+function cellarColor(index: number): number {
+  const value = FLOOR_PALETTES.cellar[index];
+  if (value === undefined) {
+    throw new Error(`cellar palette has no colour at index ${String(index)}`);
+  }
+  return value;
+}
+const CELLAR_A = cellarColor(0);
+const CELLAR_B = cellarColor(3);
+
+/** `0xrrggbb` to an `[r, g, b, a]` tuple, for `makePng`'s per-pixel callback. */
+function rgba(hex: number, alpha = 255): [number, number, number, number] {
+  return [(hex >> 16) & 0xff, (hex >> 8) & 0xff, hex & 0xff, alpha];
+}
 
 async function writeSprite(
   root: string,
@@ -44,8 +64,8 @@ describe('buildAtlases', () => {
   });
 
   it('packs on-palette sprites into an atlas and reports its size and memory', async () => {
-    await writeSprite(root, 'floor-1-cellar', 'tiles', 'floor', solidPng(16, 16, 0x35383a));
-    await writeSprite(root, 'floor-1-cellar', 'tiles', 'wall', solidPng(16, 16, 0x5a4230));
+    await writeSprite(root, 'floor-1-cellar', 'tiles', 'floor', solidPng(16, 16, CELLAR_A));
+    await writeSprite(root, 'floor-1-cellar', 'tiles', 'wall', solidPng(16, 16, CELLAR_B));
 
     const report = await buildAtlases({ rootDir: root, outDir: out, write: true });
     expect(report.atlasCount).toBe(1);
@@ -73,7 +93,7 @@ describe('buildAtlases', () => {
   it('fails the build on an off-palette pixel, naming the file and the pixel', async () => {
     // 0xd92b3c is only legal on floor-7-wiesn, not floor-1-cellar.
     const bad = makePng(16, 16, (x, y) =>
-      x === 5 && y === 9 ? [0xd9, 0x2b, 0x3c, 255] : [0x35, 0x38, 0x3a, 255],
+      x === 5 && y === 9 ? [0xd9, 0x2b, 0x3c, 255] : rgba(CELLAR_A),
     );
     await writeSprite(root, 'floor-1-cellar', 'tiles', 'bad', bad);
 
@@ -88,7 +108,7 @@ describe('buildAtlases', () => {
   });
 
   it('fails the build on a sprite outside its category size spec', async () => {
-    await writeSprite(root, 'floor-1-cellar', 'tiles', 'oversized', solidPng(20, 20, 0x35383a));
+    await writeSprite(root, 'floor-1-cellar', 'tiles', 'oversized', solidPng(20, 20, CELLAR_A));
 
     const failure = await buildAtlases({ rootDir: root, outDir: out, write: false }).catch(
       (error: unknown) => error,

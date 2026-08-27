@@ -30,15 +30,18 @@ interface RoomPalette {
  * as one palette rather than two. `floor`/`wall` are the two darker concrete
  * greys, `wallEdge` the lightest one as a highlight; `block` (an obstacle —
  * usually a rack or a crate) is the one wood accent, with the same light
- * concrete grey as its edge rather than a second, invented wood tone.
+ * concrete grey as its edge rather than a second, invented wood tone. The
+ * three greys sit close together on purpose — a damp basement lit by one
+ * bulb is a low-contrast room, and far-apart values read as a checkerboard
+ * the instant they fill a whole floor.
  */
 const FLOOR_PALETTES: Readonly<Record<number, RoomPalette>> = {
   1: {
-    floor: 0x53585c,
-    wall: 0x35383a,
-    wallEdge: 0x787e83,
-    block: 0x5a4230,
-    blockEdge: 0x787e83,
+    floor: 0x4a4d50,
+    wall: 0x3c3e40,
+    wallEdge: 0x5b5f63,
+    block: 0x54402e,
+    blockEdge: 0x5b5f63,
   },
 };
 
@@ -51,9 +54,11 @@ function paletteFor(floor: number): RoomPalette {
  * standing pool, the amber accent for the light it catches
  * (`docs/CONTENT_BIBLE.md`'s "one warm amber light source") — the one place
  * on this floor amber is meant to show up at all, which is also why it
- * isn't used for the wall/block edges above.
+ * isn't used for the wall/block edges above, and drawn at a lower alpha
+ * than the walls/blocks so a small saturated accent doesn't read as loud as
+ * a large low-contrast fill.
  */
-const PUDDLE_COLOUR = 0x35383a;
+const PUDDLE_COLOUR = 0x3c3e40;
 const PUDDLE_EDGE_COLOUR = 0xd99a3f;
 
 /** A locked door reads as cold and shut; an open one picks up the floor's amber light. */

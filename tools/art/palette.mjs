@@ -26,8 +26,11 @@ export const FLOOR_PALETTES = {
   // Der Keller — bare-concrete grey dominates (a German Keller is poured
   // concrete or concrete block, not a wooden cellar), one brown for the
   // wooden racks as a detail rather than the base material, one warm amber
-  // light source.
-  cellar: [0x35383a, 0x53585c, 0x787e83, 0x5a4230, 0xd99a3f],
+  // light source. The three greys sit close together on purpose — a damp
+  // basement is a low-contrast room lit by one bulb, not a checkerboard,
+  // and a tile texture built from far-apart values turns "busy" the moment
+  // it repeats across a whole floor.
+  cellar: [0x3c3e40, 0x4a4d50, 0x5b5f63, 0x54402e, 0xd99a3f],
   // Dorf & Acker — "green, sky blue, white-and-blue bunting"
   rural: [0x3f7a3a, 0x7fbf6a, 0x6ab0d9, 0x2e4f8c, 0xe8e2d0],
   // Der Wald — "deep green, black, sickly luminous fungus"
@@ -84,7 +87,7 @@ const FLOOR_BACKGROUND_SWATCHES = {
   // The wood accent is excluded here for the same reason the amber light is
   // — a wooden rack is furniture sitting in a concrete room, not the wall or
   // floor material itself.
-  cellar: [0x35383a, 0x53585c, 0x787e83],
+  cellar: [0x3c3e40, 0x4a4d50, 0x5b5f63],
   rural: [0x3f7a3a, 0x7fbf6a, 0x6ab0d9],
   wald: [0x16261a, 0x234d2b, 0x3d6b3a],
   alpen: [0xeef2f5, 0xb9c4cc, 0x6e7680],
