@@ -350,6 +350,83 @@ describe('Große Kellerassel boss (#36 follow-up)', () => {
   });
 });
 
+describe('Der Stier boss (#38)', () => {
+  it('charges into a wall and comes out stunned, then charges again', () => {
+    const sim = emptySim();
+    const player = sim.playerIndex;
+    const enemy = place(sim, 'der-stier', sim.positionX(player) + 60, sim.positionY(player));
+
+    let reachedCharge = false;
+    let reachedStunned = false;
+    for (let tick = 0; tick < 300 && !reachedStunned; tick++) {
+      sim.step(IDLE);
+      const state = stateName(sim, enemy);
+      reachedCharge ||= state === 'charge';
+      reachedStunned = state === 'stunned';
+    }
+    expect(reachedCharge).toBe(true);
+    expect(reachedStunned).toBe(true);
+
+    // The loop closes: stunned lets go back into approach/telegraph/charge
+    // rather than stalling once the first charge is spent.
+    let reachedApproachAgain = false;
+    for (let tick = 0; tick < 80 && !reachedApproachAgain; tick++) {
+      sim.step(IDLE);
+      reachedApproachAgain = stateName(sim, enemy) === 'approach';
+    }
+    expect(reachedApproachAgain).toBe(true);
+  });
+
+  it('splits into the mounted Maibaum-Dieb the instant health crosses half, keeping the same total budget', () => {
+    const sim = emptySim();
+    const player = sim.playerIndex;
+    const enemy = place(sim, 'der-stier', sim.positionX(player) + 200, sim.positionY(player));
+
+    // 24 -> 15: still above the 12-health threshold.
+    applyDamageAt(sim, enemy, 9, sim.positionX(enemy), sim.positionY(enemy), 0, 0, -1);
+    for (let tick = 0; tick < 20; tick++) {
+      sim.step(IDLE);
+    }
+    expect(liveEnemies(sim, 'der-stier')).toBe(1);
+    expect(liveEnemies(sim, 'der-stier-maibaum-dieb')).toBe(0);
+
+    // 15 -> 11: at or below the threshold now.
+    applyDamageAt(sim, enemy, 4, sim.positionX(enemy), sim.positionY(enemy), 0, 0, -1);
+    for (let tick = 0; tick < 20; tick++) {
+      sim.step(IDLE);
+    }
+    expect(liveEnemies(sim, 'der-stier')).toBe(0);
+    expect(liveEnemies(sim, 'der-stier-maibaum-dieb')).toBe(1);
+  });
+
+  it('phase two chains a charge into a ranged swing instead of repeating the same attack', () => {
+    const sim = emptySim();
+    const player = sim.playerIndex;
+    const enemy = place(
+      sim,
+      'der-stier-maibaum-dieb',
+      sim.positionX(player) + 60,
+      sim.positionY(player),
+    );
+
+    let reachedCharge = false;
+    let reachedSwing = false;
+    let firedDuringSwing = false;
+    for (let tick = 0; tick < 400 && !firedDuringSwing; tick++) {
+      sim.step(IDLE);
+      const state = stateName(sim, enemy);
+      reachedCharge ||= state === 'charge';
+      if (state === 'swing') {
+        reachedSwing = true;
+        firedDuringSwing ||= enemyProjectiles(sim) > 0;
+      }
+    }
+    expect(reachedCharge).toBe(true);
+    expect(reachedSwing).toBe(true);
+    expect(firedDuringSwing).toBe(true);
+  });
+});
+
 /**
  * Primitives the shipped roster does not use yet.
  *

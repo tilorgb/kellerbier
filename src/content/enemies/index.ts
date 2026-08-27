@@ -2,6 +2,7 @@ import type { EnemyDefinition } from '../../sim/enemy/definition.js';
 import { bauer } from './bauer.js';
 import { bierratte } from './bierratte.js';
 import { blaskapellist } from './blaskapellist.js';
+import { derStier, maibaumDieb } from './der-stier.js';
 import { gartenzwerg } from './gartenzwerg.js';
 import { gockel } from './gockel.js';
 import { grosseKellerassel, kellerasselSegment } from './grosse-kellerassel.js';
@@ -41,12 +42,15 @@ export const ENEMY_DEFINITIONS: readonly EnemyDefinition[] = [
   gartenzwerg,
   blaskapellist,
   traktor,
+  derStier,
+  maibaumDieb,
 ];
 
 export {
   bauer,
   bierratte,
   blaskapellist,
+  derStier,
   fasssplitter,
   gartenzwerg,
   gockel,
@@ -54,6 +58,7 @@ export {
   kellerassel,
   kellerasselSegment,
   kuh,
+  maibaumDieb,
   rollfass,
   schimmelfleck,
   schimmelspore,

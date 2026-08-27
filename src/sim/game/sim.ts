@@ -930,9 +930,10 @@ export class GameSim {
    * `roomEnemyCount` in a boss room — `null` outside one, or once it is
    * cleared. The same "presence locks the door" rule read as "presence
    * fills the bar," which is what makes this framework-level rather than
-   * Die Große Kellerassel's own: a boss with no split (#38's Stier, say) or
-   * one with several segments alive at once both just sum correctly, with
-   * nothing here naming either of them.
+   * Die Große Kellerassel's own: a boss with no split at all, one that
+   * splits into a single mounted phase two (#38's Stier), or one with
+   * several segments alive at once all just sum correctly, with nothing
+   * here naming any of them.
    *
    * Not cached — `render/boss-health-hud.ts`'s `sync` is the only caller,
    * once a frame, and a boss room never holds enough bodies for the walk to
@@ -1345,8 +1346,14 @@ export class GameSim {
       // once broken (or the room otherwise cleared), it does not come back,
       // the same as an enemy doesn't. Pedestals are handled below, in
       // `restoreOrSpawnRoomLoot` — they're loot, not decoration.
+      //
+      // `maypole` (#38, `content/rooms/dorf-boss.json`) is the same
+      // destructible-obstacle shape as `barrel`, not a new one: Der Stier's
+      // arena cover, breakable by player fire or by his own charge slamming
+      // into it, needed nothing from the engine beyond a second prop type
+      // reusing the path `barrel` already established.
       for (const prop of compiled.decorativeProps) {
-        if (prop.type === 'barrel') {
+        if (prop.type === 'barrel' || prop.type === 'maypole') {
           this.spawnTarget(prop.x, prop.y, TARGET_RADIUS);
         }
       }
