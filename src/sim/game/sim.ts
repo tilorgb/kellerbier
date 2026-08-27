@@ -79,6 +79,7 @@ import { stepCollision } from '../systems/collision.js';
 import { stepContacts } from '../systems/contact.js';
 import { stepEnemyContacts } from '../systems/enemy-contact.js';
 import {
+  ENEMY_FLAG_ELITE,
   ENEMY_MOTION_STRIDE,
   ENEMY_STRIDE,
   stepEnemies,
@@ -1326,6 +1327,10 @@ export class GameSim {
       // room is guaranteed to arrive at, so it is the one spot an author's
       // spawn placement can't account for the player already standing on.
       const entry = direction === null ? null : this.doorEntryPoint(direction, entryCell);
+      // Elites (#156) only ever roll for an ordinary room's own roster —
+      // never a boss, treasure, shop or secret encounter, each of which is
+      // already authored to be its own kind of harder.
+      const eliteChance = compiled.specialRole === undefined ? this.eliteChanceForFloor(floor) : 0;
       for (const spawn of compiled.enemySpawns) {
         if (entry !== null) {
           const dx = spawn.x - entry.x;
@@ -1338,7 +1343,8 @@ export class GameSim {
         if (definition < 0) {
           throw new Error(`room template enemy "${spawn.enemyId}" is not registered`);
         }
-        this.spawnEnemyKind(definition, spawn.x, spawn.y);
+        const elite = eliteChance > 0 && this.random.enemies.nextFloat() < eliteChance;
+        this.spawnEnemyKind(definition, spawn.x, spawn.y, elite);
       }
       // Decorative props are art (#18) except a barrel, a destructible
       // obstacle a room author drops a Bierfassl at for free — `npm run dev`
@@ -3281,28 +3287,45 @@ export class GameSim {
    * An index rather than an id, because this is called from the enemy system
    * while a body is splitting, and a string lookup in the frame loop is one the
    * registry already did at construction.
+   *
+   * `elite` (#156) is the modifier layer applied at spawn rather than
+   * thirteen more hand-authored creatures: bigger, tougher and harder-
+   * hitting than the same definition's ordinary spawn, by the multipliers
+   * in `tuning.enemy`, with `ENEMY_FLAG_ELITE` set so the renderer can tint
+   * it — "reads as elite at a glance, without needing a health bar to tell
+   * you." A boss's own `splitOnDeath` (its phase two) never passes this;
+   * see `applyCompiledRoom` for the one call site that rolls it.
    */
-  spawnEnemyKind(definition: number, x: number, y: number): Entity {
+  spawnEnemyKind(definition: number, x: number, y: number, elite = false): Entity {
     const compiled = this.enemies.at(definition);
-    const entity = this.spawnTarget(x, y, compiled.radius);
+    const sizeMultiplier = elite ? this.tuning.enemy.eliteRadiusMultiplier : 1;
+    const entity = this.spawnTarget(x, y, compiled.radius * sizeMultiplier);
     const index = entityIndex(entity);
 
     this.world.add(entity, this.enemy);
     this.world.add(entity, this.enemyMotion);
 
     const body = this.body.data;
-    body[index * 2 + 1] = compiled.mass;
+    body[index * 2 + 1] = compiled.mass * sizeMultiplier;
 
     const health = this.health.data;
-    health[index * 2] = compiled.health;
-    health[index * 2 + 1] = compiled.health;
-    this.contactDamage.data[index] = compiled.contactDamage;
+    const maxHealth = elite
+      ? Math.round(compiled.health * this.tuning.enemy.eliteHealthMultiplier)
+      : compiled.health;
+    health[index * 2] = maxHealth;
+    health[index * 2 + 1] = maxHealth;
+    this.contactDamage.data[index] = elite
+      ? Math.round(compiled.contactDamage * this.tuning.enemy.eliteContactDamageMultiplier)
+      : compiled.contactDamage;
 
     // `add` zeroed both components, which is most of the state a body starts
     // in: no ticks in the state, and none of the flags a transition reads.
     const enemy = this.enemy.data;
     enemy[index * ENEMY_STRIDE] = definition;
     enemy[index * ENEMY_STRIDE + 1] = compiled.initialState;
+    if (elite) {
+      enemy[index * ENEMY_STRIDE + 3] = ENEMY_FLAG_ELITE;
+    }
 
     // Heading east, and the spawn point `orbitPoint` circles.
     const motion = this.enemyMotion.data;
@@ -3316,6 +3339,20 @@ export class GameSim {
     }
 
     return entity;
+  }
+
+  /**
+   * The elite roll's chance on a given floor (#156) — `eliteChanceBase` plus
+   * one `eliteChancePerExtraFloor` for every floor past the first, capped at
+   * `eliteChanceMax`. The one place `applyCompiledRoom` needs this number,
+   * pulled out so the roll itself reads as "spawn, maybe elite" rather than
+   * the arithmetic living inline in that loop.
+   */
+  private eliteChanceForFloor(floor: number): number {
+    const tuning = this.tuning.enemy;
+    const chance =
+      tuning.eliteChanceBase + Math.max(0, floor - 1) * tuning.eliteChancePerExtraFloor;
+    return Math.min(tuning.eliteChanceMax, chance);
   }
 
   spawnTarget(x: number, y: number, radius: number = TARGET_RADIUS): Entity {

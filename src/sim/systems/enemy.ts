@@ -42,6 +42,13 @@ import { ProjectileTeam } from '../projectile/store.js';
 export const ENEMY_FLAG_HIT = 1 << 0;
 /** The body ran into a wall or a block. Written by `stepBodies`. */
 export const ENEMY_FLAG_BLOCKED = 1 << 1;
+/**
+ * An elite spawn (#156) — rolled once, at spawn (`GameSim.spawnEnemyKind`),
+ * and never cleared: unlike `ENEMY_FLAG_HIT`/`ENEMY_FLAG_BLOCKED`, this bit
+ * is not part of the per-tick clear below, since it describes the body
+ * itself rather than something that happened to it this tick.
+ */
+export const ENEMY_FLAG_ELITE = 1 << 2;
 
 /**
  * Ticks a body may sit in one state before the counter stops climbing.
@@ -527,6 +534,20 @@ export function isEnemyInvulnerable(sim: GameSim, index: number): boolean {
     return false;
   }
   return (sim.enemy.data[base + 2] ?? 0) <= state.invulnerableTicks;
+}
+
+/**
+ * True for a body `GameSim.spawnEnemyKind` rolled as an elite (#156) —
+ * read by the renderer for the tint that is supposed to make one
+ * recognisable without a health bar, same as `isEnemyInvulnerable` is read
+ * for the curled-shell one.
+ */
+export function isEnemyElite(sim: GameSim, index: number): boolean {
+  if (((sim.world.masks[index] ?? 0) & sim.enemyMask) !== sim.enemyMask) {
+    return false;
+  }
+  const base = index * ENEMY_STRIDE;
+  return ((sim.enemy.data[base + 3] ?? 0) & ENEMY_FLAG_ELITE) !== 0;
 }
 
 /**
