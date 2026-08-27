@@ -137,7 +137,7 @@ function resolveAgainstPlayer(other: number): void {
   // Whatever a wall would not let the player take, the other body owes instead.
   const otherWanted = overlap - playerWanted + owed;
   owed =
-    otherWanted + moveClear(sim, other, otherRadius, otherX, otherY, -awayX, -awayY, otherWanted);
+    otherWanted - moveClear(sim, other, otherRadius, otherX, otherY, -awayX, -awayY, otherWanted);
 
   // And if it is against a wall too, back to the player, who at least has an
   // input telling them why they are not moving.
@@ -209,8 +209,12 @@ function slowPlayerInto(sim: GameSim, awayX: number, awayY: number, share: numbe
  * destination is tested for clearance first — and the distance that a wall
  * refused comes back, so the pair's other body can take it on instead of it
  * quietly going missing.
+ *
+ * Exported for `enemy-contact.ts`'s own pairwise separation, which is the
+ * same wall-aware "move this far, tell me what actually happened" primitive
+ * against a generic pair rather than always the player.
  */
-function moveClear(
+export function moveClear(
   sim: GameSim,
   index: number,
   radius: number,

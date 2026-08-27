@@ -14,7 +14,10 @@
         "###############"
       ],
       "obstacles": [],
-      "enemySpawns": [{ "x": 176, "y": 72, "group": "gallery-watch" }],
+      "enemySpawns": [
+        { "x": 176, "y": 72, "group": "gallery-watch" },
+        { "x": 208, "y": 112, "group": "gallery-watch" }
+      ],
       "spawnGroups": [
         {
           "id": "gallery-watch",
@@ -42,8 +45,14 @@
         "#.............#",
         "###############"
       ],
-      "obstacles": [{ "x": 96, "y": 56, "width": 32, "height": 32 }],
-      "enemySpawns": [{ "x": 64, "y": 32, "group": "gallery-watch" }],
+      "obstacles": [
+        { "x": 96, "y": 56, "width": 32, "height": 32 },
+        { "x": 32, "y": 96, "width": 16, "height": 16 }
+      ],
+      "enemySpawns": [
+        { "x": 64, "y": 32, "group": "gallery-watch" },
+        { "x": 176, "y": 32, "group": "gallery-watch" }
+      ],
       "spawnGroups": [
         {
           "id": "gallery-watch",

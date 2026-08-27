@@ -103,7 +103,10 @@ describe('loot on enemy death', () => {
     const bierratteId = sim.enemies.indexOf('bierratte');
     expect(bierratteId).toBeGreaterThanOrEqual(0);
 
-    for (let kill = 0; kill < 40; kill++) {
+    // A weak-tier kill is now an 8%-ish drop chance (#loot-density) rather
+    // than the original 15% — more kills, so "eventually drops something"
+    // still holds with a comfortable margin rather than a bare majority.
+    for (let kill = 0; kill < 100; kill++) {
       const x = sim.positionX(sim.playerIndex) + 60 + kill;
       const y = sim.positionY(sim.playerIndex);
       sim.spawnEnemyKind(bierratteId, x, y);

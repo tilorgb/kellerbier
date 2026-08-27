@@ -716,3 +716,42 @@ the sway-wobble problem #8 described for a mouse or a stick is exactly what woul
 upgrade. That item, when it's built, re-derives its own analog-aim plumbing from what it actually
 needs rather than resurrecting this decision's flag unchanged; nothing here is being kept dormant
 on the bet that the shape will still fit.
+
+## 21. Enemies push each other apart too, identified by `enemyMask`, not by collision layer
+
+**Decided:** M6. **Enforced by:** `sim/systems/enemy-contact.ts`.
+
+`sim/systems/contact.ts` already keeps the player from standing inside an enemy or obstacle;
+nothing did the same between two enemies, which is exactly why a boss split
+(`splitFromEvent`, `systems/enemy.ts`) spawns its children in a ring and then lets them drift
+back on top of each other forever. `stepEnemyContacts` is the same mass-split position
+correction, run as its own pass over every unordered pair of enemies rather than folded into
+`stepContacts` — reusing the same tick's broadphase, immediately after it.
+
+The one surprise: filtering candidates by `CollisionLayer.Enemy` — the obvious thing to try,
+since `contact.ts`'s own `SOLID_LAYERS` already names it — silently resolves nothing, because
+every body `spawnTarget` creates (a real, authored enemy included) is tagged
+`CollisionLayer.Obstacle`. `CollisionLayer.Enemy` is declared and reserved but nothing has ever
+set it. `stepEnemyContacts` instead identifies a real enemy the same way `stepEnemies` already
+iterates them: `(sim.world.masks[index] & sim.enemyMask) === sim.enemyMask`, the `enemy` +
+`enemyMotion` component pair. This sidesteps the layer gap rather than closing it — actually
+setting `CollisionLayer.Enemy` on every enemy is a separate, wider change (everything that reads
+`SOLID_LAYERS`/`DECLARED_PAIRS` would need auditing against a layer newly being real) that
+nothing here needed to make correct.
+
+**A second, pre-existing bug surfaced by building this**: `contact.ts`'s own separation math had
+`owed = otherWanted + moveClear(...)` where the first half of the same function correctly used
+`owed = wanted - moveClear(...)` — `moveClear` returns how far a body actually got, not how far
+a wall refused it, so the second `owed` should subtract the same way the first one does. Added
+instead of subtracted, `owed` came out strongly positive whenever the far side's move was
+unblocked (the ordinary open-room case) rather than zero, and the player then got shoved an
+extra, unwanted distance on top of their own already-correct share on every contact that wasn't
+against a wall. Fixed in both `contact.ts` and this file's own copy of the same math —
+`tests/unit/contact.test.ts`'s "resolves the overlap exactly, without overshooting" is the
+regression lock, added because the existing player-vs-enemy tests only checked the loose
+"stopped overlapping" invariant, which the overshoot still satisfied.
+
+**Constrains:** a future system that needs to tell a real enemy apart from an inert body
+(a training target, a pickup, an obstacle prop) reaches for the `enemyMask` component check
+first, not a collision layer — the layer only reliably distinguishes `Obstacle`-tagged bodies
+from projectiles, the player and pickups today, not enemies from non-enemies.

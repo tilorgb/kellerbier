@@ -1,92 +1,35 @@
 {
   "id": "cellar-boss",
-  "cells": [
+  "tileGrid": [
+    "###############",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "###############"
+  ],
+  "obstacles": [],
+  "enemySpawns": [{ "x": 120, "y": 60, "group": "boss" }],
+  "spawnGroups": [
     {
-      "tileGrid": [
-        "###############",
-        "#.............#",
-        "#.............#",
-        "#.............#",
-        "#.............#",
-        "#.............#",
-        "#.............#",
-        "#.............#",
-        "###############"
-      ],
-      "obstacles": [],
-      "enemySpawns": [{ "x": 120, "y": 60, "group": "boss" }],
-      "spawnGroups": [
-        {
-          "id": "boss",
-          "count": 1,
-          "choices": [{ "enemyId": "grosse-kellerassel", "minFloor": 1, "maxFloor": 2 }]
-        }
-      ],
-      "pickupSpawns": [],
-      "hazards": [],
-      "decorativeProps": [{ "x": 120, "y": 20, "type": "boss-plate" }]
-    },
-    {
-      "tileGrid": [
-        "###############",
-        "#.............#",
-        "#.............#",
-        "#.............#",
-        "#.............#",
-        "#.............#",
-        "#.............#",
-        "#.............#",
-        "###############"
-      ],
-      "obstacles": [],
-      "enemySpawns": [],
-      "spawnGroups": [],
-      "pickupSpawns": [],
-      "hazards": [],
-      "decorativeProps": []
-    },
-    {
-      "tileGrid": [
-        "###############",
-        "#.............#",
-        "#.............#",
-        "#.............#",
-        "#.............#",
-        "#.............#",
-        "#.............#",
-        "#.............#",
-        "###############"
-      ],
-      "obstacles": [],
-      "enemySpawns": [],
-      "spawnGroups": [],
-      "pickupSpawns": [],
-      "hazards": [],
-      "decorativeProps": []
-    },
-    {
-      "tileGrid": [
-        "###############",
-        "#.............#",
-        "#.............#",
-        "#.............#",
-        "#.............#",
-        "#.............#",
-        "#.............#",
-        "#.............#",
-        "###############"
-      ],
-      "obstacles": [],
-      "enemySpawns": [],
-      "spawnGroups": [],
-      "pickupSpawns": [],
-      "hazards": [],
-      "decorativeProps": [{ "x": 120, "y": 72, "type": "pedestal" }]
+      "id": "boss",
+      "count": 1,
+      "choices": [{ "enemyId": "grosse-kellerassel", "minFloor": 1, "maxFloor": 2 }]
     }
+  ],
+  "pickupSpawns": [],
+  "hazards": [],
+  "decorativeProps": [
+    { "x": 120, "y": 20, "type": "boss-plate" },
+    { "x": 120, "y": 100, "type": "pedestal" }
   ],
   "metadata": {
     "floorTags": ["cellar", "rural"],
-    "shape": "2x2",
+    "shape": "1x1",
+    "doors": { "north": true, "east": true, "south": true, "west": true },
     "difficultyTier": 5,
     "weight": 1,
     "specialRole": "boss"

@@ -274,17 +274,20 @@ function shapeFootprints(shape: RoomShape): readonly (readonly Cell[])[] {
 }
 
 /**
- * `1x1` always wins by weight — most of a floor is plain rooms, not
- * landmarks. `T` is the rarest: a 3x3 landmark room should read as a genuine
- * find, not a shape a player sees every floor (#107).
+ * The single room is the core of a floor; a multi-cell "big" room is a rare
+ * landmark, not a shape a player expects to see every floor. Weighted low
+ * enough that most floors roll none at all, and `MAX_BIG_ROOMS_PER_FLOOR`
+ * (`buildSkeleton`) backstops the rest — a run of luck on this roll can never
+ * turn a floor into a string of landmarks. `T` stays the rarest of the big
+ * shapes: a 3x3 landmark room should read as a genuine find (#107).
  */
 function chooseShape(rng: Rng): RoomShape {
   return rng.weightedPick<RoomShape>([
-    { value: '1x1', weight: 0.55 },
-    { value: '1x2', weight: 0.2 },
-    { value: 'L', weight: 0.1 },
-    { value: '2x2', weight: 0.1 },
-    { value: 'T', weight: 0.05 },
+    { value: '1x1', weight: 0.94 },
+    { value: '1x2', weight: 0.03 },
+    { value: 'L', weight: 0.015 },
+    { value: '2x2', weight: 0.01 },
+    { value: 'T', weight: 0.005 },
   ]);
 }
 
@@ -713,6 +716,14 @@ function placeStaircase(
  * on #20 that a floor has "a recognisable shape rather than always sprawling
  * into a blob".
  */
+/**
+ * A big (multi-cell, non-staircase) room is a rare landmark (#big-rooms) —
+ * this is the hard backstop behind `chooseShape`'s low weights, so an unlucky
+ * run of rolls can never turn a floor into a string of them. One per floor
+ * is enough for the shape to still read as special.
+ */
+const MAX_BIG_ROOMS_PER_FLOOR = 1;
+
 function buildSkeleton(
   rng: Rng,
   config: FloorConfig,
@@ -722,6 +733,7 @@ function buildSkeleton(
   const occupied = new Map<string, number>();
   const rooms: PlacedRoom[] = [];
   const frontier: Cell[] = [];
+  let bigRoomsPlaced = 0;
 
   const eligibleStaircases = staircasePool.filter((template) =>
     template.floorTags.includes(config.floorTag),
@@ -831,10 +843,13 @@ function buildSkeleton(
       continue;
     }
 
-    const shape = chooseShape(rng);
+    const shape = bigRoomsPlaced >= MAX_BIG_ROOMS_PER_FLOOR ? '1x1' : chooseShape(rng);
     const footprint = placeShape(rng, occupied, anchor, shape, config.gridRadius);
     if (footprint !== null) {
       place(footprint, shape);
+      if (shape !== '1x1') {
+        bigRoomsPlaced += 1;
+      }
     } else {
       place([anchor], '1x1');
     }
@@ -1157,7 +1172,18 @@ function assignRoles(
   );
   const deadEnds = candidates.filter((room) => degreeOf(room.id) === 1);
 
-  const bossPool = (deadEnds.length > 0 ? deadEnds : candidates).slice().sort(byFarthestFirst);
+  // A boss is a normal-room encounter, not a big-room one — a big room being
+  // special is exactly as true for a boss fight as it is for anything else
+  // (#big-rooms). A boss deliberately designed for a big room is a future,
+  // separate thing (a template opting in), not something this generic slot
+  // assignment does automatically by picking whatever shape a dead end
+  // happens to have landed on.
+  const bossEligible = candidates.filter((room) => room.shape === '1x1');
+  const bossDeadEnds = deadEnds.filter((room) => room.shape === '1x1');
+
+  const bossPool = (bossDeadEnds.length > 0 ? bossDeadEnds : bossEligible)
+    .slice()
+    .sort(byFarthestFirst);
   const boss = bossPool[0];
   if (boss === undefined) {
     return null;

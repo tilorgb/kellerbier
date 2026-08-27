@@ -877,6 +877,14 @@ WASD move   arrows aim and fire
     sim = new GameSim({
       seed: RUN_SEED,
       roomTemplate: planTemplate(planRoom(floorPlan, currentRoomId)),
+      // Without this, the start room falls back to `compileRoomTemplate`'s
+      // default `SINGLE_CELL_PLACEMENT` (no doors), which in turn falls back
+      // to compiling a door on every direction the template's raw metadata
+      // allows — not just the ones the floor plan actually put a room
+      // behind. The start room is always a plain `1x1` (`buildSkeleton`
+      // places it first, unconditionally), so `buildPlacement` always has a
+      // real floor-grid cell to work from here.
+      roomPlacement: buildPlacement(planRoom(floorPlan, currentRoomId)),
       floor: floorPlan.floor,
       hiddenDoors: hiddenDoorsFor(floorPlan, currentRoomId, revealedEdges),
       // The run's very first room reads as a quick, safe tutorial beat

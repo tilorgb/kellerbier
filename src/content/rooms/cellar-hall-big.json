@@ -77,8 +77,14 @@
         "#.............#",
         "###############"
       ],
-      "obstacles": [{ "x": 104, "y": 64, "width": 32, "height": 32 }],
-      "enemySpawns": [{ "x": 48, "y": 112, "group": "hall-guard" }],
+      "obstacles": [
+        { "x": 104, "y": 64, "width": 32, "height": 32 },
+        { "x": 192, "y": 32, "width": 16, "height": 16 }
+      ],
+      "enemySpawns": [
+        { "x": 48, "y": 112, "group": "hall-guard" },
+        { "x": 208, "y": 96, "group": "hall-guard" }
+      ],
       "spawnGroups": [
         {
           "id": "hall-guard",
@@ -134,7 +140,7 @@
   "metadata": {
     "floorTags": ["cellar", "rural"],
     "shape": "2x2",
-    "difficultyTier": 2,
+    "difficultyTier": 3,
     "weight": 1
   }
 }

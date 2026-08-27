@@ -145,21 +145,20 @@ describe('floor generation', () => {
     expect(planB).not.toEqual(planA);
   });
 
-  it('a known-good seed generates a valid floor 1 that rolls every shape', () => {
+  it('a known-good seed generates a valid floor 1', () => {
     // `npm run dev` no longer boots into a fixed seed (it randomises one on
     // every load, and `?seed=`/the `R` key can pin a specific one instead —
     // see `app/main.ts`), so this seed is no longer "the dev demo's" in
-    // particular, just a known-good regression lock: hand-picked to succeed
-    // and to roll every shape (1x1/1x2/2x2/L/T) on floor 1. Content or
-    // generator changes can shift which seeds succeed (that's exactly what
-    // broke seed 5 once #23's specialRole matching landed, seed 15 once
-    // #107's `T` shape and rebalanced `chooseShape` weights landed, and
-    // seed 11 once #112's `buildDoorAllowance` started excluding an `L`/`T`
-    // room's own void-adjacent directions from `computeAdjacency` — a floor
-    // that only "validated" before because a void-doomed door was still
-    // counted as a real connection now correctly retries instead), so this
-    // exists to catch that class of regression on its own, decoupled from
-    // whatever seed a given `npm run dev` session happens to be using.
+    // particular, just a known-good regression lock: hand-picked to succeed.
+    // Content or generator changes can shift which seeds succeed (that's
+    // exactly what broke seed 5 once #23's specialRole matching landed, seed
+    // 15 once #107's `T` shape and rebalanced `chooseShape` weights landed,
+    // and seed 11 once #112's `buildDoorAllowance` started excluding an
+    // `L`/`T` room's own void-adjacent directions from `computeAdjacency` —
+    // a floor that only "validated" before because a void-doomed door was
+    // still counted as a real connection now correctly retries instead), so
+    // this exists to catch that class of regression on its own, decoupled
+    // from whatever seed a given `npm run dev` session happens to be using.
     const RUN_SEED = 16;
     const config = floorConfig(0);
     const plan = generateFloor(
@@ -169,8 +168,28 @@ describe('floor generation', () => {
     );
 
     expect(validateFloorPlan(plan, CELLAR_TEMPLATES)).toEqual([]);
-    const shapes = new Set(plan.rooms.map((room) => room.shape));
-    expect([...shapes].sort()).toEqual([...ROOM_SHAPES].sort());
+  });
+
+  it('rolls every shape somewhere across many floors, without ever rolling more than one big room on the same floor', () => {
+    // A big (non-`1x1`) room is a rare, at-most-one-per-floor landmark
+    // (#big-rooms) — `chooseShape`'s weights are low and `buildSkeleton`'s
+    // `MAX_BIG_ROOMS_PER_FLOOR` backstops them, so no single floor should
+    // ever roll two, but every shape should still turn up given enough
+    // floors, proving `chooseShape`'s weighted pick still reaches every
+    // branch rather than one going quietly dead.
+    const config = floorConfig(0);
+    const seenShapes = new Set<string>();
+    for (let seed = 0; seed < 200; seed++) {
+      const plan = generateFloor(new Rng(seed), config, CELLAR_TEMPLATES);
+      const bigRoomShapes = plan.rooms
+        .map((room) => room.shape)
+        .filter((shape) => shape !== '1x1' && shape !== 'staircase');
+      expect(bigRoomShapes.length, `seed ${String(seed)}`).toBeLessThanOrEqual(1);
+      for (const shape of plan.rooms.map((room) => room.shape)) {
+        seenShapes.add(shape);
+      }
+    }
+    expect([...seenShapes].sort()).toEqual([...ROOM_SHAPES].sort());
   });
 
   it('validates a real floor 1 layout against the authored template pool', () => {
