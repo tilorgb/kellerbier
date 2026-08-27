@@ -162,18 +162,18 @@ export interface ShootingTuning {
  */
 export interface ImpactTuning {
   /**
-   * Ticks the whole simulation freezes on a hit, plus a scaling term.
+   * Ticks a struck body's own hit-stagger lasts, plus a scaling term.
    *
-   * Hitstop costs nothing and is felt enormously. It reads as the hit having
-   * weight, because for two frames the game agrees that something happened.
-   * Capped hard: past about four ticks it stops reading as impact and starts
-   * reading as a dropped frame.
+   * Local to the body — see `hitStun` on `GameSim` for why this is not a
+   * whole-simulation freeze. It still costs nothing and is felt enormously:
+   * it reads as the hit having weight, because for a couple of frames the
+   * thing that got hit agrees that something happened. Capped hard: past
+   * about four ticks it stops reading as impact and starts reading as the
+   * body being unresponsive.
    */
-  hitstopTicks: number;
-  hitstopPerDamage: number;
-  maxHitstopTicks: number;
-  /** A kill earns a longer freeze than a hit. */
-  deathHitstopTicks: number;
+  hitstunTicks: number;
+  hitstunPerDamage: number;
+  maxHitstunTicks: number;
 
   /** Ticks a struck body renders solid white. One tick is the whole effect. */
   flashTicks: number;
@@ -632,10 +632,9 @@ export const DEFAULT_SHOOTING_TUNING: Readonly<ShootingTuning> = {
 
 /** A fresh, mutable copy of every default. */
 export const DEFAULT_IMPACT_TUNING: Readonly<ImpactTuning> = {
-  hitstopTicks: 2,
-  hitstopPerDamage: 0.6,
-  maxHitstopTicks: 4,
-  deathHitstopTicks: 6,
+  hitstunTicks: 2,
+  hitstunPerDamage: 0.6,
+  maxHitstunTicks: 4,
 
   flashTicks: 1,
   deathFlashTicks: 3,

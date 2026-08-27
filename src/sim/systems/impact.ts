@@ -11,9 +11,16 @@ import { addPush } from './movement.js';
  *
  * This is the most important file in the game. Everything else is content;
  * this is the reason the content is worth playing. A hit fires the whole
- * package at once — flash, freeze, knockback, shake, foam — and none of the
- * individual pieces is expensive or clever. What matters is that they all
- * happen, together, on the same frame.
+ * package at once — flash, a local hit-stagger, knockback, shake, foam — and
+ * none of the individual pieces is expensive or clever. What matters is that
+ * they all happen, together, on the same frame.
+ *
+ * The stagger (`GameSim.hitStun`, spent in `stepEnemies`) is deliberately
+ * local to whatever got hit, not a `requestHitstop` freeze of the whole
+ * simulation: a hit rate high enough to matter — a held trigger against a
+ * cluster, one burn tick landing on several bodies at once — used to
+ * synchronise into the entire game stopping several times a second. See
+ * `hitStun`'s doc comment on `GameSim` for the measurement.
  *
  * It reads the event queue rather than being called by collision, which is what
  * lets any of it be retuned, weakened for accessibility, or switched off
@@ -129,11 +136,16 @@ function append(buffer: Int32Array, counter: number, slot: number): void {
 /**
  * What touching something that hurts does.
  *
- * The same package as being shot — flash, freeze, knockback, shake — pointed at
- * the player instead of at what they were shooting, plus the one piece a
- * contact hit needs and a projectile hit does not: a window in which it cannot
- * happen again. Without it, standing in something empties the health bar in a
- * tenth of a second and the player never sees what killed them.
+ * The same package as being shot — flash, knockback, shake — pointed at the
+ * player instead of at what they were shooting, plus the one piece a contact
+ * hit needs and a projectile hit does not: a window in which it cannot happen
+ * again. Without it, standing in something empties the health bar in a tenth
+ * of a second and the player never sees what killed them.
+ *
+ * No hit-stagger: the victim is always the player, and stunning the player's
+ * own controls on every contact hit is not a "juicier" hit, it is dropped
+ * input — see `hitStun`'s doc comment on `GameSim`. The i-frames below are
+ * what keeps one hazard from reading as several.
  */
 function applyContact(sim: GameSim, slot: number): void {
   const events = sim.events;
@@ -149,7 +161,6 @@ function applyContact(sim: GameSim, slot: number): void {
   dispatchItemDamageTaken(sim, damage);
 
   sim.flash.data[victim] = Math.min(255, Math.round(tuning.deathFlashTicks));
-  sim.requestHitstop(Math.round(tuning.deathHitstopTicks));
   sim.makePlayerInvulnerable(Math.round(tuning.contactInvulnerabilityTicks));
 
   // Thrown clear of what hurt them. Being hurt and left standing in the thing
@@ -205,8 +216,8 @@ function applyHit(sim: GameSim, slot: number): void {
 }
 
 /**
- * The package a landed hit fires — health, flash, hitstop, knockback, shake,
- * foam, a damage number, and the kill itself when it's lethal.
+ * The package a landed hit fires — health, flash, a local stagger, knockback,
+ * shake, foam, a damage number, and the kill itself when it's lethal.
  *
  * Split out of `applyHit` so a Bierfassl's blast (`systems/bombs.ts`) fires
  * the exact same package a shot does, without going through a fake
@@ -261,12 +272,19 @@ export function applyDamageAt(
     Math.round(killed ? tuning.deathFlashTicks : tuning.flashTicks),
   );
 
-  // Hitstop. Scaled by damage, capped hard — past about four ticks it stops
-  // reading as impact and starts reading as a dropped frame.
-  const hitstop = killed
-    ? tuning.deathHitstopTicks
-    : Math.min(tuning.maxHitstopTicks, tuning.hitstopTicks + damage * tuning.hitstopPerDamage);
-  sim.requestHitstop(Math.round(hitstop));
+  // Hit-stagger. Scaled by damage, capped hard — past about four ticks it stops
+  // reading as impact and starts reading as a dropped frame. Local to the body
+  // that was hit (see `hitStun` on `GameSim`), and skipped for the player (no
+  // stunning someone's own controls) and for a kill (the body is about to
+  // leave the world; the bigger flash/shake/particles below already say
+  // "that one mattered more" without needing anything to hold still).
+  if (!isPlayer && !killed) {
+    const hitstun = Math.min(
+      tuning.maxHitstunTicks,
+      tuning.hitstunTicks + damage * tuning.hitstunPerDamage,
+    );
+    sim.requestHitStun(target, Math.round(hitstun));
+  }
 
   // Knockback, along the way the shot was travelling, divided by mass. A heavy
   // enemy shrugging off what throws a light one is how mass becomes something
@@ -322,7 +340,7 @@ export function applyDamageAt(
  * What a shot that hit something invulnerable does.
  *
  * Everything a hit does except the parts that mean it landed: no damage, no
- * flash, no hitstop, no knockback. A bullet that simply vanished into a curled
+ * flash, no stagger, no knockback. A bullet that simply vanished into a curled
  * Kellerassel would read as the game having dropped it, which is the one thing
  * this must not look like.
  */

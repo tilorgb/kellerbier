@@ -88,10 +88,11 @@ directly, rather than treating both alike.
 
 ## 6. Impact feel is a package, not a feature
 
-**Decided:** M1. **Issue:** #13.
+**Decided:** M1. **Issue:** #13. **Amended:** M6, see #23 — the stagger in the package is now
+local per body (`GameSim.hitStun`), not a whole-simulation freeze.
 
-Flash, hitstop, knockback, screenshake and particles all fire on the same frame. None of them
-is expensive or clever individually; what matters is that all of them happen together. The
+Flash, a hit-stagger, knockback, screenshake and particles all fire on the same frame. None of
+them is expensive or clever individually; what matters is that all of them happen together. The
 numbers live in `src/sim/tuning.ts` and are expected to keep moving — they are tuned by feel,
 which means they are never finished.
 
@@ -923,3 +924,44 @@ and polish all seven together at the end. That is the plan that produces seven f
 needing rework the day the art direction lands, and it is the plan that makes M6's own
 sequencing note — *"this is where the schedule goes wrong on projects like this"* — come true
 rather than avoided.
+
+## 23. A hit's stagger is local to the body struck, not a freeze of the whole simulation
+
+**Decided:** M6, from a playtest report of "hard stuttering" when an item combo's burning shots
+hit several enemies at once. **Amends:** #6.
+
+`requestHitstop` (#6, #13) froze all of `GameSim.step` for a couple of ticks on every landed
+hit — flat CPU cost, correctly measured as negligible by the benchmark (#16), because a frozen
+tick returns immediately and does almost no work. What the benchmark could not see, and what it
+says so explicitly in its own scene builder, is that this is a *stall*: "a scene with hundreds of
+hits a tick would spend most of its ticks frozen." Measured directly (a scratch harness, not
+checked in): an ordinary 8-enemy room at the base, unmodified fire rate already spends **12.5%**
+of real ticks with the entire game halted; doubling the fire rate — one item's worth — pushes
+that to 18.5%. A burn tick lands on every body it is ticking for on the same simulation tick
+(duration is set once, per hit, and counted down in lockstep), so a shot that burns a handful of
+enemies turns that baseline cost into a visible, rhythmic, whole-screen freeze several times a
+second. None of this shows up as a CPU regression; it shows up as the game feeling like it
+stutters, because for the player it *is* stuttering — the frame budget was never the problem.
+
+Fighting games freeze both parties on a hit and it reads as weight, but that convention is built
+for two participants and rare, discrete hits. A horde shooter's whole premise is many hits a
+second against many bodies, and a hit rate high enough to matter will always find a way to
+synchronise a freeze — burning several enemies at once is simply the fastest way to notice a cost
+that was already there in ordinary fire.
+
+The fix keeps the same felt package (flash, a stagger, knockback, shake, foam — #6 is otherwise
+unchanged) but scopes the stagger to the body that was hit: `GameSim.hitStun`, a per-slot counter
+next to `flash`, read by `stepEnemies` to skip one body's own decision-making for a few ticks
+while everything else in the room keeps moving. The player is never staggered by anything —
+being hit already has i-frames, knockback, flash and shake; freezing someone's own controls on
+top of that is not juicier, it is dropped input — and a kill asks for no stagger at all, since the
+body is leaving the world anyway and a kill already reads bigger through its own flash/shake/
+particle numbers. `requestHitstop`/`hitstopTicks`/`sim.frozen` still exist and still mean a real
+whole-simulation freeze — they are still exactly the right tool for the rare, deliberate,
+single-actor case (the player's own death cinematic in `app/main.ts`, a pedestal/pickup reveal
+pausing the game for a beat) — combat is simply the one thing that no longer goes through them.
+
+**Constrains:** a system that wants "this body is momentarily out of action" reads `hitStun`
+(`stepEnemies` is the only one that does today) rather than assuming a hit implies the whole tick
+did nothing; a system that wants "the whole game paused for a beat" for a rare, singular reason
+still reaches for `requestHitstop`, but combat is never that reason again.

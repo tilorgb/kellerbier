@@ -128,13 +128,6 @@ describe('projectile tag composition (#27)', () => {
     sim.world.flush();
     sim.health.data[targetIndex * 2] = 500;
     sim.health.data[targetIndex * 2 + 1] = 500;
-    // Hitstop freezes `stepStatusEffects` along with everything else — real
-    // and correct, but it decouples "ticks stepped" from "status ticks
-    // counted down," which is the one thing this test wants to hold still.
-    sim.tuning.impact.hitstopTicks = 0;
-    sim.tuning.impact.hitstopPerDamage = 0;
-    sim.tuning.impact.maxHitstopTicks = 0;
-    sim.tuning.impact.deathHitstopTicks = 0;
 
     const slot = spawnTagged(sim, ProjectileTag.Burning);
     resolveProjectileHit(sim, slot, targetIndex, 200, 100, -1, 0);
