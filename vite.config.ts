@@ -1,5 +1,6 @@
 import { fileURLToPath, URL } from 'node:url';
 import { defineConfig } from 'vitest/config';
+import { artPipelineDevPlugin } from './tools/art/dev-plugin.mjs';
 import { roomEditorServerPlugin } from './tools/room-editor/server.mjs';
 
 const resolvePath = (relative: string): string => fileURLToPath(new URL(relative, import.meta.url));
@@ -10,7 +11,7 @@ export default defineConfig({
   base: './',
   // Dev-only: `configureServer` middleware never runs under `vite build`, so
   // the room editor's save endpoint (#24) never reaches a production bundle.
-  plugins: [roomEditorServerPlugin()],
+  plugins: [artPipelineDevPlugin(), roomEditorServerPlugin()],
   resolve: {
     alias: {
       '@sim': resolvePath('./src/sim'),
