@@ -39,6 +39,12 @@ export interface GameViewTextures {
   readonly pedestalItem: Texture;
   /** A pedestal's light beam. */
   readonly pedestalBeam: Texture;
+  /**
+   * Real tile art (#35), keyed by floor number. A floor with no entry here
+   * falls back to `createRoomView`'s flat palette fill — every floor but 1,
+   * today.
+   */
+  readonly floorTiles: Readonly<Record<number, Texture>>;
 }
 
 /**
@@ -61,6 +67,7 @@ export class GameView {
   }
 
   private readonly sim: GameSim;
+  private readonly floorTiles: Readonly<Record<number, Texture>>;
   private readonly player: Sprite;
   private readonly projectiles: ProjectileView;
   private readonly entities: EntityView;
@@ -97,6 +104,7 @@ export class GameView {
 
   constructor(sim: GameSim, textures: GameViewTextures) {
     this.sim = sim;
+    this.floorTiles = textures.floorTiles;
     this.stage.addChild(this.world);
     // The room is authored at half the internal resolution and blown up here,
     // which is the whole of the camera for now. Scaling the container rather
@@ -104,7 +112,7 @@ export class GameView {
     // broadphase grid — lined up with what it is drawing over for free.
     this.world.scale.set(WORLD_ZOOM);
     this.roomGeometry = sim.room;
-    this.roomView = createRoomView(sim.room);
+    this.roomView = createRoomView(sim.room, sim.currentFloor, this.floorTiles[sim.currentFloor]);
     this.world.addChild(this.roomView);
     this.doorsLocked = sim.doorsLocked;
     this.doorView = createDoorView(sim.room, sim.doors, this.doorsLocked);
@@ -156,7 +164,11 @@ export class GameView {
       this.world.removeChild(this.roomView);
       this.roomView.destroy();
       this.roomGeometry = this.sim.room;
-      this.roomView = createRoomView(this.roomGeometry);
+      this.roomView = createRoomView(
+        this.roomGeometry,
+        this.sim.currentFloor,
+        this.floorTiles[this.sim.currentFloor],
+      );
       this.world.addChildAt(this.roomView, 0);
     }
     // Rebuilt on room change too: a fresh room's door state is not necessarily

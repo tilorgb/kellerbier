@@ -50,8 +50,10 @@ Each floor is a chapter with its own tileset, palette, enemy roster, music track
 boss. Two rooms of any floor should be instantly distinguishable from two rooms of any other.
 
 ### Floor 1 — Der Keller
-Damp stone, wooden racks, puddles, a single bare bulb. Palette: browns, cold greys, one warm
-amber light source.
+Damp bare concrete, wooden racks, puddles, a single bare bulb. A German Keller is poured or
+block concrete, not timber — so the palette leans on cold concrete greys as the base material,
+with brown reserved for the wooden racks as a detail sitting in the room rather than the room
+itself, plus one warm amber light source.
 - **Hazard:** slick puddles that carry your momentum.
 - **Teaching job:** this floor is the tutorial. Movement, shooting, doors, the first item. It
   must be beatable by someone who has never played the genre — and on an early run it is

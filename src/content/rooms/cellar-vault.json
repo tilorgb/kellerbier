@@ -1,0 +1,56 @@
+{
+  "id": "cellar-vault",
+  "tileGrid": [
+    "###############",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "###############"
+  ],
+  "obstacles": [
+    { "x": 16, "y": 56, "width": 16, "height": 32 },
+    { "x": 208, "y": 56, "width": 16, "height": 32 }
+  ],
+  "enemySpawns": [
+    { "x": 48, "y": 24, "group": "keg" },
+    { "x": 120, "y": 112, "group": "guard" },
+    { "x": 192, "y": 24, "group": "tap" }
+  ],
+  "spawnGroups": [
+    {
+      "id": "keg",
+      "count": 1,
+      "choices": [
+        { "enemyId": "rollfass", "minFloor": 1, "maxFloor": 2 },
+        { "enemyId": "bierratte", "minFloor": 3, "maxFloor": 7 }
+      ]
+    },
+    {
+      "id": "guard",
+      "count": 2,
+      "choices": [
+        { "enemyId": "kellerassel", "minFloor": 1, "maxFloor": 2 },
+        { "enemyId": "bierratte", "minFloor": 3, "maxFloor": 7 }
+      ]
+    },
+    {
+      "id": "tap",
+      "count": 1,
+      "choices": [{ "enemyId": "zapfhahn", "minFloor": 1, "maxFloor": 7 }]
+    }
+  ],
+  "pickupSpawns": [{ "x": 120, "y": 24, "type": "mass-full" }],
+  "hazards": [],
+  "decorativeProps": [],
+  "metadata": {
+    "floorTags": ["cellar", "rural"],
+    "shape": "1x1",
+    "doors": { "north": true, "east": true, "south": true, "west": true },
+    "difficultyTier": 3,
+    "weight": 1
+  }
+}

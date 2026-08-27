@@ -44,5 +44,5 @@ export const DECORATIVE_PROP_TYPE_SUGGESTIONS: readonly string[] = [
   'pedestal',
 ];
 
-/** No authored room has one yet — nothing to suggest, so this is free text only. */
-export const HAZARD_TYPE_SUGGESTIONS: readonly string[] = [];
+/** 'puddle' is the one hazard type with sim behaviour today — Floor 1's slick puddles (#35). Still free text: an author may type anything, this is only the suggestion list. */
+export const HAZARD_TYPE_SUGGESTIONS: readonly string[] = ['puddle'];

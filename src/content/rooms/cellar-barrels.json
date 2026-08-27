@@ -1,0 +1,50 @@
+{
+  "id": "cellar-barrels",
+  "tileGrid": [
+    "###############",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "###############"
+  ],
+  "obstacles": [
+    { "x": 96, "y": 16, "width": 16, "height": 16 },
+    { "x": 96, "y": 112, "width": 16, "height": 16 }
+  ],
+  "enemySpawns": [
+    { "x": 48, "y": 72, "group": "rolling-keg" },
+    { "x": 176, "y": 32, "group": "second-watch" }
+  ],
+  "spawnGroups": [
+    {
+      "id": "rolling-keg",
+      "count": 1,
+      "choices": [
+        { "enemyId": "rollfass", "minFloor": 1, "maxFloor": 2 },
+        { "enemyId": "bierratte", "minFloor": 3, "maxFloor": 7 }
+      ]
+    },
+    {
+      "id": "second-watch",
+      "count": 1,
+      "choices": [
+        { "enemyId": "kellerassel", "minFloor": 1, "maxFloor": 2 },
+        { "enemyId": "bierratte", "minFloor": 3, "maxFloor": 7 }
+      ]
+    }
+  ],
+  "pickupSpawns": [],
+  "hazards": [],
+  "decorativeProps": [],
+  "metadata": {
+    "floorTags": ["cellar", "rural"],
+    "shape": "1x1",
+    "doors": { "north": true, "east": true, "south": true, "west": true },
+    "difficultyTier": 2,
+    "weight": 1
+  }
+}

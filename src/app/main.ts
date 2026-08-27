@@ -1,5 +1,6 @@
 import { Assets, Container, Text, type Texture } from 'pixi.js';
 import massUrl from '../../assets/sprites/mass.png';
+import cellarFloorTileUrl from '../../assets/sprites/floor-1-cellar/tiles/cellar-floor.png';
 import { ENEMY_DEFINITIONS } from '../content/enemies/index.js';
 import { FLOOR_CONFIGS, type FloorConfig } from '../content/floors/definition.js';
 import { DIRECTION_OFFSET } from '../content/rooms/definition.js';
@@ -40,6 +41,7 @@ import { PromilleHud } from '../render/promille-hud.js';
 import { WalletHud } from '../render/wallet-hud.js';
 import { Vignette } from '../render/vignette.js';
 import { GameView } from '../render/view.js';
+import { AmbienceTracker, SILENT_AMBIENCE } from './audio/ambience.js';
 import { SILENT_AUDIO, playImpactAudio } from './audio/impact.js';
 import { Bindable } from './input/bindings.js';
 import { actionPrompt, detectGlyphSet } from './input/glyphs.js';
@@ -271,6 +273,15 @@ async function boot(): Promise<void> {
 
   const playerTexture = await Assets.load<Texture>({
     src: massUrl,
+    data: { scaleMode: 'nearest' },
+  });
+  // Floor 1's real tile art (#35) — see `assets/sprites/README.md`'s
+  // "nothing under here is loaded by the game directly" for why this is a
+  // plain static import rather than going through the atlas the pipeline
+  // builds: nothing in `render/` consumes that atlas yet, so this loads the
+  // source PNG the same way `playerTexture` above already does.
+  const cellarFloorTexture = await Assets.load<Texture>({
+    src: cellarFloorTileUrl,
     data: { scaleMode: 'nearest' },
   });
 
@@ -646,6 +657,11 @@ async function boot(): Promise<void> {
   input.keyboard.attach(window, app.canvas, pointerMapping);
   input.gamepad.attach(window);
 
+  // Floor music and room ambience's seam (#35, `audio/ambience.ts`) — silent
+  // until #51, wired up and being called the same way `playImpactAudio`
+  // already is below.
+  const ambience = new AmbienceTracker();
+
   // The overlay is created asynchronously and may never arrive — in a
   // production build the import below is never reached and the whole of
   // `src/debug/` is dropped from the bundle.
@@ -674,6 +690,7 @@ async function boot(): Promise<void> {
         input.setAimOrigin(sim.positionX(index), sim.positionY(index));
         sim.step(input.sample());
         playImpactAudio(sim, SILENT_AUDIO);
+        ambience.sync(sim, SILENT_AMBIENCE);
         playRumble(sim, input.gamepad);
         summary.recordTick(sim);
         advanceDeathSequence();
@@ -893,6 +910,7 @@ WASD move   arrows/mouse aim and fire
       // land; `PedestalView` tints both per quality.
       pedestalItem: createBlobTexture(app.renderer, 5, 0xffffff, 0xffffff),
       pedestalBeam: createSolidTexture(app.renderer),
+      floorTiles: { 1: cellarFloorTexture },
     };
     view = new GameView(sim, viewTextures);
     game.removeChildren();

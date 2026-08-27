@@ -11,6 +11,9 @@
 /** Boxes one room may hold. Well above what a hand-authored room needs. */
 export const MAX_ROOM_BLOCKS = 64;
 
+/** Puddle zones one room may hold. A handful per room is already generous. */
+export const MAX_ROOM_PUDDLES = 16;
+
 /**
  * How wide a door gap is, in room units, centred on its wall.
  *
@@ -84,6 +87,23 @@ export class RoomGeometry {
 
   private blocks_ = 0;
 
+  /**
+   * Floor 1's slick-puddle hazard (#35): rectangles a body's momentum reads
+   * differently inside. Flat `[minX, minY, maxX, maxY]` runs, the same shape
+   * as `blocks` above and for the same reason — `isOnPuddle` runs in the
+   * frame loop and must not allocate.
+   *
+   * Deliberately its own array rather than a `blocks`-style "hazard type"
+   * tag: a puddle is walkable, not solid, so it has nothing in common with
+   * `blocks`' collision job beyond "a rectangle in room space." A second
+   * hazard type (Floor 7's Karussell, `docs/CONTENT_BIBLE.md`) gets its own
+   * array the same way when it is built, rather than this one growing a
+   * discriminant every future hazard has to be filtered past.
+   */
+  readonly puddles = new Float32Array(MAX_ROOM_PUDDLES * BLOCK_STRIDE);
+
+  private puddles_ = 0;
+
   constructor(
     minX: number,
     minY: number,
@@ -115,6 +135,40 @@ export class RoomGeometry {
     this.blocks[base + 2] = maxX;
     this.blocks[base + 3] = maxY;
     this.blocks_ += 1;
+  }
+
+  /** Adds a slick-puddle zone. Setup-time only, same contract as `addBlock`. */
+  addPuddle(minX: number, minY: number, maxX: number, maxY: number): void {
+    if (this.puddles_ >= MAX_ROOM_PUDDLES) {
+      throw new RangeError(`A room holds at most ${String(MAX_ROOM_PUDDLES)} puddles`);
+    }
+    const base = this.puddles_ * BLOCK_STRIDE;
+    this.puddles[base] = minX;
+    this.puddles[base + 1] = minY;
+    this.puddles[base + 2] = maxX;
+    this.puddles[base + 3] = maxY;
+    this.puddles_ += 1;
+  }
+
+  get puddleCount(): number {
+    return this.puddles_;
+  }
+
+  /** True when `(x, y)` sits inside any puddle zone. Reads a body's centre, not its whole circle — a puddle is about footing, not overlap. */
+  isOnPuddle(x: number, y: number): boolean {
+    const puddles = this.puddles;
+    for (let puddle = 0; puddle < this.puddles_; puddle++) {
+      const base = puddle * BLOCK_STRIDE;
+      if (
+        x >= (puddles[base] ?? 0) &&
+        x <= (puddles[base + 2] ?? 0) &&
+        y >= (puddles[base + 1] ?? 0) &&
+        y <= (puddles[base + 3] ?? 0)
+      ) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /** True when a circle is inside the interior bounds and clear of every block. */

@@ -68,8 +68,28 @@ export function stepPlayerMovement(sim: GameSim, input: Readonly<InputFrame>): v
   // not also warp how many ticks it takes to reach it.
   const maxSpeed = sim.stats.value(StatId.Gschwindigkeit);
   const driftScale = sim.promilleDriftScale;
-  velocityX = approachAxis(velocityX, inputX * maxSpeed, inputX !== 0, tuning, driftScale);
-  velocityY = approachAxis(velocityY, inputY * maxSpeed, inputY !== 0, tuning, driftScale);
+  // Read before either axis moves — the puddle a player is standing in when
+  // the tick begins is the one their footing answers to this tick, the same
+  // "decide against where things already are" rule the rest of the frame
+  // loop follows.
+  const puddleSlip =
+    sim.puddleImmuneTicks <= 0 && sim.room.isOnPuddle(x, y) ? tuning.puddleSlip : 0;
+  velocityX = approachAxis(
+    velocityX,
+    inputX * maxSpeed,
+    inputX !== 0,
+    tuning,
+    driftScale,
+    puddleSlip,
+  );
+  velocityY = approachAxis(
+    velocityY,
+    inputY * maxSpeed,
+    inputY !== 0,
+    tuning,
+    driftScale,
+    puddleSlip,
+  );
 
   // The sampler already scales a diagonal stick or key pair to unit length, so
   // this only trims the overshoot a mid-turn direction change can produce.
@@ -167,6 +187,7 @@ function approachAxis(
   held: boolean,
   tuning: Readonly<MovementTuning>,
   driftScale: number,
+  puddleSlip: number,
 ): number {
   let rate = held ? accelerationOf(tuning) : decelerationOf(tuning);
   if (held && current * target < 0) {
@@ -178,6 +199,13 @@ function approachAxis(
   // Beduselt — see `sim.promilleDriftScale`.
   if (driftScale > 0) {
     rate /= 1 + driftScale;
+  }
+  // Floor 1's slick puddle (#35): the same shape as drift above, and stacks
+  // with it rather than replacing it — a drunk player crossing a puddle gets
+  // both penalties, because nothing about being drunk makes a wet floor less
+  // slick.
+  if (puddleSlip > 0) {
+    rate /= 1 + puddleSlip;
   }
 
   const delta = target - current;

@@ -241,5 +241,6 @@ export function buildHeadlessView(sim: GameSim): GameView {
     numberFont: 'monospace',
     pedestalItem: Texture.EMPTY,
     pedestalBeam: Texture.EMPTY,
+    floorTiles: {},
   });
 }
