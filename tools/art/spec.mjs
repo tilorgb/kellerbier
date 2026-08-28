@@ -71,3 +71,65 @@ export function floorTagForBucket(bucketId) {
   const bucket = FLOOR_BUCKETS.find((entry) => entry.id === bucketId);
   return bucket ? bucket.floorTag : null;
 }
+
+/**
+ * The animation states a clip may be authored for.
+ *
+ * Fixed, not open-ended: every one of these is derived from simulation state
+ * the engine already computes (`src/render/animation/state.ts`), so a clip
+ * named anything else is a clip nothing would ever play — a typo, in other
+ * words, and `validateAnimation` rejects it as one rather than leaving a walk
+ * cycle mysteriously unused.
+ *
+ * `idle` is mandatory whenever a sidecar authors clips at all: it is what
+ * every other state falls back to when its own clip has not been drawn yet
+ * (`docs/DECISIONS.md` #19), and a fallback that might itself be missing is
+ * not a fallback.
+ *
+ * The runtime reads this list from here rather than keeping its own copy
+ * (`src/render/animation/definition.ts` imports it, the way
+ * `src/pixel-editor/size-presets.ts` already imports `CATEGORY_SPECS`): the
+ * build's idea of a legal clip name and the animator's have to agree, and a
+ * shared constant makes that true by construction where a second list plus a
+ * sync test only makes drift detectable. Nothing Node-only comes along for
+ * the ride — this module and `validate.mjs` are pure functions over plain
+ * objects, which is why they were split out of `build.mjs` in the first place.
+ */
+export const ANIMATION_STATES = ['idle', 'move', 'telegraph', 'hurt', 'death'];
+
+/** The state every other one falls back to. */
+export const DEFAULT_ANIMATION_STATE = 'idle';
+
+/**
+ * How a clip advances once it reaches its last frame.
+ *
+ * `pingPong` counts back down through the frames it already played, minus
+ * both endpoints, so a 4-frame ping-pong is a 6-frame cycle rather than one
+ * that stutters on each end.
+ */
+export const CLIP_MODES = ['loop', 'once', 'pingPong'];
+
+/**
+ * What a `once` clip does when it ends: hold its last frame, or hand back to
+ * `idle`. A death clip holds; a hurt flinch returns to idle. Meaningless on
+ * a clip that never ends, so it is rejected on one.
+ */
+export const CLIP_END_ACTIONS = ['hold', 'idle'];
+
+/**
+ * Frames of walk cycle a creature is authored with.
+ *
+ * Four: contact, passing, contact, passing — the smallest count that reads as
+ * a cycle rather than as a two-pose flicker, and the count 16-bit era sprite
+ * work settled on for the same reason. This is a budget decision five parked
+ * floors inherit (`docs/ROADMAP.md`'s M6 sequencing note): roughly thirty-five
+ * more creatures will be authored to whatever number is written here, so the
+ * argument for it is worth having once — see `docs/DECISIONS.md` #37.
+ *
+ * Advisory rather than enforced: a strip may hold more frames than one walk
+ * cycle (the Kellerassel's holds a hurt pose and a three-frame death on top of
+ * its four walk frames), and a creature that genuinely reads better on two —
+ * something that hovers, or rolls — is not a spec violation. It is the number
+ * to reach for absent a reason not to.
+ */
+export const WALK_CYCLE_FRAMES = 4;

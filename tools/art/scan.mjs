@@ -42,6 +42,22 @@ export async function scanSprites(rootDir) {
           plainNames.add(entry.name.slice(0, -'.png'.length));
         }
       }
+      for (const name of stripNames) {
+        if (plainNames.has(name)) {
+          // Ambiguous, and silently resolvable in two different directions:
+          // both files would pack under the same `category/name` atlas key,
+          // and `render/floor-art.ts`'s loader would have to guess which one
+          // the game meant. That is a bug in what is on disk rather than a
+          // gap in what has been authored (`docs/DECISIONS.md` #19's line),
+          // so it fails the build. It has a real trigger: animating an
+          // existing static sprite means adding `name.strip.png` next to the
+          // `name.png` it replaces, and forgetting to delete the old file.
+          throw new Error(
+            `${path.join(dir, `${name}${STRIP_SUFFIX}`)}: "${name}" is authored twice, as both a ` +
+              `plain ${name}.png and an animation strip. Delete whichever one is stale.`,
+          );
+        }
+      }
       for (const name of plainNames) {
         sprites.push({
           bucketId,

@@ -30,7 +30,7 @@
  * than only in the browser bundle.
  */
 
-import { mkdir, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { legalPixelColorsFor } from '../art/palette.mjs';
@@ -155,12 +155,25 @@ async function handleSave(res, bucketId, category, name, body) {
     }
   });
 
+  const dir = path.join(ROOT_DIR, bucketId, CATEGORY_FOLDERS[category]);
+  const plainPath = path.join(dir, `${name}.png`);
+  const stripPath = path.join(dir, `${name}.strip.png`);
+  const animPath = path.join(dir, `${name}.anim.json`);
+
   let animation = null;
   if (frames.length > 1) {
     animation = {
       frames: frames.length,
       frameDurationMs: frameDurationMs ?? DEFAULT_FRAME_DURATION_MS,
       loop: loop !== false,
+      // The editor draws frames; it does not (yet) edit the `clips` map #150
+      // added, so a re-save carries whatever was already authored there
+      // through untouched rather than silently deleting it. Re-validated
+      // below against the *new* frame count, which is the case that actually
+      // needs catching: dropping a frame from a strip can leave a clip
+      // pointing past the end of it, and a 422 telling the author that is
+      // far better than a strip that loads and then throws in the game.
+      ...(await existingClips(animPath)),
     };
     const animationError = validateAnimation(animation);
     if (animationError !== null) {
@@ -173,11 +186,7 @@ async function handleSave(res, bucketId, category, name, body) {
     return;
   }
 
-  const dir = path.join(ROOT_DIR, bucketId, CATEGORY_FOLDERS[category]);
   await mkdir(dir, { recursive: true });
-  const plainPath = path.join(dir, `${name}.png`);
-  const stripPath = path.join(dir, `${name}.strip.png`);
-  const animPath = path.join(dir, `${name}.anim.json`);
 
   if (frames.length === 1) {
     await writeFile(plainPath, encodePng(frames[0]));
@@ -191,6 +200,25 @@ async function handleSave(res, bucketId, category, name, body) {
   }
 
   respondJson(res, 200, { ok: true });
+}
+
+/**
+ * The `clips` map an existing sidecar already holds, as a spreadable object
+ * (`{}` when there is none, or when the file is unreadable/not JSON).
+ *
+ * Deliberately forgiving about a broken file: this runs on the save path, and
+ * refusing to save a drawing because a hand-edited sidecar next to it has a
+ * stray comma would be the wrong trade. A broken sidecar is the art build's
+ * problem to report (`tools/art/build.mjs` fails on it by name), and saving
+ * over it with a valid one is a step towards fixing it, not away.
+ */
+async function existingClips(animPath) {
+  try {
+    const parsed = JSON.parse(await readFile(animPath, 'utf8'));
+    return parsed?.clips === undefined ? {} : { clips: parsed.clips };
+  } catch {
+    return {};
+  }
 }
 
 async function removeIfExists(filePath) {

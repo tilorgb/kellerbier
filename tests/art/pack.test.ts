@@ -72,3 +72,40 @@ describe('packSprites', () => {
     ]).toEqual([255, 0, 0, 255]);
   });
 });
+
+/**
+ * An animation clip's frames have to stay contiguous in the atlas (#150).
+ *
+ * The guarantee is structural rather than enforced — a strip arrives here as
+ * *one* sprite, several frames wide, so there is nothing for the shelf layout
+ * to split. These are the two cases that would break it if this packer ever
+ * learned to cut a wide sprite up to make it fit.
+ */
+describe('packSprites, on animation strips', () => {
+  it('places a strip as one unbroken rectangle among taller neighbours', () => {
+    const stripWidth = 24 * 6;
+    const atlas = packSprites([
+      { key: 'boss/stier', width: 96, height: 96, pixels: solid(96, 96, 9) },
+      { key: 'character/crawler', width: stripWidth, height: 16, pixels: solid(stripWidth, 16, 1) },
+      { key: 'tile/floor', width: 16, height: 16, pixels: solid(16, 16, 2) },
+    ]);
+    expect(atlas).not.toBeNull();
+    const placement = atlas?.frames['character/crawler'];
+    expect(placement?.width).toBe(stripWidth);
+    expect(placement?.height).toBe(16);
+    // One row, one rectangle: every frame of the clip is `frameWidth` further
+    // along the same scanline, which is what lets a frame swap be a rectangle
+    // change rather than a texture bind.
+    expect(placement?.y).toBe(atlas?.frames['character/crawler']?.y);
+  });
+
+  it('keeps a strip wider than the row limit in one piece, growing the atlas instead', () => {
+    const stripWidth = 32 * 80;
+    const atlas = packSprites(
+      [{ key: 'character/long', width: stripWidth, height: 32, pixels: solid(stripWidth, 32, 3) }],
+      { maxWidth: 512 },
+    );
+    expect(atlas?.frames['character/long']?.width).toBe(stripWidth);
+    expect(atlas?.width).toBeGreaterThanOrEqual(stripWidth);
+  });
+});

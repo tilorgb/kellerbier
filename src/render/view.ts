@@ -12,6 +12,8 @@ import { PedestalView } from './pedestal-view.js';
 import { ProjectileView } from './projectiles.js';
 import { createDoorView, createRoomView, createSecretHintView } from './room.js';
 import { INTERNAL_HEIGHT, INTERNAL_WIDTH, WORLD_ZOOM } from './resolution.js';
+import type { EntityAnimator } from './animation/animator.js';
+import type { AnimatedSpriteSet } from './floor-art.js';
 
 /**
  * Where the player sprite's anchor sits in its texture.
@@ -62,6 +64,17 @@ export interface GameViewTextures {
    * `entityFlash`, the same fallback `enemyArt` itself uses for `entity`.
    */
   readonly enemyFlash: Readonly<Record<string, Texture>>;
+  /**
+   * Animated character art (#150), keyed by `EnemyDefinition.id` — the frames
+   * of that creature's strip, the same frames as flash silhouettes, and its
+   * compiled clips. An enemy in here animates; one that is not draws its
+   * single `enemyArt` texture forever, exactly as before.
+   *
+   * Built by `render/floor-art.ts`'s `buildAnimatedSets` from what
+   * `loadFloorArt` scanned, because the silhouettes need a renderer and the
+   * loader deliberately has none.
+   */
+  readonly enemyAnimation: Readonly<Record<string, AnimatedSpriteSet>>;
 }
 
 /**
@@ -147,6 +160,7 @@ export class GameView {
       textures.telegraph,
       textures.enemyArt,
       textures.enemyFlash,
+      textures.enemyAnimation,
     );
     this.world.addChild(this.entities.container);
 
@@ -185,16 +199,30 @@ export class GameView {
     this.world.addChild(this.damageNumbers.container);
   }
 
+  /** The frame animator, for the debug overlay's clip panel. */
+  get animator(): EntityAnimator {
+    return this.entities.animator;
+  }
+
   /**
    * `alpha` is the fraction of a tick elapsed since the last simulation step.
    *
    * `outerZoom` is the whole-number scale `main.ts` fits the game to the
    * window at (`GameLayout.scale`) — see the rounding comment below for why
    * `sync` needs to know it.
+   *
+   * `nowMs` is the render clock animation clips advance on (#150). It defaults
+   * to reading the clock here so that every caller does not have to, but
+   * `app/main.ts` passes the reading it already took for its own frame timing:
+   * two `performance.now()` calls a frame that could disagree by a fraction of
+   * a millisecond is two clocks where one will do.
    */
-  sync(alpha: number, outerZoom = 1): void {
+  sync(alpha: number, outerZoom = 1, nowMs: number = performance.now()): void {
     const roomChanged = this.sim.room !== this.roomGeometry;
     if (roomChanged) {
+      // Before anything is drawn: the old room's bodies are gone, and they
+      // left because the room did, not because they died.
+      this.entities.resetAnimation();
       this.world.removeChild(this.roomView);
       this.roomView.destroy();
       this.roomGeometry = this.sim.room;
@@ -225,7 +253,7 @@ export class GameView {
       this.world.addChildAt(this.secretHintView, 2);
     }
     this.decals.sync();
-    this.entities.sync(alpha);
+    this.entities.sync(alpha, nowMs);
     this.pedestals.sync();
     this.projectiles.sync(alpha);
     this.particles.sync(alpha);

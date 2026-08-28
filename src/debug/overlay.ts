@@ -7,6 +7,7 @@ import type { GameView } from '../render/view.js';
 import { DrawCallCounter } from './draw-calls.js';
 import { FrameMetrics } from './metrics.js';
 import { type DebugContext, type DebugPanel, PANEL_WIDTH } from './panel.js';
+import { AnimationPanel } from './panels/animation.js';
 import { ArtPipelinePanel } from './panels/art-pipeline.js';
 import { CountsPanel } from './panels/counts.js';
 import { FrameGraphPanel } from './panels/frame-graph.js';
@@ -96,6 +97,7 @@ export class DebugOverlay {
     this.addPanel(this.runInfo);
     this.addPanel(new PickupsPanel());
     this.addPanel(new StatsPanel());
+    this.addPanel(new AnimationPanel(view.animator));
     this.addPanel(new ArtPipelinePanel());
 
     this.setVisible(false);

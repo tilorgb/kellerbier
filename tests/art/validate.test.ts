@@ -149,3 +149,100 @@ describe('validateAnimation', () => {
     expect(validateAnimation({ frames: 2, frameDurationMs: 100 })).toMatch(/loop/);
   });
 });
+
+/**
+ * Clip validation (#150). Everything here is decidable from the sidecar alone,
+ * which is exactly why it belongs in the build rather than only at runtime:
+ * `docs/DECISIONS.md` #7's line is that data whose *shape* is wrong fails CI,
+ * and only a gap in what has been authored degrades gracefully in a running
+ * game.
+ */
+describe('validateAnimation, on clips', () => {
+  const strip = { frames: 8, frameDurationMs: 120, loop: true };
+  const idle = { frames: [0], frameDurationMs: 400, mode: 'loop' };
+
+  it('accepts a full set of clips over the strip', () => {
+    expect(
+      validateAnimation({
+        ...strip,
+        clips: {
+          idle,
+          move: { frames: [0, 1, 2, 3], frameDurationMs: [110, 110, 110, 110], mode: 'loop' },
+          telegraph: { frames: [4], frameDurationMs: 120, mode: 'pingPong' },
+          hurt: { frames: [5], frameDurationMs: 90, mode: 'once', onEnd: 'idle' },
+          death: { frames: [5, 6, 7], frameDurationMs: 110, mode: 'once', onEnd: 'hold' },
+        },
+      }),
+    ).toBeNull();
+  });
+
+  it('accepts a sidecar with no clips at all — every one written before they existed', () => {
+    expect(validateAnimation(strip)).toBeNull();
+  });
+
+  it('rejects a frame index the strip does not have', () => {
+    expect(
+      validateAnimation({ ...strip, clips: { idle, move: { ...idle, frames: [8] } } }),
+    ).toMatch(/frame index 8 is outside the strip/);
+  });
+
+  it('rejects a negative frame index', () => {
+    expect(
+      validateAnimation({ ...strip, clips: { idle, move: { ...idle, frames: [-1] } } }),
+    ).toMatch(/frame index -1 is outside the strip/);
+  });
+
+  it('rejects a clip named after something no state resolves to', () => {
+    expect(validateAnimation({ ...strip, clips: { idle, walk: idle } })).toMatch(
+      /"clips.walk" is not an animation state/,
+    );
+  });
+
+  it('rejects a clip set with no idle to fall back to', () => {
+    expect(validateAnimation({ ...strip, clips: { move: idle } })).toMatch(
+      /must include an "idle"/,
+    );
+  });
+
+  it('rejects an empty clip', () => {
+    expect(validateAnimation({ ...strip, clips: { idle, move: { ...idle, frames: [] } } })).toMatch(
+      /non-empty array of frame indices/,
+    );
+  });
+
+  it('rejects a per-frame duration list that does not match the clip length', () => {
+    expect(
+      validateAnimation({
+        ...strip,
+        clips: { idle, move: { frames: [0, 1], frameDurationMs: [100], mode: 'loop' } },
+      }),
+    ).toMatch(/1 entries for 2 clip frames/);
+  });
+
+  it('rejects an unknown playback mode', () => {
+    expect(
+      validateAnimation({ ...strip, clips: { idle, move: { ...idle, mode: 'boomerang' } } }),
+    ).toMatch(/"mode" must be one of/);
+  });
+
+  it('rejects onEnd on a clip that never ends', () => {
+    expect(validateAnimation({ ...strip, clips: { idle: { ...idle, onEnd: 'hold' } } })).toMatch(
+      /only means something on a "once" clip/,
+    );
+  });
+
+  it('rejects an unknown onEnd', () => {
+    expect(
+      validateAnimation({
+        ...strip,
+        clips: { idle, death: { ...idle, mode: 'once', onEnd: 'explode' } },
+      }),
+    ).toMatch(/"onEnd" must be one of/);
+  });
+
+  it('rejects clips authored as an array rather than a map of states', () => {
+    expect(validateAnimation({ ...strip, clips: [idle] })).toMatch(
+      /"clips" must be an object keyed by animation state/,
+    );
+  });
+});

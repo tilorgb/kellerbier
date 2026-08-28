@@ -9,6 +9,9 @@ import {
   isEnemyElite,
   isEnemyInvulnerable,
 } from '../sim/systems/enemy.js';
+import { EntityAnimator } from './animation/animator.js';
+import { AUTHORED_FACING, resolveAnimationState, resolveFacing } from './animation/state.js';
+import type { AnimatedSpriteSet } from './floor-art.js';
 
 /**
  * How much wider than the body a telegraph ring ends up.
@@ -76,8 +79,23 @@ export class EntityView {
    * generic circle, for its flash too.
    */
   private readonly enemyFlashTextures: Readonly<Record<string, Texture>>;
+  /**
+   * Animated character art (#150), keyed the same way `enemyTextures` is. An
+   * id in here draws off its current clip frame instead of a single static
+   * texture; an id that is not — every creature whose animation has not been
+   * drawn yet — takes exactly the path it took before this existed.
+   */
+  private readonly enemyAnimation: Readonly<Record<string, AnimatedSpriteSet>>;
+  /**
+   * Whose clip is where. Owned here rather than by `GameView` because this is
+   * the view that knows which bodies are on screen and which enemy definition
+   * each one is — the animator is a table keyed by entity, exactly like
+   * `sprites` below, and the two are populated by the same loop.
+   */
+  readonly animator = new EntityAnimator();
   private readonly telegraphTexture: Texture;
   private readonly sprites: Sprite[] = [];
+  private readonly corpses: Sprite[] = [];
   private readonly rings: Sprite[] = [];
   private readonly labels: Text[] = [];
 
@@ -89,6 +107,11 @@ export class EntityView {
    * the thing making it is one that reads as a glitch.
    */
   private readonly ringLayer = new Container();
+  /**
+   * Corpses (#150's death clips) sit under everything living: a body on the
+   * floor must never hide the enemy that is still shooting at you.
+   */
+  private readonly corpseLayer = new Container();
   private readonly bodyLayer = new Container();
   private readonly labelLayer = new Container();
 
@@ -103,21 +126,31 @@ export class EntityView {
     telegraphTexture: Texture,
     enemyTextures: Readonly<Record<string, Texture>> = {},
     enemyFlashTextures: Readonly<Record<string, Texture>> = {},
+    enemyAnimation: Readonly<Record<string, AnimatedSpriteSet>> = {},
   ) {
     this.sim = sim;
     this.texture = texture;
     this.enemyTextures = enemyTextures;
     this.flashTexture = flashTexture;
     this.enemyFlashTextures = enemyFlashTextures;
+    this.enemyAnimation = enemyAnimation;
     this.telegraphTexture = telegraphTexture;
     this.container.addChild(this.ringLayer);
+    this.container.addChild(this.corpseLayer);
     this.container.addChild(this.bodyLayer);
     this.container.addChild(this.labelLayer);
     this.pickupTints = sim.pickups.all.map((definition) => definition.tint);
     this.pickupLabels = sim.pickups.all.map((definition) => definition.label);
   }
 
-  sync(alpha: number): void {
+  /**
+   * `nowMs` is a render-clock reading (`performance.now()`), not simulation
+   * time: clips advance on it, so animation runs at the display's rate and
+   * keeps running while the simulation is paused or single-stepped. Passed in
+   * rather than read here so a test can drive an exact 60 Hz or 144 Hz.
+   */
+  sync(alpha: number, nowMs: number): void {
+    this.animator.beginFrame(nowMs);
     const sim = this.sim;
     const world = sim.world;
     const states = world.states;
@@ -159,8 +192,34 @@ export class EntityView {
       const enemyId = isEnemyBody
         ? sim.enemies.at(sim.enemy.data[index * ENEMY_STRIDE] ?? 0).id
         : null;
+      // An animated creature (#150) resolves its frame first, because both
+      // `bodyTexture` and the flash silhouette below are that frame rather
+      // than one fixed texture. The animation state handed to the animator is
+      // a pure function of simulation state; the *frame* it comes back with is
+      // a function of the render clock, and that split is the whole of why
+      // animation can be smooth without the simulation being non-deterministic.
+      const animation = enemyId === null ? undefined : this.enemyAnimation[enemyId];
+      let animationFrame = 0;
+      let flip = 1;
+      if (animation !== undefined) {
+        animationFrame = this.animator.track(
+          index,
+          world.entityAt(index),
+          animation.clips,
+          resolveAnimationState(sim, index),
+          resolveFacing(sim, index),
+          x,
+          y,
+          radius,
+        );
+        flip = this.animator.facingOf(index) === AUTHORED_FACING ? 1 : -1;
+      }
       const bodyTexture =
-        enemyId === null ? this.texture : (this.enemyTextures[enemyId] ?? this.texture);
+        animation !== undefined
+          ? (animation.frames[animationFrame] ?? this.texture)
+          : enemyId === null
+            ? this.texture
+            : (this.enemyTextures[enemyId] ?? this.texture);
       // Pickups always draw off the white-fill texture (the same one the hit
       // flash uses), never the body texture: a tint multiplies the texture
       // underneath it, and a bright tint over a dark base is exactly what
@@ -176,9 +235,14 @@ export class EntityView {
       sprite.texture = isPickup
         ? this.flashTexture
         : (flash[index] ?? 0) > 0
-          ? enemyId === null
-            ? this.flashTexture
-            : (this.enemyFlashTextures[enemyId] ?? this.flashTexture)
+          ? animation !== undefined
+            ? // An animated body flashes as the frame it is actually on, not
+              // as a single stand-in pose: the flash is the silhouette read
+              // (#37), and a walk cycle's silhouette changes every frame.
+              (animation.flashFrames[animationFrame] ?? this.flashTexture)
+            : enemyId === null
+              ? this.flashTexture
+              : (this.enemyFlashTextures[enemyId] ?? this.flashTexture)
           : bodyTexture;
       // A curled body has to look like one. Without this the player is told
       // their shots are doing nothing only by the shots doing nothing.
@@ -209,7 +273,14 @@ export class EntityView {
       const bounceMax = Math.max(1, sim.tuning.pickup.spawnBounceTicks);
       const bounceProgress = bounceTicks / bounceMax;
       const pop = bounceTicks > 0 ? 1 + 0.4 * Math.sin(bounceProgress * Math.PI) : 1;
-      sprite.scale.set((radius / (referenceHeight / 2)) * pop);
+      // `flip` mirrors an animated body that is walking the other way. Every
+      // character sprite in the game is authored facing left
+      // (`render/animation/state.ts`'s `AUTHORED_FACING`), so this is 1 for a
+      // leftward body and -1 for a rightward one, and always 1 for anything
+      // with no animation set — which is what keeps a static sprite drawn
+      // exactly as it was before #150.
+      const spriteScale = (radius / (referenceHeight / 2)) * pop;
+      sprite.scale.set(spriteScale * flip, spriteScale);
       sprite.position.set(x, y);
 
       if (isPickup) {
@@ -242,6 +313,12 @@ export class EntityView {
       }
     }
 
+    // Every body that was drawn last frame and not this one has left the
+    // world; the animator turns the ones that died into corpses here, which is
+    // why this runs before they are drawn below.
+    this.animator.endFrame();
+    this.syncCorpses();
+
     for (let slot = used; slot < this.sprites.length; slot++) {
       const sprite = this.sprites[slot];
       if (sprite !== undefined) {
@@ -262,6 +339,75 @@ export class EntityView {
         label.visible = false;
       }
     }
+  }
+
+  /**
+   * Draws the death clips of enemies that are no longer in the world.
+   *
+   * A corpse is entirely render-side state (`animation/animator.ts`'s corpse
+   * table): the simulation freed the entity the tick it died, nothing here can
+   * be hit or hit anything, and a room change throws the lot away
+   * (`resetAnimation`). It fades out rather than popping, over the tail of its
+   * linger.
+   */
+  private syncCorpses(): void {
+    const animator = this.animator;
+    let used = 0;
+    for (let entry = 0; entry < animator.corpseCount; entry++) {
+      const corpse = animator.corpseSlotAt(entry);
+      const clips = animator.corpseSetAt(corpse);
+      if (clips === null) {
+        continue;
+      }
+      const set = this.enemyAnimation[clips.name];
+      const texture = set?.frames[animator.corpseFrameAt(corpse)];
+      if (texture === undefined) {
+        continue;
+      }
+      const sprite = this.corpseAt(used);
+      used += 1;
+      sprite.visible = true;
+      sprite.texture = texture;
+      sprite.alpha = animator.corpseAlphaAt(corpse);
+      const scale = animator.corpseRadiusAt(corpse) / (texture.height / 2);
+      sprite.scale.set(
+        scale * (animator.corpseFacingAt(corpse) === AUTHORED_FACING ? 1 : -1),
+        scale,
+      );
+      sprite.position.set(animator.corpseXAt(corpse), animator.corpseYAt(corpse));
+    }
+    for (let slot = used; slot < this.corpses.length; slot++) {
+      const sprite = this.corpses[slot];
+      if (sprite !== undefined) {
+        sprite.visible = false;
+      }
+    }
+  }
+
+  /**
+   * Forgets every clip phase and every corpse.
+   *
+   * Called by `GameView` on a room change: a body vanishing because its room
+   * unloaded is not a body dying, and without this a door transition would
+   * leave the new room strewn with the old one's corpses.
+   */
+  resetAnimation(): void {
+    this.animator.reset();
+    for (const sprite of this.corpses) {
+      sprite.visible = false;
+    }
+  }
+
+  private corpseAt(slot: number): Sprite {
+    const existing = this.corpses[slot];
+    if (existing !== undefined) {
+      return existing;
+    }
+    const created = new Sprite(this.texture);
+    created.anchor.set(0.5);
+    this.corpses.push(created);
+    this.corpseLayer.addChild(created);
+    return created;
   }
 
   private spriteAt(slot: number): Sprite {
