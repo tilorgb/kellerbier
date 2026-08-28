@@ -1009,9 +1009,11 @@ breaking open Die Abfüllanlage's dosing hopper, and never explained.
 
 **What this constrains:**
 
-- **The corrupted beer is never a player pickup.** Every beer pickup is the *old batch* — the
-  keg on Alois's back is what was left in Opa's cellar — so Promille stays ordinary drunkenness
-  and never becomes a symptom of the plot. This is the same rule the Böller already follows
+- **The corrupted beer is never a player pickup.** Every beer pickup during a run is the *old
+  batch* — the same Pfeitinger Alois's grandparents always drank — so Promille stays ordinary
+  drunkenness and never becomes a symptom of the plot. (The intro card's rucksack is filled with
+  the tainted crate instead — a one-off prologue prop, same as its mode selector, not a
+  mechanic; see `GAME_DESIGN.md` §2.) This is the same rule the Böller already follows
   (`CONTENT_BIBLE.md` floor 2): the corruption reaches the player as an enemy, a hazard, a
   labelled crate, or a tainted *item*, never as the thing they drink. A beer pickup that also
   advanced the story would put every drink in the game in argument with `CONTENT_BIBLE.md` §0's

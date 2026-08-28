@@ -38,21 +38,27 @@ Raisins. Here as well. In Opa's beer.
 > *Alles was zu gut schmeckt muss mit dem Zeug versaut werden. Erst Omas Apfelkuchen, jetzt
 > auch noch Opas Bier.*
 
-Something is rustling behind the crates, and whatever it is, it is coming towards him. He takes
-Opa's **Trink-Rucksack** down off its hook, fills it with everything left of the old batch,
-switches it from *trinken* to *schießen*, and heads south to find out who is responsible.
+Something is rustling behind the crates, and whatever it is, it is coming towards him. Fine.
+
+> *Trinkt diesen Mist doch selber.*
+
+He takes Opa's **Trink-Rucksack** down off its hook, fills it with everything left of the
+tainted crate, switches it from *trinken* to *schießen*, and heads south to find out who is
+responsible.
 
 **The Trink-Rucksack's mode selector is the joke, and it is a prologue joke.** No drinking
 backpack has a `schießen` setting; that is precisely why the moment is worth showing, and why
 Alois flipping it without comment is the last beat of the intro card. It is not an in-run
 mechanic. Nothing in play ever toggles between drinking and shooting.
 
-**What you drink is the good stuff.** The keg on Alois's back is the old batch — proper
-Pfeitinger, brewed the way it always was — and so is every beer pickup in the game. That is why
-drinking still works the way drinking works: Promille (§5) is ordinary drunkenness, not
-corruption, and nothing about it is a symptom of the plot. **The adulterated beer is never
-something the player picks up.** It is what is in everyone else, and it reaches the player only
-as an enemy, a hazard or a labelled crate on the floor — the same rule
+**What you drink, once the run starts, is the good stuff.** Every beer pickup in the run is
+the old batch — proper Pfeitinger, brewed the way it always was. That is why drinking still
+works the way drinking works: Promille (§5) is ordinary drunkenness, not corruption, and nothing
+about it is a symptom of the plot. The rucksack's tainted refill above is the same kind of beat
+as its mode selector: a one-off prologue prop, not a mechanic — it never carries into a beer
+pickup during play. **The adulterated beer is never something the player picks up.** It is what
+is in everyone else, and it reaches the player only as an enemy, a hazard or a labelled crate on
+the floor — the same rule
 `CONTENT_BIBLE.md` already applies to the Böller. The one exception is deliberate and is the
 whole temptation of the item pool: *tainted food and trinkets* can be picked up, and they are
 good, and they cost you something. See §8.
