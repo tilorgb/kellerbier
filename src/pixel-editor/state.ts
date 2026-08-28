@@ -166,6 +166,30 @@ export class PixelEditorState {
     }
   }
 
+  /**
+   * Resizes the canvas in place, top-left anchored: every frame's existing
+   * pixels stay exactly where they were drawn, new area (growing) comes in
+   * blank, and area that no longer fits (shrinking) is simply cut off — the
+   * "New" button already covers "start over at a different size," this is
+   * "the sprite I'm partway through drawing is the wrong size."
+   */
+  resizeCanvas(width: number, height: number): void {
+    this.frames = this.frames.map((frame) => {
+      const resized = blankFrame(width, height);
+      const copyWidth = Math.min(this.width, width);
+      const copyHeight = Math.min(this.height, height);
+      for (let row = 0; row < copyHeight; row++) {
+        const sourceStart = row * this.width * 4;
+        const destStart = row * width * 4;
+        resized.set(frame.subarray(sourceStart, sourceStart + copyWidth * 4), destStart);
+      }
+      return resized;
+    });
+    this.width = width;
+    this.height = height;
+    this.notify();
+  }
+
   addFrame(): void {
     this.frames.splice(this.activeFrameIndex + 1, 0, blankFrame(this.width, this.height));
     this.activeFrameIndex += 1;

@@ -1369,3 +1369,69 @@ input — a text field with no visible list of legal values is, from a first-tim
 indistinguishable from a tool that silently does nothing. A new marker kind (a point placed on the
 grid, the way enemy/pickup/prop are) needs its own branch in Erase's filter set the moment it exists,
 not as a follow-up once someone reports the marker they placed by mistake is stuck there forever.
+
+## 33. A `<canvas>`'s bitmap is only ever resized when the sprite's own dimensions actually change, never on every zoom/host resize
+
+**Decided:** M6, issue #108's follow-up, found by actually zooming a sprite that already had pixels
+drawn on it.
+
+`canvas.ts`'s `sizeCanvases` set `canvas.width`/`canvas.height` unconditionally on every call,
+including from the +/- zoom buttons and the host `ResizeObserver` — both of which only ever need to
+change the canvas's *CSS display size*, not its bitmap. Setting a `<canvas>` element's `width` or
+`height` property clears its drawn content immediately, per spec, even when set to the value it
+already had. The zoom buttons called `sizeCanvases` directly rather than `render()`, so every zoom
+click wiped the visible drawing until the next paint stroke's own `render()` call redrew it from
+`state.activeFrame` — which reads, to anyone zooming a sprite they were partway through drawing, as
+"the sprite disappeared." Fixed by only touching `.width`/`.height` when `state.width`/`state.height`
+themselves changed (a resize, a load, a reset), and leaving the CSS `style.width`/`style.height` (set
+every call regardless) as the only thing a pure zoom or host-resize ever touches.
+
+Two related fixes landed alongside it, once the canvas was actually being zoomed and dragged rather
+than only measured:
+
+- **A max-height on `.kb-pixel-canvas-wrap`** (`55vh`, matching `canvas.ts`'s own
+  `FIT_HEIGHT_FRACTION`) — without one, the wrap simply grew to fit a zoomed-in canvas instead of
+  ever overflowing vertically, so `overflow: auto` only ever produced a horizontal scrollbar no
+  matter how tall the zoomed content got.
+- **Right-button drag pans the wrap** rather than requiring the scrollbars themselves, which become
+  a thin, fiddly target the moment a sprite is zoomed in past the visible area. The pen/eraser/shade
+  tools have no use for a right click or a context menu (already suppressed), so the button was free
+  to repurpose; left-button painting is now explicitly gated to `event.button === 0` so a right-click
+  drag can never also paint.
+
+**Constrains:** any future code that resizes this canvas (or a similar one) must not assign
+`.width`/`.height` unless the pixel dimensions genuinely changed — reaching for the "just resize it,
+it's idempotent" instinct silently reintroduces this bug, because the browser does not treat a
+same-value assignment as a no-op the way it would for almost any other DOM property.
+
+## 34. The pixel editor's canvas size is an in-place, content-preserving operation, distinct from starting a fresh sprite
+
+**Decided:** M6, issue #108's follow-up — a direct request to be able to change a sprite's size
+*while editing it*, not only when starting one.
+
+"New" already read `widthInput`/`heightInput` to start a blank canvas at a chosen size, but there was
+no way to change an *already-drawn* sprite's dimensions without discarding it first — loading an
+existing sprite for a resize meant redrawing from scratch at the new size by hand. Added
+`PixelEditorState.resizeCanvas(width, height)`: top-left anchored, so every existing pixel keeps
+its exact position; growing brings in blank (transparent) area on the new right/bottom edge, and
+shrinking silently crops whatever pixels no longer fit — a deliberate, not incidental, choice: a
+canvas that is a strict superset or subset of its old bounds at (0, 0) is the one resize semantics
+that never has to guess where old content should move to. A separate "Resize" button next to "New"
+reads the same width/height fields "New" does — the two answer different questions ("start over at
+this size" vs. "this sprite is the wrong size") and needed two different one-click actions rather
+than folding resize into New behind a confirm dialog, or silently changing what New's own confirm
+already means.
+
+Fixing this also surfaced a real, independent bug in the browse panel's Load: `categorySelect`
+changed to the loaded sprite's real category, but nothing repopulated `presetSelect` (or
+`widthInput`/`heightInput`) to match — a "tile" sprite loaded first left the preset dropdown frozen
+on tile's one 16×16 entry even after loading a "character", with no way to pick another size at all.
+`loadSpriteInto` now repopulates the preset list and bounds for the loaded category and sets the
+width/height fields to the sprite's own real size (not a preset guess) — what "Resize" and a
+would-be re-save both actually read afterward.
+
+**Constrains:** any future control that shows "the current sprite's size" (or feeds one back into an
+editable field) must be refreshed by every code path that can change `state.category`/`state.width`/
+`state.height` — `New`, `Resize`, and loading a sprite all need to agree, and a preset list or bound
+left over from a previous category is exactly the kind of bug that only shows up once a real sprite
+of a different category is actually loaded, not from reading the code in isolation.

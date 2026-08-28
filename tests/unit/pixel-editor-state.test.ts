@@ -135,6 +135,61 @@ describe('PixelEditorState', () => {
     expect(state.width).toBe(32);
     expect(state.height).toBe(20);
   });
+
+  it('resizeCanvas growing keeps existing pixels at their original position and fills new area blank', () => {
+    const state = new PixelEditorState('floor-1-cellar', 'character', 4, 4);
+    state.selectedColor = 0x3c3e40;
+    state.paintPixel(3, 3);
+    state.resizeCanvas(6, 5);
+    expect(state.width).toBe(6);
+    expect(state.height).toBe(5);
+    const movedIndex = (3 * state.width + 3) * 4;
+    expect([...state.activeFrame.slice(movedIndex, movedIndex + 4)]).toEqual([
+      0x3c, 0x3e, 0x40, 255,
+    ]);
+    const newAreaIndex = (4 * state.width + 5) * 4;
+    expect([...state.activeFrame.slice(newAreaIndex, newAreaIndex + 4)]).toEqual([0, 0, 0, 0]);
+  });
+
+  it('resizeCanvas shrinking cuts off pixels outside the new bounds', () => {
+    const state = new PixelEditorState('floor-1-cellar', 'character', 6, 6);
+    state.selectedColor = 0x3c3e40;
+    state.paintPixel(0, 0);
+    state.paintPixel(5, 5);
+    state.resizeCanvas(3, 3);
+    expect(state.width).toBe(3);
+    expect(state.height).toBe(3);
+    expect(state.activeFrame).toHaveLength(3 * 3 * 4);
+    expect([...state.activeFrame.slice(0, 4)]).toEqual([0x3c, 0x3e, 0x40, 255]);
+  });
+
+  it('resizeCanvas preserves every frame of an animation, not just the active one', () => {
+    const state = new PixelEditorState('floor-1-cellar', 'character', 4, 4);
+    state.selectedColor = 0x3c3e40;
+    state.paintPixel(0, 0);
+    state.addFrame();
+    state.paintPixel(1, 1);
+    state.resizeCanvas(8, 8);
+    expect(state.frames).toHaveLength(2);
+    const [first, second] = state.frames;
+    expect([...(first?.slice(0, 4) ?? [])]).toEqual([0x3c, 0x3e, 0x40, 255]);
+    const secondIndex = (1 * 8 + 1) * 4;
+    expect([...(second?.slice(secondIndex, secondIndex + 4) ?? [])]).toEqual([
+      0x3c, 0x3e, 0x40, 255,
+    ]);
+  });
+
+  it('resizeCanvas marks the state dirty and notifies subscribers', () => {
+    const state = new PixelEditorState('floor-1-cellar', 'character', 4, 4);
+    state.markClean();
+    let calls = 0;
+    state.subscribe(() => {
+      calls += 1;
+    });
+    state.resizeCanvas(6, 6);
+    expect(state.dirty).toBe(true);
+    expect(calls).toBe(1);
+  });
 });
 
 describe('shadeArea', () => {

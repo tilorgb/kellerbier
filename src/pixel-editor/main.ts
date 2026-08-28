@@ -143,6 +143,11 @@ const STYLE = `
   background: var(--kb-color-surface-0); border: 1px solid var(--kb-color-surface-4);
   border-radius: var(--kb-radius-md); padding: 12px;
   display: inline-block; max-width: 100%; overflow: auto;
+  /* Matches canvas.ts's FIT_HEIGHT_FRACTION (0.55) — without a height cap
+     here the wrap simply grows to fit a zoomed-in canvas instead of ever
+     scrolling vertically, so zooming past the fit level only ever showed a
+     horizontal scrollbar. */
+  max-height: 55vh;
 }
 .kb-pixel-canvas {
   image-rendering: pixelated; cursor: crosshair; display: block;
@@ -359,6 +364,26 @@ function boot(): void {
     nameInput.value = '';
   });
 
+  // "New" always starts a blank canvas at the chosen size; "Resize" keeps
+  // whatever is already drawn and just changes the canvas dimensions around
+  // it (`PixelEditorState.resizeCanvas` — top-left anchored, growing adds
+  // blank area, shrinking crops) — the two read the same width/height
+  // fields but answer different questions ("start over" vs. "this one is
+  // the wrong size"), so both stay one click away rather than folding
+  // "resize" into "New" behind a confirm dialog.
+  const resizeButton = document.createElement('button');
+  resizeButton.type = 'button';
+  resizeButton.textContent = 'Resize';
+  resizeButton.title =
+    'Resize the current sprite in place — existing pixels keep their position; growing adds blank area, shrinking crops';
+  resizeButton.addEventListener('click', () => {
+    const category = categorySelect.value as SpriteCategory;
+    const spec = CATEGORY_SPECS[category];
+    const width = Math.min(spec.maxWidth, Math.max(spec.minWidth, Number(widthInput.value)));
+    const height = Math.min(spec.maxHeight, Math.max(spec.minHeight, Number(heightInput.value)));
+    state.resizeCanvas(width, height);
+  });
+
   targetRow.append(
     bucketSelect,
     categorySelect,
@@ -368,6 +393,7 @@ function boot(): void {
     heightInput,
     nameInput,
     newButton,
+    resizeButton,
   );
 
   const gridHost = document.createElement('div');
@@ -430,8 +456,20 @@ function boot(): void {
     bucketSelect.value = target.bucketId;
     categorySelect.value = target.category;
     nameInput.value = target.name;
+    // Otherwise the preset dropdown (and the width/height bounds it feeds)
+    // stayed on whatever category was selected before the load — a "tile"
+    // sprite loaded first left the preset list frozen on tile's one 16×16
+    // entry even after loading a "character", making the size controls look
+    // broken. The width/height fields show the sprite's own real size, which
+    // is what `resizeButton` and a would-be re-save actually read, rather
+    // than a preset that may not match a hand-tuned or older sprite exactly.
+    const category = target.category as SpriteCategory;
+    populatePresetSelect(category);
+    applySizeBounds(category);
+    widthInput.value = String(loaded.frameWidth);
+    heightInput.value = String(loaded.frameHeight);
     state.bucketId = target.bucketId;
-    state.category = target.category as SpriteCategory;
+    state.category = category;
     state.loadFrames(
       loaded.frames.slice(),
       loaded.frameWidth,

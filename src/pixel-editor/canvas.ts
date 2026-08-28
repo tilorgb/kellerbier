@@ -113,8 +113,13 @@ export function createGridPanel(state: PixelEditorState, host: HTMLElement): Gri
 
   let painting = false;
   let zoomIndex = 0;
-  let lastWidth = state.width;
-  let lastHeight = state.height;
+  // Never equal to a real sprite dimension on the first call, so the initial
+  // `sizeCanvases()` always takes the "dimensions changed" branch below and
+  // actually sets the canvases' bitmap size at least once — a real canvas
+  // element defaults to 300x150 until its `width`/`height` are set for the
+  // first time, and nothing else here would ever do that.
+  let lastWidth = -1;
+  let lastHeight = -1;
 
   function fitIndex(): number {
     const availableWidth = Math.max(32, host.clientWidth - WRAP_PADDING_PX * 2);
@@ -126,15 +131,24 @@ export function createGridPanel(state: PixelEditorState, host: HTMLElement): Gri
     return ZOOM_LEVELS[zoomIndex] ?? 1;
   }
 
+  /**
+   * Sets the canvases' CSS display size every call, but their actual bitmap
+   * size (`.width`/`.height`) only when the sprite's own dimensions changed —
+   * setting a `<canvas>`'s `width`/`.height` property always clears its
+   * drawn content, per spec, *even when set to the value it already had*.
+   * Zooming and resizing the host both need to resize the *display*, not
+   * touch the bitmap at all — calling this unconditionally on every zoom
+   * click used to wipe the drawing until the next paint stroke redrew it.
+   */
   function sizeCanvases(): void {
     if (state.width !== lastWidth || state.height !== lastHeight) {
       zoomIndex = fitIndex();
       lastWidth = state.width;
       lastHeight = state.height;
-    }
-    for (const target of [canvas, onionLayer, activeLayer]) {
-      target.width = state.width;
-      target.height = state.height;
+      for (const target of [canvas, onionLayer, activeLayer]) {
+        target.width = state.width;
+        target.height = state.height;
+      }
     }
     const zoom = currentZoom();
     canvas.style.width = `${String(state.width * zoom)}px`;
@@ -186,17 +200,55 @@ export function createGridPanel(state: PixelEditorState, host: HTMLElement): Gri
     }
   }
 
+  // Right-button drag pans the wrap instead of painting — the wrap's own
+  // scrollbars (`overflow: auto`) still work, but a scrollbar is a thin,
+  // fiddly target once the canvas is zoomed in past the visible area, and a
+  // pixel-art tool's right button has nothing else to do (there is no
+  // context menu here worth keeping — `contextmenu` is already suppressed
+  // below).
+  let panning: {
+    pointerId: number;
+    startX: number;
+    startY: number;
+    scrollLeft: number;
+    scrollTop: number;
+  } | null = null;
+
   function onPointerDown(event: PointerEvent): void {
+    if (event.button === 2) {
+      panning = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        scrollLeft: wrap.scrollLeft,
+        scrollTop: wrap.scrollTop,
+      };
+      canvas.setPointerCapture(event.pointerId);
+      return;
+    }
+    if (event.button !== 0) {
+      return;
+    }
     painting = true;
     canvas.setPointerCapture(event.pointerId);
     paintFromEvent(event);
   }
   function onPointerMove(event: PointerEvent): void {
+    if (panning !== null && panning.pointerId === event.pointerId) {
+      wrap.scrollLeft = panning.scrollLeft - (event.clientX - panning.startX);
+      wrap.scrollTop = panning.scrollTop - (event.clientY - panning.startY);
+      return;
+    }
     if (painting) {
       paintFromEvent(event);
     }
   }
   function onPointerUp(event: PointerEvent): void {
+    if (panning !== null && panning.pointerId === event.pointerId) {
+      panning = null;
+      canvas.releasePointerCapture(event.pointerId);
+      return;
+    }
     painting = false;
     canvas.releasePointerCapture(event.pointerId);
   }
