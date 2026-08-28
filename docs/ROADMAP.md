@@ -87,7 +87,7 @@ M6–M8 are what make it good.
 watching a clip cannot tell which parts are unfinished.*
 
 The milestone the original plan never had, and the gap it left is visible in the build today:
-there is no animation system at all, and Sepp himself is a procedurally generated shape. Sprite
+there is no animation system at all, and Alois himself is a procedurally generated shape. Sprite
 animation, the player's own art, the remaining floor 1 & 2 sprites, a VFX quality pass, the
 semantic palette, the pixel font and UI kit, and the art tooling that makes authoring the rest
 of it cheap.
@@ -155,8 +155,9 @@ against real evidence from M9's players about what the remaining five floors sho
   more meta-progression — it is unparking M10 sooner. Being a *scheduled* decision is the whole
   point; a bet with no date attached quietly becomes an assumption.
 - **The story ends on a cliffhanger, deliberately.** Der Stier closes chapter two rather than
-  revealing what is upstream — the "it was scale, not malice" reveal stays in M10 with floor 6,
-  where it was written to live. That puts real weight on execution (#58): a cliffhanger done well
+  revealing what is upstream — the "the raisins are not raisins" reveal stays in M10 with floor
+  6, where it was written to live; chapter two ends on the loaded delivery lorry pulling out of
+  the village square, southbound. That puts real weight on execution (#58): a cliffhanger done well
   is a promise, done badly it is indistinguishable from running out of content, and M9 puts it in
   front of strangers who have no roadmap. The acceptance criterion is a playtester describing it
   as a cliffhanger unprompted.

@@ -965,3 +965,81 @@ pausing the game for a beat) — combat is simply the one thing that no longer g
 (`stepEnemies` is the only one that does today) rather than assuming a hit implies the whole tick
 did nothing; a system that wants "the whole game paused for a beat" for a rare, singular reason
 still reaches for `requestHitstop`, but combat is never that reason again.
+
+
+## 24. The premise is a raisin in one family's beer, not a general adulteration — and the protagonist is Alois
+
+**Decided:** M6, in a story review before #58 (story delivery) was written. **Amends:** #22.
+**Supersedes** the premise as it stood in `GAME_DESIGN.md` §2 and `README.md` since M0.
+
+The old premise: someone is cutting Bavaria's beer with cola, lemonade and syrup, the land goes
+sour, **Sepp** taps a keg and goes to find the source. The reveal was *scale, not malice* — the
+shortcut that fed six million Wiesn visitors ate the soul of the thing, and Die Bavaria is
+poisoned by her own festival.
+
+The new premise keeps the arc, the floor order, every boss and the final boss, and replaces what
+sits under them. **Alois** is at his grandparents' in **Oberniederburg** for Sunday lunch, goes
+down to fetch another **Pfeitinger**, and finds the next crate carries a new label and an
+ingredient list reading *water, malt, hops and raisins*. The reveal moves from an economic
+argument to a single withheld fact: **the raisins are not raisins**, delivered on floor 6 by
+breaking open Die Abfüllanlage's dosing hopper, and never explained.
+
+**Why the change is worth the rewrite, given #22 spent real argument on the old reveal:**
+
+- **A specific grievance beats a general one.** "Someone is adulterating Bavaria's beer" is a
+  state of the world; "there are raisins in Opa's beer" is a thing that happened to somebody at
+  a table on a Sunday. The second one puts a reason to be in the first room *in* the first room,
+  which is exactly what the tutorial floor was missing.
+- **The raisin is a better costume than cola.** `GAME_DESIGN.md` §2's second layer needs a
+  surface joke daft enough to laugh at and a subject too heavy to name. Cola-in-beer is only the
+  first; a raisin is genuinely polarising, genuinely trivial, and carries "something people
+  cannot stop" without the word ever being used. It is a *lighter* vehicle for the identical
+  point, which is what makes the point sayable at all.
+- **The reveal got smaller, on purpose.** #22 defended "it was scale, not malice" as worth
+  waiting five parked floors for. It is replaced by less, not more: a fact withheld rather than
+  a thesis argued. A chemical or economic explanation of the raisins would convert a joke into
+  homework, and a boss fight is a bad place to read an argument. What survives from #22 is the
+  part that mattered — the reveal stays on floor 6, in M10, rather than being relocated down
+  into the shipping two floors.
+- **The chapter-two cliffhanger got testable.** #22 and #58 accept a cliffhanger on the
+  criterion that a playtester calls it one unprompted, and flagged that a bad cliffhanger and an
+  unfinished game look identical to a stranger. Chapter two now ends on a loaded delivery lorry
+  leaving the village square southbound — a direction rather than a fade, which is a far more
+  legible promise to have made.
+
+**What this constrains:**
+
+- **The corrupted beer is never a player pickup.** Every beer pickup is the *old batch* — the
+  keg on Alois's back is what was left in Opa's cellar — so Promille stays ordinary drunkenness
+  and never becomes a symptom of the plot. This is the same rule the Böller already follows
+  (`CONTENT_BIBLE.md` floor 2): the corruption reaches the player as an enemy, a hazard, a
+  labelled crate, or a tainted *item*, never as the thing they drink. A beer pickup that also
+  advanced the story would put every drink in the game in argument with `CONTENT_BIBLE.md` §0's
+  tone rules.
+- **The addiction is narrative only. There is no third meter.** It was considered and rejected:
+  a Gier axis alongside health and Promille would be the third resource a player tracks, would
+  need its own HUD, its own unlock gate and its own balance pass, and would say out loud —
+  mechanically — the one thing §2 requires never be said out loud. It is carried instead by
+  floor 6's signage, the Rosinenklauber, Der Überzeugte, and the shape of the tainted items.
+- **Two corruption tags, three answers, and `impure` is untouched.** `impure` (soft-drink mixes:
+  Radler, Spezi, Russ'n, Colaweizen) keeps its current meaning and its current members. The new
+  `rosinen` tag marks tainted items. **Reinheitsgebot 1516 is retuned to strip `rosinen` rather
+  than `impure`** — the run is named after that law, and the pact should answer the run's own
+  question. Stripping soft drinks as well moves to **Sudordnung 1493**, the real, earlier,
+  stricter Landshut ordinance, for players who want the maximal pact; **Der Rosinenklauber** is
+  the third answer, keeping the tainted items and paying elsewhere. Retuning 1516 rather than
+  widening it keeps each pact describable in one sentence, which is `GAME_DESIGN.md` §8's hard
+  rule. `tests/unit/item-effects.test.ts` and `tests/content/items.test.ts` assert the old
+  behaviour and move with it.
+- **A `rosinen` item never lies and never delays.** Clean item, plus an upgrade, plus one
+  legible cost, stated in the description. The temptation has to survive full information or it
+  is not a decision, and an item that hides its cost teaches players not to read — in a game
+  whose entire inciting incident is reading a label.
+- **Pfeitinger and Oberniederburg join the invented-name list and go to #55.** Pfeitinger is
+  load-bearing in a way `Kellerbräu` never was: it is on crates, lorries, awnings and delivery
+  notes on all seven floors, and `-inger` is the commonest Bavarian brewery ending there is.
+  Check both against the register before the art is authored, not after.
+- **The rename is docs-only today, and will not stay that way.** `Sepp` appears in no code and
+  no content — the player is still `render/placeholder-art.ts`'s generated shape — so the rename
+  costs five markdown files now. #151 (the player character's art and animation) is where it
+  starts costing sprites, and it is the last cheap moment to have done this.
