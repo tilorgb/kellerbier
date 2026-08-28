@@ -12,13 +12,11 @@ Read this before authoring any content.
 - No real brewery names, logos, marks or bottle shapes. Not Hofbräu, not Augustiner, not
   Paulaner, not Franziskaner, not anyone. Invented parody brands only: **Pfeitinger**,
   **Kellerbräu**, **Löwenbrunn**, **Sankt Anzelm**, **Alpenkrone**.
-- **Pfeitinger** carries more weight than the other four and needs the closest look at legal
-  review (#55). It is the brand the whole story turns on, it appears on crates, lorries,
-  awnings and delivery notes on every floor, and `-inger` is the commonest Bavarian brewery
-  ending there is, which is exactly what makes it plausible *and* what makes a collision
-  plausible. Check it against the register before the art is authored, not after.
-- Likewise **Oberniederburg**, the grandparents' village: invented, and funny because
-  *Ober-* and *Nieder-* cancel out. Confirm no real one exists before it goes on a signpost.
+- **Pfeitinger** is the brand the whole story turns on and appears on crates, lorries, awnings
+  and delivery notes on every floor, so it is the invented name with the most surface area in
+  the game. It goes through #55 with every other name that ships; there is no known collision.
+  **Oberniederburg**, the grandparents' village, is invented on the same terms — and funny
+  because *Ober-* and *Nieder-* cancel out.
 - "Oktoberfest" is a protected mark. The floor is called **Die Wiesn** everywhere, in every
   language, in store copy and in code identifiers.
 - Landmarks (Neuschwanstein, the Bavaria statue, Walhalla, the Frauenkirche) are buildings and

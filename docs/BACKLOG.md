@@ -125,6 +125,10 @@ What moved, concretely:
 
 The milestone the original plan never had. It sets the bar M10 inherits.
 
+Also where the premise rewrite (`DECISIONS.md` #24 — Alois, and raisins in Opa's Pfeitinger)
+stops being docs-only. #166 lands the item side of it, and it wants to go **before** #152: the
+art sweep is the last moment "one more item" is cheap.
+
 | # | Issue |
 |---|---|
 | 108 | Pixel-art authoring tool for sprite content |
@@ -134,6 +138,7 @@ The milestone the original plan never had. It sets the bar M10 inherits.
 | 152 | Floor 1 & 2 art completion sweep: every remaining placeholder, gone |
 | 153 | VFX quality pass: art-directed effects instead of generated ones |
 | 154 | Pixel font and UI kit |
+| 166 | The raisin is a build decision: the `rosinen` tag, the three pacts and Oma's Apfelkuchen |
 
 ## M7 — Meta-progression
 
