@@ -10,8 +10,15 @@ Read this before authoring any content.
 
 **Trademarks — hard rules.**
 - No real brewery names, logos, marks or bottle shapes. Not Hofbräu, not Augustiner, not
-  Paulaner, not Franziskaner, not anyone. Invented parody brands only: **Kellerbräu**,
-  **Löwenbrunn**, **Sankt Anzelm**, **Alpenkrone**.
+  Paulaner, not Franziskaner, not anyone. Invented parody brands only: **Pfeitinger**,
+  **Kellerbräu**, **Löwenbrunn**, **Sankt Anzelm**, **Alpenkrone**.
+- **Pfeitinger** carries more weight than the other four and needs the closest look at legal
+  review (#55). It is the brand the whole story turns on, it appears on crates, lorries,
+  awnings and delivery notes on every floor, and `-inger` is the commonest Bavarian brewery
+  ending there is, which is exactly what makes it plausible *and* what makes a collision
+  plausible. Check it against the register before the art is authored, not after.
+- Likewise **Oberniederburg**, the grandparents' village: invented, and funny because
+  *Ober-* and *Nieder-* cancel out. Confirm no real one exists before it goes on a signpost.
 - "Oktoberfest" is a protected mark. The floor is called **Die Wiesn** everywhere, in every
   language, in store copy and in code identifiers.
 - Landmarks (Neuschwanstein, the Bavaria statue, Walhalla, the Frauenkirche) are buildings and
@@ -28,6 +35,13 @@ Read this before authoring any content.
   culture. No sacraments, no real liturgy, nothing that reads as mockery of belief.
 - The Wild Hunt, Perchten and Krampus are winter-folklore figures. They can be genuinely
   frightening; that is period-accurate.
+- **Raisins are the running joke and they are played completely straight.** Nobody in the game
+  is wrong about raisins. The half of Bavaria that picks them out of the Apfelkuchen and the
+  half that cannot see the problem both get their say, and NPCs who genuinely prefer the new
+  Pfeitinger are not written as fools or as victims — they just like it, which is funnier and
+  worse than either. The raisin is never explained, never analysed and never called a drug: see
+  `GAME_DESIGN.md` §2's reveal, which deliberately withholds a mechanism because a mechanism
+  would turn a joke into homework.
 - Drinking is funny; consequences exist. The Kater debuff is not moralising, it is a punchline
   with mechanics attached. Nobody in-game ever delivers a message about drinking — no NPC
   line, no item text, no boss quote says anything a PSA would say. What's allowed, and worth
@@ -50,11 +64,16 @@ Each floor is a chapter with its own tileset, palette, enemy roster, music track
 boss. Two rooms of any floor should be instantly distinguishable from two rooms of any other.
 
 ### Floor 1 — Der Keller
-Damp bare concrete, wooden racks, puddles, a single bare bulb. A German Keller is poured or
+**Alois's grandparents' cellar, under their house in Oberniederburg.** Damp bare concrete,
+wooden racks, puddles, a single bare bulb. A German Keller is poured or
 block concrete, not timber — so the palette leans on cold concrete greys as the base material,
 with brown reserved for the wooden racks as a detail sitting in the room rather than the room
 itself, plus one warm amber light source.
 - **Hazard:** slick puddles that carry your momentum.
+- **Set piece:** the two crates. Opa's, empty but for the bottle Alois has just put back, and
+  the full one beside it with the new label. This is the inciting incident (`GAME_DESIGN.md`
+  §2) and it belongs in the start room, before a single enemy — the player should get to read
+  the label before anything asks them to shoot.
 - **Teaching job:** this floor is the tutorial. Movement, shooting, doors, the first item. It
   must be beatable by someone who has never played the genre — and on an early run it is
   sober, since Promille is unlocked rather than on from the start (see
@@ -62,11 +81,19 @@ itself, plus one warm amber light source.
   happens.
 
 ### Floor 2 — Dorf & Acker
-Village square, hop fields, a maypole, tractors, cow pasture. Palette: green, sky blue,
+**Oberniederburg itself**, the village the cellar is under. Village square, hop fields, a
+maypole, tractors, cow pasture. Palette: green, sky blue,
 white-and-blue bunting.
 - **Hazard:** hop trellises block line of sight; wandering livestock.
 - **Set piece:** the **Maibaum** stands in one room per floor. It can be climbed for a reward,
   and stolen by the boss (maypole theft is a real regional tradition).
+- **The corruption is visible here at scale for the first time, and only as scenery.** New-label
+  Pfeitinger crates stacked outside the Wirtshaus, on trailers, behind the Marktstand. Nobody
+  comments on them. The floor is otherwise the sunniest in the game, which is the entire effect.
+- **Chapter-two cliffhanger.** Beating Der Stier does not reveal what is upstream. What the
+  player gets is a direction: the delivery lorry pulling out of the square, southbound, loaded.
+  See `ROADMAP.md`'s sequencing notes and #58 — the acceptance criterion is a playtester calling
+  it a cliffhanger unprompted, and a lorry leaving is a far more legible promise than a fade.
 
 ### Floor 3 — Der Wald
 Bavarian Forest. Dense, dark, wrong. Palette: deep green, black, sickly luminous fungus.
@@ -89,12 +116,18 @@ Industrial. Stainless steel, conveyor belts, pipes, floodlights. Palette: steel,
 yellow, cola brown. Deliberately the ugliest floor.
 - **Hazard:** conveyor belts move you, pipes vent scalding steam, the bottling line fires
   on a fixed rhythm.
-- **This is the reveal floor.** Environmental storytelling: production quotas on the walls,
-  syrup tanks, a shipping manifest addressed to the Wiesn.
+- **This is the reveal floor.** Environmental storytelling only, no dialogue: production quotas
+  on the walls, a shipping manifest addressed to the Wiesn, the crate line running new-label
+  Pfeitinger and nothing else — and the dosing hopper, which is not fed from the ingredient
+  store along with the malt and the hops but from somewhere further in, through a pipe that
+  does not appear on the wall diagram. **The raisins are not raisins, and the floor never says
+  what they are instead** (`GAME_DESIGN.md` §2). What it shows is the consequence: year-on-year
+  Wiesn attendance posted on the wall as a production target, going up.
 
 ### Floor 7 — Die Wiesn
 Beer tents, rides, gingerbread hearts, crowds, night, neon. Palette: everything at once,
-gaudy, over-lit.
+gaudy, over-lit. Every tap on this floor runs new-label Pfeitinger, and the crowd is floor 6's
+consequence standing up and enjoying itself.
 - **Hazard:** the crowd — a moving mass you cannot shoot through; carousel arms; the
   Schießbude gallery.
 - **Environmental detail, played completely straight:** a rise behind the tents where NPC
@@ -133,6 +166,9 @@ exactly one idea. Complexity comes from combinations of enemies, not from comple
 - **Gartenzwerg** — garden gnome, plays dead until you turn your back. Throws his own hat.
 - **Blaskapellist** — tuba player, fires expanding sound rings on the beat of the floor music.
 - **Traktor** — slow, tanky, leaves an exhaust cloud that blocks vision.
+- **Rosinenkasten** — a crate of new-label Pfeitinger that walks. It does not shoot; it only
+  arrives. Killed, the bottles it was carrying burst outward in a ring, so the one idea is
+  *kill it before it is next to you* — the long-range rhyme to Rollfass's splinters.
 - **Böllerschmeißer** — lobs a lit Böller in a telegraphed arc. The fuse is the whole enemy:
   the throw is readable, the landing spot is marked, and the player has about a second to not
   be standing there. This is the only place a Böller appears — it is something thrown at you,
@@ -144,6 +180,10 @@ exactly one idea. Complexity comes from combinations of enemies, not from comple
 - **Percht** — masked winter spirit, charges with a bell-ring telegraph, immune to freezing.
 - **Hirsch** — stag, charges in an arc rather than a line.
 - **Pilz** — mushroom, immobile, puffs a spore cloud that inflicts blurred vision.
+- **Zwetschgenmandl** — the little dried-fruit figure off a Nuremberg market stall, walking.
+  Comes apart into its individual fruits when hurt and reassembles unless you have moved the
+  fight away from the pieces. Real folk craft, and the game's first hint that dried fruit is
+  doing something it should not.
 - **Drud** — nightmare spirit, only spawns when the player is on their last half-Maß. Invisible
   until close. Genuinely unpleasant, deliberately.
 
@@ -167,6 +207,10 @@ exactly one idea. Complexity comes from combinations of enemies, not from comple
 - **Colaklecks** — cola blob, splits, leaves sticky ground that slows.
 - **Kastenschieber** — pushes crates as cover, blocks line of fire.
 - **Zuckerrohr-Tank** — immobile syrup tank, floods the room floor slowly. Kill it or drown.
+- **Rosinenklauber** — quality control. His job is picking foreign matter off the line, and he
+  is picking the raisins out, and he is eating them. One idea: he gets faster and hits harder
+  the longer the fight lasts, because he does not stop. The soft DPS check on the reveal floor,
+  and the reveal's thesis delivered as a mob rather than as a sentence.
 
 **Floor 7 — Die Wiesn**
 - **Bedienung** — waitress carrying twelve Maß. Throws them one at a time, faster as she empties.
@@ -175,6 +219,10 @@ exactly one idea. Complexity comes from combinations of enemies, not from comple
   reliably because *he* does not know where he is going.
 - **Schießbudenfigur** — shooting-gallery target, pops up and fires on a track.
 - **Lebkuchenherz** — gingerbread heart with a slogan on it. The slogan is the attack.
+- **Der Überzeugte** — a Wiesn guest, not visibly corrupted, extremely pleased. Cannot be
+  killed, only shoved. Follows you across the room holding out a bottle of the new one, and
+  connecting briefly slows you. He is not an obstacle the floor puts in your way; he genuinely
+  thinks you would like it. `GAME_DESIGN.md` §2's "commits both ways", as an enemy.
 - **Karussell** — room-scale rotating hazard rather than an enemy.
 
 ---
@@ -191,8 +239,8 @@ teaches something the floor's enemies were rehearsing.
 | 3 | **Die Wilde Gjoad** | The Wild Hunt. Not one entity — a procession that sweeps the arena on a fixed path while you fight the huntsman in the gaps. |
 | 4 | **Der Watzmann** | The mountain itself. Static, enormous, fills one side of the arena. Avalanches, falling rock, a summit you must climb mid-fight. |
 | 5 | **König Ludwig II** | Phase 1: swan boat on the lake, elegant, waltzing bullet patterns on 3/4 time. Phase 2: the drowning — he pulls the arena underwater. Tragic, not cruel. |
-| 6 | **Die Abfüllanlage** | The bottling line. A machine, not a creature. Perfectly rhythmic, entirely fair, utterly relentless. Destroy four subsystems. |
-| 7 | **Die Bavaria** | The bronze statue. Phase 1: **Der Löwe**, her lion, fought at ground level. Phase 2: she steps off the plinth. Phase 3: she raises the wreath and the whole Wiesn fights for her. |
+| 6 | **Die Abfüllanlage** | The bottling line. A machine, not a creature. Perfectly rhythmic, entirely fair, utterly relentless. Destroy four subsystems — the capper, the labeller, the conveyor head and **the dosing hopper**, which is where the reveal actually lands: breaking it open is how the player sees what has been going into the beer, with no plate and no line of dialogue. |
+| 7 | **Die Bavaria** | The bronze statue: the one thing on the Theresienwiese that grows with the crowd. Phase 1: **Der Löwe**, her lion, fought at ground level. Phase 2: she steps off the plinth. Phase 3: she raises the wreath and the whole Wiesn fights for her — and they are not conscripted, they are *pleased to*, which is the fight's whole argument and is never stated anywhere else. |
 | Secret | **Der Radler** | The heretic who first cut beer with lemonade. Optional superboss, mirrors the player's own build back at them. |
 | Secret | **Die Ahnen von Walhalla** | The ancestors, in sequence, as an endurance gauntlet. |
 
@@ -205,7 +253,7 @@ Roughly 30 to start; target **120+ by v1**. Every one changes how you play.
 ### Shot-transforming
 | Item | Effect |
 |---|---|
-| **Reinheitsgebot 1516** | Strips every soft-drink modifier from your shots — permanently locks you out of them — and gives +50% Stammwürze. The purist's pact. |
+| **Reinheitsgebot 1516** | Strips every `rosinen` item you hold, permanently locks the tag out of your pools, and gives +50% Stammwürze. The purist's pact, and the one the run is named after. |
 | **Radler** | Half damage, double fire rate. |
 | **Spezi** | Split shot: cola and orange, slightly divergent. |
 | **Russ'n** | Weißbier and lemonade. Shots gain `homing`. |
@@ -234,6 +282,37 @@ Roughly 30 to start; target **120+ by v1**. Every one changes how you play.
 | **Kraftbier** | Big damage up, big speed down. |
 | **Neuschwanstein-Bauplan** | Large permanent stat buff; you lose a growing sum of Biermarken on every floor transition. Ludwig went bankrupt too. |
 | **Weiß-blaue Rauten** | Every eighth shot fires in the lozenge pattern of the Bavarian flag. |
+
+### Tainted — the `rosinen` tag
+
+The corruption, as a build decision. Every one of these is **a clean item plus an upgrade plus
+one legible cost** (`GAME_DESIGN.md` §8): good enough that taking it is tempting and refusing it
+is a real sacrifice, honest enough that the description never hides the cost. They are the
+reason the two pacts below are a choice rather than a free stat bump, and they are the only
+route the adulterated stuff ever takes into the player — the beer itself never does
+(`GAME_DESIGN.md` §2).
+
+Oma's cake is the pattern, and it should be the first pair a player ever sees:
+
+| Item | Tag | Effect |
+|---|---|---|
+| **Apfelkuchen** | — | Oma's. Heals generously on pickup, small permanent Stammwürze bump. Uncomplicated and quite boring. |
+| **Apfelkuchen (mit Rosinen)** | `rosinen` | The same cake. Heals more, bumps Stammwürze considerably more, and permanently costs you Reichweite. Strictly the better pickup and slightly the worse cake. |
+
+Both sprites are legible as *different cakes at a glance* — deliberately unlike **Weißwurst**
+(`GAME_DESIGN.md` §7), whose whole joke is an unchanged sprite. Reading the label is the thing
+the game opened on; an item pool that punishes reading it would be arguing with its own premise.
+
+### The three answers to the raisin
+
+The pacts, and the reason there are three of them: purity, appetite, and the man who has found
+a third way and is not proud of it. Each closes the others off, so a run picks one.
+
+| Item | Effect |
+|---|---|
+| **Reinheitsgebot 1516** | *(above)* Strips and locks out `rosinen`. +50% Stammwürze. Says nothing about lemonade, which is the joke it has always been making. |
+| **Sudordnung 1493** | The Landshut ordinance, twenty-three years earlier and stricter, which nobody remembers. Strips and locks out **both** `rosinen` and `impure` — Radler, Spezi, Russ'n and Colaweizen go too. +65% Stammwürze. The deep-cut purist's pact: 1516 was already the compromise. |
+| **Der Rosinenklauber** | Every `rosinen` item you hold loses its drawback and keeps its upgrade. In exchange both pacts above are removed from your pools for the rest of the run. He is not defending the raisins. He is just eating them. |
 
 ### Promille-gated
 

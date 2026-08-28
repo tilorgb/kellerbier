@@ -1,16 +1,22 @@
 # Kellerbier
 
-> *Anno 1516 ward das Reinheitsgebot erlassen. Anno jetzt hat's wer brochen.*
+> *Wasser, Malz, Hopfen — und Rosinen.*
 
 A Bavarian roguelite dungeon crawler / bullet hell, in the tradition of *The Binding of Isaac*.
 
-Someone is cutting Bavaria's beer with cola, lemonade and syrup. The Reinheitsgebot is broken,
-the land has gone sour, and **Sepp** — a lederhosen lad with a tapped keg and poor impulse
-control — climbs out of the family cellar to find out who.
+**Alois** is at his grandparents' for Sunday lunch, the way he is every Sunday, and he has gone
+down to the cellar for another bottle of the good **Pfeitinger**. The crate is empty. The full
+one next to it is Pfeitinger too, and the label is wrong: *gebraut nach dem neuen bayerischen
+Reinheitsgebot*. Water, malt, hops — and raisins.
 
-Seven floors from a rural farm cellar to the Wiesn, via the Bavarian Forest, the Alps,
-Neuschwanstein and a very industrial brewery. Expect Wolpertinger, aggressive swans,
-a tuba player who shoots sound rings, and König Ludwig II in a swan boat.
+Raisins. Here as well. In Opa's beer.
+
+So Alois takes Opa's Trink-Rucksack down off its hook, fills it with what's left of the old
+batch, switches it from *trinken* to *schießen*, and heads south to find out who is responsible.
+
+Seven floors from that cellar to the Wiesn, via the Bavarian Forest, the Alps, Neuschwanstein
+and a very industrial brewery. Expect Wolpertinger, aggressive swans, a tuba player who shoots
+sound rings, and König Ludwig II in a swan boat.
 
 ## Status
 

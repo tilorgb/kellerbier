@@ -130,7 +130,7 @@ The milestone the original plan never had. It sets the bar M10 inherits.
 | 108 | Pixel-art authoring tool for sprite content |
 | 109 | Semantic render palette and per-floor theming |
 | **150** | **Sprite animation system** — there is no animation in the game at all |
-| 151 | Sepp: the player character's art and animation |
+| 151 | Alois: the player character's art and animation |
 | 152 | Floor 1 & 2 art completion sweep: every remaining placeholder, gone |
 | 153 | VFX quality pass: art-directed effects instead of generated ones |
 | 154 | Pixel font and UI kit |
