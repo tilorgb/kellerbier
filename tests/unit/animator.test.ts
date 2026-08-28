@@ -10,6 +10,7 @@ import {
   clipFrameAt,
   compileAnimationSet,
   type AnimationSidecar,
+  type AnimationStateIndex,
   type CompiledAnimationSet,
 } from '../../src/render/animation/definition.js';
 import { bytesPerPass } from '../helpers/allocation.js';
@@ -52,7 +53,7 @@ function play(
   animator: EntityAnimator,
   hz: number,
   frames: number,
-  state = AnimationState.Move,
+  state: AnimationStateIndex = AnimationState.Move,
   set: CompiledAnimationSet = SET,
   startMs = 0,
 ): number[] {

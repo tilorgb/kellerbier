@@ -1,0 +1,29 @@
+{
+  "frames": 7,
+  "frameDurationMs": 110,
+  "loop": true,
+  "clips": {
+    "idle": {
+      "frames": [0],
+      "frameDurationMs": 400,
+      "mode": "loop"
+    },
+    "move": {
+      "frames": [0, 1, 0, 2],
+      "frameDurationMs": 110,
+      "mode": "loop"
+    },
+    "hurt": {
+      "frames": [3],
+      "frameDurationMs": 90,
+      "mode": "once",
+      "onEnd": "idle"
+    },
+    "death": {
+      "frames": [4, 5, 6],
+      "frameDurationMs": 110,
+      "mode": "once",
+      "onEnd": "hold"
+    }
+  }
+}

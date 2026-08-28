@@ -1434,6 +1434,7 @@ WASD move   arrows aim and fire
   exposeDebugHandle(
     loop,
     sim,
+    view,
     (ms) => {
       stallMs = ms;
     },
@@ -1505,6 +1506,14 @@ interface DebugHost {
   __kellerbier?: {
     loop: FixedTimestepLoop;
     sim: GameSim;
+    /**
+     * The scene graph, for `view.animator` (#150): which clip and frame each
+     * body is on, without opening the overlay. The debug panel is how a person
+     * reads that; this is how a headless check does — "the Kellerassel walks in
+     * `npm run dev`" is only actually verified by something that can see the
+     * frame index change.
+     */
+    view: GameView;
     tuning: GameSim['tuning'];
     /** Burns `ms` inside the next simulation step, to test the frame graph. */
     stall: (ms: number) => void;
@@ -1525,6 +1534,7 @@ interface DebugHost {
 function exposeDebugHandle(
   loop: FixedTimestepLoop,
   sim: GameSim,
+  view: GameView,
   stall: (ms: number) => void,
   settings: AccessibilitySettings,
   setAccessibilitySettings: (patch: Partial<AccessibilitySettings>) => void,
@@ -1535,6 +1545,7 @@ function exposeDebugHandle(
   (globalThis as unknown as DebugHost).__kellerbier = {
     loop,
     sim,
+    view,
     tuning: sim.tuning,
     stall,
     settings,

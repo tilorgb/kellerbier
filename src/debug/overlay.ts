@@ -27,6 +27,8 @@ const LAYER_COLOURS: readonly (readonly [number, number])[] = [
 
 const PANEL_GAP = 6;
 const PANEL_MARGIN = 8;
+/** Column height assumed when the real one is unknown or absurdly small. */
+const MIN_PANEL_COLUMN_HEIGHT = 480;
 
 /**
  * The tool we will look at more than any other.
@@ -70,6 +72,9 @@ export class DebugOverlay {
 
   private readonly panels: DebugPanel[] = [];
   private readonly runInfo = new RunInfoPanel();
+
+  /** Window height the current panel layout was computed for. */
+  private layoutHeight = 0;
 
   private visible = false;
   private showHitboxes = true;
@@ -157,6 +162,14 @@ export class DebugOverlay {
     };
     for (const panel of this.panels) {
       panel.update(context);
+    }
+
+    // A resized window changes how many panels fit in a column. Checked here
+    // rather than through a `resize` listener of its own: the overlay is
+    // already being asked to redraw itself once a frame, and only while it is
+    // visible, which is exactly when the answer matters.
+    if (this.layoutHeight !== Math.max(MIN_PANEL_COLUMN_HEIGHT, this.viewportHeight())) {
+      this.layOutPanels();
     }
 
     this.drawHitboxes();
@@ -264,12 +277,36 @@ export class DebugOverlay {
     this.drawCalls.detach();
   }
 
+  /**
+   * Stacks the panels, wrapping into a second column when the window is not
+   * tall enough for all of them.
+   *
+   * One column was fine for five panels and stopped being fine at seven: the
+   * art-pipeline panel already fell off the bottom of a 720-tall window before
+   * #150 added the animation panel, which is a debug panel nobody can read —
+   * the exact failure the overlay exists to prevent. The wrap deliberately
+   * overlaps the game rather than shrinking it: `DEBUG_PANEL_COLUMN_WIDTH` is
+   * what the HUD keeps clear of *permanently*, and a dev tool that is open for
+   * a few seconds at a time should not move the HUD around.
+   */
   private layOutPanels(): void {
+    const available = Math.max(MIN_PANEL_COLUMN_HEIGHT, this.viewportHeight());
+    let x = PANEL_MARGIN;
     let y = PANEL_MARGIN;
     for (const panel of this.panels) {
-      panel.view.position.set(PANEL_MARGIN, y);
+      if (y > PANEL_MARGIN && y + panel.height > available - PANEL_MARGIN) {
+        x += PANEL_WIDTH + PANEL_GAP;
+        y = PANEL_MARGIN;
+      }
+      panel.view.position.set(x, y);
       y += panel.height + PANEL_GAP;
     }
+    this.layoutHeight = available;
+  }
+
+  /** The window's own height, in the same screen pixels the panel layer is drawn in. */
+  private viewportHeight(): number {
+    return typeof window === 'undefined' ? MIN_PANEL_COLUMN_HEIGHT : window.innerHeight;
   }
 
   /**
