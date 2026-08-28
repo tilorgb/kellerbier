@@ -1,6 +1,7 @@
 import { Container, Sprite, type Renderer, type Texture } from 'pixi.js';
 import { PLAYER_HEALTH, type GameSim } from '../sim/game/sim.js';
 import { createMugTexture } from './placeholder-art.js';
+import { HUD_PALETTE } from './palette.js';
 
 const MUG_WIDTH = 12;
 const MUG_HEIGHT = 12;
@@ -8,11 +9,6 @@ const MUG_GAP = 2;
 
 /** Half-Maß per red mug. Fixed by the health model — see `applyPlayerDamage`. */
 const HALF_MASS_PER_MUG = 2;
-
-const RED_TINT = 0xd9403a;
-const SOUL_TINT = 0xdce8f2;
-/** "Schwarzbier" — dark rather than literally black, so the outline still reads. */
-const ETERNAL_TINT = 0x3a3a42;
 
 /**
  * Generous caps on how many mugs are ever drawn, sized well above anything
@@ -64,13 +60,13 @@ export class HealthHud {
     this.empty = createMugTexture(renderer, MUG_WIDTH, MUG_HEIGHT, 'empty');
 
     for (let index = 0; index < SOUL_MUG_CAP; index++) {
-      this.soulMugs.push(this.makeMug(SOUL_TINT));
+      this.soulMugs.push(this.makeMug(HUD_PALETTE.healthSoul));
     }
     for (let index = 0; index < RED_MUG_COUNT; index++) {
-      this.redMugs.push(this.makeMug(RED_TINT));
+      this.redMugs.push(this.makeMug(HUD_PALETTE.healthRed));
     }
     for (let index = 0; index < ETERNAL_MUG_CAP; index++) {
-      this.eternalMugs.push(this.makeMug(ETERNAL_TINT));
+      this.eternalMugs.push(this.makeMug(HUD_PALETTE.healthEternal));
     }
   }
 

@@ -8,15 +8,10 @@ import {
   createDiamondTexture,
   createTriangleTexture,
 } from './placeholder-art.js';
+import { HUD_PALETTE } from './palette.js';
 
 const COMPACT_CELL = 5;
 const OVERLAY_CELL = 16;
-
-const UNVISITED_COLOUR = 0x54445f;
-const VISITED_COLOUR = 0x8a7f74;
-const CURRENT_FILL = 0xe8dfd0;
-const CURRENT_OUTLINE = 0xffffff;
-const BACKDROP_COLOUR = 0x14101a;
 
 /**
  * Icons keyed by role, once a room is revealed. `secret` and `supersecret`
@@ -114,8 +109,14 @@ function drawMap(
     }
     const isCurrent = room.id === currentRoomId;
     const isVisited = reveal.visited.has(room.id);
-    const fillColour = isCurrent ? CURRENT_FILL : isVisited ? VISITED_COLOUR : undefined;
-    const outlineColour = isCurrent ? CURRENT_OUTLINE : UNVISITED_COLOUR;
+    const fillColour = isCurrent
+      ? HUD_PALETTE.minimapCurrentFill
+      : isVisited
+        ? HUD_PALETTE.minimapVisited
+        : undefined;
+    const outlineColour = isCurrent
+      ? HUD_PALETTE.minimapCurrentOutline
+      : HUD_PALETTE.minimapUnvisited;
     const outlineWidth = isCurrent ? 2 : 1;
 
     // One `Graphics` per room rather than one shared across the whole map:
@@ -252,14 +253,19 @@ export class MinimapHud {
 
   constructor(renderer: Renderer) {
     this.icons = {
-      treasure: createDiamondTexture(renderer, 4, 0xe8c96a),
-      shop: createBlobTexture(renderer, 4, 0x6ab0c9, 0xd0eef6),
-      boss: createTriangleTexture(renderer, 4, 0xc95a5a),
+      treasure: createDiamondTexture(renderer, 4, HUD_PALETTE.minimapTreasureIcon),
+      shop: createBlobTexture(
+        renderer,
+        4,
+        HUD_PALETTE.minimapShopIconFill,
+        HUD_PALETTE.minimapShopIconRim,
+      ),
+      boss: createTriangleTexture(renderer, 4, HUD_PALETTE.minimapBossIcon),
     };
 
     this.header = new Text({
       text: '',
-      style: { fill: 0xe8dfd0, fontFamily: 'monospace', fontSize: 9 },
+      style: { fill: HUD_PALETTE.labelText, fontFamily: 'monospace', fontSize: 9 },
     });
     // Right-anchored: `view` is positioned with its local x=0 at the game's
     // right edge (see `main.ts`'s `positionMinimapHud`), and everything here
@@ -273,7 +279,12 @@ export class MinimapHud {
     this.overlayView.addChild(this.overlayBackdrop);
     this.overlayHeader = new Text({
       text: '',
-      style: { fill: 0xe8dfd0, fontFamily: 'monospace', fontSize: 12, fontWeight: 'bold' },
+      style: {
+        fill: HUD_PALETTE.labelText,
+        fontFamily: 'monospace',
+        fontSize: 12,
+        fontWeight: 'bold',
+      },
     });
     this.overlayHeader.anchor.set(0.5, 0);
     this.overlayView.addChild(this.overlayHeader);
@@ -313,7 +324,7 @@ export class MinimapHud {
     this.overlayBackdrop
       .clear()
       .rect(-padding, -padding, backdropWidth, backdropHeight)
-      .fill({ color: BACKDROP_COLOUR, alpha: 0.85 });
+      .fill({ color: HUD_PALETTE.minimapBackdrop, alpha: 0.85 });
     // The overlay's own extent changes with the floor's cell bounds, so it
     // re-centres itself on its pivot rather than main.ts having to know its
     // size — main.ts only ever positions this view at the screen's centre.

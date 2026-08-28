@@ -13,6 +13,7 @@ import {
   type RoomSpawnGroup,
   type RoomSpecialRole,
 } from '../content/rooms/definition.js';
+import { FLOOR_CONFIGS } from '../content/floors/definition.js';
 import { shapeCellCount } from './definitions.js';
 
 /** One single-screen sub-room's worth of content, mutable, for the editor to bind form controls to. */
@@ -99,6 +100,25 @@ export function recomputeTileGrid(cell: EditorCell): void {
     }
   }
   cell.tileGrid = grid;
+}
+
+/**
+ * The floor number `editor/playtest.ts`'s `createPlaytest` needs to render a
+ * draft's real theme (#109) — `floorTags` are semantic strings (`'cellar'`,
+ * `'rural'`, ...), matched against `FLOOR_CONFIGS`' own `floorTag` the same
+ * way the floor generator does (`sim/room/template.ts`'s `nearestFloorChoice`
+ * neighbourhood), not a floor number directly. A draft with no tag any
+ * `FloorConfig` recognises (a fresh draft's tags not yet filled in, or a
+ * typo) falls back to floor 1 rather than failing the playtest outright.
+ */
+export function floorNumberForTags(floorTags: readonly string[]): number {
+  for (const tag of floorTags) {
+    const config = FLOOR_CONFIGS.find((candidate) => candidate.floorTag === tag);
+    if (config !== undefined) {
+      return config.floor;
+    }
+  }
+  return 1;
 }
 
 export function createBlankDraft(shape: RoomShape, id = ''): EditorDraft {
