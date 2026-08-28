@@ -12,6 +12,7 @@ import {
 import { EntityAnimator } from './animation/animator.js';
 import { AUTHORED_FACING, resolveAnimationState, resolveFacing } from './animation/state.js';
 import type { AnimatedSpriteSet } from './floor-art.js';
+import { ENTITY_PALETTE } from './palette.js';
 
 /**
  * How much wider than the body a telegraph ring ends up.
@@ -22,27 +23,8 @@ import type { AnimatedSpriteSet } from './floor-art.js';
  */
 const TELEGRAPH_SCALE = 2.6;
 
-/** Colour of a telegraph ring. The same red the overlay draws enemy colliders in. */
-const TELEGRAPH_COLOUR = 0xf2566f;
-
 /** Radius the ring texture is generated at, before it is scaled per body. */
 const TELEGRAPH_TEXTURE_RADIUS = 24;
-
-/** What an invulnerable body is tinted. Cold and dull: nothing is getting in. */
-const SHELL_TINT = 0x8fa2b8;
-
-/**
- * What an elite (#156) is tinted — a warm gold, as far from `SHELL_TINT`'s
- * cold blue-grey as the palette allows, so the two never risk reading as
- * the same signal. Elites are also spawned bigger (`eliteRadiusMultiplier`,
- * `GameSim.spawnEnemyKind`), so this is the second of two independent
- * "elite" reads — the acceptance criterion is "at a glance," and a bigger
- * gold body without a name tag is closer to that than colour alone.
- */
-const ELITE_TINT = 0xf2c14e;
-
-/** Tint for a pickup whose kind failed to resolve. Should never be seen; a loud colour if it is. */
-const UNKNOWN_PICKUP_TINT = 0xff00ff;
 
 /**
  * Draws the collidable things that are not the player: targets, enemies, and
@@ -248,12 +230,12 @@ export class EntityView {
       // their shots are doing nothing only by the shots doing nothing.
       const pickupKindIndex = sim.pickupKind.data[index] ?? -1;
       sprite.tint = isPickup
-        ? (this.pickupTints[pickupKindIndex] ?? UNKNOWN_PICKUP_TINT)
+        ? (this.pickupTints[pickupKindIndex] ?? ENTITY_PALETTE.unknownPickupTint)
         : isEnemyInvulnerable(sim, index)
-          ? SHELL_TINT
+          ? ENTITY_PALETTE.invulnerableShellTint
           : isEnemyElite(sim, index)
-            ? ELITE_TINT
-            : 0xffffff;
+            ? ENTITY_PALETTE.eliteTint
+            : ENTITY_PALETTE.normalTint;
       // The texture is drawn at a fixed size; scaling it to the collider is
       // what keeps the sprite and the hitbox describing the same object.
       // Read off `bodyTexture` (what's drawn most of the time) rather than
@@ -429,7 +411,7 @@ export class EntityView {
     }
     const created = new Sprite(this.telegraphTexture);
     created.anchor.set(0.5);
-    created.tint = TELEGRAPH_COLOUR;
+    created.tint = ENTITY_PALETTE.telegraphRing;
     this.rings.push(created);
     this.ringLayer.addChild(created);
     return created;
@@ -442,7 +424,12 @@ export class EntityView {
     }
     const created = new Text({
       text: '',
-      style: { fill: 0x1b1622, fontFamily: 'monospace', fontSize: 6, fontWeight: 'bold' },
+      style: {
+        fill: ENTITY_PALETTE.pickupLabelText,
+        fontFamily: 'monospace',
+        fontSize: 6,
+        fontWeight: 'bold',
+      },
     });
     // Dark text on a light pickup reads at this size where a light outline
     // on a dark fill would not — the fill colours here are pastel/bright by

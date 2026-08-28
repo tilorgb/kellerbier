@@ -1,5 +1,6 @@
 import { Container, Graphics, Text } from 'pixi.js';
 import { INTERNAL_HEIGHT, INTERNAL_WIDTH, type GameLayout } from './resolution.js';
+import { EFFECT_PALETTE, HUD_PALETTE } from './palette.js';
 
 /** What the screen shows. Assembled by whoever tracks the run, not read from `GameSim` directly. */
 export interface RunSummaryText {
@@ -37,7 +38,7 @@ export class GameOverScreen {
     this.headline = new Text({
       text: '',
       style: {
-        fill: 0xe8dfd0,
+        fill: HUD_PALETTE.gameOverHeadline,
         fontFamily: 'monospace',
         fontSize: 40,
         fontWeight: 'bold',
@@ -48,7 +49,12 @@ export class GameOverScreen {
 
     this.summary = new Text({
       text: '',
-      style: { fill: 0xb8ac9c, fontFamily: 'monospace', fontSize: 15, align: 'center' },
+      style: {
+        fill: HUD_PALETTE.gameOverSummary,
+        fontFamily: 'monospace',
+        fontSize: 15,
+        align: 'center',
+      },
     });
     this.summary.anchor.set(0.5, 0);
     this.view.addChild(this.summary);
@@ -58,7 +64,7 @@ export class GameOverScreen {
       // key. Full #46 (rebuilding the debug-overlay bindings too) is still
       // open, but the player-facing restart this hint promises is real now.
       text: 'press R to try again',
-      style: { fill: 0x8a7f74, fontFamily: 'monospace', fontSize: 13 },
+      style: { fill: HUD_PALETTE.gameOverHint, fontFamily: 'monospace', fontSize: 13 },
     });
     this.hint.anchor.set(0.5, 0);
     this.view.addChild(this.hint);
@@ -89,7 +95,7 @@ export class GameOverScreen {
     const height = INTERNAL_HEIGHT * scale;
 
     this.dim.clear();
-    this.dim.rect(0, 0, width, height).fill({ color: 0x0a0806, alpha: 0.78 });
+    this.dim.rect(0, 0, width, height).fill({ color: EFFECT_PALETTE.gameOverDim, alpha: 0.78 });
     this.view.position.set(originX, originY);
 
     const centreX = width / 2;

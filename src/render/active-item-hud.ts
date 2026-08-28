@@ -2,17 +2,13 @@ import { Container, Sprite, Text, type Renderer } from 'pixi.js';
 import type { GameSim } from '../sim/game/sim.js';
 import { promilleRequirementMet } from '../sim/game/promille.js';
 import { createBarOutlineTexture, createSolidTexture } from './placeholder-art.js';
+import { HUD_PALETTE } from './palette.js';
 
 const BAR_WIDTH = 40;
 const BAR_HEIGHT = 6;
 const BAR_PADDING = 1;
 const ICON_SIZE = 10;
 const ICON_GAP = 4;
-
-const CHARGING_TINT = 0xa89a6a;
-const READY_TINT = 0xe8c65a;
-/** #32: a `rausch`/`sober` active item outside its tier — grey, distinct from either charging shade above, backed by its own text ("sober only"/"rausch only") rather than colour alone. */
-const DORMANT_TINT = 0x6a6a6a;
 
 /**
  * The held active item's readout: a placeholder icon, a charge/"buildup"
@@ -62,7 +58,7 @@ export class ActiveItemHud {
 
     this.label = new Text({
       text: '',
-      style: { fill: 0xe8dfd0, fontFamily: 'monospace', fontSize: 9 },
+      style: { fill: HUD_PALETTE.labelText, fontFamily: 'monospace', fontSize: 9 },
     });
     this.label.position.set(barX + BAR_WIDTH + 6, -2);
     this.view.addChild(this.label);
@@ -100,7 +96,11 @@ export class ActiveItemHud {
     const dormant = !requirementMet;
 
     this.barFill.width = Math.max(0, (BAR_WIDTH - BAR_PADDING * 2) * ratio);
-    const tint = dormant ? DORMANT_TINT : ready ? READY_TINT : CHARGING_TINT;
+    const tint = dormant
+      ? HUD_PALETTE.activeItemDormant
+      : ready
+        ? HUD_PALETTE.activeItemReady
+        : HUD_PALETTE.activeItemCharging;
     this.icon.tint = tint;
     this.barFill.tint = tint;
 

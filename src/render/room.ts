@@ -2,6 +2,7 @@ import { Container, Graphics, Sprite, type Texture } from 'pixi.js';
 import { ROOM_TILE_UNITS } from '../content/rooms/definition.js';
 import { BLOCK_STRIDE, DOOR_SPAN, roomFrameSize, type RoomGeometry } from '../sim/room/geometry.js';
 import { doorCentre, type CompiledDoor } from '../sim/room/template.js';
+import { ROOM_HAZARD_PALETTE, roomThemeForFloor } from './palette.js';
 
 /**
  * Which of `variantCount` tile textures a floor cell at `(col, row)` draws —
@@ -29,100 +30,6 @@ export function pickTileVariant(col: number, row: number, variantCount: number):
   return hash % variantCount;
 }
 
-/** Placeholder palette for a floor with no room palette of its own yet. Real tilesets arrive with the art pipeline in #34. */
-const DEFAULT_PALETTE: RoomPalette = {
-  floor: 0x241d2b,
-  wall: 0x3a2f45,
-  wallEdge: 0x54445f,
-  block: 0x4a3a2c,
-  blockEdge: 0x6d5540,
-};
-
-interface RoomPalette {
-  readonly floor: number;
-  readonly wall: number;
-  readonly wallEdge: number;
-  readonly block: number;
-  readonly blockEdge: number;
-}
-
-/**
- * Floor 1 — Der Keller (#35): bare concrete, not timber — a German Keller is
- * poured or block concrete, so cold grey is the base material and brown is
- * only the wooden racks sitting in the room, not the room itself
- * (`docs/CONTENT_BIBLE.md`). Drawn from the floor's own authored five-colour
- * set (`tools/art/palette.mjs`'s `FLOOR_PALETTES.cellar`), not invented here
- * — this is the same fence the real tileset (`assets/sprites/floor-1-cellar/`)
- * is built inside, so the room's placeholder shapes and its pixel art read
- * as one palette rather than two. `floor`/`wall` are the two darker concrete
- * greys, `wallEdge` the lightest one as a highlight; `block` (an obstacle —
- * usually a rack or a crate) is the one wood accent, with the same light
- * concrete grey as its edge rather than a second, invented wood tone. The
- * three greys sit close together on purpose — a damp basement lit by one
- * bulb is a low-contrast room, and far-apart values read as a checkerboard
- * the instant they fill a whole floor.
- */
-/**
- * Floor 2 — Dorf & Acker (#37): green, sky blue, white-and-blue bunting
- * (`docs/CONTENT_BIBLE.md`). Drawn from the floor's own authored sub-palette
- * (`tools/art/palette.mjs`'s `FLOOR_PALETTES.rural`), the same fence Floor
- * 1's entry above is built inside — `floor`/`wall` are the two grass greens,
- * `wallEdge` the sky blue as a highlight so the boundary between an outdoor
- * room and its wall band reads as a hedge rather than a second floor
- * material; `block` (an obstacle — a fence post, a hay bale) takes the deep
- * blue accent, edged in the same sky blue.
- */
-const FLOOR_PALETTES: Readonly<Record<number, RoomPalette>> = {
-  1: {
-    floor: 0x4a4d50,
-    wall: 0x3c3e40,
-    wallEdge: 0x5b5f63,
-    block: 0x54402e,
-    blockEdge: 0x5b5f63,
-  },
-  2: {
-    floor: 0x3f7a3a,
-    wall: 0x2e4f8c,
-    wallEdge: 0x6ab0d9,
-    block: 0x2e4f8c,
-    blockEdge: 0x6ab0d9,
-  },
-};
-
-function paletteFor(floor: number): RoomPalette {
-  return FLOOR_PALETTES[floor] ?? DEFAULT_PALETTE;
-}
-
-/**
- * Floor 1's slick puddle (#35): the darkest concrete grey for a deep,
- * standing pool, the amber accent for the light it catches
- * (`docs/CONTENT_BIBLE.md`'s "one warm amber light source") — the one place
- * on this floor amber is meant to show up at all, which is also why it
- * isn't used for the wall/block edges above, and drawn at a lower alpha
- * than the walls/blocks so a small saturated accent doesn't read as loud as
- * a large low-contrast fill.
- */
-const PUDDLE_COLOUR = 0x3c3e40;
-const PUDDLE_EDGE_COLOUR = 0xd99a3f;
-
-/**
- * Floor 2's hop trellis (#37): drawn from the rural sub-palette
- * (`tools/art/palette.mjs`'s `FLOOR_PALETTES.rural`) — the darker leaf green
- * for the lattice itself, the lighter one as an edge highlight — rather than
- * a floor-specific `RoomPalette` entry, since a sight-blocking hazard is a
- * fixed idea (trellis foliage) independent of which floor's `paletteFor`
- * happens to be active, unlike `floor`/`wall`/`block` which are genuinely
- * reskinned per floor.
- */
-const TRELLIS_COLOUR = 0x3f7a3a;
-const TRELLIS_EDGE_COLOUR = 0x7fbf6a;
-
-/** A locked door reads as cold and shut; an open one picks up the floor's amber light. */
-const DOOR_LOCKED_COLOUR = 0x5a2a2a;
-const DOOR_OPEN_COLOUR = 0xd9a441;
-
-/** A crack in the wall, marking a bombable connection to a secret room. */
-const CRACK_COLOUR = 0x8a6a4a;
 /** Narrower than `DOOR_SPAN` — a hint, not a doorway. */
 const CRACK_SPAN = 10;
 
@@ -138,7 +45,7 @@ export function createRoomView(
   floorTileTextures?: readonly Texture[],
 ): Container {
   const container = new Container();
-  const palette = paletteFor(floorNumber);
+  const palette = roomThemeForFloor(floorNumber);
 
   const frame = roomFrameSize(room);
   const floor = new Graphics();
@@ -184,8 +91,8 @@ export function createRoomView(
     const maxY = room.puddles[base + 3] ?? 0;
     puddles
       .rect(minX, minY, maxX - minX, maxY - minY)
-      .fill({ color: PUDDLE_COLOUR, alpha: 0.85 })
-      .stroke({ width: 1, color: PUDDLE_EDGE_COLOUR, alpha: 0.5, alignment: 0 });
+      .fill({ color: ROOM_HAZARD_PALETTE.puddleFill, alpha: 0.85 })
+      .stroke({ width: 1, color: ROOM_HAZARD_PALETTE.puddleEdge, alpha: 0.5, alignment: 0 });
   }
   container.addChild(puddles);
 
@@ -198,8 +105,8 @@ export function createRoomView(
     const maxY = room.sightBlocks[base + 3] ?? 0;
     trellises
       .rect(minX, minY, maxX - minX, maxY - minY)
-      .fill({ color: TRELLIS_COLOUR, alpha: 0.75 })
-      .stroke({ width: 1, color: TRELLIS_EDGE_COLOUR, alpha: 0.6, alignment: 0 });
+      .fill({ color: ROOM_HAZARD_PALETTE.trellisFill, alpha: 0.75 })
+      .stroke({ width: 1, color: ROOM_HAZARD_PALETTE.trellisEdge, alpha: 0.6, alignment: 0 });
   }
   container.addChild(trellises);
 
@@ -254,7 +161,7 @@ export function createDoorView(
   locked: boolean,
 ): Graphics {
   const graphics = new Graphics();
-  const colour = locked ? DOOR_LOCKED_COLOUR : DOOR_OPEN_COLOUR;
+  const colour = locked ? ROOM_HAZARD_PALETTE.doorLocked : ROOM_HAZARD_PALETTE.doorOpen;
   const frame = roomFrameSize(room);
 
   for (const door of doors) {
@@ -338,5 +245,5 @@ function drawCrack(
   for (const point of rest) {
     graphics.lineTo(point[0] ?? 0, point[1] ?? 0);
   }
-  graphics.stroke({ width: 1.5, color: CRACK_COLOUR });
+  graphics.stroke({ width: 1.5, color: ROOM_HAZARD_PALETTE.crack });
 }

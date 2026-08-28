@@ -1,6 +1,7 @@
 import { Sprite, Texture } from 'pixi.js';
 import type { GameSim } from '../sim/game/sim.js';
 import { INTERNAL_HEIGHT, INTERNAL_WIDTH, type GameLayout } from './resolution.js';
+import { EFFECT_PALETTE, ENTITY_PALETTE } from './palette.js';
 
 /** Highest the vignette ever gets, even at Promille's max. Never fully opaque. */
 const MAX_ALPHA = 0.8;
@@ -13,8 +14,6 @@ const MAX_ALPHA = 0.8;
  * one place that decides how far a renderer is willing to push it.
  */
 const MAX_DISTORTION_ALPHA = 0.18;
-/** The reddening the vignette tints toward as distortion climbs — pure white is "no distortion." */
-const DISTORTION_TINT = 0xff5555;
 
 /**
  * A radial gradient, transparent centre to opaque edge, generated once via
@@ -117,7 +116,7 @@ export class Vignette {
     const distortionAlpha =
       Math.min(MAX_DISTORTION_ALPHA, distortion * MAX_DISTORTION_ALPHA) * pulse;
     this.view.alpha = Math.min(1, intensity * MAX_ALPHA + distortionAlpha);
-    this.view.tint = distortion > 0 ? DISTORTION_TINT : 0xffffff;
+    this.view.tint = distortion > 0 ? EFFECT_PALETTE.distortionTint : ENTITY_PALETTE.normalTint;
     this.view.position.set(screenX, screenY);
   }
 
