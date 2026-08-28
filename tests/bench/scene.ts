@@ -1,4 +1,5 @@
 import { Texture } from 'pixi.js';
+import { compileAnimationSet } from '../../src/render/animation/definition.js';
 import { entityIndex } from '../../src/sim/ecs/entity.js';
 import { GameSim } from '../../src/sim/game/sim.js';
 import { ParticleKind } from '../../src/sim/particle/store.js';
@@ -239,5 +240,34 @@ export function buildHeadlessView(sim: GameSim): GameView {
     floorTiles: {},
     enemyArt: {},
     enemyFlash: {},
+    // Every creature in the stress roster animates, so the frame-time budget
+    // covers the animator (#150) rather than measuring a scene that happens to
+    // skip it. `Texture.EMPTY` for every frame: what is being measured is the
+    // per-body state resolution, clip advance and transform write, and those
+    // cost the same whatever pixels the frame points at.
+    enemyAnimation: Object.fromEntries(
+      ROSTER.map((id) => [
+        id,
+        {
+          frames: BENCH_STRIP_FRAMES.map(() => Texture.EMPTY),
+          flashFrames: BENCH_STRIP_FRAMES.map(() => Texture.EMPTY),
+          clips: compileAnimationSet(id, BENCH_SIDECAR, BENCH_STRIP_FRAMES.length),
+        },
+      ]),
+    ),
   });
 }
+
+/** A four-frame walk plus a two-frame death — the shape a real creature's strip has. */
+const BENCH_STRIP_FRAMES = [0, 1, 2, 3, 4, 5];
+const BENCH_SIDECAR = {
+  frames: BENCH_STRIP_FRAMES.length,
+  frameDurationMs: 120,
+  loop: true,
+  clips: {
+    idle: { frames: [0], frameDurationMs: 400, mode: 'loop' },
+    move: { frames: [0, 1, 2, 3], frameDurationMs: 110, mode: 'loop' },
+    hurt: { frames: [4], frameDurationMs: 90, mode: 'once', onEnd: 'idle' },
+    death: { frames: [4, 5], frameDurationMs: 120, mode: 'once', onEnd: 'hold' },
+  },
+} as const;

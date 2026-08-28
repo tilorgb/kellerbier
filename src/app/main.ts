@@ -41,7 +41,7 @@ import { WalletHud } from '../render/wallet-hud.js';
 import { HUD_PALETTE, PARTICLE_PALETTE } from '../render/palette.js';
 import { Vignette } from '../render/vignette.js';
 import { GameView } from '../render/view.js';
-import { loadFloorArt } from '../render/floor-art.js';
+import { buildAnimatedSets, loadFloorArt } from '../render/floor-art.js';
 import { attachLiveArtPreviewListener } from '../render/live-art-preview.js';
 import { AmbienceTracker, SILENT_AMBIENCE } from './audio/ambience.js';
 import { SILENT_AUDIO, playImpactAudio } from './audio/impact.js';
@@ -295,7 +295,7 @@ async function boot(): Promise<void> {
   // the atlas the pipeline builds: nothing in `render/` consumes that atlas
   // yet, so `loadFloorArt` loads the source PNGs the same way `playerTexture`
   // above already does.
-  const { floorTiles, enemyArt, tileTextures, spriteOrigins, tileVariantNames } =
+  const { floorTiles, enemyArt, enemyStrips, tileTextures, spriteOrigins, tileVariantNames } =
     await loadFloorArt();
   // Sprite names are unique across floors and categories by the existing
   // authoring convention (`cellar-floor`, `rural-floor-2`, `kellerassel`, ...),
@@ -746,7 +746,11 @@ async function boot(): Promise<void> {
     render: (alpha) => {
       const started = performance.now();
       overlay?.drawCalls.beginFrame();
-      view.sync(alpha, layout.scale);
+      // `started` doubles as the render clock animation clips advance on
+      // (#150) — the same reading this frame is already being timed from,
+      // rather than a second `performance.now()` a fraction of a millisecond
+      // later.
+      view.sync(alpha, layout.scale, started);
       healthHud.sync(sim);
       promilleHud.sync(sim, settings.neutralReskin);
       walletHud.sync(sim);
@@ -990,6 +994,11 @@ WASD move   arrows aim and fire
           id,
           createSilhouetteTexture(app.renderer, texture),
         ]),
+      ),
+      // Animated creatures (#150): one silhouette per frame rather than per
+      // creature, built here because generating one needs the renderer.
+      enemyAnimation: buildAnimatedSets(enemyStrips, (texture) =>
+        createSilhouetteTexture(app.renderer, texture),
       ),
     };
     view = new GameView(sim, viewTextures);
@@ -1477,6 +1486,7 @@ WASD move   arrows aim and fire
   exposeDebugHandle(
     loop,
     sim,
+    view,
     (ms) => {
       stallMs = ms;
     },
@@ -1548,6 +1558,14 @@ interface DebugHost {
   __kellerbier?: {
     loop: FixedTimestepLoop;
     sim: GameSim;
+    /**
+     * The scene graph, for `view.animator` (#150): which clip and frame each
+     * body is on, without opening the overlay. The debug panel is how a person
+     * reads that; this is how a headless check does — "the Kellerassel walks in
+     * `npm run dev`" is only actually verified by something that can see the
+     * frame index change.
+     */
+    view: GameView;
     tuning: GameSim['tuning'];
     /** Burns `ms` inside the next simulation step, to test the frame graph. */
     stall: (ms: number) => void;
@@ -1568,6 +1586,7 @@ interface DebugHost {
 function exposeDebugHandle(
   loop: FixedTimestepLoop,
   sim: GameSim,
+  view: GameView,
   stall: (ms: number) => void,
   settings: AccessibilitySettings,
   setAccessibilitySettings: (patch: Partial<AccessibilitySettings>) => void,
@@ -1578,6 +1597,7 @@ function exposeDebugHandle(
   (globalThis as unknown as DebugHost).__kellerbier = {
     loop,
     sim,
+    view,
     tuning: sim.tuning,
     stall,
     settings,

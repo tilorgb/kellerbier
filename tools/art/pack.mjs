@@ -32,6 +32,20 @@ function blit(destination, destWidth, source, sourceWidth, sourceHeight, destX, 
  * rather than a degenerate 1×1 one. Otherwise returns
  * `{ width, height, pixels, frames }`, where `frames` maps each sprite's
  * `key` to its placement rectangle.
+ *
+ * ## An animation clip's frames stay contiguous
+ *
+ * #150 wants a clip's frames adjacent in the atlas, so that sampling frame
+ * `n` of a strip is one rectangle offset rather than a per-frame lookup, and
+ * so a clip cannot end up straddling two atlas rows. That guarantee is
+ * structural here rather than a rule this packer enforces: a `name.strip.png`
+ * arrives as *one* sprite `frameCount` frames wide (`tools/art/scan.mjs`
+ * pairs the strip with its sidecar; `tools/pixel-editor/strip.mjs` lays the
+ * frames out edge to edge with no padding), so there is nothing for the shelf
+ * layout to split. The one thing that could break it would be this packer
+ * learning to cut a wide sprite up to fit a row — which is exactly why the
+ * note is here, and why `tests/art/pack.test.ts` asserts a strip's placement
+ * is its full width even when it is wider than `maxWidth`.
  */
 export function packSprites(sprites, options = {}) {
   if (sprites.length === 0) {

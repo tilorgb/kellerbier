@@ -57,6 +57,42 @@ describe('scanSprites', () => {
     await expect(scanSprites(root)).rejects.toThrow(/walk\.anim\.json/);
   });
 
+  it('carries a strip sidecar clips map through untouched', async () => {
+    const dir = path.join(root, 'floor-1-cellar', 'characters');
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, 'crawler.strip.png'), solidPng(48, 16, 0x54402e));
+    const animation = {
+      frames: 4,
+      frameDurationMs: 120,
+      loop: true,
+      clips: {
+        idle: { frames: [0], frameDurationMs: 400, mode: 'loop' },
+        move: { frames: [0, 1, 2, 3], frameDurationMs: 110, mode: 'loop' },
+      },
+    };
+    await writeFile(path.join(dir, 'crawler.anim.json'), JSON.stringify(animation));
+
+    const [sprite] = await scanSprites(root);
+    expect(sprite?.animation).toEqual(animation);
+  });
+
+  it('throws for a name authored as both a plain sprite and a strip', async () => {
+    const dir = path.join(root, 'floor-1-cellar', 'characters');
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, 'crawler.png'), solidPng(16, 16, 0x54402e));
+    await writeFile(path.join(dir, 'crawler.strip.png'), solidPng(64, 16, 0x54402e));
+    await writeFile(
+      path.join(dir, 'crawler.anim.json'),
+      JSON.stringify({ frames: 4, frameDurationMs: 120, loop: true }),
+    );
+
+    // Both would pack under `character/crawler`, so one of them would silently
+    // win. This is the shape of forgetting to delete the static PNG when
+    // animating an existing creature — the exact thing #150 did to the
+    // Kellerassel.
+    await expect(scanSprites(root)).rejects.toThrow(/authored twice/);
+  });
+
   it('ignores an unknown bucket folder', async () => {
     const dir = path.join(root, 'not-a-real-bucket', 'tiles');
     await mkdir(dir, { recursive: true });

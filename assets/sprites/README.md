@@ -53,7 +53,48 @@ A static sprite is a plain `name.png`. An animated one is a horizontal frame str
 
 `frameDurationMs` may also be a single number shared by every frame. The strip's width must
 divide evenly by `frames`, and each resulting frame is checked against its category's size spec
-exactly like a static sprite would be.
+exactly like a static sprite would be. A name authored *both* ways — `name.png` and
+`name.strip.png` side by side — fails the build: the two would pack under the same atlas key and
+nothing could say which one the game meant.
+
+### Clips
+
+Those three fields describe the strip. What the game *plays* is a **clip**, and clips are the
+optional `clips` map in the same sidecar — one per animation state, each a frame list over the
+strip with its own timing:
+
+```json
+{
+  "frames": 8,
+  "frameDurationMs": 120,
+  "loop": true,
+  "clips": {
+    "idle": { "frames": [0, 1], "frameDurationMs": 420, "mode": "pingPong" },
+    "move": { "frames": [0, 1, 2, 3], "frameDurationMs": 110, "mode": "loop" },
+    "hurt": { "frames": [4], "frameDurationMs": 90, "mode": "once", "onEnd": "idle" },
+    "death": { "frames": [5, 6, 7], "frameDurationMs": 110, "mode": "once", "onEnd": "hold" }
+  }
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `frames` | frame indices into the strip, in play order. Any order, repeats allowed |
+| `frameDurationMs` | one number for the clip, or one per entry in `frames` |
+| `mode` | `loop`, `once`, or `pingPong` (plays back down through the middle frames) |
+| `onEnd` | `once` clips only: `hold` the last frame, or hand back to `idle` |
+
+The states are fixed — `idle`, `move`, `telegraph`, `hurt`, `death` — because each one is derived
+from simulation state the renderer already computes (`src/render/animation/state.ts`). A clip
+named anything else, or one pointing at a frame index the strip does not have, fails the build.
+
+**`idle` is required** whenever `clips` is present: a state with no clip authored yet falls back
+to `idle` and warns once in a dev build (`docs/DECISIONS.md` #19), so it is the one clip that
+cannot itself be missing. A sidecar with no `clips` at all is still legal and still animates —
+the whole strip becomes one looping `idle` clip at the strip's own timing.
+
+Four frames of walk cycle is the house budget (`docs/DECISIONS.md` #37); `WALK_CYCLE_FRAMES` in
+`tools/art/spec.mjs` is where that number lives and why.
 
 ## Projectile legibility
 

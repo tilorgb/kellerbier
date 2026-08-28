@@ -1503,3 +1503,94 @@ this redraw later — there is no more legacy 16×16 art left to carry forward. 
 should run `findOffPalettePixel`/`validateSpriteSize` (or the pixel editor's own save path, which
 calls the same functions) before presenting candidates, not just before committing — it catches a
 bucket/palette mismatch a design review by eye can miss entirely.
+
+## 37. Animation is a render-side table, clips are authored beside the art, and four frames is the walk cycle
+
+**Decided:** M6, issue #150. **Applies:** #2's `sim/`→`render/` boundary, #7's construction-time
+validation, #19's graceful content gaps and #4's overflow policy to animation.
+
+Three decisions, taken together because #150 could not be built without answering all three, and
+every one of them is inherited by roughly thirty-five creatures nobody has drawn yet.
+
+### The animator is render-side, and animation state is derived, never stored
+
+The obvious implementation is an `animationFrame` field on the entity, advanced in `stepEnemies`.
+It is also the one that quietly ends this project's determinism story: a frame index advanced in
+a tick makes the simulation a function of presentation timing, and replays, seeded runs,
+shareable bug reports and the WASM seam all rest on it not being one. So `render/animation/`
+keeps its own table keyed by entity handle — slot *and* generation, so a recycled slot is a new
+creature rather than one inheriting the last occupant's stride — and animation state is
+*resolved* from simulation state every frame (`render/animation/state.ts`: hurt from
+`flash`/`hitStun`, telegraph from the same `enemyTelegraphProgress` the warning ring is drawn
+from, move from the tick's own position delta). Nothing is written back. The lint rule in
+`tools/eslint/architecture.js` stops the renderer importing its way into the simulation;
+`tests/determinism/animation-state.test.ts` stops it happening by accident through a shared
+object, by running the same seed rendered at 60 Hz and at 240 Hz and comparing the simulation
+bit for bit.
+
+Clips advance on the render clock rather than the tick counter, which is the other half of the
+same split: a 144 Hz display plays a 440 ms walk cycle in 440 ms instead of 2.4× fast, and a
+paused or single-stepped simulation does not freeze a body mid-stride. The delta is clamped
+(`MAX_FRAME_DELTA_MS`) for the same reason `FixedTimestepLoop` clamps its step backlog — a
+backgrounded tab's four-second gap is spent, not deferred.
+
+One consequence worth naming: a **corpse** is entirely render-side state. The simulation frees
+an enemy's slot on the tick it dies, so there is no entity left to hang a death pose on; the
+animator keeps a small fixed table of corpses (position, radius, facing and clip phase, captured
+from the last frame the body was alive) and plays the death clip out on those, fading them at the
+end. Fixed and overwriting oldest-first, per #4: a room-clearing bomb drops the oldest corpse's
+last few frames rather than growing a table mid-fight. `GameView` clears the whole table on a
+room change, because a body vanishing with its room is not a body dying.
+
+### Clips are authored in the `*.anim.json` sidecar, not in `src/content/`
+
+Every other kind of content in this game lives in `src/content/`, so putting clips anywhere else
+needs an argument. It is this: a clip is a frame list over one specific strip. Authored anywhere
+other than beside that strip, there are two files that have to agree about a frame count and a
+build that can only see one of them — and the sidecar is a file the art build already reads and
+validates, and the pixel editor (#108) already writes. So `name.anim.json` grew an optional
+`clips` map, one entry per animation state, and `render/floor-art.ts` finds strips by
+`import.meta.glob` rather than by a list of imports: adding an animated creature is dropping two
+files in a folder, which is the bar `CONTRIBUTING.md`'s content definition-of-done sets. The
+states are a closed set (`ANIMATION_STATES` in `tools/art/spec.mjs`, imported by the runtime
+rather than re-listed, so the build's idea of a legal clip name and the animator's agree by
+construction).
+
+Where the line between #7 and #19 falls, concretely:
+
+- A clip naming a state nothing plays, or pointing at a frame index the strip does not have, or
+  a `once` clip with an `onEnd` that means nothing — **wrong data**. `validateAnimation` fails
+  the build, and `compileAnimationSet` throws again at load, adding the one check the build
+  cannot make: that the frame count the sidecar declares is the frame count the loaded texture
+  actually divides into.
+- A state with no clip authored yet — **a gap**. It falls back to the idle clip and warns once
+  per (sprite, state) behind `import.meta.env.DEV`, exactly the shape `nearestFloorChoice`
+  already uses. Which is why an `idle` clip is *required* whenever `clips` is present: a fallback
+  that might itself be missing is not a fallback.
+
+A name authored both ways — `name.png` and `name.strip.png` side by side — fails the scan. Both
+would pack under one atlas key, and it is the exact shape of animating an existing creature and
+forgetting to delete the static PNG.
+
+### Four frames of walk cycle
+
+`WALK_CYCLE_FRAMES` in `tools/art/spec.mjs`, and the number every creature in M10 will be
+authored to. Contact, passing, contact, passing: the smallest count that reads as a cycle rather
+than as a two-pose flicker, which is also where 16-bit-era sprite work landed for the same
+reason. Going to six or eight buys detail nobody looks at in a bullet hell — the player is
+reading silhouettes and telegraphs, not gaits — at a cost paid thirty-five more times in
+authoring hours, and paid again in every atlas.
+
+Frames are shared across clips rather than duplicated: the Kellerassel's strip is eight frames —
+four walk (frame 0 doubling as the idle rest pose), one flinch, three death — not one strip per
+clip. That is what keeps the count per creature closer to eight than to twenty.
+
+Advisory, not enforced. A creature that genuinely reads better on two frames because it hovers or
+rolls is not a spec violation; four is the number to reach for absent a reason not to, and the
+reason belongs in the commit that departs from it.
+
+**Constrains:** every animated creature from here on, floors 3-7 included; the projectile and
+boss animation #151-#154 will want (same clips, same sidecar, same states); and any future
+"presentation state derived per frame" system — a squash-and-stretch pass, a shadow that reacts
+to height — which reaches for a render-side table keyed by entity handle before it considers a
+field on the entity.

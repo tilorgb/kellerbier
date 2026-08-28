@@ -74,6 +74,20 @@ export function applyLiveArtPreview(
   if (texture === undefined) {
     return false;
   }
+  // A frame cut out of an animation strip (#150) shares one `TextureSource`
+  // with the rest of the strip, so replacing that source with a single frame's
+  // canvas would leave every *other* frame's rectangle pointing outside the
+  // image. The message says which sprite is being drawn but not which frame,
+  // so there is no correct place to write it either — an animated sprite
+  // simply has no live target yet, and reporting that honestly (the ack's
+  // `applied: false`, which the editor surfaces) is better than repainting the
+  // room with a garbled strip.
+  if (
+    texture.frame.width !== texture.source.width ||
+    texture.frame.height !== texture.source.height
+  ) {
+    return false;
+  }
   const canvas = document.createElement('canvas');
   canvas.width = message.width;
   canvas.height = message.height;

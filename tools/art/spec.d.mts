@@ -22,3 +22,13 @@ export declare const FLOOR_BUCKETS: readonly FloorBucket[];
 export declare const COMMON_BUCKET_ID: string;
 export declare const ALL_BUCKET_IDS: readonly string[];
 export declare function floorTagForBucket(bucketId: string): string | null;
+
+export type AnimationStateId = 'idle' | 'move' | 'telegraph' | 'hurt' | 'death';
+export type ClipMode = 'loop' | 'once' | 'pingPong';
+export type ClipEndAction = 'hold' | 'idle';
+
+export declare const ANIMATION_STATES: readonly AnimationStateId[];
+export declare const DEFAULT_ANIMATION_STATE: AnimationStateId;
+export declare const CLIP_MODES: readonly ClipMode[];
+export declare const CLIP_END_ACTIONS: readonly ClipEndAction[];
+export declare const WALK_CYCLE_FRAMES: number;
