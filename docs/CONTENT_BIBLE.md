@@ -287,8 +287,8 @@ The corruption, as a build decision. Every one of these is **a clean item plus a
 one legible cost** (`GAME_DESIGN.md` §8): good enough that taking it is tempting and refusing it
 is a real sacrifice, honest enough that the description never hides the cost. They are the
 reason the two pacts below are a choice rather than a free stat bump, and they are the only
-route the adulterated stuff ever takes into the player — the beer itself never does
-(`GAME_DESIGN.md` §2).
+route the adulterated stuff ever takes into the player *as a pickup* — Alois's own shot is the
+one other exception, and it is a weapon, never a beer he drinks (`GAME_DESIGN.md` §2).
 
 Oma's cake is the pattern, and it should be the first pair a player ever sees:
 
