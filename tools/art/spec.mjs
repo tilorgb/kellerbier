@@ -9,7 +9,7 @@
  * `min`/`max` rather than an exact size for `character` and `boss`: a boss
  * silhouette shrinking between floors, or a character denser than the floor
  * of the range, is exactly the kind of variation that spec is meant to
- * allow — see `docs/DECISIONS.md` #25 for `character`'s and `boss`'s actual
+ * allow — see `docs/DECISIONS.md` #26 for `character`'s and `boss`'s actual
  * ceilings, raised there from the original 16 and 48: "16-bit era" (the
  * bible's own art-direction line) describes an SNES-era colour/shading
  * budget, not a pixel-dimension rule, and the original numbers under-shot
@@ -27,15 +27,15 @@ export const CATEGORY_SPECS = {
   tile: { minWidth: 16, maxWidth: 16, minHeight: 16, maxHeight: 16 },
   // Height's floor is the original "roughly 12x16" ceiling, kept as the
   // floor so every already-committed floor-1/2 character sprite (authored at
-  // 16 tall) stays legal — `docs/DECISIONS.md` #25 raised the height
-  // ceiling to 32 for new content wanting more detail, and #26 raised the
+  // 16 tall) stays legal — `docs/DECISIONS.md` #26 raised the height
+  // ceiling to 32 for new content wanting more detail, and #27 raised the
   // width ceiling to match: a character's silhouette was never guaranteed to
   // be taller than it is wide (a stout body, a wide-bellied enemy), so
   // capping width at the old 16 while height could reach 32 baked in a
   // portrait-only assumption nothing here actually requires.
   character: { minWidth: 8, maxWidth: 32, minHeight: 16, maxHeight: 32 },
   // Floor of 17 keeps a boss from silently passing as an oversized tile.
-  // Ceiling raised from 48 to 160 by `docs/DECISIONS.md` #25 — no boss art
+  // Ceiling raised from 48 to 160 by `docs/DECISIONS.md` #26 — no boss art
   // exists yet to invalidate, and 160 (320 on screen, most of a 180-tall
   // playfield) is deliberately close to "fills the screen."
   boss: { minWidth: 17, maxWidth: 160, minHeight: 17, maxHeight: 160 },

@@ -254,7 +254,7 @@ function boot(): void {
 
   // The size a sprite category is drawn at is a range, not one fixed number
   // (`docs/CONTENT_BIBLE.md` §5's "roughly 12x16", "up to 160x160") and width
-  // and height are independent (`docs/DECISIONS.md` #26 — a character is not
+  // and height are independent (`docs/DECISIONS.md` #27 — a character is not
   // guaranteed to be taller than it is wide). `presetSelect` is a one-click
   // starting point that fills both number fields at once; `widthInput`/
   // `heightInput` are what "New" actually reads, each clamped live to

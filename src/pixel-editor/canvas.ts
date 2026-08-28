@@ -2,7 +2,7 @@ import type { PixelEditorState } from './state.js';
 
 /**
  * Zoom fits the canvas to roughly this many CSS pixels on its longer side,
- * rather than a single fixed factor — `docs/DECISIONS.md` #25 raised the
+ * rather than a single fixed factor — `docs/DECISIONS.md` #26 raised the
  * boss ceiling to 160×160, and 160 at the old fixed 16x zoom is a
  * 2560×2560px canvas: technically scrollable (`.kb-pixel-canvas-wrap`'s
  * `overflow: auto`) but useless for actually drawing, since most of the
@@ -46,9 +46,9 @@ export interface GridHandle {
  * Painting calls `state.paintPixel` (writes `state.selectedColor`, itself
  * only ever set from the palette panel's swatches, or fully-transparent) or,
  * for the `shade` tool, `state.shadeArea` (nudges already-painted pixels
- * along `palette.mjs`'s derived shade ramps) — see `docs/DECISIONS.md` #24's
+ * along `palette.mjs`'s derived shade ramps) — see `docs/DECISIONS.md` #25's
  * "there is no off-palette pixel to lint for after the fact, because the
- * picker never offers one", extended by #27 to the shading brush's derived
+ * picker never offers one", extended by #28 to the shading brush's derived
  * tones instead of hand-picked ones.
  */
 export function createGridPanel(state: PixelEditorState, host: HTMLElement): GridHandle {

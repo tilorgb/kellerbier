@@ -12,7 +12,7 @@
  * `tools/room-editor/server.mjs`, the sibling this follows.
  *
  * Every check here reuses the same pure functions `tools/art/build.mjs` runs
- * at build time (`docs/DECISIONS.md` #24) — this endpoint is a second,
+ * at build time (`docs/DECISIONS.md` #25) — this endpoint is a second,
  * earlier place those functions run, not a second implementation of them.
  * `png.mjs` (the one place this pipeline touches the `pngjs` dependency) and
  * the actual file writes are the reason this lives server-side rather than

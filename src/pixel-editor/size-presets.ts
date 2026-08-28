@@ -5,10 +5,10 @@ import { CATEGORY_SPECS, type SpriteCategory } from '../../tools/art/spec.mjs';
  * "New", not the canvas's only legal sizes. Each category's `CATEGORY_SPECS`
  * in `tools/art/spec.mjs` is a *range* (`docs/CONTENT_BIBLE.md` §5's
  * "roughly 12x16 up to 16x32" for a character, "up to 160x160" for a boss —
- * `docs/DECISIONS.md` #25's ceilings), not one fixed number, so a bigger
+ * `docs/DECISIONS.md` #26's ceilings), not one fixed number, so a bigger
  * boss and a smaller one are both legal — there was just no way to author
- * the smaller (or, before #25, the larger) one, since the canvas always
- * maxed out at a single fixed size. `docs/DECISIONS.md` #26 went a step
+ * the smaller (or, before #26, the larger) one, since the canvas always
+ * maxed out at a single fixed size. `docs/DECISIONS.md` #27 went a step
  * further: width and height are independently editable in the tool, so a
  * wide-and-short canvas nobody named here (a stout body, a wide-bellied
  * enemy) is still reachable — these tiers just seed the width/height fields
@@ -18,7 +18,7 @@ import { CATEGORY_SPECS, type SpriteCategory } from '../../tools/art/spec.mjs';
  * `[minWidth, maxWidth] x [minHeight, maxHeight]` range, checked by
  * `tests/unit/pixel-editor-size-presets.test.ts` against `CATEGORY_SPECS`
  * directly rather than by eye — the same "never let the picker offer
- * something illegal" guarantee `docs/DECISIONS.md` #24 already holds for
+ * something illegal" guarantee `docs/DECISIONS.md` #25 already holds for
  * colour, extended to size. `tile`'s spec pins one exact size (16x16, per
  * the content bible), so it gets exactly one preset rather than five —
  * offering more would just be five names for the same number.
@@ -35,8 +35,8 @@ export const DEFAULT_SIZE_PRESET_ID = 'normal';
 const SIZE_PRESETS: Readonly<Record<SpriteCategory, readonly SizePreset[]>> = {
   tile: [{ id: 'normal', label: 'Normal (16×16)', width: 16, height: 16 }],
   // A straight ramp from the floor (8x16, the old ceiling) to the new
-  // ceiling (16x32, docs/DECISIONS.md #25) — "normal" lands at 12x24,
-  // deliberately past the old 12x16 default: #25 was raised specifically so
+  // ceiling (16x32, docs/DECISIONS.md #26) — "normal" lands at 12x24,
+  // deliberately past the old 12x16 default: #26 was raised specifically so
   // an ordinary enemy could reach for more detail than 16px tall allowed.
   character: [
     { id: 'tiny', label: 'Tiny (8×16)', width: 8, height: 16 },
@@ -46,7 +46,7 @@ const SIZE_PRESETS: Readonly<Record<SpriteCategory, readonly SizePreset[]>> = {
     { id: 'xtra-big', label: 'Xtra-big (16×32)', width: 16, height: 32 },
   ],
   // Tiers run all the way to the new 160x160 ceiling (docs/DECISIONS.md
-  // #25) — a boss is the one category meant to dominate the screen, so
+  // #26) — a boss is the one category meant to dominate the screen, so
   // "xtra-big" here means it, not a cautious step short of it.
   boss: [
     { id: 'tiny', label: 'Tiny (24×24)', width: 24, height: 24 },

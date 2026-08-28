@@ -187,7 +187,7 @@ function buildStripPixels(
  * single frame, or a `.strip.png` + `.anim.json` pair for an animation — via
  * `exportFile`'s save dialog, one call per file. Nothing here validates
  * palette/size the way the server does; the canvas is already fixed-size and
- * palette-locked (`docs/DECISIONS.md` #24), so there is nothing left for a
+ * palette-locked (`docs/DECISIONS.md` #25), so there is nothing left for a
  * second check here to catch.
  */
 async function saveSpriteToDisk(name: string, sprite: SpriteToSave): Promise<SaveResult> {

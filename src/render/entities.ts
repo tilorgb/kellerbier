@@ -198,7 +198,7 @@ export class EntityView {
       // size than every frame around it, since dedicated character art and
       // the shared flash blob are not the same shape. `bodyTexture.height`
       // rather than a fixed constant: `character` sprites are no longer all
-      // exactly 16 tall (`docs/DECISIONS.md` #25 raised the ceiling to 32
+      // exactly 16 tall (`docs/DECISIONS.md` #26 raised the ceiling to 32
       // for more detail), so the scale reference has to be each sprite's own
       // real height, not an assumption that stopped holding.
       const referenceHeight = bodyTexture.height;

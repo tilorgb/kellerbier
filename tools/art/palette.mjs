@@ -108,14 +108,14 @@ export function floorBackgroundSwatches(floorTag) {
 }
 
 /**
- * The shading brush (#108's follow-up, `docs/DECISIONS.md` #27) needs a
+ * The shading brush (#108's follow-up, `docs/DECISIONS.md` #28) needs a
  * "lighter"/"darker" neighbour for a colour a pen already painted, and the
  * palette above has no such relationship recorded — five hand-picked hues
  * per floor, not five ramps. Rather than hand-author ramps too (another
  * thing to keep in sync with `FLOOR_PALETTES`), every allowed colour gets
  * one derived the same deterministic way: shift its HSL lightness by a fixed
  * step and convert back. Fixed and finite — four steps either side of the
- * original — for the same reason `docs/DECISIONS.md` #24 fixed the pen's
+ * original — for the same reason `docs/DECISIONS.md` #25 fixed the pen's
  * palette to a finite set: a brush that could nudge lightness by any amount
  * could paint a pixel `validate.mjs` has never seen before. `legalPixelColorsFor`
  * is the full set that actually can produce, checked by the build the same

@@ -63,9 +63,9 @@ describe('allowedColorsFor', () => {
   });
 });
 
-// docs/DECISIONS.md #27: the pixel editor's shading brush needs a
+// docs/DECISIONS.md #28: the pixel editor's shading brush needs a
 // deterministic, fixed lighter/darker ramp per colour rather than a free
-// lightness slider, for the same "no off-palette pixel" reason #24 fixed the
+// lightness slider, for the same "no off-palette pixel" reason #25 fixed the
 // pen's palette to a finite set.
 describe('shading', () => {
   it('shadeOf with step 0 returns the colour unchanged', () => {

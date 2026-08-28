@@ -24,8 +24,8 @@ Each of those has four subfolders, one per sprite category:
 | Folder | Category | File size (simulation units, not screen pixels) |
 |---|---|---|
 | `tiles/` | `tile` | exactly 16×16 |
-| `characters/` | `character` | 8-16 wide, 16-32 tall (`~12×16` as authored, see `docs/DECISIONS.md` #25) |
-| `bosses/` | `boss` | up to 160×160 (see `docs/DECISIONS.md` #25) |
+| `characters/` | `character` | 8-16 wide, 16-32 tall (`~12×16` as authored, see `docs/DECISIONS.md` #26) |
+| `bosses/` | `boss` | up to 160×160 (see `docs/DECISIONS.md` #26) |
 | `projectiles/` | `projectile` | up to 16×16 |
 
 Sizes are **file** pixels. The room is drawn at `WORLD_ZOOM` (`src/render/resolution.ts`), so a

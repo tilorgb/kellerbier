@@ -19,48 +19,116 @@ none of them is cut.
 
 ## 2. Premise and story
 
-In 1516 the *Reinheitsgebot* fixed what beer may contain: water, barley, hops. Someone has
-broken it. Beer across Bavaria is being cut with cola, lemonade and syrup, and where the
-adulterated stuff is drunk the land goes wrong — animals turn strange, folklore creatures
-wake up, and the old spirits get *annoyed*.
+In 1516 the *Reinheitsgebot* fixed what beer may contain: water, barley, hops. Somebody has
+issued a new one.
 
-**Sepp** finds the family cellar full of something that is no longer beer. He taps a keg,
-straps it on, and goes to find the source.
+**Alois** is at his grandparents' in Oberniederburg for Sunday lunch, the way he is every
+Sunday. Schweinsbraten, Knödl, Bier — was braucht's mehr. Opa's glass is getting low, so Alois
+takes the empty bottle down to the cellar to fetch another **Pfeitinger**, the good stuff,
+the one everybody drinks. It was the last bottle in the crate. The full crate standing next to
+it is Pfeitinger too, and the label is *wrong*. He turns the bottle round. On the back:
 
-Story is delivered lightly: a short illustrated card between chapters, boss intro plates,
-item flavour text, and NPC one-liners at the Stammtisch hub. No cutscenes longer than a few
+> *Gebraut nach dem neuen bayerischen Reinheitsgebot.*
+
+A new one? Nobody told him about a new one. He reads the ingredients, and the ingredients say
+water, malt, hops — and **raisins**.
+
+Raisins. Here as well. In Opa's beer.
+
+> *Alles was zu gut schmeckt muss mit dem Zeug versaut werden. Erst Omas Apfelkuchen, jetzt
+> auch noch Opas Bier.*
+
+Something is rustling behind the crates, and whatever it is, it is coming towards him. Fine.
+
+> *Trinkt diesen Mist doch selber.*
+
+He takes Opa's **Trink-Rucksack** down off its hook, fills it with everything left of the
+tainted crate, switches it from *trinken* to *schießen*, and heads south to find out who is
+responsible.
+
+**The Trink-Rucksack's mode selector is the joke, and it is a prologue joke.** No drinking
+backpack has a `schießen` setting; that is precisely why the moment is worth showing, and why
+Alois flipping it without comment is the last beat of the intro card. Once it is switched, it
+stays switched: the Trink-Rucksack is a killing machine for the rest of the run, whatever ends
+up in it. Nothing in play ever toggles it back to *trinken*.
+
+**What Alois shoots is the tainted batch. What he drinks is the good stuff, and the two never
+mix.** His shot, for the whole run, is what he loaded the rucksack with in the cellar — the
+corrupted Pfeitinger, fired right back at whoever is responsible. Every beer *pickup* in the
+run, by contrast, is the old batch — proper Pfeitinger, brewed the way it always was — so
+drinking still works the way drinking works: Promille (§5) is ordinary drunkenness, real buffs
+and real debuffs from a beer Alois chooses to drink, not a symptom of the plot. **The
+adulterated beer is never something the player drinks, and never a pickup on the floor.** Beyond
+Alois's own shot, it is what is in everyone else, and it reaches the player only as an enemy, a
+hazard or a labelled crate on the floor — the same rule `CONTENT_BIBLE.md` already applies to the
+Böller. The one exception is deliberate and is the whole temptation of the item pool: *tainted
+food and trinkets* can be picked up, and they are good, and they cost you something. See §8.
+
+Story is delivered lightly: a short illustrated card between chapters, boss intro plates, item
+flavour text, and NPC one-liners at the Stammtisch hub. No cutscenes longer than a few
 seconds; nothing that blocks a replay.
 
-**Arc:** rural cellar → village → forest → mountains → castle → industrial brewery → Wiesn.
-The corruption gets less folkloric and more *industrial* as you climb, which is the joke:
-the monster at the end is not a demon, it is a bottling plant with a marketing department.
+**Arc:** the grandparents' cellar → their village → forest → mountains → castle → industrial
+brewery → Wiesn. The corruption gets less folkloric and more *industrial* as you climb, which is
+the joke: the monster at the end is not a demon, it is a bottling plant with a marketing
+department. The arc now opens inside one family's Sunday rather than on a general state of
+affairs, which costs nothing and buys a first floor the player has a personal reason to be
+standing in.
 
-**The reveal (draft):** the adulteration is not sabotage, it is *scale*. Someone had to make
-enough beer for six million Wiesn visitors, and the shortcut ate the soul of the thing. The
-final boss, **Die Bavaria**, is the bronze statue over the Theresienwiese animated by all of
-it — the personification of Bavaria herself, poisoned by her own festival.
+**Pfeitinger is the same brand, reformulated.** The crate next to Opa's is not a counterfeit and
+not a rival; it is Pfeitinger, bought out and re-recipe'd, with a new label nobody at the table
+noticed arriving. That keeps the betrayal domestic — Opa has been drinking it for weeks and
+saying nothing is wrong — and it means the brand name stays useful the whole run: every crate,
+lorry, awning and delivery note Alois passes is the same word he grew up with.
+
+**The reveal.** It lands late, on floor 6, in the brewery, once the arc has already stopped
+being folkloric: **the raisins are not raisins.** The game never says what they are instead.
+A chemical explanation is a worse joke than no explanation, and inventing one converts a funny
+premise into homework. What the floor shows is only the consequence — people who drink the new
+Pfeitinger cannot leave it alone. That is why the crates keep going out, why the village square
+is stacked with them, and why the Wiesn takes more people every year than the year before.
+Somebody put them in on purpose, and somebody has made a great deal of money.
+
+The final boss, **Die Bavaria**, is the bronze statue over the Theresienwiese: the one thing on
+that field that grows with the crowd. Six million becomes seven becomes eight, and she is what
+all of it adds up to.
+
+**Raisins polarise, and the game commits both ways.** Half of Bavaria picks them out of the
+Apfelkuchen and the other half thinks that is madness — and the new Pfeitinger inherits the
+argument intact. Not everyone Alois meets is a victim. Some of them will tell him, cheerfully
+and at length, that the new one is actually quite good, and some of them are not fighting him
+because they are corrupted but because he is being rude about their beer. This is the cheapest
+content in the design — a handful of NPC barks and an enemy or two — and it does more work than
+anything else on this page: it is the funniest available reading of the premise and the bleakest
+one, simultaneously, which is exactly the register the next paragraph is aiming for.
 
 **The second layer, and how far to push it.** Isaac's trick is the model: the surface is fun
 and gross and lets you laugh at the costume, and the thing underneath is only there for
-whoever keeps looking. Ours is sitting in plain sight already — a festival marketed as
-family-friendly Kultur that is, structurally, six million people getting very drunk together,
-and a culture with enough affection for beer that the line between tradition and a drinking
-problem gets genuinely hard to see. Die Bavaria being poisoned by her own festival already
-carries that if it's played straight at the right beat; the job is not to add a moral, it's to
-not flinch away from the one the premise already has. Concretely: a boss intro plate, an item
-description, an environmental detail can sit right up against the real thing (see
-`CONTENT_BIBLE.md`'s Floor 7 entry for one) without a single line of dialogue ever saying it
-out loud. The moment anything *says* "drinking is bad," we've lost the joke and the point
-both — see `CONTENT_BIBLE.md` §0's tone rule on this exact line.
+whoever keeps looking. The raisin *is* the costume — a daft, harmless, faintly annoying thing
+that half the room loves and half the room picks out of the cake — and the joke lands long
+before anyone notices what it is standing in for: something people cannot stop drinking, and a
+festival that gets bigger every year on exactly that. Underneath it sits the real thing, which
+was always sitting there anyway — a festival marketed as family-friendly Kultur that is,
+structurally, six million people getting very drunk together, and a culture with enough
+affection for beer that the line between tradition and a drinking problem gets genuinely hard to
+see. Die Bavaria growing with her own crowd already carries that if it is played straight at the
+right beat; the job is not to add a moral, it is to not flinch away from the one the premise
+already has. Putting it on the raisins rather than on the beer directly is what makes it
+sayable — it is a lighter vehicle for the identical point, and it keeps every line of dialogue
+free of the subject. Concretely: a boss intro plate, an item description, an environmental
+detail can sit right up against the real thing (see `CONTENT_BIBLE.md`'s Floor 7 entry for one)
+without a single line ever saying it out loud. The moment anything *says* "drinking is bad,"
+we've lost the joke and the point both — see `CONTENT_BIBLE.md` §0's tone rule on this exact
+line.
 
 ## 3. Characters
 
-Sepp is available from the start; the rest unlock through play. Each is a different *verb*,
+Alois is available from the start; the rest unlock through play. Each is a different *verb*,
 not a stat spread.
 
 | Character | Unlock | Shot | Identity |
 |---|---|---|---|
-| **Sepp** | start | Helles, straight stream | The baseline. Balanced, forgiving, 3 Maß of health. |
+| **Alois** | start | tainted Pfeitinger, straight stream | The baseline. Balanced, forgiving, 3 Maß of health. Opa's Trink-Rucksack, loaded with the corrupted batch and locked to *schießen*. |
 | **Resi** | beat floor 3 | Brezn, arcing and returning | Fast, fragile, shots curve — rewards positioning over aim. |
 | **Bruder Barnabas** | beat floor 5 | Doppelbock, slow and heavy | Monastery brewer. Cannot pick up food; grows stronger the longer he fasts. |
 | **Der Wolpertinger** | secret | randomised each room | Chaos character. Stats reroll on floor entry. Unfair in both directions. |
@@ -232,6 +300,12 @@ can explain exactly why the player's damage is 47.3.
 | Key | **Kellerschlüssel** | |
 | Food (lowers Promille) | **Brezn**, **Obazda**, **Radi** | Also small heals. |
 
+Every beer pickup in that table is **the old batch** (§2) — Pfeitinger as it was brewed before
+the new label. None of it is adulterated, none of it advances the plot, and none of it is where
+the raisins get into the player. That is a deliberate separation: Promille is a mechanic the
+player is choosing to play with, and the moment a beer pickup is also a story event, every drink
+in the game starts arguing with the tone rules in `CONTENT_BIBLE.md` §0.
+
 **Weißwurst** deserves its own line. Bavarian rule: *die Weißwurst darf das Mittagsläuten
 nicht hören* — the white sausage must not hear the noon bells. So the pickup heals generously
 on floors 1–3 and, from floor 4, is spoiled: it damages you and inflicts a short debuff. The
@@ -248,6 +322,16 @@ Detailed item seeds live in [CONTENT_BIBLE.md](CONTENT_BIBLE.md). The *system*:
 - **Synergies emerge from tag composition**, not from an authored N×N table. Homing + bouncing
   + splitting composes automatically. Only genuinely special pairs get hand-written overrides.
 - Every item declares a **Promille requirement**: `any`, `sober`, or `rausch`.
+- Two **corruption tags** mark items the purists object to, and they are separate on purpose.
+  `impure` is the old objection — beer cut with a soft drink (Radler, Spezi, Russ'n,
+  Colaweizen), which is a matter of taste and has been for a century. `rosinen` is the new one:
+  items carrying the adulteration the run is about. An item is tainted iff a raisin got into it,
+  which is a fact about the item, not a judgement about it — several `rosinen` items are among
+  the strongest in the game, and that is the point of them.
+- A `rosinen` item follows one shape: **it is a clean item plus an upgrade plus one legible
+  cost.** Tempting on the pedestal, regretted specifically rather than generally. It never
+  inflicts a hidden or delayed penalty and it never lies in its description, because the
+  interesting decision is the one made with full information.
 - Items live in **pools** (treasure, shop, boss, devil, angel, secret, curse) and are removed
   from the pool once taken in a run.
 
