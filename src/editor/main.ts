@@ -10,7 +10,13 @@ import { createBackgroundPanel } from './background-panel.js';
 import { createGridPanel } from './grid.js';
 import { createLiveRoomSync, isEmbedded } from './live-room-sync.js';
 import { type PlaytestHandle, createPlaytest } from './playtest.js';
-import { EditorState, createBlankDraft, fromRoomTemplate, toTemplateJSON } from './state.js';
+import {
+  EditorState,
+  createBlankDraft,
+  floorNumberForTags,
+  fromRoomTemplate,
+  toTemplateJSON,
+} from './state.js';
 
 const STYLE = `
 .kb-editor-root {
@@ -334,7 +340,7 @@ function boot(): void {
         document.body,
         toTemplateJSON(state.draft),
         state.draft.shape,
-        1,
+        floorNumberForTags(state.draft.floorTags),
       );
     })();
   });

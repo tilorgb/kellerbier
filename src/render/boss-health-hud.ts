@@ -1,6 +1,7 @@
 import { Container, Sprite, Text, type Renderer } from 'pixi.js';
 import type { GameSim } from '../sim/game/sim.js';
 import { createBarOutlineTexture, createSolidTexture } from './placeholder-art.js';
+import { HUD_PALETTE } from './palette.js';
 
 const BAR_WIDTH = 140;
 const BAR_HEIGHT = 8;
@@ -32,14 +33,19 @@ export class BossHealthHud {
     this.view.addChild(outline);
 
     this.fill = new Sprite(createSolidTexture(renderer));
-    this.fill.tint = 0xb23a3a;
+    this.fill.tint = HUD_PALETTE.bossHealthFill;
     this.fill.position.set(-BAR_WIDTH / 2 + BAR_PADDING, BAR_PADDING);
     this.fill.height = BAR_HEIGHT - BAR_PADDING * 2;
     this.view.addChild(this.fill);
 
     this.label = new Text({
       text: 'BOSS',
-      style: { fill: 0xe8dfd0, fontFamily: 'monospace', fontSize: 9, fontWeight: 'bold' },
+      style: {
+        fill: HUD_PALETTE.labelText,
+        fontFamily: 'monospace',
+        fontSize: 9,
+        fontWeight: 'bold',
+      },
     });
     this.label.anchor.set(0.5, 1);
     this.label.position.set(0, -2);

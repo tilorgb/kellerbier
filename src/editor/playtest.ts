@@ -13,6 +13,7 @@ import {
 import { EntityView } from '../render/entities.js';
 import { GameView } from '../render/view.js';
 import { loadFloorArt } from '../render/floor-art.js';
+import { PARTICLE_PALETTE } from '../render/palette.js';
 import { FixedTimestepLoop, runAnimationFrameLoop } from '../app/loop.js';
 import { InputSampler } from '../app/input/sampler.js';
 import { computeGameLayout } from '../render/resolution.js';
@@ -116,15 +117,49 @@ export async function createPlaytest(
 
   const view = new GameView(sim, {
     player: playerTexture,
-    projectile: createBlobTexture(app.renderer, sim.tuning.shooting.shotRadius, 0xf0c46a, 0xfff3d0),
-    entity: createBlobTexture(app.renderer, MAX_COLLIDER_RADIUS, 0x7d5a3c, 0xb08056),
-    entityFlash: createBlobTexture(app.renderer, MAX_COLLIDER_RADIUS, 0xffffff, 0xffffff),
-    telegraph: createRingTexture(app.renderer, EntityView.telegraphTextureRadius, 0xffffff),
-    foam: createBlobTexture(app.renderer, 2, 0xfff4dc, 0xffffff),
-    splash: createBlobTexture(app.renderer, 2, 0xd9a441, 0xf6d08a),
-    decal: createBlobTexture(app.renderer, 8, 0x3a2a12, 0x4a3618),
+    projectile: createBlobTexture(
+      app.renderer,
+      sim.tuning.shooting.shotRadius,
+      PARTICLE_PALETTE.projectileFill,
+      PARTICLE_PALETTE.projectileRim,
+    ),
+    entity: createBlobTexture(
+      app.renderer,
+      MAX_COLLIDER_RADIUS,
+      PARTICLE_PALETTE.entityFill,
+      PARTICLE_PALETTE.entityRim,
+    ),
+    entityFlash: createBlobTexture(
+      app.renderer,
+      MAX_COLLIDER_RADIUS,
+      PARTICLE_PALETTE.entityFlash,
+      PARTICLE_PALETTE.entityFlash,
+    ),
+    telegraph: createRingTexture(
+      app.renderer,
+      EntityView.telegraphTextureRadius,
+      PARTICLE_PALETTE.telegraphRing,
+    ),
+    foam: createBlobTexture(app.renderer, 2, PARTICLE_PALETTE.foamFill, PARTICLE_PALETTE.foamRim),
+    splash: createBlobTexture(
+      app.renderer,
+      2,
+      PARTICLE_PALETTE.splashFill,
+      PARTICLE_PALETTE.splashRim,
+    ),
+    decal: createBlobTexture(
+      app.renderer,
+      8,
+      PARTICLE_PALETTE.decalFill,
+      PARTICLE_PALETTE.decalRim,
+    ),
     numberFont: 'monospace',
-    pedestalItem: createBlobTexture(app.renderer, 5, 0xffffff, 0xffffff),
+    pedestalItem: createBlobTexture(
+      app.renderer,
+      5,
+      PARTICLE_PALETTE.pedestalItemFill,
+      PARTICLE_PALETTE.pedestalItemFill,
+    ),
     pedestalBeam: createSolidTexture(app.renderer),
     floorTiles,
     enemyArt,

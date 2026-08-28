@@ -1,5 +1,6 @@
 import { Container, Sprite, type Texture } from 'pixi.js';
 import type { GameSim } from '../sim/game/sim.js';
+import { ENTITY_PALETTE } from './palette.js';
 
 /**
  * Draws every pedestal in the current room (#28): a light beam and a
@@ -54,7 +55,7 @@ export class PedestalView {
         continue;
       }
       const item = sim.items.at(pedestal.itemIndex);
-      const tint = QUALITY_TINT[item.quality];
+      const tint = ENTITY_PALETTE.itemQualityTints[item.quality];
 
       const beam = this.beamAt(used);
       const itemSprite = this.itemAt(used);
@@ -142,11 +143,3 @@ export class PedestalView {
 /** Beam sprite size, in room pixels — tall and narrow, the pedestal's own footprint rather than the room's. */
 const BEAM_WIDTH = 10;
 const BEAM_HEIGHT = 26;
-
-/**
- * Quality 0-3 tint, Isaac's own quality-colour convention loosely followed:
- * plain, then warmer, then a real "this one matters" gold. Placeholder art
- * (#34) — the whole point is a run can already tell an item's tier apart at
- * a glance before real sprites exist.
- */
-const QUALITY_TINT = [0xd8d0c0, 0x7fd0e8, 0xb98af0, 0xf2c94c] as const;

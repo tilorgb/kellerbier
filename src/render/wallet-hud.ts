@@ -1,5 +1,6 @@
 import { Text } from 'pixi.js';
 import type { GameSim } from '../sim/game/sim.js';
+import { HUD_PALETTE } from './palette.js';
 
 /**
  * Biermarken, Kellerschlüssel and Bierfassl in inventory — one line of text.
@@ -17,7 +18,7 @@ export class WalletHud {
   constructor() {
     this.view = new Text({
       text: '',
-      style: { fill: 0xe8dfd0, fontFamily: 'monospace', fontSize: 9 },
+      style: { fill: HUD_PALETTE.labelText, fontFamily: 'monospace', fontSize: 9 },
     });
   }
 

@@ -1,4 +1,5 @@
 import { Container, Graphics, Sprite, type Renderer, type Texture } from 'pixi.js';
+import { STRUCTURAL_WHITE } from './palette.js';
 
 /**
  * Placeholder art, generated rather than drawn.
@@ -41,7 +42,7 @@ export function createRingTexture(renderer: Renderer, radius: number, color: num
  * own shape, not a tint of its real one.
  */
 export function createSilhouetteTexture(renderer: Renderer, source: Texture): Texture {
-  const fill = new Graphics().rect(0, 0, source.width, source.height).fill(0xffffff);
+  const fill = new Graphics().rect(0, 0, source.width, source.height).fill(STRUCTURAL_WHITE);
   const mask = new Sprite(source);
   fill.mask = mask;
   const container = new Container();
@@ -66,12 +67,14 @@ export function createMugTexture(
   fill: 'empty' | 'half' | 'full',
 ): Texture {
   const graphics = new Graphics();
-  graphics.roundRect(0.5, 0.5, width - 1, height - 1, 1.5).stroke({ width: 1, color: 0xffffff });
+  graphics
+    .roundRect(0.5, 0.5, width - 1, height - 1, 1.5)
+    .stroke({ width: 1, color: STRUCTURAL_WHITE });
   if (fill !== 'empty') {
     const fillHeight = fill === 'full' ? height - 3 : (height - 3) / 2;
     graphics
       .roundRect(2, height - 1.5 - fillHeight, width - 4, fillHeight, 1)
-      .fill({ color: 0xffffff });
+      .fill({ color: STRUCTURAL_WHITE });
   }
   const texture = renderer.generateTexture({ target: graphics, resolution: 1 });
   graphics.destroy();
@@ -85,7 +88,9 @@ export function createBarOutlineTexture(
   height: number,
 ): Texture {
   const graphics = new Graphics();
-  graphics.roundRect(0.5, 0.5, width - 1, height - 1, 1).stroke({ width: 1, color: 0xffffff });
+  graphics
+    .roundRect(0.5, 0.5, width - 1, height - 1, 1)
+    .stroke({ width: 1, color: STRUCTURAL_WHITE });
   const texture = renderer.generateTexture({ target: graphics, resolution: 1 });
   graphics.destroy();
   return texture;
@@ -99,7 +104,7 @@ export function createBarOutlineTexture(
  */
 export function createSolidTexture(renderer: Renderer): Texture {
   const graphics = new Graphics();
-  graphics.rect(0, 0, 1, 1).fill({ color: 0xffffff });
+  graphics.rect(0, 0, 1, 1).fill({ color: STRUCTURAL_WHITE });
   const texture = renderer.generateTexture({ target: graphics, resolution: 1 });
   graphics.destroy();
   return texture;

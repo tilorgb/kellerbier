@@ -1,8 +1,6 @@
 import { Application, type Container, TextureSource } from 'pixi.js';
 import { type GameLayout, computeGameLayout } from './resolution.js';
-
-/** The colour behind everything — cellar dark, not black. */
-export const BACKGROUND_COLOUR = 0x14101a;
+import { APP_BACKGROUND_COLOUR } from './palette.js';
 
 /**
  * `host`'s own box in CSS pixels — what the renderer is sized to, rather than
@@ -43,7 +41,7 @@ export async function createRenderer(host: HTMLElement): Promise<Application> {
   await app.init({
     width,
     height,
-    background: BACKGROUND_COLOUR,
+    background: APP_BACKGROUND_COLOUR,
     antialias: false,
     roundPixels: true,
     // The renderer is told the display's pixel ratio and sizes its own backing

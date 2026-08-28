@@ -2,6 +2,7 @@ import { Container, Sprite, Text, type Renderer } from 'pixi.js';
 import type { GameSim } from '../sim/game/sim.js';
 import { promilleRequirementMet } from '../sim/game/promille.js';
 import { createSolidTexture } from './placeholder-art.js';
+import { HUD_PALETTE } from './palette.js';
 
 const ICON_SIZE = 8;
 const ROW_HEIGHT = 12;
@@ -9,10 +10,6 @@ const ICON_GAP = 4;
 
 /** Generous cap on rows shown at once — a run realistically holds a handful of gated items, never all 19. */
 const MAX_ROWS = 10;
-
-/** Pale blue for `sober`, warm amber for `rausch` — decoration on top of the text label, never the only signal (`docs/CONTENT_BIBLE.md`'s "no information by colour alone" convention every other HUD piece here already follows). */
-const SOBER_TINT = 0x8fd0e8;
-const RAUSCH_TINT = 0xd97a3a;
 
 /** How much an inactive row dims, on both the icon and its label — the same "bright the instant it matters" idea `ActiveItemHud`'s tint swap uses, just expressed as alpha instead of a colour swap. */
 const DORMANT_ALPHA = 0.35;
@@ -56,7 +53,7 @@ export class ItemGateHud {
 
       const label = new Text({
         text: '',
-        style: { fill: 0xe8dfd0, fontFamily: 'monospace', fontSize: 9 },
+        style: { fill: HUD_PALETTE.labelText, fontFamily: 'monospace', fontSize: 9 },
       });
       label.position.set(ICON_SIZE + ICON_GAP, -1);
       container.addChild(label);
@@ -85,7 +82,10 @@ export class ItemGateHud {
         continue;
       }
       const active = promilleRequirementMet(item.promilleRequirement, tier);
-      const tint = item.promilleRequirement === 'sober' ? SOBER_TINT : RAUSCH_TINT;
+      const tint =
+        item.promilleRequirement === 'sober'
+          ? HUD_PALETTE.itemGateSober
+          : HUD_PALETTE.itemGateRausch;
       const alpha = active ? 1 : DORMANT_ALPHA;
 
       row.container.visible = true;

@@ -38,6 +38,7 @@ import { ItemGateHud } from '../render/item-gate-hud.js';
 import { MinimapHud } from '../render/minimap-hud.js';
 import { PromilleHud } from '../render/promille-hud.js';
 import { WalletHud } from '../render/wallet-hud.js';
+import { HUD_PALETTE, PARTICLE_PALETTE } from '../render/palette.js';
 import { Vignette } from '../render/vignette.js';
 import { GameView } from '../render/view.js';
 import { loadFloorArt } from '../render/floor-art.js';
@@ -375,7 +376,7 @@ async function boot(): Promise<void> {
 
   const hud = new Text({
     text: '',
-    style: { fill: 0x8a7f74, fontFamily: 'monospace', fontSize: 13 },
+    style: { fill: HUD_PALETTE.devText, fontFamily: 'monospace', fontSize: 13 },
   });
   // In the screen layer rather than the game, for the reason the debug panels
   // are: this is text, and text made of game pixels is text nobody can read.
@@ -401,7 +402,12 @@ async function boot(): Promise<void> {
    */
   const bossBanner = new Text({
     text: 'BOSSRAUM',
-    style: { fill: 0xd9a441, fontFamily: 'monospace', fontSize: 18, fontWeight: 'bold' },
+    style: {
+      fill: HUD_PALETTE.bossBanner,
+      fontFamily: 'monospace',
+      fontSize: 18,
+      fontWeight: 'bold',
+    },
   });
   bossBanner.anchor.set(0.5);
   bossBanner.visible = false;
@@ -441,7 +447,12 @@ async function boot(): Promise<void> {
    */
   const pickupToast = new Text({
     text: '',
-    style: { fill: 0xe8c94a, fontFamily: 'monospace', fontSize: 14, fontWeight: 'bold' },
+    style: {
+      fill: HUD_PALETTE.toastText,
+      fontFamily: 'monospace',
+      fontSize: 14,
+      fontWeight: 'bold',
+    },
   });
   pickupToast.anchor.set(0.5);
   pickupToast.visible = false;
@@ -471,7 +482,12 @@ async function boot(): Promise<void> {
    */
   const shopPreview = new Text({
     text: '',
-    style: { fill: 0xe8c94a, fontFamily: 'monospace', fontSize: 13, fontWeight: 'bold' },
+    style: {
+      fill: HUD_PALETTE.toastText,
+      fontFamily: 'monospace',
+      fontSize: 13,
+      fontWeight: 'bold',
+    },
   });
   shopPreview.anchor.set(0.5);
   shopPreview.visible = false;
@@ -499,7 +515,12 @@ async function boot(): Promise<void> {
    */
   const pedestalNamePlate = new Text({
     text: '',
-    style: { fill: 0xffffff, fontFamily: 'monospace', fontSize: 10, fontWeight: 'bold' },
+    style: {
+      fill: HUD_PALETTE.pedestalText,
+      fontFamily: 'monospace',
+      fontSize: 10,
+      fontWeight: 'bold',
+    },
   });
   pedestalNamePlate.anchor.set(0.5, 1);
   pedestalNamePlate.visible = false;
@@ -518,7 +539,7 @@ async function boot(): Promise<void> {
   const pedestalReveal = new Text({
     text: '',
     style: {
-      fill: 0xffffff,
+      fill: HUD_PALETTE.pedestalText,
       fontFamily: 'monospace',
       fontSize: 16,
       fontWeight: 'bold',
@@ -770,7 +791,9 @@ async function boot(): Promise<void> {
           shopPreviewLabel = label;
           shopPreview.text = label;
         }
-        shopPreview.tint = preview.affordable ? 0xffffff : 0x8a8a8a;
+        shopPreview.tint = preview.affordable
+          ? HUD_PALETTE.shopPreviewAffordable
+          : HUD_PALETTE.shopPreviewUnaffordable;
         shopPreview.visible = true;
       } else if (shopPreview.visible) {
         shopPreview.visible = false;
@@ -912,24 +935,53 @@ WASD move   arrows aim and fire
       projectile: createBlobTexture(
         app.renderer,
         sim.tuning.shooting.shotRadius,
-        0xf0c46a,
-        0xfff3d0,
+        PARTICLE_PALETTE.projectileFill,
+        PARTICLE_PALETTE.projectileRim,
       ),
-      entity: createBlobTexture(app.renderer, MAX_COLLIDER_RADIUS, 0x7d5a3c, 0xb08056),
-      entityFlash: createBlobTexture(app.renderer, MAX_COLLIDER_RADIUS, 0xffffff, 0xffffff),
+      entity: createBlobTexture(
+        app.renderer,
+        MAX_COLLIDER_RADIUS,
+        PARTICLE_PALETTE.entityFill,
+        PARTICLE_PALETTE.entityRim,
+      ),
+      entityFlash: createBlobTexture(
+        app.renderer,
+        MAX_COLLIDER_RADIUS,
+        PARTICLE_PALETTE.entityFlash,
+        PARTICLE_PALETTE.entityFlash,
+      ),
       // White, and tinted where it is drawn — one texture for every telegraph.
-      telegraph: createRingTexture(app.renderer, EntityView.telegraphTextureRadius, 0xffffff),
-      foam: createBlobTexture(app.renderer, 2, 0xfff4dc, 0xffffff),
-      splash: createBlobTexture(app.renderer, 2, 0xd9a441, 0xf6d08a),
+      telegraph: createRingTexture(
+        app.renderer,
+        EntityView.telegraphTextureRadius,
+        PARTICLE_PALETTE.telegraphRing,
+      ),
+      foam: createBlobTexture(app.renderer, 2, PARTICLE_PALETTE.foamFill, PARTICLE_PALETTE.foamRim),
+      splash: createBlobTexture(
+        app.renderer,
+        2,
+        PARTICLE_PALETTE.splashFill,
+        PARTICLE_PALETTE.splashRim,
+      ),
       // Dark and wet, not another body. A splash the same brown as a target
       // reads as "something is still standing there", which is the one
       // thing a corpse marker must not do.
-      decal: createBlobTexture(app.renderer, 8, 0x3a2a12, 0x4a3618),
+      decal: createBlobTexture(
+        app.renderer,
+        8,
+        PARTICLE_PALETTE.decalFill,
+        PARTICLE_PALETTE.decalRim,
+      ),
       numberFont: 'monospace',
       // Placeholder art (#34) — a plain bright disc and a soft vertical bar
       // are enough to read as "an item floating on light" until real sprites
       // land; `PedestalView` tints both per quality.
-      pedestalItem: createBlobTexture(app.renderer, 5, 0xffffff, 0xffffff),
+      pedestalItem: createBlobTexture(
+        app.renderer,
+        5,
+        PARTICLE_PALETTE.pedestalItemFill,
+        PARTICLE_PALETTE.pedestalItemFill,
+      ),
       pedestalBeam: createSolidTexture(app.renderer),
       floorTiles,
       enemyArt,
