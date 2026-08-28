@@ -37,6 +37,18 @@ export function stepShooting(sim: GameSim, input: Readonly<InputFrame>): void {
   const aimY = axisToUnit(input.aimY);
   const wantsToFire = isActionDown(input, InputAction.Fire) && (aimX !== 0 || aimY !== 0);
 
+  // Where the Schlauch is pointing, held through a centred stick (#151). The
+  // stored aim is what the renderer draws the nozzle off, so it has to survive
+  // the frames between shots — a hose that snapped back to a default the tick
+  // the player stopped pushing the stick would flick on every burst. Normalised
+  // here rather than at the draw call, so the eight octants the nozzle is
+  // authored in are picked from the same vector `fire` shoots along.
+  if (aimX !== 0 || aimY !== 0) {
+    const aimLength = vectorLength(aimX, aimY);
+    sim.aimDirectionX = aimX / aimLength;
+    sim.aimDirectionY = aimY / aimLength;
+  }
+
   // The cooldown ticks down whether or not fire is held, and a shot *adds* the
   // delay rather than assigning it. That is what makes a held-down stream
   // evenly spaced: the rhythm is set by the delay, not by when the tick
@@ -100,6 +112,12 @@ function fire(sim: GameSim, aimX: number, aimY: number): void {
   // player strafes, so the shot carries a fraction of their velocity as a
   // constant slant they read and shoot through — see the tuning docs.
   const inheritance = tuning.velocityInheritance;
+
+  // The muzzle frame is drawn off this (#151). Stamped here rather than in
+  // `stepShooting`'s "wants to fire" branch: a held trigger wants to fire on
+  // every tick and only actually fires when the cooldown allows it, and the
+  // nozzle should flare on the shots that happened.
+  sim.lastShotTick = sim.tick;
 
   // Items react to the shot before it exists (#26) — the same moment the
   // stat pipeline already resolves damage from, one line below.

@@ -95,6 +95,12 @@ export interface AnimatedSpriteSet extends LoadedStrip {
  * Every `characters/*.strip.png` in the tree, and every `*.anim.json` beside
  * one, resolved at build time by Vite.
  *
+ * `floor-*` rather than every bucket: `common/` holds Alois's own strips
+ * (#151), which are keyed by facing rather than by enemy id and loaded by
+ * `render/player-art.ts`. The rule that draws the line is not a naming
+ * convention — it is that a floor bucket *is* a roster, and this map is
+ * indexed by `EnemyDefinition.id`.
+ *
  * A glob rather than the explicit static imports the static sprites above
  * still use, and deliberately so: an animated creature has to be addable by
  * dropping two files in a folder (`CONTRIBUTING.md`'s content
@@ -105,12 +111,12 @@ export interface AnimatedSpriteSet extends LoadedStrip {
  * same reason, and it works in `vite dev` and in a production build alike.
  */
 const STRIP_URLS: Record<string, string> = import.meta.glob(
-  '../../assets/sprites/*/characters/*.strip.png',
+  '../../assets/sprites/floor-*/characters/*.strip.png',
   { eager: true, query: '?url', import: 'default' },
 );
 
 const STRIP_SIDECARS: Record<string, AnimationSidecar> = import.meta.glob(
-  '../../assets/sprites/*/characters/*.anim.json',
+  '../../assets/sprites/floor-*/characters/*.anim.json',
   { eager: true, import: 'default' },
 );
 

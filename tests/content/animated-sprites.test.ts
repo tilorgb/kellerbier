@@ -10,6 +10,11 @@ import {
   type AnimationSidecar,
 } from '../../src/render/animation/definition.js';
 import { ENEMY_DEFINITIONS } from '../../src/content/enemies/index.js';
+import { PLAYER_BODY_KEYS, SCHLAUCH_OCTANTS } from '../../src/render/player-art.js';
+import { WALK_CYCLE_FRAMES } from '../../tools/art/spec.mjs';
+
+/** Every strip name `render/player-art.ts` asks `common/characters/` for. */
+const PLAYER_STRIP_NAMES = [...PLAYER_BODY_KEYS.map((key) => `alois-${key}`), 'alois-schlauch'];
 
 /**
  * The animated art that is actually committed, compiled the way the game
@@ -61,17 +66,83 @@ describe('every animation strip in assets/sprites/', () => {
     },
   );
 
-  it.each(animated.map((sprite) => [sprite.name, sprite.filePath] as const))(
+  it.each(animated.map((sprite) => [sprite.name, sprite] as const))(
     '%s is named after a sprite something in the game asks for',
-    (name) => {
-      // A strip under `characters/` is looked up by `EnemyDefinition.id`
-      // (`render/floor-art.ts`), so a typo in the filename is a strip nothing
-      // ever plays — the animated equivalent of an unresolvable enemy id, and
-      // `docs/DECISIONS.md` #7 says that fails rather than degrades.
+    (name, sprite) => {
+      // A strip is looked up by name and by nothing else, so a typo in a
+      // filename is a strip nothing ever plays — the animated equivalent of an
+      // unresolvable enemy id, and `docs/DECISIONS.md` #7 says that fails
+      // rather than degrades. Which names are askable depends on the bucket:
+      // a floor bucket is a roster, keyed by `EnemyDefinition.id`
+      // (`render/floor-art.ts`); `common/` is where Alois lives, keyed by
+      // facing and drunkenness (`render/player-art.ts`).
+      if (sprite.bucketId === 'common') {
+        expect(PLAYER_STRIP_NAMES).toContain(name);
+        return;
+      }
       const ids = ENEMY_DEFINITIONS.map((definition) => definition.id);
       expect(ids).toContain(name);
     },
   );
+});
+
+describe('Alois (#151)', () => {
+  const bodies = PLAYER_BODY_KEYS.map((key) => {
+    const sprite = animated.find((entry) => entry.name === `alois-${key}`);
+    if (sprite === undefined) {
+      throw new Error(`alois-${key}.strip.png is not committed`);
+    }
+    return [key, sprite] as const;
+  });
+
+  it('has a body strip for every facing, sober and drunk', () => {
+    // Six: three facings (side is mirrored for the fourth) times sober and
+    // drunk. The acceptance criterion this stands for is "no generated
+    // placeholder draws the player" — `render/player-art.ts` throws on a
+    // missing one at load, and this is the same guarantee a pull request away
+    // from a player rather than a tick away.
+    expect(bodies).toHaveLength(6);
+  });
+
+  it.each(bodies)('alois-%s walks and idles', (_key, sprite) => {
+    const sidecar = sprite.animation as AnimationSidecar;
+    const set = compileAnimationSet(sprite.name, sidecar, sidecar.frames);
+    // An idle that is one frame is a paused game, which is the thing #151 says
+    // it must not look like.
+    expect(set.idle.sequence.length).toBeGreaterThan(1);
+    const move = set.clips[AnimationState.Move];
+    expect(move?.sequence).toHaveLength(WALK_CYCLE_FRAMES);
+  });
+
+  it('flinches and dies, in every facing he can be looked at in', () => {
+    for (const [key, sprite] of bodies) {
+      if (key.startsWith('drunk-')) {
+        // Deliberately unauthored: `PlayerView` never asks a drunk strip for
+        // `hurt` or `death` — a flinch is a flinch — so drawing six more poses
+        // nothing plays would be six more poses to keep in step. The idle
+        // fallback covers it if that ever changes, and warns once.
+        continue;
+      }
+      const sidecar = sprite.animation as AnimationSidecar;
+      const set = compileAnimationSet(sprite.name, sidecar, sidecar.frames);
+      expect(set.clips[AnimationState.Hurt]?.repeats).toBe(false);
+      const death = set.clips[AnimationState.Death];
+      expect(death?.repeats).toBe(false);
+      // Held, not handed back to idle: the death clip has to still be on
+      // screen when the game-over screen comes up over it.
+      expect(death?.holds).toBe(true);
+    }
+  });
+
+  it('aims through a Schlauch with eight resting and eight firing frames', () => {
+    const schlauch = animated.find((sprite) => sprite.name === 'alois-schlauch');
+    expect(schlauch).toBeDefined();
+    const sidecar = schlauch?.animation as AnimationSidecar;
+    expect(sidecar.frames).toBe(SCHLAUCH_OCTANTS * 2);
+    // No clips at all, and that is the honest shape: the game indexes this
+    // strip by aim octant, it never plays it as a timeline.
+    expect(sidecar.clips).toBeUndefined();
+  });
 });
 
 describe('the Kellerassel', () => {

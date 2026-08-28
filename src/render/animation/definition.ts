@@ -321,3 +321,53 @@ export function clipFrameAt(clip: CompiledClip, elapsedMs: number): number {
 export function clipHasEnded(clip: CompiledClip, elapsedMs: number): boolean {
   return !clip.repeats && elapsedMs >= clip.totalMs;
 }
+
+/**
+ * The content-gap fallback `docs/DECISIONS.md` #19 asks for, in the shape it
+ * asks for it: a body whose clip for some state has not been drawn yet keeps
+ * playing its idle pose instead of throwing or drawing nothing, and says so
+ * once per (sprite, state) in a dev build.
+ *
+ * A clip pointing at a frame the strip does not have is the other case
+ * entirely — data that is wrong rather than missing — and `compileAnimationSet`
+ * has already thrown on it long before this runs.
+ *
+ * An object rather than a free function because the "once" is the point: the
+ * dedup state has to live somewhere, and it lives with the thing that plays
+ * clips. Two of them now play clips — `animation/animator.ts` for every body in
+ * the room, `render/player-view.ts` for Alois (#151) — which is why this moved
+ * out of the animator rather than being copied into the second caller.
+ */
+export class ClipStateResolver {
+  /**
+   * Clips already warned about, as a bitmask of states per set.
+   *
+   * Per set rather than per entity: the gap is in the authored data, so it is
+   * the same gap however many Kellerasseln walk into it, and one line in the
+   * console is the useful number of lines. A `Map` keyed by the set object
+   * itself rather than by a built string — the check runs on the fallback path
+   * every frame it applies, and a template literal there would be a per-frame
+   * allocation in the one place the animator promises not to have one.
+   */
+  private readonly warned = new Map<CompiledAnimationSet, number>();
+
+  /** `state` if `set` has a clip for it, otherwise `idle`. */
+  resolve(set: CompiledAnimationSet, state: AnimationStateIndex): AnimationStateIndex {
+    if (set.clips[state] !== null && set.clips[state] !== undefined) {
+      return state;
+    }
+    if (import.meta.env.DEV) {
+      const warned = this.warned.get(set) ?? 0;
+      const bit = 1 << state;
+      if ((warned & bit) === 0) {
+        this.warned.set(set, warned | bit);
+        console.warn(
+          `${set.name} has no "${ANIMATION_STATE_IDS[state] ?? String(state)}" clip authored — ` +
+            `falling back to its idle clip. Add one to ${set.name}.anim.json when the frames ` +
+            `for it are drawn.`,
+        );
+      }
+    }
+    return AnimationState.Idle;
+  }
+}

@@ -1,5 +1,4 @@
-import { Assets, Container, type Texture } from 'pixi.js';
-import massUrl from '../../assets/sprites/mass.png';
+import { Container } from 'pixi.js';
 import type { RoomShape } from '../content/rooms/definition.js';
 import { GameSim, MAX_COLLIDER_RADIUS } from '../sim/game/sim.js';
 import type { RoomPlacement } from '../sim/room/template.js';
@@ -13,6 +12,7 @@ import {
 import { EntityView } from '../render/entities.js';
 import { GameView } from '../render/view.js';
 import { buildAnimatedSets, loadFloorArt } from '../render/floor-art.js';
+import { loadPlayerArt } from '../render/player-art.js';
 import { PARTICLE_PALETTE } from '../render/palette.js';
 import { FixedTimestepLoop, runAnimationFrameLoop } from '../app/loop.js';
 import { InputSampler } from '../app/input/sampler.js';
@@ -103,20 +103,19 @@ export async function createPlaytest(
 
   const app = await createRenderer(overlay);
 
-  const playerTexture = await Assets.load<Texture>({
-    src: massUrl,
-    data: { scaleMode: 'nearest' },
-  });
-  // Real floor/enemy art (#35) — a room author checking their layout in
-  // Playtest has the exact same "which blob was that" problem a real run
-  // does, so this preview gets the same art a run would.
-  const { floorTiles, enemyArt, enemyStrips } = await loadFloorArt();
+  // Real floor/enemy art (#35) and Alois's own (#151) — a room author checking
+  // their layout in Playtest has the exact same "which blob was that" problem a
+  // real run does, so this preview gets the same art a run would.
+  const [{ floorTiles, enemyArt, enemyStrips }, playerArt] = await Promise.all([
+    loadFloorArt(),
+    loadPlayerArt(),
+  ]);
 
   const sim = new GameSim({ seed: 1, population: 'empty', floor });
   sim.loadRoom(templateJson, floor, null, [], canonicalPlacement(shape));
 
   const view = new GameView(sim, {
-    player: playerTexture,
+    playerArt,
     projectile: createBlobTexture(
       app.renderer,
       sim.tuning.shooting.shotRadius,

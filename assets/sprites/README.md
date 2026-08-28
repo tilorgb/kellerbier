@@ -93,6 +93,31 @@ to `idle` and warns once in a dev build (`docs/DECISIONS.md` #19), so it is the 
 cannot itself be missing. A sidecar with no `clips` at all is still legal and still animates —
 the whole strip becomes one looping `idle` clip at the strip's own timing.
 
+### Directions, and the player's strips
+
+The state list is also what decides how a character facing more than one way is filed. "The same
+walk, facing the other way" is not a clip — the state names are fixed so that a clip nothing
+plays is a typo — so it is another **strip**. Alois (`docs/DECISIONS.md` #38) is the worked
+example, and everything in `common/characters/` is his:
+
+| File | What it is |
+|---|---|
+| `alois-south.strip.png` | walking toward the camera |
+| `alois-north.strip.png` | walking away |
+| `alois-side.strip.png` | side-on, authored facing left and mirrored for the other way |
+| `alois-drunk-*.strip.png` | the same three, leaning, from Beduselt up |
+| `alois-schlauch.strip.png` | the Trink-Rucksack's hose, in its eight aim directions |
+
+Two things about that last one. It is a frame **table**, not a timeline: the game indexes it by
+aim octant (0-7 resting, 8-15 with a shot just fired) and never plays it, so its sidecar authors
+no `clips` at all — which is legal, and honest. And it is why the body only needs four
+directions: where Alois is *aiming* is carried by the hose, so where he is *walking* is all the
+body has to say.
+
+The drunk strips author `idle` and `move` only, on purpose — a flinch is a flinch — and
+`render/player-view.ts` asks the sober strip for `hurt` and `death` rather than letting the
+fallback below turn a drunk death into a drunk idle.
+
 Four frames of walk cycle is the house budget (`docs/DECISIONS.md` #37); `WALK_CYCLE_FRAMES` in
 `tools/art/spec.mjs` is where that number lives and why.
 

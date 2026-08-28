@@ -1594,3 +1594,68 @@ boss animation #151-#154 will want (same clips, same sidecar, same states); and 
 "presentation state derived per frame" system — a squash-and-stretch pass, a shadow that reacts
 to height — which reaches for a render-side table keyed by entity handle before it considers a
 field on the entity.
+
+## 38. The player is a four-way body plus a one-way hose, and drunk is a pose rather than a wobble
+
+**Decided:** M6, drawing Alois (#151) — the first character in the game whose *movement* and
+*aim* are two different directions, and the first whose art has to change with a gameplay stat.
+
+Three questions had to be answered together, and each one had an obvious answer that was wrong.
+
+**Four-way body, not eight.** The obvious answer to "a twin-stick game needs to show where you
+are aiming" is more directions, and it does not work: eight directions is not eight more frames,
+it is eight of *every* frame — walk, idle, flinch, death, and all of it again drunk. What the
+player actually needs to read is two independent things, and drawing them into one sprite is what
+makes the count multiply. So the body is authored in three strips (toward the camera, away, and
+side-on mirrored for the fourth) and drawn in the direction he is **moving**, and the
+Trink-Rucksack's hose — the Schlauch, which is where the shots come from, per
+`docs/GAME_DESIGN.md` §2 — is a second sprite drawn in the direction he is **aiming**, in eight.
+Aim resolution ends up finer than body resolution, which is the right way round: eight nozzle
+frames total, against the twenty-four extra body frames the same fineness would have cost.
+Walking left while shooting right — #151's own acceptance criterion — then needs no art at all;
+it is two layers already pointing where they were told to.
+
+The body follows aim only when he is standing still, where movement has no opinion and an idle
+body facing away from what it is shooting looks broken. A diagonal draws as the side view rather
+than the front or back one: it keeps the face and the tank in frame, and both are how a player
+finds themselves in a busy room.
+
+**Directions are strips, not clips.** #37 fixed the clip names — `idle`, `move`, `telegraph`,
+`hurt`, `death` — precisely so that a clip nothing plays is a typo rather than a feature, and
+that is worth keeping: it means "the same walk, facing the other way" cannot be expressed as a
+clip. It is expressed as another strip, which costs the format nothing, the build nothing, and
+the runtime nothing — `render/player-art.ts` loads all seven through #150's own `cutStrip` and
+`compileAnimationSet`. The one thing this does need that the enemy animator deliberately refuses
+to do is **carrying clip phase across a set swap**: `EntityAnimator` resets a slot's stride when
+its set changes, because a recycled slot must not inherit the previous occupant's, and a body
+turning a corner is exactly the opposite case. Hence `render/player-view.ts` being its own small
+player rather than a seventh caller of the animator — that, plus Alois never becoming a corpse
+(`systems/impact.ts` keeps his entity alive through death on purpose, which is also why he is the
+one body that can resolve `death` from simulation state at all, where an enemy cannot).
+
+**Drunk is drawn, not animated.** The tempting implementation of "the character should read as
+drunk" is a sway — a sine on the sprite's rotation or offset, free and immediately convincing.
+It is also unshippable, because #33's accessibility toggles exist to turn exactly that off, and
+#151's acceptance criterion is that reduced-motion and no-sway get "an Alois who is still
+readable and **still drunk**". A drunk read built out of motion is a drunk read those players
+never get. So it is built out of *poses*: three more strips with a lean, a wider stance,
+half-lidded eyes and a flushed cheek, swapped in at Beduselt — the tier where
+`promilleDriftScale` and `promilleWobbleAmplitude` start ramping, so he begins looking unsteady
+on the same tier he begins being unsteady. The renderer adds no motion of its own, which is what
+makes the accessibility toggles a no-op on him by construction rather than by a code path that
+has to remember.
+
+The drunk strips author `idle` and `move` only. A flinch and a death are the same flinch and
+death drunk or sober — the difference would be a lean nobody reads through a hit flash — so
+`PlayerView` asks the *sober* strip for those two states rather than letting #19's idle fallback
+quietly turn a drunk death into a drunk idle. That is the one place in this design where the
+graceful fallback would have hidden a bug instead of covering a gap, and it is handled explicitly
+for that reason.
+
+**Constrains:** every playable character after Alois (`docs/GAME_DESIGN.md` §6's roster —
+Resi, Schorsch, the rest) inherits the seven-strip shape, the four-way/eight-way split, and the
+"drunk is a pose" rule; a character whose weapon is not a hose still gets a second layer for
+wherever their shot comes from. Anything that later wants a *ninth* body direction should add
+nozzle frames instead and ask what is actually unreadable. And `GameSim.aimDirectionX`/`Y` and
+`lastShotTick` are now part of what the renderer may read: aim is simulation state because it is
+a function of the input log, not because the renderer needed somewhere to put it.
