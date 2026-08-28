@@ -56,12 +56,32 @@ export function contrastRatio(a, b) {
 export const MIN_PROJECTILE_CONTRAST = 3.0;
 
 /**
- * Checks every projectile's rim colour against every floor's full set of
- * legal background colours.
+ * Checks every projectile against every floor's set of large-area background
+ * colours, scoring each background against whichever of the sprite's two
+ * brightness extremes reads better against it.
  *
- * `projectiles`: `{ name, rim }[]` — `rim` is a `0xRRGGBB` colour.
- * `floors`: `{ floorTag, colors }[]` — `colors` is that floor's full legal
- * background set (`floorBackgroundSwatches` from `palette.mjs`).
+ * `projectiles`: `{ name, rim, shade }[]` — `rim` is the sprite's brightest
+ * opaque colour and `shade` its darkest (`validate.mjs`'s
+ * `brightestOpaqueColor`/`darkestOpaqueColor`). `shade` may be omitted, which
+ * scores the sprite on its bright end alone, exactly as this function did
+ * before #152.
+ * `floors`: `{ floorTag, colors }[]` — `colors` is that floor's background
+ * swatch set (`floorBackgroundSwatches` from `palette.mjs`).
+ *
+ * **Why the better of two ends rather than the bright one only.** §5's rule is
+ * "differ in brightness, not only hue", and its "enemy shots always get a
+ * bright rim" is one half of how a sprite does that; a dark outline is the
+ * other. Which half carries a given background is a property of the
+ * background, not of the sprite: nothing bright reads on Die Alpen's snow and
+ * nothing dark reads on Der Wald's black, so a shot that appears on both — the
+ * player's own, which appears on all seven floors — needs both ends and needs
+ * to be scored on both. `docs/DECISIONS.md` #39 has the palette search
+ * proving no single colour clears all seven, which is what made this a gate
+ * no `common` projectile could ever pass rather than a strict one.
+ *
+ * It stays a real gate. A flat mid-grey blob has both extremes in the middle
+ * and still fails against most floors; what now passes is specifically a
+ * sprite with genuine internal contrast, which is the thing §5 was asking for.
  *
  * Returns one failure per (projectile, floor) pair that falls under the
  * threshold, each naming the specific background colour it read worst
@@ -71,11 +91,15 @@ export const MIN_PROJECTILE_CONTRAST = 3.0;
 export function checkProjectileLegibility(projectiles, floors) {
   const failures = [];
   for (const projectile of projectiles) {
+    const shade = projectile.shade ?? projectile.rim;
     for (const floor of floors) {
       let worstRatio = Infinity;
       let worstColor = null;
       for (const background of floor.colors) {
-        const ratio = contrastRatio(projectile.rim, background);
+        const ratio = Math.max(
+          contrastRatio(projectile.rim, background),
+          contrastRatio(shade, background),
+        );
         if (ratio < worstRatio) {
           worstRatio = ratio;
           worstColor = background;

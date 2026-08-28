@@ -24,7 +24,7 @@ Each of those has four subfolders, one per sprite category:
 | Folder | Category | File size (simulation units, not screen pixels) |
 |---|---|---|
 | `tiles/` | `tile` | exactly 16×16 |
-| `characters/` | `character` | 8-16 wide, 16-32 tall (`~12×16` as authored, see `docs/DECISIONS.md` #26) |
+| `characters/` | `character` | 8-32 wide, 16-32 tall (`~12×16` as authored, see `docs/DECISIONS.md` #26) |
 | `bosses/` | `boss` | up to 160×160 (see `docs/DECISIONS.md` #26) |
 | `projectiles/` | `projectile` | up to 16×16 |
 
@@ -121,12 +121,48 @@ fallback below turn a drunk death into a drunk idle.
 Four frames of walk cycle is the house budget (`docs/DECISIONS.md` #37); `WALK_CYCLE_FRAMES` in
 `tools/art/spec.mjs` is where that number lives and why.
 
+## What each folder is for, beyond the size spec
+
+A category is a size contract, not a taxonomy, so a few things live somewhere that needs saying
+out loud. `render/floor-art.ts` discovers all of it by glob — adding a sprite is dropping a file
+in a folder, at runtime as well as in the atlas build — and looks each one up by **name**:
+
+| Where | Named | Looked up by |
+|---|---|---|
+| `<floor>/characters/<enemy id>` | `kellerassel`, `bauer`, … | `EnemyDefinition.id` |
+| `<floor>/bosses/<enemy id>` | `grosse-kellerassel`, `der-stier` | `EnemyDefinition.id` — a boss is a roster entry like any other, so its strip lands in the same map |
+| `common/characters/pickup-<pickup id>` | `pickup-mass-full`, … | `PickupDefinition.id` |
+| `common/characters/<enemy id>` | `shopkeeper` | an enemy that appears on every floor |
+| `common/characters/alois-*` | the player's seven strips | `render/player-art.ts` (#151) |
+| `<floor>/tiles/*` | `cellar-wall`, `rural-hedge-block`, … | `FLOOR_TILESETS` (the wall/lip/block/floor roles) and `PROP_TILE_NAMES` (a room's `decorativeProps`) |
+| `common/tiles/*` | `door-open`, `pedestal`, `minimap-boss`, `crate-opa`, … | shared world objects and HUD icons |
+| `<floor>/projectiles/*` | `tap-drip`, `boeller`, … | `FiringBehaviourBase.art`, or the floor's default shot |
+| `common/projectiles/*` | `beer`, `beer-burning`, … | the player's shot and its per-tag variants |
+
+Two rules follow from that table rather than from the size spec:
+
+- **A prop shared by templates that span floors must be `common`.** Every generic Der Keller
+  template is tagged `cellar, rural` alike, so a cellar-palette prop placed in one appears on
+  floor 2 off that floor's palette. The two set-piece crates are `common` for exactly this reason
+  (`docs/DECISIONS.md` #40).
+- **A sprite nobody looks up costs one atlas entry and no code**, so an unused name is harmless —
+  but `tests/content/sprite-coverage.test.ts` fails on the reverse: content that names art nobody
+  has drawn.
+
 ## Projectile legibility
 
-Every sprite dropped under a `projectiles/` folder has its brightest ("rim") pixel checked
-against every colour legal on every floor, and the build fails if any pairing reads below a 3:1
-contrast ratio — see `tools/art/contrast.mjs` for why checking the full palette stands in for
-"every floor tileset" rather than one sampled screenshot.
+Every sprite dropped under a `projectiles/` folder has both its brightest ("rim") and darkest
+("outline") opaque pixel checked against every large-area background colour legal on every floor
+it can appear on, scoring each background against whichever end reads better against it. The build
+fails if any pairing reads below a 3:1 contrast ratio.
+
+**Author every projectile with a dark outline and a bright core.** That is not a style note, it is
+what passes: nothing bright reads on Die Alpen's snow and nothing dark reads on Der Wald's black,
+so a shot that appears on more than one floor needs both ends. `docs/DECISIONS.md` #39 has the
+palette search showing there is no single colour that clears all seven, and
+`tools/art/contrast.mjs` has the reasoning for why checking the palette stands in for "every floor
+tileset" rather than one sampled screenshot. The same check runs live in the pixel editor's
+legibility panel while you draw.
 
 ## Building
 

@@ -1,0 +1,198 @@
+import { readdir, readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { describe, expect, it } from 'vitest';
+import { ENEMY_DEFINITIONS } from '../../src/content/enemies/index.js';
+import { PICKUP_DEFINITIONS } from '../../src/content/pickups/index.js';
+import { ROOM_TEMPLATES } from '../../src/content/rooms/index.js';
+import { validateRoomTemplate } from '../../src/sim/room/template.js';
+import { isMultiCellRoomTemplate } from '../../src/content/rooms/definition.js';
+import { FLOOR_TILESETS, PROP_TILE_NAMES, MAIBAUM_TOP_TILE } from '../../src/render/floor-art.js';
+import { PLAYER_TAG_SPRITE_ORDER } from '../../src/render/projectiles.js';
+import { DESTRUCTIBLE_PROP_KINDS } from '../../src/sim/game/sim.js';
+import { ALL_BUCKET_IDS, CATEGORY_FOLDERS } from '../../tools/art/spec.mjs';
+
+/**
+ * "No generated placeholder draws anything a player sees" (#152) is not a
+ * property of a file — it is a property of the *relationship* between the
+ * content and the sprite tree, and the only way it stays true as content grows
+ * is a test that walks both.
+ *
+ * These read the real `assets/sprites/` tree rather than a fixture, on purpose.
+ * The failure this exists to catch is "a floor-2 enemy was added and nobody
+ * drew it" — which is exactly what floor 2's own Böllerschmeißer (#156) had
+ * done by the time this landed, and what nothing in the suite noticed. A
+ * fixture cannot notice it; only the real tree can.
+ */
+
+const SPRITE_ROOT = path.resolve(import.meta.dirname, '../../assets/sprites');
+const STRIP_SUFFIX = '.strip.png';
+
+/** Every sprite name in the tree, by category, across every bucket. */
+async function spriteNames(category: keyof typeof CATEGORY_FOLDERS): Promise<Set<string>> {
+  const names = new Set<string>();
+  for (const bucketId of ALL_BUCKET_IDS) {
+    const dir = path.join(SPRITE_ROOT, bucketId, CATEGORY_FOLDERS[category]);
+    let entries: string[];
+    try {
+      entries = await readdir(dir);
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (entry.endsWith(STRIP_SUFFIX)) {
+        names.add(entry.slice(0, -STRIP_SUFFIX.length));
+      } else if (entry.endsWith('.png')) {
+        names.add(entry.slice(0, -'.png'.length));
+      }
+    }
+  }
+  return names;
+}
+
+const characterNames = await spriteNames('character');
+const bossNames = await spriteNames('boss');
+const tileNames = await spriteNames('tile');
+const projectileNames = await spriteNames('projectile');
+
+/** A creature draws from `characters/` or `bosses/` — `EntityView` looks in one map that merges both. */
+const creatureNames = new Set([...characterNames, ...bossNames]);
+
+const templates = ROOM_TEMPLATES.map((room, index) =>
+  validateRoomTemplate(room, `room[${String(index)}]`, ENEMY_DEFINITIONS),
+);
+
+describe('every registered enemy has art', () => {
+  it.each(ENEMY_DEFINITIONS.map((definition) => definition.id))('%s', (id) => {
+    expect(creatureNames).toContain(id);
+  });
+});
+
+describe('every registered pickup has art', () => {
+  it.each(PICKUP_DEFINITIONS.map((definition) => definition.id))('%s', (id) => {
+    expect(characterNames).toContain(`pickup-${id}`);
+  });
+});
+
+describe('every floor tileset names sprites that exist', () => {
+  for (const [floor, tileset] of Object.entries(FLOOR_TILESETS)) {
+    const named = [
+      ...tileset.floorVariants,
+      tileset.wall,
+      tileset.wallLip,
+      tileset.block,
+      ...tileset.destructibles,
+    ];
+    it.each(named)(`floor ${floor}: %s`, (name) => {
+      expect(tileNames).toContain(name);
+    });
+
+    it(`floor ${floor} names a destructible for every kind the sim can spawn, or falls back to the first`, () => {
+      // A floor may legitimately name fewer than there are kinds — Der Keller
+      // has no Maibaum — but it must never name *more*, which would be a
+      // tileset naming a prop kind the simulation cannot produce.
+      expect(tileset.destructibles.length).toBeGreaterThan(0);
+      expect(tileset.destructibles.length).toBeLessThanOrEqual(DESTRUCTIBLE_PROP_KINDS.length);
+    });
+  }
+});
+
+describe('every prop type authored in a room is drawable', () => {
+  const authoredTypes = new Set<string>();
+  for (const template of templates) {
+    const layouts = isMultiCellRoomTemplate(template) ? template.cells : [template];
+    for (const layout of layouts) {
+      for (const prop of layout.decorativeProps) {
+        authoredTypes.add(prop.type);
+      }
+    }
+  }
+
+  it('finds at least the prop types this test was written against', () => {
+    // A guard on the guard: if `decorativeProps` ever stops being reachable
+    // through `validateRoomTemplate`, every assertion below would vacuously
+    // pass and the coverage would quietly disappear.
+    expect(authoredTypes.size).toBeGreaterThanOrEqual(10);
+  });
+
+  it.each([...authoredTypes].sort())('%s', (type) => {
+    // Either it maps to a tile that exists, or it is explicitly `null` —
+    // "something else draws this". An unmapped type is the content gap
+    // `render/prop-view.ts` warns about, and a warning is not a substitute for
+    // catching it on a pull request (`CLAUDE.md`'s own line on this).
+    expect(Object.keys(PROP_TILE_NAMES)).toContain(type);
+    const tile = PROP_TILE_NAMES[type];
+    if (tile !== null && tile !== undefined) {
+      expect(tileNames).toContain(tile);
+    }
+  });
+
+  it('draws the Maibaum two tiles tall', () => {
+    expect(tileNames).toContain(MAIBAUM_TOP_TILE);
+  });
+});
+
+describe('every projectile sprite a shot names exists', () => {
+  const authored = new Set<string>();
+  for (const definition of ENEMY_DEFINITIONS) {
+    for (const state of definition.states) {
+      for (const behaviour of state.behaviours) {
+        const art = 'art' in behaviour ? behaviour.art : undefined;
+        if (typeof art === 'string') {
+          authored.add(art);
+        }
+      }
+    }
+  }
+
+  it('finds the shots that were authored with their own art', () => {
+    expect(authored.size).toBeGreaterThan(0);
+  });
+
+  it.each([...authored].sort())('enemy shot art %s', (name) => {
+    expect(projectileNames).toContain(name);
+  });
+
+  it.each(PLAYER_TAG_SPRITE_ORDER.map((entry) => entry.sprite))('player tag art %s', (name) => {
+    expect(projectileNames).toContain(name);
+  });
+
+  it('has the player base shot', () => {
+    expect(projectileNames).toContain('beer');
+  });
+});
+
+describe('no sprite folder for a shipped floor is empty', () => {
+  // #152's own acceptance criterion, stated as the test that keeps it true.
+  const shipped = ['common', 'floor-1-cellar', 'floor-2-rural'];
+  it.each(
+    shipped.flatMap((bucketId) =>
+      Object.values(CATEGORY_FOLDERS).map((folder) => [bucketId, folder] as const),
+    ),
+  )('%s/%s', async (bucketId, folder) => {
+    const entries = await readdir(path.join(SPRITE_ROOT, bucketId, folder));
+    expect(entries.filter((entry) => entry.endsWith('.png'))).not.toHaveLength(0);
+  });
+});
+
+describe('the animation sidecars a boss ships author the states its fight uses', () => {
+  it.each([
+    ['floor-1-cellar', 'grosse-kellerassel'],
+    ['floor-2-rural', 'der-stier'],
+  ])('%s/%s', async (bucketId, name) => {
+    const raw = await readFile(
+      path.join(SPRITE_ROOT, bucketId, 'bosses', `${name}.anim.json`),
+      'utf8',
+    );
+    const sidecar = JSON.parse(raw) as { clips?: Record<string, unknown> };
+    // A boss is the one creature that uses the whole state list: it walks, it
+    // winds up, it flinches, and it dies on screen rather than under a
+    // game-over screen.
+    expect(Object.keys(sidecar.clips ?? {}).sort()).toEqual([
+      'death',
+      'hurt',
+      'idle',
+      'move',
+      'telegraph',
+    ]);
+  });
+});

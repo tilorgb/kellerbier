@@ -12,6 +12,7 @@ import {
 import { EntityView } from '../render/entities.js';
 import { GameView } from '../render/view.js';
 import { buildAnimatedSets, loadFloorArt } from '../render/floor-art.js';
+import { bossIdsFrom, buildProjectileArt, doorTexturesFrom } from '../render/art-bundle.js';
 import { loadPlayerArt } from '../render/player-art.js';
 import { PARTICLE_PALETTE } from '../render/palette.js';
 import { FixedTimestepLoop, runAnimationFrameLoop } from '../app/loop.js';
@@ -106,22 +107,26 @@ export async function createPlaytest(
   // Real floor/enemy art (#35) and Alois's own (#151) — a room author checking
   // their layout in Playtest has the exact same "which blob was that" problem a
   // real run does, so this preview gets the same art a run would.
-  const [{ floorTiles, enemyArt, enemyStrips }, playerArt] = await Promise.all([
-    loadFloorArt(),
-    loadPlayerArt(),
-  ]);
+  const [
+    { roomTiles, enemyArt, enemyStrips, pickupArt, projectileArt, tileTextures, spriteOrigins },
+    playerArt,
+  ] = await Promise.all([loadFloorArt(), loadPlayerArt()]);
 
   const sim = new GameSim({ seed: 1, population: 'empty', floor });
   sim.loadRoom(templateJson, floor, null, [], canonicalPlacement(shape));
 
   const view = new GameView(sim, {
     playerArt,
-    projectile: createBlobTexture(
-      app.renderer,
-      sim.tuning.shooting.shotRadius,
-      PARTICLE_PALETTE.projectileFill,
-      PARTICLE_PALETTE.projectileRim,
+    projectileArt: buildProjectileArt(
+      projectileArt,
+      createBlobTexture(
+        app.renderer,
+        sim.tuning.shooting.shotRadius,
+        PARTICLE_PALETTE.projectileFill,
+        PARTICLE_PALETTE.projectileRim,
+      ),
     ),
+    projectileArtNames: sim.enemies.projectileArtNames.map((name) => (name === '' ? null : name)),
     entity: createBlobTexture(
       app.renderer,
       MAX_COLLIDER_RADIUS,
@@ -160,7 +165,13 @@ export async function createPlaytest(
       PARTICLE_PALETTE.pedestalItemFill,
     ),
     pedestalBeam: createSolidTexture(app.renderer),
-    floorTiles,
+    pedestalPlinth: tileTextures.pedestal,
+    doors: doorTexturesFrom(tileTextures),
+    pickupArt,
+    tileTextures,
+    bossShadow: enemyArt['boss-shadow'],
+    bossIds: bossIdsFrom(spriteOrigins),
+    roomTiles,
     enemyArt,
     enemyFlash: Object.fromEntries(
       Object.entries(enemyArt).map(([id, texture]) => [

@@ -27,4 +27,11 @@ export declare function brightestOpaqueColor(
   luminanceOf: (color: number) => number,
 ): number | null;
 
+export declare function darkestOpaqueColor(
+  pixels: Buffer,
+  width: number,
+  height: number,
+  luminanceOf: (color: number) => number,
+): number | null;
+
 export declare function validateAnimation(animation: Record<string, unknown>): string | null;

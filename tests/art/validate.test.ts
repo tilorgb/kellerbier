@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   brightestOpaqueColor,
+  darkestOpaqueColor,
   findOffPalettePixel,
   validateAnimation,
   validateSpriteSize,
@@ -244,5 +245,22 @@ describe('validateAnimation, on clips', () => {
     expect(validateAnimation({ ...strip, clips: [idle] })).toMatch(
       /"clips" must be an object keyed by animation state/,
     );
+  });
+});
+
+describe('darkestOpaqueColor', () => {
+  it('finds the darkest opaque pixel', () => {
+    const pixels = Buffer.from([0xff, 0xff, 0xff, 0xff, 0x10, 0x10, 0x10, 0xff]);
+    expect(darkestOpaqueColor(pixels, 2, 1, relativeLuminance)).toBe(0x101010);
+  });
+
+  it('ignores transparent pixels, however dark', () => {
+    const pixels = Buffer.from([0x40, 0x40, 0x40, 0xff, 0x00, 0x00, 0x00, 0x00]);
+    expect(darkestOpaqueColor(pixels, 2, 1, relativeLuminance)).toBe(0x404040);
+  });
+
+  it('is null for a fully transparent sprite', () => {
+    const pixels = Buffer.from([0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+    expect(darkestOpaqueColor(pixels, 2, 1, relativeLuminance)).toBeNull();
   });
 });

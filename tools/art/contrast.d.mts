@@ -2,7 +2,10 @@
 
 export interface ProjectileSwatch {
   readonly name: string;
+  /** The sprite's brightest opaque colour. */
   readonly rim: number;
+  /** Its darkest opaque colour. Omitted scores the bright end alone. */
+  readonly shade?: number;
 }
 
 export interface FloorSwatchSet {

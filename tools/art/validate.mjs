@@ -89,6 +89,39 @@ export function brightestOpaqueColor(pixels, width, height, luminanceOf) {
 }
 
 /**
+ * The *darkest* opaque pixel, same shape — the stand-in for "the outline".
+ *
+ * A projectile reads against a background by differing from it in brightness,
+ * and which end of the sprite does that work depends entirely on the
+ * background: a shot reads on Die Alpen's snow by its dark outline and on Der
+ * Wald's black by its bright core. Checking only the bright end (which is all
+ * this module offered before #152) makes a shot that appears on more than one
+ * floor impossible to author — see `docs/DECISIONS.md` #39 for the search
+ * that established there is no single colour clearing all seven floors.
+ * `null` for a sprite with no opaque pixels at all.
+ */
+export function darkestOpaqueColor(pixels, width, height, luminanceOf) {
+  let darkest = null;
+  let darkestLuminance = Infinity;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const index = (y * width + x) * 4;
+      const alpha = pixels[index + 3];
+      if (alpha === 0) {
+        continue;
+      }
+      const rgb = (pixels[index] << 16) | (pixels[index + 1] << 8) | pixels[index + 2];
+      const luminance = luminanceOf(rgb);
+      if (luminance < darkestLuminance) {
+        darkestLuminance = luminance;
+        darkest = rgb;
+      }
+    }
+  }
+  return darkest;
+}
+
+/**
  * Validates an `*.anim.json` sidecar's shape. Returns an error string, or
  * `null` if it passes.
  *

@@ -41,6 +41,7 @@ import { HUD_PALETTE, PARTICLE_PALETTE } from '../render/palette.js';
 import { Vignette } from '../render/vignette.js';
 import { GameView } from '../render/view.js';
 import { buildAnimatedSets, loadFloorArt } from '../render/floor-art.js';
+import { bossIdsFrom, buildProjectileArt, doorTexturesFrom } from '../render/art-bundle.js';
 import { loadPlayerArt } from '../render/player-art.js';
 import { attachLiveArtPreviewListener } from '../render/live-art-preview.js';
 import { AmbienceTracker, SILENT_AMBIENCE } from './audio/ambience.js';
@@ -291,7 +292,16 @@ async function boot(): Promise<void> {
   // pipeline builds: nothing in `render/` consumes that atlas yet, so both
   // loaders load the source PNGs directly.
   const [
-    { floorTiles, enemyArt, enemyStrips, tileTextures, spriteOrigins, tileVariantNames },
+    {
+      roomTiles,
+      enemyArt,
+      enemyStrips,
+      pickupArt,
+      projectileArt,
+      tileTextures,
+      spriteOrigins,
+      tileVariantNames,
+    },
     playerArt,
   ] = await Promise.all([loadFloorArt(), loadPlayerArt()]);
   // Sprite names are unique across floors and categories by the existing
@@ -601,7 +611,11 @@ async function boot(): Promise<void> {
     itemGateHud.view.position.set(applied.originX + 8, applied.originY + 66);
   };
 
-  const minimapHud = new MinimapHud(app.renderer);
+  const minimapHud = new MinimapHud(app.renderer, {
+    treasure: tileTextures['minimap-treasure'],
+    shop: tileTextures['minimap-shop'],
+    boss: tileTextures['minimap-boss'],
+  });
   uiLayer.addChild(minimapHud.view);
   // The overlay is centred over the game, not the window — it should stay
   // aligned with the room even in a letterboxed viewport.
@@ -933,12 +947,16 @@ WASD move   arrows aim and fire
     applySettingsToSim(sim, settings);
     viewTextures ??= {
       playerArt,
-      projectile: createBlobTexture(
-        app.renderer,
-        sim.tuning.shooting.shotRadius,
-        PARTICLE_PALETTE.projectileFill,
-        PARTICLE_PALETTE.projectileRim,
+      projectileArt: buildProjectileArt(
+        projectileArt,
+        createBlobTexture(
+          app.renderer,
+          sim.tuning.shooting.shotRadius,
+          PARTICLE_PALETTE.projectileFill,
+          PARTICLE_PALETTE.projectileRim,
+        ),
       ),
+      projectileArtNames: sim.enemies.projectileArtNames.map((name) => (name === '' ? null : name)),
       entity: createBlobTexture(
         app.renderer,
         MAX_COLLIDER_RADIUS,
@@ -984,7 +1002,13 @@ WASD move   arrows aim and fire
         PARTICLE_PALETTE.pedestalItemFill,
       ),
       pedestalBeam: createSolidTexture(app.renderer),
-      floorTiles,
+      pedestalPlinth: tileTextures.pedestal,
+      doors: doorTexturesFrom(tileTextures),
+      pickupArt,
+      tileTextures,
+      bossShadow: enemyArt['boss-shadow'],
+      bossIds: bossIdsFrom(spriteOrigins),
+      roomTiles,
       enemyArt,
       enemyFlash: Object.fromEntries(
         Object.entries(enemyArt).map(([id, texture]) => [

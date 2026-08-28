@@ -19,9 +19,20 @@ export class PedestalView {
   private readonly sim: GameSim;
   private readonly itemTexture: Texture;
   private readonly beamTexture: Texture;
+  /**
+   * The plinth the item floats over (#152).
+   *
+   * A pedestal used to be a beam and a disc hanging in mid-air — the beam
+   * read as light coming from nothing. `undefined` keeps that behaviour for
+   * anywhere the sprite has not been loaded (tests, the bench scene).
+   */
+  private readonly plinthTexture: Texture | undefined;
   private readonly beams: Sprite[] = [];
   private readonly items: Sprite[] = [];
+  private readonly plinths: Sprite[] = [];
 
+  /** The plinth sits under the beam, which sits under the item: light comes off the stone, not through it. */
+  private readonly plinthLayer = new Container();
   private readonly beamLayer = new Container();
   private readonly itemLayer = new Container();
   /**
@@ -34,10 +45,12 @@ export class PedestalView {
    */
   private readonly slotForPedestal: number[] = [];
 
-  constructor(sim: GameSim, itemTexture: Texture, beamTexture: Texture) {
+  constructor(sim: GameSim, itemTexture: Texture, beamTexture: Texture, plinthTexture?: Texture) {
     this.sim = sim;
     this.itemTexture = itemTexture;
     this.beamTexture = beamTexture;
+    this.plinthTexture = plinthTexture;
+    this.container.addChild(this.plinthLayer);
     this.container.addChild(this.beamLayer);
     this.container.addChild(this.itemLayer);
   }
@@ -66,6 +79,14 @@ export class PedestalView {
       beam.tint = tint;
       beam.position.set(pedestal.x, pedestal.y);
 
+      // The plinth is untinted: the item's quality colour belongs to the item
+      // and the light it throws, not to the stone it is standing on.
+      const plinth = this.plinthAt(used - 1);
+      if (plinth !== null) {
+        plinth.visible = true;
+        plinth.position.set(pedestal.x, pedestal.y);
+      }
+
       const period = Math.max(1, tuning.bobPeriodTicks);
       // A phase offset per pedestal (from its own position) so two pedestals
       // in the same room don't bob in visible lockstep.
@@ -89,6 +110,29 @@ export class PedestalView {
         itemSprite.visible = false;
       }
     }
+    for (let slot = used; slot < this.plinths.length; slot++) {
+      const plinth = this.plinths[slot];
+      if (plinth !== undefined) {
+        plinth.visible = false;
+      }
+    }
+  }
+
+  /** `null` when no plinth sprite was loaded — the beam-and-disc behaviour from before #152. */
+  private plinthAt(slot: number): Sprite | null {
+    const texture = this.plinthTexture;
+    if (texture === undefined) {
+      return null;
+    }
+    const existing = this.plinths[slot];
+    if (existing !== undefined) {
+      return existing;
+    }
+    const created = new Sprite(texture);
+    created.anchor.set(0.5, 0.5);
+    this.plinths.push(created);
+    this.plinthLayer.addChild(created);
+    return created;
   }
 
   /**

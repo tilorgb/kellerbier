@@ -19,7 +19,10 @@ const OVERLAY_CELL = 16;
  * be spoiled by a map icon before it's found. Devil/Angel roles don't exist
  * yet (M7, `docs/GAME_DESIGN.md` §9).
  */
-type RoomIcons = Partial<Record<RoomRole, Texture>>;
+type RoomIcons = Readonly<Partial<Record<RoomRole, Texture | undefined>>>;
+
+/** On-screen height of a room-role icon, in HUD pixels. */
+const ICON_PX = 8;
 
 interface RevealState {
   readonly visited: ReadonlySet<string>;
@@ -220,6 +223,12 @@ function makeIcon(
 ): Sprite {
   const sprite = new Sprite(texture);
   sprite.anchor.set(0.5);
+  // Drawn at a fixed on-screen size rather than at the texture's own: the
+  // generated placeholders were 8px and the authored icons (#152) are 16px
+  // tiles, and the minimap's cell size is what decides how big an icon may be
+  // — not which of the two happened to be loaded. 16 -> 8 is exactly half, so
+  // every edge still lands on a whole screen pixel.
+  sprite.scale.set(ICON_PX / Math.max(1, texture.height));
   const centre = roomCentrePx(room, bounds, cellPx);
   sprite.position.set(centre.x, centre.y);
   return sprite;
@@ -251,16 +260,31 @@ export class MinimapHud {
   private readonly overlayMap = new Container();
   private readonly icons: RoomIcons;
 
-  constructor(renderer: Renderer) {
+  /**
+   * `authored` is the real icon art (#152) — `common/tiles/minimap-*.png`,
+   * loaded by `render/floor-art.ts`. Each role falls back to the generated
+   * shape it used before that art existed, so the room editor's playtest
+   * view and the bench scene (neither of which loads the sprite tree) still
+   * get a map with icons on it.
+   *
+   * The shapes match on purpose: the authored treasure icon is a diamond, the
+   * shop a ring, the boss a triangle. #21's "no information by colour alone"
+   * is a constraint on the icon *set*, and swapping generated shapes for drawn
+   * ones was never licence to change what the shapes mean.
+   */
+  constructor(renderer: Renderer, authored: RoomIcons = {}) {
     this.icons = {
-      treasure: createDiamondTexture(renderer, 4, HUD_PALETTE.minimapTreasureIcon),
-      shop: createBlobTexture(
-        renderer,
-        4,
-        HUD_PALETTE.minimapShopIconFill,
-        HUD_PALETTE.minimapShopIconRim,
-      ),
-      boss: createTriangleTexture(renderer, 4, HUD_PALETTE.minimapBossIcon),
+      treasure:
+        authored.treasure ?? createDiamondTexture(renderer, 4, HUD_PALETTE.minimapTreasureIcon),
+      shop:
+        authored.shop ??
+        createBlobTexture(
+          renderer,
+          4,
+          HUD_PALETTE.minimapShopIconFill,
+          HUD_PALETTE.minimapShopIconRim,
+        ),
+      boss: authored.boss ?? createTriangleTexture(renderer, 4, HUD_PALETTE.minimapBossIcon),
     };
 
     this.header = new Text({

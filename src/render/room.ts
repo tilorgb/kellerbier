@@ -2,12 +2,13 @@ import { Container, Graphics, Sprite, type Texture } from 'pixi.js';
 import { ROOM_TILE_UNITS } from '../content/rooms/definition.js';
 import { BLOCK_STRIDE, DOOR_SPAN, roomFrameSize, type RoomGeometry } from '../sim/room/geometry.js';
 import { doorCentre, type CompiledDoor } from '../sim/room/template.js';
+import type { RoomTileArt } from './floor-art.js';
 import { ROOM_HAZARD_PALETTE, roomThemeForFloor } from './palette.js';
 
 /**
  * Which of `variantCount` tile textures a floor cell at `(col, row)` draws —
  * Floor 2's "living floor" (#37): several tile variants (`floor-art.ts`'s
- * `RURAL_FLOOR_TILE_URLS`) mixed across the room instead of one texture
+ * `FloorTileset.floorVariants`) mixed across the room instead of one texture
  * tiled identically everywhere, so the ground doesn't read as a single
  * repeating swatch.
  *
@@ -34,15 +35,50 @@ export function pickTileVariant(col: number, row: number, variantCount: number):
 const CRACK_SPAN = 10;
 
 /**
+ * Tiles `texture` over a rectangle, one sprite per 16-unit cell, into
+ * `container`.
+ *
+ * The rectangle is not required to land on tile boundaries — the wall band is
+ * 40 units wide and 18 tall (`sim/room/template.ts`'s `ROOM_MARGIN_X`/`_Y`),
+ * neither a multiple of 16 — so the last row and column of a band run under
+ * whatever is drawn over it rather than being clipped. That is why the wall
+ * goes down before the floor does: a masonry course cut off mid-block by the
+ * floor's edge reads as the wall continuing behind the floor, which is what
+ * it is.
+ */
+function tileRect(
+  container: Container,
+  texture: Texture,
+  minX: number,
+  minY: number,
+  maxX: number,
+  maxY: number,
+): void {
+  for (let y = minY; y < maxY; y += ROOM_TILE_UNITS) {
+    for (let x = minX; x < maxX; x += ROOM_TILE_UNITS) {
+      const tile = new Sprite(texture);
+      tile.position.set(x, y);
+      container.addChild(tile);
+    }
+  }
+}
+
+/**
  * Draws a room once, into a static container.
  *
  * Room geometry does not change while the room is loaded, so this is built at
  * load and never touched again — nothing here runs per frame.
+ *
+ * `tileArt` is the floor's authored tileset (`floor-art.ts`'s `roomTiles`).
+ * A floor with none — every floor but 1 and 2 today (#39-#43, parked in M10)
+ * — keeps the flat `RoomTheme` fill this drew before any tileset existed,
+ * which is the graceful-degradation shape `docs/DECISIONS.md` #19 asks for:
+ * an unfinished floor looks plain, it does not fail to load.
  */
 export function createRoomView(
   room: RoomGeometry,
   floorNumber = 0,
-  floorTileTextures?: readonly Texture[],
+  tileArt?: RoomTileArt,
 ): Container {
   const container = new Container();
   const palette = roomThemeForFloor(floorNumber);
@@ -52,19 +88,41 @@ export function createRoomView(
   floor.rect(0, 0, frame.width, frame.height).fill(palette.wall);
   floor
     .rect(room.minX, room.minY, room.maxX - room.minX, room.maxY - room.minY)
-    .fill(palette.floor)
-    .stroke({ width: 1, color: palette.wallEdge, alignment: 0 });
+    .fill(palette.floor);
   container.addChild(floor);
+
+  if (tileArt !== undefined) {
+    // The wall band, over the whole frame — the playfield's own tiles land on
+    // top of it below. Real wall art at last: `cellar-wall.png` was authored
+    // in #35 and floor 1 drew a flat grey rectangle over it for two
+    // milestones (#152).
+    tileRect(container, tileArt.wall, 0, 0, frame.width, frame.height);
+    // One course of "lip" along the wall the player is looking at — the north
+    // band's inner edge, where the wall meets the floor. Only the north side:
+    // the lip is authored with its highlight along the *bottom* of the tile,
+    // which is only the right way up against a wall face seen from the front.
+    // The other three edges keep the 1px `wallEdge` stroke below for
+    // definition, which is what they had and all they need.
+    tileRect(
+      container,
+      tileArt.wallLip,
+      room.minX,
+      room.minY - ROOM_TILE_UNITS,
+      room.maxX,
+      room.minY,
+    );
+  }
 
   // Real tile art (#35's `assets/sprites/floor-1-cellar/tiles/`, #37's
   // `floor-2-rural/tiles/`), laid over the flat fill above rather than
   // replacing it — the fill is what shows through a room shape's dropped
   // cells and margin, and stays the fallback for every floor that has no
   // tile art yet. One sprite per 16-unit cell rather than a single tiled
-  // texture, each drawing whichever of `floorTileTextures` `pickTileVariant`
+  // texture, each drawing whichever of the floor's variants `pickTileVariant`
   // lands on for that cell — with one texture (Floor 1, today) every cell
   // picks index 0 and this is visually identical to the old single
   // `TilingSprite`; with several (Floor 2) it's the "living floor" mix.
+  const floorTileTextures = tileArt?.floorVariants;
   if (floorTileTextures !== undefined && floorTileTextures.length > 0) {
     for (let y = room.minY; y < room.maxY; y += ROOM_TILE_UNITS) {
       for (let x = room.minX; x < room.maxX; x += ROOM_TILE_UNITS) {
@@ -81,6 +139,14 @@ export function createRoomView(
       }
     }
   }
+
+  // The playfield outline goes on last of the ground layers, so a tile drawn
+  // right up to the edge does not paint over the one line that separates
+  // floor from wall on the three sides with no lip course.
+  container
+    .addChild(new Graphics())
+    .rect(room.minX, room.minY, room.maxX - room.minX, room.maxY - room.minY)
+    .stroke({ width: 1, color: palette.wallEdge, alignment: 0 });
 
   const puddles = new Graphics();
   for (let puddle = 0; puddle < room.puddleCount; puddle++) {
@@ -106,10 +172,14 @@ export function createRoomView(
     trellises
       .rect(minX, minY, maxX - minX, maxY - minY)
       .fill({ color: ROOM_HAZARD_PALETTE.trellisFill, alpha: 0.75 })
-      .stroke({ width: 1, color: ROOM_HAZARD_PALETTE.trellisEdge, alpha: 0.6, alignment: 0 });
+      .stroke({ color: ROOM_HAZARD_PALETTE.trellisEdge, width: 1, alpha: 0.6, alignment: 0 });
   }
   container.addChild(trellises);
 
+  // A shape's dropped cells (`L`'s one corner from #100/#20, `T`'s four from
+  // #107) are real `blocks` entries too (for collision), so they are skipped
+  // here and drawn as boundary below rather than as pillars the size of a
+  // sub-room sitting in the middle of the room.
   const blocks = new Graphics();
   for (let block = 0; block < room.blockCount; block++) {
     const base = block * BLOCK_STRIDE;
@@ -117,74 +187,144 @@ export function createRoomView(
     const minY = room.blocks[base + 1] ?? 0;
     const maxX = room.blocks[base + 2] ?? 0;
     const maxY = room.blocks[base + 3] ?? 0;
+    if (isVoidRect(room, minX, minY, maxX, maxY)) {
+      continue;
+    }
+    if (tileArt !== undefined) {
+      tileRect(container, tileArt.block, minX, minY, maxX, maxY);
+    } else {
+      blocks.rect(minX, minY, maxX - minX, maxY - minY).fill(palette.block);
+    }
     blocks
       .rect(minX, minY, maxX - minX, maxY - minY)
-      .fill(palette.block)
       .stroke({ width: 1, color: palette.blockEdge, alignment: 0 });
   }
   container.addChild(blocks);
 
-  // A shape's dropped cells (`L`'s one corner from #100/#20, `T`'s four from
-  // #107) are real `blocks` entries too (for collision), but drawn over in
-  // the wall's own colour rather than left as obstacles — they read as the
-  // rest of the room's boundary, not as pillars the size of a sub-room
-  // sitting in the middle of it.
   for (const voidRect of room.voidRects) {
-    container
-      .addChild(new Graphics())
-      .rect(
-        voidRect.minX,
-        voidRect.minY,
-        voidRect.maxX - voidRect.minX,
-        voidRect.maxY - voidRect.minY,
-      )
-      .fill(palette.wall)
-      .stroke({ width: 1, color: palette.wallEdge, alignment: 0 });
+    const outline = new Graphics().rect(
+      voidRect.minX,
+      voidRect.minY,
+      voidRect.maxX - voidRect.minX,
+      voidRect.maxY - voidRect.minY,
+    );
+    if (tileArt === undefined) {
+      outline.fill(palette.wall);
+    } else {
+      tileRect(container, tileArt.wall, voidRect.minX, voidRect.minY, voidRect.maxX, voidRect.maxY);
+    }
+    container.addChild(outline.stroke({ width: 1, color: palette.wallEdge, alignment: 0 }));
   }
 
   return container;
 }
 
+/** Whether a `blocks` entry is one of the shape's dropped cells rather than an authored obstacle. */
+function isVoidRect(
+  room: RoomGeometry,
+  minX: number,
+  minY: number,
+  maxX: number,
+  maxY: number,
+): boolean {
+  return room.voidRects.some(
+    (rect) => rect.minX === minX && rect.minY === minY && rect.maxX === maxX && rect.maxY === maxY,
+  );
+}
+
+/** The two door sprites a room draws its doorways with (#152). */
+export interface DoorTextures {
+  readonly open: Texture;
+  readonly closed: Texture;
+}
+
 /**
- * Draws a marker in the wall band for each of the room's real doors (#100:
- * up to eight for a `2x2` room, one per `(cell, wall)` pair with a real
- * neighbour), coloured by whether it is locked.
+ * Draws each of the room's real doors (#100: up to eight for a `2x2` room,
+ * one per `(cell, wall)` pair with a real neighbour), open or locked.
  *
- * Kept separate from `createRoomView` because door colour changes the instant
- * the last enemy dies — redrawing a handful of small rects on that is cheap,
- * redrawing the whole room (floor, blocks) every time the lock state flips is
- * not.
+ * Kept separate from `createRoomView` because door state changes the instant
+ * the last enemy dies — rebuilding a handful of sprites on that is cheap,
+ * rebuilding the whole room (floor, walls, blocks) every time the lock state
+ * flips is not.
+ *
+ * With `textures`, a doorway is two 16x16 door tiles laid end to end across
+ * the `DOOR_SPAN`-wide gap at 1:1 — 32 units across a 24-unit gap, so each
+ * one overhangs 4 units into the wall either side. Drawn at native size
+ * rather than stretched to the gap on purpose: a 16px sprite scaled to 24
+ * puts some of its pixels one screen pixel wide and some two, which
+ * `docs/CONTENT_BIBLE.md` §5 rules out outright, and a door frame set into
+ * the wall around it is what a door looks like anyway.
  */
 export function createDoorView(
   room: RoomGeometry,
   doors: readonly CompiledDoor[],
   locked: boolean,
-): Graphics {
+  textures?: DoorTextures,
+): Container {
+  const container = new Container();
   const graphics = new Graphics();
   const colour = locked ? ROOM_HAZARD_PALETTE.doorLocked : ROOM_HAZARD_PALETTE.doorOpen;
   const frame = roomFrameSize(room);
+  const texture = textures === undefined ? null : locked ? textures.closed : textures.open;
 
   for (const door of doors) {
     const centre = doorCentre(room, door);
     const span = door.span ?? DOOR_SPAN;
     const half = span / 2;
+    let bandMinX = 0;
+    let bandMinY = 0;
+    let bandWidth = 0;
+    let bandHeight = 0;
     switch (door.direction) {
       case 'north':
-        graphics.rect(centre.x - half, 0, span, room.minY).fill(colour);
+        [bandMinX, bandMinY, bandWidth, bandHeight] = [centre.x - half, 0, span, room.minY];
         break;
       case 'south':
-        graphics.rect(centre.x - half, room.maxY, span, frame.height - room.maxY).fill(colour);
+        [bandMinX, bandMinY, bandWidth, bandHeight] = [
+          centre.x - half,
+          room.maxY,
+          span,
+          frame.height - room.maxY,
+        ];
         break;
       case 'west':
-        graphics.rect(0, centre.y - half, room.minX, span).fill(colour);
+        [bandMinX, bandMinY, bandWidth, bandHeight] = [0, centre.y - half, room.minX, span];
         break;
       case 'east':
-        graphics.rect(room.maxX, centre.y - half, frame.width - room.maxX, span).fill(colour);
+        [bandMinX, bandMinY, bandWidth, bandHeight] = [
+          room.maxX,
+          centre.y - half,
+          frame.width - room.maxX,
+          span,
+        ];
         break;
+    }
+    if (texture === null) {
+      graphics.rect(bandMinX, bandMinY, bandWidth, bandHeight).fill(colour);
+      continue;
+    }
+    // Two tiles along the doorway's own long axis, centred on the gap and on
+    // the band's thickness.
+    const horizontal = door.direction === 'north' || door.direction === 'south';
+    const alongX = horizontal ? bandMinX + span / 2 - ROOM_TILE_UNITS : bandMinX + bandWidth / 2;
+    const alongY = horizontal ? bandMinY + bandHeight / 2 : bandMinY + span / 2 - ROOM_TILE_UNITS;
+    for (let step = 0; step < 2; step++) {
+      const sprite = new Sprite(texture);
+      sprite.anchor.set(horizontal ? 0 : 0.5, horizontal ? 0.5 : 0);
+      sprite.position.set(
+        horizontal ? alongX + step * ROOM_TILE_UNITS : alongX,
+        horizontal ? alongY : alongY + step * ROOM_TILE_UNITS,
+      );
+      container.addChild(sprite);
     }
   }
 
-  return graphics;
+  if (texture === null) {
+    container.addChild(graphics);
+  } else {
+    graphics.destroy();
+  }
+  return container;
 }
 
 /**

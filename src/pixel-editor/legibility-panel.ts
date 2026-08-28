@@ -5,7 +5,7 @@ import {
 } from '../../tools/art/contrast.mjs';
 import { floorBackgroundSwatches } from '../../tools/art/palette.mjs';
 import { FLOOR_BUCKETS, floorTagForBucket } from '../../tools/art/spec.mjs';
-import { brightestOpaqueColor } from '../../tools/art/validate.mjs';
+import { brightestOpaqueColor, darkestOpaqueColor } from '../../tools/art/validate.mjs';
 import type { PixelEditorState } from './state.js';
 
 export interface LegibilityPanelHandle {
@@ -14,9 +14,13 @@ export interface LegibilityPanelHandle {
 
 /**
  * "Enemy shots must read against every background" (`docs/CONTENT_BIBLE.md`
- * §5), checked live while drawing a projectile — the same
- * `brightestOpaqueColor` + `contrastRatio` pair `tools/art/build.mjs` runs at
- * build time, called here on every paint instead of after a save. A sprite
+ * §5), checked live while drawing a projectile — the same brightest/darkest
+ * extremes + `contrastRatio` scoring `tools/art/build.mjs` runs at build
+ * time, called here on every paint instead of after a save. A background is
+ * scored against whichever end of the sprite reads better against it, for the
+ * reasons in `tools/art/contrast.mjs` and `docs/DECISIONS.md` #39 — a panel
+ * that graded a sprite more harshly than the build does would send an author
+ * chasing a failure that is not there. A sprite
  * authored under one floor's bucket is only ever checked against that
  * floor's own background swatches, matching `build.mjs`'s reasoning exactly
  * ("a projectile authored under one floor's bucket only ever appears
@@ -67,7 +71,13 @@ export function createLegibilityPanel(
       state.height,
       relativeLuminance,
     );
-    if (rim === null) {
+    const shade = darkestOpaqueColor(
+      asBuffer(state.activeFrame),
+      state.width,
+      state.height,
+      relativeLuminance,
+    );
+    if (rim === null || shade === null) {
       const empty = document.createElement('p');
       empty.textContent = 'Draw at least one opaque pixel to check legibility.';
       list.appendChild(empty);
@@ -78,7 +88,7 @@ export function createLegibilityPanel(
       let worstRatio = Infinity;
       let worstColor: number | null = null;
       for (const background of floor.colors) {
-        const ratio = contrastRatio(rim, background);
+        const ratio = Math.max(contrastRatio(rim, background), contrastRatio(shade, background));
         if (ratio < worstRatio) {
           worstRatio = ratio;
           worstColor = background;

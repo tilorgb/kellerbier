@@ -1659,3 +1659,110 @@ wherever their shot comes from. Anything that later wants a *ninth* body directi
 nozzle frames instead and ask what is actually unreadable. And `GameSim.aimDirectionX`/`Y` and
 `lastShotTick` are now part of what the renderer may read: aim is simulation state because it is
 a function of the input log, not because the renderer needed somewhere to put it.
+
+## 39. Projectile legibility is scored against a sprite's *better* extreme, not its brightest pixel
+
+**Decided:** M6, while authoring the projectile set for #152. **Amends:** #34, whose gate this
+loosens in one direction and keeps everywhere else.
+
+`tools/art/build.mjs` took each projectile's brightest opaque pixel as "the rim" and required a
+3:1 contrast ratio against every large-area background colour of every floor the sprite could
+appear on. That is a faithful reading of `CONTENT_BIBLE.md` §5's "enemy shots always get a bright
+rim so they read against any background", and it made the sweep's most important sprite —
+**Alois's own shot** — impossible to author at all.
+
+A `common` projectile appears on all seven floors, so it is checked against all seven at once. A
+search over the whole legal `common` palette (neutrals plus every floor's five, plus every
+colour's derived shade ramp — 195 colours) returns **zero** candidates. The reason is not a tight
+threshold, it is a contradiction: Die Alpen's background is snow (`#eef2f5`, `#b9c4cc`,
+`#6e7680`) and Der Wald's is near-black (`#16261a`). Nothing bright clears the first; nothing
+dark clears the second; and nothing in between clears either, because Alpen's own mid grey sits
+exactly where "in between" is. The per-floor case was survivable but lopsided in the same way:
+Der Keller admitted only near-white rims and Dorf & Acker only near-*black* ones, which is how
+the first draft of floor 2's shots ended up as flat black dots with no rim at all — the opposite
+of what §5 asked for.
+
+**The fix: for each background, score the sprite on whichever of its two brightness extremes
+reads better against that background.** `validate.mjs` gained `darkestOpaqueColor` beside
+`brightestOpaqueColor`; `checkProjectileLegibility` takes both and uses `max(...)` per background.
+A shot with a black outline and a bright core then reads on snow *by its outline* and on black *by
+its core*, which is what a pixel artist would have done unprompted and what §5's rule was already
+half-stating. Every one of #152's ten projectile sprites carries both ends deliberately.
+
+**Why this is still a gate, and not a formality.** Which end does the work is a property of the
+*background*, not of the sprite, so a sprite still has to earn both. A flat mid-tone blob has
+both extremes in the middle and fails against most floors exactly as before —
+`tests/art/contrast.test.ts` asserts that specific case, because it is the one that would make
+this change a rubber stamp. What now passes is specifically a sprite with real internal contrast.
+The threshold (3.0) and the swatch sets (`floorBackgroundSwatches`) are untouched.
+
+**What this constrains:**
+
+- **`src/pixel-editor/legibility-panel.ts` moves with it.** The live panel and the build gate must
+  agree or an author chases a failure that is not there; it computes the same two extremes and the
+  same `max`.
+- **A projectile still has to be *drawn* with an outline.** The gate can only check that the
+  extremes exist, not that the darker one traces the silhouette. That part stays a review
+  judgement, and #34's legibility test (the sprite shown at 1× in motion over real floor tiles) is
+  where it is actually caught.
+- **This is a projectile rule, nothing else.** Characters, tiles and bosses are held to palette
+  and size, never to contrast — a Kellerassel that reads poorly against a cellar wall is a
+  drawing problem, not a hard constraint, because a creature is large, slow, and telegraphed. A
+  shot is none of those, which is why it has a gate at all.
+
+## 40. A room's furniture is authored data the renderer looks up, and a floor's tileset is a five-name manifest
+
+**Decided:** M6, wiring #152's art into the renderer.
+
+Two gaps turned up together while looking for the last placeholders, and they have the same
+shape: art that existed, or data that existed, with nothing joining the two.
+
+**`decorativeProps` had been authored since M2 and almost nothing drew it.** Seventeen prop types
+appear across the room templates — fence posts, bunting, the Maibaum, a market stall, a well, a
+trough, a tractor. Exactly two of them did anything: `barrel` and `maypole` become destructible
+targets, and `pedestal` becomes loot, all three in the simulation. The other fourteen were
+authored intention that reached the screen as nothing at all, which is most of the reason every
+room read as a bare grid. `render/prop-view.ts` now draws them from `PROP_TILE_NAMES`, a
+prop-type-to-tile map with three kinds of entry:
+
+- **a tile name** — draw it
+- **`null`** — something else already draws this (a trellis from the room's `sightBlocks`, a
+  puddle from its hazards, a barrel from `EntityView`). Listed rather than omitted, so that
+- **absent** — means a real content gap: no art has been drawn for this type yet. It warns once
+  per distinct message in a dev build and the room loads without it (#19), and
+  `tests/content/sprite-coverage.test.ts` fails on a pull request that introduces one, which is
+  the check that actually matters.
+
+**Floor 1's wall art shipped in #35 and was never loaded.** `cellar-wall.png` and
+`cellar-plank.png` sat in the tree for two milestones while `render/room.ts` drew flat `Graphics`
+rectangles over the top of them. What was missing was not the art and not the loader — it was
+anything that said *which* of a floor's tiles is its wall. `FLOOR_TILESETS` is that, and it is
+deliberately a hand-written manifest rather than a naming convention: "adding a sprite is dropping
+a file in a folder" is right for content (one more floor variant, one more prop) and wrong for
+roles, because inferring "the wall" from `*-wall.png` would turn a rename into a silent behaviour
+change. Five names per floor is the whole of it, and a floor with no entry keeps the flat
+`RoomTheme` fill — which is what floors 3-7 still do.
+
+**The two smaller decisions this forced, both recorded here because they cost a component and a
+field:**
+
+- **`GameSim.propKind`.** The simulation genuinely treats a barrel and Der Stier's Maibaum
+  identically — that is #38's own note on why `maypole` needed nothing from the engine — so
+  nothing on a target's body distinguished them, and the renderer drew a Maibaum as a barrel. One
+  `Uint8Array` component, written by `spawnTarget`, indexes `DESTRUCTIBLE_PROP_KINDS`. Render-only,
+  like `spawnBounce`: it cannot affect a replay, and it is written on every spawn anyway, because
+  a recycled slot inheriting the last occupant's prop kind is a bug a player would see.
+- **`FiringBehaviourBase.art`.** Which sprite an enemy's shot draws is authored on the *behaviour*,
+  not the enemy — a creature with two firing states can plausibly fire two different things — and
+  interned by `EnemyRegistry` into a small integer the projectile store carries, so the frame loop
+  never compares a string. Omitted means "the floor's default shot", so a new enemy needs nothing
+  here until its shot is worth telling apart from its neighbours'.
+
+**What this constrains:** the crates are `common` art, not floor 1's, because *every* generic
+cellar template is tagged `cellar, rural` alike — a cellar-palette prop placed in one of them
+appears on floor 2 off that floor's palette. Any future prop shared by templates that span floors
+has to be `common` for the same reason, and a prop that must be one floor's own can only live in a
+template tagged for that floor alone. Floor 1's set-piece crates are in `cellar-larder` rather
+than in the start room for the same reason from the other direction: there is no `start` special
+role, so no template can be guaranteed to be the room the run opens in. Pinning them there needs
+that role and belongs with #58's story delivery, not with the art.

@@ -453,6 +453,11 @@ function fireOne(sim: GameSim, index: number, angle: number, shot: FiringBehavio
     shot.damage,
     Math.max(1, Math.round(shot.lifetimeTicks)),
     ProjectileTeam.Enemy,
+    0,
+    // Which sprite this shot is drawn as, if its behaviour named one (#152).
+    // Resolved through the roster's interned name table rather than carried as
+    // a string, so nothing in the frame loop compares one.
+    sim.enemies.artIndexOf(shot.art),
   );
 }
 
