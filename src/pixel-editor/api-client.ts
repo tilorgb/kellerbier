@@ -1,15 +1,17 @@
 /**
- * Thin wrapper around `tools/pixel-editor/server.mjs`'s three endpoints —
- * available under `vite dev`, same as `src/editor/api-client.ts`. In a
- * production build (the CI-published preview, `docs/DECISIONS.md`'s
- * pixel-editor entries) nothing is listening on `API_BASE`, so `saveSprite`
- * branches on `import.meta.env.DEV` and exports to disk via
- * `dev-ui/file-export.ts` instead — `listSprites`/`loadSprite` stay
- * dev-server-only (browsing existing art has nothing to fall back to
- * without a directory listing, and simply come back empty outside dev).
+ * `saveSprite` talks to `tools/pixel-editor/server.mjs`'s save endpoint,
+ * available under `vite dev` only — a production build (the CI-published
+ * preview, `docs/DECISIONS.md`'s pixel-editor entries) has no server behind
+ * it, so it branches on `import.meta.env.DEV` and exports to disk via
+ * `dev-ui/file-export.ts` instead. `listSprites`/`loadSprite` need no such
+ * branch: `static-sprite-index.ts`'s `import.meta.glob` scan works
+ * identically in dev and in a static build, so browsing and loading existing
+ * art is the same code path everywhere, and never depends on a server being
+ * there to ask.
  */
 
 import { exportFile } from '../dev-ui/file-export.js';
+import { listSpritesStatic, loadSpriteStatic } from './static-sprite-index.js';
 
 const API_BASE = '/__pixel-editor-api/sprites';
 
@@ -73,13 +75,8 @@ export function base64ToBytes(base64: string): Uint8ClampedArray {
   return bytes;
 }
 
-export async function listSprites(): Promise<SpriteSummary[]> {
-  const response = await fetch(API_BASE);
-  const body: unknown = await response.json().catch(() => null);
-  if (!response.ok || typeof body !== 'object' || body === null || !('sprites' in body)) {
-    return [];
-  }
-  return (body as { sprites: SpriteSummary[] }).sprites;
+export function listSprites(): Promise<SpriteSummary[]> {
+  return Promise.resolve(listSpritesStatic());
 }
 
 export async function loadSprite(
@@ -87,24 +84,7 @@ export async function loadSprite(
   category: string,
   name: string,
 ): Promise<LoadedSprite | null> {
-  const response = await fetch(spritePath(bucketId, category, name));
-  if (!response.ok) {
-    return null;
-  }
-  const body = (await response.json()) as {
-    frameWidth: number;
-    frameHeight: number;
-    frames: string[];
-    frameDurationMs: number;
-    loop: boolean;
-  };
-  return {
-    frameWidth: body.frameWidth,
-    frameHeight: body.frameHeight,
-    frames: body.frames.map(base64ToBytes),
-    frameDurationMs: body.frameDurationMs,
-    loop: body.loop,
-  };
+  return loadSpriteStatic(bucketId, category, name);
 }
 
 export async function saveSprite(

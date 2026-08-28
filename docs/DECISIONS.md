@@ -1262,3 +1262,47 @@ through whatever load path already exists (as this did) rather than inventing a 
 should only reach for an explicit apply/sync step if there is a genuine draft/live divergence to
 reconcile — not merely because the room editor's version of "load something into an editor" happens
 to have one.
+
+## 30. Browsing and loading existing sprites is a build-time `import.meta.glob` scan, not a dev-server route
+
+**Decided:** M6, issue #108, found by actually clicking Load on the CI-published preview build.
+
+#29 fixed the pixel canvas's *layout* so a docked, narrow panel could actually reach the Browse
+sprites panel — but Browse and Load themselves still failed outright on that preview: every entry
+came back "Could not load", and the panel itself listed nothing. The cause predates #29 entirely.
+`tools/pixel-editor/server.mjs`'s `GET /sprites` and `GET /sprites/:bucket/:category/:name` only
+ever exist under `configureServer`, which Vite only runs for `vite dev` — a CI-published preview is
+`vite build` output served as plain static files with no server behind it at all, so every browse/
+load `fetch()` 404'd. `saveSprite` already had a production fallback (`dev-ui/file-export.ts`'s save
+dialog) precisely because writing a file has no other way to happen without a server; browsing and
+loading were never given the equivalent thought, because they were built and always exercised
+against a running dev server, where the gap does not exist to see.
+
+Loading has an option saving does not: reading files that already exist can be answered entirely at
+*build* time rather than *request* time, since Vite already knows the full file list before either a
+dev server or a static build exists. `import.meta.glob('../../assets/sprites/**/*.png', { eager:
+true, query: '?url', import: 'default' })` (`src/pixel-editor/static-sprite-index.ts`) resolves
+every sprite PNG's URL at bundle time, in dev and in a production build alike — small sprites end up
+inlined as `data:` URLs by Vite's own default asset handling, larger ones as hashed files, and
+either way `fetch(url)` on the result works the same, decoded into raw pixels via
+`createImageBitmap` and a throwaway `<canvas>` (the mirror image of `api-client.ts`'s existing
+`frameToPngBlob`, which already goes canvas-to-PNG for the same no-server reason). The path string
+itself is parsed the same way `tools/art/scan.mjs`'s `scanSprites` already reads the directory
+convention (`<bucket>/<category-folder>/<name>[.strip].png`, an animated strip's frame count/timing
+from a matching `.anim.json` sidecar, also read via `import.meta.glob`) — a second reading of the
+same convention, not a divergent one.
+
+This replaces `listSprites`/`loadSprite` everywhere, not just outside dev: the server's `GET` routes
+were doing nothing the static scan cannot also do inside `vite dev` (a full page reload already
+follows every save, per `main.ts`'s `SNAPSHOT_KEY` comment, so a freshly-saved file is on the glob's
+next scan the moment the reload it already causes lands), so keeping two implementations of the same
+read path around would only be a second place for this exact gap to reopen. `tools/pixel-editor/
+server.mjs` now serves only `POST` — the one operation a static build is structurally unable to do
+for itself.
+
+**Constrains:** any future "list/load something that's already a static asset" feature should reach
+for the same `import.meta.glob`-at-build-time shape rather than a dev-server route guarded by an
+`import.meta.env.DEV` fallback — the fallback pattern is correct for genuine writes (`saveSprite`
+still needs one), and a trap for reads, which have no reason to depend on a server being there at
+all. Adding a sprite category or bucket needs no change here: the glob pattern and the path-parsing
+regex both key off `CATEGORY_FOLDERS`/the directory itself, not an enumerated list.

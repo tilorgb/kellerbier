@@ -1,11 +1,22 @@
 /**
  * Dev-server half of the pixel-art authoring tool (#108): a Vite plugin,
- * wired into `vite.config.ts`, exposing the endpoints `pixel-editor.html`'s
- * browser app talks to under `/__pixel-editor-api/sprites` —
+ * wired into `vite.config.ts`, exposing the one endpoint
+ * `pixel-editor.html`'s browser app talks to under
+ * `/__pixel-editor-api/sprites` —
  *
- * - `GET  /sprites`                     — every sprite currently on disk, for the browse panel
- * - `GET  /sprites/:bucket/:category/:name` — decodes one sprite (plain or strip) for loading
  * - `POST /sprites/:bucket/:category/:name` — validates and writes a drawn sprite
+ *
+ * Listing and loading *existing* sprites used to live here too, as `GET`
+ * routes — moved to `src/pixel-editor/static-sprite-index.ts`'s
+ * `import.meta.glob` scan (`docs/DECISIONS.md`'s pixel-editor entries)
+ * because a `configureServer` route, by construction, only ever runs under
+ * `vite dev`: a CI-published preview build has no server behind it at all,
+ * so browsing/loading came back empty/failed there even though the tool
+ * itself was reachable. Saving keeps a real server on the other end of it
+ * because writing a new file to disk is the one thing a static build can
+ * never do for itself; browsing and loading have no such requirement, so
+ * they moved to the one code path that actually works everywhere this page
+ * is served.
  *
  * `configureServer` middleware only ever runs under `vite`/`vite dev`, never
  * `vite build`/`vite preview` — see `roomEditorServerPlugin` in
@@ -15,16 +26,15 @@
  * at build time (`docs/DECISIONS.md` #25) — this endpoint is a second,
  * earlier place those functions run, not a second implementation of them.
  * `png.mjs` (the one place this pipeline touches the `pngjs` dependency) and
- * the actual file writes are the reason this lives server-side rather than
- * only in the browser bundle.
+ * the actual file write are the reason saving still lives server-side rather
+ * than only in the browser bundle.
  */
 
-import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { legalPixelColorsFor } from '../art/palette.mjs';
-import { decodePng, encodePng } from '../art/png.mjs';
-import { scanSprites } from '../art/scan.mjs';
+import { encodePng } from '../art/png.mjs';
 import { ALL_BUCKET_IDS, CATEGORY_FOLDERS } from '../art/spec.mjs';
 import { findOffPalettePixel, validateAnimation, validateSpriteSize } from '../art/validate.mjs';
 import { buildStrip } from './strip.mjs';
@@ -52,15 +62,6 @@ export function pixelEditorServerPlugin() {
             .filter((part) => part.length > 0)
             .map(decodeURIComponent);
 
-          if (parts.length === 0) {
-            if (req.method !== 'GET') {
-              respondJson(res, 405, { error: 'only GET is supported on /sprites' });
-              return;
-            }
-            await handleList(res);
-            return;
-          }
-
           if (parts.length !== 3) {
             respondJson(res, 404, { error: 'expected /sprites/:bucketId/:category/:name' });
             return;
@@ -72,10 +73,6 @@ export function pixelEditorServerPlugin() {
             return;
           }
 
-          if (req.method === 'GET') {
-            await handleLoad(res, bucketId, category, name);
-            return;
-          }
           if (req.method === 'POST') {
             const body = JSON.parse(await readBody(req));
             await handleSave(res, bucketId, category, name, body);
@@ -101,60 +98,6 @@ function validateTarget(bucketId, category, name) {
     return 'sprite name must be lowercase letters, digits and hyphens';
   }
   return null;
-}
-
-async function handleList(res) {
-  const sprites = await scanSprites(ROOT_DIR);
-  respondJson(res, 200, {
-    sprites: sprites.map((sprite) => ({
-      bucketId: sprite.bucketId,
-      category: sprite.category,
-      name: sprite.name,
-      hasAnimation: sprite.animation !== null,
-    })),
-  });
-}
-
-async function handleLoad(res, bucketId, category, name) {
-  const dir = path.join(ROOT_DIR, bucketId, CATEGORY_FOLDERS[category]);
-  const plainPath = path.join(dir, `${name}.png`);
-  const stripPath = path.join(dir, `${name}.strip.png`);
-  const animPath = path.join(dir, `${name}.anim.json`);
-
-  let buffer;
-  let animation = null;
-  try {
-    buffer = await readFile(plainPath);
-  } catch {
-    try {
-      buffer = await readFile(stripPath);
-      animation = JSON.parse(await readFile(animPath, 'utf8'));
-    } catch {
-      respondJson(res, 404, { error: `no sprite named "${name}" in ${bucketId}/${category}` });
-      return;
-    }
-  }
-
-  const { width, height, pixels } = decodePng(buffer);
-  const frameCount = animation?.frames ?? 1;
-  const frameWidth = width / frameCount;
-  const frames = [];
-  for (let index = 0; index < frameCount; index++) {
-    const frame = Buffer.alloc(frameWidth * height * 4);
-    for (let row = 0; row < height; row++) {
-      const sourceStart = (row * width + index * frameWidth) * 4;
-      pixels.copy(frame, row * frameWidth * 4, sourceStart, sourceStart + frameWidth * 4);
-    }
-    frames.push(frame.toString('base64'));
-  }
-
-  respondJson(res, 200, {
-    frameWidth,
-    frameHeight: height,
-    frames,
-    frameDurationMs: animation?.frameDurationMs ?? DEFAULT_FRAME_DURATION_MS,
-    loop: animation?.loop ?? true,
-  });
 }
 
 async function handleSave(res, bucketId, category, name, body) {
