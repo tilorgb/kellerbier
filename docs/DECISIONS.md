@@ -1205,3 +1205,60 @@ extra work — `legalPixelColorsFor` derives from whatever `FLOOR_PALETTES`/`all
 already says. A future change to how many steps a ramp has, or how big a lightness step is, only
 needs to change `palette.mjs`'s `SHADE_STEPS`/`SHADE_LIGHTNESS_STEP` — `shadeRampOf`'s length and
 `legalPixelColorsFor`'s size follow automatically, checked by `tests/art/palette.test.ts`.
+
+## 29. The pixel canvas fits its actual host, not a fixed pixel target, and click-to-pick resolves through the same live-preview wiring rather than a second "apply" mechanism
+
+**Decided:** M6, issue #108, once the docked editor (#108's split-view follow-up) was actually used
+narrow rather than only measured in its own full-width tab.
+
+`canvas.ts`'s zoom (#26's `zoomFor`) targeted a fixed 512 CSS px regardless of how much room was
+actually available. That is exactly the docked panel's own footprint at its default width, so a
+512px-wide canvas plus 12px of wrap padding on each side either forced the whole page to scroll
+horizontally or sat mostly out of view — and either way pushed every panel below it (Save, Palette,
+Frames, **Browse sprites**) far enough down the page that loading an existing sprite read as broken
+rather than merely buried. Two independent fixes, not one:
+
+- **The fit zoom is now measured, not assumed.** `fitZoom(width, height, availableWidth,
+  availableHeight)` takes the smaller of `.kb-pixel-left`'s actual `clientWidth` (a `ResizeObserver`
+  on it, recomputed on every resize — the split view's divider drag changes that width without ever
+  firing a window `resize` event) and a fraction of `window.innerHeight`, so the whole sprite is
+  visible without scrolling in a full tab and in a docked panel dragged down to `MIN_PANEL_WIDTH`
+  alike. This only measures anything because `.kb-pixel-left` also had to change from `flex: 0 0
+  auto` (sized to its own content — the canvas — which is circular) to `flex: 1 1 auto` (sized by
+  the layout, the same way `.kb-pixel-right` already was).
+- **Browse sprites moved to the top of the right column.** Even a correctly-fitted canvas is still
+  the visually dominant element on the page; "load something that already exists" is at least as
+  common a first action as "start drawing", and burying its panel last, below Palette/Background/
+  Frames/Legibility, cost more scrolling than the load feature's own actual complexity justified.
+
+Wheel zoom (`onWheel`) rides on top of the fit zoom as a separate multiplier (`zoomMultiplier`,
+reset to 1 whenever the sprite's own width/height change) rather than replacing it — the fit zoom
+is what answers "show me the whole sprite," the wheel is what answers "let me get in close on one
+corner of a 160×160 boss," and conflating them would mean either losing the guaranteed-visible
+default or losing the ability to zoom past it. Zooming re-centres on the cursor's own position
+(tracked in `wrap.scroll{Left,Top}` terms before and after the zoom change) rather than the
+canvas's top-left corner, since the point being zoomed in on is usually not the origin.
+
+Separately, `app/main.ts`'s click-to-pick (the last piece of #108's "click a sprite in-game to edit
+it" request) turned out to need no new synchronization mechanism at all. A click on the game canvas,
+while the Sprites editor is docked, resolves to a `(bucketId, category, name)` via `app/sprite-pick.ts`
+(checking `pickEnemyAt` before `pickTileNameAt`, since a visible enemy standing on a floor tile
+should win) and posts it to the iframe as `kb-pixel-editor:pick`; the pixel editor loads it through
+the exact same `loadSpriteInto` the browse panel's own Load buttons use. From there,
+`live-preview-client.ts` (#108's original live-preview wiring) already posts every edit to the
+parent on its own, and `attachLiveArtPreviewListener` already applies a matching name's texture
+live — so a picked, then edited, sprite is visible in the running game with no explicit "Apply"
+step, unlike the room editor's. The room editor needs one because a room template's *shape* can
+diverge from the live room's compiled state in ways that have to be reconciled before pushing;
+a sprite's pixels have no such draft/live split to reconcile — the picture the editor is drawing
+*is* the picture, at every intermediate stroke, not a design to compile and check first.
+
+**Constrains:** any future editor panel that reads "how much room do I actually have" should reach
+for the same measured-`ResizeObserver`-plus-`window.innerHeight`-fraction shape rather than a fixed
+pixel target, the same way `render/app.ts`'s `trackWindowSize` already does for the game canvas
+itself — a fixed target is only ever right by accident, for whichever one screen size it was tuned
+against. A future "pick this thing from the running game" entry point should default to routing
+through whatever load path already exists (as this did) rather than inventing a parallel one, and
+should only reach for an explicit apply/sync step if there is a genuine draft/live divergence to
+reconcile — not merely because the room editor's version of "load something into an editor" happens
+to have one.

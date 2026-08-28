@@ -2,6 +2,10 @@ import { injectDevUiTokens } from '../dev-ui/tokens.js';
 
 export interface EditorDockHandle {
   destroy(): void;
+  /** The currently docked editor's id (`'rooms'`/`'sprites'`), or `null` while closed — `app/main.ts`'s click-to-pick only fires while this is `'sprites'`. */
+  activeEditorId(): string | null;
+  /** Posts `message` into the currently docked editor's iframe. Returns `false` (and posts nothing) if no editor is open. */
+  postToActive(message: unknown): boolean;
 }
 
 export interface EditorDockCallbacks {
@@ -207,6 +211,17 @@ export function createEditorDock(
       close();
       toggleBar.remove();
       style.remove();
+    },
+    activeEditorId(): string | null {
+      return openEditorId;
+    },
+    postToActive(message: unknown): boolean {
+      const target = iframe?.contentWindow;
+      if (target === null || target === undefined || openEditorId === null) {
+        return false;
+      }
+      target.postMessage(message, '*');
+      return true;
     },
   };
 }

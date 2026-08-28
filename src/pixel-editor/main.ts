@@ -76,7 +76,14 @@ const STYLE = `
 }
 .kb-pixel-root * { box-sizing: border-box; }
 .kb-pixel-column { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-.kb-pixel-left { flex: 0 0 auto; }
+/*
+ * flex: 1 1 auto (not 0 0 auto) so this column's rendered width reflects
+ * genuine available space rather than sizing to its own content — the canvas
+ * grid (canvas.ts) measures this column's clientWidth to fit the sprite to
+ * whatever room is actually there, which only means anything if the
+ * column's width comes from the layout rather than from the canvas itself.
+ */
+.kb-pixel-left { flex: 1 1 auto; min-width: 0; }
 .kb-pixel-right { flex: 1 1 320px; min-width: 280px; max-width: 420px; overflow-y: auto; max-height: 100vh; }
 
 /*
@@ -389,36 +396,82 @@ function boot(): void {
     status.textContent = snapshot.status;
   }
 
-  createPalettePanel(state, right);
-  createBackgroundPanel(state, grid, right);
-  createFramesPanel(state, right);
-  createLegibilityPanel(state, right);
+  /** Shared by the browse panel's own Load buttons and the in-game click-to-pick listener below — both just resolve a `(bucketId, category, name)` to a server fetch and the same state update. */
+  async function loadSpriteInto(target: {
+    bucketId: string;
+    category: string;
+    name: string;
+  }): Promise<void> {
+    const loaded = await loadSprite(target.bucketId, target.category, target.name);
+    if (loaded === null) {
+      status.textContent = `Could not load ${target.bucketId}/${target.category}/${target.name}.`;
+      return;
+    }
+    bucketSelect.value = target.bucketId;
+    categorySelect.value = target.category;
+    nameInput.value = target.name;
+    state.bucketId = target.bucketId;
+    state.category = target.category as SpriteCategory;
+    state.loadFrames(
+      loaded.frames.slice(),
+      loaded.frameWidth,
+      loaded.frameHeight,
+      loaded.frameDurationMs,
+      loaded.loop,
+    );
+    status.textContent = `Loaded ${target.bucketId}/${target.category}/${target.name}.`;
+  }
+
+  // First panel in the right column, not last: "load something existing and
+  // edit it" is at least as common a way to start as "draw something new",
+  // and the previous bottom-of-the-list position sat below a canvas that
+  // could run to hundreds of CSS pixels tall — reachable, but only after
+  // scrolling well past everything else, which reads as "there's no way to
+  // load a sprite" long before a still-scrolling user finds out otherwise.
   const browsePanel = createBrowsePanel(right, {
     onLoad: (sprite: SpriteSummary) => {
       if (state.dirty && !window.confirm('Discard unsaved changes and load this sprite?')) {
         return;
       }
-      void (async () => {
-        const loaded = await loadSprite(sprite.bucketId, sprite.category, sprite.name);
-        if (loaded === null) {
-          status.textContent = `Could not load ${sprite.bucketId}/${sprite.category}/${sprite.name}.`;
-          return;
-        }
-        bucketSelect.value = sprite.bucketId;
-        categorySelect.value = sprite.category;
-        nameInput.value = sprite.name;
-        state.bucketId = sprite.bucketId;
-        state.category = sprite.category as SpriteCategory;
-        state.loadFrames(
-          loaded.frames.slice(),
-          loaded.frameWidth,
-          loaded.frameHeight,
-          loaded.frameDurationMs,
-          loaded.loop,
-        );
-        status.textContent = `Loaded ${sprite.bucketId}/${sprite.category}/${sprite.name}.`;
-      })();
+      void loadSpriteInto(sprite);
     },
+  });
+  createPalettePanel(state, right);
+  createBackgroundPanel(state, grid, right);
+  createFramesPanel(state, right);
+  createLegibilityPanel(state, right);
+
+  /**
+   * The other half of `app/main.ts`'s in-game click-to-pick (#108's
+   * follow-up): a click on an enemy or floor tile there resolves to a
+   * `(bucketId, category, name)` and posts it here as
+   * `kb-pixel-editor:pick`, same shape `SpriteSummary` already has. Loading
+   * through the same `loadSpriteInto` the browse panel uses means the two
+   * entry points can never drift apart, and once loaded the sprite is a
+   * live-preview target automatically (`live-preview-client.ts` already
+   * posts on every edit) — no separate "apply" step, unlike the room
+   * editor's, because there is no live/draft split to reconcile here.
+   */
+  window.addEventListener('message', (event: MessageEvent<unknown>) => {
+    const data = event.data;
+    if (
+      typeof data !== 'object' ||
+      data === null ||
+      !('type' in data) ||
+      data.type !== 'kb-pixel-editor:pick' ||
+      !('bucketId' in data) ||
+      !('category' in data) ||
+      !('name' in data) ||
+      typeof data.bucketId !== 'string' ||
+      typeof data.category !== 'string' ||
+      typeof data.name !== 'string'
+    ) {
+      return;
+    }
+    if (state.dirty && !window.confirm(`Discard unsaved changes and load "${data.name}"?`)) {
+      return;
+    }
+    void loadSpriteInto({ bucketId: data.bucketId, category: data.category, name: data.name });
   });
 
   saveButton.addEventListener('click', () => {

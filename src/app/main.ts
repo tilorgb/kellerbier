@@ -1,4 +1,4 @@
-import { Assets, Container, Text, type Texture } from 'pixi.js';
+import { Assets, Container, Point, Text, type Texture } from 'pixi.js';
 import massUrl from '../../assets/sprites/mass.png';
 import { ENEMY_DEFINITIONS } from '../content/enemies/index.js';
 import { FLOOR_CONFIGS, type FloorConfig } from '../content/floors/definition.js';
@@ -52,6 +52,7 @@ import { FixedTimestepLoop, runAnimationFrameLoop } from './loop.js';
 import { RunSummaryTracker } from './run-summary.js';
 import { createAccessibilityPanel } from './accessibility-panel.js';
 import { createEditorDock } from './editor-dock.js';
+import { pickEnemyAt, pickTileNameAt } from './sprite-pick.js';
 import {
   type AccessibilitySettings,
   applySettingsToSim,
@@ -293,7 +294,8 @@ async function boot(): Promise<void> {
   // the atlas the pipeline builds: nothing in `render/` consumes that atlas
   // yet, so `loadFloorArt` loads the source PNGs the same way `playerTexture`
   // above already does.
-  const { floorTiles, enemyArt, tileTextures } = await loadFloorArt();
+  const { floorTiles, enemyArt, tileTextures, spriteOrigins, tileVariantNames } =
+    await loadFloorArt();
   // Sprite names are unique across floors and categories by the existing
   // authoring convention (`cellar-floor`, `rural-floor-2`, `kellerassel`, ...),
   // so one flat name -> `Texture` map is enough for the pixel editor's live
@@ -1308,7 +1310,7 @@ WASD move   arrows aim and fire
   const dockRoot = document.getElementById('dock-root');
   if (dockRoot !== null) {
     let pausedBeforeDock = false;
-    createEditorDock(dockRoot, {
+    const dock = createEditorDock(dockRoot, {
       // Pausing while any editor is docked is what makes it safe to hand the
       // live room over to the room editor below — the player can't walk
       // through a door mid-edit and invalidate `currentRoomId`/`floorPlan`
@@ -1323,6 +1325,41 @@ WASD move   arrows aim and fire
           loop.paused = false;
         }
       },
+    });
+
+    // Click-to-pick (#108's follow-up): while the Sprites editor is the
+    // docked panel, a click on the game canvas resolves to whichever enemy
+    // or floor tile is under it and loads that sprite into the editor —
+    // `app.canvas`'s own pointer events, not Pixi's interaction system,
+    // since nothing in the game otherwise uses stage-level pointer
+    // interactivity and DOM coordinates are all this needs. Enemies are
+    // checked before tiles: an enemy standing on the floor should win a
+    // click that lands on both. Only fires while the sprites editor is open
+    // — the room editor has no use for a game click, and this would
+    // otherwise steal clicks a mouse-driven aim scheme might one day want.
+    app.canvas.addEventListener('pointerdown', (event: PointerEvent) => {
+      if (dock.activeEditorId() !== 'sprites') {
+        return;
+      }
+      const rect = app.canvas.getBoundingClientRect();
+      const global = new Point(event.clientX - rect.left, event.clientY - rect.top);
+      const local = view.worldLayer.toLocal(global);
+      const enemyId = pickEnemyAt(sim, local.x, local.y);
+      const name =
+        enemyId ?? pickTileNameAt(sim, floorPlan.floor, local.x, local.y, tileVariantNames);
+      if (name === null) {
+        return;
+      }
+      const origin = spriteOrigins[name];
+      if (origin === undefined) {
+        return;
+      }
+      dock.postToActive({
+        type: 'kb-pixel-editor:pick',
+        bucketId: origin.bucketId,
+        category: origin.category,
+        name,
+      });
     });
 
     window.addEventListener('message', (event: MessageEvent<unknown>) => {
