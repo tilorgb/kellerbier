@@ -38,24 +38,31 @@ Raisins. Here as well. In Opa's beer.
 > *Alles was zu gut schmeckt muss mit dem Zeug versaut werden. Erst Omas Apfelkuchen, jetzt
 > auch noch Opas Bier.*
 
-Something is rustling behind the crates, and whatever it is, it is coming towards him. He takes
-Opa's **Trink-Rucksack** down off its hook, fills it with everything left of the old batch,
-switches it from *trinken* to *schießen*, and heads south to find out who is responsible.
+Something is rustling behind the crates, and whatever it is, it is coming towards him. Fine.
+
+> *Trinkt diesen Mist doch selber.*
+
+He takes Opa's **Trink-Rucksack** down off its hook, fills it with everything left of the
+tainted crate, switches it from *trinken* to *schießen*, and heads south to find out who is
+responsible.
 
 **The Trink-Rucksack's mode selector is the joke, and it is a prologue joke.** No drinking
 backpack has a `schießen` setting; that is precisely why the moment is worth showing, and why
-Alois flipping it without comment is the last beat of the intro card. It is not an in-run
-mechanic. Nothing in play ever toggles between drinking and shooting.
+Alois flipping it without comment is the last beat of the intro card. Once it is switched, it
+stays switched: the Trink-Rucksack is a killing machine for the rest of the run, whatever ends
+up in it. Nothing in play ever toggles it back to *trinken*.
 
-**What you drink is the good stuff.** The keg on Alois's back is the old batch — proper
-Pfeitinger, brewed the way it always was — and so is every beer pickup in the game. That is why
-drinking still works the way drinking works: Promille (§5) is ordinary drunkenness, not
-corruption, and nothing about it is a symptom of the plot. **The adulterated beer is never
-something the player picks up.** It is what is in everyone else, and it reaches the player only
-as an enemy, a hazard or a labelled crate on the floor — the same rule
-`CONTENT_BIBLE.md` already applies to the Böller. The one exception is deliberate and is the
-whole temptation of the item pool: *tainted food and trinkets* can be picked up, and they are
-good, and they cost you something. See §8.
+**What Alois shoots is the tainted batch. What he drinks is the good stuff, and the two never
+mix.** His shot, for the whole run, is what he loaded the rucksack with in the cellar — the
+corrupted Pfeitinger, fired right back at whoever is responsible. Every beer *pickup* in the
+run, by contrast, is the old batch — proper Pfeitinger, brewed the way it always was — so
+drinking still works the way drinking works: Promille (§5) is ordinary drunkenness, real buffs
+and real debuffs from a beer Alois chooses to drink, not a symptom of the plot. **The
+adulterated beer is never something the player drinks, and never a pickup on the floor.** Beyond
+Alois's own shot, it is what is in everyone else, and it reaches the player only as an enemy, a
+hazard or a labelled crate on the floor — the same rule `CONTENT_BIBLE.md` already applies to the
+Böller. The one exception is deliberate and is the whole temptation of the item pool: *tainted
+food and trinkets* can be picked up, and they are good, and they cost you something. See §8.
 
 Story is delivered lightly: a short illustrated card between chapters, boss intro plates, item
 flavour text, and NPC one-liners at the Stammtisch hub. No cutscenes longer than a few
@@ -121,7 +128,7 @@ not a stat spread.
 
 | Character | Unlock | Shot | Identity |
 |---|---|---|---|
-| **Alois** | start | Pfeitinger, straight stream | The baseline. Balanced, forgiving, 3 Maß of health. Opa's Trink-Rucksack, still set to *schießen*. |
+| **Alois** | start | tainted Pfeitinger, straight stream | The baseline. Balanced, forgiving, 3 Maß of health. Opa's Trink-Rucksack, loaded with the corrupted batch and locked to *schießen*. |
 | **Resi** | beat floor 3 | Brezn, arcing and returning | Fast, fragile, shots curve — rewards positioning over aim. |
 | **Bruder Barnabas** | beat floor 5 | Doppelbock, slow and heavy | Monastery brewer. Cannot pick up food; grows stronger the longer he fasts. |
 | **Der Wolpertinger** | secret | randomised each room | Chaos character. Stats reroll on floor entry. Unfair in both directions. |

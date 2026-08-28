@@ -11,8 +11,9 @@ Reinheitsgebot*. Water, malt, hops — and raisins.
 
 Raisins. Here as well. In Opa's beer.
 
-So Alois takes Opa's Trink-Rucksack down off its hook, fills it with what's left of the old
-batch, switches it from *trinken* to *schießen*, and heads south to find out who is responsible.
+*Trinkt diesen Mist doch selber.* So Alois takes Opa's Trink-Rucksack down off its hook, fills
+it with what's left of the tainted crate, switches it from *trinken* to *schießen*, and heads
+south to find out who is responsible.
 
 Seven floors from that cellar to the Wiesn, via the Bavarian Forest, the Alps, Neuschwanstein
 and a very industrial brewery. Expect Wolpertinger, aggressive swans, a tuba player who shoots
