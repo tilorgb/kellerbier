@@ -573,6 +573,35 @@ export class GameSim {
   fireCooldown = 0;
 
   /**
+   * The last direction the player actually aimed, as a unit vector, held
+   * through every tick the aim stick is centred.
+   *
+   * Simulation state rather than something the renderer reads off the input
+   * frame, for two reasons. It is a pure function of the input log — the same
+   * log produces the same aim on the same tick, on any machine — so it costs
+   * determinism nothing. And the renderer is not handed input frames at all
+   * (`GameView.sync` takes `sim` and an interpolation alpha, and nothing
+   * else); routing aim through the one object it already reads is what keeps
+   * that arrow pointing one way.
+   *
+   * Defaults to "in front of him" rather than to nothing: Alois holds the
+   * Schlauch before the player has touched the aim stick, and a nozzle
+   * pointing nowhere on the first frame of a run is a nozzle that has to be
+   * special-cased everywhere downstream. Written by `systems/shooting.ts`.
+   */
+  aimDirectionX = 0;
+  aimDirectionY = 1;
+
+  /**
+   * The tick the last shot left the Schlauch on, or `-1` before the first
+   * one. What `render/player-view.ts` plays the muzzle frame off — a shot is
+   * an event with no lasting simulation state otherwise, and "did he fire in
+   * the last few ticks" is not answerable from `fireCooldown`, which counts
+   * down identically whether the button is held or was tapped once.
+   */
+  lastShotTick = -1;
+
+  /**
    * Ticks the simulation is frozen for.
    *
    * Hitstop lives here rather than in the loop. Freezing the loop would stop
@@ -703,6 +732,7 @@ export class GameSim {
   /** Set once, the tick every pool empties with no eternal heart to spend. */
   private playerDeadFlag = false;
   private playerDeathTick_ = -1;
+  private playerHurtTick_ = -1;
   private deathWordValue: string | undefined;
 
   /** Carried in from `GameSimOptions`, and never written after construction. */
@@ -1625,6 +1655,21 @@ export class GameSim {
     }
   }
 
+  /**
+   * The tick the player last took damage on, or `-1` — the flinch clip's
+   * trigger (`render/animation/state.ts`).
+   *
+   * Recorded in `applyPlayerDamage` rather than derived from
+   * `playerInvulnerableTicks`, because the window a hit opens is a different
+   * length depending on what landed it (`ImpactTuning`'s contact and
+   * projectile windows) and because Umgfalln opens one without anyone being
+   * hit. A count that means two different things cannot be read backwards
+   * into "was he just hurt"; a tick stamp can.
+   */
+  get playerHurtTick(): number {
+    return this.playerHurtTick_;
+  }
+
   /** Red Maß, current and max — the pool every other entity's `health` also carries. */
   get playerHealth(): number {
     return this.health.data[this.playerIndex * 2] ?? 0;
@@ -1832,6 +1877,10 @@ export class GameSim {
     const health = this.health.data;
     const index = this.playerIndex;
     const red = health[index * 2] ?? 0;
+    // Every hit that actually lands passes through here — see this method's
+    // own doc comment on being the one place player health changes — so this
+    // is the one stamp the flinch clip can trust.
+    this.playerHurtTick_ = this.currentTick;
 
     // Reaching exactly zero is lethal, same as going below it — a hit does
     // not need to overkill to end a run, it only needs to use up what is left.

@@ -7,6 +7,7 @@ import { ProjectileTeam } from '../../src/sim/projectile/store.js';
 import { RoomGeometry } from '../../src/sim/room/geometry.js';
 import { RngStream, createStreamRng } from '../../src/sim/rng/streams.js';
 import { GameView } from '../../src/render/view.js';
+import { stubPlayerArt } from '../helpers/player-art.js';
 
 /**
  * The stress scene: the performance budget in `docs/TECH_STACK.md` §3, built.
@@ -226,7 +227,7 @@ export function buildStressScene(): StressScene {
  */
 export function buildHeadlessView(sim: GameSim): GameView {
   return new GameView(sim, {
-    player: Texture.EMPTY,
+    playerArt: stubPlayerArt(),
     projectile: Texture.EMPTY,
     entity: Texture.EMPTY,
     entityFlash: Texture.EMPTY,

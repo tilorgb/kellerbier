@@ -1,5 +1,4 @@
-import { Assets, Container, Point, Text, type Texture } from 'pixi.js';
-import massUrl from '../../assets/sprites/mass.png';
+import { Container, Point, Text } from 'pixi.js';
 import { ENEMY_DEFINITIONS } from '../content/enemies/index.js';
 import { FLOOR_CONFIGS, type FloorConfig } from '../content/floors/definition.js';
 import { DIRECTION_OFFSET } from '../content/rooms/definition.js';
@@ -42,6 +41,7 @@ import { HUD_PALETTE, PARTICLE_PALETTE } from '../render/palette.js';
 import { Vignette } from '../render/vignette.js';
 import { GameView } from '../render/view.js';
 import { buildAnimatedSets, loadFloorArt } from '../render/floor-art.js';
+import { loadPlayerArt } from '../render/player-art.js';
 import { attachLiveArtPreviewListener } from '../render/live-art-preview.js';
 import { AmbienceTracker, SILENT_AMBIENCE } from './audio/ambience.js';
 import { SILENT_AUDIO, playImpactAudio } from './audio/impact.js';
@@ -285,18 +285,15 @@ async function boot(): Promise<void> {
   // `GameSim`/replay state.
   const settings = loadSettings();
 
-  const playerTexture = await Assets.load<Texture>({
-    src: massUrl,
-    data: { scaleMode: 'nearest' },
-  });
-  // Floor 1's real tile and character art (#35) — see
-  // `assets/sprites/README.md`'s "nothing under here is loaded by the game
-  // directly" for why this goes through plain static imports rather than
-  // the atlas the pipeline builds: nothing in `render/` consumes that atlas
-  // yet, so `loadFloorArt` loads the source PNGs the same way `playerTexture`
-  // above already does.
-  const { floorTiles, enemyArt, enemyStrips, tileTextures, spriteOrigins, tileVariantNames } =
-    await loadFloorArt();
+  // The floors' real tile and character art (#35), and Alois's own (#151) —
+  // see `assets/sprites/README.md`'s "nothing under here is loaded by the game
+  // directly" for why these go through plain imports rather than the atlas the
+  // pipeline builds: nothing in `render/` consumes that atlas yet, so both
+  // loaders load the source PNGs directly.
+  const [
+    { floorTiles, enemyArt, enemyStrips, tileTextures, spriteOrigins, tileVariantNames },
+    playerArt,
+  ] = await Promise.all([loadFloorArt(), loadPlayerArt()]);
   // Sprite names are unique across floors and categories by the existing
   // authoring convention (`cellar-floor`, `rural-floor-2`, `kellerassel`, ...),
   // so one flat name -> `Texture` map is enough for the pixel editor's live
@@ -882,7 +879,7 @@ WASD move   arrows aim and fire
    * the initial boot, and again by the `R` key / `#seed-input` (below) for a
    * restart, the same way Isaac's own restart key works.
    *
-   * Everything that outlives one run (the renderer, `app`, `playerTexture`,
+   * Everything that outlives one run (the renderer, `app`, `playerArt`,
    * every screen-space HUD element, `loop`, `input`) is left alone; only the
    * run-scoped state — `floorPlan`/`currentRoomId`/`visitedRoomIds`/
    * `revealedEdges`/`sim`/`view`, plus death/summary/key-hint bookkeeping —
@@ -935,7 +932,7 @@ WASD move   arrows aim and fire
     // which `viewTextures`'s own comment notes is otherwise never rebuilt.
     applySettingsToSim(sim, settings);
     viewTextures ??= {
-      player: playerTexture,
+      playerArt,
       projectile: createBlobTexture(
         app.renderer,
         sim.tuning.shooting.shotRadius,

@@ -1,6 +1,6 @@
 import {
   AnimationState,
-  ANIMATION_STATE_IDS,
+  ClipStateResolver,
   clipFrameAt,
   clipHasEnded,
   type AnimationStateIndex,
@@ -128,17 +128,8 @@ export class EntityAnimator {
   private corpseCursor = 0;
   private corpseOverflowCount = 0;
 
-  /**
-   * Clips already warned about, as a bitmask of states per set.
-   *
-   * Per set rather than per entity: the gap is in the authored data, so it is
-   * the same gap however many Kellerasseln walk into it, and one line in the
-   * console is the useful number of lines. A `Map` keyed by the set object
-   * itself rather than by a built string — the check runs on the fallback path
-   * every frame it applies, and a template literal there would be a per-frame
-   * allocation in the one place this class promises not to have one.
-   */
-  private readonly warnedStates = new Map<CompiledAnimationSet, number>();
+  /** The #19 clip fallback, shared with `render/player-view.ts`. */
+  private readonly clipStates = new ClipStateResolver();
 
   /** Milliseconds the last `beginFrame` advanced clips by. Reported by the debug overlay. */
   get lastDeltaMs(): number {
@@ -376,33 +367,12 @@ export class EntityAnimator {
 
   /**
    * The clip to actually play for `state` — `state` itself when it has one,
-   * `idle` when it does not.
-   *
-   * This is the content-gap fallback `docs/DECISIONS.md` #19 asks for, in the
-   * shape it asks for it: an enemy whose walk cycle has not been drawn yet
-   * keeps running its idle pose instead of throwing or drawing nothing, and
-   * says so once per (sprite, state) in a dev build. A clip pointing at a
-   * frame the strip does not have is the other case entirely — data that is
-   * wrong rather than missing — and `compileAnimationSet` has already thrown
-   * on it long before this runs.
+   * `idle` when it does not. `ClipStateResolver` is the whole of it; this
+   * stays as a name because every call site inside this class reads better
+   * for it.
    */
   private clipStateFor(set: CompiledAnimationSet, state: AnimationStateIndex): AnimationStateIndex {
-    if (set.clips[state] !== null && set.clips[state] !== undefined) {
-      return state;
-    }
-    if (import.meta.env.DEV) {
-      const warned = this.warnedStates.get(set) ?? 0;
-      const bit = 1 << state;
-      if ((warned & bit) === 0) {
-        this.warnedStates.set(set, warned | bit);
-        console.warn(
-          `${set.name} has no "${ANIMATION_STATE_IDS[state] ?? String(state)}" clip authored — ` +
-            `falling back to its idle clip. Add one to ${set.name}.anim.json when the frames ` +
-            `for it are drawn.`,
-        );
-      }
-    }
-    return AnimationState.Idle;
+    return this.clipStates.resolve(set, state);
   }
 
   private startCorpse(slot: number): void {

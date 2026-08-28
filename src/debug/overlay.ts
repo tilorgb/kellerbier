@@ -102,7 +102,7 @@ export class DebugOverlay {
     this.addPanel(this.runInfo);
     this.addPanel(new PickupsPanel());
     this.addPanel(new StatsPanel());
-    this.addPanel(new AnimationPanel(view.animator));
+    this.addPanel(new AnimationPanel(view.animator, view.player));
     this.addPanel(new ArtPipelinePanel());
 
     this.setVisible(false);

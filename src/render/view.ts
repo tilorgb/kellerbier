@@ -1,5 +1,5 @@
-import { Container, Sprite, type Graphics, type Texture } from 'pixi.js';
-import { PLAYER_RADIUS, ROOM_TRANSITION_TICKS, type GameSim } from '../sim/game/sim.js';
+import { Container, type Graphics, type Texture } from 'pixi.js';
+import { ROOM_TRANSITION_TICKS, type GameSim } from '../sim/game/sim.js';
 import { roomFrameSize, type RoomGeometry } from '../sim/room/geometry.js';
 import { PLAYFIELD_HEIGHT, PLAYFIELD_WIDTH } from '../sim/room/playground.js';
 import type { CompiledDoor } from '../sim/room/template.js';
@@ -14,19 +14,16 @@ import { createDoorView, createRoomView, createSecretHintView } from './room.js'
 import { INTERNAL_HEIGHT, INTERNAL_WIDTH, WORLD_ZOOM } from './resolution.js';
 import type { EntityAnimator } from './animation/animator.js';
 import type { AnimatedSpriteSet } from './floor-art.js';
-
-/**
- * Where the player sprite's anchor sits in its texture.
- *
- * Measured off the art rather than assumed: the opaque pixels of `mass.png`
- * span x 1-15 and y 3-30 of a 16x32 texture (#25's raised character ceiling,
- * #108's detailed redraw), so the mug's centre is (8, 16.5).
- */
-const PLAYER_ANCHOR_X = 8 / 16;
-const PLAYER_ANCHOR_Y = 16.5 / 32;
+import type { PlayerArt } from './player-art.js';
+import { PlayerView } from './player-view.js';
 
 export interface GameViewTextures {
-  readonly player: Texture;
+  /**
+   * Alois's own strips (#151), replacing the single static player texture
+   * this used to be. He is animated, four-way and two-layered, so "the
+   * player's texture" stopped being a thing there is exactly one of.
+   */
+  readonly playerArt: PlayerArt;
   readonly projectile: Texture;
   readonly entity: Texture;
   /** The entity shape in solid white, for the one-tick hit flash. */
@@ -98,7 +95,7 @@ export class GameView {
 
   private readonly sim: GameSim;
   private readonly floorTiles: Readonly<Record<number, readonly Texture[]>>;
-  private readonly player: Sprite;
+  private readonly playerView: PlayerView;
   private readonly projectiles: ProjectileView;
   private readonly entities: EntityView;
   private readonly pedestals: PedestalView;
@@ -167,24 +164,8 @@ export class GameView {
     this.pedestals = new PedestalView(sim, textures.pedestalItem, textures.pedestalBeam);
     this.world.addChild(this.pedestals.container);
 
-    this.player = new Sprite(textures.player);
-    // The mug's opaque pixels span y 3-30 of a 32-tall texture, so its
-    // vertical centre (16.5) is not the texture's own midpoint (16) — a
-    // centred anchor would hang the art off-centre from the body it belongs
-    // to. A fraction of a pixel was invisible before the room was zoomed; at
-    // 2x it is a whole screen pixel of the collider poking out on one side
-    // and a gap on the other.
-    this.player.anchor.set(PLAYER_ANCHOR_X, PLAYER_ANCHOR_Y);
-    // Scaled to the player's own collider, exactly like `EntityView` scales
-    // every enemy body to its radius — not left at native texture size. Pixel
-    // density and on-screen size are different questions: art authored at a
-    // higher resolution for more visible detail (#25, #108's player redraw)
-    // must not, by itself, change how big the player reads in the room.
-    // Without this the two stayed accidentally coupled through the texture's
-    // raw pixel height, so redrawing the same-size character denser silently
-    // grew it on screen instead of just sharpening it.
-    this.player.scale.set(PLAYER_RADIUS / (textures.player.height / 2));
-    this.world.addChild(this.player);
+    this.playerView = new PlayerView(textures.playerArt);
+    this.world.addChild(this.playerView.container);
 
     this.projectiles = new ProjectileView(sim.projectiles, textures.projectile);
     this.world.addChild(this.projectiles.container);
@@ -262,7 +243,7 @@ export class GameView {
     const index = this.sim.playerIndex;
     const playerX = lerp(this.sim.previousX(index), this.sim.positionX(index), alpha);
     const playerY = lerp(this.sim.previousY(index), this.sim.positionY(index), alpha);
-    this.player.position.set(playerX, playerY);
+    this.playerView.sync(this.sim, alpha, nowMs);
     const follow = this.followOffset(playerX, playerY);
 
     // Rounded, not left fractional — a camera offset by a fraction of a real
@@ -397,8 +378,12 @@ export class GameView {
    * screen.
    */
   playerScreenPosition(): { readonly x: number; readonly y: number } {
-    const point = this.player.getGlobalPosition();
-    return { x: point.x, y: point.y };
+    return this.playerView.screenPosition();
+  }
+
+  /** Alois's animation state, for the debug overlay's animation panel. */
+  get player(): PlayerView {
+    return this.playerView;
   }
 
   /**
