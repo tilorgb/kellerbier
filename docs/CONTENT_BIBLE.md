@@ -342,9 +342,11 @@ requirement cannot be evaluated is a stat stick rather than a build decision.
 
 - **16-bit era**, not 8-bit. Readability with a screen full of projectiles requires more
   colours and more silhouette detail than an NES palette allows.
-- **16×16 tiles**, characters roughly 12×16, bosses up to 48×48 — as authored. Sprites live in
-  simulation units and the room is drawn at `WORLD_ZOOM`, so on screen those are 32×32, ~24×32
-  and 96×96.
+- **16×16 tiles**, characters roughly 12×16 up to 16×32, bosses up to 160×160 — as authored (see
+  `docs/DECISIONS.md` #26 for the character/boss ceilings — "16-bit" is a colour/shading budget,
+  not a pixel-dimension one). Sprites live in simulation units and the room is drawn at
+  `WORLD_ZOOM`, so on screen those are 32×32, ~24×32 up to 32×64, and up to 320×320 — a boss at
+  its ceiling is deliberately close to filling the 360-tall internal resolution.
 - **Internal resolution 640×360** for the game layer, scaled by a whole number of device
   pixels. Never non-integer: a sprite drawn at 1.5× has some pixels one screen pixel wide and
   some two. Menus, HUD text and anything else made of words are drawn outside that layer at

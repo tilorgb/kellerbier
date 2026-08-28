@@ -20,7 +20,7 @@ import { doorCentre, type CompiledDoor } from '../sim/room/template.js';
  * coincidence rather than a rule, and different rooms overwhelmingly don't
  * share cells in the first place.
  */
-function pickTileVariant(col: number, row: number, variantCount: number): number {
+export function pickTileVariant(col: number, row: number, variantCount: number): number {
   if (variantCount <= 1) {
     return 0;
   }

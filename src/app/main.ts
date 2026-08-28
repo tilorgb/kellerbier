@@ -1,4 +1,4 @@
-import { Assets, Container, Text, type Texture } from 'pixi.js';
+import { Assets, Container, Point, Text, type Texture } from 'pixi.js';
 import massUrl from '../../assets/sprites/mass.png';
 import { ENEMY_DEFINITIONS } from '../content/enemies/index.js';
 import { FLOOR_CONFIGS, type FloorConfig } from '../content/floors/definition.js';
@@ -41,6 +41,7 @@ import { WalletHud } from '../render/wallet-hud.js';
 import { Vignette } from '../render/vignette.js';
 import { GameView } from '../render/view.js';
 import { loadFloorArt } from '../render/floor-art.js';
+import { attachLiveArtPreviewListener } from '../render/live-art-preview.js';
 import { AmbienceTracker, SILENT_AMBIENCE } from './audio/ambience.js';
 import { SILENT_AUDIO, playImpactAudio } from './audio/impact.js';
 import { Bindable } from './input/bindings.js';
@@ -50,6 +51,8 @@ import { playRumble } from './input/rumble.js';
 import { FixedTimestepLoop, runAnimationFrameLoop } from './loop.js';
 import { RunSummaryTracker } from './run-summary.js';
 import { createAccessibilityPanel } from './accessibility-panel.js';
+import { createEditorDock } from './editor-dock.js';
+import { pickEnemyAt, pickTileNameAt } from './sprite-pick.js';
 import {
   type AccessibilitySettings,
   applySettingsToSim,
@@ -291,7 +294,14 @@ async function boot(): Promise<void> {
   // the atlas the pipeline builds: nothing in `render/` consumes that atlas
   // yet, so `loadFloorArt` loads the source PNGs the same way `playerTexture`
   // above already does.
-  const { floorTiles, enemyArt } = await loadFloorArt();
+  const { floorTiles, enemyArt, tileTextures, spriteOrigins, tileVariantNames } =
+    await loadFloorArt();
+  // Sprite names are unique across floors and categories by the existing
+  // authoring convention (`cellar-floor`, `rural-floor-2`, `kellerassel`, ...),
+  // so one flat name -> `Texture` map is enough for the pixel editor's live
+  // preview (#108) to find "the texture for this sprite" without also
+  // needing the bucketId it was authored under.
+  attachLiveArtPreviewListener({ ...tileTextures, ...enemyArt });
 
   // The run seed: fixed via the page's `?seed=` query param when present,
   // otherwise freshly randomised on every load — proper seeded runs are #48,
@@ -646,7 +656,7 @@ async function boot(): Promise<void> {
 
   let layout = computeGameLayout(window.innerWidth, window.innerHeight, window.devicePixelRatio);
 
-  trackWindowSize(app, game, (applied) => {
+  trackWindowSize(app, game, host, (applied) => {
     layout = applied;
     positionHud(applied);
     positionHealthHud(applied);
@@ -1290,6 +1300,116 @@ WASD move   arrows aim and fire
   runAnimationFrameLoop(loop);
   window.setInterval(refreshHud, 100);
 
+  // The room editor (#24) / pixel editor (#108) split-view toggle. Ships
+  // unconditionally, unlike the debug overlay below — see
+  // `editor-dock.ts`'s doc comment for why it can't live behind that
+  // `import.meta.env.DEV` gate and still be reachable from a published
+  // preview build. Placed here, not at the top of `boot`, because pausing
+  // and the room-sync messages below both need `loop`/`sim`/`floorPlan`,
+  // which do not exist yet that early.
+  const dockRoot = document.getElementById('dock-root');
+  if (dockRoot !== null) {
+    let pausedBeforeDock = false;
+    const dock = createEditorDock(dockRoot, {
+      // Pausing while any editor is docked is what makes it safe to hand the
+      // live room over to the room editor below — the player can't walk
+      // through a door mid-edit and invalidate `currentRoomId`/`floorPlan`
+      // out from under it. It also means editing an enemy's sprite never
+      // has to worry about that enemy attacking mid-edit.
+      onOpen: () => {
+        pausedBeforeDock = loop.paused;
+        loop.paused = true;
+      },
+      onClose: () => {
+        if (!pausedBeforeDock) {
+          loop.paused = false;
+        }
+      },
+    });
+
+    // Click-to-pick (#108's follow-up): while the Sprites editor is the
+    // docked panel, a click on the game canvas resolves to whichever enemy
+    // or floor tile is under it and loads that sprite into the editor —
+    // `app.canvas`'s own pointer events, not Pixi's interaction system,
+    // since nothing in the game otherwise uses stage-level pointer
+    // interactivity and DOM coordinates are all this needs. Enemies are
+    // checked before tiles: an enemy standing on the floor should win a
+    // click that lands on both. Only fires while the sprites editor is open
+    // — the room editor has no use for a game click, and this would
+    // otherwise steal clicks a mouse-driven aim scheme might one day want.
+    app.canvas.addEventListener('pointerdown', (event: PointerEvent) => {
+      if (dock.activeEditorId() !== 'sprites') {
+        return;
+      }
+      const rect = app.canvas.getBoundingClientRect();
+      const global = new Point(event.clientX - rect.left, event.clientY - rect.top);
+      const local = view.worldLayer.toLocal(global);
+      const enemyId = pickEnemyAt(sim, local.x, local.y);
+      const name =
+        enemyId ?? pickTileNameAt(sim, floorPlan.floor, local.x, local.y, tileVariantNames);
+      if (name === null) {
+        return;
+      }
+      const origin = spriteOrigins[name];
+      if (origin === undefined) {
+        return;
+      }
+      dock.postToActive({
+        type: 'kb-pixel-editor:pick',
+        bucketId: origin.bucketId,
+        category: origin.category,
+        name,
+      });
+    });
+
+    window.addEventListener('message', (event: MessageEvent<unknown>) => {
+      const data = event.data;
+      if (typeof data !== 'object' || data === null || !('type' in data)) {
+        return;
+      }
+      if (data.type === 'kb-room-editor:request-current') {
+        const room = planRoom(floorPlan, currentRoomId);
+        const templateJson = room.staircaseTemplateId === undefined ? planTemplate(room) : null;
+        event.source?.postMessage(
+          { type: 'kb-room-editor:current-room', templateJson },
+          { targetOrigin: '*' },
+        );
+        return;
+      }
+      if (data.type === 'kb-room-editor:apply' && 'templateJson' in data) {
+        try {
+          const room = planRoom(floorPlan, currentRoomId);
+          if (room.staircaseTemplateId !== undefined) {
+            throw new Error('the current room is a staircase, which the room editor cannot edit');
+          }
+          sim.loadRoom(
+            data.templateJson,
+            floorPlan.floor,
+            null,
+            hiddenDoorsFor(floorPlan, currentRoomId, revealedEdges),
+            buildPlacement(room),
+          );
+          view.setSecretHints(crackHintsFor(floorPlan, currentRoomId, revealedEdges));
+          minimapHud.rebuild(floorPlan, currentRoomId, visitedRoomIds);
+          refreshHud();
+          event.source?.postMessage(
+            { type: 'kb-room-editor:apply-ack', ok: true },
+            { targetOrigin: '*' },
+          );
+        } catch (error) {
+          event.source?.postMessage(
+            {
+              type: 'kb-room-editor:apply-ack',
+              ok: false,
+              error: error instanceof Error ? error.message : String(error),
+            },
+            { targetOrigin: '*' },
+          );
+        }
+      }
+    });
+  }
+
   // Re-applies the accessibility settings to whichever `GameSim` a restart
   // has most recently built, and refreshes the two places that show a
   // Promille label immediately, rather than waiting for their own next
@@ -1315,9 +1435,8 @@ WASD move   arrows aim and fire
       applyAccessibilityChange();
     },
   );
-  mountRoomEditorLink();
-  // Not gated behind `import.meta.env.DEV` like `mountRoomEditorLink` — this
-  // is the player-facing half of #33, so it has to ship in a production
+  // Not gated behind `import.meta.env.DEV` like `mountDebugOverlay` above —
+  // this is the player-facing half of #33, so it has to ship in a production
   // build.
   createAccessibilityPanel(settings, applyAccessibilityChange);
 }
@@ -1413,43 +1532,6 @@ function exposeDebugHandle(
     setAccessibilitySettings,
   };
   console.warn('__kellerbier is exposed for debugging (dev build only)');
-}
-
-/**
- * A link to the room editor (#24) — dev builds only, same as the debug handle
- * above, since `editor.html` is not wired into `build.rollupOptions.input`
- * and is never bundled either way. A real link rather than only a console
- * message, so reaching it never requires typing the URL by hand.
- *
- * Fixed bottom-left: the tuning toggle already owns bottom-right
- * (`tuning-window.ts`), and every screen-space HUD element the game itself
- * draws — health, Promille, wallet, minimap — lives top-left/top-right
- * *inside* the Pixi canvas, not in the DOM, so bottom-left is the one corner
- * nothing else is using.
- */
-function mountRoomEditorLink(): void {
-  if (!import.meta.env.DEV) {
-    return;
-  }
-  const style = document.createElement('style');
-  style.textContent = `
-.kb-room-editor-link {
-  position: fixed; left: 12px; bottom: 12px; z-index: 30;
-  font: 12px/1.4 ui-monospace, monospace; color: #d8cfc4;
-  background: #1b1622; border: 1px solid #3d3348; border-radius: 4px;
-  padding: 6px 10px; text-decoration: none;
-}
-.kb-room-editor-link:hover { background: #241d2e; }
-`;
-  document.head.appendChild(style);
-
-  const link = document.createElement('a');
-  link.className = 'kb-room-editor-link';
-  link.href = '/editor.html';
-  link.target = '_blank';
-  link.rel = 'noopener';
-  link.textContent = 'room editor';
-  document.body.appendChild(link);
 }
 
 void boot().catch((error: unknown) => {

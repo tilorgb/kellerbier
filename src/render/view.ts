@@ -1,5 +1,5 @@
 import { Container, Sprite, type Graphics, type Texture } from 'pixi.js';
-import { ROOM_TRANSITION_TICKS, type GameSim } from '../sim/game/sim.js';
+import { PLAYER_RADIUS, ROOM_TRANSITION_TICKS, type GameSim } from '../sim/game/sim.js';
 import { roomFrameSize, type RoomGeometry } from '../sim/room/geometry.js';
 import { PLAYFIELD_HEIGHT, PLAYFIELD_WIDTH } from '../sim/room/playground.js';
 import type { CompiledDoor } from '../sim/room/template.js';
@@ -17,10 +17,11 @@ import { INTERNAL_HEIGHT, INTERNAL_WIDTH, WORLD_ZOOM } from './resolution.js';
  * Where the player sprite's anchor sits in its texture.
  *
  * Measured off the art rather than assumed: the opaque pixels of `mass.png`
- * span x 2-12 and y 1-14 of a 16x16 texture, so the mug's centre is (7.5, 8).
+ * span x 1-15 and y 3-30 of a 16x32 texture (#25's raised character ceiling,
+ * #108's detailed redraw), so the mug's centre is (8, 16.5).
  */
-const PLAYER_ANCHOR_X = 7.5 / 16;
-const PLAYER_ANCHOR_Y = 8 / 16;
+const PLAYER_ANCHOR_X = 8 / 16;
+const PLAYER_ANCHOR_Y = 16.5 / 32;
 
 export interface GameViewTextures {
   readonly player: Texture;
@@ -153,12 +154,22 @@ export class GameView {
     this.world.addChild(this.pedestals.container);
 
     this.player = new Sprite(textures.player);
-    // Not 0.5. The mug is drawn across columns 2-12 of a 16px texture, so its
-    // centre is at 7.5 and a centred anchor hangs the art half a pixel left of
-    // the body it belongs to. Half a pixel was invisible before the room was
-    // zoomed; at 2x it is a whole screen pixel of the collider poking out on
-    // one side and a gap on the other.
+    // The mug's opaque pixels span y 3-30 of a 32-tall texture, so its
+    // vertical centre (16.5) is not the texture's own midpoint (16) — a
+    // centred anchor would hang the art off-centre from the body it belongs
+    // to. A fraction of a pixel was invisible before the room was zoomed; at
+    // 2x it is a whole screen pixel of the collider poking out on one side
+    // and a gap on the other.
     this.player.anchor.set(PLAYER_ANCHOR_X, PLAYER_ANCHOR_Y);
+    // Scaled to the player's own collider, exactly like `EntityView` scales
+    // every enemy body to its radius — not left at native texture size. Pixel
+    // density and on-screen size are different questions: art authored at a
+    // higher resolution for more visible detail (#25, #108's player redraw)
+    // must not, by itself, change how big the player reads in the room.
+    // Without this the two stayed accidentally coupled through the texture's
+    // raw pixel height, so redrawing the same-size character denser silently
+    // grew it on screen instead of just sharpening it.
+    this.player.scale.set(PLAYER_RADIUS / (textures.player.height / 2));
     this.world.addChild(this.player);
 
     this.projectiles = new ProjectileView(sim.projectiles, textures.projectile);

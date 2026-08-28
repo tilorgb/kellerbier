@@ -1046,3 +1046,460 @@ breaking open Die Abfüllanlage's dosing hopper, and never explained.
   no content — the player is still `render/placeholder-art.ts`'s generated shape — so the rename
   costs five markdown files now. #151 (the player character's art and animation) is where it
   starts costing sprites, and it is the last cheap moment to have done this.
+## 25. Pixel art is authored in a custom in-browser tool, not an off-the-shelf editor plus a lint pass
+
+**Decided:** M6, issue #108, weighed against #34's art pipeline and #24's "build the tool before
+the content" precedent (room editor).
+
+#108 posed this as a real build-vs-buy question: Aseprite or Piskel already draw pixels well, and
+palette/size/legibility enforcement could instead be a lint pass run over files authored anywhere.
+That would have been the right call if enforcement were the expensive part. It is not, because #34
+already built it — `tools/art/spec.mjs`, `palette.mjs`, `validate.mjs` and `contrast.mjs` are pure
+functions with no filesystem or Node dependency, written expressly so a build step and a test
+suite could both call them without duplicating logic. A custom tool does not re-implement
+palette/size/legibility checking; it imports those same four modules straight into the browser
+bundle and calls them live, on every keystroke, instead of after a save. That turns #34's
+after-the-fact build failure into something stronger: a canvas that is *fixed* at each category's
+maximum size (`CATEGORY_SPECS`), so an out-of-spec sprite cannot be drawn in the first place rather
+than merely rejected, and a palette swatch strip sourced from `allowedColorsFor(bucketId)` that is
+the *only* colour a pen tool can lay down — there is no off-palette pixel to lint for after the
+fact, because the picker never offers one. A lint pass over files from an arbitrary editor cannot
+make either guarantee; it can only catch the mistake later, the same way #34 already does for
+anything authored outside this tool.
+
+The precedent from #24 (room editor) generalises directly: this project already treats "the tool
+that authors the content" as its own build-before-content deliverable, with a working pattern for
+it — a small Vite dev-server plugin exposing one save endpoint, a browser SPA next to it, dev-only
+by construction because `configureServer` middleware never runs under a production build. The
+pixel-art tool (`pixel-editor.html`, `src/pixel-editor/`, `tools/pixel-editor/server.mjs`) is a
+second instance of exactly that shape, not a new one.
+
+**Constrains:** the tool's client bundle may only import the dependency-free modules under
+`tools/art/` (`spec.mjs`, `palette.mjs`, `validate.mjs`, `contrast.mjs`); `png.mjs`
+(a `pngjs`/Node dependency) and file-writing stay server-side, in the dev-plugin's save endpoint,
+the same split `build.mjs` already draws between decoding and validation. Adding a sprite category
+or changing a floor's palette means editing `tools/art/spec.mjs`/`palette.mjs` once, and both the
+build pipeline and the authoring tool pick it up — there is deliberately nowhere else those
+numbers are allowed to live.
+
+## 26. `character` and `boss` sprite ceilings are raised — 16-bit is a colour/shading era, not a pixel-dimension rule
+
+**Decided:** M6, prompted by using the pixel editor (#108) for real and asking "how is 16×16
+'16-bit style'?" against reference art from the actual game `docs/CONTENT_BIBLE.md` §5 names as
+its touchstone.
+
+The bible's "16-bit era, not 8-bit" line was read, when the original `tools/art/spec.mjs` ceilings
+were set, as a pixel-dimension budget — `character` capped at 16 tall, `boss` at 48×48. It is not:
+"16-bit" describes a console generation's colour depth and shading complexity, not a tile size.
+That generation's actual character sprites are composited from several tiles and run well past
+16px tall; a single-tile ceiling under-shoots the density the bible's own reference actually has.
+`tile` staying exactly 16×16 was never the problem — a background tile is a repeating unit, not
+where detail lives — the ceiling that mattered was on the sprites meant to carry it.
+
+Raised via `tools/art/spec.mjs`'s `CATEGORY_SPECS`:
+
+- `character`: `maxHeight` 16 → 32 (`minHeight` stays 16, `maxWidth`/`minWidth` unchanged at
+  8/16). The floor, not the ceiling, moved to keep every already-committed floor-1/2 character
+  sprite — authored at 16 tall — legal; only new content reaches for the extra height.
+- `boss`: `maxWidth`/`maxHeight` 48 → 160 (`minWidth`/`minHeight` unchanged at 17). No boss art
+  exists yet, so there was nothing to invalidate. 160 authored is 320 on screen
+  (`WORLD_ZOOM` = 2) against a 180-tall playfield (`src/sim/room/playground.ts`'s
+  `PLAYFIELD_HEIGHT`) — deliberately close to filling it, on the reasoning that a boss is the one
+  sprite category meant to dominate the screen rather than share it.
+
+`projectile` and `tile` are untouched: a tile's whole job is to repeat identically and unnoticed,
+and a projectile's legibility rule (`docs/CONTENT_BIBLE.md` §5) already caps it at something
+tile-scale or smaller on its own terms.
+
+**Constrains:** `src/pixel-editor/size-presets.ts`'s curated tiers are the numbers actually used
+day to day and must stay inside these ranges — checked by
+`tests/unit/pixel-editor-size-presets.test.ts` against `CATEGORY_SPECS` directly rather than by
+eye, so a future spec change here is caught rather than silently leaving a preset out of range in
+either direction.
+
+## 27. Sprite pixel density is decoupled from on-screen size, and `character` width is no longer capped shorter than height
+
+**Decided:** M6, immediately after #26, while actually redrawing the player sprite (#108's
+proof-of-concept) at the new 32-tall ceiling.
+
+Two related mistakes surfaced from doing that redraw for real rather than just raising the spec
+number:
+
+- **The player sprite rendered twice as tall on screen the moment it was redrawn at 32px instead
+  of 16.** `EntityView` (`src/render/entities.ts`) already scales every enemy body to its own
+  collider radius (`sprite.scale.set(radius / (referenceHeight / 2))`), so a denser enemy texture
+  was always going to render at the same on-screen size — more texture pixels per world unit, not
+  a bigger sprite. `GameView`'s player sprite (`src/render/view.ts`) had no such scale at all: it
+  drew `textures.player` at native size, one texture pixel per world unit. That coupling was
+  invisible for as long as every character sprite happened to be 16 tall, and broke the instant
+  one wasn't — exactly the failure mode #26 raised the ceiling to invite. Fixed by giving the
+  player the same collider-relative scale enemies already get:
+  `this.player.scale.set(PLAYER_RADIUS / (textures.player.height / 2))` (`PLAYER_RADIUS` from
+  `sim/game/sim.ts`). Pixel density and on-screen size are different questions; #26 answered "how
+  much detail can art carry," and this is what actually keeps that answer from also silently
+  answering "how big is the player."
+- **`character.maxWidth` stayed at 16 while `maxHeight` went to 32**, which bakes in an assumption
+  the bible never actually makes: that a character silhouette is always taller than it is wide. A
+  stout body, a wide-bellied enemy, anything that reads better wide than tall was left with a third
+  of the canvas height had. Raised to 32, matching the height ceiling (`tools/art/spec.mjs`).
+
+That second fix would have been cosmetic on its own — the pixel editor's "size" control
+(`src/pixel-editor/size-presets.ts`) offered exactly five named tiers per category, each a fixed
+`(width, height)` pair walking width and height up together, so even with a wider `CATEGORY_SPECS`
+range there was still no way to actually pick a wide-and-short canvas. The named tiers stay, as a
+one-click starting point (and the only thing `tests/unit/pixel-editor-size-presets.test.ts` checks
+against `CATEGORY_SPECS`), but `PixelEditorState`'s canvas size is no longer tied to picking one of
+them: "New" now takes an explicit width and height (`state.reset(bucketId, category, width,
+height)`), editable as two independent number fields clamped live to `CATEGORY_SPECS`'
+`isWithinCategorySpec`, so any legal combination — not just the five the tiers happen to name — is
+reachable.
+
+**Constrains:** any future per-category size ceiling change only has to stay internally consistent
+in `tools/art/spec.mjs`; it no longer needs a matching hand-picked tier in `size-presets.ts` to
+actually be reachable in the tool. Any new sprite category added later that scales art to a
+gameplay quantity (a collider, a hitbox) the way the player and every enemy do must scale by that
+quantity, not draw its texture at native size — this decision is the second time that assumption
+broke silently, and the fix is the same both times.
+
+## 28. The pixel editor gets a shading brush, backed by a derived shade ramp rather than a free colour picker
+
+**Decided:** M6, immediately after #27, once the player redraw (#108) demonstrated that layered
+shading (a foam highlight, a glass condensation glint, a darker base) is what actually makes the
+higher-resolution art from #26 read as detailed rather than just bigger — and hand-authoring that
+shading pixel by pixel from `tools/art/palette.mjs`'s five hand-picked hues per floor is slow and
+easy to get wrong (see this session's own three attempts at the player sprite).
+
+The palette (`FLOOR_PALETTES`) is five deliberately chosen hues per floor, not five ramps — there
+is no recorded "lighter" or "darker" neighbour for `cellar`'s one amber, so a brush that wants to
+paint "amber, but a bit brighter" has nothing to reach for. Two options: hand-author a ramp per
+colour (more numbers to keep in sync with `FLOOR_PALETTES`, and another thing `docs/CONTENT_BIBLE.md`
+§5's "~40 colours overall" cap would need to account for by hand), or derive one deterministically.
+Derived won: `shadeOf(color, step)` shifts a colour's HSL lightness by a fixed amount per step and
+converts back, `shadeRampOf(color)` is the five tones (two darker, the original, two lighter) that
+produces, and both are pure functions of the existing palette — nothing to author, nothing to keep
+in sync, and (unlike a free lightness slider) a *finite* set of outputs, which matters for the
+reason below.
+
+`docs/DECISIONS.md` #25 fixed the pen tool's palette to a finite, checked set specifically so there
+is no off-palette pixel to catch after the fact — a shading brush that could nudge lightness by any
+continuous amount would reopen exactly that hole. `legalPixelColorsFor(bucketId)` is
+`allowedColorsFor(bucketId)` plus every one of those colours' derived ramps — still finite, still
+fully determined by `FLOOR_PALETTES`, just five times bigger — and is what `tools/art/build.mjs`
+and the pixel editor's own save endpoint (`tools/pixel-editor/server.mjs`) now check a saved sprite
+against, in place of the narrower `allowedColorsFor`. `allowedColorsFor` itself is unchanged and
+still what the palette panel's swatches and a fresh sprite's default colour draw from — the pen
+still only ever hands `state.selectedColor` one of the five-per-floor hand-picked hues; only the
+shading brush's *output* reaches into the derived tones.
+
+The brush itself (`PixelEditorState.shadeArea`, wired from `canvas.ts`'s pointer handlers) reads
+each already-opaque pixel under a circular brush, and for each one independently rolls whether it
+moves at all (`SHADE_HIT_CHANCE`, so a drag does not instantly saturate the whole brush to one flat
+tone) and, if so, which direction (`palette.mjs`'s `nudgeShade`, clamped at the ramp's ends).
+Independent per-pixel randomness — not "the whole brushed area moves the same direction" — is the
+actual shading effect: a mix of nudged-lighter and nudged-darker pixels reads as texture/shading,
+a uniform shift just reads as a flat recolour. Transparent pixels are skipped outright: shading
+works on art that is already there, it does not fill blank canvas the way the pen does.
+
+**Constrains:** any new sprite category or floor palette change is automatically shade-able with no
+extra work — `legalPixelColorsFor` derives from whatever `FLOOR_PALETTES`/`allowedColorsFor`
+already says. A future change to how many steps a ramp has, or how big a lightness step is, only
+needs to change `palette.mjs`'s `SHADE_STEPS`/`SHADE_LIGHTNESS_STEP` — `shadeRampOf`'s length and
+`legalPixelColorsFor`'s size follow automatically, checked by `tests/art/palette.test.ts`.
+
+## 29. The pixel canvas fits its actual host, not a fixed pixel target, and click-to-pick resolves through the same live-preview wiring rather than a second "apply" mechanism
+
+**Decided:** M6, issue #108, once the docked editor (#108's split-view follow-up) was actually used
+narrow rather than only measured in its own full-width tab.
+
+`canvas.ts`'s zoom (#26's `zoomFor`) targeted a fixed 512 CSS px regardless of how much room was
+actually available. That is exactly the docked panel's own footprint at its default width, so a
+512px-wide canvas plus 12px of wrap padding on each side either forced the whole page to scroll
+horizontally or sat mostly out of view — and either way pushed every panel below it (Save, Palette,
+Frames, **Browse sprites**) far enough down the page that loading an existing sprite read as broken
+rather than merely buried. Two independent fixes, not one:
+
+- **The fit zoom is now measured, not assumed.** `fitZoom(width, height, availableWidth,
+  availableHeight)` takes the smaller of `.kb-pixel-left`'s actual `clientWidth` (a `ResizeObserver`
+  on it, recomputed on every resize — the split view's divider drag changes that width without ever
+  firing a window `resize` event) and a fraction of `window.innerHeight`, so the whole sprite is
+  visible without scrolling in a full tab and in a docked panel dragged down to `MIN_PANEL_WIDTH`
+  alike. This only measures anything because `.kb-pixel-left` also had to change from `flex: 0 0
+  auto` (sized to its own content — the canvas — which is circular) to `flex: 1 1 auto` (sized by
+  the layout, the same way `.kb-pixel-right` already was).
+- **Browse sprites moved to the top of the right column.** Even a correctly-fitted canvas is still
+  the visually dominant element on the page; "load something that already exists" is at least as
+  common a first action as "start drawing", and burying its panel last, below Palette/Background/
+  Frames/Legibility, cost more scrolling than the load feature's own actual complexity justified.
+
+Wheel zoom (`onWheel`) rides on top of the fit zoom as a separate multiplier (`zoomMultiplier`,
+reset to 1 whenever the sprite's own width/height change) rather than replacing it — the fit zoom
+is what answers "show me the whole sprite," the wheel is what answers "let me get in close on one
+corner of a 160×160 boss," and conflating them would mean either losing the guaranteed-visible
+default or losing the ability to zoom past it. Zooming re-centres on the cursor's own position
+(tracked in `wrap.scroll{Left,Top}` terms before and after the zoom change) rather than the
+canvas's top-left corner, since the point being zoomed in on is usually not the origin.
+
+Separately, `app/main.ts`'s click-to-pick (the last piece of #108's "click a sprite in-game to edit
+it" request) turned out to need no new synchronization mechanism at all. A click on the game canvas,
+while the Sprites editor is docked, resolves to a `(bucketId, category, name)` via `app/sprite-pick.ts`
+(checking `pickEnemyAt` before `pickTileNameAt`, since a visible enemy standing on a floor tile
+should win) and posts it to the iframe as `kb-pixel-editor:pick`; the pixel editor loads it through
+the exact same `loadSpriteInto` the browse panel's own Load buttons use. From there,
+`live-preview-client.ts` (#108's original live-preview wiring) already posts every edit to the
+parent on its own, and `attachLiveArtPreviewListener` already applies a matching name's texture
+live — so a picked, then edited, sprite is visible in the running game with no explicit "Apply"
+step, unlike the room editor's. The room editor needs one because a room template's *shape* can
+diverge from the live room's compiled state in ways that have to be reconciled before pushing;
+a sprite's pixels have no such draft/live split to reconcile — the picture the editor is drawing
+*is* the picture, at every intermediate stroke, not a design to compile and check first.
+
+**Constrains:** any future editor panel that reads "how much room do I actually have" should reach
+for the same measured-`ResizeObserver`-plus-`window.innerHeight`-fraction shape rather than a fixed
+pixel target, the same way `render/app.ts`'s `trackWindowSize` already does for the game canvas
+itself — a fixed target is only ever right by accident, for whichever one screen size it was tuned
+against. A future "pick this thing from the running game" entry point should default to routing
+through whatever load path already exists (as this did) rather than inventing a parallel one, and
+should only reach for an explicit apply/sync step if there is a genuine draft/live divergence to
+reconcile — not merely because the room editor's version of "load something into an editor" happens
+to have one.
+
+## 30. Browsing and loading existing sprites is a build-time `import.meta.glob` scan, not a dev-server route
+
+**Decided:** M6, issue #108, found by actually clicking Load on the CI-published preview build.
+
+#29 fixed the pixel canvas's *layout* so a docked, narrow panel could actually reach the Browse
+sprites panel — but Browse and Load themselves still failed outright on that preview: every entry
+came back "Could not load", and the panel itself listed nothing. The cause predates #29 entirely.
+`tools/pixel-editor/server.mjs`'s `GET /sprites` and `GET /sprites/:bucket/:category/:name` only
+ever exist under `configureServer`, which Vite only runs for `vite dev` — a CI-published preview is
+`vite build` output served as plain static files with no server behind it at all, so every browse/
+load `fetch()` 404'd. `saveSprite` already had a production fallback (`dev-ui/file-export.ts`'s save
+dialog) precisely because writing a file has no other way to happen without a server; browsing and
+loading were never given the equivalent thought, because they were built and always exercised
+against a running dev server, where the gap does not exist to see.
+
+Loading has an option saving does not: reading files that already exist can be answered entirely at
+*build* time rather than *request* time, since Vite already knows the full file list before either a
+dev server or a static build exists. `import.meta.glob('../../assets/sprites/**/*.png', { eager:
+true, query: '?url', import: 'default' })` (`src/pixel-editor/static-sprite-index.ts`) resolves
+every sprite PNG's URL at bundle time, in dev and in a production build alike — small sprites end up
+inlined as `data:` URLs by Vite's own default asset handling, larger ones as hashed files, and
+either way `fetch(url)` on the result works the same, decoded into raw pixels via
+`createImageBitmap` and a throwaway `<canvas>` (the mirror image of `api-client.ts`'s existing
+`frameToPngBlob`, which already goes canvas-to-PNG for the same no-server reason). The path string
+itself is parsed the same way `tools/art/scan.mjs`'s `scanSprites` already reads the directory
+convention (`<bucket>/<category-folder>/<name>[.strip].png`, an animated strip's frame count/timing
+from a matching `.anim.json` sidecar, also read via `import.meta.glob`) — a second reading of the
+same convention, not a divergent one.
+
+This replaces `listSprites`/`loadSprite` everywhere, not just outside dev: the server's `GET` routes
+were doing nothing the static scan cannot also do inside `vite dev` (a full page reload already
+follows every save, per `main.ts`'s `SNAPSHOT_KEY` comment, so a freshly-saved file is on the glob's
+next scan the moment the reload it already causes lands), so keeping two implementations of the same
+read path around would only be a second place for this exact gap to reopen. `tools/pixel-editor/
+server.mjs` now serves only `POST` — the one operation a static build is structurally unable to do
+for itself.
+
+**Constrains:** any future "list/load something that's already a static asset" feature should reach
+for the same `import.meta.glob`-at-build-time shape rather than a dev-server route guarded by an
+`import.meta.env.DEV` fallback — the fallback pattern is correct for genuine writes (`saveSprite`
+still needs one), and a trap for reads, which have no reason to depend on a server being there at
+all. Adding a sprite category or bucket needs no change here: the glob pattern and the path-parsing
+regex both key off `CATEGORY_FOLDERS`/the directory itself, not an enumerated list.
+
+## 31. Click-to-pick pads its hit-test well past the physics collider, because the two are answering different questions
+
+**Decided:** M6, issue #108, found by actually clicking on enemies rather than only on their exact
+simulated centre.
+
+`app/sprite-pick.ts`'s `pickEnemyAt` originally hit-tested against an enemy's real collider radius
+(`sim/enemy/size.ts`'s `ENEMY_PROFILES` — 4 to 10 world units), on the reasoning that it was reading
+the same data the sim's own hit-test reads. That reasoning does not transfer: a collider radius is
+tuned for combat feel, not for a mouse, and `EntityView`'s uniform `radius / (referenceHeight / 2)`
+scale means the *visible* sprite is a `2*radius` square around that circle — so even a pixel-perfect
+click on a visible corner of the sprite already misses the inscribed circle, before accounting for a
+real click never landing exactly on a collider's centre at all. In practice this made the feature
+read as "always resolves to the floor tile," since `pickTileNameAt` is checked second and, on floor 1
+(one tile variant today), returns the same name regardless of where the miss landed.
+
+Padded the enemy pick radius by `PICK_RADIUS_MULTIPLIER` (2.5×) rather than reusing the raw collider
+— a UI affordance for "click the thing you can see" is a different question from "did this hurt the
+player," and answering it with the same number was the actual bug, not a rounding error to tune away.
+
+**Constrains:** any future click-target hit-test built from gameplay collision data (not just this
+one) should ask whether it is answering "what does this look like to click on" or "what does this
+collide with" before reusing gameplay geometry directly — the two only coincidentally share a value
+when a sprite happens to be drawn exactly at its collider's size, which nothing here guarantees.
+
+## 32. The room editor's grid tools are dropdowns wherever the value is one of a small known set, and Erase clears every marker kind, not just rectangles
+
+**Decided:** M6, issue #24's follow-up, found by actually using the enemy/hazard/prop tools rather
+than only the wall/erase pair they were built and tested against first.
+
+Three separate gaps, one root cause — a tool's toolbar option was built to store *whatever a author
+already knew to type*, not to teach them what to type:
+
+- **Enemy spawn** placed a marker bound to `cell.spawnGroups[0]`'s id with no way to choose an enemy
+  at all, and `window.alert`ed "add a spawn group first" if none existed yet — which reads as "this
+  tool does nothing" the first time anyone reaches for it, since nothing on the grid or its toolbar
+  hints that a *different* panel (`panels/spawn-groups.ts`) is where the actual enemy gets chosen.
+  Fixed with an enemy `<select>` right on the toolbar (mirroring `pickup`'s own already-correct
+  pattern) and `findOrCreateSimpleSpawnGroup`, which reuses or creates a plain one-choice,
+  every-floor group for whichever enemy is selected — the Spawn groups panel is still where a
+  multi-choice, floor-varying group gets hand-authored, this is only the fast path for the ordinary
+  "this enemy, here" case that a locked single enemy id could never express in the first place. The
+  spawn marker's tooltip now shows the resolved enemy id (`enemyLabelFor`) instead of the group id, for
+  the same "read what you actually placed" reason.
+- **Hazard** had a bare text input with no suggestions wired in at all — `definitions.ts` already
+  defined `HAZARD_TYPE_SUGGESTIONS`, just never imported here. **Prop** had a `<datalist>` combo box,
+  which technically listed its own suggestions but reads, in practice, as an empty text field with no
+  visible hint that typing shows a dropdown. Both became explicit `<select>` dropdowns via one shared
+  `createTypePicker` helper, with a trailing "Custom…" option that reveals a plain text input —
+  keeping the "still accepts free text" property `definitions.ts`'s own doc comment calls out
+  (neither field has a real registry `sim/room/template.ts` enforces), just opt-in instead of hidden.
+- **Erase** only ever filtered `obstacles`/`hazards` (the two rectangle-shaped lists) — an enemy
+  spawn, pickup or decorative prop placed by mistake had no way to be removed at all, which read as
+  "erase doesn't work" to anyone whose stray click happened to be one of those instead of a wall.
+  Extended to filter `enemySpawns`/`pickupSpawns`/`decorativeProps` too, by the same point-inside-
+  drag-rectangle test the marker-placement tools already use to place them.
+
+**Constrains:** a new grid tool whose option is one of a small, known set (not truly free-form data)
+should default to `createTypePicker`'s select-plus-custom-escape-hatch shape rather than a bare text
+input — a text field with no visible list of legal values is, from a first-time author's side,
+indistinguishable from a tool that silently does nothing. A new marker kind (a point placed on the
+grid, the way enemy/pickup/prop are) needs its own branch in Erase's filter set the moment it exists,
+not as a follow-up once someone reports the marker they placed by mistake is stuck there forever.
+
+## 33. A `<canvas>`'s bitmap is only ever resized when the sprite's own dimensions actually change, never on every zoom/host resize
+
+**Decided:** M6, issue #108's follow-up, found by actually zooming a sprite that already had pixels
+drawn on it.
+
+`canvas.ts`'s `sizeCanvases` set `canvas.width`/`canvas.height` unconditionally on every call,
+including from the +/- zoom buttons and the host `ResizeObserver` — both of which only ever need to
+change the canvas's *CSS display size*, not its bitmap. Setting a `<canvas>` element's `width` or
+`height` property clears its drawn content immediately, per spec, even when set to the value it
+already had. The zoom buttons called `sizeCanvases` directly rather than `render()`, so every zoom
+click wiped the visible drawing until the next paint stroke's own `render()` call redrew it from
+`state.activeFrame` — which reads, to anyone zooming a sprite they were partway through drawing, as
+"the sprite disappeared." Fixed by only touching `.width`/`.height` when `state.width`/`state.height`
+themselves changed (a resize, a load, a reset), and leaving the CSS `style.width`/`style.height` (set
+every call regardless) as the only thing a pure zoom or host-resize ever touches.
+
+Two related fixes landed alongside it, once the canvas was actually being zoomed and dragged rather
+than only measured:
+
+- **A max-height on `.kb-pixel-canvas-wrap`** (`55vh`, matching `canvas.ts`'s own
+  `FIT_HEIGHT_FRACTION`) — without one, the wrap simply grew to fit a zoomed-in canvas instead of
+  ever overflowing vertically, so `overflow: auto` only ever produced a horizontal scrollbar no
+  matter how tall the zoomed content got.
+- **Right-button drag pans the wrap** rather than requiring the scrollbars themselves, which become
+  a thin, fiddly target the moment a sprite is zoomed in past the visible area. The pen/eraser/shade
+  tools have no use for a right click or a context menu (already suppressed), so the button was free
+  to repurpose; left-button painting is now explicitly gated to `event.button === 0` so a right-click
+  drag can never also paint.
+
+**Constrains:** any future code that resizes this canvas (or a similar one) must not assign
+`.width`/`.height` unless the pixel dimensions genuinely changed — reaching for the "just resize it,
+it's idempotent" instinct silently reintroduces this bug, because the browser does not treat a
+same-value assignment as a no-op the way it would for almost any other DOM property.
+
+## 34. The pixel editor's canvas size is an in-place, content-preserving operation, distinct from starting a fresh sprite
+
+**Decided:** M6, issue #108's follow-up — a direct request to be able to change a sprite's size
+*while editing it*, not only when starting one.
+
+"New" already read `widthInput`/`heightInput` to start a blank canvas at a chosen size, but there was
+no way to change an *already-drawn* sprite's dimensions without discarding it first — loading an
+existing sprite for a resize meant redrawing from scratch at the new size by hand. Added
+`PixelEditorState.resizeCanvas(width, height)`: top-left anchored, so every existing pixel keeps
+its exact position; growing brings in blank (transparent) area on the new right/bottom edge, and
+shrinking silently crops whatever pixels no longer fit — a deliberate, not incidental, choice: a
+canvas that is a strict superset or subset of its old bounds at (0, 0) is the one resize semantics
+that never has to guess where old content should move to. A separate "Resize" button next to "New"
+reads the same width/height fields "New" does — the two answer different questions ("start over at
+this size" vs. "this sprite is the wrong size") and needed two different one-click actions rather
+than folding resize into New behind a confirm dialog, or silently changing what New's own confirm
+already means.
+
+Fixing this also surfaced a real, independent bug in the browse panel's Load: `categorySelect`
+changed to the loaded sprite's real category, but nothing repopulated `presetSelect` (or
+`widthInput`/`heightInput`) to match — a "tile" sprite loaded first left the preset dropdown frozen
+on tile's one 16×16 entry even after loading a "character", with no way to pick another size at all.
+`loadSpriteInto` now repopulates the preset list and bounds for the loaded category and sets the
+width/height fields to the sprite's own real size (not a preset guess) — what "Resize" and a
+would-be re-save both actually read afterward.
+
+**Constrains:** any future control that shows "the current sprite's size" (or feeds one back into an
+editable field) must be refreshed by every code path that can change `state.category`/`state.width`/
+`state.height` — `New`, `Resize`, and loading a sprite all need to agree, and a preset list or bound
+left over from a previous category is exactly the kind of bug that only shows up once a real sprite
+of a different category is actually loaded, not from reading the code in isolation.
+
+## 35. The size-preset dropdown reflects the sprite's actual current size honestly, including "none of these"
+
+**Decided:** M6, issue #108's follow-up, found by actually resizing a loaded sprite twice in a row.
+
+#34 fixed the preset dropdown showing a category's *previous* selection after loading a sprite of a
+different category, but left a subtler version of the same class of bug: after loading, the dropdown
+was always forced to `DEFAULT_SIZE_PRESET_ID` ("Normal"), regardless of whether the loaded sprite's
+actual size matched it. Most authored art predates the named tiers entirely — every floor-1/2
+character sprite is a legacy 16×16, which is not `character`'s "Normal" (12×24) or any of its other
+four. Loading one and seeing "Normal" selected reads as "this is what my sprite currently is," which
+is simply false — and the concrete failure it causes: pick "Big," resize, then pick "Normal" again
+expecting to *revert* to the sprite's original size, and get 12×24 instead of the 16×16 it actually
+started at, with no warning that "Normal" was never that in the first place.
+
+Added `presetIdForSize(category, width, height)` (`size-presets.ts`) — the preset whose dimensions
+exactly match, or `null` — and a `CUSTOM_SIZE_OPTION` sentinel in the dropdown's own option list that
+`syncPresetToSize` selects whenever nothing matches. Called after every operation that can change the
+sprite's actual size (load, New, Resize) rather than only at load time, so the dropdown's claim is
+never stale relative to whatever the width/height fields and the canvas itself currently say.
+
+**Constrains:** a derived/summary UI control (this dropdown, or anything like it — a "this matches
+preset X" indicator, a status computed from other state) must be resynced by *every* code path that
+can change the state it summarizes, not only the one path that happened to be modified first —
+`syncPresetToSize` needed three call sites, not one, precisely because three different actions can
+each independently make the previous "matches this preset" answer wrong.
+
+## 36. The whole floor-1/2 enemy roster is redrawn off the 16×16 floor, not kept there as grandfathered content
+
+**Decided:** M6, issue #108's follow-up. **Supersedes** #25/#26's framing of the pre-existing 16×16
+roster as legal-and-untouched — for this specific content, not the general principle.
+
+#25/#26 raised `character`'s size ceiling but deliberately left the floor at 16 tall specifically so
+the entire already-authored floor-1/2 roster (13 sprites) stayed legal without being touched — "only
+new content reaches for the extra height." That framing did not survive contact with the pixel
+editor's own size-preset dropdown (#35): every one of those 13 sprites is a legacy 16×16 that matches
+none of the five named tiers, so loading any of them showed "Custom," and this project does not want
+to ship its first version with its own entire enemy roster in that state. The decision this session
+made once that was seen clearly: redraw the roster now rather than defer it, and given that choice,
+size each sprite to its own actual shape (`presetIdForSize`'s tiers are convenience defaults, not a
+mandate that every character be tall-and-narrow) rather than force all 13 into one uniform tier a
+woodlouse and a tractor have no business sharing.
+
+Thirteen redraws, evolved from the original silhouette rather than invented fresh — each keeps the
+original's recognizable shape (Kellerassel's segmented dome, Rollfass's stave-and-hoop barrel,
+Bauer's overalls-and-pitchfork) at meaningfully more resolution, with real shading via
+`palette.mjs`'s `shadeOf` (the same derivation #28's shading brush uses) rather than the originals'
+flat 2-3-colour fills. Sizes, chosen per creature rather than uniformly: Kellerassel 24×16, Bierratte
+20×16, Schimmelfleck 22×18, Schimmelspore 18×16, Zapfhahn 16×28, Rollfass 22×26, Fasssplitter 14×20,
+Bauer 16×28, Kuh 32×20, Gockel 18×22, Gartenzwerg 16×22, Blaskapellist 26×24, Traktor 32×22 — every
+one checked against `tools/art/validate.mjs`'s size and palette rules before being committed, the
+same gate a save through the pixel editor itself would have to pass.
+
+Two designs (Zapfhahn, a wall-mounted tap; Blaskapellist, a tuba player) took three drafting passes
+each before they read as the thing they are supposed to be rather than, respectively, a robot arm and
+an abstract ring — kept as a live example of the same lesson #108's player-sprite redraw already
+recorded: a first procedural pass is a sketch, not a result, and the fix is redrawing it properly
+rather than shipping the sketch. One real bug surfaced and was caught by validation rather than by
+eye: an early draft of Traktor's tires and exhaust used `cellar`'s dark grey instead of a shared
+neutral, which `findOffPalettePixel` flagged immediately — floor-2-rural has no standing to borrow a
+colour that belongs to floor-1-cellar's own five.
+
+**Constrains:** the next floor's roster (3-7, still parked per #22) starts from a blank slate with
+these presets and this shading technique already established, rather than needing its own version of
+this redraw later — there is no more legacy 16×16 art left to carry forward. Any future sprite work
+should run `findOffPalettePixel`/`validateSpriteSize` (or the pixel editor's own save path, which
+calls the same functions) before presenting candidates, not just before committing — it catches a
+bucket/palette mismatch a design review by eye can miss entirely.

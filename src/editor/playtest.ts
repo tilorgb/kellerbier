@@ -140,7 +140,7 @@ export async function createPlaytest(
   app.stage.addChild(game);
 
   let layout = computeGameLayout(window.innerWidth, window.innerHeight, window.devicePixelRatio);
-  const stopTrackingWindowSize = trackWindowSize(app, game, (applied) => {
+  const stopTrackingWindowSize = trackWindowSize(app, game, overlay, (applied) => {
     layout = applied;
   });
 

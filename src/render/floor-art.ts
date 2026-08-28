@@ -32,7 +32,46 @@ import traktorUrl from '../../assets/sprites/floor-2-rural/characters/traktor.pn
 export interface FloorArt {
   readonly floorTiles: Readonly<Record<number, readonly Texture[]>>;
   readonly enemyArt: Readonly<Record<string, Texture>>;
+  /**
+   * The same tile `Texture`s as `floorTiles`, keyed by sprite name
+   * (`cellar-floor`, `rural-floor-2`, ...) instead of floor number — for
+   * `app/live-art-preview.ts` (#108), which needs to find "the texture for
+   * this named sprite" without knowing `pickTileVariant`'s per-floor
+   * ordering. Same `Texture` objects, not copies: mutating one through this
+   * map is mutating the one `floorTiles`/`RoomView` already draws with.
+   */
+  readonly tileTextures: Readonly<Record<string, Texture>>;
+  /**
+   * `(bucketId, category)` for every name in `enemyArt`/`tileTextures` —
+   * `app/main.ts`'s click-to-pick (#108) needs this to hand the pixel
+   * editor a full `(bucketId, category, name)` target, not just the name a
+   * click resolved to.
+   */
+  readonly spriteOrigins: Readonly<
+    Record<string, { bucketId: string; category: 'character' | 'tile' }>
+  >;
+  /** `floorTiles[floor]`'s texture order, by name instead of `Texture` — `render/room.ts`'s `pickTileVariant` returns an index into this same order. */
+  readonly tileVariantNames: Readonly<Record<number, readonly string[]>>;
 }
+
+const CELLAR_ENEMY_IDS = [
+  'kellerassel',
+  'bierratte',
+  'schimmelfleck',
+  'schimmelspore',
+  'zapfhahn',
+  'rollfass',
+  'fasssplitter',
+] as const;
+
+const RURAL_ENEMY_IDS = [
+  'bauer',
+  'kuh',
+  'gockel',
+  'gartenzwerg',
+  'blaskapellist',
+  'traktor',
+] as const;
 
 const ENEMY_SPRITE_URLS = [
   ['kellerassel', kellerasselUrl],
@@ -76,6 +115,14 @@ async function loadTile(src: string): Promise<Texture> {
   return Assets.load<Texture>({ src, data: { scaleMode: 'nearest' } });
 }
 
+/** Matches `RURAL_FLOOR_TILE_URLS`'s order — the sprite names those same four files are authored under in `assets/sprites/floor-2-rural/tiles/`. */
+const RURAL_FLOOR_TILE_NAMES = [
+  'rural-floor-1',
+  'rural-floor-2',
+  'rural-floor-3',
+  'rural-floor-4',
+] as const;
+
 export async function loadFloorArt(): Promise<FloorArt> {
   const [cellarFloorTexture, ruralFloorTextures, enemyEntries] = await Promise.all([
     loadTile(cellarFloorTileUrl),
@@ -87,8 +134,29 @@ export async function loadFloorArt(): Promise<FloorArt> {
       ),
     ),
   ]);
+  const spriteOrigins: Record<string, { bucketId: string; category: 'character' | 'tile' }> = {
+    'cellar-floor': { bucketId: 'floor-1-cellar', category: 'tile' },
+  };
+  for (const name of RURAL_FLOOR_TILE_NAMES) {
+    spriteOrigins[name] = { bucketId: 'floor-2-rural', category: 'tile' };
+  }
+  for (const id of CELLAR_ENEMY_IDS) {
+    spriteOrigins[id] = { bucketId: 'floor-1-cellar', category: 'character' };
+  }
+  for (const id of RURAL_ENEMY_IDS) {
+    spriteOrigins[id] = { bucketId: 'floor-2-rural', category: 'character' };
+  }
+
   return {
     floorTiles: { 1: [cellarFloorTexture], 2: ruralFloorTextures },
     enemyArt: Object.fromEntries(enemyEntries),
+    tileTextures: {
+      'cellar-floor': cellarFloorTexture,
+      ...Object.fromEntries(
+        RURAL_FLOOR_TILE_NAMES.map((name, index) => [name, ruralFloorTextures[index]]),
+      ),
+    },
+    spriteOrigins,
+    tileVariantNames: { 1: ['cellar-floor'], 2: RURAL_FLOOR_TILE_NAMES },
   };
 }

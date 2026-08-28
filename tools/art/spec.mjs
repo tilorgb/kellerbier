@@ -6,10 +6,14 @@
  * (`src/render/resolution.ts`), so these numbers are half what lands on
  * screen; the atlas build never sees screen pixels at all.
  *
- * `min`/`max` rather than an exact size for `character` and `boss`: the bible
- * says "roughly 12×16" and "up to 48×48", not one fixed number, and a boss
- * silhouette shrinking a few pixels between floors is exactly the kind of
- * variation that spec is meant to allow.
+ * `min`/`max` rather than an exact size for `character` and `boss`: a boss
+ * silhouette shrinking between floors, or a character denser than the floor
+ * of the range, is exactly the kind of variation that spec is meant to
+ * allow — see `docs/DECISIONS.md` #26 for `character`'s and `boss`'s actual
+ * ceilings, raised there from the original 16 and 48: "16-bit era" (the
+ * bible's own art-direction line) describes an SNES-era colour/shading
+ * budget, not a pixel-dimension rule, and the original numbers under-shot
+ * what that era's actual character/boss sprites looked like.
  */
 
 export const CATEGORY_FOLDERS = {
@@ -21,11 +25,20 @@ export const CATEGORY_FOLDERS = {
 
 export const CATEGORY_SPECS = {
   tile: { minWidth: 16, maxWidth: 16, minHeight: 16, maxHeight: 16 },
-  // "roughly 12×16" — width has some room, height does not: a character
-  // sprite that isn't a full 16px tall reads as floating above the floor.
-  character: { minWidth: 8, maxWidth: 16, minHeight: 16, maxHeight: 16 },
+  // Height's floor is the original "roughly 12x16" ceiling, kept as the
+  // floor so every already-committed floor-1/2 character sprite (authored at
+  // 16 tall) stays legal — `docs/DECISIONS.md` #26 raised the height
+  // ceiling to 32 for new content wanting more detail, and #27 raised the
+  // width ceiling to match: a character's silhouette was never guaranteed to
+  // be taller than it is wide (a stout body, a wide-bellied enemy), so
+  // capping width at the old 16 while height could reach 32 baked in a
+  // portrait-only assumption nothing here actually requires.
+  character: { minWidth: 8, maxWidth: 32, minHeight: 16, maxHeight: 32 },
   // Floor of 17 keeps a boss from silently passing as an oversized tile.
-  boss: { minWidth: 17, maxWidth: 48, minHeight: 17, maxHeight: 48 },
+  // Ceiling raised from 48 to 160 by `docs/DECISIONS.md` #26 — no boss art
+  // exists yet to invalidate, and 160 (320 on screen, most of a 180-tall
+  // playfield) is deliberately close to "fills the screen."
+  boss: { minWidth: 17, maxWidth: 160, minHeight: 17, maxHeight: 160 },
   // Not in the bible directly — derived from "enemy shots must read against
   // every background", which only makes sense for something tile-scale or
   // smaller.

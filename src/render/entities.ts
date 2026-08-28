@@ -42,17 +42,6 @@ const ELITE_TINT = 0xf2c14e;
 const UNKNOWN_PICKUP_TINT = 0xff00ff;
 
 /**
- * Every `character`-category sprite is exactly this tall
- * (`assets/sprites/README.md`'s size table; enforced at build time by
- * `tools/art/spec.mjs`), unlike its width, which is free to vary from
- * creature to creature. Used as the scale reference for any enemy with its
- * own art, instead of the shared blob texture's own (square) width — so a
- * narrower sprite like Bierratte's stays visually narrower rather than
- * being stretched to a circle's width.
- */
-const CHARACTER_SPRITE_HEIGHT = 16;
-
-/**
  * Draws the collidable things that are not the player: targets, enemies, and
  * the ring an enemy warns with before it attacks.
  *
@@ -207,9 +196,12 @@ export class EntityView {
       // `sprite.texture` (which is the flash texture for one tick out of
       // sixty) — otherwise the one flash tick would render at a different
       // size than every frame around it, since dedicated character art and
-      // the shared flash blob are not the same shape.
-      const referenceHeight =
-        bodyTexture === this.texture ? this.texture.height : CHARACTER_SPRITE_HEIGHT;
+      // the shared flash blob are not the same shape. `bodyTexture.height`
+      // rather than a fixed constant: `character` sprites are no longer all
+      // exactly 16 tall (`docs/DECISIONS.md` #26 raised the ceiling to 32
+      // for more detail), so the scale reference has to be each sprite's own
+      // real height, not an assumption that stopped holding.
+      const referenceHeight = bodyTexture.height;
       // A pickup pops in on spawn — a cosmetic-only bump read off the same
       // countdown `stepPickups`' collection never touches, so it never
       // affects the hitbox it's drawn over.

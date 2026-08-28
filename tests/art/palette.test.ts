@@ -2,9 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
   allowedColorsFor,
   FLOOR_PALETTES,
+  legalPixelColorsFor,
   MASTER_PALETTE,
   NEUTRAL_PALETTE,
+  nudgeShade,
+  shadeOf,
+  shadeRampOf,
 } from '../../tools/art/palette.mjs';
+import { relativeLuminance } from '../../tools/art/contrast.mjs';
 import { FLOOR_BUCKETS } from '../../tools/art/spec.mjs';
 import { FLOOR_CONFIGS } from '../../src/content/floors/definition.js';
 
@@ -55,5 +60,56 @@ describe('allowedColorsFor', () => {
 
   it('throws on an unknown bucket', () => {
     expect(() => allowedColorsFor('floor-9-nonexistent')).toThrow();
+  });
+});
+
+// docs/DECISIONS.md #28: the pixel editor's shading brush needs a
+// deterministic, fixed lighter/darker ramp per colour rather than a free
+// lightness slider, for the same "no off-palette pixel" reason #25 fixed the
+// pen's palette to a finite set.
+describe('shading', () => {
+  it('shadeOf with step 0 returns the colour unchanged', () => {
+    for (const color of FLOOR_PALETTES.cellar) {
+      expect(shadeOf(color, 0)).toBe(color);
+    }
+  });
+
+  it('shadeRampOf is 5 tones, darkest to lightest, with the original colour in the middle', () => {
+    for (const color of FLOOR_PALETTES.rural) {
+      const ramp = shadeRampOf(color);
+      expect(ramp).toHaveLength(5);
+      expect(ramp[2]).toBe(color);
+      const luminances = ramp.map((tone) => relativeLuminance(tone));
+      for (let i = 1; i < luminances.length; i++) {
+        expect(luminances[i]).toBeGreaterThanOrEqual(luminances[i - 1] ?? 0);
+      }
+    }
+  });
+
+  it('legalPixelColorsFor is a superset of allowedColorsFor, for the same bucket', () => {
+    const allowed = allowedColorsFor('floor-1-cellar');
+    const legal = legalPixelColorsFor('floor-1-cellar');
+    for (const color of allowed) {
+      expect(legal.has(color)).toBe(true);
+    }
+    expect(legal.size).toBeGreaterThan(allowed.size);
+  });
+
+  it('nudgeShade moves a colour one step along its own ramp, clamped at either end', () => {
+    const [base] = FLOOR_PALETTES.cellar;
+    if (base === undefined) {
+      throw new Error('cellar palette is empty');
+    }
+    const oneLighter = nudgeShade('floor-1-cellar', base, 1);
+    expect(oneLighter).toBe(shadeOf(base, 1));
+    const twoLighter = nudgeShade('floor-1-cellar', oneLighter, 1);
+    expect(twoLighter).toBe(shadeOf(base, 2));
+    // Already at the ramp's lightest end: nudging further stays put rather than drifting past it.
+    const stillTwoLighter = nudgeShade('floor-1-cellar', twoLighter, 1);
+    expect(stillTwoLighter).toBe(twoLighter);
+  });
+
+  it('nudgeShade leaves a colour outside the bucket entirely unchanged', () => {
+    expect(nudgeShade('floor-1-cellar', 0x123456, 1)).toBe(0x123456);
   });
 });
