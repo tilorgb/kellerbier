@@ -17,9 +17,25 @@ const STYLE = `
   background: var(--kb-color-surface-1);
 }
 .kb-editor-root * { box-sizing: border-box; }
-.kb-editor-column { display: flex; flex-direction: column; gap: 12px; }
+.kb-editor-column { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .kb-editor-left { flex: 0 0 auto; }
 .kb-editor-right { flex: 1 1 320px; min-width: 280px; max-width: 420px; overflow-y: auto; max-height: 100vh; }
+
+/*
+ * This page is opened both as its own tab and docked in the game shell's
+ * split view (app/editor-dock.ts), whose divider the user can drag
+ * arbitrarily narrow — an iframe's media queries respond to its own
+ * rendered width, so this reflows live as the divider moves, no
+ * coordination with the parent page needed. Below the breakpoint the two
+ * columns stack instead of sitting side by side, and the room grid (below,
+ * .kb-editor-grid-panel) scrolls horizontally within its own box rather
+ * than forcing the whole page wider than the docked panel.
+ */
+@media (max-width: 640px) {
+  .kb-editor-root { flex-direction: column; min-height: 0; }
+  .kb-editor-left { width: 100%; }
+  .kb-editor-right { width: 100%; max-width: none; min-width: 0; max-height: none; overflow-y: visible; }
+}
 
 .kb-editor-panel {
   background: var(--kb-color-panel-editor); border: 1px solid var(--kb-color-surface-4);
@@ -49,7 +65,7 @@ const STYLE = `
 
 .kb-editor-grid-panel {
   background: var(--kb-color-panel-editor); border: 1px solid var(--kb-color-surface-4);
-  border-radius: var(--kb-radius-md); padding: 10px;
+  border-radius: var(--kb-radius-md); padding: 10px; max-width: 100%; overflow: auto;
 }
 .kb-editor-toolbar { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .kb-editor-tool {
@@ -232,7 +248,10 @@ function boot(): void {
       const result = await saveRoom(state.draft.id, toTemplateJSON(state.draft));
       if (result.ok) {
         state.markClean();
-        status.textContent = `Saved src/content/rooms/${state.draft.id}.json.`;
+        status.textContent =
+          result.via === 'file-export'
+            ? `Saved ${state.draft.id}.json — move it into src/content/rooms/ if it isn't there already.`
+            : `Saved src/content/rooms/${state.draft.id}.json.`;
         browsePanel.refresh();
       } else {
         status.textContent = `Save failed: ${result.error ?? 'unknown error'}`;

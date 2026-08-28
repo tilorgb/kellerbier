@@ -32,6 +32,15 @@ import traktorUrl from '../../assets/sprites/floor-2-rural/characters/traktor.pn
 export interface FloorArt {
   readonly floorTiles: Readonly<Record<number, readonly Texture[]>>;
   readonly enemyArt: Readonly<Record<string, Texture>>;
+  /**
+   * The same tile `Texture`s as `floorTiles`, keyed by sprite name
+   * (`cellar-floor`, `rural-floor-2`, ...) instead of floor number — for
+   * `app/live-art-preview.ts` (#108), which needs to find "the texture for
+   * this named sprite" without knowing `pickTileVariant`'s per-floor
+   * ordering. Same `Texture` objects, not copies: mutating one through this
+   * map is mutating the one `floorTiles`/`RoomView` already draws with.
+   */
+  readonly tileTextures: Readonly<Record<string, Texture>>;
 }
 
 const ENEMY_SPRITE_URLS = [
@@ -76,6 +85,14 @@ async function loadTile(src: string): Promise<Texture> {
   return Assets.load<Texture>({ src, data: { scaleMode: 'nearest' } });
 }
 
+/** Matches `RURAL_FLOOR_TILE_URLS`'s order — the sprite names those same four files are authored under in `assets/sprites/floor-2-rural/tiles/`. */
+const RURAL_FLOOR_TILE_NAMES = [
+  'rural-floor-1',
+  'rural-floor-2',
+  'rural-floor-3',
+  'rural-floor-4',
+] as const;
+
 export async function loadFloorArt(): Promise<FloorArt> {
   const [cellarFloorTexture, ruralFloorTextures, enemyEntries] = await Promise.all([
     loadTile(cellarFloorTileUrl),
@@ -90,5 +107,11 @@ export async function loadFloorArt(): Promise<FloorArt> {
   return {
     floorTiles: { 1: [cellarFloorTexture], 2: ruralFloorTextures },
     enemyArt: Object.fromEntries(enemyEntries),
+    tileTextures: {
+      'cellar-floor': cellarFloorTexture,
+      ...Object.fromEntries(
+        RURAL_FLOOR_TILE_NAMES.map((name, index) => [name, ruralFloorTextures[index]]),
+      ),
+    },
   };
 }

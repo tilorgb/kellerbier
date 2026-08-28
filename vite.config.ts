@@ -29,6 +29,20 @@ export default defineConfig({
     // Small sprites inline as data URIs, which keeps `file://` working;
     // real atlases are far above this and stay as cache-bustable files.
     assetsInlineLimit: 8192,
+    rollupOptions: {
+      // Vite's default build only bundles `index.html` — the room editor
+      // (#24) and pixel editor (#108) were reachable only by typing their
+      // URL under `vite dev`, and dropped from the CI-published playable
+      // preview (`.github/workflows/ci.yml`'s `preview` job, a static
+      // `vite build` output) entirely. Listing all three here is what makes
+      // `app/editor-dock.ts`'s docked iframe panel have something to load in
+      // that preview, not just in local dev.
+      input: {
+        index: resolvePath('./index.html'),
+        editor: resolvePath('./editor.html'),
+        'pixel-editor': resolvePath('./pixel-editor.html'),
+      },
+    },
   },
   test: {
     include: ['tests/**/*.test.ts'],

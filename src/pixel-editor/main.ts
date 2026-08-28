@@ -10,6 +10,7 @@ import { createBrowsePanel } from './browse-panel.js';
 import { createGridPanel } from './canvas.js';
 import { createFramesPanel } from './frames-panel.js';
 import { createLegibilityPanel } from './legibility-panel.js';
+import { type LiveStatus, createLivePreviewClient } from './live-preview-client.js';
 import { createPalettePanel } from './palette-panel.js';
 import { PixelEditorState } from './state.js';
 import {
@@ -71,9 +72,25 @@ const STYLE = `
   background: var(--kb-color-surface-1);
 }
 .kb-pixel-root * { box-sizing: border-box; }
-.kb-pixel-column { display: flex; flex-direction: column; gap: 12px; }
+.kb-pixel-column { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .kb-pixel-left { flex: 0 0 auto; }
 .kb-pixel-right { flex: 1 1 320px; min-width: 280px; max-width: 420px; overflow-y: auto; max-height: 100vh; }
+
+/*
+ * This page is opened both as its own tab and docked in the game shell's
+ * split view (app/editor-dock.ts), whose divider the user can drag
+ * arbitrarily narrow — an iframe's media queries respond to its own
+ * rendered width, so this reflows live as the divider moves, no
+ * coordination with the parent page needed. Below the breakpoint, the two
+ * columns stack instead of sitting side by side, and the canvas/frame
+ * strips scroll horizontally within their own box (below) rather than
+ * forcing the whole page wider than the docked panel.
+ */
+@media (max-width: 640px) {
+  .kb-pixel-root { flex-direction: column; min-height: 0; }
+  .kb-pixel-left { width: 100%; }
+  .kb-pixel-right { width: 100%; max-width: none; min-width: 0; max-height: none; overflow-y: visible; }
+}
 
 .kb-pixel-panel {
   background: var(--kb-color-panel-editor); border: 1px solid var(--kb-color-surface-4);
@@ -101,7 +118,8 @@ const STYLE = `
 
 .kb-pixel-canvas-wrap {
   background: var(--kb-color-surface-0); border: 1px solid var(--kb-color-surface-4);
-  border-radius: var(--kb-radius-md); padding: 12px; display: inline-block;
+  border-radius: var(--kb-radius-md); padding: 12px;
+  display: inline-block; max-width: 100%; overflow: auto;
 }
 .kb-pixel-canvas {
   image-rendering: pixelated; cursor: crosshair; display: block;
@@ -139,6 +157,8 @@ const STYLE = `
 
 .kb-pixel-actions { display: flex; gap: 8px; }
 .kb-pixel-status { min-height: 1.4em; color: var(--kb-color-text-dim); }
+.kb-pixel-live-status { min-height: 1.4em; margin: 4px 0 0; color: var(--kb-color-text-dim); font-size: 12px; }
+.kb-pixel-live-status-live { color: var(--kb-color-ok); }
 `;
 
 function bucketLabel(bucketId: string): string {
@@ -250,6 +270,26 @@ function boot(): void {
   left.appendChild(gridHost);
   createGridPanel(state, gridHost);
 
+  const livePreviewStatus = document.createElement('p');
+  livePreviewStatus.className = 'kb-pixel-live-status';
+  left.appendChild(livePreviewStatus);
+  function renderLiveStatus(liveStatus: LiveStatus): void {
+    if (window.parent === window) {
+      livePreviewStatus.textContent = '';
+      return;
+    }
+    if (liveStatus === 'live') {
+      livePreviewStatus.textContent = '● Live in the running game';
+      livePreviewStatus.className = 'kb-pixel-live-status kb-pixel-live-status-live';
+    } else if (liveStatus === 'not-wired') {
+      livePreviewStatus.textContent = '○ Not wired into the running game yet';
+      livePreviewStatus.className = 'kb-pixel-live-status';
+    } else {
+      livePreviewStatus.textContent = '';
+    }
+  }
+  createLivePreviewClient(state, () => nameInput.value.trim(), renderLiveStatus);
+
   const actionsRow = document.createElement('div');
   actionsRow.className = 'kb-pixel-panel kb-pixel-actions';
   const saveButton = document.createElement('button');
@@ -315,7 +355,11 @@ function boot(): void {
         state.markClean();
         const folder = CATEGORY_FOLDERS[state.category];
         const fileName = state.frames.length > 1 ? `${name}.strip.png` : `${name}.png`;
-        status.textContent = `Saved assets/sprites/${state.bucketId}/${folder}/${fileName}.`;
+        status.textContent =
+          result.via === 'file-export'
+            ? `Saved ${fileName}${state.frames.length > 1 ? ' and its .anim.json' : ''} — ` +
+              `move it into assets/sprites/${state.bucketId}/${folder}/ if it isn't there already.`
+            : `Saved assets/sprites/${state.bucketId}/${folder}/${fileName}.`;
         browsePanel.refresh();
       } else {
         status.textContent = `Save failed: ${result.error ?? 'unknown error'}`;

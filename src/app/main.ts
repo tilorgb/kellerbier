@@ -41,6 +41,7 @@ import { WalletHud } from '../render/wallet-hud.js';
 import { Vignette } from '../render/vignette.js';
 import { GameView } from '../render/view.js';
 import { loadFloorArt } from '../render/floor-art.js';
+import { attachLiveArtPreviewListener } from '../render/live-art-preview.js';
 import { AmbienceTracker, SILENT_AMBIENCE } from './audio/ambience.js';
 import { SILENT_AUDIO, playImpactAudio } from './audio/impact.js';
 import { Bindable } from './input/bindings.js';
@@ -50,6 +51,7 @@ import { playRumble } from './input/rumble.js';
 import { FixedTimestepLoop, runAnimationFrameLoop } from './loop.js';
 import { RunSummaryTracker } from './run-summary.js';
 import { createAccessibilityPanel } from './accessibility-panel.js';
+import { createEditorDock } from './editor-dock.js';
 import {
   type AccessibilitySettings,
   applySettingsToSim,
@@ -271,6 +273,16 @@ async function boot(): Promise<void> {
     throw new Error('Missing #game host element in index.html');
   }
 
+  // The room editor (#24) / pixel editor (#108) split-view toggle. Ships
+  // unconditionally, unlike the debug overlay below — see
+  // `editor-dock.ts`'s doc comment for why it can't live behind that
+  // `import.meta.env.DEV` gate and still be reachable from a published
+  // preview build.
+  const dockRoot = document.getElementById('dock-root');
+  if (dockRoot !== null) {
+    createEditorDock(dockRoot);
+  }
+
   const app = await createRenderer(host);
 
   // Accessibility settings (#33): persisted across reloads in `localStorage`,
@@ -291,7 +303,13 @@ async function boot(): Promise<void> {
   // the atlas the pipeline builds: nothing in `render/` consumes that atlas
   // yet, so `loadFloorArt` loads the source PNGs the same way `playerTexture`
   // above already does.
-  const { floorTiles, enemyArt } = await loadFloorArt();
+  const { floorTiles, enemyArt, tileTextures } = await loadFloorArt();
+  // Sprite names are unique across floors and categories by the existing
+  // authoring convention (`cellar-floor`, `rural-floor-2`, `kellerassel`, ...),
+  // so one flat name -> `Texture` map is enough for the pixel editor's live
+  // preview (#108) to find "the texture for this sprite" without also
+  // needing the bucketId it was authored under.
+  attachLiveArtPreviewListener({ ...tileTextures, ...enemyArt });
 
   // The run seed: fixed via the page's `?seed=` query param when present,
   // otherwise freshly randomised on every load — proper seeded runs are #48,
@@ -646,7 +664,7 @@ async function boot(): Promise<void> {
 
   let layout = computeGameLayout(window.innerWidth, window.innerHeight, window.devicePixelRatio);
 
-  trackWindowSize(app, game, (applied) => {
+  trackWindowSize(app, game, host, (applied) => {
     layout = applied;
     positionHud(applied);
     positionHealthHud(applied);
@@ -1315,9 +1333,8 @@ WASD move   arrows aim and fire
       applyAccessibilityChange();
     },
   );
-  mountRoomEditorLink();
-  // Not gated behind `import.meta.env.DEV` like `mountRoomEditorLink` — this
-  // is the player-facing half of #33, so it has to ship in a production
+  // Not gated behind `import.meta.env.DEV` like `mountDebugOverlay` above —
+  // this is the player-facing half of #33, so it has to ship in a production
   // build.
   createAccessibilityPanel(settings, applyAccessibilityChange);
 }
@@ -1413,43 +1430,6 @@ function exposeDebugHandle(
     setAccessibilitySettings,
   };
   console.warn('__kellerbier is exposed for debugging (dev build only)');
-}
-
-/**
- * A link to the room editor (#24) — dev builds only, same as the debug handle
- * above, since `editor.html` is not wired into `build.rollupOptions.input`
- * and is never bundled either way. A real link rather than only a console
- * message, so reaching it never requires typing the URL by hand.
- *
- * Fixed bottom-left: the tuning toggle already owns bottom-right
- * (`tuning-window.ts`), and every screen-space HUD element the game itself
- * draws — health, Promille, wallet, minimap — lives top-left/top-right
- * *inside* the Pixi canvas, not in the DOM, so bottom-left is the one corner
- * nothing else is using.
- */
-function mountRoomEditorLink(): void {
-  if (!import.meta.env.DEV) {
-    return;
-  }
-  const style = document.createElement('style');
-  style.textContent = `
-.kb-room-editor-link {
-  position: fixed; left: 12px; bottom: 12px; z-index: 30;
-  font: 12px/1.4 ui-monospace, monospace; color: #d8cfc4;
-  background: #1b1622; border: 1px solid #3d3348; border-radius: 4px;
-  padding: 6px 10px; text-decoration: none;
-}
-.kb-room-editor-link:hover { background: #241d2e; }
-`;
-  document.head.appendChild(style);
-
-  const link = document.createElement('a');
-  link.className = 'kb-room-editor-link';
-  link.href = '/editor.html';
-  link.target = '_blank';
-  link.rel = 'noopener';
-  link.textContent = 'room editor';
-  document.body.appendChild(link);
 }
 
 void boot().catch((error: unknown) => {
