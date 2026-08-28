@@ -1461,3 +1461,45 @@ preset X" indicator, a status computed from other state) must be resynced by *ev
 can change the state it summarizes, not only the one path that happened to be modified first —
 `syncPresetToSize` needed three call sites, not one, precisely because three different actions can
 each independently make the previous "matches this preset" answer wrong.
+
+## 36. The whole floor-1/2 enemy roster is redrawn off the 16×16 floor, not kept there as grandfathered content
+
+**Decided:** M6, issue #108's follow-up. **Supersedes** #25/#26's framing of the pre-existing 16×16
+roster as legal-and-untouched — for this specific content, not the general principle.
+
+#25/#26 raised `character`'s size ceiling but deliberately left the floor at 16 tall specifically so
+the entire already-authored floor-1/2 roster (13 sprites) stayed legal without being touched — "only
+new content reaches for the extra height." That framing did not survive contact with the pixel
+editor's own size-preset dropdown (#35): every one of those 13 sprites is a legacy 16×16 that matches
+none of the five named tiers, so loading any of them showed "Custom," and this project does not want
+to ship its first version with its own entire enemy roster in that state. The decision this session
+made once that was seen clearly: redraw the roster now rather than defer it, and given that choice,
+size each sprite to its own actual shape (`presetIdForSize`'s tiers are convenience defaults, not a
+mandate that every character be tall-and-narrow) rather than force all 13 into one uniform tier a
+woodlouse and a tractor have no business sharing.
+
+Thirteen redraws, evolved from the original silhouette rather than invented fresh — each keeps the
+original's recognizable shape (Kellerassel's segmented dome, Rollfass's stave-and-hoop barrel,
+Bauer's overalls-and-pitchfork) at meaningfully more resolution, with real shading via
+`palette.mjs`'s `shadeOf` (the same derivation #28's shading brush uses) rather than the originals'
+flat 2-3-colour fills. Sizes, chosen per creature rather than uniformly: Kellerassel 24×16, Bierratte
+20×16, Schimmelfleck 22×18, Schimmelspore 18×16, Zapfhahn 16×28, Rollfass 22×26, Fasssplitter 14×20,
+Bauer 16×28, Kuh 32×20, Gockel 18×22, Gartenzwerg 16×22, Blaskapellist 26×24, Traktor 32×22 — every
+one checked against `tools/art/validate.mjs`'s size and palette rules before being committed, the
+same gate a save through the pixel editor itself would have to pass.
+
+Two designs (Zapfhahn, a wall-mounted tap; Blaskapellist, a tuba player) took three drafting passes
+each before they read as the thing they are supposed to be rather than, respectively, a robot arm and
+an abstract ring — kept as a live example of the same lesson #108's player-sprite redraw already
+recorded: a first procedural pass is a sketch, not a result, and the fix is redrawing it properly
+rather than shipping the sketch. One real bug surfaced and was caught by validation rather than by
+eye: an early draft of Traktor's tires and exhaust used `cellar`'s dark grey instead of a shared
+neutral, which `findOffPalettePixel` flagged immediately — floor-2-rural has no standing to borrow a
+colour that belongs to floor-1-cellar's own five.
+
+**Constrains:** the next floor's roster (3-7, still parked per #22) starts from a blank slate with
+these presets and this shading technique already established, rather than needing its own version of
+this redraw later — there is no more legacy 16×16 art left to carry forward. Any future sprite work
+should run `findOffPalettePixel`/`validateSpriteSize` (or the pixel editor's own save path, which
+calls the same functions) before presenting candidates, not just before committing — it catches a
+bucket/palette mismatch a design review by eye can miss entirely.
