@@ -6,9 +6,13 @@ import {
   type RoomEnemySpawn,
   type RoomPickupSpawn,
 } from '../content/rooms/definition.js';
+import { ENEMY_DEFINITIONS } from '../content/enemies/index.js';
 import { PICKUP_DEFINITIONS } from '../content/pickups/pickups.js';
-import { DECORATIVE_PROP_TYPE_SUGGESTIONS } from './definitions.js';
+import { DECORATIVE_PROP_TYPE_SUGGESTIONS, HAZARD_TYPE_SUGGESTIONS } from './definitions.js';
 import { type EditorCell, type EditorState, recomputeTileGrid } from './state.js';
+
+/** The `<select>` value that means "type your own", for the hazard/prop pickers — never a real hazard/prop type itself. */
+const CUSTOM_OPTION = '__custom__';
 
 /** One tile, in editor display pixels. Large enough to be a comfortable click target. */
 const TILE_PX = 24;
@@ -33,8 +37,9 @@ export interface GridPanelHandle {
  */
 export function createGridPanel(state: EditorState, host: HTMLElement): GridPanelHandle {
   let tool: Tool = 'wall';
+  let enemyType = ENEMY_DEFINITIONS[0]?.id ?? '';
   let pickupType = PICKUP_DEFINITIONS[0]?.id ?? '';
-  let hazardType = '';
+  let hazardType = HAZARD_TYPE_SUGGESTIONS[0] ?? '';
   let propType = DECORATIVE_PROP_TYPE_SUGGESTIONS[0] ?? '';
   let dragStart: { col: number; row: number } | null = null;
   let dragCurrent: { col: number; row: number } | null = null;
@@ -154,6 +159,15 @@ export function createGridPanel(state: EditorState, host: HTMLElement): GridPane
             hazard.y + hazard.height <= y + height
           ),
       );
+      // Point markers too, not just the rectangle-based obstacles/hazards —
+      // an enemy spawn, pickup or prop placed with a stray click had no way
+      // to be removed before this, since the erase tool only ever checked
+      // the two rectangle lists.
+      const inRect = (point: { x: number; y: number }): boolean =>
+        point.x >= x && point.x < x + width && point.y >= y && point.y < y + height;
+      cell.enemySpawns = cell.enemySpawns.filter((spawn) => !inRect(spawn));
+      cell.pickupSpawns = cell.pickupSpawns.filter((pickup) => !inRect(pickup));
+      cell.decorativeProps = cell.decorativeProps.filter((prop) => !inRect(prop));
       recomputeTileGrid(cell);
     } else if (tool === 'hazard') {
       if (hazardType.trim() !== '') {
@@ -163,18 +177,55 @@ export function createGridPanel(state: EditorState, host: HTMLElement): GridPane
     state.notify();
   }
 
+  /**
+   * The enemy-spawn tool places a spawn point bound to a *group* (a pool of
+   * enemy/floor-range choices — `panels/spawn-groups.ts`), but picking one
+   * enemy from a dropdown is the common case, and having to detour through
+   * that separate panel to hand-author a one-choice group first read as the
+   * tool doing nothing at all. Reuses an existing one-choice, every-floor
+   * group for the same enemy if one is already there (so ten spawns of the
+   * same enemy don't create ten near-identical groups), and creates one
+   * otherwise — a variety-across-floors spawn is still exactly what the
+   * Spawn groups panel is for, this is only the fast path for the ordinary
+   * case of "this enemy, here."
+   */
+  function findOrCreateSimpleSpawnGroup(cell: EditorCell, targetEnemyId: string): string {
+    const existing = cell.spawnGroups.find((group) => {
+      const [onlyChoice] = group.choices;
+      return (
+        group.choices.length === 1 &&
+        onlyChoice?.enemyId === targetEnemyId &&
+        onlyChoice.minFloor === 1 &&
+        onlyChoice.maxFloor === 7
+      );
+    });
+    if (existing !== undefined) {
+      return existing.id;
+    }
+    let index = cell.spawnGroups.length + 1;
+    while (cell.spawnGroups.some((group) => group.id === `group-${String(index)}`)) {
+      index += 1;
+    }
+    const id = `group-${String(index)}`;
+    cell.spawnGroups.push({
+      id,
+      count: 1,
+      choices: [{ enemyId: targetEnemyId, minFloor: 1, maxFloor: 7 }],
+    });
+    return id;
+  }
+
   function placePoint(col: number, row: number): void {
     const cell = currentCell();
     const x = col * ROOM_TILE_UNITS + ROOM_TILE_UNITS / 2;
     const y = row * ROOM_TILE_UNITS + ROOM_TILE_UNITS / 2;
 
     if (tool === 'enemy') {
-      const group = cell.spawnGroups[0];
-      if (group === undefined) {
-        window.alert('Add a spawn group first (Spawn groups panel) before placing an enemy spawn.');
+      if (enemyType === '') {
         return;
       }
-      const spawn: RoomEnemySpawn = { x, y, group: group.id };
+      const groupId = findOrCreateSimpleSpawnGroup(cell, enemyType);
+      const spawn: RoomEnemySpawn = { x, y, group: groupId };
       cell.enemySpawns.push(spawn);
     } else if (tool === 'pickup') {
       if (pickupType === '') {
@@ -252,6 +303,20 @@ export function createGridPanel(state: EditorState, host: HTMLElement): GridPane
   const propButton = toolButton('prop', 'Prop');
   toolbar.append(wallButton, eraseButton, enemyButton, pickupButton, hazardButton, propButton);
 
+  const enemySelect = document.createElement('select');
+  enemySelect.className = 'kb-editor-tool-option';
+  for (const enemy of ENEMY_DEFINITIONS) {
+    const option = document.createElement('option');
+    option.value = enemy.id;
+    option.textContent = enemy.id;
+    enemySelect.appendChild(option);
+  }
+  enemySelect.value = enemyType;
+  enemySelect.addEventListener('change', () => {
+    enemyType = enemySelect.value;
+  });
+  toolbar.appendChild(enemySelect);
+
   const pickupSelect = document.createElement('select');
   pickupSelect.className = 'kb-editor-tool-option';
   for (const pickup of PICKUP_DEFINITIONS) {
@@ -266,32 +331,77 @@ export function createGridPanel(state: EditorState, host: HTMLElement): GridPane
   });
   toolbar.appendChild(pickupSelect);
 
-  const hazardInput = document.createElement('input');
-  hazardInput.type = 'text';
-  hazardInput.placeholder = 'hazard type';
-  hazardInput.className = 'kb-editor-tool-option';
-  hazardInput.addEventListener('input', () => {
-    hazardType = hazardInput.value;
-  });
-  toolbar.appendChild(hazardInput);
+  /**
+   * A dropdown of every known type plus "Custom…", not a bare text field —
+   * a free-text-with-invisible-`<datalist>` combo box (this control's
+   * previous shape for `prop`, and `hazard` had no suggestions wired in at
+   * all) reads as "an empty box, and no idea what goes in it," which is
+   * exactly what it was. Neither field has a real registry
+   * (`state.ts`'s `RoomHazard`/`RoomDecorativeProp` only require a
+   * non-empty string), so "Custom…" still reaches every value a `<datalist>`
+   * combo box could, just via an explicit reveal instead of a hidden one.
+   */
+  function createTypePicker(
+    suggestions: readonly string[],
+    initial: string,
+    onChange: (value: string) => void,
+  ): { select: HTMLSelectElement; customInput: HTMLInputElement } {
+    const select = document.createElement('select');
+    select.className = 'kb-editor-tool-option';
+    for (const suggestion of suggestions) {
+      const option = document.createElement('option');
+      option.value = suggestion;
+      option.textContent = suggestion;
+      select.appendChild(option);
+    }
+    const customOption = document.createElement('option');
+    customOption.value = CUSTOM_OPTION;
+    customOption.textContent = 'Custom…';
+    select.appendChild(customOption);
 
-  const propInput = document.createElement('input');
-  propInput.type = 'text';
-  propInput.placeholder = 'prop type';
-  propInput.setAttribute('list', 'kb-editor-prop-types');
-  propInput.value = propType;
-  propInput.className = 'kb-editor-tool-option';
-  propInput.addEventListener('input', () => {
-    propType = propInput.value;
-  });
-  const propList = document.createElement('datalist');
-  propList.id = 'kb-editor-prop-types';
-  for (const suggestion of DECORATIVE_PROP_TYPE_SUGGESTIONS) {
-    const option = document.createElement('option');
-    option.value = suggestion;
-    propList.appendChild(option);
+    const customInput = document.createElement('input');
+    customInput.type = 'text';
+    customInput.placeholder = 'type name';
+    customInput.className = 'kb-editor-tool-option';
+    customInput.hidden = true;
+
+    const isKnown = suggestions.includes(initial);
+    select.value = isKnown ? initial : CUSTOM_OPTION;
+    customInput.hidden = isKnown;
+    customInput.value = isKnown ? '' : initial;
+
+    select.addEventListener('change', () => {
+      if (select.value === CUSTOM_OPTION) {
+        customInput.hidden = false;
+        onChange(customInput.value);
+      } else {
+        customInput.hidden = true;
+        onChange(select.value);
+      }
+    });
+    customInput.addEventListener('input', () => {
+      onChange(customInput.value);
+    });
+
+    return { select, customInput };
   }
-  toolbar.append(propInput, propList);
+
+  const hazardPicker = createTypePicker(HAZARD_TYPE_SUGGESTIONS, hazardType, (value) => {
+    hazardType = value;
+  });
+  toolbar.append(hazardPicker.select, hazardPicker.customInput);
+
+  const propPicker = createTypePicker(DECORATIVE_PROP_TYPE_SUGGESTIONS, propType, (value) => {
+    propType = value;
+  });
+  toolbar.append(propPicker.select, propPicker.customInput);
+
+  /** The group's single enemy, for the common case `findOrCreateSimpleSpawnGroup` produces — falls back to the raw group id for a hand-authored multi-choice group, where "the enemy" isn't one answer. */
+  function enemyLabelFor(cell: EditorCell, groupId: string): string {
+    const group = cell.spawnGroups.find((candidate) => candidate.id === groupId);
+    const [onlyChoice] = group?.choices ?? [];
+    return group?.choices.length === 1 && onlyChoice !== undefined ? onlyChoice.enemyId : groupId;
+  }
 
   function renderMarkers(): void {
     markerLayer.replaceChildren();
@@ -310,7 +420,7 @@ export function createGridPanel(state: EditorState, host: HTMLElement): GridPane
     }
     for (const spawn of cell.enemySpawns) {
       markerLayer.appendChild(
-        pointMarker(spawn.x, spawn.y, scale, 'enemy', `enemy: ${spawn.group}`),
+        pointMarker(spawn.x, spawn.y, scale, 'enemy', `enemy: ${enemyLabelFor(cell, spawn.group)}`),
       );
     }
     for (const pickup of cell.pickupSpawns) {
@@ -347,9 +457,13 @@ export function createGridPanel(state: EditorState, host: HTMLElement): GridPane
     ] as const) {
       button.classList.toggle('kb-editor-tool-active', tool === id);
     }
+    enemySelect.hidden = tool !== 'enemy';
     pickupSelect.hidden = tool !== 'pickup';
-    hazardInput.hidden = tool !== 'hazard';
-    propInput.hidden = tool !== 'prop';
+    hazardPicker.select.hidden = tool !== 'hazard';
+    hazardPicker.customInput.hidden =
+      tool !== 'hazard' || hazardPicker.select.value !== CUSTOM_OPTION;
+    propPicker.select.hidden = tool !== 'prop';
+    propPicker.customInput.hidden = tool !== 'prop' || propPicker.select.value !== CUSTOM_OPTION;
   }
 
   function render(): void {

@@ -1,32 +1,35 @@
 import type { PixelEditorState } from './state.js';
 
 /**
- * The "fit" zoom (no wheel zoom applied yet) targets the smaller of the
- * host column's actual measured width and a fraction of the window's
- * height, not a single fixed constant — a fixed 512px target (this
- * function's previous shape) is exactly `.kb-pixel-canvas-wrap`'s own
- * fixed footprint regardless of how much room is actually available, which
- * is fine in this page's own full-width tab but wrong the moment it's
- * docked narrow (`app/editor-dock.ts`'s split view, draggable down to
- * `MIN_PANEL_WIDTH`): a 512px-wide canvas in a 280px panel either forces
- * the whole page to scroll horizontally or (worse) sits mostly out of view,
- * which is exactly the "I can't find Save/Browse below the canvas" shape a
- * boxed-in canvas produces. Capping the height too (`FIT_HEIGHT_FRACTION`)
- * keeps a tall canvas from pushing every panel below it (Palette, Frames,
- * Browse sprites) far down the page regardless of how much horizontal room
- * there is.
+ * The starting ("fit") zoom targets the smaller of the host column's actual
+ * measured width and a fraction of the window's height, not a single fixed
+ * constant — a fixed pixel target regardless of how much room is actually
+ * available is fine in this page's own full-width tab but wrong the moment
+ * it's docked narrow (`app/editor-dock.ts`'s split view, draggable down to
+ * `MIN_PANEL_WIDTH`): a too-wide canvas either forces the whole page to
+ * scroll horizontally or sits mostly out of view. Capping the height too
+ * (`FIT_HEIGHT_FRACTION`) keeps a tall canvas from pushing every panel below
+ * it far down the page regardless of how much horizontal room there is.
  */
 const FIT_HEIGHT_FRACTION = 0.55;
-const MIN_ZOOM = 1;
-const MAX_ZOOM = 64;
-/** Wheel notches needed to roughly double the zoom — small enough that one scroll tick reads as a nudge, not a jump. */
-const WHEEL_ZOOM_STEP = 1.15;
-const MIN_ZOOM_MULTIPLIER = 1;
-const MAX_ZOOM_MULTIPLIER = 32;
 /** Padding `.kb-pixel-canvas-wrap` applies on each side (`main.ts`'s STYLE) — subtracted from the host's measured width so the fit calc targets the canvas's own available box, not the wrap's outer one. */
 const WRAP_PADDING_PX = 12;
 
-function fitZoom(
+/**
+ * Fixed zoom levels the +/- buttons step between, rather than a continuous
+ * multiplier — chosen after a mouse-wheel version of this shipped and turned
+ * out to have two real problems: the wheel also scrolls the page underneath
+ * the canvas (nothing here can `preventDefault` its way out of that once the
+ * page itself is what's supposed to scroll), and re-centring the view on the
+ * cursor on every notch was fragile enough to occasionally scroll the sprite
+ * out of the wrap's visible area entirely. Discrete buttons sidestep both:
+ * no scroll-anchoring math is needed because each click is a big, predictable
+ * jump, not a continuous drag, and the wrap's scroll position is simply reset
+ * to the top-left on every change, which is always still inside the canvas.
+ */
+const ZOOM_LEVELS = [1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64] as const;
+
+function fitZoomIndex(
   width: number,
   height: number,
   availableWidth: number,
@@ -34,7 +37,17 @@ function fitZoom(
 ): number {
   const target = Math.max(32, Math.min(availableWidth, availableHeight));
   const fit = Math.floor(target / Math.max(width, height));
-  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, fit));
+  // The largest level that still fits, so a fresh sprite is never bigger
+  // than its available space — falling back to the smallest level (never 0)
+  // if even that doesn't fit, since a canvas has to render at some size.
+  let index = 0;
+  for (let candidate = 0; candidate < ZOOM_LEVELS.length; candidate++) {
+    const level = ZOOM_LEVELS[candidate];
+    if (level !== undefined && level <= fit) {
+      index = candidate;
+    }
+  }
+  return index;
 }
 
 /** TS does not retain a nullability narrowing across a later closure boundary (`render` below), even for a `const` — resolving through a function whose return type is already non-null sidesteps that rather than re-asserting at every call site. */
@@ -69,16 +82,13 @@ export interface GridHandle {
  * picker never offers one", extended by #28 to the shading brush's derived
  * tones instead of hand-picked ones.
  *
- * Zoom is two numbers multiplied together, not one: a "fit" zoom (`fitZoom`)
- * that keeps the whole sprite visible without scrolling, recomputed whenever
- * `host` or the window resizes (`ResizeObserver` plus a `resize` listener —
- * the docked split view's divider drag changes `host`'s width without ever
- * firing a window resize, so the observer is the one that actually matters
- * day to day), and a user-driven multiplier the mouse wheel adjusts on top of
- * it, for genuinely getting in close on a boss-sized canvas. The multiplier
- * resets to 1 whenever the sprite's own dimensions change (a fresh "New" or a
- * loaded sprite) — carrying a previous sprite's zoom into a differently-sized
- * one has no reason to make sense.
+ * Zoom starts at a "fit" level computed from the available space (recomputed
+ * whenever `host` or the window resizes — the docked split view's divider
+ * drag changes `host`'s width without ever firing a window resize, hence the
+ * `ResizeObserver`), and the +/- buttons step between `ZOOM_LEVELS` from
+ * there. The zoom index resets to the fit level whenever the sprite's own
+ * dimensions change (a fresh "New" or a loaded sprite) — carrying a previous
+ * sprite's zoom into a differently-sized one has no reason to make sense.
  */
 export function createGridPanel(state: PixelEditorState, host: HTMLElement): GridHandle {
   const wrap = document.createElement('div');
@@ -102,23 +112,23 @@ export function createGridPanel(state: PixelEditorState, host: HTMLElement): Gri
   const activeCtx = get2dContext(activeLayer);
 
   let painting = false;
-  let zoomMultiplier = MIN_ZOOM_MULTIPLIER;
+  let zoomIndex = 0;
   let lastWidth = state.width;
   let lastHeight = state.height;
 
-  function baseZoom(): number {
+  function fitIndex(): number {
     const availableWidth = Math.max(32, host.clientWidth - WRAP_PADDING_PX * 2);
     const availableHeight = Math.max(32, window.innerHeight * FIT_HEIGHT_FRACTION);
-    return fitZoom(state.width, state.height, availableWidth, availableHeight);
+    return fitZoomIndex(state.width, state.height, availableWidth, availableHeight);
   }
 
   function currentZoom(): number {
-    return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.round(baseZoom() * zoomMultiplier)));
+    return ZOOM_LEVELS[zoomIndex] ?? 1;
   }
 
   function sizeCanvases(): void {
     if (state.width !== lastWidth || state.height !== lastHeight) {
-      zoomMultiplier = MIN_ZOOM_MULTIPLIER;
+      zoomIndex = fitIndex();
       lastWidth = state.width;
       lastHeight = state.height;
     }
@@ -204,49 +214,73 @@ export function createGridPanel(state: PixelEditorState, host: HTMLElement): Gri
     event.preventDefault();
   });
 
-  /**
-   * Zooms in/out under the cursor rather than always from the top-left
-   * corner: without re-centring on the point that was under the pointer
-   * before the resize, a zoom-in on, say, the bottom-right of a boss canvas
-   * would immediately scroll that spot out of view — the opposite of what
-   * "zoom in for detail" is for. `wrap.scroll{Left,Top}` are content-space
-   * (unaffected by the wrap's own padding), so the cursor's content-space
-   * position before and after the zoom change is what has to line up.
-   */
-  function onWheel(event: WheelEvent): void {
-    event.preventDefault();
-    const rect = wrap.getBoundingClientRect();
-    const cursorX = event.clientX - rect.left + wrap.scrollLeft;
-    const cursorY = event.clientY - rect.top + wrap.scrollTop;
-    const previousZoom = currentZoom();
-    zoomMultiplier =
-      event.deltaY < 0
-        ? Math.min(MAX_ZOOM_MULTIPLIER, zoomMultiplier * WHEEL_ZOOM_STEP)
-        : Math.max(MIN_ZOOM_MULTIPLIER, zoomMultiplier / WHEEL_ZOOM_STEP);
-    sizeCanvases();
-    const ratio = currentZoom() / previousZoom;
-    wrap.scrollLeft = cursorX * ratio - (event.clientX - rect.left);
-    wrap.scrollTop = cursorY * ratio - (event.clientY - rect.top);
+  const zoomRow = document.createElement('div');
+  zoomRow.className = 'kb-pixel-zoom-row';
+  const zoomOutButton = document.createElement('button');
+  zoomOutButton.type = 'button';
+  zoomOutButton.textContent = '−';
+  zoomOutButton.title = 'Zoom out';
+  const zoomLabel = document.createElement('span');
+  zoomLabel.className = 'kb-pixel-zoom-label';
+  const zoomInButton = document.createElement('button');
+  zoomInButton.type = 'button';
+  zoomInButton.textContent = '+';
+  zoomInButton.title = 'Zoom in';
+  zoomRow.append(zoomOutButton, zoomLabel, zoomInButton);
+  host.insertBefore(zoomRow, wrap);
+
+  function renderZoomRow(): void {
+    zoomLabel.textContent = `${String(currentZoom())}×`;
+    zoomOutButton.disabled = zoomIndex <= 0;
+    zoomInButton.disabled = zoomIndex >= ZOOM_LEVELS.length - 1;
   }
-  wrap.addEventListener('wheel', onWheel, { passive: false });
+
+  // Resets scroll to the top-left on every zoom change rather than trying to
+  // re-centre on wherever the view happened to be — with discrete, fairly
+  // large jumps between levels (unlike a continuous wheel), the previous
+  // scroll offset has no reason to still point at anything meaningful, and
+  // the top-left corner is always inside the canvas whatever the zoom.
+  zoomOutButton.addEventListener('click', () => {
+    zoomIndex = Math.max(0, zoomIndex - 1);
+    sizeCanvases();
+    renderZoomRow();
+    wrap.scrollLeft = 0;
+    wrap.scrollTop = 0;
+  });
+  zoomInButton.addEventListener('click', () => {
+    zoomIndex = Math.min(ZOOM_LEVELS.length - 1, zoomIndex + 1);
+    sizeCanvases();
+    renderZoomRow();
+    wrap.scrollLeft = 0;
+    wrap.scrollTop = 0;
+  });
 
   // A window `resize` alone misses the docked split view's divider drag,
   // which changes `host`'s width without the window itself resizing —
   // `render/app.ts`'s `trackWindowSize` picks the same `ResizeObserver`
   // approach for the identical reason.
-  const resizeObserver = new ResizeObserver(sizeCanvases);
+  const onHostResize = (): void => {
+    sizeCanvases();
+    renderZoomRow();
+  };
+  const resizeObserver = new ResizeObserver(onHostResize);
   resizeObserver.observe(host);
-  window.addEventListener('resize', sizeCanvases);
+  window.addEventListener('resize', onHostResize);
 
-  const unsubscribe = state.subscribe(render);
+  zoomIndex = fitIndex();
+  const unsubscribe = state.subscribe(() => {
+    render();
+    renderZoomRow();
+  });
   render();
+  renderZoomRow();
 
   return {
     destroy(): void {
       resizeObserver.disconnect();
-      window.removeEventListener('resize', sizeCanvases);
-      wrap.removeEventListener('wheel', onWheel);
+      window.removeEventListener('resize', onHostResize);
       unsubscribe();
+      zoomRow.remove();
       wrap.remove();
     },
     setBackgroundColor(color: string | null): void {

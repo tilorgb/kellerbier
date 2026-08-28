@@ -1306,3 +1306,66 @@ for the same `import.meta.glob`-at-build-time shape rather than a dev-server rou
 still needs one), and a trap for reads, which have no reason to depend on a server being there at
 all. Adding a sprite category or bucket needs no change here: the glob pattern and the path-parsing
 regex both key off `CATEGORY_FOLDERS`/the directory itself, not an enumerated list.
+
+## 31. Click-to-pick pads its hit-test well past the physics collider, because the two are answering different questions
+
+**Decided:** M6, issue #108, found by actually clicking on enemies rather than only on their exact
+simulated centre.
+
+`app/sprite-pick.ts`'s `pickEnemyAt` originally hit-tested against an enemy's real collider radius
+(`sim/enemy/size.ts`'s `ENEMY_PROFILES` — 4 to 10 world units), on the reasoning that it was reading
+the same data the sim's own hit-test reads. That reasoning does not transfer: a collider radius is
+tuned for combat feel, not for a mouse, and `EntityView`'s uniform `radius / (referenceHeight / 2)`
+scale means the *visible* sprite is a `2*radius` square around that circle — so even a pixel-perfect
+click on a visible corner of the sprite already misses the inscribed circle, before accounting for a
+real click never landing exactly on a collider's centre at all. In practice this made the feature
+read as "always resolves to the floor tile," since `pickTileNameAt` is checked second and, on floor 1
+(one tile variant today), returns the same name regardless of where the miss landed.
+
+Padded the enemy pick radius by `PICK_RADIUS_MULTIPLIER` (2.5×) rather than reusing the raw collider
+— a UI affordance for "click the thing you can see" is a different question from "did this hurt the
+player," and answering it with the same number was the actual bug, not a rounding error to tune away.
+
+**Constrains:** any future click-target hit-test built from gameplay collision data (not just this
+one) should ask whether it is answering "what does this look like to click on" or "what does this
+collide with" before reusing gameplay geometry directly — the two only coincidentally share a value
+when a sprite happens to be drawn exactly at its collider's size, which nothing here guarantees.
+
+## 32. The room editor's grid tools are dropdowns wherever the value is one of a small known set, and Erase clears every marker kind, not just rectangles
+
+**Decided:** M6, issue #24's follow-up, found by actually using the enemy/hazard/prop tools rather
+than only the wall/erase pair they were built and tested against first.
+
+Three separate gaps, one root cause — a tool's toolbar option was built to store *whatever a author
+already knew to type*, not to teach them what to type:
+
+- **Enemy spawn** placed a marker bound to `cell.spawnGroups[0]`'s id with no way to choose an enemy
+  at all, and `window.alert`ed "add a spawn group first" if none existed yet — which reads as "this
+  tool does nothing" the first time anyone reaches for it, since nothing on the grid or its toolbar
+  hints that a *different* panel (`panels/spawn-groups.ts`) is where the actual enemy gets chosen.
+  Fixed with an enemy `<select>` right on the toolbar (mirroring `pickup`'s own already-correct
+  pattern) and `findOrCreateSimpleSpawnGroup`, which reuses or creates a plain one-choice,
+  every-floor group for whichever enemy is selected — the Spawn groups panel is still where a
+  multi-choice, floor-varying group gets hand-authored, this is only the fast path for the ordinary
+  "this enemy, here" case that a locked single enemy id could never express in the first place. The
+  spawn marker's tooltip now shows the resolved enemy id (`enemyLabelFor`) instead of the group id, for
+  the same "read what you actually placed" reason.
+- **Hazard** had a bare text input with no suggestions wired in at all — `definitions.ts` already
+  defined `HAZARD_TYPE_SUGGESTIONS`, just never imported here. **Prop** had a `<datalist>` combo box,
+  which technically listed its own suggestions but reads, in practice, as an empty text field with no
+  visible hint that typing shows a dropdown. Both became explicit `<select>` dropdowns via one shared
+  `createTypePicker` helper, with a trailing "Custom…" option that reveals a plain text input —
+  keeping the "still accepts free text" property `definitions.ts`'s own doc comment calls out
+  (neither field has a real registry `sim/room/template.ts` enforces), just opt-in instead of hidden.
+- **Erase** only ever filtered `obstacles`/`hazards` (the two rectangle-shaped lists) — an enemy
+  spawn, pickup or decorative prop placed by mistake had no way to be removed at all, which read as
+  "erase doesn't work" to anyone whose stray click happened to be one of those instead of a wall.
+  Extended to filter `enemySpawns`/`pickupSpawns`/`decorativeProps` too, by the same point-inside-
+  drag-rectangle test the marker-placement tools already use to place them.
+
+**Constrains:** a new grid tool whose option is one of a small, known set (not truly free-form data)
+should default to `createTypePicker`'s select-plus-custom-escape-hatch shape rather than a bare text
+input — a text field with no visible list of legal values is, from a first-time author's side,
+indistinguishable from a tool that silently does nothing. A new marker kind (a point placed on the
+grid, the way enemy/pickup/prop are) needs its own branch in Erase's filter set the moment it exists,
+not as a follow-up once someone reports the marker they placed by mistake is stuck there forever.

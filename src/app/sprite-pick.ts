@@ -13,7 +13,22 @@ import { pickTileVariant } from '../render/room.js';
  * queried once on click instead of every frame.
  */
 
-/** The closest alive enemy whose collider contains `(worldX, worldY)`, by id — `null` if none does. Mirrors `EntityView.sync`'s own hit-test data exactly, read externally rather than duplicated internally. */
+/**
+ * How generous a click gets, relative to an enemy's real collider radius.
+ *
+ * The collider is a gameplay hitbox (`sim/enemy/size.ts`'s `ENEMY_PROFILES`
+ * — 4 to 10 world units), tuned for combat feel, not for a mouse. A "normal"
+ * enemy's rendered sprite is a `2*radius`-square bounding box around that
+ * circle (`EntityView`'s uniform `radius / (referenceHeight / 2)` scale), so
+ * even a pixel-perfect click on a visible corner of the sprite already
+ * misses the inscribed circle — and a real click is never pixel-perfect on
+ * top of that. Padding the pick radius well past the collider is what makes
+ * "click the sprite you can see" actually work, rather than only working for
+ * clicks that happen to land within a few world units of dead centre.
+ */
+const PICK_RADIUS_MULTIPLIER = 2.5;
+
+/** The closest alive enemy whose (generously padded, see `PICK_RADIUS_MULTIPLIER`) collider contains `(worldX, worldY)`, by id — `null` if none does. */
 export function pickEnemyAt(sim: GameSim, worldX: number, worldY: number): string | null {
   const world = sim.world;
   const states = world.states;
@@ -30,7 +45,7 @@ export function pickEnemyAt(sim: GameSim, worldX: number, worldY: number): strin
     if (((masks[index] ?? 0) & sim.enemyMask) !== sim.enemyMask) {
       continue;
     }
-    const radius = body[index * 2] ?? 1;
+    const radius = (body[index * 2] ?? 1) * PICK_RADIUS_MULTIPLIER;
     const dx = sim.positionX(index) - worldX;
     const dy = sim.positionY(index) - worldY;
     const distance = Math.hypot(dx, dy);

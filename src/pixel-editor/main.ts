@@ -126,6 +126,19 @@ const STYLE = `
 .kb-pixel-target-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .kb-pixel-target-row select, .kb-pixel-target-row input { width: auto; flex: 1 1 100px; }
 
+.kb-pixel-zoom-row {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
+  color: var(--kb-color-text-dim); font-size: 12px;
+}
+.kb-pixel-zoom-row button {
+  font: inherit; color: var(--kb-color-text); background: var(--kb-color-surface-3);
+  border: 1px solid var(--kb-color-surface-4); border-radius: var(--kb-radius-sm);
+  width: 24px; height: 24px; line-height: 1; cursor: pointer;
+}
+.kb-pixel-zoom-row button:hover:not(:disabled) { background: var(--kb-color-surface-3-hover); }
+.kb-pixel-zoom-row button:disabled { opacity: 0.4; cursor: default; }
+.kb-pixel-zoom-label { min-width: 3em; text-align: center; }
+
 .kb-pixel-canvas-wrap {
   background: var(--kb-color-surface-0); border: 1px solid var(--kb-color-surface-4);
   border-radius: var(--kb-radius-md); padding: 12px;
@@ -361,6 +374,13 @@ function boot(): void {
   left.appendChild(gridHost);
   const grid = createGridPanel(state, gridHost);
 
+  // Right under the canvas rather than off in the right column: the tool
+  // choice (pen/eraser/shade), the brush size and the colour swatches are
+  // what a hand actually moving between "look at the canvas" and "look at
+  // the controls" wants closest, not filed alongside the browse/background/
+  // frames panels that are consulted far less often mid-stroke.
+  createPalettePanel(state, left);
+
   const livePreviewStatus = document.createElement('p');
   livePreviewStatus.className = 'kb-pixel-live-status';
   left.appendChild(livePreviewStatus);
@@ -422,12 +442,15 @@ function boot(): void {
     status.textContent = `Loaded ${target.bucketId}/${target.category}/${target.name}.`;
   }
 
-  // First panel in the right column, not last: "load something existing and
-  // edit it" is at least as common a way to start as "draw something new",
-  // and the previous bottom-of-the-list position sat below a canvas that
-  // could run to hundreds of CSS pixels tall — reachable, but only after
-  // scrolling well past everything else, which reads as "there's no way to
-  // load a sprite" long before a still-scrolling user finds out otherwise.
+  createBackgroundPanel(state, grid, right);
+  createFramesPanel(state, right);
+  createLegibilityPanel(state, right);
+  // Last in the right column: browsing and loading an existing sprite is a
+  // less frequent action than the painting tools next to the canvas or the
+  // per-sprite panels above it, and the canvas now fits its own host
+  // (`canvas.ts`'s `fitZoomIndex`) rather than defaulting to a fixed size
+  // that used to push everything below it far down the page — so this no
+  // longer needs to sit first just to stay reachable.
   const browsePanel = createBrowsePanel(right, {
     onLoad: (sprite: SpriteSummary) => {
       if (state.dirty && !window.confirm('Discard unsaved changes and load this sprite?')) {
@@ -436,10 +459,6 @@ function boot(): void {
       void loadSpriteInto(sprite);
     },
   });
-  createPalettePanel(state, right);
-  createBackgroundPanel(state, grid, right);
-  createFramesPanel(state, right);
-  createLegibilityPanel(state, right);
 
   /**
    * The other half of `app/main.ts`'s in-game click-to-pick (#108's
