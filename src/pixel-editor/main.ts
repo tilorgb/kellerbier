@@ -6,16 +6,19 @@ import {
   saveSprite,
   type SpriteSummary,
 } from './api-client.js';
+import { createBackgroundPanel } from './background-panel.js';
 import { createBrowsePanel } from './browse-panel.js';
 import { createGridPanel } from './canvas.js';
 import { createFramesPanel } from './frames-panel.js';
 import { createLegibilityPanel } from './legibility-panel.js';
 import { type LiveStatus, createLivePreviewClient } from './live-preview-client.js';
 import { createPalettePanel } from './palette-panel.js';
-import { PixelEditorState } from './state.js';
+import { DEFAULT_SIZE_PRESET_ID, sizePresetsFor } from './size-presets.js';
+import { PixelEditorState, canvasSizeFor } from './state.js';
 import {
   ALL_BUCKET_IDS,
   CATEGORY_FOLDERS,
+  CATEGORY_SPECS,
   FLOOR_BUCKETS,
   type SpriteCategory,
 } from '../../tools/art/spec.mjs';
@@ -101,7 +104,7 @@ const STYLE = `
   color: var(--kb-color-text-dim); font-weight: normal;
 }
 .kb-pixel-panel label { display: block; margin-bottom: 6px; }
-.kb-pixel-panel input[type='text'], .kb-pixel-panel select {
+.kb-pixel-panel input[type='text'], .kb-pixel-panel input[type='number'], .kb-pixel-panel select {
   width: 100%; background: var(--kb-color-surface-3); color: var(--kb-color-text);
   border: 1px solid var(--kb-color-surface-4); border-radius: var(--kb-radius-sm);
   padding: 3px 5px; font: inherit; margin-top: 2px;
@@ -132,10 +135,16 @@ const STYLE = `
 
 .kb-pixel-tool-row { display: flex; gap: 6px; margin-bottom: 8px; }
 .kb-pixel-tool-active { background: var(--kb-color-accent); color: var(--kb-color-surface-1); border-color: var(--kb-color-accent); }
+.kb-pixel-brush-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; color: var(--kb-color-text-dim); font-size: 12px; }
+.kb-pixel-brush-row input[type='range'] { flex: 1 1 auto; }
 
 .kb-pixel-swatches { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; }
 .kb-pixel-swatch { width: 24px; height: 24px; padding: 0; border: 2px solid var(--kb-color-surface-4); border-radius: var(--kb-radius-sm); cursor: pointer; }
 .kb-pixel-swatch-active { outline: 2px solid var(--kb-color-accent); outline-offset: 1px; }
+
+.kb-pixel-bg-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.kb-pixel-bg-swatch { width: 26px; height: 26px; padding: 0; border: 2px solid var(--kb-color-surface-4); border-radius: var(--kb-radius-sm); cursor: pointer; }
+.kb-pixel-bg-active { outline: 2px solid var(--kb-color-accent); outline-offset: 1px; }
 
 .kb-pixel-frame-strip { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .kb-pixel-frame-thumb {
@@ -243,14 +252,76 @@ function boot(): void {
     categorySelect.appendChild(option);
   }
 
+  // The size a sprite category is drawn at is a range, not one fixed number
+  // (`docs/CONTENT_BIBLE.md` §5's "roughly 12x16", "up to 160x160") and width
+  // and height are independent (`docs/DECISIONS.md` #26 — a character is not
+  // guaranteed to be taller than it is wide). `presetSelect` is a one-click
+  // starting point that fills both number fields at once; `widthInput`/
+  // `heightInput` are what "New" actually reads, each clamped live to
+  // whatever range `CATEGORY_SPECS` gives the selected category, so any
+  // legal combination is reachable, not just the five the presets name.
+  const presetSelect = document.createElement('select');
+  const widthInput = document.createElement('input');
+  widthInput.type = 'number';
+  widthInput.title = 'Width';
+  widthInput.placeholder = 'W';
+  const heightInput = document.createElement('input');
+  heightInput.type = 'number';
+  heightInput.title = 'Height';
+  heightInput.placeholder = 'H';
+  const sizeSeparator = document.createElement('span');
+  sizeSeparator.textContent = '×';
+  sizeSeparator.setAttribute('aria-hidden', 'true');
+
+  function applySizeBounds(category: SpriteCategory): void {
+    const spec = CATEGORY_SPECS[category];
+    widthInput.min = String(spec.minWidth);
+    widthInput.max = String(spec.maxWidth);
+    heightInput.min = String(spec.minHeight);
+    heightInput.max = String(spec.maxHeight);
+  }
+
+  function populatePresetSelect(category: SpriteCategory): void {
+    presetSelect.replaceChildren();
+    for (const preset of sizePresetsFor(category)) {
+      const option = document.createElement('option');
+      option.value = preset.id;
+      option.textContent = preset.label;
+      presetSelect.appendChild(option);
+    }
+    // Otherwise the browser defaults a freshly repopulated <select> to its
+    // first option ("tiny") rather than this category's actual default tier.
+    presetSelect.value = DEFAULT_SIZE_PRESET_ID;
+  }
+
+  function fillSizeFromPreset(category: SpriteCategory, presetId: string): void {
+    applySizeBounds(category);
+    const size = canvasSizeFor(category, presetId);
+    widthInput.value = String(size.width);
+    heightInput.value = String(size.height);
+  }
+
+  categorySelect.addEventListener('change', () => {
+    const category = categorySelect.value as SpriteCategory;
+    populatePresetSelect(category);
+    fillSizeFromPreset(category, presetSelect.value);
+  });
+  presetSelect.addEventListener('change', () => {
+    fillSizeFromPreset(categorySelect.value as SpriteCategory, presetSelect.value);
+  });
+
   const nameInput = document.createElement('input');
   nameInput.type = 'text';
   nameInput.placeholder = 'sprite-name';
 
+  populatePresetSelect(snapshot?.category ?? defaultCategory);
+  fillSizeFromPreset(snapshot?.category ?? defaultCategory, DEFAULT_SIZE_PRESET_ID);
   if (snapshot !== null) {
     bucketSelect.value = snapshot.bucketId;
     categorySelect.value = snapshot.category;
     nameInput.value = snapshot.name;
+    widthInput.value = String(snapshot.width);
+    heightInput.value = String(snapshot.height);
   }
 
   const newButton = document.createElement('button');
@@ -260,15 +331,28 @@ function boot(): void {
     if (state.dirty && !window.confirm('Discard unsaved changes and start a new sprite?')) {
       return;
     }
-    state.reset(bucketSelect.value, categorySelect.value as SpriteCategory);
+    const category = categorySelect.value as SpriteCategory;
+    const spec = CATEGORY_SPECS[category];
+    const width = Math.min(spec.maxWidth, Math.max(spec.minWidth, Number(widthInput.value)));
+    const height = Math.min(spec.maxHeight, Math.max(spec.minHeight, Number(heightInput.value)));
+    state.reset(bucketSelect.value, category, width, height);
     nameInput.value = '';
   });
 
-  targetRow.append(bucketSelect, categorySelect, nameInput, newButton);
+  targetRow.append(
+    bucketSelect,
+    categorySelect,
+    presetSelect,
+    widthInput,
+    sizeSeparator,
+    heightInput,
+    nameInput,
+    newButton,
+  );
 
   const gridHost = document.createElement('div');
   left.appendChild(gridHost);
-  createGridPanel(state, gridHost);
+  const grid = createGridPanel(state, gridHost);
 
   const livePreviewStatus = document.createElement('p');
   livePreviewStatus.className = 'kb-pixel-live-status';
@@ -306,6 +390,7 @@ function boot(): void {
   }
 
   createPalettePanel(state, right);
+  createBackgroundPanel(state, grid, right);
   createFramesPanel(state, right);
   createLegibilityPanel(state, right);
   const browsePanel = createBrowsePanel(right, {

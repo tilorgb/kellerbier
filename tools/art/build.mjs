@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { allowedColorsFor, floorBackgroundSwatches, FLOOR_BUCKETS } from './palette.mjs';
+import { floorBackgroundSwatches, FLOOR_BUCKETS, legalPixelColorsFor } from './palette.mjs';
 import { checkProjectileLegibility, relativeLuminance } from './contrast.mjs';
 import { decodePng, encodePng } from './png.mjs';
 import { packSprites } from './pack.mjs';
@@ -59,7 +59,7 @@ export async function buildAtlases({ rootDir, outDir, write = true }) {
       }
     }
 
-    const allowed = allowedColorsFor(sprite.bucketId);
+    const allowed = legalPixelColorsFor(sprite.bucketId);
     const offending = findOffPalettePixel(pixels, width, height, allowed);
     if (offending !== null) {
       const hex = offending.color.toString(16).padStart(6, '0');

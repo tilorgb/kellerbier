@@ -273,16 +273,6 @@ async function boot(): Promise<void> {
     throw new Error('Missing #game host element in index.html');
   }
 
-  // The room editor (#24) / pixel editor (#108) split-view toggle. Ships
-  // unconditionally, unlike the debug overlay below — see
-  // `editor-dock.ts`'s doc comment for why it can't live behind that
-  // `import.meta.env.DEV` gate and still be reachable from a published
-  // preview build.
-  const dockRoot = document.getElementById('dock-root');
-  if (dockRoot !== null) {
-    createEditorDock(dockRoot);
-  }
-
   const app = await createRenderer(host);
 
   // Accessibility settings (#33): persisted across reloads in `localStorage`,
@@ -1307,6 +1297,81 @@ WASD move   arrows aim and fire
 
   runAnimationFrameLoop(loop);
   window.setInterval(refreshHud, 100);
+
+  // The room editor (#24) / pixel editor (#108) split-view toggle. Ships
+  // unconditionally, unlike the debug overlay below — see
+  // `editor-dock.ts`'s doc comment for why it can't live behind that
+  // `import.meta.env.DEV` gate and still be reachable from a published
+  // preview build. Placed here, not at the top of `boot`, because pausing
+  // and the room-sync messages below both need `loop`/`sim`/`floorPlan`,
+  // which do not exist yet that early.
+  const dockRoot = document.getElementById('dock-root');
+  if (dockRoot !== null) {
+    let pausedBeforeDock = false;
+    createEditorDock(dockRoot, {
+      // Pausing while any editor is docked is what makes it safe to hand the
+      // live room over to the room editor below — the player can't walk
+      // through a door mid-edit and invalidate `currentRoomId`/`floorPlan`
+      // out from under it. It also means editing an enemy's sprite never
+      // has to worry about that enemy attacking mid-edit.
+      onOpen: () => {
+        pausedBeforeDock = loop.paused;
+        loop.paused = true;
+      },
+      onClose: () => {
+        if (!pausedBeforeDock) {
+          loop.paused = false;
+        }
+      },
+    });
+
+    window.addEventListener('message', (event: MessageEvent<unknown>) => {
+      const data = event.data;
+      if (typeof data !== 'object' || data === null || !('type' in data)) {
+        return;
+      }
+      if (data.type === 'kb-room-editor:request-current') {
+        const room = planRoom(floorPlan, currentRoomId);
+        const templateJson = room.staircaseTemplateId === undefined ? planTemplate(room) : null;
+        event.source?.postMessage(
+          { type: 'kb-room-editor:current-room', templateJson },
+          { targetOrigin: '*' },
+        );
+        return;
+      }
+      if (data.type === 'kb-room-editor:apply' && 'templateJson' in data) {
+        try {
+          const room = planRoom(floorPlan, currentRoomId);
+          if (room.staircaseTemplateId !== undefined) {
+            throw new Error('the current room is a staircase, which the room editor cannot edit');
+          }
+          sim.loadRoom(
+            data.templateJson,
+            floorPlan.floor,
+            null,
+            hiddenDoorsFor(floorPlan, currentRoomId, revealedEdges),
+            buildPlacement(room),
+          );
+          view.setSecretHints(crackHintsFor(floorPlan, currentRoomId, revealedEdges));
+          minimapHud.rebuild(floorPlan, currentRoomId, visitedRoomIds);
+          refreshHud();
+          event.source?.postMessage(
+            { type: 'kb-room-editor:apply-ack', ok: true },
+            { targetOrigin: '*' },
+          );
+        } catch (error) {
+          event.source?.postMessage(
+            {
+              type: 'kb-room-editor:apply-ack',
+              ok: false,
+              error: error instanceof Error ? error.message : String(error),
+            },
+            { targetOrigin: '*' },
+          );
+        }
+      }
+    });
+  }
 
   // Re-applies the accessibility settings to whichever `GameSim` a restart
   // has most recently built, and refreshes the two places that show a

@@ -15,4 +15,8 @@ export declare const FLOOR_PALETTES: Readonly<{
 export declare const MASTER_PALETTE: readonly number[];
 export declare function allowedColorsFor(bucketId: string): Set<number>;
 export declare function floorBackgroundSwatches(floorTag: string): readonly number[];
+export declare function shadeOf(color: number, step: number): number;
+export declare function shadeRampOf(color: number): readonly number[];
+export declare function legalPixelColorsFor(bucketId: string): Set<number>;
+export declare function nudgeShade(bucketId: string, color: number, direction: number): number;
 export declare const FLOOR_BUCKETS: readonly FloorBucket[];

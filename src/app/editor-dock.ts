@@ -4,6 +4,12 @@ export interface EditorDockHandle {
   destroy(): void;
 }
 
+export interface EditorDockCallbacks {
+  /** Fires on the closed -> open transition only, never on switching editors while already open. */
+  readonly onOpen?: () => void;
+  readonly onClose?: () => void;
+}
+
 interface DockedEditor {
   readonly id: string;
   readonly label: string;
@@ -85,7 +91,10 @@ const STYLE = `
  * subdirectory — the CI preview publishes pull requests to
  * `pr/<number>/` under the repo's Pages site, not the site root.
  */
-export function createEditorDock(dockRoot: HTMLElement): EditorDockHandle {
+export function createEditorDock(
+  dockRoot: HTMLElement,
+  callbacks: EditorDockCallbacks = {},
+): EditorDockHandle {
   injectDevUiTokens();
 
   const style = document.createElement('style');
@@ -121,6 +130,7 @@ export function createEditorDock(dockRoot: HTMLElement): EditorDockHandle {
   }
 
   function open(editor: DockedEditor): void {
+    const wasClosed = panel === null;
     if (panel === null) {
       divider = document.createElement('div');
       divider.id = 'dock-divider';
@@ -143,6 +153,9 @@ export function createEditorDock(dockRoot: HTMLElement): EditorDockHandle {
     }
     openEditorId = editor.id;
     renderActiveButton();
+    if (wasClosed) {
+      callbacks.onOpen?.();
+    }
   }
 
   function close(): void {
@@ -153,6 +166,7 @@ export function createEditorDock(dockRoot: HTMLElement): EditorDockHandle {
     iframe = null;
     openEditorId = null;
     renderActiveButton();
+    callbacks.onClose?.();
   }
 
   function toggle(editor: DockedEditor): void {

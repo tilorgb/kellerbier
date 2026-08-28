@@ -1,5 +1,6 @@
-import { CATEGORY_SPECS, type SpriteCategory } from '../../tools/art/spec.mjs';
-import { allowedColorsFor } from '../../tools/art/palette.mjs';
+import type { SpriteCategory } from '../../tools/art/spec.mjs';
+import { allowedColorsFor, nudgeShade } from '../../tools/art/palette.mjs';
+import { DEFAULT_SIZE_PRESET_ID, sizePresetFor } from './size-presets.js';
 
 /**
  * One drawn frame: RGBA bytes, `width * height * 4` long. `Uint8ClampedArray`
@@ -9,22 +10,42 @@ import { allowedColorsFor } from '../../tools/art/palette.mjs';
  */
 export type FrameData = Uint8ClampedArray;
 
-export type Tool = 'pen' | 'eraser';
+export type Tool = 'pen' | 'eraser' | 'shade';
+
+/** How wide a `shade` stroke's brush is, in pixels of radius — `1` touches only the pixel under the pointer. */
+export const MIN_BRUSH_RADIUS = 1;
+export const MAX_BRUSH_RADIUS = 6;
+export const DEFAULT_BRUSH_RADIUS = 2;
 
 /**
- * A sprite category's canvas is fixed at its spec's *maximum* size
- * (`docs/DECISIONS.md` #24) — `minWidth <= maxWidth <= maxWidth` is always
- * true, so a canvas authored at that size can never fail
- * `validate.mjs`'s `validateSpriteSize`, for any category, with no
- * freehand resizing to get there. `character`'s "roughly 12x16" and
- * `boss`'s "up to 48x48" both mean "this is the largest legal size", not
- * "this is the only legal size" — a narrower character or a smaller boss is
- * still a sprite drawn on this canvas with its unused columns/rows left
- * transparent, exactly as legal as one that fills it.
+ * Chance any one pixel under a `shade` brush actually moves on a given
+ * pointer-move sample, rather than every covered pixel shifting every time:
+ * a drag samples many times a second, so shading at 100% would saturate a
+ * whole area to the ramp's end in an instant and there would be no dial
+ * between "touched it once" and "touched it for a while" — the brush would
+ * only ever paint a flat darkest/lightest fill, never the mixed grain a
+ * shading pass is actually for.
  */
-export function canvasSizeFor(category: SpriteCategory): { width: number; height: number } {
-  const spec = CATEGORY_SPECS[category];
-  return { width: spec.maxWidth, height: spec.maxHeight };
+const SHADE_HIT_CHANCE = 0.35;
+
+/**
+ * A named size preset's `(width, height)` — `size-presets.ts`'s curated
+ * tiers are a one-click starting point for "New" (and the numbers
+ * `tests/unit/pixel-editor-size-presets.test.ts` checks against
+ * `CATEGORY_SPECS`), not the canvas's only legal size: `docs/DECISIONS.md`
+ * #26 replaced "pick one of five tiers" with two independently editable
+ * width/height fields, since walking width and height up together in
+ * lockstep can never land on a wide-and-short canvas. `PixelEditorState`
+ * itself just takes whatever `(width, height)` the caller hands it, checked
+ * against `isWithinCategorySpec` — this is only for computing a tier's
+ * numbers to seed those fields.
+ */
+export function canvasSizeFor(
+  category: SpriteCategory,
+  sizePresetId: string,
+): { width: number; height: number } {
+  const preset = sizePresetFor(category, sizePresetId);
+  return { width: preset.width, height: preset.height };
 }
 
 export function blankFrame(width: number, height: number): FrameData {
@@ -52,14 +73,19 @@ export class PixelEditorState {
   tool: Tool = 'pen';
   /** `null` only when the palette has not painted a first selection yet — the picker always defaults one in. */
   selectedColor: number | null = null;
+  /** Radius of the `shade` tool's brush, in pixels — irrelevant to `pen`/`eraser`, which always touch exactly one. */
+  brushRadius = DEFAULT_BRUSH_RADIUS;
   dirty = false;
 
   private readonly listeners = new Set<() => void>();
 
-  constructor(bucketId: string, category: SpriteCategory) {
+  constructor(bucketId: string, category: SpriteCategory, width?: number, height?: number) {
     this.bucketId = bucketId;
     this.category = category;
-    const size = canvasSizeFor(category);
+    const size =
+      width !== undefined && height !== undefined
+        ? { width, height }
+        : canvasSizeFor(category, DEFAULT_SIZE_PRESET_ID);
     this.width = size.width;
     this.height = size.height;
     this.frames = [blankFrame(this.width, this.height)];
@@ -100,11 +126,14 @@ export class PixelEditorState {
     return this.frames[this.activeFrameIndex - 1] ?? null;
   }
 
-  /** Resets to a fresh single-frame blank canvas for `bucketId`/`category`, keeping the current name. */
-  reset(bucketId: string, category: SpriteCategory): void {
+  /** Resets to a fresh single-frame blank canvas for `bucketId`/`category`/`(width, height)`, keeping the current name. */
+  reset(bucketId: string, category: SpriteCategory, width?: number, height?: number): void {
     this.bucketId = bucketId;
     this.category = category;
-    const size = canvasSizeFor(category);
+    const size =
+      width !== undefined && height !== undefined
+        ? { width, height }
+        : canvasSizeFor(category, DEFAULT_SIZE_PRESET_ID);
     this.width = size.width;
     this.height = size.height;
     this.frames = [blankFrame(this.width, this.height)];
@@ -185,5 +214,58 @@ export class PixelEditorState {
       frame[index + 3] = 255;
     }
     this.notify();
+  }
+
+  /**
+   * Nudges pixels within `brushRadius` of `(centerX, centerY)` a step lighter
+   * or darker, each independently and at random — some of an already-painted
+   * area reading brighter, some darker, is the actual shading effect; every
+   * covered pixel moving the same direction would just be a flat recolour.
+   * Only touches pixels that are already opaque and already on `bucketId`'s
+   * ramp (`palette.mjs`'s `nudgeShade` returns an untouched colour otherwise,
+   * which includes every fully-transparent pixel): shading paints over
+   * existing art, it does not fill blank canvas.
+   */
+  shadeArea(centerX: number, centerY: number): void {
+    const frame = this.activeFrame;
+    const radius = this.brushRadius;
+    const radiusSquared = radius * radius;
+    let changed = false;
+    for (let dy = -radius; dy <= radius; dy++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        if (dx * dx + dy * dy > radiusSquared) {
+          continue;
+        }
+        const x = centerX + dx;
+        const y = centerY + dy;
+        if (x < 0 || x >= this.width || y < 0 || y >= this.height) {
+          continue;
+        }
+        const index = (y * this.width + x) * 4;
+        if (frame[index + 3] === 0) {
+          continue;
+        }
+        if (Math.random() > SHADE_HIT_CHANCE) {
+          continue;
+        }
+        const color =
+          (((frame[index] ?? 0) << 16) |
+            ((frame[index + 1] ?? 0) << 8) |
+            (frame[index + 2] ?? 0)) >>>
+          0;
+        const direction = Math.random() < 0.5 ? -1 : 1;
+        const next = nudgeShade(this.bucketId, color, direction);
+        if (next === color) {
+          continue;
+        }
+        frame[index] = (next >> 16) & 0xff;
+        frame[index + 1] = (next >> 8) & 0xff;
+        frame[index + 2] = next & 0xff;
+        changed = true;
+      }
+    }
+    if (changed) {
+      this.notify();
+    }
   }
 }

@@ -1,18 +1,22 @@
-import { describe, expect, it } from 'vitest';
-import { allowedColorsFor } from '../../tools/art/palette.mjs';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { allowedColorsFor, shadeOf } from '../../tools/art/palette.mjs';
 import { CATEGORY_SPECS, type SpriteCategory } from '../../tools/art/spec.mjs';
+import { sizePresetsFor } from '../../src/pixel-editor/size-presets.js';
 import { PixelEditorState, canvasSizeFor } from '../../src/pixel-editor/state.js';
 
 const CATEGORIES: SpriteCategory[] = ['tile', 'character', 'boss', 'projectile'];
 
 describe('canvasSizeFor', () => {
-  it.each(CATEGORIES)('fixes %s to its spec maximum, always inside the legal range', (category) => {
-    const size = canvasSizeFor(category);
+  it.each(CATEGORIES)('resolves every %s preset to a size inside its legal range', (category) => {
     const spec = CATEGORY_SPECS[category];
-    expect(size.width).toBe(spec.maxWidth);
-    expect(size.height).toBe(spec.maxHeight);
-    expect(size.width).toBeGreaterThanOrEqual(spec.minWidth);
-    expect(size.height).toBeGreaterThanOrEqual(spec.minHeight);
+    for (const preset of sizePresetsFor(category)) {
+      const size = canvasSizeFor(category, preset.id);
+      expect(size).toEqual({ width: preset.width, height: preset.height });
+      expect(size.width).toBeGreaterThanOrEqual(spec.minWidth);
+      expect(size.width).toBeLessThanOrEqual(spec.maxWidth);
+      expect(size.height).toBeGreaterThanOrEqual(spec.minHeight);
+      expect(size.height).toBeLessThanOrEqual(spec.maxHeight);
+    }
   });
 });
 
@@ -112,15 +116,75 @@ describe('PixelEditorState', () => {
     expect(state.onionSkinFrame).toBeNull();
   });
 
-  it('reset switches bucket/category, resizes the canvas and re-defaults the palette colour', () => {
+  it('reset switches bucket/category, resizes the canvas to the default preset size and re-defaults the palette colour', () => {
     const state = new PixelEditorState('floor-1-cellar', 'tile');
     state.paintPixel(0, 0);
     state.reset('floor-2-rural', 'boss');
-    const spec = CATEGORY_SPECS.boss;
-    expect(state.width).toBe(spec.maxWidth);
-    expect(state.height).toBe(spec.maxHeight);
+    const normalBossPreset = sizePresetsFor('boss').find((preset) => preset.id === 'normal');
+    expect(normalBossPreset).toBeDefined();
+    expect(state.width).toBe(normalBossPreset?.width);
+    expect(state.height).toBe(normalBossPreset?.height);
     expect(state.frames).toHaveLength(1);
     expect(state.dirty).toBe(false);
     expect(allowedColorsFor('floor-2-rural').has(state.selectedColor ?? -1)).toBe(true);
+  });
+
+  it('reset accepts an explicit width and height, independent of any named preset', () => {
+    const state = new PixelEditorState('floor-1-cellar', 'tile');
+    state.reset('floor-1-cellar', 'character', 32, 20);
+    expect(state.width).toBe(32);
+    expect(state.height).toBe(20);
+  });
+});
+
+describe('shadeArea', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('nudges an already-painted pixel one step darker, and leaves transparent pixels alone', () => {
+    const state = new PixelEditorState('floor-1-cellar', 'character');
+    const [base] = [...allowedColorsFor('floor-1-cellar')];
+    if (base === undefined) {
+      throw new Error('floor-1-cellar has no allowed colours');
+    }
+    state.selectedColor = base;
+    state.tool = 'pen';
+    state.paintPixel(2, 2);
+    // Deterministic: always "hits" (0 > 0.35 is false) and always picks the darker direction (0 < 0.5 is true).
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    state.tool = 'shade';
+    state.shadeArea(2, 2);
+    const index = (2 * state.width + 2) * 4;
+    const painted =
+      ((state.activeFrame[index] ?? 0) << 16) |
+      ((state.activeFrame[index + 1] ?? 0) << 8) |
+      (state.activeFrame[index + 2] ?? 0);
+    expect(painted).toBe(shadeOf(base, -1));
+    // A transparent neighbour within the same brush radius must stay fully transparent.
+    const emptyIndex = (2 * state.width + 1) * 4;
+    expect([...state.activeFrame.slice(emptyIndex, emptyIndex + 4)]).toEqual([0, 0, 0, 0]);
+  });
+
+  it('clamps at the ramp end rather than drifting past it after repeated passes', () => {
+    const state = new PixelEditorState('floor-1-cellar', 'character');
+    const [base] = [...allowedColorsFor('floor-1-cellar')];
+    if (base === undefined) {
+      throw new Error('floor-1-cellar has no allowed colours');
+    }
+    state.selectedColor = base;
+    state.tool = 'pen';
+    state.paintPixel(2, 2);
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    state.tool = 'shade';
+    for (let i = 0; i < 5; i++) {
+      state.shadeArea(2, 2);
+    }
+    const index = (2 * state.width + 2) * 4;
+    const painted =
+      ((state.activeFrame[index] ?? 0) << 16) |
+      ((state.activeFrame[index + 1] ?? 0) << 8) |
+      (state.activeFrame[index + 2] ?? 0);
+    expect(painted).toBe(shadeOf(base, -2));
   });
 });

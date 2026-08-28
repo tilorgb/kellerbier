@@ -1,6 +1,23 @@
 import type { PixelEditorState } from './state.js';
 
-const DEFAULT_ZOOM = 16;
+/**
+ * Zoom fits the canvas to roughly this many CSS pixels on its longer side,
+ * rather than a single fixed factor — `docs/DECISIONS.md` #25 raised the
+ * boss ceiling to 160×160, and 160 at the old fixed 16x zoom is a
+ * 2560×2560px canvas: technically scrollable (`.kb-pixel-canvas-wrap`'s
+ * `overflow: auto`) but useless for actually drawing, since most of the
+ * sprite is off-screen at any one time. A 16×16 tile still lands near its
+ * old fixed zoom (512/16 = 32, close enough to the old 16 to feel familiar);
+ * a 160×160 boss lands at 3x instead, which actually fits.
+ */
+const TARGET_CANVAS_PX = 512;
+const MIN_ZOOM = 2;
+const MAX_ZOOM = 32;
+
+function zoomFor(width: number, height: number): number {
+  const fit = Math.floor(TARGET_CANVAS_PX / Math.max(width, height));
+  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, fit));
+}
 
 /** TS does not retain a nullability narrowing across a later closure boundary (`render` below), even for a `const` — resolving through a function whose return type is already non-null sidesteps that rather than re-asserting at every call site. */
 function get2dContext(canvas: HTMLCanvasElement): CanvasRenderingContext2D {
@@ -15,6 +32,8 @@ const ONION_SKIN_ALPHA = 0.35;
 
 export interface GridHandle {
   destroy(): void;
+  /** Sets the canvas's own background colour — what shows through a transparent pixel. `null` restores the default dark theme background. */
+  setBackgroundColor(color: string | null): void;
 }
 
 /**
@@ -24,17 +43,15 @@ export interface GridHandle {
  * so painting one authored pixel reads as a crisp square rather than a
  * blurred scale artifact.
  *
- * Painting only ever calls `state.paintPixel`, which only ever writes
- * `state.selectedColor` (itself only ever set from the palette panel's
- * swatches) or fully-transparent — see `docs/DECISIONS.md` #24's "there is
- * no off-palette pixel to lint for after the fact, because the picker never
- * offers one".
+ * Painting calls `state.paintPixel` (writes `state.selectedColor`, itself
+ * only ever set from the palette panel's swatches, or fully-transparent) or,
+ * for the `shade` tool, `state.shadeArea` (nudges already-painted pixels
+ * along `palette.mjs`'s derived shade ramps) — see `docs/DECISIONS.md` #24's
+ * "there is no off-palette pixel to lint for after the fact, because the
+ * picker never offers one", extended by #27 to the shading brush's derived
+ * tones instead of hand-picked ones.
  */
-export function createGridPanel(
-  state: PixelEditorState,
-  host: HTMLElement,
-  zoom = DEFAULT_ZOOM,
-): GridHandle {
+export function createGridPanel(state: PixelEditorState, host: HTMLElement): GridHandle {
   const wrap = document.createElement('div');
   wrap.className = 'kb-pixel-canvas-wrap';
   host.appendChild(wrap);
@@ -62,6 +79,7 @@ export function createGridPanel(
       target.width = state.width;
       target.height = state.height;
     }
+    const zoom = zoomFor(state.width, state.height);
     canvas.style.width = `${String(state.width * zoom)}px`;
     canvas.style.height = `${String(state.height * zoom)}px`;
     canvas.style.backgroundSize = `${String(zoom)}px ${String(zoom)}px`;
@@ -104,7 +122,11 @@ export function createGridPanel(
 
   function paintFromEvent(event: PointerEvent): void {
     const { x, y } = pixelFromEvent(event);
-    state.paintPixel(x, y);
+    if (state.tool === 'shade') {
+      state.shadeArea(x, y);
+    } else {
+      state.paintPixel(x, y);
+    }
   }
 
   function onPointerDown(event: PointerEvent): void {
@@ -142,6 +164,9 @@ export function createGridPanel(
     destroy(): void {
       unsubscribe();
       wrap.remove();
+    },
+    setBackgroundColor(color: string | null): void {
+      canvas.style.backgroundColor = color ?? '';
     },
   };
 }

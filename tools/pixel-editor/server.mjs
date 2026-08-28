@@ -22,7 +22,7 @@
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { allowedColorsFor } from '../art/palette.mjs';
+import { legalPixelColorsFor } from '../art/palette.mjs';
 import { decodePng, encodePng } from '../art/png.mjs';
 import { scanSprites } from '../art/scan.mjs';
 import { ALL_BUCKET_IDS, CATEGORY_FOLDERS } from '../art/spec.mjs';
@@ -200,7 +200,7 @@ async function handleSave(res, bucketId, category, name, body) {
     problems.push(sizeError);
   }
 
-  const allowed = allowedColorsFor(bucketId);
+  const allowed = legalPixelColorsFor(bucketId);
   frames.forEach((frame, index) => {
     const offending = findOffPalettePixel(frame.pixels, frame.width, frame.height, allowed);
     if (offending !== null) {

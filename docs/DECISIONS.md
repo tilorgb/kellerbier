@@ -1001,3 +1001,127 @@ the same split `build.mjs` already draws between decoding and validation. Adding
 or changing a floor's palette means editing `tools/art/spec.mjs`/`palette.mjs` once, and both the
 build pipeline and the authoring tool pick it up — there is deliberately nowhere else those
 numbers are allowed to live.
+
+## 25. `character` and `boss` sprite ceilings are raised — 16-bit is a colour/shading era, not a pixel-dimension rule
+
+**Decided:** M6, prompted by using the pixel editor (#108) for real and asking "how is 16×16
+'16-bit style'?" against reference art from the actual game `docs/CONTENT_BIBLE.md` §5 names as
+its touchstone.
+
+The bible's "16-bit era, not 8-bit" line was read, when the original `tools/art/spec.mjs` ceilings
+were set, as a pixel-dimension budget — `character` capped at 16 tall, `boss` at 48×48. It is not:
+"16-bit" describes a console generation's colour depth and shading complexity, not a tile size.
+That generation's actual character sprites are composited from several tiles and run well past
+16px tall; a single-tile ceiling under-shoots the density the bible's own reference actually has.
+`tile` staying exactly 16×16 was never the problem — a background tile is a repeating unit, not
+where detail lives — the ceiling that mattered was on the sprites meant to carry it.
+
+Raised via `tools/art/spec.mjs`'s `CATEGORY_SPECS`:
+
+- `character`: `maxHeight` 16 → 32 (`minHeight` stays 16, `maxWidth`/`minWidth` unchanged at
+  8/16). The floor, not the ceiling, moved to keep every already-committed floor-1/2 character
+  sprite — authored at 16 tall — legal; only new content reaches for the extra height.
+- `boss`: `maxWidth`/`maxHeight` 48 → 160 (`minWidth`/`minHeight` unchanged at 17). No boss art
+  exists yet, so there was nothing to invalidate. 160 authored is 320 on screen
+  (`WORLD_ZOOM` = 2) against a 180-tall playfield (`src/sim/room/playground.ts`'s
+  `PLAYFIELD_HEIGHT`) — deliberately close to filling it, on the reasoning that a boss is the one
+  sprite category meant to dominate the screen rather than share it.
+
+`projectile` and `tile` are untouched: a tile's whole job is to repeat identically and unnoticed,
+and a projectile's legibility rule (`docs/CONTENT_BIBLE.md` §5) already caps it at something
+tile-scale or smaller on its own terms.
+
+**Constrains:** `src/pixel-editor/size-presets.ts`'s curated tiers are the numbers actually used
+day to day and must stay inside these ranges — checked by
+`tests/unit/pixel-editor-size-presets.test.ts` against `CATEGORY_SPECS` directly rather than by
+eye, so a future spec change here is caught rather than silently leaving a preset out of range in
+either direction.
+
+## 26. Sprite pixel density is decoupled from on-screen size, and `character` width is no longer capped shorter than height
+
+**Decided:** M6, immediately after #25, while actually redrawing the player sprite (#108's
+proof-of-concept) at the new 32-tall ceiling.
+
+Two related mistakes surfaced from doing that redraw for real rather than just raising the spec
+number:
+
+- **The player sprite rendered twice as tall on screen the moment it was redrawn at 32px instead
+  of 16.** `EntityView` (`src/render/entities.ts`) already scales every enemy body to its own
+  collider radius (`sprite.scale.set(radius / (referenceHeight / 2))`), so a denser enemy texture
+  was always going to render at the same on-screen size — more texture pixels per world unit, not
+  a bigger sprite. `GameView`'s player sprite (`src/render/view.ts`) had no such scale at all: it
+  drew `textures.player` at native size, one texture pixel per world unit. That coupling was
+  invisible for as long as every character sprite happened to be 16 tall, and broke the instant
+  one wasn't — exactly the failure mode #25 raised the ceiling to invite. Fixed by giving the
+  player the same collider-relative scale enemies already get:
+  `this.player.scale.set(PLAYER_RADIUS / (textures.player.height / 2))` (`PLAYER_RADIUS` from
+  `sim/game/sim.ts`). Pixel density and on-screen size are different questions; #25 answered "how
+  much detail can art carry," and this is what actually keeps that answer from also silently
+  answering "how big is the player."
+- **`character.maxWidth` stayed at 16 while `maxHeight` went to 32**, which bakes in an assumption
+  the bible never actually makes: that a character silhouette is always taller than it is wide. A
+  stout body, a wide-bellied enemy, anything that reads better wide than tall was left with a third
+  of the canvas height had. Raised to 32, matching the height ceiling (`tools/art/spec.mjs`).
+
+That second fix would have been cosmetic on its own — the pixel editor's "size" control
+(`src/pixel-editor/size-presets.ts`) offered exactly five named tiers per category, each a fixed
+`(width, height)` pair walking width and height up together, so even with a wider `CATEGORY_SPECS`
+range there was still no way to actually pick a wide-and-short canvas. The named tiers stay, as a
+one-click starting point (and the only thing `tests/unit/pixel-editor-size-presets.test.ts` checks
+against `CATEGORY_SPECS`), but `PixelEditorState`'s canvas size is no longer tied to picking one of
+them: "New" now takes an explicit width and height (`state.reset(bucketId, category, width,
+height)`), editable as two independent number fields clamped live to `CATEGORY_SPECS`'
+`isWithinCategorySpec`, so any legal combination — not just the five the tiers happen to name — is
+reachable.
+
+**Constrains:** any future per-category size ceiling change only has to stay internally consistent
+in `tools/art/spec.mjs`; it no longer needs a matching hand-picked tier in `size-presets.ts` to
+actually be reachable in the tool. Any new sprite category added later that scales art to a
+gameplay quantity (a collider, a hitbox) the way the player and every enemy do must scale by that
+quantity, not draw its texture at native size — this decision is the second time that assumption
+broke silently, and the fix is the same both times.
+
+## 27. The pixel editor gets a shading brush, backed by a derived shade ramp rather than a free colour picker
+
+**Decided:** M6, immediately after #26, once the player redraw (#108) demonstrated that layered
+shading (a foam highlight, a glass condensation glint, a darker base) is what actually makes the
+higher-resolution art from #25 read as detailed rather than just bigger — and hand-authoring that
+shading pixel by pixel from `tools/art/palette.mjs`'s five hand-picked hues per floor is slow and
+easy to get wrong (see this session's own three attempts at the player sprite).
+
+The palette (`FLOOR_PALETTES`) is five deliberately chosen hues per floor, not five ramps — there
+is no recorded "lighter" or "darker" neighbour for `cellar`'s one amber, so a brush that wants to
+paint "amber, but a bit brighter" has nothing to reach for. Two options: hand-author a ramp per
+colour (more numbers to keep in sync with `FLOOR_PALETTES`, and another thing `docs/CONTENT_BIBLE.md`
+§5's "~40 colours overall" cap would need to account for by hand), or derive one deterministically.
+Derived won: `shadeOf(color, step)` shifts a colour's HSL lightness by a fixed amount per step and
+converts back, `shadeRampOf(color)` is the five tones (two darker, the original, two lighter) that
+produces, and both are pure functions of the existing palette — nothing to author, nothing to keep
+in sync, and (unlike a free lightness slider) a *finite* set of outputs, which matters for the
+reason below.
+
+`docs/DECISIONS.md` #24 fixed the pen tool's palette to a finite, checked set specifically so there
+is no off-palette pixel to catch after the fact — a shading brush that could nudge lightness by any
+continuous amount would reopen exactly that hole. `legalPixelColorsFor(bucketId)` is
+`allowedColorsFor(bucketId)` plus every one of those colours' derived ramps — still finite, still
+fully determined by `FLOOR_PALETTES`, just five times bigger — and is what `tools/art/build.mjs`
+and the pixel editor's own save endpoint (`tools/pixel-editor/server.mjs`) now check a saved sprite
+against, in place of the narrower `allowedColorsFor`. `allowedColorsFor` itself is unchanged and
+still what the palette panel's swatches and a fresh sprite's default colour draw from — the pen
+still only ever hands `state.selectedColor` one of the five-per-floor hand-picked hues; only the
+shading brush's *output* reaches into the derived tones.
+
+The brush itself (`PixelEditorState.shadeArea`, wired from `canvas.ts`'s pointer handlers) reads
+each already-opaque pixel under a circular brush, and for each one independently rolls whether it
+moves at all (`SHADE_HIT_CHANCE`, so a drag does not instantly saturate the whole brush to one flat
+tone) and, if so, which direction (`palette.mjs`'s `nudgeShade`, clamped at the ramp's ends).
+Independent per-pixel randomness — not "the whole brushed area moves the same direction" — is the
+actual shading effect: a mix of nudged-lighter and nudged-darker pixels reads as texture/shading,
+a uniform shift just reads as a flat recolour. Transparent pixels are skipped outright: shading
+works on art that is already there, it does not fill blank canvas the way the pen does.
+
+**Constrains:** any new sprite category or floor palette change is automatically shade-able with no
+extra work — `legalPixelColorsFor` derives from whatever `FLOOR_PALETTES`/`allowedColorsFor`
+already says. A future change to how many steps a ramp has, or how big a lightness step is, only
+needs to change `palette.mjs`'s `SHADE_STEPS`/`SHADE_LIGHTNESS_STEP` — `shadeRampOf`'s length and
+`legalPixelColorsFor`'s size follow automatically, checked by `tests/art/palette.test.ts`.

@@ -1,5 +1,5 @@
 import { allowedColorsFor } from '../../tools/art/palette.mjs';
-import type { PixelEditorState } from './state.js';
+import { MAX_BRUSH_RADIUS, MIN_BRUSH_RADIUS, type PixelEditorState } from './state.js';
 
 export interface PalettePanelHandle {
   destroy(): void;
@@ -11,7 +11,10 @@ export interface PalettePanelHandle {
  * there is no free-form colour picker anywhere in this tool. That is the
  * actual "cannot save an off-palette pixel" guarantee (`docs/DECISIONS.md`
  * #24): the picker never offers a colour outside the bucket's legal set, so
- * `state.paintPixel` can never write one.
+ * `state.paintPixel` can never write one. The `shade` tool (`docs/DECISIONS.md`
+ * #27) never reads `selectedColor` at all — it derives a lighter/darker tone
+ * of whatever a pixel already is — so it needs no swatch of its own, just
+ * the brush-size control this panel also owns.
  */
 export function createPalettePanel(state: PixelEditorState, host: HTMLElement): PalettePanelHandle {
   const root = document.createElement('div');
@@ -30,8 +33,25 @@ export function createPalettePanel(state: PixelEditorState, host: HTMLElement): 
   const eraserButton = document.createElement('button');
   eraserButton.type = 'button';
   eraserButton.textContent = 'Eraser';
-  toolRow.append(penButton, eraserButton);
+  const shadeButton = document.createElement('button');
+  shadeButton.type = 'button';
+  shadeButton.textContent = 'Shade';
+  shadeButton.title = 'Drag over already-painted pixels to nudge some lighter, some darker';
+  toolRow.append(penButton, eraserButton, shadeButton);
   root.appendChild(toolRow);
+
+  // Only meaningful for `shade` — `pen`/`eraser` always touch one pixel.
+  const brushRow = document.createElement('label');
+  brushRow.className = 'kb-pixel-brush-row';
+  const brushLabel = document.createElement('span');
+  brushLabel.textContent = 'Brush size';
+  const brushInput = document.createElement('input');
+  brushInput.type = 'range';
+  brushInput.min = String(MIN_BRUSH_RADIUS);
+  brushInput.max = String(MAX_BRUSH_RADIUS);
+  brushInput.value = String(state.brushRadius);
+  brushRow.append(brushLabel, brushInput);
+  root.appendChild(brushRow);
 
   const swatchGrid = document.createElement('div');
   swatchGrid.className = 'kb-pixel-swatches';
@@ -45,10 +65,19 @@ export function createPalettePanel(state: PixelEditorState, host: HTMLElement): 
     state.tool = 'eraser';
     state.notify();
   });
+  shadeButton.addEventListener('click', () => {
+    state.tool = 'shade';
+    state.notify();
+  });
+  brushInput.addEventListener('input', () => {
+    state.brushRadius = Number(brushInput.value);
+  });
 
   function render(): void {
     penButton.classList.toggle('kb-pixel-tool-active', state.tool === 'pen');
     eraserButton.classList.toggle('kb-pixel-tool-active', state.tool === 'eraser');
+    shadeButton.classList.toggle('kb-pixel-tool-active', state.tool === 'shade');
+    brushRow.style.display = state.tool === 'shade' ? 'flex' : 'none';
 
     swatchGrid.replaceChildren();
     const colors = [...allowedColorsFor(state.bucketId)].sort((a, b) => a - b);

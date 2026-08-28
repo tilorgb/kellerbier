@@ -41,7 +41,37 @@ export interface FloorArt {
    * map is mutating the one `floorTiles`/`RoomView` already draws with.
    */
   readonly tileTextures: Readonly<Record<string, Texture>>;
+  /**
+   * `(bucketId, category)` for every name in `enemyArt`/`tileTextures` —
+   * `app/main.ts`'s click-to-pick (#108) needs this to hand the pixel
+   * editor a full `(bucketId, category, name)` target, not just the name a
+   * click resolved to.
+   */
+  readonly spriteOrigins: Readonly<
+    Record<string, { bucketId: string; category: 'character' | 'tile' }>
+  >;
+  /** `floorTiles[floor]`'s texture order, by name instead of `Texture` — `render/room.ts`'s `pickTileVariant` returns an index into this same order. */
+  readonly tileVariantNames: Readonly<Record<number, readonly string[]>>;
 }
+
+const CELLAR_ENEMY_IDS = [
+  'kellerassel',
+  'bierratte',
+  'schimmelfleck',
+  'schimmelspore',
+  'zapfhahn',
+  'rollfass',
+  'fasssplitter',
+] as const;
+
+const RURAL_ENEMY_IDS = [
+  'bauer',
+  'kuh',
+  'gockel',
+  'gartenzwerg',
+  'blaskapellist',
+  'traktor',
+] as const;
 
 const ENEMY_SPRITE_URLS = [
   ['kellerassel', kellerasselUrl],
@@ -104,6 +134,19 @@ export async function loadFloorArt(): Promise<FloorArt> {
       ),
     ),
   ]);
+  const spriteOrigins: Record<string, { bucketId: string; category: 'character' | 'tile' }> = {
+    'cellar-floor': { bucketId: 'floor-1-cellar', category: 'tile' },
+  };
+  for (const name of RURAL_FLOOR_TILE_NAMES) {
+    spriteOrigins[name] = { bucketId: 'floor-2-rural', category: 'tile' };
+  }
+  for (const id of CELLAR_ENEMY_IDS) {
+    spriteOrigins[id] = { bucketId: 'floor-1-cellar', category: 'character' };
+  }
+  for (const id of RURAL_ENEMY_IDS) {
+    spriteOrigins[id] = { bucketId: 'floor-2-rural', category: 'character' };
+  }
+
   return {
     floorTiles: { 1: [cellarFloorTexture], 2: ruralFloorTextures },
     enemyArt: Object.fromEntries(enemyEntries),
@@ -113,5 +156,7 @@ export async function loadFloorArt(): Promise<FloorArt> {
         RURAL_FLOOR_TILE_NAMES.map((name, index) => [name, ruralFloorTextures[index]]),
       ),
     },
+    spriteOrigins,
+    tileVariantNames: { 1: ['cellar-floor'], 2: RURAL_FLOOR_TILE_NAMES },
   };
 }

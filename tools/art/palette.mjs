@@ -107,4 +107,117 @@ export function floorBackgroundSwatches(floorTag) {
   return backgroundColors;
 }
 
+/**
+ * The shading brush (#108's follow-up, `docs/DECISIONS.md` #27) needs a
+ * "lighter"/"darker" neighbour for a colour a pen already painted, and the
+ * palette above has no such relationship recorded — five hand-picked hues
+ * per floor, not five ramps. Rather than hand-author ramps too (another
+ * thing to keep in sync with `FLOOR_PALETTES`), every allowed colour gets
+ * one derived the same deterministic way: shift its HSL lightness by a fixed
+ * step and convert back. Fixed and finite — four steps either side of the
+ * original — for the same reason `docs/DECISIONS.md` #24 fixed the pen's
+ * palette to a finite set: a brush that could nudge lightness by any amount
+ * could paint a pixel `validate.mjs` has never seen before. `legalPixelColorsFor`
+ * is the full set that actually can produce, checked by the build the same
+ * way `allowedColorsFor` already is.
+ */
+const SHADE_STEPS = [-2, -1, 0, 1, 2];
+const SHADE_LIGHTNESS_STEP = 0.09;
+
+function rgbToHsl(r, g, b) {
+  const rn = r / 255;
+  const gn = g / 255;
+  const bn = b / 255;
+  const max = Math.max(rn, gn, bn);
+  const min = Math.min(rn, gn, bn);
+  const l = (max + min) / 2;
+  if (max === min) {
+    return [0, 0, l];
+  }
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  let h;
+  if (max === rn) {
+    h = (gn - bn) / d + (gn < bn ? 6 : 0);
+  } else if (max === gn) {
+    h = (bn - rn) / d + 2;
+  } else {
+    h = (rn - gn) / d + 4;
+  }
+  return [h / 6, s, l];
+}
+
+function hueToRgb(p, q, t) {
+  let tt = t;
+  if (tt < 0) tt += 1;
+  if (tt > 1) tt -= 1;
+  if (tt < 1 / 6) return p + (q - p) * 6 * tt;
+  if (tt < 1 / 2) return q;
+  if (tt < 2 / 3) return p + (q - p) * (2 / 3 - tt) * 6;
+  return p;
+}
+
+function hslToRgb(h, s, l) {
+  if (s === 0) {
+    const v = Math.round(l * 255);
+    return [v, v, v];
+  }
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+  const r = hueToRgb(p, q, h + 1 / 3);
+  const g = hueToRgb(p, q, h);
+  const b = hueToRgb(p, q, h - 1 / 3);
+  return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
+}
+
+/** `color` shifted `step` `SHADE_LIGHTNESS_STEP`s lighter (positive) or darker (negative), clamped to a valid lightness. `step: 0` returns `color` unchanged. */
+export function shadeOf(color, step) {
+  if (step === 0) {
+    return color;
+  }
+  const r = (color >> 16) & 0xff;
+  const g = (color >> 8) & 0xff;
+  const b = color & 0xff;
+  const [h, s, l] = rgbToHsl(r, g, b);
+  const nextL = Math.min(1, Math.max(0, l + step * SHADE_LIGHTNESS_STEP));
+  const [nr, ng, nb] = hslToRgb(h, s, nextL);
+  return (nr << 16) | (ng << 8) | nb;
+}
+
+/** Every derived tone of `color`, darkest to lightest, `color` itself included at the middle index. */
+export function shadeRampOf(color) {
+  return SHADE_STEPS.map((step) => shadeOf(color, step));
+}
+
+/** Every colour a sprite in `bucketId` may legally contain once the shading brush is allowed to touch it: `allowedColorsFor(bucketId)` plus every colour's own derived ramp. What `validate.mjs`'s off-palette check is run against for a saved sprite (`tools/art/build.mjs`) — `allowedColorsFor` itself stays the *pickable* set the palette panel's swatches offer. */
+export function legalPixelColorsFor(bucketId) {
+  const legal = new Set();
+  for (const color of allowedColorsFor(bucketId)) {
+    for (const step of SHADE_STEPS) {
+      legal.add(shadeOf(color, step));
+    }
+  }
+  return legal;
+}
+
+/**
+ * `color` moved one `SHADE_LIGHTNESS_STEP` toward lighter (`direction: 1`) or
+ * darker (`direction: -1`), staying on `bucketId`'s fixed ramp — clamped at
+ * either end rather than drifting past it. `color` that isn't on any of the
+ * bucket's ramps (should never happen for a pixel the pen or a previous
+ * shading pass actually painted) is returned unchanged rather than guessed
+ * at.
+ */
+export function nudgeShade(bucketId, color, direction) {
+  for (const base of allowedColorsFor(bucketId)) {
+    for (const step of SHADE_STEPS) {
+      if (shadeOf(base, step) === color) {
+        const nextStep = Math.min(2, Math.max(-2, step + direction));
+        return shadeOf(base, nextStep);
+      }
+    }
+  }
+  return color;
+}
+
 export { FLOOR_BUCKETS };

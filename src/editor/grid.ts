@@ -19,6 +19,8 @@ type Tool = 'wall' | 'erase' | 'enemy' | 'pickup' | 'hazard' | 'prop';
 
 export interface GridPanelHandle {
   destroy(): void;
+  /** Tints every non-wall tile cell — `null` restores the default grey. See `.kb-editor-tile`'s `--kb-editor-tile-bg` custom property. */
+  setBackgroundColor(color: string | null): void;
 }
 
 /**
@@ -366,6 +368,17 @@ export function createGridPanel(state: EditorState, host: HTMLElement): GridPane
       tileLayer.removeEventListener('pointerover', onTilePointerEnter);
       window.removeEventListener('pointerup', onWindowPointerUp);
       root.remove();
+    },
+    setBackgroundColor(color: string | null): void {
+      // Removed rather than set to `''` when clearing: an empty-string custom
+      // property is still "set" for `var()`'s fallback purposes, which would
+      // make `.kb-editor-tile`'s `background` resolve to nothing instead of
+      // falling back to its default grey.
+      if (color === null) {
+        tileLayer.style.removeProperty('--kb-editor-tile-bg');
+      } else {
+        tileLayer.style.setProperty('--kb-editor-tile-bg', color);
+      }
     },
   };
 

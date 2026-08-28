@@ -6,7 +6,9 @@ import { createMetadataPanel } from './panels/metadata.js';
 import { createSpawnGroupsPanel } from './panels/spawn-groups.js';
 import { createValidationPanel } from './panels/validation.js';
 import { SHAPES } from './definitions.js';
+import { createBackgroundPanel } from './background-panel.js';
 import { createGridPanel } from './grid.js';
+import { createLiveRoomSync, isEmbedded } from './live-room-sync.js';
 import { type PlaytestHandle, createPlaytest } from './playtest.js';
 import { EditorState, createBlankDraft, fromRoomTemplate, toTemplateJSON } from './state.js';
 
@@ -58,6 +60,9 @@ const STYLE = `
 }
 .kb-editor-panel button:hover { background: var(--kb-color-surface-3-hover); }
 .kb-editor-doors { display: flex; gap: 10px; margin-bottom: 8px; }
+.kb-editor-bg-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.kb-editor-bg-swatch { width: 26px; height: 26px; padding: 0; border: 2px solid var(--kb-color-surface-4); border-radius: var(--kb-radius-sm); cursor: pointer; }
+.kb-editor-bg-active { outline: 2px solid var(--kb-color-accent); outline-offset: 1px; }
 .kb-editor-doors label { display: flex; align-items: center; gap: 4px; margin: 0; }
 
 .kb-editor-cell-tabs { display: flex; gap: 6px; }
@@ -86,7 +91,8 @@ const STYLE = `
 .kb-editor-grid-wrap { position: relative; }
 .kb-editor-tile-layer { position: relative; background: var(--kb-color-surface-0); }
 .kb-editor-tile {
-  position: absolute; background: var(--kb-color-surface-3); border: 1px solid var(--kb-color-surface-2);
+  position: absolute; background: var(--kb-editor-tile-bg, var(--kb-color-surface-3));
+  border: 1px solid var(--kb-color-surface-2);
   cursor: crosshair;
 }
 .kb-editor-tile-wall { background: var(--kb-color-surface-4-alt); }
@@ -152,6 +158,12 @@ function boot(): void {
   root.appendChild(right);
 
   const state = new EditorState(createBlankDraft('1x1'));
+  // The shape the currently-loaded draft had when the live room sync
+  // (below) loaded it from the running game — `null` for anything loaded
+  // any other way (New room, Browse). `Apply to running game` refuses a
+  // shape change against this, since compiling a template against a real
+  // floor-grid placement built for a different shape throws.
+  let liveRoomShape: RoomShape | null = null;
 
   const newRow = document.createElement('div');
   newRow.className = 'kb-editor-panel';
@@ -169,6 +181,7 @@ function boot(): void {
     if (state.dirty && !window.confirm('Discard unsaved changes and start a new room?')) {
       return;
     }
+    liveRoomShape = null;
     state.load(createBlankDraft(newShapeSelect.value as RoomShape));
   });
   newRow.append(newShapeSelect, newButton);
@@ -180,7 +193,7 @@ function boot(): void {
 
   const gridHost = document.createElement('div');
   left.appendChild(gridHost);
-  createGridPanel(state, gridHost);
+  const grid = createGridPanel(state, gridHost);
 
   const actionsRow = document.createElement('div');
   actionsRow.className = 'kb-editor-panel kb-editor-actions';
@@ -191,12 +204,21 @@ function boot(): void {
   playtestButton.type = 'button';
   playtestButton.textContent = 'Playtest';
   actionsRow.append(saveButton, playtestButton);
+  const embedded = isEmbedded();
+  let applyButton: HTMLButtonElement | null = null;
+  if (embedded) {
+    applyButton = document.createElement('button');
+    applyButton.type = 'button';
+    applyButton.textContent = 'Apply to running game';
+    actionsRow.appendChild(applyButton);
+  }
   left.appendChild(actionsRow);
 
   const status = document.createElement('p');
   status.className = 'kb-editor-status';
   left.appendChild(status);
 
+  createBackgroundPanel(grid, right);
   createMetadataPanel(state, right);
   createSpawnGroupsPanel(state, right);
   const validationPanel = createValidationPanel(state, right);
@@ -205,14 +227,55 @@ function boot(): void {
       if (state.dirty && !window.confirm('Discard unsaved changes and load this room?')) {
         return;
       }
+      liveRoomShape = null;
       state.load(fromRoomTemplate(raw));
     },
     onDuplicate: (raw) => {
       if (state.dirty && !window.confirm('Discard unsaved changes and duplicate this room?')) {
         return;
       }
+      liveRoomShape = null;
       state.load(fromRoomTemplate(raw, ''));
     },
+  });
+
+  // The docked half of #108's "load the room I'm actually standing in, edit
+  // it live" follow-up.
+  const liveRoomSync = createLiveRoomSync(
+    (templateJson) => {
+      if (templateJson === null) {
+        status.textContent =
+          "Current room can't be edited live (it's a staircase) — starting blank.";
+        return;
+      }
+      const draft = fromRoomTemplate(templateJson);
+      liveRoomShape = draft.shape;
+      state.load(draft);
+      status.textContent = `Loaded the room you're standing in (${draft.id}).`;
+    },
+    (result) => {
+      if (result.ok) {
+        status.textContent = 'Applied to the running game.';
+      } else {
+        status.textContent = `Apply failed: ${result.error ?? 'unknown error'}`;
+      }
+    },
+  );
+  if (embedded) {
+    liveRoomSync.requestCurrentRoom();
+  }
+
+  applyButton?.addEventListener('click', () => {
+    if (!validationPanel.isValid()) {
+      status.textContent = 'Fix the validation error before applying.';
+      return;
+    }
+    if (liveRoomShape !== null && state.draft.shape !== liveRoomShape) {
+      status.textContent = `Can't apply a shape change live (loaded as ${liveRoomShape}) — Save instead.`;
+      return;
+    }
+    status.textContent = 'Applying…';
+    liveRoomSync.applyToRunningGame(toTemplateJSON(state.draft));
   });
 
   function renderCellTabs(): void {
