@@ -3,6 +3,7 @@ import { CATEGORY_SPECS, type SpriteCategory } from '../../tools/art/spec.mjs';
 import {
   DEFAULT_SIZE_PRESET_ID,
   isWithinCategorySpec,
+  presetIdForSize,
   sizePresetFor,
   sizePresetsFor,
 } from '../../src/pixel-editor/size-presets.js';
@@ -39,5 +40,21 @@ describe('sizePresetsFor', () => {
       const ids = sizePresetsFor(category).map((preset) => preset.id);
       expect(new Set(ids).size).toBe(ids.length);
     }
+  });
+});
+
+describe('presetIdForSize', () => {
+  it('resolves every preset back to its own id from its own width/height', () => {
+    for (const category of CATEGORIES) {
+      for (const preset of sizePresetsFor(category)) {
+        expect(presetIdForSize(category, preset.width, preset.height)).toBe(preset.id);
+      }
+    }
+  });
+
+  it('returns null for a size matching no preset — legacy art predating the named tiers', () => {
+    // 16x16 is not one of "character"'s five tiers (tiny/small/normal/big/xtra-big) —
+    // exactly the shape of an already-authored floor-1/2 sprite.
+    expect(presetIdForSize('character', 16, 16)).toBeNull();
   });
 });

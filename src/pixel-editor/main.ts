@@ -13,7 +13,7 @@ import { createFramesPanel } from './frames-panel.js';
 import { createLegibilityPanel } from './legibility-panel.js';
 import { type LiveStatus, createLivePreviewClient } from './live-preview-client.js';
 import { createPalettePanel } from './palette-panel.js';
-import { DEFAULT_SIZE_PRESET_ID, sizePresetsFor } from './size-presets.js';
+import { DEFAULT_SIZE_PRESET_ID, presetIdForSize, sizePresetsFor } from './size-presets.js';
 import { PixelEditorState, canvasSizeFor } from './state.js';
 import {
   ALL_BUCKET_IDS,
@@ -306,6 +306,18 @@ function boot(): void {
     heightInput.max = String(spec.maxHeight);
   }
 
+  /**
+   * Never a real preset id — selected (and shown) whenever the current
+   * width/height don't exactly match any named tier for the category, so the
+   * dropdown never silently implies a size the sprite isn't. Loaded art in
+   * particular predates these tiers entirely (kellerassel is a legacy 16×16,
+   * matching none of `character`'s five) — defaulting the dropdown to
+   * "Normal" regardless, as it used to, read as "this is the sprite's
+   * current size" right up until picking a *different* preset and resizing
+   * silently changed it to something the sprite never actually was.
+   */
+  const CUSTOM_SIZE_OPTION = '__custom__';
+
   function populatePresetSelect(category: SpriteCategory): void {
     presetSelect.replaceChildren();
     for (const preset of sizePresetsFor(category)) {
@@ -314,13 +326,22 @@ function boot(): void {
       option.textContent = preset.label;
       presetSelect.appendChild(option);
     }
-    // Otherwise the browser defaults a freshly repopulated <select> to its
-    // first option ("tiny") rather than this category's actual default tier.
-    presetSelect.value = DEFAULT_SIZE_PRESET_ID;
+    const customOption = document.createElement('option');
+    customOption.value = CUSTOM_SIZE_OPTION;
+    customOption.textContent = 'Custom';
+    presetSelect.appendChild(customOption);
+  }
+
+  /** Selects whichever preset exactly matches `(width, height)`, or `CUSTOM_SIZE_OPTION` if none does — call after anything that can change the sprite's actual size, so the dropdown never shows a preset name the sprite isn't currently at. */
+  function syncPresetToSize(category: SpriteCategory, width: number, height: number): void {
+    presetSelect.value = presetIdForSize(category, width, height) ?? CUSTOM_SIZE_OPTION;
   }
 
   function fillSizeFromPreset(category: SpriteCategory, presetId: string): void {
     applySizeBounds(category);
+    if (presetId === CUSTOM_SIZE_OPTION) {
+      return;
+    }
     const size = canvasSizeFor(category, presetId);
     widthInput.value = String(size.width);
     heightInput.value = String(size.height);
@@ -329,7 +350,8 @@ function boot(): void {
   categorySelect.addEventListener('change', () => {
     const category = categorySelect.value as SpriteCategory;
     populatePresetSelect(category);
-    fillSizeFromPreset(category, presetSelect.value);
+    fillSizeFromPreset(category, DEFAULT_SIZE_PRESET_ID);
+    presetSelect.value = DEFAULT_SIZE_PRESET_ID;
   });
   presetSelect.addEventListener('change', () => {
     fillSizeFromPreset(categorySelect.value as SpriteCategory, presetSelect.value);
@@ -341,12 +363,14 @@ function boot(): void {
 
   populatePresetSelect(snapshot?.category ?? defaultCategory);
   fillSizeFromPreset(snapshot?.category ?? defaultCategory, DEFAULT_SIZE_PRESET_ID);
+  presetSelect.value = DEFAULT_SIZE_PRESET_ID;
   if (snapshot !== null) {
     bucketSelect.value = snapshot.bucketId;
     categorySelect.value = snapshot.category;
     nameInput.value = snapshot.name;
     widthInput.value = String(snapshot.width);
     heightInput.value = String(snapshot.height);
+    syncPresetToSize(snapshot.category, snapshot.width, snapshot.height);
   }
 
   const newButton = document.createElement('button');
@@ -362,6 +386,9 @@ function boot(): void {
     const height = Math.min(spec.maxHeight, Math.max(spec.minHeight, Number(heightInput.value)));
     state.reset(bucketSelect.value, category, width, height);
     nameInput.value = '';
+    widthInput.value = String(width);
+    heightInput.value = String(height);
+    syncPresetToSize(category, width, height);
   });
 
   // "New" always starts a blank canvas at the chosen size; "Resize" keeps
@@ -382,6 +409,9 @@ function boot(): void {
     const width = Math.min(spec.maxWidth, Math.max(spec.minWidth, Number(widthInput.value)));
     const height = Math.min(spec.maxHeight, Math.max(spec.minHeight, Number(heightInput.value)));
     state.resizeCanvas(width, height);
+    widthInput.value = String(width);
+    heightInput.value = String(height);
+    syncPresetToSize(category, width, height);
   });
 
   targetRow.append(
@@ -468,6 +498,13 @@ function boot(): void {
     applySizeBounds(category);
     widthInput.value = String(loaded.frameWidth);
     heightInput.value = String(loaded.frameHeight);
+    // Honestly, not `DEFAULT_SIZE_PRESET_ID` regardless — a lot of authored
+    // art (any floor-1/2 character sprite) predates these named tiers and
+    // matches none of them, and defaulting the dropdown to "Normal" anyway
+    // is exactly the bug this fixes: picking "Normal" back after trying
+    // another preset silently resized to that preset's fixed numbers, not
+    // back to whatever the sprite's real loaded size actually was.
+    syncPresetToSize(category, loaded.frameWidth, loaded.frameHeight);
     state.bucketId = target.bucketId;
     state.category = category;
     state.loadFrames(

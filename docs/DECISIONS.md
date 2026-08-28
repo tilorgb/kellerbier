@@ -1435,3 +1435,29 @@ editable field) must be refreshed by every code path that can change `state.cate
 `state.height` — `New`, `Resize`, and loading a sprite all need to agree, and a preset list or bound
 left over from a previous category is exactly the kind of bug that only shows up once a real sprite
 of a different category is actually loaded, not from reading the code in isolation.
+
+## 35. The size-preset dropdown reflects the sprite's actual current size honestly, including "none of these"
+
+**Decided:** M6, issue #108's follow-up, found by actually resizing a loaded sprite twice in a row.
+
+#34 fixed the preset dropdown showing a category's *previous* selection after loading a sprite of a
+different category, but left a subtler version of the same class of bug: after loading, the dropdown
+was always forced to `DEFAULT_SIZE_PRESET_ID` ("Normal"), regardless of whether the loaded sprite's
+actual size matched it. Most authored art predates the named tiers entirely — every floor-1/2
+character sprite is a legacy 16×16, which is not `character`'s "Normal" (12×24) or any of its other
+four. Loading one and seeing "Normal" selected reads as "this is what my sprite currently is," which
+is simply false — and the concrete failure it causes: pick "Big," resize, then pick "Normal" again
+expecting to *revert* to the sprite's original size, and get 12×24 instead of the 16×16 it actually
+started at, with no warning that "Normal" was never that in the first place.
+
+Added `presetIdForSize(category, width, height)` (`size-presets.ts`) — the preset whose dimensions
+exactly match, or `null` — and a `CUSTOM_SIZE_OPTION` sentinel in the dropdown's own option list that
+`syncPresetToSize` selects whenever nothing matches. Called after every operation that can change the
+sprite's actual size (load, New, Resize) rather than only at load time, so the dropdown's claim is
+never stale relative to whatever the width/height fields and the canvas itself currently say.
+
+**Constrains:** a derived/summary UI control (this dropdown, or anything like it — a "this matches
+preset X" indicator, a status computed from other state) must be resynced by *every* code path that
+can change the state it summarizes, not only the one path that happened to be modified first —
+`syncPresetToSize` needed three call sites, not one, precisely because three different actions can
+each independently make the previous "matches this preset" answer wrong.

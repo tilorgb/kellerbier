@@ -81,6 +81,26 @@ export function sizePresetFor(category: SpriteCategory, presetId: string): SizeP
   return match;
 }
 
+/**
+ * The preset (if any) whose width/height exactly match — for reflecting a
+ * sprite's actual current size back into the preset dropdown honestly,
+ * rather than defaulting it to `DEFAULT_SIZE_PRESET_ID` regardless of
+ * whether that preset is what the sprite currently is. A lot of authored art
+ * predates these named tiers entirely (kellerassel is a legacy 16×16, which
+ * matches none of `character`'s five) — `null` here is the caller's signal
+ * to show a "Custom" state instead of a preset name that just isn't true.
+ */
+export function presetIdForSize(
+  category: SpriteCategory,
+  width: number,
+  height: number,
+): string | null {
+  return (
+    sizePresetsFor(category).find((preset) => preset.width === width && preset.height === height)
+      ?.id ?? null
+  );
+}
+
 /** Every preset's width/height, checked against `CATEGORY_SPECS` — the invariant `tests/unit/pixel-editor-size-presets.test.ts` pins. */
 export function isWithinCategorySpec(
   category: SpriteCategory,
