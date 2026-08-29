@@ -42,7 +42,7 @@ import { TICKS_PER_SECOND } from '../../../src/sim/time.js';
  * health it still had taken from it.
  *
  * One `GameSim` per combination, deliberately — unlike
- * `tests/unit/projectile-tags-fuzz.test.ts`'s 4,096 masks sharing one sim,
+ * `tests/fuzz/heavy/projectile-tags.test.ts`'s 4,096 masks sharing one sim,
  * a combination here changes the inventory (and therefore the stat
  * pipeline's registered sources), and re-deriving "exactly the prior state"
  * for an arbitrary held-item set on removal is the harder problem #26

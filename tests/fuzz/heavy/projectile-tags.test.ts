@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { entityIndex } from '../../src/sim/ecs/entity.js';
-import { GameSim } from '../../src/sim/game/sim.js';
-import { NO_SLOT } from '../../src/sim/pool/slot-pool.js';
-import { finalizeProjectileTags } from '../../src/sim/projectile/behavior.js';
-import { ProjectileTeam } from '../../src/sim/projectile/store.js';
-import { PROJECTILE_TAG_COUNT } from '../../src/sim/projectile/tags.js';
-import { RoomGeometry } from '../../src/sim/room/geometry.js';
+import { entityIndex } from '../../../src/sim/ecs/entity.js';
+import { GameSim } from '../../../src/sim/game/sim.js';
+import { NO_SLOT } from '../../../src/sim/pool/slot-pool.js';
+import { finalizeProjectileTags } from '../../../src/sim/projectile/behavior.js';
+import { ProjectileTeam } from '../../../src/sim/projectile/store.js';
+import { PROJECTILE_TAG_COUNT } from '../../../src/sim/projectile/tags.js';
+import { RoomGeometry } from '../../../src/sim/room/geometry.js';
 
 /**
  * The fuzz test #27's own acceptance criteria names (see #30): every possible
@@ -22,6 +22,13 @@ import { RoomGeometry } from '../../src/sim/room/geometry.js';
  * simulation itself. The shared state that could leak between masks (the
  * projectile pool, the target's health, any status effect left on it) is
  * reset explicitly at the top of every iteration instead.
+ *
+ * Lives alongside `synergy.test.ts` under `tests/fuzz/heavy/` rather than in
+ * `tests/unit/`, for the same reason that one does (see its own doc comment
+ * and `vite.config.ts`'s `test.exclude`): 4,096 masks × 90 ticks sharing one
+ * sim is still an exhaustive sweep, not a unit test, and was costing every
+ * `npm run test` run more time than the rest of the suite combined. It runs
+ * via `npm run fuzz` and the nightly/on-demand `fuzz.yml` workflow instead.
  */
 
 const ROOM_WIDTH = 640;
