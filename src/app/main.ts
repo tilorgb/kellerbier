@@ -66,6 +66,7 @@ import { playRumble } from './input/rumble.js';
 import { FixedTimestepLoop, runAnimationFrameLoop } from './loop.js';
 import { RunSummaryTracker } from './run-summary.js';
 import { createAccessibilityPanel } from './accessibility-panel.js';
+import { createTouchControls, isTouchCapable } from './touch-controls.js';
 import { createEditorDock } from './editor-dock.js';
 import { pickEnemyAt, pickTileNameAt } from './sprite-pick.js';
 import {
@@ -731,6 +732,11 @@ async function boot(): Promise<void> {
   const input = new InputSampler();
   input.keyboard.attach(window);
   input.gamepad.attach(window);
+  // On-screen dual sticks, only where touch is the real input rather than a
+  // mouse that merely happens to sit on a touch-capable laptop.
+  if (isTouchCapable()) {
+    createTouchControls(input.touch);
+  }
 
   // Floor music and room ambience's seam (#35, `audio/ambience.ts`) — silent
   // until #51, wired up and being called the same way `playImpactAudio`
@@ -794,8 +800,13 @@ async function boot(): Promise<void> {
       // active item already has the pedestal's own name plate telling them
       // what `use` does there instead.
       const glyphSet = detectGlyphSet(input.activeDevice, input.gamepad.id);
-      const device = input.activeDevice === 'keyboard' ? 'keyboard' : 'gamepad';
-      const activatePrompt = actionPrompt(input.bindings, Bindable.Use, device, glyphSet);
+      const device = input.activeDevice === 'gamepad' ? 'gamepad' : 'keyboard';
+      // Touch has no bindings to look up a glyph for — the on-screen button
+      // is already labelled "Use", so the prompt just points at it.
+      const activatePrompt =
+        input.activeDevice === 'touch'
+          ? 'Tap Use'
+          : actionPrompt(input.bindings, Bindable.Use, device, glyphSet);
       activeItemHud.sync(sim, activatePrompt);
       itemGateHud.sync(sim);
       bossHealthHud.sync(sim);

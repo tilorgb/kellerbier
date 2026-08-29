@@ -10,14 +10,16 @@ import {
 import { type BindableAction, type Bindings, createDefaultBindings } from './bindings.js';
 import { GamepadAxis, GamepadSource } from './gamepad.js';
 import { KeyboardSource } from './keyboard.js';
+import { TouchSource } from './touch.js';
 
 /** Which family of device the player last touched, for on-screen glyphs. */
-export type ActiveDevice = 'keyboard' | 'gamepad';
+export type ActiveDevice = 'keyboard' | 'gamepad' | 'touch';
 
 export interface InputSamplerOptions {
   readonly bindings?: Bindings;
   readonly keyboard?: KeyboardSource;
   readonly gamepad?: GamepadSource;
+  readonly touch?: TouchSource;
 }
 
 /**
@@ -30,6 +32,7 @@ export interface InputSamplerOptions {
 export class InputSampler {
   readonly keyboard: KeyboardSource;
   readonly gamepad: GamepadSource;
+  readonly touch: TouchSource;
   bindings: Bindings;
 
   private readonly current = createInputFrame();
@@ -37,12 +40,14 @@ export class InputSampler {
 
   private lastKeyboardActivity = 0;
   private lastGamepadActivity = 0;
+  private lastTouchActivity = 0;
   private device: ActiveDevice = 'keyboard';
 
   constructor(options: InputSamplerOptions = {}) {
     this.bindings = options.bindings ?? createDefaultBindings();
     this.keyboard = options.keyboard ?? new KeyboardSource();
     this.gamepad = options.gamepad ?? new GamepadSource();
+    this.touch = options.touch ?? new TouchSource();
   }
 
   /** The device the player most recently used. */
@@ -70,10 +75,13 @@ export class InputSampler {
     clearInputFrame(this.current);
 
     this.gamepad.update();
+    this.touch.update();
     this.updateActiveDevice();
 
     if (this.device === 'gamepad') {
       this.sampleGamepad();
+    } else if (this.device === 'touch') {
+      this.sampleTouch();
     } else {
       this.sampleKeyboard();
     }
@@ -86,21 +94,29 @@ export class InputSampler {
    *
    * Whichever the player touched most recently wins, and an unplugged
    * controller falls straight back to keyboard rather than freezing input.
+   * Touch has no disconnect to detect — an idle on-screen stick simply stops
+   * reporting activity, the same as an idle keyboard.
    */
   private updateActiveDevice(): void {
     const keyboardActivity = this.keyboard.activityCounter;
     const gamepadActivity = this.gamepad.activityCounter;
+    const touchActivity = this.touch.activityCounter;
 
-    if (!this.gamepad.connected) {
+    if (!this.gamepad.connected && this.device === 'gamepad') {
       this.device = 'keyboard';
-    } else if (gamepadActivity > this.lastGamepadActivity) {
+    }
+
+    if (this.gamepad.connected && gamepadActivity > this.lastGamepadActivity) {
       this.device = 'gamepad';
     } else if (keyboardActivity > this.lastKeyboardActivity) {
       this.device = 'keyboard';
+    } else if (touchActivity > this.lastTouchActivity) {
+      this.device = 'touch';
     }
 
     this.lastKeyboardActivity = keyboardActivity;
     this.lastGamepadActivity = gamepadActivity;
+    this.lastTouchActivity = touchActivity;
   }
 
   private isKeyboardActionDown(action: BindableAction): boolean {
@@ -170,6 +186,42 @@ export class InputSampler {
 
     // A right stick pushed off centre is a fire command, the way twin-stick
     // shooters have always worked. The bound fire button still works too.
+    if (this.current.aimX !== 0 || this.current.aimY !== 0) {
+      this.current.buttons |= 1 << InputAction.Fire;
+    }
+  }
+
+  /**
+   * The on-screen dual sticks: no bindings to consult, since the touch layout
+   * is fixed — `app/touch-controls.ts` already dead-zones nothing itself and
+   * hands raw knob offsets to `TouchSource`, which applies the dead zone this
+   * reads back out through `lastMoveX`/`lastAimX` etc.
+   */
+  private sampleTouch(): void {
+    this.current.moveX = quantiseAxis(this.touch.lastMoveX);
+    this.current.moveY = quantiseAxis(this.touch.lastMoveY);
+
+    // Snapped to the same eight directions as every other device —
+    // docs/DECISIONS.md #20.
+    snapToOctant(this.touch.lastAimX, this.touch.lastAimY);
+    this.current.aimX = quantiseAxis(scratchX);
+    this.current.aimY = quantiseAxis(scratchY);
+
+    if (this.touch.isButtonDown('bomb')) {
+      this.current.buttons |= 1 << InputAction.Bomb;
+    }
+    if (this.touch.isButtonDown('use')) {
+      this.current.buttons |= 1 << InputAction.Use;
+    }
+    if (this.touch.isButtonDown('map')) {
+      this.current.buttons |= 1 << InputAction.Map;
+    }
+    if (this.touch.isButtonDown('pause')) {
+      this.current.buttons |= 1 << InputAction.Pause;
+    }
+
+    // The aim stick pushed off centre is the fire command, the same
+    // twin-stick convention the gamepad's right stick follows.
     if (this.current.aimX !== 0 || this.current.aimY !== 0) {
       this.current.buttons |= 1 << InputAction.Fire;
     }

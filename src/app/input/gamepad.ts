@@ -14,6 +14,8 @@
  *   that press rather than reporting an absence.
  */
 
+import { applyRadialDeadZone } from './dead-zone.js';
+
 /**
  * The one shape of haptic actuator this code calls. Structural rather than
  * the full lib.dom `GamepadHapticActuator`, matching `GamepadLike` itself —
@@ -45,13 +47,7 @@ export const GamepadAxis = {
   RightStickY: 3,
 } as const;
 
-/**
- * Radial dead zone, not per-axis.
- *
- * A per-axis dead zone leaves a square hole at the centre, so a stick pushed
- * gently along a diagonal registers while the same push along an axis does not.
- * Players feel that as the stick "sticking" to the diagonals.
- */
+/** Radial dead zone, not per-axis — see `dead-zone.ts`. */
 export const DEFAULT_DEAD_ZONE = 0.22;
 
 /** Below this, a stick is not considered deliberate activity. */
@@ -187,19 +183,9 @@ export class GamepadSource {
    * movements possible instead of the stick feeling like a switch.
    */
   readStick(xAxis: number, yAxis: number): void {
-    const rawX = this.axis(xAxis);
-    const rawY = this.axis(yAxis);
-    const magnitude = Math.hypot(rawX, rawY);
-
-    if (magnitude <= this.deadZone || magnitude === 0) {
-      this.stickX = 0;
-      this.stickY = 0;
-      return;
-    }
-
-    const rescaled = Math.min((magnitude - this.deadZone) / (1 - this.deadZone), 1);
-    this.stickX = (rawX / magnitude) * rescaled;
-    this.stickY = (rawY / magnitude) * rescaled;
+    const deadZoned = applyRadialDeadZone(this.axis(xAxis), this.axis(yAxis), this.deadZone);
+    this.stickX = deadZoned.x;
+    this.stickY = deadZoned.y;
   }
 
   get lastStickX(): number {
