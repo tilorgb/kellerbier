@@ -46,18 +46,21 @@ describe('validateSpriteSize', () => {
     expect(validateSpriteSize('character', 12, 10)).not.toBeNull();
   });
 
-  // docs/DECISIONS.md #26: character's height ceiling raised 16 -> 32.
-  it('accepts a taller character up to 32 and rejects one past it', () => {
-    expect(validateSpriteSize('character', 16, 32)).toBeNull();
-    expect(validateSpriteSize('character', 16, 33)).not.toBeNull();
+  // docs/DECISIONS.md #26 raised character's height ceiling 16 -> 32, then #42
+  // raised it again to 48: a character canvas is now its size on screen, and
+  // 48 is a `mid` body's 40px collider plus headroom.
+  it('accepts a taller character up to 48 and rejects one past it', () => {
+    expect(validateSpriteSize('character', 16, 48)).toBeNull();
+    expect(validateSpriteSize('character', 16, 49)).not.toBeNull();
   });
 
-  // docs/DECISIONS.md #27: character's width ceiling raised 16 -> 32, to
-  // match — a wide-bellied character is no longer capped a third as wide as
-  // it is allowed to be tall.
-  it('accepts a wider character up to 32 and rejects one past it', () => {
-    expect(validateSpriteSize('character', 32, 20)).toBeNull();
-    expect(validateSpriteSize('character', 33, 20)).not.toBeNull();
+  // docs/DECISIONS.md #27 raised character's width ceiling 16 -> 32 so a
+  // wide-bellied character was not capped a third as wide as it was allowed to
+  // be tall; #42 raised it to 64, the width the widest bodies in the roster —
+  // Kuh, Traktor — actually need now that a canvas is a size.
+  it('accepts a wider character up to 64 and rejects one past it', () => {
+    expect(validateSpriteSize('character', 64, 20)).toBeNull();
+    expect(validateSpriteSize('character', 65, 20)).not.toBeNull();
   });
 
   // docs/DECISIONS.md #26: boss ceiling raised 48x48 -> 160x160.
@@ -69,9 +72,9 @@ describe('validateSpriteSize', () => {
   it('divides a strip by its frame count before checking each frame', () => {
     // 8 frames of a 12x16 character strip.
     expect(validateSpriteSize('character', 96, 16, 8)).toBeNull();
-    // Same total width, wrong frame count: each "frame" would be 48 wide,
-    // past the (post-#27) 32 ceiling.
-    expect(validateSpriteSize('character', 96, 16, 2)).toMatch(/frame size 48x16/);
+    // Same total width, wrong frame count: each "frame" would be 96 wide,
+    // past the (post-#42) 64 ceiling.
+    expect(validateSpriteSize('character', 192, 16, 2)).toMatch(/frame size 96x16/);
   });
 
   it('rejects a strip whose width does not divide evenly', () => {

@@ -7,6 +7,7 @@ import { createInputFrame } from '../../src/sim/input/frame.js';
 import { RoomGeometry } from '../../src/sim/room/geometry.js';
 import { EntityView } from '../../src/render/entities.js';
 import { buildAnimatedSets, cutStrip, type AnimatedSpriteSet } from '../../src/render/floor-art.js';
+import { ACTOR_SPRITE_SCALE, TILE_SPRITE_SCALE } from '../../src/render/resolution.js';
 
 /**
  * The loader and the view, headlessly.
@@ -195,6 +196,62 @@ describe('EntityView, drawing an animated enemy', () => {
     expect(view.animator.facingOf(index)).toBe(1);
     // Authored facing is left, so a rightward body draws with a negated x scale.
     expect(spriteIn(view, BODY_LAYER)?.scale.x).toBeLessThan(0);
+  });
+
+  /**
+   * The regression this whole area exists for (`docs/DECISIONS.md` #42).
+   *
+   * `EntityView` used to size a body by `radius / (texture.height / 2)`, which
+   * normalised height to the collider and left width entirely free — so a
+   * redraw that bought its detail sideways, which is the only direction a flat
+   * creature has, widened the enemy on screen one-for-one with no change to
+   * what could be hit. The Kellerassel went from 26x18 to 42x25 internal
+   * pixels that way, on an unchanged radius of 7.
+   *
+   * These two assert the property that replaced it from both sides: the drawn
+   * scale is the grid constant, and it does not move when either the texture
+   * or the collider does.
+   */
+  it('draws a body at the actor grid, not at a scale derived from its collider', () => {
+    const { sim } = oneEnemySim();
+    const { view } = animatedView(sim);
+    view.sync(0, 0);
+    const sprite = spriteIn(view, BODY_LAYER);
+    expect(sprite?.scale.y).toBe(ACTOR_SPRITE_SCALE);
+    expect(Math.abs(sprite?.scale.x ?? 0)).toBe(ACTOR_SPRITE_SCALE);
+  });
+
+  it('draws the same body at the same size whatever its collider is', () => {
+    const drawn: number[] = [];
+    for (const radius of [4, 7, 10, 20]) {
+      const { sim, index } = oneEnemySim();
+      sim.body.data[index * 2] = radius;
+      const { view } = animatedView(sim);
+      view.sync(0, 0);
+      drawn.push(spriteIn(view, BODY_LAYER)?.scale.y ?? 0);
+    }
+    // Four colliders spanning every size class in the game and one past it.
+    // Under the old formula these were four different sizes.
+    expect(new Set(drawn)).toEqual(new Set([ACTOR_SPRITE_SCALE]));
+  });
+
+  it('draws a destructible prop at the same size as the identical tile as furniture', () => {
+    // A barrel is authored once, in the floor's tileset, and reaches the
+    // screen down two different paths: `render/prop-view.ts` draws the
+    // decorative ones at native size, `EntityView` draws the breakable ones.
+    // They used to disagree by 25% — 2.5 internal pixels per authored pixel
+    // against the room's own 2.0 — so the barrel you could smash was visibly
+    // bigger than the one beside it that you could not.
+    const { sim } = oneEnemySim();
+    const { view } = animatedView(sim);
+    view.setTargetTextures([Texture.EMPTY]);
+    sim.spawnTarget(60, 60);
+    sim.world.flush();
+    view.sync(0, 0);
+    const scales = (view.container.children[BODY_LAYER]?.children ?? [])
+      .filter((child): child is Sprite => child instanceof Sprite && child.visible)
+      .map((sprite) => sprite.scale.y);
+    expect(scales).toContain(TILE_SPRITE_SCALE);
   });
 
   it('leaves a corpse playing the death clip when the body is gone', () => {

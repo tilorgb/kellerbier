@@ -253,3 +253,45 @@ function validateClip(clip, stripFrames) {
   }
   return null;
 }
+
+/**
+ * The tight box around a sprite's opaque pixels — its silhouette, as opposed
+ * to the canvas it was drawn on.
+ *
+ * Since `docs/DECISIONS.md` #42 a body's canvas *is* its size in internal
+ * pixels, so the canvas alone cannot say how large a creature reads: two rows
+ * of headroom above a 14-row woodlouse is a 16-tall file holding a 14-tall
+ * animal, and it is the animal a player sees and shoots at.
+ * `tests/content/sprite-scale.test.ts` compares this, not `height`, against
+ * the collider the creature is authored with.
+ *
+ * `frameWidth` scopes the scan to frame 0 of an animation strip. One frame is
+ * the right unit: every frame of a strip shares one canvas size, so the
+ * silhouette of the pose the creature stands in is what the check is about,
+ * not the union of every pose it ever takes.
+ *
+ * Returns `null` for a fully transparent sprite, which has no silhouette to
+ * measure and is a different problem than a mis-sized one.
+ */
+export function inkedBounds(pixels, width, height, frameWidth = width) {
+  const scanWidth = Math.min(frameWidth, width);
+  let minX = scanWidth;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < scanWidth; x++) {
+      if (pixels[(y * width + x) * 4 + 3] === 0) {
+        continue;
+      }
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+  }
+  if (maxX < 0) {
+    return null;
+  }
+  return { minX, minY, width: maxX - minX + 1, height: maxY - minY + 1 };
+}

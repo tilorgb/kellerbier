@@ -35,3 +35,17 @@ export declare function darkestOpaqueColor(
 ): number | null;
 
 export declare function validateAnimation(animation: Record<string, unknown>): string | null;
+
+export interface InkedBounds {
+  readonly minX: number;
+  readonly minY: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+export declare function inkedBounds(
+  pixels: Buffer,
+  width: number,
+  height: number,
+  frameWidth?: number,
+): InkedBounds | null;

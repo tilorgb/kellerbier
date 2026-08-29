@@ -13,6 +13,7 @@ import { EntityAnimator } from './animation/animator.js';
 import { AUTHORED_FACING, resolveAnimationState, resolveFacing } from './animation/state.js';
 import type { AnimatedSpriteSet } from './floor-art.js';
 import { ENTITY_PALETTE } from './palette.js';
+import { ACTOR_SPRITE_SCALE, TILE_SPRITE_SCALE } from './resolution.js';
 
 /**
  * How much wider than the body a telegraph ring ends up.
@@ -276,6 +277,9 @@ export class EntityView {
         );
         flip = this.animator.facingOf(index) === AUTHORED_FACING ? 1 : -1;
       }
+      // Neither an enemy nor a pickup: an authored destructible prop, drawn
+      // from the floor tileset rather than from `characters/`.
+      const isPropTarget = !isPickup && enemyId === null;
       const pickupKindIndex = sim.pickupKind.data[index] ?? -1;
       // A pickup with real art (#152) draws it untinted. One without still
       // draws off the white-fill texture (the same one the hit flash uses),
@@ -291,9 +295,10 @@ export class EntityView {
           : animation !== undefined
             ? (animation.frames[animationFrame] ?? this.texture)
             : enemyId === null
-              ? // Neither an enemy nor a pickup: a destructible prop, drawn as
-                // whichever of the floor's own props it was spawned from
-                // (#152) rather than as the shared blob.
+              ? // `isPropTarget` in every sense but the type checker's — this
+                // spelling is what narrows `enemyId` for the branch below.
+                // Drawn as whichever of the floor's own props it was spawned
+                // from (#152) rather than as the shared blob.
                 (this.targetTextures[sim.propKind.data[index] ?? 0] ??
                 this.targetTextures[0] ??
                 this.texture)
@@ -326,18 +331,21 @@ export class EntityView {
           : isEnemyElite(sim, index)
             ? ENTITY_PALETTE.eliteTint
             : ENTITY_PALETTE.normalTint;
-      // The texture is drawn at a fixed size; scaling it to the collider is
-      // what keeps the sprite and the hitbox describing the same object.
-      // Read off `bodyTexture` (what's drawn most of the time) rather than
-      // `sprite.texture` (which is the flash texture for one tick out of
-      // sixty) — otherwise the one flash tick would render at a different
-      // size than every frame around it, since dedicated character art and
-      // the shared flash blob are not the same shape. `bodyTexture.height`
-      // rather than a fixed constant: `character` sprites are no longer all
-      // exactly 16 tall (`docs/DECISIONS.md` #26 raised the ceiling to 32
-      // for more detail), so the scale reference has to be each sprite's own
-      // real height, not an assumption that stopped holding.
-      const referenceHeight = bodyTexture.height;
+      // Drawn at the actor grid: one authored pixel per internal pixel,
+      // whatever the body is (`render/resolution.ts`, `docs/DECISIONS.md`
+      // #42). This used to be `radius / (bodyTexture.height / 2)` — size
+      // derived from the collider — which normalised height and left width
+      // free, so widening a canvas for more detail widened the body on
+      // screen instead. On-screen size is now the authored canvas and
+      // nothing else; `tests/content/sprite-scale.test.ts` is what keeps a
+      // canvas honest about the collider it is drawn over.
+      //
+      // A destructible prop is the one exception, and it is not really one:
+      // it is drawn from the floor's own *tile* art, so it takes the tile
+      // grid the identical sprite takes when `render/prop-view.ts` draws it
+      // as furniture. Before this the same barrel PNG rendered 25% larger as
+      // a target than as scenery, in the same room.
+      const gridScale = isPropTarget ? TILE_SPRITE_SCALE : ACTOR_SPRITE_SCALE;
       // A pickup pops in on spawn — a cosmetic-only bump read off the same
       // countdown `stepPickups`' collection never touches, so it never
       // affects the hitbox it's drawn over.
@@ -351,7 +359,7 @@ export class EntityView {
       // leftward body and -1 for a rightward one, and always 1 for anything
       // with no animation set — which is what keeps a static sprite drawn
       // exactly as it was before #150.
-      const spriteScale = (radius / (referenceHeight / 2)) * pop;
+      const spriteScale = gridScale * pop;
       sprite.scale.set(spriteScale * flip, spriteScale);
       sprite.position.set(x, y);
 
@@ -496,10 +504,11 @@ export class EntityView {
       sprite.visible = true;
       sprite.texture = texture;
       sprite.alpha = animator.corpseAlphaAt(corpse);
-      const scale = animator.corpseRadiusAt(corpse) / (texture.height / 2);
+      // The same grid the living body was on — a corpse that changed size
+      // the frame the enemy died would read as the death, not as the clip.
       sprite.scale.set(
-        scale * (animator.corpseFacingAt(corpse) === AUTHORED_FACING ? 1 : -1),
-        scale,
+        ACTOR_SPRITE_SCALE * (animator.corpseFacingAt(corpse) === AUTHORED_FACING ? 1 : -1),
+        ACTOR_SPRITE_SCALE,
       );
       sprite.position.set(animator.corpseXAt(corpse), animator.corpseYAt(corpse));
     }
