@@ -1,11 +1,12 @@
-import { Container, Sprite, Text, type Renderer } from 'pixi.js';
+import { Container, Sprite, type BitmapText } from 'pixi.js';
 import type { GameSim } from '../sim/game/sim.js';
-import { createBarOutlineTexture, createSolidTexture } from './placeholder-art.js';
-import { HUD_PALETTE } from './palette.js';
+import { HUD_PALETTE, UI_PALETTE } from './palette.js';
+import { type UiKit } from './ui/kit.js';
+import { uiText, uiTextWidth, UI_TEXT_HEIGHT } from './ui/text.js';
 
-const BAR_WIDTH = 140;
-const BAR_HEIGHT = 8;
-const BAR_PADDING = 1;
+const BAR_WIDTH = 150;
+const BAR_HEIGHT = 11;
+const BAR_INSET = 2;
 
 /**
  * A boss room's health bar (#36) — top-centre, screen-space, and hidden
@@ -19,36 +20,32 @@ const BAR_PADDING = 1;
  * with nothing here naming either.
  *
  * No name label: three independent bodies mid-fight have no one name to
- * show, and a framework piece should not need one to make sense.
+ * show, and a framework piece should not need one to make sense. The word
+ * above the bar is the generic `BOSS`, drawn in the kit's accent so it reads
+ * as a heading rather than as a name the game failed to fill in.
  */
 export class BossHealthHud {
   readonly view = new Container();
 
   private readonly fill: Sprite;
-  private readonly label: Text;
+  private readonly label: BitmapText;
 
-  constructor(renderer: Renderer) {
-    const outline = new Sprite(createBarOutlineTexture(renderer, BAR_WIDTH, BAR_HEIGHT));
-    outline.position.set(-BAR_WIDTH / 2, 0);
-    this.view.addChild(outline);
+  constructor(kit: UiKit) {
+    const well = kit.wellSprite(BAR_WIDTH, BAR_HEIGHT);
+    well.position.set(-BAR_WIDTH / 2, 0);
+    this.view.addChild(well);
 
-    this.fill = new Sprite(createSolidTexture(renderer));
+    this.fill = new Sprite(kit.solid);
     this.fill.tint = HUD_PALETTE.bossHealthFill;
-    this.fill.position.set(-BAR_WIDTH / 2 + BAR_PADDING, BAR_PADDING);
-    this.fill.height = BAR_HEIGHT - BAR_PADDING * 2;
+    this.fill.position.set(-BAR_WIDTH / 2 + BAR_INSET, BAR_INSET);
+    this.fill.height = BAR_HEIGHT - BAR_INSET * 2;
     this.view.addChild(this.fill);
 
-    this.label = new Text({
-      text: 'BOSS',
-      style: {
-        fill: HUD_PALETTE.labelText,
-        fontFamily: 'monospace',
-        fontSize: 9,
-        fontWeight: 'bold',
-      },
-    });
-    this.label.anchor.set(0.5, 1);
-    this.label.position.set(0, -2);
+    this.label = uiText('BOSS', { colour: UI_PALETTE.accent });
+    // Positioned rather than anchored: `BitmapText`'s anchor is applied to its
+    // whole line box, and the exact centring wanted here is over the bar,
+    // which is the thing whose width is known.
+    this.label.position.set(-Math.round(uiTextWidth('BOSS') / 2), -UI_TEXT_HEIGHT - 2);
     this.view.addChild(this.label);
 
     this.view.visible = false;
@@ -61,6 +58,6 @@ export class BossHealthHud {
       return;
     }
     const ratio = Math.min(1, Math.max(0, boss.current / boss.max));
-    this.fill.width = Math.max(0, (BAR_WIDTH - BAR_PADDING * 2) * ratio);
+    this.fill.width = Math.max(0, (BAR_WIDTH - BAR_INSET * 2) * ratio);
   }
 }

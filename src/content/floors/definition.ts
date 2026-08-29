@@ -16,13 +16,54 @@ export interface FloorConfig {
   readonly maxRooms: number;
   /** Grid cells from the start room a floor may sprawl before generation stops growing it. */
   readonly gridRadius: number;
+  /**
+   * One line, in the floor's own voice, for its title card (#154).
+   *
+   * Transcribed from `docs/CONTENT_BIBLE.md` §1's description of the floor
+   * rather than invented here — the card is meant to say what the chapter is,
+   * and the chapter is already written down. Data, like everything else on
+   * this record: a floor's card needs no engine change, only a row.
+   */
+  readonly flavour: string;
 }
 
 export const FLOOR_CONFIGS: readonly FloorConfig[] = [
-  { floor: 1, name: 'Der Keller', floorTag: 'cellar', minRooms: 8, maxRooms: 12, gridRadius: 5 },
-  { floor: 2, name: 'Dorf & Acker', floorTag: 'rural', minRooms: 9, maxRooms: 13, gridRadius: 5 },
-  { floor: 3, name: 'Der Wald', floorTag: 'wald', minRooms: 10, maxRooms: 14, gridRadius: 6 },
-  { floor: 4, name: 'Die Alpen', floorTag: 'alpen', minRooms: 10, maxRooms: 14, gridRadius: 6 },
+  {
+    floor: 1,
+    name: 'Der Keller',
+    floorTag: 'cellar',
+    minRooms: 8,
+    maxRooms: 12,
+    gridRadius: 5,
+    flavour: 'Feucht, kalt, und oa einzige Glühbirn',
+  },
+  {
+    floor: 2,
+    name: 'Dorf & Acker',
+    floorTag: 'rural',
+    minRooms: 9,
+    maxRooms: 13,
+    gridRadius: 5,
+    flavour: 'Dorfplatz, Hopfen — und lauter neue Kistn',
+  },
+  {
+    floor: 3,
+    name: 'Der Wald',
+    floorTag: 'wald',
+    minRooms: 10,
+    maxRooms: 14,
+    gridRadius: 6,
+    flavour: 'Dicht, dunkel, und falsch',
+  },
+  {
+    floor: 4,
+    name: 'Die Alpen',
+    floorTag: 'alpen',
+    minRooms: 10,
+    maxRooms: 14,
+    gridRadius: 6,
+    flavour: 'Fels, Schnee, und a Wind der schiabt',
+  },
   {
     floor: 5,
     name: 'Schloss Neuschwanstein',
@@ -30,6 +71,7 @@ export const FLOOR_CONFIGS: readonly FloorConfig[] = [
     minRooms: 11,
     maxRooms: 15,
     gridRadius: 6,
+    flavour: 'A Märchen auf Pump, nie fertig worn',
   },
   {
     floor: 6,
@@ -38,6 +80,15 @@ export const FLOOR_CONFIGS: readonly FloorConfig[] = [
     minRooms: 11,
     maxRooms: 15,
     gridRadius: 7,
+    flavour: 'Stahl, Warnlicht, und Quotn an der Wand',
   },
-  { floor: 7, name: 'Die Wiesn', floorTag: 'wiesn', minRooms: 12, maxRooms: 16, gridRadius: 7 },
+  {
+    floor: 7,
+    name: 'Die Wiesn',
+    floorTag: 'wiesn',
+    minRooms: 12,
+    maxRooms: 16,
+    gridRadius: 7,
+    flavour: 'Ois auf oamal, und ois zvui',
+  },
 ];

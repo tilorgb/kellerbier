@@ -1,6 +1,14 @@
-import { Container, Graphics, Text } from 'pixi.js';
-import { INTERNAL_HEIGHT, INTERNAL_WIDTH, type GameLayout } from './resolution.js';
-import { EFFECT_PALETTE, HUD_PALETTE } from './palette.js';
+import { Container, Graphics, type BitmapText, type Renderer } from 'pixi.js';
+import { EFFECT_PALETTE, HUD_PALETTE, UI_PALETTE } from './palette.js';
+import type { UiKit } from './ui/kit.js';
+import { DisplayTitle, TITLE_STYLES } from './ui/title.js';
+import { uiText, uiTextWidth, UI_LINE_HEIGHT, UI_TEXT_HEIGHT } from './ui/text.js';
+
+/** How much bigger than its authored size the death word is drawn. Whole, like every other scale here. */
+const HEADLINE_SCALE = 3;
+
+/** Padding inside the plate the summary sits on. */
+const PLATE_PADDING = 8;
 
 /** What the screen shows. Assembled by whoever tracks the run, not read from `GameSim` directly. */
 export interface RunSummaryText {
@@ -14,94 +22,104 @@ export interface RunSummaryText {
 
 /**
  * The game-over screen: a dim over the game, the death word, and a short run
- * summary.
+ * summary on a plate.
  *
- * Screen-space, sized off the same `GameLayout` the HUD positions itself
- * with, and hidden by default — `main.ts` shows it once the death sequence's
- * slow-motion beat runs out, not the moment `sim.playerDead` flips true.
+ * Laid out in UI pixels, like every other HUD piece — `main.ts` scales the
+ * whole layer.
+ *
+ * The death word is drawn in the **display face**, in the same bled treatment
+ * the boss plate takes: `docs/CONTENT_BIBLE.md` §7's pool is Boarisch for
+ * "fell over", it is the last thing a run says, and nothing is shooting while
+ * it is on screen — which is the whole test for whether a broken script
+ * belongs somewhere (`docs/DECISIONS.md` #44). The two lines under it stay in
+ * the text face, because they are numbers a player actually reads.
  */
 export class GameOverScreen {
   readonly view = new Container();
 
   private readonly dim: Graphics;
-  private readonly headline: Text;
-  private readonly summary: Text;
-  private readonly hint: Text;
-  private layout: GameLayout = { scale: 1, originX: 0, originY: 0 };
+  private readonly plate: Container;
+  private readonly headline: DisplayTitle;
+  private readonly summary: BitmapText;
+  private readonly hint: BitmapText;
+  private readonly kit: UiKit;
+  private width = 0;
+  private height = 0;
 
-  constructor() {
+  constructor(kit: UiKit, renderer: Renderer) {
+    this.kit = kit;
     this.view.visible = false;
 
     this.dim = new Graphics();
     this.view.addChild(this.dim);
 
-    this.headline = new Text({
-      text: '',
-      style: {
-        fill: HUD_PALETTE.gameOverHeadline,
-        fontFamily: 'monospace',
-        fontSize: 40,
-        fontWeight: 'bold',
-      },
-    });
-    this.headline.anchor.set(0.5, 1);
-    this.view.addChild(this.headline);
+    this.plate = new Container();
+    this.view.addChild(this.plate);
 
-    this.summary = new Text({
-      text: '',
-      style: {
-        fill: HUD_PALETTE.gameOverSummary,
-        fontFamily: 'monospace',
-        fontSize: 15,
-        align: 'center',
-      },
-    });
-    this.summary.anchor.set(0.5, 0);
+    this.headline = new DisplayTitle(renderer, TITLE_STYLES.threat);
+    this.headline.view.scale.set(HEADLINE_SCALE);
+    this.view.addChild(this.headline.view);
+
+    this.summary = uiText('', { colour: HUD_PALETTE.gameOverSummary });
     this.view.addChild(this.summary);
 
-    this.hint = new Text({
+    this.hint = uiText(
       // In-run restart landed for #112's dev-seed work — `main.ts`'s `R`
       // key. Full #46 (rebuilding the debug-overlay bindings too) is still
       // open, but the player-facing restart this hint promises is real now.
-      text: 'press R to try again',
-      style: { fill: HUD_PALETTE.gameOverHint, fontFamily: 'monospace', fontSize: 13 },
-    });
-    this.hint.anchor.set(0.5, 0);
+      'R drückn für an neuen Lauf',
+      { colour: UI_PALETTE.textDim },
+    );
     this.view.addChild(this.hint);
   }
 
   show(info: RunSummaryText): void {
-    this.headline.text = info.word;
-    this.summary.text = `survived ${info.seconds.toFixed(1)}s   ${String(info.kills)} kills   ${info.floor}`;
+    this.headline.set(info.word);
+    this.summary.text = `${info.seconds.toFixed(1)}s überlebt   ${String(info.kills)} erledigt   ${info.floor}`;
     this.view.visible = true;
-    this.layPixels();
+    this.layOut();
   }
 
   hide(): void {
     this.view.visible = false;
   }
 
-  /** Call on every resize, same as the HUD's own `positionHud`. */
-  resize(layout: GameLayout): void {
-    this.layout = layout;
+  /** Call on every resize, same as the HUD's own layout pass. Dimensions in UI pixels. */
+  resize(width: number, height: number): void {
+    this.width = width;
+    this.height = height;
     if (this.view.visible) {
-      this.layPixels();
+      this.layOut();
     }
   }
 
-  private layPixels(): void {
-    const { scale, originX, originY } = this.layout;
-    const width = INTERNAL_WIDTH * scale;
-    const height = INTERNAL_HEIGHT * scale;
+  private layOut(): void {
+    const { width, height } = this;
 
     this.dim.clear();
     this.dim.rect(0, 0, width, height).fill({ color: EFFECT_PALETTE.gameOverDim, alpha: 0.78 });
-    this.view.position.set(originX, originY);
 
     const centreX = width / 2;
     const centreY = height / 2;
-    this.headline.position.set(centreX, centreY - 4);
-    this.summary.position.set(centreX, centreY + 10);
-    this.hint.position.set(centreX, centreY + 34);
+
+    this.headline.place(centreX, Math.round(centreY - this.headline.height * HEADLINE_SCALE - 6));
+
+    const summaryWidth = uiTextWidth(this.summary.text);
+    const hintWidth = uiTextWidth(this.hint.text);
+    const plateWidth = Math.max(summaryWidth, hintWidth) + PLATE_PADDING * 2;
+    const plateHeight = UI_LINE_HEIGHT + UI_TEXT_HEIGHT + PLATE_PADDING * 2;
+    const plateX = Math.round(centreX - plateWidth / 2);
+    const plateY = Math.round(centreY + 4);
+
+    this.plate.removeChildren();
+    const panel = this.kit.panelSprite(plateWidth, plateHeight);
+    this.plate.addChild(panel);
+    this.plate.position.set(plateX, plateY);
+
+    this.summary.position.set(Math.round(centreX - summaryWidth / 2), plateY + PLATE_PADDING);
+    this.hint.position.set(
+      Math.round(centreX - hintWidth / 2),
+      plateY + PLATE_PADDING + UI_LINE_HEIGHT,
+    );
   }
 }

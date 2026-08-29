@@ -207,6 +207,102 @@ export const HUD_PALETTE = {
   shopPreviewUnaffordable: 0x8a8a8a,
 } as const;
 
+// ---------------------------------------------------------------------------
+// The UI kit (render/ui/) — panels, buttons, sliders, the focus ring, icons
+// ---------------------------------------------------------------------------
+
+/**
+ * The kit's own colours (#154).
+ *
+ * Separate from `HUD_PALETTE` above rather than folded into it, because the
+ * two answer different questions. `HUD_PALETTE` is *what a value means* — a
+ * Promille tier, a soul mug, an unaffordable price — and every entry there
+ * exists because some piece of state needed a colour. `UI_PALETTE` is *what
+ * the chrome around it is made of*, and it has to hold still: a panel that
+ * changed colour with the floor would make every screen read as a different
+ * game, which is exactly what the per-floor `RoomTheme` above is for and
+ * exactly what the UI must not do.
+ *
+ * The neutrals come off the master palette (`tools/art/palette.mjs`'s
+ * `NEUTRAL_PALETTE`) where there is a match — `outline` is its outline ink —
+ * and the purples are the same family `APP_BACKGROUND_COLOUR` and
+ * `DEFAULT_ROOM_THEME` already sit in, so a panel over an unthemed part of the
+ * screen reads as belonging to it.
+ */
+export const UI_PALETTE = {
+  /** Every piece of UI art is drawn against this. Master-palette outline ink. */
+  outline: 0x1c1a1f,
+
+  /** The dark field inside a panel — brown rather than the app's purple, so the chrome reads as a made object rather than as more background. */
+  panelFill: 0x2a1c14,
+  panelHighlight: 0x8a5a24,
+  panelShadow: 0x120c0a,
+
+  /** A button at rest. */
+  buttonFill: 0x4a2f18,
+  buttonHighlight: 0xd9a441,
+  buttonShadow: 0x8a5a24,
+  /** The row the cursor or the gamepad is on. */
+  buttonSelectedFill: 0x8a5a24,
+  buttonSelectedHighlight: 0xf0c46a,
+  /** Held down — the bevel inverts, so a press reads without the row moving. */
+  buttonPressedFill: 0x1c1a1f,
+  /** Unavailable: flat, no bevel, and its label drops to `textDisabled`. */
+  buttonDisabledFill: 0x2a2630,
+
+  /** The inside of anything sunken — a slider track, a meter, an empty slot. */
+  wellFill: 0x120c0a,
+
+  sliderFill: 0xd9a441,
+  knobFill: 0xd0c6b8,
+
+  /** The gamepad focus ring (#53). The one gold nothing else on the screen uses. */
+  focusRing: 0xe8c94a,
+
+  /** Label text on a panel, and the dimmer secondary line under it. */
+  text: 0xe8dfd0,
+  textDim: 0x8a7f74,
+  textDisabled: 0x6a6270,
+
+  /** The kit's one accent — the same amber an open door and a cellar light already are. */
+  accent: 0xd9a441,
+} as const;
+
+/**
+ * The display face's treatments (#154) — the colours a title is built out of.
+ *
+ * Kept apart from `UI_PALETTE` because they answer a different question again:
+ * `UI_PALETTE` is the chrome a player looks *past*, and these are the two or
+ * three seconds a floor card or a boss plate is the only thing on screen. A
+ * ramp here is deliberately three or four flat bands rather than a gradient —
+ * that is what the era's actual title cards did, and it is what survives being
+ * drawn out of whole pixels.
+ */
+export const TITLE_PALETTE = {
+  /** Gold leaf, lit from above: the floor cards and the game's own name. */
+  goldRamp: [0xf6e3a0, 0xe8c94a, 0xd9a441, 0x8a5a24] as readonly number[],
+  goldGrain: 0xf6e3a0,
+  /** The boss plate and the word a run ends on — the same shapes, bled. */
+  bloodRamp: [0xf2a09a, 0xd9403a, 0x8a1f22] as readonly number[],
+  bloodGrain: 0xf2a09a,
+  /** A quieter scheme for a heading that is not an event — the map overlay's floor line. */
+  boneRamp: [0xf5f0e6, 0xd0c6b8, 0x8a7f74] as readonly number[],
+
+  /** One pixel around every treated line. The master palette's outline ink. */
+  outline: 0x1c1a1f,
+  /** The hard offset shadow under a title. Darker than any fill, so it never reads as part of the letter. */
+  shadow: 0x120c0a,
+
+  /** The card's ornamental border and rules. */
+  rule: 0xd9a441,
+  ruleShade: 0x8a5a24,
+  /** What a title card puts behind itself, over the frozen room. */
+  cardBackdrop: 0x1c1410,
+  cardEdge: 0x14100c,
+  /** The line of flavour under a floor's name. */
+  cardSubtitle: 0xb8ac9c,
+} as const;
+
 /** The colour behind everything — cellar dark, not black (`render/app.ts`). */
 export const APP_BACKGROUND_COLOUR = 0x14101a;
 

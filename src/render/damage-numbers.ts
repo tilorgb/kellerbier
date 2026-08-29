@@ -1,6 +1,7 @@
 import { BitmapText, Container } from 'pixi.js';
 import type { DamageNumberStore } from '../sim/particle/damage-numbers.js';
 import { lerp } from '../sim/math.js';
+import { UI_TEXT_HEIGHT } from './ui/text.js';
 
 /**
  * Draws floating damage numbers.
@@ -8,6 +9,11 @@ import { lerp } from '../sim/math.js';
  * `BitmapText` rather than `Text`: a `Text` regenerates a texture whenever its
  * string changes, and these change every time one is reused. At a few dozen a
  * second that is a texture upload per number.
+ *
+ * `fontFamily` is passed in rather than reached for, because the two entry
+ * points that have a renderer hand it the pixel font (#154) while the bench
+ * scene — which has no renderer to build the font's atlas on, and is
+ * measuring transform work rather than looks — keeps a system face.
  */
 export class DamageNumberView {
   readonly container = new Container();
@@ -57,7 +63,10 @@ export class DamageNumberView {
     }
     const created = new BitmapText({
       text: '',
-      style: { fontFamily: this.fontFamily, fontSize: 10 },
+      // The font's own cell size, so the pixel font draws 1:1 in world
+      // units and its glyphs land on whole pixels once `WORLD_ZOOM` doubles
+      // them — any other size resamples a bitmap font.
+      style: { fontFamily: this.fontFamily, fontSize: UI_TEXT_HEIGHT },
     });
     created.anchor.set(0.5);
     this.labels.push(created);
