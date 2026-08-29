@@ -195,14 +195,18 @@ describe('#29 — held-together smoke test (stand-in for #30)', () => {
     for (const definition of ITEM_DEFINITIONS) {
       sim.pickUpItem(definition.id);
     }
-    // Reinheitsgebot 1516 strips every already-held `impure` item the moment
-    // it is picked up — expected here, not a bug this smoke test should
-    // flag, so the expectation accounts for it rather than assuming every
-    // definition stays held.
-    const impureCount = ITEM_DEFINITIONS.filter((definition) =>
-      definition.tags?.includes('impure'),
+    // Reinheitsgebot 1516 strips every already-held `rosinen` item, and
+    // Sudordnung 1493 strips every already-held `rosinen` or `impure` item,
+    // the moment each is picked up — expected here, not a bug this smoke
+    // test should flag, so the expectation accounts for it rather than
+    // assuming every definition stays held. Whichever of the two pacts is
+    // picked up first strips both tags' worth of items outright; the other
+    // then finds nothing left to strip, so the net stripped count is the
+    // union of both tags regardless of pickup order (#166).
+    const strippedCount = ITEM_DEFINITIONS.filter((definition) =>
+      (definition.tags ?? []).some((tag) => tag === 'impure' || tag === 'rosinen'),
     ).length;
-    expect(sim.inventory.count).toBe(ITEM_DEFINITIONS.length - impureCount);
+    expect(sim.inventory.count).toBe(ITEM_DEFINITIONS.length - strippedCount);
 
     expect(() => {
       for (let tick = 0; tick < 600; tick++) {

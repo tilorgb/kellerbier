@@ -8,6 +8,8 @@ import { almrosenkranz } from './almrosenkranz.js';
 import { alpensegen } from './alpensegen.js';
 import { alpengluehen } from './alpengluehen.js';
 import { alpenkroneKronkorken } from './alpenkrone-kronkorken.js';
+import { apfelkuchen } from './apfelkuchen.js';
+import { apfelkuchenMitRosinen } from './apfelkuchen-mit-rosinen.js';
 import { bauernMistgabel } from './bauern-mistgabel.js';
 import { bedienungTablett } from './bedienung-tablett.js';
 import { bergrettung } from './bergrettung.js';
@@ -23,6 +25,7 @@ import { brezn } from './brezn.js';
 import { brotzeitbrett } from './brotzeitbrett.js';
 import { colaweizen } from './colaweizen.js';
 import { derOrdner } from './der-ordner.js';
+import { derRosinenklauber } from './der-rosinenklauber.js';
 import { drudmaske } from './drudmaske.js';
 import { enzian } from './enzian.js';
 import { fassanstich } from './fassanstich.js';
@@ -113,6 +116,7 @@ import { spiegelsaal } from './spiegelsaal.js';
 import { standlkasse } from './standlkasse.js';
 import { steckerlfisch } from './steckerlfisch.js';
 import { steinkrug } from './steinkrug.js';
+import { sudordnung1493 } from './sudordnung-1493.js';
 import { teufelsbraten } from './teufelsbraten.js';
 import { teufelstrittRuss } from './teufelstritt-russ.js';
 import { teufelstrittstein } from './teufelstrittstein.js';
@@ -183,7 +187,11 @@ import { zwoaDreiGsuffa } from './zwoa-drei-gsuffa.js';
  * Bierbauch and Halbe Portion, the roster's first pair to raise/lower
  * Trinkfest. #32 adds Konterbier, the last item named in §4's
  * Promille-gated table (Ruhige Hand, Maßkrugstemmen, Fingerhakeln and Zwoa,
- * drei, gsuffa were already here from earlier batches).
+ * drei, gsuffa were already here from earlier batches). #166 adds the
+ * `rosinen` tag's first two items, Apfelkuchen and Apfelkuchen (mit
+ * Rosinen), plus Sudordnung 1493 and Der Rosinenklauber — the second and
+ * third answers to the raisin, alongside a retune of Reinheitsgebot 1516
+ * (own file, unchanged here) from stripping `impure` to stripping `rosinen`.
  */
 export const ITEM_DEFINITIONS: readonly ItemDefinition[] = [
   bierkrug,
@@ -318,6 +326,10 @@ export const ITEM_DEFINITIONS: readonly ItemDefinition[] = [
   bierbauch,
   halbePortion,
   konterbier,
+  apfelkuchen,
+  apfelkuchenMitRosinen,
+  sudordnung1493,
+  derRosinenklauber,
 ];
 
 export {
@@ -330,6 +342,8 @@ export {
   alpengluehen,
   alpenkroneKronkorken,
   alpensegen,
+  apfelkuchen,
+  apfelkuchenMitRosinen,
   bauernMistgabel,
   bedienungTablett,
   bergrettung,
@@ -345,6 +359,7 @@ export {
   brotzeitbrett,
   colaweizen,
   derOrdner,
+  derRosinenklauber,
   drudmaske,
   enzian,
   fassanstich,
@@ -435,6 +450,7 @@ export {
   standlkasse,
   steckerlfisch,
   steinkrug,
+  sudordnung1493,
   teufelsbraten,
   teufelstrittRuss,
   teufelstrittstein,
