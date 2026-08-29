@@ -197,6 +197,16 @@ export interface PlayerHeading {
  * (`render/player-view.ts`), not by the body, which is the whole reason a
  * four-way body is enough for a twin-stick game (`docs/DECISIONS.md` #38).
  *
+ * "Movement" here reads `sim.velocity` — the input-driven channel — rather
+ * than the raw position delta. Firing kicks the player with a recoil impulse
+ * on the separate `push` channel (`sim/systems/shooting.ts`'s `fire()`, via
+ * `addPush`), and a push is real displacement: reading position delta treated
+ * that recoil as "movement" and pointed the body opposite the shot for the
+ * tick or two it takes to decay, so standing still and firing flickered the
+ * body left-right on every shot. Velocity carries only what `moveX`/`moveY`
+ * input actually asked for, so recoil with no held direction correctly falls
+ * through to aim.
+ *
  * Horizontal wins a tie: a diagonal drawn as a side view keeps the face and
  * the Zapfanlage in frame, where drawing it as a back view hides both.
  *
@@ -204,8 +214,9 @@ export interface PlayerHeading {
  */
 export function resolvePlayerHeading(sim: GameSim, out: PlayerHeading): boolean {
   const index = sim.playerIndex;
-  let dx = sim.positionX(index) - sim.previousX(index);
-  let dy = sim.positionY(index) - sim.previousY(index);
+  const pairBase = index * 2;
+  let dx = sim.velocity.data[pairBase] ?? 0;
+  let dy = sim.velocity.data[pairBase + 1] ?? 0;
   if (Math.abs(dx) <= MOVE_EPSILON_PX && Math.abs(dy) <= MOVE_EPSILON_PX) {
     dx = sim.aimDirectionX;
     dy = sim.aimDirectionY;

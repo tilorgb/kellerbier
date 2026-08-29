@@ -348,8 +348,11 @@ export class EntityView {
       const gridScale = isPropTarget ? TILE_SPRITE_SCALE : ACTOR_SPRITE_SCALE;
       // A pickup pops in on spawn — a cosmetic-only bump read off the same
       // countdown `stepPickups`' collection never touches, so it never
-      // affects the hitbox it's drawn over.
-      const bounceTicks = sim.spawnBounce.data[index] ?? 0;
+      // affects the hitbox it's drawn over. Gated to `isPickup`: the
+      // component array is dense and reused across recycled ECS slots, so an
+      // enemy or prop created into a slot a just-collected pickup still had a
+      // few bounce ticks left in would otherwise inherit its pop.
+      const bounceTicks = isPickup ? (sim.spawnBounce.data[index] ?? 0) : 0;
       const bounceMax = Math.max(1, sim.tuning.pickup.spawnBounceTicks);
       const bounceProgress = bounceTicks / bounceMax;
       const pop = bounceTicks > 0 ? 1 + 0.4 * Math.sin(bounceProgress * Math.PI) : 1;

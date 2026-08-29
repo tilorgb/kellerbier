@@ -1540,7 +1540,7 @@ export class GameSim {
         if (this.pickups.indexOf(pickup.type) < 0) {
           continue;
         }
-        this.spawnPickup(pickup.type, pickup.x, pickup.y, pickup.price);
+        this.spawnPickup(pickup.type, pickup.x, pickup.y, pickup.price, false);
       }
       this.pedestalList = snapshot.pedestals.map((pedestal) => ({ ...pedestal }));
       return;
@@ -3232,24 +3232,44 @@ export class GameSim {
     if (this.room.isClear(centreX, centreY, radius)) {
       return { x: centreX, y: centreY };
     }
-    const ringStep = 8;
-    const samplesPerRing = 12;
-    const maxRadius = Math.max(this.room.maxX - this.room.minX, this.room.maxY - this.room.minY);
-    for (let ringRadius = ringStep; ringRadius <= maxRadius; ringRadius += ringStep) {
-      for (let sample = 0; sample < samplesPerRing; sample++) {
-        const angle = (sample / samplesPerRing) * Math.PI * 2;
-        const x = centreX + Math.cos(angle) * ringRadius;
-        const y = centreY + Math.sin(angle) * ringRadius;
-        if (this.room.isClear(x, y, radius)) {
-          return { x, y };
-        }
-      }
+    const ring = this.ringSearchClearPoint(centreX, centreY, radius);
+    if (ring !== null) {
+      return ring;
     }
     // Every ring blocked is not a case any authored room should produce
     // (`tests/content/rooms.test.ts` compiles every template), so this is
     // the same "place it anyway rather than not spawn at all" fallback
     // `safeSpawnPoint` uses.
     return { x: centreX, y: centreY };
+  }
+
+  /**
+   * Spirals outward from `(originX, originY)` in rings, returning the first
+   * clear point found, or `null` if every ring out to the room's own extent
+   * is blocked. Shared by `findPlayerSpawnPoint` (spiralling from the room
+   * centre) and `safeSpawnPoint` (spiralling from whatever point was asked
+   * for) — both need "walk off this block" rather than "nudge toward a fixed
+   * point that might be the block itself".
+   */
+  private ringSearchClearPoint(
+    originX: number,
+    originY: number,
+    radius: number,
+  ): { x: number; y: number } | null {
+    const ringStep = 8;
+    const samplesPerRing = 12;
+    const maxRadius = Math.max(this.room.maxX - this.room.minX, this.room.maxY - this.room.minY);
+    for (let ringRadius = ringStep; ringRadius <= maxRadius; ringRadius += ringStep) {
+      for (let sample = 0; sample < samplesPerRing; sample++) {
+        const angle = (sample / samplesPerRing) * Math.PI * 2;
+        const x = originX + Math.cos(angle) * ringRadius;
+        const y = originY + Math.sin(angle) * ringRadius;
+        if (this.room.isClear(x, y, radius)) {
+          return { x, y };
+        }
+      }
+    }
+    return null;
   }
 
   private spawnPlayer(): Entity {
@@ -3595,8 +3615,16 @@ export class GameSim {
    * shop's stock. `sim/systems/pickup.ts`'s `collect` reads its *presence*
    * as "this one must be paid for," not the value alone, so an omitted or
    * zero price is indistinguishable from any other pickup in the game.
+   *
+   * `announce` gates the spawn-bounce pop: `true` for a pickup that is
+   * genuinely appearing for the first time (a drop, an authored
+   * `pickupSpawns` entry), `false` for one that already existed and is only
+   * being re-materialised — `restoreOrSpawnRoomLoot` re-entering a room whose
+   * loot snapshot was captured on a previous visit. Without this, walking
+   * back into a room the player already looted at (nothing new dropped) pops
+   * every leftover pickup on the floor as if it had just spawned.
    */
-  spawnPickup(kindId: string, x: number, y: number, price?: number): Entity {
+  spawnPickup(kindId: string, x: number, y: number, price?: number, announce = true): Entity {
     const definitionIndex = this.pickups.indexOf(kindId);
     if (definitionIndex < 0) {
       throw new Error(`Unknown pickup kind "${kindId}"`);
@@ -3639,8 +3667,10 @@ export class GameSim {
 
     this.pickupKind.data[index] = definitionIndex;
     // Purely cosmetic — `EntityView` reads this down to pop the sprite on
-    // spawn, and nothing else in the simulation looks at it.
-    this.spawnBounce.data[index] = Math.round(this.tuning.pickup.spawnBounceTicks);
+    // spawn, and nothing else in the simulation looks at it. Skipped for a
+    // restored pickup (`announce = false`): it was already on the floor, not
+    // something that just appeared.
+    this.spawnBounce.data[index] = announce ? Math.round(this.tuning.pickup.spawnBounceTicks) : 0;
     if (priced) {
       this.pickupPrice.data[index] = price;
     }
@@ -3744,10 +3774,14 @@ export class GameSim {
    * spawn site (loot rolls, room-clear rolls, room-authored `pickupSpawns`)
    * routes through rather than re-implements.
    *
-   * A few discrete steps toward the centre, not a search: a room is small
-   * enough that "closer to the middle" reliably finds daylight, and giving up
-   * and placing it exactly where asked (same as `splitFromEvent`'s corpse
-   * fallback in `systems/enemy.ts`) is a better failure than not spawning it.
+   * A few discrete steps toward the centre first, since a room is usually
+   * small enough that "closer to the middle" reliably finds daylight cheaply.
+   * That nudge is a no-op when `(x, y)` already *is* the centre — exactly
+   * what `rollRoomClearLoot` asks for — so a ring search spiralling out from
+   * the requested point (the same fallback `findPlayerSpawnPoint` uses)
+   * backs it up before this gives up and places it exactly where asked (same
+   * as `splitFromEvent`'s corpse fallback in `systems/enemy.ts`), a better
+   * failure than not spawning it.
    */
   private safeSpawnPoint(x: number, y: number, radius: number): { x: number; y: number } {
     if (this.room.isClear(x, y, radius)) {
@@ -3762,6 +3796,10 @@ export class GameSim {
       if (this.room.isClear(candidateX, candidateY, radius)) {
         return { x: candidateX, y: candidateY };
       }
+    }
+    const ring = this.ringSearchClearPoint(x, y, radius);
+    if (ring !== null) {
+      return ring;
     }
     return { x, y };
   }
