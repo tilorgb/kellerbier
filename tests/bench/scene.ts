@@ -2,7 +2,7 @@ import { Texture } from 'pixi.js';
 import { compileAnimationSet } from '../../src/render/animation/definition.js';
 import { entityIndex } from '../../src/sim/ecs/entity.js';
 import { GameSim } from '../../src/sim/game/sim.js';
-import { ParticleKind } from '../../src/sim/particle/store.js';
+import { PARTICLE_KIND_IDS, ParticleKind } from '../../src/sim/particle/store.js';
 import { ProjectileTeam } from '../../src/sim/projectile/store.js';
 import { RoomGeometry } from '../../src/sim/room/geometry.js';
 import { RngStream, createStreamRng } from '../../src/sim/rng/streams.js';
@@ -203,7 +203,11 @@ export function buildStressScene(): StressScene {
         ((particle % 5) - 2) * 0.3,
         particleLife,
         particleSize,
-        particle % 2 === 0 ? ParticleKind.Foam : ParticleKind.Splash,
+        // Every kind, not the two the game used to have (#153): each one is a
+        // different texture, so a scene made of two of them would measure a
+        // batch the real game no longer has. Cycled deterministically — this
+        // is a benchmark, and a random mix would make two runs incomparable.
+        PARTICLE_KIND_IDS[particle % PARTICLE_KIND_IDS.length] ?? ParticleKind.Foam,
       );
     }
   };
@@ -251,7 +255,13 @@ export function buildHeadlessView(sim: GameSim): GameView {
     entity: Texture.EMPTY,
     entityFlash: Texture.EMPTY,
     telegraph: Texture.EMPTY,
-    particleArt: { byKind: [], fallback: Texture.EMPTY },
+    // A distinct texture object per kind rather than one shared `Texture.EMPTY`:
+    // the per-particle texture swap is exactly what #153 added to this loop, and
+    // a scene where every kind points at the same object would not measure it.
+    particleArt: {
+      byKind: PARTICLE_KIND_IDS.map(() => new Texture()),
+      fallback: Texture.EMPTY,
+    },
     decal: Texture.EMPTY,
     numberFont: 'monospace',
     pedestalItem: Texture.EMPTY,
