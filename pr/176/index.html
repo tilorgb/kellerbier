@@ -65,6 +65,14 @@
         border-radius: 4px;
         padding: 4px 6px;
       }
+      /* A dev tool for pinning/finding seeds — on a touch device there is no
+         keyboard to type a seed into it anyway, and `app/touch-controls.ts`'s
+         pause button already claims this corner. */
+      @media (pointer: coarse) {
+        #seed-control {
+          display: none;
+        }
+      }
       #seed-control input[type='number'] {
         width: 8ch;
         font-family: monospace;
@@ -107,7 +115,7 @@
         cursor: default;
       }
     </style>
-    <script type="module" crossorigin src="./assets/index-B02yPo6e.js"></script>
+    <script type="module" crossorigin src="./assets/index-BfpL2rPe.js"></script>
     <link rel="modulepreload" crossorigin href="./assets/Geometry-CZGVBKwE.js">
     <link rel="modulepreload" crossorigin href="./assets/tokens-DlqQo_JF.js">
     <link rel="modulepreload" crossorigin href="./assets/Filter-DM8SVgg4.js">
