@@ -1,20 +1,22 @@
-import { Container, Sprite, Text, type Renderer } from 'pixi.js';
+import { Container, Sprite, type BitmapText } from 'pixi.js';
 import type { GameSim } from '../sim/game/sim.js';
 import { promilleRequirementMet } from '../sim/game/promille.js';
-import { createBarOutlineTexture, createSolidTexture } from './placeholder-art.js';
 import { HUD_PALETTE } from './palette.js';
+import { iconRoles, type UiKit } from './ui/kit.js';
+import { uiText, UI_TEXT_HEIGHT } from './ui/text.js';
 
-const BAR_WIDTH = 40;
-const BAR_HEIGHT = 6;
-const BAR_PADDING = 1;
-const ICON_SIZE = 10;
-const ICON_GAP = 4;
+const SLOT_SIZE = 14;
+const BAR_WIDTH = 44;
+const BAR_HEIGHT = 7;
+const BAR_INSET = 2;
+const GAP = 3;
 
 /**
- * The held active item's readout: a placeholder icon, a charge/"buildup"
- * bar, and which button fires it — #59's item batches are the first content
- * to actually reach `maxCharge`, and until now nothing in the dev app showed
- * an active item existed at all short of reading `O`'s debug overlay.
+ * The held active item's readout: an icon in a slot, a charge/"buildup"
+ * bar in a well, and which button fires it — #59's item batches are the
+ * first content to actually reach `maxCharge`, and until #59 nothing in the
+ * dev app showed an active item existed at all short of reading `O`'s debug
+ * overlay.
  *
  * `main.ts` passes the current button prompt in on every `sync` rather than
  * this class computing one itself — `app/input/glyphs.ts`'s `actionPrompt`
@@ -23,45 +25,50 @@ const ICON_GAP = 4;
  * space, HUD reads sim state, input state stays in `main.ts`" split every
  * other HUD piece here already keeps.
  *
- * No icon set exists yet (`ItemDefinition.sprite` is a placeholder key —
- * #34's job to resolve), so the icon is a plain tinted square: dim while
- * charging, bright gold the instant `useActiveItem` would actually fire.
- * That tint is the one piece of state duplicated outside the bar on
- * purpose — a charged item is worth noticing at a glance, not only on a
- * close read of the bar.
+ * Per-item icons are still `ItemDefinition.sprite`'s job (#34) and do not
+ * exist; what #154 replaces is the *slot* — a plain tinted square became the
+ * kit's slot frame with a star in it, so an empty slot and a filled one read
+ * as the same object in two states rather than as a coloured square that
+ * came and went. The tint still carries readiness, because a charged item is
+ * worth noticing at a glance rather than on a close read of the bar.
  */
 export class ActiveItemHud {
   readonly view = new Container();
 
+  private readonly kit: UiKit;
   private readonly icon: Sprite;
   private readonly barFill: Sprite;
-  private readonly label: Text;
+  private readonly label: BitmapText;
 
   private heldId: string | null = null;
 
-  constructor(renderer: Renderer) {
-    this.icon = new Sprite(createSolidTexture(renderer));
-    this.icon.width = ICON_SIZE;
-    this.icon.height = ICON_SIZE;
-    this.icon.position.set(0, 0);
+  constructor(kit: UiKit) {
+    this.kit = kit;
+
+    const slot = kit.slotSprite(SLOT_SIZE, SLOT_SIZE);
+    this.view.addChild(slot);
+
+    const starSize = kit.iconSize('star');
+    this.icon = new Sprite(kit.icon('star', iconRoles(HUD_PALETTE.activeItemCharging)));
+    this.icon.position.set(
+      Math.floor((SLOT_SIZE - starSize.width) / 2),
+      Math.floor((SLOT_SIZE - starSize.height) / 2),
+    );
     this.view.addChild(this.icon);
 
-    const barX = ICON_SIZE + ICON_GAP;
-    const outline = new Sprite(createBarOutlineTexture(renderer, BAR_WIDTH, BAR_HEIGHT));
-    outline.position.set(barX, 0);
-    this.view.addChild(outline);
-
-    this.barFill = new Sprite(createSolidTexture(renderer));
-    this.barFill.position.set(barX + BAR_PADDING, BAR_PADDING);
-    this.barFill.height = BAR_HEIGHT - BAR_PADDING * 2;
-    this.view.addChild(this.barFill);
-
-    this.label = new Text({
-      text: '',
-      style: { fill: HUD_PALETTE.labelText, fontFamily: 'monospace', fontSize: 9 },
-    });
-    this.label.position.set(barX + BAR_WIDTH + 6, -2);
+    const barX = SLOT_SIZE + GAP;
+    this.label = uiText('');
+    this.label.position.set(barX, 0);
     this.view.addChild(this.label);
+
+    const well = this.kit.wellSprite(BAR_WIDTH, BAR_HEIGHT);
+    well.position.set(barX, UI_TEXT_HEIGHT + 1);
+    this.view.addChild(well);
+
+    this.barFill = new Sprite(kit.solid);
+    this.barFill.position.set(barX + BAR_INSET, UI_TEXT_HEIGHT + 1 + BAR_INSET);
+    this.barFill.height = BAR_HEIGHT - BAR_INSET * 2;
+    this.view.addChild(this.barFill);
 
     this.view.visible = false;
   }
@@ -95,26 +102,34 @@ export class ActiveItemHud {
     const ready = ratio >= 1 && requirementMet;
     const dormant = !requirementMet;
 
-    this.barFill.width = Math.max(0, (BAR_WIDTH - BAR_PADDING * 2) * ratio);
+    this.barFill.width = Math.max(0, (BAR_WIDTH - BAR_INSET * 2) * ratio);
     const tint = dormant
       ? HUD_PALETTE.activeItemDormant
       : ready
         ? HUD_PALETTE.activeItemReady
         : HUD_PALETTE.activeItemCharging;
-    this.icon.tint = tint;
+    // A dormant item shows the padlock rather than the star: the same
+    // "shape first, colour second" rule the minimap icons follow, so the
+    // state survives being read on a bad monitor or by a colourblind player.
+    this.icon.texture = this.kit.icon(dormant ? 'lock' : 'star', iconRoles(tint));
     this.barFill.tint = tint;
 
     const prompt = activatePrompt ?? 'unbound';
     const percent = Math.round(ratio * 100);
     this.label.text = dormant
-      ? `${item.name}  (${item.promilleRequirement} only)`
+      ? `${item.name} (${item.promilleRequirement})`
       : ready
-        ? `${item.name}  [${prompt}]`
-        : `${item.name}  ${String(percent)}%`;
+        ? `${item.name} [${prompt}]`
+        : `${item.name} ${String(percent)}%`;
   }
 
   /** The item this HUD is currently showing, or `null` — for tests. */
   get shownItemId(): string | null {
     return this.heldId;
+  }
+
+  /** Height of the block in UI pixels. */
+  get height(): number {
+    return SLOT_SIZE;
   }
 }

@@ -1,4 +1,4 @@
-import { Container, Point, Text } from 'pixi.js';
+import { Container, Point } from 'pixi.js';
 import { ENEMY_DEFINITIONS } from '../content/enemies/index.js';
 import { FLOOR_CONFIGS, type FloorConfig } from '../content/floors/definition.js';
 import { DIRECTION_OFFSET } from '../content/rooms/definition.js';
@@ -37,7 +37,14 @@ import { ItemGateHud } from '../render/item-gate-hud.js';
 import { MinimapHud } from '../render/minimap-hud.js';
 import { PromilleHud } from '../render/promille-hud.js';
 import { WalletHud } from '../render/wallet-hud.js';
-import { HUD_PALETTE, PARTICLE_PALETTE } from '../render/palette.js';
+import { HUD_PALETTE, PARTICLE_PALETTE, UI_PALETTE } from '../render/palette.js';
+import { FloorTitleCard } from '../render/floor-title-card.js';
+import { installPixelFonts, UI_FONT_FAMILY } from '../render/ui/font.js';
+import { UiKit } from '../render/ui/kit.js';
+import { TextPlate } from '../render/ui/text-plate.js';
+import { DisplayTitle, TITLE_STYLES } from '../render/ui/title.js';
+import { UiKitGallery } from '../render/ui/gallery.js';
+import { uiScaleFor, uiText, UI_TEXT_HEIGHT } from '../render/ui/text.js';
 import { Vignette } from '../render/vignette.js';
 import { GameView } from '../render/view.js';
 import { buildAnimatedSets, loadFloorArt } from '../render/floor-art.js';
@@ -95,6 +102,36 @@ const STAIRCASE_TEMPLATES_BY_ID = new Map(
  * `MIN_ROOMS_FOR_ROLES`), not before.
  */
 const HIGHEST_PLAYABLE_FLOOR = 2;
+
+/** Margin from the frame's edge to the HUD, in UI pixels. */
+const HUD_MARGIN = 6;
+
+/** Vertical gap between two rows of the top-left HUD stack, in UI pixels. */
+const HUD_ROW_GAP = 2;
+
+/** How much bigger than one UI pixel the dev readout draws. Whole, like every other scale here. */
+const DEV_READOUT_SCALE = 2;
+
+/** Wrap width for the pedestal reveal's description, in UI pixels — a little under two-thirds of the frame. */
+const PEDESTAL_REVEAL_WRAP = 380;
+
+/** How far above a pedestal its name plate floats, in UI pixels. */
+const PEDESTAL_PLATE_LIFT = 18;
+
+/**
+ * How long a floor's title card stays up, and how long its fade-out takes.
+ *
+ * Milliseconds off the wall clock, and it is the one presentation timer here
+ * that is. Ticks would tie the card to `loop.timeScale` (which the death
+ * sequence deliberately drags to a crawl) and rendered *frames* are not ticks
+ * — a fixed-timestep loop catching up steps several ticks per frame, so a
+ * frame count reads as a different duration on a slow machine than on a fast
+ * one. Nothing about the card reaches the simulation, so nothing about it can
+ * reach a replay, which is what makes the wall clock allowable here and
+ * nowhere in `sim/`.
+ */
+const FLOOR_CARD_MS = 2600;
+const FLOOR_CARD_FADE_MS = 700;
 
 function floorConfig(floorNumber: number): FloorConfig {
   const config = FLOOR_CONFIGS.find((candidate) => candidate.floor === floorNumber);
@@ -284,6 +321,13 @@ async function boot(): Promise<void> {
 
   const app = await createRenderer(host);
 
+  // Before anything builds a label: `render/ui/text.ts` warns loudly if a
+  // `BitmapText` is made before the faces exist, because Pixi answers an
+  // unknown `fontFamily` by generating one from a browser face — which is
+  // silently the system-font HUD #154 exists to remove.
+  installPixelFonts(app.renderer);
+  const kit = new UiKit(app.renderer);
+
   // Accessibility settings (#33): persisted across reloads in `localStorage`,
   // read once here and mutated in place from then on — by the panel below,
   // and re-applied to a fresh `sim` on every `startRun` (a restart rebuilds
@@ -388,67 +432,79 @@ async function boot(): Promise<void> {
   const vignette = new Vignette();
   uiLayer.addChild(vignette.view);
 
-  const hud = new Text({
-    text: '',
-    style: { fill: HUD_PALETTE.devText, fontFamily: 'monospace', fontSize: 13 },
-  });
-  // In the screen layer rather than the game, for the reason the debug panels
-  // are: this is text, and text made of game pixels is text nobody can read.
-  // Anchored bottom-left so it stays put as lines are added to it, and pinned
-  // to the game's own bottom-left corner rather than the window's, so it does
-  // not drift out into the letterbox.
-  hud.anchor.set(0, 1);
-  uiLayer.addChild(hud);
-  const positionHud = (applied: GameLayout): void => {
-    hud.position.set(applied.originX + 8, applied.originY + INTERNAL_HEIGHT * applied.scale - 8);
-  };
-
-  const gameOverScreen = new GameOverScreen();
-  uiLayer.addChild(gameOverScreen.view);
+  /**
+   * Everything drawn on the UI's own pixel grid (#154).
+   *
+   * `hudLayer` is scaled by a whole number (`uiScaleFor`) and positioned at
+   * the game's own top-left, so **one UI pixel is one game pixel** and every
+   * HUD piece below lays itself out against a 640x360 frame it never has to
+   * ask the size of. The layer is what is scaled, not each component, so a
+   * component holds no idea of the window at all.
+   *
+   * `vignette` stays outside it (it covers the frame, and wants no scaling)
+   * and so does the `O` debug overlay, which `mountDebugOverlay` adds to
+   * `uiLayer` afterwards and therefore draws on top of all of this.
+   */
+  const hudLayer = new Container();
 
   /**
-   * The boss room's intro plate (#23): a plain banner shown for the room's
-   * warmup window (`sim.roomWarmupTicks`, the same "enemies stand inert"
-   * beat every room already gets) whenever that room's role is `'boss'`.
-   * Toggled, not redrawn, every frame — `text` is only ever set on the edge
-   * it becomes visible, the same restraint `hud`'s own slow-cadence comment
-   * argues for, just event-driven instead of timed.
+   * The dev-only bottom-left readout: ticks, seed, room state, counts.
+   *
+   * Outside `hudLayer` and at its own fixed scale, because it is a dense
+   * instrument rather than a HUD element — at the UI scale a large window
+   * picks, five lines of it would cover the room it is reporting on. It is
+   * still drawn in the pixel font: nothing a player can see should be in a
+   * system face, and this is visible without pressing anything (the `O`
+   * overlay's panels, which are not, keep their monospace).
    */
-  const bossBanner = new Text({
-    text: 'BOSSRAUM',
-    style: {
-      fill: HUD_PALETTE.bossBanner,
-      fontFamily: 'monospace',
-      fontSize: 18,
-      fontWeight: 'bold',
-    },
-  });
-  bossBanner.anchor.set(0.5);
-  bossBanner.visible = false;
-  uiLayer.addChild(bossBanner);
-  const positionBossBanner = (applied: GameLayout): void => {
-    bossBanner.position.set(
-      applied.originX + (INTERNAL_WIDTH * applied.scale) / 2,
-      applied.originY + INTERNAL_HEIGHT * applied.scale * 0.3,
-    );
-  };
+  const hud = uiText('', { colour: UI_PALETTE.textDim });
+  hud.scale.set(DEV_READOUT_SCALE);
+  hud.anchor.set(0, 1);
+  uiLayer.addChild(hud);
+
+  // Added after the readout so anything screen-filling in here — a floor
+  // card, the kit gallery, the game-over screen — covers it rather than
+  // having a column of debug text drawn across it.
+  uiLayer.addChild(hudLayer);
+
+  const gameOverScreen = new GameOverScreen(kit, app.renderer);
+
+  /**
+   * The floor's title card (#154) — the screen-filling Fraktur plate a floor
+   * opens on.
+   *
+   * Neither this nor the game-over screen is added here: both cover the HUD
+   * rather than sitting under it, so they are added last, after every HUD
+   * piece below. A title card with a health row on top of it is a title card
+   * that reads as a bug.
+   */
+  const floorTitleCard = new FloorTitleCard(app.renderer);
+  /** When the current floor card comes down, on the wall clock. Render-only — never sim state. */
+  let floorCardUntil = 0;
+
+  /**
+   * The boss room's intro plate (#23): shown for the room's warmup window
+   * (`sim.roomWarmupTicks`, the same "enemies stand inert" beat every room
+   * already gets) whenever that room's role is `'boss'`.
+   *
+   * Drawn in the display face's threat treatment — the same Fraktur the floor
+   * card uses, bled red. Rebuilt only on the edge it becomes visible, the
+   * same restraint the old `Text` version kept, and cheaper now that a
+   * treated line is a texture rather than a string.
+   */
+  const bossBanner = new DisplayTitle(app.renderer, TITLE_STYLES.threat);
+  bossBanner.set('Bossraum');
+  bossBanner.view.visible = false;
+  hudLayer.addChild(bossBanner.view);
   let bossBannerShown = false;
 
   /**
    * The boss room's own health bar (#36) — see `render/boss-health-hud.ts`'s
    * doc comment for why it reads `sim.bossHealth` rather than anything named
-   * after this specific boss. Positioned just above `bossBanner`'s own text
-   * so the two never overlap while both happen to be visible during the
-   * room's warmup beat.
+   * after this specific boss.
    */
-  const bossHealthHud = new BossHealthHud(app.renderer);
-  uiLayer.addChild(bossHealthHud.view);
-  const positionBossHealthHud = (applied: GameLayout): void => {
-    bossHealthHud.view.position.set(
-      applied.originX + (INTERNAL_WIDTH * applied.scale) / 2,
-      applied.originY + 12,
-    );
-  };
+  const bossHealthHud = new BossHealthHud(kit);
+  hudLayer.addChild(bossHealthHud.view);
 
   /**
    * "What did I just pick up" toast (#26): the German name of whatever was
@@ -458,28 +514,13 @@ async function boot(): Promise<void> {
    * simulation (ticks down in `decayPresentation`) rather than a wall-clock
    * timer here, for the same replay-determinism reason `bossBanner` reads
    * `sim.roomWarmupTicks` instead of its own clock.
+   *
+   * On a kit plate now rather than bare over the room: this is a line the
+   * player has under a second to read, and over Die Alpen's snow or Die
+   * Wiesn's magenta a bare label is a label with no background at all.
    */
-  const pickupToast = new Text({
-    text: '',
-    style: {
-      fill: HUD_PALETTE.toastText,
-      fontFamily: 'monospace',
-      fontSize: 14,
-      fontWeight: 'bold',
-    },
-  });
-  pickupToast.anchor.set(0.5);
-  pickupToast.visible = false;
-  uiLayer.addChild(pickupToast);
-  const positionPickupToast = (applied: GameLayout): void => {
-    pickupToast.position.set(
-      applied.originX + (INTERNAL_WIDTH * applied.scale) / 2,
-      // Clear of the top-left HUD stack (health/Promille/wallet, the last of
-      // which sits at a fixed `originY + 42` screen pixels) even at a small
-      // window scale, and still well above `bossBanner`'s 0.3.
-      applied.originY + INTERNAL_HEIGHT * applied.scale * 0.22,
-    );
-  };
+  const pickupToast = new TextPlate(kit, { colour: HUD_PALETTE.toastText });
+  hudLayer.addChild(pickupToast.view);
   let pickupToastLabel = '';
 
   /**
@@ -487,58 +528,23 @@ async function boot(): Promise<void> {
    * Fixed HUD position rather than anchored to the item itself the way the
    * pedestal name plate is: a shop room is a bare floor with a handful of
    * items, not a room complex enough that "belongs to the thing it floats
-   * over" is doing any work, and this stays simple the same reason
-   * `pickupToast` is fixed rather than anchored to the pickup that triggered
-   * it. Driven by `sim.shopPreview`, itself driven by `sim.nearbyShopPickup`
-   * (`sim/systems/pickup.ts`'s `stepPickups`) — touching a priced pickup no
-   * longer buys it outright, this is what tells the player what pressing
-   * `use` would.
+   * over" is doing any work. Driven by `sim.shopPreview`, itself driven by
+   * `sim.nearbyShopPickup` (`sim/systems/pickup.ts`'s `stepPickups`).
    */
-  const shopPreview = new Text({
-    text: '',
-    style: {
-      fill: HUD_PALETTE.toastText,
-      fontFamily: 'monospace',
-      fontSize: 13,
-      fontWeight: 'bold',
-    },
-  });
-  shopPreview.anchor.set(0.5);
-  shopPreview.visible = false;
-  uiLayer.addChild(shopPreview);
-  const positionShopPreview = (applied: GameLayout): void => {
-    shopPreview.position.set(
-      applied.originX + (INTERNAL_WIDTH * applied.scale) / 2,
-      // Below `bossBanner`'s 0.3 and clear of the room itself for any window
-      // scale — this is a floor-reading prompt, not a mid-room callout.
-      applied.originY + INTERNAL_HEIGHT * applied.scale * 0.88,
-    );
-  };
+  const shopPreview = new TextPlate(kit, { colour: HUD_PALETTE.toastText });
+  hudLayer.addChild(shopPreview.view);
   let shopPreviewLabel = '';
 
   /**
    * A pedestal's name plate "on approach" (#28) — the item's name only (the
    * full description waits for the reveal panel below, once it's actually
    * taken). Anchored to the pedestal's own screen position each frame
-   * (`view.pedestalScreenPosition`) rather than a fixed HUD slot, so it
-   * reads as belonging to the pedestal it floats over. Drawn in `uiLayer`,
-   * at the display's own resolution rather than the low-res game layer, the
-   * same choice `pickupToast`/`bossBanner` already make — the acceptance
-   * criterion that the name and description stay readable at internal
-   * resolution is what that choice is for.
+   * (`view.pedestalScreenPosition`, converted into `hudLayer`'s space) rather
+   * than a fixed HUD slot, so it reads as belonging to the pedestal it floats
+   * over.
    */
-  const pedestalNamePlate = new Text({
-    text: '',
-    style: {
-      fill: HUD_PALETTE.pedestalText,
-      fontFamily: 'monospace',
-      fontSize: 10,
-      fontWeight: 'bold',
-    },
-  });
-  pedestalNamePlate.anchor.set(0.5, 1);
-  pedestalNamePlate.visible = false;
-  uiLayer.addChild(pedestalNamePlate);
+  const pedestalNamePlate = new TextPlate(kit, { colour: UI_PALETTE.text });
+  hudLayer.addChild(pedestalNamePlate.view);
   let pedestalNamePlateLabel = '';
 
   /**
@@ -550,92 +556,113 @@ async function boot(): Promise<void> {
    * `pickupToast`/`toastTicks` already work, just longer and worth reading
    * in full rather than skimming.
    */
-  const pedestalReveal = new Text({
-    text: '',
-    style: {
-      fill: HUD_PALETTE.pedestalText,
-      fontFamily: 'monospace',
-      fontSize: 16,
-      fontWeight: 'bold',
-      align: 'center',
-      wordWrap: true,
-      wordWrapWidth: 420,
-    },
+  const pedestalReveal = new TextPlate(kit, {
+    colour: UI_PALETTE.text,
+    align: 'center',
+    wrapWidth: PEDESTAL_REVEAL_WRAP,
   });
-  pedestalReveal.anchor.set(0.5);
-  pedestalReveal.visible = false;
-  uiLayer.addChild(pedestalReveal);
-  const positionPedestalReveal = (applied: GameLayout): void => {
-    pedestalReveal.position.set(
-      applied.originX + (INTERNAL_WIDTH * applied.scale) / 2,
-      applied.originY + (INTERNAL_HEIGHT * applied.scale) / 2,
-    );
-  };
+  hudLayer.addChild(pedestalReveal.view);
   let pedestalRevealLabel = '';
 
-  const healthHud = new HealthHud(app.renderer);
-  uiLayer.addChild(healthHud.view);
-  // Screen pixels, not scaled — the same choice `hud` (the debug text) makes,
-  // and for the same reason: `uiLayer` is drawn at display resolution, and a
-  // fixed-size icon scaled up with the game's integer zoom would go blocky
-  // exactly when the window is large enough that it would otherwise be able
-  // to look its best.
-  const positionHealthHud = (applied: GameLayout): void => {
-    healthHud.view.position.set(applied.originX + 8, applied.originY + 8);
-  };
+  const healthHud = new HealthHud(kit);
+  hudLayer.addChild(healthHud.view);
 
-  const promilleHud = new PromilleHud(app.renderer);
-  uiLayer.addChild(promilleHud.view);
-  // Stacked directly under the health row, same corner.
-  const positionPromilleHud = (applied: GameLayout): void => {
-    promilleHud.view.position.set(applied.originX + 8, applied.originY + 30);
-  };
+  const promilleHud = new PromilleHud(kit);
+  hudLayer.addChild(promilleHud.view);
 
-  const walletHud = new WalletHud();
-  uiLayer.addChild(walletHud.view);
-  // Stacked directly under the Promille bar, same corner.
-  const positionWalletHud = (applied: GameLayout): void => {
-    walletHud.view.position.set(applied.originX + 8, applied.originY + 42);
-  };
+  const walletHud = new WalletHud(kit);
+  hudLayer.addChild(walletHud.view);
 
-  const activeItemHud = new ActiveItemHud(app.renderer);
-  uiLayer.addChild(activeItemHud.view);
-  // Stacked directly under the wallet row, same corner. Hidden entirely
-  // (`ActiveItemHud.sync`) whenever no active item is held, so an ordinary
-  // run without one never shows an empty row here.
-  const positionActiveItemHud = (applied: GameLayout): void => {
-    activeItemHud.view.position.set(applied.originX + 8, applied.originY + 54);
-  };
+  /**
+   * Hidden entirely (`ActiveItemHud.sync`) whenever no active item is held,
+   * so an ordinary run without one never shows an empty row.
+   */
+  const activeItemHud = new ActiveItemHud(kit);
+  hudLayer.addChild(activeItemHud.view);
 
-  const itemGateHud = new ItemGateHud(app.renderer);
-  uiLayer.addChild(itemGateHud.view);
-  // Stacked directly under the active-item row, same corner — #32's "item
-  // activation state is unambiguous in the HUD" acceptance criterion for
-  // every held `sober`/`rausch` passive item. Rows past the held gated set
-  // stay hidden (`ItemGateHud.sync`), so a run holding none of them shows
-  // nothing here at all.
-  const positionItemGateHud = (applied: GameLayout): void => {
-    itemGateHud.view.position.set(applied.originX + 8, applied.originY + 66);
-  };
+  /**
+   * #32's "item activation state is unambiguous in the HUD" for every held
+   * `sober`/`rausch` passive item. Rows past the held gated set stay hidden
+   * (`ItemGateHud.sync`), so a run holding none shows nothing here at all.
+   */
+  const itemGateHud = new ItemGateHud(kit);
+  hudLayer.addChild(itemGateHud.view);
 
-  const minimapHud = new MinimapHud(app.renderer, {
+  const minimapHud = new MinimapHud(app.renderer, kit, {
     treasure: tileTextures['minimap-treasure'],
     shop: tileTextures['minimap-shop'],
     boss: tileTextures['minimap-boss'],
   });
-  uiLayer.addChild(minimapHud.view);
+  hudLayer.addChild(minimapHud.view);
   // The overlay is centred over the game, not the window — it should stay
   // aligned with the room even in a letterboxed viewport.
-  uiLayer.addChild(minimapHud.overlayView);
-  const positionMinimapHud = (applied: GameLayout): void => {
-    minimapHud.view.position.set(
-      applied.originX + INTERNAL_WIDTH * applied.scale - 8,
-      applied.originY + 8,
+  hudLayer.addChild(minimapHud.overlayView);
+
+  /**
+   * The kit's own specimen page (`K`).
+   *
+   * Shipped rather than kept in a test because most of what #154 built — the
+   * button states, the slider, the focus ring #53 needs — has no consumer in
+   * the game until M8's menus, and `CLAUDE.md` is explicit that a feature
+   * nobody can experience is not finished however green the suite is.
+   */
+  const kitGallery = new UiKitGallery(kit, app.renderer);
+
+  // Last, and in this order: a floor card covers the HUD, the gallery covers
+  // the card, and the game-over screen covers everything.
+  hudLayer.addChild(floorTitleCard.view);
+  hudLayer.addChild(kitGallery.view);
+  hudLayer.addChild(gameOverScreen.view);
+
+  /** The frame's size in UI pixels, kept for the per-frame placements below. */
+  let uiFrame = { width: INTERNAL_WIDTH, height: INTERNAL_HEIGHT };
+
+  /**
+   * Places every HUD piece, in UI pixels, against the frame.
+   *
+   * One function rather than the dozen `positionX` closures this replaced:
+   * the pieces are stacked *relative to each other* now (each one reports its
+   * own height), so a component growing a row can no longer silently overlap
+   * the one below it, which is exactly what a column of hand-written screen
+   * offsets could not promise.
+   */
+  const layoutHud = (applied: GameLayout): void => {
+    const scale = uiScaleFor(applied);
+    hudLayer.scale.set(scale);
+    hudLayer.position.set(applied.originX, applied.originY);
+    const width = Math.round((INTERNAL_WIDTH * applied.scale) / scale);
+    const height = Math.round((INTERNAL_HEIGHT * applied.scale) / scale);
+    uiFrame = { width, height };
+
+    hud.position.set(
+      applied.originX + HUD_MARGIN,
+      applied.originY + INTERNAL_HEIGHT * applied.scale - HUD_MARGIN,
     );
-    minimapHud.overlayView.position.set(
-      applied.originX + (INTERNAL_WIDTH * applied.scale) / 2,
-      applied.originY + (INTERNAL_HEIGHT * applied.scale) / 2,
-    );
+
+    let y = HUD_MARGIN;
+    healthHud.view.position.set(HUD_MARGIN, y);
+    y += healthHud.height + HUD_ROW_GAP;
+    promilleHud.view.position.set(HUD_MARGIN, y);
+    y += promilleHud.height + HUD_ROW_GAP;
+    walletHud.view.position.set(HUD_MARGIN, y);
+    y += walletHud.height + HUD_ROW_GAP;
+    activeItemHud.view.position.set(HUD_MARGIN, y);
+    y += activeItemHud.height + HUD_ROW_GAP;
+    itemGateHud.view.position.set(HUD_MARGIN, y);
+
+    const centreX = Math.round(width / 2);
+    bossHealthHud.view.position.set(centreX, HUD_MARGIN + UI_TEXT_HEIGHT + 2);
+    bossBanner.place(centreX, Math.round(height * 0.26));
+    pickupToast.place(centreX, Math.round(height * 0.2));
+    shopPreview.place(centreX, Math.round(height * 0.85));
+    pedestalReveal.placeCentred(centreX, Math.round(height / 2));
+
+    minimapHud.view.position.set(width - HUD_MARGIN, HUD_MARGIN);
+    minimapHud.overlayView.position.set(centreX, Math.round(height / 2));
+
+    gameOverScreen.resize(width, height);
+    floorTitleCard.resize(width, height);
+    kitGallery.resize(width, height);
   };
 
   let summary = new RunSummaryTracker();
@@ -697,19 +724,7 @@ async function boot(): Promise<void> {
 
   trackWindowSize(app, game, host, (applied) => {
     layout = applied;
-    positionHud(applied);
-    positionHealthHud(applied);
-    positionPromilleHud(applied);
-    positionWalletHud(applied);
-    positionActiveItemHud(applied);
-    positionItemGateHud(applied);
-    positionMinimapHud(applied);
-    positionBossBanner(applied);
-    positionBossHealthHud(applied);
-    positionPickupToast(applied);
-    positionShopPreview(applied);
-    positionPedestalReveal(applied);
-    gameOverScreen.resize(applied);
+    layoutHud(applied);
     vignette.resize(applied);
   });
 
@@ -789,14 +804,15 @@ async function boot(): Promise<void> {
         sim.roomWarmupTicks > 0 && planRoom(floorPlan, currentRoomId).role === 'boss';
       if (showBossBanner !== bossBannerShown) {
         bossBannerShown = showBossBanner;
-        bossBanner.visible = showBossBanner;
+        bossBanner.view.visible = showBossBanner;
       }
       const toast = sim.pickupToast;
       if (toast !== null) {
         const label = `${toast.name} — ${toast.description}`;
         if (label !== pickupToastLabel) {
           pickupToastLabel = label;
-          pickupToast.text = label;
+          pickupToast.set(label);
+          pickupToast.place(Math.round(uiFrame.width / 2), Math.round(uiFrame.height * 0.2));
         }
         pickupToast.visible = true;
       } else if (pickupToast.visible) {
@@ -811,11 +827,14 @@ async function boot(): Promise<void> {
           : `${preview.name} — ${preview.description} — ${price} (not enough)`;
         if (label !== shopPreviewLabel) {
           shopPreviewLabel = label;
-          shopPreview.text = label;
+          shopPreview.set(label);
+          shopPreview.place(Math.round(uiFrame.width / 2), Math.round(uiFrame.height * 0.85));
         }
-        shopPreview.tint = preview.affordable
-          ? HUD_PALETTE.shopPreviewAffordable
-          : HUD_PALETTE.shopPreviewUnaffordable;
+        shopPreview.setColour(
+          preview.affordable
+            ? HUD_PALETTE.shopPreviewAffordable
+            : HUD_PALETTE.shopPreviewUnaffordable,
+        );
         shopPreview.visible = true;
       } else if (shopPreview.visible) {
         shopPreview.visible = false;
@@ -829,9 +848,13 @@ async function boot(): Promise<void> {
         const label = `${item.name}  [use]`;
         if (label !== pedestalNamePlateLabel) {
           pedestalNamePlateLabel = label;
-          pedestalNamePlate.text = label;
+          pedestalNamePlate.set(label);
         }
-        pedestalNamePlate.position.set(nameplateScreen.x, nameplateScreen.y - 14);
+        // `pedestalScreenPosition` is in stage space; `hudLayer` is scaled and
+        // offset, so the point has to come back into its local pixels before
+        // a plate laid out in UI pixels can use it.
+        const local = hudLayer.toLocal({ x: nameplateScreen.x, y: nameplateScreen.y });
+        pedestalNamePlate.place(local.x, local.y - PEDESTAL_PLATE_LIFT);
         pedestalNamePlate.visible = true;
       } else if (pedestalNamePlate.visible) {
         pedestalNamePlate.visible = false;
@@ -842,13 +865,18 @@ async function boot(): Promise<void> {
         const label = `${reveal.name}\n${reveal.description}`;
         if (label !== pedestalRevealLabel) {
           pedestalRevealLabel = label;
-          pedestalReveal.text = label;
+          pedestalReveal.set(label);
+          pedestalReveal.placeCentred(
+            Math.round(uiFrame.width / 2),
+            Math.round(uiFrame.height / 2),
+          );
         }
         pedestalReveal.visible = true;
       } else if (pedestalReveal.visible) {
         pedestalReveal.visible = false;
         pedestalRevealLabel = '';
       }
+      advanceFloorCard(started);
       const playerScreen = view.playerScreenPosition();
       vignette.sync(sim, playerScreen.x, playerScreen.y);
       overlay?.sync(alpha);
@@ -1000,7 +1028,7 @@ WASD move   arrows aim and fire
         PARTICLE_PALETTE.decalFill,
         PARTICLE_PALETTE.decalRim,
       ),
-      numberFont: 'monospace',
+      numberFont: UI_FONT_FAMILY,
       // Placeholder art (#34) — a plain bright disc and a soft vertical bar
       // are enough to read as "an item floating on light" until real sprites
       // land; `PedestalView` tints both per quality.
@@ -1042,7 +1070,7 @@ WASD move   arrows aim and fire
     deathPhaseTicks = 0;
     keyHintTicks = 0;
     bossBannerShown = false;
-    bossBanner.visible = false;
+    bossBanner.view.visible = false;
     pickupToastLabel = '';
     pickupToast.visible = false;
     shopPreviewLabel = '';
@@ -1057,8 +1085,35 @@ WASD move   arrows aim and fire
     loop.paused = false;
 
     refreshHud();
-    positionHud(layout);
-    positionBossBanner(layout);
+    layoutHud(layout);
+    showFloorCard();
+  }
+
+  /**
+   * Raises the current floor's title card.
+   *
+   * Called from `startRun` and from `advanceFloor` — the two moments a player
+   * arrives somewhere new — rather than from a room transition, because the
+   * card is announcing a *chapter*, and a chapter announced on every door
+   * would stop being an announcement by the third room.
+   */
+  function showFloorCard(): void {
+    const config = floorConfig(floorPlan.floor);
+    floorTitleCard.show(floorPlan.floor, config.name, config.flavour);
+    floorCardUntil = performance.now() + FLOOR_CARD_MS;
+  }
+
+  /** Fades the card out and takes it down. See `FLOOR_CARD_MS` for why this is a clock and not a tick count. */
+  function advanceFloorCard(now: number): void {
+    if (!floorTitleCard.visible) {
+      return;
+    }
+    const remaining = floorCardUntil - now;
+    if (remaining <= 0) {
+      floorTitleCard.hide();
+      return;
+    }
+    floorTitleCard.setFade(Math.min(1, remaining / FLOOR_CARD_FADE_MS));
   }
 
   startRun(RUN_SEED);
@@ -1275,6 +1330,7 @@ WASD move   arrows aim and fire
     view.setSecretHints(crackHintsFor(floorPlan, currentRoomId, revealedEdges));
     minimapHud.rebuild(floorPlan, currentRoomId, visitedRoomIds);
     refreshHud();
+    showFloorCard();
   }
 
   /** `sim.doorContact`'s door, translated into "which of this room's real cells did that come from". */
@@ -1357,6 +1413,13 @@ WASD move   arrows aim and fire
         // A fresh random seed every press, same as Isaac's own restart key —
         // `#seed-input` is what pins a specific one instead.
         startRun(Math.floor(Math.random() * 1_000_000));
+        break;
+      case 'k':
+      case 'K':
+        // Steps through the focus-ring rows on each press and closes on the
+        // last one, so the ring is visibly a thing that moves rather than a
+        // decoration painted on one button.
+        kitGallery.toggle();
         break;
       case 'n':
       case 'N': {

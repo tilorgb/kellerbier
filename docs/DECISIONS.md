@@ -1821,7 +1821,129 @@ every toggle — or the fact has to be given a second home first. In practice th
 effects go in `sim/particle/effects.ts` next to the existing bursts, whose own doc comment states
 the rule, and get a row in `tests/unit/particle-art.test.ts`'s suppression table either way.
 
-## 42. A sprite's canvas is its size on screen — the actor grid is one authored pixel per internal pixel
+## 42. The line box grew rather than the cap height shrinking, and accented letters are composed
+
+**Decided:** M6, building the pixel font and UI kit (#154). **Constrains:** every UI screen laid
+out from here on — #52's localisation, #53's text scaling, #58's item flavour text, and every M8
+menu.
+
+#52 named the trap and asked for it to be solved early: *"Designing a readable 8px font with
+umlauts inside a 640×360 frame is genuinely constrained work — the diacritics need vertical room
+that simply is not there."* It is not there because a diacritic can only get its room from one of
+two places, and both cost something:
+
+- **a shorter cap height**, keeping an 8-row line box: four HUD rows in 40 pixels, and letterforms
+  five rows tall;
+- **a taller line box**, keeping the caps: three HUD rows in the same 40 pixels, and letterforms
+  seven rows tall.
+
+Both were built as far as a rendered sample of the same German strings, and the taller box won on
+the thing the whole issue is about: at five rows, `Ä`'s dots and `A`'s apex are two pixels apart
+and the eye reads them as one shape. The cell is **10 rows** — two for a diacritic, one clear, a
+seven-row cap band, and one descender — and `LINE_ADVANCE` is 12 so a descender and the next
+line's diacritic cannot touch. The display face (#44) uses the same shape at 16.
+
+**A diacritic's room is reserved, not borrowed, and that is what makes composition possible.**
+`Ä` is `A` plus the dieresis mark, placed by rule; so are the other 53 accented Latin-1 letters.
+Fifty-four hand-drawn bitmaps became one table of base-plus-mark pairs, a mark redrawn once moves
+every letter that uses it, and `tests/unit/ui-font.test.ts` asserts that no accented Latin-1
+letter is drawn by hand — because the first one that is, is the first one whose dots sit a pixel
+off from every other.
+
+**The one asymmetry is deliberate.** A one-row mark keeps a clear row between itself and the
+letter; a two-row mark sits straight on it. The dieresis is a one-row mark for exactly this
+reason: it is the only mark German, Boarisch and English need, and it is the one that must never
+be misread. The circumflex, tilde and ring — which no target language uses — pay the cramped
+price instead. That rule is a field on the face (`markClearance`, and `MarkSource.tight`), not a
+special case in the compiler.
+
+**What this constrains:** German runs roughly a third longer than English for the same UI string,
+and this is now checkable rather than arguable — `PixelFace.measure` is exact and needs no
+renderer, so `tests/unit/ui-strings.test.ts` fails a pull request that makes a real German string
+overflow the element that draws it. Two of the current strings clear their budget by under 10%
+("Schloss Neuschwanstein" on a floor card, the longest shop preview), so that test is load-bearing
+rather than decorative. A new UI element declares its budget there or it is not finished.
+
+## 43. UI art is screen-space, generated at boot, and lives in `src/render/ui/` — not in the atlas
+
+**Decided:** M6, with #154. **Constrains:** every later HUD element, and M8's menus.
+
+The obvious home for a heart, a Biermarke and a panel corner is `assets/sprites/common/tiles/`,
+next to the minimap icons that are already there. It is the wrong home, and the reason is what the
+atlas pipeline's contract actually says: **16×16 exactly, a per-floor palette, drawn in the world
+at `WORLD_ZOOM`.** Every clause of that is about a sprite that lives *in a room on a floor*. A
+panel corner is 3×3, belongs to no floor, and is drawn in screen space at the UI's own scale.
+Forcing it through would have meant a fifth sprite category whose spec contradicted the other
+four.
+
+So UI art is authored as **source**, in `render/ui/`, in a role format (`pixel-art.ts`) where a
+pixel names `outline`/`fill`/`highlight`/`accent` rather than a colour, and is generated into
+textures once at boot the way `placeholder-art.ts` already generates its shapes. Roles rather than
+a tint because one mug bitmap has to draw red Maß, white Weißbier *and* near-black Schwarzbier,
+and a tint can only ever darken — the same reason `placeholder-art.ts` swaps textures for a hit
+flash instead of tinting one.
+
+**The UI is laid out in UI pixels on a whole-number scale.** `render/ui/text.ts`'s `uiScaleFor`
+returns an integer, `app/main.ts` scales one `hudLayer` by it, and every component below measures
+itself in units where one is one pixel of the 640×360 frame. This *narrows*
+`docs/CONTENT_BIBLE.md` §5's "HUD text is not held to 640×360": it is still drawn outside the
+scaled game container at the display's own resolution — which is why it is crisp on a 4K monitor
+rather than eight device pixels tall — but its *grid* is now the frame's, because a pixel font at
+a fractional size resamples and `resolution.ts` exists to prevent exactly that. The bible's bullet
+has been amended to say so.
+
+**What this constrains:** a new HUD element lays out in UI pixels and reports its own height, so
+the stack in `app/main.ts` composes rather than being a column of hand-written offsets. Anything
+that wants to be bigger multiplies by a whole number. And #53's text scaling is a change to one
+integer rather than a second layout system.
+
+## 44. There are two faces, and the broken one is only for what nobody has to read under fire
+
+**Decided:** M6, with #154. **Constrains:** where Fraktur may be used, forever.
+
+Bavaria's own typographic voice is Fraktur, and a Bavarian roguelike that sets everything in a
+clean pixel sans is leaving its best joke on the table. Fraktur is also, measurably, slower to
+read: it is built out of broken strokes and near-identical stems, its capitals include pairs
+(`A`/`U`, `B`/`V`, `C`/`E`, `I`/`J`, `K`/`R`, `M`/`W`) that people who grew up reading it still
+confuse, and at a pixel size its whole character comes from breaks that need three pixels each to
+read as deliberate.
+
+So there are two faces, and the rule between them is not stylistic:
+
+| | Text face | Display face |
+|---|---|---|
+| Cell | 10 rows, 7-row caps | 16 rows, 11-row caps |
+| For | every label, price, prompt, description | the game's name, a floor's name, a boss plate, the word a run ends on |
+| Test | can it be read while something is shooting at you? | is anything shooting at you? |
+
+**A broken script is allowed exactly where nothing is happening.** A floor card is up while the
+player is standing still; a death word is the last thing a run says. A Promille readout is not,
+and never gets it.
+
+Authenticity lost to legibility in three places, each recorded because the temptation to "fix"
+them later is real: **no long ſ** (it is a typesetting rule, not a glyph, and it reads as `f` to a
+modern eye), **no ligatures**, and **modern capital skeletons** wearing Fraktur's weight and
+breaks rather than its actual confusable forms. What is kept is what makes it the script: broken
+strokes, two-pixel stems with diamond spurs, the Elefantenrüssel where a capital has room, and the
+tight narrow rhythm that makes a word read as one dark mass.
+
+**The display face falls back to the text face, glyph by glyph.** It authors A–Z, a–z, 0–9, ß and
+heading punctuation; anything else is borrowed and reseated on the display baseline. A display
+face legitimately needs fewer characters than a text face — nothing writes a paragraph in it — but
+a heading that hit a missing character would show a box, and `docs/DECISIONS.md` #19's rule is
+that a content gap degrades gracefully. Borrowing *is* the graceful degradation;
+`tests/unit/ui-font.test.ts` still holds both faces to full printable Latin-1.
+
+**A treatment is data, not a second face.** Outline, weight, a top-to-bottom colour ramp, a
+texture and a hard offset shadow are one `TitleStyle` object, and a treated line is rasterised
+**whole** rather than glyph by glyph — an outline belongs to the word, or every letter gap grows
+a seam. That is affordable only because this is a display face: the things drawn with it change on
+an event, a handful of times a run, never per frame.
+
+**What this constrains:** a new heading picks one of the three schemes in `TITLE_STYLES` rather
+than inventing colours, and anything that reads as a *label* uses `uiText`, not `displayText` —
+including headings inside a HUD element, where a raised voice would just be noise.
+## 45. A sprite's canvas is its size on screen — the actor grid is one authored pixel per internal pixel
 
 **Decided:** M6, from an art-direction audit asking why sprites kept growing whenever they were
 redrawn with more detail. **Supersedes** the half of #27 that claimed pixel density was decoupled

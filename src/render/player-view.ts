@@ -130,7 +130,7 @@ export class PlayerView {
     this.body.anchor.set(0.5, 0.5);
     // Drawn on the actor grid, exactly like `EntityView` draws every enemy
     // body: one authored pixel per internal pixel (`render/resolution.ts`'s
-    // `ACTOR_SPRITE_SCALE`, `docs/DECISIONS.md` #42). Authoring at a higher
+    // `ACTOR_SPRITE_SCALE`, `docs/DECISIONS.md` #45). Authoring at a higher
     // resolution for more detail (#26, #27) must not, by itself, change how
     // big Alois reads in the room — and it no longer can, because size is the
     // authored canvas rather than something inferred from it.

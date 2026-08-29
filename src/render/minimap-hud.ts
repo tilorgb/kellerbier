@@ -1,4 +1,12 @@
-import { Container, Graphics, Sprite, Text, type Renderer, type Texture } from 'pixi.js';
+import {
+  type BitmapText,
+  Container,
+  Graphics,
+  type NineSliceSprite,
+  Sprite,
+  type Renderer,
+  type Texture,
+} from 'pixi.js';
 import type { FloorPlan, FloorPlanRoom, RoomDoor, RoomRole } from '../sim/room/floor-plan.js';
 import { DIRECTION_OFFSET } from '../content/rooms/definition.js';
 import { computeVoidCells, voidCellKey } from '../sim/room/void-cells.js';
@@ -8,7 +16,12 @@ import {
   createDiamondTexture,
   createTriangleTexture,
 } from './placeholder-art.js';
-import { HUD_PALETTE } from './palette.js';
+import { HUD_PALETTE, UI_PALETTE } from './palette.js';
+import { type UiKit } from './ui/kit.js';
+import { uiText, uiTextWidth, UI_TEXT_HEIGHT } from './ui/text.js';
+
+/** Room for the floor's name above the compact map. */
+const HEADER_HEIGHT = 12;
 
 const COMPACT_CELL = 5;
 const OVERLAY_CELL = 16;
@@ -253,10 +266,10 @@ export class MinimapHud {
   readonly view = new Container();
   readonly overlayView = new Container();
 
-  private readonly header: Text;
+  private readonly header: BitmapText;
   private readonly compactMap = new Container();
-  private readonly overlayBackdrop: Graphics;
-  private readonly overlayHeader: Text;
+  private readonly overlayBackdrop: NineSliceSprite;
+  private readonly overlayHeader: BitmapText;
   private readonly overlayMap = new Container();
   private readonly icons: RoomIcons;
 
@@ -272,7 +285,7 @@ export class MinimapHud {
    * is a constraint on the icon *set*, and swapping generated shapes for drawn
    * ones was never licence to change what the shapes mean.
    */
-  constructor(renderer: Renderer, authored: RoomIcons = {}) {
+  constructor(renderer: Renderer, kit: UiKit, authored: RoomIcons = {}) {
     this.icons = {
       treasure:
         authored.treasure ?? createDiamondTexture(renderer, 4, HUD_PALETTE.minimapTreasureIcon),
@@ -287,30 +300,22 @@ export class MinimapHud {
       boss: authored.boss ?? createTriangleTexture(renderer, 4, HUD_PALETTE.minimapBossIcon),
     };
 
-    this.header = new Text({
-      text: '',
-      style: { fill: HUD_PALETTE.labelText, fontFamily: 'monospace', fontSize: 9 },
-    });
-    // Right-anchored: `view` is positioned with its local x=0 at the game's
-    // right edge (see `main.ts`'s `positionMinimapHud`), and everything here
-    // grows leftward from it, same as `compactMap` below.
-    this.header.anchor.set(1, 0);
+    this.header = uiText('');
+    // Right-aligned by measurement rather than by anchor: `view` is positioned
+    // with its local x=0 at the game's right edge (see `main.ts`'s
+    // `positionMinimapHud`), and everything here grows leftward from it, same
+    // as `compactMap` below. `uiTextWidth` is exact, so this lands on a whole
+    // pixel where an anchor on a proportional line box would not.
     this.view.addChild(this.header);
-    this.compactMap.position.set(0, 12);
+    this.compactMap.position.set(0, HEADER_HEIGHT);
     this.view.addChild(this.compactMap);
 
-    this.overlayBackdrop = new Graphics();
+    // The full map's backdrop is the kit's panel (#154), not a flat
+    // translucent rectangle: the overlay is the one screen-filling piece of
+    // chrome the game has today, and it is what a menu will be built out of.
+    this.overlayBackdrop = kit.panelSprite(1, 1);
     this.overlayView.addChild(this.overlayBackdrop);
-    this.overlayHeader = new Text({
-      text: '',
-      style: {
-        fill: HUD_PALETTE.labelText,
-        fontFamily: 'monospace',
-        fontSize: 12,
-        fontWeight: 'bold',
-      },
-    });
-    this.overlayHeader.anchor.set(0.5, 0);
+    this.overlayHeader = uiText('', { colour: UI_PALETTE.accent });
     this.overlayView.addChild(this.overlayHeader);
     this.overlayView.addChild(this.overlayMap);
     this.overlayView.visible = false;
@@ -318,8 +323,9 @@ export class MinimapHud {
 
   rebuild(plan: FloorPlan, currentRoomId: string, visitedRoomIds: ReadonlySet<string>): void {
     const reveal = computeReveal(plan, visitedRoomIds);
-    const headerText = `Floor ${String(plan.floor)} — ${plan.floorName}`;
+    const headerText = `${String(plan.floor)}. Stock — ${plan.floorName}`;
     this.header.text = headerText;
+    this.header.position.set(-uiTextWidth(headerText), 0);
 
     const compactSize = drawMap(
       this.compactMap,
@@ -329,7 +335,7 @@ export class MinimapHud {
       COMPACT_CELL,
       this.icons,
     );
-    this.compactMap.position.set(-compactSize.width, 12);
+    this.compactMap.position.set(-compactSize.width, HEADER_HEIGHT);
 
     const overlaySize = drawMap(
       this.overlayMap,
@@ -339,16 +345,23 @@ export class MinimapHud {
       OVERLAY_CELL,
       this.icons,
     );
-    const padding = 16;
+    const padding = 10;
     this.overlayHeader.text = headerText;
-    this.overlayHeader.position.set(overlaySize.width / 2, 0);
-    this.overlayMap.position.set(0, this.overlayHeader.height + 8);
-    const backdropWidth = overlaySize.width + padding * 2;
-    const backdropHeight = overlaySize.height + this.overlayHeader.height + 8 + padding * 2;
-    this.overlayBackdrop
-      .clear()
-      .rect(-padding, -padding, backdropWidth, backdropHeight)
-      .fill({ color: HUD_PALETTE.minimapBackdrop, alpha: 0.85 });
+    // The panel is sized to whichever is wider, the map or its own heading:
+    // a two-room floor has a map narrower than "1. Stock — Der Keller", and
+    // sizing to the map alone let the heading hang off both ends of it.
+    const headerWidth = uiTextWidth(headerText);
+    const contentWidth = Math.max(overlaySize.width, headerWidth);
+    this.overlayHeader.position.set(Math.round((contentWidth - headerWidth) / 2), 0);
+    this.overlayMap.position.set(
+      Math.round((contentWidth - overlaySize.width) / 2),
+      UI_TEXT_HEIGHT + 6,
+    );
+    const backdropWidth = contentWidth + padding * 2;
+    const backdropHeight = overlaySize.height + UI_TEXT_HEIGHT + 6 + padding * 2;
+    this.overlayBackdrop.position.set(-padding, -padding);
+    this.overlayBackdrop.width = backdropWidth;
+    this.overlayBackdrop.height = backdropHeight;
     // The overlay's own extent changes with the floor's cell bounds, so it
     // re-centres itself on its pivot rather than main.ts having to know its
     // size — main.ts only ever positions this view at the screen's centre.

@@ -258,7 +258,7 @@ function validateClip(clip, stripFrames) {
  * The tight box around a sprite's opaque pixels — its silhouette, as opposed
  * to the canvas it was drawn on.
  *
- * Since `docs/DECISIONS.md` #42 a body's canvas *is* its size in internal
+ * Since `docs/DECISIONS.md` #45 a body's canvas *is* its size in internal
  * pixels, so the canvas alone cannot say how large a creature reads: two rows
  * of headroom above a 14-row woodlouse is a 16-tall file holding a 14-tall
  * animal, and it is the animal a player sees and shoots at.

@@ -333,7 +333,7 @@ export class EntityView {
             : ENTITY_PALETTE.normalTint;
       // Drawn at the actor grid: one authored pixel per internal pixel,
       // whatever the body is (`render/resolution.ts`, `docs/DECISIONS.md`
-      // #42). This used to be `radius / (bodyTexture.height / 2)` — size
+      // #45). This used to be `radius / (bodyTexture.height / 2)` — size
       // derived from the collider — which normalised height and left width
       // free, so widening a canvas for more detail widened the body on
       // screen instead. On-screen size is now the authored canvas and

@@ -136,7 +136,7 @@ export class ProjectileView {
         floor,
       );
       sprite.texture = texture;
-      // The deliberate exception to the actor grid (`docs/DECISIONS.md` #42):
+      // The deliberate exception to the actor grid (`docs/DECISIONS.md` #45):
       // a shot is scaled to its own collider, not drawn at its authored size.
       // `shotRadius` is tunable at runtime (`sim/tuning.ts`) and items change
       // it, so here the sprite's size *is* live information — a bigger shot

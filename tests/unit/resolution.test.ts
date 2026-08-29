@@ -60,9 +60,9 @@ describe('computeViewport', () => {
 });
 
 /**
- * The two grids, pinned (`docs/DECISIONS.md` #42).
+ * The two grids, pinned (`docs/DECISIONS.md` #45).
  *
- * Both numbers below were, before #42, neither stated nor true: bodies were
+ * Both numbers below were, before #45, neither stated nor true: bodies were
  * drawn at whatever `radius / (texture.height / 2)` came to, which across the
  * committed roster was twelve different values, nine of them fractional. These
  * assertions are cheap and they are the reason that cannot come back.

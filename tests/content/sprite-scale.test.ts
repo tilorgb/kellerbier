@@ -10,7 +10,7 @@ import { ACTOR_PIXELS_PER_UNIT } from '../../src/render/resolution.js';
 
 /**
  * The check that was missing, and whose absence is the whole of
- * `docs/DECISIONS.md` #42.
+ * `docs/DECISIONS.md` #45.
  *
  * The art pipeline was well guarded on everything except the one number that
  * decides how large a creature reads. `validateSpriteSize` range-checks a
@@ -69,7 +69,7 @@ const MAX_SILHOUETTE = 1.8;
 /**
  * Creatures whose art does not yet fit the collider it is drawn over.
  *
- * Art debt from #42, recorded rather than papered over. Both entries are
+ * Art debt from #45, recorded rather than papered over. Both entries are
  * bodies drawn well inside their own hitbox — a Shopkeeper 16 internal pixels
  * tall behind a 28-pixel collider, a Kellerassel-Segment at 15 — because the
  * old renderer inflated them to fit and nothing ever had to be authored to

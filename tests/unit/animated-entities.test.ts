@@ -199,7 +199,7 @@ describe('EntityView, drawing an animated enemy', () => {
   });
 
   /**
-   * The regression this whole area exists for (`docs/DECISIONS.md` #42).
+   * The regression this whole area exists for (`docs/DECISIONS.md` #45).
    *
    * `EntityView` used to size a body by `radius / (texture.height / 2)`, which
    * normalised height to the collider and left width entirely free — so a

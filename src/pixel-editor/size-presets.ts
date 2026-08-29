@@ -35,7 +35,7 @@ export const DEFAULT_SIZE_PRESET_ID = 'normal';
 const SIZE_PRESETS: Readonly<Record<SpriteCategory, readonly SizePreset[]>> = {
   tile: [{ id: 'normal', label: 'Normal (16×16)', width: 16, height: 16 }],
   // Named after the thing they are actually for, since `docs/DECISIONS.md`
-  // #42: a character canvas is its size on screen, so the useful starting
+  // #45: a character canvas is its size on screen, so the useful starting
   // point is the `EnemySize` class the creature will be authored as. The
   // three collider diameters are 16, 28 and 40 internal pixels
   // (`sim/enemy/size.ts`'s `ENEMY_PROFILES`, doubled), and each preset is
@@ -57,7 +57,7 @@ const SIZE_PRESETS: Readonly<Record<SpriteCategory, readonly SizePreset[]>> = {
   ],
   // Tiers run all the way to the 160x160 ceiling (docs/DECISIONS.md #26) — a
   // boss is the one category meant to dominate the screen, so "xtra-big" here
-  // means it, not a cautious step short of it. Since #42 these are literal:
+  // means it, not a cautious step short of it. Since #45 these are literal:
   // 160 authored is 160 of the frame's 360 lines, where before the renderer
   // would have squeezed any of them to 40.
   boss: [

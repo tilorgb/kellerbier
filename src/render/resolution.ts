@@ -52,7 +52,7 @@ export const WORLD_ZOOM = 2;
  * bigger" were the same request, and the roster ended up drawn at twelve
  * different pixel sizes — most of them fractional, which this module's own
  * opening paragraph calls a hard rule rather than a preference. See
- * `docs/DECISIONS.md` #42.
+ * `docs/DECISIONS.md` #45.
  *
  * So: on-screen size is what was authored, and only what was authored. A
  * sprite's canvas *is* its size in internal pixels. Detail is bought by

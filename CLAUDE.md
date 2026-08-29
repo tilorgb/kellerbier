@@ -94,7 +94,7 @@ even for placeholder-tier art: the *pattern/style choice* is what needs sign-off
 perfect execution of it.
 
 **Size is a design choice now, so it is part of what needs sign-off.** Since `docs/DECISIONS.md`
-#42 a sprite's canvas is literally its size on screen — a 24×16 character is 24×16 of the 640×360
+#45 a sprite's canvas is literally its size on screen — a 24×16 character is 24×16 of the 640×360
 frame — so picking a canvas is picking how big the creature reads in the room, not just how much
 detail it can carry. Don't infer one from what the old art happened to be, and don't let a canvas
 grow sideways just because that is where the spare pixels were: show the option on a real floor
@@ -103,7 +103,11 @@ tile next to Alois at true scale, and let the size be chosen along with the desi
 collider it is drawn over, but it is a wide band and a gate, not an art director.
 
 In practice: render the options at a legible scale (upscaled, nearest-neighbour, no smoothing) and
-send them as an image rather than describing them in text. If the art has a "how it repeats" or
+send them as an image rather than describing them in text. **UI art has a shortcut for this**: it
+is authored as source in `src/render/ui/` (`docs/DECISIONS.md` #43) and rasterised by pure
+functions — `PixelFace.glyph`, `drawPixelArt`, `renderTitlePixels` — so a throwaway Node script
+plus `pngjs` can render a specimen sheet without a browser or a renderer. #154's font, kit and
+title-card options were all signed off that way. If the art has a "how it repeats" or
 "how it varies" question — a tileset that mixes several variants across a floor, say — show that
 mixed/tiled, not just the individual swatches, since that's what the option actually reads like in
 play. Once a direction is picked, iterating within it (fixing a rendering bug, tightening a shape)

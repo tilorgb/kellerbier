@@ -1,7 +1,7 @@
 /**
  * Sprite categories, their file-size spec, and the floor bucket list.
  *
- * Sizes are in *file* pixels, and since `docs/DECISIONS.md` #42 they are also
+ * Sizes are in *file* pixels, and since `docs/DECISIONS.md` #45 they are also
  * the sprite's size on screen: everything that is a body — a character, a
  * boss, a pickup — is drawn at `render/resolution.ts`'s `ACTOR_SPRITE_SCALE`,
  * one authored pixel per internal pixel, so a 24x16 canvas is 24x16 of the
@@ -41,7 +41,7 @@ export const CATEGORY_SPECS = {
   // capping width at the old 16 while height could reach 32 baked in a
   // portrait-only assumption nothing here actually requires.
   //
-  // Raised again to 64x48 by `docs/DECISIONS.md` #42, and this time the
+  // Raised again to 64x48 by `docs/DECISIONS.md` #45, and this time the
   // number means something concrete rather than "some more detail". A
   // character's canvas is now its size in internal pixels, so the ceiling has
   // to clear the largest body that is not a boss: a `mid` creature's collider
@@ -59,7 +59,7 @@ export const CATEGORY_SPECS = {
   // at its authored size, while `EntityView` was in fact drawing every body
   // at `2 * radius` world units tall, and the largest radius in the game is
   // `mid`'s 10 — so every boss was 40 internal pixels tall whatever it was
-  // authored at, and a 160-tall one would have lost three rows in four. #42
+  // authored at, and a 160-tall one would have lost three rows in four. #45
   // made the assumption true: at `ACTOR_SPRITE_SCALE` a 160-tall boss really
   // is 160 of the 360-line frame. The number is unchanged; it just finally
   // does what it says.

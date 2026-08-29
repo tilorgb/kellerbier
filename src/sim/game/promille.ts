@@ -153,7 +153,11 @@ export function promilleTierName(tier: PromilleTierId): string {
     case PromilleTier.Umgfalln:
       return 'Umgfalln';
     default:
-      return 'Nuchtern';
+      // Spelled with its umlaut, unlike the `PromilleTier.Nuchtern` *key*
+      // above: the key is an identifier and the string is a word a player
+      // reads. It was ASCII on both sides until #154, when the UI got a font
+      // that can actually draw an `ü`.
+      return 'Nüchtern';
   }
 }
 
