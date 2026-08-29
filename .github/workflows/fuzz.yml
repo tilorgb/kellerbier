@@ -5,12 +5,15 @@ name: Synergy fuzz
 # projectile, the projectile pool overflowing, a softlock, and a tick that
 # blows the frame budget — plus a balance report of the strongest and
 # weakest combinations found, and any that came out a statistical outlier.
+# Also runs `tests/fuzz/heavy/projectile-tags.test.ts` (#27/#30), the
+# exhaustive 4,096-combination projectile-tag sweep — everything under
+# `tests/fuzz/heavy/**` runs via the same `npm run fuzz` command below.
 #
-# Deliberately not on every pull request: `tests/fuzz/heavy/synergy.test.ts`
-# is slow by design (that is the point of running 10,000 combinations), so
-# it runs nightly and on demand instead, per the issue's own acceptance
-# criteria — the same split `bench` already makes between the pull-request
-# gate and its own `npm run bench`.
+# Deliberately not on every pull request: both of these are slow by design
+# (that is the point of an exhaustive/10,000-combination sweep), so they run
+# nightly and on demand instead, per #30's own acceptance criteria — the
+# same split `bench` already makes between the pull-request gate and its own
+# `npm run bench`.
 
 on:
   schedule:
@@ -43,7 +46,7 @@ jobs:
       - name: Install
         run: npm ci
 
-      - name: Run the synergy fuzz harness
+      - name: Run the heavy fuzz suite (synergy + projectile tags)
         run: npm run fuzz
 
       - name: Format the balance report
