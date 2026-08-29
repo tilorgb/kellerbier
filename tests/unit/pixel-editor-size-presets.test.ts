@@ -53,8 +53,9 @@ describe('presetIdForSize', () => {
   });
 
   it('returns null for a size matching no preset — legacy art predating the named tiers', () => {
-    // 16x16 is not one of "character"'s five tiers (tiny/small/normal/big/xtra-big) —
-    // exactly the shape of an already-authored floor-1/2 sprite.
-    expect(presetIdForSize('character', 16, 16)).toBeNull();
+    // 24x16 is not one of "character"'s five tiers (mini/normal/mid/wide/tall) —
+    // it is the Kellerassel, sized to its own silhouette the way
+    // `docs/DECISIONS.md` #36 asks every creature to be.
+    expect(presetIdForSize('character', 24, 16)).toBeNull();
   });
 });

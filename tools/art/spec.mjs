@@ -1,10 +1,16 @@
 /**
  * Sprite categories, their file-size spec, and the floor bucket list.
  *
- * Sizes are in *file* pixels — simulation units, per `docs/CONTENT_BIBLE.md`
- * §5 and issue #34's comment thread. Sprites are drawn at `WORLD_ZOOM`
- * (`src/render/resolution.ts`), so these numbers are half what lands on
- * screen; the atlas build never sees screen pixels at all.
+ * Sizes are in *file* pixels, and since `docs/DECISIONS.md` #45 they are also
+ * the sprite's size on screen: everything that is a body — a character, a
+ * boss, a pickup — is drawn at `render/resolution.ts`'s `ACTOR_SPRITE_SCALE`,
+ * one authored pixel per internal pixel, so a 24x16 canvas is 24x16 of the
+ * 640x360 frame. `tile` is the one category still on the coarser room grid
+ * (`TILE_SPRITE_SCALE`, two internal pixels per authored pixel), because a
+ * 16px tile covers `ROOM_TILE_UNITS` world units by definition.
+ *
+ * That makes these numbers a *composition* budget, not just a memory one:
+ * a ceiling here is how much of the screen the category may cover.
  *
  * `min`/`max` rather than an exact size for `character` and `boss`: a boss
  * silhouette shrinking between floors, or a character denser than the floor
@@ -34,11 +40,29 @@ export const CATEGORY_SPECS = {
   // be taller than it is wide (a stout body, a wide-bellied enemy), so
   // capping width at the old 16 while height could reach 32 baked in a
   // portrait-only assumption nothing here actually requires.
-  character: { minWidth: 8, maxWidth: 32, minHeight: 16, maxHeight: 32 },
+  //
+  // Raised again to 64x48 by `docs/DECISIONS.md` #45, and this time the
+  // number means something concrete rather than "some more detail". A
+  // character's canvas is now its size in internal pixels, so the ceiling has
+  // to clear the largest body that is not a boss: a `mid` creature's collider
+  // is 40 internal pixels across (`ENEMY_PROFILES`), and the widest things in
+  // the roster — Kuh, Traktor — are roughly half again as wide as they are
+  // tall. 48 tall gives a `mid` body its collider plus headroom; 64 wide
+  // gives that same body room to be the shape it is. Anything wanting more
+  // than that is a boss and belongs in `bosses/`.
+  character: { minWidth: 8, maxWidth: 64, minHeight: 16, maxHeight: 48 },
   // Floor of 17 keeps a boss from silently passing as an oversized tile.
-  // Ceiling raised from 48 to 160 by `docs/DECISIONS.md` #26 — no boss art
-  // exists yet to invalidate, and 160 (320 on screen, most of a 180-tall
-  // playfield) is deliberately close to "fills the screen."
+  // Ceiling raised from 48 to 160 by `docs/DECISIONS.md` #26, on the
+  // reasoning that a boss is the one category meant to dominate the screen.
+  //
+  // That reasoning was not true when it was written: #26 assumed a boss drew
+  // at its authored size, while `EntityView` was in fact drawing every body
+  // at `2 * radius` world units tall, and the largest radius in the game is
+  // `mid`'s 10 — so every boss was 40 internal pixels tall whatever it was
+  // authored at, and a 160-tall one would have lost three rows in four. #45
+  // made the assumption true: at `ACTOR_SPRITE_SCALE` a 160-tall boss really
+  // is 160 of the 360-line frame. The number is unchanged; it just finally
+  // does what it says.
   boss: { minWidth: 17, maxWidth: 160, minHeight: 17, maxHeight: 160 },
   // Not in the bible directly — derived from "enemy shots must read against
   // every background", which only makes sense for something tile-scale or

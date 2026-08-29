@@ -1943,3 +1943,108 @@ an event, a handful of times a run, never per frame.
 **What this constrains:** a new heading picks one of the three schemes in `TITLE_STYLES` rather
 than inventing colours, and anything that reads as a *label* uses `uiText`, not `displayText` —
 including headings inside a HUD element, where a raised voice would just be noise.
+## 45. A sprite's canvas is its size on screen — the actor grid is one authored pixel per internal pixel
+
+**Decided:** M6, from an art-direction audit asking why sprites kept growing whenever they were
+redrawn with more detail. **Supersedes** the half of #27 that claimed pixel density was decoupled
+from on-screen size: it was decoupled on one axis.
+
+### What was actually happening
+
+`EntityView` sized every body in the game by one expression:
+
+```ts
+const referenceHeight = bodyTexture.height;
+const spriteScale = radius / (referenceHeight / 2);
+sprite.scale.set(spriteScale * flip, spriteScale);
+```
+
+#27 introduced it so that redrawing the player at 32px instead of 16 would not make him twice as
+tall, and for *height* it does exactly that. But the same factor is then applied to width, where
+nothing constrains it: drawn width is `authored width × radius ÷ (authored height ÷ 2)`. Widening
+a canvas widens the body on screen, one-for-one, with no change to what can be hit.
+
+So the pipeline offered an author one lever for "more detail" — more pixels — wired to two
+different outputs depending on which axis they were spent on. Vertically: resolution. Horizontally:
+size. And `CATEGORY_SPECS.character` pins `minHeight` at 16 (#26 kept it there deliberately, to
+keep the committed roster legal), so a wide, flat creature *cannot* spend them vertically. The spec
+pushed exactly one shape of creature into the one axis the renderer did not defend.
+
+The Kellerassel is the worked example, and is what prompted the audit. #36's redraw took it from
+16×16 to 24×16 — the only direction available to a woodlouse. On screen: 26×18 internal pixels to
+42×25, **2.24× the area**, on a radius that never moved. The note that started this was "I asked
+for a more detailed sprite, I didn't ask for it to grow."
+
+Two further consequences of deriving size from the collider, both live on `main` until this:
+
+- **Twelve different pixel sizes.** Measured across the committed roster, `screen px ÷ authored px`
+  ranged from 0.8 to 2.5 and took twelve distinct values, nine of them fractional — meaning
+  resampled, which `render/resolution.ts`'s own opening paragraph calls "a hard rule rather than a
+  preference". Alois and the pickups sat at 1.0; the floor tiles at 2.0; the roster smeared across
+  the gap between them, at 1.167, 1.273, 1.4, 1.538, 1.556, 1.75, 1.818.
+- **#26's boss ceiling was arithmetically unreachable.** It raised `boss` to 160×160 reasoning that
+  "160 authored is 320 on screen ... deliberately close to filling" a 180-tall playfield. But a body
+  was drawn `2 × radius` world units tall and the largest radius in the game is `mid`'s 10, so every
+  boss was 40 internal pixels tall whatever it was authored at — 11% of the playfield, not 89%. Die
+  Große Kellerassel was authored 40×20, 3% of the canvas the spec allowed, and drawn at 2.0: the
+  game's climactic sprite was its *coarsest* art, twice the pixel size of the Alois standing next to
+  it.
+
+### The decision
+
+**On-screen size is the authored canvas, and nothing else.** `render/resolution.ts` states two
+grids and every drawing path takes one of them:
+
+- `ACTOR_SPRITE_SCALE` — one authored pixel per internal pixel, for anything that *is* a thing: a
+  character, a boss, a corpse, a pickup. Want more detail? Draw more pixels. Want it bigger? Draw a
+  bigger canvas. The two questions finally have two different answers.
+- `TILE_SPRITE_SCALE` — two internal pixels per authored pixel, for room art. Not a compromise and
+  not chosen here: a 16px tile covering `ROOM_TILE_UNITS` world units *is* 2.0 by definition. A
+  background that repeats identically and unnoticed carrying less detail than the things acting in
+  front of it is the same judgement `tools/art/spec.mjs` already makes by pinning `tile` at exactly
+  16×16 while letting a character grow.
+
+Both are whole numbers by construction, so no sprite is ever resampled. `tests/unit/resolution.test.ts`
+pins both.
+
+**The collider stops deciding size and starts being checked against it.**
+`tests/content/sprite-scale.test.ts` walks the real sprite tree and holds every creature's
+silhouette — its *inked* box, not its canvas — to between 0.6× and 1.8× its collider diameter, on
+its longest axis. Longest axis rather than height because the collider is a circle and a creature is
+not: no circle matches both a Kellerassel's 24px width and its 14px height, and its width is what a
+player reads and shoots at. The band is deliberately wide; this is a gate against a sprite drifting
+away from its collider unnoticed, not a house style for how big a creature should be. That decision
+stays with a person, where `CLAUDE.md`'s sign-off ritual puts it.
+
+Two creatures fail it today — Shopkeeper and Kellerassel-Segment, both drawn well inside their own
+hitbox because the old renderer inflated them to fit and nothing ever had to be authored to size.
+They are listed in `PENDING_REDRAW`, which the same test asserts may only ever shrink.
+
+### What this did to the committed art
+
+Anything already on the actor grid is untouched: Alois, every pickup, Bauer, Zapfhahn, Bierratte,
+Schimmelspore. Four sprites were at exactly 2.0 — the engine was already drawing them as 2×2 blocks
+— so they were re-encoded at 2× nearest-neighbour: Große Kellerassel, Der Stier, Kuh and
+Maibaum-Dieb now hold on disk the pixels the screen was already showing, unchanged to the eye and
+with real resolution available to a future pass. That is a file-format correction, not new art, and
+is why it did not go through art sign-off.
+
+Everything that was at a fractional scale now draws at its authored size, which is smaller than
+before — the Kellerassel at 24×14, Schimmelfleck at 22×16, Rollfass at 21×26, Traktor at 28×22.
+Those numbers were never designed; they are what the old formula happened to produce. Growing any of
+them back is now a one-line art change with a visible target, and Traktor especially wants one: a
+tractor half the size of the cow beside it is a real note, and it is *expressible* for the first
+time.
+
+`character`'s ceiling rises 32×32 → 64×48 to make room for this, and the number now means something
+concrete: it is how much of a 640×360 frame the category may cover. A `mid` collider is 40 internal
+pixels across, and the widest bodies in the roster are half again as wide as they are tall.
+
+**Constrains:** anything new that draws a sprite takes one of the two grid constants — a third
+scale is a third pixel size, and this is now the third time (after #26 and #27) that a coupling
+between art size and something else broke silently. One deliberate exemption exists and names the
+rule by contrast: a sprite whose on-screen size is *live information* is scaled to that information
+instead. A projectile is drawn to its own collider because `shotRadius` is item-modifiable and a
+bigger shot has to look bigger; a telegraph ring grows because the growth is the countdown; a
+particle shrinks because that is the effect. A body is not information — it is a body — so it is
+drawn at the grid.

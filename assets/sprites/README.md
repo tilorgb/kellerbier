@@ -9,8 +9,9 @@ the atlas rebuilds automatically, in `npm run dev` and in `npm run build` alike.
 
 **UI art.** The pixel fonts, the panel and button frames, the focus ring and the HUD icon set are
 authored as source in `src/render/ui/` and generated into textures at boot — see
-`docs/DECISIONS.md` #43. Every clause of this folder's contract (16×16 exactly, a per-floor
-palette, drawn in the world at `WORLD_ZOOM`) is about a sprite that lives *in a room on a floor*;
+`docs/DECISIONS.md` #43. Every clause of this folder's contract (a per-floor palette, a canvas
+that is the sprite's size in the world — `docs/DECISIONS.md` #45) is about a sprite that lives
+*in a room on a floor*;
 a panel corner is 3×3, belongs to no floor, and is drawn in screen space at the UI's own scale.
 
 The minimap's room-role icons (`common/tiles/minimap-*`) are the deliberate exception, and they

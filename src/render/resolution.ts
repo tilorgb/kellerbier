@@ -35,6 +35,50 @@ export const INTERNAL_HEIGHT = 360;
  */
 export const WORLD_ZOOM = 2;
 
+/**
+ * Internal pixels one authored sprite pixel covers, for anything that *is* a
+ * thing rather than a readout: a body, a corpse, a pickup.
+ *
+ * One. That is the whole rule, and the point of stating it as a constant is
+ * that it used to be nine different numbers.
+ *
+ * Before this, `EntityView` sized every body by `radius / (texture.height / 2)`
+ * — on-screen size derived from the collider, with the sprite's own height as
+ * the divisor. It was introduced (`docs/DECISIONS.md` #27) so a taller redraw
+ * would not make a character taller on screen, and for height it did exactly
+ * that. But the same factor was then applied to *width*, where nothing
+ * constrained it: widening a canvas widened the body on screen one-for-one,
+ * with no change to what could be hit. "Draw it with more detail" and "make it
+ * bigger" were the same request, and the roster ended up drawn at twelve
+ * different pixel sizes — most of them fractional, which this module's own
+ * opening paragraph calls a hard rule rather than a preference. See
+ * `docs/DECISIONS.md` #45.
+ *
+ * So: on-screen size is what was authored, and only what was authored. A
+ * sprite's canvas *is* its size in internal pixels. Detail is bought by
+ * drawing more of them; size is changed by drawing a bigger canvas. The two
+ * questions finally have two different answers.
+ */
+export const ACTOR_PIXELS_PER_UNIT = WORLD_ZOOM;
+
+/** What `ACTOR_PIXELS_PER_UNIT` means as a Pixi scale. Whole-pixel by construction. */
+export const ACTOR_SPRITE_SCALE = 1 / ACTOR_PIXELS_PER_UNIT;
+
+/**
+ * The coarser grid the room itself is on: a 16px tile covering
+ * `ROOM_TILE_UNITS` world units is two internal pixels per authored pixel.
+ *
+ * Deliberately not the same as `ACTOR_SPRITE_SCALE`, and not a compromise —
+ * a background that repeats identically and unnoticed carries less detail than
+ * the things acting in front of it, which is what `tools/art/spec.mjs` already
+ * says by pinning `tile` at exactly 16x16 while letting a character grow. It is
+ * fixed by the room format rather than chosen here: it is what `render/room.ts`
+ * and `render/prop-view.ts` have always drawn at, stated so that anything else
+ * drawing tile art (a destructible barrel, say) can draw at the same size as
+ * the identical sprite standing next to it.
+ */
+export const TILE_SPRITE_SCALE = 1;
+
 export interface Viewport {
   /** Whole-number scale factor applied to the canvas element. */
   readonly scale: number;

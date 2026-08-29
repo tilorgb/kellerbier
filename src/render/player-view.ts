@@ -1,5 +1,5 @@
 import { Container, Sprite, type Texture } from 'pixi.js';
-import { PLAYER_RADIUS, type GameSim } from '../sim/game/sim.js';
+import type { GameSim } from '../sim/game/sim.js';
 import { PromilleTier } from '../sim/game/promille.js';
 import { lerp } from '../sim/math.js';
 import {
@@ -21,6 +21,7 @@ import {
   type PlayerHeading,
 } from './animation/state.js';
 import { SCHLAUCH_OCTANTS, type PlayerArt, type PlayerBodyKey } from './player-art.js';
+import { ACTOR_SPRITE_SCALE } from './resolution.js';
 
 /**
  * Where the Schlauch's nozzle hangs off the body, per facing, in *authored*
@@ -127,19 +128,28 @@ export class PlayerView {
     this.art = art;
     this.body = new Sprite(art.body.south.frames[0]);
     this.body.anchor.set(0.5, 0.5);
-    // Scaled to the player's own collider, exactly like `EntityView` scales
-    // every enemy body: authoring at a higher resolution for more detail
-    // (`docs/DECISIONS.md` #26, #27) must not, by itself, change how big Alois
-    // reads in the room. At 28 authored pixels against a radius of 7 this
-    // comes out at 0.5 — one authored pixel per half world unit, which is one
-    // internal pixel at `WORLD_ZOOM`, which is the same pixel size the 16px
-    // floor tiles are drawn at. That is not a coincidence worth losing: it is
-    // why Alois's pixels and the floor's are the same size on screen.
-    this.pixelScale = PLAYER_RADIUS / (this.body.texture.height / 2);
+    // Drawn on the actor grid, exactly like `EntityView` draws every enemy
+    // body: one authored pixel per internal pixel (`render/resolution.ts`'s
+    // `ACTOR_SPRITE_SCALE`, `docs/DECISIONS.md` #45). Authoring at a higher
+    // resolution for more detail (#26, #27) must not, by itself, change how
+    // big Alois reads in the room — and it no longer can, because size is the
+    // authored canvas rather than something inferred from it.
+    //
+    // This used to be `PLAYER_RADIUS / (texture.height / 2)`, which at 28
+    // authored pixels against a radius of 7 happens to come out at the same
+    // 0.5: Alois is the one body in the game already drawn on the grid, which
+    // is why he is the reference the rest of the roster is being brought to
+    // rather than the thing being changed. Worth stating plainly, because the
+    // comment this replaces got it wrong: an Alois pixel is *half* the size of
+    // a floor tile's, not the same. A 16px tile covers 16 world units, so it
+    // is drawn two internal pixels per authored pixel (`TILE_SPRITE_SCALE`);
+    // he is drawn at one. Foreground carries twice the detail of the
+    // background, deliberately.
+    this.pixelScale = ACTOR_SPRITE_SCALE;
     this.body.scale.set(this.pixelScale);
-    // The hose takes the *body's* scale, not one derived from its own 16px
-    // frame — two sprites sharing one character need one pixel size, or the
-    // nozzle renders at a different resolution than the hand holding it.
+    // The hose takes the *body's* scale rather than one of its own — two
+    // sprites sharing one character need one pixel size, or the nozzle renders
+    // at a different resolution than the hand holding it.
     this.schlauch = new Sprite(art.schlauch.frames[0]);
     this.schlauch.anchor.set(0.5, 0.5);
     this.schlauch.scale.set(this.pixelScale);

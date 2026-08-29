@@ -136,12 +136,20 @@ export class ProjectileView {
         floor,
       );
       sprite.texture = texture;
-      // Scaled to the shot's own collider rather than drawn at the sprite's
-      // authored size: `shotRadius` is tunable at runtime (`sim/tuning.ts`)
-      // and items change it, so a sprite drawn at a fixed size would stop
-      // describing the thing that actually hits you. Height rather than a
-      // constant, for the same reason `EntityView` reads `bodyTexture.height`
-      // — the set is not all one size.
+      // The deliberate exception to the actor grid (`docs/DECISIONS.md` #45):
+      // a shot is scaled to its own collider, not drawn at its authored size.
+      // `shotRadius` is tunable at runtime (`sim/tuning.ts`) and items change
+      // it, so here the sprite's size *is* live information — a bigger shot
+      // has to look bigger, the same way a telegraph ring's growth is the
+      // countdown. That is the line the grid rule draws: a body is a thing and
+      // is drawn at the grid; anything whose on-screen size is telling the
+      // player something is drawn at that size instead.
+      //
+      // Note the residual: the default `shotRadius` of 3 against 8px shot art
+      // is 1.5 internal pixels per authored pixel, which is resampled. The fix
+      // is art rather than code — 12x12 shot art is inside `projectile`'s spec
+      // and lands the default exactly on the grid — and is left for whoever
+      // next opens the projectile set.
       const scale = ((store.radius[index] ?? 1) * 2) / texture.height;
       sprite.scale.set(scale);
       sprite.position.set(

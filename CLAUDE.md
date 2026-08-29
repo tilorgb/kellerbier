@@ -93,6 +93,15 @@ them to the user, and let them pick before the art lands in a commit. This holds
 even for placeholder-tier art: the *pattern/style choice* is what needs sign-off, not the pixel-
 perfect execution of it.
 
+**Size is a design choice now, so it is part of what needs sign-off.** Since `docs/DECISIONS.md`
+#45 a sprite's canvas is literally its size on screen — a 24×16 character is 24×16 of the 640×360
+frame — so picking a canvas is picking how big the creature reads in the room, not just how much
+detail it can carry. Don't infer one from what the old art happened to be, and don't let a canvas
+grow sideways just because that is where the spare pixels were: show the option on a real floor
+tile next to Alois at true scale, and let the size be chosen along with the design.
+`tests/content/sprite-scale.test.ts` will catch a silhouette that has drifted away from the
+collider it is drawn over, but it is a wide band and a gate, not an art director.
+
 In practice: render the options at a legible scale (upscaled, nearest-neighbour, no smoothing) and
 send them as an image rather than describing them in text. **UI art has a shortcut for this**: it
 is authored as source in `src/render/ui/` (`docs/DECISIONS.md` #43) and rasterised by pure

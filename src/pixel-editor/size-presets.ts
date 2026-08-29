@@ -34,20 +34,32 @@ export const DEFAULT_SIZE_PRESET_ID = 'normal';
 
 const SIZE_PRESETS: Readonly<Record<SpriteCategory, readonly SizePreset[]>> = {
   tile: [{ id: 'normal', label: 'Normal (16×16)', width: 16, height: 16 }],
-  // A straight ramp from the floor (8x16, the old ceiling) to the new
-  // ceiling (16x32, docs/DECISIONS.md #26) — "normal" lands at 12x24,
-  // deliberately past the old 12x16 default: #26 was raised specifically so
-  // an ordinary enemy could reach for more detail than 16px tall allowed.
+  // Named after the thing they are actually for, since `docs/DECISIONS.md`
+  // #45: a character canvas is its size on screen, so the useful starting
+  // point is the `EnemySize` class the creature will be authored as. The
+  // three collider diameters are 16, 28 and 40 internal pixels
+  // (`sim/enemy/size.ts`'s `ENEMY_PROFILES`, doubled), and each preset is
+  // that diameter as a square-ish body — which is the shape
+  // `tests/content/sprite-scale.test.ts` will hold the finished sprite to.
+  //
+  // `wide` and `tall` are the two escapes from square, for the shapes the
+  // roster keeps producing: a Kuh or a Kellerassel is a low, wide body, and a
+  // Zapfhahn or a Bauer is a narrow, tall one. A ramp of five sizes walking
+  // width and height up together — which is what these were before — could
+  // express neither, and was the reason a flat creature wanting more detail
+  // had nowhere to spend it but width.
   character: [
-    { id: 'tiny', label: 'Tiny (8×16)', width: 8, height: 16 },
-    { id: 'small', label: 'Small (10×20)', width: 10, height: 20 },
-    { id: 'normal', label: 'Normal (12×24)', width: 12, height: 24 },
-    { id: 'big', label: 'Big (14×28)', width: 14, height: 28 },
-    { id: 'xtra-big', label: 'Xtra-big (16×32)', width: 16, height: 32 },
+    { id: 'mini', label: 'Mini body (16×16)', width: 16, height: 16 },
+    { id: 'normal', label: 'Normal body (20×28)', width: 20, height: 28 },
+    { id: 'mid', label: 'Mid body (40×40)', width: 40, height: 40 },
+    { id: 'wide', label: 'Wide (56×32)', width: 56, height: 32 },
+    { id: 'tall', label: 'Tall (24×48)', width: 24, height: 48 },
   ],
-  // Tiers run all the way to the new 160x160 ceiling (docs/DECISIONS.md
-  // #26) — a boss is the one category meant to dominate the screen, so
-  // "xtra-big" here means it, not a cautious step short of it.
+  // Tiers run all the way to the 160x160 ceiling (docs/DECISIONS.md #26) — a
+  // boss is the one category meant to dominate the screen, so "xtra-big" here
+  // means it, not a cautious step short of it. Since #45 these are literal:
+  // 160 authored is 160 of the frame's 360 lines, where before the renderer
+  // would have squeezed any of them to 40.
   boss: [
     { id: 'tiny', label: 'Tiny (24×24)', width: 24, height: 24 },
     { id: 'small', label: 'Small (64×64)', width: 64, height: 64 },
@@ -96,9 +108,13 @@ export function sizePresetFor(category: SpriteCategory, presetId: string): SizeP
  * sprite's actual current size back into the preset dropdown honestly,
  * rather than defaulting it to `DEFAULT_SIZE_PRESET_ID` regardless of
  * whether that preset is what the sprite currently is. A lot of authored art
- * predates these named tiers entirely (kellerassel is a legacy 16×16, which
+ * predates these named tiers entirely (the Kellerassel is 24×16, which
  * matches none of `character`'s five) — `null` here is the caller's signal
  * to show a "Custom" state instead of a preset name that just isn't true.
+ *
+ * Most of the committed roster is in that state and stays there: a preset is
+ * a place to start, and a creature sized to its own silhouette rather than to
+ * the nearest named tier is the outcome `docs/DECISIONS.md` #36 wanted.
  */
 export function presetIdForSize(
   category: SpriteCategory,

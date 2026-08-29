@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { INTERNAL_HEIGHT, INTERNAL_WIDTH, computeViewport } from '../../src/render/resolution.js';
+import {
+  ACTOR_PIXELS_PER_UNIT,
+  ACTOR_SPRITE_SCALE,
+  INTERNAL_HEIGHT,
+  INTERNAL_WIDTH,
+  TILE_SPRITE_SCALE,
+  WORLD_ZOOM,
+  computeViewport,
+} from '../../src/render/resolution.js';
+import { ROOM_TILE_UNITS } from '../../src/content/rooms/definition.js';
 
 describe('computeViewport', () => {
   it('uses 1x when the window is exactly the internal resolution', () => {
@@ -47,5 +56,32 @@ describe('computeViewport', () => {
 
   it('honours a caller-supplied internal resolution', () => {
     expect(computeViewport(800, 800, 100, 100).scale).toBe(8);
+  });
+});
+
+/**
+ * The two grids, pinned (`docs/DECISIONS.md` #45).
+ *
+ * Both numbers below were, before #45, neither stated nor true: bodies were
+ * drawn at whatever `radius / (texture.height / 2)` came to, which across the
+ * committed roster was twelve different values, nine of them fractional. These
+ * assertions are cheap and they are the reason that cannot come back.
+ */
+describe('the pixel grids', () => {
+  it('draws an actor at exactly one internal pixel per authored pixel', () => {
+    expect(ACTOR_SPRITE_SCALE * WORLD_ZOOM).toBe(1);
+  });
+
+  it('draws a room tile at exactly two, because a 16px tile covers 16 world units', () => {
+    expect(TILE_SPRITE_SCALE * WORLD_ZOOM).toBe(2);
+    // Which is the same statement from the room format's side: a tile sprite
+    // drawn at native size has to span one cell exactly, or the floor seams.
+    expect(ROOM_TILE_UNITS * TILE_SPRITE_SCALE * WORLD_ZOOM).toBe(16 * 2);
+  });
+
+  it('keeps both grids whole, so no sprite is ever resampled', () => {
+    expect(Number.isInteger(ACTOR_SPRITE_SCALE * WORLD_ZOOM)).toBe(true);
+    expect(Number.isInteger(TILE_SPRITE_SCALE * WORLD_ZOOM)).toBe(true);
+    expect(ACTOR_PIXELS_PER_UNIT).toBe(WORLD_ZOOM);
   });
 });

@@ -342,11 +342,19 @@ requirement cannot be evaluated is a stat stick rather than a build decision.
 
 - **16-bit era**, not 8-bit. Readability with a screen full of projectiles requires more
   colours and more silhouette detail than an NES palette allows.
-- **16×16 tiles**, characters roughly 12×16 up to 16×32, bosses up to 160×160 — as authored (see
-  `docs/DECISIONS.md` #26 for the character/boss ceilings — "16-bit" is a colour/shading budget,
-  not a pixel-dimension one). Sprites live in simulation units and the room is drawn at
-  `WORLD_ZOOM`, so on screen those are 32×32, ~24×32 up to 32×64, and up to 320×320 — a boss at
-  its ceiling is deliberately close to filling the 360-tall internal resolution.
+- **16×16 tiles**, characters up to 64×48, bosses up to 160×160 (see `docs/DECISIONS.md` #26 for
+  the ceilings — "16-bit" is a colour/shading budget, not a pixel-dimension one).
+- **A sprite's canvas is its size on screen** (`docs/DECISIONS.md` #45). Everything that is a
+  thing — a character, a boss, a pickup — is drawn one authored pixel per internal pixel, so a
+  24×16 canvas is 24×16 of the 640×360 frame and a boss at its ceiling really does fill 160 of
+  its 360 lines. Room tiles are the one exception, and by definition rather than by choice: a
+  16px tile covers 16 world units, so it is drawn two internal pixels per authored pixel. The
+  background is deliberately the coarser of the two.
+  - The corollary, and the reason the rule is written down: **more detail is more pixels, not a
+    bigger sprite.** Widening a canvas used to widen the creature on screen without changing what
+    could be hit — which is how the Kellerassel's redraw doubled it. Draw a bigger canvas when you
+    want a bigger creature, and check `tests/content/sprite-scale.test.ts` agrees the collider
+    still describes it.
 - **Internal resolution 640×360** for the game layer, scaled by a whole number of device
   pixels. Never non-integer: a sprite drawn at 1.5× has some pixels one screen pixel wide and
   some two. Menus, HUD text and anything else made of words are drawn outside that layer, at
