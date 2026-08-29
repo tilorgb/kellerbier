@@ -1,21 +1,4 @@
 import { Assets, Rectangle, Texture } from 'pixi.js';
-import cellarFloorTileUrl from '../../assets/sprites/floor-1-cellar/tiles/cellar-floor.png';
-import bierratteUrl from '../../assets/sprites/floor-1-cellar/characters/bierratte.png';
-import schimmelfleckUrl from '../../assets/sprites/floor-1-cellar/characters/schimmelfleck.png';
-import schimmelsporeUrl from '../../assets/sprites/floor-1-cellar/characters/schimmelspore.png';
-import zapfhahnUrl from '../../assets/sprites/floor-1-cellar/characters/zapfhahn.png';
-import rollfassUrl from '../../assets/sprites/floor-1-cellar/characters/rollfass.png';
-import fasssplitterUrl from '../../assets/sprites/floor-1-cellar/characters/fasssplitter.png';
-import ruralFloorTile1Url from '../../assets/sprites/floor-2-rural/tiles/rural-floor-1.png';
-import ruralFloorTile2Url from '../../assets/sprites/floor-2-rural/tiles/rural-floor-2.png';
-import ruralFloorTile3Url from '../../assets/sprites/floor-2-rural/tiles/rural-floor-3.png';
-import ruralFloorTile4Url from '../../assets/sprites/floor-2-rural/tiles/rural-floor-4.png';
-import bauerUrl from '../../assets/sprites/floor-2-rural/characters/bauer.png';
-import kuhUrl from '../../assets/sprites/floor-2-rural/characters/kuh.png';
-import gockelUrl from '../../assets/sprites/floor-2-rural/characters/gockel.png';
-import gartenzwergUrl from '../../assets/sprites/floor-2-rural/characters/gartenzwerg.png';
-import blaskapellistUrl from '../../assets/sprites/floor-2-rural/characters/blaskapellist.png';
-import traktorUrl from '../../assets/sprites/floor-2-rural/characters/traktor.png';
 import {
   compileAnimationSet,
   type AnimationSidecar,
@@ -23,54 +6,187 @@ import {
 } from './animation/definition.js';
 
 /**
- * The two per-floor art maps `GameViewTextures` needs (#35).
+ * Every authored sprite in the tree, loaded and shaped for the renderer.
  *
- * `floorTiles` holds one or more tile variants per floor — Floor 2's "living
- * floor" (#37) draws from four, one of them picked per floor cell by a
- * deterministic hash of that cell's position (`render/room.ts`'s
- * `pickTileVariant`) rather than tiling one texture, so two cells never look
- * identical by coincidence the way a single repeating texture guarantees.
- * The pick happens once, when the room is built — nothing re-rolls it on a
- * later redraw, so a room's floor stays exactly as it was drawn.
+ * ## Globs, not import lists
+ *
+ * Every category is discovered by `import.meta.glob` (#152). Before this,
+ * static tiles and characters were a hand-maintained list of `import`
+ * statements at the top of this file — nineteen of them by the time floor 2
+ * landed, and exactly the "engine change required to add the next one" that
+ * `CONTRIBUTING.md`'s content definition-of-done rules out. #150 had already
+ * made animation strips a glob for that reason; #152 added forty-odd sprites
+ * at once, which settled the argument for the rest. Adding a sprite is now
+ * dropping a file in a folder, in the atlas build *and* at runtime.
+ *
+ * Names are the keys, and the maps are deliberately flat and complete rather
+ * than filtered per consumer: an enemy looks itself up by
+ * `EnemyDefinition.id`, a pickup by `pickup-<id>`, a room's tileset by the
+ * names in `FLOOR_TILESETS`. A sprite nobody looks up costs one atlas entry
+ * and no code.
  */
 export interface FloorArt {
-  readonly floorTiles: Readonly<Record<number, readonly Texture[]>>;
+  /** Every floor with authored room tiles, keyed by floor number. Floors 3-7 have no entry (#39-#43, parked). */
+  readonly roomTiles: Readonly<Record<number, RoomTileArt>>;
+  /**
+   * Real character art, keyed by sprite name — which for a creature is its
+   * `EnemyDefinition.id`. An enemy with no entry here falls back to the
+   * shared blob, as it did before its art was drawn.
+   */
   readonly enemyArt: Readonly<Record<string, Texture>>;
   /**
-   * The same tile `Texture`s as `floorTiles`, keyed by sprite name
-   * (`cellar-floor`, `rural-floor-2`, ...) instead of floor number — for
-   * `app/live-art-preview.ts` (#108), which needs to find "the texture for
-   * this named sprite" without knowing `pickTileVariant`'s per-floor
-   * ordering. Same `Texture` objects, not copies: mutating one through this
-   * map is mutating the one `floorTiles`/`RoomView` already draws with.
-   */
-  readonly tileTextures: Readonly<Record<string, Texture>>;
-  /**
-   * `(bucketId, category)` for every name in `enemyArt`/`tileTextures` —
-   * `app/main.ts`'s click-to-pick (#108) needs this to hand the pixel
-   * editor a full `(bucketId, category, name)` target, not just the name a
-   * click resolved to.
-   */
-  readonly spriteOrigins: Readonly<
-    Record<string, { bucketId: string; category: 'character' | 'tile' }>
-  >;
-  /** `floorTiles[floor]`'s texture order, by name instead of `Texture` — `render/room.ts`'s `pickTileVariant` returns an index into this same order. */
-  readonly tileVariantNames: Readonly<Record<number, readonly string[]>>;
-  /**
-   * Animated character art (#150), keyed by `EnemyDefinition.id` the same way
-   * `enemyArt` is — one entry per `name.strip.png` found under any bucket's
-   * `characters/` folder, with its frames already cut out of the strip and its
+   * Animated character *and boss* art (#150, extended by #152), keyed the
+   * same way `enemyArt` is — the frames of that creature's strip with its
    * `*.anim.json` clips compiled.
    *
-   * An enemy appears in here *or* in `enemyArt` with a single static texture,
-   * never both: `tools/art/scan.mjs` fails the build on a name authored twice.
-   * `enemyArt` still carries the strip's first frame, though, because
+   * A boss is an enemy with a bigger sprite as far as everything downstream
+   * of here is concerned, which is why the two bosses' strips land in this
+   * one map rather than a parallel `bossStrips`: `EntityView` already
+   * animates anything it finds here by id, so the whole of "the boss
+   * animates" was one glob pattern.
+   *
+   * An id appears in here *or* in `enemyArt` with a single static texture,
+   * never both: `tools/art/scan.mjs` fails the build on a name authored
+   * twice. `enemyArt` still carries the strip's first frame, though, because
    * everything else that looks art up by name — click-to-pick (#108), the
-   * minimap, anything a later issue adds — wants "a texture for this creature"
-   * and does not care that it happens to be animated.
+   * minimap — wants "a texture for this creature" and does not care that it
+   * happens to be animated.
    */
   readonly enemyStrips: Readonly<Record<string, LoadedStrip>>;
+  /** Pickup art (#152), keyed by `PickupDefinition.id` — authored as `common/characters/pickup-<id>.png`. */
+  readonly pickupArt: Readonly<Record<string, Texture>>;
+  /** Projectile art (#152), keyed by sprite name (`beer`, `beer-burning`, `tap-drip`, ...). */
+  readonly projectileArt: Readonly<Record<string, Texture>>;
+  /** Every tile in the tree, keyed by sprite name — room tilesets, props, doors, the pedestal, the minimap icons. */
+  readonly tileTextures: Readonly<Record<string, Texture>>;
+  /**
+   * `(bucketId, category)` for every name above — `app/main.ts`'s
+   * click-to-pick (#108) needs this to hand the pixel editor a full
+   * `(bucketId, category, name)` target, not just the name a click resolved
+   * to.
+   */
+  readonly spriteOrigins: Readonly<Record<string, SpriteOrigin>>;
+  /** `roomTiles[floor].floorVariants`'s order, by name — `render/room.ts`'s `pickTileVariant` returns an index into this same order. */
+  readonly tileVariantNames: Readonly<Record<number, readonly string[]>>;
 }
+
+export interface SpriteOrigin {
+  readonly bucketId: string;
+  readonly category: 'character' | 'tile' | 'projectile' | 'boss';
+}
+
+/**
+ * Which named tiles make up one floor's room: the floor variants, the wall
+ * band, the course where the wall meets the floor, what an obstacle is drawn
+ * as, and what its one destructible prop looks like.
+ *
+ * A manifest rather than a naming convention. "Adding a sprite is dropping a
+ * file in a folder" holds for *content* — one more floor variant, one more
+ * prop — but which of a floor's tiles is its wall is a decision, not a
+ * filename, and inferring it from `*-wall.png` would make a rename a silent
+ * behaviour change. Five names per floor is the whole of the config, and a
+ * floor with no entry keeps drawing the flat `RoomTheme` fill it always did.
+ */
+export interface FloorTileset {
+  readonly floorVariants: readonly string[];
+  readonly wall: string;
+  readonly wallLip: string;
+  readonly block: string;
+  /**
+   * What each destructible prop is drawn as on this floor, in
+   * `DESTRUCTIBLE_PROP_KINDS` order (`sim/game/sim.ts`).
+   *
+   * Per floor because `barrel` is authored in `cellar+rural` templates alike
+   * and cannot be one sprite on one floor's palette — Der Keller's browns are
+   * not legal on Dorf & Acker. Per kind because the simulation deliberately
+   * treats a barrel and Der Stier's Maibaum identically, so nothing else
+   * distinguishes them for the view.
+   *
+   * A floor may name fewer than there are kinds; anything past the end falls
+   * back to entry 0, which is why `barrel` is entry 0 on both sides.
+   */
+  readonly destructibles: readonly string[];
+}
+
+export const FLOOR_TILESETS: Readonly<Record<number, FloorTileset>> = {
+  // Der Keller (#35). `cellar-wall` and `cellar-plank` were both authored
+  // back then and neither was ever loaded — floor 1 has been drawing flat
+  // `Graphics` walls over real wall art for two milestones.
+  1: {
+    floorVariants: ['cellar-floor'],
+    wall: 'cellar-wall',
+    wallLip: 'cellar-wall-lip',
+    block: 'cellar-plank',
+    // No Maibaum in a cellar — a floor-1 `maypole` prop would be a content
+    // error, and falls back to the barrel rather than to nothing.
+    destructibles: ['cellar-barrel'],
+  },
+  // Dorf & Acker (#37): four floor variants, the "living floor".
+  2: {
+    floorVariants: ['rural-floor-1', 'rural-floor-2', 'rural-floor-3', 'rural-floor-4'],
+    wall: 'rural-wall',
+    wallLip: 'rural-wall-lip',
+    block: 'rural-hedge-block',
+    destructibles: ['rural-barrel', 'rural-maibaum-base'],
+  },
+};
+
+/** One floor's tileset with its names resolved to `Texture`s — what `render/room.ts` draws from. */
+export interface RoomTileArt {
+  readonly floorVariants: readonly Texture[];
+  readonly wall: Texture;
+  readonly wallLip: Texture;
+  readonly block: Texture;
+  /** By `DESTRUCTIBLE_PROP_KINDS` index; a kind past the end draws entry 0. */
+  readonly destructibles: readonly Texture[];
+}
+
+/**
+ * Which tile sprite each authored `decorativeProps` type is drawn as (#152).
+ *
+ * `null` means "something else already draws this", and is a deliberate entry
+ * rather than an omission: a trellis is drawn from the room's `sightBlocks`
+ * and a puddle from its hazards, so a prop view drawing them again would
+ * double them up. An omission, by contrast, is a real content gap and warns
+ * once in a dev build (`render/prop-view.ts`, `docs/DECISIONS.md` #19).
+ *
+ * `barrel` and `maypole` are `null` for a second reason: both become real
+ * destructible entities in the simulation, so `EntityView` draws them from
+ * the floor tileset's own `destructibles`. Listed rather than omitted so the
+ * missing-art warning stays a signal about art that has not been drawn.
+ */
+export const PROP_TILE_NAMES: Readonly<Record<string, string | null>> = {
+  // The three crates are `common` art rather than a floor's own, because
+  // every generic cellar template is tagged `cellar, rural` alike — a
+  // cellar-palette crate would appear in a floor-2 room off that floor's
+  // palette. A wooden crate is shared scenery on all seven floors anyway
+  // (`docs/CONTENT_BIBLE.md` §0's "on crates, lorries, awnings").
+  'crate-opa': 'crate-opa',
+  'crate-neu': 'crate-neu',
+  'crate-stack': 'crate-stack',
+  bulb: 'cellar-bulb',
+  'hay-bale': 'rural-hay-bale',
+  maibaum: 'rural-maibaum-base',
+  'fence-post': 'rural-fence-post',
+  bunting: 'rural-bunting',
+  trough: 'rural-trough',
+  tractor: 'rural-tractor',
+  well: 'rural-well',
+  'market-stall': 'rural-market-stall',
+  bandstand: 'rural-bandstand',
+  'shopkeeper-stand': 'shopkeeper-stand',
+  'boss-plate': 'boss-plate',
+  // Drawn elsewhere, on purpose.
+  barrel: null,
+  maypole: null,
+  pedestal: null,
+  puddle: null,
+  trellis: null,
+  'hop-trellis': null,
+};
+
+/** The tile stacked directly above a `maibaum` prop — a maypole is two tiles tall or it is a stick. */
+export const MAIBAUM_TOP_TILE = 'rural-maibaum-top';
 
 /** One animated sprite as loaded: frames cut from the strip, plus its compiled clips. */
 export interface LoadedStrip {
@@ -92,35 +208,77 @@ export interface AnimatedSpriteSet extends LoadedStrip {
 }
 
 /**
- * Every `characters/*.strip.png` in the tree, and every `*.anim.json` beside
- * one, resolved at build time by Vite.
+ * Every animation strip a *creature* is authored as, and every `*.anim.json`
+ * beside one, resolved at build time by Vite.
  *
- * `floor-*` rather than every bucket: `common/` holds Alois's own strips
- * (#151), which are keyed by facing rather than by enemy id and loaded by
+ * `floor-*` rather than every bucket, and `characters`/`bosses` rather than
+ * every category: `common/characters/` holds Alois's own strips (#151), which
+ * are keyed by facing rather than by enemy id and loaded by
  * `render/player-art.ts`. The rule that draws the line is not a naming
  * convention — it is that a floor bucket *is* a roster, and this map is
- * indexed by `EnemyDefinition.id`.
- *
- * A glob rather than the explicit static imports the static sprites above
- * still use, and deliberately so: an animated creature has to be addable by
- * dropping two files in a folder (`CONTRIBUTING.md`'s content
- * definition-of-done — "authored as data, with no engine change required to
- * add the next one"), and a list of `import` statements in this file is
- * exactly the engine change that bar rules out. `import.meta.glob` is the
- * same build-time scan `src/pixel-editor/static-sprite-index.ts` uses for the
- * same reason, and it works in `vite dev` and in a production build alike.
+ * indexed by `EnemyDefinition.id`. A boss is in that roster like anything
+ * else (`content/enemies/grosse-kellerassel.ts`), which is why `bosses/`
+ * joins it here.
  */
-const STRIP_URLS: Record<string, string> = import.meta.glob(
-  '../../assets/sprites/floor-*/characters/*.strip.png',
+const STRIP_URLS: Record<string, string> = {
+  ...import.meta.glob<string>('../../assets/sprites/floor-*/characters/*.strip.png', {
+    eager: true,
+    query: '?url',
+    import: 'default',
+  }),
+  ...import.meta.glob<string>('../../assets/sprites/floor-*/bosses/*.strip.png', {
+    eager: true,
+    query: '?url',
+    import: 'default',
+  }),
+};
+
+const STRIP_SIDECARS: Record<string, AnimationSidecar> = {
+  ...import.meta.glob<AnimationSidecar>('../../assets/sprites/floor-*/characters/*.anim.json', {
+    eager: true,
+    import: 'default',
+  }),
+  ...import.meta.glob<AnimationSidecar>('../../assets/sprites/floor-*/bosses/*.anim.json', {
+    eager: true,
+    import: 'default',
+  }),
+};
+
+/** Every static sprite in the tree, by category. A strip matches `*.png` too, so `SPRITE_PATH_PATTERN` filters them back out. */
+const STATIC_TILE_URLS: Record<string, string> = import.meta.glob<string>(
+  '../../assets/sprites/*/tiles/*.png',
   { eager: true, query: '?url', import: 'default' },
 );
 
-const STRIP_SIDECARS: Record<string, AnimationSidecar> = import.meta.glob(
-  '../../assets/sprites/floor-*/characters/*.anim.json',
-  { eager: true, import: 'default' },
+const STATIC_CHARACTER_URLS: Record<string, string> = import.meta.glob<string>(
+  '../../assets/sprites/*/characters/*.png',
+  { eager: true, query: '?url', import: 'default' },
 );
 
-const STRIP_PATH_PATTERN = /\/assets\/sprites\/([^/]+)\/characters\/([^/]+)\.strip\.png$/;
+const STATIC_PROJECTILE_URLS: Record<string, string> = import.meta.glob<string>(
+  '../../assets/sprites/*/projectiles/*.png',
+  { eager: true, query: '?url', import: 'default' },
+);
+
+const STATIC_BOSS_URLS: Record<string, string> = import.meta.glob<string>(
+  '../../assets/sprites/*/bosses/*.png',
+  { eager: true, query: '?url', import: 'default' },
+);
+
+const STRIP_PATH_PATTERN =
+  /\/assets\/sprites\/([^/]+)\/(?:characters|bosses)\/([^/]+)\.strip\.png$/;
+
+/** `(bucketId, name)` out of a sprite path, or `null` for an animation strip (which `STRIP_URLS` owns). */
+function parseSpritePath(path: string, folder: string): { bucketId: string; name: string } | null {
+  const pattern = new RegExp(`/assets/sprites/([^/]+)/${folder}/([^/]+)\\.png$`);
+  const match = pattern.exec(path);
+  const bucketId = match?.[1];
+  const name = match?.[2];
+  if (bucketId === undefined || name === undefined || name.endsWith('.strip')) {
+    return null;
+  }
+  return { bucketId, name };
+}
 
 /**
  * Cuts a strip into per-frame `Texture`s and compiles its sidecar.
@@ -179,6 +337,10 @@ export function buildAnimatedSets(
   return sets;
 }
 
+async function loadNearest(src: string): Promise<Texture> {
+  return Assets.load<Texture>({ src, data: { scaleMode: 'nearest' } });
+}
+
 async function loadStrips(): Promise<Record<string, LoadedStrip>> {
   const strips: Record<string, LoadedStrip> = {};
   for (const [path, url] of Object.entries(STRIP_URLS)) {
@@ -196,50 +358,36 @@ async function loadStrips(): Promise<Record<string, LoadedStrip>> {
       // animate is the exact failure mode #150 is meant to remove.
       throw new Error(`${name}.strip.png has no ${name}.anim.json sidecar next to it`);
     }
-    const base = await Assets.load<Texture>({ src: url, data: { scaleMode: 'nearest' } });
+    const base = await loadNearest(url);
     strips[name] = cutStrip(name, base, sidecar);
   }
   return strips;
 }
 
-const CELLAR_ENEMY_IDS = [
-  'kellerassel',
-  'bierratte',
-  'schimmelfleck',
-  'schimmelspore',
-  'zapfhahn',
-  'rollfass',
-  'fasssplitter',
-] as const;
+/** Loads one glob's worth of static sprites into `(name, texture)` plus their origins. */
+async function loadStatics(
+  urls: Readonly<Record<string, string>>,
+  folder: string,
+  category: SpriteOrigin['category'],
+  into: Record<string, Texture>,
+  origins: Record<string, SpriteOrigin>,
+): Promise<void> {
+  await Promise.all(
+    Object.entries(urls).map(async ([path, url]) => {
+      const parsed = parseSpritePath(path, folder);
+      if (parsed === null) {
+        return;
+      }
+      into[parsed.name] = await loadNearest(url);
+      origins[parsed.name] = { bucketId: parsed.bucketId, category };
+    }),
+  );
+}
 
-const RURAL_ENEMY_IDS = [
-  'bauer',
-  'kuh',
-  'gockel',
-  'gartenzwerg',
-  'blaskapellist',
-  'traktor',
-] as const;
-
-const ENEMY_SPRITE_URLS = [
-  ['bierratte', bierratteUrl],
-  ['schimmelfleck', schimmelfleckUrl],
-  ['schimmelspore', schimmelsporeUrl],
-  ['zapfhahn', zapfhahnUrl],
-  ['rollfass', rollfassUrl],
-  ['fasssplitter', fasssplitterUrl],
-  ['bauer', bauerUrl],
-  ['kuh', kuhUrl],
-  ['gockel', gockelUrl],
-  ['gartenzwerg', gartenzwergUrl],
-  ['blaskapellist', blaskapellistUrl],
-  ['traktor', traktorUrl],
-] as const;
+const PICKUP_PREFIX = 'pickup-';
 
 /**
- * Loads every floor's authored art — today, Floor 1's tile and Der Keller's
- * enemy roster (#35), plus Floor 2's tile and the Dorf & Acker roster (#37)
- * — and returns it shaped for `GameViewTextures.floorTiles`/`enemyArt`.
+ * Loads every authored sprite and returns it shaped for `GameViewTextures`.
  *
  * One shared loader rather than each entry point (`app/main.ts`,
  * `editor/playtest.ts`) repeating the same `Assets.load` calls: both want
@@ -247,72 +395,112 @@ const ENEMY_SPRITE_URLS = [
  * from the real art exactly the way a real run does — "which blob was
  * that" is a room-design question as much as a playtesting one. Loading it
  * unconditionally, regardless of which floor is actually being previewed,
- * is harmless: `createRoomView`/`EntityView` only ever look up a floor
- * number or enemy id that this bundle actually has an entry for, so a
- * floor-3 preview simply never touches any of it.
+ * is harmless: nothing here is looked up by a floor that has no art.
  */
-const RURAL_FLOOR_TILE_URLS = [
-  ruralFloorTile1Url,
-  ruralFloorTile2Url,
-  ruralFloorTile3Url,
-  ruralFloorTile4Url,
-] as const;
-
-async function loadTile(src: string): Promise<Texture> {
-  return Assets.load<Texture>({ src, data: { scaleMode: 'nearest' } });
-}
-
-/** Matches `RURAL_FLOOR_TILE_URLS`'s order — the sprite names those same four files are authored under in `assets/sprites/floor-2-rural/tiles/`. */
-const RURAL_FLOOR_TILE_NAMES = [
-  'rural-floor-1',
-  'rural-floor-2',
-  'rural-floor-3',
-  'rural-floor-4',
-] as const;
-
 export async function loadFloorArt(): Promise<FloorArt> {
-  const [cellarFloorTexture, ruralFloorTextures, enemyEntries, enemyStrips] = await Promise.all([
-    loadTile(cellarFloorTileUrl),
-    Promise.all(RURAL_FLOOR_TILE_URLS.map(loadTile)),
-    Promise.all(
-      ENEMY_SPRITE_URLS.map(
-        async ([id, src]) =>
-          [id, await Assets.load<Texture>({ src, data: { scaleMode: 'nearest' } })] as const,
-      ),
-    ),
+  const tileTextures: Record<string, Texture> = {};
+  const characterTextures: Record<string, Texture> = {};
+  const projectileTextures: Record<string, Texture> = {};
+  const bossTextures: Record<string, Texture> = {};
+  const spriteOrigins: Record<string, SpriteOrigin> = {};
+
+  const [enemyStrips] = await Promise.all([
     loadStrips(),
+    loadStatics(STATIC_TILE_URLS, 'tiles', 'tile', tileTextures, spriteOrigins),
+    loadStatics(STATIC_CHARACTER_URLS, 'characters', 'character', characterTextures, spriteOrigins),
+    loadStatics(
+      STATIC_PROJECTILE_URLS,
+      'projectiles',
+      'projectile',
+      projectileTextures,
+      spriteOrigins,
+    ),
+    loadStatics(STATIC_BOSS_URLS, 'bosses', 'boss', bossTextures, spriteOrigins),
   ]);
-  const spriteOrigins: Record<string, { bucketId: string; category: 'character' | 'tile' }> = {
-    'cellar-floor': { bucketId: 'floor-1-cellar', category: 'tile' },
-  };
-  for (const name of RURAL_FLOOR_TILE_NAMES) {
-    spriteOrigins[name] = { bucketId: 'floor-2-rural', category: 'tile' };
+
+  // A strip's own name is a sprite origin too — click-to-pick has to resolve
+  // an animated creature to the file it was drawn in, same as a static one.
+  for (const path of Object.keys(STRIP_URLS)) {
+    const match = STRIP_PATH_PATTERN.exec(path);
+    const bucketId = match?.[1];
+    const name = match?.[2];
+    if (bucketId === undefined || name === undefined) {
+      continue;
+    }
+    spriteOrigins[name] = {
+      bucketId,
+      category: path.includes('/bosses/') ? 'boss' : 'character',
+    };
   }
-  for (const id of CELLAR_ENEMY_IDS) {
-    spriteOrigins[id] = { bucketId: 'floor-1-cellar', category: 'character' };
+
+  const pickupArt: Record<string, Texture> = {};
+  for (const [name, texture] of Object.entries(characterTextures)) {
+    if (name.startsWith(PICKUP_PREFIX)) {
+      pickupArt[name.slice(PICKUP_PREFIX.length)] = texture;
+    }
   }
-  for (const id of RURAL_ENEMY_IDS) {
-    spriteOrigins[id] = { bucketId: 'floor-2-rural', category: 'character' };
+
+  const roomTiles: Record<number, RoomTileArt> = {};
+  const tileVariantNames: Record<number, readonly string[]> = {};
+  for (const [floor, tileset] of Object.entries(FLOOR_TILESETS)) {
+    const resolved = resolveTileset(Number(floor), tileset, tileTextures);
+    if (resolved === null) {
+      continue;
+    }
+    roomTiles[Number(floor)] = resolved;
+    tileVariantNames[Number(floor)] = tileset.floorVariants;
   }
 
   return {
-    floorTiles: { 1: [cellarFloorTexture], 2: ruralFloorTextures },
+    roomTiles,
     // An animated creature's first frame stands in as "its texture" for
     // everything that looks art up by name and does not care about clips.
     enemyArt: {
-      ...Object.fromEntries(enemyEntries),
+      ...characterTextures,
+      ...bossTextures,
       ...Object.fromEntries(
         Object.entries(enemyStrips).map(([id, strip]) => [id, strip.frames[0] ?? Texture.EMPTY]),
       ),
     },
     enemyStrips,
-    tileTextures: {
-      'cellar-floor': cellarFloorTexture,
-      ...Object.fromEntries(
-        RURAL_FLOOR_TILE_NAMES.map((name, index) => [name, ruralFloorTextures[index]]),
-      ),
-    },
+    pickupArt,
+    projectileArt: projectileTextures,
+    tileTextures,
     spriteOrigins,
-    tileVariantNames: { 1: ['cellar-floor'], 2: RURAL_FLOOR_TILE_NAMES },
+    tileVariantNames,
+  };
+}
+
+/**
+ * Resolves one floor's tileset names to textures, throwing on a name that has
+ * no file behind it.
+ *
+ * Thrown rather than degraded, unlike the prop-type gap in
+ * `render/prop-view.ts`: a missing floor variant is a manifest naming a
+ * sprite that does not exist, which is `docs/DECISIONS.md` #7's "the data is
+ * wrong" rather than #19's "nothing authored for this case yet". A floor with
+ * *no* manifest entry at all is the gap, and is handled by simply not
+ * appearing in `roomTiles`.
+ */
+function resolveTileset(
+  floor: number,
+  tileset: FloorTileset,
+  tileTextures: Readonly<Record<string, Texture>>,
+): RoomTileArt | null {
+  const need = (name: string): Texture => {
+    const texture = tileTextures[name];
+    if (texture === undefined) {
+      throw new Error(
+        `floor ${String(floor)}'s tileset names "${name}", which is not authored under any bucket's tiles/ folder`,
+      );
+    }
+    return texture;
+  };
+  return {
+    floorVariants: tileset.floorVariants.map(need),
+    wall: need(tileset.wall),
+    wallLip: need(tileset.wallLip),
+    block: need(tileset.block),
+    destructibles: tileset.destructibles.map(need),
   };
 }

@@ -136,13 +136,14 @@ function animatedView(sim: GameSim): { view: EntityView; set: AnimatedSpriteSet 
 }
 
 /**
- * `EntityView` stacks its layers rings / corpses / bodies / labels, in that
- * order, so that a corpse can never cover something still alive. These two
+ * `EntityView` stacks its layers shadows / rings / corpses / bodies / labels,
+ * in that order, so that a boss's ground shadow can never cover its own
+ * telegraph and a corpse can never cover something still alive. These two
  * readers depend on that order, and the first test below asserts it, so a
  * reshuffle fails there once rather than here four times.
  */
-const CORPSE_LAYER = 1;
-const BODY_LAYER = 2;
+const CORPSE_LAYER = 2;
+const BODY_LAYER = 3;
 
 function spriteIn(view: EntityView, layer: number, slot = 0): Sprite | undefined {
   return view.container.children[layer]?.children[slot] as Sprite | undefined;
@@ -155,7 +156,7 @@ describe('EntityView, drawing an animated enemy', () => {
     const { sim } = oneEnemySim();
     const { view } = animatedView(sim);
     view.sync(0, 0);
-    expect(view.container.children).toHaveLength(4);
+    expect(view.container.children).toHaveLength(5);
     expect(spriteIn(view, BODY_LAYER)).toBeInstanceOf(Sprite);
   });
 

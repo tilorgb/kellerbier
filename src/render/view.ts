@@ -9,11 +9,12 @@ import { DecalView } from './decals.js';
 import { EntityView } from './entities.js';
 import { ParticleView } from './particles.js';
 import { PedestalView } from './pedestal-view.js';
-import { ProjectileView } from './projectiles.js';
-import { createDoorView, createRoomView, createSecretHintView } from './room.js';
+import { ProjectileView, type ProjectileArt } from './projectiles.js';
+import { createDoorView, createRoomView, createSecretHintView, type DoorTextures } from './room.js';
+import { createPropView } from './prop-view.js';
 import { INTERNAL_HEIGHT, INTERNAL_WIDTH, WORLD_ZOOM } from './resolution.js';
 import type { EntityAnimator } from './animation/animator.js';
-import type { AnimatedSpriteSet } from './floor-art.js';
+import type { AnimatedSpriteSet, RoomTileArt } from './floor-art.js';
 import type { PlayerArt } from './player-art.js';
 import { PlayerView } from './player-view.js';
 
@@ -24,7 +25,10 @@ export interface GameViewTextures {
    * player's texture" stopped being a thing there is exactly one of.
    */
   readonly playerArt: PlayerArt;
-  readonly projectile: Texture;
+  /** Every projectile sprite, and the rule for which shot draws which (#152). */
+  readonly projectileArt: ProjectileArt;
+  /** `art` slot to sprite name, from `EnemyRegistry.projectileArtNames`. */
+  readonly projectileArtNames: readonly (string | null)[];
   readonly entity: Texture;
   /** The entity shape in solid white, for the one-tick hit flash. */
   readonly entityFlash: Texture;
@@ -39,13 +43,27 @@ export interface GameViewTextures {
   readonly pedestalItem: Texture;
   /** A pedestal's light beam. */
   readonly pedestalBeam: Texture;
+  /** The plinth the item floats over (#152). Omitted leaves the beam hanging in mid-air, as it did before. */
+  readonly pedestalPlinth?: Texture | undefined;
+  /** The two door sprites (#152). Omitted falls back to the flat coloured band. */
+  readonly doors?: DoorTextures | undefined;
+  /** Pickup art (#152), keyed by `PickupDefinition.id`. */
+  readonly pickupArt?: Readonly<Record<string, Texture>> | undefined;
+  /** The ground shadow a boss stands on (#152). Omitted leaves bosses drawn as they were. */
+  readonly bossShadow?: Texture | undefined;
+  /** Which ids draw off `bosses/` art, so only those get a shadow. */
+  readonly bossIds?: ReadonlySet<string> | undefined;
+  /** Every tile in the tree by name — what `render/prop-view.ts` draws a room's `decorativeProps` from (#152). */
+  readonly tileTextures?: Readonly<Record<string, Texture>> | undefined;
   /**
-   * Real tile art (#35, #37), keyed by floor number, one or more variants
-   * per floor (`render/room.ts`'s `pickTileVariant` picks between them per
-   * cell). A floor with no entry here falls back to `createRoomView`'s flat
-   * palette fill — every floor but 1 and 2, today.
+   * Real tile art (#35, #37, #152), keyed by floor number: the floor
+   * variants (`render/room.ts`'s `pickTileVariant` picks between them per
+   * cell), the wall band, the course where wall meets floor, what an obstacle
+   * is drawn as, and the floor's destructible prop. A floor with no entry
+   * here falls back to `createRoomView`'s flat palette fill — every floor but
+   * 1 and 2, today.
    */
-  readonly floorTiles: Readonly<Record<number, readonly Texture[]>>;
+  readonly roomTiles: Readonly<Record<number, RoomTileArt>>;
   /**
    * Real character art (#35), keyed by `EnemyDefinition.id`. An enemy with
    * no entry here falls back to `entity`, the shared blob every enemy used
@@ -94,7 +112,10 @@ export class GameView {
   }
 
   private readonly sim: GameSim;
-  private readonly floorTiles: Readonly<Record<number, readonly Texture[]>>;
+  private readonly roomTiles: Readonly<Record<number, RoomTileArt>>;
+  private readonly doorTextures: DoorTextures | undefined;
+  private readonly tileTextures: Readonly<Record<string, Texture>>;
+  private propView: Container;
   private readonly playerView: PlayerView;
   private readonly projectiles: ProjectileView;
   private readonly entities: EntityView;
@@ -104,7 +125,7 @@ export class GameView {
   private readonly damageNumbers: DamageNumberView;
   private roomGeometry: RoomGeometry;
   private roomView: Container;
-  private doorView: Graphics;
+  private doorView: Container;
   private doorsLocked: boolean;
   private secretHintView: Graphics;
   private secretHintDoors: readonly CompiledDoor[] = [];
@@ -131,7 +152,9 @@ export class GameView {
 
   constructor(sim: GameSim, textures: GameViewTextures) {
     this.sim = sim;
-    this.floorTiles = textures.floorTiles;
+    this.roomTiles = textures.roomTiles;
+    this.doorTextures = textures.doors;
+    this.tileTextures = textures.tileTextures ?? {};
     this.stage.addChild(this.world);
     // The room is authored at half the internal resolution and blown up here,
     // which is the whole of the camera for now. Scaling the container rather
@@ -139,13 +162,17 @@ export class GameView {
     // broadphase grid — lined up with what it is drawing over for free.
     this.world.scale.set(WORLD_ZOOM);
     this.roomGeometry = sim.room;
-    this.roomView = createRoomView(sim.room, sim.currentFloor, this.floorTiles[sim.currentFloor]);
+    this.roomView = createRoomView(sim.room, sim.currentFloor, this.roomTiles[sim.currentFloor]);
     this.world.addChild(this.roomView);
     this.doorsLocked = sim.doorsLocked;
-    this.doorView = createDoorView(sim.room, sim.doors, this.doorsLocked);
+    this.doorView = createDoorView(sim.room, sim.doors, this.doorsLocked, this.doorTextures);
     this.world.addChild(this.doorView);
     this.secretHintView = createSecretHintView(sim.room, []);
     this.world.addChild(this.secretHintView);
+    // A room's authored furniture (#152), over the floor and under everything
+    // that moves: a fence post must never hide the enemy standing behind it.
+    this.propView = createPropView(sim.roomDecorativeProps, this.tileTextures);
+    this.world.addChild(this.propView);
 
     this.decals = new DecalView(sim.decals, textures.decal);
     this.world.addChild(this.decals.container);
@@ -158,16 +185,29 @@ export class GameView {
       textures.enemyArt,
       textures.enemyFlash,
       textures.enemyAnimation,
+      textures.pickupArt,
+      textures.bossShadow,
+      textures.bossIds,
     );
+    this.entities.setTargetTextures(this.roomTiles[sim.currentFloor]?.destructibles);
     this.world.addChild(this.entities.container);
 
-    this.pedestals = new PedestalView(sim, textures.pedestalItem, textures.pedestalBeam);
+    this.pedestals = new PedestalView(
+      sim,
+      textures.pedestalItem,
+      textures.pedestalBeam,
+      textures.pedestalPlinth,
+    );
     this.world.addChild(this.pedestals.container);
 
     this.playerView = new PlayerView(textures.playerArt);
     this.world.addChild(this.playerView.container);
 
-    this.projectiles = new ProjectileView(sim.projectiles, textures.projectile);
+    this.projectiles = new ProjectileView(
+      sim.projectiles,
+      textures.projectileArt,
+      textures.projectileArtNames,
+    );
     this.world.addChild(this.projectiles.container);
 
     this.particles = new ParticleView(sim.particles, {
@@ -210,9 +250,11 @@ export class GameView {
       this.roomView = createRoomView(
         this.roomGeometry,
         this.sim.currentFloor,
-        this.floorTiles[this.sim.currentFloor],
+        this.roomTiles[this.sim.currentFloor],
       );
       this.world.addChildAt(this.roomView, 0);
+      // Which barrel is a property of the floor, and a run crosses floors.
+      this.entities.setTargetTextures(this.roomTiles[this.sim.currentFloor]?.destructibles);
     }
     // Rebuilt on room change too: a fresh room's door state is not necessarily
     // "locked", e.g. a cleared room re-entered still has none of its own enemies.
@@ -220,7 +262,12 @@ export class GameView {
       this.world.removeChild(this.doorView);
       this.doorView.destroy();
       this.doorsLocked = this.sim.doorsLocked;
-      this.doorView = createDoorView(this.roomGeometry, this.sim.doors, this.doorsLocked);
+      this.doorView = createDoorView(
+        this.roomGeometry,
+        this.sim.doors,
+        this.doorsLocked,
+        this.doorTextures,
+      );
       this.world.addChildAt(this.doorView, 1);
     }
     // A bombed-open wall stops being a hint the same tick it stops being
@@ -232,11 +279,15 @@ export class GameView {
       this.secretHintView.destroy();
       this.secretHintView = createSecretHintView(this.roomGeometry, this.secretHintDoors);
       this.world.addChildAt(this.secretHintView, 2);
+      this.world.removeChild(this.propView);
+      this.propView.destroy({ children: true });
+      this.propView = createPropView(this.sim.roomDecorativeProps, this.tileTextures);
+      this.world.addChildAt(this.propView, 3);
     }
     this.decals.sync();
     this.entities.sync(alpha, nowMs);
     this.pedestals.sync();
-    this.projectiles.sync(alpha);
+    this.projectiles.sync(alpha, this.sim.currentFloor);
     this.particles.sync(alpha);
     this.damageNumbers.sync(alpha);
 

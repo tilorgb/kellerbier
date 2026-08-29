@@ -26,6 +26,18 @@ const TELEGRAPH_SCALE = 2.6;
 /** Radius the ring texture is generated at, before it is scaled per body. */
 const TELEGRAPH_TEXTURE_RADIUS = 24;
 
+/** How far below a priced pickup its number sits, once the pickup has art of its own to not cover. */
+const PRICE_LABEL_OFFSET_Y = 8;
+
+/**
+ * How dark a boss's ground shadow reads.
+ *
+ * Soft on purpose: it exists to seat the body on the floor, and a hard shadow
+ * under a boss is one more dark shape competing with the shots the player is
+ * trying to track.
+ */
+const BOSS_SHADOW_ALPHA = 0.35;
+
 /**
  * Draws the collidable things that are not the player: targets, enemies, and
  * the ring an enemy warns with before it attacks.
@@ -88,6 +100,8 @@ export class EntityView {
    * changes, and a warning (or a label) that flickers in front of and behind
    * the thing making it is one that reads as a glitch.
    */
+  /** Under everything, including the telegraph ring — a shadow is on the floor. */
+  private readonly shadowLayer = new Container();
   private readonly ringLayer = new Container();
   /**
    * Corpses (#150's death clips) sit under everything living: a body on the
@@ -100,6 +114,37 @@ export class EntityView {
   /** Tint and label per pickup kind, indexed the same way `pickupKind` component values are. */
   private readonly pickupTints: readonly number[];
   private readonly pickupLabels: readonly string[];
+  /**
+   * Each pickup kind's own sprite (#152), indexed the same way — a Maß, a
+   * Biermarke, a Bierfassl, a Schlüssel, the food. A kind with no entry
+   * falls back to the tinted white disc and its two-letter label, which is
+   * what every pickup in the game looked like before this.
+   */
+  private readonly pickupSprites: readonly (Texture | undefined)[];
+  /**
+   * What each destructible prop is drawn as on the floor currently loaded, by
+   * `DESTRUCTIBLE_PROP_KINDS` index (`FloorTileset.destructibles`).
+   *
+   * Targets are the one collidable body with neither an `EnemyDefinition.id`
+   * nor a pickup kind, so this is how a room's authored `barrel` and
+   * `maypole` props stop being the same brown blob every enemy used to be.
+   * Empty on a floor with no tileset, which falls back to `texture`.
+   */
+  private targetTextures: readonly Texture[] = [];
+  /**
+   * The ground shadow a boss stands on (#152), and which ids get one.
+   *
+   * Only bosses. A boss sprite is two to three times the size of anything else
+   * in the room, and at that size a body with nothing under it reads as
+   * hovering rather than standing — which is the whole reason this is the one
+   * asset in `common/bosses/`. An ordinary enemy is small enough that its own
+   * silhouette does the job, and giving everything a shadow would put a
+   * second dark shape under every body in a game whose projectiles the player
+   * must not lose track of.
+   */
+  private readonly bossShadowTexture: Texture | undefined;
+  private readonly bossIds: ReadonlySet<string>;
+  private readonly shadows: Sprite[] = [];
 
   constructor(
     sim: GameSim,
@@ -109,6 +154,9 @@ export class EntityView {
     enemyTextures: Readonly<Record<string, Texture>> = {},
     enemyFlashTextures: Readonly<Record<string, Texture>> = {},
     enemyAnimation: Readonly<Record<string, AnimatedSpriteSet>> = {},
+    pickupArt: Readonly<Record<string, Texture>> = {},
+    bossShadow?: Texture,
+    bossIds: ReadonlySet<string> = new Set(),
   ) {
     this.sim = sim;
     this.texture = texture;
@@ -117,12 +165,27 @@ export class EntityView {
     this.enemyFlashTextures = enemyFlashTextures;
     this.enemyAnimation = enemyAnimation;
     this.telegraphTexture = telegraphTexture;
+    this.bossShadowTexture = bossShadow;
+    this.bossIds = bossIds;
+    this.container.addChild(this.shadowLayer);
     this.container.addChild(this.ringLayer);
     this.container.addChild(this.corpseLayer);
     this.container.addChild(this.bodyLayer);
     this.container.addChild(this.labelLayer);
     this.pickupTints = sim.pickups.all.map((definition) => definition.tint);
     this.pickupLabels = sim.pickups.all.map((definition) => definition.label);
+    this.pickupSprites = sim.pickups.all.map((definition) => pickupArt[definition.id]);
+  }
+
+  /**
+   * Points the destructible-prop sprite at the floor now loaded.
+   *
+   * Called by `GameView` on every room load rather than passed once in the
+   * constructor: a run crosses floors and `EntityView` outlives the crossing,
+   * so "which barrel" is per-room state, not per-view state.
+   */
+  setTargetTextures(textures: readonly Texture[] = []): void {
+    this.targetTextures = textures;
   }
 
   /**
@@ -145,6 +208,7 @@ export class EntityView {
     let used = 0;
     let ringsUsed = 0;
     let labelsUsed = 0;
+    let shadowsUsed = 0;
     const highWater = world.highWater;
     for (let index = 0; index < highWater; index++) {
       if (states[index] !== World.ALIVE) {
@@ -196,26 +260,35 @@ export class EntityView {
         );
         flip = this.animator.facingOf(index) === AUTHORED_FACING ? 1 : -1;
       }
-      const bodyTexture =
-        animation !== undefined
-          ? (animation.frames[animationFrame] ?? this.texture)
-          : enemyId === null
-            ? this.texture
-            : (this.enemyTextures[enemyId] ?? this.texture);
-      // Pickups always draw off the white-fill texture (the same one the hit
-      // flash uses), never the body texture: a tint multiplies the texture
-      // underneath it, and a bright tint over a dark base is exactly what
-      // read as "everything is a brown blob" — white is the one base a tint
+      const pickupKindIndex = sim.pickupKind.data[index] ?? -1;
+      // A pickup with real art (#152) draws it untinted. One without still
+      // draws off the white-fill texture (the same one the hit flash uses),
+      // never the body texture: a tint multiplies the texture underneath it,
+      // and a bright tint over a dark base is exactly what read as
+      // "everything is a brown blob" — white is the one base a tint
       // reproduces exactly.
-      //
-      // A hit flash, by contrast, is that enemy's own shape (#37's bug
-      // report — it used to be `flashTexture`'s generic circle for every
-      // enemy, wider than most of them): `enemyFlashTextures` is keyed the
-      // same way `enemyTextures` is, so an id with no dedicated art falls
-      // back to `flashTexture` the same way `bodyTexture` falls back to
-      // `texture`.
+      const pickupSprite = isPickup ? this.pickupSprites[pickupKindIndex] : undefined;
+      const bodyTexture =
+        pickupSprite ??
+        (isPickup
+          ? this.flashTexture
+          : animation !== undefined
+            ? (animation.frames[animationFrame] ?? this.texture)
+            : enemyId === null
+              ? // Neither an enemy nor a pickup: a destructible prop, drawn as
+                // whichever of the floor's own props it was spawned from
+                // (#152) rather than as the shared blob.
+                (this.targetTextures[sim.propKind.data[index] ?? 0] ??
+                this.targetTextures[0] ??
+                this.texture)
+              : (this.enemyTextures[enemyId] ?? this.texture));
+      // A hit flash is that enemy's own shape (#37's bug report — it used to
+      // be `flashTexture`'s generic circle for every enemy, wider than most
+      // of them): `enemyFlashTextures` is keyed the same way `enemyTextures`
+      // is, so an id with no dedicated art falls back to `flashTexture` the
+      // same way `bodyTexture` falls back to `texture`.
       sprite.texture = isPickup
-        ? this.flashTexture
+        ? bodyTexture
         : (flash[index] ?? 0) > 0
           ? animation !== undefined
             ? // An animated body flashes as the frame it is actually on, not
@@ -228,9 +301,10 @@ export class EntityView {
           : bodyTexture;
       // A curled body has to look like one. Without this the player is told
       // their shots are doing nothing only by the shots doing nothing.
-      const pickupKindIndex = sim.pickupKind.data[index] ?? -1;
       sprite.tint = isPickup
-        ? (this.pickupTints[pickupKindIndex] ?? ENTITY_PALETTE.unknownPickupTint)
+        ? pickupSprite !== undefined
+          ? ENTITY_PALETTE.normalTint
+          : (this.pickupTints[pickupKindIndex] ?? ENTITY_PALETTE.unknownPickupTint)
         : isEnemyInvulnerable(sim, index)
           ? ENTITY_PALETTE.invulnerableShellTint
           : isEnemyElite(sim, index)
@@ -265,19 +339,45 @@ export class EntityView {
       sprite.scale.set(spriteScale * flip, spriteScale);
       sprite.position.set(x, y);
 
-      if (isPickup) {
+      const priced = isPickup && ((masks[index] ?? 0) & sim.pickupPrice.bit) !== 0;
+      // The two-letter label was how a pickup said which one it was before it
+      // had a sprite (#152). Now the sprite says it, so the label survives
+      // only where it carries something the art cannot: a shop price, and any
+      // pickup whose art has not been drawn yet.
+      if (isPickup && (priced || pickupSprite === undefined)) {
         const label = this.labelAt(labelsUsed);
         labelsUsed += 1;
         label.visible = true;
-        const priced = ((masks[index] ?? 0) & sim.pickupPrice.bit) !== 0;
         const kindLabel = this.pickupLabels[pickupKindIndex] ?? '?';
         // A shop's stock reads its price the same way everything else in the
         // wallet reads Biermarken — a plain number, no currency glyph — so
         // this is legible before the player has ever seen a shop.
         label.text = priced
-          ? `${kindLabel} · ${String(sim.pickupPrice.data[index] ?? 0)}`
+          ? pickupSprite === undefined
+            ? `${kindLabel} · ${String(sim.pickupPrice.data[index] ?? 0)}`
+            : String(sim.pickupPrice.data[index] ?? 0)
           : kindLabel;
-        label.position.set(x, y);
+        // Under the sprite rather than across it once there is a sprite to be
+        // across: a price is a caption, and a caption over the middle of the
+        // thing it captions hides the thing.
+        label.position.set(x, pickupSprite === undefined ? y : y + PRICE_LABEL_OFFSET_Y);
+      }
+
+      if (enemyId !== null && this.bossIds.has(enemyId)) {
+        const shadow = this.shadowAt(shadowsUsed);
+        if (shadow !== null) {
+          shadowsUsed += 1;
+          shadow.visible = true;
+          // Wider than tall and wider than the body, the way a shadow cast by
+          // one overhead bulb is. Anchored at the body's feet rather than its
+          // centre, which is the bottom of the sprite, not the bottom of the
+          // collider.
+          shadow.scale.set(
+            (radius * 2.4) / shadow.texture.width,
+            (radius * 0.9) / shadow.texture.height,
+          );
+          shadow.position.set(x, y + radius * 0.75);
+        }
       }
 
       const progress = enemyTelegraphProgress(sim, index);
@@ -321,6 +421,31 @@ export class EntityView {
         label.visible = false;
       }
     }
+
+    for (let slot = shadowsUsed; slot < this.shadows.length; slot++) {
+      const shadow = this.shadows[slot];
+      if (shadow !== undefined) {
+        shadow.visible = false;
+      }
+    }
+  }
+
+  /** `null` when no shadow sprite was loaded — the pre-#152 behaviour. */
+  private shadowAt(slot: number): Sprite | null {
+    const texture = this.bossShadowTexture;
+    if (texture === undefined) {
+      return null;
+    }
+    const existing = this.shadows[slot];
+    if (existing !== undefined) {
+      return existing;
+    }
+    const created = new Sprite(texture);
+    created.anchor.set(0.5);
+    created.alpha = BOSS_SHADOW_ALPHA;
+    this.shadows.push(created);
+    this.shadowLayer.addChild(created);
+    return created;
   }
 
   /**

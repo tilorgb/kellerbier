@@ -40,6 +40,10 @@ export const blaskapellist: EnemyDefinition = {
           speed: 0.9,
           damage: 1,
           lifetimeTicks: 50,
+          // A ring of sound, drawn as one (#152). The one shot on the floor
+          // that arrives on the beat is also the one that should not look like
+          // everything else that arrives.
+          art: 'blas-note',
         },
       ],
     },

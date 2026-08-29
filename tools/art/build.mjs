@@ -8,6 +8,7 @@ import { scanSprites } from './scan.mjs';
 import { ALL_BUCKET_IDS, floorTagForBucket } from './spec.mjs';
 import {
   brightestOpaqueColor,
+  darkestOpaqueColor,
   findOffPalettePixel,
   validateAnimation,
   validateSpriteSize,
@@ -72,11 +73,14 @@ export async function buildAtlases({ rootDir, outDir, write = true }) {
     decoded.push({ sprite, width, height, pixels });
   }
 
-  // Legibility: every projectile's brightest ("rim") pixel, checked against
-  // the background swatches of every floor it could actually appear on.
-  // A projectile authored under one floor's bucket only ever appears there,
-  // so it is checked against that floor alone; a `common` projectile is
-  // shared by every enemy in the game and is held to all seven at once.
+  // Legibility: every projectile's two brightness extremes — its brightest
+  // ("rim") and darkest ("outline") pixel — checked against the background
+  // swatches of every floor it could actually appear on, each background
+  // scored against whichever end reads better against it (`contrast.mjs`,
+  // `docs/DECISIONS.md` #39). A projectile authored under one floor's bucket
+  // only ever appears there, so it is checked against that floor alone; a
+  // `common` projectile is shared by every floor in the game — Alois's own
+  // shot is the case — and is held to all seven at once.
   const allFloorSwatchSets = FLOOR_BUCKETS.map((bucket) => ({
     floorTag: bucket.floorTag,
     colors: floorBackgroundSwatches(bucket.floorTag),
@@ -88,7 +92,8 @@ export async function buildAtlases({ rootDir, outDir, write = true }) {
       continue;
     }
     const rim = brightestOpaqueColor(entry.pixels, entry.width, entry.height, relativeLuminance);
-    if (rim === null) {
+    const shade = darkestOpaqueColor(entry.pixels, entry.width, entry.height, relativeLuminance);
+    if (rim === null || shade === null) {
       continue;
     }
     projectileSpritesChecked += 1;
@@ -99,7 +104,7 @@ export async function buildAtlases({ rootDir, outDir, write = true }) {
         ? allFloorSwatchSets
         : allFloorSwatchSets.filter((set) => set.floorTag === ownFloorTag);
 
-    const legibilityFailures = checkProjectileLegibility([{ name, rim }], floorSwatchSets);
+    const legibilityFailures = checkProjectileLegibility([{ name, rim, shade }], floorSwatchSets);
     for (const failure of legibilityFailures) {
       const hex = failure.against.toString(16).padStart(6, '0');
       problems.push(

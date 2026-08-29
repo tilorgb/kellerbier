@@ -77,6 +77,24 @@ export class ProjectileStore {
    * same body be hit again later (an orbiting shot lapping past it, say).
    */
   readonly lastHitTarget: Int32Array;
+  /**
+   * Which projectile sprite this shot is drawn as (#152) — an index into
+   * `EnemyRegistry.projectileArtNames`, 0 for "the default for this team".
+   *
+   * Presentational, and in the store rather than in the renderer because the
+   * renderer has no other way to know: a shot in flight is nine typed arrays
+   * and nothing that remembers who fired it. A small integer rather than a
+   * string keeps the array a `Uint8Array` and the frame loop free of string
+   * comparison, the same reasoning `EnemyRegistry` already applies to state
+   * and transition names.
+   *
+   * It cannot affect a replay — nothing in `step` reads it — but it is still
+   * written by `spawn` like every other field, because "trusting `despawn` to
+   * have cleared them is the classic pooling bug" applies to a cosmetic field
+   * exactly as much as to a lethal one: a fresh shot inheriting the last
+   * occupant's sprite is a bug a player would see.
+   */
+  readonly art: Uint8Array;
 
   private readonly pool: SlotPool;
 
@@ -94,6 +112,7 @@ export class ProjectileStore {
     this.team = new Uint8Array(capacity);
     this.generation = new Uint32Array(capacity);
     this.tags = new Uint32Array(capacity);
+    this.art = new Uint8Array(capacity);
     this.spawnX = new Float32Array(capacity);
     this.spawnY = new Float32Array(capacity);
     this.ticksAlive = new Int16Array(capacity);
@@ -143,6 +162,7 @@ export class ProjectileStore {
     lifetime: number,
     team: ProjectileTeamId,
     tags = 0,
+    art = 0,
   ): number {
     const index = this.pool.acquire();
     if (index === NO_SLOT) {
@@ -175,6 +195,7 @@ export class ProjectileStore {
     this.splitDepth[index] = 0;
     this.stickyTarget[index] = -1;
     this.lastHitTarget[index] = -1;
+    this.art[index] = art;
     return index;
   }
 

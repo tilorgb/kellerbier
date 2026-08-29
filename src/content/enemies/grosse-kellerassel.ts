@@ -109,6 +109,11 @@ export const grosseKellerassel: EnemyDefinition = {
           speed: 1.4,
           damage: 1,
           lifetimeTicks: 50,
+          // What it spits is the cellar itself — the mould it has been living
+          // in, thrown back at you. Its own sprite (#152) rather than the
+          // floor's default tap drip, so a boss volley never reads as an
+          // ordinary Zapfhahn's.
+          art: 'spore',
         },
         PHASE_TWO_SPLIT,
       ],

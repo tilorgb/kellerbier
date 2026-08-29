@@ -129,6 +129,22 @@ export interface FiringBehaviourBase {
   readonly lifetimeTicks: number;
   /** Collider radius. Defaults to the player's own shot size. */
   readonly radius?: number;
+  /**
+   * Which projectile sprite this shot is drawn as (#152) — a sprite name
+   * under some bucket's `projectiles/` folder (`spore`, `blas-note`, ...).
+   * Omitted draws the shooter's floor default, so a new enemy needs nothing
+   * here until its shot is worth telling apart from its neighbours'.
+   *
+   * On the *behaviour* rather than on the enemy, because a creature with two
+   * firing states can plausibly fire two different things — the Zapfhahn's
+   * drip and its pressurised burst are the same enemy — and because that is
+   * where the rest of a shot's authored properties already live.
+   *
+   * Purely presentational: nothing in `step` reads it, and it is checked
+   * against the loaded art at content-test time rather than at spawn time,
+   * so a typo fails CI instead of a run.
+   */
+  readonly art?: string;
 }
 
 /** One shot at the player, on a timer. */

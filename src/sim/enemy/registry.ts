@@ -102,7 +102,22 @@ export interface CompiledEnemy {
 export class EnemyRegistry {
   readonly all: readonly CompiledEnemy[];
 
+  /**
+   * Every distinct projectile-sprite name any firing behaviour in the roster
+   * names (#152), interned so a shot in flight can carry a small integer
+   * instead of a string.
+   *
+   * Index 0 is reserved for "no art named" and is never a real name, so a
+   * projectile's `art` slot needs no sentinel of its own and a store zeroed
+   * on reset means what it looks like it means. Built here rather than on
+   * `GameSim` because it is a property of the *roster*, resolved once at
+   * construction alongside every other name-to-index this class already
+   * resolves.
+   */
+  readonly projectileArtNames: readonly string[];
+
   private readonly byId = new Map<string, number>();
+  private readonly artIndices = new Map<string, number>();
 
   constructor(definitions: readonly EnemyDefinition[]) {
     for (const definition of definitions) {
@@ -111,7 +126,32 @@ export class EnemyRegistry {
       }
       this.byId.set(definition.id, this.byId.size);
     }
+    const artNames: string[] = [''];
+    for (const definition of definitions) {
+      for (const state of definition.states) {
+        for (const behaviour of state.behaviours) {
+          const art = 'art' in behaviour ? behaviour.art : undefined;
+          if (typeof art !== 'string' || art === '' || this.artIndices.has(art)) {
+            continue;
+          }
+          this.artIndices.set(art, artNames.length);
+          artNames.push(art);
+        }
+      }
+    }
+    this.projectileArtNames = artNames;
     this.all = definitions.map((definition) => this.compile(definition));
+  }
+
+  /** The interned index of a shot's `art` name, or 0 for a shot that names none. */
+  artIndexOf(art: string | undefined): number {
+    return art === undefined ? 0 : (this.artIndices.get(art) ?? 0);
+  }
+
+  /** The name behind an `art` index, or `null` for 0 (and for anything out of range). */
+  artNameAt(index: number): string | null {
+    const name = this.projectileArtNames[index];
+    return name === undefined || name === '' ? null : name;
   }
 
   get count(): number {

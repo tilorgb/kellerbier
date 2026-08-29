@@ -7,6 +7,7 @@ import { ProjectileTeam } from '../../src/sim/projectile/store.js';
 import { RoomGeometry } from '../../src/sim/room/geometry.js';
 import { RngStream, createStreamRng } from '../../src/sim/rng/streams.js';
 import { GameView } from '../../src/render/view.js';
+import type { RoomTileArt } from '../../src/render/floor-art.js';
 import { stubPlayerArt } from '../helpers/player-art.js';
 
 /**
@@ -225,10 +226,28 @@ export function buildStressScene(): StressScene {
  * a real context. Those stay in the debug overlay (`O`), which counts them in
  * the browser against the same budget.
  */
+/** One floor's tileset, all `Texture.EMPTY` — the sprite *count* is what matters here. */
+function benchTileset(): RoomTileArt {
+  return {
+    floorVariants: [Texture.EMPTY],
+    wall: Texture.EMPTY,
+    wallLip: Texture.EMPTY,
+    block: Texture.EMPTY,
+    destructibles: [Texture.EMPTY],
+  };
+}
+
 export function buildHeadlessView(sim: GameSim): GameView {
   return new GameView(sim, {
     playerArt: stubPlayerArt(),
-    projectile: Texture.EMPTY,
+    projectileArt: {
+      player: Texture.EMPTY,
+      playerTags: [],
+      enemyByName: {},
+      enemyByFloor: {},
+      fallback: Texture.EMPTY,
+    },
+    projectileArtNames: [],
     entity: Texture.EMPTY,
     entityFlash: Texture.EMPTY,
     telegraph: Texture.EMPTY,
@@ -238,7 +257,16 @@ export function buildHeadlessView(sim: GameSim): GameView {
     numberFont: 'monospace',
     pedestalItem: Texture.EMPTY,
     pedestalBeam: Texture.EMPTY,
-    floorTiles: {},
+    // The room the game actually builds, not a bare one: a real tileset means
+    // the wall band, the lip course and the obstacle tiles are all real
+    // sprites, and the frame budget covers the ~400 of them a floor-1 room
+    // now holds (#152) rather than measuring a scene that skips them.
+    // `Texture.EMPTY` throughout — what is being measured is the per-frame
+    // transform work, which costs the same whatever pixels a sprite points at.
+    roomTiles: {
+      1: benchTileset(),
+      2: benchTileset(),
+    },
     enemyArt: {},
     enemyFlash: {},
     // Every creature in the stress roster animates, so the frame-time budget

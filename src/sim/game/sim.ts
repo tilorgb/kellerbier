@@ -116,6 +116,18 @@ export const PLAYER_RADIUS = 7;
 /** Collider radius of a training target — a mid-size body. */
 export const TARGET_RADIUS = ENEMY_PROFILES[EnemySize.Mid].radius;
 
+/**
+ * The `decorativeProps` types that become destructible targets, in the order
+ * `GameSim.propKind` indexes them.
+ *
+ * Index 0 is `barrel` so a target spawned by anything that does not name a
+ * kind — the training target in the tuning playground, a test calling
+ * `spawnTarget` directly — reads as the thing every target used to be.
+ */
+export const DESTRUCTIBLE_PROP_KINDS = ['barrel', 'maypole'] as const;
+
+export type DestructiblePropKind = (typeof DESTRUCTIBLE_PROP_KINDS)[number];
+
 /** Collider radius of a placed Bierfassl. A small keg, not a mug. */
 export const BOMB_RADIUS = 6;
 
@@ -487,6 +499,20 @@ export class GameSim {
   /** Ticks left of the cosmetic spawn-bounce, on every pickup. Render-only. */
   readonly spawnBounce: Component<Uint8Array>;
   /**
+   * Which authored `decorativeProps` type a destructible target was spawned
+   * from — an index into `DESTRUCTIBLE_PROP_KINDS` (#152). Render-only, like
+   * `spawnBounce`.
+   *
+   * A target is the one collidable body with neither an enemy definition nor
+   * a pickup kind, so before this the renderer had no way to tell Der Stier's
+   * Maibaum from a barrel and drew both as the same thing. The simulation
+   * genuinely does treat them identically — that is `GameSim`'s own comment on
+   * why `maypole` needed nothing from the engine beyond reusing `barrel`'s
+   * path — which is exactly why the *difference* has to be recorded somewhere
+   * for the view, and cannot be inferred from anything else on the body.
+   */
+  readonly propKind: Component<Uint8Array>;
+  /**
    * Burn/poison/freeze durations, in ticks — `[burnTicks, poisonTicks, freezeTicks]`
    * per slot (`sim/systems/status-effects.ts`'s `STATUS_*` constants).
    * Written by a `ProjectileTag` (#27) landing a hit, aged and spent by
@@ -553,6 +579,29 @@ export class GameSim {
 
   /** The loaded room's stable content id, or empty for the tuning playground. */
   roomId = '';
+  /**
+   * The loaded room's `decorativeProps`, verbatim from its template (#152).
+   *
+   * Kept here so the renderer can *draw* them. They were authored from the
+   * beginning (`content/rooms/definition.ts`'s `RoomDecorativeProp`) and used
+   * only for the two that become real entities — `barrel` and `maypole`
+   * become destructible targets, `pedestal` becomes loot — which left the
+   * other fifteen types as data nothing ever looked at, and every room in the
+   * game reading as a bare grid with a fence post's worth of authored
+   * intention thrown away.
+   *
+   * Simulation-adjacent rather than simulation state: nothing in `step` reads
+   * this, and a prop that is only art cannot affect a replay. It sits next to
+   * `room` for the same reason `room` does — the renderer needs the loaded
+   * room's shape and the loaded room's furniture, and neither is worth a
+   * second channel out of the sim.
+   */
+  roomDecorativeProps: readonly {
+    readonly x: number;
+    readonly y: number;
+    readonly type: string;
+    readonly rotation?: number;
+  }[] = [];
   /** Ticks remaining in the presentation transition after a room load. */
   roomTransitionTicks = 0;
   roomTransitionDirection: RoomDirection | null = null;
@@ -877,6 +926,7 @@ export class GameSim {
     this.pickupPrice = this.world.defineComponent('pickupPrice', Int16Array, 1);
     this.bombFuse = this.world.defineComponent('bombFuse', Int16Array, 1);
     this.spawnBounce = this.world.defineComponent('spawnBounce', Uint8Array, 1);
+    this.propKind = this.world.defineComponent('propKind', Uint8Array, 1);
     this.statusEffect = this.world.defineComponent(
       'statusEffect',
       Int16Array,
@@ -1343,6 +1393,7 @@ export class GameSim {
     this.clearRoomEntities();
     this.room = compiled.geometry;
     this.roomId = compiled.id;
+    this.roomDecorativeProps = compiled.decorativeProps;
     this.roomDoors = compiled.doors;
     this.bombableWalls.clear();
     this.pedestalList = [];
@@ -1413,8 +1464,9 @@ export class GameSim {
       // into it, needed nothing from the engine beyond a second prop type
       // reusing the path `barrel` already established.
       for (const prop of compiled.decorativeProps) {
-        if (prop.type === 'barrel' || prop.type === 'maypole') {
-          this.spawnTarget(prop.x, prop.y, TARGET_RADIUS);
+        const propKind = DESTRUCTIBLE_PROP_KINDS.indexOf(prop.type as DestructiblePropKind);
+        if (propKind >= 0) {
+          this.spawnTarget(prop.x, prop.y, TARGET_RADIUS, propKind);
         }
       }
     }
@@ -3450,7 +3502,7 @@ export class GameSim {
     return Math.min(tuning.eliteChanceMax, chance);
   }
 
-  spawnTarget(x: number, y: number, radius: number = TARGET_RADIUS): Entity {
+  spawnTarget(x: number, y: number, radius: number = TARGET_RADIUS, propKind = 0): Entity {
     const entity = this.world.create();
     this.world.add(entity, this.transform);
     this.world.add(entity, this.velocity);
@@ -3460,6 +3512,7 @@ export class GameSim {
     this.world.add(entity, this.health);
     this.world.add(entity, this.contactDamage);
     this.world.add(entity, this.flash);
+    this.world.add(entity, this.propKind);
     this.world.add(entity, this.spawnPost);
 
     const index = entityIndex(entity);
@@ -3468,6 +3521,11 @@ export class GameSim {
     transform[index * 4 + 1] = y;
     transform[index * 4 + 2] = x;
     transform[index * 4 + 3] = y;
+
+    // Written rather than assumed clear, same as `contactDamage` below: an
+    // entity slot is recycled, and a barrel inheriting the last occupant's
+    // prop kind would draw as a Maibaum.
+    this.propKind.data[index] = propKind;
 
     const body = this.body.data;
     body[index * 2] = radius;
