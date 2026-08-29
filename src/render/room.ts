@@ -48,6 +48,15 @@ const FLOOR_VARIANT_ACCENT_ALPHA = 0.55;
  * goes down before the floor does: a masonry course cut off mid-block by the
  * floor's edge reads as the wall continuing behind the floor, which is what
  * it is.
+ *
+ * Scaled by `ROOM_TILE_UNITS / texture.width` rather than drawn at native
+ * size (`docs/DECISIONS.md` #48): a tile is authored at one of exactly two
+ * legal sizes, 16 or 32 (`tools/art/spec.mjs`), and this is what keeps either
+ * one filling the same `ROOM_TILE_UNITS`-wide cell — 16 at scale 1 on the
+ * coarser room grid, 32 at scale 0.5 landing on the same 1:1 grid a
+ * character draws on. A wall redrawn at 32 for more detail and a block still
+ * at 16 tile side by side in the same room with no code change either one
+ * has to know about.
  */
 function tileRect(
   container: Container,
@@ -57,9 +66,11 @@ function tileRect(
   maxX: number,
   maxY: number,
 ): void {
+  const scale = ROOM_TILE_UNITS / texture.width;
   for (let y = minY; y < maxY; y += ROOM_TILE_UNITS) {
     for (let x = minX; x < maxX; x += ROOM_TILE_UNITS) {
       const tile = new Sprite(texture);
+      tile.scale.set(scale);
       tile.position.set(x, y);
       container.addChild(tile);
     }
@@ -137,6 +148,10 @@ export function createRoomView(
           continue;
         }
         const tile = new Sprite(texture);
+        // `docs/DECISIONS.md` #48: a floor variant may be authored at 16 or
+        // 32, and this is what keeps either one filling the same
+        // `ROOM_TILE_UNITS`-wide cell — see `tileRect`'s own doc comment.
+        tile.scale.set(ROOM_TILE_UNITS / texture.width);
         tile.position.set(x, y);
         // Every authored floor variant's base fill is the same colour as
         // `palette.floor` underneath it (the flat rect above) — only its one

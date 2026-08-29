@@ -24,10 +24,19 @@ describe('sizePresetsFor', () => {
     expect(isWithinCategorySpec(category, preset.width, preset.height)).toBe(true);
   });
 
-  it('tile has exactly one preset, matching its fixed 16x16 spec', () => {
+  // docs/DECISIONS.md #48: a tile is one of exactly two sizes, not a range.
+  it('tile has exactly two presets, matching its two legal sizes', () => {
     const presets = sizePresetsFor('tile');
-    expect(presets).toHaveLength(1);
-    expect(presets[0]).toMatchObject({ width: 16, height: 16 });
+    expect(presets).toHaveLength(2);
+    expect(presets).toContainEqual(expect.objectContaining({ width: 16, height: 16 }));
+    expect(presets).toContainEqual(expect.objectContaining({ width: 32, height: 32 }));
+  });
+
+  it('rejects a tile size that is not one of the two legal ones', () => {
+    expect(isWithinCategorySpec('tile', 16, 16)).toBe(true);
+    expect(isWithinCategorySpec('tile', 32, 32)).toBe(true);
+    expect(isWithinCategorySpec('tile', 24, 24)).toBe(false);
+    expect(isWithinCategorySpec('tile', 32, 16)).toBe(false);
   });
 
   it('falls back to the default preset for an unknown id', () => {

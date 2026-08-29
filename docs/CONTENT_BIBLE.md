@@ -345,14 +345,18 @@ requirement cannot be evaluated is a stat stick rather than a build decision.
 
 - **16-bit era**, not 8-bit. Readability with a screen full of projectiles requires more
   colours and more silhouette detail than an NES palette allows.
-- **16×16 tiles**, characters up to 64×48, bosses up to 160×160 (see `docs/DECISIONS.md` #26 for
-  the ceilings — "16-bit" is a colour/shading budget, not a pixel-dimension one).
+- **16×16 tiles, or 32×32 for a tile drawn with more detail** (`docs/DECISIONS.md` #48), characters
+  up to 64×48, bosses up to 160×160 (see `docs/DECISIONS.md` #26 for the ceilings — "16-bit" is a
+  colour/shading budget, not a pixel-dimension one).
 - **A sprite's canvas is its size on screen** (`docs/DECISIONS.md` #45). Everything that is a
   thing — a character, a boss, a pickup — is drawn one authored pixel per internal pixel, so a
   24×16 canvas is 24×16 of the 640×360 frame and a boss at its ceiling really does fill 160 of
-  its 360 lines. Room tiles are the one exception, and by definition rather than by choice: a
-  16px tile covers 16 world units, so it is drawn two internal pixels per authored pixel. The
-  background is deliberately the coarser of the two.
+  its 360 lines. Room tiles default to the coarser of the two grids, and by definition rather than
+  by choice: a 16px tile covers 16 world units, so it is drawn two internal pixels per authored
+  pixel unless it opts into the finer one. A tile authored at 32×32 draws on the same 1:1 grid a
+  character does instead, filling the identical on-screen cell with twice the resolvable detail —
+  a per-asset choice (`docs/DECISIONS.md` #48), not a floor-wide one: a redrawn wall and a
+  still-16px block sit in the same room with nothing else to change.
   - The corollary, and the reason the rule is written down: **more detail is more pixels, not a
     bigger sprite.** Widening a canvas used to widen the creature on screen without changing what
     could be hit — which is how the Kellerassel's redraw doubled it. Draw a bigger canvas when you

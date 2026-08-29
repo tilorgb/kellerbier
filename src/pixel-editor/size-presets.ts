@@ -19,9 +19,10 @@ import { CATEGORY_SPECS, type SpriteCategory } from '../../tools/art/spec.mjs';
  * `tests/unit/pixel-editor-size-presets.test.ts` against `CATEGORY_SPECS`
  * directly rather than by eye — the same "never let the picker offer
  * something illegal" guarantee `docs/DECISIONS.md` #25 already holds for
- * colour, extended to size. `tile`'s spec pins one exact size (16x16, per
- * the content bible), so it gets exactly one preset rather than five —
- * offering more would just be five names for the same number.
+ * colour, extended to size. `tile`'s spec pins two exact sizes rather than a
+ * continuous range (`docs/DECISIONS.md` #48: 16 or 32, nothing between), so
+ * it gets exactly two presets rather than five — offering more would just be
+ * five names split across two numbers.
  */
 export interface SizePreset {
   readonly id: string;
@@ -33,7 +34,10 @@ export interface SizePreset {
 export const DEFAULT_SIZE_PRESET_ID = 'normal';
 
 const SIZE_PRESETS: Readonly<Record<SpriteCategory, readonly SizePreset[]>> = {
-  tile: [{ id: 'normal', label: 'Normal (16×16)', width: 16, height: 16 }],
+  tile: [
+    { id: 'normal', label: 'Normal (16×16)', width: 16, height: 16 },
+    { id: 'detailed', label: 'Detailed (32×32)', width: 32, height: 32 },
+  ],
   // Named after the thing they are actually for, since `docs/DECISIONS.md`
   // #45: a character canvas is its size on screen, so the useful starting
   // point is the `EnemySize` class the creature will be authored as. The
@@ -127,12 +131,24 @@ export function presetIdForSize(
   );
 }
 
-/** Every preset's width/height, checked against `CATEGORY_SPECS` — the invariant `tests/unit/pixel-editor-size-presets.test.ts` pins. */
+/**
+ * Every preset's width/height, checked against `CATEGORY_SPECS` — the
+ * invariant `tests/unit/pixel-editor-size-presets.test.ts` pins.
+ *
+ * `tile` is checked against its two discrete legal sizes rather than the
+ * `[minWidth, maxWidth]` range (`docs/DECISIONS.md` #48) — the same
+ * distinction `tools/art/validate.mjs`'s `validateSpriteSize` makes, so this
+ * agrees with what the build actually accepts rather than with the wider
+ * range `CATEGORY_SPECS.tile` states for generic range-checking consumers.
+ */
 export function isWithinCategorySpec(
   category: SpriteCategory,
   width: number,
   height: number,
 ): boolean {
+  if (category === 'tile') {
+    return width === height && (width === 16 || width === 32);
+  }
   const spec = CATEGORY_SPECS[category];
   return (
     width >= spec.minWidth &&
