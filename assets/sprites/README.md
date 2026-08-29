@@ -35,7 +35,7 @@ Each of those has four subfolders, one per sprite category:
 
 | Folder | Category | File size (simulation units, not screen pixels) |
 |---|---|---|
-| `tiles/` | `tile` | exactly 16×16 |
+| `tiles/` | `tile` | exactly 16×16, or exactly 32×32 (see below) |
 | `characters/` | `character` | 8-32 wide, 16-32 tall (`~12×16` as authored, see `docs/DECISIONS.md` #26) |
 | `bosses/` | `boss` | up to 160×160 (see `docs/DECISIONS.md` #26) |
 | `projectiles/` | `projectile` | up to 16×16 |
@@ -44,6 +44,14 @@ Each of those has four subfolders, one per sprite category:
 Sizes are **file** pixels. The room is drawn at `WORLD_ZOOM` (`src/render/resolution.ts`), so a
 16×16 tile lands on screen at 32×32 — see issue #34's comment thread and
 `docs/CONTENT_BIBLE.md` §5 for the history of that distinction.
+
+**A tile is one of exactly two sizes, not a range**, per `docs/DECISIONS.md` #48: 16×16 draws on
+the coarser room grid every tile used before this, at `TILE_SPRITE_SCALE`; 32×32 draws on the same
+1:1 grid a character does, at `ACTOR_SPRITE_SCALE`, for real added detail at the same on-screen
+size. `render/room.ts`'s `tileRect` picks the right one from the file's own width, so a redrawn
+wall and a still-16px block sit in the same room with nothing else to change. Nothing in between —
+a 24×24 tile would need a fractional sprite scale, which `render/resolution.ts`'s whole-number-scale
+rule rules out — so `tools/art/validate.mjs` rejects anything but exactly 16 or exactly 32.
 
 ## Palette
 

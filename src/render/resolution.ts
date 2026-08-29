@@ -65,17 +65,20 @@ export const ACTOR_PIXELS_PER_UNIT = WORLD_ZOOM;
 export const ACTOR_SPRITE_SCALE = 1 / ACTOR_PIXELS_PER_UNIT;
 
 /**
- * The coarser grid the room itself is on: a 16px tile covering
- * `ROOM_TILE_UNITS` world units is two internal pixels per authored pixel.
+ * The coarser grid a 16px tile draws on: covering `ROOM_TILE_UNITS` world
+ * units, that is two internal pixels per authored pixel.
  *
- * Deliberately not the same as `ACTOR_SPRITE_SCALE`, and not a compromise —
- * a background that repeats identically and unnoticed carries less detail than
- * the things acting in front of it, which is what `tools/art/spec.mjs` already
- * says by pinning `tile` at exactly 16x16 while letting a character grow. It is
- * fixed by the room format rather than chosen here: it is what `render/room.ts`
- * and `render/prop-view.ts` have always drawn at, stated so that anything else
- * drawing tile art (a destructible barrel, say) can draw at the same size as
- * the identical sprite standing next to it.
+ * Deliberately not the same as `ACTOR_SPRITE_SCALE` by default — a background
+ * that repeats identically and unnoticed carries less detail than the things
+ * acting in front of it. Since `docs/DECISIONS.md` #48, that is a per-tile
+ * choice rather than a fixed one: `tools/art/spec.mjs` allows a tile to be
+ * authored at 32x32 instead, and `render/room.ts`'s `tileRect` puts *that*
+ * tile on `ACTOR_SPRITE_SCALE`'s 1:1 grid instead of this one, derived from
+ * the texture's own width rather than hardcoded — so this constant still
+ * describes every tile that stays at 16, which is most of them, without
+ * describing all of them any more. Kept here rather than only in `room.ts`
+ * so anything else drawing 16px tile art (a destructible barrel, say) can
+ * draw at the same size as the identical sprite standing next to it.
  */
 export const TILE_SPRITE_SCALE = 1;
 

@@ -5,9 +5,17 @@
  * the sprite's size on screen: everything that is a body — a character, a
  * boss, a pickup — is drawn at `render/resolution.ts`'s `ACTOR_SPRITE_SCALE`,
  * one authored pixel per internal pixel, so a 24x16 canvas is 24x16 of the
- * 640x360 frame. `tile` is the one category still on the coarser room grid
- * (`TILE_SPRITE_SCALE`, two internal pixels per authored pixel), because a
- * 16px tile covers `ROOM_TILE_UNITS` world units by definition.
+ * 640x360 frame. `tile` covers a fixed `ROOM_TILE_UNITS` footprint by
+ * definition, so — per `docs/DECISIONS.md` #48 — it may be authored at either
+ * of exactly two square sizes rather than a size the spec range would
+ * otherwise suggest is continuously variable: 16 draws on the coarser room
+ * grid (`TILE_SPRITE_SCALE`, two internal pixels per authored pixel, #45's
+ * original default), 32 draws on the same 1:1 grid a character does
+ * (`ACTOR_SPRITE_SCALE`) for an author who wants more resolvable detail.
+ * `tools/art/validate.mjs`'s `validateSpriteSize` enforces the two-sizes-only
+ * rule directly; the `min`/`max` here just bound the range for generic
+ * consumers (the pixel editor's size presets) that don't need to know tile
+ * art is special.
  *
  * That makes these numbers a *composition* budget, not just a memory one:
  * a ceiling here is how much of the screen the category may cover.
@@ -31,7 +39,7 @@ export const CATEGORY_FOLDERS = {
 };
 
 export const CATEGORY_SPECS = {
-  tile: { minWidth: 16, maxWidth: 16, minHeight: 16, maxHeight: 16 },
+  tile: { minWidth: 16, maxWidth: 32, minHeight: 16, maxHeight: 32 },
   // Height's floor is the original "roughly 12x16" ceiling, kept as the
   // floor so every already-committed floor-1/2 character sprite (authored at
   // 16 tall) stays legal — `docs/DECISIONS.md` #26 raised the height

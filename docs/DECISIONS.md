@@ -2136,3 +2136,61 @@ the wrong call in hindsight — the more `rosinen` items exist, the cheaper opti
 gets relative to trusting every author to copy the convention correctly. If a `rosinen` item ships
 with a forgotten Klauber check, that is this decision's failure mode, and the fix is option 2,
 not a patch on option 1.
+
+## 48. A tile may draw at 32x32 on the actor grid, per asset, instead of only 16x16 on the room grid
+
+**Decided:** M8, #180, from a direct note that the committed floor/wall tiles read as low-detail
+next to character art. **Amends:** #45's tile half — not the actor half, which is untouched — by
+turning `TILE_SPRITE_SCALE` from the only grid room art draws on into the default one.
+
+### What #45 said and why this isn't quite reopening it
+
+#45 fixed `ACTOR_SPRITE_SCALE` (one authored pixel per internal pixel, for anything that is a
+body) and `TILE_SPRITE_SCALE` (two internal pixels per authored pixel, for room art) as the two
+grids a sprite may draw on, and named the choice deliberate rather than an oversight: "a background
+that repeats identically and unnoticed carrying less detail than the things acting in front of it"
+is the same judgement `tools/art/spec.mjs` already made pinning `tile` at exactly 16x16 while
+letting a character grow. That reasoning is sound and this decision does not relitigate it — a
+tile that repeats across a whole floor genuinely does not need a character's detail budget by
+default, and floor 1's `cellar-plank` block and every destructible stay at 16 for exactly that
+reason.
+
+What changed is narrower: whether *every* tile must stay on that grid, or whether an author who
+wants more resolvable detail on one — because it reads flat, because it's the thing the player
+stares at for an entire floor — can ask for it, on that one asset, without inventing a third scale.
+#45's own "Constrains" line is the guardrail this stays inside: "anything new that draws a sprite
+takes one of the two grid constants — a third scale is a third pixel size." 32x32 is not a third
+scale. It is `ACTOR_SPRITE_SCALE`, the grid that already exists, made available to `tile` as well
+as `character`.
+
+### The mechanism
+
+`tools/art/spec.mjs`'s `CATEGORY_SPECS.tile` widens from an exact 16x16 to a 16-or-32 pair —
+`tools/art/validate.mjs`'s `validateSpriteSize` enforces the two sizes discretely rather than as a
+continuous range, because anything in between (a 24x24 tile, say) would need a fractional sprite
+scale to keep its `ROOM_TILE_UNITS` footprint fixed, which `render/resolution.ts`'s whole-number-
+scale rule already rules out for every other sprite in the game.
+
+`render/room.ts`'s `tileRect` — the one place every wall, wall-lip, block and void-rect fill draws
+through — picks its sprite scale as `ROOM_TILE_UNITS / texture.width` instead of drawing at native
+size. A 16px texture gets scale 1 (unchanged: `TILE_SPRITE_SCALE`'s grid). A 32px texture gets
+scale 0.5, which combined with `WORLD_ZOOM` lands it on exactly `ACTOR_SPRITE_SCALE`'s 1:1 grid,
+filling the identical on-screen cell. The floor-variant loop in `createRoomView` (Floor 2's "living
+floor" mix) does the same. Neither path needs to know which grid a given texture is actually on;
+the texture's own width says so.
+
+This is what lets floor 1 (`cellar-wall`, `cellar-wall-lip`, `cellar-floor`) and floor 2
+(`rural-wall`, `rural-wall-lip`, the four `rural-floor-*` variants) redraw at 32x32 in the same
+change that ships this decision, while `cellar-plank`, `rural-hedge-block`, every destructible, and
+every door stay at 16x16 with nothing about them touched — a per-asset upgrade path rather than a
+floor-wide or game-wide cutover, the same incremental shape #35/#37's own tile art landed in
+originally.
+
+**Constrains:** a tile redraw is now also a size decision, not just a palette one — going to 32
+doubles the pixel count (and therefore the redraw work and the atlas bytes) for real, resolvable
+detail, not a free upscale of the existing 16px art. Per this repo's own pixel-art sign-off
+convention, which size to draw at is exactly the kind of choice that needs a candidate shown at
+true on-screen scale next to Alois before it lands, not assumed from "more pixels is obviously
+better." A future third size is not "just add another number to `LEGAL_TILE_SIZES`" — it would
+need its own grid constant and its own whole-number-scale proof the way 16 and 32 already have
+one each; nothing here makes a third size cheap.

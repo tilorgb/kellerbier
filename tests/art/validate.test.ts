@@ -32,13 +32,18 @@ function buildPixels(
 }
 
 describe('validateSpriteSize', () => {
-  it('accepts an exact 16x16 tile', () => {
+  // docs/DECISIONS.md #48: a tile draws on one of exactly two grids, so 16
+  // and 32 are both legal — anything else would need a fractional sprite
+  // scale to keep its ROOM_TILE_UNITS footprint fixed.
+  it('accepts a tile at either of its two legal sizes', () => {
     expect(validateSpriteSize('tile', 16, 16)).toBeNull();
+    expect(validateSpriteSize('tile', 32, 32)).toBeNull();
   });
 
-  it('rejects a tile of any other size', () => {
-    expect(validateSpriteSize('tile', 32, 32)).toMatch(/outside the "tile" spec/);
-    expect(validateSpriteSize('tile', 17, 16)).not.toBeNull();
+  it('rejects a tile that is not square, or square at an in-between size', () => {
+    expect(validateSpriteSize('tile', 17, 16)).toMatch(/outside the "tile" spec/);
+    expect(validateSpriteSize('tile', 32, 16)).not.toBeNull();
+    expect(validateSpriteSize('tile', 24, 24)).not.toBeNull();
   });
 
   it('accepts a 12x16 character and rejects a short one', () => {

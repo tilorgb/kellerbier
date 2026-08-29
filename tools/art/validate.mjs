@@ -13,6 +13,14 @@ import {
  */
 
 /**
+ * The only two sizes room art may be authored at (`docs/DECISIONS.md` #48) —
+ * not a range, because anything in between would need a fractional sprite
+ * scale to keep a tile's `ROOM_TILE_UNITS` footprint fixed, and
+ * `render/resolution.ts`'s whole-number-scale rule rules that out.
+ */
+const LEGAL_TILE_SIZES = [16, 32];
+
+/**
  * Checks a decoded sprite (or one frame of an animation strip) against its
  * category's size spec. Returns an error string, or `null` if it passes.
  */
@@ -25,12 +33,18 @@ export function validateSpriteSize(category, width, height, frameCount = 1) {
     return `strip is ${width}px wide, which does not divide evenly into ${frameCount} frames`;
   }
   const frameWidth = width / frameCount;
+  const sizeLabel = frameCount > 1 ? `frame size ${frameWidth}x${height}` : `${width}x${height}`;
+  if (category === 'tile') {
+    if (frameWidth === height && LEGAL_TILE_SIZES.includes(frameWidth)) {
+      return null;
+    }
+    return `${sizeLabel} is outside the "tile" spec (must be square, exactly ${LEGAL_TILE_SIZES.join(' or ')})`;
+  }
   const withinWidth = frameWidth >= spec.minWidth && frameWidth <= spec.maxWidth;
   const withinHeight = height >= spec.minHeight && height <= spec.maxHeight;
   if (withinWidth && withinHeight) {
     return null;
   }
-  const sizeLabel = frameCount > 1 ? `frame size ${frameWidth}x${height}` : `${width}x${height}`;
   return (
     `${sizeLabel} is outside the "${category}" spec ` +
     `(${spec.minWidth}-${spec.maxWidth} wide, ${spec.minHeight}-${spec.maxHeight} tall)`
