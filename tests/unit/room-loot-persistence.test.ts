@@ -204,6 +204,27 @@ describe('room loot persistence', () => {
     expect(countPickups(sim)).toBe(0);
   });
 
+  it('a restored pickup does not pop in again — only a genuinely new one does', () => {
+    const room = lootRoom('test-loot-room');
+    const sim = new GameSim({ roomTemplate: room, floor: 1 });
+
+    // Freshly authored on first load: it just appeared, so it pops.
+    sim.world.forEach(sim.pickupKind.bit, (index) => {
+      expect(sim.spawnBounce.data[index] ?? 0).toBeGreaterThan(0);
+    });
+
+    sim.loadRoom(elsewhere(), 1);
+    sim.loadRoom(room, 1);
+
+    // Same two pickups, restored from `roomLootSnapshots` rather than
+    // spawned anew — they were already on the floor, so walking back in
+    // must not play the spawn pop a second time.
+    expect(countPickups(sim)).toBe(2);
+    sim.world.forEach(sim.pickupKind.bit, (index) => {
+      expect(sim.spawnBounce.data[index] ?? 0).toBe(0);
+    });
+  });
+
   it('clearFloorProgress forgets leftover loot too, the same as it forgets a cleared room', () => {
     const room = lootRoom('test-loot-room');
     const sim = new GameSim({ roomTemplate: room, floor: 1 });

@@ -37,6 +37,13 @@ function sim(): GameSim {
  * input: what is under test is the derivation from "the tick moved him this
  * far", and steering him there with a `stepPlayerMovement` would make every
  * assertion here depend on acceleration tuning as well.
+ *
+ * Also writes `velocity` to match the same delta. `resolveAnimationState`
+ * still reads the position delta directly, but `resolvePlayerHeading` reads
+ * `velocity` — the input-driven channel — precisely so a recoil impulse on
+ * the separate `push` channel cannot masquerade as walking (see that
+ * function's own doc comment). A `place` call is meant to simulate "the tick
+ * actually walked him this far," so its velocity is this delta, not zero.
  */
 function place(game: GameSim, x: number, y: number, previousX = x, previousY = y): void {
   const base = game.playerIndex * 4;
@@ -44,6 +51,9 @@ function place(game: GameSim, x: number, y: number, previousX = x, previousY = y
   game.transform.data[base + 1] = y;
   game.transform.data[base + 2] = previousX;
   game.transform.data[base + 3] = previousY;
+  const velocityBase = game.playerIndex * 2;
+  game.velocity.data[velocityBase] = x - previousX;
+  game.velocity.data[velocityBase + 1] = y - previousY;
 }
 
 describe('resolvePlayerAnimationState', () => {
@@ -152,6 +162,30 @@ describe('resolvePlayerHeading', () => {
     game.aimDirectionY = -1;
     resolvePlayerHeading(game, out);
     expect(out.facing).toBe(PlayerFacing.South);
+  });
+
+  it('keeps facing the aim while standing still and firing, unmoved by recoil push', () => {
+    const game = sim();
+    const out = heading();
+    // Standing still: no input-driven velocity, only the transform sitting
+    // in place — the state a held-down idle shot leaves the player in
+    // between ticks, `push`'s recoil impulse notwithstanding.
+    place(game, 100, 100);
+    game.aimDirectionX = -1;
+    game.aimDirectionY = 0;
+    // Firing kicks the player with a recoil impulse opposite the aim
+    // (`sim/systems/shooting.ts`'s `fire()`, via `addPush`) on the `push`
+    // channel, not `velocity`. Before this, `resolvePlayerHeading` read the
+    // raw position delta, which push contributes to just as much as real
+    // movement — so a shot fired stationary flipped the body to face away
+    // from the aim for a tick or two until the push decayed, then back,
+    // flickering left-right on every shot. `push` alone must not move the
+    // needle here.
+    const pushBase = game.playerIndex * 2;
+    game.push.data[pushBase] = 0.3;
+    game.push.data[pushBase + 1] = 0;
+    resolvePlayerHeading(game, out);
+    expect(out).toEqual({ facing: PlayerFacing.Side, mirror: 1 });
   });
 });
 

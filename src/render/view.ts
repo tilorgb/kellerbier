@@ -10,7 +10,13 @@ import { EntityView } from './entities.js';
 import { ParticleView, type ParticleAccessibility, type ParticleTextures } from './particles.js';
 import { PedestalView } from './pedestal-view.js';
 import { ProjectileView, type ProjectileArt } from './projectiles.js';
-import { createDoorView, createRoomView, createSecretHintView, type DoorTextures } from './room.js';
+import {
+  createDoorView,
+  createRoomView,
+  createSecretHintView,
+  type DoorTextures,
+  type DoorView,
+} from './room.js';
 import { createPropView } from './prop-view.js';
 import { INTERNAL_HEIGHT, INTERNAL_WIDTH, WORLD_ZOOM } from './resolution.js';
 import { ENTITY_PALETTE } from './palette.js';
@@ -102,6 +108,38 @@ const DOOR_PULSE_FRAMES = 20;
 const DOOR_PULSE_DEPTH = 0.55;
 
 /**
+ * Rendered frames a door's open/close transition takes. Quicker than the
+ * amber clear-pulse it plays alongside — a door swinging is a mechanical
+ * beat, not a celebration — about a fifth of a second at 60 Hz.
+ */
+const DOOR_TRANSITION_FRAMES = 12;
+/**
+ * The depth-axis scale a door tile settles at mid-swing, never quite zero:
+ * a door collapsed to nothing reads as a rendering glitch, not a door
+ * edge-on, and the two overlapping tiles of the incoming/outgoing state
+ * cover for the sliver either one leaves.
+ */
+const DOOR_TRANSITION_MIN_SCALE = 0.08;
+
+/**
+ * Scales every door tile in `view` along its own depth axis — the axis
+ * `render/room.ts`'s `createDoorView` already anchors each sprite's centre
+ * on, so shrinking it reads as the door retracting into the wall rather than
+ * squashing toward a corner. `1` is the door drawn at rest; the open/close
+ * transition sweeps this from `DOOR_TRANSITION_MIN_SCALE` up to `1` (or back)
+ * over `DOOR_TRANSITION_FRAMES`.
+ */
+function applyDoorSwingScale(view: DoorView, scale: number): void {
+  for (const { sprite, horizontal } of view.sprites) {
+    if (horizontal) {
+      sprite.scale.y = scale;
+    } else {
+      sprite.scale.x = scale;
+    }
+  }
+}
+
+/**
  * The scene graph for one running game.
  *
  * Reads simulation state and writes sprite positions. It never writes back —
@@ -134,7 +172,10 @@ export class GameView {
   private readonly damageNumbers: DamageNumberView;
   private roomGeometry: RoomGeometry;
   private roomView: Container;
-  private doorView: Container;
+  private doorView: DoorView;
+  /** The outgoing door state, kept alive and animated out while `doorView` animates in. */
+  private previousDoorView: DoorView | undefined;
+  private doorTransitionTicks = 0;
   private doorsLocked: boolean;
   private secretHintView: Graphics;
   private secretHintDoors: readonly CompiledDoor[] = [];
@@ -198,7 +239,7 @@ export class GameView {
     this.world.addChild(this.roomView);
     this.doorsLocked = sim.doorsLocked;
     this.doorView = createDoorView(sim.room, sim.doors, this.doorsLocked, this.doorTextures);
-    this.world.addChild(this.doorView);
+    this.world.addChild(this.doorView.container);
     this.secretHintView = createSecretHintView(sim.room, []);
     this.world.addChild(this.secretHintView);
     // A room's authored furniture (#152), over the floor and under everything
@@ -304,22 +345,68 @@ export class GameView {
     // Rebuilt on room change too: a fresh room's door state is not necessarily
     // "locked", e.g. a cleared room re-entered still has none of its own enemies.
     if (roomChanged || this.sim.doorsLocked !== this.doorsLocked) {
-      this.world.removeChild(this.doorView);
-      this.doorView.destroy();
+      const justUnlocked = !this.sim.doorsLocked && !roomChanged;
       this.doorsLocked = this.sim.doorsLocked;
-      const justUnlocked = !this.doorsLocked && !roomChanged;
-      this.doorView = createDoorView(
+      const nextDoorView = createDoorView(
         this.roomGeometry,
         this.sim.doors,
         this.doorsLocked,
         this.doorTextures,
       );
-      this.world.addChildAt(this.doorView, 1);
+      // A swing animation needs the outgoing sprites kept around to animate
+      // out, not just a texture to snap away from — so the old `doorView`
+      // becomes `previousDoorView` and animates alongside the new one instead
+      // of being destroyed on the spot. That only makes sense between two
+      // real door states in the same room; a room change has no "outgoing
+      // door" to swing (the whole room just changed under it), and a
+      // transition already in flight when another one starts has nothing
+      // coherent to animate from, so both hard-cut instead.
+      if (this.previousDoorView !== undefined) {
+        this.world.removeChild(this.previousDoorView.container);
+        this.previousDoorView.container.destroy();
+        this.previousDoorView = undefined;
+      }
+      const canAnimate =
+        !roomChanged && this.doorView.sprites.length > 0 && nextDoorView.sprites.length > 0;
+      if (canAnimate) {
+        this.previousDoorView = this.doorView;
+        this.previousDoorView.container.alpha = 1;
+        this.doorTransitionTicks = DOOR_TRANSITION_FRAMES;
+      } else {
+        this.world.removeChild(this.doorView.container);
+        this.doorView.container.destroy();
+        this.doorTransitionTicks = 0;
+      }
+      this.doorView = nextDoorView;
+      this.world.addChildAt(this.doorView.container, 1);
+      if (this.previousDoorView !== undefined) {
+        this.world.addChildAt(this.previousDoorView.container, 1);
+      }
       // The doors are what actually changed when a room cleared, so they are
       // what says so (#153). Only on an unlock inside the same room — walking
       // into an already-cleared room rebuilds the same view and has nothing to
       // announce.
       this.doorPulseFrames = justUnlocked ? DOOR_PULSE_FRAMES : 0;
+    }
+    if (this.doorTransitionTicks > 0) {
+      this.doorTransitionTicks -= 1;
+      // 0 at the first animated frame, 1 once the swing completes.
+      const progress = 1 - this.doorTransitionTicks / DOOR_TRANSITION_FRAMES;
+      applyDoorSwingScale(
+        this.doorView,
+        DOOR_TRANSITION_MIN_SCALE + (1 - DOOR_TRANSITION_MIN_SCALE) * progress,
+      );
+      if (this.previousDoorView !== undefined) {
+        applyDoorSwingScale(
+          this.previousDoorView,
+          DOOR_TRANSITION_MIN_SCALE + (1 - DOOR_TRANSITION_MIN_SCALE) * (1 - progress),
+        );
+        if (this.doorTransitionTicks === 0) {
+          this.world.removeChild(this.previousDoorView.container);
+          this.previousDoorView.container.destroy();
+          this.previousDoorView = undefined;
+        }
+      }
     }
     if (this.doorPulseFrames > 0) {
       this.doorPulseFrames -= 1;
@@ -327,12 +414,12 @@ export class GameView {
       // Suppressed by `reduceFlashes`, and by nothing else: it is a bright
       // thing that happens repeatedly over a run, which is the exact hazard
       // that toggle exists for.
-      this.doorView.tint = ENTITY_PALETTE.normalTint;
-      this.doorView.alpha = this.accessibility.reduceFlashes
+      this.doorView.container.tint = ENTITY_PALETTE.normalTint;
+      this.doorView.container.alpha = this.accessibility.reduceFlashes
         ? 1
         : 1 - Math.sin(progress * Math.PI) * DOOR_PULSE_DEPTH;
     } else {
-      this.doorView.alpha = 1;
+      this.doorView.container.alpha = 1;
     }
     // A bombed-open wall stops being a hint the same tick it stops being
     // hidden — `setSecretHints` is what the caller (`app/main.ts`, which

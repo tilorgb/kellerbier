@@ -97,6 +97,33 @@ describe('GameSim.dropLoot', () => {
   });
 });
 
+describe('GameSim.dropLoot around a blocked point', () => {
+  it('does not spawn on top of a block sitting on the requested point itself', () => {
+    const room = bareRoom();
+    // Block the room's exact centre — the same point `rollRoomClearLoot`
+    // asks `dropLoot` to spawn at, and the one case `safeSpawnPoint`'s
+    // few-step nudge toward the centre can never escape: nudging toward a
+    // point that already *is* the block is a no-op every step.
+    const centreX = (room.minX + room.maxX) / 2;
+    const centreY = (room.minY + room.maxY) / 2;
+    room.addBlock(centreX - 20, centreY - 20, centreX + 20, centreY + 20);
+    const sim = new GameSim({ seed: 1, population: 'empty', room });
+    const table: DropTable = {
+      sober: [{ pickupId: 'biermarke-1', weight: 1 }],
+      promilled: [{ pickupId: 'biermarke-1', weight: 1 }],
+    };
+    sim.dropLoot(table, centreX, centreY);
+    sim.world.flush();
+    const radius = sim.pickups.get('biermarke-1').radius;
+    let found = false;
+    sim.world.forEach(sim.world.maskOf(sim.pickupKind), (index) => {
+      found = true;
+      expect(sim.room.isClear(sim.positionX(index), sim.positionY(index), radius)).toBe(true);
+    });
+    expect(found).toBe(true);
+  });
+});
+
 describe('loot on enemy death', () => {
   it('drops a pickup entity, over enough kills, from the tier the enemy resolves to', () => {
     const sim = emptySim({ promilleUnlocked: true });

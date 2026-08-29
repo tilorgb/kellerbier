@@ -34,6 +34,9 @@ export function pickTileVariant(col: number, row: number, variantCount: number):
 /** Narrower than `DOOR_SPAN` — a hint, not a doorway. */
 const CRACK_SPAN = 10;
 
+/** How much a floor tile variant's accent fleck is dimmed toward the base floor colour. */
+const FLOOR_VARIANT_ACCENT_ALPHA = 0.55;
+
 /**
  * Tiles `texture` over a rectangle, one sprite per 16-unit cell, into
  * `container`.
@@ -135,6 +138,16 @@ export function createRoomView(
         }
         const tile = new Sprite(texture);
         tile.position.set(x, y);
+        // Every authored floor variant's base fill is the same colour as
+        // `palette.floor` underneath it (the flat rect above) — only its one
+        // or two accent-fleck pixels differ. Dimming the whole sprite toward
+        // that shared background therefore leaves the base untouched and
+        // just softens the fleck, the same "read as background, not a
+        // foreground thing" treatment `DecalView` already gives blood decals
+        // (`render/decals.ts`). With a "living floor" mix picking a variant
+        // per cell (almost) every cell shows one, undimmed they read as a
+        // field of small bright objects rather than floor grain.
+        tile.alpha = FLOOR_VARIANT_ACCENT_ALPHA;
         container.addChild(tile);
       }
     }
@@ -239,6 +252,25 @@ export interface DoorTextures {
 }
 
 /**
+ * A door tile sprite plus which axis it spans the doorway's *depth* on —
+ * `render/view.ts`'s open/close transition scales exactly that axis, on
+ * exactly this sprite's own anchor, so a west/east door's tiles retract
+ * sideways into the wall while a north/south door's retract vertically,
+ * whichever pair actually sits in the gap.
+ */
+export interface DoorSprite {
+  readonly sprite: Sprite;
+  readonly horizontal: boolean;
+}
+
+/** A door layer: the container to draw, plus its tile sprites for animating open/close. */
+export interface DoorView {
+  readonly container: Container;
+  /** Empty when there are no textures — the flat colour fallback has nothing to animate. */
+  readonly sprites: readonly DoorSprite[];
+}
+
+/**
  * Draws each of the room's real doors (#100: up to eight for a `2x2` room,
  * one per `(cell, wall)` pair with a real neighbour), open or locked.
  *
@@ -260,8 +292,9 @@ export function createDoorView(
   doors: readonly CompiledDoor[],
   locked: boolean,
   textures?: DoorTextures,
-): Container {
+): DoorView {
   const container = new Container();
+  const sprites: DoorSprite[] = [];
   const graphics = new Graphics();
   const colour = locked ? ROOM_HAZARD_PALETTE.doorLocked : ROOM_HAZARD_PALETTE.doorOpen;
   const frame = roomFrameSize(room);
@@ -303,11 +336,24 @@ export function createDoorView(
       graphics.rect(bandMinX, bandMinY, bandWidth, bandHeight).fill(colour);
       continue;
     }
-    // Two tiles along the doorway's own long axis, centred on the gap and on
-    // the band's thickness.
+    // Two tiles along the doorway's own long axis, centred on the gap.
+    //
+    // Across the wall's thickness, the door sits flush against the interior
+    // wall face (`centre.x`/`centre.y`, the same point `wallLip` above is
+    // drawn flush against) and extends one tile's width *away* from the room
+    // — not centred in the whole margin band. The margin is 40 units deep on
+    // the west/east walls but only 18 on north/south (`ROOM_MARGIN_X`/`_Y` in
+    // `sim/room/template.ts`), so centring a 16-unit sprite in the band left
+    // west/east doors floating with ~12 units of solid wall visible on both
+    // sides, while north/south happened to look right because the band there
+    // is already close to one tile deep.
     const horizontal = door.direction === 'north' || door.direction === 'south';
-    const alongX = horizontal ? bandMinX + span / 2 - ROOM_TILE_UNITS : bandMinX + bandWidth / 2;
-    const alongY = horizontal ? bandMinY + bandHeight / 2 : bandMinY + span / 2 - ROOM_TILE_UNITS;
+    const crossOffset =
+      door.direction === 'north' || door.direction === 'west'
+        ? -ROOM_TILE_UNITS / 2
+        : ROOM_TILE_UNITS / 2;
+    const alongX = horizontal ? bandMinX + span / 2 - ROOM_TILE_UNITS : centre.x + crossOffset;
+    const alongY = horizontal ? centre.y + crossOffset : bandMinY + span / 2 - ROOM_TILE_UNITS;
     for (let step = 0; step < 2; step++) {
       const sprite = new Sprite(texture);
       sprite.anchor.set(horizontal ? 0 : 0.5, horizontal ? 0.5 : 0);
@@ -316,6 +362,7 @@ export function createDoorView(
         horizontal ? alongY : alongY + step * ROOM_TILE_UNITS,
       );
       container.addChild(sprite);
+      sprites.push({ sprite, horizontal });
     }
   }
 
@@ -324,7 +371,7 @@ export function createDoorView(
   } else {
     graphics.destroy();
   }
-  return container;
+  return { container, sprites };
 }
 
 /**
