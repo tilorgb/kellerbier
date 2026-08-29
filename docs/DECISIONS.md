@@ -2048,3 +2048,54 @@ instead. A projectile is drawn to its own collider because `shotRadius` is item-
 bigger shot has to look bigger; a telegraph ring grows because the growth is the countdown; a
 particle shrinks because that is the effect. A body is not information — it is a body — so it is
 drawn at the grid.
+
+## 46. Touch is a third input device, not a mobile port
+
+**Decided:** M8, on direct request — `docs/GAME_DESIGN.md` #13 said "no mobile build" explicitly
+so it would not get relitigated by accident, and this relitigates it on purpose, deliberately, in
+the narrow form actually asked for: play on a phone browser, not a native build, a different
+control scheme, or a redesigned layout. That line is now stale and this entry replaces it.
+
+### What changed and what didn't
+
+`InputSampler` already treated keyboard and gamepad as interchangeable producers of one
+`InputFrame` (this file's own opening line on the input module: "the game never reads a key code
+or a stick value"). Touch is a third producer of the same frame, not a parallel system: a new
+`TouchSource` (`app/input/touch.ts`) holds two stick axes and four button states, set by whatever
+widget is driving it rather than polled, and `InputSampler.sampleTouch` reads it exactly the way
+`sampleGamepad` reads the pad — including snapping the aim stick to the same eight directions
+every other device already snaps to (#20's "eight-way, full stop, on every device" reads literally
+now). `updateActiveDevice`'s two-way arbitration (whichever device most recently crossed its
+activity threshold wins, gamepad checked first) became three-way with touch appended last in the
+chain, after keyboard — an arbitrary but stable tie-break, the same kind the gamepad/keyboard pair
+already had.
+
+The radial dead-zone math `GamepadSource.readStick` used was pulled out to `app/input/dead-zone.ts`
+so `TouchSource` could reuse it rather than re-deriving the same rescale-from-the-edge formula;
+`GamepadSource` itself is otherwise unchanged; its own test suite is the proof.
+
+On-screen chrome (`app/touch-controls.ts`) is a fixed-position DOM overlay — two draggable sticks
+at the bottom corners (move left, aim right, matching the keyboard's WASD-moves/arrows-aim split)
+and four tap buttons for bomb/use/map/pause — built with the same plain-DOM-plus-`dev-ui/tokens.ts`
+approach `accessibility-panel.ts` already established for player-facing chrome that isn't worth a
+framework. It mounts only when `window.matchMedia('(pointer: coarse)')` matches, so a mouse-and-
+keyboard player on a touch-capable laptop never sees it, and it ships in every build rather than
+behind `import.meta.env.DEV` — it is a control scheme, not a debug tool.
+
+### What this deliberately does not cover
+
+No layout changes, no phone-specific HUD, no orientation handling, no app-store build, no
+touch-aware tutorial prompts beyond the one activation string (`main.ts`'s `activatePrompt`) that
+already had to special-case its device. `render/resolution.ts`'s whole-number-scale rule is
+untouched, so a portrait phone narrower than 640 CSS pixels still floors its viewport scale at 1×
+and overflows — landscape happens to clear that bar on most phones, but nothing here guarantees or
+enforces it. Any of that is a separate, larger piece of work with its own design questions (a
+rotate-to-landscape prompt, hiding dev-only chrome like `#seed-control` on a phone, a touch-shaped
+settings screen) and was explicitly scoped out of this change rather than silently skipped.
+
+**Constrains:** a fourth input device follows this same shape — a `*Source` class the sampler
+polls or reads, one `sample*` method that snaps aim to an octant and treats aim deflection as fire,
+and arbitration appended to `updateActiveDevice`'s chain — rather than a parallel input path. Any
+UI element gated on `ActiveDevice` (today, only `main.ts`'s activation prompt) has to keep handling
+`'touch'` as its own case rather than folding it into `'gamepad'` for convenience; the two devices
+have no bindings in common to fall back on.

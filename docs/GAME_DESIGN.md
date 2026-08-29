@@ -375,13 +375,20 @@ Not a polish-phase afterthought; several of these are structural and must land e
 - Camera sway / screenshake intensity sliders, including "off".
 - Colourblind-safe projectile palette: enemy shots and player shots must be distinguishable
   by shape *and* brightness, not only hue.
-- Full input rebinding, gamepad and keyboard.
+- Full input rebinding, gamepad and keyboard. Touch (`docs/DECISIONS.md` #46) has a fixed layout
+  and is not yet rebindable.
 - Optional aim assist and a "no drift" mode that keeps Promille's stat effects but removes the
   movement penalty.
 - Text scaling; no critical information conveyed by colour alone.
 
 ## 13. Out of scope for v1
 
-Stated explicitly so it stops being relitigated: no multiplayer, no mobile build, no
-procedural item generation, no 3D, no online leaderboards at launch, no mod API (though the
-data-driven content format should not *prevent* one later).
+Stated explicitly so it stops being relitigated: no multiplayer, no procedural item generation,
+no 3D, no online leaderboards at launch, no mod API (though the data-driven content format should
+not *prevent* one later).
+
+Touch is now a supported input device (`docs/DECISIONS.md` #46) — a dual-stick on-screen overlay
+that plays like the gamepad, shown automatically on a touch-capable browser. That is narrower than
+"a mobile build": no native app, no phone-specific layout, no orientation handling. A portrait
+phone narrower than the 640px internal resolution still doesn't fit at whole-number scale
+(`render/resolution.ts`); landscape does, on most phones, but nothing enforces it.

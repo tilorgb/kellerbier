@@ -29,6 +29,10 @@ const STYLE = `
   border-radius: var(--kb-radius-md); padding: 6px 10px; cursor: pointer;
 }
 .kb-a11y-toggle:hover { background: var(--kb-color-surface-3); }
+/* touch-controls.ts claims all four corners, so a touch layout needs the
+   toggle somewhere none of those four sticks/buttons sit — top-centre is the
+   one strip of screen edge nothing else uses. */
+.kb-a11y-toggle.kb-a11y-top-center { left: 50%; bottom: auto; top: 12px; transform: translateX(-50%); }
 .kb-a11y {
   position: fixed; left: 12px; bottom: 48px; z-index: 30;
   width: 240px;
@@ -36,6 +40,7 @@ const STYLE = `
   background: var(--kb-color-panel-tuning); border: 1px solid var(--kb-color-surface-4);
   border-radius: var(--kb-radius-md); padding: 10px 12px 12px;
 }
+.kb-a11y.kb-a11y-top-center { left: 50%; bottom: auto; top: 48px; transform: translateX(-50%); }
 .kb-a11y[hidden] { display: none; }
 .kb-a11y h2 {
   margin: 0 0 8px; font-size: 11px; letter-spacing: 0.08em;
@@ -57,6 +62,16 @@ export interface AccessibilityPanelHandle {
   destroy(): void;
 }
 
+export interface AccessibilityPanelOptions {
+  /**
+   * Where the collapsed toggle (and the panel it opens) sits. `bottom-left`
+   * is the default, used whenever nothing else claims that corner;
+   * `top-center` is for a touch layout, where `touch-controls.ts` already
+   * claims all four corners for its sticks and buttons.
+   */
+  readonly placement?: 'bottom-left' | 'top-center';
+}
+
 /**
  * `settings` is mutated in place (the same object `app/main.ts` holds and
  * passes to `applySettingsToSim`/`PromilleHud.sync`), so nothing here needs
@@ -67,6 +82,7 @@ export interface AccessibilityPanelHandle {
 export function createAccessibilityPanel(
   settings: AccessibilitySettings,
   onChange: () => void,
+  options: AccessibilityPanelOptions = {},
 ): AccessibilityPanelHandle {
   injectDevUiTokens();
 
@@ -74,12 +90,14 @@ export function createAccessibilityPanel(
   style.textContent = STYLE;
   document.head.appendChild(style);
 
+  const topCenter = options.placement === 'top-center';
+
   const panel = document.createElement('div');
-  panel.className = 'kb-a11y';
+  panel.className = topCenter ? 'kb-a11y kb-a11y-top-center' : 'kb-a11y';
   panel.hidden = true;
 
   const toggle = document.createElement('button');
-  toggle.className = 'kb-a11y-toggle';
+  toggle.className = topCenter ? 'kb-a11y-toggle kb-a11y-top-center' : 'kb-a11y-toggle';
   toggle.type = 'button';
   toggle.textContent = 'accessibility';
 

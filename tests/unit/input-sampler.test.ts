@@ -11,6 +11,7 @@ import { GamepadButton, createDefaultBindings } from '../../src/app/input/bindin
 import { DEFAULT_DEAD_ZONE, GamepadSource, type GamepadLike } from '../../src/app/input/gamepad.js';
 import { KeyboardSource } from '../../src/app/input/keyboard.js';
 import { InputSampler } from '../../src/app/input/sampler.js';
+import { DEFAULT_TOUCH_DEAD_ZONE, TouchSource } from '../../src/app/input/touch.js';
 
 interface PadState {
   axes: number[];
@@ -55,6 +56,7 @@ interface Harness {
   sampler: InputSampler;
   keyboard: KeyboardSource;
   gamepad: GamepadSource;
+  touch: TouchSource;
   pad: PadState;
 }
 
@@ -62,8 +64,9 @@ function harness(): Harness {
   const pad = createPadState();
   const keyboard = new KeyboardSource();
   const gamepad = padSource(pad);
-  const sampler = new InputSampler({ bindings: createDefaultBindings(), keyboard, gamepad });
-  return { sampler, keyboard, gamepad, pad };
+  const touch = new TouchSource();
+  const sampler = new InputSampler({ bindings: createDefaultBindings(), keyboard, gamepad, touch });
+  return { sampler, keyboard, gamepad, touch, pad };
 }
 
 /**
@@ -311,6 +314,98 @@ describe('gamepad sampling', () => {
   });
 });
 
+describe('touch sampling', () => {
+  it('stays on the keyboard until a stick is dragged', () => {
+    const { sampler } = harness();
+    sampler.sample();
+    expect(sampler.activeDevice).toBe('keyboard');
+  });
+
+  it('switches to touch when the move stick is dragged', () => {
+    const { sampler, touch } = harness();
+    touch.setMoveStick(1, 0);
+    expect(sampler.sample().moveX).toBe(AXIS_RESOLUTION);
+    expect(sampler.activeDevice).toBe('touch');
+  });
+
+  it('moves and aims on separate sticks', () => {
+    const { sampler, touch } = harness();
+    touch.setMoveStick(-1, 0);
+    touch.setAimStick(0, 1);
+
+    const frame = sampler.sample();
+    expect(frame.moveX).toBe(-AXIS_RESOLUTION);
+    expect(frame.moveY).toBe(0);
+    expect(frame.aimX).toBe(0);
+    expect(frame.aimY).toBe(AXIS_RESOLUTION);
+  });
+
+  it('applies a radial dead zone', () => {
+    const { sampler, touch } = harness();
+    touch.setMoveStick(1, 0);
+    sampler.sample();
+
+    touch.setMoveStick(DEFAULT_TOUCH_DEAD_ZONE * 0.5, DEFAULT_TOUCH_DEAD_ZONE * 0.5);
+    const frame = sampler.sample();
+    expect(frame.moveX).toBe(0);
+    expect(frame.moveY).toBe(0);
+  });
+
+  it('reads the four touch buttons', () => {
+    const { sampler, touch } = harness();
+    touch.setButtonDown('bomb', true);
+    touch.setButtonDown('map', true);
+
+    const frame = sampler.sample();
+    expect(isActionDown(frame, InputAction.Bomb)).toBe(true);
+    expect(isActionDown(frame, InputAction.Map)).toBe(true);
+    expect(isActionDown(frame, InputAction.Use)).toBe(false);
+    expect(isActionDown(frame, InputAction.Pause)).toBe(false);
+  });
+
+  it('fires from the aim stick alone, the same twin-stick convention as the gamepad', () => {
+    const { sampler, touch } = harness();
+    touch.setAimStick(0, -1);
+    expect(isActionDown(sampler.sample(), InputAction.Fire)).toBe(true);
+  });
+
+  it('snaps the aim stick to the nearest of eight directions rather than a free angle', () => {
+    // docs/DECISIONS.md #20: eight-way aim on every device, touch included.
+    const { sampler, touch } = harness();
+    touch.setAimStick(0.9, 0.3);
+
+    const frame = sampler.sample();
+    expect(frame.aimX).toBe(AXIS_RESOLUTION);
+    expect(frame.aimY).toBe(0);
+  });
+
+  it('leaves the move stick at rest inside the dead zone rather than drifting', () => {
+    const { sampler, touch } = harness();
+    touch.setMoveStick(1, 0);
+    sampler.sample();
+
+    touch.setMoveStick(0, 0);
+    const frame = sampler.sample();
+    expect(frame.moveX).toBe(0);
+    expect(frame.moveY).toBe(0);
+    // Once a stick is released the widget reports exactly (0, 0), not a
+    // magnitude below the dead zone — this pins that the sampler still reads
+    // it as fully at rest either way.
+  });
+
+  it('clears every stick and button on blur, the same as the keyboard', () => {
+    const { sampler, touch } = harness();
+    touch.setMoveStick(1, 0);
+    touch.setButtonDown('bomb', true);
+    sampler.sample();
+
+    touch.clear();
+    const frame = sampler.sample();
+    expect(frame.moveX).toBe(0);
+    expect(isActionDown(frame, InputAction.Bomb)).toBe(false);
+  });
+});
+
 describe('hot-plug', () => {
   it('falls back to the keyboard when the pad disappears mid-run', () => {
     const { sampler, keyboard, pad } = harness();
@@ -382,6 +477,28 @@ describe('device switching', () => {
   it('ignores stick drift below the activity threshold', () => {
     const { sampler, pad } = harness();
     pad.axes = [0.1, 0.1, 0, 0];
+    sampler.sample();
+    expect(sampler.activeDevice).toBe('keyboard');
+  });
+
+  it('moves between all three devices as each is touched in turn', () => {
+    const { sampler, keyboard, pad, touch } = harness();
+
+    keyboard.keyDown('KeyD');
+    sampler.sample();
+    expect(sampler.activeDevice).toBe('keyboard');
+
+    pad.axes = [1, 0, 0, 0];
+    sampler.sample();
+    expect(sampler.activeDevice).toBe('gamepad');
+
+    pad.axes = [0, 0, 0, 0];
+    touch.setMoveStick(1, 0);
+    sampler.sample();
+    expect(sampler.activeDevice).toBe('touch');
+
+    keyboard.keyUp('KeyD');
+    keyboard.keyDown('KeyA');
     sampler.sample();
     expect(sampler.activeDevice).toBe('keyboard');
   });

@@ -66,6 +66,7 @@ import { playRumble } from './input/rumble.js';
 import { FixedTimestepLoop, runAnimationFrameLoop } from './loop.js';
 import { RunSummaryTracker } from './run-summary.js';
 import { createAccessibilityPanel } from './accessibility-panel.js';
+import { createTouchControls, isTouchCapable } from './touch-controls.js';
 import { createEditorDock } from './editor-dock.js';
 import { pickEnemyAt, pickTileNameAt } from './sprite-pick.js';
 import {
@@ -319,6 +320,12 @@ async function boot(): Promise<void> {
     throw new Error('Missing #game host element in index.html');
   }
 
+  // Touch is the real input here, not a mouse that merely happens to sit on
+  // a touch-capable laptop — decided once, up front, and reused everywhere
+  // mobile chrome has to make room for the on-screen sticks or get out of
+  // the way of a small screen entirely.
+  const touchCapable = isTouchCapable();
+
   const app = await createRenderer(host);
 
   // Before anything builds a label: `render/ui/text.ts` warns loudly if a
@@ -460,6 +467,11 @@ async function boot(): Promise<void> {
   const hud = uiText('', { colour: UI_PALETTE.textDim });
   hud.scale.set(DEV_READOUT_SCALE);
   hud.anchor.set(0, 1);
+  // A dense instrument readout has no reader on a phone: nobody is holding a
+  // controller in one hand and squinting at tick counts in the other, and it
+  // would eat a meaningful slice of an already-small screen for nothing a
+  // touch player can act on.
+  hud.visible = !touchCapable;
   uiLayer.addChild(hud);
 
   // Added after the readout so anything screen-filling in here — a floor
@@ -731,6 +743,10 @@ async function boot(): Promise<void> {
   const input = new InputSampler();
   input.keyboard.attach(window);
   input.gamepad.attach(window);
+  // On-screen dual sticks, only where touch is the real input.
+  if (touchCapable) {
+    createTouchControls(input.touch);
+  }
 
   // Floor music and room ambience's seam (#35, `audio/ambience.ts`) — silent
   // until #51, wired up and being called the same way `playImpactAudio`
@@ -794,8 +810,13 @@ async function boot(): Promise<void> {
       // active item already has the pedestal's own name plate telling them
       // what `use` does there instead.
       const glyphSet = detectGlyphSet(input.activeDevice, input.gamepad.id);
-      const device = input.activeDevice === 'keyboard' ? 'keyboard' : 'gamepad';
-      const activatePrompt = actionPrompt(input.bindings, Bindable.Use, device, glyphSet);
+      const device = input.activeDevice === 'gamepad' ? 'gamepad' : 'keyboard';
+      // Touch has no bindings to look up a glyph for — the on-screen button
+      // is already labelled "Use", so the prompt just points at it.
+      const activatePrompt =
+        input.activeDevice === 'touch'
+          ? 'Tap Use'
+          : actionPrompt(input.bindings, Bindable.Use, device, glyphSet);
       activeItemHud.sync(sim, activatePrompt);
       itemGateHud.sync(sim);
       bossHealthHud.sync(sim);
@@ -1455,13 +1476,18 @@ WASD move   arrows aim and fire
   window.setInterval(refreshHud, 100);
 
   // The room editor (#24) / pixel editor (#108) split-view toggle. Ships
-  // unconditionally, unlike the debug overlay below — see
+  // unconditionally on desktop, unlike the debug overlay below — see
   // `editor-dock.ts`'s doc comment for why it can't live behind that
   // `import.meta.env.DEV` gate and still be reachable from a published
   // preview build. Placed here, not at the top of `boot`, because pausing
   // and the room-sync messages below both need `loop`/`sim`/`floorPlan`,
   // which do not exist yet that early.
-  const dockRoot = document.getElementById('dock-root');
+  //
+  // Skipped on touch: there is no keyboard-and-mouse editing session to be
+  // had on a phone, the split view has nowhere to put a panel next to the
+  // game on a small screen, and the toggle buttons would otherwise sit
+  // directly on top of `touch-controls.ts`'s map button.
+  const dockRoot = touchCapable ? null : document.getElementById('dock-root');
   if (dockRoot !== null) {
     let pausedBeforeDock = false;
     const dock = createEditorDock(dockRoot, {
@@ -1598,8 +1624,13 @@ WASD move   arrows aim and fire
   );
   // Not gated behind `import.meta.env.DEV` like `mountDebugOverlay` above —
   // this is the player-facing half of #33, so it has to ship in a production
-  // build.
-  createAccessibilityPanel(settings, applyAccessibilityChange);
+  // build. Moved to top-centre on touch: `touch-controls.ts` already claims
+  // all four corners (move/aim sticks bottom-left/right, map/pause
+  // top-left/right), so bottom-left — this panel's normal spot — would sit
+  // right under the move stick.
+  createAccessibilityPanel(settings, applyAccessibilityChange, {
+    placement: touchCapable ? 'top-center' : 'bottom-left',
+  });
 }
 
 /**
