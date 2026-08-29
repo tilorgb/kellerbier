@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { EventKind } from '../../src/sim/events/queue.js';
+import { ParticleKind } from '../../src/sim/particle/store.js';
 import { GameSim, TARGET_HEALTH, TARGET_RESPAWN_TICKS } from '../../src/sim/game/sim.js';
 import {
   type InputFrame,
@@ -51,6 +52,17 @@ function landOneShot(sim: GameSim): number {
     }
   }
   throw new Error('the shot never landed');
+}
+
+/** How many live particles are of one kind. */
+function countKind(sim: GameSim, kind: number): number {
+  let count = 0;
+  sim.particles.forEachLive((index) => {
+    if (sim.particles.kind[index] === kind) {
+      count += 1;
+    }
+  });
+  return count;
 }
 
 describe('impact feel', () => {
@@ -187,21 +199,55 @@ describe('impact feel', () => {
     const sim = new GameSim();
     expect(sim.particles.liveCount).toBe(0);
     landOneShot(sim);
-    expect(sim.particles.liveCount).toBe(DEFAULT_IMPACT_TUNING.particlesPerHit);
+    // Counted by kind rather than in total (#153): firing also throws a muzzle
+    // flash and a landed hit adds a few sparks, so a bare total no longer says
+    // anything about the foam specifically — which is the thing this is about.
+    expect(countKind(sim, ParticleKind.Foam)).toBe(DEFAULT_IMPACT_TUNING.particlesPerHit);
+  });
+
+  it('throws sparks on a hit that lands but does not kill', () => {
+    const sim = new GameSim();
+    landOneShot(sim);
+    expect(countKind(sim, ParticleKind.Spark)).toBeGreaterThan(0);
+  });
+
+  it('throws no sparks on a hit that kills — the death effect is the statement instead', () => {
+    // A separate sim rather than a second shot into the first one: sparks are
+    // deliberately short-lived, so the ones from an earlier hit are long gone
+    // by the time a second shot crosses the room, and a before/after count
+    // would pass for the wrong reason.
+    const sim = new GameSim();
+    sim.tuning.shooting.shotDamage = TARGET_HEALTH;
+    landOneShot(sim);
+    expect(countKind(sim, ParticleKind.Spark)).toBe(0);
+    expect(countKind(sim, ParticleKind.Splash)).toBeGreaterThan(0);
   });
 
   it('throws a heavier burst on a kill than on a hit', () => {
     const sim = new GameSim();
     landOneShot(sim);
-    const afterHit = sim.particles.liveCount;
+    const foamOnHit = countKind(sim, ParticleKind.Foam);
 
     // Enough damage to finish it on the next shot. No stagger to wait out
     // between the two — a struck-but-alive body stays hittable regardless.
     sim.tuning.shooting.shotDamage = TARGET_HEALTH;
     landOneShot(sim);
-    expect(sim.particles.liveCount - afterHit).toBeGreaterThan(
-      DEFAULT_IMPACT_TUNING.particlesPerHit,
-    );
+    // A training target is not an enemy, so it comes apart into beer — the
+    // default every death threw before `deathEffect` existed.
+    expect(countKind(sim, ParticleKind.Splash)).toBeGreaterThan(foamOnHit);
+  });
+
+  it('flashes the muzzle on the tick a shot leaves it', () => {
+    const sim = new GameSim();
+    expect(countKind(sim, ParticleKind.Flash)).toBe(0);
+    // Checked on the firing tick, not after the shot lands: a muzzle flash
+    // that outlived the shot's flight would be a lamp.
+    sim.step(aiming(-1, 0));
+    expect(countKind(sim, ParticleKind.Flash)).toBe(1);
+    for (let tick = 0; tick < 10; tick++) {
+      sim.step(IDLE);
+    }
+    expect(countKind(sim, ParticleKind.Flash)).toBe(0);
   });
 
   it('keeps damage numbers off unless they are asked for', () => {

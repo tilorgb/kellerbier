@@ -19,6 +19,8 @@ export const rollfass: EnemyDefinition = {
   id: 'rollfass',
   name: 'Rollfass',
   size: 'mid',
+  // A barrel, so: staves.
+  deathEffect: 'shard',
   health: 4,
   contactDamage: 1,
   // Heavier than a 'mid' body's own default: a barrel nudged off its line by
@@ -55,6 +57,8 @@ export const fasssplitter: EnemyDefinition = {
   id: 'fasssplitter',
   name: 'Fasssplitter',
   size: 'mini',
+  // It is already a splinter.
+  deathEffect: 'shard',
   health: 1,
   contactDamage: 1,
   lootTier: 'weak',

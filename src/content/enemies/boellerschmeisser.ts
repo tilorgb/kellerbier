@@ -32,6 +32,8 @@ export const boellerschmeisser: EnemyDefinition = {
   id: 'boellerschmeisser',
   name: 'Böllerschmeißer',
   size: 'normal',
+  // He goes off rather than dying.
+  deathEffect: 'ember',
   health: 3,
   contactDamage: 1,
   initial: 'lurk',

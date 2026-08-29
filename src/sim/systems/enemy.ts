@@ -8,6 +8,7 @@ import {
 } from '../enemy/registry.js';
 import { EventKind } from '../events/queue.js';
 import type { GameSim } from '../game/sim.js';
+import { muzzleFlash } from '../particle/effects.js';
 import { clamp, vectorLength } from '../math.js';
 import { ProjectileTeam } from '../projectile/store.js';
 
@@ -455,10 +456,15 @@ function fireOne(sim: GameSim, index: number, angle: number, shot: FiringBehavio
     ProjectileTeam.Enemy,
     0,
     // Which sprite this shot is drawn as, if its behaviour named one (#152).
+
     // Resolved through the roster's interned name table rather than carried as
     // a string, so nothing in the frame loop compares one.
     sim.enemies.artIndexOf(shot.art),
   );
+  // "Something over there just shot" is worth a frame of warning at the edge
+  // of vision (#153), and an enemy's muzzle flashing where the player's does
+  // not is how a game teaches that enemy shots come from nowhere.
+  muzzleFlash(sim, muzzleX, muzzleY);
 }
 
 /**

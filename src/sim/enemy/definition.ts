@@ -325,6 +325,16 @@ export interface EnemyDefinition {
   /** The `name` of the state it spawns in. */
   readonly initial: string;
   readonly states: readonly EnemyState[];
+  /**
+   * What this creature comes apart into when it dies (#153) — one of
+   * `DEATH_EFFECT_KINDS`' names (`splash`, `spore`, `shard`, `dust`, `ember`).
+   *
+   * Defaults to `splash`, which is beer, which is what every death in the game
+   * threw before this. Authored rather than switched on by id so floor 3's
+   * roster picks one without an engine change; purely presentational, so it
+   * can never change what a run does.
+   */
+  readonly deathEffect?: string;
   /** Which drop table (`content/pickups/drop-tables.ts`) its death rolls from. Defaults to `'normal'`. */
   readonly lootTier?: 'weak' | 'normal' | 'tough';
   /**

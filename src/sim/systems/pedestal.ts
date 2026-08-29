@@ -1,5 +1,6 @@
 import { InputAction, type InputFrame } from '../input/frame.js';
 import type { GameSim } from '../game/sim.js';
+import { pickupGlint } from '../particle/effects.js';
 import { attemptShopPurchase } from './pickup.js';
 
 /**
@@ -27,7 +28,14 @@ export function stepPedestal(sim: GameSim, input: Readonly<InputFrame>): void {
 
   const pedestal = sim.nearestAvailablePedestal();
   if (pedestal >= 0) {
+    const taken = sim.activePedestals[pedestal];
     sim.takePedestalItem(pedestal);
+    // The item leaving the plinth is the signal; this is the flourish on top
+    // of it (#153). Read before the take, because after it the pedestal no
+    // longer holds anything to read a position from.
+    if (taken !== undefined) {
+      pickupGlint(sim, taken.x, taken.y);
+    }
     return;
   }
 

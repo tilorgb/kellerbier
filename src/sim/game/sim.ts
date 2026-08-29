@@ -64,6 +64,7 @@ import { EventQueue } from '../events/queue.js';
 import { DamageNumberStore } from '../particle/damage-numbers.js';
 import { DecalStore } from '../particle/decals.js';
 import { ParticleStore } from '../particle/store.js';
+import { doorPuff, roomClearRing } from '../particle/effects.js';
 import { ProjectileStore, ProjectileTeam } from '../projectile/store.js';
 import { finalizeProjectileTags } from '../projectile/behavior.js';
 import {
@@ -1417,6 +1418,14 @@ export class GameSim {
     this.roomTransitionTicks = direction === null ? 0 : ROOM_TRANSITION_TICKS;
     this.roomTransitionDirection = direction;
     this.roomWarmupTicks = ROOM_WARMUP_TICKS;
+    // A puff at the door the player just came through (#153) — the transition
+    // itself is #96's camera slide, and this is what makes the arrival land
+    // somewhere rather than simply appearing there. Only on a real transition:
+    // `direction === null` is the first room of a run, which nobody walked
+    // into.
+    if (direction !== null) {
+      doorPuff(this, this.positionX(this.playerIndex), this.positionY(this.playerIndex));
+    }
     if (floor !== this.lastFloorStartDispatched) {
       this.lastFloorStartDispatched = floor;
       dispatchItemFloorStart(this, floor);
@@ -1475,6 +1484,26 @@ export class GameSim {
       this.roomClearedIds.add(this.roomId);
     }
     this.world.flush();
+  }
+
+  /**
+   * The room-clear celebration (#153): a glint ring from the room's centre and
+   * a dust puff at every door.
+   *
+   * Every part of it is redundant with something already visible — the doors
+   * unlock, the last body is gone — which is the constraint on an effect that
+   * an accessibility toggle is allowed to remove. `render/` is where the
+   * suppression happens, not here: a reduced-motion run must produce the same
+   * simulation as a full one, so these particles are always spawned and
+   * sometimes not drawn (`docs/DECISIONS.md` #41).
+   */
+  private announceRoomClear(): void {
+    const room = this.room;
+    roomClearRing(this, (room.minX + room.maxX) / 2, (room.minY + room.maxY) / 2);
+    for (const door of this.roomDoors) {
+      const centre = doorCentre(room, door);
+      doorPuff(this, centre.x, centre.y);
+    }
   }
 
   /**
@@ -3090,6 +3119,12 @@ export class GameSim {
     ) {
       this.rollRoomClearLoot();
       dispatchItemRoomClear(this);
+      // The single most repeated success moment in the game, and until #153 it
+      // had no celebration at all. A ring out of the room's own centre, and a
+      // puff at each door that just unlocked — the celebration points at the
+      // thing that actually changed, which is what keeps it honest when it is
+      // switched off.
+      this.announceRoomClear();
       // The boss's own reward pedestal (`pendingBossPedestals`'s doc
       // comment) — held back until this exact tick rather than spawned the
       // moment the room loaded, so it is not already sitting there during

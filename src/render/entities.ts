@@ -29,6 +29,9 @@ const TELEGRAPH_TEXTURE_RADIUS = 24;
 /** How far below a priced pickup its number sits, once the pickup has art of its own to not cover. */
 const PRICE_LABEL_OFFSET_Y = 8;
 
+/** Radians per millisecond of the telegraph ring's brightness pulse — a little under two a second. */
+const RING_PULSE_RATE = 0.011;
+
 /**
  * How dark a boss's ground shadow reads.
  *
@@ -143,6 +146,14 @@ export class EntityView {
    * must not lose track of.
    */
   private readonly bossShadowTexture: Texture | undefined;
+  /**
+   * Whether the telegraph ring's brightness pulses (#153).
+   *
+   * The ring's *growth* is the information — it is the countdown — and always
+   * plays. The pulse on top of it is emphasis, and emphasis that repeats every
+   * telegraph is exactly what `reduceFlashes` exists to remove.
+   */
+  private ringPulses = true;
   private readonly bossIds: ReadonlySet<string>;
   private readonly shadows: Sprite[] = [];
 
@@ -186,6 +197,11 @@ export class EntityView {
    */
   setTargetTextures(textures: readonly Texture[] = []): void {
     this.targetTextures = textures;
+  }
+
+  /** `reduceFlashes` off means the telegraph ring may pulse; on means it only grows. */
+  setRingPulses(pulses: boolean): void {
+    this.ringPulses = pulses;
   }
 
   /**
@@ -390,7 +406,11 @@ export class EntityView {
         const ringRadius = radius * (1 + (TELEGRAPH_SCALE - 1) * progress);
         ring.scale.set(ringRadius / (this.telegraphTexture.width / 2));
         // Fades in with it, so the first frame of a telegraph does not pop.
-        ring.alpha = 0.35 + progress * 0.5;
+        // The extra pulse rides on top and is the only removable half: with
+        // `reduceFlashes` on, the ring still grows and still fades in, it
+        // simply stops flickering while it does (#153).
+        const pulse = this.ringPulses ? Math.sin(nowMs * RING_PULSE_RATE) * 0.12 : 0;
+        ring.alpha = Math.min(1, 0.35 + progress * 0.5 + pulse);
         ring.position.set(x, y);
       }
     }

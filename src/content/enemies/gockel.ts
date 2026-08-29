@@ -18,6 +18,8 @@ export const gockel: EnemyDefinition = {
   id: 'gockel',
   name: 'Gockel',
   size: 'normal',
+  // Feathers read closer to dust than to beer.
+  deathEffect: 'dust',
   health: 2,
   contactDamage: 1,
   initial: 'roost',

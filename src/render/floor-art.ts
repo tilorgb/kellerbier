@@ -57,6 +57,8 @@ export interface FloorArt {
   readonly pickupArt: Readonly<Record<string, Texture>>;
   /** Projectile art (#152), keyed by sprite name (`beer`, `beer-burning`, `tap-drip`, ...). */
   readonly projectileArt: Readonly<Record<string, Texture>>;
+  /** Effect art (#153), keyed by sprite name (`foam`, `spark`, `glint`, `ring`, ...). */
+  readonly vfxArt: Readonly<Record<string, Texture>>;
   /** Every tile in the tree, keyed by sprite name — room tilesets, props, doors, the pedestal, the minimap icons. */
   readonly tileTextures: Readonly<Record<string, Texture>>;
   /**
@@ -72,7 +74,7 @@ export interface FloorArt {
 
 export interface SpriteOrigin {
   readonly bucketId: string;
-  readonly category: 'character' | 'tile' | 'projectile' | 'boss';
+  readonly category: 'character' | 'tile' | 'projectile' | 'boss' | 'vfx';
 }
 
 /**
@@ -265,6 +267,11 @@ const STATIC_BOSS_URLS: Record<string, string> = import.meta.glob<string>(
   { eager: true, query: '?url', import: 'default' },
 );
 
+const STATIC_VFX_URLS: Record<string, string> = import.meta.glob<string>(
+  '../../assets/sprites/*/vfx/*.png',
+  { eager: true, query: '?url', import: 'default' },
+);
+
 const STRIP_PATH_PATTERN =
   /\/assets\/sprites\/([^/]+)\/(?:characters|bosses)\/([^/]+)\.strip\.png$/;
 
@@ -402,6 +409,7 @@ export async function loadFloorArt(): Promise<FloorArt> {
   const characterTextures: Record<string, Texture> = {};
   const projectileTextures: Record<string, Texture> = {};
   const bossTextures: Record<string, Texture> = {};
+  const vfxTextures: Record<string, Texture> = {};
   const spriteOrigins: Record<string, SpriteOrigin> = {};
 
   const [enemyStrips] = await Promise.all([
@@ -416,6 +424,7 @@ export async function loadFloorArt(): Promise<FloorArt> {
       spriteOrigins,
     ),
     loadStatics(STATIC_BOSS_URLS, 'bosses', 'boss', bossTextures, spriteOrigins),
+    loadStatics(STATIC_VFX_URLS, 'vfx', 'vfx', vfxTextures, spriteOrigins),
   ]);
 
   // A strip's own name is a sprite origin too — click-to-pick has to resolve
@@ -465,6 +474,7 @@ export async function loadFloorArt(): Promise<FloorArt> {
     enemyStrips,
     pickupArt,
     projectileArt: projectileTextures,
+    vfxArt: vfxTextures,
     tileTextures,
     spriteOrigins,
     tileVariantNames,

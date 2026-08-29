@@ -152,14 +152,46 @@ export function createAccessibilityPanel(
     onChange();
   });
 
+  // Reduced motion (#153).
+  const motionRow = document.createElement('label');
+  motionRow.className = 'kb-checkbox-row';
+  const motionCheckbox = document.createElement('input');
+  motionCheckbox.type = 'checkbox';
+  const motionText = document.createElement('span');
+  motionText.textContent = 'reduced motion';
+  motionRow.append(motionCheckbox, motionText);
+
+  motionCheckbox.addEventListener('change', () => {
+    settings.reducedMotion = motionCheckbox.checked;
+    saveSettings(settings);
+    onChange();
+  });
+
+  // Reduced flashing (#153).
+  const flashRow = document.createElement('label');
+  flashRow.className = 'kb-checkbox-row';
+  const flashCheckbox = document.createElement('input');
+  flashCheckbox.type = 'checkbox';
+  const flashText = document.createElement('span');
+  flashText.textContent = 'reduce flashing';
+  flashRow.append(flashCheckbox, flashText);
+
+  flashCheckbox.addEventListener('change', () => {
+    settings.reduceFlashes = flashCheckbox.checked;
+    saveSettings(settings);
+    onChange();
+  });
+
   const refresh = (): void => {
     refreshSway();
     driftCheckbox.checked = settings.noDrift;
     reskinCheckbox.checked = settings.neutralReskin;
+    motionCheckbox.checked = settings.reducedMotion;
+    flashCheckbox.checked = settings.reduceFlashes;
   };
   refresh();
 
-  panel.append(swayLabel, driftRow, reskinRow);
+  panel.append(swayLabel, driftRow, reskinRow, motionRow, flashRow);
 
   toggle.addEventListener('click', () => {
     panel.hidden = !panel.hidden;

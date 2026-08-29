@@ -1,7 +1,7 @@
 import { Sprite, Texture } from 'pixi.js';
 import type { GameSim } from '../sim/game/sim.js';
 import { INTERNAL_HEIGHT, INTERNAL_WIDTH, type GameLayout } from './resolution.js';
-import { EFFECT_PALETTE, ENTITY_PALETTE } from './palette.js';
+import { EFFECT_PALETTE, PROMILLE_KATER_TINT, PROMILLE_VIGNETTE_TINT } from './palette.js';
 
 /** Highest the vignette ever gets, even at Promille's max. Never fully opaque. */
 const MAX_ALPHA = 0.8;
@@ -62,6 +62,13 @@ function createVignetteTexture(): Texture {
  */
 const COVERAGE = 2.2;
 
+/** Below this much tunnel vision the screen does not breathe — a sober run has no reason to. */
+const BREATH_FROM = 0.25;
+/** Ticks per breath. Slow enough to read as unsteadiness rather than as a flicker. */
+const BREATH_PERIOD_TICKS = 150;
+/** How much alpha one breath is worth, at full intensity. */
+const BREATH_ALPHA = 0.05;
+
 /**
  * Tunnel vision (#17): the game-feel half of Promille, alongside camera sway
  * — "the visual exaggeration should outrun the mechanical penalty" per
@@ -94,6 +101,21 @@ export class Vignette {
    * `GameView.playerScreenPosition()` — so the clear centre of the tunnel
    * tracks the player exactly, camera shake/sway and all.
    */
+  /**
+   * Whether the vignette breathes (#153).
+   *
+   * The tier *tint* and the tier *darkness* are the information — how drunk
+   * you are — and always apply. The slow pulse laid over them from Vollrausch
+   * up is emphasis, and `reduceFlashes` removes it. #92's own fast distortion
+   * pulse goes with it, for the same reason and more so: it is the fastest
+   * flicker in the game.
+   */
+  setPulses(pulses: boolean): void {
+    this.pulses = pulses;
+  }
+
+  private pulses = true;
+
   sync(sim: GameSim, screenX: number, screenY: number): void {
     const intensity = Math.min(1, sim.promille / 5);
     // Screen distortion (#92): a fast, deterministic pulse layered on top of
@@ -112,11 +134,30 @@ export class Vignette {
       1,
       sim.tuning.promille.screenDistortionPeriodTicks / Math.max(1, distortion),
     );
-    const pulse = distortion > 0 ? (Math.sin((sim.tick / period) * Math.PI * 2) + 1) / 2 : 0;
+    const pulse =
+      distortion > 0 && this.pulses ? (Math.sin((sim.tick / period) * Math.PI * 2) + 1) / 2 : 0;
     const distortionAlpha =
       Math.min(MAX_DISTORTION_ALPHA, distortion * MAX_DISTORTION_ALPHA) * pulse;
-    this.view.alpha = Math.min(1, intensity * MAX_ALPHA + distortionAlpha);
-    this.view.tint = distortion > 0 ? EFFECT_PALETTE.distortionTint : ENTITY_PALETTE.normalTint;
+    // A slow breath from Vollrausch up (#153), under #92's fast one: the
+    // meter's own tiers stop being visually distinguishable somewhere in the
+    // middle otherwise, because "the vignette gets darker" is one axis and
+    // seven tiers do not fit on it.
+    const breath =
+      this.pulses && intensity > BREATH_FROM
+        ? Math.sin((sim.tick / BREATH_PERIOD_TICKS) * Math.PI * 2) * BREATH_ALPHA * intensity
+        : 0;
+    this.view.alpha = Math.min(1, Math.max(0, intensity * MAX_ALPHA + distortionAlpha + breath));
+    // Kater overrides the tier entirely — the hangover outlasts the tier that
+    // caused it, and a cold grey where every tier is warm is the whole read.
+    // #92's own red distortion tint stays on top of both: it means something
+    // narrower (Trinkfest is actively over-driving the screen) and it should
+    // still win when it is running.
+    this.view.tint =
+      distortion > 0
+        ? EFFECT_PALETTE.distortionTint
+        : sim.hasKater
+          ? PROMILLE_KATER_TINT
+          : PROMILLE_VIGNETTE_TINT[sim.promilleTier];
     this.view.position.set(screenX, screenY);
   }
 

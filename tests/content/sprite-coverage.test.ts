@@ -10,6 +10,12 @@ import { FLOOR_TILESETS, PROP_TILE_NAMES, MAIBAUM_TOP_TILE } from '../../src/ren
 import { PLAYER_TAG_SPRITE_ORDER } from '../../src/render/projectiles.js';
 import { DESTRUCTIBLE_PROP_KINDS } from '../../src/sim/game/sim.js';
 import { ALL_BUCKET_IDS, CATEGORY_FOLDERS } from '../../tools/art/spec.mjs';
+import { buildParticleArt, TELEGRAPH_RING_SPRITE } from '../../src/render/art-bundle.js';
+import { PARTICLE_KIND_IDS } from '../../src/sim/particle/store.js';
+import { Texture } from 'pixi.js';
+
+/** Stands in for a loaded texture — this test is about *which names exist*, not about pixels. */
+const PLACEHOLDER = Texture.EMPTY;
 
 /**
  * "No generated placeholder draws anything a player sees" (#152) is not a
@@ -53,6 +59,7 @@ const characterNames = await spriteNames('character');
 const bossNames = await spriteNames('boss');
 const tileNames = await spriteNames('tile');
 const projectileNames = await spriteNames('projectile');
+const vfxNames = await spriteNames('vfx');
 
 /** A creature draws from `characters/` or `bosses/` — `EntityView` looks in one map that merges both. */
 const creatureNames = new Set([...characterNames, ...bossNames]);
@@ -164,13 +171,44 @@ describe('every projectile sprite a shot names exists', () => {
 describe('no sprite folder for a shipped floor is empty', () => {
   // #152's own acceptance criterion, stated as the test that keeps it true.
   const shipped = ['common', 'floor-1-cellar', 'floor-2-rural'];
-  it.each(
-    shipped.flatMap((bucketId) =>
-      Object.values(CATEGORY_FOLDERS).map((folder) => [bucketId, folder] as const),
-    ),
-  )('%s/%s', async (bucketId, folder) => {
-    const entries = await readdir(path.join(SPRITE_ROOT, bucketId, folder));
-    expect(entries.filter((entry) => entry.endsWith('.png'))).not.toHaveLength(0);
+  // The four *world-art* categories. `vfx` (#153) is deliberately excluded:
+  // effect art is shared across floors by design and lives entirely in
+  // `common/`, so requiring a per-floor `vfx/` folder would be asking for
+  // floor-specific copies of a dust puff that nothing wants.
+  const worldArt = [
+    CATEGORY_FOLDERS.tile,
+    CATEGORY_FOLDERS.character,
+    CATEGORY_FOLDERS.boss,
+    CATEGORY_FOLDERS.projectile,
+  ];
+  it.each(shipped.flatMap((bucketId) => worldArt.map((folder) => [bucketId, folder] as const)))(
+    '%s/%s',
+    async (bucketId, folder) => {
+      const entries = await readdir(path.join(SPRITE_ROOT, bucketId, folder));
+      expect(entries.filter((entry) => entry.endsWith('.png'))).not.toHaveLength(0);
+    },
+  );
+
+  it('has the shared effect set', () => {
+    expect(vfxNames.size).toBeGreaterThan(0);
+  });
+});
+
+describe('every particle kind has effect art in the real tree', () => {
+  // The other half of `tests/unit/particle-art.test.ts`, which checks the
+  // *mapping* against a fixture: this checks the mapping against what is
+  // actually on disk, so adding a `ParticleKind` without drawing it fails on
+  // a pull request rather than showing up as a silently generic burst.
+  it.each(PARTICLE_KIND_IDS)('kind %s', (kind) => {
+    const art = buildParticleArt(
+      Object.fromEntries([...vfxNames].map((name) => [name, PLACEHOLDER])),
+      PLACEHOLDER,
+    );
+    expect(art.byKind[kind]).toBeDefined();
+  });
+
+  it('authors the telegraph ring the entity view asks for', () => {
+    expect(vfxNames).toContain(TELEGRAPH_RING_SPRITE);
   });
 });
 

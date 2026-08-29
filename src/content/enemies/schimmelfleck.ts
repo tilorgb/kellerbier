@@ -12,6 +12,8 @@ export const schimmelfleck: EnemyDefinition = {
   id: 'schimmelfleck',
   name: 'Schimmelfleck',
   size: 'normal',
+  // A mould patch does not have beer in it.
+  deathEffect: 'spore',
   health: 3,
   contactDamage: 1,
   // Heavier than its size class, because a body that cannot move must not be
@@ -34,6 +36,8 @@ export const schimmelspore: EnemyDefinition = {
   id: 'schimmelspore',
   name: 'Schimmelspore',
   size: 'mini',
+  // Neither does its spore.
+  deathEffect: 'spore',
   health: 1,
   contactDamage: 1,
   lootTier: 'weak',
