@@ -17,6 +17,8 @@ export const traktor: EnemyDefinition = {
   id: 'traktor',
   name: 'Traktor',
   size: 'mid',
+  // A machine stopping, not a body.
+  deathEffect: 'ember',
   health: 8,
   contactDamage: 2,
   // Heavier than a plain 'mid' body — a tractor a player's own bump could

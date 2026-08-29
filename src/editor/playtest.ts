@@ -12,7 +12,13 @@ import {
 import { EntityView } from '../render/entities.js';
 import { GameView } from '../render/view.js';
 import { buildAnimatedSets, loadFloorArt } from '../render/floor-art.js';
-import { bossIdsFrom, buildProjectileArt, doorTexturesFrom } from '../render/art-bundle.js';
+import {
+  bossIdsFrom,
+  buildParticleArt,
+  buildProjectileArt,
+  doorTexturesFrom,
+  TELEGRAPH_RING_SPRITE,
+} from '../render/art-bundle.js';
 import { loadPlayerArt } from '../render/player-art.js';
 import { PARTICLE_PALETTE } from '../render/palette.js';
 import { FixedTimestepLoop, runAnimationFrameLoop } from '../app/loop.js';
@@ -108,7 +114,16 @@ export async function createPlaytest(
   // their layout in Playtest has the exact same "which blob was that" problem a
   // real run does, so this preview gets the same art a run would.
   const [
-    { roomTiles, enemyArt, enemyStrips, pickupArt, projectileArt, tileTextures, spriteOrigins },
+    {
+      roomTiles,
+      enemyArt,
+      enemyStrips,
+      pickupArt,
+      projectileArt,
+      vfxArt,
+      tileTextures,
+      spriteOrigins,
+    },
     playerArt,
   ] = await Promise.all([loadFloorArt(), loadPlayerArt()]);
 
@@ -139,17 +154,16 @@ export async function createPlaytest(
       PARTICLE_PALETTE.entityFlash,
       PARTICLE_PALETTE.entityFlash,
     ),
-    telegraph: createRingTexture(
-      app.renderer,
-      EntityView.telegraphTextureRadius,
-      PARTICLE_PALETTE.telegraphRing,
-    ),
-    foam: createBlobTexture(app.renderer, 2, PARTICLE_PALETTE.foamFill, PARTICLE_PALETTE.foamRim),
-    splash: createBlobTexture(
-      app.renderer,
-      2,
-      PARTICLE_PALETTE.splashFill,
-      PARTICLE_PALETTE.splashRim,
+    telegraph:
+      vfxArt[TELEGRAPH_RING_SPRITE] ??
+      createRingTexture(
+        app.renderer,
+        EntityView.telegraphTextureRadius,
+        PARTICLE_PALETTE.telegraphRing,
+      ),
+    particleArt: buildParticleArt(
+      vfxArt,
+      createBlobTexture(app.renderer, 2, PARTICLE_PALETTE.foamFill, PARTICLE_PALETTE.foamRim),
     ),
     decal: createBlobTexture(
       app.renderer,

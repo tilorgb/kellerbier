@@ -13,6 +13,29 @@ import {
   MOVEMENT_BEHAVIOURS,
 } from './definition.js';
 import { ENEMY_PROFILES, ENEMY_SIZE_BY_NAME, type EnemySizeId } from './size.js';
+import { DEATH_EFFECT_KINDS, DEFAULT_DEATH_EFFECT } from '../particle/effects.js';
+import type { ParticleKindId } from '../particle/store.js';
+
+/**
+ * `deathEffect` as a name to `deathEffect` as a `ParticleKind`.
+ *
+ * Thrown on an unknown name rather than defaulted: a definition that names an
+ * effect means to have one, and the failure mode of guessing is a creature
+ * that quietly throws beer forever with nobody noticing.
+ */
+function compileDeathEffect(name: string | undefined, where: string): ParticleKindId {
+  if (name === undefined) {
+    return DEFAULT_DEATH_EFFECT;
+  }
+  const kind = DEATH_EFFECT_KINDS[name];
+  if (kind === undefined) {
+    throw new Error(
+      `${where} names deathEffect "${name}", which is not one of ` +
+        Object.keys(DEATH_EFFECT_KINDS).join(', '),
+    );
+  }
+  return kind;
+}
 
 /**
  * Enemy data, checked once and turned into something a system can read fast.
@@ -97,6 +120,17 @@ export interface CompiledEnemy {
   readonly states: readonly CompiledState[];
   readonly lootTier: 'weak' | 'normal' | 'tough';
   readonly locksRoom: boolean;
+  /**
+   * The `ParticleKind` this creature comes apart into (#153), resolved from
+   * the definition's authored `deathEffect` name.
+   *
+   * Resolved here rather than at the death site for the same reason every
+   * other name in this class is: the frame loop must not compare a string,
+   * and an unknown name must fail at construction — a typo'd `deathEffect`
+   * silently falling back to beer is exactly the kind of quiet content bug
+   * `docs/DECISIONS.md` #7 rules out.
+   */
+  readonly deathEffect: ParticleKindId;
 }
 
 export class EnemyRegistry {
@@ -234,6 +268,7 @@ export class EnemyRegistry {
       states,
       lootTier: definition.lootTier ?? 'normal',
       locksRoom: definition.locksRoom ?? true,
+      deathEffect: compileDeathEffect(definition.deathEffect, where),
     };
   }
 

@@ -7,12 +7,13 @@ import { clamp, lerp } from '../sim/math.js';
 import { DamageNumberView } from './damage-numbers.js';
 import { DecalView } from './decals.js';
 import { EntityView } from './entities.js';
-import { ParticleView } from './particles.js';
+import { ParticleView, type ParticleAccessibility, type ParticleTextures } from './particles.js';
 import { PedestalView } from './pedestal-view.js';
 import { ProjectileView, type ProjectileArt } from './projectiles.js';
 import { createDoorView, createRoomView, createSecretHintView, type DoorTextures } from './room.js';
 import { createPropView } from './prop-view.js';
 import { INTERNAL_HEIGHT, INTERNAL_WIDTH, WORLD_ZOOM } from './resolution.js';
+import { ENTITY_PALETTE } from './palette.js';
 import type { EntityAnimator } from './animation/animator.js';
 import type { AnimatedSpriteSet, RoomTileArt } from './floor-art.js';
 import type { PlayerArt } from './player-art.js';
@@ -34,8 +35,8 @@ export interface GameViewTextures {
   readonly entityFlash: Texture;
   /** The ring an enemy telegraphs an attack with. */
   readonly telegraph: Texture;
-  readonly foam: Texture;
-  readonly splash: Texture;
+  /** One effect sprite per `ParticleKind` (#153), plus what an unauthored kind falls back to. */
+  readonly particleArt: ParticleTextures;
   readonly decal: Texture;
   /** Font family for damage numbers. */
   readonly numberFont: string;
@@ -91,6 +92,14 @@ export interface GameViewTextures {
    */
   readonly enemyAnimation: Readonly<Record<string, AnimatedSpriteSet>>;
 }
+
+/** What reduced motion multiplies screen shake by. A quarter still reads; nothing does not. */
+const REDUCED_MOTION_SHAKE = 0.25;
+
+/** Rendered frames the doors pulse for when a room clears. About a third of a second at 60 Hz. */
+const DOOR_PULSE_FRAMES = 20;
+/** How far the pulse dips the doors' alpha at its deepest. */
+const DOOR_PULSE_DEPTH = 0.55;
 
 /**
  * The scene graph for one running game.
@@ -149,6 +158,29 @@ export class GameView {
    */
   cameraX = 0;
   cameraY = 0;
+
+  /**
+   * What screen shake is multiplied by before it is applied.
+   *
+   * Damped rather than removed under reduced motion: shake is the cheapest
+   * signal that a hit was *yours* rather than something that happened
+   * elsewhere on screen, and a quarter of it still reads where none at all
+   * does not. `GameSim.screenShakeScale` is the separate, sim-side control
+   * the debug tuning window drives; this one is the accessibility toggle's,
+   * and it is render-side because it must not change a replay.
+   */
+  private shakeScale = 1;
+
+  private accessibility: ParticleAccessibility = { reducedMotion: false, reduceFlashes: false };
+
+  /**
+   * Frames left of the amber pulse the doors give when a room clears (#153).
+   *
+   * Counted in rendered frames rather than simulation ticks because it is
+   * purely presentational and must not exist in a replay — and because the
+   * thing it decorates, the doors unlocking, is already visible without it.
+   */
+  private doorPulseFrames = 0;
 
   constructor(sim: GameSim, textures: GameViewTextures) {
     this.sim = sim;
@@ -210,14 +242,27 @@ export class GameView {
     );
     this.world.addChild(this.projectiles.container);
 
-    this.particles = new ParticleView(sim.particles, {
-      foam: textures.foam,
-      splash: textures.splash,
-    });
+    this.particles = new ParticleView(sim.particles, textures.particleArt);
     this.world.addChild(this.particles.container);
 
     this.damageNumbers = new DamageNumberView(sim.damageNumbers, textures.numberFont);
     this.world.addChild(this.damageNumbers.container);
+  }
+
+  /**
+   * Which effects the player has switched off (#153).
+   *
+   * Held here and pushed down rather than read from a module global, so a
+   * headless test or the room editor's playtest view gets the full set without
+   * having to know the setting exists. Never reaches `GameSim`: a
+   * reduced-motion run steps identically to a full one, or a recorded replay
+   * would not play back (`docs/DECISIONS.md` #41).
+   */
+  setAccessibility(accessibility: ParticleAccessibility): void {
+    this.accessibility = accessibility;
+    this.particles.setAccessibility(accessibility);
+    this.entities.setRingPulses(!accessibility.reduceFlashes);
+    this.shakeScale = accessibility.reducedMotion ? REDUCED_MOTION_SHAKE : 1;
   }
 
   /** The frame animator, for the debug overlay's clip panel. */
@@ -262,6 +307,7 @@ export class GameView {
       this.world.removeChild(this.doorView);
       this.doorView.destroy();
       this.doorsLocked = this.sim.doorsLocked;
+      const justUnlocked = !this.doorsLocked && !roomChanged;
       this.doorView = createDoorView(
         this.roomGeometry,
         this.sim.doors,
@@ -269,6 +315,24 @@ export class GameView {
         this.doorTextures,
       );
       this.world.addChildAt(this.doorView, 1);
+      // The doors are what actually changed when a room cleared, so they are
+      // what says so (#153). Only on an unlock inside the same room — walking
+      // into an already-cleared room rebuilds the same view and has nothing to
+      // announce.
+      this.doorPulseFrames = justUnlocked ? DOOR_PULSE_FRAMES : 0;
+    }
+    if (this.doorPulseFrames > 0) {
+      this.doorPulseFrames -= 1;
+      const progress = this.doorPulseFrames / DOOR_PULSE_FRAMES;
+      // Suppressed by `reduceFlashes`, and by nothing else: it is a bright
+      // thing that happens repeatedly over a run, which is the exact hazard
+      // that toggle exists for.
+      this.doorView.tint = ENTITY_PALETTE.normalTint;
+      this.doorView.alpha = this.accessibility.reduceFlashes
+        ? 1
+        : 1 - Math.sin(progress * Math.PI) * DOOR_PULSE_DEPTH;
+    } else {
+      this.doorView.alpha = 1;
     }
     // A bombed-open wall stops being a hint the same tick it stops being
     // hidden — `setSecretHints` is what the caller (`app/main.ts`, which
@@ -312,8 +376,12 @@ export class GameView {
     const roundToScreenPixel = (value: number): number => Math.round(value * zoom) / zoom;
     const slide = this.transitionSlideOffset(alpha);
     this.world.position.set(
-      roundToScreenPixel(follow.x + this.sim.shakeX + this.sim.swayX + this.cameraX + slide.x),
-      roundToScreenPixel(follow.y + this.sim.shakeY + this.sim.swayY + this.cameraY + slide.y),
+      roundToScreenPixel(
+        follow.x + this.sim.shakeX * this.shakeScale + this.sim.swayX + this.cameraX + slide.x,
+      ),
+      roundToScreenPixel(
+        follow.y + this.sim.shakeY * this.shakeScale + this.sim.swayY + this.cameraY + slide.y,
+      ),
     );
   }
 

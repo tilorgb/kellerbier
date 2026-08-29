@@ -17,15 +17,54 @@ import { NO_SLOT, SlotPool } from '../pool/slot-pool.js';
 /** The budget from docs/TECH_STACK.md §3. */
 export const PARTICLE_CAPACITY = 1000;
 
-/** What a particle is, which decides how it is drawn and how it moves. */
+/**
+ * What a particle is, which decides how it is drawn and how it moves.
+ *
+ * Nine kinds rather than two (#153). The first two are what every effect in
+ * the game used to be made of; the rest exist because "a death effect per
+ * creature class" and "a muzzle flash" and "the room just cleared" are
+ * different *statements*, and a statement made in the same beer-foam brown as
+ * every other one is not a statement.
+ *
+ * The order matters in one place only: `render/particles.ts` indexes its
+ * texture table by this value, so a kind added here needs a sprite added
+ * there — which `tests/unit/particle-art.test.ts` checks rather than trusting.
+ */
 export const ParticleKind = {
-  /** Beer foam: light, drags hard, fades. */
+  /** Beer foam: light, drags hard, fades. What a hit that landed throws. */
   Foam: 0,
   /** Heavier splash thrown on death. */
   Splash: 1,
+  /** A hard bright spark, thrown along the impact normal on a hit that did not kill. */
+  Spark: 2,
+  /** Grey, slow, and unlit — a door opening, a body hitting the floor. */
+  Dust: 3,
+  /** What a Schimmelfleck throws instead of beer. Drifts rather than falls. */
+  Spore: 4,
+  /** Splinters, off a Rollfass or a broken barrel. */
+  Shard: 5,
+  /** A hot mote, off anything that went off rather than died. */
+  Ember: 6,
+  /** A four-point star: something good happened here. Pickups, pedestals, a cleared room. */
+  Glint: 7,
+  /** The muzzle, on the tick a shot leaves. One particle, very short. */
+  Flash: 8,
 } as const;
 
 export type ParticleKindId = (typeof ParticleKind)[keyof typeof ParticleKind];
+
+/** Every kind, in value order — for the renderer's texture table and the tests that pin it. */
+export const PARTICLE_KIND_IDS: readonly ParticleKindId[] = [
+  ParticleKind.Foam,
+  ParticleKind.Splash,
+  ParticleKind.Spark,
+  ParticleKind.Dust,
+  ParticleKind.Spore,
+  ParticleKind.Shard,
+  ParticleKind.Ember,
+  ParticleKind.Glint,
+  ParticleKind.Flash,
+];
 
 export class ParticleStore {
   readonly capacity: number;

@@ -2,6 +2,8 @@ import type { Texture } from 'pixi.js';
 import type { DoorTextures } from './room.js';
 import type { SpriteOrigin } from './floor-art.js';
 import { PLAYER_TAG_SPRITE_ORDER, type ProjectileArt } from './projectiles.js';
+import type { ParticleTextures } from './particles.js';
+import { PARTICLE_KIND_IDS, ParticleKind } from '../sim/particle/store.js';
 
 /**
  * Assembles the two pieces of `GameViewTextures` that need a rule rather than
@@ -83,4 +85,47 @@ export function bossIdsFrom(
       .filter(([, origin]) => origin.category === 'boss')
       .map(([name]) => name),
   );
+}
+
+/**
+ * The sprite each `ParticleKind` is drawn as (#153), by the name it is
+ * authored under in `common/vfx/`.
+ *
+ * A table rather than a naming convention for the same reason `FLOOR_TILESETS`
+ * is one: which sprite is "the death splash" is a decision, and inferring it
+ * from the kind's own name would make a rename a silent behaviour change.
+ */
+const PARTICLE_SPRITE_NAMES: Readonly<Record<number, string>> = {
+  [ParticleKind.Foam]: 'foam',
+  [ParticleKind.Splash]: 'splash',
+  [ParticleKind.Spark]: 'spark',
+  [ParticleKind.Dust]: 'dust',
+  [ParticleKind.Spore]: 'spore',
+  [ParticleKind.Shard]: 'shard',
+  [ParticleKind.Ember]: 'ember',
+  [ParticleKind.Glint]: 'glint',
+  [ParticleKind.Flash]: 'flash',
+};
+
+/** The name the art-directed telegraph ring is authored under (#153). */
+export const TELEGRAPH_RING_SPRITE = 'ring';
+
+/**
+ * Effect textures indexed by `ParticleKind`, with `fallback` standing in for
+ * any kind whose sprite has not been drawn.
+ *
+ * The fallback is a real parameter rather than something this reaches for, so
+ * the room editor's playtest view and the bench scene — neither of which loads
+ * the sprite tree — still draw particles rather than nothing.
+ */
+export function buildParticleArt(
+  vfxTextures: Readonly<Record<string, Texture>>,
+  fallback: Texture,
+): ParticleTextures {
+  const byKind: (Texture | undefined)[] = [];
+  for (const kind of PARTICLE_KIND_IDS) {
+    const name = PARTICLE_SPRITE_NAMES[kind];
+    byKind[kind] = name === undefined ? undefined : vfxTextures[name];
+  }
+  return { byKind, fallback };
 }

@@ -1,8 +1,8 @@
 import { EventKind } from '../events/queue.js';
 import type { GameSim } from '../game/sim.js';
-import { vectorLength } from '../math.js';
-import { ParticleKind } from '../particle/store.js';
-import { isEnemyInvulnerable, markEnemyHit } from './enemy.js';
+import { ParticleKind, type ParticleKindId } from '../particle/store.js';
+import { DEFAULT_DEATH_EFFECT, dragFor, spray } from '../particle/effects.js';
+import { ENEMY_STRIDE, isEnemyInvulnerable, markEnemyHit } from './enemy.js';
 import { dispatchItemDamageTaken, dispatchItemHit, dispatchItemKill } from './items.js';
 import { addPush } from './movement.js';
 
@@ -304,6 +304,9 @@ export function applyDamageAt(
         : damage * tuning.shakePerDamage;
   sim.addShake(-normalX, -normalY, shake);
 
+  // What a creature comes apart into is authored on the creature (#153) —
+  // beer splashes, a Schimmelfleck does not — and falls back to beer for
+  // anything that names nothing, which is what every death used to throw.
   spray(
     sim,
     hitX,
@@ -311,10 +314,29 @@ export function applyDamageAt(
     normalX,
     normalY,
     killed ? tuning.particlesOnDeath : tuning.particlesPerHit,
-    killed ? ParticleKind.Splash : ParticleKind.Foam,
+    killed ? deathEffectOf(sim, target) : ParticleKind.Foam,
     tuning.particleSpread,
     1,
   );
+  // A few hard sparks on top of the foam, on a hit that landed but did not
+  // kill. Foam says "that connected"; the sparks are what make it *read* as
+  // connecting rather than as the shot being absorbed — and there are few
+  // enough of them that they never bury what is behind the body.
+  if (!killed && tuning.particlesPerHit > 0) {
+    spray(
+      sim,
+      hitX,
+      hitY,
+      normalX,
+      normalY,
+      HIT_SPARKS,
+      ParticleKind.Spark,
+      tuning.particleSpread * 0.5,
+      1.5,
+      0.5,
+      0.7,
+    );
+  }
 
   if (tuning.damageNumbers) {
     sim.damageNumbers.spawn(
@@ -344,6 +366,23 @@ export function applyDamageAt(
  * Kellerassel would read as the game having dropped it, which is the one thing
  * this must not look like.
  */
+/** How many sparks a landed hit throws on top of its foam. Deliberately few. */
+const HIT_SPARKS = 3;
+
+/**
+ * The particle kind `target` comes apart into.
+ *
+ * Reads the compiled enemy's own authored `deathEffect`. Anything that is not
+ * an enemy — a barrel, a training target — throws beer like everything did
+ * before this, which is the right answer for a prop full of it.
+ */
+function deathEffectOf(sim: GameSim, target: number): ParticleKindId {
+  if (((sim.world.masks[target] ?? 0) & sim.enemyMask) !== sim.enemyMask) {
+    return DEFAULT_DEATH_EFFECT;
+  }
+  return sim.enemies.at(sim.enemy.data[target * ENEMY_STRIDE] ?? 0).deathEffect;
+}
+
 function deflect(sim: GameSim, x: number, y: number, normalX: number, normalY: number): void {
   const tuning = sim.tuning.enemy;
   spray(
@@ -395,62 +434,6 @@ function applySpend(sim: GameSim, slot: number): void {
   );
 }
 
-/**
- * A burst of foam along the impact normal.
- *
- * Drawn from the cosmetic random stream, which exists exactly for this: a
- * particle effect that rolled from the shared generator would shift every
- * subsequent draw in the run, so adding one spark would silently rewrite every
- * floor layout in the game.
- */
-/**
- * The four draws one particle needs, taken in one call.
- *
- * `nextFloat` hands a double back across a call boundary, and V8 boxes one it
- * does not inline. At four a particle and thousands of particles a tick that
- * was 83 KB of garbage per tick on the stress scene — see `Rng.nextFloats`,
- * which exists for this call site.
- */
-const DRAW_ANGLE = 0;
-const DRAW_SPEED = 1;
-const DRAW_LIFE = 2;
-const DRAW_SIZE = 3;
-const DRAWS_PER_PARTICLE = 4;
-const draws = new Float64Array(DRAWS_PER_PARTICLE);
-
-function spray(
-  sim: GameSim,
-  x: number,
-  y: number,
-  normalX: number,
-  normalY: number,
-  count: number,
-  kind: number,
-  spread: number,
-  speedScale: number,
-): void {
-  const tuning = sim.tuning.impact;
-  const random = sim.random.cosmetic;
-
-  const length = vectorLength(normalX, normalY);
-  const baseAngle = length === 0 ? 0 : Math.atan2(normalY, normalX);
-
-  for (let particle = 0; particle < count; particle++) {
-    random.nextFloats(draws, DRAWS_PER_PARTICLE);
-    const angle = baseAngle + ((draws[DRAW_ANGLE] ?? 0) * 2 - 1) * spread;
-    const speed = tuning.particleSpeed * speedScale * (0.4 + (draws[DRAW_SPEED] ?? 0) * 0.8);
-    sim.particles.spawn(
-      x,
-      y,
-      Math.cos(angle) * speed,
-      Math.sin(angle) * speed,
-      Math.round(tuning.particleLifeTicks * (0.6 + (draws[DRAW_LIFE] ?? 0) * 0.6)),
-      tuning.particleSize * (1 + (draws[DRAW_SIZE] ?? 0) * 1.5),
-      kind === ParticleKind.Splash ? ParticleKind.Splash : ParticleKind.Foam,
-    );
-  }
-}
-
 /** Ages every particle, and drags it toward a stop. */
 export function stepParticles(sim: GameSim): void {
   particleSim = sim;
@@ -480,7 +463,9 @@ function advanceParticle(index: number): void {
   particles.previousX[index] = x;
   particles.previousY[index] = y;
 
-  const drag = sim.tuning.impact.particleDrag;
+  // Per-kind (#153): a spore hangs in the air where a splinter drops. One
+  // multiply on a number the loop already read, rather than a branch.
+  const drag = dragFor(sim.tuning.impact.particleDrag, particles.kind[index] ?? 0);
   const velocityX = (particles.velocityX[index] ?? 0) * drag;
   const velocityY = (particles.velocityY[index] ?? 0) * drag;
   particles.velocityX[index] = velocityX;

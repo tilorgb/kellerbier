@@ -15,6 +15,8 @@ export const gartenzwerg: EnemyDefinition = {
   id: 'gartenzwerg',
   name: 'Gartenzwerg',
   size: 'normal',
+  // Painted plaster, and it shatters.
+  deathEffect: 'shard',
   health: 2,
   // Harmless to bump into while it is playing statue — the hat throw is the
   // only thing about it that hurts.

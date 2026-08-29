@@ -41,7 +41,13 @@ import { HUD_PALETTE, PARTICLE_PALETTE } from '../render/palette.js';
 import { Vignette } from '../render/vignette.js';
 import { GameView } from '../render/view.js';
 import { buildAnimatedSets, loadFloorArt } from '../render/floor-art.js';
-import { bossIdsFrom, buildProjectileArt, doorTexturesFrom } from '../render/art-bundle.js';
+import {
+  bossIdsFrom,
+  buildParticleArt,
+  buildProjectileArt,
+  doorTexturesFrom,
+  TELEGRAPH_RING_SPRITE,
+} from '../render/art-bundle.js';
 import { loadPlayerArt } from '../render/player-art.js';
 import { attachLiveArtPreviewListener } from '../render/live-art-preview.js';
 import { AmbienceTracker, SILENT_AMBIENCE } from './audio/ambience.js';
@@ -298,6 +304,7 @@ async function boot(): Promise<void> {
       enemyStrips,
       pickupArt,
       projectileArt,
+      vfxArt,
       tileTextures,
       spriteOrigins,
       tileVariantNames,
@@ -969,18 +976,20 @@ WASD move   arrows aim and fire
         PARTICLE_PALETTE.entityFlash,
         PARTICLE_PALETTE.entityFlash,
       ),
-      // White, and tinted where it is drawn — one texture for every telegraph.
-      telegraph: createRingTexture(
-        app.renderer,
-        EntityView.telegraphTextureRadius,
-        PARTICLE_PALETTE.telegraphRing,
-      ),
-      foam: createBlobTexture(app.renderer, 2, PARTICLE_PALETTE.foamFill, PARTICLE_PALETTE.foamRim),
-      splash: createBlobTexture(
-        app.renderer,
-        2,
-        PARTICLE_PALETTE.splashFill,
-        PARTICLE_PALETTE.splashRim,
+      // The art-directed warning ring (#153) — a dashed arc set, authored at the
+      // size a `mid` enemy's telegraph is actually drawn, so it lands near 1:1
+      // where the generated ring it replaces already did. Still white and still
+      // tinted where it is drawn: one texture serves every telegraph.
+      telegraph:
+        vfxArt[TELEGRAPH_RING_SPRITE] ??
+        createRingTexture(
+          app.renderer,
+          EntityView.telegraphTextureRadius,
+          PARTICLE_PALETTE.telegraphRing,
+        ),
+      particleArt: buildParticleArt(
+        vfxArt,
+        createBlobTexture(app.renderer, 2, PARTICLE_PALETTE.foamFill, PARTICLE_PALETTE.foamRim),
       ),
       // Dark and wet, not another body. A splash the same brown as a target
       // reads as "something is still standing there", which is the one
@@ -1499,9 +1508,15 @@ WASD move   arrows aim and fire
   // so both change paths behave identically.
   const applyAccessibilityChange = (): void => {
     applySettingsToSim(sim, settings);
+    // The two #153 toggles never reach the simulation — a reduced-motion run
+    // has to step identically to a full one — so they are pushed at the
+    // renderer instead, on the same change path as everything else.
+    view.setAccessibility(settings);
+    vignette.setPulses(!settings.reduceFlashes);
     promilleHud.sync(sim, settings.neutralReskin);
     refreshHud();
   };
+  applyAccessibilityChange();
 
   overlay = await mountDebugOverlay(sim, view, app, uiLayer, () => layout.scale);
   exposeDebugHandle(

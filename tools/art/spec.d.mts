@@ -1,6 +1,6 @@
 /** Hand-written types for a plain-JS module — see `tools/eslint/architecture.d.ts`. */
 
-export type SpriteCategory = 'tile' | 'character' | 'boss' | 'projectile';
+export type SpriteCategory = 'tile' | 'character' | 'boss' | 'projectile' | 'vfx';
 
 export interface CategorySpec {
   readonly minWidth: number;

@@ -54,6 +54,8 @@ export const grosseKellerassel: EnemyDefinition = {
   id: 'grosse-kellerassel',
   name: 'Die Große Kellerassel',
   size: 'mid',
+  // The same, at boss scale.
+  deathEffect: 'dust',
   health: 18,
   contactDamage: 2,
   initial: 'crawl',
@@ -132,6 +134,8 @@ export const kellerasselSegment: EnemyDefinition = {
   id: 'kellerassel-segment',
   name: 'Kellerassel-Segment',
   size: 'normal',
+  // One plate of the same insect.
+  deathEffect: 'dust',
   health: 3,
   contactDamage: 1,
   lootTier: 'weak',

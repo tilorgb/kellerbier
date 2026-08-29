@@ -1,5 +1,6 @@
 import { EventKind } from '../events/queue.js';
 import type { GameSim } from '../game/sim.js';
+import { muzzleFlash } from '../particle/effects.js';
 import { vectorLength } from '../math.js';
 import { type InputFrame, InputAction, axisToUnit, isActionDown } from '../input/frame.js';
 import { NO_SLOT } from '../pool/slot-pool.js';
@@ -153,6 +154,10 @@ function fire(sim: GameSim, aimX: number, aimY: number): void {
   // (pierce/bounce budgets, split depth) have to be derived from the mask the
   // shot actually ends up carrying.
   finalizeProjectileTags(sim, slot);
+  // At the Schlauch's nozzle, where #151 already draws the hose pointing
+  // (#153). One particle, four ticks: a flash that travelled would be a
+  // second projectile.
+  muzzleFlash(sim, muzzleX, muzzleY);
 
   addPush(sim, playerIndex, -directionX * tuning.kickback, -directionY * tuning.kickback);
 }

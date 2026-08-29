@@ -1766,3 +1766,57 @@ template tagged for that floor alone. Floor 1's set-piece crates are in `cellar-
 than in the start room for the same reason from the other direction: there is no `start` special
 role, so no template can be guaranteed to be the room the run opens in. Pinning them there needs
 that role and belongs with #58's story delivery, not with the art.
+
+## 41. Effects are always simulated and sometimes drawn — accessibility suppression is render-side
+
+**Decided:** M6, building the VFX pass (#153). **Constrains:** every effect added after it.
+
+Particles live in the simulation and draw from the seeded cosmetic random stream, because a
+replay whose foam sprays differently is not evidence of anything (`ParticleStore`'s own doc
+comment, and #16's reason for a separate stream at all). #153 adds two accessibility toggles —
+**reduced motion** and **reduce flashing** — and the obvious implementation of both is to stop
+spawning the effects they remove.
+
+**That implementation is wrong, and the reason is replays.** A run recorded with reduced motion
+on would consume a different number of draws from the cosmetic stream than the same inputs with
+it off, so the two would diverge — not in what the player did, but in everything downstream of
+the stream. A recording made by a player who uses the toggle would then play back as a different
+run on a machine that does not, which is the one thing the seeded-stream design exists to
+prevent. It would also make the toggle a *balance* setting by accident, since particle count is a
+simulation cost.
+
+So: **every effect is spawned unconditionally, and `render/particles.ts` decides what to draw.**
+`ParticleView.draws(kind)` is the whole of the suppression, `GameView.setAccessibility` is how it
+is told, and `applySettingsToSim` deliberately has no entry for either toggle —
+`tests/unit/settings.test.ts` asserts that a sim configured with both on is identical to one with
+both off. The cost is that a suppressed particle is still stepped, which is a few microseconds
+against a 4 ms budget and buys exact replay equivalence.
+
+**What may be suppressed, and what may not.** The line is whether an effect is the *only* copy of
+something:
+
+| Kept, always | Removable |
+|---|---|
+| Foam and splash — "that connected", "that died" | The room-clear glint ring |
+| Hit sparks — the second half of "that connected" | The door puffs |
+| A creature's own death effect — it says *what* died | The pickup glints |
+| The telegraph ring's growth — it is the countdown | The ring's brightness *pulse* |
+| The one-frame white hit flash | The muzzle flash |
+| Damage numbers, knockback, hitstun | The vignette's breathing |
+
+Screen shake is the one thing damped rather than removed (to a quarter): it is the cheapest
+signal that a hit was *yours* rather than something happening elsewhere on screen, and a floor of
+it still reads where none does not. `swayScale` (#33) stays the separate, finer control for the
+camera specifically.
+
+**The one-frame hit flash is deliberately not a "flash".** `reduceFlashes` exists for repetition —
+a muzzle flashing eight times a second, a vignette breathing continuously — not for brightness.
+A hit flash fires once per hit and is what tells the player a shot landed; removing it would
+leave a hit reading as a shot the game dropped, which is exactly the "an accessibility toggle
+must not remove information" rule this whole entry is about.
+
+**What this constrains:** an effect added later is only allowed to be removable if something else
+already carries its meaning. An effect that is the sole carrier of a fact has to be kept under
+every toggle — or the fact has to be given a second home first. In practice that means new
+effects go in `sim/particle/effects.ts` next to the existing bursts, whose own doc comment states
+the rule, and get a row in `tests/unit/particle-art.test.ts`'s suppression table either way.

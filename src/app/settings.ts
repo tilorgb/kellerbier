@@ -38,12 +38,46 @@ export interface AccessibilitySettings {
    * neighbours, and `render/promille-hud.ts`'s neutral colour table.
    */
   neutralReskin: boolean;
+  /**
+   * Reduced motion (#153, #53's first half): damps screen shake, and stops
+   * every *decorative* effect from being drawn — the room-clear ring, the door
+   * puffs, the pickup glints, the promille vignette's pulse.
+   *
+   * What it deliberately keeps: the foam and splash a hit throws, the hit
+   * flash, the telegraph ring's growth. Those are the only copy of something —
+   * "that connected", "that died", "that is about to attack" — and an
+   * accessibility toggle that removes information is not an accessibility
+   * toggle. Shake is damped rather than removed for the same reason: it is
+   * the cheapest signal that a hit was *yours*, and a floor of it is still
+   * readable where none at all is not. `swayScale` above is the separate,
+   * finer control for the camera specifically.
+   *
+   * Suppressed in the renderer, never in the simulation — see
+   * `docs/DECISIONS.md` #41 for why a reduced-motion run has to produce the
+   * identical simulation to a full one.
+   */
+  reducedMotion: boolean;
+  /**
+   * Reduced flashing (#153, #53's other half): stops the effects that
+   * *repeat* brightly — the muzzle flash on every shot, the room-clear amber
+   * door pulse, the promille vignette's breathing, the telegraph ring's alpha
+   * pulse.
+   *
+   * The one-frame white hit flash is deliberately **not** in that list. It
+   * fires once per hit rather than continuously, it is what tells the player a
+   * shot landed, and removing it would leave a hit reading as a shot the game
+   * dropped. The hazard this setting exists for is repetition — a muzzle
+   * flashing eight times a second is the thing worth being able to switch off.
+   */
+  reduceFlashes: boolean;
 }
 
 export const DEFAULT_ACCESSIBILITY_SETTINGS: Readonly<AccessibilitySettings> = {
   swayScale: 1,
   noDrift: false,
   neutralReskin: false,
+  reducedMotion: false,
+  reduceFlashes: false,
 };
 
 /**
@@ -90,6 +124,14 @@ export function loadSettings(): AccessibilitySettings {
         typeof candidate.neutralReskin === 'boolean'
           ? candidate.neutralReskin
           : DEFAULT_ACCESSIBILITY_SETTINGS.neutralReskin,
+      reducedMotion:
+        typeof candidate.reducedMotion === 'boolean'
+          ? candidate.reducedMotion
+          : DEFAULT_ACCESSIBILITY_SETTINGS.reducedMotion,
+      reduceFlashes:
+        typeof candidate.reduceFlashes === 'boolean'
+          ? candidate.reduceFlashes
+          : DEFAULT_ACCESSIBILITY_SETTINGS.reduceFlashes,
     };
   } catch {
     return { ...DEFAULT_ACCESSIBILITY_SETTINGS };
@@ -113,8 +155,13 @@ export function saveSettings(settings: AccessibilitySettings): void {
  * accessibility panel changes a value, so a mid-run edit takes effect on the
  * next tick rather than the next run.
  *
- * `neutralReskin` has no entry here on purpose: nothing in `GameSim` needs
- * it — it only ever changes *how* a Promille value is displayed
+ * `neutralReskin`, `reducedMotion` and `reduceFlashes` have no entry here on
+ * purpose. The last two are the load-bearing case: a reduced-motion run must
+ * step *identically* to a full one, or a replay recorded with the toggle on
+ * plays back differently with it off (`docs/DECISIONS.md` #41), so they never
+ * reach the simulation at all — every effect is spawned either way and the
+ * renderer decides what to draw. `neutralReskin` is the milder version of the
+ * same thing: nothing in `GameSim` needs — it only ever changes *how* a Promille value is displayed
  * (`promilleTierDisplayName` and friends), never what the simulation does
  * with it, so render/debug call sites read `settings.neutralReskin` directly
  * instead of it round-tripping through the sim.

@@ -27,6 +27,7 @@ Each of those has four subfolders, one per sprite category:
 | `characters/` | `character` | 8-32 wide, 16-32 tall (`~12×16` as authored, see `docs/DECISIONS.md` #26) |
 | `bosses/` | `boss` | up to 160×160 (see `docs/DECISIONS.md` #26) |
 | `projectiles/` | `projectile` | up to 16×16 |
+| `vfx/` | `vfx` | up to 48×48 |
 
 Sizes are **file** pixels. The room is drawn at `WORLD_ZOOM` (`src/render/resolution.ts`), so a
 16×16 tile lands on screen at 32×32 — see issue #34's comment thread and
@@ -138,6 +139,7 @@ in a folder, at runtime as well as in the atlas build — and looks each one up 
 | `common/tiles/*` | `door-open`, `pedestal`, `minimap-boss`, `crate-opa`, … | shared world objects and HUD icons |
 | `<floor>/projectiles/*` | `tap-drip`, `boeller`, … | `FiringBehaviourBase.art`, or the floor's default shot |
 | `common/projectiles/*` | `beer`, `beer-burning`, … | the player's shot and its per-tag variants |
+| `common/vfx/*` | `foam`, `spark`, `glint`, `ring`, … | one per `ParticleKind`, plus the telegraph ring |
 
 Two rules follow from that table rather than from the size spec:
 
@@ -148,6 +150,23 @@ Two rules follow from that table rather than from the size spec:
 - **A sprite nobody looks up costs one atlas entry and no code**, so an unused name is harmless —
   but `tests/content/sprite-coverage.test.ts` fails on the reverse: content that names art nobody
   has drawn.
+
+## Effect art is not projectile art
+
+`vfx/` (#153) is its own category rather than more `projectiles/` for one reason: **the projectile
+legibility gate must not apply to it.** A shot has to read against every background because
+misreading one is a hit the player takes; a dust puff has to do the opposite, and holding it to
+the gate would force every soft effect to grow a hard outline it should not have. The trade is
+that an effect's legibility is a review judgement rather than a build gate — which is the right
+way round, since #153's own constraint on an effect is that it must be *removable* without losing
+information, not that it must be readable.
+
+The size ceiling is 48 rather than `projectile`'s 16 because one member of the set is not a
+particle: the telegraph ring is drawn at 2.6× an enemy's radius, which for a `mid` body is 52
+units across, and authoring it at 16 would blow it up more than three times.
+
+Which sprite each `ParticleKind` draws is a table in `render/art-bundle.ts`, not a naming
+convention — same reasoning as `FLOOR_TILESETS` (`docs/DECISIONS.md` #40).
 
 ## Projectile legibility
 

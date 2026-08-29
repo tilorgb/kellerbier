@@ -26,18 +26,52 @@ describe('accessibility settings (#33)', () => {
 
   it('never throws on save, even with nowhere to persist to', () => {
     expect(() => {
-      saveSettings({ swayScale: 0, noDrift: true, neutralReskin: true });
+      saveSettings({
+        ...DEFAULT_ACCESSIBILITY_SETTINGS,
+        swayScale: 0,
+        noDrift: true,
+        neutralReskin: true,
+      });
     }).not.toThrow();
+  });
+
+  it('never lets a render-only toggle reach the simulation', () => {
+    // #153's reduced-motion and flash toggles must not change what a run
+    // *does*, or a replay recorded with one on plays back differently with it
+    // off (`docs/DECISIONS.md` #41). `applySettingsToSim` is the only channel
+    // from settings into the sim, so this is where that is enforced.
+    const plain = new GameSim({ room: bareRoom() });
+    const suppressed = new GameSim({ room: bareRoom() });
+    applySettingsToSim(plain, DEFAULT_ACCESSIBILITY_SETTINGS);
+    applySettingsToSim(suppressed, {
+      ...DEFAULT_ACCESSIBILITY_SETTINGS,
+      reducedMotion: true,
+      reduceFlashes: true,
+    });
+    expect(suppressed.swayScale).toBe(plain.swayScale);
+    expect(suppressed.driftScale).toBe(plain.driftScale);
+    expect(suppressed.wobbleScale).toBe(plain.wobbleScale);
+    expect(suppressed.screenShakeScale).toBe(plain.screenShakeScale);
   });
 
   it('applies swayScale, and derives driftScale/wobbleScale from noDrift, onto a live GameSim', () => {
     const sim = new GameSim({ room: bareRoom() });
-    applySettingsToSim(sim, { swayScale: 0.4, noDrift: true, neutralReskin: false });
+    applySettingsToSim(sim, {
+      ...DEFAULT_ACCESSIBILITY_SETTINGS,
+      swayScale: 0.4,
+      noDrift: true,
+      neutralReskin: false,
+    });
     expect(sim.swayScale).toBe(0.4);
     expect(sim.driftScale).toBe(0);
     expect(sim.wobbleScale).toBe(0);
 
-    applySettingsToSim(sim, { swayScale: 1, noDrift: false, neutralReskin: false });
+    applySettingsToSim(sim, {
+      ...DEFAULT_ACCESSIBILITY_SETTINGS,
+      swayScale: 1,
+      noDrift: false,
+      neutralReskin: false,
+    });
     expect(sim.swayScale).toBe(1);
     expect(sim.driftScale).toBe(1);
     expect(sim.wobbleScale).toBe(1);
@@ -45,7 +79,12 @@ describe('accessibility settings (#33)', () => {
 
   it('applying swayScale 0 is exact, not merely small', () => {
     const sim = new GameSim({ room: bareRoom() });
-    applySettingsToSim(sim, { swayScale: 0, noDrift: false, neutralReskin: false });
+    applySettingsToSim(sim, {
+      ...DEFAULT_ACCESSIBILITY_SETTINGS,
+      swayScale: 0,
+      noDrift: false,
+      neutralReskin: false,
+    });
     expect(sim.swayScale).toBe(0);
   });
 });

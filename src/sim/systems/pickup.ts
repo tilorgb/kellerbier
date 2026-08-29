@@ -1,6 +1,7 @@
 import { circlesOverlap } from '../collision/circle-circle.js';
 import { CollisionLayer } from '../collision/layers.js';
 import type { GameSim } from '../game/sim.js';
+import { pickupGlint } from '../particle/effects.js';
 import { dispatchItemBeerPickup } from './items.js';
 
 /**
@@ -184,6 +185,10 @@ function collect(sim: GameSim, other: number): boolean {
       }
       break;
   }
+  // A collected pickup already vanishes, so this is decoration on top of
+  // something the player can already see (#153) — which is exactly the bar an
+  // effect has to clear before it may be switched off by a toggle.
+  pickupGlint(sim, sim.positionX(other), sim.positionY(other));
   return true;
 }
 

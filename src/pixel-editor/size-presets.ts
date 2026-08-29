@@ -62,6 +62,16 @@ const SIZE_PRESETS: Readonly<Record<SpriteCategory, readonly SizePreset[]>> = {
     { id: 'big', label: 'Big (12×12)', width: 12, height: 12 },
     { id: 'xtra-big', label: 'Xtra-big (16×16)', width: 16, height: 16 },
   ],
+  // Effect art (#153) shares `projectile`'s size range, but not its ramp: a
+  // particle is small and a telegraph ring is tile-scale, with very little in
+  // between, so "normal" sits at the particle end rather than in the middle.
+  vfx: [
+    { id: 'tiny', label: 'Tiny (3×3)', width: 3, height: 3 },
+    { id: 'small', label: 'Small (4×4)', width: 4, height: 4 },
+    { id: 'normal', label: 'Normal (6×6)', width: 6, height: 6 },
+    { id: 'big', label: 'Big (8×8)', width: 8, height: 8 },
+    { id: 'xtra-big', label: 'Xtra-big (48×48)', width: 48, height: 48 },
+  ],
 };
 
 export function sizePresetsFor(category: SpriteCategory): readonly SizePreset[] {

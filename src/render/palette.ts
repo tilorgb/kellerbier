@@ -56,6 +56,36 @@ export const ENTITY_PALETTE = {
 // Full-screen effects (render/vignette.ts, render/game-over.ts)
 // ---------------------------------------------------------------------------
 
+/**
+ * What the vignette tints toward at each Promille tier (#153).
+ *
+ * The vignette used to be one black fade that got darker, plus #92's red
+ * pulse at the very top — so the whole middle of the meter, where a player
+ * actually spends a run, looked identical at every tier. These are the same
+ * warm ramp the HUD's tier colours already run (`HUD_PALETTE.promilleTier`),
+ * desaturated toward the dark end: the vignette should agree with the meter
+ * without competing with it.
+ *
+ * Nuchtern is untinted, not "black" — at zero Promille the vignette's alpha
+ * is zero anyway, and a tint on nothing is nothing.
+ */
+export const PROMILLE_VIGNETTE_TINT: Readonly<Record<PromilleTierId, number>> = {
+  [PromilleTier.Nuchtern]: 0xffffff,
+  [PromilleTier.Angeheitert]: 0xf0e4c8,
+  [PromilleTier.Beduselt]: 0xe8c48a,
+  [PromilleTier.Vollrausch]: 0xd99a5a,
+  [PromilleTier.Sturzbesoffen]: 0xc76a4a,
+  [PromilleTier.Filmriss]: 0x9a3a4a,
+  [PromilleTier.Umgfalln]: 0x7a2a3a,
+};
+
+/**
+ * Kater overrides the tier tint entirely — the debuff outlasts the tier that
+ * caused it, so the screen has to say "hangover" rather than "still drunk".
+ * Cold and grey where every tier tint is warm, which is the whole read.
+ */
+export const PROMILLE_KATER_TINT = 0x6a7080;
+
 export const EFFECT_PALETTE = {
   /** The reddening the vignette tints toward as Trinkfest screen-distortion climbs — pure white (`ENTITY_PALETTE.normalTint`) is "no distortion." */
   distortionTint: 0xff5555,

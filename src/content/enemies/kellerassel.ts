@@ -17,6 +17,8 @@ export const kellerassel: EnemyDefinition = {
   id: 'kellerassel',
   name: 'Kellerassel',
   size: 'normal',
+  // An insect: cellar dust, not a drink.
+  deathEffect: 'dust',
   health: 3,
   contactDamage: 1,
   initial: 'crawl',

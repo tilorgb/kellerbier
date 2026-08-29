@@ -21,6 +21,7 @@ export const CATEGORY_FOLDERS = {
   character: 'characters',
   boss: 'bosses',
   projectile: 'projectiles',
+  vfx: 'vfx',
 };
 
 export const CATEGORY_SPECS = {
@@ -43,6 +44,23 @@ export const CATEGORY_SPECS = {
   // every background", which only makes sense for something tile-scale or
   // smaller.
   projectile: { minWidth: 2, maxWidth: 16, minHeight: 2, maxHeight: 16 },
+  // Effect art (#153): particles, the muzzle flash, the telegraph ring. Same
+  // size range as a projectile and deliberately a *separate* category, for one
+  // reason: the projectile legibility gate (`contrast.mjs`) must not apply
+  // here. A shot has to read against every background because misreading one
+  // is a hit the player takes; a dust puff has to do the opposite, and the
+  // gate would force every soft effect to grow a hard outline it should not
+  // have. The trade is that an effect's legibility is a review judgement
+  // rather than a build gate — which is the right way round, since #153's own
+  // constraint is that an effect must be *removable* without losing
+  // information, not that it must be readable.
+  // Wider than `projectile`'s 16 at the top end, because one member of this
+  // set is not a particle: the telegraph ring is drawn at 2.6x an enemy's
+  // radius (`render/entities.ts`'s `TELEGRAPH_SCALE`), which for a `mid` body
+  // is 52 units across. Authored at 16 it would be blown up more than three
+  // times and read as a different, chunkier game than everything around it;
+  // 48 lands it near 1:1 where the generated ring it replaces already was.
+  vfx: { minWidth: 2, maxWidth: 48, minHeight: 2, maxHeight: 48 },
 };
 
 /**

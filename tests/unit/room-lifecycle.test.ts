@@ -58,7 +58,13 @@ describe('room lifecycle', () => {
     expect(sim.liveEnemyCount).toBe(0);
     expect(sim.world.count).toBe(1);
     expect(sim.projectiles.liveCount).toBe(0);
-    expect(sim.particles.liveCount).toBe(0);
+    // The old room's foam is gone. What is left is the *new* room's arrival
+    // puff at the door the player just walked through (#153) — spawned after
+    // the clear, so this asserts what it always meant to: nothing survives a
+    // transition, and anything present belongs to the room now loaded.
+    sim.particles.forEachLive((index) => {
+      expect(sim.particles.kind[index]).toBe(ParticleKind.Dust);
+    });
     expect(sim.playerIndex).toBe(player);
     expect(sim.playerHealth).toBe(healthBefore);
     expect(sim.positionY(player)).toBeCloseTo(sim.room.maxY - 8);
