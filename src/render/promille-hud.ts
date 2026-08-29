@@ -1,4 +1,4 @@
-import { Container, Sprite, Text, type Renderer } from 'pixi.js';
+import { Container, Sprite, type BitmapText } from 'pixi.js';
 import type { GameSim } from '../sim/game/sim.js';
 import {
   promilleCapFor,
@@ -6,15 +6,19 @@ import {
   promilleTierDisplayName,
   promilleUnitSuffix,
 } from '../sim/game/promille.js';
-import { createBarOutlineTexture, createSolidTexture } from './placeholder-art.js';
-import { HUD_PALETTE } from './palette.js';
+import { HUD_PALETTE, UI_PALETTE } from './palette.js';
+import { iconRoles, type UiKit } from './ui/kit.js';
+import { uiText, UI_TEXT_HEIGHT } from './ui/text.js';
 
-const BAR_WIDTH = 56;
-const BAR_HEIGHT = 6;
-const BAR_PADDING = 1;
+const BAR_WIDTH = 60;
+const BAR_HEIGHT = 9;
+/** The well's own border, inside which the fill is drawn. */
+const BAR_INSET = 2;
+const ICON_GAP = 2;
+const LABEL_GAP = 4;
 
 /**
- * The Promille meter: a fill bar plus its tier name as text.
+ * The Promille meter: a drop icon, a fill in a sunken well, and the tier name.
  *
  * Screen-space, in `uiLayer`, positioned directly under `HealthHud` — same
  * reasoning as every other HUD piece here: never inside anything the camera
@@ -23,27 +27,40 @@ const BAR_PADDING = 1;
  * The tier name is not decorative: it is what keeps this widget from
  * conveying its state by bar colour alone (the #21 acceptance criterion),
  * the same way the mug shapes carry `HealthHud`'s state independent of tint.
+ * #154 adds a third, redundant-on-purpose channel — the drop icon takes the
+ * tier's colour too, so the meter reads at a glance from the corner of the
+ * eye without the label having to be read at all.
  */
 export class PromilleHud {
   readonly view = new Container();
 
+  private readonly kit: UiKit;
+  private readonly icon: Sprite;
   private readonly fill: Sprite;
-  private readonly label: Text;
+  private readonly label: BitmapText;
+  private readonly iconWidth: number;
 
-  constructor(renderer: Renderer) {
-    const outline = new Sprite(createBarOutlineTexture(renderer, BAR_WIDTH, BAR_HEIGHT));
-    this.view.addChild(outline);
+  constructor(kit: UiKit) {
+    this.kit = kit;
+    const iconSize = kit.iconSize('promille');
+    this.iconWidth = iconSize.width;
 
-    this.fill = new Sprite(createSolidTexture(renderer));
-    this.fill.position.set(BAR_PADDING, BAR_PADDING);
-    this.fill.height = BAR_HEIGHT - BAR_PADDING * 2;
+    this.icon = new Sprite(kit.icon('promille', iconRoles(UI_PALETTE.accent)));
+    this.icon.position.set(0, 0);
+    this.view.addChild(this.icon);
+
+    const barX = this.iconWidth + ICON_GAP;
+    const well = kit.wellSprite(BAR_WIDTH, BAR_HEIGHT);
+    well.position.set(barX, 0);
+    this.view.addChild(well);
+
+    this.fill = new Sprite(kit.solid);
+    this.fill.position.set(barX + BAR_INSET, BAR_INSET);
+    this.fill.height = BAR_HEIGHT - BAR_INSET * 2;
     this.view.addChild(this.fill);
 
-    this.label = new Text({
-      text: '',
-      style: { fill: HUD_PALETTE.labelText, fontFamily: 'monospace', fontSize: 9 },
-    });
-    this.label.position.set(BAR_WIDTH + 6, -2);
+    this.label = uiText('');
+    this.label.position.set(barX + BAR_WIDTH + LABEL_GAP, 0);
     this.view.addChild(this.label);
   }
 
@@ -60,10 +77,13 @@ export class PromilleHud {
     // high tolerance has pushed the ceiling.
     const cap = promilleCapFor(sim.trinkfest, sim.tuning.promille);
     const ratio = Math.min(1, Math.max(0, sim.promille / cap));
-    this.fill.width = Math.max(0, (BAR_WIDTH - BAR_PADDING * 2) * ratio);
+    this.fill.width = Math.max(0, (BAR_WIDTH - BAR_INSET * 2) * ratio);
     const tierColor = neutralReskin ? HUD_PALETTE.promilleTierNeutral : HUD_PALETTE.promilleTier;
     const katerColor = neutralReskin ? HUD_PALETTE.promilleKaterNeutral : HUD_PALETTE.promilleKater;
-    this.fill.tint = sim.hasKater ? katerColor : tierColor[sim.promilleTier];
+    const colour = sim.hasKater ? katerColor : tierColor[sim.promilleTier];
+    this.fill.tint = colour;
+    this.icon.texture = this.kit.icon('promille', iconRoles(colour));
+
     const tierText = `${promilleTierDisplayName(sim.promilleTier, neutralReskin)} ${sim.promille.toFixed(1)}${promilleUnitSuffix(neutralReskin)}`;
     // Trinkfest itself only earns HUD space once it has actually moved off
     // baseline — showing "Trinkfest 0" on every single run would be clutter
@@ -76,5 +96,10 @@ export class PromilleHud {
     this.label.text = sim.hasKater
       ? `${tierText} ${promilleKaterLabel(neutralReskin)}${trinkfestText}`
       : `${tierText}${trinkfestText}`;
+  }
+
+  /** Height of the row in UI pixels — the taller of the bar and one line of text. */
+  get height(): number {
+    return Math.max(BAR_HEIGHT, UI_TEXT_HEIGHT);
   }
 }

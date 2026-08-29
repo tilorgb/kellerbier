@@ -2,6 +2,7 @@ import { Container } from 'pixi.js';
 import type { RoomShape } from '../content/rooms/definition.js';
 import { GameSim, MAX_COLLIDER_RADIUS } from '../sim/game/sim.js';
 import type { RoomPlacement } from '../sim/room/template.js';
+import { installPixelFonts, UI_FONT_FAMILY } from '../render/ui/font.js';
 import { createRenderer, trackWindowSize } from '../render/app.js';
 import {
   createBlobTexture,
@@ -109,6 +110,10 @@ export async function createPlaytest(
   overlay.appendChild(exitButton);
 
   const app = await createRenderer(overlay);
+  // The playtest view draws damage numbers, and they are drawn in the pixel
+  // font like everything else — so the faces have to exist here too, not only
+  // in `app/main.ts`. Idempotent, so the two entry points cannot build two.
+  installPixelFonts(app.renderer);
 
   // Real floor/enemy art (#35) and Alois's own (#151) — a room author checking
   // their layout in Playtest has the exact same "which blob was that" problem a
@@ -171,7 +176,7 @@ export async function createPlaytest(
       PARTICLE_PALETTE.decalFill,
       PARTICLE_PALETTE.decalRim,
     ),
-    numberFont: 'monospace',
+    numberFont: UI_FONT_FAMILY,
     pedestalItem: createBlobTexture(
       app.renderer,
       5,
