@@ -368,29 +368,107 @@ describe('#29 acceptance criteria', () => {
     }
   });
 
-  it('Reinheitsgebot 1516 strips and permanently locks out every impure item already held', async () => {
+  it('#166: Reinheitsgebot 1516 strips and permanently locks out every rosinen item already held, and leaves impure items alone', async () => {
     const { radler } = await import('../../src/content/items/radler.js');
-    const { spezi } = await import('../../src/content/items/spezi.js');
     const { reinheitsgebot1516 } = await import('../../src/content/items/reinheitsgebot-1516.js');
+    const rosinenA = baseItem('rosinen-a', { tags: ['rosinen'] });
+    const rosinenB = baseItem('rosinen-b', { tags: ['rosinen'] });
     const sim = new GameSim({
       room: bareRoom(),
-      items: [radler, spezi, reinheitsgebot1516],
+      items: [radler, rosinenA, rosinenB, reinheitsgebot1516],
       population: 'empty',
     });
     sim.pickUpItem('radler');
-    sim.pickUpItem('spezi');
+    sim.pickUpItem('rosinen-a');
+    sim.pickUpItem('rosinen-b');
     expect(sim.hasItem('radler')).toBe(true);
-    expect(sim.hasItem('spezi')).toBe(true);
+    expect(sim.hasItem('rosinen-a')).toBe(true);
+    expect(sim.hasItem('rosinen-b')).toBe(true);
 
     sim.pickUpItem('reinheitsgebot-1516');
 
-    expect(sim.hasItem('radler')).toBe(false);
-    expect(sim.hasItem('spezi')).toBe(false);
+    expect(sim.hasItem('rosinen-a')).toBe(false);
+    expect(sim.hasItem('rosinen-b')).toBe(false);
+    // The retune's whole point: `impure` now coexists with 1516 (#166's balance change).
+    expect(sim.hasItem('radler')).toBe(true);
 
     // Picking the purist's pact back up a second time must not resurrect them.
     sim.loadRoom(pedestalRoom('reinheitsgebot-lockout-room'), 1);
-    expect(sim.activePedestals[0]?.itemIndex).not.toBe(sim.items.indexOf('radler'));
-    expect(sim.activePedestals[0]?.itemIndex).not.toBe(sim.items.indexOf('spezi'));
+    expect(sim.activePedestals[0]?.itemIndex).not.toBe(sim.items.indexOf('rosinen-a'));
+    expect(sim.activePedestals[0]?.itemIndex).not.toBe(sim.items.indexOf('rosinen-b'));
+  });
+
+  it('#166: Sudordnung 1493 strips and permanently locks out every rosinen and impure item already held', async () => {
+    const { radler } = await import('../../src/content/items/radler.js');
+    const { sudordnung1493 } = await import('../../src/content/items/sudordnung-1493.js');
+    const rosinenItem = baseItem('rosinen-c', { tags: ['rosinen'] });
+    const sim = new GameSim({
+      room: bareRoom(),
+      items: [radler, rosinenItem, sudordnung1493],
+      population: 'empty',
+    });
+    sim.pickUpItem('radler');
+    sim.pickUpItem('rosinen-c');
+    expect(sim.hasItem('radler')).toBe(true);
+    expect(sim.hasItem('rosinen-c')).toBe(true);
+
+    sim.pickUpItem('sudordnung-1493');
+
+    expect(sim.hasItem('radler')).toBe(false);
+    expect(sim.hasItem('rosinen-c')).toBe(false);
+  });
+
+  it('#166: Der Rosinenklauber bans both purity pacts from the pool the moment it is picked up', async () => {
+    const { derRosinenklauber } = await import('../../src/content/items/der-rosinenklauber.js');
+    const { reinheitsgebot1516 } = await import('../../src/content/items/reinheitsgebot-1516.js');
+    const { sudordnung1493 } = await import('../../src/content/items/sudordnung-1493.js');
+    const sim = new GameSim({
+      room: bareRoom(),
+      items: [derRosinenklauber, reinheitsgebot1516, sudordnung1493],
+      population: 'empty',
+    });
+
+    sim.pickUpItem('der-rosinenklauber');
+
+    sim.loadRoom(pedestalRoom('klauber-lockout-room'), 1);
+    expect(sim.activePedestals[0]?.itemIndex).not.toBe(sim.items.indexOf('reinheitsgebot-1516'));
+    expect(sim.activePedestals[0]?.itemIndex).not.toBe(sim.items.indexOf('sudordnung-1493'));
+  });
+
+  it('#166: Der Rosinenklauber suppresses a held rosinen item drawback, in either pickup order', async () => {
+    const { apfelkuchenMitRosinen } =
+      await import('../../src/content/items/apfelkuchen-mit-rosinen.js');
+    const { derRosinenklauber } = await import('../../src/content/items/der-rosinenklauber.js');
+
+    const unmodified = new GameSim({ room: bareRoom(), population: 'empty' }).stats.value(
+      'reichweite',
+    );
+
+    // The rosinen item first, then the Klauber.
+    const simA = new GameSim({
+      room: bareRoom(),
+      items: [apfelkuchenMitRosinen, derRosinenklauber],
+      population: 'empty',
+    });
+    simA.pickUpItem('apfelkuchen-mit-rosinen');
+    const penalised = simA.stats.value('reichweite');
+    expect(penalised).toBeLessThan(unmodified);
+    simA.pickUpItem('der-rosinenklauber');
+    expect(simA.stats.value('reichweite')).toBeCloseTo(unmodified, 5);
+
+    // The Klauber first, then the rosinen item.
+    const simB = new GameSim({
+      room: bareRoom(),
+      items: [apfelkuchenMitRosinen, derRosinenklauber],
+      population: 'empty',
+    });
+    simB.pickUpItem('der-rosinenklauber');
+    simB.pickUpItem('apfelkuchen-mit-rosinen');
+    expect(simB.stats.value('reichweite')).toBeCloseTo(unmodified, 5);
+
+    // Losing the Klauber restores the drawback.
+    simB.removeItem('der-rosinenklauber');
+    expect(simB.stats.value('reichweite')).toBeCloseTo(penalised, 5);
   });
 
   it('three independently-authored combinations of items compose into shots none of them describes alone', async () => {

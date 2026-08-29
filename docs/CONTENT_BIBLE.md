@@ -290,12 +290,15 @@ reason the two pacts below are a choice rather than a free stat bump, and they a
 route the adulterated stuff ever takes into the player *as a pickup* — Alois's own shot is the
 one other exception, and it is a weapon, never a beer he drinks (`GAME_DESIGN.md` §2).
 
-Oma's cake is the pattern, and it should be the first pair a player ever sees:
+Oma's cake is the pattern, and it should be the first pair a player ever sees — deliberately the
+one exception to "upgrade plus cost" above: it is a clean item plus the same clean item plus a
+cost, no upgrade at all, because the read a player's very first `rosinen` item should teach is
+"I know it's worse, but I'll take it anyway," not "obviously better, mind the fine print."
 
 | Item | Tag | Effect |
 |---|---|---|
 | **Apfelkuchen** | — | Oma's. Heals generously on pickup, small permanent Stammwürze bump. Uncomplicated and quite boring. |
-| **Apfelkuchen (mit Rosinen)** | `rosinen` | The same cake. Heals more, bumps Stammwürze considerably more, and permanently costs you Reichweite. Strictly the better pickup and slightly the worse cake. |
+| **Apfelkuchen (mit Rosinen)** | `rosinen` | The same cake, same heal, same Stammwürze bump — plus a permanent Reichweite cost. Not the better pickup: the *shittier* one you take anyway when nothing better is on the pedestal. |
 
 Both sprites are legible as *different cakes at a glance* — deliberately unlike **Weißwurst**
 (`GAME_DESIGN.md` §7), whose whole joke is an unchanged sprite. Reading the label is the thing

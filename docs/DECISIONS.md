@@ -2099,3 +2099,40 @@ and arbitration appended to `updateActiveDevice`'s chain — rather than a paral
 UI element gated on `ActiveDevice` (today, only `main.ts`'s activation prompt) has to keep handling
 `'touch'` as its own case rather than folding it into `'gamepad'` for convenience; the two devices
 have no bindings in common to fall back on.
+
+## 47. Der Rosinenklauber suppresses a `rosinen` item's drawback by per-item convention, not a declared penalty field
+
+**Decided:** M6, #166. **Amends:** none — the choice #166 itself left open.
+
+Der Rosinenklauber's whole effect is "every `rosinen` item you hold keeps its upgrade and loses
+its drawback." An item's drawback is not a separable thing today: it is just another entry a
+`modifyStats` hook returns, indistinguishable from its upgrade entries to anything outside the
+item's own file. Two ways to let the Klauber suppress it:
+
+1. **Per-item convention.** Each `rosinen` item's `modifyStats` checks a cached flag
+   (`state.charge`) for whether the Klauber is held, and omits its own penalty entry when it is.
+   No engine change; follows the existing "reach into `ctx.sim`, never import a value" rule the
+   same way `weisswurst.ts`'s floor check already does for a `sim`-derived condition
+   `modifyStats` cannot read directly.
+2. **A declared penalty.** `ItemDefinition` grows an optional field that separates an item's cost
+   modifiers from its upgrade modifiers, so the Klauber (or anything else) can suppress them
+   generically, without each `rosinen` item's author remembering to wire it in by hand.
+
+Chosen: **option 1.** `rosinen` has exactly one member (`apfelkuchen-mit-rosinen.ts`) at the
+moment this landed — inventing a new `ItemDefinition` field, a compile/validation rule for it and
+a generic suppression path in the engine is real engine surface bought for a convention with a
+single follower today, and `.github/ISSUE_TEMPLATE/content.yml` already wants an engine change
+like option 2 behind its own feature issue rather than riding in on a content one. The convention
+costs one `onPickup`/`modifyStats` shape per tainted item (`apfelkuchen-mit-rosinen.ts`) plus one
+shared helper (`der-rosinenklauber.ts`'s `syncRosinenItems`) that walks every held `rosinen` item
+on the Klauber's own pickup and removal, so pickup order between the Klauber and a tainted item
+never matters.
+
+**Constrains:** every future `rosinen` item has to remember the same shape by hand — a cached
+`state.charge` (or `state.timer`, if `charge` is already spoken for) flag set on its own
+`onPickup`, read by its own `modifyStats`, and left alone otherwise; nothing enforces this the way
+a declared field would. #59's push toward 120+ items is exactly the pressure that could make this
+the wrong call in hindsight — the more `rosinen` items exist, the cheaper option 2's enforcement
+gets relative to trusting every author to copy the convention correctly. If a `rosinen` item ships
+with a forgotten Klauber check, that is this decision's failure mode, and the fix is option 2,
+not a patch on option 1.
