@@ -94,7 +94,11 @@ even for placeholder-tier art: the *pattern/style choice* is what needs sign-off
 perfect execution of it.
 
 In practice: render the options at a legible scale (upscaled, nearest-neighbour, no smoothing) and
-send them as an image rather than describing them in text. If the art has a "how it repeats" or
+send them as an image rather than describing them in text. **UI art has a shortcut for this**: it
+is authored as source in `src/render/ui/` (`docs/DECISIONS.md` #43) and rasterised by pure
+functions — `PixelFace.glyph`, `drawPixelArt`, `renderTitlePixels` — so a throwaway Node script
+plus `pngjs` can render a specimen sheet without a browser or a renderer. #154's font, kit and
+title-card options were all signed off that way. If the art has a "how it repeats" or
 "how it varies" question — a tileset that mixes several variants across a floor, say — show that
 mixed/tiled, not just the individual swatches, since that's what the option actually reads like in
 play. Once a direction is picked, iterating within it (fixing a rendering bug, tightening a shape)

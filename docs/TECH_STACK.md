@@ -179,16 +179,22 @@ item id is unique, every localisation key resolves in every locale.
 src/
   sim/          ecs/  systems/  collision/  rng/  stats/  items/  rooms/  gen/
   render/       pixi setup, sprite layers, particles, camera, hud
+    ui/         the pixel fonts, the UI kit, icons, display type (#154)
   app/          input, audio, save, screens, settings, localisation
   content/      items/  enemies/  rooms/  floors/  loot/   (+ schemas)
   debug/        overlay, stat inspector, room warp, item spawner, replay tools
 assets/
-  atlases/  audio/  fonts/
+  atlases/  audio/
 tests/
   unit/  determinism/  content/  bench/
 tools/
   room-editor/  atlas-packer/  balance-sim/
 ```
+
+`assets/` has no `fonts/` directory, and that is deliberate: the two pixel faces (#154) are
+*source*, not assets — bitmaps in `src/render/ui/`, rasterised into a texture at boot. So is the
+rest of the UI kit, for the reason in `docs/DECISIONS.md` #43.
+
 
 ## 6. Tooling
 

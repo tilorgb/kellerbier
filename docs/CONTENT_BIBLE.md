@@ -349,8 +349,22 @@ requirement cannot be evaluated is a stat stick rather than a build decision.
   its ceiling is deliberately close to filling the 360-tall internal resolution.
 - **Internal resolution 640×360** for the game layer, scaled by a whole number of device
   pixels. Never non-integer: a sprite drawn at 1.5× has some pixels one screen pixel wide and
-  some two. Menus, HUD text and anything else made of words are drawn outside that layer at
-  the display's own resolution, and are not held to 640×360.
+  some two. Menus, HUD text and anything else made of words are drawn outside that layer, at
+  the display's own resolution — so a HUD on a 4K monitor is not stuck with eight device pixels
+  of glyph height. Since #154 they are nonetheless laid out on the **frame's own grid**, at a
+  whole-number scale of it: the UI is drawn in a pixel font the project owns, and a pixel font
+  at a fractional size resamples exactly the way a tile does. See `docs/DECISIONS.md` #43.
+- **Two type faces, and the rule between them is legibility, not taste.** A 10-row text face for
+  everything read while something is shooting at you, and a 16-row pixel Fraktur for the few
+  things said in a raised voice — the game's name, a floor's title card, a boss plate, the word
+  a run ends on. `docs/DECISIONS.md` #44 has the line, and why the long ſ and the genuinely
+  confusable Fraktur capitals did not survive it.
+- **Umlauts and ß are letters, not decorated vowels.** German is a first-class language here, so
+  a diacritic's vertical room is reserved in the cell rather than borrowed from the cap height,
+  and accented letters are composed from a base plus a mark rather than drawn one at a time
+  (`docs/DECISIONS.md` #42). German also runs roughly a third longer than English for the same
+  UI string: lay a screen out with that as the default case, and let
+  `tests/unit/ui-strings.test.ts` — which measures the real strings — say whether it fits.
 - **Palette capped at ~40 colours** overall, with a per-floor sub-palette so each chapter has
   its own mood while staying visually one game.
 - **Projectile legibility is a hard constraint that overrides beauty.** Player shots and enemy
