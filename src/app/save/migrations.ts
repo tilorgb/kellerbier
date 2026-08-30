@@ -58,7 +58,15 @@ const v1ToV2: SaveMigration = (raw) => {
   return { ...raw, schemaVersion: 2, lastRun: latest, greetedRegulars: [] };
 };
 
-export const MIGRATIONS: readonly SaveMigration[] = [v0ToV1, v1ToV2];
+/**
+ * v2 -> v3 (#48): `replays` is new storage, not a reshape of anything v2
+ * already had — there is nothing to back-fill it from, unlike `v1ToV2`'s
+ * `lastRun`. An upgraded save simply starts with none, same as
+ * `createDefaultSave`.
+ */
+const v2ToV3: SaveMigration = (raw) => ({ ...raw, schemaVersion: 3, replays: [] });
+
+export const MIGRATIONS: readonly SaveMigration[] = [v0ToV1, v1ToV2, v2ToV3];
 
 function versionOf(raw: Record<string, unknown>): number {
   const version = raw.schemaVersion;

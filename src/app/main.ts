@@ -13,8 +13,15 @@ import {
   validateRoomTemplate,
 } from '../sim/room/template.js';
 import { RngStream, createStreamRng } from '../sim/rng/streams.js';
+import { decodeSeed, encodeSeed } from '../sim/rng/seed.js';
 import { TICKS_PER_SECOND } from '../sim/time.js';
-import { InputAction, isActionDown, type InputFrame } from '../sim/input/frame.js';
+import {
+  InputAction,
+  createInputFrame,
+  isActionDown,
+  type InputFrame,
+} from '../sim/input/frame.js';
+import { InputPlayback, InputRecording } from '../sim/input/recording.js';
 import { createRenderer, trackWindowSize } from '../render/app.js';
 import {
   createBlobTexture,
@@ -40,6 +47,7 @@ import { PromilleHud } from '../render/promille-hud.js';
 import { WalletHud } from '../render/wallet-hud.js';
 import { HUD_PALETTE, PARTICLE_PALETTE, UI_PALETTE } from '../render/palette.js';
 import { FloorTitleCard } from '../render/floor-title-card.js';
+import { ReplayViewer } from '../render/replay-viewer.js';
 import { installPixelFonts, UI_FONT_FAMILY } from '../render/ui/font.js';
 import { UiKit } from '../render/ui/kit.js';
 import { TextPlate } from '../render/ui/text-plate.js';
@@ -65,7 +73,10 @@ import { actionPrompt, detectGlyphSet } from './input/glyphs.js';
 import { InputSampler } from './input/sampler.js';
 import { playRumble } from './input/rumble.js';
 import { FixedTimestepLoop, runAnimationFrameLoop } from './loop.js';
-import { RunSummaryTracker } from './run-summary.js';
+import { RunSummaryTracker, buildRunDetailsText, runDetailsFrom } from './run-summary.js';
+import { dailyDateKey, todaysDailySeed } from './daily.js';
+import { buildReplayRecord, loadReplayFrames, saveReplay } from './replay/store.js';
+import { downloadReplayFile, parseReplayText } from './replay/file.js';
 import { createAccessibilityPanel } from './accessibility-panel.js';
 import { createTouchControls, isTouchCapable } from './touch-controls.js';
 import { createEditorDock } from './editor-dock.js';
@@ -81,6 +92,7 @@ import { loadSave } from './save/storage.js';
 import {
   markGreeted,
   recordBossDefeat,
+  recordDailyRunOutcome,
   recordRunOutcome,
   resetProgress,
   stammtischView,
@@ -392,17 +404,21 @@ async function boot(): Promise<void> {
   attachLiveArtPreviewListener({ ...tileTextures, ...enemyArt });
 
   // The run seed: fixed via the page's `?seed=` query param when present,
-  // otherwise freshly randomised on every load — proper seeded runs are #48,
-  // this is the dev-only stopgap that makes "here's a seed that breaks"
-  // actionable before then. Everything downstream of it already behaves as
-  // though it were chosen, which is the point — the floor below is generated
-  // from this same seed's `RngStream.Floor` stream (see
-  // `src/sim/rng/streams.ts`), so it is exactly as reproducible as the rest
-  // of the run. The current seed is always shown in `hud` (`refreshHud`,
-  // below) so a run that misbehaves can be reported by seed number alone.
-  // `#seed-input` (`index.html`) and the `R` key (below) both restart the run
-  // in place via `startRun` — no page reload, so no `?seed=` URL/storage
-  // plumbing is needed for either.
+  // otherwise freshly randomised on every load. `?seed=`/`#seed-input`
+  // (`index.html`) stay a raw-numeric dev convenience — the player-facing
+  // seed UI is the Stammtisch's "Nächster Lauf" panel (#48): a human-readable
+  // string (`sim/rng/seed.ts`'s `encodeSeed`/`decodeSeed`), typed in with `E`,
+  // rerolled with `R`, copied with `C`, and the daily run's own seed with `D`.
+  // Everything downstream of `RUN_SEED` already behaves as though it were
+  // chosen, which is the point — the floor below is generated from this same
+  // seed's `RngStream.Floor` stream (see `src/sim/rng/streams.ts`), so it is
+  // exactly as reproducible as the rest of the run. The current seed is
+  // always shown in `hud` (`refreshHud`, below) so a run that misbehaves can
+  // be reported by seed number alone, and pressing `C` any time copies the
+  // full seed/character/items/outcome summary (`app/run-summary.ts`). Both
+  // `#seed-input` and the `R` key (below) restart the run in place via
+  // `startRun` — no page reload, so no `?seed=` URL/storage plumbing is
+  // needed for either.
   const seedParam = new URLSearchParams(location.search).get('seed');
   const parsedSeed = seedParam === null ? Number.NaN : Number(seedParam);
   let RUN_SEED = Number.isFinite(parsedSeed)
@@ -725,6 +741,11 @@ async function boot(): Promise<void> {
     minimapHud.view.position.set(width - HUD_MARGIN, HUD_MARGIN);
     minimapHud.overlayView.position.set(centreX, Math.round(height / 2));
 
+    replayViewer.view.position.set(
+      centreX - Math.round(replayViewer.width / 2),
+      height - HUD_MARGIN - replayViewer.height,
+    );
+
     gameOverScreen.resize(width, height);
     stammtisch.resize(width, height);
     floorTitleCard.resize(width, height);
@@ -763,6 +784,24 @@ async function boot(): Promise<void> {
 
   /** The seed the next run starts on — rolled at boot, on every death, and by `R` at the table. */
   let pendingSeed = rollSeed();
+  /** Whether `pendingSeed` is today's daily seed (`D` at the table) — see `activeRunIsDaily`. */
+  let pendingIsDaily = false;
+  /** Whether the run in progress was started as the daily run — consumed once, at `startRun`, from `pendingIsDaily`. */
+  let activeRunIsDaily = false;
+
+  /**
+   * The replay currently being watched (#48), or `null` for ordinary live
+   * play. Entered only from the Stammtisch, and only over a finished run —
+   * see `watchLatestReplay`/`loadReplayFromFile` for why that guard is what
+   * keeps this from ever discarding a run still in progress.
+   */
+  let replay: {
+    readonly seed: number;
+    readonly recording: InputRecording;
+    playback: InputPlayback;
+  } | null = null;
+  const replayViewer = new ReplayViewer(kit);
+  hudLayer.addChild(replayViewer.view);
 
   /** Whether the loop was already paused when the hub opened, so closing it doesn't un-pause a debug pause. */
   let pausedBeforeStammtisch = false;
@@ -864,30 +903,84 @@ async function boot(): Promise<void> {
           // separate, smaller follow-up.
           floor: `${floorPlan.floorName}  room ${sim.roomId} (${planRoom(floorPlan, currentRoomId).role})`,
         });
-        // A dead run has nothing left to resume into — the R key (or a
-        // fresh page load) starts a new one either way, so the in-progress
-        // log is cleared rather than left around to be resumed into a
-        // tableau that is already over.
-        persistActiveRun(null);
-        const save = recordRunOutcome({
-          seed: RUN_SEED,
-          floor: floorPlan.floor,
-          ticksSurvived: sim.playerDeathTick,
-          kills: summary.kills,
-          deathWord: sim.deathWord ?? null,
-          recordedAt: Date.now(),
-        });
-        pendingSeed = rollSeed();
-        // An arrival is an event, so it interrupts: a regular earned during
-        // the run that just ended introduces himself now, over the game-over
-        // screen, which is the moment `docs/GAME_DESIGN.md` §9 describes for
-        // the Promille unlock. Any other death leaves the hub where it is —
-        // one keypress away, per the hint the game-over screen shows.
-        if (stammtischView(save).seats.some((seat) => seat.arriving)) {
-          openStammtisch();
+        // Watching a replay plays this same death sequence back — the game-
+        // over screen above still shows, since that is what the replay is
+        // *of* — but none of the bookkeeping below runs a second time: the
+        // outcome it is replaying was already recorded (or, for an imported
+        // replay, belongs to whoever's machine recorded it in the first
+        // place), and there is no in-progress `activeRun` for a replay to
+        // clear or reroll `pendingSeed` out from under.
+        if (replay === null) {
+          // A dead run has nothing left to resume into — the R key (or a
+          // fresh page load) starts a new one either way, so the in-progress
+          // log is cleared rather than left around to be resumed into a
+          // tableau that is already over.
+          persistActiveRun(null);
+          const save = recordRunOutcome({
+            seed: RUN_SEED,
+            floor: floorPlan.floor,
+            ticksSurvived: sim.playerDeathTick,
+            kills: summary.kills,
+            deathWord: sim.deathWord ?? null,
+            recordedAt: Date.now(),
+          });
+          if (activeRunIsDaily) {
+            recordDailyRunOutcome({
+              date: dailyDateKey(),
+              seed: RUN_SEED,
+              ticksSurvived: sim.playerDeathTick,
+              kills: summary.kills,
+            });
+          }
+          persistFinishedRunReplay();
+          pendingSeed = rollSeed();
+          // An arrival is an event, so it interrupts: a regular earned during
+          // the run that just ended introduces himself now, over the game-over
+          // screen, which is the moment `docs/GAME_DESIGN.md` §9 describes for
+          // the Promille unlock. Any other death leaves the hub where it is —
+          // one keypress away, per the hint the game-over screen shows.
+          if (stammtischView(save).seats.some((seat) => seat.arriving)) {
+            openStammtisch();
+          }
         }
       }
     }
+  }
+
+  /**
+   * Compresses the just-finished run's input log and stores it as a replay
+   * (#48) — fire-and-forget: compression is `async` (`replay/codec.ts`'s
+   * `CompressionStream`), and nothing downstream of a finished run's game-
+   * over screen depends on the write landing before the next frame.
+   *
+   * Reads `activeRunRecorder` synchronously, before the `await`, so a fast
+   * `R`/Enter press that starts a new run (and reassigns it) in the
+   * meantime cannot hand this the wrong run's frames.
+   */
+  function persistFinishedRunReplay(): void {
+    const finishedSeed = RUN_SEED;
+    const finishedFloor = floorPlan.floor;
+    const finishedTicks = sim.playerDeathTick;
+    const finishedKills = summary.kills;
+    const finishedDeathWord = sim.deathWord ?? null;
+    const finishedIsDaily = activeRunIsDaily;
+    const recording = new InputRecording(Math.max(1, activeRunRecorder.frameCount));
+    for (const frame of decodeActiveRunFrames(activeRunRecorder.toSave())) {
+      recording.push(frame);
+    }
+    buildReplayRecord(recording.toBytes(), {
+      seed: finishedSeed,
+      floor: finishedFloor,
+      ticksSurvived: finishedTicks,
+      kills: finishedKills,
+      deathWord: finishedDeathWord,
+      kind: finishedIsDaily ? 'daily' : 'normal',
+      recordedAt: Date.now(),
+    })
+      .then(saveReplay)
+      .catch((error: unknown) => {
+        console.warn('[replay] failed to store this run’s replay', error);
+      });
   }
 
   let layout = computeGameLayout(window.innerWidth, window.innerHeight, window.devicePixelRatio);
@@ -986,10 +1079,29 @@ async function boot(): Promise<void> {
         }
       }
       if (deathPhase !== 'over') {
-        const frame = input.sample();
-        activeRunRecorder.record(frame);
-        advanceOneTick(frame, true);
-        autosaveActiveRun();
+        if (replay !== null) {
+          // A replay drives the same `advanceOneTick` a live tick does, just
+          // fed from `InputPlayback` instead of `input.sample()`, and with
+          // `live: false` — the same flag `resumeActiveRun`'s fast-forward
+          // already uses to suppress audio/rumble/boss-credit for a tick that
+          // already happened once, for real, when this was first recorded.
+          if (replay.playback.finished) {
+            // Pausing rather than looping: the death sequence (if the run
+            // this replays ended in one) still has ticks queued up after the
+            // last *input* frame, since a live run keeps stepping through
+            // `deathPhase`'s freeze/slowmo beats — see `advanceDeathSequence`.
+            // Holding here lets those play out instead of coasting on empty
+            // input the moment the recorded log runs dry.
+            loop.paused = true;
+          } else {
+            advanceOneTick(replay.playback.next(), false);
+          }
+        } else {
+          const frame = input.sample();
+          activeRunRecorder.record(frame);
+          advanceOneTick(frame, true);
+          autosaveActiveRun();
+        }
       }
       simMs += performance.now() - started;
     },
@@ -1101,6 +1213,18 @@ async function boot(): Promise<void> {
       advanceFloorCard(started);
       const playerScreen = view.playerScreenPosition();
       vignette.sync(sim, playerScreen.x, playerScreen.y);
+      if (replay !== null) {
+        replayViewer.show();
+        replayViewer.sync(
+          replay.seed,
+          sim.tick,
+          replay.recording.length,
+          loop.paused,
+          loop.timeScale,
+        );
+      } else {
+        replayViewer.hide();
+      }
       overlay?.sync(alpha);
       overlay?.record(simMs, performance.now() - started, 0);
       simMs = 0;
@@ -1143,7 +1267,7 @@ shots ${String(shots.liveCount)}/${String(shots.capacity)}  particles ${String(
 save ${String(activeRunRecorder.frameCount)} ticks logged${wasResumed ? '  (resumed)' : ''}
 WASD move   arrows aim and fire
   O debug   T tuning   I shot tags   Y accessibility   P pause   . step   [ ] time scale
-  N next room (after clear)   R restart (new seed)`;
+  N next room (after clear)   R restart (new seed)   C copy run   L load replay`;
   };
   /**
    * (Re)starts the run on `seed`: regenerates the floor plan and rebuilds
@@ -1163,8 +1287,15 @@ WASD move   arrows aim and fire
    * to whichever `sim`/`view` exist at that moment. A restart after that
    * point leaves them pointed at the *previous* run — reload the page to
    * reset them, same as before this existed.
+   *
+   * `persist` is `false` only for a replay's own rebuild-and-fast-forward
+   * (#48's `enterReplay`/`seekReplayTo`) — those calls are not a new run the
+   * player is starting, and writing their throwaway recorder over the
+   * `activeRun` save slot would either clobber a real in-progress run (if one
+   * were still live, which replay's own `deathPhase === 'over'` guard rules
+   * out) or, harmlessly but pointlessly, overwrite it with an empty one.
    */
-  function startRun(seed: number): void {
+  function startRun(seed: number, { persist = true }: { persist?: boolean } = {}): void {
     RUN_SEED = seed;
     if (seedInput instanceof HTMLInputElement) {
       seedInput.value = String(RUN_SEED);
@@ -1206,10 +1337,13 @@ WASD move   arrows aim and fire
     // A restart abandons whatever was being recorded for the previous run —
     // persisted immediately (not just reassigned in memory) so a crash right
     // after a restart resumes into the *new* run next time, not the one the
-    // player just left behind.
+    // player just left behind. Skipped for `persist: false` (a replay's own
+    // rebuild) — see this function's doc comment.
     activeRunRecorder = new ActiveRunRecorder(seed);
     ticksSinceAutosave = 0;
-    persistActiveRun(activeRunRecorder);
+    if (persist) {
+      persistActiveRun(activeRunRecorder);
+    }
     wasResumed = false;
     viewTextures ??= {
       playerArt,
@@ -1391,6 +1525,138 @@ WASD move   arrows aim and fire
       persistActiveRun(null);
       return false;
     }
+  }
+
+  /**
+   * Rebuilds `sim`/`view` for `seed` and fast-forwards through `frames` up
+   * to `upToTick`, the same technique `resumeActiveRun` above uses to
+   * reconstruct a saved run — replaying the recorded log through
+   * `advanceOneTick(frame, false)` is what reproduces every bit of
+   * simulation state exactly, RNG stream position included, without a
+   * snapshot format. `persist: false` (`startRun`'s own doc comment) keeps
+   * this from writing a throwaway recorder over the real `activeRun` slot.
+   */
+  function replayTo(seed: number, frames: InputRecording, upToTick: number): void {
+    startRun(seed, { persist: false });
+    const scratch = createInputFrame();
+    const clamped = Math.max(0, Math.min(upToTick, frames.length));
+    for (let tick = 0; tick < clamped; tick++) {
+      frames.read(tick, scratch);
+      advanceOneTick(scratch, false);
+    }
+    loop.fastForward(clamped);
+  }
+
+  /** Enters replay mode on `seed`/`frameBytes`, watching from the start. Only valid over a finished run — see `watchLatestReplay`. */
+  function enterReplay(seed: number, frameBytes: Int8Array): void {
+    const recording = InputRecording.fromBytes(frameBytes);
+    closeStammtisch();
+    replay = { seed, recording, playback: new InputPlayback(recording) };
+    replayTo(seed, recording, 0);
+    loop.paused = false;
+    loop.timeScale = 1;
+    refreshHud();
+  }
+
+  /** Seeks the open replay to `targetTick`, clamped to the recording's own length. */
+  function seekReplayTo(targetTick: number): void {
+    if (replay === null) {
+      return;
+    }
+    // `replayTo` rebuilds through `startRun`, which always leaves a fresh
+    // run unpaused at 1x (its own doc comment on `persist`) — the right
+    // default for starting a run, and the wrong one for seeking one that is
+    // already open, where scrubbing while paused should still be paused
+    // afterwards rather than quietly resuming.
+    const wasPaused = loop.paused;
+    const timeScale = loop.timeScale;
+    const clamped = Math.max(0, Math.min(targetTick, replay.recording.length));
+    replayTo(replay.seed, replay.recording, clamped);
+    replay.playback.rewind();
+    for (let skipped = 0; skipped < clamped; skipped++) {
+      replay.playback.next();
+    }
+    loop.paused = wasPaused;
+    loop.timeScale = timeScale;
+    refreshHud();
+  }
+
+  /** Leaves replay mode and reopens the hub — there is nothing to resume back into, see `enterReplay`'s own guard. */
+  function exitReplay(): void {
+    replay = null;
+    replayViewer.hide();
+    openStammtisch();
+  }
+
+  /** Loads the most recently stored replay (`app/replay/store.ts`) and starts watching it, if there is one. */
+  function watchLatestReplay(): void {
+    const record = loadSave().replays[0];
+    if (record === undefined) {
+      return;
+    }
+    loadReplayFrames(record)
+      .then((bytes) => {
+        enterReplay(record.seed, bytes);
+      })
+      .catch((error: unknown) => {
+        console.warn('[replay] failed to load the stored replay', error);
+      });
+  }
+
+  /**
+   * Opens a file picker for an imported `.json` replay (`app/replay/file.ts`)
+   * — the other half of `CONTRIBUTING.md`'s "attach the replay file too": a
+   * replay someone else's machine recorded, dropped into a bug report, that
+   * this build can watch without either machine needing anything else.
+   *
+   * A live run in progress is confirmed away rather than silently discarded
+   * — the same guard `editor/main.ts`'s own `window.confirm` calls use for
+   * "discard unsaved changes" — since loading a replay rebuilds `sim` from
+   * scratch (`enterReplay`) the same way starting a new run does.
+   */
+  function loadReplayFromFile(): void {
+    if (
+      deathPhase !== 'over' &&
+      !window.confirm('Load a replay now? This ends the run in progress.')
+    ) {
+      return;
+    }
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/json,.json';
+    input.addEventListener('change', () => {
+      const file = input.files?.[0];
+      if (file === undefined) {
+        return;
+      }
+      file
+        .text()
+        .then((text) => {
+          const record = parseReplayText(text);
+          if (record === null) {
+            console.warn('[replay] that file is not a Kellerbier replay');
+            return null;
+          }
+          return loadReplayFrames(record).then((bytes) => {
+            enterReplay(record.seed, bytes);
+          });
+        })
+        .catch((error: unknown) => {
+          console.warn('[replay] failed to load the chosen file', error);
+        });
+    });
+    input.click();
+  }
+
+  /** "Copy run details" (#48): the current run's seed, character, items and outcome, as shareable text. */
+  function copyCurrentRunDetails(): void {
+    const details = runDetailsFrom(
+      sim,
+      floorPlan.floorName,
+      planRoom(floorPlan, currentRoomId).role,
+      summary.kills,
+    );
+    void navigator.clipboard.writeText(buildRunDetailsText(details));
   }
 
   if (!resumeActiveRun()) {
@@ -1685,6 +1951,42 @@ WASD move   arrows aim and fire
   }
 
   window.addEventListener('keydown', (event: KeyboardEvent) => {
+    // Replay playback (#48) swallows every key of its own before either of
+    // the two switches below get a look — none of the hub's or the live
+    // game's keys make sense over a run that is being watched, not played.
+    if (replay !== null) {
+      switch (event.key) {
+        case ' ':
+          loop.paused = !loop.paused;
+          break;
+        case 'ArrowLeft':
+          seekReplayTo(sim.tick - (event.shiftKey ? 60 : 5) * TICKS_PER_SECOND);
+          break;
+        case 'ArrowRight':
+          seekReplayTo(sim.tick + (event.shiftKey ? 60 : 5) * TICKS_PER_SECOND);
+          break;
+        case '+':
+        case '=':
+          loop.timeScale = Math.min(8, loop.timeScale * 2);
+          break;
+        case '-':
+          loop.timeScale = Math.max(0.05, loop.timeScale / 2);
+          break;
+        case 'c':
+        case 'C':
+          copyCurrentRunDetails();
+          break;
+        case 'Escape':
+        case 'v':
+        case 'V':
+          exitReplay();
+          break;
+        default:
+          return;
+      }
+      event.preventDefault();
+      return;
+    }
     // The hub swallows the dev keys while it is open: `R` at the table
     // changes the seed of the run you are about to start rather than
     // restarting the one you just finished, and `N`/`P`/`K` have nothing to
@@ -1704,6 +2006,8 @@ WASD move   arrows aim and fire
           // `runOver`. Mid-run the table is somewhere you look, not a way to
           // throw the run away by pressing the most obvious key on it.
           if (deathPhase === 'over') {
+            activeRunIsDaily = pendingIsDaily;
+            pendingIsDaily = false;
             closeStammtisch();
             startRun(pendingSeed);
           }
@@ -1711,8 +2015,74 @@ WASD move   arrows aim and fire
         case 'r':
         case 'R':
           pendingSeed = rollSeed();
+          pendingIsDaily = false;
           stammtisch.setSeed(pendingSeed);
           break;
+        case 'e':
+        case 'E': {
+          // Human-readable seed entry (#48) — gated the same as the row it
+          // edits (`seedUnlocked`), and a `window.prompt` rather than a kit
+          // widget because the pixel UI kit has no text-input control yet
+          // (that is #53's own follow-up); every other dev-facing text entry
+          // in this project (`editor/main.ts`, `pixel-editor/main.ts`) already
+          // reaches for the same browser-native dialog.
+          if (!stammtischView().seedUnlocked) {
+            break;
+          }
+          const typed = window.prompt('Same eigeben (7 Zeichen):', encodeSeed(pendingSeed >>> 0));
+          if (typed === null) {
+            break;
+          }
+          try {
+            pendingSeed = decodeSeed(typed);
+            pendingIsDaily = false;
+            stammtisch.setSeed(pendingSeed);
+          } catch (error) {
+            console.warn('[seed] not a valid seed', error);
+          }
+          break;
+        }
+        case 'd':
+        case 'D':
+          // The daily run (#48): the same seed for every player on today's
+          // UTC date — `dailyStatus` (`app/meta/progress.ts`) is what marks
+          // it already played, once `Enter` actually starts it.
+          pendingSeed = todaysDailySeed();
+          pendingIsDaily = true;
+          stammtisch.setSeed(pendingSeed);
+          break;
+        case 'c':
+        case 'C':
+          // Mid-run (the hub opened with `T` over a live run) this copies
+          // the run actually in progress; over a finished run it copies the
+          // seed about to be started, since there is no live run's items or
+          // outcome to report yet.
+          if (deathPhase === 'over') {
+            void navigator.clipboard.writeText(`Same: ${encodeSeed(pendingSeed >>> 0)}`);
+          } else {
+            copyCurrentRunDetails();
+          }
+          break;
+        case 'v':
+        case 'V':
+          // Watch the run just finished (#48) — only reachable once it truly
+          // is finished, the same guard `Enter` uses, so this never discards
+          // a run still in progress.
+          if (deathPhase === 'over') {
+            watchLatestReplay();
+          }
+          break;
+        case 'x':
+        case 'X': {
+          // "Attach the replay file too" (`CONTRIBUTING.md`'s bug-report
+          // step): the latest stored replay, as a `.json` a player can
+          // actually attach to a report — the counterpart to `L`'s import.
+          const latest = loadSave().replays[0];
+          if (latest !== undefined) {
+            downloadReplayFile(latest);
+          }
+          break;
+        }
         case 't':
         case 'T':
         case 'Escape':
@@ -1751,6 +2121,18 @@ WASD move   arrows aim and fire
         // last one, so the ring is visibly a thing that moves rather than a
         // decoration painted on one button.
         kitGallery.toggle();
+        break;
+      case 'c':
+      case 'C':
+        // "Current seed always visible and copyable" (#48): the seed shown
+        // in the dev readout is not the only way to get at it any more —
+        // this works for every player, in the real, non-debug HUD, at any
+        // point in a run.
+        copyCurrentRunDetails();
+        break;
+      case 'l':
+      case 'L':
+        loadReplayFromFile();
         break;
       case 't':
       case 'T':

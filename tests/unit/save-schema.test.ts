@@ -77,4 +77,50 @@ describe('save schema sanitisation (#45)', () => {
       'xaver',
     ]);
   });
+
+  it('keeps a well-formed replay and drops one missing a field (#48)', () => {
+    const replay = {
+      id: 'a-b-c',
+      seed: 7,
+      frames: 'H4sI...',
+      floor: 2,
+      ticksSurvived: 900,
+      kills: 12,
+      deathWord: 'Hi',
+      kind: 'daily',
+      recordedAt: 5,
+    };
+    expect(sanitizeSave({ replays: [replay] }).replays).toEqual([replay]);
+    expect(sanitizeSave({ replays: [{ id: 'x', seed: 1 }] }).replays).toEqual([]);
+  });
+
+  it('falls back to "normal" for a replay kind that is not "daily"', () => {
+    const replay = {
+      id: 'a',
+      seed: 1,
+      frames: '',
+      floor: 1,
+      ticksSurvived: 1,
+      kills: 0,
+      deathWord: null,
+      kind: 'something-else',
+      recordedAt: 1,
+    };
+    expect(sanitizeSave({ replays: [replay] }).replays[0]?.kind).toBe('normal');
+  });
+
+  it('caps replays at MAX_REPLAYS, keeping the earliest entries in the array', () => {
+    const many = Array.from({ length: 8 }, (_unused, index) => ({
+      id: String(index),
+      seed: index,
+      frames: '',
+      floor: 1,
+      ticksSurvived: 1,
+      kills: 0,
+      deathWord: null,
+      kind: 'normal',
+      recordedAt: index,
+    }));
+    expect(sanitizeSave({ replays: many }).replays).toHaveLength(5);
+  });
 });

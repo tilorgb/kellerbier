@@ -1,10 +1,12 @@
 import { STAMMTISCH } from '../../content/stammtisch/index.js';
-import type { BestRunRecord, SaveData } from '../save/schema.js';
+import { dailyDateKey } from '../daily.js';
+import type { BestRunRecord, DailyRunRecord, SaveData } from '../save/schema.js';
 import { loadSave, updateSave } from '../save/storage.js';
 import {
   type StammtischView,
   buildStammtischView,
   withBossDefeat,
+  withDailyRunOutcome,
   withGreetings,
   withRunOutcome,
 } from './progress.js';
@@ -28,6 +30,11 @@ export function recordRunOutcome(record: BestRunRecord): SaveData {
   return updateSave((save) => withRunOutcome(save, record, STAMMTISCH));
 }
 
+/** A daily run ended — recorded into `dailyRunHistory` too, if today's attempt hasn't been spent yet. */
+export function recordDailyRunOutcome(record: DailyRunRecord): SaveData {
+  return updateSave((save) => withDailyRunOutcome(save, record));
+}
+
 /** The player has seen these regulars arrive; from here they are ordinary seats. */
 export function markGreeted(ids: readonly string[]): SaveData {
   return updateSave((save) => withGreetings(save, ids));
@@ -35,11 +42,11 @@ export function markGreeted(ids: readonly string[]): SaveData {
 
 /** Everything the hub screen draws, from the save on disk (or the one handed in, for a test). */
 export function stammtischView(save: SaveData = loadSave()): StammtischView {
-  return buildStammtischView(save, STAMMTISCH);
+  return buildStammtischView(save, STAMMTISCH, dailyDateKey());
 }
 
 export { STAMMTISCH } from '../../content/stammtisch/index.js';
-export type { RunFacts, SeatView, StammtischView } from './progress.js';
+export type { DailyStatus, RunFacts, SeatView, StammtischView } from './progress.js';
 export { lastRunLine, runFactsFrom, UNLOCK_BOARD, UNLOCK_SEED } from './progress.js';
 
 /**

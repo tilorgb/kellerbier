@@ -9,6 +9,7 @@ import {
   createLabel,
   createPanelFrame,
 } from '../panel.js';
+import { encodeSeed } from '../../sim/rng/seed.js';
 import { TICKS_PER_SECOND } from '../../sim/time.js';
 
 const LINES = 5;
@@ -53,7 +54,17 @@ export class RunInfoPanel implements DebugPanel {
     const sim = context.sim;
     const seconds = (sim.tick / TICKS_PER_SECOND).toFixed(2);
 
-    this.setLine(0, `seed   ${sim.seed.toString(16).padStart(8, '0')}`);
+    // `>>> 0`: `sim.seed` is whatever the dev-only `?seed=`/`#seed-input`
+    // tools (`app/main.ts`) happened to pass, which — unlike every player-
+    // facing seed source (`rollSeed`, `decodeSeed`, `dailySeed`) — is not
+    // guaranteed to already be a valid 32-bit unsigned integer. `encodeSeed`
+    // is deliberately strict about that (a seed that quietly encodes wrong is
+    // worse than one that is rejected), so this panel normalises first rather
+    // than relaxing that guarantee for everyone else.
+    this.setLine(
+      0,
+      `seed   ${encodeSeed(sim.seed >>> 0)}  (${sim.seed.toString(16).padStart(8, '0')})`,
+    );
     this.setLine(1, `tick   ${String(sim.tick)}  (${seconds}s)`);
     // Floor and room are placeholders until #20 generates them. Shown anyway so
     // the shape of a bug report does not change when they arrive.

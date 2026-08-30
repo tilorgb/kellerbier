@@ -145,6 +145,8 @@ page nobody else can see. Run `node tools/labels/apply-labels.mjs --dry-run` to 
 **Attach the seed.** In a procedurally generated game a bug report without one is frequently
 unactionable — nobody can reach the room you were standing in.
 
-Press `O` to open the debug overlay and `C` to copy the run's identity to the clipboard. Paste
-that into the report. Once replay recording lands (#48) attach the replay file too, and the bug
-becomes reproducible on any machine, exactly, every time.
+Press `C` at any point in a run to copy the seed, character, items and outcome to the clipboard
+(the debug overlay's own `O` → `C` still works too, with the raw tick/hex detail). Paste that into
+the report, then press `X` at the Stammtisch to download the run's replay as a `.json` file and
+attach it — whoever picks up the report presses `L` in their own build, loads the file, and
+watches the exact run that produced the bug, on their machine, from a fresh clone.

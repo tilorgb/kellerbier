@@ -31,7 +31,10 @@ describe('save migration chain (#45)', () => {
       activeRun: null,
     };
     const migrated = sanitizeSave(migrateSave(v1));
-    expect(migrated.schemaVersion).toBe(2);
+    // `sanitizeSave` always stamps the current version, not just the v2 step
+    // this test is otherwise about — see `v2ToV3` for what the walk past v2
+    // adds (nothing this test's own v1 fields touch).
+    expect(migrated.schemaVersion).toBe(SAVE_SCHEMA_VERSION);
     expect(migrated.unlocks).toEqual(['lore-opas-zettl']);
     expect(migrated.statistics).toEqual({ kills: 240 });
     expect(migrated.greetedRegulars).toEqual([]);
