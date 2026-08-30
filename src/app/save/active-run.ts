@@ -1,5 +1,5 @@
 import { type InputFrame, createInputFrame } from '../../sim/input/frame.js';
-import { type ActiveRunSave, type SaveData } from './schema.js';
+import { type ActiveRunSave, type SaveData, DEFAULT_CHARACTER_ID } from './schema.js';
 import { updateSave } from './storage.js';
 
 /** Numbers per encoded frame — `[moveX, moveY, aimX, aimY, buttons]`. See `ActiveRunSave.frames`. */
@@ -19,7 +19,18 @@ export const FRAME_LOG_STRIDE = 5;
 export class ActiveRunRecorder {
   private readonly frames: number[] = [];
 
-  constructor(readonly seed: number) {}
+  /**
+   * `promilleUnlocked` and `character` are run *parameters*, not inputs —
+   * both are fixed for the whole run, so they ride on the recorder rather
+   * than being encoded per frame, and `toSave` writes them beside the log.
+   * See `ActiveRunSave.promilleUnlocked` and `ActiveRunSave.character` for
+   * why replaying without either resumes the wrong run.
+   */
+  constructor(
+    readonly seed: number,
+    readonly promilleUnlocked = true,
+    readonly character = DEFAULT_CHARACTER_ID,
+  ) {}
 
   get frameCount(): number {
     return this.frames.length / FRAME_LOG_STRIDE;
@@ -30,7 +41,12 @@ export class ActiveRunRecorder {
   }
 
   toSave(): ActiveRunSave {
-    return { seed: this.seed, frames: this.frames.slice() };
+    return {
+      seed: this.seed,
+      frames: this.frames.slice(),
+      promilleUnlocked: this.promilleUnlocked,
+      character: this.character,
+    };
   }
 }
 
@@ -40,7 +56,7 @@ export class ActiveRunRecorder {
  * rather than starting a second, disconnected recorder.
  */
 export function recorderFrom(active: ActiveRunSave): ActiveRunRecorder {
-  const recorder = new ActiveRunRecorder(active.seed);
+  const recorder = new ActiveRunRecorder(active.seed, active.promilleUnlocked, active.character);
   for (const frame of decodeActiveRunFrames(active)) {
     recorder.record(frame);
   }

@@ -4,6 +4,7 @@ import { loadSave, updateSave } from '../save/storage.js';
 import {
   type StammtischView,
   buildStammtischView,
+  characterById,
   cycleCharacter,
   withBossDefeat,
   withGreetings,
@@ -12,7 +13,7 @@ import {
   withRunOutcome,
   withSelectedCharacter,
 } from './progress.js';
-import type { CharacterTraits } from '../../sim/character/definition.js';
+import { type CharacterTraits, NEUTRAL_TRAITS } from '../../sim/character/definition.js';
 
 /**
  * The Stammtisch's write side (#46): the three moments the hub's state
@@ -47,6 +48,16 @@ export function selectNextCharacter(delta: number): string {
   return selectCharacter(cycleCharacter(loadSave(), STAMMTISCH, delta));
 }
 
+/**
+ * How the character `id` names plays, whether or not it is still unlocked —
+ * what a resumed run is rebuilt with (`ActiveRunSave.character`). An id the
+ * roster no longer has falls back to Alois rather than failing: a log that
+ * cannot name its character still has to replay into a run.
+ */
+export function characterTraitsById(id: string): CharacterTraits {
+  return characterById(STAMMTISCH, id)?.traits ?? NEUTRAL_TRAITS;
+}
+
 /** How the currently selected character plays — handed to `GameSim` at run start. */
 export function selectedCharacter(save: SaveData = loadSave()): CharacterTraits {
   return selectedCharacterTraits(save, STAMMTISCH);
@@ -71,6 +82,7 @@ export {
   runFactsFrom,
   selectedCharacterId,
   UNLOCK_BOARD,
+  UNLOCK_PROMILLE,
   UNLOCK_SEED,
 } from './progress.js';
 export type { CharacterView } from './progress.js';

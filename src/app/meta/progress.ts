@@ -358,6 +358,12 @@ export interface StammtischView {
   readonly totalKills: number;
 }
 
+/**
+ * The unlock id the Promille mechanic itself is gated behind (#85) — Da
+ * Xaver's, earned by beating Der Stier. Read at run start rather than by the
+ * hub: see `app/promille-gate.ts`.
+ */
+export const UNLOCK_PROMILLE = 'promille';
 /** The unlock id the run board is gated behind — see `content/stammtisch/unlocks.ts`. */
 export const UNLOCK_BOARD = 'stammtisch-tafel';
 /** The unlock id the seed row is gated behind. */

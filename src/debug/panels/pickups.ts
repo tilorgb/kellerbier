@@ -46,7 +46,12 @@ export class PickupsPanel implements DebugPanel {
       2,
       `floor ${String(sim.currentFloor)}  drop table: ${sim.promilleUnlocked ? 'promilled' : 'sober'}`,
     );
-    this.setLine(3, 'B place/roll Bierfassl');
+    // `E`, not `B` — the bomb binding moved to `KeyE` (`app/input/
+    // bindings.ts`) and this hint did not follow it. Corrected here rather
+    // than in its own change because #85 claims `B` for the Promille-gate
+    // override, and a panel telling a developer `B` drops a Bierfassl while
+    // it actually restarts the run is worse than the stale hint was.
+    this.setLine(3, 'E place/roll Bierfassl');
   }
 
   private setLine(index: number, text: string): void {

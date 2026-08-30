@@ -9,7 +9,11 @@ import type { CharacterDefinition } from '../../app/meta/definition.js';
  * conventional way *down* the Promille meter, so a Barnabas run that drinks
  * cannot sober up on purpose. That is what ties the roster into the Promille
  * system rather than sitting beside it: he is a Vollrausch character by
- * construction, not by a flavour line saying so. `fasting` is the other end:
+ * construction, not by a flavour line saying so. In a *sober* run (#85 — the
+ * meter is gated behind Der Stier) there is nothing to sober up from, so the
+ * refusal is simply a heal he walks past and the fast is the whole of him;
+ * that is the weaker half of the character, and it lasts exactly as long as
+ * the player takes to beat floor 2. `fasting` is the other end:
  * the longer he swallows nothing at all, the harder he hits
  * (`CharacterTuning.fastStepTicks`), so the pickups he *can* take — a Maß, a
  * beer — are a real cost rather than free healing.

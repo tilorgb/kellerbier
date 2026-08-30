@@ -227,6 +227,26 @@ export interface ItemDefinition {
   readonly pools: readonly ItemPoolId[];
   readonly quality: ItemQuality;
   readonly promilleRequirement: PromilleRequirement;
+  /**
+   * Whether the item is **Promille machinery** — its effect spends, refunds,
+   * caps or tolerates the meter, so it has nothing to do at all in a sober
+   * run (#85). Konterbier is the item the issue names: it clears a Kater
+   * that cannot happen, while requiring no particular tier to do it, so
+   * `promilleRequirement` alone was never going to filter it out.
+   *
+   * Defaults to `promilleRequirement !== 'any'`, which is the honest
+   * implication rather than a convenience: an item gated on a tier already
+   * needs a meter to have a tier. Only an `any`-requirement item whose
+   * *effect* touches Promille has to say so here, and
+   * `tests/content/sober-run.test.ts` is what catches one that forgot —
+   * its player-facing description would name a mechanic the run does not
+   * have, which is exactly the acceptance criterion ("without meeting the
+   * word Promille anywhere") failing.
+   *
+   * Setting this to `false` on a tier-gated item is a contradiction, and
+   * `ItemRegistry.validate` rejects it rather than quietly picking a side.
+   */
+  readonly needsPromille?: boolean;
   /** Free-form, for #27's projectile tag composition and future filtering. Defaults to none. */
   readonly tags?: readonly string[];
   readonly active?: ActiveItemDefinition;

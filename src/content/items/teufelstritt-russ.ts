@@ -19,6 +19,9 @@ export const teufelstrittRuss: ItemDefinition = {
   pools: ['shop', 'devil', 'secret'],
   quality: 2,
   promilleRequirement: 'any',
+  // No tier gate — but it is Promille machinery all the same (its Stammwürze is paid for in Promille every floor),
+  // so a sober run never offers it (#85).
+  needsPromille: true,
   hooks: {
     modifyStats: () => [{ stat: 'stammwuerze', op: 'multiply', value: DAMAGE_MULTIPLIER }],
     onFloorStart: (ctx) => {

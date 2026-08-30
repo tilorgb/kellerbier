@@ -12,7 +12,7 @@ import { EnemyRegistry } from '../enemy/registry.js';
 import { ENEMY_PROFILES, EnemySize, type EnemySizeId } from '../enemy/size.js';
 import type { InputFrame } from '../input/frame.js';
 import { createInputFrame } from '../input/frame.js';
-import type { DropTable } from '../pickup/definition.js';
+import { type DropTable, pickupDescriptionFor } from '../pickup/definition.js';
 import { PickupRegistry } from '../pickup/registry.js';
 import { ITEM_DEFINITIONS } from '../../content/items/index.js';
 import {
@@ -389,7 +389,10 @@ export interface GameSimOptions {
    * memory belongs to whatever is starting runs, not to the run itself.
    */
   readonly previousDeathWord?: string;
-  /** Defaults to `true` — see `GameSim.promilleUnlocked`. */
+  /**
+   * Whether the run has the Promille mechanic (#85). Defaults to `true` —
+   * see `GameSim.promilleUnlocked` for what `false` actually turns off.
+   */
   readonly promilleUnlocked?: boolean;
   /**
    * Who the run is played as (#47). Defaults to `NEUTRAL_TRAITS` — Alois,
@@ -799,10 +802,19 @@ export class GameSim {
   private bombsCount = 0;
 
   /**
-   * Whether this run rolls the `promilled` half of every drop table, or the
-   * `sober` half — see DECISIONS.md §9 and #85. Persisted unlock state does
-   * not exist yet (#85 is M7); this defaults to unlocked so today's runs play
-   * exactly as before, with the branch point already in place for #85 to set.
+   * Whether this run has the Promille mechanic at all (#85).
+   *
+   * Decided once, at construction, and never written again: a run is sober
+   * or promilled from its first tick to its last. False means the meter
+   * reads zero forever (`get promille`), beer never drops (`dropLoot` rolls
+   * the `sober` half of every table), and no Promille item is ever offered
+   * (`itemEligibleForOffer`). `app/main.ts` sets it from the persisted
+   * `promille` unlock — see `app/promille-gate.ts` — and passes it through
+   * every `loadRoom`, so it survives a floor transition.
+   *
+   * Defaults to `true` so that a test, a bench or an editor building a
+   * `GameSim` without an opinion gets the full mechanic, which is what every
+   * one of them meant before this flag existed.
    */
   readonly promilleUnlocked: boolean;
 
@@ -2026,7 +2038,7 @@ export class GameSim {
     const price = this.pickupPrice.data[slot] ?? 0;
     return {
       name: definition.name,
-      description: definition.description,
+      description: pickupDescriptionFor(definition, this.promilleUnlocked),
       price,
       affordable: this.biermarkenCount >= price,
     };
@@ -2166,9 +2178,24 @@ export class GameSim {
     }
   }
 
-  /** Current Promille, 0–5 at baseline Trinkfest, higher once it is raised. Backed by `tuning.promille.current` — see `tuning.ts`. */
+  /**
+   * Current Promille, 0–5 at baseline Trinkfest, higher once it is raised.
+   * Backed by `tuning.promille.current` — see `tuning.ts`.
+   *
+   * **Zero, unconditionally, in a sober run** (#85). This one getter is the
+   * whole of the sober path through the mechanic: the tier, the drift, the
+   * aim wobble, the camera sway, the screen distortion, the HUD bar and the
+   * `O`-overlay's own readout are every one of them a function of this
+   * number, so gating it here makes "no meter, no drift, no tier bonuses"
+   * true by construction rather than by six independent guards that could
+   * drift apart. `addPromille` is gated too, so `tuning.promille.current`
+   * cannot quietly accumulate behind this either — but a debug slider
+   * writing that field directly still reads as zero here, which is the
+   * "leaves no HUD or drift behind" acceptance criterion holding even for
+   * the one path that bypasses `addPromille`.
+   */
   get promille(): number {
-    return this.tuning.promille.current;
+    return this.promilleUnlocked ? this.tuning.promille.current : 0;
   }
 
   /**
@@ -2516,9 +2543,15 @@ export class GameSim {
   /**
    * Raises Promille, clamped at `promilleCapFor(trinkfest)` — `PROMILLE_MAX`
    * itself at baseline Trinkfest, further out once it is raised (#92). The
-   * one place it goes up — beer pickups (#17) and the debug slider (which
-   * writes `tuning.promille.current` directly, bypassing this) are the only
-   * sources today.
+   * one place it goes up — beer pickups (#17), a handful of items, and the
+   * debug slider (which writes `tuning.promille.current` directly, bypassing
+   * this) are the sources today.
+   *
+   * Inert in a sober run (#85). Beer never drops there and no Promille item
+   * is ever offered, so nothing should reach this in the first place — the
+   * guard is here because this is the one chokepoint every raise passes
+   * through, and "the meter cannot move" is worth being true of the
+   * mechanism rather than only of the content that happens to feed it.
    *
    * Crossing the Umgfalln threshold starts the knockdown via
    * `maybeStartUmgfalln` rather than in whatever called this, the same
@@ -2526,7 +2559,7 @@ export class GameSim {
    * every raise — pickup or otherwise — behaves the same way.
    */
   addPromille(amount: number): void {
-    if (amount <= 0) {
+    if (amount <= 0 || !this.promilleUnlocked) {
       return;
     }
     const tuning = this.tuning.promille;

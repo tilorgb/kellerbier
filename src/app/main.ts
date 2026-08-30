@@ -78,11 +78,13 @@ import {
   saveSettings,
 } from './settings.js';
 import { ActiveRunRecorder, decodeActiveRunFrames, persistActiveRun } from './save/active-run.js';
+import type { CharacterTraits } from '../sim/character/definition.js';
 import { loadSave } from './save/storage.js';
 import {
   markGreeted,
   recordBossDefeat,
   recordRunOutcome,
+  characterTraitsById,
   resetProgress,
   selectCharacter,
   selectedCharacter,
@@ -90,6 +92,13 @@ import {
   stammtischView,
   unlockEverything,
 } from './meta/index.js';
+import {
+  type PromilleOverride,
+  nextPromilleOverride,
+  readPromilleOverride,
+  resolvePromilleUnlocked,
+  writePromilleOverride,
+} from './promille-gate.js';
 
 /**
  * The authored pool, run through the same typed boundary the sim uses to load
@@ -719,8 +728,13 @@ async function boot(): Promise<void> {
     let y = HUD_MARGIN;
     healthHud.view.position.set(HUD_MARGIN, y);
     y += healthHud.height + HUD_ROW_GAP;
+    // A sober run has no meter (#85): `height` is 0 there, and the row's gap
+    // goes with it — otherwise the column would keep a blank line where the
+    // bar used to be, which reads as a HUD element that failed to draw.
     promilleHud.view.position.set(HUD_MARGIN, y);
-    y += promilleHud.height + HUD_ROW_GAP;
+    if (promilleHud.view.visible) {
+      y += promilleHud.height + HUD_ROW_GAP;
+    }
     walletHud.view.position.set(HUD_MARGIN, y);
     y += walletHud.height + HUD_ROW_GAP;
     characterHud.view.position.set(HUD_MARGIN, y);
@@ -777,6 +791,28 @@ async function boot(): Promise<void> {
 
   /** The seed the next run starts on — rolled at boot, on every death, and by `R` at the table. */
   let pendingSeed = rollSeed();
+
+  /**
+   * The dev override on the Promille gate (#85), read once at boot and
+   * cycled by `B`. `auto` — the state every player is in — means the save's
+   * own unlock decides.
+   */
+  let promilleOverride: PromilleOverride = readPromilleOverride();
+
+  /**
+   * Whether the run *about to start* has Promille, from the save plus the
+   * override above.
+   *
+   * Read at run start rather than held as a live flag, because the unlock
+   * can be earned in the middle of a run: `creditBossDefeat` commits the
+   * moment Der Stier falls, and the beer is deliberately not switched on
+   * under the player's feet — Da Xaver announces it at the table and it is
+   * there from the *next* run, which is what makes the unlock legible
+   * instead of a mechanic that silently appeared.
+   */
+  function nextRunPromilleUnlocked(): boolean {
+    return resolvePromilleUnlocked(loadSave(), promilleOverride);
+  }
 
   /** Whether the loop was already paused when the hub opened, so closing it doesn't un-pause a debug pause. */
   let pausedBeforeStammtisch = false;
@@ -1152,17 +1188,31 @@ async function boot(): Promise<void> {
     // `PromilleHud`'s label rather than staying the classic name always.
     const meterLabel = promilleMeterLabel(settings.neutralReskin).toLowerCase();
     const tierLabel = promilleTierDisplayName(sim.promilleTier, settings.neutralReskin);
+    // The whole line goes in a sober run (#85), not a line reading "0.00
+    // Nüchtern": this text is reachable with `O` and is what a bug report's
+    // clipboard copy carries, and a meter that is not in the run should not
+    // be in the readout of it either. What the run *is* gets said once, on
+    // the seed line, where the override that pinned it is also named.
+    const promilleLine = sim.promilleUnlocked
+      ? `\n${meterLabel} ${sim.promille.toFixed(2)} ${tierLabel}${trinkfest}${knockedDown}`
+      : '';
+    const runState = sim.promilleUnlocked ? '' : '  SOBER RUN';
+    const override = promilleOverride === 'auto' ? '' : `  [${promilleOverride} forced]`;
+    // Dev builds only, like the key itself — and not only for symmetry: this
+    // line is reachable with `O` in a shipped build, and a key list naming
+    // the mechanic would hand a sober player the word the gate exists to
+    // keep from them until Da Xaver says it.
+    const overrideKeyHint = import.meta.env.DEV ? `   B promille gate (${promilleOverride})` : '';
     hud.text = `seed ${String(RUN_SEED)}  ${character}  ${floorPlan.floorName}  room ${sim.roomId} (${currentRole})  doors ${roomState}${warmup}${keyHint}  enemies ${String(sim.liveEnemyCount)}
   tick ${String(loop.tick)}  ${seconds}s  x${scale}${loop.paused ? '  PAUSED' : ''}
-hp ${String(hearts)}/${String(maxHearts)}  soul ${String(sim.playerSoulHealth)}  eternal ${String(sim.playerEternalHealth)}${invulnerable}${dead}
-${meterLabel} ${sim.promille.toFixed(2)} ${tierLabel}${trinkfest}${knockedDown}
+hp ${String(hearts)}/${String(maxHearts)}  soul ${String(sim.playerSoulHealth)}  eternal ${String(sim.playerEternalHealth)}${invulnerable}${dead}${runState}${override}${promilleLine}
 shots ${String(shots.liveCount)}/${String(shots.capacity)}  particles ${String(
       particles.liveCount,
     )}/${String(particles.capacity)}${shots.overflows > 0 ? '  SHOT OVERFLOW' : ''}
 save ${String(activeRunRecorder.frameCount)} ticks logged${wasResumed ? '  (resumed)' : ''}
 WASD move   arrows aim and fire
   O debug   T tuning   I shot tags   Y accessibility   P pause   . step   [ ] time scale
-  N next room (after clear)   R restart (new seed)`;
+  N next room (after clear)   R restart (new seed)${overrideKeyHint}`;
   };
   /**
    * (Re)starts the run on `seed`: regenerates the floor plan and rebuilds
@@ -1183,7 +1233,11 @@ WASD move   arrows aim and fire
    * point leaves them pointed at the *previous* run — reload the page to
    * reset them, same as before this existed.
    */
-  function startRun(seed: number): void {
+  function startRun(
+    seed: number,
+    promilleUnlocked = nextRunPromilleUnlocked(),
+    character: CharacterTraits = selectedCharacter(),
+  ): void {
     RUN_SEED = seed;
     if (seedInput instanceof HTMLInputElement) {
       seedInput.value = String(RUN_SEED);
@@ -1201,10 +1255,11 @@ WASD move   arrows aim and fire
 
     sim = new GameSim({
       seed: RUN_SEED,
-      // Who the Stammtisch's run-start panel currently has selected (#47).
-      // Resolved here, at the one moment a run begins, rather than held in a
-      // variable that could drift from the save the panel writes.
-      character: selectedCharacter(),
+      // Who the run is played as (#47) — the Stammtisch's current selection
+      // for a fresh run, and the *recorded* one for a resume. A run
+      // parameter, the same shape as `promilleUnlocked` below, for the same
+      // reason: see `ActiveRunSave.character`.
+      character,
       roomTemplate: planTemplate(planRoom(floorPlan, currentRoomId)),
       // Without this, the start room falls back to `compileRoomTemplate`'s
       // default `SINGLE_CELL_PLACEMENT` (no doors), which in turn falls back
@@ -1220,6 +1275,11 @@ WASD move   arrows aim and fire
       // rather than the first real encounter — no enemies, no drops,
       // whatever the chosen template itself authors.
       suppressRoomContent: true,
+      // Sober or promilled, decided here and never again for this run (#85).
+      // Passed as a `GameSim` option rather than set afterwards because the
+      // very first room is populated inside the constructor, and its drop
+      // table has to already know which half to roll.
+      promilleUnlocked,
     });
     // A restart rebuilds `sim` from scratch, so the accessibility settings
     // have to be re-applied to it every time — they live on the instance
@@ -1230,7 +1290,7 @@ WASD move   arrows aim and fire
     // persisted immediately (not just reassigned in memory) so a crash right
     // after a restart resumes into the *new* run next time, not the one the
     // player just left behind.
-    activeRunRecorder = new ActiveRunRecorder(seed);
+    activeRunRecorder = new ActiveRunRecorder(seed, promilleUnlocked, character.id);
     ticksSinceAutosave = 0;
     persistActiveRun(activeRunRecorder);
     wasResumed = false;
@@ -1340,6 +1400,11 @@ WASD move   arrows aim and fire
     loop.timeScale = 1;
     loop.paused = false;
 
+    // Before `layoutHud`, not after: the meter's row is gone in a sober run,
+    // and the column below it only closes up if the layout pass already
+    // knows that. See `PromilleHud.setUnlocked`.
+    promilleHud.setUnlocked(promilleUnlocked);
+
     refreshHud();
     layoutHud(layout);
     showFloorCard();
@@ -1394,7 +1459,19 @@ WASD move   arrows aim and fire
     }
     try {
       RUN_SEED = activeRun.seed;
-      startRun(RUN_SEED);
+      // The run's own recorded state, never the save's current unlock: the
+      // Promille unlock is committed the instant Der Stier falls, so a player
+      // who beat him and closed the tab has a save that says "promilled"
+      // about a log that was recorded sober. Replaying those inputs against
+      // the wrong drop tables would resume a different run — see
+      // `ActiveRunSave.promilleUnlocked`.
+      // Same argument for the character (#47): the table writes a choice the
+      // moment the player cycles to it, mid-run included, so the save's
+      // current pick can already describe somebody other than whoever
+      // recorded this log. `characterTraitsById` resolves the recorded id
+      // without asking whether it is still unlocked — a run in progress is
+      // not a new choice to be validated.
+      startRun(RUN_SEED, activeRun.promilleUnlocked, characterTraitsById(activeRun.character));
       const frames = decodeActiveRunFrames(activeRun);
       for (const frame of frames) {
         activeRunRecorder.record(frame);
@@ -1792,6 +1869,24 @@ WASD move   arrows aim and fire
         // playing, not only after dying.
         openStammtisch();
         break;
+      case 'b':
+      case 'B':
+        // B for Bier: cycles auto -> sober -> promilled -> auto and restarts
+        // on the new state (#85's debug override). A restart rather than a
+        // live toggle because the flag is a run *parameter* — the drop
+        // tables and the item pool were both chosen with it, so flipping it
+        // mid-run would leave a promilled run's beer lying on a sober floor.
+        //
+        // Dev builds only. In a release build this key would hand a player
+        // the mechanic the whole unlock exists to make them earn, and the
+        // rest of `src/debug/` is behind a dynamic import for the same
+        // reason.
+        if (import.meta.env.DEV) {
+          promilleOverride = nextPromilleOverride(promilleOverride);
+          writePromilleOverride(promilleOverride);
+          startRun(RUN_SEED);
+        }
+        break;
       case 'n':
       case 'N': {
         // Walks the generated floor depth-first: an unvisited door first,
@@ -2001,6 +2096,22 @@ WASD move   arrows aim and fire
         }
       },
     },
+    {
+      // Getters, not a snapshot: the override and the live run's state both
+      // change under this handle (`B`, a restart), and a headless check that
+      // read a stale boolean would be checking the wrong run.
+      get override() {
+        return promilleOverride;
+      },
+      get unlocked() {
+        return sim.promilleUnlocked;
+      },
+      setOverride: (override) => {
+        promilleOverride = override;
+        writePromilleOverride(override);
+        startRun(RUN_SEED);
+      },
+    },
   );
   // Not gated behind `import.meta.env.DEV` like `mountDebugOverlay` above —
   // this is the player-facing half of #33, so it has to ship in a production
@@ -2102,7 +2213,35 @@ interface DebugHost {
      *   __kellerbier.stammtisch.open();
      */
     stammtisch: StammtischHandle;
+    /**
+     * The Promille gate (#85) — same reasoning as `stammtisch` above; see
+     * `PromilleHandle`.
+     *
+     *   __kellerbier.promille.setOverride('sober');
+     */
+    promille: PromilleHandle;
   };
+}
+
+/**
+ * The debug handle's Promille-gate controls (#85) — the scriptable half of
+ * the `B` key.
+ *
+ * Here for the same reason `stammtisch` is: the honest way to reach a sober
+ * run is a fresh save and not beating Der Stier, and the honest way back to a
+ * promilled one from there is a twenty-minute run. Neither is a question
+ * worth asking that expensively on every change to the mechanic.
+ *
+ *   __kellerbier.promille.setOverride('sober');
+ *   __kellerbier.promille.unlocked;  // false
+ */
+interface PromilleHandle {
+  /** The current override — `auto` follows the save's unlock. */
+  readonly override: PromilleOverride;
+  /** Whether the run on screen right now actually has the mechanic. */
+  readonly unlocked: boolean;
+  /** Pins (or releases) the state and restarts the run on the same seed. */
+  setOverride: (override: PromilleOverride) => void;
 }
 
 /** The debug handle's hub controls — see `DebugHost`. */
@@ -2131,6 +2270,7 @@ function exposeDebugHandle(
   settings: AccessibilitySettings,
   setAccessibilitySettings: (patch: Partial<AccessibilitySettings>) => void,
   stammtisch: StammtischHandle,
+  promille: PromilleHandle,
 ): void {
   if (!import.meta.env.DEV) {
     return;
@@ -2144,6 +2284,7 @@ function exposeDebugHandle(
     settings,
     setAccessibilitySettings,
     stammtisch,
+    promille,
   };
   console.warn('__kellerbier is exposed for debugging (dev build only)');
 }

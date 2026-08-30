@@ -16,7 +16,7 @@ describe('save migration chain (#45)', () => {
     expect(MIGRATIONS).toHaveLength(SAVE_SCHEMA_VERSION);
   });
 
-  it('upgrades a real v1 save to the current version without touching what v1 already stored (#46, #47)', () => {
+  it('upgrades a real v1 save to the current version without touching what v1 already stored (#46, #85, #47)', () => {
     const v1 = {
       schemaVersion: 1,
       settings: { swayScale: 0.5 },
@@ -31,6 +31,10 @@ describe('save migration chain (#45)', () => {
       activeRun: null,
     };
     const migrated = sanitizeSave(migrateSave(v1));
+    // Asserted against the constant rather than a literal: the point of the
+    // chain is that a v1 save reaches *today's* version, whatever that has
+    // become since, not that it reaches the one version that existed when
+    // this test was written.
     expect(migrated.schemaVersion).toBe(SAVE_SCHEMA_VERSION);
     expect(migrated.unlocks).toEqual(['lore-opas-zettl']);
     expect(migrated.statistics).toEqual({ kills: 240 });
@@ -38,9 +42,52 @@ describe('save migration chain (#45)', () => {
     // The most recently *recorded* run, not the longest one — the table's
     // comments are about the run you just played.
     expect(migrated.lastRun?.seed).toBe(2);
-    // v2 -> v3 (#47): a save from before characters existed walks in as the
+    // v3 -> v4 (#47): a save from before characters existed walks in as the
     // only character it could ever have played.
     expect(migrated.selectedCharacter).toBe('alois');
+  });
+
+  it('back-fills a v3 in-progress run as an Alois run (#47)', () => {
+    // The run parameter half of v3 -> v4: a log recorded before there was a
+    // roster can only have been Alois, and a resume that rebuilt it as
+    // whoever the table currently offers would replay those inputs at
+    // somebody else's health and speed.
+    const v3 = {
+      schemaVersion: 3,
+      unlocks: [],
+      activeRun: { seed: 9, frames: [1, 2, 3, 4, 5], promilleUnlocked: false },
+      lastRun: null,
+      greetedRegulars: [],
+    };
+    const migrated = sanitizeSave(migrateSave(v3));
+    expect(migrated.activeRun?.character).toBe('alois');
+    // And the run's own recorded parameters are left exactly as they were.
+    expect(migrated.activeRun?.promilleUnlocked).toBe(false);
+  });
+
+  it('back-fills a v2 in-progress run as promilled rather than reading the unlock set (#85)', () => {
+    // The two genuinely differ, and the unlock set is the wrong source. A v2
+    // tester who never beat Der Stier still recorded a promilled run —
+    // `GameSim.promilleUnlocked` defaulted to true and nothing set it — so
+    // deriving the flag from `unlocks` here would resume their run with the
+    // beer taken out from under it.
+    const v2 = {
+      schemaVersion: 2,
+      unlocks: [],
+      activeRun: { seed: 4, frames: [1, 2, 3, 4, 5] },
+      lastRun: null,
+      greetedRegulars: [],
+    };
+    const migrated = sanitizeSave(migrateSave(v2));
+    expect(migrated.activeRun?.promilleUnlocked).toBe(true);
+    expect(migrated.activeRun?.seed).toBe(4);
+    expect(migrated.activeRun?.frames).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it('migrates a v2 save with no run in progress without inventing one', () => {
+    const migrated = sanitizeSave(migrateSave({ schemaVersion: 2, activeRun: null }));
+    expect(migrated.activeRun).toBeNull();
+    expect(migrated.schemaVersion).toBe(SAVE_SCHEMA_VERSION);
   });
 
   it('leaves lastRun null when a v1 save never finished a run', () => {

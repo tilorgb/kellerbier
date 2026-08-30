@@ -2,6 +2,7 @@ import { circlesOverlap } from '../collision/circle-circle.js';
 import { CollisionLayer } from '../collision/layers.js';
 import type { GameSim } from '../game/sim.js';
 import { pickupGlint } from '../particle/effects.js';
+import { pickupDescriptionFor } from '../pickup/definition.js';
 import { dispatchItemBeerPickup } from './items.js';
 
 /**
@@ -146,7 +147,7 @@ function collect(sim: GameSim, other: number): boolean {
   if (priced && !sim.spendBiermarken(sim.pickupPrice.data[other] ?? 0)) {
     return false;
   }
-  sim.reportCollected(definition.name, definition.description);
+  sim.reportCollected(definition.name, pickupDescriptionFor(definition, sim.promilleUnlocked));
 
   // A fast is broken by swallowing something, whatever it was (#47) — see
   // `GameSim.breakFast`. Every branch below that heals or drinks counts;
