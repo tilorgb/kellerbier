@@ -68,12 +68,16 @@ export function stepPlayerMovement(sim: GameSim, input: Readonly<InputFrame>): v
   // not also warp how many ticks it takes to reach it.
   const maxSpeed = sim.stats.value(StatId.Gschwindigkeit);
   const driftScale = sim.promilleDriftScale;
+  // König Ludwig (#47): furniture and puddles are both things on the floor,
+  // and he is not on the floor. Walls still stop him — see
+  // `RoomGeometry.blockOverflyable` for which rectangles are which.
+  const flying = sim.playerFlies;
   // Read before either axis moves — the puddle a player is standing in when
   // the tick begins is the one their footing answers to this tick, the same
   // "decide against where things already are" rule the rest of the frame
   // loop follows.
   const puddleSlip =
-    sim.puddleImmuneTicks <= 0 && sim.room.isOnPuddle(x, y) ? tuning.puddleSlip : 0;
+    !flying && sim.puddleImmuneTicks <= 0 && sim.room.isOnPuddle(x, y) ? tuning.puddleSlip : 0;
   velocityX = approachAxis(
     velocityX,
     inputX * maxSpeed,
@@ -113,6 +117,7 @@ export function stepPlayerMovement(sim: GameSim, input: Readonly<InputFrame>): v
     velocityX + pushX,
     velocityY + pushY,
     radius,
+    flying,
   );
   if ((blocked & BLOCKED_X) !== 0) {
     velocityX = 0;
@@ -131,9 +136,9 @@ export function stepPlayerMovement(sim: GameSim, input: Readonly<InputFrame>): v
   // blocked: a player held up by a few pixels of corner overlap is nudged clear
   // rather than left grinding against it.
   if (velocityX === 0 && inputX !== 0 && inputY === 0) {
-    nudgeAroundCornerY(sim, index, Math.sign(inputX) * radius, radius, tuning);
+    nudgeAroundCornerY(sim, index, Math.sign(inputX) * radius, radius, tuning, flying);
   } else if (velocityY === 0 && inputY !== 0 && inputX === 0) {
-    nudgeAroundCornerX(sim, index, Math.sign(inputY) * radius, radius, tuning);
+    nudgeAroundCornerX(sim, index, Math.sign(inputY) * radius, radius, tuning, flying);
   }
 }
 
@@ -229,12 +234,13 @@ function nudgeAroundCornerY(
   probeOffset: number,
   radius: number,
   tuning: Readonly<MovementTuning>,
+  overfly: boolean,
 ): void {
   const transform = sim.transform.data;
   const base = index * 4;
   const centreX = transform[base] ?? 0;
   const centreY = transform[base + 1] ?? 0;
-  if (!findBlockingEdgeY(sim.room, centreX + probeOffset, centreY, radius)) {
+  if (!findBlockingEdgeY(sim.room, centreX + probeOffset, centreY, radius, overfly)) {
     return;
   }
   const nudge = clearanceNudge(
@@ -254,12 +260,13 @@ function nudgeAroundCornerX(
   probeOffset: number,
   radius: number,
   tuning: Readonly<MovementTuning>,
+  overfly: boolean,
 ): void {
   const transform = sim.transform.data;
   const base = index * 4;
   const centreX = transform[base] ?? 0;
   const centreY = transform[base + 1] ?? 0;
-  if (!findBlockingEdgeX(sim.room, centreX, centreY + probeOffset, radius)) {
+  if (!findBlockingEdgeX(sim.room, centreX, centreY + probeOffset, radius, overfly)) {
     return;
   }
   const nudge = clearanceNudge(

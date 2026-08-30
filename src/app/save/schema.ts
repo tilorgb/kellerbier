@@ -29,8 +29,21 @@ import {
  * whether it is a sober run or a promilled one. That is not redundant with
  * `unlocks`, and the reason is a real bug rather than tidiness — see
  * `ActiveRunSave.promilleUnlocked`.
+ *
+ * v4 (#47) adds which character the next run starts as, and which one the
+ * run in progress is already being played as.
  */
-export const SAVE_SCHEMA_VERSION = 3;
+export const SAVE_SCHEMA_VERSION = 4;
+
+/**
+ * The character a save with no opinion starts as (#47).
+ *
+ * A bare string rather than an import from `src/content/`: the save layer
+ * validates *shapes*, and a save naming a character the roster has since
+ * dropped is handled where the roster is actually known
+ * (`selectedCharacterId`), not here.
+ */
+export const DEFAULT_CHARACTER_ID = 'alois';
 
 /** A completed run, kept for the "best runs" list. */
 export interface BestRunRecord {
@@ -90,6 +103,14 @@ export interface ReplayRecord {
    * disagree (recorded sober before Der Stier fell, watched after).
    */
   readonly promilleUnlocked: boolean;
+  /**
+   * Who the run was played as (#47) — a run parameter for the same reason
+   * `promilleUnlocked` above is one. The Stammtisch stores a character the
+   * moment the player cycles to it, so rebuilding a saved replay against the
+   * save's *current* pick would replay one character's inputs at another's
+   * health, speed and shot behaviour.
+   */
+  readonly character: string;
   /** `Date.now()` when the run ended. */
   readonly recordedAt: number;
 }
@@ -133,6 +154,19 @@ export interface ActiveRunSave {
    * have unlocked.
    */
   readonly promilleUnlocked: boolean;
+  /**
+   * The character the run being resumed is played as (#47).
+   *
+   * Recorded with the log for exactly the reason `promilleUnlocked` above
+   * is: it is a run *parameter*, and the save's current answer to "who would
+   * you like to play as" is not it. The Stammtisch writes a character
+   * choice the moment the player cycles to it, mid-run included — so a
+   * player who opens the table during an Alois run, looks at Resi and closes
+   * the tab would otherwise resume Resi replaying Alois's inputs, at Resi's
+   * health and Resi's speed. That is the same divergence, from the same
+   * shape of bug.
+   */
+  readonly character: string;
 }
 
 /** The v1 shape, kept for the migration that reads it. Nothing loads a save at this version any more. */
@@ -188,8 +222,24 @@ export interface SaveDataV3 extends Omit<SaveDataV2, 'schemaVersion'> {
   readonly replays: readonly ReplayRecord[];
 }
 
-/** The current schema version. A union the day a v4 lands and something still reads a v3. */
-export type SaveData = SaveDataV3;
+/**
+ * v4 (#47): which character the next run starts as.
+ *
+ * Persisted rather than reset per session for the reason every other
+ * roguelike persists it: a player who has decided they are a Barnabas player
+ * has decided it about more than the next thirty seconds, and re-picking on
+ * every page load would make the choice feel like a setting the game keeps
+ * forgetting. It is a *preference*, not progress — an id naming a character
+ * who no longer exists or is no longer unlocked is not an error, it just
+ * falls back (`selectedCharacterId`).
+ */
+export interface SaveDataV4 extends Omit<SaveDataV3, 'schemaVersion'> {
+  readonly schemaVersion: 4;
+  readonly selectedCharacter: string;
+}
+
+/** The current schema version. A union the day a v5 lands and something still reads a v4. */
+export type SaveData = SaveDataV4;
 
 /** How many `bestRuns` entries a finished run keeps — see `app/meta/progress.ts`'s `withRunOutcome`. */
 export const MAX_BEST_RUNS = 10;
@@ -210,6 +260,7 @@ export function createDefaultSave(): SaveData {
     lastRun: null,
     greetedRegulars: [],
     replays: [],
+    selectedCharacter: DEFAULT_CHARACTER_ID,
   };
 }
 
@@ -325,6 +376,13 @@ function sanitizeActiveRun(value: unknown): ActiveRunSave | null {
     // run whose flag went missing. Defaulting the other way would replay
     // those with beer removed from under them.
     promilleUnlocked: value.promilleUnlocked !== false,
+    // Same reasoning one field up, and the same answer as the v3 migration's
+    // back-fill: a log recorded before characters existed can only have been
+    // an Alois run.
+    character:
+      typeof value.character === 'string' && value.character.length > 0
+        ? value.character
+        : DEFAULT_CHARACTER_ID,
   };
 }
 
@@ -355,6 +413,12 @@ export function sanitizeReplay(value: unknown): ReplayRecord | null {
     // back-fill: a replay recorded before this field existed was recorded by
     // a build where every run was a promilled one.
     promilleUnlocked: value.promilleUnlocked !== false,
+    // Same back-fill as `sanitizeActiveRun`'s: a replay recorded before the
+    // roster existed can only be an Alois run.
+    character:
+      typeof value.character === 'string' && value.character.length > 0
+        ? value.character
+        : DEFAULT_CHARACTER_ID,
     recordedAt: value.recordedAt,
   };
 }
@@ -396,5 +460,9 @@ export function sanitizeSave(value: unknown): SaveData {
     lastRun: sanitizeBestRun(source.lastRun),
     greetedRegulars: sanitizeStringArray(source.greetedRegulars),
     replays: sanitizeReplays(source.replays),
+    selectedCharacter:
+      typeof source.selectedCharacter === 'string' && source.selectedCharacter.length > 0
+        ? source.selectedCharacter
+        : DEFAULT_CHARACTER_ID,
   };
 }

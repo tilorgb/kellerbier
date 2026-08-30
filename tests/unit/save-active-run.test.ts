@@ -40,8 +40,22 @@ describe('active-run recording and replay (#45)', () => {
       seed: 1,
       frames: [1, 2, 3, 4, 5, 9, 9],
       promilleUnlocked: true,
+      character: 'alois',
     });
     expect(decoded).toHaveLength(1);
+  });
+
+  it('carries the run’s character beside its log, so a resume rebuilds the same run (#47)', () => {
+    // Same shape of parameter, same failure without it: the Stammtisch
+    // writes a character choice the moment the player cycles to it, mid-run
+    // included, so the save's current pick can already describe somebody
+    // other than whoever recorded this log.
+    const barnabas = new ActiveRunRecorder(12, true, 'barnabas');
+    barnabas.record(frame({ moveX: 1 }));
+    expect(barnabas.toSave().character).toBe('barnabas');
+    expect(recorderFrom(barnabas.toSave()).character).toBe('barnabas');
+    // The default is the Alois run every pre-#47 recorder produced.
+    expect(new ActiveRunRecorder(12).character).toBe('alois');
   });
 
   it('carries the run’s Promille state beside its log, so a resume rebuilds the same run (#85)', () => {
@@ -84,6 +98,7 @@ describe('active-run recording and replay (#45)', () => {
       seed: 5,
       frames: [1, 0, 0, 0, 0],
       promilleUnlocked: true,
+      character: 'alois',
     });
 
     persistActiveRun(null);

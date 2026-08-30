@@ -34,8 +34,11 @@ export function createPlaygroundRoom(): RoomGeometry {
 
   // Two pillars, placed to give both a flat wall to slide along and an exposed
   // corner to clip — the two cases wall handling has to get right.
-  room.addBlock(74, 54, 94, 74);
-  room.addBlock(226, 106, 246, 126);
+  // Overflyable (#47): the two pillars are furniture, the same as an
+  // authored room's obstacles — so the playground answers a flying
+  // character the way a real room does.
+  room.addBlock(74, 54, 94, 74, true);
+  room.addBlock(226, 106, 246, 126, true);
 
   return room;
 }

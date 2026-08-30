@@ -91,7 +91,30 @@ const v2ToV3: SaveMigration = (raw) => {
   };
 };
 
-export const MIGRATIONS: readonly SaveMigration[] = [v0ToV1, v1ToV2, v2ToV3];
+/**
+ * v3 -> v4 (#47): the character the next run starts as, and the one the run
+ * in progress is already being played as.
+ *
+ * Both back-fill to Alois, which is both the only character a pre-#47 save
+ * could have played and the fallback `selectedCharacterId` would pick
+ * anyway — written explicitly so a v4 save always *has* the fields rather
+ * than relying on the sanitiser to keep filling them in forever. The
+ * `activeRun` half follows #85's v2 → v3 step exactly: a run parameter
+ * belongs with the log it describes, not with the save's current opinion.
+ */
+const v3ToV4: SaveMigration = (raw) => {
+  const active = raw.activeRun;
+  const upgraded = { ...raw, schemaVersion: 4, selectedCharacter: 'alois' };
+  if (typeof active !== 'object' || active === null || Array.isArray(active)) {
+    return upgraded;
+  }
+  return {
+    ...upgraded,
+    activeRun: { ...(active as Record<string, unknown>), character: 'alois' },
+  };
+};
+
+export const MIGRATIONS: readonly SaveMigration[] = [v0ToV1, v1ToV2, v2ToV3, v3ToV4];
 
 function versionOf(raw: Record<string, unknown>): number {
   const version = raw.schemaVersion;

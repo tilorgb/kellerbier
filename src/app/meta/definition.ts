@@ -1,3 +1,5 @@
+import type { CharacterTraits } from '../../sim/character/definition.js';
+
 /**
  * The shapes the Stammtisch is authored in (#46).
  *
@@ -104,13 +106,37 @@ export interface RegularDefinition {
   readonly waiting: string;
 }
 
-/** A playable character offered on the run-start panel. #47 is what makes this list longer than one. */
+/**
+ * A playable character offered on the run-start panel (#46's shape, #47's
+ * content).
+ *
+ * ## Why a character carries its own condition rather than an unlock id
+ *
+ * #46 wrote `requires` as the id of an entry in `STAMMTISCH_UNLOCKS`,
+ * because at the time the only unlockable things were what the four
+ * regulars brought with them. #47 made that the wrong shape: every unlock
+ * belongs to exactly one regular (`tests/content/stammtisch.test.ts` asserts
+ * it, and the table is drawn on that assumption), so five characters as five
+ * unlocks would mean five more chairs at a four-chair table — a table
+ * rebuilt to fit the roster of a *different* feature.
+ *
+ * A character is its own unlockable thing instead: it states the same
+ * `UnlockCondition` the unlocks use, so `conditionMet`/`conditionProgress`
+ * and the "always something to work toward" progress line come along
+ * unchanged, and the run-start panel shows the roster with its own goals
+ * under it. The table stays the regulars' table.
+ */
 export interface CharacterDefinition {
   readonly id: string;
   readonly name: string;
+  /** One line on who they are, in the player's language, not the code's. */
   readonly note: string;
-  /** The unlock that makes them selectable, or `null` for the one you start with. */
-  readonly requires: string | null;
+  /** What earns them, or `null` for the one you start with. */
+  readonly requires: UnlockCondition | null;
+  /** That condition as a sentence: "Schlog Der Stier am Dorfplatz". Empty for Alois. */
+  readonly goal: string;
+  /** How they actually play — handed straight to `GameSim` as its `character`. */
+  readonly traits: CharacterTraits;
 }
 
 /** Everything the hub is built from, handed in as one bundle so a test can substitute its own. */

@@ -12,6 +12,8 @@ export interface ReplayOutcome {
   readonly kind: 'normal' | 'daily';
   /** Whether this run had the Promille mechanic (#85) — see `ReplayRecord.promilleUnlocked`. */
   readonly promilleUnlocked: boolean;
+  /** Who it was played as (#47) — see `ReplayRecord.character`. */
+  readonly character: string;
   readonly recordedAt: number;
 }
 
@@ -39,6 +41,7 @@ export async function buildReplayRecord(
     deathWord: outcome.deathWord,
     kind: outcome.kind,
     promilleUnlocked: outcome.promilleUnlocked,
+    character: outcome.character,
     recordedAt: outcome.recordedAt,
   };
 }

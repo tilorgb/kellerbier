@@ -1,4 +1,3 @@
-import { STAMMTISCH_CHARACTERS } from '../content/stammtisch/characters.js';
 import { EventKind } from '../sim/events/queue.js';
 import type { GameSim } from '../sim/game/sim.js';
 import { encodeSeed } from '../sim/rng/seed.js';
@@ -59,7 +58,7 @@ export function heldItemNames(sim: GameSim): string[] {
 /** Everything `buildRunDetailsText` needs to say about one run. */
 export interface RunDetails {
   readonly seed: number;
-  /** The one character the game has today — `content/stammtisch/characters.ts`'s doc comment on why. #47 makes this a real selection. */
+  /** Who the run was played as (#47) — read off the run itself, not off the save's current pick. */
   readonly character: string;
   readonly floorName: string;
   readonly roomRole: string;
@@ -79,7 +78,7 @@ export function runDetailsFrom(
 ): RunDetails {
   return {
     seed: sim.seed,
-    character: STAMMTISCH_CHARACTERS[0]?.name ?? 'Alois',
+    character: sim.character.name,
     floorName,
     roomRole,
     ticksSurvived: sim.playerDead ? sim.playerDeathTick : sim.tick,

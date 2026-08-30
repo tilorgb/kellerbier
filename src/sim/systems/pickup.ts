@@ -129,13 +129,37 @@ function collect(sim: GameSim, other: number): boolean {
   if (definitionIndex < 0) {
     return true;
   }
+  const definition = sim.pickups.at(definitionIndex);
+  const effect = definition.effect;
+  // Bruder Barnabas (#47) refuses food outright: the Brezn stays on the
+  // floor, uncollected, and he is told why. Refusing rather than collecting
+  // it for nothing is the whole mechanic — food is the conventional way back
+  // down the Promille meter, and a character who can see the way down and
+  // cannot take it is the Vollrausch character the roster wanted him for.
+  //
+  // Checked *before* the price is paid below, not after: a shop selling a
+  // Brezn would otherwise take his Biermarken for something he then declines.
+  if (effect.kind === 'food' && sim.playerRefusesFood) {
+    sim.reportCollected(definition.name, 'Er fast’t — des bleibt liegn.');
+    return false;
+  }
   const priced = ((sim.world.masks[other] ?? 0) & sim.pickupPrice.bit) !== 0;
   if (priced && !sim.spendBiermarken(sim.pickupPrice.data[other] ?? 0)) {
     return false;
   }
-  const definition = sim.pickups.at(definitionIndex);
-  const effect = definition.effect;
   sim.reportCollected(definition.name, pickupDescriptionFor(definition, sim.promilleUnlocked));
+
+  // A fast is broken by swallowing something, whatever it was (#47) — see
+  // `GameSim.breakFast`. Every branch below that heals or drinks counts;
+  // a Biermarke, a key and a keg do not.
+  if (
+    effect.kind === 'health' ||
+    effect.kind === 'food' ||
+    effect.kind === 'promille' ||
+    effect.kind === 'weisswurst'
+  ) {
+    sim.breakFast();
+  }
 
   switch (effect.kind) {
     case 'health':

@@ -1,4 +1,5 @@
 import { FLOOR_CONFIGS } from '../../content/floors/definition.js';
+import { type CharacterTraits, NEUTRAL_TRAITS } from '../../sim/character/definition.js';
 import { dailySeed } from '../../sim/rng/daily.js';
 import { TICKS_PER_SECOND } from '../../sim/time.js';
 import {
@@ -8,6 +9,7 @@ import {
   MAX_BEST_RUNS,
 } from '../save/schema.js';
 import {
+  type CharacterDefinition,
   type LineCondition,
   type RegularDefinition,
   type StammtischContent,
@@ -157,6 +159,101 @@ export function withRunOutcome(
 }
 
 /**
+ * Records who the next run starts as.
+ *
+ * Refuses an id that is not on the roster or is still locked, rather than
+ * storing it and letting the fallback quietly correct it later: the caller
+ * is a menu that should not be able to offer a locked row, and a rejected
+ * write is how a bug in that menu shows up as "the cursor won't move"
+ * instead of as a run that silently started as somebody else.
+ */
+export function withSelectedCharacter(
+  save: SaveData,
+  id: string,
+  content: StammtischContent,
+): SaveData {
+  const character = characterById(content, id);
+  if (character === undefined || !characterUnlocked(save, character)) {
+    return save;
+  }
+  return save.selectedCharacter === id ? save : { ...save, selectedCharacter: id };
+}
+
+/**
+ * The next unlocked character `delta` steps along the roster from the
+ * currently selected one, wrapping.
+ *
+ * Wrapping, unlike the table's chair cursor, because this is a *choice* and
+ * not a place: a player cycling the roster wants to come back round to Alois
+ * without pressing the key five more times. Locked rows are skipped rather
+ * than landed on and refused — they are still drawn, so the player can see
+ * what they are missing, but the cursor never rests somewhere it cannot
+ * start a run from.
+ */
+export function cycleCharacter(save: SaveData, content: StammtischContent, delta: number): string {
+  const roster = content.characters;
+  const current = selectedCharacterId(save, content);
+  const start = roster.findIndex((character) => character.id === current);
+  const step = delta < 0 ? -1 : 1;
+  for (let offset = 1; offset <= roster.length; offset++) {
+    const index = (((start + offset * step) % roster.length) + roster.length) % roster.length;
+    const candidate = roster[index];
+    if (candidate !== undefined && characterUnlocked(save, candidate)) {
+      return candidate.id;
+    }
+  }
+  return current;
+}
+
+/**
+ * How the selected character actually plays — the one value `app/main.ts`
+ * hands `GameSim` when a run starts.
+ *
+ * Falls back to `NEUTRAL_TRAITS` rather than throwing on a roster that
+ * somehow matches nothing: a run that starts as Alois is a run, and a
+ * `startRun` that throws is a black screen. The roster is covered by
+ * `tests/content/characters.test.ts`, which is where an empty one should
+ * fail.
+ */
+export function selectedCharacterTraits(
+  save: SaveData,
+  content: StammtischContent,
+): CharacterTraits {
+  const id = selectedCharacterId(save, content);
+  return characterById(content, id)?.traits ?? NEUTRAL_TRAITS;
+}
+
+/**
+ * Every condition on the roster met at once — the debug handle's "show me
+ * all of it".
+ *
+ * Walks the conditions rather than listing the statistics they happen to
+ * read, so a character or an unlock added later is covered without anybody
+ * remembering to extend this. The mirror image of `resetProgress`, and there
+ * for the same reason: trying five characters by hand costs four hundred
+ * kills and ten finished runs, which is a price worth paying to *play* the
+ * game and not to check that a stat block reads right.
+ */
+export function withEverythingUnlocked(save: SaveData, content: StammtischContent): SaveData {
+  const statistics = { ...save.statistics };
+  const conditions: UnlockCondition[] = [
+    ...content.unlocks.map((unlock) => unlock.condition),
+    ...content.characters
+      .map((character) => character.requires)
+      .filter((requires): requires is UnlockCondition => requires !== null),
+  ];
+  for (const condition of conditions) {
+    if (condition.kind === 'bossDefeated') {
+      const key = bossStatKey(condition.floor);
+      statistics[key] = Math.max(statistics[key] ?? 0, 1);
+    } else {
+      statistics[condition.stat] = Math.max(statistics[condition.stat] ?? 0, condition.value);
+    }
+  }
+  return grantEarnedUnlocks({ ...save, statistics }, content);
+}
+
+/**
  * Records a daily run's result (#48), but only the first time `date` is
  * seen — "one attempt" for a save with no server to enforce it means the
  * entry already in `dailyRunHistory` for that date is the one that counts,
@@ -285,11 +382,9 @@ export interface StammtischView {
   readonly seats: readonly SeatView[];
   /** Index into `seats` the screen should open on — an arriving regular, else the first empty chair. */
   readonly openOn: number;
-  readonly characters: readonly {
-    readonly name: string;
-    readonly note: string;
-    readonly unlocked: boolean;
-  }[];
+  readonly characters: readonly CharacterView[];
+  /** The id of the character the next run would start as — always an unlocked one. */
+  readonly selectedCharacter: string;
   /** The board's rows, longest run first, or `null` while the board itself is still locked. */
   readonly board: readonly string[] | null;
   /** Whether the run-start panel offers a seed to change. */
@@ -312,6 +407,69 @@ export const UNLOCK_PROMILLE = 'promille';
 export const UNLOCK_BOARD = 'stammtisch-tafel';
 /** The unlock id the seed row is gated behind. */
 export const UNLOCK_SEED = 'stammtisch-zufoi';
+
+/** One row of the run-start panel's roster. */
+export interface CharacterView {
+  readonly id: string;
+  readonly name: string;
+  readonly note: string;
+  readonly unlocked: boolean;
+  /** What would earn them. Empty once they are earned — a met goal is not news. */
+  readonly goal: string;
+  /** "240 / 400" while locked and countable, `null` for a one-shot condition or an unlocked row. */
+  readonly progress: string | null;
+}
+
+/** Whether `save` has met what `character` asks for. Alois (`requires: null`) is always true. */
+export function characterUnlocked(save: SaveData, character: CharacterDefinition): boolean {
+  return character.requires === null || conditionMet(save, character.requires);
+}
+
+export function characterView(save: SaveData, character: CharacterDefinition): CharacterView {
+  const unlocked = characterUnlocked(save, character);
+  const progress = character.requires === null ? null : conditionProgress(save, character.requires);
+  return {
+    id: character.id,
+    name: character.name,
+    note: character.note,
+    unlocked,
+    goal: unlocked ? '' : character.goal,
+    progress:
+      unlocked || progress === null || progress.goal <= 1
+        ? null
+        : `${String(progress.current)} / ${String(progress.goal)}`,
+  };
+}
+
+/**
+ * The character the next run starts as: the saved choice, if it still exists
+ * and is still unlocked, and otherwise the first unlocked row.
+ *
+ * Falling back rather than trusting the save is not paranoia about
+ * `localStorage` — it is what happens on an ordinary
+ * `__kellerbier.stammtisch.resetProgress()`, or the day a character's unlock
+ * condition is re-tuned upward. A saved id nobody can play any more must not
+ * be able to start a run.
+ */
+export function selectedCharacterId(save: SaveData, content: StammtischContent): string {
+  const chosen = content.characters.find((character) => character.id === save.selectedCharacter);
+  if (chosen !== undefined && characterUnlocked(save, chosen)) {
+    return chosen.id;
+  }
+  return content.characters.find((character) => characterUnlocked(save, character))?.id ?? '';
+}
+
+/**
+ * The character `id` names, or the first unlocked one — the run-start path's
+ * one lookup, so `app/main.ts` never has to know what happens when a save
+ * names a character that has since been renamed.
+ */
+export function characterById(
+  content: StammtischContent,
+  id: string,
+): CharacterDefinition | undefined {
+  return content.characters.find((character) => character.id === id);
+}
 
 function unlockById(content: StammtischContent, id: string): UnlockDefinition | undefined {
   return content.unlocks.find((unlock) => unlock.id === id);
@@ -358,11 +516,8 @@ export function buildStammtischView(
     lastRunLine: lastRunLine(lastRun),
     seats,
     openOn: arriving >= 0 ? arriving : empty >= 0 ? empty : 0,
-    characters: content.characters.map((character) => ({
-      name: character.name,
-      note: character.note,
-      unlocked: character.requires === null || unlocked.has(character.requires),
-    })),
+    characters: content.characters.map((character) => characterView(save, character)),
+    selectedCharacter: selectedCharacterId(save, content),
     board: unlocked.has(UNLOCK_BOARD) ? save.bestRuns.map(boardRow) : null,
     seedUnlocked: unlocked.has(UNLOCK_SEED),
     runsPlayed: statistic(save, STAT_RUNS),

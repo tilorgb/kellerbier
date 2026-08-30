@@ -37,6 +37,7 @@ import {
 } from '../render/resolution.js';
 import { ActiveItemHud } from '../render/active-item-hud.js';
 import { BossHealthHud } from '../render/boss-health-hud.js';
+import { CharacterHud } from '../render/character-hud.js';
 import { EntityView } from '../render/entities.js';
 import { GameOverScreen } from '../render/game-over.js';
 import { StammtischScreen } from '../render/stammtisch.js';
@@ -88,14 +89,20 @@ import {
   saveSettings,
 } from './settings.js';
 import { ActiveRunRecorder, decodeActiveRunFrames, persistActiveRun } from './save/active-run.js';
+import type { CharacterTraits } from '../sim/character/definition.js';
 import { loadSave } from './save/storage.js';
 import {
   markGreeted,
   recordBossDefeat,
   recordDailyRunOutcome,
   recordRunOutcome,
+  characterTraitsById,
   resetProgress,
+  selectCharacter,
+  selectedCharacter,
+  selectNextCharacter,
   stammtischView,
+  unlockEverything,
 } from './meta/index.js';
 import {
   type PromilleOverride,
@@ -659,6 +666,13 @@ async function boot(): Promise<void> {
   hudLayer.addChild(walletHud.view);
 
   /**
+   * The character's own row (#47) — hidden for a character whose rules have
+   * no state to watch, so an Alois run's HUD is unchanged.
+   */
+  const characterHud = new CharacterHud(kit);
+  hudLayer.addChild(characterHud.view);
+
+  /**
    * Hidden entirely (`ActiveItemHud.sync`) whenever no active item is held,
    * so an ordinary run without one never shows an empty row.
    */
@@ -739,6 +753,8 @@ async function boot(): Promise<void> {
     }
     walletHud.view.position.set(HUD_MARGIN, y);
     y += walletHud.height + HUD_ROW_GAP;
+    characterHud.view.position.set(HUD_MARGIN, y);
+    y += characterHud.height + HUD_ROW_GAP;
     activeItemHud.view.position.set(HUD_MARGIN, y);
     y += activeItemHud.height + HUD_ROW_GAP;
     itemGateHud.view.position.set(HUD_MARGIN, y);
@@ -813,6 +829,8 @@ async function boot(): Promise<void> {
     playback: InputPlayback;
     /** The recorded run's own Promille state (#85) — see `startRun`'s doc comment on why a replay never uses today's unlock state instead. */
     readonly promilleUnlocked: boolean;
+    /** And the character it was played as (#47), for exactly the same reason. */
+    readonly character: string;
   } | null = null;
   const replayViewer = new ReplayViewer(kit);
   hudLayer.addChild(replayViewer.view);
@@ -1001,6 +1019,7 @@ async function boot(): Promise<void> {
     const finishedDeathWord = sim.deathWord ?? null;
     const finishedIsDaily = activeRunIsDaily;
     const finishedPromilleUnlocked = activeRunRecorder.promilleUnlocked;
+    const finishedCharacter = activeRunRecorder.character;
     const recording = new InputRecording(Math.max(1, activeRunRecorder.frameCount));
     for (const frame of decodeActiveRunFrames(activeRunRecorder.toSave())) {
       recording.push(frame);
@@ -1013,6 +1032,7 @@ async function boot(): Promise<void> {
       deathWord: finishedDeathWord,
       kind: finishedIsDaily ? 'daily' : 'normal',
       promilleUnlocked: finishedPromilleUnlocked,
+      character: finishedCharacter,
       recordedAt: Date.now(),
     })
       .then(saveReplay)
@@ -1154,6 +1174,7 @@ async function boot(): Promise<void> {
       healthHud.sync(sim);
       promilleHud.sync(sim, settings.neutralReskin);
       walletHud.sync(sim);
+      characterHud.sync(sim);
       // `use` is dual-purpose (`stepPedestal`) — near a pedestal it takes the
       // item instead, but the prompt shown here is always the activation one:
       // the two are mutually exclusive in practice (`sim/systems/pedestal.ts`'s
@@ -1289,6 +1310,10 @@ async function boot(): Promise<void> {
     // Trinkfest (#92) only earns space on this line once it has actually
     // moved off baseline — same reasoning as `PromilleHud`'s own label.
     const trinkfest = sim.trinkfest !== 0 ? `  trinkfest ${String(sim.trinkfest)}` : '';
+    // Who the run is being played as (#47) — on the line a bug report's
+    // clipboard copy carries, because "Barnabas refuses food" and "food
+    // pickups are broken" are the same screenshot otherwise.
+    const character = sim.character.name;
     // Neutral reskin (#33): the meter's own name and its tier both switch —
     // this line is reachable by a normal player (`O`) and is what a bug
     // report's clipboard copy carries, so it gets the same treatment as
@@ -1310,7 +1335,7 @@ async function boot(): Promise<void> {
     // the mechanic would hand a sober player the word the gate exists to
     // keep from them until Da Xaver says it.
     const overrideKeyHint = import.meta.env.DEV ? `   B promille gate (${promilleOverride})` : '';
-    hud.text = `seed ${String(RUN_SEED)}  ${floorPlan.floorName}  room ${sim.roomId} (${currentRole})  doors ${roomState}${warmup}${keyHint}  enemies ${String(sim.liveEnemyCount)}
+    hud.text = `seed ${String(RUN_SEED)}  ${character}  ${floorPlan.floorName}  room ${sim.roomId} (${currentRole})  doors ${roomState}${warmup}${keyHint}  enemies ${String(sim.liveEnemyCount)}
   tick ${String(loop.tick)}  ${seconds}s  x${scale}${loop.paused ? '  PAUSED' : ''}
 hp ${String(hearts)}/${String(maxHearts)}  soul ${String(sim.playerSoulHealth)}  eternal ${String(sim.playerEternalHealth)}${invulnerable}${dead}${runState}${override}${promilleLine}
 shots ${String(shots.liveCount)}/${String(shots.capacity)}  particles ${String(
@@ -1358,7 +1383,12 @@ WASD move   arrows aim and fire
     {
       promilleUnlocked = nextRunPromilleUnlocked(),
       persist = true,
-    }: { promilleUnlocked?: boolean; persist?: boolean } = {},
+      character = selectedCharacter(),
+    }: {
+      promilleUnlocked?: boolean;
+      persist?: boolean;
+      character?: CharacterTraits;
+    } = {},
   ): void {
     RUN_SEED = seed;
     if (seedInput instanceof HTMLInputElement) {
@@ -1377,6 +1407,11 @@ WASD move   arrows aim and fire
 
     sim = new GameSim({
       seed: RUN_SEED,
+      // Who the run is played as (#47) — the Stammtisch's current selection
+      // for a fresh run, and the *recorded* one for a resume or a replay. A
+      // run parameter, the same shape as `promilleUnlocked` below, for the
+      // same reason: see `ActiveRunSave.character`.
+      character,
       roomTemplate: planTemplate(planRoom(floorPlan, currentRoomId)),
       // Without this, the start room falls back to `compileRoomTemplate`'s
       // default `SINGLE_CELL_PLACEMENT` (no doors), which in turn falls back
@@ -1408,7 +1443,7 @@ WASD move   arrows aim and fire
     // after a restart resumes into the *new* run next time, not the one the
     // player just left behind. Skipped for `persist: false` (a replay's own
     // rebuild) — see this function's doc comment.
-    activeRunRecorder = new ActiveRunRecorder(seed, promilleUnlocked);
+    activeRunRecorder = new ActiveRunRecorder(seed, promilleUnlocked, character.id);
     ticksSinceAutosave = 0;
     if (persist) {
       persistActiveRun(activeRunRecorder);
@@ -1585,7 +1620,16 @@ WASD move   arrows aim and fire
       // about a log that was recorded sober. Replaying those inputs against
       // the wrong drop tables would resume a different run — see
       // `ActiveRunSave.promilleUnlocked`.
-      startRun(RUN_SEED, { promilleUnlocked: activeRun.promilleUnlocked });
+      // Same argument for the character (#47): the table writes a choice the
+      // moment the player cycles to it, mid-run included, so the save's
+      // current pick can already describe somebody other than whoever
+      // recorded this log. `characterTraitsById` resolves the recorded id
+      // without asking whether it is still unlocked — a run in progress is
+      // not a new choice to be validated.
+      startRun(RUN_SEED, {
+        promilleUnlocked: activeRun.promilleUnlocked,
+        character: characterTraitsById(activeRun.character),
+      });
       const frames = decodeActiveRunFrames(activeRun);
       for (const frame of frames) {
         activeRunRecorder.record(frame);
@@ -1621,8 +1665,13 @@ WASD move   arrows aim and fire
     frames: InputRecording,
     upToTick: number,
     promilleUnlocked: boolean,
+    character: string,
   ): void {
-    startRun(seed, { persist: false, promilleUnlocked });
+    startRun(seed, {
+      persist: false,
+      promilleUnlocked,
+      character: characterTraitsById(character),
+    });
     const scratch = createInputFrame();
     const clamped = Math.max(0, Math.min(upToTick, frames.length));
     for (let tick = 0; tick < clamped; tick++) {
@@ -1640,11 +1689,22 @@ WASD move   arrows aim and fire
    * `ActiveRunSave`, #85), not today's save state — see `startRun`'s doc
    * comment.
    */
-  function enterReplay(seed: number, frameBytes: Int8Array, promilleUnlocked: boolean): void {
+  function enterReplay(
+    seed: number,
+    frameBytes: Int8Array,
+    promilleUnlocked: boolean,
+    character: string,
+  ): void {
     const recording = InputRecording.fromBytes(frameBytes);
     closeStammtisch();
-    replay = { seed, recording, playback: new InputPlayback(recording), promilleUnlocked };
-    replayTo(seed, recording, 0, promilleUnlocked);
+    replay = {
+      seed,
+      recording,
+      playback: new InputPlayback(recording),
+      promilleUnlocked,
+      character,
+    };
+    replayTo(seed, recording, 0, promilleUnlocked, character);
     loop.paused = false;
     loop.timeScale = 1;
     refreshHud();
@@ -1663,7 +1723,7 @@ WASD move   arrows aim and fire
     const wasPaused = loop.paused;
     const timeScale = loop.timeScale;
     const clamped = Math.max(0, Math.min(targetTick, replay.recording.length));
-    replayTo(replay.seed, replay.recording, clamped, replay.promilleUnlocked);
+    replayTo(replay.seed, replay.recording, clamped, replay.promilleUnlocked, replay.character);
     replay.playback.rewind();
     for (let skipped = 0; skipped < clamped; skipped++) {
       replay.playback.next();
@@ -1688,7 +1748,7 @@ WASD move   arrows aim and fire
     }
     loadReplayFrames(record)
       .then((bytes) => {
-        enterReplay(record.seed, bytes, record.promilleUnlocked);
+        enterReplay(record.seed, bytes, record.promilleUnlocked, record.character);
       })
       .catch((error: unknown) => {
         console.warn('[replay] failed to load the stored replay', error);
@@ -1730,7 +1790,7 @@ WASD move   arrows aim and fire
             return null;
           }
           return loadReplayFrames(record).then((bytes) => {
-            enterReplay(record.seed, bytes, record.promilleUnlocked);
+            enterReplay(record.seed, bytes, record.promilleUnlocked, record.character);
           });
         })
         .catch((error: unknown) => {
@@ -2104,6 +2164,15 @@ WASD move   arrows aim and fire
             startRun(pendingSeed);
           }
           break;
+        case 'f':
+        case 'F':
+          // F for Figur. Cycles the roster's unlocked rows and stores the
+          // choice immediately — the panel is the only place it is shown, so
+          // a choice that lived in memory until Enter would be a choice the
+          // player could not check they had made.
+          selectNextCharacter(event.shiftKey ? -1 : 1);
+          stammtisch.update(stammtischView());
+          break;
         case 'r':
         case 'R':
           pendingSeed = rollSeed();
@@ -2448,6 +2517,18 @@ WASD move   arrows aim and fire
       close: closeStammtisch,
       recordBossDefeat,
       resetProgress,
+      unlockEverything: () => {
+        unlockEverything();
+        if (stammtisch.visible) {
+          stammtisch.update(stammtischView());
+        }
+      },
+      selectCharacter: (id: string) => {
+        selectCharacter(id);
+        if (stammtisch.visible) {
+          stammtisch.update(stammtischView());
+        }
+      },
     },
     {
       // Getters, not a snapshot: the override and the live run's state both
@@ -2605,6 +2686,14 @@ interface StammtischHandle {
   recordBossDefeat: (floor: number) => void;
   /** Empties the table and the statistics behind it, keeping settings and the run in progress. */
   resetProgress: () => void;
+  /** Meets every unlock condition on the roster at once (#47) — its mirror. */
+  unlockEverything: () => void;
+  /**
+   * Picks the character the next run starts as, by id. Refuses one that is
+   * still locked, so a dev handle cannot start a run nobody could — pair it
+   * with `unlockEverything` to try one out.
+   */
+  selectCharacter: (id: string) => void;
 }
 
 function exposeDebugHandle(

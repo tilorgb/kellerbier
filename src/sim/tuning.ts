@@ -591,6 +591,33 @@ export interface ItemPoolTuning {
   bobPeriodTicks: number;
 }
 
+/**
+ * The three character verbs that are numbers rather than behaviour (#47).
+ *
+ * Barnabas's fast, Ludwig's purse and the Wolpertinger's reroll all have a
+ * "how much" that has to be tunable at runtime, per `CONTRIBUTING.md`'s
+ * gameplay definition of done — the *rules* themselves live in
+ * `sim/character/definition.ts` as data on the roster, but nobody can feel
+ * whether a fast should pay off after fifteen seconds or forty-five without
+ * dragging it while playing.
+ */
+export interface CharacterTuning {
+  /** Ticks of fasting per step of Barnabas's Stammwürze bonus. */
+  fastStepTicks: number;
+  /** Stammwürze added per completed step, as a multiplier addend (0.2 = +20% per step). */
+  fastStepBonus: number;
+  /** Steps the fast stops paying at, so a patient run is strong rather than unbounded. */
+  fastMaxSteps: number;
+  /** Ticks between the Biermarken Ludwig's crown costs him. */
+  purseDrainTicks: number;
+  /** Ludwig's Stammwürze multiplier while the purse still has something in it. */
+  pursePowerMultiplier: number;
+  /** Lowest factor a Wolpertinger reroll can hand a stat. */
+  chaosMinFactor: number;
+  /** Highest. The band is deliberately wider upward than down — unfair in both directions, but playable. */
+  chaosMaxFactor: number;
+}
+
 export interface SimTuning {
   readonly movement: MovementTuning;
   readonly shooting: ShootingTuning;
@@ -600,6 +627,7 @@ export interface SimTuning {
   readonly pickup: PickupTuning;
   readonly projectileTags: ProjectileTagTuning;
   readonly itemPool: ItemPoolTuning;
+  readonly character: CharacterTuning;
 }
 
 export const DEFAULT_MOVEMENT_TUNING: Readonly<MovementTuning> = {
@@ -816,6 +844,24 @@ export const DEFAULT_PROJECTILE_TAG_TUNING: Readonly<ProjectileTagTuning> = {
   freezeDurationTicks: 45,
 };
 
+export const DEFAULT_CHARACTER_TUNING: Readonly<CharacterTuning> = {
+  // Fifteen seconds a step, four steps: a Barnabas who has eaten nothing for
+  // a minute is hitting twice as hard as one who just drank. Long enough
+  // that walking past a Brezn is a decision, short enough to be felt inside
+  // one floor.
+  fastStepTicks: 900,
+  fastStepBonus: 0.25,
+  fastMaxSteps: 4,
+  // A Biermarke every one and a half seconds. Ludwig starts with a purse
+  // (`content/characters/koenig-ludwig.ts`) that buys him about a minute of
+  // being Ludwig, which is roughly a room and a half — so the coins a room
+  // drops are the thing keeping him in the air, not decoration.
+  purseDrainTicks: 90,
+  pursePowerMultiplier: 3,
+  chaosMinFactor: 0.6,
+  chaosMaxFactor: 1.8,
+};
+
 export function createTuning(): SimTuning {
   return {
     movement: { ...DEFAULT_MOVEMENT_TUNING },
@@ -826,6 +872,7 @@ export function createTuning(): SimTuning {
     pickup: { ...DEFAULT_PICKUP_TUNING },
     projectileTags: { ...DEFAULT_PROJECTILE_TAG_TUNING },
     itemPool: { ...DEFAULT_ITEM_POOL_TUNING },
+    character: { ...DEFAULT_CHARACTER_TUNING },
   };
 }
 

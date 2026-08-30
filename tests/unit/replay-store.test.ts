@@ -22,6 +22,7 @@ const OUTCOME = {
   deathWord: 'Umgfalln',
   kind: 'normal' as const,
   promilleUnlocked: true,
+  character: 'barnabas',
   recordedAt: 1000,
 };
 

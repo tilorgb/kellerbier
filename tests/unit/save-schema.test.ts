@@ -32,11 +32,14 @@ describe('save schema sanitisation (#45)', () => {
     expect(sanitized.bestRuns).toEqual([]);
     // `promilleUnlocked` is back-filled `true` rather than dropped: an
     // active run that reaches here without it was recorded before the field
-    // existed, and every one of those was a promilled run (#85).
+    // existed, and every one of those was a promilled run (#85). `character`
+    // back-fills the same way and for the same reason: a log recorded before
+    // there was a roster can only have been an Alois run (#47).
     expect(sanitized.activeRun).toEqual({
       seed: 7,
       frames: [1, 2, 3, 4, 5],
       promilleUnlocked: true,
+      character: 'alois',
     });
   });
 
@@ -96,6 +99,7 @@ describe('save schema sanitisation (#45)', () => {
       deathWord: 'Hi',
       kind: 'daily',
       promilleUnlocked: false,
+      character: 'resi',
       recordedAt: 5,
     };
     expect(sanitizeSave({ replays: [replay] }).replays).toEqual([replay]);
@@ -116,6 +120,8 @@ describe('save schema sanitisation (#45)', () => {
       recordedAt: 5,
     };
     expect(sanitizeSave({ replays: [withoutFlag] }).replays[0]?.promilleUnlocked).toBe(true);
+    // And the same back-fill for the character a pre-#47 replay cannot name.
+    expect(sanitizeSave({ replays: [withoutFlag] }).replays[0]?.character).toBe('alois');
   });
 
   it('falls back to "normal" for a replay kind that is not "daily"', () => {

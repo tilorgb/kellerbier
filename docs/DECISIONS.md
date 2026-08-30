@@ -2471,3 +2471,81 @@ would need.
 extension of `dailyRunHistory`. A future "resume a live run into a replay without losing it"
 feature (not asked for here) would need `enterReplay` to snapshot rather than discard the live
 `sim`, which nothing here does today.
+
+---
+
+## 54. A character is a stat block plus named rules, and a rule is a branch in exactly one system
+
+**Decided:** M7, #47. The other five playable characters — `GAME_DESIGN.md` §3's roster, whose
+own rule for itself is that each one is a different **verb**, not a different stat spread.
+
+**The verb cannot be data, so the *name* of the verb is.** Bruder Barnabas refuses food, König
+Ludwig flies, Der Wolpertinger is rerolled every floor, D'Sennerin's ricochets come back at
+her. None of that is expressible as numbers, and a `CharacterDefinition` carrying functions
+would put behaviour in `src/content/`, which the `content-is-data` lint rule exists to prevent
+(#7, and the M6 schedule's assumption that adding content is a data change). So a character is
+a stat block, a list of item ids, a list of projectile tags — and a list of **rule ids**. Each
+rule id is read by exactly one system: `refusesFood` by `sim/systems/pickup.ts`, `flies` by
+`sim/systems/movement.ts`, `ricochetHurtsOwner` by `sim/systems/collision.ts`, `fasting`,
+`purse` and `chaos` by `GameSim` itself. Adding the seventh character stays a file in
+`src/content/characters/`; adding a genuinely new verb costs a rule id and one system, which is
+the honest price of a verb that did not exist before. The three ids read on per-tick paths are
+resolved to booleans once at construction, so no hot loop scans an array to find out who it is
+carrying.
+
+**Three of the four ways a character touches the pipeline are separate sources.** The fixed
+stat block registers once as `'character'`; Barnabas's fast is `'character-fast'`, Ludwig's
+purse `'character-purse'`, the Wolpertinger's roll `'character-chaos'`. One combined source
+would have been fewer lines and would have made the stat inspector (#25) say "Resi ×1.3" where
+the truth is "Resi ×1.3, and Fastn ×1.5 because you have not eaten in a minute". The whole
+point of #25 was that a number comes with the chain of named reasons that produced it.
+
+**A character's own condition, not an entry in the unlock list.** #46 wrote
+`CharacterDefinition.requires` as the id of a `STAMMTISCH_UNLOCKS` entry, because at the time
+the only unlockable things were what the four regulars brought. Every unlock belongs to exactly
+one regular — the content test asserts it, and the table is drawn on that assumption — so five
+characters as five unlocks would have meant nine chairs at a four-chair table: one feature's
+roster rebuilding another feature's furniture. A character states the same `UnlockCondition`
+instead, so `conditionMet`/`conditionProgress` and the "always something to work toward"
+progress line come along unchanged, and the roster is drawn as its own panel on the run-start
+side of the hub.
+
+**The conditions are what the shipped game can produce, not what the design doc wants.**
+§3 unlocks Resi on floor 3 and König Ludwig by beating him on floor 6. Floors 3-7 are parked
+(M10), so those are goals with no way to reach them — the "a gate nobody updated" failure
+`CLAUDE.md` warns about, in its purest form: a perfectly correct character nobody can ever
+play. Every condition is therefore something a player of the current two-floor build can meet
+(the two bosses, total kills, finished runs, Der Stier three times as Ludwig's stand-in), and
+`tests/content/characters.test.ts` fails the build if a new one names a floor past
+`HIGHEST_PLAYABLE_FLOOR`. Each becomes its intended condition in the same file on the day its
+floor lands.
+
+**Flight crosses furniture, never the map.** `RoomGeometry.addBlock` grew an `overflyable`
+flag, and it is off by default: an authored obstacle opts in, while the blocks standing in for
+an `L`/`T` room's unclaimed grid cells (and a staircase's seams) do not. The failure mode of
+the other default is a player flying out of the room into cells that were deliberately not
+compiled, next to doors that were deliberately not made; the failure mode of this one is a
+crate Ludwig has to walk around. His flight is also *rented* — the purse drains a Biermarke a
+second and his damage multiplier dies with it — which is the answer to the issue's own warning
+that flight must not trivialise a floor built around obstacles: crossing them is a shortcut
+whose currency is time, and time is what his purse is denominated in. Floors 4 and 6 are the
+real test of that, and they do not exist yet.
+
+**Save schema v4**, two fields. `selectedCharacter` is a preference, not progress — a stored id
+that is unknown or has since re-locked falls back to the first unlocked character rather than
+failing, because a `startRun` that throws is a black screen. `ActiveRunSave.character` is the
+other one, and it is #52's argument applied unchanged: a character is a run *parameter*, so it
+rides with the log it describes. The table writes a choice the moment the player cycles to it,
+mid-run included, so a run resumed against the save's *current* pick would replay one
+character's inputs at another's health and speed — the same divergence #85 had to prevent for
+the Promille flag, discovered by merging into it. `ReplayRecord.character` is the third copy of
+that same argument, found the same way when #53's replays landed: a replay is a rebuilt run,
+so watching a Barnabas run while the table has Resi selected would reconstruct a run nobody
+played. Both back-fill to Alois, which is the only character a log recorded before this issue
+could have been.
+
+**Constrains:** #48's daily run has to decide whether a fixed character is part of a day's seed.
+#50's challenges are the same shape as a character (a run modifier chosen at the table) and
+should reuse `CharacterTraits` rather than growing a parallel one. Per-character *art* is
+deliberately not part of this — every character plays as Alois's sprites today, because new
+pixel art needs a sign-off round (`CLAUDE.md`) that a stat block does not.
