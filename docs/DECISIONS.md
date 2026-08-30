@@ -2194,3 +2194,44 @@ true on-screen scale next to Alois before it lands, not assumed from "more pixel
 better." A future third size is not "just add another number to `LEGAL_TILE_SIZES`" — it would
 need its own grid constant and its own whole-number-scale proof the way 16 and 32 already have
 one each; nothing here makes a third size cheap.
+
+## 49. Every tile category redraws at 32x32 together, or not at all — mixed density within a category is the bug #48 left open
+
+**Decided:** M8, #182, closing the gap #48 (`#180`) deliberately left open: that decision redrew
+only floor 1 and floor 2's floor/wall/wall-lip, naming `cellar-plank`, `rural-hedge-block`, every
+destructible, and every door as "per-asset upgrade, not floor-wide" — true as a mechanism, but it
+left exactly the mismatch #180 was drawn to fix sitting on every other tile in the room: an
+obstacle block or a piece of furniture at the old 16px density next to a now-32px floor and a
+1:1-detail character.
+
+**What changed:** every remaining `tile`-category asset under `assets/sprites/*/tiles/` —
+obstacle blocks (`cellar-plank`, `rural-hedge-block`), destructibles (`cellar-barrel`,
+`rural-barrel`, `rural-maibaum-base`), both doors (`door-open`, `door-closed`), and every
+decorative prop (`cellar-bulb`, the three crates, `boss-plate`, `pedestal`, `shopkeeper-stand`,
+and floor 2's bandstand/bunting/fence-post/hay-bale/maibaum-top/market-stall/tractor/trough/well)
+— redrew at 32x32 in the same change, on-palette, each with its own deliberate structural detail
+(wood-grain direction, staggered stone coursing, individual leaf-cluster placement, hoop rivets,
+fabric folds) rather than a single filter applied uniformly — the same "candidate shown at true
+on-screen scale next to Alois" sign-off #48 already required, run once per asset rather than once
+for the whole batch, because a barrel's stave-and-hoop structure and a hedge's leaf rosette are not
+the same design choice even though both are "add detail to an existing silhouette."
+
+No living room in floors 1-2 now mixes a crisp 32px surface with a soft 16px prop, obstacle, or
+door — the exact symptom `#182`'s title named.
+
+**The minimap icons (`minimap-boss`, `minimap-shop`, `minimap-treasure`) also moved to 32x32**,
+but for consistency of the file spec only, not for any visual gain: `render/minimap-hud.ts`'s
+`makeIcon` draws every room-role icon at a fixed `ICON_PX` (8 screen pixels) regardless of the
+source texture's own size — it is HUD chrome sized to the minimap's own scale, not a room sprite
+sized by `tileRect`'s `ROOM_TILE_UNITS / texture.width` rule. A 32px source is downsampled to the
+same 8px icon a 16px source already was, so the extra authored pixels buy nothing a player can
+see. They were redrawn anyway on direct instruction, with a plain bevelled upscale and no bespoke
+interior texture — spending hand-authored detail on pixels nobody will ever resolve would be the
+wrong side of this same decision's reasoning.
+
+**Constrains:** floors 3-7 (#39-#43, parked in M10) have no tile art yet at all. When they land,
+author every tile-category asset straight at 32x32 from the start rather than shipping at 16x16
+and coming back for a second pass — this issue and #180 before it are now two separate times a
+floor's tile art needed revisiting for exactly this reason, and a third floor doing it the old way
+on purpose would be relitigating a settled call. `tools/art/spec.mjs`/`validate.mjs` need no
+change either way; the 16-or-32 rule from #48 already covers both sizes.
