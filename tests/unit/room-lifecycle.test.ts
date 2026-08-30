@@ -260,12 +260,145 @@ describe('boss room reward', () => {
     const outcomes = new Set<boolean>();
     for (let roll = 0; roll < 40; roll++) {
       const before = sim.world.count;
-      sim.dropLoot(BOSS_REWARD_DROP_TABLE, sim.room.minX + 10, sim.room.minY + 10);
+      const result = sim.dropLoot(BOSS_REWARD_DROP_TABLE, sim.room.minX + 10, sim.room.minY + 10);
       sim.world.flush();
-      outcomes.add(sim.world.count > before);
+      const spawned = sim.world.count > before;
+      outcomes.add(spawned);
+      // The return value is what `rollRoomClearLoot` hands `announceRoomClear`
+      // to position the room-clear ring (#room-rewards-doors-bugs) — it has
+      // to agree with whether anything actually spawned, not just say so.
+      expect(result !== null).toBe(spawned);
     }
     expect(outcomes.has(true)).toBe(true);
     expect(outcomes.has(false)).toBe(true);
+  });
+});
+
+describe('room-clear reward ring (#room-rewards-doors-bugs)', () => {
+  function roomCentre(sim: GameSim): { x: number; y: number } {
+    return { x: (sim.room.minX + sim.room.maxX) / 2, y: (sim.room.minY + sim.room.maxY) / 2 };
+  }
+
+  function liveGlints(sim: GameSim): { x: number; y: number }[] {
+    const glints: { x: number; y: number }[] = [];
+    sim.particles.forEachLive((index) => {
+      if (sim.particles.kind[index] === ParticleKind.Glint) {
+        glints.push({ x: sim.particles.x[index] ?? 0, y: sim.particles.y[index] ?? 0 });
+      }
+    });
+    return glints;
+  }
+
+  /**
+   * Kills every live enemy and steps once — the same "the last enemy just
+   * died" tick `describe('boss room reward', ...)`'s sibling tests drive by
+   * hand. A room with no authored enemies at all is marked cleared the
+   * instant it loads (`applyCompiledRoom`'s own `roomClearedIds.add`), which
+   * never reaches the room-clear roll — an authored enemy has to actually
+   * die on a real `step` for that.
+   */
+  function clearByKillingEveryone(sim: GameSim): void {
+    const enemies: number[] = [];
+    sim.world.forEach(sim.enemyMask, (index) => enemies.push(index));
+    for (const index of enemies) {
+      sim.kill(index);
+    }
+    sim.world.flush();
+    sim.step(idle());
+    sim.world.flush();
+  }
+
+  function pickupCountOf(sim: GameSim): number {
+    let count = 0;
+    sim.world.forEach(sim.world.maskOf(sim.pickupKind), () => {
+      count += 1;
+    });
+    return count;
+  }
+
+  it('spawns no ring on a clear that pays out nothing', () => {
+    // `ROOM_CLEAR_DROP_TABLE`'s `null` outcome is roughly 30% of the roll —
+    // seed-hunt for one of the room's own first `random.items` draw landing
+    // there, same technique `dropLoot`'s "many rolls" tests above use, just
+    // over seeds instead of repeated calls, since only the very first roll a
+    // fresh room makes is the one `clearByKillingEveryone` below exercises.
+    let cleared: GameSim | undefined;
+    for (let seed = 0; seed < 200 && cleared === undefined; seed++) {
+      const candidate = new GameSim({
+        roomTemplate: cellarCrossroads,
+        floor: 1,
+        population: 'empty',
+        seed,
+      });
+      clearByKillingEveryone(candidate);
+      if (pickupCountOf(candidate) === 0) {
+        cleared = candidate;
+      }
+    }
+    if (cleared === undefined) {
+      throw new Error('no seed in range rolled the room-clear table\'s "nothing" outcome');
+    }
+    expect(liveGlints(cleared)).toHaveLength(0);
+  });
+
+  it('positions the ring at the reward pickup itself, not the room centre, when the centre is blocked', () => {
+    const probe = new GameSim({ roomTemplate: cellarCrossroads, floor: 1, population: 'empty' });
+    const centre = roomCentre(probe);
+    const blockedCentreTemplate = {
+      ...cellarCrossroads,
+      // `obstacles` are authored relative to the playfield's own top-left,
+      // before `compileRoomTemplate` offsets everything by the room margin
+      // (`ROOM_MARGIN_X`/`_Y`) to land in `sim.room`'s world space — the same
+      // offset `probe.room.minX`/`minY` already carries, so subtracting it
+      // back out here is what actually lands this block on `centre`.
+      obstacles: [
+        ...cellarCrossroads.obstacles,
+        {
+          x: centre.x - probe.room.minX - 20,
+          y: centre.y - probe.room.minY - 20,
+          width: 40,
+          height: 40,
+        },
+      ],
+    };
+
+    let cleared: GameSim | undefined;
+    for (let seed = 0; seed < 200 && cleared === undefined; seed++) {
+      const candidate = new GameSim({
+        roomTemplate: blockedCentreTemplate,
+        floor: 1,
+        population: 'empty',
+        seed,
+      });
+      clearByKillingEveryone(candidate);
+      if (pickupCountOf(candidate) > 0) {
+        cleared = candidate;
+      }
+    }
+    if (cleared === undefined) {
+      throw new Error('no seed in range rolled a reward off the blocked room-clear table');
+    }
+    const sim = cleared;
+
+    let pickupX = NaN;
+    let pickupY = NaN;
+    sim.world.forEach(sim.world.maskOf(sim.pickupKind), (index) => {
+      pickupX = sim.positionX(index);
+      pickupY = sim.positionY(index);
+    });
+    // `safeSpawnPoint` actually had to move it off the blocked centre.
+    expect(Math.hypot(pickupX - centre.x, pickupY - centre.y)).toBeGreaterThan(20);
+
+    const glints = liveGlints(sim);
+    expect(glints.length).toBeGreaterThan(0);
+    for (const glint of glints) {
+      // The ring's spokes fly outward from where they spawned (`ring`'s own
+      // doc comment) at up to `ROOM_CLEAR_SPEED` (1.6) per tick, and one tick
+      // has elapsed by the time this reads them — a few units of drift off
+      // the spawn point, nowhere near the ~57-unit gap to the blocked centre.
+      expect(Math.hypot(glint.x - pickupX, glint.y - pickupY)).toBeLessThan(5);
+      expect(Math.hypot(glint.x - centre.x, glint.y - centre.y)).toBeGreaterThan(20);
+    }
   });
 });
 

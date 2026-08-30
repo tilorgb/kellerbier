@@ -128,13 +128,19 @@ const DOOR_TRANSITION_MIN_SCALE = 0.08;
  * squashing toward a corner. `1` is the door drawn at rest; the open/close
  * transition sweeps this from `DOOR_TRANSITION_MIN_SCALE` up to `1` (or back)
  * over `DOOR_TRANSITION_FRAMES`.
+ *
+ * `progress` is a fraction of each sprite's own `baseScale`
+ * (`createDoorView`'s `tileGridScale`), not the on-screen scale outright —
+ * the door textures are authored at 32px, so `baseScale` is `0.5`, and
+ * assigning `progress` (which reaches `1` at rest) straight to the axis left
+ * a fully-open door twice its correct height/width on that axis.
  */
-function applyDoorSwingScale(view: DoorView, scale: number): void {
-  for (const { sprite, horizontal } of view.sprites) {
+function applyDoorSwingScale(view: DoorView, progress: number): void {
+  for (const { sprite, horizontal, baseScale } of view.sprites) {
     if (horizontal) {
-      sprite.scale.y = scale;
+      sprite.scale.y = baseScale * progress;
     } else {
-      sprite.scale.x = scale;
+      sprite.scale.x = baseScale * progress;
     }
   }
 }

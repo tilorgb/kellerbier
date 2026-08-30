@@ -136,6 +136,19 @@ export function createRoomView(
       room.maxX,
       room.minY,
     );
+    // The wall band above just tiled over the *whole* frame, interior
+    // included, so it painted over the flat `palette.floor` fill drawn a few
+    // lines up. That fill is exactly what the floor-variant sprites below are
+    // authored to blend against — their alpha dimming leaves the base
+    // untouched only when what's underneath already matches `palette.floor`
+    // (this function's own doc comment). Re-laying it here restores that
+    // before the floor variants go down, instead of leaving them to blend
+    // toward the wall texture and read as a half-transparent floor with the
+    // wall visible through it.
+    container
+      .addChild(new Graphics())
+      .rect(room.minX, room.minY, room.maxX - room.minX, room.maxY - room.minY)
+      .fill(palette.floor);
   }
 
   // Real tile art (#35's `assets/sprites/floor-1-cellar/tiles/`, #37's
@@ -287,6 +300,15 @@ export interface DoorTextures {
 export interface DoorSprite {
   readonly sprite: Sprite;
   readonly horizontal: boolean;
+  /**
+   * The tile-grid scale (`tileGridScale`) this sprite was built at — the
+   * open/close swing (`render/view.ts`'s `applyDoorSwingScale`) multiplies
+   * its depth-axis progress by this rather than assigning it outright, since
+   * the door textures are authored at 32px (`docs/DECISIONS.md` #48) and a
+   * bare progress value of `1` at rest is double the sprite's actual
+   * on-screen tile size.
+   */
+  readonly baseScale: number;
 }
 
 /** A door layer: the container to draw, plus its tile sprites for animating open/close. */
@@ -382,16 +404,17 @@ export function createDoorView(
         : ROOM_TILE_UNITS / 2;
     const alongX = horizontal ? bandMinX + span / 2 - ROOM_TILE_UNITS : centre.x + crossOffset;
     const alongY = horizontal ? centre.y + crossOffset : bandMinY + span / 2 - ROOM_TILE_UNITS;
+    const baseScale = tileGridScale(texture);
     for (let step = 0; step < 2; step++) {
       const sprite = new Sprite(texture);
-      sprite.scale.set(tileGridScale(texture));
+      sprite.scale.set(baseScale);
       sprite.anchor.set(horizontal ? 0 : 0.5, horizontal ? 0.5 : 0);
       sprite.position.set(
         horizontal ? alongX + step * ROOM_TILE_UNITS : alongX,
         horizontal ? alongY : alongY + step * ROOM_TILE_UNITS,
       );
       container.addChild(sprite);
-      sprites.push({ sprite, horizontal });
+      sprites.push({ sprite, horizontal, baseScale });
     }
   }
 
