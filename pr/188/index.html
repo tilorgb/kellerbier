@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kellerbier</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background: #0b0a0d;
+        overflow: hidden;
+      }
+      /*
+       * `#dock-root` is the split-view `app/editor-dock.ts` opens onto: a
+       * flex row with `#game-pane` (the game itself, everything that used to
+       * hang directly off `<body>`) as one child, and a divider + iframe
+       * panel it inserts as siblings when a docked editor is open. `#game`
+       * fills `#game-pane` rather than the window directly now, so shrinking
+       * `#game-pane` for a split view is the only thing that has to happen —
+       * `render/app.ts`'s `trackWindowSize` watches `#game`'s own box via a
+       * `ResizeObserver`, not `window`'s size, so it already reacts to that
+       * on its own.
+       */
+      #dock-root {
+        display: flex;
+        width: 100vw;
+        height: 100vh;
+        overflow: hidden;
+      }
+      #game-pane {
+        position: relative;
+        flex: 1 1 auto;
+        min-width: 0;
+        height: 100%;
+      }
+      #game {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+      }
+      /* Belt and braces: the renderer is nearest-neighbour, and so is any
+         browser-side scaling of the canvas element itself. */
+      #game canvas {
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;
+      }
+      #seed-control {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-family: monospace;
+        font-size: 12px;
+        color: #cfc6bb;
+        background: rgba(11, 10, 13, 0.7);
+        border: 1px solid #3a2f45;
+        border-radius: 4px;
+        padding: 4px 6px;
+      }
+      /* A dev tool for pinning/finding seeds — on a touch device there is no
+         keyboard to type a seed into it anyway, and `app/touch-controls.ts`'s
+         pause button already claims this corner. */
+      @media (pointer: coarse) {
+        #seed-control {
+          display: none;
+        }
+      }
+      #seed-control input[type='number'] {
+        width: 8ch;
+        font-family: monospace;
+        font-size: 12px;
+        background: #1c1720;
+        color: #cfc6bb;
+        border: 1px solid #54445f;
+        border-radius: 3px;
+        padding: 2px 4px;
+      }
+      #seed-finder {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding-left: 6px;
+        margin-left: 2px;
+        border-left: 1px solid #3a2f45;
+      }
+      #seed-finder label {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        white-space: nowrap;
+      }
+      #seed-finder button {
+        font-family: monospace;
+        font-size: 12px;
+        background: #241d2b;
+        color: #cfc6bb;
+        border: 1px solid #54445f;
+        border-radius: 3px;
+        padding: 2px 6px;
+        cursor: pointer;
+      }
+      #seed-finder button:hover {
+        background: #2f2636;
+      }
+      #seed-finder button:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+    </style>
+    <script type="module" crossorigin src="./assets/index-C9imhJBG.js"></script>
+    <link rel="modulepreload" crossorigin href="./assets/Geometry-CZGVBKwE.js">
+    <link rel="modulepreload" crossorigin href="./assets/tokens-CaN2YNsQ.js">
+    <link rel="modulepreload" crossorigin href="./assets/Filter-DM8SVgg4.js">
+    <link rel="modulepreload" crossorigin href="./assets/canvasUtils-BwcAxi36.js">
+    <link rel="modulepreload" crossorigin href="./assets/Cache-DOCLyTZt.js">
+    <link rel="modulepreload" crossorigin href="./assets/GCManagedHash-1mXRsHGx.js">
+    <link rel="modulepreload" crossorigin href="./assets/RenderTargetSystem-D72Pqw4w.js">
+    <link rel="modulepreload" crossorigin href="./assets/getTextureBatchBindGroup-CCNGb0nl.js">
+    <link rel="modulepreload" crossorigin href="./assets/GraphicsContext-2oHUVbLl.js">
+    <link rel="modulepreload" crossorigin href="./assets/CanvasPool-BaexORx5.js">
+    <link rel="modulepreload" crossorigin href="./assets/BufferResource-BxCDYwYw.js">
+    <link rel="modulepreload" crossorigin href="./assets/loop-DQlcIOge.js">
+  </head>
+  <body>
+    <div id="dock-root">
+      <div id="game-pane">
+        <div id="game"></div>
+        <div id="seed-control">
+          <label for="seed-input">seed</label>
+          <input id="seed-input" type="number" step="1" />
+          <div id="seed-finder">
+            <label><input type="checkbox" id="filter-staircase" /> staircase</label>
+            <label><input type="checkbox" id="filter-all-shapes" /> all shapes</label>
+            <button id="seed-find-button" type="button">find</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
