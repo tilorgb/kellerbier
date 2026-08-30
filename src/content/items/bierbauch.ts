@@ -39,6 +39,9 @@ export const bierbauch: ItemDefinition = {
   pools: ['treasure', 'shop', 'boss'],
   quality: 2,
   promilleRequirement: 'any',
+  // No tier gate — but it is Promille machinery all the same (sells Gschwindigkeit for Trinkfest),
+  // so a sober run never offers it (#85).
+  needsPromille: true,
   hooks: {
     modifyStats: () => [
       { stat: 'gschwindigkeit', op: 'multiply', value: GSCHWINDIGKEIT_MULTIPLIER },

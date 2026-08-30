@@ -2,6 +2,7 @@ import { circlesOverlap } from '../collision/circle-circle.js';
 import { CollisionLayer } from '../collision/layers.js';
 import type { GameSim } from '../game/sim.js';
 import { pickupGlint } from '../particle/effects.js';
+import { pickupDescriptionFor } from '../pickup/definition.js';
 import { dispatchItemBeerPickup } from './items.js';
 
 /**
@@ -134,7 +135,7 @@ function collect(sim: GameSim, other: number): boolean {
   }
   const definition = sim.pickups.at(definitionIndex);
   const effect = definition.effect;
-  sim.reportCollected(definition.name, definition.description);
+  sim.reportCollected(definition.name, pickupDescriptionFor(definition, sim.promilleUnlocked));
 
   switch (effect.kind) {
     case 'health':

@@ -25,6 +25,9 @@ export const halbePortion: ItemDefinition = {
   pools: ['treasure', 'shop'],
   quality: 1,
   promilleRequirement: 'any',
+  // No tier gate — but it is Promille machinery all the same (sells Trinkfest for Schluckfrequenz),
+  // so a sober run never offers it (#85).
+  needsPromille: true,
   hooks: {
     modifyStats: () => [
       { stat: 'schluckfrequenz', op: 'multiply', value: SCHLUCKFREQUENZ_MULTIPLIER },

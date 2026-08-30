@@ -18,6 +18,13 @@ export interface CompiledItem {
   readonly pools: readonly ItemPoolId[];
   readonly quality: ItemQuality;
   readonly promilleRequirement: PromilleRequirement;
+  /**
+   * `ItemDefinition.needsPromille` with its default filled in — the single
+   * field `itemEligibleForOffer` reads to keep a Promille item out of a
+   * sober run's pools, so neither it nor any other consumer has to remember
+   * that a tier-gated item implies this too.
+   */
+  readonly needsPromille: boolean;
   readonly tags: readonly string[];
   readonly active: ActiveItemDefinition | undefined;
   readonly hooks: ItemHooks;
@@ -112,6 +119,12 @@ export class ItemRegistry {
         `${where} has an unknown Promille requirement "${definition.promilleRequirement}"`,
       );
     }
+    if (definition.needsPromille === false && definition.promilleRequirement !== 'any') {
+      throw new Error(
+        `${where} is gated on Promille ("${definition.promilleRequirement}") but declares ` +
+          `needsPromille: false — an item that needs a tier needs the meter that has tiers`,
+      );
+    }
     if (definition.active !== undefined) {
       if (!(definition.active.maxCharge > 0) || !Number.isInteger(definition.active.maxCharge)) {
         throw new Error(
@@ -132,6 +145,7 @@ export class ItemRegistry {
       pools: definition.pools,
       quality: definition.quality,
       promilleRequirement: definition.promilleRequirement,
+      needsPromille: definition.needsPromille ?? definition.promilleRequirement !== 'any',
       tags: definition.tags ?? [],
       active: definition.active,
       hooks: definition.hooks ?? {},

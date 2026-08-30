@@ -64,7 +64,9 @@ npm run build      # production static build
 window — every feel constant on a slider, changed while the game runs. `O` opens the debug
 overlay — frame graph, entity and pool counts, draw calls, hitboxes (`H`) and the spatial-hash
 grid (`G`). Middle-drag pans the camera, `0` recentres, `C` copies the run's seed and tick for
-a bug report. (Plain letters rather than F-keys or punctuation — a hosted preview's browser
+a bug report. `B` cycles the Promille gate (#85) between following your save, forcing a sober
+run and forcing a promilled one, and restarts on the same seed — dev builds only, since in a
+release build it would hand a player the mechanic the unlock exists to make them earn. (Plain letters rather than F-keys or punctuation — a hosted preview's browser
 chrome claims F-keys as its own shortcuts, and punctuation-row keys can land on a dead accent
 key on a non-US keyboard layout.)
 

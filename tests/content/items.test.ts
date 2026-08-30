@@ -61,6 +61,22 @@ describe('the item roster', () => {
     }
     expect(() => new ItemRegistry([first, first])).toThrow(/share the id/i);
   });
+
+  it('rejects an item that is gated on a tier but claims not to need the meter (#85)', () => {
+    const gated = ITEM_DEFINITIONS.find((item) => item.promilleRequirement !== 'any');
+    if (gated === undefined) {
+      throw new Error('expected at least one Promille-gated item');
+    }
+    // `needsPromille` defaults to "yes, if it is gated", so the only way to
+    // reach this is to write the contradiction out by hand — and it is worth
+    // rejecting rather than resolving, because either half could be the
+    // mistake and the registry cannot tell which.
+    expect(() => new ItemRegistry([{ ...gated, needsPromille: false }])).toThrow(
+      /needs a tier needs the meter/i,
+    );
+    // The consistent pairing compiles, and so does an ungated item opting in.
+    expect(() => new ItemRegistry([{ ...gated, needsPromille: true }])).not.toThrow();
+  });
 });
 
 /**

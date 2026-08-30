@@ -320,6 +320,14 @@ a third way and is not proud of it. Each closes the others off, so a run picks o
 None of these appear in a run where Promille has not been unlocked yet — an item whose
 requirement cannot be evaluated is a stat stick rather than a build decision.
 
+Two different things put an item here. Most are gated on a **tier**: `sober` needs the meter at
+baseline, `rausch` needs it at Vollrausch or past it. Konterbier is the other kind — it needs
+no particular tier, it needs the *meter*, because a hangover cannot happen in a run that has no
+Promille to have too much of. Items of the second kind say so with `needsPromille` in their
+definition (`docs/DECISIONS.md` #52); the first kind imply it. Schuhplattler wants neither and
+is listed here only because it shares the table's flavour — it appears in a sober run like any
+other item.
+
 | Item | Requirement | Effect |
 |---|---|---|
 | **Maßkrugstemmen** | `rausch` | Hold fire to charge; damage scales with hold time. Your arms shake — accuracy falls as damage rises. |

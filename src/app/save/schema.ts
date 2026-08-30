@@ -20,8 +20,12 @@ import {
  * than reset (`migrations.ts`). `unlocks` and `statistics` were already
  * there and needed no change at all, which is the version-from-day-one
  * argument working exactly as advertised.
+ *
+ * v3 (#85) adds one field to the in-progress run: whether it is a sober run
+ * or a promilled one. That is not redundant with `unlocks`, and the reason
+ * is a real bug rather than tidiness — see `ActiveRunSave.promilleUnlocked`.
  */
-export const SAVE_SCHEMA_VERSION = 2;
+export const SAVE_SCHEMA_VERSION = 3;
 
 /** A completed run, kept for the "best runs" list. */
 export interface BestRunRecord {
@@ -67,6 +71,25 @@ export interface DailyRunRecord {
 export interface ActiveRunSave {
   readonly seed: number;
   readonly frames: readonly number[];
+  /**
+   * Whether the run being resumed has the Promille mechanic (#85).
+   *
+   * Recorded with the log rather than re-derived from `unlocks` on resume,
+   * because the two genuinely disagree in the case that matters: the
+   * Promille unlock is granted the moment Der Stier goes down
+   * (`withBossDefeat` commits immediately, on purpose), so a player who
+   * beats him and then closes the tab has a save whose `unlocks` say
+   * "promilled" describing a run that was sober for every tick it recorded.
+   * Rebuilding that run promilled would replay the same inputs against
+   * different drop tables and a different item pool, and the resumed run
+   * would quietly not be the run that was saved.
+   *
+   * This is also what #85's "the state is part of the run's parameters"
+   * means for a shared seed: a run is reproduced by its seed *and* this
+   * flag, not by the seed plus whatever the person replaying it happens to
+   * have unlocked.
+   */
+  readonly promilleUnlocked: boolean;
 }
 
 /** The v1 shape, kept for the migration that reads it. Nothing loads a save at this version any more. */
@@ -101,8 +124,18 @@ export interface SaveDataV2 extends Omit<SaveDataV1, 'schemaVersion'> {
   readonly greetedRegulars: readonly string[];
 }
 
-/** The current schema version. A union the day a v3 lands and something still reads a v2. */
-export type SaveData = SaveDataV2;
+/**
+ * v3 (#85): the in-progress run remembers whether it was sober. Only
+ * `activeRun`'s own shape changed, so v3 extends v2 with nothing of its own
+ * — `ActiveRunSave` is the type that grew, and `sanitizeActiveRun` is where
+ * the new field is defended.
+ */
+export interface SaveDataV3 extends Omit<SaveDataV2, 'schemaVersion'> {
+  readonly schemaVersion: 3;
+}
+
+/** The current schema version. A union the day a v4 lands and something still reads a v3. */
+export type SaveData = SaveDataV3;
 
 /** How many `bestRuns` entries a finished run keeps — see `app/meta/progress.ts`'s `withRunOutcome`. */
 export const MAX_BEST_RUNS = 10;
@@ -224,7 +257,17 @@ function sanitizeActiveRun(value: unknown): ActiveRunSave | null {
     // is simpler than threading a partial-recovery path through it.
     return null;
   }
-  return { seed: value.seed, frames };
+  return {
+    seed: value.seed,
+    frames,
+    // Defaults to a promilled run rather than a sober one, matching the v2
+    // migration's own back-fill: every run recorded before this field
+    // existed was a promilled one, so a log that reaches here without it is
+    // far likelier to be one of those (or a hand-edited save) than a sober
+    // run whose flag went missing. Defaulting the other way would replay
+    // those with beer removed from under them.
+    promilleUnlocked: value.promilleUnlocked !== false,
+  };
 }
 
 /**

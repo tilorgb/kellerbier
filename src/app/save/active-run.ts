@@ -19,7 +19,17 @@ export const FRAME_LOG_STRIDE = 5;
 export class ActiveRunRecorder {
   private readonly frames: number[] = [];
 
-  constructor(readonly seed: number) {}
+  /**
+   * `promilleUnlocked` is a run *parameter*, not an input — it is fixed for
+   * the whole run, so it rides on the recorder rather than being encoded per
+   * frame, and `toSave` writes it beside the log. See
+   * `ActiveRunSave.promilleUnlocked` for why replaying without it resumes
+   * the wrong run.
+   */
+  constructor(
+    readonly seed: number,
+    readonly promilleUnlocked = true,
+  ) {}
 
   get frameCount(): number {
     return this.frames.length / FRAME_LOG_STRIDE;
@@ -30,7 +40,11 @@ export class ActiveRunRecorder {
   }
 
   toSave(): ActiveRunSave {
-    return { seed: this.seed, frames: this.frames.slice() };
+    return {
+      seed: this.seed,
+      frames: this.frames.slice(),
+      promilleUnlocked: this.promilleUnlocked,
+    };
   }
 }
 
@@ -40,7 +54,7 @@ export class ActiveRunRecorder {
  * rather than starting a second, disconnected recorder.
  */
 export function recorderFrom(active: ActiveRunSave): ActiveRunRecorder {
-  const recorder = new ActiveRunRecorder(active.seed);
+  const recorder = new ActiveRunRecorder(active.seed, active.promilleUnlocked);
   for (const frame of decodeActiveRunFrames(active)) {
     recorder.record(frame);
   }
