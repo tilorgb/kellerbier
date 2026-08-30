@@ -32,6 +32,7 @@ import { ActiveItemHud } from '../render/active-item-hud.js';
 import { BossHealthHud } from '../render/boss-health-hud.js';
 import { EntityView } from '../render/entities.js';
 import { GameOverScreen } from '../render/game-over.js';
+import { StammtischScreen } from '../render/stammtisch.js';
 import { HealthHud } from '../render/health-hud.js';
 import { ItemGateHud } from '../render/item-gate-hud.js';
 import { MinimapHud } from '../render/minimap-hud.js';
@@ -75,13 +76,15 @@ import {
   loadSettings,
   saveSettings,
 } from './settings.js';
-import {
-  ActiveRunRecorder,
-  decodeActiveRunFrames,
-  persistActiveRun,
-  recordBestRun,
-} from './save/active-run.js';
+import { ActiveRunRecorder, decodeActiveRunFrames, persistActiveRun } from './save/active-run.js';
 import { loadSave } from './save/storage.js';
+import {
+  markGreeted,
+  recordBossDefeat,
+  recordRunOutcome,
+  resetProgress,
+  stammtischView,
+} from './meta/index.js';
 
 /**
  * The authored pool, run through the same typed boundary the sim uses to load
@@ -110,6 +113,18 @@ const STAIRCASE_TEMPLATES_BY_ID = new Map(
  * `MIN_ROOMS_FOR_ROLES`), not before.
  */
 const HIGHEST_PLAYABLE_FLOOR = 2;
+
+/**
+ * A fresh run seed.
+ *
+ * `Math.random` rather than a stream: picking which run to play is not part
+ * of the run, so it is the one roll that must *not* come out of the seeded
+ * streams `src/sim/rng/` owns — drawing it from one would make the next run's
+ * identity a function of the last one's.
+ */
+function rollSeed(): number {
+  return Math.floor(Math.random() * 1_000_000);
+}
 
 /** Margin from the frame's edge to the HUD, in UI pixels. */
 const HUD_MARGIN = 6;
@@ -503,6 +518,20 @@ async function boot(): Promise<void> {
   const gameOverScreen = new GameOverScreen(kit, app.renderer);
 
   /**
+   * Der Stammtisch (#46) — the hub between runs, opened with `T` and
+   * automatically the moment a run ends with a new regular waiting at it.
+   *
+   * A screen rather than a room: the tavern the design doc describes is a
+   * place you walk into, and building it as one means a second simulation
+   * mode (movement, collision, an NPC to stand in front of) for a table of
+   * four people who each say one line. This draws the same table out of the
+   * kit that already draws every other panel, which is what makes it
+   * something #47's characters and #50's challenges can add a row to rather
+   * than a level someone has to author.
+   */
+  const stammtisch = new StammtischScreen(kit, app.renderer);
+
+  /**
    * The floor's title card (#154) — the screen-filling Fraktur plate a floor
    * opens on.
    *
@@ -646,6 +675,9 @@ async function boot(): Promise<void> {
   hudLayer.addChild(floorTitleCard.view);
   hudLayer.addChild(kitGallery.view);
   hudLayer.addChild(gameOverScreen.view);
+  // Above the game-over screen: the hub opens over a finished run's tableau,
+  // and the two are on screen together the moment a new regular arrives.
+  hudLayer.addChild(stammtisch.view);
 
   /** The frame's size in UI pixels, kept for the per-frame placements below. */
   let uiFrame = { width: INTERNAL_WIDTH, height: INTERNAL_HEIGHT };
@@ -694,6 +726,7 @@ async function boot(): Promise<void> {
     minimapHud.overlayView.position.set(centreX, Math.round(height / 2));
 
     gameOverScreen.resize(width, height);
+    stammtisch.resize(width, height);
     floorTitleCard.resize(width, height);
     kitGallery.resize(width, height);
   };
@@ -716,6 +749,88 @@ async function boot(): Promise<void> {
   let keyHintTicks = 0;
   /** Three seconds at 60 ticks/second — long enough to read, short enough not to linger. */
   const KEY_HINT_TICKS = 180;
+
+  /**
+   * Boss rooms already paid for this run, keyed floor + floor-plan room.
+   *
+   * Walking back into a boss room you have already cleared re-reads as
+   * "cleared boss room" on every tick you stand in it, so the credit needs a
+   * memory of its own. Cleared on a floor advance rather than only on a
+   * restart: a run that loops back round to floor 1 (`advanceFloor`) is
+   * genuinely fighting that boss again.
+   */
+  let creditedBossRooms = new Set<string>();
+
+  /** The seed the next run starts on — rolled at boot, on every death, and by `R` at the table. */
+  let pendingSeed = rollSeed();
+
+  /** Whether the loop was already paused when the hub opened, so closing it doesn't un-pause a debug pause. */
+  let pausedBeforeStammtisch = false;
+
+  /** Whether the room read as cleared last tick — see `creditBossDefeat`. */
+  let roomClearedLastTick = false;
+
+  /**
+   * Credits the floor's boss on the tick its room *becomes* clear.
+   *
+   * An edge rather than a state, because "I am standing in a cleared boss
+   * room" is true for every tick of the walk to the exit, and because the
+   * cheap read (`sim.roomCleared`) is the one that runs every tick while the
+   * floor-plan lookup only runs on the handful of ticks a room is actually
+   * finished on.
+   *
+   * `live` gates the credit for the same reason it gates audio and rumble: a
+   * resumed run replays its whole input log through `advanceOneTick`, and a
+   * boss beaten before the save was written was already credited when it
+   * actually happened. Crediting it again would hand out a defeat per reload.
+   * The edge itself is tracked in both cases, so a replay leaves this in the
+   * same state the live run it is reconstructing was in.
+   */
+  function creditBossDefeat(live: boolean): void {
+    const cleared = sim.roomCleared;
+    const justCleared = cleared && !roomClearedLastTick;
+    roomClearedLastTick = cleared;
+    if (!live || !justCleared || planRoom(floorPlan, currentRoomId).role !== 'boss') {
+      return;
+    }
+    const key = `${String(floorPlan.floor)}:${currentRoomId}`;
+    if (creditedBossRooms.has(key)) {
+      return;
+    }
+    creditedBossRooms.add(key);
+    recordBossDefeat(floorPlan.floor);
+  }
+
+  /** Opens the hub over whatever is on screen, pausing the run behind it. */
+  function openStammtisch(): void {
+    if (stammtisch.visible) {
+      return;
+    }
+    pausedBeforeStammtisch = loop.paused;
+    loop.paused = true;
+    stammtisch.show(stammtischView(), pendingSeed, deathPhase === 'over');
+    greetSelectedRegular();
+  }
+
+  function closeStammtisch(): void {
+    if (!stammtisch.visible) {
+      return;
+    }
+    stammtisch.hide();
+    loop.paused = pausedBeforeStammtisch;
+  }
+
+  /**
+   * Marks the chair the cursor is on as greeted, if its regular has just
+   * arrived — so an arrival line plays once, when the player is actually
+   * looking at it, rather than being spent by a hub they opened for the seed.
+   */
+  function greetSelectedRegular(): void {
+    const seat = stammtisch.selectedSeat;
+    if (seat?.arriving === true) {
+      markGreeted([seat.id]);
+    }
+  }
 
   /** Called once per real `sim.step()`, right after it, to drive `deathPhase` forward. */
   function advanceDeathSequence(): void {
@@ -754,7 +869,7 @@ async function boot(): Promise<void> {
         // log is cleared rather than left around to be resumed into a
         // tableau that is already over.
         persistActiveRun(null);
-        recordBestRun({
+        const save = recordRunOutcome({
           seed: RUN_SEED,
           floor: floorPlan.floor,
           ticksSurvived: sim.playerDeathTick,
@@ -762,6 +877,15 @@ async function boot(): Promise<void> {
           deathWord: sim.deathWord ?? null,
           recordedAt: Date.now(),
         });
+        pendingSeed = rollSeed();
+        // An arrival is an event, so it interrupts: a regular earned during
+        // the run that just ended introduces himself now, over the game-over
+        // screen, which is the moment `docs/GAME_DESIGN.md` §9 describes for
+        // the Promille unlock. Any other death leaves the hub where it is —
+        // one keypress away, per the hint the game-over screen shows.
+        if (stammtischView(save).seats.some((seat) => seat.arriving)) {
+          openStammtisch();
+        }
       }
     }
   }
@@ -821,6 +945,7 @@ async function boot(): Promise<void> {
       playRumble(sim, input.gamepad);
     }
     summary.recordTick(sim);
+    creditBossDefeat(live);
     advanceDeathSequence();
     checkSecretReveals();
     if (keyHintTicks > 0) {
@@ -1172,6 +1297,8 @@ WASD move   arrows aim and fire
     minimapHud.rebuild(floorPlan, currentRoomId, visitedRoomIds);
 
     summary = new RunSummaryTracker();
+    creditedBossRooms = new Set<string>();
+    roomClearedLastTick = false;
     deathPhase = 'alive';
     deathPhaseTicks = 0;
     keyHintTicks = 0;
@@ -1470,6 +1597,9 @@ WASD move   arrows aim and fire
     currentRoomId = floorPlan.startRoomId;
     visitedRoomIds = new Set([currentRoomId]);
     revealedEdges = new Set<string>();
+    // A new floor plan means new room ids, and a loop back round to floor 1
+    // is a boss that has to be beaten again — see `creditedBossRooms`.
+    creditedBossRooms = new Set<string>();
     // `sim` itself is never recreated here, and every loop regenerates from
     // the same small `floorConfig(1)` template pool — without this, the
     // previous loop's `roomClearedIds` would wrongly mark an increasing
@@ -1555,6 +1685,46 @@ WASD move   arrows aim and fire
   }
 
   window.addEventListener('keydown', (event: KeyboardEvent) => {
+    // The hub swallows the dev keys while it is open: `R` at the table
+    // changes the seed of the run you are about to start rather than
+    // restarting the one you just finished, and `N`/`P`/`K` have nothing to
+    // act on behind a paused screen.
+    if (stammtisch.visible) {
+      switch (event.key) {
+        case 'ArrowLeft':
+          stammtisch.moveSelection(-1);
+          greetSelectedRegular();
+          break;
+        case 'ArrowRight':
+          stammtisch.moveSelection(1);
+          greetSelectedRegular();
+          break;
+        case 'Enter':
+          // Only from a finished run: see `StammtischScreen.show`'s
+          // `runOver`. Mid-run the table is somewhere you look, not a way to
+          // throw the run away by pressing the most obvious key on it.
+          if (deathPhase === 'over') {
+            closeStammtisch();
+            startRun(pendingSeed);
+          }
+          break;
+        case 'r':
+        case 'R':
+          pendingSeed = rollSeed();
+          stammtisch.setSeed(pendingSeed);
+          break;
+        case 't':
+        case 'T':
+        case 'Escape':
+          closeStammtisch();
+          break;
+        default:
+          return;
+      }
+      event.preventDefault();
+      refreshHud();
+      return;
+    }
     switch (event.key) {
       case 'p':
       case 'P':
@@ -1581,6 +1751,14 @@ WASD move   arrows aim and fire
         // last one, so the ring is visibly a thing that moves rather than a
         // decoration painted on one button.
         kitGallery.toggle();
+        break;
+      case 't':
+      case 'T':
+        // T for Tisch. The hub is reachable mid-run as well as after one,
+        // because the thing it is mostly used for during a session — seeing
+        // what the next chair wants — is a question a player has while
+        // playing, not only after dying.
+        openStammtisch();
         break;
       case 'n':
       case 'N': {
@@ -1773,6 +1951,12 @@ WASD move   arrows aim and fire
       saveSettings(settings);
       applyAccessibilityChange();
     },
+    {
+      open: openStammtisch,
+      close: closeStammtisch,
+      recordBossDefeat,
+      resetProgress,
+    },
   );
   // Not gated behind `import.meta.env.DEV` like `mountDebugOverlay` above —
   // this is the player-facing half of #33, so it has to ship in a production
@@ -1862,7 +2046,29 @@ interface DebugHost {
      */
     settings: AccessibilitySettings;
     setAccessibilitySettings: (patch: Partial<AccessibilitySettings>) => void;
+    /**
+     * The Stammtisch (#46), for the same reason `stall` and
+     * `setAccessibilitySettings` are here: the table filling up is a
+     * twenty-minute question to ask by playing (beat two bosses, die, look)
+     * and a one-line question to ask from here, which is what makes checking
+     * how an arrival actually reads cheap enough to do on every change.
+     *
+     *   __kellerbier.stammtisch.resetProgress();
+     *   __kellerbier.stammtisch.recordBossDefeat(1);
+     *   __kellerbier.stammtisch.open();
+     */
+    stammtisch: StammtischHandle;
   };
+}
+
+/** The debug handle's hub controls — see `DebugHost`. */
+interface StammtischHandle {
+  open: () => void;
+  close: () => void;
+  /** Credits the boss of `floor`, exactly as beating it would. */
+  recordBossDefeat: (floor: number) => void;
+  /** Empties the table and the statistics behind it, keeping settings and the run in progress. */
+  resetProgress: () => void;
 }
 
 function exposeDebugHandle(
@@ -1872,6 +2078,7 @@ function exposeDebugHandle(
   stall: (ms: number) => void,
   settings: AccessibilitySettings,
   setAccessibilitySettings: (patch: Partial<AccessibilitySettings>) => void,
+  stammtisch: StammtischHandle,
 ): void {
   if (!import.meta.env.DEV) {
     return;
@@ -1884,6 +2091,7 @@ function exposeDebugHandle(
     stall,
     settings,
     setAccessibilitySettings,
+    stammtisch,
   };
   console.warn('__kellerbier is exposed for debugging (dev build only)');
 }

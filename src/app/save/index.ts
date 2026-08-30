@@ -3,7 +3,6 @@ export {
   FRAME_LOG_STRIDE,
   decodeActiveRunFrames,
   persistActiveRun,
-  recordBestRun,
   recorderFrom,
 } from './active-run.js';
 export { exportSaveText, importSaveText } from './export-import.js';
@@ -18,6 +17,7 @@ export {
   type DailyRunRecord,
   type SaveData,
   type SaveDataV1,
+  type SaveDataV2,
 } from './schema.js';
 export {
   SAVE_BACKUP_KEY,

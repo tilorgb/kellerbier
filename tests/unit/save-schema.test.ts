@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_ACCESSIBILITY_SETTINGS } from '../../src/app/settings.js';
-import { createDefaultSave, sanitizeSave } from '../../src/app/save/schema.js';
+import { SAVE_SCHEMA_VERSION, createDefaultSave, sanitizeSave } from '../../src/app/save/schema.js';
 
 describe('save schema sanitisation (#45)', () => {
   it('produces the default save from anything that is not a plain object', () => {
@@ -55,6 +55,26 @@ describe('save schema sanitisation (#45)', () => {
   });
 
   it('always stamps the current schema version, regardless of what was asked for', () => {
-    expect(sanitizeSave({ schemaVersion: 999 }).schemaVersion).toBe(1);
+    expect(sanitizeSave({ schemaVersion: 999 }).schemaVersion).toBe(SAVE_SCHEMA_VERSION);
+  });
+
+  it('keeps a well-formed lastRun and drops one that is missing a field (#46)', () => {
+    const lastRun = {
+      seed: 7,
+      floor: 2,
+      ticksSurvived: 900,
+      kills: 12,
+      deathWord: 'Hi',
+      recordedAt: 5,
+    };
+    expect(sanitizeSave({ lastRun }).lastRun).toEqual(lastRun);
+    expect(sanitizeSave({ lastRun: { seed: 7, floor: 2 } }).lastRun).toBeNull();
+  });
+
+  it('keeps only the string ids in greetedRegulars (#46)', () => {
+    expect(sanitizeSave({ greetedRegulars: ['sepp', 3, null, 'xaver'] }).greetedRegulars).toEqual([
+      'sepp',
+      'xaver',
+    ]);
   });
 });

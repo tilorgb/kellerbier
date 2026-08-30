@@ -4,9 +4,9 @@ import {
   ActiveRunRecorder,
   decodeActiveRunFrames,
   persistActiveRun,
-  recordBestRun,
   recorderFrom,
 } from '../../src/app/save/active-run.js';
+import { recordRunOutcome } from '../../src/app/meta/index.js';
 import { MAX_BEST_RUNS } from '../../src/app/save/schema.js';
 import { loadSave } from '../../src/app/save/storage.js';
 import { createInputFrame, type InputFrame } from '../../src/sim/input/frame.js';
@@ -65,10 +65,15 @@ describe('active-run recording and replay (#45)', () => {
     expect(loadSave().activeRun).toBeNull();
   });
 
-  it('recordBestRun keeps the highest ticksSurvived first, capped at MAX_BEST_RUNS', () => {
+  // The best-runs list moved to `meta/progress.ts` with #46 — a finished run
+  // is one commit now (totals, last run, unlocks and this list together)
+  // rather than a separate write beside the active-run recorder. The
+  // behaviour it is asserting is unchanged, so the test moved rather than
+  // being replaced.
+  it('a finished run keeps the highest ticksSurvived first, capped at MAX_BEST_RUNS', () => {
     installFakeLocalStorage();
     for (let i = 0; i < MAX_BEST_RUNS + 3; i++) {
-      recordBestRun({
+      recordRunOutcome({
         seed: i,
         floor: 1,
         ticksSurvived: i * 100,

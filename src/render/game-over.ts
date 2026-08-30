@@ -64,10 +64,11 @@ export class GameOverScreen {
     this.view.addChild(this.summary);
 
     this.hint = uiText(
-      // In-run restart landed for #112's dev-seed work — `main.ts`'s `R`
-      // key. Full #46 (rebuilding the debug-overlay bindings too) is still
-      // open, but the player-facing restart this hint promises is real now.
-      'R drückn für an neuen Lauf',
+      // Two ways out of a finished run, since #46: straight into another one,
+      // or to the table that has something to say about the one that just
+      // ended. A run that earned a new regular opens the second on its own
+      // (`main.ts`'s `advanceDeathSequence`); this is for every other death.
+      'R drückn für an neuen Lauf    T für an Stammtisch',
       { colour: UI_PALETTE.textDim },
     );
     this.view.addChild(this.hint);

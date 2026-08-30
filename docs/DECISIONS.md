@@ -2297,3 +2297,65 @@ rather than inventing a second recording format. Any future change to what `Game
 or to what an app-level system does *between* steps that isn't a pure function of `sim` state (the
 old `advanceFloor` bug's shape), breaks replay-based resume silently — a determinism regression
 here fails the same way it always does: quietly, until someone tries to reproduce a run.
+
+## 51. The Stammtisch is a screen over the run, unlock effects are read rather than applied, and a chair only exists for content that exists
+
+**Decided:** M7, #46. The hub between runs — `GAME_DESIGN.md` §11's regulars' table, where every
+boss you beat adds someone and everyone at the table brought something with them.
+
+**A screen, not a room.** The design doc describes a place: the regulars' table in the village
+tavern. Building it as one means a second simulation mode — a walkable room, collision, an NPC
+to stand in front of and an interact verb — for four people who each say one line. It is drawn
+out of the #154 kit instead, over a paused run, which is what makes adding a regular a row in
+`content/stammtisch/regulars.ts` rather than a level someone has to author, and what lets #47's
+characters and #50's challenges extend the same screen instead of extending a space. The cost
+is real and accepted: the hub does not *feel* like a place yet. If it ever needs to, it can
+become one behind the same view model, because nothing outside `render/stammtisch.ts` knows how
+it is drawn.
+
+**The meta layer is `app/`, not `sim/`.** Unlocks read the save; the save reads `localStorage`
+and the wall clock. A `GameSim` that could see how many runs the player had lost would stop
+being a pure function of a seed and an input log (#2, #50), so the whole of `app/meta/` is pure
+functions over a `SaveData` plus a roster, with `app/meta/index.ts` as the only part that
+persists anything. That is also why the rules are testable without a browser and why
+`render/stammtisch.ts` holds no rules at all — it draws a view model that
+`buildStammtischView` assembled.
+
+**An unlock is a flag other issues read, not an effect this one applies.** `unlocks` is a list
+of ids in the save; nothing in `app/meta/` knows what any of them *do*. #85 will read
+`promille` to keep the first runs sober, #47 will read a character id, #50 a challenge. The
+alternative — an unlock carrying a function, or a switch statement over ids — would put every
+future feature's behaviour inside the hub, which is exactly the shape that makes a hub the file
+everyone has to touch. The consequence to be honest about: the `promille` grant currently runs
+ahead of its gate, so beating Der Stier announces a mechanic that is already on for everybody.
+That errs in the harmless direction (nobody is shown something they cannot have) and #85 closes
+it.
+
+**Unlocks are re-evaluated on every commit, never granted by the code that raised the event.**
+`grantEarnedUnlocks` walks every definition against the save's statistics each time the save
+changes. So an unlock added to the roster later is granted retroactively to whoever already met
+its condition, a re-tuned threshold takes effect on the next commit rather than being frozen
+into whoever was playing that week, and the boss-defeat path and the run-end path cannot drift
+apart. The cost is a walk over a handful of definitions a few times per run.
+
+**The table has a chair for content that exists, and not one per planned floor.** Two chairs
+are earned off the two bosses in the game; the other two off totals (kills, runs) a session
+actually reaches. Seven chairs for seven floors would have been the obvious shape and would
+have meant an itch.io release (M9, two floors) shipping a table with five chairs nobody can
+ever fill — a progress bar that is mostly a promise. Adding a floor's chair is a row on the day
+that floor's boss lands, exactly like `HIGHEST_PLAYABLE_FLOOR`.
+
+**Save schema v2, and the first real migration.** `lastRun` and `greetedRegulars` are new
+stores: `bestRuns` is sorted by length and capped, so the run a player *just* finished is often
+not in it, and a table commenting on your best run ever after you died in thirty seconds is the
+generic-feeling text this issue exists to avoid. The v1 → v2 migration back-fills `lastRun`
+from the most recently recorded best run, and #45's `MIGRATIONS` chain went from "proven
+against a synthetic fixture" to carrying a real step — indexed by version, so `MIGRATIONS[i]`
+takes a save at version `i` to `i + 1` and index 0 is a v0 stamp rather than a hole.
+
+**Constrains:** #85 (Promille gate), #47 (characters), #50 (challenges and achievements) and
+#48 (seeded/daily runs, which the run-start panel's seed row is the front end of) all attach by
+adding a row to `content/stammtisch/` and reading an id out of `save.unlocks` — not by adding a
+branch to the hub. Any new per-run statistic an unlock wants to be earned on has to be
+committed in `withRunOutcome`/`withBossDefeat`, because those two are the only places the save
+learns that anything happened.

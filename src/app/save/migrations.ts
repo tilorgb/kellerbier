@@ -6,17 +6,59 @@
  * from whatever version a save claims up to `SAVE_SCHEMA_VERSION`, so a save
  * written by an old build upgrades instead of getting discarded.
  *
- * `MIGRATIONS` is empty today — this is schema v1, the first version this
- * project has ever shipped, so there is nothing to migrate *from* yet. The
- * chain is built and tested now anyway, per this issue's own point: shipping
- * the versioning before the first save exists is what makes the second
- * schema version cheap instead of a fire drill. `tests/unit/save-migrations
- * .test.ts` exercises the runner itself against a synthetic v0 -> v1 fixture
- * so the mechanism is proven ahead of the first real migration needing it.
+ * The chain is **indexed by version**: `MIGRATIONS[i]` takes a save at
+ * version `i` to version `i + 1`, so its length is always the newest schema
+ * version. That is why a v0 step exists below even though no unversioned save
+ * was ever written — index 0 cannot be a hole without every later migration
+ * running one version early.
+ *
+ * `SAVE_KEY` stays `kellerbier.save.v1` across all of this on purpose: the
+ * version in the *key* is the storage generation (which slot in
+ * `localStorage` a save lives in), and the `schemaVersion` in the *blob* is
+ * what this chain reads. Bumping the key instead of migrating is how progress
+ * gets silently abandoned, which is the failure #45 exists to prevent.
  */
 export type SaveMigration = (raw: Record<string, unknown>) => Record<string, unknown>;
 
-export const MIGRATIONS: readonly SaveMigration[] = [];
+/**
+ * v0 -> v1: an unversioned blob under `SAVE_KEY`.
+ *
+ * No such save was ever written — the key and `schemaVersion: 1` shipped
+ * together in #45 — so this only stamps the version and hands every field on
+ * untouched, leaving `sanitizeSave` to fill in whatever is missing. It exists
+ * to hold index 0, per the chain's own indexing rule above.
+ */
+const v0ToV1: SaveMigration = (raw) => ({ ...raw, schemaVersion: 1 });
+
+/**
+ * v1 -> v2 (#46): the Stammtisch's two stores.
+ *
+ * `lastRun` is back-filled from the most recently *recorded* entry in
+ * `bestRuns` rather than left null. It is an approximation — `bestRuns` keeps
+ * the ten longest runs, so a v1 tester's genuinely last run may have been too
+ * short to make the list — but it is the honest best guess from what v1
+ * stored, and it means an upgraded save walks into a Stammtisch whose
+ * regulars have something to say about a real run instead of greeting a
+ * veteran as though they had never played.
+ */
+const v1ToV2: SaveMigration = (raw) => {
+  const bestRuns = Array.isArray(raw.bestRuns) ? raw.bestRuns : [];
+  let latest: Record<string, unknown> | null = null;
+  for (const entry of bestRuns) {
+    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+      continue;
+    }
+    const record = entry as Record<string, unknown>;
+    const recordedAt = typeof record.recordedAt === 'number' ? record.recordedAt : 0;
+    const best = typeof latest?.recordedAt === 'number' ? latest.recordedAt : -1;
+    if (recordedAt > best) {
+      latest = record;
+    }
+  }
+  return { ...raw, schemaVersion: 2, lastRun: latest, greetedRegulars: [] };
+};
+
+export const MIGRATIONS: readonly SaveMigration[] = [v0ToV1, v1ToV2];
 
 function versionOf(raw: Record<string, unknown>): number {
   const version = raw.schemaVersion;
