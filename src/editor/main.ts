@@ -5,6 +5,7 @@ import { createBrowsePanel } from './panels/browse.js';
 import { createMetadataPanel } from './panels/metadata.js';
 import { createSpawnGroupsPanel } from './panels/spawn-groups.js';
 import { createValidationPanel } from './panels/validation.js';
+import { renderDraftThumbnail } from './panels/thumbnail.js';
 import { SHAPES } from './definitions.js';
 import { createBackgroundPanel } from './background-panel.js';
 import { createGridPanel } from './grid.js';
@@ -71,8 +72,13 @@ const STYLE = `
 .kb-editor-bg-active { outline: 2px solid var(--kb-color-accent); outline-offset: 1px; }
 .kb-editor-doors label { display: flex; align-items: center; gap: 4px; margin: 0; }
 
-.kb-editor-cell-tabs { display: flex; gap: 6px; }
+.kb-editor-cell-tabs-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.kb-editor-cell-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
 .kb-editor-cell-tabs button.kb-editor-tab-active { background: var(--kb-color-surface-4); }
+.kb-editor-room-overview canvas {
+  display: block; image-rendering: pixelated; border: 1px solid var(--kb-color-surface-4);
+  border-radius: 2px;
+}
 
 .kb-editor-grid-panel {
   background: var(--kb-color-panel-editor); border: 1px solid var(--kb-color-surface-4);
@@ -122,6 +128,36 @@ const STYLE = `
 
 .kb-editor-browse-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
 .kb-editor-browse-row span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.kb-editor-browse-filter {
+  width: 100%; background: var(--kb-color-surface-3); color: var(--kb-color-text);
+  border: 1px solid var(--kb-color-surface-4); border-radius: var(--kb-radius-sm);
+  padding: 4px 6px; font: inherit; margin-bottom: 6px;
+}
+.kb-editor-browse-count { margin: 0 0 8px; font-size: 11px; color: var(--kb-color-text-dim); }
+.kb-editor-browse-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px;
+  max-height: 420px; overflow-y: auto;
+}
+.kb-editor-browse-card {
+  display: flex; flex-direction: column; gap: 4px; padding: 6px;
+  background: var(--kb-color-surface-3); border: 1px solid var(--kb-color-surface-4);
+  border-radius: var(--kb-radius-sm);
+}
+.kb-editor-thumbnail {
+  width: 100%; height: auto; image-rendering: pixelated; border-radius: 2px;
+  border: 1px solid var(--kb-color-surface-4);
+}
+.kb-editor-browse-card-label {
+  font-size: 11px; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.kb-editor-browse-card-meta {
+  font-size: 10px; color: var(--kb-color-text-dim); overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kb-editor-browse-card-actions { display: flex; gap: 4px; }
+.kb-editor-browse-card-actions button { flex: 1; padding: 3px 4px; font-size: 11px; }
+.kb-editor-browse-empty { grid-column: 1 / -1; color: var(--kb-color-text-dim); font-size: 12px; }
 
 .kb-editor-validation-ok { color: var(--kb-color-ok); }
 .kb-editor-validation-error { color: var(--kb-color-warn); }
@@ -193,9 +229,18 @@ function boot(): void {
   newRow.append(newShapeSelect, newButton);
   left.appendChild(newRow);
 
+  const cellTabsRow = document.createElement('div');
+  cellTabsRow.className = 'kb-editor-cell-tabs-row';
+  left.appendChild(cellTabsRow);
+
   const cellTabs = document.createElement('div');
   cellTabs.className = 'kb-editor-cell-tabs';
-  left.appendChild(cellTabs);
+  cellTabsRow.appendChild(cellTabs);
+
+  const roomOverviewHost = document.createElement('div');
+  roomOverviewHost.className = 'kb-editor-room-overview';
+  roomOverviewHost.title = "The whole room's shape, with the cell you're editing outlined";
+  cellTabsRow.appendChild(roomOverviewHost);
 
   const gridHost = document.createElement('div');
   left.appendChild(gridHost);
@@ -286,6 +331,7 @@ function boot(): void {
 
   function renderCellTabs(): void {
     cellTabs.replaceChildren();
+    roomOverviewHost.replaceChildren();
     if (state.draft.cells.length <= 1) {
       return;
     }
@@ -299,6 +345,14 @@ function boot(): void {
       });
       cellTabs.appendChild(tab);
     });
+    // A multi-cell room's grid below only ever shows one cell in isolation —
+    // this is the whole shape at a glance, active cell outlined, so "is this
+    // the room's actual outer corner, or just this cell's own edge" is a
+    // question this overview answers instead of a guess (#24's editors, made
+    // to actually spare an author that mistake).
+    roomOverviewHost.appendChild(
+      renderDraftThumbnail(state.draft, { tilePx: 6, activeCellIndex: state.activeCellIndex }),
+    );
   }
   state.subscribe(renderCellTabs);
   renderCellTabs();

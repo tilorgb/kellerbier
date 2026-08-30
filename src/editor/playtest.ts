@@ -2,6 +2,7 @@ import { Container } from 'pixi.js';
 import type { RoomShape } from '../content/rooms/definition.js';
 import { GameSim, MAX_COLLIDER_RADIUS } from '../sim/game/sim.js';
 import type { RoomPlacement } from '../sim/room/template.js';
+import { MULTI_CELL_LAYOUT } from './definitions.js';
 import { installPixelFonts, UI_FONT_FAMILY } from '../render/ui/font.js';
 import { createRenderer, trackWindowSize } from '../render/app.js';
 import {
@@ -31,51 +32,16 @@ export interface PlaytestHandle {
 }
 
 /**
- * Every multi-cell shape's canonical layout for playtesting, in the local
- * (0-indexed) coordinates `compileRoomTemplate`'s `RoomPlacement` needs.
- *
- * There is no authored adjacency to read this from (`RoomSubLayout`'s doc
- * comment on `src/content/rooms/definition.ts`) — in a real run, the floor
- * generator picks where a multi-cell room's cells actually land
- * (`src/sim/room/floor-plan.ts`'s `shapeFootprints`). A playtest is testing
- * this room's own content, not the floor it might end up on, so any one
- * legal layout does the job; these mirror `shapeFootprints`'s first variant
- * for each shape. `L` drops the last of `2x2`'s four corners — one of
- * `shapeFootprints('2x2')`'s corners removed, same as every `L` variant is
- * built from there.
+ * A playtest's canonical layout for a multi-cell shape, in the local
+ * (0-indexed) coordinates `compileRoomTemplate`'s `RoomPlacement` needs — see
+ * `definitions.ts`'s `MULTI_CELL_LAYOUT` for why any one legal layout does
+ * the job here.
  */
-const CANONICAL_MULTI_CELL_LAYOUT: Readonly<
-  Record<Exclude<RoomShape, '1x1'>, readonly { readonly col: number; readonly row: number }[]>
-> = {
-  '1x2': [
-    { col: 0, row: 0 },
-    { col: 1, row: 0 },
-  ],
-  '2x2': [
-    { col: 0, row: 0 },
-    { col: 1, row: 0 },
-    { col: 0, row: 1 },
-    { col: 1, row: 1 },
-  ],
-  L: [
-    { col: 0, row: 0 },
-    { col: 1, row: 0 },
-    { col: 0, row: 1 },
-  ],
-  T: [
-    { col: 0, row: 0 },
-    { col: 1, row: 0 },
-    { col: 2, row: 0 },
-    { col: 1, row: 1 },
-    { col: 1, row: 2 },
-  ],
-};
-
 function canonicalPlacement(shape: RoomShape): RoomPlacement | undefined {
   if (shape === '1x1') {
     return undefined;
   }
-  return { cells: CANONICAL_MULTI_CELL_LAYOUT[shape] };
+  return { cells: MULTI_CELL_LAYOUT[shape] };
 }
 
 /**

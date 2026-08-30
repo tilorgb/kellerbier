@@ -24,8 +24,37 @@ const SAFE_ROOM_ID = /^[a-z][a-z0-9-]{0,63}$/;
 const API_PREFIX = '/__room-editor-api/rooms/';
 
 export function roomEditorServerPlugin() {
+  // Absolute paths this plugin itself just wrote, each pending exactly one
+  // `handleHotUpdate` — see that hook below for why.
+  const pendingOwnWrites = new Set();
+
   return {
     name: 'room-editor-server',
+    /**
+     * `src/content/rooms/index.ts` eagerly `import.meta.glob`s every room in
+     * this folder, so writing a saved room's file here lands in that
+     * module's dependency graph — and since nothing there accepts its own
+     * HMR update, Vite's default is a full-page reload of *every* open tab,
+     * this editor's own included. Docked in the game shell (`app/editor-dock.ts`),
+     * that reload takes the whole shell with it: the dock closes, the editor
+     * iframe reboots from scratch, and whatever the author was doing —
+     * mid-edit state, the Browse panel's scroll position — is gone. A Save
+     * ending in "now go find your room again" is not a save action anyone
+     * wants to reach for.
+     *
+     * Swallowing the update only for the exact file this plugin just wrote
+     * (not for `src/content/rooms/**` generally) keeps that regression fixed
+     * without touching the one thing the blanket version would break: hand-
+     * editing a room's JSON in a text editor while `vite dev` runs still
+     * hot-reloads the running game the way it always has.
+     */
+    handleHotUpdate(ctx) {
+      if (pendingOwnWrites.has(ctx.file)) {
+        pendingOwnWrites.delete(ctx.file);
+        return [];
+      }
+      return undefined;
+    },
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
         if (req.method !== 'POST' || !req.url || !req.url.startsWith(API_PREFIX)) {
@@ -57,6 +86,7 @@ export function roomEditorServerPlugin() {
         }
 
         const filePath = path.join(server.config.root, 'src/content/rooms', `${roomId}.json`);
+        pendingOwnWrites.add(filePath);
         await writeFile(filePath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
         respondJson(res, 200, { ok: true });
       });
