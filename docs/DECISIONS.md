@@ -2419,9 +2419,62 @@ override (`B`, `__kellerbier.promille`) lives in its own `localStorage` key rath
 save, so it never travels through export/import to somebody else's machine and `resetProgress`
 does not silently clear it.
 
+## 53. A replay is a compressed input log, watched by re-entering `startRun` — never a second sim mode
+
+**Decided:** M7, #48. Seeded runs, the daily run, and replay recording/playback — cashing in the
+determinism #2/#3 already promise ("a run is its seed plus its input log").
+
+**Nothing new to store, bar one field #52 also needed.** `sim/input/recording.ts`'s
+`InputRecording`/`InputPlayback` and `app/save/schema.ts`'s `ActiveRunSave` (#50) already had
+everything a replay needs — a seed and a packed frame log. `app/replay/` adds only what those two
+didn't: `codec.ts` compresses the packed bytes with `CompressionStream('gzip')` for storage/a
+`.json` file, and `store.ts`/`file.ts` are the save-side and file-side plumbing around that. The
+one field `ReplayRecord` does carry beyond that — `promilleUnlocked` — exists because #52 landed
+in the same v3 and its own "Constrains" section named this exact requirement: a replay is
+reproduced by its seed **and** its run parameters, so watching one has to reconstruct the
+Promille state that run actually had, not whatever the save happens to say today. The 100 KB
+budget (`tests/determinism/replay.test.ts`) is gzip finding the repetition ordinary play already
+has — a held direction or a held fire button is many identical frames in a row — not a bespoke
+encoding; a synthetic worst case (a stick sweeping through a full circle every single tick,
+never once repeating) does not hit the budget, but no real run plays that way, and the
+literal claim in `CLAUDE.md`'s docs already banked on this ("a full run compresses to a few
+kilobytes because the simulation is deterministic").
+
+**Watching a replay is not a second run mode.** `app/main.ts`'s `enterReplay`/`seekReplayTo`
+call the exact same `startRun`/`advanceOneTick(frame, false)` path `resumeActiveRun` already
+uses to fast-forward a saved run on reload — the only new argument is `startRun`'s `persist:
+false`, which stops a replay's own throwaway recorder from overwriting the real `activeRun`
+save slot. Scrubbing is therefore "rebuild from tick 0, replay up to the target tick," the same
+technique a mid-run resume already relies on, rather than a snapshot/rewind mechanism this
+issue would otherwise have had to invent.
+
+**A replay is only ever entered over a finished run.** `V` (watch) and loading a replay file are
+both gated on `deathPhase === 'over'` (loading a file additionally confirms if a live run is
+mid-flight) — because entering one calls `startRun` and there is no live run's state to
+preserve once its outcome is already recorded. This is what keeps replay-watching from needing
+a "pause and remember the live run" mechanism: there is deliberately nothing to remember.
+`advanceDeathSequence`'s outcome-recording (save write, daily-run entry, `pendingSeed` reroll,
+auto-opening the hub) is skipped while `replay !== null` for the same reason — a replay
+reproduces an outcome that was already recorded once, for real, and must not record it again.
+
+**The daily run's "one attempt" is a local, honest-player mechanism, not an enforced one.**
+`dailyRunHistory` records the *first* result for a UTC date key (`app/daily.ts`'s
+`dailyDateKey`, chosen over local time so the seed and the "already played" boundary land on
+the same real moment for every player) and ignores a later attempt on the same seed — there is
+no server to check against, so a player can always clear `localStorage` and play again. That is
+the same trust model every other stat in `save/schema.ts` already runs on; a real leaderboard
+would need a server-side day boundary and attempt count, not a client-side one, which is why
+this is recorded as a local decision rather than treated as the finished feature a leaderboard
+would need.
+
+**Constrains:** a future server-backed daily leaderboard needs its own attempt-counting, not an
+extension of `dailyRunHistory`. A future "resume a live run into a replay without losing it"
+feature (not asked for here) would need `enterReplay` to snapshot rather than discard the live
+`sim`, which nothing here does today.
+
 ---
 
-## 53. A character is a stat block plus named rules, and a rule is a branch in exactly one system
+## 54. A character is a stat block plus named rules, and a rule is a branch in exactly one system
 
 **Decided:** M7, #47. The other five playable characters — `GAME_DESIGN.md` §3's roster, whose
 own rule for itself is that each one is a different **verb**, not a different stat spread.
@@ -2485,7 +2538,11 @@ other one, and it is #52's argument applied unchanged: a character is a run *par
 rides with the log it describes. The table writes a choice the moment the player cycles to it,
 mid-run included, so a run resumed against the save's *current* pick would replay one
 character's inputs at another's health and speed — the same divergence #85 had to prevent for
-the Promille flag, discovered by merging into it.
+the Promille flag, discovered by merging into it. `ReplayRecord.character` is the third copy of
+that same argument, found the same way when #53's replays landed: a replay is a rebuilt run,
+so watching a Barnabas run while the table has Resi selected would reconstruct a run nobody
+played. Both back-fill to Alois, which is the only character a log recorded before this issue
+could have been.
 
 **Constrains:** #48's daily run has to decide whether a fixed character is part of a day's seed.
 #50's challenges are the same shape as a character (a run modifier chosen at the table) and

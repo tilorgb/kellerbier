@@ -1,7 +1,13 @@
 import { FLOOR_CONFIGS } from '../../content/floors/definition.js';
 import { type CharacterTraits, NEUTRAL_TRAITS } from '../../sim/character/definition.js';
+import { dailySeed } from '../../sim/rng/daily.js';
 import { TICKS_PER_SECOND } from '../../sim/time.js';
-import { type BestRunRecord, type SaveData, MAX_BEST_RUNS } from '../save/schema.js';
+import {
+  type BestRunRecord,
+  type DailyRunRecord,
+  type SaveData,
+  MAX_BEST_RUNS,
+} from '../save/schema.js';
 import {
   type CharacterDefinition,
   type LineCondition,
@@ -247,6 +253,35 @@ export function withEverythingUnlocked(save: SaveData, content: StammtischConten
   return grantEarnedUnlocks({ ...save, statistics }, content);
 }
 
+/**
+ * Records a daily run's result (#48), but only the first time `date` is
+ * seen — "one attempt" for a save with no server to enforce it means the
+ * entry already in `dailyRunHistory` for that date is the one that counts,
+ * and a later replay of the same daily seed (for fun, or to see how it goes
+ * differently) leaves it untouched. `withRunOutcome` still runs on every
+ * daily run regardless — the totals and best-runs board do not distinguish
+ * a daily run from an ordinary one, only `dailyRunHistory` does.
+ */
+export function withDailyRunOutcome(save: SaveData, record: DailyRunRecord): SaveData {
+  if (save.dailyRunHistory.some((entry) => entry.date === record.date)) {
+    return save;
+  }
+  return { ...save, dailyRunHistory: [...save.dailyRunHistory, record] };
+}
+
+/** Today's daily-run seed and whether it has already been played, from the save alone. */
+export interface DailyStatus {
+  readonly seed: number;
+  readonly playedToday: DailyRunRecord | null;
+}
+
+export function dailyStatus(save: SaveData, todayKey: string): DailyStatus {
+  return {
+    seed: dailySeed(todayKey),
+    playedToday: save.dailyRunHistory.find((entry) => entry.date === todayKey) ?? null,
+  };
+}
+
 /** Marks every seated regular as having said hello, so an arrival line only plays once. */
 export function withGreetings(save: SaveData, ids: readonly string[]): SaveData {
   const greeted = new Set(save.greetedRegulars);
@@ -356,6 +391,10 @@ export interface StammtischView {
   readonly seedUnlocked: boolean;
   readonly runsPlayed: number;
   readonly totalKills: number;
+  /** Today's daily-run seed and whether it has already been played. */
+  readonly daily: DailyStatus;
+  /** Whether there is a stored replay to watch — see `app/replay/store.ts`. */
+  readonly hasReplay: boolean;
 }
 
 /**
@@ -436,7 +475,11 @@ function unlockById(content: StammtischContent, id: string): UnlockDefinition | 
   return content.unlocks.find((unlock) => unlock.id === id);
 }
 
-export function buildStammtischView(save: SaveData, content: StammtischContent): StammtischView {
+export function buildStammtischView(
+  save: SaveData,
+  content: StammtischContent,
+  todayKey: string,
+): StammtischView {
   const lastRun = save.lastRun === null ? null : runFactsFrom(save.lastRun);
   const unlocked = new Set(save.unlocks);
   const greeted = new Set(save.greetedRegulars);
@@ -479,6 +522,8 @@ export function buildStammtischView(save: SaveData, content: StammtischContent):
     seedUnlocked: unlocked.has(UNLOCK_SEED),
     runsPlayed: statistic(save, STAT_RUNS),
     totalKills: statistic(save, STAT_KILLS),
+    daily: dailyStatus(save, todayKey),
+    hasReplay: save.replays.length > 0,
   };
 }
 

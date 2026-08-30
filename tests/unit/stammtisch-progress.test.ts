@@ -3,6 +3,7 @@ import { installFakeLocalStorage } from '../helpers/fake-local-storage.js';
 import {
   markGreeted,
   recordBossDefeat,
+  recordDailyRunOutcome,
   recordRunOutcome,
   resetProgress,
   stammtischView,
@@ -19,6 +20,7 @@ import {
   characterUnlocked,
   conditionProgress,
   cycleCharacter,
+  dailyStatus,
   selectedCharacterId,
   selectedCharacterTraits,
   withEverythingUnlocked,
@@ -27,11 +29,13 @@ import {
   pickLine,
   runFactsFrom,
   withBossDefeat,
+  withDailyRunOutcome,
   withGreetings,
   withRunOutcome,
   UNLOCK_BOARD,
 } from '../../src/app/meta/progress.js';
 import { createDefaultSave, type BestRunRecord, type SaveData } from '../../src/app/save/schema.js';
+import { dailySeed } from '../../src/sim/rng/daily.js';
 import type { CharacterTraits } from '../../src/sim/character/definition.js';
 
 /** A character's traits with nothing in them — this suite is about the rules around the roster, not the roster. */
@@ -219,7 +223,7 @@ describe('Stammtisch progress (#46)', () => {
 
   describe('the table, as the screen sees it', () => {
     function view(save: SaveData) {
-      return buildStammtischView(save, CONTENT);
+      return buildStammtischView(save, CONTENT, '2026-08-30');
     }
 
     it('orders the chairs by seat, not by the order the roster happens to be in', () => {
@@ -267,6 +271,76 @@ describe('Stammtisch progress (#46)', () => {
     });
   });
 
+  describe('the daily run (#48)', () => {
+    it('records the first attempt on a date, and ignores a later one', () => {
+      const first = withDailyRunOutcome(createDefaultSave(), {
+        date: '2026-08-30',
+        seed: 1,
+        ticksSurvived: 100,
+        kills: 5,
+      });
+      expect(first.dailyRunHistory).toEqual([
+        { date: '2026-08-30', seed: 1, ticksSurvived: 100, kills: 5 },
+      ]);
+
+      // A second attempt on the same date — replaying it for fun, say —
+      // leaves the recorded one untouched.
+      const second = withDailyRunOutcome(first, {
+        date: '2026-08-30',
+        seed: 1,
+        ticksSurvived: 9000,
+        kills: 90,
+      });
+      expect(second.dailyRunHistory).toEqual(first.dailyRunHistory);
+    });
+
+    it('records a new date as a second entry', () => {
+      const withOne = withDailyRunOutcome(createDefaultSave(), {
+        date: '2026-08-30',
+        seed: 1,
+        ticksSurvived: 100,
+        kills: 5,
+      });
+      const withTwo = withDailyRunOutcome(withOne, {
+        date: '2026-08-31',
+        seed: 2,
+        ticksSurvived: 200,
+        kills: 6,
+      });
+      expect(withTwo.dailyRunHistory.map((entry) => entry.date)).toEqual([
+        '2026-08-30',
+        '2026-08-31',
+      ]);
+    });
+
+    it('reports the seed for a date and whether it has been played, from the save alone', () => {
+      expect(dailyStatus(createDefaultSave(), '2026-08-30').playedToday).toBeNull();
+      const played = withDailyRunOutcome(createDefaultSave(), {
+        date: '2026-08-30',
+        seed: dailySeed('2026-08-30'),
+        ticksSurvived: 100,
+        kills: 5,
+      });
+      const status = dailyStatus(played, '2026-08-30');
+      expect(status.seed).toBe(dailySeed('2026-08-30'));
+      expect(status.playedToday?.kills).toBe(5);
+      // A different date's status is unaffected by yesterday's entry.
+      expect(dailyStatus(played, '2026-08-31').playedToday).toBeNull();
+    });
+
+    it('carries the daily status into the table view', () => {
+      const played = withDailyRunOutcome(createDefaultSave(), {
+        date: '2026-08-30',
+        seed: dailySeed('2026-08-30'),
+        ticksSurvived: 100,
+        kills: 5,
+      });
+      const withDate = buildStammtischView(played, CONTENT, '2026-08-30');
+      expect(withDate.daily.playedToday).not.toBeNull();
+      expect(withDate.hasReplay).toBe(false);
+    });
+  });
+
   describe('through the save on disk', () => {
     afterEach(() => {
       vi.unstubAllGlobals();
@@ -295,6 +369,16 @@ describe('Stammtisch progress (#46)', () => {
       expect(stammtischView().seats[0]?.arriving).toBe(false);
     });
 
+    it('records a daily run once, and a second attempt the same day is a no-op (#48)', () => {
+      installFakeLocalStorage();
+      resetProgress();
+      recordDailyRunOutcome({ date: '2026-08-30', seed: 1, ticksSurvived: 100, kills: 5 });
+      recordDailyRunOutcome({ date: '2026-08-30', seed: 1, ticksSurvived: 9000, kills: 90 });
+      expect(loadSave().dailyRunHistory).toEqual([
+        { date: '2026-08-30', seed: 1, ticksSurvived: 100, kills: 5 },
+      ]);
+    });
+
     it('empties the table without taking the settings with it', () => {
       const storage = installFakeLocalStorage();
       recordBossDefeat(1);
@@ -310,11 +394,13 @@ describe('Stammtisch progress (#46)', () => {
 });
 
 describe('the run-start roster (#47)', () => {
+  /** Any date: this block is about the roster, and #48's daily row only needs *a* day. */
+  const TODAY = '2026-08-30';
   const beatenFloor1 = (): SaveData => withBossDefeat(createDefaultSave(), 1, CONTENT);
 
   it('offers only the free character until something has been beaten', () => {
     const save = createDefaultSave();
-    const view = buildStammtischView(save, CONTENT);
+    const view = buildStammtischView(save, CONTENT, TODAY);
     expect(view.characters.map((character) => character.unlocked)).toEqual([true, false, false]);
     expect(view.selectedCharacter).toBe('alois');
     // A locked row says what would open it, with the count where there is one.
@@ -324,7 +410,7 @@ describe('the run-start roster (#47)', () => {
 
   it('opens a character the moment its own condition is met', () => {
     const save = beatenFloor1();
-    const view = buildStammtischView(save, CONTENT);
+    const view = buildStammtischView(save, CONTENT, TODAY);
     expect(view.characters[1]?.unlocked).toBe(true);
     expect(view.characters[1]?.goal).toBe('');
     const resi = CONTENT.characters.find((character) => character.id === 'resi');
@@ -362,7 +448,7 @@ describe('the run-start roster (#47)', () => {
 
   it('opens everything at once for the debug handle, roster and table alike', () => {
     const save = withEverythingUnlocked(createDefaultSave(), CONTENT);
-    const view = buildStammtischView(save, CONTENT);
+    const view = buildStammtischView(save, CONTENT, TODAY);
     expect(view.characters.every((character) => character.unlocked)).toBe(true);
     expect(view.seats.every((seat) => seat.seated)).toBe(true);
   });

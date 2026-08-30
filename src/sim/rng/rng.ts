@@ -27,7 +27,7 @@ function rotl32(value: number, bits: number): number {
  * mixing function avoids that, which is why "seed 1" and "seed 2" produce
  * unrelated runs rather than near-identical ones.
  */
-function splitmix32(input: number): number {
+export function splitmix32(input: number): number {
   let z = (input + 0x9e3779b9) | 0;
   z = Math.imul(z ^ (z >>> 16), 0x21f0aaad);
   z = Math.imul(z ^ (z >>> 15), 0x735a2d97);
