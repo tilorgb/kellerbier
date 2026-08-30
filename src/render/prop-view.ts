@@ -1,6 +1,7 @@
 import { Container, Sprite, type Texture } from 'pixi.js';
 import { ROOM_TILE_UNITS } from '../content/rooms/definition.js';
 import { MAIBAUM_TOP_TILE, PROP_TILE_NAMES } from './floor-art.js';
+import { tileGridScale } from './room.js';
 
 /**
  * Draws a room's authored `decorativeProps` (#152).
@@ -58,6 +59,13 @@ export function createPropView(
 
 function centred(texture: Texture, x: number, y: number): Sprite {
   const sprite = new Sprite(texture);
+  // A decorative prop is tile-category art (`docs/DECISIONS.md` #48), so it
+  // takes the same `tileGridScale` every other tile-category renderer does —
+  // authored at 16 or 32, filling the same on-screen footprint either way.
+  // Before #182's follow-up this had no scale at all, which was silently
+  // correct only because every prop happened to be 16px; redrawing one at 32
+  // doubled it on screen with nothing here to notice.
+  sprite.scale.set(tileGridScale(texture));
   sprite.anchor.set(0.5);
   sprite.position.set(x, y);
   return sprite;

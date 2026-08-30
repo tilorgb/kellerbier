@@ -242,9 +242,10 @@ describe('EntityView, drawing an animated enemy', () => {
     // They used to disagree by 25% — 2.5 internal pixels per authored pixel
     // against the room's own 2.0 — so the barrel you could smash was visibly
     // bigger than the one beside it that you could not.
+    const sixteenPxTile = new Texture({ source: new TextureSource({ width: 16, height: 16 }) });
     const { sim } = oneEnemySim();
     const { view } = animatedView(sim);
-    view.setTargetTextures([Texture.EMPTY]);
+    view.setTargetTextures([sixteenPxTile]);
     sim.spawnTarget(60, 60);
     sim.world.flush();
     view.sync(0, 0);
@@ -252,6 +253,24 @@ describe('EntityView, drawing an animated enemy', () => {
       .filter((child): child is Sprite => child instanceof Sprite && child.visible)
       .map((sprite) => sprite.scale.y);
     expect(scales).toContain(TILE_SPRITE_SCALE);
+  });
+
+  it('draws a destructible authored at 32x32 on the same grid as its 16x16 counterpart', () => {
+    // #182's follow-up: a destructible's on-screen size must track its own
+    // texture's width (`tileGridScale`), not a constant baked in for the
+    // 16px case — otherwise redrawing one barrel PNG at 32x32 for more
+    // detail silently doubles it on screen instead of just adding detail.
+    const thirtyTwoPxTile = new Texture({ source: new TextureSource({ width: 32, height: 32 }) });
+    const { sim } = oneEnemySim();
+    const { view } = animatedView(sim);
+    view.setTargetTextures([thirtyTwoPxTile]);
+    sim.spawnTarget(60, 60);
+    sim.world.flush();
+    view.sync(0, 0);
+    const scales = (view.container.children[BODY_LAYER]?.children ?? [])
+      .filter((child): child is Sprite => child instanceof Sprite && child.visible)
+      .map((sprite) => sprite.scale.y);
+    expect(scales).toContain(TILE_SPRITE_SCALE / 2);
   });
 
   it('leaves a corpse playing the death clip when the body is gone', () => {

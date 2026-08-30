@@ -38,6 +38,26 @@ const CRACK_SPAN = 10;
 const FLOOR_VARIANT_ACCENT_ALPHA = 0.55;
 
 /**
+ * The scale that puts a tile-category texture — authored at one of exactly
+ * two legal sizes, 16 or 32 (`tools/art/spec.mjs`) — on the room's
+ * `ROOM_TILE_UNITS`-wide grid, whichever of the two it happens to be:
+ * 16 at scale 1 on the coarser room grid, 32 at scale 0.5 landing on the same
+ * 1:1 grid a character draws on (`docs/DECISIONS.md` #48).
+ *
+ * `tileRect` below was the only place this was ever computed until #182's
+ * follow-up: every other renderer that draws tile-category art — a
+ * destructible entity (`entities.ts`), a decorative prop (`prop-view.ts`), a
+ * door (`createDoorView` below), a pedestal's plinth (`pedestal-view.ts`) —
+ * either hardcoded a 16px-shaped constant or set no scale at all,
+ * so redrawing any of those assets at 32x32 doubled them on screen instead of
+ * just adding detail. One shared derivation is what keeps that from
+ * recurring the next time an asset in any of those categories opts into 32.
+ */
+export function tileGridScale(texture: Texture): number {
+  return ROOM_TILE_UNITS / texture.width;
+}
+
+/**
  * Tiles `texture` over a rectangle, one sprite per 16-unit cell, into
  * `container`.
  *
@@ -48,15 +68,6 @@ const FLOOR_VARIANT_ACCENT_ALPHA = 0.55;
  * goes down before the floor does: a masonry course cut off mid-block by the
  * floor's edge reads as the wall continuing behind the floor, which is what
  * it is.
- *
- * Scaled by `ROOM_TILE_UNITS / texture.width` rather than drawn at native
- * size (`docs/DECISIONS.md` #48): a tile is authored at one of exactly two
- * legal sizes, 16 or 32 (`tools/art/spec.mjs`), and this is what keeps either
- * one filling the same `ROOM_TILE_UNITS`-wide cell — 16 at scale 1 on the
- * coarser room grid, 32 at scale 0.5 landing on the same 1:1 grid a
- * character draws on. A wall redrawn at 32 for more detail and a block still
- * at 16 tile side by side in the same room with no code change either one
- * has to know about.
  */
 function tileRect(
   container: Container,
@@ -66,7 +77,7 @@ function tileRect(
   maxX: number,
   maxY: number,
 ): void {
-  const scale = ROOM_TILE_UNITS / texture.width;
+  const scale = tileGridScale(texture);
   for (let y = minY; y < maxY; y += ROOM_TILE_UNITS) {
     for (let x = minX; x < maxX; x += ROOM_TILE_UNITS) {
       const tile = new Sprite(texture);
@@ -150,8 +161,8 @@ export function createRoomView(
         const tile = new Sprite(texture);
         // `docs/DECISIONS.md` #48: a floor variant may be authored at 16 or
         // 32, and this is what keeps either one filling the same
-        // `ROOM_TILE_UNITS`-wide cell — see `tileRect`'s own doc comment.
-        tile.scale.set(ROOM_TILE_UNITS / texture.width);
+        // `ROOM_TILE_UNITS`-wide cell — see `tileGridScale`'s own doc comment.
+        tile.scale.set(tileGridScale(texture));
         tile.position.set(x, y);
         // Every authored floor variant's base fill is the same colour as
         // `palette.floor` underneath it (the flat rect above) — only its one
@@ -294,11 +305,13 @@ export interface DoorView {
  * rebuilding the whole room (floor, walls, blocks) every time the lock state
  * flips is not.
  *
- * With `textures`, a doorway is two 16x16 door tiles laid end to end across
- * the `DOOR_SPAN`-wide gap at 1:1 — 32 units across a 24-unit gap, so each
- * one overhangs 4 units into the wall either side. Drawn at native size
- * rather than stretched to the gap on purpose: a 16px sprite scaled to 24
- * puts some of its pixels one screen pixel wide and some two, which
+ * With `textures`, a doorway is two door tiles laid end to end across the
+ * `DOOR_SPAN`-wide gap, each `ROOM_TILE_UNITS` wide on-screen regardless of
+ * which of the two legal tile sizes it was authored at (`tileGridScale`,
+ * `docs/DECISIONS.md` #48/#182) — 32 units across a 24-unit gap, so each one
+ * overhangs 4 units into the wall either side. Scaled onto that grid rather
+ * than stretched to the gap on purpose: a sprite scaled to a non-tile size
+ * like 24 puts some of its pixels one screen pixel wide and some two, which
  * `docs/CONTENT_BIBLE.md` §5 rules out outright, and a door frame set into
  * the wall around it is what a door looks like anyway.
  */
@@ -371,6 +384,7 @@ export function createDoorView(
     const alongY = horizontal ? centre.y + crossOffset : bandMinY + span / 2 - ROOM_TILE_UNITS;
     for (let step = 0; step < 2; step++) {
       const sprite = new Sprite(texture);
+      sprite.scale.set(tileGridScale(texture));
       sprite.anchor.set(horizontal ? 0 : 0.5, horizontal ? 0.5 : 0);
       sprite.position.set(
         horizontal ? alongX + step * ROOM_TILE_UNITS : alongX,

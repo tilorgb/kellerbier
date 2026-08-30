@@ -1,6 +1,7 @@
 import { Container, Sprite, type Texture } from 'pixi.js';
 import type { GameSim } from '../sim/game/sim.js';
 import { ENTITY_PALETTE } from './palette.js';
+import { tileGridScale } from './room.js';
 
 /**
  * Draws every pedestal in the current room (#28): a light beam and a
@@ -129,6 +130,10 @@ export class PedestalView {
       return existing;
     }
     const created = new Sprite(texture);
+    // The plinth is tile-category art like every other piece of room
+    // furniture (`docs/DECISIONS.md` #48/#182) — `tileGridScale` keeps it
+    // the same on-screen size whether it was authored at 16 or 32.
+    created.scale.set(tileGridScale(texture));
     created.anchor.set(0.5, 0.5);
     this.plinths.push(created);
     this.plinthLayer.addChild(created);

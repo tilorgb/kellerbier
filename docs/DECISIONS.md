@@ -2219,6 +2219,25 @@ the same design choice even though both are "add detail to an existing silhouett
 No living room in floors 1-2 now mixes a crisp 32px surface with a soft 16px prop, obstacle, or
 door — the exact symptom `#182`'s title named.
 
+**The redraw alone shipped every destructible, door, prop, and the pedestal twice as big, not
+just denser — a second bug this same change had to fix before the first draft of it could land.**
+`tileRect`'s `ROOM_TILE_UNITS / texture.width` scale (`#48`) was the only place a tile-category
+sprite's on-screen size was ever actually derived from its own texture. Every other renderer that
+draws this category of art had baked in an assumption that the source is 16px and never checked:
+`entities.ts` scaled a destructible target by the fixed `TILE_SPRITE_SCALE` constant regardless of
+its texture's real width, `prop-view.ts`'s `centred()` (every decorative prop) and
+`pedestal-view.ts`'s plinth set no scale on their sprite at all (native 1-authored-pixel-per-
+world-unit), and `createDoorView`'s door tiles were drawn "at native size" by explicit design
+comment. All four were silently correct only because every tile-category asset outside `tileRect`
+happened to be 16px — the day one of them wasn't, each one doubled on screen with nothing in the
+renderer able to notice. `tileRect`'s formula is now `room.ts`'s exported `tileGridScale(texture)`,
+and all four call sites use it, the same way `tileRect` and the floor-variant loop already did —
+one shared derivation rather than four places that could each independently drift from it again.
+
+`tests/unit/animated-entities.test.ts` gained the regression case this should have had from the
+start: a destructible target authored at 32x32 renders at exactly half the scale of one authored at
+16x16, not the same scale for both.
+
 **The minimap icons (`minimap-boss`, `minimap-shop`, `minimap-treasure`) also moved to 32x32**,
 but for consistency of the file spec only, not for any visual gain: `render/minimap-hud.ts`'s
 `makeIcon` draws every room-role icon at a fixed `ICON_PX` (8 screen pixels) regardless of the

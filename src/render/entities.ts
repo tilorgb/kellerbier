@@ -13,7 +13,8 @@ import { EntityAnimator } from './animation/animator.js';
 import { AUTHORED_FACING, resolveAnimationState, resolveFacing } from './animation/state.js';
 import type { AnimatedSpriteSet } from './floor-art.js';
 import { ENTITY_PALETTE } from './palette.js';
-import { ACTOR_SPRITE_SCALE, TILE_SPRITE_SCALE } from './resolution.js';
+import { ACTOR_SPRITE_SCALE } from './resolution.js';
+import { tileGridScale } from './room.js';
 
 /**
  * How much wider than the body a telegraph ring ends up.
@@ -344,8 +345,10 @@ export class EntityView {
       // it is drawn from the floor's own *tile* art, so it takes the tile
       // grid the identical sprite takes when `render/prop-view.ts` draws it
       // as furniture. Before this the same barrel PNG rendered 25% larger as
-      // a target than as scenery, in the same room.
-      const gridScale = isPropTarget ? TILE_SPRITE_SCALE : ACTOR_SPRITE_SCALE;
+      // a target than as scenery, in the same room. `tileGridScale` (not a
+      // fixed constant, since #182) is what keeps that true whether the
+      // destructible's art is authored at 16 or 32.
+      const gridScale = isPropTarget ? tileGridScale(bodyTexture) : ACTOR_SPRITE_SCALE;
       // A pickup pops in on spawn — a cosmetic-only bump read off the same
       // countdown `stepPickups`' collection never touches, so it never
       // affects the hitbox it's drawn over. Gated to `isPickup`: the
