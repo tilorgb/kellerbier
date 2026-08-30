@@ -5,12 +5,48 @@ import {
   runMigrations,
   type SaveMigration,
 } from '../../src/app/save/migrations.js';
+import { SAVE_SCHEMA_VERSION, sanitizeSave } from '../../src/app/save/schema.js';
 
 describe('save migration chain (#45)', () => {
-  it('has no real migrations yet — this is schema v1, the first version ever shipped', () => {
-    expect(MIGRATIONS).toEqual([]);
-    // migrateSave is a no-op today, and must stay that way until a v2 exists.
-    const raw = { schemaVersion: 1, unlocks: ['a'] };
+  it('carries exactly one step per shipped schema version', () => {
+    // The chain is indexed by version: MIGRATIONS[i] takes a save at version
+    // i to i + 1, so a chain shorter than the current version would silently
+    // leave the newest saves un-migrated, and a longer one would run a step
+    // that has no version to run for.
+    expect(MIGRATIONS).toHaveLength(SAVE_SCHEMA_VERSION);
+  });
+
+  it('upgrades a real v1 save to v2 without touching what v1 already stored (#46)', () => {
+    const v1 = {
+      schemaVersion: 1,
+      settings: { swayScale: 0.5 },
+      unlocks: ['lore-opas-zettl'],
+      achievements: [],
+      statistics: { kills: 240 },
+      dailyRunHistory: [],
+      bestRuns: [
+        { seed: 1, floor: 1, ticksSurvived: 9000, kills: 80, deathWord: 'Hi', recordedAt: 10 },
+        { seed: 2, floor: 2, ticksSurvived: 300, kills: 4, deathWord: null, recordedAt: 99 },
+      ],
+      activeRun: null,
+    };
+    const migrated = sanitizeSave(migrateSave(v1));
+    expect(migrated.schemaVersion).toBe(2);
+    expect(migrated.unlocks).toEqual(['lore-opas-zettl']);
+    expect(migrated.statistics).toEqual({ kills: 240 });
+    expect(migrated.greetedRegulars).toEqual([]);
+    // The most recently *recorded* run, not the longest one — the table's
+    // comments are about the run you just played.
+    expect(migrated.lastRun?.seed).toBe(2);
+  });
+
+  it('leaves lastRun null when a v1 save never finished a run', () => {
+    const migrated = sanitizeSave(migrateSave({ schemaVersion: 1, bestRuns: [] }));
+    expect(migrated.lastRun).toBeNull();
+  });
+
+  it('is a no-op on a save already at the current version', () => {
+    const raw = { schemaVersion: SAVE_SCHEMA_VERSION, unlocks: ['a'] };
     expect(migrateSave(raw)).toBe(raw);
   });
 

@@ -8,14 +8,20 @@ import {
  * The persisted save (#45): a single versioned JSON blob, per
  * `docs/GAME_DESIGN.md` §11 and `docs/DECISIONS.md` #50.
  *
- * `unlocks`, `achievements`, `dailyRunHistory` and the Stammtisch hub itself
- * do not exist yet — #46, #48 and #50 are the milestones that populate them.
- * They are typed and persisted from day one anyway, per this issue's own
- * note: shipping the versioning before the first real save exists is what
- * lets an early tester's progress survive the schema growing later, instead
- * of everyone's `unlocks` starting from an empty array the day #46 ships.
+ * `achievements` and `dailyRunHistory` still have nothing writing them —
+ * #48 and #50 are the milestones that populate them. They are typed and
+ * persisted from day one anyway, per #45's own note: shipping the versioning
+ * before the first real save exists is what lets an early tester's progress
+ * survive the schema growing later.
+ *
+ * v2 is the first time that promise was cashed in. The Stammtisch (#46)
+ * needed two stores v1 had no room for — the run the regulars comment on,
+ * and which of them have already said hello — so v1 saves migrate rather
+ * than reset (`migrations.ts`). `unlocks` and `statistics` were already
+ * there and needed no change at all, which is the version-from-day-one
+ * argument working exactly as advertised.
  */
-export const SAVE_SCHEMA_VERSION = 1;
+export const SAVE_SCHEMA_VERSION = 2;
 
 /** A completed run, kept for the "best runs" list. */
 export interface BestRunRecord {
@@ -63,6 +69,7 @@ export interface ActiveRunSave {
   readonly frames: readonly number[];
 }
 
+/** The v1 shape, kept for the migration that reads it. Nothing loads a save at this version any more. */
 export interface SaveDataV1 {
   readonly schemaVersion: 1;
   readonly settings: AccessibilitySettings;
@@ -74,10 +81,30 @@ export interface SaveDataV1 {
   readonly activeRun: ActiveRunSave | null;
 }
 
-/** The only schema version today. A union once a migration adds a second one. */
-export type SaveData = SaveDataV1;
+/**
+ * v2 (#46): the Stammtisch's two stores.
+ *
+ * `lastRun` is deliberately separate from `bestRuns` rather than derived from
+ * it. `bestRuns` is sorted by `ticksSurvived` and capped at `MAX_BEST_RUNS`,
+ * so the run a player *just* finished is frequently not in it at all — and a
+ * table of regulars whose comments silently fall back to the player's best
+ * run ever, on the run they just died thirty seconds into, is exactly the
+ * generic-feeling text #46's acceptance criterion rules out.
+ *
+ * `greetedRegulars` is what makes an arrival happen once: a regular who has
+ * been unlocked but never greeted opens the hub on their own line ("here is
+ * what I brought"), and is a normal seat from the next visit on.
+ */
+export interface SaveDataV2 extends Omit<SaveDataV1, 'schemaVersion'> {
+  readonly schemaVersion: 2;
+  readonly lastRun: BestRunRecord | null;
+  readonly greetedRegulars: readonly string[];
+}
 
-/** How many `bestRuns` entries `recordBestRun` keeps — see `active-run.ts`. */
+/** The current schema version. A union the day a v3 lands and something still reads a v2. */
+export type SaveData = SaveDataV2;
+
+/** How many `bestRuns` entries a finished run keeps — see `app/meta/progress.ts`'s `withRunOutcome`. */
 export const MAX_BEST_RUNS = 10;
 
 export function createDefaultSave(): SaveData {
@@ -90,6 +117,8 @@ export function createDefaultSave(): SaveData {
     dailyRunHistory: [],
     bestRuns: [],
     activeRun: null,
+    lastRun: null,
+    greetedRegulars: [],
   };
 }
 
@@ -145,28 +174,36 @@ function sanitizeDailyRunHistory(value: unknown): DailyRunRecord[] {
   return records;
 }
 
+function sanitizeBestRun(value: unknown): BestRunRecord | null {
+  if (
+    !isPlainObject(value) ||
+    !isFiniteNumber(value.seed) ||
+    !isFiniteNumber(value.floor) ||
+    !isFiniteNumber(value.ticksSurvived) ||
+    !isFiniteNumber(value.kills) ||
+    !isFiniteNumber(value.recordedAt)
+  ) {
+    return null;
+  }
+  return {
+    seed: value.seed,
+    floor: value.floor,
+    ticksSurvived: value.ticksSurvived,
+    kills: value.kills,
+    deathWord: typeof value.deathWord === 'string' ? value.deathWord : null,
+    recordedAt: value.recordedAt,
+  };
+}
+
 function sanitizeBestRuns(value: unknown): BestRunRecord[] {
   if (!Array.isArray(value)) {
     return [];
   }
   const records: BestRunRecord[] = [];
   for (const entry of value) {
-    if (
-      isPlainObject(entry) &&
-      isFiniteNumber(entry.seed) &&
-      isFiniteNumber(entry.floor) &&
-      isFiniteNumber(entry.ticksSurvived) &&
-      isFiniteNumber(entry.kills) &&
-      isFiniteNumber(entry.recordedAt)
-    ) {
-      records.push({
-        seed: entry.seed,
-        floor: entry.floor,
-        ticksSurvived: entry.ticksSurvived,
-        kills: entry.kills,
-        deathWord: typeof entry.deathWord === 'string' ? entry.deathWord : null,
-        recordedAt: entry.recordedAt,
-      });
+    const record = sanitizeBestRun(entry);
+    if (record !== null) {
+      records.push(record);
     }
   }
   return records;
@@ -210,5 +247,7 @@ export function sanitizeSave(value: unknown): SaveData {
     dailyRunHistory: sanitizeDailyRunHistory(source.dailyRunHistory),
     bestRuns: sanitizeBestRuns(source.bestRuns),
     activeRun: sanitizeActiveRun(source.activeRun),
+    lastRun: sanitizeBestRun(source.lastRun),
+    greetedRegulars: sanitizeStringArray(source.greetedRegulars),
   };
 }

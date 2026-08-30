@@ -1,5 +1,5 @@
 import { type InputFrame, createInputFrame } from '../../sim/input/frame.js';
-import { type ActiveRunSave, type BestRunRecord, type SaveData, MAX_BEST_RUNS } from './schema.js';
+import { type ActiveRunSave, type SaveData } from './schema.js';
 import { updateSave } from './storage.js';
 
 /** Numbers per encoded frame — `[moveX, moveY, aimX, aimY, buttons]`. See `ActiveRunSave.frames`. */
@@ -76,22 +76,4 @@ export function persistActiveRun(recorder: ActiveRunRecorder | null): SaveData {
     ...save,
     activeRun: recorder === null ? null : recorder.toSave(),
   }));
-}
-
-/**
- * Appends a completed run to `bestRuns`, highest `ticksSurvived` first,
- * capped at `MAX_BEST_RUNS` — the "best runs" list #45 asks the save to
- * carry, populated with the one summary already computed today
- * (`app/run-summary.ts`'s kill count, plus `GameSim`'s own tick/death-word).
- * The Stammtisch hub that actually shows this list is #46; this is what it
- * will read once it exists, the same "store it before the UI needs it"
- * shape as `unlocks`/`achievements`.
- */
-export function recordBestRun(record: BestRunRecord): SaveData {
-  return updateSave((save) => {
-    const bestRuns = [...save.bestRuns, record]
-      .sort((a, b) => b.ticksSurvived - a.ticksSurvived)
-      .slice(0, MAX_BEST_RUNS);
-    return { ...save, bestRuns };
-  });
 }
