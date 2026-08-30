@@ -88,6 +88,27 @@ export class RoomGeometry {
   /** Flat `[minX, minY, maxX, maxY]` runs. Read `blockCount * BLOCK_STRIDE` of it. */
   readonly blocks = new Float32Array(MAX_ROOM_BLOCKS * BLOCK_STRIDE);
 
+  /**
+   * `1` for a block a flying body crosses (#47's König Ludwig), `0` for one
+   * nothing crosses. Parallel to `blocks`, one entry per block.
+   *
+   * The distinction is not "how solid is it" but *what the rectangle is
+   * standing in for*. A template's authored obstacle is furniture inside a
+   * room — a crate, a vat, a pillar — and flying over furniture is exactly
+   * the promise Ludwig's crown makes. A `voidRect` is not furniture: it is
+   * the grid cell an `L`- or `T`-shaped room's footprint never claimed, a
+   * wall wearing a block's clothes because that is the cheapest way to make
+   * collision respect the shape (see `voidRects` above). A flying player who
+   * crossed one would be standing in a room that does not exist, outside the
+   * camera's clamp, next to doors that were deliberately not compiled.
+   *
+   * So `addBlock` defaults to *not* overflyable and the one caller that
+   * knows it is placing furniture opts in, rather than the other way round:
+   * the failure mode of the wrong default is a player leaving the map, and
+   * the failure mode of this one is a crate Ludwig has to walk around.
+   */
+  readonly blockOverflyable = new Uint8Array(MAX_ROOM_BLOCKS);
+
   private blocks_ = 0;
 
   /**
@@ -140,7 +161,7 @@ export class RoomGeometry {
   }
 
   /** Adds a solid box. Setup-time only; the storage is fixed and never grows. */
-  addBlock(minX: number, minY: number, maxX: number, maxY: number): void {
+  addBlock(minX: number, minY: number, maxX: number, maxY: number, overflyable = false): void {
     if (this.blocks_ >= MAX_ROOM_BLOCKS) {
       throw new RangeError(`A room holds at most ${String(MAX_ROOM_BLOCKS)} blocks`);
     }
@@ -149,6 +170,7 @@ export class RoomGeometry {
     this.blocks[base + 1] = minY;
     this.blocks[base + 2] = maxX;
     this.blocks[base + 3] = maxY;
+    this.blockOverflyable[this.blocks_] = overflyable ? 1 : 0;
     this.blocks_ += 1;
   }
 

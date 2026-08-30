@@ -403,11 +403,16 @@ export function compileRoomTemplate(
     const cellOffsetY = offsetY + cell.row * SCREEN_HEIGHT;
 
     for (const obstacle of layout.obstacles) {
+      // Overflyable (#47): an authored obstacle is furniture standing in a
+      // room, and furniture is what König Ludwig's flight crosses. The
+      // `voidRects` blocks added above are not — see
+      // `RoomGeometry.blockOverflyable`.
       geometry.addBlock(
         cellOffsetX + obstacle.x,
         cellOffsetY + obstacle.y,
         cellOffsetX + obstacle.x + obstacle.width,
         cellOffsetY + obstacle.y + obstacle.height,
+        true,
       );
     }
 

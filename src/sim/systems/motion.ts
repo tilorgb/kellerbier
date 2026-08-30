@@ -27,6 +27,14 @@ export const BLOCKED_Y = 2;
  * it is running into diagonally; one axis at a time slides along it.
  *
  * Writes `x` and `y` in place. Allocates nothing.
+ *
+ * `overfly` is a body that crosses a room's furniture (#47's König Ludwig):
+ * every `RoomGeometry` block flagged `overflyable` is skipped, the room's own
+ * walls and its unclaimed grid cells are not. A parameter rather than
+ * something read off the body, because this module knows about rectangles and
+ * radii and deliberately nothing about who is moving. Every other resolver
+ * below takes it for the same reason and defaults it off, so nothing that
+ * walks changed.
  */
 export function moveBody(
   room: RoomGeometry,
@@ -35,6 +43,7 @@ export function moveBody(
   deltaX: number,
   deltaY: number,
   radius: number,
+  overfly = false,
 ): number {
   const base = index * 4;
   const startX = transform[base] ?? 0;
@@ -43,13 +52,13 @@ export function moveBody(
   let blocked = 0;
 
   const wantedX = startX + deltaX;
-  const resolvedX = resolveAxisX(room, wantedX, startY, radius, deltaX);
+  const resolvedX = resolveAxisX(room, wantedX, startY, radius, deltaX, overfly);
   if (resolvedX !== wantedX) {
     blocked |= BLOCKED_X;
   }
 
   const wantedY = startY + deltaY;
-  const resolvedY = resolveAxisY(room, resolvedX, wantedY, radius, deltaY);
+  const resolvedY = resolveAxisY(room, resolvedX, wantedY, radius, deltaY, overfly);
   if (resolvedY !== wantedY) {
     blocked |= BLOCKED_Y;
   }
@@ -66,6 +75,7 @@ export function resolveAxisX(
   centreY: number,
   radius: number,
   deltaX: number,
+  overfly = false,
 ): number {
   if (deltaX === 0) {
     return centreX;
@@ -81,6 +91,9 @@ export function resolveAxisX(
   const movingRight = deltaX > 0;
   const blocks = room.blocks;
   for (let block = 0; block < room.blockCount; block++) {
+    if (overfly && (room.blockOverflyable[block] ?? 0) === 1) {
+      continue;
+    }
     const base = block * BLOCK_STRIDE;
     const minX = blocks[base] ?? 0;
     const minY = blocks[base + 1] ?? 0;
@@ -101,6 +114,7 @@ export function resolveAxisY(
   centreY: number,
   radius: number,
   deltaY: number,
+  overfly = false,
 ): number {
   if (deltaY === 0) {
     return centreY;
@@ -116,6 +130,9 @@ export function resolveAxisY(
   const movingDown = deltaY > 0;
   const blocks = room.blocks;
   for (let block = 0; block < room.blockCount; block++) {
+    if (overfly && (room.blockOverflyable[block] ?? 0) === 1) {
+      continue;
+    }
     const base = block * BLOCK_STRIDE;
     const minX = blocks[base] ?? 0;
     const minY = blocks[base + 1] ?? 0;
@@ -148,9 +165,13 @@ export function findBlockingEdgeY(
   probeX: number,
   centreY: number,
   radius: number,
+  overfly = false,
 ): boolean {
   const blocks = room.blocks;
   for (let block = 0; block < room.blockCount; block++) {
+    if (overfly && (room.blockOverflyable[block] ?? 0) === 1) {
+      continue;
+    }
     const base = block * BLOCK_STRIDE;
     const minX = blocks[base] ?? 0;
     const maxX = blocks[base + 2] ?? 0;
@@ -175,9 +196,13 @@ export function findBlockingEdgeX(
   centreX: number,
   probeY: number,
   radius: number,
+  overfly = false,
 ): boolean {
   const blocks = room.blocks;
   for (let block = 0; block < room.blockCount; block++) {
+    if (overfly && (room.blockOverflyable[block] ?? 0) === 1) {
+      continue;
+    }
     const base = block * BLOCK_STRIDE;
     const minY = blocks[base + 1] ?? 0;
     const maxY = blocks[base + 3] ?? 0;

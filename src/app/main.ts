@@ -30,6 +30,7 @@ import {
 } from '../render/resolution.js';
 import { ActiveItemHud } from '../render/active-item-hud.js';
 import { BossHealthHud } from '../render/boss-health-hud.js';
+import { CharacterHud } from '../render/character-hud.js';
 import { EntityView } from '../render/entities.js';
 import { GameOverScreen } from '../render/game-over.js';
 import { StammtischScreen } from '../render/stammtisch.js';
@@ -83,7 +84,11 @@ import {
   recordBossDefeat,
   recordRunOutcome,
   resetProgress,
+  selectCharacter,
+  selectedCharacter,
+  selectNextCharacter,
   stammtischView,
+  unlockEverything,
 } from './meta/index.js';
 
 /**
@@ -636,6 +641,13 @@ async function boot(): Promise<void> {
   hudLayer.addChild(walletHud.view);
 
   /**
+   * The character's own row (#47) — hidden for a character whose rules have
+   * no state to watch, so an Alois run's HUD is unchanged.
+   */
+  const characterHud = new CharacterHud(kit);
+  hudLayer.addChild(characterHud.view);
+
+  /**
    * Hidden entirely (`ActiveItemHud.sync`) whenever no active item is held,
    * so an ordinary run without one never shows an empty row.
    */
@@ -711,6 +723,8 @@ async function boot(): Promise<void> {
     y += promilleHud.height + HUD_ROW_GAP;
     walletHud.view.position.set(HUD_MARGIN, y);
     y += walletHud.height + HUD_ROW_GAP;
+    characterHud.view.position.set(HUD_MARGIN, y);
+    y += characterHud.height + HUD_ROW_GAP;
     activeItemHud.view.position.set(HUD_MARGIN, y);
     y += activeItemHud.height + HUD_ROW_GAP;
     itemGateHud.view.position.set(HUD_MARGIN, y);
@@ -1004,6 +1018,7 @@ async function boot(): Promise<void> {
       healthHud.sync(sim);
       promilleHud.sync(sim, settings.neutralReskin);
       walletHud.sync(sim);
+      characterHud.sync(sim);
       // `use` is dual-purpose (`stepPedestal`) — near a pedestal it takes the
       // item instead, but the prompt shown here is always the activation one:
       // the two are mutually exclusive in practice (`sim/systems/pedestal.ts`'s
@@ -1127,13 +1142,17 @@ async function boot(): Promise<void> {
     // Trinkfest (#92) only earns space on this line once it has actually
     // moved off baseline — same reasoning as `PromilleHud`'s own label.
     const trinkfest = sim.trinkfest !== 0 ? `  trinkfest ${String(sim.trinkfest)}` : '';
+    // Who the run is being played as (#47) — on the line a bug report's
+    // clipboard copy carries, because "Barnabas refuses food" and "food
+    // pickups are broken" are the same screenshot otherwise.
+    const character = sim.character.name;
     // Neutral reskin (#33): the meter's own name and its tier both switch —
     // this line is reachable by a normal player (`O`) and is what a bug
     // report's clipboard copy carries, so it gets the same treatment as
     // `PromilleHud`'s label rather than staying the classic name always.
     const meterLabel = promilleMeterLabel(settings.neutralReskin).toLowerCase();
     const tierLabel = promilleTierDisplayName(sim.promilleTier, settings.neutralReskin);
-    hud.text = `seed ${String(RUN_SEED)}  ${floorPlan.floorName}  room ${sim.roomId} (${currentRole})  doors ${roomState}${warmup}${keyHint}  enemies ${String(sim.liveEnemyCount)}
+    hud.text = `seed ${String(RUN_SEED)}  ${character}  ${floorPlan.floorName}  room ${sim.roomId} (${currentRole})  doors ${roomState}${warmup}${keyHint}  enemies ${String(sim.liveEnemyCount)}
   tick ${String(loop.tick)}  ${seconds}s  x${scale}${loop.paused ? '  PAUSED' : ''}
 hp ${String(hearts)}/${String(maxHearts)}  soul ${String(sim.playerSoulHealth)}  eternal ${String(sim.playerEternalHealth)}${invulnerable}${dead}
 ${meterLabel} ${sim.promille.toFixed(2)} ${tierLabel}${trinkfest}${knockedDown}
@@ -1182,6 +1201,10 @@ WASD move   arrows aim and fire
 
     sim = new GameSim({
       seed: RUN_SEED,
+      // Who the Stammtisch's run-start panel currently has selected (#47).
+      // Resolved here, at the one moment a run begins, rather than held in a
+      // variable that could drift from the save the panel writes.
+      character: selectedCharacter(),
       roomTemplate: planTemplate(planRoom(floorPlan, currentRoomId)),
       // Without this, the start room falls back to `compileRoomTemplate`'s
       // default `SINGLE_CELL_PLACEMENT` (no doors), which in turn falls back
@@ -1708,6 +1731,15 @@ WASD move   arrows aim and fire
             startRun(pendingSeed);
           }
           break;
+        case 'f':
+        case 'F':
+          // F for Figur. Cycles the roster's unlocked rows and stores the
+          // choice immediately — the panel is the only place it is shown, so
+          // a choice that lived in memory until Enter would be a choice the
+          // player could not check they had made.
+          selectNextCharacter(event.shiftKey ? -1 : 1);
+          stammtisch.update(stammtischView());
+          break;
         case 'r':
         case 'R':
           pendingSeed = rollSeed();
@@ -1956,6 +1988,18 @@ WASD move   arrows aim and fire
       close: closeStammtisch,
       recordBossDefeat,
       resetProgress,
+      unlockEverything: () => {
+        unlockEverything();
+        if (stammtisch.visible) {
+          stammtisch.update(stammtischView());
+        }
+      },
+      selectCharacter: (id: string) => {
+        selectCharacter(id);
+        if (stammtisch.visible) {
+          stammtisch.update(stammtischView());
+        }
+      },
     },
   );
   // Not gated behind `import.meta.env.DEV` like `mountDebugOverlay` above —
@@ -2069,6 +2113,14 @@ interface StammtischHandle {
   recordBossDefeat: (floor: number) => void;
   /** Empties the table and the statistics behind it, keeping settings and the run in progress. */
   resetProgress: () => void;
+  /** Meets every unlock condition on the roster at once (#47) — its mirror. */
+  unlockEverything: () => void;
+  /**
+   * Picks the character the next run starts as, by id. Refuses one that is
+   * still locked, so a dev handle cannot start a run nobody could — pair it
+   * with `unlockEverything` to try one out.
+   */
+  selectCharacter: (id: string) => void;
 }
 
 function exposeDebugHandle(

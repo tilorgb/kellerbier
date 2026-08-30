@@ -19,9 +19,20 @@ import {
  * and which of them have already said hello — so v1 saves migrate rather
  * than reset (`migrations.ts`). `unlocks` and `statistics` were already
  * there and needed no change at all, which is the version-from-day-one
- * argument working exactly as advertised.
+ * argument working exactly as advertised. v3 (#47) cashed it in again for
+ * one field: which character the next run starts as.
  */
-export const SAVE_SCHEMA_VERSION = 2;
+export const SAVE_SCHEMA_VERSION = 3;
+
+/**
+ * The character a save with no opinion starts as (#47).
+ *
+ * A bare string rather than an import from `src/content/`: the save layer
+ * validates *shapes*, and a save naming a character the roster has since
+ * dropped is handled where the roster is actually known
+ * (`selectedCharacterId`), not here.
+ */
+export const DEFAULT_CHARACTER_ID = 'alois';
 
 /** A completed run, kept for the "best runs" list. */
 export interface BestRunRecord {
@@ -101,8 +112,24 @@ export interface SaveDataV2 extends Omit<SaveDataV1, 'schemaVersion'> {
   readonly greetedRegulars: readonly string[];
 }
 
-/** The current schema version. A union the day a v3 lands and something still reads a v2. */
-export type SaveData = SaveDataV2;
+/**
+ * v3 (#47): which character the next run starts as.
+ *
+ * Persisted rather than reset per session for the reason every other
+ * roguelike persists it: a player who has decided they are a Barnabas player
+ * has decided it about more than the next thirty seconds, and re-picking on
+ * every page load would make the choice feel like a setting the game keeps
+ * forgetting. It is a *preference*, not progress — an id naming a character
+ * who no longer exists or is no longer unlocked is not an error, it just
+ * falls back (`selectedCharacterId`).
+ */
+export interface SaveDataV3 extends Omit<SaveDataV2, 'schemaVersion'> {
+  readonly schemaVersion: 3;
+  readonly selectedCharacter: string;
+}
+
+/** The current schema version. A union the day a v4 lands and something still reads a v3. */
+export type SaveData = SaveDataV3;
 
 /** How many `bestRuns` entries a finished run keeps — see `app/meta/progress.ts`'s `withRunOutcome`. */
 export const MAX_BEST_RUNS = 10;
@@ -119,6 +146,7 @@ export function createDefaultSave(): SaveData {
     activeRun: null,
     lastRun: null,
     greetedRegulars: [],
+    selectedCharacter: DEFAULT_CHARACTER_ID,
   };
 }
 
@@ -249,5 +277,9 @@ export function sanitizeSave(value: unknown): SaveData {
     activeRun: sanitizeActiveRun(source.activeRun),
     lastRun: sanitizeBestRun(source.lastRun),
     greetedRegulars: sanitizeStringArray(source.greetedRegulars),
+    selectedCharacter:
+      typeof source.selectedCharacter === 'string' && source.selectedCharacter.length > 0
+        ? source.selectedCharacter
+        : DEFAULT_CHARACTER_ID,
   };
 }

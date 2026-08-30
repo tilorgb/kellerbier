@@ -21,7 +21,13 @@ const ICON_INDENT = 12;
 /** How many best runs the board shows. Ten are stored; four is what fits under the table. */
 const BOARD_ROWS = 4;
 const BOARD_WIDTH = 190;
-const NEXT_RUN_WIDTH = 210;
+const NEXT_RUN_WIDTH = 232;
+
+/** One row of a bottom panel. `colour` defaults to the ordinary text colour. */
+interface PanelRow {
+  readonly text: string;
+  readonly colour?: number;
+}
 
 /**
  * Der Stammtisch (#46) — the table between runs.
@@ -138,6 +144,18 @@ export class StammtischScreen {
     }
   }
 
+  /**
+   * Swaps in a freshly built view without moving the cursor — what the
+   * character keys call, since choosing a character changes the save and so
+   * every row this screen derives from it.
+   */
+  update(view: StammtischView): void {
+    this.state = view;
+    if (this.view.visible) {
+      this.layOut();
+    }
+  }
+
   /** Call on every resize. Dimensions in UI pixels. */
   resize(width: number, height: number): void {
     this.width = width;
@@ -236,8 +254,8 @@ export class StammtischScreen {
     // arrow glyphs, and an unknown character is a blank, not a hint.
     this.addCentred(
       this.runOver
-        ? 'Enter: Lauf starten    Links/Rechts: umschaun    R: anderer Same    T: zua'
-        : 'Links/Rechts: umschaun    T: zruck zum Lauf',
+        ? 'Enter: Lauf starten    F: Figur    Links/Rechts: umschaun    R: anderer Same    T: zua'
+        : 'F: Figur    Links/Rechts: umschaun    T: zruck zum Lauf',
       centreX,
       hintY,
       UI_PALETTE.textDim,
@@ -304,28 +322,61 @@ export class StammtischScreen {
     return Math.max(UI_LINE_HEIGHT, Math.ceil(label.height));
   }
 
-  private nextRunRows(state: StammtischView): readonly string[] {
+  /**
+   * The run-start panel: the whole roster (#47), then the run's other
+   * particulars.
+   *
+   * Every character is listed, locked ones included and dimmed, with what
+   * would earn them next to the name — the same argument the empty chairs
+   * above are drawn on. A panel that showed only the characters you already
+   * have could not tell you what to go and get.
+   */
+  private nextRunRows(state: StammtischView): readonly PanelRow[] {
     const seated = state.seats.filter((seat) => seat.seated).length;
-    return [
-      `Figur: ${state.characters.find((character) => character.unlocked)?.name ?? 'Alois'}`,
-      state.seedUnlocked ? `Same: ${String(this.seed)}` : 'Same: no ned dei Sach',
-      `Freigschaltn: ${String(seated)} vo ${String(state.seats.length)}`,
-      `Läufe: ${String(state.runsPlayed)}    Daschlogn: ${String(state.totalKills)}`,
-    ];
+    const width = NEXT_RUN_WIDTH - PAD * 2;
+    const rows: PanelRow[] = state.characters.map((character) => {
+      if (!character.unlocked) {
+        return {
+          text: fit(`  ${character.name} — ${character.progress ?? character.goal}`, width),
+          colour: UI_PALETTE.textDisabled,
+        };
+      }
+      const chosen = character.id === state.selectedCharacter;
+      return {
+        // A cursor made of characters rather than a focus ring: this list is
+        // read, not walked with the arrow keys the table above owns.
+        text: fit(`${chosen ? '>' : ' '} ${character.name}`, width),
+        colour: chosen ? UI_PALETTE.accent : UI_PALETTE.text,
+      };
+    });
+    const chosen = state.characters.find((character) => character.id === state.selectedCharacter);
+    if (chosen !== undefined) {
+      rows.push({ text: fit(chosen.note, width), colour: UI_PALETTE.textDim });
+    }
+    rows.push({
+      text: state.seedUnlocked ? `Same: ${String(this.seed)}` : 'Same: no ned dei Sach',
+    });
+    rows.push({ text: `Freigschaltn: ${String(seated)} vo ${String(state.seats.length)}` });
+    rows.push({
+      text: `Läufe: ${String(state.runsPlayed)}    Daschlogn: ${String(state.totalKills)}`,
+    });
+    return rows;
   }
 
-  private boardRows(state: StammtischView): readonly string[] {
+  private boardRows(state: StammtischView): readonly PanelRow[] {
     const board = state.board;
     if (board === null) {
-      return ['D’Tafel hängt no leer —', 'da schreibt erst wer o.'];
+      return [{ text: 'D’Tafel hängt no leer —' }, { text: 'da schreibt erst wer o.' }];
     }
-    return board.length === 0 ? ['No koa Lauf an der Tafel.'] : board.slice(0, BOARD_ROWS);
+    return board.length === 0
+      ? [{ text: 'No koa Lauf an der Tafel.' }]
+      : board.slice(0, BOARD_ROWS).map((text) => ({ text }));
   }
 
   /** A titled panel whose *bottom* edge sits at `bottom`, so two of them share a baseline. */
   private drawPanel(
     heading: string,
-    rows: readonly string[],
+    rows: readonly PanelRow[],
     x: number,
     bottom: number,
     width: number,
@@ -339,7 +390,7 @@ export class StammtischScreen {
     headingLabel.position.set(x + PAD, y + PAD);
     this.content.addChild(headingLabel);
     rows.forEach((row, index) => {
-      const label = uiText(row, { colour: UI_PALETTE.text });
+      const label = uiText(row.text, { colour: row.colour ?? UI_PALETTE.text });
       label.position.set(x + PAD, y + PAD + UI_LINE_HEIGHT * (index + 1));
       this.content.addChild(label);
     });
@@ -350,4 +401,24 @@ export class StammtischScreen {
     label.position.set(Math.round(centreX - uiTextWidth(text) / 2), y);
     this.content.addChild(label);
   }
+}
+
+/**
+ * `text`, shortened until it measures inside `width`.
+ *
+ * A panel row is one line at a fixed line height — the wrapping `uiText`
+ * offers would silently push every row below it down and out of a panel
+ * whose height was computed from the row *count*. Trimming to an ellipsis of
+ * three dots (the pixel face has no `…`, and an unknown glyph is a blank)
+ * keeps the row a row and still says that something was cut.
+ */
+function fit(text: string, width: number): string {
+  if (uiTextWidth(text) <= width) {
+    return text;
+  }
+  let cut = text;
+  while (cut.length > 1 && uiTextWidth(`${cut}...`) > width) {
+    cut = cut.slice(0, -1);
+  }
+  return `${cut.trimEnd()}...`;
 }

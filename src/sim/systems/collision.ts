@@ -146,7 +146,16 @@ function resolveProjectile(slot: number): void {
   state[RADIUS] = radius;
   slots[PROJECTILE_MASK] =
     projectiles.team[slot] === ProjectileTeam.Player
-      ? CollisionLayer.Enemy | CollisionLayer.Obstacle
+      ? CollisionLayer.Enemy |
+        CollisionLayer.Obstacle |
+        // D'Sennerin (#47): a Kuhglocke that has already come off something
+        // is nobody's friend, hers included — "small rooms become a danger
+        // to herself", as a rule rather than as flavour text. Only *after*
+        // it has bounced, or every shot she fired would hit her at the
+        // muzzle; `hasBounced` reads the budget `finalizeProjectileTags`
+        // set from the same tuning value, so it needs no extra per-shot
+        // storage to know one has been spent.
+        (sim.ownShotsHurtOwner && hasBounced(sim, slot) ? CollisionLayer.Player : 0)
       : CollisionLayer.Player | CollisionLayer.Obstacle;
 
   state[BEST_HIT_TIME] = Number.POSITIVE_INFINITY;
@@ -195,6 +204,19 @@ function resolveProjectile(slot: number): void {
   // — see `resolveProjectileHit`'s own doc comment for the priority a mask
   // with more than one of those tags resolves through.
   resolveProjectileHit(sim, slot, target, hitX, hitY, normalX, normalY);
+}
+
+/**
+ * Whether a `bouncing` shot has spent at least one of its bounces.
+ *
+ * Compared against the budget rather than recorded on the shot: both come
+ * from `tuning.projectileTags.bounceMaxCount`, and a shot carrying no bounce
+ * tag has a budget of zero, which can never be below the maximum — so an
+ * ordinary shot answers `false` without a branch of its own.
+ */
+function hasBounced(sim: GameSim, slot: number): boolean {
+  const budget = Math.max(0, Math.round(sim.tuning.projectileTags.bounceMaxCount));
+  return (sim.projectiles.bounceRemaining[slot] ?? 0) < budget;
 }
 
 /** Exact test for one broadphase candidate. Keeps the earliest hit found. */

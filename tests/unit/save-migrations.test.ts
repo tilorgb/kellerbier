@@ -16,7 +16,7 @@ describe('save migration chain (#45)', () => {
     expect(MIGRATIONS).toHaveLength(SAVE_SCHEMA_VERSION);
   });
 
-  it('upgrades a real v1 save to v2 without touching what v1 already stored (#46)', () => {
+  it('upgrades a real v1 save to the current version without touching what v1 already stored (#46, #47)', () => {
     const v1 = {
       schemaVersion: 1,
       settings: { swayScale: 0.5 },
@@ -31,13 +31,16 @@ describe('save migration chain (#45)', () => {
       activeRun: null,
     };
     const migrated = sanitizeSave(migrateSave(v1));
-    expect(migrated.schemaVersion).toBe(2);
+    expect(migrated.schemaVersion).toBe(SAVE_SCHEMA_VERSION);
     expect(migrated.unlocks).toEqual(['lore-opas-zettl']);
     expect(migrated.statistics).toEqual({ kills: 240 });
     expect(migrated.greetedRegulars).toEqual([]);
     // The most recently *recorded* run, not the longest one — the table's
     // comments are about the run you just played.
     expect(migrated.lastRun?.seed).toBe(2);
+    // v2 -> v3 (#47): a save from before characters existed walks in as the
+    // only character it could ever have played.
+    expect(migrated.selectedCharacter).toBe('alois');
   });
 
   it('leaves lastRun null when a v1 save never finished a run', () => {

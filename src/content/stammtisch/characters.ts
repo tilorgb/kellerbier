@@ -1,20 +1,11 @@
-import type { CharacterDefinition } from '../../app/meta/definition.js';
+export { CHARACTERS as STAMMTISCH_CHARACTERS } from '../characters/index.js';
 
 /**
- * Who you can walk in as (#46's run-start panel).
+ * The roster the Stammtisch's run-start panel offers.
  *
- * One row today, and that is the honest state of it: `docs/GAME_DESIGN.md`
- * §3's other five characters are #47, and every one of them unlocks off a
- * floor that does not exist yet (Resi at floor 3, Bruder Barnabas at floor
- * 5). The panel therefore offers a list of one rather than a row of teasing
- * silhouettes — the table above it is where the game promises things it can
- * actually deliver.
+ * It lives in `src/content/characters/` now (#47) — one file per character,
+ * the same shape `src/content/enemies/` and `src/content/items/` already
+ * use, because a character grew from three lines to a stat block, a rule list
+ * and a page of reasoning. This re-export is what keeps `STAMMTISCH`'s bundle
+ * reading the same as it did when the roster was one row long.
  */
-export const STAMMTISCH_CHARACTERS: readonly CharacterDefinition[] = [
-  {
-    id: 'alois',
-    name: 'Alois',
-    note: 'Opas Trink-Rucksack, gladen mit der falschen Charge',
-    requires: null,
-  },
-];

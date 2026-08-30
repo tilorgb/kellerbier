@@ -24,6 +24,13 @@ export const RngStream = {
    * voice-bark selection. Kept seeded anyway so replays look identical too.
    */
   Cosmetic: 3,
+  /**
+   * Character rules that roll (#47) — today only Der Wolpertinger's
+   * per-floor stat reroll. Its own stream for the reason the file's opening
+   * comment gives: a chaos character drawing from `floor` would make every
+   * room layout in the game depend on how many floors he had entered.
+   */
+  Character: 4,
 } as const;
 
 export type RngStreamId = (typeof RngStream)[keyof typeof RngStream];
@@ -56,6 +63,7 @@ export interface RunRandom {
   readonly items: Rng;
   readonly enemies: Rng;
   readonly cosmetic: Rng;
+  readonly character: Rng;
 }
 
 export function createRunRandom(runSeed: number): RunRandom {
@@ -64,5 +72,6 @@ export function createRunRandom(runSeed: number): RunRandom {
     items: createStreamRng(runSeed, RngStream.Items),
     enemies: createStreamRng(runSeed, RngStream.Enemies),
     cosmetic: createStreamRng(runSeed, RngStream.Cosmetic),
+    character: createStreamRng(runSeed, RngStream.Character),
   };
 }

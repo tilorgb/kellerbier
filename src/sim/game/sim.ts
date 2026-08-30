@@ -25,6 +25,12 @@ import { ItemInventory } from '../item/inventory.js';
 import { selectItemOffer } from '../item/pool.js';
 import { ItemRegistry } from '../item/registry.js';
 import { type RunRandom, createRunRandom } from '../rng/streams.js';
+import {
+  type CharacterTraits,
+  CharacterRule,
+  NEUTRAL_TRAITS,
+  hasCharacterRule,
+} from '../character/definition.js';
 import { drawDeathWord } from './death-word.js';
 import {
   PromilleTier,
@@ -113,6 +119,21 @@ const DEFAULT_CAPACITY = 8192;
 
 /** Collider radius of the player, in pixels. */
 export const PLAYER_RADIUS = 7;
+
+/**
+ * The stats Der Wolpertinger's per-floor reroll touches (#47).
+ *
+ * Dusel is left out, and not by oversight: it is a multiplier over a base of
+ * zero (`baseStats`), so rolling it would be the one stat where chaos
+ * demonstrably does nothing. It joins the list the day something reads it.
+ */
+const CHAOS_STATS: readonly StatId[] = [
+  StatId.Stammwuerze,
+  StatId.Schluckfrequenz,
+  StatId.Reichweite,
+  StatId.Wurfkraft,
+  StatId.Gschwindigkeit,
+];
 
 /** Collider radius of a training target — a mid-size body. */
 export const TARGET_RADIUS = ENEMY_PROFILES[EnemySize.Mid].radius;
@@ -370,6 +391,12 @@ export interface GameSimOptions {
   readonly previousDeathWord?: string;
   /** Defaults to `true` — see `GameSim.promilleUnlocked`. */
   readonly promilleUnlocked?: boolean;
+  /**
+   * Who the run is played as (#47). Defaults to `NEUTRAL_TRAITS` — Alois,
+   * and exactly the run every test written before characters existed
+   * describes.
+   */
+  readonly character?: CharacterTraits;
 }
 
 /**
@@ -779,6 +806,43 @@ export class GameSim {
    */
   readonly promilleUnlocked: boolean;
 
+  /**
+   * Who this run is being played as (#47), as data — see
+   * `sim/character/definition.ts`.
+   *
+   * Read once at construction and never replaced: a character is chosen at
+   * the Stammtisch, before the run exists, and a run that could change
+   * character halfway would make "same seed, same input log, same run" a
+   * function of something outside both.
+   */
+  readonly character: CharacterTraits;
+  /**
+   * The character's rules, resolved once.
+   *
+   * `hasCharacterRule` is an array scan, and three of these are read on the
+   * per-tick movement, collision and pickup paths — the scan is trivial, but
+   * so is hoisting it, and the hot-path files then read a boolean rather
+   * than knowing how a roster stores its rules.
+   */
+  private readonly characterFlies: boolean;
+  private readonly characterRefusesFood: boolean;
+  private readonly characterRicochets: boolean;
+  private readonly characterFasts: boolean;
+  private readonly characterPurse: boolean;
+  private readonly characterChaos: boolean;
+  /** Ticks since the last thing swallowed — Bruder Barnabas's fast. */
+  private fastTicksValue = 0;
+  /** The fast step and bonus `stats` last had modifiers built for. See `syncFastModifiers`. */
+  private lastFastSteps = -1;
+  private lastFastBonus = Number.NaN;
+  /** Ticks since Ludwig's crown last cost him a Biermarke. */
+  private purseTicks = 0;
+  /** What `syncPurseModifiers` last built for: solvency, and the multiplier it used. */
+  private lastPurseSolvent: boolean | null = null;
+  private lastPurseMultiplier = Number.NaN;
+  /** The floor Der Wolpertinger's stats were last rolled for. -1 before the first roll. */
+  private lastChaosFloor = -1;
+
   /** Set once, the tick every pool empties with no eternal heart to spend. */
   private playerDeadFlag = false;
   private playerDeathTick_ = -1;
@@ -911,6 +975,22 @@ export class GameSim {
     this.stats = new StatPipeline(() => this.baseStats(), DEFAULT_STAT_CAPS);
     this.previousDeathWord = options.previousDeathWord;
 
+    this.character = options.character ?? NEUTRAL_TRAITS;
+    this.characterFlies = hasCharacterRule(this.character, CharacterRule.Flies);
+    this.characterRefusesFood = hasCharacterRule(this.character, CharacterRule.RefusesFood);
+    this.characterRicochets = hasCharacterRule(this.character, CharacterRule.RicochetHurtsOwner);
+    this.characterFasts = hasCharacterRule(this.character, CharacterRule.Fasting);
+    this.characterPurse = hasCharacterRule(this.character, CharacterRule.Purse);
+    this.characterChaos = hasCharacterRule(this.character, CharacterRule.Chaos);
+    // The innate half of a shot's behaviour (#47) — Resi's arcing, returning
+    // Brezn, D'Sennerin's ricochet. `forcedTags` is exactly the field
+    // `ShootingTuning` reserved for this, ORed rather than assigned so the
+    // debug tag chooser can still add to it while a character run is going.
+    for (const tag of this.character.shotTags) {
+      this.tuning.shooting.forcedTags |= PROJECTILE_TAG_BY_NAME[tag];
+    }
+    this.applyCharacterStats();
+
     this.transform = this.world.defineComponent('transform', Float32Array, 4);
     this.velocity = this.world.defineComponent('velocity', Float32Array, 2);
     this.body = this.world.defineComponent('body', Float32Array, 2);
@@ -959,7 +1039,17 @@ export class GameSim {
     this.decals = new DecalStore();
     this.events = new EventQueue();
 
+    this.biermarkenCount = this.character.startingBiermarken;
+    this.bombsCount = this.character.startingBombs;
+    this.keysCount = this.character.startingKeys;
+
     this.playerHandle = this.spawnPlayer();
+    // Before the first room loads, not after: an item with an `onFloorStart`
+    // hook that arrived a moment later would silently skip floor 1, which is
+    // the only floor a starting item is guaranteed to see.
+    for (const id of this.character.items) {
+      this.pickUpItem(id);
+    }
     if (options.roomTemplate !== undefined) {
       this.loadRoom(
         options.roomTemplate,
@@ -978,6 +1068,17 @@ export class GameSim {
         this.spawnTrainingTargets();
       }
     }
+    // A chaos character always starts a run rolled, even in a sim that never
+    // loads a room template (the tuning playground, most tests): the room
+    // path above has already rolled for its own floor and this no-ops, and
+    // the playground path has not.
+    this.rerollChaosStats(this.currentFloorValue);
+    // The two counter rules register their opening contribution here rather
+    // than waiting for the first `step`: Ludwig walks in with a full purse,
+    // and a run whose damage is only correct from tick 1 onward is a run
+    // whose first shot is wrong.
+    this.syncFastModifiers();
+    this.syncPurseModifiers();
     this.world.flush();
   }
 
@@ -1430,6 +1531,10 @@ export class GameSim {
       this.lastFloorStartDispatched = floor;
       dispatchItemFloorStart(this, floor);
     }
+    // "Stats reroll on every floor entry" (#47) — a floor, not a room: the
+    // guard inside is on the floor number, so walking back and forth through
+    // a door does not reroll anything.
+    this.rerollChaosStats(floor);
     this.currentFloorValue = floor;
     this.roomEnemyCount = 0;
     const alreadyCleared = this.roomClearedIds.has(this.roomId);
@@ -1764,6 +1869,72 @@ export class GameSim {
   /** Schwarzbier banked. Not spent by ordinary damage — see `applyPlayerDamage`. */
   get playerEternalHealth(): number {
     return this.eternalHp;
+  }
+
+  /** The red Maß pool's ceiling — the character's, not the engine's default. */
+  get playerMaxHealth(): number {
+    return this.health.data[this.playerIndex * 2 + 1] ?? 0;
+  }
+
+  /**
+   * König Ludwig is over the furniture, not on it (#47) — read once a tick
+   * by `sim/systems/movement.ts`. Never lets anyone through a wall: see
+   * `RoomGeometry.blockOverflyable`.
+   */
+  get playerFlies(): boolean {
+    return this.characterFlies;
+  }
+
+  /** Bruder Barnabas leaves every `food` pickup where it lies — `sim/systems/pickup.ts`. */
+  get playerRefusesFood(): boolean {
+    return this.characterRefusesFood;
+  }
+
+  /** D'Sennerin's own ricochets can come back at her — `sim/systems/collision.ts`. */
+  get ownShotsHurtOwner(): boolean {
+    return this.characterRicochets;
+  }
+
+  /** Ticks since the last thing the player swallowed. Zero for anyone who does not fast. */
+  get fastTicks(): number {
+    return this.fastTicksValue;
+  }
+
+  /**
+   * How many completed fast steps are currently paying out, capped at
+   * `CharacterTuning.fastMaxSteps`. The HUD's one number for the mechanic.
+   */
+  get fastSteps(): number {
+    const tuning = this.tuning.character;
+    return Math.min(
+      Math.max(0, Math.round(tuning.fastMaxSteps)),
+      Math.floor(this.fastTicksValue / Math.max(1, Math.round(tuning.fastStepTicks))),
+    );
+  }
+
+  /**
+   * Ends a fast — called from `sim/systems/pickup.ts` for anything swallowed.
+   *
+   * A no-op for a character who does not fast, so the pickup path calls it
+   * unconditionally rather than asking first, and the one place that decides
+   * what counts as eating stays the place that resolves pickups.
+   */
+  breakFast(): void {
+    if (!this.characterFasts || this.fastTicksValue === 0) {
+      return;
+    }
+    this.fastTicksValue = 0;
+    this.syncFastModifiers();
+  }
+
+  /** Whether Ludwig's purse still has something in it — his damage rides on this. */
+  get pursePowered(): boolean {
+    return this.characterPurse && this.biermarkenCount > 0;
+  }
+
+  /** The floor Der Wolpertinger's stats were last rolled for, or -1 for anyone else. */
+  get chaosFloor(): number {
+    return this.characterChaos ? this.lastChaosFloor : -1;
   }
 
   /** Grants soul hearts (Weißbier) — collected via `spawnPickup`, or called directly by tests. */
@@ -2101,6 +2272,160 @@ export class GameSim {
       },
     ];
     this.stats.setSourceModifiers('promille', modifiers);
+  }
+
+  /**
+   * The character's fixed stat block, registered once at construction as the
+   * source `'character'`.
+   *
+   * Fixed is the point: this is who they are, and it never changes during a
+   * run. The three rules that *do* move a stat mid-run each register their
+   * own source instead (`'character-fast'`, `'character-purse'`,
+   * `'character-chaos'`) rather than rebuilding this one — so the stat
+   * inspector shows "Resi ×1.3" and "Fastn ×1.5" as two separate lines with
+   * two separate reasons, which is the whole of what #25 bought.
+   */
+  private applyCharacterStats(): void {
+    if (this.character.stats.length === 0) {
+      return;
+    }
+    const source = {
+      kind: 'character' as const,
+      id: this.character.id,
+      label: this.character.name,
+    };
+    const modifiers: StatModifier[] = this.character.stats.map((modifier) => ({
+      stat: modifier.stat,
+      op: modifier.op,
+      value: modifier.value,
+      source,
+    }));
+    this.stats.setSourceModifiers('character', modifiers);
+  }
+
+  /**
+   * Bruder Barnabas's fast (#47): Stammwürze climbs one step per
+   * `fastStepTicks` gone without swallowing anything, up to `fastMaxSteps`.
+   *
+   * Rebuilt only when the step *or* the tuning behind it changes — the tick
+   * check is two integer divides, and the pipeline is only touched on the
+   * one tick in nine hundred that actually crosses a step. The bonus is
+   * compared too, so dragging the slider in the tuning window takes effect
+   * the moment it moves rather than at the next step, which is the whole
+   * point of the numbers being live.
+   */
+  private syncFastModifiers(): void {
+    if (!this.characterFasts) {
+      return;
+    }
+    const tuning = this.tuning.character;
+    const steps = this.fastSteps;
+    if (steps === this.lastFastSteps && tuning.fastStepBonus === this.lastFastBonus) {
+      return;
+    }
+    this.lastFastSteps = steps;
+    this.lastFastBonus = tuning.fastStepBonus;
+    if (steps <= 0) {
+      this.stats.clearSource('character-fast');
+      return;
+    }
+    const source = { kind: 'character' as const, id: 'fastn', label: 'Fastn' };
+    this.stats.setSourceModifiers('character-fast', [
+      {
+        stat: StatId.Stammwuerze,
+        op: 'multiply',
+        value: 1 + steps * tuning.fastStepBonus,
+        source,
+      },
+    ]);
+  }
+
+  /**
+   * König Ludwig's purse (#47): the absurd damage is *rented*, and the rent
+   * is a Biermarke every `purseDrainTicks`.
+   *
+   * Running dry is deliberately not a death spiral — it takes the multiplier
+   * away and nothing else, so a broke Ludwig is an ordinary fragile
+   * character until the next coin rather than a run that is over but still
+   * being played. It is also what keeps his flight from trivialising a floor
+   * built around obstacles: crossing them costs time, and time is the one
+   * thing his purse is denominated in.
+   */
+  private syncPurseModifiers(): void {
+    if (!this.characterPurse) {
+      return;
+    }
+    const multiplier = this.tuning.character.pursePowerMultiplier;
+    const solvent = this.biermarkenCount > 0;
+    if (solvent === this.lastPurseSolvent && multiplier === this.lastPurseMultiplier) {
+      return;
+    }
+    this.lastPurseSolvent = solvent;
+    this.lastPurseMultiplier = multiplier;
+    if (!solvent) {
+      this.stats.clearSource('character-purse');
+      return;
+    }
+    const source = { kind: 'character' as const, id: 'geldbeutl', label: 'Geldbeutl' };
+    this.stats.setSourceModifiers('character-purse', [
+      { stat: StatId.Stammwuerze, op: 'multiply', value: multiplier, source },
+    ]);
+  }
+
+  /**
+   * Der Wolpertinger's reroll (#47): five multipliers, drawn on entering a
+   * floor, replacing the previous floor's outright.
+   *
+   * Drawn from the run's own `character` stream, so the same seed and the
+   * same route produce the same monster — "unfair in both directions" has to
+   * still be reproducible, or a Wolpertinger bug report cannot be replayed.
+   * A no-op for every other character, and for a second call on a floor
+   * already rolled (a room transition inside one floor is not a new floor).
+   */
+  private rerollChaosStats(floor: number): void {
+    if (!this.characterChaos || floor === this.lastChaosFloor) {
+      return;
+    }
+    this.lastChaosFloor = floor;
+    const tuning = this.tuning.character;
+    const span = tuning.chaosMaxFactor - tuning.chaosMinFactor;
+    const source = {
+      kind: 'character' as const,
+      id: 'wolpertinger',
+      label: `Wolpertinger (${String(floor)}. Stock)`,
+    };
+    const modifiers: StatModifier[] = CHAOS_STATS.map((stat) => ({
+      stat,
+      op: 'multiply' as const,
+      value: tuning.chaosMinFactor + this.random.character.nextFloat() * span,
+      source,
+    }));
+    this.stats.setSourceModifiers('character-chaos', modifiers);
+  }
+
+  /**
+   * The two character rules that are counters rather than events, advanced
+   * once a tick from `step` before anything reads `stats`.
+   *
+   * Both are no-ops for a character without the rule, which is why `step`
+   * calls this unconditionally instead of asking first: the alternative is
+   * the frame loop knowing which character it is running, which is exactly
+   * what the rule ids exist to avoid.
+   */
+  private stepCharacter(): void {
+    if (this.characterFasts) {
+      this.fastTicksValue += 1;
+      this.syncFastModifiers();
+    }
+    if (this.characterPurse) {
+      this.purseTicks += 1;
+      const interval = Math.max(1, Math.round(this.tuning.character.purseDrainTicks));
+      if (this.purseTicks >= interval) {
+        this.purseTicks = 0;
+        this.spendBiermarken(1);
+      }
+      this.syncPurseModifiers();
+    }
   }
 
   /**
@@ -3063,6 +3388,10 @@ export class GameSim {
     stepPromille(this);
     this.syncPromilleModifiers();
     this.syncKaterModifiers();
+    // The character's own per-tick rules (#47) — Barnabas's fast, Ludwig's
+    // purse — settled here for the same reason Promille is: movement and
+    // shooting both read the stats they change, later in this same tick.
+    this.stepCharacter();
     // The `sober`/`rausch` item gate (#32): before anything reads `stats`
     // this tick, catch a tier boundary crossed since the last one so a held
     // gated item's stat contribution appears or disappears the same tick the
@@ -3297,9 +3626,13 @@ export class GameSim {
     body[index * 2] = PLAYER_RADIUS;
     body[index * 2 + 1] = 1;
 
+    // The character's own pool (#47), not the engine's default: Resi walks in
+    // on four Maß and Bruder Barnabas on eight, and `PLAYER_HEALTH` is what
+    // `NEUTRAL_TRAITS` — Alois — carries.
     const health = this.health.data;
-    health[index * 2] = PLAYER_HEALTH;
-    health[index * 2 + 1] = PLAYER_HEALTH;
+    const maxHealth = Math.max(1, Math.round(this.character.maxHealth));
+    health[index * 2] = maxHealth;
+    health[index * 2 + 1] = maxHealth;
     this.contactDamage.data[index] = 0;
 
     this.setCollisionLayer(index, CollisionLayer.Player);
@@ -3856,12 +4189,12 @@ export class GameSim {
     if (effect.kind === 'health') {
       low =
         effect.pool === 'red'
-          ? this.playerHealth < PLAYER_HEALTH * tuning.needThreshold
+          ? this.playerHealth < this.playerMaxHealth * tuning.needThreshold
           : effect.pool === 'soul'
             ? this.soulHp === 0
             : this.eternalHp === 0;
     } else if (effect.kind === 'food') {
-      low = this.playerHealth < PLAYER_HEALTH * tuning.needThreshold;
+      low = this.playerHealth < this.playerMaxHealth * tuning.needThreshold;
     } else if (effect.kind === 'currency') {
       low = this.biermarkenCount === 0;
     } else if (effect.kind === 'bombs') {

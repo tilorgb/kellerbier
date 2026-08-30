@@ -1,5 +1,6 @@
 import type { SimTuning } from '../sim/tuning.js';
 import {
+  DEFAULT_CHARACTER_TUNING,
   DEFAULT_ENEMY_TUNING,
   DEFAULT_IMPACT_TUNING,
   DEFAULT_ITEM_POOL_TUNING,
@@ -41,7 +42,8 @@ interface FieldSpec {
 
 interface GroupSpec {
   readonly title: string;
-  readonly group: 'movement' | 'shooting' | 'impact' | 'enemy' | 'promille' | 'pickup' | 'itemPool';
+  readonly group:
+    'movement' | 'shooting' | 'impact' | 'enemy' | 'promille' | 'pickup' | 'itemPool' | 'character';
   readonly fields: readonly FieldSpec[];
 }
 
@@ -320,6 +322,25 @@ const GROUPS: readonly GroupSpec[] = [
       { key: 'bobPeriodTicks', min: 10, max: 300, step: 5, hint: 'ticks per bob cycle' },
     ],
   },
+  {
+    title: 'character',
+    group: 'character',
+    fields: [
+      { key: 'fastStepTicks', min: 120, max: 2400, step: 60, hint: 'ticks per step of the fast' },
+      { key: 'fastStepBonus', min: 0, max: 1, step: 0.05, hint: 'Stammwürze per step' },
+      { key: 'fastMaxSteps', min: 0, max: 10, step: 1, hint: 'steps the fast stops paying at' },
+      {
+        key: 'purseDrainTicks',
+        min: 15,
+        max: 600,
+        step: 15,
+        hint: 'ticks per Biermarke the crown costs',
+      },
+      { key: 'pursePowerMultiplier', min: 1, max: 6, step: 0.25, hint: 'Ludwig damage while paid' },
+      { key: 'chaosMinFactor', min: 0.1, max: 1, step: 0.05, hint: 'worst a reroll can do' },
+      { key: 'chaosMaxFactor', min: 1, max: 4, step: 0.1, hint: 'best a reroll can do' },
+    ],
+  },
 ];
 
 const DEFAULTS = {
@@ -330,6 +351,7 @@ const DEFAULTS = {
   promille: DEFAULT_PROMILLE_TUNING,
   pickup: DEFAULT_PICKUP_TUNING,
   itemPool: DEFAULT_ITEM_POOL_TUNING,
+  character: DEFAULT_CHARACTER_TUNING,
 } as const;
 
 const STYLE = `

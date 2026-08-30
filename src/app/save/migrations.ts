@@ -58,7 +58,17 @@ const v1ToV2: SaveMigration = (raw) => {
   return { ...raw, schemaVersion: 2, lastRun: latest, greetedRegulars: [] };
 };
 
-export const MIGRATIONS: readonly SaveMigration[] = [v0ToV1, v1ToV2];
+/**
+ * v2 -> v3 (#47): the character the next run starts as.
+ *
+ * Everybody upgrades as Alois, which is both the only character a v2 save
+ * could have played and the fallback `selectedCharacterId` would have picked
+ * anyway — the field is written explicitly so a v3 save always *has* it,
+ * rather than relying on the sanitiser to keep filling it in forever.
+ */
+const v2ToV3: SaveMigration = (raw) => ({ ...raw, schemaVersion: 3, selectedCharacter: 'alois' });
+
+export const MIGRATIONS: readonly SaveMigration[] = [v0ToV1, v1ToV2, v2ToV3];
 
 function versionOf(raw: Record<string, unknown>): number {
   const version = raw.schemaVersion;

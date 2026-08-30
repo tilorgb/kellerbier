@@ -16,7 +16,13 @@ import type {
 import { bossStatKey } from '../../src/app/meta/definition.js';
 import {
   buildStammtischView,
+  characterUnlocked,
   conditionProgress,
+  cycleCharacter,
+  selectedCharacterId,
+  selectedCharacterTraits,
+  withEverythingUnlocked,
+  withSelectedCharacter,
   fillTokens,
   pickLine,
   runFactsFrom,
@@ -26,6 +32,23 @@ import {
   UNLOCK_BOARD,
 } from '../../src/app/meta/progress.js';
 import { createDefaultSave, type BestRunRecord, type SaveData } from '../../src/app/save/schema.js';
+import type { CharacterTraits } from '../../src/sim/character/definition.js';
+
+/** A character's traits with nothing in them — this suite is about the rules around the roster, not the roster. */
+function traits(id: string, name: string): CharacterTraits {
+  return {
+    id,
+    name,
+    maxHealth: 6,
+    startingBiermarken: 0,
+    startingBombs: 0,
+    startingKeys: 0,
+    items: [],
+    shotTags: [],
+    stats: [],
+    rules: [],
+  };
+}
 
 const UNLOCKS: readonly UnlockDefinition[] = [
   {
@@ -75,7 +98,32 @@ const TRAUDL: RegularDefinition = {
 const CONTENT: StammtischContent = {
   regulars: [TRAUDL, SEPP],
   unlocks: UNLOCKS,
-  characters: [{ id: 'alois', name: 'Alois', note: 'Rucksack', requires: null }],
+  characters: [
+    {
+      id: 'alois',
+      name: 'Alois',
+      note: 'Rucksack',
+      requires: null,
+      goal: '',
+      traits: traits('alois', 'Alois'),
+    },
+    {
+      id: 'resi',
+      name: 'Resi',
+      note: 'Dirndl',
+      requires: { kind: 'bossDefeated', floor: 1 },
+      goal: 'Schlog den Kellerboss',
+      traits: traits('resi', 'Resi'),
+    },
+    {
+      id: 'sennerin',
+      name: "D'Sennerin",
+      note: 'Kuhglockn',
+      requires: { kind: 'statAtLeast', stat: 'kills', value: 100 },
+      goal: '100 daschlogn',
+      traits: traits('sennerin', "D'Sennerin"),
+    },
+  ],
 };
 
 function run(partial: Partial<BestRunRecord> = {}): BestRunRecord {
@@ -258,5 +306,64 @@ describe('Stammtisch progress (#46)', () => {
       expect(cleared.settings).toEqual(loadSave().settings);
       expect(storage.getItem('kellerbier.save.v1')).not.toBeNull();
     });
+  });
+});
+
+describe('the run-start roster (#47)', () => {
+  const beatenFloor1 = (): SaveData => withBossDefeat(createDefaultSave(), 1, CONTENT);
+
+  it('offers only the free character until something has been beaten', () => {
+    const save = createDefaultSave();
+    const view = buildStammtischView(save, CONTENT);
+    expect(view.characters.map((character) => character.unlocked)).toEqual([true, false, false]);
+    expect(view.selectedCharacter).toBe('alois');
+    // A locked row says what would open it, with the count where there is one.
+    expect(view.characters[1]?.goal).toBe('Schlog den Kellerboss');
+    expect(view.characters[2]?.progress).toBe('0 / 100');
+  });
+
+  it('opens a character the moment its own condition is met', () => {
+    const save = beatenFloor1();
+    const view = buildStammtischView(save, CONTENT);
+    expect(view.characters[1]?.unlocked).toBe(true);
+    expect(view.characters[1]?.goal).toBe('');
+    const resi = CONTENT.characters.find((character) => character.id === 'resi');
+    expect(resi === undefined ? false : characterUnlocked(save, resi)).toBe(true);
+  });
+
+  it('refuses to select a character that is still locked', () => {
+    const save = createDefaultSave();
+    expect(withSelectedCharacter(save, 'resi', CONTENT).selectedCharacter).toBe('alois');
+    expect(withSelectedCharacter(save, 'gerti', CONTENT).selectedCharacter).toBe('alois');
+    expect(withSelectedCharacter(beatenFloor1(), 'resi', CONTENT).selectedCharacter).toBe('resi');
+  });
+
+  it('falls back rather than starting a run as somebody the save can no longer play', () => {
+    const chosen = withSelectedCharacter(beatenFloor1(), 'resi', CONTENT);
+    expect(selectedCharacterId(chosen, CONTENT)).toBe('resi');
+    // The same choice, on a save whose progress has since been wiped.
+    const wiped: SaveData = { ...chosen, statistics: {}, unlocks: [] };
+    expect(selectedCharacterId(wiped, CONTENT)).toBe('alois');
+    expect(selectedCharacterTraits(wiped, CONTENT).id).toBe('alois');
+  });
+
+  it('cycles past locked rows, and wraps', () => {
+    const save = beatenFloor1();
+    expect(cycleCharacter(save, CONTENT, 1)).toBe('resi');
+    const onResi = withSelectedCharacter(save, 'resi', CONTENT);
+    // Sennerin is still locked, so forward from Resi comes back round to Alois.
+    expect(cycleCharacter(onResi, CONTENT, 1)).toBe('alois');
+    expect(cycleCharacter(onResi, CONTENT, -1)).toBe('alois');
+  });
+
+  it('stays put when nothing else is unlocked to cycle to', () => {
+    expect(cycleCharacter(createDefaultSave(), CONTENT, 1)).toBe('alois');
+  });
+
+  it('opens everything at once for the debug handle, roster and table alike', () => {
+    const save = withEverythingUnlocked(createDefaultSave(), CONTENT);
+    const view = buildStammtischView(save, CONTENT);
+    expect(view.characters.every((character) => character.unlocked)).toBe(true);
+    expect(view.seats.every((seat) => seat.seated)).toBe(true);
   });
 });
