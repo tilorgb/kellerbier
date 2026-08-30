@@ -59,28 +59,34 @@ const v1ToV2: SaveMigration = (raw) => {
 };
 
 /**
- * v2 -> v3 (#85): the in-progress run learns whether it is sober.
+ * v2 -> v3: two features landing together.
  *
- * Back-filled `true` rather than read off `unlocks`, and the distinction
- * matters. Every run recorded by a pre-#85 build *was* a promilled one —
+ * #48's half is `replays` — new storage, not a reshape of anything v2
+ * already had, so there is nothing to back-fill it from (unlike `v1ToV2`'s
+ * `lastRun`); an upgraded save simply starts with none, same as
+ * `createDefaultSave`.
+ *
+ * #85's half is the in-progress run learning whether it is sober. Back-filled
+ * `true` rather than read off `unlocks`, and the distinction matters. Every
+ * run recorded by a pre-#85 build *was* a promilled one —
  * `GameSim.promilleUnlocked` defaulted to `true` and nothing set it — so
  * `true` reconstructs the run that was actually saved. Deriving it from the
  * save's unlock set instead would resume a v2 tester's in-progress run with
  * the beer stripped out of it purely because they had never beaten Der
  * Stier, which is the exact divergence `ActiveRunSave.promilleUnlocked`
- * exists to prevent.
- *
- * A save with no run in progress migrates to a `null` `activeRun` untouched;
- * `sanitizeSave` is what turns anything else unparseable into `null`.
+ * exists to prevent. A save with no run in progress migrates to a `null`
+ * `activeRun` untouched; `sanitizeSave` is what turns anything else
+ * unparseable into `null`.
  */
 const v2ToV3: SaveMigration = (raw) => {
   const active = raw.activeRun;
   if (typeof active !== 'object' || active === null || Array.isArray(active)) {
-    return { ...raw, schemaVersion: 3 };
+    return { ...raw, schemaVersion: 3, replays: [] };
   }
   return {
     ...raw,
     schemaVersion: 3,
+    replays: [],
     activeRun: { ...(active as Record<string, unknown>), promilleUnlocked: true },
   };
 };

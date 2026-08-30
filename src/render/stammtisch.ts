@@ -1,5 +1,6 @@
 import { Container, Graphics, Sprite, type BitmapText, type Renderer } from 'pixi.js';
 import type { SeatView, StammtischView } from '../app/meta/progress.js';
+import { encodeSeed } from '../sim/rng/seed.js';
 import { EFFECT_PALETTE, UI_PALETTE } from './palette.js';
 import { FocusRing, iconRoles, type UiKit } from './ui/kit.js';
 import { DisplayTitle, TITLE_STYLES } from './ui/title.js';
@@ -221,8 +222,12 @@ export class StammtischScreen {
 
     // --- the two panels along the bottom, bottom-aligned so they share a
     // baseline however many rows each of them happens to hold ---
+    // A finished run offers a second hint row (seed/daily/replay controls,
+    // #48) that a run still in progress has no use for, so only that case
+    // reserves the extra line.
+    const hintRows = this.runOver ? 2 : 1;
     const hintY = this.height - MARGIN - UI_TEXT_HEIGHT;
-    const panelBottom = hintY - 6;
+    const panelBottom = hintY - (hintRows - 1) * UI_LINE_HEIGHT - 6;
     this.drawPanel('Nächster Lauf', this.nextRunRows(state), MARGIN, panelBottom, NEXT_RUN_WIDTH);
     this.drawPanel(
       'D’Tafel',
@@ -234,14 +239,28 @@ export class StammtischScreen {
 
     // Spelled out rather than drawn as ← and →: the pixel face (#154) has no
     // arrow glyphs, and an unknown character is a blank, not a hint.
-    this.addCentred(
-      this.runOver
-        ? 'Enter: Lauf starten    Links/Rechts: umschaun    R: anderer Same    T: zua'
-        : 'Links/Rechts: umschaun    T: zruck zum Lauf',
-      centreX,
-      hintY,
-      UI_PALETTE.textDim,
-    );
+    if (this.runOver) {
+      this.addCentred(
+        'Enter: Lauf starten    Links/Rechts: umschaun    R: anderer Same    T: zua',
+        centreX,
+        hintY - UI_LINE_HEIGHT,
+        UI_PALETTE.textDim,
+      );
+      const replayHint = state.hasReplay ? '    V: o’gschaugt    X: exportian' : '';
+      this.addCentred(
+        `E: Same eigeben    D: täglicher Lauf    C: kopian${replayHint}`,
+        centreX,
+        hintY,
+        UI_PALETTE.textDim,
+      );
+    } else {
+      this.addCentred(
+        'Links/Rechts: umschaun    C: Lauf kopian    T: zruck zum Lauf',
+        centreX,
+        hintY,
+        UI_PALETTE.textDim,
+      );
+    }
   }
 
   /** One chair's contents, laid out top-down in its own container so the frame can be sized around it. */
@@ -306,9 +325,11 @@ export class StammtischScreen {
 
   private nextRunRows(state: StammtischView): readonly string[] {
     const seated = state.seats.filter((seat) => seat.seated).length;
+    const daily = state.daily.playedToday;
     return [
       `Figur: ${state.characters.find((character) => character.unlocked)?.name ?? 'Alois'}`,
-      state.seedUnlocked ? `Same: ${String(this.seed)}` : 'Same: no ned dei Sach',
+      state.seedUnlocked ? `Same: ${encodeSeed(this.seed >>> 0)}` : 'Same: no ned dei Sach',
+      `Täglicher Same: ${encodeSeed(state.daily.seed >>> 0)}${daily === null ? '' : ' (scho gspielt)'}`,
       `Freigschaltn: ${String(seated)} vo ${String(state.seats.length)}`,
       `Läufe: ${String(state.runsPlayed)}    Daschlogn: ${String(state.totalKills)}`,
     ];

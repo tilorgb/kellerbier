@@ -21,9 +21,14 @@ import {
  * there and needed no change at all, which is the version-from-day-one
  * argument working exactly as advertised.
  *
- * v3 (#85) adds one field to the in-progress run: whether it is a sober run
- * or a promilled one. That is not redundant with `unlocks`, and the reason
- * is a real bug rather than tidiness — see `ActiveRunSave.promilleUnlocked`.
+ * v3 is two features landing together. #48 is `dailyRunHistory` finally
+ * being written to, plus `replays` — a small cap of finished runs'
+ * seed-plus-input-log, kept so "watch the run you just had" and "attach a
+ * replay to a bug report" both work from a normal player's save without
+ * needing a file already on disk. #85 adds one field to the in-progress run:
+ * whether it is a sober run or a promilled one. That is not redundant with
+ * `unlocks`, and the reason is a real bug rather than tidiness — see
+ * `ActiveRunSave.promilleUnlocked`.
  */
 export const SAVE_SCHEMA_VERSION = 3;
 
@@ -39,16 +44,54 @@ export interface BestRunRecord {
 }
 
 /**
- * One day's daily-run result. Nothing writes these yet — the daily run
- * itself is #48 — but the shape is fixed now so #48 lands data into an
- * existing, versioned array rather than inventing storage for it later.
+ * One day's daily-run result (#48) — the one attempt that counted, keyed by
+ * `app/daily.ts`'s `dailyDateKey` (UTC, so it agrees with `dailySeed`
+ * regardless of the player's own timezone). `app/meta/index.ts`'s
+ * `recordDailyRunOutcome` only ever inserts one entry per date: a date
+ * already in this array means that day's attempt is spent, which is what
+ * "one attempt" means for a save with no server to enforce it.
  */
 export interface DailyRunRecord {
-  /** `YYYY-MM-DD`, in the player's local time. */
+  /** `YYYY-MM-DD`, UTC — see `app/daily.ts`'s `dailyDateKey`. */
   readonly date: string;
   readonly seed: number;
   readonly ticksSurvived: number;
   readonly kills: number;
+}
+
+/**
+ * A finished run's replay (#48): its seed plus its whole input log, which is
+ * everything `sim/input/recording.ts`'s `InputRecording`/`InputPlayback`
+ * need to reconstruct the run exactly, tick for tick.
+ *
+ * `frames` is `InputRecording.toBytes()` gzip-compressed and base64-encoded
+ * (`app/replay/codec.ts`) — the packed bytes alone are already dense (five
+ * bytes a tick), but a full 35-50 minute run (`docs/GAME_DESIGN.md` §4) is
+ * still the better part of a megabyte raw, and the acceptance criterion is a
+ * shareable file under 100 KB. Compression is what closes that gap: real
+ * play holds an axis or a button for many ticks at a stretch, which gzip's
+ * own history window finds without this needing a bespoke encoding.
+ */
+export interface ReplayRecord {
+  readonly id: string;
+  readonly seed: number;
+  /** Base64 of the gzip-compressed packed frame bytes — see the doc comment above. */
+  readonly frames: string;
+  readonly floor: number;
+  readonly ticksSurvived: number;
+  readonly kills: number;
+  readonly deathWord: string | null;
+  readonly kind: 'normal' | 'daily';
+  /**
+   * Whether this run had the Promille mechanic (#85) — a run parameter, the
+   * same reason `ActiveRunSave.promilleUnlocked` exists: replaying this
+   * seed's inputs against the *current* save's unlock state would reconstruct
+   * a different run than the one that was actually recorded whenever the two
+   * disagree (recorded sober before Der Stier fell, watched after).
+   */
+  readonly promilleUnlocked: boolean;
+  /** `Date.now()` when the run ended. */
+  readonly recordedAt: number;
 }
 
 /**
@@ -125,13 +168,24 @@ export interface SaveDataV2 extends Omit<SaveDataV1, 'schemaVersion'> {
 }
 
 /**
- * v3 (#85): the in-progress run remembers whether it was sober. Only
- * `activeRun`'s own shape changed, so v3 extends v2 with nothing of its own
- * — `ActiveRunSave` is the type that grew, and `sanitizeActiveRun` is where
- * the new field is defended.
+ * v3 (#48): `replays`, capped the same way `bestRuns` already is.
+ *
+ * Kept separate from `bestRuns`/`lastRun` rather than folded into them —
+ * a replay is heavy (kilobytes, not a handful of numbers) and short-lived by
+ * design (`MAX_REPLAYS`), where the best-runs board is small and kept
+ * forever. Mixing the two would mean either every `BestRunRecord` carries a
+ * replay it usually doesn't have, or the board's ten-year-old entries start
+ * silently losing their replay the moment a newer run displaces them from
+ * this array — neither of which the board's own contract promises today.
+ *
+ * v3 is also (#85) the in-progress run remembering whether it was sober —
+ * that half added nothing of its own to this interface, since only
+ * `activeRun`'s own shape changed: `ActiveRunSave` is the type that grew,
+ * and `sanitizeActiveRun` is where the new field is defended.
  */
 export interface SaveDataV3 extends Omit<SaveDataV2, 'schemaVersion'> {
   readonly schemaVersion: 3;
+  readonly replays: readonly ReplayRecord[];
 }
 
 /** The current schema version. A union the day a v4 lands and something still reads a v3. */
@@ -139,6 +193,9 @@ export type SaveData = SaveDataV3;
 
 /** How many `bestRuns` entries a finished run keeps — see `app/meta/progress.ts`'s `withRunOutcome`. */
 export const MAX_BEST_RUNS = 10;
+
+/** How many replays a save keeps — see `app/replay/store.ts`'s `saveReplay`. */
+export const MAX_REPLAYS = 5;
 
 export function createDefaultSave(): SaveData {
   return {
@@ -152,6 +209,7 @@ export function createDefaultSave(): SaveData {
     activeRun: null,
     lastRun: null,
     greetedRegulars: [],
+    replays: [],
   };
 }
 
@@ -270,6 +328,51 @@ function sanitizeActiveRun(value: unknown): ActiveRunSave | null {
   };
 }
 
+/** Exported for `app/replay/file.ts`: an imported `.json` replay needs the same validation a save's own field does. */
+export function sanitizeReplay(value: unknown): ReplayRecord | null {
+  if (
+    !isPlainObject(value) ||
+    typeof value.id !== 'string' ||
+    !isFiniteNumber(value.seed) ||
+    typeof value.frames !== 'string' ||
+    !isFiniteNumber(value.floor) ||
+    !isFiniteNumber(value.ticksSurvived) ||
+    !isFiniteNumber(value.kills) ||
+    !isFiniteNumber(value.recordedAt)
+  ) {
+    return null;
+  }
+  return {
+    id: value.id,
+    seed: value.seed,
+    frames: value.frames,
+    floor: value.floor,
+    ticksSurvived: value.ticksSurvived,
+    kills: value.kills,
+    deathWord: typeof value.deathWord === 'string' ? value.deathWord : null,
+    kind: value.kind === 'daily' ? 'daily' : 'normal',
+    // Defaults to promilled, matching `sanitizeActiveRun`'s identical
+    // back-fill: a replay recorded before this field existed was recorded by
+    // a build where every run was a promilled one.
+    promilleUnlocked: value.promilleUnlocked !== false,
+    recordedAt: value.recordedAt,
+  };
+}
+
+function sanitizeReplays(value: unknown): ReplayRecord[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const records: ReplayRecord[] = [];
+  for (const entry of value) {
+    const record = sanitizeReplay(entry);
+    if (record !== null) {
+      records.push(record);
+    }
+  }
+  return records.slice(0, MAX_REPLAYS);
+}
+
 /**
  * Coerces an arbitrary parsed value into a full `SaveData`, field-by-field —
  * the same "never throw the whole blob away over one bad field" approach
@@ -292,5 +395,6 @@ export function sanitizeSave(value: unknown): SaveData {
     activeRun: sanitizeActiveRun(source.activeRun),
     lastRun: sanitizeBestRun(source.lastRun),
     greetedRegulars: sanitizeStringArray(source.greetedRegulars),
+    replays: sanitizeReplays(source.replays),
   };
 }
