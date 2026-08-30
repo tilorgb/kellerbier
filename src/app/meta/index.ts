@@ -47,7 +47,13 @@ export function stammtischView(save: SaveData = loadSave()): StammtischView {
 
 export { STAMMTISCH } from '../../content/stammtisch/index.js';
 export type { DailyStatus, RunFacts, SeatView, StammtischView } from './progress.js';
-export { lastRunLine, runFactsFrom, UNLOCK_BOARD, UNLOCK_SEED } from './progress.js';
+export {
+  lastRunLine,
+  runFactsFrom,
+  UNLOCK_BOARD,
+  UNLOCK_PROMILLE,
+  UNLOCK_SEED,
+} from './progress.js';
 
 /**
  * Wipes the meta progress and nothing else — the table empties, the settings

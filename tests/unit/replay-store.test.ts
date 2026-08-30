@@ -21,6 +21,7 @@ const OUTCOME = {
   kills: 12,
   deathWord: 'Umgfalln',
   kind: 'normal' as const,
+  promilleUnlocked: true,
   recordedAt: 1000,
 };
 

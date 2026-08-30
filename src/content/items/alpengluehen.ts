@@ -24,6 +24,9 @@ export const alpengluehen: ItemDefinition = {
   pools: ['shop', 'boss', 'secret'],
   quality: 2,
   promilleRequirement: 'any',
+  // No tier gate — but it is Promille machinery all the same (its self-burn half only triggers at high Promille),
+  // so a sober run never offers it (#85).
+  needsPromille: true,
   hooks: {
     onProjectileSpawn: (ctx) => {
       ctx.sim.addProjectileTag(ctx.projectile, 'burning');

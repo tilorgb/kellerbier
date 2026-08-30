@@ -36,8 +36,29 @@ describe('active-run recording and replay (#45)', () => {
   });
 
   it('a truncated frame log decodes only the whole frames it actually holds', () => {
-    const decoded = decodeActiveRunFrames({ seed: 1, frames: [1, 2, 3, 4, 5, 9, 9] });
+    const decoded = decodeActiveRunFrames({
+      seed: 1,
+      frames: [1, 2, 3, 4, 5, 9, 9],
+      promilleUnlocked: true,
+    });
     expect(decoded).toHaveLength(1);
+  });
+
+  it('carries the run’s Promille state beside its log, so a resume rebuilds the same run (#85)', () => {
+    // The flag is a run *parameter*, not an input, so it rides on the
+    // recorder rather than being encoded per frame — and it has to survive
+    // the round trip, because the save's own unlock set can already disagree
+    // with it: beating Der Stier grants Promille mid-run, which would resume
+    // a sober log as a promilled run.
+    const sober = new ActiveRunRecorder(11, false);
+    sober.record(frame({ moveX: 1 }));
+    expect(sober.toSave().promilleUnlocked).toBe(false);
+    expect(recorderFrom(sober.toSave()).promilleUnlocked).toBe(false);
+
+    const promilled = new ActiveRunRecorder(11, true);
+    expect(promilled.toSave().promilleUnlocked).toBe(true);
+    // The default is the promilled run every pre-#85 recorder produced.
+    expect(new ActiveRunRecorder(11).promilleUnlocked).toBe(true);
   });
 
   it('recorderFrom continues a saved log rather than starting a second, disconnected one', () => {
@@ -59,7 +80,11 @@ describe('active-run recording and replay (#45)', () => {
     const recorder = new ActiveRunRecorder(5);
     recorder.record(frame({ moveX: 1 }));
     persistActiveRun(recorder);
-    expect(loadSave().activeRun).toEqual({ seed: 5, frames: [1, 0, 0, 0, 0] });
+    expect(loadSave().activeRun).toEqual({
+      seed: 5,
+      frames: [1, 0, 0, 0, 0],
+      promilleUnlocked: true,
+    });
 
     persistActiveRun(null);
     expect(loadSave().activeRun).toBeNull();

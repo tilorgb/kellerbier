@@ -10,6 +10,8 @@ export interface ReplayOutcome {
   readonly kills: number;
   readonly deathWord: string | null;
   readonly kind: 'normal' | 'daily';
+  /** Whether this run had the Promille mechanic (#85) — see `ReplayRecord.promilleUnlocked`. */
+  readonly promilleUnlocked: boolean;
   readonly recordedAt: number;
 }
 
@@ -36,6 +38,7 @@ export async function buildReplayRecord(
     kills: outcome.kills,
     deathWord: outcome.deathWord,
     kind: outcome.kind,
+    promilleUnlocked: outcome.promilleUnlocked,
     recordedAt: outcome.recordedAt,
   };
 }

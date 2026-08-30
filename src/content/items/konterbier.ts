@@ -26,6 +26,9 @@ export const konterbier: ItemDefinition = {
   pools: ['treasure', 'shop'],
   quality: 1,
   promilleRequirement: 'any',
+  // No tier gate — but it is Promille machinery all the same (clears a Kater that cannot happen),
+  // so a sober run never offers it (#85).
+  needsPromille: true,
   hooks: {
     onBeerPickup: (ctx) => {
       if (ctx.sim.hasKater) {

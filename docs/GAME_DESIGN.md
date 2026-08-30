@@ -237,8 +237,11 @@ something. It is survivable and it is your own fault, which is the correct emoti
 Promille is **unlocked, not on from the start**. The first runs are sober: no meter, no HUD
 element, no drift, no wobble, no sway, no tier bonuses, and the beer pickup does not drop at
 all. Maß, Weißbier and Schwarzbier are health and are unaffected; the food items keep their
-heal and simply have nothing to lower. The `sober` and `rausch` items are filtered out of the
-pools, since a requirement that can never be evaluated is not a build decision.
+heal and simply have nothing to lower — and say so, since a toast reading "lowers Promille" is
+the mechanic's name in the most-read text in the game. Items are filtered out of the pools
+wherever the meter is what they are *for*: the `sober` and `rausch` sets, since a requirement
+that can never be evaluated is not a build decision, and equally the ones that spend, refund,
+cap or tolerate it at no particular tier — Konterbier clears a hangover that cannot happen.
 
 The unlock is granted the first time the player beats **Der Stier**, and it is announced at the
 Stammtisch: a new regular arrives, says what he brought, and the beer is on the table from the

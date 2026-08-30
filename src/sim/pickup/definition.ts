@@ -13,6 +13,20 @@ export interface PickupDefinition {
   readonly name: string;
   /** A short, plain-language translation of what it does — "Bomb", "Currency +5". Shown on the pickup toast (#26). */
   readonly description: string;
+  /**
+   * What `description` says in a **sober run** (#85), for the pickups whose
+   * honest description names a mechanic that run does not have — the three
+   * food items, whose "lowers Promille" half has nothing to lower.
+   *
+   * Authored rather than derived. #85's acceptance criterion is that a
+   * first-time player clears floor 1 "without meeting the word Promille
+   * anywhere", and a toast is the most-read text in the game; stripping the
+   * clause with a regex would eventually produce a sentence nobody wrote,
+   * whereas a second authored string is checked by the same content tests
+   * the first one is. Omitted means the description is already true in both
+   * runs, which is the case for all but three pickups.
+   */
+  readonly soberDescription?: string;
   readonly radius: number;
   readonly tint: number;
   /**
@@ -57,6 +71,25 @@ export type PickupEffect =
       readonly healBelowFloor: number;
       readonly damageAtOrAbove: number;
     };
+
+/**
+ * The description to show for `definition` in a run that is (or is not)
+ * promilled — `soberDescription` where one is authored and the run is sober,
+ * `description` otherwise.
+ *
+ * A function rather than a field lookup at each call site because there are
+ * two of them (the pickup toast in `sim/systems/pickup.ts`, and the shop
+ * preview in `GameSim.shopPreview`) and a third would be easy to add without
+ * noticing this rule existed.
+ */
+export function pickupDescriptionFor(
+  definition: Pick<PickupDefinition, 'description' | 'soberDescription'>,
+  promilleUnlocked: boolean,
+): string {
+  return promilleUnlocked
+    ? definition.description
+    : (definition.soberDescription ?? definition.description);
+}
 
 /** One weighted outcome. `pickupId: null` is "nothing drops" — its own outcome, not an absence. */
 export interface DropTableEntry {

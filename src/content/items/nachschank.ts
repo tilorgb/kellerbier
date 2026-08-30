@@ -20,6 +20,9 @@ export const nachschank: ItemDefinition = {
   pools: ['treasure', 'shop'],
   quality: 1,
   promilleRequirement: 'any',
+  // No tier gate — but it is Promille machinery all the same (its top-up heal is paid for in Promille),
+  // so a sober run never offers it (#85).
+  needsPromille: true,
   active: { maxCharge: COOLDOWN_TICKS },
   hooks: {
     onActivate: (ctx) => {

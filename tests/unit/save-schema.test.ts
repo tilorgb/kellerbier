@@ -30,7 +30,14 @@ describe('save schema sanitisation (#45)', () => {
       { date: '2026-01-01', seed: 1, ticksSurvived: 100, kills: 2 },
     ]);
     expect(sanitized.bestRuns).toEqual([]);
-    expect(sanitized.activeRun).toEqual({ seed: 7, frames: [1, 2, 3, 4, 5] });
+    // `promilleUnlocked` is back-filled `true` rather than dropped: an
+    // active run that reaches here without it was recorded before the field
+    // existed, and every one of those was a promilled run (#85).
+    expect(sanitized.activeRun).toEqual({
+      seed: 7,
+      frames: [1, 2, 3, 4, 5],
+      promilleUnlocked: true,
+    });
   });
 
   it('treats an active run with a non-numeric frame, or no frames at all, as no run in progress', () => {
@@ -88,10 +95,27 @@ describe('save schema sanitisation (#45)', () => {
       kills: 12,
       deathWord: 'Hi',
       kind: 'daily',
+      promilleUnlocked: false,
       recordedAt: 5,
     };
     expect(sanitizeSave({ replays: [replay] }).replays).toEqual([replay]);
     expect(sanitizeSave({ replays: [{ id: 'x', seed: 1 }] }).replays).toEqual([]);
+  });
+
+  it('back-fills promilleUnlocked true for a replay recorded before that field existed (#85)', () => {
+    const { promilleUnlocked: _omitted, ...withoutFlag } = {
+      id: 'a-b-c',
+      seed: 7,
+      frames: 'H4sI...',
+      floor: 2,
+      ticksSurvived: 900,
+      kills: 12,
+      deathWord: 'Hi',
+      kind: 'daily' as const,
+      promilleUnlocked: false,
+      recordedAt: 5,
+    };
+    expect(sanitizeSave({ replays: [withoutFlag] }).replays[0]?.promilleUnlocked).toBe(true);
   });
 
   it('falls back to "normal" for a replay kind that is not "daily"', () => {

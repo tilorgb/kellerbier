@@ -97,6 +97,13 @@ import {
   resetProgress,
   stammtischView,
 } from './meta/index.js';
+import {
+  type PromilleOverride,
+  nextPromilleOverride,
+  readPromilleOverride,
+  resolvePromilleUnlocked,
+  writePromilleOverride,
+} from './promille-gate.js';
 
 /**
  * The authored pool, run through the same typed boundary the sim uses to load
@@ -723,8 +730,13 @@ async function boot(): Promise<void> {
     let y = HUD_MARGIN;
     healthHud.view.position.set(HUD_MARGIN, y);
     y += healthHud.height + HUD_ROW_GAP;
+    // A sober run has no meter (#85): `height` is 0 there, and the row's gap
+    // goes with it — otherwise the column would keep a blank line where the
+    // bar used to be, which reads as a HUD element that failed to draw.
     promilleHud.view.position.set(HUD_MARGIN, y);
-    y += promilleHud.height + HUD_ROW_GAP;
+    if (promilleHud.view.visible) {
+      y += promilleHud.height + HUD_ROW_GAP;
+    }
     walletHud.view.position.set(HUD_MARGIN, y);
     y += walletHud.height + HUD_ROW_GAP;
     activeItemHud.view.position.set(HUD_MARGIN, y);
@@ -799,9 +811,33 @@ async function boot(): Promise<void> {
     readonly seed: number;
     readonly recording: InputRecording;
     playback: InputPlayback;
+    /** The recorded run's own Promille state (#85) — see `startRun`'s doc comment on why a replay never uses today's unlock state instead. */
+    readonly promilleUnlocked: boolean;
   } | null = null;
   const replayViewer = new ReplayViewer(kit);
   hudLayer.addChild(replayViewer.view);
+
+  /**
+   * The dev override on the Promille gate (#85), read once at boot and
+   * cycled by `B`. `auto` — the state every player is in — means the save's
+   * own unlock decides.
+   */
+  let promilleOverride: PromilleOverride = readPromilleOverride();
+
+  /**
+   * Whether the run *about to start* has Promille, from the save plus the
+   * override above.
+   *
+   * Read at run start rather than held as a live flag, because the unlock
+   * can be earned in the middle of a run: `creditBossDefeat` commits the
+   * moment Der Stier falls, and the beer is deliberately not switched on
+   * under the player's feet — Da Xaver announces it at the table and it is
+   * there from the *next* run, which is what makes the unlock legible
+   * instead of a mechanic that silently appeared.
+   */
+  function nextRunPromilleUnlocked(): boolean {
+    return resolvePromilleUnlocked(loadSave(), promilleOverride);
+  }
 
   /** Whether the loop was already paused when the hub opened, so closing it doesn't un-pause a debug pause. */
   let pausedBeforeStammtisch = false;
@@ -964,6 +1000,7 @@ async function boot(): Promise<void> {
     const finishedKills = summary.kills;
     const finishedDeathWord = sim.deathWord ?? null;
     const finishedIsDaily = activeRunIsDaily;
+    const finishedPromilleUnlocked = activeRunRecorder.promilleUnlocked;
     const recording = new InputRecording(Math.max(1, activeRunRecorder.frameCount));
     for (const frame of decodeActiveRunFrames(activeRunRecorder.toSave())) {
       recording.push(frame);
@@ -975,6 +1012,7 @@ async function boot(): Promise<void> {
       kills: finishedKills,
       deathWord: finishedDeathWord,
       kind: finishedIsDaily ? 'daily' : 'normal',
+      promilleUnlocked: finishedPromilleUnlocked,
       recordedAt: Date.now(),
     })
       .then(saveReplay)
@@ -1257,17 +1295,31 @@ async function boot(): Promise<void> {
     // `PromilleHud`'s label rather than staying the classic name always.
     const meterLabel = promilleMeterLabel(settings.neutralReskin).toLowerCase();
     const tierLabel = promilleTierDisplayName(sim.promilleTier, settings.neutralReskin);
+    // The whole line goes in a sober run (#85), not a line reading "0.00
+    // Nüchtern": this text is reachable with `O` and is what a bug report's
+    // clipboard copy carries, and a meter that is not in the run should not
+    // be in the readout of it either. What the run *is* gets said once, on
+    // the seed line, where the override that pinned it is also named.
+    const promilleLine = sim.promilleUnlocked
+      ? `\n${meterLabel} ${sim.promille.toFixed(2)} ${tierLabel}${trinkfest}${knockedDown}`
+      : '';
+    const runState = sim.promilleUnlocked ? '' : '  SOBER RUN';
+    const override = promilleOverride === 'auto' ? '' : `  [${promilleOverride} forced]`;
+    // Dev builds only, like the key itself — and not only for symmetry: this
+    // line is reachable with `O` in a shipped build, and a key list naming
+    // the mechanic would hand a sober player the word the gate exists to
+    // keep from them until Da Xaver says it.
+    const overrideKeyHint = import.meta.env.DEV ? `   B promille gate (${promilleOverride})` : '';
     hud.text = `seed ${String(RUN_SEED)}  ${floorPlan.floorName}  room ${sim.roomId} (${currentRole})  doors ${roomState}${warmup}${keyHint}  enemies ${String(sim.liveEnemyCount)}
   tick ${String(loop.tick)}  ${seconds}s  x${scale}${loop.paused ? '  PAUSED' : ''}
-hp ${String(hearts)}/${String(maxHearts)}  soul ${String(sim.playerSoulHealth)}  eternal ${String(sim.playerEternalHealth)}${invulnerable}${dead}
-${meterLabel} ${sim.promille.toFixed(2)} ${tierLabel}${trinkfest}${knockedDown}
+hp ${String(hearts)}/${String(maxHearts)}  soul ${String(sim.playerSoulHealth)}  eternal ${String(sim.playerEternalHealth)}${invulnerable}${dead}${runState}${override}${promilleLine}
 shots ${String(shots.liveCount)}/${String(shots.capacity)}  particles ${String(
       particles.liveCount,
     )}/${String(particles.capacity)}${shots.overflows > 0 ? '  SHOT OVERFLOW' : ''}
 save ${String(activeRunRecorder.frameCount)} ticks logged${wasResumed ? '  (resumed)' : ''}
 WASD move   arrows aim and fire
   O debug   T tuning   I shot tags   Y accessibility   P pause   . step   [ ] time scale
-  N next room (after clear)   R restart (new seed)   C copy run   L load replay`;
+  N next room (after clear)   R restart (new seed)   C copy run   L load replay${overrideKeyHint}`;
   };
   /**
    * (Re)starts the run on `seed`: regenerates the floor plan and rebuilds
@@ -1294,8 +1346,20 @@ WASD move   arrows aim and fire
    * `activeRun` save slot would either clobber a real in-progress run (if one
    * were still live, which replay's own `deathPhase === 'over'` guard rules
    * out) or, harmlessly but pointlessly, overwrite it with an empty one.
+   *
+   * `promilleUnlocked` defaults to `nextRunPromilleUnlocked()` — the save's
+   * current unlock state — for a genuinely new run, but a replay passes the
+   * *recorded* run's own flag explicitly (#48/#85 together): replaying a
+   * seed's inputs against today's unlock state instead of the state the run
+   * actually had would reconstruct a different run whenever the two disagree.
    */
-  function startRun(seed: number, { persist = true }: { persist?: boolean } = {}): void {
+  function startRun(
+    seed: number,
+    {
+      promilleUnlocked = nextRunPromilleUnlocked(),
+      persist = true,
+    }: { promilleUnlocked?: boolean; persist?: boolean } = {},
+  ): void {
     RUN_SEED = seed;
     if (seedInput instanceof HTMLInputElement) {
       seedInput.value = String(RUN_SEED);
@@ -1328,6 +1392,11 @@ WASD move   arrows aim and fire
       // rather than the first real encounter — no enemies, no drops,
       // whatever the chosen template itself authors.
       suppressRoomContent: true,
+      // Sober or promilled, decided here and never again for this run (#85).
+      // Passed as a `GameSim` option rather than set afterwards because the
+      // very first room is populated inside the constructor, and its drop
+      // table has to already know which half to roll.
+      promilleUnlocked,
     });
     // A restart rebuilds `sim` from scratch, so the accessibility settings
     // have to be re-applied to it every time — they live on the instance
@@ -1339,7 +1408,7 @@ WASD move   arrows aim and fire
     // after a restart resumes into the *new* run next time, not the one the
     // player just left behind. Skipped for `persist: false` (a replay's own
     // rebuild) — see this function's doc comment.
-    activeRunRecorder = new ActiveRunRecorder(seed);
+    activeRunRecorder = new ActiveRunRecorder(seed, promilleUnlocked);
     ticksSinceAutosave = 0;
     if (persist) {
       persistActiveRun(activeRunRecorder);
@@ -1451,6 +1520,11 @@ WASD move   arrows aim and fire
     loop.timeScale = 1;
     loop.paused = false;
 
+    // Before `layoutHud`, not after: the meter's row is gone in a sober run,
+    // and the column below it only closes up if the layout pass already
+    // knows that. See `PromilleHud.setUnlocked`.
+    promilleHud.setUnlocked(promilleUnlocked);
+
     refreshHud();
     layoutHud(layout);
     showFloorCard();
@@ -1505,7 +1579,13 @@ WASD move   arrows aim and fire
     }
     try {
       RUN_SEED = activeRun.seed;
-      startRun(RUN_SEED);
+      // The run's own recorded state, never the save's current unlock: the
+      // Promille unlock is committed the instant Der Stier falls, so a player
+      // who beat him and closed the tab has a save that says "promilled"
+      // about a log that was recorded sober. Replaying those inputs against
+      // the wrong drop tables would resume a different run — see
+      // `ActiveRunSave.promilleUnlocked`.
+      startRun(RUN_SEED, { promilleUnlocked: activeRun.promilleUnlocked });
       const frames = decodeActiveRunFrames(activeRun);
       for (const frame of frames) {
         activeRunRecorder.record(frame);
@@ -1536,8 +1616,13 @@ WASD move   arrows aim and fire
    * snapshot format. `persist: false` (`startRun`'s own doc comment) keeps
    * this from writing a throwaway recorder over the real `activeRun` slot.
    */
-  function replayTo(seed: number, frames: InputRecording, upToTick: number): void {
-    startRun(seed, { persist: false });
+  function replayTo(
+    seed: number,
+    frames: InputRecording,
+    upToTick: number,
+    promilleUnlocked: boolean,
+  ): void {
+    startRun(seed, { persist: false, promilleUnlocked });
     const scratch = createInputFrame();
     const clamped = Math.max(0, Math.min(upToTick, frames.length));
     for (let tick = 0; tick < clamped; tick++) {
@@ -1547,12 +1632,19 @@ WASD move   arrows aim and fire
     loop.fastForward(clamped);
   }
 
-  /** Enters replay mode on `seed`/`frameBytes`, watching from the start. Only valid over a finished run — see `watchLatestReplay`. */
-  function enterReplay(seed: number, frameBytes: Int8Array): void {
+  /**
+   * Enters replay mode on `seed`/`frameBytes`, watching from the start. Only
+   * valid over a finished run — see `watchLatestReplay`.
+   *
+   * `promilleUnlocked` is the recorded run's own flag (`ReplayRecord`/
+   * `ActiveRunSave`, #85), not today's save state — see `startRun`'s doc
+   * comment.
+   */
+  function enterReplay(seed: number, frameBytes: Int8Array, promilleUnlocked: boolean): void {
     const recording = InputRecording.fromBytes(frameBytes);
     closeStammtisch();
-    replay = { seed, recording, playback: new InputPlayback(recording) };
-    replayTo(seed, recording, 0);
+    replay = { seed, recording, playback: new InputPlayback(recording), promilleUnlocked };
+    replayTo(seed, recording, 0, promilleUnlocked);
     loop.paused = false;
     loop.timeScale = 1;
     refreshHud();
@@ -1571,7 +1663,7 @@ WASD move   arrows aim and fire
     const wasPaused = loop.paused;
     const timeScale = loop.timeScale;
     const clamped = Math.max(0, Math.min(targetTick, replay.recording.length));
-    replayTo(replay.seed, replay.recording, clamped);
+    replayTo(replay.seed, replay.recording, clamped, replay.promilleUnlocked);
     replay.playback.rewind();
     for (let skipped = 0; skipped < clamped; skipped++) {
       replay.playback.next();
@@ -1596,7 +1688,7 @@ WASD move   arrows aim and fire
     }
     loadReplayFrames(record)
       .then((bytes) => {
-        enterReplay(record.seed, bytes);
+        enterReplay(record.seed, bytes, record.promilleUnlocked);
       })
       .catch((error: unknown) => {
         console.warn('[replay] failed to load the stored replay', error);
@@ -1638,7 +1730,7 @@ WASD move   arrows aim and fire
             return null;
           }
           return loadReplayFrames(record).then((bytes) => {
-            enterReplay(record.seed, bytes);
+            enterReplay(record.seed, bytes, record.promilleUnlocked);
           });
         })
         .catch((error: unknown) => {
@@ -2142,6 +2234,24 @@ WASD move   arrows aim and fire
         // playing, not only after dying.
         openStammtisch();
         break;
+      case 'b':
+      case 'B':
+        // B for Bier: cycles auto -> sober -> promilled -> auto and restarts
+        // on the new state (#85's debug override). A restart rather than a
+        // live toggle because the flag is a run *parameter* — the drop
+        // tables and the item pool were both chosen with it, so flipping it
+        // mid-run would leave a promilled run's beer lying on a sober floor.
+        //
+        // Dev builds only. In a release build this key would hand a player
+        // the mechanic the whole unlock exists to make them earn, and the
+        // rest of `src/debug/` is behind a dynamic import for the same
+        // reason.
+        if (import.meta.env.DEV) {
+          promilleOverride = nextPromilleOverride(promilleOverride);
+          writePromilleOverride(promilleOverride);
+          startRun(RUN_SEED);
+        }
+        break;
       case 'n':
       case 'N': {
         // Walks the generated floor depth-first: an unvisited door first,
@@ -2339,6 +2449,22 @@ WASD move   arrows aim and fire
       recordBossDefeat,
       resetProgress,
     },
+    {
+      // Getters, not a snapshot: the override and the live run's state both
+      // change under this handle (`B`, a restart), and a headless check that
+      // read a stale boolean would be checking the wrong run.
+      get override() {
+        return promilleOverride;
+      },
+      get unlocked() {
+        return sim.promilleUnlocked;
+      },
+      setOverride: (override) => {
+        promilleOverride = override;
+        writePromilleOverride(override);
+        startRun(RUN_SEED);
+      },
+    },
   );
   // Not gated behind `import.meta.env.DEV` like `mountDebugOverlay` above —
   // this is the player-facing half of #33, so it has to ship in a production
@@ -2440,7 +2566,35 @@ interface DebugHost {
      *   __kellerbier.stammtisch.open();
      */
     stammtisch: StammtischHandle;
+    /**
+     * The Promille gate (#85) — same reasoning as `stammtisch` above; see
+     * `PromilleHandle`.
+     *
+     *   __kellerbier.promille.setOverride('sober');
+     */
+    promille: PromilleHandle;
   };
+}
+
+/**
+ * The debug handle's Promille-gate controls (#85) — the scriptable half of
+ * the `B` key.
+ *
+ * Here for the same reason `stammtisch` is: the honest way to reach a sober
+ * run is a fresh save and not beating Der Stier, and the honest way back to a
+ * promilled one from there is a twenty-minute run. Neither is a question
+ * worth asking that expensively on every change to the mechanic.
+ *
+ *   __kellerbier.promille.setOverride('sober');
+ *   __kellerbier.promille.unlocked;  // false
+ */
+interface PromilleHandle {
+  /** The current override — `auto` follows the save's unlock. */
+  readonly override: PromilleOverride;
+  /** Whether the run on screen right now actually has the mechanic. */
+  readonly unlocked: boolean;
+  /** Pins (or releases) the state and restarts the run on the same seed. */
+  setOverride: (override: PromilleOverride) => void;
 }
 
 /** The debug handle's hub controls — see `DebugHost`. */
@@ -2461,6 +2615,7 @@ function exposeDebugHandle(
   settings: AccessibilitySettings,
   setAccessibilitySettings: (patch: Partial<AccessibilitySettings>) => void,
   stammtisch: StammtischHandle,
+  promille: PromilleHandle,
 ): void {
   if (!import.meta.env.DEV) {
     return;
@@ -2474,6 +2629,7 @@ function exposeDebugHandle(
     settings,
     setAccessibilitySettings,
     stammtisch,
+    promille,
   };
   console.warn('__kellerbier is exposed for debugging (dev build only)');
 }

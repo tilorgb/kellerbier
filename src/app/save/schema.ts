@@ -21,10 +21,14 @@ import {
  * there and needed no change at all, which is the version-from-day-one
  * argument working exactly as advertised.
  *
- * v3 (#48) is `dailyRunHistory` finally being written to, plus `replays` —
- * a small cap of finished runs' seed-plus-input-log, kept so "watch the run
- * you just had" and "attach a replay to a bug report" both work from a
- * normal player's save without needing a file already on disk.
+ * v3 is two features landing together. #48 is `dailyRunHistory` finally
+ * being written to, plus `replays` — a small cap of finished runs'
+ * seed-plus-input-log, kept so "watch the run you just had" and "attach a
+ * replay to a bug report" both work from a normal player's save without
+ * needing a file already on disk. #85 adds one field to the in-progress run:
+ * whether it is a sober run or a promilled one. That is not redundant with
+ * `unlocks`, and the reason is a real bug rather than tidiness — see
+ * `ActiveRunSave.promilleUnlocked`.
  */
 export const SAVE_SCHEMA_VERSION = 3;
 
@@ -78,6 +82,14 @@ export interface ReplayRecord {
   readonly kills: number;
   readonly deathWord: string | null;
   readonly kind: 'normal' | 'daily';
+  /**
+   * Whether this run had the Promille mechanic (#85) — a run parameter, the
+   * same reason `ActiveRunSave.promilleUnlocked` exists: replaying this
+   * seed's inputs against the *current* save's unlock state would reconstruct
+   * a different run than the one that was actually recorded whenever the two
+   * disagree (recorded sober before Der Stier fell, watched after).
+   */
+  readonly promilleUnlocked: boolean;
   /** `Date.now()` when the run ended. */
   readonly recordedAt: number;
 }
@@ -102,6 +114,25 @@ export interface ReplayRecord {
 export interface ActiveRunSave {
   readonly seed: number;
   readonly frames: readonly number[];
+  /**
+   * Whether the run being resumed has the Promille mechanic (#85).
+   *
+   * Recorded with the log rather than re-derived from `unlocks` on resume,
+   * because the two genuinely disagree in the case that matters: the
+   * Promille unlock is granted the moment Der Stier goes down
+   * (`withBossDefeat` commits immediately, on purpose), so a player who
+   * beats him and then closes the tab has a save whose `unlocks` say
+   * "promilled" describing a run that was sober for every tick it recorded.
+   * Rebuilding that run promilled would replay the same inputs against
+   * different drop tables and a different item pool, and the resumed run
+   * would quietly not be the run that was saved.
+   *
+   * This is also what #85's "the state is part of the run's parameters"
+   * means for a shared seed: a run is reproduced by its seed *and* this
+   * flag, not by the seed plus whatever the person replaying it happens to
+   * have unlocked.
+   */
+  readonly promilleUnlocked: boolean;
 }
 
 /** The v1 shape, kept for the migration that reads it. Nothing loads a save at this version any more. */
@@ -146,6 +177,11 @@ export interface SaveDataV2 extends Omit<SaveDataV1, 'schemaVersion'> {
  * replay it usually doesn't have, or the board's ten-year-old entries start
  * silently losing their replay the moment a newer run displaces them from
  * this array — neither of which the board's own contract promises today.
+ *
+ * v3 is also (#85) the in-progress run remembering whether it was sober —
+ * that half added nothing of its own to this interface, since only
+ * `activeRun`'s own shape changed: `ActiveRunSave` is the type that grew,
+ * and `sanitizeActiveRun` is where the new field is defended.
  */
 export interface SaveDataV3 extends Omit<SaveDataV2, 'schemaVersion'> {
   readonly schemaVersion: 3;
@@ -279,7 +315,17 @@ function sanitizeActiveRun(value: unknown): ActiveRunSave | null {
     // is simpler than threading a partial-recovery path through it.
     return null;
   }
-  return { seed: value.seed, frames };
+  return {
+    seed: value.seed,
+    frames,
+    // Defaults to a promilled run rather than a sober one, matching the v2
+    // migration's own back-fill: every run recorded before this field
+    // existed was a promilled one, so a log that reaches here without it is
+    // far likelier to be one of those (or a hand-edited save) than a sober
+    // run whose flag went missing. Defaulting the other way would replay
+    // those with beer removed from under them.
+    promilleUnlocked: value.promilleUnlocked !== false,
+  };
 }
 
 /** Exported for `app/replay/file.ts`: an imported `.json` replay needs the same validation a save's own field does. */
@@ -305,6 +351,10 @@ export function sanitizeReplay(value: unknown): ReplayRecord | null {
     kills: value.kills,
     deathWord: typeof value.deathWord === 'string' ? value.deathWord : null,
     kind: value.kind === 'daily' ? 'daily' : 'normal',
+    // Defaults to promilled, matching `sanitizeActiveRun`'s identical
+    // back-fill: a replay recorded before this field existed was recorded by
+    // a build where every run was a promilled one.
+    promilleUnlocked: value.promilleUnlocked !== false,
     recordedAt: value.recordedAt,
   };
 }
