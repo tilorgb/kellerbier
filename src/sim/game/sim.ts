@@ -1604,19 +1604,29 @@ export class GameSim {
   }
 
   /**
-   * The room-clear celebration (#153): a glint ring from the room's centre and
-   * a dust puff at every door.
+   * The room-clear celebration (#153): a glint ring at every reward that
+   * actually appeared this tick, and a dust puff at every door.
    *
-   * Every part of it is redundant with something already visible — the doors
-   * unlock, the last body is gone — which is the constraint on an effect that
-   * an accessibility toggle is allowed to remove. `render/` is where the
-   * suppression happens, not here: a reduced-motion run must produce the same
-   * simulation as a full one, so these particles are always spawned and
-   * sometimes not drawn (`docs/DECISIONS.md` #41).
+   * The door puffs are redundant with something already visible — the doors
+   * unlock — which is the constraint on an effect that an accessibility
+   * toggle is allowed to remove. `render/` is where the suppression happens,
+   * not here: a reduced-motion run must produce the same simulation as a
+   * full one, so these particles are always spawned and sometimes not drawn
+   * (`docs/DECISIONS.md` #41).
+   *
+   * The ring is not redundant the same way, so it does not fire the same
+   * way: `rewardLocations` is only ever where a reward actually spawned this
+   * tick (`rollRoomClearLoot`'s drop, a boss's pedestal), and only there — a
+   * ring at the room's own centre regardless of whether anything dropped, or
+   * regardless of where a drop's `safeSpawnPoint` fallback actually placed
+   * it, used to celebrate a reward that either was not there or was
+   * somewhere else on screen.
    */
-  private announceRoomClear(): void {
+  private announceRoomClear(rewardLocations: readonly { x: number; y: number }[]): void {
     const room = this.room;
-    roomClearRing(this, (room.minX + room.maxX) / 2, (room.minY + room.maxY) / 2);
+    for (const location of rewardLocations) {
+      roomClearRing(this, location.x, location.y);
+    }
     for (const door of this.roomDoors) {
       const centre = doorCentre(room, door);
       doorPuff(this, centre.x, centre.y);
@@ -3479,22 +3489,28 @@ export class GameSim {
       this.roomEnemyCount === 0 &&
       !this.roomClearedIds.has(this.roomId)
     ) {
-      this.rollRoomClearLoot();
+      const rewardLocations: { x: number; y: number }[] = [];
+      const loot = this.rollRoomClearLoot();
+      if (loot !== null) {
+        rewardLocations.push(loot);
+      }
       dispatchItemRoomClear(this);
-      // The single most repeated success moment in the game, and until #153 it
-      // had no celebration at all. A ring out of the room's own centre, and a
-      // puff at each door that just unlocked — the celebration points at the
-      // thing that actually changed, which is what keeps it honest when it is
-      // switched off.
-      this.announceRoomClear();
       // The boss's own reward pedestal (`pendingBossPedestals`'s doc
       // comment) — held back until this exact tick rather than spawned the
       // moment the room loaded, so it is not already sitting there during
-      // the fight.
+      // the fight. Spawned before `announceRoomClear` so its location can
+      // join `rewardLocations` too.
       for (const pending of this.pendingBossPedestals) {
         this.spawnPedestal(pending.x, pending.y);
+        rewardLocations.push({ x: pending.x, y: pending.y });
       }
       this.pendingBossPedestals = [];
+      // The single most repeated success moment in the game, and until #153 it
+      // had no celebration at all. A ring at each reward that actually
+      // appeared, and a puff at each door that just unlocked — the
+      // celebration points at the thing that actually changed, which is what
+      // keeps it honest when it is switched off.
+      this.announceRoomClear(rewardLocations);
     }
     if (this.roomTemplateLoaded && this.roomEnemyCount === 0) {
       this.roomClearedIds.add(this.roomId);
@@ -4172,19 +4188,25 @@ export class GameSim {
 
   /**
    * Rolls one outcome from `table` and spawns it near `(x, y)`, or spawns
-   * nothing for the `null` "nothing drops" outcome. The one place a drop
-   * table is read: `stepLootDrops` (enemy deaths) and `rollRoomClearLoot`
-   * (room clear) both call this rather than rolling their own way, so
-   * sober/promilled selection and need-weighting only exist once.
+   * nothing and returns `null` for the `null` "nothing drops" outcome. The
+   * one place a drop table is read: `stepLootDrops` (enemy deaths) and
+   * `rollRoomClearLoot` (room clear) both call this rather than rolling
+   * their own way, so sober/promilled selection and need-weighting only
+   * exist once.
+   *
+   * Returns where the pickup actually landed — `safeSpawnPoint` can push it
+   * away from `(x, y)` if that point is blocked — so a caller that wants a
+   * visual cue tied to the reward itself (`rollRoomClearLoot`'s ring, below)
+   * can point it at the real spawn rather than assuming its own `(x, y)`.
    */
-  dropLoot(table: DropTable, x: number, y: number): void {
+  dropLoot(table: DropTable, x: number, y: number): { x: number; y: number } | null {
     const entries = this.promilleUnlocked ? table.promilled : table.sober;
     let total = 0;
     for (const entry of entries) {
       total += entry.weight * this.needMultiplierFor(entry.pickupId);
     }
     if (total <= 0) {
-      return;
+      return null;
     }
     let roll = this.random.items.nextFloat() * total;
     let chosen: string | null = null;
@@ -4196,11 +4218,12 @@ export class GameSim {
       }
     }
     if (chosen === null) {
-      return;
+      return null;
     }
     const radius = this.pickups.get(chosen).radius;
     const safe = this.safeSpawnPoint(x, y, radius);
     this.spawnPickup(chosen, safe.x, safe.y);
+    return safe;
   }
 
   /**
@@ -4251,11 +4274,11 @@ export class GameSim {
    * reward stacked on it. The pedestal item is the boss reward; this can
    * add a coin or a keg on top of it, or nothing at all.
    */
-  private rollRoomClearLoot(): void {
+  private rollRoomClearLoot(): { x: number; y: number } | null {
     const centreX = (this.room.minX + this.room.maxX) / 2;
     const centreY = (this.room.minY + this.room.maxY) / 2;
     const table = this.roomSpecialRole === 'boss' ? BOSS_REWARD_DROP_TABLE : ROOM_CLEAR_DROP_TABLE;
-    this.dropLoot(table, centreX, centreY);
+    return this.dropLoot(table, centreX, centreY);
   }
 
   private setCollisionLayer(index: number, layer: CollisionLayerId): void {
