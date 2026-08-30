@@ -70,6 +70,14 @@ export class PromilleHud {
    * changed, only what it currently is, the next time a frame syncs.
    */
   sync(sim: GameSim, neutralReskin: boolean): void {
+    // A sober run (#85) has no meter at all — not an empty one. `setUnlocked`
+    // is what actually hides the row and closes the gap it leaves in the HUD
+    // column; this is the guard that stops a frame syncing into a hidden
+    // widget, and it is a plain early return because `sim.promilleUnlocked`
+    // cannot change under a live run.
+    if (!sim.promilleUnlocked) {
+      return;
+    }
     // The bar's own denominator is "how close to falling over," not a fixed
     // scale — at baseline Trinkfest that is `PROMILLE_MAX` exactly (unchanged
     // from pre-#92), and it grows with `promilleCapFor` once Trinkfest is
@@ -98,8 +106,27 @@ export class PromilleHud {
       : `${tierText}${trinkfestText}`;
   }
 
-  /** Height of the row in UI pixels — the taller of the bar and one line of text. */
+  /**
+   * Shows or hides the whole row for a run (#85).
+   *
+   * Explicit rather than derived inside `sync`, because `height` is read by
+   * `app/main.ts`'s `layoutHud` — which runs once per run start and per
+   * resize, not per frame — and it has to already know the answer by then or
+   * the HUD column keeps a hole where the meter used to be. `startRun` calls
+   * this before `layoutHud` for exactly that reason.
+   */
+  setUnlocked(unlocked: boolean): void {
+    this.view.visible = unlocked;
+  }
+
+  /**
+   * Height of the row in UI pixels — the taller of the bar and one line of
+   * text, and zero while hidden, so the rows below it close up rather than
+   * stacking under a gap. `ActiveItemHud` gets away with a constant here
+   * because it is second-from-last in the column; this row is second from
+   * the top.
+   */
   get height(): number {
-    return Math.max(BAR_HEIGHT, UI_TEXT_HEIGHT);
+    return this.view.visible ? Math.max(BAR_HEIGHT, UI_TEXT_HEIGHT) : 0;
   }
 }

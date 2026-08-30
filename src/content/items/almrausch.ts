@@ -26,6 +26,9 @@ export const almrausch: ItemDefinition = {
   pools: ['treasure', 'shop', 'boss'],
   quality: 2,
   promilleRequirement: 'any',
+  // No tier gate — but it is Promille machinery all the same (scales off the meter itself),
+  // so a sober run never offers it (#85).
+  needsPromille: true,
   hooks: {
     modifyStats: (state) =>
       state.charge <= 0

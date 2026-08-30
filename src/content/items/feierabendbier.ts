@@ -22,6 +22,9 @@ export const feierabendbier: ItemDefinition = {
   pools: ['treasure', 'shop'],
   quality: 1,
   promilleRequirement: 'any',
+  // No tier gate — but it is Promille machinery all the same (its per-floor heal is paid for in Promille),
+  // so a sober run never offers it (#85).
+  needsPromille: true,
   hooks: {
     onFloorStart: (ctx) => {
       ctx.sim.addPlayerHealth(HEAL_AMOUNT);

@@ -31,6 +31,9 @@ export const enzian: ItemDefinition = {
   pools: ['shop', 'boss', 'secret'],
   quality: 2,
   promilleRequirement: 'any',
+  // No tier gate — but it is Promille machinery all the same (its fire-rate burst is paid for in Promille),
+  // so a sober run never offers it (#85).
+  needsPromille: true,
   active: { maxCharge: COOLDOWN_TICKS },
   hooks: {
     modifyStats: (state) =>

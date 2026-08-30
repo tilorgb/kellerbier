@@ -17,7 +17,7 @@ import type { CompiledItem, ItemRegistry } from './registry.js';
 
 /** Everything a draw needs to know about the run it is offering an item to. */
 export interface ItemOfferContext {
-  /** Mirrors `GameSim.promilleUnlocked` — a `sober`/`rausch` item never appears before the mechanic exists. */
+  /** Mirrors `GameSim.promilleUnlocked` — a Promille item never appears before the mechanic exists. */
   readonly promilleUnlocked: boolean;
   /** The current floor (`GameSim.currentFloor`) — deeper floors skew the draw toward rarer quality tiers. */
   readonly floor: number;
@@ -48,7 +48,12 @@ export function itemEligibleForOffer(
   // An item whose Promille requirement can never be evaluated is a stat
   // stick, not a build decision (`docs/DECISIONS.md` #9) — filtered out of
   // every pool exactly like a sober run's drop tables already filter Beer.
-  if (!ctx.promilleUnlocked && item.promilleRequirement !== 'any') {
+  // `needsPromille` is the wider version of that same rule (#85): an item
+  // that spends or refunds the meter is just as dead in a sober run as one
+  // gated on a tier of it, and Konterbier — which clears a Kater that
+  // cannot happen, at any tier — is the case a requirement check alone
+  // misses. See `ItemDefinition.needsPromille`.
+  if (!ctx.promilleUnlocked && item.needsPromille) {
     return false;
   }
   return true;

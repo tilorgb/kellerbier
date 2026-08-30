@@ -2359,3 +2359,62 @@ adding a row to `content/stammtisch/` and reading an id out of `save.unlocks` �
 branch to the hub. Any new per-run statistic an unlock wants to be earned on has to be
 committed in `withRunOutcome`/`withBossDefeat`, because those two are the only places the save
 learns that anything happened.
+
+## 52. The sober run is one gated getter, one item flag, and a run parameter in the save
+
+**Decided:** M7, #85. The implementation of [#9](#9-promille-is-unlocked-not-on-from-the-first-run),
+which said the mechanic would be unlocked rather than on and left the shape of the "not
+unlocked" path open. Three of the answers turned out to constrain other work, so they are here
+rather than only in the code.
+
+**One gated getter, not a guard per system.** #9's own wording asked for "the system not
+running, rather than the system running with its numbers set to zero", and the honest reading
+of that was tempting: a branch in movement, one in shooting, one in the camera, one in the HUD.
+What actually shipped is smaller and stronger — `GameSim.promille` returns `0` when the run is
+sober, and the tier, the drift, the aim wobble, the camera sway, the screen distortion, the
+stat modifiers, the HUD bar and the debug readout are every one of them already a pure function
+of that number. Six guards that could drift apart became one that cannot, and it holds even for
+the debug tuning window, which writes `tuning.promille.current` directly and bypasses
+`addPromille` (also gated, so the field cannot quietly accumulate either). The cost is that
+"the meter is zero" and "there is no meter" are the same state inside the simulation; what
+distinguishes them for anything that needs to know is `GameSim.promilleUnlocked`, which is what
+the HUD and the drop tables read.
+
+**A tier gate and a mechanic gate are two different fields.** `promilleRequirement`
+(`any`/`sober`/`rausch`, #26) says which *tier* an item needs. It cannot express Konterbier,
+which clears a Kater at any tier and is therefore perfectly inert in a run that cannot have
+one — and #85 names Konterbier specifically. Extending the enum with a fourth value would have
+kept one field at the price of mixing two kinds of question in it; instead `needsPromille` is
+its own boolean, defaulting to `promilleRequirement !== 'any'` because an item that needs a
+tier needs the meter that has tiers. Eleven of today's items set it explicitly, and the
+registry rejects the contradiction (`needsPromille: false` on a gated item) rather than picking
+a side.
+
+The field is data an author has to remember, which is a failure mode, so it is backed by a
+test rather than by a convention: `tests/content/sober-run.test.ts` asserts that no item a
+sober run can be offered has a *description* naming Promille, Kater, Trinkfest or a tier. That
+works because `ItemDefinition.description` is required to be a plain-language translation of
+what the item does — an item that is Promille machinery and forgot to say so gives itself away
+in its own player-facing text. The same file checks the other paths content can leak through:
+a sober drop table naming the beer pickup, a room template authoring one directly (which does
+not go through `dropLoot`'s branch at all), and a pool the filter has emptied.
+
+**The run's state is saved with the run, not re-derived from the unlock set.** Save schema v3
+adds `promilleUnlocked` to `ActiveRunSave`. This is not redundancy: `withBossDefeat` commits
+the Promille unlock the instant Der Stier falls (#51, deliberately), so a player who beats him
+and closes the tab has a save whose `unlocks` say "promilled" describing a log that was sober
+for every tick it recorded. Rebuilding that run from `unlocks` would replay the same inputs
+against different drop tables and a different item pool — a resume that is quietly not the run
+that was saved. The v2 → v3 migration back-fills `true` for the same reason and not from
+`unlocks` either: every run recorded before the field existed *was* promilled.
+
+**Constrains:** a run is reproduced by its seed **and** its parameters, of which this is the
+first. #48's replays and shared seeds have to carry the same flag, and any later run parameter
+(a character, #47; a challenge, #50; a curse, #49) is another one — the shape to copy is a
+field on `ActiveRunSave` plus a migration, not a re-derivation from the save's current state.
+Any new item whose effect spends, refunds, caps or tolerates the meter must set
+`needsPromille`, and any new pickup whose description names the mechanic needs a
+`soberDescription`; both are enforced on the pull request rather than at runtime. The dev
+override (`B`, `__kellerbier.promille`) lives in its own `localStorage` key rather than in the
+save, so it never travels through export/import to somebody else's machine and `resetProgress`
+does not silently clear it.

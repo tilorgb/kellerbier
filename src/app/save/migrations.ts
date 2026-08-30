@@ -58,7 +58,34 @@ const v1ToV2: SaveMigration = (raw) => {
   return { ...raw, schemaVersion: 2, lastRun: latest, greetedRegulars: [] };
 };
 
-export const MIGRATIONS: readonly SaveMigration[] = [v0ToV1, v1ToV2];
+/**
+ * v2 -> v3 (#85): the in-progress run learns whether it is sober.
+ *
+ * Back-filled `true` rather than read off `unlocks`, and the distinction
+ * matters. Every run recorded by a pre-#85 build *was* a promilled one —
+ * `GameSim.promilleUnlocked` defaulted to `true` and nothing set it — so
+ * `true` reconstructs the run that was actually saved. Deriving it from the
+ * save's unlock set instead would resume a v2 tester's in-progress run with
+ * the beer stripped out of it purely because they had never beaten Der
+ * Stier, which is the exact divergence `ActiveRunSave.promilleUnlocked`
+ * exists to prevent.
+ *
+ * A save with no run in progress migrates to a `null` `activeRun` untouched;
+ * `sanitizeSave` is what turns anything else unparseable into `null`.
+ */
+const v2ToV3: SaveMigration = (raw) => {
+  const active = raw.activeRun;
+  if (typeof active !== 'object' || active === null || Array.isArray(active)) {
+    return { ...raw, schemaVersion: 3 };
+  }
+  return {
+    ...raw,
+    schemaVersion: 3,
+    activeRun: { ...(active as Record<string, unknown>), promilleUnlocked: true },
+  };
+};
+
+export const MIGRATIONS: readonly SaveMigration[] = [v0ToV1, v1ToV2, v2ToV3];
 
 function versionOf(raw: Record<string, unknown>): number {
   const version = raw.schemaVersion;

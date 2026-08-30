@@ -25,6 +25,9 @@ export const nikolausgabe: ItemDefinition = {
   pools: ['treasure', 'shop', 'secret'],
   quality: 1,
   promilleRequirement: 'any',
+  // No tier gate — but it is Promille machinery all the same (half its room-clear reward is Promille),
+  // so a sober run never offers it (#85).
+  needsPromille: true,
   hooks: {
     onRoomClear: (ctx) => {
       const sim = ctx.sim;

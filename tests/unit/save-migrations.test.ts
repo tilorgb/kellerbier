@@ -16,7 +16,7 @@ describe('save migration chain (#45)', () => {
     expect(MIGRATIONS).toHaveLength(SAVE_SCHEMA_VERSION);
   });
 
-  it('upgrades a real v1 save to v2 without touching what v1 already stored (#46)', () => {
+  it('upgrades a real v1 save to the current version without touching what v1 already stored (#46)', () => {
     const v1 = {
       schemaVersion: 1,
       settings: { swayScale: 0.5 },
@@ -31,13 +31,42 @@ describe('save migration chain (#45)', () => {
       activeRun: null,
     };
     const migrated = sanitizeSave(migrateSave(v1));
-    expect(migrated.schemaVersion).toBe(2);
+    // Asserted against the constant rather than a literal: the point of the
+    // chain is that a v1 save reaches *today's* version, whatever that has
+    // become since, not that it reaches the one version that existed when
+    // this test was written.
+    expect(migrated.schemaVersion).toBe(SAVE_SCHEMA_VERSION);
     expect(migrated.unlocks).toEqual(['lore-opas-zettl']);
     expect(migrated.statistics).toEqual({ kills: 240 });
     expect(migrated.greetedRegulars).toEqual([]);
     // The most recently *recorded* run, not the longest one — the table's
     // comments are about the run you just played.
     expect(migrated.lastRun?.seed).toBe(2);
+  });
+
+  it('back-fills a v2 in-progress run as promilled rather than reading the unlock set (#85)', () => {
+    // The two genuinely differ, and the unlock set is the wrong source. A v2
+    // tester who never beat Der Stier still recorded a promilled run —
+    // `GameSim.promilleUnlocked` defaulted to true and nothing set it — so
+    // deriving the flag from `unlocks` here would resume their run with the
+    // beer taken out from under it.
+    const v2 = {
+      schemaVersion: 2,
+      unlocks: [],
+      activeRun: { seed: 4, frames: [1, 2, 3, 4, 5] },
+      lastRun: null,
+      greetedRegulars: [],
+    };
+    const migrated = sanitizeSave(migrateSave(v2));
+    expect(migrated.activeRun?.promilleUnlocked).toBe(true);
+    expect(migrated.activeRun?.seed).toBe(4);
+    expect(migrated.activeRun?.frames).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it('migrates a v2 save with no run in progress without inventing one', () => {
+    const migrated = sanitizeSave(migrateSave({ schemaVersion: 2, activeRun: null }));
+    expect(migrated.activeRun).toBeNull();
+    expect(migrated.schemaVersion).toBe(SAVE_SCHEMA_VERSION);
   });
 
   it('leaves lastRun null when a v1 save never finished a run', () => {

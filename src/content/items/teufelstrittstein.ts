@@ -27,6 +27,9 @@ export const teufelstrittstein: ItemDefinition = {
   pools: ['shop', 'devil', 'secret'],
   quality: 3,
   promilleRequirement: 'any',
+  // No tier gate — but it is Promille machinery all the same (its Stammwürze is paid for with a Promille floor),
+  // so a sober run never offers it (#85).
+  needsPromille: true,
   hooks: {
     modifyStats: () => [{ stat: 'stammwuerze', op: 'multiply', value: DAMAGE_MULTIPLIER }],
     onTick: (ctx) => {

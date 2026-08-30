@@ -9,6 +9,14 @@ const RADIUS = 4;
  * Health — Maß, Weißbier, Schwarzbier — drops in every run, unchanged. Beer is
  * the *Promille* pickup and is the one kind a sober run's drop tables never
  * name; see `drop-tables.ts`.
+ *
+ * The three food items are the only pickups that read differently in the two
+ * runs: they heal in both, and their "lowers Promille" half is a sentence a
+ * sober run has no business showing, so each carries a `soberDescription`
+ * saying only what it actually does there (#85). Their heal numbers are
+ * repeated in that second string rather than shared with the first, because
+ * the two are written for different readers and the first one is not a
+ * template.
  */
 export const massFull: PickupDefinition = {
   id: 'mass-full',
@@ -127,6 +135,7 @@ export const brezn: PickupDefinition = {
   id: 'brezn',
   name: 'Brezn',
   description: 'Heal, lowers Promille',
+  soberDescription: 'Health +1',
   radius: RADIUS,
   tint: 0xa9702f,
   label: 'Br',
@@ -137,6 +146,7 @@ export const obazda: PickupDefinition = {
   id: 'obazda',
   name: 'Obazda',
   description: 'Heal, lowers Promille',
+  soberDescription: 'Health +2',
   radius: RADIUS,
   tint: 0xe8b23d,
   label: 'Oz',
@@ -147,6 +157,7 @@ export const radi: PickupDefinition = {
   id: 'radi',
   name: 'Radi',
   description: 'Heal, lowers Promille',
+  soberDescription: 'Health +1',
   radius: RADIUS,
   tint: 0x9fd6a0,
   label: 'Ra',
