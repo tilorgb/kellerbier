@@ -92,10 +92,44 @@ function isUnitInterval(value: unknown): value is number {
 }
 
 /**
+ * Coerces an arbitrary parsed value into a full `AccessibilitySettings`,
+ * falling back to defaults field-by-field rather than all-or-nothing — a
+ * future field this version doesn't know about, or one saved by an older
+ * version that lacked a later field, should not throw the whole blob away.
+ *
+ * Exported so the save system (#45) can reuse the exact same validation when
+ * it folds settings into the unified save blob, instead of a second copy of
+ * this field-by-field logic drifting out of sync with this one.
+ */
+export function sanitizeAccessibilitySettings(candidate: unknown): AccessibilitySettings {
+  if (typeof candidate !== 'object' || candidate === null) {
+    return { ...DEFAULT_ACCESSIBILITY_SETTINGS };
+  }
+  const source = candidate as Partial<Record<keyof AccessibilitySettings, unknown>>;
+  return {
+    swayScale: isUnitInterval(source.swayScale)
+      ? source.swayScale
+      : DEFAULT_ACCESSIBILITY_SETTINGS.swayScale,
+    noDrift:
+      typeof source.noDrift === 'boolean' ? source.noDrift : DEFAULT_ACCESSIBILITY_SETTINGS.noDrift,
+    neutralReskin:
+      typeof source.neutralReskin === 'boolean'
+        ? source.neutralReskin
+        : DEFAULT_ACCESSIBILITY_SETTINGS.neutralReskin,
+    reducedMotion:
+      typeof source.reducedMotion === 'boolean'
+        ? source.reducedMotion
+        : DEFAULT_ACCESSIBILITY_SETTINGS.reducedMotion,
+    reduceFlashes:
+      typeof source.reduceFlashes === 'boolean'
+        ? source.reduceFlashes
+        : DEFAULT_ACCESSIBILITY_SETTINGS.reduceFlashes,
+  };
+}
+
+/**
  * Reads the persisted settings, falling back to defaults field-by-field
- * rather than all-or-nothing — a future field this version doesn't know
- * about, or one saved by an older version that lacked a later field, should
- * not throw the whole blob away.
+ * rather than all-or-nothing — see `sanitizeAccessibilitySettings`.
  *
  * Never throws: a private window, disabled storage, or a headless/test
  * environment with no `localStorage` at all (this repo's own `vitest`
@@ -108,31 +142,7 @@ export function loadSettings(): AccessibilitySettings {
       return { ...DEFAULT_ACCESSIBILITY_SETTINGS };
     }
     const parsed: unknown = JSON.parse(raw);
-    if (typeof parsed !== 'object' || parsed === null) {
-      return { ...DEFAULT_ACCESSIBILITY_SETTINGS };
-    }
-    const candidate = parsed as Partial<Record<keyof AccessibilitySettings, unknown>>;
-    return {
-      swayScale: isUnitInterval(candidate.swayScale)
-        ? candidate.swayScale
-        : DEFAULT_ACCESSIBILITY_SETTINGS.swayScale,
-      noDrift:
-        typeof candidate.noDrift === 'boolean'
-          ? candidate.noDrift
-          : DEFAULT_ACCESSIBILITY_SETTINGS.noDrift,
-      neutralReskin:
-        typeof candidate.neutralReskin === 'boolean'
-          ? candidate.neutralReskin
-          : DEFAULT_ACCESSIBILITY_SETTINGS.neutralReskin,
-      reducedMotion:
-        typeof candidate.reducedMotion === 'boolean'
-          ? candidate.reducedMotion
-          : DEFAULT_ACCESSIBILITY_SETTINGS.reducedMotion,
-      reduceFlashes:
-        typeof candidate.reduceFlashes === 'boolean'
-          ? candidate.reduceFlashes
-          : DEFAULT_ACCESSIBILITY_SETTINGS.reduceFlashes,
-    };
+    return sanitizeAccessibilitySettings(parsed);
   } catch {
     return { ...DEFAULT_ACCESSIBILITY_SETTINGS };
   }
