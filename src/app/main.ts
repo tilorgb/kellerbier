@@ -14,7 +14,7 @@ import {
 } from '../sim/room/template.js';
 import { RngStream, createStreamRng } from '../sim/rng/streams.js';
 import { TICKS_PER_SECOND } from '../sim/time.js';
-import { InputAction, isActionDown } from '../sim/input/frame.js';
+import { InputAction, isActionDown, type InputFrame } from '../sim/input/frame.js';
 import { createRenderer, trackWindowSize } from '../render/app.js';
 import {
   createBlobTexture,
@@ -75,6 +75,13 @@ import {
   loadSettings,
   saveSettings,
 } from './settings.js';
+import {
+  ActiveRunRecorder,
+  decodeActiveRunFrames,
+  persistActiveRun,
+  recordBestRun,
+} from './save/active-run.js';
+import { loadSave } from './save/storage.js';
 
 /**
  * The authored pool, run through the same typed boundary the sim uses to load
@@ -414,6 +421,20 @@ async function boot(): Promise<void> {
   let sim!: GameSim;
   let view!: GameView;
   /**
+   * The in-progress run's input log (#45). Reset by every `startRun`
+   * (a restart abandons whatever was being recorded, the same as a fresh
+   * `sim`) and replayed from a saved one at boot by `resumeActiveRun` below,
+   * before the first real frame — see `save/schema.ts`'s `ActiveRunSave` for
+   * why a recorded input log is what makes an exact resume possible at all.
+   */
+  let activeRunRecorder!: ActiveRunRecorder;
+  /** Whether this run was resumed from a saved input log — see `resumeActiveRun`. Shown in `refreshHud`. */
+  let wasResumed = false;
+  /** Ticks since `activeRunRecorder` was last written to `localStorage` — see `autosaveActiveRun`. */
+  let ticksSinceAutosave = 0;
+  /** Once a second: frequent enough that a crash loses under a second of input, rare enough not to stringify the whole log every tick. */
+  const AUTOSAVE_INTERVAL_TICKS = TICKS_PER_SECOND;
+  /**
    * The player/entity/projectile textures `view` draws with. Built once,
    * from whichever `sim` exists first — every `GameSim`'s `tuning` defaults
    * are the same fixed values (`createTuning`), never seed-dependent, so
@@ -728,6 +749,19 @@ async function boot(): Promise<void> {
           // separate, smaller follow-up.
           floor: `${floorPlan.floorName}  room ${sim.roomId} (${planRoom(floorPlan, currentRoomId).role})`,
         });
+        // A dead run has nothing left to resume into — the R key (or a
+        // fresh page load) starts a new one either way, so the in-progress
+        // log is cleared rather than left around to be resumed into a
+        // tableau that is already over.
+        persistActiveRun(null);
+        recordBestRun({
+          seed: RUN_SEED,
+          floor: floorPlan.floor,
+          ticksSurvived: sim.playerDeathTick,
+          kills: summary.kills,
+          deathWord: sim.deathWord ?? null,
+          recordedAt: Date.now(),
+        });
       }
     }
   }
@@ -764,6 +798,58 @@ async function boot(): Promise<void> {
   // rather than against a hope that one will turn up.
   let stallMs = 0;
 
+  /**
+   * Advances the simulation by exactly one tick given `frame`.
+   *
+   * `live` gates the presentation-only side effects — audio and controller
+   * rumble — that must never re-fire during the fast-forward replay
+   * `resumeActiveRun` (below) does at boot: replaying a saved run's whole
+   * input log through this same function is what reconstructs it exactly
+   * (see `save/schema.ts`'s `ActiveRunSave` doc comment), and fast-forwarding
+   * through possibly tens of thousands of recorded frames must not replay
+   * every historical gunshot's sound and rumble pulse at once. Everything
+   * else — the step itself, the kill count, the death sequence, secret
+   * reveals, the key-hint timer, and any door or floor transition — has to
+   * run identically in both cases, since reproducing exactly that state is
+   * the whole point of fast-forwarding through the log in the first place.
+   */
+  function advanceOneTick(frame: Readonly<InputFrame>, live: boolean): void {
+    sim.step(frame);
+    if (live) {
+      playImpactAudio(sim, SILENT_AUDIO);
+      ambience.sync(sim, SILENT_AMBIENCE);
+      playRumble(sim, input.gamepad);
+    }
+    summary.recordTick(sim);
+    advanceDeathSequence();
+    checkSecretReveals();
+    if (keyHintTicks > 0) {
+      keyHintTicks -= 1;
+    }
+    const touchedDoor = sim.doorContact;
+    if (touchedDoor !== null) {
+      enterNeighbor(touchedDoor);
+    }
+  }
+
+  /**
+   * Writes the in-progress run's input log to `localStorage` roughly once a
+   * second, rather than every tick — `JSON.stringify`-ing a growing frame log
+   * sixty times a second is exactly the per-tick allocation
+   * `docs/TECH_STACK.md` §3's budget exists to catch, for a feature (mid-run
+   * resume) that only needs to survive a *reload*, not a mid-tick crash.
+   * `beforeunload`/`visibilitychange` (registered near `runAnimationFrameLoop`
+   * below) cover the gap this leaves on an actual tab close.
+   */
+  function autosaveActiveRun(): void {
+    ticksSinceAutosave += 1;
+    if (ticksSinceAutosave < AUTOSAVE_INTERVAL_TICKS) {
+      return;
+    }
+    ticksSinceAutosave = 0;
+    persistActiveRun(activeRunRecorder);
+  }
+
   const loop = new FixedTimestepLoop({
     step: () => {
       const started = performance.now();
@@ -775,20 +861,10 @@ async function boot(): Promise<void> {
         }
       }
       if (deathPhase !== 'over') {
-        sim.step(input.sample());
-        playImpactAudio(sim, SILENT_AUDIO);
-        ambience.sync(sim, SILENT_AMBIENCE);
-        playRumble(sim, input.gamepad);
-        summary.recordTick(sim);
-        advanceDeathSequence();
-        checkSecretReveals();
-        if (keyHintTicks > 0) {
-          keyHintTicks -= 1;
-        }
-        const touchedDoor = sim.doorContact;
-        if (touchedDoor !== null) {
-          enterNeighbor(touchedDoor);
-        }
+        const frame = input.sample();
+        activeRunRecorder.record(frame);
+        advanceOneTick(frame, true);
+        autosaveActiveRun();
       }
       simMs += performance.now() - started;
     },
@@ -939,6 +1015,7 @@ ${meterLabel} ${sim.promille.toFixed(2)} ${tierLabel}${trinkfest}${knockedDown}
 shots ${String(shots.liveCount)}/${String(shots.capacity)}  particles ${String(
       particles.liveCount,
     )}/${String(particles.capacity)}${shots.overflows > 0 ? '  SHOT OVERFLOW' : ''}
+save ${String(activeRunRecorder.frameCount)} ticks logged${wasResumed ? '  (resumed)' : ''}
 WASD move   arrows aim and fire
   O debug   T tuning   I shot tags   Y accessibility   P pause   . step   [ ] time scale
   N next room (after clear)   R restart (new seed)`;
@@ -1001,6 +1078,14 @@ WASD move   arrows aim and fire
     // (`GameSim.swayScale`/`driftScale`/`wobbleScale`), not in `tuning`,
     // which `viewTextures`'s own comment notes is otherwise never rebuilt.
     applySettingsToSim(sim, settings);
+    // A restart abandons whatever was being recorded for the previous run —
+    // persisted immediately (not just reassigned in memory) so a crash right
+    // after a restart resumes into the *new* run next time, not the one the
+    // player just left behind.
+    activeRunRecorder = new ActiveRunRecorder(seed);
+    ticksSinceAutosave = 0;
+    persistActiveRun(activeRunRecorder);
+    wasResumed = false;
     viewTextures ??= {
       playerArt,
       projectileArt: buildProjectileArt(
@@ -1137,7 +1222,53 @@ WASD move   arrows aim and fire
     floorTitleCard.setFade(Math.min(1, remaining / FLOOR_CARD_FADE_MS));
   }
 
-  startRun(RUN_SEED);
+  /**
+   * Resumes the run saved by a previous session, if there is one, by
+   * replaying its recorded input log through a fresh `GameSim` built for its
+   * seed — see `save/schema.ts`'s `ActiveRunSave` doc comment for why replay
+   * reconstructs the run exactly, RNG stream position included, rather than
+   * this snapshotting `GameSim`'s internals directly.
+   *
+   * Returns whether a resume actually happened. A saved run that fails to
+   * replay cleanly (a shape it depended on has since changed; any other
+   * exception) must not leave the game unplayable — this discards it and
+   * reports "no resume" rather than propagating the exception, the same
+   * "a content gap degrades gracefully, but still fails loudly enough to
+   * notice" shape `CLAUDE.md` asks of an authored-content gap, applied here
+   * to a save that no longer replays.
+   */
+  function resumeActiveRun(): boolean {
+    const activeRun = loadSave().activeRun;
+    if (activeRun === null) {
+      return false;
+    }
+    try {
+      RUN_SEED = activeRun.seed;
+      startRun(RUN_SEED);
+      const frames = decodeActiveRunFrames(activeRun);
+      for (const frame of frames) {
+        activeRunRecorder.record(frame);
+        advanceOneTick(frame, false);
+      }
+      // The replay above steps `sim` directly rather than through `loop`, so
+      // `loop`'s own tick counter is still 0 (from `startRun`'s `loop.reset()`)
+      // — catch its presentation clock up to match, or the HUD's elapsed-time
+      // readout would restart from zero under a `sim` that is already well
+      // past it.
+      loop.fastForward(frames.length);
+      persistActiveRun(activeRunRecorder);
+      wasResumed = true;
+      return true;
+    } catch (error) {
+      console.warn('[save] a saved run failed to resume; starting a fresh one instead', error);
+      persistActiveRun(null);
+      return false;
+    }
+  }
+
+  if (!resumeActiveRun()) {
+    startRun(RUN_SEED);
+  }
 
   if (seedInput instanceof HTMLInputElement) {
     seedInput.addEventListener('change', () => {
@@ -1317,12 +1448,21 @@ WASD move   arrows aim and fire
    * lands — this is what keeps the loop endless rather than a dead end the
    * moment a `npm run dev` playtest clears the last floor that exists, so
    * item stacks can be tested across as many runs through them as needed.
+   *
+   * Draws from `sim.random.floor` — the run's own seeded floor stream
+   * (`sim/rng/streams.ts`) — rather than a freshly-`Math.random()`-picked
+   * seed as this used to. That used to mean a run that crossed into floor 2
+   * was no longer a pure function of its seed and input log: replaying the
+   * exact same run twice could regenerate a different floor 2 each time.
+   * `GameSim`'s own class doc comment promises the opposite ("reproducible
+   * from a seed and an input log"), and the mid-run save/resume this
+   * function rides along with (#45) depends on that promise holding across
+   * a floor advance, not just within one floor.
    */
   function advanceFloor(): void {
     const nextFloor = floorPlan.floor >= HIGHEST_PLAYABLE_FLOOR ? 1 : floorPlan.floor + 1;
-    const seed = Math.floor(Math.random() * 1_000_000);
     floorPlan = generateFloor(
-      createStreamRng(seed, RngStream.Floor),
+      sim.random.floor,
       floorConfig(nextFloor),
       ROOM_TEMPLATE_POOL,
       STAIRCASE_TEMPLATE_POOL,
@@ -1470,6 +1610,18 @@ WASD move   arrows aim and fire
         return;
     }
     refreshHud();
+  });
+
+  // Catches the gap `autosaveActiveRun`'s once-a-second cadence leaves on an
+  // actual tab close or backgrounding — `visibilitychange` fires reliably on
+  // mobile browsers that don't always run `beforeunload`.
+  window.addEventListener('beforeunload', () => {
+    persistActiveRun(activeRunRecorder);
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      persistActiveRun(activeRunRecorder);
+    }
   });
 
   runAnimationFrameLoop(loop);

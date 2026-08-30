@@ -230,4 +230,32 @@ describe('FixedTimestepLoop', () => {
     expect(loop.tick).toBe(0);
     expect(loop.alpha).toBe(0);
   });
+
+  describe('fastForward (#45)', () => {
+    it('advances the tick counter without calling stepFn', () => {
+      const { loop, steps } = makeLoop();
+      loop.fastForward(500);
+      expect(loop.tick).toBe(500);
+      expect(steps).toEqual([]);
+    });
+
+    it('leaves alpha in range so the very next advance steps cleanly from the new tick', () => {
+      const { loop, steps } = makeLoop();
+      loop.fastForward(120);
+      loop.advance(0); // establishes the clock origin, same as the very first real frame
+      loop.advance(1000 / 60);
+      expect(steps).toEqual([120]);
+      expect(loop.tick).toBe(121);
+    });
+
+    it('rejects a negative or non-integer tick count', () => {
+      const { loop } = makeLoop();
+      expect(() => {
+        loop.fastForward(-1);
+      }).toThrow(/non-negative integer/);
+      expect(() => {
+        loop.fastForward(1.5);
+      }).toThrow(/non-negative integer/);
+    });
+  });
 });

@@ -2254,3 +2254,46 @@ and coming back for a second pass — this issue and #180 before it are now two 
 floor's tile art needed revisiting for exactly this reason, and a third floor doing it the old way
 on purpose would be relitigating a settled call. `tools/art/spec.mjs`/`validate.mjs` need no
 change either way; the 16-or-32 rule from #48 already covers both sizes.
+
+## 50. Mid-run save/resume replays the input log instead of snapshotting `GameSim`
+
+**Decided:** M7, #45. The save system needed a way to reconstruct an in-progress run exactly —
+same room, same inventory, same RNG stream position — after the tab was closed and reopened.
+The obvious-looking approach is a snapshot: walk `GameSim`'s ECS `World`, every pooled store
+(projectiles, particles, decals, damage numbers), the floor/room graph, the item inventory and
+stat cache, and the RNG streams, and serialise all of it. `GameSim` is roughly 4,000 lines and
+carries that much state precisely because M2-M6 have spent five milestones adding to it; a
+hand-written snapshot format would need to track every one of those additions forever, and a
+single missed field is a resume that loads but is subtly wrong — the worst failure mode a save
+system can have, because nothing about it looks broken.
+
+**What it does instead:** persists the run's seed and the exact sequence of `InputFrame`s it
+received, then reconstructs by calling `startRun(seed)` and replaying every frame through
+`GameSim.step` before the player sees anything. This is not a workaround — it is what `GameSim`'s
+own class doc comment already promises: it "reads a single `InputFrame` per tick and nothing
+else… which is what makes a run reproducible from a seed and an input log," and
+`sim/input/frame.ts`'s `InputFrame` doc comment independently says "a replay is a list of these,
+and nothing else." The save system is the first thing to actually build that replay, rather than
+a second, parallel serialisation format competing with a guarantee the sim already makes.
+
+**What this took to actually hold across a floor advance:** `app/main.ts`'s `advanceFloor` (the
+boss-room "next floor" exit) used to reseed the next floor's generator from `Math.random()` — a
+real, pre-existing gap in the seed-and-input-log promise above, invisible until something needed
+to replay across a floor boundary. Fixed by drawing from `sim.random.floor` (the run's own seeded
+floor stream, `sim/rng/streams.ts`) instead, which is also the textbook-correct stream for the
+purpose per that file's own "a system draws from its own stream only" rule. Replaying a run that
+never crosses into floor 2 never exercised this; the bug had been sitting there since `advanceFloor`
+was written.
+
+**What replay does *not* cover:** `app/main.ts`'s dev-only tools that bypass the recorded
+`InputFrame` entirely — the `N` key's floor tour (`crossDoor`) and the seed-finder's speculative
+`generateFloor` calls — are not part of the input log and are not guaranteed to survive a resume.
+This is the same "known gap, written down rather than silently accepted" shape `startRun`'s own
+doc comment already uses for the debug-overlay rebind gap.
+
+**Constrains:** #48 (seeded runs, daily run and replay recording) needs exactly this artifact — a
+seed plus an `InputFrame` log — for its own replay files, and should extend `save/active-run.ts`
+rather than inventing a second recording format. Any future change to what `GameSim.step` reads,
+or to what an app-level system does *between* steps that isn't a pure function of `sim` state (the
+old `advanceFloor` bug's shape), breaks replay-based resume silently — a determinism regression
+here fails the same way it always does: quietly, until someone tries to reproduce a run.

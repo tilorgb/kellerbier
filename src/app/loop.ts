@@ -144,6 +144,25 @@ export class FixedTimestepLoop {
     this.renderFn(0);
   }
 
+  /**
+   * Advances the tick counter and simulation clock by `ticks`, without
+   * calling `stepFn` — for when the simulation was already advanced some
+   * other way (mid-run resume's replay, `app/main.ts`'s `resumeActiveRun`,
+   * #45) and only the loop's own presentation clock needs to catch up, so
+   * the HUD's elapsed-time readout reflects the resumed tick instead of
+   * restarting from zero while the simulation itself is already well past
+   * it.
+   */
+  fastForward(ticks: number): void {
+    if (!Number.isInteger(ticks) || ticks < 0) {
+      throw new RangeError(
+        `fastForward needs a non-negative integer tick count, got ${String(ticks)}`,
+      );
+    }
+    this.currentTick += ticks;
+    this.simTimeMs = (this.currentTick * 1000) / this.ticksPerSecond;
+  }
+
   /** Returns the loop to tick 0 and forgets the clock origin. */
   reset(): void {
     this.simTimeMs = 0;
