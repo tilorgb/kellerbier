@@ -145,19 +145,21 @@ silhouette, and the brass keg drawn on the hip facing the camera and on the back
 The keg's position on the canvas is what `render/player-view.ts`'s `SCHLAUCH_ANCHOR` is
 measured against, so moving it in the art means re-measuring there.
 
-**These seven are the one exception to "a sprite is a PNG you drew".** They are composed from
-text blocks in `tools/art/authoring/alois.mjs` — a head per direction and expression, a torso, a
-set of legs per contact pose, the keg — and written out by `npm run art:alois`. Forty-four
-frames that between them hold about a dozen distinct drawings is the shape the pixel editor is
-worst at: fixing the face means fixing it in forty-four places, and a walk cycle acquires a hat
-one pixel off on frame 3 that nobody sees for a month. Everything else in this tree, including
-every other animated strip, is still drawn in the editor and committed directly.
+**These seven — plus the two chibi bosses — are the exception to "a sprite is a PNG you drew".**
+Alois is composed from text blocks and primitives in `tools/art/authoring/alois.mjs` (a head per
+direction and expression, a torso, a set of legs per contact pose, the keg) and written by
+`npm run art:alois`. Die Große Kellerassel, Der Stier and the Maibaum-Dieb are composed the same
+way in `tools/art/authoring/bosses.mjs` and written by `npm run art:bosses` — seven frames of one
+big re-posed body is Alois's problem at boss scale (`docs/DECISIONS.md` #55/#56). Everything else
+in this tree, including every other animated strip and the *floor* Kellerassel, is still drawn in
+the editor and committed directly.
 
 The PNGs stay committed and the game still loads *them*, so nothing about the runtime changes.
-But `tests/art/alois-authoring.test.ts` re-encodes the source and compares byte for byte, which
-means a hand edit to these seven files fails the build: the editor is where you try something,
-and folding it back into `alois.mjs` is what makes it land. Same trade as `docs/DECISIONS.md`
-#43's UI art, confined to the one sprite with the same repetition problem.
+But `tests/art/alois-authoring.test.ts` and `tests/art/boss-authoring.test.ts` re-encode the
+source and compare byte for byte, which means a hand edit to these files fails the build: the
+editor is where you try something, and folding it back into the source is what makes it land.
+Same trade as `docs/DECISIONS.md` #43's UI art, confined to the sprites with the same repetition
+problem.
 
 Four frames of walk cycle is the house budget (`docs/DECISIONS.md` #37); `WALK_CYCLE_FRAMES` in
 `tools/art/spec.mjs` is where that number lives and why.
@@ -171,7 +173,7 @@ in a folder, at runtime as well as in the atlas build — and looks each one up 
 | Where | Named | Looked up by |
 |---|---|---|
 | `<floor>/characters/<enemy id>` | `kellerassel`, `bauer`, … | `EnemyDefinition.id` |
-| `<floor>/bosses/<enemy id>` | `grosse-kellerassel`, `der-stier` | `EnemyDefinition.id` — a boss is a roster entry like any other, so its strip lands in the same map |
+| `<floor>/bosses/<enemy id>` | `grosse-kellerassel`, `der-stier`, `der-stier-maibaum-dieb` | `EnemyDefinition.id` — a boss is a roster entry like any other, so its strip lands in the same map. A phase-two body (`der-stier-maibaum-dieb`) lives here too, not in `characters/`: it is `size: 'boss'` and wants the boss shadow (`docs/DECISIONS.md` #56) |
 | `common/characters/pickup-<pickup id>` | `pickup-mass-full`, … | `PickupDefinition.id` |
 | `common/characters/<enemy id>` | `shopkeeper` | an enemy that appears on every floor |
 | `common/characters/alois-*` | the player's seven strips | `render/player-art.ts` (#151) |

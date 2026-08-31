@@ -2604,3 +2604,62 @@ inconsistent with the player until each is redrawn — one issue per group, each
 creature's canvas. `PENDING_REDRAW` in `tests/content/sprite-scale.test.ts` already names two
 of them for a different reason and should be emptied by the same work. Per-character art for
 #47's roster (#54's closing note) inherits these rules whenever it lands.
+
+**Amendment (M8, #193): the two bosses are full chibi, not an exception.** The question
+#193 existed to answer was whether a boss — the one thing in a room that is meant to
+frighten — should follow the chibi direction or break it. Three readings went to an option
+round at true scale on each boss's own floor with Alois in frame: full chibi, chibi
+proportions with a hostile face, and a deliberate realistic exception. **Full chibi won.** A
+boss is as cute as the roster and the threat is carried by scale, motion and the telegraph
+pose, not by the face — with one concession, a slightly angled dark brow, so the read is
+"the game, but this one wants to hurt you" rather than "the mascot". Every boss on floors
+3-7 (#39-#43) inherits this. The "Alois alone is composed" paragraph above is also amended:
+Die Große Kellerassel, Der Stier and the Maibaum-Dieb are composed from
+`tools/art/authoring/bosses.mjs` too, for Alois's exact reason — seven frames of one
+re-posed body — and "a Kellerassel belongs in the editor" now means the *floor* Kellerassel,
+not the boss. The scale that came with the win is #56.
+
+## 56. A boss is its own enemy size class, drawn taller than its collider and standing on it
+
+**Decided:** M8, #193, alongside #55's boss amendment. "Bosses can be bigger — 20-25% of the
+screen, look to Isaac" was the direction, and #45 makes that a decision with a consequence:
+since an authored pixel is an on-screen pixel, a boss drawn at a quarter of the 360-tall frame
+is ~90-140 internal pixels of silhouette, and `tests/content/sprite-scale.test.ts` holds every
+body to within 1.8x the collider it is drawn over. Die Große Kellerassel and Der Stier were
+`mid` (radius 10, a 40px collider); a 130px chibi over that fails the check, and papering it
+with an exemption is exactly what #193's acceptance criteria forbids.
+
+**So `boss` is a fourth `EnemySize`** (`sim/enemy/size.ts`), radius 22 — a 44-world-unit,
+88-internal-pixel collider, ~3x `mid` — which puts a quarter-frame silhouette mid-band. This
+is deliberately a real gameplay quantity and not a rendering fudge: the hitbox is what dodge
+spacing, knockback and contact separation all read, and an Isaac boss *does* occupy a large
+piece of the room. Mass 20 with it, high enough that a player's own body checking the boss
+never shoves it off a charge line — Der Stier keeps that as an explicit override so its feel
+does not move if the class default ever does. The two existing bosses and the Maibaum-Dieb move onto the
+class in the same change; their authored health and contact damage are unchanged, so the
+fights are the same fights at a bigger read. `mid` stays the ceiling for the `character`
+sprite category (`tools/art/spec.mjs`), and the Maibaum-Dieb moved from `characters/` to
+`floor-2-rural/bosses/` to match — which is also how it picks up the boss ground shadow.
+
+**A boss stands on its collider rather than being centred through it.** #45's "authored size
+is on-screen size, centred on the body" is right for anything the size of a body; a sprite
+two to three times taller than its hitbox, centred, sinks half of itself through the floor.
+So `render/entities.ts` bottom-anchors a boss sprite (and its corpse, and its shadow) at the
+collider's lower edge — the one place the anchor is not `0.5` — and every boss frame is
+authored with its ground contact on the canvas's bottom edge, `bob` bending the legs rather
+than lifting the feet, so the anchor lands on the shadow instead of a few pixels above it.
+Everything else is untouched, and a recycled ECS slot that was a boss and is now a fly is
+explicitly put back to centre.
+
+**The wind-up is read off the body, not the ring.** Every other enemy grows a telegraph ring
+over its wind-up; scaled to a boss's collider that ring wraps the room and says nothing about
+where it is safe to stand. So a boss gets no ring — its `telegraph` clip holds a visibly
+strained pose and `ENTITY_PALETTE.bossTelegraphTint` flushes the body red over the countdown.
+The attack's own telegraph (the spit cone, the charge line) still has to be dodgeable on
+position; that was never the ring's job.
+
+**Constrains:** every floor 3-7 boss (#39-#43) is authored at this scale and this class from
+the start, ground contact on the bottom edge, and telegraphs by pose + flush. `tools/art/
+spec.mjs`'s `boss` canvas ceiling (160x160) is now a real limit rather than a generous one —
+the Maibaum-Dieb, with the stolen maypole raised, sits at 132x156 — and a boss that genuinely
+needs to be taller is a spec change with a paragraph, not a quiet bump.
