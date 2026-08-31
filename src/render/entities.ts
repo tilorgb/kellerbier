@@ -2,6 +2,7 @@ import { Container, Sprite, Text, type Texture } from 'pixi.js';
 import { CollisionLayer } from '../sim/collision/layers.js';
 import { World } from '../sim/ecs/world.js';
 import type { GameSim } from '../sim/game/sim.js';
+import { propKindIndex } from '../sim/game/prop-kinds.js';
 import { lerp } from '../sim/math.js';
 import {
   ENEMY_STRIDE,
@@ -27,6 +28,13 @@ const TELEGRAPH_SCALE = 2.6;
 
 /** Radius the ring texture is generated at, before it is scaled per body. */
 const TELEGRAPH_TEXTURE_RADIUS = 24;
+
+/**
+ * The `maypole` prop kind (#199). `MaibaumView` draws this one — tall,
+ * walk-behind, and the Maibaum-Dieb's weapon once grabbed — so `EntityView`
+ * leaves it alone rather than drawing a second short copy at the collider.
+ */
+const MAYPOLE_PROP_KIND = propKindIndex('maypole');
 
 /** How far below a priced pickup its number sits, once the pickup has art of its own to not cover. */
 const PRICE_LABEL_OFFSET_Y = 8;
@@ -248,6 +256,15 @@ export class EntityView {
         continue;
       }
       if (((collision[index * 2] ?? 0) & CollisionLayer.Player) !== 0) {
+        continue;
+      }
+      // The arena maypole is `MaibaumView`'s to draw (#199) — skip it here.
+      if (
+        ((masks[index] ?? 0) & sim.enemyMask) !== sim.enemyMask &&
+        ((collision[index * 2] ?? 0) & CollisionLayer.Pickup) === 0 &&
+        ((masks[index] ?? 0) & sim.propKind.bit) !== 0 &&
+        (sim.propKind.data[index] ?? 0) === MAYPOLE_PROP_KIND
+      ) {
         continue;
       }
 

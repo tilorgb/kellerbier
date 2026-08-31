@@ -18,6 +18,7 @@ import {
   type DoorView,
 } from './room.js';
 import { createPropView } from './prop-view.js';
+import { MaibaumView } from './maibaum-view.js';
 import { INTERNAL_HEIGHT, INTERNAL_WIDTH, WORLD_ZOOM } from './resolution.js';
 import { ENTITY_PALETTE } from './palette.js';
 import type { EntityAnimator } from './animation/animator.js';
@@ -169,6 +170,7 @@ export class GameView {
   private readonly doorTextures: DoorTextures | undefined;
   private readonly tileTextures: Readonly<Record<string, Texture>>;
   private propView: Container;
+  private readonly maibaumView: MaibaumView;
   private readonly playerView: PlayerView;
   private readonly projectiles: ProjectileView;
   private readonly entities: EntityView;
@@ -281,6 +283,12 @@ export class GameView {
 
     this.playerView = new PlayerView(textures.playerArt);
     this.world.addChild(this.playerView.container);
+
+    // The arena Maibaum (#199): drawn just after the player, then re-ordered
+    // against them every frame in `sync` so a player standing behind it is
+    // hidden by it and one in front is not.
+    this.maibaumView = new MaibaumView();
+    this.world.addChild(this.maibaumView.container);
 
     this.projectiles = new ProjectileView(
       sim.projectiles,
@@ -452,6 +460,20 @@ export class GameView {
     const playerX = lerp(this.sim.previousX(index), this.sim.positionX(index), alpha);
     const playerY = lerp(this.sim.previousY(index), this.sim.positionY(index), alpha);
     this.playerView.sync(this.sim, alpha, nowMs);
+
+    // The Maibaum, and where it sits relative to the player: behind the pole's
+    // base means it draws in front of them (they are behind it), otherwise
+    // after. Only the planted pole has a `footY` to sort against — the held
+    // one just rides wherever it was left, which is next to the player anyway.
+    this.maibaumView.sync(this.sim);
+    const foot = this.maibaumView.footY;
+    this.world.removeChild(this.maibaumView.container);
+    const playerChildIndex = this.world.getChildIndex(this.playerView.container);
+    const behindPole = foot !== null && playerY <= foot;
+    this.world.addChildAt(
+      this.maibaumView.container,
+      behindPole ? playerChildIndex + 1 : playerChildIndex,
+    );
     const follow = this.followOffset(playerX, playerY);
 
     // Rounded, not left fractional — a camera offset by a fraction of a real

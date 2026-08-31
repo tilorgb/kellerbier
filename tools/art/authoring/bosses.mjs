@@ -51,6 +51,8 @@ const RURAL = {
   B: 0x3962af, // blue, lit
   n: 0x3f7a3a, // wreath green
   N: 0x64b25e, // wreath green, lit
+  s: 0xcabc92, // Maibaum-Dieb skin (#199) — the warmest tone floor 2 allows
+  e: 0x233c69, // dark blue, for the Dieb's iris
 };
 
 for (const [where, palette, bucket] of [
@@ -371,142 +373,148 @@ export const KELLERASSEL_FRAMES = [
 ];
 
 // ================================================================ STIER
-// Feet always plant on `SGROUND` regardless of `bob`, so the bottom-anchored
-// sprite (#193) sits on its shadow; `bob` bends the legs and raises the body.
-const SW = 132,
-  SH = 120,
-  SGROUND = 118;
+// Redrawn #199 toward a stocky 3/4-view bull (the front-on "head on a tower"
+// read was the bug the head-seam fix could only paper over). Head sits up on
+// the shoulders and forward, connected by a real neck; the body carries the
+// mass. Facing LEFT, feet on `SGROUND`, bottom-anchored (#193). ~80% of the
+// old height, and the head + horns sit forward of / above the collider so the
+// dangerous part a player reads is the body.
+const SW = 116,
+  SH = 100,
+  SGROUND = 96;
 
-function stierHorns(cv, P, hx, hy, forward = 0) {
-  for (const s of [-1, 1]) {
-    let x = hx + s * 22,
-      y = hy;
-    const steps = 26;
-    for (let t = 0; t <= steps; t++) {
-      const f = t / steps;
-      const wd = Math.max(1.5, 7 * (1 - f * 0.85));
-      // out, then curve up (and forward on a telegraph)
-      x += s * (1.3 - f * 0.6) + s * forward * 0.16;
-      y += f < 0.4 ? 0.5 : -(1.1 - forward * 0.12);
-      fillEllipse(cv, x, y, wd, wd, f > 0.5 ? P.R : P.r);
-      if (f < 0.35) fillEllipse(cv, x + s, y + wd - 1, wd * 0.55, 1.5, P.G);
-      if (f > 0.85) fillEllipse(cv, x, y, wd * 0.7, wd * 0.7, P.G); // dark tip
-    }
+/** One curved horn sweeping out and up from `(bx, by)`; `far` tints it back. */
+function stierHorn(cv, P, bx, by, dir, far) {
+  let px = bx,
+    py = by;
+  for (let t = 1; t <= 28; t++) {
+    const f = t / 28;
+    // out quickly, then hook upward
+    px = bx + dir * (13 * Math.sqrt(f) + 3 * f);
+    py = by - (18 * f * f + 4 * f);
+    const wd = Math.max(1, 4 * (1 - f * 0.82));
+    fillEllipse(cv, px, py, wd, wd, far ? P.R : P.r);
   }
+  fillEllipse(cv, px, py, 2, 2, P.G); // dark tip
 }
 
-function stierHead(cv, P, { hy, lower = 0, expr = 'idle' }) {
-  const hx = 58;
-  const cy = hy + lower;
-  // neck: a short mass tying the head to the body below it
-  fillRect(cv, hx - 14, cy + 8, 28, 22, P.C);
-  // ears
-  fillEllipse(cv, hx - 30, cy - 4, 8, 6, P.C);
-  fillEllipse(cv, hx + 30, cy - 4, 8, 6, P.C);
+function stierBody(cv, P, { by, legPose = 0, tilt = 0 }) {
+  const legY = SGROUND;
+  // far pair — behind the body, cooler tone
+  for (const lx of [70, 40]) {
+    fillRect(cv, lx - 5, legY - 24, 10, 24, P.H);
+    fillRect(cv, lx - 5, legY - 3, 10, 3, P.G);
+  }
+  // near pair — front leg can brace back on a telegraph / stagger
+  for (const [lx0, lift] of [
+    [82, legPose === 2 ? 3 : 0],
+    [30, legPose === 1 ? -3 : 0],
+  ]) {
+    const lx = lx0 + (lx0 < 56 ? lift : 0);
+    const top = legY - 28 + (lx0 > 56 ? lift : 0);
+    fillRect(cv, lx - 6, top, 12, legY - top, P.C);
+    fillRect(cv, lx - 6, top, 4, legY - top, P.c);
+    fillRect(cv, lx - 6, legY - 3, 12, 3, P.r);
+  }
+  // barrel: overlapping masses, haunch high to the back-right
+  fillEllipse(cv, 76, by + 4 + tilt, 25, 21, P.C);
+  fillEllipse(cv, 54, by, 33, 23, P.C);
+  fillEllipse(cv, 36, by - 2, 21, 19, P.C);
+  fillEllipse(cv, 44, by - 12, 28, 11, P.c); // spine dip
+  fillEllipse(cv, 40, by - 12, 21, 7, P.H); // topline light
+  fillEllipse(cv, 66, by - 8, 19, 7, P.H);
+  fillEllipse(cv, 34, by - 14, 12, 9, P.C); // shoulder hump
+  fillEllipse(cv, 32, by - 16, 8, 5, P.H);
+  fillEllipse(cv, 56, by + 15, 29, 7, P.c); // belly shadow
+  stroke(cv, 98, by + 2, 105, by + 20, P.c, 3); // tail
+  fillEllipse(cv, 105, by + 22, 3, 5, P.c);
+}
+
+function stierHead(cv, P, { by, headDown = 0, headBack = 0, expr = 'idle' }) {
+  const hx = 24 + headBack;
+  const hy = by - 20 + headDown;
+  // neck — a short thick mass from the shoulder to a head that sits UP on it
+  for (let t = 0; t <= 16; t++) {
+    const f = t / 16;
+    const x = 34 + (hx - 34) * f;
+    const y = by - 8 + (hy + 6 - (by - 8)) * f;
+    const wd = 15 - f * 2;
+    fillEllipse(cv, x, y, wd, wd * 0.9, P.C);
+  }
+  fillEllipse(cv, 28, by - 18, 9, 6, P.H); // neck crest light
   // head mass
-  fillEllipse(cv, hx, cy, 34, 30, P.C);
-  fillEllipse(cv, hx - 3, cy - 5, 30, 23, P.H);
-  // forelock
-  for (const o of [-7, 0, 7]) fillEllipse(cv, hx + o, cy - 22 + lower * 0.3, 3, 4, P.c);
-  stierHorns(cv, P, hx, cy - 20, expr === 'telegraph' ? 3 : 0);
-  // muzzle — broad and low, wider than tall, with a dark nose band (bovine, not a snout)
-  fillRect(cv, hx - 16, cy + 10, 32, 16, P.r);
-  fillEllipse(cv, hx - 16, cy + 18, 4, 8, P.r);
-  fillEllipse(cv, hx + 16, cy + 18, 4, 8, P.r);
-  fillRect(cv, hx - 16, cy + 20, 32, 6, P.R);
-  fillRect(cv, hx - 15, cy + 9, 30, 4, P.C); // nose band
-  // nostrils: short horizontal slits, low and wide-set
-  stroke(cv, hx - 12, cy + 17, hx - 6, cy + 17, P.K, 2);
-  stroke(cv, hx + 6, cy + 17, hx + 12, cy + 17, P.K, 2);
-  if (expr === 'telegraph') {
-    for (const s of [-1, 1]) {
-      fillEllipse(cv, hx + s * 20, cy + 14, 3, 2, P.G);
-      fillEllipse(cv, hx + s * 26, cy + 9, 3, 2, P.G);
-      fillEllipse(cv, hx + s * 30, cy + 3, 2, 2, P.G);
-    }
+  fillEllipse(cv, hx, hy, 17, 15, P.C);
+  fillEllipse(cv, hx - 3, hy - 4, 13, 10, P.H);
+  fillEllipse(cv, hx + 13, hy - 3, 5, 4, P.C); // ear
+  fillEllipse(cv, hx + 14, hy - 4, 3, 2, P.H);
+  fillEllipse(cv, hx - 3, hy + 1, 5, 12, P.R); // white blaze
+  fillEllipse(cv, hx - 4, hy - 6, 3, 5, P.r);
+  // muzzle — overlaps the head, broad and low
+  fillEllipse(cv, hx - 9, hy + 12, 12, 9, P.r);
+  fillRect(cv, hx - 18, hy + 8, 16, 10, P.r);
+  fillRect(cv, hx - 18, hy + 15, 16, 3, P.R);
+  fillRect(cv, hx - 14, hy + 6, 16, 3, P.C); // noseband
+  set(cv, hx - 12, hy + 12, P.K);
+  set(cv, hx - 11, hy + 12, P.K);
+  set(cv, hx - 5, hy + 13, P.K);
+  set(cv, hx - 4, hy + 13, P.K);
+  // forelock between the horns
+  for (const o of [-3, 1, 5]) fillEllipse(cv, hx + o, hy - 13, 2, 3, P.c);
+  // horns
+  stierHorn(cv, P, hx - 8, hy - 11, -1, true);
+  stierHorn(cv, P, hx + 8, hy - 11, 1, false);
+  // one clear near eye + a small hint of the far one (3/4 view) + heavy brow
+  const narrow = expr === 'telegraph';
+  const ex = hx + 5;
+  if (expr === 'hurt' || expr === 'dead') {
+    stroke(cv, ex - 4, hy - 4, ex + 4, hy + 4, P.K, 2);
+    stroke(cv, ex - 4, hy + 4, ex + 4, hy - 4, P.K, 2);
+  } else {
+    fillEllipse(cv, ex, hy, 4, narrow ? 2 : 4, P.W);
+    fillEllipse(cv, ex - 1, hy + 1, 2, narrow ? 1.5 : 2.5, P.K);
+    set(cv, ex - 2, hy - 2, P.W);
+    fillEllipse(cv, hx - 9, hy, 2, narrow ? 1 : 2, P.W); // far eye, small
+    set(cv, hx - 10, hy + 1, P.K);
   }
-  // eyes
-  for (const s of [-1, 1]) {
-    const ex = hx + s * 15,
-      ey = cy - 2;
-    if (expr === 'hurt' || expr === 'dead') {
-      stroke(cv, ex - 6, ey - 5, ex + 6, ey + 5, P.K, 2);
-      stroke(cv, ex - 6, ey + 5, ex + 6, ey - 5, P.K, 2);
-      continue;
-    }
-    const narrow = expr === 'telegraph';
-    fillEllipse(cv, ex, ey, 8, narrow ? 4 : 9, P.W);
-    fillEllipse(cv, ex, ey + (narrow ? 0 : 2), 5, narrow ? 3 : 6, P.K);
-    set(cv, ex - 3, ey - 3, P.W);
-    set(cv, ex - 2, ey - 3, P.W);
-    set(cv, ex - 3, ey - 2, P.W);
-    // cross little brow, heavier on a telegraph
-    const b = narrow ? 4 : 2;
-    stroke(
-      cv,
-      ex - 8,
-      ey - 10 + (s < 0 ? b : -b),
-      ex + 8,
-      ey - 10 + (s < 0 ? -b : b),
-      P.c,
-      narrow ? 3 : 2,
-    );
+  // one thick angled brow ridge over the near eye
+  stroke(cv, hx - 2, hy - 6 + (narrow ? 3 : 0), hx + 12, hy - 8, P.c, narrow ? 4 : 3);
+  stroke(cv, hx - 11, hy - 4, hx - 5, hy - 5, P.c, 2); // far brow hint
+  // telegraph — steam off the nose
+  if (expr === 'telegraph') {
+    for (const s of [0, 1]) fillEllipse(cv, hx - 12 - s * 5, hy + 8 - s * 4, 3, 2, P.G);
   }
 }
 
-function stierBody(cv, P, { by, legPose = 0, telegraph = false }) {
-  // stubby legs, spaced so the gaps between them read. Tops follow the body
-  // (which `bob` raises), hooves stay planted on the ground line — so a raised
-  // body reads as the bull rising onto its legs, not hovering.
-  const front = telegraph ? [26, 46] : [24, 46];
-  const back = [78, 100];
-  const legs = [
-    [front[0], legPose === 1 ? 3 : 0],
-    [front[1], 0],
-    [back[0], 0],
-    [back[1], legPose === 2 ? 3 : 0],
-  ];
-  for (const [lx, lift] of legs) {
-    const top = by + 6 + lift;
-    fillRect(cv, lx - 5, top, 10, SGROUND - top, P.C);
-    fillRect(cv, lx - 5, top, 3, SGROUND - top, P.c); // inner shade separates the pair
-    fillRect(cv, lx - 5, SGROUND - 2, 10, 2, P.r); // hoof
-  }
-  // barrel body
-  fillEllipse(cv, 62, by - 4, 33, 18, P.C);
-  fillEllipse(cv, 58, by - 9, 26, 12, P.H);
-  // little tail
-  stroke(cv, 92, by - 10, 100, by + 6, P.c, 2);
-  fillEllipse(cv, 100, by + 7, 3, 4, P.c);
-  // flower-wreath collar across the chest
+function stierWreath(cv, P, by) {
   for (let i = 0; i < 9; i++) {
-    const ax = 34 + i * 6,
-      ay = by - 16 + Math.sin(i) * 2;
-    fillEllipse(cv, ax, ay, 3, 3, i % 2 ? P.N : P.r);
+    const ax = 20 + i * 4,
+      ay = by - 4 + Math.sin(i * 0.9) * 3;
+    fillEllipse(cv, ax, ay, 2.5, 2.5, i % 2 ? P.N : P.r);
     set(cv, ax, ay, i % 2 ? P.n : P.R);
   }
 }
 
-function stierFrame(name, { headY = 44, lower = 0, expr = 'idle', bob = 0, legPose = 0 }) {
+function stierFrame(name, { expr = 'idle', bob = 0, legPose = 0, headDown = 0, headBack = 0 }) {
   const cv = canvas(SW, SH);
   if (expr === 'dead') {
-    // collapsed on its side, lying on the ground line
-    fillEllipse(cv, 66, SGROUND - 18, 44, 18, RURAL.C);
-    fillEllipse(cv, 60, SGROUND - 24, 34, 11, RURAL.H);
-    for (const lx of [40, 54, 82, 96])
-      stroke(cv, lx, SGROUND - 26, lx + (lx < 66 ? -14 : 14), SGROUND - 40, RURAL.C, 6);
-    // head down left
-    fillEllipse(cv, 24, SGROUND - 14, 20, 15, RURAL.C);
-    stierHorns(cv, RURAL, 24, SGROUND - 26, 0);
-    fillEllipse(cv, 16, SGROUND - 8, 9, 6, RURAL.R);
-    stroke(cv, 12, SGROUND - 18, 22, SGROUND - 10, RURAL.K, 2);
-    stroke(cv, 12, SGROUND - 10, 22, SGROUND - 18, RURAL.K, 2);
+    // collapsed onto its side along the ground line
+    fillEllipse(cv, 62, SGROUND - 16, 42, 16, RURAL.C);
+    fillEllipse(cv, 56, SGROUND - 22, 32, 10, RURAL.H);
+    for (const lx of [40, 54, 78, 92])
+      stroke(cv, lx, SGROUND - 24, lx + (lx < 62 ? -12 : 12), SGROUND - 36, RURAL.C, 6);
+    fillEllipse(cv, 22, SGROUND - 12, 16, 13, RURAL.C); // head down left
+    fillEllipse(cv, 14, SGROUND - 6, 8, 5, RURAL.R); // muzzle
+    stierHorn(cv, RURAL, 24, SGROUND - 20, -1, true);
+    stierHorn(cv, RURAL, 26, SGROUND - 20, 1, false);
+    stroke(cv, 18, SGROUND - 16, 26, SGROUND - 8, RURAL.K, 2);
+    stroke(cv, 18, SGROUND - 8, 26, SGROUND - 16, RURAL.K, 2);
     inkOutline(cv, RURAL.K);
     return finish(name, cv);
   }
-  const by = 100 - bob;
-  stierBody(cv, RURAL, { by, legPose, telegraph: expr === 'telegraph' });
-  stierHead(cv, RURAL, { hy: headY - bob, lower, expr });
+  const by = SGROUND - 40 - bob;
+  stierBody(cv, RURAL, { by, legPose, tilt: expr === 'hurt' ? 3 : 0 });
+  stierWreath(cv, RURAL, by);
+  stierHead(cv, RURAL, { by, headDown, headBack, expr });
   inkOutline(cv, RURAL.K);
   return finish(name, cv);
 }
@@ -514,123 +522,308 @@ function stierFrame(name, { headY = 44, lower = 0, expr = 'idle', bob = 0, legPo
 export const STIER_FRAMES = [
   stierFrame('stier-idle', { expr: 'idle' }),
   stierFrame('stier-walk', { expr: 'idle', bob: 2, legPose: 1 }),
-  stierFrame('stier-idle-b', { expr: 'idle', bob: 1, legPose: 2, lower: 1 }),
-  stierFrame('stier-telegraph', { expr: 'telegraph', lower: 14, legPose: 1 }),
-  stierFrame('stier-hurt', { expr: 'hurt', lower: -5, bob: 3 }),
-  stierFrame('stier-death-1', { expr: 'hurt', lower: 16, bob: -3, legPose: 1 }),
+  stierFrame('stier-idle-b', { expr: 'idle', bob: 1, legPose: 2, headDown: 1 }),
+  stierFrame('stier-telegraph', { expr: 'telegraph', bob: 2, legPose: 1, headDown: 7 }),
+  stierFrame('stier-hurt', { expr: 'hurt', bob: 3, headDown: -5, headBack: 4 }),
+  stierFrame('stier-death-1', { expr: 'hurt', bob: -2, legPose: 1, headDown: 8 }),
   stierFrame('stier-death-2', { expr: 'dead' }),
 ];
 
-// ==================================================== MAIBAUM-DIEB (static)
-// Phase two: Der Stier in a low charging crouch — head thrust forward and down
-// at the left, back arched up behind — with the Maibaum-Dieb high on the hump
-// and the stolen maypole raised the full height of the canvas. A bespoke pose
-// rather than the standing parts, so the head does not swallow the body.
-const MW = 132,
-  MH = 156;
+// ==================================================== MAIBAUM-DIEB (strip)
+// Phase two (#199): the thief on foot, no bull. Player-sized and a little
+// chubby — a stocky Bua in lederhosen, flat cap pulled low, domino mask (clean
+// Alois-style eyes: white + dark-blue iris), one green feather, warm skin. This
+// is the design signed off in the option round, authored as pixel grids the
+// same way `alois.mjs` does its heads — the right tool for a small cute face.
+//
+// Facing left, feet on the bottom row, bottom-anchored (#193). The stolen pole
+// is never in these frames — `render/maibaum-view.ts` swings a cut-down weapon
+// pole in his hands (#199) — so the strip stays a small, uniform 24×34 canvas.
+const DIEB_PAL = {
+  '.': null,
+  K: RURAL.K,
+  c: RURAL.c,
+  C: RURAL.C,
+  H: RURAL.H,
+  S: RURAL.s, // skin (the warmest floor-2 tone; Alois's own e8c28c is not legal here)
+  s: RURAL.R, // skin, lit
+  W: RURAL.W, // eye white / highlight
+  E: RURAL.e, // iris (dark blue)
+  b: RURAL.b,
+  B: RURAL.B,
+  n: RURAL.n, // suspenders / feather green
+  N: RURAL.N,
+  g: RURAL.g, // Haferlschuh grey
+};
+const DIEB_W = 24,
+  DIEB_H = 34;
 
-export function maibaumDiebFrame() {
-  const P = RURAL;
-  const cv = canvas(MW, MH);
-  const ground = MH - 2; // hooves on the bottom edge — bottom-anchored (#193)
-
-  // --- stolen Maibaum, first so the rider overlaps it ---
-  const poleX = 86;
-  for (let y = 10; y < 112; y++) {
-    const phase = Math.floor((y / 5) % 2);
-    fillRect(cv, poleX - 3, y, 7, 1, phase ? P.b : P.r);
-    set(cv, poleX - 4, y, P.K);
-    set(cv, poleX + 3, y, P.K);
+/** Paints an ASCII grid onto a fixed-size canvas (its own ink is already in it). */
+function diebGrid(name, rows) {
+  const cv = canvas(DIEB_W, DIEB_H);
+  for (let y = 0; y < Math.min(rows.length, DIEB_H); y++) {
+    const row = rows[y];
+    for (let x = 0; x < Math.min(row.length, DIEB_W); x++) {
+      const col = DIEB_PAL[row[x]] ?? null;
+      if (col !== null) set(cv, x, y, col);
+    }
   }
-  fillRect(cv, poleX - 16, 24, 32, 3, P.R);
-  fillEllipse(cv, poleX - 14, 32, 3, 5, P.r);
-  fillEllipse(cv, poleX + 14, 32, 3, 5, P.r);
-  for (let a = 0; a < 64; a++) {
-    const t = (a / 64) * Math.PI * 2;
-    set(cv, poleX + Math.cos(t) * 18, 44 + Math.sin(t) * 10, a % 3 ? P.n : P.N);
-    set(cv, poleX + Math.cos(t) * 15, 44 + Math.sin(t) * 7, a % 4 ? P.n : P.r);
-  }
-  stroke(cv, poleX, 28, poleX - 22, 72, P.b, 2);
-  stroke(cv, poleX, 28, poleX + 18, 62, P.r, 2);
-  stroke(cv, poleX, 28, poleX - 10, 90, P.R, 1);
-  stroke(cv, poleX, 8, poleX, 18, P.R, 2);
-  fillEllipse(cv, poleX, 8, 3, 3, P.n);
-
-  // --- Der Stier, charging crouch ---
-  // back legs planted, front legs braced low
-  for (const [lx, ly, h] of [
-    [38, ground - 24, 24],
-    [58, ground - 22, 22],
-    [96, ground - 30, 30],
-    [112, ground - 28, 28],
-  ]) {
-    fillRect(cv, lx - 5, ly, 10, h, P.C);
-    fillRect(cv, lx - 5, ly, 3, h, P.c);
-    fillRect(cv, lx - 5, ly + h - 2, 10, 2, P.r);
-  }
-  // arched body rising to a hump behind the shoulders
-  fillEllipse(cv, 74, ground - 44, 42, 26, P.C);
-  fillEllipse(cv, 80, ground - 54, 26, 18, P.c); // hump
-  fillEllipse(cv, 68, ground - 50, 30, 16, P.H); // top light
-  stroke(cv, 112, ground - 54, 122, ground - 30, P.c, 2); // tail
-  // thick neck sweeping down-left to the lowered head
-  fillEllipse(cv, 48, ground - 40, 20, 20, P.C);
-  // lowered head, horns leading
-  const hx = 30,
-    hy = ground - 34;
-  fillEllipse(cv, hx, hy, 22, 19, P.C);
-  fillEllipse(cv, hx - 2, hy - 3, 18, 13, P.H);
-  fillRect(cv, hx - 13, hy + 6, 22, 12, P.r); // broad muzzle
-  fillRect(cv, hx - 12, hy + 5, 20, 3, P.c);
-  stroke(cv, hx - 9, hy + 11, hx - 4, hy + 11, P.K, 2);
-  stroke(cv, hx + 3, hy + 11, hx + 8, hy + 11, P.K, 2);
-  // forward-swept horns
-  for (const dy2 of [0]) void dy2;
-  stroke(cv, hx + 6, hy - 12, hx - 20, hy - 8, P.r, 4);
-  stroke(cv, hx - 20, hy - 8, hx - 30, hy + 2, P.R, 3);
-  stroke(cv, hx + 10, hy - 8, hx - 6, hy - 20, P.r, 4);
-  stroke(cv, hx - 6, hy - 20, hx - 12, hy - 28, P.R, 3);
-  // small furious eyes
-  for (const s of [-1, 1]) {
-    stroke(cv, hx + s * 2 - 5, hy - 6, hx + s * 2 + 5, hy - 2, P.K, 2);
-    set(cv, hx + s * 2, hy - 5, P.W);
-  }
-  // steam
-  for (const s of [-1, 1]) {
-    fillEllipse(cv, hx + s * 16, hy + 6, 3, 2, P.G);
-    fillEllipse(cv, hx + s * 22, hy, 2, 2, P.G);
-  }
-
-  // --- the Maibaum-Dieb, high on the hump ---
-  const dx = 74,
-    dyy = ground - 66;
-  stroke(cv, dx - 3, dyy + 5, dx - 12, dyy + 16, P.b, 4);
-  stroke(cv, dx + 4, dyy + 5, dx + 13, dyy + 16, P.b, 4);
-  fillEllipse(cv, dx, dyy - 2, 8, 12, P.b);
-  fillEllipse(cv, dx - 1, dyy - 3, 6, 9, P.B);
-  fillRect(cv, dx - 5, dyy - 11, 10, 3, P.r);
-  fillEllipse(cv, dx, dyy - 17, 6, 6, P.R);
-  set(cv, dx - 2, dyy - 17, P.K);
-  set(cv, dx + 2, dyy - 17, P.K);
-  stroke(cv, dx - 3, dyy - 14, dx + 3, dyy - 14, P.c, 1);
-  fillEllipse(cv, dx, dyy - 22, 7, 2, P.n);
-  fillEllipse(cv, dx + 1, dyy - 25, 3, 4, P.n);
-  set(cv, dx + 4, dyy - 25, P.r);
-  stroke(cv, dx - 4, dyy - 4, poleX - 3, 86, P.b, 3);
-  stroke(cv, dx + 5, dyy - 7, poleX + 2, 66, P.b, 3);
-
-  inkOutline(cv, P.K);
-  return finish('der-stier-maibaum-dieb', cv);
+  return finish(name, cv);
 }
+
+// prettier-ignore
+const DIEB_IDLE = [
+  '.........KKKKKKK.........',
+  '.......KKCCCCCCCKK.......',
+  '.....KKCCHHHHHHHCCKKKKK..',
+  '...KKCCCCCCCCCCCCCK.KnK..',
+  '..KKHHHHHHHHHHHHHHKKKNK..',
+  '.KKCCCCCCCCCCCCCCCCKKNK..',
+  '.KKKKKKKKKKKKKKKKKKK.NK..',
+  '...KSSSSssssssSSSSK.K....',
+  '...KSSKKKSSSSKKKSSK......',
+  '...KCCCCCCCCCCCCCCK......',
+  '...KCWEsCCCCCCWEsCK......',
+  '...KCWEECCCCCCWEECK......',
+  '...KKCCCCCCCCCCCCKK......',
+  '....KSSSSSKKSSSSSK.......',
+  '....KSSSSSSSSSSSSK.......',
+  '....KsSSSSSSSSSSsK.......',
+  '.....KSScKKKKcSSSK.......',
+  '.....KSSSSssSSSSK........',
+  '......KKSSSSSSKK.........',
+  '........KSs.sSK..........',
+  '......KKbbBBBBbbKK.......',
+  '.....KbBBBBBBBBBBbK......',
+  '....KSKnBBBBBBBBnKSK.....',
+  '...KSSKbBBBBBBBBKSSK.....',
+  '...KSSK.bBBBBBB.KSSK.....',
+  '...KK..KCCCCCCCCK..KK....',
+  '.......KCHHHHHHHCK.......',
+  '.......KCHsHHsHHCK.......',
+  '.......KCccccccccK.......',
+  '.......KSSsK.KsSSK.......',
+  '.......KSSSK.KSSSK.......',
+  '......KKggKK.KKggKK......',
+  '......KKKKK...KKKKK......',
+  '........................',
+];
+
+// walk: forward foot, trailing foot, a one-row head bob.
+// prettier-ignore
+const DIEB_WALK = [
+  '........................',
+  '.........KKKKKKK.........',
+  '.......KKCCCCCCCKK.......',
+  '.....KKCCHHHHHHHCCKKKKK..',
+  '...KKCCCCCCCCCCCCCK.KnK..',
+  '..KKHHHHHHHHHHHHHHKKKNK..',
+  '.KKCCCCCCCCCCCCCCCCKKNK..',
+  '.KKKKKKKKKKKKKKKKKKK.NK..',
+  '...KSSSSssssssSSSSK.K....',
+  '...KSSKKKSSSSKKKSSK......',
+  '...KCCCCCCCCCCCCCCK......',
+  '...KCWEsCCCCCCWEsCK......',
+  '...KCWEECCCCCCWEECK......',
+  '...KKCCCCCCCCCCCCKK......',
+  '....KSSSSSKKSSSSSK.......',
+  '....KSSSSSSSSSSSSK.......',
+  '....KsSSSSSSSSSSsK.......',
+  '.....KSScKKKKcSSSK.......',
+  '.....KSSSSssSSSSK........',
+  '......KKSSSSSSKK.........',
+  '........KSs.sSK..........',
+  '......KKbbBBBBbbKK.......',
+  '.....KbBBBBBBBBBBbK......',
+  '....KSKnBBBBBBBBnKSK.....',
+  '...KSSKbBBBBBBBBKSSK.....',
+  '...KSSK.bBBBBBB.KSSK.....',
+  '...KK..KCCCCCCCCK..KK....',
+  '.......KCHHHHHHHCK.......',
+  '.......KCHsHHsHHCK.......',
+  '......KCccccccccK........',
+  '.....KSSsK....KsSSK......',
+  '.....KSSSK....KSSSK......',
+  '....KKggKK....KKggKK.....',
+  '....KKKKK......KKKKK.....',
+];
+
+// telegraph: brow up hard, near arm cocked the pole back over the far shoulder.
+// prettier-ignore
+const DIEB_TELE = [
+  '...KK....KKKKKKK.........',
+  '..KSSK.KKCCCCCCCKK.......',
+  '..KSSKKCCHHHHHHHCCKKKKK..',
+  '...KKKCCCCCCCCCCCCK.KnK..',
+  '..KKHHHHHHHHHHHHHHKKKNK..',
+  '.KKCCCCCCCCCCCCCCCCKKNK..',
+  '.KKKKKKKKKKKKKKKKKKK.NK..',
+  '...KSSKKKSSSSKKKSSK.K....',
+  '...KSSSSssssssSSSSK......',
+  '...KCCCCCCCCCCCCCCK......',
+  '...KCWEECCCCCCWEECK......',
+  '...KCWEECCCCCCWEECK......',
+  '...KKCCCCCCCCCCCCKK......',
+  '....KSSSSSKKSSSSSK.......',
+  '....KSSSSSSSSSSSSK.......',
+  '....KsSSSSSSSSSSsK.......',
+  '.....KSScccccSSSK.......',
+  '.....KSSSSSSSSSSK........',
+  '......KKSSSSSSKK.........',
+  '........sSKsS............',
+  '......KKbbBBBBbbKKK......',
+  '.....KbBBBBBBBBBBbKSK....',
+  '....KSKnBBBBBBBBnKSSK....',
+  '...KSSKbBBBBBBBBKSSK.....',
+  '...KSSK.bBBBBBB.KK.......',
+  '...KK..KCCCCCCCCK..KK....',
+  '.......KCHHHHHHHCK.......',
+  '.......KCHsHHsHHCK.......',
+  '.......KCccccccccK.......',
+  '......KSSsK..KsSSK.......',
+  '.......KSSK..KSSSK.......',
+  '.....KKggKK..KKggKK......',
+  '.....KKKKK....KKKKK......',
+  '........................',
+];
+
+// hurt: eyes screwed to X's, head knocked back-right, arms flung out.
+// prettier-ignore
+const DIEB_HURT = [
+  '.........KKKKKKK.........',
+  '.......KKCCCCCCCKK.......',
+  '.....KKCCHHHHHHHCCKKKKK..',
+  '...KKCCCCCCCCCCCCCK.KnK..',
+  '..KKHHHHHHHHHHHHHHKKKNK..',
+  '.KKCCCCCCCCCCCCCCCCKKNK..',
+  '.KKKKKKKKKKKKKKKKKKK.NK..',
+  '...KSSSSSSSSSSSSSSK.K....',
+  '...KSSKKSSSSSSKKSSK......',
+  '...KCKCKCCCCKCKCCK.......',
+  '...KCCKCCCCCCKCCCK.......',
+  '...KCKCKCCCCKCKCCK.......',
+  '...KKCCCCCCCCCCCKK.......',
+  '....KSSSSSSSSSSSK........',
+  '....KSSSSSSSSSSSK........',
+  '....KsSSSSSSSSSsK........',
+  '.....KSSSSccSSSK.........',
+  '.....KSSSSSSSSSK.........',
+  '......KKSSSSSSKK.........',
+  '.......sSK.KSs...........',
+  '...KKKbbBBBBbbKKK........',
+  '..KSKbBBBBBBBBBBbKSK.....',
+  '..KSSKnBBBBBBBBnKSSK.....',
+  '...KK.bBBBBBBBBK.KK......',
+  '.....KbBBBBBBBBK.........',
+  '...KK..KCCCCCCCCK..KK....',
+  '.......KCHHHHHHHCK.......',
+  '.......KCHsHHsHHCK.......',
+  '.......KCccccccccK.......',
+  '......KSSsK..KsSSK.......',
+  '......KSSSK..KSSSK.......',
+  '.....KKggKK..KKggKK......',
+  '.....KKKKK....KKKKK......',
+  '........................',
+];
+
+// death-1: same X-eyed head but crumpling — knees buckled, sinking.
+// prettier-ignore
+const DIEB_DEATH1 = [
+  '........................',
+  '........................',
+  '.........KKKKKKK.........',
+  '.......KKCCCCCCCKK.......',
+  '.....KKCCHHHHHHHCCKKKKK..',
+  '...KKCCCCCCCCCCCCCK.KnK..',
+  '..KKHHHHHHHHHHHHHHKKKNK..',
+  '.KKCCCCCCCCCCCCCCCCKKNK..',
+  '.KKKKKKKKKKKKKKKKKKK.NK..',
+  '...KSSSSSSSSSSSSSSK.K....',
+  '...KCKCKCCCCKCKCCK.......',
+  '...KCCKCCCCCCKCCCK.......',
+  '...KCKCKCCCCKCKCCK.......',
+  '...KKCCCCCCCCCCCKK.......',
+  '....KSSSSSSSSSSSK........',
+  '....KsSSSSSSSSSsK........',
+  '.....KSSSSccSSSK.........',
+  '.....KKSSSSSSKK..........',
+  '...KKKbbBBBBbbKKK........',
+  '..KSKbBBBBBBBBBBbKSK.....',
+  '...KKnBBBBBBBBnKK........',
+  '.....bBBBBBBBBK..........',
+  '.....KbBBBBBBBK..........',
+  '......KCCCCCCCCK.........',
+  '......KCHHHHHHHCK........',
+  '......KCccccccccK........',
+  '.....KSSSK..KSSSK........',
+  '.....KSSSK..KSSSK........',
+  '....KKggKK..KKggKK.......',
+  '....KKKKK....KKKKK.......',
+  '........................',
+  '........................',
+  '........................',
+  '........................',
+];
+
+// death-2: flat on his back, cap knocked off to the side.
+// prettier-ignore
+const DIEB_DEATH2 = [
+  '........................',
+  '........................',
+  '........................',
+  '........................',
+  '........................',
+  '........................',
+  '........................',
+  '........................',
+  '........................',
+  '........................',
+  '........................',
+  '........................',
+  '........................',
+  '..............KKK.......',
+  '....KKKK....KKCCCKK.....',
+  '..KKCHHCKK.KCCHHHCCK....',
+  '.KCCCCCCCCK.KCCCCCCK....',
+  '.KbBBBBBBbK..KKKKKK.....',
+  'KbBBBBBBBBbK.SSSS.......',
+  'KbBBnBBnBBbKKSssSK......',
+  'KbBBBBBBBBbKKSKKSK......',
+  '.KCCCCCCCCK.KKssKK......',
+  '.KCHHHHHHCK.............',
+  '.KCccccccK.............',
+  '..KSK..KSK.............',
+  '..KSK..KSK.............',
+  '.KKgKK.KKgKK...........',
+  '.KKKK..KKKK............',
+  '........................',
+  '........................',
+  '........................',
+  '........................',
+  '........................',
+  '........................',
+];
+
+// idle-b: the whole body settled a pixel lower — a slow breath.
+const DIEB_IDLE_B = ['........................', ...DIEB_IDLE.slice(0, DIEB_H - 1)];
+
+export const DIEB_FRAMES = [
+  diebGrid('dieb-idle', DIEB_IDLE),
+  diebGrid('dieb-walk', DIEB_WALK),
+  diebGrid('dieb-idle-b', DIEB_IDLE_B),
+  diebGrid('dieb-telegraph', DIEB_TELE),
+  diebGrid('dieb-hurt', DIEB_HURT),
+  diebGrid('dieb-death-1', DIEB_DEATH1),
+  diebGrid('dieb-death-2', DIEB_DEATH2),
+];
 
 // ------------------------------------------------------------------ exports
 export const STRIPS = {
   'grosse-kellerassel': KELLERASSEL_FRAMES,
   'der-stier': STIER_FRAMES,
+  'der-stier-maibaum-dieb': DIEB_FRAMES,
 };
-export const SINGLES = {
-  'der-stier-maibaum-dieb': maibaumDiebFrame(),
-};
+export const SINGLES = {};
 
 /** Which floor bucket each strip/single is authored against. */
 export const BOSS_BUCKETS = {
