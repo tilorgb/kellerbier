@@ -1,5 +1,5 @@
 import { Container, type Graphics, type Texture } from 'pixi.js';
-import { ROOM_TRANSITION_TICKS, type GameSim } from '../sim/game/sim.js';
+import { ROOM_TRANSITION_TICKS, type GameSim, type RoomDirection } from '../sim/game/sim.js';
 import { roomFrameSize, type RoomGeometry } from '../sim/room/geometry.js';
 import { PLAYFIELD_HEIGHT, PLAYFIELD_WIDTH } from '../sim/room/playground.js';
 import type { CompiledDoor } from '../sim/room/template.js';
@@ -14,6 +14,7 @@ import {
   createDoorView,
   createRoomView,
   createSecretHintView,
+  type DoorState,
   type DoorTextures,
   type DoorView,
 } from './room.js';
@@ -123,26 +124,25 @@ const DOOR_TRANSITION_FRAMES = 12;
 const DOOR_TRANSITION_MIN_SCALE = 0.08;
 
 /**
- * Scales every door tile in `view` along its own depth axis — the axis
- * `render/room.ts`'s `createDoorView` already anchors each sprite's centre
- * on, so shrinking it reads as the door retracting into the wall rather than
- * squashing toward a corner. `1` is the door drawn at rest; the open/close
- * transition sweeps this from `DOOR_TRANSITION_MIN_SCALE` up to `1` (or back)
- * over `DOOR_TRANSITION_FRAMES`.
+ * Slides every door half in `view` apart from its partner along the
+ * doorway's long axis — that axis is each sprite's own local x once its
+ * `rotation` is applied (`render/room.ts`'s `doorHalfPlacements`), so this
+ * only ever scales `scale.x`, toward the `anchor` at the sprite's outer edge.
+ * A north/south door parts sideways, a west/east door up and down ("Isaac
+ * like", `#196`). `1` is the door at rest; the transition sweeps this from
+ * `DOOR_TRANSITION_MIN_SCALE` up to `1` (or back) over
+ * `DOOR_TRANSITION_FRAMES`.
  *
- * `progress` is a fraction of each sprite's own `baseScale`
- * (`createDoorView`'s `tileGridScale`), not the on-screen scale outright —
- * the door textures are authored at 32px, so `baseScale` is `0.5`, and
- * assigning `progress` (which reaches `1` at rest) straight to the axis left
- * a fully-open door twice its correct height/width on that axis.
+ * `retractSign` carries the half's mirror (`-1` for the left/near half) and
+ * `baseScale` the 32px→tile-grid factor (`docs/DECISIONS.md` #48), both
+ * rebuilt into `scale.x` here rather than nudged — `progress` reaches `1` at
+ * rest, and a bare `1` would be double the sprite's real on-screen size.
+ * `scale.y` is left alone: `doorHalfPlacements` may have set it negative (a
+ * south door's vertical flip), and the slide never touches the short axis.
  */
 function applyDoorSwingScale(view: DoorView, progress: number): void {
-  for (const { sprite, horizontal, baseScale } of view.sprites) {
-    if (horizontal) {
-      sprite.scale.y = baseScale * progress;
-    } else {
-      sprite.scale.x = baseScale * progress;
-    }
+  for (const { sprite, retractSign, baseScale } of view.sprites) {
+    sprite.scale.x = retractSign * baseScale * progress;
   }
 }
 
@@ -185,6 +185,13 @@ export class GameView {
   private previousDoorView: DoorView | undefined;
   private doorTransitionTicks = 0;
   private doorsLocked: boolean;
+  /**
+   * Doorways that lead to an unopened key-locked treasure room (`#196`) —
+   * set by `app/main.ts` (which has the floor plan) on every room load, and
+   * drawn `locked` instead of `open` once the room's own enemies are down.
+   * Empty on a room with no such neighbour, which is almost every room.
+   */
+  private lockedDoorDirections: ReadonlySet<RoomDirection> = new Set();
   private secretHintView: Graphics;
   private secretHintDoors: readonly CompiledDoor[] = [];
 
@@ -246,7 +253,12 @@ export class GameView {
     this.roomView = createRoomView(sim.room, sim.currentFloor, this.roomTiles[sim.currentFloor]);
     this.world.addChild(this.roomView);
     this.doorsLocked = sim.doorsLocked;
-    this.doorView = createDoorView(sim.room, sim.doors, this.doorsLocked, this.doorTextures);
+    this.doorView = createDoorView(
+      sim.room,
+      sim.doors,
+      this.doorStateFor.bind(this),
+      this.doorTextures,
+    );
     this.world.addChild(this.doorView.container);
     this.secretHintView = createSecretHintView(sim.room, []);
     this.world.addChild(this.secretHintView);
@@ -364,7 +376,7 @@ export class GameView {
       const nextDoorView = createDoorView(
         this.roomGeometry,
         this.sim.doors,
-        this.doorsLocked,
+        this.doorStateFor.bind(this),
         this.doorTextures,
       );
       // A swing animation needs the outgoing sprites kept around to animate
@@ -595,6 +607,42 @@ export class GameView {
     this.secretHintView.destroy();
     this.secretHintView = createSecretHintView(this.roomGeometry, doors);
     this.world.addChildAt(this.secretHintView, 2);
+  }
+
+  /**
+   * The doorways that lead to an unopened key-locked treasure room (`#196`).
+   * Called by `app/main.ts` on every room load — it is the side that has the
+   * floor plan and the visited-room set; `GameSim` only knows the door
+   * geometry. Rebuilds the door layer in place (no slide — this is a load-time
+   * fact, not a state change a player watches happen) when the set actually
+   * changes and nothing is mid-transition.
+   */
+  setLockedDoors(directions: Iterable<RoomDirection>): void {
+    const next = new Set(directions);
+    const same =
+      next.size === this.lockedDoorDirections.size &&
+      [...next].every((d) => this.lockedDoorDirections.has(d));
+    this.lockedDoorDirections = next;
+    if (same || this.doorTransitionTicks > 0) {
+      return;
+    }
+    this.world.removeChild(this.doorView.container);
+    this.doorView.container.destroy();
+    this.doorView = createDoorView(
+      this.roomGeometry,
+      this.sim.doors,
+      this.doorStateFor.bind(this),
+      this.doorTextures,
+    );
+    this.world.addChildAt(this.doorView.container, 1);
+  }
+
+  /** Which of `open`/`closed`/`locked` a given door draws in this frame. */
+  private doorStateFor(door: CompiledDoor): DoorState {
+    if (this.doorsLocked) {
+      return 'closed';
+    }
+    return this.lockedDoorDirections.has(door.direction) ? 'locked' : 'open';
   }
 
   /**

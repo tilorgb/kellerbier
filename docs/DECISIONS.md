@@ -2619,6 +2619,47 @@ Die Große Kellerassel, Der Stier and the Maibaum-Dieb are composed from
 re-posed body — and "a Kellerassel belongs in the editor" now means the *floor* Kellerassel,
 not the boss. The scale that came with the win is #56.
 
+**Amendment (M8, #196): the tiles get a contrast hierarchy, and it runs the other way.**
+Every other redraw in this set brings a sprite *up* to the chibi direction. The tileset is
+the opposite job: a chibi foreground only reads because it is the boldest thing on screen, and
+a background drawn with the same hard `#000000` ink and the same confident shapes takes that
+away — the room becomes a colouring book. So the wall/lip/floor tiles were redrawn *quieter*,
+and the three-tier rule floors 3-7 inherit is:
+
+- **Background surface** (`*-wall`, `*-floor`/`*-floor-*`): the darkest mark is the floor's own
+  darkest background swatch (`tools/art/palette.mjs`'s `floorBackgroundSwatches`), **never**
+  `#000000` or the `#1c1a1f` near-black. Internal value spread is at most one step of that
+  palette. Texture is sparse and seam-safe — a wall that reads fine as one tile and busy tiled
+  across a room (Der Keller's old diagonal `cellar-floor`, the hard mortar courses) is the
+  specific failure this fixes. The wall band behind everything also grew a `bleed` margin — it
+  tiles a few cells past the frame on every side, *equally*, so a letterboxed viewport shows
+  wall rather than a hard edge and the same amount of it top and bottom (a `0..frame` fill sat
+  flush at the top and overshot at the bottom, which read as the room being off-centre).
+- **Prop / obstacle / boundary** (`*-hedge-block`; `cellar-plank` by the same rule though it
+  was out of #196's scope; and — the one background tile that moved up a tier — the
+  **wall-lip**): middle weight. One step of `#1c1a1f` near-black on form-defining edges,
+  moderate internal contrast. The wall-lip stopped being a flat value bar: it is the built
+  wall the doors are set into, so it carries real material (Der Keller's `cellar-wall-lip` is a
+  rubble-stone footing, Dorf & Acker's `rural-wall-lip` the base of a trimmed hedge), authored
+  lit-top / contact-shadow-bottom. `render/room.ts` lays it as a **continuous tiling band**
+  along each edge — turned a quarter per edge so the shadow always meets the floor — covering
+  exactly the interior span and no more; a band rather than a row of discrete tiles so there is
+  no cell grid for a door sprite to sit half a cell out of. The corner cells beyond get a
+  dedicated `*-wall-lip-corner` tile (rotated from a north-west master): a solid, most-shadowed
+  block of the wall material with no straight contact-shadow edge, because a corner cell
+  touches the floor only at its one diagonal point. The bare 1px `wallEdge` stroke it replaces
+  is kept only for a floor with no tile art at all.
+- **Foreground** (doors, Alois, the roster): unchanged. Full `#000000`, full value range. The
+  door is the one tile in #196's scope that kept foreground ink weight, because a door is a
+  thing the player walks at deliberately, not a surface (see #58).
+
+Composition changed, not palette — every redrawn tile is built from the same
+`FLOOR_PALETTES` colours it was, so `FLOOR_BACKGROUND_SWATCHES` and the projectile-legibility
+gate (`tools/art/contrast.mjs`, #39) did not move. `tools/art/spec.mjs`/`validate.mjs` are
+untouched; the tiles stayed 32×32 (#48/#49 already settled size, and a finer 1:1 grid buys
+composition room, not resolution). Floors 3-7 author their tiles to this hierarchy from the
+start.
+
 ## 56. A boss is its own enemy size class, drawn taller than its collider and standing on it
 
 **Decided:** M8, #193, alongside #55's boss amendment. "Bosses can be bigger — 20-25% of the
@@ -2712,3 +2753,48 @@ content-driven branch on room state has `whenPropWithin`/`whenPropBeyond` and `a
 reach for, and any melee mob has `meleeArc`. A graceful-degradation note: a
 `meleeArc`/`grabProp`/`approachProp` that names a prop kind no floor authors is a typo, and
 throws at registry construction rather than producing a boss that never attacks.
+
+## 58. A door is a half-tile mirrored into a whole, it parts along the doorway, and it has three states
+
+**Decided:** M8, #196. The door was the one tile in that issue's scope that is *not*
+background — a thing the player walks at on purpose, with states they must tell apart across a
+room — so it kept the foreground's hard `#000000` ink while the walls and floors went quiet
+(#55's amendment). Three things changed.
+
+**One texture is half a door; the renderer makes the whole.** Before this, `door-closed`/
+`door-open` were each drawn *twice* side by side across the 24-unit gap, and the old
+concentric-square art tiled that way read as two holes rather than one door. Now each texture
+is the **right half** — seam on its left edge, a light stone frame post on its right,
+room-facing edge along the bottom — and `render/room.ts`'s `createDoorView` draws it on the
+right of the doorway and a horizontally-mirrored copy on the left. The leaf is near-black
+(`#1c1a1f`) iron with beveled panel bands and rivets, deliberately darker than any wall it sits
+in so a shut door reads against grey concrete and green hedge alike; the light frame post rims
+it. `doorHalfPlacements` is the pure function that
+positions and orients the two halves; its per-direction `scaleX`/`scaleY`/`rotation` were
+derived by hand from Pixi's `anchor:(1,1)` transform and are locked by
+`tests/unit/door-layout.test.ts`, because getting a mirror, a quarter-turn and a retract to
+share one sprite was the whole of the fiddliness.
+
+**It parts along the doorway's long axis, not its depth.** The old open/close transition
+scaled each tile on its depth axis — a north door's tiles got shorter top-to-bottom. Now the
+two halves slide *apart* toward opposite walls: a north/south door parts sideways, a west/east
+door parts up and down, the way an Isaac door does. That axis is always the sprite's own local
+x once its `rotation` is applied, so `render/view.ts`'s `applyDoorSwingScale` only ever touches
+`scale.x`, rebuilding it from a stored `retractSign` (the mirror) and `baseScale`.
+
+**`locked` is a third state, and it needed plumbing the sim doesn't have.** A key-locked
+treasure room (`metadata.keyLocked`, one room today: `cellar-treasure-locked.json`) used to
+show a doorway identical to any free door — you learned it was locked by walking into it.
+`GameSim` only knows door *geometry*, not what template sits on the far side, so
+`app/main.ts`'s `lockedDoorsFor` (it has the floor plan) computes which of the current room's
+doorways lead to an unopened key-locked room and hands them to `GameView.setLockedDoors`;
+`doorStateFor` then draws those `locked` instead of `open` once the room's own enemies are
+down. `door-locked.png` is a new `common` tile — the closed leaf with a padlock across the
+seam. Per `docs/DECISIONS.md` #19 it is optional: a texture set without it falls the `locked`
+state back to `closed`, never throws mid-transition.
+
+**Constrains:** floors 3-7 share these three door tiles (they are `common`, not per-floor) and
+inherit the half-tile/mirror/rotate model; a floor that wants its own door art authors three
+right-half textures to the same contract. `DoorTextures` gained an optional `locked`, and
+`doorTexturesFrom` treats a missing `door-locked.png` as fine while still requiring
+`open`+`closed`.

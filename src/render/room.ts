@@ -1,4 +1,4 @@
-import { Container, Graphics, Sprite, type Texture } from 'pixi.js';
+import { Container, Graphics, Sprite, TilingSprite, type Texture } from 'pixi.js';
 import { ROOM_TILE_UNITS } from '../content/rooms/definition.js';
 import { BLOCK_STRIDE, DOOR_SPAN, roomFrameSize, type RoomGeometry } from '../sim/room/geometry.js';
 import { doorCentre, type CompiledDoor } from '../sim/room/template.js';
@@ -89,6 +89,67 @@ function tileRect(
 }
 
 /**
+ * The wall-boundary ("lip") course along all four edges of the room's
+ * interior box, plus a dedicated corner piece at each of the four corners
+ * (#196) — the built wall the doors sit in.
+ *
+ * `edge` is authored lit-top / contact-shadow-bottom (a wall face seen
+ * head-on against the north wall); it is drawn as a **continuous** tiling
+ * band along each edge, turned a quarter so the shadow always lands against
+ * the floor — north unturned, south flipped, west/east rotated. A band, not a
+ * row of discrete tiles, so there is no tile grid for a door sprite to sit
+ * half a cell out of, and no seam to align.
+ *
+ * Each band covers *exactly* the room's interior span (`minX..maxX` /
+ * `minY..maxY`) and stops there. The corner cells beyond are filled by
+ * `corner`, authored for the north-west corner as a solid block of the wall
+ * material darkening toward the room's inner corner point — no straight
+ * contact-shadow edge, because a corner cell touches the floor only at that
+ * one diagonal point. Rotated a quarter per corner clockwise around the room.
+ */
+function tileLipEdges(
+  container: Container,
+  edge: Texture,
+  corner: Texture,
+  room: RoomGeometry,
+): void {
+  const t = ROOM_TILE_UNITS;
+  const half = t / 2;
+  const scale = tileGridScale(edge); // 32px texture → a 16-unit course
+
+  // One edge band. `along` is the interior span it runs; `depth` is `t`. It is
+  // placed by its own top-left corner (`anchor 0,0`) and `rotation` swings
+  // that corner's two axes onto the wall — see each call for the pivot point.
+  const band = (along: number, px: number, py: number, rotation: number): void => {
+    const strip = new TilingSprite({ texture: edge, width: along, height: t });
+    strip.tileScale.set(scale); // 32px texture repeats every `t` (16) local units
+    strip.anchor.set(0, 0);
+    strip.rotation = rotation;
+    strip.position.set(px, py);
+    container.addChild(strip);
+  };
+  const spanX = room.maxX - room.minX;
+  const spanY = room.maxY - room.minY;
+  band(spanX, room.minX, room.minY - t, 0); // north: fills x[minX,maxX] y[minY-t,minY]
+  band(spanX, room.maxX, room.maxY + t, Math.PI); // south: 180° swings back over x[minX,maxX] y[maxY,maxY+t]
+  band(spanY, room.minX - t, room.maxY, -Math.PI / 2); // west: -90° → x[minX-t,minX] y[minY,maxY]
+  band(spanY, room.maxX + t, room.minY, Math.PI / 2); // east: +90° → x[maxX,maxX+t] y[minY,maxY]
+
+  const spin = (cx: number, cy: number, rotation: number): void => {
+    const tile = new Sprite(corner);
+    tile.anchor.set(0.5);
+    tile.scale.set(tileGridScale(corner));
+    tile.rotation = rotation;
+    tile.position.set(cx, cy);
+    container.addChild(tile);
+  };
+  spin(room.minX - half, room.minY - half, 0); // NW
+  spin(room.maxX + half, room.minY - half, Math.PI / 2); // NE
+  spin(room.maxX + half, room.maxY + half, Math.PI); // SE
+  spin(room.minX - half, room.maxY + half, -Math.PI / 2); // SW
+}
+
+/**
  * Draws a room once, into a static container.
  *
  * Room geometry does not change while the room is loaded, so this is built at
@@ -109,8 +170,14 @@ export function createRoomView(
   const palette = roomThemeForFloor(floorNumber);
 
   const frame = roomFrameSize(room);
+  // The wall extends this far past the frame on every side, so a letterboxed
+  // viewport (a window that is not exactly the internal aspect ratio) shows
+  // wall rather than a hard edge, and shows the *same* amount on opposite
+  // sides — a bare `0..frame` fill sat flush at the top and overshot at the
+  // bottom, which read as the room being off-centre (#196).
+  const bleed = ROOM_TILE_UNITS * 4;
   const floor = new Graphics();
-  floor.rect(0, 0, frame.width, frame.height).fill(palette.wall);
+  floor.rect(-bleed, -bleed, frame.width + bleed * 2, frame.height + bleed * 2).fill(palette.wall);
   floor
     .rect(room.minX, room.minY, room.maxX - room.minX, room.maxY - room.minY)
     .fill(palette.floor);
@@ -121,21 +188,12 @@ export function createRoomView(
     // top of it below. Real wall art at last: `cellar-wall.png` was authored
     // in #35 and floor 1 drew a flat grey rectangle over it for two
     // milestones (#152).
-    tileRect(container, tileArt.wall, 0, 0, frame.width, frame.height);
-    // One course of "lip" along the wall the player is looking at — the north
-    // band's inner edge, where the wall meets the floor. Only the north side:
-    // the lip is authored with its highlight along the *bottom* of the tile,
-    // which is only the right way up against a wall face seen from the front.
-    // The other three edges keep the 1px `wallEdge` stroke below for
-    // definition, which is what they had and all they need.
-    tileRect(
-      container,
-      tileArt.wallLip,
-      room.minX,
-      room.minY - ROOM_TILE_UNITS,
-      room.maxX,
-      room.minY,
-    );
+    tileRect(container, tileArt.wall, -bleed, -bleed, frame.width + bleed, frame.height + bleed);
+    // The wall-boundary course — a continuous tiling band along every edge
+    // where the wall meets the floor, with a dedicated corner piece at each
+    // corner (#196). The built wall the doors are set into; it reads as a
+    // framed room rather than a rectangle drawn on a field.
+    tileLipEdges(container, tileArt.wallLip, tileArt.wallLipCorner, room);
     // The wall band above just tiled over the *whole* frame, interior
     // included, so it painted over the flat `palette.floor` fill drawn a few
     // lines up. That fill is exactly what the floor-variant sprites below are
@@ -192,13 +250,16 @@ export function createRoomView(
     }
   }
 
-  // The playfield outline goes on last of the ground layers, so a tile drawn
-  // right up to the edge does not paint over the one line that separates
-  // floor from wall on the three sides with no lip course.
-  container
-    .addChild(new Graphics())
-    .rect(room.minX, room.minY, room.maxX - room.minX, room.maxY - room.minY)
-    .stroke({ width: 1, color: palette.wallEdge, alignment: 0 });
+  // The playfield outline — the floor/wall separation for a floor with no
+  // tile art (every floor but 1 and 2 today). With a tileset the lip course
+  // above already draws that separation on all four edges, so the bare line
+  // would just be a second, harder edge on top of it.
+  if (tileArt === undefined) {
+    container
+      .addChild(new Graphics())
+      .rect(room.minX, room.minY, room.maxX - room.minX, room.maxY - room.minY)
+      .stroke({ width: 1, color: palette.wallEdge, alignment: 0 });
+  }
 
   const puddles = new Graphics();
   for (let puddle = 0; puddle < room.puddleCount; puddle++) {
@@ -284,30 +345,47 @@ function isVoidRect(
   );
 }
 
-/** The two door sprites a room draws its doorways with (#152). */
+/**
+ * The door sprites a room draws its doorways with (#152, #196).
+ *
+ * `open`/`closed` are the two states every door has; `locked` is the third
+ * (#196) — a doorway into a key-locked treasure room (`metadata.keyLocked`)
+ * that a player has not opened yet. `locked` is optional: a texture set
+ * authored without it falls back to `closed`, per `docs/DECISIONS.md` #19's
+ * graceful-degradation rule — a missing state must not throw inside a
+ * transition.
+ *
+ * Each texture is the **right half** of a door — the seam runs down its left
+ * edge, the frame post is on its right. `createDoorView` draws it on the
+ * right of the doorway and a mirrored copy on the left, so the two tiles read
+ * as one door rather than two (the "two holes" `#196` set out to fix), and
+ * rotates the pair 90° for a west/east doorway so the seam — and the
+ * padlock across it — runs the way that door actually parts.
+ */
 export interface DoorTextures {
   readonly open: Texture;
   readonly closed: Texture;
+  readonly locked?: Texture | undefined;
 }
 
+/** Which state `createDoorView` draws a given door in. */
+export type DoorState = 'open' | 'closed' | 'locked';
+
 /**
- * A door tile sprite plus which axis it spans the doorway's *depth* on —
- * `render/view.ts`'s open/close transition scales exactly that axis, on
- * exactly this sprite's own anchor, so a west/east door's tiles retract
- * sideways into the wall while a north/south door's retract vertically,
- * whichever pair actually sits in the gap.
+ * One half-door sprite, plus what the open/close transition needs to slide it
+ * apart from its partner (`render/view.ts`'s `applyDoorSwingScale`).
+ *
+ * The two halves of a doorway retract along the doorway's **long** axis,
+ * toward opposite walls — a north/south door parts sideways, a west/east door
+ * parts up and down ("Isaac-like", `#196`). That axis is always the sprite's
+ * own local x once `rotation` is applied, so the transition only ever scales
+ * `sprite.scale.x`; `retractSign` carries the mirror (`-1` for the left half)
+ * and `baseScale` the 32px→tile-grid factor (`docs/DECISIONS.md` #48), so the
+ * transition can rebuild the full `scale.x` value rather than nudge it.
  */
 export interface DoorSprite {
   readonly sprite: Sprite;
-  readonly horizontal: boolean;
-  /**
-   * The tile-grid scale (`tileGridScale`) this sprite was built at — the
-   * open/close swing (`render/view.ts`'s `applyDoorSwingScale`) multiplies
-   * its depth-axis progress by this rather than assigning it outright, since
-   * the door textures are authored at 32px (`docs/DECISIONS.md` #48) and a
-   * bare progress value of `1` at rest is double the sprite's actual
-   * on-screen tile size.
-   */
+  readonly retractSign: number;
   readonly baseScale: number;
 }
 
@@ -319,38 +397,109 @@ export interface DoorView {
 }
 
 /**
+ * Where one half of a doorway's door sits and how it is oriented — a pure
+ * function of the room, the door and the tile-grid scale, so the placement
+ * (and the mirror/rotation signs that were the fiddly part of `#196`) is
+ * unit-testable without a renderer (`tests/unit/door-layout.test.ts`).
+ *
+ * A doorway is two `ROOM_TILE_UNITS`-wide half-door tiles that meet at its
+ * centre (`doorCentre`, the wall/floor seam) and extend one tile's depth
+ * *into* the wall — 32 units of door across a 24-unit gap, so each half
+ * overhangs into the wall on both the outer and (past the seam) the far side.
+ * Scaled onto that grid rather than stretched to the gap for the reason
+ * `docs/CONTENT_BIBLE.md` §5 rules non-whole-pixel scaling out.
+ *
+ * Each texture is a right-half door (`DoorTextures`): seam on the local left
+ * edge, frame post on the right, the room-facing edge along the bottom.
+ * `anchor` is `(1, 1)` — the post/room corner — and every half is placed by
+ * putting that corner at `pivot` and letting `scaleX`/`scaleY`/`rotation`
+ * lay the rest out from there. `scaleX < 0` is the mirrored left/near half;
+ * `retractSign` (`= sign(scaleX)`) is what `render/view.ts` multiplies back
+ * in when it slides the halves apart along the doorway's long axis.
+ */
+export interface DoorHalfPlacement {
+  readonly pivotX: number;
+  readonly pivotY: number;
+  readonly scaleX: number;
+  readonly scaleY: number;
+  readonly rotation: number;
+  readonly retractSign: number;
+}
+
+export function doorHalfPlacements(
+  room: RoomGeometry,
+  door: CompiledDoor,
+  baseScale: number,
+): readonly [DoorHalfPlacement, DoorHalfPlacement] {
+  // Derived once, by hand, from Pixi's transform for an `anchor:(1,1)` sprite:
+  //   world = pos + Rot(rotation) · ((local − (32,32)) · (scaleX, scaleY))
+  // with the four semantic edges of the right-half texture (seam at local
+  // x=0, post at x=32, into-wall at y=0, room-facing at y=32) pinned to where
+  // that half has to sit. `tests/unit/door-layout.test.ts` locks the results.
+  // The retract axis is always the sprite's local x once rotation is applied
+  // (`applyDoorSwingScale`), so `retractSign` is just `sign(scaleX)`.
+  const c = doorCentre(room, door);
+  const t = ROOM_TILE_UNITS;
+  const s = baseScale;
+  const R = Math.PI / 2;
+  switch (door.direction) {
+    // North: room below. Halves part left/right; room-facing edge points down.
+    case 'north':
+      return [
+        { pivotX: c.x + t, pivotY: c.y, scaleX: s, scaleY: s, rotation: 0, retractSign: 1 },
+        { pivotX: c.x - t, pivotY: c.y, scaleX: -s, scaleY: s, rotation: 0, retractSign: -1 },
+      ];
+    // South: room above. Same left/right split, room-facing edge flipped up.
+    case 'south':
+      return [
+        { pivotX: c.x + t, pivotY: c.y, scaleX: s, scaleY: -s, rotation: 0, retractSign: 1 },
+        { pivotX: c.x - t, pivotY: c.y, scaleX: -s, scaleY: -s, rotation: 0, retractSign: -1 },
+      ];
+    // West: room to the right. Quarter turn clockwise so the seam runs across
+    // the doorway and the halves part up/down; room-facing edge points right.
+    case 'west':
+      return [
+        { pivotX: c.x, pivotY: c.y + t, scaleX: s, scaleY: -s, rotation: R, retractSign: 1 },
+        { pivotX: c.x, pivotY: c.y - t, scaleX: -s, scaleY: -s, rotation: R, retractSign: -1 },
+      ];
+    // East: room to the left. Quarter turn the other way.
+    case 'east':
+      return [
+        { pivotX: c.x, pivotY: c.y + t, scaleX: -s, scaleY: -s, rotation: -R, retractSign: -1 },
+        { pivotX: c.x, pivotY: c.y - t, scaleX: s, scaleY: -s, rotation: -R, retractSign: 1 },
+      ];
+  }
+  throw new Error(`unknown door direction "${String(door.direction)}"`);
+}
+
+/**
  * Draws each of the room's real doors (#100: up to eight for a `2x2` room,
- * one per `(cell, wall)` pair with a real neighbour), open or locked.
+ * one per `(cell, wall)` pair with a real neighbour).
  *
  * Kept separate from `createRoomView` because door state changes the instant
  * the last enemy dies — rebuilding a handful of sprites on that is cheap,
- * rebuilding the whole room (floor, walls, blocks) every time the lock state
- * flips is not.
+ * rebuilding the whole room (floor, walls, blocks) every time it flips is not.
  *
- * With `textures`, a doorway is two door tiles laid end to end across the
- * `DOOR_SPAN`-wide gap, each `ROOM_TILE_UNITS` wide on-screen regardless of
- * which of the two legal tile sizes it was authored at (`tileGridScale`,
- * `docs/DECISIONS.md` #48/#182) — 32 units across a 24-unit gap, so each one
- * overhangs 4 units into the wall either side. Scaled onto that grid rather
- * than stretched to the gap on purpose: a sprite scaled to a non-tile size
- * like 24 puts some of its pixels one screen pixel wide and some two, which
- * `docs/CONTENT_BIBLE.md` §5 rules out outright, and a door frame set into
- * the wall around it is what a door looks like anyway.
+ * `doorState` says which of `open`/`closed`/`locked` each door draws in —
+ * `render/view.ts` builds it from the room's lock state and the set of
+ * doorways that lead to an unopened key-locked room (`#196`). Without
+ * `textures` the whole doorway is a flat coloured band, one state's worth of
+ * colour, exactly as before any door art existed.
  */
 export function createDoorView(
   room: RoomGeometry,
   doors: readonly CompiledDoor[],
-  locked: boolean,
+  doorState: (door: CompiledDoor) => DoorState,
   textures?: DoorTextures,
 ): DoorView {
   const container = new Container();
   const sprites: DoorSprite[] = [];
   const graphics = new Graphics();
-  const colour = locked ? ROOM_HAZARD_PALETTE.doorLocked : ROOM_HAZARD_PALETTE.doorOpen;
   const frame = roomFrameSize(room);
-  const texture = textures === undefined ? null : locked ? textures.closed : textures.open;
+  let usedGraphics = false;
 
   for (const door of doors) {
+    const state = doorState(door);
     const centre = doorCentre(room, door);
     const span = door.span ?? DOOR_SPAN;
     const half = span / 2;
@@ -382,43 +531,34 @@ export function createDoorView(
         ];
         break;
     }
+    const texture =
+      textures === undefined
+        ? null
+        : state === 'open'
+          ? textures.open
+          : // `locked` falls back to `closed` when its art has not been
+            // authored (`docs/DECISIONS.md` #19) — never throws mid-transition.
+            ((state === 'locked' ? textures.locked : undefined) ?? textures.closed);
     if (texture === null) {
+      const colour =
+        state === 'open' ? ROOM_HAZARD_PALETTE.doorOpen : ROOM_HAZARD_PALETTE.doorLocked;
       graphics.rect(bandMinX, bandMinY, bandWidth, bandHeight).fill(colour);
+      usedGraphics = true;
       continue;
     }
-    // Two tiles along the doorway's own long axis, centred on the gap.
-    //
-    // Across the wall's thickness, the door sits flush against the interior
-    // wall face (`centre.x`/`centre.y`, the same point `wallLip` above is
-    // drawn flush against) and extends one tile's width *away* from the room
-    // — not centred in the whole margin band. The margin is 40 units deep on
-    // the west/east walls but only 18 on north/south (`ROOM_MARGIN_X`/`_Y` in
-    // `sim/room/template.ts`), so centring a 16-unit sprite in the band left
-    // west/east doors floating with ~12 units of solid wall visible on both
-    // sides, while north/south happened to look right because the band there
-    // is already close to one tile deep.
-    const horizontal = door.direction === 'north' || door.direction === 'south';
-    const crossOffset =
-      door.direction === 'north' || door.direction === 'west'
-        ? -ROOM_TILE_UNITS / 2
-        : ROOM_TILE_UNITS / 2;
-    const alongX = horizontal ? bandMinX + span / 2 - ROOM_TILE_UNITS : centre.x + crossOffset;
-    const alongY = horizontal ? centre.y + crossOffset : bandMinY + span / 2 - ROOM_TILE_UNITS;
     const baseScale = tileGridScale(texture);
-    for (let step = 0; step < 2; step++) {
+    for (const place of doorHalfPlacements(room, door, baseScale)) {
       const sprite = new Sprite(texture);
-      sprite.scale.set(baseScale);
-      sprite.anchor.set(horizontal ? 0 : 0.5, horizontal ? 0.5 : 0);
-      sprite.position.set(
-        horizontal ? alongX + step * ROOM_TILE_UNITS : alongX,
-        horizontal ? alongY : alongY + step * ROOM_TILE_UNITS,
-      );
+      sprite.anchor.set(1, 1);
+      sprite.scale.set(place.scaleX, place.scaleY);
+      sprite.rotation = place.rotation;
+      sprite.position.set(place.pivotX, place.pivotY);
       container.addChild(sprite);
-      sprites.push({ sprite, horizontal, baseScale });
+      sprites.push({ sprite, retractSign: place.retractSign, baseScale });
     }
   }
 
-  if (texture === null) {
+  if (usedGraphics) {
     container.addChild(graphics);
   } else {
     graphics.destroy();

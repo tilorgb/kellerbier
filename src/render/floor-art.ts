@@ -93,6 +93,13 @@ export interface FloorTileset {
   readonly floorVariants: readonly string[];
   readonly wall: string;
   readonly wallLip: string;
+  /**
+   * The wall-boundary course turning a corner (#196) — authored for the
+   * north-west corner (lit toward the corner, contact shadow on the two edges
+   * facing the room) and rotated for the other three, so the built wall reads
+   * as continuous around the room rather than two runs meeting at an angle.
+   */
+  readonly wallLipCorner: string;
   readonly block: string;
   /**
    * What each destructible prop is drawn as on this floor, in
@@ -118,6 +125,7 @@ export const FLOOR_TILESETS: Readonly<Record<number, FloorTileset>> = {
     floorVariants: ['cellar-floor'],
     wall: 'cellar-wall',
     wallLip: 'cellar-wall-lip',
+    wallLipCorner: 'cellar-wall-lip-corner',
     block: 'cellar-plank',
     // No Maibaum in a cellar — a floor-1 `maypole` prop would be a content
     // error, and falls back to the barrel rather than to nothing.
@@ -128,6 +136,7 @@ export const FLOOR_TILESETS: Readonly<Record<number, FloorTileset>> = {
     floorVariants: ['rural-floor-1', 'rural-floor-2', 'rural-floor-3', 'rural-floor-4'],
     wall: 'rural-wall',
     wallLip: 'rural-wall-lip',
+    wallLipCorner: 'rural-wall-lip-corner',
     block: 'rural-hedge-block',
     destructibles: ['rural-barrel', 'rural-maibaum-base'],
   },
@@ -138,6 +147,7 @@ export interface RoomTileArt {
   readonly floorVariants: readonly Texture[];
   readonly wall: Texture;
   readonly wallLip: Texture;
+  readonly wallLipCorner: Texture;
   readonly block: Texture;
   /** By `DESTRUCTIBLE_PROP_KINDS` index; a kind past the end draws entry 0. */
   readonly destructibles: readonly Texture[];
@@ -510,6 +520,7 @@ function resolveTileset(
     floorVariants: tileset.floorVariants.map(need),
     wall: need(tileset.wall),
     wallLip: need(tileset.wallLip),
+    wallLipCorner: need(tileset.wallLipCorner),
     block: need(tileset.block),
     destructibles: tileset.destructibles.map(need),
   };
