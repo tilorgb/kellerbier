@@ -369,6 +369,39 @@ function crackHintsFor(
   return hints;
 }
 
+/**
+ * The directions of `roomId`'s doorways that lead to a key-locked treasure
+ * room (`metadata.keyLocked`, #196) the player has not opened yet — what
+ * `GameView.setLockedDoors` draws with the padlocked door tile instead of
+ * the open one once the room's own enemies are down.
+ *
+ * A visited room is never still locked: `GameSim.transitionTo` consumes the
+ * key on entry, so once `visitedRoomIds` has it the door is just a door.
+ * `GameSim` itself only knows door geometry, not which template sits on the
+ * far side — this is the side of the app that has the floor plan.
+ */
+function lockedDoorsFor(
+  plan: FloorPlan,
+  roomId: string,
+  visitedRoomIds: ReadonlySet<string>,
+): RoomDirection[] {
+  const directions: RoomDirection[] = [];
+  for (const door of planRoom(plan, roomId).doors) {
+    if (visitedRoomIds.has(door.neighborRoomId)) {
+      continue;
+    }
+    const neighbor = planRoom(plan, door.neighborRoomId);
+    if (neighbor.role !== 'treasure' || neighbor.staircaseTemplateId !== undefined) {
+      continue;
+    }
+    const metadata = (planTemplate(neighbor) as { metadata?: { keyLocked?: unknown } }).metadata;
+    if (metadata?.keyLocked === true) {
+      directions.push(door.direction);
+    }
+  }
+  return directions;
+}
+
 async function boot(): Promise<void> {
   const host = document.getElementById('game');
   if (host === null) {
@@ -1539,6 +1572,7 @@ WASD move   arrows aim and fire
     game.removeChildren();
     game.addChild(view.stage);
     view.setSecretHints(crackHintsFor(floorPlan, currentRoomId, revealedEdges));
+    view.setLockedDoors(lockedDoorsFor(floorPlan, currentRoomId, visitedRoomIds));
     minimapHud.rebuild(floorPlan, currentRoomId, visitedRoomIds);
 
     summary = new RunSummaryTracker();
@@ -1977,6 +2011,7 @@ WASD move   arrows aim and fire
     currentRoomId = neighborRoomId;
     visitedRoomIds.add(neighborRoomId);
     view.setSecretHints(crackHintsFor(floorPlan, currentRoomId, revealedEdges));
+    view.setLockedDoors(lockedDoorsFor(floorPlan, currentRoomId, visitedRoomIds));
     minimapHud.rebuild(floorPlan, currentRoomId, visitedRoomIds);
     refreshHud();
     return true;
@@ -2044,6 +2079,7 @@ WASD move   arrows aim and fire
       true,
     );
     view.setSecretHints(crackHintsFor(floorPlan, currentRoomId, revealedEdges));
+    view.setLockedDoors(lockedDoorsFor(floorPlan, currentRoomId, visitedRoomIds));
     minimapHud.rebuild(floorPlan, currentRoomId, visitedRoomIds);
     refreshHud();
     showFloorCard();
@@ -2105,6 +2141,7 @@ WASD move   arrows aim and fire
     }
     if (changed) {
       view.setSecretHints(crackHintsFor(floorPlan, currentRoomId, revealedEdges));
+      view.setLockedDoors(lockedDoorsFor(floorPlan, currentRoomId, visitedRoomIds));
       minimapHud.rebuild(floorPlan, currentRoomId, visitedRoomIds);
     }
   }
@@ -2496,6 +2533,7 @@ WASD move   arrows aim and fire
             buildPlacement(room),
           );
           view.setSecretHints(crackHintsFor(floorPlan, currentRoomId, revealedEdges));
+          view.setLockedDoors(lockedDoorsFor(floorPlan, currentRoomId, visitedRoomIds));
           minimapHud.rebuild(floorPlan, currentRoomId, visitedRoomIds);
           refreshHud();
           event.source?.postMessage(

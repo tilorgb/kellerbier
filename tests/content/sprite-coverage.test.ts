@@ -86,6 +86,7 @@ describe('every floor tileset names sprites that exist', () => {
       ...tileset.floorVariants,
       tileset.wall,
       tileset.wallLip,
+      tileset.wallLipCorner,
       tileset.block,
       ...tileset.destructibles,
     ];

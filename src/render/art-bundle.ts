@@ -58,16 +58,19 @@ export function buildProjectileArt(
 }
 
 /**
- * The two door sprites, or `undefined` if either is missing — a half-authored
- * door set falls back to the flat coloured band whole, rather than drawing a
- * sprite for one state and a rectangle for the other.
+ * The door sprites, or `undefined` if `open` or `closed` is missing — a
+ * half-authored door set falls back to the flat coloured band whole, rather
+ * than drawing a sprite for one state and a rectangle for another. `locked`
+ * (`#196`) is allowed to be absent on its own: `createDoorView` falls it back
+ * to `closed`, per `docs/DECISIONS.md` #19.
  */
 export function doorTexturesFrom(
   tileTextures: Readonly<Record<string, Texture>>,
 ): DoorTextures | undefined {
   const open = tileTextures['door-open'];
   const closed = tileTextures['door-closed'];
-  return open === undefined || closed === undefined ? undefined : { open, closed };
+  const locked = tileTextures['door-locked'];
+  return open === undefined || closed === undefined ? undefined : { open, closed, locked };
 }
 
 /**
