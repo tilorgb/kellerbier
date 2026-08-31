@@ -2549,3 +2549,58 @@ could have been.
 should reuse `CharacterTraits` rather than growing a parallel one. Per-character *art* is
 deliberately not part of this — every character plays as Alois's sprites today, because new
 pixel art needs a sign-off round (`CLAUDE.md`) that a stat block does not.
+
+## 55. Character art is chibi-proportioned: a head that is a third of the body, eyes with a sclera, and a silhouette prop
+
+**Decided:** M8, redrawing Alois. The old roster is drawn at roughly realistic proportions —
+Alois was a 16×28 figure whose head was eight of those rows, with two pixels of eye and no
+mouth — and at the 640×360 internal frame that reads as "small person, far away" rather than as
+a character. The reference the direction was picked against is the Japanese-console-RPG chibi:
+head deliberately over-large, face carrying real expression, body simplified to the few shapes
+that survive under it.
+
+**The three rules are proportion, face, and prop.** *Proportion:* the head, hair and any
+headwear together are between a third and a half of the sprite's height — Alois lands at 16 of
+32 with the Hut on, ~9 without it. *Face:* eyes are drawn with a white highlight against a dark
+iris, wide enough to read a blink, a squeeze and a half-lid as three different things, and
+there is a mouth. That is what buys the `idle`/`hurt`/drunk poses their expression budget
+without a single extra frame: on a two-pixel eye the drunk strip and the sober strip differ
+only in how the legs are placed. *Prop:* a character gets one silhouette-carrying object it is
+recognisable by at a glance and from behind — Alois's Trachtenhut, and the brass Trink-Rucksack
+keg that is now drawn on the hip facing the camera and on the back facing away. The keg is the
+reason `render/player-view.ts`'s `SCHLAUCH_ANCHOR` is measured off the art rather than picked:
+the hose has to leave the tank a player can see.
+
+**A canvas is a size, so the size was signed off with the design.** `docs/DECISIONS.md` #45
+made an authored pixel an internal pixel, and `CLAUDE.md`'s sign-off ritual makes the canvas
+part of what a person chooses. Four options were rendered at true scale on a Der Keller floor
+tile — a 2-head 18×26, this one, a 2.7-head 18×32 and a soft-inked 22×34 — and 20×32 was
+picked. That is 1.14× the player's 28-pixel collider, comfortably inside
+`tests/content/sprite-scale.test.ts`'s 0.6-1.8 band, and about one floor tile tall, which is
+the ratio the rest of the roster now has to be redrawn against.
+
+**Hard black ink, flat fills, no dithering.** Every silhouette edge is `#000000`; shading is at
+most one step of the palette ramp, and only where a shape would otherwise be ambiguous (the
+hair parting on the back of the head, the iron hoops on the keg). The alternative — the
+soft-inked, three-tone option — was the more sophisticated drawing and the worse *game* sprite:
+at 1:1 over Der Wald's near-black floor it loses its outline entirely, and the projectile
+legibility argument in `docs/DECISIONS.md` #39 applies to a body standing on that floor for the
+same reason it applies to a shot crossing it.
+
+**Alois alone is composed from source; everything else stays a drawn PNG.** His seven strips
+are forty-four frames holding about a dozen distinct drawings — six directions of one body, each
+with an idle, a blink, two walk contacts, a flinch and three death beats — so they are authored
+as blocks in `tools/art/authoring/alois.mjs` and written out by `npm run art:alois`, with
+`tests/art/alois-authoring.test.ts` holding the committed PNGs byte-identical to that source.
+This is #43's argument for UI art, applied to the one sprite in `assets/` with the same
+repetition problem, and it is deliberately not a policy: a Kellerassel is one drawing seven
+times and belongs in the pixel editor. The cost is that these seven files cannot be hand-edited
+and committed, which is the right way round — the failure it prevents is someone running the
+build and silently reverting touch-ups nobody wrote down.
+
+**Constrains:** every remaining character, boss and shopkeeper sprite, which are now
+inconsistent with the player until each is redrawn — one issue per group, each needing its own
+`CLAUDE.md` sign-off round, since this decision fixes the *style* but not any particular
+creature's canvas. `PENDING_REDRAW` in `tests/content/sprite-scale.test.ts` already names two
+of them for a different reason and should be emptied by the same work. Per-character art for
+#47's roster (#54's closing note) inherits these rules whenever it lands.

@@ -55,7 +55,7 @@ const SCHLAUCH: AnimationSidecar = {
   loop: true,
 };
 
-function stubStrip(name: string, sidecar: AnimationSidecar, width = 16, height = 28): LoadedStrip {
+function stubStrip(name: string, sidecar: AnimationSidecar, width = 20, height = 32): LoadedStrip {
   const source = new TextureSource({ width: width * sidecar.frames, height });
   const frames = Array.from(
     { length: sidecar.frames },

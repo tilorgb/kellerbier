@@ -31,11 +31,17 @@ import { ACTOR_SPRITE_SCALE } from './resolution.js';
  * left hip, which is screen-right when he faces the camera, screen-left when
  * he faces away, and on the near flank side-on. The x figure is mirrored along
  * with the body, so the hose stays on the tank when he turns around.
+ *
+ * Re-measured for the Trachten-chibi redraw, whose canvas is 20x32 rather than
+ * the original 16x28: the keg is drawn at columns 16-19, rows 18-25, and the
+ * sprite's centre is (10, 16), so its upper half sits a little over six pixels
+ * out and four down. Facing away, the keg is drawn on his back instead and the
+ * hose runs to the same hip, which is now the screen-left one.
  */
 const SCHLAUCH_ANCHOR: Readonly<Record<PlayerFacingIndex, { x: number; y: number }>> = {
-  [PlayerFacing.South]: { x: 4, y: 1 },
-  [PlayerFacing.North]: { x: -4, y: 1 },
-  [PlayerFacing.Side]: { x: 2, y: 2 },
+  [PlayerFacing.South]: { x: 6, y: 4 },
+  [PlayerFacing.North]: { x: -6, y: 4 },
+  [PlayerFacing.Side]: { x: 5, y: 4 },
 };
 
 /**
@@ -52,18 +58,19 @@ const FIRING_TICKS = 6;
 /** Ticks of that window the nozzle is also kicked back along its own aim. */
 const RECOIL_TICKS = 3;
 
-/** How far back, in authored pixels. One. It is a 16px character. */
+/** How far back, in authored pixels. One, against a 20x32 canvas. */
 const RECOIL_PIXELS = 1;
 
 /**
  * How far along the aim the nozzle sits, past the hip it is anchored to.
  *
- * Three authored pixels, which is what it takes to clear the torso. Without
+ * Four authored pixels, which is what it takes to clear the torso. Without
  * it the hose is drawn from the hip *through* the body whenever he aims across
- * himself, and at 1x that reads as a grey band across his middle rather than
- * as a hose pointing somewhere.
+ * himself, and at 1x that reads as a band across his middle rather than as a
+ * hose pointing somewhere. Three was the figure for the 16-wide body; the
+ * Trachten-chibi redraw is 20 wide, so it takes one more.
  */
-const SCHLAUCH_REACH = 3;
+const SCHLAUCH_REACH = 4;
 
 /**
  * From this tier up, Alois is drawn drunk.
@@ -123,6 +130,15 @@ export class PlayerView {
   private elapsedMs = 0;
   private lastNowMs: number | null = null;
   private schlauchBehind = false;
+  /**
+   * The nozzle offset last written, so an unmoved hose is not written again.
+   *
+   * `NaN` until the first frame, which is the point: it compares unequal to
+   * everything, so the first `sync` always writes rather than needing a
+   * separate "have we drawn yet" flag.
+   */
+  private schlauchX = Number.NaN;
+  private schlauchY = Number.NaN;
 
   constructor(art: PlayerArt) {
     this.art = art;
@@ -274,10 +290,23 @@ export class PlayerView {
 
     const anchor = SCHLAUCH_ANCHOR[this.facing];
     const reach = SCHLAUCH_REACH - (sinceShot < RECOIL_TICKS ? RECOIL_PIXELS : 0);
-    this.schlauch.position.set(
-      (anchor.x * this.mirror + aimX * reach) * this.pixelScale,
-      (anchor.y + aimY * reach) * this.pixelScale,
-    );
+    // Written only on the frame it moves, for the same reason the child
+    // reorder below is — and it turned out to matter more than the reorder.
+    // `tests/unit/player-animation.test.ts` measures what a second of drawing
+    // allocates, and touching this transform every frame put that measurement
+    // on a coin flip: whether V8 boxes the two doubles as `HeapNumber`s is
+    // settled once per process at tier-up, so the same unmodified loop read
+    // either the instrument's floor or about 25 bytes a frame above it.
+    // Bisected to this one line, and guarding it puts every run on the floor.
+    // `ObservablePoint.set` already ignores an unchanged value; what costs is
+    // reaching the transform at all.
+    const nozzleX = (anchor.x * this.mirror + aimX * reach) * this.pixelScale;
+    const nozzleY = (anchor.y + aimY * reach) * this.pixelScale;
+    if (nozzleX !== this.schlauchX || nozzleY !== this.schlauchY) {
+      this.schlauchX = nozzleX;
+      this.schlauchY = nozzleY;
+      this.schlauch.position.set(nozzleX, nozzleY);
+    }
 
     // Aiming away from the camera puts the hose behind him. Reordered only on
     // the frame it actually changes: a `Container` re-sort every frame is a
