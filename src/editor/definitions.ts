@@ -23,6 +23,47 @@ export function shapeCellCount(shape: RoomShape): number {
   return SHAPES.find((info) => info.shape === shape)?.cellCount ?? 1;
 }
 
+/**
+ * Every multi-cell shape's canonical layout, in the local (0-indexed)
+ * `{col, row}` coordinates both `editor/playtest.ts`'s live playtest and
+ * `editor/panels/thumbnail.ts`'s browse-panel preview need — there is no
+ * authored adjacency to read this from (`RoomSubLayout`'s doc comment on
+ * `content/rooms/definition.ts`); in a real run the floor generator picks
+ * where a multi-cell room's cells actually land
+ * (`sim/room/floor-plan.ts`'s `shapeFootprints`). Both editor consumers are
+ * previewing this room's own content, not the floor it might end up on, so
+ * any one legal layout does the job; these mirror `shapeFootprints`'s first
+ * variant for each shape. `L` drops the last of `2x2`'s four corners — one of
+ * `shapeFootprints('2x2')`'s corners removed, same as every `L` variant is
+ * built from there.
+ */
+export const MULTI_CELL_LAYOUT: Readonly<
+  Record<Exclude<RoomShape, '1x1'>, readonly { readonly col: number; readonly row: number }[]>
+> = {
+  '1x2': [
+    { col: 0, row: 0 },
+    { col: 1, row: 0 },
+  ],
+  '2x2': [
+    { col: 0, row: 0 },
+    { col: 1, row: 0 },
+    { col: 0, row: 1 },
+    { col: 1, row: 1 },
+  ],
+  L: [
+    { col: 0, row: 0 },
+    { col: 1, row: 0 },
+    { col: 0, row: 1 },
+  ],
+  T: [
+    { col: 0, row: 0 },
+    { col: 1, row: 0 },
+    { col: 2, row: 0 },
+    { col: 1, row: 1 },
+    { col: 1, row: 2 },
+  ],
+};
+
 export const SPECIAL_ROLES: readonly RoomSpecialRole[] = [
   'boss',
   'treasure',

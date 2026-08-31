@@ -57,7 +57,7 @@ import { UiKitGallery } from '../render/ui/gallery.js';
 import { uiScaleFor, uiText, UI_TEXT_HEIGHT } from '../render/ui/text.js';
 import { Vignette } from '../render/vignette.js';
 import { GameView } from '../render/view.js';
-import { buildAnimatedSets, loadFloorArt } from '../render/floor-art.js';
+import { FLOOR_TILESETS, buildAnimatedSets, loadFloorArt } from '../render/floor-art.js';
 import {
   bossIdsFrom,
   buildParticleArt,
@@ -81,7 +81,14 @@ import { downloadReplayFile, parseReplayText } from './replay/file.js';
 import { createAccessibilityPanel } from './accessibility-panel.js';
 import { createTouchControls, isTouchCapable } from './touch-controls.js';
 import { createEditorDock } from './editor-dock.js';
-import { pickEnemyAt, pickTileNameAt } from './sprite-pick.js';
+import {
+  pickDecorativePropAt,
+  pickEnemyAt,
+  pickObstacleBlockAt,
+  pickPlayerAt,
+  pickPropAt,
+  pickTileNameAt,
+} from './sprite-pick.js';
 import {
   type AccessibilitySettings,
   applySettingsToSim,
@@ -2399,15 +2406,23 @@ WASD move   arrows aim and fire
     });
 
     // Click-to-pick (#108's follow-up): while the Sprites editor is the
-    // docked panel, a click on the game canvas resolves to whichever enemy
-    // or floor tile is under it and loads that sprite into the editor —
-    // `app.canvas`'s own pointer events, not Pixi's interaction system,
-    // since nothing in the game otherwise uses stage-level pointer
-    // interactivity and DOM coordinates are all this needs. Enemies are
-    // checked before tiles: an enemy standing on the floor should win a
-    // click that lands on both. Only fires while the sprites editor is open
-    // — the room editor has no use for a game click, and this would
-    // otherwise steal clicks a mouse-driven aim scheme might one day want.
+    // docked panel, a click on the game canvas resolves to whichever body is
+    // under it and loads that sprite into the editor — `app.canvas`'s own
+    // pointer events, not Pixi's interaction system, since nothing in the
+    // game otherwise uses stage-level pointer interactivity and DOM
+    // coordinates are all this needs. Checked most-specific-first — enemy,
+    // then Alois himself, then a destructible prop (a barrel, a Maibaum),
+    // then a decorative one (a fence post, a well), then an authored wall
+    // obstacle (the room editor's Wall tool, drawn from the floor's `block`
+    // tile rather than its floor variant), and only then the floor tile
+    // underneath all of them — so a click landing on more than one of these
+    // always resolves to whichever is actually drawn on top. Before this,
+    // only the enemy/tile pair were checked at all: clicking the player or
+    // any prop or obstacle silently fell through to "whatever tile is under
+    // the cursor", which read as those categories being broken.
+    // Only fires while the sprites editor is open — the room editor has no
+    // use for a game click, and this would otherwise steal clicks a
+    // mouse-driven aim scheme might one day want.
     app.canvas.addEventListener('pointerdown', (event: PointerEvent) => {
       if (dock.activeEditorId() !== 'sprites') {
         return;
@@ -2415,9 +2430,29 @@ WASD move   arrows aim and fire
       const rect = app.canvas.getBoundingClientRect();
       const global = new Point(event.clientX - rect.left, event.clientY - rect.top);
       const local = view.worldLayer.toLocal(global);
+
       const enemyId = pickEnemyAt(sim, local.x, local.y);
+      if (enemyId === null && pickPlayerAt(sim, local.x, local.y)) {
+        // Alois's own strips (`common/characters/alois-*`) never went
+        // through `loadFloorArt`'s `spriteOrigins` map — `render/player-art.ts`
+        // loads them separately, keyed by facing rather than by name — so
+        // this is resolved directly rather than through the `spriteOrigins`
+        // lookup every other category below shares.
+        dock.postToActive({
+          type: 'kb-pixel-editor:pick',
+          bucketId: 'common',
+          category: 'character',
+          name: `alois-${view.player.bodyKey}`,
+        });
+        return;
+      }
+      const tileset = FLOOR_TILESETS[floorPlan.floor];
       const name =
-        enemyId ?? pickTileNameAt(sim, floorPlan.floor, local.x, local.y, tileVariantNames);
+        enemyId ??
+        pickPropAt(sim, local.x, local.y, tileset?.destructibles ?? []) ??
+        pickDecorativePropAt(sim, local.x, local.y) ??
+        (pickObstacleBlockAt(sim, local.x, local.y) ? (tileset?.block ?? null) : null) ??
+        pickTileNameAt(sim, floorPlan.floor, local.x, local.y, tileVariantNames);
       if (name === null) {
         return;
       }
