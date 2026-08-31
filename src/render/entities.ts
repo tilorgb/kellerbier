@@ -43,6 +43,18 @@ const RING_PULSE_RATE = 0.011;
  */
 const BOSS_SHADOW_ALPHA = 0.35;
 
+/** `a` and `b` as `0xrrggbb`, blended per channel — `t` 0 is all `a`, 1 is all `b`. */
+function mixColor(a: number, b: number, t: number): number {
+  const k = Math.min(1, Math.max(0, t));
+  const ar = (a >> 16) & 0xff;
+  const ag = (a >> 8) & 0xff;
+  const ab = a & 0xff;
+  const r = Math.round(ar + (((b >> 16) & 0xff) - ar) * k);
+  const g = Math.round(ag + (((b >> 8) & 0xff) - ag) * k);
+  const bl = Math.round(ab + ((b & 0xff) - ab) * k);
+  return (r << 16) | (g << 8) | bl;
+}
+
 /**
  * Draws the collidable things that are not the player: targets, enemies, and
  * the ring an enemy warns with before it attacks.
@@ -256,6 +268,10 @@ export class EntityView {
       const enemyId = isEnemyBody
         ? sim.enemies.at(sim.enemy.data[index * ENEMY_STRIDE] ?? 0).id
         : null;
+      const isBoss = enemyId !== null && this.bossIds.has(enemyId);
+      // A boss reads its wind-up off its own body, not the expanding ring (#193):
+      // 0 unless this is a boss that is telegraphing right now.
+      const bossTelegraph = isBoss ? enemyTelegraphProgress(sim, index) : 0;
       // An animated creature (#150) resolves its frame first, because both
       // `bodyTexture` and the flash silhouette below are that frame rather
       // than one fixed texture. The animation state handed to the animator is
@@ -331,7 +347,13 @@ export class EntityView {
           ? ENTITY_PALETTE.invulnerableShellTint
           : isEnemyElite(sim, index)
             ? ENTITY_PALETTE.eliteTint
-            : ENTITY_PALETTE.normalTint;
+            : bossTelegraph > 0
+              ? mixColor(
+                  ENTITY_PALETTE.normalTint,
+                  ENTITY_PALETTE.bossTelegraphTint,
+                  Math.min(1, bossTelegraph * 1.15),
+                )
+              : ENTITY_PALETTE.normalTint;
       // Drawn at the actor grid: one authored pixel per internal pixel,
       // whatever the body is (`render/resolution.ts`, `docs/DECISIONS.md`
       // #45). This used to be `radius / (bodyTexture.height / 2)` — size
@@ -370,10 +392,10 @@ export class EntityView {
       // A boss is drawn far taller than its collider (`sim/enemy/size.ts`'s
       // `boss` class, #193), so it *stands on* the collider instead of being
       // centred through it the way #45 assumes for everything the size of a
-      // body: bottom-anchored, feet at the collider's lower edge. Every other
-      // sprite keeps the centre anchor, so a recycled ECS slot that was a boss
-      // and is now a fly is put back.
-      const isBoss = enemyId !== null && this.bossIds.has(enemyId);
+      // body: bottom-anchored, feet at the collider's lower edge — which is
+      // why every boss frame is authored with its ground contact on the
+      // canvas's bottom edge. Every other sprite keeps the centre anchor, so a
+      // recycled ECS slot that was a boss and is now a fly is put back.
       sprite.anchor.set(0.5, isBoss ? 1 : 0.5);
       sprite.position.set(x, isBoss ? y + radius : y);
 
@@ -419,7 +441,12 @@ export class EntityView {
         }
       }
 
-      const progress = enemyTelegraphProgress(sim, index);
+      // The expanding ring is for enemies the player might lose in the shuffle.
+      // A boss is a quarter of the screen and telegraphs off its own body
+      // (`bossTelegraph` above drives the red flush; its `telegraph` clip holds
+      // the strained pose) — a ring scaled to *that* collider would wrap the
+      // room and say nothing about where it is safe to stand.
+      const progress = isBoss ? 0 : enemyTelegraphProgress(sim, index);
       if (progress > 0) {
         const ring = this.ringAt(ringsUsed);
         ringsUsed += 1;

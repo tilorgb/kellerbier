@@ -183,11 +183,20 @@ export function encodeSingle(frame) {
 }
 
 // ============================================================ KELLERASSEL
-// Canvas 140x92, collider centre near (70, 52). Head/front to the left.
+// Canvas 140x86, head/front to the left. Every frame plants its ground
+// contact on `KGROUND` so the bottom-anchored sprite (#193) sits on its
+// shadow rather than floating above it.
 const KW = 140,
-  KH = 92;
+  KH = 86,
+  KGROUND = 84;
 
-function kellerasselFace(cv, P, hx, hy, { brow = 0, blink = false, shut = false, open = false }) {
+function kellerasselFace(
+  cv,
+  P,
+  hx,
+  hy,
+  { brow = 0, blink = false, shut = false, open = false, strain = false },
+) {
   // two big round eyes on the head shield
   for (const s of [0, 1]) {
     const ex = hx + (s ? 18 : 0);
@@ -197,23 +206,41 @@ function kellerasselFace(cv, P, hx, hy, { brow = 0, blink = false, shut = false,
       stroke(cv, ex, ey + 3, ex + 6, ey - 2, P.K, 3);
       continue;
     }
-    fillEllipse(cv, ex, ey, 7, 8, P.W);
-    if (blink) {
-      stroke(cv, ex - 7, ey, ex + 7, ey, P.K, 3);
+    if (strain) {
+      // eyes screwed half-shut and pushed down under the clench
+      fillEllipse(cv, ex, ey + 2, 7, 4, P.W);
+      fillEllipse(cv, ex + (s ? -1 : 1), ey + 3, 4, 3, P.K);
+      // tension ticks fanning off the outer corner
+      const o = s ? 1 : -1;
+      stroke(cv, ex + o * 8, ey - 3, ex + o * 12, ey - 6, P.d, 1);
+      stroke(cv, ex + o * 8, ey + 1, ex + o * 13, ey + 1, P.d, 1);
+      stroke(cv, ex + o * 7, ey + 5, ex + o * 11, ey + 8, P.d, 1);
     } else {
-      fillEllipse(cv, ex + (s ? -1 : 1), ey + 1, 4, 5, P.K);
-      set(cv, ex - 3, ey - 3, P.W);
-      set(cv, ex - 2, ey - 3, P.W);
-      set(cv, ex - 3, ey - 2, P.W);
+      fillEllipse(cv, ex, ey, 7, 8, P.W);
+      if (blink) {
+        stroke(cv, ex - 7, ey, ex + 7, ey, P.K, 3);
+      } else {
+        fillEllipse(cv, ex + (s ? -1 : 1), ey + 1, 4, 5, P.K);
+        set(cv, ex - 3, ey - 3, P.W);
+        set(cv, ex - 2, ey - 3, P.W);
+        set(cv, ex - 3, ey - 2, P.W);
+      }
     }
-    // brow: a chunky dark wedge, angled mean when brow>0
-    stroke(cv, ex - 7, ey - 9 + (s ? brow : -brow), ex + 7, ey - 9 + (s ? -brow : brow), P.d, 3);
+    // brow: a chunky dark wedge, angled mean when brow>0; a heavier clench on strain
+    const bw = strain ? 4 : 3;
+    stroke(cv, ex - 7, ey - 9 + (s ? brow : -brow), ex + 7, ey - 9 + (s ? -brow : brow), P.d, bw);
   }
+  // a knot of dark between the brows when it clenches
+  if (strain) fillEllipse(cv, hx + 9, hy - 8, 3, 4, P.d);
   // mouth
   const mx = hx + 9;
   if (open) {
-    fillEllipse(cv, mx, hy + 13, 7, 6, P.x);
+    fillEllipse(cv, mx, hy + 13, strain ? 8 : 7, strain ? 7 : 6, P.x);
     fillEllipse(cv, mx, hy + 15, 4, 3, P.d);
+    if (strain) {
+      // gritted rim
+      for (let x = -7; x <= 7; x += 2) set(cv, mx + x, hy + 9, P.L);
+    }
   } else {
     stroke(cv, mx - 5, hy + 11, mx, hy + 13, P.d, 2);
     stroke(cv, mx, hy + 13, mx + 5, hy + 11, P.d, 2);
@@ -227,33 +254,39 @@ function kellerasselFace(cv, P, hx, hy, { brow = 0, blink = false, shut = false,
 }
 
 function kellerasselLegs(cv, P, pose) {
-  // five little legs under the body, screen-left pair steps on odd poses
-  const feet = [22, 44, 66, 88, 110];
+  // six legs reaching from under the body down to the ground line; the
+  // screen-left three lift a little on one pose, the right three on the other
+  const feet = [26, 46, 66, 86, 104, 120];
   feet.forEach((fx, i) => {
-    const lift = pose === 1 ? (i % 2 === 0 ? 3 : 0) : pose === 2 ? (i % 2 === 0 ? 0 : 3) : 0;
-    stroke(cv, fx, 66 - lift, fx - 4, 74 - lift, P.x, 3);
+    const lift = pose === 1 ? (i % 2 === 0 ? 4 : 0) : pose === 2 ? (i % 2 === 0 ? 0 : 4) : 0;
+    stroke(cv, fx, 72, fx - 4, KGROUND - lift, P.x, 4);
   });
 }
 
-function kellerasselBody(cv, P, { bob = 0, arch = 0 }) {
-  const cy = 46 - bob;
-  // plump segmented carapace
-  fillEllipse(cv, 74, cy, 54, 24 + arch, P.m);
+function kellerasselBody(cv, P, { bob = 0, rear = 0 }) {
+  // `rear` lifts the front of the shell without changing its size — the
+  // wind-up pose, and it keeps the silhouette inside the canvas.
+  const cy = 58 - bob;
+  const ry = 22;
+  fillEllipse(cv, 74, cy, 54, ry, P.m);
+  if (rear > 0) fillEllipse(cv, 74 - 18, cy - rear, 34, ry, P.m); // raised front
   // top-lit rim
   for (let x = -54; x <= 54; x++) {
-    const yy = -(24 + arch) * Math.sqrt(Math.max(0, 1 - (x * x) / (54 * 54)));
-    set(cv, 74 + x, cy + yy + 1, P.A);
-    set(cv, 74 + x, cy + yy + 2, P.a);
-    set(cv, 74 + x, cy + yy + 3, P.l);
+    const yy = -ry * Math.sqrt(Math.max(0, 1 - (x * x) / (54 * 54)));
+    const lift = rear > 0 && x < 0 ? -rear * (1 - Math.abs(x) / 54) : 0;
+    set(cv, 74 + x, cy + yy + 1 + lift, P.A);
+    set(cv, 74 + x, cy + yy + 2 + lift, P.a);
+    set(cv, 74 + x, cy + yy + 3 + lift, P.l);
   }
   // seven tergite seams, bowing toward the back (right)
   for (let sIdx = 1; sIdx < 7; sIdx++) {
     const segx = 74 + (sIdx / 7 - 0.5) * 2 * 50;
-    for (let y = -(24 + arch); y <= 24 + arch; y++) {
-      const w = Math.sqrt(Math.max(0, 1 - (y * y) / ((24 + arch) * (24 + arch))));
+    const lift = rear > 0 && segx < 74 ? -rear * (1 - (segx - 24) / 50) : 0;
+    for (let y = -ry; y <= ry; y++) {
+      const w = Math.sqrt(Math.max(0, 1 - (y * y) / (ry * ry)));
       if (w <= 0.05) continue;
-      set(cv, segx + (1 - w) * 3, cy + y, P.d);
-      if (y % 3 === 0) set(cv, segx + (1 - w) * 3 + 1, cy + y, P.L);
+      set(cv, segx + (1 - w) * 3, cy + y + lift, P.d);
+      if (y % 3 === 0) set(cv, segx + (1 - w) * 3 + 1, cy + y + lift, P.L);
     }
   }
   // curled tail plate at the back
@@ -264,7 +297,7 @@ function kellerasselBody(cv, P, { bob = 0, arch = 0 }) {
 
 function kellerasselHead(cv, P, { bob = 0, tuck = 0, face }) {
   const hx = 16 + tuck;
-  const hy = 50 - bob;
+  const hy = 58 - bob;
   // dark collar where the head shield meets the first tergite
   fillEllipse(cv, hx + 20, hy + 2, 10, 22, P.d);
   fillEllipse(cv, hx + 9, hy + 1, 24, 21, P.l);
@@ -276,45 +309,48 @@ function kellerasselHead(cv, P, { bob = 0, tuck = 0, face }) {
 function kellerasselFrame(name, opts) {
   const cv = canvas(KW, KH);
   if (opts.curl) {
-    // fully curled pillbug ball
-    fillEllipse(cv, 70, 58, 30, 30, CELLAR.m);
-    for (let r = 26; r > 4; r -= 5) {
-      for (let a = 0; a < 64; a++) {
-        const t = (a / 64) * Math.PI * 2;
-        set(cv, 70 + Math.cos(t) * r, 58 + Math.sin(t) * r * 0.98, CELLAR.d);
-      }
-    }
-    fillEllipse(cv, 70, 58, 30, 30, null); // clip check only; keep fill
-    fillEllipse(cv, 70, 58, 29, 29, CELLAR.m);
-    for (let r = 27; r > 6; r -= 6)
+    // fully curled pillbug ball, resting on the ground line
+    const cyb = KGROUND - 26;
+    fillEllipse(cv, 70, cyb, 26, 26, CELLAR.m);
+    for (let r = 24; r > 5; r -= 6)
       for (let a = 0; a < 90; a++) {
         const t = (a / 90) * Math.PI * 2;
-        set(cv, 70 + Math.cos(t) * r, 58 + Math.sin(t) * r, CELLAR.d);
+        set(cv, 70 + Math.cos(t) * r, cyb + Math.sin(t) * r, CELLAR.d);
       }
-    // tucked legs peeking
-    for (const s of [-1, 1]) stroke(cv, 70 + s * 24, 74, 70 + s * 30, 80, CELLAR.x, 2);
+    // top-lit crest + the plate seams reading as a spiral
+    for (let x = -26; x <= 26; x++) {
+      const yy = -26 * Math.sqrt(Math.max(0, 1 - (x * x) / (26 * 26)));
+      set(cv, 70 + x, cyb + yy + 1, CELLAR.A);
+    }
+    // tucked legs peeking under the rim
+    for (const s of [-1, 1])
+      stroke(cv, 70 + s * 20, KGROUND - 4, 70 + s * 26, KGROUND, CELLAR.x, 2);
     inkOutline(cv, CELLAR.K);
     return finish(name, cv);
   }
   if (opts.roll) {
-    // death-1: tipped, legs up, half curled
-    fillEllipse(cv, 74, 56, 46, 22, CELLAR.m);
+    // death-1: tipped onto its back, legs waving, half curled
+    const bcy = KGROUND - 20;
+    fillEllipse(cv, 74, bcy, 46, 20, CELLAR.m);
     for (let sIdx = 1; sIdx < 6; sIdx++) {
       const segx = 74 + (sIdx / 6 - 0.5) * 2 * 40;
-      stroke(cv, segx, 36, segx + 3, 76, CELLAR.d, 1);
+      stroke(cv, segx, bcy - 18, segx + 3, bcy + 16, CELLAR.d, 1);
     }
     for (const fx of [40, 58, 76, 94, 108])
-      stroke(cv, fx, 38, fx + (fx < 74 ? -6 : 6), 26, CELLAR.x, 3);
+      stroke(cv, fx, bcy - 16, fx + (fx < 74 ? -6 : 6), bcy - 30, CELLAR.x, 3);
     // dazed eyes
-    stroke(cv, 26, 52, 34, 60, CELLAR.d, 2);
-    stroke(cv, 26, 60, 34, 52, CELLAR.d, 2);
+    stroke(cv, 24, bcy - 6, 32, bcy + 2, CELLAR.d, 2);
+    stroke(cv, 24, bcy + 2, 32, bcy - 6, CELLAR.d, 2);
     inkOutline(cv, CELLAR.K);
     return finish(name, cv);
   }
   kellerasselLegs(cv, CELLAR, opts.pose ?? 0);
-  const cy = kellerasselBody(cv, CELLAR, { bob: opts.bob ?? 0, arch: opts.arch ?? 0 });
-  void cy;
-  kellerasselHead(cv, CELLAR, { bob: opts.bob ?? 0, tuck: opts.tuck ?? 0, face: opts.face ?? {} });
+  kellerasselBody(cv, CELLAR, { bob: opts.bob ?? 0, rear: opts.rear ?? 0 });
+  kellerasselHead(cv, CELLAR, {
+    bob: (opts.bob ?? 0) + (opts.rear ?? 0),
+    tuck: opts.tuck ?? 0,
+    face: opts.face ?? {},
+  });
   inkOutline(cv, CELLAR.K);
   return finish(name, cv);
 }
@@ -324,20 +360,22 @@ export const KELLERASSEL_FRAMES = [
   kellerasselFrame('kellerassel-idle-b', { bob: 1, pose: 1, face: { brow: 2, blink: true } }),
   kellerasselFrame('kellerassel-walk', { bob: 1, pose: 2, face: { brow: 1 } }),
   kellerasselFrame('kellerassel-telegraph', {
-    bob: 0,
-    arch: 9,
-    tuck: 10,
+    rear: 9,
+    tuck: 12,
     pose: 1,
-    face: { brow: 6, open: true },
+    face: { brow: 5, open: true, strain: true },
   }),
-  kellerasselFrame('kellerassel-hurt', { bob: 1, arch: -3, face: { brow: 4, shut: true } }),
+  kellerasselFrame('kellerassel-hurt', { bob: 1, face: { brow: 4, shut: true } }),
   kellerasselFrame('kellerassel-death-1', { roll: true }),
   kellerasselFrame('kellerassel-death-2', { curl: true }),
 ];
 
 // ================================================================ STIER
+// Feet always plant on `SGROUND` regardless of `bob`, so the bottom-anchored
+// sprite (#193) sits on its shadow; `bob` bends the legs and raises the body.
 const SW = 132,
-  SH = 124;
+  SH = 120,
+  SGROUND = 118;
 
 function stierHorns(cv, P, hx, hy, forward = 0) {
   for (const s of [-1, 1]) {
@@ -417,19 +455,22 @@ function stierHead(cv, P, { hy, lower = 0, expr = 'idle' }) {
 }
 
 function stierBody(cv, P, { by, legPose = 0, telegraph = false }) {
-  // stubby legs, spaced so the gaps between them read
+  // stubby legs, spaced so the gaps between them read. Tops follow the body
+  // (which `bob` raises), hooves stay planted on the ground line — so a raised
+  // body reads as the bull rising onto its legs, not hovering.
   const front = telegraph ? [26, 46] : [24, 46];
   const back = [78, 100];
   const legs = [
-    [front[0], legPose === 1 ? 4 : 0],
+    [front[0], legPose === 1 ? 3 : 0],
     [front[1], 0],
     [back[0], 0],
-    [back[1], legPose === 2 ? 4 : 0],
+    [back[1], legPose === 2 ? 3 : 0],
   ];
   for (const [lx, lift] of legs) {
-    fillRect(cv, lx - 5, by - 2 - lift, 10, 22 - lift, P.C);
-    fillRect(cv, lx - 5, by - 2 - lift, 3, 22 - lift, P.c); // inner shade separates the pair
-    fillRect(cv, lx - 5, by + 18 - lift, 10, 2, P.r); // hoof
+    const top = by + 6 + lift;
+    fillRect(cv, lx - 5, top, 10, SGROUND - top, P.C);
+    fillRect(cv, lx - 5, top, 3, SGROUND - top, P.c); // inner shade separates the pair
+    fillRect(cv, lx - 5, SGROUND - 2, 10, 2, P.r); // hoof
   }
   // barrel body
   fillEllipse(cv, 62, by - 4, 33, 18, P.C);
@@ -446,24 +487,24 @@ function stierBody(cv, P, { by, legPose = 0, telegraph = false }) {
   }
 }
 
-function stierFrame(name, { headY = 40, lower = 0, expr = 'idle', bob = 0, legPose = 0 }) {
+function stierFrame(name, { headY = 44, lower = 0, expr = 'idle', bob = 0, legPose = 0 }) {
   const cv = canvas(SW, SH);
   if (expr === 'dead') {
-    // collapsed on its side
-    fillEllipse(cv, 66, 96, 44, 20, RURAL.C);
-    fillEllipse(cv, 60, 90, 34, 12, RURAL.H);
+    // collapsed on its side, lying on the ground line
+    fillEllipse(cv, 66, SGROUND - 18, 44, 18, RURAL.C);
+    fillEllipse(cv, 60, SGROUND - 24, 34, 11, RURAL.H);
     for (const lx of [40, 54, 82, 96])
-      stroke(cv, lx, 88, lx + (lx < 66 ? -14 : 14), 74, RURAL.C, 6);
+      stroke(cv, lx, SGROUND - 26, lx + (lx < 66 ? -14 : 14), SGROUND - 40, RURAL.C, 6);
     // head down left
-    fillEllipse(cv, 24, 100, 20, 17, RURAL.C);
-    stierHorns(cv, RURAL, 24, 88, 0);
-    fillEllipse(cv, 16, 106, 9, 6, RURAL.R);
-    stroke(cv, 12, 96, 22, 104, RURAL.K, 2);
-    stroke(cv, 12, 104, 22, 96, RURAL.K, 2);
+    fillEllipse(cv, 24, SGROUND - 14, 20, 15, RURAL.C);
+    stierHorns(cv, RURAL, 24, SGROUND - 26, 0);
+    fillEllipse(cv, 16, SGROUND - 8, 9, 6, RURAL.R);
+    stroke(cv, 12, SGROUND - 18, 22, SGROUND - 10, RURAL.K, 2);
+    stroke(cv, 12, SGROUND - 10, 22, SGROUND - 18, RURAL.K, 2);
     inkOutline(cv, RURAL.K);
     return finish(name, cv);
   }
-  const by = 96 - bob;
+  const by = 100 - bob;
   stierBody(cv, RURAL, { by, legPose, telegraph: expr === 'telegraph' });
   stierHead(cv, RURAL, { hy: headY - bob, lower, expr });
   inkOutline(cv, RURAL.K);
@@ -475,8 +516,8 @@ export const STIER_FRAMES = [
   stierFrame('stier-walk', { expr: 'idle', bob: 2, legPose: 1 }),
   stierFrame('stier-idle-b', { expr: 'idle', bob: 1, legPose: 2, lower: 1 }),
   stierFrame('stier-telegraph', { expr: 'telegraph', lower: 14, legPose: 1 }),
-  stierFrame('stier-hurt', { expr: 'hurt', lower: -5, bob: 2 }),
-  stierFrame('stier-death-1', { expr: 'hurt', lower: 20, bob: -6, legPose: 1 }),
+  stierFrame('stier-hurt', { expr: 'hurt', lower: -5, bob: 3 }),
+  stierFrame('stier-death-1', { expr: 'hurt', lower: 16, bob: -3, legPose: 1 }),
   stierFrame('stier-death-2', { expr: 'dead' }),
 ];
 
@@ -486,12 +527,12 @@ export const STIER_FRAMES = [
 // and the stolen maypole raised the full height of the canvas. A bespoke pose
 // rather than the standing parts, so the head does not swallow the body.
 const MW = 132,
-  MH = 160;
+  MH = 156;
 
 export function maibaumDiebFrame() {
   const P = RURAL;
   const cv = canvas(MW, MH);
-  const ground = 154;
+  const ground = MH - 2; // hooves on the bottom edge — bottom-anchored (#193)
 
   // --- stolen Maibaum, first so the rider overlaps it ---
   const poleX = 86;

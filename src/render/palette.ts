@@ -37,6 +37,16 @@ export const ENTITY_PALETTE = {
   invulnerableShellTint: 0x8fa2b8,
   /** What an elite (#156) is tinted — a warm gold, as far from `invulnerableShellTint`'s cold blue-grey as the palette allows. */
   eliteTint: 0xf2c14e,
+  /**
+   * What a boss reddens toward while it winds up an attack (#193).
+   *
+   * A boss fills a quarter of the screen, so the expanding telegraph ring every
+   * other enemy gets would cover the room — for a boss the wind-up is read off
+   * the body instead: the strained pose its `telegraph` clip holds, plus this
+   * flush ramped in over the countdown. A hot red multiply, so it darkens and
+   * reddens whatever the boss's own palette is.
+   */
+  bossTelegraphTint: 0xff5a44,
   /** Tint for a pickup whose kind failed to resolve. Should never be seen; a loud colour if it is. */
   unknownPickupTint: 0xff00ff,
   /** The untinted read — an ordinary body, or an untinted vignette. */

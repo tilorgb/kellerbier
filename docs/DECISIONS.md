@@ -2645,10 +2645,21 @@ sprite category (`tools/art/spec.mjs`), and the Maibaum-Dieb moved from `charact
 is on-screen size, centred on the body" is right for anything the size of a body; a sprite
 two to three times taller than its hitbox, centred, sinks half of itself through the floor.
 So `render/entities.ts` bottom-anchors a boss sprite (and its corpse, and its shadow) at the
-collider's lower edge — the one place the anchor is not `0.5`. Everything else is untouched,
-and a recycled ECS slot that was a boss and is now a fly is explicitly put back to centre.
+collider's lower edge — the one place the anchor is not `0.5` — and every boss frame is
+authored with its ground contact on the canvas's bottom edge, `bob` bending the legs rather
+than lifting the feet, so the anchor lands on the shadow instead of a few pixels above it.
+Everything else is untouched, and a recycled ECS slot that was a boss and is now a fly is
+explicitly put back to centre.
+
+**The wind-up is read off the body, not the ring.** Every other enemy grows a telegraph ring
+over its wind-up; scaled to a boss's collider that ring wraps the room and says nothing about
+where it is safe to stand. So a boss gets no ring — its `telegraph` clip holds a visibly
+strained pose and `ENTITY_PALETTE.bossTelegraphTint` flushes the body red over the countdown.
+The attack's own telegraph (the spit cone, the charge line) still has to be dodgeable on
+position; that was never the ring's job.
 
 **Constrains:** every floor 3-7 boss (#39-#43) is authored at this scale and this class from
-the start. `tools/art/spec.mjs`'s `boss` canvas ceiling (160x160) is now a real limit rather
-than a generous one — the Maibaum-Dieb, with the stolen maypole raised, sits at 132x160 — and
-a boss that genuinely needs to be taller is a spec change with a paragraph, not a quiet bump.
+the start, ground contact on the bottom edge, and telegraphs by pose + flush. `tools/art/
+spec.mjs`'s `boss` canvas ceiling (160x160) is now a real limit rather than a generous one —
+the Maibaum-Dieb, with the stolen maypole raised, sits at 132x156 — and a boss that genuinely
+needs to be taller is a spec change with a paragraph, not a quiet bump.
