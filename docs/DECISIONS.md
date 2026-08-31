@@ -2587,6 +2587,17 @@ at 1:1 over Der Wald's near-black floor it loses its outline entirely, and the p
 legibility argument in `docs/DECISIONS.md` #39 applies to a body standing on that floor for the
 same reason it applies to a shot crossing it.
 
+**Alois alone is composed from source; everything else stays a drawn PNG.** His seven strips
+are forty-four frames holding about a dozen distinct drawings — six directions of one body, each
+with an idle, a blink, two walk contacts, a flinch and three death beats — so they are authored
+as blocks in `tools/art/authoring/alois.mjs` and written out by `npm run art:alois`, with
+`tests/art/alois-authoring.test.ts` holding the committed PNGs byte-identical to that source.
+This is #43's argument for UI art, applied to the one sprite in `assets/` with the same
+repetition problem, and it is deliberately not a policy: a Kellerassel is one drawing seven
+times and belongs in the pixel editor. The cost is that these seven files cannot be hand-edited
+and committed, which is the right way round — the failure it prevents is someone running the
+build and silently reverting touch-ups nobody wrote down.
+
 **Constrains:** every remaining character, boss and shopkeeper sprite, which are now
 inconsistent with the player until each is redrawn — one issue per group, each needing its own
 `CLAUDE.md` sign-off round, since this decision fixes the *style* but not any particular
