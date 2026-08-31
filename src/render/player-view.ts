@@ -130,6 +130,15 @@ export class PlayerView {
   private elapsedMs = 0;
   private lastNowMs: number | null = null;
   private schlauchBehind = false;
+  /**
+   * The nozzle offset last written, so an unmoved hose is not written again.
+   *
+   * `NaN` until the first frame, which is the point: it compares unequal to
+   * everything, so the first `sync` always writes rather than needing a
+   * separate "have we drawn yet" flag.
+   */
+  private schlauchX = Number.NaN;
+  private schlauchY = Number.NaN;
 
   constructor(art: PlayerArt) {
     this.art = art;
@@ -281,10 +290,23 @@ export class PlayerView {
 
     const anchor = SCHLAUCH_ANCHOR[this.facing];
     const reach = SCHLAUCH_REACH - (sinceShot < RECOIL_TICKS ? RECOIL_PIXELS : 0);
-    this.schlauch.position.set(
-      (anchor.x * this.mirror + aimX * reach) * this.pixelScale,
-      (anchor.y + aimY * reach) * this.pixelScale,
-    );
+    // Written only on the frame it moves, for the same reason the child
+    // reorder below is — and it turned out to matter more than the reorder.
+    // `tests/unit/player-animation.test.ts` measures what a second of drawing
+    // allocates, and touching this transform every frame put that measurement
+    // on a coin flip: whether V8 boxes the two doubles as `HeapNumber`s is
+    // settled once per process at tier-up, so the same unmodified loop read
+    // either the instrument's floor or about 25 bytes a frame above it.
+    // Bisected to this one line, and guarding it puts every run on the floor.
+    // `ObservablePoint.set` already ignores an unchanged value; what costs is
+    // reaching the transform at all.
+    const nozzleX = (anchor.x * this.mirror + aimX * reach) * this.pixelScale;
+    const nozzleY = (anchor.y + aimY * reach) * this.pixelScale;
+    if (nozzleX !== this.schlauchX || nozzleY !== this.schlauchY) {
+      this.schlauchX = nozzleX;
+      this.schlauchY = nozzleY;
+      this.schlauch.position.set(nozzleX, nozzleY);
+    }
 
     // Aiming away from the camera puts the hose behind him. Reordered only on
     // the frame it actually changes: a `Container` re-sort every frame is a
