@@ -367,7 +367,15 @@ export class EntityView {
       // exactly as it was before #150.
       const spriteScale = gridScale * pop;
       sprite.scale.set(spriteScale * flip, spriteScale);
-      sprite.position.set(x, y);
+      // A boss is drawn far taller than its collider (`sim/enemy/size.ts`'s
+      // `boss` class, #193), so it *stands on* the collider instead of being
+      // centred through it the way #45 assumes for everything the size of a
+      // body: bottom-anchored, feet at the collider's lower edge. Every other
+      // sprite keeps the centre anchor, so a recycled ECS slot that was a boss
+      // and is now a fly is put back.
+      const isBoss = enemyId !== null && this.bossIds.has(enemyId);
+      sprite.anchor.set(0.5, isBoss ? 1 : 0.5);
+      sprite.position.set(x, isBoss ? y + radius : y);
 
       const priced = isPickup && ((masks[index] ?? 0) & sim.pickupPrice.bit) !== 0;
       // The two-letter label was how a pickup said which one it was before it
@@ -399,14 +407,15 @@ export class EntityView {
           shadowsUsed += 1;
           shadow.visible = true;
           // Wider than tall and wider than the body, the way a shadow cast by
-          // one overhead bulb is. Anchored at the body's feet rather than its
-          // centre, which is the bottom of the sprite, not the bottom of the
-          // collider.
+          // one overhead bulb is. A boss sprite is bottom-anchored at the
+          // collider's lower edge (#193), so the shadow goes there too — under
+          // the feet, not floating up inside the body the way `radius * 0.75`
+          // left it once the sprite grew past the collider.
           shadow.scale.set(
-            (radius * 2.4) / shadow.texture.width,
-            (radius * 0.9) / shadow.texture.height,
+            (radius * 3) / shadow.texture.width,
+            (radius * 1) / shadow.texture.height,
           );
-          shadow.position.set(x, y + radius * 0.75);
+          shadow.position.set(x, y + radius);
         }
       }
 
@@ -516,7 +525,17 @@ export class EntityView {
         ACTOR_SPRITE_SCALE * (animator.corpseFacingAt(corpse) === AUTHORED_FACING ? 1 : -1),
         ACTOR_SPRITE_SCALE,
       );
-      sprite.position.set(animator.corpseXAt(corpse), animator.corpseYAt(corpse));
+      // Match the living body's anchor (#193): a boss corpse is bottom-anchored
+      // at the collider's lower edge, so it does not jump half a sprite-height
+      // the frame the boss dies.
+      const isBoss = this.bossIds.has(clips.name);
+      sprite.anchor.set(0.5, isBoss ? 1 : 0.5);
+      sprite.position.set(
+        animator.corpseXAt(corpse),
+        isBoss
+          ? animator.corpseYAt(corpse) + animator.corpseRadiusAt(corpse)
+          : animator.corpseYAt(corpse),
+      );
     }
     for (let slot = used; slot < this.corpses.length; slot++) {
       const sprite = this.corpses[slot];

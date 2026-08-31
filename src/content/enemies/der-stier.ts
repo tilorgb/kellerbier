@@ -50,13 +50,15 @@ const PHASE_TWO_SPLIT: SplitOnDeathBehaviour = {
 export const derStier: EnemyDefinition = {
   id: 'der-stier',
   name: 'Der Stier',
-  size: 'mid',
+  // `boss` since #193 (`sim/enemy/size.ts`, `docs/DECISIONS.md` #56).
+  size: 'boss',
   health: 24,
   contactDamage: 3,
-  // Heavier than Kuh's own 9 — the charge this teaches is the same lesson at
-  // boss stakes, and a charge a player's own bump could shove off its line
-  // would stop reading as "needs a wall to stop."
-  mass: 12,
+  // The boss class already masses 20 — heavier than Kuh's own 9, so a charge a
+  // player's own bump could shove off its line would stop reading as "needs a
+  // wall to stop." Left explicit so the fight's feel does not move if the class
+  // default ever does.
+  mass: 20,
   initial: 'approach',
   states: [
     {
@@ -99,10 +101,13 @@ export const derStier: EnemyDefinition = {
 export const maibaumDieb: EnemyDefinition = {
   id: 'der-stier-maibaum-dieb',
   name: 'Der Stier (Maibaum-Dieb)',
-  size: 'mid',
+  // Phase two is Der Stier with a rider, so it reads at the same boss scale
+  // (#193): its art moved to `floor-2-rural/bosses/` for the shadow and the
+  // silhouette check the class brings with it.
+  size: 'boss',
   health: 12,
   contactDamage: 3,
-  mass: 12,
+  mass: 20,
   initial: 'approach2',
   states: [
     {

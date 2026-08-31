@@ -53,8 +53,10 @@ const PHASE_TWO_SPLIT: SplitOnDeathBehaviour = {
 export const grosseKellerassel: EnemyDefinition = {
   id: 'grosse-kellerassel',
   name: 'Die Große Kellerassel',
-  size: 'mid',
-  // The same, at boss scale.
+  // `boss` since #193: a quarter-frame chibi silhouette over a collider to
+  // match (`sim/enemy/size.ts`, `docs/DECISIONS.md` #56). Phase two's segments
+  // stay `normal` — they are the ordinary Kellerassel three times over.
+  size: 'boss',
   deathEffect: 'dust',
   health: 18,
   contactDamage: 2,
