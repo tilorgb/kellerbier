@@ -31,11 +31,17 @@ import { ACTOR_SPRITE_SCALE } from './resolution.js';
  * left hip, which is screen-right when he faces the camera, screen-left when
  * he faces away, and on the near flank side-on. The x figure is mirrored along
  * with the body, so the hose stays on the tank when he turns around.
+ *
+ * Re-measured for the Trachten-chibi redraw, whose canvas is 20x32 rather than
+ * the original 16x28: the keg is drawn at columns 16-19, rows 18-25, and the
+ * sprite's centre is (10, 16), so its upper half sits a little over six pixels
+ * out and four down. Facing away, the keg is drawn on his back instead and the
+ * hose runs to the same hip, which is now the screen-left one.
  */
 const SCHLAUCH_ANCHOR: Readonly<Record<PlayerFacingIndex, { x: number; y: number }>> = {
-  [PlayerFacing.South]: { x: 4, y: 1 },
-  [PlayerFacing.North]: { x: -4, y: 1 },
-  [PlayerFacing.Side]: { x: 2, y: 2 },
+  [PlayerFacing.South]: { x: 6, y: 4 },
+  [PlayerFacing.North]: { x: -6, y: 4 },
+  [PlayerFacing.Side]: { x: 5, y: 4 },
 };
 
 /**
@@ -52,18 +58,19 @@ const FIRING_TICKS = 6;
 /** Ticks of that window the nozzle is also kicked back along its own aim. */
 const RECOIL_TICKS = 3;
 
-/** How far back, in authored pixels. One. It is a 16px character. */
+/** How far back, in authored pixels. One, against a 20x32 canvas. */
 const RECOIL_PIXELS = 1;
 
 /**
  * How far along the aim the nozzle sits, past the hip it is anchored to.
  *
- * Three authored pixels, which is what it takes to clear the torso. Without
+ * Four authored pixels, which is what it takes to clear the torso. Without
  * it the hose is drawn from the hip *through* the body whenever he aims across
- * himself, and at 1x that reads as a grey band across his middle rather than
- * as a hose pointing somewhere.
+ * himself, and at 1x that reads as a band across his middle rather than as a
+ * hose pointing somewhere. Three was the figure for the 16-wide body; the
+ * Trachten-chibi redraw is 20 wide, so it takes one more.
  */
-const SCHLAUCH_REACH = 3;
+const SCHLAUCH_REACH = 4;
 
 /**
  * From this tier up, Alois is drawn drunk.

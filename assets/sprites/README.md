@@ -139,6 +139,12 @@ The drunk strips author `idle` and `move` only, on purpose — a flinch is a fli
 `render/player-view.ts` asks the sober strip for `hurt` and `death` rather than letting the
 fallback below turn a drunk death into a drunk idle.
 
+The bodies are 20×32 and the hose 24×24, both since the chibi redraw
+(`docs/DECISIONS.md` #55) — a head that is half the sprite, a Trachtenhut carrying the
+silhouette, and the brass keg drawn on the hip facing the camera and on the back facing away.
+The keg's position on the canvas is what `render/player-view.ts`'s `SCHLAUCH_ANCHOR` is
+measured against, so moving it in the art means re-measuring there.
+
 Four frames of walk cycle is the house budget (`docs/DECISIONS.md` #37); `WALK_CYCLE_FRAMES` in
 `tools/art/spec.mjs` is where that number lives and why.
 
