@@ -156,6 +156,7 @@ export async function createPlaytest(
     tileTextures,
     bossShadow: enemyArt['boss-shadow'],
     bossIds: bossIdsFrom(spriteOrigins),
+    actorShadow: enemyArt['actor-shadow'],
     roomTiles,
     enemyArt,
     enemyFlash: Object.fromEntries(

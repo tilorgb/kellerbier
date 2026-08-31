@@ -51,6 +51,20 @@ const RING_PULSE_RATE = 0.011;
  */
 const BOSS_SHADOW_ALPHA = 0.35;
 
+/**
+ * The same idea as `BOSS_SHADOW_ALPHA`, lighter: every other body standing on
+ * the floor — a walking enemy, a pickup, the player (`player-view.ts` reuses
+ * this same texture and ratios) — reads as sitting on the ground rather than
+ * floating over it, but a shadow this common must stay quiet enough that a
+ * roomful of them never competes with the shots the player is dodging.
+ */
+const MOB_SHADOW_ALPHA = 0.22;
+
+/** How much wider than its own radius a mob/pickup shadow is drawn — narrower than a boss's, since there is far less body to seat. */
+const MOB_SHADOW_WIDTH_SCALE = 1.5;
+/** How much shorter than its own radius a mob/pickup shadow is drawn. */
+const MOB_SHADOW_HEIGHT_SCALE = 0.5;
+
 /** `a` and `b` as `0xrrggbb`, blended per channel — `t` 0 is all `a`, 1 is all `b`. */
 function mixColor(a: number, b: number, t: number): number {
   const k = Math.min(1, Math.max(0, t));
@@ -169,6 +183,12 @@ export class EntityView {
    */
   private readonly bossShadowTexture: Texture | undefined;
   /**
+   * The generic ground shadow every non-boss body draws (loot, a walking
+   * enemy) — everything `bossShadowTexture` above deliberately excludes.
+   * Undefined leaves them exactly as they were before this: no shadow at all.
+   */
+  private readonly actorShadowTexture: Texture | undefined;
+  /**
    * Whether the telegraph ring's brightness pulses (#153).
    *
    * The ring's *growth* is the information — it is the countdown — and always
@@ -190,6 +210,7 @@ export class EntityView {
     pickupArt: Readonly<Record<string, Texture>> = {},
     bossShadow?: Texture,
     bossIds: ReadonlySet<string> = new Set(),
+    actorShadow?: Texture,
   ) {
     this.sim = sim;
     this.texture = texture;
@@ -200,6 +221,7 @@ export class EntityView {
     this.telegraphTexture = telegraphTexture;
     this.bossShadowTexture = bossShadow;
     this.bossIds = bossIds;
+    this.actorShadowTexture = actorShadow;
     this.container.addChild(this.shadowLayer);
     this.container.addChild(this.ringLayer);
     this.container.addChild(this.corpseLayer);
@@ -440,21 +462,41 @@ export class EntityView {
         label.position.set(x, pickupSprite === undefined ? y : y + PRICE_LABEL_OFFSET_Y);
       }
 
-      if (enemyId !== null && this.bossIds.has(enemyId)) {
-        const shadow = this.shadowAt(shadowsUsed);
-        if (shadow !== null) {
-          shadowsUsed += 1;
-          shadow.visible = true;
+      // A boss draws its own wider shadow (#152); every other body that
+      // stands on the floor — a walking enemy or a piece of loot — draws the
+      // shared, quieter one. An authored destructible prop (a barrel, the
+      // Maibaum) is neither: it is furniture the room placed, not something
+      // that walked or dropped there, so it keeps drawing without one.
+      const wantsShadow = enemyId !== null || isPickup;
+      const shadowTexture = isBoss ? this.bossShadowTexture : this.actorShadowTexture;
+      if (wantsShadow && shadowTexture !== undefined) {
+        const shadow = this.shadowAt(shadowsUsed, shadowTexture);
+        shadowsUsed += 1;
+        shadow.visible = true;
+        shadow.texture = shadowTexture;
+        if (isBoss) {
           // Wider than tall and wider than the body, the way a shadow cast by
           // one overhead bulb is. A boss sprite is bottom-anchored at the
           // collider's lower edge (#193), so the shadow goes there too — under
           // the feet, not floating up inside the body the way `radius * 0.75`
           // left it once the sprite grew past the collider.
+          shadow.alpha = BOSS_SHADOW_ALPHA;
           shadow.scale.set(
             (radius * 3) / shadow.texture.width,
             (radius * 1) / shadow.texture.height,
           );
           shadow.position.set(x, y + radius);
+        } else {
+          // Every other body keeps its centre anchor, so its own "ground" sits
+          // a little above the collider's bottom edge rather than exactly on
+          // it — near enough to read as underfoot without the shadow eating
+          // into the body it is meant to be seating.
+          shadow.alpha = MOB_SHADOW_ALPHA;
+          shadow.scale.set(
+            (radius * MOB_SHADOW_WIDTH_SCALE) / shadow.texture.width,
+            (radius * MOB_SHADOW_HEIGHT_SCALE) / shadow.texture.height,
+          );
+          shadow.position.set(x, y + radius * 0.85);
         }
       }
 
@@ -517,19 +559,19 @@ export class EntityView {
     }
   }
 
-  /** `null` when no shadow sprite was loaded — the pre-#152 behaviour. */
-  private shadowAt(slot: number): Sprite | null {
-    const texture = this.bossShadowTexture;
-    if (texture === undefined) {
-      return null;
-    }
+  /**
+   * `initialTexture` seeds a freshly created sprite; a reused slot gets its
+   * texture (and alpha) overwritten by the caller regardless, since the same
+   * slot may draw a boss's shadow one frame and a mob's the next as bodies
+   * come and go.
+   */
+  private shadowAt(slot: number, initialTexture: Texture): Sprite {
     const existing = this.shadows[slot];
     if (existing !== undefined) {
       return existing;
     }
-    const created = new Sprite(texture);
+    const created = new Sprite(initialTexture);
     created.anchor.set(0.5);
-    created.alpha = BOSS_SHADOW_ALPHA;
     this.shadows.push(created);
     this.shadowLayer.addChild(created);
     return created;

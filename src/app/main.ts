@@ -1554,6 +1554,7 @@ WASD move   arrows aim and fire
       tileTextures,
       bossShadow: enemyArt['boss-shadow'],
       bossIds: bossIdsFrom(spriteOrigins),
+      actorShadow: enemyArt['actor-shadow'],
       roomTiles,
       enemyArt,
       enemyFlash: Object.fromEntries(
