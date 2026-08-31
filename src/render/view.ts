@@ -61,6 +61,13 @@ export interface GameViewTextures {
   readonly bossShadow?: Texture | undefined;
   /** Which ids draw off `bosses/` art, so only those get a shadow. */
   readonly bossIds?: ReadonlySet<string> | undefined;
+  /**
+   * The shared ground shadow every other standing/dropped body draws — the
+   * player, a walking enemy, a piece of loot. Omitted leaves them exactly as
+   * they were before this existed: no shadow at all, the same graceful
+   * fallback `bossShadow`'s absence already gets.
+   */
+  readonly actorShadow?: Texture | undefined;
   /** Every tile in the tree by name — what `render/prop-view.ts` draws a room's `decorativeProps` from (#152). */
   readonly tileTextures?: Readonly<Record<string, Texture>> | undefined;
   /**
@@ -269,6 +276,7 @@ export class GameView {
       textures.pickupArt,
       textures.bossShadow,
       textures.bossIds,
+      textures.actorShadow,
     );
     this.entities.setTargetTextures(this.roomTiles[sim.currentFloor]?.destructibles);
     this.world.addChild(this.entities.container);
@@ -281,7 +289,7 @@ export class GameView {
     );
     this.world.addChild(this.pedestals.container);
 
-    this.playerView = new PlayerView(textures.playerArt);
+    this.playerView = new PlayerView(textures.playerArt, textures.actorShadow);
     this.world.addChild(this.playerView.container);
 
     // The arena Maibaum (#199): drawn just after the player, then re-ordered
