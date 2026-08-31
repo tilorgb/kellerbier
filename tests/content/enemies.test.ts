@@ -125,31 +125,34 @@ describe('the enemy roster', () => {
     expect(grosseKellerassel.states.some((state) => state.name === 'wind')).toBe(true);
   });
 
-  it('gives Der Stier a phase-two split into the mounted Maibaum-Dieb, on every state (#38)', () => {
+  it('splits Der Stier into the dismounted Maibaum-Dieb on death, on every state (#199)', () => {
     const registry = new EnemyRegistry(ENEMY_DEFINITIONS);
     const maibaumDiebIndex = registry.indexOf('der-stier-maibaum-dieb');
 
     for (const state of registry.get('der-stier').states) {
-      expect(
-        state.splits.some(
-          (split) => split.definition === maibaumDiebIndex && split.atHealthBelow === 0.5,
-        ),
-        `"${state.name}" is missing the phase-two split`,
-      ).toBe(true);
+      const split = state.splits.find((s) => s.definition === maibaumDiebIndex);
+      expect(split, `"${state.name}" is missing the phase-two split`).toBeDefined();
+      // No health gate any more (#199): Der Stier fights his full 24 and the
+      // dieb spawns on the real killing blow, with his own fresh pool.
+      expect(split?.atHealthBelow).toBe(0);
     }
 
-    // The total health budget does not change across the split, same as
-    // Die Große Kellerassel's own 18-then-9-times-three: 24 in phase one,
-    // threshold at half (12), 12 left for the Maibaum-Dieb.
     const maibaumDieb = registry.get('der-stier-maibaum-dieb');
-    expect(derStier.health / 2).toBe(maibaumDieb.health);
+    expect(derStier.health).toBe(24);
+    expect(maibaumDieb.health).toBe(18);
 
-    // Phase two chains a charge and a ranged swing into one fixed cycle
-    // rather than either running on its own timer, so the fight gains a
-    // second, differently-timed threat instead of just more damage.
+    // Phase two forks once on whether the dieb reaches the arena maypole: an
+    // armed swing branch (`meleeArc`), or Der Stier's own charge, disarmed.
     const swing = maibaumDieb.states.find((state) => state.name === 'swing');
-    expect(swing?.firing.some((shot) => shot.behaviour === 'fireSpread')).toBe(true);
-    expect(maibaumDieb.states.some((state) => state.name === 'charge')).toBe(true);
+    expect(swing?.meleeArc).not.toBeNull();
+    expect(swing?.meleeArc?.knockback).toBeGreaterThan(0);
+    expect(maibaumDieb.states.some((state) => state.name === 'dash')).toBe(true);
+
+    const approach = maibaumDieb.states.find((state) => state.name === 'approach');
+    expect(approach?.movement.behaviour).toBe('approachProp');
+    expect(approach?.approachPropKind).toBeGreaterThanOrEqual(0);
+    const grab = maibaumDieb.states.find((state) => state.name === 'grab');
+    expect(grab?.grabProp).not.toBeNull();
   });
 });
 

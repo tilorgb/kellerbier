@@ -10,9 +10,11 @@ import {
   type FireBurstBehaviour,
   type FireOnBeatBehaviour,
   type FireSpreadBehaviour,
+  type MeleeArcBehaviour,
   MOVEMENT_BEHAVIOURS,
 } from './definition.js';
 import { ENEMY_PROFILES, ENEMY_SIZE_BY_NAME, type EnemySizeId } from './size.js';
+import { propKindIndex } from '../game/prop-kinds.js';
 import { DEATH_EFFECT_KINDS, DEFAULT_DEATH_EFFECT } from '../particle/effects.js';
 import type { ParticleKindId } from '../particle/store.js';
 
@@ -61,6 +63,8 @@ export const TransitionTrigger = {
   OnBlocked: 2,
   PlayerWithin: 3,
   PlayerBeyond: 4,
+  PropWithin: 5,
+  PropBeyond: 6,
 } as const;
 
 export type TransitionTriggerId = (typeof TransitionTrigger)[keyof typeof TransitionTrigger];
@@ -71,6 +75,8 @@ export interface CompiledTransition {
   readonly value: number;
   /** Index into the enemy's own state list. */
   readonly to: number;
+  /** For `PropWithin`: the `DESTRUCTIBLE_PROP_KINDS` index to measure to. -1 otherwise. */
+  readonly propKind: number;
 }
 
 /** A `splitOnDeath` with its target resolved to a definition index. */
@@ -91,6 +97,18 @@ export interface CompiledDetonation {
   readonly radius: number;
 }
 
+/** A `meleeArc` validated once, at compile time (#199). */
+export interface CompiledMeleeArc {
+  readonly arc: number;
+  readonly reach: number;
+  readonly damage: number;
+  readonly knockback: number;
+  readonly sweepTicks: number;
+  readonly direction: -1 | 1;
+  /** Which held-weapon sprite the renderer swings, or `null` for a swipe the telegraph alone shows. Read once a frame, not in the hot path — no interning. */
+  readonly weapon: string | null;
+}
+
 export interface CompiledState {
   readonly name: string;
   /** Exactly one, guaranteed by validation. */
@@ -104,6 +122,16 @@ export interface CompiledState {
   readonly capturesLobTarget: boolean;
   /** Set for a state whose entry deals area damage at an earlier `lobTarget`'s captured position. `null` for every other state. */
   readonly detonate: CompiledDetonation | null;
+  /** Set for a state that swings a wide melee arc (Maibaum-Dieb, #199). `null` otherwise. */
+  readonly meleeArc: CompiledMeleeArc | null;
+  /**
+   * For an `approachProp` movement: the `DESTRUCTIBLE_PROP_KINDS` index it
+   * heads for. -1 for every other movement, and read only when
+   * `movement.behaviour === 'approachProp'` (#199).
+   */
+  readonly approachPropKind: number;
+  /** For a `grabProp` entry: `{ kind, reach }`. `null` for every other state (#199). */
+  readonly grabProp: { readonly kind: number; readonly reach: number } | null;
   readonly splits: readonly CompiledSplit[];
   readonly transitions: readonly CompiledTransition[];
 }
@@ -280,12 +308,15 @@ export class EnemyRegistry {
     const where = `enemy "${definition.id}" state "${state.name}"`;
 
     let movement: EnemyBehaviour | null = null;
+    let approachPropKind = -1;
     const firing: FiringBehaviour[] = [];
     const splits: CompiledSplit[] = [];
     let telegraphTicks = 0;
     let invulnerableTicks = 0;
     let capturesLobTarget = false;
     let detonate: CompiledDetonation | null = null;
+    let meleeArc: CompiledMeleeArc | null = null;
+    let grabProp: { kind: number; reach: number } | null = null;
 
     for (const behaviour of state.behaviours) {
       const name: BehaviourName = behaviour.behaviour;
@@ -297,6 +328,40 @@ export class EnemyRegistry {
           );
         }
         movement = behaviour;
+        if (behaviour.behaviour === 'approachProp') {
+          approachPropKind = resolvePropKind(behaviour.propKind, `${where}: "approachProp"`);
+        }
+        continue;
+      }
+      if (name === 'meleeArc') {
+        const swing = behaviour as MeleeArcBehaviour;
+        if (!(swing.arc > 0) || swing.arc > Math.PI * 2) {
+          throw new Error(
+            `${where}: "meleeArc" needs an arc between 0 and 2π, got ${String(swing.arc)}`,
+          );
+        }
+        if (!(swing.reach > 0)) {
+          throw new Error(`${where}: "meleeArc" needs a reach above zero`);
+        }
+        if (!(swing.damage > 0)) {
+          throw new Error(`${where}: "meleeArc" needs damage above zero`);
+        }
+        if (!(swing.sweepTicks >= 1)) {
+          throw new Error(`${where}: "meleeArc" needs sweepTicks of at least 1`);
+        }
+        if (swing.knockback < 0) {
+          throw new Error(`${where}: "meleeArc" knockback must not be negative`);
+        }
+        meleeArc = {
+          arc: swing.arc,
+          reach: swing.reach,
+          damage: swing.damage,
+          knockback: swing.knockback,
+          sweepTicks: Math.round(swing.sweepTicks),
+          // `-1 | 1` in the authored type; anything else just sweeps oddly, not a crash.
+          direction: swing.direction === -1 ? -1 : 1,
+          weapon: swing.weapon ?? null,
+        };
         continue;
       }
       if (FIRING_BEHAVIOURS.includes(name)) {
@@ -312,6 +377,14 @@ export class EnemyRegistry {
           telegraphTicks = Math.max(telegraphTicks, behaviour.ticks);
         } else if (behaviour.behaviour === 'becomeInvulnerable') {
           invulnerableTicks = Math.max(invulnerableTicks, behaviour.ticks);
+        } else if (behaviour.behaviour === 'grabProp') {
+          if (!(behaviour.reach > 0)) {
+            throw new Error(`${where}: "grabProp" needs a reach above zero`);
+          }
+          grabProp = {
+            kind: resolvePropKind(behaviour.propKind, `${where}: "grabProp"`),
+            reach: behaviour.reach,
+          };
         } else if (behaviour.behaviour === 'lobTarget') {
           capturesLobTarget = true;
         } else if (behaviour.behaviour === 'detonateLobbedBomb') {
@@ -357,7 +430,7 @@ export class EnemyRegistry {
       );
     }
 
-    const transitions = (state.transitions ?? []).map((transition) => {
+    const transitions: CompiledTransition[] = (state.transitions ?? []).map((transition) => {
       const to = stateIndexByName.get(transition.to);
       if (to === undefined) {
         throw new Error(
@@ -365,26 +438,44 @@ export class EnemyRegistry {
         );
       }
       if ('after' in transition) {
-        return { trigger: TransitionTrigger.After, value: transition.after, to } as const;
+        return { trigger: TransitionTrigger.After, value: transition.after, to, propKind: -1 };
       }
       if ('onHit' in transition) {
-        return { trigger: TransitionTrigger.OnHit, value: 0, to } as const;
+        return { trigger: TransitionTrigger.OnHit, value: 0, to, propKind: -1 };
       }
       if ('onBlocked' in transition) {
-        return { trigger: TransitionTrigger.OnBlocked, value: 0, to } as const;
+        return { trigger: TransitionTrigger.OnBlocked, value: 0, to, propKind: -1 };
       }
       if ('whenPlayerWithin' in transition) {
         return {
           trigger: TransitionTrigger.PlayerWithin,
           value: transition.whenPlayerWithin,
           to,
-        } as const;
+          propKind: -1,
+        };
+      }
+      if ('whenPropWithin' in transition) {
+        return {
+          trigger: TransitionTrigger.PropWithin,
+          value: transition.whenPropWithin,
+          to,
+          propKind: resolvePropKind(transition.prop, `${where}: "whenPropWithin"`),
+        };
+      }
+      if ('whenPropBeyond' in transition) {
+        return {
+          trigger: TransitionTrigger.PropBeyond,
+          value: transition.whenPropBeyond,
+          to,
+          propKind: resolvePropKind(transition.prop, `${where}: "whenPropBeyond"`),
+        };
       }
       return {
         trigger: TransitionTrigger.PlayerBeyond,
         value: transition.whenPlayerBeyond,
         to,
-      } as const;
+        propKind: -1,
+      };
     });
 
     return {
@@ -395,8 +486,20 @@ export class EnemyRegistry {
       invulnerableTicks,
       capturesLobTarget,
       detonate,
+      meleeArc,
+      approachPropKind,
+      grabProp,
       splits,
       transitions,
     };
   }
+}
+
+/** A `DESTRUCTIBLE_PROP_KINDS` name to its index, throwing on a typo (`docs/DECISIONS.md` #7). */
+function resolvePropKind(name: string, where: string): number {
+  const index = propKindIndex(name);
+  if (index < 0) {
+    throw new Error(`${where} names prop kind "${name}", which is not a destructible prop`);
+  }
+  return index;
 }

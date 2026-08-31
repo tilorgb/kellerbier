@@ -23,9 +23,11 @@
   "pickupSpawns": [],
   "hazards": [],
   "decorativeProps": [
-    { "x": 120, "y": 20, "type": "boss-plate" },
-    { "x": 168, "y": 72, "type": "maypole" },
-    { "x": 120, "y": 100, "type": "pedestal" }
+    { "x": 120, "y": 18, "type": "boss-plate" },
+    { "x": 60, "y": 46, "type": "maypole" },
+    { "x": 120, "y": 40, "type": "maypole" },
+    { "x": 180, "y": 46, "type": "maypole" },
+    { "x": 120, "y": 108, "type": "pedestal" }
   ],
   "metadata": {
     "floorTags": ["rural"],

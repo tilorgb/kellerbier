@@ -2660,6 +2660,55 @@ position; that was never the ring's job.
 
 **Constrains:** every floor 3-7 boss (#39-#43) is authored at this scale and this class from
 the start, ground contact on the bottom edge, and telegraphs by pose + flush. `tools/art/
-spec.mjs`'s `boss` canvas ceiling (160x160) is now a real limit rather than a generous one —
-the Maibaum-Dieb, with the stolen maypole raised, sits at 132x156 — and a boss that genuinely
-needs to be taller is a spec change with a paragraph, not a quiet bump.
+spec.mjs`'s `boss` canvas ceiling (160x160) is now a real limit rather than a generous one,
+and a boss that genuinely needs to be taller is a spec change with a paragraph, not a quiet
+bump.
+
+**Amendment (#199): the Maibaum-Dieb comes off this class.** When phase two stopped being
+"Der Stier with a rider" and became the thief dismounted and fighting on foot, "a quarter of
+the frame" stopped being true of him — he is a stocky Bua, player-sized, so he is back to
+`normal` (radius 7). He keeps his art in `floor-2-rural/bosses/` and so keeps the boss ground
+shadow and the pose-plus-flush telegraph; "boss" for him is the health bar and the room, not
+the size class. The stolen maypole is no longer raised in his sprite either — it is 2-3x his
+height, far past a `normal` canvas and past the `sprite-scale` band if it were in his
+silhouette — so `render/maibaum-view.ts` draws it separately, in his hands, angled by the
+swing. Der Stier himself is unchanged: still `boss`, still 24 health, just no longer splitting
+at half.
+
+## 57. The Maibaum-Dieb's phase-two branch is emergent from four small primitives, not a stored flag
+
+**Decided:** #199. Floor 2's phase two is now a distinct on-foot fight whose shape depends on
+one thing the player controls during phase one: whether the arena's maypole is still standing
+when Der Stier dies. If it is, the dieb walks to it, grabs it, and only ever swings a wide
+telegraphed arc. If the player brought it down (~7 hits, up from a barrel's 4), he has no
+weapon and falls back to Der Stier's own charge.
+
+**No "armed" bit is stored anywhere.** Which branch he is in is just which state his machine
+walked into. `approachProp` heads for the nearest live prop of a named kind and falls back to
+`walkTowardPlayer` when there is none; `whenPropWithin`/`whenPropBeyond` fire on that same
+distance (and `whenPropBeyond` always fires when the prop is gone — an infinite distance);
+`grabProp` removes the prop on entry and is a silent no-op when nothing is in range. Five
+primitives in `sim/enemy/`, each validated at construction (`docs/DECISIONS.md` #7), each small
+enough to be worth having for one set-piece — the same bet #14 makes about the whole enemy
+format. The maypole picks one of three authored arena positions per room entry from
+`random.floor` (the stream that already owns placement), spawns with a mass so high nothing
+moves it (`MAYPOLE_MASS` — a maypole is planted, only chipped down), and while it stands it is
+`render/maibaum-view.ts`'s to draw: tall, walk-behind (the view re-orders itself against the
+player each frame), and doubling as the weapon once `GameSim.consumeProp` latches
+`maypoleStolen`.
+
+**`meleeArc` is a reusable swept blade, not a one-tick sector.** The aim locks when the state
+is entered, then the blade travels `arc` radians over `sweepTicks` and each tick only threatens
+the wedge it crosses *that* tick — standing inside the arc's footprint is not being caught by
+it, and the blade passes any bearing once so it connects once (the player's contact i-frames
+cover the rest). `meleeBladeAngle` is shared by the hit check and by the view that swings the
+weapon sprite, so the pole a player sees and the wedge that can hit them are one motion.
+Scale-free and weapon-agnostic: the Maibaum-Dieb swings the maypole with a 90° arc at reach 64
+(`weapon: 'maibaum'`), and a future Wiesn mob can swipe a Bierbank with a small one — the sim
+owns the sweep, each weapon gets its own tiny `render/` component keyed off its own trigger.
+
+**Constrains:** nothing new on the schedule needs this, but a later boss that wants a
+content-driven branch on room state has `whenPropWithin`/`whenPropBeyond` and `approachProp` to
+reach for, and any melee mob has `meleeArc`. A graceful-degradation note: a
+`meleeArc`/`grabProp`/`approachProp` that names a prop kind no floor authors is a typo, and
+throws at registry construction rather than producing a boss that never attacks.

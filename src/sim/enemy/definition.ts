@@ -35,14 +35,17 @@ export type BehaviourName =
   | 'orbitPoint'
   | 'fleeFromPlayer'
   | 'rollBounce'
+  | 'approachProp'
   | 'pause'
   | 'fireAtPlayer'
   | 'fireBurst'
   | 'fireSpread'
   | 'fireOnBeat'
+  | 'meleeArc'
   | 'splitOnDeath'
   | 'becomeInvulnerable'
   | 'telegraph'
+  | 'grabProp'
   | 'lobTarget'
   | 'detonateLobbedBomb';
 
@@ -63,6 +66,26 @@ export interface WalkTowardPlayerBehaviour {
  */
 export interface ChargeAtPlayerBehaviour {
   readonly behaviour: 'chargeAtPlayer';
+  readonly speed: number;
+}
+
+/**
+ * Walks toward the nearest live destructible prop of a named kind, and toward
+ * the player when there is no such prop left in the room.
+ *
+ * The Maibaum-Dieb's opening move (#199): dismounted and unarmed, he heads for
+ * the arena's own maypole to pick it up. If the player brought the maypole
+ * down during phase one, `propKind`'s target is gone and he chases them
+ * instead — which is what routes him into the disarmed dash branch, with no
+ * stored "armed" flag anywhere. The fallback is `walkTowardPlayer`'s exact
+ * behaviour, so a state using this never needs a separate movement primitive
+ * for the "prop is gone" case.
+ */
+export interface ApproachPropBehaviour {
+  readonly behaviour: 'approachProp';
+  /** Which destructible prop to head for — a `DESTRUCTIBLE_PROP_KINDS` name. */
+  readonly propKind: string;
+  /** Pixels per tick, before the global `enemy.speedScale`. */
   readonly speed: number;
 }
 
@@ -191,6 +214,44 @@ export interface FireOnBeatBehaviour extends FiringBehaviourBase {
   readonly shots: number;
 }
 
+/**
+ * A swept melee attack: a blade (a pole, a bench, a fist) travels a fixed arc
+ * over a set number of ticks and hits wherever it actually passes.
+ *
+ * Deterministic, not a point check: the aim is locked when the state is
+ * entered (the same commitment `chargeAtPlayer` makes), then the blade sweeps
+ * from `-arc/2` to `+arc/2` around that aim over `sweepTicks`, and each tick it
+ * only threatens the thin wedge it is crossing *right now*. A player already
+ * behind the swing, or one the blade has passed, is not hit — standing inside
+ * the arc's footprint is not the same as being caught by it. It connects at
+ * most once per swing because the blade crosses any given angle exactly once.
+ * Pair it with a `telegraph` state for the wind-up.
+ *
+ * Reusable and scale-free: the Maibaum-Dieb swings the stolen maypole with a
+ * big one (#199); a future Wiesn mob might swipe a Bierbank with a small one.
+ * Damage and knockback go through the same `Contact` event a body touching the
+ * player raises, so a swing reads like everything else that hits you. `weapon`
+ * names which sprite the renderer swings along the blade (`render/`), or is
+ * omitted for an unarmed swipe that only the telegraph shows.
+ */
+export interface MeleeArcBehaviour {
+  readonly behaviour: 'meleeArc';
+  /** Total angle the blade travels, in radians (≈ `Math.PI / 2` for a 90° swipe). */
+  readonly arc: number;
+  /** Blade length from the body, in pixels. */
+  readonly reach: number;
+  /** Half-Maß dealt to a player the blade passes through. */
+  readonly damage: number;
+  /** Outward shove on hit, on top of the standard contact knockback. */
+  readonly knockback: number;
+  /** Ticks the blade takes to travel the whole arc. */
+  readonly sweepTicks: number;
+  /** `-1` sweeps anticlockwise, `1` clockwise (screen space). Defaults to `1`. */
+  readonly direction?: -1 | 1;
+  /** Which held-weapon sprite the renderer swings, e.g. `'maibaum'`. Omitted: telegraph only. */
+  readonly weapon?: string;
+}
+
 /** Leaves smaller things behind. The state it is declared on is the one that splits. */
 export interface SplitOnDeathBehaviour {
   readonly behaviour: 'splitOnDeath';
@@ -238,6 +299,24 @@ export interface TelegraphBehaviour {
 }
 
 /**
+ * On state entry, takes the nearest live destructible prop of a named kind
+ * that is within `reach` — the prop entity is removed from the room.
+ *
+ * The Maibaum-Dieb picking up the maypole (#199). A no-op when there is no
+ * such prop in range, which is the whole of the disarmed branch: he reaches
+ * an empty patch of ground, grabs nothing, and the state machine carries on
+ * into the dash states. Once a prop is taken it is gone for the rest of the
+ * fight — the swing states never transition back to `approachProp`.
+ */
+export interface GrabPropBehaviour {
+  readonly behaviour: 'grabProp';
+  /** Which destructible prop to take — a `DESTRUCTIBLE_PROP_KINDS` name. */
+  readonly propKind: string;
+  /** How close the prop has to be, in pixels, to be grabbed. */
+  readonly reach: number;
+}
+
+/**
  * Remembers where the player is standing, right now, for a
  * `detonateLobbedBomb` later in the same state machine to read.
  *
@@ -275,13 +354,16 @@ export type EnemyBehaviour =
   | OrbitPointBehaviour
   | FleeFromPlayerBehaviour
   | RollBounceBehaviour
+  | ApproachPropBehaviour
   | PauseBehaviour
   | FireAtPlayerBehaviour
   | FireBurstBehaviour
   | FireSpreadBehaviour
   | FireOnBeatBehaviour
+  | MeleeArcBehaviour
   | SplitOnDeathBehaviour
   | BecomeInvulnerableBehaviour
+  | GrabPropBehaviour
   | LobTargetBehaviour
   | DetonateLobbedBombBehaviour
   | TelegraphBehaviour;
@@ -301,7 +383,21 @@ export type EnemyTransition =
   /** The body ran into a wall or a block. What stops a charge. */
   | { readonly to: string; readonly onBlocked: true }
   | { readonly to: string; readonly whenPlayerWithin: number }
-  | { readonly to: string; readonly whenPlayerBeyond: number };
+  | { readonly to: string; readonly whenPlayerBeyond: number }
+  /**
+   * The nearest live destructible prop of `prop` is within this many pixels.
+   * Never fires when no such prop is left in the room — which is how the
+   * Maibaum-Dieb (#199) tells "walk to the maypole and grab it" from "there
+   * is no maypole, go for the player instead".
+   */
+  | { readonly to: string; readonly whenPropWithin: number; readonly prop: string }
+  /**
+   * The nearest live prop of `prop` is *beyond* this many pixels — and, in
+   * particular, always fires when there is no such prop at all (distance
+   * treated as infinite). The Maibaum-Dieb drops into his disarmed chase the
+   * instant the player destroys the maypole he was walking toward (#199).
+   */
+  | { readonly to: string; readonly whenPropBeyond: number; readonly prop: string };
 
 export interface EnemyState {
   readonly name: string;
@@ -354,6 +450,7 @@ export const MOVEMENT_BEHAVIOURS: readonly BehaviourName[] = [
   'orbitPoint',
   'fleeFromPlayer',
   'rollBounce',
+  'approachProp',
   'pause',
 ];
 
@@ -361,6 +458,7 @@ export const MOVEMENT_BEHAVIOURS: readonly BehaviourName[] = [
 export const ENTRY_BEHAVIOURS: readonly BehaviourName[] = [
   'telegraph',
   'becomeInvulnerable',
+  'grabProp',
   'lobTarget',
   'detonateLobbedBomb',
 ];
@@ -368,7 +466,7 @@ export const ENTRY_BEHAVIOURS: readonly BehaviourName[] = [
 /** Primitives that run when the body dies in that state. */
 export const DEATH_BEHAVIOURS: readonly BehaviourName[] = ['splitOnDeath'];
 
-/** Primitives that put something in the air. */
+/** Primitives that put something in the air. `meleeArc` (#199) is handled on its own, not here. */
 export const FIRING_BEHAVIOURS: readonly BehaviourName[] = [
   'fireAtPlayer',
   'fireBurst',

@@ -3,7 +3,14 @@ import { entityIndex } from '../../src/sim/ecs/entity.js';
 import { World } from '../../src/sim/ecs/world.js';
 import type { EnemyDefinition } from '../../src/sim/enemy/definition.js';
 import { EventKind } from '../../src/sim/events/queue.js';
-import { GameSim, PLAYER_RADIUS, type GameSimOptions } from '../../src/sim/game/sim.js';
+import {
+  GameSim,
+  MAYPOLE_HEALTH,
+  MAYPOLE_MASS,
+  MAYPOLE_RADIUS,
+  PLAYER_RADIUS,
+  type GameSimOptions,
+} from '../../src/sim/game/sim.js';
 import {
   type InputFrame,
   InputAction,
@@ -378,53 +385,121 @@ describe('Der Stier boss (#38)', () => {
     expect(reachedApproachAgain).toBe(true);
   });
 
-  it('splits into the mounted Maibaum-Dieb the instant health crosses half, keeping the same total budget', () => {
+  it('splits into the dismounted Maibaum-Dieb only on the real killing blow (#199)', () => {
     const sim = emptySim();
     const player = sim.playerIndex;
     const enemy = place(sim, 'der-stier', sim.positionX(player) + 200, sim.positionY(player));
 
-    // 24 -> 15: still above the 12-health threshold.
-    applyDamageAt(sim, enemy, 9, sim.positionX(enemy), sim.positionY(enemy), 0, 0, -1);
-    for (let tick = 0; tick < 20; tick++) {
-      sim.step(IDLE);
-    }
+    // 24 -> 1: well past the old half-health gate, still no split.
+    applyDamageAt(sim, enemy, 23, sim.positionX(enemy), sim.positionY(enemy), 0, 0, -1);
+    stepEnemyDeaths(sim);
+    sim.world.flush();
     expect(liveEnemies(sim, 'der-stier')).toBe(1);
     expect(liveEnemies(sim, 'der-stier-maibaum-dieb')).toBe(0);
 
-    // 15 -> 11: at or below the threshold now.
-    applyDamageAt(sim, enemy, 4, sim.positionX(enemy), sim.positionY(enemy), 0, 0, -1);
-    for (let tick = 0; tick < 20; tick++) {
-      sim.step(IDLE);
-    }
+    // The last hit: Der Stier dies, the dieb spawns with his own fresh 18 —
+    // the same call + death sweep the impact system runs on a landed shot.
+    applyDamageAt(sim, enemy, 1, sim.positionX(enemy), sim.positionY(enemy), 0, 0, -1);
+    stepEnemyDeaths(sim);
+    sim.world.flush();
     expect(liveEnemies(sim, 'der-stier')).toBe(0);
     expect(liveEnemies(sim, 'der-stier-maibaum-dieb')).toBe(1);
   });
 
-  it('phase two chains a charge into a ranged swing instead of repeating the same attack', () => {
+  it('armed branch: the dieb walks to a standing maypole, grabs it, then swings (#199)', () => {
     const sim = emptySim();
     const player = sim.playerIndex;
-    const enemy = place(
+    const px = sim.positionX(player);
+    const py = sim.positionY(player);
+    // A maypole between the dieb and the player, so `approachProp` heads for it.
+    // Prop kind 1 is `maypole` (`DESTRUCTIBLE_PROP_KINDS`).
+    sim.spawnTarget(px + 40, py, 6, 1, 7);
+    sim.world.flush();
+    const dieb = place(sim, 'der-stier-maibaum-dieb', px + 90, py);
+
+    let reachedGrab = false;
+    let reachedSwing = false;
+    const seen = new Set<string>();
+    for (let tick = 0; tick < 400 && !reachedSwing; tick++) {
+      sim.step(IDLE);
+      const state = stateName(sim, dieb);
+      seen.add(state);
+      reachedGrab ||= state === 'grab';
+      reachedSwing ||= state === 'swing';
+    }
+    expect(reachedGrab, `states seen: ${[...seen].join(', ')}`).toBe(true);
+    expect(reachedSwing).toBe(true);
+    expect(sim.maypoleStolen).toBe(true);
+  });
+
+  it('the swipe is a swept blade: it hits when it passes the player, not on contact (#199)', () => {
+    const sim = emptySim();
+    const player = sim.playerIndex;
+    const px = sim.positionX(player);
+    const py = sim.positionY(player);
+    sim.spawnTarget(px + 30, py, 6, 1, 7);
+    sim.world.flush();
+    const dieb = place(sim, 'der-stier-maibaum-dieb', px + 55, py);
+
+    let hpBeforeSwing = -1;
+    let hurtDuringSwing = false;
+    let hurtWhileNotSwinging = false;
+    for (let tick = 0; tick < 500; tick++) {
+      const before = sim.playerHealth;
+      sim.step(IDLE);
+      const state = stateName(sim, dieb);
+      if (state === 'swing' && hpBeforeSwing < 0) hpBeforeSwing = before;
+      const tookDamage = sim.playerHealth < before;
+      if (state === 'swing') hurtDuringSwing ||= tookDamage;
+      else if (state !== 'grab' && sim.maypoleStolen) hurtWhileNotSwinging ||= tookDamage;
+      if (hurtDuringSwing) break;
+    }
+    // The armed dieb stands right next to the player between swings holding the
+    // pole; that must never chip the health bar — only the swing itself does.
+    expect(hurtWhileNotSwinging).toBe(false);
+    expect(hurtDuringSwing).toBe(true);
+  });
+
+  it('the arena maypole does not move when shot or bumped, only takes damage (#199)', () => {
+    const sim = emptySim();
+    const player = sim.playerIndex;
+    const px = sim.positionX(player) + 40;
+    const py = sim.positionY(player);
+    // Spawn the way `applyCompiledRoom` does for a boss-room maypole.
+    const pole = entityIndex(
+      sim.spawnTarget(px, py, MAYPOLE_RADIUS, 1, MAYPOLE_HEALTH, MAYPOLE_MASS),
+    );
+    sim.world.flush();
+
+    applyDamageAt(sim, pole, 2, sim.positionX(pole), sim.positionY(pole), 1, 0, -1);
+    for (let t = 0; t < 30; t++) sim.step(IDLE);
+
+    expect(sim.positionX(pole)).toBeCloseTo(px, 1);
+    expect(sim.positionY(pole)).toBeCloseTo(py, 1);
+    expect(sim.health.data[pole * 2]).toBe(MAYPOLE_HEALTH - 2);
+  });
+
+  it('disarmed branch: no maypole, the dieb dashes like Der Stier (#199)', () => {
+    const sim = emptySim();
+    const player = sim.playerIndex;
+    const dieb = place(
       sim,
       'der-stier-maibaum-dieb',
       sim.positionX(player) + 60,
       sim.positionY(player),
     );
 
-    let reachedCharge = false;
+    let reachedDash = false;
     let reachedSwing = false;
-    let firedDuringSwing = false;
-    for (let tick = 0; tick < 400 && !firedDuringSwing; tick++) {
+    for (let tick = 0; tick < 400 && !reachedDash; tick++) {
       sim.step(IDLE);
-      const state = stateName(sim, enemy);
-      reachedCharge ||= state === 'charge';
-      if (state === 'swing') {
-        reachedSwing = true;
-        firedDuringSwing ||= enemyProjectiles(sim) > 0;
-      }
+      const state = stateName(sim, dieb);
+      reachedDash ||= state === 'dash';
+      reachedSwing ||= state === 'swing';
     }
-    expect(reachedCharge).toBe(true);
-    expect(reachedSwing).toBe(true);
-    expect(firedDuringSwing).toBe(true);
+    expect(reachedDash).toBe(true);
+    expect(reachedSwing).toBe(false);
+    expect(sim.maypoleStolen).toBe(false);
   });
 });
 

@@ -1,7 +1,7 @@
 import { World } from '../ecs/world.js';
-import type { EnemyBehaviour } from '../enemy/definition.js';
 import {
   type CompiledDetonation,
+  type CompiledMeleeArc,
   type CompiledState,
   type FiringBehaviour,
   TransitionTrigger,
@@ -10,6 +10,7 @@ import { EventKind } from '../events/queue.js';
 import type { GameSim } from '../game/sim.js';
 import { muzzleFlash } from '../particle/effects.js';
 import { clamp, vectorLength } from '../math.js';
+import { addPush } from './movement.js';
 import { ProjectileTeam } from '../projectile/store.js';
 
 /**
@@ -122,7 +123,10 @@ export function stepEnemies(sim: GameSim): void {
     const toPlayerY = playerY - sim.positionY(index);
     const distance = vectorLength(toPlayerX, toPlayerY);
 
-    const next = chooseTransition(sim, state, ticks, flags, distance);
+    const selfX = sim.positionX(index);
+    const selfY = sim.positionY(index);
+
+    const next = chooseTransition(sim, state, ticks, flags, distance, selfX, selfY);
     if (next >= 0) {
       const entered = compiled.states[next];
       if (entered !== undefined) {
@@ -134,6 +138,12 @@ export function stepEnemies(sim: GameSim): void {
         }
         if (entered.detonate !== null) {
           detonateLobbedBomb(sim, index, entered.detonate);
+        }
+        if (entered.grabProp !== null) {
+          grabNearestProp(sim, index, entered.grabProp);
+        }
+        if (entered.meleeArc !== null) {
+          lockMeleeAim(sim, index, toPlayerX, toPlayerY, distance);
         }
       }
     }
@@ -153,9 +163,12 @@ export function stepEnemies(sim: GameSim): void {
       continue;
     }
 
-    applyMovement(sim, index, state.movement, ticks, toPlayerX, toPlayerY, distance);
+    applyMovement(sim, index, state, ticks, toPlayerX, toPlayerY, distance, selfX, selfY);
     if (state.firing.length > 0) {
       applyFiring(sim, index, state, ticks, toPlayerX, toPlayerY, distance);
+    }
+    if (state.meleeArc !== null) {
+      applyMeleeArc(sim, index, state.meleeArc, ticks, selfX, selfY);
     }
 
     enemy[base + 2] = ticks < MAX_STATE_TICKS ? ticks + 1 : ticks;
@@ -174,6 +187,8 @@ function chooseTransition(
   ticks: number,
   flags: number,
   distance: number,
+  selfX: number,
+  selfY: number,
 ): number {
   for (const transition of state.transitions) {
     switch (transition.trigger) {
@@ -202,6 +217,24 @@ function chooseTransition(
           return transition.to;
         }
         break;
+      case TransitionTrigger.PropWithin: {
+        // Never fires when the prop is gone — `nearestPropDistance` returns
+        // Infinity — which is how the Maibaum-Dieb (#199) tells "reach the
+        // maypole" from "there is no maypole".
+        if (nearestPropDistance(sim, selfX, selfY, transition.propKind) <= transition.value) {
+          return transition.to;
+        }
+        break;
+      }
+      case TransitionTrigger.PropBeyond: {
+        // Always fires when the prop is gone (Infinity > anything) — the
+        // Maibaum-Dieb drops into his disarmed chase the instant the maypole
+        // he was walking toward is destroyed (#199).
+        if (nearestPropDistance(sim, selfX, selfY, transition.propKind) > transition.value) {
+          return transition.to;
+        }
+        break;
+      }
       default:
         break;
     }
@@ -251,12 +284,15 @@ function crossesSplitThreshold(sim: GameSim, index: number, state: CompiledState
 function applyMovement(
   sim: GameSim,
   index: number,
-  behaviour: EnemyBehaviour,
+  state: CompiledState,
   ticks: number,
   toPlayerX: number,
   toPlayerY: number,
   distance: number,
+  selfX: number,
+  selfY: number,
 ): void {
+  const behaviour = state.movement;
   const velocity = sim.velocity.data;
   const base = index * 2;
   const motion = sim.enemyMotion.data;
@@ -273,6 +309,24 @@ function applyMovement(
       const speed = behaviour.speed * scale;
       velocity[base] = distance === 0 ? 0 : (toPlayerX / distance) * speed;
       velocity[base + 1] = distance === 0 ? 0 : (toPlayerY / distance) * speed;
+      return;
+    }
+    case 'approachProp': {
+      // Head for the nearest live prop of the named kind; with none left in
+      // the room, fall back to exactly `walkTowardPlayer` (#199). The prop
+      // index is resolved once at compile time onto the state.
+      const speed = behaviour.speed * scale;
+      const prop = nearestPropIndex(sim, selfX, selfY, state.approachPropKind);
+      let dirX = toPlayerX;
+      let dirY = toPlayerY;
+      let length = distance;
+      if (prop >= 0) {
+        dirX = sim.positionX(prop) - selfX;
+        dirY = sim.positionY(prop) - selfY;
+        length = vectorLength(dirX, dirY);
+      }
+      velocity[base] = length === 0 ? 0 : (dirX / length) * speed;
+      velocity[base + 1] = length === 0 ? 0 : (dirY / length) * speed;
       return;
     }
     case 'fleeFromPlayer': {
@@ -494,6 +548,167 @@ function detonateLobbedBomb(sim: GameSim, index: number, detonation: CompiledDet
   const x = motion[motionBase] ?? sim.positionX(index);
   const y = motion[motionBase + 1] ?? sim.positionY(index);
   sim.applySplashDamage(x, y, detonation.radius, detonation.damage, index);
+}
+
+/**
+ * The nearest live destructible prop of `kind`, as an entity index, or -1.
+ *
+ * `kind` is a `DESTRUCTIBLE_PROP_KINDS` index resolved at compile time. The
+ * scan is one pass over the world per call — the Maibaum-Dieb (#199) is the
+ * only body that calls it, and a boss room never holds enough entities for it
+ * to register, the same argument `GameSim.bossHealth`'s per-frame scan makes.
+ *
+ * @hot — no allocation; returns via the module scratch below.
+ */
+function nearestPropIndex(sim: GameSim, x: number, y: number, kind: number): number {
+  if (kind < 0) {
+    return -1;
+  }
+  const states = sim.world.states;
+  const masks = sim.world.masks;
+  const propBit = sim.propKind.bit;
+  const propData = sim.propKind.data;
+  let best = -1;
+  let bestSq = Infinity;
+  for (let i = 0; i < sim.world.highWater; i++) {
+    if (states[i] !== World.ALIVE || ((masks[i] ?? 0) & propBit) === 0) {
+      continue;
+    }
+    if ((propData[i] ?? 0) !== kind) {
+      continue;
+    }
+    const dx = sim.positionX(i) - x;
+    const dy = sim.positionY(i) - y;
+    const distSq = dx * dx + dy * dy;
+    if (distSq < bestSq) {
+      bestSq = distSq;
+      best = i;
+    }
+  }
+  return best;
+}
+
+/** Distance to the nearest live prop of `kind`, or `Infinity` when there is none. */
+function nearestPropDistance(sim: GameSim, x: number, y: number, kind: number): number {
+  const index = nearestPropIndex(sim, x, y, kind);
+  if (index < 0) {
+    return Infinity;
+  }
+  const dx = sim.positionX(index) - x;
+  const dy = sim.positionY(index) - y;
+  return vectorLength(dx, dy);
+}
+
+/**
+ * On entering a `grabProp` state: take the nearest prop of the named kind
+ * within `reach`. A no-op when none is in range — which is the whole of the
+ * Maibaum-Dieb's disarmed branch (#199).
+ */
+function grabNearestProp(
+  sim: GameSim,
+  index: number,
+  grab: { readonly kind: number; readonly reach: number },
+): void {
+  const prop = nearestPropIndex(sim, sim.positionX(index), sim.positionY(index), grab.kind);
+  if (prop < 0) {
+    return;
+  }
+  const dx = sim.positionX(prop) - sim.positionX(index);
+  const dy = sim.positionY(prop) - sim.positionY(index);
+  if (vectorLength(dx, dy) <= grab.reach) {
+    sim.consumeProp(prop);
+  }
+}
+
+/**
+ * Locks the swing's aim at the player's direction on the tick the `meleeArc`
+ * state is entered, in the body's own `enemyMotion` heading fields — the same
+ * commitment `chargeAtPlayer` makes, and safe to store there because a
+ * `meleeArc` state moves with `pause`.
+ */
+function lockMeleeAim(
+  sim: GameSim,
+  index: number,
+  toPlayerX: number,
+  toPlayerY: number,
+  distance: number,
+): void {
+  const motion = sim.enemyMotion.data;
+  const motionBase = index * ENEMY_MOTION_STRIDE;
+  motion[motionBase] = distance === 0 ? 1 : toPlayerX / distance;
+  motion[motionBase + 1] = distance === 0 ? 0 : toPlayerY / distance;
+}
+
+/**
+ * The absolute world angle of the blade `ticks` into the sweep — one edge of
+ * the arc at `ticks <= 0`, the other at `ticks >= sweepTicks`, linear between.
+ * Shared by the hit check and by the renderer that swings the weapon sprite,
+ * so the two can never disagree about where the blade is (#199).
+ */
+export function meleeBladeAngle(swing: CompiledMeleeArc, aimAngle: number, ticks: number): number {
+  const t = clamp(ticks / swing.sweepTicks, 0, 1);
+  return aimAngle + swing.direction * (-swing.arc / 2 + swing.arc * t);
+}
+
+/** Smallest signed difference `a - b`, wrapped to (-π, π]. */
+function angleDelta(a: number, b: number): number {
+  let d = (a - b) % (Math.PI * 2);
+  if (d > Math.PI) d -= Math.PI * 2;
+  if (d <= -Math.PI) d += Math.PI * 2;
+  return d;
+}
+
+/**
+ * The swing itself: a blade travelling `swing.arc` over `swing.sweepTicks`.
+ *
+ * Each tick it threatens only the thin wedge it crossed *this* tick — the
+ * player has to actually be where the blade is passing, not merely somewhere
+ * inside the arc's footprint. It connects at most once because the blade
+ * crosses any bearing once, and the player's contact i-frames (set by
+ * `applyContact` off the `Contact` event below) cover the rest of the sweep.
+ * Damage, knockback, flash and shake all come from that one event, so a swing
+ * reads exactly like every other thing that hits you, plus an extra outward
+ * shove for the weight of the weapon (#199).
+ */
+function applyMeleeArc(
+  sim: GameSim,
+  index: number,
+  swing: CompiledMeleeArc,
+  ticks: number,
+  selfX: number,
+  selfY: number,
+): void {
+  if (ticks < 1 || ticks > swing.sweepTicks || sim.playerInvulnerableTicks > 0) {
+    return;
+  }
+  const playerIndex = sim.playerIndex;
+  const toX = sim.positionX(playerIndex) - selfX;
+  const toY = sim.positionY(playerIndex) - selfY;
+  const distance = vectorLength(toX, toY);
+  if (distance > swing.reach + (sim.body.data[playerIndex * 2] ?? 0)) {
+    return;
+  }
+  const motion = sim.enemyMotion.data;
+  const motionBase = index * ENEMY_MOTION_STRIDE;
+  const aimAngle = Math.atan2(motion[motionBase + 1] ?? 0, motion[motionBase] ?? 1);
+  const from = meleeBladeAngle(swing, aimAngle, ticks - 1);
+  const to = meleeBladeAngle(swing, aimAngle, ticks);
+  const playerBearing = Math.atan2(toY, toX);
+  // Caught if the player's bearing lies in the slice swept this tick, widened
+  // a little so a fast sweep still connects with a stationary target.
+  const mid = (from + to) / 2;
+  const half = Math.abs(to - from) / 2 + 0.1;
+  if (Math.abs(angleDelta(playerBearing, mid)) > half) {
+    return;
+  }
+  const nx = distance === 0 ? Math.cos(aimAngle) : toX / distance;
+  const ny = distance === 0 ? Math.sin(aimAngle) : toY / distance;
+  // The normal points from the swinger to the player — away from what hit
+  // them, the convention every impact event uses.
+  sim.events.push(EventKind.Contact, playerIndex, index, selfX, selfY, nx, ny, swing.damage);
+  if (swing.knockback > 0) {
+    addPush(sim, playerIndex, nx * swing.knockback, ny * swing.knockback);
+  }
 }
 
 /**

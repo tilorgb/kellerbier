@@ -89,6 +89,7 @@ import {
   ENEMY_FLAG_ELITE,
   ENEMY_MOTION_STRIDE,
   ENEMY_STRIDE,
+  meleeBladeAngle,
   stepEnemies,
   stepEnemyDeaths,
 } from '../systems/enemy.js';
@@ -113,6 +114,7 @@ import {
   STATUS_POISON,
   stepStatusEffects,
 } from '../systems/status-effects.js';
+import { DESTRUCTIBLE_PROP_KINDS, type DestructiblePropKind, propKindIndex } from './prop-kinds.js';
 
 /** Entity slots reserved up front. Sized well above M1's population. */
 const DEFAULT_CAPACITY = 8192;
@@ -139,16 +141,12 @@ const CHAOS_STATS: readonly StatId[] = [
 export const TARGET_RADIUS = ENEMY_PROFILES[EnemySize.Mid].radius;
 
 /**
- * The `decorativeProps` types that become destructible targets, in the order
- * `GameSim.propKind` indexes them.
- *
- * Index 0 is `barrel` so a target spawned by anything that does not name a
- * kind — the training target in the tuning playground, a test calling
- * `spawnTarget` directly — reads as the thing every target used to be.
+ * `DESTRUCTIBLE_PROP_KINDS` now lives in its own leaf module (`prop-kinds.ts`)
+ * so `sim/enemy/` can name a kind without importing this file (#199);
+ * re-exported here so every existing `from '.../game/sim.js'` import is
+ * unchanged.
  */
-export const DESTRUCTIBLE_PROP_KINDS = ['barrel', 'maypole'] as const;
-
-export type DestructiblePropKind = (typeof DESTRUCTIBLE_PROP_KINDS)[number];
+export { DESTRUCTIBLE_PROP_KINDS, type DestructiblePropKind };
 
 /** Collider radius of a placed Bierfassl. A small keg, not a mug. */
 export const BOMB_RADIUS = 6;
@@ -164,6 +162,21 @@ export const MAX_COLLIDER_RADIUS = 16;
 
 /** Hit points of a training target. Four shots, so a kill is a small commitment. */
 export const TARGET_HEALTH = ENEMY_PROFILES[EnemySize.Mid].health;
+
+/**
+ * The arena maypole (#199) is tougher than a barrel and thinner: denying the
+ * Maibaum-Dieb his weapon is a real time investment during phase one, and a
+ * maypole is a pole — the player walks past its base, not around a crate.
+ */
+export const MAYPOLE_HEALTH = 7;
+export const MAYPOLE_RADIUS = 6;
+/**
+ * The arena maypole (#199) does not move: not shoved by a player walking into
+ * it, not knocked by a shot, only chipped down and destroyed. A mass this far
+ * above anything else makes contact separation and hit knockback (both divided
+ * by mass) round to nothing against it.
+ */
+export const MAYPOLE_MASS = 1e6;
 
 /** Hit points the player starts a run with, in half-Maß. */
 export const PLAYER_HEALTH = 6;
@@ -899,6 +912,8 @@ export class GameSim {
   /** Enemy definition a post brings back, or -1 for a plain training target. */
   private readonly postDefinition: number[] = [];
   private roomEnemyCount = 0;
+  /** Latched by `consumeProp` when the Maibaum-Dieb takes the arena maypole (#199); cleared on room load. */
+  private maypoleTaken = false;
   private roomClearedIds = new Set<string>();
   private roomTemplateLoaded = false;
   /** Every real door the current room has (#100) — see the `doors` getter for the *visible* subset. */
@@ -1177,6 +1192,108 @@ export class GameSim {
       max += this.health.data[index * 2 + 1] ?? 0;
     }
     return any ? { current, max } : null;
+  }
+
+  /**
+   * The held Maibaum, once the Maibaum-Dieb has it (#199) — render data for
+   * `MaibaumView`. `null` until `consumeProp` latches `maypoleTaken`, and while
+   * no dieb body is alive.
+   *
+   * `poleAngle` is the world bearing the pole *points* (0 is +x, `-π/2` is
+   * straight up), which the view turns into a sprite rotation. It is the same
+   * `meleeBladeAngle` the hit check reads during the swing itself, so the pole
+   * a player sees and the wedge that can hit them are the one motion; during
+   * the wind-up it is cocked back past the swing's start edge, and otherwise it
+   * rests shouldered at that start edge.
+   *
+   * Not cached — one caller, once a frame, and a boss room holds a handful of
+   * bodies, the same argument `bossHealth` makes.
+   */
+  get maibaumHeld(): {
+    readonly x: number;
+    readonly y: number;
+    readonly poleAngle: number;
+  } | null {
+    if (!this.maypoleTaken) {
+      return null;
+    }
+    const diebDef = this.enemies.indexOf('der-stier-maibaum-dieb');
+    if (diebDef < 0) {
+      return null;
+    }
+    const states = this.world.states;
+    const masks = this.world.masks;
+    for (let index = 0; index < this.world.highWater; index++) {
+      if (
+        states[index] !== World.ALIVE ||
+        ((masks[index] ?? 0) & this.enemyMask) !== this.enemyMask
+      ) {
+        continue;
+      }
+      const base = index * ENEMY_STRIDE;
+      if ((this.enemy.data[base] ?? -1) !== diebDef) {
+        continue;
+      }
+      const compiled = this.enemies.at(diebDef);
+      const state = compiled.states[this.enemy.data[base + 1] ?? 0];
+      const ticks = this.enemy.data[base + 2] ?? 0;
+      const swingState = compiled.states.find((s) => s.meleeArc !== null);
+      const arc = swingState?.meleeArc ?? null;
+      const selfX = this.positionX(index);
+      const selfY = this.positionY(index);
+      const motionBase = index * ENEMY_MOTION_STRIDE;
+
+      let poleAngle = -Math.PI / 2; // straight up, if nothing else applies
+      if (arc !== null) {
+        if (state?.name === 'swing') {
+          const aim = Math.atan2(
+            this.enemyMotion.data[motionBase + 1] ?? 0,
+            this.enemyMotion.data[motionBase] ?? 1,
+          );
+          poleAngle = meleeBladeAngle(arc, aim, ticks);
+        } else {
+          // Not committed yet: aim at the player now, sit at the start edge,
+          // and wind further back as the telegraph fills.
+          const aim = Math.atan2(
+            this.positionY(this.playerIndex) - selfY,
+            this.positionX(this.playerIndex) - selfX,
+          );
+          const wind =
+            state?.name === 'swing-telegraph'
+              ? Math.min(1, ticks / Math.max(1, state.telegraphTicks))
+              : 0;
+          poleAngle = aim + arc.direction * (-arc.arc / 2 - 0.7 * wind);
+        }
+      }
+      return { x: selfX, y: selfY, poleAngle };
+    }
+    return null;
+  }
+
+  /**
+   * The arena maypole while it still stands (#199) — position and hit-flash
+   * for `MaibaumView` to draw it tall and walk-behind. `null` once it is
+   * destroyed or taken. Render-only.
+   */
+  get maypolePlanted(): { readonly x: number; readonly y: number; readonly flash: number } | null {
+    const kind = propKindIndex('maypole');
+    const states = this.world.states;
+    const masks = this.world.masks;
+    const propBit = this.propKind.bit;
+    for (let index = 0; index < this.world.highWater; index++) {
+      if (states[index] !== World.ALIVE || ((masks[index] ?? 0) & propBit) === 0) {
+        continue;
+      }
+      if ((this.propKind.data[index] ?? 0) !== kind) {
+        continue;
+      }
+      return {
+        x: this.positionX(index),
+        y: this.positionY(index),
+        flash: this.flash.data[index] ?? 0,
+      };
+    }
+    return null;
   }
 
   /**
@@ -1549,6 +1666,7 @@ export class GameSim {
     this.rerollChaosStats(floor);
     this.currentFloorValue = floor;
     this.roomEnemyCount = 0;
+    this.maypoleTaken = false;
     const alreadyCleared = this.roomClearedIds.has(this.roomId);
     this.positionPlayerAtDoor(direction, entryCell);
     if (!alreadyCleared) {
@@ -1589,11 +1707,35 @@ export class GameSim {
       // arena cover, breakable by player fire or by his own charge slamming
       // into it, needed nothing from the engine beyond a second prop type
       // reusing the path `barrel` already established.
+      // A room may author several `maypole` props as alternative arena
+      // positions (#199, `content/rooms/dorf-boss.json`): only one stands, and
+      // which one is a `random.floor` roll — the stream that already owns
+      // "room placement". Any other destructible prop spawns wherever it is
+      // authored, one entity per entry, as it always has.
+      const maypoles = compiled.decorativeProps.filter((prop) => prop.type === 'maypole');
+      const chosenMaypole =
+        maypoles.length > 0
+          ? maypoles[Math.floor(this.random.floor.nextFloat() * maypoles.length)]
+          : undefined;
       for (const prop of compiled.decorativeProps) {
         const propKind = DESTRUCTIBLE_PROP_KINDS.indexOf(prop.type as DestructiblePropKind);
-        if (propKind >= 0) {
-          this.spawnTarget(prop.x, prop.y, TARGET_RADIUS, propKind);
+        if (propKind < 0) {
+          continue;
         }
+        if (prop.type === 'maypole') {
+          if (prop === chosenMaypole) {
+            this.spawnTarget(
+              prop.x,
+              prop.y,
+              MAYPOLE_RADIUS,
+              propKind,
+              MAYPOLE_HEALTH,
+              MAYPOLE_MASS,
+            );
+          }
+          continue;
+        }
+        this.spawnTarget(prop.x, prop.y, TARGET_RADIUS, propKind);
       }
     }
     this.restoreOrSpawnRoomLoot(compiled);
@@ -3411,6 +3553,33 @@ export class GameSim {
     applyDamageAt(this, index, remaining, this.positionX(index), this.positionY(index), 0, -1, -1);
   }
 
+  /**
+   * Removes a destructible prop the way something *picking it up* would — no
+   * splash, no loot, no death event, nothing for `splitOnDeath` or the loot
+   * table to react to.
+   *
+   * The Maibaum-Dieb grabbing the arena maypole (#199, `grabProp`). A maypole
+   * taken this way latches `maypoleStolen`, which is what lets `MaibaumView`
+   * switch the same sprite from a planted prop to the pole in his hands.
+   */
+  consumeProp(index: number): void {
+    const wasMaypole =
+      ((this.world.masks[index] ?? 0) & this.propKind.bit) !== 0 &&
+      (this.propKind.data[index] ?? 0) === propKindIndex('maypole');
+    if (this.world.destroy(this.world.entityAt(index)) && wasMaypole) {
+      this.maypoleTaken = true;
+    }
+  }
+
+  /**
+   * True once the arena maypole has been picked up by the Maibaum-Dieb this
+   * room (#199). Render-only — `MaibaumView` reads it to draw the pole in his
+   * hands instead of standing in the arena. Reset on every room load.
+   */
+  get maypoleStolen(): boolean {
+    return this.maypoleTaken;
+  }
+
   step(input: Readonly<InputFrame> = this.idleInput): void {
     this.events.clear();
 
@@ -3939,7 +4108,14 @@ export class GameSim {
     return Math.min(tuning.eliteChanceMax, chance);
   }
 
-  spawnTarget(x: number, y: number, radius: number = TARGET_RADIUS, propKind = 0): Entity {
+  spawnTarget(
+    x: number,
+    y: number,
+    radius: number = TARGET_RADIUS,
+    propKind = 0,
+    health: number = TARGET_HEALTH,
+    mass = 3,
+  ): Entity {
     const entity = this.world.create();
     this.world.add(entity, this.transform);
     this.world.add(entity, this.velocity);
@@ -3966,11 +4142,11 @@ export class GameSim {
 
     const body = this.body.data;
     body[index * 2] = radius;
-    body[index * 2 + 1] = 3;
+    body[index * 2 + 1] = mass;
 
-    const health = this.health.data;
-    health[index * 2] = TARGET_HEALTH;
-    health[index * 2 + 1] = TARGET_HEALTH;
+    const healthData = this.health.data;
+    healthData[index * 2] = health;
+    healthData[index * 2 + 1] = health;
 
     // Written rather than assumed clear: slots are recycled, and a body that
     // inherited the contact damage of whatever last used its slot is a bug that
