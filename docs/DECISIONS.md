@@ -2660,6 +2660,71 @@ untouched; the tiles stayed 32×32 (#48/#49 already settled size, and a finer 1:
 composition room, not resolution). Floors 3-7 author their tiles to this hierarchy from the
 start.
 
+**Amendment (M8, #191): the Der Keller roster, and "a creature gets a face" is not absolute.**
+Floor 1's roster is the first of the per-group redraws. It is mostly *not* people — a
+woodlouse, a mould patch, a rolling barrel, a barrel splinter, a wall tap — so #55's three
+rules were re-read rather than transferred, and the option round settled which carry:
+
+- **The face rule is for the animals only.** The Kellerassel, its shed segment and the
+  Bierratte get an eye — a white sclera against a near-black pupil, big enough to read a
+  blink and a flinch. The **Schimmelfleck does not**: it is a spreading growth and reads by
+  its lumpy silhouette and the way it pulses, not by looking back — a deliberate exception to
+  "every creature gets a face", because the thing it *is* has no face. Its Spore inherits
+  that. The **Zapfhahn and Rollfass stay objects** — a wall tap is plumbing, a barrel is a
+  barrel — the same call #192 makes for the Traktor. The Fasssplitter is flung debris.
+- **Proportion becomes "the head-feature is oversized".** The Kellerassel's front plate and
+  the Bierratte's head are large against a shrunk body; there is no shared head block the way
+  #192's human roster has one, because these bodies share no head shape.
+- **Brown, not grey, for the chitin.** Der Keller is the lowest-contrast floor by design
+  (`tools/art/palette.mjs`'s three close greys), so #55's "lean on the outline, not the
+  shading" clause bites hardest here. The Kellerassel and its parts are drawn in the floor's
+  one brown, which separates them from the grey wall before the `#000000` edge even has to.
+
+The Kellerassel stays a seven-frame strip — same frame count and the same
+idle/move/hurt/death clip list its untouched `.anim.json` names — now built from shared parts
+(`tools/art/authoring/floor1-roster.mjs`, `npm run art:floor1`), with the three death beats a
+woodlouse's actual defence: it rolls into a ball. The canvas grew from 24×16 to 26×18. The
+other seven sprites are single frames. `kellerassel-segment` leaves `PENDING_REDRAW` in
+`tests/content/sprite-scale.test.ts` (redrawn to 0.71× its collider, inside the band); the
+list now holds only `shopkeeper`, for #194. Everything is byte-locked by
+`tests/art/floor1-roster-authoring.test.ts`.
+
+**Amendment (M8, #192): the Dorf & Acker roster, and the human head ratio is decided here.**
+Floor 2's roster is the second of the per-group redraws (#191 is Floor 1's). Two calls the
+issue held for the option round, both now settled and recorded so a later sprite cannot
+re-litigate them:
+
+- **A person on this floor has Alois's head ratio, not two-thirds of it.** Bauer,
+  Blaskapellist and Böllerschmeißer carry a head-plus-headwear that is ~44% of the sprite —
+  Alois's own proportion — so they read as his brothers rather than as adults he is a child
+  beside. The alternative (human heads at two-thirds of Alois's, making him read childlike)
+  was a valid direction and was rejected deliberately. `HUMAN_FACE` in
+  `tools/art/authoring/floor2-roster.mjs` is Alois's eye and mouth verbatim, spliced into
+  every full-bodied human; the test asserts it is present, so "same ratio" is enforced, not
+  hoped for. The Gartenzwerg keeps its own outsized-hat chibi proportion (it was already
+  chibi — the question was only what changes, and the answer is: it gets Alois's eye and the
+  hat becomes its thrown prop); the Kuh and Gockel scale the feature that reads as the head
+  against a shrunk body.
+- **The Traktor stays a machine — grille and headlamps, no eyes.** The Kuh has a face because
+  it is livestock and follows the creature rules; a tractor with eyes is a different game's
+  tone, and Floor 2 is the one that has to stay funny without becoming cartoon farmyard
+  (`docs/CONTENT_BIBLE.md`). Its chibi read is carried by proportion — fat wheels, stubby
+  hood, the oversized exhaust stack that is also its prop.
+
+Floor 2 has no red, brown or skin tone in its five (`tools/art/palette.mjs`), so "skin" is
+`#cabc92` — cream two steps down, the warmest tone the floor allows, the same one the
+Maibaum-Dieb established (#199) — and the roster is blue/green/cream throughout. Hard
+`#000000` ink matters more on this bright floor than on Der Keller: the failure mode is a
+sprite with too much saturated fill competing with the tileset, and the outline is what keeps
+a body in front of it. The seven sprites are composed from source
+(`tools/art/authoring/floor2-roster.mjs`, `npm run art:floor2`), byte-locked by
+`tests/art/floor2-roster-authoring.test.ts` — Alois's argument (#55) and the bosses' (#56)
+applied to seven near-identical chibi bodies that share one face. The Maibaum-Dieb is
+untouched: #193/#199 already moved it to `bosses/` and composed it. This landed in one pull
+request with #191 (the Floor 1 roster above) — the two halves of the same redraw, sharing the
+authoring method and this amendment — so `PENDING_REDRAW` in
+`tests/content/sprite-scale.test.ts` came down to just `shopkeeper` (#194) across the pair.
+
 ## 56. A boss is its own enemy size class, drawn taller than its collider and standing on it
 
 **Decided:** M8, #193, alongside #55's boss amendment. "Bosses can be bigger — 20-25% of the
