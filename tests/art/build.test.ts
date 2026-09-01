@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AtlasBuildError, buildAtlases } from '../../tools/art/build.mjs';
 import { decodePng } from '../../tools/art/png.mjs';
-import { FLOOR_PALETTES } from '../../tools/art/palette.mjs';
+import { FLOOR_PALETTES, toBackgroundHue } from '../../tools/art/palette.mjs';
 import { makePng, solidPng } from './helpers.js';
 
 // Two arbitrary on-palette cellar colours, read from the real palette rather
@@ -105,6 +105,32 @@ describe('buildAtlases', () => {
     expect(message).toMatch(/bad\.png/);
     expect(message).toMatch(/\(5, 9\)/);
     expect(message).toMatch(/#d92b3c/);
+  });
+
+  it('checks a background-tier sprite against the derived tier, not the foreground palette', async () => {
+    // A colour only on the background tier — a rural hue darkened and
+    // desaturated by `toBackgroundHue`. Legal on `rural-well` (a decorative
+    // prop, background tier per `tools/art/tiers.mjs`)...
+    const ruralA = FLOOR_PALETTES.rural[0];
+    if (ruralA === undefined) {
+      throw new Error('rural palette is empty');
+    }
+    const bgColor = toBackgroundHue(ruralA);
+    await writeSprite(root, 'floor-2-rural', 'tiles', 'rural-well', solidPng(16, 16, bgColor));
+    const report = await buildAtlases({ rootDir: root, outDir: out, write: false });
+    expect(report.spriteCount).toBe(1);
+
+    // ...and off-palette on `rural-barrel`, a destructible the player acts on
+    // (foreground tier), even though the pixels are identical.
+    await writeSprite(root, 'floor-2-rural', 'tiles', 'rural-barrel', solidPng(16, 16, bgColor));
+    const failure = await buildAtlases({ rootDir: root, outDir: out, write: false }).catch(
+      (error: unknown) => error,
+    );
+    expect(failure).toBeInstanceOf(AtlasBuildError);
+    const message = (failure as InstanceType<typeof AtlasBuildError>).message;
+    expect(message).toMatch(/rural-barrel\.png/);
+    expect(message).toMatch(/on the foreground tier/);
+    expect(message).not.toMatch(/rural-well\.png/);
   });
 
   it('fails the build on a sprite outside its category size spec', async () => {

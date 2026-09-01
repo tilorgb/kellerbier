@@ -11,6 +11,7 @@ import { FLOOR_TILESETS, PROP_TILE_NAMES, MAIBAUM_TOP_TILE } from '../../src/ren
 import { PLAYER_TAG_SPRITE_ORDER } from '../../src/render/projectiles.js';
 import { DESTRUCTIBLE_PROP_KINDS } from '../../src/sim/game/sim.js';
 import { ALL_BUCKET_IDS, CATEGORY_FOLDERS } from '../../tools/art/spec.mjs';
+import { BACKGROUND_SPRITE_NAMES, tileTierDeclared } from '../../tools/art/tiers.mjs';
 import { buildParticleArt, TELEGRAPH_RING_SPRITE } from '../../src/render/art-bundle.js';
 import { PARTICLE_KIND_IDS } from '../../src/sim/particle/store.js';
 import { Texture } from 'pixi.js';
@@ -137,6 +138,25 @@ describe('every prop / hazard type a room can carry is drawable', () => {
 
   it('draws the Maibaum two tiles tall', () => {
     expect(tileNames).toContain(MAIBAUM_TOP_TILE);
+  });
+});
+
+describe('every tile sprite declares a palette tier (#214)', () => {
+  // `tile` is the one category that can be foreground *or* background — a
+  // barrel the player breaks vs. a well they walk past. `tools/art/tiers.mjs`
+  // is a manifest, not a naming convention, so a new tile that is in neither
+  // set fails here rather than defaulting quietly to a tier it may read wrong
+  // on. Non-`tile` categories are always foreground and need no entry.
+  it.each([...tileNames].sort())('%s is foreground or background, not unclassified', (name) => {
+    expect(tileTierDeclared(name)).toBe(true);
+  });
+
+  it('every background-tier name actually exists in the sprite tree', () => {
+    // A rename that drops a background sprite would otherwise silently pull it
+    // back onto the loud foreground tier.
+    for (const name of BACKGROUND_SPRITE_NAMES) {
+      expect(tileNames).toContain(name);
+    }
   });
 });
 

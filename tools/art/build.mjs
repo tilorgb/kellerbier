@@ -6,6 +6,7 @@ import { decodePng, encodePng } from './png.mjs';
 import { packSprites } from './pack.mjs';
 import { scanSprites } from './scan.mjs';
 import { ALL_BUCKET_IDS, floorTagForBucket } from './spec.mjs';
+import { spriteTier } from './tiers.mjs';
 import {
   brightestOpaqueColor,
   darkestOpaqueColor,
@@ -60,13 +61,14 @@ export async function buildAtlases({ rootDir, outDir, write = true }) {
       }
     }
 
-    const allowed = legalPixelColorsFor(sprite.bucketId);
+    const tier = spriteTier(sprite.bucketId, sprite.category, sprite.name);
+    const allowed = legalPixelColorsFor(sprite.bucketId, tier);
     const offending = findOffPalettePixel(pixels, width, height, allowed);
     if (offending !== null) {
       const hex = offending.color.toString(16).padStart(6, '0');
       problems.push(
         `${sprite.filePath}: pixel (${String(offending.x)}, ${String(offending.y)}) is #${hex}, ` +
-          `which is off-palette for "${sprite.bucketId}"`,
+          `which is off-palette for "${sprite.bucketId}" on the ${tier} tier`,
       );
     }
 

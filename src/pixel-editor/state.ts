@@ -1,5 +1,6 @@
 import type { SpriteCategory } from '../../tools/art/spec.mjs';
-import { allowedColorsFor, nudgeShade } from '../../tools/art/palette.mjs';
+import type { SpriteTier } from '../../tools/art/palette.mjs';
+import { nudgeShade, pickableColorsFor } from '../../tools/art/palette.mjs';
 import { DEFAULT_SIZE_PRESET_ID, sizePresetFor } from './size-presets.js';
 
 /**
@@ -71,6 +72,14 @@ export class PixelEditorState {
   loop = true;
   onionSkin = true;
   tool: Tool = 'pen';
+  /**
+   * Which palette tier this sprite is drawn on (#214). Drives the swatch set
+   * the palette panel offers and the `shade` tool's ramp — a background sprite
+   * only ever sees the quiet derived colours, so `docs/DECISIONS.md` #25's "no
+   * off-palette pixel to lint for" holds for it too. Set from `spriteTier` on
+   * Load; chosen in the "New" controls otherwise.
+   */
+  tier: SpriteTier = 'foreground';
   /** `null` only when the palette has not painted a first selection yet — the picker always defaults one in. */
   selectedColor: number | null = null;
   /** Radius of the `shade` tool's brush, in pixels — irrelevant to `pen`/`eraser`, which always touch exactly one. */
@@ -79,9 +88,16 @@ export class PixelEditorState {
 
   private readonly listeners = new Set<() => void>();
 
-  constructor(bucketId: string, category: SpriteCategory, width?: number, height?: number) {
+  constructor(
+    bucketId: string,
+    category: SpriteCategory,
+    width?: number,
+    height?: number,
+    tier: SpriteTier = 'foreground',
+  ) {
     this.bucketId = bucketId;
     this.category = category;
+    this.tier = tier;
     const size =
       width !== undefined && height !== undefined
         ? { width, height }
@@ -89,7 +105,7 @@ export class PixelEditorState {
     this.width = size.width;
     this.height = size.height;
     this.frames = [blankFrame(this.width, this.height)];
-    const [firstColor] = [...allowedColorsFor(bucketId)];
+    const [firstColor] = [...pickableColorsFor(bucketId, tier)];
     this.selectedColor = firstColor ?? null;
   }
 
@@ -126,10 +142,17 @@ export class PixelEditorState {
     return this.frames[this.activeFrameIndex - 1] ?? null;
   }
 
-  /** Resets to a fresh single-frame blank canvas for `bucketId`/`category`/`(width, height)`, keeping the current name. */
-  reset(bucketId: string, category: SpriteCategory, width?: number, height?: number): void {
+  /** Resets to a fresh single-frame blank canvas for `bucketId`/`category`/`tier`/`(width, height)`, keeping the current name. */
+  reset(
+    bucketId: string,
+    category: SpriteCategory,
+    width?: number,
+    height?: number,
+    tier: SpriteTier = 'foreground',
+  ): void {
     this.bucketId = bucketId;
     this.category = category;
+    this.tier = tier;
     const size =
       width !== undefined && height !== undefined
         ? { width, height }
@@ -138,7 +161,7 @@ export class PixelEditorState {
     this.height = size.height;
     this.frames = [blankFrame(this.width, this.height)];
     this.activeFrameIndex = 0;
-    const [firstColor] = [...allowedColorsFor(bucketId)];
+    const [firstColor] = [...pickableColorsFor(bucketId, tier)];
     this.selectedColor = firstColor ?? null;
     this.dirty = false;
     for (const listener of this.listeners) {
@@ -278,7 +301,7 @@ export class PixelEditorState {
             (frame[index + 2] ?? 0)) >>>
           0;
         const direction = Math.random() < 0.5 ? -1 : 1;
-        const next = nudgeShade(this.bucketId, color, direction);
+        const next = nudgeShade(this.bucketId, color, direction, this.tier);
         if (next === color) {
           continue;
         }
