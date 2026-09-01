@@ -1,5 +1,6 @@
-import { Container, Graphics } from 'pixi.js';
+import { Container, Graphics, type Texture } from 'pixi.js';
 import type { GameSim } from '../sim/game/sim.js';
+import { createGroundShadow, styleGroundShadow } from './ground-shadow.js';
 
 /**
  * The arena Maibaum (#199) — the one prop the player can walk *behind*, and
@@ -113,12 +114,21 @@ export class MaibaumView {
 
   private readonly planted = new Graphics();
   private readonly held = new Graphics();
+  private readonly shadow = new Container();
   private footYValue: number | null = null;
 
-  constructor() {
+  constructor(shadowTexture?: Texture) {
     drawPlanted(this.planted);
     drawHeld(this.held);
-    this.container.addChild(this.planted, this.held);
+    // Under the pole, so a planted Maibaum sits on the floor like every other
+    // body (`docs/DECISIONS.md` #61). Only shown while planted — a held pole
+    // is in the Dieb's hands, and the Dieb has his own shadow.
+    if (shadowTexture !== undefined) {
+      const blob = createGroundShadow(shadowTexture);
+      styleGroundShadow(blob, shadowTexture, 12);
+      this.shadow.addChild(blob);
+    }
+    this.container.addChild(this.shadow, this.planted, this.held);
     this.container.visible = false;
   }
 
@@ -132,9 +142,11 @@ export class MaibaumView {
     const heldAt = plantedAt === null ? sim.maibaumHeld : null;
 
     this.planted.visible = plantedAt !== null;
+    this.shadow.visible = plantedAt !== null;
     if (plantedAt !== null) {
       this.planted.position.set(plantedAt.x, plantedAt.y);
       this.planted.tint = plantedAt.flash > 0 ? HIT_FLUSH : 0xffffff;
+      this.shadow.position.set(plantedAt.x, plantedAt.y);
     }
 
     this.held.visible = heldAt !== null;

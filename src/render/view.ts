@@ -311,7 +311,7 @@ export class GameView {
     // The arena Maibaum (#199): drawn just after the player, then re-ordered
     // against them every frame in `sync` so a player standing behind it is
     // hidden by it and one in front is not.
-    this.maibaumView = new MaibaumView();
+    this.maibaumView = new MaibaumView(textures.actorShadow);
     this.world.addChild(this.maibaumView.container);
 
     this.projectiles = new ProjectileView(

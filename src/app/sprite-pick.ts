@@ -165,16 +165,29 @@ export function pickDecorativePropAt(sim: GameSim, worldX: number, worldY: numbe
 }
 
 /**
- * `true` when `(worldX, worldY)` falls inside an authored *obstacle*
- * rectangle (the room editor's Wall tool — `RoomObstacle`, `sim/room/geometry.ts`'s
- * `RoomGeometry.blocks` with `blockOverflyable` set) — rendered as the
- * floor's `block` tile (`render/room.ts`'s `tileRect(container, tileArt.block, ...)`),
- * not the floor variant underneath it. Excludes a shape's own void cells
- * (`L`/`T`'s missing corners), which share the same `blocks` array but with
- * `blockOverflyable` unset — those stand in for the wall, and clicking one
- * should find nothing here, not the crate/plank art actual furniture draws.
+ * The obstacle-variant sprite name at `(worldX, worldY)`, or `null` if the
+ * point is not inside an authored *obstacle* rectangle (the room editor's
+ * Wall tool — `RoomObstacle`, `sim/room/geometry.ts`'s `RoomGeometry.blocks`
+ * with `blockOverflyable` set).
+ *
+ * `render/room.ts` draws an obstacle rect as one boulder per cell, picked off
+ * the same `pickTileVariant` hash the floor mix uses, so this resolves the
+ * click to the exact variant sitting under the cursor rather than always
+ * variant 0 — the obstacle equivalent of `pickTileNameAt`.
+ *
+ * Excludes a shape's own void cells (`L`/`T`'s missing corners), which share
+ * the `blocks` array but with `blockOverflyable` unset — those stand in for
+ * the wall, and clicking one should find nothing here.
  */
-export function pickObstacleBlockAt(sim: GameSim, worldX: number, worldY: number): boolean {
+export function pickObstacleBlockNameAt(
+  sim: GameSim,
+  worldX: number,
+  worldY: number,
+  blockVariantNames: readonly string[],
+): string | null {
+  if (blockVariantNames.length === 0) {
+    return null;
+  }
   const room = sim.room;
   for (let index = 0; index < room.blockCount; index++) {
     if (room.blockOverflyable[index] !== 1) {
@@ -186,10 +199,13 @@ export function pickObstacleBlockAt(sim: GameSim, worldX: number, worldY: number
     const maxX = room.blocks[base + 2] ?? 0;
     const maxY = room.blocks[base + 3] ?? 0;
     if (worldX >= minX && worldX < maxX && worldY >= minY && worldY < maxY) {
-      return true;
+      const col = Math.floor(worldX / ROOM_TILE_UNITS);
+      const row = Math.floor(worldY / ROOM_TILE_UNITS);
+      const variant = pickTileVariant(col, row, blockVariantNames.length);
+      return blockVariantNames[variant] ?? blockVariantNames[0] ?? null;
     }
   }
-  return false;
+  return null;
 }
 
 /**

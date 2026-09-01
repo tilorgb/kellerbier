@@ -95,7 +95,7 @@ import { createEditorDock } from './editor-dock.js';
 import {
   pickDecorativePropAt,
   pickEnemyAt,
-  pickObstacleBlockAt,
+  pickObstacleBlockNameAt,
   pickPlayerAt,
   pickPropAt,
   pickTileNameAt,
@@ -564,6 +564,7 @@ async function boot(): Promise<void> {
       tileTextures,
       spriteOrigins,
       tileVariantNames,
+      blockVariantNames,
     },
     playerArt,
   ] = await Promise.all([loadFloorArt(), loadPlayerArt()]);
@@ -2649,7 +2650,7 @@ WASD move   arrows aim and fire
         enemyId ??
         pickPropAt(sim, local.x, local.y, tileset?.destructibles ?? []) ??
         pickDecorativePropAt(sim, local.x, local.y) ??
-        (pickObstacleBlockAt(sim, local.x, local.y) ? (tileset?.block ?? null) : null) ??
+        pickObstacleBlockNameAt(sim, local.x, local.y, blockVariantNames[floorPlan.floor] ?? []) ??
         pickTileNameAt(sim, floorPlan.floor, local.x, local.y, tileVariantNames);
       if (name === null) {
         return;
