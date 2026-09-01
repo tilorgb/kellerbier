@@ -56,6 +56,7 @@ import { HealthHud } from '../render/health-hud.js';
 import { ItemGateHud } from '../render/item-gate-hud.js';
 import { MinimapHud } from '../render/minimap-hud.js';
 import { CurseHud } from '../render/curse-hud.js';
+import { ItemSetHud } from '../render/item-set-hud.js';
 import { PromilleHud } from '../render/promille-hud.js';
 import { WalletHud } from '../render/wallet-hud.js';
 import { HUD_PALETTE, PARTICLE_PALETTE, UI_PALETTE } from '../render/palette.js';
@@ -850,6 +851,10 @@ async function boot(): Promise<void> {
   const itemGateHud = new ItemGateHud(kit);
   hudLayer.addChild(itemGateHud.view);
 
+  /** Item sets (#137): the "N/M held" progress row and the completion banner. */
+  const itemSetHud = new ItemSetHud(kit);
+  hudLayer.addChild(itemSetHud.view);
+
   const minimapHud = new MinimapHud(app.renderer, kit, {
     treasure: tileTextures['minimap-treasure'],
     shop: tileTextures['minimap-shop'],
@@ -925,8 +930,10 @@ async function boot(): Promise<void> {
     activeItemHud.view.position.set(HUD_MARGIN, y);
     y += activeItemHud.height + HUD_ROW_GAP;
     itemGateHud.view.position.set(HUD_MARGIN, y);
+    y += itemGateHud.height + HUD_ROW_GAP;
 
     const centreX = Math.round(width / 2);
+    itemSetHud.place(HUD_MARGIN, y, centreX, Math.round(height * 0.32));
     bossHealthHud.view.position.set(centreX, HUD_MARGIN + UI_TEXT_HEIGHT + 2);
     bossBanner.place(centreX, Math.round(height * 0.26));
     pickupToast.place(centreX, Math.round(height * 0.2));
@@ -1359,6 +1366,7 @@ async function boot(): Promise<void> {
           : actionPrompt(input.bindings, Bindable.Use, device, glyphSet);
       activeItemHud.sync(sim, activatePrompt);
       itemGateHud.sync(sim);
+      itemSetHud.sync(sim);
       bossHealthHud.sync(sim);
       curseHud.sync(sim);
       minimapHud.setMapOpen(isActionDown(input.frame, InputAction.Map));

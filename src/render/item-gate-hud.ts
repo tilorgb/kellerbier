@@ -48,6 +48,7 @@ export class ItemGateHud {
   private readonly kit: UiKit;
   private readonly rows: Row[] = [];
   private readonly iconWidth: number;
+  private shownCount = 0;
 
   constructor(kit: UiKit) {
     this.kit = kit;
@@ -111,5 +112,11 @@ export class ItemGateHud {
         row.container.visible = false;
       }
     }
+    this.shownCount = shown;
+  }
+
+  /** Height of the currently-shown rows, in UI pixels — 0 for a run holding no gated item, same as every other HUD piece's "hide when empty." */
+  get height(): number {
+    return this.shownCount * ROW_HEIGHT;
   }
 }

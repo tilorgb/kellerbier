@@ -27,6 +27,8 @@ import {
 import { ItemInventory } from '../item/inventory.js';
 import { selectItemOffer } from '../item/pool.js';
 import { ItemRegistry } from '../item/registry.js';
+import { SetRegistry, setStatSourceKey, type ItemSetDefinition } from '../item/set.js';
+import { ITEM_SET_DEFINITIONS } from '../../content/item-sets/index.js';
 import { type RunRandom, createRunRandom } from '../rng/streams.js';
 import {
   type CharacterTraits,
@@ -404,6 +406,8 @@ export interface GameSimOptions {
   readonly enemies?: readonly EnemyDefinition[];
   /** Item data. Defaults to everything in `src/content/items/`. */
   readonly items?: readonly ItemDefinition[];
+  /** Item set data (#137). Defaults to everything in `src/content/item-sets/`. */
+  readonly itemSets?: readonly ItemSetDefinition[];
   /**
    * The headline word the *previous* run's death screen showed, if any.
    *
@@ -596,6 +600,9 @@ export class GameSim {
   /** Every item definition, validated, sorted by id and compiled once at construction (#26). */
   readonly items: ItemRegistry;
 
+  /** Every item set, validated against `items` and compiled once at construction (#137). */
+  readonly itemSets: SetRegistry;
+
   /** Which items this run holds, and their per-item runtime state. */
   readonly inventory: ItemInventory;
 
@@ -608,6 +615,19 @@ export class GameSim {
   private readonly itemStatsDirty: Uint8Array;
   private readonly dirtyItemIndices: Int32Array;
   private dirtyItemCount = 0;
+
+  /**
+   * Which item sets (#137) are currently complete — every member held at
+   * once. Rechecked in full on every `pickUpItem`/`removeItem`
+   * (`syncItemSetModifiers`) rather than dirty-tracked the way
+   * `itemStatsDirty` is: the roster is a handful of sets, not hundreds of
+   * items, so a full walk costs nothing and needs no bookkeeping of its own.
+   */
+  private readonly completedSetIds = new Set<string>();
+  /** Ticks left showing the set-completion notification. See `setCompletionReveal`. */
+  private setRevealTicks = 0;
+  private setRevealName = '';
+  private setRevealDescription = '';
 
   /** The floor `dispatchItemFloorStart` was last fired for. 0 is not a real floor, so floor 1 still fires once. */
   private lastFloorStartDispatched = 0;
@@ -1074,6 +1094,16 @@ export class GameSim {
     this.enemies = new EnemyRegistry(options.enemies ?? ENEMY_DEFINITIONS);
     this.pickups = new PickupRegistry(PICKUP_DEFINITIONS);
     this.items = new ItemRegistry(options.items ?? ITEM_DEFINITIONS);
+    this.itemSets = new SetRegistry(
+      // The default set roster (#137) assumes the default item roster is
+      // also in play — a test substituting its own small `items` list
+      // (every existing test that does) has no reason to also carry every
+      // set's member ids, so it gets no sets by default rather than a
+      // constructor that throws over content the test never asked for.
+      // Passing `itemSets` explicitly always wins, custom roster or not.
+      options.itemSets ?? (options.items === undefined ? ITEM_SET_DEFINITIONS : []),
+      this.items,
+    );
     this.inventory = new ItemInventory(this.items);
     this.itemStatsDirty = new Uint8Array(this.items.count);
     this.dirtyItemIndices = new Int32Array(this.items.count);
@@ -2949,6 +2979,10 @@ export class GameSim {
     this.syncItemStatModifiers();
     const item = this.items.at(index);
     this.reportCollected(item.name, item.description);
+    // After `reportCollected`, not before: a set completing on this exact
+    // pickup has to force-clear the ordinary toast that call just started,
+    // not race it.
+    this.syncItemSetModifiers();
     item.hooks.onPickup?.({ sim: this, itemId: id, state });
     return state;
   }
@@ -2971,6 +3005,7 @@ export class GameSim {
     const stillHeld = this.inventory.remove(index);
     this.markItemStatsDirty(index);
     this.syncItemStatModifiers();
+    this.syncItemSetModifiers();
     if (!stillHeld) {
       item.hooks.onRemove?.({ sim: this, itemId: id, state });
     }
@@ -3476,6 +3511,62 @@ export class GameSim {
     this.dirtyItemCount = 0;
   }
 
+  /**
+   * Rechecks every item set's completion (#137) — every member held at
+   * once — and folds the set's `bonus` into the stat pipeline the instant
+   * it becomes true, clearing it the instant it stops being true. Called
+   * from `pickUpItem`/`removeItem`, the same two places `ItemInventory`
+   * itself reacts to a stack starting or ending.
+   *
+   * A newly-completed set fires the reveal panel and — the same
+   * "the bigger notification wins" precedent `takePedestalItem` sets for its
+   * own reveal over the ordinary pickup toast — force-clears whichever
+   * ordinary toast or pedestal reveal was already showing, so a set's third
+   * piece landing never reads as two things happening at once.
+   */
+  private syncItemSetModifiers(): void {
+    for (const set of this.itemSets.all) {
+      const complete = set.memberIndices.every((index) => this.inventory.has(index));
+      const wasComplete = this.completedSetIds.has(set.id);
+      if (complete === wasComplete) {
+        continue;
+      }
+      const key = setStatSourceKey(set.id);
+      if (complete) {
+        this.completedSetIds.add(set.id);
+        const source = { kind: 'set' as const, id: set.id, label: set.name };
+        const modifiers: StatModifier[] = set.bonus.map((modifier) => ({ ...modifier, source }));
+        if (modifiers.length > 0) {
+          this.stats.setSourceModifiers(key, modifiers);
+        }
+        this.setRevealName = set.name;
+        this.setRevealDescription = `The full ${set.name} set — every piece is doing more together.`;
+        this.setRevealTicks = Math.round(this.tuning.itemPool.revealHoldTicks);
+        this.toastTicks = 0;
+        this.pedestalRevealTicks = 0;
+      } else {
+        this.completedSetIds.delete(set.id);
+        this.stats.clearSource(key);
+      }
+    }
+  }
+
+  /**
+   * The set-completion notification, or `null` once it has aged out — same
+   * "return null past its ticks" shape as `pickupToast`/`pedestalReveal`.
+   */
+  get setCompletionReveal(): { readonly name: string; readonly description: string } | null {
+    if (this.setRevealTicks <= 0) {
+      return null;
+    }
+    return { name: this.setRevealName, description: this.setRevealDescription };
+  }
+
+  /** Whether `id` (an `ItemSetDefinition.id`) is currently complete — every member held at once. */
+  hasCompletedSet(id: string): boolean {
+    return this.completedSetIds.has(id);
+  }
+
   /** True while the simulation is frozen by hitstop. */
   get frozen(): boolean {
     return this.hitstopTicks > 0;
@@ -3834,6 +3925,9 @@ export class GameSim {
     }
     if (this.curseAnnounceTicks > 0) {
       this.curseAnnounceTicks -= 1;
+    }
+    if (this.setRevealTicks > 0) {
+      this.setRevealTicks -= 1;
     }
   }
 
