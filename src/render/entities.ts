@@ -1,10 +1,11 @@
 import { Container, Sprite, Text, type Texture } from 'pixi.js';
+import { ROOM_TILE_UNITS } from '../content/rooms/definition.js';
 import { CollisionLayer } from '../sim/collision/layers.js';
 import { World } from '../sim/ecs/world.js';
 import type { GameSim } from '../sim/game/sim.js';
 import { propKindIndex } from '../sim/game/prop-kinds.js';
 import { lerp } from '../sim/math.js';
-import { bombFuseProgress } from '../sim/systems/bombs.js';
+import { bombBlastArmLength, bombFuseProgress } from '../sim/systems/bombs.js';
 import {
   ENEMY_STRIDE,
   enemyTelegraphProgress,
@@ -137,9 +138,21 @@ export class EntityView {
    */
   readonly animator = new EntityAnimator();
   private readonly telegraphTexture: Texture;
+  /**
+   * A 1x1 solid, stretched into the two bars a bomb's cross telegraph is
+   * drawn from (#210) — the same generic "meant to be stretched" texture
+   * `main.ts`'s `pedestalBeam` already uses for a bar fill, since a cross's
+   * arms are rectangles and the ring pool's round texture cannot draw one.
+   * Undefined leaves a placed bomb with no telegraph at all, the same
+   * "missing texture, skip the effect" fallback every other optional texture
+   * here already takes.
+   */
+  private readonly barTexture: Texture | undefined;
   private readonly sprites: Sprite[] = [];
   private readonly corpses: Sprite[] = [];
   private readonly rings: Sprite[] = [];
+  /** Two per bomb telegraphed this frame — the horizontal arm, then the vertical one. See `barTexture`. */
+  private readonly bars: Sprite[] = [];
   private readonly labels: Text[] = [];
 
   /**
@@ -235,6 +248,7 @@ export class EntityView {
     bossShadow?: Texture,
     bossIds: ReadonlySet<string> = new Set(),
     actorShadow?: Texture,
+    barTexture?: Texture,
   ) {
     this.sim = sim;
     this.texture = texture;
@@ -247,6 +261,7 @@ export class EntityView {
     this.bossIds = bossIds;
     this.actorShadowTexture = actorShadow;
     this.bombTexture = pickupArt[BOMB_PICKUP_ID];
+    this.barTexture = barTexture;
     this.container.addChild(this.shadowLayer);
     this.container.addChild(this.ringLayer);
     this.container.addChild(this.corpseLayer);
@@ -292,6 +307,7 @@ export class EntityView {
 
     let used = 0;
     let ringsUsed = 0;
+    let barsUsed = 0;
     let labelsUsed = 0;
     let shadowsUsed = 0;
     const highWater = world.highWater;
@@ -591,6 +607,33 @@ export class EntityView {
         ring.alpha = Math.min(1, 0.35 + progress * 0.5 + pulse);
         ring.position.set(x, y);
       }
+
+      // A placed Bierfassl telegraphs a cross, not a ring (#210) — the same
+      // shape `blastCandidate` (`sim/systems/bombs.ts`) actually damages,
+      // growing from nothing to the real blast reach as `bombFuse` counts
+      // down rather than a fixed multiple of the bomb's own tiny collider.
+      // `bombFuseProgress` already gates this to a live bomb (0 otherwise).
+      if (isBomb && bombFuse > 0 && this.barTexture !== undefined) {
+        const armSpan = bombBlastArmLength(sim) * 2 * bombFuse;
+        const pulse = this.ringPulses ? Math.sin(nowMs * RING_PULSE_RATE) * 0.12 : 0;
+        const alpha = Math.min(1, 0.35 + bombFuse * 0.5 + pulse);
+
+        const horizontalBar = this.barAt(barsUsed);
+        barsUsed += 1;
+        horizontalBar.visible = true;
+        horizontalBar.width = armSpan;
+        horizontalBar.height = ROOM_TILE_UNITS;
+        horizontalBar.alpha = alpha;
+        horizontalBar.position.set(x, y);
+
+        const verticalBar = this.barAt(barsUsed);
+        barsUsed += 1;
+        verticalBar.visible = true;
+        verticalBar.width = ROOM_TILE_UNITS;
+        verticalBar.height = armSpan;
+        verticalBar.alpha = alpha;
+        verticalBar.position.set(x, y);
+      }
     }
 
     // Every body that was drawn last frame and not this one has left the
@@ -610,6 +653,13 @@ export class EntityView {
       const ring = this.rings[slot];
       if (ring !== undefined) {
         ring.visible = false;
+      }
+    }
+
+    for (let slot = barsUsed; slot < this.bars.length; slot++) {
+      const bar = this.bars[slot];
+      if (bar !== undefined) {
+        bar.visible = false;
       }
     }
 
@@ -747,6 +797,20 @@ export class EntityView {
     created.anchor.set(0.5);
     created.tint = ENTITY_PALETTE.telegraphRing;
     this.rings.push(created);
+    this.ringLayer.addChild(created);
+    return created;
+  }
+
+  /** One bar of a bomb's cross telegraph. `this.barTexture` must be defined — checked once by the caller rather than per bar. */
+  private barAt(slot: number): Sprite {
+    const existing = this.bars[slot];
+    if (existing !== undefined) {
+      return existing;
+    }
+    const created = new Sprite(this.barTexture);
+    created.anchor.set(0.5);
+    created.tint = ENTITY_PALETTE.telegraphRing;
+    this.bars.push(created);
     this.ringLayer.addChild(created);
     return created;
   }

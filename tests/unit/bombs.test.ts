@@ -4,8 +4,13 @@ import { entityIndex } from '../../src/sim/ecs/entity.js';
 import { GameSim, PLAYER_HEALTH, TARGET_RADIUS } from '../../src/sim/game/sim.js';
 import { RoomGeometry } from '../../src/sim/room/geometry.js';
 import { createInputFrame, quantiseAxis } from '../../src/sim/input/frame.js';
-import { ROOM_COLUMNS, ROOM_ROWS, type RoomSubLayout } from '../../src/content/rooms/definition.js';
-import { bombFuseProgress } from '../../src/sim/systems/bombs.js';
+import {
+  ROOM_COLUMNS,
+  ROOM_ROWS,
+  ROOM_TILE_UNITS,
+  type RoomSubLayout,
+} from '../../src/content/rooms/definition.js';
+import { bombBlastArmLength, bombFuseProgress } from '../../src/sim/systems/bombs.js';
 
 function bareRoom(): RoomGeometry {
   return new RoomGeometry(0, 0, 320, 180);
@@ -34,7 +39,7 @@ describe('Bierfassl fuse and blast', () => {
   it('does nothing until the fuse runs out, then explodes and destroys a destructible obstacle', () => {
     const sim = emptySim();
     const index = sim.playerIndex;
-    // Well clear of the player and the blast radius default (40px) reaches it.
+    // Well clear of the player, and 10px from the bomb along its own arm.
     const barrelX = sim.positionX(index) + 400;
     const barrelY = sim.positionY(index) + 400;
     const bomb = sim.spawnBierfassl(barrelX + 10, barrelY, 0, 0, false);
@@ -54,6 +59,64 @@ describe('Bierfassl fuse and blast', () => {
     sim.step(idle());
     expect(sim.world.isAlive(bomb)).toBe(false);
     expect(sim.world.isAlive(barrel)).toBe(false);
+  });
+
+  /** Detonates the bomb at `(bombX, bombY)` and reports whether `target` survived it. */
+  function explodeNear(bombX: number, bombY: number, targetX: number, targetY: number): boolean {
+    const sim = emptySim();
+    const bomb = sim.spawnBierfassl(bombX, bombY, 0, 0, false);
+    const target = sim.spawnTarget(targetX, targetY, TARGET_RADIUS);
+    sim.world.flush();
+    const fuseTicks = Math.round(sim.tuning.pickup.bombFuseTicks);
+    for (let tick = 0; tick <= fuseTicks; tick++) {
+      sim.step(idle());
+    }
+    expect(sim.world.isAlive(bomb)).toBe(false);
+    return sim.world.isAlive(target);
+  }
+
+  describe('the blast is a Bomberman cross (#210), not a circle', () => {
+    it('reaches straight along an arm, up to bombBlastArmTiles tiles out', () => {
+      const sim = emptySim();
+      const armLength = bombBlastArmLength(sim);
+      expect(armLength).toBe(2 * ROOM_TILE_UNITS);
+
+      const bombX = sim.positionX(sim.playerIndex) + 300;
+      const bombY = sim.positionY(sim.playerIndex) + 300;
+      expect(explodeNear(bombX, bombY, bombX + armLength - 2, bombY)).toBe(false);
+    });
+
+    it('stops past the arm’s reach, on the same axis', () => {
+      const sim = emptySim();
+      const armLength = bombBlastArmLength(sim);
+      const bombX = sim.positionX(sim.playerIndex) + 300;
+      const bombY = sim.positionY(sim.playerIndex) + 300;
+      expect(explodeNear(bombX, bombY, bombX + armLength + TARGET_RADIUS + 5, bombY)).toBe(true);
+    });
+
+    it('misses a target on the diagonal even well inside the old circular radius', () => {
+      const sim = emptySim();
+      const armLength = bombBlastArmLength(sim);
+      const bombX = sim.positionX(sim.playerIndex) + 300;
+      const bombY = sim.positionY(sim.playerIndex) + 300;
+      // A distance comfortably inside the pre-#210 circular blast (40px),
+      // split evenly between both axes so it lands outside either arm's
+      // one-tile-wide band.
+      const diagonalOffset = armLength * 0.7;
+      expect(
+        explodeNear(bombX, bombY, bombX + diagonalOffset, bombY + diagonalOffset),
+      ).toBe(true);
+    });
+
+    it('hits anything inside the arm’s own tile-wide band, not just dead-centre on the axis', () => {
+      const sim = emptySim();
+      const bombX = sim.positionX(sim.playerIndex) + 300;
+      const bombY = sim.positionY(sim.playerIndex) + 300;
+      // Off-axis but still inside the horizontal arm's own tile-wide band,
+      // and well short of the arm's length — a real Bomberman-style hit,
+      // not a dead-centre-only one.
+      expect(explodeNear(bombX, bombY, bombX + 20, bombY + 6)).toBe(false);
+    });
   });
 
   it('a set-down Bierfassl never moves', () => {
