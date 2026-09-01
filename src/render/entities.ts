@@ -40,9 +40,6 @@ const MAYPOLE_PROP_KIND = propKindIndex('maypole');
 /** The pickup id whose art a placed Bierfassl reuses (#208) — see `bombTexture`'s own doc comment. */
 const BOMB_PICKUP_ID = 'bierfassl';
 
-/** How far below a priced pickup its number sits, once the pickup has art of its own to not cover. */
-const PRICE_LABEL_OFFSET_Y = 8;
-
 /** Radians per millisecond of the telegraph ring's brightness pulse — a little under two a second. */
 const RING_PULSE_RATE = 0.011;
 
@@ -513,8 +510,16 @@ export class EntityView {
           : kindLabel;
         // Under the sprite rather than across it once there is a sprite to be
         // across: a price is a caption, and a caption over the middle of the
-        // thing it captions hides the thing.
-        label.position.set(x, pickupSprite === undefined ? y : y + PRICE_LABEL_OFFSET_Y);
+        // thing it captions hides the thing. The offset is the sprite's own
+        // half-height (#208) rather than a fixed number — a fixed 8 was
+        // exactly half of the 16px canvas every pickup used to be authored
+        // at, so it stopped sitting under the art the moment that canvas
+        // grew, the same "offset tied to a size that can change instead of
+        // the actual sprite" mistake #204's ground-shadow fix already caught.
+        label.position.set(
+          x,
+          pickupSprite === undefined ? y : y + (pickupSprite.height / 2) * ACTOR_SPRITE_SCALE,
+        );
       }
 
       // A boss draws its own wider shadow (#152); every other body that
