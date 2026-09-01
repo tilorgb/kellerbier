@@ -2529,8 +2529,16 @@ export class GameSim {
    * `tuning.blutwurz.recoveryMaxHealthPenalty`, filled — a successful
    * recovery earns the full (reduced) tank back, not a scrape-by heal — and
    * Kater starts, the same debuff waking from Umgfalln leaves behind.
+   *
+   * A no-op outside an active walk — public (for `stepBlutwurz`'s own
+   * touch-check to call), so guarded the same way `startBlutwurz`'s own
+   * caller is, rather than trusting every future caller to check first:
+   * calling this twice in a row must not spend the recovery penalty twice.
    */
   recoverFromBlutwurz(): void {
+    if (!this.blutwurzActiveFlag) {
+      return;
+    }
     const index = this.playerIndex;
     const restoredMax = Math.max(
       1,
@@ -2549,8 +2557,14 @@ export class GameSim {
    * exactly like a hit that landed clean would — `killPlayer` reads
    * `blutwurzActiveFlag` before this clears it, which is what gives the
    * death word its own, different one.
+   *
+   * A no-op outside an active walk, same reasoning `recoverFromBlutwurz`
+   * guards for.
    */
   failBlutwurz(): void {
+    if (!this.blutwurzActiveFlag) {
+      return;
+    }
     this.killPlayer();
   }
 

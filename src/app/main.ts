@@ -980,6 +980,8 @@ async function boot(): Promise<void> {
    */
   let deathPhase: 'alive' | 'freezing' | 'slowmo' | 'over' = 'alive';
   let deathPhaseTicks = 0;
+  /** Edge-detects `sim.blutwurzActive` turning on — see `enterBlutwurzEntrance`. */
+  let wasBlutwurzActive = false;
 
   /** Ticks left to show the "needs a key" HUD line — see `enterNeighbor`. */
   let keyHintTicks = 0;
@@ -2322,8 +2324,6 @@ WASD move   arrows aim and fire
     refreshHud();
   }
 
-  /** Edge-detects `sim.blutwurzActive` turning on — see `enterBlutwurzEntrance`. */
-  let wasBlutwurzActive = false;
   function checkBlutwurzTransition(): void {
     const active = sim.blutwurzActive;
     if (active && !wasBlutwurzActive) {
