@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CHARACTERS } from '../../src/content/characters/index.js';
+import { AUTHORED_CHARACTERS, CHARACTERS } from '../../src/content/characters/index.js';
 import { ITEM_DEFINITIONS } from '../../src/content/items/index.js';
 import { bossStatKey, STAT_KILLS, STAT_RUNS } from '../../src/app/meta/definition.js';
 import { CHARACTER_RULE_IDS, NEUTRAL_TRAITS } from '../../src/sim/character/definition.js';
@@ -22,9 +22,9 @@ const HIGHEST_PLAYABLE_FLOOR = 2;
 
 describe('character roster (#47)', () => {
   it('gives every character a distinct id, and traits that agree about it', () => {
-    const ids = CHARACTERS.map((character) => character.id);
+    const ids = AUTHORED_CHARACTERS.map((character) => character.id);
     expect(new Set(ids).size).toBe(ids.length);
-    for (const character of CHARACTERS) {
+    for (const character of AUTHORED_CHARACTERS) {
       expect(character.traits.id, character.name).toBe(character.id);
       expect(character.traits.name, character.id).toBe(character.name);
       expect(character.note.length, character.id).toBeGreaterThan(0);
@@ -33,7 +33,7 @@ describe('character roster (#47)', () => {
 
   it('starts everyone with items that exist', () => {
     const items = new Set(ITEM_DEFINITIONS.map((item) => item.id));
-    for (const character of CHARACTERS) {
+    for (const character of AUTHORED_CHARACTERS) {
       for (const id of character.traits.items) {
         expect(items, `${character.name} starts with ${id}`).toContain(id);
       }
@@ -41,7 +41,7 @@ describe('character roster (#47)', () => {
   });
 
   it('names only projectile tags, stats and rules the engine has', () => {
-    for (const character of CHARACTERS) {
+    for (const character of AUTHORED_CHARACTERS) {
       for (const tag of character.traits.shotTags) {
         expect(Object.keys(PROJECTILE_TAG_BY_NAME), character.id).toContain(tag);
       }
@@ -59,7 +59,7 @@ describe('character roster (#47)', () => {
   });
 
   it('is playable: nobody is so fragile or so slow that the run is not a run', () => {
-    for (const character of CHARACTERS) {
+    for (const character of AUTHORED_CHARACTERS) {
       expect(character.traits.maxHealth, character.id).toBeGreaterThanOrEqual(3);
       expect(character.traits.maxHealth, character.id).toBeLessThanOrEqual(10);
       const speed = character.traits.stats.find(
@@ -82,7 +82,7 @@ describe('character roster (#47)', () => {
     for (let floor = 1; floor <= HIGHEST_PLAYABLE_FLOOR; floor++) {
       countable.add(bossStatKey(floor));
     }
-    for (const character of CHARACTERS) {
+    for (const character of AUTHORED_CHARACTERS) {
       const requires = character.requires;
       if (requires === null) {
         continue;
@@ -98,7 +98,7 @@ describe('character roster (#47)', () => {
   });
 
   it('offers exactly one character with no condition at all, and it is Alois', () => {
-    const free = CHARACTERS.filter((character) => character.requires === null);
+    const free = AUTHORED_CHARACTERS.filter((character) => character.requires === null);
     expect(free.map((character) => character.id)).toEqual(['alois']);
     expect(free[0]?.goal).toBe('');
   });
@@ -109,12 +109,23 @@ describe('character roster (#47)', () => {
   });
 
   it("spells König Ludwig's stand-in condition as the boss statistic it means", () => {
-    const ludwig = CHARACTERS.find((character) => character.id === 'ludwig');
+    const ludwig = AUTHORED_CHARACTERS.find((character) => character.id === 'ludwig');
     expect(ludwig?.requires).toEqual({ kind: 'statAtLeast', stat: bossStatKey(2), value: 3 });
   });
 
   it('gives every rule the engine knows about to somebody — an unread rule is dead code', () => {
-    const used = new Set(CHARACTERS.flatMap((character) => character.traits.rules));
+    const used = new Set(AUTHORED_CHARACTERS.flatMap((character) => character.traits.rules));
     expect([...used].sort()).toEqual([...CHARACTER_RULE_IDS].sort());
+  });
+
+  /**
+   * The offered roster (#205) — cut down to Alois alone until the other five
+   * `AUTHORED_CHARACTERS` each get their own balance pass. This is the one
+   * assertion in this file about what `CHARACTERS` actually is rather than
+   * about authored-content quality; the rest deliberately test
+   * `AUTHORED_CHARACTERS` so a benched character stays honest while it waits.
+   */
+  it('currently offers only Alois, until the rest come back one at a time (#205)', () => {
+    expect(CHARACTERS.map((character) => character.id)).toEqual(['alois']);
   });
 });
