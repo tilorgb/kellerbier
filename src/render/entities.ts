@@ -488,15 +488,24 @@ export class EntityView {
           shadow.position.set(x, y + radius);
         } else {
           // Every other body keeps its centre anchor, so its own "ground" sits
-          // a little above the collider's bottom edge rather than exactly on
+          // a little above its own visual bottom edge rather than exactly on
           // it — near enough to read as underfoot without the shadow eating
-          // into the body it is meant to be seating.
+          // into the body it is meant to be seating. This used to be
+          // `radius * 0.85` — the collider's half-height — which is only the
+          // sprite's own half-height when the authored canvas happens to
+          // match the collider. Since #45 an authored pixel is a screen
+          // pixel and nothing constrains canvas size to collider size
+          // (Rollfass's 26px-tall barrel over a 20-unit `mid` collider,
+          // Kellerassel's 16px body over a 14-unit `normal` one), so a body
+          // taller than its collider had its shadow sitting well above its
+          // drawn feet — read as floating rather than standing on it.
+          const visualHalfHeight = (bodyTexture.height / 2) * gridScale;
           shadow.alpha = MOB_SHADOW_ALPHA;
           shadow.scale.set(
             (radius * MOB_SHADOW_WIDTH_SCALE) / shadow.texture.width,
             (radius * MOB_SHADOW_HEIGHT_SCALE) / shadow.texture.height,
           );
-          shadow.position.set(x, y + radius * 0.85);
+          shadow.position.set(x, y + visualHalfHeight * 0.85);
         }
       }
 
