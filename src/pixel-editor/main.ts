@@ -22,6 +22,8 @@ import {
   FLOOR_BUCKETS,
   type SpriteCategory,
 } from '../../tools/art/spec.mjs';
+import type { SpriteTier } from '../../tools/art/palette.mjs';
+import { spriteTier } from '../../tools/art/tiers.mjs';
 
 const CATEGORIES = Object.keys(CATEGORY_FOLDERS) as SpriteCategory[];
 const SAFE_NAME = /^[a-z][a-z0-9-]{0,63}$/;
@@ -51,6 +53,8 @@ interface EditorSnapshot {
   readonly frameDurationMs: number;
   readonly loop: boolean;
   readonly onionSkin: boolean;
+  /** Optional: a snapshot written before #214 has no tier — restore falls back to `'foreground'`. */
+  readonly tier?: SpriteTier;
   readonly dirty: boolean;
   readonly status: string;
 }
@@ -281,6 +285,7 @@ function boot(): void {
     );
     state.activeFrameIndex = snapshot.activeFrameIndex;
     state.onionSkin = snapshot.onionSkin;
+    state.tier = snapshot.tier ?? 'foreground';
     state.dirty = snapshot.dirty;
   }
 
@@ -307,6 +312,24 @@ function boot(): void {
     option.textContent = category;
     categorySelect.appendChild(option);
   }
+
+  // The palette tier the sprite is drawn on (#214). Set from `spriteTier` when
+  // a known sprite is loaded or its name is typed; picked by hand for a brand
+  // new background sprite whose name is not in the manifest yet. Drives which
+  // swatches the palette panel offers — a background sprite only ever sees the
+  // quiet derived colours.
+  const tierSelect = document.createElement('select');
+  for (const tier of ['foreground', 'background'] as const) {
+    const option = document.createElement('option');
+    option.value = tier;
+    option.textContent = tier;
+    tierSelect.appendChild(option);
+  }
+  tierSelect.title = 'Palette tier — background sprites draw from the quiet derived palette (#214)';
+  tierSelect.addEventListener('change', () => {
+    state.tier = tierSelect.value as SpriteTier;
+    state.notify();
+  });
 
   // The size a sprite category is drawn at is a range, not one fixed number
   // (`docs/CONTENT_BIBLE.md` §5's "roughly 12x16", "up to 160x160") and width
@@ -391,6 +414,24 @@ function boot(): void {
   const nameInput = document.createElement('input');
   nameInput.type = 'text';
   nameInput.placeholder = 'sprite-name';
+  // Typing the name of a sprite the manifest already classifies as background
+  // (re-authoring an existing prop from scratch, say) flips the tier to match,
+  // so the swatches are right before the first stroke. Only ever flips *to*
+  // background — an unknown name is a new sprite whose tier is the author's to
+  // pick, and foreground is already the safe default.
+  nameInput.addEventListener('input', () => {
+    const name = nameInput.value.trim();
+    if (name === '' || state.tier === 'background') {
+      return;
+    }
+    if (
+      spriteTier(bucketSelect.value, categorySelect.value as SpriteCategory, name) === 'background'
+    ) {
+      tierSelect.value = 'background';
+      state.tier = 'background';
+      state.notify();
+    }
+  });
 
   populatePresetSelect(snapshot?.category ?? defaultCategory);
   fillSizeFromPreset(snapshot?.category ?? defaultCategory, DEFAULT_SIZE_PRESET_ID);
@@ -398,6 +439,7 @@ function boot(): void {
   if (snapshot !== null) {
     bucketSelect.value = snapshot.bucketId;
     categorySelect.value = snapshot.category;
+    tierSelect.value = snapshot.tier ?? 'foreground';
     nameInput.value = snapshot.name;
     widthInput.value = String(snapshot.width);
     heightInput.value = String(snapshot.height);
@@ -415,7 +457,7 @@ function boot(): void {
     const spec = CATEGORY_SPECS[category];
     const width = Math.min(spec.maxWidth, Math.max(spec.minWidth, Number(widthInput.value)));
     const height = Math.min(spec.maxHeight, Math.max(spec.minHeight, Number(heightInput.value)));
-    state.reset(bucketSelect.value, category, width, height);
+    state.reset(bucketSelect.value, category, width, height, tierSelect.value as SpriteTier);
     nameInput.value = '';
     widthInput.value = String(width);
     heightInput.value = String(height);
@@ -448,6 +490,7 @@ function boot(): void {
   targetRow.append(
     bucketSelect,
     categorySelect,
+    tierSelect,
     presetSelect,
     widthInput,
     sizeSeparator,
@@ -517,6 +560,9 @@ function boot(): void {
     bucketSelect.value = target.bucketId;
     categorySelect.value = target.category;
     nameInput.value = target.name;
+    const tier = spriteTier(target.bucketId, target.category as SpriteCategory, target.name);
+    tierSelect.value = tier;
+    state.tier = tier;
     // Otherwise the preset dropdown (and the width/height bounds it feeds)
     // stayed on whatever category was selected before the load — a "tile"
     // sprite loaded first left the preset list frozen on tile's one 16×16
@@ -643,6 +689,7 @@ function boot(): void {
         frameDurationMs: state.frameDurationMs,
         loop: state.loop,
         onionSkin: state.onionSkin,
+        tier: state.tier,
         dirty: state.dirty,
         status: status.textContent,
       };

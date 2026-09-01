@@ -2927,3 +2927,53 @@ never the thing that was wrong.
 `ground-shadow.ts`, not roll its own. The shadow texture is threaded as `textures.actorShadow`
 through `GameView`; absent (tests, the bench scene) every shadow is simply skipped, exactly as
 before.
+
+## 62. A second, derived palette tier for everything the player does not act on
+
+**Decided:** M8. #196 set the contrast hierarchy (foreground bold, props middling, background
+quiet) and #195 brought the decorative props up to the chibi direction — but both stayed on the
+**same** per-floor legal palette. So `rural-well` and `rural-fence-post`, which the player walks
+straight through, were painted in the same confident hues as `rural-barrel`, which the player
+can push and break. Non-interactive scenery read as an obstacle. Colour was doing the wrong
+job.
+
+**Two tiers, and the line between them is "does the player act on it".** *Foreground* (the
+default): the player, every enemy and boss, projectiles, VFX, pickups, the obstacle
+`blockVariants` (#60), the `destructibles` (barrel, Maibaum), doors, the pedestal — anything
+shot, collected, pushed, opened or routed around. *Background*: walls, floors, the wall lip,
+and every free-standing decorative prop that is art-only (no collision, nothing to destroy).
+The foreground palette does not move; the background one is quieter so scenery recedes instead
+of implying an interaction it does not have.
+
+**Derived, not authored — per #28.** `BACKGROUND_PALETTES[floorTag]` is `FLOOR_PALETTES[floorTag]`
+with each hue pushed `BACKGROUND_TIER.darken` `SHADE_LIGHTNESS_STEP`s darker and
+`BACKGROUND_TIER.desaturate` `DESATURATION_STEP`s toward grey — one each, chosen by eye against
+a real floor-1 and floor-2 room. No second table to keep in sync, and the ~40-colour cap in
+`docs/CONTENT_BIBLE.md` §5 is untouched because these are pure functions of hues already
+counted. `legalPixelColorsFor` and `nudgeShade` gained a `tier` argument (defaulting to
+`'foreground'`, so every prior caller is unchanged); `pickableColorsFor(bucket, tier)` is the
+swatch set, with `allowedColorsFor` staying the foreground one verbatim.
+
+**The `common` bucket derives from every floor hue.** `crate-*`, `shopkeeper-stand` and
+`boss-plate` are shared scenery with no per-floor mood to derive from, so their background tier
+is every hue in `FLOOR_PALETTES` run through the same `toBackgroundHue` — symmetric with
+foreground `common`, which may already draw the whole `MASTER_PALETTE`. A crate's wood still
+needs somewhere to shade to; a single fixed neutral flattened it.
+
+**Classification is a manifest, not a naming convention.** `tools/art/tiers.mjs`'s
+`BACKGROUND_SPRITE_NAMES` is the explicit list, the same call `FLOOR_TILESETS` and
+`PROP_TILE_NAMES` are — inferring "background" from a `-wall` suffix would make a rename a
+silent behaviour change. Foreground is the default for every non-`tile` category;
+`tests/content/sprite-coverage.test.ts` requires every `tile` on disk to be in
+`BACKGROUND_SPRITE_NAMES` or `FOREGROUND_TILE_NAMES` and fails a pull request on one that is in
+neither, so adding a tile forces a tier decision.
+
+**Constrains:** `tools/art/build.mjs` checks each sprite's off-palette pixels against its own
+tier. The pixel editor's swatch panel and a fresh sprite's default colour come from the tier of
+the sprite being edited (a `tier` select in the New controls, set from `spriteTier` on Load),
+so #25's "there is no off-palette pixel to lint for" holds for both tiers. `contrast.mjs`'s
+projectile-legibility gate now scores shots against the *background-tier* wall/floor tones,
+since that is what a shot actually flies over. Floors 3-7 (#39-#43) inherit the tier for free:
+`BACKGROUND_PALETTES` already covers every floor tag, so their content landing only adds tile
+names to the manifest. Making a decorative prop *solid* is a separate question (its own issue) —
+this decision is about not *implying* a collision that is not there.

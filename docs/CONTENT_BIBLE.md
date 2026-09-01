@@ -390,6 +390,14 @@ other item.
   `tests/unit/ui-strings.test.ts` — which measures the real strings — say whether it fits.
 - **Palette capped at ~40 colours** overall, with a per-floor sub-palette so each chapter has
   its own mood while staying visually one game.
+- **Two palette tiers, split by whether the player acts on the thing** (`docs/DECISIONS.md`
+  #62). Foreground — the player, enemies, bosses, shots, pickups, obstacles, destructibles,
+  doors, the pedestal — is drawn bold from the floor's own sub-palette. Background — walls,
+  floors, the wall lip, and every art-only decorative prop (a well, a fence post, bunting) —
+  is drawn from a **derived** quieter tier: the same hues, darkened and desaturated by a fixed
+  step so scenery recedes instead of reading as an obstacle. This is #196's "foreground bold /
+  props middling / background quiet" made a rule: colour tells the player what to look at. No
+  new authored colours — the quiet tier is a pure function of the ~40 already counted.
 - **Projectile legibility is a hard constraint that overrides beauty.** Player shots and enemy
   shots must differ in shape *and* brightness, not only hue. Enemy shots always get a bright
   rim so they read against any background. Test every floor palette with the projectile set

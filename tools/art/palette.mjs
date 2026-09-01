@@ -98,13 +98,24 @@ const FLOOR_BACKGROUND_SWATCHES = {
   wiesn: FLOOR_PALETTES.wiesn,
 };
 
-/** Every floor's own background swatches — what `contrast.mjs` checks projectiles against. */
+/**
+ * Every floor's own large-area background tones — what `contrast.mjs` checks
+ * projectiles against.
+ *
+ * Since #214 these are the *background-tier* derivations of the swatches above,
+ * not the raw `FLOOR_PALETTES` hues: walls, floors and lips are drawn on the
+ * background tier now, so the wall a shot actually flies over is the quieter,
+ * darker one, and that is what "the projectile must still read" has to mean.
+ * `FLOOR_BACKGROUND_SWATCHES` stays the *selection* — which of a floor's hues
+ * cover large areas — and `toBackgroundHue` does to each exactly what the tier
+ * does to the tile.
+ */
 export function floorBackgroundSwatches(floorTag) {
   const backgroundColors = FLOOR_BACKGROUND_SWATCHES[floorTag];
   if (backgroundColors === undefined) {
     throw new Error(`unknown floor tag "${floorTag}"`);
   }
-  return backgroundColors;
+  return backgroundColors.map(toBackgroundHue);
 }
 
 /**
@@ -123,6 +134,15 @@ export function floorBackgroundSwatches(floorTag) {
  */
 const SHADE_STEPS = [-2, -1, 0, 1, 2];
 const SHADE_LIGHTNESS_STEP = 0.09;
+
+/**
+ * One step of the background tier's desaturation (#214), the saturation-axis
+ * peer of `SHADE_LIGHTNESS_STEP`. Kept a touch bigger than the lightness step
+ * because pulling a hue toward grey is what actually makes it stop reading as
+ * "a colour the player should look at" — the darkening alone just makes it a
+ * darker version of the same confident hue.
+ */
+const DESATURATION_STEP = 0.1;
 
 function rgbToHsl(r, g, b) {
   const rn = r / 255;
@@ -184,15 +204,39 @@ export function shadeOf(color, step) {
   return (nr << 16) | (ng << 8) | nb;
 }
 
+/** `color` with its HSL saturation pushed down by `step` `DESATURATION_STEP`s (clamped at 0). `step: 0` returns `color` unchanged. */
+export function desaturateOf(color, step) {
+  if (step === 0) {
+    return color;
+  }
+  const r = (color >> 16) & 0xff;
+  const g = (color >> 8) & 0xff;
+  const b = color & 0xff;
+  const [h, s, l] = rgbToHsl(r, g, b);
+  const nextS = Math.min(1, Math.max(0, s - step * DESATURATION_STEP));
+  const [nr, ng, nb] = hslToRgb(h, nextS, l);
+  return (nr << 16) | (ng << 8) | nb;
+}
+
 /** Every derived tone of `color`, darkest to lightest, `color` itself included at the middle index. */
 export function shadeRampOf(color) {
   return SHADE_STEPS.map((step) => shadeOf(color, step));
 }
 
-/** Every colour a sprite in `bucketId` may legally contain once the shading brush is allowed to touch it: `allowedColorsFor(bucketId)` plus every colour's own derived ramp. What `validate.mjs`'s off-palette check is run against for a saved sprite (`tools/art/build.mjs`) — `allowedColorsFor` itself stays the *pickable* set the palette panel's swatches offer. */
-export function legalPixelColorsFor(bucketId) {
+/**
+ * Every colour a sprite in `bucketId` on `tier` may legally contain once the
+ * shading brush is allowed to touch it: `pickableColorsFor(bucketId, tier)`
+ * plus every colour's own derived ramp. What `validate.mjs`'s off-palette check
+ * is run against for a saved sprite (`tools/art/build.mjs`, which passes the
+ * sprite's own tier from `tiers.mjs`) — the pickable set itself stays the
+ * swatches the palette panel offers.
+ *
+ * `tier` defaults to `'foreground'` so every existing caller (and every
+ * foreground sprite, which is the default classification) is unchanged.
+ */
+export function legalPixelColorsFor(bucketId, tier = 'foreground') {
   const legal = new Set();
-  for (const color of allowedColorsFor(bucketId)) {
+  for (const color of pickableColorsFor(bucketId, tier)) {
     for (const step of SHADE_STEPS) {
       legal.add(shadeOf(color, step));
     }
@@ -202,14 +246,16 @@ export function legalPixelColorsFor(bucketId) {
 
 /**
  * `color` moved one `SHADE_LIGHTNESS_STEP` toward lighter (`direction: 1`) or
- * darker (`direction: -1`), staying on `bucketId`'s fixed ramp — clamped at
- * either end rather than drifting past it. `color` that isn't on any of the
- * bucket's ramps (should never happen for a pixel the pen or a previous
- * shading pass actually painted) is returned unchanged rather than guessed
- * at.
+ * darker (`direction: -1`), staying on `bucketId`/`tier`'s fixed ramp — clamped
+ * at either end rather than drifting past it. `color` that isn't on any of the
+ * tier's ramps (should never happen for a pixel the pen or a previous shading
+ * pass actually painted) is returned unchanged rather than guessed at.
+ *
+ * `tier` defaults to `'foreground'` for the same reason `legalPixelColorsFor`'s
+ * does.
  */
-export function nudgeShade(bucketId, color, direction) {
-  for (const base of allowedColorsFor(bucketId)) {
+export function nudgeShade(bucketId, color, direction, tier = 'foreground') {
+  for (const base of pickableColorsFor(bucketId, tier)) {
     for (const step of SHADE_STEPS) {
       if (shadeOf(base, step) === color) {
         const nextStep = Math.min(2, Math.max(-2, step + direction));
@@ -218,6 +264,73 @@ export function nudgeShade(bucketId, color, direction) {
     }
   }
   return color;
+}
+
+/**
+ * The background tier (#214).
+ *
+ * `docs/DECISIONS.md` #62: everything the player does not act on — walls,
+ * floors, the wall-boundary lip, and every art-only decorative prop
+ * (`tools/art/tiers.mjs` has the manifest) — is drawn from a quieter palette so
+ * it recedes instead of competing with the barrel the player *can* break or the
+ * enemy shooting at them. Per `docs/DECISIONS.md` #28 (`shadeOf`, "derive,
+ * don't author a second table to keep in sync") the quiet palette is not
+ * authored: it is `FLOOR_PALETTES` run through a fixed darken-and-desaturate,
+ * so the ~40-colour cap in `docs/CONTENT_BIBLE.md` §5 is untouched — these are
+ * pure functions of the hues already counted.
+ *
+ * `BACKGROUND_TIER` is the whole tuning knob: how many `SHADE_LIGHTNESS_STEP`s
+ * darker and how many `DESATURATION_STEP`s toward grey. Conservative by
+ * default (#214's brief) — one each — and moved only by eye against a real
+ * floor-1 and floor-2 room.
+ */
+export const BACKGROUND_TIER = { darken: 1, desaturate: 1 };
+
+/** One foreground hue pushed onto the background tier: `BACKGROUND_TIER.darken` steps darker, then `BACKGROUND_TIER.desaturate` steps toward grey. */
+export function toBackgroundHue(color) {
+  return desaturateOf(shadeOf(color, -BACKGROUND_TIER.darken), BACKGROUND_TIER.desaturate);
+}
+
+/**
+ * Each floor's five hues, derived onto the background tier. Keyed exactly like
+ * `FLOOR_PALETTES` and, like it, a pure function of it — never edited by hand.
+ */
+export const BACKGROUND_PALETTES = Object.fromEntries(
+  Object.entries(FLOOR_PALETTES).map(([floorTag, colors]) => [
+    floorTag,
+    colors.map(toBackgroundHue),
+  ]),
+);
+
+/**
+ * The colours a *background-tier* sprite in `bucketId` may pick from — the peer
+ * of `allowedColorsFor` for the other tier.
+ *
+ * A floor bucket gets its own `BACKGROUND_PALETTES` entry plus the neutrals
+ * (outline ink and hit-flash white are tier-independent). `common` has no
+ * per-floor mood to derive from, so — `docs/DECISIONS.md` #62 — its background
+ * tier is every floor hue in the game run through `toBackgroundHue`, the same
+ * way foreground `common` may draw the whole `MASTER_PALETTE`: a crate is
+ * shared scenery and its wood still needs somewhere to shade to.
+ */
+export function backgroundColorsFor(bucketId) {
+  if (bucketId === COMMON_BUCKET_ID) {
+    return new Set([
+      ...NEUTRAL_PALETTE,
+      ...Object.values(FLOOR_PALETTES).flat().map(toBackgroundHue),
+    ]);
+  }
+  const floorTag = floorTagForBucket(bucketId);
+  const floorColors = floorTag !== null ? BACKGROUND_PALETTES[floorTag] : undefined;
+  if (floorColors === undefined) {
+    throw new Error(`unknown sprite bucket "${bucketId}"`);
+  }
+  return new Set([...NEUTRAL_PALETTE, ...floorColors]);
+}
+
+/** The pickable swatch set for `bucketId` on `tier` — `allowedColorsFor` stays the foreground one, verbatim. */
+export function pickableColorsFor(bucketId, tier = 'foreground') {
+  return tier === 'background' ? backgroundColorsFor(bucketId) : allowedColorsFor(bucketId);
 }
 
 export { FLOOR_BUCKETS };

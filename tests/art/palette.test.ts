@@ -1,13 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import {
   allowedColorsFor,
+  BACKGROUND_PALETTES,
+  BACKGROUND_TIER,
+  backgroundColorsFor,
   FLOOR_PALETTES,
   legalPixelColorsFor,
   MASTER_PALETTE,
   NEUTRAL_PALETTE,
   nudgeShade,
+  pickableColorsFor,
   shadeOf,
   shadeRampOf,
+  toBackgroundHue,
 } from '../../tools/art/palette.mjs';
 import { relativeLuminance } from '../../tools/art/contrast.mjs';
 import { FLOOR_BUCKETS } from '../../tools/art/spec.mjs';
@@ -111,5 +116,128 @@ describe('shading', () => {
 
   it('nudgeShade leaves a colour outside the bucket entirely unchanged', () => {
     expect(nudgeShade('floor-1-cellar', 0x123456, 1)).toBe(0x123456);
+  });
+});
+
+// #214 / docs/DECISIONS.md #62: everything the player does not act on is drawn
+// from a quieter tier — FLOOR_PALETTES darkened and desaturated by a pure
+// function, never a second authored table.
+function hslSaturation(color: number): number {
+  const r = ((color >> 16) & 0xff) / 255;
+  const g = ((color >> 8) & 0xff) / 255;
+  const b = (color & 0xff) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  if (max === min) {
+    return 0;
+  }
+  const l = (max + min) / 2;
+  const d = max - min;
+  return l > 0.5 ? d / (2 - max - min) : d / (max + min);
+}
+
+describe('the background tier', () => {
+  it('derives BACKGROUND_PALETTES from FLOOR_PALETTES by the same pure function', () => {
+    for (const [floorTag, colors] of Object.entries(FLOOR_PALETTES)) {
+      expect(BACKGROUND_PALETTES[floorTag]).toEqual(colors.map(toBackgroundHue));
+    }
+  });
+
+  it('every background hue is darker and no more saturated than its foreground source', () => {
+    for (const colors of Object.values(FLOOR_PALETTES)) {
+      for (const color of colors) {
+        const bg = toBackgroundHue(color);
+        // Darkening can clamp at pure black for an already-near-black hue, so
+        // "not lighter" rather than "strictly darker".
+        expect(relativeLuminance(bg)).toBeLessThanOrEqual(relativeLuminance(color));
+        expect(hslSaturation(bg)).toBeLessThanOrEqual(hslSaturation(color) + 1e-9);
+      }
+    }
+    // At the default one-step-each tuning, a mid-saturation hue moves on both
+    // axes — the tier is not a no-op.
+    const rural = FLOOR_PALETTES.rural[0];
+    if (rural === undefined) {
+      throw new Error('rural palette is empty');
+    }
+    expect(toBackgroundHue(rural)).not.toBe(rural);
+    expect(relativeLuminance(toBackgroundHue(rural))).toBeLessThan(relativeLuminance(rural));
+    expect(hslSaturation(toBackgroundHue(rural))).toBeLessThan(hslSaturation(rural));
+  });
+
+  it('leaves the ~40-colour cap untouched — the derived tier adds no authored colours', () => {
+    // MASTER_PALETTE is still exactly NEUTRAL_PALETTE plus the FLOOR_PALETTES
+    // hues; BACKGROUND_PALETTES is not part of it.
+    const authored = new Set([...NEUTRAL_PALETTE, ...Object.values(FLOOR_PALETTES).flat()]);
+    expect(new Set(MASTER_PALETTE)).toEqual(authored);
+    expect(MASTER_PALETTE.length).toBeLessThanOrEqual(45);
+  });
+
+  it('backgroundColorsFor: a floor bucket is its BACKGROUND_PALETTES entry plus neutrals', () => {
+    const bg = backgroundColorsFor('floor-2-rural');
+    for (const color of BACKGROUND_PALETTES.rural ?? []) {
+      expect(bg.has(color)).toBe(true);
+    }
+    for (const color of NEUTRAL_PALETTE) {
+      expect(bg.has(color)).toBe(true);
+    }
+    // The confident foreground hue itself is not pickable on the background tier.
+    const ruralA = FLOOR_PALETTES.rural[0];
+    if (ruralA !== undefined && !NEUTRAL_PALETTE.includes(ruralA)) {
+      expect(bg.has(ruralA)).toBe(toBackgroundHue(ruralA) === ruralA);
+    }
+  });
+
+  it('backgroundColorsFor: common derives from every floor hue in the game', () => {
+    const bg = backgroundColorsFor('common');
+    for (const color of Object.values(FLOOR_PALETTES).flat()) {
+      expect(bg.has(toBackgroundHue(color))).toBe(true);
+    }
+    for (const color of NEUTRAL_PALETTE) {
+      expect(bg.has(color)).toBe(true);
+    }
+  });
+
+  it('backgroundColorsFor throws on an unknown bucket', () => {
+    expect(() => backgroundColorsFor('floor-9-nonexistent')).toThrow();
+  });
+
+  it('pickableColorsFor routes by tier; allowedColorsFor stays the foreground set', () => {
+    expect(pickableColorsFor('floor-2-rural', 'foreground')).toEqual(
+      allowedColorsFor('floor-2-rural'),
+    );
+    expect(pickableColorsFor('floor-2-rural', 'background')).toEqual(
+      backgroundColorsFor('floor-2-rural'),
+    );
+    // Default tier is foreground — every pre-#214 caller is unchanged.
+    expect(pickableColorsFor('floor-2-rural')).toEqual(allowedColorsFor('floor-2-rural'));
+  });
+
+  it('legalPixelColorsFor(bucket, "background") is a superset of backgroundColorsFor', () => {
+    const pickable = backgroundColorsFor('floor-1-cellar');
+    const legal = legalPixelColorsFor('floor-1-cellar', 'background');
+    for (const color of pickable) {
+      expect(legal.has(color)).toBe(true);
+    }
+    expect(legal.size).toBeGreaterThan(pickable.size);
+  });
+
+  it('nudgeShade on the background tier stays on the background ramp', () => {
+    // A genuine derived hue, not a neutral (black nudges to itself either way).
+    const base = BACKGROUND_PALETTES.rural?.[0];
+    if (base === undefined) {
+      throw new Error('rural background palette is empty');
+    }
+    expect(nudgeShade('floor-2-rural', base, 1, 'background')).toBe(shadeOf(base, 1));
+    // That derived hue is not on the foreground ramp, so the default-tier call
+    // leaves it untouched rather than guessing.
+    expect(legalPixelColorsFor('floor-2-rural', 'foreground').has(base)).toBe(false);
+    expect(nudgeShade('floor-2-rural', base, 1)).toBe(base);
+  });
+
+  it('BACKGROUND_TIER stays a conservative nudge, not a wholesale recolour', () => {
+    expect(BACKGROUND_TIER.darken).toBeGreaterThanOrEqual(1);
+    expect(BACKGROUND_TIER.darken).toBeLessThanOrEqual(3);
+    expect(BACKGROUND_TIER.desaturate).toBeGreaterThanOrEqual(1);
+    expect(BACKGROUND_TIER.desaturate).toBeLessThanOrEqual(3);
   });
 });
