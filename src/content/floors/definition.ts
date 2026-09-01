@@ -7,6 +7,9 @@
  * authored templates yet (that's #39–#43); their configs exist so the
  * generator and its tests are already right for seven floors, not one.
  */
+
+import type { RoomGenTuning } from '../../sim/tuning.js';
+
 export interface FloorConfig {
   readonly floor: number;
   readonly name: string;
@@ -26,6 +29,19 @@ export interface FloorConfig {
    */
   readonly flavour: string;
 }
+
+/**
+ * Per-floor overrides for procedural room generation (#random-rooms).
+ *
+ * `sim/tuning.ts`'s `DEFAULT_ROOM_GEN_TUNING` is Floor 1's feel and the live
+ * debug-slider target. A floor that wants a different texture — denser woods, a
+ * wide-open Wiesn — lists just the fields that differ here, keyed by its
+ * `floorTag`; `app/main.ts` merges the override over the live tuning when it
+ * generates that floor's rooms. Empty means "same as Floor 1".
+ */
+export const ROOM_GEN_FLOOR_OVERRIDES: Readonly<Record<string, Partial<RoomGenTuning>>> = {
+  // wald: { minCoverTiles: 12, maxCoverTiles: 26, busyChance: 0.2 },
+};
 
 export const FLOOR_CONFIGS: readonly FloorConfig[] = [
   {

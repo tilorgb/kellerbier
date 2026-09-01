@@ -627,6 +627,57 @@ export interface CharacterTuning {
   chaosMaxFactor: number;
 }
 
+/**
+ * Procedural room generation (#random-rooms — `sim/room/generate-room.ts`).
+ *
+ * Every field here is a "feel" number for how a generated room reads: how much
+ * cover it carries, how often a room is near-empty or cluttered, how many mobs
+ * and props it holds. Live-tunable like the rest of this file — the tuning
+ * window binds a slider to each — and it is `app/main.ts` that reads `roomGen`
+ * off the live `SimTuning` and hands it to the generator, so a slider drag
+ * shows up on the next room generated (walk to the next room, or the `G` debug
+ * key).
+ *
+ * These values are the **Floor 1** feel. Later floors that want a different
+ * texture (denser woods, an open Wiesn) override individual fields per floor
+ * tag in `content/floors/definition.ts`'s `ROOM_GEN_FLOOR_OVERRIDES`, which is
+ * merged over this at generation time.
+ */
+export interface RoomGenTuning {
+  /** Interior tiles (of 91) an ordinary room fills with obstacles — the sweet-spot band. */
+  minCoverTiles: number;
+  maxCoverTiles: number;
+  /** Chance a room is instead near-empty. */
+  sparseChance: number;
+  sparseMaxTiles: number;
+  /** Chance a room is instead cluttered — a higher ceiling only, still navigable. */
+  busyChance: number;
+  busyMaxCoverTiles: number;
+  /** Stamps an attempt may try before the coverage band judges the result — the band, not this, is the real control. */
+  maxScatter: number;
+  maxCoverWalls: number;
+  /** Layout attempts before falling back to an empty room. Not worth a slider; still tunable in code. */
+  layoutRetries: number;
+  /** Enemy threat budget = base + perDistance·distance-from-start + perFloor·(floor-1). */
+  threatBase: number;
+  threatPerDistance: number;
+  threatPerFloor: number;
+  maxEnemies: number;
+  /** Chance a room drops one free pickup. */
+  pickupChance: number;
+  /** Decorative / destructible props (barrels, crates, hay bales) scattered as scenery — up to this many. */
+  maxProps: number;
+  /** Chance a room gets one floor-flavour hazard patch (Floor 1 puddle, Floor 2 trellis). */
+  hazardChance: number;
+  /**
+   * Chance a `1x1` `normal` slot is filled by a hand-authored room instead of a
+   * generated one — the route for a one-off room design to pop up on a floor.
+   * The authored pool is every `1x1` template with no `specialRole`, weighted
+   * by its `metadata.weight`.
+   */
+  authoredRoomChance: number;
+}
+
 export interface SimTuning {
   readonly movement: MovementTuning;
   readonly shooting: ShootingTuning;
@@ -637,6 +688,7 @@ export interface SimTuning {
   readonly projectileTags: ProjectileTagTuning;
   readonly itemPool: ItemPoolTuning;
   readonly character: CharacterTuning;
+  readonly roomGen: RoomGenTuning;
 }
 
 export const DEFAULT_MOVEMENT_TUNING: Readonly<MovementTuning> = {
@@ -871,6 +923,33 @@ export const DEFAULT_CHARACTER_TUNING: Readonly<CharacterTuning> = {
   chaosMaxFactor: 1.8,
 };
 
+/**
+ * Floor 1's room-generation feel. A moderate amount of cover in most rooms
+ * (`minCoverTiles`–`maxCoverTiles` of 91), a near-empty room now and then, a
+ * cluttered one rarely — the mob fight is the challenge, not the walk.
+ */
+export const DEFAULT_ROOM_GEN_TUNING: Readonly<RoomGenTuning> = {
+  minCoverTiles: 8,
+  maxCoverTiles: 22,
+  sparseChance: 0.05,
+  sparseMaxTiles: 3,
+  busyChance: 0.16,
+  busyMaxCoverTiles: 40,
+  // Per single-screen cell. High enough that an attempt can reach the busy
+  // ceiling — the coverage band, not these, decides what a room ends up with.
+  maxScatter: 10,
+  maxCoverWalls: 3,
+  layoutRetries: 40,
+  threatBase: 2,
+  threatPerDistance: 1.2,
+  threatPerFloor: 0.5,
+  maxEnemies: 6,
+  pickupChance: 0.2,
+  maxProps: 5,
+  hazardChance: 0.18,
+  authoredRoomChance: 0.12,
+};
+
 export function createTuning(): SimTuning {
   return {
     movement: { ...DEFAULT_MOVEMENT_TUNING },
@@ -882,6 +961,7 @@ export function createTuning(): SimTuning {
     projectileTags: { ...DEFAULT_PROJECTILE_TAG_TUNING },
     itemPool: { ...DEFAULT_ITEM_POOL_TUNING },
     character: { ...DEFAULT_CHARACTER_TUNING },
+    roomGen: { ...DEFAULT_ROOM_GEN_TUNING },
   };
 }
 

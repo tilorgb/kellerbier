@@ -1,12 +1,23 @@
 import { Container, Point } from 'pixi.js';
 import { ENEMY_DEFINITIONS } from '../content/enemies/index.js';
-import { FLOOR_CONFIGS, type FloorConfig } from '../content/floors/definition.js';
-import { DIRECTION_OFFSET } from '../content/rooms/definition.js';
+import {
+  FLOOR_CONFIGS,
+  ROOM_GEN_FLOOR_OVERRIDES,
+  type FloorConfig,
+} from '../content/floors/definition.js';
+import {
+  DIRECTION_OFFSET,
+  isMultiCellRoomTemplate,
+  type MultiCellRoomShape,
+} from '../content/rooms/definition.js';
 import { ROOM_TEMPLATES, STAIRCASE_TEMPLATES, type DoorDirection } from '../content/rooms/index.js';
 import { type RoomDirection, GameSim, MAX_COLLIDER_RADIUS } from '../sim/game/sim.js';
 import { promilleMeterLabel, promilleTierDisplayName } from '../sim/game/promille.js';
 import { type FloorPlan, type FloorPlanRoom, generateFloor } from '../sim/room/floor-plan.js';
+import { generateMultiCellRoom, generateRoom, roomGenSeed } from '../sim/room/generate-room.js';
+import type { RoomGenTuning } from '../sim/tuning.js';
 import { validateStaircaseTemplate } from '../sim/room/staircase.js';
+import { Rng } from '../sim/rng/rng.js';
 import {
   type CompiledDoor,
   type RoomPlacement,
@@ -213,6 +224,112 @@ function planTemplate(room: FloorPlanRoom): unknown {
     );
   }
   return template;
+}
+
+/**
+ * Procedural room content (#random-rooms).
+ *
+ * `sim/room/generate-room.ts` synthesises a `RoomTemplate` for every ordinary
+ * `normal` slot (any shape) — except the `authoredRoomChance` fraction, filled
+ * by a hand-authored room of the same shape drawn from the pool instead. Any
+ * authored room with no `specialRole` is a candidate; that is the whole of
+ * "add a room and it shows up on a floor". The floor generator still owns the
+ * room *graph*; the start room and every special room stay hand-authored.
+ * Keyed by floor-plan room id and rebuilt every time a new `floorPlan` is
+ * assigned; `roomTemplateFor` consults it before the authored fallback. Params
+ * are read live off `sim.tuning.roomGen` (so the debug tuning-window sliders
+ * apply on the next room generated), merged with any per-floor override from
+ * `ROOM_GEN_FLOOR_OVERRIDES`. `roomGenSalt` is bumped by the `G` debug key so a
+ * dev can walk through fresh layouts without touching the run seed.
+ */
+let proceduralRooms = new Map<string, unknown>();
+let roomGenSalt = 0;
+
+/**
+ * The hand-authored ordinary rooms that fit a slot — no special role, right
+ * shape, right tag, and (`1x1` only) doors a superset of what the slot needs.
+ * Every one is a sprinkle candidate; there is no opt-in flag.
+ */
+function sprinkleCandidates(
+  room: FloorPlanRoom,
+  floorTag: string,
+): { value: unknown; weight: number }[] {
+  const needed = room.doors.map((door) => door.direction);
+  const candidates: { value: unknown; weight: number }[] = [];
+  for (const template of ROOM_TEMPLATE_POOL) {
+    if (
+      template.metadata.specialRole !== undefined ||
+      template.metadata.shape !== room.shape ||
+      !template.metadata.floorTags.includes(floorTag)
+    ) {
+      continue;
+    }
+    if (
+      !isMultiCellRoomTemplate(template) &&
+      !needed.every((direction) => template.metadata.doors[direction])
+    ) {
+      continue;
+    }
+    candidates.push({ value: template, weight: template.metadata.weight });
+  }
+  return candidates;
+}
+
+function rebuildProceduralRooms(plan: FloorPlan, runSeed: number, baseTuning: RoomGenTuning): void {
+  const next = new Map<string, unknown>();
+  const config = FLOOR_CONFIGS.find((candidate) => candidate.floor === plan.floor);
+  if (config !== undefined) {
+    const params: RoomGenTuning = {
+      ...baseTuning,
+      ...(ROOM_GEN_FLOOR_OVERRIDES[config.floorTag] ?? {}),
+    };
+    for (const room of plan.rooms) {
+      if (room.role !== 'normal' || room.staircaseTemplateId !== undefined) {
+        continue;
+      }
+      const rng = new Rng(roomGenSeed(runSeed, plan.floor, room.id, roomGenSalt));
+      const sprinkle = rng.chance(params.authoredRoomChance)
+        ? sprinkleCandidates(room, config.floorTag)
+        : [];
+      if (sprinkle.length > 0) {
+        next.set(room.id, rng.weightedPick(sprinkle));
+        continue;
+      }
+      const ctx = {
+        roomId: room.id,
+        floor: plan.floor,
+        floorTag: config.floorTag,
+        distanceFromStart: room.distanceFromStart,
+        rng,
+      };
+      if (room.shape === '1x1') {
+        next.set(
+          room.id,
+          generateRoom({ ...ctx, doors: room.doors.map((door) => door.direction) }, params),
+        );
+      } else {
+        const placement = buildPlacement(room);
+        next.set(
+          room.id,
+          generateMultiCellRoom(
+            {
+              ...ctx,
+              shape: room.shape as MultiCellRoomShape,
+              cells: placement.cells,
+              doors: placement.doors ?? [],
+            },
+            params,
+          ),
+        );
+      }
+    }
+  }
+  proceduralRooms = next;
+}
+
+/** The template for a room — the procedurally generated one when there is one, else the authored pick. */
+function roomTemplateFor(room: FloorPlanRoom): unknown {
+  return proceduralRooms.get(room.id) ?? planTemplate(room);
 }
 
 /** `planTemplate`'s staircase counterpart (#112) — `room.staircaseTemplateId` must be set. */
@@ -1452,7 +1569,7 @@ WASD move   arrows aim and fire
       // run parameter, the same shape as `promilleUnlocked` below, for the
       // same reason: see `ActiveRunSave.character`.
       character,
-      roomTemplate: planTemplate(planRoom(floorPlan, currentRoomId)),
+      roomTemplate: roomTemplateFor(planRoom(floorPlan, currentRoomId)),
       // Without this, the start room falls back to `compileRoomTemplate`'s
       // default `SINGLE_CELL_PLACEMENT` (no doors), which in turn falls back
       // to compiling a door on every direction the template's raw metadata
@@ -1473,6 +1590,10 @@ WASD move   arrows aim and fire
       // table has to already know which half to roll.
       promilleUnlocked,
     });
+    // The start room is hand-authored (loaded just above); the procedural
+    // `normal` rooms are built now that `sim` — and its live `tuning.roomGen`
+    // — exists, ready for the first door the player walks through.
+    rebuildProceduralRooms(floorPlan, RUN_SEED, sim.tuning.roomGen);
     // A restart rebuilds `sim` from scratch, so the accessibility settings
     // have to be re-applied to it every time — they live on the instance
     // (`GameSim.swayScale`/`driftScale`/`wobbleScale`), not in `tuning`,
@@ -1989,7 +2110,7 @@ WASD move   arrows aim and fire
             );
             const entryCell = neighborPlacement.cells[entryCellIndex] ?? { col: 0, row: 0 };
             return sim.transitionTo(
-              planTemplate(neighborRoom),
+              roomTemplateFor(neighborRoom),
               floorPlan.floor,
               direction,
               hiddenDoorsFor(floorPlan, neighborRoomId, revealedEdges),
@@ -2055,6 +2176,7 @@ WASD move   arrows aim and fire
       ROOM_TEMPLATE_POOL,
       STAIRCASE_TEMPLATE_POOL,
     );
+    rebuildProceduralRooms(floorPlan, RUN_SEED, sim.tuning.roomGen);
     currentRoomId = floorPlan.startRoomId;
     visitedRoomIds = new Set([currentRoomId]);
     revealedEdges = new Set<string>();
@@ -2069,7 +2191,7 @@ WASD move   arrows aim and fire
     // `GameSim.clearFloorProgress`'s doc comment.
     sim.clearFloorProgress();
     sim.loadRoom(
-      planTemplate(planRoom(floorPlan, currentRoomId)),
+      roomTemplateFor(planRoom(floorPlan, currentRoomId)),
       floorPlan.floor,
       null,
       hiddenDoorsFor(floorPlan, currentRoomId, revealedEdges),
@@ -2390,6 +2512,44 @@ WASD move   arrows aim and fire
         }
         break;
       }
+      case 'g':
+      case 'G': {
+        // #random-rooms: reroll every procedural room on this floor and reload
+        // the current one in place, so a dev can mash `G` and watch fresh
+        // layouts without changing the run seed. Dev builds only, same as `B`.
+        if (import.meta.env.DEV) {
+          roomGenSalt += 1;
+          rebuildProceduralRooms(floorPlan, RUN_SEED, sim.tuning.roomGen);
+          const room = planRoom(floorPlan, currentRoomId);
+          if (room.staircaseTemplateId === undefined) {
+            const isStart = currentRoomId === floorPlan.startRoomId;
+            const placement = buildPlacement(room);
+            // A generated room's centre can be blocked, so don't drop the
+            // player there (`direction: null`) — walk them in through one of
+            // its doors, where the wall-margin ring is always clear. For a
+            // multi-cell room, land on the sub-cell that door is actually on.
+            const entryDoor = isStart ? undefined : room.doors[0];
+            const entryDirection: RoomDirection | null = entryDoor?.direction ?? null;
+            let entryCell = { col: 0, row: 0 };
+            if (entryDoor !== undefined) {
+              entryCell = placement.cells[entryDoor.cellIndex] ?? entryCell;
+            }
+            sim.loadRoom(
+              roomTemplateFor(room),
+              floorPlan.floor,
+              entryDirection,
+              hiddenDoorsFor(floorPlan, currentRoomId, revealedEdges),
+              placement,
+              entryCell,
+              isStart,
+            );
+            view.setSecretHints(crackHintsFor(floorPlan, currentRoomId, revealedEdges));
+            view.setLockedDoors(lockedDoorsFor(floorPlan, currentRoomId, visitedRoomIds));
+            minimapHud.rebuild(floorPlan, currentRoomId, visitedRoomIds);
+          }
+        }
+        break;
+      }
       default:
         return;
     }
@@ -2513,7 +2673,7 @@ WASD move   arrows aim and fire
       }
       if (data.type === 'kb-room-editor:request-current') {
         const room = planRoom(floorPlan, currentRoomId);
-        const templateJson = room.staircaseTemplateId === undefined ? planTemplate(room) : null;
+        const templateJson = room.staircaseTemplateId === undefined ? roomTemplateFor(room) : null;
         event.source?.postMessage(
           { type: 'kb-room-editor:current-room', templateJson },
           { targetOrigin: '*' },

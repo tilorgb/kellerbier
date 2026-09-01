@@ -5,6 +5,7 @@ import { ENEMY_DEFINITIONS } from '../../src/content/enemies/index.js';
 import { PICKUP_DEFINITIONS } from '../../src/content/pickups/index.js';
 import { ROOM_TEMPLATES } from '../../src/content/rooms/index.js';
 import { validateRoomTemplate } from '../../src/sim/room/template.js';
+import { GENERATED_SCENERY_TYPES } from '../../src/sim/room/generate-room.js';
 import { isMultiCellRoomTemplate } from '../../src/content/rooms/definition.js';
 import { FLOOR_TILESETS, PROP_TILE_NAMES, MAIBAUM_TOP_TILE } from '../../src/render/floor-art.js';
 import { PLAYER_TAG_SPRITE_ORDER } from '../../src/render/projectiles.js';
@@ -104,8 +105,8 @@ describe('every floor tileset names sprites that exist', () => {
   }
 });
 
-describe('every prop type authored in a room is drawable', () => {
-  const authoredTypes = new Set<string>();
+describe('every prop / hazard type a room can carry is drawable', () => {
+  const authoredTypes = new Set<string>(GENERATED_SCENERY_TYPES);
   for (const template of templates) {
     const layouts = isMultiCellRoomTemplate(template) ? template.cells : [template];
     for (const layout of layouts) {
@@ -116,10 +117,10 @@ describe('every prop type authored in a room is drawable', () => {
   }
 
   it('finds at least the prop types this test was written against', () => {
-    // A guard on the guard: if `decorativeProps` ever stops being reachable
-    // through `validateRoomTemplate`, every assertion below would vacuously
-    // pass and the coverage would quietly disappear.
-    expect(authoredTypes.size).toBeGreaterThanOrEqual(10);
+    // A guard on the guard: if `decorativeProps` (authored) and
+    // `GENERATED_SCENERY_TYPES` (procedural) ever stop being reachable, every
+    // assertion below would vacuously pass and the coverage would disappear.
+    expect(authoredTypes.size).toBeGreaterThanOrEqual(8);
   });
 
   it.each([...authoredTypes].sort())('%s', (type) => {

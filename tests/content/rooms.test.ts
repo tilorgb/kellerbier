@@ -24,6 +24,22 @@ describe('room templates', () => {
     }
   });
 
+  it('keeps at least one ordinary room per playable floor tag for the generator to fall back on and sprinkle', () => {
+    // The generator fills ordinary slots (#random-rooms); the authored ordinary
+    // rooms that remain double as the sprinkle pool and as the floor
+    // generator's eligibility fallback, so each playable tag needs one.
+    const templates = ROOM_TEMPLATES.map((room, index) =>
+      validateRoomTemplate(room, `room[${String(index)}]`, ENEMY_DEFINITIONS),
+    );
+    for (const tag of ['cellar', 'rural']) {
+      const ordinary = templates.filter(
+        (template) =>
+          template.metadata.specialRole === undefined && template.metadata.floorTags.includes(tag),
+      );
+      expect(ordinary.length).toBeGreaterThan(0);
+    }
+  });
+
   it('loads the hand-authored JSON at the standard dimensions', () => {
     const template = validateRoomTemplate(cellarCrossroads, 'cellar.json', ENEMY_DEFINITIONS);
     if (isMultiCellRoomTemplate(template)) {

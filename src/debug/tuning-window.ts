@@ -7,6 +7,7 @@ import {
   DEFAULT_MOVEMENT_TUNING,
   DEFAULT_PICKUP_TUNING,
   DEFAULT_PROMILLE_TUNING,
+  DEFAULT_ROOM_GEN_TUNING,
   DEFAULT_SHOOTING_TUNING,
 } from '../sim/tuning.js';
 import { injectDevUiTokens } from '../dev-ui/tokens.js';
@@ -43,7 +44,15 @@ interface FieldSpec {
 interface GroupSpec {
   readonly title: string;
   readonly group:
-    'movement' | 'shooting' | 'impact' | 'enemy' | 'promille' | 'pickup' | 'itemPool' | 'character';
+    | 'movement'
+    | 'shooting'
+    | 'impact'
+    | 'enemy'
+    | 'promille'
+    | 'pickup'
+    | 'itemPool'
+    | 'character'
+    | 'roomGen';
   readonly fields: readonly FieldSpec[];
 }
 
@@ -329,6 +338,52 @@ const GROUPS: readonly GroupSpec[] = [
     ],
   },
   {
+    title: 'room gen (POC)',
+    group: 'roomGen',
+    fields: [
+      { key: 'minCoverTiles', min: 0, max: 50, step: 1, hint: 'obstacle tiles, low end (of 91)' },
+      { key: 'maxCoverTiles', min: 0, max: 60, step: 1, hint: 'obstacle tiles, high end' },
+      { key: 'sparseChance', min: 0, max: 0.5, step: 0.01, hint: 'chance of a near-empty room' },
+      { key: 'sparseMaxTiles', min: 0, max: 16, step: 1, hint: 'obstacle tiles when sparse' },
+      { key: 'busyChance', min: 0, max: 0.5, step: 0.01, hint: 'chance of a cluttered room' },
+      { key: 'busyMaxCoverTiles', min: 10, max: 70, step: 1, hint: 'obstacle tiles when busy' },
+      { key: 'maxScatter', min: 1, max: 20, step: 1, hint: 'obstacle clumps tried per attempt' },
+      {
+        key: 'maxCoverWalls',
+        min: 0,
+        max: 8,
+        step: 1,
+        hint: 'short cover walls tried per attempt',
+      },
+      { key: 'threatBase', min: 0, max: 8, step: 0.5, hint: 'enemy budget, base' },
+      {
+        key: 'threatPerDistance',
+        min: 0,
+        max: 4,
+        step: 0.1,
+        hint: 'enemy budget per room from start',
+      },
+      { key: 'threatPerFloor', min: 0, max: 3, step: 0.1, hint: 'enemy budget per floor deep' },
+      { key: 'maxEnemies', min: 0, max: 12, step: 1, hint: 'hard cap on bodies in a room' },
+      { key: 'pickupChance', min: 0, max: 1, step: 0.05, hint: 'chance of a free pickup' },
+      { key: 'maxProps', min: 0, max: 14, step: 1, hint: 'barrels / crates scattered as scenery' },
+      {
+        key: 'hazardChance',
+        min: 0,
+        max: 1,
+        step: 0.02,
+        hint: 'chance of a puddle / trellis patch',
+      },
+      {
+        key: 'authoredRoomChance',
+        min: 0,
+        max: 1,
+        step: 0.02,
+        hint: 'chance a normal slot is a hand-authored room',
+      },
+    ],
+  },
+  {
     title: 'character',
     group: 'character',
     fields: [
@@ -358,6 +413,7 @@ const DEFAULTS = {
   pickup: DEFAULT_PICKUP_TUNING,
   itemPool: DEFAULT_ITEM_POOL_TUNING,
   character: DEFAULT_CHARACTER_TUNING,
+  roomGen: DEFAULT_ROOM_GEN_TUNING,
 } as const;
 
 const STYLE = `
