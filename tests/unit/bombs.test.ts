@@ -5,6 +5,7 @@ import { GameSim, PLAYER_HEALTH, TARGET_RADIUS } from '../../src/sim/game/sim.js
 import { RoomGeometry } from '../../src/sim/room/geometry.js';
 import { createInputFrame, quantiseAxis } from '../../src/sim/input/frame.js';
 import { ROOM_COLUMNS, ROOM_ROWS, type RoomSubLayout } from '../../src/content/rooms/definition.js';
+import { bombFuseProgress } from '../../src/sim/systems/bombs.js';
 
 function bareRoom(): RoomGeometry {
   return new RoomGeometry(0, 0, 320, 180);
@@ -140,6 +141,33 @@ describe('Bierfassl fuse and blast', () => {
       sim.step(frame);
     }
     expect(sim.playerHealth).toBe(PLAYER_HEALTH);
+  });
+});
+
+describe('bombFuseProgress (#208)', () => {
+  it('is 0 for anything without a fuse', () => {
+    const sim = emptySim();
+    expect(bombFuseProgress(sim, sim.playerIndex)).toBe(0);
+  });
+
+  it('climbs from 0 right after placement to 1 on the tick it explodes', () => {
+    const sim = emptySim();
+    const index = sim.playerIndex;
+    const bomb = sim.spawnBierfassl(sim.positionX(index) + 100, sim.positionY(index), 0, 0, false);
+    sim.world.flush();
+    const bombIndex = entityIndex(bomb);
+
+    expect(bombFuseProgress(sim, bombIndex)).toBe(0);
+
+    const fuseTicks = Math.round(sim.tuning.pickup.bombFuseTicks);
+    let lastProgress = 0;
+    for (let tick = 0; tick < fuseTicks; tick++) {
+      sim.step(idle());
+      const progress = bombFuseProgress(sim, bombIndex);
+      expect(progress).toBeGreaterThanOrEqual(lastProgress);
+      lastProgress = progress;
+    }
+    expect(lastProgress).toBeCloseTo(1, 5);
   });
 });
 

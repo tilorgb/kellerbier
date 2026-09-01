@@ -40,6 +40,25 @@ const BOMB_Y = 1;
 const BOMB_SELF = 2;
 const bomb = new Float64Array(3);
 
+/**
+ * How far a placed Bierfassl is through its fuse, `0` (just set down) to `1`
+ * (exploding this tick) — what `render/entities.ts` reads to redden the body
+ * as the countdown runs out (#208), the same "progress drives a visual ramp"
+ * shape `sim/systems/enemy.ts`'s `enemyTelegraphProgress` already uses for a
+ * boss's wind-up flush.
+ *
+ * `0` for anything without a fuse rather than throwing — a render loop calls
+ * this once per collidable body, most of which are not a Bierfassl at all.
+ */
+export function bombFuseProgress(sim: GameSim, index: number): number {
+  if (((sim.world.masks[index] ?? 0) & sim.bombFuse.bit) === 0) {
+    return 0;
+  }
+  const total = Math.max(1, Math.round(sim.tuning.pickup.bombFuseTicks));
+  const ticksLeft = sim.bombFuse.data[index] ?? 0;
+  return Math.min(1, Math.max(0, (total - ticksLeft) / total));
+}
+
 export function stepBombs(sim: GameSim): void {
   const world = sim.world;
   const states = world.states;
