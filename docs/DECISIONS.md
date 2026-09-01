@@ -2849,3 +2849,81 @@ deleted.
 generated multi-cell room's whole obstacle budget is one `RoomGeometry` (64 blocks), void cells
 included — the coverage band scales by cell count but a busy `T` can still hit the ceiling and
 fall back to a lighter layout.
+
+## 60. A floor's in-room obstacle is a set of 2–4 composed rock tiles the room mixes per cell, with no keyline
+
+**Decided:** M8. The obstacle blocks looked like furniture — floor 1's `cellar-plank` read as a
+wooden hatch, floor 2's `rural-hedge-block` as a hedge with a blue frame — and a three-cell
+wall of them read as three copies of one stamp with a walkable-looking channel between
+neighbours. Three things changed, all off one sign-off round (`CLAUDE.md`).
+
+**The hard edge was never in the tile.** `render/room.ts` stroked a 1px `RoomTheme.blockEdge`
+rectangle around every obstacle rect — and did it whether or not a tileset was present. On
+floor 2 that stroke *is* the "blue border": `blockEdge` is that floor's sky blue. The stroke is
+now gone whenever a tileset is present (the flat-colour fallback for floors 3-7 keeps it), the
+same way the bare floor/wall outline already yields to the lip course. An authored obstacle's
+rounded silhouette is its edge.
+
+**One obstacle is now a variant set, mixed per cell.** `FloorTileset.block: string` became
+`blockVariants: readonly string[]` (2–4 entries), and `render/room.ts`'s new `tileRectVariants`
+picks one per 16-unit cell off the same `pickTileVariant` hash the "living floor" (#37) uses —
+deterministic on `(col, row)`, so a cell always draws the same rock. A pile of rock reads as a
+pile; a repeated stamp reads as a mistake. `FloorArt` gained `blockVariantNames` (the obstacle
+peer of `tileVariantNames`) so click-to-pick resolves to the exact variant under the cursor;
+`pickObstacleBlockAt` (a boolean) became `pickObstacleBlockNameAt`.
+
+**The rocks are composed, not drawn.** `tools/art/authoring/blocks.mjs` + `npm run art:blocks`,
+locked byte-for-byte by `tests/art/blocks-authoring.test.ts` — four near-identical boulders per
+floor is exactly the drift trap #55/#56 moved Alois and the bosses into source for. Floor 1 is
+faceted grey boulders (chunks lit top-left, dark contact band, a translucent cast shadow baked
+into the tile); floor 2 is "Lesesteinhaufen" — a packed mound of neutral-grey field stones with
+moss in the crevices, the one blocker the rural palette (no grey or brown of its own, but
+neutrals are legal everywhere) can carry. Every silhouette reaches within ~2px of all four cell
+edges so a clump reads as one solid mass with no walkable gap.
+
+**Constrains:** a floor adding room art now owns a `blockVariants` list, not one `block` name,
+and `tests/content/sprite-coverage.test.ts` checks every entry exists. Floors 3-7's flat
+`RoomTheme.block`/`blockEdge` fallback is unchanged. The cast shadow is baked as partial-alpha
+pixels whose RGB is the legal neutral `#1c1a1f`, so `findOffPalettePixel` still passes.
+
+## 61. Anything the player acts on casts a ground shadow, from one shared function
+
+**Decided:** M8. #195 gave the player, ordinary enemies and dropped pickups a soft
+`common/characters/actor-shadow.png` blob, reusing the boss shadow's idea (#152), and left "the
+other props" for a follow-up. Three problems had accumulated: the follow-up never happened
+(destructible barrels, the planted Maibaum and placed Bierfassln cast nothing), the three
+renderers that *did* draw one each had their own copy of the maths, and every copy sized and
+placed the shadow off the **collider radius** — which since #45 is unrelated to the sprite.
+Alois fills a 32px canvas over a 14-unit collider, so `radius * 0.85` put his shadow 2px up his
+shins at an alpha faint enough to miss.
+
+**The rule, and where the line is.** A shadow means "this is a thing in the room you deal with":
+the player, every enemy and boss, a dropped pickup, a destructible target, a placed Bierfassl,
+the planted Maibaum. Pure scenery the player only walks past does **not** get one — a fence
+post, a well, a hay bale, bunting, the cellar bulb — because a shadow on all of it turns the
+floor into visual noise and stops the shadow *meaning* anything. Also exempt: a shot in flight,
+the item floating in a pedestal's beam, the `boss-plate` floor marking, and the obstacle tiles,
+which bake their own contact shadow (#60). The first cut of this drew shadows under every
+`decorativeProps` prop and was walked back for exactly that reason.
+
+**Match the drawing, not the physics.** The shadow seats under the art's **last opaque row** —
+found per sprite by `render/inked-bounds.ts`, which scans the texture's own source image on a
+scratch 2D canvas once and caches it — not under the padded canvas edge and not under the
+collider (#195's `radius * 0.85` was the collider guess, and it sat 2px up the player's shins
+because his 32px canvas is not his 14-unit hitbox). No DOM, no 2D context, or an undecoded
+source falls back to the canvas bottom, which is never worse than before. Width is the drawn
+width times a footprint fraction — `GROUND_SHADOW.standingFootprint` 0.72, `lyingFootprint` 0.5
+for a keg / stein / coin / Brezn that lies flat — capped at `0.6` of a tile, since a padded
+canvas is far wider than where the thing actually touches down.
+
+**One implementation.** `render/ground-shadow.ts`: `styleGroundShadow(sprite, texture,
+shadowWidth, weight)` and `groundShadowFeetY(centreY, texture, scale)`, tuned by `GROUND_SHADOW`
+in `palette.ts` — `bodyAlpha` up to `0.4` from #195's 0.22/0.24. `EntityView`, `PlayerView` and
+`MaibaumView` call it. A boss keeps its own wider, flatter texture and `radius * 3` sizing
+(bottom-anchored at the collider, #193) — #152 tuned that against the boss sprites and it was
+never the thing that was wrong.
+
+**Constrains:** a new renderer that draws something the player acts on is expected to call
+`ground-shadow.ts`, not roll its own. The shadow texture is threaded as `textures.actorShadow`
+through `GameView`; absent (tests, the bench scene) every shadow is simply skipped, exactly as
+before.

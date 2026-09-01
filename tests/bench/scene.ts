@@ -237,7 +237,7 @@ function benchTileset(): RoomTileArt {
     wall: Texture.EMPTY,
     wallLip: Texture.EMPTY,
     wallLipCorner: Texture.EMPTY,
-    block: Texture.EMPTY,
+    blockVariants: [Texture.EMPTY],
     destructibles: [Texture.EMPTY],
   };
 }

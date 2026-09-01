@@ -145,17 +145,23 @@ silhouette, and the brass keg drawn on the hip facing the camera and on the back
 The keg's position on the canvas is what `render/player-view.ts`'s `SCHLAUCH_ANCHOR` is
 measured against, so moving it in the art means re-measuring there.
 
-**These seven — plus the two chibi bosses — are the exception to "a sprite is a PNG you drew".**
+**These seven — plus the two chibi bosses and the obstacle tiles — are the exception to "a sprite
+is a PNG you drew".**
 Alois is composed from text blocks and primitives in `tools/art/authoring/alois.mjs` (a head per
 direction and expression, a torso, a set of legs per contact pose, the keg) and written by
 `npm run art:alois`. Die Große Kellerassel, Der Stier and the Maibaum-Dieb are composed the same
 way in `tools/art/authoring/bosses.mjs` and written by `npm run art:bosses` — seven frames of one
-big re-posed body is Alois's problem at boss scale (`docs/DECISIONS.md` #55/#56). Everything else
+big re-posed body is Alois's problem at boss scale (`docs/DECISIONS.md` #55/#56). The in-room
+obstacle tiles (`cellar-boulder-*`, `rural-fieldstone-*`) are composed in
+`tools/art/authoring/blocks.mjs` and written by `npm run art:blocks` — a floor's blocker is a *set*
+of 2–4 near-identical rocks the room mixes per cell, which is the same drift trap
+(`docs/DECISIONS.md` #45's own reasoning). Everything else
 in this tree, including every other animated strip and the *floor* Kellerassel, is still drawn in
 the editor and committed directly.
 
 The PNGs stay committed and the game still loads *them*, so nothing about the runtime changes.
-But `tests/art/alois-authoring.test.ts` and `tests/art/boss-authoring.test.ts` re-encode the
+But `tests/art/alois-authoring.test.ts`, `tests/art/boss-authoring.test.ts` and
+`tests/art/blocks-authoring.test.ts` re-encode the
 source and compare byte for byte, which means a hand edit to these files fails the build: the
 editor is where you try something, and folding it back into the source is what makes it land.
 Same trade as `docs/DECISIONS.md` #43's UI art, confined to the sprites with the same repetition
@@ -177,7 +183,7 @@ in a folder, at runtime as well as in the atlas build — and looks each one up 
 | `common/characters/pickup-<pickup id>` | `pickup-mass-full`, … | `PickupDefinition.id` |
 | `common/characters/<enemy id>` | `shopkeeper` | an enemy that appears on every floor |
 | `common/characters/alois-*` | the player's seven strips | `render/player-art.ts` (#151) |
-| `<floor>/tiles/*` | `cellar-wall`, `rural-hedge-block`, … | `FLOOR_TILESETS` (the wall/lip/block/floor roles) and `PROP_TILE_NAMES` (a room's `decorativeProps`) |
+| `<floor>/tiles/*` | `cellar-wall`, `cellar-boulder-1`, `rural-fieldstone-1`, … | `FLOOR_TILESETS` (the wall/lip/floor roles and the 2–4 `blockVariants` a room mixes per cell) and `PROP_TILE_NAMES` (a room's `decorativeProps`). Obstacle variant sets are composed by `tools/art/authoring/blocks.mjs` (`npm run art:blocks`) |
 | `common/tiles/*` | `door-open`, `pedestal`, `minimap-boss`, `crate-opa`, … | shared world objects and HUD icons |
 | `<floor>/projectiles/*` | `tap-drip`, `boeller`, … | `FiringBehaviourBase.art`, or the floor's default shot |
 | `common/projectiles/*` | `beer`, `beer-burning`, … | the player's shot and its per-tag variants |

@@ -88,7 +88,7 @@ describe('every floor tileset names sprites that exist', () => {
       tileset.wall,
       tileset.wallLip,
       tileset.wallLipCorner,
-      tileset.block,
+      ...tileset.blockVariants,
       ...tileset.destructibles,
     ];
     it.each(named)(`floor ${floor}: %s`, (name) => {

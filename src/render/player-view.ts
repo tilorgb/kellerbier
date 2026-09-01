@@ -22,7 +22,8 @@ import {
 } from './animation/state.js';
 import { SCHLAUCH_OCTANTS, type PlayerArt, type PlayerBodyKey } from './player-art.js';
 import { ACTOR_SPRITE_SCALE } from './resolution.js';
-import { PLAYER_RADIUS } from '../sim/game/sim.js';
+import { createGroundShadow, groundShadowFeetY, styleGroundShadow } from './ground-shadow.js';
+import { GROUND_SHADOW } from './palette.js';
 
 /**
  * Where the Schlauch's nozzle hangs off the body, per facing, in *authored*
@@ -92,14 +93,12 @@ const SCHLAUCH_REACH = 4;
 const DRUNK_FROM_TIER = PromilleTier.Beduselt;
 
 /**
- * Alois's own ground shadow, drawn off the same shared texture and roughly
- * the same ratios `entities.ts` gives every other walking body (#195) — he is
- * the one body in the room with nothing under his feet otherwise, which read
- * as floating the same way an unshadowed boss used to (#152).
+ * Alois's own ground shadow — the shared `render/ground-shadow.ts` treatment
+ * (`docs/DECISIONS.md` #61), same as every other body that stands on the
+ * floor. It used to be a local copy of the maths (`#195`) with its centre at
+ * `PLAYER_RADIUS * 0.85` — 2px up his shins, because his 32px canvas is not
+ * his 14-unit collider — and an alpha faint enough to miss.
  */
-const PLAYER_SHADOW_ALPHA = 0.24;
-const PLAYER_SHADOW_WIDTH_SCALE = 1.5;
-const PLAYER_SHADOW_HEIGHT_SCALE = 0.5;
 
 /**
  * Alois: body, and the Schlauch he shoots through (#151).
@@ -154,17 +153,20 @@ export class PlayerView {
 
   constructor(art: PlayerArt, shadowTexture?: Texture) {
     this.art = art;
-    if (shadowTexture !== undefined) {
+    const southFrame = art.body.south.frames[0];
+    if (shadowTexture !== undefined && southFrame !== undefined) {
       // Added first, so it always sits under the body and the hose — a
       // container child order the two of them never have to know about.
-      this.shadow = new Sprite(shadowTexture);
-      this.shadow.anchor.set(0.5);
-      this.shadow.alpha = PLAYER_SHADOW_ALPHA;
-      this.shadow.scale.set(
-        (PLAYER_RADIUS * PLAYER_SHADOW_WIDTH_SCALE) / shadowTexture.width,
-        (PLAYER_RADIUS * PLAYER_SHADOW_HEIGHT_SCALE) / shadowTexture.height,
+      // Seated under the south frame's last opaque row (the same across
+      // facings — a character plants on one ground line) and sized off the
+      // drawn body, by the same helpers every other body uses.
+      this.shadow = createGroundShadow(shadowTexture);
+      styleGroundShadow(
+        this.shadow,
+        shadowTexture,
+        southFrame.width * ACTOR_SPRITE_SCALE * GROUND_SHADOW.standingFootprint,
       );
-      this.shadow.position.set(0, PLAYER_RADIUS * 0.85);
+      this.shadow.position.set(0, groundShadowFeetY(0, southFrame, ACTOR_SPRITE_SCALE));
       this.container.addChild(this.shadow);
     }
     this.body = new Sprite(art.body.south.frames[0]);

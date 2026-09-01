@@ -89,6 +89,41 @@ function tileRect(
 }
 
 /**
+ * Like `tileRect`, but picks one of `textures` per cell off `pickTileVariant`
+ * — the obstacle equivalent of the "living floor" mix. A three-cell wall
+ * block drawn from one texture read as the same stamp three times; a
+ * different boulder each cell reads as a pile of rock. The rect is still not
+ * required to land on cell boundaries — the last partial cell runs under
+ * whatever is drawn over it, same as `tileRect`.
+ */
+function tileRectVariants(
+  container: Container,
+  textures: readonly Texture[],
+  minX: number,
+  minY: number,
+  maxX: number,
+  maxY: number,
+): void {
+  if (textures.length === 0) {
+    return;
+  }
+  for (let y = minY; y < maxY; y += ROOM_TILE_UNITS) {
+    for (let x = minX; x < maxX; x += ROOM_TILE_UNITS) {
+      const col = Math.round(x / ROOM_TILE_UNITS);
+      const row = Math.round(y / ROOM_TILE_UNITS);
+      const texture = textures[pickTileVariant(col, row, textures.length)] ?? textures[0];
+      if (texture === undefined) {
+        continue;
+      }
+      const tile = new Sprite(texture);
+      tile.scale.set(tileGridScale(texture));
+      tile.position.set(x, y);
+      container.addChild(tile);
+    }
+  }
+}
+
+/**
  * The wall-boundary ("lip") course along all four edges of the room's
  * interior box, plus a dedicated corner piece at each of the four corners
  * (#196) — the built wall the doors sit in.
@@ -304,13 +339,18 @@ export function createRoomView(
       continue;
     }
     if (tileArt !== undefined) {
-      tileRect(container, tileArt.block, minX, minY, maxX, maxY);
+      // A boulder per cell, no keyline. The 1px `blockEdge` stroke below is
+      // what made the old obstacle read as a square hatch (and, on floor 2,
+      // was literally the "blue border" — `palette.blockEdge` is that floor's
+      // sky blue): with authored art its rounded silhouette is the edge, and
+      // a hard rectangle drawn over it just fights that.
+      tileRectVariants(container, tileArt.blockVariants, minX, minY, maxX, maxY);
     } else {
       blocks.rect(minX, minY, maxX - minX, maxY - minY).fill(palette.block);
+      blocks
+        .rect(minX, minY, maxX - minX, maxY - minY)
+        .stroke({ width: 1, color: palette.blockEdge, alignment: 0 });
     }
-    blocks
-      .rect(minX, minY, maxX - minX, maxY - minY)
-      .stroke({ width: 1, color: palette.blockEdge, alignment: 0 });
   }
   container.addChild(blocks);
 

@@ -70,6 +70,8 @@ export interface FloorArt {
   readonly spriteOrigins: Readonly<Record<string, SpriteOrigin>>;
   /** `roomTiles[floor].floorVariants`'s order, by name — `render/room.ts`'s `pickTileVariant` returns an index into this same order. */
   readonly tileVariantNames: Readonly<Record<number, readonly string[]>>;
+  /** `roomTiles[floor].blockVariants`'s order, by name — the obstacle equivalent of `tileVariantNames`, for click-to-pick (`app/sprite-pick.ts`). */
+  readonly blockVariantNames: Readonly<Record<number, readonly string[]>>;
 }
 
 export interface SpriteOrigin {
@@ -79,8 +81,8 @@ export interface SpriteOrigin {
 
 /**
  * Which named tiles make up one floor's room: the floor variants, the wall
- * band, the course where the wall meets the floor, what an obstacle is drawn
- * as, and what its one destructible prop looks like.
+ * band, the course where the wall meets the floor, the obstacle variants, and
+ * what its one destructible prop looks like.
  *
  * A manifest rather than a naming convention. "Adding a sprite is dropping a
  * file in a folder" holds for *content* — one more floor variant, one more
@@ -100,7 +102,16 @@ export interface FloorTileset {
    * as continuous around the room rather than two runs meeting at an angle.
    */
   readonly wallLipCorner: string;
-  readonly block: string;
+  /**
+   * The obstacle tile — an authored wall block (`RoomObstacle`) — as a set of
+   * 2–4 variants `render/room.ts` mixes across a room per cell, the same way
+   * `floorVariants` mixes the ground (#37's "living floor"). A single
+   * obstacle sprite tiled identically down a three-cell wall read as a
+   * repeated stamp; a boulder that is a different one each cell reads as a
+   * pile of rock. Order matters only in that `pickTileVariant`'s hash indexes
+   * into it — the same cell always lands on the same variant.
+   */
+  readonly blockVariants: readonly string[];
   /**
    * What each destructible prop is drawn as on this floor, in
    * `DESTRUCTIBLE_PROP_KINDS` order (`sim/game/sim.ts`).
@@ -126,7 +137,12 @@ export const FLOOR_TILESETS: Readonly<Record<number, FloorTileset>> = {
     wall: 'cellar-wall',
     wallLip: 'cellar-wall-lip',
     wallLipCorner: 'cellar-wall-lip-corner',
-    block: 'cellar-plank',
+    blockVariants: [
+      'cellar-boulder-1',
+      'cellar-boulder-2',
+      'cellar-boulder-3',
+      'cellar-boulder-4',
+    ],
     // No Maibaum in a cellar — a floor-1 `maypole` prop would be a content
     // error, and falls back to the barrel rather than to nothing.
     destructibles: ['cellar-barrel'],
@@ -137,7 +153,12 @@ export const FLOOR_TILESETS: Readonly<Record<number, FloorTileset>> = {
     wall: 'rural-wall',
     wallLip: 'rural-wall-lip',
     wallLipCorner: 'rural-wall-lip-corner',
-    block: 'rural-hedge-block',
+    blockVariants: [
+      'rural-fieldstone-1',
+      'rural-fieldstone-2',
+      'rural-fieldstone-3',
+      'rural-fieldstone-4',
+    ],
     destructibles: ['rural-barrel', 'rural-maibaum-base'],
   },
 };
@@ -148,7 +169,8 @@ export interface RoomTileArt {
   readonly wall: Texture;
   readonly wallLip: Texture;
   readonly wallLipCorner: Texture;
-  readonly block: Texture;
+  /** The obstacle variants, in `FloorTileset.blockVariants` order — `render/room.ts` picks one per cell. */
+  readonly blockVariants: readonly Texture[];
   /** By `DESTRUCTIBLE_PROP_KINDS` index; a kind past the end draws entry 0. */
   readonly destructibles: readonly Texture[];
 }
@@ -461,6 +483,7 @@ export async function loadFloorArt(): Promise<FloorArt> {
 
   const roomTiles: Record<number, RoomTileArt> = {};
   const tileVariantNames: Record<number, readonly string[]> = {};
+  const blockVariantNames: Record<number, readonly string[]> = {};
   for (const [floor, tileset] of Object.entries(FLOOR_TILESETS)) {
     const resolved = resolveTileset(Number(floor), tileset, tileTextures);
     if (resolved === null) {
@@ -468,6 +491,7 @@ export async function loadFloorArt(): Promise<FloorArt> {
     }
     roomTiles[Number(floor)] = resolved;
     tileVariantNames[Number(floor)] = tileset.floorVariants;
+    blockVariantNames[Number(floor)] = tileset.blockVariants;
   }
 
   return {
@@ -488,6 +512,7 @@ export async function loadFloorArt(): Promise<FloorArt> {
     tileTextures,
     spriteOrigins,
     tileVariantNames,
+    blockVariantNames,
   };
 }
 
@@ -521,7 +546,7 @@ function resolveTileset(
     wall: need(tileset.wall),
     wallLip: need(tileset.wallLip),
     wallLipCorner: need(tileset.wallLipCorner),
-    block: need(tileset.block),
+    blockVariants: tileset.blockVariants.map(need),
     destructibles: tileset.destructibles.map(need),
   };
 }

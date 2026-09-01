@@ -15,7 +15,8 @@ import {
 import { EntityAnimator } from './animation/animator.js';
 import { AUTHORED_FACING, resolveAnimationState, resolveFacing } from './animation/state.js';
 import type { AnimatedSpriteSet } from './floor-art.js';
-import { ENTITY_PALETTE } from './palette.js';
+import { ENTITY_PALETTE, GROUND_SHADOW } from './palette.js';
+import { groundShadowFeetY, styleGroundShadow } from './ground-shadow.js';
 import { ACTOR_SPRITE_SCALE } from './resolution.js';
 import { tileGridScale } from './room.js';
 
@@ -45,27 +46,17 @@ const BOMB_PICKUP_ID = 'bierfassl';
 const RING_PULSE_RATE = 0.011;
 
 /**
- * How dark a boss's ground shadow reads.
- *
- * Soft on purpose: it exists to seat the body on the floor, and a hard shadow
- * under a boss is one more dark shape competing with the shots the player is
- * trying to track.
+ * A boss's ground shadow: its own wider, flatter texture (`common/bosses/`),
+ * drawn `radius * 3` across and `radius` tall at `GROUND_SHADOW.bossAlpha`.
+ * Kept as its own thing rather than routed through `styleGroundShadow` —
+ * #152 tuned it against the boss sprites specifically, and a boss is
+ * bottom-anchored (#193) where every other body is centred, so its feet are
+ * already `y + radius` and not something to re-derive. Every *other* body
+ * here — enemy, pickup, destructible target, placed Bierfassl — takes the
+ * shared treatment (`docs/DECISIONS.md` #61).
  */
-const BOSS_SHADOW_ALPHA = 0.35;
-
-/**
- * The same idea as `BOSS_SHADOW_ALPHA`, lighter: every other body standing on
- * the floor — a walking enemy, a pickup, the player (`player-view.ts` reuses
- * this same texture and ratios) — reads as sitting on the ground rather than
- * floating over it, but a shadow this common must stay quiet enough that a
- * roomful of them never competes with the shots the player is dodging.
- */
-const MOB_SHADOW_ALPHA = 0.22;
-
-/** How much wider than its own radius a mob/pickup shadow is drawn — narrower than a boss's, since there is far less body to seat. */
-const MOB_SHADOW_WIDTH_SCALE = 1.5;
-/** How much shorter than its own radius a mob/pickup shadow is drawn. */
-const MOB_SHADOW_HEIGHT_SCALE = 0.5;
+const BOSS_SHADOW_WIDTH_SCALE = 3;
+const BOSS_SHADOW_HEIGHT_SCALE = 1;
 
 /**
  * How fast a placed Bierfassl's fuse-warning blink oscillates at its
@@ -538,50 +529,42 @@ export class EntityView {
         );
       }
 
-      // A boss draws its own wider shadow (#152); every other body that
-      // stands on the floor — a walking enemy or a piece of loot — draws the
-      // shared, quieter one. An authored destructible prop (a barrel, the
-      // Maibaum) is neither: it is furniture the room placed, not something
-      // that walked or dropped there, so it keeps drawing without one.
-      const wantsShadow = enemyId !== null || isPickup;
+      // Every body `EntityView` draws stands on the floor, so every one casts
+      // a ground shadow (`docs/DECISIONS.md` #61) — a walking enemy, a piece
+      // of loot, a destructible barrel, the placed Bierfassl. The corpse
+      // layer and the arena maypole are drawn elsewhere and skipped above; a
+      // shot in flight is a different pool entirely.
       const shadowTexture = isBoss ? this.bossShadowTexture : this.actorShadowTexture;
-      if (wantsShadow && shadowTexture !== undefined) {
+      if (shadowTexture !== undefined) {
         const shadow = this.shadowAt(shadowsUsed, shadowTexture);
         shadowsUsed += 1;
         shadow.visible = true;
         shadow.texture = shadowTexture;
         if (isBoss) {
-          // Wider than tall and wider than the body, the way a shadow cast by
-          // one overhead bulb is. A boss sprite is bottom-anchored at the
-          // collider's lower edge (#193), so the shadow goes there too — under
-          // the feet, not floating up inside the body the way `radius * 0.75`
-          // left it once the sprite grew past the collider.
-          shadow.alpha = BOSS_SHADOW_ALPHA;
+          shadow.anchor.set(0.5);
+          shadow.alpha = GROUND_SHADOW.bossAlpha;
           shadow.scale.set(
-            (radius * 3) / shadow.texture.width,
-            (radius * 1) / shadow.texture.height,
+            (radius * BOSS_SHADOW_WIDTH_SCALE) / shadow.texture.width,
+            (radius * BOSS_SHADOW_HEIGHT_SCALE) / shadow.texture.height,
           );
+          // Bottom-anchored at the collider's lower edge (#193) — feet there.
           shadow.position.set(x, y + radius);
         } else {
-          // Every other body keeps its centre anchor, so its own "ground" sits
-          // a little above its own visual bottom edge rather than exactly on
-          // it — near enough to read as underfoot without the shadow eating
-          // into the body it is meant to be seating. This used to be
-          // `radius * 0.85` — the collider's half-height — which is only the
-          // sprite's own half-height when the authored canvas happens to
-          // match the collider. Since #45 an authored pixel is a screen
-          // pixel and nothing constrains canvas size to collider size
-          // (Rollfass's 26px-tall barrel over a 20-unit `mid` collider,
-          // Kellerassel's 16px body over a 14-unit `normal` one), so a body
-          // taller than its collider had its shadow sitting well above its
-          // drawn feet — read as floating rather than standing on it.
-          const visualHalfHeight = (bodyTexture.height / 2) * gridScale;
-          shadow.alpha = MOB_SHADOW_ALPHA;
-          shadow.scale.set(
-            (radius * MOB_SHADOW_WIDTH_SCALE) / shadow.texture.width,
-            (radius * MOB_SHADOW_HEIGHT_SCALE) / shadow.texture.height,
+          // Seated under the art's real bottom row (`groundShadowFeetY` →
+          // `inked-bounds.ts`), and narrowed to a real footprint — the padded
+          // canvas is far wider than where the thing meets the floor. A piece
+          // of loot, a keg or a barrel lies flat, so its footprint is tighter
+          // still.
+          const lies = isPickup || isPropTarget || isBomb;
+          const footprint = lies
+            ? GROUND_SHADOW.lyingFootprint
+            : GROUND_SHADOW.standingFootprint;
+          styleGroundShadow(
+            shadow,
+            shadowTexture,
+            Math.min(bodyTexture.width * gridScale * footprint, ROOM_TILE_UNITS * 0.6),
           );
-          shadow.position.set(x, y + visualHalfHeight * 0.85);
+          shadow.position.set(x, groundShadowFeetY(y, bodyTexture, gridScale));
         }
       }
 

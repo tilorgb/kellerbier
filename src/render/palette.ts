@@ -27,6 +27,47 @@ import { PromilleTier, type PromilleTierId } from '../sim/game/promille.js';
  */
 
 // ---------------------------------------------------------------------------
+// Ground shadows (render/ground-shadow.ts) — one rule, one set of numbers
+// ---------------------------------------------------------------------------
+
+/**
+ * The soft ellipse every foreground thing the player *acts on* casts where it
+ * meets the floor — the player, an enemy, a boss, a dropped pickup, a
+ * destructible barrel, a placed Bierfassl, the planted Maibaum
+ * (`docs/DECISIONS.md` #61). Not pure scenery the player only walks past (a
+ * fence post, a well, bunting), not a shot in flight, not the item floating
+ * in a pedestal's beam; and not the obstacle tiles, which carry their own
+ * baked contact shadow (#60).
+ *
+ * `render/ground-shadow.ts` owns the maths; these are the only knobs. The
+ * shadow texture (`common/characters/actor-shadow.png`, a soft blob;
+ * `common/bosses/boss-shadow.png`, a bigger flatter one) is drawn at these
+ * alphas — the values #195 introduced were faint enough to barely read, so
+ * `bodyAlpha` is up from 0.22/0.24.
+ */
+export const GROUND_SHADOW = {
+  /** Player, enemy, pickup, destructible — anything actor-sized. */
+  bodyAlpha: 0.4,
+  /** A boss: its own wider, flatter texture, already tuned in #152 — kept where it was. */
+  bossAlpha: 0.35,
+  /** Shadow height as a fraction of its width — a shallow ellipse seen at the game's fixed ¾ angle. */
+  aspect: 0.42,
+  /** Fraction of a body's drawn width its shadow reads at — a standing body's footprint is narrower than its silhouette, and the canvas is padded on top of that. */
+  standingFootprint: 0.72,
+  /** Tighter still for a compact object that lies on the floor rather than standing — a keg, a stein, a coin, a Brezn. */
+  lyingFootprint: 0.5,
+  /**
+   * How far *above* the art's last opaque row the shadow's centre sits, in
+   * world units. Half a unit — barely a pixel — just so the ellipse straddles
+   * the contact line instead of hanging entirely off the heels. The bottom of
+   * the drawing itself is found per sprite by `render/inked-bounds.ts`, not
+   * guessed from the canvas or the collider (#195's `radius * 0.85` was the
+   * guess, and it sat 2px up the player's shins).
+   */
+  contactInset: 0.5,
+} as const;
+
+// ---------------------------------------------------------------------------
 // Entities (render/entities.ts)
 // ---------------------------------------------------------------------------
 
