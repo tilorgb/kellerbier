@@ -49,6 +49,8 @@ export const ENTITY_PALETTE = {
   bossTelegraphTint: 0xff5a44,
   /** Tint for a pickup whose kind failed to resolve. Should never be seen; a loud colour if it is. */
   unknownPickupTint: 0xff00ff,
+  /** What a placed Bierfassl reddens toward as its fuse burns down (#208) — the same hot red a boss's own wind-up uses, so "about to go off" reads as one consistent warning across the game. */
+  bombFuseTint: 0xff5a44,
   /** The untinted read — an ordinary body, or an untinted vignette. */
   normalTint: 0xffffff,
   /** A shop/pickup price label's text, dark-on-pastel — the fill colours pickups draw with are pastel/bright by design, so this is the one label colour that reads across all of them without per-kind styling. */

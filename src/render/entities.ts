@@ -4,6 +4,7 @@ import { World } from '../sim/ecs/world.js';
 import type { GameSim } from '../sim/game/sim.js';
 import { propKindIndex } from '../sim/game/prop-kinds.js';
 import { lerp } from '../sim/math.js';
+import { bombFuseProgress } from '../sim/systems/bombs.js';
 import {
   ENEMY_STRIDE,
   enemyTelegraphProgress,
@@ -36,6 +37,9 @@ const TELEGRAPH_TEXTURE_RADIUS = 24;
  */
 const MAYPOLE_PROP_KIND = propKindIndex('maypole');
 
+/** The pickup id whose art a placed Bierfassl reuses (#208) — see `bombTexture`'s own doc comment. */
+const BOMB_PICKUP_ID = 'bierfassl';
+
 /** How far below a priced pickup its number sits, once the pickup has art of its own to not cover. */
 const PRICE_LABEL_OFFSET_Y = 8;
 
@@ -64,6 +68,15 @@ const MOB_SHADOW_ALPHA = 0.22;
 const MOB_SHADOW_WIDTH_SCALE = 1.5;
 /** How much shorter than its own radius a mob/pickup shadow is drawn. */
 const MOB_SHADOW_HEIGHT_SCALE = 0.5;
+
+/**
+ * How fast a placed Bierfassl's fuse-warning blink oscillates at its
+ * fastest, once the fuse is past half burned — radians/ms, the same unit
+ * `RING_PULSE_RATE` uses. Roughly four times that rate: a bomb about to go
+ * off reads as urgent close up, where a telegraph ring is read at a glance
+ * from across the room.
+ */
+const BOMB_BLINK_RATE = 0.045;
 
 /** `a` and `b` as `0xrrggbb`, blended per channel — `t` 0 is all `a`, 1 is all `b`. */
 function mixColor(a: number, b: number, t: number): number {
@@ -161,6 +174,20 @@ export class EntityView {
    */
   private readonly pickupSprites: readonly (Texture | undefined)[];
   /**
+   * The placed-Bierfassl sprite — the same texture `pickupSprites` draws the
+   * `bierfassl` pickup with (#208), so a bomb on the ground and a bomb
+   * underfoot read as the same object at the same size. Deliberately not a
+   * destructible prop's `targetTextures`/`propKind` path: a live bomb never
+   * gets a `propKind` (`GameSim.spawnBierfassl` builds it directly rather
+   * than through `spawnTarget`), so falling into that path read whatever
+   * prop kind `0` — `'barrel'` — happened to mean, at the floor's own
+   * tile-grid scale, which is why a planted bomb used to render as a room
+   * barrel. `undefined` (no `bierfassl` pickup art loaded) falls back to
+   * `texture`, the same shared blob every other unartworked body already
+   * falls back to.
+   */
+  private readonly bombTexture: Texture | undefined;
+  /**
    * What each destructible prop is drawn as on the floor currently loaded, by
    * `DESTRUCTIBLE_PROP_KINDS` index (`FloorTileset.destructibles`).
    *
@@ -222,6 +249,7 @@ export class EntityView {
     this.bossShadowTexture = bossShadow;
     this.bossIds = bossIds;
     this.actorShadowTexture = actorShadow;
+    this.bombTexture = pickupArt[BOMB_PICKUP_ID];
     this.container.addChild(this.shadowLayer);
     this.container.addChild(this.ringLayer);
     this.container.addChild(this.corpseLayer);
@@ -311,6 +339,15 @@ export class EntityView {
       // A boss reads its wind-up off its own body, not the expanding ring (#193):
       // 0 unless this is a boss that is telegraphing right now.
       const bossTelegraph = isBoss ? enemyTelegraphProgress(sim, index) : 0;
+      // A placed Bierfassl (#208) — neither a pickup nor an enemy, but drawn
+      // off its own dedicated texture rather than falling into the
+      // destructible-prop path below, which is what used to draw it as a
+      // room barrel (see `bombTexture`'s doc comment).
+      const isBomb = ((masks[index] ?? 0) & sim.bombFuse.bit) !== 0;
+      // 0 for anything but a live bomb — how far through its fuse it is,
+      // driving the red flush/blink below the same way `bossTelegraph` drives
+      // a boss's own wind-up flush.
+      const bombFuse = isBomb ? bombFuseProgress(sim, index) : 0;
       // An animated creature (#150) resolves its frame first, because both
       // `bodyTexture` and the flash silhouette below are that frame rather
       // than one fixed texture. The animation state handed to the animator is
@@ -333,9 +370,10 @@ export class EntityView {
         );
         flip = this.animator.facingOf(index) === AUTHORED_FACING ? 1 : -1;
       }
-      // Neither an enemy nor a pickup: an authored destructible prop, drawn
-      // from the floor tileset rather than from `characters/`.
-      const isPropTarget = !isPickup && enemyId === null;
+      // Neither an enemy nor a pickup, and not a live bomb either: an
+      // authored destructible prop, drawn from the floor tileset rather than
+      // from `characters/`.
+      const isPropTarget = !isPickup && enemyId === null && !isBomb;
       const pickupKindIndex = sim.pickupKind.data[index] ?? -1;
       // A pickup with real art (#152) draws it untinted. One without still
       // draws off the white-fill texture (the same one the hit flash uses),
@@ -350,15 +388,17 @@ export class EntityView {
           ? this.flashTexture
           : animation !== undefined
             ? (animation.frames[animationFrame] ?? this.texture)
-            : enemyId === null
-              ? // `isPropTarget` in every sense but the type checker's — this
-                // spelling is what narrows `enemyId` for the branch below.
-                // Drawn as whichever of the floor's own props it was spawned
-                // from (#152) rather than as the shared blob.
-                (this.targetTextures[sim.propKind.data[index] ?? 0] ??
-                this.targetTextures[0] ??
-                this.texture)
-              : (this.enemyTextures[enemyId] ?? this.texture));
+            : isBomb
+              ? (this.bombTexture ?? this.texture)
+              : enemyId === null
+                ? // `isPropTarget` in every sense but the type checker's — this
+                  // spelling is what narrows `enemyId` for the branch below.
+                  // Drawn as whichever of the floor's own props it was spawned
+                  // from (#152) rather than as the shared blob.
+                  (this.targetTextures[sim.propKind.data[index] ?? 0] ??
+                  this.targetTextures[0] ??
+                  this.texture)
+                : (this.enemyTextures[enemyId] ?? this.texture));
       // A hit flash is that enemy's own shape (#37's bug report — it used to
       // be `flashTexture`'s generic circle for every enemy, wider than most
       // of them): `enemyFlashTextures` is keyed the same way `enemyTextures`
@@ -392,7 +432,22 @@ export class EntityView {
                   ENTITY_PALETTE.bossTelegraphTint,
                   Math.min(1, bossTelegraph * 1.15),
                 )
-              : ENTITY_PALETTE.normalTint;
+              : bombFuse > 0
+                ? mixColor(
+                    ENTITY_PALETTE.normalTint,
+                    ENTITY_PALETTE.bombFuseTint,
+                    // Reddens steadily as the fuse burns down; past the
+                    // halfway point an accelerating blink rides on top of
+                    // that ramp, so the last stretch before it goes off
+                    // reads as an urgent countdown rather than a flat glow.
+                    Math.min(
+                      1,
+                      bombFuse +
+                        Math.max(0, bombFuse - 0.5) *
+                          (Math.sin(nowMs * BOMB_BLINK_RATE * (1 + bombFuse * 3)) * 0.5 + 0.5),
+                    ),
+                  )
+                : ENTITY_PALETTE.normalTint;
       // Drawn at the actor grid: one authored pixel per internal pixel,
       // whatever the body is (`render/resolution.ts`, `docs/DECISIONS.md`
       // #45). This used to be `radius / (bodyTexture.height / 2)` — size
