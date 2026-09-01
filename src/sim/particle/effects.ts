@@ -1,3 +1,4 @@
+import { ROOM_TILE_UNITS } from '../../content/rooms/definition.js';
 import type { GameSim } from '../game/sim.js';
 import { vectorLength } from '../math.js';
 import { ParticleKind, type ParticleKindId } from './store.js';
@@ -190,6 +191,45 @@ export function doorPuff(sim: GameSim, x: number, y: number): void {
 }
 
 const DOOR_PUFF_COUNT = 6;
+
+/**
+ * A Bierfassl's own detonation (#210) — a Bomberman cross, not a ring:
+ * everything the blast reaches already gets its own hit flash or death
+ * effect, but the epicentre itself was otherwise invisible, and a radial
+ * burst would draw a shape the blast does not actually have.
+ *
+ * One flame at the bomb's own tile, plus one at every tile out to
+ * `armTiles` in each of the four cardinal directions — `armTiles` is the
+ * caller's own `tuning.pickup.bombBlastArmTiles`, the same number
+ * `sim/systems/bombs.ts`'s `blastCandidate` damages out to and
+ * `render/entities.ts`'s pre-blast telegraph grows toward, so what lit up
+ * beforehand, what flares now, and what just took damage are always the
+ * same tiles.
+ */
+export function bombBlast(sim: GameSim, x: number, y: number, armTiles: number): void {
+  flameBurst(sim, x, y);
+  for (const [dirX, dirY] of BOMB_BLAST_DIRECTIONS) {
+    for (let tile = 1; tile <= armTiles; tile++) {
+      flameBurst(sim, x + dirX * tile * ROOM_TILE_UNITS, y + dirY * tile * ROOM_TILE_UNITS);
+    }
+  }
+}
+
+/** One tile's worth of fire: a stationary flash plus a small scatter of embers, so a tile reads as briefly on fire rather than as a single dot. */
+function flameBurst(sim: GameSim, x: number, y: number): void {
+  sim.particles.spawn(x, y, 0, 0, BOMB_BLAST_TICKS, BOMB_BLAST_FLASH_SIZE, ParticleKind.Ember);
+  spray(sim, x, y, 0, 0, BOMB_BLAST_EMBERS_PER_TILE, ParticleKind.Ember, Math.PI, 0.6, 0.6, 0.8);
+}
+
+const BOMB_BLAST_DIRECTIONS: readonly (readonly [number, number])[] = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+];
+const BOMB_BLAST_TICKS = 16;
+const BOMB_BLAST_FLASH_SIZE = 5;
+const BOMB_BLAST_EMBERS_PER_TILE = 3;
 
 /** Something good was picked up. */
 export function pickupGlint(sim: GameSim, x: number, y: number): void {

@@ -289,6 +289,10 @@ export class GameView {
       textures.bossShadow,
       textures.bossIds,
       textures.actorShadow,
+      // `pedestalBeam` is already a generic 1x1 solid meant to be stretched
+      // into a bar — reused here rather than generating a second identical
+      // texture for the bomb cross telegraph's two bars (#210).
+      textures.pedestalBeam,
     );
     this.entities.setTargetTextures(this.roomTiles[sim.currentFloor]?.destructibles);
     this.world.addChild(this.entities.container);

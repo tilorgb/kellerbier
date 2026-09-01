@@ -527,8 +527,17 @@ export interface PickupTuning {
   needThreshold: number;
   /** Ticks between a Bierfassl being placed and it exploding. */
   bombFuseTicks: number;
-  /** Radius the blast damages and destroys destructible terrain within. */
-  bombBlastRadius: number;
+  /**
+   * How many tiles the blast reaches in each of the four cardinal directions
+   * — a Bomberman cross, not a circle: the same width as the bomb's own tile
+   * out to this many tiles north/south/east/west of it, damaging and
+   * destroying destructible terrain the same distance it telegraphs and
+   * animates (`sim/systems/bombs.ts`'s `blastCandidate`,
+   * `render/entities.ts`'s bomb telegraph, `sim/particle/effects.ts`'s
+   * `bombBlast`, all read this one number). The knob an item raises or
+   * lowers later to make a bomb reach further or less far.
+   */
+  bombBlastArmTiles: number;
   /** Damage the blast deals to everything it reaches. */
   bombBlastDamage: number;
   /** Initial speed of a rolled Bierfassl, pixels per tick. */
@@ -792,7 +801,7 @@ export const DEFAULT_PICKUP_TUNING: Readonly<PickupTuning> = {
   needMultiplier: 2,
   needThreshold: 0.5,
   bombFuseTicks: 90,
-  bombBlastRadius: 40,
+  bombBlastArmTiles: 2,
   bombBlastDamage: 4,
   bombRollSpeed: 2.6,
   bombRollDrag: 0.9,
