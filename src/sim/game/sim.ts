@@ -1,6 +1,7 @@
 import { type Component, World } from '../ecs/world.js';
 import { type Entity, entityIndex } from '../ecs/entity.js';
 import { ENEMY_DEFINITIONS } from '../../content/enemies/index.js';
+import { CURSE_DEFINITIONS } from '../../content/curses/index.js';
 import {
   BOSS_REWARD_DROP_TABLE,
   PICKUP_DEFINITIONS,
@@ -14,6 +15,8 @@ import type { InputFrame } from '../input/frame.js';
 import { createInputFrame } from '../input/frame.js';
 import { type DropTable, pickupDescriptionFor } from '../pickup/definition.js';
 import { PickupRegistry } from '../pickup/registry.js';
+import type { CurseId } from '../curse/definition.js';
+import { stepCurse } from '../systems/curse.js';
 import { ITEM_DEFINITIONS } from '../../content/items/index.js';
 import {
   type ItemDefinition,
@@ -188,6 +191,14 @@ export const TARGET_RESPAWN_TICKS = 150;
 
 /** A room transition is immediate in simulation and presented over this many frames. */
 export const ROOM_TRANSITION_TICKS = 12;
+
+/**
+ * How long a floor's curse announcement banner (#49) stays up, in ticks —
+ * longer than the ordinary pickup toast's `tuning.pickup.toastTicks`, since
+ * a curse is a fact about the whole floor and worth reading, not a quick
+ * float-past-loot line.
+ */
+export const CURSE_ANNOUNCE_TICKS = 240;
 
 /**
  * How long enemies stay inert after a room loads, in ticks (0.4s at 60
@@ -808,6 +819,23 @@ export class GameSim {
   private toastName = '';
   private toastDescription = '';
   private toastTicks = 0;
+
+  /** The active floor curse (#49), rolled once per floor by `rollFloorCurse`. `null` on an uncursed floor. */
+  private curseIdValue: CurseId | null = null;
+  /** Ticks left showing the curse-entry announcement banner. See `curseAnnouncement`. */
+  private curseAnnounceTicks = 0;
+  /**
+   * Current wind angle for the Föhn curse, radians — the curse's own scratch
+   * value, the same role an item hook's `ItemRuntimeState.charge` plays for
+   * the Föhn item (`sim/systems/curse.ts`'s `applyWind`). Public for the same
+   * reason `puddleImmuneTicks` is: read and written by a system, not a
+   * method.
+   */
+  curseFoehnAngle = 0;
+  /** Ticks left on Sperrstunde's "last call" timer, while it is the active curse. 0 once expired. */
+  sperrstundeTicksLeft = 0;
+  /** Ticks until Sperrstunde's next Ordner harassment application, once its timer has expired. */
+  sperrstundeHarassmentCooldown = 0;
 
   /** Biermarken banked, Kellerschlüssel held, and Bierfassl in inventory — see #22. */
   private biermarkenCount = 0;
@@ -1658,6 +1686,7 @@ export class GameSim {
     }
     if (floor !== this.lastFloorStartDispatched) {
       this.lastFloorStartDispatched = floor;
+      this.rollFloorCurse();
       dispatchItemFloorStart(this, floor);
     }
     // "Stats reroll on every floor entry" (#47) — a floor, not a room: the
@@ -2149,6 +2178,61 @@ export class GameSim {
     this.toastName = name;
     this.toastDescription = description;
     this.toastTicks = Math.round(this.tuning.pickup.toastTicks);
+  }
+
+  /** The active floor curse (#49), or `null` on an uncursed floor. */
+  get curse(): CurseId | null {
+    return this.curseIdValue;
+  }
+
+  /**
+   * The curse-entry announcement, or `null` once it has aged out — same
+   * "return null past its ticks" shape as `pickupToast`. Read by the render
+   * layer once a frame.
+   */
+  get curseAnnouncement(): { readonly name: string; readonly description: string } | null {
+    if (this.curseAnnounceTicks <= 0 || this.curseIdValue === null) {
+      return null;
+    }
+    const definition = CURSE_DEFINITIONS.find((entry) => entry.id === this.curseIdValue);
+    return definition === undefined
+      ? null
+      : { name: definition.name, description: definition.description };
+  }
+
+  /**
+   * Rolls whether this floor carries a curse, and which one — called once
+   * per floor, from `applyCompiledRoom`'s own "new floor" guard, the same
+   * moment `dispatchItemFloorStart` fires.
+   *
+   * Kater is the one curse with an immediate effect rather than a per-tick
+   * one: it starts the same `katerTicksValue` debuff `tickUmgfalln` would,
+   * so the floor opens hungover instead of the player waking up that way.
+   * Nebel and Blaue Stunde need nothing here — both are read directly off
+   * `curse` by the renderer — and Föhn/Sperrstunde's per-tick effects live in
+   * `sim/systems/curse.ts`'s `stepCurse`.
+   */
+  private rollFloorCurse(): void {
+    const tuning = this.tuning.curse;
+    this.curseFoehnAngle = 0;
+    this.sperrstundeHarassmentCooldown = 0;
+    if (!this.random.curse.chance(tuning.curseChance)) {
+      this.curseIdValue = null;
+      this.sperrstundeTicksLeft = 0;
+      return;
+    }
+    const definition = this.random.curse.pick(CURSE_DEFINITIONS);
+    this.curseIdValue = definition.id;
+    this.sperrstundeTicksLeft =
+      definition.id === 'sperrstunde' ? Math.round(tuning.sperrstundeTimerTicks) : 0;
+    if (definition.id === 'kater') {
+      this.startKater();
+    }
+    this.curseAnnounceTicks = CURSE_ANNOUNCE_TICKS;
+    // The curse announcement is a bigger deal than an ordinary pickup toast
+    // that happened to still be showing when the floor loaded — same
+    // suppression precedent `takePedestalItem` sets for its own reveal panel.
+    this.toastTicks = 0;
   }
 
   /** Biermarken banked. */
@@ -3634,6 +3718,11 @@ export class GameSim {
     // ordering requirement — it rides along here rather than earning a
     // second call site.
     stepStatusEffects(this);
+    // A curse's per-tick effect (Föhn's wind, Sperrstunde's timer and
+    // harassment) — after status effects so an Ordner poison application
+    // this tick is picked up by the very next `stepStatusEffects` call
+    // rather than sitting unaged for a whole extra tick.
+    stepCurse(this);
     stepBodies(this);
     stepShooting(this, input);
     stepProjectiles(this);
@@ -3742,6 +3831,9 @@ export class GameSim {
     }
     if (this.pedestalRevealTicks > 0) {
       this.pedestalRevealTicks -= 1;
+    }
+    if (this.curseAnnounceTicks > 0) {
+      this.curseAnnounceTicks -= 1;
     }
   }
 

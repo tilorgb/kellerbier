@@ -55,6 +55,7 @@ import { StammtischScreen } from '../render/stammtisch.js';
 import { HealthHud } from '../render/health-hud.js';
 import { ItemGateHud } from '../render/item-gate-hud.js';
 import { MinimapHud } from '../render/minimap-hud.js';
+import { CurseHud } from '../render/curse-hud.js';
 import { PromilleHud } from '../render/promille-hud.js';
 import { WalletHud } from '../render/wallet-hud.js';
 import { HUD_PALETTE, PARTICLE_PALETTE, UI_PALETTE } from '../render/palette.js';
@@ -67,6 +68,7 @@ import { DisplayTitle, TITLE_STYLES } from '../render/ui/title.js';
 import { UiKitGallery } from '../render/ui/gallery.js';
 import { uiScaleFor, uiText, UI_TEXT_HEIGHT } from '../render/ui/text.js';
 import { Vignette } from '../render/vignette.js';
+import { BlaueStundeOverlay } from '../render/blaue-stunde-overlay.js';
 import { GameView } from '../render/view.js';
 import { FLOOR_TILESETS, buildAnimatedSets, loadFloorArt } from '../render/floor-art.js';
 import {
@@ -662,6 +664,9 @@ async function boot(): Promise<void> {
   // screen drawn after it.
   const vignette = new Vignette();
   uiLayer.addChild(vignette.view);
+  /** Blaue Stunde's darkening (#49) — same layer/positioning as `vignette`, its own sprite. */
+  const blaueStundeOverlay = new BlaueStundeOverlay();
+  uiLayer.addChild(blaueStundeOverlay.view);
 
   /**
    * Everything drawn on the UI's own pixel grid (#154).
@@ -855,6 +860,10 @@ async function boot(): Promise<void> {
   // aligned with the room even in a letterboxed viewport.
   hudLayer.addChild(minimapHud.overlayView);
 
+  /** A floor's curse (#49): the entry announcement and Sperrstunde's countdown. */
+  const curseHud = new CurseHud(kit);
+  hudLayer.addChild(curseHud.view);
+
   /**
    * The kit's own specimen page (`K`).
    *
@@ -926,6 +935,7 @@ async function boot(): Promise<void> {
 
     minimapHud.view.position.set(width - HUD_MARGIN, HUD_MARGIN);
     minimapHud.overlayView.position.set(centreX, Math.round(height / 2));
+    curseHud.resize(width, height);
 
     replayViewer.view.position.set(
       centreX - Math.round(replayViewer.width / 2),
@@ -1350,7 +1360,17 @@ async function boot(): Promise<void> {
       activeItemHud.sync(sim, activatePrompt);
       itemGateHud.sync(sim);
       bossHealthHud.sync(sim);
+      curseHud.sync(sim);
       minimapHud.setMapOpen(isActionDown(input.frame, InputAction.Map));
+      // Nebel (#49): no minimap for the floor — render-only, the same
+      // "accessibility suppression is render-side" split `docs/DECISIONS.md`
+      // #41 already uses; the sim keeps tracking visited/revealed rooms
+      // underneath, only the corner map and its overlay stop drawing.
+      // After `setMapOpen`, which would otherwise stomp both flags back on.
+      if (sim.curse === 'nebel') {
+        minimapHud.view.visible = false;
+        minimapHud.overlayView.visible = false;
+      }
       const showBossBanner =
         sim.roomWarmupTicks > 0 && planRoom(floorPlan, currentRoomId).role === 'boss';
       if (showBossBanner !== bossBannerShown) {
@@ -1430,6 +1450,7 @@ async function boot(): Promise<void> {
       advanceFloorCard(started);
       const playerScreen = view.playerScreenPosition();
       vignette.sync(sim, playerScreen.x, playerScreen.y);
+      blaueStundeOverlay.sync(sim, playerScreen.x, playerScreen.y, layout, settings.reducedMotion);
       if (replay !== null) {
         replayViewer.show();
         replayViewer.sync(

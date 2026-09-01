@@ -678,6 +678,34 @@ export interface RoomGenTuning {
   authoredRoomChance: number;
 }
 
+/**
+ * Curses (#49): a floor modifier's own numbers, kept out of the systems that
+ * read them for the same "author can't tune what isn't a slider" reason
+ * every other subsystem here is. `curseChance` is the one field that isn't a
+ * specific curse's own number — how often a floor rolls one at all.
+ */
+export interface CurseTuning {
+  /** Chance a generated floor carries a curse at all — see `GameSim`'s floor-start roll. */
+  curseChance: number;
+  /** Ticks before Sperrstunde's "last call" timer runs out. Ten seconds is one short floor, not a whole one. */
+  sperrstundeTimerTicks: number;
+  /**
+   * Once Sperrstunde's timer expires, the Ordner's harassment (a poison tick
+   * on the player, reusing `sim/systems/status-effects.ts`) refreshes this
+   * often — never lethal on its own, per #49's own acceptance criterion, just
+   * pressure to keep moving.
+   */
+  sperrstundeHarassmentIntervalTicks: number;
+  /** Duration/magnitude of each Ordner poison application — see `poisonDurationTicks`/`poisonDamagePerTick` in `ProjectileTagTuning` for the shape this mirrors. */
+  sperrstundeHarassmentDurationTicks: number;
+  /** Radians the Föhn curse's wind direction turns per tick — same shape as the Föhn item's own constant. */
+  foehnRotationRadiansPerTick: number;
+  /** How hard the Föhn curse pushes every live projectile each tick. */
+  foehnWindStrength: number;
+  /** Radius, in px, the player can still see clearly under Blaue Stunde — render-side only, never touches simulation. */
+  blaueStundeVisionRadius: number;
+}
+
 export interface SimTuning {
   readonly movement: MovementTuning;
   readonly shooting: ShootingTuning;
@@ -689,6 +717,7 @@ export interface SimTuning {
   readonly itemPool: ItemPoolTuning;
   readonly character: CharacterTuning;
   readonly roomGen: RoomGenTuning;
+  readonly curse: CurseTuning;
 }
 
 export const DEFAULT_MOVEMENT_TUNING: Readonly<MovementTuning> = {
@@ -950,6 +979,23 @@ export const DEFAULT_ROOM_GEN_TUNING: Readonly<RoomGenTuning> = {
   authoredRoomChance: 0.12,
 };
 
+/**
+ * Sperrstunde's timer is deliberately generous — #49's own acceptance
+ * criterion is urgency without making exploration pointless, and the Ordner's
+ * harassment reuses poison's tick shape (`ProjectileTagTuning`) rather than
+ * inventing a second damage-over-time curve: pressure enough to notice,
+ * capped low enough that standing still never turns into a death by itself.
+ */
+export const DEFAULT_CURSE_TUNING: Readonly<CurseTuning> = {
+  curseChance: 0.35,
+  sperrstundeTimerTicks: 1800,
+  sperrstundeHarassmentIntervalTicks: 240,
+  sperrstundeHarassmentDurationTicks: 60,
+  foehnRotationRadiansPerTick: 0.01,
+  foehnWindStrength: 0.05,
+  blaueStundeVisionRadius: 140,
+};
+
 export function createTuning(): SimTuning {
   return {
     movement: { ...DEFAULT_MOVEMENT_TUNING },
@@ -960,6 +1006,7 @@ export function createTuning(): SimTuning {
     pickup: { ...DEFAULT_PICKUP_TUNING },
     projectileTags: { ...DEFAULT_PROJECTILE_TAG_TUNING },
     itemPool: { ...DEFAULT_ITEM_POOL_TUNING },
+    curse: { ...DEFAULT_CURSE_TUNING },
     character: { ...DEFAULT_CHARACTER_TUNING },
     roomGen: { ...DEFAULT_ROOM_GEN_TUNING },
   };
