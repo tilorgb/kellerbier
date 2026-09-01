@@ -922,6 +922,23 @@ export class GameSim {
   private playerHurtTick_ = -1;
   private deathWordValue: string | undefined;
 
+  /**
+   * Set once, by `markWon` (#155) — the tick the run was won. Unlike
+   * `playerDeadFlag`, nothing inside `GameSim` itself decides *when* this
+   * happens: "the last floor that exists" is `app/main.ts`'s
+   * `HIGHEST_PLAYABLE_FLOOR`, a content-completeness fact rather than a
+   * simulation rule (the same reasoning `docs/DECISIONS.md` #22 already
+   * gives for floors 3-7 being parked, not cancelled) — so the *decision*
+   * lives where that constant already does, and calls this the instant it's
+   * made. The flag still lives here, not in `main.ts`, because it has to
+   * replay identically: `markWon` is called from the same
+   * `advanceOneTick`-driven path a room transition already is (see
+   * `enterNeighbor`), so a full replay reaches the same tick and calls it
+   * the same way live play did.
+   */
+  private playerWonFlag = false;
+  private playerWonTick_ = -1;
+
   /** Carried in from `GameSimOptions`, and never written after construction. */
   private readonly previousDeathWord: string | undefined;
 
@@ -2378,6 +2395,31 @@ export class GameSim {
   /** The tick death happened on, or -1 while the player is alive. */
   get playerDeathTick(): number {
     return this.playerDeathTick_;
+  }
+
+  /** True once the run has been won (#155) — see `markWon`. */
+  get playerWon(): boolean {
+    return this.playerWonFlag;
+  }
+
+  /** The tick the run was won on, or -1 until then. */
+  get playerWonTick(): number {
+    return this.playerWonTick_;
+  }
+
+  /**
+   * Marks the run won (#155) — called by `app/main.ts`'s `enterNeighbor`
+   * the instant it decides the boss room just cleared was the last floor's,
+   * rather than routing into another lap of the dev-only endless floor
+   * loop. A no-op past the first call, and past a death: once a run has
+   * ended one way, it does not end the other way too.
+   */
+  markWon(): void {
+    if (this.playerWonFlag || this.playerDeadFlag) {
+      return;
+    }
+    this.playerWonFlag = true;
+    this.playerWonTick_ = this.currentTick;
   }
 
   /**

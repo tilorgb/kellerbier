@@ -51,6 +51,7 @@ import { BossHealthHud } from '../render/boss-health-hud.js';
 import { CharacterHud } from '../render/character-hud.js';
 import { EntityView } from '../render/entities.js';
 import { GameOverScreen } from '../render/game-over.js';
+import { VictoryScreen } from '../render/victory-screen.js';
 import { StammtischScreen } from '../render/stammtisch.js';
 import { HealthHud } from '../render/health-hud.js';
 import { ItemGateHud } from '../render/item-gate-hud.js';
@@ -132,6 +133,7 @@ import {
   resolvePromilleUnlocked,
   writePromilleOverride,
 } from './promille-gate.js';
+import { readEndlessFloors, writeEndlessFloors } from './endless-floor-debug.js';
 
 /**
  * The authored pool, run through the same typed boundary the sim uses to load
@@ -710,6 +712,7 @@ async function boot(): Promise<void> {
   uiLayer.addChild(hudLayer);
 
   const gameOverScreen = new GameOverScreen(kit, app.renderer);
+  const victoryScreen = new VictoryScreen(kit, app.renderer);
 
   /**
    * Der Stammtisch (#46) — the hub between runs, opened with `T` and
@@ -884,8 +887,10 @@ async function boot(): Promise<void> {
   hudLayer.addChild(floorTitleCard.view);
   hudLayer.addChild(kitGallery.view);
   hudLayer.addChild(gameOverScreen.view);
-  // Above the game-over screen: the hub opens over a finished run's tableau,
-  // and the two are on screen together the moment a new regular arrives.
+  hudLayer.addChild(victoryScreen.view);
+  // Above the game-over/victory screens: the hub opens over a finished
+  // run's tableau, and the two are on screen together the moment a new
+  // regular arrives.
   hudLayer.addChild(stammtisch.view);
 
   /** The frame's size in UI pixels, kept for the per-frame placements below. */
@@ -950,6 +955,7 @@ async function boot(): Promise<void> {
     );
 
     gameOverScreen.resize(width, height);
+    victoryScreen.resize(width, height);
     stammtisch.resize(width, height);
     floorTitleCard.resize(width, height);
     kitGallery.resize(width, height);
@@ -1016,6 +1022,9 @@ async function boot(): Promise<void> {
    * own unlock decides.
    */
   let promilleOverride: PromilleOverride = readPromilleOverride();
+
+  /** The dev override on the endless floor loop (#155), read once at boot and toggled by `Y`. */
+  let endlessFloors = readEndlessFloors();
 
   /**
    * Whether the run *about to start* has Promille, from the save plus the
@@ -1100,11 +1109,29 @@ async function boot(): Promise<void> {
     }
   }
 
-  /** Called once per real `sim.step()`, right after it, to drive `deathPhase` forward. */
+  /**
+   * How far the run got, at the tick it ended — `playerDeathTick` for a
+   * death, `playerWonTick` for a win (#155). The one thing the two outcomes
+   * don't share a field for.
+   */
+  function runEndTick(): number {
+    return sim.playerWon ? sim.playerWonTick : sim.playerDeathTick;
+  }
+
+  /**
+   * Called once per real `sim.step()`, right after it, to drive `deathPhase`
+   * forward. Despite the name, this now drives *either* way a run can end
+   * (#155) — a death or a win — through the same freeze/slowmo/summary
+   * shape, branching only at the very end on which one actually happened.
+   * Kept as one sequence rather than a parallel `winPhase` because every
+   * beat up to the summary screen is identical, and `sim.playerDead`/
+   * `sim.playerWon` are mutually exclusive by construction (`GameSim.markWon`
+   * is a no-op once the player is already dead).
+   */
   function advanceDeathSequence(): void {
     const tuning = sim.tuning.impact;
     if (deathPhase === 'alive') {
-      if (sim.playerDead) {
+      if (sim.playerDead || sim.playerWon) {
         deathPhase = 'freezing';
         sim.requestHitstop(Math.round(tuning.deathFreezeTicks));
       }
@@ -1123,51 +1150,66 @@ async function boot(): Promise<void> {
       if (deathPhaseTicks >= tuning.deathSlowmoTicks) {
         deathPhase = 'over';
         loop.timeScale = 1;
-        gameOverScreen.show({
-          word: sim.deathWord ?? 'Umgfalln',
-          seconds: sim.playerDeathTick / TICKS_PER_SECOND,
-          kills: summary.kills,
-          // `src/debug/panels/run-info.ts` still shows its own placeholder —
-          // wiring the generated floor into the debug overlay's context is a
-          // separate, smaller follow-up.
-          floor: `${floorPlan.floorName}  room ${sim.roomId} (${planRoom(floorPlan, currentRoomId).role})`,
-        });
-        // Watching a replay plays this same death sequence back — the game-
-        // over screen above still shows, since that is what the replay is
-        // *of* — but none of the bookkeeping below runs a second time: the
+        const floorLabel = `${floorPlan.floorName}  room ${sim.roomId} (${planRoom(floorPlan, currentRoomId).role})`;
+        if (sim.playerWon) {
+          victoryScreen.show({
+            seconds: sim.playerWonTick / TICKS_PER_SECOND,
+            kills: summary.kills,
+            floor: floorLabel,
+          });
+        } else {
+          gameOverScreen.show({
+            word: sim.deathWord ?? 'Umgfalln',
+            seconds: sim.playerDeathTick / TICKS_PER_SECOND,
+            kills: summary.kills,
+            // `src/debug/panels/run-info.ts` still shows its own placeholder —
+            // wiring the generated floor into the debug overlay's context is a
+            // separate, smaller follow-up.
+            floor: floorLabel,
+          });
+        }
+        // Watching a replay plays this same sequence back — the summary
+        // screen above still shows, since that is what the replay is *of*
+        // — but none of the bookkeeping below runs a second time: the
         // outcome it is replaying was already recorded (or, for an imported
         // replay, belongs to whoever's machine recorded it in the first
         // place), and there is no in-progress `activeRun` for a replay to
         // clear or reroll `pendingSeed` out from under.
         if (replay === null) {
-          // A dead run has nothing left to resume into — the R key (or a
-          // fresh page load) starts a new one either way, so the in-progress
-          // log is cleared rather than left around to be resumed into a
-          // tableau that is already over.
+          // A finished run — won or dead — has nothing left to resume into:
+          // the R key (or a fresh page load) starts a new one either way, so
+          // the in-progress log is cleared rather than left around to be
+          // resumed into a tableau that is already over.
           persistActiveRun(null);
+          const ticksSurvived = runEndTick();
           const save = recordRunOutcome({
             seed: RUN_SEED,
             floor: floorPlan.floor,
-            ticksSurvived: sim.playerDeathTick,
+            ticksSurvived,
             kills: summary.kills,
-            deathWord: sim.deathWord ?? null,
+            // `null` rather than a drawn word is also how a *win* is told
+            // apart from a death on the record itself — a won run never had
+            // one to draw. See `run-summary.ts`'s own outcome-agnostic
+            // `RunDetails.alive`/`deathWord` shape for the same idea applied
+            // to the clipboard "copy run details" text.
+            deathWord: sim.playerWon ? null : (sim.deathWord ?? null),
             recordedAt: Date.now(),
           });
           if (activeRunIsDaily) {
             recordDailyRunOutcome({
               date: dailyDateKey(),
               seed: RUN_SEED,
-              ticksSurvived: sim.playerDeathTick,
+              ticksSurvived,
               kills: summary.kills,
             });
           }
           persistFinishedRunReplay();
           pendingSeed = rollSeed();
           // An arrival is an event, so it interrupts: a regular earned during
-          // the run that just ended introduces himself now, over the game-over
+          // the run that just ended introduces himself now, over the summary
           // screen, which is the moment `docs/GAME_DESIGN.md` §9 describes for
-          // the Promille unlock. Any other death leaves the hub where it is —
-          // one keypress away, per the hint the game-over screen shows.
+          // the Promille unlock. Any other run end leaves the hub where it
+          // is — one keypress away, per the hint the summary screen shows.
           if (stammtischView(save).seats.some((seat) => seat.arriving)) {
             openStammtisch();
           }
@@ -1189,9 +1231,9 @@ async function boot(): Promise<void> {
   function persistFinishedRunReplay(): void {
     const finishedSeed = RUN_SEED;
     const finishedFloor = floorPlan.floor;
-    const finishedTicks = sim.playerDeathTick;
+    const finishedTicks = runEndTick();
     const finishedKills = summary.kills;
-    const finishedDeathWord = sim.deathWord ?? null;
+    const finishedDeathWord = sim.playerWon ? null : (sim.deathWord ?? null);
     const finishedIsDaily = activeRunIsDaily;
     const finishedPromilleUnlocked = activeRunRecorder.promilleUnlocked;
     const finishedCharacter = activeRunRecorder.character;
@@ -1744,6 +1786,7 @@ WASD move   arrows aim and fire
     pedestalRevealLabel = '';
     pedestalReveal.visible = false;
     gameOverScreen.hide();
+    victoryScreen.hide();
     loop.reset();
     loop.timeScale = 1;
     loop.paused = false;
@@ -2241,7 +2284,18 @@ WASD move   arrows aim and fire
   /** `sim.doorContact`'s door, translated into "which of this room's real cells did that come from". */
   function enterNeighbor(exitDoor: CompiledDoor): boolean {
     if (exitDoor === sim.nextFloorDoor) {
-      advanceFloor();
+      // The last floor's boss room, cleared, walked through — the run is
+      // won (#155) rather than looping back to floor 1, unless the dev-only
+      // endless-floor override (`Y`) is on. `sim.markWon()` is the only
+      // thing this branch does to `sim` itself: the boss room, its loot and
+      // the player's own state are left exactly as they are, the same
+      // "nothing regenerates" reasoning that makes the victory sequence
+      // need no floor snapshot of its own.
+      if (floorPlan.floor >= HIGHEST_PLAYABLE_FLOOR && !endlessFloors) {
+        sim.markWon();
+      } else {
+        advanceFloor();
+      }
       return true;
     }
     const room = planRoom(floorPlan, currentRoomId);
@@ -2516,6 +2570,22 @@ WASD move   arrows aim and fire
           promilleOverride = nextPromilleOverride(promilleOverride);
           writePromilleOverride(promilleOverride);
           startRun(RUN_SEED);
+        }
+        break;
+      case 'y':
+      case 'Y':
+        // Y for the pre-#155 endless floor loop: clearing the last floor's
+        // boss used to always wrap back to floor 1 with `sim` intact, which
+        // is genuinely useful for running an item stack through the floors
+        // repeatedly during a playtest. Now that clearing Der Stier ends the
+        // run for real, this toggle is the only way back to that loop — off
+        // by default, so a player can never wander into it by just playing.
+        // No live-toggle guard needed the way Promille's `B` has one: this
+        // changes nothing about drop tables or item pools, only what happens
+        // the next time the dev-only next-floor door is walked through.
+        if (import.meta.env.DEV) {
+          endlessFloors = !endlessFloors;
+          writeEndlessFloors(endlessFloors);
         }
         break;
       case 'n':
