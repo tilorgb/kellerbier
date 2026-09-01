@@ -103,9 +103,7 @@ describe('Bierfassl fuse and blast', () => {
       // split evenly between both axes so it lands outside either arm's
       // one-tile-wide band.
       const diagonalOffset = armLength * 0.7;
-      expect(
-        explodeNear(bombX, bombY, bombX + diagonalOffset, bombY + diagonalOffset),
-      ).toBe(true);
+      expect(explodeNear(bombX, bombY, bombX + diagonalOffset, bombY + diagonalOffset)).toBe(true);
     });
 
     it('hits anything inside the arm’s own tile-wide band, not just dead-centre on the axis', () => {
