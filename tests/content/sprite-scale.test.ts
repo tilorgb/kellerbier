@@ -69,18 +69,19 @@ const MAX_SILHOUETTE = 1.8;
 /**
  * Creatures whose art does not yet fit the collider it is drawn over.
  *
- * Art debt from #45, recorded rather than papered over. Both entries are
- * bodies drawn well inside their own hitbox — a Shopkeeper 16 internal pixels
- * tall behind a 28-pixel collider, a Kellerassel-Segment at 15 — because the
- * old renderer inflated them to fit and nothing ever had to be authored to
- * size. Each needs a redraw at a size a person has signed off, so each stays
- * here until it gets one.
+ * Art debt from #45, recorded rather than papered over. The Shopkeeper is a
+ * body drawn well inside its own hitbox — 16 internal pixels tall behind a
+ * 28-pixel collider — because the old renderer inflated it to fit and nothing
+ * ever had to be authored to size. It needs a redraw at a size a person has
+ * signed off (#194), so it stays here until it gets one. The
+ * Kellerassel-Segment left this list in #191, redrawn from
+ * `tools/art/authoring/floor1-roster.mjs`.
  *
  * This list may only ever shrink; the test below fails if an entry stops being
  * needed, so a fixed sprite cannot quietly leave its exemption behind for the
  * next mis-sized one to inherit.
  */
-const PENDING_REDRAW: ReadonlySet<string> = new Set(['shopkeeper', 'kellerassel-segment']);
+const PENDING_REDRAW: ReadonlySet<string> = new Set(['shopkeeper']);
 
 const sprites = await scanSprites(SPRITE_ROOT);
 const creatureArt = new Map(
