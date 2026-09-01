@@ -4,6 +4,7 @@ import {
   BACKGROUND_PALETTES,
   BACKGROUND_TIER,
   backgroundColorsFor,
+  clampToBackgroundCeiling,
   FLOOR_PALETTES,
   legalPixelColorsFor,
   MASTER_PALETTE,
@@ -122,6 +123,13 @@ describe('shading', () => {
 // #214 / docs/DECISIONS.md #62: everything the player does not act on is drawn
 // from a quieter tier — FLOOR_PALETTES darkened and desaturated by a pure
 // function, never a second authored table.
+function hslLightness(color: number): number {
+  const r = ((color >> 16) & 0xff) / 255;
+  const g = ((color >> 8) & 0xff) / 255;
+  const b = (color & 0xff) / 255;
+  return (Math.max(r, g, b) + Math.min(r, g, b)) / 2;
+}
+
 function hslSaturation(color: number): number {
   const r = ((color >> 16) & 0xff) / 255;
   const g = ((color >> 8) & 0xff) / 255;
@@ -164,6 +172,26 @@ describe('the background tier', () => {
     expect(hslSaturation(toBackgroundHue(rural))).toBeLessThan(hslSaturation(rural));
   });
 
+  it('no background hue breaks the tier ceiling — a prop accent cannot flash against the wall', () => {
+    // Small slack: the clamp sets HSL exactly on the ceiling, but a round-trip
+    // through byte RGB — worse at low lightness, where saturation's denominator
+    // is small — can land a hair above when recomputed. Visually still on it.
+    const eps = 0.02;
+    for (const color of [
+      ...Object.values(BACKGROUND_PALETTES).flat(),
+      ...backgroundColorsFor('common'),
+      ...backgroundColorsFor('floor-1-cellar'),
+    ]) {
+      expect(hslLightness(color)).toBeLessThanOrEqual(BACKGROUND_TIER.maxLightness + eps);
+      expect(hslSaturation(color)).toBeLessThanOrEqual(BACKGROUND_TIER.maxSaturation + eps);
+    }
+    // The neutrals in particular: hit-flash white is pulled down, black is not.
+    const bg = backgroundColorsFor('floor-2-rural');
+    expect(bg.has(0xffffff)).toBe(false);
+    expect(bg.has(0x000000)).toBe(true);
+    expect(bg.has(clampToBackgroundCeiling(0xffffff))).toBe(true);
+  });
+
   it('leaves the ~40-colour cap untouched — the derived tier adds no authored colours', () => {
     // MASTER_PALETTE is still exactly NEUTRAL_PALETTE plus the FLOOR_PALETTES
     // hues; BACKGROUND_PALETTES is not part of it.
@@ -178,7 +206,7 @@ describe('the background tier', () => {
       expect(bg.has(color)).toBe(true);
     }
     for (const color of NEUTRAL_PALETTE) {
-      expect(bg.has(color)).toBe(true);
+      expect(bg.has(clampToBackgroundCeiling(color))).toBe(true);
     }
     // The confident foreground hue itself is not pickable on the background tier.
     const ruralA = FLOOR_PALETTES.rural[0];
@@ -193,7 +221,7 @@ describe('the background tier', () => {
       expect(bg.has(toBackgroundHue(color))).toBe(true);
     }
     for (const color of NEUTRAL_PALETTE) {
-      expect(bg.has(color)).toBe(true);
+      expect(bg.has(clampToBackgroundCeiling(color))).toBe(true);
     }
   });
 
@@ -239,5 +267,10 @@ describe('the background tier', () => {
     expect(BACKGROUND_TIER.darken).toBeLessThanOrEqual(3);
     expect(BACKGROUND_TIER.desaturate).toBeGreaterThanOrEqual(1);
     expect(BACKGROUND_TIER.desaturate).toBeLessThanOrEqual(3);
+    // The ceiling is quiet but not black — a prop must still read as present.
+    expect(BACKGROUND_TIER.maxLightness).toBeGreaterThan(0.25);
+    expect(BACKGROUND_TIER.maxLightness).toBeLessThan(0.5);
+    expect(BACKGROUND_TIER.maxSaturation).toBeGreaterThan(0.15);
+    expect(BACKGROUND_TIER.maxSaturation).toBeLessThan(0.45);
   });
 });

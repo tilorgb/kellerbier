@@ -2947,12 +2947,19 @@ of implying an interaction it does not have.
 
 **Derived, not authored — per #28.** `BACKGROUND_PALETTES[floorTag]` is `FLOOR_PALETTES[floorTag]`
 with each hue pushed `BACKGROUND_TIER.darken` `SHADE_LIGHTNESS_STEP`s darker and
-`BACKGROUND_TIER.desaturate` `DESATURATION_STEP`s toward grey — one each, chosen by eye against
-a real floor-1 and floor-2 room. No second table to keep in sync, and the ~40-colour cap in
-`docs/CONTENT_BIBLE.md` §5 is untouched because these are pure functions of hues already
-counted. `legalPixelColorsFor` and `nudgeShade` gained a `tier` argument (defaulting to
-`'foreground'`, so every prior caller is unchanged); `pickableColorsFor(bucket, tier)` is the
-swatch set, with `allowedColorsFor` staying the foreground one verbatim.
+`BACKGROUND_TIER.desaturate` `DESATURATION_STEP`s toward grey (one each), **then clamped under a
+hard HSL ceiling** — `maxLightness` 0.4, `maxSaturation` 0.3 (`clampToBackgroundCeiling`). The
+nudge alone tames a floor's own muted greys and greens but not a prop's bright accent: a cream
+highlight or a sky-blue panel starts so far above the wall that one step still leaves it
+flashing against it. The ceiling pulls every derived tone — and the neutrals, which
+`backgroundColorsFor` runs through it too, because hit-flash white has no business on a sprite
+that never flashes — down to where it reads as scenery; the re-tone migration also collapses a
+highlight shade-step whose tone would break the ceiling. A tone already under it (every
+wall/floor/lip tone #196 tuned) is untouched. No second table to keep in sync, and the
+~40-colour cap in `docs/CONTENT_BIBLE.md` §5 is untouched because these are pure functions of
+hues already counted. `legalPixelColorsFor` and `nudgeShade` gained a `tier` argument
+(defaulting to `'foreground'`, so every prior caller is unchanged); `pickableColorsFor(bucket,
+tier)` is the swatch set, with `allowedColorsFor` staying the foreground one verbatim.
 
 **The `common` bucket derives from every floor hue.** `crate-*`, `shopkeeper-stand` and
 `boss-plate` are shared scenery with no per-floor mood to derive from, so their background tier

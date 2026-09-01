@@ -284,11 +284,40 @@ export function nudgeShade(bucketId, color, direction, tier = 'foreground') {
  * default (#214's brief) — one each — and moved only by eye against a real
  * floor-1 and floor-2 room.
  */
-export const BACKGROUND_TIER = { darken: 1, desaturate: 1 };
+export const BACKGROUND_TIER = {
+  darken: 1,
+  desaturate: 1,
+  maxLightness: 0.4,
+  maxSaturation: 0.3,
+};
 
-/** One foreground hue pushed onto the background tier: `BACKGROUND_TIER.darken` steps darker, then `BACKGROUND_TIER.desaturate` steps toward grey. */
+/**
+ * `color` with its HSL lightness and saturation clamped down to the background
+ * tier's ceiling. A colour already under both is returned unchanged — which is
+ * every wall/floor/lip tone #196 tuned, so those do not move. What it does
+ * catch is a prop's bright accent: a cream highlight or a sky-blue panel that
+ * starts so far above the wall the darken/desaturate nudge alone still leaves
+ * it flashing against it.
+ */
+export function clampToBackgroundCeiling(color) {
+  const r = (color >> 16) & 0xff;
+  const g = (color >> 8) & 0xff;
+  const b = color & 0xff;
+  const [h, s, l] = rgbToHsl(r, g, b);
+  const nextL = Math.min(l, BACKGROUND_TIER.maxLightness);
+  const nextS = Math.min(s, BACKGROUND_TIER.maxSaturation);
+  if (nextL === l && nextS === s) {
+    return color;
+  }
+  const [nr, ng, nb] = hslToRgb(h, nextS, nextL);
+  return (nr << 16) | (ng << 8) | nb;
+}
+
+/** One foreground hue pushed onto the background tier: darkened, desaturated, then clamped under the tier's brightness/saturation ceiling. */
 export function toBackgroundHue(color) {
-  return desaturateOf(shadeOf(color, -BACKGROUND_TIER.darken), BACKGROUND_TIER.desaturate);
+  return clampToBackgroundCeiling(
+    desaturateOf(shadeOf(color, -BACKGROUND_TIER.darken), BACKGROUND_TIER.desaturate),
+  );
 }
 
 /**
@@ -306,26 +335,27 @@ export const BACKGROUND_PALETTES = Object.fromEntries(
  * The colours a *background-tier* sprite in `bucketId` may pick from — the peer
  * of `allowedColorsFor` for the other tier.
  *
- * A floor bucket gets its own `BACKGROUND_PALETTES` entry plus the neutrals
- * (outline ink and hit-flash white are tier-independent). `common` has no
+ * A floor bucket gets its own `BACKGROUND_PALETTES` entry plus the neutrals —
+ * but the neutrals run through the same ceiling (`clampToBackgroundCeiling`):
+ * black outline ink is under it already and passes through untouched, while
+ * hit-flash white and the bright mid-grey have no business on a sprite that
+ * does not flash and come down to where they read as scenery. `common` has no
  * per-floor mood to derive from, so — `docs/DECISIONS.md` #62 — its background
  * tier is every floor hue in the game run through `toBackgroundHue`, the same
  * way foreground `common` may draw the whole `MASTER_PALETTE`: a crate is
  * shared scenery and its wood still needs somewhere to shade to.
  */
 export function backgroundColorsFor(bucketId) {
+  const neutrals = NEUTRAL_PALETTE.map(clampToBackgroundCeiling);
   if (bucketId === COMMON_BUCKET_ID) {
-    return new Set([
-      ...NEUTRAL_PALETTE,
-      ...Object.values(FLOOR_PALETTES).flat().map(toBackgroundHue),
-    ]);
+    return new Set([...neutrals, ...Object.values(FLOOR_PALETTES).flat().map(toBackgroundHue)]);
   }
   const floorTag = floorTagForBucket(bucketId);
   const floorColors = floorTag !== null ? BACKGROUND_PALETTES[floorTag] : undefined;
   if (floorColors === undefined) {
     throw new Error(`unknown sprite bucket "${bucketId}"`);
   }
-  return new Set([...NEUTRAL_PALETTE, ...floorColors]);
+  return new Set([...neutrals, ...floorColors]);
 }
 
 /** The pickable swatch set for `bucketId` on `tier` — `allowedColorsFor` stays the foreground one, verbatim. */

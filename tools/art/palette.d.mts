@@ -14,7 +14,12 @@ export declare const FLOOR_PALETTES: Readonly<{
 }>;
 export declare const MASTER_PALETTE: readonly number[];
 export declare const BACKGROUND_PALETTES: Readonly<Record<string, readonly number[]>>;
-export declare const BACKGROUND_TIER: { readonly darken: number; readonly desaturate: number };
+export declare const BACKGROUND_TIER: {
+  readonly darken: number;
+  readonly desaturate: number;
+  readonly maxLightness: number;
+  readonly maxSaturation: number;
+};
 
 export type SpriteTier = 'foreground' | 'background';
 
@@ -24,6 +29,7 @@ export declare function pickableColorsFor(bucketId: string, tier?: SpriteTier): 
 export declare function floorBackgroundSwatches(floorTag: string): readonly number[];
 export declare function shadeOf(color: number, step: number): number;
 export declare function desaturateOf(color: number, step: number): number;
+export declare function clampToBackgroundCeiling(color: number): number;
 export declare function toBackgroundHue(color: number): number;
 export declare function shadeRampOf(color: number): readonly number[];
 export declare function legalPixelColorsFor(bucketId: string, tier?: SpriteTier): Set<number>;
