@@ -13,8 +13,20 @@ import { GROUND_SHADOW } from '../../src/render/palette.js';
 
 function fakeSprite() {
   return {
-    anchor: { value: 0, set(v: number) { this.value = v; } },
-    scale: { x: 1, y: 1, set(x: number, y?: number) { this.x = x; this.y = y ?? x; } },
+    anchor: {
+      value: 0,
+      set(v: number) {
+        this.value = v;
+      },
+    },
+    scale: {
+      x: 1,
+      y: 1,
+      set(x: number, y?: number) {
+        this.x = x;
+        this.y = y ?? x;
+      },
+    },
     alpha: 1,
     visible: false,
     texture: null as Texture | null,
@@ -22,17 +34,28 @@ function fakeSprite() {
 }
 
 const tex = (w: number, h: number): Texture =>
-  ({ width: w, height: h, frame: { x: 0, y: 0, width: w, height: h }, source: {} }) as unknown as Texture;
+  ({
+    width: w,
+    height: h,
+    frame: { x: 0, y: 0, width: w, height: h },
+    source: {},
+  }) as unknown as Texture;
 
 describe('groundShadowFeetY', () => {
   it('seats the shadow just above the drawing’s bottom edge', () => {
     // 32px frame at scale 0.5, no DOM -> bottom edge is frameHeight/2 * scale below centre.
-    expect(groundShadowFeetY(100, tex(20, 32), 0.5)).toBeCloseTo(100 + 8 - GROUND_SHADOW.contactInset);
+    expect(groundShadowFeetY(100, tex(20, 32), 0.5)).toBeCloseTo(
+      100 + 8 - GROUND_SHADOW.contactInset,
+    );
   });
 
   it('follows the sprite: a taller frame or a bigger scale seats lower', () => {
-    expect(groundShadowFeetY(0, tex(20, 48), 0.5)).toBeGreaterThan(groundShadowFeetY(0, tex(20, 32), 0.5));
-    expect(groundShadowFeetY(0, tex(20, 32), 1)).toBeGreaterThan(groundShadowFeetY(0, tex(20, 32), 0.5));
+    expect(groundShadowFeetY(0, tex(20, 48), 0.5)).toBeGreaterThan(
+      groundShadowFeetY(0, tex(20, 32), 0.5),
+    );
+    expect(groundShadowFeetY(0, tex(20, 32), 1)).toBeGreaterThan(
+      groundShadowFeetY(0, tex(20, 32), 0.5),
+    );
   });
 });
 

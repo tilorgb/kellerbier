@@ -41,10 +41,13 @@ describe("the block tiles' committed art is what the authoring source produces",
     expect(Object.keys(BLOCKS).sort()).toEqual(named);
   });
 
-  it.each(Object.entries(FLOOR_TILESETS))('floor %s names 2–4 obstacle variants', (_floor, tileset) => {
-    expect(tileset.blockVariants.length).toBeGreaterThanOrEqual(2);
-    expect(tileset.blockVariants.length).toBeLessThanOrEqual(4);
-  });
+  it.each(Object.entries(FLOOR_TILESETS))(
+    'floor %s names 2–4 obstacle variants',
+    (_floor, tileset) => {
+      expect(tileset.blockVariants.length).toBeGreaterThanOrEqual(2);
+      expect(tileset.blockVariants.length).toBeLessThanOrEqual(4);
+    },
+  );
 
   it.each(entries)('%s.png is byte-identical to a fresh encode', async (name, frame) => {
     const committed = await readFile(pathFor(name));
@@ -66,11 +69,7 @@ describe("the block tiles' committed art is what the authoring source produces",
   });
 
   it('the square-edged obstacles it replaces are gone', async () => {
-    await expect(
-      readFile(`${SPRITES}floor-1-cellar/tiles/cellar-plank.png`),
-    ).rejects.toThrow();
-    await expect(
-      readFile(`${SPRITES}floor-2-rural/tiles/rural-hedge-block.png`),
-    ).rejects.toThrow();
+    await expect(readFile(`${SPRITES}floor-1-cellar/tiles/cellar-plank.png`)).rejects.toThrow();
+    await expect(readFile(`${SPRITES}floor-2-rural/tiles/rural-hedge-block.png`)).rejects.toThrow();
   });
 });

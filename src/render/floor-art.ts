@@ -137,12 +137,7 @@ export const FLOOR_TILESETS: Readonly<Record<number, FloorTileset>> = {
     wall: 'cellar-wall',
     wallLip: 'cellar-wall-lip',
     wallLipCorner: 'cellar-wall-lip-corner',
-    blockVariants: [
-      'cellar-boulder-1',
-      'cellar-boulder-2',
-      'cellar-boulder-3',
-      'cellar-boulder-4',
-    ],
+    blockVariants: ['cellar-boulder-1', 'cellar-boulder-2', 'cellar-boulder-3', 'cellar-boulder-4'],
     // No Maibaum in a cellar — a floor-1 `maypole` prop would be a content
     // error, and falls back to the barrel rather than to nothing.
     destructibles: ['cellar-barrel'],
