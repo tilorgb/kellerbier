@@ -706,6 +706,26 @@ export interface CurseTuning {
   blaueStundeVisionRadius: number;
 }
 
+/**
+ * Blutwurz (#84): a second chance you have to walk back for. Its own group
+ * rather than folded into `PromilleTuning` — the mechanic borrows Promille's
+ * *tiers* when a run has them (see `sim/systems/blutwurz.ts`), but its own
+ * numbers (how fragile the spirit is, how far "close enough to the corpse"
+ * reaches, what a recovery permanently costs) are Blutwurz's alone.
+ */
+export interface BlutwurzTuning {
+  /** Promille raised per tick while the spirit walk is on, in a run that has the meter at all. */
+  promilleRisePerTick: number;
+  /** A sober run's own hidden countdown, in ticks, standing in for the meter it does not have. */
+  soberFailTicks: number;
+  /** How close, in px, counts as "reached the corpse." */
+  corpseTouchRadius: number;
+  /** Max health while the spirit walk is on, in half-Maß — fragile by design, one hit ends it. */
+  spiritMaxHealth: number;
+  /** Permanent reduction to max health on a successful recovery, in half-Maß. */
+  recoveryMaxHealthPenalty: number;
+}
+
 export interface SimTuning {
   readonly movement: MovementTuning;
   readonly shooting: ShootingTuning;
@@ -718,6 +738,7 @@ export interface SimTuning {
   readonly character: CharacterTuning;
   readonly roomGen: RoomGenTuning;
   readonly curse: CurseTuning;
+  readonly blutwurz: BlutwurzTuning;
 }
 
 export const DEFAULT_MOVEMENT_TUNING: Readonly<MovementTuning> = {
@@ -996,6 +1017,23 @@ export const DEFAULT_CURSE_TUNING: Readonly<CurseTuning> = {
   blaueStundeVisionRadius: 140,
 };
 
+/**
+ * Roughly half a minute to walk back from a dead stop, either path — a
+ * sober run's hidden countdown and a promilled run's rise are tuned to the
+ * same rough runway (`soberFailTicks` ≈ `umgfallnThreshold / promilleRisePerTick`
+ * from a cold meter) so neither feels like the easier half of the mechanic.
+ * A run that was already mid-drink when it died gets *less* runway than
+ * that, which is the point: Blutwurz is 50% spirit, and how much spirit was
+ * already spent is exactly the run's own business.
+ */
+export const DEFAULT_BLUTWURZ_TUNING: Readonly<BlutwurzTuning> = {
+  promilleRisePerTick: 0.0025,
+  soberFailTicks: 1800,
+  corpseTouchRadius: 20,
+  spiritMaxHealth: 1,
+  recoveryMaxHealthPenalty: 2,
+};
+
 export function createTuning(): SimTuning {
   return {
     movement: { ...DEFAULT_MOVEMENT_TUNING },
@@ -1007,6 +1045,7 @@ export function createTuning(): SimTuning {
     projectileTags: { ...DEFAULT_PROJECTILE_TAG_TUNING },
     itemPool: { ...DEFAULT_ITEM_POOL_TUNING },
     curse: { ...DEFAULT_CURSE_TUNING },
+    blutwurz: { ...DEFAULT_BLUTWURZ_TUNING },
     character: { ...DEFAULT_CHARACTER_TUNING },
     roomGen: { ...DEFAULT_ROOM_GEN_TUNING },
   };

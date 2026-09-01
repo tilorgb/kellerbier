@@ -17,6 +17,7 @@ import { type DropTable, pickupDescriptionFor } from '../pickup/definition.js';
 import { PickupRegistry } from '../pickup/registry.js';
 import type { CurseId } from '../curse/definition.js';
 import { stepCurse } from '../systems/curse.js';
+import { stepBlutwurz } from '../systems/blutwurz.js';
 import { ITEM_DEFINITIONS } from '../../content/items/index.js';
 import {
   type ItemDefinition,
@@ -104,6 +105,7 @@ import { applyDamageAt, stepImpact, stepParticles } from '../systems/impact.js';
 import { stepLootDrops } from '../systems/loot.js';
 import {
   dispatchItemFloorStart,
+  dispatchItemLethalDamage,
   dispatchItemProjectileSpawn,
   dispatchItemRoomClear,
   stepItemTick,
@@ -939,6 +941,42 @@ export class GameSim {
   private playerWonFlag = false;
   private playerWonTick_ = -1;
 
+  /**
+   * Blutwurz (#84): a second chance you have to walk back for. Once per run
+   * — `blutwurzSpentFlag` guards that even across a successful recovery, not
+   * just a failed one.
+   *
+   * Floor continuity needs no snapshot of its own: `blutwurzActiveFlag`
+   * turning on does not reset or regenerate anything (`roomClearedIds`,
+   * `roomLootSnapshots`, `takenItemIds`, the room the player is standing
+   * in) — the same live `GameSim` simply keeps existing, which is what
+   * makes "the floor is byte-for-byte the floor the player died on" true
+   * by construction rather than something to engineer. `app/main.ts` reacts
+   * to `blutwurzActive` turning on the same way it reacts to a door
+   * transition (see `enterNeighbor`) — loading the floor's start room, the
+   * one thing outside `GameSim`'s own state (the floor plan) it needs.
+   */
+  private blutwurzActiveFlag = false;
+  private corpseXValue = 0;
+  private corpseYValue = 0;
+  /**
+   * Which room's local space `corpseXValue`/`corpseYValue` are in —
+   * `roomId` is per-room-load state (`GameSim.room`'s coordinates are
+   * reused by every room, not a shared floor-wide space), so a raw x/y
+   * alone would silently collide with unrelated coordinates the moment the
+   * player leaves the room the corpse is actually in.
+   */
+  private corpseRoomIdValue = '';
+  /** The player's max health from immediately before Blutwurz triggered — what the permanent penalty on a successful recovery is measured against. */
+  private blutwurzPreviousMaxHealth = 0;
+  /**
+   * The sober-run stand-in for Promille-as-timer (see `stepBlutwurz`) — a
+   * plain, invisible countdown, since a sober run has no meter to raise at
+   * all (#85's own invariant: no meter, no HUD element, full stop). Unused,
+   * and left at 0, whenever `promilleUnlocked` is true.
+   */
+  blutwurzSpiritTicks = 0;
+
   /** Carried in from `GameSimOptions`, and never written after construction. */
   private readonly previousDeathWord: string | undefined;
 
@@ -1743,7 +1781,15 @@ export class GameSim {
     this.currentFloorValue = floor;
     this.roomEnemyCount = 0;
     this.maypoleTaken = false;
-    const alreadyCleared = this.roomClearedIds.has(this.roomId);
+    // Blutwurz (#84): "cleared rooms repopulate" — a corpse run across an
+    // empty floor is a walk, not a second chance. Boss rooms are the one
+    // exception ("the floor's boss, if already killed, stays dead" — the
+    // issue's own words): re-fighting one is a second run, not a penalty,
+    // so `alreadyCleared` still holds for `specialRole === 'boss'` even
+    // while the spirit walk is on.
+    const alreadyCleared =
+      this.roomClearedIds.has(this.roomId) &&
+      !(this.blutwurzActiveFlag && compiled.specialRole !== 'boss');
     this.positionPlayerAtDoor(direction, entryCell);
     if (!alreadyCleared) {
       // A room entered through a door (not the run's very first room) never
@@ -2422,6 +2468,92 @@ export class GameSim {
     this.playerWonTick_ = this.currentTick;
   }
 
+  /** Whether the spirit walk (#84) is currently on. */
+  get blutwurzActive(): boolean {
+    return this.blutwurzActiveFlag;
+  }
+
+  /** Whether this run still has an unspent Blutwurz — a held bottle. Consumed (and so no longer true) the instant it's used. */
+  get blutwurzAvailable(): boolean {
+    return this.hasItem('blutwurz');
+  }
+
+  /**
+   * Where the corpse is, in the current room's local px, plus which room
+   * that actually is — `null` outside a spirit walk. `x`/`y` are only
+   * meaningful together with `roomId`: read them against `sim.room` only
+   * when `roomId === sim.roomId`, the same guard `stepBlutwurz`'s own
+   * touch check and the renderer's corpse marker both apply.
+   */
+  get corpsePosition(): { readonly x: number; readonly y: number; readonly roomId: string } | null {
+    return this.blutwurzActiveFlag
+      ? { x: this.corpseXValue, y: this.corpseYValue, roomId: this.corpseRoomIdValue }
+      : null;
+  }
+
+  /**
+   * Starts the spirit walk: the bottle is spent (`removeItem`, which is
+   * also what makes `blutwurzAvailable` false for the rest of the walk —
+   * `content/items/blutwurz.ts`'s own `onLethalDamage` hook is what calls
+   * this, and guards against calling it twice), and health drops to
+   * `tuning.blutwurz.spiritMaxHealth` — one hit ends it, per #84's own
+   * "fragile by design." The build itself is untouched: items, stats and
+   * their hooks all keep working exactly as they did the tick before —
+   * #84 leaves "the exact loadout" an open question and never asks for the
+   * build to go dark, only for the player to. `app/main.ts` reacts to this
+   * turning on the same tick, the same way it reacts to `sim.doorContact`:
+   * it is what actually walks the player back to the floor's start room,
+   * since the floor plan lives outside `GameSim`.
+   *
+   * Public so the item's own hook can call it — hooks call back only into
+   * what `ItemHookContext` hands them (`content-is-data`), and `ctx.sim` is
+   * the full public `GameSim` surface.
+   */
+  startBlutwurz(): void {
+    const index = this.playerIndex;
+    this.corpseXValue = this.positionX(index);
+    this.corpseYValue = this.positionY(index);
+    this.corpseRoomIdValue = this.roomId;
+    this.removeItem('blutwurz');
+    this.blutwurzActiveFlag = true;
+    this.blutwurzSpiritTicks = 0;
+    this.blutwurzPreviousMaxHealth = this.playerMaxHealth;
+    const spiritHealth = Math.max(1, Math.round(this.tuning.blutwurz.spiritMaxHealth));
+    this.health.data[index * 2 + 1] = spiritHealth;
+    this.health.data[index * 2] = spiritHealth;
+  }
+
+  /**
+   * Reaching the corpse (#84): the walk succeeded. Health returns to the
+   * pre-Blutwurz max, permanently reduced by
+   * `tuning.blutwurz.recoveryMaxHealthPenalty`, filled — a successful
+   * recovery earns the full (reduced) tank back, not a scrape-by heal — and
+   * Kater starts, the same debuff waking from Umgfalln leaves behind.
+   */
+  recoverFromBlutwurz(): void {
+    const index = this.playerIndex;
+    const restoredMax = Math.max(
+      1,
+      this.blutwurzPreviousMaxHealth - Math.round(this.tuning.blutwurz.recoveryMaxHealthPenalty),
+    );
+    this.health.data[index * 2 + 1] = restoredMax;
+    this.health.data[index * 2] = restoredMax;
+    this.startKater();
+    this.blutwurzActiveFlag = false;
+    this.blutwurzSpiritTicks = 0;
+  }
+
+  /**
+   * The walk failed: Promille (or, in a sober run, `blutwurzSpiritTicks`'s
+   * own hidden countdown) ran out before the corpse did. Ends the run
+   * exactly like a hit that landed clean would — `killPlayer` reads
+   * `blutwurzActiveFlag` before this clears it, which is what gives the
+   * death word its own, different one.
+   */
+  failBlutwurz(): void {
+    this.killPlayer();
+  }
+
   /**
    * The game-over screen's headline word, drawn once at the moment of death
    * and memoised — the pool draw is a real consumption of the cosmetic
@@ -2429,6 +2561,28 @@ export class GameSim {
    */
   get deathWord(): string | undefined {
     return this.deathWordValue;
+  }
+
+  /**
+   * Marks the run over for real: no eternal heart, no Blutwurz charge (or
+   * already spent one) left to fall back on. Factored out of
+   * `applyPlayerDamage`'s lethal branch so `failBlutwurz` — a second death,
+   * mid-spirit-walk, from `stepBlutwurz` rather than from a hit — ends the
+   * run exactly the same way.
+   */
+  private killPlayer(): void {
+    this.playerDeadFlag = true;
+    this.playerDeathTick_ = this.currentTick;
+    this.deathWordValue = this.blutwurzActiveFlag
+      ? // #84's own acceptance criterion: the run summary should say how
+        // close they got. A dedicated word rather than the ordinary pool
+        // draw is the cheapest honest version of that — this death has a
+        // different shape (a walk that came up short, not a hit that landed
+        // clean) and reads as one in the one place every death screen is
+        // read.
+        'Nimmer zruckkema'
+      : drawDeathWord(this.random.cosmetic, this.previousDeathWord);
+    this.blutwurzActiveFlag = false;
   }
 
   /**
@@ -2466,11 +2620,28 @@ export class GameSim {
         this.soulHp = 0;
         health[index * 2] = 1;
       } else {
+        // Captured before dispatch: a spirit is fragile by design (#84,
+        // `tuning.blutwurz.spiritMaxHealth`) — a *second* lethal hit landing
+        // while the walk is already underway has to end the run for real,
+        // not be silently absorbed because the walk "is already active."
+        // `blutwurz.ts`'s own hook already refuses to start a second walk
+        // over the first (`!ctx.sim.blutwurzActive`), so `blutwurzActiveFlag`
+        // never changes on this path — without capturing `wasActive` first,
+        // the check below would read that as "still handled" and the player
+        // would take unlimited hits while a spirit.
+        const wasActive = this.blutwurzActiveFlag;
         this.soulHp = 0;
         health[index * 2] = 0;
-        this.playerDeadFlag = true;
-        this.playerDeathTick_ = this.currentTick;
-        this.deathWordValue = drawDeathWord(this.random.cosmetic, this.previousDeathWord);
+        // Blutwurz (#84): the last chance, before the run ends for real, for
+        // a held item to do something about it — `dispatchItemLethalDamage`
+        // broadcasts `onLethalDamage` to everything held, and
+        // `blutwurz.ts`'s own hook is what actually starts the spirit walk.
+        // A hit that lands while nothing intervenes falls straight through
+        // to `killPlayer`, exactly as it always did.
+        dispatchItemLethalDamage(this);
+        if (wasActive || !this.blutwurzActiveFlag) {
+          this.killPlayer();
+        }
       }
       return;
     }
@@ -3857,6 +4028,9 @@ export class GameSim {
     // rather than sitting unaged for a whole extra tick.
     stepCurse(this);
     stepBodies(this);
+    // After `stepBodies`, so a corpse-touch check reads this tick's actual
+    // movement rather than last tick's position.
+    stepBlutwurz(this);
     stepShooting(this, input);
     stepProjectiles(this);
     stepCollision(this);

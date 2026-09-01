@@ -19,6 +19,7 @@ import { bierbauch } from './bierbauch.js';
 import { bierdeckel } from './bierdeckel.js';
 import { bierkrug } from './bierkrug.js';
 import { blaskapelle } from './blaskapelle.js';
+import { blutwurz } from './blutwurz.js';
 import { boellerschmeisser } from './boellerschmeisser.js';
 import { braumeisterHammer } from './braumeister-hammer.js';
 import { braumeisterSchuerze } from './braumeister-schuerze.js';
@@ -196,7 +197,9 @@ import { zwoaDreiGsuffa } from './zwoa-drei-gsuffa.js';
  * (own file, unchanged here) from stripping `impure` to stripping `rosinen`.
  * #137 adds Braumeister-Hammer and Braumeister-Schürze, the two new pieces
  * that complete the roster's first item set (`content/item-sets/braumeister.ts`)
- * alongside the Braumeister-Visier already here.
+ * alongside the Braumeister-Visier already here. #84 adds Blutwurz, the
+ * second-chance mechanic's own gating item — checked by id directly in
+ * `GameSim` rather than through a hook, since what it gates is bigger than one.
  */
 export const ITEM_DEFINITIONS: readonly ItemDefinition[] = [
   bierkrug,
@@ -248,6 +251,7 @@ export const ITEM_DEFINITIONS: readonly ItemDefinition[] = [
   sonnwendfeuer,
   bergrettung,
   blaskapelle,
+  blutwurz,
   spatenstich,
   almabtrieb,
   perchtenrute,
@@ -360,6 +364,7 @@ export {
   bierdeckel,
   bierkrug,
   blaskapelle,
+  blutwurz,
   boellerschmeisser,
   braumeisterHammer,
   braumeisterSchuerze,

@@ -57,6 +57,7 @@ import { HealthHud } from '../render/health-hud.js';
 import { ItemGateHud } from '../render/item-gate-hud.js';
 import { MinimapHud } from '../render/minimap-hud.js';
 import { CurseHud } from '../render/curse-hud.js';
+import { BlutwurzHud } from '../render/blutwurz-hud.js';
 import { ItemSetHud } from '../render/item-set-hud.js';
 import { PromilleHud } from '../render/promille-hud.js';
 import { WalletHud } from '../render/wallet-hud.js';
@@ -872,6 +873,10 @@ async function boot(): Promise<void> {
   const curseHud = new CurseHud(kit);
   hudLayer.addChild(curseHud.view);
 
+  /** The spirit walk (#84): a small persistent "you are doing this" readout. */
+  const blutwurzHud = new BlutwurzHud(kit);
+  hudLayer.addChild(blutwurzHud.view);
+
   /**
    * The kit's own specimen page (`K`).
    *
@@ -948,6 +953,7 @@ async function boot(): Promise<void> {
     minimapHud.view.position.set(width - HUD_MARGIN, HUD_MARGIN);
     minimapHud.overlayView.position.set(centreX, Math.round(height / 2));
     curseHud.resize(width, height);
+    blutwurzHud.place(centreX, Math.round(height * 0.06));
 
     replayViewer.view.position.set(
       centreX - Math.round(replayViewer.width / 2),
@@ -1315,6 +1321,7 @@ async function boot(): Promise<void> {
     summary.recordTick(sim);
     creditBossDefeat(live);
     advanceDeathSequence();
+    checkBlutwurzTransition();
     checkSecretReveals();
     if (keyHintTicks > 0) {
       keyHintTicks -= 1;
@@ -1411,6 +1418,7 @@ async function boot(): Promise<void> {
       itemSetHud.sync(sim);
       bossHealthHud.sync(sim);
       curseHud.sync(sim);
+      blutwurzHud.sync(sim);
       minimapHud.setMapOpen(isActionDown(input.frame, InputAction.Map));
       // Nebel (#49): no minimap for the floor — render-only, the same
       // "accessibility suppression is render-side" split `docs/DECISIONS.md`
@@ -1774,6 +1782,7 @@ WASD move   arrows aim and fire
     roomClearedLastTick = false;
     deathPhase = 'alive';
     deathPhaseTicks = 0;
+    wasBlutwurzActive = false;
     keyHintTicks = 0;
     bossBannerShown = false;
     bossBanner.view.visible = false;
@@ -2279,6 +2288,48 @@ WASD move   arrows aim and fire
     minimapHud.rebuild(floorPlan, currentRoomId, visitedRoomIds);
     refreshHud();
     showFloorCard();
+  }
+
+  /**
+   * The spirit walk (#84) just started — the one thing outside `GameSim`'s
+   * own state it needs is the floor's start room, since the floor plan
+   * lives in `main.ts`, not `sim`. Otherwise nothing here resets: `sim`
+   * keeps its inventory, its cleared rooms, its loot snapshots, exactly the
+   * way `advanceFloor`'s own doc comment already explains a floor advance
+   * does — this is that same "load a room in place, `sim` untouched"
+   * shape, just landing on the room the player already started this floor
+   * in rather than a freshly generated one.
+   *
+   * `direction: null` skips the walking-transition slide — waking up
+   * elsewhere should read as a cut, not a walk through a door that was
+   * never opened.
+   */
+  function enterBlutwurzEntrance(): void {
+    currentRoomId = floorPlan.startRoomId;
+    visitedRoomIds.add(currentRoomId);
+    sim.loadRoom(
+      roomTemplateFor(planRoom(floorPlan, currentRoomId)),
+      floorPlan.floor,
+      null,
+      hiddenDoorsFor(floorPlan, currentRoomId, revealedEdges),
+      undefined,
+      { col: 0, row: 0 },
+      false,
+    );
+    view.setSecretHints(crackHintsFor(floorPlan, currentRoomId, revealedEdges));
+    view.setLockedDoors(lockedDoorsFor(floorPlan, currentRoomId, visitedRoomIds));
+    minimapHud.rebuild(floorPlan, currentRoomId, visitedRoomIds);
+    refreshHud();
+  }
+
+  /** Edge-detects `sim.blutwurzActive` turning on — see `enterBlutwurzEntrance`. */
+  let wasBlutwurzActive = false;
+  function checkBlutwurzTransition(): void {
+    const active = sim.blutwurzActive;
+    if (active && !wasBlutwurzActive) {
+      enterBlutwurzEntrance();
+    }
+    wasBlutwurzActive = active;
   }
 
   /** `sim.doorContact`'s door, translated into "which of this room's real cells did that come from". */
