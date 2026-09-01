@@ -2798,3 +2798,54 @@ inherit the half-tile/mirror/rotate model; a floor that wants its own door art a
 right-half textures to the same contract. `DoorTextures` gained an optional `locked`, and
 `doorTexturesFrom` treats a missing `door-locked.png` as fine while still requiring
 `open`+`closed`.
+
+## 59. An ordinary room's interior is generated, any shape; the authored pool is the start room, the specials, and sprinkles
+
+**Decided:** #random-rooms. The floor generator (`sim/room/floor-plan.ts`) already builds the
+room *graph* — slots, roles, doors, connectivity — procedurally. What was still a hand-authored
+pool was every room's *interior*, and most of that pool had become filler: sparse rooms, a big
+puddle, three barrels against a wall. `sim/room/generate-room.ts` now fills the interior of an
+ordinary `normal` slot of any shape directly, returning a `RoomTemplate`-shaped object that
+flows through the unchanged `validateRoomTemplate` / `compileRoomTemplate` path. A multi-cell
+room (`1x2`/`2x2`/`L`/`T`) is generated as one continuous tile grid spanning the shape's
+bounding box — the seams between glued sub-rooms carry no wall — then sliced back into
+per-sub-room `RoomSubLayout`s; `L`/`T` drop their corner cells and those become solid.
+
+**What it generates.** Obstacle cover aimed at a tuned *tile-coverage band* rather than a piece
+count (`RoomGenTuning.minCoverTiles`..`maxCoverTiles`, live in the debug tuning window) — a
+moderate amount in most rooms, a near-empty or cluttered one only on the `sparseChance` /
+`busyChance` rolls, because the challenge is the mob fight, not the walk. A per-floor-tag enemy
+roster spent against a threat budget that scales with distance from start. Scenery props
+(barrels, crates), and on `hazardChance` one floor-flavour hazard patch (Floor 1 puddle, Floor
+2 trellis). Everything is seeded off `roomGenSeed(runSeed, floor, roomId, salt)` — a standalone
+`Rng`, drawing from no shared stream — so a seed reproduces its rooms exactly and adding or
+reordering generation can never desync loot or enemies. Tuning is not part of a replay, the
+same as every other `SimTuning` value.
+
+**Rule 1: never trap the player.** The centre is not special-cased — it can be blocked like
+anything else. The player only ever *enters* a generated room through a door, landing in the
+never-solid wall-margin ring; `carveDoorMouths` clears the one tile inside each door, a BFS
+from that mouth proves every other door is reachable, and `fillUnreachedPockets` seals any
+pocket so the whole walkable area is one region. Props are additionally route-checked (a barrel
+that would plug a one-tile gap is rejected); hazards are walk-through. `tests/content/
+generated-room.test.ts` re-derives all of this on the *compiled* geometry with the real player
+radius.
+
+**What stays authored, and the sprinkle rule.** The **start room** and the boss / treasure /
+shop / secret / supersecret rooms are hand-authored. Every *other* authored room — no
+`specialRole`, any shape — is automatically a **sprinkle**: `app/main.ts` rolls
+`roomGen.authoredRoomChance` per ordinary slot and, on a hit, drops a fitting authored room
+(right shape, tag, door superset) in instead of generating, weighted by `metadata.weight`.
+There is no opt-in flag — "author a room, it shows up" — because a room a designer bothered to
+make is a room they want in the game. The authored ordinary rooms that remain
+(`cellar-crossroads`, `cellar-hall`, `cellar-pillars`, plus the multi-cell landmarks) also
+serve as the floor generator's `eligibleTemplates` fallback and as fixtures a handful of `sim/`
+tests load by name; ~28 filler `1x1` templates that were nothing but a puddle or a barrel were
+deleted.
+
+**Constrains:** the generator has enemy rosters for `cellar` and `rural` only — floors 3-7
+(#39-#43) need a roster added when their content lands. Per-floor feel is `DEFAULT_ROOM_GEN_TUNING`
+(Floor 1) plus `content/floors/definition.ts`'s `ROOM_GEN_FLOOR_OVERRIDES` merged over it. A
+generated multi-cell room's whole obstacle budget is one `RoomGeometry` (64 blocks), void cells
+included — the coverage band scales by cell count but a busy `T` can still hit the ceiling and
+fall back to a lighter layout.

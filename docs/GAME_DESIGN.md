@@ -143,7 +143,10 @@ Isaac's skeleton, kept deliberately familiar:
   — the right stick snaps to the same eight directions the keys produce, rather than free-aiming
   at a point. No mouse aim (`docs/DECISIONS.md` #20). Shooting and moving are fully independent.
   Full gamepad and full rebinding.
-- **Floors** are a grid of rooms, procedurally arranged from hand-authored room templates.
+- **Floors** are a grid of rooms. The graph (which slots, which are special, where the doors
+  are) is procedural; an ordinary room's *interior* — any shape — is generated too
+  (`docs/DECISIONS.md` #59). Hand-authored templates fill the start room and the special rooms;
+  any other authored room is "sprinkled" into ordinary slots at a tunable rate.
 - **Doors lock** on entering a room with live enemies and open on clear. Cleared rooms stay
   cleared.
 - **Special rooms** per floor: Treasure (one item on a pedestal), Shop, Boss, Secret,
@@ -153,13 +156,24 @@ Isaac's skeleton, kept deliberately familiar:
 
 ### Floor generation rules
 
-- Start room is always empty and has the floor's exits.
+- Start room is always empty, hand-authored, and has the floor's exits.
 - Boss room is placed at maximum walking distance from start.
 - Treasure and Shop are dead-ends where possible.
-- Room templates are data (`.json`), tagged by floor, shape, door configuration and
-  difficulty tier; the generator picks templates that fit the slot it has carved out.
-- Every generated floor is validated: fully connected, boss reachable, no template placed in
-  a slot whose doors it does not match. Generation failures retry, then hard-fail in tests.
+- An ordinary room of any shape (`1x1` through `T`) is **procedurally generated**
+  (`sim/room/generate-room.ts`): obstacle cover aimed at a tuned band, a per-floor enemy roster
+  spent against a distance-scaled threat budget, scenery and the odd hazard patch — all seeded
+  off the run seed so it stays reproducible. The room centre is not special-cased; the player
+  only ever enters through a door and every door is proven reachable from every other. A
+  multi-cell room is generated as one continuous space and the seams between its glued
+  sub-rooms carry no wall.
+- Hand-authored templates are data (`.json`), tagged by floor, shape, door configuration and
+  difficulty tier. They fill the start room and the special rooms; every *other* authored room
+  (no `specialRole`) is a "sprinkle" — the generator rolls `roomGen.authoredRoomChance` per
+  ordinary slot and drops one in instead of generating, weighted by `metadata.weight`. That is
+  the whole of "author a room and it shows up on a floor".
+- Every generated floor is validated: fully connected, boss reachable, no authored template
+  placed in a slot whose doors it does not match. Generation failures retry, then hard-fail in
+  tests.
 
 ### Room shape and the camera
 
