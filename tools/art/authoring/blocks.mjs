@@ -95,7 +95,11 @@ const on = (cv, x, y) => get(cv, x, y) !== null;
 
 /** Deterministic hash noise in [0,1) — no `Math.random`, so a rebuild is byte-identical. */
 function hash2(x, y, seed) {
-  let h = (Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263) + Math.imul(seed | 0, 2246822519)) >>> 0;
+  let h =
+    (Math.imul(x | 0, 374761393) +
+      Math.imul(y | 0, 668265263) +
+      Math.imul(seed | 0, 2246822519)) >>>
+    0;
   h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0;
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }
@@ -198,7 +202,13 @@ const CELLAR_BOULDERS = [
     rock(cv, CELLAR, 23, 21, 9, 9, s + 2, { tone: -0.4 });
     rim(cv, CELLAR);
     contact(cv, CELLAR);
-    crack(cv, CELLAR, [[16, 10], [16, 13], [17, 16], [17, 19], [18, 22]]);
+    crack(cv, CELLAR, [
+      [16, 10],
+      [16, 13],
+      [17, 16],
+      [17, 19],
+      [18, 22],
+    ]);
     return finish('cellar-boulder-1', cv);
   },
   // tall wedge
@@ -210,7 +220,12 @@ const CELLAR_BOULDERS = [
     rock(cv, CELLAR, 21, 24, 9, 8, s + 2, { tone: -0.45 });
     rim(cv, CELLAR);
     contact(cv, CELLAR);
-    crack(cv, CELLAR, [[19, 9], [18, 12], [18, 15], [17, 18]]);
+    crack(cv, CELLAR, [
+      [19, 9],
+      [18, 12],
+      [18, 15],
+      [17, 18],
+    ]);
     return finish('cellar-boulder-2', cv);
   },
   // wide low slab
@@ -222,7 +237,13 @@ const CELLAR_BOULDERS = [
     rock(cv, CELLAR, 23, 18, 9, 8, s + 2, { tone: -0.35 });
     rim(cv, CELLAR);
     contact(cv, CELLAR);
-    crack(cv, CELLAR, [[9, 20], [13, 21], [17, 22], [21, 21], [25, 22]]);
+    crack(cv, CELLAR, [
+      [9, 20],
+      [13, 21],
+      [17, 22],
+      [21, 21],
+      [25, 22],
+    ]);
     return finish('cellar-boulder-3', cv);
   },
   // blunt, near-round
@@ -234,7 +255,12 @@ const CELLAR_BOULDERS = [
     rock(cv, CELLAR, 22, 22, 8, 8, s + 2, { tone: -0.5 });
     rim(cv, CELLAR);
     contact(cv, CELLAR);
-    crack(cv, CELLAR, [[20, 12], [19, 15], [15, 16], [12, 18]]);
+    crack(cv, CELLAR, [
+      [20, 12],
+      [19, 15],
+      [15, 16],
+      [12, 18],
+    ]);
     return finish('cellar-boulder-4', cv);
   },
 ];
@@ -246,7 +272,9 @@ const CELLAR_BOULDERS = [
 function fieldStones(name, seed, stones) {
   const cv = canvas();
   castShadow(cv, 20, 28, 15, 4);
-  stones.forEach((st, i) => rock(cv, RURAL, st[0], st[1], st[2], st[3], seed + i, { tone: st[4] ?? 0, moss: true }));
+  stones.forEach((st, i) =>
+    rock(cv, RURAL, st[0], st[1], st[2], st[3], seed + i, { tone: st[4] ?? 0, moss: true }),
+  );
   // seams where two stones butt together read darker
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
@@ -304,7 +332,10 @@ export const BLOCKS = Object.fromEntries(
 );
 
 export const BLOCK_BUCKETS = Object.fromEntries(
-  Object.keys(BLOCKS).map((name) => [name, name.startsWith('cellar-') ? 'floor-1-cellar' : 'floor-2-rural']),
+  Object.keys(BLOCKS).map((name) => [
+    name,
+    name.startsWith('cellar-') ? 'floor-1-cellar' : 'floor-2-rural',
+  ]),
 );
 
 /** Throws if any painted pixel is not legal for `bucket`. */

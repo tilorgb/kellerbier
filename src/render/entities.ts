@@ -556,9 +556,7 @@ export class EntityView {
           // of loot, a keg or a barrel lies flat, so its footprint is tighter
           // still.
           const lies = isPickup || isPropTarget || isBomb;
-          const footprint = lies
-            ? GROUND_SHADOW.lyingFootprint
-            : GROUND_SHADOW.standingFootprint;
+          const footprint = lies ? GROUND_SHADOW.lyingFootprint : GROUND_SHADOW.standingFootprint;
           styleGroundShadow(
             shadow,
             shadowTexture,
