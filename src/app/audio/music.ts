@@ -6,7 +6,13 @@ import type {
   PromilleAudioTier,
   TrackDefinition,
 } from './types.js';
-import { getAudioContext, getMasterGain } from './context.js';
+import {
+  getAudioContext,
+  getBusGain,
+  promilleMuffleToHz,
+  resetPromilleFilter,
+  setPromilleFilterCutoffHz,
+} from './context.js';
 import { playTone } from './synth.js';
 
 /**
@@ -130,6 +136,8 @@ export class MusicPlayer {
   private effectiveTicksPerBeat = 0;
   private loopTicks = 1;
   private scheduleIndex = new Map<number, readonly NoteEvent[]>();
+  private currentTier: PromilleAudioTier | null = null;
+  private distortionEnabled = true;
 
   /** The id of the track currently playing, or `null` if silent. */
   get trackId(): string | null {
@@ -156,16 +164,30 @@ export class MusicPlayer {
   }
 
   /**
-   * Applies a Promille tier's audio content (`content/audio/promille-audio.ts`)
-   * as a light, direct approximation — dragging the tempo and detuning every
-   * subsequent note — ahead of #157's real filter chain owning this.
+   * Applies a Promille tier's audio content
+   * (`content/audio/promille-audio.ts`): the tempo drag and detune stay this
+   * class's own direct approximation (the "pitch shift" #51's note asked
+   * for), and `tier.muffle` now also drives `context.ts`'s real whole-mix
+   * lowpass (the "low-pass" half) — see `promilleMuffleToHz`.
+   *
+   * `distortionEnabled` is #53's accessibility escape hatch: a player who
+   * finds the woozy pitch-drag and muffle disorienting rather than
+   * atmospheric gets a clean mix regardless of tier, without losing the
+   * Promille meter itself or its gameplay effects (which never lived here —
+   * see `GameSim.driftScale`'s doc comment for that boundary).
    */
-  setPromilleTier(tier: PromilleAudioTier): void {
-    if (this.tempoScale === tier.tempoScale && this.detuneCents === tier.detuneCents) {
+  setPromilleTier(tier: PromilleAudioTier, distortionEnabled = true): void {
+    this.currentTier = tier;
+    const changed = this.distortionEnabled !== distortionEnabled;
+    this.distortionEnabled = distortionEnabled;
+    this.applyTierFilter();
+    const tempoScale = distortionEnabled ? tier.tempoScale : 1;
+    const detuneCents = distortionEnabled ? tier.detuneCents : 0;
+    if (!changed && this.tempoScale === tempoScale && this.detuneCents === detuneCents) {
       return;
     }
-    this.tempoScale = tier.tempoScale;
-    this.detuneCents = tier.detuneCents;
+    this.tempoScale = tempoScale;
+    this.detuneCents = detuneCents;
     if (this.track !== null) {
       this.rebuildIndex();
     }
@@ -188,7 +210,7 @@ export class MusicPlayer {
       return;
     }
     const ctx = getAudioContext();
-    const destination = getMasterGain();
+    const destination = getBusGain('music');
     if (ctx === null || destination === null) {
       this.lastScheduledTick = tick;
       return;
@@ -237,5 +259,14 @@ export class MusicPlayer {
     this.effectiveTicksPerBeat = this.track.ticksPerBeat / this.tempoScale;
     this.loopTicks = Math.max(1, Math.round(this.track.loopBeats * this.effectiveTicksPerBeat));
     this.scheduleIndex = buildScheduleIndex(this.track, this.effectiveTicksPerBeat);
+  }
+
+  /** Pushes `currentTier`'s `muffle` onto `context.ts`'s whole-mix lowpass, or bypasses it. */
+  private applyTierFilter(): void {
+    if (!this.distortionEnabled || this.currentTier === null || this.currentTier.tier === 0) {
+      resetPromilleFilter();
+      return;
+    }
+    setPromilleFilterCutoffHz(promilleMuffleToHz(this.currentTier.muffle));
   }
 }
