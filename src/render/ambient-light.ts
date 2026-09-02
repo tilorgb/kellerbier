@@ -122,6 +122,12 @@ function createGlowTexture(
   innerStop: number,
   outerStop: number = Math.SQRT2,
 ): Texture {
+  // No DOM at all — the frame-time benchmark (`tests/bench/scene.ts`) builds
+  // a `GameView` in plain Node, same reasoning as `inked-bounds.ts`'s own
+  // `scratchContext` guard.
+  if (typeof document === 'undefined') {
+    return Texture.EMPTY;
+  }
   const size = 512;
   const canvas = document.createElement('canvas');
   canvas.width = size;
@@ -183,6 +189,10 @@ const CLOUD_BLUR_FRACTION = 0.05;
  * outline.
  */
 function createCloudTexture(rgb: string): Texture {
+  // No DOM at all — same `tests/bench` reasoning as `createGlowTexture`'s own guard.
+  if (typeof document === 'undefined') {
+    return Texture.EMPTY;
+  }
   const width = 512;
   const height = 320;
   const blur = Math.round(Math.min(width, height) * CLOUD_BLUR_FRACTION);
