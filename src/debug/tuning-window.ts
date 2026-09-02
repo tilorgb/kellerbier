@@ -5,6 +5,7 @@ import {
   DEFAULT_ENEMY_TUNING,
   DEFAULT_IMPACT_TUNING,
   DEFAULT_ITEM_POOL_TUNING,
+  DEFAULT_MACHINE_TUNING,
   DEFAULT_MOVEMENT_TUNING,
   DEFAULT_PICKUP_TUNING,
   DEFAULT_PROMILLE_TUNING,
@@ -54,7 +55,8 @@ interface GroupSpec {
     | 'itemPool'
     | 'character'
     | 'roomGen'
-    | 'curse';
+    | 'curse'
+    | 'machine';
   readonly fields: readonly FieldSpec[];
 }
 
@@ -447,6 +449,57 @@ const GROUPS: readonly GroupSpec[] = [
       },
     ],
   },
+  {
+    title: 'Losbrunnen (machine)',
+    group: 'machine',
+    fields: [
+      { key: 'spawnChance', min: 0, max: 1, step: 0.05, hint: 'chance a boss room gets one' },
+      { key: 'baseCost', min: 1, max: 20, step: 1, hint: 'Biermarken, first roll' },
+      { key: 'costIncrement', min: 0, max: 10, step: 1, hint: 'Biermarken added per roll after' },
+      { key: 'breakChance', min: 0, max: 1, step: 0.05, hint: 'chance it breaks after a roll' },
+      { key: 'unluckyWeight', min: 0, max: 100, step: 1, hint: 'base weight, bad-luck outcome' },
+      {
+        key: 'commonWeight',
+        min: 0,
+        max: 100,
+        step: 1,
+        hint: 'base weight, small favourable nudge',
+      },
+      { key: 'uncommonWeight', min: 0, max: 100, step: 1, hint: 'base weight, bigger nudge' },
+      { key: 'rareWeight', min: 0, max: 100, step: 1, hint: 'base weight, big nudge' },
+      { key: 'legendaryWeight', min: 0, max: 100, step: 1, hint: 'base weight, rarest outcome' },
+      {
+        key: 'duselRollBias',
+        min: 0,
+        max: 0.5,
+        step: 0.01,
+        hint: 'Dusel skews away from bad luck',
+      },
+      { key: 'unluckyRollPercent', min: 0, max: 1, step: 0.01, hint: 'how hard a bad roll nudges' },
+      {
+        key: 'commonRollPercent',
+        min: 0,
+        max: 1,
+        step: 0.01,
+        hint: 'how much a common roll nudges',
+      },
+      {
+        key: 'uncommonRollPercent',
+        min: 0,
+        max: 1,
+        step: 0.01,
+        hint: 'how much an uncommon roll nudges',
+      },
+      {
+        key: 'rareRollPercent',
+        min: 0,
+        max: 1,
+        step: 0.01,
+        hint: 'how much a rare roll (or legendary fallback) nudges',
+      },
+      { key: 'interactRadius', min: 8, max: 80, step: 2, hint: 'px to open/feed the machine' },
+    ],
+  },
 ];
 
 const DEFAULTS = {
@@ -460,6 +513,7 @@ const DEFAULTS = {
   character: DEFAULT_CHARACTER_TUNING,
   roomGen: DEFAULT_ROOM_GEN_TUNING,
   curse: DEFAULT_CURSE_TUNING,
+  machine: DEFAULT_MACHINE_TUNING,
 } as const;
 
 const STYLE = `

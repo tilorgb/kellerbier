@@ -19,4 +19,13 @@ export const kraftbier: ItemDefinition = {
       { stat: 'gschwindigkeit', op: 'multiply', value: 0.8 },
     ],
   },
+  /**
+   * Der Losbrunnen's rarest roll (#218): the same damage bump, the move
+   * speed penalty all but brewed out — "a distinct, strictly-better named
+   * variant," not a bigger version of the same trade-off.
+   */
+  legendaryRoll: [
+    { stat: 'stammwuerze', op: 'multiply', value: 1.4 },
+    { stat: 'gschwindigkeit', op: 'multiply', value: 0.98 },
+  ],
 };

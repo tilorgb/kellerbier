@@ -3097,3 +3097,85 @@ The results screen still opens itself the moment a run ends having earned someth
 signal is now `app/main.ts` comparing the save's unlocked ids at the start of the run against the
 ids after it — no per-item seen/unseen state is needed once the screen has no dialogue to only
 say once.
+
+## 64. Der Losbrunnen: a chance-spawned boss-room machine that rerolls an item as an additive stat source, fed and browsed on `use` alone
+
+**Decided:** M7 (unmilestoned; #218's own body). **Issue:** #218, an explicitly rough design —
+"argue with, not a spec to implement" — plus a follow-up comment from the issue's own author
+settling several of its open questions (increasing cost, a break chance, spawning in the boss
+room rather than a dedicated one, one machine per chosen item) that this entry treats as
+authoritative over the issue body's own looser framing.
+
+**What "reroll a trait" means, given the architecture:** #26/#15 already made an item's
+`modifyStats` a *pure function of `ItemRuntimeState`*, shared by every copy of that id — there is
+no per-copy instance to mutate, so "reroll this item's traits" cannot mean giving one held copy a
+different number than another the way a naive reading of #218 might suggest. Instead a roll
+registers a delta `ItemStatModifier[]` under its own stat-pipeline source key,
+`itemRollSourceKey(id)` = `item-roll:<id>` (`sim/item/roll.ts`), which composes on top of the
+item's own `item:<id>` source (#14) rather than replacing or mutating it — the authored definition
+is never touched, so a second roll (or losing and re-picking-up the item, which clears the roll
+source in `GameSim.removeItem`) always starts from the same honest baseline. A roll's magnitude is
+a random one of the item's current `modifyStats` entries, nudged by a tuned percent
+(`MachineTuning`'s `*RollPercent` fields) in the tier's direction — `multiply` nudges its factor by
+`1 ± percent`, `add` nudges by `± percent` of its own magnitude, so the delta's shape always
+matches what it is layered onto. Eligibility (`itemEligibleForMachine`) is "does `modifyStats`
+return anything right now" — an item whose bonus is itself state-gated (Enzian's burst-only fire
+rate multiplier, say) is honestly, if narrowly, ineligible outside that window rather than the
+machine inventing something to roll for it; accepted as a real scope boundary, not engineered
+around.
+
+**Legendary is authored data with a graceful fallback, per decision #19's shape.** `ItemDefinition`
+gains an optional `legendaryRoll?: readonly ItemStatModifier[]` — hand-tuned, replaces the roll
+source outright rather than nudging a percent, the "distinct, strictly-better named variant" #218
+asks for without inventing a second `ItemDefinition` the roll would have to swap the held item for.
+Authored for four items so far (`kraftbier`, `braumeister-schuerze`, `bierbauch`, `halbe-portion`)
+as proof it is real content, not just schema; every other item's `legendary` roll falls back to the
+`rare` tier's generic magnitude, exactly `nearestFloorChoice`'s "closest authored alternative,
+never a crash" precedent, just for a content gap in roll tables instead of spawn groups. The
+follow-up comment's other rarity idea — a rare/legendary roll changing an item's *kind* of effect
+(fire → poison → freeze) rather than a number — is out of scope for this pass: it would need
+per-item authored alternate hook sets, a real design of its own the comment itself only sketches.
+
+**Placement rides the boss room's existing reward, rather than becoming a new special room or new
+content-authoring surface.** The follow-up comment asks for exactly this ("not its own room on the
+floor"). `floorHasLosbrunnen` is rolled once per floor, in the same guarded block
+`rollFloorCurse()`/`dispatchItemFloorStart` already share (`floor !== lastFloorStartDispatched`),
+from `random.items` — the stream's own doc comment already covers "loot rolls," so no new RNG
+stream was needed. If true, and the room compiling next is the boss room, its machine position is
+computed off the *same* authored `pedestal` `decorativeProps` entry every boss room already has for
+its reward (`LOSBRUNNEN_OFFSET_X/Y`, nudged through `safeSpawnPoint` the same as the pedestal
+itself) — no room JSON needed a new prop type. It waits for the boss to actually die exactly like
+`pendingBossPedestals` already does (`pendingBossLosbrunnen`, flushed in the same room-clear tick),
+and persists across a room revisit through the same `RoomLootSnapshot` a pedestal's own state
+already rides (`RoomLootSnapshot.machine`).
+
+**Bomb was tried for cycling, then rejected — the machine is `use`-only.** An earlier pass gave the
+Bomb button the item-picker's cycle step, on the theory that the machine only ever sits in an
+already-cleared boss room so nothing was fighting the player there to place a bomb at anyway. User
+review during the same session rejected it directly: a player even slightly off their intended
+target while trying to place a Bierfassl near the machine could destroy it by accident, and that is
+not the machine's real risk — a bad *roll* is. The picker is `use`-only instead
+(`GameSim.useMachine`): a fresh machine's first press opens it, a move-axis *tap* (edge-detected
+against `machineCyclePreviousSign`, the axis equivalent of `previousButtons`) cycles the preview
+while it's open — no new `InputAction`, no rebind-menu entry, since `move` is otherwise idle in a
+cleared room — and a second `use` press confirms and feeds; an already-fed, unbroken machine's
+`use` goes straight to a reroll, since there is nothing left to choose. Bomb keeps its ordinary job,
+and gets a *deliberate* new one instead of an accidental one: `GameSim.breakMachineFromBlast`, wired
+into `sim/systems/bombs.ts`'s `explode` right where `dispatchItemBombDetonate` already fires, breaks
+the current floor's Losbrunnen outright if a detonation lands within the blast's own radius — "should
+be possible, yes" from the same review, and now the *only* way to destroy the machine rather than
+merely risk a bad roll on it.
+
+**Rendering is a placeholder, on purpose.** `render/machine-view.ts` reuses `PedestalView`'s own
+already-loaded beam/plinth textures, tinted with two new `ENTITY_PALETTE` entries
+(`machineTint`/`machineBrokenTint`) rather than new pixel art — `CLAUDE.md`'s sign-off pass ("show
+a small set of design options... let the user pick before the art lands in a commit") applies to a
+Losbrunnen sprite exactly as much as any other new tile, and was not run this pass. A dedicated
+sprite is real follow-up work, not a gap this decision papers over.
+
+**Constrains:** a future item whose bonus should be excluded from Losbrunnen rolls entirely (an
+active item's activation cost, say) has no opt-out field yet — everything with a live
+`modifyStats` result is eligible. The picker's "browse with move, confirm with use" idiom is the
+first of its kind in the game and is the shape to reach for if another narrow, no-combat menu ever
+needs input without a new binding; it is not a general pause-menu/inventory-browsing input model on
+its own.

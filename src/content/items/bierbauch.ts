@@ -55,4 +55,11 @@ export const bierbauch: ItemDefinition = {
       ctx.sim.lowerTrinkfest(TRINKFEST_GAIN);
     },
   },
+  /**
+   * Der Losbrunnen's rarest roll (#218): the Trinkfest trade (`onPickup`/
+   * `onRemove` above) is untouched — a roll only ever reaches `modifyStats`'s
+   * own contribution — but the Gschwindigkeit cost of carrying it shrinks to
+   * almost nothing.
+   */
+  legendaryRoll: [{ stat: 'gschwindigkeit', op: 'multiply', value: 0.99 }],
 };

@@ -41,4 +41,6 @@ export const halbePortion: ItemDefinition = {
       ctx.sim.raiseTrinkfest(TRINKFEST_LOSS);
     },
   },
+  /** Der Losbrunnen's rarest roll (#218): the fire-rate perk this trades Trinkfest for, sharpened well past the ordinary version. */
+  legendaryRoll: [{ stat: 'schluckfrequenz', op: 'multiply', value: 1 / 1.3 }],
 };

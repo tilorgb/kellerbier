@@ -4,17 +4,20 @@ import { pickupGlint } from '../particle/effects.js';
 import { attemptShopPurchase } from './pickup.js';
 
 /**
- * The `use` button near a pedestal — or a priced pickup, or a charged active
- * item (#28).
+ * The `use` button near a pedestal — or a priced pickup, a Losbrunnen (#218),
+ * or a charged active item (#28).
  *
  * One button, edge-detected the same way `stepBombPlacement` reads `bomb` —
  * `GameSim.previousButtons` from the tick before is the only state this
  * needs to fire once per press rather than once per tick held. A pedestal
  * within range always wins over a shop purchase, which always wins over the
- * held active item: standing next to one with a charged active item in hand,
- * or on a shop's stock, is a rare, low-stakes coincidence, and "which of
- * several things `use` does" has to resolve the same way every time for a
- * replay to reproduce it.
+ * Losbrunnen, which always wins over the held active item: each of these is
+ * a rare, low-stakes coincidence to be standing near more than one of at
+ * once, and "which of several things `use` does" has to resolve the same
+ * way every time for a replay to reproduce it. The Losbrunnen sits below the
+ * shop and pedestal rather than above them because it is the one a player
+ * can walk away from and try again a moment later at no cost — the other
+ * two are a one-shot pickup a wrong resolution order would actually lose.
  *
  * @hot — runs in the frame loop. Nothing in here may allocate; see the
  * `no-hot-allocation` rule in tools/eslint/.
@@ -41,6 +44,11 @@ export function stepPedestal(sim: GameSim, input: Readonly<InputFrame>): void {
 
   if (sim.nearbyShopPickup >= 0) {
     attemptShopPurchase(sim);
+    return;
+  }
+
+  if (sim.isNearMachine()) {
+    sim.useMachine();
     return;
   }
 

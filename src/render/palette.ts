@@ -103,6 +103,18 @@ export const ENTITY_PALETTE = {
     number,
     number,
   ],
+  /**
+   * Der Losbrunnen's tint (`machine-view.ts`, #218) — a coppery, machine
+   * colour distinct from any `itemQualityTints` entry, so a floor's one
+   * Losbrunnen never reads as "a pedestal with an unusually good item" from
+   * across the room. Placeholder rendering: it reuses the pedestal's own
+   * beam/plinth art rather than a new sprite, pending the pixel-art sign-off
+   * pass `CLAUDE.md` requires before real art lands (`docs/DECISIONS.md`'s
+   * Losbrunnen entry).
+   */
+  machineTint: 0xc47a3a,
+  /** What the Losbrunnen tints toward once broken — the same cold, "nothing more here" read `invulnerableShellTint` already establishes. */
+  machineBrokenTint: 0x6b6558,
 } as const;
 
 // ---------------------------------------------------------------------------

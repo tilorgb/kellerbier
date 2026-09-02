@@ -4,6 +4,7 @@ import {
   type ItemHooks,
   type ItemPoolId,
   type ItemQuality,
+  type ItemStatModifier,
   ITEM_POOLS,
   type PromilleRequirement,
 } from './definition.js';
@@ -28,6 +29,8 @@ export interface CompiledItem {
   readonly tags: readonly string[];
   readonly active: ActiveItemDefinition | undefined;
   readonly hooks: ItemHooks;
+  /** See `ItemDefinition.legendaryRoll`. `undefined` when the item has no authored legendary payoff yet. */
+  readonly legendaryRoll: readonly ItemStatModifier[] | undefined;
 }
 
 const VALID_POOLS = new Set<string>(ITEM_POOLS);
@@ -133,6 +136,12 @@ export class ItemRegistry {
         );
       }
     }
+    if (definition.legendaryRoll?.length === 0) {
+      throw new Error(
+        `${where} declares an empty legendaryRoll — omit the field entirely for "no legendary ` +
+          `payoff authored yet" rather than an empty array`,
+      );
+    }
   }
 
   private compile(definition: ItemDefinition): CompiledItem {
@@ -149,6 +158,7 @@ export class ItemRegistry {
       tags: definition.tags ?? [],
       active: definition.active,
       hooks: definition.hooks ?? {},
+      legendaryRoll: definition.legendaryRoll,
     };
   }
 }

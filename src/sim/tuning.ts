@@ -726,6 +726,47 @@ export interface BlutwurzTuning {
   recoveryMaxHealthPenalty: number;
 }
 
+/**
+ * Der Losbrunnen (#218): feed a held item's numeric traits a reroll, for an
+ * increasing Biermarken price, with a chance the roll makes the item worse
+ * and a chance the machine itself breaks. Its own group rather than folded
+ * into `ItemPoolTuning` — it shares that group's Dusel-bias *shape*
+ * (`duselRollBias` mirrors `duselQualityBias`) but every number here is
+ * about the machine's own gamble, not about what a pedestal offers.
+ */
+export interface MachineTuning {
+  /** Chance a boss room's clear also spawns a Losbrunnen, rolled once per floor from `sim.random.items`. */
+  spawnChance: number;
+  /** Biermarken cost of a fresh machine's first roll. */
+  baseCost: number;
+  /** Added to the cost on every roll after the first — 1, 2, 3, 4, 5 Biermarken and rising. */
+  costIncrement: number;
+  /** Chance, rolled after every roll, that the machine breaks and refuses any further use this run. */
+  breakChance: number;
+  /** Base weight of the bad-luck outcome tier — nudges the rolled stat backward. */
+  unluckyWeight: number;
+  /** Base weight of a small favourable nudge. */
+  commonWeight: number;
+  /** Base weight of a bigger favourable nudge. */
+  uncommonWeight: number;
+  /** Base weight of a big favourable nudge, or a real trait upgrade for an item that authors one. */
+  rareWeight: number;
+  /** Base weight of the rarest outcome — an item's authored `legendaryRoll`, or `rareWeight`'s magnitude when none exists yet (`docs/DECISIONS.md` #19). */
+  legendaryWeight: number;
+  /** Same shape as `ItemPoolTuning.duselQualityBias`, driven by the player's resolved Dusel: pushes weight away from `unlucky` and toward `rare`/`legendary`. */
+  duselRollBias: number;
+  /** Fraction the bad-luck tier nudges the chosen modifier against the player. */
+  unluckyRollPercent: number;
+  /** Fraction the common tier nudges the chosen modifier in the player's favour. */
+  commonRollPercent: number;
+  /** Fraction the uncommon tier nudges the chosen modifier in the player's favour. */
+  uncommonRollPercent: number;
+  /** Fraction the rare tier (and the legendary fallback) nudges the chosen modifier in the player's favour. */
+  rareRollPercent: number;
+  /** Radius (px) inside which the machine shows its prompt and accepts cycle/feed input — same shape as `ItemPoolTuning.interactRadius`. */
+  interactRadius: number;
+}
+
 export interface SimTuning {
   readonly movement: MovementTuning;
   readonly shooting: ShootingTuning;
@@ -739,6 +780,7 @@ export interface SimTuning {
   readonly roomGen: RoomGenTuning;
   readonly curse: CurseTuning;
   readonly blutwurz: BlutwurzTuning;
+  readonly machine: MachineTuning;
 }
 
 export const DEFAULT_MOVEMENT_TUNING: Readonly<MovementTuning> = {
@@ -1034,6 +1076,32 @@ export const DEFAULT_BLUTWURZ_TUNING: Readonly<BlutwurzTuning> = {
   recoveryMaxHealthPenalty: 2,
 };
 
+/**
+ * Set high enough that a dev build sees a Losbrunnen within a couple of
+ * boss clears rather than a couple of dozen — #218's own acceptance bar is
+ * "reachable through the real progression," and a rare chance would make
+ * that expensive to verify by hand. `unluckyWeight` sits well below the
+ * three favourable common/uncommon/rare tiers so a bad roll is a real risk
+ * without being the modal outcome — "a real gamble," not a coin flip.
+ */
+export const DEFAULT_MACHINE_TUNING: Readonly<MachineTuning> = {
+  spawnChance: 0.5,
+  baseCost: 1,
+  costIncrement: 1,
+  breakChance: 0.15,
+  unluckyWeight: 20,
+  commonWeight: 55,
+  uncommonWeight: 25,
+  rareWeight: 10,
+  legendaryWeight: 3,
+  duselRollBias: 0.08,
+  unluckyRollPercent: 0.15,
+  commonRollPercent: 0.08,
+  uncommonRollPercent: 0.18,
+  rareRollPercent: 0.35,
+  interactRadius: 28,
+};
+
 export function createTuning(): SimTuning {
   return {
     movement: { ...DEFAULT_MOVEMENT_TUNING },
@@ -1048,6 +1116,7 @@ export function createTuning(): SimTuning {
     blutwurz: { ...DEFAULT_BLUTWURZ_TUNING },
     character: { ...DEFAULT_CHARACTER_TUNING },
     roomGen: { ...DEFAULT_ROOM_GEN_TUNING },
+    machine: { ...DEFAULT_MACHINE_TUNING },
   };
 }
 

@@ -268,4 +268,18 @@ export interface ItemDefinition {
   readonly tags?: readonly string[];
   readonly active?: ActiveItemDefinition;
   readonly hooks?: ItemHooks;
+  /**
+   * The hand-authored payoff for a Losbrunnen's rarest roll (#218) — replaces
+   * the machine's own generic delta outright rather than adding to it, the
+   * "distinct, strictly-better named variant" the issue asks for, authored as
+   * data rather than a second `ItemDefinition` the roll would have to swap
+   * the held item for. Optional and deliberately rare in the content: most
+   * items have none yet, and `sim/item/roll.ts`'s `rollItemStatModifiers`
+   * falls back to the `rare` tier's generic magnitude when it's absent —
+   * `docs/DECISIONS.md` #19's content-gap shape, not a bug. Non-empty when
+   * present; `ItemRegistry.validate` rejects an authored empty array outright
+   * rather than silently falling back for an item that clearly meant to have
+   * one.
+   */
+  readonly legendaryRoll?: readonly ItemStatModifier[];
 }
