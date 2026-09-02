@@ -520,6 +520,48 @@ function lockedDoorsFor(
   return directions;
 }
 
+/**
+ * Text for `machinePrompt`, from `sim.machinePreview` — one line per state.
+ * `[use]` is the same shorthand `shopPreview`'s own label already uses,
+ * since neither has a per-device glyph lookup the way `activatePrompt` does.
+ * Everything here is reachable through `use` alone (`GameSim.useMachine`'s
+ * own doc comment on why) — the picker's "browse" step is a move-axis tap,
+ * mentioned in its own prompt line rather than bound to a second button.
+ */
+function machineHudLabel(preview: {
+  readonly state: 'empty' | 'unfed' | 'fed' | 'broken';
+  readonly pickerOpen: boolean;
+  readonly itemName: string | undefined;
+  readonly cost: number;
+  readonly affordable: boolean;
+  readonly lastRollSummary: string | undefined;
+}): string {
+  switch (preview.state) {
+    case 'broken':
+      return 'Losbrunnen — kaputt.';
+    case 'empty':
+      return preview.itemName === undefined
+        ? 'Losbrunnen — nothing to feed it.'
+        : `Losbrunnen — ${preview.itemName} is gone.`;
+    case 'unfed': {
+      if (!preview.pickerOpen) {
+        return 'Losbrunnen  [use: choose an item]';
+      }
+      const cost = `${String(preview.cost)} Biermarken`;
+      return preview.affordable
+        ? `Losbrunnen — feed ${preview.itemName ?? ''}? ${cost}  [move: browse] [use: feed]`
+        : `Losbrunnen — feed ${preview.itemName ?? ''}? ${cost} (not enough)`;
+    }
+    case 'fed': {
+      const cost = `${String(preview.cost)} Biermarken`;
+      const summary = preview.lastRollSummary === undefined ? '' : `${preview.lastRollSummary}  `;
+      return preview.affordable
+        ? `${summary}Reroll ${preview.itemName ?? ''}? ${cost}  [use]`
+        : `${summary}Reroll ${preview.itemName ?? ''}? ${cost} (not enough)`;
+    }
+  }
+}
+
 async function boot(): Promise<void> {
   const host = document.getElementById('game');
   if (host === null) {
@@ -786,6 +828,18 @@ async function boot(): Promise<void> {
   let shopPreviewLabel = '';
 
   /**
+   * Der Losbrunnen's prompt (#218) — what feeding/rerolling it would cost,
+   * and the last roll's outcome once it has one. Same fixed-HUD-slot shape
+   * as `shopPreview` and the same reason: the room it appears in (a cleared
+   * boss room) is bare enough that anchoring to the machine's own screen
+   * position would buy nothing `shopPreview`'s own doc comment doesn't
+   * already cover. Driven by `sim.machinePreview`.
+   */
+  const machinePrompt = new TextPlate(kit, { colour: HUD_PALETTE.toastText });
+  hudLayer.addChild(machinePrompt.view);
+  let machinePromptLabel = '';
+
+  /**
    * A pedestal's name plate "on approach" (#28) — the item's name only (the
    * full description waits for the reveal panel below, once it's actually
    * taken). Anchored to the pedestal's own screen position each frame
@@ -938,6 +992,7 @@ async function boot(): Promise<void> {
     bossBanner.place(centreX, Math.round(height * 0.26));
     pickupToast.place(centreX, Math.round(height * 0.2));
     shopPreview.place(centreX, Math.round(height * 0.85));
+    machinePrompt.place(centreX, Math.round(height * 0.78));
     pedestalReveal.placeCentred(centreX, Math.round(height / 2));
 
     minimapHud.view.position.set(width - HUD_MARGIN, HUD_MARGIN);
@@ -1449,6 +1504,26 @@ async function boot(): Promise<void> {
         shopPreview.visible = false;
         shopPreviewLabel = '';
       }
+      const machine = sim.machinePreview;
+      if (machine !== null) {
+        const label = machineHudLabel(machine);
+        if (label !== machinePromptLabel) {
+          machinePromptLabel = label;
+          machinePrompt.set(label);
+          machinePrompt.place(Math.round(uiFrame.width / 2), Math.round(uiFrame.height * 0.78));
+        }
+        machinePrompt.setColour(
+          machine.state === 'unfed' || machine.state === 'fed'
+            ? machine.affordable
+              ? HUD_PALETTE.shopPreviewAffordable
+              : HUD_PALETTE.shopPreviewUnaffordable
+            : HUD_PALETTE.toastText,
+        );
+        machinePrompt.visible = true;
+      } else if (machinePrompt.visible) {
+        machinePrompt.visible = false;
+        machinePromptLabel = '';
+      }
       const nearbyPedestal = sim.nearestAvailablePedestal();
       const nameplateScreen =
         nearbyPedestal >= 0 ? view.pedestalScreenPosition(nearbyPedestal) : null;
@@ -1771,6 +1846,8 @@ WASD move   arrows aim and fire
     pickupToast.visible = false;
     shopPreviewLabel = '';
     shopPreview.visible = false;
+    machinePromptLabel = '';
+    machinePrompt.visible = false;
     pedestalNamePlateLabel = '';
     pedestalNamePlate.visible = false;
     pedestalRevealLabel = '';

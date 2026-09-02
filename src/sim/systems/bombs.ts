@@ -156,6 +156,12 @@ function explode(sim: GameSim, index: number): void {
   // other item hook, just for a moment #26 did not originally name.
   dispatchItemBombDetonate(sim, x, y);
 
+  // Der Losbrunnen (#218): the one way to destroy it outright rather than
+  // merely risk a bad roll — a real cost for planting a bomb carelessly
+  // near it. Same circular over-fetch radius as the wall reveal just above,
+  // for the same reason.
+  sim.breakMachineFromBlast(x, y, armLength);
+
   bombBlast(sim, x, y, sim.tuning.pickup.bombBlastArmTiles);
   sim.addShake(0, -1, tuning.bombBlastDamage);
   sim.world.destroy(sim.world.entityAt(index));

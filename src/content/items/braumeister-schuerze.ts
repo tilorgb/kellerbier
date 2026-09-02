@@ -24,4 +24,6 @@ export const braumeisterSchuerze: ItemDefinition = {
   hooks: {
     modifyStats: () => [{ stat: 'stammwuerze', op: 'add', value: STAMMWUERZE_BONUS }],
   },
+  /** Der Losbrunnen's rarest roll (#218): the apron reinforced, triple the flat bonus. */
+  legendaryRoll: [{ stat: 'stammwuerze', op: 'add', value: STAMMWUERZE_BONUS * 3 }],
 };

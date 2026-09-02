@@ -28,6 +28,14 @@ import {
 import { ItemInventory } from '../item/inventory.js';
 import { selectItemOffer } from '../item/pool.js';
 import { ItemRegistry } from '../item/registry.js';
+import {
+  itemEligibleForMachine,
+  itemRollSourceKey,
+  type MachineRollResult,
+  type MachineRollTier,
+  rollItemStatModifiers,
+  selectMachineRollTier,
+} from '../item/roll.js';
 import { SetRegistry, setStatSourceKey, type ItemSetDefinition } from '../item/set.js';
 import { ITEM_SET_DEFINITIONS } from '../../content/item-sets/index.js';
 import { type RunRandom, createRunRandom } from '../rng/streams.js';
@@ -68,7 +76,7 @@ import { TICKS_PER_SECOND } from '../time.js';
 import { type SimTuning, createTuning } from '../tuning.js';
 import { StatPipeline } from '../stats/cache.js';
 import { DEFAULT_STAT_CAPS } from '../stats/caps.js';
-import { StatId, type BaseStats } from '../stats/definition.js';
+import { StatId, STAT_LABELS, type BaseStats } from '../stats/definition.js';
 import type { StatModifier } from '../stats/modifiers.js';
 import { type CollisionLayerId, CollisionLayer, collisionMaskFor } from '../collision/layers.js';
 import { SpatialHash } from '../collision/spatial-hash.js';
@@ -100,6 +108,7 @@ import {
   stepEnemyDeaths,
 } from '../systems/enemy.js';
 import { stepBombPlacement } from '../systems/bomb-placement.js';
+import { stepMachine } from '../systems/machine.js';
 import { stepBombs } from '../systems/bombs.js';
 import { applyDamageAt, stepImpact, stepParticles } from '../systems/impact.js';
 import { stepLootDrops } from '../systems/loot.js';
@@ -229,6 +238,13 @@ const DOOR_SPAWN_SAFETY_RADIUS = 48;
  */
 const PEDESTAL_RADIUS = 8;
 
+/** Where a Losbrunnen anchors relative to the boss room's own reward pedestal — off to one side, never on top of it. */
+const LOSBRUNNEN_OFFSET_X = 36;
+const LOSBRUNNEN_OFFSET_Y = 0;
+
+/** Move-axis magnitude (of `AXIS_RESOLUTION`'s 127) that counts as a deliberate left/right tap for the Losbrunnen's picker — `cycleMachinePreviewFromAxis`. */
+const MACHINE_AXIS_TAP_THRESHOLD = 40;
+
 export type RoomDirection = 'north' | 'east' | 'south' | 'west';
 
 /** Used only by `doorEntryPoint`'s staircase branch — see its doc comment. */
@@ -312,6 +328,27 @@ interface PedestalRuntime {
 }
 
 /**
+ * A live Losbrunnen (#218): a boss room's chance-spawned modifier machine.
+ *
+ * At most one per floor — `GameSim.floorHasLosbrunnen` is rolled once per
+ * floor entry and the machine itself only ever appears in that floor's boss
+ * room, so a single instance (rather than `PedestalRuntime`'s list) is
+ * exact, not a simplification. Not an ECS entity for the same reasons a
+ * pedestal isn't (`PedestalRuntime`'s own doc comment): stationary, never
+ * collides, at most one per room.
+ */
+interface MachineRuntime {
+  readonly x: number;
+  readonly y: number;
+  /** Registry index of the item this machine is locked onto, or -1 before it has ever been fed. */
+  itemIndex: number;
+  /** Rolls performed so far — drives the increasing Biermarken cost. */
+  rolls: number;
+  /** Once true, the machine refuses any further feed/reroll for the rest of the run. */
+  broken: boolean;
+}
+
+/**
  * What a room still owes the player, captured the moment they leave it —
  * see `GameSim.snapshotRoomLoot`. Restoring from this instead of re-rolling
  * the template is what makes loot (and a shop's stock, and an unclaimed
@@ -326,6 +363,8 @@ interface RoomLootSnapshot {
     readonly price?: number;
   }[];
   readonly pedestals: readonly PedestalRuntime[];
+  /** `null` for every room but a floor's boss room, and only non-null there once the Losbrunnen has actually spawned. */
+  readonly machine: MachineRuntime | null;
 }
 
 /**
@@ -337,6 +376,25 @@ interface RoomLootSnapshot {
  * its own follow-up (#28 only wires the pools that already have a room to
  * offer from: treasure, boss, secret).
  */
+const MACHINE_ROLL_TIER_LABELS: Readonly<Record<MachineRollTier, string>> = {
+  unlucky: 'Unlucky',
+  common: 'Common',
+  uncommon: 'Uncommon',
+  rare: 'Rare',
+  legendary: 'Legendary',
+};
+
+/** The Losbrunnen's toast text for one roll — `GameSim.applyMachineRoll`'s own `reportCollected` call. */
+function describeMachineRoll(itemName: string, result: MachineRollResult): string {
+  const tierLabel = MACHINE_ROLL_TIER_LABELS[result.tier];
+  if (result.rolled === undefined) {
+    return `${itemName}: ${tierLabel.toLowerCase()} roll, nothing changed.`;
+  }
+  const statLabel = STAT_LABELS[result.rolled.stat];
+  const direction = result.rolled.favourable ? 'up' : 'down';
+  return `${itemName}: ${tierLabel} roll — ${statLabel} ${direction}.`;
+}
+
 function pedestalPoolForRole(role: RoomSpecialRole | undefined): ItemPoolId {
   switch (role) {
     case 'boss':
@@ -1063,6 +1121,53 @@ export class GameSim {
    */
   private pendingBossPedestals: { readonly x: number; readonly y: number }[] = [];
   /**
+   * Whether this floor's boss room gets a Losbrunnen at all — rolled once
+   * per floor entry (`applyCompiledRoom`'s "new floor" guard, alongside
+   * `rollFloorCurse`) from `random.items`, so the decision is fixed the
+   * moment the floor starts rather than re-rolled every time the boss room
+   * is (re-)compiled.
+   */
+  private floorHasLosbrunnen = false;
+  /** The current floor's Losbrunnen, once it has actually spawned — see `MachineRuntime`. */
+  private machineRuntime: MachineRuntime | null = null;
+  /**
+   * Where the Losbrunnen will appear, held back until the boss actually
+   * dies — the exact `pendingBossPedestals` shape, one position instead of a
+   * list because at most one machine ever spawns per floor. Computed in
+   * `restoreOrSpawnRoomLoot` from the boss room's own authored pedestal
+   * position (offset clear of it), never authored separately — see
+   * `docs/DECISIONS.md`'s Losbrunnen entry for why this rides the boss
+   * room's existing reward anchor instead of a new room-template field.
+   */
+  private pendingBossLosbrunnen: { readonly x: number; readonly y: number } | null = null;
+  /**
+   * Which held, roll-eligible item the Losbrunnen's prompt is currently
+   * previewing, cycled while its picker is open. An id rather than a
+   * registry index so it survives the eligible list reshuffling as items
+   * are picked up/lost between visits — `machinePreview` clamps back to a
+   * valid entry if this one is no longer eligible.
+   */
+  private machinePreviewItemId: string | null = null;
+  /**
+   * Whether the Losbrunnen's item picker is open — `use` on a fresh machine
+   * opens it, `use` again confirms and feeds (`GameSim.useMachine`). Every
+   * step here is the *same* button, on purpose: repurposing Bomb for
+   * cycling was tried and rejected (`docs/DECISIONS.md`'s Losbrunnen entry)
+   * because a player who is even slightly off target while trying to place
+   * a Bierfassl near the machine could destroy it by accident — which the
+   * machine should only ever do on a real detonation nearby
+   * (`breakMachineFromBlast`), never as a side effect of browsing its menu.
+   */
+  private machinePickerOpenValue = false;
+  /**
+   * Sign of the move axis on the previous tick, while the picker is open —
+   * `cycleMachinePreviewFromAxis`'s own edge detector, the tap-not-hold
+   * equivalent of `previousButtons` for an axis instead of a button. Reset
+   * whenever the picker closes, so re-opening it always starts requiring a
+   * fresh tap rather than reading whatever direction happened to be held.
+   */
+  private machineCyclePreviousSign: -1 | 0 | 1 = 0;
+  /**
    * Leftover loot from a room the player has already left, keyed the same
    * way `roomClearedIds` is — by the authored template's own id, not a
    * per-instance floor-plan id (see `clearFloorProgress`'s doc comment for
@@ -1090,6 +1195,8 @@ export class GameSim {
   private pedestalRevealTicks = 0;
   private pedestalRevealName = '';
   private pedestalRevealDescription = '';
+  /** Human-readable summary of the Losbrunnen's last roll, surfaced through `machinePreview` until the next one. */
+  private machineLastRollSummary: string | undefined = undefined;
   /**
    * The Bierfassl just set down under the player, if any — `null` once the
    * player has stepped clear of it once.
@@ -1763,6 +1870,17 @@ export class GameSim {
     this.bombableWalls.clear();
     this.pedestalList = [];
     this.pendingBossPedestals = [];
+    // Reset unconditionally, like `pedestalList` above — `restoreOrSpawnRoomLoot`,
+    // called right after this, is what actually repopulates it (from a
+    // snapshot, or by pushing a fresh `pendingBossLosbrunnen` for a boss
+    // room's first visit). Without this, a machine spawned in the boss room
+    // would keep reading as "in range" while standing in an unrelated room
+    // this floor was never rolled a Losbrunnen for a snapshot of.
+    this.machineRuntime = null;
+    this.pendingBossLosbrunnen = null;
+    this.machinePreviewItemId = null;
+    this.machinePickerOpenValue = false;
+    this.machineCyclePreviousSign = 0;
     this.nearbyShopPickupSlot = -1;
     for (const hidden of hiddenDoors) {
       const match = this.roomDoors.find(
@@ -1794,6 +1912,19 @@ export class GameSim {
       this.lastFloorStartDispatched = floor;
       this.rollFloorCurse();
       dispatchItemFloorStart(this, floor);
+      // Der Losbrunnen (#218): fixed for the floor the instant it starts,
+      // the same footing as the curse roll right above — never re-rolled by
+      // walking in and out of the boss room, and reset here (rather than
+      // only on a fresh machine spawn) so a floor that rolls "no machine"
+      // stays that way even if `machineRuntime` was still set from... it
+      // never is across a floor boundary in practice, but resetting
+      // unconditionally is what makes that an invariant instead of luck.
+      this.floorHasLosbrunnen = this.random.items.chance(this.tuning.machine.spawnChance);
+      this.machineRuntime = null;
+      this.pendingBossLosbrunnen = null;
+      this.machinePreviewItemId = null;
+      this.machinePickerOpenValue = false;
+      this.machineCyclePreviousSign = 0;
     }
     // "Stats reroll on every floor entry" (#47) — a floor, not a room: the
     // guard inside is on the floor number, so walking back and forth through
@@ -1955,6 +2086,7 @@ export class GameSim {
         this.spawnPickup(pickup.type, pickup.x, pickup.y, pickup.price, false);
       }
       this.pedestalList = snapshot.pedestals.map((pedestal) => ({ ...pedestal }));
+      this.machineRuntime = snapshot.machine === null ? null : { ...snapshot.machine };
       return;
     }
     if (this.roomClearedIds.has(this.roomId)) {
@@ -1991,6 +2123,21 @@ export class GameSim {
       const safe = this.safeSpawnPoint(prop.x, prop.y, PEDESTAL_RADIUS);
       if (this.roomSpecialRole === 'boss' && this.roomEnemyCount > 0) {
         this.pendingBossPedestals.push({ x: safe.x, y: safe.y });
+        // Der Losbrunnen (#218) rides the boss room's own authored reward
+        // spot rather than a second authored position — offset clear of it
+        // and nudged safe the same way. Only the first `pedestal` prop in a
+        // boss room ever contributes one (`pendingBossLosbrunnen === null`
+        // guard), which is every real boss room today (one reward pedestal
+        // apiece); a future boss room with more than one would just get its
+        // Losbrunnen anchored off the first.
+        if (this.floorHasLosbrunnen && this.pendingBossLosbrunnen === null) {
+          const machineSpot = this.safeSpawnPoint(
+            prop.x + LOSBRUNNEN_OFFSET_X,
+            prop.y + LOSBRUNNEN_OFFSET_Y,
+            PEDESTAL_RADIUS,
+          );
+          this.pendingBossLosbrunnen = { x: machineSpot.x, y: machineSpot.y };
+        }
       } else {
         this.spawnPedestal(safe.x, safe.y);
       }
@@ -2024,6 +2171,7 @@ export class GameSim {
     this.roomLootSnapshots.set(this.roomId, {
       pickups,
       pedestals: this.pedestalList.map((pedestal) => ({ ...pedestal })),
+      machine: this.machineRuntime === null ? null : { ...this.machineRuntime },
     });
   }
 
@@ -3256,6 +3404,12 @@ export class GameSim {
     this.syncItemSetModifiers();
     if (!stillHeld) {
       item.hooks.onRemove?.({ sim: this, itemId: id, state });
+      // A Losbrunnen roll (#218) is the same "exactly the prior state"
+      // promise `modifyStats`'s own source gets — losing the last copy
+      // clears its rolled bonus too, so picking the item back up later
+      // starts from the honest, un-rerolled baseline rather than a stale
+      // multiplier surviving the gap.
+      this.stats.clearSource(itemRollSourceKey(id));
     }
     return stillHeld;
   }
@@ -3709,6 +3863,307 @@ export class GameSim {
     this.pedestalRevealTicks = Math.round(this.tuning.itemPool.revealHoldTicks);
   }
 
+  /** Whether the player is within `tuning.machine.interactRadius` of this floor's Losbrunnen, if it has spawned. */
+  isNearMachine(): boolean {
+    const machine = this.machineRuntime;
+    if (machine === null) {
+      return false;
+    }
+    const playerX = this.positionX(this.playerIndex);
+    const playerY = this.positionY(this.playerIndex);
+    const dx = machine.x - playerX;
+    const dy = machine.y - playerY;
+    const radius = this.tuning.machine.interactRadius;
+    return dx * dx + dy * dy <= radius * radius;
+  }
+
+  /** The current Losbrunnen, for rendering — `null` off this floor or before it has spawned. */
+  get activeMachine(): Readonly<MachineRuntime> | null {
+    return this.machineRuntime;
+  }
+
+  /**
+   * Registry indices of currently held items the Losbrunnen could roll right
+   * now — anything whose `modifyStats` hook actually returns something for
+   * its current runtime state (`itemEligibleForMachine`). Walked in
+   * `heldOrder` (id order, #15), so cycling always lands on the same item in
+   * the same position regardless of pickup order.
+   */
+  private machineEligibleItemIndices(): number[] {
+    const indices: number[] = [];
+    this.inventory.forEachHeld((index, state) => {
+      if (itemEligibleForMachine(this.items.at(index), state)) {
+        indices.push(index);
+      }
+    });
+    return indices;
+  }
+
+  /** Clamps `machinePreviewItemId` to a real member of `eligible`, defaulting to its first entry. */
+  private resolveMachinePreviewIndex(eligible: readonly number[]): number {
+    if (this.machinePreviewItemId !== null) {
+      const found = eligible.find((index) => this.items.at(index).id === this.machinePreviewItemId);
+      if (found !== undefined) {
+        return found;
+      }
+    }
+    const first = eligible[0];
+    if (first === undefined) {
+      throw new RangeError('resolveMachinePreviewIndex needs a non-empty eligible list');
+    }
+    this.machinePreviewItemId = this.items.at(first).id;
+    return first;
+  }
+
+  /** Whether the Losbrunnen's item picker is currently open — see `machinePickerOpenValue`. */
+  get isMachinePickerOpen(): boolean {
+    return this.machinePickerOpenValue;
+  }
+
+  /** Closes the picker and resets its axis-tap edge detector — called whenever the player leaves range. */
+  closeMachinePicker(): void {
+    this.machinePickerOpenValue = false;
+    this.machineCyclePreviousSign = 0;
+  }
+
+  /**
+   * Advances the Losbrunnen's item preview by one, while its picker is open.
+   * A no-op once the machine is fed: there is nothing left to cycle, the
+   * item is locked (#218's own follow-up: "this machine will only reroll
+   * that single item").
+   */
+  private cycleMachinePreview(direction: 1 | -1): void {
+    if (this.machineRuntime === null || this.machineRuntime.itemIndex >= 0) {
+      return;
+    }
+    const eligible = this.machineEligibleItemIndices();
+    if (eligible.length === 0) {
+      return;
+    }
+    const current = this.resolveMachinePreviewIndex(eligible);
+    const position = eligible.indexOf(current);
+    const next = eligible[(position + direction + eligible.length) % eligible.length];
+    if (next === undefined) {
+      throw new RangeError('cycleMachinePreview needs a non-empty eligible list');
+    }
+    this.machinePreviewItemId = this.items.at(next).id;
+  }
+
+  /**
+   * Reads one tick's move axis for a left/right *tap* — a fresh push, not a
+   * held direction — and cycles the picker's preview on it. Called every
+   * tick by `sim/systems/machine.ts`'s `stepMachine`, regardless of `use`,
+   * which is why this needs its own edge detector (`machineCyclePreviousSign`)
+   * rather than `previousButtons`: there is no button here, only an axis,
+   * and reading it as a level rather than an edge would spin the preview
+   * every tick a direction is held instead of once per push.
+   */
+  cycleMachinePreviewFromAxis(moveX: number): void {
+    if (!this.machinePickerOpenValue) {
+      this.machineCyclePreviousSign = 0;
+      return;
+    }
+    const sign: -1 | 0 | 1 =
+      moveX > MACHINE_AXIS_TAP_THRESHOLD ? 1 : moveX < -MACHINE_AXIS_TAP_THRESHOLD ? -1 : 0;
+    if (sign !== 0 && sign !== this.machineCyclePreviousSign) {
+      this.cycleMachinePreview(sign);
+    }
+    this.machineCyclePreviousSign = sign;
+  }
+
+  /**
+   * What the Losbrunnen's prompt should show right now, or `null` out of
+   * range / off this floor — same "read once a frame, no rendering here"
+   * shape as `shopPreview`. `'empty'` covers both "nothing eligible to feed"
+   * and "locked onto an item since lost" — the machine has nothing useful to
+   * do in either case. `pickerOpen` only means anything for `'unfed'`: a
+   * fresh machine's first `use` opens the picker rather than feeding
+   * outright, so the HUD can say "press use to choose" before committing to
+   * anything.
+   */
+  get machinePreview(): {
+    readonly state: 'empty' | 'unfed' | 'fed' | 'broken';
+    readonly pickerOpen: boolean;
+    readonly itemName: string | undefined;
+    readonly cost: number;
+    readonly affordable: boolean;
+    readonly lastRollSummary: string | undefined;
+  } | null {
+    const machine = this.machineRuntime;
+    if (machine === null || !this.isNearMachine()) {
+      return null;
+    }
+    if (machine.broken) {
+      const itemName = machine.itemIndex >= 0 ? this.items.at(machine.itemIndex).name : undefined;
+      return {
+        state: 'broken',
+        pickerOpen: false,
+        itemName,
+        cost: 0,
+        affordable: false,
+        lastRollSummary: this.machineLastRollSummary,
+      };
+    }
+    if (machine.itemIndex < 0) {
+      const eligible = this.machineEligibleItemIndices();
+      if (eligible.length === 0) {
+        return {
+          state: 'empty',
+          pickerOpen: false,
+          itemName: undefined,
+          cost: 0,
+          affordable: false,
+          lastRollSummary: undefined,
+        };
+      }
+      const cost = this.tuning.machine.baseCost;
+      if (!this.machinePickerOpenValue) {
+        return {
+          state: 'unfed',
+          pickerOpen: false,
+          itemName: undefined,
+          cost,
+          affordable: this.biermarkenCount >= cost,
+          lastRollSummary: undefined,
+        };
+      }
+      const preview = this.items.at(this.resolveMachinePreviewIndex(eligible));
+      return {
+        state: 'unfed',
+        pickerOpen: true,
+        itemName: preview.name,
+        cost,
+        affordable: this.biermarkenCount >= cost,
+        lastRollSummary: undefined,
+      };
+    }
+    if (!this.inventory.has(machine.itemIndex)) {
+      return {
+        state: 'empty',
+        pickerOpen: false,
+        itemName: this.items.at(machine.itemIndex).name,
+        cost: 0,
+        affordable: false,
+        lastRollSummary: this.machineLastRollSummary,
+      };
+    }
+    const item = this.items.at(machine.itemIndex);
+    const cost = this.tuning.machine.baseCost + machine.rolls * this.tuning.machine.costIncrement;
+    return {
+      state: 'fed',
+      pickerOpen: false,
+      itemName: item.name,
+      cost,
+      affordable: this.biermarkenCount >= cost,
+      lastRollSummary: this.machineLastRollSummary,
+    };
+  }
+
+  /**
+   * `use` near the Losbrunnen (`sim/systems/pedestal.ts`'s priority chain) —
+   * the machine's *only* interaction button (`machinePickerOpenValue`'s doc
+   * comment on why Bomb was rejected for cycling). Three presses do three
+   * different things depending on state, in order: a fresh machine opens
+   * its picker; an open picker feeds whatever it is currently previewing;
+   * an already-fed, unbroken machine pays for another roll outright — there
+   * is nothing to choose there, so no picker step is needed. A no-op
+   * whenever nothing eligible exists, the machine is broken, or the player
+   * can't afford the cost — nothing is spent on a press that can't do
+   * anything.
+   */
+  useMachine(): void {
+    const machine = this.machineRuntime;
+    if (machine === null || machine.broken || !this.isNearMachine()) {
+      return;
+    }
+    if (machine.itemIndex < 0) {
+      const eligible = this.machineEligibleItemIndices();
+      if (eligible.length === 0) {
+        return;
+      }
+      if (!this.machinePickerOpenValue) {
+        this.machinePickerOpenValue = true;
+        this.machineCyclePreviousSign = 0;
+        this.resolveMachinePreviewIndex(eligible);
+        return;
+      }
+      const chosen = this.resolveMachinePreviewIndex(eligible);
+      if (!this.spendBiermarken(this.tuning.machine.baseCost)) {
+        return;
+      }
+      machine.itemIndex = chosen;
+      this.closeMachinePicker();
+      this.applyMachineRoll(machine);
+      return;
+    }
+    if (!this.inventory.has(machine.itemIndex)) {
+      return;
+    }
+    const cost = this.tuning.machine.baseCost + machine.rolls * this.tuning.machine.costIncrement;
+    if (!this.spendBiermarken(cost)) {
+      return;
+    }
+    this.applyMachineRoll(machine);
+  }
+
+  /**
+   * Breaks the current floor's Losbrunnen if a detonation at `(x, y)` landed
+   * within `radius` of it — `sim/systems/bombs.ts`'s `explode`, on every
+   * Bierfassl blast regardless of what set it off. The one way to destroy
+   * the machine outright rather than merely risking a bad roll — a real
+   * cost for planting a bomb carelessly near it, never a side effect of
+   * ordinary browsing (`machinePickerOpenValue`'s doc comment).
+   */
+  breakMachineFromBlast(x: number, y: number, radius: number): void {
+    const machine = this.machineRuntime;
+    if (machine === null || machine.broken) {
+      return;
+    }
+    const dx = machine.x - x;
+    const dy = machine.y - y;
+    if (dx * dx + dy * dy > radius * radius) {
+      return;
+    }
+    machine.broken = true;
+    this.closeMachinePicker();
+    this.reportCollected('Losbrunnen', 'Blown apart.');
+  }
+
+  /**
+   * Rolls one outcome tier (`selectMachineRollTier`, biased by the player's
+   * resolved Dusel) and registers its delta under `itemRollSourceKey` —
+   * replacing whatever the item's previous roll was, never stacking with
+   * it, which is what makes "reroll" mean reroll rather than accumulate.
+   * Increments `rolls` (the next cost) and rolls the break chance last, so
+   * the roll that breaks the machine still lands first.
+   */
+  private applyMachineRoll(machine: MachineRuntime): void {
+    const item = this.items.at(machine.itemIndex);
+    const state = this.inventory.stateOf(machine.itemIndex);
+    const tier = selectMachineRollTier(
+      this.random.items,
+      this.stats.value(StatId.Dusel),
+      this.tuning.machine,
+    );
+    const result = rollItemStatModifiers(item, state, tier, this.random.items, this.tuning.machine);
+    const key = itemRollSourceKey(item.id);
+    if (result.modifiers.length === 0) {
+      this.stats.clearSource(key);
+    } else {
+      const source = { kind: 'item' as const, id: item.id, label: `${item.name} (Losbrunnen)` };
+      this.stats.setSourceModifiers(
+        key,
+        result.modifiers.map((modifier) => ({ ...modifier, source })),
+      );
+    }
+    machine.rolls += 1;
+    this.machineLastRollSummary = describeMachineRoll(item.name, result);
+    this.reportCollected('Losbrunnen', this.machineLastRollSummary);
+    if (this.random.items.chance(this.tuning.machine.breakChance)) {
+      machine.broken = true;
+    }
+  }
+
   /** Marks an item's `modifyStats` output stale — drained by `syncItemStatModifiers`. */
   private markItemStatsDirty(index: number): void {
     if ((this.itemStatsDirty[index] ?? 0) !== 0) {
@@ -4048,6 +4503,12 @@ export class GameSim {
     // Same footing as placing a Bierfassl — a player action gated on the same
     // button edge, resolved before anything else this tick.
     stepPedestal(this, input);
+    // The Losbrunnen's own per-tick upkeep (#218) — closing its picker on
+    // distance and reading an axis tap to cycle it, neither of which is a
+    // button edge `stepPedestal`'s chain above already resolved `use` for
+    // this tick. See `stepMachine`'s own doc comment for why this can't
+    // just live inside that chain.
+    stepMachine(this, input);
     // Enemies decide after the player has moved and before bodies integrate, so
     // a body moves on the same tick as the decision that moved it.
     stepEnemies(this);
@@ -4105,6 +4566,15 @@ export class GameSim {
         rewardLocations.push({ x: pending.x, y: pending.y });
       }
       this.pendingBossPedestals = [];
+      // Der Losbrunnen (#218) waits for the same tick — appearing mid-fight
+      // would read as loot sitting out during a boss that hasn't dropped
+      // anything yet.
+      if (this.pendingBossLosbrunnen !== null) {
+        const spot = this.pendingBossLosbrunnen;
+        this.machineRuntime = { x: spot.x, y: spot.y, itemIndex: -1, rolls: 0, broken: false };
+        rewardLocations.push({ x: spot.x, y: spot.y });
+        this.pendingBossLosbrunnen = null;
+      }
       // The single most repeated success moment in the game, and until #153 it
       // had no celebration at all. A ring at each reward that actually
       // appeared, and a puff at each door that just unlocked — the

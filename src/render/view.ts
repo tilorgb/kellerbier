@@ -10,6 +10,7 @@ import { DecalView } from './decals.js';
 import { EntityView } from './entities.js';
 import { ParticleView, type ParticleAccessibility, type ParticleTextures } from './particles.js';
 import { PedestalView } from './pedestal-view.js';
+import { MachineView } from './machine-view.js';
 import { ProjectileView, type ProjectileArt } from './projectiles.js';
 import {
   createDoorView,
@@ -186,6 +187,7 @@ export class GameView {
   private readonly projectiles: ProjectileView;
   private readonly entities: EntityView;
   private readonly pedestals: PedestalView;
+  private readonly machine: MachineView;
   private readonly particles: ParticleView;
   private readonly decals: DecalView;
   private readonly damageNumbers: DamageNumberView;
@@ -315,6 +317,11 @@ export class GameView {
       textures.pedestalPlinth,
     );
     this.world.addChild(this.pedestals.container);
+
+    // Der Losbrunnen (#218) reuses the same generic beam/plinth textures as
+    // a pedestal, tinted distinctly — see `MachineView`'s own doc comment.
+    this.machine = new MachineView(sim, textures.pedestalBeam, textures.pedestalPlinth);
+    this.world.addChild(this.machine.container);
 
     // Blutwurz (#84): drawn just before the player, ground-level, so a
     // corpse in the room the player is standing in reads as part of the
@@ -496,6 +503,7 @@ export class GameView {
     this.decals.sync();
     this.entities.sync(alpha, nowMs);
     this.pedestals.sync();
+    this.machine.sync();
     this.corpseView.sync(this.sim);
     this.projectiles.sync(alpha, this.sim.currentFloor);
     this.particles.sync(alpha);
@@ -708,5 +716,10 @@ export class GameView {
    */
   pedestalScreenPosition(pedestalIndex: number): { readonly x: number; readonly y: number } | null {
     return this.pedestals.screenPositionFor(pedestalIndex);
+  }
+
+  /** Where the current floor's Losbrunnen lands on screen, or `null` while nothing is drawn — same shape as `pedestalScreenPosition`. */
+  machineScreenPosition(): { readonly x: number; readonly y: number } | null {
+    return this.machine.screenPosition();
   }
 }
