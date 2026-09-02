@@ -64,11 +64,11 @@ export class GameOverScreen {
     this.view.addChild(this.summary);
 
     this.hint = uiText(
-      // Two ways out of a finished run, since #46: straight into another one,
-      // or to the table that has something to say about the one that just
-      // ended. A run that earned a new regular opens the second on its own
+      // Two ways out of a finished run: straight into another one, or to the
+      // results screen for the last run's stats and unlocks. A run that
+      // earned something new opens the second on its own
       // (`main.ts`'s `advanceDeathSequence`); this is for every other death.
-      'R drückn für an neuen Lauf    T für an Stammtisch',
+      'R drückn für an neuen Lauf    T für d’Bilanz',
       { colour: UI_PALETTE.textDim },
     );
     this.view.addChild(this.hint);

@@ -1,22 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { installFakeLocalStorage } from '../helpers/fake-local-storage.js';
 import {
-  markGreeted,
   recordBossDefeat,
   recordDailyRunOutcome,
   recordRunOutcome,
   resetProgress,
-  stammtischView,
+  runResultsView,
 } from '../../src/app/meta/index.js';
 import { loadSave } from '../../src/app/save/storage.js';
-import type {
-  RegularDefinition,
-  StammtischContent,
-  UnlockDefinition,
-} from '../../src/app/meta/definition.js';
+import type { ProgressionContent, UnlockDefinition } from '../../src/app/meta/definition.js';
 import { bossStatKey } from '../../src/app/meta/definition.js';
 import {
-  buildStammtischView,
+  buildRunResultsView,
   characterUnlocked,
   conditionProgress,
   cycleCharacter,
@@ -25,12 +20,8 @@ import {
   selectedCharacterTraits,
   withEverythingUnlocked,
   withSelectedCharacter,
-  fillTokens,
-  pickLine,
-  runFactsFrom,
   withBossDefeat,
   withDailyRunOutcome,
-  withGreetings,
   withRunOutcome,
   UNLOCK_BOARD,
 } from '../../src/app/meta/progress.js';
@@ -59,7 +50,7 @@ const UNLOCKS: readonly UnlockDefinition[] = [
     id: 'first-boss',
     name: 'Opas Zettl',
     effect: 'A Zettl',
-    category: 'lore',
+    category: 'hub',
     condition: { kind: 'bossDefeated', floor: 1 },
     goal: 'Schlog den Kellerboss',
   },
@@ -73,34 +64,7 @@ const UNLOCKS: readonly UnlockDefinition[] = [
   },
 ];
 
-const SEPP: RegularDefinition = {
-  id: 'sepp',
-  name: 'Da Sepp',
-  role: 'Nachbar',
-  seat: 1,
-  grants: 'first-boss',
-  greeting: 'Servus, i bin da Sepp.',
-  lines: [
-    { when: { kind: 'diedOnFloor', floor: 1 }, text: 'Im Keller, nach {sek}.' },
-    { when: { kind: 'diedOnFloor', floor: 1 }, text: '{kills} Viecher im Keller.' },
-    { when: { kind: 'always' }, text: 'Aso.' },
-  ],
-  waiting: 'A leara Stui.',
-};
-
-const TRAUDL: RegularDefinition = {
-  id: 'traudl',
-  name: "D'Traudl",
-  role: 'Bedienung',
-  seat: 2,
-  grants: UNLOCK_BOARD,
-  greeting: 'I schreib ois o.',
-  lines: [{ when: { kind: 'always' }, text: '{stock}, {sek}.' }],
-  waiting: 'Do sitzt kane.',
-};
-
-const CONTENT: StammtischContent = {
-  regulars: [TRAUDL, SEPP],
+const CONTENT: ProgressionContent = {
   unlocks: UNLOCKS,
   characters: [
     {
@@ -142,9 +106,9 @@ function run(partial: Partial<BestRunRecord> = {}): BestRunRecord {
   };
 }
 
-describe('Stammtisch progress (#46)', () => {
-  describe('earning a chair', () => {
-    it('seats the regular whose boss just went down, and nobody else', () => {
+describe('meta-progression', () => {
+  describe('earning an unlock', () => {
+    it('grants the unlock whose boss just went down, and nobody else', () => {
       const save = withBossDefeat(createDefaultSave(), 1, CONTENT);
       expect(save.unlocks).toEqual(['first-boss']);
       expect(save.statistics[bossStatKey(1)]).toBe(1);
@@ -166,7 +130,7 @@ describe('Stammtisch progress (#46)', () => {
       expect(withRunOutcome(save, run({ kills: 0 }), CONTENT).unlocks).toEqual([UNLOCK_BOARD]);
     });
 
-    it('never seats the same regular twice, however often the boss is beaten', () => {
+    it('never grants the same unlock twice, however often the boss is beaten', () => {
       let save = withBossDefeat(createDefaultSave(), 1, CONTENT);
       save = withBossDefeat(save, 1, CONTENT);
       expect(save.unlocks).toEqual(['first-boss']);
@@ -198,64 +162,36 @@ describe('Stammtisch progress (#46)', () => {
     });
   });
 
-  describe('what a regular says', () => {
-    it('quotes the run back rather than reading from a generic pool', () => {
-      const facts = runFactsFrom(run({ ticksSurvived: 630, kills: 3 }));
-      expect(pickLine(SEPP, facts)).toBe('Im Keller, nach 10,5 s.');
-    });
-
-    it('varies between equally specific lines with the run’s own seed, deterministically', () => {
-      const first = pickLine(SEPP, runFactsFrom(run({ seed: 5, kills: 3 })));
-      const second = pickLine(SEPP, runFactsFrom(run({ seed: 4, kills: 3 })));
-      expect(first).not.toBe(second);
-      expect(pickLine(SEPP, runFactsFrom(run({ seed: 5, kills: 3 })))).toBe(first);
-    });
-
-    it('falls back to the catch-all only when nothing sharper matches', () => {
-      expect(pickLine(SEPP, runFactsFrom(run({ floor: 2 })))).toBe('Aso.');
-    });
-
-    it('has something to say before the first run, with no numbers to invent', () => {
-      expect(pickLine(TRAUDL, null)).toBe('—, —.');
-      expect(fillTokens('{sek} {kills} {stock} {wort}', null)).toBe('— — — —');
-    });
-  });
-
-  describe('the table, as the screen sees it', () => {
+  describe('the results screen', () => {
     function view(save: SaveData) {
-      return buildStammtischView(save, CONTENT, '2026-08-30');
+      return buildRunResultsView(save, CONTENT);
     }
 
-    it('orders the chairs by seat, not by the order the roster happens to be in', () => {
-      expect(view(createDefaultSave()).seats.map((seat) => seat.id)).toEqual(['sepp', 'traudl']);
+    it('leads with the last run, or says there was none', () => {
+      expect(view(createDefaultSave()).lastRun).toBeNull();
+      const save = withRunOutcome(createDefaultSave(), run({ kills: 3 }), CONTENT);
+      expect(view(save).lastRun?.kills).toBe(3);
     });
 
-    it('shows an empty chair with its goal, its progress and no name', () => {
+    it('shows a locked unlock with its goal and its progress, and nothing it does', () => {
       const save = withRunOutcome(createDefaultSave(), run({ kills: 40 }), CONTENT);
-      const traudl = view(save).seats[1];
-      expect(traudl?.seated).toBe(false);
-      expect(traudl?.name).toBeNull();
-      expect(traudl?.goal).toBe('100 daschlogn');
-      expect(traudl?.progress).toBe('40 / 100');
-      expect(traudl?.line).toBe('Do sitzt kane.');
+      const board = view(save).unlocks.find((unlock) => unlock.id === UNLOCK_BOARD);
+      expect(board?.unlocked).toBe(false);
+      expect(board?.goal).toBe('100 daschlogn');
+      expect(board?.progress).toBe('40 / 100');
+      expect(board?.effect).toBe('');
     });
 
-    it('opens on an arriving regular and plays the greeting, once', () => {
+    it('shows an unlocked unlock with its effect, and no goal left to chase', () => {
       const save = withBossDefeat(createDefaultSave(), 1, CONTENT);
-      const arriving = view(save);
-      expect(arriving.openOn).toBe(0);
-      expect(arriving.seats[0]?.arriving).toBe(true);
-      expect(arriving.seats[0]?.line).toBe('Servus, i bin da Sepp.');
-
-      const greeted = view(withGreetings(save, ['sepp']));
-      expect(greeted.seats[0]?.arriving).toBe(false);
-      expect(greeted.seats[0]?.line).toBe('Aso.');
-      // With nobody arriving, the cursor opens on the next thing to work
-      // toward rather than back at the start of the table.
-      expect(greeted.openOn).toBe(1);
+      const first = view(save).unlocks.find((unlock) => unlock.id === 'first-boss');
+      expect(first?.unlocked).toBe(true);
+      expect(first?.effect).toBe('A Zettl');
+      expect(first?.goal).toBe('');
+      expect(first?.progress).toBeNull();
     });
 
-    it('keeps the run board locked until the regular who writes it turns up', () => {
+    it('keeps the run board locked until its own condition is met', () => {
       const save = withRunOutcome(createDefaultSave(), run({ kills: 40 }), CONTENT);
       expect(view(save).board).toBeNull();
       const withBoard = withRunOutcome(save, run({ kills: 100 }), CONTENT);
@@ -327,18 +263,6 @@ describe('Stammtisch progress (#46)', () => {
       // A different date's status is unaffected by yesterday's entry.
       expect(dailyStatus(played, '2026-08-31').playedToday).toBeNull();
     });
-
-    it('carries the daily status into the table view', () => {
-      const played = withDailyRunOutcome(createDefaultSave(), {
-        date: '2026-08-30',
-        seed: dailySeed('2026-08-30'),
-        ticksSurvived: 100,
-        kills: 5,
-      });
-      const withDate = buildStammtischView(played, CONTENT, '2026-08-30');
-      expect(withDate.daily.playedToday).not.toBeNull();
-      expect(withDate.hasReplay).toBe(false);
-    });
   });
 
   describe('through the save on disk', () => {
@@ -346,10 +270,10 @@ describe('Stammtisch progress (#46)', () => {
       vi.unstubAllGlobals();
     });
 
-    it('round-trips a filled table: beat a boss, reload, he is still sitting there', () => {
+    it('round-trips an earned unlock: beat a boss, reload, it is still there', () => {
       installFakeLocalStorage();
       resetProgress();
-      recordBossDefeat(1);
+      recordBossDefeat(2);
       recordRunOutcome(run({ kills: 3, floor: 1 }));
 
       // Everything below reads the save back out of storage rather than
@@ -357,16 +281,11 @@ describe('Stammtisch progress (#46)', () => {
       // unlock state surviving a save, and an in-memory object would prove
       // nothing about that.
       const reloaded = loadSave();
-      expect(reloaded.unlocks).toContain('lore-opas-zettl');
+      expect(reloaded.unlocks).toContain('promille');
       expect(reloaded.lastRun?.kills).toBe(3);
-
-      const seat = stammtischView(reloaded).seats[0];
-      expect(seat?.seated).toBe(true);
-      expect(seat?.arriving).toBe(true);
-
-      markGreeted(['sepp']);
-      expect(loadSave().greetedRegulars).toEqual(['sepp']);
-      expect(stammtischView().seats[0]?.arriving).toBe(false);
+      expect(runResultsView(reloaded).unlocks.find((u) => u.id === 'promille')?.unlocked).toBe(
+        true,
+      );
     });
 
     it('records a daily run once, and a second attempt the same day is a no-op (#48)', () => {
@@ -379,7 +298,7 @@ describe('Stammtisch progress (#46)', () => {
       ]);
     });
 
-    it('empties the table without taking the settings with it', () => {
+    it('empties the unlocks without taking the settings with it', () => {
       const storage = installFakeLocalStorage();
       recordBossDefeat(1);
       recordRunOutcome(run());
@@ -394,25 +313,21 @@ describe('Stammtisch progress (#46)', () => {
 });
 
 describe('the run-start roster (#47)', () => {
-  /** Any date: this block is about the roster, and #48's daily row only needs *a* day. */
-  const TODAY = '2026-08-30';
   const beatenFloor1 = (): SaveData => withBossDefeat(createDefaultSave(), 1, CONTENT);
 
   it('offers only the free character until something has been beaten', () => {
     const save = createDefaultSave();
-    const view = buildStammtischView(save, CONTENT, TODAY);
-    expect(view.characters.map((character) => character.unlocked)).toEqual([true, false, false]);
-    expect(view.selectedCharacter).toBe('alois');
-    // A locked row says what would open it, with the count where there is one.
-    expect(view.characters[1]?.goal).toBe('Schlog den Kellerboss');
-    expect(view.characters[2]?.progress).toBe('0 / 100');
+    const view = buildRunResultsView(save, CONTENT);
+    expect(view.lastRun).toBeNull();
+    expect(CONTENT.characters.map((character) => characterUnlocked(save, character))).toEqual([
+      true,
+      false,
+      false,
+    ]);
   });
 
   it('opens a character the moment its own condition is met', () => {
     const save = beatenFloor1();
-    const view = buildStammtischView(save, CONTENT, TODAY);
-    expect(view.characters[1]?.unlocked).toBe(true);
-    expect(view.characters[1]?.goal).toBe('');
     const resi = CONTENT.characters.find((character) => character.id === 'resi');
     expect(resi === undefined ? false : characterUnlocked(save, resi)).toBe(true);
   });
@@ -446,10 +361,11 @@ describe('the run-start roster (#47)', () => {
     expect(cycleCharacter(createDefaultSave(), CONTENT, 1)).toBe('alois');
   });
 
-  it('opens everything at once for the debug handle, roster and table alike', () => {
+  it('opens everything at once for the debug handle, roster and unlocks alike', () => {
     const save = withEverythingUnlocked(createDefaultSave(), CONTENT);
-    const view = buildStammtischView(save, CONTENT, TODAY);
-    expect(view.characters.every((character) => character.unlocked)).toBe(true);
-    expect(view.seats.every((seat) => seat.seated)).toBe(true);
+    expect(CONTENT.characters.every((character) => characterUnlocked(save, character))).toBe(true);
+    expect(buildRunResultsView(save, CONTENT).unlocks.every((unlock) => unlock.unlocked)).toBe(
+      true,
+    );
   });
 });

@@ -64,9 +64,8 @@ hazard or a labelled crate on the floor — the same rule `CONTENT_BIBLE.md` alr
 Böller. The one exception is deliberate and is the whole temptation of the item pool: *tainted
 food and trinkets* can be picked up, and they are good, and they cost you something. See §8.
 
-Story is delivered lightly: a short illustrated card between chapters, boss intro plates, item
-flavour text, and NPC one-liners at the Stammtisch hub. No cutscenes longer than a few
-seconds; nothing that blocks a replay.
+Story is delivered lightly: a short illustrated card between chapters, boss intro plates, and item
+flavour text. No cutscenes longer than a few seconds; nothing that blocks a replay.
 
 **Arc:** the grandparents' cellar → their village → forest → mountains → castle → industrial
 brewery → Wiesn. The corruption gets less folkloric and more *industrial* as you climb, which is
@@ -257,9 +256,8 @@ wherever the meter is what they are *for*: the `sober` and `rausch` sets, since 
 that can never be evaluated is not a build decision, and equally the ones that spend, refund,
 cap or tolerate it at no particular tier — Konterbier clears a hangover that cannot happen.
 
-The unlock is granted the first time the player beats **Der Stier**, and it is announced at the
-Stammtisch: a new regular arrives, says what he brought, and the beer is on the table from the
-next run on.
+The unlock is granted the first time the player beats **Der Stier**, and it is announced on the
+results screen the run ends into: the beer is on the table from the next run on.
 
 The reason is pacing. The opening should read as a familiar twin-stick roguelite — shoot,
 dodge, pick things up — so that the game teaches one mechanic at a time rather than all of them
@@ -374,9 +372,11 @@ Occasional, announced on floor entry, mostly negative and always thematic.
 
 ## 11. Meta-progression
 
-- A hub: the **Stammtisch**, the regulars' table in the village tavern. Every boss you defeat
-  adds a regular, and each regular unlocks something — a character, an item into the pool, a
-  challenge.
+- Between runs: a plain, stylized results screen — the last run's stats, what has been unlocked
+  and what is still locked (with its goal), and the run board once it is earned. Every boss you
+  defeat unlocks something — a character, an item into the pool, a challenge. No hub, no NPCs: a
+  real main menu (character select, seed entry, the daily run, replays) is its own, separate
+  piece of work, not built yet.
 - **Wiesn-Orden** — achievements as festival medals.
 - **Seeded runs** — every run has a shareable seed; identical seed means identical run.
 - **Daily run** — one seed per day, one attempt, a leaderboard if we ever host one.

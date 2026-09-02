@@ -71,7 +71,7 @@ export class VictoryScreen {
     this.summary = uiText('', { colour: HUD_PALETTE.gameOverSummary });
     this.view.addChild(this.summary);
 
-    this.hint = uiText('R drückn für an neuen Lauf    T für an Stammtisch', {
+    this.hint = uiText('R drückn für an neuen Lauf    T für d’Bilanz', {
       colour: UI_PALETTE.textDim,
     });
     this.view.addChild(this.hint);

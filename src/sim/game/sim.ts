@@ -885,10 +885,10 @@ export class GameSim {
    * Who this run is being played as (#47), as data — see
    * `sim/character/definition.ts`.
    *
-   * Read once at construction and never replaced: a character is chosen at
-   * the Stammtisch, before the run exists, and a run that could change
-   * character halfway would make "same seed, same input log, same run" a
-   * function of something outside both.
+   * Read once at construction and never replaced: a character is chosen
+   * before the run exists, and a run that could change character halfway
+   * would make "same seed, same input log, same run" a function of
+   * something outside both.
    */
   readonly character: CharacterTraits;
   /**

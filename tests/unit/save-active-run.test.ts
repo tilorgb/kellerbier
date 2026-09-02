@@ -46,10 +46,9 @@ describe('active-run recording and replay (#45)', () => {
   });
 
   it('carries the run’s character beside its log, so a resume rebuilds the same run (#47)', () => {
-    // Same shape of parameter, same failure without it: the Stammtisch
-    // writes a character choice the moment the player cycles to it, mid-run
-    // included, so the save's current pick can already describe somebody
-    // other than whoever recorded this log.
+    // Same shape of parameter, same failure without it: the save's character
+    // choice can change mid-run, so the save's current pick can already
+    // describe somebody other than whoever recorded this log.
     const barnabas = new ActiveRunRecorder(12, true, 'barnabas');
     barnabas.record(frame({ moveX: 1 }));
     expect(barnabas.toSave().character).toBe('barnabas');

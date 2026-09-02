@@ -95,11 +95,12 @@ of it cheap.
 ## M7 — Meta-progression
 *Exit: losing a run makes you want to start another one immediately.*
 
-Save system, the Stammtisch hub, unlocks, additional characters, achievements, seeded runs,
-the daily run, challenge runs, curses, devil and angel rooms — and the run's actual ending,
-now that floor 2's boss is the last one. The first unlock is Promille itself, granted for
-beating Der Stier, which makes the hub load-bearing earlier than the rest of this milestone
-implies.
+Save system, a results screen between runs, unlocks, additional characters, achievements, seeded
+runs, the daily run, challenge runs, curses, devil and angel rooms — and the run's actual ending,
+now that floor 2's boss is the last one. The first unlock is Promille itself, granted for beating
+Der Stier, which makes the results screen load-bearing earlier than the rest of this milestone
+implies. Character select, seed entry, the daily run and replays move to M8's title screen and
+menus rather than living on the results screen — see `docs/DECISIONS.md`'s follow-up to #51.
 
 **This milestone carries more weight than it used to.** With five floors deferred, the reason
 to start a second run cannot be "there is more to see" — it has to be a different character, a

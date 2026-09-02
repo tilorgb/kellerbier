@@ -114,7 +114,17 @@ const v3ToV4: SaveMigration = (raw) => {
   };
 };
 
-export const MIGRATIONS: readonly SaveMigration[] = [v0ToV1, v1ToV2, v2ToV3, v3ToV4];
+/**
+ * v4 -> v5: `greetedRegulars` is retired along with the hub's regulars and
+ * their arrival dialogue — nothing reads it any more. No back-fill needed
+ * for a field that is simply gone: `sanitizeSave` builds `SaveData`
+ * field-by-field from a known list, so a stray `greetedRegulars` left in a
+ * migrated blob is never copied into the result. This step exists to hold
+ * the version, the same as `v0ToV1`.
+ */
+const v4ToV5: SaveMigration = (raw) => ({ ...raw, schemaVersion: 5 });
+
+export const MIGRATIONS: readonly SaveMigration[] = [v0ToV1, v1ToV2, v2ToV3, v3ToV4, v4ToV5];
 
 function versionOf(raw: Record<string, unknown>): number {
   const version = raw.schemaVersion;

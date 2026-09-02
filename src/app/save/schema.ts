@@ -32,8 +32,12 @@ import {
  *
  * v4 (#47) adds which character the next run starts as, and which one the
  * run in progress is already being played as.
+ *
+ * v5 retires `greetedRegulars`: the hub's regulars and their arrival dialogue
+ * are gone (`docs/DECISIONS.md`'s follow-up to #51), and nothing reads it any
+ * more.
  */
-export const SAVE_SCHEMA_VERSION = 4;
+export const SAVE_SCHEMA_VERSION = 5;
 
 /**
  * The character a save with no opinion starts as (#47).
@@ -238,8 +242,19 @@ export interface SaveDataV4 extends Omit<SaveDataV3, 'schemaVersion'> {
   readonly selectedCharacter: string;
 }
 
-/** The current schema version. A union the day a v5 lands and something still reads a v4. */
-export type SaveData = SaveDataV4;
+/**
+ * v5: `greetedRegulars` retired.
+ *
+ * It tracked which of the hub's regulars had already said their arrival
+ * line — a feature this version removes outright, dialogue and all. Nothing
+ * needs to be back-filled in its place; see `migrations.ts`'s `v4ToV5`.
+ */
+export interface SaveDataV5 extends Omit<SaveDataV4, 'schemaVersion' | 'greetedRegulars'> {
+  readonly schemaVersion: 5;
+}
+
+/** The current schema version. A union the day a v6 lands and something still reads a v5. */
+export type SaveData = SaveDataV5;
 
 /** How many `bestRuns` entries a finished run keeps — see `app/meta/progress.ts`'s `withRunOutcome`. */
 export const MAX_BEST_RUNS = 10;
@@ -258,7 +273,6 @@ export function createDefaultSave(): SaveData {
     bestRuns: [],
     activeRun: null,
     lastRun: null,
-    greetedRegulars: [],
     replays: [],
     selectedCharacter: DEFAULT_CHARACTER_ID,
   };
@@ -458,7 +472,6 @@ export function sanitizeSave(value: unknown): SaveData {
     bestRuns: sanitizeBestRuns(source.bestRuns),
     activeRun: sanitizeActiveRun(source.activeRun),
     lastRun: sanitizeBestRun(source.lastRun),
-    greetedRegulars: sanitizeStringArray(source.greetedRegulars),
     replays: sanitizeReplays(source.replays),
     selectedCharacter:
       typeof source.selectedCharacter === 'string' && source.selectedCharacter.length > 0

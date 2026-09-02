@@ -24,7 +24,6 @@ import {
   validateRoomTemplate,
 } from '../sim/room/template.js';
 import { RngStream, createStreamRng } from '../sim/rng/streams.js';
-import { decodeSeed, encodeSeed } from '../sim/rng/seed.js';
 import { TICKS_PER_SECOND } from '../sim/time.js';
 import {
   InputAction,
@@ -52,7 +51,7 @@ import { CharacterHud } from '../render/character-hud.js';
 import { EntityView } from '../render/entities.js';
 import { GameOverScreen } from '../render/game-over.js';
 import { VictoryScreen } from '../render/victory-screen.js';
-import { StammtischScreen } from '../render/stammtisch.js';
+import { RunResultsScreen } from '../render/run-results.js';
 import { HealthHud } from '../render/health-hud.js';
 import { ItemGateHud } from '../render/item-gate-hud.js';
 import { MinimapHud } from '../render/minimap-hud.js';
@@ -91,7 +90,6 @@ import { InputSampler } from './input/sampler.js';
 import { playRumble } from './input/rumble.js';
 import { FixedTimestepLoop, runAnimationFrameLoop } from './loop.js';
 import { RunSummaryTracker, buildRunDetailsText, runDetailsFrom } from './run-summary.js';
-import { dailyDateKey, todaysDailySeed } from './daily.js';
 import { buildReplayRecord, loadReplayFrames, saveReplay } from './replay/store.js';
 import { downloadReplayFile, parseReplayText } from './replay/file.js';
 import { createAccessibilityPanel } from './accessibility-panel.js';
@@ -115,16 +113,13 @@ import { ActiveRunRecorder, decodeActiveRunFrames, persistActiveRun } from './sa
 import type { CharacterTraits } from '../sim/character/definition.js';
 import { loadSave } from './save/storage.js';
 import {
-  markGreeted,
   recordBossDefeat,
-  recordDailyRunOutcome,
   recordRunOutcome,
   characterTraitsById,
   resetProgress,
   selectCharacter,
   selectedCharacter,
-  selectNextCharacter,
-  stammtischView,
+  runResultsView,
   unlockEverything,
 } from './meta/index.js';
 import {
@@ -583,10 +578,9 @@ async function boot(): Promise<void> {
 
   // The run seed: fixed via the page's `?seed=` query param when present,
   // otherwise freshly randomised on every load. `?seed=`/`#seed-input`
-  // (`index.html`) stay a raw-numeric dev convenience — the player-facing
-  // seed UI is the Stammtisch's "Nächster Lauf" panel (#48): a human-readable
-  // string (`sim/rng/seed.ts`'s `encodeSeed`/`decodeSeed`), typed in with `E`,
-  // rerolled with `R`, copied with `C`, and the daily run's own seed with `D`.
+  // (`index.html`) stay a raw-numeric dev convenience — a player-facing,
+  // human-readable seed (entry/reroll/daily/copy, #48) is main-menu scope and
+  // not built yet, now that the Stammtisch that used to carry it is gone.
   // Everything downstream of `RUN_SEED` already behaves as though it were
   // chosen, which is the point — the floor below is generated from this same
   // seed's `RngStream.Floor` stream (see `src/sim/rng/streams.ts`), so it is
@@ -716,18 +710,14 @@ async function boot(): Promise<void> {
   const victoryScreen = new VictoryScreen(kit, app.renderer);
 
   /**
-   * Der Stammtisch (#46) — the hub between runs, opened with `T` and
-   * automatically the moment a run ends with a new regular waiting at it.
+   * The results screen — a stylized statistics page opened with `T` and
+   * automatically the moment a run ends having earned something new.
    *
-   * A screen rather than a room: the tavern the design doc describes is a
-   * place you walk into, and building it as one means a second simulation
-   * mode (movement, collision, an NPC to stand in front of) for a table of
-   * four people who each say one line. This draws the same table out of the
-   * kit that already draws every other panel, which is what makes it
-   * something #47's characters and #50's challenges can add a row to rather
-   * than a level someone has to author.
+   * Replaced the Stammtisch hub (`docs/DECISIONS.md` #51 and its follow-up):
+   * last run, unlocks, the run board — nothing else. Character select, seed
+   * entry and the daily run are a real main menu's job, not built yet.
    */
-  const stammtisch = new StammtischScreen(kit, app.renderer);
+  const runResults = new RunResultsScreen(kit, app.renderer);
 
   /**
    * The floor's title card (#154) — the screen-filling Fraktur plate a floor
@@ -896,7 +886,7 @@ async function boot(): Promise<void> {
   // Above the game-over/victory screens: the hub opens over a finished
   // run's tableau, and the two are on screen together the moment a new
   // regular arrives.
-  hudLayer.addChild(stammtisch.view);
+  hudLayer.addChild(runResults.view);
 
   /** The frame's size in UI pixels, kept for the per-frame placements below. */
   let uiFrame = { width: INTERNAL_WIDTH, height: INTERNAL_HEIGHT };
@@ -962,7 +952,7 @@ async function boot(): Promise<void> {
 
     gameOverScreen.resize(width, height);
     victoryScreen.resize(width, height);
-    stammtisch.resize(width, height);
+    runResults.resize(width, height);
     floorTitleCard.resize(width, height);
     kitGallery.resize(width, height);
   };
@@ -999,17 +989,13 @@ async function boot(): Promise<void> {
    */
   let creditedBossRooms = new Set<string>();
 
-  /** The seed the next run starts on — rolled at boot, on every death, and by `R` at the table. */
+  /** The seed the next run starts on — rolled at boot and on every death. */
   let pendingSeed = rollSeed();
-  /** Whether `pendingSeed` is today's daily seed (`D` at the table) — see `activeRunIsDaily`. */
-  let pendingIsDaily = false;
-  /** Whether the run in progress was started as the daily run — consumed once, at `startRun`, from `pendingIsDaily`. */
-  let activeRunIsDaily = false;
 
   /**
    * The replay currently being watched (#48), or `null` for ordinary live
-   * play. Entered only from the Stammtisch, and only over a finished run —
-   * see `watchLatestReplay`/`loadReplayFromFile` for why that guard is what
+   * play. Entered only by loading a `.json` replay file (`L`), and only over
+   * a finished run — see `loadReplayFromFile` for why that guard is what
    * keeps this from ever discarding a run still in progress.
    */
   let replay: {
@@ -1049,8 +1035,16 @@ async function boot(): Promise<void> {
     return resolvePromilleUnlocked(loadSave(), promilleOverride);
   }
 
-  /** Whether the loop was already paused when the hub opened, so closing it doesn't un-pause a debug pause. */
-  let pausedBeforeStammtisch = false;
+  /** Whether the loop was already paused when the results screen opened, so closing it doesn't un-pause a debug pause. */
+  let pausedBeforeRunResults = false;
+
+  /**
+   * The save's unlocked ids at the moment the current run started — what
+   * `advanceDeathSequence` compares the run's end against to decide whether
+   * something new was earned during it (a boss defeat mid-run counts, since
+   * it commits immediately — see `creditBossDefeat`).
+   */
+  let unlocksAtRunStart = new Set<string>();
 
   /** Whether the room read as cleared last tick — see `creditBossDefeat`. */
   let roomClearedLastTick = false;
@@ -1086,35 +1080,22 @@ async function boot(): Promise<void> {
     recordBossDefeat(floorPlan.floor);
   }
 
-  /** Opens the hub over whatever is on screen, pausing the run behind it. */
-  function openStammtisch(): void {
-    if (stammtisch.visible) {
+  /** Opens the results screen over whatever is on screen, pausing the run behind it. */
+  function openRunResults(): void {
+    if (runResults.visible) {
       return;
     }
-    pausedBeforeStammtisch = loop.paused;
+    pausedBeforeRunResults = loop.paused;
     loop.paused = true;
-    stammtisch.show(stammtischView(), pendingSeed, deathPhase === 'over');
-    greetSelectedRegular();
+    runResults.show(runResultsView(), deathPhase === 'over');
   }
 
-  function closeStammtisch(): void {
-    if (!stammtisch.visible) {
+  function closeRunResults(): void {
+    if (!runResults.visible) {
       return;
     }
-    stammtisch.hide();
-    loop.paused = pausedBeforeStammtisch;
-  }
-
-  /**
-   * Marks the chair the cursor is on as greeted, if its regular has just
-   * arrived — so an arrival line plays once, when the player is actually
-   * looking at it, rather than being spent by a hub they opened for the seed.
-   */
-  function greetSelectedRegular(): void {
-    const seat = stammtisch.selectedSeat;
-    if (seat?.arriving === true) {
-      markGreeted([seat.id]);
-    }
+    runResults.hide();
+    loop.paused = pausedBeforeRunResults;
   }
 
   /**
@@ -1203,23 +1184,17 @@ async function boot(): Promise<void> {
             deathWord: sim.playerWon ? null : (sim.deathWord ?? null),
             recordedAt: Date.now(),
           });
-          if (activeRunIsDaily) {
-            recordDailyRunOutcome({
-              date: dailyDateKey(),
-              seed: RUN_SEED,
-              ticksSurvived,
-              kills: summary.kills,
-            });
-          }
           persistFinishedRunReplay();
           pendingSeed = rollSeed();
-          // An arrival is an event, so it interrupts: a regular earned during
-          // the run that just ended introduces himself now, over the summary
-          // screen, which is the moment `docs/GAME_DESIGN.md` §9 describes for
-          // the Promille unlock. Any other run end leaves the hub where it
-          // is — one keypress away, per the hint the summary screen shows.
-          if (stammtischView(save).seats.some((seat) => seat.arriving)) {
-            openStammtisch();
+          // A new unlock is an event, so it interrupts: something earned
+          // during the run that just ended (mid-run, via `creditBossDefeat`,
+          // or by this very outcome) is shown now, over the summary screen,
+          // which is the moment `docs/GAME_DESIGN.md` §9 describes for the
+          // Promille unlock. Any other run end leaves the results screen
+          // where it is — one keypress away, per the hint the summary screen
+          // shows.
+          if (save.unlocks.some((id) => !unlocksAtRunStart.has(id))) {
+            openRunResults();
           }
         }
       }
@@ -1242,7 +1217,6 @@ async function boot(): Promise<void> {
     const finishedTicks = runEndTick();
     const finishedKills = summary.kills;
     const finishedDeathWord = sim.playerWon ? null : (sim.deathWord ?? null);
-    const finishedIsDaily = activeRunIsDaily;
     const finishedPromilleUnlocked = activeRunRecorder.promilleUnlocked;
     const finishedCharacter = activeRunRecorder.character;
     const recording = new InputRecording(Math.max(1, activeRunRecorder.frameCount));
@@ -1255,7 +1229,11 @@ async function boot(): Promise<void> {
       ticksSurvived: finishedTicks,
       kills: finishedKills,
       deathWord: finishedDeathWord,
-      kind: finishedIsDaily ? 'daily' : 'normal',
+      // The daily run's own entry point (`D` at the Stammtisch) is gone for
+      // now along with it — main-menu scope, not built yet — so every replay
+      // recorded today is 'normal'. `ReplayRecord.kind` stays `'normal' |
+      // 'daily'` for when it comes back.
+      kind: 'normal',
       promilleUnlocked: finishedPromilleUnlocked,
       character: finishedCharacter,
       recordedAt: Date.now(),
@@ -1633,6 +1611,7 @@ WASD move   arrows aim and fire
     if (seedInput instanceof HTMLInputElement) {
       seedInput.value = String(RUN_SEED);
     }
+    unlocksAtRunStart = new Set(loadSave().unlocks);
 
     floorPlan = generateFloor(
       createStreamRng(RUN_SEED, RngStream.Floor),
@@ -1646,8 +1625,8 @@ WASD move   arrows aim and fire
 
     sim = new GameSim({
       seed: RUN_SEED,
-      // Who the run is played as (#47) — the Stammtisch's current selection
-      // for a fresh run, and the *recorded* one for a resume or a replay. A
+      // Who the run is played as (#47) — the save's current selection for a
+      // fresh run, and the *recorded* one for a resume or a replay. A
       // run parameter, the same shape as `promilleUnlocked` below, for the
       // same reason: see `ActiveRunSave.character`.
       character,
@@ -1930,7 +1909,7 @@ WASD move   arrows aim and fire
 
   /**
    * Enters replay mode on `seed`/`frameBytes`, watching from the start. Only
-   * valid over a finished run — see `watchLatestReplay`.
+   * valid over a finished run — see `loadReplayFromFile`.
    *
    * `promilleUnlocked` is the recorded run's own flag (`ReplayRecord`/
    * `ActiveRunSave`, #85), not today's save state — see `startRun`'s doc
@@ -1943,7 +1922,7 @@ WASD move   arrows aim and fire
     character: string,
   ): void {
     const recording = InputRecording.fromBytes(frameBytes);
-    closeStammtisch();
+    closeRunResults();
     replay = {
       seed,
       recording,
@@ -1980,26 +1959,11 @@ WASD move   arrows aim and fire
     refreshHud();
   }
 
-  /** Leaves replay mode and reopens the hub — there is nothing to resume back into, see `enterReplay`'s own guard. */
+  /** Leaves replay mode and reopens the results screen — there is nothing to resume back into, see `enterReplay`'s own guard. */
   function exitReplay(): void {
     replay = null;
     replayViewer.hide();
-    openStammtisch();
-  }
-
-  /** Loads the most recently stored replay (`app/replay/store.ts`) and starts watching it, if there is one. */
-  function watchLatestReplay(): void {
-    const record = loadSave().replays[0];
-    if (record === undefined) {
-      return;
-    }
-    loadReplayFrames(record)
-      .then((bytes) => {
-        enterReplay(record.seed, bytes, record.promilleUnlocked, record.character);
-      })
-      .catch((error: unknown) => {
-        console.warn('[replay] failed to load the stored replay', error);
-      });
+    openRunResults();
   }
 
   /**
@@ -2441,115 +2405,23 @@ WASD move   arrows aim and fire
       event.preventDefault();
       return;
     }
-    // The hub swallows the dev keys while it is open: `R` at the table
-    // changes the seed of the run you are about to start rather than
-    // restarting the one you just finished, and `N`/`P`/`K` have nothing to
-    // act on behind a paused screen.
-    if (stammtisch.visible) {
+    // The results screen swallows the dev keys while it is open: `N`/`P`/`K`
+    // have nothing to act on behind a paused screen.
+    if (runResults.visible) {
       switch (event.key) {
-        case 'ArrowLeft':
-          stammtisch.moveSelection(-1);
-          greetSelectedRegular();
-          break;
-        case 'ArrowRight':
-          stammtisch.moveSelection(1);
-          greetSelectedRegular();
-          break;
         case 'Enter':
-          // Only from a finished run: see `StammtischScreen.show`'s
-          // `runOver`. Mid-run the table is somewhere you look, not a way to
-          // throw the run away by pressing the most obvious key on it.
+          // Only from a finished run: see `RunResultsScreen.show`'s
+          // `runOver`. Mid-run this screen is somewhere you look, not a way
+          // to throw the run away by pressing the most obvious key on it.
           if (deathPhase === 'over') {
-            activeRunIsDaily = pendingIsDaily;
-            pendingIsDaily = false;
-            closeStammtisch();
+            closeRunResults();
             startRun(pendingSeed);
           }
           break;
-        case 'f':
-        case 'F':
-          // F for Figur. Cycles the roster's unlocked rows and stores the
-          // choice immediately — the panel is the only place it is shown, so
-          // a choice that lived in memory until Enter would be a choice the
-          // player could not check they had made.
-          selectNextCharacter(event.shiftKey ? -1 : 1);
-          stammtisch.update(stammtischView());
-          break;
-        case 'r':
-        case 'R':
-          pendingSeed = rollSeed();
-          pendingIsDaily = false;
-          stammtisch.setSeed(pendingSeed);
-          break;
-        case 'e':
-        case 'E': {
-          // Human-readable seed entry (#48) — gated the same as the row it
-          // edits (`seedUnlocked`), and a `window.prompt` rather than a kit
-          // widget because the pixel UI kit has no text-input control yet
-          // (that is #53's own follow-up); every other dev-facing text entry
-          // in this project (`editor/main.ts`, `pixel-editor/main.ts`) already
-          // reaches for the same browser-native dialog.
-          if (!stammtischView().seedUnlocked) {
-            break;
-          }
-          const typed = window.prompt('Same eigeben (7 Zeichen):', encodeSeed(pendingSeed >>> 0));
-          if (typed === null) {
-            break;
-          }
-          try {
-            pendingSeed = decodeSeed(typed);
-            pendingIsDaily = false;
-            stammtisch.setSeed(pendingSeed);
-          } catch (error) {
-            console.warn('[seed] not a valid seed', error);
-          }
-          break;
-        }
-        case 'd':
-        case 'D':
-          // The daily run (#48): the same seed for every player on today's
-          // UTC date — `dailyStatus` (`app/meta/progress.ts`) is what marks
-          // it already played, once `Enter` actually starts it.
-          pendingSeed = todaysDailySeed();
-          pendingIsDaily = true;
-          stammtisch.setSeed(pendingSeed);
-          break;
-        case 'c':
-        case 'C':
-          // Mid-run (the hub opened with `T` over a live run) this copies
-          // the run actually in progress; over a finished run it copies the
-          // seed about to be started, since there is no live run's items or
-          // outcome to report yet.
-          if (deathPhase === 'over') {
-            void navigator.clipboard.writeText(`Same: ${encodeSeed(pendingSeed >>> 0)}`);
-          } else {
-            copyCurrentRunDetails();
-          }
-          break;
-        case 'v':
-        case 'V':
-          // Watch the run just finished (#48) — only reachable once it truly
-          // is finished, the same guard `Enter` uses, so this never discards
-          // a run still in progress.
-          if (deathPhase === 'over') {
-            watchLatestReplay();
-          }
-          break;
-        case 'x':
-        case 'X': {
-          // "Attach the replay file too" (`CONTRIBUTING.md`'s bug-report
-          // step): the latest stored replay, as a `.json` a player can
-          // actually attach to a report — the counterpart to `L`'s import.
-          const latest = loadSave().replays[0];
-          if (latest !== undefined) {
-            downloadReplayFile(latest);
-          }
-          break;
-        }
         case 't':
         case 'T':
         case 'Escape':
-          closeStammtisch();
+          closeRunResults();
           break;
         default:
           return;
@@ -2597,13 +2469,25 @@ WASD move   arrows aim and fire
       case 'L':
         loadReplayFromFile();
         break;
+      case 'x':
+      case 'X': {
+        // "Attach the replay file too" (`CONTRIBUTING.md`'s bug-report
+        // step): the latest stored replay, as a `.json` a player can
+        // actually attach to a report — the counterpart to `L`'s import.
+        // Global, like `L` and `C`, rather than tucked behind the results
+        // screen: reporting a bug is not a hub feature.
+        const latest = loadSave().replays[0];
+        if (latest !== undefined) {
+          downloadReplayFile(latest);
+        }
+        break;
+      }
       case 't':
       case 'T':
-        // T for Tisch. The hub is reachable mid-run as well as after one,
-        // because the thing it is mostly used for during a session — seeing
-        // what the next chair wants — is a question a player has while
+        // The results screen is reachable mid-run as well as after one, so
+        // "what have I got so far" is a question a player can ask while
         // playing, not only after dying.
-        openStammtisch();
+        openRunResults();
         break;
       case 'b':
       case 'B':
@@ -2898,20 +2782,20 @@ WASD move   arrows aim and fire
       applyAccessibilityChange();
     },
     {
-      open: openStammtisch,
-      close: closeStammtisch,
+      open: openRunResults,
+      close: closeRunResults,
       recordBossDefeat,
       resetProgress,
       unlockEverything: () => {
         unlockEverything();
-        if (stammtisch.visible) {
-          stammtisch.update(stammtischView());
+        if (runResults.visible) {
+          runResults.update(runResultsView());
         }
       },
       selectCharacter: (id: string) => {
         selectCharacter(id);
-        if (stammtisch.visible) {
-          stammtisch.update(stammtischView());
+        if (runResults.visible) {
+          runResults.update(runResultsView());
         }
       },
     },
@@ -3021,19 +2905,19 @@ interface DebugHost {
     settings: AccessibilitySettings;
     setAccessibilitySettings: (patch: Partial<AccessibilitySettings>) => void;
     /**
-     * The Stammtisch (#46), for the same reason `stall` and
-     * `setAccessibilitySettings` are here: the table filling up is a
+     * Meta-progression, for the same reason `stall` and
+     * `setAccessibilitySettings` are here: earning an unlock is a
      * twenty-minute question to ask by playing (beat two bosses, die, look)
      * and a one-line question to ask from here, which is what makes checking
-     * how an arrival actually reads cheap enough to do on every change.
+     * how one actually reads cheap enough to do on every change.
      *
-     *   __kellerbier.stammtisch.resetProgress();
-     *   __kellerbier.stammtisch.recordBossDefeat(1);
-     *   __kellerbier.stammtisch.open();
+     *   __kellerbier.progression.resetProgress();
+     *   __kellerbier.progression.recordBossDefeat(1);
+     *   __kellerbier.progression.open();
      */
-    stammtisch: StammtischHandle;
+    progression: ProgressionHandle;
     /**
-     * The Promille gate (#85) — same reasoning as `stammtisch` above; see
+     * The Promille gate (#85) — same reasoning as `progression` above; see
      * `PromilleHandle`.
      *
      *   __kellerbier.promille.setOverride('sober');
@@ -3046,7 +2930,7 @@ interface DebugHost {
  * The debug handle's Promille-gate controls (#85) — the scriptable half of
  * the `B` key.
  *
- * Here for the same reason `stammtisch` is: the honest way to reach a sober
+ * Here for the same reason `progression` is: the honest way to reach a sober
  * run is a fresh save and not beating Der Stier, and the honest way back to a
  * promilled one from there is a twenty-minute run. Neither is a question
  * worth asking that expensively on every change to the mechanic.
@@ -3063,13 +2947,13 @@ interface PromilleHandle {
   setOverride: (override: PromilleOverride) => void;
 }
 
-/** The debug handle's hub controls — see `DebugHost`. */
-interface StammtischHandle {
+/** The debug handle's meta-progression controls — see `DebugHost`. */
+interface ProgressionHandle {
   open: () => void;
   close: () => void;
   /** Credits the boss of `floor`, exactly as beating it would. */
   recordBossDefeat: (floor: number) => void;
-  /** Empties the table and the statistics behind it, keeping settings and the run in progress. */
+  /** Empties the unlocks and the statistics behind them, keeping settings and the run in progress. */
   resetProgress: () => void;
   /** Meets every unlock condition on the roster at once (#47) — its mirror. */
   unlockEverything: () => void;
@@ -3088,7 +2972,7 @@ function exposeDebugHandle(
   stall: (ms: number) => void,
   settings: AccessibilitySettings,
   setAccessibilitySettings: (patch: Partial<AccessibilitySettings>) => void,
-  stammtisch: StammtischHandle,
+  progression: ProgressionHandle,
   promille: PromilleHandle,
 ): void {
   if (!import.meta.env.DEV) {
@@ -3102,7 +2986,7 @@ function exposeDebugHandle(
     stall,
     settings,
     setAccessibilitySettings,
-    stammtisch,
+    progression,
     promille,
   };
   console.warn('__kellerbier is exposed for debugging (dev build only)');

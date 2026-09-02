@@ -21,8 +21,8 @@ const HEIGHT = PAD * 2 + UI_LINE_HEIGHT * 3;
  * readout and "left/right seek, Space pause" is the same instrument in the
  * same idiom, not a smaller version of a widget this project has not built
  * yet. Spelled out rather than drawn as arrow glyphs — the pixel face (#154)
- * has none, the same reason `render/stammtisch.ts`'s own hint line spells
- * "Links/Rechts" out instead.
+ * has none, the same reason every hint line in this project spells a
+ * direction out instead.
  *
  * Drawn with the kit, in `hudLayer`, so it is real HUD — visible to a normal
  * player watching a replay, not a debug-overlay-only readout the way the
