@@ -26,19 +26,43 @@ const TICKS_PER_BEAT = 30;
 
 // --- Floor 1 & 2: the same eight-beat theme, two arrangements ------------
 
-/** The shared melody line — literal beat/note pairs, not derived, so both
- * tracks below are visibly "the same tune" rather than two arrays that
- * happen to agree. */
-const MAIN_THEME_MELODY: readonly (readonly [beat: number, note: string])[] = [
-  [0, 'C4'],
-  [1, 'E4'],
-  [2, 'G4'],
-  [3, 'E4'],
-  [4, 'F4'],
-  [5, 'A4'],
-  [6, 'G4'],
-  [7, 'E4'],
-];
+/**
+ * The shared melody line, in the shape of a Bavarian Gstanzl (a
+ * Schnaderhüpfl-style dance quatrain): major key, built almost entirely on
+ * the tonic (C-E-G) and dominant (G-B-D) triads that carry the whole
+ * genre's I-V7 harmony, in four two-beat phrases the way a Gstanzl's four
+ * octosyllabic lines pair off — phrase 1 states the tonic arpeggio, phrase
+ * 2 echoes it a step lower, phrase 3 is the "jodler" leap up through the
+ * dominant to the tune's high point, and phrase 4 walks back down to hand
+ * the loop back to phrase 1. (No period sheet music for a specific Gstanzl
+ * could be sourced — every direct fetch for one was blocked at the network
+ * boundary — so this is an idiomatic composition from those documented
+ * structural conventions, not a transcription of an existing tune. A
+ * genuine baseline per #51's own brief, meant to be reworked from here
+ * using the audio editor's loop-library workflow, not a final melody.)
+ *
+ * Literal beat/note/duration triples, not derived, so both tracks below are
+ * visibly "the same tune" rather than two arrays that happen to agree.
+ */
+const MAIN_THEME_MELODY: readonly (readonly [beat: number, note: string, durationBeats: number])[] =
+  [
+    // Phrase 1 (tonic arpeggio, dance pulse: short-short-long).
+    [0, 'C4', 0.5],
+    [0.5, 'E4', 0.5],
+    [1, 'G4', 1],
+    // Phrase 2 (the same shape, echoed a step lower).
+    [2, 'G4', 0.5],
+    [2.5, 'F4', 0.5],
+    [3, 'E4', 1],
+    // Phrase 3 (the "jodler" leap: a dominant-seventh arpeggio up to the high point).
+    [4, 'G4', 0.5],
+    [4.5, 'B4', 0.5],
+    [5, 'D5', 1],
+    // Phrase 4 (stepping back down, landing on the dominant to loop into phrase 1).
+    [6, 'C5', 0.5],
+    [6.5, 'A4', 0.5],
+    [7, 'G4', 1],
+  ];
 
 export const floor1DerKeller: TrackDefinition = {
   id: 'floor-1-der-keller',
@@ -47,9 +71,9 @@ export const floor1DerKeller: TrackDefinition = {
   loopBeats: 8,
   // A lone accordion, nothing else — no bass, no stabs. The floor is empty
   // and so is the arrangement.
-  events: MAIN_THEME_MELODY.map(([beat, note]): NoteEvent => ({
+  events: MAIN_THEME_MELODY.map(([beat, note, durationBeats]): NoteEvent => ({
     beat,
-    durationBeats: 0.9,
+    durationBeats: durationBeats * 0.9,
     instrument: 'accordion',
     note,
     velocity: 0.75,
@@ -63,31 +87,32 @@ export const floor2DorfUndAcker: TrackDefinition = {
   loopBeats: 8,
   events: [
     // The same accordion line, unchanged...
-    ...MAIN_THEME_MELODY.map(([beat, note]): NoteEvent => ({
+    ...MAIN_THEME_MELODY.map(([beat, note, durationBeats]): NoteEvent => ({
       beat,
-      durationBeats: 0.9,
+      durationBeats: durationBeats * 0.85,
       instrument: 'accordion',
       note,
       velocity: 0.7,
     })),
     // ...doubled an octave up by the clarinet — the full band's brightness.
-    ...MAIN_THEME_MELODY.map(([beat, note]): NoteEvent => ({
+    ...MAIN_THEME_MELODY.map(([beat, note, durationBeats]): NoteEvent => ({
       beat,
-      durationBeats: 0.85,
+      durationBeats: durationBeats * 0.85,
       instrument: 'clarinet',
       note: bumpOctave(note, 1),
       velocity: 0.5,
     })),
-    // Tuba "oom": root/fifth on every beat, C under bars one, F under bar two
-    // — the chord the melody's second half (F A G E) sits over.
+    // Tuba "oom-pah": root/fifth every beat, under the tonic for phrases 1-2
+    // and the dominant for phrases 3-4 — the same two chords the melody
+    // itself arpeggiates, a Gstanzl's I-V7 harmony played straight.
     { beat: 0, durationBeats: 0.8, instrument: 'tuba', note: 'C2', velocity: 0.9 },
     { beat: 1, durationBeats: 0.8, instrument: 'tuba', note: 'G2', velocity: 0.8 },
     { beat: 2, durationBeats: 0.8, instrument: 'tuba', note: 'C2', velocity: 0.9 },
     { beat: 3, durationBeats: 0.8, instrument: 'tuba', note: 'G2', velocity: 0.8 },
-    { beat: 4, durationBeats: 0.8, instrument: 'tuba', note: 'F2', velocity: 0.9 },
-    { beat: 5, durationBeats: 0.8, instrument: 'tuba', note: 'C3', velocity: 0.8 },
-    { beat: 6, durationBeats: 0.8, instrument: 'tuba', note: 'F2', velocity: 0.9 },
-    { beat: 7, durationBeats: 0.8, instrument: 'tuba', note: 'C3', velocity: 0.8 },
+    { beat: 4, durationBeats: 0.8, instrument: 'tuba', note: 'G2', velocity: 0.9 },
+    { beat: 5, durationBeats: 0.8, instrument: 'tuba', note: 'D3', velocity: 0.8 },
+    { beat: 6, durationBeats: 0.8, instrument: 'tuba', note: 'G2', velocity: 0.9 },
+    { beat: 7, durationBeats: 0.8, instrument: 'tuba', note: 'D3', velocity: 0.8 },
     // Brass "pah": a stab on every off-beat.
     {
       beat: 0.5,
@@ -121,28 +146,28 @@ export const floor2DorfUndAcker: TrackDefinition = {
       beat: 4.5,
       durationBeats: 0.2,
       instrument: 'brass-stab',
-      note: ['F4', 'A4', 'C5'],
+      note: ['G4', 'B4', 'D5'],
       velocity: 0.6,
     },
     {
       beat: 5.5,
       durationBeats: 0.2,
       instrument: 'brass-stab',
-      note: ['F4', 'A4', 'C5'],
+      note: ['G4', 'B4', 'D5'],
       velocity: 0.6,
     },
     {
       beat: 6.5,
       durationBeats: 0.2,
       instrument: 'brass-stab',
-      note: ['F4', 'A4', 'C5'],
+      note: ['G4', 'B4', 'D5'],
       velocity: 0.6,
     },
     {
       beat: 7.5,
       durationBeats: 0.2,
       instrument: 'brass-stab',
-      note: ['F4', 'A4', 'C5'],
+      note: ['G4', 'B4', 'D5'],
       velocity: 0.6,
     },
   ],
@@ -274,16 +299,16 @@ export const titleTheme: TrackDefinition = {
   // that will turn it into the full band. `#158` (title screen) is this
   // track's call site once it exists.
   events: [
-    ...MAIN_THEME_MELODY.map(([beat, note]): NoteEvent => ({
+    ...MAIN_THEME_MELODY.map(([beat, note, durationBeats]): NoteEvent => ({
       beat,
-      durationBeats: 0.95,
+      durationBeats: durationBeats * 0.95,
       instrument: 'accordion',
       note,
       velocity: 0.6,
     })),
-    ...MAIN_THEME_MELODY.map(([beat, note]): NoteEvent => ({
+    ...MAIN_THEME_MELODY.map(([beat, note, durationBeats]): NoteEvent => ({
       beat,
-      durationBeats: 0.9,
+      durationBeats: durationBeats * 0.9,
       instrument: 'clarinet',
       note: bumpOctave(note, 1),
       velocity: 0.35,

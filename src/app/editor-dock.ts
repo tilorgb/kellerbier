@@ -23,6 +23,7 @@ interface DockedEditor {
 const EDITORS: readonly DockedEditor[] = [
   { id: 'rooms', label: '🚪 Rooms', src: 'editor.html' },
   { id: 'sprites', label: '🎨 Sprites', src: 'pixel-editor.html' },
+  { id: 'audio', label: '🎵 Audio', src: 'audio-editor.html' },
 ];
 
 const DEFAULT_PANEL_WIDTH = 480;

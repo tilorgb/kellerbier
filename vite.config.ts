@@ -1,6 +1,7 @@
 import { fileURLToPath, URL } from 'node:url';
 import { defineConfig } from 'vitest/config';
 import { artPipelineDevPlugin } from './tools/art/dev-plugin.mjs';
+import { audioEditorServerPlugin } from './tools/audio-editor/server.mjs';
 import { pixelEditorServerPlugin } from './tools/pixel-editor/server.mjs';
 import { roomEditorServerPlugin } from './tools/room-editor/server.mjs';
 
@@ -13,7 +14,12 @@ export default defineConfig({
   // Dev-only: `configureServer` middleware never runs under `vite build`, so
   // the room editor's (#24) and pixel editor's (#108) save endpoints never
   // reach a production bundle.
-  plugins: [artPipelineDevPlugin(), roomEditorServerPlugin(), pixelEditorServerPlugin()],
+  plugins: [
+    artPipelineDevPlugin(),
+    roomEditorServerPlugin(),
+    pixelEditorServerPlugin(),
+    audioEditorServerPlugin(),
+  ],
   resolve: {
     alias: {
       '@sim': resolvePath('./src/sim'),
@@ -41,6 +47,7 @@ export default defineConfig({
         index: resolvePath('./index.html'),
         editor: resolvePath('./editor.html'),
         'pixel-editor': resolvePath('./pixel-editor.html'),
+        'audio-editor': resolvePath('./audio-editor.html'),
       },
     },
   },
