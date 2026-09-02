@@ -61,24 +61,27 @@ export class VictoryScreen {
     this.headline.set('Sieg!');
     this.view.addChild(this.headline.view);
 
-    this.epilogue = uiText(
-      'Der Stier is gfalln. Irgendwer weiter obn im Tal woaß, was mim Bier los is —\n' +
-        'des is a neue Gschicht. Mehr kimmt no.',
-      { colour: UI_PALETTE.text, align: 'center' },
-    );
+    // Short and plain (#221), not the two-line dialect paragraph this used
+    // to be. #58 (story delivery) replaces this beat properly; until then
+    // it stays a placeholder beat — "the moment of quiet" #155 asks for,
+    // not the finished narrative #58 will eventually write.
+    this.epilogue = uiText('To be continued.', { colour: UI_PALETTE.text, align: 'center' });
     this.view.addChild(this.epilogue);
 
     this.summary = uiText('', { colour: HUD_PALETTE.gameOverSummary });
     this.view.addChild(this.summary);
 
-    this.hint = uiText('R drückn für an neuen Lauf    T für d’Bilanz', {
+    // Plain English (#221): a control hint is read on every clear, so it's
+    // functional text under `docs/CONTENT_BIBLE.md` §0 — same rule and same
+    // wording `GameOverScreen`'s hint follows.
+    this.hint = uiText('R: Try Again    T: Results', {
       colour: UI_PALETTE.textDim,
     });
     this.view.addChild(this.hint);
   }
 
   show(info: VictorySummaryText): void {
-    this.summary.text = `${info.seconds.toFixed(1)}s   ${String(info.kills)} erledigt   ${info.floor}`;
+    this.summary.text = `${info.seconds.toFixed(1)}s   ${String(info.kills)} killed   ${info.floor}`;
     this.view.visible = true;
     this.layOut();
   }

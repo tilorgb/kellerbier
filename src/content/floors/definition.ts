@@ -22,10 +22,14 @@ export interface FloorConfig {
   /**
    * One line, in the floor's own voice, for its title card (#154).
    *
-   * Transcribed from `docs/CONTENT_BIBLE.md` §1's description of the floor
-   * rather than invented here — the card is meant to say what the chapter is,
-   * and the chapter is already written down. Data, like everything else on
-   * this record: a floor's card needs no engine change, only a row.
+   * Grounded in `docs/CONTENT_BIBLE.md` §1's description of the floor rather
+   * than invented from nothing — the card is meant to say what the chapter
+   * is, and the chapter is already written down. Plain English carrying one
+   * seasoned Bavarian word, marked `*like this*` and rendered by
+   * `render/ui/text.ts`'s `SeasonedText` — `docs/CONTENT_BIBLE.md` §0's "a
+   * word, not a sentence" rule (#221), not a translated German sentence.
+   * Data, like everything else on this record: a floor's card needs no
+   * engine change, only a row.
    */
   readonly flavour: string;
 }
@@ -46,65 +50,67 @@ export const ROOM_GEN_FLOOR_OVERRIDES: Readonly<Record<string, Partial<RoomGenTu
 export const FLOOR_CONFIGS: readonly FloorConfig[] = [
   {
     floor: 1,
-    name: 'Der Keller',
+    name: 'The Cellar',
     floorTag: 'cellar',
     minRooms: 8,
     maxRooms: 12,
     gridRadius: 5,
-    flavour: 'Feucht, kalt, und oa einzige Glühbirn',
+    flavour: 'Watch your *Fiaß*.',
   },
   {
     floor: 2,
-    name: 'Dorf & Acker',
+    name: 'Village & Fields',
     floorTag: 'rural',
     minRooms: 9,
     maxRooms: 13,
     gridRadius: 5,
-    flavour: 'Dorfplatz, Hopfen — und lauter neue Kistn',
+    flavour: 'Sunny, peaceful, *Blaskapell’n*.',
   },
   {
     floor: 3,
-    name: 'Der Wald',
+    name: 'The Forest',
     floorTag: 'wald',
     minRooms: 10,
     maxRooms: 14,
     gridRadius: 6,
-    flavour: 'Dicht, dunkel, und falsch',
+    flavour: 'Oh, deer!',
   },
   {
     floor: 4,
-    name: 'Die Alpen',
+    name: 'The Alps',
     floorTag: 'alpen',
     minRooms: 10,
     maxRooms: 14,
     gridRadius: 6,
-    flavour: 'Fels, Schnee, und a Wind der schiabt',
+    flavour: 'Thin air and hard *Haxn*.',
   },
   {
     floor: 5,
-    name: 'Schloss Neuschwanstein',
+    name: 'Neuschwanstein Castle',
     floorTag: 'schloss',
     minRooms: 11,
     maxRooms: 15,
     gridRadius: 6,
-    flavour: 'A Märchen auf Pump, nie fertig worn',
+    flavour: 'Locals describe its beauty as "*basst scho*."',
   },
   {
     floor: 6,
-    name: 'Die Brauerei',
+    name: 'The Brewery',
     floorTag: 'brauerei',
     minRooms: 11,
     maxRooms: 15,
     gridRadius: 7,
-    flavour: 'Stahl, Warnlicht, und Quotn an der Wand',
+    flavour: 'Someone put a *Rausch* in my last beer.',
   },
   {
     floor: 7,
+    // "Oktoberfest" is a protected mark — the floor stays "Die Wiesn" in
+    // every locale, per `docs/CONTENT_BIBLE.md` §0.
     name: 'Die Wiesn',
     floorTag: 'wiesn',
     minRooms: 12,
     maxRooms: 16,
     gridRadius: 7,
-    flavour: 'Ois auf oamal, und ois zvui',
+    flavour: 'Ole, ole, ole!',
   },
 ];

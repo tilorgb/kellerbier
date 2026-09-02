@@ -90,9 +90,9 @@ export function characterStatus(sim: GameSim): CharacterStatus | null {
     const steps = sim.fastSteps;
     const percent = Math.round(steps * sim.tuning.character.fastStepBonus * 100);
     return steps === 0
-      ? { text: 'Fastn: no nix', icon: 'mug-empty', tint: UI_PALETTE.textDim }
+      ? { text: 'Fasting: nothing yet', icon: 'mug-empty', tint: UI_PALETTE.textDim }
       : {
-          text: `Fastn: +${String(percent)}% Stammwürze`,
+          text: `Fasting: +${String(percent)}% strength`,
           icon: 'star',
           tint: HUD_PALETTE.activeItemReady,
         };
@@ -100,15 +100,15 @@ export function characterStatus(sim: GameSim): CharacterStatus | null {
   if (traits.rules.includes('purse')) {
     return sim.pursePowered
       ? {
-          text: `Geldbeutl: ${String(sim.biermarken)} — er fliagt`,
+          text: `Purse: ${String(sim.biermarken)} — flying`,
           icon: 'biermarke',
           tint: HUD_PALETTE.minimapTreasureIcon,
         }
-      : { text: 'Geldbeutl leer — koa Kraft', icon: 'lock', tint: UI_PALETTE.textDisabled };
+      : { text: 'Purse empty — no power', icon: 'lock', tint: UI_PALETTE.textDisabled };
   }
   if (traits.rules.includes('chaos')) {
     return {
-      text: `Neu würfelt im ${String(sim.chaosFloor)}. Stock`,
+      text: `Rerolls on floor ${String(sim.chaosFloor)}`,
       icon: 'star',
       tint: UI_PALETTE.accent,
     };

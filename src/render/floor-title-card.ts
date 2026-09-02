@@ -1,7 +1,7 @@
 import { Container, Graphics, type BitmapText, type Renderer } from 'pixi.js';
-import { TITLE_PALETTE } from './palette.js';
+import { TITLE_PALETTE, UI_PALETTE } from './palette.js';
 import { DisplayTitle, TITLE_STYLES } from './ui/title.js';
-import { displayText, uiText, uiTextWidth, UI_TEXT_HEIGHT } from './ui/text.js';
+import { displayText, SeasonedText, UI_TEXT_HEIGHT } from './ui/text.js';
 
 /** How large the floor's own name is drawn, as a whole multiple of the display face's cell. */
 const NAME_SCALE = 3;
@@ -9,16 +9,20 @@ const NAME_SCALE = 3;
 /** Width of the ornamental rules, as a fraction of the frame. */
 const RULE_SPAN = 0.62;
 
-/** German ordinals for the seven floors — a card says "Erster Stock", not "Floor 1". */
+/**
+ * Ordinals for the seven floors — a card says "First Floor", not "Floor 1".
+ * Plain English (#221): the ordinal is read on every floor transition, which
+ * makes it functional text under `docs/CONTENT_BIBLE.md` §0, not flavour.
+ */
 const ORDINALS: readonly string[] = [
-  'Nullter',
-  'Erster',
-  'Zweiter',
-  'Dritter',
-  'Vierter',
-  'Fünfter',
-  'Sechster',
-  'Siebter',
+  'Zeroth',
+  'First',
+  'Second',
+  'Third',
+  'Fourth',
+  'Fifth',
+  'Sixth',
+  'Seventh',
 ];
 
 /**
@@ -58,7 +62,7 @@ export class FloorTitleCard {
   private readonly rules = new Graphics();
   private readonly ordinal: BitmapText;
   private readonly name: DisplayTitle;
-  private readonly subtitle: BitmapText;
+  private readonly subtitle: SeasonedText;
 
   private width = 0;
   private height = 0;
@@ -79,16 +83,23 @@ export class FloorTitleCard {
 
     // The flavour line is the *text* face on purpose. It is the only thing on
     // the card anyone actually reads a sentence of, and a sentence of Fraktur
-    // is a sentence nobody finishes.
-    this.subtitle = uiText('', { colour: TITLE_PALETTE.cardSubtitle });
-    this.view.addChild(this.subtitle);
+    // is a sentence nobody finishes. It carries one seasoned Bavarian word
+    // (`*word*`, `docs/CONTENT_BIBLE.md` §0, #221) in `UI_PALETTE.accent` —
+    // the same gold the card's own rules and border already use, so the
+    // one dropped-in word reads as part of the card's chrome rather than a
+    // competing colour.
+    this.subtitle = new SeasonedText(renderer, {
+      colour: TITLE_PALETTE.cardSubtitle,
+      accentColour: UI_PALETTE.accent,
+    });
+    this.view.addChild(this.subtitle.view);
   }
 
   /** Shows the card for `floor`, named and described. Sizes in UI pixels. */
   show(floor: number, floorName: string, flavour: string): void {
-    this.ordinal.text = `${ORDINALS[floor] ?? 'Weiterer'} Stock`;
+    this.ordinal.text = `${ORDINALS[floor] ?? 'Further'} Floor`;
     this.name.set(floorName);
-    this.subtitle.text = flavour;
+    this.subtitle.set(flavour);
     this.view.visible = true;
     this.view.alpha = 1;
     this.layOut();
@@ -158,8 +169,8 @@ export class FloorTitleCard {
       top - this.ordinal.height + UI_TEXT_HEIGHT,
     );
     this.name.place(centreX, top + UI_TEXT_HEIGHT + gap);
-    this.subtitle.position.set(
-      centreX - Math.round(uiTextWidth(this.subtitle.text) / 2),
+    this.subtitle.view.position.set(
+      centreX - Math.round(this.subtitle.width / 2),
       top + UI_TEXT_HEIGHT + gap + nameHeight + gap,
     );
 

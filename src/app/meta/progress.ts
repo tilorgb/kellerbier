@@ -404,14 +404,14 @@ export function buildRunResultsView(save: SaveData, content: ProgressionContent)
 /** One line of the run board: place, how long it lasted, how much it took with it. */
 export function boardRow(record: BestRunRecord, index = 0): string {
   const run = runFactsFrom(record);
-  return `${String(index + 1)}.  ${seconds(run.seconds)}   ${String(run.kills)} daschlogn   ${run.floorName}`;
+  return `${String(index + 1)}.  ${seconds(run.seconds)}   ${String(run.kills)} killed   ${run.floorName}`;
 }
 
-/** The last run as the one line the results screen leads with. */
+/** The last run as the one line the results screen leads with. Plain English (#221) — read every time the screen opens. */
 export function lastRunLine(run: RunFacts | null): string {
   if (run === null) {
-    return 'No koa Lauf gspielt — der Keller wart scho.';
+    return 'No run played yet — the cellar is waiting.';
   }
-  const word = run.deathWord === null ? '' : `  „${run.deathWord}“`;
-  return `Letzter Lauf — ${seconds(run.seconds)}  ·  ${String(run.kills)} daschlogn  ·  ${run.floorName}${word}`;
+  const word = run.deathWord === null ? '' : `  "${run.deathWord}"`;
+  return `Last run — ${seconds(run.seconds)}  ·  ${String(run.kills)} killed  ·  ${run.floorName}${word}`;
 }

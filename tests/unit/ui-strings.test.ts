@@ -11,6 +11,7 @@ import {
 } from '../../src/sim/game/promille.js';
 import { INTERNAL_HEIGHT, INTERNAL_WIDTH } from '../../src/render/resolution.js';
 import { DISPLAY_FACE, TEXT_FACE } from '../../src/render/ui/font-compile.js';
+import { seasonedTextWidth } from '../../src/render/ui/text.js';
 
 /**
  * #154's third acceptance criterion, as arithmetic: *the longest German
@@ -135,7 +136,15 @@ describe('the real German UI strings fit the elements that draw them', () => {
         nameWidth,
         `floor card: "${config.name}" is ${String(nameWidth)}px wide`,
       ).toBeLessThanOrEqual(INTERNAL_WIDTH - 24);
-      fits(config.flavour, INTERNAL_WIDTH - 48, 'floor card flavour');
+      // The flavour line carries a `*word*`-marked run (#221), drawn by
+      // `SeasonedText` rather than plain `uiText` — its markers cost no
+      // pixels, so the budget check measures the line the way it renders.
+      const flavourBudget = INTERNAL_WIDTH - 48;
+      const flavourWidth = seasonedTextWidth(config.flavour);
+      expect(
+        flavourWidth,
+        `floor card flavour: "${config.flavour}" is ${String(flavourWidth)}px, over its ${String(flavourBudget)}px`,
+      ).toBeLessThanOrEqual(flavourBudget);
     }
   });
 
