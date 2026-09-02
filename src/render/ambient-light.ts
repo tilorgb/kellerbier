@@ -1,4 +1,4 @@
-import { Container, Graphics, Sprite, Texture } from 'pixi.js';
+import { Container, Sprite, Texture } from 'pixi.js';
 import type { RoomRect } from '../sim/room/geometry.js';
 import { TICKS_PER_SECOND } from '../sim/time.js';
 
@@ -8,6 +8,13 @@ import { TICKS_PER_SECOND } from '../sim/time.js';
  * player). Two effects, one per authored floor, both requested as a "nice
  * touch" rather than a mechanic — neither reads `GameSim` state beyond the
  * floor number and the tick counter, and neither can affect a replay.
+ *
+ * Both are soft, smoothly-shaded canvas gradients rather than anything drawn
+ * on the pixel grid — deliberately: a lamp's falloff and a cloud's shadow are
+ * naturally soft-edged things, and forcing them onto hard pixel steps would
+ * read as banding, not lighting. The rest of the game stays pixel art; this
+ * is the one place a smoother, "modern" render technique sits well next to
+ * it, the same way `vignette.ts`'s own gradient already does.
  *
  * Drawn just above `propView` and below `decals`/`entities` in
  * `render/view.ts` — the ground and its furniture darken, bodies and shots
@@ -22,39 +29,39 @@ const KELLER_FLOOR = 1;
 const DORF_FLOOR = 2;
 
 /** Warm, barely-off-black — a bare bulb's shadow, not a neutral grey one. */
-const KELLER_SHADOW_COLOUR = 'rgba(12, 9, 6, 1)';
-const KELLER_SHADOW_FILL = 0x0c0906;
+const KELLER_SHADOW_RGB = '12, 9, 6';
 /** Cool, desaturated blue-grey — a cloud's shadow, not a storm front. */
-const CLOUD_SHADOW_COLOUR = 'rgba(28, 40, 52, 1)';
+const CLOUD_SHADOW_RGB = '28, 40, 52';
 
 /**
- * How much of the gradient's radius stays fully transparent before the fade
- * to `KELLER_SHADOW_COLOUR` begins. Small: `KELLER_CENTRE_ALPHA` already
- * carries "the whole cellar is darker," so the gradient's own job is just the
- * extra edge falloff, and a small flat centre keeps that falloff reading as
- * continuous rather than a hard-edged disc.
+ * How much of the gradient's radius is spent easing from `KELLER_CENTRE_ALPHA`
+ * to `KELLER_EDGE_ALPHA` before the flat centre begins — small, so the bulb
+ * reads as one continuous pool of light rather than a hard-edged disc.
  */
 const KELLER_INNER_STOP = 0.08;
-/** The cellar's uniform darkening, present everywhere including dead centre. */
+/** The cellar's darkening directly under the bulb — never fully lit, "the whole cellar is darker." */
 const KELLER_CENTRE_ALPHA = 0.16;
-/** Total darkening at the gradient's outer edge — `KELLER_CENTRE_ALPHA` plus the falloff's own share. */
-const KELLER_EDGE_ALPHA = 0.62;
+/** The darkening the falloff reaches by the gradient's outer edge. */
+const KELLER_EDGE_ALPHA = 0.64;
 /**
- * The gradient sprite's size relative to the room's own interior span.
- * Bigger than `1` so the falloff's outer edge sits past the room's real
- * edge rather than exactly on it — the wall midpoints read as dim rather
- * than pitch black, and the corners (further out on both axes) are what
- * actually reaches `KELLER_EDGE_ALPHA`, which is the "brightest in the
- * centre, darkest in the corners" read a single bulb overhead actually has.
+ * The falloff sprite's size relative to the room's *full authored frame*
+ * (`sim/room/geometry.ts`'s `roomFrameSize` — interior plus the wall margin
+ * on every side), not just the interior play area: a bulb overhead lights
+ * the nearby wall too, not only the floor, and sizing off the frame is what
+ * lets the glow reach that wall band with the same falloff rather than
+ * stopping dead at the floor's own edge. Bigger than `1` on top of that so
+ * the sprite's own rectangular bounds sit past the frame's corners — with a
+ * texture whose fade already reaches its own corner (see
+ * `createGlowTexture`), that keeps the one hard edge that necessarily exists
+ * (a `Sprite` is always a rectangle) off the visible frame entirely.
  */
-const KELLER_COVERAGE = 1.5;
+const KELLER_COVERAGE = 1.3;
 
-const CLOUD_INNER_STOP = 0.15;
 /** Never more than this much shadow — "very subtle... shouldn't disturb." */
-const CLOUD_MAX_ALPHA = 0.14;
+const CLOUD_MAX_ALPHA = 0.16;
 /** How wide/tall the shadow patch is relative to the room, less than `1` so it reads as a discrete cloud rather than the whole sky dimming at once. */
-const CLOUD_WIDTH_FRACTION = 0.9;
-const CLOUD_HEIGHT_FRACTION = 0.75;
+const CLOUD_WIDTH_FRACTION = 0.85;
+const CLOUD_HEIGHT_FRACTION = 0.6;
 /** How often a cloud starts crossing. Long enough that "occasional" is the honest word for it. */
 const CLOUD_CYCLE_TICKS = TICKS_PER_SECOND * 50;
 /** How long one crossing takes, start to finish — a slow drift, not a blink. */
@@ -63,16 +70,29 @@ const CLOUD_CROSS_TICKS = TICKS_PER_SECOND * 16;
 const CLOUD_FADE_FRACTION = 0.25;
 
 /**
- * A square radial-gradient texture: transparent out to `innerStop` (a
- * fraction of the radius), fading to opaque `colour` at the edge. Generated
- * once via `<canvas>`, same reasoning as `vignette.ts`'s own gradient — a
- * soft radial fade is a Canvas 2D gradient, not a shape, and not worth a
- * shader. Kept local rather than shared with `Vignette`: the two callers
- * want different edge colours baked into the pixels, and a shared helper
- * would just move the parameter around rather than remove any real
- * duplication.
+ * A square radial-gradient texture, easing from `rgba(rgb, innerAlpha)` at
+ * the centre (out to `innerStop`, a fraction of the radius) to
+ * `rgba(rgb, outerAlpha)` at the texture's own corner. Generated once via
+ * `<canvas>` — a soft radial fade is a Canvas 2D gradient, not a shape, and
+ * not worth a shader, same reasoning as `vignette.ts`'s own gradient.
+ *
+ * The outer stop sits at the corner radius (`size/2 * √2`), not the more
+ * usual inscribed-circle radius (`size/2`): canvas gradients paint their
+ * last stop's colour for every radius past it rather than stopping there, so
+ * an inscribed-circle outer stop leaves the texture's own four corners a
+ * flat, uniform block once stretched onto a sprite — invisible on a sprite
+ * cropped well inside its own bounds (nothing here is), but a visible
+ * hard-edged rectangle on one that isn't. Ending the fade at the corner
+ * instead means every pixel this texture can be stretched to is still part
+ * of one continuous gradient, which is what actually reads as round.
  */
-function createRadialFadeTexture(innerStop: number, colour: string, size = 512): Texture {
+function createGlowTexture(
+  rgb: string,
+  innerAlpha: number,
+  outerAlpha: number,
+  innerStop: number,
+): Texture {
+  const size = 512;
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
@@ -82,27 +102,82 @@ function createRadialFadeTexture(innerStop: number, colour: string, size = 512):
     return Texture.from(canvas);
   }
   const centre = size / 2;
-  const transparent = colour.replace(/[\d.]+\)$/, '0)');
-  // Canvas gradients paint their last stop's colour for every radius past it
-  // rather than stopping there, so an outer radius short of the texture's own
-  // corner leaves the four corners a flat, fully-opaque block once stretched
-  // onto a sprite whose bounds aren't cropped away (as `Vignette`'s oversized
-  // sprite happens to crop its own). Ending the fade at the corner radius
-  // instead means the gradient still has somewhere to go all the way out to
-  // every pixel this texture can be stretched to.
-  const outerRadius = centre * Math.SQRT2;
   const gradient = context.createRadialGradient(
     centre,
     centre,
     size * innerStop,
     centre,
     centre,
-    outerRadius,
+    centre * Math.SQRT2,
   );
-  gradient.addColorStop(0, transparent);
-  gradient.addColorStop(1, colour);
+  gradient.addColorStop(0, `rgba(${rgb}, ${String(innerAlpha)})`);
+  gradient.addColorStop(1, `rgba(${rgb}, ${String(outerAlpha)})`);
   context.fillStyle = gradient;
   context.fillRect(0, 0, size, size);
+  return Texture.from(canvas);
+}
+
+/**
+ * A hand-placed cluster of overlapping circles, fractions of the canvas —
+ * the classic cartoon-cloud silhouette (a wide flattish base, a few rounded
+ * bumps along the top) rather than a single oval, which reads as a smudge
+ * more than a cloud. Feathered afterward in `createCloudTexture`, so the
+ * bumps read as one soft shape and not as a row of separate blobs.
+ */
+const CLOUD_PUFFS: readonly { readonly x: number; readonly y: number; readonly r: number }[] = [
+  { x: 0.22, y: 0.62, r: 0.15 },
+  { x: 0.37, y: 0.44, r: 0.21 },
+  { x: 0.55, y: 0.38, r: 0.24 },
+  { x: 0.73, y: 0.48, r: 0.2 },
+  { x: 0.85, y: 0.62, r: 0.14 },
+  { x: 0.5, y: 0.64, r: 0.22 },
+];
+
+/** How much of the canvas's shorter side one blur pass softens the silhouette's edge by. */
+const CLOUD_BLUR_FRACTION = 0.05;
+
+/**
+ * A soft-edged cloud silhouette, coloured `rgb` at full alpha — `AmbientLight`
+ * controls how dark the shadow actually reads via `Sprite.alpha`, same as the
+ * lamp glow does.
+ *
+ * Drawn crisp (union of `CLOUD_PUFFS`, no filter) onto an offscreen canvas
+ * first and blurred only when that whole silhouette is composited onto the
+ * real texture, rather than blurring each circle as it's drawn — blurring
+ * per-shape leaves visible extra-soft seams where two feathered edges
+ * overlap; blurring the finished union softens only the silhouette's actual
+ * outline.
+ */
+function createCloudTexture(rgb: string): Texture {
+  const width = 512;
+  const height = 320;
+  const blur = Math.round(Math.min(width, height) * CLOUD_BLUR_FRACTION);
+
+  const shape = document.createElement('canvas');
+  shape.width = width;
+  shape.height = height;
+  const shapeContext = shape.getContext('2d');
+  if (shapeContext === null) {
+    // No 2D context is a headless/test environment, not a real failure.
+    return Texture.from(shape);
+  }
+  shapeContext.fillStyle = `rgb(${rgb})`;
+  const unit = Math.min(width, height);
+  for (const puff of CLOUD_PUFFS) {
+    shapeContext.beginPath();
+    shapeContext.arc(puff.x * width, puff.y * height, puff.r * unit, 0, Math.PI * 2);
+    shapeContext.fill();
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d');
+  if (context === null) {
+    return Texture.from(canvas);
+  }
+  context.filter = `blur(${String(blur)}px)`;
+  context.drawImage(shape, 0, 0);
   return Texture.from(canvas);
 }
 
@@ -118,14 +193,27 @@ function roomCentre(room: RoomRect): { readonly x: number; readonly y: number } 
   return { x: (room.minX + room.maxX) / 2, y: (room.minY + room.maxY) / 2 };
 }
 
+/**
+ * The room's full authored frame — interior plus the wall margin on every
+ * side. Every room has an equal margin on opposite sides
+ * (`sim/room/geometry.ts`'s `roomFrameSize`, which this mirrors rather than
+ * calls: that function takes a `RoomGeometry`, and everything here only ever
+ * needs the four bounds a plain `RoomRect` already carries), so the far
+ * margin is always exactly `minX`/`minY` again.
+ */
+function frameSize(room: RoomRect): { readonly width: number; readonly height: number } {
+  return { width: room.minX + room.maxX, height: room.minY + room.maxY };
+}
+
 /** Where and how big Floor 1's falloff sprite sits, centred on the room. */
 export function lampPlacement(room: RoomRect): Placement {
   const centre = roomCentre(room);
+  const frame = frameSize(room);
   return {
     x: centre.x,
     y: centre.y,
-    width: (room.maxX - room.minX) * KELLER_COVERAGE,
-    height: (room.maxY - room.minY) * KELLER_COVERAGE,
+    width: frame.width * KELLER_COVERAGE,
+    height: frame.height * KELLER_COVERAGE,
   };
 }
 
@@ -188,7 +276,6 @@ export class AmbientLight {
 
   private readonly lampTexture: Texture;
   private readonly cloudTexture: Texture;
-  private readonly baseDarken = new Graphics();
   private readonly lampSprite: Sprite;
   private readonly cloudSprite: Sprite;
   private floorNumber = 0;
@@ -196,10 +283,13 @@ export class AmbientLight {
   private reducedMotion = false;
 
   constructor() {
-    this.lampTexture = createRadialFadeTexture(KELLER_INNER_STOP, KELLER_SHADOW_COLOUR);
-    this.cloudTexture = createRadialFadeTexture(CLOUD_INNER_STOP, CLOUD_SHADOW_COLOUR);
-
-    this.container.addChild(this.baseDarken);
+    this.lampTexture = createGlowTexture(
+      KELLER_SHADOW_RGB,
+      KELLER_CENTRE_ALPHA,
+      KELLER_EDGE_ALPHA,
+      KELLER_INNER_STOP,
+    );
+    this.cloudTexture = createCloudTexture(CLOUD_SHADOW_RGB);
 
     this.lampSprite = new Sprite(this.lampTexture);
     this.lampSprite.anchor.set(0.5);
@@ -224,17 +314,12 @@ export class AmbientLight {
     this.room = room;
     this.floorNumber = floorNumber;
 
-    this.baseDarken.clear();
     if (floorNumber === KELLER_FLOOR) {
-      this.baseDarken
-        .rect(room.minX, room.minY, room.maxX - room.minX, room.maxY - room.minY)
-        .fill(KELLER_SHADOW_FILL);
-      this.baseDarken.alpha = KELLER_CENTRE_ALPHA;
       const lamp = lampPlacement(room);
       this.lampSprite.position.set(lamp.x, lamp.y);
       this.lampSprite.width = lamp.width;
       this.lampSprite.height = lamp.height;
-      this.lampSprite.alpha = KELLER_EDGE_ALPHA - KELLER_CENTRE_ALPHA;
+      this.lampSprite.alpha = 1;
     } else {
       this.lampSprite.alpha = 0;
     }
