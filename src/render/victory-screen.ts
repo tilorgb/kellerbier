@@ -2,7 +2,7 @@ import { Container, Graphics, type BitmapText, type Renderer } from 'pixi.js';
 import { EFFECT_PALETTE, HUD_PALETTE, UI_PALETTE } from './palette.js';
 import type { UiKit } from './ui/kit.js';
 import { DisplayTitle, TITLE_STYLES } from './ui/title.js';
-import { SeasonedText, uiText, uiTextWidth, UI_LINE_HEIGHT, UI_TEXT_HEIGHT } from './ui/text.js';
+import { uiText, uiTextWidth, UI_LINE_HEIGHT, UI_TEXT_HEIGHT } from './ui/text.js';
 
 /** How much bigger than its authored size the headline is drawn — same scale `GameOverScreen` uses. */
 const HEADLINE_SCALE = 3;
@@ -39,7 +39,7 @@ export class VictoryScreen {
   private readonly dim: Graphics;
   private readonly plate: Container;
   private readonly headline: DisplayTitle;
-  private readonly epilogue: SeasonedText;
+  private readonly epilogue: BitmapText;
   private readonly summary: BitmapText;
   private readonly hint: BitmapText;
   private readonly kit: UiKit;
@@ -61,19 +61,12 @@ export class VictoryScreen {
     this.headline.set('Sieg!');
     this.view.addChild(this.headline.view);
 
-    // Plain English carrying one seasoned word (#221), not the two-line
-    // dialect paragraph this used to be. #58 (story delivery) replaces this
-    // beat properly; until then it stays short, per `docs/CONTENT_BIBLE.md`
-    // §0 — and it's the second surface (besides the floor title card) the
-    // `*word*`/`SeasonedText` primitive is verified on.
-    this.epilogue = new SeasonedText(renderer, {
-      colour: UI_PALETTE.text,
-      accentColour: UI_PALETTE.accent,
-    });
-    this.epilogue.set(
-      'Der Stier has fallen. Someone upriver still owes an answer about the *Bier*.',
-    );
-    this.view.addChild(this.epilogue.view);
+    // Short and plain (#221), not the two-line dialect paragraph this used
+    // to be. #58 (story delivery) replaces this beat properly; until then
+    // it stays a placeholder beat — "the moment of quiet" #155 asks for,
+    // not the finished narrative #58 will eventually write.
+    this.epilogue = uiText('To be continued.', { colour: UI_PALETTE.text, align: 'center' });
+    this.view.addChild(this.epilogue);
 
     this.summary = uiText('', { colour: HUD_PALETTE.gameOverSummary });
     this.view.addChild(this.summary);
@@ -117,8 +110,9 @@ export class VictoryScreen {
 
     this.headline.place(centreX, Math.round(centreY - this.headline.height * HEADLINE_SCALE - 34));
 
-    this.epilogue.view.position.set(
-      Math.round(centreX - this.epilogue.width / 2),
+    const epilogueWidth = uiTextWidth(this.epilogue.text);
+    this.epilogue.position.set(
+      Math.round(centreX - epilogueWidth / 2),
       Math.round(centreY - (this.headline.height * HEADLINE_SCALE) / 2 + 10),
     );
 

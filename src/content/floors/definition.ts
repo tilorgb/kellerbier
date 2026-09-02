@@ -64,7 +64,7 @@ export const FLOOR_CONFIGS: readonly FloorConfig[] = [
     minRooms: 9,
     maxRooms: 13,
     gridRadius: 5,
-    flavour: 'Sunny square, hop fields — and too many new *Kistn*.',
+    flavour: 'Sunny, peaceful, *Blaskapell’n*.',
   },
   {
     floor: 3,
@@ -73,7 +73,7 @@ export const FLOOR_CONFIGS: readonly FloorConfig[] = [
     minRooms: 10,
     maxRooms: 14,
     gridRadius: 6,
-    flavour: 'Thick, dark woods. The *Waldschrat* is watching.',
+    flavour: 'Oh, deer!',
   },
   {
     floor: 4,
@@ -82,7 +82,7 @@ export const FLOOR_CONFIGS: readonly FloorConfig[] = [
     minRooms: 10,
     maxRooms: 14,
     gridRadius: 6,
-    flavour: 'Rock, snow, and a wind that *schiabt*.',
+    flavour: 'Thin air and hard *Haxn*.',
   },
   {
     floor: 5,
@@ -91,7 +91,7 @@ export const FLOOR_CONFIGS: readonly FloorConfig[] = [
     minRooms: 11,
     maxRooms: 15,
     gridRadius: 6,
-    flavour: 'A fairy tale on credit — never *fertig*.',
+    flavour: 'Locals describe its beauty as "*basst scho*."',
   },
   {
     floor: 6,
@@ -100,7 +100,7 @@ export const FLOOR_CONFIGS: readonly FloorConfig[] = [
     minRooms: 11,
     maxRooms: 15,
     gridRadius: 7,
-    flavour: 'Steel, hazard light, and *Quotn* on every wall.',
+    flavour: 'Someone put a *Rausch* in my last beer.',
   },
   {
     floor: 7,
@@ -111,6 +111,6 @@ export const FLOOR_CONFIGS: readonly FloorConfig[] = [
     minRooms: 12,
     maxRooms: 16,
     gridRadius: 7,
-    flavour: 'Beer tents, brass bands, and *ois zvui*.',
+    flavour: 'Ole, ole, ole!',
   },
 ];
