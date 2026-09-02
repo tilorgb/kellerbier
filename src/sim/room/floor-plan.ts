@@ -1250,6 +1250,19 @@ function eligibleTemplates(
     ) {
       return false;
     }
+    // A key-locked room (#196) must never sit on the only path to anywhere
+    // else on the floor — reaching it costs a Kellerschlüssel, and a floor
+    // that made passing through it mandatory would strand a keyless player
+    // (or, worse, gate the boss room itself behind one). `assignRoles` only
+    // *prefers* a dead end for the treasure slot — it falls back to a
+    // through-room once the floor runs short of real dead ends — so the
+    // actual guarantee has to live here, at template selection: a keyLocked
+    // template is excluded outright from any position needing more than the
+    // one door a dead end has. The floor's other, non-locked treasure
+    // template stays eligible either way, so this never starves the slot.
+    if (template.metadata.keyLocked === true && neededDirections.size > 1) {
+      return false;
+    }
     if (isMultiCellRoomTemplate(template)) {
       return true;
     }
