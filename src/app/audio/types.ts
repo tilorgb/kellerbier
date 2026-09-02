@@ -1,0 +1,147 @@
+/**
+ * The schema `src/content/audio/*` data is authored against — the audio
+ * counterpart of `sim/enemy/definition.ts`'s `EnemyDefinition`: the engine
+ * layer owns the shape, content imports it type-only
+ * (`tools/eslint/architecture.js`'s `kellerbier/content-is-data`), and adding
+ * a track, an instrument or an SFX id is a data change, not an engine one.
+ *
+ * Everything here is plain data — no `AudioContext`, no Web Audio node, no
+ * DOM. `app/audio/synth.ts` is what turns it into sound; keeping the two
+ * separate is what lets `tests/unit/audio-*.test.ts` assert on the data and
+ * the scheduling math without a browser.
+ */
+
+/** A basic Web Audio periodic waveform — chiptune's whole vocabulary. */
+export type Waveform = 'sine' | 'square' | 'sawtooth' | 'triangle';
+
+/** Attack/decay/sustain/release, in seconds (sustain is a 0–1 gain level). */
+export interface Envelope {
+  readonly attack: number;
+  readonly decay: number;
+  readonly sustain: number;
+  readonly release: number;
+}
+
+/** A second, detuned oscillator layered under the first — an instrument's "fatness". */
+export interface OscillatorLayer {
+  readonly waveform: Waveform;
+  /** Cents (1/100 semitone) away from the primary oscillator. */
+  readonly detuneCents: number;
+  /** 0–1, relative to the primary oscillator's own gain. */
+  readonly mix: number;
+}
+
+/** A one-pole-ish lowpass/bandpass/highpass carved onto the voice, per `BiquadFilterNode.type`. */
+export interface InstrumentFilter {
+  readonly type: 'lowpass' | 'bandpass' | 'highpass';
+  readonly frequencyHz: number;
+  readonly q: number;
+}
+
+/**
+ * A synthesised instrument voice — the Blaskapelle's members. Every track
+ * references these by id; there is no per-note timbre, only per-instrument.
+ */
+export interface InstrumentDefinition {
+  readonly id: string;
+  readonly name: string;
+  readonly waveform: Waveform;
+  readonly envelope: Envelope;
+  readonly secondaryOscillator?: OscillatorLayer;
+  readonly filter?: InstrumentFilter;
+  /** A slow pitch wobble — the accordion's reed wheeze. Omit for a clean tone. */
+  readonly vibrato?: { readonly rateHz: number; readonly depthCents: number };
+  /** Overall voice loudness relative to the mix, 0–1. */
+  readonly gain: number;
+}
+
+/**
+ * One note (or chord) in a track, expressed in beats from the track's own
+ * start — never in seconds and never against `AudioContext.currentTime`.
+ * `music.ts`'s scheduler is what converts `beat` to a playback time, and it
+ * does that from `sim.tick`, per #51's "must never introduce a timing
+ * dependency on audio playback position."
+ */
+export interface NoteEvent {
+  readonly beat: number;
+  readonly durationBeats: number;
+  readonly instrument: string;
+  /**
+   * Scientific pitch notation (`'A4'`, `'Eb3'`) or a chord as several of
+   * them. `synth.ts`'s `noteToFrequency` is the parser both sides agree on.
+   */
+  readonly note: string | readonly string[];
+  /** 0–1, layered on top of the instrument's own `gain`. Defaults to 1. */
+  readonly velocity?: number;
+}
+
+/**
+ * A composed piece — a floor theme, a boss theme, a stinger. `ticksPerBeat`
+ * is always 30 (120 BPM at the simulation's fixed 60 ticks/second,
+ * `sim/time.ts`) so every track lands on the same beat grid
+ * `content/enemies/blaskapellist.ts`'s `fireOnBeat` already fires on;
+ * written out per track anyway, not imported, for the same "content is a
+ * literal" reason `blaskapellist.ts` gives its own copy of the number.
+ */
+export interface TrackDefinition {
+  readonly id: string;
+  readonly title: string;
+  readonly ticksPerBeat: number;
+  /** Loop length. A track's last beat plus its duration must not exceed this. */
+  readonly loopBeats: number;
+  readonly events: readonly NoteEvent[];
+}
+
+/** A single synthesised sound effect: filtered noise, or a short tone, or both. */
+export interface SfxDefinition {
+  readonly id: string;
+  readonly description: string;
+  readonly noise?: {
+    readonly filter?: InstrumentFilter;
+    readonly durationSeconds: number;
+    readonly gain: number;
+  };
+  readonly tone?: {
+    readonly instrument: string;
+    readonly note: string;
+    readonly durationSeconds: number;
+  };
+  /** Random pitch wobble per play, in cents, so a repeated hit doesn't phase-lock. Defaults to 0. */
+  readonly pitchJitterCents?: number;
+}
+
+/**
+ * A short Bavarian voice bark (`docs/CONTENT_BIBLE.md` §6) — placeholder
+ * content until real voice-over lands. `motif` stands in for the recorded
+ * line: a short synthesised "shout" contour (an instrument sliding across a
+ * couple of notes) rather than actual speech, so the trigger, rate-limit and
+ * mixing seam exist and sound distinct from the SFX/music layers today.
+ */
+export interface BarkDefinition {
+  readonly id: string;
+  readonly text: string;
+  readonly motif: {
+    readonly instrument: string;
+    readonly notes: readonly string[];
+    readonly noteDurationSeconds: number;
+  };
+}
+
+/**
+ * The audio *content* of a Promille tier (`docs/GAME_DESIGN.md` §5) — what
+ * the filtered mix should sound like. The filter chain itself (buses,
+ * ducking, the actual DSP) is #157's; this is only the target parameters
+ * that chain will read, plus the light, bus-free approximation
+ * `music.ts`'s `MusicPlayer.setPromilleTier` applies directly to its own
+ * oscillators today so the effect is audible before #157 lands.
+ */
+export interface PromilleAudioTier {
+  readonly tier: number;
+  readonly name: string;
+  /** Playback rate multiplier — sober is 1; deeper tiers drag the tempo down. */
+  readonly tempoScale: number;
+  /** Detune applied to every voice, in cents — a woozy, slightly-flat mix. */
+  readonly detuneCents: number;
+  /** 0–1 — how much a lowpass should close in once #157 owns the mix bus. */
+  readonly muffle: number;
+}

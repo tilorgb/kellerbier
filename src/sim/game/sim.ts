@@ -983,6 +983,15 @@ export class GameSim {
   private deathWordValue: string | undefined;
 
   /**
+   * This tick's kills, by the slot that died, to the enemy id that died
+   * there — `kill()` populates it before `world.flush()` frees the slot;
+   * `enemyIdAt` reads it first, before falling back to the slot's live
+   * component data for a hit that did not kill. Cleared at the top of every
+   * `step()`, alongside `events.clear()`.
+   */
+  private deathEnemyIdByIndex = new Map<number, string>();
+
+  /**
    * Set once, by `markWon` (#155) — the tick the run was won. Unlike
    * `playerDeadFlag`, nothing inside `GameSim` itself decides *when* this
    * happens: "the last floor that exists" is `app/main.ts`'s
@@ -2274,6 +2283,34 @@ export class GameSim {
   /** The player's storage slot. Stable for the lifetime of the run. */
   get playerIndex(): number {
     return entityIndex(this.playerHandle);
+  }
+
+  /**
+   * The enemy id at storage slot `index` — `app/audio/sfx-player.ts`'s hook
+   * for picking a hit/death sound by what was actually hit
+   * (`content/audio/sfx.ts`'s `ENEMY_SFX_CATEGORY`). Checks this tick's
+   * kills first (`deathEnemyIdByIndex` — a killed slot is freed by
+   * `world.flush()` before any of this can run, so its live component data
+   * is already gone), then falls back to the slot's live data for a hit
+   * that did not kill. `null` for anything that resolves to neither: the
+   * player, a prop, or a slot with nothing recorded either way.
+   */
+  enemyIdAt(index: number): string | null {
+    const fromDeath = this.deathEnemyIdByIndex.get(index);
+    if (fromDeath !== undefined) {
+      return fromDeath;
+    }
+    if (index < 0 || index >= this.world.highWater || this.world.states[index] !== World.ALIVE) {
+      return null;
+    }
+    if (((this.world.masks[index] ?? 0) & this.enemyMask) !== this.enemyMask) {
+      return null;
+    }
+    const definitionIndex = this.enemy.data[index * ENEMY_STRIDE] ?? -1;
+    if (definitionIndex < 0) {
+      return null;
+    }
+    return this.enemies.at(definitionIndex).id;
   }
 
   /** Advances the simulation exactly one tick. */
@@ -4390,8 +4427,17 @@ export class GameSim {
     // `locksRoom` (the shopkeeper, `content/enemies/shopkeeper.ts`) — it was
     // never counted in, so killing it must not count it out.
     const enemyMasked = ((this.world.masks[index] ?? 0) & this.enemyMask) === this.enemyMask;
-    const wasEnemy =
-      enemyMasked && this.enemies.at(this.enemy.data[index * ENEMY_STRIDE] ?? -1).locksRoom;
+    const definitionIndex = this.enemy.data[index * ENEMY_STRIDE] ?? -1;
+    const wasEnemy = enemyMasked && this.enemies.at(definitionIndex).locksRoom;
+    // Same "read before flush clears it" reasoning as `wasEnemy` above, kept
+    // for `enemyIdAt` — `world.flush()` (end of `step()`) frees this slot
+    // before `app/audio/impact.ts`'s `playImpactAudio` ever gets to read it,
+    // so the Death event's own audio cue has nothing left to look up by the
+    // time it runs. Stashed here, at the one moment the slot still reliably
+    // names what died.
+    if (enemyMasked && definitionIndex >= 0) {
+      this.deathEnemyIdByIndex.set(index, this.enemies.at(definitionIndex).id);
+    }
     const random = this.random.cosmetic;
     this.decals.spawn(
       this.positionX(index),
@@ -4460,6 +4506,7 @@ export class GameSim {
 
   step(input: Readonly<InputFrame> = this.idleInput): void {
     this.events.clear();
+    this.deathEnemyIdByIndex.clear();
 
     // Hitstop freezes everything, including the flash that caused it — which is
     // the point: the white frame is held up for the player to see.

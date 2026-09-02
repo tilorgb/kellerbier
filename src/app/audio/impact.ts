@@ -4,30 +4,33 @@ import type { GameSim } from '../../sim/game/sim.js';
 /**
  * The seam audio plugs into.
  *
- * There is no audio yet — the sound pass is #51, in M8. What exists now is the
- * point at which it will attach, wired up and being called, so that adding
- * sound later is writing an implementation rather than finding every place a
- * hit happens.
+ * `sfx-player.ts`'s `SynthImpactAudio` is #51's real implementation;
+ * `SILENT_AUDIO` stays exported for tests and any environment without Web
+ * Audio, the same role `ambience.ts`'s `SILENT_AMBIENCE` plays there.
  *
  * It reads the event queue after a step rather than being called from the
  * simulation, for the same reason everything else does: `sim/` has no idea an
  * audio system exists, and a headless test runs the same code path.
  */
 export interface ImpactAudio {
-  onHit(x: number, y: number, damage: number): void;
-  onDeath(x: number, y: number): void;
+  /** `enemyId` is `null` for a hit whose victim resolved to nothing living by the time this ran. */
+  onHit(x: number, y: number, damage: number, enemyId: string | null): void;
+  onDeath(x: number, y: number, enemyId: string | null): void;
   /** The player took damage, from any source — contact or a shot. */
   onPlayerHit(damage: number): void;
   /** The player's last half-Maß just went, with no eternal heart left to spend it (#15). */
   onPlayerDeath(): void;
+  /** A shot expired against a wall or out of range, hitting nothing (`EventKind.ProjectileSpent`). */
+  onWallHit(x: number, y: number): void;
 }
 
-/** The implementation until #51. Deliberately silent, deliberately present. */
+/** The implementation until Web Audio is available. Deliberately silent, deliberately present. */
 export const SILENT_AUDIO: ImpactAudio = {
   onHit: () => undefined,
   onDeath: () => undefined,
   onPlayerHit: () => undefined,
   onPlayerDeath: () => undefined,
+  onWallHit: () => undefined,
 };
 
 /**
@@ -42,8 +45,13 @@ export function playImpactAudio(sim: GameSim, audio: ImpactAudio): void {
     const x = events.x[slot] ?? 0;
     const y = events.y[slot] ?? 0;
     switch (events.kind[slot]) {
-      case EventKind.ProjectileHit:
-        audio.onHit(x, y, events.value[slot] ?? 0);
+      case EventKind.ProjectileHit: {
+        const victim = events.other[slot] ?? -1;
+        audio.onHit(x, y, events.value[slot] ?? 0, sim.enemyIdAt(victim));
+        break;
+      }
+      case EventKind.ProjectileSpent:
+        audio.onWallHit(x, y);
         break;
       case EventKind.Damage:
         // Only ever pushed for the player — see `applyContact`/`applyHit`.
@@ -53,7 +61,7 @@ export function playImpactAudio(sim: GameSim, audio: ImpactAudio): void {
         if (events.subject[slot] === player) {
           audio.onPlayerDeath();
         } else {
-          audio.onDeath(x, y);
+          audio.onDeath(x, y, sim.enemyIdAt(events.subject[slot] ?? -1));
         }
         break;
       default:
