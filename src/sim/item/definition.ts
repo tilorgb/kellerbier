@@ -156,6 +156,21 @@ export type ItemBombDetonateHook = (
 export type ItemBeerPickupHook = ItemHook;
 
 /**
+ * Fires from `GameSim.applyPlayerDamage`'s lethal branch, once an eternal
+ * heart has already been ruled out — the last chance, before the run ends
+ * for real, for a held item to do something about it. Added for #84's
+ * Blutwurz (`content/items/blutwurz.ts`): "a killing blow, with nothing
+ * else standing between the player and the run ending" turned out to be
+ * exactly the kind of named moment `onBombDetonate`/`onBeerPickup` already
+ * are, so it gets the same broadcast-to-every-held-item treatment rather
+ * than `GameSim` special-casing one item's id. A hook that does nothing
+ * leaves the death to proceed exactly as it would have — `GameSim` checks
+ * `blutwurzActive` immediately after dispatch to decide whether it still
+ * needs to.
+ */
+export type ItemLethalDamageHook = ItemHook;
+
+/**
  * Every hook an item can declare, per `docs/GAME_DESIGN.md` §8's list plus
  * `onPickup`/`onRemove` (the pairing acceptance criterion #4 — "picking up
  * and losing an item returns the player to exactly the prior state" — needs
@@ -183,6 +198,8 @@ export interface ItemHooks {
   readonly onBombDetonate?: ItemBombDetonateHook;
   /** See `ItemBeerPickupHook`. */
   readonly onBeerPickup?: ItemBeerPickupHook;
+  /** See `ItemLethalDamageHook`. */
+  readonly onLethalDamage?: ItemLethalDamageHook;
 }
 
 /**

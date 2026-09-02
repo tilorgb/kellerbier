@@ -1,6 +1,7 @@
 import { type Component, World } from '../ecs/world.js';
 import { type Entity, entityIndex } from '../ecs/entity.js';
 import { ENEMY_DEFINITIONS } from '../../content/enemies/index.js';
+import { CURSE_DEFINITIONS } from '../../content/curses/index.js';
 import {
   BOSS_REWARD_DROP_TABLE,
   PICKUP_DEFINITIONS,
@@ -14,6 +15,9 @@ import type { InputFrame } from '../input/frame.js';
 import { createInputFrame } from '../input/frame.js';
 import { type DropTable, pickupDescriptionFor } from '../pickup/definition.js';
 import { PickupRegistry } from '../pickup/registry.js';
+import type { CurseId } from '../curse/definition.js';
+import { stepCurse } from '../systems/curse.js';
+import { stepBlutwurz } from '../systems/blutwurz.js';
 import { ITEM_DEFINITIONS } from '../../content/items/index.js';
 import {
   type ItemDefinition,
@@ -24,6 +28,8 @@ import {
 import { ItemInventory } from '../item/inventory.js';
 import { selectItemOffer } from '../item/pool.js';
 import { ItemRegistry } from '../item/registry.js';
+import { SetRegistry, setStatSourceKey, type ItemSetDefinition } from '../item/set.js';
+import { ITEM_SET_DEFINITIONS } from '../../content/item-sets/index.js';
 import { type RunRandom, createRunRandom } from '../rng/streams.js';
 import {
   type CharacterTraits,
@@ -99,6 +105,7 @@ import { applyDamageAt, stepImpact, stepParticles } from '../systems/impact.js';
 import { stepLootDrops } from '../systems/loot.js';
 import {
   dispatchItemFloorStart,
+  dispatchItemLethalDamage,
   dispatchItemProjectileSpawn,
   dispatchItemRoomClear,
   stepItemTick,
@@ -188,6 +195,14 @@ export const TARGET_RESPAWN_TICKS = 150;
 
 /** A room transition is immediate in simulation and presented over this many frames. */
 export const ROOM_TRANSITION_TICKS = 12;
+
+/**
+ * How long a floor's curse announcement banner (#49) stays up, in ticks —
+ * longer than the ordinary pickup toast's `tuning.pickup.toastTicks`, since
+ * a curse is a fact about the whole floor and worth reading, not a quick
+ * float-past-loot line.
+ */
+export const CURSE_ANNOUNCE_TICKS = 240;
 
 /**
  * How long enemies stay inert after a room loads, in ticks (0.4s at 60
@@ -393,6 +408,8 @@ export interface GameSimOptions {
   readonly enemies?: readonly EnemyDefinition[];
   /** Item data. Defaults to everything in `src/content/items/`. */
   readonly items?: readonly ItemDefinition[];
+  /** Item set data (#137). Defaults to everything in `src/content/item-sets/`. */
+  readonly itemSets?: readonly ItemSetDefinition[];
   /**
    * The headline word the *previous* run's death screen showed, if any.
    *
@@ -585,6 +602,9 @@ export class GameSim {
   /** Every item definition, validated, sorted by id and compiled once at construction (#26). */
   readonly items: ItemRegistry;
 
+  /** Every item set, validated against `items` and compiled once at construction (#137). */
+  readonly itemSets: SetRegistry;
+
   /** Which items this run holds, and their per-item runtime state. */
   readonly inventory: ItemInventory;
 
@@ -597,6 +617,19 @@ export class GameSim {
   private readonly itemStatsDirty: Uint8Array;
   private readonly dirtyItemIndices: Int32Array;
   private dirtyItemCount = 0;
+
+  /**
+   * Which item sets (#137) are currently complete — every member held at
+   * once. Rechecked in full on every `pickUpItem`/`removeItem`
+   * (`syncItemSetModifiers`) rather than dirty-tracked the way
+   * `itemStatsDirty` is: the roster is a handful of sets, not hundreds of
+   * items, so a full walk costs nothing and needs no bookkeeping of its own.
+   */
+  private readonly completedSetIds = new Set<string>();
+  /** Ticks left showing the set-completion notification. See `setCompletionReveal`. */
+  private setRevealTicks = 0;
+  private setRevealName = '';
+  private setRevealDescription = '';
 
   /** The floor `dispatchItemFloorStart` was last fired for. 0 is not a real floor, so floor 1 still fires once. */
   private lastFloorStartDispatched = 0;
@@ -809,6 +842,23 @@ export class GameSim {
   private toastDescription = '';
   private toastTicks = 0;
 
+  /** The active floor curse (#49), rolled once per floor by `rollFloorCurse`. `null` on an uncursed floor. */
+  private curseIdValue: CurseId | null = null;
+  /** Ticks left showing the curse-entry announcement banner. See `curseAnnouncement`. */
+  private curseAnnounceTicks = 0;
+  /**
+   * Current wind angle for the Föhn curse, radians — the curse's own scratch
+   * value, the same role an item hook's `ItemRuntimeState.charge` plays for
+   * the Föhn item (`sim/systems/curse.ts`'s `applyWind`). Public for the same
+   * reason `puddleImmuneTicks` is: read and written by a system, not a
+   * method.
+   */
+  curseFoehnAngle = 0;
+  /** Ticks left on Sperrstunde's "last call" timer, while it is the active curse. 0 once expired. */
+  sperrstundeTicksLeft = 0;
+  /** Ticks until Sperrstunde's next Ordner harassment application, once its timer has expired. */
+  sperrstundeHarassmentCooldown = 0;
+
   /** Biermarken banked, Kellerschlüssel held, and Bierfassl in inventory — see #22. */
   private biermarkenCount = 0;
   private keysCount = 0;
@@ -873,6 +923,59 @@ export class GameSim {
   private playerDeathTick_ = -1;
   private playerHurtTick_ = -1;
   private deathWordValue: string | undefined;
+
+  /**
+   * Set once, by `markWon` (#155) — the tick the run was won. Unlike
+   * `playerDeadFlag`, nothing inside `GameSim` itself decides *when* this
+   * happens: "the last floor that exists" is `app/main.ts`'s
+   * `HIGHEST_PLAYABLE_FLOOR`, a content-completeness fact rather than a
+   * simulation rule (the same reasoning `docs/DECISIONS.md` #22 already
+   * gives for floors 3-7 being parked, not cancelled) — so the *decision*
+   * lives where that constant already does, and calls this the instant it's
+   * made. The flag still lives here, not in `main.ts`, because it has to
+   * replay identically: `markWon` is called from the same
+   * `advanceOneTick`-driven path a room transition already is (see
+   * `enterNeighbor`), so a full replay reaches the same tick and calls it
+   * the same way live play did.
+   */
+  private playerWonFlag = false;
+  private playerWonTick_ = -1;
+
+  /**
+   * Blutwurz (#84): a second chance you have to walk back for. Once per run
+   * — `blutwurzSpentFlag` guards that even across a successful recovery, not
+   * just a failed one.
+   *
+   * Floor continuity needs no snapshot of its own: `blutwurzActiveFlag`
+   * turning on does not reset or regenerate anything (`roomClearedIds`,
+   * `roomLootSnapshots`, `takenItemIds`, the room the player is standing
+   * in) — the same live `GameSim` simply keeps existing, which is what
+   * makes "the floor is byte-for-byte the floor the player died on" true
+   * by construction rather than something to engineer. `app/main.ts` reacts
+   * to `blutwurzActive` turning on the same way it reacts to a door
+   * transition (see `enterNeighbor`) — loading the floor's start room, the
+   * one thing outside `GameSim`'s own state (the floor plan) it needs.
+   */
+  private blutwurzActiveFlag = false;
+  private corpseXValue = 0;
+  private corpseYValue = 0;
+  /**
+   * Which room's local space `corpseXValue`/`corpseYValue` are in —
+   * `roomId` is per-room-load state (`GameSim.room`'s coordinates are
+   * reused by every room, not a shared floor-wide space), so a raw x/y
+   * alone would silently collide with unrelated coordinates the moment the
+   * player leaves the room the corpse is actually in.
+   */
+  private corpseRoomIdValue = '';
+  /** The player's max health from immediately before Blutwurz triggered — what the permanent penalty on a successful recovery is measured against. */
+  private blutwurzPreviousMaxHealth = 0;
+  /**
+   * The sober-run stand-in for Promille-as-timer (see `stepBlutwurz`) — a
+   * plain, invisible countdown, since a sober run has no meter to raise at
+   * all (#85's own invariant: no meter, no HUD element, full stop). Unused,
+   * and left at 0, whenever `promilleUnlocked` is true.
+   */
+  blutwurzSpiritTicks = 0;
 
   /** Carried in from `GameSimOptions`, and never written after construction. */
   private readonly previousDeathWord: string | undefined;
@@ -1046,6 +1149,16 @@ export class GameSim {
     this.enemies = new EnemyRegistry(options.enemies ?? ENEMY_DEFINITIONS);
     this.pickups = new PickupRegistry(PICKUP_DEFINITIONS);
     this.items = new ItemRegistry(options.items ?? ITEM_DEFINITIONS);
+    this.itemSets = new SetRegistry(
+      // The default set roster (#137) assumes the default item roster is
+      // also in play — a test substituting its own small `items` list
+      // (every existing test that does) has no reason to also carry every
+      // set's member ids, so it gets no sets by default rather than a
+      // constructor that throws over content the test never asked for.
+      // Passing `itemSets` explicitly always wins, custom roster or not.
+      options.itemSets ?? (options.items === undefined ? ITEM_SET_DEFINITIONS : []),
+      this.items,
+    );
     this.inventory = new ItemInventory(this.items);
     this.itemStatsDirty = new Uint8Array(this.items.count);
     this.dirtyItemIndices = new Int32Array(this.items.count);
@@ -1658,6 +1771,7 @@ export class GameSim {
     }
     if (floor !== this.lastFloorStartDispatched) {
       this.lastFloorStartDispatched = floor;
+      this.rollFloorCurse();
       dispatchItemFloorStart(this, floor);
     }
     // "Stats reroll on every floor entry" (#47) — a floor, not a room: the
@@ -1667,7 +1781,15 @@ export class GameSim {
     this.currentFloorValue = floor;
     this.roomEnemyCount = 0;
     this.maypoleTaken = false;
-    const alreadyCleared = this.roomClearedIds.has(this.roomId);
+    // Blutwurz (#84): "cleared rooms repopulate" — a corpse run across an
+    // empty floor is a walk, not a second chance. Boss rooms are the one
+    // exception ("the floor's boss, if already killed, stays dead" — the
+    // issue's own words): re-fighting one is a second run, not a penalty,
+    // so `alreadyCleared` still holds for `specialRole === 'boss'` even
+    // while the spirit walk is on.
+    const alreadyCleared =
+      this.roomClearedIds.has(this.roomId) &&
+      !(this.blutwurzActiveFlag && compiled.specialRole !== 'boss');
     this.positionPlayerAtDoor(direction, entryCell);
     if (!alreadyCleared) {
       // A room entered through a door (not the run's very first room) never
@@ -2151,6 +2273,61 @@ export class GameSim {
     this.toastTicks = Math.round(this.tuning.pickup.toastTicks);
   }
 
+  /** The active floor curse (#49), or `null` on an uncursed floor. */
+  get curse(): CurseId | null {
+    return this.curseIdValue;
+  }
+
+  /**
+   * The curse-entry announcement, or `null` once it has aged out — same
+   * "return null past its ticks" shape as `pickupToast`. Read by the render
+   * layer once a frame.
+   */
+  get curseAnnouncement(): { readonly name: string; readonly description: string } | null {
+    if (this.curseAnnounceTicks <= 0 || this.curseIdValue === null) {
+      return null;
+    }
+    const definition = CURSE_DEFINITIONS.find((entry) => entry.id === this.curseIdValue);
+    return definition === undefined
+      ? null
+      : { name: definition.name, description: definition.description };
+  }
+
+  /**
+   * Rolls whether this floor carries a curse, and which one — called once
+   * per floor, from `applyCompiledRoom`'s own "new floor" guard, the same
+   * moment `dispatchItemFloorStart` fires.
+   *
+   * Kater is the one curse with an immediate effect rather than a per-tick
+   * one: it starts the same `katerTicksValue` debuff `tickUmgfalln` would,
+   * so the floor opens hungover instead of the player waking up that way.
+   * Nebel and Blaue Stunde need nothing here — both are read directly off
+   * `curse` by the renderer — and Föhn/Sperrstunde's per-tick effects live in
+   * `sim/systems/curse.ts`'s `stepCurse`.
+   */
+  private rollFloorCurse(): void {
+    const tuning = this.tuning.curse;
+    this.curseFoehnAngle = 0;
+    this.sperrstundeHarassmentCooldown = 0;
+    if (!this.random.curse.chance(tuning.curseChance)) {
+      this.curseIdValue = null;
+      this.sperrstundeTicksLeft = 0;
+      return;
+    }
+    const definition = this.random.curse.pick(CURSE_DEFINITIONS);
+    this.curseIdValue = definition.id;
+    this.sperrstundeTicksLeft =
+      definition.id === 'sperrstunde' ? Math.round(tuning.sperrstundeTimerTicks) : 0;
+    if (definition.id === 'kater') {
+      this.startKater();
+    }
+    this.curseAnnounceTicks = CURSE_ANNOUNCE_TICKS;
+    // The curse announcement is a bigger deal than an ordinary pickup toast
+    // that happened to still be showing when the floor loaded — same
+    // suppression precedent `takePedestalItem` sets for its own reveal panel.
+    this.toastTicks = 0;
+  }
+
   /** Biermarken banked. */
   get biermarken(): number {
     return this.biermarkenCount;
@@ -2266,6 +2443,131 @@ export class GameSim {
     return this.playerDeathTick_;
   }
 
+  /** True once the run has been won (#155) — see `markWon`. */
+  get playerWon(): boolean {
+    return this.playerWonFlag;
+  }
+
+  /** The tick the run was won on, or -1 until then. */
+  get playerWonTick(): number {
+    return this.playerWonTick_;
+  }
+
+  /**
+   * Marks the run won (#155) — called by `app/main.ts`'s `enterNeighbor`
+   * the instant it decides the boss room just cleared was the last floor's,
+   * rather than routing into another lap of the dev-only endless floor
+   * loop. A no-op past the first call, and past a death: once a run has
+   * ended one way, it does not end the other way too.
+   */
+  markWon(): void {
+    if (this.playerWonFlag || this.playerDeadFlag) {
+      return;
+    }
+    this.playerWonFlag = true;
+    this.playerWonTick_ = this.currentTick;
+  }
+
+  /** Whether the spirit walk (#84) is currently on. */
+  get blutwurzActive(): boolean {
+    return this.blutwurzActiveFlag;
+  }
+
+  /** Whether this run still has an unspent Blutwurz — a held bottle. Consumed (and so no longer true) the instant it's used. */
+  get blutwurzAvailable(): boolean {
+    return this.hasItem('blutwurz');
+  }
+
+  /**
+   * Where the corpse is, in the current room's local px, plus which room
+   * that actually is — `null` outside a spirit walk. `x`/`y` are only
+   * meaningful together with `roomId`: read them against `sim.room` only
+   * when `roomId === sim.roomId`, the same guard `stepBlutwurz`'s own
+   * touch check and the renderer's corpse marker both apply.
+   */
+  get corpsePosition(): { readonly x: number; readonly y: number; readonly roomId: string } | null {
+    return this.blutwurzActiveFlag
+      ? { x: this.corpseXValue, y: this.corpseYValue, roomId: this.corpseRoomIdValue }
+      : null;
+  }
+
+  /**
+   * Starts the spirit walk: the bottle is spent (`removeItem`, which is
+   * also what makes `blutwurzAvailable` false for the rest of the walk —
+   * `content/items/blutwurz.ts`'s own `onLethalDamage` hook is what calls
+   * this, and guards against calling it twice), and health drops to
+   * `tuning.blutwurz.spiritMaxHealth` — one hit ends it, per #84's own
+   * "fragile by design." The build itself is untouched: items, stats and
+   * their hooks all keep working exactly as they did the tick before —
+   * #84 leaves "the exact loadout" an open question and never asks for the
+   * build to go dark, only for the player to. `app/main.ts` reacts to this
+   * turning on the same tick, the same way it reacts to `sim.doorContact`:
+   * it is what actually walks the player back to the floor's start room,
+   * since the floor plan lives outside `GameSim`.
+   *
+   * Public so the item's own hook can call it — hooks call back only into
+   * what `ItemHookContext` hands them (`content-is-data`), and `ctx.sim` is
+   * the full public `GameSim` surface.
+   */
+  startBlutwurz(): void {
+    const index = this.playerIndex;
+    this.corpseXValue = this.positionX(index);
+    this.corpseYValue = this.positionY(index);
+    this.corpseRoomIdValue = this.roomId;
+    this.removeItem('blutwurz');
+    this.blutwurzActiveFlag = true;
+    this.blutwurzSpiritTicks = 0;
+    this.blutwurzPreviousMaxHealth = this.playerMaxHealth;
+    const spiritHealth = Math.max(1, Math.round(this.tuning.blutwurz.spiritMaxHealth));
+    this.health.data[index * 2 + 1] = spiritHealth;
+    this.health.data[index * 2] = spiritHealth;
+  }
+
+  /**
+   * Reaching the corpse (#84): the walk succeeded. Health returns to the
+   * pre-Blutwurz max, permanently reduced by
+   * `tuning.blutwurz.recoveryMaxHealthPenalty`, filled — a successful
+   * recovery earns the full (reduced) tank back, not a scrape-by heal — and
+   * Kater starts, the same debuff waking from Umgfalln leaves behind.
+   *
+   * A no-op outside an active walk — public (for `stepBlutwurz`'s own
+   * touch-check to call), so guarded the same way `startBlutwurz`'s own
+   * caller is, rather than trusting every future caller to check first:
+   * calling this twice in a row must not spend the recovery penalty twice.
+   */
+  recoverFromBlutwurz(): void {
+    if (!this.blutwurzActiveFlag) {
+      return;
+    }
+    const index = this.playerIndex;
+    const restoredMax = Math.max(
+      1,
+      this.blutwurzPreviousMaxHealth - Math.round(this.tuning.blutwurz.recoveryMaxHealthPenalty),
+    );
+    this.health.data[index * 2 + 1] = restoredMax;
+    this.health.data[index * 2] = restoredMax;
+    this.startKater();
+    this.blutwurzActiveFlag = false;
+    this.blutwurzSpiritTicks = 0;
+  }
+
+  /**
+   * The walk failed: Promille (or, in a sober run, `blutwurzSpiritTicks`'s
+   * own hidden countdown) ran out before the corpse did. Ends the run
+   * exactly like a hit that landed clean would — `killPlayer` reads
+   * `blutwurzActiveFlag` before this clears it, which is what gives the
+   * death word its own, different one.
+   *
+   * A no-op outside an active walk, same reasoning `recoverFromBlutwurz`
+   * guards for.
+   */
+  failBlutwurz(): void {
+    if (!this.blutwurzActiveFlag) {
+      return;
+    }
+    this.killPlayer();
+  }
+
   /**
    * The game-over screen's headline word, drawn once at the moment of death
    * and memoised — the pool draw is a real consumption of the cosmetic
@@ -2273,6 +2575,28 @@ export class GameSim {
    */
   get deathWord(): string | undefined {
     return this.deathWordValue;
+  }
+
+  /**
+   * Marks the run over for real: no eternal heart, no Blutwurz charge (or
+   * already spent one) left to fall back on. Factored out of
+   * `applyPlayerDamage`'s lethal branch so `failBlutwurz` — a second death,
+   * mid-spirit-walk, from `stepBlutwurz` rather than from a hit — ends the
+   * run exactly the same way.
+   */
+  private killPlayer(): void {
+    this.playerDeadFlag = true;
+    this.playerDeathTick_ = this.currentTick;
+    this.deathWordValue = this.blutwurzActiveFlag
+      ? // #84's own acceptance criterion: the run summary should say how
+        // close they got. A dedicated word rather than the ordinary pool
+        // draw is the cheapest honest version of that — this death has a
+        // different shape (a walk that came up short, not a hit that landed
+        // clean) and reads as one in the one place every death screen is
+        // read.
+        'Nimmer zruckkema'
+      : drawDeathWord(this.random.cosmetic, this.previousDeathWord);
+    this.blutwurzActiveFlag = false;
   }
 
   /**
@@ -2310,11 +2634,28 @@ export class GameSim {
         this.soulHp = 0;
         health[index * 2] = 1;
       } else {
+        // Captured before dispatch: a spirit is fragile by design (#84,
+        // `tuning.blutwurz.spiritMaxHealth`) — a *second* lethal hit landing
+        // while the walk is already underway has to end the run for real,
+        // not be silently absorbed because the walk "is already active."
+        // `blutwurz.ts`'s own hook already refuses to start a second walk
+        // over the first (`!ctx.sim.blutwurzActive`), so `blutwurzActiveFlag`
+        // never changes on this path — without capturing `wasActive` first,
+        // the check below would read that as "still handled" and the player
+        // would take unlimited hits while a spirit.
+        const wasActive = this.blutwurzActiveFlag;
         this.soulHp = 0;
         health[index * 2] = 0;
-        this.playerDeadFlag = true;
-        this.playerDeathTick_ = this.currentTick;
-        this.deathWordValue = drawDeathWord(this.random.cosmetic, this.previousDeathWord);
+        // Blutwurz (#84): the last chance, before the run ends for real, for
+        // a held item to do something about it — `dispatchItemLethalDamage`
+        // broadcasts `onLethalDamage` to everything held, and
+        // `blutwurz.ts`'s own hook is what actually starts the spirit walk.
+        // A hit that lands while nothing intervenes falls straight through
+        // to `killPlayer`, exactly as it always did.
+        dispatchItemLethalDamage(this);
+        if (wasActive || !this.blutwurzActiveFlag) {
+          this.killPlayer();
+        }
       }
       return;
     }
@@ -2865,6 +3206,10 @@ export class GameSim {
     this.syncItemStatModifiers();
     const item = this.items.at(index);
     this.reportCollected(item.name, item.description);
+    // After `reportCollected`, not before: a set completing on this exact
+    // pickup has to force-clear the ordinary toast that call just started,
+    // not race it.
+    this.syncItemSetModifiers();
     item.hooks.onPickup?.({ sim: this, itemId: id, state });
     return state;
   }
@@ -2887,6 +3232,7 @@ export class GameSim {
     const stillHeld = this.inventory.remove(index);
     this.markItemStatsDirty(index);
     this.syncItemStatModifiers();
+    this.syncItemSetModifiers();
     if (!stillHeld) {
       item.hooks.onRemove?.({ sim: this, itemId: id, state });
     }
@@ -3392,6 +3738,62 @@ export class GameSim {
     this.dirtyItemCount = 0;
   }
 
+  /**
+   * Rechecks every item set's completion (#137) — every member held at
+   * once — and folds the set's `bonus` into the stat pipeline the instant
+   * it becomes true, clearing it the instant it stops being true. Called
+   * from `pickUpItem`/`removeItem`, the same two places `ItemInventory`
+   * itself reacts to a stack starting or ending.
+   *
+   * A newly-completed set fires the reveal panel and — the same
+   * "the bigger notification wins" precedent `takePedestalItem` sets for its
+   * own reveal over the ordinary pickup toast — force-clears whichever
+   * ordinary toast or pedestal reveal was already showing, so a set's third
+   * piece landing never reads as two things happening at once.
+   */
+  private syncItemSetModifiers(): void {
+    for (const set of this.itemSets.all) {
+      const complete = set.memberIndices.every((index) => this.inventory.has(index));
+      const wasComplete = this.completedSetIds.has(set.id);
+      if (complete === wasComplete) {
+        continue;
+      }
+      const key = setStatSourceKey(set.id);
+      if (complete) {
+        this.completedSetIds.add(set.id);
+        const source = { kind: 'set' as const, id: set.id, label: set.name };
+        const modifiers: StatModifier[] = set.bonus.map((modifier) => ({ ...modifier, source }));
+        if (modifiers.length > 0) {
+          this.stats.setSourceModifiers(key, modifiers);
+        }
+        this.setRevealName = set.name;
+        this.setRevealDescription = `The full ${set.name} set — every piece is doing more together.`;
+        this.setRevealTicks = Math.round(this.tuning.itemPool.revealHoldTicks);
+        this.toastTicks = 0;
+        this.pedestalRevealTicks = 0;
+      } else {
+        this.completedSetIds.delete(set.id);
+        this.stats.clearSource(key);
+      }
+    }
+  }
+
+  /**
+   * The set-completion notification, or `null` once it has aged out — same
+   * "return null past its ticks" shape as `pickupToast`/`pedestalReveal`.
+   */
+  get setCompletionReveal(): { readonly name: string; readonly description: string } | null {
+    if (this.setRevealTicks <= 0) {
+      return null;
+    }
+    return { name: this.setRevealName, description: this.setRevealDescription };
+  }
+
+  /** Whether `id` (an `ItemSetDefinition.id`) is currently complete — every member held at once. */
+  hasCompletedSet(id: string): boolean {
+    return this.completedSetIds.has(id);
+  }
+
   /** True while the simulation is frozen by hitstop. */
   get frozen(): boolean {
     return this.hitstopTicks > 0;
@@ -3634,7 +4036,15 @@ export class GameSim {
     // ordering requirement — it rides along here rather than earning a
     // second call site.
     stepStatusEffects(this);
+    // A curse's per-tick effect (Föhn's wind, Sperrstunde's timer and
+    // harassment) — after status effects so an Ordner poison application
+    // this tick is picked up by the very next `stepStatusEffects` call
+    // rather than sitting unaged for a whole extra tick.
+    stepCurse(this);
     stepBodies(this);
+    // After `stepBodies`, so a corpse-touch check reads this tick's actual
+    // movement rather than last tick's position.
+    stepBlutwurz(this);
     stepShooting(this, input);
     stepProjectiles(this);
     stepCollision(this);
@@ -3742,6 +4152,12 @@ export class GameSim {
     }
     if (this.pedestalRevealTicks > 0) {
       this.pedestalRevealTicks -= 1;
+    }
+    if (this.curseAnnounceTicks > 0) {
+      this.curseAnnounceTicks -= 1;
+    }
+    if (this.setRevealTicks > 0) {
+      this.setRevealTicks -= 1;
     }
   }
 
