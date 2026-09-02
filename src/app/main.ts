@@ -82,8 +82,11 @@ import {
 } from '../render/art-bundle.js';
 import { loadPlayerArt } from '../render/player-art.js';
 import { attachLiveArtPreviewListener } from '../render/live-art-preview.js';
-import { AmbienceTracker, SILENT_AMBIENCE } from './audio/ambience.js';
-import { SILENT_AUDIO, playImpactAudio } from './audio/impact.js';
+import { AmbienceTracker, SynthAmbienceAudio } from './audio/ambience.js';
+import { playImpactAudio } from './audio/impact.js';
+import { SYNTH_IMPACT_AUDIO, playSfx, playVictoryFanfare } from './audio/sfx-player.js';
+import { FootstepTracker } from './audio/footsteps.js';
+import { attachAudioUnlockListener, isMuted, toggleMute } from './audio/context.js';
 import { Bindable } from './input/bindings.js';
 import { actionPrompt, detectGlyphSet } from './input/glyphs.js';
 import { InputSampler } from './input/sampler.js';
@@ -1143,6 +1146,7 @@ async function boot(): Promise<void> {
     pausedBeforeRunResults = loop.paused;
     loop.paused = true;
     runResults.show(runResultsView(), deathPhase === 'over');
+    playSfx('ui-open');
   }
 
   function closeRunResults(): void {
@@ -1151,6 +1155,7 @@ async function boot(): Promise<void> {
     }
     runResults.hide();
     loop.paused = pausedBeforeRunResults;
+    playSfx('ui-close');
   }
 
   /**
@@ -1201,6 +1206,8 @@ async function boot(): Promise<void> {
             kills: summary.kills,
             floor: floorLabel,
           });
+          ambience.stop();
+          playVictoryFanfare();
         } else {
           gameOverScreen.show({
             word: sim.deathWord ?? 'Umgfalln',
@@ -1211,6 +1218,7 @@ async function boot(): Promise<void> {
             // separate, smaller follow-up.
             floor: floorLabel,
           });
+          ambience.stop();
         }
         // Watching a replay plays this same sequence back — the summary
         // screen above still shows, since that is what the replay is *of*
@@ -1250,6 +1258,7 @@ async function boot(): Promise<void> {
           // shows.
           if (save.unlocks.some((id) => !unlocksAtRunStart.has(id))) {
             openRunResults();
+            playSfx('ui-unlock-fanfare');
           }
         }
       }
@@ -1315,10 +1324,14 @@ async function boot(): Promise<void> {
     createTouchControls(input.touch);
   }
 
-  // Floor music and room ambience's seam (#35, `audio/ambience.ts`) — silent
-  // until #51, wired up and being called the same way `playImpactAudio`
-  // already is below.
-  const ambience = new AmbienceTracker();
+  // Floor music, boss themes and room ambience (#51, `audio/ambience.ts`):
+  // `ambienceTracker` edge-detects a floor/room change from `sim` and calls
+  // `ambience`, the real Web-Audio-backed implementation, the same seam
+  // shape `playImpactAudio`/`SYNTH_IMPACT_AUDIO` use below.
+  const ambienceTracker = new AmbienceTracker();
+  const ambience = new SynthAmbienceAudio();
+  const footsteps = new FootstepTracker();
+  attachAudioUnlockListener();
 
   // The overlay is created asynchronously and may never arrive — in a
   // production build the import below is never reached and the whole of
@@ -1349,8 +1362,12 @@ async function boot(): Promise<void> {
   function advanceOneTick(frame: Readonly<InputFrame>, live: boolean): void {
     sim.step(frame);
     if (live) {
-      playImpactAudio(sim, SILENT_AUDIO);
-      ambience.sync(sim, SILENT_AMBIENCE);
+      playImpactAudio(sim, SYNTH_IMPACT_AUDIO);
+      const isBossRoom = planRoom(floorPlan, currentRoomId).role === 'boss';
+      ambienceTracker.sync(sim, ambience, isBossRoom);
+      ambience.sync(sim.tick, live);
+      ambience.syncPromilleTier(sim.promilleTier);
+      footsteps.sync(sim, live);
       playRumble(sim, input.gamepad);
     }
     summary.recordTick(sim);
@@ -1363,7 +1380,9 @@ async function boot(): Promise<void> {
     }
     const touchedDoor = sim.doorContact;
     if (touchedDoor !== null) {
-      enterNeighbor(touchedDoor);
+      if (enterNeighbor(touchedDoor)) {
+        playSfx('door-open');
+      }
     }
   }
 
@@ -1477,6 +1496,7 @@ async function boot(): Promise<void> {
           pickupToastLabel = label;
           pickupToast.set(label);
           pickupToast.place(Math.round(uiFrame.width / 2), Math.round(uiFrame.height * 0.2));
+          playSfx('pickup-generic');
         }
         pickupToast.visible = true;
       } else if (pickupToast.visible) {
@@ -1554,6 +1574,7 @@ async function boot(): Promise<void> {
             Math.round(uiFrame.width / 2),
             Math.round(uiFrame.height / 2),
           );
+          playSfx('pickup-pedestal');
         }
         pedestalReveal.visible = true;
       } else if (pedestalReveal.visible) {
@@ -1635,7 +1656,7 @@ shots ${String(shots.liveCount)}/${String(shots.capacity)}  particles ${String(
     )}/${String(particles.capacity)}${shots.overflows > 0 ? '  SHOT OVERFLOW' : ''}
 save ${String(activeRunRecorder.frameCount)} ticks logged${wasResumed ? '  (resumed)' : ''}
 WASD move   arrows aim and fire
-  O debug   T tuning   I shot tags   Y accessibility   P pause   . step   [ ] time scale
+  O debug   T tuning   I shot tags   Y accessibility   P pause   M ${isMuted() ? 'unmute' : 'mute'}   . step   [ ] time scale
   N next room (after clear)   R restart (new seed)   C copy run   L load replay${overrideKeyHint}`;
   };
   /**
@@ -1880,6 +1901,7 @@ WASD move   arrows aim and fire
     const config = floorConfig(floorPlan.floor);
     floorTitleCard.show(floorPlan.floor, config.name, config.flavour);
     floorCardUntil = performance.now() + FLOOR_CARD_MS;
+    playSfx('floor-card-whoosh');
   }
 
   /** Fades the card out and takes it down. See `FLOOR_CARD_MS` for why this is a clock and not a tick count. */
@@ -2442,6 +2464,7 @@ WASD move   arrows aim and fire
       view.setSecretHints(crackHintsFor(floorPlan, currentRoomId, revealedEdges));
       view.setLockedDoors(lockedDoorsFor(floorPlan, currentRoomId, visitedRoomIds));
       minimapHud.rebuild(floorPlan, currentRoomId, visitedRoomIds);
+      playSfx('secret-reveal');
     }
   }
 
@@ -2493,6 +2516,7 @@ WASD move   arrows aim and fire
           if (deathPhase === 'over') {
             closeRunResults();
             startRun(pendingSeed);
+            playSfx('ui-confirm');
           }
           break;
         case 't':
@@ -2511,6 +2535,10 @@ WASD move   arrows aim and fire
       case 'p':
       case 'P':
         loop.paused = !loop.paused;
+        break;
+      case 'm':
+      case 'M':
+        toggleMute();
         break;
       case '.':
         loop.stepOnce();
