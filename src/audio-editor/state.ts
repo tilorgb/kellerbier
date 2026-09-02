@@ -35,6 +35,47 @@ export function blankLoop(): EditorLoop {
   return { loopBeats: 8, ticksPerBeat: 30, lanes: ['accordion'], notes: [] };
 }
 
+/**
+ * A named, single-instrument loop saved for reuse — "the tuba part",
+ * composed and kept on its own, independently of whatever is currently
+ * being combined into the working loop. Persisted to `localStorage` (per
+ * browser, not through the server — this is a scratch workspace, not
+ * shipped content; the working loop it gets combined into is what actually
+ * saves to `content/audio/tracks.ts`, via the existing track panel).
+ */
+export interface SavedInstrumentLoop {
+  readonly name: string;
+  readonly instrument: string;
+  readonly loopBeats: number;
+  readonly notes: readonly Omit<LoopNote, 'id'>[];
+}
+
+const LOOP_LIBRARY_STORAGE_KEY = 'kellerbier-audio-editor-loop-library';
+
+function loadLoopLibrary(): SavedInstrumentLoop[] {
+  try {
+    const raw = window.localStorage.getItem(LOOP_LIBRARY_STORAGE_KEY);
+    if (raw === null) {
+      return [];
+    }
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as SavedInstrumentLoop[]) : [];
+  } catch {
+    // Private browsing, a full quota, a hand-edited/corrupt value — a
+    // scratch workspace starting empty beats the whole editor failing to boot.
+    return [];
+  }
+}
+
+function persistLoopLibrary(loops: readonly SavedInstrumentLoop[]): void {
+  try {
+    window.localStorage.setItem(LOOP_LIBRARY_STORAGE_KEY, JSON.stringify(loops));
+  } catch {
+    // Same reasoning as `loadLoopLibrary` — losing the save silently is
+    // better than an uncaught exception out of a click handler.
+  }
+}
+
 type Listener = () => void;
 
 /**
@@ -49,11 +90,14 @@ export class AudioEditorState {
   loop: EditorLoop = blankLoop();
   selectedInstrumentId = 'accordion';
   selectedTrackId: string | null = null;
+  /** Duration a newly-placed note gets, in beats — the piano roll's "note length" control. Drag-resize (`resizeNote`) overrides it per note afterward. */
+  defaultNoteDurationBeats = 0.5;
   isPlaying = false;
   /** Current playback position, in beats from loop start — the piano roll's playhead. */
   playheadBeat = 0;
   recordArmed = false;
   bpm = 120;
+  savedLoops: SavedInstrumentLoop[] = typeof window === 'undefined' ? [] : loadLoopLibrary();
 
   private nextNoteId = 1;
   private readonly listeners = new Set<Listener>();
@@ -153,6 +197,49 @@ export class AudioEditorState {
   loadTracksAndInstruments(tracks: TrackDefinition[], instruments: InstrumentDefinition[]): void {
     this.tracks = tracks;
     this.instruments = instruments;
+    this.notify();
+  }
+
+  /** Saves `instrument`'s current notes in the working loop as a named, reusable loop. Overwrites a loop already saved under `name`. */
+  saveLaneAsLoop(name: string, instrument: string): void {
+    const notes = this.loop.notes
+      .filter((note) => note.instrument === instrument)
+      .map(({ id: _id, ...rest }) => rest);
+    const saved: SavedInstrumentLoop = { name, instrument, loopBeats: this.loop.loopBeats, notes };
+    this.savedLoops = [...this.savedLoops.filter((loop) => loop.name !== name), saved];
+    persistLoopLibrary(this.savedLoops);
+    this.notify();
+  }
+
+  deleteSavedLoop(name: string): void {
+    this.savedLoops = this.savedLoops.filter((loop) => loop.name !== name);
+    persistLoopLibrary(this.savedLoops);
+    this.notify();
+  }
+
+  /**
+   * Brings a saved loop into the working loop — "the final track where
+   * each instrument comes together": adds a lane for its instrument if one
+   * isn't open yet, and replaces that lane's notes with the saved ones
+   * (not merged alongside whatever was already there, so clicking "add" a
+   * second time updates the lane instead of doubling its notes). Notes
+   * that would land past the working loop's own length are dropped, the
+   * same "wouldn't fit" rule `mergeLoopIntoTrack` applies when a loop goes
+   * into a shipped track.
+   */
+  addSavedLoopToWorkingLoop(name: string): void {
+    const saved = this.savedLoops.find((loop) => loop.name === name);
+    if (saved === undefined) {
+      return;
+    }
+    this.loop.notes = this.loop.notes.filter((note) => note.instrument !== saved.instrument);
+    for (const note of saved.notes) {
+      if (note.beat + note.durationBeats > this.loop.loopBeats) {
+        continue;
+      }
+      this.loop.notes.push({ ...note, id: this.nextNoteId++ });
+    }
+    this.addLane(saved.instrument);
     this.notify();
   }
 }

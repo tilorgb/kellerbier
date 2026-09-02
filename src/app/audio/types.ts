@@ -39,10 +39,16 @@ export interface InstrumentFilter {
 }
 
 /**
- * A synthesised instrument voice — the Blaskapelle's members. Every track
- * references these by id; there is no per-note timbre, only per-instrument.
+ * A synthesised, pitched instrument voice — the Blaskapelle's members, plus
+ * whatever else gets added to the palette (guitar, banjo, piano, ...).
+ * Every track references these by id; there is no per-note timbre, only
+ * per-instrument. `kind: 'tonal'` is what tells `synth.ts#playTone` and the
+ * piano roll this instrument plays pitches, not drum voices — see
+ * `PercussionInstrumentDefinition` for the other branch of
+ * `InstrumentDefinition`.
  */
-export interface InstrumentDefinition {
+export interface TonalInstrumentDefinition {
+  readonly kind: 'tonal';
   readonly id: string;
   readonly name: string;
   readonly waveform: Waveform;
@@ -54,6 +60,48 @@ export interface InstrumentDefinition {
   /** Overall voice loudness relative to the mix, 0–1. */
   readonly gain: number;
 }
+
+/**
+ * One drum sound within a `PercussionInstrumentDefinition` — filtered
+ * noise, optionally with a low sine "thump" underneath it (a kick wants
+ * one, a hi-hat doesn't). `id` is what a percussion track's `NoteEvent.note`
+ * names instead of a pitch (`'kick'`, not `'C4'`) — a kit has no scale, so
+ * reusing scientific pitch notation for "which drum" would be a lie the
+ * schema tells about itself. `label` is what the piano roll draws on that
+ * row instead of a note name.
+ */
+export interface DrumVoice {
+  readonly id: string;
+  readonly label: string;
+  readonly noise?: {
+    readonly filter?: InstrumentFilter;
+    readonly durationSeconds: number;
+    readonly gain: number;
+  };
+  readonly tone?: {
+    readonly frequencyHz: number;
+    readonly durationSeconds: number;
+    readonly gain: number;
+  };
+}
+
+/**
+ * A drum kit — a fixed small set of `DrumVoice`s, each its own row on the
+ * piano roll rather than a pitch range (`kind: 'percussion'` is what tells
+ * `synth.ts#playTone` and the piano roll to read it that way). `voices` is
+ * an array, not a map, so row order is the array's own order rather than
+ * relying on object-key iteration order to stay stable.
+ */
+export interface PercussionInstrumentDefinition {
+  readonly kind: 'percussion';
+  readonly id: string;
+  readonly name: string;
+  readonly voices: readonly DrumVoice[];
+  /** Overall voice loudness relative to the mix, 0–1. */
+  readonly gain: number;
+}
+
+export type InstrumentDefinition = TonalInstrumentDefinition | PercussionInstrumentDefinition;
 
 /**
  * One note (or chord) in a track, expressed in beats from the track's own
@@ -68,7 +116,10 @@ export interface NoteEvent {
   readonly instrument: string;
   /**
    * Scientific pitch notation (`'A4'`, `'Eb3'`) or a chord as several of
-   * them. `synth.ts`'s `noteToFrequency` is the parser both sides agree on.
+   * them, for a `TonalInstrumentDefinition` — `synth.ts`'s `noteToFrequency`
+   * is the parser both sides agree on. For a `PercussionInstrumentDefinition`,
+   * one of its `DrumVoice.id`s instead (`'kick'`, not a pitch); a kit has no
+   * chords, so `note` is always a single string there.
    */
   readonly note: string | readonly string[];
   /** 0–1, layered on top of the instrument's own `gain`. Defaults to 1. */

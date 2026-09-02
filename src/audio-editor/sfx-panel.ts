@@ -62,6 +62,12 @@ export function createSfxPanel(
   const toneEnabled = checkboxField('Enabled', root);
   const toneInstrument = document.createElement('select');
   for (const instrument of instrumentsById.values()) {
+    // A tone layer names a pitch; `drums` (kind: 'percussion') has none —
+    // its `NoteEvent.note` means a `DrumVoice.id` instead, so it never
+    // belongs in a picker that feeds `SfxDefinition`'s tone.instrument.
+    if (instrument.kind !== 'tonal') {
+      continue;
+    }
     const option = document.createElement('option');
     option.value = instrument.id;
     option.textContent = instrument.name;

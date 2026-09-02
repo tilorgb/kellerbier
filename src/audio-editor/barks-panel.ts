@@ -53,6 +53,11 @@ export function createBarksPanel(
   instrumentLabel.textContent = 'Instrument';
   const instrumentSelect = document.createElement('select');
   for (const instrument of instrumentsById.values()) {
+    // A bark motif is a short pitch sequence; `drums` (kind: 'percussion')
+    // has no pitches to sequence, so it doesn't belong in this picker.
+    if (instrument.kind !== 'tonal') {
+      continue;
+    }
     const option = document.createElement('option');
     option.value = instrument.id;
     option.textContent = instrument.name;

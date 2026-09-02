@@ -2,6 +2,7 @@ import { injectDevUiTokens } from '../dev-ui/tokens.js';
 import { fetchInstruments, fetchTracks } from './api-client.js';
 import { createBarksPanel } from './barks-panel.js';
 import { createEnemyCategoryPanel } from './enemy-category-panel.js';
+import { createLoopLibraryPanel } from './loop-library-panel.js';
 import { createMidiInput } from './midi.js';
 import { createLoopPlayer } from './playback.js';
 import { createPianoRoll } from './piano-roll.js';
@@ -94,6 +95,18 @@ const STYLE = `
 .kb-audio-enemy-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .kb-audio-enemy-row select { width: 100px; }
 .kb-audio-enemy-row button {
+  font: inherit; color: var(--kb-color-text); background: var(--kb-color-surface-3);
+  border: 1px solid var(--kb-color-surface-4); border-radius: var(--kb-radius-sm);
+  padding: 3px 8px; cursor: pointer;
+}
+
+.kb-audio-loop-list { display: flex; flex-direction: column; gap: 4px; }
+.kb-audio-loop-row {
+  display: flex; align-items: center; gap: 8px; padding: 4px 6px;
+  border-radius: var(--kb-radius-sm); background: var(--kb-color-surface-2);
+}
+.kb-audio-loop-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kb-audio-loop-row button {
   font: inherit; color: var(--kb-color-text); background: var(--kb-color-surface-3);
   border: 1px solid var(--kb-color-surface-4); border-radius: var(--kb-radius-sm);
   padding: 3px 8px; cursor: pointer;
@@ -227,6 +240,33 @@ async function boot(): Promise<void> {
   loopBeatsLabel.appendChild(loopBeatsInput);
   transport.appendChild(loopBeatsLabel);
 
+  const durationLabel = document.createElement('label');
+  durationLabel.textContent = 'Note length';
+  const durationSelect = document.createElement('select');
+  // "Beats" is a quarter note here, the usual convention — 0.5 beats is an
+  // eighth note, 4 beats a whole note.
+  const DURATION_OPTIONS: readonly { beats: number; label: string }[] = [
+    { beats: 0.125, label: '1/32' },
+    { beats: 0.25, label: '1/16' },
+    { beats: 0.5, label: '1/8' },
+    { beats: 1, label: '1/4' },
+    { beats: 2, label: '1/2' },
+    { beats: 4, label: 'whole' },
+    { beats: 8, label: 'double' },
+  ];
+  for (const option of DURATION_OPTIONS) {
+    const el = document.createElement('option');
+    el.value = String(option.beats);
+    el.textContent = `${option.label} note`;
+    durationSelect.appendChild(el);
+  }
+  durationSelect.value = String(state.defaultNoteDurationBeats);
+  durationSelect.addEventListener('change', () => {
+    state.defaultNoteDurationBeats = Number.parseFloat(durationSelect.value) || 0.5;
+  });
+  durationLabel.appendChild(durationSelect);
+  transport.appendChild(durationLabel);
+
   const clearButton = document.createElement('button');
   clearButton.type = 'button';
   clearButton.textContent = 'Clear loop';
@@ -262,9 +302,18 @@ async function boot(): Promise<void> {
   midiStatus.className = 'kb-audio-midi-devices';
   transport.appendChild(midiStatus);
 
+  function onSaveLane(instrument: string): void {
+    const suggested = `${instrument} loop`;
+    const name = window.prompt('Save this lane as a loop named:', suggested);
+    if (name === null || name.trim().length === 0) {
+      return;
+    }
+    state.saveLaneAsLoop(name.trim(), instrument);
+  }
+
   const pianoRollHost = document.createElement('div');
   musicSection.appendChild(pianoRollHost);
-  const pianoRoll = createPianoRoll(state, pianoRollHost, instrumentsById);
+  const pianoRoll = createPianoRoll(state, pianoRollHost, instrumentsById, onSaveLane);
 
   const panelsRow = document.createElement('div');
   panelsRow.style.display = 'flex';
@@ -272,6 +321,7 @@ async function boot(): Promise<void> {
   panelsRow.style.flexWrap = 'wrap';
   musicSection.appendChild(panelsRow);
   createTrackPanel(state, panelsRow);
+  createLoopLibraryPanel(state, panelsRow);
 
   const player = createLoopPlayer(state, instrumentsById);
   playButton.addEventListener('click', () => {

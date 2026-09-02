@@ -1,9 +1,16 @@
-import type { Envelope, InstrumentDefinition, InstrumentFilter, SfxDefinition } from './types.js';
+import type {
+  DrumVoice,
+  Envelope,
+  InstrumentDefinition,
+  InstrumentFilter,
+  SfxDefinition,
+} from './types.js';
 
 /**
  * Turns `content/audio/*` data into Web Audio nodes: the chiptune Blaskapelle
- * synth (`playTone`, for `music.ts` and voice barks) and the percussion/SFX
- * layer (`playNoise`, for `sfx-player.ts`).
+ * synth (`playTone`, for `music.ts` and voice barks — dispatching to
+ * `playDrumVoice` internally for a `PercussionInstrumentDefinition`) and the
+ * SFX noise layer (`playNoise`, for `sfx-player.ts`).
  *
  * Every function here degrades to a no-op if its `AudioContext` is `null` —
  * callers pass whatever `context.ts#getAudioContext()` returned rather than
@@ -108,6 +115,19 @@ export function playTone(
   /** A fixed offset, unlike `pitchJitterCents` — `music.ts`'s Promille "woozy mix" drift. */
   constantDetuneCents = 0,
 ): void {
+  if (instrument.kind === 'percussion') {
+    // A kit has no chords and no pitch to jitter/detune — `note` is a
+    // single `DrumVoice.id` (`'kick'`, not `'C4'`), and the voice's own
+    // `noise`/`tone` durations are what the piano roll's own duration
+    // setting can't usefully override (a drum hit doesn't sustain the way
+    // a held tone does), so `durationSeconds` is intentionally unused here.
+    const voiceId = typeof note === 'string' ? note : note[0];
+    const voice = instrument.voices.find((candidate) => candidate.id === voiceId);
+    if (voice !== undefined) {
+      playDrumVoice(ctx, destination, voice, startTime, instrument.gain * velocity);
+    }
+    return;
+  }
   const notes: readonly string[] = typeof note === 'string' ? [note] : note;
   for (const n of notes) {
     playSingleTone(
@@ -127,7 +147,7 @@ export function playTone(
 function playSingleTone(
   ctx: AudioContext,
   destination: AudioNode,
-  instrument: InstrumentDefinition,
+  instrument: Extract<InstrumentDefinition, { kind: 'tonal' }>,
   note: string,
   startTime: number,
   durationSeconds: number,
@@ -224,16 +244,22 @@ function getNoiseBuffer(ctx: AudioContext): AudioBuffer {
 }
 
 /**
- * Plays an SFX's noise layer — filtered white noise with a short percussive
- * envelope. This is the carrier for every impact, footstep and door sound;
- * `sfx.ts`'s `SfxDefinition.tone` (via `playTone`) covers the handful that
- * want a pitched blip (UI confirm/cancel, pickups) instead of or alongside it.
+ * Filtered white noise with a short percussive envelope, at an explicit
+ * `AudioContext` time — the shared carrier under `playNoise` (an SFX's
+ * noise layer, always "now") and `playDrumVoice` (a drum hit, scheduled
+ * ahead like any other note `music.ts` plays).
  */
-export function playNoise(ctx: AudioContext, destination: AudioNode, def: SfxDefinition): void {
-  if (def.noise === undefined) {
-    return;
-  }
-  const { filter, durationSeconds, gain } = def.noise;
+function playFilteredNoiseAt(
+  ctx: AudioContext,
+  destination: AudioNode,
+  startTime: number,
+  opts: {
+    readonly filter?: InstrumentFilter;
+    readonly durationSeconds: number;
+    readonly gain: number;
+  },
+): void {
+  const { filter, durationSeconds, gain } = opts;
   const source = ctx.createBufferSource();
   source.buffer = getNoiseBuffer(ctx);
 
@@ -247,12 +273,11 @@ export function playNoise(ctx: AudioContext, destination: AudioNode, def: SfxDef
   tail.connect(destination);
   source.connect(gainNode);
 
-  const now = ctx.currentTime;
   const g = gainNode.gain;
-  g.setValueAtTime(gain, now);
-  g.exponentialRampToValueAtTime(Math.max(gain * 0.001, 0.0001), now + durationSeconds);
+  g.setValueAtTime(gain, startTime);
+  g.exponentialRampToValueAtTime(Math.max(gain * 0.001, 0.0001), startTime + durationSeconds);
 
-  source.start(now, 0, durationSeconds);
+  source.start(startTime, 0, durationSeconds);
   source.onended = (): void => {
     source.disconnect();
     gainNode.disconnect();
@@ -260,6 +285,74 @@ export function playNoise(ctx: AudioContext, destination: AudioNode, def: SfxDef
       tail.disconnect();
     }
   };
+}
+
+/**
+ * Plays an SFX's noise layer — filtered white noise with a short percussive
+ * envelope. This is the carrier for every impact, footstep and door sound;
+ * `sfx.ts`'s `SfxDefinition.tone` (via `playTone`) covers the handful that
+ * want a pitched blip (UI confirm/cancel, pickups) instead of or alongside it.
+ */
+export function playNoise(ctx: AudioContext, destination: AudioNode, def: SfxDefinition): void {
+  if (def.noise === undefined) {
+    return;
+  }
+  playFilteredNoiseAt(ctx, destination, ctx.currentTime, def.noise);
+}
+
+/**
+ * A short sine "thump" at a fixed pitch, decaying fast — the low body under
+ * a kick or tom that `playFilteredNoiseAt`'s noise alone doesn't carry.
+ */
+function playDrumTone(
+  ctx: AudioContext,
+  destination: AudioNode,
+  startTime: number,
+  opts: { readonly frequencyHz: number; readonly durationSeconds: number; readonly gain: number },
+): void {
+  const osc = ctx.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(opts.frequencyHz, startTime);
+  osc.frequency.exponentialRampToValueAtTime(
+    Math.max(20, opts.frequencyHz * 0.5),
+    startTime + opts.durationSeconds,
+  );
+
+  const gainNode = ctx.createGain();
+  osc.connect(gainNode);
+  gainNode.connect(destination);
+  const g = gainNode.gain;
+  g.setValueAtTime(opts.gain, startTime);
+  g.exponentialRampToValueAtTime(
+    Math.max(opts.gain * 0.001, 0.0001),
+    startTime + opts.durationSeconds,
+  );
+
+  osc.start(startTime);
+  osc.stop(startTime + opts.durationSeconds + 0.02);
+  osc.onended = (): void => {
+    osc.disconnect();
+    gainNode.disconnect();
+  };
+}
+
+/** Plays one `DrumVoice` — its noise and/or tone layer together, at `startTime`. */
+export function playDrumVoice(
+  ctx: AudioContext,
+  destination: AudioNode,
+  voice: DrumVoice,
+  startTime: number,
+  gainScale: number,
+): void {
+  if (voice.noise !== undefined) {
+    playFilteredNoiseAt(ctx, destination, startTime, {
+      ...voice.noise,
+      gain: voice.noise.gain * gainScale,
+    });
+  }
+  if (voice.tone !== undefined) {
+    playDrumTone(ctx, destination, startTime, { ...voice.tone, gain: voice.tone.gain * gainScale });
+  }
 }
 
 /** Plays an `SfxDefinition`'s noise and/or tone layer together, "now". */
