@@ -10,9 +10,7 @@ import {
 } from '../save/schema.js';
 import {
   type CharacterDefinition,
-  type LineCondition,
-  type RegularDefinition,
-  type StammtischContent,
+  type ProgressionContent,
   type UnlockCondition,
   type UnlockDefinition,
   STAT_DEEPEST_FLOOR,
@@ -23,13 +21,14 @@ import {
 } from './definition.js';
 
 /**
- * The Stammtisch's rules (#46), as pure functions over a `SaveData`.
+ * Meta-progression's rules, as pure functions over a `SaveData`.
  *
  * Everything here takes a save and returns a new one, or takes a save and
  * returns something to draw. Nothing reaches for `localStorage`, a `GameSim`
  * or a `Container` — `meta/index.ts` is the thin layer that persists the
- * results, `render/stammtisch.ts` is the thin layer that draws them, and this
- * is where the decisions live, so all of it is testable without a browser.
+ * results, `render/run-results.ts` is the thin layer that draws them, and
+ * this is where the decisions live, so all of it is testable without a
+ * browser.
  *
  * ## Why unlocks are re-evaluated rather than granted at the moment they are earned
  *
@@ -44,7 +43,7 @@ import {
  * nothing next to a save write.
  */
 
-/** The one run the regulars talk about, in the units a line quotes it in. */
+/** The one run the results screen leads with. */
 export interface RunFacts {
   readonly seed: number;
   readonly floor: number;
@@ -54,7 +53,7 @@ export interface RunFacts {
   readonly deathWord: string | null;
 }
 
-/** How far along a goal the player is — shown under a locked seat so a goal is legible, not mysterious. */
+/** How far along a goal the player is — shown under a locked unlock so a goal is legible, not mysterious. */
 export interface ConditionProgress {
   readonly current: number;
   readonly goal: number;
@@ -100,10 +99,9 @@ export function conditionMet(save: SaveData, condition: UnlockCondition): boolea
 
 /**
  * Grants every unlock whose condition the save now meets, preserving the
- * order they were earned in — `unlocks` doubles as the arrival order at the
- * table, so a regular who turns up later sits down later.
+ * order they were earned in.
  */
-export function grantEarnedUnlocks(save: SaveData, content: StammtischContent): SaveData {
+export function grantEarnedUnlocks(save: SaveData, content: ProgressionContent): SaveData {
   const earned = save.unlocks.slice();
   const known = new Set(earned);
   for (const unlock of content.unlocks) {
@@ -126,7 +124,7 @@ export function grantEarnedUnlocks(save: SaveData, content: StammtischContent): 
 export function withBossDefeat(
   save: SaveData,
   floor: number,
-  content: StammtischContent,
+  content: ProgressionContent,
 ): SaveData {
   const statistics = { ...save.statistics };
   statistics[bossStatKey(floor)] = statistic(save, bossStatKey(floor)) + 1;
@@ -135,8 +133,8 @@ export function withBossDefeat(
 }
 
 /**
- * Records a finished run: the summary the regulars comment on, the running
- * totals the later seats are earned with, and the best-runs list.
+ * Records a finished run: the summary the results screen leads with, the
+ * running totals later unlocks are earned with, and the best-runs list.
  *
  * The best-runs insert lives here rather than beside the active-run recorder
  * it started next to (#45), so that "a run ended" is one commit against the
@@ -145,7 +143,7 @@ export function withBossDefeat(
 export function withRunOutcome(
   save: SaveData,
   record: BestRunRecord,
-  content: StammtischContent,
+  content: ProgressionContent,
 ): SaveData {
   const statistics = { ...save.statistics };
   statistics[STAT_RUNS] = statistic(save, STAT_RUNS) + 1;
@@ -170,7 +168,7 @@ export function withRunOutcome(
 export function withSelectedCharacter(
   save: SaveData,
   id: string,
-  content: StammtischContent,
+  content: ProgressionContent,
 ): SaveData {
   const character = characterById(content, id);
   if (character === undefined || !characterUnlocked(save, character)) {
@@ -183,14 +181,11 @@ export function withSelectedCharacter(
  * The next unlocked character `delta` steps along the roster from the
  * currently selected one, wrapping.
  *
- * Wrapping, unlike the table's chair cursor, because this is a *choice* and
- * not a place: a player cycling the roster wants to come back round to Alois
- * without pressing the key five more times. Locked rows are skipped rather
- * than landed on and refused — they are still drawn, so the player can see
- * what they are missing, but the cursor never rests somewhere it cannot
- * start a run from.
+ * Locked rows are skipped rather than landed on and refused — they are still
+ * drawn wherever the roster is shown, so the player can see what they are
+ * missing, but the cursor never rests somewhere it cannot start a run from.
  */
-export function cycleCharacter(save: SaveData, content: StammtischContent, delta: number): string {
+export function cycleCharacter(save: SaveData, content: ProgressionContent, delta: number): string {
   const roster = content.characters;
   const current = selectedCharacterId(save, content);
   const start = roster.findIndex((character) => character.id === current);
@@ -217,7 +212,7 @@ export function cycleCharacter(save: SaveData, content: StammtischContent, delta
  */
 export function selectedCharacterTraits(
   save: SaveData,
-  content: StammtischContent,
+  content: ProgressionContent,
 ): CharacterTraits {
   const id = selectedCharacterId(save, content);
   return characterById(content, id)?.traits ?? NEUTRAL_TRAITS;
@@ -229,12 +224,9 @@ export function selectedCharacterTraits(
  *
  * Walks the conditions rather than listing the statistics they happen to
  * read, so a character or an unlock added later is covered without anybody
- * remembering to extend this. The mirror image of `resetProgress`, and there
- * for the same reason: trying five characters by hand costs four hundred
- * kills and ten finished runs, which is a price worth paying to *play* the
- * game and not to check that a stat block reads right.
+ * remembering to extend this.
  */
-export function withEverythingUnlocked(save: SaveData, content: StammtischContent): SaveData {
+export function withEverythingUnlocked(save: SaveData, content: ProgressionContent): SaveData {
   const statistics = { ...save.statistics };
   const conditions: UnlockCondition[] = [
     ...content.unlocks.map((unlock) => unlock.condition),
@@ -282,133 +274,12 @@ export function dailyStatus(save: SaveData, todayKey: string): DailyStatus {
   };
 }
 
-/** Marks every seated regular as having said hello, so an arrival line only plays once. */
-export function withGreetings(save: SaveData, ids: readonly string[]): SaveData {
-  const greeted = new Set(save.greetedRegulars);
-  const added = ids.filter((id) => !greeted.has(id));
-  return added.length === 0
-    ? save
-    : { ...save, greetedRegulars: [...save.greetedRegulars, ...added] };
-}
-
-function lineMatches(condition: LineCondition, run: RunFacts | null): boolean {
-  if (run === null) {
-    return condition.kind === 'noRun' || condition.kind === 'always';
-  }
-  switch (condition.kind) {
-    case 'always':
-      return true;
-    case 'noRun':
-      return false;
-    case 'diedOnFloor':
-      return run.floor === condition.floor;
-    case 'reachedFloor':
-      return run.floor >= condition.floor;
-    case 'shorterThan':
-      return run.seconds < condition.seconds;
-    case 'longerThan':
-      return run.seconds > condition.seconds;
-    case 'killsBelow':
-      return run.kills < condition.kills;
-    case 'killsAtLeast':
-      return run.kills >= condition.kills;
-  }
-}
-
 /** German decimals, because everything else on this screen is in German too. */
 function seconds(value: number): string {
   return `${value.toFixed(1).replace('.', ',')} s`;
 }
 
-/**
- * Fills a line's `{sek}`/`{kills}`/`{stock}`/`{wort}` tokens from the run.
- *
- * A line with no run to quote keeps its tokens out of the player's way by
- * falling back to a dash rather than printing "undefined" — but no authored
- * line should reach that case, since a line carrying a token is authored
- * under a condition that already requires a run.
- */
-export function fillTokens(text: string, run: RunFacts | null): string {
-  return text
-    .replace('{sek}', run === null ? '—' : seconds(run.seconds))
-    .replace('{kills}', run === null ? '—' : String(run.kills))
-    .replace('{stock}', run === null ? '—' : run.floorName)
-    .replace('{wort}', run?.deathWord ?? '—');
-}
-
-/**
- * Which line a regular says about `run`.
- *
- * Specific beats generic: a line conditioned on the run wins over the
- * catch-all, always. Among equally specific matches the run's own seed picks
- * one, so the table is not word-for-word identical between two runs that
- * happened to end the same way — and it is still deterministic, so a test can
- * pin it and a replay of the same run says the same thing.
- */
-export function pickLine(regular: RegularDefinition, run: RunFacts | null): string {
-  const matches = regular.lines.filter((line) => lineMatches(line.when, run));
-  const specific = matches.filter((line) => line.when.kind !== 'always');
-  const pool = specific.length > 0 ? specific : matches;
-  if (pool.length === 0) {
-    return regular.greeting;
-  }
-  const index = run === null ? 0 : Math.abs(Math.trunc(run.seed)) % pool.length;
-  return fillTokens((pool[index] ?? pool[0])?.text ?? regular.greeting, run);
-}
-
-/** One chair at the table, as the screen needs it. */
-export interface SeatView {
-  readonly id: string;
-  /** The regular's name once they are seated, or `null` while the chair is empty. */
-  readonly name: string | null;
-  readonly role: string;
-  readonly seated: boolean;
-  /** True on the first visit after they arrive — the screen opens on this seat and plays the greeting. */
-  readonly arriving: boolean;
-  /** What they say: their greeting on arrival, a comment on the last run afterwards, the goal while empty. */
-  readonly line: string;
-  readonly grantName: string;
-  readonly grantEffect: string;
-  readonly goal: string;
-  /** `null` once the seat is filled — otherwise "3 / 5", so a goal is a number and not a mystery. */
-  readonly progress: string | null;
-}
-
-/** Everything `render/stammtisch.ts` draws. Assembled here so the screen holds no rules of its own. */
-export interface StammtischView {
-  readonly lastRun: RunFacts | null;
-  /** The last run as the screen's own subtitle — formatted here, so the wording is testable. */
-  readonly lastRunLine: string;
-  readonly seats: readonly SeatView[];
-  /** Index into `seats` the screen should open on — an arriving regular, else the first empty chair. */
-  readonly openOn: number;
-  readonly characters: readonly CharacterView[];
-  /** The id of the character the next run would start as — always an unlocked one. */
-  readonly selectedCharacter: string;
-  /** The board's rows, longest run first, or `null` while the board itself is still locked. */
-  readonly board: readonly string[] | null;
-  /** Whether the run-start panel offers a seed to change. */
-  readonly seedUnlocked: boolean;
-  readonly runsPlayed: number;
-  readonly totalKills: number;
-  /** Today's daily-run seed and whether it has already been played. */
-  readonly daily: DailyStatus;
-  /** Whether there is a stored replay to watch — see `app/replay/store.ts`. */
-  readonly hasReplay: boolean;
-}
-
-/**
- * The unlock id the Promille mechanic itself is gated behind (#85) — Da
- * Xaver's, earned by beating Der Stier. Read at run start rather than by the
- * hub: see `app/promille-gate.ts`.
- */
-export const UNLOCK_PROMILLE = 'promille';
-/** The unlock id the run board is gated behind — see `content/stammtisch/unlocks.ts`. */
-export const UNLOCK_BOARD = 'stammtisch-tafel';
-/** The unlock id the seed row is gated behind. */
-export const UNLOCK_SEED = 'stammtisch-zufoi';
-
-/** One row of the run-start panel's roster. */
+/** One row of the run-start roster. */
 export interface CharacterView {
   readonly id: string;
   readonly name: string;
@@ -447,11 +318,11 @@ export function characterView(save: SaveData, character: CharacterDefinition): C
  *
  * Falling back rather than trusting the save is not paranoia about
  * `localStorage` — it is what happens on an ordinary
- * `__kellerbier.stammtisch.resetProgress()`, or the day a character's unlock
- * condition is re-tuned upward. A saved id nobody can play any more must not
- * be able to start a run.
+ * `__kellerbier.progression.resetProgress()`, or the day a character's
+ * unlock condition is re-tuned upward. A saved id nobody can play any more
+ * must not be able to start a run.
  */
-export function selectedCharacterId(save: SaveData, content: StammtischContent): string {
+export function selectedCharacterId(save: SaveData, content: ProgressionContent): string {
   const chosen = content.characters.find((character) => character.id === save.selectedCharacter);
   if (chosen !== undefined && characterUnlocked(save, chosen)) {
     return chosen.id;
@@ -465,65 +336,68 @@ export function selectedCharacterId(save: SaveData, content: StammtischContent):
  * names a character that has since been renamed.
  */
 export function characterById(
-  content: StammtischContent,
+  content: ProgressionContent,
   id: string,
 ): CharacterDefinition | undefined {
   return content.characters.find((character) => character.id === id);
 }
 
-function unlockById(content: StammtischContent, id: string): UnlockDefinition | undefined {
-  return content.unlocks.find((unlock) => unlock.id === id);
+/** One unlock, as the results screen needs it. */
+export interface UnlockView {
+  readonly id: string;
+  readonly name: string;
+  readonly unlocked: boolean;
+  /** What it does, once unlocked. Empty while locked. */
+  readonly effect: string;
+  /** What earns it. Empty once it is earned — a met goal is not news. */
+  readonly goal: string;
+  /** "40 / 200" while locked and countable, `null` for a one-shot condition or an unlocked row. */
+  readonly progress: string | null;
 }
 
-export function buildStammtischView(
-  save: SaveData,
-  content: StammtischContent,
-  todayKey: string,
-): StammtischView {
+function unlockView(save: SaveData, unlock: UnlockDefinition, unlocked: Set<string>): UnlockView {
+  const isUnlocked = unlocked.has(unlock.id);
+  const progress = conditionProgress(save, unlock.condition);
+  return {
+    id: unlock.id,
+    name: unlock.name,
+    unlocked: isUnlocked,
+    effect: isUnlocked ? unlock.effect : '',
+    goal: isUnlocked ? '' : unlock.goal,
+    progress:
+      isUnlocked || progress.goal <= 1
+        ? null
+        : `${String(progress.current)} / ${String(progress.goal)}`,
+  };
+}
+
+/** The unlock id the Promille mechanic itself is gated behind (#85) — read at run start, see `app/promille-gate.ts`. */
+export const UNLOCK_PROMILLE = 'promille';
+/** The unlock id the run board is gated behind — see `content/progression/unlocks.ts`. */
+export const UNLOCK_BOARD = 'run-board';
+
+/** Everything `render/run-results.ts` draws. Assembled here so the screen holds no rules of its own. */
+export interface RunResultsView {
+  readonly lastRun: RunFacts | null;
+  /** The last run as the screen's own subtitle — formatted here, so the wording is testable. */
+  readonly lastRunLine: string;
+  readonly unlocks: readonly UnlockView[];
+  /** The board's rows, longest run first, or `null` while the board itself is still locked. */
+  readonly board: readonly string[] | null;
+  readonly runsPlayed: number;
+  readonly totalKills: number;
+}
+
+export function buildRunResultsView(save: SaveData, content: ProgressionContent): RunResultsView {
   const lastRun = save.lastRun === null ? null : runFactsFrom(save.lastRun);
   const unlocked = new Set(save.unlocks);
-  const greeted = new Set(save.greetedRegulars);
-  const seats = [...content.regulars]
-    .sort((a, b) => a.seat - b.seat)
-    .map((regular): SeatView => {
-      const grant = unlockById(content, regular.grants);
-      const seated = unlocked.has(regular.grants);
-      const arriving = seated && !greeted.has(regular.id);
-      const progress = grant === undefined ? null : conditionProgress(save, grant.condition);
-      return {
-        id: regular.id,
-        name: seated ? regular.name : null,
-        // An empty chair has no role line at all rather than a placeholder
-        // one: "no name yet" is not information, and the sentence under the
-        // padlock — what it would take to fill this chair — is.
-        role: seated ? regular.role : '',
-        seated,
-        arriving,
-        line: seated ? (arriving ? regular.greeting : pickLine(regular, lastRun)) : regular.waiting,
-        grantName: grant?.name ?? regular.grants,
-        grantEffect: grant?.effect ?? '',
-        goal: grant?.goal ?? '',
-        progress:
-          seated || progress === null || progress.goal <= 1
-            ? null
-            : `${String(progress.current)} / ${String(progress.goal)}`,
-      };
-    });
-  const arriving = seats.findIndex((seat) => seat.arriving);
-  const empty = seats.findIndex((seat) => !seat.seated);
   return {
     lastRun,
     lastRunLine: lastRunLine(lastRun),
-    seats,
-    openOn: arriving >= 0 ? arriving : empty >= 0 ? empty : 0,
-    characters: content.characters.map((character) => characterView(save, character)),
-    selectedCharacter: selectedCharacterId(save, content),
+    unlocks: content.unlocks.map((unlock) => unlockView(save, unlock, unlocked)),
     board: unlocked.has(UNLOCK_BOARD) ? save.bestRuns.map(boardRow) : null,
-    seedUnlocked: unlocked.has(UNLOCK_SEED),
     runsPlayed: statistic(save, STAT_RUNS),
     totalKills: statistic(save, STAT_KILLS),
-    daily: dailyStatus(save, todayKey),
-    hasReplay: save.replays.length > 0,
   };
 }
 
@@ -533,7 +407,7 @@ export function boardRow(record: BestRunRecord, index = 0): string {
   return `${String(index + 1)}.  ${seconds(run.seconds)}   ${String(run.kills)} daschlogn   ${run.floorName}`;
 }
 
-/** The last run as the one line the hub leads with. */
+/** The last run as the one line the results screen leads with. */
 export function lastRunLine(run: RunFacts | null): string {
   if (run === null) {
     return 'No koa Lauf gspielt — der Keller wart scho.';

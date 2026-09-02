@@ -6,22 +6,22 @@ import type { SaveData } from './save/schema.js';
  *
  * Promille is the game's signature system and a new player should not meet
  * it in their first minute: the opening reads as an ordinary twin-stick
- * roguelite, and the beer arrives later, earned and announced at the
- * Stammtisch. This module owns the one decision that implements that — the
- * boolean `app/main.ts` hands to every `GameSim` it builds — and nothing
- * else. What the flag then *turns off* lives with the thing it turns off:
- * `GameSim.promille` (the meter, and everything derived from it),
- * `GameSim.dropLoot` (the sober half of every drop table) and
+ * roguelite, and the beer arrives later, earned by beating Der Stier and
+ * announced on the results screen. This module owns the one decision that
+ * implements that — the boolean `app/main.ts` hands to every `GameSim` it
+ * builds — and nothing else. What the flag then *turns off* lives with the
+ * thing it turns off: `GameSim.promille` (the meter, and everything derived
+ * from it), `GameSim.dropLoot` (the sober half of every drop table) and
  * `itemEligibleForOffer` (Promille items).
  *
- * Kept out of `meta/` deliberately. Everything in there is about the hub —
- * who is sitting at the table and what they say — and reads the save after a
- * run has ended. This is read at run *start*, and it is the only unlock in
- * the set that changes how the simulation itself is built, so it gets its
- * own small module rather than being a fifth thing `meta/index.ts` does.
+ * Kept out of `meta/` deliberately. Everything in there is about progression
+ * — what has been earned — and reads the save after a run has ended. This is
+ * read at run *start*, and it is the only unlock in the set that changes how
+ * the simulation itself is built, so it gets its own small module rather
+ * than being a fifth thing `meta/index.ts` does.
  */
 
-/** Whether the save has earned Promille — the unlock Da Xaver brings for beating Der Stier. */
+/** Whether the save has earned Promille — the unlock for beating Der Stier. */
 export function promilleUnlockedIn(save: SaveData): boolean {
   return save.unlocks.includes(UNLOCK_PROMILLE);
 }

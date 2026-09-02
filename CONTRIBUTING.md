@@ -147,6 +147,6 @@ unactionable — nobody can reach the room you were standing in.
 
 Press `C` at any point in a run to copy the seed, character, items and outcome to the clipboard
 (the debug overlay's own `O` → `C` still works too, with the raw tick/hex detail). Paste that into
-the report, then press `X` at the Stammtisch to download the run's replay as a `.json` file and
-attach it — whoever picks up the report presses `L` in their own build, loads the file, and
-watches the exact run that produced the bug, on their machine, from a fresh clone.
+the report, then press `X` to download the run's replay as a `.json` file and attach it — whoever
+picks up the report presses `L` in their own build, loads the file, and watches the exact run that
+produced the bug, on their machine, from a fresh clone.

@@ -81,13 +81,6 @@ describe('save schema sanitisation (#45)', () => {
     expect(sanitizeSave({ lastRun: { seed: 7, floor: 2 } }).lastRun).toBeNull();
   });
 
-  it('keeps only the string ids in greetedRegulars (#46)', () => {
-    expect(sanitizeSave({ greetedRegulars: ['sepp', 3, null, 'xaver'] }).greetedRegulars).toEqual([
-      'sepp',
-      'xaver',
-    ]);
-  });
-
   it('keeps a well-formed replay and drops one missing a field (#48)', () => {
     const replay = {
       id: 'a-b-c',

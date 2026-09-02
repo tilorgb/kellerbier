@@ -41,9 +41,8 @@ describe('save migration chain (#45)', () => {
     expect(migrated.schemaVersion).toBe(SAVE_SCHEMA_VERSION);
     expect(migrated.unlocks).toEqual(['lore-opas-zettl']);
     expect(migrated.statistics).toEqual({ kills: 240 });
-    expect(migrated.greetedRegulars).toEqual([]);
-    // The most recently *recorded* run, not the longest one — the table's
-    // comments are about the run you just played.
+    // The most recently *recorded* run, not the longest one — the results
+    // screen is about the run you just played.
     expect(migrated.lastRun?.seed).toBe(2);
     // v3 -> v4 (#47): a save from before characters existed walks in as the
     // only character it could ever have played.
@@ -85,6 +84,20 @@ describe('save migration chain (#45)', () => {
     expect(migrated.activeRun?.promilleUnlocked).toBe(true);
     expect(migrated.activeRun?.seed).toBe(4);
     expect(migrated.activeRun?.frames).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it('drops a v4 save’s greetedRegulars without otherwise touching it', () => {
+    const v4 = {
+      schemaVersion: 4,
+      unlocks: ['promille'],
+      greetedRegulars: ['sepp'],
+      selectedCharacter: 'resi',
+    };
+    const migrated = sanitizeSave(migrateSave(v4));
+    expect(migrated.schemaVersion).toBe(SAVE_SCHEMA_VERSION);
+    expect(migrated.unlocks).toEqual(['promille']);
+    expect(migrated.selectedCharacter).toBe('resi');
+    expect(migrated).not.toHaveProperty('greetedRegulars');
   });
 
   it('migrates a v2 save with no run in progress without inventing one', () => {

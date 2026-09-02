@@ -3049,3 +3049,51 @@ since that is what a shot actually flies over. Floors 3-7 (#39-#43) inherit the 
 `BACKGROUND_PALETTES` already covers every floor tag, so their content landing only adds tile
 names to the manifest. Making a decorative prop *solid* is a separate question (its own issue) —
 this decision is about not *implying* a collision that is not there.
+
+## 63. The Stammtisch hub is retired; a plain results screen carries the same unlocks
+
+**Decided:** M7 follow-up to #51. #51 built the hub between runs as a tavern table: four
+regulars, each arriving on a boss kill or a stat total, each with a name, a role, a greeting and
+several lines of dialogue conditioned on the last run. Playing it rather than just building it
+showed the framing was not paying for itself: with no portraits yet (pixel art needs its own
+sign-off, per `CLAUDE.md`), a "regular" was a name plate and a paragraph of text indistinguishable
+from the leaderboard rows next to it. Four chairs, a speech panel, a run-start roster and a seed
+panel crammed into one 640×360 screen read as a dense, undifferentiated dump of text rather than a
+hub with personality — the opposite of what the chairs-not-a-progress-bar argument in #51 was
+for.
+
+**The fix is subtraction, not a redesign.** `src/render/run-results.ts`'s `RunResultsScreen`
+replaces `StammtischScreen` outright: the last run's line, a plain list of unlocks (locked ones
+show their goal and progress, unlocked ones show what they do), and the run board. No regulars,
+no seats, no greeting/arrival state, no dialogue conditioned on the last run, no cursor to move
+across a table. `app/meta/definition.ts`'s `RegularDefinition`/`RegularLine`/`LineCondition` are
+gone along with `progress.ts`'s `pickLine`/`fillTokens`/`withGreetings`, and
+`src/content/stammtisch/regulars.ts` is deleted rather than kept unused — there is no reduced
+version of "a regular's line" that this screen still needs.
+
+**Two unlocks remain, and two are cut outright.** `promille` (beat Der Stier — the game's
+signature mechanic) and the run board (`run-board`, formerly `stammtisch-tafel`, 200 kills) are
+real, load-bearing gates and stay. `lore-opas-zettl` (Da Sepp's flavour text) and
+`stammtisch-zufoi` (Da Toni's seed-reveal) existed only to be delivered by a regular's dialogue
+that no longer exists, and neither had anything else to attach to, so both are deleted rather than
+re-homed. `UnlockCategory` drops `'lore'` for the same reason.
+
+**Character select, seed entry, the daily run and replay-watching move to a real main menu —
+M8's "title screen, pause and settings" — rather than living on this screen, and are simply
+unreachable in-game until that milestone.** Concretely: the `F` (cycle character), `E`/`R`/`D`
+(seed entry/reroll/daily) and `V` (watch latest replay) keys are gone with the panel that hosted
+them; `pendingIsDaily`/`activeRunIsDaily` and the daily-run-outcome commit in `app/main.ts` go
+with them, since nothing can set them true any more (`ReplayRecord.kind` is hardcoded `'normal'`
+until a trigger exists again). `dailyRunHistory`/`recordDailyRunOutcome`/`dailyStatus` and the
+character roster/selection functions in `app/meta/` are untouched — real, tested systems a menu
+will call again — only their one call site in `main.ts` is gone. `C` (copy run details), `L`
+(import a replay file) and `X` (export the latest stored replay) stay **global** keys rather than
+moving with the rest: they are `CONTRIBUTING.md`'s bug-report tooling, not hub features, and never
+belonged to the Stammtisch's presentation in the first place.
+
+**`SaveDataV5` drops `greetedRegulars`.** Nothing reads it any more, and there is nothing to
+back-fill in its place — `migrations.ts`'s `v4ToV5` only bumps the version, the same as `v0ToV1`.
+The results screen still opens itself the moment a run ends having earned something new, but the
+signal is now `app/main.ts` comparing the save's unlocked ids at the start of the run against the
+ids after it — no per-item seen/unseen state is needed once the screen has no dialogue to only
+say once.
