@@ -53,6 +53,30 @@ Read this before authoring any content.
 - Ship English, German, and **Boarisch** (Bavarian dialect) as a joke locale that is
   nonetheless a real, complete translation. Item *names* stay Bavarian in all locales.
 - Every string goes through the localisation layer from day one. No hardcoded UI text, ever.
+- **Text density: mostly plain English, Bavarian words as seasoning (#221).** Two kinds of
+  text, decided per surface:
+  - **Functional text** — control hints, anything read every run (HUD status rows, the
+    results screen, the "press R to restart" line, panel headings) — is plain English,
+    always. No dropped-in dialect, no exceptions: this is text a returning player has to
+    parse on autopilot, and a sentence of Boarisch in the way of that is friction, not
+    charm.
+  - **Flavour text** — floor cards, item flavour, barks, the death-word headline — carries
+    its Bavarian as **individual words, not translated sentences**. One loaded word doing
+    the joke (a proper noun, `content/death-words.ts`'s headline pool) beats a whole line a
+    player has to decode. `docs/GAME_DESIGN.md`'s Heimatfilm tone comes from specificity and
+    warmth, not from density of dialect — the target is *scarcer* text overall, with more of
+    the mood carried by image and sound (`#58`), not just the same amount of text
+    re-languaged.
+  - A hand-placed Bavarian word in an otherwise-English flavour line gets its own type
+    treatment (colour and/or the display face) so it reads as deliberate rather than as a
+    typo — `render/ui/text.ts`'s `*word*` convention. Signed off as a design option per this
+    file's own art/UI convention (see `CLAUDE.md`) before it lands everywhere.
+  - A voice that is deliberately dialect-speaking as characterisation (an NPC bark written
+    in character, not a system message) is a case-by-case call, not a blanket exemption —
+    decide it on the surface's own terms and say why in the PR, per #221's acceptance
+    criteria.
+  - This does not touch names: item, floor and boss names stay Bavarian everywhere, in
+    every locale, per the rule above.
 
 ---
 

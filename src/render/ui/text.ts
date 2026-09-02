@@ -1,8 +1,9 @@
-import { BitmapText } from 'pixi.js';
+import { BitmapText, Sprite, type Renderer } from 'pixi.js';
 import type { GameLayout } from '../resolution.js';
 import { UI_PALETTE } from '../palette.js';
 import { DISPLAY_FACE, TEXT_FACE } from './font-compile.js';
 import { pixelFontsInstalled } from './font.js';
+import { pixelsToTexture } from './title.js';
 
 /**
  * Making text with the pixel font, and the one number every HUD lays itself
@@ -147,4 +148,171 @@ function makeText(
         : { wordWrap: true, wordWrapWidth: options.wrapWidth, lineHeight: lineAdvance }),
     },
   });
+}
+
+/**
+ * One run of a `*word*`-marked flavour line: `text`, and whether it's the
+ * one Bavarian word the line drops in.
+ *
+ * `docs/CONTENT_BIBLE.md` §0 (#221): flavour text carries its Bavarian as a
+ * single seasoned word, not a translated sentence, and that word gets its
+ * own type treatment so it reads as deliberate rather than as a typo. This
+ * is the authoring seam that says *which* word — a content author wraps it
+ * in asterisks (`'Watch your *Fiaß*'`) at the string, no rendering
+ * knowledge required.
+ */
+export interface SeasonedRun {
+  readonly text: string;
+  readonly accent: boolean;
+}
+
+/**
+ * Splits a `*word*`-marked line into runs. A `*` with no matching close is
+ * left as an ordinary character — a stray marker degrades to "one odd
+ * character in the line", not a broken screen (`docs/DECISIONS.md` #19).
+ */
+export function parseSeasoned(marked: string): readonly SeasonedRun[] {
+  const runs: SeasonedRun[] = [];
+  const pattern = /\*([^*]+)\*/g;
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(marked)) !== null) {
+    if (match.index > cursor) {
+      runs.push({ text: marked.slice(cursor, match.index), accent: false });
+    }
+    runs.push({ text: match[1] ?? '', accent: true });
+    cursor = pattern.lastIndex;
+  }
+  if (cursor < marked.length) {
+    runs.push({ text: marked.slice(cursor), accent: false });
+  }
+  return runs;
+}
+
+/** `marked` with its `*...*` markers removed — the locale/measurement paths that don't draw them. */
+export function stripSeasoning(marked: string): string {
+  return marked.replace(/\*([^*]+)\*/g, '$1');
+}
+
+/** How wide a `seasonedText`/`SeasonedText` line draws, in UI pixels. The markers cost nothing. */
+export function seasonedTextWidth(marked: string): number {
+  return TEXT_FACE.measure(stripSeasoning(marked));
+}
+
+/** A rasterised two-colour line: one colour per pixel, `-1` where nothing is drawn. Single-line only. */
+export interface SeasonedPixels {
+  readonly width: number;
+  readonly height: number;
+  readonly colours: Int32Array;
+}
+
+/**
+ * Rasterises a `*word*`-marked line in the text face: every character in its
+ * run's colour, at the exact pen position a single `uiText` would have put
+ * it. One `BitmapText` can only draw its whole string in one colour
+ * (`makeText` above), so this is the "two colours, one line" primitive
+ * #221 needs — built pure, the same no-renderer, no-DOM way `title.ts`'s
+ * `renderTitlePixels` is, so a unit test can assert the accent run lands in
+ * the right pixels without a `Renderer`.
+ */
+export function renderSeasonedPixels(
+  marked: string,
+  colour: number,
+  accentColour: number,
+): SeasonedPixels {
+  const runs = parseSeasoned(marked);
+  const height = TEXT_FACE.metrics.cellHeight;
+  const placements: { rows: readonly string[]; top: number; colour: number; x: number }[] = [];
+  let pen = 0;
+  for (const run of runs) {
+    const runColour = run.accent ? accentColour : colour;
+    for (const character of run.text) {
+      const glyph = TEXT_FACE.glyph(character);
+      placements.push({ rows: glyph.rows, top: glyph.top, colour: runColour, x: pen });
+      pen += glyph.advance;
+    }
+  }
+  const width = Math.max(0, pen - TEXT_FACE.metrics.letterSpacing);
+  const colours = new Int32Array(Math.max(1, width) * height).fill(-1);
+  for (const placement of placements) {
+    for (let row = 0; row < placement.rows.length; row++) {
+      const line = placement.rows[row] ?? '';
+      const y = placement.top + row;
+      if (y < 0 || y >= height) {
+        continue;
+      }
+      for (let column = 0; column < line.length; column++) {
+        if (line[column] !== '#') {
+          continue;
+        }
+        const x = placement.x + column;
+        if (x < 0 || x >= width) {
+          continue;
+        }
+        colours[y * width + x] = placement.colour;
+      }
+    }
+  }
+  return { width, height, colours };
+}
+
+export interface SeasonedTextOptions {
+  /** Colour of the plain runs. Defaults to `UI_PALETTE.text`. */
+  readonly colour?: number;
+  /** Colour of the `*...*`-marked run(s). Defaults to `UI_PALETTE.accent`. */
+  readonly accentColour?: number;
+}
+
+/**
+ * A single-line `*word*`-marked string as a sprite, one colour on the plain
+ * runs and another on the accented one — the floor title card's subtitle is
+ * the first consumer (#221). Same rebuild-on-change lifecycle as
+ * `DisplayTitle`, and for the same reason: this changes on an event, a
+ * handful of times a run, never per frame.
+ */
+export class SeasonedText {
+  readonly view = new Sprite();
+
+  private readonly renderer: Renderer;
+  private readonly colour: number;
+  private readonly accentColour: number;
+  private current = '';
+
+  constructor(renderer: Renderer, options: SeasonedTextOptions = {}) {
+    this.renderer = renderer;
+    this.colour = options.colour ?? UI_PALETTE.text;
+    this.accentColour = options.accentColour ?? UI_PALETTE.accent;
+  }
+
+  /** Sets the line. A repeat of the current text is a no-op. */
+  set(text: string): void {
+    if (text === this.current && this.view.texture.width > 1) {
+      return;
+    }
+    this.current = text;
+    this.rebuild();
+  }
+
+  private rebuild(): void {
+    const previous = this.view.texture;
+    const { width, height, colours } = renderSeasonedPixels(
+      this.current,
+      this.colour,
+      this.accentColour,
+    );
+    this.view.texture = pixelsToTexture(this.renderer, width, height, colours);
+    if (previous.width > 1) {
+      previous.destroy(true);
+    }
+  }
+
+  /** Width in UI pixels. */
+  get width(): number {
+    return this.view.texture.width;
+  }
+
+  /** Height in UI pixels. */
+  get height(): number {
+    return this.view.texture.height;
+  }
 }

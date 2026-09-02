@@ -251,18 +251,22 @@ export function renderTitlePixels(face: PixelFace, text: string, style: TitleSty
   return { width: mask.width, height: mask.height, colours };
 }
 
-/** Draws `text` in `face` with `style` into a texture sized exactly to it. */
-export function titleTexture(
+/**
+ * Turns a rasterised colour grid — `renderTitlePixels`'s output, or any other
+ * `{ width, height, colours }` triple built the same way (`text.ts`'s
+ * `renderSeasonedPixels` for a two-colour body line) — into a texture.
+ *
+ * One fill per distinct colour, and horizontal runs within it: a treated
+ * line is a handful of flat bands, so this is a few dozen rectangles rather
+ * than one per pixel.
+ */
+export function pixelsToTexture(
   renderer: Renderer,
-  face: PixelFace,
-  text: string,
-  style: TitleStyle,
+  width: number,
+  height: number,
+  colours: Int32Array,
 ): Texture {
-  const { width, height, colours } = renderTitlePixels(face, text, style);
   const graphics = new Graphics();
-  // One fill per distinct colour, and horizontal runs within it: a treated
-  // line is a handful of flat bands, so this is a few dozen rectangles rather
-  // than one per pixel.
   const distinct = new Set<number>();
   for (const colour of colours) {
     if (colour >= 0) {
@@ -297,6 +301,17 @@ export function titleTexture(
   });
   graphics.destroy();
   return texture;
+}
+
+/** Draws `text` in `face` with `style` into a texture sized exactly to it. */
+export function titleTexture(
+  renderer: Renderer,
+  face: PixelFace,
+  text: string,
+  style: TitleStyle,
+): Texture {
+  const { width, height, colours } = renderTitlePixels(face, text, style);
+  return pixelsToTexture(renderer, width, height, colours);
 }
 
 /**

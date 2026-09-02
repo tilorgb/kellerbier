@@ -21,18 +21,21 @@ export const PROGRESSION_UNLOCKS: readonly UnlockDefinition[] = [
     // *gate* — sober first runs, no meter, no beer in the drop tables — is
     // `app/promille-gate.ts`; this is the flag it reads.
     id: 'promille',
-    name: "'s Promille",
-    effect: 'Ab jetzt is a Maß mit dabei — und der Zeiger geht mit.',
+    // "Promille" is the mechanic's own name — `sim/game/promille.ts`'s
+    // `promilleMeterLabel` — not flavour, so it stays as-is rather than
+    // translating (#221).
+    name: 'Promille',
+    effect: "From now on you're carrying a Maß — and the meter goes with it.",
     category: 'mechanic',
     condition: { kind: 'bossDefeated', floor: 2 },
-    goal: 'Schlog Der Stier am Dorfplatz',
+    goal: 'Beat Der Stier at the village square',
   },
   {
     id: 'run-board',
-    name: "D'Tafel",
-    effect: 'Deine besten Läufe stehn ab jetzt auf der Tafel.',
+    name: 'The Board',
+    effect: 'Your best runs now show up on the board.',
     category: 'hub',
     condition: { kind: 'statAtLeast', stat: 'kills', value: 200 },
-    goal: '200 Viecher insgesamt daschlogn',
+    goal: 'Kill 200 enemies total',
   },
 ];

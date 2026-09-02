@@ -73,7 +73,7 @@ export class RunResultsScreen {
     this.view.visible = false;
     this.view.addChild(this.backdrop);
     this.title = new DisplayTitle(renderer, TITLE_STYLES.floor);
-    this.title.set('D’Bilanz');
+    this.title.set('Results');
     this.view.addChild(this.title.view);
     this.view.addChild(this.content);
   }
@@ -134,7 +134,7 @@ export class RunResultsScreen {
     this.addCentred(state.lastRunLine, centreX, lastRunY, UI_PALETTE.textDim);
     const statsY = lastRunY + UI_LINE_HEIGHT;
     this.addCentred(
-      `Läufe: ${String(state.runsPlayed)}    Daschlogn: ${String(state.totalKills)}`,
+      `Runs: ${String(state.runsPlayed)}    Kills: ${String(state.totalKills)}`,
       centreX,
       statsY,
       UI_PALETTE.textDim,
@@ -161,12 +161,12 @@ export class RunResultsScreen {
     const rightX = leftX + UNLOCKS_WIDTH + PANEL_GAP;
 
     this.drawUnlocksPanel(unlockEntries, leftX, bandCentre + unlocksHeight / 2, unlocksHeight);
-    this.drawPanel('D’Tafel', boardRowsData, rightX, bandCentre + boardHeight / 2, BOARD_WIDTH);
+    this.drawPanel('The Board', boardRowsData, rightX, bandCentre + boardHeight / 2, BOARD_WIDTH);
 
     if (this.runOver) {
-      this.addCentred('Enter: neuer Lauf    T: zua', centreX, hintY, UI_PALETTE.textDim);
+      this.addCentred('Enter: New Run    T: Close', centreX, hintY, UI_PALETTE.textDim);
     } else {
-      this.addCentred('T: zruck zum Lauf', centreX, hintY, UI_PALETTE.textDim);
+      this.addCentred('T: Back to Run', centreX, hintY, UI_PALETTE.textDim);
     }
   }
 
@@ -193,7 +193,7 @@ export class RunResultsScreen {
     return { header, detail, height: UI_LINE_HEIGHT + Math.max(UI_LINE_HEIGHT, detail.height) };
   }
 
-  /** The "Freigschaltn" panel, stacking each unlock's entry to whatever height its wrapped detail needs. */
+  /** The "Unlocked" panel, stacking each unlock's entry to whatever height its wrapped detail needs. */
   private drawUnlocksPanel(
     entries: readonly UnlockEntry[],
     x: number,
@@ -204,7 +204,7 @@ export class RunResultsScreen {
     const panel = this.kit.panelSprite(UNLOCKS_WIDTH, height);
     panel.position.set(x, y);
     this.content.addChild(panel);
-    const heading = uiText('Freigschaltn', { colour: UI_PALETTE.accent });
+    const heading = uiText('Unlocked', { colour: UI_PALETTE.accent });
     heading.position.set(x + PAD, y + PAD);
     this.content.addChild(heading);
     let rowY = y + PAD + UI_LINE_HEIGHT;
@@ -220,10 +220,10 @@ export class RunResultsScreen {
   private boardRows(state: RunResultsView): readonly PanelRow[] {
     const board = state.board;
     if (board === null) {
-      return [{ text: 'D’Tafel hängt no leer —' }, { text: 'da schreibt erst wer o.' }];
+      return [{ text: 'The board is still empty —' }, { text: 'nobody has written on it yet.' }];
     }
     return board.length === 0
-      ? [{ text: 'No koa Lauf an der Tafel.' }]
+      ? [{ text: 'No runs on the board yet.' }]
       : board.slice(0, BOARD_ROWS).map((text) => ({ text }));
   }
 
