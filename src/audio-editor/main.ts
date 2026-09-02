@@ -3,6 +3,7 @@ import { fetchInstruments, fetchTracks } from './api-client.js';
 import { createMidiInput } from './midi.js';
 import { createLoopPlayer } from './playback.js';
 import { createPianoRoll } from './piano-roll.js';
+import { createSfxPanel } from './sfx-panel.js';
 import { AudioEditorState } from './state.js';
 import { createTrackPanel } from './track-panel.js';
 
@@ -13,6 +14,16 @@ const STYLE = `
   background: var(--kb-color-surface-1);
 }
 .kb-audio-root * { box-sizing: border-box; }
+
+.kb-audio-tabs { display: flex; gap: 8px; }
+.kb-audio-tabs button {
+  font: inherit; color: var(--kb-color-text-dim); background: var(--kb-color-surface-3);
+  border: 1px solid var(--kb-color-surface-4); border-radius: var(--kb-radius-sm);
+  padding: 6px 14px; cursor: pointer;
+}
+.kb-audio-tabs button.kb-audio-active { background: var(--kb-color-accent); color: #241d2e; }
+.kb-audio-section { display: flex; flex-direction: column; gap: 12px; }
+.kb-audio-section[hidden] { display: none; }
 
 .kb-audio-transport {
   display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
@@ -54,6 +65,11 @@ const STYLE = `
   margin: 0 0 8px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
   color: var(--kb-color-text-dim); font-weight: normal;
 }
+.kb-audio-panel h3 {
+  margin: 10px 0 6px; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--kb-color-accent); font-weight: normal; border-top: 1px solid var(--kb-color-surface-4);
+  padding-top: 8px;
+}
 .kb-audio-panel select { width: 100%; margin-bottom: 8px; }
 .kb-audio-panel label { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
 .kb-audio-panel input { width: 80px; }
@@ -86,16 +102,51 @@ async function boot(): Promise<void> {
   root.className = 'kb-audio-root';
   host.appendChild(root);
 
+  const tabs = document.createElement('div');
+  tabs.className = 'kb-audio-tabs';
+  root.appendChild(tabs);
+  const musicTabButton = document.createElement('button');
+  musicTabButton.type = 'button';
+  musicTabButton.textContent = '🎵 Music';
+  tabs.appendChild(musicTabButton);
+  const sfxTabButton = document.createElement('button');
+  sfxTabButton.type = 'button';
+  sfxTabButton.textContent = '🔊 SFX';
+  tabs.appendChild(sfxTabButton);
+
+  const musicSection = document.createElement('div');
+  musicSection.className = 'kb-audio-section';
+  root.appendChild(musicSection);
+  const sfxSection = document.createElement('div');
+  sfxSection.className = 'kb-audio-section';
+  sfxSection.hidden = true;
+  root.appendChild(sfxSection);
+
+  function showTab(tab: 'music' | 'sfx'): void {
+    musicSection.hidden = tab !== 'music';
+    sfxSection.hidden = tab !== 'sfx';
+    musicTabButton.classList.toggle('kb-audio-active', tab === 'music');
+    sfxTabButton.classList.toggle('kb-audio-active', tab === 'sfx');
+  }
+  musicTabButton.addEventListener('click', () => {
+    showTab('music');
+  });
+  sfxTabButton.addEventListener('click', () => {
+    showTab('sfx');
+  });
+  showTab('music');
+
   const state = new AudioEditorState();
 
   const [tracks, instruments] = await Promise.all([fetchTracks(), fetchInstruments()]);
   state.loadTracksAndInstruments(tracks, instruments);
   state.selectedTrackId = tracks[0]?.id ?? null;
   const instrumentsById = new Map(instruments.map((instrument) => [instrument.id, instrument]));
+  createSfxPanel(sfxSection, instrumentsById);
 
   const transport = document.createElement('div');
   transport.className = 'kb-audio-transport';
-  root.appendChild(transport);
+  musicSection.appendChild(transport);
 
   const playButton = document.createElement('button');
   playButton.type = 'button';
@@ -169,14 +220,14 @@ async function boot(): Promise<void> {
   transport.appendChild(midiStatus);
 
   const pianoRollHost = document.createElement('div');
-  root.appendChild(pianoRollHost);
+  musicSection.appendChild(pianoRollHost);
   const pianoRoll = createPianoRoll(state, pianoRollHost, instrumentsById);
 
   const panelsRow = document.createElement('div');
   panelsRow.style.display = 'flex';
   panelsRow.style.gap = '12px';
   panelsRow.style.flexWrap = 'wrap';
-  root.appendChild(panelsRow);
+  musicSection.appendChild(panelsRow);
   createTrackPanel(state, panelsRow);
 
   const player = createLoopPlayer(state, instrumentsById);

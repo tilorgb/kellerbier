@@ -1,4 +1,9 @@
-import type { InstrumentDefinition, NoteEvent, TrackDefinition } from '../app/audio/types.js';
+import type {
+  InstrumentDefinition,
+  NoteEvent,
+  SfxDefinition,
+  TrackDefinition,
+} from '../app/audio/types.js';
 
 const API_PREFIX = '/__audio-editor-api';
 
@@ -18,6 +23,10 @@ export function fetchInstruments(): Promise<InstrumentDefinition[]> {
   return getJson('/instruments');
 }
 
+export function fetchSfx(): Promise<SfxDefinition[]> {
+  return getJson('/sfx');
+}
+
 /** Replaces a track's `events` array and writes `content/audio/tracks.ts` — throws with the server's own message on failure. */
 export async function saveTrackEvents(
   trackId: string,
@@ -27,6 +36,19 @@ export async function saveTrackEvents(
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ events }),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? `save failed: ${String(res.status)}`);
+  }
+}
+
+/** Replaces an SFX's whole definition and writes `content/audio/sfx.ts` — throws with the server's own message on failure. */
+export async function saveSfx(sfxId: string, definition: Omit<SfxDefinition, 'id'>): Promise<void> {
+  const res = await fetch(`${API_PREFIX}/sfx/${encodeURIComponent(sfxId)}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(definition),
   });
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { error?: string };
