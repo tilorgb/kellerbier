@@ -4,6 +4,7 @@ import { roomFrameSize, type RoomGeometry } from '../sim/room/geometry.js';
 import { PLAYFIELD_HEIGHT, PLAYFIELD_WIDTH } from '../sim/room/playground.js';
 import type { CompiledDoor } from '../sim/room/template.js';
 import { clamp, lerp } from '../sim/math.js';
+import { AmbientLight } from './ambient-light.js';
 import { DamageNumberView } from './damage-numbers.js';
 import { DecalView } from './decals.js';
 import { EntityView } from './entities.js';
@@ -177,6 +178,7 @@ export class GameView {
   private readonly doorTextures: DoorTextures | undefined;
   private readonly tileTextures: Readonly<Record<string, Texture>>;
   private propView: Container;
+  private readonly ambientLight: AmbientLight;
   private readonly maibaumView: MaibaumView;
   private readonly playerView: PlayerView;
   private readonly projectiles: ProjectileView;
@@ -274,6 +276,13 @@ export class GameView {
     this.propView = createPropView(sim.roomDecorativeProps, this.tileTextures);
     this.world.addChild(this.propView);
 
+    // Ambient per-floor lighting: over the floor/walls/props, under anything
+    // that moves or has to stay readable (decals down through damage numbers)
+    // — see `ambient-light.ts`'s own doc comment for why it stops there.
+    this.ambientLight = new AmbientLight();
+    this.ambientLight.onRoomChanged(sim.room, sim.currentFloor);
+    this.world.addChild(this.ambientLight.container);
+
     this.decals = new DecalView(sim.decals, textures.decal);
     this.world.addChild(this.decals.container);
 
@@ -342,6 +351,7 @@ export class GameView {
     this.particles.setAccessibility(accessibility);
     this.entities.setRingPulses(!accessibility.reduceFlashes);
     this.shakeScale = accessibility.reducedMotion ? REDUCED_MOTION_SHAKE : 1;
+    this.ambientLight.setReducedMotion(accessibility.reducedMotion);
   }
 
   /** The frame animator, for the debug overlay's clip panel. */
@@ -472,7 +482,9 @@ export class GameView {
       this.propView.destroy({ children: true });
       this.propView = createPropView(this.sim.roomDecorativeProps, this.tileTextures);
       this.world.addChildAt(this.propView, 3);
+      this.ambientLight.onRoomChanged(this.roomGeometry, this.sim.currentFloor);
     }
+    this.ambientLight.sync(this.sim.tick);
     this.decals.sync();
     this.entities.sync(alpha, nowMs);
     this.pedestals.sync();
