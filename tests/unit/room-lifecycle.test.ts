@@ -187,6 +187,52 @@ describe('key-locked treasure rooms', () => {
     expect(sim.keys).toBe(1);
     expect(sim.roomId).toBe('test-treasure-locked');
   });
+
+  it('never asks for a second key leaving and walking back in', () => {
+    const sim = new GameSim({
+      roomTemplate: { ...cellarCrossroads, enemySpawns: [], spawnGroups: [] },
+      floor: 1,
+      population: 'empty',
+    });
+    sim.addKeys(1);
+
+    expect(sim.transitionTo(lockedRoom, 1, 'north')).toBe(true);
+    expect(sim.keys).toBe(0);
+
+    // Walk back out, then straight back in — a real door, not a debug
+    // teleport, since that is the shape a player actually hits the bug in.
+    expect(
+      sim.transitionTo({ ...cellarCrossroads, enemySpawns: [], spawnGroups: [] }, 1, 'south'),
+    ).toBe(true);
+    expect(sim.roomId).toBe('cellar-crossroads');
+
+    expect(sim.transitionTo(lockedRoom, 1, 'north')).toBe(true);
+    expect(sim.keys).toBe(0);
+    expect(sim.roomId).toBe('test-treasure-locked');
+  });
+
+  it("clearFloorProgress re-locks a fresh floor's draw of the same template id", () => {
+    // `roomId` is keyed by the authored template's own id, not a
+    // per-instance floor-plan id (`GameSim.clearFloorProgress`'s doc
+    // comment) — re-entering `lockedRoom` after `clearFloorProgress` here
+    // stands in for a *different* physical room, on a freshly generated
+    // floor, that happens to draw the same template.
+    const sim = new GameSim({
+      roomTemplate: { ...cellarCrossroads, enemySpawns: [], spawnGroups: [] },
+      floor: 1,
+      population: 'empty',
+    });
+    sim.addKeys(2);
+    expect(sim.transitionTo(lockedRoom, 1, 'north')).toBe(true);
+    expect(sim.keys).toBe(1);
+
+    sim.clearFloorProgress();
+    expect(
+      sim.transitionTo({ ...cellarCrossroads, enemySpawns: [], spawnGroups: [] }, 1, 'south'),
+    ).toBe(true);
+    expect(sim.transitionTo(lockedRoom, 1, 'north')).toBe(true);
+    expect(sim.keys).toBe(0);
+  });
 });
 
 describe('the shopkeeper', () => {

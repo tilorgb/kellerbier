@@ -1018,6 +1018,13 @@ export class GameSim {
   /** Latched by `consumeProp` when the Maibaum-Dieb takes the arena maypole (#199); cleared on room load. */
   private maypoleTaken = false;
   private roomClearedIds = new Set<string>();
+  /**
+   * Key-locked treasure rooms (#196) a Kellerschlüssel has already been
+   * spent to enter, keyed the same way `roomClearedIds` is — by the authored
+   * template's own id, not a per-instance id — so leaving and walking back
+   * in never asks for a second key. `transitionTo` is the only writer.
+   */
+  private unlockedKeyRoomIds = new Set<string>();
   private roomTemplateLoaded = false;
   /** Every real door the current room has (#100) — see the `doors` getter for the *visible* subset. */
   private roomDoors: readonly CompiledDoor[] = [];
@@ -1461,6 +1468,9 @@ export class GameSim {
     // loot from a room on the *previous* floor's draw of this template must
     // not leak into a different physical room that happens to reuse it.
     this.roomLootSnapshots.clear();
+    // Same reasoning again: a fresh floor's draw of a template id that a
+    // previous floor happened to also use must not start pre-unlocked.
+    this.unlockedKeyRoomIds.clear();
   }
 
   /**
@@ -1583,10 +1593,16 @@ export class GameSim {
 
   /**
    * Loads the next room only when its matching door exists, this room is
-   * clear, and — for a key-locked treasure room — a Kellerschlüssel is spent
-   * to open it. The key is spent only once every other check has passed, so
-   * a blocked transition (wrong direction, enemies still up, no key) never
-   * costs one.
+   * clear, and — for a key-locked treasure room, the *first* time it is
+   * entered — a Kellerschlüssel is spent to open it. The key is spent only
+   * once every other check has passed, so a blocked transition (wrong
+   * direction, enemies still up, no key) never costs one.
+   *
+   * A room already in `unlockedKeyRoomIds` never asks again: the door was
+   * unlocked the moment the key was spent, not re-locked behind the player
+   * on the way out, so leaving and walking back in must find it open — the
+   * same "a visited room is never still locked" rule `app/main.ts`'s
+   * `lockedDoorsFor` already drew the door itself by.
    */
   transitionTo(
     template: unknown,
@@ -1606,8 +1622,13 @@ export class GameSim {
       ENEMY_DEFINITIONS,
       placement,
     );
-    if (destination.source.metadata.keyLocked === true && !this.spendKeys(1)) {
+    const isKeyLocked = destination.source.metadata.keyLocked === true;
+    const alreadyUnlocked = isKeyLocked && this.unlockedKeyRoomIds.has(destination.source.id);
+    if (isKeyLocked && !alreadyUnlocked && !this.spendKeys(1)) {
       return false;
+    }
+    if (isKeyLocked) {
+      this.unlockedKeyRoomIds.add(destination.source.id);
     }
     this.roomClearedIds.add(this.roomId);
     this.loadRoom(template, floor, direction, hiddenDoors, placement, entryCell);

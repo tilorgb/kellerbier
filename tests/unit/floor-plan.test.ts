@@ -11,6 +11,7 @@ import {
   type RoomSpecialRole,
   type RoomSubLayout,
   type RoomTemplate,
+  type SingleCellRoomTemplate,
 } from '../../src/content/rooms/definition.js';
 import {
   generateFloor,
@@ -110,6 +111,32 @@ function syntheticPool(): RoomTemplate[] {
     }
   }
   return templates;
+}
+
+/**
+ * `syntheticPool()` plus one extra `1x1` treasure template per floor tag,
+ * `keyLocked: true` — everything else about it identical to (and so always
+ * competing on weight with) the ordinary treasure template already in the
+ * pool. Kept separate from `syntheticPool()` itself rather than folded in:
+ * most of that helper's callers don't care about key-locked rooms at all,
+ * and adding a second treasure template to every one of them would change
+ * how often the *ordinary* treasure template gets picked in tests that are
+ * about something else entirely.
+ */
+function syntheticPoolWithLockedTreasure(): RoomTemplate[] {
+  const pool = syntheticPool();
+  const treasureTemplates = pool.filter(
+    (template): template is SingleCellRoomTemplate =>
+      template.metadata.shape === '1x1' && template.metadata.specialRole === 'treasure',
+  );
+  for (const template of treasureTemplates) {
+    pool.push({
+      ...template,
+      id: `${template.id}-locked`,
+      metadata: { ...template.metadata, keyLocked: true },
+    });
+  }
+  return pool;
 }
 
 /** One staircase template per floor tag — enough for the generator to have something to place (#112). */
@@ -240,6 +267,33 @@ describe('floor generation', () => {
       const plan = generateFloor(new Rng(seed), config, pool);
       expect(validateFloorPlan(plan, pool)).toEqual([]);
     }
+  });
+
+  it('never places a key-locked template anywhere but a dead end', () => {
+    // A key-locked treasure room (#196) costs a Kellerschlüssel to enter —
+    // if the generator ever placed one on a room needing more than its own
+    // one door, that room would sit on the *only* path to whatever is past
+    // it (up to and including the boss), stranding a keyless player. The
+    // ordinary, unlocked treasure template stays eligible for every slot
+    // regardless, so this is never the reason a floor fails to generate.
+    const pool = syntheticPoolWithLockedTreasure();
+    const templatesById = new Map(pool.map((template) => [template.id, template]));
+    let checkedAny = false;
+    for (let seed = 0; seed < 2000; seed++) {
+      const config = floorConfig(seed % FLOOR_CONFIGS.length);
+      const plan = generateFloor(new Rng(seed), config, pool);
+      for (const room of plan.rooms) {
+        if (templatesById.get(room.templateId)?.metadata.keyLocked !== true) {
+          continue;
+        }
+        checkedAny = true;
+        expect(
+          room.doors.length,
+          `seed ${String(seed)}, room ${room.id} uses key-locked template "${room.templateId}" with ${String(room.doors.length)} doors`,
+        ).toBe(1);
+      }
+    }
+    expect(checkedAny).toBe(true);
   });
 
   it('never gives an L/T room a door that points into its own void cell', () => {
