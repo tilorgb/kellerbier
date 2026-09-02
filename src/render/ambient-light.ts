@@ -30,8 +30,18 @@ const DORF_FLOOR = 2;
 
 /** Warm, barely-off-black — a bare bulb's shadow, not a neutral grey one. */
 const KELLER_SHADOW_RGB = '12, 9, 6';
-/** Cool, desaturated blue-grey — a cloud's shadow, not a storm front. */
-const CLOUD_SHADOW_RGB = '28, 40, 52';
+/** The bulb's own warm light, for the additive glow pooled under it — not the shadow colour inverted, an actual light-bulb amber. */
+const KELLER_GLOW_RGB = '255, 214, 140';
+/**
+ * Neutral, close to white — a cloud dims whatever is under it without
+ * changing its colour, which is what a `multiply`-blended near-white does
+ * (`AmbientLight`'s cloud sprite runs in `multiply` rather than the lamp's
+ * plain alpha blend): scaling every channel by the same near-1 factor keeps
+ * hue and saturation exactly where they were and only pulls brightness down,
+ * instead of mixing in a foreign blue-grey the way a `normal`-blend overlay
+ * would — see `createCloudTexture`'s own doc comment for the reasoning.
+ */
+const CLOUD_SHADOW_RGB = '150, 150, 150';
 
 /**
  * How much of the gradient's radius is spent easing from `KELLER_CENTRE_ALPHA`
@@ -39,26 +49,42 @@ const CLOUD_SHADOW_RGB = '28, 40, 52';
  * reads as one continuous pool of light rather than a hard-edged disc.
  */
 const KELLER_INNER_STOP = 0.08;
-/** The cellar's darkening directly under the bulb — never fully lit, "the whole cellar is darker." */
-const KELLER_CENTRE_ALPHA = 0.16;
-/** The darkening the falloff reaches by the gradient's outer edge. */
-const KELLER_EDGE_ALPHA = 0.64;
+/** The cellar's darkening directly under the bulb — `KELLER_GLOW_RGB`'s additive glow is what actually brightens the centre; this stays low rather than zero so even the lit pool reads as part of a darker room. */
+const KELLER_CENTRE_ALPHA = 0.05;
+/** The darkening the falloff reaches by the gradient's outer edge — deliberately strong: "brighter in the middle and darker on the edge" is the whole ask. */
+const KELLER_EDGE_ALPHA = 0.78;
+/** How strong the additive warm glow is directly under the bulb. */
+const KELLER_GLOW_PEAK_ALPHA = 0.4;
 /**
- * The falloff sprite's size relative to the room's *full authored frame*
+ * Where the glow's own fade reaches `0`, as a fraction of the *shadow*
+ * sprite's half-size (both sprites share one `lampPlacement`, so this is
+ * relative to the same span either way) — well short of `1`, so the glow is
+ * fully spent while the darkening is still only partway to `KELLER_EDGE_ALPHA`.
+ * Sharing the sprite but not the falloff distance is what keeps "brighter in
+ * the middle, darker at the edge" reading as one continuous pool of light
+ * rather than a lit disc sitting on top of a separately-vignetted floor: the
+ * glow has already faded to nothing well before the darkening has faded in
+ * very far, so there is no point where the two are both still strong and
+ * fighting each other, and the edges are free to reach real darkness instead
+ * of the glow perpetually taking a bite out of it.
+ */
+const KELLER_GLOW_REACH = 0.55;
+/**
+ * The falloff sprites' size relative to the room's *full authored frame*
  * (`sim/room/geometry.ts`'s `roomFrameSize` — interior plus the wall margin
  * on every side), not just the interior play area: a bulb overhead lights
  * the nearby wall too, not only the floor, and sizing off the frame is what
  * lets the glow reach that wall band with the same falloff rather than
  * stopping dead at the floor's own edge. Bigger than `1` on top of that so
- * the sprite's own rectangular bounds sit past the frame's corners — with a
+ * the sprites' own rectangular bounds sit past the frame's corners — with a
  * texture whose fade already reaches its own corner (see
  * `createGlowTexture`), that keeps the one hard edge that necessarily exists
  * (a `Sprite` is always a rectangle) off the visible frame entirely.
  */
 const KELLER_COVERAGE = 1.3;
 
-/** Never more than this much shadow — "very subtle... shouldn't disturb." */
-const CLOUD_MAX_ALPHA = 0.16;
+/** Never more than this much of the cloud's own near-white gets multiplied in — a soft dimming, not a wash. */
+const CLOUD_MAX_ALPHA = 0.4;
 /** How wide/tall the shadow patch is relative to the room, less than `1` so it reads as a discrete cloud rather than the whole sky dimming at once. */
 const CLOUD_WIDTH_FRACTION = 0.85;
 const CLOUD_HEIGHT_FRACTION = 0.6;
@@ -76,21 +102,25 @@ const CLOUD_FADE_FRACTION = 0.25;
  * `<canvas>` — a soft radial fade is a Canvas 2D gradient, not a shape, and
  * not worth a shader, same reasoning as `vignette.ts`'s own gradient.
  *
- * The outer stop sits at the corner radius (`size/2 * √2`), not the more
- * usual inscribed-circle radius (`size/2`): canvas gradients paint their
- * last stop's colour for every radius past it rather than stopping there, so
- * an inscribed-circle outer stop leaves the texture's own four corners a
- * flat, uniform block once stretched onto a sprite — invisible on a sprite
- * cropped well inside its own bounds (nothing here is), but a visible
- * hard-edged rectangle on one that isn't. Ending the fade at the corner
- * instead means every pixel this texture can be stretched to is still part
- * of one continuous gradient, which is what actually reads as round.
+ * `outerStop` (a fraction of `size/2`) defaults callers to the texture's own
+ * corner radius (`√2`), not the more usual inscribed-circle radius (`1`):
+ * canvas gradients paint their last stop's colour for every radius past it
+ * rather than stopping there, so an inscribed-circle outer stop leaves the
+ * texture's own four corners a flat, uniform block once stretched onto a
+ * sprite — invisible on a sprite cropped well inside its own bounds, but a
+ * visible hard-edged rectangle on one that isn't. Ending the fade at the
+ * corner instead means every pixel a *fully covering* texture like the lamp
+ * shadow gets stretched to is still part of one continuous gradient. A
+ * texture meant to fade all the way to nothing well inside its own sprite
+ * (the lamp glow) passes a smaller `outerStop` on purpose instead — there
+ * the flat region past the last stop is transparent, so it never shows.
  */
 function createGlowTexture(
   rgb: string,
   innerAlpha: number,
   outerAlpha: number,
   innerStop: number,
+  outerStop: number = Math.SQRT2,
 ): Texture {
   const size = 512;
   const canvas = document.createElement('canvas');
@@ -108,7 +138,7 @@ function createGlowTexture(
     size * innerStop,
     centre,
     centre,
-    centre * Math.SQRT2,
+    centre * outerStop,
   );
   gradient.addColorStop(0, `rgba(${rgb}, ${String(innerAlpha)})`);
   gradient.addColorStop(1, `rgba(${rgb}, ${String(outerAlpha)})`);
@@ -138,8 +168,12 @@ const CLOUD_BLUR_FRACTION = 0.05;
 
 /**
  * A soft-edged cloud silhouette, coloured `rgb` at full alpha — `AmbientLight`
- * controls how dark the shadow actually reads via `Sprite.alpha`, same as the
- * lamp glow does.
+ * draws it with `blendMode: 'multiply'` rather than the lamp's plain alpha
+ * blend, and controls how strongly that multiply applies via `Sprite.alpha`.
+ * `rgb` is meant to be near-white (`CLOUD_SHADOW_RGB`): multiplying the floor
+ * by a near-1 factor dims it without shifting its hue, which is what makes
+ * this read as an actual shadow instead of a grey-blue wash painted over the
+ * ground — the failure mode a plain alpha-blended overlay had.
  *
  * Drawn crisp (union of `CLOUD_PUFFS`, no filter) onto an offscreen canvas
  * first and blurred only when that whole silhouette is composited onto the
@@ -274,30 +308,48 @@ export function cloudPlacement(room: RoomRect, progress: number): Placement {
 export class AmbientLight {
   readonly container = new Container();
 
-  private readonly lampTexture: Texture;
+  private readonly lampShadowTexture: Texture;
+  private readonly lampGlowTexture: Texture;
   private readonly cloudTexture: Texture;
-  private readonly lampSprite: Sprite;
+  /** The darkening vignette — drawn first, so the additive glow painted after it never gets darkened back down. */
+  private readonly lampShadowSprite: Sprite;
+  /** The bulb's own warm pool of light, `blendMode: 'add'` — see `KELLER_GLOW_REACH`'s own doc comment for why it fades out well short of the shadow's own falloff. */
+  private readonly lampGlowSprite: Sprite;
   private readonly cloudSprite: Sprite;
   private floorNumber = 0;
   private room: RoomRect = { minX: 0, minY: 0, maxX: 0, maxY: 0 };
   private reducedMotion = false;
 
   constructor() {
-    this.lampTexture = createGlowTexture(
+    this.lampShadowTexture = createGlowTexture(
       KELLER_SHADOW_RGB,
       KELLER_CENTRE_ALPHA,
       KELLER_EDGE_ALPHA,
       KELLER_INNER_STOP,
     );
+    this.lampGlowTexture = createGlowTexture(
+      KELLER_GLOW_RGB,
+      KELLER_GLOW_PEAK_ALPHA,
+      0,
+      KELLER_INNER_STOP,
+      KELLER_GLOW_REACH,
+    );
     this.cloudTexture = createCloudTexture(CLOUD_SHADOW_RGB);
 
-    this.lampSprite = new Sprite(this.lampTexture);
-    this.lampSprite.anchor.set(0.5);
-    this.lampSprite.alpha = 0;
-    this.container.addChild(this.lampSprite);
+    this.lampShadowSprite = new Sprite(this.lampShadowTexture);
+    this.lampShadowSprite.anchor.set(0.5);
+    this.lampShadowSprite.alpha = 0;
+    this.container.addChild(this.lampShadowSprite);
+
+    this.lampGlowSprite = new Sprite(this.lampGlowTexture);
+    this.lampGlowSprite.anchor.set(0.5);
+    this.lampGlowSprite.blendMode = 'add';
+    this.lampGlowSprite.alpha = 0;
+    this.container.addChild(this.lampGlowSprite);
 
     this.cloudSprite = new Sprite(this.cloudTexture);
     this.cloudSprite.anchor.set(0.5);
+    this.cloudSprite.blendMode = 'multiply';
     this.cloudSprite.alpha = 0;
     this.container.addChild(this.cloudSprite);
   }
@@ -316,12 +368,17 @@ export class AmbientLight {
 
     if (floorNumber === KELLER_FLOOR) {
       const lamp = lampPlacement(room);
-      this.lampSprite.position.set(lamp.x, lamp.y);
-      this.lampSprite.width = lamp.width;
-      this.lampSprite.height = lamp.height;
-      this.lampSprite.alpha = 1;
+      this.lampShadowSprite.position.set(lamp.x, lamp.y);
+      this.lampShadowSprite.width = lamp.width;
+      this.lampShadowSprite.height = lamp.height;
+      this.lampShadowSprite.alpha = 1;
+      this.lampGlowSprite.position.set(lamp.x, lamp.y);
+      this.lampGlowSprite.width = lamp.width;
+      this.lampGlowSprite.height = lamp.height;
+      this.lampGlowSprite.alpha = 1;
     } else {
-      this.lampSprite.alpha = 0;
+      this.lampShadowSprite.alpha = 0;
+      this.lampGlowSprite.alpha = 0;
     }
 
     if (floorNumber !== DORF_FLOOR) {
