@@ -6,8 +6,13 @@
  * - `GET  /tracks`               — every `TrackDefinition`, live from `src/content/audio/tracks.ts`
  * - `GET  /instruments`          — every `InstrumentDefinition`
  * - `GET  /sfx`                  — every `SfxDefinition`, live from `src/content/audio/sfx.ts`
+ * - `GET  /barks`                — every `BarkDefinition`, live from `src/content/audio/barks.ts`
+ * - `GET  /enemies`               — every enemy's `{id, name}`, live from `src/content/enemies/index.ts`
+ * - `GET  /enemy-categories`     — the `ENEMY_SFX_CATEGORY` map, live from `src/content/audio/sfx.ts`
  * - `POST /tracks/:id/events`    — replaces one track's `events` array and writes the file
  * - `POST /sfx/:id`              — replaces one SFX's whole definition and writes the file
+ * - `POST /barks/:id`            — replaces one bark's whole definition and writes the file
+ * - `POST /enemy-categories`     — replaces the whole `ENEMY_SFX_CATEGORY` map and writes the file
  *
  * `configureServer` middleware only ever runs under `vite`/`vite dev`, never
  * `vite build`/`vite preview` — see `tools/room-editor/server.mjs`, the
@@ -41,6 +46,7 @@ import * as prettier from 'prettier';
 const API_PREFIX = '/__audio-editor-api/';
 const TRACKS_FILE = 'src/content/audio/tracks.ts';
 const SFX_FILE = 'src/content/audio/sfx.ts';
+const BARKS_FILE = 'src/content/audio/barks.ts';
 
 /**
  * Track id (`TrackDefinition.id`, what the browser and the game both use) →
@@ -96,6 +102,25 @@ export function audioEditorServerPlugin() {
             respondJson(res, 200, mod.SFX_DEFINITIONS);
             return;
           }
+          if (req.method === 'GET' && route === 'barks') {
+            const mod = await server.ssrLoadModule('/src/content/audio/barks.ts');
+            respondJson(res, 200, mod.BARK_DEFINITIONS);
+            return;
+          }
+          if (req.method === 'GET' && route === 'enemies') {
+            const mod = await server.ssrLoadModule('/src/content/enemies/index.ts');
+            respondJson(
+              res,
+              200,
+              mod.ENEMY_DEFINITIONS.map((enemy) => ({ id: enemy.id, name: enemy.name })),
+            );
+            return;
+          }
+          if (req.method === 'GET' && route === 'enemy-categories') {
+            const mod = await server.ssrLoadModule('/src/content/audio/sfx.ts');
+            respondJson(res, 200, mod.ENEMY_SFX_CATEGORY);
+            return;
+          }
           const eventsMatch = /^tracks\/([^/]+)\/events$/.exec(route);
           if (req.method === 'POST' && eventsMatch) {
             const trackId = decodeURIComponent(eventsMatch[1]);
@@ -115,6 +140,27 @@ export function audioEditorServerPlugin() {
               server,
               res,
               sfxId,
+              JSON.parse(await readBody(req)),
+              pendingOwnWrites,
+            );
+            return;
+          }
+          const barkMatch = /^barks\/([^/]+)$/.exec(route);
+          if (req.method === 'POST' && barkMatch) {
+            const barkId = decodeURIComponent(barkMatch[1]);
+            await handleSaveBark(
+              server,
+              res,
+              barkId,
+              JSON.parse(await readBody(req)),
+              pendingOwnWrites,
+            );
+            return;
+          }
+          if (req.method === 'POST' && route === 'enemy-categories') {
+            await handleSaveEnemyCategories(
+              server,
+              res,
               JSON.parse(await readBody(req)),
               pendingOwnWrites,
             );
@@ -171,11 +217,12 @@ async function handleSaveEvents(server, res, trackId, body, pendingOwnWrites) {
 }
 
 /**
- * Unlike `EXPORT_NAME_BY_TRACK_ID`, `sfx.ts`'s ids all follow one mechanical
- * rule end to end (`'hit-squelch'` -> `hitSquelch`), so the export name is
- * derived rather than hand-mapped — but derived is not the same as trusted:
- * `handleSaveSfx` still confirms a `const` by that exact name exists before
- * writing anything, and reports the id/name it tried if it doesn't, rather
+ * Unlike `EXPORT_NAME_BY_TRACK_ID`, `sfx.ts`'s and `barks.ts`'s ids all
+ * follow one mechanical rule end to end (`'hit-squelch'` -> `hitSquelch`,
+ * `'geh-weida'` -> `gehWeida`), so `handleSaveSfx`/`handleSaveBark` derive
+ * the export name rather than hand-mapping it — but derived is not the same
+ * as trusted: both still confirm a `const` by that exact name exists before
+ * writing anything, and report the id/name they tried if it doesn't, rather
  * than silently writing to the wrong place or failing opaquely.
  */
 function kebabToCamel(id) {
@@ -275,6 +322,163 @@ function renderSfxDefinition(id, def) {
     parts.push(`pitchJitterCents: ${String(def.pitchJitterCents)}`);
   }
   return `{\n  ${parts.join(',\n  ')},\n}`;
+}
+
+async function handleSaveBark(server, res, barkId, body, pendingOwnWrites) {
+  const exportName = kebabToCamel(barkId);
+  const validationError = validateBark(body);
+  if (validationError !== null) {
+    respondJson(res, 422, { error: validationError });
+    return;
+  }
+
+  const filePath = path.join(server.config.root, BARKS_FILE);
+  const sourceText = await readFile(filePath, 'utf8');
+  const span = findConstInitializerSpan(sourceText, 'barks.ts', exportName);
+  if (span === null) {
+    respondJson(res, 404, {
+      error: `no "const ${exportName}" in ${BARKS_FILE} (derived from bark id "${barkId}")`,
+    });
+    return;
+  }
+
+  const replaced =
+    sourceText.slice(0, span.start) +
+    renderBarkDefinition(barkId, body) +
+    sourceText.slice(span.end);
+  const config = (await prettier.resolveConfig(filePath)) ?? {};
+  const formatted = await prettier.format(replaced, { ...config, filepath: filePath });
+
+  pendingOwnWrites.add(filePath);
+  await writeFile(filePath, formatted, 'utf8');
+  respondJson(res, 200, { ok: true });
+}
+
+/** Same shape `content/audio/types.ts`'s `BarkDefinition` describes. */
+function validateBark(def) {
+  if (typeof def?.text !== 'string' || def.text.length === 0) {
+    return '"text" must be a non-empty string';
+  }
+  const motif = def.motif;
+  if (typeof motif?.instrument !== 'string' || motif.instrument.length === 0) {
+    return 'motif.instrument must be a non-empty string';
+  }
+  if (!Array.isArray(motif.notes) || motif.notes.length === 0) {
+    return 'motif.notes must be a non-empty array of note names';
+  }
+  if (!motif.notes.every((note) => typeof note === 'string' && note.length > 0)) {
+    return 'every motif.notes entry must be a non-empty string';
+  }
+  if (typeof motif.noteDurationSeconds !== 'number') {
+    return 'motif.noteDurationSeconds must be a number';
+  }
+  return null;
+}
+
+function renderBarkDefinition(id, def) {
+  const notes = def.motif.notes.map((note) => JSON.stringify(note)).join(', ');
+  return (
+    `{\n` +
+    `  id: ${JSON.stringify(id)},\n` +
+    `  text: ${JSON.stringify(def.text)},\n` +
+    `  motif: {\n` +
+    `    instrument: ${JSON.stringify(def.motif.instrument)},\n` +
+    `    notes: [${notes}],\n` +
+    `    noteDurationSeconds: ${String(def.motif.noteDurationSeconds)},\n` +
+    `  },\n` +
+    `}`
+  );
+}
+
+const KNOWN_ENEMY_SFX_CATEGORIES = new Set(['squelch', 'metal', 'animal', 'folk', 'oompah']);
+
+async function handleSaveEnemyCategories(server, res, body, pendingOwnWrites) {
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+    respondJson(res, 400, { error: 'body must be an object mapping enemy id -> category' });
+    return;
+  }
+
+  const enemiesMod = await server.ssrLoadModule('/src/content/enemies/index.ts');
+  const rosterIds = new Set(enemiesMod.ENEMY_DEFINITIONS.map((enemy) => enemy.id));
+  const submittedIds = new Set(Object.keys(body));
+
+  for (const [id, category] of Object.entries(body)) {
+    if (!rosterIds.has(id)) {
+      respondJson(res, 422, { error: `"${id}" is not an enemy id in the current roster` });
+      return;
+    }
+    if (!KNOWN_ENEMY_SFX_CATEGORIES.has(category)) {
+      respondJson(res, 422, {
+        error: `"${id}": category must be one of ${[...KNOWN_ENEMY_SFX_CATEGORIES].join(', ')}, got "${String(category)}"`,
+      });
+      return;
+    }
+  }
+  const missing = [...rosterIds].filter((id) => !submittedIds.has(id));
+  if (missing.length > 0) {
+    respondJson(res, 422, {
+      error: `missing a category for: ${missing.join(', ')} — every enemy needs one (tests/content/audio.test.ts checks this)`,
+    });
+    return;
+  }
+
+  const filePath = path.join(server.config.root, SFX_FILE);
+  const sourceText = await readFile(filePath, 'utf8');
+  const sourceFile = ts.createSourceFile('sfx.ts', sourceText, ts.ScriptTarget.Latest, true);
+  const initializer = findTopLevelConstInitializer(sourceFile, 'ENEMY_SFX_CATEGORY');
+  if (initializer === null || !ts.isObjectLiteralExpression(initializer)) {
+    respondJson(res, 404, { error: `no "const ENEMY_SFX_CATEGORY" in ${SFX_FILE}` });
+    return;
+  }
+  const span = { start: initializer.getStart(sourceFile), end: initializer.getEnd() };
+
+  // Keeps the file's existing key order for keys that already existed —
+  // otherwise every save reorders the whole map to whatever order the
+  // roster happened to load in, and a one-enemy re-sort turns into a
+  // diff that touches every line, unreviewable and useless for git blame.
+  // New keys (a roster addition the map hadn't caught up to yet) are
+  // appended at the end, in whatever order the browser submitted them.
+  const existingOrder = objectLiteralKeyOrder(initializer);
+  const remaining = new Set(Object.keys(body));
+  const orderedKeys = [];
+  for (const key of existingOrder) {
+    if (remaining.has(key)) {
+      orderedKeys.push(key);
+      remaining.delete(key);
+    }
+  }
+  orderedKeys.push(...remaining);
+
+  const replaced =
+    sourceText.slice(0, span.start) +
+    renderEnemyCategoryMap(body, orderedKeys) +
+    sourceText.slice(span.end);
+  const config = (await prettier.resolveConfig(filePath)) ?? {};
+  const formatted = await prettier.format(replaced, { ...config, filepath: filePath });
+
+  pendingOwnWrites.add(filePath);
+  await writeFile(filePath, formatted, 'utf8');
+  respondJson(res, 200, { ok: true });
+}
+
+/** An object literal's property keys, in source order — string literal or identifier names alike. */
+function objectLiteralKeyOrder(objectLiteral) {
+  const keys = [];
+  for (const prop of objectLiteral.properties) {
+    if (ts.isPropertyAssignment(prop)) {
+      if (ts.isIdentifier(prop.name)) {
+        keys.push(prop.name.text);
+      } else if (ts.isStringLiteral(prop.name)) {
+        keys.push(prop.name.text);
+      }
+    }
+  }
+  return keys;
+}
+
+function renderEnemyCategoryMap(map, orderedKeys) {
+  const lines = orderedKeys.map((id) => `  ${JSON.stringify(id)}: ${JSON.stringify(map[id])},`);
+  return `{\n${lines.join('\n')}\n}`;
 }
 
 /** Same shape `content/audio/types.ts`'s `NoteEvent` describes, checked by hand rather than importing a runtime validator that doesn't exist yet. */

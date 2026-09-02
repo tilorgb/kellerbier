@@ -1,5 +1,7 @@
 import { injectDevUiTokens } from '../dev-ui/tokens.js';
 import { fetchInstruments, fetchTracks } from './api-client.js';
+import { createBarksPanel } from './barks-panel.js';
+import { createEnemyCategoryPanel } from './enemy-category-panel.js';
 import { createMidiInput } from './midi.js';
 import { createLoopPlayer } from './playback.js';
 import { createPianoRoll } from './piano-roll.js';
@@ -81,6 +83,21 @@ const STYLE = `
 }
 .kb-audio-status { margin-top: 8px; color: var(--kb-color-ok); font-size: 12px; }
 .kb-audio-status-warn { color: var(--kb-color-warn); }
+.kb-audio-hint { margin: -4px 0 10px; color: var(--kb-color-text-subtle); font-size: 11px; line-height: 1.4; }
+
+.kb-audio-panel-wide { max-width: 720px; }
+.kb-audio-enemy-table { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; max-height: 480px; overflow-y: auto; }
+.kb-audio-enemy-row {
+  display: flex; align-items: center; gap: 8px; padding: 4px 6px;
+  border-radius: var(--kb-radius-sm); background: var(--kb-color-surface-2);
+}
+.kb-audio-enemy-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kb-audio-enemy-row select { width: 100px; }
+.kb-audio-enemy-row button {
+  font: inherit; color: var(--kb-color-text); background: var(--kb-color-surface-3);
+  border: 1px solid var(--kb-color-surface-4); border-radius: var(--kb-radius-sm);
+  padding: 3px 8px; cursor: pointer;
+}
 `;
 
 function injectStyle(): void {
@@ -102,38 +119,62 @@ async function boot(): Promise<void> {
   root.className = 'kb-audio-root';
   host.appendChild(root);
 
+  // Four tabs, one job each — a track's melody, a one-shot cue's synth
+  // parameters, a voice line's motif, and a sorting table are different
+  // enough editing tasks that a single crowded page would mean scrolling
+  // past three of them to reach the fourth; Cubase keeps the same split
+  // (key editor, sample editor, mixer) for the same reason.
+  const TAB_IDS = ['music', 'sfx', 'barks', 'enemies'] as const;
+  type TabId = (typeof TAB_IDS)[number];
+  const TAB_LABELS: Record<TabId, string> = {
+    music: '🎵 Music',
+    sfx: '🔊 SFX',
+    barks: '🗣️ Barks',
+    enemies: '👹 Enemy sounds',
+  };
+
   const tabs = document.createElement('div');
   tabs.className = 'kb-audio-tabs';
   root.appendChild(tabs);
-  const musicTabButton = document.createElement('button');
-  musicTabButton.type = 'button';
-  musicTabButton.textContent = '🎵 Music';
-  tabs.appendChild(musicTabButton);
-  const sfxTabButton = document.createElement('button');
-  sfxTabButton.type = 'button';
-  sfxTabButton.textContent = '🔊 SFX';
-  tabs.appendChild(sfxTabButton);
 
-  const musicSection = document.createElement('div');
-  musicSection.className = 'kb-audio-section';
-  root.appendChild(musicSection);
-  const sfxSection = document.createElement('div');
-  sfxSection.className = 'kb-audio-section';
-  sfxSection.hidden = true;
-  root.appendChild(sfxSection);
+  function buildTab(id: TabId): { button: HTMLButtonElement; section: HTMLDivElement } {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = TAB_LABELS[id];
+    button.addEventListener('click', () => {
+      showTab(id);
+    });
+    tabs.appendChild(button);
 
-  function showTab(tab: 'music' | 'sfx'): void {
-    musicSection.hidden = tab !== 'music';
-    sfxSection.hidden = tab !== 'sfx';
-    musicTabButton.classList.toggle('kb-audio-active', tab === 'music');
-    sfxTabButton.classList.toggle('kb-audio-active', tab === 'sfx');
+    const section = document.createElement('div');
+    section.className = 'kb-audio-section';
+    section.hidden = true;
+    root.appendChild(section);
+
+    return { button, section };
   }
-  musicTabButton.addEventListener('click', () => {
-    showTab('music');
-  });
-  sfxTabButton.addEventListener('click', () => {
-    showTab('sfx');
-  });
+
+  const musicTab = buildTab('music');
+  const sfxTab = buildTab('sfx');
+  const barksTab = buildTab('barks');
+  const enemiesTab = buildTab('enemies');
+  const musicSection = musicTab.section;
+  const sfxSection = sfxTab.section;
+  const barksSection = barksTab.section;
+  const enemiesSection = enemiesTab.section;
+  const allTabs: Record<TabId, { button: HTMLButtonElement; section: HTMLDivElement }> = {
+    music: musicTab,
+    sfx: sfxTab,
+    barks: barksTab,
+    enemies: enemiesTab,
+  };
+
+  function showTab(tab: TabId): void {
+    for (const id of TAB_IDS) {
+      allTabs[id].section.hidden = id !== tab;
+      allTabs[id].button.classList.toggle('kb-audio-active', id === tab);
+    }
+  }
   showTab('music');
 
   const state = new AudioEditorState();
@@ -143,6 +184,8 @@ async function boot(): Promise<void> {
   state.selectedTrackId = tracks[0]?.id ?? null;
   const instrumentsById = new Map(instruments.map((instrument) => [instrument.id, instrument]));
   createSfxPanel(sfxSection, instrumentsById);
+  createBarksPanel(barksSection, instrumentsById);
+  createEnemyCategoryPanel(enemiesSection, instrumentsById);
 
   const transport = document.createElement('div');
   transport.className = 'kb-audio-transport';

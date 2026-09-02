@@ -1,9 +1,16 @@
 import type {
+  BarkDefinition,
   InstrumentDefinition,
   NoteEvent,
   SfxDefinition,
   TrackDefinition,
 } from '../app/audio/types.js';
+import type { EnemySfxCategory } from '../content/audio/sfx.js';
+
+export interface EnemySummary {
+  readonly id: string;
+  readonly name: string;
+}
 
 const API_PREFIX = '/__audio-editor-api';
 
@@ -49,6 +56,47 @@ export async function saveSfx(sfxId: string, definition: Omit<SfxDefinition, 'id
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(definition),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? `save failed: ${String(res.status)}`);
+  }
+}
+
+export function fetchBarks(): Promise<BarkDefinition[]> {
+  return getJson('/barks');
+}
+
+/** Replaces a bark's whole definition and writes `content/audio/barks.ts` — throws with the server's own message on failure. */
+export async function saveBark(
+  barkId: string,
+  definition: Omit<BarkDefinition, 'id'>,
+): Promise<void> {
+  const res = await fetch(`${API_PREFIX}/barks/${encodeURIComponent(barkId)}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(definition),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? `save failed: ${String(res.status)}`);
+  }
+}
+
+export function fetchEnemies(): Promise<EnemySummary[]> {
+  return getJson('/enemies');
+}
+
+export function fetchEnemyCategories(): Promise<Record<string, EnemySfxCategory>> {
+  return getJson('/enemy-categories');
+}
+
+/** Replaces the whole `ENEMY_SFX_CATEGORY` map and writes `content/audio/sfx.ts` — throws with the server's own message on failure. */
+export async function saveEnemyCategories(map: Record<string, EnemySfxCategory>): Promise<void> {
+  const res = await fetch(`${API_PREFIX}/enemy-categories`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(map),
   });
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { error?: string };
