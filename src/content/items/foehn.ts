@@ -19,6 +19,13 @@ const TWO_PI = Math.PI * 2;
  * from it, never caring what put it there. A shot nudged this tick simply
  * arrives at next tick's `applyProjectileMotionTags` with different velocity
  * to work from, exactly as if the player or an enemy had aimed it there.
+ *
+ * The Föhn *curse* (#49, `sim/systems/curse.ts`'s `applyWind`) is the same
+ * wind blowing for the whole floor unconditionally rather than only while
+ * this item is held — deliberately a separate copy of this same small piece
+ * of math rather than a shared import: `src/content/` is data and the
+ * `content-is-data` lint rule (`tools/eslint/architecture.js`) means an item
+ * file may not import a function out of `sim/`, only types.
  */
 export const foehn: ItemDefinition = {
   id: 'foehn',

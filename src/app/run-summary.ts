@@ -68,6 +68,13 @@ export interface RunDetails {
   readonly items: readonly string[];
   /** Whether the run this describes is still going — changes the tense of the outcome clause. */
   readonly alive: boolean;
+  /**
+   * Whether the run ended in a win (#155) rather than ongoing or dead.
+   * Optional, defaulting to falsy, so every existing caller/fixture that
+   * predates the win state (there was only ever "alive" or "dead" before
+   * it) keeps meaning exactly what it always did.
+   */
+  readonly won?: boolean;
 }
 
 export function runDetailsFrom(
@@ -81,11 +88,20 @@ export function runDetailsFrom(
     character: sim.character.name,
     floorName,
     roomRole,
-    ticksSurvived: sim.playerDead ? sim.playerDeathTick : sim.tick,
+    // `sim.tick` keeps climbing after either outcome (nothing pauses the
+    // sim itself at the moment a run ends) — the frozen tick each outcome's
+    // own field records is what "how long did the run actually last" means.
+    ticksSurvived: sim.playerWon
+      ? sim.playerWonTick
+      : sim.playerDead
+        ? sim.playerDeathTick
+        : sim.tick,
     kills,
-    deathWord: sim.deathWord ?? null,
+    // A won run never drew a death word — there was nothing to draw one for.
+    deathWord: sim.playerWon ? null : (sim.deathWord ?? null),
     items: heldItemNames(sim),
     alive: !sim.playerDead,
+    won: sim.playerWon,
   };
 }
 
@@ -98,11 +114,14 @@ export function runDetailsFrom(
  */
 export function buildRunDetailsText(details: RunDetails): string {
   const seconds = (details.ticksSurvived / TICKS_PER_SECOND).toFixed(1);
-  const outcome = details.alive
-    ? `still going, ${details.floorName} (${details.roomRole})`
-    : `died on ${details.floorName} (${details.roomRole})${
-        details.deathWord === null ? '' : ` — "${details.deathWord}"`
-      }`;
+  const outcome =
+    details.won === true
+      ? `won on ${details.floorName} (${details.roomRole})`
+      : details.alive
+        ? `still going, ${details.floorName} (${details.roomRole})`
+        : `died on ${details.floorName} (${details.roomRole})${
+            details.deathWord === null ? '' : ` — "${details.deathWord}"`
+          }`;
   const items = details.items.length === 0 ? 'none' : details.items.join(', ');
   // `>>> 0`: see `debug/panels/run-info.ts`'s identical normalisation — a
   // dev-only seed source (`?seed=`, `#seed-input`) is the only way `sim.seed`

@@ -376,3 +376,35 @@ export function dispatchItemBeerPickup(sim: GameSim): void {
   sim.inventory.forEachHeld(visitBeerPickup);
   dispatchSim = null;
 }
+
+function visitLethalDamage(index: number, state: ItemRuntimeState): void {
+  const sim = dispatchSim;
+  if (sim === null) {
+    return;
+  }
+  const item = sim.items.at(index);
+  if (!promilleRequirementMet(item.promilleRequirement, scratch.tier)) {
+    return;
+  }
+  const hook = item.hooks.onLethalDamage;
+  if (hook === undefined) {
+    return;
+  }
+  scratch.itemId = item.id;
+  scratch.state = state;
+  hook(scratch);
+}
+
+/**
+ * Fires from `GameSim.applyPlayerDamage`'s lethal branch, once an eternal
+ * heart has already been ruled out — see `ItemLethalDamageHook`'s doc
+ * comment. `GameSim` checks `blutwurzActive` right after this call to
+ * decide whether the death still needs to proceed.
+ */
+export function dispatchItemLethalDamage(sim: GameSim): void {
+  dispatchSim = sim;
+  scratch.sim = sim;
+  scratch.tier = sim.promilleTier;
+  sim.inventory.forEachHeld(visitLethalDamage);
+  dispatchSim = null;
+}

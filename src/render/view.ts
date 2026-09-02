@@ -21,6 +21,7 @@ import {
 } from './room.js';
 import { createPropView } from './prop-view.js';
 import { MaibaumView } from './maibaum-view.js';
+import { CorpseView } from './corpse-view.js';
 import { INTERNAL_HEIGHT, INTERNAL_WIDTH, WORLD_ZOOM } from './resolution.js';
 import { ENTITY_PALETTE } from './palette.js';
 import type { EntityAnimator } from './animation/animator.js';
@@ -180,6 +181,7 @@ export class GameView {
   private propView: Container;
   private readonly ambientLight: AmbientLight;
   private readonly maibaumView: MaibaumView;
+  private readonly corpseView: CorpseView;
   private readonly playerView: PlayerView;
   private readonly projectiles: ProjectileView;
   private readonly entities: EntityView;
@@ -313,6 +315,12 @@ export class GameView {
       textures.pedestalPlinth,
     );
     this.world.addChild(this.pedestals.container);
+
+    // Blutwurz (#84): drawn just before the player, ground-level, so a
+    // corpse in the room the player is standing in reads as part of the
+    // floor rather than floating over it.
+    this.corpseView = new CorpseView();
+    this.world.addChild(this.corpseView.container);
 
     this.playerView = new PlayerView(textures.playerArt, textures.actorShadow);
     this.world.addChild(this.playerView.container);
@@ -488,6 +496,7 @@ export class GameView {
     this.decals.sync();
     this.entities.sync(alpha, nowMs);
     this.pedestals.sync();
+    this.corpseView.sync(this.sim);
     this.projectiles.sync(alpha, this.sim.currentFloor);
     this.particles.sync(alpha);
     this.damageNumbers.sync(alpha);

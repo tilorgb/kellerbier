@@ -23,7 +23,7 @@ import {
 import { SCHLAUCH_OCTANTS, type PlayerArt, type PlayerBodyKey } from './player-art.js';
 import { ACTOR_SPRITE_SCALE } from './resolution.js';
 import { createGroundShadow, groundShadowFeetY, styleGroundShadow } from './ground-shadow.js';
-import { GROUND_SHADOW } from './palette.js';
+import { BLUTWURZ_SPIRIT_TINT, GROUND_SHADOW } from './palette.js';
 
 /**
  * Where the Schlauch's nozzle hangs off the body, per facing, in *authored*
@@ -263,6 +263,14 @@ export class PlayerView {
     const frames = this.art.body[this.keyFor(this.facing, this.drunk)].frames;
     this.body.texture = frames[this.frame] ?? this.body.texture;
     this.body.scale.set(this.pixelScale * this.mirror, this.pixelScale);
+
+    // Blutwurz (#84): "its own... palette" — a tint on the existing sprite
+    // rather than new pixel art, so the spirit walk reads as a distinct
+    // state at zero new-asset cost. White (no tint) the instant it ends,
+    // recovery or death alike.
+    const spiritTint = sim.blutwurzActive ? BLUTWURZ_SPIRIT_TINT : 0xffffff;
+    this.body.tint = spiritTint;
+    this.schlauch.tint = spiritTint;
 
     this.syncSchlauch(sim);
   }

@@ -1,6 +1,7 @@
 import type { SimTuning } from '../sim/tuning.js';
 import {
   DEFAULT_CHARACTER_TUNING,
+  DEFAULT_CURSE_TUNING,
   DEFAULT_ENEMY_TUNING,
   DEFAULT_IMPACT_TUNING,
   DEFAULT_ITEM_POOL_TUNING,
@@ -52,7 +53,8 @@ interface GroupSpec {
     | 'pickup'
     | 'itemPool'
     | 'character'
-    | 'roomGen';
+    | 'roomGen'
+    | 'curse';
   readonly fields: readonly FieldSpec[];
 }
 
@@ -402,6 +404,49 @@ const GROUPS: readonly GroupSpec[] = [
       { key: 'chaosMaxFactor', min: 1, max: 4, step: 0.1, hint: 'best a reroll can do' },
     ],
   },
+  {
+    title: 'curse',
+    group: 'curse',
+    fields: [
+      { key: 'curseChance', min: 0, max: 1, step: 0.05, hint: 'chance a floor rolls a curse' },
+      {
+        key: 'sperrstundeTimerTicks',
+        min: 300,
+        max: 3600,
+        step: 60,
+        hint: 'Sperrstunde: ticks before last call',
+      },
+      {
+        key: 'sperrstundeHarassmentIntervalTicks',
+        min: 30,
+        max: 600,
+        step: 30,
+        hint: 'Sperrstunde: ticks between Ordner pokes',
+      },
+      {
+        key: 'sperrstundeHarassmentDurationTicks',
+        min: 15,
+        max: 240,
+        step: 15,
+        hint: 'Sperrstunde: each poke’s poison length',
+      },
+      {
+        key: 'foehnRotationRadiansPerTick',
+        min: 0,
+        max: 0.05,
+        step: 0.002,
+        hint: 'Föhn: how fast the wind turns',
+      },
+      { key: 'foehnWindStrength', min: 0, max: 0.2, step: 0.01, hint: 'Föhn: push per tick' },
+      {
+        key: 'blaueStundeVisionRadius',
+        min: 40,
+        max: 320,
+        step: 10,
+        hint: 'Blaue Stunde: clear radius, px',
+      },
+    ],
+  },
 ];
 
 const DEFAULTS = {
@@ -414,6 +459,7 @@ const DEFAULTS = {
   itemPool: DEFAULT_ITEM_POOL_TUNING,
   character: DEFAULT_CHARACTER_TUNING,
   roomGen: DEFAULT_ROOM_GEN_TUNING,
+  curse: DEFAULT_CURSE_TUNING,
 } as const;
 
 const STYLE = `

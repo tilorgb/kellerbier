@@ -31,6 +31,8 @@ export const RngStream = {
    * room layout in the game depend on how many floors he had entered.
    */
   Character: 4,
+  /** Whether a floor carries a curse (#49), and which one. */
+  Curse: 5,
 } as const;
 
 export type RngStreamId = (typeof RngStream)[keyof typeof RngStream];
@@ -64,6 +66,7 @@ export interface RunRandom {
   readonly enemies: Rng;
   readonly cosmetic: Rng;
   readonly character: Rng;
+  readonly curse: Rng;
 }
 
 export function createRunRandom(runSeed: number): RunRandom {
@@ -73,5 +76,6 @@ export function createRunRandom(runSeed: number): RunRandom {
     enemies: createStreamRng(runSeed, RngStream.Enemies),
     cosmetic: createStreamRng(runSeed, RngStream.Cosmetic),
     character: createStreamRng(runSeed, RngStream.Character),
+    curse: createStreamRng(runSeed, RngStream.Curse),
   };
 }

@@ -139,6 +139,15 @@ export const PROMILLE_VIGNETTE_TINT: Readonly<Record<PromilleTierId, number>> = 
  */
 export const PROMILLE_KATER_TINT = 0x6a7080;
 
+/**
+ * Blutwurz (#84): the spirit walk's own palette — pale, cold, spectral
+ * blue, tinted onto the player's existing sprite rather than new pixel art
+ * (a tint is a render parameter, not art `CLAUDE.md`'s sign-off rule
+ * applies to). "A distinct... palette" per the issue's own scope, at the
+ * cost of no new asset.
+ */
+export const BLUTWURZ_SPIRIT_TINT = 0x9ec8e8;
+
 export const EFFECT_PALETTE = {
   /** The reddening the vignette tints toward as Trinkfest screen-distortion climbs — pure white (`ENTITY_PALETTE.normalTint`) is "no distortion." */
   distortionTint: 0xff5555,
