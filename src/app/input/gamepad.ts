@@ -65,10 +65,11 @@ export class GamepadSource {
   private stickX = 0;
   private stickY = 0;
 
-  constructor(
-    poll?: GamepadPoller,
-    readonly deadZone = DEFAULT_DEAD_ZONE,
-  ) {
+  /** Mutable so #53's settings screen can adjust it live, not just at construction. */
+  deadZone: number;
+
+  constructor(poll?: GamepadPoller, deadZone = DEFAULT_DEAD_ZONE) {
+    this.deadZone = deadZone;
     this.poll = poll ?? (() => (typeof navigator === 'undefined' ? [] : navigator.getGamepads()));
   }
 

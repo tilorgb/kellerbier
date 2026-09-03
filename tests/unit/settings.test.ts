@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_ACCESSIBILITY_SETTINGS,
+  SLOW_MODE_OPTIONS,
+  TEXT_SCALE_OPTIONS,
   applySettingsToSim,
   loadSettings,
+  sanitizeAccessibilitySettings,
   saveSettings,
 } from '../../src/app/settings.js';
 import { GameSim } from '../../src/sim/game/sim.js';
@@ -86,5 +89,57 @@ describe('accessibility settings (#33)', () => {
       neutralReskin: false,
     });
     expect(sim.swayScale).toBe(0);
+  });
+
+  it('applies screenshakeScale onto a live GameSim (#53)', () => {
+    const sim = new GameSim({ room: bareRoom() });
+    applySettingsToSim(sim, { ...DEFAULT_ACCESSIBILITY_SETTINGS, screenshakeScale: 0.3 });
+    expect(sim.screenShakeScale).toBe(0.3);
+  });
+});
+
+describe('sanitizeAccessibilitySettings (#53)', () => {
+  it('produces the full defaults from anything that is not a plain object', () => {
+    for (const junk of [null, undefined, 42, 'nope', [1, 2, 3]]) {
+      expect(sanitizeAccessibilitySettings(junk)).toEqual(DEFAULT_ACCESSIBILITY_SETTINGS);
+    }
+  });
+
+  it('keeps a valid screenshakeScale and falls back an out-of-range one', () => {
+    expect(sanitizeAccessibilitySettings({ screenshakeScale: 0.5 }).screenshakeScale).toBe(0.5);
+    expect(sanitizeAccessibilitySettings({ screenshakeScale: 2 }).screenshakeScale).toBe(
+      DEFAULT_ACCESSIBILITY_SETTINGS.screenshakeScale,
+    );
+    expect(sanitizeAccessibilitySettings({ screenshakeScale: -1 }).screenshakeScale).toBe(
+      DEFAULT_ACCESSIBILITY_SETTINGS.screenshakeScale,
+    );
+  });
+
+  it('keeps colorblindPalette and reduceAudioDistortion only when they are booleans', () => {
+    expect(sanitizeAccessibilitySettings({ colorblindPalette: true }).colorblindPalette).toBe(true);
+    expect(sanitizeAccessibilitySettings({ colorblindPalette: 'yes' }).colorblindPalette).toBe(
+      false,
+    );
+    expect(
+      sanitizeAccessibilitySettings({ reduceAudioDistortion: true }).reduceAudioDistortion,
+    ).toBe(true);
+    expect(
+      sanitizeAccessibilitySettings({ reduceAudioDistortion: 'yes' }).reduceAudioDistortion,
+    ).toBe(false);
+  });
+
+  it('keeps a textScale from the offered set and falls back to 1 for anything else', () => {
+    for (const value of TEXT_SCALE_OPTIONS) {
+      expect(sanitizeAccessibilitySettings({ textScale: value }).textScale).toBe(value);
+    }
+    expect(sanitizeAccessibilitySettings({ textScale: 1.1 }).textScale).toBe(1);
+    expect(sanitizeAccessibilitySettings({ textScale: 'huge' }).textScale).toBe(1);
+  });
+
+  it('keeps a slowModeScale from the offered set and falls back to 1 (off) for anything else', () => {
+    for (const value of SLOW_MODE_OPTIONS) {
+      expect(sanitizeAccessibilitySettings({ slowModeScale: value }).slowModeScale).toBe(value);
+    }
+    expect(sanitizeAccessibilitySettings({ slowModeScale: 0.3 }).slowModeScale).toBe(1);
   });
 });

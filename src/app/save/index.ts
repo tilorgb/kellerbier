@@ -19,6 +19,7 @@ export {
   type SaveDataV1,
   type SaveDataV2,
 } from './schema.js';
+export type { SaveDataV6 } from './schema.js';
 export {
   SAVE_BACKUP_KEY,
   SAVE_CORRUPT_KEY,

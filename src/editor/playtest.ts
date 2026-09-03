@@ -174,7 +174,7 @@ export async function createPlaytest(
   app.stage.addChild(game);
 
   let layout = computeGameLayout(window.innerWidth, window.innerHeight, window.devicePixelRatio);
-  const stopTrackingWindowSize = trackWindowSize(app, game, overlay, (applied) => {
+  const windowSizeTracker = trackWindowSize(app, game, overlay, (applied) => {
     layout = applied;
   });
 
@@ -203,7 +203,7 @@ export async function createPlaytest(
   function destroy(): void {
     window.removeEventListener('keydown', onKeyDown);
     stopLoop();
-    stopTrackingWindowSize();
+    windowSizeTracker.dispose();
     stopKeyboard();
     stopGamepad();
     app.destroy(true, { children: true });

@@ -30,6 +30,14 @@ export interface ProjectileArt {
   readonly enemyByFloor: Readonly<Record<number, Texture>>;
   /** What draws when nothing above resolves — a floor with no authored projectile art (#39-#43, parked). */
   readonly fallback: Texture;
+  /**
+   * #53's colourblind-safe marker pair (`docs/GAME_DESIGN.md` §12) —
+   * `placeholder-art.ts`'s `createDotMarkerTexture`/`createDiamondMarkerTexture`,
+   * generated once at boot. Optional: a `ProjectileArt` built without a
+   * renderer (a test's own hand-built one, say) simply never draws a marker,
+   * the same graceful omission `GameViewTextures`'s other optional fields get.
+   */
+  readonly teamMarkers?: { readonly player: Texture; readonly enemy: Texture };
 }
 
 /**
@@ -84,6 +92,32 @@ export const PLAYER_TAG_SPRITE_ORDER: readonly { tag: ProjectileTagId; sprite: s
   { tag: ProjectileTag.Spectral, sprite: 'beer-spectral' },
 ];
 
+/** Whether the colourblind-safe marker (#53, `docs/GAME_DESIGN.md` §12) draws over every shot. */
+export interface ProjectileAccessibility {
+  readonly colorblindPalette: boolean;
+}
+
+const DEFAULT_PROJECTILE_ACCESSIBILITY: ProjectileAccessibility = { colorblindPalette: false };
+
+/**
+ * One pooled marker sprite per live shot, texture-swapped between
+ * `art.teamMarkers.player`/`.enemy` by `store.team` — the same "swap the
+ * texture, not the object" pattern the shot sprite itself already uses.
+ * Both textures are pure white: brightness is the primary cue, the
+ * dot-vs-diamond shape the secondary one, so "which shot can hurt me" never
+ * depends on reading a hue. Drawn as textured `Sprite`s rather than
+ * `Graphics` — `placeholder-art.ts`'s own doc comment is why: a few
+ * thousand `Graphics` (this project's own stress scene runs 5,000
+ * projectiles) break sprite batching and the draw-call budget with it.
+ *
+ * A separate sibling in `container` rather than a child of the shot sprite:
+ * a child inherits the parent's scale, which is set from the *shot
+ * texture's* native size (`sync`'s own `scale` above) — a marker's size
+ * needs to track the shot's rendered radius instead, which is simpler to
+ * compute directly than to back out of an inherited transform.
+ */
+const MARKER_SCALE = 0.6;
+
 /**
  * Draws everything in flight.
  *
@@ -104,6 +138,14 @@ export class ProjectileView {
   /** `art` index to sprite name, from the roster's interned table. Read per shot, so it is a plain array lookup. */
   private readonly artNames: readonly (string | null)[];
   private readonly sprites: Sprite[] = [];
+  /**
+   * One pooled marker sprite per slot, alongside its shot — `null` entries
+   * hold the slot until #53's toggle first turns colourblind mode on, the
+   * same lazy-creation `spriteAt` already uses for the shot sprites
+   * themselves. Never created at all when `art.teamMarkers` is absent.
+   */
+  private readonly markers: (Sprite | null)[] = [];
+  private accessibility: ProjectileAccessibility = DEFAULT_PROJECTILE_ACCESSIBILITY;
 
   constructor(
     store: ProjectileStore,
@@ -120,12 +162,20 @@ export class ProjectileView {
     return this.sprites.length;
   }
 
+  /** #53's settings-screen toggle. Held here rather than read from a global, same as `ParticleView.setAccessibility`. */
+  setAccessibility(accessibility: ProjectileAccessibility): void {
+    this.accessibility = accessibility;
+  }
+
   sync(alpha: number, floor: number): void {
     const store = this.store;
+    const teamMarkers = this.art.teamMarkers;
+    const markersOn = this.accessibility.colorblindPalette && teamMarkers !== undefined;
     let used = 0;
 
     store.forEachLive((index) => {
-      const sprite = this.spriteAt(used);
+      const slot = used;
+      const sprite = this.spriteAt(slot);
       used += 1;
       sprite.visible = true;
       const texture = spriteFor(
@@ -150,12 +200,29 @@ export class ProjectileView {
       // is art rather than code — 12x12 shot art is inside `projectile`'s spec
       // and lands the default exactly on the grid — and is left for whoever
       // next opens the projectile set.
-      const scale = ((store.radius[index] ?? 1) * 2) / texture.height;
+      const radius = store.radius[index] ?? 1;
+      const scale = (radius * 2) / texture.height;
       sprite.scale.set(scale);
       sprite.position.set(
         lerp(store.previousX[index] ?? 0, store.x[index] ?? 0, alpha),
         lerp(store.previousY[index] ?? 0, store.y[index] ?? 0, alpha),
       );
+
+      if (markersOn) {
+        const marker = this.markerAt(slot);
+        if (marker !== null) {
+          marker.texture =
+            store.team[index] === ProjectileTeam.Player ? teamMarkers.player : teamMarkers.enemy;
+          marker.visible = true;
+          marker.scale.set((radius * 2 * MARKER_SCALE) / marker.texture.height);
+          marker.position.copyFrom(sprite.position);
+        }
+      } else {
+        const marker = this.markers[slot];
+        if (marker !== undefined && marker !== null) {
+          marker.visible = false;
+        }
+      }
     });
 
     for (let slot = used; slot < this.sprites.length; slot++) {
@@ -168,6 +235,10 @@ export class ProjectileView {
         break;
       }
       sprite.visible = false;
+      const marker = this.markers[slot];
+      if (marker !== undefined && marker !== null) {
+        marker.visible = false;
+      }
     }
   }
 
@@ -180,6 +251,25 @@ export class ProjectileView {
     const created = new Sprite(this.art.player);
     created.anchor.set(0.5);
     this.sprites.push(created);
+    this.container.addChild(created);
+    return created;
+  }
+
+  /** Lazily creates the marker for `slot`, the same shape `spriteAt` follows — `null` when the feature has no art to draw. */
+  private markerAt(slot: number): Sprite | null {
+    const existing = this.markers[slot];
+    if (existing !== undefined) {
+      return existing;
+    }
+    const teamMarkers = this.art.teamMarkers;
+    if (teamMarkers === undefined) {
+      this.markers[slot] = null;
+      return null;
+    }
+    const created = new Sprite(teamMarkers.player);
+    created.anchor.set(0.5);
+    created.visible = false;
+    this.markers[slot] = created;
     this.container.addChild(created);
     return created;
   }

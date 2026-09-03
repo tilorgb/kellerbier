@@ -118,6 +118,71 @@ export function cloneBindings(bindings: Bindings): Bindings {
   return { keyboard, gamepad };
 }
 
+/**
+ * Overwrites `bindings` in place with the default layout — #53's "reset all
+ * bindings" button. In place rather than handing back a fresh object,
+ * because a live `Bindings` has other things already holding a reference to
+ * it (`InputSampler.bindings`, a `BindingCapture` mid-flow); replacing the
+ * object out from under them would leave whichever one holds the old
+ * reference reading/writing bindings nothing else agrees are current.
+ */
+export function resetBindings(bindings: Bindings): void {
+  const defaults = createDefaultBindings();
+  for (const action of ALL_BINDABLE_ACTIONS) {
+    bindings.keyboard[action] = [...defaults.keyboard[action]];
+    bindings.gamepad[action] = [...defaults.gamepad[action]];
+  }
+}
+
+function sanitizeStringArray(value: unknown): string[] | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+  const strings = value.filter((entry): entry is string => typeof entry === 'string');
+  return strings.length === value.length ? strings : null;
+}
+
+function sanitizeButtonArray(value: unknown): number[] | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+  const buttons = value.filter(
+    (entry): entry is number => typeof entry === 'number' && Number.isInteger(entry) && entry >= 0,
+  );
+  return buttons.length === value.length ? buttons : null;
+}
+
+/**
+ * Coerces an arbitrary parsed value into a full `Bindings`, action by
+ * action — the same field-by-field fallback `settings.ts`'s
+ * `sanitizeAccessibilitySettings` uses, so a save from before an action
+ * existed, or one hand-edited into a bad shape, falls back to that one
+ * action's default rather than discarding every rebind the player made.
+ */
+export function sanitizeBindings(candidate: unknown): Bindings {
+  const defaults = createDefaultBindings();
+  if (typeof candidate !== 'object' || candidate === null) {
+    return defaults;
+  }
+  const source = candidate as Partial<Record<'keyboard' | 'gamepad', unknown>>;
+  const rawKeyboard =
+    typeof source.keyboard === 'object' && source.keyboard !== null
+      ? (source.keyboard as Partial<Record<BindableAction, unknown>>)
+      : {};
+  const rawGamepad =
+    typeof source.gamepad === 'object' && source.gamepad !== null
+      ? (source.gamepad as Partial<Record<BindableAction, unknown>>)
+      : {};
+
+  const keyboard = {} as Record<BindableAction, string[]>;
+  const gamepad = {} as Record<BindableAction, number[]>;
+  for (const action of ALL_BINDABLE_ACTIONS) {
+    keyboard[action] = sanitizeStringArray(rawKeyboard[action]) ?? defaults.keyboard[action];
+    gamepad[action] = sanitizeButtonArray(rawGamepad[action]) ?? defaults.gamepad[action];
+  }
+  return { keyboard, gamepad };
+}
+
 /** A binding that two or more actions share. */
 export interface BindingConflict {
   readonly device: BindingDevice;

@@ -54,7 +54,7 @@ const STYLE = `
   border-color: var(--kb-color-accent, #f0c46a);
 }
 /*
- * The debug overlay's dev-only DOM tools (tuning-window, accessibility-panel,
+ * The debug overlay's dev-only DOM tools (tuning-window, settings-screen,
  * projectile-tag-chooser) are all fixed-position at z-index 30, unaware that
  * a docked panel now shares the viewport with them — without their own
  * stacking context, a plain flex sibling would fall behind them regardless

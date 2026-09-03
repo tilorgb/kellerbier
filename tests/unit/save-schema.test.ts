@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_ACCESSIBILITY_SETTINGS } from '../../src/app/settings.js';
+import { createDefaultPreferences } from '../../src/app/preferences.js';
 import { SAVE_SCHEMA_VERSION, createDefaultSave, sanitizeSave } from '../../src/app/save/schema.js';
 
 describe('save schema sanitisation (#45)', () => {
@@ -66,6 +67,16 @@ describe('save schema sanitisation (#45)', () => {
 
   it('always stamps the current schema version, regardless of what was asked for', () => {
     expect(sanitizeSave({ schemaVersion: 999 }).schemaVersion).toBe(SAVE_SCHEMA_VERSION);
+  });
+
+  it('defaults preferences (#53) when absent, and sanitises them group-by-group when present', () => {
+    expect(sanitizeSave({}).preferences).toEqual(createDefaultPreferences());
+    const sanitized = sanitizeSave({
+      preferences: { video: { scale: 2 }, mixer: { master: 0.5 } },
+    });
+    expect(sanitized.preferences.video).toEqual({ scale: 2 });
+    expect(sanitized.preferences.mixer.master).toBe(0.5);
+    expect(sanitized.preferences.controls).toEqual(createDefaultPreferences().controls);
   });
 
   it('keeps a well-formed lastRun and drops one that is missing a field (#46)', () => {

@@ -25,6 +25,56 @@ export function createRingTexture(renderer: Renderer, radius: number, color: num
   return texture;
 }
 
+/** A dark outline behind every marker shape, so a pure-white marker still reads against pale shot art. */
+const MARKER_OUTLINE_COLOR = 0x000000;
+
+/**
+ * A small filled dot with a dark ring around it — half of #53's
+ * colourblind-safe projectile marker (`docs/GAME_DESIGN.md` §12), drawn as a
+ * texture rather than a per-shot `Graphics` for the same batching reason
+ * this whole file exists for. `color` is pure white by convention (the
+ * marker's job is a brightness/shape cue that reads regardless of whatever
+ * hue the shot underneath it carries), and the dark ring is what keeps that
+ * true even against shot art that is *itself* pale — the beer shot's own
+ * highlight, say — where a plain white-on-white fill would vanish.
+ */
+export function createDotMarkerTexture(renderer: Renderer, radius: number, color: number): Texture {
+  const graphics = new Graphics()
+    .circle(radius, radius, radius)
+    .fill({ color: MARKER_OUTLINE_COLOR })
+    .circle(radius, radius, radius - 2)
+    .fill({ color });
+  const texture = renderer.generateTexture({ target: graphics, resolution: 1 });
+  graphics.destroy();
+  return texture;
+}
+
+/**
+ * A small outlined diamond, also dark-ringed — the other half of #53's
+ * marker pair (`ProjectileTeam.Enemy`'s shape, `createDotMarkerTexture`'s
+ * doc comment covers `ProjectileTeam.Player`'s and the outline's own
+ * reasoning). Outlined rather than filled so the two read apart by
+ * silhouette alone, not just by which one happens to be solid.
+ */
+export function createDiamondMarkerTexture(
+  renderer: Renderer,
+  radius: number,
+  color: number,
+): Texture {
+  const path = (g: Graphics): Graphics =>
+    g
+      .moveTo(radius, 0)
+      .lineTo(radius * 2, radius)
+      .lineTo(radius, radius * 2)
+      .lineTo(0, radius)
+      .closePath();
+  const graphics = path(new Graphics()).stroke({ width: 4, color: MARKER_OUTLINE_COLOR });
+  path(graphics).stroke({ width: 2, color });
+  const texture = renderer.generateTexture({ target: graphics, resolution: 1 });
+  graphics.destroy();
+  return texture;
+}
+
 /**
  * A solid-white cutout of `source`, same size and same silhouette — an
  * enemy's own hit flash, rather than the generic round `entityFlash` blob

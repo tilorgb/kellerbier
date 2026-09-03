@@ -7,6 +7,7 @@ import {
   createInputFrame,
   quantiseAxis,
 } from '../../sim/input/frame.js';
+import { applyAimAssist, DEFAULT_AIM_ASSIST_STRENGTH } from './aim-assist.js';
 import { type BindableAction, type Bindings, createDefaultBindings } from './bindings.js';
 import { GamepadAxis, GamepadSource } from './gamepad.js';
 import { KeyboardSource } from './keyboard.js';
@@ -23,6 +24,19 @@ export interface InputSamplerOptions {
 }
 
 /**
+ * What `sample` needs to run #53's aim assist for one tick — read fresh off
+ * `GameSim` by the caller (`app/main.ts`) rather than this module importing
+ * `GameSim` itself, the same "app glues sim to input" boundary
+ * `advanceOneTick`'s own call site already keeps.
+ */
+export interface AimAssistQuery {
+  readonly playerX: number;
+  readonly playerY: number;
+  /** `GameSim.world.forEach(sim.enemyMask, …)`-shaped — never materialises a per-tick array. */
+  readonly visitEnemies: (visit: (targetX: number, targetY: number) => void) => void;
+}
+
+/**
  * Turns device state into one `InputFrame` per tick.
  *
  * Everything device-shaped stops here. Past this point the game — and the
@@ -34,6 +48,8 @@ export class InputSampler {
   readonly gamepad: GamepadSource;
   readonly touch: TouchSource;
   bindings: Bindings;
+  /** #53's Controls-tab toggle. Off by default — assist is opt-in, same as every other accessibility setting. */
+  aimAssistEnabled = false;
 
   private readonly current = createInputFrame();
   private readonly previous = createInputFrame();
@@ -70,7 +86,7 @@ export class InputSampler {
    *
    * Allocation-free: both frames are owned by the sampler and reused.
    */
-  sample(): Readonly<InputFrame> {
+  sample(aimAssist?: AimAssistQuery): Readonly<InputFrame> {
     copyInputFrame(this.current, this.previous);
     clearInputFrame(this.current);
 
@@ -79,9 +95,9 @@ export class InputSampler {
     this.updateActiveDevice();
 
     if (this.device === 'gamepad') {
-      this.sampleGamepad();
+      this.sampleGamepad(aimAssist);
     } else if (this.device === 'touch') {
-      this.sampleTouch();
+      this.sampleTouch(aimAssist);
     } else {
       this.sampleKeyboard();
     }
@@ -154,7 +170,7 @@ export class InputSampler {
     this.setButton(InputAction.Pause, 'pause', gamepadDevice);
   }
 
-  private sampleGamepad(): void {
+  private sampleGamepad(aimAssist?: AimAssistQuery): void {
     this.gamepad.readStick(GamepadAxis.LeftStickX, GamepadAxis.LeftStickY);
     let moveX = this.gamepad.lastStickX;
     let moveY = this.gamepad.lastStickY;
@@ -176,9 +192,23 @@ export class InputSampler {
     this.current.moveY = quantiseAxis(moveY);
 
     this.gamepad.readStick(GamepadAxis.RightStickX, GamepadAxis.RightStickY);
+    let aimX = this.gamepad.lastStickX;
+    let aimY = this.gamepad.lastStickY;
+    if (this.aimAssistEnabled && aimAssist !== undefined) {
+      const assisted = applyAimAssist(
+        aimX,
+        aimY,
+        aimAssist.playerX,
+        aimAssist.playerY,
+        DEFAULT_AIM_ASSIST_STRENGTH,
+        aimAssist.visitEnemies,
+      );
+      aimX = assisted.x;
+      aimY = assisted.y;
+    }
     // Snapped to the same eight directions as aim keys, rather than a free
     // angle — docs/DECISIONS.md #20.
-    snapToOctant(this.gamepad.lastStickX, this.gamepad.lastStickY);
+    snapToOctant(aimX, aimY);
     this.current.aimX = quantiseAxis(scratchX);
     this.current.aimY = quantiseAxis(scratchY);
 
@@ -197,13 +227,27 @@ export class InputSampler {
    * hands raw knob offsets to `TouchSource`, which applies the dead zone this
    * reads back out through `lastMoveX`/`lastAimX` etc.
    */
-  private sampleTouch(): void {
+  private sampleTouch(aimAssist?: AimAssistQuery): void {
     this.current.moveX = quantiseAxis(this.touch.lastMoveX);
     this.current.moveY = quantiseAxis(this.touch.lastMoveY);
 
+    let aimX = this.touch.lastAimX;
+    let aimY = this.touch.lastAimY;
+    if (this.aimAssistEnabled && aimAssist !== undefined) {
+      const assisted = applyAimAssist(
+        aimX,
+        aimY,
+        aimAssist.playerX,
+        aimAssist.playerY,
+        DEFAULT_AIM_ASSIST_STRENGTH,
+        aimAssist.visitEnemies,
+      );
+      aimX = assisted.x;
+      aimY = assisted.y;
+    }
     // Snapped to the same eight directions as every other device —
     // docs/DECISIONS.md #20.
-    snapToOctant(this.touch.lastAimX, this.touch.lastAimY);
+    snapToOctant(aimX, aimY);
     this.current.aimX = quantiseAxis(scratchX);
     this.current.aimY = quantiseAxis(scratchY);
 

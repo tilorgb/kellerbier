@@ -97,15 +97,27 @@ export interface Viewport {
  * Largest whole-number scale at which the internal resolution still fits the
  * window, floored at 1 — a window smaller than 640x360 crops rather than
  * producing a blurry sub-pixel scale.
+ *
+ * `forcedScale`, in device pixels, is #53's Video-tab override: a player on
+ * a very large display where "biggest that fits" reads uncomfortably large,
+ * or one who wants more of the room visible, pins a smaller whole number
+ * instead of the auto-fit maximum. Still floored at 1 and still whole —
+ * `resolution.ts`'s own hard rule against a fractional scale applies to a
+ * chosen scale exactly as it does to a computed one. Choosing a scale
+ * larger than the window fits is allowed (the letterbox fields below simply
+ * clamp to 0, i.e. the game crops) rather than silently overridden, since a
+ * player who explicitly asked for it presumably has a reason.
  */
 export function computeViewport(
   windowWidth: number,
   windowHeight: number,
   internalWidth: number = INTERNAL_WIDTH,
   internalHeight: number = INTERNAL_HEIGHT,
+  forcedScale?: number,
 ): Viewport {
   const fit = Math.min(windowWidth / internalWidth, windowHeight / internalHeight);
-  const scale = Math.max(1, Math.floor(fit));
+  const scale =
+    forcedScale !== undefined ? Math.max(1, Math.floor(forcedScale)) : Math.max(1, Math.floor(fit));
   const width = internalWidth * scale;
   const height = internalHeight * scale;
   return {
@@ -139,9 +151,17 @@ export function computeGameLayout(
   windowWidth: number,
   windowHeight: number,
   pixelRatio = 1,
+  /** #53's Video-tab scale override, in CSS pixels — `'auto'` or omitted is today's fit-to-window behaviour. */
+  forcedScale?: number,
 ): GameLayout {
   const ratio = pixelRatio > 0 ? pixelRatio : 1;
-  const viewport = computeViewport(windowWidth * ratio, windowHeight * ratio);
+  const viewport = computeViewport(
+    windowWidth * ratio,
+    windowHeight * ratio,
+    INTERNAL_WIDTH,
+    INTERNAL_HEIGHT,
+    forcedScale === undefined ? undefined : forcedScale * ratio,
+  );
   return {
     scale: viewport.scale / ratio,
     originX: Math.round(viewport.letterboxX / 2) / ratio,
