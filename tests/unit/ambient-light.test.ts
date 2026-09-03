@@ -15,6 +15,32 @@ describe('lampPlacement', () => {
     expect(placement.width).toBeGreaterThan(ROOM.maxX - ROOM.minX);
     expect(placement.height).toBeGreaterThan(ROOM.maxY - ROOM.minY);
   });
+
+  it('never grows past one screen of coverage, even in a multi-cell room (#243)', () => {
+    // Reported on Floor 2 as the cloud first, but Floor 1's static lamp
+    // falloff sized itself off the same uncapped room span and had the
+    // identical bug — a room several screens wide produced a falloff
+    // several screens wide, not the single bulb's pool of light it's meant
+    // to be. `1.3` mirrors `KELLER_COVERAGE`, not exported from
+    // `ambient-light.ts`.
+    const placement = lampPlacement(MULTI_CELL_ROOM);
+    expect(placement.width).toBeLessThanOrEqual((INTERNAL_WIDTH / WORLD_ZOOM) * 1.3);
+    expect(placement.height).toBeLessThanOrEqual((INTERNAL_HEIGHT / WORLD_ZOOM) * 1.3);
+  });
+
+  it('still centres on a multi-cell room, despite the capped size', () => {
+    const placement = lampPlacement(MULTI_CELL_ROOM);
+    expect(placement.x).toBe((MULTI_CELL_ROOM.minX + MULTI_CELL_ROOM.maxX) / 2);
+    expect(placement.y).toBe((MULTI_CELL_ROOM.minY + MULTI_CELL_ROOM.maxY) / 2);
+  });
+
+  it('leaves a single-screen room unaffected by the cap', () => {
+    // ROOM's own frame is already under one screen, so sizing off the room
+    // itself (the pre-#243 formula) and sizing off the cap agree exactly.
+    const placement = lampPlacement(ROOM);
+    expect(placement.width).toBeCloseTo((ROOM.maxX - ROOM.minX) * 1.3);
+    expect(placement.height).toBeCloseTo((ROOM.maxY - ROOM.minY) * 1.3);
+  });
 });
 
 describe('cloudShadowState', () => {

@@ -29,6 +29,28 @@ const KELLER_FLOOR = 1;
 /** Dorf & Acker (#37): bright and outdoor — the sun, with the odd cloud passing over it. */
 const DORF_FLOOR = 2;
 
+/**
+ * The room span both `lampPlacement` and `cloudPlacement` size their sprite
+ * against never exceeds one screen's worth of world units — the same
+ * `viewWidth`/`viewHeight` `GameView.followOffset` computes the camera's pan
+ * range from (#243). A `1x1` room's own span already sits under this, so the
+ * clamp is a no-op there and nothing about either floor's original
+ * single-screen rooms changes; a `2x2`/`L`/`T` room (`sim/room/geometry.ts`'s
+ * `voidRects`) is wider and/or taller than one screen, and sizing a sprite
+ * off its full span there produced a falloff several screens wide — soft-
+ * edged in its own texture, but the blur/gradient is a fixed fraction of the
+ * *texture*, so stretched that far it reads as a hard-edged shadow box that
+ * only ever shows part of itself, and the camera panning with the player
+ * made that visible slice look like it was tracking them from off-screen.
+ * Reported on Floor 2 first (the cloud, easier to notice mid-drift) but the
+ * exact same bug in Floor 1's static lamp falloff, sized the same uncapped
+ * way — both floors generate rooms through the one shared procedural shape
+ * generator (`content/floors/definition.ts`'s `ROOM_GEN_FLOOR_OVERRIDES`),
+ * so neither is special-cased out of a `2x2`/`L`/`T` shape.
+ */
+const ROOM_SPAN_CAP_WIDTH = INTERNAL_WIDTH / WORLD_ZOOM;
+const ROOM_SPAN_CAP_HEIGHT = INTERNAL_HEIGHT / WORLD_ZOOM;
+
 /** Warm, barely-off-black — a bare bulb's shadow, not a neutral grey one. */
 const KELLER_SHADOW_RGB = '12, 9, 6';
 /** The bulb's own warm light, for the additive glow pooled under it — not the shadow colour inverted, an actual light-bulb amber. */
@@ -89,25 +111,6 @@ const CLOUD_MAX_ALPHA = 0.4;
 /** How wide/tall the shadow patch is relative to the room, less than `1` so it reads as a discrete cloud rather than the whole sky dimming at once. */
 const CLOUD_WIDTH_FRACTION = 0.85;
 const CLOUD_HEIGHT_FRACTION = 0.6;
-/**
- * The room span `cloudPlacement` sizes the cloud against never exceeds one
- * screen's worth of world units — the same `viewWidth`/`viewHeight`
- * `GameView.followOffset` computes the camera's pan range from (#243). A
- * `1x1` room's own span already sits under this, so the clamp is a no-op
- * there and nothing about Floor 1/2's original single-screen rooms changes;
- * a `2x2`/`L`/`T` room (`sim/room/geometry.ts`'s `voidRects`) is wider and/or
- * taller than one screen, and sizing the cloud off its full span there
- * produced a shadow several screens wide — soft-edged in its own texture,
- * but the blur is a fixed fraction of the *texture*, so stretched that far
- * it reads as a hard-edged "shadowy box" that only ever shows part of
- * itself, and the camera panning with the player made that visible slice
- * look like it was tracking them from off-screen. Capping the cloud's own
- * size to a screen keeps it reading as a discrete cloud drifting across the
- * room regardless of how many screens the room spans; `travel` below still
- * uses the room's own full width, so it still crosses the whole thing.
- */
-const CLOUD_MAX_WIDTH = INTERNAL_WIDTH / WORLD_ZOOM;
-const CLOUD_MAX_HEIGHT = INTERNAL_HEIGHT / WORLD_ZOOM;
 /** How often a cloud starts crossing. Long enough that "occasional" is the honest word for it. */
 const CLOUD_CYCLE_TICKS = TICKS_PER_SECOND * 50;
 /** How long one crossing takes, start to finish — a slow drift, not a blink. */
@@ -269,15 +272,28 @@ function frameSize(room: RoomRect): { readonly width: number; readonly height: n
   return { width: room.minX + room.maxX, height: room.minY + room.maxY };
 }
 
-/** Where and how big Floor 1's falloff sprite sits, centred on the room. */
+/**
+ * Where and how big Floor 1's falloff sprite sits, centred on the room.
+ *
+ * `frame`'s own span is capped to `ROOM_SPAN_CAP_WIDTH`/`_HEIGHT` before
+ * `KELLER_COVERAGE` widens it (#243) — the same clamp `cloudPlacement`
+ * applies, and for the identical reason: a `2x2`/`L`/`T` room's full frame is
+ * bigger than one screen, and sizing the bulb's falloff off that uncapped
+ * span produced the exact same oversized "shadow box" the cloud did, just
+ * static rather than drifting. Capping first and multiplying by the
+ * coverage factor after keeps a `1x1` room's own falloff exactly as before
+ * (its frame already sits under the cap) while a sprawling room gets a
+ * normal, screen-sized pool of light instead of one stretched across
+ * several screens.
+ */
 export function lampPlacement(room: RoomRect): Placement {
   const centre = roomCentre(room);
   const frame = frameSize(room);
   return {
     x: centre.x,
     y: centre.y,
-    width: frame.width * KELLER_COVERAGE,
-    height: frame.height * KELLER_COVERAGE,
+    width: Math.min(frame.width, ROOM_SPAN_CAP_WIDTH) * KELLER_COVERAGE,
+    height: Math.min(frame.height, ROOM_SPAN_CAP_HEIGHT) * KELLER_COVERAGE,
   };
 }
 
@@ -317,8 +333,8 @@ export function cloudShadowState(tick: number): CloudShadowState {
 export function cloudPlacement(room: RoomRect, progress: number): Placement {
   const roomWidth = room.maxX - room.minX;
   const roomHeight = room.maxY - room.minY;
-  const width = Math.min(roomWidth, CLOUD_MAX_WIDTH) * CLOUD_WIDTH_FRACTION;
-  const height = Math.min(roomHeight, CLOUD_MAX_HEIGHT) * CLOUD_HEIGHT_FRACTION;
+  const width = Math.min(roomWidth, ROOM_SPAN_CAP_WIDTH) * CLOUD_WIDTH_FRACTION;
+  const height = Math.min(roomHeight, ROOM_SPAN_CAP_HEIGHT) * CLOUD_HEIGHT_FRACTION;
   const travel = roomWidth + width;
   return {
     x: room.minX - width / 2 + travel * progress,
