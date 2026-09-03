@@ -2,6 +2,7 @@ import { Container, Point } from 'pixi.js';
 import { ENEMY_DEFINITIONS } from '../content/enemies/index.js';
 import {
   FLOOR_CONFIGS,
+  HIGHEST_PLAYABLE_FLOOR,
   ROOM_GEN_FLOOR_OVERRIDES,
   type FloorConfig,
 } from '../content/floors/definition.js';
@@ -159,16 +160,6 @@ const STAIRCASE_TEMPLATE_POOL = STAIRCASE_TEMPLATES.map((room, index) =>
 const STAIRCASE_TEMPLATES_BY_ID = new Map(
   STAIRCASE_TEMPLATE_POOL.map((template) => [template.id, template]),
 );
-
-/**
- * The highest floor number with a real room pool to draw from, today — see
- * `advanceFloor`'s doc comment for why this is separate from `FLOOR_CONFIGS`
- * simply listing floors 1-7. Bump this the moment a floor's room templates
- * land (its `floorTag` shows up in at least a start/boss/treasure/shop/
- * secret/supersecret template — see `sim/room/floor-plan.ts`'s
- * `MIN_ROOMS_FOR_ROLES`), not before.
- */
-const HIGHEST_PLAYABLE_FLOOR = 2;
 
 /**
  * A fresh run seed.

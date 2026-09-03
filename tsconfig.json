@@ -39,7 +39,8 @@
     "tools",
     "vite.config.ts",
     "vitest.bench.config.ts",
-    "vitest.fuzz.config.ts"
+    "vitest.fuzz.config.ts",
+    "vitest.playtest.config.ts"
   ],
   // Deliberate rule violations. They are linted by the architecture test, which
   // reads them as text and hands them to ESLint at a pretend path — they are

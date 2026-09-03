@@ -114,3 +114,22 @@ export const FLOOR_CONFIGS: readonly FloorConfig[] = [
     flavour: 'Ole, ole, ole!',
   },
 ];
+
+/**
+ * The highest floor number with a real room pool to draw from, today —
+ * `FLOOR_CONFIGS` above already lists floors up to 7 (#37's doc comment),
+ * but a floor's config being *present* isn't the same as its room pool
+ * being non-empty: floors 3-7 have zero templates tagged for their
+ * `floorTag` (`wald`/`alpen`/`schloss`/`brauerei`/`wiesn`), so
+ * `generateFloor` would throw the moment it tried to place a start or boss
+ * room. Bump this the moment a floor's room templates land (its
+ * `floorTag` shows up in at least a start/boss/treasure/shop/secret/
+ * supersecret template — see `sim/room/floor-plan.ts`'s
+ * `MIN_ROOMS_FOR_ROLES`), not before.
+ *
+ * Lives here rather than as a local constant in `app/main.ts` (which owns
+ * the dev "next floor" loop that reads it) so `tests/playtest/`'s headless
+ * bot can import the same number instead of carrying its own copy that
+ * could silently drift out of sync.
+ */
+export const HIGHEST_PLAYABLE_FLOOR = 2;
