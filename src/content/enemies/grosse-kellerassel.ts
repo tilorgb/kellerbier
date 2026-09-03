@@ -33,13 +33,24 @@ import type { EnemyDefinition, SplitOnDeathBehaviour } from '../../sim/enemy/def
  * curled, mid-advance, mid-telegraph or mid-spray just as easily as while
  * crawling.
  *
- * The numbers are chosen so the fight's total health budget does not change
- * between phases: 18 in phase one, threshold at 9, then three segments at 3
- * each — the same 9 left to clear either way, just split three ways instead
- * of one. "Deliberately gentle... its job is to be beaten": no ranged attack
- * anywhere in phase two, only the same curl loop three smaller bodies at
- * once now asks the player to read while managing which one to engage —
- * "teaches crowd management and target prioritisation."
+ * **#232: the pool was an order of magnitude too small.** At 18 health the
+ * fight was over in one or two `crawl → curl → advance → wind → spit`
+ * loops (that loop is ~194 ticks, ~3.2s) — the player never saw most of
+ * what phase one was authored to do, and phase two arrived as noise rather
+ * than a moment. The pool is tuned, not computed, but the target is "the
+ * authored loop plays out at least four times against a realistic mid-run
+ * fight" — the same yardstick #232 uses for Der Stier — checked with a real
+ * `GameSim` rather than by hand (`tests/content/boss-pacing.test.ts`): at
+ * 180 total the loop lands 5 times before the split at 6 DPS (a Bierkrug's
+ * worth of damage) and 10 times at the 3 DPS a run starts at. The threshold
+ * stays at half (90), holding the fight's total health budget unchanged
+ * between phases the way the original 18/9 split did: 90 in phase one,
+ * three segments at 30 each — the same 90 left to clear either way, just
+ * split three ways instead of one. "Deliberately gentle... its job is to be
+ * beaten": no ranged attack anywhere in phase two, only the same curl loop
+ * three smaller bodies at once now asks the player to read while managing
+ * which one to engage — "teaches crowd management and target
+ * prioritisation."
  */
 
 const PHASE_TWO_SPLIT: SplitOnDeathBehaviour = {
@@ -58,8 +69,14 @@ export const grosseKellerassel: EnemyDefinition = {
   // stay `normal` — they are the ordinary Kellerassel three times over.
   size: 'boss',
   deathEffect: 'dust',
-  health: 18,
-  contactDamage: 2,
+  health: 180,
+  // #232: was 2. `docs/DECISIONS.md` #65 — pressure comes from the
+  // telegraphed `spit`, not from standing next to the body — and a boss
+  // whose bare touch can chip a real fraction of a 6-health player twice
+  // over is fixing the fight's difficulty with the wrong lever. Length
+  // (the health pool above) is that lever now; contact is just the thing
+  // that punishes standing still.
+  contactDamage: 1,
   initial: 'crawl',
   states: [
     {
@@ -146,7 +163,11 @@ export const kellerasselSegment: EnemyDefinition = {
   size: 'normal',
   // One plate of the same insect.
   deathEffect: 'dust',
-  health: 3,
+  // #232: was 3 (three segments for 9 total, matching the old 18-health
+  // boss's own half). Scaled with `grosseKellerassel.health` to keep the
+  // phase-one/phase-two budget split the doc comment above describes: 30
+  // each, 90 total, the same 90 phase one left behind at the split.
+  health: 30,
   contactDamage: 1,
   lootTier: 'weak',
   initial: 'crawl',
