@@ -55,6 +55,7 @@ describe('accessibility settings (#33)', () => {
     expect(suppressed.driftScale).toBe(plain.driftScale);
     expect(suppressed.wobbleScale).toBe(plain.wobbleScale);
     expect(suppressed.screenShakeScale).toBe(plain.screenShakeScale);
+    expect(suppressed.hitstopScale).toBe(plain.hitstopScale);
   });
 
   it('applies swayScale, and derives driftScale/wobbleScale from noDrift, onto a live GameSim', () => {
@@ -95,6 +96,12 @@ describe('accessibility settings (#33)', () => {
     const sim = new GameSim({ room: bareRoom() });
     applySettingsToSim(sim, { ...DEFAULT_ACCESSIBILITY_SETTINGS, screenshakeScale: 0.3 });
     expect(sim.screenShakeScale).toBe(0.3);
+  });
+
+  it('applies hitstopScale onto a live GameSim (#235)', () => {
+    const sim = new GameSim({ room: bareRoom() });
+    applySettingsToSim(sim, { ...DEFAULT_ACCESSIBILITY_SETTINGS, hitstopScale: 0.3 });
+    expect(sim.hitstopScale).toBe(0.3);
   });
 });
 

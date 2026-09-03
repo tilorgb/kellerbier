@@ -317,6 +317,19 @@ function buildVideoSection(deps: SettingsScreenDeps): HTMLElement {
     },
   );
 
+  const hitstop = makeSlider(
+    'Hitstop',
+    0,
+    100,
+    1,
+    (v) => `${String(Math.round(v))}%`,
+    () => deps.settings.hitstopScale * 100,
+    (v) => {
+      deps.settings.hitstopScale = v / 100;
+      saveAndApplySettings(deps);
+    },
+  );
+
   const flashReduction = makeCheckbox(
     'Reduce flashing',
     () => deps.settings.reduceFlashes,
@@ -326,7 +339,14 @@ function buildVideoSection(deps: SettingsScreenDeps): HTMLElement {
     },
   );
 
-  section.append(scaleSelect.el, fullscreenButton, screenshake.el, sway.el, flashReduction.el);
+  section.append(
+    scaleSelect.el,
+    fullscreenButton,
+    screenshake.el,
+    sway.el,
+    hitstop.el,
+    flashReduction.el,
+  );
   return section;
 }
 

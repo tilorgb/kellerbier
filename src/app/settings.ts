@@ -89,6 +89,15 @@ export interface AccessibilitySettings {
    */
   screenshakeScale: number;
   /**
+   * Hitstop intensity (#235), 0-1 — the Video tab's other sibling to
+   * `swayScale`/`screenshakeScale`. Plugs straight into `GameSim.hitstopScale`,
+   * which scales every whole-simulation freeze `requestHitstop` is asked
+   * for: an ordinary kill, a boss kill, and the player's own fatal hit alike.
+   * 0 means no freeze at all, not merely a short one — same standard as
+   * `swayScale` reaching a literal zero offset.
+   */
+  hitstopScale: number;
+  /**
    * The colourblind-safe projectile palette (#53, `docs/GAME_DESIGN.md`
    * §12): player and enemy shots read apart by shape and brightness rather
    * than hue alone. Read directly by render call sites
@@ -131,6 +140,7 @@ export const DEFAULT_ACCESSIBILITY_SETTINGS: Readonly<AccessibilitySettings> = {
   reducedMotion: false,
   reduceFlashes: false,
   screenshakeScale: 1,
+  hitstopScale: 1,
   colorblindPalette: false,
   textScale: 1,
   slowModeScale: 1,
@@ -187,6 +197,9 @@ export function sanitizeAccessibilitySettings(candidate: unknown): Accessibility
     screenshakeScale: isUnitInterval(source.screenshakeScale)
       ? source.screenshakeScale
       : DEFAULT_ACCESSIBILITY_SETTINGS.screenshakeScale,
+    hitstopScale: isUnitInterval(source.hitstopScale)
+      ? source.hitstopScale
+      : DEFAULT_ACCESSIBILITY_SETTINGS.hitstopScale,
     colorblindPalette:
       typeof source.colorblindPalette === 'boolean'
         ? source.colorblindPalette
@@ -254,10 +267,16 @@ export function saveSettings(settings: AccessibilitySettings): void {
  * site, not the sim, for the identical reduced-motion reason: an accessible
  * *presentation* of the Promille tier, with the tier's actual gameplay
  * effects — and a replay recorded with it on — untouched either way.
+ *
+ * `hitstopScale` (#235) follows `screenshakeScale`'s shape, not
+ * `reducedMotion`'s: a freeze's whole effect is how long it holds `step()`,
+ * so there is no render-only way to suppress it the way a drawn effect can
+ * be skipped — it has to reach `GameSim.hitstopScale` to mean anything.
  */
 export function applySettingsToSim(sim: GameSim, settings: AccessibilitySettings): void {
   sim.swayScale = settings.swayScale;
   sim.driftScale = settings.noDrift ? 0 : 1;
   sim.wobbleScale = settings.noDrift ? 0 : 1;
   sim.screenShakeScale = settings.screenshakeScale;
+  sim.hitstopScale = settings.hitstopScale;
 }
