@@ -134,3 +134,11 @@ the issue number (`"Multi-cell room camera-follow (#100)"`) instead of actually 
 PR **body** needs a real keyword — `Closes #N`, `Fixes #N`, or `Resolves #N` — or the issue stays
 open after merge. After merging a PR meant to close an issue, it's cheap to double-check with
 `gh issue view <N> --json state` rather than assume the merge did it.
+
+## "Implement #N" always ends in a PR
+
+When a prompt asks to implement an issue (`"implement #229"` and the like), open the pull request
+as part of finishing the task — don't stop at a pushed branch and wait to be asked. This holds
+even if a host environment auto-opens a bare PR on push: check for one before creating a new one,
+and if it exists, fill in its body properly (the `Closes #N` keyword, the acceptance-criteria
+checklist, what was found, the test plan) rather than leaving the auto-generated placeholder.
