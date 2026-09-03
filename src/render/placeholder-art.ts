@@ -25,6 +25,35 @@ export function createRingTexture(renderer: Renderer, radius: number, color: num
   return texture;
 }
 
+/**
+ * A wedge, tip at the texture's left edge and pointing along +x — the shape
+ * a directional telegraph (a charge's line, a melee swing's arc, #233)
+ * scales non-uniformly out of rather than redrawing per attack: `scale.x`
+ * sets how far it reaches, `scale.y` sets how wide, and because the wedge's
+ * two edges are straight rather than a true arc, scaling `y` by `k` turns a
+ * `halfAngle` wedge into one of `atan(k * tan(halfAngle))` exactly — good for
+ * any width the roster ever authors, not just the one this is generated at.
+ * Anchor the sprite at `(0, 0.5)` so the tip sits on the body and `rotation`
+ * points it at the aim direction.
+ */
+export function createWedgeTexture(
+  renderer: Renderer,
+  length: number,
+  halfAngle: number,
+  color: number,
+): Texture {
+  const halfWidth = length * Math.tan(halfAngle);
+  const graphics = new Graphics()
+    .moveTo(0, halfWidth)
+    .lineTo(length, 0)
+    .lineTo(length, halfWidth * 2)
+    .closePath()
+    .fill({ color });
+  const texture = renderer.generateTexture({ target: graphics, resolution: 1 });
+  graphics.destroy();
+  return texture;
+}
+
 /** A dark outline behind every marker shape, so a pure-white marker still reads against pale shot art. */
 const MARKER_OUTLINE_COLOR = 0x000000;
 

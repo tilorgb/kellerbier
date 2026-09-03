@@ -1,6 +1,7 @@
 import { World } from '../ecs/world.js';
 import {
   type CompiledDetonation,
+  type CompiledEnemy,
   type CompiledMeleeArc,
   type CompiledState,
   type FiringBehaviour,
@@ -920,5 +921,134 @@ export function lobbedBombFlight(sim: GameSim, index: number, out: LobbedBombFli
   out.endX = motion[motionBase] ?? startX;
   out.endY = motion[motionBase + 1] ?? startY;
   out.progress = progress;
+  return true;
+}
+
+/**
+ * Which shape a telegraph should draw (#233).
+ *
+ * Every wind-up used to draw the same ring regardless of what it warned
+ * about — a charge, a radial burst and a lobbed bomb all looked identical,
+ * which reads fine until the roster has more than one of them in a room at
+ * once. The shape is read off what the telegraphing state's own `after`
+ * transition leads to (or, for a lob, off the state's *own* captured
+ * target) rather than authored a second time per enemy, so a new enemy
+ * reusing an existing attack primitive needs no render change.
+ */
+export const TelegraphShape = {
+  /** An untargeted burst, centred on the body — the state ahead fires. */
+  Ring: 0,
+  /** A charge — the state ahead is `chargeAtPlayer`. Drawn from the body along the aim direction. */
+  Line: 1,
+  /** A melee swing with a facing — the state ahead swings a `meleeArc`. */
+  Arc: 2,
+  /** A landing zone away from the body — this state itself captured a `lobTarget` a `detonateLobbedBomb` ahead reads back. */
+  Ground: 3,
+} as const;
+
+export type TelegraphShapeId = (typeof TelegraphShape)[keyof typeof TelegraphShape];
+
+/** Reusable scratch struct for `enemyTelegraphShape`, written in place so a render loop's per-frame call never allocates. */
+export interface EnemyTelegraphShapeInfo {
+  shape: TelegraphShapeId;
+  /** 0..1, the same fraction `enemyTelegraphProgress` returns for this state. */
+  progress: number;
+  /** World-space anchor: the body for Ring/Line/Arc, the captured landing spot for Ground. */
+  x: number;
+  y: number;
+  /** Aim angle in radians, toward the player. Line and Arc only. */
+  angle: number;
+  /** The swing's full angular width in radians. Arc only. */
+  arc: number;
+  /** The real extent at progress 1: the swing's reach for Arc, the blast radius for Ground. Unused for Ring/Line. */
+  reach: number;
+}
+
+/**
+ * The state a telegraphing state's own `after` transition leads to, or
+ * `null` when it has none. Read the same way `chooseTransition`'s `After`
+ * case does — the first `after` transition in declaration order — so a
+ * wind-up and the shape warning about it can never name different attacks.
+ */
+function stateAfterTelegraph(compiled: CompiledEnemy, state: CompiledState): CompiledState | null {
+  for (const transition of state.transitions) {
+    if (transition.trigger === TransitionTrigger.After) {
+      return compiled.states[transition.to] ?? null;
+    }
+  }
+  return null;
+}
+
+/**
+ * Writes the shape `index`'s current telegraph should draw into `out` and
+ * returns `true` — or leaves `out` untouched and returns `false` while it is
+ * not telegraphing at all, the same gate `enemyTelegraphProgress` applies.
+ *
+ * @hot — one call per telegraphing enemy per frame, from `EntityView.sync`.
+ */
+export function enemyTelegraphShape(
+  sim: GameSim,
+  index: number,
+  out: EnemyTelegraphShapeInfo,
+): boolean {
+  const progress = enemyTelegraphProgress(sim, index);
+  if (progress <= 0) {
+    return false;
+  }
+  const base = index * ENEMY_STRIDE;
+  const compiled = sim.enemies.at(sim.enemy.data[base] ?? 0);
+  const state = compiled.states[sim.enemy.data[base + 1] ?? 0];
+  if (state === undefined) {
+    return false;
+  }
+  out.progress = progress;
+  const selfX = sim.positionX(index);
+  const selfY = sim.positionY(index);
+  const follow = stateAfterTelegraph(compiled, state);
+
+  if (state.capturesLobTarget && follow !== null && follow.detonate !== null) {
+    const motion = sim.enemyMotion.data;
+    const motionBase = index * ENEMY_MOTION_STRIDE;
+    out.shape = TelegraphShape.Ground;
+    out.x = motion[motionBase] ?? selfX;
+    out.y = motion[motionBase + 1] ?? selfY;
+    out.angle = 0;
+    out.arc = 0;
+    out.reach = follow.detonate.radius;
+    return true;
+  }
+
+  if (follow !== null && follow.meleeArc !== null) {
+    const toPlayerX = sim.positionX(sim.playerIndex) - selfX;
+    const toPlayerY = sim.positionY(sim.playerIndex) - selfY;
+    const distance = vectorLength(toPlayerX, toPlayerY);
+    out.shape = TelegraphShape.Arc;
+    out.x = selfX;
+    out.y = selfY;
+    out.angle = distance === 0 ? 0 : Math.atan2(toPlayerY, toPlayerX);
+    out.arc = follow.meleeArc.arc;
+    out.reach = follow.meleeArc.reach;
+    return true;
+  }
+
+  if (follow?.movement.behaviour === 'chargeAtPlayer') {
+    const toPlayerX = sim.positionX(sim.playerIndex) - selfX;
+    const toPlayerY = sim.positionY(sim.playerIndex) - selfY;
+    const distance = vectorLength(toPlayerX, toPlayerY);
+    out.shape = TelegraphShape.Line;
+    out.x = selfX;
+    out.y = selfY;
+    out.angle = distance === 0 ? 0 : Math.atan2(toPlayerY, toPlayerX);
+    out.arc = 0;
+    out.reach = 0;
+    return true;
+  }
+
+  out.shape = TelegraphShape.Ring;
+  out.x = selfX;
+  out.y = selfY;
+  out.angle = 0;
+  out.arc = 0;
+  out.reach = 0;
   return true;
 }
