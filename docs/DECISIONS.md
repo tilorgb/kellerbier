@@ -3212,3 +3212,36 @@ needed replacing rather than tuning down.
 primary threat first; a charge or a contact-seeking body is the secondary or occasional tool, not
 the default source of pressure. `docs/CONTENT_BIBLE.md` §2 states the practical version of this
 rule for whoever authors the next roster entry.
+
+## 66. A boss's health pool is tuned against its own authored cycle, measured with a real sim
+
+**Decided:** M8, #232. Die Große Kellerassel (18 health) and Der Stier (24, Maibaum-Dieb 18) were
+priced like ordinary enemies rather than like the multi-state set pieces they were written as: at
+a floor-of-the-run 3-6 DPS, both died in one or two laps of their own authored loop — Der Stier's
+`approach → telegraph → charge → stunned` (~131 ticks) or the Kellerassel's `crawl → curl →
+advance → wind → spit` (~194 ticks). Phase two (the Kellerassel's split, the dieb) then arrived
+as noise a few seconds in rather than a moment the player had earned.
+
+**The rule.** A boss's health is tuned, not computed — "tune it, do not compute it" is #232's own
+instruction — but the target is checkable: the authored loop should run at least four times in a
+fight against a realistic mid-run player before the boss dies or phase-shifts. `tests/content/
+boss-pacing.test.ts` is that check, run against a real `GameSim` rather than by hand: a boss alone
+in a room, a player who only aims and fires, at both the 3 DPS a run starts at and the 6 DPS one
+Bierkrug buys, counting how many times the loop's own attack state (`spit`, `charge`) is actually
+entered. Der Stier is 80 now (was 24), the Maibaum-Dieb 60 (was 18, same 0.75 ratio), Die Große
+Kellerassel 180 (was 18) with its half-health split threshold unchanged so the fight's total
+budget is still split evenly between phases (90 before the split, three 30-health segments after
+— the original 9/3-each split, just scaled).
+
+**Contact damage is not the lever.** Both bosses' `contactDamage` came down too (Der Stier and the
+Maibaum-Dieb from 3 to 1, the Kellerassel from 2 to 1) — `docs/DECISIONS.md` #65's "pressure from
+a shot, not a body" applies to a charge as much as an idle touch, since `sim/systems/contact.ts`
+reads one flat `contactDamage` field for both. At the old numbers two contacts could remove all or
+most of a 6-health player's bar; length (the health pool above) is the intended difficulty lever
+now, so contact stays a tax for standing still, not a second clock on the fight.
+
+**Constrains:** a future boss's health and contact damage should be checked the same way — measure
+the authored loop's own cycle count against a `GameSim`, at the DPS band a run's own item pool
+actually produces, rather than picking a number and trusting the total feels right. `contactDamage`
+on a boss-sized body is capped by "two contacts, half health," not raised to compensate for a short
+fight.

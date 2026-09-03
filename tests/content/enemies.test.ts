@@ -132,14 +132,17 @@ describe('the enemy roster', () => {
     for (const state of registry.get('der-stier').states) {
       const split = state.splits.find((s) => s.definition === maibaumDiebIndex);
       expect(split, `"${state.name}" is missing the phase-two split`).toBeDefined();
-      // No health gate any more (#199): Der Stier fights his full 24 and the
-      // dieb spawns on the real killing blow, with his own fresh pool.
+      // No health gate any more (#199): Der Stier fights his full pool and
+      // the dieb spawns on the real killing blow, with his own fresh pool.
       expect(split?.atHealthBelow).toBe(0);
     }
 
     const maibaumDieb = registry.get('der-stier-maibaum-dieb');
-    expect(derStier.health).toBe(24);
-    expect(maibaumDieb.health).toBe(18);
+    // #232: raised from 24/18 so each boss's authored cycle plays out
+    // several times against a realistic mid-run fight — see
+    // `tests/content/boss-pacing.test.ts` for the measured version of this.
+    expect(derStier.health).toBe(80);
+    expect(maibaumDieb.health).toBe(60);
 
     // Phase two forks once on whether the dieb reaches the arena maypole: an
     // armed swing branch (`meleeArc`), or Der Stier's own charge, disarmed.

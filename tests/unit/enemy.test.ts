@@ -393,14 +393,14 @@ describe('Der Stier boss (#38)', () => {
     const player = sim.playerIndex;
     const enemy = place(sim, 'der-stier', sim.positionX(player) + 200, sim.positionY(player));
 
-    // 24 -> 1: well past the old half-health gate, still no split.
-    applyDamageAt(sim, enemy, 23, sim.positionX(enemy), sim.positionY(enemy), 0, 0, -1);
+    // 80 -> 1: well past the old half-health gate, still no split.
+    applyDamageAt(sim, enemy, 79, sim.positionX(enemy), sim.positionY(enemy), 0, 0, -1);
     stepEnemyDeaths(sim);
     sim.world.flush();
     expect(liveEnemies(sim, 'der-stier')).toBe(1);
     expect(liveEnemies(sim, 'der-stier-maibaum-dieb')).toBe(0);
 
-    // The last hit: Der Stier dies, the dieb spawns with his own fresh 18 —
+    // The last hit: Der Stier dies, the dieb spawns with his own fresh 60 —
     // the same call + death sweep the impact system runs on a landed shot.
     applyDamageAt(sim, enemy, 1, sim.positionX(enemy), sim.positionY(enemy), 0, 0, -1);
     stepEnemyDeaths(sim);

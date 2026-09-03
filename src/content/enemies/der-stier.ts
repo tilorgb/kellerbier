@@ -30,6 +30,19 @@ import type { EnemyDefinition, SplitOnDeathBehaviour } from '../../sim/enemy/def
  * There is no stored "armed" flag: which branch he is in is just which state
  * the machine walked into. Once `grab` has run, the swing states never
  * transition back to `approach`, so the maypole is his for good.
+ *
+ * **#232: both health pools were an order of magnitude too small.** At 24
+ * health Der Stier's own `approach → telegraph → charge → stunned` loop
+ * (~131 ticks, ~2.2s) ran two or three times before he died — a full cycle
+ * or two short of a player ever having to answer it as a loop rather than
+ * a one-off. The pool is tuned, not computed, but the target is the same
+ * one #232 states directly: 12-20 seconds against a realistic mid-run 4-6
+ * DPS, which is roughly 60-100 health. 80 lands in that band and gives the
+ * loop room to run five to seven times before he actually dies. The dieb's
+ * own pool is scaled by the same ratio the original 18/24 split held (0.75)
+ * — 60, not 18 — so his own swing/dash loop gets the same "plays out
+ * several times" treatment rather than being tuned back down to a fight
+ * that is over before the player reads it.
  */
 
 const PHASE_TWO_SPLIT: SplitOnDeathBehaviour = {
@@ -44,8 +57,18 @@ export const derStier: EnemyDefinition = {
   name: 'Der Stier',
   // `boss` since #193 (`sim/enemy/size.ts`, `docs/DECISIONS.md` #56).
   size: 'boss',
-  health: 24,
-  contactDamage: 3,
+  // #232: was 24. See the module doc comment — tuned against "the authored
+  // loop runs five to seven times against a realistic mid-run DPS," not
+  // computed.
+  health: 80,
+  // #232: was 3. There is one `contactDamage` field for both an idle touch
+  // and a connected charge (`sim/systems/contact.ts` reads it either way),
+  // and at 3 against a 6-health player two touches were most of a run —
+  // `docs/DECISIONS.md` #65's "pressure from a shot, not a body" applies to
+  // a charge too: it is punishable exactly because it is telegraphed, and a
+  // longer fight (the health pool above) is the intended lever, not a
+  // harder-hitting one.
+  contactDamage: 1,
   // The boss class already masses 20 — heavier than Kuh's own 9, so a charge a
   // player's own bump could shove off its line would stop reading as "needs a
   // wall to stop." Left explicit so the fight's feel does not move if the class
@@ -84,9 +107,10 @@ export const derStier: EnemyDefinition = {
 /**
  * Phase two: the dismounted Maibaum-Dieb (#199). Player-sized and a little
  * chubby (`normal`), not a second bull — the threat is the stolen maypole and
- * the dash, not his mass. Fresh 18 health; the boss bar refills to it on its
- * own, because `GameSim.bossHealth` sums whatever `locksRoom` bodies are
- * alive and Der Stier's 24 have just left the room.
+ * the dash, not his mass. Fresh 60 health (#232: was 18, scaled with Der
+ * Stier's own by the same 0.75 ratio); the boss bar refills to it on its own,
+ * because `GameSim.bossHealth` sums whatever `locksRoom` bodies are alive
+ * and Der Stier's 80 have just left the room.
  *
  * `initial: 'approach'`. From there the machine forks once, on whether he
  * reaches a live maypole (`whenPropWithin`) before he reaches the player
@@ -96,8 +120,12 @@ export const maibaumDieb: EnemyDefinition = {
   id: 'der-stier-maibaum-dieb',
   name: 'Der Stier (Maibaum-Dieb)',
   size: 'normal',
-  health: 18,
-  contactDamage: 3,
+  health: 60,
+  // #232: was 3, same "length over damage" reasoning as Der Stier's own —
+  // both the passive touch and the disarmed `dash`'s charge read this one
+  // field, and `meleeArc`'s telegraphed swing (below) is the armed branch's
+  // real punish, not incidental contact.
+  contactDamage: 1,
   // Chubbier than the `normal` default of 3 so a dash is not shoved off line
   // by a player's own bump, the same reason Der Stier states his.
   mass: 6,
