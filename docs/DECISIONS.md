@@ -3179,3 +3179,36 @@ active item's activation cost, say) has no opt-out field yet — everything with
 first of its kind in the game and is the shape to reach for if another narrow, no-combat menu ever
 needs input without a new binding; it is not a general pause-menu/inventory-browsing input model on
 its own.
+
+## 65. Enemy pressure comes primarily from shots, not contact — a charge or a seek is the exception
+
+**Decided:** M8, from #229's own playtest. The issue's speed pass first tried to fix "nothing in
+this game asks anything of a retreating player" by giving Bierratte a body that outran the
+player: `walkTowardPlayer` at a speed above `DEFAULT_MOVEMENT_TUNING.maxSpeed`, triggered silently
+the instant the player got close. It did exactly what it was told to and played terribly —
+nothing telegraphed it, nothing about it could be dodged once it started, and the player's one
+existing tool against pressure (a straight retreat) had just been taken away with nothing put in
+its place. It read as the game cheating, not as a threat, and had to be redesigned rather than
+just re-tuned.
+
+**The rule.** An enemy's actual damage output — the thing a player has to dodge, not merely avoid
+standing next to — should come from a shot, not from a body. A shot can be telegraphed, aimed,
+led and dodged in the open; contact damage from a body closing distance can only be avoided by
+not being there, which for a body faster than the player isn't a real choice at all. Bierratte's
+fix (#229) is the template every future pursuing enemy should read against: `scurry` (harmless
+wander) → `telegraph` (the shared red ring every wind-up in the game already uses) → one aimed
+shot faster than the player → a short `dash` that closes the last stretch for contact damage if
+the player didn't move. The shot is the threat; the dash is only what happens if it was ignored.
+
+**What this doesn't ban.** A charge (Kuh, Bauer's lunge, Der Stier) is fine, and so is a body
+whose whole point is being bumped into (a basic Kellerassel, Traktor) — both stay useful. A charge
+is a telegraphed, punishable commitment, not a silent stat check, and a slow contact-only body is
+exactly the "thing you walk past while something else is pressuring you" #229's own writeup wants
+a floor to have. What doesn't work is a body's *speed alone*, with no telegraph and no ranged
+component, being what makes a room hard — that is what Bierratte's first draft did, and why it
+needed replacing rather than tuning down.
+
+**Constrains:** designing a new pursuing or aggressive enemy — reach for a telegraphed shot as the
+primary threat first; a charge or a contact-seeking body is the secondary or occasional tool, not
+the default source of pressure. `docs/CONTENT_BIBLE.md` §2 states the practical version of this
+rule for whoever authors the next roster entry.

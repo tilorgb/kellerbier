@@ -174,6 +174,16 @@ consequence standing up and enjoying itself.
 Design rule: every enemy must be readable at a glance by **silhouette alone**, and must have
 exactly one idea. Complexity comes from combinations of enemies, not from complex enemies.
 
+**Pressure comes from shots, not contact.** A ranged, telegraphed attack should carry most of an
+enemy's actual damage output — it can be seen coming, aimed at, led and dodged. A charge (Kuh,
+Bauer's lunge, Der Stier) or a body that just wants to be next to the player (a basic Kellerassel,
+Traktor) is fine, and stays useful — a charge is a telegraphed commitment with its own punish
+window, and a slow contact-only body is exactly the "thing you walk past while something else is
+making you move" a room needs. What doesn't work is a body's *speed alone*, with no telegraph and
+no shot, being what makes a room hard: nothing to read, nothing to dodge, only "don't be there,"
+which for anything faster than the player isn't a real choice. See `docs/DECISIONS.md` #65 for
+where this came from and the enemy it happened to first.
+
 **Floor 1 — Der Keller**
 - **Kellerassel** — woodlouse, crawls at you, curls into an invulnerable ball when shot. Basic.
 - **Bierratte** — fast, erratic, low HP. Teaches leading your shots.

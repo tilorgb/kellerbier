@@ -784,7 +784,18 @@ export interface SimTuning {
 }
 
 export const DEFAULT_MOVEMENT_TUNING: Readonly<MovementTuning> = {
-  maxSpeed: 1.8,
+  // #229: was 1.8. A first playtest of that issue's own speed pass came back
+  // "the overall game is too fast" — not any one number, the whole baseline
+  // pace — so the player's own top speed comes down by the same ~10% every
+  // other speed in this file is nudged by below (`DEFAULT_ENEMY_TUNING`'s
+  // `speedScale`/`projectileSpeedScale`, `DEFAULT_SHOOTING_TUNING.shotSpeed`).
+  // `ticksToTopSpeed`/`ticksToStop` are untouched, so `accelerationOf` and
+  // `decelerationOf` scale down with it and the *feel* of reaching top speed
+  // is unchanged — only how fast top speed itself is. Raising this back up
+  // later (a speed item, a character trait) is exactly the kind of headroom
+  // a roguelite is supposed to hand back over a run, not something this
+  // baseline needs to reserve for on day one.
+  maxSpeed: 1.62,
   ticksToTopSpeed: 8,
   ticksToStop: 11,
   turnBoost: 1.6,
@@ -801,10 +812,16 @@ export const DEFAULT_MOVEMENT_TUNING: Readonly<MovementTuning> = {
 
 export const DEFAULT_SHOOTING_TUNING: Readonly<ShootingTuning> = {
   fireDelayTicks: 20,
-  shotSpeed: 3.5,
+  // #229: was 3.5 — nudged down ~10% with `DEFAULT_MOVEMENT_TUNING.maxSpeed`,
+  // part of the same across-the-board pace pass. `shotLifetimeTicks` moves
+  // with it (30 -> 34) so the shot's actual *range* — "half the room," per
+  // its own doc comment — stays where it was; only how fast the shot crosses
+  // that range changes, which is what "nudge the pace down" is supposed to
+  // mean, not "shrink the weapon."
+  shotSpeed: 3.15,
   shotRadius: 3,
   shotDamage: 1,
-  shotLifetimeTicks: 30,
+  shotLifetimeTicks: 34,
   muzzleOffset: 8,
   velocityInheritance: 0.85,
   kickback: 0.3,
@@ -851,10 +868,18 @@ export const DEFAULT_IMPACT_TUNING: Readonly<ImpactTuning> = {
 };
 
 export const DEFAULT_ENEMY_TUNING: Readonly<EnemyTuning> = {
-  speedScale: 1,
+  // #229: both were 1. The same ~10% pace-down as
+  // `DEFAULT_MOVEMENT_TUNING.maxSpeed`/`DEFAULT_SHOOTING_TUNING.shotSpeed`,
+  // applied here instead of to every individual `content/enemies/` number so
+  // the roster's own relative speeds — the handful of things this issue
+  // raised past player speed, everything else left slow — don't have to be
+  // re-derived by hand. This is exactly the "a balance pass moves once and
+  // every enemy on every floor feels" scalar this interface's own doc
+  // comment describes itself as being for.
+  speedScale: 0.9,
   telegraphScale: 1,
   fireIntervalScale: 1,
-  projectileSpeedScale: 1,
+  projectileSpeedScale: 0.9,
   deflectParticles: 6,
   deflectShake: 0.3,
   // 8% on Floor 1, 14% on Floor 2 — noticeable without every third room
