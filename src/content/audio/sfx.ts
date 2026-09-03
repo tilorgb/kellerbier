@@ -101,6 +101,121 @@ const deathOompah: SfxDefinition = {
   tone: { instrument: 'tuba', note: 'G2', durationSeconds: 0.25 },
 };
 
+const playerShot: SfxDefinition = {
+  id: 'player-shot',
+  description:
+    "The player's own shot leaving the Schlauch (#234) — up to several times a second on a held trigger, " +
+    'so it has to sit under `hit-*`/`death-*` rather than compete with them. Pitch-jittered so an identical ' +
+    "sample three times a second doesn't turn into a headache.",
+  noise: {
+    filter: { type: 'highpass', frequencyHz: 4000, q: 1 },
+    durationSeconds: 0.025,
+    gain: 0.08,
+  },
+  tone: { instrument: 'banjo', note: 'C6', durationSeconds: 0.03 },
+  pitchJitterCents: 350,
+};
+
+const shotSquelch: SfxDefinition = {
+  id: 'shot-squelch',
+  description: 'A soft-bodied enemy (Zapfhahn) launches a shot.',
+  noise: {
+    filter: { type: 'lowpass', frequencyHz: 700, q: 0.6 },
+    durationSeconds: 0.05,
+    gain: 0.25,
+  },
+};
+const shotMetal: SfxDefinition = {
+  id: 'shot-metal',
+  description: 'A metal enemy (Böllerschmeißer) launches a shot.',
+  noise: {
+    filter: { type: 'bandpass', frequencyHz: 3200, q: 4 },
+    durationSeconds: 0.04,
+    gain: 0.22,
+  },
+};
+const shotAnimal: SfxDefinition = {
+  id: 'shot-animal',
+  description: 'An animal enemy (Gockel, Der Stier) launches a shot.',
+  noise: {
+    filter: { type: 'lowpass', frequencyHz: 900, q: 0.6 },
+    durationSeconds: 0.05,
+    gain: 0.2,
+  },
+  tone: { instrument: 'clarinet', note: 'A3', durationSeconds: 0.05 },
+  pitchJitterCents: 150,
+};
+const shotFolk: SfxDefinition = {
+  id: 'shot-folk',
+  description: 'A folk enemy (Bauer, Gartenzwerg) launches a shot.',
+  noise: {
+    filter: { type: 'bandpass', frequencyHz: 1500, q: 1.5 },
+    durationSeconds: 0.04,
+    gain: 0.2,
+  },
+};
+const shotOompah: SfxDefinition = {
+  id: 'shot-oompah',
+  description: 'The Blaskapellist launches a shot.',
+  noise: {
+    filter: { type: 'highpass', frequencyHz: 2200, q: 1 },
+    durationSeconds: 0.03,
+    gain: 0.15,
+  },
+  tone: { instrument: 'brass-stab', note: 'E4', durationSeconds: 0.05 },
+};
+
+const attackWindup: SfxDefinition = {
+  id: 'attack-windup',
+  description:
+    'An enemy telegraph begins (#233/#234) — the audio half of the warning ring, for the player who is not ' +
+    'looking at the enemy telegraphing it.',
+  tone: { instrument: 'clarinet', note: 'D4', durationSeconds: 0.3 },
+  noise: {
+    filter: { type: 'bandpass', frequencyHz: 900, q: 2 },
+    durationSeconds: 0.25,
+    gain: 0.2,
+  },
+};
+
+const roomClear: SfxDefinition = {
+  id: 'room-clear',
+  description:
+    "The room's last enemy is handled (#234) — a reward sting distinct from `door-open`, which is a door " +
+    'sound doing this job today.',
+  noise: {
+    filter: { type: 'bandpass', frequencyHz: 2200, q: 2 },
+    durationSeconds: 0.12,
+    gain: 0.25,
+  },
+  tone: { instrument: 'brass-stab', note: 'G4', durationSeconds: 0.22 },
+};
+
+const lowHealth: SfxDefinition = {
+  id: 'low-health',
+  description:
+    'The player drops to 1 or 2 half-Maß of red health (#234) — a state change with no cue before this.',
+  noise: {
+    filter: { type: 'lowpass', frequencyHz: 200, q: 0.6 },
+    durationSeconds: 0.3,
+    gain: 0.3,
+  },
+  tone: { instrument: 'tuba', note: 'D2', durationSeconds: 0.4 },
+};
+
+const enemySplit: SfxDefinition = {
+  id: 'enemy-split',
+  description:
+    "A body's `splitOnDeath` behaviour produces children (#234) — Der Stier's and Grosse Kellerassel's " +
+    'PHASE_TWO_SPLIT included, but not boss-only: a Rollfass shattering into Fasssplitter is the same event.',
+  noise: {
+    filter: { type: 'bandpass', frequencyHz: 1000, q: 2 },
+    durationSeconds: 0.2,
+    gain: 0.4,
+  },
+  tone: { instrument: 'tuba', note: 'A2', durationSeconds: 0.25 },
+};
+
 const playerHit: SfxDefinition = {
   id: 'player-hit',
   description: 'The player takes damage, from any source.',
@@ -224,6 +339,16 @@ export const SFX_DEFINITIONS: readonly SfxDefinition[] = [
   deathAnimal,
   deathFolk,
   deathOompah,
+  playerShot,
+  shotSquelch,
+  shotMetal,
+  shotAnimal,
+  shotFolk,
+  shotOompah,
+  attackWindup,
+  roomClear,
+  lowHealth,
+  enemySplit,
   playerHit,
   playerDeath,
   wallHit,

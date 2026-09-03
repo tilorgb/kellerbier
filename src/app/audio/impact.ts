@@ -22,6 +22,14 @@ export interface ImpactAudio {
   onPlayerDeath(): void;
   /** A shot expired against a wall or out of range, hitting nothing (`EventKind.ProjectileSpent`). */
   onWallHit(x: number, y: number): void;
+  /** The player's own shot left the barrel (#234) — fires up to several times a second. */
+  onPlayerShotFired(): void;
+  /** An enemy's shot left the barrel (#234). */
+  onEnemyShotFired(enemyId: string | null): void;
+  /** An enemy entered a telegraphed wind-up — the audio half of the warning ring (#234). */
+  onAttackWindup(enemyId: string | null): void;
+  /** A body's on-death `splitOnDeath` behaviour produced children — a boss phase change or similar (#234). */
+  onEnemySplit(): void;
 }
 
 /** The implementation until Web Audio is available. Deliberately silent, deliberately present. */
@@ -31,6 +39,10 @@ export const SILENT_AUDIO: ImpactAudio = {
   onPlayerHit: () => undefined,
   onPlayerDeath: () => undefined,
   onWallHit: () => undefined,
+  onPlayerShotFired: () => undefined,
+  onEnemyShotFired: () => undefined,
+  onAttackWindup: () => undefined,
+  onEnemySplit: () => undefined,
 };
 
 /**
@@ -63,6 +75,19 @@ export function playImpactAudio(sim: GameSim, audio: ImpactAudio): void {
         } else {
           audio.onDeath(x, y, sim.enemyIdAt(events.subject[slot] ?? -1));
         }
+        break;
+      case EventKind.ShotFired:
+        if (events.subject[slot] === player) {
+          audio.onPlayerShotFired();
+        } else {
+          audio.onEnemyShotFired(sim.enemyIdAt(events.subject[slot] ?? -1));
+        }
+        break;
+      case EventKind.AttackWindup:
+        audio.onAttackWindup(sim.enemyIdAt(events.subject[slot] ?? -1));
+        break;
+      case EventKind.EnemySplit:
+        audio.onEnemySplit();
         break;
       default:
         break;

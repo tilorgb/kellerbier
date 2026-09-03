@@ -1037,3 +1037,80 @@ describe('enemies against the player', () => {
     expect(sim.world.states[player]).toBe(World.ALIVE);
   });
 });
+
+describe('action/state audio events (#234)', () => {
+  it('reports an AttackWindup event the tick a telegraphed state is entered, naming the enemy', () => {
+    const sim = emptySim();
+    const player = sim.playerIndex;
+    const enemy = place(sim, 'zapfhahn', sim.positionX(player) + 40, sim.positionY(player));
+
+    // Well within `whenPlayerWithin: 110`, so `idle` transitions to `wind`
+    // (`{ behaviour: 'telegraph', ticks: 30 }`) on the very first tick.
+    sim.step(IDLE);
+    expect(stateName(sim, enemy)).toBe('wind');
+
+    const windups: number[] = [];
+    sim.events.forEach((slot) => {
+      if (sim.events.kind[slot] === EventKind.AttackWindup) {
+        windups.push(sim.events.subject[slot] ?? -1);
+      }
+    });
+    expect(windups).toEqual([enemy]);
+
+    // Not fired again on every tick spent telegraphing — only on entry.
+    let windupsAfterEntry = 0;
+    for (let tick = 0; tick < 25; tick++) {
+      sim.step(IDLE);
+      sim.events.forEach((slot) => {
+        if (sim.events.kind[slot] === EventKind.AttackWindup) {
+          windupsAfterEntry += 1;
+        }
+      });
+    }
+    expect(stateName(sim, enemy)).toBe('wind');
+    expect(windupsAfterEntry).toBe(0);
+  });
+
+  it("reports a ShotFired event per shot the tick an enemy's `fireSpread` volley leaves, naming the shooter", () => {
+    const sim = emptySim();
+    const player = sim.playerIndex;
+    const enemy = place(sim, 'zapfhahn', sim.positionX(player) + 40, sim.positionY(player));
+
+    for (let tick = 0; tick < 60 && stateName(sim, enemy) !== 'spray'; tick++) {
+      sim.step(IDLE);
+    }
+    expect(stateName(sim, enemy)).toBe('spray');
+
+    // `spray`'s `fireSpread` fans three shots the instant the state begins —
+    // one `ShotFired` per ray, all naming the same shooter.
+    const subjects: number[] = [];
+    sim.events.forEach((slot) => {
+      if (sim.events.kind[slot] === EventKind.ShotFired) {
+        subjects.push(sim.events.subject[slot] ?? -1);
+      }
+    });
+    expect(subjects).toEqual([enemy, enemy, enemy]);
+  });
+
+  it("reports an EnemySplit event the tick a `splitOnDeath` body's death lands", () => {
+    const sim = emptySim();
+    const player = sim.playerIndex;
+    const enemy = place(sim, 'rollfass', sim.positionX(player) + 40, sim.positionY(player));
+    const definition = sim.enemies.at(sim.enemies.indexOf('rollfass'));
+    sim.tuning.shooting.shotDamage = definition.health;
+
+    expect(liveEnemies(sim, 'fasssplitter')).toBe(0);
+    landShot(sim);
+    expect(sim.world.isAlive(sim.world.entityAt(enemy))).toBe(false);
+
+    const splits: number[] = [];
+    sim.events.forEach((slot) => {
+      if (sim.events.kind[slot] === EventKind.EnemySplit) {
+        splits.push(sim.events.subject[slot] ?? -1);
+      }
+    });
+    expect(splits).toEqual([enemy]);
+    // Rollfass's own `splitOnDeath`: `{ into: 'fasssplitter', count: 3 }`.
+    expect(liveEnemies(sim, 'fasssplitter')).toBe(3);
+  });
+});

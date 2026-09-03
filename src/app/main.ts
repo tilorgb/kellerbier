@@ -1123,17 +1123,42 @@ async function boot(): Promise<void> {
    */
   let unlocksAtRunStart = new Set<string>();
 
-  /** Whether the room read as cleared last tick — see `creditBossDefeat`. */
+  /** Whether the room read as cleared last tick — shared by the room-clear sting below and `creditBossDefeat`. */
   let roomClearedLastTick = false;
+
+  /**
+   * Plays the room-clear sting the tick `sim.roomCleared` edges true —
+   * every room, not just a boss's, unlike `creditBossDefeat` below which
+   * narrows the same edge to the one case it cares about (#234: `door-open`
+   * doing a reward's job, because crossing into a freshly-unlocked door was
+   * the only audio signal a clear ever got).
+   *
+   * `live` gates the sound for the same reason it gates every other
+   * presentation effect in `advanceOneTick`: a resumed run replays its
+   * whole input log, and that must not replay every historical clear's
+   * sting at once. The edge itself is tracked unconditionally — see
+   * `creditBossDefeat`'s own doc comment for why.
+   *
+   * Returns whether the room just cleared this tick, so `creditBossDefeat`
+   * can key off the same edge without recomputing it.
+   */
+  function checkRoomClearSting(live: boolean): boolean {
+    const cleared = sim.roomCleared;
+    const justCleared = cleared && !roomClearedLastTick;
+    roomClearedLastTick = cleared;
+    if (live && justCleared) {
+      playSfx('room-clear');
+    }
+    return justCleared;
+  }
 
   /**
    * Credits the floor's boss on the tick its room *becomes* clear.
    *
    * An edge rather than a state, because "I am standing in a cleared boss
-   * room" is true for every tick of the walk to the exit, and because the
-   * cheap read (`sim.roomCleared`) is the one that runs every tick while the
-   * floor-plan lookup only runs on the handful of ticks a room is actually
-   * finished on.
+   * room" is true for every tick of the walk to the exit — `justCleared` is
+   * `checkRoomClearSting`'s edge, computed once per tick and shared here
+   * rather than read a second time.
    *
    * `live` gates the credit for the same reason it gates audio and rumble: a
    * resumed run replays its whole input log through `advanceOneTick`, and a
@@ -1142,10 +1167,7 @@ async function boot(): Promise<void> {
    * The edge itself is tracked in both cases, so a replay leaves this in the
    * same state the live run it is reconstructing was in.
    */
-  function creditBossDefeat(live: boolean): void {
-    const cleared = sim.roomCleared;
-    const justCleared = cleared && !roomClearedLastTick;
-    roomClearedLastTick = cleared;
+  function creditBossDefeat(live: boolean, justCleared: boolean): void {
     if (!live || !justCleared || planRoom(floorPlan, currentRoomId).role !== 'boss') {
       return;
     }
@@ -1155,6 +1177,29 @@ async function boot(): Promise<void> {
     }
     creditedBossRooms.add(key);
     recordBossDefeat(floorPlan.floor);
+  }
+
+  /** Whether the player read as critical (≤2 half-Maß of red health) last tick — the edge `checkLowHealthSting` keys off. */
+  let playerWasLowHealthLastTick = false;
+
+  /** Half-Maß of red health at or below which the player reads as critical (#234: "the player gets no audio state change at all"). */
+  const LOW_HEALTH_THRESHOLD = 2;
+
+  /**
+   * Plays the low-health sting the tick the player's red health edges at or
+   * below `LOW_HEALTH_THRESHOLD` — re-arms once health rises back above it,
+   * so a second drop into the danger zone later in the run cues again.
+   *
+   * `live` gates the sound the same way `checkRoomClearSting` does; the
+   * edge is tracked unconditionally for the same replay-reconstruction
+   * reason.
+   */
+  function checkLowHealthSting(live: boolean): void {
+    const low = sim.playerHealth > 0 && sim.playerHealth <= LOW_HEALTH_THRESHOLD;
+    if (live && low && !playerWasLowHealthLastTick) {
+      playSfx('low-health');
+    }
+    playerWasLowHealthLastTick = low;
   }
 
   /** Opens the results screen over whatever is on screen, pausing the run behind it. */
@@ -1415,7 +1460,9 @@ async function boot(): Promise<void> {
       playRumble(sim, input.gamepad);
     }
     summary.recordTick(sim);
-    creditBossDefeat(live);
+    const justCleared = checkRoomClearSting(live);
+    creditBossDefeat(live, justCleared);
+    checkLowHealthSting(live);
     advanceDeathSequence();
     checkBlutwurzTransition();
     checkSecretReveals();
@@ -1926,6 +1973,7 @@ WASD move   arrows aim and fire
     summary = new RunSummaryTracker();
     creditedBossRooms = new Set<string>();
     roomClearedLastTick = false;
+    playerWasLowHealthLastTick = false;
     deathPhase = 'alive';
     deathPhaseTicks = 0;
     wasBlutwurzActive = false;

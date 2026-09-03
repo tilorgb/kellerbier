@@ -30,6 +30,12 @@ export const EventKind = {
    * value: damage, normal: away from what was touched.
    */
   Contact: 5,
+  /** A shot left the barrel. a: shooter slot (the player or an enemy). */
+  ShotFired: 6,
+  /** A state carrying a telegraph was entered — the wind-up warning. a: enemy slot. */
+  AttackWindup: 7,
+  /** A body's on-death `splitOnDeath` behaviour actually produced children. a: the body that died. */
+  EnemySplit: 8,
 } as const;
 
 export type EventKindId = (typeof EventKind)[keyof typeof EventKind];
