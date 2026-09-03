@@ -14,6 +14,12 @@ import {
   setPromilleFilterCutoffHz,
 } from './context.js';
 import { playTone } from './synth.js';
+import {
+  peekSampleBuffer,
+  playSampleBuffer,
+  preloadSample,
+  type SampleVoiceHandle,
+} from './sample-player.js';
 
 /**
  * Schedules and plays `content/audio/tracks.ts` tracks against `sim.tick` —
@@ -107,6 +113,19 @@ export function playTrackOnce(
   track: TrackDefinition,
 ): void {
   const now = ctx.currentTime;
+  if (track.sample !== undefined) {
+    preloadSample(ctx, track.sample.assetId);
+    const buffer = peekSampleBuffer(ctx, track.sample.assetId);
+    // Still decoding (or missing) the first time this plays — falls through
+    // to the synthesised `events` below rather than staying silent, the
+    // same gap-degrades-gracefully shape every other sample call site here
+    // follows. A later call (the buffer having since resolved) plays the
+    // real recording.
+    if (buffer !== null) {
+      playSampleBuffer(ctx, destination, buffer, track.sample.edit, now, false);
+      return;
+    }
+  }
   for (const event of track.events) {
     const instrument = instrumentsById.get(event.instrument);
     if (instrument === undefined) {
@@ -138,6 +157,8 @@ export class MusicPlayer {
   private scheduleIndex = new Map<number, readonly NoteEvent[]>();
   private currentTier: PromilleAudioTier | null = null;
   private distortionEnabled = true;
+  /** The currently-looping recorded sample, when `this.track.sample` is set — `null` while a note-based track plays, or while the sample is still decoding. */
+  private sampleVoice: SampleVoiceHandle | null = null;
 
   /** The id of the track currently playing, or `null` if silent. */
   get trackId(): string | null {
@@ -153,13 +174,17 @@ export class MusicPlayer {
     if (this.track?.id === track.id) {
       return;
     }
+    this.sampleVoice?.stop();
+    this.sampleVoice = null;
     this.track = track;
     this.lastScheduledTick = atTick - 1;
     this.rebuildIndex();
   }
 
-  /** Stops scheduling new notes. Already-sounding notes ring out on their own envelopes. */
+  /** Stops scheduling new notes (or the looping sample). Already-sounding notes ring out on their own envelopes. */
   stop(): void {
+    this.sampleVoice?.stop();
+    this.sampleVoice = null;
     this.track = null;
   }
 
@@ -188,6 +213,11 @@ export class MusicPlayer {
     }
     this.tempoScale = tempoScale;
     this.detuneCents = detuneCents;
+    // A sample has no notes to re-derive a slower grid from — dragging its
+    // own playback rate is the direct equivalent of `rebuildIndex`'s
+    // `effectiveTicksPerBeat` slowdown, and reads as the same "woozy tape"
+    // effect a detuned oscillator does.
+    this.sampleVoice?.setPlaybackRate(tempoScale);
     if (this.track !== null) {
       this.rebuildIndex();
     }
@@ -218,6 +248,11 @@ export class MusicPlayer {
     if (this.realTimeAnchorTick === null) {
       this.realTimeAnchorTick = tick;
       this.realTimeAnchorAudioTime = ctx.currentTime;
+    }
+    if (this.track.sample !== undefined) {
+      this.syncSample(ctx, destination, this.track.sample, tick);
+      this.lastScheduledTick = tick;
+      return;
     }
     const from = this.lastScheduledTick + 1;
     for (let t = from; t <= tick; t += 1) {
@@ -250,6 +285,43 @@ export class MusicPlayer {
       }
     }
     this.lastScheduledTick = tick;
+  }
+
+  /**
+   * The sample-track half of `sync()`: starts the recording looping once its
+   * buffer has decoded, at the tick-derived audio time (`audioTimeForTick`,
+   * the exact same conversion the note branch uses) — a real recording is
+   * still started *from a tick*, never from `ctx.currentTime` directly, so
+   * it keeps #51's "no timing dependency the wrong way round" even though a
+   * looping sample has nothing further to schedule per tick after that.
+   * A no-op once `sampleVoice` exists, aside from re-asserting the sample's
+   * own gain/filter never drift out from under a Promille tier's filter
+   * changes (they don't touch this bus at all, so there's nothing to redo).
+   */
+  private syncSample(
+    ctx: AudioContext,
+    destination: AudioNode,
+    sample: NonNullable<TrackDefinition['sample']>,
+    tick: number,
+  ): void {
+    if (this.sampleVoice !== null) {
+      return;
+    }
+    preloadSample(ctx, sample.assetId);
+    const buffer = peekSampleBuffer(ctx, sample.assetId);
+    if (buffer === null) {
+      // Still decoding — tried again next tick, same "gap degrades
+      // gracefully" shape every other sample call site in this module uses.
+      return;
+    }
+    const startTime = audioTimeForTick(
+      this.realTimeAnchorAudioTime,
+      this.realTimeAnchorTick ?? tick,
+      tick,
+    );
+    const voice = playSampleBuffer(ctx, destination, buffer, sample.edit, startTime, true);
+    voice.setPlaybackRate(this.tempoScale);
+    this.sampleVoice = voice;
   }
 
   private rebuildIndex(): void {

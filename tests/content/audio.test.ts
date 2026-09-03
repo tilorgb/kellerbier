@@ -1,3 +1,6 @@
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { ENEMY_DEFINITIONS } from '../../src/content/enemies/index.js';
 import { blaskapellist } from '../../src/content/enemies/blaskapellist.js';
@@ -12,6 +15,7 @@ import {
 } from '../../src/content/audio/index.js';
 import { noteToFrequency } from '../../src/app/audio/synth.js';
 import { PromilleTier } from '../../src/sim/game/promille.js';
+import type { SampleRef } from '../../src/app/audio/types.js';
 
 const instrumentIds = new Set(INSTRUMENT_DEFINITIONS.map((instrument) => instrument.id));
 const sfxIds = new Set(SFX_DEFINITIONS.map((sfx) => sfx.id));
@@ -196,5 +200,66 @@ describe('Promille audio content', () => {
     const sober = PROMILLE_AUDIO_TIERS[PromilleTier.Nuchtern];
     expect(sober?.tempoScale).toBe(1);
     expect(sober?.detuneCents).toBe(0);
+  });
+});
+
+/**
+ * A track/SFX/bark's `sample` (a DAW recording standing in for its
+ * synthesised content — `app/audio/types.ts`'s `SampleRef`) points at a real
+ * file this test can actually check for, unlike its synth counterparts: a
+ * bad note or an unknown instrument id fails fast the moment it's used
+ * (`noteToFrequency` throws), but a missing `assets/audio/*` file would only
+ * surface at runtime as the silent, graceful fallback
+ * `app/audio/sample-player.ts`'s callers already give a *still-decoding*
+ * sample — indistinguishable from "never going to load". This is the CI-side
+ * half that catches the difference, the same `docs/DECISIONS.md` #19 split
+ * `tests/content/room-floor-eligibility.test.ts` already draws for rooms.
+ */
+describe('recorded samples', () => {
+  const AUDIO_ASSETS_DIR = fileURLToPath(new URL('../../assets/audio/', import.meta.url));
+  const ALLOWED_EXTENSIONS = ['wav', 'mp3', 'ogg'];
+
+  function assetFileExists(assetId: string): boolean {
+    return ALLOWED_EXTENSIONS.some((ext) =>
+      existsSync(path.join(AUDIO_ASSETS_DIR, `${assetId}.${ext}`)),
+    );
+  }
+
+  function expectWellFormed(label: string, sample: SampleRef): void {
+    expect(
+      assetFileExists(sample.assetId),
+      `"${label}": no assets/audio/${sample.assetId}.{wav,mp3,ogg}`,
+    ).toBe(true);
+    expect(
+      sample.edit.trimEndSeconds,
+      `"${label}": sample.edit.trimEndSeconds must be after trimStartSeconds`,
+    ).toBeGreaterThan(sample.edit.trimStartSeconds);
+    expect(
+      sample.edit.fadeInSeconds,
+      `"${label}": fadeInSeconds must not be negative`,
+    ).toBeGreaterThanOrEqual(0);
+    expect(
+      sample.edit.fadeOutSeconds,
+      `"${label}": fadeOutSeconds must not be negative`,
+    ).toBeGreaterThanOrEqual(0);
+    expect(sample.edit.gain, `"${label}": gain must not be negative`).toBeGreaterThanOrEqual(0);
+  }
+
+  it('points every track/SFX/bark sample at a real file with a well-formed edit', () => {
+    for (const track of TRACK_DEFINITIONS) {
+      if (track.sample !== undefined) {
+        expectWellFormed(track.id, track.sample);
+      }
+    }
+    for (const sfx of SFX_DEFINITIONS) {
+      if (sfx.sample !== undefined) {
+        expectWellFormed(sfx.id, sfx.sample);
+      }
+    }
+    for (const bark of BARK_DEFINITIONS) {
+      if (bark.sample !== undefined) {
+        expectWellFormed(bark.id, bark.sample);
+      }
+    }
   });
 });

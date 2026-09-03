@@ -13,6 +13,9 @@
  * - `POST /sfx/:id`              — replaces one SFX's whole definition and writes the file
  * - `POST /barks/:id`            — replaces one bark's whole definition and writes the file
  * - `POST /enemy-categories`     — replaces the whole `ENEMY_SFX_CATEGORY` map and writes the file
+ * - `GET  /audio-assets`         — every recorded file under `assets/audio/`, with its size
+ * - `POST /audio-assets`         — writes a browser-uploaded recording to `assets/audio/`
+ * - `POST /tracks|sfx|barks/:id/sample` — sets or clears (body `null`) that item's `sample` field
  *
  * `configureServer` middleware only ever runs under `vite`/`vite dev`, never
  * `vite build`/`vite preview` — see `tools/room-editor/server.mjs`, the
@@ -38,7 +41,7 @@
  * style by eye.
  */
 
-import { readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import ts from 'typescript';
 import * as prettier from 'prettier';
@@ -47,6 +50,21 @@ const API_PREFIX = '/__audio-editor-api/';
 const TRACKS_FILE = 'src/content/audio/tracks.ts';
 const SFX_FILE = 'src/content/audio/sfx.ts';
 const BARKS_FILE = 'src/content/audio/barks.ts';
+const AUDIO_ASSETS_DIR = 'assets/audio';
+const ALLOWED_AUDIO_EXTENSIONS = new Set(['wav', 'mp3', 'ogg']);
+/** 25MB — generous for a short loop or a voice line, small enough that a mis-picked multi-minute stem doesn't quietly blow up the repo. */
+const MAX_AUDIO_ASSET_BYTES = 25 * 1024 * 1024;
+
+const CONTENT_FILE_BY_KIND = {
+  tracks: { path: TRACKS_FILE, sourceFileName: 'tracks.ts' },
+  sfx: { path: SFX_FILE, sourceFileName: 'sfx.ts' },
+  barks: { path: BARKS_FILE, sourceFileName: 'barks.ts' },
+};
+
+/** `'tracks'` uses `EXPORT_NAME_BY_TRACK_ID` (no mechanical id -> export-name rule); `'sfx'`/`'barks'` derive it (`kebabToCamel`), same split `handleSaveSfx`/`handleSaveBark` already draw. */
+function exportNameForContentId(kind, id) {
+  return kind === 'tracks' ? EXPORT_NAME_BY_TRACK_ID[id] : kebabToCamel(id);
+}
 
 /**
  * Track id (`TrackDefinition.id`, what the browser and the game both use) →
@@ -161,6 +179,27 @@ export function audioEditorServerPlugin() {
             await handleSaveEnemyCategories(
               server,
               res,
+              JSON.parse(await readBody(req)),
+              pendingOwnWrites,
+            );
+            return;
+          }
+          if (req.method === 'GET' && route === 'audio-assets') {
+            respondJson(res, 200, await listAudioAssets(server));
+            return;
+          }
+          if (req.method === 'POST' && route === 'audio-assets') {
+            await handleUploadAudioAsset(server, res, JSON.parse(await readBody(req)));
+            return;
+          }
+          const sampleMatch = /^(tracks|sfx|barks)\/([^/]+)\/sample$/.exec(route);
+          if (req.method === 'POST' && sampleMatch) {
+            const [, kind, contentId] = sampleMatch;
+            await handleSaveSample(
+              server,
+              res,
+              kind,
+              decodeURIComponent(contentId),
               JSON.parse(await readBody(req)),
               pendingOwnWrites,
             );
@@ -479,6 +518,254 @@ function objectLiteralKeyOrder(objectLiteral) {
 function renderEnemyCategoryMap(map, orderedKeys) {
   const lines = orderedKeys.map((id) => `  ${JSON.stringify(id)}: ${JSON.stringify(map[id])},`);
   return `{\n${lines.join('\n')}\n}`;
+}
+
+// --- Recorded samples: uploading the file, and the `sample` field on a
+// track/SFX/bark's own definition ------------------------------------------
+
+/**
+ * A DAW export's own filename ("Der Keller - Take 3.wav") to a safe,
+ * URL- and TS-identifier-friendly asset id — lowercased, non-alphanumerics
+ * collapsed to a single `-`, leading/trailing `-` trimmed. Mirrors the
+ * kebab-case every hand-authored id in this file already uses
+ * (`'floor-1-der-keller'`), so a saved asset id reads the same as any other
+ * content id in the editor.
+ */
+function slugify(name) {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+async function listAudioAssets(server) {
+  const dir = path.join(server.config.root, AUDIO_ASSETS_DIR);
+  let entries;
+  try {
+    entries = await readdir(dir);
+  } catch {
+    return [];
+  }
+  const assets = [];
+  for (const fileName of entries) {
+    const ext = fileName.split('.').pop()?.toLowerCase();
+    if (ext === undefined || !ALLOWED_AUDIO_EXTENSIONS.has(ext)) {
+      continue;
+    }
+    const info = await stat(path.join(dir, fileName));
+    assets.push({ assetId: fileName.slice(0, -(ext.length + 1)), fileName, bytes: info.size });
+  }
+  return assets;
+}
+
+/**
+ * `POST /audio-assets` — writes a browser-uploaded recording to
+ * `assets/audio/`. Body: `{ fileName: string, dataBase64: string }`, the
+ * same "just JSON, no multipart" shape `pixel-editor/api-client.ts`'s
+ * `saveSprite` already uses for a canvas's raw pixels. Same name twice
+ * overwrites — the same "save === the name it's known by, not a fresh
+ * one every time" behaviour `tools/pixel-editor/server.mjs`'s own save
+ * endpoint has, which is what lets re-exporting a trimmed take from the DAW
+ * under the same name update it in place instead of littering the repo with
+ * `take-2`, `take-3`, ...
+ */
+async function handleUploadAudioAsset(server, res, body) {
+  if (typeof body?.fileName !== 'string' || body.fileName.length === 0) {
+    respondJson(res, 400, { error: '"fileName" must be a non-empty string' });
+    return;
+  }
+  if (typeof body?.dataBase64 !== 'string' || body.dataBase64.length === 0) {
+    respondJson(res, 400, { error: '"dataBase64" must be a non-empty string' });
+    return;
+  }
+  const ext = body.fileName.split('.').pop()?.toLowerCase();
+  if (ext === undefined || !ALLOWED_AUDIO_EXTENSIONS.has(ext)) {
+    respondJson(res, 422, {
+      error: `unsupported file extension — must be one of ${[...ALLOWED_AUDIO_EXTENSIONS].join(', ')}`,
+    });
+    return;
+  }
+  const stem = slugify(body.fileName.slice(0, -(ext.length + 1)));
+  if (stem.length === 0) {
+    respondJson(res, 422, { error: 'the file name has no usable characters once slugified' });
+    return;
+  }
+
+  let bytes;
+  try {
+    bytes = Buffer.from(body.dataBase64, 'base64');
+  } catch {
+    respondJson(res, 400, { error: '"dataBase64" is not valid base64' });
+    return;
+  }
+  if (bytes.length === 0) {
+    respondJson(res, 422, { error: 'the uploaded file is empty' });
+    return;
+  }
+  if (bytes.length > MAX_AUDIO_ASSET_BYTES) {
+    respondJson(res, 422, {
+      error: `file is ${String(Math.round(bytes.length / 1024 / 1024))}MB — the limit is ${String(MAX_AUDIO_ASSET_BYTES / 1024 / 1024)}MB`,
+    });
+    return;
+  }
+
+  const fileName = `${stem}.${ext}`;
+  const dir = path.join(server.config.root, AUDIO_ASSETS_DIR);
+  await mkdir(dir, { recursive: true });
+  await writeFile(path.join(dir, fileName), bytes);
+  respondJson(res, 200, { ok: true, assetId: stem, fileName });
+}
+
+/** Same shape `app/audio/types.ts`'s `SampleEdit` describes. */
+function validateSampleEdit(edit) {
+  const numericFields = [
+    'trimStartSeconds',
+    'trimEndSeconds',
+    'fadeInSeconds',
+    'fadeOutSeconds',
+    'gain',
+  ];
+  for (const field of numericFields) {
+    if (typeof edit?.[field] !== 'number' || !Number.isFinite(edit[field])) {
+      return `edit.${field} must be a finite number`;
+    }
+  }
+  if (edit.trimEndSeconds < edit.trimStartSeconds) {
+    return 'edit.trimEndSeconds must not be before edit.trimStartSeconds';
+  }
+  if (edit.filter !== undefined) {
+    if (!FILTER_TYPES.has(edit.filter.type)) {
+      return `edit.filter.type must be one of ${[...FILTER_TYPES].join(', ')}`;
+    }
+    if (typeof edit.filter.frequencyHz !== 'number' || typeof edit.filter.q !== 'number') {
+      return 'edit.filter.frequencyHz and edit.filter.q must be numbers';
+    }
+  }
+  return null;
+}
+
+/** Same shape `app/audio/types.ts`'s `SampleRef` describes. */
+function validateSampleRef(sample) {
+  if (typeof sample?.assetId !== 'string' || sample.assetId.length === 0) {
+    return '"assetId" must be a non-empty string';
+  }
+  return validateSampleEdit(sample.edit);
+}
+
+function renderSampleRef(sample) {
+  const filterPart =
+    sample.edit.filter === undefined
+      ? ''
+      : `filter: { type: ${JSON.stringify(sample.edit.filter.type)}, frequencyHz: ${String(sample.edit.filter.frequencyHz)}, q: ${String(sample.edit.filter.q)} }, `;
+  return (
+    `{ assetId: ${JSON.stringify(sample.assetId)}, edit: { ` +
+    `trimStartSeconds: ${String(sample.edit.trimStartSeconds)}, ` +
+    `trimEndSeconds: ${String(sample.edit.trimEndSeconds)}, ` +
+    `fadeInSeconds: ${String(sample.edit.fadeInSeconds)}, ` +
+    `fadeOutSeconds: ${String(sample.edit.fadeOutSeconds)}, ` +
+    `gain: ${String(sample.edit.gain)}, ${filterPart}} }`
+  );
+}
+
+/** The `sample` property assignment on `objectLiteral`, or `null` if it has none. */
+function findSamplePropertyAssignment(objectLiteral) {
+  for (const prop of objectLiteral.properties) {
+    if (
+      ts.isPropertyAssignment(prop) &&
+      ts.isIdentifier(prop.name) &&
+      prop.name.text === 'sample'
+    ) {
+      return prop;
+    }
+  }
+  return null;
+}
+
+/**
+ * Sets, replaces, or removes an object literal's `sample: {...}` property in
+ * source text — the one piece of splicing `handleSaveSample` needs that the
+ * existing "replace one known sub-property" (`findEventsArraySpan`) and
+ * "replace the whole object" (`findConstInitializerSpan`) helpers don't
+ * cover on their own, because `sample` may not exist on the object yet.
+ * Deliberately loose about exact whitespace either side (an insert always
+ * lands right after the opening `{`, a removal eats one trailing comma if
+ * there is one) — `prettier.format` cleans up the result before it's
+ * written, the same way every other save endpoint in this file already
+ * leans on it rather than hand-formatting.
+ */
+function spliceSampleProperty(sourceText, sourceFile, objectLiteral, newValueText) {
+  const existing = findSamplePropertyAssignment(objectLiteral);
+  if (newValueText === null) {
+    if (existing === null) {
+      return sourceText;
+    }
+    const start = existing.getStart(sourceFile);
+    let end = existing.getEnd();
+    let i = end;
+    while (i < sourceText.length && /\s/.test(sourceText[i])) {
+      i += 1;
+    }
+    if (sourceText[i] === ',') {
+      end = i + 1;
+    }
+    return sourceText.slice(0, start) + sourceText.slice(end);
+  }
+  if (existing !== null) {
+    const start = existing.initializer.getStart(sourceFile);
+    const end = existing.initializer.getEnd();
+    return sourceText.slice(0, start) + newValueText + sourceText.slice(end);
+  }
+  const insertAt = objectLiteral.getStart(sourceFile) + 1;
+  return `${sourceText.slice(0, insertAt)}\n  sample: ${newValueText},${sourceText.slice(insertAt)}`;
+}
+
+/**
+ * `POST /(tracks|sfx|barks)/:id/sample` — sets or clears (`body === null`) a
+ * content item's `sample` field in place, leaving every other field (its
+ * `events`/`noise`/`tone`/`motif`, its doc comments, every other export in
+ * the file) untouched. Shares `EXPORT_NAME_BY_TRACK_ID`/`kebabToCamel` with
+ * the existing save endpoints (`exportNameForContentId`) so a track/SFX/bark
+ * id that endpoint doesn't recognise fails the same way theirs already does.
+ */
+async function handleSaveSample(server, res, kind, contentId, body, pendingOwnWrites) {
+  const fileInfo = CONTENT_FILE_BY_KIND[kind];
+  const exportName = exportNameForContentId(kind, contentId);
+  if (fileInfo === undefined || exportName === undefined) {
+    respondJson(res, 404, { error: `unknown ${kind} id "${contentId}"` });
+    return;
+  }
+  if (body !== null) {
+    const error = validateSampleRef(body);
+    if (error !== null) {
+      respondJson(res, 422, { error });
+      return;
+    }
+  }
+
+  const filePath = path.join(server.config.root, fileInfo.path);
+  const sourceText = await readFile(filePath, 'utf8');
+  const sourceFile = ts.createSourceFile(
+    fileInfo.sourceFileName,
+    sourceText,
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  const initializer = findTopLevelConstInitializer(sourceFile, exportName);
+  if (initializer === null || !ts.isObjectLiteralExpression(initializer)) {
+    respondJson(res, 404, {
+      error: `no "const ${exportName}" in ${fileInfo.path} (derived from ${kind} id "${contentId}")`,
+    });
+    return;
+  }
+
+  const newValueText = body === null ? null : renderSampleRef(body);
+  const replaced = spliceSampleProperty(sourceText, sourceFile, initializer, newValueText);
+  const config = (await prettier.resolveConfig(filePath)) ?? {};
+  const formatted = await prettier.format(replaced, { ...config, filepath: filePath });
+
+  pendingOwnWrites.add(filePath);
+  await writeFile(filePath, formatted, 'utf8');
+  respondJson(res, 200, { ok: true });
 }
 
 /** Same shape `content/audio/types.ts`'s `NoteEvent` describes, checked by hand rather than importing a runtime validator that doesn't exist yet. */

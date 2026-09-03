@@ -1,4 +1,5 @@
-import { fetchTracks, saveTrackEvents } from './api-client.js';
+import { fetchTracks, saveTrackEvents, saveTrackSample } from './api-client.js';
+import { createSampleEditorPanel } from './sample-editor-panel.js';
 import { eventsToLoop, mergeLoopIntoTrack } from './state.js';
 import type { AudioEditorState } from './state.js';
 
@@ -56,6 +57,15 @@ export function createTrackPanel(state: AudioEditorState, host: HTMLElement): Tr
   status.className = 'kb-audio-status';
   root.appendChild(status);
 
+  const sampleEditor = createSampleEditorPanel(root, {
+    getCurrentSample: () => state.tracks.find((track) => track.id === select.value)?.sample,
+    saveSample: async (sample) => {
+      await saveTrackSample(select.value, sample);
+      state.tracks = await fetchTracks();
+      state.notify();
+    },
+  });
+
   function renderOptions(): void {
     select.innerHTML = '';
     for (const track of state.tracks) {
@@ -71,6 +81,7 @@ export function createTrackPanel(state: AudioEditorState, host: HTMLElement): Tr
 
   select.addEventListener('change', () => {
     state.selectedTrackId = select.value;
+    sampleEditor.refresh();
   });
 
   loadButton.addEventListener('click', () => {
@@ -135,6 +146,7 @@ export function createTrackPanel(state: AudioEditorState, host: HTMLElement): Tr
   return {
     destroy(): void {
       unsubscribe();
+      sampleEditor.destroy();
       root.remove();
     },
   };

@@ -88,7 +88,12 @@ import { loadPlayerArt } from '../render/player-art.js';
 import { attachLiveArtPreviewListener } from '../render/live-art-preview.js';
 import { AmbienceTracker, SynthAmbienceAudio } from './audio/ambience.js';
 import { playImpactAudio } from './audio/impact.js';
-import { SYNTH_IMPACT_AUDIO, playSfx, playVictoryFanfare } from './audio/sfx-player.js';
+import {
+  SYNTH_IMPACT_AUDIO,
+  playSfx,
+  playVictoryFanfare,
+  preloadContentAudioSamples,
+} from './audio/sfx-player.js';
 import { FootstepTracker } from './audio/footsteps.js';
 import {
   applyMixerSettings,
@@ -1422,6 +1427,7 @@ async function boot(): Promise<void> {
   const ambience = new SynthAmbienceAudio();
   const footsteps = new FootstepTracker();
   attachAudioUnlockListener();
+  preloadContentAudioSamples();
 
   // The overlay is created asynchronously and may never arrive — in a
   // production build the import below is never reached and the whole of

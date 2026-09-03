@@ -104,6 +104,47 @@ export interface PercussionInstrumentDefinition {
 export type InstrumentDefinition = TonalInstrumentDefinition | PercussionInstrumentDefinition;
 
 /**
+ * The non-destructive edit applied to a recorded sample at playback time —
+ * a crop, a pair of fades, a gain, and (reusing `InstrumentFilter` rather
+ * than inventing a second filter shape) an optional tone-shaping filter.
+ * "Non-destructive" is the point: `assets/audio/<assetId>.*` always holds
+ * exactly the file the DAW exported, and every edit here re-derives the
+ * played sound from it on the fly, the same way `synth.ts` derives a voice
+ * from an `InstrumentDefinition` rather than baking one down to a fixed
+ * buffer — re-cropping or nudging a fade never re-encodes anything.
+ */
+export interface SampleEdit {
+  /** Seconds into the source file where playback starts. */
+  readonly trimStartSeconds: number;
+  /** Seconds into the source file where playback ends (exclusive). */
+  readonly trimEndSeconds: number;
+  readonly fadeInSeconds: number;
+  readonly fadeOutSeconds: number;
+  /** Linear gain, 0–2 (1 = unity). */
+  readonly gain: number;
+  readonly filter?: InstrumentFilter;
+}
+
+/**
+ * A recorded audio file dropped into `assets/audio/` (WAV/MP3/OGG — whatever
+ * `AudioContext.decodeAudioData` accepts) plus how to play it back.
+ * `assetId` is the file's name without its extension, matching
+ * `app/audio/sample-assets.ts`'s `import.meta.glob` index — the same
+ * "id is the filename" convention `pixel-editor/static-sprite-index.ts`
+ * already uses for sprites.
+ *
+ * A `TrackDefinition`/`SfxDefinition`/`BarkDefinition` carrying a `sample`
+ * plays it *instead of* its synthesised content — the recording replaces
+ * the placeholder rather than layering under it, so `events`/`noise`/`tone`/
+ * `motif` stay in the file as the fallback `app/audio/sample-player.ts`'s
+ * callers fall back to while the asset is still decoding (or missing).
+ */
+export interface SampleRef {
+  readonly assetId: string;
+  readonly edit: SampleEdit;
+}
+
+/**
  * One note (or chord) in a track, expressed in beats from the track's own
  * start — never in seconds and never against `AudioContext.currentTime`.
  * `music.ts`'s scheduler is what converts `beat` to a playback time, and it
@@ -141,6 +182,8 @@ export interface TrackDefinition {
   /** Loop length. A track's last beat plus its duration must not exceed this. */
   readonly loopBeats: number;
   readonly events: readonly NoteEvent[];
+  /** A DAW recording standing in for `events` — see `SampleRef`'s own doc comment. */
+  readonly sample?: SampleRef;
 }
 
 /** A single synthesised sound effect: filtered noise, or a short tone, or both. */
@@ -159,6 +202,8 @@ export interface SfxDefinition {
   };
   /** Random pitch wobble per play, in cents, so a repeated hit doesn't phase-lock. Defaults to 0. */
   readonly pitchJitterCents?: number;
+  /** A recorded one-shot standing in for `noise`/`tone` — see `SampleRef`'s own doc comment. */
+  readonly sample?: SampleRef;
 }
 
 /**
@@ -176,6 +221,8 @@ export interface BarkDefinition {
     readonly notes: readonly string[];
     readonly noteDurationSeconds: number;
   };
+  /** A recorded voice line standing in for `motif` — see `SampleRef`'s own doc comment. */
+  readonly sample?: SampleRef;
 }
 
 /**
