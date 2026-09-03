@@ -45,6 +45,35 @@ export interface FloorConfig {
  */
 export const ROOM_GEN_FLOOR_OVERRIDES: Readonly<Record<string, Partial<RoomGenTuning>>> = {
   // wald: { minCoverTiles: 12, maxCoverTiles: 26, busyChance: 0.2 },
+  /**
+   * #231: Floor 2's `threatPerFloor` bump (`DEFAULT_ROOM_GEN_TUNING`) moved
+   * an ordinary room from 5.42 enemies / 12.99 HP on Floor 1 to 5.64 / 14.50
+   * on Floor 2 — +4% bodies, +12% HP, the "quarter of one extra Bierratte"
+   * #231 first measured. `maxEnemies` (not the threat budget) turned out to
+   * be the actual ceiling both floors were hitting, so raising `threatBase`/
+   * `threatPerDistance` alone barely moved the body count — this override
+   * lifts the cap too, landing at 6.25 enemies / 16.25 HP: +15%/+25% over
+   * Floor 1, a real step up from the rounding-error one but deliberately
+   * modest.
+   *
+   * An earlier pass here went to +55%/+70% on the theory that Floor 2, as
+   * the last floor of a two-floor demo, needed to read as the run's real
+   * capstone. Playtesting it said otherwise: more/tankier bodies made the
+   * floor feel like a final stage rather than an ordinary second one, and
+   * "just add enemies" is explicitly not the fix — a two-floor demo can
+   * still hold a two-floor's ramp, one step, not a cliff. The room-gen knob
+   * stays modest for exactly that reason; the roster's own moveset variety
+   * (bierratte's evasive-erratic/aimed-shot/dash loop is the model other
+   * Floor 2 enemies should move toward) is where "harder" is meant to keep
+   * coming from, not from more bodies per room.
+   *
+   * `DEFAULT_ROOM_GEN_TUNING` itself is untouched, so Floor 1 — and the
+   * tutorial's own feel — doesn't move with it. Elite chance
+   * (`DEFAULT_ENEMY_TUNING.eliteChancePerExtraFloor`) is left alone: #231's
+   * own acceptance bar for it ("reasonable once #230 lands") is already met
+   * at Floor 2's 14%.
+   */
+  rural: { threatBase: 3.5, threatPerDistance: 1.6, maxEnemies: 7, hazardChance: 0.2 },
 };
 
 export const FLOOR_CONFIGS: readonly FloorConfig[] = [
