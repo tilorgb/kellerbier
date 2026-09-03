@@ -7,7 +7,20 @@ import {
 } from '../../content/audio/tracks.js';
 import { PROMILLE_AUDIO_TIERS } from '../../content/audio/promille-audio.js';
 import type { GameSim } from '../../sim/game/sim.js';
+import { duckMusic } from './context.js';
 import { MusicPlayer } from './music.js';
+
+/**
+ * Ducking envelope for a boss room's entry (#157's "music steps back under
+ * boss intros"): a firm dip rather than the lighter pickup/bark ducks in
+ * `sfx-player.ts`, since the very next thing that happens is the track
+ * itself swapping to the boss theme — this is what keeps that swap from
+ * landing as a hard cut.
+ */
+const BOSS_ENTRY_DUCK_DEPTH = 0.85;
+const BOSS_ENTRY_DUCK_ATTACK_SECONDS = 0.05;
+const BOSS_ENTRY_DUCK_HOLD_SECONDS = 0.2;
+const BOSS_ENTRY_DUCK_RELEASE_SECONDS = 0.6;
 
 /**
  * The seam floor music and room ambience plug into.
@@ -81,6 +94,12 @@ export class SynthAmbienceAudio implements AmbienceAudio {
     }
     this.inBossRoom = isBossRoom;
     if (isBossRoom) {
+      duckMusic(
+        BOSS_ENTRY_DUCK_DEPTH,
+        BOSS_ENTRY_DUCK_ATTACK_SECONDS,
+        BOSS_ENTRY_DUCK_HOLD_SECONDS,
+        BOSS_ENTRY_DUCK_RELEASE_SECONDS,
+      );
       const boss = BOSS_TRACK.get(this.currentFloor) ?? bossKellerassel;
       this.player.play(boss, tick);
     } else {
@@ -99,11 +118,16 @@ export class SynthAmbienceAudio implements AmbienceAudio {
     this.inBossRoom = false;
   }
 
-  /** `sim.promilleTier` → `content/audio/promille-audio.ts`'s tier content. */
-  syncPromilleTier(tier: number): void {
+  /**
+   * `sim.promilleTier` → `content/audio/promille-audio.ts`'s tier content.
+   * `distortionEnabled` defaults to on; #53's settings screen passes `false`
+   * for a player who wants the Promille meter's gameplay effects without its
+   * audio disorientation (see `MusicPlayer.setPromilleTier`'s doc comment).
+   */
+  syncPromilleTier(tier: number, distortionEnabled = true): void {
     const content = PROMILLE_AUDIO_TIERS[tier];
     if (content !== undefined) {
-      this.player.setPromilleTier(content);
+      this.player.setPromilleTier(content, distortionEnabled);
     }
   }
 

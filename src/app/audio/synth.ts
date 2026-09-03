@@ -43,6 +43,43 @@ const SEMITONE_FROM_C: Readonly<Record<string, number>> = {
 const NOTE_PATTERN = /^([A-G])(#|b)?(-?\d+)$/;
 
 /**
+ * A handle onto a still-sounding voice, returned by every `play*` function in
+ * this file. `stop()` fades it out over `FAST_STOP_SECONDS` and cuts it
+ * short instead of letting its envelope finish — `sfx-player.ts`'s polyphony
+ * cap is the only caller today (#157's voice-stealing: the oldest of too many
+ * simultaneous SFX gets cut here rather than left to ring out and clip the
+ * bus with everything still layering on top of it).
+ *
+ * Safe to call more than once, and safe to ignore entirely for a fire-and-
+ * forget voice (`music.ts`'s notes, `sfx-player.ts`'s barks) — every voice
+ * still self-disconnects via `onended` the way it always did.
+ */
+export interface VoiceHandle {
+  stop(): void;
+}
+
+const NULL_VOICE: VoiceHandle = { stop: () => undefined };
+
+/** How quickly `VoiceHandle.stop()` fades a cut-short voice — fast enough to read as a cut, not a click. */
+const FAST_STOP_SECONDS = 0.015;
+
+function combineVoices(handles: readonly VoiceHandle[]): VoiceHandle {
+  if (handles.length === 1) {
+    const only = handles[0];
+    if (only !== undefined) {
+      return only;
+    }
+  }
+  return {
+    stop: () => {
+      for (const handle of handles) {
+        handle.stop();
+      }
+    },
+  };
+}
+
+/**
  * Scientific pitch notation ('A4', 'Eb3', 'F#5') to Hz, A4 = 440.
  * Throws on malformed input — a typo in a track's note data is a content bug
  * and belongs caught in CI (`tests/content/audio.test.ts`), the same
@@ -114,7 +151,7 @@ export function playTone(
   pitchJitterCents = 0,
   /** A fixed offset, unlike `pitchJitterCents` — `music.ts`'s Promille "woozy mix" drift. */
   constantDetuneCents = 0,
-): void {
+): VoiceHandle {
   if (instrument.kind === 'percussion') {
     // A kit has no chords and no pitch to jitter/detune — `note` is a
     // single `DrumVoice.id` (`'kick'`, not `'C4'`), and the voice's own
@@ -124,12 +161,12 @@ export function playTone(
     const voiceId = typeof note === 'string' ? note : note[0];
     const voice = instrument.voices.find((candidate) => candidate.id === voiceId);
     if (voice !== undefined) {
-      playDrumVoice(ctx, destination, voice, startTime, instrument.gain * velocity);
+      return playDrumVoice(ctx, destination, voice, startTime, instrument.gain * velocity);
     }
-    return;
+    return NULL_VOICE;
   }
   const notes: readonly string[] = typeof note === 'string' ? [note] : note;
-  for (const n of notes) {
+  const handles = notes.map((n) =>
     playSingleTone(
       ctx,
       destination,
@@ -140,8 +177,9 @@ export function playTone(
       velocity,
       pitchJitterCents,
       constantDetuneCents,
-    );
-  }
+    ),
+  );
+  return combineVoices(handles);
 }
 
 function playSingleTone(
@@ -154,7 +192,7 @@ function playSingleTone(
   velocity: number,
   pitchJitterCents: number,
   constantDetuneCents: number,
-): void {
+): VoiceHandle {
   const baseFrequency = noteToFrequency(note);
   const jitter =
     constantDetuneCents + (pitchJitterCents === 0 ? 0 : (Math.random() * 2 - 1) * pitchJitterCents);
@@ -224,6 +262,23 @@ function playSingleTone(
       tail.disconnect();
     }
   };
+
+  return {
+    stop: (): void => {
+      const now = ctx.currentTime;
+      const gainParam = voiceGain.gain;
+      gainParam.cancelScheduledValues(now);
+      gainParam.setValueAtTime(gainParam.value, now);
+      gainParam.linearRampToValueAtTime(0, now + FAST_STOP_SECONDS);
+      for (const osc of oscillators) {
+        try {
+          osc.stop(now + FAST_STOP_SECONDS + 0.02);
+        } catch {
+          // Already stopped/scheduled — nothing more to cut short.
+        }
+      }
+    },
+  };
 }
 
 const noiseBufferCache = new WeakMap<AudioContext, AudioBuffer>();
@@ -244,6 +299,16 @@ function getNoiseBuffer(ctx: AudioContext): AudioBuffer {
 }
 
 /**
+ * Fills and caches the shared noise buffer ahead of the first SFX that needs
+ * it. `context.ts` calls this once, right after creating the `AudioContext`
+ * — see its own doc comment for why doing it there instead of lazily on
+ * first use is the fix, not a micro-optimisation.
+ */
+export function warmNoiseBuffer(ctx: AudioContext): void {
+  getNoiseBuffer(ctx);
+}
+
+/**
  * Filtered white noise with a short percussive envelope, at an explicit
  * `AudioContext` time — the shared carrier under `playNoise` (an SFX's
  * noise layer, always "now") and `playDrumVoice` (a drum hit, scheduled
@@ -258,7 +323,7 @@ function playFilteredNoiseAt(
     readonly durationSeconds: number;
     readonly gain: number;
   },
-): void {
+): VoiceHandle {
   const { filter, durationSeconds, gain } = opts;
   const source = ctx.createBufferSource();
   source.buffer = getNoiseBuffer(ctx);
@@ -285,6 +350,20 @@ function playFilteredNoiseAt(
       tail.disconnect();
     }
   };
+
+  return {
+    stop: (): void => {
+      const now = ctx.currentTime;
+      g.cancelScheduledValues(now);
+      g.setValueAtTime(g.value, now);
+      g.linearRampToValueAtTime(0, now + FAST_STOP_SECONDS);
+      try {
+        source.stop(now + FAST_STOP_SECONDS + 0.01);
+      } catch {
+        // Already stopped/scheduled — nothing more to cut short.
+      }
+    },
+  };
 }
 
 /**
@@ -293,11 +372,15 @@ function playFilteredNoiseAt(
  * `sfx.ts`'s `SfxDefinition.tone` (via `playTone`) covers the handful that
  * want a pitched blip (UI confirm/cancel, pickups) instead of or alongside it.
  */
-export function playNoise(ctx: AudioContext, destination: AudioNode, def: SfxDefinition): void {
+export function playNoise(
+  ctx: AudioContext,
+  destination: AudioNode,
+  def: SfxDefinition,
+): VoiceHandle {
   if (def.noise === undefined) {
-    return;
+    return NULL_VOICE;
   }
-  playFilteredNoiseAt(ctx, destination, ctx.currentTime, def.noise);
+  return playFilteredNoiseAt(ctx, destination, ctx.currentTime, def.noise);
 }
 
 /**
@@ -309,7 +392,7 @@ function playDrumTone(
   destination: AudioNode,
   startTime: number,
   opts: { readonly frequencyHz: number; readonly durationSeconds: number; readonly gain: number },
-): void {
+): VoiceHandle {
   const osc = ctx.createOscillator();
   osc.type = 'sine';
   osc.frequency.setValueAtTime(opts.frequencyHz, startTime);
@@ -334,6 +417,20 @@ function playDrumTone(
     osc.disconnect();
     gainNode.disconnect();
   };
+
+  return {
+    stop: (): void => {
+      const now = ctx.currentTime;
+      g.cancelScheduledValues(now);
+      g.setValueAtTime(g.value, now);
+      g.linearRampToValueAtTime(0, now + FAST_STOP_SECONDS);
+      try {
+        osc.stop(now + FAST_STOP_SECONDS + 0.02);
+      } catch {
+        // Already stopped/scheduled — nothing more to cut short.
+      }
+    },
+  };
 }
 
 /** Plays one `DrumVoice` — its noise and/or tone layer together, at `startTime`. */
@@ -343,16 +440,25 @@ export function playDrumVoice(
   voice: DrumVoice,
   startTime: number,
   gainScale: number,
-): void {
+): VoiceHandle {
+  const handles: VoiceHandle[] = [];
   if (voice.noise !== undefined) {
-    playFilteredNoiseAt(ctx, destination, startTime, {
-      ...voice.noise,
-      gain: voice.noise.gain * gainScale,
-    });
+    handles.push(
+      playFilteredNoiseAt(ctx, destination, startTime, {
+        ...voice.noise,
+        gain: voice.noise.gain * gainScale,
+      }),
+    );
   }
   if (voice.tone !== undefined) {
-    playDrumTone(ctx, destination, startTime, { ...voice.tone, gain: voice.tone.gain * gainScale });
+    handles.push(
+      playDrumTone(ctx, destination, startTime, {
+        ...voice.tone,
+        gain: voice.tone.gain * gainScale,
+      }),
+    );
   }
+  return combineVoices(handles);
 }
 
 /** Plays an `SfxDefinition`'s noise and/or tone layer together, "now". */
@@ -361,22 +467,25 @@ export function playSfxSound(
   destination: AudioNode,
   def: SfxDefinition,
   instruments: ReadonlyMap<string, InstrumentDefinition>,
-): void {
-  playNoise(ctx, destination, def);
+): VoiceHandle {
+  const handles: VoiceHandle[] = [playNoise(ctx, destination, def)];
   if (def.tone !== undefined) {
     const instrument = instruments.get(def.tone.instrument);
     if (instrument === undefined) {
       throw new Error(`sfx "${def.id}" references unknown instrument "${def.tone.instrument}"`);
     }
-    playTone(
-      ctx,
-      destination,
-      instrument,
-      def.tone.note,
-      ctx.currentTime,
-      def.tone.durationSeconds,
-      1,
-      def.pitchJitterCents ?? 0,
+    handles.push(
+      playTone(
+        ctx,
+        destination,
+        instrument,
+        def.tone.note,
+        ctx.currentTime,
+        def.tone.durationSeconds,
+        1,
+        def.pitchJitterCents ?? 0,
+      ),
     );
   }
+  return combineVoices(handles);
 }

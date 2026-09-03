@@ -128,6 +128,26 @@ resolve at least 128 KB of it. Across the two modes that same sabotage resolved 
 The sharp instrument for a change is still the pull-request comparison, where both runs come off
 one runner minutes apart and are far more likely to land in the same mode.
 
+### Audio
+
+Nothing under `app/audio/` decodes an asset. Every voice — music, SFX, barks — is synthesised at
+schedule time from `content/audio/*` data (`synth.ts`'s oscillators and filtered noise), so there
+is no decode step to budget and nothing to move off the main thread: the "asset loading" line
+item other subsystems have doesn't apply here the way it would to sampled audio.
+
+The one thing that *does* cost real time is filling the shared noise buffer
+(`synth.ts#getNoiseBuffer`, one second of samples at the context's sample rate) the first time
+anything needs it. Before #157 that fill happened lazily, on whichever SFX played first — which
+in practice meant the first hit of a room, mid-combat. `context.ts#getAudioContext()` now warms
+it once, right after constructing the `AudioContext` (boot, or the first user-gesture unlock),
+which is the fix for the "no frame-time spike on a room transition" budget row above: the one
+allocation-and-fill audio ever does no longer has a chance to land on a frame anyone is measuring.
+
+Every other audio-side cost — a note's oscillators, an SFX's filtered-noise envelope, the mixer's
+bus graph and ducking ramps — is `AudioContext`-scheduled ahead of playback time and runs on the
+browser's own audio rendering thread, not this project's frame loop, so it never appears in the
+simulation-tick or full-frame budget rows at all.
+
 ## 4. Architecture
 
 ### Layers, strictly one-directional

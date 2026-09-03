@@ -7,8 +7,8 @@ import {
 } from '../../content/audio/sfx.js';
 import { victoryTheme } from '../../content/audio/tracks.js';
 import type { BarkDefinition, InstrumentDefinition, SfxDefinition } from './types.js';
-import { getAudioContext, getMasterGain } from './context.js';
-import { playSfxSound, playTone } from './synth.js';
+import { duckMusic, getAudioContext, getBusGain } from './context.js';
+import { type VoiceHandle, playSfxSound, playTone } from './synth.js';
 import { playTrackOnce } from './music.js';
 import type { ImpactAudio } from './impact.js';
 
@@ -28,31 +28,118 @@ function categoryFor(enemyId: string | null): EnemySfxCategory {
 }
 
 /**
+ * How many SFX voices may sound at once (#157). A bullet-heavy room with an
+ * uncapped hit sound is the concrete failure mode the issue names: past this
+ * many simultaneous voices, the newest steals the oldest's slot
+ * (`stealOldestVoice`) rather than layering forever and clipping the bus.
+ */
+const MAX_CONCURRENT_SFX = 16;
+
+/**
+ * The minimum gap between two plays of the *same* SFX id (#157's "twelve
+ * simultaneous copies of one sample"). Short enough that two genuinely
+ * distinct hits a beat apart both sound; long enough to collapse the exact
+ * duplicate spam of twelve projectiles resolving in the same tick into the
+ * one copy that actually reads.
+ */
+const SFX_RETRIGGER_COOLDOWN_SECONDS = 0.03;
+
+interface ActiveSfxVoice {
+  readonly id: string;
+  readonly endsAt: number;
+  readonly handle: VoiceHandle;
+}
+
+/** Oldest-first — a new voice always pushes onto the end, so index 0 is always the one to steal. */
+const activeVoices: ActiveSfxVoice[] = [];
+const lastPlayedAtById = new Map<string, number>();
+
+/** A generous ceiling for an SFX with neither field set — never actually reached, just a safe default. */
+const DEFAULT_VOICE_DURATION_SECONDS = 0.3;
+
+function estimatedDurationSeconds(def: SfxDefinition): number {
+  const noiseDuration = def.noise?.durationSeconds ?? 0;
+  const toneDuration = def.tone?.durationSeconds ?? 0;
+  const longest = Math.max(noiseDuration, toneDuration);
+  return longest > 0 ? longest : DEFAULT_VOICE_DURATION_SECONDS;
+}
+
+function pruneExpiredVoices(now: number): void {
+  while (activeVoices.length > 0 && (activeVoices[0]?.endsAt ?? Infinity) <= now) {
+    activeVoices.shift();
+  }
+}
+
+function stealOldestVoice(): void {
+  const oldest = activeVoices.shift();
+  oldest?.handle.stop();
+}
+
+/**
  * Plays a `content/audio/sfx.ts` id "now" — the generic entry point for
  * every one-shot cue outside `ImpactAudio`'s own five hooks: pickups, doors,
  * footsteps and UI actions. A no-op off-browser or for an unknown id, so a
  * typo in a trigger site degrades to silence rather than throwing mid-frame
  * (unlike a content file's own bad reference, which `tests/content/audio.test.ts`
  * catches before it ships).
+ *
+ * Ducks the music bus for a pickup chime specifically (#157's "music steps
+ * back under … item pickups") — every `sfx.ts` id prefixed `pickup-` is
+ * assumed to be one; nothing else in the roster is.
  */
 export function playSfx(id: string): void {
   const ctx = getAudioContext();
-  const destination = getMasterGain();
+  const destination = getBusGain('sfx');
   const def = sfxById.get(id);
   if (ctx === null || destination === null || def === undefined) {
     return;
   }
-  playSfxSound(ctx, destination, def, instrumentsById);
+  const now = ctx.currentTime;
+  pruneExpiredVoices(now);
+
+  const lastPlayedAt = lastPlayedAtById.get(id);
+  if (lastPlayedAt !== undefined && now - lastPlayedAt < SFX_RETRIGGER_COOLDOWN_SECONDS) {
+    return;
+  }
+  lastPlayedAtById.set(id, now);
+
+  if (activeVoices.length >= MAX_CONCURRENT_SFX) {
+    stealOldestVoice();
+  }
+
+  const handle = playSfxSound(ctx, destination, def, instrumentsById);
+  activeVoices.push({ id, endsAt: now + estimatedDurationSeconds(def), handle });
+
+  if (id.startsWith('pickup-')) {
+    duckMusic(
+      PICKUP_DUCK_DEPTH,
+      PICKUP_DUCK_ATTACK_SECONDS,
+      PICKUP_DUCK_HOLD_SECONDS,
+      PICKUP_DUCK_RELEASE_SECONDS,
+    );
+  }
 }
+
+const PICKUP_DUCK_DEPTH = 0.4;
+const PICKUP_DUCK_ATTACK_SECONDS = 0.03;
+const PICKUP_DUCK_HOLD_SECONDS = 0.15;
+const PICKUP_DUCK_RELEASE_SECONDS = 0.4;
+
+const BARK_DUCK_DEPTH = 0.6;
+const BARK_DUCK_ATTACK_SECONDS = 0.05;
+const BARK_DUCK_RELEASE_SECONDS = 0.5;
 
 /**
  * Plays a `content/audio/barks.ts` voice bark's placeholder motif — see that
  * file's own doc comment for why this is a synthesised contour rather than
- * recorded speech. Notes play in sequence, not as a chord.
+ * recorded speech. Notes play in sequence, not as a chord, on the voice bus
+ * — and duck the music under it (#157's "music steps back under … voice
+ * barks"), held for the motif's own length so it doesn't swell back up
+ * mid-line.
  */
 export function playBark(id: string): void {
   const ctx = getAudioContext();
-  const destination = getMasterGain();
+  const destination = getBusGain('voice');
   const bark = barksById.get(id);
   if (ctx === null || destination === null || bark === undefined) {
     return;
@@ -61,6 +148,8 @@ export function playBark(id: string): void {
   if (instrument === undefined) {
     return;
   }
+  const motifSeconds = bark.motif.notes.length * bark.motif.noteDurationSeconds;
+  duckMusic(BARK_DUCK_DEPTH, BARK_DUCK_ATTACK_SECONDS, motifSeconds, BARK_DUCK_RELEASE_SECONDS);
   let startTime = ctx.currentTime;
   for (const note of bark.motif.notes) {
     playTone(ctx, destination, instrument, note, startTime, bark.motif.noteDurationSeconds);
@@ -96,7 +185,7 @@ function maybeBarkOnKill(): void {
 /** Plays the win fanfare once — `victory-screen.ts`'s call site, on `sim.playerWon`. */
 export function playVictoryFanfare(): void {
   const ctx = getAudioContext();
-  const destination = getMasterGain();
+  const destination = getBusGain('music');
   if (ctx === null || destination === null) {
     return;
   }
