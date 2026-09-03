@@ -35,7 +35,7 @@ export const zapfhahn: EnemyDefinition = {
         { behaviour: 'pause' },
         {
           behaviour: 'fireSpread',
-          shots: 5,
+          shots: 3,
           arc: 0.9,
           // One fan per visit to this state: the volley leaves on the tick the
           // state begins, and the state is over well before the next one is due.
