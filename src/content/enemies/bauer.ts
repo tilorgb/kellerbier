@@ -7,6 +7,13 @@ import type { EnemyDefinition } from '../../sim/enemy/definition.js';
  * same shape Zapfhahn's wind-up already teaches on Floor 1 — this is that
  * lesson applied to a body that closes distance first instead of standing
  * still, so the player has to read the telegraph while still moving.
+ *
+ * #229: `stalk` used to be 0.7, well under `DEFAULT_MOVEMENT_TUNING.maxSpeed`
+ * (1.8) — a farmer whose entire design is "stalk and lunge" who could never
+ * actually stalk a retreating player into lunge range. Raised past player
+ * speed so backing away buys time rather than resetting the fight for free;
+ * `lunge`'s own 2.2 (already faster than `stalk`) is untouched, so the two
+ * states keep their relative order — a brisk close followed by a real burst.
  */
 export const bauer: EnemyDefinition = {
   id: 'bauer',
@@ -23,7 +30,7 @@ export const bauer: EnemyDefinition = {
     },
     {
       name: 'stalk',
-      behaviours: [{ behaviour: 'walkTowardPlayer', speed: 0.7 }],
+      behaviours: [{ behaviour: 'walkTowardPlayer', speed: 2 }],
       transitions: [
         { to: 'telegraph', whenPlayerWithin: 44 },
         { to: 'plow', whenPlayerBeyond: 140 },

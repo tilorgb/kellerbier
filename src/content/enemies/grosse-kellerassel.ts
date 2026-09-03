@@ -110,7 +110,14 @@ export const grosseKellerassel: EnemyDefinition = {
           shots: 3,
           arc: 0.5,
           everyTicks: 60,
-          speed: 1.4,
+          // #229: narrow enough (a 0.5 rad cone, not a 360° ring like
+          // `kellerasselSegment`'s siblings on this floor) that it reads as
+          // aimed at the player rather than as a fan to thread, so it is
+          // raised past `DEFAULT_MOVEMENT_TUNING.maxSpeed` (1.8) the same
+          // way an aimed shot is elsewhere in this pass — Floor 1's boss
+          // room is the one place on the floor a retreating player has to
+          // actually answer a projectile instead of outwalking it.
+          speed: 2,
           damage: 1,
           lifetimeTicks: 50,
           // What it spits is the cellar itself — the mould it has been living
