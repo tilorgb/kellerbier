@@ -10,6 +10,7 @@ import {
   createRingTexture,
   createSilhouetteTexture,
   createSolidTexture,
+  createWedgeTexture,
 } from '../render/placeholder-art.js';
 import { EntityView } from '../render/entities.js';
 import { GameView } from '../render/view.js';
@@ -132,6 +133,12 @@ export async function createPlaytest(
         EntityView.telegraphTextureRadius,
         PARTICLE_PALETTE.telegraphRing,
       ),
+    telegraphWedge: createWedgeTexture(
+      app.renderer,
+      EntityView.wedgeTextureLength,
+      EntityView.wedgeTextureHalfAngle,
+      PARTICLE_PALETTE.telegraphRing,
+    ),
     particleArt: buildParticleArt(
       vfxArt,
       createBlobTexture(app.renderer, 2, PARTICLE_PALETTE.foamFill, PARTICLE_PALETTE.foamRim),

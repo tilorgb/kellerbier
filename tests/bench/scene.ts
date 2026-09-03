@@ -256,6 +256,7 @@ export function buildHeadlessView(sim: GameSim): GameView {
     entity: Texture.EMPTY,
     entityFlash: Texture.EMPTY,
     telegraph: Texture.EMPTY,
+    telegraphWedge: Texture.EMPTY,
     // A distinct texture object per kind rather than one shared `Texture.EMPTY`:
     // the per-particle texture swap is exactly what #153 added to this loop, and
     // a scene where every kind points at the same object would not measure it.

@@ -23,9 +23,12 @@ import { RoomGeometry } from '../../src/sim/room/geometry.js';
 import {
   ENEMY_STRIDE,
   enemyTelegraphProgress,
+  enemyTelegraphShape,
   isEnemyInvulnerable,
   lobbedBombFlight,
   stepEnemyDeaths,
+  TelegraphShape,
+  type EnemyTelegraphShapeInfo,
   type LobbedBombFlight,
 } from '../../src/sim/systems/enemy.js';
 import { applyDamageAt } from '../../src/sim/systems/impact.js';
@@ -870,6 +873,183 @@ describe('lobTarget / detonateLobbedBomb (#156)', () => {
       // moves forward — never resets or reverses mid-throw.
       expect(flight.progress).toBeGreaterThan(firstProgress);
     });
+  });
+});
+
+/**
+ * `enemyTelegraphShape` (#233): what a wind-up warns about, read off the
+ * state its own `after` transition leads to rather than authored a second
+ * time per enemy — so the roster's own content proves the mapping, and a
+ * couple of custom definitions cover the shapes nothing shipped uses yet.
+ */
+describe('enemyTelegraphShape (#233)', () => {
+  function freshShape(): EnemyTelegraphShapeInfo {
+    return { shape: TelegraphShape.Ring, progress: 0, x: 0, y: 0, angle: 0, arc: 0, reach: 0 };
+  }
+
+  it('is false while a body is not telegraphing at all', () => {
+    const sim = emptySim();
+    const enemy = place(
+      sim,
+      'kuh',
+      sim.positionX(sim.playerIndex) + 200,
+      sim.positionY(sim.playerIndex),
+    );
+    expect(enemyTelegraphShape(sim, enemy, freshShape())).toBe(false);
+  });
+
+  it('reads a charge as Line, aimed at the player, not authored on the enemy', () => {
+    // Kuh's `telegraph` state's own `after` leads to `charge`, whose
+    // movement is `chargeAtPlayer` — nothing in `content/enemies/kuh.ts`
+    // says "draw a line," the shape comes entirely from that lookup.
+    const sim = emptySim();
+    const player = sim.playerIndex;
+    const enemy = place(sim, 'kuh', sim.positionX(player) + 40, sim.positionY(player));
+    for (let tick = 0; tick < 30 && stateName(sim, enemy) !== 'telegraph'; tick++) {
+      sim.step(IDLE);
+    }
+    expect(stateName(sim, enemy)).toBe('telegraph');
+    // One more tick: `enemyTelegraphProgress` (and so this) reads 0 on the
+    // exact tick a state is entered.
+    sim.step(IDLE);
+
+    const shape = freshShape();
+    expect(enemyTelegraphShape(sim, enemy, shape)).toBe(true);
+    expect(shape.shape).toBe(TelegraphShape.Line);
+    // The player sits due west of the body, so the aim angle is π.
+    expect(shape.angle).toBeCloseTo(Math.PI, 1);
+  });
+
+  it('reads a radial burst as Ring, the same shape every telegraph used to draw', () => {
+    // Zapfhahn's `wind` leads to `spray`, a `fireSpread` — the default case.
+    const sim = emptySim();
+    const player = sim.playerIndex;
+    const enemy = place(sim, 'zapfhahn', sim.positionX(player) + 60, sim.positionY(player));
+    for (let tick = 0; tick < 30 && stateName(sim, enemy) !== 'wind'; tick++) {
+      sim.step(IDLE);
+    }
+    expect(stateName(sim, enemy)).toBe('wind');
+    sim.step(IDLE);
+
+    const shape = freshShape();
+    expect(enemyTelegraphShape(sim, enemy, shape)).toBe(true);
+    expect(shape.shape).toBe(TelegraphShape.Ring);
+  });
+
+  it("reads Böllerschmeißer's lob as Ground, at the spot captured when the throw began — not wherever the player is now — sized to the real blast radius", () => {
+    const sim = emptySim();
+    const player = sim.playerIndex;
+    const transform = sim.transform.data;
+    // Close enough to trigger `lurk`'s own `whenPlayerWithin: 120`.
+    const enemy = place(
+      sim,
+      'boellerschmeisser',
+      sim.positionX(player) + 60,
+      sim.positionY(player),
+    );
+
+    for (let tick = 0; tick < 10 && stateName(sim, enemy) !== 'wind'; tick++) {
+      sim.step(IDLE);
+    }
+    expect(stateName(sim, enemy)).toBe('wind');
+    const capturedX = sim.positionX(player);
+    const capturedY = sim.positionY(player);
+    sim.step(IDLE);
+
+    // The player runs off before the throw lands — the marker must stay
+    // where the throw began, the same lesson `chargeAtPlayer`'s own locked
+    // aim teaches: a warning that follows the player is not dodgeable.
+    transform[player * 4] = capturedX + 500;
+    transform[player * 4 + 1] = capturedY + 500;
+    transform[player * 4 + 2] = capturedX + 500;
+    transform[player * 4 + 3] = capturedY + 500;
+
+    const shape = freshShape();
+    expect(enemyTelegraphShape(sim, enemy, shape)).toBe(true);
+    expect(shape.shape).toBe(TelegraphShape.Ground);
+    expect(shape.x).toBeCloseTo(capturedX, 0);
+    expect(shape.y).toBeCloseTo(capturedY, 0);
+    // `content/enemies/boellerschmeisser.ts`'s `boom` state detonates at
+    // radius 28 — the same number the marker's own final size is read from.
+    expect(shape.reach).toBe(28);
+  });
+
+  const swinger: EnemyDefinition = {
+    id: 'swinger',
+    name: 'Swinger',
+    size: 'normal',
+    health: 4,
+    contactDamage: 0,
+    initial: 'wind',
+    states: [
+      {
+        name: 'wind',
+        behaviours: [{ behaviour: 'pause' }, { behaviour: 'telegraph', ticks: 10 }],
+        transitions: [{ to: 'swing', after: 10 }],
+      },
+      {
+        name: 'swing',
+        behaviours: [
+          { behaviour: 'pause' },
+          {
+            behaviour: 'meleeArc',
+            arc: Math.PI / 2,
+            reach: 30,
+            damage: 2,
+            knockback: 2,
+            sweepTicks: 8,
+          },
+        ],
+        transitions: [{ to: 'wind', after: 20 }],
+      },
+    ],
+  };
+
+  it('reads a melee swing as Arc, with the real arc width and reach, aimed at the player', () => {
+    // No shipped enemy is small enough to draw this today (the roster's own
+    // `meleeArc` user, the Maibaum-Dieb, is a boss and reads its wind-up off
+    // its own body instead) — authored here so the lookup itself is proven
+    // independent of that render-layer exclusion (#233's own acceptance
+    // criterion: "adding a new enemy with an existing attack kind needs no
+    // render change").
+    const sim = emptySim({ enemies: [swinger] });
+    const player = sim.playerIndex;
+    const enemy = place(sim, 'swinger', sim.positionX(player) + 40, sim.positionY(player));
+    // One tick so the state's own counter is past zero — `enemyTelegraphProgress`
+    // (and so this) reads 0 on the exact tick a state is entered.
+    sim.step(IDLE);
+    const shape = freshShape();
+    expect(enemyTelegraphShape(sim, enemy, shape)).toBe(true);
+    expect(shape.shape).toBe(TelegraphShape.Arc);
+    expect(shape.arc).toBeCloseTo(Math.PI / 2);
+    expect(shape.reach).toBe(30);
+    expect(shape.angle).toBeCloseTo(Math.PI, 1);
+  });
+
+  const noAfter: EnemyDefinition = {
+    id: 'no-after',
+    name: 'NoAfter',
+    size: 'normal',
+    health: 4,
+    contactDamage: 0,
+    initial: 'wind',
+    states: [
+      {
+        name: 'wind',
+        behaviours: [{ behaviour: 'pause' }, { behaviour: 'telegraph', ticks: 10 }],
+        transitions: [{ to: 'wind', onHit: true }],
+      },
+    ],
+  };
+
+  it('falls back to Ring when a telegraphing state has no After transition to read', () => {
+    const sim = emptySim({ enemies: [noAfter] });
+    const player = sim.playerIndex;
+    const enemy = place(sim, 'no-after', sim.positionX(player) + 40, sim.positionY(player));
+    sim.step(IDLE);
+    const shape = freshShape();
+    expect(enemyTelegraphShape(sim, enemy, shape)).toBe(true);
+    expect(shape.shape).toBe(TelegraphShape.Ring);
   });
 });
 

@@ -45,8 +45,10 @@ export interface GameViewTextures {
   readonly entity: Texture;
   /** The entity shape in solid white, for the one-tick hit flash. */
   readonly entityFlash: Texture;
-  /** The ring an enemy telegraphs an attack with. */
+  /** The ring an enemy telegraphs an untargeted burst with. */
   readonly telegraph: Texture;
+  /** The wedge a `Line`/`Arc` telegraph (a charge, a melee swing, #233) scales non-uniformly out of. */
+  readonly telegraphWedge: Texture;
   /** One effect sprite per `ParticleKind` (#153), plus what an unauthored kind falls back to. */
   readonly particleArt: ParticleTextures;
   readonly decal: Texture;
@@ -312,6 +314,7 @@ export class GameView {
       textures.entity,
       textures.entityFlash,
       textures.telegraph,
+      textures.telegraphWedge,
       textures.enemyArt,
       textures.enemyFlash,
       textures.enemyAnimation,

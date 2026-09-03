@@ -41,6 +41,7 @@ import {
   createRingTexture,
   createSilhouetteTexture,
   createSolidTexture,
+  createWedgeTexture,
 } from '../render/placeholder-art.js';
 import {
   type GameLayout,
@@ -1918,6 +1919,15 @@ WASD move   arrows aim and fire
           EntityView.telegraphTextureRadius,
           PARTICLE_PALETTE.telegraphRing,
         ),
+      // The directional half of the same warning (#233) — no authored art yet,
+      // so this is `createRingTexture`'s own generated fallback, just a wedge
+      // instead of a ring: white, tinted where it is drawn.
+      telegraphWedge: createWedgeTexture(
+        app.renderer,
+        EntityView.wedgeTextureLength,
+        EntityView.wedgeTextureHalfAngle,
+        PARTICLE_PALETTE.telegraphRing,
+      ),
       particleArt: buildParticleArt(
         vfxArt,
         createBlobTexture(app.renderer, 2, PARTICLE_PALETTE.foamFill, PARTICLE_PALETTE.foamRim),

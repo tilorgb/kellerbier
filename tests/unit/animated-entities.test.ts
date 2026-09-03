@@ -129,6 +129,7 @@ function animatedView(sim: GameSim): { view: EntityView; set: AnimatedSpriteSet 
     Texture.EMPTY,
     Texture.EMPTY,
     Texture.EMPTY,
+    Texture.EMPTY,
     {},
     {},
     { kellerassel: set },
@@ -315,7 +316,7 @@ describe('EntityView, drawing an animated enemy', () => {
   it('draws an enemy with no animation set exactly as it did before', () => {
     const { sim } = oneEnemySim();
     const still = Texture.EMPTY;
-    const view = new EntityView(sim, still, still, still, {}, {}, {});
+    const view = new EntityView(sim, still, still, still, still, {}, {}, {});
     sim.step(idle);
     view.sync(0, 0);
     expect(view.animator.trackedCount).toBe(0);

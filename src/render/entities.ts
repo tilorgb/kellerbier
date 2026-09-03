@@ -8,9 +8,12 @@ import { lerp } from '../sim/math.js';
 import { bombBlastArmLength, bombFuseProgress } from '../sim/systems/bombs.js';
 import {
   ENEMY_STRIDE,
+  type EnemyTelegraphShapeInfo,
   enemyTelegraphProgress,
+  enemyTelegraphShape,
   isEnemyElite,
   isEnemyInvulnerable,
+  TelegraphShape,
 } from '../sim/systems/enemy.js';
 import { EntityAnimator } from './animation/animator.js';
 import { AUTHORED_FACING, resolveAnimationState, resolveFacing } from './animation/state.js';
@@ -31,6 +34,28 @@ const TELEGRAPH_SCALE = 2.6;
 
 /** Radius the ring texture is generated at, before it is scaled per body. */
 const TELEGRAPH_TEXTURE_RADIUS = 24;
+
+/**
+ * How far a charge's directional warning (`TelegraphShape.Line`, #233)
+ * reaches at the end of its wind-up, as a multiple of the body's own
+ * radius — wider than `TELEGRAPH_SCALE` because a charge threatens a lane
+ * across the room, not an area around the body.
+ */
+const LINE_TELEGRAPH_SCALE = 6;
+
+/**
+ * Half-angle a `Line` telegraph's wedge is drawn at, in radians — a narrow
+ * cone that reads as "this direction" rather than as a real hit-space; the
+ * charge itself is a point-wide line, so this is purely a legibility width,
+ * not authored data the way `Arc`'s half-angle is.
+ */
+const LINE_TELEGRAPH_HALF_ANGLE = 0.12;
+
+/** Length the wedge texture is generated at, before `Line`/`Arc` scale it non-uniformly per attack. */
+const WEDGE_TEXTURE_LENGTH = 32;
+
+/** Half-angle the wedge texture is generated at — `Line`/`Arc` both derive their own width from this by scaling `y` (`createWedgeTexture`'s own doc comment). */
+const WEDGE_TEXTURE_HALF_ANGLE = 0.3;
 
 /**
  * The `maypole` prop kind (#199). `MaibaumView` draws this one — tall,
@@ -130,19 +155,30 @@ export class EntityView {
   readonly animator = new EntityAnimator();
   private readonly telegraphTexture: Texture;
   /**
+   * The wedge every `Line`/`Arc` telegraph (#233) scales non-uniformly out of
+   * — `createWedgeTexture`'s own doc comment covers the shape and the maths
+   * that lets one texture cover a charge's narrow direction cone and a wide
+   * melee swing alike.
+   */
+  private readonly wedgeTexture: Texture;
+  /**
    * A 1x1 solid, stretched into the two bars a bomb's cross telegraph is
    * drawn from (#210) — the same generic "meant to be stretched" texture
    * `main.ts`'s `pedestalBeam` already uses for a bar fill, since a cross's
    * arms are rectangles and the ring pool's round texture cannot draw one.
    * Undefined leaves a placed bomb with no telegraph at all, the same
    * "missing texture, skip the effect" fallback every other optional texture
-   * here already takes.
+   * here already takes. Reused for an enemy's own `Ground` telegraph (#233,
+   * Böllerschmeißer) — a square landing marker is the same "stretch a solid"
+   * job as a bomb's cross arm, just one bar instead of two.
    */
   private readonly barTexture: Texture | undefined;
   private readonly sprites: Sprite[] = [];
   private readonly corpses: Sprite[] = [];
   private readonly rings: Sprite[] = [];
-  /** Two per bomb telegraphed this frame — the horizontal arm, then the vertical one. See `barTexture`. */
+  /** `Line`/`Arc` telegraphs (#233) — a directional wedge, not a ring. See `wedgeTexture`. */
+  private readonly wedges: Sprite[] = [];
+  /** Two per bomb telegraphed this frame — the horizontal arm, then the vertical one — plus one per `Ground` enemy telegraph (#233). See `barTexture`. */
   private readonly bars: Sprite[] = [];
   private readonly labels: Text[] = [];
 
@@ -226,12 +262,23 @@ export class EntityView {
   private ringPulses = true;
   private readonly bossIds: ReadonlySet<string>;
   private readonly shadows: Sprite[] = [];
+  /** Reused across every telegraphing body each frame, so the scan never allocates — `enemyTelegraphShape`'s own contract, same as `BombFlightView`'s `scratch` field. */
+  private readonly telegraphShape: EnemyTelegraphShapeInfo = {
+    shape: TelegraphShape.Ring,
+    progress: 0,
+    x: 0,
+    y: 0,
+    angle: 0,
+    arc: 0,
+    reach: 0,
+  };
 
   constructor(
     sim: GameSim,
     texture: Texture,
     flashTexture: Texture,
     telegraphTexture: Texture,
+    wedgeTexture: Texture,
     enemyTextures: Readonly<Record<string, Texture>> = {},
     enemyFlashTextures: Readonly<Record<string, Texture>> = {},
     enemyAnimation: Readonly<Record<string, AnimatedSpriteSet>> = {},
@@ -248,6 +295,7 @@ export class EntityView {
     this.enemyFlashTextures = enemyFlashTextures;
     this.enemyAnimation = enemyAnimation;
     this.telegraphTexture = telegraphTexture;
+    this.wedgeTexture = wedgeTexture;
     this.bossShadowTexture = bossShadow;
     this.bossIds = bossIds;
     this.actorShadowTexture = actorShadow;
@@ -298,6 +346,7 @@ export class EntityView {
 
     let used = 0;
     let ringsUsed = 0;
+    let wedgesUsed = 0;
     let barsUsed = 0;
     let labelsUsed = 0;
     let shadowsUsed = 0;
@@ -566,27 +615,81 @@ export class EntityView {
         }
       }
 
-      // The expanding ring is for enemies the player might lose in the shuffle.
-      // A boss is a quarter of the screen and telegraphs off its own body
+      // The telegraph is for enemies the player might lose in the shuffle. A
+      // boss is a quarter of the screen and telegraphs off its own body
       // (`bossTelegraph` above drives the red flush; its `telegraph` clip holds
-      // the strained pose) — a ring scaled to *that* collider would wrap the
+      // the strained pose) — a shape scaled to *that* collider would wrap the
       // room and say nothing about where it is safe to stand.
-      const progress = isBoss ? 0 : enemyTelegraphProgress(sim, index);
-      if (progress > 0) {
-        const ring = this.ringAt(ringsUsed);
-        ringsUsed += 1;
-        ring.visible = true;
-        // Grows out of the body over the wind-up, and is at its widest on the
-        // tick the attack leaves. The size is the countdown.
-        const ringRadius = radius * (1 + (TELEGRAPH_SCALE - 1) * progress);
-        ring.scale.set(ringRadius / (this.telegraphTexture.width / 2));
-        // Fades in with it, so the first frame of a telegraph does not pop.
-        // The extra pulse rides on top and is the only removable half: with
-        // `reduceFlashes` on, the ring still grows and still fades in, it
-        // simply stops flickering while it does (#153).
+      if (!isBoss && enemyTelegraphShape(sim, index, this.telegraphShape)) {
+        const info = this.telegraphShape;
+        // Fades in with the growth, so the first frame of a telegraph does not
+        // pop. The extra pulse rides on top and is the only removable half:
+        // with `reduceFlashes` on, every shape below still grows and still
+        // fades in, it simply stops flickering while it does (#153).
         const pulse = this.ringPulses ? Math.sin(nowMs * RING_PULSE_RATE) * 0.12 : 0;
-        ring.alpha = Math.min(1, 0.35 + progress * 0.5 + pulse);
-        ring.position.set(x, y);
+        const alpha = Math.min(1, 0.35 + info.progress * 0.5 + pulse);
+        switch (info.shape) {
+          case TelegraphShape.Line: {
+            // A charge or an aimed dash: a narrow directional cone, not an
+            // area around the body — "get out of the line, sideways" only
+            // reads if the warning itself has a direction (#233).
+            const wedge = this.wedgeAt(wedgesUsed);
+            wedgesUsed += 1;
+            wedge.visible = true;
+            const reach = radius * (1 + (LINE_TELEGRAPH_SCALE - 1) * info.progress);
+            this.scaleWedge(wedge, reach, LINE_TELEGRAPH_HALF_ANGLE);
+            wedge.rotation = info.angle;
+            wedge.alpha = alpha;
+            wedge.position.set(info.x, info.y);
+            break;
+          }
+          case TelegraphShape.Arc: {
+            // A melee swing: the real swept footprint, growing from nothing
+            // to its full authored reach and width as the countdown ends —
+            // the last frame before the swing lands is the actual danger
+            // zone, not a stylised approximation of it.
+            const wedge = this.wedgeAt(wedgesUsed);
+            wedgesUsed += 1;
+            wedge.visible = true;
+            this.scaleWedge(wedge, info.reach * info.progress, info.arc / 2);
+            wedge.rotation = info.angle;
+            wedge.alpha = alpha;
+            wedge.position.set(info.x, info.y);
+            break;
+          }
+          case TelegraphShape.Ground: {
+            // A landing zone away from the body (Böllerschmeißer, #233) — the
+            // one shape that is never centred on the thing making it, which
+            // is the whole point: the ring used to grow on the *thrower*
+            // while the danger was at the *landing spot*.
+            if (this.barTexture !== undefined) {
+              const marker = this.barAt(barsUsed);
+              barsUsed += 1;
+              marker.visible = true;
+              const size = info.reach * 2 * info.progress;
+              marker.width = size;
+              marker.height = size;
+              marker.alpha = alpha;
+              marker.position.set(info.x, info.y);
+            }
+            break;
+          }
+          default: {
+            // An untargeted burst, centred on the body — the shape every
+            // telegraph in the game used to draw, kept as-is for anything a
+            // radial spread of shots follows.
+            const ring = this.ringAt(ringsUsed);
+            ringsUsed += 1;
+            ring.visible = true;
+            // Grows out of the body over the wind-up, and is at its widest on
+            // the tick the attack leaves. The size is the countdown.
+            const ringRadius = radius * (1 + (TELEGRAPH_SCALE - 1) * info.progress);
+            ring.scale.set(ringRadius / (this.telegraphTexture.width / 2));
+            ring.alpha = alpha;
+            ring.position.set(info.x, info.y);
+            break;
+          }
+        }
       }
 
       // A placed Bierfassl telegraphs a cross, not a ring (#210) — the same
@@ -634,6 +737,13 @@ export class EntityView {
       const ring = this.rings[slot];
       if (ring !== undefined) {
         ring.visible = false;
+      }
+    }
+
+    for (let slot = wedgesUsed; slot < this.wedges.length; slot++) {
+      const wedge = this.wedges[slot];
+      if (wedge !== undefined) {
+        wedge.visible = false;
       }
     }
 
@@ -782,6 +892,40 @@ export class EntityView {
     return created;
   }
 
+  /**
+   * A `Line`/`Arc` telegraph's wedge (#233). Anchored at `(0, 0.5)` rather
+   * than centred — the tip of `wedgeTexture` sits on the body, and rotation
+   * alone points it at the aim direction, the same "anchor at the pivot"
+   * convention the pooled bodies above anchor at their own centre for.
+   */
+  private wedgeAt(slot: number): Sprite {
+    const existing = this.wedges[slot];
+    if (existing !== undefined) {
+      return existing;
+    }
+    const created = new Sprite(this.wedgeTexture);
+    created.anchor.set(0, 0.5);
+    created.tint = ENTITY_PALETTE.telegraphRing;
+    this.wedges.push(created);
+    this.ringLayer.addChild(created);
+    return created;
+  }
+
+  /**
+   * Scales a wedge sprite so its two straight edges span `halfAngle` out to
+   * `reach` — `createWedgeTexture`'s own doc comment covers the maths this
+   * leans on (a straight-edged wedge's width scales exactly with `y`, unlike
+   * a true arc's).
+   */
+  private scaleWedge(sprite: Sprite, reach: number, halfAngle: number): void {
+    const genericHalfWidth = WEDGE_TEXTURE_LENGTH * Math.tan(WEDGE_TEXTURE_HALF_ANGLE);
+    const halfWidth = reach * Math.tan(halfAngle);
+    sprite.scale.set(
+      reach / WEDGE_TEXTURE_LENGTH,
+      genericHalfWidth <= 0 ? 0 : halfWidth / genericHalfWidth,
+    );
+  }
+
   /** One bar of a bomb's cross telegraph. `this.barTexture` must be defined — checked once by the caller rather than per bar. */
   private barAt(slot: number): Sprite {
     const existing = this.bars[slot];
@@ -824,5 +968,15 @@ export class EntityView {
   /** The radius the ring texture must be generated at. */
   static get telegraphTextureRadius(): number {
     return TELEGRAPH_TEXTURE_RADIUS;
+  }
+
+  /** The length the wedge texture must be generated at (`createWedgeTexture`'s `length`). */
+  static get wedgeTextureLength(): number {
+    return WEDGE_TEXTURE_LENGTH;
+  }
+
+  /** The half-angle the wedge texture must be generated at (`createWedgeTexture`'s `halfAngle`). */
+  static get wedgeTextureHalfAngle(): number {
+    return WEDGE_TEXTURE_HALF_ANGLE;
   }
 }
