@@ -113,10 +113,11 @@ export const grosseKellerassel: EnemyDefinition = {
           // #229: narrow enough (a 0.5 rad cone, not a 360° ring like
           // `kellerasselSegment`'s siblings on this floor) that it reads as
           // aimed at the player rather than as a fan to thread, so it is
-          // raised past `DEFAULT_MOVEMENT_TUNING.maxSpeed` (1.8) the same
-          // way an aimed shot is elsewhere in this pass — Floor 1's boss
-          // room is the one place on the floor a retreating player has to
-          // actually answer a projectile instead of outwalking it.
+          // raised past `DEFAULT_MOVEMENT_TUNING.maxSpeed` the same way an
+          // aimed shot is elsewhere in this pass — Floor 1's boss room is
+          // the one place on the floor a retreating player has to actually
+          // answer a projectile instead of outwalking it. Before
+          // `DEFAULT_ENEMY_TUNING.projectileSpeedScale` (0.9).
           speed: 2,
           damage: 1,
           lifetimeTicks: 50,

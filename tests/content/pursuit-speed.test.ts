@@ -29,6 +29,12 @@ import { DEFAULT_MOVEMENT_TUNING } from '../../src/sim/tuning.js';
  *
  * This is a floor, not a per-enemy, guarantee: individual numbers are free to
  * move again in a later balance pass as long as each floor keeps its two.
+ *
+ * Compared as authored, against `DEFAULT_MOVEMENT_TUNING.maxSpeed` — content
+ * numbers are stated "before the global `enemy.speedScale`/
+ * `projectileSpeedScale`" (`sim/tuning.ts`), and both of those default to the
+ * same 0.9 today, so every entry checked here keeps the same relative margin
+ * over the player at runtime that it has on paper.
  */
 const NARROW_CONE_RADIANS = Math.PI / 2;
 
@@ -53,8 +59,9 @@ describe('#229 the retreat-and-fire dominant strategy', () => {
   const maxSpeed = DEFAULT_MOVEMENT_TUNING.maxSpeed;
 
   it('gives Floor 1 at least two roster entries that beat player speed', () => {
-    // Bierratte's `rush` (a body that closes the gap) and Die Große
-    // Kellerassel's `spit` (an aimed volley, from the floor's own boss room).
+    // Bierratte's `snipe` (an aimed shot, fired mid-assault rather than a
+    // silent chase) and Die Große Kellerassel's `spit` (an aimed volley,
+    // from the floor's own boss room).
     const floor1 = [bierratte, grosseKellerassel];
     const outpacing = floor1.filter((definition) => hasOutpacingState(definition, maxSpeed));
     expect(outpacing.length).toBeGreaterThanOrEqual(2);

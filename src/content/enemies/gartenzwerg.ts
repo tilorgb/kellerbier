@@ -13,9 +13,13 @@ import type { EnemyDefinition } from '../../sim/enemy/definition.js';
  *
  * #229: `fireAtPlayer` re-aims at the player on every volley, which makes it
  * an aimed shot rather than a spread — the kind of attack the speed pass asks
- * to beat `DEFAULT_MOVEMENT_TUNING.maxSpeed` (1.8) rather than stay under it,
- * so retreating in a straight line is not automatically safe. Raised from
- * 1.4 to 2.2: fast enough to have to be dodged, not just outwalked.
+ * to beat `DEFAULT_MOVEMENT_TUNING.maxSpeed` rather than stay under it, so
+ * retreating in a straight line is not automatically safe. Raised from 1.4
+ * to 2.2, before `DEFAULT_ENEMY_TUNING.projectileSpeedScale` (0.9) is
+ * applied — fast enough to have to be dodged, not just outwalked, with
+ * enough margin left over the player's own (also nudged down) top speed
+ * that the same pass's general slowdown doesn't erase the point of raising
+ * it.
  */
 export const gartenzwerg: EnemyDefinition = {
   id: 'gartenzwerg',
