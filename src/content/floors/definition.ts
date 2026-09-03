@@ -45,6 +45,29 @@ export interface FloorConfig {
  */
 export const ROOM_GEN_FLOOR_OVERRIDES: Readonly<Record<string, Partial<RoomGenTuning>>> = {
   // wald: { minCoverTiles: 12, maxCoverTiles: 26, busyChance: 0.2 },
+  /**
+   * #231: with only two floors in the shipping demo, Floor 2 isn't a gentle
+   * per-floor ramp — it's the demo's one and only step, and it has to read
+   * as the harder half of it, not a rounding error on Floor 1. Measured
+   * directly against `generateRoom` (`sim/room/generate-room.ts`) — 200
+   * seeds, both floors' full door sets — before this override, Floor 2's
+   * `threatPerFloor` bump (`DEFAULT_ROOM_GEN_TUNING`) moved an ordinary
+   * room from 5.42 enemies / 12.99 HP on Floor 1 to 5.64 / 14.50 on Floor 2
+   * — +4% bodies, +12% HP, exactly the "quarter of one extra Bierratte"
+   * #231 measured. `maxEnemies` (not the threat budget) turned out to be
+   * the actual ceiling both floors were hitting, so raising `threatBase`/
+   * `threatPerDistance` alone barely moved the body count — this override
+   * lifts the cap too. Landed here at 8.42 enemies / 22.14 HP: +55%/+70%
+   * over Floor 1, a real step rather than a rounding error, still drawn
+   * from the same `rural` roster and room shapes Floor 2 already uses — the
+   * texture doesn't change, only how much of it a room asks the player to
+   * answer. `DEFAULT_ROOM_GEN_TUNING` itself is untouched, so Floor 1 — and
+   * the tutorial's own feel — doesn't move with it. Elite chance
+   * (`DEFAULT_ENEMY_TUNING.eliteChancePerExtraFloor`) is left alone: #231's
+   * own acceptance bar for it ("reasonable once #230 lands") is already
+   * met at Floor 2's 14%.
+   */
+  rural: { threatBase: 6, threatPerDistance: 2.2, maxEnemies: 9, hazardChance: 0.3 },
 };
 
 export const FLOOR_CONFIGS: readonly FloorConfig[] = [
