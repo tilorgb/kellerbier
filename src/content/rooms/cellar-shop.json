@@ -26,7 +26,10 @@
     { "x": 168, "y": 100, "type": "kellerschluessel", "price": 4 }
   ],
   "hazards": [],
-  "decorativeProps": [{ "x": 120, "y": 40, "type": "shopkeeper-stand" }],
+  "decorativeProps": [
+    { "x": 120, "y": 40, "type": "shopkeeper-stand" },
+    { "x": 200, "y": 100, "type": "losbrunnen" }
+  ],
   "metadata": {
     "floorTags": ["cellar", "rural"],
     "shape": "1x1",

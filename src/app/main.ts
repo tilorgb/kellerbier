@@ -539,6 +539,11 @@ function lockedDoorsFor(
  * Everything here is reachable through `use` alone (`GameSim.useMachine`'s
  * own doc comment on why) — the picker's "browse" step is a move-axis tap,
  * mentioned in its own prompt line rather than bound to a second button.
+ *
+ * `breakChance` (#238) is folded into the same cost clause on every state
+ * that is actually offering a roll — the risk a `use` press is about to
+ * take is stated in the same breath as what it costs, not left for the
+ * player to discover after the fact.
  */
 function machineHudLabel(preview: {
   readonly state: 'empty' | 'unfed' | 'fed' | 'broken';
@@ -546,6 +551,7 @@ function machineHudLabel(preview: {
   readonly itemName: string | undefined;
   readonly cost: number;
   readonly affordable: boolean;
+  readonly breakChance: number;
   readonly lastRollSummary: string | undefined;
 }): string {
   switch (preview.state) {
@@ -559,13 +565,13 @@ function machineHudLabel(preview: {
       if (!preview.pickerOpen) {
         return 'Losbrunnen  [use: choose an item]';
       }
-      const cost = `${String(preview.cost)} Biermarken`;
+      const cost = `${String(preview.cost)} Biermarken, ${String(Math.round(preview.breakChance * 100))}% to break`;
       return preview.affordable
         ? `Losbrunnen — feed ${preview.itemName ?? ''}? ${cost}  [move: browse] [use: feed]`
         : `Losbrunnen — feed ${preview.itemName ?? ''}? ${cost} (not enough)`;
     }
     case 'fed': {
-      const cost = `${String(preview.cost)} Biermarken`;
+      const cost = `${String(preview.cost)} Biermarken, ${String(Math.round(preview.breakChance * 100))}% to break`;
       const summary = preview.lastRollSummary === undefined ? '' : `${preview.lastRollSummary}  `;
       return preview.affordable
         ? `${summary}Reroll ${preview.itemName ?? ''}? ${cost}  [use]`

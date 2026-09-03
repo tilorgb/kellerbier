@@ -752,14 +752,26 @@ export interface BlutwurzTuning {
  * about the machine's own gamble, not about what a pedestal offers.
  */
 export interface MachineTuning {
-  /** Chance a boss room's clear also spawns a Losbrunnen, rolled once per floor from `sim.random.items`. */
+  /**
+   * Chance a floor gets a Losbrunnen at all, rolled once per floor from
+   * `sim.random.items`. It appears in whichever of the floor's shop or boss
+   * room the player reaches first with the roll still unclaimed (#238) — the
+   * shop when the floor has one, the boss room's own reward spot otherwise.
+   */
   spawnChance: number;
   /** Biermarken cost of a fresh machine's first roll. */
   baseCost: number;
   /** Added to the cost on every roll after the first — 1, 2, 3, 4, 5 Biermarken and rising. */
   costIncrement: number;
-  /** Chance, rolled after every roll, that the machine breaks and refuses any further use this run. */
+  /** Chance the first roll breaks the machine and refuses any further use this run. */
   breakChance: number;
+  /**
+   * Added to `breakChance` per roll already made, so the risk climbs and is
+   * shown climbing (`machinePreview.breakChance`) rather than staying a
+   * flat, hidden 15% forever (#238) — a player who keeps pulling is
+   * knowingly pushing their luck, not gambling on a number they never saw.
+   */
+  breakChanceIncrement: number;
   /** Base weight of the bad-luck outcome tier — nudges the rolled stat backward. */
   unluckyWeight: number;
   /** Base weight of a small favourable nudge. */
@@ -1134,12 +1146,23 @@ export const DEFAULT_BLUTWURZ_TUNING: Readonly<BlutwurzTuning> = {
  * that expensive to verify by hand. `unluckyWeight` sits well below the
  * three favourable common/uncommon/rare tiers so a bad roll is a real risk
  * without being the modal outcome — "a real gamble," not a coin flip.
+ *
+ * `spawnChance` raised from #218's original 0.5 (#238): at two floors, a
+ * coin flip per floor left a quarter of runs seeing no Losbrunnen at all.
+ * 0.85 makes a *floor* miss the rare case (1-in-~6.7) rather than the
+ * *run's* modal outcome — across two floors that is a >97% chance of at
+ * least one. `breakChanceIncrement` is #238's other tuning change: the
+ * flat 15% that used to sit unstated behind every pull now climbs a visible
+ * 5 points a roll (`machinePreview.breakChance`), so "push your luck" is a
+ * choice the player can see the price of before making it, not a surprise
+ * after the first one.
  */
 export const DEFAULT_MACHINE_TUNING: Readonly<MachineTuning> = {
-  spawnChance: 0.5,
+  spawnChance: 0.85,
   baseCost: 1,
   costIncrement: 1,
   breakChance: 0.15,
+  breakChanceIncrement: 0.05,
   unluckyWeight: 20,
   commonWeight: 55,
   uncommonWeight: 25,

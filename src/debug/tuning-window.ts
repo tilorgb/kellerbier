@@ -455,10 +455,17 @@ const GROUPS: readonly GroupSpec[] = [
     title: 'Losbrunnen (machine)',
     group: 'machine',
     fields: [
-      { key: 'spawnChance', min: 0, max: 1, step: 0.05, hint: 'chance a boss room gets one' },
+      { key: 'spawnChance', min: 0, max: 1, step: 0.05, hint: 'chance the floor gets one at all' },
       { key: 'baseCost', min: 1, max: 20, step: 1, hint: 'Biermarken, first roll' },
       { key: 'costIncrement', min: 0, max: 10, step: 1, hint: 'Biermarken added per roll after' },
-      { key: 'breakChance', min: 0, max: 1, step: 0.05, hint: 'chance it breaks after a roll' },
+      { key: 'breakChance', min: 0, max: 1, step: 0.05, hint: 'chance the first roll breaks it' },
+      {
+        key: 'breakChanceIncrement',
+        min: 0,
+        max: 0.5,
+        step: 0.01,
+        hint: 'added to break chance per roll already made',
+      },
       { key: 'unluckyWeight', min: 0, max: 100, step: 1, hint: 'base weight, bad-luck outcome' },
       {
         key: 'commonWeight',

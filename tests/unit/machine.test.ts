@@ -10,15 +10,17 @@ const IDLE = createInputFrame();
 /**
  * `RngStream.Items`'s first draw (the Losbrunnen spawn roll, `floor !==
  * lastFloorStartDispatched`'s own guard) is `true` at seed 4 and `false` at
- * seed 1 against the default `spawnChance: 0.5` — found once by brute force
- * (`createStreamRng(seed, RngStream.Items).chance(0.5)`) since `GameSim` has
- * no way to override `tuning.machine` before its first room loads inside its
- * own constructor. Every other machine tuning field (`breakChance`, roll
- * percents, ...) *can* be mutated after construction, since those are only
- * read when a roll actually happens — this is the one exception.
+ * seed 23 against the default `spawnChance: 0.85` (#238, up from #218's
+ * 0.5) — found once by brute force
+ * (`createStreamRng(seed, RngStream.Items).chance(0.85)`) since `GameSim`
+ * has no way to override `tuning.machine` before its first room loads
+ * inside its own constructor. Every other machine tuning field
+ * (`breakChance`, roll percents, ...) *can* be mutated after construction,
+ * since those are only read when a roll actually happens — this is the one
+ * exception.
  */
 const SEED_SPAWNS_MACHINE = 4;
-const SEED_NO_MACHINE = 1;
+const SEED_NO_MACHINE = 23;
 
 /** A minimal, valid item — mirrors `tests/unit/item-pool.test.ts`'s `baseItem`. */
 function baseItem(id: string, overrides: Partial<ItemDefinition> = {}): ItemDefinition {
@@ -99,6 +101,41 @@ function plainRoom(id: string): SingleCellRoomTemplate {
       doors: { north: false, east: false, south: false, west: false },
       difficultyTier: 1,
       weight: 1,
+    },
+  };
+}
+
+const SHOP_LOSBRUNNEN_X = 200;
+const SHOP_LOSBRUNNEN_Y = 100;
+
+/** A `1x1` shop room, no enemies, with an authored `losbrunnen` anchor (#238) — the machine's second home. */
+function shopRoom(id = 'test-machine-shop-room'): SingleCellRoomTemplate {
+  return {
+    id,
+    tileGrid: [
+      '###############',
+      '#.............#',
+      '#.............#',
+      '#.............#',
+      '#.............#',
+      '#.............#',
+      '#.............#',
+      '#.............#',
+      '###############',
+    ],
+    obstacles: [],
+    enemySpawns: [],
+    spawnGroups: [],
+    pickupSpawns: [],
+    hazards: [],
+    decorativeProps: [{ x: SHOP_LOSBRUNNEN_X, y: SHOP_LOSBRUNNEN_Y, type: 'losbrunnen' }],
+    metadata: {
+      floorTags: ['test'],
+      shape: '1x1',
+      doors: { north: false, east: false, south: false, west: false },
+      difficultyTier: 1,
+      weight: 1,
+      specialRole: 'shop',
     },
   };
 }
@@ -318,6 +355,7 @@ describe('Der Losbrunnen — rolls and cost (#218)', () => {
   it('the reroll cost increases each time, by tuning.machine.costIncrement', () => {
     const sim = simWithDeadBoss([baseItem('a')]);
     sim.tuning.machine.breakChance = 0;
+    sim.tuning.machine.breakChanceIncrement = 0;
     sim.addBiermarken(50);
     sim.pickUpItem('a');
     standAtMachine(sim);
@@ -433,5 +471,93 @@ describe('Der Losbrunnen — persists across a room revisit (#218)', () => {
     sim.loadRoom(bossRoom(), 1); // same id as the original boss room -> restores its snapshot
     expect(sim.activeMachine?.itemIndex).toBe(itemBefore);
     expect(sim.activeMachine?.rolls).toBe(rollsBefore);
+  });
+});
+
+describe('Der Losbrunnen — a shop is the machine’s second home (#238)', () => {
+  it('spawns immediately in a shop, with no boss fight to wait for', () => {
+    const sim = new GameSim({
+      seed: SEED_SPAWNS_MACHINE,
+      roomTemplate: shopRoom(),
+      floor: 1,
+      population: 'empty',
+      items: [baseItem('a')],
+    });
+    expect(sim.activeMachine).not.toBeNull();
+    expect(sim.activeMachine?.itemIndex).toBe(-1);
+    expect(sim.activeMachine?.broken).toBe(false);
+  });
+
+  it('never spawns in a shop on a floor that rolled against it', () => {
+    const sim = new GameSim({
+      seed: SEED_NO_MACHINE,
+      roomTemplate: shopRoom(),
+      floor: 1,
+      population: 'empty',
+      items: [baseItem('a')],
+    });
+    expect(sim.activeMachine).toBeNull();
+  });
+
+  it("a shop visited first claims the floor's one Losbrunnen, so the boss room gets none", () => {
+    const sim = new GameSim({
+      seed: SEED_SPAWNS_MACHINE,
+      roomTemplate: shopRoom(),
+      floor: 1,
+      population: 'empty',
+      items: [baseItem('a')],
+    });
+    expect(sim.activeMachine).not.toBeNull();
+
+    sim.loadRoom(bossRoom(), 1);
+    killBoss(sim);
+    expect(sim.activeMachine).toBeNull();
+  });
+
+  it('a boss room reached first claims it, so a shop visited afterward gets none', () => {
+    const sim = simWithDeadBoss([baseItem('a')]);
+    expect(sim.activeMachine).not.toBeNull();
+
+    sim.loadRoom(shopRoom(), 1);
+    expect(sim.activeMachine).toBeNull();
+  });
+});
+
+describe('Der Losbrunnen — break risk climbs and is shown before the pull (#238)', () => {
+  it('machinePreview.breakChance is the base chance on a fresh machine', () => {
+    const sim = simWithDeadBoss([baseItem('a')]);
+    sim.tuning.machine.breakChance = 0.2;
+    sim.addBiermarken(50);
+    sim.pickUpItem('a');
+    standAtMachine(sim);
+
+    sim.step(pressUse()); // opens the picker, nothing rolled yet
+    expect(sim.machinePreview?.breakChance).toBeCloseTo(0.2);
+  });
+
+  it('breakChance climbs by breakChanceIncrement for every roll already made', () => {
+    const sim = simWithDeadBoss([baseItem('a')]);
+    sim.tuning.machine.breakChance = 0;
+    sim.tuning.machine.breakChanceIncrement = 0.1;
+    sim.addBiermarken(50);
+    sim.pickUpItem('a');
+    standAtMachine(sim);
+
+    // A fresh machine's first roll is guaranteed safe (0 rolls made yet,
+    // breakChance still 0), so this stays deterministic without touching RNG.
+    sim.step(pressUse());
+    sim.step(IDLE);
+    sim.step(pressUse());
+    expect(sim.activeMachine?.broken).toBe(false);
+    expect(sim.activeMachine?.rolls).toBe(1);
+    expect(sim.machinePreview?.breakChance).toBeCloseTo(0.1);
+  });
+
+  it('is invisible (0) on a machine with nothing to roll', () => {
+    const sim = simWithDeadBoss([baseItem('a', { hooks: {} })]);
+    sim.addBiermarken(10);
+    sim.pickUpItem('a');
+    standAtMachine(sim);
+    expect(sim.machinePreview?.breakChance).toBe(0);
   });
 });

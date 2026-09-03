@@ -328,14 +328,15 @@ interface PedestalRuntime {
 }
 
 /**
- * A live Losbrunnen (#218): a boss room's chance-spawned modifier machine.
+ * A live Losbrunnen (#218): a floor's chance-spawned modifier machine.
  *
  * At most one per floor — `GameSim.floorHasLosbrunnen` is rolled once per
- * floor entry and the machine itself only ever appears in that floor's boss
- * room, so a single instance (rather than `PedestalRuntime`'s list) is
- * exact, not a simplification. Not an ECS entity for the same reasons a
- * pedestal isn't (`PedestalRuntime`'s own doc comment): stationary, never
- * collides, at most one per room.
+ * floor entry, and `GameSim.losbrunnenClaimedThisFloor` (#238) makes sure
+ * only the first of the floor's shop or boss room the player actually
+ * reaches materialises it, so a single instance (rather than
+ * `PedestalRuntime`'s list) is exact, not a simplification. Not an ECS
+ * entity for the same reasons a pedestal isn't (`PedestalRuntime`'s own doc
+ * comment): stationary, never collides, at most one per room.
  */
 interface MachineRuntime {
   readonly x: number;
@@ -363,7 +364,12 @@ interface RoomLootSnapshot {
     readonly price?: number;
   }[];
   readonly pedestals: readonly PedestalRuntime[];
-  /** `null` for every room but a floor's boss room, and only non-null there once the Losbrunnen has actually spawned. */
+  /**
+   * `null` for every room but whichever of the floor's shop or boss room
+   * ended up hosting the Losbrunnen (#238) — and even there, only non-null
+   * once it has actually spawned (immediately in a shop, held back until
+   * the kill in a boss room).
+   */
   readonly machine: MachineRuntime | null;
 }
 
@@ -1143,19 +1149,32 @@ export class GameSim {
    */
   private pendingBossPedestals: { readonly x: number; readonly y: number }[] = [];
   /**
-   * Whether this floor's boss room gets a Losbrunnen at all — rolled once
-   * per floor entry (`applyCompiledRoom`'s "new floor" guard, alongside
+   * Whether this floor gets a Losbrunnen at all — rolled once per floor
+   * entry (`applyCompiledRoom`'s "new floor" guard, alongside
    * `rollFloorCurse`) from `random.items`, so the decision is fixed the
-   * moment the floor starts rather than re-rolled every time the boss room
-   * is (re-)compiled.
+   * moment the floor starts rather than re-rolled every time a candidate
+   * room is (re-)compiled.
    */
   private floorHasLosbrunnen = false;
+  /**
+   * Whether this floor's Losbrunnen has already been claimed by a room —
+   * #238's "one machine, whichever spot the player reaches first." Checked
+   * (and set) by both the shop's instant-spawn branch and the boss room's
+   * `pendingBossLosbrunnen` branch in `restoreOrSpawnRoomLoot`, so whichever
+   * of the two the player walks into first is the one that gets it; reset
+   * alongside `floorHasLosbrunnen` on every new floor.
+   */
+  private losbrunnenClaimedThisFloor = false;
   /** The current floor's Losbrunnen, once it has actually spawned — see `MachineRuntime`. */
   private machineRuntime: MachineRuntime | null = null;
   /**
    * Where the Losbrunnen will appear, held back until the boss actually
    * dies — the exact `pendingBossPedestals` shape, one position instead of a
-   * list because at most one machine ever spawns per floor. Computed in
+   * list because at most one machine ever spawns per floor. Only ever set
+   * when the boss room is the one that wins `losbrunnenClaimedThisFloor`
+   * (#238) — a shop that claims it first spawns straight into
+   * `machineRuntime` instead, since a shop's stock isn't held back for a
+   * fight the way a boss room's reward is. Computed in
    * `restoreOrSpawnRoomLoot` from the boss room's own authored pedestal
    * position (offset clear of it), never authored separately — see
    * `docs/DECISIONS.md`'s Losbrunnen entry for why this rides the boss
@@ -1894,10 +1913,11 @@ export class GameSim {
     this.pendingBossPedestals = [];
     // Reset unconditionally, like `pedestalList` above — `restoreOrSpawnRoomLoot`,
     // called right after this, is what actually repopulates it (from a
-    // snapshot, or by pushing a fresh `pendingBossLosbrunnen` for a boss
-    // room's first visit). Without this, a machine spawned in the boss room
-    // would keep reading as "in range" while standing in an unrelated room
-    // this floor was never rolled a Losbrunnen for a snapshot of.
+    // snapshot, by spawning straight into a shop, or by pushing a fresh
+    // `pendingBossLosbrunnen` for a boss room's first visit). Without this,
+    // a machine spawned in one room would keep reading as "in range" while
+    // standing in an unrelated room this floor was never rolled a
+    // Losbrunnen for a snapshot of.
     this.machineRuntime = null;
     this.pendingBossLosbrunnen = null;
     this.machinePreviewItemId = null;
@@ -1936,12 +1956,16 @@ export class GameSim {
       dispatchItemFloorStart(this, floor);
       // Der Losbrunnen (#218): fixed for the floor the instant it starts,
       // the same footing as the curse roll right above — never re-rolled by
-      // walking in and out of the boss room, and reset here (rather than
-      // only on a fresh machine spawn) so a floor that rolls "no machine"
-      // stays that way even if `machineRuntime` was still set from... it
-      // never is across a floor boundary in practice, but resetting
-      // unconditionally is what makes that an invariant instead of luck.
+      // walking in and out of a room, and reset here (rather than only on a
+      // fresh machine spawn) so a floor that rolls "no machine" stays that
+      // way even if `machineRuntime` was still set from... it never is
+      // across a floor boundary in practice, but resetting unconditionally
+      // is what makes that an invariant instead of luck.
       this.floorHasLosbrunnen = this.random.items.chance(this.tuning.machine.spawnChance);
+      // #238: which of the floor's shop/boss room actually claims it is
+      // decided by whichever the player reaches first, not here — this
+      // just clears last floor's claim.
+      this.losbrunnenClaimedThisFloor = false;
       this.machineRuntime = null;
       this.pendingBossLosbrunnen = null;
       this.machinePreviewItemId = null;
@@ -2133,6 +2157,21 @@ export class GameSim {
     // "boss room, already cleared" — that case never reaches here at all
     // (the `roomClearedIds.has` branch above returns before this point).
     for (const prop of compiled.decorativeProps) {
+      // A shop's `losbrunnen` prop (#238) is the machine's second home:
+      // unlike the boss room's reward, a shop's stock is never held back
+      // for a fight, so this claims the floor's Losbrunnen and spawns it
+      // straight into `machineRuntime` the instant the shop loads, rather
+      // than going through `pendingBossLosbrunnen`'s hold-until-clear dance.
+      // `losbrunnenClaimedThisFloor` is what stops the boss room from also
+      // handing one out later this floor.
+      if (prop.type === 'losbrunnen') {
+        if (this.floorHasLosbrunnen && !this.losbrunnenClaimedThisFloor) {
+          const safe = this.safeSpawnPoint(prop.x, prop.y, PEDESTAL_RADIUS);
+          this.machineRuntime = { x: safe.x, y: safe.y, itemIndex: -1, rolls: 0, broken: false };
+          this.losbrunnenClaimedThisFloor = true;
+        }
+        continue;
+      }
       if (prop.type !== 'pedestal') {
         continue;
       }
@@ -2148,17 +2187,17 @@ export class GameSim {
         // Der Losbrunnen (#218) rides the boss room's own authored reward
         // spot rather than a second authored position — offset clear of it
         // and nudged safe the same way. Only the first `pedestal` prop in a
-        // boss room ever contributes one (`pendingBossLosbrunnen === null`
-        // guard), which is every real boss room today (one reward pedestal
-        // apiece); a future boss room with more than one would just get its
-        // Losbrunnen anchored off the first.
-        if (this.floorHasLosbrunnen && this.pendingBossLosbrunnen === null) {
+        // boss room ever contributes one, and only when nothing has claimed
+        // the floor's Losbrunnen yet (`losbrunnenClaimedThisFloor`, #238) —
+        // a shop the player already reached this floor takes priority.
+        if (this.floorHasLosbrunnen && !this.losbrunnenClaimedThisFloor) {
           const machineSpot = this.safeSpawnPoint(
             prop.x + LOSBRUNNEN_OFFSET_X,
             prop.y + LOSBRUNNEN_OFFSET_Y,
             PEDESTAL_RADIUS,
           );
           this.pendingBossLosbrunnen = { x: machineSpot.x, y: machineSpot.y };
+          this.losbrunnenClaimedThisFloor = true;
         }
       } else {
         this.spawnPedestal(safe.x, safe.y);
@@ -4052,6 +4091,13 @@ export class GameSim {
     readonly itemName: string | undefined;
     readonly cost: number;
     readonly affordable: boolean;
+    /**
+     * Chance the roll a confirming `use` press would make breaks the
+     * machine — 0 where no roll is on offer (`'empty'`/`'broken'`). #238:
+     * shown so a player always sees the price of the pull they are about
+     * to make, never just the result of one they already made.
+     */
+    readonly breakChance: number;
     readonly lastRollSummary: string | undefined;
   } | null {
     const machine = this.machineRuntime;
@@ -4066,6 +4112,7 @@ export class GameSim {
         itemName,
         cost: 0,
         affordable: false,
+        breakChance: 0,
         lastRollSummary: this.machineLastRollSummary,
       };
     }
@@ -4078,10 +4125,12 @@ export class GameSim {
           itemName: undefined,
           cost: 0,
           affordable: false,
+          breakChance: 0,
           lastRollSummary: undefined,
         };
       }
       const cost = this.tuning.machine.baseCost;
+      const breakChance = this.machineBreakChance(machine);
       if (!this.machinePickerOpenValue) {
         return {
           state: 'unfed',
@@ -4089,6 +4138,7 @@ export class GameSim {
           itemName: undefined,
           cost,
           affordable: this.biermarkenCount >= cost,
+          breakChance,
           lastRollSummary: undefined,
         };
       }
@@ -4099,6 +4149,7 @@ export class GameSim {
         itemName: preview.name,
         cost,
         affordable: this.biermarkenCount >= cost,
+        breakChance,
         lastRollSummary: undefined,
       };
     }
@@ -4109,6 +4160,7 @@ export class GameSim {
         itemName: this.items.at(machine.itemIndex).name,
         cost: 0,
         affordable: false,
+        breakChance: 0,
         lastRollSummary: this.machineLastRollSummary,
       };
     }
@@ -4120,6 +4172,7 @@ export class GameSim {
       itemName: item.name,
       cost,
       affordable: this.biermarkenCount >= cost,
+      breakChance: this.machineBreakChance(machine),
       lastRollSummary: this.machineLastRollSummary,
     };
   }
@@ -4199,8 +4252,11 @@ export class GameSim {
    * resolved Dusel) and registers its delta under `itemRollSourceKey` —
    * replacing whatever the item's previous roll was, never stacking with
    * it, which is what makes "reroll" mean reroll rather than accumulate.
-   * Increments `rolls` (the next cost) and rolls the break chance last, so
-   * the roll that breaks the machine still lands first.
+   * The break chance this roll is actually gambling on (`machineBreakChance`)
+   * is read *before* `rolls` increments — the same "count of rolls already
+   * made" the cost calculation elsewhere already uses — then rolls the
+   * break itself last, so the roll that breaks the machine still lands
+   * first.
    */
   private applyMachineRoll(machine: MachineRuntime): void {
     const item = this.items.at(machine.itemIndex);
@@ -4221,12 +4277,27 @@ export class GameSim {
         result.modifiers.map((modifier) => ({ ...modifier, source })),
       );
     }
+    const breakChance = this.machineBreakChance(machine);
     machine.rolls += 1;
     this.machineLastRollSummary = describeMachineRoll(item.name, result);
     this.reportCollected('Losbrunnen', this.machineLastRollSummary);
-    if (this.random.items.chance(this.tuning.machine.breakChance)) {
+    if (this.random.items.chance(breakChance)) {
       machine.broken = true;
     }
+  }
+
+  /**
+   * Chance the machine's *next* roll breaks it (#238) — `breakChance` plus
+   * `breakChanceIncrement` per roll already made, clamped to 1 — the same
+   * "escalating and visible, not a flat hidden number" the field's own doc
+   * comment asks for. Read here right before the gamble happens, and by
+   * `machinePreview` so the HUD can show it before the player commits.
+   */
+  private machineBreakChance(machine: Readonly<MachineRuntime>): number {
+    return Math.min(
+      1,
+      this.tuning.machine.breakChance + machine.rolls * this.tuning.machine.breakChanceIncrement,
+    );
   }
 
   /** Marks an item's `modifyStats` output stale — drained by `syncItemStatModifiers`. */
