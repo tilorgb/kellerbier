@@ -199,6 +199,12 @@ export function playVictoryFanfare(): void {
  * `enemyId === null` (a category-less or already-resolved-away victim,
  * `sim.enemyIdAt`'s doc comment) still gets a sound — the `squelch`
  * default — rather than nothing.
+ *
+ * `onPlayerShotFired`/`onEnemyShotFired`/`onAttackWindup`/`onEnemySplit`
+ * are #234's half of the same idea, applied to actions and state rather
+ * than consequences: the player's own shot, an enemy's shot (categorised
+ * the same way a hit is), a telegraph's wind-up and a `splitOnDeath` — a
+ * boss phase change included — all went silent before this.
  */
 export const SYNTH_IMPACT_AUDIO: ImpactAudio = {
   onHit: (_x, _y, _damage, enemyId) => {
@@ -216,5 +222,17 @@ export const SYNTH_IMPACT_AUDIO: ImpactAudio = {
   },
   onWallHit: () => {
     playSfx('wall-hit');
+  },
+  onPlayerShotFired: () => {
+    playSfx('player-shot');
+  },
+  onEnemyShotFired: (enemyId) => {
+    playSfx(`shot-${categoryFor(enemyId)}`);
+  },
+  onAttackWindup: () => {
+    playSfx('attack-windup');
+  },
+  onEnemySplit: () => {
+    playSfx('enemy-split');
   },
 };

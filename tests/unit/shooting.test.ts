@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { EventKind } from '../../src/sim/events/queue.js';
 import { GameSim } from '../../src/sim/game/sim.js';
 import {
   type InputFrame,
@@ -9,6 +10,17 @@ import {
 } from '../../src/sim/input/frame.js';
 import { RoomGeometry } from '../../src/sim/room/geometry.js';
 import { DEFAULT_SHOOTING_TUNING } from '../../src/sim/tuning.js';
+
+/** `ShotFired` events reported by the step that just ran. */
+function shotsFiredThisTick(sim: GameSim): number[] {
+  const subjects: number[] = [];
+  sim.events.forEach((slot) => {
+    if (sim.events.kind[slot] === EventKind.ShotFired) {
+      subjects.push(sim.events.subject[slot] ?? -1);
+    }
+  });
+  return subjects;
+}
 
 function openRoom(): RoomGeometry {
   return new RoomGeometry(0, 0, 640, 360);
@@ -261,5 +273,35 @@ describe('velocity inheritance', () => {
     const shot = shotVelocity(sim);
     expect(shot.x).toBeGreaterThan(DEFAULT_SHOOTING_TUNING.shotSpeed);
     expect(shot.y).toBeCloseTo(0, 6);
+  });
+});
+
+describe('ShotFired event (#234)', () => {
+  it('reports one event per squeeze, naming the player as the shooter', () => {
+    const sim = new GameSim({ room: openRoom() });
+    sim.step(aiming(1, 0));
+    const subjects = shotsFiredThisTick(sim);
+    expect(subjects).toEqual([sim.playerIndex]);
+  });
+
+  it('reports nothing on a tick nothing fires — cooldown still counting down', () => {
+    const sim = new GameSim({ room: openRoom() });
+    sim.step(aiming(1, 0));
+    // Immediately after firing, the cooldown blocks the very next tick from
+    // firing again (`DEFAULT_SHOOTING_TUNING.fireDelayTicks` is well above 1).
+    sim.step(aiming(1, 0));
+    expect(shotsFiredThisTick(sim)).toEqual([]);
+  });
+
+  it('reports exactly one event even with an item hooked into the same shot', () => {
+    // `sim/systems/shooting.ts#fire` pushes `ShotFired` once, before
+    // `dispatchItemProjectileSpawn` runs — an item's `onProjectileSpawn` hook
+    // (Spiegelsaal tags the shot to split later, on impact) must not cause a
+    // second push just because it reacted to the same squeeze.
+    const sim = new GameSim({ room: openRoom() });
+    sim.inventory.pickUp(sim.items.indexOf('spiegelsaal'));
+    sim.step(aiming(1, 0));
+    expect(shotsFiredThisTick(sim).length).toBe(1);
+    expect(sim.projectiles.liveCount).toBe(1);
   });
 });

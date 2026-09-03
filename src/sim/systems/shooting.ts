@@ -120,6 +120,21 @@ function fire(sim: GameSim, aimX: number, aimY: number): void {
   // nozzle should flare on the shots that happened.
   sim.lastShotTick = sim.tick;
 
+  // One event per squeeze, not per projectile a multi-shot item spawns off
+  // it (#234) — `sfx-player.ts`'s `player-shot` cue is what stays under the
+  // hit sound rather than competing with it, and firing once per pellet
+  // would make that impossible to hold true no matter how quiet the cue is.
+  sim.events.push(
+    EventKind.ShotFired,
+    playerIndex,
+    NO_SLOT,
+    muzzleX,
+    muzzleY,
+    directionX,
+    directionY,
+    0,
+  );
+
   // Items react to the shot before it exists (#26) — the same moment the
   // stat pipeline already resolves damage from, one line below.
   dispatchItemShoot(sim, directionX, directionY);

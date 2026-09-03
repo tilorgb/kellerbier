@@ -11,6 +11,7 @@ import type { GameSim } from '../game/sim.js';
 import { muzzleFlash } from '../particle/effects.js';
 import { clamp, vectorLength } from '../math.js';
 import { addPush } from './movement.js';
+import { NO_SLOT } from '../pool/slot-pool.js';
 import { ProjectileTeam } from '../projectile/store.js';
 
 /**
@@ -144,6 +145,14 @@ export function stepEnemies(sim: GameSim): void {
         }
         if (entered.meleeArc !== null) {
           lockMeleeAim(sim, index, toPlayerX, toPlayerY, distance);
+        }
+        // The audio half of the telegraph ring (#234): fired once, on the
+        // tick the state begins, not once per tick spent telegraphing — the
+        // ring itself is read continuously (`enemyTelegraphProgress`), but a
+        // "rising tone under a wind-up" only makes sense as a cue with a
+        // start.
+        if (entered.telegraphTicks > 0) {
+          sim.events.push(EventKind.AttackWindup, index, NO_SLOT, selfX, selfY, 0, 0, 0);
         }
       }
     }
@@ -519,6 +528,9 @@ function fireOne(sim: GameSim, index: number, angle: number, shot: FiringBehavio
   // of vision (#153), and an enemy's muzzle flashing where the player's does
   // not is how a game teaches that enemy shots come from nowhere.
   muzzleFlash(sim, muzzleX, muzzleY);
+  // The audio half of the same idea (#234): in a bullet hell you need to
+  // hear what fired behind you, not just see it.
+  sim.events.push(EventKind.ShotFired, index, NO_SLOT, muzzleX, muzzleY, directionX, directionY, 0);
 }
 
 /**
@@ -755,6 +767,12 @@ function splitFromEvent(slot: number): void {
   const atX = sim.events.x[slot] ?? 0;
   const atY = sim.events.y[slot] ?? 0;
   const random = sim.random.enemies;
+
+  // One cue for the whole split, not one per child spawned below — Der
+  // Stier's `PHASE_TWO_SPLIT` and a Fass shattering into `fasssplitter` are
+  // both "a body's death produced more of them," and #234 wants that event
+  // itself audible rather than silent.
+  sim.events.push(EventKind.EnemySplit, index, NO_SLOT, atX, atY, 0, 0, 0);
 
   for (const split of state.splits) {
     const count = Math.max(0, Math.round(split.count));
