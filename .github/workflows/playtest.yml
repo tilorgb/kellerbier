@@ -1,0 +1,66 @@
+name: Balance simulator
+
+# #54: a scripted bot (`tests/playtest/`) plays a sweep of seeds, starting
+# loadouts and skill profiles headlessly through real floors 1-2 — the
+# reachable route through the actual game, not a single fixed combat scene
+# (that's `Synergy fuzz`, `.github/workflows/fuzz.yml`) — and reports win
+# rate, deaths and time spent per floor, and any run that crashed.
+#
+# Deliberately not on every pull request: a full sweep of two-floor runs is
+# slow by design, so it runs nightly and on demand instead — the same split
+# `fuzz`/`bench` already make between the pull-request gate and their own
+# `npm run playtest`. Anyone working a balance or gameplay-mechanics issue
+# can also fire this from the Actions tab (`workflow_dispatch`) rather than
+# waiting for the next nightly run.
+
+on:
+  schedule:
+    # Nightly, off the hour — same reasoning `fuzz.yml`'s cron gives for not
+    # firing on the hour: everyone else's cron does, and a shared runner
+    # fleet is calmer between those spikes.
+    - cron: '41 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: balance-simulator
+  cancel-in-progress: false
+
+jobs:
+  playtest:
+    name: Scripted playtest sweep
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Run the balance simulator
+        run: npm run playtest
+
+      - name: Format the report
+        if: always()
+        run: node tools/playtest/report.mjs playtest/results.json --out playtest-report.md
+
+      - name: Add to the job summary
+        if: always()
+        run: cat playtest-report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the raw results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: balance-simulator-results
+          path: |
+            playtest/results.json
+            playtest-report.md
+          retention-days: 30
