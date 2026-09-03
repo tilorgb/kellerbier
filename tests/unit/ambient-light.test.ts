@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { cloudPlacement, cloudShadowState, lampPlacement } from '../../src/render/ambient-light.js';
+import { INTERNAL_HEIGHT, INTERNAL_WIDTH, WORLD_ZOOM } from '../../src/render/resolution.js';
 import { TICKS_PER_SECOND } from '../../src/sim/time.js';
 
 const ROOM = { minX: 0, minY: 0, maxX: 320, maxY: 180 };
+/** A `2x2` Floor 2 room (`sim/room/geometry.ts`'s `voidRects`) — several screens wider/taller than `ROOM`. */
+const MULTI_CELL_ROOM = { minX: 0, minY: 0, maxX: 960, maxY: 540 };
 
 describe('lampPlacement', () => {
   it('centres on the room and grows past its span', () => {
@@ -11,6 +14,32 @@ describe('lampPlacement', () => {
     expect(placement.y).toBe(90);
     expect(placement.width).toBeGreaterThan(ROOM.maxX - ROOM.minX);
     expect(placement.height).toBeGreaterThan(ROOM.maxY - ROOM.minY);
+  });
+
+  it('never grows past one screen of coverage, even in a multi-cell room (#243)', () => {
+    // Reported on Floor 2 as the cloud first, but Floor 1's static lamp
+    // falloff sized itself off the same uncapped room span and had the
+    // identical bug — a room several screens wide produced a falloff
+    // several screens wide, not the single bulb's pool of light it's meant
+    // to be. `1.3` mirrors `KELLER_COVERAGE`, not exported from
+    // `ambient-light.ts`.
+    const placement = lampPlacement(MULTI_CELL_ROOM);
+    expect(placement.width).toBeLessThanOrEqual((INTERNAL_WIDTH / WORLD_ZOOM) * 1.3);
+    expect(placement.height).toBeLessThanOrEqual((INTERNAL_HEIGHT / WORLD_ZOOM) * 1.3);
+  });
+
+  it('still centres on a multi-cell room, despite the capped size', () => {
+    const placement = lampPlacement(MULTI_CELL_ROOM);
+    expect(placement.x).toBe((MULTI_CELL_ROOM.minX + MULTI_CELL_ROOM.maxX) / 2);
+    expect(placement.y).toBe((MULTI_CELL_ROOM.minY + MULTI_CELL_ROOM.maxY) / 2);
+  });
+
+  it('leaves a single-screen room unaffected by the cap', () => {
+    // ROOM's own frame is already under one screen, so sizing off the room
+    // itself (the pre-#243 formula) and sizing off the cap agree exactly.
+    const placement = lampPlacement(ROOM);
+    expect(placement.width).toBeCloseTo((ROOM.maxX - ROOM.minX) * 1.3);
+    expect(placement.height).toBeCloseTo((ROOM.maxY - ROOM.minY) * 1.3);
   });
 });
 
@@ -60,5 +89,26 @@ describe('cloudPlacement', () => {
   it('sits vertically centred on the room throughout the crossing', () => {
     const placement = cloudPlacement(ROOM, 0.5);
     expect(placement.y).toBe((ROOM.minY + ROOM.maxY) / 2);
+  });
+
+  it('never grows past one screen, even in a multi-cell room (#243)', () => {
+    const placement = cloudPlacement(MULTI_CELL_ROOM, 0.5);
+    expect(placement.width).toBeLessThanOrEqual(INTERNAL_WIDTH / WORLD_ZOOM);
+    expect(placement.height).toBeLessThanOrEqual(INTERNAL_HEIGHT / WORLD_ZOOM);
+  });
+
+  it('still crosses the full span of a multi-cell room despite the capped size', () => {
+    const start = cloudPlacement(MULTI_CELL_ROOM, 0);
+    const end = cloudPlacement(MULTI_CELL_ROOM, 1);
+    expect(start.x + start.width / 2).toBeLessThanOrEqual(MULTI_CELL_ROOM.minX);
+    expect(end.x - end.width / 2).toBeGreaterThanOrEqual(MULTI_CELL_ROOM.maxX);
+  });
+
+  it('leaves a single-screen room unaffected by the cap', () => {
+    // ROOM's own span is already under one screen, so sizing off the room
+    // itself (the pre-#243 formula) and sizing off the cap agree exactly.
+    const placement = cloudPlacement(ROOM, 0.5);
+    expect(placement.width).toBeCloseTo((ROOM.maxX - ROOM.minX) * 0.85);
+    expect(placement.height).toBeCloseTo((ROOM.maxY - ROOM.minY) * 0.6);
   });
 });

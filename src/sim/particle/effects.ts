@@ -231,6 +231,36 @@ const BOMB_BLAST_TICKS = 16;
 const BOMB_BLAST_FLASH_SIZE = 5;
 const BOMB_BLAST_EMBERS_PER_TILE = 3;
 
+/**
+ * A point-in-space blast with no thrown or planted body of its own to draw —
+ * the Böllerschmeißer's lobbed bomb (#243, `detonateLobbedBomb` in
+ * `sim/systems/enemy.ts`) and the player's own item version of the same
+ * mechanic (`content/items/boellerschmeisser.ts`), both of which detonate
+ * through `GameSim.applySplashDamage` alone. Unlike a Bierfassl, there is no
+ * bomb entity sitting at the epicentre before it goes off, so nothing was
+ * ever drawn there — a player standing at the edge of the radius took damage
+ * with no visible source. A stationary flash at the epicentre plus a ring of
+ * embers thrown out to roughly `radius` over the ring's own lifetime, so the
+ * boom reads at the size it actually did damage over.
+ */
+export function splashBurst(sim: GameSim, x: number, y: number, radius: number): void {
+  sim.particles.spawn(x, y, 0, 0, SPLASH_BURST_TICKS, SPLASH_BURST_FLASH_SIZE, ParticleKind.Ember);
+  ring(
+    sim,
+    x,
+    y,
+    SPLASH_BURST_SPOKES,
+    ParticleKind.Ember,
+    radius / SPLASH_BURST_TICKS,
+    SPLASH_BURST_TICKS,
+    3,
+  );
+}
+
+const SPLASH_BURST_SPOKES = 12;
+const SPLASH_BURST_TICKS = 16;
+const SPLASH_BURST_FLASH_SIZE = 6;
+
 /** Something good was picked up. */
 export function pickupGlint(sim: GameSim, x: number, y: number): void {
   ring(sim, x, y, PICKUP_SPOKES, ParticleKind.Glint, PICKUP_SPEED, PICKUP_TICKS, 2);

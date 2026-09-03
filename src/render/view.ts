@@ -22,6 +22,7 @@ import {
 } from './room.js';
 import { createPropView } from './prop-view.js';
 import { MaibaumView } from './maibaum-view.js';
+import { BombFlightView } from './bomb-flight-view.js';
 import { CorpseView } from './corpse-view.js';
 import { INTERNAL_HEIGHT, INTERNAL_WIDTH, WORLD_ZOOM } from './resolution.js';
 import { ENTITY_PALETTE } from './palette.js';
@@ -196,6 +197,7 @@ export class GameView {
   private readonly corpseView: CorpseView;
   private readonly playerView: PlayerView;
   private readonly projectiles: ProjectileView;
+  private readonly bombFlightView: BombFlightView;
   private readonly entities: EntityView;
   private readonly pedestals: PedestalView;
   private readonly machine: MachineView;
@@ -360,6 +362,12 @@ export class GameView {
     );
     this.world.addChild(this.projectiles.container);
 
+    // A Böllerschmeißer's lobbed bomb (#243): drawn above bodies and shots
+    // alike, the same z-order a real projectile takes, since it is — for the
+    // second it is in the air — exactly that.
+    this.bombFlightView = new BombFlightView();
+    this.world.addChild(this.bombFlightView.container);
+
     this.particles = new ParticleView(sim.particles, textures.particleArt);
     this.world.addChild(this.particles.container);
 
@@ -522,6 +530,7 @@ export class GameView {
     this.machine.sync();
     this.corpseView.sync(this.sim);
     this.projectiles.sync(alpha, this.sim.currentFloor);
+    this.bombFlightView.sync(this.sim);
     this.particles.sync(alpha);
     this.damageNumbers.sync(alpha);
 
