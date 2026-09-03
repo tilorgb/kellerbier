@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ENEMY_DEFINITIONS } from '../../src/content/enemies/index.js';
 import { DOOR_DIRECTIONS, type DoorDirection } from '../../src/content/rooms/definition.js';
+import type { EnemyBehaviour, EnemyDefinition } from '../../src/sim/enemy/definition.js';
 import {
   DEFAULT_ROOM_GEN_TUNING,
   generateMultiCellRoom,
@@ -546,6 +547,89 @@ describe('procedural room generator (POC)', () => {
       );
       expect(compiled.doors).toHaveLength(1);
       expect(compiled.doors[0]?.direction).toBe(direction);
+    }
+  });
+
+  /**
+   * #230: a locked room (`GameSim.doorsLocked` — any room with a live enemy)
+   * whose whole roster stands still, bounces a fixed axis, or otherwise never
+   * closes distance on the player is not a fight. "Pursues" is derived from
+   * each enemy's own state machine — a `walkTowardPlayer`/`chargeAtPlayer`
+   * movement primitive in any state — rather than trusted from the
+   * generator's own roster tags, so a roster entry silently drifting out of
+   * sync with its enemy's real behaviour would fail this, not just a
+   * hand-review.
+   */
+  function hasPursuingState(definition: EnemyDefinition): boolean {
+    return definition.states.some((state) =>
+      state.behaviours.some(
+        (behaviour: EnemyBehaviour) =>
+          behaviour.behaviour === 'walkTowardPlayer' || behaviour.behaviour === 'chargeAtPlayer',
+      ),
+    );
+  }
+  const pursuingEnemyIds = new Set(
+    ENEMY_DEFINITIONS.filter(hasPursuingState).map((definition) => definition.id),
+  );
+
+  /** Live bodies a generated room actually spawns — `RoomSpawnGroup.count`, not one per `enemySpawns` entry (a `groupSize` roster entry spawns several from a single group). */
+  function bodyCount(template: {
+    enemySpawns: readonly { group: string }[];
+    spawnGroups: readonly { id: string; count: number }[];
+  }): number {
+    return template.enemySpawns.reduce((total, spawn) => {
+      const group = template.spawnGroups.find((candidate) => candidate.id === spawn.group);
+      return total + (group?.count ?? 1);
+    }, 0);
+  }
+
+  it('never locks a room on a roster with no pursuing enemy, and keeps single-enemy rooms rare', () => {
+    const meanEnemiesByFloor = new Map<number, number>();
+    for (const { floor, tag } of FLOORS) {
+      let rooms = 0;
+      let totalBodies = 0;
+      let singleEnemy = 0;
+      for (let seed = 0; seed < 300; seed++) {
+        const roomId = `pursuer-${String(seed)}`;
+        const template = generateRoom({
+          roomId,
+          floor,
+          floorTag: tag,
+          doors: ['north', 'south'],
+          distanceFromStart: seed % 7,
+          rng: new Rng(roomGenSeed(918273, floor, roomId, seed)),
+        });
+        rooms += 1;
+        const count = bodyCount(template);
+        totalBodies += count;
+        if (count === 1) {
+          singleEnemy += 1;
+        }
+        if (count === 0) {
+          continue; // an empty room never locks its doors — nothing to guarantee
+        }
+        const hasPursuer = template.enemySpawns.some((spawn) => {
+          const group = template.spawnGroups.find((candidate) => candidate.id === spawn.group);
+          return group?.choices.some((choice) => pursuingEnemyIds.has(choice.enemyId)) ?? false;
+        });
+        expect(
+          hasPursuer,
+          `floor ${String(floor)} seed ${String(seed)}: locked room's roster has no pursuing enemy`,
+        ).toBe(true);
+      }
+      const mean = totalBodies / rooms;
+      expect(mean, `floor ${String(floor)} mean enemies per room`).toBeGreaterThanOrEqual(4);
+      expect(singleEnemy / rooms, `floor ${String(floor)} single-enemy room rate`).toBeLessThan(
+        0.05,
+      );
+      meanEnemiesByFloor.set(floor, mean);
+    }
+    const floor1Mean = meanEnemiesByFloor.get(1);
+    const floor2Mean = meanEnemiesByFloor.get(2);
+    if (floor1Mean !== undefined && floor2Mean !== undefined) {
+      expect(floor2Mean, 'floor 2 mean enemies per room should rise over floor 1').toBeGreaterThan(
+        floor1Mean,
+      );
     }
   });
 });

@@ -100,6 +100,22 @@ interface RosterEntry {
   readonly weight: number;
   /** Rough threat cost spent from the budget when this body is placed. */
   readonly cost: number;
+  /**
+   * Does this body's own movement close distance on the player during normal
+   * play (a `walkTowardPlayer`/`chargeAtPlayer` state), as opposed to sitting
+   * still (`pause`), bouncing a fixed axis ignoring the player (`rollBounce`),
+   * or only ever firing from where it stands? #230: a locked room with no
+   * pursuer in its roster is target practice, not a fight — `placeEnemies`
+   * guarantees at least one whenever a room has enemies at all.
+   */
+  readonly pursues: boolean;
+  /**
+   * A cheap body priced and weighted for numbers, not for surviving alone —
+   * placed as a cluster of this many for one budget draw (#230's "a Bierratte
+   * at cost 1 and 1 HP is not an encounter at any count under about four").
+   * Omitted (or 1) places a single body as before.
+   */
+  readonly groupSize?: number;
 }
 
 /**
@@ -109,21 +125,21 @@ interface RosterEntry {
  */
 const ROSTERS: Readonly<Record<string, readonly RosterEntry[]>> = {
   cellar: [
-    { id: 'bierratte', weight: 3, cost: 1 },
-    { id: 'kellerassel', weight: 3, cost: 2 },
-    { id: 'zapfhahn', weight: 2, cost: 2 },
-    { id: 'schimmelfleck', weight: 2, cost: 3 },
-    { id: 'rollfass', weight: 1, cost: 3 },
+    { id: 'bierratte', weight: 3, cost: 1, pursues: true, groupSize: 3 },
+    { id: 'kellerassel', weight: 3, cost: 2, pursues: true },
+    { id: 'zapfhahn', weight: 2, cost: 2, pursues: false },
+    { id: 'schimmelfleck', weight: 2, cost: 3, pursues: false },
+    { id: 'rollfass', weight: 1, cost: 3, pursues: false },
   ],
   rural: [
-    { id: 'gockel', weight: 2, cost: 1 },
-    { id: 'bierratte', weight: 2, cost: 1 },
-    { id: 'bauer', weight: 3, cost: 2 },
-    { id: 'gartenzwerg', weight: 2, cost: 2 },
-    { id: 'kuh', weight: 2, cost: 3 },
-    { id: 'blaskapellist', weight: 1, cost: 3 },
-    { id: 'boellerschmeisser', weight: 1, cost: 3 },
-    { id: 'traktor', weight: 1, cost: 4 },
+    { id: 'gockel', weight: 2, cost: 1, pursues: true, groupSize: 3 },
+    { id: 'bierratte', weight: 2, cost: 1, pursues: true, groupSize: 3 },
+    { id: 'bauer', weight: 3, cost: 2, pursues: true },
+    { id: 'gartenzwerg', weight: 2, cost: 2, pursues: false },
+    { id: 'kuh', weight: 2, cost: 3, pursues: true },
+    { id: 'blaskapellist', weight: 1, cost: 3, pursues: false },
+    { id: 'boellerschmeisser', weight: 1, cost: 3, pursues: false },
+    { id: 'traktor', weight: 1, cost: 4, pursues: true },
   ],
 };
 
@@ -739,6 +755,56 @@ function openTiles(
 interface PlacedEnemy {
   readonly tile: PlacedTile;
   readonly enemyId: string;
+  readonly cost: number;
+  readonly pursues: boolean;
+  /** Bodies spawned together at `tile` from this one placement — see `RosterEntry.groupSize`. */
+  readonly groupSize: number;
+}
+
+/**
+ * #230: a locked room (`GameSim.doorsLocked` — any room with a live enemy)
+ * whose whole roster stands still or ignores the player is not a fight. If
+ * the budget draw above happened to land only on non-pursuing bodies, swap
+ * the cheapest one for the roster's cheapest pursuer — a static enemy is
+ * still a fine *addition* to a room that already has something chasing the
+ * player, just never the whole room. A room the draw left empty is not
+ * touched: it never locks its doors, so there is nothing to guarantee here.
+ */
+function ensurePursuerPresent(
+  ctx: RoomGenContext,
+  roster: readonly RosterEntry[],
+  placed: PlacedEnemy[],
+): void {
+  if (placed.length === 0 || placed.some((enemy) => enemy.pursues)) {
+    return;
+  }
+  const pursuers = roster.filter((entry) => entry.pursues);
+  if (pursuers.length === 0) {
+    warnOnce(
+      `no-pursuer:${ctx.floorTag}`,
+      `generate-room: floor tag "${ctx.floorTag}" has no pursuing roster entry — every locked room ` +
+        `stays passive. Add one to ROSTERS in sim/room/generate-room.ts.`,
+    );
+    return;
+  }
+  const pursuer = pursuers.reduce((min, entry) => (entry.cost < min.cost ? entry : min));
+  let cheapestIndex = 0;
+  for (let index = 1; index < placed.length; index++) {
+    if ((placed[index]?.cost ?? Infinity) < (placed[cheapestIndex]?.cost ?? Infinity)) {
+      cheapestIndex = index;
+    }
+  }
+  const target = placed[cheapestIndex];
+  if (target === undefined) {
+    return;
+  }
+  placed[cheapestIndex] = {
+    ...target,
+    enemyId: pursuer.id,
+    cost: pursuer.cost,
+    pursues: true,
+    groupSize: pursuer.groupSize ?? 1,
+  };
 }
 
 function placeEnemies(
@@ -767,8 +833,9 @@ function placeEnemies(
 
   const placed: PlacedEnemy[] = [];
   let spent = 0;
+  let bodyCount = 0;
   for (const tile of shuffled) {
-    if (placed.length >= maxEnemies || budget - spent < cheapest) {
+    if (bodyCount >= maxEnemies || budget - spent < cheapest) {
       break;
     }
     if (
@@ -785,9 +852,18 @@ function placeEnemies(
     const choice = ctx.rng.weightedPick(
       affordable.map((entry) => ({ value: entry, weight: entry.weight })),
     );
-    placed.push({ tile, enemyId: choice.id });
+    const groupSize = choice.groupSize ?? 1;
+    placed.push({
+      tile,
+      enemyId: choice.id,
+      cost: choice.cost,
+      pursues: choice.pursues,
+      groupSize,
+    });
     spent += choice.cost;
+    bodyCount += groupSize;
   }
+  ensurePursuerPresent(ctx, roster, placed);
   return placed;
 }
 
@@ -990,7 +1066,7 @@ function subLayoutFor(
     const groupId = `gen-${String(cell.col)}-${String(cell.row)}-${String(index)}`;
     spawnGroups.push({
       id: groupId,
-      count: 1,
+      count: enemy.groupSize,
       choices: [{ enemyId: enemy.enemyId, minFloor: 1, maxFloor: 7 }],
     });
     enemySpawns.push({ x: localX(enemy.tile.col), y: localY(enemy.tile.row), group: groupId });

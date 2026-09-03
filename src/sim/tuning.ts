@@ -1057,9 +1057,15 @@ export const DEFAULT_ROOM_GEN_TUNING: Readonly<RoomGenTuning> = {
   maxScatter: 10,
   maxCoverWalls: 3,
   layoutRetries: 40,
-  threatBase: 2,
-  threatPerDistance: 1.2,
-  threatPerFloor: 0.5,
+  // #230: 2 / 1.2 / 0.5 landed a locked room at ~2.3 bodies on average — "roughly
+  // half an encounter," and the 6-body ceiling below was never reached on Floor
+  // 1 at all. Four to six live bodies is the shape being aimed at now; a Bierratte/
+  // Gockel draw's own `groupSize` (ROSTERS in generate-room.ts) does some of that
+  // lifting for free, so this budget only needs to comfortably afford *two* draws
+  // at the distances an 8–12 room floor actually produces, not one big one.
+  threatBase: 3,
+  threatPerDistance: 1.5,
+  threatPerFloor: 1,
   maxEnemies: 6,
   pickupChance: 0.2,
   maxProps: 5,
