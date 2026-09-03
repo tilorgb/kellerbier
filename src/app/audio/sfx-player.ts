@@ -5,11 +5,12 @@ import {
   SFX_DEFINITIONS,
   type EnemySfxCategory,
 } from '../../content/audio/sfx.js';
-import { victoryTheme } from '../../content/audio/tracks.js';
+import { TRACK_DEFINITIONS, victoryTheme } from '../../content/audio/tracks.js';
 import type { BarkDefinition, InstrumentDefinition, SfxDefinition } from './types.js';
 import { duckMusic, getAudioContext, getBusGain } from './context.js';
 import { type VoiceHandle, playSfxSound, playTone } from './synth.js';
 import { playTrackOnce } from './music.js';
+import { peekSampleBuffer, playSampleBuffer, preloadSample } from './sample-player.js';
 import type { ImpactAudio } from './impact.js';
 
 const instrumentsById = new Map<string, InstrumentDefinition>(
@@ -58,6 +59,11 @@ const lastPlayedAtById = new Map<string, number>();
 const DEFAULT_VOICE_DURATION_SECONDS = 0.3;
 
 function estimatedDurationSeconds(def: SfxDefinition): number {
+  if (def.sample !== undefined) {
+    const { trimStartSeconds, trimEndSeconds } = def.sample.edit;
+    const sampleDuration = trimEndSeconds - trimStartSeconds;
+    return sampleDuration > 0 ? sampleDuration : DEFAULT_VOICE_DURATION_SECONDS;
+  }
   const noiseDuration = def.noise?.durationSeconds ?? 0;
   const toneDuration = def.tone?.durationSeconds ?? 0;
   const longest = Math.max(noiseDuration, toneDuration);
@@ -73,6 +79,29 @@ function pruneExpiredVoices(now: number): void {
 function stealOldestVoice(): void {
   const oldest = activeVoices.shift();
   oldest?.handle.stop();
+}
+
+/**
+ * Plays `def.sample` if one is set and has finished decoding; otherwise
+ * (no recording, or still decoding) falls back to the synthesised
+ * noise/tone layer `playSfxSound` always could — the "content gap degrades
+ * gracefully" shape `docs/DECISIONS.md` #19 already asks of room content,
+ * applied to a recording that hasn't loaded yet instead of a room that
+ * hasn't been authored yet.
+ */
+function playSfxOrFallback(
+  ctx: AudioContext,
+  destination: AudioNode,
+  def: SfxDefinition,
+): VoiceHandle {
+  if (def.sample !== undefined) {
+    preloadSample(ctx, def.sample.assetId);
+    const buffer = peekSampleBuffer(ctx, def.sample.assetId);
+    if (buffer !== null) {
+      return playSampleBuffer(ctx, destination, buffer, def.sample.edit, ctx.currentTime, false);
+    }
+  }
+  return playSfxSound(ctx, destination, def, instrumentsById);
 }
 
 /**
@@ -107,7 +136,7 @@ export function playSfx(id: string): void {
     stealOldestVoice();
   }
 
-  const handle = playSfxSound(ctx, destination, def, instrumentsById);
+  const handle = playSfxOrFallback(ctx, destination, def);
   activeVoices.push({ id, endsAt: now + estimatedDurationSeconds(def), handle });
 
   if (id.startsWith('pickup-')) {
@@ -143,6 +172,19 @@ export function playBark(id: string): void {
   const bark = barksById.get(id);
   if (ctx === null || destination === null || bark === undefined) {
     return;
+  }
+  if (bark.sample !== undefined) {
+    preloadSample(ctx, bark.sample.assetId);
+    const buffer = peekSampleBuffer(ctx, bark.sample.assetId);
+    if (buffer !== null) {
+      const { trimStartSeconds, trimEndSeconds } = bark.sample.edit;
+      const lineSeconds = Math.max(0, trimEndSeconds - trimStartSeconds);
+      duckMusic(BARK_DUCK_DEPTH, BARK_DUCK_ATTACK_SECONDS, lineSeconds, BARK_DUCK_RELEASE_SECONDS);
+      playSampleBuffer(ctx, destination, buffer, bark.sample.edit, ctx.currentTime, false);
+      return;
+    }
+    // Still decoding — falls through to the synthesised motif below, same
+    // as `playSfxOrFallback`.
   }
   const instrument = instrumentsById.get(bark.motif.instrument);
   if (instrument === undefined) {
@@ -180,6 +222,40 @@ function maybeBarkOnKill(): void {
   }
   lastBarkAtMs = now;
   playBark(id);
+}
+
+/**
+ * Kicks off decoding every recorded sample any track/SFX/bark currently
+ * references, once — `app/main.ts`'s boot sequence calls this right after
+ * `attachAudioUnlockListener`, the same "pay the cost off the hot path"
+ * reasoning `context.ts`'s `warmNoiseBuffer` call already follows. Without
+ * this, every sample-backed sound's *first* play would find its buffer
+ * still decoding and fall back to its synthesised placeholder for that one
+ * play — harmless (the same gap-degrades-gracefully fallback every other
+ * call site here already leans on) but avoidable, since decoding a few
+ * short recordings well ahead of the first note/hit/line costs nothing a
+ * player would notice.
+ */
+export function preloadContentAudioSamples(): void {
+  const ctx = getAudioContext();
+  if (ctx === null) {
+    return;
+  }
+  for (const track of TRACK_DEFINITIONS) {
+    if (track.sample !== undefined) {
+      preloadSample(ctx, track.sample.assetId);
+    }
+  }
+  for (const sfx of SFX_DEFINITIONS) {
+    if (sfx.sample !== undefined) {
+      preloadSample(ctx, sfx.sample.assetId);
+    }
+  }
+  for (const bark of BARK_DEFINITIONS) {
+    if (bark.sample !== undefined) {
+      preloadSample(ctx, bark.sample.assetId);
+    }
+  }
 }
 
 /** Plays the win fanfare once — `victory-screen.ts`'s call site, on `sim.playerWon`. */

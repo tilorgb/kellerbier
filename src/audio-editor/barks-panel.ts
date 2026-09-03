@@ -1,4 +1,5 @@
-import { fetchBarks, saveBark } from './api-client.js';
+import { fetchBarks, saveBark, saveBarkSample } from './api-client.js';
+import { createSampleEditorPanel } from './sample-editor-panel.js';
 import { getAudioContext, getMasterGain, resumeAudioContext } from '../app/audio/context.js';
 import { playTone } from '../app/audio/synth.js';
 import type { BarkDefinition, InstrumentDefinition } from '../app/audio/types.js';
@@ -102,6 +103,14 @@ export function createBarksPanel(
   status.className = 'kb-audio-status';
   root.appendChild(status);
 
+  const sampleEditor = createSampleEditorPanel(root, {
+    getCurrentSample: () => barksList.find((bark) => bark.id === idSelect.value)?.sample,
+    saveSample: async (sample) => {
+      await saveBarkSample(idSelect.value, sample);
+      barksList = await fetchBarks();
+    },
+  });
+
   function parseNotes(): string[] {
     return notesInput.value
       .split(',')
@@ -135,6 +144,7 @@ export function createBarksPanel(
     if (bark !== undefined) {
       loadIntoForm(bark);
     }
+    sampleEditor.refresh();
   });
 
   previewButton.addEventListener('click', () => {
@@ -198,6 +208,7 @@ export function createBarksPanel(
 
   return {
     destroy(): void {
+      sampleEditor.destroy();
       root.remove();
     },
   };
