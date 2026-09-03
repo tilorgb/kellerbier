@@ -6,6 +6,7 @@ import {
   INTERNAL_WIDTH,
   TILE_SPRITE_SCALE,
   WORLD_ZOOM,
+  computeGameLayout,
   computeViewport,
 } from '../../src/render/resolution.js';
 import { ROOM_TILE_UNITS } from '../../src/content/rooms/definition.js';
@@ -56,6 +57,50 @@ describe('computeViewport', () => {
 
   it('honours a caller-supplied internal resolution', () => {
     expect(computeViewport(800, 800, 100, 100).scale).toBe(8);
+  });
+
+  describe('forcedScale (#53)', () => {
+    it('pins the scale instead of computing the largest fit', () => {
+      // 1920x1080 would otherwise auto-fit to 3x.
+      const viewport = computeViewport(1920, 1080, INTERNAL_WIDTH, INTERNAL_HEIGHT, 2);
+      expect(viewport.scale).toBe(2);
+      expect(viewport.width).toBe(INTERNAL_WIDTH * 2);
+      expect(viewport.height).toBe(INTERNAL_HEIGHT * 2);
+    });
+
+    it('still floors to a whole number', () => {
+      expect(computeViewport(1920, 1080, INTERNAL_WIDTH, INTERNAL_HEIGHT, 2.9).scale).toBe(2);
+    });
+
+    it('still clamps to a minimum of 1x', () => {
+      expect(computeViewport(1920, 1080, INTERNAL_WIDTH, INTERNAL_HEIGHT, 0).scale).toBe(1);
+      expect(computeViewport(1920, 1080, INTERNAL_WIDTH, INTERNAL_HEIGHT, -3).scale).toBe(1);
+    });
+
+    it('allows a scale larger than the window fits, cropping rather than overriding it', () => {
+      const viewport = computeViewport(640, 360, INTERNAL_WIDTH, INTERNAL_HEIGHT, 4);
+      expect(viewport.scale).toBe(4);
+      expect(viewport.letterboxX).toBe(0);
+      expect(viewport.letterboxY).toBe(0);
+    });
+  });
+});
+
+describe('computeGameLayout forcedScale (#53)', () => {
+  it('produces the forced scale directly at pixel ratio 1', () => {
+    const layout = computeGameLayout(1920, 1080, 1, 2);
+    expect(layout.scale).toBe(2);
+  });
+
+  it('produces the same forced CSS-pixel scale at a fractional device pixel ratio', () => {
+    const layout = computeGameLayout(1920, 1080, 1.5, 2);
+    expect(layout.scale).toBeCloseTo(2, 10);
+  });
+
+  it('falls back to auto-fit when omitted', () => {
+    const auto = computeGameLayout(1920, 1080, 1);
+    const explicitAuto = computeGameLayout(1920, 1080, 1, undefined);
+    expect(auto).toEqual(explicitAuto);
   });
 });
 

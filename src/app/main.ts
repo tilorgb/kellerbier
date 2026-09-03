@@ -35,6 +35,8 @@ import { InputPlayback, InputRecording } from '../sim/input/recording.js';
 import { createRenderer, trackWindowSize } from '../render/app.js';
 import {
   createBlobTexture,
+  createDiamondMarkerTexture,
+  createDotMarkerTexture,
   createRingTexture,
   createSilhouetteTexture,
   createSolidTexture,
@@ -86,7 +88,12 @@ import { AmbienceTracker, SynthAmbienceAudio } from './audio/ambience.js';
 import { playImpactAudio } from './audio/impact.js';
 import { SYNTH_IMPACT_AUDIO, playSfx, playVictoryFanfare } from './audio/sfx-player.js';
 import { FootstepTracker } from './audio/footsteps.js';
-import { attachAudioUnlockListener, isMuted, toggleMute } from './audio/context.js';
+import {
+  applyMixerSettings,
+  attachAudioUnlockListener,
+  isMuted,
+  toggleMute,
+} from './audio/context.js';
 import { Bindable } from './input/bindings.js';
 import { actionPrompt, detectGlyphSet } from './input/glyphs.js';
 import { InputSampler } from './input/sampler.js';
@@ -95,7 +102,7 @@ import { FixedTimestepLoop, runAnimationFrameLoop } from './loop.js';
 import { RunSummaryTracker, buildRunDetailsText, runDetailsFrom } from './run-summary.js';
 import { buildReplayRecord, loadReplayFrames, saveReplay } from './replay/store.js';
 import { downloadReplayFile, parseReplayText } from './replay/file.js';
-import { createAccessibilityPanel } from './accessibility-panel.js';
+import { createSettingsScreen } from './settings-screen.js';
 import { createTouchControls, isTouchCapable } from './touch-controls.js';
 import { createEditorDock } from './editor-dock.js';
 import {
@@ -112,6 +119,7 @@ import {
   loadSettings,
   saveSettings,
 } from './settings.js';
+import { loadPreferences } from './preferences.js';
 import { ActiveRunRecorder, decodeActiveRunFrames, persistActiveRun } from './save/active-run.js';
 import type { CharacterTraits } from '../sim/character/definition.js';
 import { loadSave } from './save/storage.js';
@@ -185,6 +193,15 @@ const DEV_READOUT_SCALE = 2;
 
 /** Wrap width for the pedestal reveal's description, in UI pixels — a little under two-thirds of the frame. */
 const PEDESTAL_REVEAL_WRAP = 380;
+
+/**
+ * Generation radius for #53's colourblind-safe projectile marker
+ * (`createDotMarkerTexture`/`createDiamondMarkerTexture`). Generous, the
+ * same reasoning `createRingTexture`'s own doc comment gives for its own
+ * radius: `ProjectileView` scales the marker down to fit each shot rather
+ * than up, so a soft edge from upscaling never happens.
+ */
+const PROJECTILE_MARKER_RADIUS = 8;
 
 /** How far above a pedestal its name plate floats, in UI pixels. */
 const PEDESTAL_PLATE_LIFT = 18;
@@ -594,6 +611,14 @@ async function boot(): Promise<void> {
   // `GameSim`/replay state.
   const settings = loadSettings();
 
+  // #53's Video/Audio/Controls settings — the mixer volumes #157 built the
+  // bus graph for, the rebindable `Bindings` #5 built the capture flow for,
+  // the gamepad dead zone and aim assist. Same lifetime and mutate-in-place
+  // shape as `settings` above; the settings screen (below) holds the other
+  // end of it.
+  const preferences = loadPreferences();
+  applyMixerSettings(preferences.mixer);
+
   // The floors' real tile and character art (#35), and Alois's own (#151) —
   // see `assets/sprites/README.md`'s "nothing under here is loaded by the game
   // directly" for why these go through plain imports rather than the atlas the
@@ -958,7 +983,10 @@ async function boot(): Promise<void> {
    * offsets could not promise.
    */
   const layoutHud = (applied: GameLayout): void => {
-    const scale = uiScaleFor(applied);
+    // #53's text-scale setting: a whole-number multiplier on top of the
+    // window's own integer zoom, so a bigger UI is always the same crisp
+    // pixel font at a bigger whole size — see `uiScaleFor`'s own doc comment.
+    const scale = uiScaleFor(applied, settings.textScale);
     hudLayer.scale.set(scale);
     hudLayer.position.set(applied.originX, applied.originY);
     const width = Math.round((INTERNAL_WIDTH * applied.scale) / scale);
@@ -1198,7 +1226,10 @@ async function boot(): Promise<void> {
       deathPhaseTicks += 1;
       if (deathPhaseTicks >= tuning.deathSlowmoTicks) {
         deathPhase = 'over';
-        loop.timeScale = 1;
+        // Back to the player's own chosen speed (#53's slow-mode), not
+        // hardcoded full speed — the death slowmo is a narrative effect on
+        // top of whatever baseline they picked, not a reset of it.
+        loop.timeScale = settings.slowModeScale;
         const floorLabel = `${floorPlan.floorName}  room ${sim.roomId} (${planRoom(floorPlan, currentRoomId).role})`;
         if (sim.playerWon) {
           victoryScreen.show({
@@ -1308,15 +1339,37 @@ async function boot(): Promise<void> {
       });
   }
 
-  let layout = computeGameLayout(window.innerWidth, window.innerHeight, window.devicePixelRatio);
+  /** #53's Video-tab scale override as `computeGameLayout`'s `forcedScale` — `'auto'` means "no override". */
+  const forcedVideoScale = (): number | undefined =>
+    preferences.video.scale === 'auto' ? undefined : preferences.video.scale;
 
-  trackWindowSize(app, game, host, (applied) => {
-    layout = applied;
-    layoutHud(applied);
-    vignette.resize(applied);
-  });
+  let layout = computeGameLayout(
+    window.innerWidth,
+    window.innerHeight,
+    window.devicePixelRatio,
+    forcedVideoScale(),
+  );
+
+  const windowSizeTracker = trackWindowSize(
+    app,
+    game,
+    host,
+    (applied) => {
+      layout = applied;
+      layoutHud(applied);
+      vignette.resize(applied);
+    },
+    forcedVideoScale,
+  );
 
   const input = new InputSampler();
+  // #53's Controls tab: the persisted rebinding (#5's own capture engine),
+  // gamepad dead zone and aim assist, all read once here and then mutated in
+  // place by the settings screen the same way `settings`/`preferences`
+  // themselves are.
+  input.bindings = preferences.controls.bindings;
+  input.gamepad.deadZone = preferences.controls.gamepadDeadZone;
+  input.aimAssistEnabled = preferences.controls.aimAssist;
   input.keyboard.attach(window);
   input.gamepad.attach(window);
   // On-screen dual sticks, only where touch is the real input.
@@ -1366,7 +1419,7 @@ async function boot(): Promise<void> {
       const isBossRoom = planRoom(floorPlan, currentRoomId).role === 'boss';
       ambienceTracker.sync(sim, ambience, isBossRoom);
       ambience.sync(sim.tick, live);
-      ambience.syncPromilleTier(sim.promilleTier);
+      ambience.syncPromilleTier(sim.promilleTier, !settings.reduceAudioDistortion);
       footsteps.sync(sim, live);
       playRumble(sim, input.gamepad);
     }
@@ -1433,7 +1486,22 @@ async function boot(): Promise<void> {
             advanceOneTick(replay.playback.next(), false);
           }
         } else {
-          const frame = input.sample();
+          // #53's aim assist reads live enemy positions, so it only builds a
+          // query object when the toggle is actually on — everyone else
+          // pays nothing for a feature they didn't enable.
+          const frame = input.sample(
+            input.aimAssistEnabled
+              ? {
+                  playerX: sim.positionX(sim.playerIndex),
+                  playerY: sim.positionY(sim.playerIndex),
+                  visitEnemies: (visit) => {
+                    sim.world.forEach(sim.enemyMask, (index) => {
+                      visit(sim.positionX(index), sim.positionY(index));
+                    });
+                  },
+                }
+              : undefined,
+          );
           activeRunRecorder.record(frame);
           advanceOneTick(frame, true);
           autosaveActiveRun();
@@ -1656,7 +1724,7 @@ shots ${String(shots.liveCount)}/${String(shots.capacity)}  particles ${String(
     )}/${String(particles.capacity)}${shots.overflows > 0 ? '  SHOT OVERFLOW' : ''}
 save ${String(activeRunRecorder.frameCount)} ticks logged${wasResumed ? '  (resumed)' : ''}
 WASD move   arrows aim and fire
-  O debug   T tuning   I shot tags   Y accessibility   P pause   M ${isMuted() ? 'unmute' : 'mute'}   . step   [ ] time scale
+  O debug   T tuning   I shot tags   Y settings   P pause   M ${isMuted() ? 'unmute' : 'mute'}   . step   [ ] time scale
   N next room (after clear)   R restart (new seed)   C copy run   L load replay${overrideKeyHint}`;
   };
   /**
@@ -1769,15 +1837,25 @@ WASD move   arrows aim and fire
     wasResumed = false;
     viewTextures ??= {
       playerArt,
-      projectileArt: buildProjectileArt(
-        projectileArt,
-        createBlobTexture(
-          app.renderer,
-          sim.tuning.shooting.shotRadius,
-          PARTICLE_PALETTE.projectileFill,
-          PARTICLE_PALETTE.projectileRim,
+      projectileArt: {
+        ...buildProjectileArt(
+          projectileArt,
+          createBlobTexture(
+            app.renderer,
+            sim.tuning.shooting.shotRadius,
+            PARTICLE_PALETTE.projectileFill,
+            PARTICLE_PALETTE.projectileRim,
+          ),
         ),
-      ),
+        // #53's colourblind-safe marker pair (`docs/GAME_DESIGN.md` §12) —
+        // generated once here, same lifetime as every other texture in this
+        // block, and drawn only when the settings screen's toggle is on
+        // (`ProjectileView.setAccessibility`).
+        teamMarkers: {
+          player: createDotMarkerTexture(app.renderer, PROJECTILE_MARKER_RADIUS, 0xffffff),
+          enemy: createDiamondMarkerTexture(app.renderer, PROJECTILE_MARKER_RADIUS, 0xffffff),
+        },
+      },
       projectileArtNames: sim.enemies.projectileArtNames.map((name) => (name === '' ? null : name)),
       entity: createBlobTexture(
         app.renderer,
@@ -1876,7 +1954,11 @@ WASD move   arrows aim and fire
     gameOverScreen.hide();
     victoryScreen.hide();
     loop.reset();
-    loop.timeScale = 1;
+    // #53's slow-mode: a real-time speed multiplier, not a change to what a
+    // tick computes — see `AccessibilitySettings.slowModeScale`'s own doc
+    // comment. A fresh run starts at the player's chosen baseline, not
+    // always full speed.
+    loop.timeScale = settings.slowModeScale;
     loop.paused = false;
 
     // Before `layoutHud`, not after: the meter's row is gone in a sober run,
@@ -2031,7 +2113,7 @@ WASD move   arrows aim and fire
     };
     replayTo(seed, recording, 0, promilleUnlocked, character);
     loop.paused = false;
-    loop.timeScale = 1;
+    loop.timeScale = settings.slowModeScale;
     refreshHud();
   }
 
@@ -2868,9 +2950,34 @@ WASD move   arrows aim and fire
     view.setAccessibility(settings);
     vignette.setPulses(!settings.reduceFlashes);
     promilleHud.sync(sim, settings.neutralReskin);
+    // Text scale changes the HUD's own whole-number scale, which a settings
+    // change must re-apply immediately rather than waiting for the next
+    // window resize to happen to call `layoutHud` again.
+    layoutHud(layout);
+    // #53's slow-mode, applied live — but only during ordinary gameplay.
+    // The death sequence and a scrubbed/paused replay each own `timeScale`
+    // for the moment they are in (`advanceDeathSequence`'s narrative slowmo,
+    // `seekReplayTo`'s save/restore around a scrub); stepping on either here
+    // would fight the very code that just set it.
+    if (!loop.paused && replay === null && deathPhase === 'alive') {
+      loop.timeScale = settings.slowModeScale;
+    }
     refreshHud();
   };
   applyAccessibilityChange();
+
+  // Re-applies #53's Video/Audio/Controls preferences everywhere they have a
+  // live counterpart — the settings screen's own change path, the same
+  // shape as `applyAccessibilityChange` above. `preferences` is mutated in
+  // place by that screen, so this just re-reads it and pushes it back out.
+  const applyPreferencesChange = (): void => {
+    applyMixerSettings(preferences.mixer);
+    input.bindings = preferences.controls.bindings;
+    input.gamepad.deadZone = preferences.controls.gamepadDeadZone;
+    input.aimAssistEnabled = preferences.controls.aimAssist;
+    windowSizeTracker.relayout();
+  };
+  applyPreferencesChange();
 
   overlay = await mountDebugOverlay(sim, view, app, uiLayer, () => layout.scale);
   exposeDebugHandle(
@@ -2922,14 +3029,22 @@ WASD move   arrows aim and fire
     },
   );
   // Not gated behind `import.meta.env.DEV` like `mountDebugOverlay` above —
-  // this is the player-facing half of #33, so it has to ship in a production
-  // build. Moved to top-centre on touch: `touch-controls.ts` already claims
-  // all four corners (move/aim sticks bottom-left/right, map/pause
-  // top-left/right), so bottom-left — this panel's normal spot — would sit
-  // right under the move stick.
-  createAccessibilityPanel(settings, applyAccessibilityChange, {
-    placement: touchCapable ? 'top-center' : 'bottom-left',
-  });
+  // this is the player-facing half of #33/#53, so it has to ship in a
+  // production build. Moved to top-centre on touch: `touch-controls.ts`
+  // already claims all four corners (move/aim sticks bottom-left/right,
+  // map/pause top-left/right), so bottom-left — this panel's normal spot —
+  // would sit right under the move stick.
+  createSettingsScreen(
+    {
+      settings,
+      preferences,
+      gamepad: input.gamepad,
+      getActiveDevice: () => input.activeDevice,
+      onAccessibilityChange: applyAccessibilityChange,
+      onPreferencesChange: applyPreferencesChange,
+    },
+    { placement: touchCapable ? 'top-center' : 'bottom-left' },
+  );
 }
 
 /**

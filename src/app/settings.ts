@@ -1,24 +1,35 @@
 import type { GameSim } from '../sim/game/sim.js';
+import { loadSave, updateSave } from './save/storage.js';
 
 /**
- * Accessibility settings (#33): camera-sway intensity, no-drift mode, and the
- * neutral reskin. Deliberately not part of `GameSim`/`SimTuning` — see
- * `docs/DECISIONS.md`'s entry on this: a settings change is a rendering/input
- * concern, not simulation state, and must never need to be deterministic or
- * replayable the way `PromilleTuning.current`'s own doc comment carves out an
- * exception for. `GameSim.swayScale`/`driftScale`/`wobbleScale` are what
- * actually carry these values into the sim's per-tick math — this module only
- * owns the persisted source of truth and pushes it onto whichever `GameSim`
- * is live via `applySettingsToSim`.
+ * Accessibility settings: started with #33's camera-sway intensity, no-drift
+ * mode and neutral reskin; #53 (the full accessibility suite) adds
+ * screenshake intensity, the colourblind-safe palette, text scaling,
+ * slow-mode and the Promille audio-distortion toggle to the same file rather
+ * than a parallel one, since they share every mechanic below.
+ *
+ * Deliberately not part of `GameSim`/`SimTuning` — see `docs/DECISIONS.md`'s
+ * entry on this: a settings change is a rendering/input concern, not
+ * simulation state, and must never need to be deterministic or replayable
+ * the way `PromilleTuning.current`'s own doc comment carves out an exception
+ * for. `GameSim.swayScale`/`driftScale`/`wobbleScale`/`screenShakeScale` are
+ * what actually carry the sim-facing subset of these values into the sim's
+ * per-tick math — this module only owns the persisted source of truth and
+ * pushes it onto whichever `GameSim` is live via `applySettingsToSim`. The
+ * rest (colour, text size, real-time speed, audio) reach their own render/
+ * loop/audio call sites directly — see `applySettingsToSim`'s own doc
+ * comment for exactly which is which and why.
  *
  * Defaults are the full, unaccessibility-adjusted experience (issue #33's own
  * "Defaults are the full experience; these are opt-in") — a fresh install, or
- * a corrupted/missing `localStorage` entry, behaves exactly like the game did
- * before this file existed.
+ * a corrupted/missing save, behaves exactly like the game did before this
+ * file existed. Persisted through the unified save (#45) via
+ * `save/storage.ts`'s `loadSave`/`updateSave` — see `loadSettings`'s own doc
+ * comment for why this module no longer keeps its own storage key.
  */
 export interface AccessibilitySettings {
   /**
-   * 0 (silent) to 1 (full) — `app/accessibility-panel.ts`'s slider is 0-100%,
+   * 0 (silent) to 1 (full) — `app/settings-screen.ts`'s slider is 0-100%,
    * stored here as a fraction so it plugs straight into `GameSim.swayScale`.
    * 0 must produce a literally-zero camera offset, not merely a small one —
    * `GameSim.swayScale`'s own doc comment, and `promille.test.ts`, are what
@@ -70,6 +81,47 @@ export interface AccessibilitySettings {
    * flashing eight times a second is the thing worth being able to switch off.
    */
   reduceFlashes: boolean;
+  /**
+   * Screenshake intensity (#53), 0-1 — the settings screen's Video-tab
+   * sibling to `swayScale`. Plugs straight into `GameSim.screenShakeScale`,
+   * which existed since before this field did (`sim.ts`'s own default of 1)
+   * but had nothing driving it from a persisted setting until now.
+   */
+  screenshakeScale: number;
+  /**
+   * The colourblind-safe projectile palette (#53, `docs/GAME_DESIGN.md`
+   * §12): player and enemy shots read apart by shape and brightness rather
+   * than hue alone. Read directly by render call sites
+   * (`render/projectile-view.ts` and neighbours) rather than round-tripping
+   * through `GameSim` — a palette swap is exactly the kind of "how it looks,
+   * never what it does" concern `neutralReskin` above already keeps out of
+   * the simulation.
+   */
+  colorblindPalette: boolean;
+  /**
+   * Text scale multiplier (#53) for the pixel-font UI kit
+   * (`render/ui/text.ts`) — 1, 1.25 or 1.5. Kept as a plain multiplier
+   * rather than a named size so a HUD element can apply it without knowing
+   * the settings screen's own labels for it.
+   */
+  textScale: number;
+  /**
+   * Optional slow-mode (#53): a real-time speed multiplier applied to
+   * `FixedTimestepLoop.timeScale`'s baseline (`app/loop.ts`) — 1 is off.
+   * Every tick still runs the same simulation math at the same tick rate;
+   * only how many ticks happen per real second changes, which is what
+   * "without changing balance" means here — nothing about damage,
+   * cooldowns or drop rates reads real time anywhere in `sim/`.
+   */
+  slowModeScale: number;
+  /**
+   * Reduces the Promille meter's audio disorientation — the tempo drag,
+   * detune and lowpass `MusicPlayer.setPromilleTier` applies (#157) — while
+   * leaving the meter's gameplay effects and its HUD/visual language alone.
+   * See `ambience.ts`'s `syncPromilleTier` call site for where this reaches
+   * the audio layer.
+   */
+  reduceAudioDistortion: boolean;
 }
 
 export const DEFAULT_ACCESSIBILITY_SETTINGS: Readonly<AccessibilitySettings> = {
@@ -78,17 +130,25 @@ export const DEFAULT_ACCESSIBILITY_SETTINGS: Readonly<AccessibilitySettings> = {
   neutralReskin: false,
   reducedMotion: false,
   reduceFlashes: false,
+  screenshakeScale: 1,
+  colorblindPalette: false,
+  textScale: 1,
+  slowModeScale: 1,
+  reduceAudioDistortion: false,
 };
 
-/**
- * Versioned so a later, incompatible shape can migrate or discard an old
- * blob instead of crashing on it — same reasoning `docs/GAME_DESIGN.md` §11
- * gives for the (still-unbuilt) save-file key.
- */
-const STORAGE_KEY = 'kellerbier.settings.v1';
+/** The text scales the settings screen offers — anything else sanitises back to 1. */
+export const TEXT_SCALE_OPTIONS: readonly number[] = [1, 1.25, 1.5];
+
+/** The slow-mode speeds the settings screen offers — 1 is off. */
+export const SLOW_MODE_OPTIONS: readonly number[] = [1, 0.85, 0.7];
 
 function isUnitInterval(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1;
+}
+
+function isOneOf(value: unknown, options: readonly number[]): value is number {
+  return typeof value === 'number' && options.includes(value);
 }
 
 /**
@@ -124,38 +184,47 @@ export function sanitizeAccessibilitySettings(candidate: unknown): Accessibility
       typeof source.reduceFlashes === 'boolean'
         ? source.reduceFlashes
         : DEFAULT_ACCESSIBILITY_SETTINGS.reduceFlashes,
+    screenshakeScale: isUnitInterval(source.screenshakeScale)
+      ? source.screenshakeScale
+      : DEFAULT_ACCESSIBILITY_SETTINGS.screenshakeScale,
+    colorblindPalette:
+      typeof source.colorblindPalette === 'boolean'
+        ? source.colorblindPalette
+        : DEFAULT_ACCESSIBILITY_SETTINGS.colorblindPalette,
+    textScale: isOneOf(source.textScale, TEXT_SCALE_OPTIONS)
+      ? source.textScale
+      : DEFAULT_ACCESSIBILITY_SETTINGS.textScale,
+    slowModeScale: isOneOf(source.slowModeScale, SLOW_MODE_OPTIONS)
+      ? source.slowModeScale
+      : DEFAULT_ACCESSIBILITY_SETTINGS.slowModeScale,
+    reduceAudioDistortion:
+      typeof source.reduceAudioDistortion === 'boolean'
+        ? source.reduceAudioDistortion
+        : DEFAULT_ACCESSIBILITY_SETTINGS.reduceAudioDistortion,
   };
 }
 
 /**
- * Reads the persisted settings, falling back to defaults field-by-field
- * rather than all-or-nothing — see `sanitizeAccessibilitySettings`.
+ * Reads the persisted settings from the unified save (#45) — see
+ * `save/storage.ts#loadSave`'s own doc comment for the recovery order
+ * (corrupted primary -> backup -> a first-run adoption of the standalone
+ * key this module used to own -> defaults) and why it never throws.
  *
- * Never throws: a private window, disabled storage, or a headless/test
- * environment with no `localStorage` at all (this repo's own `vitest`
- * config runs in `environment: 'node'`) all fall through to the defaults.
+ * This module used to keep its own `localStorage` key entirely separate
+ * from the unified save, which was #53's own acceptance criterion to fix:
+ * "every setting survives a restart, through #45 rather than through its
+ * own storage." `loadSave` already handled adopting that legacy key into a
+ * fresh save on its first run (`storage.ts`'s `readLegacySettings`); this
+ * function just needed to start asking it instead of reading the old key
+ * directly.
  */
 export function loadSettings(): AccessibilitySettings {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw === null) {
-      return { ...DEFAULT_ACCESSIBILITY_SETTINGS };
-    }
-    const parsed: unknown = JSON.parse(raw);
-    return sanitizeAccessibilitySettings(parsed);
-  } catch {
-    return { ...DEFAULT_ACCESSIBILITY_SETTINGS };
-  }
+  return loadSave().settings;
 }
 
-/** Best-effort persistence — a write that fails (storage full, private mode) should not crash a settings change. */
+/** Persists `settings` into the unified save — best-effort, same as every other field `updateSave`/`writeSave` write. */
 export function saveSettings(settings: AccessibilitySettings): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-  } catch {
-    // Nothing to do: the setting still applies for the rest of this session,
-    // it just won't survive a reload.
-  }
+  updateSave((save) => ({ ...save, settings }));
 }
 
 /**
@@ -175,9 +244,20 @@ export function saveSettings(settings: AccessibilitySettings): void {
  * (`promilleTierDisplayName` and friends), never what the simulation does
  * with it, so render/debug call sites read `settings.neutralReskin` directly
  * instead of it round-tripping through the sim.
+ *
+ * #53's four new fields follow the same split, each for its own reason:
+ * `colorblindPalette` and `textScale` are draw-time concerns read directly by
+ * their render call sites, the same as `neutralReskin`. `slowModeScale`
+ * drives `FixedTimestepLoop.timeScale` (`app/loop.ts`), not `GameSim` — it
+ * changes how many real seconds a tick takes, never what a tick computes.
+ * `reduceAudioDistortion` reaches `app/audio/`'s `syncPromilleTier` call
+ * site, not the sim, for the identical reduced-motion reason: an accessible
+ * *presentation* of the Promille tier, with the tier's actual gameplay
+ * effects — and a replay recorded with it on — untouched either way.
  */
 export function applySettingsToSim(sim: GameSim, settings: AccessibilitySettings): void {
   sim.swayScale = settings.swayScale;
   sim.driftScale = settings.noDrift ? 0 : 1;
   sim.wobbleScale = settings.noDrift ? 0 : 1;
+  sim.screenShakeScale = settings.screenshakeScale;
 }

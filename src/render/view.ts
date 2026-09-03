@@ -111,6 +111,17 @@ export interface GameViewTextures {
   readonly enemyAnimation: Readonly<Record<string, AnimatedSpriteSet>>;
 }
 
+/**
+ * Everything `RenderView.setAccessibility` accepts: `ParticleAccessibility`'s
+ * two fields, plus #53's colourblind-safe projectile marker toggle
+ * (`ProjectileView.setAccessibility`'s own `ProjectileAccessibility`).
+ * Combined here rather than passed as two separate arguments so `main.ts`
+ * has one call site to make when any accessibility setting changes.
+ */
+export interface RenderAccessibility extends ParticleAccessibility {
+  readonly colorblindPalette: boolean;
+}
+
 /** What reduced motion multiplies screen shake by. A quarter still reads; nothing does not. */
 const REDUCED_MOTION_SHAKE = 0.25;
 
@@ -240,7 +251,11 @@ export class GameView {
    */
   private shakeScale = 1;
 
-  private accessibility: ParticleAccessibility = { reducedMotion: false, reduceFlashes: false };
+  private accessibility: RenderAccessibility = {
+    reducedMotion: false,
+    reduceFlashes: false,
+    colorblindPalette: false,
+  };
 
   /**
    * Frames left of the amber pulse the doors give when a room clears (#153).
@@ -361,12 +376,13 @@ export class GameView {
    * reduced-motion run steps identically to a full one, or a recorded replay
    * would not play back (`docs/DECISIONS.md` #41).
    */
-  setAccessibility(accessibility: ParticleAccessibility): void {
+  setAccessibility(accessibility: RenderAccessibility): void {
     this.accessibility = accessibility;
     this.particles.setAccessibility(accessibility);
     this.entities.setRingPulses(!accessibility.reduceFlashes);
     this.shakeScale = accessibility.reducedMotion ? REDUCED_MOTION_SHAKE : 1;
     this.ambientLight.setReducedMotion(accessibility.reducedMotion);
+    this.projectiles.setAccessibility({ colorblindPalette: accessibility.colorblindPalette });
   }
 
   /** The frame animator, for the debug overlay's clip panel. */

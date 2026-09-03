@@ -9,7 +9,7 @@ import { injectDevUiTokens } from '../dev-ui/tokens.js';
  * buttons cover clustered near the thumb that isn't busy aiming.
  *
  * Mounted only on a touch-capable device (`isTouchCapable` below) — a mouse
- * player never sees this, the same reasoning `accessibility-panel.ts` gives
+ * player never sees this, the same reasoning `settings-screen.ts` gives
  * for shipping in every build rather than behind dev tooling: this is
  * player-facing, not a debug tool, so it is not gated behind
  * `import.meta.env.DEV`.

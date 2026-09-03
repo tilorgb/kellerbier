@@ -9,6 +9,8 @@ import {
   findConflicts,
   listConflicts,
   removeBinding,
+  resetBindings,
+  sanitizeBindings,
 } from '../../src/app/input/bindings.js';
 import { BindingCapture } from '../../src/app/input/rebind.js';
 import { GamepadSource, type GamepadLike } from '../../src/app/input/gamepad.js';
@@ -277,5 +279,82 @@ describe('rebinding capture', () => {
     source.update();
     expect(capture.pollGamepad(source)?.input).toBe(GamepadButton.North);
     expect(bindings.gamepad.map).toEqual([GamepadButton.North]);
+  });
+});
+
+describe('sanitizeBindings (#53)', () => {
+  it('falls back to the full default layout for a non-object', () => {
+    expect(sanitizeBindings(null)).toEqual(createDefaultBindings());
+    expect(sanitizeBindings(undefined)).toEqual(createDefaultBindings());
+    expect(sanitizeBindings('nope')).toEqual(createDefaultBindings());
+  });
+
+  it('falls back to the full default layout for an empty object', () => {
+    expect(sanitizeBindings({})).toEqual(createDefaultBindings());
+  });
+
+  it('keeps a valid custom binding', () => {
+    const bindings = createDefaultBindings();
+    addBinding(bindings, 'fire', 'keyboard', 'KeyF');
+    expect(sanitizeBindings(bindings)).toEqual(bindings);
+  });
+
+  it('falls back only the one malformed action, action by action', () => {
+    const raw = {
+      keyboard: { ...createDefaultBindings().keyboard, fire: 'not-an-array' },
+      gamepad: createDefaultBindings().gamepad,
+    };
+    const sanitized = sanitizeBindings(raw);
+    expect(sanitized.keyboard.fire).toEqual(createDefaultBindings().keyboard.fire);
+    expect(sanitized.keyboard.bomb).toEqual(createDefaultBindings().keyboard.bomb);
+  });
+
+  it('drops a keyboard array containing a non-string entry entirely, falling back to default', () => {
+    const raw = {
+      keyboard: { ...createDefaultBindings().keyboard, fire: ['KeyF', 42] },
+      gamepad: createDefaultBindings().gamepad,
+    };
+    expect(sanitizeBindings(raw).keyboard.fire).toEqual(createDefaultBindings().keyboard.fire);
+  });
+
+  it('drops a gamepad array containing a negative or fractional entry, falling back to default', () => {
+    const raw = {
+      keyboard: createDefaultBindings().keyboard,
+      gamepad: { ...createDefaultBindings().gamepad, bomb: [-1] },
+    };
+    expect(sanitizeBindings(raw).gamepad.bomb).toEqual(createDefaultBindings().gamepad.bomb);
+    const rawFraction = {
+      keyboard: createDefaultBindings().keyboard,
+      gamepad: { ...createDefaultBindings().gamepad, bomb: [1.5] },
+    };
+    expect(sanitizeBindings(rawFraction).gamepad.bomb).toEqual(
+      createDefaultBindings().gamepad.bomb,
+    );
+  });
+});
+
+describe('resetBindings (#53)', () => {
+  it('overwrites a rebound layout back to the default, in place', () => {
+    const bindings = createDefaultBindings();
+    addBinding(bindings, 'fire', 'keyboard', 'KeyF');
+    clearBindings(bindings, 'bomb', 'keyboard');
+    resetBindings(bindings);
+    expect(bindings).toEqual(createDefaultBindings());
+  });
+
+  it('mutates the same object rather than replacing it', () => {
+    const bindings = createDefaultBindings();
+    const capture = new BindingCapture(bindings);
+    capture.begin('fire', 'keyboard');
+    capture.captureKey('KeyF');
+
+    resetBindings(bindings);
+
+    // The capture (and anything else holding `bindings`) still reads the
+    // reset values, since the object identity never changed.
+    capture.begin('bomb', 'keyboard');
+    capture.captureKey('KeyG');
+    expect(bindings.keyboard.bomb).toEqual(['KeyG']);
+    expect(bindings.keyboard.fire).toEqual(createDefaultBindings().keyboard.fire);
   });
 });

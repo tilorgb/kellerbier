@@ -124,7 +124,25 @@ const v3ToV4: SaveMigration = (raw) => {
  */
 const v4ToV5: SaveMigration = (raw) => ({ ...raw, schemaVersion: 5 });
 
-export const MIGRATIONS: readonly SaveMigration[] = [v0ToV1, v1ToV2, v2ToV3, v3ToV4, v4ToV5];
+/**
+ * v5 -> v6 (#53): `preferences` is new storage, not a reshape of anything v5
+ * already had — same reasoning `v2ToV3`'s own `replays` back-fill gives for
+ * starting empty rather than deriving a value from something older. A save
+ * from before rebinding, the mixer or a dead-zone setting existed has no
+ * opinion to carry forward; `sanitizeSave`'s own `sanitizePreferences` fills
+ * in `createDefaultPreferences()` for a missing field regardless, so this
+ * step exists to hold the version, the same as `v4ToV5`.
+ */
+const v5ToV6: SaveMigration = (raw) => ({ ...raw, schemaVersion: 6 });
+
+export const MIGRATIONS: readonly SaveMigration[] = [
+  v0ToV1,
+  v1ToV2,
+  v2ToV3,
+  v3ToV4,
+  v4ToV5,
+  v5ToV6,
+];
 
 function versionOf(raw: Record<string, unknown>): number {
   const version = raw.schemaVersion;

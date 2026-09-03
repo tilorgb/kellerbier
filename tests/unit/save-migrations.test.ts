@@ -6,6 +6,7 @@ import {
   type SaveMigration,
 } from '../../src/app/save/migrations.js';
 import { SAVE_SCHEMA_VERSION, sanitizeSave } from '../../src/app/save/schema.js';
+import { createDefaultPreferences } from '../../src/app/preferences.js';
 
 describe('save migration chain (#45)', () => {
   it('carries exactly one step per shipped schema version', () => {
@@ -98,6 +99,20 @@ describe('save migration chain (#45)', () => {
     expect(migrated.unlocks).toEqual(['promille']);
     expect(migrated.selectedCharacter).toBe('resi');
     expect(migrated).not.toHaveProperty('greetedRegulars');
+  });
+
+  it('back-fills a v5 save with default preferences (#53)', () => {
+    const v5 = {
+      schemaVersion: 5,
+      unlocks: ['promille'],
+      selectedCharacter: 'resi',
+    };
+    const migrated = sanitizeSave(migrateSave(v5));
+    expect(migrated.schemaVersion).toBe(SAVE_SCHEMA_VERSION);
+    expect(migrated.preferences).toEqual(createDefaultPreferences());
+    // Untouched by the new step.
+    expect(migrated.unlocks).toEqual(['promille']);
+    expect(migrated.selectedCharacter).toBe('resi');
   });
 
   it('migrates a v2 save with no run in progress without inventing one', () => {

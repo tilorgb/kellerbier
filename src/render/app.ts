@@ -71,8 +71,10 @@ export function applyGameLayout(
   windowWidth: number,
   windowHeight: number,
   pixelRatio = 1,
+  /** #53's Video-tab scale override — `undefined` is today's fit-to-window behaviour. */
+  forcedScale?: number,
 ): GameLayout {
-  const layout = computeGameLayout(windowWidth, windowHeight, pixelRatio);
+  const layout = computeGameLayout(windowWidth, windowHeight, pixelRatio, forcedScale);
   game.scale.set(layout.scale);
   game.position.set(layout.originX, layout.originY);
   return layout;
@@ -89,23 +91,44 @@ export function applyGameLayout(
  * `window`-only listener would never see since the window itself hasn't
  * resized.
  */
+export interface WindowSizeTracker {
+  /** Stops the `ResizeObserver`. */
+  dispose(): void;
+  /**
+   * Re-applies the layout against the host's *current* box without waiting
+   * for an actual resize — #53's Video-tab scale override changing is not a
+   * resize, so nothing would otherwise trigger the `ResizeObserver` below.
+   */
+  relayout(): void;
+}
+
 export function trackWindowSize(
   app: Application,
   game: Container,
   host: HTMLElement,
   onLayout: (layout: GameLayout) => void,
-): () => void {
+  /**
+   * Reads #53's Video-tab scale override live on every call rather than
+   * snapshotting it once — so a settings change, applied via `relayout()`
+   * above, actually picks up the new value, the same way
+   * `mountDebugOverlay`'s own `() => layout.scale` getter stays live.
+   */
+  getForcedScale?: () => number | undefined,
+): WindowSizeTracker {
   const onResize = (): void => {
     const { width, height } = hostBox(host);
     const ratio = window.devicePixelRatio || 1;
     app.renderer.resolution = ratio;
     app.renderer.resize(width, height);
-    onLayout(applyGameLayout(game, width, height, ratio));
+    onLayout(applyGameLayout(game, width, height, ratio, getForcedScale?.()));
   };
   onResize();
   const observer = new ResizeObserver(onResize);
   observer.observe(host);
-  return () => {
-    observer.disconnect();
+  return {
+    dispose: () => {
+      observer.disconnect();
+    },
+    relayout: onResize,
   };
 }

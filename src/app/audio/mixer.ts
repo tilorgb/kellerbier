@@ -11,12 +11,18 @@
 /** The buses a slider can move independently — `context.ts`'s bus graph. */
 export type AudioBus = 'music' | 'sfx' | 'voice';
 
+/**
+ * Plain mutable fields, not `readonly` — the settings screen mutates a live
+ * `Preferences.mixer` in place (`settings.ts`'s `AccessibilitySettings` sets
+ * the same precedent), the same object `app/main.ts` already holds and
+ * re-applies from on every change.
+ */
 export interface MixerSettings {
   /** 0 (silent) to 1 (full) — attenuates every bus below it, including the master mute. */
-  readonly master: number;
-  readonly music: number;
-  readonly sfx: number;
-  readonly voice: number;
+  master: number;
+  music: number;
+  sfx: number;
+  voice: number;
 }
 
 export const DEFAULT_MIXER_SETTINGS: Readonly<MixerSettings> = {
