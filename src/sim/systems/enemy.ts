@@ -851,3 +851,56 @@ export function enemyTelegraphProgress(sim: GameSim, index: number): number {
   }
   return clamp(ticks / total, 0, 1);
 }
+
+/** Reusable scratch struct for `lobbedBombFlight`, written in place so a render loop's per-frame call never allocates. */
+export interface LobbedBombFlight {
+  startX: number;
+  startY: number;
+  endX: number;
+  endY: number;
+  /** 0..1, the same fraction `enemyTelegraphProgress` computes for this state's own ring. */
+  progress: number;
+}
+
+/**
+ * The bomb a body is currently lobbing, if any (#243) — start (its own
+ * position, frozen for the whole state, since a `lobTarget`-capturing
+ * state's `movement` is always `pause`), end (the spot `lobTarget` stored
+ * into `enemyMotion`), and how far through the throw it is. The throw and
+ * the telegraph share one duration — both are the same state, read the same
+ * ticks-in-state counter — so this reuses `enemyTelegraphProgress` rather
+ * than tracking its own clock.
+ *
+ * Written into `out` and returns `true` only while the body's *current*
+ * state is the one that captured a `lobTarget` (`wind`, for the
+ * Böllerschmeißer) — `false`, `out` untouched, at every other tick of its
+ * life, `boom` included: the bomb has already landed once `detonateLobbedBomb`
+ * runs, so there is nothing left in flight to draw.
+ *
+ * @hot — one call per enemy per frame, from `BombFlightView.sync`.
+ */
+export function lobbedBombFlight(sim: GameSim, index: number, out: LobbedBombFlight): boolean {
+  if (((sim.world.masks[index] ?? 0) & sim.enemyMask) !== sim.enemyMask) {
+    return false;
+  }
+  const base = index * ENEMY_STRIDE;
+  const compiled = sim.enemies.at(sim.enemy.data[base] ?? 0);
+  const state = compiled.states[sim.enemy.data[base + 1] ?? 0];
+  if (state?.capturesLobTarget !== true) {
+    return false;
+  }
+  const progress = enemyTelegraphProgress(sim, index);
+  if (progress <= 0) {
+    return false;
+  }
+  const motion = sim.enemyMotion.data;
+  const motionBase = index * ENEMY_MOTION_STRIDE;
+  const startX = sim.positionX(index);
+  const startY = sim.positionY(index);
+  out.startX = startX;
+  out.startY = startY;
+  out.endX = motion[motionBase] ?? startX;
+  out.endY = motion[motionBase + 1] ?? startY;
+  out.progress = progress;
+  return true;
+}

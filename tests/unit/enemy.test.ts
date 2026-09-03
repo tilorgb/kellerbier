@@ -24,7 +24,9 @@ import {
   ENEMY_STRIDE,
   enemyTelegraphProgress,
   isEnemyInvulnerable,
+  lobbedBombFlight,
   stepEnemyDeaths,
+  type LobbedBombFlight,
 } from '../../src/sim/systems/enemy.js';
 import { applyDamageAt } from '../../src/sim/systems/impact.js';
 
@@ -716,7 +718,16 @@ describe('lobTarget / detonateLobbedBomb (#156)', () => {
       },
       {
         name: 'wind',
-        behaviours: [{ behaviour: 'pause' }, { behaviour: 'lobTarget' }],
+        // `telegraph` ticks match the `after` transition below exactly, the
+        // same convention the real `boellerschmeisser` content uses
+        // (`content/enemies/boellerschmeisser.ts`): the throw and the ring's
+        // own growth share one duration, which is what `lobbedBombFlight`
+        // (#243) relies on to time the bomb's flight off the same countdown.
+        behaviours: [
+          { behaviour: 'pause' },
+          { behaviour: 'telegraph', ticks: 10 },
+          { behaviour: 'lobTarget' },
+        ],
         transitions: [{ to: 'boom', after: 10 }],
       },
       {
@@ -805,6 +816,60 @@ describe('lobTarget / detonateLobbedBomb (#156)', () => {
       }
     }
     throw new Error('detonateLobbedBomb never drew a burst at the captured spot');
+  });
+
+  /**
+   * #243: neither the ring on the thrower nor the burst at the landing spot
+   * showed the throw itself — a hit read as the bomb spawning directly on
+   * the player. `lobbedBombFlight` is the data `render/bomb-flight-view.ts`
+   * draws a travelling keg from, over the same wind-up the ring already
+   * telegraphs.
+   */
+  describe('lobbedBombFlight (#243)', () => {
+    function freshFlight(): LobbedBombFlight {
+      return { startX: 0, startY: 0, endX: 0, endY: 0, progress: 0 };
+    }
+
+    it('reports no flight before or after the wind-up', () => {
+      const sim = emptySim({ enemies: [thrower] });
+      teleportPlayer(sim, 300, 90);
+      const enemy = place(sim, 'thrower', 100, 90);
+
+      expect(stateName(sim, enemy)).toBe('idle');
+      expect(lobbedBombFlight(sim, enemy, freshFlight())).toBe(false);
+
+      for (let tick = 0; tick < 12 && stateName(sim, enemy) !== 'boom'; tick++) {
+        sim.step(IDLE);
+      }
+      expect(stateName(sim, enemy)).toBe('boom');
+      expect(lobbedBombFlight(sim, enemy, freshFlight())).toBe(false);
+    });
+
+    it('flies from the thrower to the captured landing spot during the wind-up', () => {
+      const sim = emptySim({ enemies: [thrower] });
+      teleportPlayer(sim, 300, 90);
+      const enemy = place(sim, 'thrower', 100, 90);
+
+      for (let tick = 0; tick < 2 && stateName(sim, enemy) !== 'wind'; tick++) {
+        sim.step(IDLE);
+      }
+      expect(stateName(sim, enemy)).toBe('wind');
+
+      const flight = freshFlight();
+      expect(lobbedBombFlight(sim, enemy, flight)).toBe(true);
+      expect(flight.startX).toBeCloseTo(100);
+      expect(flight.startY).toBeCloseTo(90);
+      expect(flight.endX).toBeCloseTo(300);
+      expect(flight.endY).toBeCloseTo(90);
+      expect(flight.progress).toBeGreaterThan(0);
+
+      const firstProgress = flight.progress;
+      sim.step(IDLE);
+      expect(lobbedBombFlight(sim, enemy, flight)).toBe(true);
+      // Rides the same countdown the ring's own growth reads, so it always
+      // moves forward — never resets or reverses mid-throw.
+      expect(flight.progress).toBeGreaterThan(firstProgress);
+    });
   });
 });
 
