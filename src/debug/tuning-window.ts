@@ -146,6 +146,8 @@ const GROUPS: readonly GroupSpec[] = [
       { key: 'deathFreezeTicks', min: 0, max: 120, step: 5, hint: 'freeze on the fatal hit' },
       { key: 'deathSlowmoTicks', min: 0, max: 240, step: 5, hint: 'slow-motion beat length' },
       { key: 'deathSlowmoScale', min: 0, max: 1, step: 0.05, hint: 'how slow, 0 is stopped' },
+      { key: 'killFreezeTicks', min: 0, max: 12, step: 1, hint: 'freeze on an ordinary kill' },
+      { key: 'bossKillFreezeTicks', min: 0, max: 40, step: 1, hint: 'freeze on a boss kill' },
     ],
   },
   {

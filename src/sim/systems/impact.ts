@@ -2,6 +2,7 @@ import { EventKind } from '../events/queue.js';
 import type { GameSim } from '../game/sim.js';
 import { ParticleKind, type ParticleKindId } from '../particle/store.js';
 import { DEFAULT_DEATH_EFFECT, dragFor, spray } from '../particle/effects.js';
+import { EnemySize } from '../enemy/size.js';
 import { ENEMY_STRIDE, isEnemyInvulnerable, markEnemyHit } from './enemy.js';
 import { dispatchItemDamageTaken, dispatchItemHit, dispatchItemKill } from './items.js';
 import { addPush } from './movement.js';
@@ -353,6 +354,18 @@ export function applyDamageAt(
     events.push(EventKind.Death, target, cause, hitX, hitY, normalX, normalY, 0);
     dispatchItemKill(sim, target);
     sim.kill(target);
+    // A kill is rare where hits are not, which is exactly the case
+    // `requestHitstop`'s own doc comment still reserves the whole-simulation
+    // freeze for (#23 amended #6 to keep an ordinary hit's stagger local for
+    // that same reason). Boss kill gets closer to the player's own death
+    // beat — the one enemy in the room worth a health bar earns something
+    // closer to what losing the run does. Requesting it here, alongside the
+    // kill's own flash/shake/particle numbers, is what makes "four kills on
+    // one tick, one freeze" fall out of `requestHitstop`'s existing
+    // longest-wins rule for free, with no extra guard needed.
+    sim.requestHitstop(
+      isBossKill(sim, target) ? tuning.bossKillFreezeTicks : tuning.killFreezeTicks,
+    );
   } else if (isPlayer && sim.playerDead) {
     events.push(EventKind.Death, target, cause, hitX, hitY, normalX, normalY, 0);
   }
@@ -381,6 +394,19 @@ function deathEffectOf(sim: GameSim, target: number): ParticleKindId {
     return DEFAULT_DEATH_EFFECT;
   }
   return sim.enemies.at(sim.enemy.data[target * ENEMY_STRIDE] ?? 0).deathEffect;
+}
+
+/**
+ * Whether `target` is an authored boss — same mask check as `deathEffectOf`,
+ * read before `sim.kill` (called just above this in `applyDamageAt`) queues
+ * the slot's death; the mask itself survives until `world.flush()` at the
+ * end of the tick, so reading it after `kill` here is still safe.
+ */
+function isBossKill(sim: GameSim, target: number): boolean {
+  if (((sim.world.masks[target] ?? 0) & sim.enemyMask) !== sim.enemyMask) {
+    return false;
+  }
+  return sim.enemies.at(sim.enemy.data[target * ENEMY_STRIDE] ?? 0).size === EnemySize.Boss;
 }
 
 function deflect(sim: GameSim, x: number, y: number, normalX: number, normalY: number): void {

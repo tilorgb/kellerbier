@@ -275,6 +275,23 @@ export interface ImpactTuning {
   deathSlowmoTicks: number;
   /** `loop.timeScale` during the slow-motion beat. 1 is normal speed, 0 is stopped. */
   deathSlowmoScale: number;
+
+  /**
+   * The freeze on an ordinary kill, in ticks. The same `requestHitstop`
+   * mechanism as `deathFreezeTicks`, not the local `hitstun` a hit that
+   * doesn't kill gets (see `impact.ts`'s own doc comment for why an ordinary
+   * *hit* stays local while a *kill* is rare enough to afford a real,
+   * whole-simulation beat). `requestHitstop`'s "longest request wins" rule is
+   * the entire guard against several kills on one tick stacking into several
+   * freezes — four enemies dying on the same tick still produce one.
+   */
+  killFreezeTicks: number;
+  /**
+   * The freeze on a boss kill, in ticks — longer than `killFreezeTicks`,
+   * closer to `deathFreezeTicks`. Killing the one enemy in the room worth a
+   * health bar earns closer to the same beat that losing the run does.
+   */
+  bossKillFreezeTicks: number;
 }
 
 /**
@@ -865,6 +882,9 @@ export const DEFAULT_IMPACT_TUNING: Readonly<ImpactTuning> = {
   deathFreezeTicks: 20,
   deathSlowmoTicks: 30,
   deathSlowmoScale: 0.4,
+
+  killFreezeTicks: 3,
+  bossKillFreezeTicks: 16,
 };
 
 export const DEFAULT_ENEMY_TUNING: Readonly<EnemyTuning> = {

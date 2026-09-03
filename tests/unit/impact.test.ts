@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { entityIndex } from '../../src/sim/ecs/entity.js';
+import { EnemySize } from '../../src/sim/enemy/size.js';
 import { EventKind } from '../../src/sim/events/queue.js';
 import { ParticleKind } from '../../src/sim/particle/store.js';
 import { GameSim, TARGET_HEALTH, TARGET_RESPAWN_TICKS } from '../../src/sim/game/sim.js';
@@ -10,6 +12,7 @@ import {
   setActionDown,
 } from '../../src/sim/input/frame.js';
 import { DEFAULT_IMPACT_TUNING } from '../../src/sim/tuning.js';
+import { applyDamageAt } from '../../src/sim/systems/impact.js';
 
 const IDLE = createInputFrame();
 
@@ -318,5 +321,59 @@ describe('death', () => {
       sim.step(IDLE);
     }
     expect(sim.world.count).toBe(afterDeath + 1);
+  });
+});
+
+describe('kill hitstop (#235)', () => {
+  it('freezes the simulation briefly on an ordinary kill', () => {
+    const sim = new GameSim();
+    expect(sim.frozen).toBe(false);
+    sim.tuning.shooting.shotDamage = TARGET_HEALTH;
+    landOneShot(sim);
+    expect(sim.hitstop).toBe(DEFAULT_IMPACT_TUNING.killFreezeTicks);
+    expect(sim.frozen).toBe(true);
+  });
+
+  it('freezes longer on a boss kill than on an ordinary one', () => {
+    const sim = new GameSim();
+    const boss = entityIndex(
+      sim.spawnEnemyKind(sim.enemies.indexOf('grosse-kellerassel'), 250, 90),
+    );
+    sim.world.flush();
+    const bossHealth = sim.health.data[boss * 2] ?? 0;
+
+    applyDamageAt(sim, boss, bossHealth, 250, 90, 0, 0, -1);
+
+    expect(sim.hitstop).toBe(DEFAULT_IMPACT_TUNING.bossKillFreezeTicks);
+    expect(DEFAULT_IMPACT_TUNING.bossKillFreezeTicks).toBeGreaterThan(
+      DEFAULT_IMPACT_TUNING.killFreezeTicks,
+    );
+  });
+
+  it('caps four simultaneous kills at one freeze, not four', () => {
+    const sim = new GameSim();
+    const indices: number[] = [];
+    for (let i = 0; i < 4; i++) {
+      indices.push(entityIndex(sim.spawnEnemy(100 + i * 20, 100, EnemySize.Mini)));
+    }
+    sim.world.flush();
+    expect(sim.hitstop).toBe(0);
+
+    for (const index of indices) {
+      applyDamageAt(sim, index, sim.health.data[index * 2] ?? 0, 100, 100, 0, 0, -1);
+    }
+
+    expect(sim.hitstop).toBe(DEFAULT_IMPACT_TUNING.killFreezeTicks);
+  });
+
+  it('has an accessibility scale that reaches actual zero', () => {
+    const sim = new GameSim();
+    sim.tuning.shooting.shotDamage = TARGET_HEALTH;
+    sim.hitstopScale = 0;
+
+    landOneShot(sim);
+
+    expect(sim.hitstop).toBe(0);
+    expect(sim.frozen).toBe(false);
   });
 });

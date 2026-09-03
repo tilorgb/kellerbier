@@ -849,6 +849,19 @@ export class GameSim {
   wobbleScale = 1;
 
   /**
+   * Accessibility scale on hitstop, 0 to 1.
+   *
+   * Same precedent as `screenShakeScale`, applied in `requestHitstop` itself
+   * rather than at a getter: unlike shake (a camera offset read every frame)
+   * a freeze's whole effect *is* how many ticks it holds `step()` for, so the
+   * scale has to reach the ticks a request actually asks for, not just how
+   * the result is drawn. Reaches zero, and zero means no freeze at all — a
+   * kill and a boss kill still hit their flash/shake/particle beats exactly
+   * as before, just without the whole-simulation pause on top of them.
+   */
+  hitstopScale = 1;
+
+  /**
    * Ticks left of the Umgfalln knockdown — set by `addPromille` when a raise
    * crosses the top tier. Movement and firing both check this directly rather
    * than going through a generic "stunned" flag, since nothing else stuns the
@@ -4379,14 +4392,18 @@ export class GameSim {
   }
 
   /**
-   * Freezes the simulation for up to `ticks`.
+   * Freezes the simulation for up to `ticks`, before `hitstopScale`.
    *
    * The longest request wins rather than the sum: two enemies dying on the same
-   * tick should feel like one big hit, not like the game stalling twice.
+   * tick should feel like one big hit, not like the game stalling twice — and
+   * comparing the two *scaled* ticks (rather than scaling once at the end)
+   * keeps that true regardless of `hitstopScale`, the same way it was already
+   * true before this scale existed.
    */
   requestHitstop(ticks: number): void {
-    if (ticks > this.hitstopTicks) {
-      this.hitstopTicks = ticks;
+    const scaled = Math.round(ticks * this.hitstopScale);
+    if (scaled > this.hitstopTicks) {
+      this.hitstopTicks = scaled;
     }
   }
 
