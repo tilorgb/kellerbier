@@ -1,6 +1,7 @@
 import { Container, Sprite, Texture } from 'pixi.js';
 import type { RoomRect } from '../sim/room/geometry.js';
 import { TICKS_PER_SECOND } from '../sim/time.js';
+import { INTERNAL_HEIGHT, INTERNAL_WIDTH, WORLD_ZOOM } from './resolution.js';
 
 /**
  * Ambient per-floor lighting, world-space so it pans and shakes with the room
@@ -88,6 +89,25 @@ const CLOUD_MAX_ALPHA = 0.4;
 /** How wide/tall the shadow patch is relative to the room, less than `1` so it reads as a discrete cloud rather than the whole sky dimming at once. */
 const CLOUD_WIDTH_FRACTION = 0.85;
 const CLOUD_HEIGHT_FRACTION = 0.6;
+/**
+ * The room span `cloudPlacement` sizes the cloud against never exceeds one
+ * screen's worth of world units — the same `viewWidth`/`viewHeight`
+ * `GameView.followOffset` computes the camera's pan range from (#243). A
+ * `1x1` room's own span already sits under this, so the clamp is a no-op
+ * there and nothing about Floor 1/2's original single-screen rooms changes;
+ * a `2x2`/`L`/`T` room (`sim/room/geometry.ts`'s `voidRects`) is wider and/or
+ * taller than one screen, and sizing the cloud off its full span there
+ * produced a shadow several screens wide — soft-edged in its own texture,
+ * but the blur is a fixed fraction of the *texture*, so stretched that far
+ * it reads as a hard-edged "shadowy box" that only ever shows part of
+ * itself, and the camera panning with the player made that visible slice
+ * look like it was tracking them from off-screen. Capping the cloud's own
+ * size to a screen keeps it reading as a discrete cloud drifting across the
+ * room regardless of how many screens the room spans; `travel` below still
+ * uses the room's own full width, so it still crosses the whole thing.
+ */
+const CLOUD_MAX_WIDTH = INTERNAL_WIDTH / WORLD_ZOOM;
+const CLOUD_MAX_HEIGHT = INTERNAL_HEIGHT / WORLD_ZOOM;
 /** How often a cloud starts crossing. Long enough that "occasional" is the honest word for it. */
 const CLOUD_CYCLE_TICKS = TICKS_PER_SECOND * 50;
 /** How long one crossing takes, start to finish — a slow drift, not a blink. */
@@ -295,9 +315,11 @@ export function cloudShadowState(tick: number): CloudShadowState {
 
 /** Where and how big the cloud shadow sits at a given point in its crossing — drifting west to east, fully off-room at both ends. */
 export function cloudPlacement(room: RoomRect, progress: number): Placement {
-  const width = (room.maxX - room.minX) * CLOUD_WIDTH_FRACTION;
-  const height = (room.maxY - room.minY) * CLOUD_HEIGHT_FRACTION;
-  const travel = room.maxX - room.minX + width;
+  const roomWidth = room.maxX - room.minX;
+  const roomHeight = room.maxY - room.minY;
+  const width = Math.min(roomWidth, CLOUD_MAX_WIDTH) * CLOUD_WIDTH_FRACTION;
+  const height = Math.min(roomHeight, CLOUD_MAX_HEIGHT) * CLOUD_HEIGHT_FRACTION;
+  const travel = roomWidth + width;
   return {
     x: room.minX - width / 2 + travel * progress,
     y: roomCentre(room).y,

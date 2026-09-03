@@ -84,7 +84,7 @@ import { EventQueue } from '../events/queue.js';
 import { DamageNumberStore } from '../particle/damage-numbers.js';
 import { DecalStore } from '../particle/decals.js';
 import { ParticleStore } from '../particle/store.js';
-import { doorPuff, roomClearRing } from '../particle/effects.js';
+import { doorPuff, roomClearRing, splashBurst } from '../particle/effects.js';
 import { ProjectileStore, ProjectileTeam } from '../projectile/store.js';
 import { finalizeProjectileTags } from '../projectile/behavior.js';
 import {
@@ -3640,6 +3640,21 @@ export class GameSim {
       const normalY = distance > 0 ? dy / distance : -1;
       applyDamageAt(this, index, damage, otherX, otherY, normalX, normalY, excludeIndex);
     });
+  }
+
+  /**
+   * The burst `applySplashDamage` never draws on its own (#243) — most of
+   * its callers already have their own visible cause (a melee swing, a
+   * thrown item's own sprite landing) and would double up on an automatic
+   * one, so this stays a separate, opt-in call rather than folded into
+   * `applySplashDamage` itself. For a detonation with no thrown or planted
+   * body of its own to draw — the Böllerschmeißer's lobbed bomb
+   * (`sim/systems/enemy.ts`'s `detonateLobbedBomb`) and the player's own
+   * item version of the same mechanic (`content/items/boellerschmeisser.ts`)
+   * — the damage was the only thing visible at all.
+   */
+  splashBurst(x: number, y: number, radius: number): void {
+    splashBurst(this, x, y, radius);
   }
 
   /**

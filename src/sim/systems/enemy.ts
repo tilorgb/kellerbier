@@ -548,6 +548,11 @@ function detonateLobbedBomb(sim: GameSim, index: number, detonation: CompiledDet
   const x = motion[motionBase] ?? sim.positionX(index);
   const y = motion[motionBase + 1] ?? sim.positionY(index);
   sim.applySplashDamage(x, y, detonation.radius, detonation.damage, index);
+  // #243: `applySplashDamage` alone leaves the blast itself invisible — a
+  // real hit already flashes on whatever it caught, but there was nothing at
+  // the landing spot for a player who dodged, or who was hit from off to one
+  // side, to actually see.
+  sim.splashBurst(x, y, detonation.radius);
 }
 
 /**
