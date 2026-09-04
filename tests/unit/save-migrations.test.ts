@@ -115,6 +115,20 @@ describe('save migration chain (#45)', () => {
     expect(migrated.selectedCharacter).toBe('resi');
   });
 
+  it('back-fills a v6 save opted out of telemetry, with no session id (#54, #159)', () => {
+    const v6 = {
+      schemaVersion: 6,
+      unlocks: ['promille'],
+      selectedCharacter: 'resi',
+    };
+    const migrated = sanitizeSave(migrateSave(v6));
+    expect(migrated.schemaVersion).toBe(SAVE_SCHEMA_VERSION);
+    expect(migrated.telemetry).toEqual({ optedIn: false, sessionId: null, runs: [] });
+    // Untouched by the new step.
+    expect(migrated.unlocks).toEqual(['promille']);
+    expect(migrated.selectedCharacter).toBe('resi');
+  });
+
   it('migrates a v2 save with no run in progress without inventing one', () => {
     const migrated = sanitizeSave(migrateSave({ schemaVersion: 2, activeRun: null }));
     expect(migrated.activeRun).toBeNull();

@@ -16,6 +16,7 @@ import { bindingLabels, detectGlyphSet } from './input/glyphs.js';
 import { BindingCapture } from './input/rebind.js';
 import type { GamepadSource } from './input/gamepad.js';
 import type { ActiveDevice } from './input/sampler.js';
+import type { TelemetryStore } from './telemetry/schema.js';
 
 /**
  * The settings screen (#53): Video, Audio, Controls and Accessibility, in
@@ -107,6 +108,11 @@ const STYLE = `
 .kb-bind-table th { text-align: left; color: var(--kb-color-text-dim); font-weight: normal; padding-bottom: 4px; }
 .kb-bind-table td { padding: 2px 4px 2px 0; vertical-align: middle; }
 .kb-bind-table td.kb-bind-cell { width: 40%; }
+
+.kb-privacy-copy { color: var(--kb-color-text-dim); margin: 0 0 10px; }
+.kb-privacy-session { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; }
+.kb-privacy-session code { color: var(--kb-color-accent); font: inherit; }
+.kb-privacy-buttons { display: flex; gap: 8px; }
 `;
 
 /** Human-readable action names, in the order the rebind table lists them. */
@@ -145,6 +151,22 @@ export interface SettingsScreenDeps {
   readonly onAccessibilityChange: () => void;
   /** Called after any `preferences` field changes — `app/main.ts`'s `applyPreferencesChange`. */
   readonly onPreferencesChange: () => void;
+  /**
+   * The Privacy tab (#54, #159's playtest telemetry). Reads and writes go
+   * through `app/telemetry/store.ts` rather than a mutable object this
+   * screen owns directly, unlike `settings`/`preferences` above — consent
+   * has to be a deliberate, persisted act the moment it is given
+   * (`optIntoTelemetry` mints a fresh session id), not a value that could
+   * already be sitting `true` in an in-memory object before the player ever
+   * saw the checkbox.
+   */
+  readonly telemetry: {
+    readonly get: () => TelemetryStore;
+    readonly optIn: () => void;
+    readonly optOut: () => void;
+    readonly export: () => void;
+    readonly clear: () => void;
+  };
 }
 
 function saveAndApplySettings(deps: SettingsScreenDeps): void {
@@ -652,14 +674,96 @@ function buildAccessibilitySection(deps: SettingsScreenDeps): HTMLElement {
   return section;
 }
 
+/**
+ * The Privacy tab (#54, #159): opt-in playtest telemetry, in plain language,
+ * at the point of consent — #54's own acceptance criterion. No slider or
+ * select here, unlike every other tab: the whole tab is one decision (on or
+ * off) plus what to do with what has already been collected.
+ */
+function buildPrivacySection(deps: SettingsScreenDeps): HTMLElement {
+  const section = document.createElement('div');
+  section.className = 'kb-settings-section';
+
+  const copy = document.createElement('p');
+  copy.className = 'kb-privacy-copy';
+  copy.textContent =
+    'Playtest telemetry is off by default. Turning it on records, on this device only, ' +
+    'how each run ends (won or died, on which floor), how long each room took to clear, ' +
+    'which items were held, and how much time was spent at each Promille tier. Nothing ' +
+    'else — no name, no account, no location, no way to identify who played. A run is ' +
+    'kept here until you export it as a file yourself; nothing is ever sent anywhere ' +
+    'automatically.';
+
+  const sessionRow = document.createElement('div');
+  sessionRow.className = 'kb-privacy-session';
+  const sessionLabel = document.createElement('span');
+  sessionLabel.className = 'kb-name';
+  const sessionValue = document.createElement('code');
+
+  const runCount = document.createElement('p');
+  runCount.className = 'kb-privacy-copy';
+
+  const exportButton = document.createElement('button');
+  exportButton.type = 'button';
+  exportButton.className = 'kb-btn';
+  exportButton.textContent = 'Export as file';
+  exportButton.addEventListener('click', () => {
+    deps.telemetry.export();
+  });
+
+  const clearButton = document.createElement('button');
+  clearButton.type = 'button';
+  clearButton.className = 'kb-btn';
+  clearButton.textContent = 'Clear';
+  clearButton.addEventListener('click', () => {
+    deps.telemetry.clear();
+    refresh();
+  });
+
+  const buttons = document.createElement('div');
+  buttons.className = 'kb-privacy-buttons';
+  buttons.append(exportButton, clearButton);
+
+  const refresh = (): void => {
+    const store = deps.telemetry.get();
+    sessionLabel.textContent = store.sessionId === null ? '' : 'Session';
+    sessionValue.textContent = store.sessionId ?? '';
+    sessionRow.hidden = store.sessionId === null;
+    runCount.textContent = store.optedIn
+      ? `${String(store.runs.length)} run${store.runs.length === 1 ? '' : 's'} recorded, waiting to be exported.`
+      : '';
+    exportButton.hidden = store.runs.length === 0;
+    clearButton.hidden = store.runs.length === 0;
+  };
+
+  const toggle = makeCheckbox(
+    'Share anonymous playtest telemetry',
+    () => deps.telemetry.get().optedIn,
+    (value) => {
+      if (value) {
+        deps.telemetry.optIn();
+      } else {
+        deps.telemetry.optOut();
+      }
+      refresh();
+    },
+  );
+
+  sessionRow.append(sessionLabel, sessionValue);
+  section.append(copy, toggle.el, sessionRow, runCount, buttons);
+  refresh();
+  return section;
+}
+
 const TABS: readonly {
-  readonly id: 'video' | 'audio' | 'controls' | 'accessibility';
+  readonly id: 'video' | 'audio' | 'controls' | 'accessibility' | 'privacy';
   readonly label: string;
 }[] = [
   { id: 'video', label: 'Video' },
   { id: 'audio', label: 'Audio' },
   { id: 'controls', label: 'Controls' },
   { id: 'accessibility', label: 'Accessibility' },
+  { id: 'privacy', label: 'Privacy' },
 ];
 
 /**
@@ -713,6 +817,7 @@ export function createSettingsScreen(
     audio: buildAudioSection(deps),
     controls: buildControlsSection(deps),
     accessibility: buildAccessibilitySection(deps),
+    privacy: buildPrivacySection(deps),
   };
   for (const tab of TABS) {
     sections[tab.id].hidden = true;

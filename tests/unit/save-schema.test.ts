@@ -92,6 +92,17 @@ describe('save schema sanitisation (#45)', () => {
     expect(sanitizeSave({ lastRun: { seed: 7, floor: 2 } }).lastRun).toBeNull();
   });
 
+  it('defaults telemetry (#54, #159) to opted-out when absent, and sanitises it field-by-field when present', () => {
+    expect(sanitizeSave({}).telemetry).toEqual({ optedIn: false, sessionId: null, runs: [] });
+    const sanitized = sanitizeSave({
+      telemetry: { optedIn: true, sessionId: 'abc-123', runs: [{ runId: 'not-a-full-run' }] },
+    });
+    expect(sanitized.telemetry.optedIn).toBe(true);
+    expect(sanitized.telemetry.sessionId).toBe('abc-123');
+    // A half-formed run record is dropped rather than kept malformed.
+    expect(sanitized.telemetry.runs).toEqual([]);
+  });
+
   it('keeps a well-formed replay and drops one missing a field (#48)', () => {
     const replay = {
       id: 'a-b-c',

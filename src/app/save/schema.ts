@@ -4,6 +4,11 @@ import {
   sanitizeAccessibilitySettings,
 } from '../settings.js';
 import { createDefaultPreferences, type Preferences, sanitizePreferences } from '../preferences.js';
+import {
+  createDefaultTelemetryStore,
+  sanitizeTelemetryStore,
+  type TelemetryStore,
+} from '../telemetry/schema.js';
 
 /**
  * The persisted save (#45): a single versioned JSON blob, per
@@ -46,8 +51,19 @@ import { createDefaultPreferences, type Preferences, sanitizePreferences } from 
  * (`AccessibilitySettings`) for the same reason `replays` stayed apart from
  * `bestRuns` at v3: a genuinely different shape (nested and mutable, not
  * flat), validated by its own sanitiser.
+ *
+ * v7 (#54, #159) adds `telemetry`: the opt-in, anonymous playtest telemetry
+ * store (`app/telemetry/schema.ts`'s `TelemetryStore`) — whether the player
+ * has consented, the anonymous session id minted the moment they do, and a
+ * capped buffer of finished runs waiting to be exported. Its own top-level
+ * field for the same reason `preferences` and `replays` are: a shape (and a
+ * consent flag) nothing else here has, validated by its own sanitiser.
+ * Defaults to opted out, same as every other privacy-affecting default in
+ * this project (`AccessibilitySettings`'s own doc comment) — a fresh
+ * install, or a save from before this field existed, collects nothing until
+ * a player explicitly turns it on.
  */
-export const SAVE_SCHEMA_VERSION = 6;
+export const SAVE_SCHEMA_VERSION = 7;
 
 /**
  * The character a save with no opinion starts as (#47).
@@ -269,8 +285,14 @@ export interface SaveDataV6 extends Omit<SaveDataV5, 'schemaVersion'> {
   readonly preferences: Preferences;
 }
 
-/** The current schema version. A union the day a v7 lands and something still reads a v6. */
-export type SaveData = SaveDataV6;
+/** v7 (#54, #159): `telemetry` — see `SAVE_SCHEMA_VERSION`'s own doc comment above. */
+export interface SaveDataV7 extends Omit<SaveDataV6, 'schemaVersion'> {
+  readonly schemaVersion: 7;
+  readonly telemetry: TelemetryStore;
+}
+
+/** The current schema version. A union the day a v8 lands and something still reads a v7. */
+export type SaveData = SaveDataV7;
 
 /** How many `bestRuns` entries a finished run keeps — see `app/meta/progress.ts`'s `withRunOutcome`. */
 export const MAX_BEST_RUNS = 10;
@@ -292,6 +314,7 @@ export function createDefaultSave(): SaveData {
     replays: [],
     selectedCharacter: DEFAULT_CHARACTER_ID,
     preferences: createDefaultPreferences(),
+    telemetry: createDefaultTelemetryStore(),
   };
 }
 
@@ -495,5 +518,6 @@ export function sanitizeSave(value: unknown): SaveData {
         ? source.selectedCharacter
         : DEFAULT_CHARACTER_ID,
     preferences: sanitizePreferences(source.preferences),
+    telemetry: sanitizeTelemetryStore(source.telemetry),
   };
 }

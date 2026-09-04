@@ -3245,3 +3245,42 @@ the authored loop's own cycle count against a `GameSim`, at the DPS band a run's
 actually produces, rather than picking a number and trusting the total feels right. `contactDamage`
 on a boss-sized body is capped by "two contacts, half health," not raised to compensate for a short
 fight.
+
+## 67. Playtest telemetry has no server — opt-in, anonymous, and file-based end to end
+
+**Decided:** M8, #54 and #159. #54 asks for "opt-in, anonymous telemetry" and "a dashboard over the
+collected data." The obvious shape — a backend endpoint the client posts to, a database, a web
+dashboard reading it — is exactly what `docs/TECH_STACK.md`'s own scope (a static site on GitHub
+Pages, no server, no account system) rules out, and standing one up for two floors' worth of
+balance data would be infrastructure this project would then own indefinitely. Kellerbier already
+has a working answer to "how does data leave a player's machine on their own terms": `CONTRIBUTING.md`'s
+bug-report flow, where `C` copies run details and `X` downloads a replay `.json` a player attaches
+by hand. Telemetry reuses that shape rather than inventing a second one.
+
+**The rule.** `app/telemetry/schema.ts`'s `TelemetryStore` lives in the unified save (#45, v7),
+opted out by default, exactly like every other privacy-affecting default in this project
+(`AccessibilitySettings`'s own "defaults are the full experience" precedent). Opting in
+(`app/telemetry/store.ts#optIntoTelemetry`) mints a `crypto.randomUUID()` session id — the same
+mechanism `replay/store.ts` already uses for a replay's own id — and nothing more: no device
+fingerprint, no account, no IP, collected client-side or otherwise. What gets recorded is exactly
+#54's own list (run outcome, deaths by floor and best-effort cause, item pickups, room clear times,
+Promille tier ticks) and nothing else, buffered locally and capped (`MAX_TELEMETRY_RUNS`, the same
+"keep a handful, drop the rest" shape `MAX_REPLAYS`/`MAX_BEST_RUNS` already use). A player exports
+it as a `.json` file whenever they choose (`app/telemetry/file.ts#downloadTelemetryFile`, the
+Settings → Privacy tab); nothing is ever sent anywhere automatically. "The dashboard" is
+`tools/telemetry/dashboard.mjs`: a Node script that reads whatever export files it is handed and
+prints the aggregate — the same relationship `tools/playtest/report.mjs` already has to the balance
+simulator's own `results.json`, applied to real play instead of a scripted sweep.
+
+**The session identifier is for #159, not for attribution.** A structured playtest session
+(`docs/PLAYTEST_PROTOCOL.md`) needs a way to tell one tester's data apart from another's without
+naming either of them — the id, read off the Settings → Privacy tab (and included in `C`'s "copy
+run details" text, `run-summary.ts`), is that and nothing more. A fresh id is minted on every
+opt-in rather than being reused, so opting out and back in later reads as a new session rather than
+quietly resuming an old one.
+
+**Constrains:** any future telemetry field has to answer #54's own question ("does this help tune
+the two-floor curve") before it is added — this is not a general analytics pipe. If a real backend
+is ever justified (post-#159, once a playtest cadence is actually running and file-shuffling
+becomes the bottleneck), that is a new decision to make deliberately, not a default this one
+quietly grows into.
