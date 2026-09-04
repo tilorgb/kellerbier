@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GameSim, PLAYER_HEALTH } from '../../src/sim/game/sim.js';
+import { GameSim, PLAYER_HEALTH, SOUL_HEALTH_MAX } from '../../src/sim/game/sim.js';
 import { entityIndex } from '../../src/sim/ecs/entity.js';
 import { RoomGeometry } from '../../src/sim/room/geometry.js';
 import { InputAction, createInputFrame, setActionDown } from '../../src/sim/input/frame.js';
@@ -68,7 +68,7 @@ describe('pickup collection', () => {
     const index = sim.playerIndex;
     sim.applyPlayerDamage(2);
     sim.addPromille(1);
-    sim.spawnPickup('obazda', sim.positionX(index), sim.positionY(index));
+    sim.spawnPickup('bratwurst-full', sim.positionX(index), sim.positionY(index));
     sim.world.flush();
     sim.step(idle());
     expect(sim.playerHealth).toBe(PLAYER_HEALTH - 2 + 2);
@@ -81,36 +81,41 @@ describe('pickup collection', () => {
   it('food clears an active Kater debuff', () => {
     const sim = emptySim();
     const index = sim.playerIndex;
+    sim.applyPlayerDamage(2); // leaves the red pool short of full, so the Wurst is not refused
     sim.tuning.promille.umgfallnKnockdownTicks = 1;
     sim.addPromille(5);
     sim.step(idle()); // wake, Kater starts
     expect(sim.hasKater).toBe(true);
 
-    sim.spawnPickup('obazda', sim.positionX(index), sim.positionY(index));
+    sim.spawnPickup('bratwurst-full', sim.positionX(index), sim.positionY(index));
     sim.world.flush();
     sim.step(idle());
 
     expect(sim.hasKater).toBe(false);
   });
 
-  it('Weißwurst heals generously below the floor threshold', () => {
-    const sim = new GameSim({ room: bareRoom(), roomTemplate: minimalRoom(), floor: 3 });
+  it('Weißwurst heals the soul pool and lowers Promille', () => {
+    const sim = emptySim();
     const index = sim.playerIndex;
-    sim.applyPlayerDamage(4);
-    sim.spawnPickup('weisswurst', sim.positionX(index), sim.positionY(index));
+    sim.addPromille(1);
+    sim.spawnPickup('weisswurst-full', sim.positionX(index), sim.positionY(index));
     sim.world.flush();
     sim.step(idle());
-    expect(sim.playerHealth).toBe(PLAYER_HEALTH);
+    expect(sim.playerSoulHealth).toBe(2);
+    expect(sim.promille).toBeCloseTo(0.5, 1);
   });
 
-  it('Weißwurst damages instead, from the floor threshold on — same sprite either way', () => {
-    const sim = new GameSim({ room: bareRoom(), roomTemplate: minimalRoom(), floor: 4 });
+  it('a full soul pool refuses a Weißwurst outright — no heal, no Promille change', () => {
+    const sim = emptySim();
     const index = sim.playerIndex;
-    const before = sim.playerHealth;
-    sim.spawnPickup('weisswurst', sim.positionX(index), sim.positionY(index));
+    sim.addSoulHealth(SOUL_HEALTH_MAX);
+    sim.addPromille(1);
+    const promilleBefore = sim.promille;
+    sim.spawnPickup('weisswurst-full', sim.positionX(index), sim.positionY(index));
     sim.world.flush();
     sim.step(idle());
-    expect(sim.playerHealth).toBeLessThan(before);
+    expect(sim.playerSoulHealth).toBe(SOUL_HEALTH_MAX);
+    expect(sim.promille).toBeCloseTo(promilleBefore, 1);
   });
 });
 
@@ -132,7 +137,7 @@ describe('priced pickup', () => {
     expect(sim.playerHealth).toBe(damaged);
     expect(sim.shopPreview).toEqual({
       name: 'Maß',
-      description: 'Health +2',
+      description: 'Raises Promille',
       price: 5,
       affordable: true,
     });
@@ -162,6 +167,7 @@ describe('priced pickup', () => {
     sim.addBiermarken(5);
     const index = sim.playerIndex;
     sim.applyPlayerDamage(2);
+    const damaged = sim.playerHealth;
     sim.spawnPickup('mass-full', sim.positionX(index), sim.positionY(index), 5);
     sim.world.flush();
 
@@ -170,7 +176,8 @@ describe('priced pickup', () => {
     sim.step(pressUse());
 
     expect(sim.biermarken).toBe(0);
-    expect(sim.playerHealth).toBe(PLAYER_HEALTH);
+    expect(sim.playerHealth).toBe(damaged); // Maß no longer heals
+    expect(sim.promille).toBeGreaterThan(0);
     expect(sim.shopPreview).toBeNull();
   });
 
@@ -288,33 +295,3 @@ describe('pickup toast', () => {
     expect(sim.pickupToast).toEqual({ name: 'Biermarke', description: 'Currency +1' });
   });
 });
-
-function minimalRoom(): unknown {
-  return {
-    id: 'test-room',
-    tileGrid: [
-      '###############',
-      '#.............#',
-      '#.............#',
-      '#.............#',
-      '#.............#',
-      '#.............#',
-      '#.............#',
-      '#.............#',
-      '###############',
-    ],
-    obstacles: [],
-    enemySpawns: [],
-    spawnGroups: [],
-    pickupSpawns: [],
-    hazards: [],
-    decorativeProps: [],
-    metadata: {
-      floorTags: ['cellar'],
-      shape: '1x1',
-      doors: { north: false, east: false, south: false, west: false },
-      difficultyTier: 1,
-      weight: 1,
-    },
-  };
-}

@@ -21,8 +21,8 @@
     }
   ],
   "pickupSpawns": [
-    { "x": 64, "y": 100, "type": "obazda", "price": 2 },
-    { "x": 120, "y": 100, "type": "weissbier", "price": 8 },
+    { "x": 64, "y": 100, "type": "bratwurst-full", "price": 2 },
+    { "x": 120, "y": 100, "type": "weisswurst-full", "price": 8 },
     { "x": 176, "y": 100, "type": "kellerschluessel-ring", "price": 9 }
   ],
   "hazards": [],

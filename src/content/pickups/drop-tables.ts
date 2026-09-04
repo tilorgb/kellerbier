@@ -5,9 +5,11 @@ import type { DropTable, LootTier } from '../../sim/pickup/definition.js';
  *
  * These are starting numbers, not a balance pass (that is #30's job once item
  * pools exist to fight over). What matters here is the shape: every `sober`
- * table is the matching `promilled` table with `beer`'s weight moved to
- * Biermarken, Kellerschlüssel and health rather than a different table
+ * table is the matching `promilled` table with Maß's weight moved to
+ * Biermarken, Kellerschlüssel and Wurst rather than a different table
  * structure — so a future balance pass only ever edits numbers in this file.
+ * Maß (health-food-redesign) is now a pure Promille pickup, so it is exactly
+ * as absent from a `sober` table as Bier was before it.
  *
  * `null`'s weight is what actually sets the drop *rate* — the rest of a
  * table only decides the mix once something has already dropped. Originally
@@ -31,20 +33,16 @@ export const ENEMY_DROP_TABLES: Readonly<Record<LootTier, DropTable>> = {
     promilled: [
       { pickupId: null, weight: 500 },
       { pickupId: 'biermarke-1', weight: 15 },
-      { pickupId: 'brezn', weight: 8 },
-      { pickupId: 'radi', weight: 8 },
+      { pickupId: 'bratwurst-half', weight: 16 },
       { pickupId: 'mass-half', weight: 6 },
-      { pickupId: 'beer', weight: 5 },
       { pickupId: 'kellerschluessel', weight: 2 },
       { pickupId: 'bierfassl', weight: 1 },
     ],
     sober: [
       { pickupId: null, weight: 500 },
-      { pickupId: 'biermarke-1', weight: 17 },
-      { pickupId: 'brezn', weight: 8 },
-      { pickupId: 'radi', weight: 8 },
-      { pickupId: 'mass-half', weight: 8 },
-      { pickupId: 'kellerschluessel', weight: 3 },
+      { pickupId: 'biermarke-1', weight: 18 },
+      { pickupId: 'bratwurst-half', weight: 17 },
+      { pickupId: 'kellerschluessel', weight: 4 },
       { pickupId: 'bierfassl', weight: 1 },
     ],
   },
@@ -53,27 +51,24 @@ export const ENEMY_DROP_TABLES: Readonly<Record<LootTier, DropTable>> = {
       { pickupId: null, weight: 340 },
       { pickupId: 'biermarke-1', weight: 15 },
       { pickupId: 'biermarke-5', weight: 5 },
-      { pickupId: 'brezn', weight: 8 },
-      { pickupId: 'obazda', weight: 5 },
-      { pickupId: 'radi', weight: 6 },
+      { pickupId: 'bratwurst-half', weight: 8 },
+      { pickupId: 'bratwurst-full', weight: 5 },
+      { pickupId: 'weisswurst-half', weight: 4 },
+      { pickupId: 'weisswurst-full', weight: 1 },
       { pickupId: 'mass-half', weight: 7 },
       { pickupId: 'mass-full', weight: 2 },
-      { pickupId: 'weissbier', weight: 1 },
-      { pickupId: 'beer', weight: 6 },
       { pickupId: 'kellerschluessel', weight: 3 },
       { pickupId: 'bierfassl', weight: 2 },
     ],
     sober: [
       { pickupId: null, weight: 340 },
       { pickupId: 'biermarke-1', weight: 17 },
-      { pickupId: 'biermarke-5', weight: 5 },
-      { pickupId: 'brezn', weight: 8 },
-      { pickupId: 'obazda', weight: 5 },
-      { pickupId: 'radi', weight: 6 },
-      { pickupId: 'mass-half', weight: 9 },
-      { pickupId: 'mass-full', weight: 2 },
-      { pickupId: 'weissbier', weight: 1 },
-      { pickupId: 'kellerschluessel', weight: 5 },
+      { pickupId: 'biermarke-5', weight: 7 },
+      { pickupId: 'bratwurst-half', weight: 9 },
+      { pickupId: 'bratwurst-full', weight: 5 },
+      { pickupId: 'weisswurst-half', weight: 4 },
+      { pickupId: 'weisswurst-full', weight: 2 },
+      { pickupId: 'kellerschluessel', weight: 6 },
       { pickupId: 'bierfassl', weight: 2 },
     ],
   },
@@ -84,27 +79,23 @@ export const ENEMY_DROP_TABLES: Readonly<Record<LootTier, DropTable>> = {
       { pickupId: 'biermarke-5', weight: 15 },
       { pickupId: 'biermarke-10', weight: 5 },
       { pickupId: 'mass-full', weight: 10 },
-      { pickupId: 'weissbier', weight: 8 },
-      { pickupId: 'schwarzbier', weight: 2 },
-      { pickupId: 'brezn', weight: 6 },
-      { pickupId: 'radi', weight: 6 },
-      { pickupId: 'obazda', weight: 8 },
-      { pickupId: 'beer', weight: 8 },
+      { pickupId: 'weisswurst-full', weight: 8 },
+      { pickupId: 'blutwurst-full', weight: 2 },
+      { pickupId: 'bratwurst-half', weight: 6 },
+      { pickupId: 'bratwurst-full', weight: 8 },
       { pickupId: 'kellerschluessel-ring', weight: 5 },
       { pickupId: 'bierfassl-pack', weight: 5 },
     ],
     sober: [
       { pickupId: null, weight: 240 },
       { pickupId: 'biermarke-1', weight: 2 },
-      { pickupId: 'biermarke-5', weight: 18 },
+      { pickupId: 'biermarke-5', weight: 20 },
       { pickupId: 'biermarke-10', weight: 5 },
-      { pickupId: 'mass-full', weight: 12 },
-      { pickupId: 'weissbier', weight: 8 },
-      { pickupId: 'schwarzbier', weight: 2 },
-      { pickupId: 'brezn', weight: 6 },
-      { pickupId: 'radi', weight: 6 },
-      { pickupId: 'obazda', weight: 8 },
-      { pickupId: 'kellerschluessel-ring', weight: 8 },
+      { pickupId: 'weisswurst-full', weight: 8 },
+      { pickupId: 'blutwurst-full', weight: 2 },
+      { pickupId: 'bratwurst-half', weight: 6 },
+      { pickupId: 'bratwurst-full', weight: 8 },
+      { pickupId: 'kellerschluessel-ring', weight: 10 },
       { pickupId: 'bierfassl-pack', weight: 5 },
     ],
   },
@@ -125,20 +116,18 @@ export const ROOM_CLEAR_DROP_TABLE: DropTable = {
     { pickupId: 'biermarke-1', weight: 15 },
     { pickupId: 'biermarke-5', weight: 20 },
     { pickupId: 'mass-half', weight: 15 },
-    { pickupId: 'brezn', weight: 10 },
-    { pickupId: 'obazda', weight: 8 },
+    { pickupId: 'bratwurst-half', weight: 10 },
+    { pickupId: 'bratwurst-full', weight: 8 },
     { pickupId: 'kellerschluessel', weight: 10 },
     { pickupId: 'bierfassl', weight: 8 },
-    { pickupId: 'beer', weight: 4 },
   ],
   sober: [
     { pickupId: null, weight: 38 },
     { pickupId: 'biermarke-1', weight: 15 },
-    { pickupId: 'biermarke-5', weight: 22 },
-    { pickupId: 'mass-half', weight: 16 },
-    { pickupId: 'brezn', weight: 10 },
-    { pickupId: 'obazda', weight: 8 },
-    { pickupId: 'kellerschluessel', weight: 11 },
+    { pickupId: 'biermarke-5', weight: 24 },
+    { pickupId: 'bratwurst-half', weight: 16 },
+    { pickupId: 'bratwurst-full', weight: 10 },
+    { pickupId: 'kellerschluessel', weight: 13 },
     { pickupId: 'bierfassl', weight: 8 },
   ],
 };
@@ -152,25 +141,28 @@ export const ROOM_CLEAR_DROP_TABLE: DropTable = {
  * weight against the rest of the table — a coin or a keg is a nice extra a
  * boss fight can pay out, not something the fight owes on top of the item.
  * The non-null weights still lean hard toward the biggest denominations and
- * the eternal heart no `ENEMY_DROP_TABLES` tier ever names, same as before.
+ * the eternal heart no `ENEMY_DROP_TABLES` tier ever names a full-size dose
+ * of, same as before — Blutwurst's half tier gets its one and only table
+ * appearance here, a cheaper long-shot next to the full one.
  */
 export const BOSS_REWARD_DROP_TABLE: DropTable = {
   promilled: [
     { pickupId: null, weight: 100 },
     { pickupId: 'biermarke-10', weight: 25 },
     { pickupId: 'mass-full', weight: 20 },
-    { pickupId: 'weissbier', weight: 15 },
-    { pickupId: 'schwarzbier', weight: 8 },
+    { pickupId: 'weisswurst-full', weight: 15 },
+    { pickupId: 'blutwurst-full', weight: 8 },
+    { pickupId: 'blutwurst-half', weight: 6 },
     { pickupId: 'kellerschluessel-ring', weight: 15 },
     { pickupId: 'bierfassl-pack', weight: 10 },
-    { pickupId: 'beer', weight: 7 },
   ],
   sober: [
     { pickupId: null, weight: 100 },
     { pickupId: 'biermarke-10', weight: 28 },
-    { pickupId: 'mass-full', weight: 22 },
-    { pickupId: 'weissbier', weight: 17 },
-    { pickupId: 'schwarzbier', weight: 8 },
+    { pickupId: 'bratwurst-full', weight: 22 },
+    { pickupId: 'weisswurst-full', weight: 17 },
+    { pickupId: 'blutwurst-full', weight: 8 },
+    { pickupId: 'blutwurst-half', weight: 6 },
     { pickupId: 'kellerschluessel-ring', weight: 15 },
     { pickupId: 'bierfassl-pack', weight: 10 },
   ],

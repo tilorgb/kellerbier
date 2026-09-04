@@ -59,20 +59,20 @@ describe('Ruhige Hand — the sober build', () => {
     expect(sim.stats.value(StatId.Stammwuerze)).toBeCloseTo(base * 1.4, 5);
   });
 
-  it('picking up a beer with Ruhige Hand held is the genuine dilemma the issue asks for', () => {
+  it('picking up a Maß with Ruhige Hand held is the genuine dilemma the issue asks for', () => {
     const sim = new GameSim({ room: bareRoom(), items: [ruhigeHand] });
     // Comfortably past the 0.5 sober line rather than landing exactly on it —
     // see the previous test's comment on why an exact boundary value is the
     // wrong thing to assert against here.
-    sim.tuning.promille.beerAmount = 0.6;
+    sim.tuning.promille.massFullAmount = 0.6;
     const base = sim.stats.value(StatId.Stammwuerze);
     sim.pickUpItem('ruhige-hand');
     expect(sim.stats.value(StatId.Stammwuerze)).toBeCloseTo(base * 1.4, 5);
 
     const index = sim.playerIndex;
-    sim.spawnPickup('beer', sim.positionX(index), sim.positionY(index));
+    sim.spawnPickup('mass-full', sim.positionX(index), sim.positionY(index));
     sim.world.flush();
-    sim.step(IDLE); // the beer is collected this tick, raising Promille past 0.5
+    sim.step(IDLE); // the Maß is collected this tick, raising Promille past 0.5
     expect(sim.promilleTier).toBe(PromilleTier.Angeheitert);
 
     // The stat pipeline notices the crossing at the top of the *next* tick —
@@ -155,7 +155,7 @@ describe('Konterbier — drinking while hungover clears the Kater', () => {
     expect(sim.hasKater).toBe(true);
 
     const index = sim.playerIndex;
-    sim.spawnPickup('beer', sim.positionX(index), sim.positionY(index));
+    sim.spawnPickup('mass-full', sim.positionX(index), sim.positionY(index));
     sim.world.flush();
     sim.step(IDLE); // the beer is collected this tick
 
@@ -170,7 +170,7 @@ describe('Konterbier — drinking while hungover clears the Kater', () => {
     expect(sim.hasKater).toBe(true);
 
     const index = sim.playerIndex;
-    sim.spawnPickup('beer', sim.positionX(index), sim.positionY(index));
+    sim.spawnPickup('mass-full', sim.positionX(index), sim.positionY(index));
     sim.world.flush();
     sim.step(IDLE);
 
@@ -183,7 +183,7 @@ describe('Konterbier — drinking while hungover clears the Kater', () => {
     expect(sim.hasKater).toBe(false);
 
     const index = sim.playerIndex;
-    sim.spawnPickup('beer', sim.positionX(index), sim.positionY(index));
+    sim.spawnPickup('mass-full', sim.positionX(index), sim.positionY(index));
     sim.world.flush();
     expect(() => {
       sim.step(IDLE);

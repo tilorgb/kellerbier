@@ -129,7 +129,6 @@ not a stat spread.
 |---|---|---|---|
 | **Alois** | start | tainted Pfeitinger, straight stream | The baseline. Balanced, forgiving, 3 Maß of health. Opa's Trink-Rucksack, loaded with the corrupted batch and locked to *schießen*. |
 | **Resi** | beat floor 3 | Brezn, arcing and returning | Fast, fragile, shots curve — rewards positioning over aim. |
-| **Bruder Barnabas** | beat floor 5 | Doppelbock, slow and heavy | Monastery brewer. Cannot pick up food; grows stronger the longer he fasts. |
 | **Der Wolpertinger** | secret | randomised each room | Chaos character. Stats reroll on floor entry. Unfair in both directions. |
 | **König Ludwig II** | beat him | swans, homing | Flies over obstacles, drains coins constantly, absurd damage. Late unlock. |
 | **D'Sennerin** | challenge | thrown Kuhglocken, ricochet | Alpine. Shots bounce off walls; small rooms become a threat to herself. |
@@ -228,9 +227,8 @@ sentiment if it does not feel good.
 A second meter beside health, measured in **Promille** (0.0 – 5.0) — and one a new player
 does not meet on their first run. See *When it turns on*, below.
 
-**Going up:** drinking beer pickups, certain items, boss rewards, some devil pacts.
-**Coming down:** time (slow, continuous decay), eating (Brezn, Obazda, Radi), water fountains,
-being hit.
+**Going up:** drinking Maß pickups, certain items, boss rewards, some devil pacts.
+**Coming down:** time (slow, continuous decay), eating Wurst, water fountains, being hit.
 
 ### Tiers
 
@@ -248,16 +246,16 @@ something. It is survivable and it is your own fault, which is the correct emoti
 ### When it turns on
 
 Promille is **unlocked, not on from the start**. The first runs are sober: no meter, no HUD
-element, no drift, no wobble, no sway, no tier bonuses, and the beer pickup does not drop at
-all. Maß, Weißbier and Schwarzbier are health and are unaffected; the food items keep their
-heal and simply have nothing to lower — and say so, since a toast reading "lowers Promille" is
-the mechanic's name in the most-read text in the game. Items are filtered out of the pools
-wherever the meter is what they are *for*: the `sober` and `rausch` sets, since a requirement
-that can never be evaluated is not a build decision, and equally the ones that spend, refund,
-cap or tolerate it at no particular tier — Konterbier clears a hangover that cannot happen.
+element, no drift, no wobble, no sway, no tier bonuses, and the Maß pickup does not drop at
+all. Wurst is health and is unaffected; it keeps its heal and simply has nothing to lower — and
+says so, since a toast reading "lowers Promille" is the mechanic's name in the most-read text in
+the game. Items are filtered out of the pools wherever the meter is what they are *for*: the
+`sober` and `rausch` sets, since a requirement that can never be evaluated is not a build
+decision, and equally the ones that spend, refund, cap or tolerate it at no particular tier —
+Konterbier clears a hangover that cannot happen.
 
 The unlock is granted the first time the player beats **Der Stier**, and it is announced on the
-results screen the run ends into: the beer is on the table from the next run on.
+results screen the run ends into: the Maß is on the table from the next run on.
 
 The reason is pacing. The opening should read as a familiar twin-stick roguelite — shoot,
 dodge, pick things up — so that the game teaches one mechanic at a time rather than all of them
@@ -307,24 +305,25 @@ can explain exactly why the player's damage is 47.3.
 
 | Thing | Bavarian | Notes |
 |---|---|---|
-| Red heart | **Maß** | Full mug / half mug. |
-| Soul heart | **Weißbier** | Blue-white, spent before red. |
-| Eternal heart | **Schwarzbier** | |
+| Red heart | **Bratwurst** | Full / half. Heals and lowers Promille. |
+| Soul heart | **Weißwurst** | Spent before red. Heals and lowers Promille. |
+| Eternal heart | **Blutwurst** | Heals and lowers Promille. |
+| Promille | **Maß** | Full mug / half mug. The only Promille pickup; no longer heals. |
 | Coin | **Biermarke** | Festival beer token. |
 | Bomb | **Bierfassl** | A small keg, set down or rolled: the hoops give way and it bursts. A firecracker is a nuisance, not a thing you are pleased to find — Böller belong to the enemies who throw them. |
 | Key | **Kellerschlüssel** | |
-| Food (lowers Promille) | **Brezn**, **Obazda**, **Radi** | Also small heals. |
+
+Health is Wurst, not beer: every tier of every pool — full and half — both heals its own pool
+and lowers Promille by a moderate, size-based amount (full vs. half, not pool-based, so a rare
+Blutwurst is not a stealth-stronger sobering tool than a common Bratwurst). A pool refuses its
+Wurst outright when it is already at its cap, the same all-or-nothing shape as any other refused
+pickup.
 
 Every beer pickup in that table is **the old batch** (§2) — Pfeitinger as it was brewed before
 the new label. None of it is adulterated, none of it advances the plot, and none of it is where
 the raisins get into the player. That is a deliberate separation: Promille is a mechanic the
 player is choosing to play with, and the moment a beer pickup is also a story event, every drink
 in the game starts arguing with the tone rules in `CONTENT_BIBLE.md` §0.
-
-**Weißwurst** deserves its own line. Bavarian rule: *die Weißwurst darf das Mittagsläuten
-nicht hören* — the white sausage must not hear the noon bells. So the pickup heals generously
-on floors 1–3 and, from floor 4, is spoiled: it damages you and inflicts a short debuff. The
-sprite does not change. Players learn this exactly once.
 
 ## 8. Items and synergy
 

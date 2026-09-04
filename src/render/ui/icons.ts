@@ -9,53 +9,57 @@ import type { PixelArt } from './pixel-art.js';
  * a tile — see `docs/DECISIONS.md` #43.
  *
  * Silhouette first, colour second. Every icon has to survive being drawn in
- * one of several role palettes (a Maß is red, a Weißbier white, a Schwarzbier
- * near-black — one bitmap, three sets of roles), so a reading that depends on
- * its colour is a reading that breaks on the second use. `CONTRIBUTING.md`'s
- * art row says the same thing about enemies; it is more true, not less, of
- * something drawn at nine pixels across.
+ * one of several role palettes (a Bratwurst is red, a Weißwurst pale, a
+ * Blutwurst near-black — one bitmap, three sets of roles), so a reading that
+ * depends on its colour is a reading that breaks on the second use.
+ * `CONTRIBUTING.md`'s art row says the same thing about enemies; it is more
+ * true, not less, of something drawn at nine pixels across.
  */
 
-/** A full Maß — foam on top, the glass hooped like the real thing. */
-export const ICON_MUG_FULL: PixelArt = [
-  'ooooooo...',
-  'ohhhhhoooo',
-  'offfffo..o',
-  'offfffo..o',
-  'offfffo..o',
-  'offfffoooo',
-  'offfffo...',
-  'offfffo...',
-  'offfffo...',
-  'ooooooo...',
+/**
+ * A whole Wurst — tied off at both ends, one accent-role fleck part way down
+ * (a grill mark on Bratwurst, a fat fleck on Blutwurst; invisible on
+ * Weißwurst, whose accent role is set to its own fill colour).
+ */
+export const ICON_WURST_FULL: PixelArt = [
+  '...ooo...',
+  '...oho...',
+  '...ofo...',
+  '..offfo..',
+  '.ohffffo.',
+  '.ohfaffo.',
+  '.ohffffo.',
+  '.ohfaffo.',
+  '..offfo..',
+  '...ofo...',
+  '...oho...',
+  '...ooo...',
 ];
 
-/** Half a Maß — the same glass, drunk to the middle. Half-Maß is the health model's own granularity. */
-export const ICON_MUG_HALF: PixelArt = [
-  'ooooooo...',
-  'o.....oooo',
-  'o.....o..o',
-  'o.....o..o',
-  'ohhhhhoooo',
-  'offfffo...',
-  'offfffo...',
-  'offfffo...',
-  'offfffo...',
-  'ooooooo...',
+/** Half a Wurst — split clean down the middle, per health-food-redesign's sign-off: the top piece, tied end and all, outlined at the cut. */
+export const ICON_WURST_HALF: PixelArt = [
+  '...ooo...',
+  '...oho...',
+  '...ofo...',
+  '..offfo..',
+  '.ohffffo.',
+  '.ooooooo.',
 ];
 
-/** An empty glass. Drawn, not removed: a spent Maß has to leave its slot behind or the row gets shorter as you lose. */
-export const ICON_MUG_EMPTY: PixelArt = [
-  'ooooooo...',
-  'o.....oooo',
-  'o.....o..o',
-  'o.....o..o',
-  'o.....oooo',
-  'o.....o...',
-  'o.....o...',
-  'o.....o...',
-  'o.....o...',
-  'ooooooo...',
+/** An empty Wurst. Drawn, not removed: a spent slot has to leave its outline behind or the row gets shorter as you lose. */
+export const ICON_WURST_EMPTY: PixelArt = [
+  '...ooo...',
+  '...o.o...',
+  '...o.o...',
+  '..o...o..',
+  '.o.....o.',
+  '.o.....o.',
+  '.o.....o.',
+  '.o.....o.',
+  '..o...o..',
+  '...o.o...',
+  '...o.o...',
+  '...ooo...',
 ];
 
 /** A Biermarke — the beer token the Wiesn actually runs on, and this game's coin. */
@@ -168,9 +172,9 @@ export const ICON_CARET: PixelArt = [
 
 /** Every icon by name — the kit's own gallery walks this rather than a hand-kept list. */
 export const UI_ICONS: Readonly<Record<string, PixelArt>> = {
-  'mug-full': ICON_MUG_FULL,
-  'mug-half': ICON_MUG_HALF,
-  'mug-empty': ICON_MUG_EMPTY,
+  'wurst-full': ICON_WURST_FULL,
+  'wurst-half': ICON_WURST_HALF,
+  'wurst-empty': ICON_WURST_EMPTY,
   biermarke: ICON_BIERMARKE,
   key: ICON_KEY,
   fassl: ICON_FASSL,

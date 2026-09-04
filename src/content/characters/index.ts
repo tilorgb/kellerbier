@@ -1,6 +1,5 @@
 import type { CharacterDefinition } from '../../app/meta/definition.js';
 import { alois } from './alois.js';
-import { bruderBarnabas } from './bruder-barnabas.js';
 import { derWolpertinger } from './der-wolpertinger.js';
 import { koenigLudwig } from './koenig-ludwig.js';
 import { resi } from './resi.js';
@@ -26,7 +25,6 @@ export const AUTHORED_CHARACTERS: readonly CharacterDefinition[] = [
   alois,
   resi,
   sennerin,
-  bruderBarnabas,
   koenigLudwig,
   derWolpertinger,
 ];
@@ -43,4 +41,4 @@ export const AUTHORED_CHARACTERS: readonly CharacterDefinition[] = [
  */
 export const CHARACTERS: readonly CharacterDefinition[] = [alois];
 
-export { alois, bruderBarnabas, derWolpertinger, koenigLudwig, resi, sennerin };
+export { alois, derWolpertinger, koenigLudwig, resi, sennerin };

@@ -194,8 +194,28 @@ export const MAYPOLE_RADIUS = 6;
  */
 export const MAYPOLE_MASS = 1e6;
 
-/** Hit points the player starts a run with, in half-Maß. */
+/** Hit points the player starts a run with, in half-heart units. */
 export const PLAYER_HEALTH = 6;
+
+/**
+ * The soul pool's ceiling, in half-heart units (5 whole hearts) — what
+ * `addSoulHealth` clamps to. Previously uncapped in the sim and only
+ * visually capped in `HealthHud`; a Weißwurst pickup collected past this
+ * point is now refused outright rather than silently wasted, so the cap has
+ * to be real, not just cosmetic.
+ */
+export const SOUL_HEALTH_MAX = 10;
+
+/**
+ * The eternal pool's ceiling, in half-heart units (6 whole hearts) — what
+ * `addEternalHealth` clamps to. Eternal hearts now carry the same
+ * half-heart granularity soul and red already have (a half-Blutwurst grants
+ * half a heart), where before they only ever came in whole units.
+ */
+export const ETERNAL_HEALTH_MAX = 12;
+
+/** Half-heart units that make up one whole eternal heart — what `applyPlayerDamage` spends on a save. */
+export const ETERNAL_HALF_UNIT = 2;
 
 export { ENEMY_PROFILES, EnemySize, type EnemyProfile, type EnemySizeId } from '../enemy/size.js';
 
@@ -899,7 +919,10 @@ export class GameSim {
   private invulnerableTicks = 0;
 
   /**
-   * The player's soul and eternal pools, in half-Maß.
+   * The player's soul and eternal pools, both in half-heart units (see
+   * `SOUL_HEALTH_MAX`/`ETERNAL_HEALTH_MAX`/`ETERNAL_HALF_UNIT`) — eternal
+   * used to only ever come in whole hearts, but a half-Blutwurst now grants
+   * half of one the same way a half-Weißwurst grants half a soul heart.
    *
    * Red health stays in the `health` component every entity carries, since
    * enemies and targets need it too. Soul and eternal are player-only, so they
@@ -981,16 +1004,9 @@ export class GameSim {
    * than knowing how a roster stores its rules.
    */
   private readonly characterFlies: boolean;
-  private readonly characterRefusesFood: boolean;
   private readonly characterRicochets: boolean;
-  private readonly characterFasts: boolean;
   private readonly characterPurse: boolean;
   private readonly characterChaos: boolean;
-  /** Ticks since the last thing swallowed — Bruder Barnabas's fast. */
-  private fastTicksValue = 0;
-  /** The fast step and bonus `stats` last had modifiers built for. See `syncFastModifiers`. */
-  private lastFastSteps = -1;
-  private lastFastBonus = Number.NaN;
   /** Ticks since Ludwig's crown last cost him a Biermarke. */
   private purseTicks = 0;
   /** What `syncPurseModifiers` last built for: solvency, and the multiplier it used. */
@@ -1279,9 +1295,7 @@ export class GameSim {
 
     this.character = options.character ?? NEUTRAL_TRAITS;
     this.characterFlies = hasCharacterRule(this.character, CharacterRule.Flies);
-    this.characterRefusesFood = hasCharacterRule(this.character, CharacterRule.RefusesFood);
     this.characterRicochets = hasCharacterRule(this.character, CharacterRule.RicochetHurtsOwner);
-    this.characterFasts = hasCharacterRule(this.character, CharacterRule.Fasting);
     this.characterPurse = hasCharacterRule(this.character, CharacterRule.Purse);
     this.characterChaos = hasCharacterRule(this.character, CharacterRule.Chaos);
     // The innate half of a shot's behaviour (#47) — Resi's arcing, returning
@@ -1385,11 +1399,10 @@ export class GameSim {
     // path above has already rolled for its own floor and this no-ops, and
     // the playground path has not.
     this.rerollChaosStats(this.currentFloorValue);
-    // The two counter rules register their opening contribution here rather
-    // than waiting for the first `step`: Ludwig walks in with a full purse,
-    // and a run whose damage is only correct from tick 1 onward is a run
-    // whose first shot is wrong.
-    this.syncFastModifiers();
+    // The purse rule registers its opening contribution here rather than
+    // waiting for the first `step`: Ludwig walks in with a full purse, and a
+    // run whose damage is only correct from tick 1 onward is a run whose
+    // first shot is wrong.
     this.syncPurseModifiers();
     this.world.flush();
   }
@@ -2446,46 +2459,9 @@ export class GameSim {
     return this.characterFlies;
   }
 
-  /** Bruder Barnabas leaves every `food` pickup where it lies — `sim/systems/pickup.ts`. */
-  get playerRefusesFood(): boolean {
-    return this.characterRefusesFood;
-  }
-
   /** D'Sennerin's own ricochets can come back at her — `sim/systems/collision.ts`. */
   get ownShotsHurtOwner(): boolean {
     return this.characterRicochets;
-  }
-
-  /** Ticks since the last thing the player swallowed. Zero for anyone who does not fast. */
-  get fastTicks(): number {
-    return this.fastTicksValue;
-  }
-
-  /**
-   * How many completed fast steps are currently paying out, capped at
-   * `CharacterTuning.fastMaxSteps`. The HUD's one number for the mechanic.
-   */
-  get fastSteps(): number {
-    const tuning = this.tuning.character;
-    return Math.min(
-      Math.max(0, Math.round(tuning.fastMaxSteps)),
-      Math.floor(this.fastTicksValue / Math.max(1, Math.round(tuning.fastStepTicks))),
-    );
-  }
-
-  /**
-   * Ends a fast — called from `sim/systems/pickup.ts` for anything swallowed.
-   *
-   * A no-op for a character who does not fast, so the pickup path calls it
-   * unconditionally rather than asking first, and the one place that decides
-   * what counts as eating stays the place that resolves pickups.
-   */
-  breakFast(): void {
-    if (!this.characterFasts || this.fastTicksValue === 0) {
-      return;
-    }
-    this.fastTicksValue = 0;
-    this.syncFastModifiers();
   }
 
   /** Whether Ludwig's purse still has something in it — his damage rides on this. */
@@ -2498,18 +2474,32 @@ export class GameSim {
     return this.characterChaos ? this.lastChaosFloor : -1;
   }
 
-  /** Grants soul hearts (Weißbier) — collected via `spawnPickup`, or called directly by tests. */
+  /**
+   * Grants soul hearts (Weißwurst), clamped to `SOUL_HEALTH_MAX` — collected
+   * via `spawnPickup`, or called directly by tests.
+   */
   addSoulHealth(amount: number): void {
     if (amount > 0) {
-      this.soulHp += amount;
+      this.soulHp = Math.min(SOUL_HEALTH_MAX, this.soulHp + amount);
     }
   }
 
-  /** Grants eternal hearts (Schwarzbier). Same caveat as `addSoulHealth`. */
+  /** Grants eternal hearts (Blutwurst), clamped to `ETERNAL_HEALTH_MAX`. Same caveat as `addSoulHealth`. */
   addEternalHealth(amount: number): void {
     if (amount > 0) {
-      this.eternalHp += amount;
+      this.eternalHp = Math.min(ETERNAL_HEALTH_MAX, this.eternalHp + amount);
     }
+  }
+
+  /** Whether `pool` is already at its ceiling — `sim/systems/pickup.ts` refuses a Wurst pickup that targets a full pool. */
+  healthPoolFull(pool: 'red' | 'soul' | 'eternal'): boolean {
+    if (pool === 'red') {
+      return this.playerHealth >= this.playerMaxHealth;
+    }
+    if (pool === 'soul') {
+      return this.soulHp >= SOUL_HEALTH_MAX;
+    }
+    return this.eternalHp >= ETERNAL_HEALTH_MAX;
   }
 
   /** Heals red Maß, clamped to the pool's max. The Maß/food half of the pickup economy. */
@@ -2900,12 +2890,13 @@ export class GameSim {
     // Reaching exactly zero is lethal, same as going below it — a hit does
     // not need to overkill to end a run, it only needs to use up what is left.
     if (amount >= this.soulHp + red) {
-      if (this.eternalHp > 0) {
-        // A killing blow with a heart banked: the heart is spent instead of
-        // the run, and comes back as the one half-Maß a player needs to keep
-        // standing rather than as a full refill — an eternal heart is a save,
-        // not a heal.
-        this.eternalHp -= 1;
+      if (this.eternalHp >= ETERNAL_HALF_UNIT) {
+        // A killing blow with a whole heart banked: the heart is spent
+        // instead of the run, and comes back as the one half-Maß a player
+        // needs to keep standing rather than as a full refill — an eternal
+        // heart is a save, not a heal. A single banked half-heart (a lone
+        // half-Blutwurst) is not enough on its own to trigger this.
+        this.eternalHp -= ETERNAL_HALF_UNIT;
         this.soulHp = 0;
         health[index * 2] = 1;
       } else {
@@ -3074,11 +3065,11 @@ export class GameSim {
    * source `'character'`.
    *
    * Fixed is the point: this is who they are, and it never changes during a
-   * run. The three rules that *do* move a stat mid-run each register their
-   * own source instead (`'character-fast'`, `'character-purse'`,
-   * `'character-chaos'`) rather than rebuilding this one — so the stat
-   * inspector shows "Resi ×1.3" and "Fastn ×1.5" as two separate lines with
-   * two separate reasons, which is the whole of what #25 bought.
+   * run. The rules that *do* move a stat mid-run each register their own
+   * source instead (`'character-purse'`, `'character-chaos'`) rather than
+   * rebuilding this one — so the stat inspector shows "Resi ×1.3" and
+   * "Geldbeutl ×3" as two separate lines with two separate reasons, which is
+   * the whole of what #25 bought.
    */
   private applyCharacterStats(): void {
     if (this.character.stats.length === 0) {
@@ -3096,43 +3087,6 @@ export class GameSim {
       source,
     }));
     this.stats.setSourceModifiers('character', modifiers);
-  }
-
-  /**
-   * Bruder Barnabas's fast (#47): Stammwürze climbs one step per
-   * `fastStepTicks` gone without swallowing anything, up to `fastMaxSteps`.
-   *
-   * Rebuilt only when the step *or* the tuning behind it changes — the tick
-   * check is two integer divides, and the pipeline is only touched on the
-   * one tick in nine hundred that actually crosses a step. The bonus is
-   * compared too, so dragging the slider in the tuning window takes effect
-   * the moment it moves rather than at the next step, which is the whole
-   * point of the numbers being live.
-   */
-  private syncFastModifiers(): void {
-    if (!this.characterFasts) {
-      return;
-    }
-    const tuning = this.tuning.character;
-    const steps = this.fastSteps;
-    if (steps === this.lastFastSteps && tuning.fastStepBonus === this.lastFastBonus) {
-      return;
-    }
-    this.lastFastSteps = steps;
-    this.lastFastBonus = tuning.fastStepBonus;
-    if (steps <= 0) {
-      this.stats.clearSource('character-fast');
-      return;
-    }
-    const source = { kind: 'character' as const, id: 'fastn', label: 'Fastn' };
-    this.stats.setSourceModifiers('character-fast', [
-      {
-        stat: StatId.Stammwuerze,
-        op: 'multiply',
-        value: 1 + steps * tuning.fastStepBonus,
-        source,
-      },
-    ]);
   }
 
   /**
@@ -3199,19 +3153,15 @@ export class GameSim {
   }
 
   /**
-   * The two character rules that are counters rather than events, advanced
-   * once a tick from `step` before anything reads `stats`.
+   * The character rule that is a counter rather than an event, advanced once
+   * a tick from `step` before anything reads `stats`.
    *
-   * Both are no-ops for a character without the rule, which is why `step`
-   * calls this unconditionally instead of asking first: the alternative is
-   * the frame loop knowing which character it is running, which is exactly
-   * what the rule ids exist to avoid.
+   * A no-op for a character without the rule, which is why `step` calls this
+   * unconditionally instead of asking first: the alternative is the frame
+   * loop knowing which character it is running, which is exactly what the
+   * rule ids exist to avoid.
    */
   private stepCharacter(): void {
-    if (this.characterFasts) {
-      this.fastTicksValue += 1;
-      this.syncFastModifiers();
-    }
     if (this.characterPurse) {
       this.purseTicks += 1;
       const interval = Math.max(1, Math.round(this.tuning.character.purseDrainTicks));
@@ -4735,9 +4685,9 @@ export class GameSim {
     stepPromille(this);
     this.syncPromilleModifiers();
     this.syncKaterModifiers();
-    // The character's own per-tick rules (#47) — Barnabas's fast, Ludwig's
-    // purse — settled here for the same reason Promille is: movement and
-    // shooting both read the stats they change, later in this same tick.
+    // The character's own per-tick rules (#47) — Ludwig's purse — settled
+    // here for the same reason Promille is: movement and shooting both read
+    // the stats they change, later in this same tick.
     this.stepCharacter();
     // The `sober`/`rausch` item gate (#32): before anything reads `stats`
     // this tick, catch a tier boundary crossed since the last one so a held
@@ -5009,7 +4959,7 @@ export class GameSim {
     body[index * 2 + 1] = 1;
 
     // The character's own pool (#47), not the engine's default: Resi walks in
-    // on four Maß and Bruder Barnabas on eight, and `PLAYER_HEALTH` is what
+    // on four Maß and D'Sennerin on five, and `PLAYER_HEALTH` is what
     // `NEUTRAL_TRAITS` — Alois — carries.
     const health = this.health.data;
     const maxHealth = Math.max(1, Math.round(this.character.maxHealth));
@@ -5066,23 +5016,23 @@ export class GameSim {
     // None of these sit at (midX, midY) — that's the player's own spawn
     // point (see `spawnPlayer`), and a pickup there is collected before the
     // player has done anything to earn it.
-    this.spawnPickup('beer', midX + 30, midY - 30);
-    this.spawnPickup('beer', this.room.minX + 100, this.room.maxY - 30);
-    this.spawnPickup('beer', this.room.maxX - 100, this.room.minY + 40);
-    this.spawnPickup('beer', this.room.minX + 50, midY + 10);
+    this.spawnPickup('mass-full', midX + 30, midY - 30);
+    this.spawnPickup('mass-full', this.room.minX + 100, this.room.maxY - 30);
+    this.spawnPickup('mass-full', this.room.maxX - 100, this.room.minY + 40);
+    this.spawnPickup('mass-full', this.room.minX + 50, midY + 10);
     // A dozen total, well past PROMILLE_MAX even accounting for decay and
     // travel time between them — a full "beer crawl" across the room lets a
     // playtester walk every tier, including Umgfalln, in one lap rather than
     // reaching only partway up Beduselt. Dev/testing convenience; the real
     // drop table is #22.
-    this.spawnPickup('beer', this.room.minX + 20, midY - 30);
-    this.spawnPickup('beer', this.room.minX + 90, this.room.minY + 30);
-    this.spawnPickup('beer', midX - 10, this.room.maxY - 20);
-    this.spawnPickup('beer', this.room.maxX - 110, midY + 45);
-    this.spawnPickup('beer', this.room.maxX - 55, this.room.minY + 10);
-    this.spawnPickup('beer', this.room.maxX - 20, this.room.maxY - 20);
-    this.spawnPickup('beer', midX + 20, this.room.maxY - 40);
-    this.spawnPickup('beer', midX - 30, this.room.minY + 20);
+    this.spawnPickup('mass-full', this.room.minX + 20, midY - 30);
+    this.spawnPickup('mass-full', this.room.minX + 90, this.room.minY + 30);
+    this.spawnPickup('mass-full', midX - 10, this.room.maxY - 20);
+    this.spawnPickup('mass-full', this.room.maxX - 110, midY + 45);
+    this.spawnPickup('mass-full', this.room.maxX - 55, this.room.minY + 10);
+    this.spawnPickup('mass-full', this.room.maxX - 20, this.room.maxY - 20);
+    this.spawnPickup('mass-full', midX + 20, this.room.maxY - 40);
+    this.spawnPickup('mass-full', midX - 30, this.room.minY + 20);
   }
 
   /** Puts an authored enemy on a post, by the id its definition states. */
@@ -5595,15 +5545,13 @@ export class GameSim {
     const tuning = this.tuning.pickup;
     const effect = this.pickups.get(pickupId).effect;
     let low = false;
-    if (effect.kind === 'health') {
+    if (effect.kind === 'food') {
       low =
         effect.pool === 'red'
           ? this.playerHealth < this.playerMaxHealth * tuning.needThreshold
           : effect.pool === 'soul'
             ? this.soulHp === 0
             : this.eternalHp === 0;
-    } else if (effect.kind === 'food') {
-      low = this.playerHealth < this.playerMaxHealth * tuning.needThreshold;
     } else if (effect.kind === 'currency') {
       low = this.biermarkenCount === 0;
     } else if (effect.kind === 'bombs') {

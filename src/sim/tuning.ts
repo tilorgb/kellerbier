@@ -371,8 +371,16 @@ export interface PromilleTuning {
   current: number;
   /** Promille lost per second, pure time decay — no eating/water/being-hit yet (#31). */
   decayPerSecond: number;
-  /** Promille one beer pickup adds. */
-  beerAmount: number;
+  /**
+   * Promille one full/half Maß pickup adds — the only alcohol pickups in the
+   * game (#health-food-redesign). Sized for realism against `PROMILLE_MAX`
+   * (5.0) and `umgfallnThresholdFor`'s baseline 4.5: four full Maß lands at
+   * 4.0, deep in Vollrausch and about as drunk as a run gets on purpose; a
+   * fifth crosses 4.5 and triggers Umgfalln — "four full Maß to properly
+   * drunk, one more and you're knocked out."
+   */
+  massFullAmount: number;
+  massHalfAmount: number;
 
   /**
    * Trinkfest (#92): tolerance. 0 is the baseline every run starts at — with
@@ -618,22 +626,15 @@ export interface ItemPoolTuning {
 }
 
 /**
- * The three character verbs that are numbers rather than behaviour (#47).
+ * The two character verbs that are numbers rather than behaviour (#47).
  *
- * Barnabas's fast, Ludwig's purse and the Wolpertinger's reroll all have a
- * "how much" that has to be tunable at runtime, per `CONTRIBUTING.md`'s
- * gameplay definition of done — the *rules* themselves live in
- * `sim/character/definition.ts` as data on the roster, but nobody can feel
- * whether a fast should pay off after fifteen seconds or forty-five without
- * dragging it while playing.
+ * Ludwig's purse and the Wolpertinger's reroll both have a "how much" that
+ * has to be tunable at runtime, per `CONTRIBUTING.md`'s gameplay definition
+ * of done — the *rules* themselves live in `sim/character/definition.ts` as
+ * data on the roster, but nobody can feel whether a reroll's band is too
+ * wide or too narrow without dragging it while playing.
  */
 export interface CharacterTuning {
-  /** Ticks of fasting per step of Barnabas's Stammwürze bonus. */
-  fastStepTicks: number;
-  /** Stammwürze added per completed step, as a multiplier addend (0.2 = +20% per step). */
-  fastStepBonus: number;
-  /** Steps the fast stops paying at, so a patient run is strong rather than unbounded. */
-  fastMaxSteps: number;
   /** Ticks between the Biermarken Ludwig's crown costs him. */
   purseDrainTicks: number;
   /** Ludwig's Stammwürze multiplier while the purse still has something in it. */
@@ -928,13 +929,13 @@ export const DEFAULT_ENEMY_TUNING: Readonly<EnemyTuning> = {
 export const DEFAULT_PROMILLE_TUNING: Readonly<PromilleTuning> = {
   current: 0,
   decayPerSecond: 0.05,
-  // Halved from the M1 prototype's 0.8 — one beer used to put a sober player
-  // most of the way to Angeheitert, and six landed Umgfalln with barely a
-  // decision along the way. At 0.4, Angeheitert takes two, Vollrausch eight,
-  // Umgfalln twelve — enough drinks apart, at this decay rate, that going up
-  // a tier is a choice made mid-fight rather than a side effect of picking
-  // up whatever a room happened to drop.
-  beerAmount: 0.4,
+  // Realistic-scale replacement for the old beer-pickup amounts
+  // (health-food-redesign): four full Maß (4 x 1.0 = 4.0) sits deep in
+  // Vollrausch (>= 3.0) without reaching Umgfalln — "properly drunk" — and a
+  // fifth (5.0) crosses `umgfallnThresholdFor`'s baseline 4.5 and knocks the
+  // player out, matching `PROMILLE_MAX` exactly. Half a Maß is half that.
+  massFullAmount: 1.0,
+  massHalfAmount: 0.5,
 
   // Baseline — see the field's own doc comment for why this has to be 0.
   trinkfest: 0,
@@ -1055,13 +1056,6 @@ export const DEFAULT_PROJECTILE_TAG_TUNING: Readonly<ProjectileTagTuning> = {
 };
 
 export const DEFAULT_CHARACTER_TUNING: Readonly<CharacterTuning> = {
-  // Fifteen seconds a step, four steps: a Barnabas who has eaten nothing for
-  // a minute is hitting twice as hard as one who just drank. Long enough
-  // that walking past a Brezn is a decision, short enough to be felt inside
-  // one floor.
-  fastStepTicks: 900,
-  fastStepBonus: 0.25,
-  fastMaxSteps: 4,
   // A Biermarke every one and a half seconds. Ludwig starts with a purse
   // (`content/characters/koenig-ludwig.ts`) that buys him about a minute of
   // being Ludwig, which is roughly a room and a half — so the coins a room

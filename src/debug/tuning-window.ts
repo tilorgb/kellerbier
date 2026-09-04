@@ -194,7 +194,8 @@ const GROUPS: readonly GroupSpec[] = [
       // every tier, bonus, drift, wobble and sway reacts on the next tick.
       { key: 'current', min: 0, max: 5, step: 0.1, hint: 'current Promille — the slider' },
       { key: 'decayPerSecond', min: 0, max: 0.5, step: 0.01, hint: 'Promille lost per second' },
-      { key: 'beerAmount', min: 0, max: 3, step: 0.1, hint: 'Promille per beer' },
+      { key: 'massFullAmount', min: 0, max: 3, step: 0.1, hint: 'Promille per full Maß' },
+      { key: 'massHalfAmount', min: 0, max: 3, step: 0.1, hint: 'Promille per half Maß' },
       {
         key: 'trinkfest',
         min: -1,
@@ -393,9 +394,6 @@ const GROUPS: readonly GroupSpec[] = [
     title: 'character',
     group: 'character',
     fields: [
-      { key: 'fastStepTicks', min: 120, max: 2400, step: 60, hint: 'ticks per step of the fast' },
-      { key: 'fastStepBonus', min: 0, max: 1, step: 0.05, hint: 'Stammwürze per step' },
-      { key: 'fastMaxSteps', min: 0, max: 10, step: 1, hint: 'steps the fast stops paying at' },
       {
         key: 'purseDrainTicks',
         min: 15,
