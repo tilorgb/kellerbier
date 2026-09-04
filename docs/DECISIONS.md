@@ -3246,7 +3246,54 @@ actually produces, rather than picking a number and trusting the total feels rig
 on a boss-sized body is capped by "two contacts, half health," not raised to compensate for a short
 fight.
 
-## 67. Der Losbrunnen gets a second home in the shop, a near-certain spawn, and a break risk the player can see coming
+## 67. The screen-flow is four states, "hub" is the title screen, and strings stay hardcoded until #52
+
+**Decided:** M8, #158. Three things worth writing down before the next screen or the localisation
+layer builds on top of this.
+
+**`ScreenFlow` (`app/screen-flow.ts`) is deliberately narrow: `'title' | 'run' | 'paused' |
+'credits'`.** A run's own ending — the freeze/slowmo beat, the game-over or victory screen, the
+results screen behind or after it — stays inside `'run'`, tracked by `main.ts`'s existing
+`deathPhase`, rather than becoming more top-level states. Splitting them out would have made the
+state machine "more correct" on paper and bought nothing: those screens are the run *finishing*,
+not a different place a player has gone, and every one of them already had to work while `replay`
+and `runResults` — two more existing, independent flags — were also live. The four `ScreenFlow`
+states are exactly the transitions that were genuinely missing (nothing owned "is the title up",
+"is the game paused", "are we reading credits" before this issue); everything downstream of a run
+starting keeps the flags it already had.
+
+**"Retry or hub" (the issue's own words) is Retry-or-Title.** `docs/DECISIONS.md` #63 named "a
+real main menu" as where character select, seed entry, the daily run and replay-watching would
+eventually move — this issue is that menu, but its own scope list is only Start/Continue/Settings/
+Credits/Quit. There is still no separate hub *room* the way Isaac's basement is one, and building
+one was not this issue's job: "Hub" on the game-over/victory/pause screens goes to the title
+screen, which is the only screen a finished or paused run has to go back to today.
+`app/main.ts`'s `quitToTitle` is one function for both the pause menu's "Quit to Title" and the
+end screens' "Hub", because which of the two called it is exactly `screenFlow.current` at the
+moment it runs: `'paused'` still has a live, resumable run; a finished run's `activeRun` save was
+already cleared by `advanceDeathSequence` before its own screen ever showed. Character select,
+seed entry, the daily run and replay-watching remain unreachable in-game, same as #63 left them —
+still real, tested code in `app/meta/`, just not wired to a button, and still a follow-up rather
+than scope creep onto this one.
+
+**Every string this issue introduced is plain, hardcoded English.** #52 (the localisation layer:
+three locales, the "no hardcoded strings" lint rule, the missing-key build check) does not exist
+yet — it is still open. Building a real localisation layer as a side effect of the title-screen
+issue would have been scope creep in the other direction, and satisfying a lint rule that has not
+been written yet is not a thing that can be done honestly. What *is* done: every string this issue
+added is short, English, and lives in exactly one place per screen (`title-screen.ts`,
+`pause-screen.ts`, `credits-screen.ts`, the `Menu` item labels on `GameOverScreen`/
+`VictoryScreen`/`RunResultsScreen`) rather than scattered inline — so that #52's own pass is a
+mechanical extraction into a key/locale table, not an archaeology dig through this issue's diff.
+
+**Constrains:** the next screen that needs player-facing text should keep doing this — one string
+literal per label, not composed at multiple call sites — until #52 lands and gives it somewhere to
+move to. The next screen that needs a *new* top-level state (a shop, a character-select screen)
+extends `Screen` in `screen-flow.ts` rather than adding another boolean to `main.ts`; a state that
+is really a sub-beat of an existing screen (the way game-over/victory/results are all `'run'`)
+should stay a flag inside that screen's own handling instead.
+
+## 68. Der Losbrunnen gets a second home in the shop, a near-certain spawn, and a break risk the player can see coming
 
 **Decided:** M8, #238, a tuning-and-placement follow-up on #218/`docs/DECISIONS.md` #64. A
 two-floor run only ever saw the Losbrunnen a quarter of the time (`spawnChance: 0.5`, rolled once
@@ -3298,10 +3345,10 @@ the issue's most speculative option ("consider whether") and is superseded by th
 above, which reaches the same "a machine met while still thinking about the build" goal without
 needing the boss room's reward-pedestal anchor to move.
 
-## 68. Der Losbrunnen's picker becomes a real card menu, and active items can reroll too
+## 69. Der Losbrunnen's picker becomes a real card menu, and active items can reroll too
 
 **Decided:** M8, #238's own follow-up comment from the issue's author, implemented in the same
-pass as #67: "the machine use should open a real menu where the user can choose the item... like
+pass as #68: "the machine use should open a real menu where the user can choose the item... like
 the reroll machine in Diablo, maybe a little mixed with the reward dialog in Vampire Survivors...
 Also we want passive AND active items to be able to reroll."
 

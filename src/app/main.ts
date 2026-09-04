@@ -89,7 +89,12 @@ import { loadPlayerArt } from '../render/player-art.js';
 import { attachLiveArtPreviewListener } from '../render/live-art-preview.js';
 import { AmbienceTracker, SynthAmbienceAudio } from './audio/ambience.js';
 import { playImpactAudio } from './audio/impact.js';
-import { SYNTH_IMPACT_AUDIO, playSfx, playVictoryFanfare } from './audio/sfx-player.js';
+import {
+  SYNTH_IMPACT_AUDIO,
+  playSfx,
+  playVictoryFanfare,
+  preloadContentAudioSamples,
+} from './audio/sfx-player.js';
 import { FootstepTracker } from './audio/footsteps.js';
 import {
   applyMixerSettings,
@@ -99,13 +104,15 @@ import {
 } from './audio/context.js';
 import { Bindable } from './input/bindings.js';
 import { actionPrompt, detectGlyphSet } from './input/glyphs.js';
+import { GamepadMenuNav } from './input/menu-nav.js';
 import { InputSampler } from './input/sampler.js';
 import { playRumble } from './input/rumble.js';
 import { FixedTimestepLoop, runAnimationFrameLoop } from './loop.js';
+import { ScreenFlowController } from './screen-flow.js';
 import { RunSummaryTracker, buildRunDetailsText, runDetailsFrom } from './run-summary.js';
 import { buildReplayRecord, loadReplayFrames, saveReplay } from './replay/store.js';
 import { downloadReplayFile, parseReplayText } from './replay/file.js';
-import { createSettingsScreen } from './settings-screen.js';
+import { createSettingsScreen, type SettingsScreenHandle } from './settings-screen.js';
 import { createTouchControls, isTouchCapable } from './touch-controls.js';
 import { createEditorDock } from './editor-dock.js';
 import {
@@ -729,6 +736,30 @@ async function boot(): Promise<void> {
   let sim!: GameSim;
   let view!: GameView;
   /**
+   * The title/pause/credits flow (#158) — see `screen-flow.ts`'s own doc
+   * comment for what does and doesn't count as a top-level screen there.
+   * `null` until `loop` and `input` exist, further down: `startRun`'s own
+   * `layoutHud` call already runs once before that, from the very first
+   * boot — see the optional-chaining reads below rather than a definite-
+   * assignment `!`, which would make that first call a crash instead of a
+   * harmless no-op resize.
+   */
+  let screenController: ScreenFlowController | null = null;
+  // Shared with `screenController`'s own gamepad polling — see
+  // `GamepadMenuNav`'s doc comment for why one instance covers every
+  // `Menu`-backed screen rather than one each.
+  const menuNav = new GamepadMenuNav();
+  /**
+   * The DOM settings panel (#53) — created near the very end of `boot`,
+   * after an `await` the title/pause screens' own "Settings" button can in
+   * principle run ahead of (a dev build's debug-overlay import genuinely
+   * takes a few frames; a production build's is one microtask, but nothing
+   * here should rely on that being fast enough not to matter). `null` until
+   * then, so that button is a harmless no-op instead of a crash in the
+   * astronomically unlikely case it is clicked in that window.
+   */
+  let settingsHandle: SettingsScreenHandle | null = null;
+  /**
    * The in-progress run's input log (#45). Reset by every `startRun`
    * (a restart abandons whatever was being recorded, the same as a fresh
    * `sim`) and replayed from a saved one at boot by `resumeActiveRun` below,
@@ -811,8 +842,28 @@ async function boot(): Promise<void> {
   // having a column of debug text drawn across it.
   uiLayer.addChild(hudLayer);
 
-  const gameOverScreen = new GameOverScreen(kit, app.renderer);
-  const victoryScreen = new VictoryScreen(kit, app.renderer);
+  const gameOverScreen = new GameOverScreen(kit, app.renderer, {
+    onRetry: () => {
+      retryRun();
+    },
+    onResults: () => {
+      openRunResults();
+    },
+    onHub: () => {
+      quitToTitle();
+    },
+  });
+  const victoryScreen = new VictoryScreen(kit, app.renderer, {
+    onRetry: () => {
+      retryRun();
+    },
+    onResults: () => {
+      openRunResults();
+    },
+    onHub: () => {
+      quitToTitle();
+    },
+  });
 
   /**
    * The results screen — a stylized statistics page opened with `T` and
@@ -822,7 +873,19 @@ async function boot(): Promise<void> {
    * last run, unlocks, the run board — nothing else. Character select, seed
    * entry and the daily run are a real main menu's job, not built yet.
    */
-  const runResults = new RunResultsScreen(kit, app.renderer);
+  const runResults = new RunResultsScreen(kit, app.renderer, {
+    onNewRun: () => {
+      // Same seed source `Enter` always used here — `pendingSeed`, rolled
+      // once a run ends (`advanceDeathSequence`), not a fresh roll on the
+      // spot the way the global `R` key (`retryRun`) works.
+      closeRunResults();
+      startRun(pendingSeed);
+      playSfx('ui-confirm');
+    },
+    onClose: () => {
+      closeRunResults();
+    },
+  });
 
   /**
    * The floor's title card (#154) — the screen-filling Fraktur plate a floor
@@ -1014,13 +1077,17 @@ async function boot(): Promise<void> {
   hudLayer.addChild(kitGallery.view);
   hudLayer.addChild(gameOverScreen.view);
   hudLayer.addChild(victoryScreen.view);
-  // Above the game-over/victory screens: the hub opens over a finished
-  // run's tableau, and the two are on screen together the moment a new
-  // regular arrives.
+  // Above the game-over/victory screens: the results screen opens over a
+  // finished run's tableau, and an unlock earned by that very run shows it
+  // automatically (`advanceDeathSequence`), so the two have to be able to
+  // sit on screen together.
   hudLayer.addChild(runResults.view);
   // The Losbrunnen's picker (#238) is its own mid-run modal, on top of the
   // ordinary HUD for the same reason `runResults` is.
   hudLayer.addChild(machinePicker.view);
+  // The title/pause/credits screens (#158) are added once `screenController`
+  // itself is, further down — it needs `loop` and `input`, neither of which
+  // exists yet at this point in `boot`.
 
   /** The frame's size in UI pixels, kept for the per-frame placements below. */
   let uiFrame = { width: INTERNAL_WIDTH, height: INTERNAL_HEIGHT };
@@ -1092,6 +1159,9 @@ async function boot(): Promise<void> {
     victoryScreen.resize(width, height);
     runResults.resize(width, height);
     machinePicker.resize(width, height);
+    // `null` only for the very first call, from `startRun`'s own boot-time
+    // `layoutHud` — before `loop`/`input` exist to build this from.
+    screenController?.resize(width, height);
     floorTitleCard.resize(width, height);
     kitGallery.resize(width, height);
   };
@@ -1282,6 +1352,70 @@ async function boot(): Promise<void> {
     runResults.hide();
     loop.paused = pausedBeforeRunResults;
     playSfx('ui-close');
+  }
+
+  /**
+   * The pause menu's "Quit to Title" and the game-over/victory screens'
+   * "Hub" both end up here — `ScreenFlowController.quitToTitle` decides
+   * which of the two called it (and thus whether "Continue" comes back up)
+   * from its own `current` state; this wrapper only adds hiding the two
+   * end screens, which the controller doesn't hold a reference to.
+   */
+  function quitToTitle(): void {
+    gameOverScreen.hide();
+    victoryScreen.hide();
+    screenController?.quitToTitle();
+  }
+
+  /** The global `R` key and every "Retry" button: a fresh random seed, same as Isaac's own restart key. */
+  function retryRun(): void {
+    screenController?.enterRun();
+    startRun(Math.floor(Math.random() * 1_000_000));
+  }
+
+  /**
+   * Drives the game-over/victory/results screens from the gamepad, once per
+   * rendered frame — `screenController`'s own `pollGamepad` handles the
+   * title/pause/credits case and returns `false` while a run is live, which
+   * is exactly when these three might be the ones up instead. Shares
+   * `menuNav`'s edge-tracking with it, since the two are never both
+   * polling for real in the same frame — see `GamepadMenuNav`'s doc
+   * comment.
+   */
+  function pollMenuGamepad(): void {
+    if (screenController?.pollGamepad() === true) {
+      return;
+    }
+    if (!runResults.visible && deathPhase !== 'over') {
+      return;
+    }
+    const edges = menuNav.poll(input.gamepad);
+    if (runResults.visible) {
+      if (edges.up) {
+        runResults.moveFocus(-1);
+      }
+      if (edges.down) {
+        runResults.moveFocus(1);
+      }
+      if (edges.confirm) {
+        runResults.activate();
+      }
+      if (edges.cancel) {
+        closeRunResults();
+      }
+      return;
+    }
+    // `deathPhase === 'over'`: the game-over/victory screen, whichever is showing.
+    const endScreen = gameOverScreen.visible ? gameOverScreen : victoryScreen;
+    if (edges.up) {
+      endScreen.moveFocus(-1);
+    }
+    if (edges.down) {
+      endScreen.moveFocus(1);
+    }
+    if (edges.confirm) {
+      endScreen.activate();
+    }
   }
 
   /**
@@ -1483,6 +1617,7 @@ async function boot(): Promise<void> {
   const ambience = new SynthAmbienceAudio();
   const footsteps = new FootstepTracker();
   attachAudioUnlockListener();
+  preloadContentAudioSamples();
 
   // The overlay is created asynchronously and may never arrive — in a
   // production build the import below is never reached and the whole of
@@ -1526,6 +1661,22 @@ async function boot(): Promise<void> {
     creditBossDefeat(live, justCleared);
     checkLowHealthSting(live);
     advanceDeathSequence();
+    // The bindable `pause` action (`Bindable.Pause` — Escape by default,
+    // gamepad Start), finally read: it existed in `bindings.ts` and the
+    // settings screen's rebind table since before this issue, with nothing
+    // consuming it. `live` excludes a replay's own recorded frames — replay
+    // playback pauses through the ` ` key in its own keydown branch instead.
+    // `deathPhase`/`runResults` are this call site's own concerns to check —
+    // `ScreenFlowController.openPause` only re-checks its own `screenFlow`.
+    if (
+      live &&
+      deathPhase === 'alive' &&
+      !runResults.visible &&
+      isActionDown(frame, InputAction.Pause) &&
+      !isActionDown(input.previousFrame, InputAction.Pause)
+    ) {
+      screenController?.openPause();
+    }
     checkBlutwurzTransition();
     checkSecretReveals();
     if (keyHintTicks > 0) {
@@ -1612,6 +1763,10 @@ async function boot(): Promise<void> {
     render: (alpha) => {
       const started = performance.now();
       overlay?.drawCalls.beginFrame();
+      // Gamepad menu navigation (#158): has to run every rendered frame
+      // rather than every tick, since it is exactly what keeps working while
+      // `loop.paused` has stopped ticks from running at all.
+      pollMenuGamepad();
       // `started` doubles as the render clock animation clips advance on
       // (#150) — the same reading this frame is already being timed from,
       // rather than a second `performance.now()` a fraction of a millisecond
@@ -1796,6 +1951,37 @@ async function boot(): Promise<void> {
       simMs = 0;
     },
   });
+
+  screenController = new ScreenFlowController({
+    kit,
+    renderer: app.renderer,
+    loop,
+    gamepad: input.gamepad,
+    menuNav,
+    startNewRun: retryRun,
+    openSettings: () => {
+      settingsHandle?.open();
+    },
+    playOpenSound: () => {
+      playSfx('ui-open');
+    },
+    playCloseSound: () => {
+      playSfx('ui-close');
+    },
+  });
+  // Topmost of all (#158): the title, pause and credits screens each cover
+  // the entire frame while they're up, over the run and over each other's
+  // end screens alike — there is nothing a player should see peeking out
+  // from underneath any of them.
+  hudLayer.addChild(screenController.pause.view);
+  hudLayer.addChild(screenController.credits.view);
+  hudLayer.addChild(screenController.title.view);
+  // `layoutHud`'s own boot-time call already ran once, before this existed —
+  // catch it up to the real frame size before the title screen (raised
+  // further down, once `resumeActiveRun`/`startRun` have actually run) gets
+  // its own first layout, or that would be a stale `INTERNAL_WIDTH`/
+  // `INTERNAL_HEIGHT` guess.
+  screenController.resize(uiFrame.width, uiFrame.height);
 
   // Refreshing the HUD regenerates a texture, so it runs on a slow cadence
   // rather than every frame.
@@ -2339,9 +2525,19 @@ WASD move   arrows aim and fire
     void navigator.clipboard.writeText(buildRunDetailsText(details));
   }
 
-  if (!resumeActiveRun()) {
+  // Boots to the title screen (#158), not straight into a run — but a real
+  // `sim`/`view` is still built synchronously right here, exactly as before
+  // this issue, so nothing downstream has to learn to cope with there being
+  // none yet (see the definite-assignment note on `sim!`/`view!` above).
+  // `screenController.showTitle` immediately pauses the loop and covers it,
+  // so the room never actually plays in front of anyone — safe this late,
+  // since the animation frame loop that would otherwise render an uncovered
+  // frame of it doesn't start until further down still.
+  const hadResumableRun = resumeActiveRun();
+  if (!hadResumableRun) {
     startRun(RUN_SEED);
   }
+  screenController.showTitle(hadResumableRun);
 
   if (seedInput instanceof HTMLInputElement) {
     seedInput.addEventListener('change', () => {
@@ -2687,6 +2883,13 @@ WASD move   arrows aim and fire
   }
 
   window.addEventListener('keydown', (event: KeyboardEvent) => {
+    // The title, pause and credits screens (#158) swallow every key of
+    // their own before anything below gets a look — a run cannot be live
+    // (and `replay`/`runResults`/dev keys with it) while one of these is
+    // covering it, per `screenFlow`'s own boundary.
+    if (screenController.handleKeydown(event)) {
+      return;
+    }
     // Replay playback (#48) swallows every key of its own before either of
     // the two switches below get a look — none of the hub's or the live
     // game's keys make sense over a run that is being watched, not played.
@@ -2727,15 +2930,22 @@ WASD move   arrows aim and fire
     // have nothing to act on behind a paused screen.
     if (runResults.visible) {
       switch (event.key) {
+        case 'ArrowUp':
+        case 'w':
+        case 'W':
+          runResults.moveFocus(-1);
+          break;
+        case 'ArrowDown':
+        case 's':
+        case 'S':
+          runResults.moveFocus(1);
+          break;
         case 'Enter':
-          // Only from a finished run: see `RunResultsScreen.show`'s
-          // `runOver`. Mid-run this screen is somewhere you look, not a way
-          // to throw the run away by pressing the most obvious key on it.
-          if (deathPhase === 'over') {
-            closeRunResults();
-            startRun(pendingSeed);
-            playSfx('ui-confirm');
-          }
+          // `RunResultsScreen`'s own item list already keeps this from
+          // throwing a live run away: "New Run" only exists when `runOver`
+          // (`RunResultsScreen.show`'s own `runOver` flag) — mid-run there is
+          // only "Back to Run" to activate.
+          runResults.activate();
           break;
         case 't':
         case 'T':
@@ -2770,8 +2980,27 @@ WASD move   arrows aim and fire
       case 'r':
       case 'R':
         // A fresh random seed every press, same as Isaac's own restart key —
-        // `#seed-input` is what pins a specific one instead.
-        startRun(Math.floor(Math.random() * 1_000_000));
+        // `#seed-input` is what pins a specific one instead. Same function
+        // the game-over/victory screens' own "Retry" button calls.
+        retryRun();
+        break;
+      case 'ArrowUp':
+      case 'ArrowDown':
+      case 'Enter':
+        // The game-over/victory screen's own `Menu` (#158) — only up while
+        // `deathPhase === 'over'`, so these three are otherwise unclaimed
+        // keys during ordinary play (arrows aim through `InputSampler`'s own
+        // polling, not this event switch).
+        if (deathPhase === 'over') {
+          const endScreen = gameOverScreen.visible ? gameOverScreen : victoryScreen;
+          if (event.key === 'ArrowUp') {
+            endScreen.moveFocus(-1);
+          } else if (event.key === 'ArrowDown') {
+            endScreen.moveFocus(1);
+          } else {
+            endScreen.activate();
+          }
+        }
         break;
       case 'k':
       case 'K':
@@ -3170,7 +3399,7 @@ WASD move   arrows aim and fire
   // already claims all four corners (move/aim sticks bottom-left/right,
   // map/pause top-left/right), so bottom-left — this panel's normal spot —
   // would sit right under the move stick.
-  createSettingsScreen(
+  settingsHandle = createSettingsScreen(
     {
       settings,
       preferences,

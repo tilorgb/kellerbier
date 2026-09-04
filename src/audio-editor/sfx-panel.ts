@@ -1,4 +1,5 @@
-import { fetchSfx, saveSfx } from './api-client.js';
+import { fetchSfx, saveSfx, saveSfxSample } from './api-client.js';
+import { createSampleEditorPanel } from './sample-editor-panel.js';
 import { getAudioContext, getMasterGain, resumeAudioContext } from '../app/audio/context.js';
 import { playSfxSound } from '../app/audio/synth.js';
 import type { InstrumentDefinition, InstrumentFilter, SfxDefinition } from '../app/audio/types.js';
@@ -107,6 +108,14 @@ export function createSfxPanel(
   status.className = 'kb-audio-status';
   root.appendChild(status);
 
+  const sampleEditor = createSampleEditorPanel(root, {
+    getCurrentSample: () => sfxList.find((sfx) => sfx.id === idSelect.value)?.sample,
+    saveSample: async (sample) => {
+      await saveSfxSample(idSelect.value, sample);
+      sfxList = await fetchSfx();
+    },
+  });
+
   function currentDefinition(): Omit<SfxDefinition, 'id'> {
     const type = filterType.value;
     const noise = noiseEnabled.checked
@@ -174,6 +183,7 @@ export function createSfxPanel(
     if (sfx !== undefined) {
       loadIntoForm(sfx);
     }
+    sampleEditor.refresh();
   });
 
   previewButton.addEventListener('click', () => {
@@ -219,6 +229,7 @@ export function createSfxPanel(
 
   return {
     destroy(): void {
+      sampleEditor.destroy();
       root.remove();
     },
   };
