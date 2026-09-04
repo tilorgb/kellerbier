@@ -47,8 +47,8 @@ function lootRoom(id: string): SingleCellRoomTemplate {
     enemySpawns: [],
     spawnGroups: [],
     pickupSpawns: [
-      { x: PICKUP_A.x, y: PICKUP_A.y, type: 'brezn' },
-      { x: PICKUP_B.x, y: PICKUP_B.y, type: 'radi' },
+      { x: PICKUP_A.x, y: PICKUP_A.y, type: 'bratwurst-full' },
+      { x: PICKUP_B.x, y: PICKUP_B.y, type: 'weisswurst-full' },
     ],
     hazards: [],
     decorativeProps: [{ x: PEDESTAL.x, y: PEDESTAL.y, type: 'pedestal' }],
@@ -136,17 +136,18 @@ describe('room loot persistence', () => {
     const room = lootRoom('test-loot-room');
     const sim = new GameSim({ roomTemplate: room, floor: 1 });
 
-    const breznAt = pickupPosition(sim, 'brezn');
+    sim.applyPlayerDamage(2); // leaves the red pool short of full, so the Wurst is not refused
+    const breznAt = pickupPosition(sim, 'bratwurst-full');
     placePlayer(sim, breznAt.x, breznAt.y);
     sim.step(IDLE);
     expect(countPickups(sim)).toBe(1);
-    expect(pickupKinds(sim)).toEqual(['radi']);
+    expect(pickupKinds(sim)).toEqual(['weisswurst-full']);
 
     sim.loadRoom(elsewhere(), 1);
     sim.loadRoom(room, 1);
 
     expect(countPickups(sim)).toBe(1);
-    expect(pickupKinds(sim)).toEqual(['radi']);
+    expect(pickupKinds(sim)).toEqual(['weisswurst-full']);
   });
 
   it('a pedestal item taken before leaving stays taken, not re-offered', () => {
@@ -179,7 +180,7 @@ describe('room loot persistence', () => {
     // Stands in for an enemy's drop or the room-clear roll — from `GameSim`'s
     // own perspective a pickup is a pickup regardless of who called
     // `spawnPickup`, which is exactly what `snapshotRoomLoot` relies on.
-    sim.spawnPickup('beer', 100, 60);
+    sim.spawnPickup('mass-full', 100, 60);
     sim.world.flush();
     expect(countPickups(sim)).toBe(1);
 
@@ -192,7 +193,7 @@ describe('room loot persistence', () => {
   it('a fully looted room stays empty on a later visit', () => {
     const room = elsewhere('test-empty-room');
     const sim = new GameSim({ roomTemplate: room, floor: 1 });
-    sim.spawnPickup('beer', 100, 60);
+    sim.spawnPickup('mass-full', 100, 60);
     sim.world.flush();
     placePlayer(sim, 100, 60);
     sim.step(IDLE);

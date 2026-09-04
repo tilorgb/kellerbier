@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import cellarCrossroads from '../../src/content/rooms/cellar.json';
 import cellarBoss from '../../src/content/rooms/cellar-boss.json';
-import { GameSim } from '../../src/sim/game/sim.js';
+import { ETERNAL_HALF_UNIT, GameSim } from '../../src/sim/game/sim.js';
 import { createInputFrame } from '../../src/sim/input/frame.js';
 import { blutwurz } from '../../src/content/items/blutwurz.js';
 
@@ -86,7 +86,7 @@ describe('starting the spirit walk (#84)', () => {
   it('an eternal heart still takes priority over a held bottle', () => {
     const sim = roomSim();
     sim.pickUpItem('blutwurz');
-    sim.addEternalHealth(1);
+    sim.addEternalHealth(ETERNAL_HALF_UNIT);
     sim.applyPlayerDamage(1000);
     expect(sim.playerDead).toBe(false);
     expect(sim.blutwurzActive).toBe(false);

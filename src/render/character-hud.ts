@@ -13,9 +13,9 @@ const ICON_GAP = 3;
  * Two things, and the second is the reason this exists at all. The name
  * alone would be a label — the run already knows who it is, and so does the
  * player who just picked. What the player cannot see anywhere else is the
- * *state* of a character rule: how far Bruder Barnabas's fast has climbed,
- * whether König Ludwig's purse still has anything in it, which floor Der
- * Wolpertinger's stats were last rolled for. `CONTRIBUTING.md`'s gameplay
+ * *state* of a character rule: whether König Ludwig's purse still has
+ * anything in it, which floor Der Wolpertinger's stats were last rolled for.
+ * `CONTRIBUTING.md`'s gameplay
  * row is explicit that a thing you cannot see is a thing you cannot tune,
  * and `CLAUDE.md`'s is explicit that a feature nobody can experience is not
  * finished; a stat multiplier moving silently in the pipeline is exactly the
@@ -86,17 +86,6 @@ interface CharacterStatus {
  */
 export function characterStatus(sim: GameSim): CharacterStatus | null {
   const traits = sim.character;
-  if (traits.rules.includes('fasting')) {
-    const steps = sim.fastSteps;
-    const percent = Math.round(steps * sim.tuning.character.fastStepBonus * 100);
-    return steps === 0
-      ? { text: 'Fasting: nothing yet', icon: 'wurst-empty', tint: UI_PALETTE.textDim }
-      : {
-          text: `Fasting: +${String(percent)}% strength`,
-          icon: 'star',
-          tint: HUD_PALETTE.activeItemReady,
-        };
-  }
   if (traits.rules.includes('purse')) {
     return sim.pursePowered
       ? {

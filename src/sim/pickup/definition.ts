@@ -53,8 +53,7 @@ export type PickupEffect =
    * which (like `addPromille`) takes a magnitude, not a signed delta.
    *
    * Refused outright — stays on the floor, no heal, no Promille change —
-   * when `pool` is already at its ceiling (`GameSim.healthPoolFull`), the
-   * same all-or-nothing shape Bruder Barnabas's fast refusal already uses.
+   * when `pool` is already at its ceiling (`GameSim.healthPoolFull`).
    */
   | {
       readonly kind: 'food';
@@ -99,8 +98,8 @@ export interface DropTableEntry {
 
 /**
  * A drop table has two variants, selected once per run by whether Promille is
- * unlocked (#85). `sober` never names `'beer'` — its weight goes to
- * Biermarken, Kellerschlüssel and health instead, per the issue's own
+ * unlocked (#85). `sober` never names a Maß — its weight goes to
+ * Biermarken, Kellerschlüssel and Wurst instead, per the issue's own
  * "Update — the drop table has a sober variant" note. This is what makes drop
  * rates "data, tunable without a code change": both variants are read here,
  * nothing branches on run state anywhere else.

@@ -394,9 +394,6 @@ const GROUPS: readonly GroupSpec[] = [
     title: 'character',
     group: 'character',
     fields: [
-      { key: 'fastStepTicks', min: 120, max: 2400, step: 60, hint: 'ticks per step of the fast' },
-      { key: 'fastStepBonus', min: 0, max: 1, step: 0.05, hint: 'Stammwürze per step' },
-      { key: 'fastMaxSteps', min: 0, max: 10, step: 1, hint: 'steps the fast stops paying at' },
       {
         key: 'purseDrainTicks',
         min: 15,

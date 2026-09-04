@@ -47,11 +47,11 @@ describe('GameSim.dropLoot', () => {
     ],
     promilled: [
       { pickupId: null, weight: 1 },
-      { pickupId: 'beer', weight: 1 },
+      { pickupId: 'mass-full', weight: 1 },
     ],
   };
 
-  it('never rolls Beer in a sober run, across many rolls', () => {
+  it('never rolls Maß in a sober run, across many rolls', () => {
     const sim = emptySim({ promilleUnlocked: false });
     for (let roll = 0; roll < 200; roll++) {
       sim.dropLoot(table, 160, 90);
@@ -61,7 +61,7 @@ describe('GameSim.dropLoot', () => {
     // itself is checked at the entity level, not through the wallet.
     sim.world.flush();
     expect(countPickups(sim, 'biermarke-1')).toBeGreaterThan(0);
-    expect(countPickups(sim, 'beer')).toBe(0);
+    expect(countPickups(sim, 'mass-full')).toBe(0);
   });
 
   it('reads the promilled variant once unlocked', () => {
@@ -70,7 +70,7 @@ describe('GameSim.dropLoot', () => {
       sim.dropLoot(table, 160, 90);
     }
     sim.world.flush();
-    expect(countPickups(sim, 'beer')).toBeGreaterThan(0);
+    expect(countPickups(sim, 'mass-full')).toBeGreaterThan(0);
   });
 
   it('boosts a need the player is low on', () => {

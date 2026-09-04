@@ -155,7 +155,7 @@ describe('Konterbier — drinking while hungover clears the Kater', () => {
     expect(sim.hasKater).toBe(true);
 
     const index = sim.playerIndex;
-    sim.spawnPickup('beer', sim.positionX(index), sim.positionY(index));
+    sim.spawnPickup('mass-full', sim.positionX(index), sim.positionY(index));
     sim.world.flush();
     sim.step(IDLE); // the beer is collected this tick
 
@@ -170,7 +170,7 @@ describe('Konterbier — drinking while hungover clears the Kater', () => {
     expect(sim.hasKater).toBe(true);
 
     const index = sim.playerIndex;
-    sim.spawnPickup('beer', sim.positionX(index), sim.positionY(index));
+    sim.spawnPickup('mass-full', sim.positionX(index), sim.positionY(index));
     sim.world.flush();
     sim.step(IDLE);
 
@@ -183,7 +183,7 @@ describe('Konterbier — drinking while hungover clears the Kater', () => {
     expect(sim.hasKater).toBe(false);
 
     const index = sim.playerIndex;
-    sim.spawnPickup('beer', sim.positionX(index), sim.positionY(index));
+    sim.spawnPickup('mass-full', sim.positionX(index), sim.positionY(index));
     sim.world.flush();
     expect(() => {
       sim.step(IDLE);

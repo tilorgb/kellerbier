@@ -131,22 +131,10 @@ function collect(sim: GameSim, other: number): boolean {
   }
   const definition = sim.pickups.at(definitionIndex);
   const effect = definition.effect;
-  // Bruder Barnabas (#47) refuses food outright: the Brezn stays on the
-  // floor, uncollected, and he is told why. Refusing rather than collecting
-  // it for nothing is the whole mechanic — food is the conventional way back
-  // down the Promille meter, and a character who can see the way down and
-  // cannot take it is the Vollrausch character the roster wanted him for.
-  //
-  // Checked *before* the price is paid below, not after: a shop selling a
-  // Brezn would otherwise take his Biermarken for something he then declines.
-  if (effect.kind === 'food' && sim.playerRefusesFood) {
-    sim.reportCollected(definition.name, 'Er fast’t — des bleibt liegn.');
-    return false;
-  }
-  // A full pool refuses its Wurst outright — no heal, no Promille change,
-  // same all-or-nothing shape as Barnabas's fast above. Checked before the
-  // price is paid for the same reason: a shop selling a full-pool Wurst
-  // would otherwise take Biermarken for something the player then can't use.
+  // A full pool refuses its Wurst outright — no heal, no Promille change.
+  // Checked before the price is paid below, not after: a shop selling a
+  // full-pool Wurst would otherwise take Biermarken for something the player
+  // then can't use.
   if (effect.kind === 'food' && sim.healthPoolFull(effect.pool)) {
     sim.reportCollected(definition.name, 'Is scho voll — bleibt liegn.');
     return false;
@@ -156,13 +144,6 @@ function collect(sim: GameSim, other: number): boolean {
     return false;
   }
   sim.reportCollected(definition.name, pickupDescriptionFor(definition, sim.promilleUnlocked));
-
-  // A fast is broken by swallowing something, whatever it was (#47) — see
-  // `GameSim.breakFast`. Every branch below that heals or drinks counts;
-  // a Biermarke, a key and a keg do not.
-  if (effect.kind === 'food' || effect.kind === 'promille') {
-    sim.breakFast();
-  }
 
   switch (effect.kind) {
     case 'currency':

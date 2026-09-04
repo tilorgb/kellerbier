@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GameSim, PLAYER_HEALTH } from '../../src/sim/game/sim.js';
+import { ETERNAL_HALF_UNIT, GameSim, PLAYER_HEALTH } from '../../src/sim/game/sim.js';
 import { RoomGeometry } from '../../src/sim/room/geometry.js';
 import { type InputFrame, createInputFrame, quantiseAxis } from '../../src/sim/input/frame.js';
 import { ProjectileTeam } from '../../src/sim/projectile/store.js';
@@ -60,7 +60,7 @@ describe('player health pools', () => {
 
   it('spends an eternal heart on a killing blow instead of dying, and refills red to 1', () => {
     const sim = emptySim();
-    sim.addEternalHealth(1);
+    sim.addEternalHealth(ETERNAL_HALF_UNIT);
     sim.applyPlayerDamage(PLAYER_HEALTH);
     expect(sim.playerEternalHealth).toBe(0);
     expect(sim.playerHealth).toBe(1);

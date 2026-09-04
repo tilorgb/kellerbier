@@ -6,19 +6,19 @@ import type { ModifierOp } from '../stats/modifiers.js';
  * Who you are playing as, as data (#47).
  *
  * `docs/GAME_DESIGN.md` §3 is explicit that a character is **a different
- * verb, not a different stat spread**: Bruder Barnabas refuses food, König
- * Ludwig flies and pays for it, Der Wolpertinger is rerolled every floor.
- * A stat block alone cannot express any of those, and a `CharacterDefinition`
- * carrying functions would put behaviour in `src/content/` — which the
- * `content-is-data` lint rule (and the reasoning behind it) rules out.
+ * verb, not a different stat spread**: König Ludwig flies and pays for it,
+ * Der Wolpertinger is rerolled every floor, D'Sennerin's own ricochets can
+ * hit her. A stat block alone cannot express any of those, and a
+ * `CharacterDefinition` carrying functions would put behaviour in
+ * `src/content/` — which the `content-is-data` lint rule (and the reasoning
+ * behind it) rules out.
  *
  * So a character is a stat block **plus a list of named rules**. The rule is
- * a string in the roster and a branch in the one system that owns it: the
- * food refusal lives in `sim/systems/pickup.ts`, flight in
- * `sim/systems/movement.ts`, the ricochet in `sim/systems/collision.ts`.
- * Adding the sixth character stays a data change; adding a genuinely new
- * *verb* is a rule id and the one system that reads it, which is the honest
- * cost of a verb that did not exist before.
+ * a string in the roster and a branch in the one system that owns it: flight
+ * lives in `sim/systems/movement.ts`, the ricochet in
+ * `sim/systems/collision.ts`. Adding the sixth character stays a data
+ * change; adding a genuinely new *verb* is a rule id and the one system that
+ * reads it, which is the honest cost of a verb that did not exist before.
  *
  * Nothing here is optional-with-a-default: a character states its whole
  * hand. `NEUTRAL_TRAITS` below is what "no character at all" means, and is
@@ -38,22 +38,6 @@ export interface CharacterStatModifier {
  * one rule.
  */
 export const CharacterRule = {
-  /**
-   * Every `food` pickup is left on the floor untouched (`sim/systems/pickup.ts`).
-   *
-   * Deliberately *refused*, not silently collected for nothing: the Brezn
-   * stays lying there, so a Barnabas player can see what they are giving up.
-   * Food is also the only conventional way down off the Promille meter,
-   * which is what makes him the Vollrausch character the issue's note
-   * describes rather than a character with one pickup filtered out.
-   */
-  RefusesFood: 'refusesFood',
-  /**
-   * Stammwürze climbs the longer he goes without swallowing anything
-   * (`GameSim.syncCharacterFastModifiers`). Any pickup that heals or drinks
-   * breaks the fast; refused food never does, because he never took it.
-   */
-  Fasting: 'fasting',
   /**
    * Crosses a room's interior obstacles and ignores its puddles
    * (`sim/systems/movement.ts`). Never crosses a room's own walls, or the
@@ -83,8 +67,6 @@ export type CharacterRuleId = (typeof CharacterRule)[keyof typeof CharacterRule]
 
 /** Every rule id, for the content test that checks a roster names only real ones. */
 export const CHARACTER_RULE_IDS: readonly CharacterRuleId[] = [
-  CharacterRule.RefusesFood,
-  CharacterRule.Fasting,
   CharacterRule.Flies,
   CharacterRule.Purse,
   CharacterRule.Chaos,

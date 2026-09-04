@@ -83,9 +83,10 @@ describe('a seed reproduces the run it recorded, not the run the player has unlo
     const promilled = runDigest(true);
     expect(sober).not.toEqual(promilled);
     // And it differs in the direction the gate promises, not merely somewhere:
-    // the sober run rolled real loot, and none of it was beer.
+    // the sober run rolled real loot, and none of it was a Maß.
     expect(sober.length).toBeGreaterThan(0);
-    expect(sober).not.toContain('beer');
-    expect(promilled).toContain('beer');
+    expect(sober).not.toContain('mass-full');
+    expect(sober).not.toContain('mass-half');
+    expect(promilled.some((id) => id === 'mass-full' || id === 'mass-half')).toBe(true);
   });
 });
