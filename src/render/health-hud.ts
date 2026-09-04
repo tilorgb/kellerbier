@@ -1,5 +1,10 @@
 import { Container, Sprite, type Texture } from 'pixi.js';
-import { ETERNAL_HEALTH_MAX, PLAYER_HEALTH, SOUL_HEALTH_MAX, type GameSim } from '../sim/game/sim.js';
+import {
+  ETERNAL_HEALTH_MAX,
+  PLAYER_HEALTH,
+  SOUL_HEALTH_MAX,
+  type GameSim,
+} from '../sim/game/sim.js';
 import { HEALTH_ICON_ROLES, type UiKit } from './ui/kit.js';
 
 const WURST_GAP = 1;
