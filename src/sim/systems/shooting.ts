@@ -236,6 +236,28 @@ function advanceProjectile(index: number): void {
   const velocityX = projectiles.velocityX[index] ?? 0;
   const velocityY = projectiles.velocityY[index] ?? 0;
   const radius = projectiles.radius[index] ?? 0;
+  // Terrain never has to admit more than the player's own body already does.
+  // `radius` is the *hit* circle — what a shot deals damage through, and what
+  // `sim/systems/collision.ts`'s swept test against an enemy still reads at
+  // full size, unclamped, because a bigger hit-circle mattering against
+  // something it can hurt is exactly what an item like Maß (2.5x radius) is
+  // buying. But a gap the room was authored to let the shooter's own body
+  // through must keep letting a shot through too — the shooter fit there a
+  // moment ago. Without this clamp, an item that only inflates the hit
+  // circle turns "stand next to a wall and fire alongside it" into a shot
+  // that dies on its own muzzle, which reads as a broken weapon rather than
+  // as a bigger one.
+  //
+  // Read off `sim.body.data` — the player's live collider radius, the same
+  // place `sim/systems/enemy.ts`'s melee reach check reads it from — rather
+  // than importing `PLAYER_RADIUS` from `sim/game/sim.ts` directly: that
+  // import crosses the same circular module edge `sim.ts` already has onto
+  // this file (`sim.ts` imports `stepShooting`/`stepProjectiles` from here),
+  // and reading it unconditionally on every live projectile every tick
+  // measurably cost this hot loop its zero-allocation guarantee
+  // (`tests/unit/projectile-allocation.test.ts`) even though nothing about a
+  // `number` import should heap-allocate on its face.
+  const wallRadius = Math.min(radius, sim.body.data[sim.playerIndex * 2] ?? 0);
   const tags = projectiles.tags[index] ?? 0;
   // `spectral`: passes through walls entirely rather than ending or bouncing
   // at one — the shot still collides with whatever it is allowed to hit
@@ -254,7 +276,7 @@ function advanceProjectile(index: number): void {
   for (let substep = 0; substep < substeps; substep++) {
     const stepX = currentX + velocityX / substeps;
     const stepY = currentY + velocityY / substeps;
-    if (!spectral && !room.isClear(stepX, stepY, radius)) {
+    if (!spectral && !room.isClear(stepX, stepY, wallRadius)) {
       // The impact normal points back the way the shot came, which is the
       // direction a spray of foam should leave the wall in — and, per
       // `reflectVelocity`'s doc comment, exactly the normal a wall bounce

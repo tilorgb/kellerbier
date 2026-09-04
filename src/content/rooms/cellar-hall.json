@@ -23,7 +23,7 @@
   "spawnGroups": [
     {
       "id": "hall-watch",
-      "count": 2,
+      "count": 1,
       "choices": [
         { "enemyId": "bierratte", "minFloor": 1, "maxFloor": 2 },
         { "enemyId": "gockel", "minFloor": 2, "maxFloor": 2 },
