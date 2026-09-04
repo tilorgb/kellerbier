@@ -6,6 +6,8 @@ interface DecodedImage {
   pixels: Buffer;
 }
 
+export declare function removeBackground(image: DecodedImage, tolerance?: number): DecodedImage;
+
 export declare function downscaleBoxFilter(
   image: DecodedImage,
   targetWidth: number,
@@ -21,5 +23,10 @@ export declare function paletteForFloor(floorTag?: string | null): readonly numb
 
 export declare function postprocessDiffusionOutput(
   image: DecodedImage,
-  options: { targetWidth: number; targetHeight: number; palette: readonly number[] },
+  options: {
+    targetWidth: number;
+    targetHeight: number;
+    palette: readonly number[];
+    backgroundTolerance?: number | null;
+  },
 ): DecodedImage;

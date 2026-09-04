@@ -3449,3 +3449,47 @@ the two-floor curve") before it is added — this is not a general analytics pip
 is ever justified (post-#159, once a playtest cadence is actually running and file-shuffling
 becomes the bottleneck), that is a new decision to make deliberately, not a default this one
 quietly grows into.
+
+## 71. The local diffusion pipeline lives outside the repo; generation is scripted, not just manual
+
+**Decided:** tooling/workflow (#258), not tied to a milestone.
+
+ComfyUI plus a Stable Diffusion 1.5 checkpoint and a pixel-art LoRA is several gigabytes of model
+weights — nothing about them is source, so none of it goes in `kellerbier`'s git tree. ComfyUI is
+installed at `D:\repos\ComfyUI`, a sibling of this repo rather than a subdirectory of it: same
+parent folder, own `.git` (upstream ComfyUI's, not ours), own venv, own `models/` directory for
+the checkpoint and LoRA. Nothing under that path is ever committed here. The repo's own half of
+#258 is `tools/art/diffusion-postprocess.mjs` (box-filter downscale, then palette-snap onto
+`palette.mjs`'s existing `FLOOR_PALETTES`/`MASTER_PALETTE`) plus its CLI — that part *is* source,
+because it is deterministic and has no business living next to a GPU-bound model server.
+
+**Remote API, not manual-only.** The issue's open question was whether this has to be a human
+sitting at the home machine's ComfyUI web UI for every generation, or whether it can be driven
+programmatically (Claude, or a script, calling the local server's HTTP API). This session answered
+it empirically: `POST http://127.0.0.1:8188/prompt` with a workflow graph (`CheckpointLoaderSimple`
+→ `LoraLoader` → `CLIPTextEncode` ×2 → `KSampler` → `VAEDecode` → `SaveImage`), then polling
+`GET /history/<prompt_id>`, took one raw text prompt to a finished PNG in about 18 seconds with no
+human clicking anything. The manual web UI stays available for interactive iteration — picking a
+seed by eye, nudging LoRA strength, browsing intermediate previews — but it is a fallback for that
+kind of exploration, not the only way in. Anything that just needs "n candidates for this prompt"
+can go through the HTTP API directly.
+
+**The model choices, for whoever revisits this GPU:** the checkpoint is the
+`stable-diffusion-v1-5/stable-diffusion-v1-5` mirror on Hugging Face (the original `runwayml` repo
+is gone); the LoRA is `artificialguybr/pixelartredmond-1-5v-pixel-art-loras-for-sd-1-5` — an SD1.5
+LoRA, not the far more commonly-linked SDXL "PixelArtRedmond," which will silently produce garbage
+if loaded against this checkpoint. Trigger phrase is `Pixel Art, PixArFK` in the positive prompt.
+
+**Constrains, and the gotcha that cost the most time getting here:** on a 20-series-or-newer Nvidia
+GPU (this machine's RTX 2070 Super included), ComfyUI's own README already warns the `cu126`
+portable build is for 10-series-and-older cards only — but the deeper trap is one level down:
+`comfy-kitchen` (ComfyUI's fused-kernel package, pinned by its `requirements.txt`) registers a
+custom op with a `list[int]` parameter, which `torch.library.infer_schema` only started accepting
+in a torch release newer than the `2.6.0+cu124` that `pip install torch --index-url .../whl/cu124`
+still resolves to. The fix was installing torch from the `cu130` index instead
+(`pip install --upgrade torch torchvision torchaudio --extra-index-url
+https://download.pytorch.org/whl/cu130`, landing on `2.14.0+cu130`) — a plain "follow ComfyUI's
+own install docs for a 20-series GPU" outcome in hindsight, but the failure mode (an import
+traceback deep in `comfy_kitchen`'s CUDA backend, not an obvious "wrong torch version" message)
+is not self-explanatory. Anyone reinstalling this pipeline from scratch should start from the
+`cu130` index directly rather than the more commonly-linked `cu124` one.

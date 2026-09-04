@@ -4,6 +4,7 @@ import {
   paletteForFloor,
   postprocessDiffusionOutput,
   quantizeToPalette,
+  removeBackground,
 } from '../../tools/art/diffusion-postprocess.mjs';
 import { FLOOR_PALETTES, MASTER_PALETTE, NEUTRAL_PALETTE } from '../../tools/art/palette.mjs';
 
@@ -17,6 +18,48 @@ function solidImage(width: number, height: number, [r, g, b, a]: [number, number
   }
   return { width, height, pixels };
 }
+
+describe('removeBackground', () => {
+  it('keys out a uniform background reachable from the edge', () => {
+    // A 3x3 white image with the centre pixel painted a distinct colour.
+    const image = solidImage(3, 3, [255, 255, 255, 255]);
+    image.pixels[(1 * 3 + 1) * 4] = 200; // centre pixel: distinct reddish colour
+    image.pixels[(1 * 3 + 1) * 4 + 1] = 20;
+    image.pixels[(1 * 3 + 1) * 4 + 2] = 20;
+
+    const result = removeBackground(image);
+    for (let i = 0; i < result.pixels.length; i += 4) {
+      const isCentre = i === (1 * 3 + 1) * 4;
+      expect(result.pixels[i + 3]).toBe(isCentre ? 255 : 0);
+    }
+  });
+
+  it('leaves a background-coloured pixel opaque when a subject encloses it', () => {
+    // A 3x3 image: a dark ring around a white centre. The centre pixel is
+    // background-coloured but never touches the edge through other
+    // near-background pixels, so it must survive as opaque.
+    const image = solidImage(3, 3, [10, 10, 10, 255]);
+    const centre = (1 * 3 + 1) * 4;
+    image.pixels[centre] = 255;
+    image.pixels[centre + 1] = 255;
+    image.pixels[centre + 2] = 255;
+
+    // Sample background from the (dark) corners, so use a tight tolerance —
+    // the enclosed white pixel is far from that colour regardless.
+    const result = removeBackground(image, 16);
+    expect(result.pixels[centre + 3]).toBe(255);
+    // A corner (part of the ring, connected to the edge) is keyed out.
+    expect(result.pixels[3]).toBe(0);
+  });
+
+  it('respects the tolerance around the sampled corner colour', () => {
+    const image = solidImage(2, 2, [100, 100, 100, 255]);
+    const result = removeBackground(image, 5);
+    for (let i = 0; i < result.pixels.length; i += 4) {
+      expect(result.pixels[i + 3]).toBe(0);
+    }
+  });
+});
 
 describe('downscaleBoxFilter', () => {
   it('averages a block down to one pixel', () => {

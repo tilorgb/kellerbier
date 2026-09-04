@@ -2,14 +2,88 @@ import { MASTER_PALETTE, NEUTRAL_PALETTE, FLOOR_PALETTES } from './palette.mjs';
 
 /**
  * Turns a raw Stable Diffusion output (stylistically pixel-art, but a
- * continuous-tone PNG at whatever resolution the model produced — see #258)
- * into a candidate sprite/tile: box-filtered down to a grid-aligned size,
- * then every pixel snapped to a fixed palette. Neither step is destructive
- * to the *source* — this always writes a new file — and neither step is a
- * substitute for the sign-off `CLAUDE.md`'s "New pixel art needs sign-off"
- * section requires: this produces *candidates* to choose between, not a
- * finished asset.
+ * continuous-tone PNG at whatever resolution the model produced, with an
+ * opaque background rather than the transparency a real sprite needs — see
+ * #258) into a candidate sprite/tile: background keyed out, box-filtered
+ * down to a grid-aligned size, then every pixel snapped to a fixed palette.
+ * None of these steps are destructive to the *source* — this always writes
+ * a new file — and none of them are a substitute for the sign-off
+ * `CLAUDE.md`'s "New pixel art needs sign-off" section requires: this
+ * produces *candidates* to choose between, not a finished asset.
  */
+
+/**
+ * Keys out the background a raw generation was drawn on: floods outward
+ * from every edge pixel, marking each one transparent (alpha 0) as long as
+ * it stays within `tolerance` of the sampled background colour, and stops
+ * spreading the moment it hits something further away. Flood-filling from
+ * the border rather than thresholding every pixel in the image is what
+ * keeps a light-coloured *interior* highlight (a barrel's rim, say) opaque
+ * even though its colour is close to the background — it was never
+ * connected to the edge through other near-background pixels.
+ *
+ * The background colour itself is sampled as the average of the image's
+ * four corners: a single corner pixel can be a stray flourish (SD backgrounds
+ * are rarely perfectly flat), but a subject sized to leave the corners clear
+ * makes the average a good estimate of the intended background tone.
+ */
+export function removeBackground({ width, height, pixels }, tolerance = 32) {
+  const [br, bg, bb] = sampleCornerBackground(width, height, pixels);
+  const out = Buffer.from(pixels);
+  const visited = new Uint8Array(width * height);
+  const tol2 = tolerance * tolerance;
+  const queue = [];
+
+  for (let x = 0; x < width; x++) {
+    queue.push(x, (height - 1) * width + x);
+  }
+  for (let y = 0; y < height; y++) {
+    queue.push(y * width, y * width + width - 1);
+  }
+
+  let head = 0;
+  while (head < queue.length) {
+    const idx = queue[head];
+    head += 1;
+    if (visited[idx] === 1) {
+      continue;
+    }
+    visited[idx] = 1;
+    const i = idx * 4;
+    const dr = out[i] - br;
+    const dg = out[i + 1] - bg;
+    const db = out[i + 2] - bb;
+    if (dr * dr + dg * dg + db * db > tol2) {
+      continue;
+    }
+    out[i + 3] = 0;
+    const x = idx % width;
+    const y = (idx / width) | 0;
+    if (x > 0) queue.push(idx - 1);
+    if (x < width - 1) queue.push(idx + 1);
+    if (y > 0) queue.push(idx - width);
+    if (y < height - 1) queue.push(idx + width);
+  }
+  return { width, height, pixels: out };
+}
+
+function sampleCornerBackground(width, height, pixels) {
+  const corners = [0, width - 1, (height - 1) * width, (height - 1) * width + width - 1];
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  for (const idx of corners) {
+    const i = idx * 4;
+    r += pixels[i];
+    g += pixels[i + 1];
+    b += pixels[i + 2];
+  }
+  return [
+    Math.round(r / corners.length),
+    Math.round(g / corners.length),
+    Math.round(b / corners.length),
+  ];
+}
 
 /**
  * Box-filter downscale: `targetWidth`/`targetHeight` must each evenly divide
@@ -127,13 +201,21 @@ export function paletteForFloor(floorTag) {
 }
 
 /**
- * The full candidate pipeline: downscale, then quantize. `palette` is
- * whatever `paletteForFloor` (or a caller's own array) produced.
+ * The full candidate pipeline: key out the background, downscale, then
+ * quantize. `palette` is whatever `paletteForFloor` (or a caller's own
+ * array) produced. `backgroundTolerance` defaults to `removeBackground`'s
+ * own default; pass `null` to skip background removal entirely (a source
+ * that already carries real transparency, e.g. a manually-edited candidate
+ * fed back through the pipeline for re-quantizing).
  */
 export function postprocessDiffusionOutput(
   { width, height, pixels },
-  { targetWidth, targetHeight, palette },
+  { targetWidth, targetHeight, palette, backgroundTolerance = 32 },
 ) {
-  const downscaled = downscaleBoxFilter({ width, height, pixels }, targetWidth, targetHeight);
+  const keyed =
+    backgroundTolerance === null
+      ? { width, height, pixels }
+      : removeBackground({ width, height, pixels }, backgroundTolerance);
+  const downscaled = downscaleBoxFilter(keyed, targetWidth, targetHeight);
   return quantizeToPalette(downscaled, palette);
 }

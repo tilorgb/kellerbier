@@ -4,12 +4,13 @@ import { decodePng, encodePng } from './png.mjs';
 import { paletteForFloor, postprocessDiffusionOutput } from './diffusion-postprocess.mjs';
 
 /**
- * `npm run art:diffusion-postprocess -- --in raw.png --out candidate.png --width 32 --height 32 [--floor cellar]`
+ * `npm run art:diffusion-postprocess -- --in raw.png --out candidate.png --width 32 --height 32 [--floor cellar] [--bg-tolerance 32] [--no-bg-removal]`
  *
  * The repo-side half of #258: turns one raw ComfyUI output into one
- * grid-aligned, on-palette candidate PNG. Never overwrites the source, and
- * never writes into `assets/sprites/` itself — a candidate still needs the
- * `CLAUDE.md` pixel-art sign-off before it becomes committed art.
+ * grid-aligned, on-palette candidate PNG with its background keyed out.
+ * Never overwrites the source, and never writes into `assets/sprites/`
+ * itself — a candidate still needs the `CLAUDE.md` pixel-art sign-off
+ * before it becomes committed art.
  */
 
 function parseArgs(argv) {
@@ -24,7 +25,9 @@ function parseArgs(argv) {
   return args;
 }
 
-const args = parseArgs(process.argv.slice(2));
+const rawArgv = process.argv.slice(2);
+const skipBgRemoval = rawArgv.includes('--no-bg-removal');
+const args = parseArgs(rawArgv.filter((arg) => arg !== '--no-bg-removal'));
 if (
   args.in === undefined ||
   args.out === undefined ||
@@ -32,22 +35,29 @@ if (
   args.height === undefined
 ) {
   console.error(
-    'usage: diffusion-postprocess-cli.mjs --in <raw.png> --out <candidate.png> --width <n> --height <n> [--floor <floorTag>]',
+    'usage: diffusion-postprocess-cli.mjs --in <raw.png> --out <candidate.png> --width <n> --height <n> [--floor <floorTag>] [--bg-tolerance <n>] [--no-bg-removal]',
   );
   process.exitCode = 1;
 } else {
   const raw = await readFile(args.in);
   const decoded = decodePng(raw);
   const palette = paletteForFloor(args.floor ?? null);
+  const backgroundTolerance = skipBgRemoval
+    ? null
+    : args['bg-tolerance'] !== undefined
+      ? Number.parseInt(args['bg-tolerance'], 10)
+      : 32;
   const candidate = postprocessDiffusionOutput(decoded, {
     targetWidth: Number.parseInt(args.width, 10),
     targetHeight: Number.parseInt(args.height, 10),
     palette,
+    backgroundTolerance,
   });
   await writeFile(args.out, encodePng(candidate));
   console.log(
     `diffusion-postprocess: ${args.in} (${String(decoded.width)}x${String(decoded.height)}) -> ` +
       `${args.out} (${String(candidate.width)}x${String(candidate.height)}, ` +
-      `${args.floor ?? 'master'} palette, ${String(palette.length)} colours)`,
+      `${args.floor ?? 'master'} palette, ${String(palette.length)} colours, ` +
+      `bg-removal ${backgroundTolerance === null ? 'off' : `tolerance ${String(backgroundTolerance)}`})`,
   );
 }
