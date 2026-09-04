@@ -553,14 +553,17 @@ function captureLobTarget(sim: GameSim, index: number): void {
  * earlier state in this same body's life stored, through
  * `GameSim.applySplashDamage` — the same chokepoint the player's own
  * Böllerschmeißer item detonates through. `excludeIndex` is the thrower
- * itself, so a lobbed bomb never catches its own thrower in its blast.
+ * itself, so a lobbed bomb never catches its own thrower in its blast, and
+ * `hitsEnemies: false` (#260) keeps it off every *other* enemy caught in the
+ * radius too — an enemy's own bomb, unlike a player's, is not meant to catch
+ * the rest of the room's roster.
  */
 function detonateLobbedBomb(sim: GameSim, index: number, detonation: CompiledDetonation): void {
   const motion = sim.enemyMotion.data;
   const motionBase = index * ENEMY_MOTION_STRIDE;
   const x = motion[motionBase] ?? sim.positionX(index);
   const y = motion[motionBase + 1] ?? sim.positionY(index);
-  sim.applySplashDamage(x, y, detonation.radius, detonation.damage, index);
+  sim.applySplashDamage(x, y, detonation.radius, detonation.damage, index, false);
   // #243: `applySplashDamage` alone leaves the blast itself invisible — a
   // real hit already flashes on whatever it caught, but there was nothing at
   // the landing spot for a player who dodged, or who was hit from off to one
@@ -777,6 +780,16 @@ function splitFromEvent(slot: number): void {
 
   for (const split of state.splits) {
     const count = Math.max(0, Math.round(split.count));
+    // Read once per split, at the death point: the Maibaum-Dieb's own case
+    // (#260) needs to know whether the maypole is still standing at the
+    // exact moment Der Stier dies, not later once the child is already
+    // walking around — same "no stored flag, just what's true right now"
+    // spirit as `approachProp`'s own fallback.
+    const healthOverride =
+      split.healthWithoutPropKind >= 0 &&
+      nearestPropIndex(sim, atX, atY, split.healthWithoutPropKind) < 0
+        ? split.healthWithoutPropHealth
+        : undefined;
     // One rolled offset for the whole ring, so the children fan out evenly
     // rather than clumping — and so one draw covers any number of them.
     const offset = random.nextFloat() * Math.PI * 2;
@@ -791,7 +804,7 @@ function splitFromEvent(slot: number): void {
         x = atX;
         y = atY;
       }
-      sim.spawnEnemyKind(split.definition, x, y);
+      sim.spawnEnemyKind(split.definition, x, y, false, healthOverride);
     }
   }
 }

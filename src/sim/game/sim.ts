@@ -3701,18 +3701,47 @@ export class GameSim {
    * poorer copy of it. `excludeIndex` is skipped entirely — the target a
    * shot already hit directly, say, so a splash never double-counts its own
    * trigger.
+   *
+   * `hitsEnemies` defaults to `true` for every item caller here (a player's
+   * splash is meant to catch every enemy it reaches), but `false` for the
+   * one enemy-sourced caller, the Böllerschmeißer's lobbed bomb
+   * (`sim/systems/enemy.ts`'s `detonateLobbedBomb`) — #260: an enemy's own
+   * blast otherwise hit every other enemy caught in it same as a player's
+   * would, which read as mobs "killing themselves regularly." `false`
+   * excludes bodies carrying the `enemy` component specifically, checked
+   * separately from `mask` below: every enemy in the game is spawned
+   * through `spawnTarget`, which tags it `Obstacle` same as a barrel or the
+   * arena maypole (`slowEnemiesNear`'s own doc comment above explains why —
+   * `CollisionLayer.Enemy` is reserved but nothing sets it), so an obstacle
+   * and a real enemy are indistinguishable by collision layer alone. An
+   * enemy's own bomb keeps hitting obstacles and the player either way —
+   * only other enemies are exempted. Bierfassl bombs (`systems/bombs.ts`)
+   * are a third case — exclusively player-placed, so hitting enemies (and
+   * the player who set one) is intentional there, and unaffected: they read
+   * `BLAST_MASK`, not this one.
    */
-  applySplashDamage(x: number, y: number, radius: number, damage: number, excludeIndex = -1): void {
+  applySplashDamage(
+    x: number,
+    y: number,
+    radius: number,
+    damage: number,
+    excludeIndex = -1,
+    hitsEnemies = true,
+  ): void {
     if (damage <= 0 || radius <= 0) {
       return;
     }
     const mask = CollisionLayer.Enemy | CollisionLayer.Obstacle | CollisionLayer.Player;
+    const enemyMask = this.enemyMask;
     this.broadphase.query(x, y, radius, (index) => {
       if (index === excludeIndex) {
         return;
       }
       const layer = this.collision.data[index * 2] ?? 0;
       if ((layer & mask) === 0) {
+        return;
+      }
+      if (!hitsEnemies && ((this.world.masks[index] ?? 0) & enemyMask) === enemyMask) {
         return;
       }
       if ((this.health.data[index * 2] ?? 0) <= 0) {
@@ -5203,8 +5232,19 @@ export class GameSim {
    * it — "reads as elite at a glance, without needing a health bar to tell
    * you." A boss's own `splitOnDeath` (its phase two) never passes this;
    * see `applyCompiledRoom` for the one call site that rolls it.
+   *
+   * `healthOverride` replaces `definition`'s own authored `health` outright —
+   * `splitOnDeath.healthWithoutProp` (#260) is the one caller that passes it,
+   * for a child spawned without the prop its fight was meant to hinge on.
+   * Never combined with `elite`: a split child is never rolled as one.
    */
-  spawnEnemyKind(definition: number, x: number, y: number, elite = false): Entity {
+  spawnEnemyKind(
+    definition: number,
+    x: number,
+    y: number,
+    elite = false,
+    healthOverride?: number,
+  ): Entity {
     const compiled = this.enemies.at(definition);
     const sizeMultiplier = elite ? this.tuning.enemy.eliteRadiusMultiplier : 1;
     const entity = this.spawnTarget(x, y, compiled.radius * sizeMultiplier);
@@ -5217,9 +5257,11 @@ export class GameSim {
     body[index * 2 + 1] = compiled.mass * sizeMultiplier;
 
     const health = this.health.data;
-    const maxHealth = elite
-      ? Math.round(compiled.health * this.tuning.enemy.eliteHealthMultiplier)
-      : compiled.health;
+    const maxHealth =
+      healthOverride ??
+      (elite
+        ? Math.round(compiled.health * this.tuning.enemy.eliteHealthMultiplier)
+        : compiled.health);
     health[index * 2] = maxHealth;
     health[index * 2 + 1] = maxHealth;
     this.contactDamage.data[index] = elite

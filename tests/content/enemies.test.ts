@@ -139,10 +139,19 @@ describe('the enemy roster', () => {
 
     const maibaumDieb = registry.get('der-stier-maibaum-dieb');
     // #232: raised from 24/18 so each boss's authored cycle plays out
-    // several times against a realistic mid-run fight — see
+    // several times against a realistic mid-run fight; #260: trimmed back
+    // down from 80/60 once that overshot into "too long" — see
     // `tests/content/boss-pacing.test.ts` for the measured version of this.
-    expect(derStier.health).toBe(80);
-    expect(maibaumDieb.health).toBe(60);
+    expect(derStier.health).toBe(60);
+    expect(maibaumDieb.health).toBe(45);
+
+    // #260: a disarmed dieb (no live maypole left when Der Stier dies) spawns
+    // considerably weaker than an armed one.
+    const derStierApproach = registry.get('der-stier').states.find((s) => s.name === 'approach');
+    const phaseTwoSplit = derStierApproach?.splits.find((s) => s.definition === maibaumDiebIndex);
+    expect(phaseTwoSplit?.healthWithoutPropKind).toBeGreaterThanOrEqual(0);
+    expect(phaseTwoSplit?.healthWithoutPropHealth).toBeGreaterThan(0);
+    expect(phaseTwoSplit?.healthWithoutPropHealth).toBeLessThan(maibaumDieb.health);
 
     // Phase two forks once on whether the dieb reaches the arena maypole: an
     // armed swing branch (`meleeArc`), or Der Stier's own charge, disarmed.
