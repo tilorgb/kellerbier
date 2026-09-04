@@ -162,4 +162,21 @@ export class AmbienceTracker {
       audio.onRoomEnter(sim.roomId, config?.floorTag ?? '', isBossRoom, sim.tick);
     }
   }
+
+  /**
+   * Forgets the floor/room it last saw a change from — `app/main.ts`'s
+   * `startRun`, alongside every other per-run tracker reset there.
+   *
+   * Without this, a restart into a new `sim` that happens to start on the
+   * same floor number the previous run last reported (floor 1, almost
+   * always, since every run starts there) reads as "no change" on the very
+   * first `sync()` call: `onFloorStart` never fires, so the new run's floor
+   * theme never starts — silence rather than a restarted track. This
+   * instance survives every `startRun` (created once at boot,
+   * `app/main.ts`'s own module-level setup), so nothing else clears it.
+   */
+  reset(): void {
+    this.lastFloor = -1;
+    this.lastRoomId = '';
+  }
 }

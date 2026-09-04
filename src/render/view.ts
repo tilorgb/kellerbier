@@ -750,4 +750,30 @@ export class GameView {
   machineScreenPosition(): { readonly x: number; readonly y: number } | null {
     return this.machine.screenPosition();
   }
+
+  /**
+   * Releases everything this view uniquely owns, once it has been swapped
+   * out of `app/main.ts`'s `startRun` for a fresh one on a restart.
+   *
+   * `stage.destroy({ children: true })` frees every sprite/container this
+   * view built, but deliberately *not* their textures (no `texture`/
+   * `textureSource` option): most of what they draw with is `viewTextures`
+   * — the art atlases `startRun` builds once and reuses across every
+   * restart (`viewTextures ??= {...}`) — and destroying a texture still
+   * referenced by the *next* run's sprites would blank them out.
+   *
+   * `ambientLight` is the one exception, handled separately before that:
+   * its lamp/cloud textures are canvases generated fresh in its own
+   * constructor, not shared with anything else, so nothing else will ever
+   * destroy them — leaving them here was a real leak, three new canvases
+   * uploaded as GPU textures on every single restart and never freed. A
+   * prime suspect for reports of a stray "shadow box" that only shows up
+   * after several retries (GPU texture pressure/eviction from the pile-up
+   * would take a few to bite), though not yet confirmed live as the actual
+   * mechanism — leaked regardless, and worth fixing on that basis alone.
+   */
+  destroy(): void {
+    this.ambientLight.destroy();
+    this.stage.destroy({ children: true });
+  }
 }
