@@ -238,6 +238,7 @@ export function applyDamageAt(
   normalX: number,
   normalY: number,
   cause: number,
+  hitEffect: ParticleKindId = ParticleKind.Foam,
 ): void {
   const events = sim.events;
   const tuning = sim.tuning.impact;
@@ -308,6 +309,10 @@ export function applyDamageAt(
   // What a creature comes apart into is authored on the creature (#153) —
   // beer splashes, a Schimmelfleck does not — and falls back to beer for
   // anything that names nothing, which is what every death used to throw.
+  // A non-kill hit sprays `hitEffect` (Foam by default) rather than always
+  // Foam, so a status tick (#248 — `stepStatusEffects` passes Spore for a
+  // poison tick) reads as a distinct kind of hit rather than identical to a
+  // shot or a claw landing.
   spray(
     sim,
     hitX,
@@ -315,7 +320,7 @@ export function applyDamageAt(
     normalX,
     normalY,
     killed ? tuning.particlesOnDeath : tuning.particlesPerHit,
-    killed ? deathEffectOf(sim, target) : ParticleKind.Foam,
+    killed ? deathEffectOf(sim, target) : hitEffect,
     tuning.particleSpread,
     1,
   );

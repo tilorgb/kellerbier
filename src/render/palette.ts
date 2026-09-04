@@ -160,6 +160,15 @@ export const PROMILLE_KATER_TINT = 0x6a7080;
  */
 export const BLUTWURZ_SPIRIT_TINT = 0x9ec8e8;
 
+/**
+ * `STATUS_POISON`'s tint on whatever body carries it (#248) — a sickly,
+ * yellow-leaning green, chosen to read as "wrong" against Alois's own warm
+ * palette and to sit far from `BLUTWURZ_SPIRIT_TINT`'s cold blue, since the
+ * two are both "the whole body is tinted" states and must never be
+ * mistakable for each other on the rare run where both are active.
+ */
+export const STATUS_POISON_TINT = 0x8fbf3a;
+
 export const EFFECT_PALETTE = {
   /** The reddening the vignette tints toward as Trinkfest screen-distortion climbs — pure white (`ENTITY_PALETTE.normalTint`) is "no distortion." */
   distortionTint: 0xff5555,

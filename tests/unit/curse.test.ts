@@ -4,6 +4,7 @@ import { RoomGeometry } from '../../src/sim/room/geometry.js';
 import { CURSE_IDS } from '../../src/sim/curse/definition.js';
 import { STATUS_EFFECT_STRIDE, STATUS_POISON } from '../../src/sim/systems/status-effects.js';
 import { ProjectileTeam } from '../../src/sim/projectile/store.js';
+import { ParticleKind } from '../../src/sim/particle/store.js';
 import { createInputFrame } from '../../src/sim/input/frame.js';
 
 /**
@@ -154,6 +155,33 @@ describe('floor curses (#49)', () => {
     // The tick the timer actually hits zero, harassment applies immediately.
     expect(sim.statusEffect.data[base + STATUS_POISON] ?? 0).toBeGreaterThan(0);
     expect(sim.playerDead).toBe(false);
+  });
+
+  it("a Sperrstunde harassment tick sprays a distinct particle, not the ordinary hit's foam (#248)", () => {
+    const sim = seedRollingCurse('sperrstunde');
+    sim.sperrstundeTicksLeft = 0;
+    expect(sim.sperrstundeHarassmentCooldown).toBe(0);
+
+    sim.step(idle()); // timer already at 0 and cooldown clear; harassment poison is applied
+    const base = sim.playerIndex * STATUS_EFFECT_STRIDE;
+    expect(sim.statusEffect.data[base + STATUS_POISON] ?? 0).toBeGreaterThan(0);
+
+    const healthBefore = sim.playerHealth;
+    sim.step(idle()); // poisonTickInterval's first multiple: the harassment's own damage lands
+    expect(sim.playerHealth).toBeLessThan(healthBefore);
+
+    let sporeCount = 0;
+    let foamCount = 0;
+    sim.particles.forEachLive((index) => {
+      if (sim.particles.kind[index] === ParticleKind.Spore) {
+        sporeCount += 1;
+      }
+      if (sim.particles.kind[index] === ParticleKind.Foam) {
+        foamCount += 1;
+      }
+    });
+    expect(sporeCount).toBeGreaterThan(0);
+    expect(foamCount).toBe(0);
   });
 
   it('Nebel and Blaue Stunde carry no per-tick simulation side effect beyond the curse id', () => {

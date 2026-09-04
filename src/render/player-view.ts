@@ -23,7 +23,8 @@ import {
 import { SCHLAUCH_OCTANTS, type PlayerArt, type PlayerBodyKey } from './player-art.js';
 import { ACTOR_SPRITE_SCALE } from './resolution.js';
 import { createGroundShadow, groundShadowFeetY, styleGroundShadow } from './ground-shadow.js';
-import { BLUTWURZ_SPIRIT_TINT, GROUND_SHADOW } from './palette.js';
+import { BLUTWURZ_SPIRIT_TINT, GROUND_SHADOW, STATUS_POISON_TINT } from './palette.js';
+import { STATUS_EFFECT_STRIDE, STATUS_POISON } from '../sim/systems/status-effects.js';
 
 /**
  * Where the Schlauch's nozzle hangs off the body, per facing, in *authored*
@@ -267,8 +268,16 @@ export class PlayerView {
     // Blutwurz (#84): "its own... palette" — a tint on the existing sprite
     // rather than new pixel art, so the spirit walk reads as a distinct
     // state at zero new-asset cost. White (no tint) the instant it ends,
-    // recovery or death alike.
-    const spiritTint = sim.blutwurzActive ? BLUTWURZ_SPIRIT_TINT : 0xffffff;
+    // recovery or death alike. Blutwurz wins over a poison tint below: it is
+    // a whole distinct run-state the player deliberately entered, where
+    // poison is incidental damage-over-time — the rarer, more deliberate
+    // state should never be masked by the more common one.
+    const poisoned = (sim.statusEffect.data[index * STATUS_EFFECT_STRIDE + STATUS_POISON] ?? 0) > 0;
+    const spiritTint = sim.blutwurzActive
+      ? BLUTWURZ_SPIRIT_TINT
+      : poisoned
+        ? STATUS_POISON_TINT
+        : 0xffffff;
     this.body.tint = spiritTint;
     this.schlauch.tint = spiritTint;
 
