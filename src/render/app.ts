@@ -49,6 +49,11 @@ export async function createRenderer(host: HTMLElement): Promise<Application> {
     resolution: window.devicePixelRatio || 1,
     autoDensity: true,
     preference: 'webgl',
+    // Pixi defaults the WebGL context's own hint to 'default'. On a hybrid-GPU
+    // laptop that lets the browser hand this canvas the low-power integrated
+    // GPU instead of the discrete one, which is enough to make this game's
+    // otherwise cheap 2D pixel art render sluggishly.
+    powerPreference: 'high-performance',
   });
 
   const canvas = app.canvas;

@@ -212,6 +212,9 @@ export const PROP_TILE_NAMES: Readonly<Record<string, string | null>> = {
   puddle: null,
   trellis: null,
   'hop-trellis': null,
+  // A shop's Losbrunnen anchor (#238) — drawn by `MachineView`, the same
+  // "no tile of its own" shape `pedestal` already has.
+  losbrunnen: null,
 };
 
 /** The tile stacked directly above a `maibaum` prop — a maypole is two tiles tall or it is a stick. */

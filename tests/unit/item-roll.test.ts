@@ -3,6 +3,7 @@ import type { ItemDefinition, ItemRuntimeState } from '../../src/sim/item/defini
 import {
   itemEligibleForMachine,
   itemRollSourceKey,
+  machineRollTargets,
   machineRollTierWeight,
   rollItemStatModifiers,
   selectMachineRollTier,
@@ -45,6 +46,61 @@ describe('itemEligibleForMachine', () => {
   it('is ineligible when modifyStats currently returns nothing (a gated or state-dependent item)', () => {
     const item = new ItemRegistry([baseItem('a', { hooks: { modifyStats: () => [] } })]).at(0);
     expect(itemEligibleForMachine(item, runtimeState())).toBe(false);
+  });
+
+  it('is eligible with an `active` charge bar alone, even with no modifyStats hook at all (#238)', () => {
+    const item = new ItemRegistry([baseItem('a', { active: { maxCharge: 300 } })]).at(0);
+    expect(itemEligibleForMachine(item, runtimeState())).toBe(true);
+  });
+
+  it('stays eligible through an active item’s cooldown even while its state-gated modifyStats is not currently live (#238, Enzian’s own shape)', () => {
+    const item = new ItemRegistry([
+      baseItem('a', {
+        active: { maxCharge: 900 },
+        hooks: {
+          modifyStats: (state) =>
+            state.charge < 0 ? [{ stat: 'schluckfrequenz', op: 'multiply', value: 0.15 }] : [],
+        },
+      }),
+    ]).at(0);
+    // Not mid-burst — `modifyStats` alone would say ineligible, but the cooldown target keeps it eligible.
+    expect(itemEligibleForMachine(item, runtimeState())).toBe(true);
+  });
+});
+
+describe('machineRollTargets (#238)', () => {
+  it('lists one target per modifyStats entry for a plain passive item', () => {
+    const item = new ItemRegistry([
+      baseItem('a', {
+        hooks: {
+          modifyStats: () => [
+            { stat: 'stammwuerze', op: 'add', value: 1 },
+            { stat: 'gschwindigkeit', op: 'multiply', value: 1.1 },
+          ],
+        },
+      }),
+    ]).at(0);
+    const targets = machineRollTargets(item, runtimeState());
+    expect(targets).toHaveLength(2);
+    expect(targets.every((target) => target.kind === 'stat')).toBe(true);
+  });
+
+  it('adds exactly one cooldown target for an active item, regardless of maxCharge', () => {
+    const item = new ItemRegistry([baseItem('a', { active: { maxCharge: 600 } })]).at(0);
+    const targets = machineRollTargets(item, runtimeState());
+    expect(targets).toEqual([{ kind: 'cooldown' }]);
+  });
+
+  it('offers both a stat and a cooldown target for a hybrid item', () => {
+    const item = new ItemRegistry([
+      baseItem('a', {
+        active: { maxCharge: 900 },
+        hooks: { modifyStats: () => [{ stat: 'stammwuerze', op: 'add', value: 1 }] },
+      }),
+    ]).at(0);
+    const targets = machineRollTargets(item, runtimeState());
+    expect(targets).toHaveLength(2);
+    expect(targets.map((target) => target.kind).sort()).toEqual(['cooldown', 'stat']);
   });
 });
 
@@ -186,6 +242,78 @@ describe('rollItemStatModifiers', () => {
       1 + DEFAULT_MACHINE_TUNING.rareRollPercent,
       6,
     );
+  });
+
+  describe('a cooldown target, for an active item (#238)', () => {
+    const activeItem = new ItemRegistry([
+      baseItem('active-item', { active: { maxCharge: 600 } }),
+    ]).at(0);
+
+    it('shrinks the cooldown factor below 1 on a favourable tier', () => {
+      const result = rollItemStatModifiers(
+        activeItem,
+        runtimeState(),
+        'common',
+        new Rng(1),
+        DEFAULT_MACHINE_TUNING,
+      );
+      expect(result.rolled).toEqual({ kind: 'cooldown', favourable: true });
+      expect(result.modifiers).toEqual([]);
+      expect(result.cooldownFactor).toBeLessThan(1);
+      expect(result.cooldownFactor).toBeCloseTo(1 - DEFAULT_MACHINE_TUNING.commonRollPercent, 6);
+    });
+
+    it('grows the cooldown factor above 1 on unlucky', () => {
+      const result = rollItemStatModifiers(
+        activeItem,
+        runtimeState(),
+        'unlucky',
+        new Rng(1),
+        DEFAULT_MACHINE_TUNING,
+      );
+      expect(result.rolled).toEqual({ kind: 'cooldown', favourable: false });
+      expect(result.cooldownFactor).toBeCloseTo(1 + DEFAULT_MACHINE_TUNING.unluckyRollPercent, 6);
+    });
+
+    it('a legendary roll on an active item with no authored legendaryRoll falls back to the rare cooldown magnitude', () => {
+      const result = rollItemStatModifiers(
+        activeItem,
+        runtimeState(),
+        'legendary',
+        new Rng(1),
+        DEFAULT_MACHINE_TUNING,
+      );
+      expect(result.usedLegendaryFallback).toBe(true);
+      expect(result.rolled).toEqual({ kind: 'cooldown', favourable: true });
+      expect(result.cooldownFactor).toBeCloseTo(1 - DEFAULT_MACHINE_TUNING.rareRollPercent, 6);
+    });
+
+    it('picks between a stat and a cooldown target for a hybrid item, never touching both at once', () => {
+      const hybrid = new ItemRegistry([
+        baseItem('hybrid', {
+          active: { maxCharge: 900 },
+          hooks: { modifyStats: () => [{ stat: 'stammwuerze', op: 'add', value: 1 }] },
+        }),
+      ]).at(0);
+      // Try a spread of draws; every single result must be exactly one kind, never a mix.
+      for (let seed = 1; seed <= 20; seed++) {
+        const result = rollItemStatModifiers(
+          hybrid,
+          runtimeState(),
+          'common',
+          new Rng(seed),
+          DEFAULT_MACHINE_TUNING,
+        );
+        if (result.rolled?.kind === 'cooldown') {
+          expect(result.modifiers).toEqual([]);
+          expect(result.cooldownFactor).toBeDefined();
+        } else {
+          expect(result.rolled?.kind).toBe('stat');
+          expect(result.modifiers).toHaveLength(1);
+          expect(result.cooldownFactor).toBeUndefined();
+        }
+      }
+    });
   });
 });
 

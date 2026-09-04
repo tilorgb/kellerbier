@@ -133,6 +133,8 @@ const ACTION_LABELS: Readonly<Record<BindableAction, string>> = {
 };
 
 export interface SettingsScreenHandle {
+  /** Opens the panel — the title and pause menus' own "Settings" button, alongside the corner toggle. */
+  open(): void;
   destroy(): void;
 }
 
@@ -871,6 +873,9 @@ export function createSettingsScreen(
   document.body.append(toggle, panel);
 
   return {
+    open(): void {
+      panel.hidden = false;
+    },
     destroy(): void {
       window.removeEventListener('keydown', onKeyDown);
       toggle.remove();

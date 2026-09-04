@@ -104,16 +104,12 @@ const deathOompah: SfxDefinition = {
 const playerShot: SfxDefinition = {
   id: 'player-shot',
   description:
-    "The player's own shot leaving the Schlauch (#234) — up to several times a second on a held trigger, " +
-    'so it has to sit under `hit-*`/`death-*` rather than compete with them. Pitch-jittered so an identical ' +
-    "sample three times a second doesn't turn into a headache.",
+    "The player's own shot leaving the Schlauch (#234) — up to several times a second on a held trigger, so it has to sit under `hit-*`/`death-*` rather than compete with them. Pitch-jittered so an identical sample three times a second doesn't turn into a headache.",
   noise: {
-    filter: { type: 'highpass', frequencyHz: 4000, q: 1 },
-    durationSeconds: 0.025,
-    gain: 0.08,
+    filter: { type: 'lowpass', frequencyHz: 4000, q: 25 },
+    durationSeconds: 0.09,
+    gain: 0.2,
   },
-  tone: { instrument: 'banjo', note: 'C6', durationSeconds: 0.03 },
-  pitchJitterCents: 350,
 };
 
 const shotSquelch: SfxDefinition = {

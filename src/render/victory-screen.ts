@@ -1,14 +1,17 @@
 import { Container, Graphics, type BitmapText, type Renderer } from 'pixi.js';
 import { EFFECT_PALETTE, HUD_PALETTE, UI_PALETTE } from './palette.js';
 import type { UiKit } from './ui/kit.js';
+import { Menu, type MenuItem, type MenuScreen } from './ui/menu.js';
 import { DisplayTitle, TITLE_STYLES } from './ui/title.js';
-import { uiText, uiTextWidth, UI_LINE_HEIGHT, UI_TEXT_HEIGHT } from './ui/text.js';
+import { uiText, uiTextWidth } from './ui/text.js';
 
 /** How much bigger than its authored size the headline is drawn — same scale `GameOverScreen` uses. */
 const HEADLINE_SCALE = 3;
 
 /** Padding inside the plate the summary/epilogue sits on. */
 const PLATE_PADDING = 8;
+
+const GAP_ABOVE_MENU = 10;
 
 /** What the screen shows. Assembled by whoever tracks the run, not read from `GameSim` directly. */
 export interface VictorySummaryText {
@@ -17,15 +20,22 @@ export interface VictorySummaryText {
   readonly floor: string;
 }
 
+export interface VictoryScreenActions {
+  readonly onRetry: () => void;
+  readonly onResults: () => void;
+  readonly onHub: () => void;
+}
+
 /**
  * The victory screen (#155): clearing Der Stier — the last boss the game
  * has today — ends the run and says so.
  *
  * Same shape as `GameOverScreen`, on purpose: a dim over the game, a
- * headline in the display face, a summary plate, a hint line. The headline
- * takes `TITLE_STYLES.floor` (gold) rather than `threat` (blood) — the one
- * other place a title this size appears — so a win reads as a different
- * feeling from a death rather than a re-skinned loss screen.
+ * headline in the display face, a summary plate, a `Menu` (#158) in place of
+ * the old two-key hint. The headline takes `TITLE_STYLES.floor` (gold)
+ * rather than `threat` (blood) — the one other place a title this size
+ * appears — so a win reads as a different feeling from a death rather than a
+ * re-skinned loss screen.
  *
  * The epilogue line is deliberately short and not character-specific: #58
  * (story delivery, chapter cards, the real chapter-two cliffhanger) is M8
@@ -33,7 +43,7 @@ export interface VictorySummaryText {
  * for — a beat that closes the run — not the finished narrative beat #58
  * will eventually replace it with.
  */
-export class VictoryScreen {
+export class VictoryScreen implements MenuScreen {
   readonly view = new Container();
 
   private readonly dim: Graphics;
@@ -41,12 +51,12 @@ export class VictoryScreen {
   private readonly headline: DisplayTitle;
   private readonly epilogue: BitmapText;
   private readonly summary: BitmapText;
-  private readonly hint: BitmapText;
+  private readonly menu: Menu;
   private readonly kit: UiKit;
   private width = 0;
   private height = 0;
 
-  constructor(kit: UiKit, renderer: Renderer) {
+  constructor(kit: UiKit, renderer: Renderer, actions: VictoryScreenActions) {
     this.kit = kit;
     this.view.visible = false;
 
@@ -71,23 +81,36 @@ export class VictoryScreen {
     this.summary = uiText('', { colour: HUD_PALETTE.gameOverSummary });
     this.view.addChild(this.summary);
 
-    // Plain English (#221): a control hint is read on every clear, so it's
-    // functional text under `docs/CONTENT_BIBLE.md` §0 — same rule and same
-    // wording `GameOverScreen`'s hint follows.
-    this.hint = uiText('R: Try Again    T: Results', {
-      colour: UI_PALETTE.textDim,
-    });
-    this.view.addChild(this.hint);
+    const items: MenuItem[] = [
+      { label: 'Retry', onSelect: actions.onRetry },
+      { label: 'Results', onSelect: actions.onResults },
+      { label: 'Hub', onSelect: actions.onHub },
+    ];
+    this.menu = new Menu(kit, items);
+    this.view.addChild(this.menu.view);
+  }
+
+  get visible(): boolean {
+    return this.view.visible;
   }
 
   show(info: VictorySummaryText): void {
     this.summary.text = `${info.seconds.toFixed(1)}s   ${String(info.kills)} killed   ${info.floor}`;
     this.view.visible = true;
+    this.menu.refresh();
     this.layOut();
   }
 
   hide(): void {
     this.view.visible = false;
+  }
+
+  moveFocus(delta: 1 | -1): void {
+    this.menu.moveFocus(delta);
+  }
+
+  activate(): void {
+    this.menu.activate();
   }
 
   /** Call on every resize, same as the HUD's own layout pass. Dimensions in UI pixels. */
@@ -117,9 +140,8 @@ export class VictoryScreen {
     );
 
     const summaryWidth = uiTextWidth(this.summary.text);
-    const hintWidth = uiTextWidth(this.hint.text);
-    const plateWidth = Math.max(summaryWidth, hintWidth) + PLATE_PADDING * 2;
-    const plateHeight = UI_LINE_HEIGHT + UI_TEXT_HEIGHT + PLATE_PADDING * 2;
+    const plateWidth = Math.max(summaryWidth, this.menu.width) + PLATE_PADDING * 2;
+    const plateHeight = PLATE_PADDING * 3 + this.summary.height + GAP_ABOVE_MENU + this.menu.height;
     const plateX = Math.round(centreX - plateWidth / 2);
     const plateY = Math.round(centreY + 30);
 
@@ -129,9 +151,9 @@ export class VictoryScreen {
     this.plate.position.set(plateX, plateY);
 
     this.summary.position.set(Math.round(centreX - summaryWidth / 2), plateY + PLATE_PADDING);
-    this.hint.position.set(
-      Math.round(centreX - hintWidth / 2),
-      plateY + PLATE_PADDING + UI_LINE_HEIGHT,
+    this.menu.view.position.set(
+      Math.round(centreX - this.menu.width / 2),
+      plateY + PLATE_PADDING * 2 + this.summary.height + GAP_ABOVE_MENU,
     );
   }
 }
