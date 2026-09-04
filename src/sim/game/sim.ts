@@ -3702,46 +3702,26 @@ export class GameSim {
    * shot already hit directly, say, so a splash never double-counts its own
    * trigger.
    *
-   * `hitsEnemies` defaults to `true` for every item caller here (a player's
-   * splash is meant to catch every enemy it reaches), but `false` for the
-   * one enemy-sourced caller, the Böllerschmeißer's lobbed bomb
-   * (`sim/systems/enemy.ts`'s `detonateLobbedBomb`) — #260: an enemy's own
-   * blast otherwise hit every other enemy caught in it same as a player's
-   * would, which read as mobs "killing themselves regularly." `false`
-   * excludes bodies carrying the `enemy` component specifically, checked
-   * separately from `mask` below: every enemy in the game is spawned
-   * through `spawnTarget`, which tags it `Obstacle` same as a barrel or the
-   * arena maypole (`slowEnemiesNear`'s own doc comment above explains why —
-   * `CollisionLayer.Enemy` is reserved but nothing sets it), so an obstacle
-   * and a real enemy are indistinguishable by collision layer alone. An
-   * enemy's own bomb keeps hitting obstacles and the player either way —
-   * only other enemies are exempted. Bierfassl bombs (`systems/bombs.ts`)
-   * are a third case — exclusively player-placed, so hitting enemies (and
-   * the player who set one) is intentional there, and unaffected: they read
-   * `BLAST_MASK`, not this one.
+   * Deliberately indiscriminate: this always includes `Enemy`, so an enemy's
+   * own bomb (the Böllerschmeißer's lobbed bomb, `sim/systems/enemy.ts`'s
+   * `detonateLobbedBomb`) can catch another enemy standing in the blast
+   * exactly as a player's splash item would (#260 discussion) — a bomb is
+   * "more damaging" than an ordinary shot precisely because it doesn't
+   * discriminate who is standing in it, unlike a regular `EnemyProjectile`
+   * shot, which already never touches `Enemy` at all
+   * (`collision/layers.ts`).
    */
-  applySplashDamage(
-    x: number,
-    y: number,
-    radius: number,
-    damage: number,
-    excludeIndex = -1,
-    hitsEnemies = true,
-  ): void {
+  applySplashDamage(x: number, y: number, radius: number, damage: number, excludeIndex = -1): void {
     if (damage <= 0 || radius <= 0) {
       return;
     }
     const mask = CollisionLayer.Enemy | CollisionLayer.Obstacle | CollisionLayer.Player;
-    const enemyMask = this.enemyMask;
     this.broadphase.query(x, y, radius, (index) => {
       if (index === excludeIndex) {
         return;
       }
       const layer = this.collision.data[index * 2] ?? 0;
       if ((layer & mask) === 0) {
-        return;
-      }
-      if (!hitsEnemies && ((this.world.masks[index] ?? 0) & enemyMask) === enemyMask) {
         return;
       }
       if ((this.health.data[index * 2] ?? 0) <= 0) {

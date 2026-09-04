@@ -553,17 +553,16 @@ function captureLobTarget(sim: GameSim, index: number): void {
  * earlier state in this same body's life stored, through
  * `GameSim.applySplashDamage` — the same chokepoint the player's own
  * Böllerschmeißer item detonates through. `excludeIndex` is the thrower
- * itself, so a lobbed bomb never catches its own thrower in its blast, and
- * `hitsEnemies: false` (#260) keeps it off every *other* enemy caught in the
- * radius too — an enemy's own bomb, unlike a player's, is not meant to catch
- * the rest of the room's roster.
+ * itself, so a lobbed bomb never catches its own thrower in its blast — it
+ * can still catch every *other* enemy standing in the radius, same as a
+ * player's own splash would (`applySplashDamage`'s own doc comment).
  */
 function detonateLobbedBomb(sim: GameSim, index: number, detonation: CompiledDetonation): void {
   const motion = sim.enemyMotion.data;
   const motionBase = index * ENEMY_MOTION_STRIDE;
   const x = motion[motionBase] ?? sim.positionX(index);
   const y = motion[motionBase + 1] ?? sim.positionY(index);
-  sim.applySplashDamage(x, y, detonation.radius, detonation.damage, index, false);
+  sim.applySplashDamage(x, y, detonation.radius, detonation.damage, index);
   // #243: `applySplashDamage` alone leaves the blast itself invisible — a
   // real hit already flashes on whatever it caught, but there was nothing at
   // the landing spot for a player who dodged, or who was hit from off to one

@@ -894,7 +894,14 @@ describe('lobTarget / detonateLobbedBomb (#156)', () => {
    * `detonateLobbedBomb` now passes `hitsEnemies: false`
    * (`GameSim.applySplashDamage`'s own doc comment).
    */
-  it('never catches another enemy standing in its blast (#260)', () => {
+  /**
+   * #260 discussion: deliberately indiscriminate — a bomb is "more damaging"
+   * than an ordinary shot precisely because it doesn't discriminate who is
+   * standing in the blast, unlike an `EnemyProjectile` shot, which already
+   * never touches `Enemy` at all (`collision/layers.ts`). Only the thrower
+   * itself is exempt (the test above).
+   */
+  it('catches another enemy standing in its blast, same as a player splash would (#260)', () => {
     const sim = emptySim({ enemies: [thrower, bystander] });
     // The bomb lands wherever `lobTarget` captured — the player's position —
     // so the bystander has to stand there too, same as the thrower does in
@@ -908,7 +915,7 @@ describe('lobTarget / detonateLobbedBomb (#156)', () => {
     for (let tick = 0; tick < 12 && stateName(sim, enemy) !== 'boom'; tick++) {
       sim.step(IDLE);
     }
-    expect(health(sim, other)).toBe(before);
+    expect(health(sim, other)).toBeLessThan(before);
   });
 
   /**
