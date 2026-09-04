@@ -114,9 +114,9 @@ const FOCUS_ROLES: ArtRoles = {
  * The roles an icon is drawn in.
  *
  * `iconRoles(accent)` is the common case — the kit's outline and fill, with
- * one colour swapped for whatever the icon is *about* (a Maß's red, a
+ * one colour swapped for whatever the icon is *about* (a Bratwurst's red, a
  * Biermarke's gold). The health row is why this is a function rather than a
- * constant: one mug bitmap, three pools, three sets of roles.
+ * constant: one Wurst bitmap, three pools, three sets of roles.
  */
 export function iconRoles(accent: number, fill: number = UI_PALETTE.panelHighlight): ArtRoles {
   return {
@@ -127,13 +127,19 @@ export function iconRoles(accent: number, fill: number = UI_PALETTE.panelHighlig
   };
 }
 
-/** Icon roles for one of the three health pools. */
+/**
+ * Icon roles for one of the three health pools — Bratwurst (red), Weißwurst
+ * (soul), Blutwurst (eternal). `accent` draws the bitmap's one detail fleck:
+ * a dark grill mark on Bratwurst, a bright fat fleck on Blutwurst, and on
+ * Weißwurst the same colour as `fill` so its two fleck pixels blend away —
+ * one bitmap stays plain on the pool that has no business showing a mark.
+ */
 export const HEALTH_ICON_ROLES: Readonly<Record<'red' | 'soul' | 'eternal', ArtRoles>> = {
   red: {
     outline: UI_PALETTE.outline,
     fill: HUD_PALETTE.healthRed,
     highlight: 0xf2a09a,
-    accent: HUD_PALETTE.healthRed,
+    accent: 0x7a2313,
   },
   soul: {
     outline: UI_PALETTE.outline,
@@ -141,14 +147,13 @@ export const HEALTH_ICON_ROLES: Readonly<Record<'red' | 'soul' | 'eternal', ArtR
     highlight: 0xffffff,
     accent: HUD_PALETTE.healthSoul,
   },
-  // Schwarzbier: the fill is nearly the outline, so the foam highlight is the
-  // only thing that keeps the silhouette readable — which is why the mug
-  // bitmap has a foam row at all rather than being a flat block.
+  // Blutwurst: the fill is nearly the outline, so the highlight and the red
+  // flecks are the only things that keep the silhouette readable.
   eternal: {
     outline: UI_PALETTE.outline,
     fill: HUD_PALETTE.healthEternal,
     highlight: 0x8a8a9a,
-    accent: HUD_PALETTE.healthEternal,
+    accent: HUD_PALETTE.healthRed,
   },
 };
 

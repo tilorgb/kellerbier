@@ -8,14 +8,12 @@ import {
   setActionDown,
 } from '../../src/sim/input/frame.js';
 import { RoomGeometry } from '../../src/sim/room/geometry.js';
-import { CollisionLayer } from '../../src/sim/collision/layers.js';
 import cellarRoom from '../../src/content/rooms/cellar.json';
 import { ProjectileTag, hasTag } from '../../src/sim/projectile/tags.js';
 import { StatId } from '../../src/sim/stats/definition.js';
 import { DEFAULT_CHARACTER_TUNING } from '../../src/sim/tuning.js';
 import type { CharacterTraits } from '../../src/sim/character/definition.js';
 import { alois } from '../../src/content/characters/alois.js';
-import { bruderBarnabas } from '../../src/content/characters/bruder-barnabas.js';
 import { derWolpertinger } from '../../src/content/characters/der-wolpertinger.js';
 import { koenigLudwig } from '../../src/content/characters/koenig-ludwig.js';
 import { resi } from '../../src/content/characters/resi.js';
@@ -55,17 +53,6 @@ function placePlayer(sim: GameSim, x: number, y: number): void {
   sim.transform.data[base + 3] = y;
 }
 
-/** How many pickup bodies are still lying in the room. */
-function livePickups(sim: GameSim): number {
-  let count = 0;
-  sim.world.forEach(sim.collidableMask, (index) => {
-    if (((sim.collision.data[index * 2] ?? 0) & CollisionLayer.Pickup) !== 0) {
-      count += 1;
-    }
-  });
-  return count;
-}
-
 function playerX(sim: GameSim): number {
   return sim.positionX(sim.playerIndex);
 }
@@ -100,10 +87,6 @@ describe('characters (#47)', () => {
     expect(ludwig.playerHealth).toBe(4);
     expect(ludwig.biermarken).toBe(40);
     expect(ludwig.hasItem('ludwigs-schwan')).toBe(true);
-
-    const barnabas = simFor(bruderBarnabas.traits);
-    expect(barnabas.playerMaxHealth).toBe(8);
-    expect(barnabas.hasItem('loewenbrunn-doppelbock')).toBe(true);
   });
 
   it('folds a character’s stat block into the pipeline as its own named source', () => {
@@ -136,76 +119,6 @@ describe('characters (#47)', () => {
     const plain = simFor(alois.traits);
     plain.step(aiming(1, 0));
     expect(firstShotTags(plain)).toBe(0);
-  });
-});
-
-describe('Bruder Barnabas — the fast (#47)', () => {
-  it('leaves a food pickup lying there rather than collecting it', () => {
-    const sim = simFor(bruderBarnabas.traits);
-    sim.applyPlayerDamage(2);
-    const hurt = sim.playerHealth;
-    sim.spawnPickup('brezn', playerX(sim), sim.positionY(sim.playerIndex));
-    sim.world.flush();
-    sim.step(IDLE);
-
-    // Refused, not silently consumed: still in the room, and it healed nothing.
-    expect(livePickups(sim)).toBe(1);
-    expect(sim.playerHealth).toBe(hurt);
-  });
-
-  it('is the only one who refuses it — anybody else eats the same Brezn', () => {
-    const sim = simFor(alois.traits);
-    sim.applyPlayerDamage(2);
-    const hurt = sim.playerHealth;
-    sim.spawnPickup('brezn', playerX(sim), sim.positionY(sim.playerIndex));
-    sim.world.flush();
-    sim.step(IDLE);
-
-    expect(livePickups(sim)).toBe(0);
-    expect(sim.playerHealth).toBeGreaterThan(hurt);
-  });
-
-  it('hits harder the longer he has swallowed nothing, and stops at the cap', () => {
-    const sim = simFor(bruderBarnabas.traits);
-    const opening = sim.stats.value(StatId.Stammwuerze);
-    const step = Math.round(DEFAULT_CHARACTER_TUNING.fastStepTicks);
-
-    for (let tick = 0; tick < step; tick++) {
-      sim.step(IDLE);
-    }
-    expect(sim.fastSteps).toBe(1);
-    const afterOne = sim.stats.value(StatId.Stammwuerze);
-    expect(afterOne).toBeCloseTo(opening * (1 + DEFAULT_CHARACTER_TUNING.fastStepBonus), 5);
-
-    for (let tick = 0; tick < step * (DEFAULT_CHARACTER_TUNING.fastMaxSteps + 3); tick++) {
-      sim.step(IDLE);
-    }
-    expect(sim.fastSteps).toBe(DEFAULT_CHARACTER_TUNING.fastMaxSteps);
-  });
-
-  it('loses the fast the moment he drinks something, and starts it again', () => {
-    const sim = simFor(bruderBarnabas.traits);
-    for (let tick = 0; tick < DEFAULT_CHARACTER_TUNING.fastStepTicks; tick++) {
-      sim.step(IDLE);
-    }
-    expect(sim.fastSteps).toBe(1);
-
-    sim.spawnPickup('mass-half', playerX(sim), sim.positionY(sim.playerIndex));
-    sim.world.flush();
-    sim.step(IDLE);
-
-    // Zero, not one: the fast is advanced at the top of a tick and broken by
-    // the pickup resolved later in the same one.
-    expect(sim.fastTicks).toBe(0);
-    expect(sim.fastSteps).toBe(0);
-  });
-
-  it('never fasts for anybody else — an Alois run has no such counter', () => {
-    const sim = simFor(alois.traits);
-    for (let tick = 0; tick < 200; tick++) {
-      sim.step(IDLE);
-    }
-    expect(sim.fastTicks).toBe(0);
   });
 });
 

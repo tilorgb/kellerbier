@@ -194,8 +194,28 @@ export const MAYPOLE_RADIUS = 6;
  */
 export const MAYPOLE_MASS = 1e6;
 
-/** Hit points the player starts a run with, in half-Maß. */
+/** Hit points the player starts a run with, in half-heart units. */
 export const PLAYER_HEALTH = 6;
+
+/**
+ * The soul pool's ceiling, in half-heart units (5 whole hearts) — what
+ * `addSoulHealth` clamps to. Previously uncapped in the sim and only
+ * visually capped in `HealthHud`; a Weißwurst pickup collected past this
+ * point is now refused outright rather than silently wasted, so the cap has
+ * to be real, not just cosmetic.
+ */
+export const SOUL_HEALTH_MAX = 10;
+
+/**
+ * The eternal pool's ceiling, in half-heart units (6 whole hearts) — what
+ * `addEternalHealth` clamps to. Eternal hearts now carry the same
+ * half-heart granularity soul and red already have (a half-Blutwurst grants
+ * half a heart), where before they only ever came in whole units.
+ */
+export const ETERNAL_HEALTH_MAX = 12;
+
+/** Half-heart units that make up one whole eternal heart — what `applyPlayerDamage` spends on a save. */
+export const ETERNAL_HALF_UNIT = 2;
 
 export { ENEMY_PROFILES, EnemySize, type EnemyProfile, type EnemySizeId } from '../enemy/size.js';
 
@@ -899,7 +919,10 @@ export class GameSim {
   private invulnerableTicks = 0;
 
   /**
-   * The player's soul and eternal pools, in half-Maß.
+   * The player's soul and eternal pools, both in half-heart units (see
+   * `SOUL_HEALTH_MAX`/`ETERNAL_HEALTH_MAX`/`ETERNAL_HALF_UNIT`) — eternal
+   * used to only ever come in whole hearts, but a half-Blutwurst now grants
+   * half of one the same way a half-Weißwurst grants half a soul heart.
    *
    * Red health stays in the `health` component every entity carries, since
    * enemies and targets need it too. Soul and eternal are player-only, so they
@@ -2498,18 +2521,32 @@ export class GameSim {
     return this.characterChaos ? this.lastChaosFloor : -1;
   }
 
-  /** Grants soul hearts (Weißbier) — collected via `spawnPickup`, or called directly by tests. */
+  /**
+   * Grants soul hearts (Weißwurst), clamped to `SOUL_HEALTH_MAX` — collected
+   * via `spawnPickup`, or called directly by tests.
+   */
   addSoulHealth(amount: number): void {
     if (amount > 0) {
-      this.soulHp += amount;
+      this.soulHp = Math.min(SOUL_HEALTH_MAX, this.soulHp + amount);
     }
   }
 
-  /** Grants eternal hearts (Schwarzbier). Same caveat as `addSoulHealth`. */
+  /** Grants eternal hearts (Blutwurst), clamped to `ETERNAL_HEALTH_MAX`. Same caveat as `addSoulHealth`. */
   addEternalHealth(amount: number): void {
     if (amount > 0) {
-      this.eternalHp += amount;
+      this.eternalHp = Math.min(ETERNAL_HEALTH_MAX, this.eternalHp + amount);
     }
+  }
+
+  /** Whether `pool` is already at its ceiling — `sim/systems/pickup.ts` refuses a Wurst pickup that targets a full pool. */
+  healthPoolFull(pool: 'red' | 'soul' | 'eternal'): boolean {
+    if (pool === 'red') {
+      return this.playerHealth >= this.playerMaxHealth;
+    }
+    if (pool === 'soul') {
+      return this.soulHp >= SOUL_HEALTH_MAX;
+    }
+    return this.eternalHp >= ETERNAL_HEALTH_MAX;
   }
 
   /** Heals red Maß, clamped to the pool's max. The Maß/food half of the pickup economy. */
@@ -2900,12 +2937,13 @@ export class GameSim {
     // Reaching exactly zero is lethal, same as going below it — a hit does
     // not need to overkill to end a run, it only needs to use up what is left.
     if (amount >= this.soulHp + red) {
-      if (this.eternalHp > 0) {
-        // A killing blow with a heart banked: the heart is spent instead of
-        // the run, and comes back as the one half-Maß a player needs to keep
-        // standing rather than as a full refill — an eternal heart is a save,
-        // not a heal.
-        this.eternalHp -= 1;
+      if (this.eternalHp >= ETERNAL_HALF_UNIT) {
+        // A killing blow with a whole heart banked: the heart is spent
+        // instead of the run, and comes back as the one half-Maß a player
+        // needs to keep standing rather than as a full refill — an eternal
+        // heart is a save, not a heal. A single banked half-heart (a lone
+        // half-Blutwurst) is not enough on its own to trigger this.
+        this.eternalHp -= ETERNAL_HALF_UNIT;
         this.soulHp = 0;
         health[index * 2] = 1;
       } else {
@@ -5573,15 +5611,13 @@ export class GameSim {
     const tuning = this.tuning.pickup;
     const effect = this.pickups.get(pickupId).effect;
     let low = false;
-    if (effect.kind === 'health') {
+    if (effect.kind === 'food') {
       low =
         effect.pool === 'red'
           ? this.playerHealth < this.playerMaxHealth * tuning.needThreshold
           : effect.pool === 'soul'
             ? this.soulHp === 0
             : this.eternalHp === 0;
-    } else if (effect.kind === 'food') {
-      low = this.playerHealth < this.playerMaxHealth * tuning.needThreshold;
     } else if (effect.kind === 'currency') {
       low = this.biermarkenCount === 0;
     } else if (effect.kind === 'bombs') {

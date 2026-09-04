@@ -194,7 +194,8 @@ const GROUPS: readonly GroupSpec[] = [
       // every tier, bonus, drift, wobble and sway reacts on the next tick.
       { key: 'current', min: 0, max: 5, step: 0.1, hint: 'current Promille — the slider' },
       { key: 'decayPerSecond', min: 0, max: 0.5, step: 0.01, hint: 'Promille lost per second' },
-      { key: 'beerAmount', min: 0, max: 3, step: 0.1, hint: 'Promille per beer' },
+      { key: 'massFullAmount', min: 0, max: 3, step: 0.1, hint: 'Promille per full Maß' },
+      { key: 'massHalfAmount', min: 0, max: 3, step: 0.1, hint: 'Promille per half Maß' },
       {
         key: 'trinkfest',
         min: -1,

@@ -41,36 +41,36 @@ export interface PickupDefinition {
 }
 
 export type PickupEffect =
-  | { readonly kind: 'health'; readonly pool: 'red' | 'soul' | 'eternal'; readonly amount: number }
   | { readonly kind: 'currency'; readonly amount: number }
   | { readonly kind: 'bombs'; readonly amount: number }
   | { readonly kind: 'keys'; readonly amount: number }
   /**
-   * Brezn, Obazda, Radi: a small heal that also lowers Promille.
-   * `promille` is the positive amount it lowers by — passed straight to
-   * `GameSim.lowerPromille`, which (like `addPromille`) takes a magnitude,
-   * not a signed delta.
-   */
-  | { readonly kind: 'food'; readonly heal: number; readonly promille: number }
-  /**
-   * Beer: the one pickup that raises Promille. Never rolled in a sober run's
-   * tables. No `amount` field — the raise reads `tuning.promille.beerAmount`
-   * at collection time, the same tunable value the debug tuning window
-   * already binds a slider to, so there is exactly one number that says how
-   * much one beer is worth.
-   */
-  | { readonly kind: 'promille'; readonly heal: number }
-  /**
-   * Weißwurst: generous on floors before `floorThreshold`, spoiled from it on.
-   * One definition, one tint — "the sprite does not change" holds by
-   * construction, not by a rule someone could forget to keep.
+   * Wurst: the only health pickup in the game (#health-food-redesign). Heals
+   * `pool` by `heal` and lowers Promille by `promille` — every tier of every
+   * pool doubles as the "soberness" mechanic the old Brezn/Obazda/Radi food
+   * items used to be, not just the red-pool Bratwurst. `promille` is the
+   * positive amount it lowers by — passed straight to `GameSim.lowerPromille`,
+   * which (like `addPromille`) takes a magnitude, not a signed delta.
+   *
+   * Refused outright — stays on the floor, no heal, no Promille change —
+   * when `pool` is already at its ceiling (`GameSim.healthPoolFull`), the
+   * same all-or-nothing shape Bruder Barnabas's fast refusal already uses.
    */
   | {
-      readonly kind: 'weisswurst';
-      readonly floorThreshold: number;
-      readonly healBelowFloor: number;
-      readonly damageAtOrAbove: number;
-    };
+      readonly kind: 'food';
+      readonly pool: 'red' | 'soul' | 'eternal';
+      readonly heal: number;
+      readonly promille: number;
+    }
+  /**
+   * Maß: the only Promille pickup in the game, full and half — replaces the
+   * old single-tier Bier. Never rolled in a sober run's tables, and no
+   * longer heals at all (that is Wurst's job now). No `amount` field — the
+   * raise reads `tuning.promille.massFullAmount`/`massHalfAmount` at
+   * collection time, the same tunable-value pattern the debug tuning window
+   * already binds a slider to.
+   */
+  | { readonly kind: 'promille'; readonly size: 'full' | 'half' };
 
 /**
  * The description to show for `definition` in a run that is (or is not)

@@ -45,7 +45,7 @@
       "obstacles": [],
       "enemySpawns": [],
       "spawnGroups": [],
-      "pickupSpawns": [{ "x": 120, "y": 72, "type": "mass-half" }],
+      "pickupSpawns": [{ "x": 120, "y": 72, "type": "bratwurst-half" }],
       "hazards": [],
       "decorativeProps": []
     },

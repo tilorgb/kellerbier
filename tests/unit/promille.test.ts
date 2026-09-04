@@ -508,25 +508,25 @@ describe('Kater', () => {
   });
 });
 
-describe('beer pickups', () => {
+describe('Maß pickups', () => {
   it('raises Promille and removes the pickup on overlap', () => {
     const sim = emptySim();
     const index = sim.playerIndex;
-    sim.tuning.promille.beerAmount = 0.5;
-    const beer = sim.spawnPickup('beer', sim.positionX(index), sim.positionY(index));
+    sim.tuning.promille.massFullAmount = 0.5;
+    const mass = sim.spawnPickup('mass-full', sim.positionX(index), sim.positionY(index));
     sim.world.flush();
-    const beerIndex = entityIndex(beer);
+    const massIndex = entityIndex(mass);
 
     sim.step(idle());
 
     expect(sim.promille).toBeCloseTo(0.5, 5);
-    expect(sim.world.states[beerIndex]).not.toBe(1);
+    expect(sim.world.states[massIndex]).not.toBe(1);
   });
 
   it('does not raise Promille from a pickup nowhere near the player', () => {
     const sim = emptySim();
     const index = sim.playerIndex;
-    sim.spawnPickup('beer', sim.positionX(index) + 200, sim.positionY(index) + 200);
+    sim.spawnPickup('mass-full', sim.positionX(index) + 200, sim.positionY(index) + 200);
     sim.world.flush();
     sim.step(idle());
     expect(sim.promille).toBe(0);

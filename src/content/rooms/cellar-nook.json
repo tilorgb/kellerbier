@@ -55,7 +55,7 @@
           ]
         }
       ],
-      "pickupSpawns": [{ "x": 176, "y": 96, "type": "mass-half" }],
+      "pickupSpawns": [{ "x": 176, "y": 96, "type": "bratwurst-half" }],
       "hazards": [],
       "decorativeProps": []
     },

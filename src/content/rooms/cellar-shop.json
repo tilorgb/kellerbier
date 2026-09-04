@@ -21,7 +21,7 @@
     }
   ],
   "pickupSpawns": [
-    { "x": 72, "y": 100, "type": "mass-full", "price": 6 },
+    { "x": 72, "y": 100, "type": "bratwurst-full", "price": 6 },
     { "x": 120, "y": 100, "type": "bierfassl-pack", "price": 5 },
     { "x": 168, "y": 100, "type": "kellerschluessel", "price": 4 }
   ],

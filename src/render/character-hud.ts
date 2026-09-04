@@ -90,7 +90,7 @@ export function characterStatus(sim: GameSim): CharacterStatus | null {
     const steps = sim.fastSteps;
     const percent = Math.round(steps * sim.tuning.character.fastStepBonus * 100);
     return steps === 0
-      ? { text: 'Fasting: nothing yet', icon: 'mug-empty', tint: UI_PALETTE.textDim }
+      ? { text: 'Fasting: nothing yet', icon: 'wurst-empty', tint: UI_PALETTE.textDim }
       : {
           text: `Fasting: +${String(percent)}% strength`,
           icon: 'star',

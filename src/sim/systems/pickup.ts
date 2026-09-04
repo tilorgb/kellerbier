@@ -143,6 +143,14 @@ function collect(sim: GameSim, other: number): boolean {
     sim.reportCollected(definition.name, 'Er fast’t — des bleibt liegn.');
     return false;
   }
+  // A full pool refuses its Wurst outright — no heal, no Promille change,
+  // same all-or-nothing shape as Barnabas's fast above. Checked before the
+  // price is paid for the same reason: a shop selling a full-pool Wurst
+  // would otherwise take Biermarken for something the player then can't use.
+  if (effect.kind === 'food' && sim.healthPoolFull(effect.pool)) {
+    sim.reportCollected(definition.name, 'Is scho voll — bleibt liegn.');
+    return false;
+  }
   const priced = ((sim.world.masks[other] ?? 0) & sim.pickupPrice.bit) !== 0;
   if (priced && !sim.spendBiermarken(sim.pickupPrice.data[other] ?? 0)) {
     return false;
@@ -152,25 +160,11 @@ function collect(sim: GameSim, other: number): boolean {
   // A fast is broken by swallowing something, whatever it was (#47) — see
   // `GameSim.breakFast`. Every branch below that heals or drinks counts;
   // a Biermarke, a key and a keg do not.
-  if (
-    effect.kind === 'health' ||
-    effect.kind === 'food' ||
-    effect.kind === 'promille' ||
-    effect.kind === 'weisswurst'
-  ) {
+  if (effect.kind === 'food' || effect.kind === 'promille') {
     sim.breakFast();
   }
 
   switch (effect.kind) {
-    case 'health':
-      if (effect.pool === 'red') {
-        sim.addPlayerHealth(effect.amount);
-      } else if (effect.pool === 'soul') {
-        sim.addSoulHealth(effect.amount);
-      } else {
-        sim.addEternalHealth(effect.amount);
-      }
-      break;
     case 'currency':
       sim.addBiermarken(effect.amount);
       break;
@@ -181,34 +175,36 @@ function collect(sim: GameSim, other: number): boolean {
       sim.addKeys(effect.amount);
       break;
     case 'food':
-      // Inert in a sober run is true of every food pickup, by construction:
+      // Inert in a sober run is true of every Wurst pickup, by construction:
       // Promille sits at zero the whole run, so `lowerPromille` has nothing
       // to lower, and Kater is never running to clear. No gate is needed
       // here — see `GameSim.lowerPromille`.
-      sim.addPlayerHealth(effect.heal);
+      if (effect.pool === 'red') {
+        sim.addPlayerHealth(effect.heal);
+      } else if (effect.pool === 'soul') {
+        sim.addSoulHealth(effect.heal);
+      } else {
+        sim.addEternalHealth(effect.heal);
+      }
       sim.lowerPromille(effect.promille);
       sim.clearKater();
       break;
-    case 'promille':
+    case 'promille': {
       // Reads the live tunable rather than a value baked into content — see
       // the `promille` variant's doc comment in `sim/pickup/definition.ts`.
-      sim.addPromille(sim.tuning.promille.beerAmount);
-      sim.addPlayerHealth(effect.heal);
-      // A beer never clears Kater on its own (that is `food`'s job, above) —
+      // Maß no longer heals at all — that is Wurst's job now.
+      const amount =
+        effect.size === 'full'
+          ? sim.tuning.promille.massFullAmount
+          : sim.tuning.promille.massHalfAmount;
+      sim.addPromille(amount);
+      // A Maß never clears Kater on its own (that is `food`'s job, above) —
       // Konterbier (#32) is what makes drinking through a hangover work, so
       // every held item gets a look at this exact event rather than the
       // engine special-casing one item's id here.
       dispatchItemBeerPickup(sim);
       break;
-    case 'weisswurst':
-      // *"Nach zwölfe nimmer."* One definition, one tint — the branch changes
-      // what it does, never what it looks like.
-      if (sim.currentFloor < effect.floorThreshold) {
-        sim.addPlayerHealth(effect.healBelowFloor);
-      } else {
-        sim.applyPlayerDamage(effect.damageAtOrAbove);
-      }
-      break;
+    }
   }
   // A collected pickup already vanishes, so this is decoration on top of
   // something the player can already see (#153) — which is exactly the bar an

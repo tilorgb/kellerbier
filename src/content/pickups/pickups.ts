@@ -6,59 +6,103 @@ const RADIUS = 4;
 /**
  * Every pickup in the game.
  *
- * Health — Maß, Weißbier, Schwarzbier — drops in every run, unchanged. Beer is
- * the *Promille* pickup and is the one kind a sober run's drop tables never
- * name; see `drop-tables.ts`.
+ * Health — Bratwurst, Weißwurst, Blutwurst — is Wurst, full stop
+ * (health-food-redesign). There is no separate "food" category any more:
+ * every Wurst tier both heals its own pool *and* lowers Promille by a
+ * moderate, size-based amount (full vs. half — not pool-based, so a rare
+ * Blutwurst is not a stealth-stronger sobering tool than a common
+ * Bratwurst), the job Brezn/Obazda/Radi used to split off on their own.
+ * `soberDescription` says only the heal half of that in a sober run (#85),
+ * the same reasoning the old food items followed.
  *
- * The three food items are the only pickups that read differently in the two
- * runs: they heal in both, and their "lowers Promille" half is a sentence a
- * sober run has no business showing, so each carries a `soberDescription`
- * saying only what it actually does there (#85). Their heal numbers are
- * repeated in that second string rather than shared with the first, because
- * the two are written for different readers and the first one is not a
- * template.
+ * Maß — full and half — is the only Promille pickup, replacing Bier. It no
+ * longer heals at all; see the `promille` effect's own doc comment in
+ * `sim/pickup/definition.ts` for how big a swig it actually is.
  */
 export const massFull: PickupDefinition = {
   id: 'mass-full',
   name: 'Maß',
-  description: 'Health +2',
+  description: 'Raises Promille',
   radius: RADIUS,
   tint: 0xd9403a,
   label: 'M+',
-  effect: { kind: 'health', pool: 'red', amount: 2 },
+  effect: { kind: 'promille', size: 'full' },
 };
 
 export const massHalf: PickupDefinition = {
   id: 'mass-half',
   name: 'Halbe Maß',
-  description: 'Health +1',
+  description: 'Raises Promille (less)',
   radius: RADIUS,
   tint: 0xd9403a,
   label: 'M',
-  effect: { kind: 'health', pool: 'red', amount: 1 },
+  effect: { kind: 'promille', size: 'half' },
 };
 
-export const weissbier: PickupDefinition = {
-  id: 'weissbier',
-  name: 'Weißbier',
-  description: 'Soul heart +2',
+export const bratwurstFull: PickupDefinition = {
+  id: 'bratwurst-full',
+  name: 'Bratwurst',
+  description: 'Heal, lowers Promille',
+  soberDescription: 'Health +2',
   radius: RADIUS,
-  tint: 0x6fa8dc,
-  label: 'W',
-  effect: { kind: 'health', pool: 'soul', amount: 2 },
+  tint: 0xd92b3c,
+  label: 'Br+',
+  effect: { kind: 'food', pool: 'red', heal: 2, promille: 0.5 },
 };
 
-export const schwarzbier: PickupDefinition = {
-  id: 'schwarzbier',
-  name: 'Schwarzbier',
-  description: 'Eternal heart +1',
-  // Dark, "eternal" tint, but still visible against the room's own dark
-  // background — the whole point of a Schwarzbier drop is that it reads on
-  // sight.
-  tint: 0x6a5a78,
+export const bratwurstHalf: PickupDefinition = {
+  id: 'bratwurst-half',
+  name: 'Halbe Bratwurst',
+  description: 'Heal, lowers Promille',
+  soberDescription: 'Health +1',
   radius: RADIUS,
-  label: 'S',
-  effect: { kind: 'health', pool: 'eternal', amount: 1 },
+  tint: 0xd92b3c,
+  label: 'Br',
+  effect: { kind: 'food', pool: 'red', heal: 1, promille: 0.25 },
+};
+
+export const weisswurstFull: PickupDefinition = {
+  id: 'weisswurst-full',
+  name: 'Weißwurst',
+  description: 'Soul heart, lowers Promille',
+  soberDescription: 'Soul heart +2',
+  radius: RADIUS,
+  tint: 0xe8e2d0,
+  label: 'Ww+',
+  effect: { kind: 'food', pool: 'soul', heal: 2, promille: 0.5 },
+};
+
+export const weisswurstHalf: PickupDefinition = {
+  id: 'weisswurst-half',
+  name: 'Halbe Weißwurst',
+  description: 'Soul heart, lowers Promille',
+  soberDescription: 'Soul heart +1',
+  radius: RADIUS,
+  tint: 0xe8e2d0,
+  label: 'Ww',
+  effect: { kind: 'food', pool: 'soul', heal: 1, promille: 0.25 },
+};
+
+export const blutwurstFull: PickupDefinition = {
+  id: 'blutwurst-full',
+  name: 'Blutwurst',
+  description: 'Eternal heart, lowers Promille',
+  soberDescription: 'Eternal heart +2',
+  radius: RADIUS,
+  tint: 0x1c1a1f,
+  label: 'Bl+',
+  effect: { kind: 'food', pool: 'eternal', heal: 2, promille: 0.5 },
+};
+
+export const blutwurstHalf: PickupDefinition = {
+  id: 'blutwurst-half',
+  name: 'Halbe Blutwurst',
+  description: 'Eternal heart, lowers Promille',
+  soberDescription: 'Eternal heart +1',
+  radius: RADIUS,
+  tint: 0x1c1a1f,
+  label: 'Bl',
+  effect: { kind: 'food', pool: 'eternal', heal: 1, promille: 0.25 },
 };
 
 export const biermarke1: PickupDefinition = {
@@ -131,69 +175,15 @@ export const kellerschluesselRing: PickupDefinition = {
   effect: { kind: 'keys', amount: 3 },
 };
 
-export const brezn: PickupDefinition = {
-  id: 'brezn',
-  name: 'Brezn',
-  description: 'Heal, lowers Promille',
-  soberDescription: 'Health +1',
-  radius: RADIUS,
-  tint: 0xa9702f,
-  label: 'Br',
-  effect: { kind: 'food', heal: 1, promille: 0.3 },
-};
-
-export const obazda: PickupDefinition = {
-  id: 'obazda',
-  name: 'Obazda',
-  description: 'Heal, lowers Promille',
-  soberDescription: 'Health +2',
-  radius: RADIUS,
-  tint: 0xe8b23d,
-  label: 'Oz',
-  effect: { kind: 'food', heal: 2, promille: 0.5 },
-};
-
-export const radi: PickupDefinition = {
-  id: 'radi',
-  name: 'Radi',
-  description: 'Heal, lowers Promille',
-  soberDescription: 'Health +1',
-  radius: RADIUS,
-  tint: 0x9fd6a0,
-  label: 'Ra',
-  effect: { kind: 'food', heal: 1, promille: 0.2 },
-};
-
-export const beer: PickupDefinition = {
-  id: 'beer',
-  name: 'Bier',
-  description: 'Heal, raises Promille',
-  radius: RADIUS,
-  tint: 0xf0c46a,
-  label: 'Bi',
-  effect: { kind: 'promille', heal: 1 },
-};
-
-/**
- * *"Nach zwölfe nimmer."* Generous through floor 3; from floor 4 it is spoiled
- * and hurts instead — see `sim/systems/pickup.ts` for the floor check. One
- * definition, one tint, one label — the sprite cannot betray the trap.
- */
-export const weisswurst: PickupDefinition = {
-  id: 'weisswurst',
-  name: 'Weißwurst',
-  description: 'Heal — spoils after floor 3',
-  radius: RADIUS,
-  tint: 0xecdcc0,
-  label: 'Ww',
-  effect: { kind: 'weisswurst', floorThreshold: 4, healBelowFloor: 4, damageAtOrAbove: 2 },
-};
-
 export const PICKUP_DEFINITIONS: readonly PickupDefinition[] = [
   massFull,
   massHalf,
-  weissbier,
-  schwarzbier,
+  bratwurstFull,
+  bratwurstHalf,
+  weisswurstFull,
+  weisswurstHalf,
+  blutwurstFull,
+  blutwurstHalf,
   biermarke1,
   biermarke5,
   biermarke10,
@@ -201,9 +191,4 @@ export const PICKUP_DEFINITIONS: readonly PickupDefinition[] = [
   bierfasslPack,
   kellerschluessel,
   kellerschluesselRing,
-  brezn,
-  obazda,
-  radi,
-  beer,
-  weisswurst,
 ];
