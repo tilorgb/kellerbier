@@ -40,17 +40,20 @@ import type { EnemyDefinition, SplitOnDeathBehaviour } from '../../sim/enemy/def
  * than a moment. The pool is tuned, not computed, but the target is "the
  * authored loop plays out at least four times against a realistic mid-run
  * fight" — the same yardstick #232 uses for Der Stier — checked with a real
- * `GameSim` rather than by hand (`tests/content/boss-pacing.test.ts`): at
- * 180 total the loop lands 5 times before the split at 6 DPS (a Bierkrug's
- * worth of damage) and 10 times at the 3 DPS a run starts at. The threshold
- * stays at half (90), holding the fight's total health budget unchanged
- * between phases the way the original 18/9 split did: 90 in phase one,
- * three segments at 30 each — the same 90 left to clear either way, just
- * split three ways instead of one. "Deliberately gentle... its job is to be
- * beaten": no ranged attack anywhere in phase two, only the same curl loop
- * three smaller bodies at once now asks the player to read while managing
- * which one to engage — "teaches crowd management and target
- * prioritisation."
+ * `GameSim` rather than by hand (`tests/content/boss-pacing.test.ts`).
+ *
+ * **#260: 180 overshot it the other way.** Play reports called phase one "a
+ * dash too long" — at 180 the loop ran 10 times at the 3 DPS a run starts
+ * at (only 5 at 6 DPS, a Bierkrug's worth of damage). 160 keeps the same
+ * `tests/content/boss-pacing.test.ts` floor comfortably (8 loops at 3 DPS,
+ * 4 — the floor itself — at 6 DPS, with room either side before the next
+ * loop count boundary) while visibly trimming the fight.
+ *
+ * The 50% split threshold no longer means "phase two gets whatever's left
+ * of an even budget" the way it did pre-#260: phase two's own tankiness is
+ * tuned independently now (see `kellerasselSegment`'s own comment) rather
+ * than being derived from splitting phase one's pool three ways, so the two
+ * phases' health totals do not need to match any more.
  */
 
 const PHASE_TWO_SPLIT: SplitOnDeathBehaviour = {
@@ -69,7 +72,7 @@ export const grosseKellerassel: EnemyDefinition = {
   // stay `normal` — they are the ordinary Kellerassel three times over.
   size: 'boss',
   deathEffect: 'dust',
-  health: 180,
+  health: 160,
   // #232: was 2. `docs/DECISIONS.md` #65 — pressure comes from the
   // telegraphed `spit`, not from standing next to the body — and a boss
   // whose bare touch can chip a real fraction of a 6-health player twice
@@ -163,11 +166,14 @@ export const kellerasselSegment: EnemyDefinition = {
   size: 'normal',
   // One plate of the same insect.
   deathEffect: 'dust',
-  // #232: was 3 (three segments for 9 total, matching the old 18-health
-  // boss's own half). Scaled with `grosseKellerassel.health` to keep the
-  // phase-one/phase-two budget split the doc comment above describes: 30
-  // each, 90 total, the same 90 phase one left behind at the split.
-  health: 30,
+  // #260: was 30 — scaled to keep phase one and phase two's health totals
+  // matching (#232), which made three of these read as three mini-bosses
+  // rather than the crowd of ordinary Kellerassel (`health: 3`) the split is
+  // meant to feel like. Set independently of phase one's own pool now: a
+  // little above the ordinary mob's 3 so a segment still reads as tougher
+  // than the room's regular roster, nowhere near the 10x that made them
+  // tanky enough to fight almost as long as phase one itself.
+  health: 8,
   contactDamage: 1,
   lootTier: 'weak',
   initial: 'crawl',

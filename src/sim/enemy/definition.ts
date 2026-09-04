@@ -271,6 +271,24 @@ export interface SplitOnDeathBehaviour {
    * since the split reads off whichever state was current at the moment.
    */
   readonly atHealthBelow?: number;
+  /**
+   * Spawns the child at reduced health when no live prop of `propKind`
+   * remains in the room at the moment of the split, instead of `into`'s own
+   * authored `health` (#260).
+   *
+   * Der Stier's own case: `der-stier-maibaum-dieb` spawns at his full
+   * authored health if the maypole he is about to grab (`der-stier.ts`'s
+   * `PHASE_TWO_SPLIT`, `content/enemies/der-stier.ts`'s `approachProp`) is
+   * still standing, and at `health` here if the player already brought it
+   * down during phase one. A disarmed dieb falls into the shorter
+   * `chase`/`dash` branch rather than the melee one — "the Dieb is sad" is
+   * meant to read as a quicker fight, not the same one on foot.
+   */
+  readonly healthWithoutProp?: {
+    /** A `DESTRUCTIBLE_PROP_KINDS` name — the same prop the split's target chases. */
+    readonly propKind: string;
+    readonly health: number;
+  };
 }
 
 /**

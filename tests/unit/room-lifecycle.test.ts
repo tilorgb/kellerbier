@@ -575,10 +575,14 @@ describe('Die Große Kellerassel (#36)', () => {
     expect(liveSegments(sim)).toBe(3);
     expect(sim.doorsLocked).toBe(true);
     expect(sim.transitionTo(cellarCrossroads, 1, 'north')).toBe(false);
-    // The fight's total health budget is unchanged by the split.
+    // #260: phase two's own health is tuned independently of phase one's
+    // now (`content/enemies/grosse-kellerassel.ts`'s own doc comment) — a
+    // segment reads close to the ordinary Kellerassel's own health rather
+    // than splitting phase one's pool three ways, so the combined bar after
+    // the split is no longer half of `fullHealth`.
     const afterSplit = sim.bossHealth;
-    expect(afterSplit?.max).toBe(fullHealth / 2);
-    expect(afterSplit?.current).toBe(fullHealth / 2);
+    expect(afterSplit?.max).toBeLessThan(fullHealth / 2);
+    expect(afterSplit?.current).toBe(afterSplit?.max);
   });
 
   it('unlocks the doors and rolls a guaranteed reward once every segment is down', () => {

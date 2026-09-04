@@ -58,6 +58,19 @@ let activeBody: Float32Array = new Float32Array(0);
 let activeCollisionLayers: Uint16Array = new Uint16Array(0);
 /** `sim.projectiles.lastHitTarget` — see `testCandidate`'s use of it, and the same reasoning above. */
 let activeLastHitTarget: Int32Array = new Int32Array(0);
+/**
+ * `sim.world.masks` and `sim.enemyMask` — what `testCandidate` reads to tell
+ * a real enemy body apart from an ordinary `Obstacle` (a barrel, the arena
+ * maypole). Needed because every enemy in the game is spawned tagged
+ * `CollisionLayer.Obstacle`, not `Enemy` (`CollisionLayer.Enemy` is reserved
+ * but nothing sets it — `GameSim.slowEnemiesNear`'s own doc comment), so an
+ * `EnemyProjectile`'s `Player | Obstacle` mask below would otherwise also
+ * match every other enemy in the room.
+ */
+let activeEntityMasks: Uint32Array = new Uint32Array(0);
+/** `sim.enemyMask` — a single tick-global integer, kept in a typed array rather than a bare `let` (`kellerbier/no-hot-allocation`). */
+const globalState = new Int32Array(1);
+const ENEMY_MASK = 0;
 
 /** Slots in `state`, the double half of the projectile being resolved. */
 const FROM_X = 0;
@@ -72,7 +85,9 @@ const STATE_SLOTS = 6;
 const PROJECTILE_SLOT = 0;
 const PROJECTILE_MASK = 1;
 const BEST_HIT_TARGET = 2;
-const SLOT_COUNT = 3;
+/** `1` for an enemy-team shot, which must not hit another real enemy body — see `activeEntityMasks`. */
+const PROJECTILE_EXCLUDES_ENEMIES = 3;
+const SLOT_COUNT = 4;
 
 /** The projectile currently being resolved, and the best hit found for it. */
 const state = new Float64Array(STATE_SLOTS);
@@ -84,6 +99,8 @@ export function stepCollision(sim: GameSim): void {
   activeBody = sim.body.data;
   activeCollisionLayers = sim.collision.data;
   activeLastHitTarget = sim.projectiles.lastHitTarget;
+  activeEntityMasks = sim.world.masks;
+  globalState[ENEMY_MASK] = sim.enemyMask;
 
   buildBroadphase(sim);
   sim.projectiles.forEachLive(resolveProjectile);
@@ -157,6 +174,7 @@ function resolveProjectile(slot: number): void {
         // storage to know one has been spent.
         (sim.ownShotsHurtOwner && hasBounced(sim, slot) ? CollisionLayer.Player : 0)
       : CollisionLayer.Player | CollisionLayer.Obstacle;
+  slots[PROJECTILE_EXCLUDES_ENEMIES] = projectiles.team[slot] === ProjectileTeam.Enemy ? 1 : 0;
 
   state[BEST_HIT_TIME] = Number.POSITIVE_INFINITY;
   slots[BEST_HIT_TARGET] = -1;
@@ -223,6 +241,19 @@ function hasBounced(sim: GameSim, slot: number): boolean {
 function testCandidate(index: number): void {
   const layer = activeCollisionLayers[index * 2] ?? 0;
   if ((layer & (slots[PROJECTILE_MASK] ?? 0)) === 0) {
+    return;
+  }
+  // An enemy-team shot's mask includes `Obstacle` so it can still hit a
+  // barrel or the arena maypole — but every real enemy is tagged `Obstacle`
+  // too (see `activeEntityMasks`'s own doc comment), so without this check
+  // it would also hit every other enemy standing in its path. Player-team
+  // shots need no such check: `Enemy` is already the layer their own mask
+  // reaches for, and it happens to be the one nothing is ever tagged with.
+  const enemyMask = globalState[ENEMY_MASK] ?? 0;
+  if (
+    slots[PROJECTILE_EXCLUDES_ENEMIES] === 1 &&
+    ((activeEntityMasks[index] ?? 0) & enemyMask) === enemyMask
+  ) {
     return;
   }
   // A `piercing`/`bouncing` shot that survived a hit last tick does not

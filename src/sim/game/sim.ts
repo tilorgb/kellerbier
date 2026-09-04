@@ -3701,6 +3701,15 @@ export class GameSim {
    * poorer copy of it. `excludeIndex` is skipped entirely — the target a
    * shot already hit directly, say, so a splash never double-counts its own
    * trigger.
+   *
+   * Deliberately indiscriminate: this always includes `Enemy`, so an enemy's
+   * own bomb (the Böllerschmeißer's lobbed bomb, `sim/systems/enemy.ts`'s
+   * `detonateLobbedBomb`) can catch another enemy standing in the blast
+   * exactly as a player's splash item would (#260 discussion) — a bomb is
+   * "more damaging" than an ordinary shot precisely because it doesn't
+   * discriminate who is standing in it, unlike a regular `EnemyProjectile`
+   * shot, which already never touches `Enemy` at all
+   * (`collision/layers.ts`).
    */
   applySplashDamage(x: number, y: number, radius: number, damage: number, excludeIndex = -1): void {
     if (damage <= 0 || radius <= 0) {
@@ -5203,8 +5212,19 @@ export class GameSim {
    * it — "reads as elite at a glance, without needing a health bar to tell
    * you." A boss's own `splitOnDeath` (its phase two) never passes this;
    * see `applyCompiledRoom` for the one call site that rolls it.
+   *
+   * `healthOverride` replaces `definition`'s own authored `health` outright —
+   * `splitOnDeath.healthWithoutProp` (#260) is the one caller that passes it,
+   * for a child spawned without the prop its fight was meant to hinge on.
+   * Never combined with `elite`: a split child is never rolled as one.
    */
-  spawnEnemyKind(definition: number, x: number, y: number, elite = false): Entity {
+  spawnEnemyKind(
+    definition: number,
+    x: number,
+    y: number,
+    elite = false,
+    healthOverride?: number,
+  ): Entity {
     const compiled = this.enemies.at(definition);
     const sizeMultiplier = elite ? this.tuning.enemy.eliteRadiusMultiplier : 1;
     const entity = this.spawnTarget(x, y, compiled.radius * sizeMultiplier);
@@ -5217,9 +5237,11 @@ export class GameSim {
     body[index * 2 + 1] = compiled.mass * sizeMultiplier;
 
     const health = this.health.data;
-    const maxHealth = elite
-      ? Math.round(compiled.health * this.tuning.enemy.eliteHealthMultiplier)
-      : compiled.health;
+    const maxHealth =
+      healthOverride ??
+      (elite
+        ? Math.round(compiled.health * this.tuning.enemy.eliteHealthMultiplier)
+        : compiled.health);
     health[index * 2] = maxHealth;
     health[index * 2 + 1] = maxHealth;
     this.contactDamage.data[index] = elite

@@ -9,8 +9,8 @@ import type { EnemyDefinition, SplitOnDeathBehaviour } from '../../sim/enemy/def
  * **Phase one** is Der Stier alone: Kuh's own approach/telegraph/charge/stunned
  * loop (`content/enemies/kuh.ts`), scaled up — "pure charge-and-punish,
  * teaching the loop the Kuh has been rehearsing all floor" is the issue's own
- * words. He fights his full 24 health; there is no mid-fight phase gate any
- * more.
+ * words. He fights his full health (see below); there is no mid-fight phase
+ * gate any more.
  *
  * **Phase two** begins when Der Stier actually dies. `PHASE_TWO_SPLIT` (no
  * `atHealthBelow`, so it fires on the real killing blow) spawns
@@ -35,14 +35,30 @@ import type { EnemyDefinition, SplitOnDeathBehaviour } from '../../sim/enemy/def
  * health Der Stier's own `approach → telegraph → charge → stunned` loop
  * (~131 ticks, ~2.2s) ran two or three times before he died — a full cycle
  * or two short of a player ever having to answer it as a loop rather than
- * a one-off. The pool is tuned, not computed, but the target is the same
+ * a one-off. The pool is tuned, not computed, but the target was the same
  * one #232 states directly: 12-20 seconds against a realistic mid-run 4-6
- * DPS, which is roughly 60-100 health. 80 lands in that band and gives the
- * loop room to run five to seven times before he actually dies. The dieb's
- * own pool is scaled by the same ratio the original 18/24 split held (0.75)
- * — 60, not 18 — so his own swing/dash loop gets the same "plays out
- * several times" treatment rather than being tuned back down to a fight
- * that is over before the player reads it.
+ * DPS, which is roughly 60-100 health, and 80 landed in that band.
+ *
+ * **#260: 80 overshot it, same as Die Große Kellerassel's own pool did.**
+ * Play reports called the second floor's boss the same "too long" as the
+ * first's. 60 keeps `tests/content/boss-pacing.test.ts`'s "at least four
+ * `charge`s before he dies" floor with room either side of the boundary
+ * (8 loops at 3 DPS, 4 at 6 DPS) while trimming the fight from the 11/6 loops
+ * 80 gave. The dieb's armed pool (`maibaumDieb.health`) is scaled down by
+ * the same 0.75 ratio #232 first picked, 45 rather than 60, for the same
+ * reason: nothing here says phase one and phase two have to move in lockstep,
+ * they are just both long by the same proportion.
+ *
+ * **#260 also splits the dieb's own pool in two.** "Depending on if the dieb
+ * could get the maibaum or not" — a disarmed dieb (the player already broke
+ * the maypole during phase one) is meant to be a shorter, sadder fight than
+ * an armed one, not the same 45-health pool wearing a different animation.
+ * `PHASE_TWO_SPLIT.healthWithoutProp` reads whether a live `maypole` prop is
+ * still in the room at the instant Der Stier dies (`sim/systems/enemy.ts`'s
+ * `splitFromEvent`, the same moment the dieb's own `approach` state will
+ * later re-check on its own) and spawns him at 20 health instead of 45 when
+ * it is gone — the disarmed `chase`/`dash` loop that gets fewer, quicker
+ * turns before he goes down, rather than the melee one's full run.
  */
 
 const PHASE_TWO_SPLIT: SplitOnDeathBehaviour = {
@@ -50,6 +66,9 @@ const PHASE_TWO_SPLIT: SplitOnDeathBehaviour = {
   into: 'der-stier-maibaum-dieb',
   count: 1,
   spread: 0,
+  // #260: "the Dieb is sad and thus can be disposed quicker" without the
+  // maypole he was heading for — see the module doc comment above.
+  healthWithoutProp: { propKind: 'maypole', health: 20 },
 };
 
 export const derStier: EnemyDefinition = {
@@ -57,10 +76,10 @@ export const derStier: EnemyDefinition = {
   name: 'Der Stier',
   // `boss` since #193 (`sim/enemy/size.ts`, `docs/DECISIONS.md` #56).
   size: 'boss',
-  // #232: was 24. See the module doc comment — tuned against "the authored
-  // loop runs five to seven times against a realistic mid-run DPS," not
-  // computed.
-  health: 80,
+  // #260: was 80; #232 before that: was 24. See the module doc comment —
+  // tuned by feel against `tests/content/boss-pacing.test.ts`'s loop-count
+  // floor, not computed.
+  health: 60,
   // #232: was 3. There is one `contactDamage` field for both an idle touch
   // and a connected charge (`sim/systems/contact.ts` reads it either way),
   // and at 3 against a 6-health player two touches were most of a run —
@@ -107,10 +126,14 @@ export const derStier: EnemyDefinition = {
 /**
  * Phase two: the dismounted Maibaum-Dieb (#199). Player-sized and a little
  * chubby (`normal`), not a second bull — the threat is the stolen maypole and
- * the dash, not his mass. Fresh 60 health (#232: was 18, scaled with Der
- * Stier's own by the same 0.75 ratio); the boss bar refills to it on its own,
- * because `GameSim.bossHealth` sums whatever `locksRoom` bodies are alive
- * and Der Stier's 80 have just left the room.
+ * the dash, not his mass. `health` here (45, #260: was 60, #232: was 18 —
+ * scaled with Der Stier's own by the same 0.75 ratio each time) is what he
+ * spawns at when he still has a maypole to reach; the boss bar refills to
+ * whichever pool he actually spawned with on its own, because
+ * `GameSim.bossHealth` sums whatever `locksRoom` bodies are alive and Der
+ * Stier's have just left the room. `PHASE_TWO_SPLIT.healthWithoutProp`
+ * (`der-stier.ts`'s own doc comment) spawns him at 20 instead when no live
+ * maypole remains — this field is only ever the armed number.
  *
  * `initial: 'approach'`. From there the machine forks once, on whether he
  * reaches a live maypole (`whenPropWithin`) before he reaches the player
@@ -120,7 +143,7 @@ export const maibaumDieb: EnemyDefinition = {
   id: 'der-stier-maibaum-dieb',
   name: 'Der Stier (Maibaum-Dieb)',
   size: 'normal',
-  health: 60,
+  health: 45,
   // #232: was 3, same "length over damage" reasoning as Der Stier's own —
   // both the passive touch and the disarmed `dash`'s charge read this one
   // field, and `meleeArc`'s telegraphed swing (below) is the armed branch's

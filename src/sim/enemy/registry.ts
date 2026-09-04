@@ -86,6 +86,10 @@ export interface CompiledSplit {
   readonly spread: number;
   /** Fraction of max health that force-triggers the split early. Zero: never. */
   readonly atHealthBelow: number;
+  /** `healthWithoutProp`'s prop resolved to a `DESTRUCTIBLE_PROP_KINDS` index, or -1 when unset. */
+  readonly healthWithoutPropKind: number;
+  /** `healthWithoutProp.health`. Meaningless when `healthWithoutPropKind` is -1. */
+  readonly healthWithoutPropHealth: number;
 }
 
 export type FiringBehaviour =
@@ -411,11 +415,28 @@ export class EnemyRegistry {
             `${where} has atHealthBelow of ${String(atHealthBelow)}, which is not a fraction between 0 and 1`,
           );
         }
+        let healthWithoutPropKind = -1;
+        let healthWithoutPropHealth = 0;
+        if (behaviour.healthWithoutProp !== undefined) {
+          if (!(behaviour.healthWithoutProp.health > 0)) {
+            throw new Error(
+              `${where}'s "splitOnDeath" healthWithoutProp must have health above zero, got ` +
+                String(behaviour.healthWithoutProp.health),
+            );
+          }
+          healthWithoutPropKind = resolvePropKind(
+            behaviour.healthWithoutProp.propKind,
+            `${where}: "splitOnDeath" healthWithoutProp`,
+          );
+          healthWithoutPropHealth = behaviour.healthWithoutProp.health;
+        }
         splits.push({
           definition: into,
           count: behaviour.count,
           spread: behaviour.spread ?? 6,
           atHealthBelow,
+          healthWithoutPropKind,
+          healthWithoutPropHealth,
         });
         continue;
       }

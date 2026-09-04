@@ -1,5 +1,6 @@
 import { Container, Sprite, Texture } from 'pixi.js';
 import type { RoomRect } from '../sim/room/geometry.js';
+import { SCREEN_HEIGHT, SCREEN_WIDTH } from '../sim/room/template.js';
 import { TICKS_PER_SECOND } from '../sim/time.js';
 import { INTERNAL_HEIGHT, INTERNAL_WIDTH, WORLD_ZOOM } from './resolution.js';
 
@@ -30,23 +31,29 @@ const KELLER_FLOOR = 1;
 const DORF_FLOOR = 2;
 
 /**
- * The room span both `lampPlacement` and `cloudPlacement` size their sprite
- * against never exceeds one screen's worth of world units — the same
- * `viewWidth`/`viewHeight` `GameView.followOffset` computes the camera's pan
- * range from (#243). A `1x1` room's own span already sits under this, so the
- * clamp is a no-op there and nothing about either floor's original
- * single-screen rooms changes; a `2x2`/`L`/`T` room (`sim/room/geometry.ts`'s
- * `voidRects`) is wider and/or taller than one screen, and sizing a sprite
- * off its full span there produced a falloff several screens wide — soft-
- * edged in its own texture, but the blur/gradient is a fixed fraction of the
- * *texture*, so stretched that far it reads as a hard-edged shadow box that
- * only ever shows part of itself, and the camera panning with the player
- * made that visible slice look like it was tracking them from off-screen.
- * Reported on Floor 2 first (the cloud, easier to notice mid-drift) but the
- * exact same bug in Floor 1's static lamp falloff, sized the same uncapped
- * way — both floors generate rooms through the one shared procedural shape
- * generator (`content/floors/definition.ts`'s `ROOM_GEN_FLOOR_OVERRIDES`),
- * so neither is special-cased out of a `2x2`/`L`/`T` shape.
+ * The span both `lampPlacement` and `cloudPlacement` size one falloff sprite
+ * against — the same `viewWidth`/`viewHeight` `GameView.followOffset`
+ * computes the camera's pan range from, i.e. one screen's worth of world
+ * units (#243). A `1x1` room's own span already sits under this, so nothing
+ * about either floor's original single-screen rooms changes.
+ *
+ * #243 capped a *single* sprite, centred on the whole room, to this span —
+ * which fixed the original "falloff several screens wide" symptom (a
+ * texture's blur/gradient is a fixed fraction of the texture, so stretching
+ * one sprite across a `2x2`/`L`/`T` room's full multi-screen span read as a
+ * hard-edged shadow box that only ever showed part of itself, tracking the
+ * camera as it panned) but traded it for the opposite one: a single
+ * screen-sized sprite is *smaller* than a multi-cell room, so it left the far
+ * cells unlit and its own rectangular edge visible inside the arena (#260).
+ *
+ * The actual fix is `roomCellCentres`: place one screen-capped falloff per
+ * screen-cell of the room (every room's cells are exactly `SCREEN_WIDTH` ×
+ * `SCREEN_HEIGHT`, glued edge to edge — `sim/room/template.ts`) rather than
+ * one stretched over the room's whole bounding box. Each pool keeps the same
+ * never-stretched-past-one-screen size #243 already fixed, and
+ * `KELLER_COVERAGE`/the cloud's own fractions make adjacent cells' pools
+ * overlap enough to blend at the seam instead of leaving a gap — many small
+ * bulbs (or one drifting cloud per cell) rather than one giant one.
  */
 const ROOM_SPAN_CAP_WIDTH = INTERNAL_WIDTH / WORLD_ZOOM;
 const ROOM_SPAN_CAP_HEIGHT = INTERNAL_HEIGHT / WORLD_ZOOM;
@@ -248,7 +255,7 @@ function createCloudTexture(rgb: string): Texture {
   return Texture.from(canvas);
 }
 
-/** Rectangle plus size, in room units — what a sprite needs to sit centred over `room` at some fraction of its span. */
+/** Rectangle plus size, in room units — what a sprite needs to sit centred over a point at some fraction of one screen's span. */
 interface Placement {
   readonly x: number;
   readonly y: number;
@@ -256,44 +263,62 @@ interface Placement {
   readonly height: number;
 }
 
-function roomCentre(room: RoomRect): { readonly x: number; readonly y: number } {
-  return { x: (room.minX + room.maxX) / 2, y: (room.minY + room.maxY) / 2 };
+/** A single screen-cell's centre, in room units. */
+export interface CellCentre {
+  readonly x: number;
+  readonly y: number;
 }
 
 /**
- * The room's full authored frame — interior plus the wall margin on every
- * side. Every room has an equal margin on opposite sides
- * (`sim/room/geometry.ts`'s `roomFrameSize`, which this mirrors rather than
- * calls: that function takes a `RoomGeometry`, and everything here only ever
- * needs the four bounds a plain `RoomRect` already carries), so the far
- * margin is always exactly `minX`/`minY` again.
- */
-function frameSize(room: RoomRect): { readonly width: number; readonly height: number } {
-  return { width: room.minX + room.maxX, height: room.minY + room.maxY };
-}
-
-/**
- * Where and how big Floor 1's falloff sprite sits, centred on the room.
+ * Every screen-cell centre in `room`'s bounding grid, row-major — one entry
+ * for a `1x1` room (its own centre, exactly as before #260), up to nine for
+ * `T`'s `3x3` bounding box (`content/rooms/definition.ts`'s `MULTI_CELL_COUNT`).
+ * Void cells (`sim/room/geometry.ts`'s `voidRects` — the corners an `L`/`T`
+ * shape's footprint doesn't claim) get a centre too: they're walled off, so a
+ * pool of light sitting there is never seen, and including them keeps this a
+ * plain grid walk rather than a shape-aware one.
  *
- * `frame`'s own span is capped to `ROOM_SPAN_CAP_WIDTH`/`_HEIGHT` before
- * `KELLER_COVERAGE` widens it (#243) — the same clamp `cloudPlacement`
- * applies, and for the identical reason: a `2x2`/`L`/`T` room's full frame is
- * bigger than one screen, and sizing the bulb's falloff off that uncapped
- * span produced the exact same oversized "shadow box" the cloud did, just
- * static rather than drifting. Capping first and multiplying by the
- * coverage factor after keeps a `1x1` room's own falloff exactly as before
- * (its frame already sits under the cap) while a sprawling room gets a
- * normal, screen-sized pool of light instead of one stretched across
- * several screens.
+ * Every room's cells are glued edge to edge with no gap between them
+ * (`sim/room/template.ts`'s `compileRoomTemplate`), each exactly
+ * `SCREEN_WIDTH` × `SCREEN_HEIGHT` — so the room's own interior bounds divide
+ * evenly into that grid for every shape `ROOM_SHAPES` authors. A staircase
+ * room's steps overlap by half a screen instead of tiling cleanly
+ * (`sim/room/staircase.ts`'s `STAIR_STEP_OVERLAP`), so the division here is
+ * only ever approximate there — still enough cells, spread across the room,
+ * to avoid the single-undersized-box bug this replaces, just not seamed
+ * exactly on each step.
  */
-export function lampPlacement(room: RoomRect): Placement {
-  const centre = roomCentre(room);
-  const frame = frameSize(room);
+export function roomCellCentres(room: RoomRect): CellCentre[] {
+  const cols = Math.max(1, Math.round((room.maxX - room.minX) / SCREEN_WIDTH));
+  const rows = Math.max(1, Math.round((room.maxY - room.minY) / SCREEN_HEIGHT));
+  const centres: CellCentre[] = [];
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      centres.push({
+        x: room.minX + col * SCREEN_WIDTH + SCREEN_WIDTH / 2,
+        y: room.minY + row * SCREEN_HEIGHT + SCREEN_HEIGHT / 2,
+      });
+    }
+  }
+  return centres;
+}
+
+/**
+ * Where and how big one of Floor 1's falloff sprites sits, centred on a
+ * single screen-cell (#260) — never the whole room, however many cells it
+ * has. Always exactly `ROOM_SPAN_CAP_WIDTH`/`_HEIGHT` times `KELLER_COVERAGE`
+ * (#243's cap, on a span that is by construction never bigger than one
+ * screen to begin with) so a `1x1` room's one cell renders exactly as before
+ * either fix, and a multi-cell room gets one such pool per cell
+ * (`roomCellCentres`) instead of a single sprite stretched or shrunk to fit
+ * the whole thing.
+ */
+export function lampPlacement(cell: CellCentre): Placement {
   return {
-    x: centre.x,
-    y: centre.y,
-    width: Math.min(frame.width, ROOM_SPAN_CAP_WIDTH) * KELLER_COVERAGE,
-    height: Math.min(frame.height, ROOM_SPAN_CAP_HEIGHT) * KELLER_COVERAGE,
+    x: cell.x,
+    y: cell.y,
+    width: ROOM_SPAN_CAP_WIDTH * KELLER_COVERAGE,
+    height: ROOM_SPAN_CAP_HEIGHT * KELLER_COVERAGE,
   };
 }
 
@@ -329,16 +354,22 @@ export function cloudShadowState(tick: number): CloudShadowState {
   return { visible: alpha > 0, progress, alpha };
 }
 
-/** Where and how big the cloud shadow sits at a given point in its crossing — drifting west to east, fully off-room at both ends. */
-export function cloudPlacement(room: RoomRect, progress: number): Placement {
-  const roomWidth = room.maxX - room.minX;
-  const roomHeight = room.maxY - room.minY;
-  const width = Math.min(roomWidth, ROOM_SPAN_CAP_WIDTH) * CLOUD_WIDTH_FRACTION;
-  const height = Math.min(roomHeight, ROOM_SPAN_CAP_HEIGHT) * CLOUD_HEIGHT_FRACTION;
-  const travel = roomWidth + width;
+/**
+ * Where and how big one cloud shadow sits at a given point in its crossing —
+ * drifting west to east across a single screen-cell (#260, mirroring
+ * `lampPlacement`), fully off that cell at both ends. `AmbientLight` drives
+ * one of these per cell in `roomCellCentres`, all sharing the same `progress`
+ * (from the one run-wide `cloudShadowState`) so every cell's cloud crosses in
+ * lockstep — one weather front passing over the whole room at once, rather
+ * than several independent clouds happening to overlap.
+ */
+export function cloudPlacement(cell: CellCentre, progress: number): Placement {
+  const width = ROOM_SPAN_CAP_WIDTH * CLOUD_WIDTH_FRACTION;
+  const height = ROOM_SPAN_CAP_HEIGHT * CLOUD_HEIGHT_FRACTION;
+  const travel = ROOM_SPAN_CAP_WIDTH + width;
   return {
-    x: room.minX - width / 2 + travel * progress,
-    y: roomCentre(room).y,
+    x: cell.x - ROOM_SPAN_CAP_WIDTH / 2 - width / 2 + travel * progress,
+    y: cell.y,
     width,
     height,
   };
@@ -352,6 +383,13 @@ export function cloudPlacement(room: RoomRect, progress: number): Placement {
  * that touches geometry. `sync` runs every rendered frame but only Floor 2's
  * cloud actually does anything there; every other floor, including Floor 1's
  * static falloff, costs nothing per frame.
+ *
+ * One cell's worth of sprites used to be enough — a single lamp-shadow,
+ * lamp-glow and cloud sprite, centred on the room. Since #260 each floor
+ * needs up to one falloff *per screen-cell* (`roomCellCentres`), so the three
+ * single sprites are now three pools, grown to the room's cell count and
+ * never shrunk — a smaller room after a bigger one just leaves the pool's
+ * extra sprites at `alpha = 0` rather than destroying and recreating them.
  */
 export class AmbientLight {
   readonly container = new Container();
@@ -360,12 +398,12 @@ export class AmbientLight {
   private readonly lampGlowTexture: Texture;
   private readonly cloudTexture: Texture;
   /** The darkening vignette — drawn first, so the additive glow painted after it never gets darkened back down. */
-  private readonly lampShadowSprite: Sprite;
+  private readonly lampShadowSprites: Sprite[] = [];
   /** The bulb's own warm pool of light, `blendMode: 'add'` — see `KELLER_GLOW_REACH`'s own doc comment for why it fades out well short of the shadow's own falloff. */
-  private readonly lampGlowSprite: Sprite;
-  private readonly cloudSprite: Sprite;
+  private readonly lampGlowSprites: Sprite[] = [];
+  private readonly cloudSprites: Sprite[] = [];
   private floorNumber = 0;
-  private room: RoomRect = { minX: 0, minY: 0, maxX: 0, maxY: 0 };
+  private cells: CellCentre[] = [];
   private reducedMotion = false;
 
   constructor() {
@@ -383,69 +421,105 @@ export class AmbientLight {
       KELLER_GLOW_REACH,
     );
     this.cloudTexture = createCloudTexture(CLOUD_SHADOW_RGB);
+  }
 
-    this.lampShadowSprite = new Sprite(this.lampShadowTexture);
-    this.lampShadowSprite.anchor.set(0.5);
-    this.lampShadowSprite.alpha = 0;
-    this.container.addChild(this.lampShadowSprite);
-
-    this.lampGlowSprite = new Sprite(this.lampGlowTexture);
-    this.lampGlowSprite.anchor.set(0.5);
-    this.lampGlowSprite.blendMode = 'add';
-    this.lampGlowSprite.alpha = 0;
-    this.container.addChild(this.lampGlowSprite);
-
-    this.cloudSprite = new Sprite(this.cloudTexture);
-    this.cloudSprite.anchor.set(0.5);
-    this.cloudSprite.blendMode = 'multiply';
-    this.cloudSprite.alpha = 0;
-    this.container.addChild(this.cloudSprite);
+  /** Grows `pool` to `count` sprites of `texture`/`blendMode`, adding new ones to `container`; never shrinks it. */
+  private growPool(
+    pool: Sprite[],
+    texture: Texture,
+    blendMode: Sprite['blendMode'],
+    count: number,
+  ): void {
+    while (pool.length < count) {
+      const sprite = new Sprite(texture);
+      sprite.anchor.set(0.5);
+      sprite.blendMode = blendMode;
+      sprite.alpha = 0;
+      this.container.addChild(sprite);
+      pool.push(sprite);
+    }
   }
 
   /** `reduceMotion` (#153's accessibility toggle) skips the drifting cloud entirely — it is a slow, non-essential background motion, not a mechanic. */
   setReducedMotion(reducedMotion: boolean): void {
     this.reducedMotion = reducedMotion;
     if (reducedMotion) {
-      this.cloudSprite.alpha = 0;
+      for (const sprite of this.cloudSprites) {
+        sprite.alpha = 0;
+      }
     }
   }
 
   onRoomChanged(room: RoomRect, floorNumber: number): void {
-    this.room = room;
     this.floorNumber = floorNumber;
+    this.cells = roomCellCentres(room);
 
     if (floorNumber === KELLER_FLOOR) {
-      const lamp = lampPlacement(room);
-      this.lampShadowSprite.position.set(lamp.x, lamp.y);
-      this.lampShadowSprite.width = lamp.width;
-      this.lampShadowSprite.height = lamp.height;
-      this.lampShadowSprite.alpha = 1;
-      this.lampGlowSprite.position.set(lamp.x, lamp.y);
-      this.lampGlowSprite.width = lamp.width;
-      this.lampGlowSprite.height = lamp.height;
-      this.lampGlowSprite.alpha = 1;
+      this.growPool(this.lampShadowSprites, this.lampShadowTexture, 'normal', this.cells.length);
+      this.growPool(this.lampGlowSprites, this.lampGlowTexture, 'add', this.cells.length);
+      this.cells.forEach((cell, index) => {
+        const lamp = lampPlacement(cell);
+        const shadow = this.lampShadowSprites[index];
+        const glow = this.lampGlowSprites[index];
+        if (shadow === undefined || glow === undefined) {
+          return;
+        }
+        shadow.position.set(lamp.x, lamp.y);
+        shadow.width = lamp.width;
+        shadow.height = lamp.height;
+        shadow.alpha = 1;
+        glow.position.set(lamp.x, lamp.y);
+        glow.width = lamp.width;
+        glow.height = lamp.height;
+        glow.alpha = 1;
+      });
+      for (const sprite of this.lampShadowSprites.slice(this.cells.length)) {
+        sprite.alpha = 0;
+      }
+      for (const sprite of this.lampGlowSprites.slice(this.cells.length)) {
+        sprite.alpha = 0;
+      }
     } else {
-      this.lampShadowSprite.alpha = 0;
-      this.lampGlowSprite.alpha = 0;
+      for (const sprite of this.lampShadowSprites) {
+        sprite.alpha = 0;
+      }
+      for (const sprite of this.lampGlowSprites) {
+        sprite.alpha = 0;
+      }
     }
 
-    if (floorNumber !== DORF_FLOOR) {
-      this.cloudSprite.alpha = 0;
+    if (floorNumber === DORF_FLOOR) {
+      this.growPool(this.cloudSprites, this.cloudTexture, 'multiply', this.cells.length);
+      for (const sprite of this.cloudSprites.slice(this.cells.length)) {
+        sprite.alpha = 0;
+      }
+    } else {
+      for (const sprite of this.cloudSprites) {
+        sprite.alpha = 0;
+      }
     }
   }
 
   sync(tick: number): void {
     if (this.floorNumber !== DORF_FLOOR || this.reducedMotion) {
-      this.cloudSprite.alpha = 0;
+      for (const sprite of this.cloudSprites) {
+        sprite.alpha = 0;
+      }
       return;
     }
     const state = cloudShadowState(tick);
-    this.cloudSprite.alpha = state.alpha;
-    if (state.visible) {
-      const placement = cloudPlacement(this.room, state.progress);
-      this.cloudSprite.position.set(placement.x, placement.y);
-      this.cloudSprite.width = placement.width;
-      this.cloudSprite.height = placement.height;
-    }
+    this.cells.forEach((cell, index) => {
+      const sprite = this.cloudSprites[index];
+      if (sprite === undefined) {
+        return;
+      }
+      sprite.alpha = state.alpha;
+      if (state.visible) {
+        const placement = cloudPlacement(cell, state.progress);
+        sprite.position.set(placement.x, placement.y);
+        sprite.width = placement.width;
+        sprite.height = placement.height;
+      }
+    });
   }
 }

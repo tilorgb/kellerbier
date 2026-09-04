@@ -4,6 +4,7 @@ import { World } from '../../src/sim/ecs/world.js';
 import type { EnemyDefinition } from '../../src/sim/enemy/definition.js';
 import { EventKind } from '../../src/sim/events/queue.js';
 import {
+  DESTRUCTIBLE_PROP_KINDS,
   GameSim,
   MAYPOLE_HEALTH,
   MAYPOLE_MASS,
@@ -123,6 +124,23 @@ function liveEnemies(sim: GameSim, id: string): number {
     }
   }
   return found;
+}
+
+/** The storage slot of the first live body of `id`, or -1 if none. */
+function findEnemyIndex(sim: GameSim, id: string): number {
+  const definition = sim.enemies.indexOf(id);
+  for (let index = 0; index < sim.world.highWater; index++) {
+    if (sim.world.states[index] !== World.ALIVE) {
+      continue;
+    }
+    if (((sim.world.masks[index] ?? 0) & sim.enemyMask) !== sim.enemyMask) {
+      continue;
+    }
+    if ((sim.enemy.data[index * ENEMY_STRIDE] ?? -1) === definition) {
+      return index;
+    }
+  }
+  return -1;
 }
 
 function enemyProjectiles(sim: GameSim): number {
@@ -396,20 +414,77 @@ describe('Der Stier boss (#38)', () => {
     const player = sim.playerIndex;
     const enemy = place(sim, 'der-stier', sim.positionX(player) + 200, sim.positionY(player));
 
-    // 80 -> 1: well past the old half-health gate, still no split.
-    applyDamageAt(sim, enemy, 79, sim.positionX(enemy), sim.positionY(enemy), 0, 0, -1);
+    // 60 -> 1: well past the old half-health gate, still no split.
+    applyDamageAt(sim, enemy, 59, sim.positionX(enemy), sim.positionY(enemy), 0, 0, -1);
     stepEnemyDeaths(sim);
     sim.world.flush();
     expect(liveEnemies(sim, 'der-stier')).toBe(1);
     expect(liveEnemies(sim, 'der-stier-maibaum-dieb')).toBe(0);
 
-    // The last hit: Der Stier dies, the dieb spawns with his own fresh 60 —
+    // The last hit: Der Stier dies, the dieb spawns with his own fresh pool —
     // the same call + death sweep the impact system runs on a landed shot.
+    // (No maypole in this bare test room, so #260's `healthWithoutProp`
+    // applies — the dieb's pool here is the disarmed one, not the armed
+    // `maibaumDieb.health`; only the split itself is under test.)
     applyDamageAt(sim, enemy, 1, sim.positionX(enemy), sim.positionY(enemy), 0, 0, -1);
     stepEnemyDeaths(sim);
     sim.world.flush();
     expect(liveEnemies(sim, 'der-stier')).toBe(0);
     expect(liveEnemies(sim, 'der-stier-maibaum-dieb')).toBe(1);
+  });
+
+  it('spawns the dieb weaker when no live maypole remains at the moment Der Stier dies (#260)', () => {
+    // Structural, not numeric — the exact pools are content's own numbers
+    // (`content/enemies/der-stier.ts`), this only asserts the split reads
+    // the room correctly at the instant it fires. One sim with no maypole
+    // in the room, one with a live one, both bare otherwise.
+    const disarmed = emptySim();
+    const disarmedStier = place(
+      disarmed,
+      'der-stier',
+      disarmed.positionX(disarmed.playerIndex) + 200,
+      disarmed.positionY(disarmed.playerIndex),
+    );
+    const disarmedMax = disarmed.health.data[disarmedStier * 2 + 1] ?? 0;
+    applyDamageAt(
+      disarmed,
+      disarmedStier,
+      disarmedMax,
+      disarmed.positionX(disarmedStier),
+      disarmed.positionY(disarmedStier),
+      0,
+      0,
+      -1,
+    );
+    stepEnemyDeaths(disarmed);
+    disarmed.world.flush();
+    const disarmedDieb = findEnemyIndex(disarmed, 'der-stier-maibaum-dieb');
+    expect(disarmedDieb).toBeGreaterThanOrEqual(0);
+    const disarmedHealth = health(disarmed, disarmedDieb);
+
+    const armed = emptySim();
+    const stierX = armed.positionX(armed.playerIndex) + 200;
+    const stierY = armed.positionY(armed.playerIndex);
+    // A live maypole sitting right where Der Stier is about to die.
+    armed.spawnTarget(
+      stierX,
+      stierY,
+      MAYPOLE_RADIUS,
+      DESTRUCTIBLE_PROP_KINDS.indexOf('maypole'),
+      MAYPOLE_HEALTH,
+      MAYPOLE_MASS,
+    );
+    armed.world.flush();
+    const armedStier = place(armed, 'der-stier', stierX, stierY);
+    const armedMax = armed.health.data[armedStier * 2 + 1] ?? 0;
+    applyDamageAt(armed, armedStier, armedMax, stierX, stierY, 0, 0, -1);
+    stepEnemyDeaths(armed);
+    armed.world.flush();
+    const armedDieb = findEnemyIndex(armed, 'der-stier-maibaum-dieb');
+    expect(armedDieb).toBeGreaterThanOrEqual(0);
+    const armedHealth = health(armed, armedDieb);
+
+    expect(armedHealth).toBeGreaterThan(disarmedHealth);
   });
 
   it('armed branch: the dieb walks to a standing maypole, grabs it, then swings (#199)', () => {
@@ -744,6 +819,17 @@ describe('lobTarget / detonateLobbedBomb (#156)', () => {
     ],
   };
 
+  /** A second, harmless body to stand in the blast radius — nothing more than a health pool. */
+  const bystander: EnemyDefinition = {
+    id: 'bystander',
+    name: 'Bystander',
+    size: 'normal',
+    health: 5,
+    contactDamage: 0,
+    initial: 'idle',
+    states: [{ name: 'idle', behaviours: [{ behaviour: 'pause' }], transitions: [] }],
+  };
+
   function teleportPlayer(sim: GameSim, x: number, y: number): void {
     const player = sim.playerIndex;
     const transform = sim.transform.data;
@@ -799,6 +885,37 @@ describe('lobTarget / detonateLobbedBomb (#156)', () => {
       sim.step(IDLE);
     }
     expect(health(sim, enemy)).toBe(before);
+  });
+
+  /**
+   * #260: mobs "kill themselves regularly" — an enemy's own lobbed bomb was
+   * reading the same `Enemy | Obstacle | Player` splash mask a player item's
+   * splash uses, so every other enemy caught in the blast took damage too.
+   * `detonateLobbedBomb` now passes `hitsEnemies: false`
+   * (`GameSim.applySplashDamage`'s own doc comment).
+   */
+  /**
+   * #260 discussion: deliberately indiscriminate — a bomb is "more damaging"
+   * than an ordinary shot precisely because it doesn't discriminate who is
+   * standing in the blast, unlike an `EnemyProjectile` shot, which already
+   * never touches `Enemy` at all (`collision/layers.ts`). Only the thrower
+   * itself is exempt (the test above).
+   */
+  it('catches another enemy standing in its blast, same as a player splash would (#260)', () => {
+    const sim = emptySim({ enemies: [thrower, bystander] });
+    // The bomb lands wherever `lobTarget` captured — the player's position —
+    // so the bystander has to stand there too, same as the thrower does in
+    // "never catches the thrower in its own blast" above.
+    teleportPlayer(sim, 100, 90);
+    const enemy = place(sim, 'thrower', 300, 90);
+    // Well inside the 20-radius blast.
+    const other = place(sim, 'bystander', 105, 92);
+
+    const before = health(sim, other);
+    for (let tick = 0; tick < 12 && stateName(sim, enemy) !== 'boom'; tick++) {
+      sim.step(IDLE);
+    }
+    expect(health(sim, other)).toBeLessThan(before);
   });
 
   /**

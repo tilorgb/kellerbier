@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { NO_HIT, circlesOverlap, sweptCircleHit } from '../../src/sim/collision/circle-circle.js';
+import { entityIndex } from '../../src/sim/ecs/entity.js';
 import { EventKind } from '../../src/sim/events/queue.js';
 import { GameSim, TARGET_RADIUS } from '../../src/sim/game/sim.js';
 import {
@@ -161,5 +162,52 @@ describe('projectiles against the world', () => {
       });
     }
     expect(hitSubject).toBe(sim.playerIndex);
+  });
+
+  /**
+   * Every enemy in the game is spawned tagged `CollisionLayer.Obstacle`, not
+   * `Enemy` (`CollisionLayer.Enemy` is reserved but nothing sets it —
+   * `GameSim.slowEnemiesNear`'s own doc comment), so an `EnemyProjectile`'s
+   * `Player | Obstacle` mask used to also match every other enemy standing
+   * in its path — an enemy's own shot could kill a second enemy it flew
+   * past. `sim/systems/collision.ts`'s `testCandidate` now excludes real
+   * enemy bodies specifically for an enemy-team shot, checked separately
+   * from the raw collision layer. A real `Obstacle` (a barrel, the arena
+   * maypole) is unaffected — the next test.
+   */
+  it('does not let an enemy shot hit another enemy standing in its path', () => {
+    const sim = new GameSim({ population: 'empty' });
+    const playerX = sim.positionX(sim.playerIndex);
+    const playerY = sim.positionY(sim.playerIndex);
+    const bystander = sim.spawnEnemyKind(sim.enemies.indexOf('kellerassel'), playerX - 40, playerY);
+    sim.world.flush();
+    const bystanderIndex = entityIndex(bystander);
+    const before = sim.health.data[bystanderIndex * 2] ?? 0;
+
+    // Fired from further out on the same line, so it crosses the bystander
+    // on its way toward the player.
+    sim.projectiles.spawn(playerX - 80, playerY, 6, 0, 3, 1, 60, ProjectileTeam.Enemy);
+
+    for (let tick = 0; tick < 40; tick++) {
+      sim.step(IDLE);
+    }
+    expect(sim.health.data[bystanderIndex * 2] ?? 0).toBe(before);
+  });
+
+  it('still lets an enemy shot hit a real obstacle standing in its path', () => {
+    const sim = new GameSim({ population: 'empty' });
+    const playerX = sim.positionX(sim.playerIndex);
+    const playerY = sim.positionY(sim.playerIndex);
+    const barrel = sim.spawnTarget(playerX - 40, playerY);
+    sim.world.flush();
+    const barrelIndex = entityIndex(barrel);
+    const before = sim.health.data[barrelIndex * 2] ?? 0;
+
+    sim.projectiles.spawn(playerX - 80, playerY, 6, 0, 3, 1, 60, ProjectileTeam.Enemy);
+
+    for (let tick = 0; tick < 40; tick++) {
+      sim.step(IDLE);
+    }
+    expect(sim.health.data[barrelIndex * 2] ?? 0).toBeLessThan(before);
   });
 });
