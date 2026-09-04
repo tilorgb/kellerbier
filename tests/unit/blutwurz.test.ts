@@ -58,6 +58,16 @@ function roomSim(template: unknown = emptyRoom('start-room'), floor = 1): GameSi
   return new GameSim({ roomTemplate: template, floor, population: 'empty', items: [blutwurz] });
 }
 
+/**
+ * `sim.transitionTo(..., force: true)` — these tests are about repopulation,
+ * not the crossing-intent gate (`GameSim.transitionTo`'s own doc comment on
+ * `pressingToward`), and a `sim` built directly in a test has never recorded
+ * any movement input to satisfy that gate.
+ */
+function forceTransitionTo(sim: GameSim, template: unknown, floor: number): boolean {
+  return sim.transitionTo(template, floor, 'north', undefined, undefined, undefined, true);
+}
+
 const idle = () => createInputFrame();
 
 describe('starting the spirit walk (#84)', () => {
@@ -235,7 +245,7 @@ describe('cleared rooms repopulate for the walk, except a boss room (#84)', () =
     sim.world.flush();
     expect(sim.roomCleared).toBe(true);
 
-    expect(sim.transitionTo(cellarCrossroads, 1, 'north')).toBe(true);
+    expect(forceTransitionTo(sim, cellarCrossroads, 1)).toBe(true);
     expect(sim.liveEnemyCount).toBe(0);
   });
 
@@ -253,7 +263,7 @@ describe('cleared rooms repopulate for the walk, except a boss room (#84)', () =
     sim.applyPlayerDamage(1000);
     expect(sim.blutwurzActive).toBe(true);
 
-    expect(sim.transitionTo(cellarCrossroads, 1, 'north')).toBe(true);
+    expect(forceTransitionTo(sim, cellarCrossroads, 1)).toBe(true);
     expect(sim.liveEnemyCount).toBeGreaterThan(0);
   });
 
@@ -272,7 +282,7 @@ describe('cleared rooms repopulate for the walk, except a boss room (#84)', () =
     sim.applyPlayerDamage(1000);
     expect(sim.blutwurzActive).toBe(true);
 
-    expect(sim.transitionTo(cellarBoss, 1, 'north')).toBe(true);
+    expect(forceTransitionTo(sim, cellarBoss, 1)).toBe(true);
     expect(sim.liveEnemyCount).toBe(0);
   });
 });

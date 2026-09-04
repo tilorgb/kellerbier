@@ -3,7 +3,7 @@ import cellarCrossroads from '../../src/content/rooms/cellar.json';
 import { BOSS_REWARD_DROP_TABLE } from '../../src/content/pickups/drop-tables.js';
 import { EventKind } from '../../src/sim/events/queue.js';
 import { GameSim, PLAYER_RADIUS } from '../../src/sim/game/sim.js';
-import { createInputFrame } from '../../src/sim/input/frame.js';
+import { type InputFrame, createInputFrame, quantiseAxis } from '../../src/sim/input/frame.js';
 import { ProjectileTeam } from '../../src/sim/projectile/store.js';
 import { ParticleKind } from '../../src/sim/particle/store.js';
 import { stepEnemyDeaths } from '../../src/sim/systems/enemy.js';
@@ -14,6 +14,13 @@ function roomSim(): GameSim {
 }
 
 const idle = () => createInputFrame();
+
+function walking(moveX: number, moveY: number): InputFrame {
+  const frame = createInputFrame();
+  frame.moveX = quantiseAxis(moveX);
+  frame.moveY = quantiseAxis(moveY);
+  return frame;
+}
 
 describe('room lifecycle', () => {
   it('locks doors until the authoritative enemy count reaches zero', () => {
@@ -52,7 +59,7 @@ describe('room lifecycle', () => {
     expect(sim.projectiles.liveCount).toBe(1);
     expect(sim.particles.liveCount).toBe(1);
 
-    expect(sim.transitionTo(cellarCrossroads, 1, 'north')).toBe(true);
+    expect(forceTransitionTo(sim, cellarCrossroads, 1, 'north')).toBe(true);
     expect(sim.roomTransitionTicks).toBeGreaterThan(0);
     expect(sim.roomTransitionTicks).toBeLessThanOrEqual(20);
     expect(sim.liveEnemyCount).toBe(0);
@@ -152,6 +159,22 @@ describe('room lifecycle', () => {
   });
 });
 
+/**
+ * `sim.transitionTo(..., force: true)` — none of these tests are about the
+ * crossing-intent gate itself (`GameSim.transitionTo`'s own doc comment on
+ * `pressingToward`), they are about the key/room-clear/persistence behaviour
+ * around it, and a `sim` built directly in a test has never recorded any
+ * movement input to satisfy that gate.
+ */
+function forceTransitionTo(
+  sim: GameSim,
+  template: unknown,
+  floor: number,
+  direction: Parameters<GameSim['transitionTo']>[2],
+): boolean {
+  return sim.transitionTo(template, floor, direction, undefined, undefined, undefined, true);
+}
+
 describe('key-locked treasure rooms', () => {
   const lockedRoom = {
     ...cellarCrossroads,
@@ -169,7 +192,7 @@ describe('key-locked treasure rooms', () => {
     });
 
     expect(sim.keys).toBe(0);
-    expect(sim.transitionTo(lockedRoom, 1, 'north')).toBe(false);
+    expect(forceTransitionTo(sim, lockedRoom, 1, 'north')).toBe(false);
     expect(sim.keys).toBe(0);
     expect(sim.roomId).toBe('cellar-crossroads');
   });
@@ -182,7 +205,7 @@ describe('key-locked treasure rooms', () => {
     });
     sim.addKeys(2);
 
-    expect(sim.transitionTo(lockedRoom, 1, 'north')).toBe(true);
+    expect(forceTransitionTo(sim, lockedRoom, 1, 'north')).toBe(true);
 
     expect(sim.keys).toBe(1);
     expect(sim.roomId).toBe('test-treasure-locked');
@@ -196,17 +219,17 @@ describe('key-locked treasure rooms', () => {
     });
     sim.addKeys(1);
 
-    expect(sim.transitionTo(lockedRoom, 1, 'north')).toBe(true);
+    expect(forceTransitionTo(sim, lockedRoom, 1, 'north')).toBe(true);
     expect(sim.keys).toBe(0);
 
     // Walk back out, then straight back in — a real door, not a debug
     // teleport, since that is the shape a player actually hits the bug in.
     expect(
-      sim.transitionTo({ ...cellarCrossroads, enemySpawns: [], spawnGroups: [] }, 1, 'south'),
+      forceTransitionTo(sim, { ...cellarCrossroads, enemySpawns: [], spawnGroups: [] }, 1, 'south'),
     ).toBe(true);
     expect(sim.roomId).toBe('cellar-crossroads');
 
-    expect(sim.transitionTo(lockedRoom, 1, 'north')).toBe(true);
+    expect(forceTransitionTo(sim, lockedRoom, 1, 'north')).toBe(true);
     expect(sim.keys).toBe(0);
     expect(sim.roomId).toBe('test-treasure-locked');
   });
@@ -223,15 +246,91 @@ describe('key-locked treasure rooms', () => {
       population: 'empty',
     });
     sim.addKeys(2);
-    expect(sim.transitionTo(lockedRoom, 1, 'north')).toBe(true);
+    expect(forceTransitionTo(sim, lockedRoom, 1, 'north')).toBe(true);
     expect(sim.keys).toBe(1);
 
     sim.clearFloorProgress();
     expect(
-      sim.transitionTo({ ...cellarCrossroads, enemySpawns: [], spawnGroups: [] }, 1, 'south'),
+      forceTransitionTo(sim, { ...cellarCrossroads, enemySpawns: [], spawnGroups: [] }, 1, 'south'),
     ).toBe(true);
+    expect(forceTransitionTo(sim, lockedRoom, 1, 'north')).toBe(true);
+    expect(sim.keys).toBe(0);
+  });
+
+  it('unlocks on mere touch, but only actually crosses once the player presses toward it', () => {
+    // Exactly the split the bug report asked for: touching a locked door is
+    // enough to spend the key and open it, but the room switch itself still
+    // needs a real walk into the door, same as an ordinary one.
+    const sim = new GameSim({
+      roomTemplate: { ...cellarCrossroads, enemySpawns: [], spawnGroups: [] },
+      floor: 1,
+      population: 'empty',
+    });
+    sim.addKeys(1);
+
+    // No movement recorded yet — touching without pressing toward the door.
+    expect(sim.transitionTo(lockedRoom, 1, 'north')).toBe(false);
+    expect(sim.keys).toBe(0);
+    expect(sim.roomId).toBe('cellar-crossroads');
+
+    // Now press north and touch again — crosses, without spending a second key.
+    sim.step(walking(0, -1));
     expect(sim.transitionTo(lockedRoom, 1, 'north')).toBe(true);
     expect(sim.keys).toBe(0);
+    expect(sim.roomId).toBe('test-treasure-locked');
+  });
+});
+
+/** `roomSim()`, cleared of its two authored enemies — `doorsLocked` false, same as any cleared room a player has already fought through. */
+function clearedRoomSim(): GameSim {
+  const sim = roomSim();
+  const enemies: number[] = [];
+  sim.world.forEach(sim.enemyMask, (index) => enemies.push(index));
+  for (const index of enemies) {
+    sim.kill(index);
+  }
+  sim.world.flush();
+  return sim;
+}
+
+describe('crossing vs. touching a door', () => {
+  it('never switches rooms from touch alone, with no movement input at all', () => {
+    const sim = clearedRoomSim();
+    expect(sim.transitionTo(cellarCrossroads, 1, 'north')).toBe(false);
+    expect(sim.roomId).toBe('cellar-crossroads');
+  });
+
+  it('switches rooms once the player is pressing toward the door', () => {
+    const sim = clearedRoomSim();
+    sim.step(walking(0, -1)); // holding north
+    expect(sim.pressingToward('north')).toBe(true);
+    expect(sim.transitionTo(cellarCrossroads, 1, 'north')).toBe(true);
+  });
+
+  it('does not cross a door merely touched while running along the wall it sits on', () => {
+    // The reported bug, exactly: moving parallel to the wall a door sits on
+    // (here, east — perpendicular to a north-facing door) touches the same
+    // `doorContact` span an actual northward walk would, with no intention
+    // of leaving through it.
+    const sim = clearedRoomSim();
+    sim.step(walking(1, 0)); // holding east, not north
+    expect(sim.pressingToward('north')).toBe(false);
+    expect(sim.transitionTo(cellarCrossroads, 1, 'north')).toBe(false);
+    expect(sim.roomId).toBe('cellar-crossroads');
+  });
+
+  it('still crosses on a diagonal press that includes the door’s own direction', () => {
+    const sim = clearedRoomSim();
+    sim.step(walking(1, -1)); // north-east: has a real north component
+    expect(sim.pressingToward('north')).toBe(true);
+    expect(sim.transitionTo(cellarCrossroads, 1, 'north')).toBe(true);
+  });
+
+  it('force skips the crossing check, for non-player callers like the debug floor tour', () => {
+    const sim = clearedRoomSim();
+    expect(
+      sim.transitionTo(cellarCrossroads, 1, 'north', undefined, undefined, undefined, true),
+    ).toBe(true);
   });
 });
 
@@ -259,7 +358,7 @@ describe('the shopkeeper', () => {
     expect(liveShopkeepers).toBe(1);
     expect(sim.liveEnemyCount).toBe(0);
     expect(sim.doorsLocked).toBe(false);
-    expect(sim.transitionTo(cellarCrossroads, 1, 'north')).toBe(true);
+    expect(forceTransitionTo(sim, cellarCrossroads, 1, 'north')).toBe(true);
   });
 
   it('still does not seal the doors once killed', () => {

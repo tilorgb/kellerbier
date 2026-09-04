@@ -296,6 +296,46 @@ describe('floor generation', () => {
     expect(checkedAny).toBe(true);
   });
 
+  it("never locks floor 1's treasure room behind a key — it is the run's free kickstart item", () => {
+    // A first-time player has no reason yet to expect a locked door hides
+    // something worth a Kellerschlüssel, and whether they even have one by
+    // then is pure chance — gating the very first item behind it turns "free
+    // item to get the run started" into "maybe an item, maybe nothing."
+    // Every other floor still rolls the locked template normally, which the
+    // next assertion below checks for.
+    const pool = syntheticPoolWithLockedTreasure();
+    const templatesById = new Map(pool.map((template) => [template.id, template]));
+    const floor1Config = floorConfig(0);
+    expect(floor1Config.floor).toBe(1);
+    for (let seed = 0; seed < 500; seed++) {
+      const plan = generateFloor(new Rng(seed), floor1Config, pool);
+      const treasureRoom = plan.rooms.find((room) => room.id === plan.treasureRoomId);
+      expect(
+        templatesById.get(treasureRoom?.templateId ?? '')?.metadata.keyLocked,
+        `seed ${String(seed)}`,
+      ).not.toBe(true);
+    }
+  });
+
+  it('still rolls the locked treasure template on other floors, at least sometimes', () => {
+    // The floor-1 exclusion above must not have accidentally become global —
+    // this is what would catch that.
+    const pool = syntheticPoolWithLockedTreasure();
+    const templatesById = new Map(pool.map((template) => [template.id, template]));
+    const floor2Config = floorConfig(1);
+    expect(floor2Config.floor).toBe(2);
+    let sawLocked = false;
+    for (let seed = 0; seed < 500; seed++) {
+      const plan = generateFloor(new Rng(seed), floor2Config, pool);
+      const treasureRoom = plan.rooms.find((room) => room.id === plan.treasureRoomId);
+      if (templatesById.get(treasureRoom?.templateId ?? '')?.metadata.keyLocked === true) {
+        sawLocked = true;
+        break;
+      }
+    }
+    expect(sawLocked).toBe(true);
+  });
+
   it('never gives an L/T room a door that points into its own void cell', () => {
     // `compileRoomTemplate` drops any door pointing into a shape's own void
     // cell (`L`'s dropped corner, `T`'s four, #107) unconditionally — a real

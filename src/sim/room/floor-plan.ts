@@ -1239,6 +1239,7 @@ function eligibleTemplates(
   floorTag: string,
   doors: readonly RoomDoor[],
   role: RoomRole,
+  floor: number,
 ): RoomTemplate[] {
   const specialRole = requiredSpecialRole(role);
   const neededDirections = new Set(doors.map((door) => door.direction));
@@ -1248,6 +1249,16 @@ function eligibleTemplates(
       !template.metadata.floorTags.includes(floorTag) ||
       template.metadata.specialRole !== specialRole
     ) {
+      return false;
+    }
+    // Floor 1's treasure item is the run's own kickstart, not a reward to
+    // hunt a Kellerschlüssel for first — a first-time player has no reason
+    // yet to expect a locked door hides something worth going back for, and
+    // gating the very first item behind a key it is pure chance whether
+    // they even have turns "free item to get the run started" into "maybe
+    // an item, maybe nothing, depending on an unrelated drop." Every other
+    // floor's treasure slot still rolls the locked template normally.
+    if (template.metadata.keyLocked === true && role === 'treasure' && floor === 1) {
       return false;
     }
     // A key-locked room (#196) must never sit on the only path to anywhere
@@ -1337,6 +1348,7 @@ function tryGenerateFloor(
         config.floorTag,
         doors,
         role,
+        config.floor,
       );
       if (eligible.length === 0) {
         return null;
