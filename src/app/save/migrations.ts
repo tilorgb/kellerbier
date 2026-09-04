@@ -135,6 +135,16 @@ const v4ToV5: SaveMigration = (raw) => ({ ...raw, schemaVersion: 5 });
  */
 const v5ToV6: SaveMigration = (raw) => ({ ...raw, schemaVersion: 6 });
 
+/**
+ * v6 -> v7 (#54, #159): `telemetry` is new storage, opted out by default —
+ * same reasoning `v5ToV6`'s own doc comment gives for `preferences`: nothing
+ * before this version had an opinion on playtest telemetry, and
+ * `sanitizeSave`'s `sanitizeTelemetryStore` already fills in
+ * `createDefaultTelemetryStore()` (opted out, no session id, no runs) for a
+ * missing field regardless. This step exists to hold the version.
+ */
+const v6ToV7: SaveMigration = (raw) => ({ ...raw, schemaVersion: 7 });
+
 export const MIGRATIONS: readonly SaveMigration[] = [
   v0ToV1,
   v1ToV2,
@@ -142,6 +152,7 @@ export const MIGRATIONS: readonly SaveMigration[] = [
   v3ToV4,
   v4ToV5,
   v5ToV6,
+  v6ToV7,
 ];
 
 function versionOf(raw: Record<string, unknown>): number {

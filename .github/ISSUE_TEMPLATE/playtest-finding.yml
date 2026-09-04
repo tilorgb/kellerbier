@@ -1,0 +1,72 @@
+name: Playtest finding
+description: Something a structured playtest session (#159) turned up.
+labels: [design]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        One issue per distinct finding, not one per session — see `docs/PLAYTEST_PROTOCOL.md`
+        §8. A session's notes usually produce several of these.
+
+  - type: input
+    id: session
+    attributes:
+      label: Session
+      description: |
+        The anonymous telemetry session id (Settings → Privacy), if the tester opted in, plus
+        the date and who ran the session. This is what ties the finding back to the session it
+        came from — the protocol's own acceptance criterion.
+      placeholder: 2026-09-04, run by <observer>, session a1b2c3d4-... (or "not opted in")
+    validations:
+      required: true
+
+  - type: dropdown
+    id: source
+    attributes:
+      label: Where this came from
+      options:
+        - Observation (watched live, not something the tester said)
+        - Feedback form answer
+        - Both
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: |
+        What the tester did, or said, and what you expected instead. "Stood in the doorway for
+        20 seconds, unsure the room wasn't cleared yet" is a finding — say what you actually
+        saw, not your theory about why yet.
+    validations:
+      required: true
+
+  - type: textarea
+    id: where
+    attributes:
+      label: Where in the run
+      description: Floor, room, item/enemy involved, and roughly how far into the session.
+
+  - type: dropdown
+    id: shape
+    attributes:
+      label: What kind of finding this is
+      options:
+        - First-session/tutorial friction (floor 1 not teaching something)
+        - Missed as scenery (a prop/door/pickup that didn't read as interactive)
+        - Balance (too strong/weak/swingy) — file under Balance instead if that's all it is
+        - Confusion about a system (Promille, items, navigation)
+        - Bug/crash — file under Bug instead if that's all it is
+        - Something else entirely / a moment nobody considered
+    validations:
+      required: true
+
+  - type: textarea
+    id: recurrence
+    attributes:
+      label: Has this shown up in another session?
+      description: |
+        If three or more findings land on the same room/mechanic, `docs/PLAYTEST_PROTOCOL.md`
+        §7 treats that as a trigger for a dedicated session, not a coincidence — link the other
+        issues here if you know of them.

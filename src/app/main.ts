@@ -113,6 +113,15 @@ import { RunSummaryTracker, buildRunDetailsText, runDetailsFrom } from './run-su
 import { buildReplayRecord, loadReplayFrames, saveReplay } from './replay/store.js';
 import { downloadReplayFile, parseReplayText } from './replay/file.js';
 import { createSettingsScreen, type SettingsScreenHandle } from './settings-screen.js';
+import { TelemetryTracker } from './telemetry/tracker.js';
+import {
+  clearTelemetryRuns,
+  loadTelemetry,
+  optIntoTelemetry,
+  optOutOfTelemetry,
+  recordRunTelemetry,
+} from './telemetry/store.js';
+import { downloadTelemetryFile } from './telemetry/file.js';
 import { createTouchControls, isTouchCapable } from './touch-controls.js';
 import { createEditorDock } from './editor-dock.js';
 import {
@@ -1167,6 +1176,8 @@ async function boot(): Promise<void> {
   };
 
   let summary = new RunSummaryTracker();
+  /** #54/#159's playtest telemetry for the run in progress — see `startRun`'s reset and `TelemetryTracker`'s own doc comment. */
+  let telemetry = new TelemetryTracker();
   /**
    * Where the run is, once the player dies.
    *
@@ -1497,6 +1508,21 @@ async function boot(): Promise<void> {
           // resumed into a tableau that is already over.
           persistActiveRun(null);
           const ticksSurvived = runEndTick();
+          // #54/#159: a no-op unless the player opted in
+          // (`telemetry/store.ts#recordRunTelemetry`'s own gate) — built
+          // unconditionally anyway, same as `recordRunOutcome` below, so
+          // "should this be collected" stays a single decision in the store
+          // rather than a second copy of the opt-in check here.
+          recordRunTelemetry(
+            telemetry.finish(sim, {
+              seed: RUN_SEED,
+              character: activeRunRecorder.character,
+              outcome: sim.playerWon ? 'won' : 'died',
+              floor: floorPlan.floor,
+              roomRole: planRoom(floorPlan, currentRoomId).role,
+              ticksSurvived,
+            }),
+          );
           const save = recordRunOutcome({
             seed: RUN_SEED,
             floor: floorPlan.floor,
@@ -1658,6 +1684,13 @@ async function boot(): Promise<void> {
     }
     summary.recordTick(sim);
     const justCleared = checkRoomClearSting(live);
+    telemetry.recordTick(
+      sim,
+      floorPlan.floor,
+      currentRoomId,
+      planRoom(floorPlan, currentRoomId).role,
+      justCleared,
+    );
     creditBossDefeat(live, justCleared);
     checkLowHealthSting(live);
     advanceDeathSequence();
@@ -2254,6 +2287,7 @@ WASD move   arrows aim and fire
     minimapHud.rebuild(floorPlan, currentRoomId, visitedRoomIds);
 
     summary = new RunSummaryTracker();
+    telemetry = new TelemetryTracker();
     creditedBossRooms = new Set<string>();
     roomClearedLastTick = false;
     playerWasLowHealthLastTick = false;
@@ -2521,6 +2555,7 @@ WASD move   arrows aim and fire
       floorPlan.floorName,
       planRoom(floorPlan, currentRoomId).role,
       summary.kills,
+      loadTelemetry().sessionId,
     );
     void navigator.clipboard.writeText(buildRunDetailsText(details));
   }
@@ -3407,6 +3442,21 @@ WASD move   arrows aim and fire
       getActiveDevice: () => input.activeDevice,
       onAccessibilityChange: applyAccessibilityChange,
       onPreferencesChange: applyPreferencesChange,
+      telemetry: {
+        get: loadTelemetry,
+        optIn: () => {
+          optIntoTelemetry();
+        },
+        optOut: () => {
+          optOutOfTelemetry();
+        },
+        export: () => {
+          downloadTelemetryFile(loadTelemetry());
+        },
+        clear: () => {
+          clearTelemetryRuns();
+        },
+      },
     },
     { placement: touchCapable ? 'top-center' : 'bottom-left' },
   );

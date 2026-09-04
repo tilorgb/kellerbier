@@ -41,6 +41,16 @@ import {
  * - **No procedural room content.** See `floor-runtime.ts`'s own doc
  *   comment — every room still plays a real authored template, just never
  *   the generated-in-place variant a human's run can also draw.
+ * - **The bot never touches Promille.** It paths to the boss and fights;
+ *   nothing here drinks, eats, or otherwise interacts with the meter, so
+ *   `promilleTierTicks` on every outcome this harness produces is `{ '0':
+ *   <every tick> }` — the sweep exercises floors 1-2's combat and traversal,
+ *   never the drift/sway/tier system layered on top of it. #54's own
+ *   "Promille tier usage" acceptance criterion is a claim about *real play*
+ *   (`app/telemetry/`), not this harness; `promilleTierTicks` is carried
+ *   here anyway so `report.mjs` has something to print once a run's loadout
+ *   or the bot itself is taught to drink, rather than adding the field in a
+ *   second change later.
  *
  * None of these change what floors 1-2's *combat and traversal* actually
  * demand of a player, which is what `damageTaken`/`ticks`/`result` here are
@@ -81,6 +91,15 @@ export interface PlaytestOutcome {
   readonly ticksCompleted: number;
   readonly damageTaken: number;
   readonly floors: readonly FloorOutcome[];
+  /**
+   * Ticks spent at each Promille tier id (`sim/game/promille.ts#PromilleTier`)
+   * across the whole run, keyed as strings — #54's "Promille tier usage"
+   * balance question, answered against the scripted sweep the same way item
+   * win rate is: a distribution `tools/playtest/report.mjs` reports on,
+   * rather than a pass/fail this harness gates on (see this file's own doc
+   * comment on why only a crash fails the build).
+   */
+  readonly promilleTierTicks: Readonly<Record<string, number>>;
 }
 
 /** ~20 minutes of ticks at 60 tps — generous against #54's own "about fifteen minutes" target for a full two-floor run. */
@@ -190,6 +209,7 @@ export function runPlaytest(options: PlaytestOptions): PlaytestOutcome {
       ticksCompleted: 0,
       damageTaken: 0,
       floors: [],
+      promilleTierTicks: {},
     };
   }
 
@@ -207,6 +227,7 @@ export function runPlaytest(options: PlaytestOptions): PlaytestOutcome {
   let ticksSinceProgress = 0;
   let lastX = sim.positionX(sim.playerIndex);
   let lastY = sim.positionY(sim.playerIndex);
+  const promilleTierTicks = new Map<number, number>();
 
   let result: PlaytestResult = 'ranOut';
   let errorMessage: string | undefined;
@@ -247,6 +268,8 @@ export function runPlaytest(options: PlaytestOptions): PlaytestOutcome {
       break runLoop;
     }
     floorTicks += 1;
+    const tier = sim.promilleTier;
+    promilleTierTicks.set(tier, (promilleTierTicks.get(tier) ?? 0) + 1);
 
     const healthAfter = sim.playerHealth + sim.playerSoulHealth + sim.playerEternalHealth;
     if (healthAfter < healthBefore) {
@@ -372,6 +395,11 @@ export function runPlaytest(options: PlaytestOptions): PlaytestOutcome {
     });
   }
 
+  const promilleTierTicksOut: Record<string, number> = {};
+  for (const [tier, ticks] of promilleTierTicks) {
+    promilleTierTicksOut[String(tier)] = ticks;
+  }
+
   return {
     seed: options.seed,
     skill: options.skill.name,
@@ -383,5 +411,6 @@ export function runPlaytest(options: PlaytestOptions): PlaytestOutcome {
     ticksCompleted: tick,
     damageTaken: totalDamageTaken,
     floors: floorOutcomes,
+    promilleTierTicks: promilleTierTicksOut,
   };
 }

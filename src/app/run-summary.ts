@@ -75,6 +75,15 @@ export interface RunDetails {
    * it) keeps meaning exactly what it always did.
    */
   readonly won?: boolean;
+  /**
+   * The anonymous playtest telemetry session id (#159), if the player has
+   * opted into telemetry (`app/telemetry/store.ts#loadTelemetry`) — `null`
+   * otherwise. Included in the "copy run details" text so a tester in a
+   * playtest session (`docs/PLAYTEST_PROTOCOL.md`) can hand the observer the
+   * one thing that ties their telemetry to the session being watched,
+   * through the same key everybody already presses to report a bug.
+   */
+  readonly telemetrySessionId?: string | null;
 }
 
 export function runDetailsFrom(
@@ -82,6 +91,7 @@ export function runDetailsFrom(
   floorName: string,
   roomRole: string,
   kills: number,
+  telemetrySessionId: string | null = null,
 ): RunDetails {
   return {
     seed: sim.seed,
@@ -102,6 +112,7 @@ export function runDetailsFrom(
     items: heldItemNames(sim),
     alive: !sim.playerDead,
     won: sim.playerWon,
+    telemetrySessionId,
   };
 }
 
@@ -126,9 +137,13 @@ export function buildRunDetailsText(details: RunDetails): string {
   // `>>> 0`: see `debug/panels/run-info.ts`'s identical normalisation — a
   // dev-only seed source (`?seed=`, `#seed-input`) is the only way `sim.seed`
   // is not already a valid 32-bit unsigned integer.
+  const telemetryLine =
+    details.telemetrySessionId === null || details.telemetrySessionId === undefined
+      ? ''
+      : `\nPlaytest session: ${details.telemetrySessionId}`;
   return (
     `Kellerbier run — seed ${encodeSeed(details.seed >>> 0)} · ${details.character}\n` +
     `${seconds}s survived · ${String(details.kills)} kills · ${outcome}\n` +
-    `Items: ${items}`
+    `Items: ${items}${telemetryLine}`
   );
 }

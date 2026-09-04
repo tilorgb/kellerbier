@@ -16,11 +16,44 @@ import { fileURLToPath } from 'node:url';
 const args = process.argv.slice(2);
 const outFlag = args.indexOf('--out');
 const outPath = outFlag === -1 ? undefined : args[outFlag + 1];
-const positional = args.filter((_, index) => index !== outFlag && index !== outFlag + 1);
+// `outFlag === -1`: nothing to strip, so filtering by position would (with
+// `outFlag + 1` reading as `0`) wrongly drop a results-path argument at
+// index 0 — the exact bug fixed here and in `tools/telemetry/dashboard.mjs`'s
+// identical `inputs` line.
+const positional =
+  outFlag === -1 ? args : args.filter((_, index) => index !== outFlag && index !== outFlag + 1);
 const resultsPath =
   positional[0] ?? fileURLToPath(new URL('../../playtest/results.json', import.meta.url));
 
 const report = JSON.parse(readFileSync(resultsPath, 'utf8'));
+
+/**
+ * `sim/game/promille.ts#PromilleTier`'s ids, by name — duplicated here
+ * rather than imported because this is a plain Node script run directly
+ * (`node tools/playtest/report.mjs`, no TypeScript loader), the same reason
+ * every other `tools/*.mjs` formatter in this project reads its input as
+ * plain JSON rather than importing `src/`. Kept in sync by
+ * `tests/playtest/lib/report.test.ts`, which asserts every id this report
+ * might see has a name here.
+ */
+const PROMILLE_TIER_NAMES = {
+  0: 'Nüchtern',
+  1: 'Angeheitert',
+  2: 'Beduselt',
+  3: 'Vollrausch',
+  4: 'Sturzbesoffen',
+  5: 'Filmriss',
+  6: 'Umgfalln',
+};
+
+/**
+ * #54's "no item has a win rate wildly outside the expected band without a
+ * deliberate reason": flagged here, not failed — see this report's own doc
+ * comment on why nothing about balance turns the exit code red. A minimum
+ * appearance count keeps a single-sample outlier from reading as a finding.
+ */
+const OUTLIER_MIN_APPEARANCES = 4;
+const OUTLIER_BAND = 0.35;
 
 function describeFailure(failure) {
   return (
@@ -64,6 +97,54 @@ for (const floor of report.floors) {
   );
 }
 lines.push('');
+
+lines.push('#### Promille tier usage');
+lines.push('');
+const tierTotal = Object.values(report.promilleTierUsage ?? {}).reduce((a, b) => a + b, 0);
+if (tierTotal === 0) {
+  lines.push('_No Promille ticks recorded this sweep._');
+} else {
+  lines.push('| Tier | Share of ticks |');
+  lines.push('|---|---|');
+  for (const [tier, ticks] of Object.entries(report.promilleTierUsage).sort(
+    (a, b) => Number(a[0]) - Number(b[0]),
+  )) {
+    const name = PROMILLE_TIER_NAMES[tier] ?? `tier ${tier}`;
+    lines.push(`| ${name} | ${((ticks / tierTotal) * 100).toFixed(1)}% |`);
+  }
+}
+lines.push('');
+
+lines.push('#### Item win rates');
+lines.push('');
+const itemWinRates = report.itemWinRates ?? [];
+if (itemWinRates.length === 0) {
+  lines.push('_No item appeared in a starting loadout this sweep._');
+} else {
+  const outliers = itemWinRates.filter(
+    (item) =>
+      item.appearances >= OUTLIER_MIN_APPEARANCES &&
+      Math.abs(item.winRate - report.winRate) >= OUTLIER_BAND,
+  );
+  if (outliers.length === 0) {
+    lines.push(
+      `No item is more than ${(OUTLIER_BAND * 100).toFixed(0)} points off the ${(report.winRate * 100).toFixed(1)}% ` +
+        `overall win rate at ${String(OUTLIER_MIN_APPEARANCES)}+ appearances.`,
+    );
+  } else {
+    lines.push(
+      `${String(outliers.length)} item(s) more than ${(OUTLIER_BAND * 100).toFixed(0)} points off the overall win rate ` +
+        `(${String(OUTLIER_MIN_APPEARANCES)}+ appearances):`,
+    );
+    lines.push('');
+    for (const item of outliers) {
+      lines.push(
+        `- **${item.itemId}** — ${(item.winRate * 100).toFixed(1)}% over ${String(item.appearances)} appearances`,
+      );
+    }
+  }
+  lines.push('');
+}
 
 if (report.failures.length > 0) {
   lines.push(`#### Failures (first ${String(report.failures.length)})`);
