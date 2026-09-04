@@ -2279,15 +2279,34 @@ WASD move   arrows aim and fire
         createSilhouetteTexture(app.renderer, texture),
       ),
     };
+    // `view` (`let view!: GameView`) is only actually unassigned on the
+    // very first call, before boot's first `startRun` — every restart after
+    // that has a real previous view to tear down. Captured before the
+    // reassignment just below, then destroyed only once the new one is
+    // already in `game` — removed from the display list first, per
+    // `GameView.destroy`'s own doc comment, then freed.
+    const previousView = typeof view !== 'undefined' ? view : undefined;
     view = new GameView(sim, viewTextures);
     game.removeChildren();
     game.addChild(view.stage);
+    previousView?.destroy();
     view.setSecretHints(crackHintsFor(floorPlan, currentRoomId, revealedEdges));
     view.setLockedDoors(lockedDoorsFor(floorPlan, currentRoomId, visitedRoomIds));
     minimapHud.rebuild(floorPlan, currentRoomId, visitedRoomIds);
 
     summary = new RunSummaryTracker();
     telemetry = new TelemetryTracker();
+    // Both `ambience` (`SynthAmbienceAudio`) and `ambienceTracker` survive
+    // every `startRun` (created once at boot) — a plain restart, unlike the
+    // death sequence's own `ambience.stop()`, never otherwise touches
+    // either, so a mid-run `R` restart left the previous run's track
+    // "already playing" as far as `MusicPlayer.play` could tell, and a
+    // restart landing back on floor 1 (every run's start floor) looked like
+    // no floor change at all to `ambienceTracker`. Either alone was enough
+    // to leave a fresh run silent; both are reset unconditionally here, the
+    // same as every other per-run tracker below.
+    ambience.stop();
+    ambienceTracker.reset();
     creditedBossRooms = new Set<string>();
     roomClearedLastTick = false;
     playerWasLowHealthLastTick = false;

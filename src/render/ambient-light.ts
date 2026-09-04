@@ -522,4 +522,26 @@ export class AmbientLight {
       }
     });
   }
+
+  /**
+   * Frees the three canvases the constructor generated and uploaded as GPU
+   * textures — uniquely this instance's own, never shared with anything
+   * else (contrast `viewTextures`'s art atlases, reused across every
+   * restart), so nothing else will ever free them if this doesn't.
+   * `GameView.destroy` calls this before destroying `container` itself.
+   *
+   * Skips `Texture.EMPTY` — what the constructor's `createGlowTexture`/
+   * `createCloudTexture` fall back to with no `document` (`tests/bench`'s
+   * headless `GameView`, this module's own doc comment) — which is a
+   * shared singleton every other texture-less sprite in the process also
+   * falls back to; destroying it would take all of them down too.
+   */
+  destroy(): void {
+    this.container.destroy({ children: true });
+    for (const texture of [this.lampShadowTexture, this.lampGlowTexture, this.cloudTexture]) {
+      if (texture !== Texture.EMPTY) {
+        texture.destroy(true);
+      }
+    }
+  }
 }
