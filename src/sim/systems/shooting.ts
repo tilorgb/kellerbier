@@ -1,5 +1,5 @@
 import { EventKind } from '../events/queue.js';
-import type { GameSim } from '../game/sim.js';
+import { PLAYER_RADIUS, type GameSim } from '../game/sim.js';
 import { muzzleFlash } from '../particle/effects.js';
 import { vectorLength } from '../math.js';
 import { type InputFrame, InputAction, axisToUnit, isActionDown } from '../input/frame.js';
@@ -236,6 +236,18 @@ function advanceProjectile(index: number): void {
   const velocityX = projectiles.velocityX[index] ?? 0;
   const velocityY = projectiles.velocityY[index] ?? 0;
   const radius = projectiles.radius[index] ?? 0;
+  // Terrain never has to admit more than the player's own body already does.
+  // `radius` is the *hit* circle — what a shot deals damage through, and what
+  // `sim/systems/collision.ts`'s swept test against an enemy still reads at
+  // full size, unclamped, because a bigger hit-circle mattering against
+  // something it can hurt is exactly what an item like Maß (2.5x radius) is
+  // buying. But a gap the room was authored to let the shooter's own body
+  // through must keep letting a shot through too — the shooter fit there a
+  // moment ago. Without this clamp, an item that only inflates the hit
+  // circle turns "stand next to a wall and fire alongside it" into a shot
+  // that dies on its own muzzle, which reads as a broken weapon rather than
+  // as a bigger one.
+  const wallRadius = Math.min(radius, PLAYER_RADIUS);
   const tags = projectiles.tags[index] ?? 0;
   // `spectral`: passes through walls entirely rather than ending or bouncing
   // at one — the shot still collides with whatever it is allowed to hit
@@ -254,7 +266,7 @@ function advanceProjectile(index: number): void {
   for (let substep = 0; substep < substeps; substep++) {
     const stepX = currentX + velocityX / substeps;
     const stepY = currentY + velocityY / substeps;
-    if (!spectral && !room.isClear(stepX, stepY, radius)) {
+    if (!spectral && !room.isClear(stepX, stepY, wallRadius)) {
       // The impact normal points back the way the shot came, which is the
       // direction a spray of foam should leave the wall in — and, per
       // `reflectVelocity`'s doc comment, exactly the normal a wall bounce

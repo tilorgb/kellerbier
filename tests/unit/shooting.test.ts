@@ -276,6 +276,50 @@ describe('velocity inheritance', () => {
   });
 });
 
+/**
+ * A bug report: Maß (`content/items/mass.ts`) inflates a shot's hit-circle
+ * 2.5x after it spawns, and that inflated radius was also what
+ * `sim/systems/shooting.ts`'s `advanceProjectile` tested against walls —
+ * so standing right next to a wall and firing alongside it could kill the
+ * enlarged shot on its own muzzle, in a gap the player's own body was
+ * already standing in. Terrain clearance is capped at `PLAYER_RADIUS`
+ * (`sim/game/sim.ts`) for exactly that reason: a gap the room already
+ * admits the shooter through must keep admitting their shot, whatever an
+ * item has done to its hit-circle. Enemy/obstacle collision is untouched —
+ * `sim/systems/collision.ts` still reads the full inflated radius there,
+ * because a bigger hit-circle mattering against something it can hurt is
+ * the point of the item.
+ */
+describe('wall clearance for an item-enlarged shot', () => {
+  it('keeps a Maß shot alive down a corridor only just wide enough for the player', () => {
+    // A corridor exactly `PLAYER_RADIUS` tall on each side of centre —
+    // narrow enough that Maß's 2.5x-inflated radius (7.5) no longer fits,
+    // even though the player's own body (radius 7) does.
+    const room = new RoomGeometry(0, 0, 640, 360);
+    room.addBlock(0, 0, 640, 173);
+    room.addBlock(0, 187, 640, 360);
+    const sim = new GameSim({ room });
+    const base = sim.playerIndex * 4;
+    sim.transform.data[base] = 100;
+    sim.transform.data[base + 1] = 180;
+    sim.transform.data[base + 2] = 100;
+    sim.transform.data[base + 3] = 180;
+
+    sim.inventory.pickUp(sim.items.indexOf('mass'));
+    sim.step(aiming(1, 0));
+    // Shooting and the shot's own first movement step both happen within
+    // this same tick — the old, uncapped check killed the shot right here.
+    expect(sim.projectiles.liveCount).toBe(1);
+
+    const xBefore = sim.projectiles.x[0] ?? 0;
+    for (let tick = 0; tick < 5; tick++) {
+      sim.step(IDLE);
+    }
+    expect(sim.projectiles.liveCount).toBe(1);
+    expect(sim.projectiles.x[0] ?? 0).toBeGreaterThan(xBefore);
+  });
+});
+
 describe('ShotFired event (#234)', () => {
   it('reports one event per squeeze, naming the player as the shooter', () => {
     const sim = new GameSim({ room: openRoom() });
