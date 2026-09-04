@@ -12,6 +12,7 @@
     "dev": "vite",
     "build": "npm run typecheck && vite build",
     "build:atlas": "node tools/art/build-atlas.mjs",
+    "art:diffusion-postprocess": "node tools/art/diffusion-postprocess-cli.mjs",
     "art:alois": "node tools/art/authoring/build-alois.mjs",
     "art:bosses": "node tools/art/authoring/build-bosses.mjs",
     "art:blocks": "node tools/art/authoring/build-blocks.mjs",
