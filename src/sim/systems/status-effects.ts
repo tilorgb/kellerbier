@@ -1,5 +1,6 @@
 import { World } from '../ecs/world.js';
 import type { GameSim } from '../game/sim.js';
+import { ParticleKind, type ParticleKindId } from '../particle/store.js';
 import { applyDamageAt } from './impact.js';
 
 /**
@@ -60,7 +61,12 @@ export function stepStatusEffects(sim: GameSim): void {
     if (poison > 0) {
       status[base + STATUS_POISON] = poison - 1;
       if (poison % poisonInterval === 0) {
-        applyStatusDamage(sim, index, tuning.poisonDamagePerTick);
+        // Spore, not Foam (#248): the issue's own complaint was that a
+        // poison tick reads identically to ordinary contact/projectile
+        // damage. A green puff distinct from foam/sparks is what makes the
+        // tick itself, not just the ambient poisoned state, legible in the
+        // moment it lands.
+        applyStatusDamage(sim, index, tuning.poisonDamagePerTick, ParticleKind.Spore);
       }
     }
   }
@@ -76,10 +82,19 @@ export function stepStatusEffects(sim: GameSim): void {
  * zero by the first would take a second `applyDamageAt` — flash, stagger,
  * knockback and all — and a second `Death`/kill dispatch, from the second.
  * `cause` is -1: a status tick has no projectile behind it to attribute to.
+ * `effect` is the non-kill hit particle (Foam by default, from
+ * `applyDamageAt`'s own default) — burn ticks leave it at Foam; a poison
+ * tick's caller passes Spore instead, so the two read as different sources
+ * of "unexplained" damage rather than one.
  */
-function applyStatusDamage(sim: GameSim, index: number, amount: number): void {
+function applyStatusDamage(
+  sim: GameSim,
+  index: number,
+  amount: number,
+  effect?: ParticleKindId,
+): void {
   if (amount <= 0 || (sim.health.data[index * 2] ?? 0) <= 0) {
     return;
   }
-  applyDamageAt(sim, index, amount, sim.positionX(index), sim.positionY(index), 0, 0, -1);
+  applyDamageAt(sim, index, amount, sim.positionX(index), sim.positionY(index), 0, 0, -1, effect);
 }
