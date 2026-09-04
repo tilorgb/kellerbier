@@ -2690,11 +2690,18 @@ WASD move   arrows aim and fire
    * `sim.transitionTo`. Shared by `enterNeighbor` (`sim.doorContact`, walking
    * into a door for real) and the `N` debug tour, which already knows which
    * `RoomDoor` it wants without needing to touch one.
+   *
+   * `force` (default off) skips `sim.transitionTo`/`transitionToStaircase`'s
+   * own `pressingToward` crossing check — see their doc comments. `N`'s tour
+   * passes `true`: it teleports through doors a real player isn't standing
+   * at, let alone walking into, so requiring movement input toward one would
+   * just make the shortcut silently do nothing.
    */
   function crossDoor(
     exitCellIndex: number,
     direction: RoomDirection,
     neighborRoomId: string,
+    force = false,
   ): boolean {
     const room = planRoom(floorPlan, currentRoomId);
     const exitCell = room.cells[exitCellIndex];
@@ -2714,6 +2721,7 @@ WASD move   arrows aim and fire
             floorPlan.floor,
             direction,
             hiddenDoorsFor(floorPlan, neighborRoomId, revealedEdges),
+            force,
           )
         : (() => {
             const neighborPlacement = buildPlacement(neighborRoom);
@@ -2731,6 +2739,7 @@ WASD move   arrows aim and fire
               hiddenDoorsFor(floorPlan, neighborRoomId, revealedEdges),
               neighborPlacement,
               entryCell,
+              force,
             );
           })();
     if (!succeeded) {
@@ -2739,8 +2748,17 @@ WASD move   arrows aim and fire
       // transition, so ruling that out and checking the target is a
       // treasure room the player has no key for is enough to tell the two
       // apart without threading a discriminated failure reason through the
-      // sim layer for one HUD line.
-      if (!sim.doorsLocked && neighborRoom.role === 'treasure' && sim.keys <= 0) {
+      // sim layer for one HUD line. Gated on `pressingToward` too, now that
+      // a failed transition can also mean "hasn't walked into it yet" —
+      // without this, merely standing at (or running past) any treasure
+      // door with an empty key pocket would show the hint every tick,
+      // locked or not.
+      if (
+        sim.pressingToward(direction) &&
+        !sim.doorsLocked &&
+        neighborRoom.role === 'treasure' &&
+        sim.keys <= 0
+      ) {
         keyHintTicks = KEY_HINT_TICKS;
       }
       return false;
@@ -2863,9 +2881,22 @@ WASD move   arrows aim and fire
     wasBlutwurzActive = active;
   }
 
-  /** `sim.doorContact`'s door, translated into "which of this room's real cells did that come from". */
+  /**
+   * `sim.doorContact`'s door, translated into "which of this room's real
+   * cells did that come from". Only ever called from the real per-tick
+   * `doorContact` poll below — `crossDoor` is what the `N` debug tour calls
+   * directly instead, so every path through here is a real player and needs
+   * no `force` escape hatch of its own.
+   */
   function enterNeighbor(exitDoor: CompiledDoor): boolean {
     if (exitDoor === sim.nextFloorDoor) {
+      // Same "touching is not walking through" rule `crossDoor`'s callees
+      // enforce for an ordinary door — this one skips `crossDoor` entirely
+      // (it ends the run or regenerates the floor instead of loading a
+      // neighbour), so nothing else would otherwise gate it.
+      if (!sim.pressingToward(exitDoor.direction)) {
+        return false;
+      }
       // The last floor's boss room, cleared, walked through — the run is
       // won (#155) rather than looping back to floor 1, unless the dev-only
       // endless-floor override (`Y`) is on. `sim.markWon()` is the only
@@ -3135,7 +3166,9 @@ WASD move   arrows aim and fire
         // backtracking through an already-seen room only once every door
         // from here has been used. Now that `sim.doorContact` triggers a
         // real transition on its own, this is a dev shortcut for touring the
-        // floor without walking it — both go through the same `crossDoor`.
+        // floor without walking it — both go through the same `crossDoor`,
+        // `force: true` here since a dev pressing `N` is never also holding
+        // the movement key toward whichever door this picks.
         //
         // Tries every candidate in priority order rather than picking one
         // and stopping: a neighbour existing in the floor-plan graph does
@@ -3147,7 +3180,7 @@ WASD move   arrows aim and fire
         const unvisited = room.doors.filter((door) => !visitedRoomIds.has(door.neighborRoomId));
         const visited = room.doors.filter((door) => visitedRoomIds.has(door.neighborRoomId));
         for (const door of [...unvisited, ...visited]) {
-          if (crossDoor(door.cellIndex, door.direction, door.neighborRoomId)) {
+          if (crossDoor(door.cellIndex, door.direction, door.neighborRoomId, true)) {
             break;
           }
         }

@@ -53,6 +53,9 @@ export function stepPlayerMovement(sim: GameSim, input: Readonly<InputFrame>): v
   const knockedDown = sim.umgfallnTicks > 0;
   const inputX = knockedDown ? 0 : axisToUnit(input.moveX);
   const inputY = knockedDown ? 0 : axisToUnit(input.moveY);
+  // `GameSim.pressingToward` — a door only actually crosses on a deliberate
+  // walk into it, not a graze while running along the wall it sits on.
+  sim.setLastMoveInput(inputX, inputY);
 
   let velocityX = velocity[pairBase] ?? 0;
   let velocityY = velocity[pairBase + 1] ?? 0;

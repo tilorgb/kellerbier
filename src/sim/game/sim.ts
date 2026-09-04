@@ -1101,6 +1101,16 @@ export class GameSim {
   private readonly idleInput = createInputFrame();
 
   /**
+   * This tick's held movement input (WASD, not aim), knockdown-zeroed the
+   * same way `stepPlayerMovement` zeroes its own — set there, each tick, and
+   * read by `pressingToward` to tell a deliberate walk through a door apart
+   * from merely touching its threshold. `-1`/`0`/`1` per axis, same range
+   * `axisToUnit` already produces.
+   */
+  private lastMoveInputX = 0;
+  private lastMoveInputY = 0;
+
+  /**
    * Where the room's bodies stand, and how long until a dead one returns.
    *
    * Respawning is a playground affordance, not a game rule. Tuning by feel
@@ -1656,12 +1666,20 @@ export class GameSim {
    *
    * The player is always clamped to the room's interior rectangle (see
    * `resolveAxis` in `systems/motion.ts`) — there is no physical gap in the
-   * wall to walk through — so "walking through a door" is this: touching the
-   * boundary at the point a door is drawn (`render/room.ts`'s `DOOR_SPAN`
-   * band, centred on that door's own cell), with that door unlocked. The
-   * caller (the app layer, which owns the floor plan and room templates)
-   * polls this once a tick and calls `transitionTo` when it isn't `null` —
-   * the same call the dev "N" shortcut in `main.ts` already makes.
+   * wall to walk through — so this is: touching the boundary at the point a
+   * door is drawn (`render/room.ts`'s `DOOR_SPAN` band, centred on that
+   * door's own cell), with that door unlocked. This alone is only *touch* —
+   * a room running along its own wall crosses the same band with no
+   * intention of leaving through it, since the clamp above leaves an edge
+   * sitting on the wall until the player presses away from it again, not
+   * only while they are pressing into it. `transitionTo`/`transitionToStaircase`
+   * key off this for the unlock-a-key-room side effect (touch is enough for
+   * that), but additionally gate the actual room switch on `pressingToward`
+   * — see those methods' own doc comments. The caller (the app layer, which
+   * owns the floor plan and room templates) polls this once a tick and calls
+   * `transitionTo` when it isn't `null` — the same call the dev "N" shortcut
+   * in `main.ts` already makes, with `force: true` since it never has real
+   * movement input to check.
    */
   get doorContact(): CompiledDoor | null {
     if (!this.roomTemplateLoaded || this.doorsLocked) {
@@ -1781,6 +1799,18 @@ export class GameSim {
    * on the way out, so leaving and walking back in must find it open — the
    * same "a visited room is never still locked" rule `app/main.ts`'s
    * `lockedDoorsFor` already drew the door itself by.
+   *
+   * Unlocking and actually crossing are two different moments (the caller —
+   * `app/main.ts`'s real per-tick `doorContact` poll — is the one that
+   * enforces this on the normal path): the key spend above happens on mere
+   * *touch*, same tick a still-locked door is reached, so the run's own
+   * "is this open now" state settles immediately. The room switch just below
+   * additionally requires `pressingToward(direction)` — the player has to be
+   * holding movement into the door, not merely standing (or running past) at
+   * its threshold, which `doorContact` alone cannot tell apart from a real
+   * crossing. `force` skips that second check for the handful of callers
+   * that aren't a real player walking (`app/main.ts`'s `N` floor-tour
+   * shortcut) — never for a live door-contact poll.
    */
   transitionTo(
     template: unknown,
@@ -1789,6 +1819,7 @@ export class GameSim {
     hiddenDoors: readonly Pick<CompiledDoor, 'direction' | 'cellCol' | 'cellRow'>[] = [],
     placement?: RoomPlacement,
     entryCell?: { readonly col: number; readonly row: number },
+    force = false,
   ): boolean {
     if (!this.roomTemplateLoaded || this.doorsLocked || !this.hasDoor(direction)) {
       return false;
@@ -1807,6 +1838,9 @@ export class GameSim {
     }
     if (isKeyLocked) {
       this.unlockedKeyRoomIds.add(destination.source.id);
+    }
+    if (!force && !this.pressingToward(direction)) {
+      return false;
     }
     this.roomClearedIds.add(this.roomId);
     this.loadRoom(template, floor, direction, hiddenDoors, placement, entryCell);
@@ -1863,14 +1897,25 @@ export class GameSim {
     );
   }
 
-  /** `transitionTo`'s staircase counterpart — see `loadStaircaseRoom`. No staircase is ever key-locked (none is authored with any content yet). */
+  /**
+   * `transitionTo`'s staircase counterpart — see `loadStaircaseRoom`. No
+   * staircase is ever key-locked (none is authored with any content yet),
+   * so there is no unlock-on-touch step here — but the same
+   * `pressingToward` crossing gate applies, and the same `force` escape
+   * hatch for the same non-player callers. See `transitionTo`'s own doc
+   * comment for why both exist.
+   */
   transitionToStaircase(
     template: unknown,
     floor: number,
     direction: RoomDirection,
     hiddenDoors: readonly Pick<CompiledDoor, 'direction' | 'cellCol' | 'cellRow'>[] = [],
+    force = false,
   ): boolean {
     if (!this.roomTemplateLoaded || this.doorsLocked || !this.hasDoor(direction)) {
+      return false;
+    }
+    if (!force && !this.pressingToward(direction)) {
       return false;
     }
     this.roomClearedIds.add(this.roomId);
@@ -2268,6 +2313,46 @@ export class GameSim {
 
   private hasDoor(direction: RoomDirection): boolean {
     return this.doors.some((door) => door.direction === direction);
+  }
+
+  /**
+   * Records this tick's held movement input, for `pressingToward` — called
+   * once from `systems/movement.ts`'s `stepPlayerMovement`, which already
+   * computes the knockdown-zeroed axis values this reuses rather than
+   * re-deriving them from the raw `InputFrame` a second place.
+   */
+  setLastMoveInput(x: number, y: number): void {
+    this.lastMoveInputX = x;
+    this.lastMoveInputY = y;
+  }
+
+  /**
+   * Whether the player's own held movement input (WASD, not aim) has a
+   * component pointing toward `direction` — the whole of what tells a
+   * deliberate walk through a door apart from merely grazing its threshold
+   * while running along the wall it sits on.
+   *
+   * `doorContact` can go true from *position* alone: the player is always
+   * clamped to the room's interior rectangle (see that getter's own doc
+   * comment), so once they have pressed into a wall at all, their edge sits
+   * exactly on it until they press away again — running north-south along a
+   * west wall with a door on it, never once pressing west, still leaves them
+   * sitting on that clamp from an earlier press and crosses the door's span.
+   * `transitionTo`/`transitionToStaircase` gate the actual room switch on
+   * this, on top of `doorContact`, so that only counts as *touching* the
+   * door, not *going through* it.
+   */
+  pressingToward(direction: RoomDirection): boolean {
+    switch (direction) {
+      case 'north':
+        return this.lastMoveInputY < 0;
+      case 'south':
+        return this.lastMoveInputY > 0;
+      case 'west':
+        return this.lastMoveInputX < 0;
+      case 'east':
+        return this.lastMoveInputX > 0;
+    }
   }
 
   private clearRoomEntities(): void {
