@@ -1,14 +1,17 @@
 import { Container, Graphics, type BitmapText, type Renderer } from 'pixi.js';
-import { EFFECT_PALETTE, HUD_PALETTE, UI_PALETTE } from './palette.js';
+import { EFFECT_PALETTE, HUD_PALETTE } from './palette.js';
 import type { UiKit } from './ui/kit.js';
+import { Menu, type MenuItem, type MenuScreen } from './ui/menu.js';
 import { DisplayTitle, TITLE_STYLES } from './ui/title.js';
-import { uiText, uiTextWidth, UI_LINE_HEIGHT, UI_TEXT_HEIGHT } from './ui/text.js';
+import { uiText, uiTextWidth } from './ui/text.js';
 
 /** How much bigger than its authored size the death word is drawn. Whole, like every other scale here. */
 const HEADLINE_SCALE = 3;
 
 /** Padding inside the plate the summary sits on. */
 const PLATE_PADDING = 8;
+
+const GAP_ABOVE_MENU = 10;
 
 /** What the screen shows. Assembled by whoever tracks the run, not read from `GameSim` directly. */
 export interface RunSummaryText {
@@ -20,9 +23,15 @@ export interface RunSummaryText {
   readonly floor: string;
 }
 
+export interface GameOverScreenActions {
+  readonly onRetry: () => void;
+  readonly onResults: () => void;
+  readonly onHub: () => void;
+}
+
 /**
- * The game-over screen: a dim over the game, the death word, and a short run
- * summary on a plate.
+ * The game-over screen: a dim over the game, the death word, a short run
+ * summary on a plate, and the way onward.
  *
  * Laid out in UI pixels, like every other HUD piece — `main.ts` scales the
  * whole layer.
@@ -33,20 +42,25 @@ export interface RunSummaryText {
  * it is on screen — which is the whole test for whether a broken script
  * belongs somewhere (`docs/DECISIONS.md` #44). The two lines under it stay in
  * the text face, because they are numbers a player actually reads.
+ *
+ * `Menu` (#158) replaced the two-key hint line this used to have: "R: Try
+ * Again  T: Results" worked only for a keyboard. `R`/`T` still do the same
+ * thing globally (muscle memory, and a bug report referencing them), but the
+ * screen itself is now reachable and leavable with a gamepad or a mouse too.
  */
-export class GameOverScreen {
+export class GameOverScreen implements MenuScreen {
   readonly view = new Container();
 
   private readonly dim: Graphics;
   private readonly plate: Container;
   private readonly headline: DisplayTitle;
   private readonly summary: BitmapText;
-  private readonly hint: BitmapText;
+  private readonly menu: Menu;
   private readonly kit: UiKit;
   private width = 0;
   private height = 0;
 
-  constructor(kit: UiKit, renderer: Renderer) {
+  constructor(kit: UiKit, renderer: Renderer, actions: GameOverScreenActions) {
     this.kit = kit;
     this.view.visible = false;
 
@@ -63,29 +77,37 @@ export class GameOverScreen {
     this.summary = uiText('', { colour: HUD_PALETTE.gameOverSummary });
     this.view.addChild(this.summary);
 
-    this.hint = uiText(
-      // Two ways out of a finished run: straight into another one, or to the
-      // results screen for the last run's stats and unlocks. A run that
-      // earned something new opens the second on its own
-      // (`main.ts`'s `advanceDeathSequence`); this is for every other death.
-      // Plain English (#221): a control hint is read on every single death,
-      // which makes it functional text under `docs/CONTENT_BIBLE.md` §0 —
-      // no seasoned Bavarian word here, unlike the death word above it.
-      'R: Try Again    T: Results',
-      { colour: UI_PALETTE.textDim },
-    );
-    this.view.addChild(this.hint);
+    const items: MenuItem[] = [
+      { label: 'Retry', onSelect: actions.onRetry },
+      { label: 'Results', onSelect: actions.onResults },
+      { label: 'Hub', onSelect: actions.onHub },
+    ];
+    this.menu = new Menu(kit, items);
+    this.view.addChild(this.menu.view);
+  }
+
+  get visible(): boolean {
+    return this.view.visible;
   }
 
   show(info: RunSummaryText): void {
     this.headline.set(info.word);
     this.summary.text = `${info.seconds.toFixed(1)}s survived   ${String(info.kills)} killed   ${info.floor}`;
     this.view.visible = true;
+    this.menu.refresh();
     this.layOut();
   }
 
   hide(): void {
     this.view.visible = false;
+  }
+
+  moveFocus(delta: 1 | -1): void {
+    this.menu.moveFocus(delta);
+  }
+
+  activate(): void {
+    this.menu.activate();
   }
 
   /** Call on every resize, same as the HUD's own layout pass. Dimensions in UI pixels. */
@@ -109,9 +131,8 @@ export class GameOverScreen {
     this.headline.place(centreX, Math.round(centreY - this.headline.height * HEADLINE_SCALE - 6));
 
     const summaryWidth = uiTextWidth(this.summary.text);
-    const hintWidth = uiTextWidth(this.hint.text);
-    const plateWidth = Math.max(summaryWidth, hintWidth) + PLATE_PADDING * 2;
-    const plateHeight = UI_LINE_HEIGHT + UI_TEXT_HEIGHT + PLATE_PADDING * 2;
+    const plateWidth = Math.max(summaryWidth, this.menu.width) + PLATE_PADDING * 2;
+    const plateHeight = PLATE_PADDING * 3 + this.summary.height + GAP_ABOVE_MENU + this.menu.height;
     const plateX = Math.round(centreX - plateWidth / 2);
     const plateY = Math.round(centreY + 4);
 
@@ -121,9 +142,9 @@ export class GameOverScreen {
     this.plate.position.set(plateX, plateY);
 
     this.summary.position.set(Math.round(centreX - summaryWidth / 2), plateY + PLATE_PADDING);
-    this.hint.position.set(
-      Math.round(centreX - hintWidth / 2),
-      plateY + PLATE_PADDING + UI_LINE_HEIGHT,
+    this.menu.view.position.set(
+      Math.round(centreX - this.menu.width / 2),
+      plateY + PLATE_PADDING * 2 + this.summary.height + GAP_ABOVE_MENU,
     );
   }
 }

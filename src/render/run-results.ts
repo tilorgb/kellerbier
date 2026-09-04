@@ -2,8 +2,9 @@ import { Container, Graphics, type BitmapText, type Renderer } from 'pixi.js';
 import type { RunResultsView, UnlockView } from '../app/meta/progress.js';
 import { EFFECT_PALETTE, UI_PALETTE } from './palette.js';
 import type { UiKit } from './ui/kit.js';
+import { Menu, type MenuItem, type MenuScreen } from './ui/menu.js';
 import { DisplayTitle, TITLE_STYLES } from './ui/title.js';
-import { UI_LINE_HEIGHT, UI_TEXT_HEIGHT, uiText, uiTextWidth } from './ui/text.js';
+import { UI_LINE_HEIGHT, uiText, uiTextWidth } from './ui/text.js';
 
 /** Margin from the frame's edge to anything on this screen, in UI pixels. */
 const MARGIN = 12;
@@ -33,6 +34,13 @@ interface UnlockEntry {
   readonly height: number;
 }
 
+export interface RunResultsScreenActions {
+  /** Only ever called with `runOver` true — starts a fresh run from this screen. */
+  readonly onNewRun: () => void;
+  /** Closes the screen: back to whatever was showing underneath it, over a live run or a finished one alike. */
+  readonly onClose: () => void;
+}
+
 /**
  * The run-results screen — a plain, stylized statistics page shown between
  * runs.
@@ -54,28 +62,51 @@ interface UnlockEntry {
  * again, the same as the screen it replaced: this only changes when it opens
  * or when something is unlocked while it is open, and the simulation is
  * paused behind it.
+ *
+ * ## The `Menu` at the bottom (#158)
+ *
+ * Replaces the old "Enter: New Run  T: Close" / "T: Back to Run" hint text,
+ * which only ever worked from a keyboard. The items themselves still depend
+ * on `runOver` exactly as the hint text did: a screen opened after a death
+ * offers a new run or a way back to the screen underneath it; a screen
+ * opened *mid*-run offers only the way back to it, because "New Run" over a
+ * run that is still going would throw it away with no warning.
  */
-export class RunResultsScreen {
+export class RunResultsScreen implements MenuScreen {
   readonly view = new Container();
 
   private readonly kit: UiKit;
   private readonly backdrop = new Graphics();
   private readonly title: DisplayTitle;
   private readonly content = new Container();
+  private readonly menu: Menu;
+  private readonly actions: RunResultsScreenActions;
 
   private state: RunResultsView | null = null;
   private runOver = true;
   private width = 0;
   private height = 0;
 
-  constructor(kit: UiKit, renderer: Renderer) {
+  constructor(kit: UiKit, renderer: Renderer, actions: RunResultsScreenActions) {
     this.kit = kit;
+    this.actions = actions;
     this.view.visible = false;
     this.view.addChild(this.backdrop);
     this.title = new DisplayTitle(renderer, TITLE_STYLES.floor);
     this.title.set('Results');
     this.view.addChild(this.title.view);
     this.view.addChild(this.content);
+    this.menu = new Menu(kit, this.menuItems());
+    this.view.addChild(this.menu.view);
+  }
+
+  private menuItems(): MenuItem[] {
+    return this.runOver
+      ? [
+          { label: 'New Run', onSelect: this.actions.onNewRun },
+          { label: 'Close', onSelect: this.actions.onClose },
+        ]
+      : [{ label: 'Back to Run', onSelect: this.actions.onClose }];
   }
 
   get visible(): boolean {
@@ -92,12 +123,21 @@ export class RunResultsScreen {
   show(view: RunResultsView, runOver: boolean): void {
     this.state = view;
     this.runOver = runOver;
+    this.menu.setItems(this.menuItems());
     this.view.visible = true;
     this.layOut();
   }
 
   hide(): void {
     this.view.visible = false;
+  }
+
+  moveFocus(delta: 1 | -1): void {
+    this.menu.moveFocus(delta);
+  }
+
+  activate(): void {
+    this.menu.activate();
   }
 
   /** Swaps in a freshly built view without closing the screen — what an unlock earned mid-visit calls. */
@@ -140,14 +180,14 @@ export class RunResultsScreen {
       UI_PALETTE.textDim,
     );
 
-    const hintY = this.height - MARGIN - UI_TEXT_HEIGHT;
+    const menuTop = this.height - MARGIN - this.menu.height;
 
     // The two panels sit centred in the band between the summary lines above
-    // and the hint row below, rather than pinned to the bottom — with no
-    // table of chairs above them any more, bottom-pinning would leave a bare
-    // gap under the summary instead of a screen that reads as one piece.
+    // and the menu below, rather than pinned to the bottom — with no table
+    // of chairs above them any more, bottom-pinning would leave a bare gap
+    // under the summary instead of a screen that reads as one piece.
     const bandTop = statsY + UI_LINE_HEIGHT + 10;
-    const bandBottom = hintY - 10;
+    const bandBottom = menuTop - 10;
     const bandCentre = Math.round((bandTop + bandBottom) / 2);
 
     const unlockEntries = state.unlocks.map((unlock) => this.buildUnlockEntry(unlock));
@@ -163,11 +203,7 @@ export class RunResultsScreen {
     this.drawUnlocksPanel(unlockEntries, leftX, bandCentre + unlocksHeight / 2, unlocksHeight);
     this.drawPanel('The Board', boardRowsData, rightX, bandCentre + boardHeight / 2, BOARD_WIDTH);
 
-    if (this.runOver) {
-      this.addCentred('Enter: New Run    T: Close', centreX, hintY, UI_PALETTE.textDim);
-    } else {
-      this.addCentred('T: Back to Run', centreX, hintY, UI_PALETTE.textDim);
-    }
+    this.menu.view.position.set(Math.round(centreX - this.menu.width / 2), menuTop);
   }
 
   /**
