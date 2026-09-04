@@ -1,5 +1,5 @@
 import { EventKind } from '../events/queue.js';
-import { PLAYER_RADIUS, type GameSim } from '../game/sim.js';
+import type { GameSim } from '../game/sim.js';
 import { muzzleFlash } from '../particle/effects.js';
 import { vectorLength } from '../math.js';
 import { type InputFrame, InputAction, axisToUnit, isActionDown } from '../input/frame.js';
@@ -247,7 +247,17 @@ function advanceProjectile(index: number): void {
   // circle turns "stand next to a wall and fire alongside it" into a shot
   // that dies on its own muzzle, which reads as a broken weapon rather than
   // as a bigger one.
-  const wallRadius = Math.min(radius, PLAYER_RADIUS);
+  //
+  // Read off `sim.body.data` — the player's live collider radius, the same
+  // place `sim/systems/enemy.ts`'s melee reach check reads it from — rather
+  // than importing `PLAYER_RADIUS` from `sim/game/sim.ts` directly: that
+  // import crosses the same circular module edge `sim.ts` already has onto
+  // this file (`sim.ts` imports `stepShooting`/`stepProjectiles` from here),
+  // and reading it unconditionally on every live projectile every tick
+  // measurably cost this hot loop its zero-allocation guarantee
+  // (`tests/unit/projectile-allocation.test.ts`) even though nothing about a
+  // `number` import should heap-allocate on its face.
+  const wallRadius = Math.min(radius, sim.body.data[sim.playerIndex * 2] ?? 0);
   const tags = projectiles.tags[index] ?? 0;
   // `spectral`: passes through walls entirely rather than ending or bouncing
   // at one — the shot still collides with whatever it is allowed to hit
