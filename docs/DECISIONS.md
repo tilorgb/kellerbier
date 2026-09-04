@@ -3297,3 +3297,69 @@ confirm with use" idiom (#64) is unchanged. Rerolling before the boss fight rath
 the issue's most speculative option ("consider whether") and is superseded by the shop placement
 above, which reaches the same "a machine met while still thinking about the build" goal without
 needing the boss room's reward-pedestal anchor to move.
+
+## 68. Der Losbrunnen's picker becomes a real card menu, and active items can reroll too
+
+**Decided:** M8, #238's own follow-up comment from the issue's author, implemented in the same
+pass as #67: "the machine use should open a real menu where the user can choose the item... like
+the reroll machine in Diablo, maybe a little mixed with the reward dialog in Vampire Survivors...
+Also we want passive AND active items to be able to reroll."
+
+**The picker is now a real screen, built entirely from the existing `UiKit` — no new pixel art, no
+new input binding.** `render/machine-picker.ts`'s `MachinePickerScreen` replaces the old
+single-line `machinePrompt` text for the two states that actually offer a roll: `'unfed'` with its
+picker open (choosing which item to feed) and `'fed'` (confirming a reroll). Both draw through the
+same shape — a row of `kit.buttonSprite` cards (`'selected'` state doing double duty as "this is
+the one you'd feed"), a `FocusRing` tracking the current one, the selected card's full description
+on its own wide line below (cards hold only a name; German item descriptions run long —
+Böllerschmeißer's is a full sentence — and wrapping that inside a small fixed-height card risked
+overflow), and a cost/break-chance/hint line under that. `'empty'`/`'broken'`/a fresh `'unfed'`
+machine before its first `use` keep the old plain `machinePrompt` line — there is nothing to choose
+in any of those, so a full-screen card menu would be theatre over an invitation or an apology.
+Input is unchanged from #64: `use` opens it, a move-axis tap cycles the selection
+(`cycleMachinePreviewFromAxis`), `use` again confirms — the screen only turns
+`GameSim.machineChoices`/`machinePreview` into pixels every frame, the same "screen reads state,
+`main.ts` owns the words and the input" split every other HUD piece here already keeps.
+
+**"Game will pause during this" is honoured as a presentation guarantee, not a `loop.paused` engine
+freeze.** `RunResultsScreen` hard-pauses because it opens *between* runs; the Losbrunnen's picker
+opens *mid-run, mid-replay*, and a replay is a recorded `InputFrame` per tick — stopping
+`sim.step()` outright would mean any menu interaction has to happen through a side channel outside
+that log, which a replay has no way to reproduce. So ticks keep flowing while the picker is open,
+exactly as #64's original text-prompt version already did; what changed is only the presentation,
+via a large dimmed modal that reads as "the world stopped for this" without the sim actually
+stopping. This is provably safe rather than merely convenient: `stepPedestal`'s priority chain
+(`docs/DECISIONS.md`'s own #64 entry) is the only thing standing between a boss room's cleared
+enemies and its reward, and a shop's own enemy — `content/enemies/shopkeeper.ts`'s `Wirt` — has
+`contactDamage: 0` and starts `peaceful`, only ever firing back if the player shot it first. Every
+room the machine can appear in is threat-free at the moment it is interactable, so a functional
+freeze buys nothing a shallow one does not already give the player, and the alternative (gating
+large parts of `GameSim.step`'s carefully, comment-explained ordering behind a new conditional) was
+a real risk for zero real benefit. If a future room ever puts the machine somewhere genuinely
+unsafe, the freeze that would actually need adding is a narrow one — skip `stepEnemies` specifically
+while the picker is open — not `loop.paused`.
+
+**Active items reroll through a new `cooldown` target, parallel to a stat's `modifyStats` entry.**
+`sim/item/roll.ts` gains `MachineRollTarget` (`{ kind: 'stat', modifier }` or `{ kind: 'cooldown' }`)
+and `machineRollTargets`, which `itemEligibleForMachine` is now defined in terms of: a `modifyStats`
+entry per current output, plus one more `cooldown` target whenever `item.active !== undefined` —
+offered unconditionally, unlike a state-gated `modifyStats` entry, since a cooldown is always a real
+number to nudge regardless of current charge. `rollItemStatModifiers` picks uniformly among
+whatever is on offer (a hybrid item like Enzian can have both); a `cooldown` hit nudges
+`ActiveItemDefinition.maxCharge` by the tier's usual percent, *shrinking* it on a favourable roll —
+a shorter cooldown being the active-item equivalent of a bigger stat. The result is stored in
+`GameSim`'s new `activeItemCooldownFactor` map (item id → factor), read through a new
+`effectiveMaxCharge(item)` method everywhere `active.maxCharge` used to be read directly
+(`chargeActiveItem`, `useActiveItem`, `ActiveItemHud`'s bar fill) — the same "replaces, never
+composes with, the previous roll" promise `itemRollSourceKey`'s stat source already keeps, and
+cleared on `removeItem`'s last-copy-loss branch for the same "exactly the prior state" reason.
+`maxCharge` was the only choice available without inventing new authored data: an active item's
+other numbers (a Böllerschmeißer's fuse length, a Kirchturmuhr's freeze radius) are plain
+module-level constants closed over by its hook functions, invisible to anything outside the closure
+— `active.maxCharge` is the one active-item number that already lives on the definition itself.
+
+**Constrains:** an item whose cooldown is rerolled and who then loses its `active` field would have
+nowhere for the stored factor to mean anything — not reachable today (no item's shape changes at
+runtime) but worth knowing if that ever becomes possible. A future item wanting a *different*
+numeric trait reroll-able (fuse length, blast radius) would need that trait promoted from a hook
+closure's local constant onto `ActiveItemDefinition` first, the same way `maxCharge` already is.

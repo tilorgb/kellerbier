@@ -27,7 +27,7 @@ import {
 } from '../item/definition.js';
 import { ItemInventory } from '../item/inventory.js';
 import { selectItemOffer } from '../item/pool.js';
-import { ItemRegistry } from '../item/registry.js';
+import { ItemRegistry, type CompiledItem } from '../item/registry.js';
 import {
   itemEligibleForMachine,
   itemRollSourceKey,
@@ -395,6 +395,10 @@ function describeMachineRoll(itemName: string, result: MachineRollResult): strin
   const tierLabel = MACHINE_ROLL_TIER_LABELS[result.tier];
   if (result.rolled === undefined) {
     return `${itemName}: ${tierLabel.toLowerCase()} roll, nothing changed.`;
+  }
+  if (result.rolled.kind === 'cooldown') {
+    const direction = result.rolled.favourable ? 'shorter' : 'longer';
+    return `${itemName}: ${tierLabel} roll — cooldown ${direction}.`;
   }
   const statLabel = STAT_LABELS[result.rolled.stat];
   const direction = result.rolled.favourable ? 'up' : 'down';
@@ -1238,6 +1242,19 @@ export class GameSim {
   private pedestalRevealDescription = '';
   /** Human-readable summary of the Losbrunnen's last roll, surfaced through `machinePreview` until the next one. */
   private machineLastRollSummary: string | undefined = undefined;
+  /**
+   * An active item's `maxCharge`, after a Losbrunnen `cooldown` roll (#238)
+   * — the active-item equivalent of the stat pipeline's `item-roll:<id>`
+   * source, keyed by item id the same way. Absent means "un-rerolled, read
+   * the authored base" (`effectiveMaxCharge`'s own fallback), exactly the
+   * honest-baseline promise `itemRollSourceKey`'s doc comment already makes
+   * for a stat roll. A later roll *replaces* the stored factor outright
+   * rather than composing with it — "reroll means reroll" — and losing the
+   * last copy of the item clears the entry (`removeItem`), the same
+   * "exactly the prior state" `stats.clearSource(itemRollSourceKey(id))`
+   * already guarantees for a stat roll.
+   */
+  private readonly activeItemCooldownFactor = new Map<string, number>();
   /**
    * The Bierfassl just set down under the player, if any — `null` once the
    * player has stepped clear of it once.
@@ -3499,11 +3516,32 @@ export class GameSim {
       // starts from the honest, un-rerolled baseline rather than a stale
       // multiplier surviving the gap.
       this.stats.clearSource(itemRollSourceKey(id));
+      // Same promise, for a cooldown roll (#238) — see `activeItemCooldownFactor`.
+      this.activeItemCooldownFactor.delete(id);
     }
     return stillHeld;
   }
 
-  /** Adds charge to a held active item, capped at its `maxCharge`. A no-op for an item that is not held or not active. */
+  /**
+   * `active.maxCharge` after a Losbrunnen `cooldown` roll (#238) — read
+   * everywhere the authored base used to be read directly (`chargeActiveItem`,
+   * `useActiveItem`, `ActiveItemHud`'s charge-bar fill), so a rerolled
+   * cooldown actually changes how long the item takes to charge rather than
+   * only changing a number nothing looks at. `1` for an item with no
+   * `active` at all — never reachable through a real charge bar, but a safe
+   * non-zero default rather than a divide-by-zero for a caller that asks
+   * anyway.
+   */
+  effectiveMaxCharge(item: Pick<CompiledItem, 'id' | 'active'>): number {
+    const active = item.active;
+    if (active === undefined) {
+      return 1;
+    }
+    const factor = this.activeItemCooldownFactor.get(item.id) ?? 1;
+    return Math.max(1, Math.round(active.maxCharge * factor));
+  }
+
+  /** Adds charge to a held active item, capped at its (possibly rerolled) `maxCharge`. A no-op for an item that is not held or not active. */
   chargeActiveItem(id: string, amount: number): void {
     if (amount <= 0) {
       return;
@@ -3512,12 +3550,12 @@ export class GameSim {
     if (index < 0 || !this.inventory.has(index)) {
       return;
     }
-    const active = this.items.at(index).active;
-    if (active === undefined) {
+    const item = this.items.at(index);
+    if (item.active === undefined) {
       return;
     }
     const state = this.inventory.stateOf(index);
-    state.charge = Math.min(active.maxCharge, state.charge + amount);
+    state.charge = Math.min(this.effectiveMaxCharge(item), state.charge + amount);
   }
 
   /**
@@ -3546,7 +3584,7 @@ export class GameSim {
       return false;
     }
     const state = this.inventory.stateOf(index);
-    if (state.charge < active.maxCharge) {
+    if (state.charge < this.effectiveMaxCharge(item)) {
       return false;
     }
     state.charge = 0;
@@ -4089,6 +4127,8 @@ export class GameSim {
     readonly state: 'empty' | 'unfed' | 'fed' | 'broken';
     readonly pickerOpen: boolean;
     readonly itemName: string | undefined;
+    /** The previewed/locked item's own player-facing blurb — #238's picker menu shows it under the card. `undefined` wherever `itemName` is. */
+    readonly itemDescription: string | undefined;
     readonly cost: number;
     readonly affordable: boolean;
     /**
@@ -4105,11 +4145,12 @@ export class GameSim {
       return null;
     }
     if (machine.broken) {
-      const itemName = machine.itemIndex >= 0 ? this.items.at(machine.itemIndex).name : undefined;
+      const brokenItem = machine.itemIndex >= 0 ? this.items.at(machine.itemIndex) : undefined;
       return {
         state: 'broken',
         pickerOpen: false,
-        itemName,
+        itemName: brokenItem?.name,
+        itemDescription: brokenItem?.description,
         cost: 0,
         affordable: false,
         breakChance: 0,
@@ -4123,6 +4164,7 @@ export class GameSim {
           state: 'empty',
           pickerOpen: false,
           itemName: undefined,
+          itemDescription: undefined,
           cost: 0,
           affordable: false,
           breakChance: 0,
@@ -4136,6 +4178,7 @@ export class GameSim {
           state: 'unfed',
           pickerOpen: false,
           itemName: undefined,
+          itemDescription: undefined,
           cost,
           affordable: this.biermarkenCount >= cost,
           breakChance,
@@ -4147,6 +4190,7 @@ export class GameSim {
         state: 'unfed',
         pickerOpen: true,
         itemName: preview.name,
+        itemDescription: preview.description,
         cost,
         affordable: this.biermarkenCount >= cost,
         breakChance,
@@ -4154,10 +4198,12 @@ export class GameSim {
       };
     }
     if (!this.inventory.has(machine.itemIndex)) {
+      const lostItem = this.items.at(machine.itemIndex);
       return {
         state: 'empty',
         pickerOpen: false,
-        itemName: this.items.at(machine.itemIndex).name,
+        itemName: lostItem.name,
+        itemDescription: lostItem.description,
         cost: 0,
         affordable: false,
         breakChance: 0,
@@ -4170,11 +4216,54 @@ export class GameSim {
       state: 'fed',
       pickerOpen: false,
       itemName: item.name,
+      itemDescription: item.description,
       cost,
       affordable: this.biermarkenCount >= cost,
       breakChance: this.machineBreakChance(machine),
       lastRollSummary: this.machineLastRollSummary,
     };
+  }
+
+  /**
+   * Every item the Losbrunnen's picker could feed right now, for the real
+   * choose-an-item menu (#238) — `null` whenever `machinePreview` isn't in
+   * its `'unfed'`-with-`pickerOpen` state, which is the only moment there is
+   * a *set* of items to lay out as cards rather than a single locked-in one.
+   * Ordered the same stable id order `machineEligibleItemIndices` already
+   * walks in, so the grid never reshuffles between frames on its own.
+   */
+  get machineChoices():
+    | readonly {
+        readonly id: string;
+        readonly name: string;
+        readonly description: string;
+        readonly selected: boolean;
+      }[]
+    | null {
+    const machine = this.machineRuntime;
+    if (
+      machine === null ||
+      machine.broken ||
+      machine.itemIndex >= 0 ||
+      !this.machinePickerOpenValue ||
+      !this.isNearMachine()
+    ) {
+      return null;
+    }
+    const eligible = this.machineEligibleItemIndices();
+    if (eligible.length === 0) {
+      return null;
+    }
+    const selectedIndex = this.resolveMachinePreviewIndex(eligible);
+    return eligible.map((index) => {
+      const item = this.items.at(index);
+      return {
+        id: item.id,
+        name: item.name,
+        description: item.description,
+        selected: index === selectedIndex,
+      };
+    });
   }
 
   /**
@@ -4249,14 +4338,17 @@ export class GameSim {
 
   /**
    * Rolls one outcome tier (`selectMachineRollTier`, biased by the player's
-   * resolved Dusel) and registers its delta under `itemRollSourceKey` —
-   * replacing whatever the item's previous roll was, never stacking with
-   * it, which is what makes "reroll" mean reroll rather than accumulate.
-   * The break chance this roll is actually gambling on (`machineBreakChance`)
-   * is read *before* `rolls` increments — the same "count of rolls already
-   * made" the cost calculation elsewhere already uses — then rolls the
-   * break itself last, so the roll that breaks the machine still lands
-   * first.
+   * resolved Dusel) and registers its delta — under `itemRollSourceKey` for
+   * a stat target, or into `activeItemCooldownFactor` for a `cooldown` one
+   * (#238) — replacing whatever the item's previous roll of *that same
+   * kind* was, never stacking with it, which is what makes "reroll" mean
+   * reroll rather than accumulate. A hybrid item's other kind of roll (if
+   * it has one already registered) is untouched either way, since this
+   * roll never targeted it. The break chance this roll is actually
+   * gambling on (`machineBreakChance`) is read *before* `rolls` increments
+   * — the same "count of rolls already made" the cost calculation
+   * elsewhere already uses — then rolls the break itself last, so the roll
+   * that breaks the machine still lands first.
    */
   private applyMachineRoll(machine: MachineRuntime): void {
     const item = this.items.at(machine.itemIndex);
@@ -4267,15 +4359,21 @@ export class GameSim {
       this.tuning.machine,
     );
     const result = rollItemStatModifiers(item, state, tier, this.random.items, this.tuning.machine);
-    const key = itemRollSourceKey(item.id);
-    if (result.modifiers.length === 0) {
-      this.stats.clearSource(key);
+    if (result.rolled?.kind === 'cooldown') {
+      if (result.cooldownFactor !== undefined) {
+        this.activeItemCooldownFactor.set(item.id, result.cooldownFactor);
+      }
     } else {
-      const source = { kind: 'item' as const, id: item.id, label: `${item.name} (Losbrunnen)` };
-      this.stats.setSourceModifiers(
-        key,
-        result.modifiers.map((modifier) => ({ ...modifier, source })),
-      );
+      const key = itemRollSourceKey(item.id);
+      if (result.modifiers.length === 0) {
+        this.stats.clearSource(key);
+      } else {
+        const source = { kind: 'item' as const, id: item.id, label: `${item.name} (Losbrunnen)` };
+        this.stats.setSourceModifiers(
+          key,
+          result.modifiers.map((modifier) => ({ ...modifier, source })),
+        );
+      }
     }
     const breakChance = this.machineBreakChance(machine);
     machine.rolls += 1;

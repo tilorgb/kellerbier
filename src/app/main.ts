@@ -56,6 +56,7 @@ import { EntityView } from '../render/entities.js';
 import { GameOverScreen } from '../render/game-over.js';
 import { VictoryScreen } from '../render/victory-screen.js';
 import { RunResultsScreen } from '../render/run-results.js';
+import { MachinePickerScreen, type MachinePickerView } from '../render/machine-picker.js';
 import { HealthHud } from '../render/health-hud.js';
 import { ItemGateHud } from '../render/item-gate-hud.js';
 import { MinimapHud } from '../render/minimap-hud.js';
@@ -533,26 +534,17 @@ function lockedDoorsFor(
 }
 
 /**
- * Text for `machinePrompt`, from `sim.machinePreview` — one line per state.
- * `[use]` is the same shorthand `shopPreview`'s own label already uses,
- * since neither has a per-device glyph lookup the way `activatePrompt` does.
- * Everything here is reachable through `use` alone (`GameSim.useMachine`'s
- * own doc comment on why) — the picker's "browse" step is a move-axis tap,
- * mentioned in its own prompt line rather than bound to a second button.
- *
- * `breakChance` (#238) is folded into the same cost clause on every state
- * that is actually offering a roll — the risk a `use` press is about to
- * take is stated in the same breath as what it costs, not left for the
- * player to discover after the fact.
+ * Text for the plain `machinePrompt` line — the two states that stay a
+ * single line because there is nothing to choose yet: `'broken'`/`'empty'`
+ * (nothing a menu could offer), and a fresh `'unfed'` machine before its
+ * picker has even been opened (an invitation to press `use`, not a choice).
+ * Once there *is* a choice — `'unfed'` with its picker open, or `'fed'`,
+ * about to reroll — `machinePickerView` below takes over and
+ * `MachinePickerScreen` draws it instead (#238).
  */
 function machineHudLabel(preview: {
   readonly state: 'empty' | 'unfed' | 'fed' | 'broken';
-  readonly pickerOpen: boolean;
   readonly itemName: string | undefined;
-  readonly cost: number;
-  readonly affordable: boolean;
-  readonly breakChance: number;
-  readonly lastRollSummary: string | undefined;
 }): string {
   switch (preview.state) {
     case 'broken':
@@ -561,23 +553,68 @@ function machineHudLabel(preview: {
       return preview.itemName === undefined
         ? 'Losbrunnen — nothing to feed it.'
         : `Losbrunnen — ${preview.itemName} is gone.`;
-    case 'unfed': {
-      if (!preview.pickerOpen) {
-        return 'Losbrunnen  [use: choose an item]';
-      }
-      const cost = `${String(preview.cost)} Biermarken, ${String(Math.round(preview.breakChance * 100))}% to break`;
-      return preview.affordable
-        ? `Losbrunnen — feed ${preview.itemName ?? ''}? ${cost}  [move: browse] [use: feed]`
-        : `Losbrunnen — feed ${preview.itemName ?? ''}? ${cost} (not enough)`;
-    }
-    case 'fed': {
-      const cost = `${String(preview.cost)} Biermarken, ${String(Math.round(preview.breakChance * 100))}% to break`;
-      const summary = preview.lastRollSummary === undefined ? '' : `${preview.lastRollSummary}  `;
-      return preview.affordable
-        ? `${summary}Reroll ${preview.itemName ?? ''}? ${cost}  [use]`
-        : `${summary}Reroll ${preview.itemName ?? ''}? ${cost} (not enough)`;
-    }
+    case 'unfed':
+      return 'Losbrunnen  [use: choose an item]';
+    case 'fed':
+      // Unreachable from `main.ts` — `'fed'` always routes to the picker
+      // screen instead — kept exhaustive so a future caller can't forget it.
+      return '';
   }
+}
+
+/**
+ * Builds what `MachinePickerScreen` draws for the current tick, from
+ * `sim.machinePreview`/`sim.machineChoices` — called only for the two
+ * states that actually offer a roll (#238's own "real menu" ask).
+ * `[use]`/`[move]` are the same button-shorthand `machineHudLabel` already
+ * used, since neither screen has a per-device glyph lookup the way
+ * `activatePrompt` does.
+ */
+function machinePickerView(
+  sim: GameSim,
+  preview: {
+    readonly state: 'empty' | 'unfed' | 'fed' | 'broken';
+    readonly itemName: string | undefined;
+    readonly itemDescription: string | undefined;
+    readonly cost: number;
+    readonly affordable: boolean;
+    readonly breakChance: number;
+    readonly lastRollSummary: string | undefined;
+  },
+): MachinePickerView {
+  const choices = sim.machineChoices;
+  const cards =
+    choices !== null
+      ? choices.map((choice) => ({
+          id: choice.id,
+          name: choice.name,
+          description: choice.description,
+          selected: choice.selected,
+        }))
+      : [
+          {
+            id: '',
+            name: preview.itemName ?? '',
+            description: preview.itemDescription ?? '',
+            selected: true,
+          },
+        ];
+  const hint =
+    preview.state === 'unfed'
+      ? preview.affordable
+        ? '[move] browse   [use] feed'
+        : 'not enough Biermarken'
+      : preview.affordable
+        ? '[use] reroll'
+        : 'not enough Biermarken';
+  return {
+    cards,
+    cost: preview.cost,
+    breakChance: preview.breakChance,
+    affordable: preview.affordable,
+    lastRollSummary: preview.lastRollSummary,
+    hint,
+  };
 }
 
 async function boot(): Promise<void> {
@@ -866,6 +903,20 @@ async function boot(): Promise<void> {
   let machinePromptLabel = '';
 
   /**
+   * Der Losbrunnen's real picker menu (#238) — replaces `machinePrompt` for
+   * the two states that actually offer a choice (`'unfed'` with its picker
+   * open, and `'fed'`, about to reroll); `machinePrompt`'s plain line still
+   * covers `'empty'`/`'broken'`, which have nothing to choose. See
+   * `render/machine-picker.ts`'s own doc comment for why this exists at
+   * all — the issue's own request for "a real menu... like the reroll
+   * machine in Diablo... mixed with the reward dialog in Vampire
+   * Survivors."
+   */
+  const machinePicker = new MachinePickerScreen(kit);
+  /** Serialized last-drawn `MachinePickerView`, so a frame with nothing new doesn't rebuild the whole screen. */
+  let machinePickerViewCache: string | null = null;
+
+  /**
    * A pedestal's name plate "on approach" (#28) — the item's name only (the
    * full description waits for the reveal panel below, once it's actually
    * taken). Anchored to the pedestal's own screen position each frame
@@ -967,6 +1018,9 @@ async function boot(): Promise<void> {
   // run's tableau, and the two are on screen together the moment a new
   // regular arrives.
   hudLayer.addChild(runResults.view);
+  // The Losbrunnen's picker (#238) is its own mid-run modal, on top of the
+  // ordinary HUD for the same reason `runResults` is.
+  hudLayer.addChild(machinePicker.view);
 
   /** The frame's size in UI pixels, kept for the per-frame placements below. */
   let uiFrame = { width: INTERNAL_WIDTH, height: INTERNAL_HEIGHT };
@@ -1037,6 +1091,7 @@ async function boot(): Promise<void> {
     gameOverScreen.resize(width, height);
     victoryScreen.resize(width, height);
     runResults.resize(width, height);
+    machinePicker.resize(width, height);
     floorTitleCard.resize(width, height);
     kitGallery.resize(width, height);
   };
@@ -1638,24 +1693,50 @@ async function boot(): Promise<void> {
         shopPreviewLabel = '';
       }
       const machine = sim.machinePreview;
-      if (machine !== null) {
-        const label = machineHudLabel(machine);
-        if (label !== machinePromptLabel) {
-          machinePromptLabel = label;
-          machinePrompt.set(label);
-          machinePrompt.place(Math.round(uiFrame.width / 2), Math.round(uiFrame.height * 0.78));
+      if (
+        machine !== null &&
+        (machine.state === 'fed' || (machine.state === 'unfed' && machine.pickerOpen))
+      ) {
+        if (machinePrompt.visible) {
+          machinePrompt.visible = false;
+          machinePromptLabel = '';
         }
-        machinePrompt.setColour(
-          machine.state === 'unfed' || machine.state === 'fed'
-            ? machine.affordable
-              ? HUD_PALETTE.shopPreviewAffordable
-              : HUD_PALETTE.shopPreviewUnaffordable
-            : HUD_PALETTE.toastText,
-        );
-        machinePrompt.visible = true;
-      } else if (machinePrompt.visible) {
-        machinePrompt.visible = false;
-        machinePromptLabel = '';
+        const view = machinePickerView(sim, machine);
+        const serialized = JSON.stringify(view);
+        if (serialized !== machinePickerViewCache) {
+          machinePickerViewCache = serialized;
+          if (machinePicker.visible) {
+            machinePicker.update(view);
+          } else {
+            machinePicker.show(view);
+            playSfx('ui-open');
+          }
+        }
+      } else {
+        if (machinePicker.visible) {
+          machinePicker.hide();
+          machinePickerViewCache = null;
+          playSfx('ui-close');
+        }
+        if (machine !== null) {
+          const label = machineHudLabel(machine);
+          if (label !== machinePromptLabel) {
+            machinePromptLabel = label;
+            machinePrompt.set(label);
+            machinePrompt.place(Math.round(uiFrame.width / 2), Math.round(uiFrame.height * 0.78));
+          }
+          machinePrompt.setColour(
+            machine.state === 'unfed'
+              ? machine.affordable
+                ? HUD_PALETTE.shopPreviewAffordable
+                : HUD_PALETTE.shopPreviewUnaffordable
+              : HUD_PALETTE.toastText,
+          );
+          machinePrompt.visible = true;
+        } else if (machinePrompt.visible) {
+          machinePrompt.visible = false;
+          machinePromptLabel = '';
+        }
       }
       const nearbyPedestal = sim.nearestAvailablePedestal();
       const nameplateScreen =

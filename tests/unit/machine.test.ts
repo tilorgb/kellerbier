@@ -37,6 +37,11 @@ function baseItem(id: string, overrides: Partial<ItemDefinition> = {}): ItemDefi
   };
 }
 
+/** A pure active item — no `modifyStats` at all, eligible only through its cooldown (#238). */
+function activeItem(id: string, maxCharge: number): ItemDefinition {
+  return baseItem(id, { active: { maxCharge }, hooks: {} });
+}
+
 const PEDESTAL_X = 160;
 const PEDESTAL_Y = 90;
 
@@ -559,5 +564,117 @@ describe('Der Losbrunnen — break risk climbs and is shown before the pull (#23
     sim.pickUpItem('a');
     standAtMachine(sim);
     expect(sim.machinePreview?.breakChance).toBe(0);
+  });
+});
+
+describe('Der Losbrunnen — active items can reroll too (#238)', () => {
+  function feed(sim: GameSim): void {
+    sim.step(pressUse());
+    sim.step(IDLE);
+    sim.step(pressUse());
+  }
+
+  it('a pure active item (no modifyStats) is eligible and reachable through the picker', () => {
+    const sim = simWithDeadBoss([activeItem('boiler', 300)]);
+    sim.addBiermarken(10);
+    sim.pickUpItem('boiler');
+    standAtMachine(sim);
+
+    expect(sim.machinePreview?.state).toBe('unfed');
+    sim.step(pressUse());
+    expect(sim.machinePreview?.pickerOpen).toBe(true);
+    expect(sim.machinePreview?.itemName).toBe('boiler');
+  });
+
+  it('feeding a pure active item rolls its cooldown, changing effectiveMaxCharge', () => {
+    const sim = simWithDeadBoss([activeItem('boiler', 300)]);
+    sim.tuning.machine.breakChance = 0;
+    sim.addBiermarken(10);
+    sim.pickUpItem('boiler');
+    standAtMachine(sim);
+
+    const item = sim.items.get('boiler');
+    expect(sim.effectiveMaxCharge(item)).toBe(300);
+
+    feed(sim);
+
+    // Only one target exists for a pure active item (`cooldown`), and every
+    // tier's percent is non-zero, so this is deterministic regardless of
+    // which tier the roll happened to land on.
+    expect(sim.effectiveMaxCharge(item)).not.toBe(300);
+    expect(sim.machinePreview?.lastRollSummary).toContain('cooldown');
+  });
+
+  it('a rolled cooldown is read by chargeActiveItem/useActiveItem, not just the authored number', () => {
+    const sim = simWithDeadBoss([activeItem('boiler', 100)]);
+    sim.tuning.machine.breakChance = 0;
+    sim.addBiermarken(10);
+    sim.pickUpItem('boiler');
+    standAtMachine(sim);
+    feed(sim);
+
+    const item = sim.items.get('boiler');
+    const rolledMax = sim.effectiveMaxCharge(item);
+    expect(rolledMax).not.toBe(100);
+
+    // One tick short of the *rolled*, not the authored, max: not ready yet.
+    sim.chargeActiveItem('boiler', rolledMax - 1);
+    expect(sim.itemState('boiler').charge).toBe(rolledMax - 1);
+    expect(sim.useActiveItem('boiler')).toBe(false);
+
+    // The last tick brings it to the rolled max, and only then is it usable.
+    sim.chargeActiveItem('boiler', 1);
+    expect(sim.itemState('boiler').charge).toBe(rolledMax);
+    expect(sim.useActiveItem('boiler')).toBe(true);
+  });
+
+  it('losing the last copy of the active item clears its rolled cooldown', () => {
+    const sim = simWithDeadBoss([activeItem('boiler', 300)]);
+    sim.tuning.machine.breakChance = 0;
+    sim.addBiermarken(10);
+    sim.pickUpItem('boiler');
+    standAtMachine(sim);
+    feed(sim);
+
+    const item = sim.items.get('boiler');
+    expect(sim.effectiveMaxCharge(item)).not.toBe(300);
+
+    sim.removeItem('boiler');
+    expect(sim.effectiveMaxCharge(item)).toBe(300);
+  });
+});
+
+describe('Der Losbrunnen — machineChoices lists every eligible item for the real picker menu (#238)', () => {
+  it('is null before the picker is opened', () => {
+    const sim = simWithDeadBoss([baseItem('a')]);
+    sim.addBiermarken(10);
+    sim.pickUpItem('a');
+    standAtMachine(sim);
+    expect(sim.machineChoices).toBeNull();
+  });
+
+  it('lists every eligible held item once the picker opens, including a pure active one', () => {
+    const sim = simWithDeadBoss([baseItem('a'), activeItem('boiler', 300)]);
+    sim.addBiermarken(10);
+    sim.pickUpItem('a');
+    sim.pickUpItem('boiler');
+    standAtMachine(sim);
+
+    sim.step(pressUse());
+    const choices = sim.machineChoices;
+    expect(choices).not.toBeNull();
+    expect(choices?.map((choice) => choice.id).sort()).toEqual(['a', 'boiler']);
+    expect(choices?.filter((choice) => choice.selected)).toHaveLength(1);
+  });
+
+  it('is null again once the machine is fed — nothing left to choose', () => {
+    const sim = simWithDeadBoss([baseItem('a')]);
+    sim.addBiermarken(10);
+    sim.pickUpItem('a');
+    standAtMachine(sim);
+    sim.step(pressUse());
+    sim.step(IDLE);
+    sim.step(pressUse());
+    expect(sim.machineChoices).toBeNull();
   });
 });

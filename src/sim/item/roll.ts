@@ -73,20 +73,64 @@ const NUDGE_PERCENT_KEYS: Readonly<
   rare: 'rareRollPercent',
 };
 
+/**
+ * One trait a Losbrunnen roll could currently nudge on an item (#238) — a
+ * live `modifyStats` entry, or (for an item with an `active` charge bar) its
+ * cooldown. A hybrid item (Enzian, whose `modifyStats` is only live during
+ * its own burst) can offer both at once; the roll picks uniformly among
+ * whatever is on offer, the same "pick a random entry" `rollItemStatModifiers`
+ * always did when the list held only stat entries.
+ */
+export type MachineRollTarget =
+  { readonly kind: 'stat'; readonly modifier: ItemStatModifier } | { readonly kind: 'cooldown' };
+
+/**
+ * Every trait a Losbrunnen roll could nudge on `item` right now — its live
+ * `modifyStats` output, one target per entry, plus one more `cooldown`
+ * target when the item has an `active` charge bar at all (#238's "active
+ * items should be able to reroll too"). An active item's cooldown is always
+ * offered regardless of current charge — unlike a state-gated `modifyStats`
+ * entry, there is nothing about "not currently ready" that should make its
+ * one authored numeric trait unreachable.
+ */
+export function machineRollTargets(
+  item: CompiledItem,
+  state: ItemRuntimeState,
+): readonly MachineRollTarget[] {
+  const targets: MachineRollTarget[] = (item.hooks.modifyStats?.(state) ?? []).map((modifier) => ({
+    kind: 'stat',
+    modifier,
+  }));
+  if (item.active !== undefined) {
+    targets.push({ kind: 'cooldown' });
+  }
+  return targets;
+}
+
 /** Whether `item` currently has anything a roll could touch — the machine's own eligibility gate. */
 export function itemEligibleForMachine(item: CompiledItem, state: ItemRuntimeState): boolean {
-  const base = item.hooks.modifyStats?.(state) ?? [];
-  return base.length > 0;
+  return machineRollTargets(item, state).length > 0;
 }
 
 export interface MachineRollResult {
   readonly tier: MachineRollTier;
-  /** The delta to register under `itemRollSourceKey(item.id)` — composes with the item's own `modifyStats` source rather than replacing it, except on an authored legendary hit, which replaces it outright. */
+  /** The delta to register under `itemRollSourceKey(item.id)` — composes with the item's own `modifyStats` source rather than replacing it, except on an authored legendary hit, which replaces it outright. Empty when the roll landed on `cooldown` instead. */
   readonly modifiers: readonly ItemStatModifier[];
   /** True when a `legendary` roll had no authored `ItemDefinition.legendaryRoll` and fell back to the `rare` tier's generic magnitude instead (`docs/DECISIONS.md` #19). */
   readonly usedLegendaryFallback: boolean;
-  /** The stat actually nudged and which way, for the machine's toast — `undefined` only when `item` had nothing eligible (`itemEligibleForMachine` should have refused the feed before this is ever called). */
-  readonly rolled: { readonly stat: StatId; readonly favourable: boolean } | undefined;
+  /** What actually got nudged and which way, for the machine's toast — `undefined` only when `item` had nothing eligible (`itemEligibleForMachine` should have refused the feed before this is ever called). */
+  readonly rolled:
+    | { readonly kind: 'stat'; readonly stat: StatId; readonly favourable: boolean }
+    | { readonly kind: 'cooldown'; readonly favourable: boolean }
+    | undefined;
+  /**
+   * Multiplier for `ActiveItemDefinition.maxCharge`, present only when
+   * `rolled?.kind === 'cooldown'`. `GameSim.applyMachineRoll` stores this
+   * outright as the item's *current* cooldown factor rather than composing
+   * it with whatever the last cooldown roll was — "reroll means reroll, not
+   * accumulate," the same promise `modifiers` already keeps for a stat.
+   */
+  readonly cooldownFactor: number | undefined;
 }
 
 /**
@@ -95,15 +139,13 @@ export interface MachineRollResult {
  * A `legendary` hit on an item with an authored `legendaryRoll` replaces the
  * roll source outright with that hand-tuned data — the "distinct,
  * strictly-better named variant" #218 asks for. Every other outcome (the
- * `legendary` tier included, absent that authoring) picks one modifier at
- * random from what the item's own `modifyStats` currently returns and
- * registers a proportional delta on the *same* stat: a `multiply` modifier
- * nudges by `1 ± percent`, an `add` modifier nudges by `± percent` of its own
- * magnitude. The delta is additive on top of the item's existing
- * contribution (its own `item:<id>` stat source is untouched), never a
- * mutation of the authored definition, which is what lets a second roll — or
- * losing and re-picking-up the item — start from the same honest baseline
- * every time.
+ * `legendary` tier included, absent that authoring) picks one target at
+ * random from `machineRollTargets` and nudges it by a tuned percent in the
+ * tier's direction: a `multiply` stat modifier nudges its factor by
+ * `1 ± percent`, an `add` one nudges by `± percent` of its own magnitude, and
+ * a `cooldown` target nudges `active.maxCharge` by the same percent —
+ * *shrinking* it on a favourable roll, since a shorter cooldown is the
+ * active-item equivalent of a bigger number being good.
  */
 export function rollItemStatModifiers(
   item: CompiledItem,
@@ -118,30 +160,53 @@ export function rollItemStatModifiers(
       tier,
       modifiers: item.legendaryRoll,
       usedLegendaryFallback: false,
-      rolled: first === undefined ? undefined : { stat: first.stat, favourable: true },
+      rolled:
+        first === undefined ? undefined : { kind: 'stat', stat: first.stat, favourable: true },
+      cooldownFactor: undefined,
     };
   }
-  const base = item.hooks.modifyStats?.(state) ?? [];
-  if (base.length === 0) {
-    return { tier, modifiers: [], usedLegendaryFallback: tier === 'legendary', rolled: undefined };
+  const targets = machineRollTargets(item, state);
+  if (targets.length === 0) {
+    return {
+      tier,
+      modifiers: [],
+      usedLegendaryFallback: tier === 'legendary',
+      rolled: undefined,
+      cooldownFactor: undefined,
+    };
   }
-  const chosen = base[rng.nextInt(0, base.length)];
+  const chosen = targets[rng.nextInt(0, targets.length)];
   if (chosen === undefined) {
-    throw new RangeError('rollItemStatModifiers needs a non-empty base modifier list');
+    throw new RangeError('rollItemStatModifiers needs a non-empty target list');
   }
   const effectiveTier = tier === 'legendary' ? 'rare' : tier;
   const percent = tuning[NUDGE_PERCENT_KEYS[effectiveTier]];
   const favourable = effectiveTier !== 'unlucky';
+  if (chosen.kind === 'cooldown') {
+    const sign = favourable ? -1 : 1;
+    return {
+      tier,
+      modifiers: [],
+      usedLegendaryFallback: tier === 'legendary',
+      rolled: { kind: 'cooldown', favourable },
+      cooldownFactor: 1 + sign * percent,
+    };
+  }
   const sign = favourable ? 1 : -1;
   const delta: ItemStatModifier =
-    chosen.op === 'multiply'
-      ? { stat: chosen.stat, op: 'multiply', value: 1 + sign * percent }
-      : { stat: chosen.stat, op: 'add', value: sign * percent * Math.abs(chosen.value) };
+    chosen.modifier.op === 'multiply'
+      ? { stat: chosen.modifier.stat, op: 'multiply', value: 1 + sign * percent }
+      : {
+          stat: chosen.modifier.stat,
+          op: 'add',
+          value: sign * percent * Math.abs(chosen.modifier.value),
+        };
   return {
     tier,
     modifiers: [delta],
     usedLegendaryFallback: tier === 'legendary',
-    rolled: { stat: chosen.stat, favourable },
+    rolled: { kind: 'stat', stat: chosen.modifier.stat, favourable },
+    cooldownFactor: undefined,
   };
 }
 
