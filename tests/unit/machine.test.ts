@@ -10,15 +10,17 @@ const IDLE = createInputFrame();
 /**
  * `RngStream.Items`'s first draw (the Losbrunnen spawn roll, `floor !==
  * lastFloorStartDispatched`'s own guard) is `true` at seed 4 and `false` at
- * seed 1 against the default `spawnChance: 0.5` — found once by brute force
- * (`createStreamRng(seed, RngStream.Items).chance(0.5)`) since `GameSim` has
- * no way to override `tuning.machine` before its first room loads inside its
- * own constructor. Every other machine tuning field (`breakChance`, roll
- * percents, ...) *can* be mutated after construction, since those are only
- * read when a roll actually happens — this is the one exception.
+ * seed 23 against the default `spawnChance: 0.85` (#238, up from #218's
+ * 0.5) — found once by brute force
+ * (`createStreamRng(seed, RngStream.Items).chance(0.85)`) since `GameSim`
+ * has no way to override `tuning.machine` before its first room loads
+ * inside its own constructor. Every other machine tuning field
+ * (`breakChance`, roll percents, ...) *can* be mutated after construction,
+ * since those are only read when a roll actually happens — this is the one
+ * exception.
  */
 const SEED_SPAWNS_MACHINE = 4;
-const SEED_NO_MACHINE = 1;
+const SEED_NO_MACHINE = 23;
 
 /** A minimal, valid item — mirrors `tests/unit/item-pool.test.ts`'s `baseItem`. */
 function baseItem(id: string, overrides: Partial<ItemDefinition> = {}): ItemDefinition {
@@ -33,6 +35,11 @@ function baseItem(id: string, overrides: Partial<ItemDefinition> = {}): ItemDefi
     hooks: { modifyStats: () => [{ stat: 'stammwuerze', op: 'add', value: 1 }] },
     ...overrides,
   };
+}
+
+/** A pure active item — no `modifyStats` at all, eligible only through its cooldown (#238). */
+function activeItem(id: string, maxCharge: number): ItemDefinition {
+  return baseItem(id, { active: { maxCharge }, hooks: {} });
 }
 
 const PEDESTAL_X = 160;
@@ -99,6 +106,41 @@ function plainRoom(id: string): SingleCellRoomTemplate {
       doors: { north: false, east: false, south: false, west: false },
       difficultyTier: 1,
       weight: 1,
+    },
+  };
+}
+
+const SHOP_LOSBRUNNEN_X = 200;
+const SHOP_LOSBRUNNEN_Y = 100;
+
+/** A `1x1` shop room, no enemies, with an authored `losbrunnen` anchor (#238) — the machine's second home. */
+function shopRoom(id = 'test-machine-shop-room'): SingleCellRoomTemplate {
+  return {
+    id,
+    tileGrid: [
+      '###############',
+      '#.............#',
+      '#.............#',
+      '#.............#',
+      '#.............#',
+      '#.............#',
+      '#.............#',
+      '#.............#',
+      '###############',
+    ],
+    obstacles: [],
+    enemySpawns: [],
+    spawnGroups: [],
+    pickupSpawns: [],
+    hazards: [],
+    decorativeProps: [{ x: SHOP_LOSBRUNNEN_X, y: SHOP_LOSBRUNNEN_Y, type: 'losbrunnen' }],
+    metadata: {
+      floorTags: ['test'],
+      shape: '1x1',
+      doors: { north: false, east: false, south: false, west: false },
+      difficultyTier: 1,
+      weight: 1,
+      specialRole: 'shop',
     },
   };
 }
@@ -318,6 +360,7 @@ describe('Der Losbrunnen — rolls and cost (#218)', () => {
   it('the reroll cost increases each time, by tuning.machine.costIncrement', () => {
     const sim = simWithDeadBoss([baseItem('a')]);
     sim.tuning.machine.breakChance = 0;
+    sim.tuning.machine.breakChanceIncrement = 0;
     sim.addBiermarken(50);
     sim.pickUpItem('a');
     standAtMachine(sim);
@@ -433,5 +476,205 @@ describe('Der Losbrunnen — persists across a room revisit (#218)', () => {
     sim.loadRoom(bossRoom(), 1); // same id as the original boss room -> restores its snapshot
     expect(sim.activeMachine?.itemIndex).toBe(itemBefore);
     expect(sim.activeMachine?.rolls).toBe(rollsBefore);
+  });
+});
+
+describe('Der Losbrunnen — a shop is the machine’s second home (#238)', () => {
+  it('spawns immediately in a shop, with no boss fight to wait for', () => {
+    const sim = new GameSim({
+      seed: SEED_SPAWNS_MACHINE,
+      roomTemplate: shopRoom(),
+      floor: 1,
+      population: 'empty',
+      items: [baseItem('a')],
+    });
+    expect(sim.activeMachine).not.toBeNull();
+    expect(sim.activeMachine?.itemIndex).toBe(-1);
+    expect(sim.activeMachine?.broken).toBe(false);
+  });
+
+  it('never spawns in a shop on a floor that rolled against it', () => {
+    const sim = new GameSim({
+      seed: SEED_NO_MACHINE,
+      roomTemplate: shopRoom(),
+      floor: 1,
+      population: 'empty',
+      items: [baseItem('a')],
+    });
+    expect(sim.activeMachine).toBeNull();
+  });
+
+  it("a shop visited first claims the floor's one Losbrunnen, so the boss room gets none", () => {
+    const sim = new GameSim({
+      seed: SEED_SPAWNS_MACHINE,
+      roomTemplate: shopRoom(),
+      floor: 1,
+      population: 'empty',
+      items: [baseItem('a')],
+    });
+    expect(sim.activeMachine).not.toBeNull();
+
+    sim.loadRoom(bossRoom(), 1);
+    killBoss(sim);
+    expect(sim.activeMachine).toBeNull();
+  });
+
+  it('a boss room reached first claims it, so a shop visited afterward gets none', () => {
+    const sim = simWithDeadBoss([baseItem('a')]);
+    expect(sim.activeMachine).not.toBeNull();
+
+    sim.loadRoom(shopRoom(), 1);
+    expect(sim.activeMachine).toBeNull();
+  });
+});
+
+describe('Der Losbrunnen — break risk climbs and is shown before the pull (#238)', () => {
+  it('machinePreview.breakChance is the base chance on a fresh machine', () => {
+    const sim = simWithDeadBoss([baseItem('a')]);
+    sim.tuning.machine.breakChance = 0.2;
+    sim.addBiermarken(50);
+    sim.pickUpItem('a');
+    standAtMachine(sim);
+
+    sim.step(pressUse()); // opens the picker, nothing rolled yet
+    expect(sim.machinePreview?.breakChance).toBeCloseTo(0.2);
+  });
+
+  it('breakChance climbs by breakChanceIncrement for every roll already made', () => {
+    const sim = simWithDeadBoss([baseItem('a')]);
+    sim.tuning.machine.breakChance = 0;
+    sim.tuning.machine.breakChanceIncrement = 0.1;
+    sim.addBiermarken(50);
+    sim.pickUpItem('a');
+    standAtMachine(sim);
+
+    // A fresh machine's first roll is guaranteed safe (0 rolls made yet,
+    // breakChance still 0), so this stays deterministic without touching RNG.
+    sim.step(pressUse());
+    sim.step(IDLE);
+    sim.step(pressUse());
+    expect(sim.activeMachine?.broken).toBe(false);
+    expect(sim.activeMachine?.rolls).toBe(1);
+    expect(sim.machinePreview?.breakChance).toBeCloseTo(0.1);
+  });
+
+  it('is invisible (0) on a machine with nothing to roll', () => {
+    const sim = simWithDeadBoss([baseItem('a', { hooks: {} })]);
+    sim.addBiermarken(10);
+    sim.pickUpItem('a');
+    standAtMachine(sim);
+    expect(sim.machinePreview?.breakChance).toBe(0);
+  });
+});
+
+describe('Der Losbrunnen — active items can reroll too (#238)', () => {
+  function feed(sim: GameSim): void {
+    sim.step(pressUse());
+    sim.step(IDLE);
+    sim.step(pressUse());
+  }
+
+  it('a pure active item (no modifyStats) is eligible and reachable through the picker', () => {
+    const sim = simWithDeadBoss([activeItem('boiler', 300)]);
+    sim.addBiermarken(10);
+    sim.pickUpItem('boiler');
+    standAtMachine(sim);
+
+    expect(sim.machinePreview?.state).toBe('unfed');
+    sim.step(pressUse());
+    expect(sim.machinePreview?.pickerOpen).toBe(true);
+    expect(sim.machinePreview?.itemName).toBe('boiler');
+  });
+
+  it('feeding a pure active item rolls its cooldown, changing effectiveMaxCharge', () => {
+    const sim = simWithDeadBoss([activeItem('boiler', 300)]);
+    sim.tuning.machine.breakChance = 0;
+    sim.addBiermarken(10);
+    sim.pickUpItem('boiler');
+    standAtMachine(sim);
+
+    const item = sim.items.get('boiler');
+    expect(sim.effectiveMaxCharge(item)).toBe(300);
+
+    feed(sim);
+
+    // Only one target exists for a pure active item (`cooldown`), and every
+    // tier's percent is non-zero, so this is deterministic regardless of
+    // which tier the roll happened to land on.
+    expect(sim.effectiveMaxCharge(item)).not.toBe(300);
+    expect(sim.machinePreview?.lastRollSummary).toContain('cooldown');
+  });
+
+  it('a rolled cooldown is read by chargeActiveItem/useActiveItem, not just the authored number', () => {
+    const sim = simWithDeadBoss([activeItem('boiler', 100)]);
+    sim.tuning.machine.breakChance = 0;
+    sim.addBiermarken(10);
+    sim.pickUpItem('boiler');
+    standAtMachine(sim);
+    feed(sim);
+
+    const item = sim.items.get('boiler');
+    const rolledMax = sim.effectiveMaxCharge(item);
+    expect(rolledMax).not.toBe(100);
+
+    // One tick short of the *rolled*, not the authored, max: not ready yet.
+    sim.chargeActiveItem('boiler', rolledMax - 1);
+    expect(sim.itemState('boiler').charge).toBe(rolledMax - 1);
+    expect(sim.useActiveItem('boiler')).toBe(false);
+
+    // The last tick brings it to the rolled max, and only then is it usable.
+    sim.chargeActiveItem('boiler', 1);
+    expect(sim.itemState('boiler').charge).toBe(rolledMax);
+    expect(sim.useActiveItem('boiler')).toBe(true);
+  });
+
+  it('losing the last copy of the active item clears its rolled cooldown', () => {
+    const sim = simWithDeadBoss([activeItem('boiler', 300)]);
+    sim.tuning.machine.breakChance = 0;
+    sim.addBiermarken(10);
+    sim.pickUpItem('boiler');
+    standAtMachine(sim);
+    feed(sim);
+
+    const item = sim.items.get('boiler');
+    expect(sim.effectiveMaxCharge(item)).not.toBe(300);
+
+    sim.removeItem('boiler');
+    expect(sim.effectiveMaxCharge(item)).toBe(300);
+  });
+});
+
+describe('Der Losbrunnen — machineChoices lists every eligible item for the real picker menu (#238)', () => {
+  it('is null before the picker is opened', () => {
+    const sim = simWithDeadBoss([baseItem('a')]);
+    sim.addBiermarken(10);
+    sim.pickUpItem('a');
+    standAtMachine(sim);
+    expect(sim.machineChoices).toBeNull();
+  });
+
+  it('lists every eligible held item once the picker opens, including a pure active one', () => {
+    const sim = simWithDeadBoss([baseItem('a'), activeItem('boiler', 300)]);
+    sim.addBiermarken(10);
+    sim.pickUpItem('a');
+    sim.pickUpItem('boiler');
+    standAtMachine(sim);
+
+    sim.step(pressUse());
+    const choices = sim.machineChoices;
+    expect(choices).not.toBeNull();
+    expect(choices?.map((choice) => choice.id).sort()).toEqual(['a', 'boiler']);
+    expect(choices?.filter((choice) => choice.selected)).toHaveLength(1);
+  });
+
+  it('is null again once the machine is fed — nothing left to choose', () => {
+    const sim = simWithDeadBoss([baseItem('a')]);
+    sim.addBiermarken(10);
+    sim.pickUpItem('a');
+    standAtMachine(sim);
+    sim.step(pressUse());
+    sim.step(IDLE);
+    sim.step(pressUse());
+    expect(sim.machineChoices).toBeNull();
   });
 });

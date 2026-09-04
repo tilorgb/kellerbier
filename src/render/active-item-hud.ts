@@ -90,7 +90,9 @@ export class ActiveItemHud {
     this.view.visible = true;
 
     const item = sim.items.get(id);
-    const maxCharge = item.active?.maxCharge ?? 1;
+    // #238: a Losbrunnen `cooldown` roll changes how full this bar has to
+    // get, not just a number nothing reads.
+    const maxCharge = sim.effectiveMaxCharge(item);
     const charge = Math.max(0, sim.itemState(id).charge);
     const ratio = Math.min(1, charge / maxCharge);
     // #32: a `rausch`/`sober` active item outside its own tier cannot fire —

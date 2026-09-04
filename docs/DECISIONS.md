@@ -3292,3 +3292,121 @@ move to. The next screen that needs a *new* top-level state (a shop, a character
 extends `Screen` in `screen-flow.ts` rather than adding another boolean to `main.ts`; a state that
 is really a sub-beat of an existing screen (the way game-over/victory/results are all `'run'`)
 should stay a flag inside that screen's own handling instead.
+
+## 68. Der Losbrunnen gets a second home in the shop, a near-certain spawn, and a break risk the player can see coming
+
+**Decided:** M8, #238, a tuning-and-placement follow-up on #218/`docs/DECISIONS.md` #64. A
+two-floor run only ever saw the Losbrunnen a quarter of the time (`spawnChance: 0.5`, rolled once
+per floor), and the one machine that did appear sat in an already-cleared boss room — a spot with
+no combat left to spend a build on and no guarantee the player still had Biermarken after the
+fight. #238's acceptance bar was explicit: a two-floor run should reliably contain one, reachable
+at a moment the player has both money and a reason to care, with a break chance that is a risk
+taken knowingly rather than a surprise.
+
+**`spawnChance` moved from 0.5 to 0.85, the cheapest lever and the issue's own "minimum."** At two
+floors that is a >97% chance of at least one Losbrunnen in the run (missing on *both* floors is
+now `0.15²`), while still leaving room for the rare floor that gets none — a coin flip becoming a
+near-certainty, not a guarantee, which keeps `random.items.chance` doing real work.
+
+**The shop is now the machine's second home, exactly as the issue proposed — "not its own room on
+the floor," the same instruction #64 already had to satisfy for the original boss-room placement.**
+A new `losbrunnen` `decorativeProps` type (a free-form `string` already, per
+`RoomDecorativeProp.type` — no schema change needed) is authored into both floor-1 shop templates
+(`cellar-shop.json`, `cellar-shop-vorrat.json`), offset clear of the shop's own goods. Unlike the
+boss room's reward, a shop's stock is never held back for a fight, so a `losbrunnen` prop spawns
+`machineRuntime` the instant the shop loads — no `pendingBossLosbrunnen`-style hold-until-clear
+needed there. `GameSim.losbrunnenClaimedThisFloor`, a new floor-scoped flag alongside
+`floorHasLosbrunnen`, is what keeps the invariant "at most one machine per floor" true now that two
+kinds of room can host it: whichever of a floor's shop or boss room the player actually reaches
+first claims it (setting the flag), and the other room's own spawn branch checks the flag before
+doing anything. This is genuinely order-independent — a shop visited before the boss room gets it,
+a boss room reached first (or a floor with no shop at all, same as every floor 2+ template today)
+falls back to exactly #64's original behaviour, and nothing needed to know the floor's layout in
+advance to arrange that.
+
+**`breakChance` is now visible and escalating instead of a flat, hidden 15% forever.** A new
+`MachineTuning.breakChanceIncrement` (0.05 default) is added to `breakChance` for every roll
+already made (`GameSim.machineBreakChance`, read with the same "count of rolls so far" the cost
+formula already uses, i.e. before `rolls` increments) — the number climbs the more a player pushes
+their luck. `machinePreview` gained a `breakChance` field, surfaced in `machineHudLabel`'s cost
+clause on every state that is actually offering a roll (`Losbrunnen — feed Kraftbier? 1
+Biermarken, 15% to break`), so the player always sees the price of the pull they are about to make.
+The issue's other framing of this same idea — "make the break a visible escalating risk the player
+is choosing to take... more in keeping with pillar 3 ['the player should be able to talk themselves
+into a bad decision'] than a flat hidden roll" — is what this reads as directly: nothing is
+concealed, and pulling again is a legible bet each time.
+
+**Not done this pass:** the issue's own follow-up comment (a real pause-and-choose menu, mixing the
+Diablo reroll dialog with Vampire Survivors' reward screen, both passive and active items
+rerollable) is a materially bigger UI surface than this pass's tuning-and-placement scope and is
+left as real follow-up work, not a gap this decision papers over — the existing "browse with move,
+confirm with use" idiom (#64) is unchanged. Rerolling before the boss fight rather than after was
+the issue's most speculative option ("consider whether") and is superseded by the shop placement
+above, which reaches the same "a machine met while still thinking about the build" goal without
+needing the boss room's reward-pedestal anchor to move.
+
+## 69. Der Losbrunnen's picker becomes a real card menu, and active items can reroll too
+
+**Decided:** M8, #238's own follow-up comment from the issue's author, implemented in the same
+pass as #68: "the machine use should open a real menu where the user can choose the item... like
+the reroll machine in Diablo, maybe a little mixed with the reward dialog in Vampire Survivors...
+Also we want passive AND active items to be able to reroll."
+
+**The picker is now a real screen, built entirely from the existing `UiKit` — no new pixel art, no
+new input binding.** `render/machine-picker.ts`'s `MachinePickerScreen` replaces the old
+single-line `machinePrompt` text for the two states that actually offer a roll: `'unfed'` with its
+picker open (choosing which item to feed) and `'fed'` (confirming a reroll). Both draw through the
+same shape — a row of `kit.buttonSprite` cards (`'selected'` state doing double duty as "this is
+the one you'd feed"), a `FocusRing` tracking the current one, the selected card's full description
+on its own wide line below (cards hold only a name; German item descriptions run long —
+Böllerschmeißer's is a full sentence — and wrapping that inside a small fixed-height card risked
+overflow), and a cost/break-chance/hint line under that. `'empty'`/`'broken'`/a fresh `'unfed'`
+machine before its first `use` keep the old plain `machinePrompt` line — there is nothing to choose
+in any of those, so a full-screen card menu would be theatre over an invitation or an apology.
+Input is unchanged from #64: `use` opens it, a move-axis tap cycles the selection
+(`cycleMachinePreviewFromAxis`), `use` again confirms — the screen only turns
+`GameSim.machineChoices`/`machinePreview` into pixels every frame, the same "screen reads state,
+`main.ts` owns the words and the input" split every other HUD piece here already keeps.
+
+**"Game will pause during this" is honoured as a presentation guarantee, not a `loop.paused` engine
+freeze.** `RunResultsScreen` hard-pauses because it opens *between* runs; the Losbrunnen's picker
+opens *mid-run, mid-replay*, and a replay is a recorded `InputFrame` per tick — stopping
+`sim.step()` outright would mean any menu interaction has to happen through a side channel outside
+that log, which a replay has no way to reproduce. So ticks keep flowing while the picker is open,
+exactly as #64's original text-prompt version already did; what changed is only the presentation,
+via a large dimmed modal that reads as "the world stopped for this" without the sim actually
+stopping. This is provably safe rather than merely convenient: `stepPedestal`'s priority chain
+(`docs/DECISIONS.md`'s own #64 entry) is the only thing standing between a boss room's cleared
+enemies and its reward, and a shop's own enemy — `content/enemies/shopkeeper.ts`'s `Wirt` — has
+`contactDamage: 0` and starts `peaceful`, only ever firing back if the player shot it first. Every
+room the machine can appear in is threat-free at the moment it is interactable, so a functional
+freeze buys nothing a shallow one does not already give the player, and the alternative (gating
+large parts of `GameSim.step`'s carefully, comment-explained ordering behind a new conditional) was
+a real risk for zero real benefit. If a future room ever puts the machine somewhere genuinely
+unsafe, the freeze that would actually need adding is a narrow one — skip `stepEnemies` specifically
+while the picker is open — not `loop.paused`.
+
+**Active items reroll through a new `cooldown` target, parallel to a stat's `modifyStats` entry.**
+`sim/item/roll.ts` gains `MachineRollTarget` (`{ kind: 'stat', modifier }` or `{ kind: 'cooldown' }`)
+and `machineRollTargets`, which `itemEligibleForMachine` is now defined in terms of: a `modifyStats`
+entry per current output, plus one more `cooldown` target whenever `item.active !== undefined` —
+offered unconditionally, unlike a state-gated `modifyStats` entry, since a cooldown is always a real
+number to nudge regardless of current charge. `rollItemStatModifiers` picks uniformly among
+whatever is on offer (a hybrid item like Enzian can have both); a `cooldown` hit nudges
+`ActiveItemDefinition.maxCharge` by the tier's usual percent, *shrinking* it on a favourable roll —
+a shorter cooldown being the active-item equivalent of a bigger stat. The result is stored in
+`GameSim`'s new `activeItemCooldownFactor` map (item id → factor), read through a new
+`effectiveMaxCharge(item)` method everywhere `active.maxCharge` used to be read directly
+(`chargeActiveItem`, `useActiveItem`, `ActiveItemHud`'s bar fill) — the same "replaces, never
+composes with, the previous roll" promise `itemRollSourceKey`'s stat source already keeps, and
+cleared on `removeItem`'s last-copy-loss branch for the same "exactly the prior state" reason.
+`maxCharge` was the only choice available without inventing new authored data: an active item's
+other numbers (a Böllerschmeißer's fuse length, a Kirchturmuhr's freeze radius) are plain
+module-level constants closed over by its hook functions, invisible to anything outside the closure
+— `active.maxCharge` is the one active-item number that already lives on the definition itself.
+
+**Constrains:** an item whose cooldown is rerolled and who then loses its `active` field would have
+nowhere for the stored factor to mean anything — not reachable today (no item's shape changes at
+runtime) but worth knowing if that ever becomes possible. A future item wanting a *different*
+numeric trait reroll-able (fuse length, blast radius) would need that trait promoted from a hook
+closure's local constant onto `ActiveItemDefinition` first, the same way `maxCharge` already is.
