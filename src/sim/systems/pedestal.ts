@@ -29,6 +29,16 @@ export function stepPedestal(sim: GameSim, input: Readonly<InputFrame>): void {
     return;
   }
 
+  // A roll actually in flight (rolling or choosing among results) captures
+  // `use` outright — a modal moment nothing existed to interrupt before this
+  // redesign, so there is no prior priority-chain behaviour to preserve
+  // here. Plain item-select stays inside the ordinary chain below exactly as
+  // before.
+  if (sim.isMachineRollActive) {
+    sim.useMachine();
+    return;
+  }
+
   const pedestal = sim.nearestAvailablePedestal();
   if (pedestal >= 0) {
     const taken = sim.activePedestals[pedestal];

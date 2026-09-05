@@ -1,4 +1,5 @@
 import { PromilleTier, type PromilleTierId } from '../sim/game/promille.js';
+import type { MachineRollTier } from '../sim/item/roll.js';
 
 /**
  * Every colour `render/` draws with, named by what it means rather than left
@@ -288,6 +289,22 @@ export const HUD_PALETTE = {
   pedestalText: 0xffffff,
   shopPreviewAffordable: 0xffffff,
   shopPreviewUnaffordable: 0x8a8a8a,
+
+  /**
+   * One colour per Losbrunnen roll tier (the picker redesign parked in
+   * `docs/DECISIONS.md` #69) — decoration on a results card whose own text
+   * already spells the tier's name out, the same "colour is never the only
+   * signal" rule `promilleTier`'s own comment states.
+   */
+  machineRollTier: {
+    unlucky: 0xd9453f,
+    common: 0xc8c8c8,
+    uncommon: 0x5fce6a,
+    rare: 0x5a9ff2,
+    legendary: 0xf2ac3a,
+  } satisfies Readonly<Record<MachineRollTier, number>>,
+  /** The "unlucky" result card's badge — a warning red pill behind white text. */
+  machineRollUnluckyBadge: 0xd9453f,
 } as const;
 
 // ---------------------------------------------------------------------------

@@ -615,16 +615,33 @@ function machinePickerView(
             selected: true,
           },
         ];
+  const rollDisplay = sim.machineRollDisplay;
+  const phase: MachinePickerView['phase'] =
+    rollDisplay === null ? 'select' : rollDisplay.phase === 'rolling' ? 'rolling' : 'results';
+  const rollProgress =
+    rollDisplay !== null && rollDisplay.phase === 'rolling' ? rollDisplay.progress : 0;
+  const results =
+    rollDisplay !== null && rollDisplay.phase === 'choosing' ? rollDisplay.candidates : [];
+
   const hint =
-    preview.state === 'unfed'
-      ? preview.affordable
-        ? '[move] browse   [use] feed'
-        : 'not enough Biermarken'
-      : preview.affordable
-        ? '[use] reroll'
-        : 'not enough Biermarken';
+    phase === 'rolling'
+      ? '…'
+      : phase === 'results'
+        ? results.length > 1
+          ? '[move] choose   [use] confirm'
+          : '[use] confirm'
+        : preview.state === 'unfed'
+          ? preview.affordable
+            ? '[move] browse   [use] feed'
+            : 'not enough Biermarken'
+          : preview.affordable
+            ? '[use] reroll'
+            : 'not enough Biermarken';
   return {
     cards,
+    phase,
+    rollProgress,
+    results,
     cost: preview.cost,
     breakChance: preview.breakChance,
     affordable: preview.affordable,
@@ -987,6 +1004,8 @@ async function boot(): Promise<void> {
   const machinePicker = new MachinePickerScreen(kit);
   /** Serialized last-drawn `MachinePickerView`, so a frame with nothing new doesn't rebuild the whole screen. */
   let machinePickerViewCache: string | null = null;
+  /** The last-drawn view's own `phase`, so confirming a result (`'results'` → `'select'` while still open) gets its own sfx cue rather than reusing `ui-open`/`ui-close`. */
+  let machinePickerPhaseCache: MachinePickerView['phase'] | null = null;
 
   /**
    * A pedestal's name plate "on approach" (#28) — the item's name only (the
@@ -1894,16 +1913,24 @@ async function boot(): Promise<void> {
         if (serialized !== machinePickerViewCache) {
           machinePickerViewCache = serialized;
           if (machinePicker.visible) {
+            // Confirming a result (`'results'` → `'select'`, still open —
+            // a break instead closes the whole screen, handled below) gets
+            // its own cue rather than reusing `ui-open`.
+            if (machinePickerPhaseCache === 'results' && view.phase === 'select') {
+              playSfx('ui-confirm');
+            }
             machinePicker.update(view);
           } else {
             machinePicker.show(view);
             playSfx('ui-open');
           }
+          machinePickerPhaseCache = view.phase;
         }
       } else {
         if (machinePicker.visible) {
           machinePicker.hide();
           machinePickerViewCache = null;
+          machinePickerPhaseCache = null;
           playSfx('ui-close');
         }
         if (machine !== null) {

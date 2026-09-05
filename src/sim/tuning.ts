@@ -795,6 +795,15 @@ export interface MachineTuning {
   rareRollPercent: number;
   /** Radius (px) inside which the machine shows its prompt and accepts cycle/feed input — same shape as `ItemPoolTuning.interactRadius`. */
   interactRadius: number;
+  /**
+   * Ticks the picker spends in its "rolling" anticipation beat between a
+   * confirmed feed and its results actually showing — the UX redesign's
+   * "little animation for anticipation." Purely a presentation delay: the
+   * break check and the tier draws it leads into are resolved deterministically
+   * on the tick this reaches zero (`GameSim.advanceMachineRoll`), so a replay
+   * reproduces the same outcome regardless of this value.
+   */
+  rollAnimationTicks: number;
 }
 
 export interface SimTuning {
@@ -1168,6 +1177,7 @@ export const DEFAULT_MACHINE_TUNING: Readonly<MachineTuning> = {
   uncommonRollPercent: 0.18,
   rareRollPercent: 0.35,
   interactRadius: 28,
+  rollAnimationTicks: 36,
 };
 
 export function createTuning(): SimTuning {

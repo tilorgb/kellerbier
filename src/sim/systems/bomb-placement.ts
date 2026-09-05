@@ -21,7 +21,9 @@ const ROLL_DEADZONE = 0.05;
 export function stepBombPlacement(sim: GameSim, input: Readonly<InputFrame>): void {
   const bombBit = 1 << InputAction.Bomb;
   const pressed = (input.buttons & bombBit) !== 0 && (sim.previousButtons & bombBit) === 0;
-  if (!pressed || sim.bombs <= 0) {
+  // The Losbrunnen's dialog (#238's UX redesign) freezes the player for as
+  // long as it's open — same reasoning as `movement.ts`/`shooting.ts`.
+  if (!pressed || sim.bombs <= 0 || sim.isMachineDialogOpen) {
     return;
   }
 
