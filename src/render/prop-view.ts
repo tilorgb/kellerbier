@@ -1,5 +1,6 @@
 import { Container, Sprite, type Texture } from 'pixi.js';
 import { ROOM_TILE_UNITS } from '../content/rooms/definition.js';
+import { setFootY } from './depth.js';
 import { MAIBAUM_TOP_TILE, PROP_TILE_NAMES } from './floor-art.js';
 import { tileGridScale } from './room.js';
 
@@ -44,20 +45,32 @@ export function createPropView(
       warnOnce(`decorative prop "${prop.type}" maps to tile "${tileName}", which is not loaded`);
       continue;
     }
-    container.addChild(centred(texture, prop.x, prop.y));
+    // The prop's own foot line: the bottom of the cell it is authored in.
+    // Everything the prop has above that is height a player walks behind.
+    const footY = prop.y + ROOM_TILE_UNITS / 2;
+    container.addChild(standing(texture, prop.x, footY, footY));
     // A maypole one tile tall is a stick. `maibaum` is the one prop authored
-    // as a two-tile stack, with its crown drawn directly above its base.
+    // as a two-tile stack, with its crown drawn directly above its base — and
+    // the crown takes the *base's* foot line, not its own, so the two halves
+    // of one object always sort together (#73).
     if (prop.type === 'maibaum') {
       const top = tileTextures[MAIBAUM_TOP_TILE];
       if (top !== undefined) {
-        container.addChild(centred(top, prop.x, prop.y - ROOM_TILE_UNITS));
+        container.addChild(standing(top, prop.x, footY - ROOM_TILE_UNITS, footY));
       }
     }
   }
   return container;
 }
 
-function centred(texture: Texture, x: number, y: number): Sprite {
+/**
+ * One prop tile, standing on `bottomY` and sorted by `footY`.
+ *
+ * The two are the same for a one-tile prop and differ for the upper half of a
+ * stacked one, which has to sort with the half it sits on rather than by its
+ * own (higher, therefore further away) edge.
+ */
+function standing(texture: Texture, x: number, bottomY: number, footY: number): Sprite {
   const sprite = new Sprite(texture);
   // A decorative prop is tile-category art (`docs/DECISIONS.md` #48), so it
   // takes the same `tileGridScale` every other tile-category renderer does —
@@ -66,8 +79,13 @@ function centred(texture: Texture, x: number, y: number): Sprite {
   // correct only because every prop happened to be 16px; redrawing one at 32
   // doubled it on screen with nothing here to notice.
   sprite.scale.set(tileGridScale(texture));
-  sprite.anchor.set(0.5);
-  sprite.position.set(x, y);
+  // Bottom-anchored on the same convention every body takes since #73, so a
+  // well or a market stall redrawn taller than its cell overhangs upward and
+  // is something to stand behind rather than something that grew downward
+  // through the floor.
+  sprite.anchor.set(0.5, 1);
+  sprite.position.set(x, bottomY);
+  setFootY(sprite, footY);
   return sprite;
 }
 

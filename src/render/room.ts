@@ -2,6 +2,7 @@ import { Container, Graphics, Sprite, TilingSprite, type Texture } from 'pixi.js
 import { ROOM_TILE_UNITS } from '../content/rooms/definition.js';
 import { BLOCK_STRIDE, DOOR_SPAN, roomFrameSize, type RoomGeometry } from '../sim/room/geometry.js';
 import { doorCentre, type CompiledDoor } from '../sim/room/template.js';
+import { setFootY } from './depth.js';
 import type { RoomTileArt } from './floor-art.js';
 import { ROOM_HAZARD_PALETTE, roomThemeForFloor } from './palette.js';
 
@@ -95,6 +96,14 @@ function tileRect(
  * different boulder each cell reads as a pile of rock. The rect is still not
  * required to land on cell boundaries — the last partial cell runs under
  * whatever is drawn over it, same as `tileRect`.
+ *
+ * Each cell is **bottom-anchored on its own lower edge** and given that edge
+ * as its foot line (`docs/DECISIONS.md` #73). Two things fall out of it. A
+ * block tile taller than it is wide — every one of them since #73 — hangs its
+ * extra rows *up* into the cell above, which is the overhang a player stands
+ * behind; and because the depth layer sorts on the foot line, the near row of
+ * a two-cell clump draws over the far row's base, so a pile reads as a pile
+ * rather than as a grid of stamps.
  */
 function tileRectVariants(
   container: Container,
@@ -117,10 +126,74 @@ function tileRectVariants(
       }
       const tile = new Sprite(texture);
       tile.scale.set(tileGridScale(texture));
-      tile.position.set(x, y);
+      tile.anchor.set(0, 1);
+      const footY = y + ROOM_TILE_UNITS;
+      tile.position.set(x, footY);
+      setFootY(tile, footY);
       container.addChild(tile);
     }
   }
+}
+
+/**
+ * The room's in-room obstacles, as their own depth-sorted layer.
+ *
+ * Split out of `createRoomView` by #73. A rock used to be part of the static
+ * room drawing, under every body in the game, so walking behind one was not
+ * something the renderer could express — the player was simply always in
+ * front. Now each obstacle cell is a child of the one sorted layer
+ * (`render/depth.ts`), interleaved with the bodies by where it stands, and the
+ * room drawing keeps only what is genuinely flat on the floor: the tiles, the
+ * lip course, the puddles, the trellises.
+ *
+ * Built once per room load, like `createRoomView`, and never touched per
+ * frame — an obstacle does not move, so its `zIndex` is written once and the
+ * sort ignores it thereafter.
+ *
+ * A shape's dropped cells (`L`'s corner from #100/#20, `T`'s four from #107)
+ * are real `blocks` entries too, for collision, but they are room *boundary*
+ * rather than furniture — `createRoomView` fills them with wall — so they are
+ * skipped here rather than drawn as boulders the size of a sub-room.
+ */
+export function createBlockView(
+  room: RoomGeometry,
+  floorNumber = 0,
+  tileArt?: RoomTileArt,
+): Container {
+  const container = new Container();
+  const palette = roomThemeForFloor(floorNumber);
+  for (let block = 0; block < room.blockCount; block++) {
+    const base = block * BLOCK_STRIDE;
+    const minX = room.blocks[base] ?? 0;
+    const minY = room.blocks[base + 1] ?? 0;
+    const maxX = room.blocks[base + 2] ?? 0;
+    const maxY = room.blocks[base + 3] ?? 0;
+    if (isVoidRect(room, minX, minY, maxX, maxY)) {
+      continue;
+    }
+    if (tileArt !== undefined) {
+      // A boulder per cell, no keyline. The 1px `blockEdge` stroke below is
+      // what made the old obstacle read as a square hatch (and, on floor 2,
+      // was literally the "blue border": `palette.blockEdge` is that floor's
+      // sky blue). With authored art its rounded silhouette is the edge, and a
+      // hard rectangle drawn over it just fights that (#60).
+      tileRectVariants(container, tileArt.blockVariants, minX, minY, maxX, maxY);
+      continue;
+    }
+    // The flat-colour fallback for a floor with no tileset (#39-#43, parked in
+    // M10). It covers its cell exactly and overhangs nothing, so nothing can
+    // be stood behind it — which is the honest rendering of a floor whose
+    // obstacle art has not been drawn yet, and it still sorts, so a body south
+    // of one is at least drawn in front of it.
+    const flat = new Graphics()
+      .rect(minX, minY, maxX - minX, maxY - minY)
+      .fill(palette.block)
+      .rect(minX, minY, maxX - minX, maxY - minY)
+      .stroke({ width: 1, color: palette.blockEdge, alignment: 0 });
+    setFootY(flat, maxY);
+    container.addChild(flat);
+  }
+  return container;
 }
 
 /**
@@ -324,36 +397,9 @@ export function createRoomView(
   }
   container.addChild(trellises);
 
-  // A shape's dropped cells (`L`'s one corner from #100/#20, `T`'s four from
-  // #107) are real `blocks` entries too (for collision), so they are skipped
-  // here and drawn as boundary below rather than as pillars the size of a
-  // sub-room sitting in the middle of the room.
-  const blocks = new Graphics();
-  for (let block = 0; block < room.blockCount; block++) {
-    const base = block * BLOCK_STRIDE;
-    const minX = room.blocks[base] ?? 0;
-    const minY = room.blocks[base + 1] ?? 0;
-    const maxX = room.blocks[base + 2] ?? 0;
-    const maxY = room.blocks[base + 3] ?? 0;
-    if (isVoidRect(room, minX, minY, maxX, maxY)) {
-      continue;
-    }
-    if (tileArt !== undefined) {
-      // A boulder per cell, no keyline. The 1px `blockEdge` stroke below is
-      // what made the old obstacle read as a square hatch (and, on floor 2,
-      // was literally the "blue border" — `palette.blockEdge` is that floor's
-      // sky blue): with authored art its rounded silhouette is the edge, and
-      // a hard rectangle drawn over it just fights that.
-      tileRectVariants(container, tileArt.blockVariants, minX, minY, maxX, maxY);
-    } else {
-      blocks.rect(minX, minY, maxX - minX, maxY - minY).fill(palette.block);
-      blocks
-        .rect(minX, minY, maxX - minX, maxY - minY)
-        .stroke({ width: 1, color: palette.blockEdge, alignment: 0 });
-    }
-  }
-  container.addChild(blocks);
-
+  // The obstacles themselves are `createBlockView`'s (#73) — they stand in the
+  // room rather than lying on it, so they belong in the depth-sorted layer
+  // with the bodies. What is left here is the floor and its boundary.
   for (const voidRect of room.voidRects) {
     const outline = new Graphics().rect(
       voidRect.minX,

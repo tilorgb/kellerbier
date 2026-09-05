@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GameSim, PLAYER_RADIUS } from '../../src/sim/game/sim.js';
+import { GameSim, PLAYER_FOOTPRINT } from '../../src/sim/game/sim.js';
 import {
   type InputFrame,
   InputAction,
@@ -151,7 +151,7 @@ describe('König Ludwig — flight and the purse (#47)', () => {
     for (let tick = 0; tick < 120; tick++) {
       sim.step(held(1, 0));
     }
-    expect(playerX(sim)).toBeLessThanOrEqual(room.maxX - PLAYER_RADIUS + 0.001);
+    expect(playerX(sim)).toBeLessThanOrEqual(room.maxX - PLAYER_FOOTPRINT + 0.001);
   });
 
   it('spends a Biermarke on the drum, and loses the crown’s damage when the purse empties', () => {

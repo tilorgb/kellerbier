@@ -32,7 +32,42 @@ import { legalPixelColorsFor, shadeOf } from '../palette.mjs';
  */
 
 const W = 32;
-const H = 32;
+
+/**
+ * The collision cell, in authored pixels: a block rect is a whole number of
+ * `ROOM_TILE_UNITS` cells and a block tile is drawn at `tileGridScale`, so
+ * these 32 rows are exactly the 16 world units the simulation blocks.
+ */
+export const BLOCK_CELL = 32;
+const CELL = BLOCK_CELL;
+
+/**
+ * How far a block's silhouette overhangs the **top** of that cell.
+ *
+ * The perceived-height rule (`docs/DECISIONS.md` #73): a thing is drawn
+ * standing on its collision footprint, and whatever it has above that
+ * footprint is height the player reads but never collides with. For a rock
+ * that means the canvas grows upward — `CELL + BLOCK_LIP` tall, base on the
+ * cell floor — and a player walking up against its south face has their legs
+ * covered by the overhang while their head clears it, which is the whole
+ * Isaac read this exists to buy. Collision is untouched: the sim still blocks
+ * exactly the cell.
+ *
+ * 8 was picked in the sign-off round (`tools/art/block-specimens.mjs`) against
+ * 12 and 16, on a clump with Alois — 32 authored pixels tall, and a block tile
+ * is on the same 1:1 grid he is — standing against its north face. 8 covers
+ * him to the knee, which is enough to read as depth and little enough that a
+ * two-cell clump still reads as rock on a floor rather than as a wall; 12 took
+ * him to the waist and 16 to the chest, and at that point a room's cover
+ * starts hiding the thing the player is dodging.
+ */
+export const BLOCK_LIP = 8;
+
+// Set by `buildBlocks` before any frame is generated, so the whole module can
+// be re-run at a different overhang (the sign-off specimen sheet did exactly
+// that) without threading a size through every shape function.
+let LIP = BLOCK_LIP;
+let H = CELL + LIP;
 
 // ----------------------------------------------------------------- palettes
 // Every value below is `legalPixelColorsFor(bucket)` — base swatch or a
@@ -72,8 +107,14 @@ function canvas() {
     sh: Array.from({ length: H }, () => Array.from({ length: W }, () => false)),
   };
 }
-/** Marks a soft ellipse of cast shadow, offset down-right from the rock's footprint. */
+/**
+ * Marks a soft ellipse of cast shadow, offset down-right from the rock's
+ * footprint. Every shape below is authored in cell coordinates (a 32-row
+ * canvas), so the lip is added here rather than at each call site: a cast
+ * shadow lies on the *floor*, which the lip pushes down by its whole height.
+ */
 function castShadow(cv, cx, cy, rx, ry) {
+  cy += LIP;
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       const d = ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2;
@@ -127,7 +168,26 @@ function lumpyInside(x, y, cx, cy, rx, ry, seed) {
  * top-left light, a 1px darker rim, and its lowest rows dropped toward the
  * contact shade. `chunks` earlier in the list are overpainted by later ones.
  */
-function rock(cv, P, cx, cy, rx, ry, seed, { tone = 0, moss = false } = {}) {
+function rock(cv, P, cx, cy, rx, ry, seed, { tone = 0, moss = false, lift = 'stretch' } = {}) {
+  // Cell coordinates in, canvas coordinates out — see `castShadow`. How a
+  // chunk uses the lip is the one thing that differs between the two floors'
+  // blockers, so it is a mode rather than a constant:
+  //
+  // - `stretch` keeps the chunk's top where it was and pushes its base down
+  //   onto the cell floor, i.e. the boulder is simply taller. Right for a
+  //   single rounded rock, which is what floor 1's blockers are.
+  // - `stack` moves the whole chunk down by the lip without resizing it, for
+  //   a chunk that is one stone in a pile: floor 2's Lesesteinhaufen grows by
+  //   being piled higher (see `fieldStones`' cap stones), not by having its
+  //   individual stones stretched into ovals.
+  // - `none` is already in canvas coordinates — the cap stones themselves,
+  //   which are positioned against the top of the canvas.
+  if (lift === 'stretch') {
+    cy += LIP / 2;
+    ry += LIP / 2;
+  } else if (lift === 'stack') {
+    cy += LIP;
+  }
   const band = [P.d2, P.d, P.m, P.l, P.h];
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
@@ -180,12 +240,16 @@ function contact(cv, P) {
   }
 }
 
+/** Cracks are on the rock face, so they ride the same stretch its chunks do. */
 function crack(cv, P, pts) {
-  for (const [x, y] of pts) if (on(cv, x, y)) set(cv, x, y, P.deep);
+  for (const [x, y] of pts) {
+    const cy = y + LIP / 2;
+    if (on(cv, x, cy)) set(cv, x, cy, P.deep);
+  }
 }
 
 function finish(name, cv) {
-  return { name, width: W, height: H, px: cv.px, sh: cv.sh };
+  return { name, width: W, height: H, lip: LIP, px: cv.px, sh: cv.sh };
 }
 
 // =============================================================== FLOOR 1 — Der Keller
@@ -228,11 +292,15 @@ const CELLAR_BOULDERS = [
     ]);
     return finish('cellar-boulder-2', cv);
   },
-  // wide low slab
+  // wide, blocky slab — the flattest of the four, but still tall enough that
+  // its crown reaches into the overhang. A variant that stopped at the cell
+  // boundary would be the one rock on the floor a player cannot stand behind
+  // (`tests/art/blocks-authoring.test.ts` fails it), and "cover sometimes
+  // works" reads as a bug rather than as variety.
   (s) => {
     const cv = canvas();
     castShadow(cv, 20, 28, 15, 4);
-    rock(cv, CELLAR, 16, 21, 15, 11, s, { tone: -0.15 });
+    rock(cv, CELLAR, 16, 19, 15, 13, s, { tone: -0.15 });
     rock(cv, CELLAR, 10, 17, 8, 7, s + 1, { tone: 0.35 });
     rock(cv, CELLAR, 23, 18, 9, 8, s + 2, { tone: -0.35 });
     rim(cv, CELLAR);
@@ -269,18 +337,42 @@ const CELLAR_BOULDERS = [
 // Cleared field stones: a packed mound. Several stones, each shaded like a
 // small boulder, overlapping enough that the pile has no interior hole and
 // its silhouette fills the cell. Moss greens the crevices.
-function fieldStones(name, seed, stones) {
+function fieldStones(name, seed, stones, caps) {
   const cv = canvas();
   castShadow(cv, 20, 28, 15, 4);
+  // Cap stones first, so the authored front row overpaints them where the two
+  // meet: the pile's near stones read as being in front of the ones behind.
+  // They are placed against the top of the canvas and sized off the lip, which
+  // is what makes the pile grow *taller* as the overhang does — a pile is not
+  // a single rock, so stretching its stones (what `lift: 'stretch'` does for
+  // floor 1's boulders) would give it four ovals instead of more stones.
+  const placedCaps = caps.map((st) => [st[0], LIP * 0.5 + st[1], st[2], LIP * 0.5 + st[3], st[4]]);
+  if (LIP > 0) {
+    placedCaps.forEach((st, i) =>
+      rock(cv, RURAL, st[0], st[1], st[2], st[3], seed + 40 + i, {
+        tone: st[4] ?? 0,
+        moss: true,
+        lift: 'none',
+      }),
+    );
+  }
   stones.forEach((st, i) =>
-    rock(cv, RURAL, st[0], st[1], st[2], st[3], seed + i, { tone: st[4] ?? 0, moss: true }),
+    rock(cv, RURAL, st[0], st[1], st[2], st[3], seed + i, {
+      tone: st[4] ?? 0,
+      moss: true,
+      lift: 'stack',
+    }),
   );
   // seams where two stones butt together read darker
+  const seams = [
+    ...(LIP > 0 ? placedCaps : []),
+    ...stones.map((st) => [st[0], st[1] + LIP, st[2], st[3]]),
+  ];
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       if (!on(cv, x, y)) continue;
       let near = 0;
-      for (const st of stones) {
+      for (const st of seams) {
         const d = Math.hypot((x - st[0]) / st[2], (y - st[1]) / st[3]);
         if (d > 0.82 && d < 1.06) near++;
       }
@@ -291,45 +383,98 @@ function fieldStones(name, seed, stones) {
   contact(cv, RURAL);
   return finish(name, cv);
 }
+// `[cx, cy, rx, ry, tone]` per stone, in cell coordinates. The second list is
+// the pile's cap: `[cx, cyFromTop, rx, ryFromLip, tone]`, placed and sized off
+// the lip by `fieldStones` so a taller overhang is more stone rather than
+// stretched stone.
 const RURAL_STONES = [
   (s) =>
-    fieldStones('rural-fieldstone-1', s, [
-      [11, 20, 9, 8, 0.1],
-      [22, 19, 9, 8, -0.35],
-      [16, 12, 9, 8, 0.3],
-      [17, 25, 10, 6, -0.5],
-    ]),
+    fieldStones(
+      'rural-fieldstone-1',
+      s,
+      [
+        [11, 20, 9, 8, 0.1],
+        [22, 19, 9, 8, -0.35],
+        [16, 12, 9, 8, 0.3],
+        [17, 25, 10, 6, -0.5],
+      ],
+      [
+        [12, 7, 8, 5, 0.4],
+        [23, 9, 7, 4, 0.05],
+      ],
+    ),
   (s) =>
-    fieldStones('rural-fieldstone-2', s, [
-      [13, 21, 10, 9, 0.1],
-      [23, 14, 8, 7, 0.35],
-      [9, 13, 7, 6, 0.2],
-      [21, 25, 9, 6, -0.5],
-    ]),
+    fieldStones(
+      'rural-fieldstone-2',
+      s,
+      [
+        [13, 21, 10, 9, 0.1],
+        [23, 14, 8, 7, 0.35],
+        [9, 13, 7, 6, 0.2],
+        [21, 25, 9, 6, -0.5],
+      ],
+      [
+        [17, 6, 9, 5, 0.45],
+        [8, 10, 7, 4, 0.1],
+      ],
+    ),
   (s) =>
-    fieldStones('rural-fieldstone-3', s, [
-      [16, 20, 12, 10, 0],
-      [10, 14, 8, 7, 0.35],
-      [24, 17, 8, 8, -0.3],
-      [16, 27, 12, 5, -0.55],
-    ]),
+    fieldStones(
+      'rural-fieldstone-3',
+      s,
+      [
+        [16, 20, 12, 10, 0],
+        [10, 14, 8, 7, 0.35],
+        [24, 17, 8, 8, -0.3],
+        [16, 27, 12, 5, -0.55],
+      ],
+      [
+        [14, 8, 9, 5, 0.4],
+        [24, 7, 7, 4, 0.15],
+      ],
+    ),
   (s) =>
-    fieldStones('rural-fieldstone-4', s, [
-      [12, 19, 9, 8, 0.15],
-      [21, 21, 9, 8, -0.3],
-      [17, 13, 8, 8, 0.3],
-      [15, 26, 10, 6, -0.5],
-    ]),
+    fieldStones(
+      'rural-fieldstone-4',
+      s,
+      [
+        [12, 19, 9, 8, 0.15],
+        [21, 21, 9, 8, -0.3],
+        [17, 13, 8, 8, 0.3],
+        [15, 26, 10, 6, -0.5],
+      ],
+      [
+        [19, 7, 8, 5, 0.45],
+        [9, 9, 7, 4, 0.05],
+      ],
+    ),
 ];
 
 // ---------------------------------------------------------------------------
-/** `name -> frame` for every block tile, both floors. */
-export const BLOCKS = Object.fromEntries(
-  [
-    ...CELLAR_BOULDERS.map((make, i) => make(101 + i * 7)),
-    ...RURAL_STONES.map((make, i) => make(401 + i * 9)),
-  ].map((frame) => [frame.name, frame]),
-);
+/**
+ * `name -> frame` for every block tile, both floors, at an overhang of `lip`
+ * authored pixels above the collision cell.
+ *
+ * A function rather than a constant because the overhang is an art-direction
+ * number that had to be *looked at* before it was picked (`CLAUDE.md`'s
+ * sign-off ritual): `tools/art/block-specimens.mjs` calls this three times at
+ * three lips and composites the results onto real floor tiles with Alois
+ * standing behind them. The committed art is `BLOCKS`, one call at
+ * `BLOCK_LIP`.
+ */
+export function buildBlocks(lip = BLOCK_LIP) {
+  LIP = Math.max(0, Math.round(lip));
+  H = CELL + LIP;
+  return Object.fromEntries(
+    [
+      ...CELLAR_BOULDERS.map((make, i) => make(101 + i * 7)),
+      ...RURAL_STONES.map((make, i) => make(401 + i * 9)),
+    ].map((frame) => [frame.name, frame]),
+  );
+}
+
+/** `name -> frame` for every block tile, both floors, at the committed `BLOCK_LIP`. */
+export const BLOCKS = buildBlocks(BLOCK_LIP);
 
 export const BLOCK_BUCKETS = Object.fromEntries(
   Object.keys(BLOCKS).map((name) => [
@@ -353,12 +498,16 @@ export function assertOnPalette(bucket, frame) {
   }
 }
 
-/** One frame → 32×32 PNG bytes. Opaque `px`, else translucent cast shadow, else clear. */
+/**
+ * One frame → PNG bytes, at the frame's own size (32 wide, `CELL + lip` tall).
+ * Opaque `px`, else translucent cast shadow, else clear.
+ */
 export function encodeSingle(frame) {
-  const pixels = Buffer.alloc(W * H * 4);
-  for (let y = 0; y < H; y++) {
-    for (let x = 0; x < W; x++) {
-      const at = (y * W + x) * 4;
+  const { width, height } = frame;
+  const pixels = Buffer.alloc(width * height * 4);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const at = (y * width + x) * 4;
       const c = frame.px[y][x];
       if (c !== null) {
         pixels[at] = (c >> 16) & 0xff;
@@ -373,5 +522,5 @@ export function encodeSingle(frame) {
       }
     }
   }
-  return encodePng({ width: W, height: H, pixels });
+  return encodePng({ width, height, pixels });
 }

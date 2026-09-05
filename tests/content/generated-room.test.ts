@@ -16,7 +16,7 @@ import {
   validateRoomTemplate,
 } from '../../src/sim/room/template.js';
 import { Rng } from '../../src/sim/rng/rng.js';
-import { PLAYER_RADIUS } from '../../src/sim/game/sim.js';
+import { PLAYER_FOOTPRINT } from '../../src/sim/game/sim.js';
 
 /**
  * The POC procedural room generator (#random-rooms) has no authored content to
@@ -74,7 +74,7 @@ interface Point {
  */
 function reachableSet(geometry: RoomGeometry, sx: number, sy: number): Point[] {
   const visited: Point[] = [];
-  if (!geometry.isClear(sx, sy, PLAYER_RADIUS)) {
+  if (!geometry.isClear(sx, sy, PLAYER_FOOTPRINT)) {
     return visited;
   }
   const seen = new Set<string>([keyOf(sx, sy)]);
@@ -97,7 +97,7 @@ function reachableSet(geometry: RoomGeometry, sx: number, sy: number): Point[] {
         continue;
       }
       const k = keyOf(nx, ny);
-      if (seen.has(k) || !geometry.isClear(nx, ny, PLAYER_RADIUS)) {
+      if (seen.has(k) || !geometry.isClear(nx, ny, PLAYER_FOOTPRINT)) {
         continue;
       }
       seen.add(k);
@@ -116,13 +116,13 @@ function doorSpawnPoint(geometry: RoomGeometry, direction: DoorDirection): Point
   const centre = doorCentre(geometry, { direction, cellCol: 0, cellRow: 0 });
   switch (direction) {
     case 'north':
-      return { x: centre.x, y: geometry.minY + PLAYER_RADIUS + 1 };
+      return { x: centre.x, y: geometry.minY + PLAYER_FOOTPRINT + 1 };
     case 'south':
-      return { x: centre.x, y: geometry.maxY - PLAYER_RADIUS - 1 };
+      return { x: centre.x, y: geometry.maxY - PLAYER_FOOTPRINT - 1 };
     case 'west':
-      return { x: geometry.minX + PLAYER_RADIUS + 1, y: centre.y };
+      return { x: geometry.minX + PLAYER_FOOTPRINT + 1, y: centre.y };
     case 'east':
-      return { x: geometry.maxX - PLAYER_RADIUS - 1, y: centre.y };
+      return { x: geometry.maxX - PLAYER_FOOTPRINT - 1, y: centre.y };
   }
 }
 
@@ -176,7 +176,7 @@ function multiCellDoorsConnect(geometry: RoomGeometry, doors: readonly CompiledD
 function entryIsSafe(geometry: RoomGeometry, doors: readonly CompiledDoor[]): boolean {
   return doors.every((door) => {
     const spawn = doorSpawnPoint(geometry, door.direction);
-    if (!geometry.isClear(spawn.x, spawn.y, PLAYER_RADIUS)) {
+    if (!geometry.isClear(spawn.x, spawn.y, PLAYER_FOOTPRINT)) {
       return false;
     }
     const inner = doorInnerTileCentre(geometry, door.direction);

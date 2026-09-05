@@ -3597,3 +3597,122 @@ selected, mirroring the left pane's own ring exactly.
 result actually being applied; the anticipation bar is a plain linear fill, not a slot-machine-style
 spin — either is real follow-up work if the beat needs more flavour, not a gap this entry papers
 over.
+
+## 73. A body has two circles — a footprint it stands on and a hurtbox it is shot in — and everything that stands is drawn on one Y-sorted layer
+
+**Decided:** M8, from a direction note: *"comparing to Isaac there is one major difference which
+makes the game feel more immersive… almost all sprites have a certain perceived height. When Isaac
+moves to a stone block north of him we can see his head sticks out over the block. His hurtbox is
+also only his body, which is on the ground."* Two things had to change for that, and neither works
+without the other.
+
+### What was in the way
+
+**Nothing in the renderer could express "behind".** `render/view.ts` built one fixed stack — room,
+then props, then bodies, then the player — so a player was always in front of every rock and every
+piece of furniture in the room, and every enemy was always behind them. The game had exactly one
+walk-behind object, the arena Maibaum (#57), and it got there by having `view.ts` lift its
+container out of the world and re-insert it above or below the player **every frame**, off a `footY`
+getter written for that one prop. That is a decent trick used once and an untenable one used twice.
+
+**And there was no height to draw.** A body was one circle used for four jobs at once — walls,
+pushing, contact damage, and being shot — and #45 sized the art *to that circle* on purpose, with
+`tests/content/sprite-scale.test.ts` holding every silhouette to within 1.8x of it on its longest
+axis. A creature whose hitbox is its whole silhouette has no head to stick out over anything. #56
+had already hit this from the other side and had to except bosses from #45's centre anchor ("a
+sprite two to three times taller than its hitbox, centred, sinks half of itself through the floor")
+without generalising it.
+
+### The two circles
+
+`sim/collision/footprint.ts`, and a `hurtbox` component alongside `body`:
+
+- **The footprint** (`GameSim.body`) is the circle on the floor — movement, walls, pushing, contact
+  damage, pickup reach, melee reach. It is deliberately smaller than the drawing. The four enemy
+  size classes state their own (`ENEMY_PROFILES.footprint`: 3 / 5 / 7 / 18 against radii 4 / 7 / 10
+  / 22); anything else derives one at `FOOTPRINT_RATIO` 0.7.
+- **The hurtbox** (`GameSim.hurtbox`) is the circle a projectile has to cross, offset up the screen
+  from the footprint's centre. Its radius is **the radius the body always had**, so every balance
+  number in `tuning.ts` still applies to the thing it was tuned against.
+
+The offset is derived, not authored: a sprite stands on its footprint's south pole, so shrinking
+the footprint by `d` lifts the drawing by `d`, and the hurtbox is lifted by the same `d` so it keeps
+sitting on the body instead of sliding down to its feet. Rounded to a whole world unit, because it
+is a *position* and `render/resolution.ts`'s whole-number rule is about positions. A stored radius
+of zero means "no hurtbox of its own" and resolves to the footprint (`hurtboxRadiusOf`), so a
+pickup — whose radius is grab reach, a number the player feels — stays one circle, and so does
+anything a test builds by hand.
+
+**Shooting an enemy is meant to feel identical, and one body deliberately breaks that rule.** Alois's
+hurtbox is his *footprint* (`PLAYER_FOOTPRINT` 5, against a drawn radius of 7), so a shot over his
+hat is a miss. That is the half of the note about his own hurtbox, it is what makes a near miss read
+as skill rather than as the game being loose, and it makes him about a third harder to hit — a real
+difficulty change to expect in a playtest, not a side effect to discover.
+
+### One sorted layer
+
+`render/depth.ts` builds a single `sortableChildren` container keyed on each thing's **foot line**,
+`y + footprintRadius` — which is also where its sprite is bottom-anchored, so the two agree by
+construction and a body drawn in front of another is a body whose feet are further down the screen.
+Into it go the room's obstacles, its decorative furniture, every body `EntityView` draws, the
+player, and the Maibaum. #56's boss exception stopped being an exception and became the rule; the
+Maibaum's per-frame re-parenting is deleted.
+
+It is its own render group. Writing `zIndex` marks a render group's structure dirty and Pixi rebuilds
+that group's instruction set; the world container also holds the projectile layer, and rebuilding
+five thousand sprites that did not move because a body walked two pixels is a cost that would only
+show up in the exact fight it must not.
+
+Flat things stay below it and unsorted — floor, lip course, puddles, decals, ground shadows,
+telegraph shapes, corpses — and captions (pickup labels, shop prices) stay above it, because a price
+an enemy can walk in front of is a price nobody can read at the moment they are deciding to buy.
+
+**A pedestal and Der Losbrunnen stay out**, below the layer. Both are a plinth under a light beam,
+and a beam is a glow rather than a body: sorting the three sprites of one against the room would put
+a barrel between a pedestal and its own light. The player therefore still always draws in front of
+one, exactly as before.
+
+### Height for the rocks
+
+A body only reads as tall if something can cover it, and the roster's sprites are all about as tall
+as their colliders (Alois is 32 authored pixels over a 28-pixel collider), so shrinking a footprint
+buys four to six internal pixels of head clearance — real, but not the effect. The effect comes from
+the obstacles, and it needed art: `tools/art/authoring/blocks.mjs` now builds each block tile
+`BLOCK_CELL + BLOCK_LIP` tall (32 + **8**), bottom-anchored in its cell so the extra rows overhang
+the cell *above*. **Collision is untouched** — the simulation still blocks exactly the cell, and the
+overhang is height a player walks behind and is never stopped by.
+
+8 was picked in a sign-off round (`CLAUDE.md`) against 12 and 16, rendered by
+`tools/art/block-specimens.mjs` onto real floor tiles with Alois standing against a clump's north
+face: 8 covers him to the knee, enough to read as depth and little enough that a two-cell clump
+still reads as rock on a floor rather than as a wall. Floor 1's boulders grow by being taller;
+floor 2's Lesesteinhaufen grows by being *piled higher* — extra cap stones rather than stretched
+ovals, because a pile is not a single rock. `tools/art/validate.mjs` allows a tile to be up to
+`MAX_TILE_OVERHANG_RATIO` (a quarter) taller than it is wide; width is still pinned to 16 or 32
+(#48), which is what keeps `tileGridScale` whole, and `render/room.ts` derives the overhang from the
+texture rather than from a constant, so the art is the only place it is stated.
+
+### What the gates now check
+
+`tests/content/sprite-scale.test.ts` keeps its floor on the longest axis and moves its **ceiling to
+width only**. Capping height was the right check while height meant nothing and is the wrong one now
+that it is the feature — it is the check that would have failed Alois for having a hat. Nothing is
+lost: `tools/art/spec.mjs`'s `character` (48) and `boss` (160) canvas maxima already bound how much
+of the frame a body may cover. `tests/art/blocks-authoring.test.ts` gained the assertion that a
+block's overhang rows are actually *inked*, because a tile that leaves them empty passes every other
+check, looks exactly like the old art, and silently has no effect.
+
+### Known trade, named rather than absorbed
+
+The ambient light (#37/#243) sits over the floor and under everything that stands, and the
+obstacles and props moved up through it. The floor beneath them still darkens; the rock and the
+market stall themselves no longer do. Scenery cannot be both above the bodies for occlusion and
+below the light for tone without lighting the bodies too, which `docs/GAME_DESIGN.md` §1 rules out.
+The background palette tier (#62) is already doing most of that work; a per-sprite ambient tint is
+the follow-up if it reads bright.
+
+**Constrains:** anything new that stands on the floor joins the depth layer and writes a foot line —
+there is no second mechanism, and the Maibaum is the worked example of why. Any sprite authored
+taller from here gets its height for free and its hitbox unchanged, which is the point: this entry
+is the *permission* for the roster to grow upward, and #45's "a bigger canvas is a bigger body" now
+means a bigger *silhouette*, not a bigger hitbox.

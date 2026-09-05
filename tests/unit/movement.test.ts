@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GameSim, PLAYER_RADIUS } from '../../src/sim/game/sim.js';
+import { GameSim, PLAYER_FOOTPRINT } from '../../src/sim/game/sim.js';
 import { type InputFrame, createInputFrame, quantiseAxis } from '../../src/sim/input/frame.js';
 import { RoomGeometry } from '../../src/sim/room/geometry.js';
 import { DEFAULT_MOVEMENT_TUNING } from '../../src/sim/tuning.js';
@@ -101,14 +101,14 @@ describe('player movement', () => {
   it('slides along a wall run into diagonally instead of stopping dead', () => {
     const room = openRoom();
     const sim = new GameSim({ room });
-    placePlayer(sim, room.maxX - PLAYER_RADIUS - 1, 180);
+    placePlayer(sim, room.maxX - PLAYER_FOOTPRINT - 1, 180);
 
     const downRight = held(Math.SQRT1_2, Math.SQRT1_2);
     for (let tick = 0; tick < 20; tick++) {
       sim.step(downRight);
     }
 
-    expect(sim.positionX(sim.playerIndex)).toBeCloseTo(room.maxX - PLAYER_RADIUS, 6);
+    expect(sim.positionX(sim.playerIndex)).toBeCloseTo(room.maxX - PLAYER_FOOTPRINT, 6);
 
     // With the blocked axis dropped, the free one runs at a steady rate — no
     // stutter, no per-tick oscillation against the wall.
@@ -132,7 +132,7 @@ describe('player movement', () => {
     room.addBlock(300, 180, 340, 260);
     const sim = new GameSim({ room });
     const overlap = 3;
-    placePlayer(sim, 280, 180 - PLAYER_RADIUS + overlap);
+    placePlayer(sim, 280, 180 - PLAYER_FOOTPRINT + overlap);
 
     const right = held(1, 0);
     for (let tick = 0; tick < 90; tick++) {
@@ -140,7 +140,7 @@ describe('player movement', () => {
     }
 
     expect(sim.positionX(sim.playerIndex)).toBeGreaterThan(340);
-    expect(sim.positionY(sim.playerIndex)).toBeLessThanOrEqual(180 - PLAYER_RADIUS);
+    expect(sim.positionY(sim.playerIndex)).toBeLessThanOrEqual(180 - PLAYER_FOOTPRINT);
   });
 
   it('honours a tuning value changed while the simulation is running', () => {
@@ -165,7 +165,7 @@ describe('player movement', () => {
       for (let tick = 0; tick < 300; tick++) {
         sim.step(direction);
         const index = sim.playerIndex;
-        expect(sim.room.isClear(sim.positionX(index), sim.positionY(index), PLAYER_RADIUS)).toBe(
+        expect(sim.room.isClear(sim.positionX(index), sim.positionY(index), PLAYER_FOOTPRINT)).toBe(
           true,
         );
       }

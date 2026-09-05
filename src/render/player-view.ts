@@ -1,5 +1,5 @@
 import { Container, Sprite, type Texture } from 'pixi.js';
-import type { GameSim } from '../sim/game/sim.js';
+import { PLAYER_FOOTPRINT, type GameSim } from '../sim/game/sim.js';
 import { PromilleTier } from '../sim/game/promille.js';
 import { lerp } from '../sim/math.js';
 import {
@@ -22,6 +22,7 @@ import {
 } from './animation/state.js';
 import { SCHLAUCH_OCTANTS, type PlayerArt, type PlayerBodyKey } from './player-art.js';
 import { ACTOR_SPRITE_SCALE } from './resolution.js';
+import { setFootY } from './depth.js';
 import { createGroundShadow, groundShadowFeetY, styleGroundShadow } from './ground-shadow.js';
 import { BLUTWURZ_SPIRIT_TINT, GROUND_SHADOW, STATUS_POISON_TINT } from './palette.js';
 import { STATUS_EFFECT_STRIDE, STATUS_POISON } from '../sim/systems/status-effects.js';
@@ -132,6 +133,18 @@ export class PlayerView {
 
   /** Authored pixels per world unit — the body's own scale, shared by the hose. */
   private readonly pixelScale: number;
+  /**
+   * Where the body sprite's *centre* now sits in container-local space.
+   *
+   * The container is still placed at Alois's collider centre, but since #73
+   * the body stands on his footprint's south pole rather than being centred
+   * through it, so its middle is half a sprite above that line. Everything
+   * measured from the middle of the drawing — the hose's hip anchor, whose
+   * offsets are authored in pixels from the sprite's centre — is shifted by
+   * this rather than re-measured, so the art's own numbers stay the art's own
+   * numbers.
+   */
+  private readonly bodyCentreY: number;
 
   private facing: PlayerFacingIndex = PlayerFacing.South;
   private mirror = 1;
@@ -167,11 +180,20 @@ export class PlayerView {
         shadowTexture,
         southFrame.width * ACTOR_SPRITE_SCALE * GROUND_SHADOW.standingFootprint,
       );
-      this.shadow.position.set(0, groundShadowFeetY(0, southFrame, ACTOR_SPRITE_SCALE));
+      this.shadow.position.set(
+        0,
+        groundShadowFeetY(PLAYER_FOOTPRINT, southFrame, ACTOR_SPRITE_SCALE),
+      );
       this.container.addChild(this.shadow);
     }
     this.body = new Sprite(art.body.south.frames[0]);
-    this.body.anchor.set(0.5, 0.5);
+    // Standing on his footprint's south pole (`render/depth.ts`, #73) rather
+    // than centred through his collider. Alois is 32 authored pixels tall over
+    // a 10-unit footprint, so twelve of those pixels — his hat, head and
+    // shoulders — are now above anything he can be stopped by or shot in, and
+    // a rock's overhang covers his boots while his head clears it.
+    this.body.anchor.set(0.5, 1);
+    this.body.position.set(0, PLAYER_FOOTPRINT);
     // Drawn on the actor grid, exactly like `EntityView` draws every enemy
     // body: one authored pixel per internal pixel (`render/resolution.ts`'s
     // `ACTOR_SPRITE_SCALE`, `docs/DECISIONS.md` #45). Authoring at a higher
@@ -191,6 +213,8 @@ export class PlayerView {
     // background, deliberately.
     this.pixelScale = ACTOR_SPRITE_SCALE;
     this.body.scale.set(this.pixelScale);
+    this.bodyCentreY =
+      PLAYER_FOOTPRINT - ((southFrame?.frame.height ?? 0) * ACTOR_SPRITE_SCALE) / 2;
     // The hose takes the *body's* scale rather than one of its own — two
     // sprites sharing one character need one pixel size, or the nozzle renders
     // at a different resolution than the hand holding it.
@@ -238,6 +262,9 @@ export class PlayerView {
     const x = lerp(sim.previousX(index), sim.positionX(index), alpha);
     const y = lerp(sim.previousY(index), sim.positionY(index), alpha);
     this.container.position.set(x, y);
+    // What the depth layer sorts him against every rock, prop and body in the
+    // room (#73) — the same foot line his sprite stands on.
+    setFootY(this.container, y + PLAYER_FOOTPRINT);
 
     if (resolvePlayerHeading(sim, this.heading)) {
       this.facing = this.heading.facing;
@@ -345,7 +372,7 @@ export class PlayerView {
     // `ObservablePoint.set` already ignores an unchanged value; what costs is
     // reaching the transform at all.
     const nozzleX = (anchor.x * this.mirror + aimX * reach) * this.pixelScale;
-    const nozzleY = (anchor.y + aimY * reach) * this.pixelScale;
+    const nozzleY = (anchor.y + aimY * reach) * this.pixelScale + this.bodyCentreY;
     if (nozzleX !== this.schlauchX || nozzleY !== this.schlauchY) {
       this.schlauchX = nozzleX;
       this.schlauchY = nozzleY;

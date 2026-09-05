@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import cellarCrossroads from '../../src/content/rooms/cellar.json';
 import { BOSS_REWARD_DROP_TABLE } from '../../src/content/pickups/drop-tables.js';
 import { EventKind } from '../../src/sim/events/queue.js';
-import { GameSim, PLAYER_RADIUS } from '../../src/sim/game/sim.js';
+import { GameSim, PLAYER_FOOTPRINT } from '../../src/sim/game/sim.js';
 import { type InputFrame, createInputFrame, quantiseAxis } from '../../src/sim/input/frame.js';
 import { ProjectileTeam } from '../../src/sim/projectile/store.js';
 import { ParticleKind } from '../../src/sim/particle/store.js';
@@ -74,7 +74,7 @@ describe('room lifecycle', () => {
     });
     expect(sim.playerIndex).toBe(player);
     expect(sim.playerHealth).toBe(healthBefore);
-    expect(sim.positionY(player)).toBeCloseTo(sim.room.maxY - 8);
+    expect(sim.positionY(player)).toBeCloseTo(sim.room.maxY - PLAYER_FOOTPRINT - 1);
   });
 
   it('only compiles doors the placement actually gives it, not every direction the template authors', () => {
@@ -119,7 +119,7 @@ describe('room lifecycle', () => {
     const x = sim.positionX(player);
     const y = sim.positionY(player);
 
-    expect(sim.room.isClear(x, y, PLAYER_RADIUS)).toBe(true);
+    expect(sim.room.isClear(x, y, PLAYER_FOOTPRINT)).toBe(true);
     expect(x < 104 || x > 136 || y < 56 || y > 88).toBe(true);
   });
 

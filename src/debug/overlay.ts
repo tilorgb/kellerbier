@@ -315,6 +315,14 @@ export class DebugOverlay {
    * That is the point rather than a convenience: a hitbox display drawn from
    * sprite bounds would agree with the sprites and disagree with the damage,
    * which is exactly the bug this is meant to find.
+   *
+   * **Two circles per body since `docs/DECISIONS.md` #73**, because there are
+   * two: the solid one is the footprint — what it walks into, what pushes it,
+   * what its contact damage reaches — and the dashed-looking faint one above
+   * it is the hurtbox, what a shot has to cross. Drawing only the first would
+   * make every "my shot went through it" report unanswerable, which is the
+   * failure mode this whole display exists against. A body whose two circles
+   * are the same (a pickup, anything spawned before the split) draws one.
    */
   private drawHitboxes(): void {
     this.hitboxes.clear();
@@ -335,9 +343,18 @@ export class DebugOverlay {
       if (((masks[index] ?? 0) & required) !== required) {
         continue;
       }
-      this.hitboxes
-        .circle(sim.positionX(index), sim.positionY(index), sim.body.data[index * 2] ?? 0)
-        .stroke({ width: 1, color: colourForLayer(sim.collision.data[index * 2] ?? 0) });
+      const colour = colourForLayer(sim.collision.data[index * 2] ?? 0);
+      const x = sim.positionX(index);
+      const y = sim.positionY(index);
+      const footprint = sim.body.data[index * 2] ?? 0;
+      this.hitboxes.circle(x, y, footprint).stroke({ width: 1, color: colour });
+      const hurtRadius = sim.hurtbox.data[index * 2] ?? 0;
+      const hurtOffsetY = sim.hurtbox.data[index * 2 + 1] ?? 0;
+      if (hurtRadius > 0 && (hurtRadius !== footprint || hurtOffsetY !== 0)) {
+        this.hitboxes
+          .circle(x, y + hurtOffsetY, hurtRadius)
+          .stroke({ width: 1, color: colour, alpha: 0.45 });
+      }
     }
 
     const projectiles = sim.projectiles;
