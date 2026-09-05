@@ -74,13 +74,15 @@ describe('every animation strip in assets/sprites/', () => {
       // unresolvable enemy id, and `docs/DECISIONS.md` #7 says that fails
       // rather than degrades. Which names are askable depends on the bucket:
       // a floor bucket is a roster, keyed by `EnemyDefinition.id`
-      // (`render/floor-art.ts`); `common/` is where Alois lives, keyed by
-      // facing and drunkenness (`render/player-art.ts`).
+      // (`render/floor-art.ts`). `common/` is both Alois, keyed by facing and
+      // drunkenness (`render/player-art.ts`), and an enemy that appears on
+      // every floor (`shopkeeper`, #194) — same `EnemyDefinition.id` lookup a
+      // floor roster uses (`assets/sprites/README.md`'s lookup table).
+      const ids = ENEMY_DEFINITIONS.map((definition) => definition.id);
       if (sprite.bucketId === 'common') {
-        expect(PLAYER_STRIP_NAMES).toContain(name);
+        expect([...PLAYER_STRIP_NAMES, ...ids]).toContain(name);
         return;
       }
-      const ids = ENEMY_DEFINITIONS.map((definition) => definition.id);
       expect(ids).toContain(name);
     },
   );

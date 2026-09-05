@@ -18,6 +18,7 @@
     "art:blocks": "node tools/art/authoring/build-blocks.mjs",
     "art:floor1": "node tools/art/authoring/build-floor1-roster.mjs",
     "art:floor2": "node tools/art/authoring/build-floor2-roster.mjs",
+    "art:shopkeeper": "node tools/art/authoring/build-shopkeeper.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

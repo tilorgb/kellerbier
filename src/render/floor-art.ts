@@ -243,17 +243,24 @@ export interface AnimatedSpriteSet extends LoadedStrip {
  * Every animation strip a *creature* is authored as, and every `*.anim.json`
  * beside one, resolved at build time by Vite.
  *
- * `floor-*` rather than every bucket, and `characters`/`bosses` rather than
- * every category: `common/characters/` holds Alois's own strips (#151), which
- * are keyed by facing rather than by enemy id and loaded by
- * `render/player-art.ts`. The rule that draws the line is not a naming
- * convention — it is that a floor bucket *is* a roster, and this map is
- * indexed by `EnemyDefinition.id`. A boss is in that roster like anything
- * else (`content/enemies/grosse-kellerassel.ts`), which is why `bosses/`
- * joins it here.
+ * `characters`/`bosses` rather than every category, and every bucket
+ * including `common` (#194): a floor bucket *is* a roster, and this map is
+ * indexed by `EnemyDefinition.id`, which is why a floor's `characters/` and
+ * `bosses/` both join it — a boss is in that roster like anything else
+ * (`content/enemies/grosse-kellerassel.ts`). `common/characters/` is a
+ * roster too, for the one enemy that appears on every floor rather than one
+ * (the Shopkeeper); it also holds Alois's own strips (#151), which are keyed
+ * by facing rather than by enemy id and loaded by `render/player-art.ts`
+ * instead — those land in this map too, unused, the same "flat and
+ * complete rather than filtered per consumer" this whole file already is.
  */
 const STRIP_URLS: Record<string, string> = {
   ...import.meta.glob<string>('../../assets/sprites/floor-*/characters/*.strip.png', {
+    eager: true,
+    query: '?url',
+    import: 'default',
+  }),
+  ...import.meta.glob<string>('../../assets/sprites/common/characters/*.strip.png', {
     eager: true,
     query: '?url',
     import: 'default',
@@ -267,6 +274,10 @@ const STRIP_URLS: Record<string, string> = {
 
 const STRIP_SIDECARS: Record<string, AnimationSidecar> = {
   ...import.meta.glob<AnimationSidecar>('../../assets/sprites/floor-*/characters/*.anim.json', {
+    eager: true,
+    import: 'default',
+  }),
+  ...import.meta.glob<AnimationSidecar>('../../assets/sprites/common/characters/*.anim.json', {
     eager: true,
     import: 'default',
   }),
