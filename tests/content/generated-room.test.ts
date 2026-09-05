@@ -206,6 +206,7 @@ describe('procedural room generator (POC)', () => {
             floorTag: tag,
             doors,
             distanceFromStart: seed % 7,
+            bossDistance: 6,
             rng: new Rng(roomGenSeed(1234, floor, `r${String(seed)}`, seed)),
           });
 
@@ -264,6 +265,7 @@ describe('procedural room generator (POC)', () => {
           floorTag: 'cellar',
           doors: ['east', 'west'],
           distanceFromStart: 3,
+          bossDistance: 6,
           rng: new Rng(roomGenSeed(2024, 1, `o${String(seed)}`, seed)),
         },
         moderate,
@@ -304,6 +306,7 @@ describe('procedural room generator (POC)', () => {
           floorTag: 'cellar',
           doors: ['north', 'east', 'south', 'west'],
           distanceFromStart: 4,
+          bossDistance: 6,
           rng: new Rng(roomGenSeed(4242, 3, `d${String(seed)}`, seed)),
         },
         dense,
@@ -336,6 +339,7 @@ describe('procedural room generator (POC)', () => {
         floorTag: 'cellar',
         doors,
         distanceFromStart: 3,
+        bossDistance: 6,
         rng: new Rng(roomGenSeed(1717, 1, `p${String(seed)}`, seed)),
       });
       if (template.decorativeProps.length > 0) {
@@ -366,6 +370,7 @@ describe('procedural room generator (POC)', () => {
         floorTag: 'cellar',
         doors: ['north', 'south'],
         distanceFromStart: 2,
+        bossDistance: 6,
         rng: new Rng(roomGenSeed(1, 1, 'noprops', 0)),
       },
       { ...DEFAULT_ROOM_GEN_TUNING, maxProps: 0, hazardChance: 0 },
@@ -445,6 +450,7 @@ describe('procedural room generator (POC)', () => {
           cells,
           doors,
           distanceFromStart: 3,
+          bossDistance: 6,
           rng: new Rng(roomGenSeed(88, 1, `${shape}-${String(seed)}`, seed)),
         });
         expect(template.cells).toHaveLength(cells.length);
@@ -482,6 +488,7 @@ describe('procedural room generator (POC)', () => {
       floorTag: 'no-such-tag',
       doors: ['north', 'south'],
       distanceFromStart: 3,
+      bossDistance: 6,
       rng: new Rng(42),
     });
     expect(template.enemySpawns).toHaveLength(0);
@@ -504,6 +511,7 @@ describe('procedural room generator (POC)', () => {
         floorTag: 'rural',
         doors: ['north', 'east', 'west'],
         distanceFromStart: 4,
+        bossDistance: 6,
         rng: new Rng(roomGenSeed(555, 2, 'r7', 3)),
       });
     expect(JSON.stringify(make())).toEqual(JSON.stringify(make()));
@@ -518,6 +526,7 @@ describe('procedural room generator (POC)', () => {
           floorTag: 'cellar',
           doors: ['north', 'east', 'south', 'west'],
           distanceFromStart: 3,
+          bossDistance: 6,
           rng: new Rng(roomGenSeed(1, 1, 'r1', salt)),
         }),
       );
@@ -536,6 +545,7 @@ describe('procedural room generator (POC)', () => {
         floorTag: 'cellar',
         doors: [direction],
         distanceFromStart: 1,
+        bossDistance: 6,
         rng: new Rng(roomGenSeed(7, 1, direction, 0)),
       });
       const compiled = compileRoomTemplate(
@@ -597,6 +607,7 @@ describe('procedural room generator (POC)', () => {
           floorTag: tag,
           doors: ['north', 'south'],
           distanceFromStart: seed % 7,
+          bossDistance: 6,
           rng: new Rng(roomGenSeed(918273, floor, roomId, seed)),
         });
         rooms += 1;
@@ -630,6 +641,77 @@ describe('procedural room generator (POC)', () => {
       expect(floor2Mean, 'floor 2 mean enemies per room should rise over floor 1').toBeGreaterThan(
         floor1Mean,
       );
+    }
+  });
+
+  /**
+   * #272: the threat budget reads *fractional* depth (`distanceFromStart /
+   * bossDistance`) rather than a raw door count, specifically so it does not
+   * saturate against `maxEnemies` a few doors in and then sit flat for the
+   * rest of a long floor. Two things follow, both checked here on a real
+   * 7-door floor: a genuine ramp from the start room to the boss door (not
+   * an early plateau), and a near-boss room that stays equally nasty
+   * whether the floor is short or long — the whole point of dividing by
+   * `bossDistance` instead of adding a flat per-door term.
+   */
+  function meanBodiesAt(
+    floor: number,
+    floorTag: string,
+    bossDistance: number,
+    distanceFromStart: number,
+    seedBase: number,
+  ): number {
+    const samples = 300;
+    let total = 0;
+    for (let seed = 0; seed < samples; seed++) {
+      const roomId = `ramp-${String(seedBase)}-${String(bossDistance)}-${String(distanceFromStart)}-${String(seed)}`;
+      const template = generateRoom({
+        roomId,
+        floor,
+        floorTag,
+        doors: ['north', 'south'],
+        distanceFromStart,
+        bossDistance,
+        rng: new Rng(roomGenSeed(seedBase, floor, roomId, seed)),
+      });
+      total += bodyCount(template);
+    }
+    return total / samples;
+  }
+
+  it('shows a real ramp across a 7-door floor, not an early plateau', () => {
+    for (const { floor, tag } of FLOORS) {
+      const bossDistance = 6;
+      const early = meanBodiesAt(floor, tag, bossDistance, 1, 5001);
+      const mid = meanBodiesAt(floor, tag, bossDistance, 3, 5001);
+      const late = meanBodiesAt(floor, tag, bossDistance, 6, 5001);
+      expect(
+        mid,
+        `floor ${String(floor)}: mid-floor room (d=3 of 6) should be harder than the start room`,
+      ).toBeGreaterThan(early);
+      expect(
+        late,
+        `floor ${String(floor)}: the room at the boss door (d=6 of 6) should be harder than mid-floor`,
+      ).toBeGreaterThan(mid);
+    }
+  });
+
+  it('keeps the room before the boss equally nasty on a short floor and a long one', () => {
+    for (const { floor, tag } of FLOORS) {
+      const nearBossByLength = [3, 6, 9, 12].map((bossDistance) =>
+        meanBodiesAt(floor, tag, bossDistance, bossDistance, 6001),
+      );
+      const min = Math.min(...nearBossByLength);
+      const max = Math.max(...nearBossByLength);
+      // Same fractional depth (1.0, right at the boss door) should land in
+      // the same ballpark regardless of how many doors it took to get
+      // there — a wide band (maxEnemies caps this at 6-7 bodies either
+      // way) rather than an exact match, since each point is its own
+      // Monte-Carlo draw.
+      expect(
+        max - min,
+        `floor ${String(floor)}: near-boss body count varies too much across floor lengths ${JSON.stringify(nearBossByLength)}`,
+      ).toBeLessThan(2);
     }
   });
 });

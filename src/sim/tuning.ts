@@ -676,7 +676,14 @@ export interface RoomGenTuning {
   maxCoverWalls: number;
   /** Layout attempts before falling back to an empty room. Not worth a slider; still tunable in code. */
   layoutRetries: number;
-  /** Enemy threat budget = base + perDistance·distance-from-start + perFloor·(floor-1). */
+  /**
+   * Enemy threat budget = base + perDistance·fractionalDepth + perFloor·(floor-1),
+   * where `fractionalDepth` is `distanceFromStart / bossDistance` (0 at the
+   * start room, 1 at the boss door) — not a raw door count (#272). This is
+   * what keeps a longer floor's back half from being flatly saturated
+   * against `maxEnemies`: the ramp always spends itself over the whole walk
+   * to the boss, however many doors that walk actually is.
+   */
   threatBase: number;
   threatPerDistance: number;
   threatPerFloor: number;
@@ -688,10 +695,12 @@ export interface RoomGenTuning {
   /** Chance a room gets one floor-flavour hazard patch (Floor 1 puddle, Floor 2 trellis). */
   hazardChance: number;
   /**
-   * Chance a `1x1` `normal` slot is filled by a hand-authored room instead of a
+   * Chance a `normal` slot is filled by a hand-authored room instead of a
    * generated one — the route for a one-off room design to pop up on a floor.
-   * The authored pool is every `1x1` template with no `specialRole`, weighted
-   * by its `metadata.weight`.
+   * The authored pool is every template of the slot's own shape with no
+   * `specialRole`, weighted by its `metadata.weight`; a template already
+   * sprinkled elsewhere on the same floor is excluded (#272 —
+   * `sim/room/sprinkle.ts`), falling back to generation rather than a repeat.
    */
   authoredRoomChance: number;
 }
@@ -1099,7 +1108,16 @@ export const DEFAULT_ROOM_GEN_TUNING: Readonly<RoomGenTuning> = {
   // lifting for free, so this budget only needs to comfortably afford *two* draws
   // at the distances an 8–12 room floor actually produces, not one big one.
   threatBase: 3,
-  threatPerDistance: 1.5,
+  // #272: reads against *fractional* depth now (distance from start over
+  // distance to the boss door, 0..1) rather than a raw door count, so this
+  // number means "extra threat between the start room and the boss door,"
+  // not "extra threat per door" — it is not the same 1.5 that shipped
+  // before the change. Re-derived against real floor plans (500 seeds) to
+  // land the room right before the boss at the same body count the old
+  // per-door ramp reached there once it saturated (~6.2 mean bodies at
+  // Floor 1's typical ~4-door boss distance) without moving the floor-wide
+  // average by more than the same ~4% the #231 retune below tolerates.
+  threatPerDistance: 7,
   threatPerFloor: 1,
   maxEnemies: 6,
   pickupChance: 0.2,

@@ -6,16 +6,13 @@ import {
   ROOM_GEN_FLOOR_OVERRIDES,
   type FloorConfig,
 } from '../content/floors/definition.js';
-import {
-  DIRECTION_OFFSET,
-  isMultiCellRoomTemplate,
-  type MultiCellRoomShape,
-} from '../content/rooms/definition.js';
+import { DIRECTION_OFFSET, type MultiCellRoomShape } from '../content/rooms/definition.js';
 import { ROOM_TEMPLATES, STAIRCASE_TEMPLATES, type DoorDirection } from '../content/rooms/index.js';
 import { type RoomDirection, GameSim, MAX_COLLIDER_RADIUS } from '../sim/game/sim.js';
 import { promilleMeterLabel, promilleTierDisplayName } from '../sim/game/promille.js';
 import { type FloorPlan, type FloorPlanRoom, generateFloor } from '../sim/room/floor-plan.js';
 import { generateMultiCellRoom, generateRoom, roomGenSeed } from '../sim/room/generate-room.js';
+import { chooseSprinkle } from '../sim/room/sprinkle.js';
 import type { RoomGenTuning } from '../sim/tuning.js';
 import { validateStaircaseTemplate } from '../sim/room/staircase.js';
 import { Rng } from '../sim/rng/rng.js';
@@ -275,36 +272,6 @@ function planTemplate(room: FloorPlanRoom): unknown {
 let proceduralRooms = new Map<string, unknown>();
 let roomGenSalt = 0;
 
-/**
- * The hand-authored ordinary rooms that fit a slot — no special role, right
- * shape, right tag, and (`1x1` only) doors a superset of what the slot needs.
- * Every one is a sprinkle candidate; there is no opt-in flag.
- */
-function sprinkleCandidates(
-  room: FloorPlanRoom,
-  floorTag: string,
-): { value: unknown; weight: number }[] {
-  const needed = room.doors.map((door) => door.direction);
-  const candidates: { value: unknown; weight: number }[] = [];
-  for (const template of ROOM_TEMPLATE_POOL) {
-    if (
-      template.metadata.specialRole !== undefined ||
-      template.metadata.shape !== room.shape ||
-      !template.metadata.floorTags.includes(floorTag)
-    ) {
-      continue;
-    }
-    if (
-      !isMultiCellRoomTemplate(template) &&
-      !needed.every((direction) => template.metadata.doors[direction])
-    ) {
-      continue;
-    }
-    candidates.push({ value: template, weight: template.metadata.weight });
-  }
-  return candidates;
-}
-
 function rebuildProceduralRooms(plan: FloorPlan, runSeed: number, baseTuning: RoomGenTuning): void {
   const next = new Map<string, unknown>();
   const config = FLOOR_CONFIGS.find((candidate) => candidate.floor === plan.floor);
@@ -313,16 +280,28 @@ function rebuildProceduralRooms(plan: FloorPlan, runSeed: number, baseTuning: Ro
       ...baseTuning,
       ...(ROOM_GEN_FLOOR_OVERRIDES[config.floorTag] ?? {}),
     };
+    const bossDistance = planRoom(plan, plan.bossRoomId).distanceFromStart;
+    // #272: sprinkled authored templates don't repeat on one floor — tracked
+    // in plan order off each room's own seeded RNG, so this stays
+    // deterministic; a floor that exhausts the pool falls back to
+    // generation rather than placing the same authored room twice.
+    const sprinkledTemplateIds = new Set<string>();
     for (const room of plan.rooms) {
       if (room.role !== 'normal' || room.staircaseTemplateId !== undefined) {
         continue;
       }
       const rng = new Rng(roomGenSeed(runSeed, plan.floor, room.id, roomGenSalt));
-      const sprinkle = rng.chance(params.authoredRoomChance)
-        ? sprinkleCandidates(room, config.floorTag)
-        : [];
-      if (sprinkle.length > 0) {
-        next.set(room.id, rng.weightedPick(sprinkle));
+      const sprinkle = chooseSprinkle(
+        room,
+        config.floorTag,
+        ROOM_TEMPLATE_POOL,
+        sprinkledTemplateIds,
+        params.authoredRoomChance,
+        rng,
+      );
+      if (sprinkle !== null) {
+        sprinkledTemplateIds.add(sprinkle.id);
+        next.set(room.id, sprinkle);
         continue;
       }
       const ctx = {
@@ -330,6 +309,7 @@ function rebuildProceduralRooms(plan: FloorPlan, runSeed: number, baseTuning: Ro
         floor: plan.floor,
         floorTag: config.floorTag,
         distanceFromStart: room.distanceFromStart,
+        bossDistance,
         rng,
       };
       if (room.shape === '1x1') {

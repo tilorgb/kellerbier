@@ -72,8 +72,19 @@ export const ROOM_GEN_FLOOR_OVERRIDES: Readonly<Record<string, Partial<RoomGenTu
    * (`DEFAULT_ENEMY_TUNING.eliteChancePerExtraFloor`) is left alone: #231's
    * own acceptance bar for it ("reasonable once #230 lands") is already met
    * at Floor 2's 14%.
+   *
+   * #272: `threatPerDistance` dropped from this override — the fractional-
+   * depth retune landed both floors' per-door ramp on the same underlying
+   * number (`DEFAULT_ROOM_GEN_TUNING.threatPerDistance`, 7), so Floor 2 now
+   * inherits it rather than restating an identical value. Re-measured
+   * against 500 real Floor 2 layouts: 5.78 bodies / 14.96 HP per ordinary
+   * room, within a couple of percent of this override's own #231 landing
+   * point (6.25/16.25 was the two-floor-demo table's own earlier number;
+   * the ordinary-room mean this override actually produces, before and
+   * after #272, is ~5.7-5.8 bodies) — the ramp shape changed, the floor's
+   * feel didn't.
    */
-  rural: { threatBase: 3.5, threatPerDistance: 1.6, maxEnemies: 7, hazardChance: 0.2 },
+  rural: { threatBase: 3.5, maxEnemies: 7, hazardChance: 0.2 },
 };
 
 export const FLOOR_CONFIGS: readonly FloorConfig[] = [
