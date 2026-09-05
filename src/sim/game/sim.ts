@@ -31,10 +31,10 @@ import { ItemRegistry, type CompiledItem } from '../item/registry.js';
 import {
   itemEligibleForMachine,
   itemRollSourceKey,
+  type MachineRollCandidate,
   type MachineRollResult,
   type MachineRollTier,
-  rollItemStatModifiers,
-  selectMachineRollTier,
+  rollMachineOutcome,
 } from '../item/roll.js';
 import { SetRegistry, setStatSourceKey, type ItemSetDefinition } from '../item/set.js';
 import { ITEM_SET_DEFINITIONS } from '../../content/item-sets/index.js';
@@ -370,6 +370,28 @@ interface MachineRuntime {
 }
 
 /**
+ * Where a confirmed feed/reroll is in the picker redesign's own beat —
+ * `docs/DECISIONS.md` #69's own "not done this pass" follow-up, now done.
+ * `'idle'` is everything `machinePickerOpenValue` used to cover on its own
+ * (nothing rolling, whether or not an item-select is open); `'rolling'` is
+ * the anticipation beat (`MachineTuning.rollAnimationTicks`) between a
+ * confirmed feed and its outcome; `'choosing'` is the results board — one
+ * `unlucky` candidate alone, or three favourable/neutral ones to pick among
+ * (`rollMachineOutcome`). A machine break is resolved *inside* the
+ * `'rolling'` tick and never reaches `'choosing'` at all — see
+ * `GameSim.resolveMachineRoll`.
+ */
+type MachineRollPhase =
+  | { readonly kind: 'idle' }
+  | { readonly kind: 'rolling'; readonly ticksRemaining: number }
+  | {
+      readonly kind: 'choosing';
+      readonly outcome: 'unlucky' | 'choice';
+      readonly candidates: readonly MachineRollCandidate[];
+      selectedIndex: number;
+    };
+
+/**
  * What a room still owes the player, captured the moment they leave it —
  * see `GameSim.snapshotRoomLoot`. Restoring from this instead of re-rolling
  * the template is what makes loot (and a shop's stock, and an unclaimed
@@ -410,19 +432,28 @@ const MACHINE_ROLL_TIER_LABELS: Readonly<Record<MachineRollTier, string>> = {
   legendary: 'Legendary',
 };
 
-/** The Losbrunnen's toast text for one roll — `GameSim.applyMachineRoll`'s own `reportCollected` call. */
-function describeMachineRoll(itemName: string, result: MachineRollResult): string {
-  const tierLabel = MACHINE_ROLL_TIER_LABELS[result.tier];
+/** What a roll actually nudged, with no item name or tier attached — shared by the toast (`describeMachineRoll`) and a results-board card (`machineRollCardLabel`). */
+function machineRollEffectLabel(result: MachineRollResult): string {
   if (result.rolled === undefined) {
-    return `${itemName}: ${tierLabel.toLowerCase()} roll, nothing changed.`;
+    return 'nothing changed';
   }
   if (result.rolled.kind === 'cooldown') {
-    const direction = result.rolled.favourable ? 'shorter' : 'longer';
-    return `${itemName}: ${tierLabel} roll — cooldown ${direction}.`;
+    return `cooldown ${result.rolled.favourable ? 'shorter' : 'longer'}`;
   }
   const statLabel = STAT_LABELS[result.rolled.stat];
-  const direction = result.rolled.favourable ? 'up' : 'down';
-  return `${itemName}: ${tierLabel} roll — ${statLabel} ${direction}.`;
+  return `${statLabel} ${result.rolled.favourable ? 'up' : 'down'}`;
+}
+
+/** The Losbrunnen's toast text for one applied roll — `GameSim.applyMachineRollResult`'s own `reportCollected` call. */
+function describeMachineRoll(itemName: string, result: MachineRollResult): string {
+  const tierLabel = MACHINE_ROLL_TIER_LABELS[result.tier];
+  return `${itemName}: ${tierLabel} roll — ${machineRollEffectLabel(result)}.`;
+}
+
+/** One results-board card's text (#238's redesigned picker) — tier and effect, no item name (the left pane already names it). */
+function machineRollCardLabel(result: MachineRollResult): string {
+  const tierLabel = MACHINE_ROLL_TIER_LABELS[result.tier];
+  return `${tierLabel} — ${machineRollEffectLabel(result)}`;
 }
 
 function pedestalPoolForRole(role: RoomSpecialRole | undefined): ItemPoolId {
@@ -1236,8 +1267,18 @@ export class GameSim {
    * equivalent of `previousButtons` for an axis instead of a button. Reset
    * whenever the picker closes, so re-opening it always starts requiring a
    * fresh tap rather than reading whatever direction happened to be held.
+   * Shared with `cycleMachineChoiceFromAxis` — the two never read it in the
+   * same tick, since `machinePickerOpenValue` and a `'choosing'`
+   * `machineRollPhase` are mutually exclusive.
    */
   private machineCyclePreviousSign: -1 | 0 | 1 = 0;
+  /**
+   * Where a confirmed feed/reroll is in its own anticipation-then-choose beat
+   * — see `MachineRollPhase`'s own doc comment. `'idle'` whenever
+   * `machinePickerOpenValue` is the only thing worth reading (including
+   * every tick before any roll has ever been confirmed).
+   */
+  private machineRollPhase: MachineRollPhase = { kind: 'idle' };
   /**
    * Leftover loot from a room the player has already left, keyed the same
    * way `roomClearedIds` is — by the authored template's own id, not a
@@ -1998,6 +2039,7 @@ export class GameSim {
     this.machinePreviewItemId = null;
     this.machinePickerOpenValue = false;
     this.machineCyclePreviousSign = 0;
+    this.machineRollPhase = { kind: 'idle' };
     this.nearbyShopPickupSlot = -1;
     for (const hidden of hiddenDoors) {
       const match = this.roomDoors.find(
@@ -2046,6 +2088,7 @@ export class GameSim {
       this.machinePreviewItemId = null;
       this.machinePickerOpenValue = false;
       this.machineCyclePreviousSign = 0;
+      this.machineRollPhase = { kind: 'idle' };
     }
     // "Stats reroll on every floor entry" (#47) — a floor, not a room: the
     // guard inside is on the floor number, so walking back and forth through
@@ -4106,10 +4149,44 @@ export class GameSim {
     return this.machinePickerOpenValue;
   }
 
-  /** Closes the picker and resets its axis-tap edge detector — called whenever the player leaves range. */
+  /**
+   * Whether the Losbrunnen's dialog — item-select, the rolling animation, or
+   * the results board — is open at all right now (the UX redesign parked in
+   * `docs/DECISIONS.md` #69). Read by `systems/movement.ts`/`shooting.ts`/
+   * `bomb-placement.ts` to freeze the player for the dialog's whole
+   * duration, and by `systems/pedestal.ts` to keep `use` captured by it
+   * rather than letting a coincidentally-nearby pedestal or shop pickup
+   * steal the press. `docs/DECISIONS.md` #69 argued a functional freeze
+   * bought nothing over ticks-quietly-continuing because every room the
+   * machine can appear in is already threat-free — true, and still the
+   * reason this stays a narrow input freeze rather than `loop.paused`
+   * (which would also stop the dialog's own input from reaching it, since
+   * `useMachine` is only ever called from a tick's own input processing);
+   * what changed is that the player's own drifting the whole time the
+   * dialog is up reads as a bug, not as "nothing else pressing."
+   */
+  get isMachineDialogOpen(): boolean {
+    return this.machinePickerOpenValue || this.machineRollPhase.kind !== 'idle';
+  }
+
+  /**
+   * Whether a confirmed feed/reroll is actually in flight — `'rolling'` or
+   * `'choosing'`, never plain item-select. Narrower than `isMachineDialogOpen`
+   * on purpose: `systems/pedestal.ts` uses this one to give `use` outright to
+   * the machine mid-roll (nothing existed to interrupt before this redesign,
+   * so there is no prior priority-chain behaviour to preserve there), while
+   * ordinary item-select stays inside the existing pedestal-first,
+   * shop-second, machine-third priority chain exactly as before.
+   */
+  get isMachineRollActive(): boolean {
+    return this.machineRollPhase.kind !== 'idle';
+  }
+
+  /** Closes the picker, cancels any roll in progress, and resets the axis-tap edge detector — called whenever the player leaves range or the machine is destroyed underneath the dialog. */
   closeMachinePicker(): void {
     this.machinePickerOpenValue = false;
     this.machineCyclePreviousSign = 0;
+    this.machineRollPhase = { kind: 'idle' };
   }
 
   /**
@@ -4144,17 +4221,61 @@ export class GameSim {
    * and reading it as a level rather than an edge would spin the preview
    * every tick a direction is held instead of once per push.
    */
-  cycleMachinePreviewFromAxis(moveX: number): void {
-    if (!this.machinePickerOpenValue) {
-      this.machineCyclePreviousSign = 0;
-      return;
-    }
+  private cycleMachinePreviewFromAxis(moveX: number): void {
     const sign: -1 | 0 | 1 =
       moveX > MACHINE_AXIS_TAP_THRESHOLD ? 1 : moveX < -MACHINE_AXIS_TAP_THRESHOLD ? -1 : 0;
     if (sign !== 0 && sign !== this.machineCyclePreviousSign) {
       this.cycleMachinePreview(sign);
     }
     this.machineCyclePreviousSign = sign;
+  }
+
+  /**
+   * Moves the results board's current selection by one — the choosing-phase
+   * counterpart of `cycleMachinePreview`, same tap-not-hold edge detector
+   * (`cycleMachineFromAxis` below never reads both in the same tick, since
+   * `machinePickerOpenValue` and a `'choosing'` phase are mutually
+   * exclusive). A no-op on the `'unlucky'` outcome — one candidate, nothing
+   * to move between.
+   */
+  private cycleMachineChoice(direction: 1 | -1): void {
+    const phase = this.machineRollPhase;
+    if (phase.kind !== 'choosing' || phase.outcome !== 'choice') {
+      return;
+    }
+    const count = phase.candidates.length;
+    phase.selectedIndex = (phase.selectedIndex + direction + count) % count;
+  }
+
+  private cycleMachineChoiceFromAxis(moveX: number): void {
+    const sign: -1 | 0 | 1 =
+      moveX > MACHINE_AXIS_TAP_THRESHOLD ? 1 : moveX < -MACHINE_AXIS_TAP_THRESHOLD ? -1 : 0;
+    if (sign !== 0 && sign !== this.machineCyclePreviousSign) {
+      this.cycleMachineChoice(sign);
+    }
+    this.machineCyclePreviousSign = sign;
+  }
+
+  /**
+   * Reads one tick's move axis for a left/right *tap* and routes it to
+   * whichever of the picker's two browsable moments is actually open right
+   * now — item-select (`cycleMachinePreviewFromAxis`) or the results board
+   * (`cycleMachineChoiceFromAxis`); neither is ever open at the same time as
+   * the other. Called every tick by `sim/systems/machine.ts`'s
+   * `stepMachine`, regardless of `use` — see that function's own doc
+   * comment for why this can't just live inside `useMachine`'s button-edge
+   * chain.
+   */
+  cycleMachineFromAxis(moveX: number): void {
+    if (this.machinePickerOpenValue) {
+      this.cycleMachinePreviewFromAxis(moveX);
+      return;
+    }
+    if (this.machineRollPhase.kind === 'choosing') {
+      this.cycleMachineChoiceFromAxis(moveX);
+      return;
+    }
+    this.machineCyclePreviousSign = 0;
   }
 
   /**
@@ -4311,20 +4432,70 @@ export class GameSim {
   }
 
   /**
+   * The picker's rolling/results state, for the redesigned two-pane screen
+   * (`render/machine-picker.ts`) — `null` whenever nothing has been rolled
+   * yet (still on item-select, or idly `'fed'` waiting for the next press).
+   * `'rolling'`'s `progress` is `0` at the first ticking tick and `1` on the
+   * last — purely for the anticipation bar's fill, never read for anything
+   * that has to be deterministic. `'choosing'`'s candidates carry no item
+   * name (the left pane already shows it) and are pre-formatted text
+   * (`machineRollCardLabel`) rather than raw tier/stat data, the same
+   * "screen reads state, main.ts/sim own the words" split `machineHudLabel`
+   * already keeps.
+   */
+  get machineRollDisplay():
+    | { readonly phase: 'rolling'; readonly progress: number }
+    | {
+        readonly phase: 'choosing';
+        readonly candidates: readonly {
+          readonly tier: MachineRollTier;
+          readonly label: string;
+          readonly selected: boolean;
+        }[];
+      }
+    | null {
+    const phase = this.machineRollPhase;
+    if (phase.kind === 'rolling') {
+      const total = Math.max(1, Math.round(this.tuning.machine.rollAnimationTicks));
+      return { phase: 'rolling', progress: Math.min(1, 1 - (phase.ticksRemaining - 1) / total) };
+    }
+    if (phase.kind === 'choosing') {
+      return {
+        phase: 'choosing',
+        candidates: phase.candidates.map((candidate, index) => ({
+          tier: candidate.tier,
+          label: machineRollCardLabel(candidate.result),
+          selected: index === phase.selectedIndex,
+        })),
+      };
+    }
+    return null;
+  }
+
+  /**
    * `use` near the Losbrunnen (`sim/systems/pedestal.ts`'s priority chain) —
    * the machine's *only* interaction button (`machinePickerOpenValue`'s doc
-   * comment on why Bomb was rejected for cycling). Three presses do three
-   * different things depending on state, in order: a fresh machine opens
-   * its picker; an open picker feeds whatever it is currently previewing;
-   * an already-fed, unbroken machine pays for another roll outright — there
-   * is nothing to choose there, so no picker step is needed. A no-op
-   * whenever nothing eligible exists, the machine is broken, or the player
-   * can't afford the cost — nothing is spent on a press that can't do
-   * anything.
+   * comment on why Bomb was rejected for cycling). What one press does
+   * depends on where the dialog already is: a fresh machine opens its
+   * picker; an open picker spends the cost and starts a roll for whatever
+   * item is currently previewed; an already-fed, unbroken machine's press
+   * starts a roll outright, since there is nothing left to choose there; a
+   * roll still `'rolling'` ignores the press (the anticipation beat isn't
+   * skippable); and a `'choosing'` press confirms whichever candidate is
+   * currently selected (`confirmMachineRollChoice`). A no-op whenever
+   * nothing eligible exists, the machine is broken, or the player can't
+   * afford the cost — nothing is spent on a press that can't do anything.
    */
   useMachine(): void {
     const machine = this.machineRuntime;
     if (machine === null || machine.broken || !this.isNearMachine()) {
+      return;
+    }
+    if (this.machineRollPhase.kind === 'choosing') {
+      this.confirmMachineRollChoice(machine);
+      return;
+    }
+    if (this.machineRollPhase.kind === 'rolling') {
       return;
     }
     if (machine.itemIndex < 0) {
@@ -4344,7 +4515,7 @@ export class GameSim {
       }
       machine.itemIndex = chosen;
       this.closeMachinePicker();
-      this.applyMachineRoll(machine);
+      this.startMachineRoll();
       return;
     }
     if (!this.inventory.has(machine.itemIndex)) {
@@ -4354,7 +4525,7 @@ export class GameSim {
     if (!this.spendBiermarken(cost)) {
       return;
     }
-    this.applyMachineRoll(machine);
+    this.startMachineRoll();
   }
 
   /**
@@ -4381,28 +4552,106 @@ export class GameSim {
   }
 
   /**
-   * Rolls one outcome tier (`selectMachineRollTier`, biased by the player's
-   * resolved Dusel) and registers its delta — under `itemRollSourceKey` for
-   * a stat target, or into `activeItemCooldownFactor` for a `cooldown` one
-   * (#238) — replacing whatever the item's previous roll of *that same
-   * kind* was, never stacking with it, which is what makes "reroll" mean
-   * reroll rather than accumulate. A hybrid item's other kind of roll (if
-   * it has one already registered) is untouched either way, since this
-   * roll never targeted it. The break chance this roll is actually
-   * gambling on (`machineBreakChance`) is read *before* `rolls` increments
-   * — the same "count of rolls already made" the cost calculation
-   * elsewhere already uses — then rolls the break itself last, so the roll
-   * that breaks the machine still lands first.
+   * Starts the picker's anticipation beat (`MachineTuning.rollAnimationTicks`)
+   * for a feed/reroll that was just paid for. Nothing about the roll itself
+   * — break, tier, which candidates — is decided yet; that all happens
+   * deterministically in `resolveMachineRoll`, on the tick the countdown
+   * reaches zero (`advanceMachineRoll`), so the delay is pure presentation
+   * and a replay reproduces the same outcome regardless of its length.
    */
-  private applyMachineRoll(machine: MachineRuntime): void {
+  private startMachineRoll(): void {
+    this.machineRollPhase = {
+      kind: 'rolling',
+      ticksRemaining: Math.max(1, Math.round(this.tuning.machine.rollAnimationTicks)),
+    };
+  }
+
+  /**
+   * Ticks down the `'rolling'` anticipation beat, called every tick by
+   * `sim/systems/machine.ts`'s `stepMachine` regardless of input — a no-op
+   * whenever nothing is actually rolling. Resolves the roll itself
+   * (`resolveMachineRoll`) the instant the countdown reaches zero.
+   */
+  advanceMachineRoll(): void {
+    const machine = this.machineRuntime;
+    const phase = this.machineRollPhase;
+    if (machine === null || phase.kind !== 'rolling') {
+      return;
+    }
+    if (phase.ticksRemaining > 1) {
+      this.machineRollPhase = { kind: 'rolling', ticksRemaining: phase.ticksRemaining - 1 };
+      return;
+    }
+    this.resolveMachineRoll(machine);
+  }
+
+  /**
+   * What a confirmed feed/reroll actually lands on, resolved the instant the
+   * `'rolling'` countdown reaches zero (#238's picker redesign,
+   * `docs/DECISIONS.md` #69's own parked follow-up). The break chance this
+   * roll is gambling on (`machineBreakChance`, read before `rolls`
+   * increments — the same "count of rolls already made" the cost
+   * calculation elsewhere uses) is rolled *first* and *pre-empts*
+   * everything else: on a break, no candidate is ever generated or
+   * shown — the dialog simply has nothing left to offer, closes, and the
+   * machine is broken from here on. Only once the machine survives that
+   * gamble does `rollMachineOutcome` decide whether this pull is the
+   * bad-luck one (a single `unlucky` candidate) or a real choice between
+   * three favourable/neutral ones, and the phase moves to `'choosing'` for
+   * the player to pick from.
+   */
+  private resolveMachineRoll(machine: MachineRuntime): void {
     const item = this.items.at(machine.itemIndex);
+    const breakChance = this.machineBreakChance(machine);
+    machine.rolls += 1;
+    if (this.random.items.chance(breakChance)) {
+      machine.broken = true;
+      this.machineRollPhase = { kind: 'idle' };
+      this.machineLastRollSummary = `${item.name}: the Losbrunnen broke!`;
+      this.reportCollected('Losbrunnen', this.machineLastRollSummary);
+      return;
+    }
     const state = this.inventory.stateOf(machine.itemIndex);
-    const tier = selectMachineRollTier(
-      this.random.items,
+    const outcome = rollMachineOutcome(
+      item,
+      state,
       this.stats.value(StatId.Dusel),
       this.tuning.machine,
+      this.random.items,
     );
-    const result = rollItemStatModifiers(item, state, tier, this.random.items, this.tuning.machine);
+    this.machineRollPhase = {
+      kind: 'choosing',
+      outcome: outcome.kind,
+      candidates: outcome.candidates,
+      selectedIndex: 0,
+    };
+  }
+
+  /** `useMachine`'s confirm press while `machineRollPhase.kind === 'choosing'` — applies whichever candidate is currently selected and closes the dialog back to the machine's ordinary `'fed'` idle. */
+  private confirmMachineRollChoice(machine: MachineRuntime): void {
+    const phase = this.machineRollPhase;
+    if (phase.kind !== 'choosing') {
+      return;
+    }
+    const chosen = phase.candidates[phase.selectedIndex];
+    this.machineRollPhase = { kind: 'idle' };
+    if (chosen === undefined) {
+      return;
+    }
+    this.applyMachineRollResult(machine, chosen.result);
+  }
+
+  /**
+   * Registers a chosen roll's delta — under `itemRollSourceKey` for a stat
+   * target, or into `activeItemCooldownFactor` for a `cooldown` one (#238)
+   * — replacing whatever the item's previous roll of *that same kind* was,
+   * never stacking with it, which is what makes "reroll" mean reroll rather
+   * than accumulate. A hybrid item's other kind of roll (if it has one
+   * already registered) is untouched either way, since this roll never
+   * targeted it.
+   */
+  private applyMachineRollResult(machine: MachineRuntime, result: MachineRollResult): void {
+    const item = this.items.at(machine.itemIndex);
     if (result.rolled?.kind === 'cooldown') {
       if (result.cooldownFactor !== undefined) {
         this.activeItemCooldownFactor.set(item.id, result.cooldownFactor);
@@ -4419,13 +4668,8 @@ export class GameSim {
         );
       }
     }
-    const breakChance = this.machineBreakChance(machine);
-    machine.rolls += 1;
     this.machineLastRollSummary = describeMachineRoll(item.name, result);
     this.reportCollected('Losbrunnen', this.machineLastRollSummary);
-    if (this.random.items.chance(breakChance)) {
-      machine.broken = true;
-    }
   }
 
   /**

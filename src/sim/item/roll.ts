@@ -214,3 +214,69 @@ export function rollItemStatModifiers(
 export function itemRollSourceKey(id: string): string {
   return `item-roll:${id}`;
 }
+
+/** Every tier but `unlucky` — the pool a favourable-only draw picks from. */
+const FAVOURABLE_MACHINE_ROLL_TIERS = MACHINE_ROLL_TIERS.filter(
+  (tier): tier is Exclude<MachineRollTier, 'unlucky'> => tier !== 'unlucky',
+);
+
+/**
+ * Draws one outcome tier from `common`/`uncommon`/`rare`/`legendary` only —
+ * the same weights `selectMachineRollTier` uses for those four, `unlucky`
+ * excluded entirely rather than drawn-and-discarded. Used to fill out a
+ * 3-option roll board (`rollMachineOutcome`) once the pull has already been
+ * decided *not* to be the bad-luck one.
+ */
+function selectFavourableMachineRollTier(
+  rng: Rng,
+  dusel: number,
+  tuning: Readonly<MachineTuning>,
+): Exclude<MachineRollTier, 'unlucky'> {
+  const weights = FAVOURABLE_MACHINE_ROLL_TIERS.map((tier) =>
+    machineRollTierWeight(tier, dusel, tuning),
+  );
+  const index = rng.weightedIndex(weights);
+  return FAVOURABLE_MACHINE_ROLL_TIERS[index] ?? 'common';
+}
+
+/** One outcome tier already rolled and resolved into a concrete `MachineRollResult`, for the redesigned picker's results board (#238's own parked follow-up). */
+export interface MachineRollCandidate {
+  readonly tier: MachineRollTier;
+  readonly result: MachineRollResult;
+}
+
+/**
+ * A Losbrunnen pull's real-menu outcome (the UX redesign parked in
+ * `docs/DECISIONS.md` #69): either the pull is the bad-luck one, in which
+ * case it is *only* ever the bad-luck one — a single `unlucky` candidate,
+ * nothing to compare it against — or it isn't, in which case the player sees
+ * three favourable-or-neutral options drawn from `common`/`uncommon`/`rare`/
+ * `legendary` and picks which one to keep. Whether the pull is unlucky at
+ * all is decided by one draw against the *full* tier weights (so
+ * `unluckyWeight`, and Dusel's pull away from it, still mean exactly what
+ * they always have); only once that draw comes up favourable does drawing
+ * the other two board slots exclude `unlucky` entirely, rather than drawing
+ * three independent picks and hoping none of them land on it.
+ */
+export function rollMachineOutcome(
+  item: CompiledItem,
+  state: ItemRuntimeState,
+  dusel: number,
+  tuning: Readonly<MachineTuning>,
+  rng: Rng,
+): { readonly kind: 'unlucky' | 'choice'; readonly candidates: readonly MachineRollCandidate[] } {
+  const firstTier = selectMachineRollTier(rng, dusel, tuning);
+  const firstCandidate: MachineRollCandidate = {
+    tier: firstTier,
+    result: rollItemStatModifiers(item, state, firstTier, rng, tuning),
+  };
+  if (firstTier === 'unlucky') {
+    return { kind: 'unlucky', candidates: [firstCandidate] };
+  }
+  const candidates = [firstCandidate];
+  for (let index = 0; index < 2; index += 1) {
+    const tier = selectFavourableMachineRollTier(rng, dusel, tuning);
+    candidates.push({ tier, result: rollItemStatModifiers(item, state, tier, rng, tuning) });
+  }
+  return { kind: 'choice', candidates };
+}

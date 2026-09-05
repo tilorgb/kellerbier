@@ -3493,3 +3493,74 @@ own install docs for a 20-series GPU" outcome in hindsight, but the failure mode
 traceback deep in `comfy_kitchen`'s CUDA backend, not an obvious "wrong torch version" message)
 is not self-explanatory. Anyone reinstalling this pipeline from scratch should start from the
 `cu130` index directly rather than the more commonly-linked `cu124` one.
+
+## 72. Der Losbrunnen's picker gets a real rolling-then-choosing beat, a two-pane layout, and actually freezes the player
+
+**Decided:** M10 (unmilestoned follow-up), the UX redesign #69 itself flagged as parked: "a
+materially bigger UI surface than \[#68's] tuning-and-placement scope... left as real follow-up
+work." Driven by a conversational spec rather than a numbered issue: pause properly, split the
+window in two (left: which item; right: what the roll produced), animate the roll for
+anticipation, collapse to a single flagged result on a bad pull, and close the whole dialog outright
+on a machine break rather than showing anything.
+
+**The picker is now a phase machine, not a single confirm-and-apply button press.**
+`GameSim.useMachine` no longer resolves a roll synchronously the instant it's paid for.
+A new `MachineRollPhase` (`sim/game/sim.ts`) tracks `'idle'` (nothing rolling — item-select or an
+idly-fed machine both read this way, exactly as `machinePickerOpenValue` alone used to), `'rolling'`
+(`MachineTuning.rollAnimationTicks`, default 36 — a pure presentation delay), and `'choosing'` (a
+results board waiting for a confirm press). `GameSim.advanceMachineRoll`, called every tick by
+`sim/systems/machine.ts`'s `stepMachine` exactly the way the axis-cycle read already was, ticks the
+countdown down and resolves the outcome — deterministically, off the tick counter alone — the
+instant it reaches zero, so a replay reproduces the exact same roll regardless of the animation's
+length or the machine's actual frame rate.
+
+**Break pre-empts the results board outright, per this session's own explicit answer to "when
+should break happen."** `GameSim.resolveMachineRoll` rolls `machineBreakChance` *first*: if it
+hits, the machine is marked broken, `machineRollPhase` goes straight back to `'idle'` with no
+candidate ever generated, and the picker screen closes on the very next frame (`machinePreview.state`
+reads `'broken'`, which `app/main.ts`'s existing show/hide branch already treats as "nothing to
+show"). This is a deliberate behaviour change from #69/#238's original `applyMachineRoll`, which
+rolled the stat modifier unconditionally and treated a break as a side effect *after* that roll
+still landed — here, a broken roll changes nothing about the item at all. Surviving the break
+gamble is what unlocks `sim/item/roll.ts`'s new `rollMachineOutcome`: one draw against the full
+tier weights decides whether this pull is the bad-luck one at all (a lone `unlucky` candidate, per
+this session's chosen "separate pull type" framing rather than drawing three and collapsing them),
+and only when it isn't does it draw two more tiers from `common`/`uncommon`/`rare`/`legendary`
+(`selectFavourableMachineRollTier`, `unlucky` excluded from the pool entirely rather than
+drawn-and-discarded) to fill out a three-option board. The player then browses with `move` and
+confirms with `use` — `GameSim.confirmMachineRollChoice` — the exact same idiom #69 established for
+item-select, now reused for "which result" instead of "which item."
+
+**The player actually stops moving now — a narrow input freeze, not `loop.paused`.** #69's own
+entry explains at length why a hard engine pause was rejected: the picker opens mid-run, mid-replay,
+and `useMachine` is only ever reachable through a tick's own recorded input, so freezing the whole
+sim would also freeze the one channel the dialog needs to hear a confirm press. That reasoning is
+unchanged and still correct — what was missing was that nothing had ever gated the player's own
+*movement* while the dialog was up in the first place, so "the world stopped for this" was a visual
+metaphor the sim never actually enforced beyond the fact that every room hosting the machine happens
+to be threat-free anyway. `GameSim.isMachineDialogOpen` (item-select open *or* a `'rolling'`/
+`'choosing'` roll phase) is now read by `stepPlayerMovement`, `stepShooting` and
+`stepBombPlacement` — the same `if (knockedDown) return`/zero-input shape Umgfalln already used —
+so the player is inert for the dialog's entire duration while ticks keep flowing underneath exactly
+as before (replay-safe, no new side channel). `sim/systems/pedestal.ts` also now gives `use`
+outright to a roll actually in flight (`isMachineRollActive`, deliberately narrower — it excludes
+plain item-select, which already had its own pedestal/shop/machine priority order to preserve)
+rather than letting a coincidentally-nearby pedestal or shop pickup win the press instead.
+
+**The screen itself is a genuine two-pane split (`render/machine-picker.ts`, rewritten), not a
+single column that swapped its own contents.** Left pane: the item card(s) — identical shape to
+#69's own row/description, just single-column now that it only owns half the panel. Right pane:
+empty with a placeholder line before anything's rolled, a `wellSprite`/`solid`-fill progress bar
+during `'rolling'`, and up to three `buttonSprite` cards during `'choosing'`, each tinted by
+`HUD_PALETTE.machineRollTier` (a new five-colour record, common through legendary plus unlucky's
+red) — decoration on top of a label that already spells the tier out in text
+(`"Legendary — Stammwürze up"`), never the only signal, the same rule `palette.ts`'s own
+`promilleTier` comment states. The sole `unlucky` candidate a bad pull ever shows gets its own small
+red "UNLUCKY" badge above the card besides, since a single card sitting alone is easy to misread as
+"just another common" at a glance. A second `FocusRing` tracks whichever result is currently
+selected, mirroring the left pane's own ring exactly.
+
+**Not done this pass:** no new sound cue for the roll landing beyond reusing `ui-confirm` on a
+result actually being applied; the anticipation bar is a plain linear fill, not a slot-machine-style
+spin — either is real follow-up work if the beat needs more flavour, not a gap this entry papers
+over.

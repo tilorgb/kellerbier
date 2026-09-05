@@ -192,6 +192,59 @@ function tapMove(direction: 1 | -1): typeof IDLE {
   return frame;
 }
 
+function moveRight(): typeof IDLE {
+  const frame = createInputFrame();
+  frame.moveX = 100;
+  return frame;
+}
+
+function playerPosition(sim: GameSim): { readonly x: number; readonly y: number } {
+  const base = sim.playerIndex * 4;
+  return { x: sim.transform.data[base] ?? 0, y: sim.transform.data[base + 1] ?? 0 };
+}
+
+/** How many idle ticks `sim`'s own tuning gives the picker's anticipation beat — see `GameSim.startMachineRoll`. */
+function machineRollTicks(sim: GameSim): number {
+  return Math.max(1, Math.round(sim.tuning.machine.rollAnimationTicks));
+}
+
+/** Runs the `'rolling'` anticipation beat to completion. After this, the machine is either broken or sitting in `'choosing'` — see `GameSim.resolveMachineRoll`. */
+function runRollAnimation(sim: GameSim): void {
+  for (let tick = 0; tick < machineRollTicks(sim); tick++) {
+    sim.step(IDLE);
+  }
+}
+
+/** Confirms whichever result is currently selected on the results board (`GameSim.confirmMachineRollChoice`). */
+function confirmRoll(sim: GameSim): void {
+  sim.step(pressUse());
+  sim.step(IDLE);
+}
+
+/**
+ * Feeds a fresh machine (open, then lock-and-roll) or starts another reroll
+ * on an already-fed one (roll outright), runs the anticipation beat to
+ * completion, and confirms the first result offered — a break pre-empts the
+ * results board entirely, so this simply stops there instead. The redesigned
+ * multi-tick counterpart of the old two/three-press `feed` this file's own
+ * describe blocks used to define locally before the picker grew a rolling
+ * beat and a results board in between.
+ */
+function feed(sim: GameSim): void {
+  const machine = sim.activeMachine;
+  if (machine !== null && machine.itemIndex < 0) {
+    sim.step(pressUse()); // opens the picker
+    sim.step(IDLE);
+  }
+  sim.step(pressUse()); // locks the item (if just opened) or starts a reroll
+  sim.step(IDLE);
+  runRollAnimation(sim);
+  if (sim.activeMachine?.broken === true) {
+    return;
+  }
+  confirmRoll(sim);
+}
+
 /** Boots a sim on `seed`, in a boss room, with the boss already dead. */
 function simWithDeadBoss(items: readonly ItemDefinition[], seed = SEED_SPAWNS_MACHINE): GameSim {
   const sim = new GameSim({ seed, roomTemplate: bossRoom(), floor: 1, population: 'empty', items });
@@ -338,14 +391,9 @@ describe('Der Losbrunnen — picker and feed, use-button only (#218)', () => {
 });
 
 describe('Der Losbrunnen — rolls and cost (#218)', () => {
-  function feed(sim: GameSim): void {
-    sim.step(pressUse());
-    sim.step(IDLE);
-    sim.step(pressUse());
-  }
-
   it('registers a delta under item-roll:<id>, on top of (not replacing) the item’s own contribution', () => {
     const sim = simWithDeadBoss([baseItem('a')]);
+    sim.tuning.machine.breakChance = 0;
     sim.addBiermarken(10);
     sim.pickUpItem('a');
     standAtMachine(sim);
@@ -369,9 +417,7 @@ describe('Der Losbrunnen — rolls and cost (#218)', () => {
     expect(sim.machinePreview?.cost).toBe(
       sim.tuning.machine.baseCost + sim.tuning.machine.costIncrement,
     );
-    sim.step(IDLE);
-    sim.step(pressUse()); // second roll
-    sim.step(IDLE);
+    feed(sim); // second roll
     expect(sim.machinePreview?.cost).toBe(
       sim.tuning.machine.baseCost + 2 * sim.tuning.machine.costIncrement,
     );
@@ -408,6 +454,7 @@ describe('Der Losbrunnen — rolls and cost (#218)', () => {
 
   it('losing the last copy of the fed item clears its roll source', () => {
     const sim = simWithDeadBoss([baseItem('a')]);
+    sim.tuning.machine.breakChance = 0;
     const withoutItem = sim.stats.value(StatId.Stammwuerze);
     sim.addBiermarken(10);
     sim.pickUpItem('a');
@@ -465,6 +512,8 @@ describe('Der Losbrunnen — persists across a room revisit (#218)', () => {
     sim.step(pressUse());
     sim.step(IDLE);
     sim.step(pressUse());
+    sim.step(IDLE);
+    runRollAnimation(sim);
 
     const rollsBefore = sim.activeMachine?.rolls;
     const itemBefore = sim.activeMachine?.itemIndex;
@@ -553,6 +602,8 @@ describe('Der Losbrunnen — break risk climbs and is shown before the pull (#23
     sim.step(pressUse());
     sim.step(IDLE);
     sim.step(pressUse());
+    sim.step(IDLE);
+    runRollAnimation(sim);
     expect(sim.activeMachine?.broken).toBe(false);
     expect(sim.activeMachine?.rolls).toBe(1);
     expect(sim.machinePreview?.breakChance).toBeCloseTo(0.1);
@@ -568,12 +619,6 @@ describe('Der Losbrunnen — break risk climbs and is shown before the pull (#23
 });
 
 describe('Der Losbrunnen — active items can reroll too (#238)', () => {
-  function feed(sim: GameSim): void {
-    sim.step(pressUse());
-    sim.step(IDLE);
-    sim.step(pressUse());
-  }
-
   it('a pure active item (no modifyStats) is eligible and reachable through the picker', () => {
     const sim = simWithDeadBoss([activeItem('boiler', 300)]);
     sim.addBiermarken(10);
@@ -676,5 +721,162 @@ describe('Der Losbrunnen — machineChoices lists every eligible item for the re
     sim.step(IDLE);
     sim.step(pressUse());
     expect(sim.machineChoices).toBeNull();
+  });
+});
+
+describe('Der Losbrunnen — the redesigned picker: rolling, results and choosing (#238 UX redesign)', () => {
+  it('the anticipation beat holds the outcome back until it finishes', () => {
+    const sim = simWithDeadBoss([baseItem('a')]);
+    sim.tuning.machine.breakChance = 0;
+    sim.addBiermarken(10);
+    sim.pickUpItem('a');
+    standAtMachine(sim);
+
+    sim.step(pressUse());
+    sim.step(IDLE);
+    sim.step(pressUse()); // locks the item, starts rolling
+    expect(sim.machineRollDisplay?.phase).toBe('rolling');
+    expect(sim.activeMachine?.rolls).toBe(0);
+
+    // One tick short of the full beat: still rolling, nothing decided yet.
+    // The press's own tick already ran `advanceMachineRoll` once (`stepMachine`
+    // runs every tick regardless of `use`), so only `machineRollTicks - 2`
+    // more idle ticks are needed to land exactly one short of resolving.
+    for (let tick = 0; tick < machineRollTicks(sim) - 2; tick++) {
+      sim.step(IDLE);
+    }
+    expect(sim.machineRollDisplay?.phase).toBe('rolling');
+    expect(sim.activeMachine?.rolls).toBe(0);
+
+    sim.step(IDLE); // the tick the beat actually resolves on
+    expect(sim.machineRollDisplay?.phase).toBe('choosing');
+    expect(sim.activeMachine?.rolls).toBe(1);
+  });
+
+  it('an unlucky pull shows exactly one candidate, tagged unlucky', () => {
+    const sim = simWithDeadBoss([baseItem('a')]);
+    sim.tuning.machine.breakChance = 0;
+    sim.tuning.machine.commonWeight = 0;
+    sim.tuning.machine.uncommonWeight = 0;
+    sim.tuning.machine.rareWeight = 0;
+    sim.tuning.machine.legendaryWeight = 0;
+    sim.addBiermarken(10);
+    sim.pickUpItem('a');
+    standAtMachine(sim);
+
+    sim.step(pressUse());
+    sim.step(IDLE);
+    sim.step(pressUse());
+    sim.step(IDLE);
+    runRollAnimation(sim);
+
+    const display = sim.machineRollDisplay;
+    if (display?.phase !== 'choosing') throw new Error('expected a choosing phase');
+    expect(display.candidates).toHaveLength(1);
+    expect(display.candidates[0]?.tier).toBe('unlucky');
+  });
+
+  it('a favourable pull shows three candidates, none of them unlucky', () => {
+    const sim = simWithDeadBoss([baseItem('a')]);
+    sim.tuning.machine.breakChance = 0;
+    sim.tuning.machine.unluckyWeight = 0;
+    sim.addBiermarken(10);
+    sim.pickUpItem('a');
+    standAtMachine(sim);
+
+    sim.step(pressUse());
+    sim.step(IDLE);
+    sim.step(pressUse());
+    sim.step(IDLE);
+    runRollAnimation(sim);
+
+    const display = sim.machineRollDisplay;
+    if (display?.phase !== 'choosing') throw new Error('expected a choosing phase');
+    expect(display.candidates).toHaveLength(3);
+    expect(display.candidates.some((candidate) => candidate.tier === 'unlucky')).toBe(false);
+    expect(display.candidates.filter((candidate) => candidate.selected)).toHaveLength(1);
+  });
+
+  it('a machine break pre-empts the results board entirely — no candidate is ever generated', () => {
+    const sim = simWithDeadBoss([baseItem('a')]);
+    sim.tuning.machine.breakChance = 1;
+    sim.addBiermarken(10);
+    sim.pickUpItem('a');
+    standAtMachine(sim);
+
+    const before = sim.stats.value(StatId.Stammwuerze);
+    sim.step(pressUse());
+    sim.step(IDLE);
+    sim.step(pressUse());
+    sim.step(IDLE);
+    runRollAnimation(sim);
+
+    expect(sim.activeMachine?.broken).toBe(true);
+    expect(sim.machineRollDisplay).toBeNull();
+    expect(sim.stats.value(StatId.Stammwuerze)).toBe(before); // nothing was ever applied
+  });
+
+  it('move cycles the current selection among three candidates, and use confirms whichever is selected', () => {
+    const sim = simWithDeadBoss([baseItem('a')]);
+    sim.tuning.machine.breakChance = 0;
+    sim.tuning.machine.unluckyWeight = 0;
+    sim.addBiermarken(10);
+    sim.pickUpItem('a');
+    standAtMachine(sim);
+
+    sim.step(pressUse());
+    sim.step(IDLE);
+    sim.step(pressUse());
+    sim.step(IDLE);
+    runRollAnimation(sim);
+
+    const initial = sim.machineRollDisplay;
+    if (initial?.phase !== 'choosing') throw new Error('expected a choosing phase');
+    expect(initial.candidates.findIndex((candidate) => candidate.selected)).toBe(0);
+
+    sim.step(tapMove(1));
+    sim.step(IDLE);
+    const afterTap = sim.machineRollDisplay;
+    if (afterTap?.phase !== 'choosing') throw new Error('expected a choosing phase');
+    expect(afterTap.candidates.findIndex((candidate) => candidate.selected)).toBe(1);
+
+    sim.step(pressUse()); // confirm
+    sim.step(IDLE);
+    expect(sim.machineRollDisplay).toBeNull();
+    expect(sim.machinePreview?.state).toBe('fed');
+  });
+
+  it('freezes the player for as long as the dialog is open, in every one of its phases', () => {
+    const sim = simWithDeadBoss([baseItem('a'), baseItem('b')]);
+    sim.tuning.machine.breakChance = 0;
+    sim.addBiermarken(10);
+    sim.pickUpItem('a');
+    sim.pickUpItem('b');
+    standAtMachine(sim);
+    const frozenAt = playerPosition(sim);
+
+    // Item-select open.
+    sim.step(pressUse());
+    sim.step(moveRight());
+    expect(playerPosition(sim)).toEqual(frozenAt);
+
+    // Locks the item and starts rolling.
+    sim.step(pressUse());
+    sim.step(moveRight());
+    expect(playerPosition(sim)).toEqual(frozenAt);
+    for (let tick = 0; tick < machineRollTicks(sim); tick++) {
+      sim.step(IDLE);
+    }
+
+    // Choosing among results.
+    expect(sim.machineRollDisplay).not.toBeNull();
+    sim.step(moveRight());
+    expect(playerPosition(sim)).toEqual(frozenAt);
+
+    // Confirms and closes — movement works again.
+    sim.step(pressUse());
+    sim.step(IDLE);
+    sim.step(moveRight());
+    expect(playerPosition(sim)).not.toEqual(frozenAt);
   });
 });

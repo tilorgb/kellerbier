@@ -22,5 +22,10 @@ export function stepMachine(sim: GameSim, input: Readonly<InputFrame>): void {
     sim.closeMachinePicker();
     return;
   }
-  sim.cycleMachinePreviewFromAxis(input.moveX);
+  // The anticipation beat and its resolution (break check, then either the
+  // bad-luck candidate or a 3-option board) are decided here, deterministically
+  // off the tick counter alone — see `GameSim.advanceMachineRoll`'s own doc
+  // comment for why this can't be tied to wall-clock animation time.
+  sim.advanceMachineRoll();
+  sim.cycleMachineFromAxis(input.moveX);
 }

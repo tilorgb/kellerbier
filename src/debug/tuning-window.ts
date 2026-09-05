@@ -505,6 +505,13 @@ const GROUPS: readonly GroupSpec[] = [
         hint: 'how much a rare roll (or legendary fallback) nudges',
       },
       { key: 'interactRadius', min: 8, max: 80, step: 2, hint: 'px to open/feed the machine' },
+      {
+        key: 'rollAnimationTicks',
+        min: 0,
+        max: 120,
+        step: 5,
+        hint: 'anticipation beat before results show',
+      },
     ],
   },
 ];

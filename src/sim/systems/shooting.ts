@@ -29,8 +29,9 @@ import { addPush } from './movement.js';
 export function stepShooting(sim: GameSim, input: Readonly<InputFrame>): void {
   // Umgfalln (#17): knocked down, cannot fire. The cooldown simply does not
   // age this tick — nothing is lost, firing just resumes where it left off
-  // once the player is back up.
-  if (sim.umgfallnTicks > 0) {
+  // once the player is back up. The Losbrunnen's dialog (#238's UX redesign)
+  // freezes the player the same way for as long as it's open.
+  if (sim.umgfallnTicks > 0 || sim.isMachineDialogOpen) {
     return;
   }
 

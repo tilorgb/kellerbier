@@ -49,10 +49,16 @@ export function stepPlayerMovement(sim: GameSim, input: Readonly<InputFrame>): v
   // Umgfalln (#17): a knocked-down player cannot steer. Zeroing input here
   // also quiets the corner-forgiveness nudge further down, which only acts
   // on a held direction — appropriate, since nobody is steering into a
-  // corner to be forgiven for.
-  const knockedDown = sim.umgfallnTicks > 0;
-  const inputX = knockedDown ? 0 : axisToUnit(input.moveX);
-  const inputY = knockedDown ? 0 : axisToUnit(input.moveY);
+  // corner to be forgiven for. The Losbrunnen's dialog (#238's UX redesign)
+  // freezes the player the same way for as long as it's open — `move` is
+  // what its own item-select/results board reads instead
+  // (`GameSim.cycleMachineFromAxis`, read directly from `input` rather than
+  // through here), so the player standing still while it does is the "world
+  // stopped for this" `docs/DECISIONS.md` #69 always meant, just actually
+  // wired to the player's own movement now rather than only to enemies.
+  const held = sim.umgfallnTicks > 0 || sim.isMachineDialogOpen;
+  const inputX = held ? 0 : axisToUnit(input.moveX);
+  const inputY = held ? 0 : axisToUnit(input.moveY);
   // `GameSim.pressingToward` — a door only actually crosses on a deliberate
   // walk into it, not a graze while running along the wall it sits on.
   sim.setLastMoveInput(inputX, inputY);
