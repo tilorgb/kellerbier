@@ -16,6 +16,7 @@ import {
   conditionProgress,
   cycleCharacter,
   dailyStatus,
+  hasBeatenABoss,
   selectedCharacterId,
   selectedCharacterTraits,
   withEverythingUnlocked,
@@ -135,6 +136,17 @@ describe('meta-progression', () => {
       save = withBossDefeat(save, 1, CONTENT);
       expect(save.unlocks).toEqual(['first-boss']);
       expect(save.statistics[bossStatKey(1)]).toBe(2);
+    });
+  });
+
+  describe('hasBeatenABoss (#271)', () => {
+    it('is false for a fresh save', () => {
+      expect(hasBeatenABoss(createDefaultSave())).toBe(false);
+    });
+
+    it('is true once any floor boss has gone down', () => {
+      expect(hasBeatenABoss(withBossDefeat(createDefaultSave(), 1, CONTENT))).toBe(true);
+      expect(hasBeatenABoss(withBossDefeat(createDefaultSave(), 2, CONTENT))).toBe(true);
     });
   });
 

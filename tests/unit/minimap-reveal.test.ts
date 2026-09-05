@@ -47,6 +47,7 @@ function plan(rooms: readonly FloorPlanRoom[]): FloorPlan {
   return {
     floor: 1,
     floorName: 'Der Keller',
+    extraLarge: false,
     startRoomId: 't',
     bossRoomId: 't',
     treasureRoomId: 't',
