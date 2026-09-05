@@ -56,6 +56,7 @@ describe('Floor 2 (Dorf & Acker) generation', () => {
         floorTag: 'rural',
         doors: ['north', 'south'],
         distanceFromStart: 3,
+        bossDistance: 6,
         rng: new Rng(roomGenSeed(99, 2, `r${String(seed)}`, seed)),
       });
       for (const group of room.spawnGroups) {

@@ -35,7 +35,8 @@
  *   `compileRoomTemplate`. `L`/`T` drop their corner cells; those become solid
  *   and are excluded from everything.
  * - Enemies: a per-floor-tag weighted roster spent against a threat budget that
- *   scales with distance from start and room size.
+ *   scales with fractional depth (distance from start over distance to the
+ *   boss door) and room size.
  * - Hazards (Floor 1 puddles, Floor 2 trellises) and decorative / destructible
  *   props (barrels, crates) are scattered as scenery, never on a route the
  *   player needs.
@@ -79,6 +80,19 @@ export interface RoomGenContext {
   readonly floorTag: string;
   /** Room-graph distance from start, for the enemy threat budget. */
   readonly distanceFromStart: number;
+  /**
+   * Room-graph distance from start to this floor's boss door — the same
+   * quantity `distanceFromStart` is measured against, always `>=
+   * distanceFromStart` (`docs/DECISIONS.md`-adjacent invariant:
+   * `validateFloorPlan` requires the boss room to sit at the floor's own
+   * maximum distance). `placeEnemies` divides by this to turn
+   * `distanceFromStart` into a *fractional* depth (0 at the start room, 1 at
+   * the boss door) — #272: an absolute per-door ramp saturates against
+   * `maxEnemies` well before a long floor's back half, so the room right
+   * before the boss stays equally nasty and a short or a long floor spend
+   * the same curve, just stretched over more or fewer doors.
+   */
+  readonly bossDistance: number;
   readonly rng: Rng;
 }
 
@@ -823,9 +837,12 @@ function placeEnemies(
     return [];
   }
   const shuffled = ctx.rng.shuffle(candidates.slice());
+  // Fractional depth (0 at the start room, 1 at the boss door) rather than a
+  // raw door count — see `RoomGenContext.bossDistance`'s doc comment for why.
+  const fractionalDepth = ctx.bossDistance > 0 ? ctx.distanceFromStart / ctx.bossDistance : 0;
   const budget =
     (params.threatBase +
-      params.threatPerDistance * ctx.distanceFromStart +
+      params.threatPerDistance * fractionalDepth +
       params.threatPerFloor * Math.max(0, ctx.floor - 1)) *
     cellCount;
   const maxEnemies = params.maxEnemies * cellCount;
