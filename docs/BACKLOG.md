@@ -162,6 +162,10 @@ used to — with five floors parked, the reason to replay cannot be "there is mo
 
 *Exit: it looks and sounds like a finished commercial game.*
 
+M8 has grown **two epics that are not about sound or menus**, and both sit upstream of #54's
+balance pass for the same reason: #54 tunes a curve, and these two decide what shape the curve has
+and how long it is. Tuning first would produce a better version of the game we already have.
+
 | # | Issue |
 |---|---|
 | 51 | Blaskapelle: floor 1 & 2 music and the full SFX pass |
@@ -172,6 +176,43 @@ used to — with five floors parked, the reason to replay cannot be "there is mo
 | 157 | Audio engine: buses, mixing, ducking and Promille filtering |
 | 158 | Title screen, pause and the run flow around the game |
 | 159 | A structured playtest loop |
+
+### #228 — The pressure pass *(epic)*
+
+*Nothing in Kellerbier can hurt a player who keeps walking.* Enemy and projectile speed, encounter
+density, the two-floor ramp, boss health, telegraphs, the missing SFX, hitstop, and three built
+mechanics the player never meets. Nine of its eleven issues are numbers and cues in systems that
+already exist.
+
+| # | Issue |
+|---|---|
+| 229–235 | Pressure and legibility — speed, density, ramp, boss health, telegraphs, SFX, crunch |
+| 236 | Promille unlocks on the last boss of the shipping game: move the gate |
+| 237 | The raisin is one item in a hundred and forty, and the purity pacts are free |
+| 238 | Der Losbrunnen appears once a run, in one room, after the fight is over |
+| 239 | Decision: does Alois need a defensive verb, or does the game need pressure first? |
+
+### #270 — Bigger floors and the mini-boss gate *(epic)*
+
+#228's successor, and the one place this project has knowingly *added* scope to the shipping game.
+The boss sits **3.94 doors** from the start room on floor 1, mean of 500 seeds — an encounter pass
+has nowhere to land in a floor that short. Longer floors, a per-floor XL roll, and a mandatory
+mini-boss fight between the player and the boss door.
+
+Unlike #228 it adds systems — a room role, a per-floor key, two rosters and their art — so it
+delays M9 deliberately rather than accidentally.
+
+| # | Issue |
+|---|---|
+| 271 | Floor size, the XL roll and a minimum boss distance |
+| 272 | The ramp saturates: threat, sprinkles and specials that scale with a floor's length |
+| 273 | Floor 2 borrows every room it has: the rural template set and the Maibaum |
+| 274 | A `miniboss` room role, placed off the path to the boss |
+| 275 | Der Meisterschlüssel: the boss door stays locked until the floor's mini-boss is down |
+| 276 | Floor 1 mini-bosses: Der Rattenkönig and Die Zapfhahn-Orgel |
+| 277 | Floor 2 mini-bosses: Die Blaskapelle and Der Ladewagen |
+| 278 | A mini-boss pays: the pedestal roll and the consolation drop |
+| 279 | What a floor is now: run structure, the bible, and the two-key decision |
 
 ## M9 — Release
 

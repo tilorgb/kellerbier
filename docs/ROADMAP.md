@@ -114,6 +114,19 @@ screen, pause and settings, localisation into English, German and Boarisch, full
 features, gamepad support, the story cards, and a serious balance pass against real playtest
 telemetry.
 
+**It also carries the two epics that decide whether there is a game under all of that**, and both
+sit upstream of the balance pass. #228, *the pressure pass*: nothing on either floor could hurt a
+player who kept walking, so no room ever asked for a decision. #270, *bigger floors and the
+mini-boss gate*: the boss sits under four doors from the start room, measured, so a floor is over
+before a run has a shape — and an encounter pass has nowhere to land in a floor that short.
+
+#270 is the one place this plan has knowingly **added** scope to the shipping game rather than
+deferring it, and it is the reason M9 moves. That is a trade worth naming rather than absorbing:
+two floors that are each twice as long, with a fight between the player and each boss door, is a
+different demo from the one the refocus originally scoped, and it costs a mini-boss roster and its
+art on top of the systems. The alternative — shipping a fifteen-minute game whose floors end four
+rooms in — is what the measurement argued against.
+
 ## M9 — Release
 *Exit: strangers are playing it — the two-floor game is out on itch.io and feedback is coming
 back.*
@@ -162,6 +175,11 @@ against real evidence from M9's players about what the remaining five floors sho
   is a promise, done badly it is indistinguishable from running out of content, and M9 puts it in
   front of strangers who have no roadmap. The acceptance criterion is a playtester describing it
   as a cliffhanger unprompted.
+- **Pressure and length before balance.** #228 and #270 both land before #54, deliberately. A
+  balance pass tunes a curve; those two decide what shape the curve is and how long it runs. Doing
+  #54 first would tune the game we have into a better version of the game we have — the same
+  argument #228 made against itself being scheduled late, applied once more when #270 turned out to
+  be its sequel.
 - **M8's balance pass is cheap now and expensive later.** Balancing two floors against real
   telemetry, with the simulator from #54, is a tractable problem. The same work across seven
   floors is the thing that eats a schedule.
