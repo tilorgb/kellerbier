@@ -63,6 +63,7 @@ export class FloorTitleCard {
   private readonly ordinal: BitmapText;
   private readonly name: DisplayTitle;
   private readonly subtitle: SeasonedText;
+  private readonly xlBadge: BitmapText;
 
   private width = 0;
   private height = 0;
@@ -93,13 +94,25 @@ export class FloorTitleCard {
       accentColour: UI_PALETTE.accent,
     });
     this.view.addChild(this.subtitle.view);
+
+    // The XL marker (#271): a floor that rolled bigger than usual says so
+    // here, in the card's own accent gold, so the extra size reads as a
+    // lucky/unlucky roll rather than the game just dragging. Below the
+    // flavour line, not beside it — the flavour is already the widest single
+    // line on the card at some floor names, and a second phrase crammed onto
+    // the same line would either overflow or force both to shrink.
+    this.xlBadge = displayText('', { colour: UI_PALETTE.accent });
+    this.view.addChild(this.xlBadge);
   }
 
   /** Shows the card for `floor`, named and described. Sizes in UI pixels. */
-  show(floor: number, floorName: string, flavour: string): void {
+  show(floor: number, floorName: string, flavour: string, extraLarge = false): void {
     this.ordinal.text = `${ORDINALS[floor] ?? 'Further'} Floor`;
     this.name.set(floorName);
     this.subtitle.set(flavour);
+    // Wording deliberately plain (#221) and provisional — #58's chapter-card
+    // work owns picking this for real; this is a marker, not a punchline.
+    this.xlBadge.text = extraLarge ? 'An unusually large floor.' : '';
     this.view.visible = true;
     this.view.alpha = 1;
     this.layOut();
@@ -158,10 +171,14 @@ export class FloorTitleCard {
 
     // Lay the stack out from its own total height so the card stays centred
     // whatever the name's size does — a two-word floor and a one-word floor
-    // should sit in the same place.
+    // should sit in the same place. The XL badge only ever contributes to
+    // the stack when it actually has text (`show`'s `extraLarge` gate) — an
+    // ordinary floor's card is exactly the height it always was.
     const nameHeight = this.name.height * NAME_SCALE;
     const gap = 8;
-    const stack = UI_TEXT_HEIGHT + gap + nameHeight + gap + UI_TEXT_HEIGHT;
+    const hasBadge = this.xlBadge.text.length > 0;
+    const badgeExtra = hasBadge ? gap + UI_TEXT_HEIGHT : 0;
+    const stack = UI_TEXT_HEIGHT + gap + nameHeight + gap + UI_TEXT_HEIGHT + badgeExtra;
     const top = Math.round((height - stack) / 2);
 
     this.ordinal.position.set(
@@ -169,9 +186,11 @@ export class FloorTitleCard {
       top - this.ordinal.height + UI_TEXT_HEIGHT,
     );
     this.name.place(centreX, top + UI_TEXT_HEIGHT + gap);
-    this.subtitle.view.position.set(
-      centreX - Math.round(this.subtitle.width / 2),
-      top + UI_TEXT_HEIGHT + gap + nameHeight + gap,
+    const subtitleY = top + UI_TEXT_HEIGHT + gap + nameHeight + gap;
+    this.subtitle.view.position.set(centreX - Math.round(this.subtitle.width / 2), subtitleY);
+    this.xlBadge.position.set(
+      centreX - Math.round(this.xlBadge.width / 2),
+      subtitleY + UI_TEXT_HEIGHT + gap,
     );
 
     const span = Math.round(width * RULE_SPAN);
