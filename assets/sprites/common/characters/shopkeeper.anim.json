@@ -1,0 +1,12 @@
+{
+  "frames": 2,
+  "frameDurationMs": 420,
+  "loop": true,
+  "clips": {
+    "idle": {
+      "frames": [0, 1],
+      "frameDurationMs": 420,
+      "mode": "pingPong"
+    }
+  }
+}

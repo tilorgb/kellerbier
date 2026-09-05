@@ -2725,6 +2725,39 @@ request with #191 (the Floor 1 roster above) — the two halves of the same redr
 authoring method and this amendment — so `PENDING_REDRAW` in
 `tests/content/sprite-scale.test.ts` came down to just `shopkeeper` (#194) across the pair.
 
+**Amendment (M8, #194): the Wirt, and `PENDING_REDRAW` empties.** The last of the character
+redraws, and the smallest, but `common/` rather than one floor's roster — a shopkeeper is
+drawn against every floor's tileset, so #39's projectile argument ("no single value clears all
+seven") applies to a body for the same reason it applies to a shot, and he is authored from
+the master palette the way Alois is, not held to one floor's five. Three readings went to the
+option round at true scale on Der Keller and Dorf & Acker tiles — a bald innkeeper with a
+raised stein, a capped one with a bar rag, and an older, grey-bearded one with a tray — and
+**the grey-bearded reading with the tray won**. `FACE` in `tools/art/authoring/shopkeeper.mjs`
+is Alois's eye and mouth verbatim (the same splice `HUMAN_FACE` above makes), the beard leaves
+a deliberate gap at the mouth rather than covering it, and the tray's brass rim sits a pixel
+past the shoulder line on each side so it reads as held rather than fused into the torso. He
+is composed from source the same way, `npm run art:shopkeeper`, byte-locked by
+`tests/art/shopkeeper-authoring.test.ts`, and gets a two-frame `idle` breathing loop — a
+static common-room body is the "paused game" read #151 already rejected for Alois, and the
+shop is the one room the player has time to stand and notice it in. His canvas grew from
+16×16 (0.57× his 28px `normal` collider, the last name on the art-debt list #45 recorded) to
+22×32 (~1.1×), which empties `PENDING_REDRAW` in `tests/content/sprite-scale.test.ts` for the
+first time since #45 opened it.
+
+**This is the first non-Alois `common/` creature to animate, and the loader had never been
+asked for one.** `render/floor-art.ts`'s animated-strip glob was `floor-*/characters/*.strip.png`
+only — deliberately, per its own comment, because until now the one thing in
+`common/characters/` that animated was Alois, loaded by `render/player-art.ts` and keyed by
+facing rather than by enemy id. Dropping `shopkeeper.strip.png` in did not fail the build (the
+art pipeline's own checks are bucket-agnostic) and did not fail a test (nothing asserted the
+loader's glob coverage) — it silently fell back to the shared blob at runtime, caught only by
+standing in front of him in a real room. Fixed by adding `common/characters/*.strip.png` (and
+its sidecar glob) alongside the floor pattern in `STRIP_URLS`/`STRIP_SIDECARS`; Alois's own
+strips land in that map too now, unused, the same "flat and complete rather than filtered per
+consumer" every other glob in that file already is. Constrains: the next `common/` creature
+that needs a clip inherits this for free, but a silent art-pipeline gap like this one is the
+argument for actually playtesting art in the running game, not just the build passing.
+
 ## 56. A boss is its own enemy size class, drawn taller than its collider and standing on it
 
 **Decided:** M8, #193, alongside #55's boss amendment. "Bosses can be bigger — 20-25% of the

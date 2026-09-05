@@ -120,8 +120,9 @@ export class EntityView {
   /**
    * Per-enemy character art (#35), keyed by `EnemyDefinition.id`. An id with
    * no entry — every enemy floors 2-7 haven't been drawn yet, plus the
-   * training target and the shopkeeper — falls back to `texture`, the
-   * shared blob every enemy used to draw as before this.
+   * training target — falls back to `texture`, the shared blob every enemy
+   * used to draw as before this. The Shopkeeper left this fallback in #194,
+   * animated (`enemyAnimation` below), the last name `PENDING_REDRAW` held.
    */
   private readonly enemyTextures: Readonly<Record<string, Texture>>;
   /**
@@ -380,10 +381,9 @@ export class EntityView {
       sprite.visible = true;
       const isPickup = ((collision[index * 2] ?? 0) & CollisionLayer.Pickup) !== 0;
       // An enemy with its own art (#35) draws off that instead of the
-      // shared blob — everything else (the training target, the
-      // shopkeeper, and every enemy floors 2-7 haven't been drawn yet)
-      // still falls back to it, the same texture this whole view used to
-      // draw every enemy from.
+      // shared blob — everything else (the training target, and every enemy
+      // floors 2-7 haven't been drawn yet) still falls back to it, the same
+      // texture this whole view used to draw every enemy from.
       const isEnemyBody = ((masks[index] ?? 0) & sim.enemyMask) === sim.enemyMask;
       const enemyId = isEnemyBody
         ? sim.enemies.at(sim.enemy.data[index * ENEMY_STRIDE] ?? 0).id
