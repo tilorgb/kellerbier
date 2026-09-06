@@ -52,7 +52,6 @@ const FRONT_WALL_HEIGHT = 5;
 const WALL_THICKNESS = ROOM_TILE_UNITS;
 /** How far past the room the dark wall base extends, so a letterboxed viewport never shows void. */
 const BLEED = ROOM_TILE_UNITS * 6;
-const BLOCK_HEIGHT = 13;
 const CRATE_HEIGHT = 11;
 const BULB_HEIGHT = 34;
 
@@ -103,6 +102,20 @@ const FLAT_PROPS: Readonly<Record<string, string>> = {
   pedestal: 'pedestal',
   'shopkeeper-stand': 'shopkeeper-stand',
 };
+
+/**
+ * `render/room.ts`'s `pickTileVariant`, copied rather than imported: that
+ * module pulls Pixi into the bundle, and the hash is four lines. Same cell,
+ * same variant, in both renderers.
+ */
+function pickTileVariant(col: number, row: number, variantCount: number): number {
+  if (variantCount <= 1) {
+    return 0;
+  }
+  let hash = (col * 374761393 + row * 668265263) >>> 0;
+  hash = Math.imul(hash ^ (hash >>> 13), 1274126177) >>> 0;
+  return hash % variantCount;
+}
 
 /** Floor 1's destructible prop art, by `DESTRUCTIBLE_PROP_KINDS` index — `FLOOR_TILESETS[1].destructibles`. */
 const DESTRUCTIBLES = ['cellar-barrel'];
@@ -290,6 +303,8 @@ export class Dungeon {
   private roomHeight = 0;
 
   private readonly slots: BillboardSlot[] = [];
+  /** Static billboards in the current room (boulders), re-leaned when the camera preset changes. */
+  private scenery: BillboardSlot[] = [];
   private readonly playerBody = new BillboardSlot();
   private readonly playerSchlauch = new BillboardSlot();
   private readonly heading: PlayerHeading = { facing: PlayerFacing.South, mirror: 1 };
@@ -396,6 +411,9 @@ export class Dungeon {
   setPreset(id: CameraPresetId): void {
     this.presetId = id;
     this.fitCamera();
+    for (const slot of this.scenery) {
+      slot.mesh.rotation.x = this.lean;
+    }
   }
 
   /** Called once per rendered frame, after the sim has stepped. */
@@ -420,6 +438,7 @@ export class Dungeon {
     this.roomGroup = new THREE.Group();
     this.scene.add(this.roomGroup);
     this.bulbs.clear();
+    this.scenery = [];
 
     const frame = roomFrameSize(room);
     this.roomWidth = frame.width;
@@ -631,6 +650,19 @@ export class Dungeon {
     }
   }
 
+  /**
+   * Obstacles are sprites, not boxes. A boulder drawn as a textured box read
+   * as a black crate with rock wallpaper; the authored tile — since #283 eight
+   * pixels taller than its cell, bottom-anchored, the overhang being its
+   * height — already *is* the illusion of a rock, and standing that up on the
+   * cell's south edge as a billboard is enough to tell the player it blocks
+   * them. Collision is the sim's rectangle either way. One billboard per cell,
+   * mixing the floor's variants by the same hash `render/room.ts` uses, so a
+   * three-cell clump is three different rocks rather than one stretched one.
+   *
+   * Void cells of an `L`/`T` room are the exception: they are the wall
+   * standing in for cells the footprint never claimed, and stay wall boxes.
+   */
   private buildBlocks(room: RoomGeometry): void {
     const blocks = room.blocks;
     for (let i = 0; i < room.blockCount; i++) {
@@ -639,12 +671,33 @@ export class Dungeon {
       const maxX = blocks[i * BLOCK_STRIDE + 2] ?? 0;
       const maxY = blocks[i * BLOCK_STRIDE + 3] ?? 0;
       const furniture = (room.blockOverflyable[i] ?? 0) === 1;
-      const height = furniture ? BLOCK_HEIGHT : WALL_HEIGHT;
-      const variant = this.sheet(BLOCK_VARIANTS[i % BLOCK_VARIANTS.length] ?? 'cellar-boulder-1');
-      const mesh = tiledBox(variant, maxX - minX, height, maxY - minY);
-      mesh.position.set((minX + maxX) / 2, height / 2, (minY + maxY) / 2);
-      this.roomGroup.add(mesh);
+      if (!furniture) {
+        const wall = tiledBox(this.sheet('cellar-wall'), maxX - minX, WALL_HEIGHT, maxY - minY);
+        wall.position.set((minX + maxX) / 2, WALL_HEIGHT / 2, (minY + maxY) / 2);
+        this.roomGroup.add(wall);
+        continue;
+      }
+      for (let y = minY; y < maxY; y += ROOM_TILE_UNITS) {
+        for (let x = minX; x < maxX; x += ROOM_TILE_UNITS) {
+          const col = Math.round(x / ROOM_TILE_UNITS);
+          const row = Math.round(y / ROOM_TILE_UNITS);
+          const variant = BLOCK_VARIANTS[pickTileVariant(col, row, BLOCK_VARIANTS.length)];
+          this.addScenery(
+            this.sheet(variant ?? 'cellar-boulder-1'),
+            x + ROOM_TILE_UNITS / 2,
+            y + ROOM_TILE_UNITS,
+          );
+        }
+      }
     }
+  }
+
+  /** A static billboard standing on the floor with its feet at `(x, footZ)` — scenery that never moves. */
+  private addScenery(sheet: SpriteSheet, x: number, footZ: number): void {
+    const slot = new BillboardSlot();
+    slot.show(sheet, 0, false, x, 0.2, footZ, this.lean, false);
+    this.roomGroup.add(slot.mesh);
+    this.scenery.push(slot);
   }
 
   /** A slick puddle is the one thing in the room that reflects: low roughness, so the lights glint off it. */

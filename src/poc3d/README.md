@@ -31,8 +31,11 @@ the simulation at all.
   `cellar-wall` art; the wall facing the camera is a 5-unit kerb so it never hides the near rows.
   Door gaps are cut where `sim.doors` says they are; a locked door stands in the gap as a
   `door-closed` leaf, an open one is a dark passage with a warm glow from the next room.
-- **Blocks are boxes.** `RoomGeometry.blocks` become 13-unit-tall boulder boxes (`cellar-boulder-*`
-  tiled on every face); `L`/`T` void cells would come out wall-height. Crate props are boxes too.
+- **Rocks are sprites.** A boulder drawn as a textured box read as a black crate, so
+  `RoomGeometry.blocks` are one bottom-anchored `cellar-boulder-*` billboard per cell instead (the
+  8 px overhang #283 authored is its height), mixed by the same per-cell hash as the 2D renderer.
+  The illusion is enough to say "this blocks you"; collision is the sim's rectangle either way.
+  `L`/`T` void cells stay wall-height boxes, because they *are* wall. Crate props are still boxes.
 - **Characters are billboards.** Every authored sprite — Alois's facing strips and Schlauch, the
   Kellerassel strip, the static Bierratte, pickups, barrels — is a quad standing on the floor at the
   body's feet, leaning back to face the camera square-on so its projected size is exactly its
