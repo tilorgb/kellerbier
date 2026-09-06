@@ -257,6 +257,8 @@ export const HUD_PALETTE = {
   minimapShopIconFill: 0x6ab0c9,
   minimapShopIconRim: 0xd0eef6,
   minimapBossIcon: 0xc95a5a,
+  /** The mini-boss gate (#274) — the boss red, lightened: the same fight, one tier down. The *shape* is what tells them apart (`ui/marker-art.ts`), not this. */
+  minimapMinibossIcon: 0xe08a7a,
 
   promilleTier: PROMILLE_TIER,
   promilleTierNeutral: PROMILLE_TIER_NEUTRAL,

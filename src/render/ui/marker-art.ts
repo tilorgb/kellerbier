@@ -58,6 +58,32 @@ export function dotTexture(radius: number, colour: number, rim: number = colour)
   });
 }
 
+/**
+ * A hollow upward triangle — the minimap's mini-boss-room icon (#274).
+ *
+ * Deliberately the boss triangle with its middle cut out rather than a new
+ * shape or a smaller triangle: a mini-boss is the floor's *other* fight, so
+ * it should read as "boss, lesser" at a glance, and #21's "no information by
+ * colour alone" means that relationship has to be carried by the silhouette,
+ * not by drawing the same triangle in a different colour.
+ */
+export function hollowTriangleTexture(radius: number, colour: number): Texture {
+  const centre = radius - 0.5;
+  return rasterise(radius, (x, y) => {
+    const halfWidth = (y + 1) / 2;
+    const inside = Math.abs(x - centre) <= halfWidth;
+    if (!inside) {
+      return undefined;
+    }
+    // One pixel of border all round: the bottom row, and — on every other
+    // row — the two pixels the row's own edge lands on. A row narrow enough
+    // that its border pixels meet stays solid, which is what keeps the apex
+    // from disappearing at this size.
+    const isEdge = y >= radius * 2 - 1 || Math.abs(x - centre) > halfWidth - 1 || halfWidth <= 1.5;
+    return isEdge ? colour : undefined;
+  });
+}
+
 /** A filled upward triangle — the minimap's boss-room icon. */
 export function triangleTexture(radius: number, colour: number): Texture {
   const centre = radius - 0.5;

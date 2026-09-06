@@ -104,7 +104,24 @@ export interface RoomPickupSpawn {
  * see `RoomRole` in `sim/room/floor-plan.ts`. Omitted means the template is
  * generic: only placed in a `'start'` or `'normal'` slot, never a special one.
  */
-export type RoomSpecialRole = 'boss' | 'treasure' | 'shop' | 'secret' | 'supersecret';
+export type RoomSpecialRole = 'boss' | 'miniboss' | 'treasure' | 'shop' | 'secret' | 'supersecret';
+
+/**
+ * Every `RoomSpecialRole`, once — the enumerated counterpart to the type
+ * above, for the same reason `ROOM_SHAPES` exists: this list had grown three
+ * hand-written copies (`sim/room/template.ts`'s validator, `editor/
+ * definitions.ts`'s picker, `editor/state.ts`'s type guard), and the shape
+ * one had already gone stale missing `'T'` before `ROOM_SHAPES` replaced it.
+ * Adding a role (`'miniboss'`, #274) is one line here instead.
+ */
+export const ROOM_SPECIAL_ROLES: readonly RoomSpecialRole[] = [
+  'boss',
+  'miniboss',
+  'treasure',
+  'shop',
+  'secret',
+  'supersecret',
+];
 
 export interface RoomHazard {
   readonly x: number;

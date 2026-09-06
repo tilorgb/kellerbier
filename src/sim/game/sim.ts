@@ -489,6 +489,11 @@ function pedestalPoolForRole(role: RoomSpecialRole | undefined): ItemPoolId {
     case 'secret':
     case 'supersecret':
       return 'secret';
+    // A mini-boss room authors no pedestal today — its reward is #275's
+    // Kellerschlüssel, which is a pickup, not a pedestal item. Listed anyway
+    // so the day one does, it draws from the same pool a treasure room does
+    // rather than silently inheriting whatever `default` happened to be.
+    case 'miniboss':
     case 'treasure':
     case 'shop':
     default:
@@ -2165,6 +2170,14 @@ export class GameSim {
       // never a boss, treasure, shop or secret encounter, each of which is
       // already authored to be its own kind of harder.
       const eliteChance = compiled.specialRole === undefined ? this.eliteChanceForFloor(floor) : 0;
+      // A mini-boss room (#274) is the one special room whose "own kind of
+      // harder" *is* the elite modifier: until its real occupants land (F/G
+      // of #270), the fight worth detouring for is a guaranteed elite of one
+      // of the floor's own enemies, in an authored arena. Guaranteed, not
+      // rolled — a gate the player walks to and finds an ordinary body in is
+      // not a gate — so this never draws from `random.enemies`, and the
+      // elite roll below stays exactly as reproducible as it was.
+      const guaranteedElite = compiled.specialRole === 'miniboss';
       for (const spawn of compiled.enemySpawns) {
         if (entry !== null) {
           const dx = spawn.x - entry.x;
@@ -2177,7 +2190,8 @@ export class GameSim {
         if (definition < 0) {
           throw new Error(`room template enemy "${spawn.enemyId}" is not registered`);
         }
-        const elite = eliteChance > 0 && this.random.enemies.nextFloat() < eliteChance;
+        const elite =
+          guaranteedElite || (eliteChance > 0 && this.random.enemies.nextFloat() < eliteChance);
         this.spawnEnemyKind(definition, spawn.x, spawn.y, elite);
       }
       // Decorative props are art (#18) except a barrel, a destructible

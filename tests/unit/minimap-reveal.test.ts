@@ -54,6 +54,7 @@ function plan(rooms: readonly FloorPlanRoom[]): FloorPlan {
     shopRoomId: 't',
     secretRoomId: 't',
     supersecretRoomId: 't',
+    minibossRoomIds: [],
     rooms,
   };
 }

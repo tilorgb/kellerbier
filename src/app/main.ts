@@ -1072,6 +1072,10 @@ async function boot(): Promise<void> {
     treasure: tileTextures['minimap-treasure'],
     shop: tileTextures['minimap-shop'],
     boss: tileTextures['minimap-boss'],
+    // No authored mini-boss icon yet (#274) — `MinimapHud` falls back to its
+    // generated shape for any role missing here, which is what this whole
+    // `authored` argument is shaped for.
+    miniboss: tileTextures['minimap-miniboss'],
   });
   hudLayer.addChild(minimapHud.view);
   // The overlay is centred over the game, not the window — it should stay

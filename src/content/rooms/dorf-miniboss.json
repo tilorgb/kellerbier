@@ -1,0 +1,43 @@
+{
+  "id": "dorf-miniboss",
+  "tileGrid": [
+    "###############",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "###############"
+  ],
+  "obstacles": [],
+  "enemySpawns": [{ "x": 120, "y": 72, "group": "miniboss" }],
+  "spawnGroups": [
+    {
+      "id": "miniboss",
+      "count": 1,
+      "choices": [
+        { "enemyId": "kuh", "minFloor": 2, "maxFloor": 2 },
+        { "enemyId": "bauer", "minFloor": 2, "maxFloor": 2 }
+      ]
+    }
+  ],
+  "pickupSpawns": [],
+  "hazards": [],
+  "decorativeProps": [
+    { "x": 40, "y": 32, "type": "hay-bale" },
+    { "x": 200, "y": 32, "type": "hay-bale" },
+    { "x": 40, "y": 112, "type": "hay-bale" },
+    { "x": 200, "y": 112, "type": "hay-bale" },
+    { "x": 120, "y": 24, "type": "crate-stack" }
+  ],
+  "metadata": {
+    "floorTags": ["rural"],
+    "shape": "1x1",
+    "doors": { "north": true, "east": true, "south": true, "west": true },
+    "difficultyTier": 4,
+    "weight": 1,
+    "specialRole": "miniboss"
+  }
+}

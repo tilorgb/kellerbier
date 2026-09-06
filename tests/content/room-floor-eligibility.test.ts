@@ -4,7 +4,7 @@ import { FLOOR_CONFIGS } from '../../src/content/floors/definition.js';
 import { ROOM_TEMPLATES } from '../../src/content/rooms/index.js';
 import type { RoomShape } from '../../src/content/rooms/definition.js';
 import { compileRoomTemplate, validateRoomTemplate } from '../../src/sim/room/template.js';
-import { generateFloor } from '../../src/sim/room/floor-plan.js';
+import { generateFloor, validateFloorPlan } from '../../src/sim/room/floor-plan.js';
 import { Rng } from '../../src/sim/rng/rng.js';
 
 /**
@@ -148,4 +148,82 @@ describe('encounter diversity across a floor (#156)', () => {
     // question a player asks between two runs.
     expect([...sequenceA].sort()).not.toEqual([...sequenceB].sort());
   });
+});
+
+/**
+ * #274's mini-boss slot, against real content rather than a synthetic pool.
+ *
+ * The gap this guards is the one `CLAUDE.md` names: a floor whose content has
+ * no mini-boss arena authored must generate cleanly *without* the slot — a
+ * floor with a locked boss door and no key (#275) is the failure mode, and it
+ * starts as "the role exists, the template does not."
+ */
+describe('mini-boss content per floor (#274)', () => {
+  const templates = ROOM_TEMPLATES.map((room, index) =>
+    validateRoomTemplate(room, `room[${String(index)}]`, ENEMY_DEFINITIONS),
+  );
+  const withMinibossRole = templates.filter(
+    (template) => template.metadata.specialRole === 'miniboss',
+  );
+
+  it('authors a 1x1 mini-boss arena for every floor tag that has a boss room', () => {
+    // The slot is `1x1` only (rule 5), so a mini-boss template of any other
+    // shape could never be placed — this is what keeps "authored" and
+    // "placeable" the same thing.
+    const bossTags = new Set(
+      templates
+        .filter((template) => template.metadata.specialRole === 'boss')
+        .flatMap((template) => template.metadata.floorTags),
+    );
+    expect(bossTags.size).toBeGreaterThan(0);
+    for (const tag of bossTags) {
+      const arenas = withMinibossRole.filter(
+        (template) =>
+          template.metadata.shape === '1x1' && template.metadata.floorTags.includes(tag),
+      );
+      expect(arenas.length, `no 1x1 mini-boss template tagged "${tag}"`).toBeGreaterThan(0);
+    }
+  });
+
+  for (const config of FLOOR_CONFIGS) {
+    const hasContent = templates.some(
+      (template) =>
+        template.metadata.specialRole === 'boss' &&
+        template.metadata.floorTags.includes(config.floorTag),
+    );
+    if (!hasContent) {
+      // Floors 3-7 (#39-#43, parked in M10) have no room templates at all
+      // yet, so there is no floor to generate — the "no mini-boss content"
+      // case is exercised below instead, on a real floor with its mini-boss
+      // template taken away.
+      continue;
+    }
+
+    it(`floor ${String(config.floor)} gets exactly one mini-boss room, in an authored arena`, () => {
+      for (let seed = 0; seed < 100; seed++) {
+        const plan = generateFloor(new Rng(seed + 900), config, templates);
+        const context = `floor ${String(config.floor)}, seed ${String(seed)}`;
+        expect(plan.minibossRoomIds.length, context).toBe(plan.extraLarge ? 2 : 1);
+        for (const id of plan.minibossRoomIds) {
+          const room = plan.rooms.find((candidate) => candidate.id === id);
+          const template = templates.find((candidate) => candidate.id === room?.templateId);
+          expect(template?.metadata.specialRole, context).toBe('miniboss');
+          expect(template?.metadata.floorTags, context).toContain(config.floorTag);
+        }
+        expect(validateFloorPlan(plan, templates), context).toEqual([]);
+      }
+    });
+
+    it(`floor ${String(config.floor)} still generates, without the slot, when no mini-boss template is authored`, () => {
+      const withoutMiniboss = templates.filter(
+        (template) => template.metadata.specialRole !== 'miniboss',
+      );
+      for (let seed = 0; seed < 100; seed++) {
+        const plan = generateFloor(new Rng(seed + 900), config, withoutMiniboss);
+        const context = `floor ${String(config.floor)}, seed ${String(seed)}`;
+        expect(plan.minibossRoomIds, context).toEqual([]);
+        expect(validateFloorPlan(plan, withoutMiniboss), context).toEqual([]);
+      }
+    });
+  }
 });

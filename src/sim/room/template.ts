@@ -5,6 +5,7 @@ import {
   ROOM_COLUMNS,
   ROOM_ROWS,
   ROOM_SHAPES,
+  ROOM_SPECIAL_ROLES,
   ROOM_TILE_UNITS,
   isMultiCellRoomTemplate,
   type DoorDirection,
@@ -226,8 +227,6 @@ export function validateRoomTemplate(
   };
 }
 
-const SPECIAL_ROLES = ['boss', 'treasure', 'shop', 'secret', 'supersecret'] as const;
-
 function optionalSpecialRole(
   value: unknown,
   source: string,
@@ -235,8 +234,8 @@ function optionalSpecialRole(
   if (value === undefined) {
     return undefined;
   }
-  if (typeof value !== 'string' || !(SPECIAL_ROLES as readonly string[]).includes(value)) {
-    fail(source, `must be one of ${SPECIAL_ROLES.join(', ')}`);
+  if (typeof value !== 'string' || !(ROOM_SPECIAL_ROLES as readonly string[]).includes(value)) {
+    fail(source, `must be one of ${ROOM_SPECIAL_ROLES.join(', ')}`);
   }
   return value as RoomTemplate['metadata']['specialRole'];
 }

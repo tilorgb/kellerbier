@@ -41,7 +41,8 @@ export interface Cell {
   readonly y: number;
 }
 
-export type RoomRole = 'start' | 'boss' | 'treasure' | 'shop' | 'secret' | 'supersecret' | 'normal';
+export type RoomRole =
+  'start' | 'boss' | 'miniboss' | 'treasure' | 'shop' | 'secret' | 'supersecret' | 'normal';
 
 /**
  * One real door: `cellIndex` is into this room's own `cells` (which sub-room
@@ -120,6 +121,16 @@ export interface FloorPlan {
   readonly shopRoomId: string;
   readonly secretRoomId: string;
   readonly supersecretRoomId: string;
+  /**
+   * The floor's mini-boss rooms (#274) — one, or two on an XL floor. Empty
+   * on a floor whose content has no `specialRole: 'miniboss'` template
+   * authored yet (floors 3-7 today): that is a content gap, not a bug, and
+   * the floor generates without the slot rather than failing (`CLAUDE.md`'s
+   * graceful-degradation rule, `docs/DECISIONS.md` #19). A list rather than
+   * one id per slot the way `treasureRoomId` is, because how many there are
+   * is itself a property of the floor.
+   */
+  readonly minibossRoomIds: readonly string[];
   readonly rooms: readonly FloorPlanRoom[];
 }
 
@@ -1139,15 +1150,117 @@ function distinctNeighborCount(doors: readonly RoomDoor[] | undefined): number {
 }
 
 /**
+ * Rule 1 of the mini-boss gate (#274): the room belongs in the last third of
+ * the floor, measured against how far the boss itself is. The point is that
+ * the backtrack after collecting the key (#275) is short — a gate found two
+ * doors in means walking the whole floor twice.
+ */
+const MINIBOSS_MIN_DISTANCE_FRACTION = 0.6;
+
+/** Mini-boss rooms per floor — two on an XL floor (#271), which is twice the floor to explore. */
+const MINIBOSS_ROOMS_PER_FLOOR = 1;
+const MINIBOSS_ROOMS_PER_XL_FLOOR = 2;
+
+/** Everything `minibossSlotProblem` needs to know about the floor around one candidate room. */
+interface MinibossPlacementContext {
+  readonly startId: string;
+  readonly bossId: string;
+  readonly bossDistance: number;
+  readonly bossNeighborIds: ReadonlySet<string>;
+  readonly neighborsOf: (id: string) => readonly string[];
+  /**
+   * Whether a room may be walked through on the way to the boss at all — a
+   * secret/supersecret room is reached by bombing a wall (#23), so a "path"
+   * through one is not a path a player can be assumed to have.
+   */
+  readonly routable: (id: string) => boolean;
+}
+
+/**
+ * Whether the boss room is still reachable from the start room once
+ * `removedId` is taken out of the floor graph — the same property
+ * `eligibleTemplates` already enforces for a `keyLocked` treasure room, asked
+ * of a whole room rather than of one template's door count.
+ */
+function bossReachableWithout(context: MinibossPlacementContext, removedId: string): boolean {
+  if (removedId === context.startId || removedId === context.bossId) {
+    return false;
+  }
+  const visited = new Set<string>([context.startId]);
+  const queue = [context.startId];
+  let head = 0;
+  while (head < queue.length) {
+    const current = queue[head];
+    head += 1;
+    if (current === undefined) {
+      continue;
+    }
+    if (current === context.bossId) {
+      return true;
+    }
+    for (const neighborId of context.neighborsOf(current)) {
+      if (neighborId === removedId || visited.has(neighborId) || !context.routable(neighborId)) {
+        continue;
+      }
+      visited.add(neighborId);
+      queue.push(neighborId);
+    }
+  }
+  return false;
+}
+
+/**
+ * Why a room cannot hold the floor's mini-boss (#274), or `null` if it can —
+ * rules 1-3 of the issue, in one place so `assignRoles` filters on exactly
+ * what `validateFloorPlan` re-checks afterwards.
+ *
+ * Rule 5 (`1x1` only) is folded in as the first check, for the same reason
+ * the boss slot is `1x1`-only (#big-rooms): a mini-boss designed for a
+ * bigger arena is a template opting in later, not a shape the slot assignment
+ * stumbles into.
+ */
+function minibossSlotProblem(
+  room: {
+    readonly id: string;
+    readonly shape: RoomShape | 'staircase';
+    readonly distanceFromStart: number;
+  },
+  context: MinibossPlacementContext,
+): string | null {
+  if (room.shape !== '1x1') {
+    return `is shape ${room.shape}, but a mini-boss slot is 1x1 only`;
+  }
+  const minDistance = MINIBOSS_MIN_DISTANCE_FRACTION * context.bossDistance;
+  if (room.distanceFromStart < minDistance) {
+    return (
+      `sits ${String(room.distanceFromStart)} doors from the start room, short of the ` +
+      `${minDistance.toFixed(1)} its floor's boss distance (${String(context.bossDistance)}) requires`
+    );
+  }
+  if (context.bossNeighborIds.has(room.id)) {
+    return 'is adjacent to the boss room, so the key and the door it opens are in sight of each other';
+  }
+  if (!bossReachableWithout(context, room.id)) {
+    return 'sits on the only path from the start room to the boss room';
+  }
+  return null;
+}
+
+/**
  * Assigns roles by the rules in `docs/GAME_DESIGN.md` §4: boss at maximum
- * distance, treasure and shop preferring dead ends. Returns `null` when the
- * skeleton is too thin to hold every required role — `tryGenerateFloor`
- * reads that as "retry", not as a bug.
+ * distance, mini-boss off the path to it (#274), treasure and shop preferring
+ * dead ends. Returns `null` when the skeleton is too thin to hold every
+ * required role — `tryGenerateFloor` reads that as "retry", not as a bug.
  *
  * `secretId`/`supersecretId` are always already placed by the time this runs
  * (`placeSecretRoom`/`placeSupersecretRoom`, called earlier in
  * `tryGenerateFloor`) — a floor with nowhere to put either is itself a retry,
  * not something this function papers over by relabelling an ordinary room.
+ *
+ * `minibossCount` is how many mini-boss rooms this floor's *content* can
+ * actually fill (`tryGenerateFloor`), never a wish: `0` on a floor with no
+ * authored mini-boss template, and this function then places none rather
+ * than labelling a room nothing can be resolved for.
  */
 function assignRoles(
   rooms: readonly PlacedRoom[],
@@ -1156,6 +1269,7 @@ function assignRoles(
   startId: string,
   secretId: string,
   supersecretId: string,
+  minibossCount: number,
 ): Map<string, RoomRole> | null {
   const roles = new Map<string, RoomRole>([
     [startId, 'start'],
@@ -1198,7 +1312,44 @@ function assignRoles(
   }
   roles.set(boss.id, 'boss');
 
-  const remaining = candidates.filter((room) => room.id !== boss.id);
+  // The mini-boss gate (#274) picks before treasure and shop do: its
+  // placement rules are far narrower than "prefer a dead end", so a floor
+  // where only one room can hold it must not lose that room to a slot any
+  // other room could have taken. A floor that cannot satisfy the rules is a
+  // retry, exactly like a floor with nowhere to put a secret room — never a
+  // floor that quietly relabels an ordinary room as the gate.
+  if (minibossCount > 0) {
+    const minibossContext: MinibossPlacementContext = {
+      startId,
+      bossId: boss.id,
+      bossDistance: distanceOf(boss.id),
+      bossNeighborIds: new Set(neighborRoomIds(adjacency.get(boss.id) ?? [])),
+      neighborsOf: (id) => neighborRoomIds(adjacency.get(id) ?? []),
+      routable: (id) => id !== secretId && id !== supersecretId,
+    };
+    const eligible = candidates.filter(
+      (room) =>
+        room.id !== boss.id &&
+        minibossSlotProblem(
+          { id: room.id, shape: room.shape, distanceFromStart: distanceOf(room.id) },
+          minibossContext,
+        ) === null,
+    );
+    // Dead ends first, then anything else, farthest first within each — the
+    // same fallback shape `specialPool` below already uses.
+    const minibossPool = [
+      ...eligible.filter((room) => degreeOf(room.id) === 1).sort(byFarthestFirst),
+      ...eligible.filter((room) => degreeOf(room.id) !== 1).sort(byFarthestFirst),
+    ];
+    if (minibossPool.length < minibossCount) {
+      return null;
+    }
+    for (const room of minibossPool.slice(0, minibossCount)) {
+      roles.set(room.id, 'miniboss');
+    }
+  }
+
+  const remaining = candidates.filter((room) => !roles.has(room.id));
   const remainingDeadEnds = remaining
     .filter((room) => degreeOf(room.id) === 1)
     .sort(byFarthestFirst);
@@ -1223,13 +1374,46 @@ function assignRoles(
 
 /** The template `specialRole` a room's `role` requires — `undefined` for a generic template. */
 function requiredSpecialRole(role: RoomRole): RoomTemplate['metadata']['specialRole'] {
-  return role === 'boss' ||
-    role === 'treasure' ||
-    role === 'shop' ||
-    role === 'secret' ||
-    role === 'supersecret'
-    ? role
-    : undefined;
+  return role === 'start' || role === 'normal' ? undefined : role;
+}
+
+/**
+ * Whether `templatePool` can actually fill a mini-boss slot on this floor —
+ * a `1x1`, `specialRole: 'miniboss'` template tagged for its `floorTag`.
+ *
+ * A floor with none (floors 3-7 today, #39-#43) gets no mini-boss slot at
+ * all: it is a content gap, not a bug, so it degrades to a floor without the
+ * role rather than to a retry loop that eventually throws. The warning is
+ * `CLAUDE.md`'s own graceful-degradation shape — dev builds only, once per
+ * floor tag, the same policy `template.ts`'s `nearestFloorChoice` uses.
+ * Never a floor with a locked boss door and no key (#275): the lock is a
+ * property of the slot existing, so no slot means no lock.
+ */
+const warnedAboutMissingMinibossContent = new Set<string>();
+
+function minibossSlotsForFloor(
+  config: FloorConfig,
+  templatePool: readonly RoomTemplate[],
+  extraLarge: boolean,
+): number {
+  const authored = templatePool.some(
+    (template) =>
+      template.metadata.specialRole === 'miniboss' &&
+      template.metadata.shape === '1x1' &&
+      template.metadata.floorTags.includes(config.floorTag),
+  );
+  if (!authored) {
+    if (import.meta.env.DEV && !warnedAboutMissingMinibossContent.has(config.floorTag)) {
+      warnedAboutMissingMinibossContent.add(config.floorTag);
+      console.warn(
+        `floor ${String(config.floor)} (${config.name}) has no 1x1 specialRole: "miniboss" room ` +
+          `template tagged "${config.floorTag}" — generating it without a mini-boss room. Author ` +
+          `one when the real content is ready (#274).`,
+      );
+    }
+    return 0;
+  }
+  return extraLarge ? MINIBOSS_ROOMS_PER_XL_FLOOR : MINIBOSS_ROOMS_PER_FLOOR;
 }
 
 /**
@@ -1367,7 +1551,15 @@ function tryGenerateFloor(
     return null;
   }
 
-  const roles = assignRoles(rooms, adjacency, distances, startId, secretId, supersecretId);
+  const roles = assignRoles(
+    rooms,
+    adjacency,
+    distances,
+    startId,
+    secretId,
+    supersecretId,
+    minibossSlotsForFloor(config, templatePool, extraLarge),
+  );
   if (roles === null) {
     return null;
   }
@@ -1433,6 +1625,9 @@ function tryGenerateFloor(
 
   const findRole = (role: RoomRole): string | undefined =>
     planRooms.find((room) => room.role === role)?.id;
+  const minibossRoomIds = planRooms
+    .filter((room) => room.role === 'miniboss')
+    .map((room) => room.id);
   const bossRoomId = findRole('boss');
   const treasureRoomId = findRole('treasure');
   const shopRoomId = findRole('shop');
@@ -1458,6 +1653,7 @@ function tryGenerateFloor(
     shopRoomId,
     secretRoomId,
     supersecretRoomId,
+    minibossRoomIds,
     rooms: planRooms,
   };
 
@@ -1566,6 +1762,55 @@ export function validateFloorPlan(
       problems.push(
         `floor must have exactly one ${role} room, has ${String(roleCounts.get(role) ?? 0)}`,
       );
+    }
+  }
+
+  // The mini-boss gate (#274). Its *count* is content-dependent — a floor
+  // whose templates can't fill the slot gets none at all (see
+  // `minibossSlotsForFloor`), which is why "zero" is valid here and "exactly
+  // one" is not the rule it is for every role above. What is always true: the
+  // ids agree with the roles, an XL floor gets two where an ordinary one gets
+  // one, and every one of them satisfies placement rules 1-3, re-derived
+  // here off the plan rather than trusted from `assignRoles`.
+  const minibossRooms = plan.rooms.filter((room) => room.role === 'miniboss');
+  const expectedMinibossCount = plan.extraLarge
+    ? MINIBOSS_ROOMS_PER_XL_FLOOR
+    : MINIBOSS_ROOMS_PER_FLOOR;
+  if (minibossRooms.length !== 0 && minibossRooms.length !== expectedMinibossCount) {
+    problems.push(
+      `floor has ${String(minibossRooms.length)} mini-boss room(s); an ${plan.extraLarge ? 'XL' : 'ordinary'} ` +
+        `floor takes ${String(expectedMinibossCount)}, or none at all where its content has no mini-boss template`,
+    );
+  }
+  if (
+    [...plan.minibossRoomIds].sort().join(',') !==
+    minibossRooms
+      .map((room) => room.id)
+      .sort()
+      .join(',')
+  ) {
+    problems.push(
+      `minibossRoomIds [${plan.minibossRoomIds.join(', ')}] does not match the rooms carrying the ` +
+        `miniboss role [${minibossRooms.map((room) => room.id).join(', ')}]`,
+    );
+  }
+  if (bossRoom !== undefined) {
+    const minibossContext: MinibossPlacementContext = {
+      startId: plan.startRoomId,
+      bossId: plan.bossRoomId,
+      bossDistance: bossRoom.distanceFromStart,
+      bossNeighborIds: new Set(neighborRoomIds(bossRoom.doors)),
+      neighborsOf: (id) => neighborRoomIds(byId.get(id)?.doors ?? []),
+      routable: (id) => {
+        const role = byId.get(id)?.role;
+        return role !== 'secret' && role !== 'supersecret';
+      },
+    };
+    for (const room of minibossRooms) {
+      const problem = minibossSlotProblem(room, minibossContext);
+      if (problem !== null) {
+        problems.push(`mini-boss room ${room.id} ${problem}`);
+      }
     }
   }
 

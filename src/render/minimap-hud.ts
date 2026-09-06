@@ -12,7 +12,12 @@ import { computeVoidCells, voidCellKey } from '../sim/room/void-cells.js';
 import { cellBounds, roomOutlineSegments } from './room-outline.js';
 import { HUD_PALETTE, UI_PALETTE } from './palette.js';
 import { type UiKit } from './ui/kit.js';
-import { diamondTexture, dotTexture, triangleTexture } from './ui/marker-art.js';
+import {
+  diamondTexture,
+  dotTexture,
+  hollowTriangleTexture,
+  triangleTexture,
+} from './ui/marker-art.js';
 import { uiText, uiTextWidth, UI_TEXT_HEIGHT } from './ui/text.js';
 
 /** Room for the floor's name above the compact map. */
@@ -24,8 +29,11 @@ const OVERLAY_CELL = 16;
 /**
  * Icons keyed by role, once a room is revealed. `secret` and `supersecret`
  * deliberately have none — a room found by bombing a wall (#23) should not
- * be spoiled by a map icon before it's found. Devil/Angel roles don't exist
- * yet (M7, `docs/GAME_DESIGN.md` §9).
+ * be spoiled by a map icon before it's found. A mini-boss room (#274) does
+ * get one, on the same terms as the boss: it is a landmark the player is
+ * meant to be able to decide to walk to, and a gate nobody can find on the
+ * map is a gate nobody detours for. Devil/Angel roles don't exist yet (M7,
+ * `docs/GAME_DESIGN.md` §9).
  */
 type RoomIcons = Readonly<Partial<Record<RoomRole, Texture | undefined>>>;
 
@@ -286,6 +294,11 @@ export class MinimapHud {
         authored.shop ??
         dotTexture(4, HUD_PALETTE.minimapShopIconFill, HUD_PALETTE.minimapShopIconRim),
       boss: authored.boss ?? triangleTexture(4, HUD_PALETTE.minimapBossIcon),
+      // The mini-boss gate (#274) has no authored icon yet — new pixel art
+      // is a design choice that gets signed off on its own (`CLAUDE.md`), so
+      // this ships the generated shape the other three roles started life
+      // with, and `authored.miniboss` is already read for the day it lands.
+      miniboss: authored.miniboss ?? hollowTriangleTexture(4, HUD_PALETTE.minimapMinibossIcon),
     };
 
     this.header = uiText('');
