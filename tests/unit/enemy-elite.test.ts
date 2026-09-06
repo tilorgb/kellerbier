@@ -3,6 +3,7 @@ import { entityIndex } from '../../src/sim/ecs/entity.js';
 import { World } from '../../src/sim/ecs/world.js';
 import cellarBoss from '../../src/content/rooms/cellar-boss.json';
 import cellarCrossroads from '../../src/content/rooms/cellar.json';
+import cellarMiniboss from '../../src/content/rooms/cellar-miniboss.json';
 import { GameSim } from '../../src/sim/game/sim.js';
 import { RoomGeometry } from '../../src/sim/room/geometry.js';
 import { isEnemyElite } from '../../src/sim/systems/enemy.js';
@@ -116,6 +117,24 @@ describe('elite modifier (#156)', () => {
     expect(indices.length).toBeGreaterThan(0);
     for (const index of indices) {
       expect(isEnemyElite(sim, index)).toBe(false);
+    }
+  });
+
+  it('makes every body in a mini-boss room an elite, even at a zero roll chance (#274)', () => {
+    // The mini-boss room's placeholder occupant *is* the elite modifier
+    // (#274) until its real fights land: a gate the player detours to and
+    // finds an ordinary body in is not a gate. Guaranteed, not rolled — so
+    // this holds with the roll chance pinned at zero.
+    const sim = emptySim();
+    sim.tuning.enemy.eliteChanceBase = 0;
+    sim.tuning.enemy.eliteChancePerExtraFloor = 0;
+
+    sim.loadRoom(cellarMiniboss, 1);
+
+    const indices = liveEnemyIndices(sim);
+    expect(indices.length).toBeGreaterThan(0);
+    for (const index of indices) {
+      expect(isEnemyElite(sim, index)).toBe(true);
     }
   });
 

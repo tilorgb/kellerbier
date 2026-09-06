@@ -78,6 +78,27 @@ function aimAxes(frame: InputFrame, dx: number, dy: number): void {
   setActionDown(frame, InputAction.Fire, true);
 }
 
+/**
+ * Ticks of a fight with nothing landing before the bot stops holding its
+ * range and closes to `PRESS_ATTACK_RANGE`.
+ *
+ * `cautious`'s 110px engage range sits just outside a shot's own ~105px
+ * lifetime, so a body that keeps its distance — a Rollfass bouncing along a
+ * wall, a Kellerassel curled in its shell — can be shot at for a full
+ * stuck-detection window without a single pellet arriving. That was survivable
+ * while every room held several enemies and one of them always closed; a
+ * mini-boss arena (#274) is one body in an open room, and it is the first
+ * room that reliably turns "holds range politely" into a run the harness
+ * calls stuck. Pressing the attack is what a player does there, and it is
+ * what #275 will need — its key is in that room, so failing to kill the
+ * occupant stops being an unlucky sweep and starts being a run that cannot
+ * finish.
+ */
+const PRESS_ATTACK_AFTER_TICKS = 120;
+
+/** Well inside a shot's range — where pressing the attack actually lands hits. */
+const PRESS_ATTACK_RANGE = 44;
+
 /** How many ticks a circle-strafe half-orbit lasts before flipping direction. */
 const CIRCLE_PERIOD_TICKS = 180;
 
@@ -104,8 +125,19 @@ function circleSign(tick: number): number {
  * range, the same fix `moveTowardInput`'s stall-strafe applies to door
  * navigation, applied unconditionally here since a fight has no "not yet
  * stalled" grace period worth waiting out.
+ *
+ * `ticksSinceDamageDealt` is the caller's own "nothing has landed" counter —
+ * past `PRESS_ATTACK_AFTER_TICKS` the bot closes to `PRESS_ATTACK_RANGE`
+ * instead of holding its profile's range, panicking included. See
+ * `PRESS_ATTACK_AFTER_TICKS`'s doc comment for why holding range can mean
+ * firing forever into nothing.
  */
-export function combatInput(sim: GameSim, skill: SkillProfile, tick = 0): InputFrame {
+export function combatInput(
+  sim: GameSim,
+  skill: SkillProfile,
+  tick = 0,
+  ticksSinceDamageDealt = 0,
+): InputFrame {
   const frame = createInputFrame();
   const enemy = nearestEnemy(sim);
   if (enemy === null) {
@@ -114,14 +146,19 @@ export function combatInput(sim: GameSim, skill: SkillProfile, tick = 0): InputF
   aimAxes(frame, enemy.dx, enemy.dy);
 
   const healthFraction = sim.playerMaxHealth > 0 ? sim.playerHealth / sim.playerMaxHealth : 1;
-  const panicking = skill.panicHealthFraction > 0 && healthFraction < skill.panicHealthFraction;
+  const pressing = ticksSinceDamageDealt > PRESS_ATTACK_AFTER_TICKS;
+  const panicking =
+    !pressing && skill.panicHealthFraction > 0 && healthFraction < skill.panicHealthFraction;
+  const engageRange = pressing
+    ? Math.min(skill.engageRange, PRESS_ATTACK_RANGE)
+    : skill.engageRange;
 
   let radialX = 0;
   let radialY = 0;
-  if (panicking || enemy.distance < skill.engageRange - skill.retreatMargin) {
+  if (panicking || enemy.distance < engageRange - skill.retreatMargin) {
     radialX = -enemy.dx;
     radialY = -enemy.dy;
-  } else if (enemy.distance > skill.engageRange) {
+  } else if (enemy.distance > engageRange) {
     radialX = enemy.dx;
     radialY = enemy.dy;
   }

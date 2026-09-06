@@ -17,6 +17,7 @@ import {
   generateFloor,
   neighborRoomIds,
   validateFloorPlan,
+  type FloorPlan,
 } from '../../src/sim/room/floor-plan.js';
 import { validateRoomTemplate } from '../../src/sim/room/template.js';
 import type { StaircaseContentTemplate } from '../../src/sim/room/staircase.js';
@@ -137,6 +138,54 @@ function syntheticPoolWithLockedTreasure(): RoomTemplate[] {
     });
   }
   return pool;
+}
+
+/**
+ * `syntheticPool()` plus one `1x1` mini-boss arena per floor tag in `tags`
+ * (every floor tag by default) — #274's slot is only ever assigned on a floor
+ * whose content can actually fill it, so a pool without one of these is the
+ * "floor 3-7 has no mini-boss authored yet" case, and a pool with one is
+ * floors 1-2's.
+ */
+function syntheticPoolWithMiniboss(
+  tags: readonly string[] = FLOOR_CONFIGS.map((config) => config.floorTag),
+): RoomTemplate[] {
+  const pool = syntheticPool();
+  const template = pool.find(
+    (candidate): candidate is SingleCellRoomTemplate =>
+      candidate.metadata.shape === '1x1' && candidate.metadata.specialRole === undefined,
+  );
+  if (template === undefined) {
+    throw new Error('synthetic pool has no 1x1 ordinary template to base a mini-boss arena on');
+  }
+  for (const tag of tags) {
+    pool.push({
+      ...template,
+      id: `synthetic-${tag}-1x1-miniboss`,
+      metadata: { ...template.metadata, floorTags: [tag], specialRole: 'miniboss' },
+    });
+  }
+  return pool;
+}
+
+/** Every room reachable from the start room with `removedId` cut out of the floor graph — re-derived here rather than imported, so this tests the rule and not the implementation of it. */
+function reachableWithout(plan: FloorPlan, removedId: string): Set<string> {
+  const byId = new Map(plan.rooms.map((room) => [room.id, room] as const));
+  const visited = new Set<string>([plan.startRoomId]);
+  const queue = [plan.startRoomId];
+  let head = 0;
+  while (head < queue.length) {
+    const current = queue[head];
+    head += 1;
+    for (const neighborId of neighborRoomIds(byId.get(current ?? '')?.doors ?? [])) {
+      if (neighborId === removedId || visited.has(neighborId)) {
+        continue;
+      }
+      visited.add(neighborId);
+      queue.push(neighborId);
+    }
+  }
+  return visited;
 }
 
 /** One staircase template per floor tag — enough for the generator to have something to place (#112). */
@@ -648,5 +697,132 @@ describe('floor generation with a staircase pool (#112)', () => {
       }
     }
     expect(checkedDoors).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * #274's mini-boss gate: one room per floor (two on an XL floor), placed in
+ * the last third, never next to the boss and never on the only path to it —
+ * because #275 puts the key to the boss door in it, and a gate on the
+ * critical path is a gate nobody chooses to take.
+ */
+describe('mini-boss rooms (#274)', () => {
+  it('places one per ordinary floor and two on an XL floor, satisfying rules 1-3, over 10,000 floors', () => {
+    const pool = syntheticPoolWithMiniboss();
+    let sawExtraLarge = false;
+    for (let seed = 0; seed < STRESS_FLOOR_COUNT; seed++) {
+      const config = floorConfig(seed % FLOOR_CONFIGS.length);
+      const plan = generateFloor(new Rng(seed), config, pool);
+      const context = `seed ${String(seed)}, floor ${config.name}`;
+      sawExtraLarge = sawExtraLarge || plan.extraLarge;
+
+      const minibosses = plan.rooms.filter((room) => room.role === 'miniboss');
+      expect(minibosses.length, context).toBe(plan.extraLarge ? 2 : 1);
+      expect([...plan.minibossRoomIds].sort(), context).toEqual(
+        minibosses.map((room) => room.id).sort(),
+      );
+
+      const bossRoom = plan.rooms.find((room) => room.id === plan.bossRoomId);
+      const bossNeighbors = new Set(neighborRoomIds(bossRoom?.doors ?? []));
+      for (const room of minibosses) {
+        // Rule 5: `1x1` only, same as the boss slot.
+        expect(room.shape, `${context}, room ${room.id}`).toBe('1x1');
+        // Rule 1: the last third of the floor, measured against the boss.
+        expect(room.distanceFromStart, `${context}, room ${room.id}`).toBeGreaterThanOrEqual(
+          0.6 * (bossRoom?.distanceFromStart ?? 0),
+        );
+        // Rule 2: never in sight of the door its key opens.
+        expect(bossNeighbors.has(room.id), `${context}, room ${room.id}`).toBe(false);
+        // Rule 3: the point of the role — removing it never cuts the boss off.
+        expect(
+          reachableWithout(plan, room.id).has(plan.bossRoomId),
+          `${context}, room ${room.id}`,
+        ).toBe(true);
+      }
+    }
+    // Two mini-bosses is an XL-floor rule, so the sweep has to have actually
+    // rolled some XL floors for the assertion above to have meant anything.
+    expect(sawExtraLarge).toBe(true);
+  }, 120_000);
+
+  it('gives a floor whose content has no mini-boss template no mini-boss slot at all, rather than failing to generate', () => {
+    // Floors 3-7 today (#39-#43, parked in M10): room content in place,
+    // no mini-boss authored. `CLAUDE.md`'s graceful-degradation rule — a
+    // content gap must degrade to "no mini-boss and no lock", never to a
+    // floor that throws, and never to a locked boss door with no key.
+    const pool = syntheticPool();
+    for (let seed = 0; seed < 500; seed++) {
+      const config = floorConfig(seed % FLOOR_CONFIGS.length);
+      const plan = generateFloor(new Rng(seed), config, pool);
+      const context = `seed ${String(seed)}, floor ${config.name}`;
+      expect(plan.minibossRoomIds, context).toEqual([]);
+      expect(
+        plan.rooms.some((room) => room.role === 'miniboss'),
+        context,
+      ).toBe(false);
+      expect(validateFloorPlan(plan, pool), context).toEqual([]);
+    }
+  });
+
+  it('gives the slot only to floors whose own tag has the template, on a pool where some do and some do not', () => {
+    // The real content shape today: floors 1-2 have a mini-boss arena, the
+    // rest do not. One floor's gap must never cost another floor its slot.
+    const pool = syntheticPoolWithMiniboss(['cellar', 'rural']);
+    for (const base of FLOOR_CONFIGS) {
+      const expected = base.floorTag === 'cellar' || base.floorTag === 'rural';
+      for (let seed = 0; seed < 40; seed++) {
+        const plan = generateFloor(new Rng(seed + 4200), base, pool);
+        expect(plan.minibossRoomIds.length > 0, `floor ${base.name}, seed ${String(seed)}`).toBe(
+          expected,
+        );
+      }
+    }
+  });
+
+  it('prefers a dead end, the same fallback shape the treasure and shop slots use', () => {
+    const pool = syntheticPoolWithMiniboss();
+    const config = floorConfig(0);
+    let deadEnds = 0;
+    let total = 0;
+    for (let seed = 0; seed < 300; seed++) {
+      const plan = generateFloor(new Rng(seed + 7700), config, pool);
+      for (const id of plan.minibossRoomIds) {
+        const room = plan.rooms.find((candidate) => candidate.id === id);
+        total += 1;
+        if (neighborRoomIds(room?.doors ?? []).length === 1) {
+          deadEnds += 1;
+        }
+      }
+    }
+    expect(total).toBeGreaterThan(0);
+    // Not "always": rules 1-3 can leave a floor with no eligible dead end at
+    // all, and the slot then falls back to a through-room rather than the
+    // floor retrying forever. The preference should still dominate.
+    expect(deadEnds / total).toBeGreaterThan(0.5);
+  });
+
+  it('reports a mini-boss room placed against its own rules as a validation problem', () => {
+    // `validateFloorPlan` re-derives rules 1-3 rather than trusting
+    // `assignRoles` — this is what proves it, by relabelling the room next
+    // door to the boss and expecting the complaint.
+    const pool = syntheticPoolWithMiniboss();
+    const plan = generateFloor(new Rng(31), floorConfig(0), pool);
+    const bossRoom = plan.rooms.find((room) => room.id === plan.bossRoomId);
+    const neighborId = neighborRoomIds(bossRoom?.doors ?? [])[0];
+    if (neighborId === undefined) {
+      throw new Error('boss room has no neighbour');
+    }
+    const tampered: FloorPlan = {
+      ...plan,
+      minibossRoomIds: [neighborId],
+      rooms: plan.rooms.map((room) =>
+        room.id === neighborId
+          ? { ...room, role: 'miniboss' as const }
+          : room.role === 'miniboss'
+            ? { ...room, role: 'normal' as const }
+            : room,
+      ),
+    };
+    expect(validateFloorPlan(tampered).join('; ')).toContain('adjacent to the boss room');
   });
 });

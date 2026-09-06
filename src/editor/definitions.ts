@@ -1,4 +1,8 @@
-import type { RoomShape, RoomSpecialRole } from '../content/rooms/definition.js';
+import {
+  ROOM_SPECIAL_ROLES,
+  type RoomShape,
+  type RoomSpecialRole,
+} from '../content/rooms/definition.js';
 
 /**
  * Drives the shape picker and which editing mode a shape gets (single grid vs.
@@ -64,13 +68,8 @@ export const MULTI_CELL_LAYOUT: Readonly<
   ],
 };
 
-export const SPECIAL_ROLES: readonly RoomSpecialRole[] = [
-  'boss',
-  'treasure',
-  'shop',
-  'secret',
-  'supersecret',
-];
+/** Re-exported under the editor's own name — `ROOM_SPECIAL_ROLES` is the one list (`content/rooms/definition.ts`), so a new role shows up in the picker without an edit here. */
+export const SPECIAL_ROLES: readonly RoomSpecialRole[] = ROOM_SPECIAL_ROLES;
 
 /**
  * Neither field has a real registry (`src/sim/room/template.ts`'s

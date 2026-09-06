@@ -2,6 +2,7 @@ import {
   ROOM_COLUMNS,
   ROOM_ROWS,
   ROOM_SHAPES,
+  ROOM_SPECIAL_ROLES,
   ROOM_TILE_UNITS,
   type RoomDecorativeProp,
   type RoomDoorConfiguration,
@@ -250,13 +251,7 @@ function isRoomShape(value: unknown): value is RoomShape {
 }
 
 function isSpecialRole(value: unknown): value is RoomSpecialRole {
-  return (
-    value === 'boss' ||
-    value === 'treasure' ||
-    value === 'shop' ||
-    value === 'secret' ||
-    value === 'supersecret'
-  );
+  return (ROOM_SPECIAL_ROLES as readonly unknown[]).includes(value);
 }
 
 type Listener = () => void;

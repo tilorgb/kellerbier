@@ -3890,3 +3890,70 @@ projected from a world point — one mechanism each, no second one. **Open:** #2
 lift is preserved in the sim, but its 2D rationale (a hitbox "under" a tall sprite) no longer
 describes the picture — a proper 3D hurtbox is a follow-up. The draw-call budget needs
 re-baselining against this scene, and the bench still cannot see it.
+
+## 75. The mini-boss gate is placed off the path to the boss — and a floor with no mini-boss content simply has none
+
+**Decided:** M8, #274 (item D of #270). **Builds on:** #19's content-gap policy, #271's XL floors,
+#big-rooms' "a special slot is `1x1`".
+
+A mini-boss room is not "one more special room." Its whole reason to exist is #275: the key to the
+boss door is in it, so *where* it sits is the mechanic. Four rules, enforced in `assignRoles`
+(`sim/room/floor-plan.ts`) and re-derived independently in `validateFloorPlan`, so a generator
+change that breaks one fails the 10,000-floor sweep rather than shipping a floor nobody can read:
+
+- **Last third of the floor** — `distanceFromStart >= 0.6 x bossDistance`. The backtrack after
+  taking the key should be short; a gate two doors in means walking the floor twice.
+- **Never adjacent to the boss room.** The key and the door it opens in sight of each other turns
+  the detour into theatre.
+- **Never on the only path to the boss.** This is the point of the role. If the mini-boss sits on
+  the critical path, then locked doors already gate the boss and the key is dead weight — the key
+  exists so the fight can be a *branch*. Enforced as "removing this room never disconnects the boss
+  from the start", the same property `eligibleTemplates` already enforces for a `keyLocked`
+  treasure room, asked of a room instead of a template's door count. Secret and supersecret rooms
+  are not counted as connections here: reaching one costs a bomb, so a path through one is not a
+  path a player can be assumed to have.
+- **`1x1`, and a dead end where the floor has one** — the boss slot's own reasoning (#big-rooms) and
+  `specialPool`'s own fallback shape. Measured over 3,000 real floors per floor: 92% land on a dead
+  end on Floor 1 and 97% on Floor 2; the rest fall back to a through-room rather than retrying
+  forever.
+
+A floor that cannot satisfy the first three is a **retry**, never a floor that quietly relabels an
+ordinary room — the rule `assignRoles` already applies to the secret rooms. Measured over 2,000
+floors per configuration, the constraint costs about 23% more generation attempts on Floor 1
+(2.39 -> 2.94 attempts per accepted floor), 12% on Floor 2, and 32% on an XL Floor 1 — against a
+ceiling of 200 attempts, and the 10,000-floor test still never hits it.
+
+**A floor whose content has no mini-boss template gets no mini-boss slot, and therefore no lock.**
+Floors 3-7 (#39-#43, parked in M10) have no room templates at all yet, and floors 1-2 will spend
+M6-M8 having their content replaced underneath them. So the slot count is derived from the pool
+(`minibossSlotsForFloor`: is there a `1x1`, `specialRole: 'miniboss'` template tagged for this
+floor?), not from the floor number, and a floor without one degrades to zero slots with a
+dev-only `console.warn`, once per floor tag — #19's policy exactly. The failure mode this exists
+to prevent is not a crash but a dead run: **a locked boss door with no key.** That is why the
+count is data-driven rather than a constant, and why #275 must gate its lock on
+`FloorPlan.minibossRoomIds` being non-empty rather than on "floor N has a mini-boss by now."
+
+**The placeholder occupant is a guaranteed elite (#156), not a rolled one.** Until F and G of #270
+land real mini-boss fights, the room holds one elite of a floor enemy in an authored open arena
+(`cellar-miniboss.json`, `dorf-miniboss.json` — no obstacles, like the two boss arenas). Guaranteed:
+a gate the player detours to and finds an ordinary body in is not a gate. It draws no extra number
+from `random.enemies`, so the elite roll every other room does stays byte-identical.
+
+**The playtest bot walks the detour now, one issue before it is forced.** `pathToBoss` takes
+waypoints and the harness feeds it the floor's mini-boss rooms; when #275 lands, the route that
+already works is the only one that works, so a broken lock cannot be mistaken for a broken bot.
+Making the bot walk into an arena holding a single evasive body immediately exposed something the
+harness had been hiding: `cautious`'s 110px engage range sits just outside a shot's ~105px
+lifetime, which was survivable only because ordinary rooms hold several enemies and one always
+closes. `combatInput` now presses the attack — closes to 44px — after two seconds with nothing
+landing. Over twelve seeds, `cautious` went from 6 stuck runs (all in a mini-boss arena) to 1 (in
+an ordinary Floor 2 room, the same one the pre-#274 baseline gets stuck in), with a win where
+before there was none.
+
+**Constrains:** a mini-boss template is `1x1` until the slot itself learns shapes, and every floor
+that wants the role must author one tagged for its own floor tag — no template, no gate, no key.
+`FloorPlan.minibossRoomIds` is the count (0, 1, or 2 on an XL floor), and anything deciding whether
+a floor is gated reads that, not the floor number. Rules 1-3 live in `minibossSlotProblem` and are
+checked twice on purpose; loosening one means changing that function, not the caller. If the retry
+rate ever becomes a real cost, rule 1 (the 0.6 fraction) is the one to relax — 2 and 3 are the
+design.

@@ -25,14 +25,15 @@ import {
  * Deliberate simplifications against a real run, all in the "known
  * limitation, not a bug" sense CLAUDE.md's content-gap section asks for:
  *
- * - **Shortest path, not a detour.** `pathToBoss` walks the shortest route
- *   to the boss room — through a shop or an unlocked treasure room when
- *   that's genuinely the only way there, never through a secret/
- *   supersecret one. It never actually shops or opens a treasure pedestal
- *   along the way, so their item pedestals, Losbrunnen rolls and Biermarken
- *   sinks never factor into a run. A player who detours (or has to detour
- *   further than the shortest route) faces a different floor than what
- *   this bot measures.
+ * - **Shortest path, plus the mini-boss detour.** `pathToBoss` walks the
+ *   shortest route to the boss room — through a shop or an unlocked treasure
+ *   room when that's genuinely the only way there, never through a secret/
+ *   supersecret one — with one deliberate exception: the floor's mini-boss
+ *   rooms (#274) are walked first, as waypoints, because #275 puts the boss
+ *   door's key in one of them. It never actually shops or opens a treasure
+ *   pedestal along the way, so their item pedestals, Losbrunnen rolls and
+ *   Biermarken sinks never factor into a run. A player who detours further
+ *   than that faces a different floor than what this bot measures.
  * - **A fixed starting loadout, not organic pickup.** `several skill
  *   levels` (the issue's own words) is modelled as a starting item set
  *   granted via `sim.pickUpItem` before floor 1 begins, the same
@@ -135,6 +136,8 @@ function decideTarget(
   sim: GameSim,
   floorPlan: FloorPlan,
   currentRoomId: string,
+  /** Mini-boss rooms (#274) this floor's run has not walked into yet — see `pathToBoss`. */
+  pendingWaypoints: readonly string[],
 ):
   | { readonly kind: 'combat' }
   | { readonly kind: 'stuck' }
@@ -153,7 +156,7 @@ function decideTarget(
     const { x, y } = doorCentre(sim.room, nextFloorDoor);
     return { kind: 'advanceFloor', x, y };
   }
-  const path = pathToBoss(floorPlan, currentRoomId);
+  const path = pathToBoss(floorPlan, currentRoomId, pendingWaypoints);
   if (path === null || path.length < 2) {
     return { kind: 'stuck' };
   }
@@ -219,12 +222,18 @@ export function runPlaytest(options: PlaytestOptions): PlaytestOutcome {
   });
 
   let currentRoomId: string = floorPlan.startRoomId;
+  /** Reset per floor, and emptied as the bot walks into each one. */
+  let pendingWaypoints: string[] = floorPlan.minibossRoomIds.filter(
+    (id) => id !== floorPlan.startRoomId,
+  );
   const floorOutcomes: FloorOutcome[] = [];
   let floorRoomsCleared = 0;
   let floorTicks = 0;
   let floorDamageTaken = 0;
   let totalDamageTaken = 0;
   let ticksSinceProgress = 0;
+  /** Ticks since the bot last hurt anything — `combatInput`'s "press the attack" signal. */
+  let ticksSinceDamageDealt = 0;
   let lastX = sim.positionX(sim.playerIndex);
   let lastY = sim.positionY(sim.playerIndex);
   const promilleTierTicks = new Map<number, number>();
@@ -236,7 +245,7 @@ export function runPlaytest(options: PlaytestOptions): PlaytestOutcome {
   runLoop: for (; tick < maxTicks; tick++) {
     let target: ReturnType<typeof decideTarget>;
     try {
-      target = decideTarget(sim, floorPlan, currentRoomId);
+      target = decideTarget(sim, floorPlan, currentRoomId, pendingWaypoints);
     } catch (error) {
       result = 'crashed';
       errorMessage = errorMessageOf(error);
@@ -249,7 +258,7 @@ export function runPlaytest(options: PlaytestOptions): PlaytestOutcome {
 
     const input =
       target.kind === 'combat'
-        ? combatInput(sim, options.skill, tick)
+        ? combatInput(sim, options.skill, tick, ticksSinceDamageDealt)
         : moveTowardInput(sim, target.x, target.y, ticksSinceProgress);
 
     const healthBefore = sim.playerHealth + sim.playerSoulHealth + sim.playerEternalHealth;
@@ -289,6 +298,7 @@ export function runPlaytest(options: PlaytestOptions): PlaytestOutcome {
     // multi-enemy fight for being stuck. Dealing damage counts as progress
     // too, whether or not it kills anything this tick.
     const dealtDamage = totalEnemyHealth(sim) < enemyHealthBefore;
+    ticksSinceDamageDealt = dealtDamage || sim.liveEnemyCount === 0 ? 0 : ticksSinceDamageDealt + 1;
 
     let progressed = false;
 
@@ -331,6 +341,7 @@ export function runPlaytest(options: PlaytestOptions): PlaytestOutcome {
             break runLoop;
           }
           currentRoomId = floorPlan.startRoomId;
+          pendingWaypoints = floorPlan.minibossRoomIds.filter((id) => id !== floorPlan.startRoomId);
           floorRoomsCleared = 0;
           floorTicks = 0;
           floorDamageTaken = 0;
@@ -357,6 +368,7 @@ export function runPlaytest(options: PlaytestOptions): PlaytestOutcome {
             );
         if (succeeded) {
           currentRoomId = crossing.neighborRoomId;
+          pendingWaypoints = pendingWaypoints.filter((id) => id !== currentRoomId);
           floorRoomsCleared += 1;
           progressed = true;
         }

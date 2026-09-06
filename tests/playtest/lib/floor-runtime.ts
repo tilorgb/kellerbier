@@ -192,10 +192,16 @@ export function startRoomLoadOptions(plan: FloorPlan): {
 function passableForPathToBoss(plan: FloorPlan, id: string): boolean {
   const room = planRoom(plan, id);
   switch (room.role) {
+    // `miniboss` (#274) is an ordinary fight in an authored arena — nothing
+    // gates entering it, and the bot clears rooms it walks into. It is never
+    // *needed* to reach the boss (that's the role's whole placement rule),
+    // but it is a legal step on a route, and `pathToBoss`'s `via` waypoints
+    // send the bot through one deliberately.
     case 'start':
     case 'normal':
     case 'boss':
     case 'shop':
+    case 'miniboss':
       return true;
     case 'treasure': {
       if (room.staircaseTemplateId !== undefined) {
@@ -211,17 +217,19 @@ function passableForPathToBoss(plan: FloorPlan, id: string): boolean {
 }
 
 /**
- * The shortest room-graph path from `fromRoomId` to `plan.bossRoomId` —
- * see `passableForPathToBoss` for which room roles it will ever route
- * through.
+ * The shortest room-graph path from `fromRoomId` to whichever of `targetIds`
+ * is nearest — see `passableForPathToBoss` for which room roles it will ever
+ * route through.
  *
- * Returns the room ids in walking order, `fromRoomId` first, `bossRoomId`
- * last — or `null` if no such path exists (never expected for a
- * `validateFloorPlan`-passing plan, but the bot treats it as "stuck" rather
- * than throwing).
+ * Returns the room ids in walking order, `fromRoomId` first, the room it
+ * reached last — or `null` if none of them is reachable.
  */
-export function pathToBoss(plan: FloorPlan, fromRoomId: string): readonly string[] | null {
-  if (fromRoomId === plan.bossRoomId) {
+function pathToNearest(
+  plan: FloorPlan,
+  fromRoomId: string,
+  targetIds: ReadonlySet<string>,
+): readonly string[] | null {
+  if (targetIds.has(fromRoomId)) {
     return [fromRoomId];
   }
   const passable = (id: string): boolean => passableForPathToBoss(plan, id);
@@ -240,7 +248,7 @@ export function pathToBoss(plan: FloorPlan, fromRoomId: string): readonly string
       }
       visited.add(next);
       cameFrom.set(next, current);
-      if (next === plan.bossRoomId) {
+      if (targetIds.has(next)) {
         const path = [next];
         let step = next;
         while (step !== fromRoomId) {
@@ -257,6 +265,41 @@ export function pathToBoss(plan: FloorPlan, fromRoomId: string): readonly string
     }
   }
   return null;
+}
+
+/**
+ * The route the bot walks from `fromRoomId`: through whichever of `via` it
+ * has not reached yet — the floor's mini-boss rooms (#274) — and only then to
+ * `plan.bossRoomId`.
+ *
+ * The detour exists here, one issue before it is *forced*, on purpose: #275
+ * locks the boss door behind a key the mini-boss drops, and a bot that only
+ * ever walked the shortest line at `plan.bossRoomId` would turn that into a
+ * harness change landing in the same PR as the lock, with no way to tell a
+ * broken lock from a broken bot. Today the detour is voluntary and every run
+ * still ends at the boss; when the lock lands, the same route is the only one
+ * that works.
+ *
+ * Returns the room ids in walking order, `fromRoomId` first — or `null` if no
+ * such path exists (never expected for a `validateFloorPlan`-passing plan,
+ * but the bot treats it as "stuck" rather than throwing).
+ */
+export function pathToBoss(
+  plan: FloorPlan,
+  fromRoomId: string,
+  via: readonly string[] = [],
+): readonly string[] | null {
+  const pending = via.filter((id) => id !== fromRoomId);
+  if (pending.length > 0) {
+    const detour = pathToNearest(plan, fromRoomId, new Set(pending));
+    // A waypoint the bot cannot route to at all is not a reason to give up on
+    // the floor — the boss is still the objective, and a mini-boss room is
+    // never on the only path to it. Fall through to the boss instead.
+    if (detour !== null) {
+      return detour;
+    }
+  }
+  return pathToNearest(plan, fromRoomId, new Set([plan.bossRoomId]));
 }
 
 /** The door in `fromRoomId` that leads toward `toRoomId` — `pathToBoss`'s next hop, resolved to a real `RoomDoor`. */
