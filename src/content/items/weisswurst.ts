@@ -17,7 +17,7 @@ const DAMAGE_MULTIPLIER = 1.3;
 export const weisswurst: ItemDefinition = {
   id: 'weisswurst',
   name: 'Weißwurst',
-  description: 'Stammwürze +30% before floor 4. Nothing after',
+  description: 'Damage +30% before floor 4. Nothing after',
   flavourText: 'The tradition says before the noon bell. The run says before the Brauerei.',
   sprite: 'weisswurst',
   pools: ['treasure', 'shop'],
@@ -25,7 +25,7 @@ export const weisswurst: ItemDefinition = {
   promilleRequirement: 'any',
   hooks: {
     modifyStats: (state) =>
-      state.charge > 0 ? [{ stat: 'stammwuerze', op: 'multiply', value: DAMAGE_MULTIPLIER }] : [],
+      state.charge > 0 ? [{ stat: 'damage', op: 'multiply', value: DAMAGE_MULTIPLIER }] : [],
     onPickup: (ctx) => {
       ctx.state.charge = ctx.sim.currentFloor <= LAST_FLOOR ? 1 : 0;
     },

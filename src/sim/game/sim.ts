@@ -167,16 +167,16 @@ export const PLAYER_FOOTPRINT = 5;
 /**
  * The stats Der Wolpertinger's per-floor reroll touches (#47).
  *
- * Dusel is left out, and not by oversight: it is a multiplier over a base of
+ * Luck is left out, and not by oversight: it is a multiplier over a base of
  * zero (`baseStats`), so rolling it would be the one stat where chaos
  * demonstrably does nothing. It joins the list the day something reads it.
  */
 const CHAOS_STATS: readonly StatId[] = [
-  StatId.Stammwuerze,
-  StatId.Schluckfrequenz,
-  StatId.Reichweite,
-  StatId.Wurfkraft,
-  StatId.Gschwindigkeit,
+  StatId.Damage,
+  StatId.FireRate,
+  StatId.Range,
+  StatId.ShotSpeed,
+  StatId.MoveSpeed,
 ];
 
 /** Collider radius of a training target — a mid-size body. */
@@ -621,12 +621,12 @@ export class GameSim {
    * the per-shot garbage the pipeline's cache exists to avoid.
    */
   private readonly baseStatsBuffer: Record<StatId, number> = {
-    [StatId.Stammwuerze]: 0,
-    [StatId.Schluckfrequenz]: 0,
-    [StatId.Reichweite]: 0,
-    [StatId.Wurfkraft]: 0,
-    [StatId.Gschwindigkeit]: 0,
-    [StatId.Dusel]: 0,
+    [StatId.Damage]: 0,
+    [StatId.FireRate]: 0,
+    [StatId.Range]: 0,
+    [StatId.ShotSpeed]: 0,
+    [StatId.MoveSpeed]: 0,
+    [StatId.Luck]: 0,
   };
 
   /** Position and the previous tick's position, for render interpolation. */
@@ -3174,17 +3174,17 @@ export class GameSim {
 
   /**
    * The stat pipeline's starting point (#25): today just what `tuning` says
-   * before any modifier runs. `Dusel` has no design-doc default yet — nothing
+   * before any modifier runs. `Luck` has no design-doc default yet — nothing
    * reads it — so it starts at zero rather than a number invented for it.
    */
   private baseStats(): BaseStats {
     const buffer = this.baseStatsBuffer;
-    buffer[StatId.Stammwuerze] = this.tuning.shooting.shotDamage;
-    buffer[StatId.Schluckfrequenz] = this.tuning.shooting.fireDelayTicks;
-    buffer[StatId.Reichweite] = this.tuning.shooting.shotLifetimeTicks;
-    buffer[StatId.Wurfkraft] = this.tuning.shooting.shotSpeed;
-    buffer[StatId.Gschwindigkeit] = this.tuning.movement.maxSpeed;
-    buffer[StatId.Dusel] = 0;
+    buffer[StatId.Damage] = this.tuning.shooting.shotDamage;
+    buffer[StatId.FireRate] = this.tuning.shooting.fireDelayTicks;
+    buffer[StatId.Range] = this.tuning.shooting.shotLifetimeTicks;
+    buffer[StatId.ShotSpeed] = this.tuning.shooting.shotSpeed;
+    buffer[StatId.MoveSpeed] = this.tuning.movement.maxSpeed;
+    buffer[StatId.Luck] = 0;
     return buffer;
   }
 
@@ -3192,7 +3192,7 @@ export class GameSim {
    * Registers Promille's contribution to the stat pipeline as a source named
    * `'promille'`, replacing it whenever the tier actually changes — a cheap
    * check every tick, a rebuild only on the rare tick a tier boundary is
-   * crossed. `promilleFireRateMultiplier` is a rate; Schluckfrequenz is a
+   * crossed. `promilleFireRateMultiplier` is a rate; Fire Rate is a
    * delay, so its factor is inverted (a 1.5x rate multiplier is a 1/1.5
    * delay multiplier) rather than teaching the pipeline to divide.
    *
@@ -3220,13 +3220,13 @@ export class GameSim {
     };
     const modifiers: StatModifier[] = [
       {
-        stat: StatId.Stammwuerze,
+        stat: StatId.Damage,
         op: 'multiply',
         value: promilleDamageMultiplier(tier, this.tuning.promille),
         source,
       },
       {
-        stat: StatId.Schluckfrequenz,
+        stat: StatId.FireRate,
         op: 'multiply',
         value: 1 / promilleFireRateMultiplier(tier, this.tuning.promille),
         source,
@@ -3292,7 +3292,7 @@ export class GameSim {
     }
     const source = { kind: 'character' as const, id: 'geldbeutl', label: 'Geldbeutl' };
     this.stats.setSourceModifiers('character-purse', [
-      { stat: StatId.Stammwuerze, op: 'multiply', value: multiplier, source },
+      { stat: StatId.Damage, op: 'multiply', value: multiplier, source },
     ]);
   }
 
@@ -3371,15 +3371,15 @@ export class GameSim {
     const source = { kind: 'kater' as const, id: 'kater', label: 'Kater' };
     const modifiers: StatModifier[] = [
       {
-        stat: StatId.Stammwuerze,
+        stat: StatId.Damage,
         op: 'multiply',
-        value: tuning.katerStammwuerzeMultiplier,
+        value: tuning.katerDamageMultiplier,
         source,
       },
       {
-        stat: StatId.Gschwindigkeit,
+        stat: StatId.MoveSpeed,
         op: 'multiply',
-        value: tuning.katerGschwindigkeitMultiplier,
+        value: tuning.katerMoveSpeedMultiplier,
         source,
       },
     ];
@@ -3774,7 +3774,7 @@ export class GameSim {
    * multi-shot item (Spezi's second, diverging shot) or a detonation item
    * (Fassldauben's staves) reaches for from its own hook, rather than
    * duplicating `fire`'s muzzle/tag bookkeeping in content. Damage defaults
-   * to the resolved Stammwürze; direction is normalised, so a caller handing
+   * to the resolved Damage; direction is normalised, so a caller handing
    * in a unit vector or a raw offset both work. Returns the projectile's
    * slot, or `NO_SLOT` if the pool was full.
    */
@@ -3795,7 +3795,7 @@ export class GameSim {
     const dirX = directionX / length;
     const dirY = directionY / length;
     const speedScale = options.speedScale ?? 1;
-    const damage = options.damage ?? Math.round(this.stats.value(StatId.Stammwuerze));
+    const damage = options.damage ?? Math.round(this.stats.value(StatId.Damage));
     const slot = this.projectiles.spawn(
       x,
       y,
@@ -4012,7 +4012,7 @@ export class GameSim {
       {
         promilleUnlocked: this.promilleUnlocked,
         floor: this.currentFloorValue,
-        dusel: this.stats.value(StatId.Dusel),
+        luck: this.stats.value(StatId.Luck),
         taken: this.takenItemIds,
       },
       this.tuning.itemPool,
@@ -4662,7 +4662,7 @@ export class GameSim {
     const outcome = rollMachineOutcome(
       item,
       state,
-      this.stats.value(StatId.Dusel),
+      this.stats.value(StatId.Luck),
       this.tuning.machine,
       this.random.items,
     );

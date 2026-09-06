@@ -15,7 +15,7 @@ const RATE_PENALTY = 0.2;
 export const spatenstich: ItemDefinition = {
   id: 'spatenstich',
   name: 'Spatenstich',
-  description: 'Shots gain piercing. Stammwürze +30%, Schluckfrequenz -20%',
+  description: 'Shots gain piercing. Damage +30%, Fire Rate -20%',
   flavourText: 'The mayor gets three tries. The crowd counts every one out loud.',
   sprite: 'spatenstich',
   pools: ['treasure', 'shop'],
@@ -23,8 +23,8 @@ export const spatenstich: ItemDefinition = {
   promilleRequirement: 'any',
   hooks: {
     modifyStats: () => [
-      { stat: 'stammwuerze', op: 'multiply', value: 1 + DAMAGE_BONUS },
-      { stat: 'schluckfrequenz', op: 'multiply', value: 1 + RATE_PENALTY },
+      { stat: 'damage', op: 'multiply', value: 1 + DAMAGE_BONUS },
+      { stat: 'fireRate', op: 'multiply', value: 1 + RATE_PENALTY },
     ],
     onProjectileSpawn: (ctx) => {
       ctx.sim.addProjectileTag(ctx.projectile, 'piercing');

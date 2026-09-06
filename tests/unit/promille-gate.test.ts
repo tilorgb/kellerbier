@@ -107,11 +107,11 @@ describe('a sober run has no Promille at all (#85)', () => {
 
   it('reads Nüchtern forever, so no tier bonus is ever registered', () => {
     const sim = soberSim();
-    const base = sim.stats.value(StatId.Stammwuerze);
+    const base = sim.stats.value(StatId.Damage);
     sim.addPromille(4);
     sim.step(IDLE);
     expect(sim.promilleTier).toBe(PromilleTier.Nuchtern);
-    expect(sim.stats.value(StatId.Stammwuerze)).toBeCloseTo(base, 5);
+    expect(sim.stats.value(StatId.Damage)).toBeCloseTo(base, 5);
   });
 
   it('leaves no drift, wobble, sway or distortion behind', () => {

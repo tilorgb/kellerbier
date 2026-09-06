@@ -6,7 +6,7 @@ import type { CompiledItem } from './registry.js';
 
 /**
  * Der Losbrunnen's roll math (#218): feeding a held item a reroll, weighted
- * by outcome tier and biased by the player's Dusel — the same shape
+ * by outcome tier and biased by the player's Luck — the same shape
  * `sim/item/pool.ts`'s `itemOfferWeight` already established for skewing a
  * weighted draw by a resolved stat, applied here to "how good is this roll"
  * instead of "how rare is the item offered."
@@ -29,12 +29,12 @@ const TIER_WEIGHT_KEYS: Readonly<Record<MachineRollTier, keyof MachineTuning>> =
 };
 
 /**
- * Which way Dusel pushes each tier's weight: away from `unlucky`, toward
+ * Which way Luck pushes each tier's weight: away from `unlucky`, toward
  * `rare`/`legendary`, and untouched for the two middle tiers — the same
  * "bias the rare end, leave the common end alone" shape `itemOfferWeight`
  * uses for quality tier 0.
  */
-const TIER_DUSEL_DIRECTION: Readonly<Record<MachineRollTier, number>> = {
+const TIER_LUCK_DIRECTION: Readonly<Record<MachineRollTier, number>> = {
   unlucky: -1,
   common: 0,
   uncommon: 0,
@@ -42,24 +42,24 @@ const TIER_DUSEL_DIRECTION: Readonly<Record<MachineRollTier, number>> = {
   legendary: 1,
 };
 
-/** How heavily `tier` is weighted in the draw, biased by the player's resolved Dusel. */
+/** How heavily `tier` is weighted in the draw, biased by the player's resolved Luck. */
 export function machineRollTierWeight(
   tier: MachineRollTier,
-  dusel: number,
+  luck: number,
   tuning: Readonly<MachineTuning>,
 ): number {
   const base = tuning[TIER_WEIGHT_KEYS[tier]];
-  const bias = 1 + TIER_DUSEL_DIRECTION[tier] * Math.max(0, dusel) * tuning.duselRollBias;
+  const bias = 1 + TIER_LUCK_DIRECTION[tier] * Math.max(0, luck) * tuning.luckRollBias;
   return Math.max(0, base * bias);
 }
 
 /** Draws one outcome tier, weighted by `machineRollTierWeight`. Draws from `rng` — pass `sim.random.items`. */
 export function selectMachineRollTier(
   rng: Rng,
-  dusel: number,
+  luck: number,
   tuning: Readonly<MachineTuning>,
 ): MachineRollTier {
-  const weights = MACHINE_ROLL_TIERS.map((tier) => machineRollTierWeight(tier, dusel, tuning));
+  const weights = MACHINE_ROLL_TIERS.map((tier) => machineRollTierWeight(tier, luck, tuning));
   const index = rng.weightedIndex(weights);
   return MACHINE_ROLL_TIERS[index] ?? 'common';
 }
@@ -229,11 +229,11 @@ const FAVOURABLE_MACHINE_ROLL_TIERS = MACHINE_ROLL_TIERS.filter(
  */
 function selectFavourableMachineRollTier(
   rng: Rng,
-  dusel: number,
+  luck: number,
   tuning: Readonly<MachineTuning>,
 ): Exclude<MachineRollTier, 'unlucky'> {
   const weights = FAVOURABLE_MACHINE_ROLL_TIERS.map((tier) =>
-    machineRollTierWeight(tier, dusel, tuning),
+    machineRollTierWeight(tier, luck, tuning),
   );
   const index = rng.weightedIndex(weights);
   return FAVOURABLE_MACHINE_ROLL_TIERS[index] ?? 'common';
@@ -253,7 +253,7 @@ export interface MachineRollCandidate {
  * three favourable-or-neutral options drawn from `common`/`uncommon`/`rare`/
  * `legendary` and picks which one to keep. Whether the pull is unlucky at
  * all is decided by one draw against the *full* tier weights (so
- * `unluckyWeight`, and Dusel's pull away from it, still mean exactly what
+ * `unluckyWeight`, and Luck's pull away from it, still mean exactly what
  * they always have); only once that draw comes up favourable does drawing
  * the other two board slots exclude `unlucky` entirely, rather than drawing
  * three independent picks and hoping none of them land on it.
@@ -261,11 +261,11 @@ export interface MachineRollCandidate {
 export function rollMachineOutcome(
   item: CompiledItem,
   state: ItemRuntimeState,
-  dusel: number,
+  luck: number,
   tuning: Readonly<MachineTuning>,
   rng: Rng,
 ): { readonly kind: 'unlucky' | 'choice'; readonly candidates: readonly MachineRollCandidate[] } {
-  const firstTier = selectMachineRollTier(rng, dusel, tuning);
+  const firstTier = selectMachineRollTier(rng, luck, tuning);
   const firstCandidate: MachineRollCandidate = {
     tier: firstTier,
     result: rollItemStatModifiers(item, state, firstTier, rng, tuning),
@@ -275,7 +275,7 @@ export function rollMachineOutcome(
   }
   const candidates = [firstCandidate];
   for (let index = 0; index < 2; index += 1) {
-    const tier = selectFavourableMachineRollTier(rng, dusel, tuning);
+    const tier = selectFavourableMachineRollTier(rng, luck, tuning);
     candidates.push({ tier, result: rollItemStatModifiers(item, state, tier, rng, tuning) });
   }
   return { kind: 'choice', candidates };

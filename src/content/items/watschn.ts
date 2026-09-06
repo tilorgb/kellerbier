@@ -1,6 +1,6 @@
 import type { ItemDefinition } from '../../sim/item/definition.js';
 
-/** The retaliation's radius, its damage scale off Stammwürze, its knockback strength, and its own short cooldown. */
+/** The retaliation's radius, its damage scale off Damage, its knockback strength, and its own short cooldown. */
 const SLAP_RADIUS = 52;
 const DAMAGE_SCALE = 0.8;
 const PUSH_STRENGTH = 1.4;
@@ -37,7 +37,7 @@ export const watschn: ItemDefinition = {
       const playerIndex = sim.playerIndex;
       const x = sim.positionX(playerIndex);
       const y = sim.positionY(playerIndex);
-      const damage = Math.max(1, Math.round(sim.stats.value('stammwuerze') * DAMAGE_SCALE));
+      const damage = Math.max(1, Math.round(sim.stats.value('damage') * DAMAGE_SCALE));
       sim.applySplashDamage(x, y, SLAP_RADIUS, damage, playerIndex);
       sim.pushEnemiesNear(x, y, SLAP_RADIUS, PUSH_STRENGTH);
     },

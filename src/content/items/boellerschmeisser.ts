@@ -42,7 +42,7 @@ export const boellerschmeisser: ItemDefinition = {
           const playerIndex = sim.playerIndex;
           const x = sim.positionX(playerIndex);
           const y = sim.positionY(playerIndex);
-          const damage = Math.max(1, Math.round(sim.stats.value('stammwuerze') * DAMAGE_SCALE));
+          const damage = Math.max(1, Math.round(sim.stats.value('damage') * DAMAGE_SCALE));
           sim.applySplashDamage(x, y, BLAST_RADIUS, damage, playerIndex);
           sim.pushEnemiesNear(x, y, BLAST_RADIUS, PUSH_STRENGTH);
           // #243: the enemy's own mirrored fix — nothing else draws the boom.

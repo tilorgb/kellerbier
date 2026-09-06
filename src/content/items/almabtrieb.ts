@@ -30,7 +30,7 @@ export const almabtrieb: ItemDefinition = {
     modifyStats: (state) =>
       state.charge <= 0
         ? []
-        : [{ stat: 'gschwindigkeit', op: 'multiply', value: 1 + state.charge * SPEED_PER_STACK }],
+        : [{ stat: 'moveSpeed', op: 'multiply', value: 1 + state.charge * SPEED_PER_STACK }],
     onKill: (ctx) => {
       const state = ctx.state;
       const gained = Math.min(MAX_STACKS, state.charge + 1);

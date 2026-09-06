@@ -16,14 +16,14 @@ const COST_PER_KILL = 1;
 export const teufelsbraten: ItemDefinition = {
   id: 'teufelsbraten',
   name: 'Teufelsbraten',
-  description: 'Stammwürze +50%. Every kill costs a Biermarken',
+  description: 'Damage +50%. Every kill costs a Biermarken',
   flavourText: 'The recipe was never written down. The price always is.',
   sprite: 'teufelsbraten',
   pools: ['shop', 'devil', 'secret'],
   quality: 3,
   promilleRequirement: 'any',
   hooks: {
-    modifyStats: () => [{ stat: 'stammwuerze', op: 'multiply', value: DAMAGE_MULTIPLIER }],
+    modifyStats: () => [{ stat: 'damage', op: 'multiply', value: DAMAGE_MULTIPLIER }],
     onKill: (ctx) => {
       ctx.sim.spendBiermarken(COST_PER_KILL);
     },

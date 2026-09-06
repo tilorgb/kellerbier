@@ -6,9 +6,9 @@ import type { ItemDefinition } from '../../sim/item/definition.js';
  * (`BEHAVIOURS.length`, used for the wrap) matters mechanically.
  */
 const BEHAVIOURS = [
-  { stat: 'stammwuerze', op: 'multiply', value: 1.3 },
-  { stat: 'gschwindigkeit', op: 'multiply', value: 1.25 },
-  { stat: 'schluckfrequenz', op: 'multiply', value: 0.75 },
+  { stat: 'damage', op: 'multiply', value: 1.3 },
+  { stat: 'moveSpeed', op: 'multiply', value: 1.25 },
+  { stat: 'fireRate', op: 'multiply', value: 0.75 },
 ] as const;
 
 /**

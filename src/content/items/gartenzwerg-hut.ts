@@ -1,9 +1,9 @@
 import type { ItemDefinition } from '../../sim/item/definition.js';
 
-/** Ticks of unbroken safety per stack, the stack cap, and Dusel granted per stack. */
+/** Ticks of unbroken safety per stack, the stack cap, and Luck granted per stack. */
 const TICKS_PER_STACK = 300;
 const MAX_STACKS = 5;
-const DUSEL_PER_STACK = 1;
+const LUCK_PER_STACK = 1;
 
 /**
  * Gartenzwerg-Hut — a garden gnome's hat. `docs/CONTENT_BIBLE.md` §2's
@@ -20,7 +20,7 @@ const DUSEL_PER_STACK = 1;
 export const gartenzwergHut: ItemDefinition = {
   id: 'gartenzwerg-hut',
   name: 'Gartenzwerg-Hut',
-  description: 'Dusel rises the longer you go without taking a hit; one hit resets it',
+  description: 'Luck rises the longer you go without taking a hit; one hit resets it',
   flavourText: 'Face down in the flower bed. Somehow this is still the lucky pose.',
   sprite: 'gartenzwerg-hut',
   pools: ['treasure', 'shop'],
@@ -28,9 +28,7 @@ export const gartenzwergHut: ItemDefinition = {
   promilleRequirement: 'any',
   hooks: {
     modifyStats: (state) =>
-      state.charge <= 0
-        ? []
-        : [{ stat: 'dusel', op: 'add', value: state.charge * DUSEL_PER_STACK }],
+      state.charge <= 0 ? [] : [{ stat: 'luck', op: 'add', value: state.charge * LUCK_PER_STACK }],
     onTick: (ctx) => {
       const state = ctx.state;
       if (state.charge >= MAX_STACKS) {

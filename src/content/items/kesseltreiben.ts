@@ -13,14 +13,14 @@ const PULL_STRENGTH = 0.5;
 export const kesseltreiben: ItemDefinition = {
   id: 'kesseltreiben',
   name: 'Kesseltreiben',
-  description: 'Stammwürze +25%. Continuously pulls every enemy in the room toward you',
+  description: 'Damage +25%. Continuously pulls every enemy in the room toward you',
   flavourText: 'The old way to hunt: stand still and let the valley come to you.',
   sprite: 'kesseltreiben',
   pools: ['shop', 'boss', 'secret', 'curse'],
   quality: 2,
   promilleRequirement: 'any',
   hooks: {
-    modifyStats: () => [{ stat: 'stammwuerze', op: 'multiply', value: 1.25 }],
+    modifyStats: () => [{ stat: 'damage', op: 'multiply', value: 1.25 }],
     onTick: (ctx) => {
       const sim = ctx.sim;
       const playerIndex = sim.playerIndex;

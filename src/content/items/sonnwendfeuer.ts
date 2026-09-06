@@ -1,6 +1,6 @@
 import type { ItemDefinition } from '../../sim/item/definition.js';
 
-/** Cooldown between jumps (60/s), the nova's radius, and its damage relative to Stammwürze. */
+/** Cooldown between jumps (60/s), the nova's radius, and its damage relative to Damage. */
 const COOLDOWN_TICKS = 480;
 const NOVA_RADIUS = 64;
 const DAMAGE_SCALE = 2.0;
@@ -31,7 +31,7 @@ export const sonnwendfeuer: ItemDefinition = {
     onActivate: (ctx) => {
       const sim = ctx.sim;
       const playerIndex = sim.playerIndex;
-      const damage = Math.max(1, Math.round(sim.stats.value('stammwuerze') * DAMAGE_SCALE));
+      const damage = Math.max(1, Math.round(sim.stats.value('damage') * DAMAGE_SCALE));
       sim.applySplashDamage(
         sim.positionX(playerIndex),
         sim.positionY(playerIndex),

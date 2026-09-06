@@ -1,8 +1,8 @@
 import type { ItemDefinition } from '../../sim/item/definition.js';
 
 /** Range and shot-speed bonuses. */
-const REICHWEITE_BONUS = 0.2;
-const WURFKRAFT_BONUS = 0.15;
+const RANGE_BONUS = 0.2;
+const SHOT_SPEED_BONUS = 0.15;
 
 /**
  * Watzmannkraxn — the climb up the Watzmann's east face, the one that
@@ -16,7 +16,7 @@ const WURFKRAFT_BONUS = 0.15;
 export const watzmannkraxn: ItemDefinition = {
   id: 'watzmannkraxn',
   name: 'Watzmannkraxn',
-  description: 'Reichweite +20%, Wurfkraft +15%',
+  description: 'Range +20%, Shot Speed +15%',
   flavourText: 'The mountain has a body count and a fan club. Frequently the same people.',
   sprite: 'watzmannkraxn',
   pools: ['treasure', 'shop', 'boss'],
@@ -24,8 +24,8 @@ export const watzmannkraxn: ItemDefinition = {
   promilleRequirement: 'any',
   hooks: {
     modifyStats: () => [
-      { stat: 'reichweite', op: 'multiply', value: 1 + REICHWEITE_BONUS },
-      { stat: 'wurfkraft', op: 'multiply', value: 1 + WURFKRAFT_BONUS },
+      { stat: 'range', op: 'multiply', value: 1 + RANGE_BONUS },
+      { stat: 'shotSpeed', op: 'multiply', value: 1 + SHOT_SPEED_BONUS },
     ],
   },
 };

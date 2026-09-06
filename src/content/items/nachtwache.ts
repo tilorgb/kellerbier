@@ -8,7 +8,7 @@ import type { ItemDefinition } from '../../sim/item/definition.js';
 export const nachtwache: ItemDefinition = {
   id: 'nachtwache',
   name: 'Nachtwache',
-  description: 'Sober. Reichweite +20%, Dusel +2',
+  description: 'Sober. Range +20%, Luck +2',
   flavourText: "Somebody has to stay sharp. Tonight, apparently, that's you.",
   sprite: 'nachtwache',
   pools: ['shop', 'secret'],
@@ -16,8 +16,8 @@ export const nachtwache: ItemDefinition = {
   promilleRequirement: 'sober',
   hooks: {
     modifyStats: () => [
-      { stat: 'reichweite', op: 'multiply', value: 1.2 },
-      { stat: 'dusel', op: 'add', value: 2 },
+      { stat: 'range', op: 'multiply', value: 1.2 },
+      { stat: 'luck', op: 'add', value: 2 },
     ],
   },
 };

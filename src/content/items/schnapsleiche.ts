@@ -8,7 +8,7 @@ import type { ItemDefinition } from '../../sim/item/definition.js';
 export const schnapsleiche: ItemDefinition = {
   id: 'schnapsleiche',
   name: 'Schnapsleiche',
-  description: 'Stammwürze +60%, Gschwindigkeit -40%',
+  description: 'Damage +60%, Move Speed -40%',
   flavourText: "Isn't going anywhere in particular. Neither, now, are you.",
   sprite: 'schnapsleiche',
   pools: ['shop', 'boss', 'secret'],
@@ -16,8 +16,8 @@ export const schnapsleiche: ItemDefinition = {
   promilleRequirement: 'rausch',
   hooks: {
     modifyStats: () => [
-      { stat: 'stammwuerze', op: 'multiply', value: 1.6 },
-      { stat: 'gschwindigkeit', op: 'multiply', value: 0.6 },
+      { stat: 'damage', op: 'multiply', value: 1.6 },
+      { stat: 'moveSpeed', op: 'multiply', value: 0.6 },
     ],
   },
 };

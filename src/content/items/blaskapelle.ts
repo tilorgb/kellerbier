@@ -1,6 +1,6 @@
 import type { ItemDefinition } from '../../sim/item/definition.js';
 
-/** Ticks between rings (60/s), the ring's radius, and its damage relative to Stammwürze. */
+/** Ticks between rings (60/s), the ring's radius, and its damage relative to Damage. */
 const RING_INTERVAL_TICKS = 100;
 const RING_RADIUS = 72;
 const DAMAGE_SCALE = 0.35;
@@ -37,7 +37,7 @@ export const blaskapelle: ItemDefinition = {
       state.timer = RING_INTERVAL_TICKS;
       const sim = ctx.sim;
       const playerIndex = sim.playerIndex;
-      const damage = Math.max(1, Math.round(sim.stats.value('stammwuerze') * DAMAGE_SCALE));
+      const damage = Math.max(1, Math.round(sim.stats.value('damage') * DAMAGE_SCALE));
       sim.applySplashDamage(
         sim.positionX(playerIndex),
         sim.positionY(playerIndex),

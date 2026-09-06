@@ -3611,7 +3611,7 @@ empty with a placeholder line before anything's rolled, a `wellSprite`/`solid`-f
 during `'rolling'`, and up to three `buttonSprite` cards during `'choosing'`, each tinted by
 `HUD_PALETTE.machineRollTier` (a new five-colour record, common through legendary plus unlucky's
 red) — decoration on top of a label that already spells the tier out in text
-(`"Legendary — Stammwürze up"`), never the only signal, the same rule `palette.ts`'s own
+(`"Legendary — Damage up"`), never the only signal, the same rule `palette.ts`'s own
 `promilleTier` comment states. The sole `unlucky` candidate a bad pull ever shows gets its own small
 red "UNLUCKY" badge above the card besides, since a single card sitting alone is easy to misread as
 "just another common" at a glance. A second `FocusRing` tracks whichever result is currently

@@ -32,7 +32,7 @@ const TEST_SET: ItemSetDefinition = {
   id: 'test-set',
   name: 'Test Set',
   members: ['piece-a', 'piece-b'],
-  bonus: [{ stat: StatId.Stammwuerze, op: 'add', value: 10 }],
+  bonus: [{ stat: StatId.Damage, op: 'add', value: 10 }],
 };
 
 function simWithTestSet(): GameSim {
@@ -46,19 +46,19 @@ function simWithTestSet(): GameSim {
 describe('item sets (#137)', () => {
   it('applies no bonus and reports no completion with only some pieces held', () => {
     const sim = simWithTestSet();
-    const before = sim.stats.value(StatId.Stammwuerze);
+    const before = sim.stats.value(StatId.Damage);
     sim.pickUpItem('piece-a');
     expect(sim.hasCompletedSet('test-set')).toBe(false);
-    expect(sim.stats.value(StatId.Stammwuerze)).toBeCloseTo(before, 5);
+    expect(sim.stats.value(StatId.Damage)).toBeCloseTo(before, 5);
   });
 
   it('applies the bonus and fires the completion reveal the instant the last piece is picked up', () => {
     const sim = simWithTestSet();
-    const before = sim.stats.value(StatId.Stammwuerze);
+    const before = sim.stats.value(StatId.Damage);
     sim.pickUpItem('piece-a');
     sim.pickUpItem('piece-b');
     expect(sim.hasCompletedSet('test-set')).toBe(true);
-    expect(sim.stats.value(StatId.Stammwuerze)).toBeCloseTo(before + 10, 5);
+    expect(sim.stats.value(StatId.Damage)).toBeCloseTo(before + 10, 5);
     const reveal = sim.setCompletionReveal;
     expect(reveal).not.toBeNull();
     expect(reveal?.name).toBe('Test Set');
@@ -66,14 +66,14 @@ describe('item sets (#137)', () => {
 
   it('removes the bonus the instant any one piece is lost, and returns to exactly the prior state', () => {
     const sim = simWithTestSet();
-    const before = sim.stats.value(StatId.Stammwuerze);
+    const before = sim.stats.value(StatId.Damage);
     sim.pickUpItem('piece-a');
     sim.pickUpItem('piece-b');
     expect(sim.hasCompletedSet('test-set')).toBe(true);
 
     sim.removeItem('piece-a');
     expect(sim.hasCompletedSet('test-set')).toBe(false);
-    expect(sim.stats.value(StatId.Stammwuerze)).toBeCloseTo(before, 5);
+    expect(sim.stats.value(StatId.Damage)).toBeCloseTo(before, 5);
   });
 
   it('a third, unrelated item does not affect completion either way', () => {

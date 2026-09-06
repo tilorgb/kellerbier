@@ -31,6 +31,6 @@ export const ruhigeHand: ItemDefinition = {
   quality: 2,
   promilleRequirement: 'sober',
   hooks: {
-    modifyStats: () => [{ stat: 'stammwuerze', op: 'multiply', value: DAMAGE_MULTIPLIER }],
+    modifyStats: () => [{ stat: 'damage', op: 'multiply', value: DAMAGE_MULTIPLIER }],
   },
 };

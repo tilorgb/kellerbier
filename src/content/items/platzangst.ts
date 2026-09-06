@@ -8,7 +8,7 @@ import type { ItemDefinition } from '../../sim/item/definition.js';
 export const platzangst: ItemDefinition = {
   id: 'platzangst',
   name: 'Platzangst',
-  description: 'Stammwürze +50%, Reichweite -50%',
+  description: 'Damage +50%, Range -50%',
   flavourText: 'Every festival tent, elbow to elbow. You made your peace with this a while ago.',
   sprite: 'platzangst',
   pools: ['shop', 'boss', 'secret', 'curse'],
@@ -16,8 +16,8 @@ export const platzangst: ItemDefinition = {
   promilleRequirement: 'any',
   hooks: {
     modifyStats: () => [
-      { stat: 'stammwuerze', op: 'multiply', value: 1.5 },
-      { stat: 'reichweite', op: 'multiply', value: 0.5 },
+      { stat: 'damage', op: 'multiply', value: 1.5 },
+      { stat: 'range', op: 'multiply', value: 0.5 },
     ],
   },
 };

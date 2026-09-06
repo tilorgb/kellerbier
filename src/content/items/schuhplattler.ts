@@ -1,6 +1,6 @@
 import type { ItemDefinition } from '../../sim/item/definition.js';
 
-/** How still counts as "still" (pixels/tick), how long you have to hold it, the shockwave's radius, and its damage scale off Stammwürze. */
+/** How still counts as "still" (pixels/tick), how long you have to hold it, the shockwave's radius, and its damage scale off Damage. */
 const STILL_EPSILON = 0.05;
 const STILL_TICKS = 45;
 const SHOCKWAVE_RADIUS = 48;
@@ -46,7 +46,7 @@ export const schuhplattler: ItemDefinition = {
         return;
       }
       state.timer = 0;
-      const damage = Math.max(1, Math.round(sim.stats.value('stammwuerze') * DAMAGE_SCALE));
+      const damage = Math.max(1, Math.round(sim.stats.value('damage') * DAMAGE_SCALE));
       sim.applySplashDamage(
         sim.positionX(playerIndex),
         sim.positionY(playerIndex),

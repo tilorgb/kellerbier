@@ -8,7 +8,7 @@ import type { ItemDefinition } from '../../sim/item/definition.js';
 export const nebellaterne: ItemDefinition = {
   id: 'nebellaterne',
   name: 'Nebellaterne',
-  description: 'Reichweite +8%, Dusel +1',
+  description: 'Range +8%, Luck +1',
   flavourText: 'Burns steady. Everything past its reach is, for tonight, none of your business.',
   sprite: 'nebellaterne',
   pools: ['treasure', 'shop'],
@@ -16,8 +16,8 @@ export const nebellaterne: ItemDefinition = {
   promilleRequirement: 'any',
   hooks: {
     modifyStats: () => [
-      { stat: 'reichweite', op: 'multiply', value: 1.08 },
-      { stat: 'dusel', op: 'add', value: 1 },
+      { stat: 'range', op: 'multiply', value: 1.08 },
+      { stat: 'luck', op: 'add', value: 1 },
     ],
   },
 };

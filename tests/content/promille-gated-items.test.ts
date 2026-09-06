@@ -34,10 +34,10 @@ function bareRoom(): RoomGeometry {
 describe('Ruhige Hand — the sober build', () => {
   it('applies its damage bonus only while under 0.5 Promille', () => {
     const sim = new GameSim({ room: bareRoom(), items: [ruhigeHand] });
-    const base = sim.stats.value(StatId.Stammwuerze);
+    const base = sim.stats.value(StatId.Damage);
 
     sim.pickUpItem('ruhige-hand');
-    expect(sim.stats.value(StatId.Stammwuerze)).toBeCloseTo(base * 1.4, 5);
+    expect(sim.stats.value(StatId.Damage)).toBeCloseTo(base * 1.4, 5);
 
     // Comfortably inside Angeheitert, not exactly on the 0.5 boundary — the
     // natural per-tick decay `stepPromille` runs at the top of every `step`
@@ -52,11 +52,11 @@ describe('Ruhige Hand — the sober build', () => {
     // assuming "not sober" means "no bonus at all."
     const angeheitertOnly =
       base * promilleDamageMultiplier(PromilleTier.Angeheitert, sim.tuning.promille);
-    expect(sim.stats.value(StatId.Stammwuerze)).toBeCloseTo(angeheitertOnly, 5);
+    expect(sim.stats.value(StatId.Damage)).toBeCloseTo(angeheitertOnly, 5);
 
     sim.tuning.promille.current = 0; // back to Nüchtern
     sim.step(IDLE);
-    expect(sim.stats.value(StatId.Stammwuerze)).toBeCloseTo(base * 1.4, 5);
+    expect(sim.stats.value(StatId.Damage)).toBeCloseTo(base * 1.4, 5);
   });
 
   it('picking up a Maß with Ruhige Hand held is the genuine dilemma the issue asks for', () => {
@@ -65,9 +65,9 @@ describe('Ruhige Hand — the sober build', () => {
     // see the previous test's comment on why an exact boundary value is the
     // wrong thing to assert against here.
     sim.tuning.promille.massFullAmount = 0.6;
-    const base = sim.stats.value(StatId.Stammwuerze);
+    const base = sim.stats.value(StatId.Damage);
     sim.pickUpItem('ruhige-hand');
-    expect(sim.stats.value(StatId.Stammwuerze)).toBeCloseTo(base * 1.4, 5);
+    expect(sim.stats.value(StatId.Damage)).toBeCloseTo(base * 1.4, 5);
 
     const index = sim.playerIndex;
     sim.spawnPickup('mass-full', sim.positionX(index), sim.positionY(index));
@@ -84,7 +84,7 @@ describe('Ruhige Hand — the sober build', () => {
     // see the previous test's comment.
     const angeheitertOnly =
       base * promilleDamageMultiplier(PromilleTier.Angeheitert, sim.tuning.promille);
-    expect(sim.stats.value(StatId.Stammwuerze)).toBeCloseTo(angeheitertOnly, 5);
+    expect(sim.stats.value(StatId.Damage)).toBeCloseTo(angeheitertOnly, 5);
   });
 });
 
@@ -99,16 +99,16 @@ describe('Maßkrugstemmen — hold fire to charge, only while in rausch', () => 
     // shot's worth of charge sticks at all.
     const sim = new GameSim({ room: bareRoom(), items: [masskrugstemmen] });
     sim.pickUpItem('masskrugstemmen');
-    const base = sim.stats.value(StatId.Stammwuerze);
+    const base = sim.stats.value(StatId.Damage);
 
     dispatchItemShoot(sim, 1, 0); // sober — must not charge
     expect(sim.itemState('masskrugstemmen').charge).toBe(0);
-    expect(sim.stats.value(StatId.Stammwuerze)).toBe(base);
+    expect(sim.stats.value(StatId.Damage)).toBe(base);
 
     sim.tuning.promille.current = 3.0; // Vollrausch
     dispatchItemShoot(sim, 1, 0);
     expect(sim.itemState('masskrugstemmen').charge).toBeGreaterThan(0);
-    expect(sim.stats.value(StatId.Stammwuerze)).toBeGreaterThan(base);
+    expect(sim.stats.value(StatId.Damage)).toBeGreaterThan(base);
   });
 });
 
@@ -132,16 +132,16 @@ describe('Zwoa, drei, gsuffa — kill stacks, only while in rausch', () => {
   it('does not stack (or apply) on a kill while sober; both start the moment rausch is reached', () => {
     const sim = new GameSim({ room: bareRoom(), items: [zwoaDreiGsuffa] });
     sim.pickUpItem('zwoa-drei-gsuffa');
-    const base = sim.stats.value(StatId.Stammwuerze);
+    const base = sim.stats.value(StatId.Damage);
 
     dispatchItemKill(sim, 1); // sober — must not stack
     expect(sim.itemState('zwoa-drei-gsuffa').charge).toBe(0);
-    expect(sim.stats.value(StatId.Stammwuerze)).toBe(base);
+    expect(sim.stats.value(StatId.Damage)).toBe(base);
 
     sim.tuning.promille.current = 3.0; // Vollrausch
     dispatchItemKill(sim, 1);
     expect(sim.itemState('zwoa-drei-gsuffa').charge).toBe(1);
-    expect(sim.stats.value(StatId.Stammwuerze)).toBeGreaterThan(base);
+    expect(sim.stats.value(StatId.Damage)).toBeGreaterThan(base);
   });
 });
 

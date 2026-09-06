@@ -1,6 +1,6 @@
 import type { ItemDefinition } from '../../sim/item/definition.js';
 
-/** Ticks between feathers (60/s), the fired shot's damage relative to Stammwürze, and the Biermarken owed per floor. */
+/** Ticks between feathers (60/s), the fired shot's damage relative to Damage, and the Biermarken owed per floor. */
 const FEATHER_INTERVAL_TICKS = 75;
 const FEATHER_DAMAGE_SCALE = 0.5;
 const COST_PER_FLOOR = 3;
@@ -47,7 +47,7 @@ export const ludwigsSchwan: ItemDefinition = {
       state.timer = FEATHER_INTERVAL_TICKS;
       const sim = ctx.sim;
       const playerIndex = sim.playerIndex;
-      const damage = Math.max(1, Math.round(sim.stats.value('stammwuerze') * FEATHER_DAMAGE_SCALE));
+      const damage = Math.max(1, Math.round(sim.stats.value('damage') * FEATHER_DAMAGE_SCALE));
       const slot = sim.spawnItemProjectile(
         sim.positionX(playerIndex),
         sim.positionY(playerIndex),

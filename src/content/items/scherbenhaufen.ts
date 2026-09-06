@@ -1,6 +1,6 @@
 import type { ItemDefinition } from '../../sim/item/definition.js';
 
-/** Cooldown between bursts (60/s), how many shards fan out, and their damage relative to Stammwürze. */
+/** Cooldown between bursts (60/s), how many shards fan out, and their damage relative to Damage. */
 const COOLDOWN_TICKS = 45;
 const SHARD_COUNT = 6;
 const DAMAGE_SCALE = 0.5;
@@ -35,7 +35,7 @@ export const scherbenhaufen: ItemDefinition = {
       const playerIndex = sim.playerIndex;
       const playerX = sim.positionX(playerIndex);
       const playerY = sim.positionY(playerIndex);
-      const damage = Math.max(1, Math.round(sim.stats.value('stammwuerze') * DAMAGE_SCALE));
+      const damage = Math.max(1, Math.round(sim.stats.value('damage') * DAMAGE_SCALE));
       for (let i = 0; i < SHARD_COUNT; i++) {
         const angle = (i / SHARD_COUNT) * Math.PI * 2;
         sim.spawnItemProjectile(playerX, playerY, Math.cos(angle), Math.sin(angle), { damage });

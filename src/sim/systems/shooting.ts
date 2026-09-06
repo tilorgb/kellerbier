@@ -61,11 +61,11 @@ export function stepShooting(sim: GameSim, input: Readonly<InputFrame>): void {
 
   if (wantsToFire && sim.fireCooldown === 0) {
     fire(sim, aimX, aimY);
-    // Schluckfrequenz (#25): resolved through the stat pipeline, which is
+    // Fire Rate (#25): resolved through the stat pipeline, which is
     // what applies Promille's fire-rate bonus and floors the result at one
     // tick — the zero-guard a delay-based fire rate needs lives in the cap,
     // not here.
-    sim.fireCooldown += Math.round(sim.stats.value(StatId.Schluckfrequenz));
+    sim.fireCooldown += Math.round(sim.stats.value(StatId.FireRate));
   }
 }
 
@@ -140,12 +140,12 @@ function fire(sim: GameSim, aimX: number, aimY: number): void {
   // stat pipeline already resolves damage from, one line below.
   dispatchItemShoot(sim, directionX, directionY);
 
-  // Stammwürze (#25): resolved through the stat pipeline — Promille's tier
+  // Damage (#25): resolved through the stat pipeline — Promille's tier
   // bonus and every held item's `modifyStats` contribution (#26) folded in
   // already. Baked in here rather than read live at impact — damage is
   // written once into the projectile at spawn (`ProjectileStore.spawn`) and
   // never re-read, so firing is the only correct hook point.
-  const damage = Math.round(sim.stats.value(StatId.Stammwuerze));
+  const damage = Math.round(sim.stats.value(StatId.Damage));
 
   const slot = sim.projectiles.spawn(
     muzzleX,

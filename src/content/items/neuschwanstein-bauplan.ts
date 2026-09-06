@@ -24,9 +24,9 @@ export const neuschwansteinBauplan: ItemDefinition = {
   promilleRequirement: 'any',
   hooks: {
     modifyStats: () => [
-      { stat: 'stammwuerze', op: 'multiply', value: 1.3 },
-      { stat: 'wurfkraft', op: 'multiply', value: 1.2 },
-      { stat: 'reichweite', op: 'multiply', value: 1.2 },
+      { stat: 'damage', op: 'multiply', value: 1.3 },
+      { stat: 'shotSpeed', op: 'multiply', value: 1.2 },
+      { stat: 'range', op: 'multiply', value: 1.2 },
     ],
     onFloorStart: (ctx) => {
       ctx.sim.spendBiermarken(Math.max(0, ctx.floor) * COST_PER_FLOOR);

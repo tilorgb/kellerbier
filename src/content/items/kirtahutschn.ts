@@ -29,7 +29,7 @@ export const kirtahutschn: ItemDefinition = {
   promilleRequirement: 'any',
   hooks: {
     modifyStats: (state) =>
-      state.charge < 0 ? [{ stat: 'gschwindigkeit', op: 'multiply', value: SPEED_MULTIPLIER }] : [],
+      state.charge < 0 ? [{ stat: 'moveSpeed', op: 'multiply', value: SPEED_MULTIPLIER }] : [],
     onPickup: (ctx) => {
       ctx.state.charge = SWING_INTERVAL_TICKS;
     },

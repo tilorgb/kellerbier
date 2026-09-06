@@ -452,12 +452,12 @@ describe('Kater', () => {
     expect(sim.katerTicks).toBe(0);
   });
 
-  it('reduces Stammwürze and Gschwindigkeit while active', () => {
+  it('reduces Damage and Move Speed while active', () => {
     const sim = emptySim();
     sim.tuning.promille.umgfallnKnockdownTicks = 1;
     sim.tuning.promille.katerDurationTicks = 100;
-    sim.tuning.promille.katerStammwuerzeMultiplier = 0.5;
-    sim.tuning.promille.katerGschwindigkeitMultiplier = 0.6;
+    sim.tuning.promille.katerDamageMultiplier = 0.5;
+    sim.tuning.promille.katerMoveSpeedMultiplier = 0.6;
     // Zeroed so the wake tier's own damage bonus (Beduselt, at 1.5) doesn't
     // also stack into the number this test isolates Kater's effect on.
     sim.tuning.promille.beduseltDamageBonus = 0;
@@ -467,8 +467,8 @@ describe('Kater', () => {
     sim.addPromille(5);
     sim.step(idle()); // wake, Kater active
 
-    expect(sim.stats.value(StatId.Stammwuerze)).toBeCloseTo(4 * 0.5, 5);
-    expect(sim.stats.value(StatId.Gschwindigkeit)).toBeCloseTo(baseMaxSpeed * 0.6, 5);
+    expect(sim.stats.value(StatId.Damage)).toBeCloseTo(4 * 0.5, 5);
+    expect(sim.stats.value(StatId.MoveSpeed)).toBeCloseTo(baseMaxSpeed * 0.6, 5);
   });
 
   it('actually slows the player, not just the inspected stat', () => {
@@ -476,7 +476,7 @@ describe('Kater', () => {
     const katerSim = emptySim();
     katerSim.tuning.promille.umgfallnKnockdownTicks = 1;
     katerSim.tuning.promille.katerDurationTicks = 100;
-    katerSim.tuning.promille.katerGschwindigkeitMultiplier = 0.5;
+    katerSim.tuning.promille.katerMoveSpeedMultiplier = 0.5;
     katerSim.addPromille(5);
     katerSim.step(idle()); // wake, Kater active; also moves both sims one idle tick
 
@@ -617,10 +617,8 @@ describe('accessibility (#33): no-drift mode', () => {
     withDrift.step(idle());
     noDrift.step(idle());
 
-    expect(noDrift.stats.value(StatId.Stammwuerze)).toBe(withDrift.stats.value(StatId.Stammwuerze));
-    expect(noDrift.stats.value(StatId.Schluckfrequenz)).toBe(
-      withDrift.stats.value(StatId.Schluckfrequenz),
-    );
+    expect(noDrift.stats.value(StatId.Damage)).toBe(withDrift.stats.value(StatId.Damage));
+    expect(noDrift.stats.value(StatId.FireRate)).toBe(withDrift.stats.value(StatId.FireRate));
     // The penalties themselves did move, or the test above would be vacuous.
     expect(noDrift.promilleDriftScale).not.toBe(withDrift.promilleDriftScale);
     expect(noDrift.promilleWobbleAmplitude).not.toBe(withDrift.promilleWobbleAmplitude);
