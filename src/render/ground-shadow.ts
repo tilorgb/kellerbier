@@ -17,7 +17,8 @@ import { inkedBottomY } from './inked-bounds.js';
  * feet" is in a different coordinate space for each of them (a child of the
  * player container at local `(0, …)`, a world-space entry in `EntityView`'s
  * shadow layer, the Maibaum at its own base). `groundShadowFeetY` is the
- * shared bit of that maths for anything drawn centre-anchored.
+ * shared bit of that maths, for the one anchor every body now uses
+ * (`render/depth.ts`'s foot line).
  */
 
 export type GroundShadowWeight = 'body' | 'boss';
@@ -56,13 +57,20 @@ export function createGroundShadow(texture: Texture): Sprite {
  * World Y a body's shadow centre sits at: under the **last opaque row of its
  * art**, not its canvas edge and not its collider (`docs/DECISIONS.md` #61).
  *
- * `sprite` is drawn centre-anchored at `centreY` and scaled by `scale`
- * (authored pixel → world unit), so the drawing's bottom edge is
- * `(inkedBottomY - frameHeight / 2) * scale` below the centre.
- * `GROUND_SHADOW.contactInset` then lifts it a hair so the ellipse straddles
- * the contact line rather than hanging entirely below the feet.
+ * `footY` is the foot line the sprite is bottom-anchored at
+ * (`render/depth.ts`), so the canvas's bottom edge is there and the drawing's
+ * last inked row is `(frameHeight - inkedBottomY) * scale` above it — the
+ * padding an author left under the feet, which is exactly what #61 exists to
+ * look through (`inkedBottomY` is one *past* the last inked row, so with no
+ * padding it is the frame height and this is zero). `GROUND_SHADOW.contactInset` then lifts it a hair more so the
+ * ellipse straddles the contact line rather than hanging entirely below it.
+ *
+ * Took a *centre* Y before #73, because a body was drawn centred on its
+ * collider. Now every body in the game stands on its footprint instead, so
+ * this takes the same number the sprite and the depth sort take — one foot
+ * line per body, read by all three.
  */
-export function groundShadowFeetY(centreY: number, texture: Texture, scale: number): number {
-  const drawnBottom = (inkedBottomY(texture) - texture.frame.height / 2) * scale;
-  return centreY + drawnBottom - GROUND_SHADOW.contactInset;
+export function groundShadowFeetY(footY: number, texture: Texture, scale: number): number {
+  const belowInk = (texture.frame.height - inkedBottomY(texture)) * scale;
+  return footY - belowInk - GROUND_SHADOW.contactInset;
 }

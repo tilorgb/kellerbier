@@ -9,7 +9,7 @@ import {
   MAYPOLE_HEALTH,
   MAYPOLE_MASS,
   MAYPOLE_RADIUS,
-  PLAYER_RADIUS,
+  PLAYER_FOOTPRINT,
   type GameSimOptions,
 } from '../../src/sim/game/sim.js';
 import {
@@ -1329,7 +1329,7 @@ describe('enemies against the player', () => {
     // slot has to survive it. A freed slot is handed to the next body that
     // spawns, and the camera follows whatever lands in it.
     expect(sim.playerIndex).toBe(player);
-    expect(sim.body.data[player * 2]).toBe(PLAYER_RADIUS);
+    expect(sim.body.data[player * 2]).toBe(PLAYER_FOOTPRINT);
     expect(health(sim, player)).toBeGreaterThanOrEqual(0);
     expect(sim.world.states[player]).toBe(World.ALIVE);
   });

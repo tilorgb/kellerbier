@@ -18,7 +18,7 @@ afterEach(() => {
 });
 
 describe('createPropView', () => {
-  it('draws one sprite per mapped prop, at the authored position', () => {
+  it('stands one sprite per mapped prop on the bottom of its authored cell', () => {
     const view = createPropView(
       [
         { x: 72, y: 32, type: 'crate-opa' },
@@ -27,16 +27,35 @@ describe('createPropView', () => {
       tiles,
     );
     expect(view.children).toHaveLength(2);
+    // Bottom-anchored on the cell's lower edge since `docs/DECISIONS.md` #73,
+    // so `y` is half a tile below the authored centre and the sprite covers
+    // exactly the cell it used to be centred in — with anything taller than a
+    // tile overhanging upward, which is what a player walks behind.
     expect(view.children.map((child) => [child.x, child.y])).toEqual([
-      [72, 32],
-      [88, 32],
+      [72, 40],
+      [88, 40],
     ]);
+  });
+
+  it('sorts every prop by where it stands', () => {
+    const view = createPropView(
+      [
+        { x: 72, y: 32, type: 'crate-opa' },
+        { x: 88, y: 64, type: 'crate-neu' },
+      ],
+      tiles,
+    );
+    expect(view.children.map((child) => child.zIndex)).toEqual([40, 72]);
   });
 
   it('draws the Maibaum as two tiles, its crown directly above its base', () => {
     const view = createPropView([{ x: 120, y: 96, type: 'maibaum' }], tiles);
     expect(view.children).toHaveLength(2);
-    expect(view.children.map((child) => child.y)).toEqual([96, 80]);
+    expect(view.children.map((child) => child.y)).toEqual([104, 88]);
+    // Both halves are one object, so the crown sorts on the base's foot line
+    // rather than on its own — otherwise a player standing between the two
+    // would be drawn through the middle of the pole.
+    expect(view.children.map((child) => child.zIndex)).toEqual([104, 104]);
   });
 
   it('draws nothing for a prop something else already draws', () => {

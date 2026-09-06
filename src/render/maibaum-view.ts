@@ -1,5 +1,6 @@
 import { Container, Graphics, type Texture } from 'pixi.js';
 import type { GameSim } from '../sim/game/sim.js';
+import { setFootY } from './depth.js';
 import { createGroundShadow, styleGroundShadow } from './ground-shadow.js';
 
 /**
@@ -12,11 +13,17 @@ import { createGroundShadow, styleGroundShadow } from './ground-shadow.js';
  * - **planted** — while `GameSim.maypolePlanted` is non-null a live
  *   destructible target stands in the arena. Drawn tall and bottom-anchored at
  *   the collider, flushing red on a hit. `EntityView` skips the `maypole` prop
- *   kind, so this is the only copy. `view.ts` re-orders this container against
- *   the player each frame off `footY`, which is the whole of "walk behind it".
+ *   kind, so this is the only copy. It sits in the depth layer and writes its
+ *   base as its foot line, which is the whole of "walk behind it".
  * - **held** — once `GameSim.maibaumHeld` is non-null the pole is in the
  *   dieb's hands: a shorter weapon pole drawn at his body, angled by his
- *   swing. Not planted, so `footY` goes null and `view.ts` stops sorting.
+ *   swing. Not planted, so it sorts at the dieb's own feet instead.
+ *
+ * This was the game's only walk-behind object, and it got there by having
+ * `view.ts` lift its container out of the world and re-insert it above or
+ * below the player every frame. #73 made that ordinary — one sorted layer,
+ * one foot line per thing — so the special case is gone and this view is now
+ * just another member of it.
  *
  * Drawn procedurally with `Graphics` rather than from a sprite sheet: a maypole
  * is a stack of stripes and a wreath of dots, the shape a pure function draws
@@ -115,7 +122,6 @@ export class MaibaumView {
   private readonly planted = new Graphics();
   private readonly held = new Graphics();
   private readonly shadow = new Container();
-  private footYValue: number | null = null;
 
   constructor(shadowTexture?: Texture) {
     drawPlanted(this.planted);
@@ -130,11 +136,6 @@ export class MaibaumView {
     }
     this.container.addChild(this.shadow, this.planted, this.held);
     this.container.visible = false;
-  }
-
-  /** World Y of the planted pole's base — `view.ts` sorts the player against it. `null` when not planted. */
-  get footY(): number | null {
-    return this.footYValue;
   }
 
   sync(sim: GameSim): void {
@@ -158,7 +159,15 @@ export class MaibaumView {
       this.held.rotation = heldAt.poleAngle + Math.PI / 2;
     }
 
-    this.footYValue = plantedAt !== null ? plantedAt.y : null;
+    // The pole's base while it is planted, the thief's own feet while he is
+    // swinging it — either way, where the thing it belongs to touches the
+    // floor (#73). A held pole tracks him closely enough that sorting it at
+    // his feet keeps it in his hands through every body he walks past.
+    if (plantedAt !== null) {
+      setFootY(this.container, plantedAt.y);
+    } else if (heldAt !== null) {
+      setFootY(this.container, heldAt.y);
+    }
     this.container.visible = plantedAt !== null || heldAt !== null;
   }
 }

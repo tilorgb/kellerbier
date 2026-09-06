@@ -42,18 +42,29 @@ const tex = (w: number, h: number): Texture =>
   }) as unknown as Texture;
 
 describe('groundShadowFeetY', () => {
-  it('seats the shadow just above the drawing’s bottom edge', () => {
-    // 32px frame at scale 0.5, no DOM -> bottom edge is frameHeight/2 * scale below centre.
-    expect(groundShadowFeetY(100, tex(20, 32), 0.5)).toBeCloseTo(
-      100 + 8 - GROUND_SHADOW.contactInset,
-    );
+  it('seats the shadow just above the foot line the sprite stands on', () => {
+    // No DOM, so the inked scan falls back to "the art fills its canvas" and
+    // the drawing's bottom edge *is* the foot line.
+    expect(groundShadowFeetY(100, tex(20, 32), 0.5)).toBeCloseTo(100 - GROUND_SHADOW.contactInset);
   });
 
-  it('follows the sprite: a taller frame or a bigger scale seats lower', () => {
-    expect(groundShadowFeetY(0, tex(20, 48), 0.5)).toBeGreaterThan(
+  it('rides the foot line one for one', () => {
+    expect(
+      groundShadowFeetY(40, tex(20, 32), 0.5) - groundShadowFeetY(0, tex(20, 32), 0.5),
+    ).toBeCloseTo(40);
+  });
+
+  it('does not move when the canvas grows over the same feet', () => {
+    // The half of `docs/DECISIONS.md` #73 this function exists to hold up:
+    // a sprite is bottom-anchored on its foot line, so authoring a taller
+    // canvas gives the body more *height* and leaves its contact with the
+    // floor exactly where it was. Before #73 this was the opposite — the
+    // shadow was derived from a centre and a frame height, so a redraw with
+    // more headroom dropped the shadow by half the pixels it added.
+    expect(groundShadowFeetY(0, tex(20, 48), 0.5)).toBeCloseTo(
       groundShadowFeetY(0, tex(20, 32), 0.5),
     );
-    expect(groundShadowFeetY(0, tex(20, 32), 1)).toBeGreaterThan(
+    expect(groundShadowFeetY(0, tex(20, 32), 1)).toBeCloseTo(
       groundShadowFeetY(0, tex(20, 32), 0.5),
     );
   });

@@ -45,8 +45,8 @@ export class AnimationPanel implements DebugPanel {
   readonly view: Container;
   readonly height = PANEL_HEIGHT;
 
-  private readonly animator: EntityAnimator;
-  private readonly player: PlayerView;
+  private animator: EntityAnimator;
+  private player: PlayerView;
   private readonly lines: ReturnType<typeof createLabel>[] = [];
 
   constructor(animator: EntityAnimator, player: PlayerView) {
@@ -59,6 +59,18 @@ export class AnimationPanel implements DebugPanel {
       this.lines.push(label);
       this.view.addChild(label);
     }
+  }
+
+  /**
+   * Points the panel at a new run's animator and player.
+   *
+   * `startRun` builds a fresh `GameView` and destroys the old one, so anything
+   * this panel read from the previous view is gone — see `DebugOverlay`'s own
+   * `setContext`, which is the only caller.
+   */
+  setSource(animator: EntityAnimator, player: PlayerView): void {
+    this.animator = animator;
+    this.player = player;
   }
 
   update(context: DebugContext): void {

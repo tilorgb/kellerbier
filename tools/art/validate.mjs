@@ -21,6 +21,27 @@ import {
 const LEGAL_TILE_SIZES = [16, 32];
 
 /**
+ * How far a tile may be taller than it is wide, as a fraction of its cell.
+ *
+ * Zero until `docs/DECISIONS.md` #73: a tile covered its cell exactly, which
+ * is why a room's obstacles could never be walked *behind*. A blocking tile
+ * now overhangs the **top** of the cell it stands in — the cell is still what
+ * the simulation blocks, the extra rows are height the player reads and never
+ * collides with — and `render/room.ts` derives the overhang from the texture
+ * rather than from a constant, so the art is the only place it is stated.
+ *
+ * A quarter of the cell is a gate, not a house style, in exactly the sense
+ * `tests/content/sprite-scale.test.ts`'s band is one: wide enough for the 8
+ * authored pixels the sign-off round picked for a 32px block
+ * (`tools/art/authoring/blocks.mjs`'s `BLOCK_LIP`), tight enough that a tile
+ * cannot quietly become a mural covering the row above it. Width is still
+ * pinned to the two legal sizes — that is what keeps `tileGridScale` a whole
+ * number, and it is a *horizontal* footprint rule, which the overhang does
+ * not touch.
+ */
+const MAX_TILE_OVERHANG_RATIO = 0.25;
+
+/**
  * Checks a decoded sprite (or one frame of an animation strip) against its
  * category's size spec. Returns an error string, or `null` if it passes.
  */
@@ -35,10 +56,19 @@ export function validateSpriteSize(category, width, height, frameCount = 1) {
   const frameWidth = width / frameCount;
   const sizeLabel = frameCount > 1 ? `frame size ${frameWidth}x${height}` : `${width}x${height}`;
   if (category === 'tile') {
-    if (frameWidth === height && LEGAL_TILE_SIZES.includes(frameWidth)) {
+    const overhang = height - frameWidth;
+    if (
+      LEGAL_TILE_SIZES.includes(frameWidth) &&
+      overhang >= 0 &&
+      overhang <= frameWidth * MAX_TILE_OVERHANG_RATIO
+    ) {
       return null;
     }
-    return `${sizeLabel} is outside the "tile" spec (must be square, exactly ${LEGAL_TILE_SIZES.join(' or ')})`;
+    return (
+      `${sizeLabel} is outside the "tile" spec (must be exactly ` +
+      `${LEGAL_TILE_SIZES.join(' or ')} wide, and between that and ` +
+      `${String(1 + MAX_TILE_OVERHANG_RATIO)}x that tall)`
+    );
   }
   const withinWidth = frameWidth >= spec.minWidth && frameWidth <= spec.maxWidth;
   const withinHeight = height >= spec.minHeight && height <= spec.maxHeight;

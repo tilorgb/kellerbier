@@ -1,5 +1,6 @@
 import { Container, Sprite, Text, type Texture } from 'pixi.js';
 import { ROOM_TILE_UNITS } from '../content/rooms/definition.js';
+import { hurtboxRadiusOf } from '../sim/collision/footprint.js';
 import { CollisionLayer } from '../sim/collision/layers.js';
 import { World } from '../sim/ecs/world.js';
 import type { GameSim } from '../sim/game/sim.js';
@@ -16,6 +17,7 @@ import {
   TelegraphShape,
 } from '../sim/systems/enemy.js';
 import { EntityAnimator } from './animation/animator.js';
+import { setFootY, standSprite } from './depth.js';
 import { AUTHORED_FACING, resolveAnimationState, resolveFacing } from './animation/state.js';
 import type { AnimatedSpriteSet } from './floor-art.js';
 import { ENTITY_PALETTE, GROUND_SHADOW } from './palette.js';
@@ -72,13 +74,14 @@ const RING_PULSE_RATE = 0.011;
 
 /**
  * A boss's ground shadow: its own wider, flatter texture (`common/bosses/`),
- * drawn `radius * 3` across and `radius` tall at `GROUND_SHADOW.bossAlpha`.
- * Kept as its own thing rather than routed through `styleGroundShadow` —
- * #152 tuned it against the boss sprites specifically, and a boss is
- * bottom-anchored (#193) where every other body is centred, so its feet are
- * already `y + radius` and not something to re-derive. Every *other* body
- * here — enemy, pickup, destructible target, placed Bierfassl — takes the
- * shared treatment (`docs/DECISIONS.md` #61).
+ * drawn three times the *drawn* radius across and one tall at
+ * `GROUND_SHADOW.bossAlpha`. Kept as its own thing rather than routed through
+ * `styleGroundShadow` — #152 tuned it against the boss sprites specifically,
+ * and a boss's silhouette really is that much wider than the padded canvas
+ * measure the shared helper takes. Every *other* body here — enemy, pickup,
+ * destructible target, placed Bierfassl — takes the shared treatment
+ * (`docs/DECISIONS.md` #61). Both sit on the same foot line now (#73); what
+ * differs is only how wide they are drawn.
  */
 const BOSS_SHADOW_WIDTH_SCALE = 3;
 const BOSS_SHADOW_HEIGHT_SCALE = 1;
@@ -198,8 +201,25 @@ export class EntityView {
    * floor must never hide the enemy that is still shooting at you.
    */
   private readonly corpseLayer = new Container();
-  private readonly bodyLayer = new Container();
-  private readonly labelLayer = new Container();
+  /**
+   * Where the bodies go — **not** a container of this view's own.
+   *
+   * `GameView` hands in the one depth-sorted layer (`render/depth.ts`), and
+   * these sprites become direct children of it, interleaved with the rocks,
+   * the furniture and the player by where each one stands. A container of its
+   * own would sort as a single unit against them, which is exactly the "every
+   * enemy is either always in front of the player or always behind them"
+   * ordering #73 exists to end.
+   */
+  private readonly bodyLayer: Container;
+  /**
+   * Pickup labels and shop prices, above everything that stands (#73).
+   *
+   * Left out of the depth layer deliberately: a price tag is a caption, not a
+   * body, and one that a passing enemy could draw over is one a player cannot
+   * read at the moment they are deciding whether to buy.
+   */
+  readonly labelLayer = new Container();
 
   /** Tint and label per pickup kind, indexed the same way `pickupKind` component values are. */
   private readonly pickupTints: readonly number[];
@@ -276,6 +296,8 @@ export class EntityView {
 
   constructor(
     sim: GameSim,
+    /** The one depth-sorted layer (`render/depth.ts`) every body is drawn into. */
+    bodyLayer: Container,
     texture: Texture,
     flashTexture: Texture,
     telegraphTexture: Texture,
@@ -290,6 +312,7 @@ export class EntityView {
     barTexture?: Texture,
   ) {
     this.sim = sim;
+    this.bodyLayer = bodyLayer;
     this.texture = texture;
     this.enemyTextures = enemyTextures;
     this.flashTexture = flashTexture;
@@ -305,8 +328,6 @@ export class EntityView {
     this.container.addChild(this.shadowLayer);
     this.container.addChild(this.ringLayer);
     this.container.addChild(this.corpseLayer);
-    this.container.addChild(this.bodyLayer);
-    this.container.addChild(this.labelLayer);
     this.pickupTints = sim.pickups.all.map((definition) => definition.tint);
     this.pickupLabels = sim.pickups.all.map((definition) => definition.label);
     this.pickupSprites = sim.pickups.all.map((definition) => pickupArt[definition.id]);
@@ -343,6 +364,7 @@ export class EntityView {
     const required = sim.collidableMask;
     const collision = sim.collision.data;
     const body = sim.body.data;
+    const hurtbox = sim.hurtbox.data;
     const flash = sim.flash.data;
 
     let used = 0;
@@ -372,9 +394,19 @@ export class EntityView {
         continue;
       }
 
-      const radius = body[index * 2] ?? 1;
+      // The **footprint** (#73): the circle on the floor, whose south pole is
+      // both where the sprite stands and what the depth layer sorts it by.
+      const footprint = body[index * 2] ?? 1;
       const x = lerp(sim.previousX(index), sim.positionX(index), alpha);
       const y = lerp(sim.previousY(index), sim.positionY(index), alpha);
+      const footY = y + footprint;
+      // The drawn body, for everything that is about how big this thing
+      // *looks* rather than where it stands: the telegraph ring around it, a
+      // boss's shadow, a price tag under it. Falls back to the footprint for a
+      // body that never got a hurtbox, which is what every one of these read
+      // before the split.
+      const hurtRadius = hurtboxRadiusOf(hurtbox[index * 2] ?? 0, footprint);
+      const hurtCentreY = y + (hurtbox[index * 2 + 1] ?? 0);
 
       const sprite = this.spriteAt(used);
       used += 1;
@@ -419,7 +451,11 @@ export class EntityView {
           resolveFacing(sim, index),
           x,
           y,
-          radius,
+          // The drawn radius, not the footprint: the animator hands this to
+          // the corpse table, which uses it to stand a death clip on the same
+          // line the living body stood on. Feeding it the smaller circle would
+          // drop every corpse by the difference the frame its enemy died.
+          hurtRadius,
         );
         flip = this.animator.facingOf(index) === AUTHORED_FACING ? 1 : -1;
       }
@@ -535,16 +571,16 @@ export class EntityView {
       // with no animation set — which is what keeps a static sprite drawn
       // exactly as it was before #150.
       const spriteScale = gridScale * pop;
-      sprite.scale.set(spriteScale * flip, spriteScale);
-      // A boss is drawn far taller than its collider (`sim/enemy/size.ts`'s
-      // `boss` class, #193), so it *stands on* the collider instead of being
-      // centred through it the way #45 assumes for everything the size of a
-      // body: bottom-anchored, feet at the collider's lower edge — which is
-      // why every boss frame is authored with its ground contact on the
-      // canvas's bottom edge. Every other sprite keeps the centre anchor, so a
-      // recycled ECS slot that was a boss and is now a fly is put back.
-      sprite.anchor.set(0.5, isBoss ? 1 : 0.5);
-      sprite.position.set(x, isBoss ? y + radius : y);
+      // Standing on the footprint's south pole, and sorted by it (#73). This
+      // used to be a centre anchor for everything but a boss, which #56 had
+      // already had to except — "a sprite two to three times taller than its
+      // hitbox, centred, sinks half of itself through the floor". That is true
+      // of *any* sprite taller than its hitbox, which is now every sprite,
+      // because the hitbox that matters on the floor is the footprint. So the
+      // boss case stopped being a case and became the rule, and there is no
+      // longer an anchor a recycled ECS slot could inherit wrongly.
+      standSprite(sprite, x, footY, spriteScale, flip);
+      setFootY(sprite, footY);
 
       const priced = isPickup && ((masks[index] ?? 0) & sim.pickupPrice.bit) !== 0;
       // The two-letter label was how a pickup said which one it was before it
@@ -572,10 +608,7 @@ export class EntityView {
         // at, so it stopped sitting under the art the moment that canvas
         // grew, the same "offset tied to a size that can change instead of
         // the actual sprite" mistake #204's ground-shadow fix already caught.
-        label.position.set(
-          x,
-          pickupSprite === undefined ? y : y + (pickupSprite.height / 2) * ACTOR_SPRITE_SCALE,
-        );
+        label.position.set(x, pickupSprite === undefined ? hurtCentreY : footY);
       }
 
       // Every body `EntityView` draws stands on the floor, so every one casts
@@ -592,12 +625,15 @@ export class EntityView {
         if (isBoss) {
           shadow.anchor.set(0.5);
           shadow.alpha = GROUND_SHADOW.bossAlpha;
+          // Sized off the *drawn* radius, which is the number #152 tuned this
+          // against and which the footprint split deliberately left alone — a
+          // boss's shadow is as wide as the boss looks, not as wide as the
+          // circle it is pushed by.
           shadow.scale.set(
-            (radius * BOSS_SHADOW_WIDTH_SCALE) / shadow.texture.width,
-            (radius * BOSS_SHADOW_HEIGHT_SCALE) / shadow.texture.height,
+            (hurtRadius * BOSS_SHADOW_WIDTH_SCALE) / shadow.texture.width,
+            (hurtRadius * BOSS_SHADOW_HEIGHT_SCALE) / shadow.texture.height,
           );
-          // Bottom-anchored at the collider's lower edge (#193) — feet there.
-          shadow.position.set(x, y + radius);
+          shadow.position.set(x, footY);
         } else {
           // Seated under the art's real bottom row (`groundShadowFeetY` →
           // `inked-bounds.ts`), and narrowed to a real footprint — the padded
@@ -611,7 +647,7 @@ export class EntityView {
             shadowTexture,
             Math.min(bodyTexture.width * gridScale * footprint, ROOM_TILE_UNITS * 0.6),
           );
-          shadow.position.set(x, groundShadowFeetY(y, bodyTexture, gridScale));
+          shadow.position.set(x, groundShadowFeetY(footY, bodyTexture, gridScale));
         }
       }
 
@@ -636,7 +672,7 @@ export class EntityView {
             const wedge = this.wedgeAt(wedgesUsed);
             wedgesUsed += 1;
             wedge.visible = true;
-            const reach = radius * (1 + (LINE_TELEGRAPH_SCALE - 1) * info.progress);
+            const reach = hurtRadius * (1 + (LINE_TELEGRAPH_SCALE - 1) * info.progress);
             this.scaleWedge(wedge, reach, LINE_TELEGRAPH_HALF_ANGLE);
             wedge.rotation = info.angle;
             wedge.alpha = alpha;
@@ -683,7 +719,11 @@ export class EntityView {
             ring.visible = true;
             // Grows out of the body over the wind-up, and is at its widest on
             // the tick the attack leaves. The size is the countdown.
-            const ringRadius = radius * (1 + (TELEGRAPH_SCALE - 1) * info.progress);
+            // Off the drawn radius, not the footprint: a telegraph is a
+            // legibility shape sized against the body a player is looking at
+            // (#153 tuned `TELEGRAPH_SCALE` against exactly that), so #73's
+            // smaller floor circle must not shrink it by a third.
+            const ringRadius = hurtRadius * (1 + (TELEGRAPH_SCALE - 1) * info.progress);
             ring.scale.set(ringRadius / (this.telegraphTexture.width / 2));
             ring.alpha = alpha;
             ring.position.set(info.x, info.y);
@@ -821,16 +861,14 @@ export class EntityView {
         ACTOR_SPRITE_SCALE * (animator.corpseFacingAt(corpse) === AUTHORED_FACING ? 1 : -1),
         ACTOR_SPRITE_SCALE,
       );
-      // Match the living body's anchor (#193): a boss corpse is bottom-anchored
-      // at the collider's lower edge, so it does not jump half a sprite-height
-      // the frame the boss dies.
-      const isBoss = this.bossIds.has(clips.name);
-      sprite.anchor.set(0.5, isBoss ? 1 : 0.5);
+      // Match the living body's anchor (#73): every body stands on its foot
+      // line, so a corpse does too and none of them jumps half a sprite-height
+      // the frame its enemy dies. The radius the animator recorded is the
+      // living body's *drawn* one, which is what its sprite was standing on.
+      sprite.anchor.set(0.5, 1);
       sprite.position.set(
         animator.corpseXAt(corpse),
-        isBoss
-          ? animator.corpseYAt(corpse) + animator.corpseRadiusAt(corpse)
-          : animator.corpseYAt(corpse),
+        animator.corpseYAt(corpse) + animator.corpseRadiusAt(corpse),
       );
     }
     for (let slot = used; slot < this.corpses.length; slot++) {

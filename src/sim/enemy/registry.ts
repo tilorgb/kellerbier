@@ -145,6 +145,8 @@ export interface CompiledEnemy {
   readonly name: string;
   readonly size: EnemySizeId;
   readonly radius: number;
+  /** The size class's ground footprint (#73) — see `EnemyProfile.footprint`. */
+  readonly footprint: number;
   readonly mass: number;
   readonly health: number;
   readonly contactDamage: number;
@@ -293,6 +295,7 @@ export class EnemyRegistry {
       name: definition.name,
       size,
       radius: profile.radius,
+      footprint: profile.footprint,
       mass: definition.mass ?? profile.mass,
       health: definition.health,
       contactDamage: definition.contactDamage,

@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest';
 import {
   BLOCKS,
   BLOCK_BUCKETS,
+  BLOCK_CELL,
+  BLOCK_LIP,
   assertOnPalette,
   encodeSingle,
 } from '../../tools/art/authoring/blocks.mjs';
@@ -57,9 +59,32 @@ describe("the block tiles' committed art is what the authoring source produces",
     ).toBe(true);
   });
 
-  it.each(entries)('%s is a 32×32 tile', async (name) => {
+  it.each(entries)('%s covers its cell and overhangs it by exactly the lip', async (name) => {
     const { width, height } = decodePng(await readFile(pathFor(name)));
-    expect([width, height]).toEqual([32, 32]);
+    expect([width, height]).toEqual([BLOCK_CELL, BLOCK_CELL + BLOCK_LIP]);
+  });
+
+  it.each(entries)('%s actually draws into its overhang', async (name) => {
+    // The point of the taller canvas (#73) is that a player standing against a
+    // rock's north face has their legs covered by it. A block whose art stops
+    // at the cell boundary would be `BLOCK_LIP` rows of nothing — the file
+    // would pass every other check here, the game would look exactly as it did
+    // before, and the only symptom would be that the effect never appeared. So
+    // this asserts the overhang is *used*, not merely present.
+    const { width, height, pixels } = decodePng(await readFile(pathFor(name)));
+    const overhangRows = height - BLOCK_CELL;
+    let inked = 0;
+    for (let y = 0; y < overhangRows; y++) {
+      for (let x = 0; x < width; x++) {
+        if ((pixels[(y * width + x) * 4 + 3] ?? 0) > 0) {
+          inked += 1;
+        }
+      }
+    }
+    expect(
+      inked,
+      `${name}.png leaves its ${String(overhangRows)} overhang rows empty`,
+    ).toBeGreaterThan(overhangRows);
   });
 
   it.each(entries)('%s stays on its floor palette', (name, frame) => {

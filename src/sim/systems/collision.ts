@@ -55,6 +55,14 @@ let activeSim: GameSim | null = null;
  */
 let activeTransform: Float32Array = new Float32Array(0);
 let activeBody: Float32Array = new Float32Array(0);
+/**
+ * `sim.hurtbox.data` — the circle a shot actually has to cross (#73), which
+ * since the footprint split is *not* `activeBody`: a body's floor circle is
+ * smaller than its drawing and sits at its base, so testing against it would
+ * make every enemy in the game about a third harder to hit and every shot
+ * that visibly struck a chest pass through it.
+ */
+let activeHurtbox: Float32Array = new Float32Array(0);
 let activeCollisionLayers: Uint16Array = new Uint16Array(0);
 /** `sim.projectiles.lastHitTarget` — see `testCandidate`'s use of it, and the same reasoning above. */
 let activeLastHitTarget: Int32Array = new Int32Array(0);
@@ -97,6 +105,7 @@ export function stepCollision(sim: GameSim): void {
   activeSim = sim;
   activeTransform = sim.transform.data;
   activeBody = sim.body.data;
+  activeHurtbox = sim.hurtbox.data;
   activeCollisionLayers = sim.collision.data;
   activeLastHitTarget = sim.projectiles.lastHitTarget;
   activeEntityMasks = sim.world.masks;
@@ -122,6 +131,7 @@ function buildBroadphase(sim: GameSim): void {
   const required = sim.collidableMask;
   const transform = activeTransform;
   const body = activeBody;
+  const hurtbox = activeHurtbox;
   const hash = sim.broadphase;
 
   hash.begin();
@@ -133,12 +143,20 @@ function buildBroadphase(sim: GameSim): void {
     if (((masks[index] ?? 0) & required) !== required) {
       continue;
     }
-    hash.insert(
-      index,
-      transform[index * 4] ?? 0,
-      transform[index * 4 + 1] ?? 0,
-      body[index * 2] ?? 0,
+    // Staged at the footprint's centre but sized to cover the hurtbox too:
+    // the hurtbox sits *above* that centre and can be wider, so a grid keyed
+    // on the footprint alone would drop candidates whose only overlap with a
+    // shot's swept path is the part of them that is off the ground. Padding
+    // the radius rather than staging a second entry keeps the broadphase one
+    // insert per body — the exact test in `testCandidate` is what decides a
+    // hit, and it reads the real circle.
+    const footprint = body[index * 2] ?? 0;
+    const hurtRadius = hurtbox[index * 2] ?? 0;
+    const reach = Math.max(
+      footprint,
+      (hurtRadius > 0 ? hurtRadius : footprint) + Math.abs(hurtbox[index * 2 + 1] ?? 0),
     );
+    hash.insert(index, transform[index * 4] ?? 0, transform[index * 4 + 1] ?? 0, reach);
   }
   hash.build();
 }
@@ -200,9 +218,15 @@ function resolveProjectile(slot: number): void {
   const hitX = fromX + (toX - fromX) * hitTime;
   const hitY = fromY + (toY - fromY) * hitTime;
 
+  // From the centre of the circle that was actually hit — the hurtbox (#73),
+  // which sits above the footprint's centre. Taking the normal from the
+  // footprint instead would tilt every impact downward: the foam would spray
+  // from under the body and knockback would push it up the screen on a shot
+  // that struck it square in the side.
   const targetBase = target * 4;
   const towardsX = hitX - (activeTransform[targetBase] ?? 0);
-  const towardsY = hitY - (activeTransform[targetBase + 1] ?? 0);
+  const towardsY =
+    hitY - ((activeTransform[targetBase + 1] ?? 0) + (activeHurtbox[target * 2 + 1] ?? 0));
   const length = vectorLength(towardsX, towardsY);
   const normalX = length === 0 ? 0 : towardsX / length;
   const normalY = length === 0 ? 0 : towardsY / length;
@@ -263,6 +287,10 @@ function testCandidate(index: number): void {
     return;
   }
 
+  // The hurtbox, not the footprint (#73) — a radius of zero means the body
+  // never got one and is collided as its own floor circle, exactly as
+  // everything was before the split.
+  const hurtRadius = activeHurtbox[index * 2] ?? 0;
   const time = sweptCircleHit(
     state[FROM_X] ?? 0,
     state[FROM_Y] ?? 0,
@@ -270,8 +298,8 @@ function testCandidate(index: number): void {
     state[TO_Y] ?? 0,
     state[RADIUS] ?? 0,
     activeTransform[index * 4] ?? 0,
-    activeTransform[index * 4 + 1] ?? 0,
-    activeBody[index * 2] ?? 0,
+    (activeTransform[index * 4 + 1] ?? 0) + (activeHurtbox[index * 2 + 1] ?? 0),
+    hurtRadius > 0 ? hurtRadius : (activeBody[index * 2] ?? 0),
   );
   if (time === NO_HIT || time >= (state[BEST_HIT_TIME] ?? 0)) {
     return;

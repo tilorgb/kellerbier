@@ -584,7 +584,7 @@ export interface TuningWindowHandle {
  * Nothing is polled: a slider writes into the tuning object the simulation is
  * already reading, and the next tick uses it.
  */
-export function createTuningWindow(tuning: SimTuning): TuningWindowHandle {
+export function createTuningWindow(getTuning: () => SimTuning): TuningWindowHandle {
   injectDevUiTokens();
 
   const style = document.createElement('style');
@@ -600,7 +600,20 @@ export function createTuningWindow(tuning: SimTuning): TuningWindowHandle {
   toggle.type = 'button';
   toggle.textContent = 'tuning';
 
-  const live = tuning as unknown as MutableTuning;
+  /**
+   * The tuning object **of the run being played**, read fresh every time.
+   *
+   * A value, not an accessor, until the same restart bug `DebugOverlay`'s
+   * `setContext` documents was found here too: `startRun` builds a new
+   * `GameSim`, a `GameSim` builds its own `SimTuning`, and every slider was
+   * bound to whichever one existed when the window was built. From the first
+   * restart onward the sliders moved numbers nobody was simulating — silently,
+   * since the readout they update is their own.
+   *
+   * Which *fields* exist never changes, so the panel is still built once; only
+   * the object each slider reads and writes is resolved per interaction.
+   */
+  const live = (): MutableTuning => getTuning() as unknown as MutableTuning;
   const refreshers: (() => void)[] = [];
 
   for (const spec of GROUPS) {
@@ -608,11 +621,13 @@ export function createTuningWindow(tuning: SimTuning): TuningWindowHandle {
     heading.textContent = spec.title;
     panel.appendChild(heading);
     for (const field of spec.fields) {
-      const target = live[spec.group];
-      if (target === undefined || typeof target[field.key] !== 'number') {
+      const probe = live()[spec.group];
+      if (probe === undefined || typeof probe[field.key] !== 'number') {
         continue;
       }
-      panel.appendChild(createSlider(target, spec.group, field, refreshers));
+      panel.appendChild(
+        createSlider(() => live()[spec.group] ?? probe, spec.group, field, refreshers),
+      );
     }
   }
 
@@ -626,7 +641,7 @@ export function createTuningWindow(tuning: SimTuning): TuningWindowHandle {
   copyButton.type = 'button';
   copyButton.textContent = 'copy changed';
   copyButton.addEventListener('click', () => {
-    const text = changedValuesAsSource(live);
+    const text = changedValuesAsSource(live());
     if (text === '') {
       status.textContent = 'nothing changed yet';
       return;
@@ -648,7 +663,7 @@ export function createTuningWindow(tuning: SimTuning): TuningWindowHandle {
   resetButton.addEventListener('click', () => {
     for (const group of Object.keys(DEFAULTS) as (keyof typeof DEFAULTS)[]) {
       const defaults = DEFAULTS[group] as unknown as Record<string, number>;
-      const target = live[group];
+      const target = live()[group];
       if (target === undefined) {
         continue;
       }
@@ -697,7 +712,8 @@ export function createTuningWindow(tuning: SimTuning): TuningWindowHandle {
 }
 
 function createSlider(
-  target: Record<string, number>,
+  /** Resolved per read and per write, so a restart's fresh tuning object is the one that moves. */
+  target: () => Record<string, number>,
   group: string,
   field: FieldSpec,
   refreshers: (() => void)[],
@@ -729,14 +745,14 @@ function createSlider(
   const original = defaults[field.key] ?? 0;
 
   const refresh = (): void => {
-    const current = target[field.key] ?? 0;
+    const current = target()[field.key] ?? 0;
     slider.value = String(current);
     value.textContent = format(current);
     value.classList.toggle('kb-changed', current !== original);
   };
 
   slider.addEventListener('input', () => {
-    target[field.key] = Number(slider.value);
+    target()[field.key] = Number(slider.value);
     refresh();
   });
 
@@ -745,7 +761,7 @@ function createSlider(
   // reset is the wrong tool for it — it throws away the nine that were right.
   value.title = 'double-click to reset this one';
   value.addEventListener('dblclick', () => {
-    target[field.key] = original;
+    target()[field.key] = original;
     refresh();
   });
 

@@ -1,3 +1,4 @@
+import { footprintRadius, hurtboxOffsetY, hurtboxRadiusOf } from '../collision/footprint.js';
 import { type Component, World } from '../ecs/world.js';
 import { type Entity, entityIndex } from '../ecs/entity.js';
 import { ENEMY_DEFINITIONS } from '../../content/enemies/index.js';
@@ -135,8 +136,33 @@ import { DESTRUCTIBLE_PROP_KINDS, type DestructiblePropKind, propKindIndex } fro
 /** Entity slots reserved up front. Sized well above M1's population. */
 const DEFAULT_CAPACITY = 8192;
 
-/** Collider radius of the player, in pixels. */
+/**
+ * The player's drawn radius, in pixels: half the silhouette, and the circle
+ * `stepCollision` still tests an enemy shot against the *pixels* of. Unchanged
+ * — every number in `tuning.ts` was tuned against a body this size.
+ */
 export const PLAYER_RADIUS = 7;
+
+/**
+ * The circle of Alois that is on the floor (`docs/DECISIONS.md` #73): what he
+ * walks into, what a doorway has to clear, what an enemy body pushes, what its
+ * contact damage has to reach — and, uniquely to him, what an enemy *shot* has
+ * to cross.
+ *
+ * That last one is the deliberate asymmetry, and it is the half of #73 that is
+ * a difficulty change rather than a rendering one. Everything else in the game
+ * keeps a hurtbox the size of its drawing, so shooting an enemy feels exactly
+ * as it did; Alois does not, so a shot passing over his hat is a miss. It is
+ * the same trade Isaac makes and the reason a near miss there reads as skill
+ * rather than as the game being loose about it — and it makes him about a
+ * third harder to hit, which is a real change to expect in a playtest, not a
+ * side effect to discover.
+ *
+ * Five rather than a fraction of seven because he is the one body in the game
+ * every other number is felt against; see `render/depth.ts` for what standing
+ * a 32-pixel sprite on a 5-unit circle does to his silhouette.
+ */
+export const PLAYER_FOOTPRINT = 5;
 
 /**
  * The stats Der Wolpertinger's per-floor reroll touches (#47).
@@ -607,8 +633,28 @@ export class GameSim {
   readonly transform: Component<Float32Array>;
   /** Velocity in pixels per tick. */
   readonly velocity: Component<Float32Array>;
-  /** Collider radius and mass. Mass is what knockback is divided by. */
+  /**
+   * The body's **footprint** radius and its mass — the circle on the floor.
+   * Mass is what knockback is divided by.
+   *
+   * Since `docs/DECISIONS.md` #73 this is deliberately smaller than the
+   * drawing: it is what the body walks into, what pushes it, what its contact
+   * damage reaches and how far a pickup can be grabbed from. What a *shot* has
+   * to cross is `hurtbox` below.
+   */
   readonly body: Component<Float32Array>;
+  /**
+   * Radius of the circle a projectile has to cross, and how far up the screen
+   * it sits from `body`'s centre (#73) — `sim/collision/footprint.ts` covers
+   * why the offset is not a free number.
+   *
+   * A radius of zero means "the footprint itself", so a body nobody has given
+   * one is collided exactly as it was before this existed. Written at every
+   * spawn rather than left to that fallback, because entity slots are
+   * recycled and a barrel inheriting a boss's hurtbox is the same class of bug
+   * `spawnTarget` already writes `contactDamage` and `propKind` to avoid.
+   */
+  readonly hurtbox: Component<Float32Array>;
   /**
    * External impulses — firing kickback, and knockback once things can be hit.
    *
@@ -1361,6 +1407,7 @@ export class GameSim {
     this.transform = this.world.defineComponent('transform', Float32Array, 4);
     this.velocity = this.world.defineComponent('velocity', Float32Array, 2);
     this.body = this.world.defineComponent('body', Float32Array, 2);
+    this.hurtbox = this.world.defineComponent('hurtbox', Float32Array, 2);
     this.push = this.world.defineComponent('push', Float32Array, 2);
     this.collision = this.world.defineComponent('collision', Uint16Array, 2);
     this.health = this.world.defineComponent('health', Int16Array, 2);
@@ -1735,22 +1782,22 @@ export class GameSim {
       const half = (door.span ?? DOOR_SPAN) / 2;
       switch (door.direction) {
         case 'north':
-          if (y <= this.room.minY + PLAYER_RADIUS && Math.abs(x - centre.x) <= half) {
+          if (y <= this.room.minY + PLAYER_FOOTPRINT && Math.abs(x - centre.x) <= half) {
             return door;
           }
           break;
         case 'south':
-          if (y >= this.room.maxY - PLAYER_RADIUS && Math.abs(x - centre.x) <= half) {
+          if (y >= this.room.maxY - PLAYER_FOOTPRINT && Math.abs(x - centre.x) <= half) {
             return door;
           }
           break;
         case 'west':
-          if (x <= this.room.minX + PLAYER_RADIUS && Math.abs(y - centre.y) <= half) {
+          if (x <= this.room.minX + PLAYER_FOOTPRINT && Math.abs(y - centre.y) <= half) {
             return door;
           }
           break;
         case 'east':
-          if (x >= this.room.maxX - PLAYER_RADIUS && Math.abs(y - centre.y) <= half) {
+          if (x >= this.room.maxX - PLAYER_FOOTPRINT && Math.abs(y - centre.y) <= half) {
             return door;
           }
           break;
@@ -2435,7 +2482,7 @@ export class GameSim {
     entryCell: { readonly col: number; readonly row: number },
   ): { x: number; y: number } {
     if (direction === null) {
-      return this.findPlayerSpawnPoint(PLAYER_RADIUS);
+      return this.findPlayerSpawnPoint(PLAYER_FOOTPRINT);
     }
     if (this.room.stepRects.length > 0) {
       // A staircase (#112) has no floor-grid cell of its own for the normal
@@ -2450,13 +2497,13 @@ export class GameSim {
       if (door?.centre !== undefined) {
         switch (wallDirection) {
           case 'north':
-            return { x: door.centre.x, y: door.centre.y + PLAYER_RADIUS + 1 };
+            return { x: door.centre.x, y: door.centre.y + PLAYER_FOOTPRINT + 1 };
           case 'south':
-            return { x: door.centre.x, y: door.centre.y - PLAYER_RADIUS - 1 };
+            return { x: door.centre.x, y: door.centre.y - PLAYER_FOOTPRINT - 1 };
           case 'east':
-            return { x: door.centre.x - PLAYER_RADIUS - 1, y: door.centre.y };
+            return { x: door.centre.x - PLAYER_FOOTPRINT - 1, y: door.centre.y };
           case 'west':
-            return { x: door.centre.x + PLAYER_RADIUS + 1, y: door.centre.y };
+            return { x: door.centre.x + PLAYER_FOOTPRINT + 1, y: door.centre.y };
         }
       }
     }
@@ -2464,13 +2511,13 @@ export class GameSim {
     const cellCentreY = this.room.minY + entryCell.row * SCREEN_HEIGHT + SCREEN_HEIGHT / 2;
     switch (direction) {
       case 'north':
-        return { x: cellCentreX, y: this.room.maxY - PLAYER_RADIUS - 1 };
+        return { x: cellCentreX, y: this.room.maxY - PLAYER_FOOTPRINT - 1 };
       case 'east':
-        return { x: this.room.minX + PLAYER_RADIUS + 1, y: cellCentreY };
+        return { x: this.room.minX + PLAYER_FOOTPRINT + 1, y: cellCentreY };
       case 'south':
-        return { x: cellCentreX, y: this.room.minY + PLAYER_RADIUS + 1 };
+        return { x: cellCentreX, y: this.room.minY + PLAYER_FOOTPRINT + 1 };
       case 'west':
-        return { x: this.room.maxX - PLAYER_RADIUS - 1, y: cellCentreY };
+        return { x: this.room.maxX - PLAYER_FOOTPRINT - 1, y: cellCentreY };
     }
   }
 
@@ -4933,7 +4980,12 @@ export class GameSim {
       this.positionY(index),
       // Smaller than the body that left it. A splash wider than the thing that
       // died reads as the floor having been painted rather than as a corpse.
-      (this.body.data[index * 2] ?? 8) * (0.7 + random.nextFloat() * 0.4),
+      // Off the hurtbox rather than the footprint (#73): "the body that left
+      // it" is the drawing, and sizing a decal to the small floor circle would
+      // shrink every splash in the game by a third for a reason that is about
+      // where a body is collided, not how big it looked.
+      hurtboxRadiusOf(this.hurtbox.data[index * 2] ?? 0, this.body.data[index * 2] ?? 8) *
+        (0.7 + random.nextFloat() * 0.4),
       random.nextFloat() * Math.PI * 2,
     );
     if (this.world.destroy(this.world.entityAt(index))) {
@@ -5267,6 +5319,7 @@ export class GameSim {
     this.world.add(entity, this.transform);
     this.world.add(entity, this.velocity);
     this.world.add(entity, this.body);
+    this.world.add(entity, this.hurtbox);
     this.world.add(entity, this.push);
     this.world.add(entity, this.collision);
     this.world.add(entity, this.health);
@@ -5274,7 +5327,7 @@ export class GameSim {
     this.world.add(entity, this.flash);
 
     const index = entityIndex(entity);
-    const spawnPoint = this.findPlayerSpawnPoint(PLAYER_RADIUS);
+    const spawnPoint = this.findPlayerSpawnPoint(PLAYER_FOOTPRINT);
     const startX = spawnPoint.x;
     const startY = spawnPoint.y;
     const transform = this.transform.data;
@@ -5284,8 +5337,15 @@ export class GameSim {
     transform[index * 4 + 3] = startY;
 
     const body = this.body.data;
-    body[index * 2] = PLAYER_RADIUS;
+    body[index * 2] = PLAYER_FOOTPRINT;
     body[index * 2 + 1] = 1;
+
+    // The one hurtbox in the game that is not the size of its drawing — see
+    // `PLAYER_FOOTPRINT`. Lifted by the same amount as everything else, so it
+    // sits over his body rather than around his boots.
+    const hurtbox = this.hurtbox.data;
+    hurtbox[index * 2] = PLAYER_FOOTPRINT;
+    hurtbox[index * 2 + 1] = hurtboxOffsetY(PLAYER_RADIUS, PLAYER_FOOTPRINT);
 
     // The character's own pool (#47), not the engine's default: Resi walks in
     // on four Maß and D'Sennerin on five, and `PLAYER_HEALTH` is what
@@ -5467,7 +5527,9 @@ export class GameSim {
     const index = entityIndex(entity);
 
     const body = this.body.data;
+    body[index * 2] = profile.footprint;
     body[index * 2 + 1] = profile.mass;
+    this.hurtbox.data[index * 2 + 1] = hurtboxOffsetY(profile.radius, profile.footprint);
 
     const health = this.health.data;
     health[index * 2] = profile.health;
@@ -5513,7 +5575,15 @@ export class GameSim {
     this.world.add(entity, this.enemyMotion);
 
     const body = this.body.data;
+    // Elite (#156) scales the footprint by the same multiplier `spawnTarget`
+    // above already scaled the drawn radius by: a bigger body stands on more
+    // floor, and the two circles staying in proportion is what keeps its
+    // sprite standing on its own collider rather than floating over it.
+    const eliteRadius = compiled.radius * sizeMultiplier;
+    const eliteFootprint = compiled.footprint * sizeMultiplier;
+    body[index * 2] = eliteFootprint;
     body[index * 2 + 1] = compiled.mass * sizeMultiplier;
+    this.hurtbox.data[index * 2 + 1] = hurtboxOffsetY(eliteRadius, eliteFootprint);
 
     const health = this.health.data;
     const maxHealth =
@@ -5576,6 +5646,7 @@ export class GameSim {
     this.world.add(entity, this.transform);
     this.world.add(entity, this.velocity);
     this.world.add(entity, this.body);
+    this.world.add(entity, this.hurtbox);
     this.world.add(entity, this.push);
     this.world.add(entity, this.collision);
     this.world.add(entity, this.health);
@@ -5596,9 +5667,18 @@ export class GameSim {
     // prop kind would draw as a Maibaum.
     this.propKind.data[index] = propKind;
 
+    // `radius` is the *drawn* body — every caller passes a size class's
+    // `radius`, a barrel's, the maypole's — so the hurtbox keeps it exactly and
+    // the footprint is the smaller circle derived from it (#73). A caller that
+    // knows better overwrites `body` afterwards, which is what `spawnEnemy` and
+    // `spawnEnemyKind` do with their class's authored footprint.
     const body = this.body.data;
-    body[index * 2] = radius;
+    body[index * 2] = footprintRadius(radius);
     body[index * 2 + 1] = mass;
+
+    const hurtbox = this.hurtbox.data;
+    hurtbox[index * 2] = radius;
+    hurtbox[index * 2 + 1] = hurtboxOffsetY(radius, footprintRadius(radius));
 
     const healthData = this.health.data;
     healthData[index * 2] = health;
@@ -5649,6 +5729,7 @@ export class GameSim {
     const entity = this.world.create();
     this.world.add(entity, this.transform);
     this.world.add(entity, this.body);
+    this.world.add(entity, this.hurtbox);
     this.world.add(entity, this.collision);
     this.world.add(entity, this.pickupKind);
     this.world.add(entity, this.spawnBounce);
@@ -5663,9 +5744,15 @@ export class GameSim {
     transform[index * 4 + 2] = x;
     transform[index * 4 + 3] = y;
 
+    // Not split into two circles (#73), deliberately: a dropped Maß lies *on*
+    // the floor, nothing shoots it, and its radius is grab reach — the one
+    // number a player feels about it. Shrinking that to a footprint would make
+    // every pickup fiddlier to walk over for no gain in how anything reads.
     const body = this.body.data;
     body[index * 2] = definition.radius;
     body[index * 2 + 1] = 1;
+    this.hurtbox.data[index * 2] = definition.radius;
+    this.hurtbox.data[index * 2 + 1] = 0;
 
     // A recycled slot keeps whatever `velocity`/`push` a previous occupant
     // left behind — most visibly the very enemy this pickup just dropped
@@ -5714,6 +5801,7 @@ export class GameSim {
     const entity = this.world.create();
     this.world.add(entity, this.transform);
     this.world.add(entity, this.body);
+    this.world.add(entity, this.hurtbox);
     this.world.add(entity, this.collision);
     this.world.add(entity, this.bombFuse);
     this.world.add(entity, this.contactDamage);
@@ -5729,8 +5817,10 @@ export class GameSim {
     transform[index * 4 + 3] = y;
 
     const body = this.body.data;
-    body[index * 2] = BOMB_RADIUS;
+    body[index * 2] = footprintRadius(BOMB_RADIUS);
     body[index * 2 + 1] = 4;
+    this.hurtbox.data[index * 2] = BOMB_RADIUS;
+    this.hurtbox.data[index * 2 + 1] = hurtboxOffsetY(BOMB_RADIUS, footprintRadius(BOMB_RADIUS));
 
     if (rolling) {
       const speed = this.tuning.pickup.bombRollSpeed;
