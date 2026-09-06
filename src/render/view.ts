@@ -207,6 +207,8 @@ export class GameView {
   private propSprites: Container[];
   /** The room's obstacles (#60), adopted into `depth` and rebuilt per room. */
   private blockSprites: Container[];
+  /** Last `AmbientLight.tintRevision` the scenery was shaded for — `-1` until the first frame. */
+  private sceneryTintRevision = -1;
   private readonly ambientLight: AmbientLight;
   private readonly maibaumView: MaibaumView;
   private readonly corpseView: CorpseView;
@@ -310,14 +312,10 @@ export class GameView {
 
     // Ambient per-floor lighting: over the floor and walls, under everything
     // that stands on them — see `ambient-light.ts`'s own doc comment for why
-    // it stops there. It used to also sit over the props and the obstacles,
-    // which #73 moved up into `depth`; the floor beneath them still darkens,
-    // but the rock and the market stall themselves no longer do. That is a
-    // real trade and the honest half of "one sorted layer": scenery cannot be
-    // both above the bodies for occlusion and below the light for tone
-    // without lighting the bodies too, which `docs/GAME_DESIGN.md` §1 rules
-    // out. The background palette tier (#62) is already doing most of that
-    // work; a per-sprite ambient tint is the follow-up if it reads bright.
+    // it stops there. The scenery standing in it no longer gets its tone by
+    // being *under* this overlay, because since #73 it has to be above it to
+    // sort against the bodies; `tintScenery` shades it by the same light
+    // instead, sampled at its own foot line.
     this.ambientLight = new AmbientLight();
     this.ambientLight.onRoomChanged(sim.room, sim.currentFloor);
     this.world.addChild(this.ambientLight.container);
@@ -567,6 +565,14 @@ export class GameView {
       this.ambientLight.onRoomChanged(this.roomGeometry, this.sim.currentFloor);
     }
     this.ambientLight.sync(this.sim.tick);
+    // Shade the scenery to match the floor it stands on. Off a revision rather
+    // than every frame: Floor 1's lamp never moves, so a room is tinted once at
+    // load; only Floor 2's drifting cloud actually costs anything per frame,
+    // and then only while it is crossing.
+    if (this.ambientLight.tintRevision !== this.sceneryTintRevision) {
+      this.sceneryTintRevision = this.ambientLight.tintRevision;
+      this.tintScenery();
+    }
     this.decals.sync();
     this.entities.sync(alpha, nowMs);
     this.pedestals.sync();
@@ -621,6 +627,25 @@ export class GameView {
    * is: a room load is not a per-frame event, and a pool of tile sprites keyed
    * by nothing in particular would be more machinery than the thing it saves.
    */
+  /**
+   * Shades every standing piece of scenery by the light at its own foot line
+   * (#73) — the darkening half, which it can no longer get by being drawn
+   * under `ambientLight.container`.
+   *
+   * The tint is a property of where a thing *stands*, so it is read at the
+   * sprite's own anchor, which is exactly its ground contact. Nothing here
+   * touches the bodies: an enemy in a dark corner stays as readable as one in
+   * the light, which is the rule this whole layer is arranged around.
+   */
+  private tintScenery(): void {
+    for (const sprite of this.blockSprites) {
+      sprite.tint = this.ambientLight.tintAt(sprite.x, sprite.y);
+    }
+    for (const sprite of this.propSprites) {
+      sprite.tint = this.ambientLight.tintAt(sprite.x, sprite.y);
+    }
+  }
+
   private replaceScenery(): void {
     for (const sprite of [...this.blockSprites, ...this.propSprites]) {
       this.depth.removeChild(sprite);
@@ -638,6 +663,11 @@ export class GameView {
       this.depth,
       createPropView(this.sim.roomDecorativeProps, this.tileTextures),
     );
+    // The new room's scenery has never been shaded; `sync` re-reads the
+    // revision on the same frame, but a room whose lighting happens to be
+    // identical to the last one's would otherwise keep the old sprites' tint
+    // and hand the new ones white.
+    this.sceneryTintRevision = -1;
   }
 
   /**
