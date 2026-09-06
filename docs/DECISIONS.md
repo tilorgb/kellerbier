@@ -3786,17 +3786,19 @@ the room read as a *place*. That was the argument, and it was made by looking, n
 
 ### What the world is now
 
-- **A fixed 56° perspective camera** (`render/world/camera.ts`), fitted once so exactly one
+- **A fixed 65° perspective camera** (`render/world/camera.ts`), fitted once so exactly one
   `320×180`-unit view — `INTERNAL / WORLD_ZOOM`, the frame the 2D game showed — fills the internal
   frame, and targeting the same clamped viewport centre `followOffset` always computed. A `1x1`
   room never scrolls; a `2x2` scrolls exactly as it did (`GAME_DESIGN.md`'s "Room shape and the
-  camera" still holds). 56° was chosen in the proof of concept against 38° (more drama, less
-  playfield) and 90° (the 2D game); `GameView.setElevation` is kept for tuning.
+  camera" still holds). The proof of concept chose 56° against 38° (more drama, less playfield) and
+  90° (the 2D game); tuning after it landed on 65° (lens 34, zoom 0.985). `GameView.setElevation`
+  is kept for tuning.
 - **Walls with height, per tileset.** `FloorTileset.wallHeight` (`render/floor-art.ts`): Der
   Keller's are 26 units of wall, Dorf & Acker's `rural-wall` a 10-unit hedge the player looks over.
   `FloorTileset.lighting` names the light rig. Both are decisions about what the wall tile *is*, so
-  they live where the tile is named (#40's manifest, two fields longer). The wall nearest the camera
-  is a kerb whatever the floor says, or it would hide the near rows.
+  they live where the tile is named (#40's manifest, two fields longer). All four walls are the
+  floor's full height (the near wall was a short kerb in the proof of concept; the 65° camera looks
+  over a full one).
 - **Real light and a shadow map** (`render/world/lighting.ts`). A cellar hangs a point light on
   every `bulb` prop — two by default if none is authored, because a cellar with no light is a black
   screen, not a mood. Daylight is a sky, a sun, and a cloud plane that *casts a shadow* through the
@@ -3812,6 +3814,15 @@ the room read as a *place*. That was the argument, and it was made by looking, n
   #43 describes `placeholder-art.ts` faking with a texture swap, now a material property.
   Obstacles, props, creatures, pickups, corpses alike: a boulder drawn as a textured box read as a
   crate with rock wallpaper, and the authored tile already *is* the illusion of a rock.
+- **Standing sprites are a second render pass** (`render/world/layers.ts`, `GameView.render`). At
+  65° a leaned quad lies almost flat — a full-height character's head sits ~14 units behind its
+  feet, inside the back wall's box, and one pass lets the wall's depth clip it. So the room draws
+  first, then everything on `ACTOR_LAYER` (every sprite, boulder, projectile, particle) draws again
+  over it with the depth buffer cleared — the 2D renderer's painter's-order compositing, sprites
+  still depth-sorted against each other. Lights are `enableAll`'d so the second pass is lit; the
+  key light's shadow camera too, so the sprites still cast. `scene.background` is nulled for the
+  pass — a `Color` background makes three force a colour clear on every `render`, `autoClear` or
+  not, which would wipe pass one.
 - **Flat things stay flat** (`render/world/flat.ts`): decals, telegraph shapes and plinths are
   quads a hair above the floor plane, stacked by kind so overlaps order predictably.
 - **Projectiles and particles are instanced**: one `InstancedMesh` per projectile texture and per

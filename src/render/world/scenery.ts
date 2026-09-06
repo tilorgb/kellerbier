@@ -24,6 +24,7 @@ import { ROOM_HAZARD_PALETTE, roomThemeForFloor } from '../palette.js';
 import { pickTileVariant, tileGridScale } from '../tiles.js';
 import { Billboard } from './billboard.js';
 import { DECAL_HEIGHT, FloorSprite, tilingTexture } from './flat.js';
+import { ACTOR_LAYER } from './layers.js';
 
 /**
  * The room as a place: floor, walls with height, doorways, obstacles, props,
@@ -40,12 +41,6 @@ import { DECAL_HEIGHT, FloorSprite, tilingTexture } from './flat.js';
  * crate with rock wallpaper; the authored tile is already the illusion of a
  * rock, and standing it up is enough to say "this blocks you" — collision is
  * the simulation's rectangle either way.
- *
- * ## The front wall
- *
- * The wall nearest the camera is a kerb, `FRONT_WALL_HEIGHT` tall, however
- * tall the floor's walls are: at full height it would hide the room's near
- * rows, and a fixed camera cannot look past it.
  *
  * ## Void cells
  *
@@ -66,7 +61,6 @@ export interface DecorativeProp {
   readonly type: string;
 }
 
-const FRONT_WALL_HEIGHT = 5;
 const WALL_THICKNESS = ROOM_TILE_UNITS;
 /** How far past the room the dark base extends, so a letterboxed frame never shows void. */
 const BLEED = ROOM_TILE_UNITS * 6;
@@ -591,7 +585,7 @@ export class Scenery {
       x: start + length / 2,
       z: room.minY - t / 2,
     }));
-    run(room.minX - t, room.maxX + t, FRONT_WALL_HEIGHT, 'south', (start, length) => ({
+    run(room.minX - t, room.maxX + t, this.wallHeight, 'south', (start, length) => ({
       x: start + length / 2,
       z: room.maxY + t / 2,
     }));
@@ -665,6 +659,8 @@ export class Scenery {
       if (tiles === undefined || tiles.blockVariants.length === 0) {
         const box = flatBox(blockColour, maxX - minX, ROOM_TILE_UNITS * 0.8, maxY - minY);
         box.position.set((minX + maxX) / 2, ROOM_TILE_UNITS * 0.4, (minY + maxY) / 2);
+        // A block stands in the room: second pass, like every other sprite.
+        box.layers.set(ACTOR_LAYER);
         this.group.add(box);
         continue;
       }
@@ -740,6 +736,8 @@ export class Scenery {
       );
       mesh.position.set((minX + maxX) / 2, TRELLIS_HEIGHT / 2, (minY + maxY) / 2);
       mesh.castShadow = true;
+      // Stands in the room, hidden behind: second pass, like every other sprite.
+      mesh.layers.set(ACTOR_LAYER);
       this.group.add(mesh);
     }
   }
@@ -814,11 +812,10 @@ export class Scenery {
       const alongX = door.direction === 'north' || door.direction === 'south';
       const inset = door.direction === 'north' ? 0.3 : door.direction === 'south' ? -0.3 : 0;
       const insetX = door.direction === 'west' ? 0.3 : door.direction === 'east' ? -0.3 : 0;
-      const wallHeight = door.direction === 'south' ? FRONT_WALL_HEIGHT : height;
       const steps = 8;
       let previous: [number, number, number] | null = null;
       for (let i = 0; i <= steps; i++) {
-        const y = 1 + (wallHeight - 2) * (i / steps);
+        const y = 1 + (height - 2) * (i / steps);
         const wobble = (i % 2 === 0 ? -1 : 1) * CRACK_SPAN * 0.35 + Math.sin(i * 2.3) * 2;
         const point: [number, number, number] = alongX
           ? [centre.x + wobble, y, centre.y + inset]

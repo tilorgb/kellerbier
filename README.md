@@ -41,7 +41,7 @@ regenerated automatically from the issue list on every issue event.
 ## Tech stack
 
 TypeScript · Vite · three.js (WebGL2) · custom fixed-timestep ECS · Vitest · deployed as a static web build.
-The room is a lit 3D scene under a fixed 56° camera; the sprites in it are 2D pixel art standing
+The room is a lit 3D scene under a fixed 65° camera; the sprites in it are 2D pixel art standing
 up, and the HUD is a 2D pass over the same canvas (`docs/DECISIONS.md` #74).
 
 Built performance-first: Structure-of-Arrays entity storage, object pooling, zero allocation

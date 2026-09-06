@@ -296,7 +296,10 @@ export class EntityView {
       const bounceMax = Math.max(1, sim.tuning.pickup.spawnBounceTicks);
       const bounceProgress = bounceTicks / bounceMax;
       const pop = bounceTicks > 0 ? 1 + 0.4 * Math.sin(bounceProgress * Math.PI) : 1;
-      const lift = isPickup ? PICKUP_LIFT + Math.sin(nowMs * 0.004 + index) * 0.8 : 0;
+      // A pickup hovers a fixed amount so its shadow separates it from the
+      // floor — it does not bob. A per-frame sine here made every static
+      // sprite in a still room read as "breathing".
+      const lift = isPickup ? PICKUP_LIFT : 0;
       billboard.place(x, 0.2 + lift, footZ, this.lean, gridScale * pop);
 
       const priced = isPickup && (mask & sim.pickupPrice.bit) !== 0;

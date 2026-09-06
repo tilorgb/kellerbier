@@ -9,6 +9,7 @@ import {
 } from 'three';
 import type { Texture } from '../gfx/index.js';
 import { ACTOR_PIXELS_PER_UNIT } from '../resolution.js';
+import { ACTOR_LAYER } from './layers.js';
 
 /**
  * A 2D sprite standing in the 3D room.
@@ -62,6 +63,9 @@ export class Billboard {
     this.mesh.receiveShadow = false;
     this.mesh.visible = false;
     this.mesh.frustumCulled = false;
+    // A billboard is always a standing sprite: drawn in GameView's second pass,
+    // over the room, so a leaning sprite is not clipped by the wall behind it.
+    this.mesh.layers.set(ACTOR_LAYER);
     this.uv = geometry.getAttribute('uv') as BufferAttribute;
   }
 
