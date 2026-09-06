@@ -114,6 +114,20 @@ export function grantEarnedUnlocks(save: SaveData, content: ProgressionContent):
 }
 
 /**
+ * Whether this save has ever beaten any floor's boss.
+ *
+ * The gate on Floor 1's XL roll (#271): a 22-room tutorial as somebody's
+ * *first* experience of the game is the one case where the extra size is
+ * purely bad, since there is no run yet to compare it against. Every
+ * floor's `bossStatKey` is checked, not just Floor 1's, so a save that
+ * somehow only ever fought a later floor's boss (a future non-linear
+ * unlock, say) still counts.
+ */
+export function hasBeatenABoss(save: SaveData): boolean {
+  return FLOOR_CONFIGS.some((config) => statistic(save, bossStatKey(config.floor)) > 0);
+}
+
+/**
  * Records that the boss of `floor` went down.
  *
  * Committed the moment it happens rather than at the end of the run, because

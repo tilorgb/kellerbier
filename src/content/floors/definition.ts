@@ -20,6 +20,28 @@ export interface FloorConfig {
   /** Grid cells from the start room a floor may sprawl before generation stops growing it. */
   readonly gridRadius: number;
   /**
+   * Minimum room-graph distance (doors walked) the boss room must sit at from
+   * the start room, enforced by `sim/room/floor-plan.ts`'s `tryGenerateFloor`
+   * as a generation retry (#271) — room count alone does not bound how far a
+   * player actually has to walk to reach the boss, since `buildSkeleton`
+   * grows a compact blob whose diameter rises with roughly √rooms rather than
+   * with room count itself.
+   */
+  readonly minBossDistance: number;
+  /**
+   * Chance, per generation attempt, that this floor rolls its XL variant
+   * (#271) — see `FloorPlan.extraLarge`. Rolled from the floor's own RNG
+   * stream inside `generateFloor`, so it is exactly as reproducible as the
+   * rest of the layout.
+   */
+  readonly xlChance: number;
+  /**
+   * Multiplier applied to `minRooms`/`maxRooms` (directly) and
+   * `minBossDistance` (by its square root — see
+   * `effectiveGenerationTargets`'s own doc comment) when a floor rolls XL.
+   */
+  readonly xlRoomMultiplier: number;
+  /**
    * One line, in the floor's own voice, for its title card (#154).
    *
    * Grounded in `docs/CONTENT_BIBLE.md` §1's description of the floor rather
@@ -92,54 +114,77 @@ export const FLOOR_CONFIGS: readonly FloorConfig[] = [
     floor: 1,
     name: 'The Cellar',
     floorTag: 'cellar',
-    minRooms: 8,
-    maxRooms: 12,
+    minRooms: 11,
+    maxRooms: 14,
     gridRadius: 5,
+    minBossDistance: 5,
+    // #271: 0 until the save has beaten a boss at least once — a first-time
+    // player's tutorial floor should never be the unlucky XL roll. The gate
+    // lives at the call site (`app/main.ts`'s `startRun`, via
+    // `app/meta/progress.ts`'s `hasBeatenABoss`), not here: this is the
+    // steady-state chance once that condition is met.
+    xlChance: 0.15,
+    xlRoomMultiplier: 1.7,
     flavour: 'Watch your *Fiaß*.',
   },
   {
     floor: 2,
     name: 'Village & Fields',
     floorTag: 'rural',
-    minRooms: 9,
-    maxRooms: 13,
+    minRooms: 13,
+    maxRooms: 17,
     gridRadius: 5,
+    minBossDistance: 5,
+    xlChance: 0.25,
+    xlRoomMultiplier: 1.7,
     flavour: 'Sunny, peaceful, *Blaskapell’n*.',
   },
   {
     floor: 3,
     name: 'The Forest',
     floorTag: 'wald',
-    minRooms: 10,
-    maxRooms: 14,
+    minRooms: 12,
+    maxRooms: 16,
     gridRadius: 6,
+    minBossDistance: 5,
+    xlChance: 0.25,
+    xlRoomMultiplier: 1.7,
     flavour: 'Oh, deer!',
   },
   {
     floor: 4,
     name: 'The Alps',
     floorTag: 'alpen',
-    minRooms: 10,
-    maxRooms: 14,
+    minRooms: 12,
+    maxRooms: 16,
     gridRadius: 6,
+    minBossDistance: 5,
+    xlChance: 0.25,
+    xlRoomMultiplier: 1.7,
     flavour: 'Thin air and hard *Haxn*.',
   },
   {
     floor: 5,
     name: 'Neuschwanstein Castle',
     floorTag: 'schloss',
-    minRooms: 11,
-    maxRooms: 15,
+    minRooms: 13,
+    maxRooms: 17,
     gridRadius: 6,
+    minBossDistance: 6,
+    xlChance: 0.25,
+    xlRoomMultiplier: 1.7,
     flavour: 'Locals describe its beauty as "*basst scho*."',
   },
   {
     floor: 6,
     name: 'The Brewery',
     floorTag: 'brauerei',
-    minRooms: 11,
-    maxRooms: 15,
+    minRooms: 13,
+    maxRooms: 17,
     gridRadius: 7,
+    minBossDistance: 6,
+    xlChance: 0.25,
+    xlRoomMultiplier: 1.7,
     flavour: 'Someone put a *Rausch* in my last beer.',
   },
   {
@@ -148,9 +193,12 @@ export const FLOOR_CONFIGS: readonly FloorConfig[] = [
     // every locale, per `docs/CONTENT_BIBLE.md` §0.
     name: 'Die Wiesn',
     floorTag: 'wiesn',
-    minRooms: 12,
-    maxRooms: 16,
+    minRooms: 14,
+    maxRooms: 18,
     gridRadius: 7,
+    minBossDistance: 6,
+    xlChance: 0.25,
+    xlRoomMultiplier: 1.7,
     flavour: 'Ole, ole, ole!',
   },
 ];

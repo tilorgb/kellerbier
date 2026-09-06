@@ -78,6 +78,7 @@ export type { DailyStatus, RunFacts, UnlockView, RunResultsView } from './progre
 export {
   characterById,
   characterUnlocked,
+  hasBeatenABoss,
   lastRunLine,
   runFactsFrom,
   selectedCharacterId,

@@ -106,6 +106,14 @@ export function neighborRoomIds(doors: readonly RoomDoor[]): readonly string[] {
 export interface FloorPlan {
   readonly floor: number;
   readonly floorName: string;
+  /**
+   * Whether this floor rolled the XL variant (#271) — `config.xlChance`,
+   * drawn once per generation attempt from the same `rng` everything else on
+   * this floor uses. Carried here rather than re-derived from room count so
+   * every consumer (the floor card, the minimap, telemetry, D's mini-boss
+   * count) reads one flag instead of guessing a threshold.
+   */
+  readonly extraLarge: boolean;
   readonly startRoomId: string;
   readonly bossRoomId: string;
   readonly treasureRoomId: string;
@@ -1283,13 +1291,50 @@ function eligibleTemplates(
   });
 }
 
+/**
+ * The room-count range and boss-distance floor actually in force for one
+ * generation attempt, `config`'s own numbers scaled up when `extraLarge`
+ * rolled.
+ *
+ * `minRooms`/`maxRooms` scale directly by `xlRoomMultiplier` — an XL floor is
+ * meant to hold roughly that many more rooms, full stop. `minBossDistance`
+ * scales by its square root instead: `buildSkeleton` grows a compact blob, so
+ * (per this file's own opening comment) walking distance rises with roughly
+ * √rooms, not with room count itself — scaling the distance floor by the same
+ * multiplier as the room count would demand a straighter, less blob-like
+ * floor than more rooms alone actually produces, and starve the retry loop.
+ */
+function effectiveGenerationTargets(
+  config: FloorConfig,
+  extraLarge: boolean,
+): { minRooms: number; maxRooms: number; minBossDistance: number } {
+  if (!extraLarge) {
+    return {
+      minRooms: config.minRooms,
+      maxRooms: config.maxRooms,
+      minBossDistance: config.minBossDistance,
+    };
+  }
+  return {
+    minRooms: Math.round(config.minRooms * config.xlRoomMultiplier),
+    maxRooms: Math.round(config.maxRooms * config.xlRoomMultiplier),
+    minBossDistance: Math.round(config.minBossDistance * Math.sqrt(config.xlRoomMultiplier)),
+  };
+}
+
 function tryGenerateFloor(
   rng: Rng,
   config: FloorConfig,
   templatePool: readonly RoomTemplate[],
   staircasePool: readonly StaircaseContentTemplate[],
 ): FloorPlan | null {
-  const targetCount = rng.nextInt(config.minRooms, config.maxRooms + 1) - 1;
+  // Rolled first, unconditionally, so every attempt at this floor (and every
+  // floor after it drawing from the same stream) consumes exactly the RNG
+  // draws its own config says it should — see `generateFloor`'s doc comment
+  // on why this has to come from `rng` and nowhere else.
+  const extraLarge = rng.chance(config.xlChance);
+  const { minRooms, maxRooms, minBossDistance } = effectiveGenerationTargets(config, extraLarge);
+  const targetCount = rng.nextInt(minRooms, maxRooms + 1) - 1;
   const skeleton = buildSkeleton(
     rng,
     config,
@@ -1324,6 +1369,17 @@ function tryGenerateFloor(
 
   const roles = assignRoles(rooms, adjacency, distances, startId, secretId, supersecretId);
   if (roles === null) {
+    return null;
+  }
+
+  // Rejection sampling over the same distribution `assignRoles` already
+  // produces (`docs/GAME_DESIGN.md` §4's own "generation failures retry, then
+  // hard-fail"), rather than a corridor-biased skeleton or a distance-weighted
+  // growth rule — see #271: the acceptance rates measured against this exact
+  // check say the retry loop barely runs, so a cleverer generator would be
+  // solving a problem that doesn't cost anything yet.
+  const bossId = [...roles.entries()].find(([, role]) => role === 'boss')?.[0];
+  if (bossId === undefined || (distances.get(bossId) ?? 0) < minBossDistance) {
     return null;
   }
 
@@ -1395,6 +1451,7 @@ function tryGenerateFloor(
   const plan: FloorPlan = {
     floor: config.floor,
     floorName: config.name,
+    extraLarge,
     startRoomId: startId,
     bossRoomId,
     treasureRoomId,
@@ -1415,6 +1472,12 @@ function tryGenerateFloor(
  * `rng` should be the run's `RngStream.Floor` stream (see
  * `src/sim/rng/streams.ts`) — a system draws from its own stream only, and a
  * run generates all seven floors off the same one, in order, across the run.
+ * This is load-bearing for more than the layout itself since #271: the XL
+ * roll (`FloorPlan.extraLarge`) is drawn from this same `rng`, first thing,
+ * on every attempt — a roll from anywhere else (`Math.random()`, a fresh
+ * generator) would silently break #50's save/resume replay the moment it
+ * crossed a floor advance, the same way a stray draw from the wrong stream
+ * always does (see this file's own `RngStream` import site).
  */
 export function generateFloor(
   rng: Rng,

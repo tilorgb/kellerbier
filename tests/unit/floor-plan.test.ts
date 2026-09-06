@@ -398,6 +398,69 @@ describe('floor generation', () => {
   });
 });
 
+describe('XL floors (#271)', () => {
+  it('rolls extraLarge deterministically for the same seed', () => {
+    const config = floorConfig(0);
+    const planA = generateFloor(new Rng(42), config, syntheticPool());
+    const planB = generateFloor(new Rng(42), config, syntheticPool());
+    expect(planB.extraLarge).toBe(planA.extraLarge);
+  });
+
+  it('never rolls extraLarge when xlChance is 0', () => {
+    const config: FloorConfig = { ...floorConfig(0), xlChance: 0 };
+    for (let seed = 0; seed < 200; seed++) {
+      const plan = generateFloor(new Rng(seed), config, syntheticPool());
+      expect(plan.extraLarge, `seed ${String(seed)}`).toBe(false);
+    }
+  });
+
+  it('always rolls extraLarge when xlChance is 1, and scales up room count and boss distance', () => {
+    const pool = syntheticPool();
+    for (const base of FLOOR_CONFIGS) {
+      const config: FloorConfig = { ...base, xlChance: 1 };
+      for (let seed = 0; seed < 50; seed++) {
+        const plan = generateFloor(new Rng(seed), config, pool);
+        expect(plan.extraLarge, `floor ${config.name}, seed ${String(seed)}`).toBe(true);
+        // `+1` for the secret room removed from `targetCount`'s own roll, and
+        // some slack for the supersecret room / a big room's extra cells —
+        // the same loose bound `validates a real floor 1 layout` above uses.
+        expect(
+          plan.rooms.length,
+          `floor ${config.name}, seed ${String(seed)}`,
+        ).toBeGreaterThanOrEqual(Math.round(base.minRooms * base.xlRoomMultiplier) - 1);
+        const bossRoom = plan.rooms.find((room) => room.id === plan.bossRoomId);
+        const expectedMinDistance = Math.round(
+          base.minBossDistance * Math.sqrt(base.xlRoomMultiplier),
+        );
+        expect(
+          bossRoom?.distanceFromStart,
+          `floor ${config.name}, seed ${String(seed)}`,
+        ).toBeGreaterThanOrEqual(expectedMinDistance);
+      }
+    }
+  });
+
+  it('never places the boss closer than minBossDistance, across every floor, XL and not', () => {
+    const pool = syntheticPool();
+    for (const base of FLOOR_CONFIGS) {
+      for (const xlChance of [0, 1]) {
+        const config: FloorConfig = { ...base, xlChance };
+        for (let seed = 0; seed < 100; seed++) {
+          const plan = generateFloor(new Rng(seed + 9000), config, pool);
+          const bossRoom = plan.rooms.find((room) => room.id === plan.bossRoomId);
+          const minBossDistance = plan.extraLarge
+            ? Math.round(base.minBossDistance * Math.sqrt(base.xlRoomMultiplier))
+            : base.minBossDistance;
+          expect(
+            bossRoom?.distanceFromStart,
+            `floor ${config.name}, xlChance ${String(xlChance)}, seed ${String(seed)}`,
+          ).toBeGreaterThanOrEqual(minBossDistance);
+        }
+      }
+    }
+  });
+});
+
 describe('floor generation with a staircase pool (#112)', () => {
   it('omitting staircasePool leaves generation exactly as before it existed', () => {
     // The regression this whole feature must never cause: every existing

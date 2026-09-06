@@ -143,6 +143,7 @@ import {
   recordBossDefeat,
   recordRunOutcome,
   characterTraitsById,
+  hasBeatenABoss,
   resetProgress,
   selectCharacter,
   selectedCharacter,
@@ -233,6 +234,18 @@ function floorConfig(floorNumber: number): FloorConfig {
     throw new Error(`no floor config for floor ${String(floorNumber)}`);
   }
   return config;
+}
+
+/**
+ * Floor 1's config, with its XL roll (#271) suppressed for a save that has
+ * never beaten a boss — a first-time player's tutorial floor is the one case
+ * where the extra size is purely bad. Every later floor (reached only after
+ * beating Floor 1's boss) always rolls its authored `xlChance` as-is; this
+ * only ever touches the very first floor of a run that starts before that.
+ */
+function floorOneConfig(): FloorConfig {
+  const config = floorConfig(1);
+  return hasBeatenABoss(loadSave()) ? config : { ...config, xlChance: 0 };
 }
 
 function planRoom(plan: FloorPlan, id: string): FloorPlanRoom {
@@ -2131,7 +2144,7 @@ WASD move   arrows aim and fire
 
     floorPlan = generateFloor(
       createStreamRng(RUN_SEED, RngStream.Floor),
-      floorConfig(1),
+      floorOneConfig(),
       ROOM_TEMPLATE_POOL,
       STAIRCASE_TEMPLATE_POOL,
     );
@@ -2363,7 +2376,7 @@ WASD move   arrows aim and fire
    */
   function showFloorCard(): void {
     const config = floorConfig(floorPlan.floor);
-    floorTitleCard.show(floorPlan.floor, config.name, config.flavour);
+    floorTitleCard.show(floorPlan.floor, config.name, config.flavour, floorPlan.extraLarge);
     floorCardUntil = performance.now() + FLOOR_CARD_MS;
     playSfx('floor-card-whoosh');
   }
@@ -2664,7 +2677,7 @@ WASD move   arrows aim and fire
           try {
             candidate = generateFloor(
               createStreamRng(seed, RngStream.Floor),
-              floorConfig(1),
+              floorOneConfig(),
               ROOM_TEMPLATE_POOL,
               STAIRCASE_TEMPLATE_POOL,
             );
