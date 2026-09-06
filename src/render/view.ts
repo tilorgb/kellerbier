@@ -1,4 +1,4 @@
-import { Color, Scene, type WebGLRenderer } from 'three';
+import { Color, type Object3D, Scene, type WebGLRenderer } from 'three';
 import { ROOM_TRANSITION_TICKS, type GameSim, type RoomDirection } from '../sim/game/sim.js';
 import { roomFrameSize, type RoomGeometry } from '../sim/room/geometry.js';
 import { PLAYFIELD_HEIGHT, PLAYFIELD_WIDTH } from '../sim/room/playground.js';
@@ -20,6 +20,7 @@ import { PlayerView } from './player-view.js';
 import { ProjectileView, type ProjectileArt } from './projectiles.js';
 import { UI_TEXT_HEIGHT } from './ui/text.js';
 import { ELEVATION, WorldCamera, type WorldPoint } from './world/camera.js';
+import { ACTOR_LAYER } from './world/layers.js';
 import { Lighting } from './world/lighting.js';
 import { type DoorState, Scenery } from './world/scenery.js';
 
@@ -43,6 +44,18 @@ import { type DoorState, Scenery } from './world/scenery.js';
  * 3. Every view reads its slice of the simulation.
  * 4. The camera follows the player (clamped to the room), plus shake, sway,
  *    the room-transition slide and the debug pan.
+ *
+ * ## Two world passes
+ *
+ * `render` draws the scene twice: the room (floor, walls, doors, decals), then
+ * everything that *stands in* it (`world/layers.ts`'s `ACTOR_LAYER` — every
+ * sprite, boulder, projectile, particle) again, over the top, with the depth
+ * buffer cleared. A standing sprite is a quad leaned right back by the camera
+ * angle, so at 65° its head is ~14 units behind its feet — inside the back
+ * wall's box, and a single pass lets the wall's depth clip it. The second pass
+ * is the 2D renderer's painter's-order compositing: sprites on top of the
+ * room, still depth-sorted against each other so one body stands behind
+ * another. The UI is a third pass, drawn by the caller.
  *
  * ## Screen positions
  *
@@ -83,6 +96,11 @@ const DOOR_TRANSITION_FRAMES = 30;
 /** Where the player's "screen position" is taken: mid-body, so the vignette centres on him, not his feet. */
 const PLAYER_ANCHOR_HEIGHT = 8;
 
+/** Moves an object onto `ACTOR_LAYER` only — off the pass-one layer, into pass two. */
+function toActorLayer(object: Object3D): void {
+  object.layers.set(ACTOR_LAYER);
+}
+
 export class GameView {
   readonly scene = new Scene();
   readonly camera = new WorldCamera();
@@ -119,6 +137,7 @@ export class GameView {
   private readonly maibaumView: MaibaumView;
   private readonly bombFlightView: BombFlightView;
   private readonly corpseView: CorpseView;
+  private readonly actorGroups: readonly Object3D[];
 
   private shakeScale = 1;
   private accessibility: RenderAccessibility = {
@@ -192,6 +211,21 @@ export class GameView {
 
     this.corpseView = new CorpseView();
     this.scene.add(this.corpseView.group);
+
+    // The groups whose contents stand in the room: drawn a second time in
+    // `render`, over the architecture, so a sprite leaning back into the wall
+    // behind it is not clipped by it. See `world/layers.ts`.
+    this.actorGroups = [
+      this.entities.group,
+      this.playerView.group,
+      this.projectiles.group,
+      this.particles.group,
+      this.pedestals.group,
+      this.machine.group,
+      this.maibaumView.group,
+      this.bombFlightView.group,
+      this.corpseView.group,
+    ];
 
     this.relight();
     this.applyDoorStates();
@@ -328,7 +362,40 @@ export class GameView {
 
   /** Draws the world pass. The caller draws the UI pass over it. */
   render(renderer: WebGLRenderer): void {
-    renderer.render(this.scene, this.camera.camera);
+    const camera = this.camera.camera;
+
+    // Everything that stands in the room is on `ACTOR_LAYER` only (set on the
+    // `Billboard`, on the block boxes and trellis, and swept here for the
+    // pooled meshes those groups grow). Pass one draws the room without them.
+    for (const group of this.actorGroups) {
+      group.traverse(toActorLayer);
+    }
+
+    // Pass one: the room — floor, walls, doors, decals, lights, shadows.
+    renderer.render(this.scene, camera);
+
+    // Pass two: the standing sprites, over the room, with the depth buffer
+    // cleared so a sprite leaning back into the wall behind it draws on top of
+    // it. They still sort against each other, so one body stands behind
+    // another. Shadows are the ones baked in pass one; nothing here casts anew.
+    //
+    // `scene.background` has to come off for this pass: a `Color` background
+    // makes three force a full colour clear at the start of every `render`,
+    // even with `autoClear` off, which would wipe pass one.
+    const previousBackground = this.scene.background;
+    const previousAutoClear = renderer.autoClear;
+    const previousShadowAutoUpdate = renderer.shadowMap.autoUpdate;
+    const previousLayerMask = camera.layers.mask;
+    this.scene.background = null;
+    renderer.autoClear = false;
+    renderer.shadowMap.autoUpdate = false;
+    camera.layers.set(ACTOR_LAYER);
+    renderer.clearDepth();
+    renderer.render(this.scene, camera);
+    this.scene.background = previousBackground;
+    camera.layers.mask = previousLayerMask;
+    renderer.autoClear = previousAutoClear;
+    renderer.shadowMap.autoUpdate = previousShadowAutoUpdate;
   }
 
   private readonly projectPoint = (x: number, height: number, z: number, out: WorldPoint): void => {

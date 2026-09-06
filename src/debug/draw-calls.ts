@@ -10,11 +10,12 @@
  * three.js publishes exactly that number as `renderer.info.render.calls`, so
  * this reads it rather than wrapping the WebGL context the way the Pixi-era
  * counter had to. One wrinkle: with `info.autoReset` on, three resets the
- * counters at the start of *every* `render()` call, and a frame here is two of
- * them — the world pass and the UI pass over it — so the value left after a
- * frame would be the UI pass alone. The counter therefore takes the reset
- * over while attached: `beginFrame` reads the whole of the previous frame and
- * then zeroes the counters itself. `detach` gives `autoReset` back.
+ * counters at the start of *every* `render()` call, and a frame here is
+ * several of them — the room pass, the actor pass over it, and the UI pass —
+ * so the value left after a frame would be the last pass alone. The counter
+ * therefore takes the reset over while attached: `beginFrame` reads the whole
+ * of the previous frame and then zeroes the counters itself. `detach` gives
+ * `autoReset` back.
  */
 
 /** The slice of a `THREE.WebGLRenderer` this reads. Structural, so a test can hand in a stub. */

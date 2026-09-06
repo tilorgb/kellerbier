@@ -4,7 +4,7 @@
 
 **TypeScript · Vite · three.js · custom fixed-timestep ECS · Vitest · static web build.**
 
-three.js draws the room as a lit 3D scene under a fixed 56° camera and the HUD as a 2D pass over
+three.js draws the room as a lit 3D scene under a fixed 65° camera and the HUD as a 2D pass over
 it; the sprites themselves stay 2D pixel art, standing up in the room (`DECISIONS.md` #74).
 PixiJS v8 was the renderer from M0 until M6.
 

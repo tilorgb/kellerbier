@@ -103,7 +103,7 @@ tile next to Alois at true scale, and let the size be chosen along with the desi
 collider it is drawn over, but it is a wide band and a gate, not an art director.
 
 **Sprites are billboards now** (`docs/DECISIONS.md` #74): a 2D sprite standing up on the floor of a
-3D room, seen from a fixed 56° camera, lit and casting a real shadow. So "show the option on a real
+3D room, seen from a fixed 65° camera, lit and casting a real shadow. So "show the option on a real
 floor tile next to Alois at true scale" means a screenshot from the game's camera — a flat mock-up
 on a tile swatch no longer shows what the player sees, since the floor recedes and the sprite does
 not. And a sprite's canvas *height* is what it stands up as: a 24×16 character stands 16 internal

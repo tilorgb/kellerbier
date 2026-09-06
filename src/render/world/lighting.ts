@@ -125,12 +125,22 @@ export class Lighting {
       this.lantern,
       this.roomLights,
     );
+    // Every light reaches both render passes — GameView draws the actor layer
+    // a second time (see `world/layers.ts`), and a light seen only on layer 0
+    // would leave those sprites unlit in that pass.
+    for (const light of [this.ambient, this.hemisphere, this.key, this.lantern]) {
+      light.layers.enableAll();
+    }
     this.key.castShadow = true;
     this.key.shadow.mapSize.set(2048, 2048);
     this.key.shadow.bias = -0.0004;
     this.key.shadow.normalBias = 0.6;
+    // The shadow pass filters casters by its own camera's layers, not the
+    // light's — without this the actor-layer sprites cast no shadow.
+    this.key.shadow.camera.layers.enableAll();
     for (let i = 0; i < SHOT_LIGHT_COUNT; i++) {
       const light = new PointLight(0xffb347, 0, 70, 2);
+      light.layers.enableAll();
       this.shotLights.push(light);
       scene.add(light);
     }
@@ -170,7 +180,9 @@ export class Lighting {
     this.scene.background = null;
 
     // High on the camera's side, a touch east of centre; see the class comment.
-    this.key.position.set(frameWidth * 0.62, 240, frameHeight * 1.9);
+    // Steep and not far south: a shallower, more-southern key raked the
+    // (now full-height) south wall's shadow a long way north across the floor.
+    this.key.position.set(frameWidth * 0.62, 340, frameHeight * 1.5);
     this.key.target.position.set(frameWidth / 2, 0, frameHeight / 2);
     const shadow = this.key.shadow.camera;
     shadow.left = -frameWidth * 0.75;
@@ -196,6 +208,7 @@ export class Lighting {
   /** A bare bulb on a cord: a warm point light with a small emissive glass where the filament is. */
   private addBulb(x: number, z: number): void {
     const light = new PointLight(0xffb870, 9000, 300, 2);
+    light.layers.enableAll();
     light.position.set(x, BULB_HEIGHT, z);
     this.roomLights.add(light);
     const glass = new Mesh(

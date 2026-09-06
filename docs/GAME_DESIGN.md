@@ -179,7 +179,7 @@ A room's shape (`1x1`/`1x2`/`2x2`/`L`/`T`) is a real physical play-space size, n
 floor-grid packing and minimap concept. A `1x2`/`2x2`/`L`/`T` room is several single-screen
 sub-rooms glued together with no wall or door between them — genuinely one bigger continuous
 space, not a bigger minimap footprint that still plays like a `1x1` once you walk in — and a
-camera follows the player around inside it. The view is a fixed 56° camera over a 3D room with
+camera follows the player around inside it. The view is a fixed 65° camera over a 3D room with
 2D sprites standing in it (`DECISIONS.md` #74) — the presentation, not the design: the room is
 still a flat play-space and a shot's path is still read off the floor as a map.
 

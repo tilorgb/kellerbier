@@ -19,13 +19,14 @@ import { INTERNAL_HEIGHT, INTERNAL_WIDTH, WORLD_ZOOM } from '../resolution.js';
  *
  * ## One angle
  *
- * 56° above the floor, looking north. Steep enough that the floor reads as a
+ * 65° above the floor, looking north. Steep enough that the floor reads as a
  * map the way a bullet hell needs it to — a shot's path is legible — and
  * shallow enough that a wall has a face and a sprite has feet. Chosen in the
  * proof of concept against 38° (more drama, less playfield) and 90° (the 2D
- * game); the debug overlay can still switch between them for tuning.
+ * game), then tuned up from 56° to 65°; the debug overlay can still switch
+ * between them for tuning.
  */
-export const ELEVATION = MathUtils.degToRad(56);
+export const ELEVATION = MathUtils.degToRad(65);
 
 /** Room units one internal frame shows — a single-screen room's playfield plus wall band. */
 export const VIEW_WIDTH = INTERNAL_WIDTH / WORLD_ZOOM;
