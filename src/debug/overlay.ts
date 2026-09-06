@@ -130,6 +130,15 @@ export class DebugOverlay {
     this.setVisible(false);
   }
 
+  /**
+   * The tuning of the run being played — what the DOM tools (`tuning-window`,
+   * `projectile-tag-chooser`) write into. A `GameSim` builds its own
+   * `SimTuning`, so a restart replaces this too.
+   */
+  get tuning(): GameSim['tuning'] {
+    return this.sim.tuning;
+  }
+
   /** Builds this run's world-space graphics and hangs them off the live view. */
   private attachWorldLayer(): void {
     this.worldLayer = new Container();
