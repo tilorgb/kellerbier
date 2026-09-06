@@ -1,0 +1,86 @@
+{
+  "id": "dorf-acker",
+  "cells": [
+    {
+      "tileGrid": [
+        "###############",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "###############"
+      ],
+      "obstacles": [],
+      "enemySpawns": [{ "x": 200, "y": 96, "group": "acker-traktor" }],
+      "spawnGroups": [
+        {
+          "id": "acker-traktor",
+          "count": 1,
+          "choices": [{ "enemyId": "traktor", "minFloor": 2, "maxFloor": 2 }]
+        }
+      ],
+      "pickupSpawns": [],
+      "hazards": [],
+      "decorativeProps": [{ "x": 24, "y": 24, "type": "fence-post" }]
+    },
+    {
+      "tileGrid": [
+        "###############",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "###############"
+      ],
+      "obstacles": [{ "x": 176, "y": 56, "width": 16, "height": 16 }],
+      "enemySpawns": [{ "x": 48, "y": 48, "group": "acker-gnome" }],
+      "spawnGroups": [
+        {
+          "id": "acker-gnome",
+          "count": 1,
+          "choices": [{ "enemyId": "gartenzwerg", "minFloor": 2, "maxFloor": 2 }]
+        }
+      ],
+      "pickupSpawns": [],
+      "hazards": [],
+      "decorativeProps": [{ "x": 200, "y": 24, "type": "tractor" }]
+    },
+    {
+      "tileGrid": [
+        "###############",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "###############"
+      ],
+      "obstacles": [],
+      "enemySpawns": [{ "x": 64, "y": 96, "group": "acker-scarecrow" }],
+      "spawnGroups": [
+        {
+          "id": "acker-scarecrow",
+          "count": 1,
+          "choices": [{ "enemyId": "gartenzwerg", "minFloor": 2, "maxFloor": 2 }]
+        }
+      ],
+      "pickupSpawns": [{ "x": 120, "y": 72, "type": "biermarke-1" }],
+      "hazards": [],
+      "decorativeProps": [{ "x": 200, "y": 120, "type": "hay-bale" }]
+    }
+  ],
+  "metadata": {
+    "floorTags": ["rural"],
+    "shape": "L",
+    "difficultyTier": 2,
+    "weight": 1
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "id": "dorf-maibaum",
+  "tileGrid": [
+    "###############",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "###############"
+  ],
+  "obstacles": [
+    { "x": 48, "y": 32, "width": 16, "height": 16 },
+    { "x": 176, "y": 96, "width": 16, "height": 16 }
+  ],
+  "enemySpawns": [{ "x": 192, "y": 32, "group": "maibaum-watch" }],
+  "spawnGroups": [
+    {
+      "id": "maibaum-watch",
+      "count": 1,
+      "choices": [{ "enemyId": "bauer", "minFloor": 2, "maxFloor": 2 }]
+    }
+  ],
+  "pickupSpawns": [],
+  "hazards": [],
+  "decorativeProps": [
+    { "x": 120, "y": 64, "type": "maibaum" },
+    { "x": 120, "y": 96, "type": "pedestal" },
+    { "x": 56, "y": 104, "type": "hay-bale" },
+    { "x": 192, "y": 104, "type": "hay-bale" }
+  ],
+  "metadata": {
+    "floorTags": ["rural"],
+    "shape": "1x1",
+    "doors": { "north": true, "east": true, "south": true, "west": true },
+    "difficultyTier": 1,
+    "weight": 1
+  }
+}

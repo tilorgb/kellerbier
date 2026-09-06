@@ -1,0 +1,73 @@
+{
+  "id": "dorf-hopfengarten",
+  "cells": [
+    {
+      "tileGrid": [
+        "###############",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "###############"
+      ],
+      "obstacles": [],
+      "enemySpawns": [{ "x": 200, "y": 96, "group": "hopfen-row" }],
+      "spawnGroups": [
+        {
+          "id": "hopfen-row",
+          "count": 1,
+          "choices": [{ "enemyId": "kuh", "minFloor": 2, "maxFloor": 2 }]
+        }
+      ],
+      "pickupSpawns": [],
+      "hazards": [
+        { "x": 64, "y": 24, "width": 16, "height": 96, "type": "trellis" },
+        { "x": 128, "y": 24, "width": 16, "height": 96, "type": "trellis" }
+      ],
+      "decorativeProps": [
+        { "x": 24, "y": 24, "type": "fence-post" },
+        { "x": 24, "y": 120, "type": "fence-post" }
+      ]
+    },
+    {
+      "tileGrid": [
+        "###############",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "###############"
+      ],
+      "obstacles": [],
+      "enemySpawns": [{ "x": 48, "y": 48, "group": "hopfen-far-row" }],
+      "spawnGroups": [
+        {
+          "id": "hopfen-far-row",
+          "count": 1,
+          "choices": [{ "enemyId": "bauer", "minFloor": 2, "maxFloor": 2 }]
+        }
+      ],
+      "pickupSpawns": [],
+      "hazards": [
+        { "x": 96, "y": 24, "width": 16, "height": 96, "type": "trellis" },
+        { "x": 160, "y": 24, "width": 16, "height": 96, "type": "trellis" }
+      ],
+      "decorativeProps": [
+        { "x": 216, "y": 24, "type": "fence-post" },
+        { "x": 216, "y": 120, "type": "fence-post" }
+      ]
+    }
+  ],
+  "metadata": {
+    "floorTags": ["rural"],
+    "shape": "1x2",
+    "difficultyTier": 2,
+    "weight": 1
+  }
+}

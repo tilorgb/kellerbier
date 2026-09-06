@@ -1,0 +1,50 @@
+{
+  "id": "dorf-stall",
+  "tileGrid": [
+    "###############",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "###############"
+  ],
+  "obstacles": [
+    { "x": 48, "y": 24, "width": 16, "height": 32 },
+    { "x": 48, "y": 88, "width": 16, "height": 32 },
+    { "x": 160, "y": 24, "width": 16, "height": 32 },
+    { "x": 160, "y": 88, "width": 16, "height": 32 }
+  ],
+  "enemySpawns": [
+    { "x": 120, "y": 72, "group": "stall-charge" },
+    { "x": 208, "y": 56, "group": "stall-watch" }
+  ],
+  "spawnGroups": [
+    {
+      "id": "stall-charge",
+      "count": 1,
+      "choices": [{ "enemyId": "kuh", "minFloor": 2, "maxFloor": 2 }]
+    },
+    {
+      "id": "stall-watch",
+      "count": 1,
+      "choices": [{ "enemyId": "bauer", "minFloor": 2, "maxFloor": 2 }]
+    }
+  ],
+  "pickupSpawns": [{ "x": 24, "y": 56, "type": "bratwurst-half" }],
+  "hazards": [],
+  "decorativeProps": [
+    { "x": 56, "y": 56, "type": "trough" },
+    { "x": 168, "y": 56, "type": "trough" },
+    { "x": 24, "y": 24, "type": "hay-bale" }
+  ],
+  "metadata": {
+    "floorTags": ["rural"],
+    "shape": "1x1",
+    "doors": { "north": true, "east": true, "south": true, "west": true },
+    "difficultyTier": 1,
+    "weight": 1
+  }
+}
