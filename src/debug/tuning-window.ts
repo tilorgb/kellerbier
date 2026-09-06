@@ -82,6 +82,13 @@ const GROUPS: readonly GroupSpec[] = [
       { key: 'contactDrag', min: 0, max: 1, step: 0.05, hint: 'how hard bodies hold you' },
       { key: 'pushDamping', min: 0.5, max: 0.98, step: 0.01, hint: 'how long a shove lasts' },
       { key: 'maxPush', min: 1, max: 16, step: 0.5, hint: 'largest shove carried' },
+      {
+        key: 'doorCrossingTicks',
+        min: 0,
+        max: 40,
+        step: 1,
+        hint: 'ticks walking into a door first',
+      },
     ],
   },
   {
@@ -114,8 +121,6 @@ const GROUPS: readonly GroupSpec[] = [
       { key: 'flashTicks', min: 0, max: 6, step: 1, hint: 'white frames on a hit' },
       { key: 'deathFlashTicks', min: 0, max: 12, step: 1, hint: 'white frames on a kill' },
       { key: 'knockback', min: 0, max: 10, step: 0.1, hint: 'throw per damage' },
-      { key: 'shakePerDamage', min: 0, max: 4, step: 0.05, hint: 'shake on a hit' },
-      { key: 'deathShake', min: 0, max: 8, step: 0.1, hint: 'shake on a kill' },
       { key: 'playerHitShake', min: 0, max: 8, step: 0.1, hint: 'shake when you are hurt' },
       { key: 'maxShake', min: 0, max: 12, step: 0.1, hint: 'shake ceiling' },
       { key: 'shakeDamping', min: 0.5, max: 0.98, step: 0.01, hint: 'how long shake lasts' },
@@ -159,7 +164,6 @@ const GROUPS: readonly GroupSpec[] = [
       { key: 'fireIntervalScale', min: 0.25, max: 4, step: 0.05, hint: 'gap between volleys' },
       { key: 'projectileSpeedScale', min: 0.25, max: 3, step: 0.05, hint: 'how fast they shoot' },
       { key: 'deflectParticles', min: 0, max: 30, step: 1, hint: 'foam off a shell' },
-      { key: 'deflectShake', min: 0, max: 3, step: 0.05, hint: 'shake off a shell' },
       {
         key: 'eliteChanceBase',
         min: 0,

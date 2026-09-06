@@ -854,6 +854,17 @@ export class GameSim {
   roomTransitionDirection: RoomDirection | null = null;
   /** Ticks remaining before enemies loaded into the current room may act. */
   roomWarmupTicks = 0;
+  /**
+   * `crossingDwellElapsed`'s own counter: how many consecutive ticks the
+   * player has been pressing into `doorCrossingDirection`'s door. Kept here
+   * rather than as a local because `transitionTo`/`transitionToStaircase` are
+   * called fresh every tick the caller polls `doorContact` — reset to 0 the
+   * moment they stop pressing that direction or a different door's crossing
+   * asks, so backing off mid-crossing (or touching a different door) starts
+   * the dwell over rather than carrying progress across.
+   */
+  private doorCrossingDirection: RoomDirection | null = null;
+  private doorCrossingTicks = 0;
 
   /**
    * Ticks left of immunity to Floor 1's slick-puddle hazard (#35) —
@@ -1901,9 +1912,13 @@ export class GameSim {
    * additionally requires `pressingToward(direction)` — the player has to be
    * holding movement into the door, not merely standing (or running past) at
    * its threshold, which `doorContact` alone cannot tell apart from a real
-   * crossing. `force` skips that second check for the handful of callers
-   * that aren't a real player walking (`app/main.ts`'s `N` floor-tour
-   * shortcut) — never for a live door-contact poll.
+   * crossing — and then, on top of that, `crossingDwellElapsed(direction)`:
+   * a few more ticks of the same held-down direction before the room
+   * actually loads, so the crossing reads as a walk through the doorframe
+   * rather than the world swapping out the instant the player's edge reaches
+   * it. `force` skips both of those checks for the handful of callers that
+   * aren't a real player walking (`app/main.ts`'s `N` floor-tour shortcut) —
+   * never for a live door-contact poll.
    */
   transitionTo(
     template: unknown,
@@ -1933,8 +1948,15 @@ export class GameSim {
       this.unlockedKeyRoomIds.add(destination.source.id);
     }
     if (!force && !this.pressingToward(direction)) {
+      this.doorCrossingDirection = null;
+      this.doorCrossingTicks = 0;
       return false;
     }
+    if (!force && !this.crossingDwellElapsed(direction)) {
+      return false;
+    }
+    this.doorCrossingDirection = null;
+    this.doorCrossingTicks = 0;
     this.roomClearedIds.add(this.roomId);
     this.loadRoom(template, floor, direction, hiddenDoors, placement, entryCell);
     return true;
@@ -2009,8 +2031,15 @@ export class GameSim {
       return false;
     }
     if (!force && !this.pressingToward(direction)) {
+      this.doorCrossingDirection = null;
+      this.doorCrossingTicks = 0;
       return false;
     }
+    if (!force && !this.crossingDwellElapsed(direction)) {
+      return false;
+    }
+    this.doorCrossingDirection = null;
+    this.doorCrossingTicks = 0;
     this.roomClearedIds.add(this.roomId);
     this.loadStaircaseRoom(template, floor, direction, hiddenDoors);
     return true;
@@ -2457,6 +2486,29 @@ export class GameSim {
       case 'east':
         return this.lastMoveInputX > 0;
     }
+  }
+
+  /**
+   * Whether the player has now been pressing into `direction`'s door for
+   * `tuning.movement.doorCrossingTicks` ticks running — `transitionTo`'s and
+   * `transitionToStaircase`'s last gate before the actual room switch, on top
+   * of `pressingToward` itself.
+   *
+   * Called only once `pressingToward(direction)` is already known true (both
+   * callers check it first), so every tick this runs is one more tick of a
+   * deliberate, continuous walk into that door: counts it, and resets to 0
+   * the moment a *different* direction's door is what is asking, so touching
+   * one door, backing off, and pressing into another never carries progress
+   * over. `pressingToward` failing (the caller's own job to check) is what
+   * resets *this* one — see the field's own doc comment.
+   */
+  private crossingDwellElapsed(direction: RoomDirection): boolean {
+    if (this.doorCrossingDirection !== direction) {
+      this.doorCrossingDirection = direction;
+      this.doorCrossingTicks = 0;
+    }
+    this.doorCrossingTicks += 1;
+    return this.doorCrossingTicks >= this.tuning.movement.doorCrossingTicks;
   }
 
   private clearRoomEntities(): void {
