@@ -14,12 +14,14 @@ import { MachineView } from './machine-view.js';
 import { ProjectileView, type ProjectileArt } from './projectiles.js';
 import {
   createDoorView,
+  createBlockView,
   createRoomView,
   createSecretHintView,
   type DoorState,
   type DoorTextures,
   type DoorView,
 } from './room.js';
+import { adoptInto, createDepthLayer } from './depth.js';
 import { createPropView } from './prop-view.js';
 import { MaibaumView } from './maibaum-view.js';
 import { BombFlightView } from './bomb-flight-view.js';
@@ -193,7 +195,20 @@ export class GameView {
   private readonly roomTiles: Readonly<Record<number, RoomTileArt>>;
   private readonly doorTextures: DoorTextures | undefined;
   private readonly tileTextures: Readonly<Record<string, Texture>>;
-  private propView: Container;
+  /**
+   * Everything that stands on the floor, sorted by where it stands
+   * (`render/depth.ts`, `docs/DECISIONS.md` #73): the room's obstacles and
+   * furniture, every body `EntityView` draws, the player, the Maibaum.
+   *
+   * The one place in this file where child order is not decided here.
+   */
+  private readonly depth: Container;
+  /** The room's decorative furniture (#152), adopted into `depth` and rebuilt per room. */
+  private propSprites: Container[];
+  /** The room's obstacles (#60), adopted into `depth` and rebuilt per room. */
+  private blockSprites: Container[];
+  /** Last `AmbientLight.tintRevision` the scenery was shaded for — `-1` until the first frame. */
+  private sceneryTintRevision = -1;
   private readonly ambientLight: AmbientLight;
   private readonly maibaumView: MaibaumView;
   private readonly corpseView: CorpseView;
@@ -294,14 +309,13 @@ export class GameView {
     this.world.addChild(this.doorView.container);
     this.secretHintView = createSecretHintView(sim.room, []);
     this.world.addChild(this.secretHintView);
-    // A room's authored furniture (#152), over the floor and under everything
-    // that moves: a fence post must never hide the enemy standing behind it.
-    this.propView = createPropView(sim.roomDecorativeProps, this.tileTextures);
-    this.world.addChild(this.propView);
 
-    // Ambient per-floor lighting: over the floor/walls/props, under anything
-    // that moves or has to stay readable (decals down through damage numbers)
-    // — see `ambient-light.ts`'s own doc comment for why it stops there.
+    // Ambient per-floor lighting: over the floor and walls, under everything
+    // that stands on them — see `ambient-light.ts`'s own doc comment for why
+    // it stops there. The scenery standing in it no longer gets its tone by
+    // being *under* this overlay, because since #73 it has to be above it to
+    // sort against the bodies; `tintScenery` shades it by the same light
+    // instead, sampled at its own foot line.
     this.ambientLight = new AmbientLight();
     this.ambientLight.onRoomChanged(sim.room, sim.currentFloor);
     this.world.addChild(this.ambientLight.container);
@@ -309,8 +323,11 @@ export class GameView {
     this.decals = new DecalView(sim.decals, textures.decal);
     this.world.addChild(this.decals.container);
 
+    this.depth = createDepthLayer();
+
     this.entities = new EntityView(
       sim,
+      this.depth,
       textures.entity,
       textures.entityFlash,
       textures.telegraph,
@@ -328,6 +345,9 @@ export class GameView {
       textures.pedestalBeam,
     );
     this.entities.setTargetTextures(this.roomTiles[sim.currentFloor]?.destructibles);
+    // Ground shadows, telegraph shapes and death clips — everything
+    // `EntityView` draws that lies *on* the floor rather than standing on it.
+    // The bodies themselves went into `depth` when it was handed in above.
     this.world.addChild(this.entities.container);
 
     this.pedestals = new PedestalView(
@@ -349,14 +369,35 @@ export class GameView {
     this.corpseView = new CorpseView();
     this.world.addChild(this.corpseView.container);
 
+    // Everything that stands up, in one sorted layer (#73). Its members are
+    // added here and to it — never to `world` — and each writes its own foot
+    // line; the order between them is not this file's to decide any more.
+    //
+    // A pedestal and Der Losbrunnen stay below it rather than joining: both
+    // are a plinth under a light beam, and a beam is a glow rather than a
+    // body — sorting the three sprites of one against the room would put a
+    // barrel between a pedestal and its own light. The player therefore always
+    // draws in front of one, which is what they already did.
+    this.blockSprites = adoptInto(
+      this.depth,
+      createBlockView(sim.room, sim.currentFloor, this.roomTiles[sim.currentFloor]),
+    );
+    // A room's authored furniture (#152). Walk-through, still — nothing here
+    // has a collider — but no longer flat: a player south of the well is drawn
+    // in front of it and one north of it behind.
+    this.propSprites = adoptInto(
+      this.depth,
+      createPropView(sim.roomDecorativeProps, this.tileTextures),
+    );
     this.playerView = new PlayerView(textures.playerArt, textures.actorShadow);
-    this.world.addChild(this.playerView.container);
-
-    // The arena Maibaum (#199): drawn just after the player, then re-ordered
-    // against them every frame in `sync` so a player standing behind it is
-    // hidden by it and one in front is not.
+    this.depth.addChild(this.playerView.container);
+    // The arena Maibaum (#199) — the object this whole layer generalises.
     this.maibaumView = new MaibaumView(textures.actorShadow);
-    this.world.addChild(this.maibaumView.container);
+    this.depth.addChild(this.maibaumView.container);
+    this.world.addChild(this.depth);
+
+    // Pickup labels and shop prices, over everything that stands.
+    this.world.addChild(this.entities.labelLayer);
 
     this.projectiles = new ProjectileView(
       sim.projectiles,
@@ -520,13 +561,18 @@ export class GameView {
       this.secretHintView.destroy();
       this.secretHintView = createSecretHintView(this.roomGeometry, this.secretHintDoors);
       this.world.addChildAt(this.secretHintView, 2);
-      this.world.removeChild(this.propView);
-      this.propView.destroy({ children: true });
-      this.propView = createPropView(this.sim.roomDecorativeProps, this.tileTextures);
-      this.world.addChildAt(this.propView, 3);
+      this.replaceScenery();
       this.ambientLight.onRoomChanged(this.roomGeometry, this.sim.currentFloor);
     }
     this.ambientLight.sync(this.sim.tick);
+    // Shade the scenery to match the floor it stands on. Off a revision rather
+    // than every frame: Floor 1's lamp never moves, so a room is tinted once at
+    // load; only Floor 2's drifting cloud actually costs anything per frame,
+    // and then only while it is crossing.
+    if (this.ambientLight.tintRevision !== this.sceneryTintRevision) {
+      this.sceneryTintRevision = this.ambientLight.tintRevision;
+      this.tintScenery();
+    }
     this.decals.sync();
     this.entities.sync(alpha, nowMs);
     this.pedestals.sync();
@@ -541,20 +587,12 @@ export class GameView {
     const playerX = lerp(this.sim.previousX(index), this.sim.positionX(index), alpha);
     const playerY = lerp(this.sim.previousY(index), this.sim.positionY(index), alpha);
     this.playerView.sync(this.sim, alpha, nowMs);
-
-    // The Maibaum, and where it sits relative to the player: behind the pole's
-    // base means it draws in front of them (they are behind it), otherwise
-    // after. Only the planted pole has a `footY` to sort against — the held
-    // one just rides wherever it was left, which is next to the player anyway.
+    // Both write their own foot line and the depth layer does the rest. This
+    // used to be four lines of hand-ordering here — the Maibaum's container
+    // pulled out of the world and re-inserted either side of the player, every
+    // frame, for the one prop in the game that could be walked behind (#199).
+    // #73 is that made general, and deleting this is most of the point.
     this.maibaumView.sync(this.sim);
-    const foot = this.maibaumView.footY;
-    this.world.removeChild(this.maibaumView.container);
-    const playerChildIndex = this.world.getChildIndex(this.playerView.container);
-    const behindPole = foot !== null && playerY <= foot;
-    this.world.addChildAt(
-      this.maibaumView.container,
-      behindPole ? playerChildIndex + 1 : playerChildIndex,
-    );
     const follow = this.followOffset(playerX, playerY);
 
     // Rounded, not left fractional — a camera offset by a fraction of a real
@@ -579,6 +617,57 @@ export class GameView {
         follow.y + this.sim.shakeY * this.shakeScale + this.sim.swayY + this.cameraY + slide.y,
       ),
     );
+  }
+
+  /**
+   * Swaps the room's static depth-layer members — its obstacles and its
+   * furniture — for the ones the newly loaded room authors.
+   *
+   * Destroyed rather than pooled, exactly as `createRoomView`'s output already
+   * is: a room load is not a per-frame event, and a pool of tile sprites keyed
+   * by nothing in particular would be more machinery than the thing it saves.
+   */
+  /**
+   * Shades every standing piece of scenery by the light at its own foot line
+   * (#73) — the darkening half, which it can no longer get by being drawn
+   * under `ambientLight.container`.
+   *
+   * The tint is a property of where a thing *stands*, so it is read at the
+   * sprite's own anchor, which is exactly its ground contact. Nothing here
+   * touches the bodies: an enemy in a dark corner stays as readable as one in
+   * the light, which is the rule this whole layer is arranged around.
+   */
+  private tintScenery(): void {
+    for (const sprite of this.blockSprites) {
+      sprite.tint = this.ambientLight.tintAt(sprite.x, sprite.y);
+    }
+    for (const sprite of this.propSprites) {
+      sprite.tint = this.ambientLight.tintAt(sprite.x, sprite.y);
+    }
+  }
+
+  private replaceScenery(): void {
+    for (const sprite of [...this.blockSprites, ...this.propSprites]) {
+      this.depth.removeChild(sprite);
+      sprite.destroy();
+    }
+    this.blockSprites = adoptInto(
+      this.depth,
+      createBlockView(
+        this.roomGeometry,
+        this.sim.currentFloor,
+        this.roomTiles[this.sim.currentFloor],
+      ),
+    );
+    this.propSprites = adoptInto(
+      this.depth,
+      createPropView(this.sim.roomDecorativeProps, this.tileTextures),
+    );
+    // The new room's scenery has never been shaded; `sync` re-reads the
+    // revision on the same frame, but a room whose lighting happens to be
+    // identical to the last one's would otherwise keep the old sprites' tint
+    // and hand the new ones white.
+    this.sceneryTintRevision = -1;
   }
 
   /**

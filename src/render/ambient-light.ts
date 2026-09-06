@@ -72,6 +72,8 @@ const KELLER_GLOW_RGB = '255, 214, 140';
  * would — see `createCloudTexture`'s own doc comment for the reasoning.
  */
 const CLOUD_SHADOW_RGB = '150, 150, 150';
+/** `CLOUD_SHADOW_RGB` as a `0..1` multiplier, for `AmbientLight.tintAt` — the same near-white, read as the factor a `multiply` blend applies. */
+const CLOUD_SHADOW_LEVEL = 150 / 255;
 
 /**
  * How much of the gradient's radius is spent easing from `KELLER_CENTRE_ALPHA`
@@ -85,6 +87,25 @@ const KELLER_CENTRE_ALPHA = 0.05;
 const KELLER_EDGE_ALPHA = 0.78;
 /** How strong the additive warm glow is directly under the bulb. */
 const KELLER_GLOW_PEAK_ALPHA = 0.4;
+/**
+ * `KELLER_GLOW_RGB`'s green and blue, for `AmbientLight.tintAt`: what a body
+ * standing in the pool is tinted *toward*, at `KELLER_GLOW_WARMTH` of the
+ * glow's own reach. Red is 255 in that colour and so is left out of the
+ * arithmetic — warming is entirely a matter of holding green and blue back.
+ */
+const KELLER_GLOW_G = 214;
+const KELLER_GLOW_B = 140;
+/**
+ * How much of the bulb's colour a body standing under it takes on.
+ *
+ * Half. The glow is *added* to the floor and can only be *multiplied* into
+ * anything standing on it (#73, `tintAt`), so this is a hue shift standing in
+ * for a light: too little and a grey rock reads cold against an amber floor,
+ * too much and the same rock goes orange and stops reading as stone. Tuned by
+ * looking at floor 1's start room with a rock in the pool and a rock in a
+ * corner in the same frame.
+ */
+const KELLER_GLOW_WARMTH = 0.5;
 /**
  * Where the glow's own fade reaches `0`, as a fraction of the *shadow*
  * sprite's half-size (both sprites share one `lampPlacement`, so this is
@@ -145,18 +166,99 @@ const CLOUD_FADE_FRACTION = 0.25;
  * (the lamp glow) passes a smaller `outerStop` on purpose instead — there
  * the flat region past the last stop is transparent, so it never shows.
  */
+/**
+ * A texture plus the alpha it actually holds, coarsely sampled.
+ *
+ * The lighting is drawn as sprites over the floor, which is all it needed to
+ * be while nothing stood *in* it. Since `docs/DECISIONS.md` #73 the obstacles
+ * and the furniture are above that overlay — they have to be, to sort against
+ * the bodies — so they have to be lit some other way, and the only way that
+ * does not cost a draw call per rock is a `tint` on the sprite itself.
+ *
+ * That needs the light's value at a point, which means reading back what the
+ * gradient canvas actually painted rather than re-deriving it: the sampler and
+ * the GPU are then looking at the same pixels by construction, and a change to
+ * a gradient stop, a puff or a blur radius cannot leave the two disagreeing.
+ * `FIELD_SIZE` is coarse on purpose — this is a soft falloff hundreds of world
+ * units across, and a rock is sixteen.
+ */
+interface AlphaField {
+  readonly width: number;
+  readonly height: number;
+  /** `0..1` per cell, row-major. */
+  readonly data: Float32Array;
+}
+
+interface SampledTexture {
+  readonly texture: Texture;
+  /** `null` with no DOM — see `createGlowTexture`'s own headless guard. */
+  readonly field: AlphaField | null;
+}
+
+const FIELD_SIZE = 64;
+
+/** Reads a canvas's alpha channel down into a `FIELD_SIZE`-ish grid. */
+function sampleAlpha(canvas: HTMLCanvasElement): AlphaField | null {
+  const context = canvas.getContext('2d');
+  if (context === null) {
+    return null;
+  }
+  const width = Math.min(FIELD_SIZE, canvas.width);
+  const height = Math.min(FIELD_SIZE, canvas.height);
+  const data = new Float32Array(width * height);
+  try {
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    for (let y = 0; y < height; y++) {
+      const sy = Math.min(canvas.height - 1, Math.floor(((y + 0.5) / height) * canvas.height));
+      for (let x = 0; x < width; x++) {
+        const sx = Math.min(canvas.width - 1, Math.floor(((x + 0.5) / width) * canvas.width));
+        data[y * width + x] = (pixels[(sy * canvas.width + sx) * 4 + 3] ?? 0) / 255;
+      }
+    }
+  } catch {
+    // A tainted canvas, or a context that cannot be read back. The overlay
+    // still draws; only the per-sprite tint falls back to "unlit", which is
+    // exactly what this looked like before it existed.
+    return null;
+  }
+  return { width, height, data };
+}
+
+/**
+ * The field's alpha at a normalised `(u, v)` inside the sprite, or `0` outside
+ * it. Nearest-neighbour: the source is already a smooth gradient sampled far
+ * more finely than anything reading it.
+ */
+function fieldAt(field: AlphaField | null, u: number, v: number): number {
+  if (field === null || u < 0 || u > 1 || v < 0 || v > 1) {
+    return 0;
+  }
+  const x = Math.min(field.width - 1, Math.floor(u * field.width));
+  const y = Math.min(field.height - 1, Math.floor(v * field.height));
+  return field.data[y * field.width + x] ?? 0;
+}
+
+/** `value` at a world point, given the placement of the sprite the field is drawn on (anchor `0.5`). */
+function sampleAt(field: AlphaField | null, placement: Placement, x: number, y: number): number {
+  return fieldAt(
+    field,
+    (x - placement.x) / placement.width + 0.5,
+    (y - placement.y) / placement.height + 0.5,
+  );
+}
+
 function createGlowTexture(
   rgb: string,
   innerAlpha: number,
   outerAlpha: number,
   innerStop: number,
   outerStop: number = Math.SQRT2,
-): Texture {
+): SampledTexture {
   // No DOM at all — the frame-time benchmark (`tests/bench/scene.ts`) builds
   // a `GameView` in plain Node, same reasoning as `inked-bounds.ts`'s own
   // `scratchContext` guard.
   if (typeof document === 'undefined') {
-    return Texture.EMPTY;
+    return { texture: Texture.EMPTY, field: null };
   }
   const size = 512;
   const canvas = document.createElement('canvas');
@@ -165,7 +267,7 @@ function createGlowTexture(
   const context = canvas.getContext('2d');
   if (context === null) {
     // No 2D context is a headless/test environment, not a real failure.
-    return Texture.from(canvas);
+    return { texture: Texture.from(canvas), field: null };
   }
   const centre = size / 2;
   const gradient = context.createRadialGradient(
@@ -180,7 +282,7 @@ function createGlowTexture(
   gradient.addColorStop(1, `rgba(${rgb}, ${String(outerAlpha)})`);
   context.fillStyle = gradient;
   context.fillRect(0, 0, size, size);
-  return Texture.from(canvas);
+  return { texture: Texture.from(canvas), field: sampleAlpha(canvas) };
 }
 
 /**
@@ -218,10 +320,10 @@ const CLOUD_BLUR_FRACTION = 0.05;
  * overlap; blurring the finished union softens only the silhouette's actual
  * outline.
  */
-function createCloudTexture(rgb: string): Texture {
+function createCloudTexture(rgb: string): SampledTexture {
   // No DOM at all — same `tests/bench` reasoning as `createGlowTexture`'s own guard.
   if (typeof document === 'undefined') {
-    return Texture.EMPTY;
+    return { texture: Texture.EMPTY, field: null };
   }
   const width = 512;
   const height = 320;
@@ -233,7 +335,7 @@ function createCloudTexture(rgb: string): Texture {
   const shapeContext = shape.getContext('2d');
   if (shapeContext === null) {
     // No 2D context is a headless/test environment, not a real failure.
-    return Texture.from(shape);
+    return { texture: Texture.from(shape), field: null };
   }
   shapeContext.fillStyle = `rgb(${rgb})`;
   const unit = Math.min(width, height);
@@ -248,11 +350,11 @@ function createCloudTexture(rgb: string): Texture {
   canvas.height = height;
   const context = canvas.getContext('2d');
   if (context === null) {
-    return Texture.from(canvas);
+    return { texture: Texture.from(canvas), field: null };
   }
   context.filter = `blur(${String(blur)}px)`;
   context.drawImage(shape, 0, 0);
-  return Texture.from(canvas);
+  return { texture: Texture.from(canvas), field: sampleAlpha(canvas) };
 }
 
 /** Rectangle plus size, in room units — what a sprite needs to sit centred over a point at some fraction of one screen's span. */
@@ -392,11 +494,17 @@ export function cloudPlacement(cell: CellCentre, progress: number): Placement {
  * extra sprites at `alpha = 0` rather than destroying and recreating them.
  */
 export class AmbientLight {
+  /**
+   * The lighting itself, drawn under the depth layer: it shades the floor and
+   * never dims a body — the legibility rule this class's own doc comment
+   * states. What *stands* in the light is shaded by `tintAt` instead, because
+   * since #73 it has to be above this to sort against the bodies.
+   */
   readonly container = new Container();
 
-  private readonly lampShadowTexture: Texture;
-  private readonly lampGlowTexture: Texture;
-  private readonly cloudTexture: Texture;
+  private readonly lampShadow: SampledTexture;
+  private readonly lampGlow: SampledTexture;
+  private readonly cloud: SampledTexture;
   /** The darkening vignette — drawn first, so the additive glow painted after it never gets darkened back down. */
   private readonly lampShadowSprites: Sprite[] = [];
   /** The bulb's own warm pool of light, `blendMode: 'add'` — see `KELLER_GLOW_REACH`'s own doc comment for why it fades out well short of the shadow's own falloff. */
@@ -405,45 +513,112 @@ export class AmbientLight {
   private floorNumber = 0;
   private cells: CellCentre[] = [];
   private reducedMotion = false;
+  /** The cloud's live crossing, mirrored out of `sync` so `tintAt` reads the same shadow the sprites are drawing. */
+  private cloudAlpha = 0;
+  private cloudProgress = 0;
+  private revision = 0;
 
   constructor() {
-    this.lampShadowTexture = createGlowTexture(
+    this.lampShadow = createGlowTexture(
       KELLER_SHADOW_RGB,
       KELLER_CENTRE_ALPHA,
       KELLER_EDGE_ALPHA,
       KELLER_INNER_STOP,
     );
-    this.lampGlowTexture = createGlowTexture(
+    this.lampGlow = createGlowTexture(
       KELLER_GLOW_RGB,
       KELLER_GLOW_PEAK_ALPHA,
       0,
       KELLER_INNER_STOP,
       KELLER_GLOW_REACH,
     );
-    this.cloudTexture = createCloudTexture(CLOUD_SHADOW_RGB);
+    this.cloud = createCloudTexture(CLOUD_SHADOW_RGB);
   }
 
-  /** Grows `pool` to `count` sprites of `texture`/`blendMode`, adding new ones to `container`; never shrinks it. */
+  /** Grows `pool` to `count` sprites of `texture`/`blendMode`, adding new ones to `into`; never shrinks it. */
   private growPool(
     pool: Sprite[],
     texture: Texture,
     blendMode: Sprite['blendMode'],
     count: number,
+    into: Container,
   ): void {
     while (pool.length < count) {
       const sprite = new Sprite(texture);
       sprite.anchor.set(0.5);
       sprite.blendMode = blendMode;
       sprite.alpha = 0;
-      this.container.addChild(sprite);
+      into.addChild(sprite);
       pool.push(sprite);
     }
+  }
+
+  /**
+   * The multiply tint a sprite **standing at** `(x, y)` should be drawn with,
+   * as `0xrrggbb` — `0xffffff` on a floor with no lighting, or with none the
+   * sampler could read.
+   *
+   * Sampled at the body's own **floor position**, so the whole drawing takes
+   * one value: a rock's raised crown is not further across the room than its
+   * base, it is above it, and lighting it by where its pixels land on screen
+   * would read height as depth and slide the falloff up its face. One value
+   * per object is also what the falloff deserves — it varies over hundreds of
+   * world units, and a rock is sixteen.
+   *
+   * A tint is a **multiply**, so it can shade and it can shift hue, and it
+   * cannot make a sprite brighter than it was drawn. That is not the
+   * limitation it first looks like: the authored art already *is* the
+   * fully-lit reference, so "no darkening at all" is the right answer directly
+   * under the bulb. What the bulb's glow contributes there is its *colour*,
+   * and `KELLER_GLOW_WARMTH` carries that — a rock in the pool reads warm
+   * rather than reading grey against a warm floor.
+   *
+   * (Drawing the glow itself over the depth layer was tried first, so it would
+   * fall on the rocks as light rather than as hue. It also falls on the bodies,
+   * and at the alpha the floor was tuned for it washes them out — Alois under
+   * the bulb lost his outline. The floor is the surface the pool is authored
+   * against; foreground art is not.)
+   */
+  tintAt(x: number, y: number): number {
+    let factor = 1;
+    let warmth = 0;
+    if (this.floorNumber === KELLER_FLOOR) {
+      for (const cell of this.cells) {
+        const placement = lampPlacement(cell);
+        factor *= 1 - sampleAt(this.lampShadow.field, placement, x, y);
+        warmth += sampleAt(this.lampGlow.field, placement, x, y);
+      }
+      warmth = Math.min(1, warmth) * KELLER_GLOW_WARMTH;
+    } else if (this.floorNumber === DORF_FLOOR && this.cloudAlpha > 0) {
+      // `multiply` with a near-white at `alpha`: every channel scaled by the
+      // same factor, which is exactly a tint and so is reproduced here rather
+      // than approximated.
+      for (const cell of this.cells) {
+        const covered = sampleAt(this.cloud.field, cloudPlacement(cell, this.cloudProgress), x, y);
+        factor *= 1 - covered * this.cloudAlpha * (1 - CLOUD_SHADOW_LEVEL);
+      }
+    }
+    const shade = (level: number): number =>
+      Math.max(0, Math.min(255, Math.round(factor * (255 + (level - 255) * warmth))));
+    return (shade(255) << 16) | (shade(KELLER_GLOW_G) << 8) | shade(KELLER_GLOW_B);
+  }
+
+  /**
+   * Bumped whenever `tintAt` would answer differently — a room change, or the
+   * cloud moving. `GameView` re-tints its scenery off this rather than every
+   * frame: on Floor 1 the lamp never moves, so the whole room is tinted once
+   * at load and never again.
+   */
+  get tintRevision(): number {
+    return this.revision;
   }
 
   /** `reduceMotion` (#153's accessibility toggle) skips the drifting cloud entirely — it is a slow, non-essential background motion, not a mechanic. */
   setReducedMotion(reducedMotion: boolean): void {
     this.reducedMotion = reducedMotion;
+    this.revision += 1;
     if (reducedMotion) {
+      this.cloudAlpha = 0;
       for (const sprite of this.cloudSprites) {
         sprite.alpha = 0;
       }
@@ -453,10 +628,23 @@ export class AmbientLight {
   onRoomChanged(room: RoomRect, floorNumber: number): void {
     this.floorNumber = floorNumber;
     this.cells = roomCellCentres(room);
+    this.revision += 1;
 
     if (floorNumber === KELLER_FLOOR) {
-      this.growPool(this.lampShadowSprites, this.lampShadowTexture, 'normal', this.cells.length);
-      this.growPool(this.lampGlowSprites, this.lampGlowTexture, 'add', this.cells.length);
+      this.growPool(
+        this.lampShadowSprites,
+        this.lampShadow.texture,
+        'normal',
+        this.cells.length,
+        this.container,
+      );
+      this.growPool(
+        this.lampGlowSprites,
+        this.lampGlow.texture,
+        'add',
+        this.cells.length,
+        this.container,
+      );
       this.cells.forEach((cell, index) => {
         const lamp = lampPlacement(cell);
         const shadow = this.lampShadowSprites[index];
@@ -489,7 +677,13 @@ export class AmbientLight {
     }
 
     if (floorNumber === DORF_FLOOR) {
-      this.growPool(this.cloudSprites, this.cloudTexture, 'multiply', this.cells.length);
+      this.growPool(
+        this.cloudSprites,
+        this.cloud.texture,
+        'multiply',
+        this.cells.length,
+        this.container,
+      );
       for (const sprite of this.cloudSprites.slice(this.cells.length)) {
         sprite.alpha = 0;
       }
@@ -502,12 +696,24 @@ export class AmbientLight {
 
   sync(tick: number): void {
     if (this.floorNumber !== DORF_FLOOR || this.reducedMotion) {
+      if (this.cloudAlpha !== 0) {
+        this.cloudAlpha = 0;
+        this.revision += 1;
+      }
       for (const sprite of this.cloudSprites) {
         sprite.alpha = 0;
       }
       return;
     }
     const state = cloudShadowState(tick);
+    // Mirrored for `tintAt`, which has to answer with the same shadow these
+    // sprites are about to draw — and bumps the revision so the scenery is
+    // re-tinted as the cloud drifts over it.
+    if (state.alpha !== this.cloudAlpha || state.progress !== this.cloudProgress) {
+      this.cloudAlpha = state.alpha;
+      this.cloudProgress = state.progress;
+      this.revision += 1;
+    }
     this.cells.forEach((cell, index) => {
       const sprite = this.cloudSprites[index];
       if (sprite === undefined) {
@@ -538,7 +744,7 @@ export class AmbientLight {
    */
   destroy(): void {
     this.container.destroy({ children: true });
-    for (const texture of [this.lampShadowTexture, this.lampGlowTexture, this.cloudTexture]) {
+    for (const { texture } of [this.lampShadow, this.lampGlow, this.cloud]) {
       if (texture !== Texture.EMPTY) {
         texture.destroy(true);
       }

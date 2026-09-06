@@ -46,22 +46,32 @@ function colliderPixels(sizeName: string): number {
 }
 
 /**
- * How far a silhouette may sit from its own collider, measured on its longest
- * axis.
+ * How far a silhouette may sit from the circle it can be shot at, and — since
+ * `docs/DECISIONS.md` #73 — on which axis each half of that is asked.
  *
- * The longest axis rather than height, because the collider is a circle and a
- * creature is not: a Kellerassel is a flat, wide animal, and no single circle
- * can match both its 24px width and its 14px height. Its width is what a
- * player reads and what they shoot at, so its width is what the circle is
- * sized against — and checking height instead would demand every flat creature
- * grow tall for a reason nothing in the game actually has.
+ * **Floor, on the longest axis** (unchanged): a body has to be at least
+ * `MIN_SILHOUETTE` of its collider on *some* axis, or it has disappeared
+ * inside its own hitbox and is being hit by nothing. Longest axis rather than
+ * height, for the reason this file has always given: the collider is a circle
+ * and a creature is not, and no single circle matches both a Kellerassel's
+ * 23px width and its 18px height. Demanding height instead would make every
+ * flat animal grow tall for a reason nothing in the game has.
  *
- * The floor stops a body disappearing inside its own hitbox, which is being
- * hit by nothing. The ceiling stops one sprawling past what can be hit, which
- * is shooting at nothing. Both are wide, deliberately: this is a gate against
- * a sprite drifting away from its collider unnoticed, not a house style for
- * how big a creature should be. That decision stays where
- * `CLAUDE.md`'s sign-off ritual puts it — with a person looking at options.
+ * **Ceiling, on width only** (this is what #73 changed): a body may not be
+ * wider than `MAX_SILHOUETTE` of what can be hit, because that is shooting at
+ * nothing. It may now be as *tall* as its category spec allows, because since
+ * #73 the pixels above a body's footprint are height a player reads and never
+ * collides with — a head that clears a rock, shoulders that clear the enemy in
+ * front. A ceiling on height would be a gate against the feature: it is the
+ * check that would have failed Alois for having a hat. Nothing is lost by
+ * dropping it, because `tools/art/spec.mjs`'s `character` (48) and `boss`
+ * (160) canvas maxima already bound how much of the 360-line frame a body may
+ * cover, which is what a ceiling here was really enforcing.
+ *
+ * Both numbers are wide, deliberately: this is a gate against a sprite
+ * drifting away from its collider unnoticed, not a house style for how big a
+ * creature should be. That decision stays where `CLAUDE.md`'s sign-off ritual
+ * puts it — with a person looking at options.
  */
 const MIN_SILHOUETTE = 0.6;
 const MAX_SILHOUETTE = 1.8;
@@ -94,8 +104,10 @@ const creatureArt = new Map(
 interface Measured {
   readonly id: string;
   readonly sizeName: string;
-  /** The silhouette's longest axis, in internal pixels. */
+  /** The silhouette's longest axis, in internal pixels — what the floor is asked of. */
   readonly silhouette: number;
+  /** The silhouette's width, in internal pixels — what the ceiling is asked of. */
+  readonly width: number;
   readonly collider: number;
   readonly canvas: string;
   readonly inked: string;
@@ -119,6 +131,7 @@ for (const definition of ENEMY_DEFINITIONS) {
     id: definition.id,
     sizeName: definition.size,
     silhouette: Math.max(bounds.width, bounds.height),
+    width: bounds.width,
     collider: colliderPixels(definition.size),
     canvas: `${String(frameWidth)}x${String(height)}`,
     inked: `${String(bounds.width)}x${String(bounds.height)}`,
@@ -132,9 +145,11 @@ describe('every creature is drawn at the size it can be hit at', () => {
 
   it.each(measured.map((entry) => [entry.id, entry] as const))('%s', (_id, entry) => {
     const ratio = entry.silhouette / entry.collider;
+    const widthRatio = entry.width / entry.collider;
     const detail =
       `${entry.id} (${entry.sizeName}): canvas ${entry.canvas}, silhouette ${entry.inked}, ` +
-      `collider ${String(entry.collider)}px, longest axis ${ratio.toFixed(2)}x the collider`;
+      `collider ${String(entry.collider)}px, longest axis ${ratio.toFixed(2)}x it, ` +
+      `width ${widthRatio.toFixed(2)}x it`;
     if (PENDING_REDRAW.has(entry.id)) {
       // Known too small, and allowed to be — but not allowed to get worse,
       // and not allowed to already be fine (see the shrink check below).
@@ -142,14 +157,16 @@ describe('every creature is drawn at the size it can be hit at', () => {
       return;
     }
     expect(ratio, detail).toBeGreaterThanOrEqual(MIN_SILHOUETTE);
-    expect(ratio, detail).toBeLessThanOrEqual(MAX_SILHOUETTE);
+    expect(widthRatio, detail).toBeLessThanOrEqual(MAX_SILHOUETTE);
   });
 
   it('PENDING_REDRAW only ever shrinks', () => {
     const stillNeeded = measured
       .filter((entry) => {
-        const ratio = entry.silhouette / entry.collider;
-        return ratio < MIN_SILHOUETTE || ratio > MAX_SILHOUETTE;
+        return (
+          entry.silhouette / entry.collider < MIN_SILHOUETTE ||
+          entry.width / entry.collider > MAX_SILHOUETTE
+        );
       })
       .map((entry) => entry.id)
       .sort();

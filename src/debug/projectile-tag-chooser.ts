@@ -79,7 +79,7 @@ export interface ProjectileTagChooserHandle {
 }
 
 /** Builds the chooser and attaches it to the document, top-right. */
-export function createProjectileTagChooser(tuning: SimTuning): ProjectileTagChooserHandle {
+export function createProjectileTagChooser(getTuning: () => SimTuning): ProjectileTagChooserHandle {
   injectDevUiTokens();
 
   const style = document.createElement('style');
@@ -99,7 +99,11 @@ export function createProjectileTagChooser(tuning: SimTuning): ProjectileTagChoo
   heading.textContent = 'shot tags — I';
   panel.appendChild(heading);
 
-  const shooting = tuning.shooting;
+  // Resolved per read/write, not captured: `startRun` builds a new `GameSim`
+  // and so a new `SimTuning`, and a chooser bound to the old one would set
+  // forced tags on a simulation nobody is playing — see `DebugOverlay`'s
+  // `setContext` for the same bug in the overlay itself.
+  const shooting = (): SimTuning['shooting'] => getTuning().shooting;
   const boxes: HTMLInputElement[] = [];
 
   for (const [name, tag] of Object.entries(ProjectileTag)) {
@@ -108,9 +112,11 @@ export function createProjectileTagChooser(tuning: SimTuning): ProjectileTagChoo
 
     const input = document.createElement('input');
     input.type = 'checkbox';
-    input.checked = (shooting.forcedTags & tag) !== 0;
+    input.checked = (shooting().forcedTags & tag) !== 0;
     input.addEventListener('change', () => {
-      shooting.forcedTags = input.checked ? shooting.forcedTags | tag : shooting.forcedTags & ~tag;
+      shooting().forcedTags = input.checked
+        ? shooting().forcedTags | tag
+        : shooting().forcedTags & ~tag;
     });
     boxes.push(input);
 
@@ -136,7 +142,7 @@ export function createProjectileTagChooser(tuning: SimTuning): ProjectileTagChoo
   clearButton.type = 'button';
   clearButton.textContent = 'clear all';
   clearButton.addEventListener('click', () => {
-    shooting.forcedTags = 0;
+    shooting().forcedTags = 0;
     for (const box of boxes) {
       box.checked = false;
     }

@@ -58,20 +58,43 @@ export class DebugOverlay {
   readonly metrics = new FrameMetrics();
   readonly drawCalls = new DrawCallCounter();
 
-  private readonly sim: GameSim;
-  private readonly view: GameView;
+  /**
+   * The run currently being watched.
+   *
+   * Not `readonly`, and that is the whole of the bug this pair used to carry:
+   * `app/main.ts`'s `startRun` builds a **new** `GameSim` and a new `GameView`
+   * on every restart — the title screen's Start, the `R` key, the seed box —
+   * and destroys the old view. The overlay was handed one of each at boot and
+   * kept them, so from the first restart onward every panel read a simulation
+   * nobody was playing and `drawHitboxes` threw on a `Graphics` that had been
+   * destroyed along with the view that owned it. In practice that meant the
+   * overlay was broken in every session, since boot's own `startRun` runs
+   * before it is even mounted. `setContext` is what keeps it pointed at the
+   * live run.
+   */
+  private sim: GameSim;
+  private view: GameView;
   private readonly gameScale: () => number;
 
   /** Panel plates, pinned to the screen. */
   private readonly panelLayer = new Container();
-  /** Colliders and the grid, drawn in room space so they move with the camera. */
-  private readonly worldLayer = new Container();
+  /**
+   * Colliders and the grid, drawn in room space so they move with the camera.
+   *
+   * Rebuilt by `setContext` rather than re-parented: these are children of the
+   * `GameView`'s own world container, and `GameView.destroy` takes its children
+   * down with it, so by the time a restart is visible these are already dead
+   * objects.
+   */
+  private worldLayer = new Container();
 
-  private readonly hitboxes = new Graphics();
-  private readonly grid = new Graphics();
+  private hitboxes = new Graphics();
+  private grid = new Graphics();
 
   private readonly panels: DebugPanel[] = [];
   private readonly runInfo = new RunInfoPanel();
+  /** Held because it is the one panel that reads the `GameView` directly, so it has to be re-pointed on a restart. */
+  private readonly animationPanel: AnimationPanel;
 
   /** Window height the current panel layout was computed for. */
   private layoutHeight = 0;
@@ -90,22 +113,61 @@ export class DebugOverlay {
     this.view = view;
     this.gameScale = gameScale;
 
-    this.worldLayer.addChild(this.grid);
-    this.worldLayer.addChild(this.hitboxes);
-    view.worldLayer.addChild(this.worldLayer);
+    this.attachWorldLayer();
     // Panels go to the screen layer, not into the game: they are text, and text
     // made of game pixels is text nobody can read.
     uiLayer.addChild(this.panelLayer);
 
+    this.animationPanel = new AnimationPanel(view.animator, view.player);
     this.addPanel(new FrameGraphPanel());
     this.addPanel(new CountsPanel());
     this.addPanel(this.runInfo);
     this.addPanel(new PickupsPanel());
     this.addPanel(new StatsPanel());
-    this.addPanel(new AnimationPanel(view.animator, view.player));
+    this.addPanel(this.animationPanel);
     this.addPanel(new ArtPipelinePanel());
 
     this.setVisible(false);
+  }
+
+  /**
+   * The tuning of the run being played — what the DOM tools (`tuning-window`,
+   * `projectile-tag-chooser`) write into. A `GameSim` builds its own
+   * `SimTuning`, so a restart replaces this too.
+   */
+  get tuning(): GameSim['tuning'] {
+    return this.sim.tuning;
+  }
+
+  /** Builds this run's world-space graphics and hangs them off the live view. */
+  private attachWorldLayer(): void {
+    this.worldLayer = new Container();
+    this.hitboxes = new Graphics();
+    this.grid = new Graphics();
+    this.worldLayer.visible = this.visible;
+    this.worldLayer.addChild(this.grid);
+    this.worldLayer.addChild(this.hitboxes);
+    this.view.worldLayer.addChild(this.worldLayer);
+  }
+
+  /**
+   * Points the overlay at the run `app/main.ts` just started.
+   *
+   * Called at the end of every `startRun`, including boot's own — so the
+   * overlay is correct from the first frame rather than from the first restart
+   * that happens to come after it was mounted. Everything the player toggled
+   * (`visible`, and which of the two world-space displays are on) survives:
+   * restarting a run to look at the same thing again is exactly when that
+   * matters.
+   */
+  setContext(sim: GameSim, view: GameView): void {
+    if (this.sim === sim && this.view === view) {
+      return;
+    }
+    this.sim = sim;
+    this.view = view;
+    this.attachWorldLayer();
+    this.animationPanel.setSource(view.animator, view.player);
   }
 
   /**
@@ -315,6 +377,14 @@ export class DebugOverlay {
    * That is the point rather than a convenience: a hitbox display drawn from
    * sprite bounds would agree with the sprites and disagree with the damage,
    * which is exactly the bug this is meant to find.
+   *
+   * **Two circles per body since `docs/DECISIONS.md` #73**, because there are
+   * two: the solid one is the footprint — what it walks into, what pushes it,
+   * what its contact damage reaches — and the dashed-looking faint one above
+   * it is the hurtbox, what a shot has to cross. Drawing only the first would
+   * make every "my shot went through it" report unanswerable, which is the
+   * failure mode this whole display exists against. A body whose two circles
+   * are the same (a pickup, anything spawned before the split) draws one.
    */
   private drawHitboxes(): void {
     this.hitboxes.clear();
@@ -335,9 +405,18 @@ export class DebugOverlay {
       if (((masks[index] ?? 0) & required) !== required) {
         continue;
       }
-      this.hitboxes
-        .circle(sim.positionX(index), sim.positionY(index), sim.body.data[index * 2] ?? 0)
-        .stroke({ width: 1, color: colourForLayer(sim.collision.data[index * 2] ?? 0) });
+      const colour = colourForLayer(sim.collision.data[index * 2] ?? 0);
+      const x = sim.positionX(index);
+      const y = sim.positionY(index);
+      const footprint = sim.body.data[index * 2] ?? 0;
+      this.hitboxes.circle(x, y, footprint).stroke({ width: 1, color: colour });
+      const hurtRadius = sim.hurtbox.data[index * 2] ?? 0;
+      const hurtOffsetY = sim.hurtbox.data[index * 2 + 1] ?? 0;
+      if (hurtRadius > 0 && (hurtRadius !== footprint || hurtOffsetY !== 0)) {
+        this.hitboxes
+          .circle(x, y + hurtOffsetY, hurtRadius)
+          .stroke({ width: 1, color: colour, alpha: 0.45 });
+      }
     }
 
     const projectiles = sim.projectiles;

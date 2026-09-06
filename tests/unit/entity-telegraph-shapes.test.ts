@@ -5,6 +5,7 @@ import { GameSim } from '../../src/sim/game/sim.js';
 import { createInputFrame } from '../../src/sim/input/frame.js';
 import { RoomGeometry } from '../../src/sim/room/geometry.js';
 import { EntityView } from '../../src/render/entities.js';
+import { createDepthLayer } from '../../src/render/depth.js';
 import { ENEMY_STRIDE } from '../../src/sim/systems/enemy.js';
 
 /**
@@ -63,6 +64,7 @@ function harness(sim: GameSim): Harness {
   const barTexture = new Texture();
   const view = new EntityView(
     sim,
+    createDepthLayer(),
     Texture.EMPTY,
     Texture.EMPTY,
     ringTexture,

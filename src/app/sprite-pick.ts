@@ -1,4 +1,5 @@
 import { ROOM_TILE_UNITS } from '../content/rooms/definition.js';
+import { hurtboxRadiusOf } from '../sim/collision/footprint.js';
 import { CollisionLayer } from '../sim/collision/layers.js';
 import type { GameSim } from '../sim/game/sim.js';
 import { ENEMY_STRIDE } from '../sim/systems/enemy.js';
@@ -26,23 +27,44 @@ import { PROP_TILE_NAMES } from '../render/floor-art.js';
  * How generous a click gets, relative to a body's real collider radius.
  *
  * The collider is a gameplay hitbox (`sim/enemy/size.ts`'s `ENEMY_PROFILES`
- * — 4 to 10 world units), tuned for combat feel, not for a mouse. A "normal"
- * enemy's rendered sprite is a `2*radius`-square bounding box around that
- * circle (`EntityView`'s uniform `radius / (referenceHeight / 2)` scale), so
- * even a pixel-perfect click on a visible corner of the sprite already
- * misses the inscribed circle — and a real click is never pixel-perfect on
- * top of that. Padding the pick radius well past the collider is what makes
- * "click the sprite you can see" actually work, rather than only working for
- * clicks that happen to land within a few world units of dead centre.
+ * — 4 to 10 world units), tuned for combat feel, not for a mouse. Even a
+ * pixel-perfect click on a visible corner of a sprite already misses the
+ * circle inscribed in it — and a real click is never pixel-perfect on top of
+ * that. Padding the pick radius well past the collider is what makes "click
+ * the sprite you can see" actually work, rather than only working for clicks
+ * that happen to land within a few world units of dead centre.
+ *
+ * Measured against the **hurtbox**, not the footprint (`docs/DECISIONS.md`
+ * #73): what a click is aiming at is the drawing, and the drawing is what the
+ * hurtbox is the size and position of. Padding the small floor circle instead
+ * would have made every pick in the tool a third tighter and centred it on the
+ * creature's feet, which is not where anyone points at a creature.
  */
 const PICK_RADIUS_MULTIPLIER = 2.5;
+
+/**
+ * Distance from `(worldX, worldY)` to the centre of the body at `index`'s
+ * hurtbox — the circle drawn where its sprite is. Falls back to the footprint
+ * for a body with no hurtbox of its own, which is what every one of these
+ * measured before the split.
+ */
+function distanceToBody(sim: GameSim, index: number, worldX: number, worldY: number): number {
+  const dx = sim.positionX(index) - worldX;
+  const dy = sim.positionY(index) + (sim.hurtbox.data[index * 2 + 1] ?? 0) - worldY;
+  return Math.hypot(dx, dy);
+}
+
+/** The pick radius for the body at `index`: its drawn radius, generously padded. */
+function pickRadius(sim: GameSim, index: number): number {
+  const footprint = sim.body.data[index * 2] ?? 1;
+  return hurtboxRadiusOf(sim.hurtbox.data[index * 2] ?? 0, footprint) * PICK_RADIUS_MULTIPLIER;
+}
 
 /** The closest alive enemy whose (generously padded, see `PICK_RADIUS_MULTIPLIER`) collider contains `(worldX, worldY)`, by id — `null` if none does. */
 export function pickEnemyAt(sim: GameSim, worldX: number, worldY: number): string | null {
   const world = sim.world;
   const states = world.states;
   const masks = world.masks;
-  const body = sim.body.data;
   const enemyData = sim.enemy.data;
 
   let bestId: string | null = null;
@@ -54,10 +76,8 @@ export function pickEnemyAt(sim: GameSim, worldX: number, worldY: number): strin
     if (((masks[index] ?? 0) & sim.enemyMask) !== sim.enemyMask) {
       continue;
     }
-    const radius = (body[index * 2] ?? 1) * PICK_RADIUS_MULTIPLIER;
-    const dx = sim.positionX(index) - worldX;
-    const dy = sim.positionY(index) - worldY;
-    const distance = Math.hypot(dx, dy);
+    const radius = pickRadius(sim, index);
+    const distance = distanceToBody(sim, index, worldX, worldY);
     if (distance <= radius && distance < bestDistance) {
       bestDistance = distance;
       bestId = sim.enemies.at(enemyData[index * ENEMY_STRIDE] ?? 0).id;
@@ -75,10 +95,7 @@ export function pickEnemyAt(sim: GameSim, worldX: number, worldY: number): strin
  */
 export function pickPlayerAt(sim: GameSim, worldX: number, worldY: number): boolean {
   const index = sim.playerIndex;
-  const radius = (sim.body.data[index * 2] ?? 1) * PICK_RADIUS_MULTIPLIER;
-  const dx = sim.positionX(index) - worldX;
-  const dy = sim.positionY(index) - worldY;
-  return Math.hypot(dx, dy) <= radius;
+  return distanceToBody(sim, index, worldX, worldY) <= pickRadius(sim, index);
 }
 
 /**
@@ -107,7 +124,6 @@ export function pickPropAt(
   const states = world.states;
   const masks = world.masks;
   const collision = sim.collision.data;
-  const body = sim.body.data;
   const propKind = sim.propKind.data;
 
   let bestName: string | null = null;
@@ -126,10 +142,8 @@ export function pickPropAt(
     if (((masks[index] ?? 0) & sim.enemyMask) === sim.enemyMask) {
       continue;
     }
-    const radius = (body[index * 2] ?? 1) * PICK_RADIUS_MULTIPLIER;
-    const dx = sim.positionX(index) - worldX;
-    const dy = sim.positionY(index) - worldY;
-    const distance = Math.hypot(dx, dy);
+    const radius = pickRadius(sim, index);
+    const distance = distanceToBody(sim, index, worldX, worldY);
     if (distance <= radius && distance < bestDistance) {
       bestDistance = distance;
       const kind = propKind[index] ?? 0;

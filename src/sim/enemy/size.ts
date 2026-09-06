@@ -41,7 +41,28 @@ export const ENEMY_SIZE_BY_NAME: Readonly<Record<EnemySizeName, EnemySizeId>> = 
 };
 
 export interface EnemyProfile {
+  /**
+   * The drawn radius: half the silhouette, and the circle a shot has to cross
+   * (`sim/collision/footprint.ts`'s hurtbox). Unchanged by #73 — it is what
+   * `tests/content/sprite-scale.test.ts` measures the art against and what
+   * every existing balance number was tuned on.
+   */
   readonly radius: number;
+  /**
+   * The circle on the *floor*: what this body walks into, what pushes it, and
+   * what has to be touched for its contact damage to land (#73).
+   *
+   * Stated per class rather than derived from `radius` by
+   * `footprintRadius`, because how much of a creature is actually on the
+   * ground is a fact about the creature. The three small classes land near the
+   * generic 0.7; `boss` is deliberately higher at 18/22, because
+   * `docs/DECISIONS.md` #56 made a boss's collider a real gameplay quantity —
+   * dodge spacing, knockback, contact separation, a body a player's own bump
+   * must never shove off a charge line — and taking a third off it would
+   * quietly re-tune both boss fights in a change that is about how they are
+   * drawn.
+   */
+  readonly footprint: number;
   /** What knockback and contact separation are divided by. */
   readonly mass: number;
   readonly health: number;
@@ -66,13 +87,13 @@ export interface EnemyProfile {
  * definition. An authored enemy states its own; see `EnemyDefinition`.
  */
 export const ENEMY_PROFILES: Readonly<Record<EnemySizeId, EnemyProfile>> = {
-  [EnemySize.Mini]: { radius: 4, mass: 1.2, health: 1, contactDamage: 1 },
-  [EnemySize.Normal]: { radius: 7, mass: 3, health: 2, contactDamage: 0 },
-  [EnemySize.Mid]: { radius: 10, mass: 6, health: 4, contactDamage: 2 },
+  [EnemySize.Mini]: { radius: 4, footprint: 3, mass: 1.2, health: 1, contactDamage: 1 },
+  [EnemySize.Normal]: { radius: 7, footprint: 5, mass: 3, health: 2, contactDamage: 0 },
+  [EnemySize.Mid]: { radius: 10, footprint: 7, mass: 6, health: 4, contactDamage: 2 },
   // ~3x mid. Diameter 44 world units = 88 internal pixels, so a boss silhouette
   // between 53 and 158 internal pixels clears `sprite-scale.test.ts`'s 0.6-1.8
   // band — a body a quarter of the 360-tall frame lands mid-band. Mass is high
   // enough that a player's own bump never shoves one off a charge line; every
   // authored boss still overrides health and contact for its fight.
-  [EnemySize.Boss]: { radius: 22, mass: 20, health: 12, contactDamage: 3 },
+  [EnemySize.Boss]: { radius: 22, footprint: 18, mass: 20, health: 12, contactDamage: 3 },
 };

@@ -66,15 +66,18 @@ export class RunInfoPanel implements DebugPanel {
       `seed   ${encodeSeed(sim.seed >>> 0)}  (${sim.seed.toString(16).padStart(8, '0')})`,
     );
     this.setLine(1, `tick   ${String(sim.tick)}  (${seconds}s)`);
-    // Floor and room are placeholders until #20 generates them. Shown anyway so
-    // the shape of a bug report does not change when they arrive.
-    this.setLine(2, 'floor  0  room playground');
+    // Written as a literal `floor 0 room playground` until now, with a comment
+    // promising real values once #20 generated them. #20 landed, and this did
+    // not — so the one panel whose whole job is making a bug report
+    // reproducible has been naming the wrong room for every run since. Both
+    // fields have been on `GameSim` the whole time.
+    this.setLine(2, `floor  ${String(sim.currentFloor)}  room ${sim.roomId}`);
     this.setLine(3, `hitstop ${String(sim.hitstop)}  shake ${sim.shake.toFixed(2)}`);
     this.setLine(4, 'O hide  H hitboxes  G grid  C copy');
 
     this.summary =
       `kellerbier seed=${sim.seed.toString(16)} tick=${String(sim.tick)} ` +
-      `floor=0 room=playground`;
+      `floor=${String(sim.currentFloor)} room=${sim.roomId}`;
   }
 
   private setLine(index: number, text: string): void {
