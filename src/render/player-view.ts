@@ -52,7 +52,7 @@ const SCHLAUCH_ANCHOR: Readonly<Record<PlayerFacingIndex, { x: number; y: number
  * Ticks the nozzle holds its firing frame after a shot.
  *
  * Six at 60 Hz is 100 ms, which is under the fastest fire delay the stat
- * pipeline will produce (`Schluckfrequenz` floors at one tick, but Promille's
+ * pipeline will produce (`Fire Rate` floors at one tick, but Promille's
  * best realistic rate is nearer eight): a stream reads as a *stream* — nozzle
  * lit the whole time — while a tap reads as one flare. Longer and a single
  * shot looks like a held trigger; shorter and a burst strobes.

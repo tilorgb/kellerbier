@@ -33,7 +33,7 @@ export const almrausch: ItemDefinition = {
     modifyStats: (state) =>
       state.charge <= 0
         ? []
-        : [{ stat: 'stammwuerze', op: 'add', value: state.charge * DAMAGE_PER_BUCKET }],
+        : [{ stat: 'damage', op: 'add', value: state.charge * DAMAGE_PER_BUCKET }],
     onTick: (ctx) => {
       const sim = ctx.sim;
       const state = ctx.state;

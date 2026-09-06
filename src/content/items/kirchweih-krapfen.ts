@@ -1,6 +1,6 @@
 import type { ItemDefinition } from '../../sim/item/definition.js';
 
-/** The extra burst's radius, and its damage relative to Stammwürze. */
+/** The extra burst's radius, and its damage relative to Damage. */
 const BURST_RADIUS = 30;
 const DAMAGE_SCALE = 0.3;
 
@@ -21,7 +21,7 @@ export const kirchweihKrapfen: ItemDefinition = {
   hooks: {
     onHit: (ctx) => {
       const sim = ctx.sim;
-      const damage = Math.max(1, Math.round(sim.stats.value('stammwuerze') * DAMAGE_SCALE));
+      const damage = Math.max(1, Math.round(sim.stats.value('damage') * DAMAGE_SCALE));
       sim.applySplashDamage(ctx.hitX, ctx.hitY, BURST_RADIUS, damage, ctx.target);
     },
   },

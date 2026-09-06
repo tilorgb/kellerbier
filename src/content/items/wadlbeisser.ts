@@ -1,6 +1,6 @@
 import type { ItemDefinition } from '../../sim/item/definition.js';
 
-/** Ticks between bites (60/s), the radius the bite reaches, and its damage scale off Stammwürze. */
+/** Ticks between bites (60/s), the radius the bite reaches, and its damage scale off Damage. */
 const BITE_INTERVAL_TICKS = 90;
 const BITE_RADIUS = 20;
 const DAMAGE_SCALE = 0.75;
@@ -35,7 +35,7 @@ export const wadlbeisser: ItemDefinition = {
       state.timer = BITE_INTERVAL_TICKS;
       const sim = ctx.sim;
       const playerIndex = sim.playerIndex;
-      const damage = Math.max(1, Math.round(sim.stats.value('stammwuerze') * DAMAGE_SCALE));
+      const damage = Math.max(1, Math.round(sim.stats.value('damage') * DAMAGE_SCALE));
       sim.applySplashDamage(
         sim.positionX(playerIndex),
         sim.positionY(playerIndex),

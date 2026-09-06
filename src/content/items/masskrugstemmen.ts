@@ -25,7 +25,7 @@ const RATE_PENALTY_PER_CHARGE = 0.4;
 export const masskrugstemmen: ItemDefinition = {
   id: 'masskrugstemmen',
   name: 'Maßkrugstemmen',
-  description: 'Damage climbs the longer you keep firing. Fire rate falls with it',
+  description: 'Damage climbs the longer you keep firing. Fire Rate falls with it',
   flavourText: 'The record is nineteen minutes. The record holder cannot lift a pen anymore.',
   sprite: 'masskrugstemmen',
   pools: ['shop', 'boss', 'secret'],
@@ -36,8 +36,8 @@ export const masskrugstemmen: ItemDefinition = {
       state.charge <= 0
         ? []
         : [
-            { stat: 'stammwuerze', op: 'add', value: state.charge * DAMAGE_PER_CHARGE },
-            { stat: 'schluckfrequenz', op: 'add', value: state.charge * RATE_PENALTY_PER_CHARGE },
+            { stat: 'damage', op: 'add', value: state.charge * DAMAGE_PER_CHARGE },
+            { stat: 'fireRate', op: 'add', value: state.charge * RATE_PENALTY_PER_CHARGE },
           ],
     onShoot: (ctx) => {
       const state = ctx.state;

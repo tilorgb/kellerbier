@@ -23,7 +23,7 @@ function context(overrides: Partial<Parameters<typeof selectItemOffer>[2]> = {})
   return {
     promilleUnlocked: true,
     floor: 1,
-    dusel: 0,
+    luck: 0,
     taken: new Set<string>(),
     ...overrides,
   };
@@ -65,23 +65,19 @@ describe('itemEligibleForOffer', () => {
 });
 
 describe('itemOfferWeight', () => {
-  it('is unaffected by floor or Dusel at quality 0', () => {
+  it('is unaffected by floor or Luck at quality 0', () => {
     const item = new ItemRegistry([baseItem('a', { quality: 0 })]).at(0);
-    const low = itemOfferWeight(item, context({ floor: 1, dusel: 0 }), DEFAULT_ITEM_POOL_TUNING);
-    const high = itemOfferWeight(item, context({ floor: 20, dusel: 50 }), DEFAULT_ITEM_POOL_TUNING);
+    const low = itemOfferWeight(item, context({ floor: 1, luck: 0 }), DEFAULT_ITEM_POOL_TUNING);
+    const high = itemOfferWeight(item, context({ floor: 20, luck: 50 }), DEFAULT_ITEM_POOL_TUNING);
     expect(high).toBe(low);
     expect(low).toBe(DEFAULT_ITEM_POOL_TUNING.qualityWeight0);
   });
 
-  it('grows with floor depth and with Dusel at quality > 0', () => {
+  it('grows with floor depth and with Luck at quality > 0', () => {
     const item = new ItemRegistry([baseItem('a', { quality: 3 })]).at(0);
-    const shallow = itemOfferWeight(
-      item,
-      context({ floor: 1, dusel: 0 }),
-      DEFAULT_ITEM_POOL_TUNING,
-    );
-    const deep = itemOfferWeight(item, context({ floor: 7, dusel: 0 }), DEFAULT_ITEM_POOL_TUNING);
-    const lucky = itemOfferWeight(item, context({ floor: 1, dusel: 10 }), DEFAULT_ITEM_POOL_TUNING);
+    const shallow = itemOfferWeight(item, context({ floor: 1, luck: 0 }), DEFAULT_ITEM_POOL_TUNING);
+    const deep = itemOfferWeight(item, context({ floor: 7, luck: 0 }), DEFAULT_ITEM_POOL_TUNING);
+    const lucky = itemOfferWeight(item, context({ floor: 1, luck: 10 }), DEFAULT_ITEM_POOL_TUNING);
     expect(deep).toBeGreaterThan(shallow);
     expect(lucky).toBeGreaterThan(shallow);
   });

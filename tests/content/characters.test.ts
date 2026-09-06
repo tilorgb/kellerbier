@@ -63,7 +63,7 @@ describe('character roster (#47)', () => {
       expect(character.traits.maxHealth, character.id).toBeGreaterThanOrEqual(3);
       expect(character.traits.maxHealth, character.id).toBeLessThanOrEqual(10);
       const speed = character.traits.stats.find(
-        (modifier) => modifier.stat === 'gschwindigkeit' && modifier.op === 'multiply',
+        (modifier) => modifier.stat === 'moveSpeed' && modifier.op === 'multiply',
       );
       expect(speed?.value ?? 1, character.id).toBeGreaterThanOrEqual(0.6);
     }

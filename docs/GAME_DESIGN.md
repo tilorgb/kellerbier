@@ -286,16 +286,20 @@ missing. It has to be complete on its own terms, which is mostly a drop-table qu
 
 ## 6. Stats
 
-Six standard stats plus Promille. Bavarian names throughout, with plain-language tooltips.
+Six standard stats plus Promille. Unlike items, floors and bosses, stats are named in plain
+English, not Bavarian — a Bavarian stat name is exactly the "system message a player has to parse
+on autopilot" case `docs/CONTENT_BIBLE.md`'s functional-text rule already carves out, so damage,
+fire rate, range, shot speed, move speed and luck stay in English everywhere: the debug overlay,
+item descriptions, tuning fields.
 
-| Stat | Name | Notes |
-|---|---|---|
-| Damage | **Stammwürze** | Original gravity. Multiplicative and additive modifiers, resolved in a defined order. |
-| Fire rate | **Schluckfrequenz** | Stored as a delay in ticks, not a rate, to avoid the classic divide-by-zero blowups. |
-| Range | **Reichweite** | Projectile lifetime. |
-| Shot speed | **Wurfkraft** | Projectile launch velocity. |
-| Move speed | **Gschwindigkeit** | |
-| Luck | **Dusel** | Gates random proc chances. |
+| Stat | Notes |
+|---|---|
+| Damage | Multiplicative and additive modifiers, resolved in a defined order. |
+| Fire Rate | Stored as a delay in ticks, not a rate, to avoid the classic divide-by-zero blowups. |
+| Range | Projectile lifetime. |
+| Shot Speed | Projectile launch velocity. |
+| Move Speed | |
+| Luck | Gates random proc chances. |
 
 The **stat pipeline** is a pure function: `base → flat adds → multipliers → caps → final`.
 It is deterministic, unit-tested, and every modifier records its source so the debug overlay

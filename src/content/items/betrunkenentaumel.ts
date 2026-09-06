@@ -9,7 +9,7 @@ import type { ItemDefinition } from '../../sim/item/definition.js';
 export const betrunkenentaumel: ItemDefinition = {
   id: 'betrunkenentaumel',
   name: 'Betrunkenentaumel',
-  description: 'Dusel +4, Wurfkraft -15%',
+  description: 'Luck +4, Shot Speed -15%',
   flavourText: "Can't hit the broad side of a Bierzelt. Occasionally that turns out to help.",
   sprite: 'betrunkenentaumel',
   pools: ['shop', 'secret'],
@@ -17,8 +17,8 @@ export const betrunkenentaumel: ItemDefinition = {
   promilleRequirement: 'rausch',
   hooks: {
     modifyStats: () => [
-      { stat: 'dusel', op: 'add', value: 4 },
-      { stat: 'wurfkraft', op: 'multiply', value: 0.85 },
+      { stat: 'luck', op: 'add', value: 4 },
+      { stat: 'shotSpeed', op: 'multiply', value: 0.85 },
     ],
   },
 };

@@ -1,6 +1,6 @@
 import type { ItemDefinition } from '../../sim/item/definition.js';
 
-/** Kills needed to crank one burst, how many shots the burst fires, and their damage scale off Stammwürze. */
+/** Kills needed to crank one burst, how many shots the burst fires, and their damage scale off Damage. */
 const KILLS_PER_BURST = 4;
 const BURST_SHOT_COUNT = 8;
 const BURST_DAMAGE_SCALE = 0.6;
@@ -37,7 +37,7 @@ export const kirchweihRatschn: ItemDefinition = {
       const playerIndex = sim.playerIndex;
       const playerX = sim.positionX(playerIndex);
       const playerY = sim.positionY(playerIndex);
-      const damage = Math.max(1, Math.round(sim.stats.value('stammwuerze') * BURST_DAMAGE_SCALE));
+      const damage = Math.max(1, Math.round(sim.stats.value('damage') * BURST_DAMAGE_SCALE));
       for (let i = 0; i < BURST_SHOT_COUNT; i++) {
         const angle = (i / BURST_SHOT_COUNT) * Math.PI * 2;
         sim.spawnItemProjectile(playerX, playerY, Math.cos(angle), Math.sin(angle), { damage });

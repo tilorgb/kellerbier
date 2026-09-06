@@ -19,7 +19,7 @@ const DAMAGE_MULTIPLIER = 1.5;
 export const drudmaske: ItemDefinition = {
   id: 'drudmaske',
   name: 'Drudmaske',
-  description: 'Stammwürze +50% while low on health',
+  description: 'Damage +50% while low on health',
   flavourText: "It only shows up when you're already having a bad night.",
   sprite: 'drudmaske',
   pools: ['boss', 'secret', 'curse'],
@@ -27,7 +27,7 @@ export const drudmaske: ItemDefinition = {
   promilleRequirement: 'any',
   hooks: {
     modifyStats: (state) =>
-      state.charge > 0 ? [{ stat: 'stammwuerze', op: 'multiply', value: DAMAGE_MULTIPLIER }] : [],
+      state.charge > 0 ? [{ stat: 'damage', op: 'multiply', value: DAMAGE_MULTIPLIER }] : [],
     onTick: (ctx) => {
       const state = ctx.state;
       const low = ctx.sim.playerHealth <= LOW_HEALTH_THRESHOLD ? 1 : 0;

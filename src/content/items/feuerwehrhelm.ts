@@ -7,7 +7,7 @@ import type { ItemDefinition } from '../../sim/item/definition.js';
 export const feuerwehrhelm: ItemDefinition = {
   id: 'feuerwehrhelm',
   name: 'Feuerwehrhelm',
-  description: 'Gschwindigkeit +10%, Wurfkraft +10%',
+  description: 'Move Speed +10%, Shot Speed +10%',
   flavourText: 'Rated to withstand heat, impact, and at least one Böllerschmeißer.',
   sprite: 'feuerwehrhelm',
   pools: ['treasure', 'shop'],
@@ -15,8 +15,8 @@ export const feuerwehrhelm: ItemDefinition = {
   promilleRequirement: 'any',
   hooks: {
     modifyStats: () => [
-      { stat: 'gschwindigkeit', op: 'multiply', value: 1.1 },
-      { stat: 'wurfkraft', op: 'multiply', value: 1.1 },
+      { stat: 'moveSpeed', op: 'multiply', value: 1.1 },
+      { stat: 'shotSpeed', op: 'multiply', value: 1.1 },
     ],
   },
 };

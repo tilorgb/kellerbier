@@ -1,6 +1,6 @@
 import type { ItemDefinition } from '../../sim/item/definition.js';
 
-/** Ticks between shots (60/s), and the shot's damage relative to Stammwürze. */
+/** Ticks between shots (60/s), and the shot's damage relative to Damage. */
 const SHOT_INTERVAL_TICKS = 90;
 const DAMAGE_SCALE = 0.6;
 
@@ -43,7 +43,7 @@ export const wildschuetz: ItemDefinition = {
       const dy = sim.positionY(playerIndex) - sim.previousY(playerIndex);
       const directionX = dx === 0 && dy === 0 ? 0 : dx;
       const directionY = dx === 0 && dy === 0 ? 1 : dy;
-      const damage = Math.max(1, Math.round(sim.stats.value('stammwuerze') * DAMAGE_SCALE));
+      const damage = Math.max(1, Math.round(sim.stats.value('damage') * DAMAGE_SCALE));
       const slot = sim.spawnItemProjectile(
         sim.positionX(playerIndex),
         sim.positionY(playerIndex),

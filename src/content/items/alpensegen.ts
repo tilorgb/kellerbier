@@ -7,7 +7,7 @@ const BIERMARKEN_AMOUNT = 1;
 /**
  * Alpensegen — an alpine blessing. Small mercies, mostly financial. The
  * roster's third `angel`-pool item, after `schutzengerl.ts` (a heal) and
- * `gluecksklee.ts` (flat Dusel) — this one pays out in Biermarken instead,
+ * `gluecksklee.ts` (flat Luck) — this one pays out in Biermarken instead,
  * on the same cooldown-gated-by-`state.timer` shape `schutzengerl.ts`
  * already established for a per-kill trigger.
  */

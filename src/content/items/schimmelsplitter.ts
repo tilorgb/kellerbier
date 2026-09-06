@@ -1,6 +1,6 @@
 import type { ItemDefinition } from '../../sim/item/definition.js';
 
-/** The burst's radius, and its damage relative to Stammwürze. */
+/** The burst's radius, and its damage relative to Damage. */
 const BURST_RADIUS = 36;
 const DAMAGE_SCALE = 0.4;
 
@@ -25,7 +25,7 @@ export const schimmelsplitter: ItemDefinition = {
   hooks: {
     onKill: (ctx) => {
       const sim = ctx.sim;
-      const damage = Math.max(1, Math.round(sim.stats.value('stammwuerze') * DAMAGE_SCALE));
+      const damage = Math.max(1, Math.round(sim.stats.value('damage') * DAMAGE_SCALE));
       sim.applySplashDamage(
         sim.positionX(ctx.target),
         sim.positionY(ctx.target),

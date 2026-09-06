@@ -6,13 +6,13 @@ import type { ItemDefinition } from '../../sim/item/definition.js';
  * for why this ships as a deterministic cycle keyed off the floor instead.
  */
 const SLOGANS = [
-  { text: 'Für mein Schatzi', modifier: { stat: 'dusel', op: 'add', value: 3 } },
+  { text: 'Für mein Schatzi', modifier: { stat: 'luck', op: 'add', value: 3 } },
   {
     text: 'Ein Herz und eine Seele',
-    modifier: { stat: 'gschwindigkeit', op: 'multiply', value: 1.2 },
+    modifier: { stat: 'moveSpeed', op: 'multiply', value: 1.2 },
   },
-  { text: 'Immer wieder gern', modifier: { stat: 'schluckfrequenz', op: 'multiply', value: 0.85 } },
-  { text: 'Nur für dich allein', modifier: { stat: 'stammwuerze', op: 'multiply', value: 1.2 } },
+  { text: 'Immer wieder gern', modifier: { stat: 'fireRate', op: 'multiply', value: 0.85 } },
+  { text: 'Nur für dich allein', modifier: { stat: 'damage', op: 'multiply', value: 1.2 } },
 ] as const;
 
 /**

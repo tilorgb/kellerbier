@@ -1,8 +1,8 @@
 import type { ItemDefinition } from '../../sim/item/definition.js';
 
 /** Range and luck bonuses, and the speed penalty that pays for them. */
-const REICHWEITE_BONUS = 0.15;
-const DUSEL_BONUS = 3;
+const RANGE_BONUS = 0.15;
+const LUCK_BONUS = 3;
 const SPEED_PENALTY = 0.1;
 
 /**
@@ -17,7 +17,7 @@ const SPEED_PENALTY = 0.1;
 export const gamsohr: ItemDefinition = {
   id: 'gamsohr',
   name: 'Gamsohr',
-  description: 'Reichweite +15%, Dusel +3. Gschwindigkeit -10%',
+  description: 'Range +15%, Luck +3. Move Speed -10%',
   flavourText: 'One ear. The other one is a story nobody tells the same way twice.',
   sprite: 'gamsohr',
   pools: ['treasure', 'shop'],
@@ -25,9 +25,9 @@ export const gamsohr: ItemDefinition = {
   promilleRequirement: 'any',
   hooks: {
     modifyStats: () => [
-      { stat: 'reichweite', op: 'multiply', value: 1 + REICHWEITE_BONUS },
-      { stat: 'dusel', op: 'add', value: DUSEL_BONUS },
-      { stat: 'gschwindigkeit', op: 'multiply', value: 1 - SPEED_PENALTY },
+      { stat: 'range', op: 'multiply', value: 1 + RANGE_BONUS },
+      { stat: 'luck', op: 'add', value: LUCK_BONUS },
+      { stat: 'moveSpeed', op: 'multiply', value: 1 - SPEED_PENALTY },
     ],
   },
 };

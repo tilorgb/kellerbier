@@ -1,7 +1,7 @@
 import type { ItemDefinition } from '../../sim/item/definition.js';
 
 /** Range bonus per floor of altitude gained. */
-const REICHWEITE_PER_FLOOR = 0.04;
+const RANGE_PER_FLOOR = 0.04;
 
 /**
  * Seilbahn — the cable car up. The higher it has carried you, the further
@@ -16,7 +16,7 @@ const REICHWEITE_PER_FLOOR = 0.04;
 export const seilbahn: ItemDefinition = {
   id: 'seilbahn',
   name: 'Seilbahn',
-  description: 'Reichweite grows with every floor you reach',
+  description: 'Range grows with every floor you reach',
   flavourText: 'The view from the top is worth it. The queue at the bottom is not.',
   sprite: 'seilbahn',
   pools: ['treasure', 'shop', 'boss'],
@@ -26,7 +26,7 @@ export const seilbahn: ItemDefinition = {
     modifyStats: (state) =>
       state.charge <= 0
         ? []
-        : [{ stat: 'reichweite', op: 'multiply', value: 1 + state.charge * REICHWEITE_PER_FLOOR }],
+        : [{ stat: 'range', op: 'multiply', value: 1 + state.charge * RANGE_PER_FLOOR }],
     onPickup: (ctx) => {
       ctx.state.charge = Math.max(0, ctx.sim.currentFloor);
     },

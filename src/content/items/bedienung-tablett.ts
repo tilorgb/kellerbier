@@ -1,6 +1,6 @@
 import type { ItemDefinition } from '../../sim/item/definition.js';
 
-/** Base interval between throws, the fastest it can shrink to, ticks shaved off per floor, and damage relative to Stammwürze. */
+/** Base interval between throws, the fastest it can shrink to, ticks shaved off per floor, and damage relative to Damage. */
 const BASE_INTERVAL_TICKS = 100;
 const MIN_INTERVAL_TICKS = 40;
 const INTERVAL_STEP_PER_FLOOR = 8;
@@ -52,7 +52,7 @@ export const bedienungTablett: ItemDefinition = {
       );
       state.timer = interval;
       const playerIndex = sim.playerIndex;
-      const damage = Math.max(1, Math.round(sim.stats.value('stammwuerze') * DAMAGE_SCALE));
+      const damage = Math.max(1, Math.round(sim.stats.value('damage') * DAMAGE_SCALE));
       sim.spawnItemProjectile(sim.positionX(playerIndex), sim.positionY(playerIndex), 0, -1, {
         damage,
       });

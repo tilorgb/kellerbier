@@ -1,6 +1,6 @@
 import type { ItemDefinition } from '../../sim/item/definition.js';
 
-/** Cooldown between arias (60/s), the wind-up before the glass shatters, the nova's radius, and its damage relative to Stammwürze. */
+/** Cooldown between arias (60/s), the wind-up before the glass shatters, the nova's radius, and its damage relative to Damage. */
 const COOLDOWN_TICKS = 480;
 const WINDUP_TICKS = 45;
 const NOVA_RADIUS = 72;
@@ -40,7 +40,7 @@ export const opernarie: ItemDefinition = {
         state.timer -= 1;
         if (state.timer === 0) {
           const playerIndex = sim.playerIndex;
-          const damage = Math.max(1, Math.round(sim.stats.value('stammwuerze') * DAMAGE_SCALE));
+          const damage = Math.max(1, Math.round(sim.stats.value('damage') * DAMAGE_SCALE));
           sim.applySplashDamage(
             sim.positionX(playerIndex),
             sim.positionY(playerIndex),

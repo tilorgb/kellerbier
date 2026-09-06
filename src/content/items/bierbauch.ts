@@ -2,13 +2,13 @@ import type { ItemDefinition } from '../../sim/item/definition.js';
 
 /** Trinkfest levels one copy is worth, and the speed it costs to carry it. */
 const TRINKFEST_GAIN = 1;
-const GSCHWINDIGKEIT_MULTIPLIER = 0.92;
+const MOVE_SPEED_MULTIPLIER = 0.92;
 
 /**
  * Bierbauch — a beer belly. Raises Trinkfest (#92) while held: the player
  * can drink further past the old Vollrausch ceiling before Umgfalln, and
  * unlocks whichever post-Vollrausch stage that buys, at the cost of a small
- * permanent Gschwindigkeit penalty for carrying it.
+ * permanent Move Speed penalty for carrying it.
  *
  * `onPickup`/`onRemove` are a genuine pair — `state.count === 1` guards the
  * raise so a second copy (this item does not stack in effect) does not
@@ -33,19 +33,17 @@ const GSCHWINDIGKEIT_MULTIPLIER = 0.92;
 export const bierbauch: ItemDefinition = {
   id: 'bierbauch',
   name: 'Bierbauch',
-  description: 'Trinkfest +1 while held. Gschwindigkeit -8%',
+  description: 'Trinkfest +1 while held. Move Speed -8%',
   flavourText: 'Not fat. Storage.',
   sprite: 'bierbauch',
   pools: ['treasure', 'shop', 'boss'],
   quality: 2,
   promilleRequirement: 'any',
-  // No tier gate — but it is Promille machinery all the same (sells Gschwindigkeit for Trinkfest),
+  // No tier gate — but it is Promille machinery all the same (sells Move Speed for Trinkfest),
   // so a sober run never offers it (#85).
   needsPromille: true,
   hooks: {
-    modifyStats: () => [
-      { stat: 'gschwindigkeit', op: 'multiply', value: GSCHWINDIGKEIT_MULTIPLIER },
-    ],
+    modifyStats: () => [{ stat: 'moveSpeed', op: 'multiply', value: MOVE_SPEED_MULTIPLIER }],
     onPickup: (ctx) => {
       if (ctx.state.count === 1) {
         ctx.sim.raiseTrinkfest(TRINKFEST_GAIN);
@@ -58,8 +56,8 @@ export const bierbauch: ItemDefinition = {
   /**
    * Der Losbrunnen's rarest roll (#218): the Trinkfest trade (`onPickup`/
    * `onRemove` above) is untouched — a roll only ever reaches `modifyStats`'s
-   * own contribution — but the Gschwindigkeit cost of carrying it shrinks to
+   * own contribution — but the Move Speed cost of carrying it shrinks to
    * almost nothing.
    */
-  legendaryRoll: [{ stat: 'gschwindigkeit', op: 'multiply', value: 0.99 }],
+  legendaryRoll: [{ stat: 'moveSpeed', op: 'multiply', value: 0.99 }],
 };

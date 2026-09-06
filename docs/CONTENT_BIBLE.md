@@ -285,7 +285,7 @@ Roughly 30 to start; target **120+ by v1**. Every one changes how you play.
 ### Shot-transforming
 | Item | Effect |
 |---|---|
-| **Reinheitsgebot 1516** | Strips every `rosinen` item you hold, permanently locks the tag out of your pools, and gives +50% Stammwürze. The purist's pact, and the one the run is named after. |
+| **Reinheitsgebot 1516** | Strips every `rosinen` item you hold, permanently locks the tag out of your pools, and gives +50% Damage. The purist's pact, and the one the run is named after. |
 | **Radler** | Half damage, double fire rate. |
 | **Spezi** | Split shot: cola and orange, slightly divergent. |
 | **Russ'n** | Weißbier and lemonade. Shots gain `homing`. |
@@ -310,7 +310,7 @@ Roughly 30 to start; target **120+ by v1**. Every one changes how you play.
 |---|---|
 | **Lederhosn** | Absorbs one hit per room. Never washed, never fails. |
 | **Haferlschuh** | +speed, +traction on ice and slick floors. |
-| **Gamsbart** | +Dusel. The bigger the beard, the luckier the man. |
+| **Gamsbart** | +Luck. The bigger the beard, the luckier the man. |
 | **Kraftbier** | Big damage up, big speed down. |
 | **Neuschwanstein-Bauplan** | Large permanent stat buff; you lose a growing sum of Biermarken on every floor transition. Ludwig went bankrupt too. |
 | **Weiß-blaue Rauten** | Every eighth shot fires in the lozenge pattern of the Bavarian flag. |
@@ -331,8 +331,8 @@ cost, no upgrade at all, because the read a player's very first `rosinen` item s
 
 | Item | Tag | Effect |
 |---|---|---|
-| **Apfelkuchen** | — | Oma's. Heals generously on pickup, small permanent Stammwürze bump. Uncomplicated and quite boring. |
-| **Apfelkuchen (mit Rosinen)** | `rosinen` | The same cake, same heal, same Stammwürze bump — plus a permanent Reichweite cost. Not the better pickup: the *shittier* one you take anyway when nothing better is on the pedestal. |
+| **Apfelkuchen** | — | Oma's. Heals generously on pickup, small permanent Damage bump. Uncomplicated and quite boring. |
+| **Apfelkuchen (mit Rosinen)** | `rosinen` | The same cake, same heal, same Damage bump — plus a permanent Range cost. Not the better pickup: the *shittier* one you take anyway when nothing better is on the pedestal. |
 
 Both sprites are legible as *different cakes at a glance* — deliberately unlike **Weißwurst**
 (`GAME_DESIGN.md` §7), whose whole joke is an unchanged sprite. Reading the label is the thing
@@ -345,8 +345,8 @@ a third way and is not proud of it. Each closes the others off, so a run picks o
 
 | Item | Effect |
 |---|---|
-| **Reinheitsgebot 1516** | *(above)* Strips and locks out `rosinen`. +50% Stammwürze. Says nothing about lemonade, which is the joke it has always been making. |
-| **Sudordnung 1493** | The Landshut ordinance, twenty-three years earlier and stricter, which nobody remembers. Strips and locks out **both** `rosinen` and `impure` — Radler, Spezi, Russ'n and Colaweizen go too. +65% Stammwürze. The deep-cut purist's pact: 1516 was already the compromise. |
+| **Reinheitsgebot 1516** | *(above)* Strips and locks out `rosinen`. +50% Damage. Says nothing about lemonade, which is the joke it has always been making. |
+| **Sudordnung 1493** | The Landshut ordinance, twenty-three years earlier and stricter, which nobody remembers. Strips and locks out **both** `rosinen` and `impure` — Radler, Spezi, Russ'n and Colaweizen go too. +65% Damage. The deep-cut purist's pact: 1516 was already the compromise. |
 | **Der Rosinenklauber** | Every `rosinen` item you hold loses its drawback and keeps its upgrade. In exchange both pacts above are removed from your pools for the rest of the run. He is not defending the raisins. He is just eating them. |
 
 ### Promille-gated

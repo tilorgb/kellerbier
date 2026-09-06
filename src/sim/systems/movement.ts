@@ -67,15 +67,15 @@ export function stepPlayerMovement(sim: GameSim, input: Readonly<InputFrame>): v
   let velocityY = velocity[pairBase + 1] ?? 0;
 
   // Read through the stat pipeline rather than `tuning.maxSpeed` directly, so
-  // a Gschwindigkeit modifier — Kater's penalty, or an item's like Gamsohr's
+  // a Move Speed modifier — Kater's penalty, or an item's like Gamsohr's
   // — actually changes how fast the player moves instead of only showing up
-  // in the stat inspector. `baseStats()` seeds Gschwindigkeit from this same
+  // in the stat inspector. `baseStats()` seeds Move Speed from this same
   // `tuning.maxSpeed`, so with no active modifier the value is identical to
   // before this read through `sim.stats` existed. Acceleration and
   // deceleration still time off the untouched `tuning.maxSpeed` below (via
   // `accelerationOf`/`decelerationOf`) — a temporary top-speed penalty should
   // not also warp how many ticks it takes to reach it.
-  const maxSpeed = sim.stats.value(StatId.Gschwindigkeit);
+  const maxSpeed = sim.stats.value(StatId.MoveSpeed);
   const driftScale = sim.promilleDriftScale;
   // König Ludwig (#47): furniture and puddles are both things on the floor,
   // and he is not on the floor. Walls still stop him — see

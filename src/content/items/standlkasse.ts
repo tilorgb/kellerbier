@@ -1,13 +1,13 @@
 import type { ItemDefinition } from '../../sim/item/definition.js';
 
-/** Biermarken spent per floor, and the permanent Stammwürze each successful payment buys. */
+/** Biermarken spent per floor, and the permanent Damage each successful payment buys. */
 const COST_PER_FLOOR = 3;
 const DAMAGE_PER_PAYMENT = 0.05;
 
 /**
  * Standlkasse — a market stall's cash box. Everything has a price today;
  * yesterday's price does not come back. Each floor, spends Biermarken for a
- * small, permanent Stammwürze gain — `spendBiermarken` fails silently if the
+ * small, permanent Damage gain — `spendBiermarken` fails silently if the
  * run cannot afford it, `teufelsbraten.ts`'s and `neuschwanstein-bauplan.ts`'s
  * own precedent for an upkeep item that never bricks a poor run.
  *
@@ -20,7 +20,7 @@ const DAMAGE_PER_PAYMENT = 0.05;
 export const standlkasse: ItemDefinition = {
   id: 'standlkasse',
   name: 'Standlkasse',
-  description: 'Each floor, spend 3 Biermarken for permanent Stammwürze if you can afford it',
+  description: 'Each floor, spend 3 Biermarken for permanent Damage if you can afford it',
   flavourText: "Everything has a price today. Yesterday's price does not come back.",
   sprite: 'standlkasse',
   pools: ['shop', 'devil', 'secret'],
@@ -30,7 +30,7 @@ export const standlkasse: ItemDefinition = {
     modifyStats: (state) =>
       state.charge <= 0
         ? []
-        : [{ stat: 'stammwuerze', op: 'add', value: state.charge * DAMAGE_PER_PAYMENT }],
+        : [{ stat: 'damage', op: 'add', value: state.charge * DAMAGE_PER_PAYMENT }],
     onFloorStart: (ctx) => {
       if (!ctx.sim.spendBiermarken(COST_PER_FLOOR)) {
         return;

@@ -267,6 +267,6 @@ describe('#29 — held-together smoke test (stand-in for #30)', () => {
       }
     }).not.toThrow();
 
-    expect(Number.isFinite(sim.stats.value(StatId.Stammwuerze))).toBe(true);
+    expect(Number.isFinite(sim.stats.value(StatId.Damage))).toBe(true);
   });
 });

@@ -18,14 +18,14 @@ const DAMAGE_PENALTY = 0.1;
 export const perchtenrute: ItemDefinition = {
   id: 'perchtenrute',
   name: 'Perchtenrute',
-  description: 'Kills scatter nearby enemies. Stammwürze -10%',
+  description: 'Kills scatter nearby enemies. Damage -10%',
   flavourText: 'It does not want your blood. It wants you to leave.',
   sprite: 'perchtenrute',
   pools: ['boss', 'secret', 'curse'],
   quality: 2,
   promilleRequirement: 'any',
   hooks: {
-    modifyStats: () => [{ stat: 'stammwuerze', op: 'multiply', value: 1 - DAMAGE_PENALTY }],
+    modifyStats: () => [{ stat: 'damage', op: 'multiply', value: 1 - DAMAGE_PENALTY }],
     onKill: (ctx) => {
       const sim = ctx.sim;
       const playerIndex = sim.playerIndex;

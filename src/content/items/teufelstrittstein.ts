@@ -21,17 +21,17 @@ const PROMILLE_FLOOR = 1.0;
 export const teufelstrittstein: ItemDefinition = {
   id: 'teufelstrittstein',
   name: 'Teufelstrittstein',
-  description: 'Stammwürze +30%. Promille can never drop below 1.0',
+  description: 'Damage +30%. Promille can never drop below 1.0',
   flavourText: 'The stone is warm to the touch. It has been warm for six hundred years.',
   sprite: 'teufelstrittstein',
   pools: ['shop', 'devil', 'secret'],
   quality: 3,
   promilleRequirement: 'any',
-  // No tier gate — but it is Promille machinery all the same (its Stammwürze is paid for with a Promille floor),
+  // No tier gate — but it is Promille machinery all the same (its Damage is paid for with a Promille floor),
   // so a sober run never offers it (#85).
   needsPromille: true,
   hooks: {
-    modifyStats: () => [{ stat: 'stammwuerze', op: 'multiply', value: DAMAGE_MULTIPLIER }],
+    modifyStats: () => [{ stat: 'damage', op: 'multiply', value: DAMAGE_MULTIPLIER }],
     onTick: (ctx) => {
       const sim = ctx.sim;
       if (sim.promille >= PROMILLE_FLOOR) {

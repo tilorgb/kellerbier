@@ -21,10 +21,10 @@ export const bierkrug: ItemDefinition = {
   hooks: {
     // Scales with `state.count` rather than a flat +1, so a second Bierkrug
     // is worth taking rather than dead weight in the pool once one is held.
-    // 'stammwuerze' — Stammwürze, damage — is the `StatId` literal rather
+    // 'damage' — Damage, damage — is the `StatId` literal rather
     // than an import of it: content may import types, never values, and
     // `StatId` (`sim/stats/definition.js`) is a value the pipeline reads its
     // string ids off of.
-    modifyStats: (state) => [{ stat: 'stammwuerze', op: 'add', value: state.count }],
+    modifyStats: (state) => [{ stat: 'damage', op: 'add', value: state.count }],
   },
 };

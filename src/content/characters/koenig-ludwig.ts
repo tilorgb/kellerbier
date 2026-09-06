@@ -50,7 +50,7 @@ export const koenigLudwig: CharacterDefinition = {
     startingKeys: 0,
     items: ['ludwigs-schwan'],
     shotTags: [],
-    stats: [{ stat: 'gschwindigkeit', op: 'multiply', value: 1.15 }],
+    stats: [{ stat: 'moveSpeed', op: 'multiply', value: 1.15 }],
     rules: ['flies', 'purse'],
   },
 };

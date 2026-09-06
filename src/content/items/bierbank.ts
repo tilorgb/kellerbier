@@ -10,7 +10,7 @@ import type { ItemDefinition } from '../../sim/item/definition.js';
 export const bierbank: ItemDefinition = {
   id: 'bierbank',
   name: 'Bierbank',
-  description: 'Dusel +1, Reichweite +5%',
+  description: 'Luck +1, Range +5%',
   flavourText: 'Reserved. Nobody has ever admitted to reserving it.',
   sprite: 'bierbank',
   pools: ['treasure', 'shop'],
@@ -18,8 +18,8 @@ export const bierbank: ItemDefinition = {
   promilleRequirement: 'any',
   hooks: {
     modifyStats: () => [
-      { stat: 'dusel', op: 'add', value: 1 },
-      { stat: 'reichweite', op: 'multiply', value: 1.05 },
+      { stat: 'luck', op: 'add', value: 1 },
+      { stat: 'range', op: 'multiply', value: 1.05 },
     ],
   },
 };

@@ -12,14 +12,14 @@ const BIERMARKEN_PER_KILL = 1;
 export const alpenkroneKronkorken: ItemDefinition = {
   id: 'alpenkrone-kronkorken',
   name: 'Alpenkrone Kronkorken',
-  description: 'Dusel +1 per stack. Kills pay out a Biermarken',
+  description: 'Luck +1 per stack. Kills pay out a Biermarken',
   flavourText: 'Printed underside: "Leider nichts gewonnen." Every single time, until this one.',
   sprite: 'alpenkrone-kronkorken',
   pools: ['treasure', 'shop'],
   quality: 0,
   promilleRequirement: 'any',
   hooks: {
-    modifyStats: (state) => [{ stat: 'dusel', op: 'add', value: state.count }],
+    modifyStats: (state) => [{ stat: 'luck', op: 'add', value: state.count }],
     onKill: (ctx) => {
       ctx.sim.addBiermarken(BIERMARKEN_PER_KILL);
     },

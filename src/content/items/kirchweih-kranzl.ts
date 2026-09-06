@@ -11,7 +11,7 @@ import type { ItemDefinition } from '../../sim/item/definition.js';
 export const kirchweihKranzl: ItemDefinition = {
   id: 'kirchweih-kranzl',
   name: 'Kirchweih-Kranzl',
-  description: 'While sober: Gschwindigkeit +15%, Dusel +2',
+  description: 'While sober: Move Speed +15%, Luck +2',
   flavourText: 'Worn once a year. Photographed every year.',
   sprite: 'kirchweih-kranzl',
   pools: ['treasure', 'shop'],
@@ -19,8 +19,8 @@ export const kirchweihKranzl: ItemDefinition = {
   promilleRequirement: 'sober',
   hooks: {
     modifyStats: () => [
-      { stat: 'gschwindigkeit', op: 'multiply', value: 1.15 },
-      { stat: 'dusel', op: 'add', value: 2 },
+      { stat: 'moveSpeed', op: 'multiply', value: 1.15 },
+      { stat: 'luck', op: 'add', value: 2 },
     ],
   },
 };

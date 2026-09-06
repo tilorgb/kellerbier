@@ -30,7 +30,7 @@ export const zwoaDreiGsuffa: ItemDefinition = {
     modifyStats: (state) =>
       state.charge <= 0
         ? []
-        : [{ stat: 'stammwuerze', op: 'multiply', value: 1 + state.charge * DAMAGE_PER_STACK }],
+        : [{ stat: 'damage', op: 'multiply', value: 1 + state.charge * DAMAGE_PER_STACK }],
     onKill: (ctx) => {
       const state = ctx.state;
       const gained = Math.min(MAX_STACKS, state.charge + 1);

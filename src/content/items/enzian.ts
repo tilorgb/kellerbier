@@ -25,7 +25,7 @@ const BURST_FIRE_RATE_MULTIPLIER = 0.15;
 export const enzian: ItemDefinition = {
   id: 'enzian',
   name: 'Enzian',
-  description: 'Active: ten seconds of huge fire rate, then Promille +1.0',
+  description: 'Active: ten seconds of huge Fire Rate, then Promille +1.0',
   flavourText: 'Distilled from a flower most people are legally not allowed to pick.',
   sprite: 'enzian',
   pools: ['shop', 'boss', 'secret'],
@@ -38,7 +38,7 @@ export const enzian: ItemDefinition = {
   hooks: {
     modifyStats: (state) =>
       state.charge < 0
-        ? [{ stat: 'schluckfrequenz', op: 'multiply', value: BURST_FIRE_RATE_MULTIPLIER }]
+        ? [{ stat: 'fireRate', op: 'multiply', value: BURST_FIRE_RATE_MULTIPLIER }]
         : [],
     onActivate: (ctx) => {
       ctx.state.charge = -BURST_TICKS;

@@ -23,7 +23,7 @@ export const colaweizen: ItemDefinition = {
   promilleRequirement: 'any',
   tags: ['impure'],
   hooks: {
-    modifyStats: () => [{ stat: 'stammwuerze', op: 'multiply', value: 0.8 }],
+    modifyStats: () => [{ stat: 'damage', op: 'multiply', value: 0.8 }],
     onProjectileSpawn: (ctx) => {
       ctx.sim.addProjectileTag(ctx.projectile, 'sticky');
     },

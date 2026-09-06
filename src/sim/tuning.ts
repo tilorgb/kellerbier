@@ -473,10 +473,10 @@ export interface PromilleTuning {
    * player sobering up faster than usual. Cleared early by eating.
    */
   katerDurationTicks: number;
-  /** Stammwürze multiplier while Kater is active — a flat penalty, not a ramp. */
-  katerStammwuerzeMultiplier: number;
-  /** Gschwindigkeit multiplier while Kater is active. */
-  katerGschwindigkeitMultiplier: number;
+  /** Damage multiplier while Kater is active — a flat penalty, not a ramp. */
+  katerDamageMultiplier: number;
+  /** Move Speed multiplier while Kater is active. */
+  katerMoveSpeedMultiplier: number;
 }
 
 /**
@@ -604,8 +604,8 @@ export interface ItemPoolTuning {
    * rarer than it already reads.
    */
   floorQualityBias: number;
-  /** Same shape as `floorQualityBias`, driven by the player's resolved Dusel stat instead of floor depth. */
-  duselQualityBias: number;
+  /** Same shape as `floorQualityBias`, driven by the player's resolved Luck stat instead of floor depth. */
+  luckQualityBias: number;
   /** Radius (px) inside which a pedestal shows its name plate and accepts the `use` button. */
   interactRadius: number;
   /**
@@ -637,7 +637,7 @@ export interface ItemPoolTuning {
 export interface CharacterTuning {
   /** Ticks between the Biermarken Ludwig's crown costs him. */
   purseDrainTicks: number;
-  /** Ludwig's Stammwürze multiplier while the purse still has something in it. */
+  /** Ludwig's Damage multiplier while the purse still has something in it. */
   pursePowerMultiplier: number;
   /** Lowest factor a Wolpertinger reroll can hand a stat. */
   chaosMinFactor: number;
@@ -757,8 +757,8 @@ export interface BlutwurzTuning {
  * Der Losbrunnen (#218): feed a held item's numeric traits a reroll, for an
  * increasing Biermarken price, with a chance the roll makes the item worse
  * and a chance the machine itself breaks. Its own group rather than folded
- * into `ItemPoolTuning` — it shares that group's Dusel-bias *shape*
- * (`duselRollBias` mirrors `duselQualityBias`) but every number here is
+ * into `ItemPoolTuning` — it shares that group's Luck-bias *shape*
+ * (`luckRollBias` mirrors `luckQualityBias`) but every number here is
  * about the machine's own gamble, not about what a pedestal offers.
  */
 export interface MachineTuning {
@@ -792,8 +792,8 @@ export interface MachineTuning {
   rareWeight: number;
   /** Base weight of the rarest outcome — an item's authored `legendaryRoll`, or `rareWeight`'s magnitude when none exists yet (`docs/DECISIONS.md` #19). */
   legendaryWeight: number;
-  /** Same shape as `ItemPoolTuning.duselQualityBias`, driven by the player's resolved Dusel: pushes weight away from `unlucky` and toward `rare`/`legendary`. */
-  duselRollBias: number;
+  /** Same shape as `ItemPoolTuning.luckQualityBias`, driven by the player's resolved Luck: pushes weight away from `unlucky` and toward `rare`/`legendary`. */
+  luckRollBias: number;
   /** Fraction the bad-luck tier nudges the chosen modifier against the player. */
   unluckyRollPercent: number;
   /** Fraction the common tier nudges the chosen modifier in the player's favour. */
@@ -1010,8 +1010,8 @@ export const DEFAULT_PROMILLE_TUNING: Readonly<PromilleTuning> = {
   // 12 seconds at 60 ticks/second — long enough to matter, short enough that
   // a room or two of caution clears it rather than making the player wait.
   katerDurationTicks: 720,
-  katerStammwuerzeMultiplier: 0.8,
-  katerGschwindigkeitMultiplier: 0.85,
+  katerDamageMultiplier: 0.8,
+  katerMoveSpeedMultiplier: 0.85,
 };
 
 export const DEFAULT_PICKUP_TUNING: Readonly<PickupTuning> = {
@@ -1034,7 +1034,7 @@ export const DEFAULT_ITEM_POOL_TUNING: Readonly<ItemPoolTuning> = {
   qualityWeight2: 25,
   qualityWeight3: 8,
   floorQualityBias: 0.06,
-  duselQualityBias: 0.05,
+  luckQualityBias: 0.05,
   interactRadius: 28,
   revealHoldTicks: 180,
   bobAmplitude: 3,
@@ -1189,7 +1189,7 @@ export const DEFAULT_MACHINE_TUNING: Readonly<MachineTuning> = {
   uncommonWeight: 25,
   rareWeight: 10,
   legendaryWeight: 3,
-  duselRollBias: 0.08,
+  luckRollBias: 0.08,
   unluckyRollPercent: 0.15,
   commonRollPercent: 0.08,
   uncommonRollPercent: 0.18,

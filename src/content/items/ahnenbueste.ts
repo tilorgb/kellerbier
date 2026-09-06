@@ -17,7 +17,7 @@ const DAMAGE_PER_FLOOR = 0.08;
 export const ahnenbueste: ItemDefinition = {
   id: 'ahnenbueste',
   name: 'Ahnenbüste',
-  description: 'Stammwürze grows with every floor you reach',
+  description: 'Damage grows with every floor you reach',
   flavourText: 'Stone eyes. They have been watching the stairs since long before you arrived.',
   sprite: 'ahnenbueste',
   pools: ['secret', 'boss'],
@@ -27,7 +27,7 @@ export const ahnenbueste: ItemDefinition = {
     modifyStats: (state) =>
       state.charge <= 0
         ? []
-        : [{ stat: 'stammwuerze', op: 'add', value: state.charge * DAMAGE_PER_FLOOR }],
+        : [{ stat: 'damage', op: 'add', value: state.charge * DAMAGE_PER_FLOOR }],
     onPickup: (ctx) => {
       ctx.state.charge = Math.max(0, ctx.sim.currentFloor);
     },

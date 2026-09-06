@@ -34,10 +34,10 @@ export const resi: CharacterDefinition = {
     items: ['brezn'],
     shotTags: ['arcing', 'returning'],
     stats: [
-      { stat: 'gschwindigkeit', op: 'multiply', value: 1.3 },
-      // Schluckfrequenz is a *delay*, so below 1 is faster — see `tuning.ts`.
-      { stat: 'schluckfrequenz', op: 'multiply', value: 0.8 },
-      { stat: 'stammwuerze', op: 'multiply', value: 0.75 },
+      { stat: 'moveSpeed', op: 'multiply', value: 1.3 },
+      // Fire Rate is a *delay*, so below 1 is faster — see `tuning.ts`.
+      { stat: 'fireRate', op: 'multiply', value: 0.8 },
+      { stat: 'damage', op: 'multiply', value: 0.75 },
     ],
     rules: [],
   },

@@ -1,6 +1,6 @@
 import type { ItemDefinition } from '../../sim/item/definition.js';
 
-/** Ticks between bites (60/s), the contact radius, the bite's damage scale off Stammwürze, and the pull strength applied every tick. */
+/** Ticks between bites (60/s), the contact radius, the bite's damage scale off Damage, and the pull strength applied every tick. */
 const CONTACT_INTERVAL_TICKS = 20;
 const CONTACT_RADIUS = 16;
 const DAMAGE_SCALE = 0.4;
@@ -45,7 +45,7 @@ export const fingerhakeln: ItemDefinition = {
         return;
       }
       state.timer = CONTACT_INTERVAL_TICKS;
-      const damage = Math.max(1, Math.round(sim.stats.value('stammwuerze') * DAMAGE_SCALE));
+      const damage = Math.max(1, Math.round(sim.stats.value('damage') * DAMAGE_SCALE));
       sim.applySplashDamage(playerX, playerY, CONTACT_RADIUS, damage, playerIndex);
     },
   },
