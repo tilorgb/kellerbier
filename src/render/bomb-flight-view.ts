@@ -1,55 +1,29 @@
-import { Container, Graphics } from 'pixi.js';
+import { Group, Mesh, MeshStandardMaterial, SphereGeometry } from 'three';
 import { World } from '../sim/ecs/world.js';
 import type { GameSim } from '../sim/game/sim.js';
 import { lerp } from '../sim/math.js';
 import { lobbedBombFlight, type LobbedBombFlight } from '../sim/systems/enemy.js';
 
 /**
- * A Böllerschmeißer's lobbed bomb, in flight (#243).
+ * A Böllerschmeißer's lobbed keg in flight.
  *
- * Before this, the throw itself was invisible: `wind`'s telegraph draws a
- * ring on the *thrower's* own body (`entities.ts`'s ring pool), and — once
- * `detonateLobbedBomb` fixed its own gap — a burst draws at the landing spot
- * the instant it goes off. Nothing drew anything in between, so a hit read
- * as the bomb spawning directly on the player rather than something thrown
- * across the room at them. This closes that gap: a small keg, arcing from
- * the thrower to `lobTarget`'s captured spot over the same wind-up
- * `lobbedBombFlight` (`sim/systems/enemy.ts`) already tracks.
- *
- * Drawn procedurally with `Graphics`, the same choice `MaibaumView` makes
- * for the same reason (`docs/DECISIONS.md` #43) — a keg with a spark is a
- * shape a pure function draws cleanly, and this engine has no height axis a
- * real "thrown" sprite could hang a z-offset on anyway (confirmed: nothing
- * in `sim/`/`render/` tracks one), so the arc is faked with a sine bump on Y
- * instead. Pooled rather than `MaibaumView`'s one static instance: more than
- * one Böllerschmeißer can be mid-throw at once, where there is only ever one
- * Maibaum in the arena.
+ * The 2D renderer faked the throw with a sine bump on the sprite's y, and
+ * said so in its own comment: "this engine has no height axis a real
+ * 'thrown' sprite could hang a z-offset on". It has one now. The keg is a
+ * small dark sphere that rises `ARC_HEIGHT` above the floor at the top of its
+ * arc and comes down where `lobbedBombFlight` says it lands — the landing
+ * marker on the floor (`EntityView`'s ground telegraph) is what the player
+ * dodges; this is what tells them why.
  */
-
 const BOMB_BODY = 0x1c1a20;
-const BOMB_RIM = 0x3a3540;
 const FUSE_SPARK = 0xffb347;
-
-/** Radius the keg's own body is drawn at, in world units — a hair bigger than a shot (`tuning.shooting.shotRadius`), since this is a thrown object, not a bullet. */
 const BOMB_RADIUS = 4;
-
-/** How high the faked arc rises at its peak, in world units — a keg lobbed across a room, not a grenade over a wall. */
-const ARC_HEIGHT = 14;
-
-function drawBomb(g: Graphics): void {
-  g.circle(0, 0, BOMB_RADIUS).fill(BOMB_BODY);
-  g.circle(0, 0, BOMB_RADIUS).stroke({ width: 1, color: BOMB_RIM });
-  // A lit fuse spark, off-centre and above the body — the same visual cue
-  // `deathEffect: 'ember'`'s doc comment calls out for this enemy: it goes
-  // off rather than dying, and the spark is the first hint why.
-  g.circle(1.5, -BOMB_RADIUS + 0.5, 1).fill(FUSE_SPARK);
-}
+const ARC_HEIGHT = 22;
 
 export class BombFlightView {
-  readonly container = new Container();
+  readonly group = new Group();
 
-  private readonly bombs: Graphics[] = [];
-  /** Reused across every call so the per-frame scan never allocates (`lobbedBombFlight`'s own `@hot` contract). */
+  private readonly bombs: Mesh<SphereGeometry, MeshStandardMaterial>[] = [];
   private readonly scratch: LobbedBombFlight = {
     startX: 0,
     startY: 0,
@@ -65,7 +39,6 @@ export class BombFlightView {
     const required = sim.enemyMask;
     const highWater = world.highWater;
     const scratch = this.scratch;
-
     let used = 0;
     for (let index = 0; index < highWater; index++) {
       if (states[index] !== World.ALIVE) {
@@ -83,14 +56,12 @@ export class BombFlightView {
       const t = scratch.progress;
       bomb.position.set(
         lerp(scratch.startX, scratch.endX, t),
-        // The straight-line lerp is where the keg would sit if it slid along
-        // the ground; subtracting a sine bump (zero at both ends, tallest at
-        // the midpoint) is the whole of the fake — no real height axis to
-        // hook a proper arc onto (see this file's own doc comment).
-        lerp(scratch.startY, scratch.endY, t) - Math.sin(Math.PI * t) * ARC_HEIGHT,
+        BOMB_RADIUS + Math.sin(Math.PI * t) * ARC_HEIGHT,
+        lerp(scratch.startY, scratch.endY, t),
       );
+      // The fuse spark: brighter as it comes down.
+      bomb.material.emissiveIntensity = 0.3 + t * 0.7;
     }
-
     for (let slot = used; slot < this.bombs.length; slot++) {
       const bomb = this.bombs[slot];
       if (bomb !== undefined) {
@@ -99,15 +70,31 @@ export class BombFlightView {
     }
   }
 
-  private bombAt(slot: number): Graphics {
+  private bombAt(slot: number): Mesh<SphereGeometry, MeshStandardMaterial> {
     const existing = this.bombs[slot];
     if (existing !== undefined) {
       return existing;
     }
-    const created = new Graphics();
-    drawBomb(created);
+    const created = new Mesh(
+      new SphereGeometry(BOMB_RADIUS, 10, 8),
+      new MeshStandardMaterial({
+        color: BOMB_BODY,
+        roughness: 0.7,
+        emissive: FUSE_SPARK,
+        emissiveIntensity: 0.3,
+      }),
+    );
+    created.castShadow = true;
     this.bombs[slot] = created;
-    this.container.addChild(created);
+    this.group.add(created);
     return created;
+  }
+
+  destroy(): void {
+    for (const bomb of this.bombs) {
+      bomb.geometry.dispose();
+      bomb.material.dispose();
+    }
+    this.group.removeFromParent();
   }
 }

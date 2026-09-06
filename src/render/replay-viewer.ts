@@ -1,4 +1,4 @@
-import { Container, type NineSliceSprite } from 'pixi.js';
+import { Container, type NineSliceSprite } from './gfx/index.js';
 import { encodeSeed } from '../sim/rng/seed.js';
 import { TICKS_PER_SECOND } from '../sim/time.js';
 import { UI_PALETTE } from './palette.js';

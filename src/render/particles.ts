@@ -1,54 +1,47 @@
-import { Container, Sprite, type Texture } from 'pixi.js';
+import {
+  AdditiveBlending,
+  Color,
+  DoubleSide,
+  Group,
+  InstancedMesh,
+  Matrix4,
+  MeshBasicMaterial,
+  PlaneGeometry,
+  Quaternion,
+  Vector3,
+} from 'three';
 import { lerp } from '../sim/math.js';
 import { ParticleKind, type ParticleStore } from '../sim/particle/store.js';
+import type { Texture } from './gfx/index.js';
 
 /**
- * Draws every particle in flight.
+ * Every live particle — foam, sparks, dust, embers, the muzzle flash.
  *
- * A particle fades and shrinks over its life rather than vanishing at the end
- * of it: a burst that pops out of existence reads as a glitch, and the fade
- * costs one multiply.
- */
-
-/**
- * One texture per `ParticleKind`, indexed by the kind's own value.
+ * ## Instanced by kind
  *
- * An array rather than a map because this is read once per particle per frame
- * with a thousand of them on screen — and because "a kind with no texture" is
- * then simply a hole the fallback fills, rather than a lookup that has to be
- * spelled out.
+ * One `InstancedMesh` per particle kind, sized to the store's capacity, so a
+ * thousand particles are a dozen draw calls. The fade is baked into the
+ * per-instance colour under additive blending: a particle near the end of its
+ * life is drawn darker, and darker under additive *is* fainter — which sidesteps
+ * both per-instance alpha and the sorting soft-alpha quads would otherwise
+ * need in a 3D scene. Foam, sparks and embers are light; additive suits them.
+ *
+ * ## Accessibility is applied at draw time
+ *
+ * `draws(kind)` is the same filter as before (`docs/DECISIONS.md` #41):
+ * reduced motion removes the decorative kinds, reduced flashes removes the
+ * muzzle flash, and neither ever removes foam, splash or spark — the only copy
+ * of "that connected" / "that died" a player gets. Suppressed here, never at
+ * spawn, so a replay is byte-identical whatever the toggles.
  */
 export interface ParticleTextures {
   readonly byKind: readonly (Texture | undefined)[];
-  /** What a kind with no texture of its own draws. */
   readonly fallback: Texture;
 }
 
-/**
- * Which effects an accessibility toggle removes, and which it must not.
- *
- * The line is whether the effect is the *only* copy of something. Foam and
- * splash say "that connected" and "that died"; sparks are the second half of
- * the first of those and stay with it. Everything else here — the room-clear
- * ring, the door puffs, the pickup glints, the muzzle flash — is decoration on
- * top of something already visible, which is exactly what makes it removable.
- *
- * Suppressed here rather than at the spawn site on purpose: a reduced-motion
- * run steps identically to a full one, so a replay recorded with the toggle on
- * plays back correctly with it off (`docs/DECISIONS.md` #41).
- */
 const DECORATIVE_KINDS = kindFlags([ParticleKind.Dust, ParticleKind.Glint, ParticleKind.Ember]);
-
-/** The one kind `reduceFlashes` removes — it fires on every shot, which is the hazard. */
 const FLASHING_KINDS = kindFlags([ParticleKind.Flash]);
 
-/**
- * A boolean per kind, indexed by the kind's own value.
- *
- * An array rather than a `Set`, because `draws` is called once per live
- * particle per frame and the budget covers a thousand of them: an indexed read
- * costs nothing where a hash lookup costs a little, a thousand times over.
- */
 function kindFlags(kinds: readonly number[]): readonly boolean[] {
   const flags: boolean[] = [];
   for (const kind of kinds) {
@@ -64,25 +57,77 @@ export interface ParticleAccessibility {
 
 const FULL_EFFECTS: ParticleAccessibility = { reducedMotion: false, reduceFlashes: false };
 
+/** How far above the floor a particle floats at birth, and how much higher it drifts as it dies. */
+const PARTICLE_HEIGHT = 3;
+const PARTICLE_RISE = 5;
+
+const SCRATCH_MATRIX = new Matrix4();
+const SCRATCH_POSITION = new Vector3();
+const SCRATCH_QUATERNION = new Quaternion();
+const SCRATCH_SCALE = new Vector3();
+const SCRATCH_COLOR = new Color();
+const X_AXIS = new Vector3(1, 0, 0);
+
+class ParticleLayer {
+  readonly mesh: InstancedMesh;
+  count = 0;
+
+  constructor(texture: Texture, capacity: number) {
+    const geometry = new PlaneGeometry(1, 1);
+    const [u0, v0, u1, v1] = texture.uvs();
+    const uv = geometry.getAttribute('uv');
+    uv.setXY(0, u0, v0);
+    uv.setXY(1, u1, v0);
+    uv.setXY(2, u0, v1);
+    uv.setXY(3, u1, v1);
+    this.mesh = new InstancedMesh(
+      geometry,
+      new MeshBasicMaterial({
+        map: texture.source.texture,
+        transparent: true,
+        depthWrite: false,
+        blending: AdditiveBlending,
+        side: DoubleSide,
+        toneMapped: false,
+      }),
+      capacity,
+    );
+    this.mesh.count = 0;
+    this.mesh.frustumCulled = false;
+    // Allocate the colour attribute up front so `setColorAt` never does.
+    this.mesh.setColorAt(0, SCRATCH_COLOR.setScalar(1));
+  }
+
+  dispose(): void {
+    this.mesh.geometry.dispose();
+    (this.mesh.material as MeshBasicMaterial).dispose();
+    this.mesh.dispose();
+    this.mesh.removeFromParent();
+  }
+}
+
 export class ParticleView {
-  readonly container = new Container();
+  readonly group = new Group();
 
   private readonly store: ParticleStore;
   private readonly textures: ParticleTextures;
-  private readonly sprites: Sprite[] = [];
+  private readonly layers: (ParticleLayer | undefined)[] = [];
   private accessibility: ParticleAccessibility = FULL_EFFECTS;
+  private lean = 0;
 
   constructor(store: ParticleStore, textures: ParticleTextures) {
     this.store = store;
     this.textures = textures;
   }
 
-  /** Which effects to draw. Read per frame rather than at construction: a toggle takes effect mid-run. */
   setAccessibility(accessibility: ParticleAccessibility): void {
     this.accessibility = accessibility;
   }
 
-  /** Whether a particle of `kind` is drawn under the current settings. */
+  setLean(lean: number): void {
+    this.lean = lean;
+  }
+
   draws(kind: number): boolean {
     const settings = this.accessibility;
     if (settings.reducedMotion && DECORATIVE_KINDS[kind] === true) {
@@ -91,57 +136,77 @@ export class ParticleView {
     return !(settings.reduceFlashes && FLASHING_KINDS[kind] === true);
   }
 
+  /** Particles drawn this frame, across every kind. */
+  get drawnCount(): number {
+    let total = 0;
+    for (const layer of this.layers) {
+      total += layer?.count ?? 0;
+    }
+    return total;
+  }
+
   sync(alpha: number): void {
     const store = this.store;
-    let used = 0;
-
+    for (const layer of this.layers) {
+      if (layer !== undefined) {
+        layer.count = 0;
+      }
+    }
+    SCRATCH_QUATERNION.setFromAxisAngle(X_AXIS, this.lean);
     store.forEachLive((index) => {
       const kind = store.kind[index] ?? 0;
       if (!this.draws(kind)) {
         return;
       }
-      const sprite = this.spriteAt(used);
-      used += 1;
-
+      const layer = this.layerFor(kind);
+      if (layer.count >= layer.mesh.instanceMatrix.count) {
+        return;
+      }
       const life = store.life[index] ?? 0;
       const maxLife = store.maxLife[index] ?? 1;
       const remaining = maxLife === 0 ? 0 : life / maxLife;
-
-      sprite.visible = true;
-      sprite.texture = this.textures.byKind[kind] ?? this.textures.fallback;
-      sprite.alpha = Math.min(1, remaining * 1.6);
-      // Scaled against the sprite's own half-height rather than the fixed `/ 2`
-      // this used before #153. The `2` was the generated foam blob's radius,
-      // and it was only ever right because every particle in the game was that
-      // one texture; the authored set runs from a 3px ember to an 8px muzzle
-      // flash. Reading each sprite's own size keeps `ParticleStore.size`
-      // meaning the same thing it always did — the radius the simulation asked
-      // for — whatever is drawn at it.
-      const size = store.size[index] ?? 1;
-      sprite.scale.set((size * (0.4 + remaining * 0.6)) / Math.max(1, sprite.texture.height / 2));
-      sprite.position.set(
+      const size = (store.size[index] ?? 1) * (0.4 + remaining * 0.6) * 2;
+      SCRATCH_POSITION.set(
         lerp(store.previousX[index] ?? 0, store.x[index] ?? 0, alpha),
+        PARTICLE_HEIGHT + (1 - remaining) * PARTICLE_RISE,
         lerp(store.previousY[index] ?? 0, store.y[index] ?? 0, alpha),
       );
+      SCRATCH_SCALE.set(size, size, 1);
+      SCRATCH_MATRIX.compose(SCRATCH_POSITION, SCRATCH_QUATERNION, SCRATCH_SCALE);
+      layer.mesh.setMatrixAt(layer.count, SCRATCH_MATRIX);
+      layer.mesh.setColorAt(layer.count, SCRATCH_COLOR.setScalar(Math.min(1, remaining * 1.6)));
+      layer.count += 1;
     });
-
-    for (let slot = used; slot < this.sprites.length; slot++) {
-      const sprite = this.sprites[slot];
-      if (sprite !== undefined) {
-        sprite.visible = false;
+    for (const layer of this.layers) {
+      if (layer === undefined) {
+        continue;
+      }
+      layer.mesh.count = layer.count;
+      layer.mesh.instanceMatrix.needsUpdate = true;
+      if (layer.mesh.instanceColor !== null) {
+        layer.mesh.instanceColor.needsUpdate = true;
       }
     }
   }
 
-  private spriteAt(slot: number): Sprite {
-    const existing = this.sprites[slot];
+  private layerFor(kind: number): ParticleLayer {
+    const existing = this.layers[kind];
     if (existing !== undefined) {
       return existing;
     }
-    const created = new Sprite(this.textures.fallback);
-    created.anchor.set(0.5);
-    this.sprites.push(created);
-    this.container.addChild(created);
+    const created = new ParticleLayer(
+      this.textures.byKind[kind] ?? this.textures.fallback,
+      this.store.capacity,
+    );
+    this.layers[kind] = created;
+    this.group.add(created.mesh);
     return created;
+  }
+
+  destroy(): void {
+    for (const layer of this.layers) {
+      layer?.dispose();
+    }
+    this.group.removeFromParent();
   }
 }

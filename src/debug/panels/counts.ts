@@ -1,4 +1,4 @@
-import type { Container } from 'pixi.js';
+import type { Container } from '../../render/gfx/index.js';
 import {
   type DebugContext,
   type DebugPanel,
@@ -69,11 +69,7 @@ export class CountsPanel implements DebugPanel {
     );
 
     const calls = context.drawCalls.lastFrameCalls;
-    this.setLine(
-      6,
-      calls < 0 ? 'draw calls n/a (webgpu)' : `draw calls ${String(calls)}`,
-      calls > 20,
-    );
+    this.setLine(6, calls < 0 ? 'draw calls n/a' : `draw calls ${String(calls)}`, calls > 20);
     this.setLine(
       7,
       `overflow  shot ${String(shots.overflows)} par ${String(particles.overflows)}`,

@@ -1,4 +1,4 @@
-import { Container, Graphics, Sprite } from 'pixi.js';
+import { Container, Graphics, Sprite } from './gfx/index.js';
 import type { MachineRollTier } from '../sim/item/roll.js';
 import { EFFECT_PALETTE, HUD_PALETTE, UI_PALETTE } from './palette.js';
 import { FocusRing, type UiKit } from './ui/kit.js';

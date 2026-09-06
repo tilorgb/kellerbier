@@ -1067,7 +1067,7 @@ function buildDoorAllowance(rooms: readonly PlacedRoom[]): Map<string, ReadonlyS
  * draw in the first place. A staircase's interior steps, and every direction
  * but one on its start/end steps, are the other way a pair can touch without
  * a door: both cells are real, occupied, and adjacent, but the allowance map
- * says no — that reads as an ordinary solid wall (`render/room.ts` only ever
+ * says no — that reads as an ordinary solid wall (`render/world/scenery.ts` only ever
  * draws a door where one is compiled, never assumes one from geometry alone).
  */
 function computeAdjacency(rooms: readonly PlacedRoom[]): Map<string, RoomDoor[]> {

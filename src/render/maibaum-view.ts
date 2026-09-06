@@ -1,173 +1,148 @@
-import { Container, Graphics, type Texture } from 'pixi.js';
+import {
+  CylinderGeometry,
+  Group,
+  Mesh,
+  MeshStandardMaterial,
+  SphereGeometry,
+  TorusGeometry,
+} from 'three';
 import type { GameSim } from '../sim/game/sim.js';
-import { setFootY } from './depth.js';
-import { createGroundShadow, styleGroundShadow } from './ground-shadow.js';
 
 /**
- * The arena Maibaum (#199) — the one prop the player can walk *behind*, and
- * the Maibaum-Dieb's weapon once he grabs it.
+ * Der Stier's Maibaum (#199): planted, a tall ceremonial pole with its wreath
+ * and crown; held, a shorter splintered pole swung flat at the player.
  *
- * It is two drawings in one place because the simulation treats it as two
- * things at two times:
+ * Both are built from primitives in the pole's own colours — the blue and
+ * cream barber stripes are alternating bands of cylinder — rather than a
+ * sprite, because a pole is the one object in the game that is genuinely a
+ * 3D shape the player reads by its *angle*: the held pole's rotation about
+ * the vertical is the swing's telegraph, and it is the same angle the hit
+ * check reads (`sim.maibaumHeld.poleAngle`).
  *
- * - **planted** — while `GameSim.maypolePlanted` is non-null a live
- *   destructible target stands in the arena. Drawn tall and bottom-anchored at
- *   the collider, flushing red on a hit. `EntityView` skips the `maypole` prop
- *   kind, so this is the only copy. It sits in the depth layer and writes its
- *   base as its foot line, which is the whole of "walk behind it".
- * - **held** — once `GameSim.maibaumHeld` is non-null the pole is in the
- *   dieb's hands: a shorter weapon pole drawn at his body, angled by his
- *   swing. Not planted, so it sorts at the dieb's own feet instead.
- *
- * This was the game's only walk-behind object, and it got there by having
- * `view.ts` lift its container out of the world and re-insert it above or
- * below the player every frame. #73 made that ordinary — one sorted layer,
- * one foot line per thing — so the special case is gone and this view is now
- * just another member of it.
- *
- * Drawn procedurally with `Graphics` rather than from a sprite sheet: a maypole
- * is a stack of stripes and a wreath of dots, the shape a pure function draws
- * cleanly (`docs/DECISIONS.md` #43's argument for UI art), and it sidesteps
- * the square-tile size rule a `tiles/` PNG would have to obey. Render-only.
+ * The planted pole flushes on a hit, as before.
  */
-
 const INK = 0x141216;
 const POLE_BLUE = 0x3962af;
 const POLE_CREAM = 0xe8e2d0;
 const WREATH = 0x4f9a4a;
 const WREATH_LIT = 0x74c46a;
-const RIBBON = [0x3962af, 0xd9cfb1, 0x74c46a];
 const BASE_WOOD = 0x4a4451;
 const HIT_FLUSH = 0xff8f7a;
 
-/** The planted ceremonial Maibaum, base at (0,0), growing upward. Tall, decorated. */
-function drawPlanted(g: Graphics): void {
-  const h = 78;
-  const w = 5;
-  // braced wooden base
-  g.rect(-4, -8, 8, 8).fill(BASE_WOOD);
-  g.rect(-6, -3, 12, 3).fill(INK);
-  g.moveTo(-3, -6)
-    .lineTo(-8, 0)
-    .moveTo(3, -6)
-    .lineTo(8, 0)
-    .stroke({ width: 1.5, color: BASE_WOOD });
-  // barber-stripe pole
-  for (let y = 6; y < h; y += 4) {
-    g.rect(-w / 2, -(y + 4), w, 4).fill(((y / 4) | 0) % 2 === 0 ? POLE_BLUE : POLE_CREAM);
-  }
-  g.rect(-w / 2 - 1, -h, 1, h - 6).fill(INK);
-  g.rect(w / 2, -h, 1, h - 6).fill(INK);
-  // lower wreath
-  wreath(g, 0, -(h - 20), 9);
-  // crossed guild signs
-  g.rect(-8, -(h - 8), 5, 5).fill(POLE_BLUE);
-  g.rect(3, -(h - 8), 5, 5).fill(POLE_BLUE);
-  g.rect(-9, -(h - 6), 18, 1.5).fill(POLE_CREAM);
-  // ribbon crown
-  RIBBON.forEach((c, i) => {
-    const spread = (i - 1) * 8;
-    g.moveTo(0, -(h - 2))
-      .lineTo(spread, -(h - 14))
-      .stroke({ width: 1.5, color: c });
-  });
-  g.circle(0, -h, 3).fill(WREATH_LIT);
-}
+const PLANTED_HEIGHT = 78;
+const HELD_LENGTH = 40;
 
-/**
- * The weapon: a stubby little maypole he can actually lift — barely taller
- * than he is (~40px), thin (3px), a splintered butt where he wrenched it out
- * of the ground, and a small wreath + ribbon tuft at the tip so it still reads
- * as *a* maypole rather than a plank. Grip at (0,0), reaching in -y (#199).
- */
-function drawHeld(g: Graphics): void {
-  const len = 40;
-  const w = 3;
-  for (let y = 3; y < len; y += 3) {
-    g.rect(-w / 2, -(y + 3), w, 3).fill(((y / 3) | 0) % 2 === 0 ? POLE_BLUE : POLE_CREAM);
-  }
-  g.rect(-w / 2 - 1, -len, 1, len).fill(INK);
-  g.rect(w / 2, -len, 1, len).fill(INK);
-  // splintered butt
-  g.moveTo(-w / 2, 0)
-    .lineTo(-w / 2 - 2, 3)
-    .moveTo(0, 0)
-    .lineTo(1, 4)
-    .moveTo(w / 2, 0)
-    .lineTo(w / 2 + 1, 2)
-    .stroke({ width: 1, color: POLE_CREAM });
-  // a small wreath + two ribbons at the head — not the ceremonial crown
-  wreath(g, 0, -(len - 3), 4);
-  RIBBON.slice(0, 2).forEach((c, i) => {
-    g.moveTo(0, -len + 1)
-      .lineTo(i === 0 ? -5 : 5, -len + 8 + i * 3)
-      .stroke({ width: 1, color: c });
-  });
-  g.circle(0, -len, 2).fill(WREATH_LIT);
-}
-
-/** A ring of dots around (cx, cy). */
-function wreath(g: Graphics, cx: number, cy: number, r: number): void {
-  for (let a = 0; a < 14; a++) {
-    const t = (a / 14) * Math.PI * 2;
-    g.circle(cx + Math.cos(t) * r, cy + Math.sin(t) * r * 0.55, 1.6).fill(
-      a % 2 === 0 ? WREATH : WREATH_LIT,
+function stripedPole(length: number, radius: number, band: number): Group {
+  const group = new Group();
+  for (let y = 0; y < length; y += band) {
+    const segment = new Mesh(
+      new CylinderGeometry(radius, radius, Math.min(band, length - y), 8),
+      new MeshStandardMaterial({
+        color: Math.floor(y / band) % 2 === 0 ? POLE_BLUE : POLE_CREAM,
+        roughness: 0.8,
+      }),
     );
+    segment.position.y = y + Math.min(band, length - y) / 2;
+    segment.castShadow = true;
+    group.add(segment);
   }
+  return group;
+}
+
+function wreath(radius: number, y: number): Mesh {
+  const ring = new Mesh(
+    new TorusGeometry(radius, radius * 0.22, 6, 14),
+    new MeshStandardMaterial({ color: WREATH, emissive: WREATH_LIT, emissiveIntensity: 0.25 }),
+  );
+  ring.rotation.x = Math.PI / 2;
+  ring.position.y = y;
+  return ring;
+}
+
+function buildPlanted(): Group {
+  const group = new Group();
+  const base = new Mesh(
+    new CylinderGeometry(4.5, 6, 8, 8),
+    new MeshStandardMaterial({ color: BASE_WOOD, roughness: 1 }),
+  );
+  base.position.y = 4;
+  base.castShadow = true;
+  group.add(base);
+  const foot = new Mesh(
+    new CylinderGeometry(6.5, 6.5, 1.5, 8),
+    new MeshStandardMaterial({ color: INK, roughness: 1 }),
+  );
+  foot.position.y = 0.75;
+  group.add(foot);
+  group.add(stripedPole(PLANTED_HEIGHT, 2.5, 4));
+  group.add(wreath(9, PLANTED_HEIGHT - 20));
+  const crown = new Mesh(
+    new SphereGeometry(3, 10, 8),
+    new MeshStandardMaterial({ color: WREATH_LIT, emissive: WREATH_LIT, emissiveIntensity: 0.4 }),
+  );
+  crown.position.y = PLANTED_HEIGHT;
+  group.add(crown);
+  return group;
+}
+
+function buildHeld(): Group {
+  const group = new Group();
+  // Built along +y and turned flat: the sim's angle is in the floor plane.
+  const pole = stripedPole(HELD_LENGTH, 1.5, 3);
+  pole.add(wreath(4, HELD_LENGTH - 3));
+  const tip = new Mesh(
+    new SphereGeometry(2, 8, 6),
+    new MeshStandardMaterial({ color: WREATH_LIT, emissive: WREATH_LIT, emissiveIntensity: 0.4 }),
+  );
+  tip.position.y = HELD_LENGTH;
+  pole.add(tip);
+  pole.rotation.z = -Math.PI / 2;
+  group.add(pole);
+  return group;
 }
 
 export class MaibaumView {
-  readonly container = new Container();
+  readonly group = new Group();
 
-  private readonly planted = new Graphics();
-  private readonly held = new Graphics();
-  private readonly shadow = new Container();
+  private readonly planted = buildPlanted();
+  private readonly held = buildHeld();
 
-  constructor(shadowTexture?: Texture) {
-    drawPlanted(this.planted);
-    drawHeld(this.held);
-    // Under the pole, so a planted Maibaum sits on the floor like every other
-    // body (`docs/DECISIONS.md` #61). Only shown while planted — a held pole
-    // is in the Dieb's hands, and the Dieb has his own shadow.
-    if (shadowTexture !== undefined) {
-      const blob = createGroundShadow(shadowTexture);
-      styleGroundShadow(blob, shadowTexture, 12);
-      this.shadow.addChild(blob);
-    }
-    this.container.addChild(this.shadow, this.planted, this.held);
-    this.container.visible = false;
+  constructor() {
+    this.group.add(this.planted, this.held);
+    this.group.visible = false;
   }
 
   sync(sim: GameSim): void {
     const plantedAt = sim.maypolePlanted;
     const heldAt = plantedAt === null ? sim.maibaumHeld : null;
-
     this.planted.visible = plantedAt !== null;
-    this.shadow.visible = plantedAt !== null;
     if (plantedAt !== null) {
-      this.planted.position.set(plantedAt.x, plantedAt.y);
-      this.planted.tint = plantedAt.flash > 0 ? HIT_FLUSH : 0xffffff;
-      this.shadow.position.set(plantedAt.x, plantedAt.y);
+      this.planted.position.set(plantedAt.x, 0, plantedAt.y);
+      const flush = plantedAt.flash > 0;
+      this.planted.traverse((object) => {
+        if (object instanceof Mesh) {
+          const material = (object as Mesh).material as MeshStandardMaterial;
+          material.emissive.setHex(flush ? HIT_FLUSH : 0x000000);
+        }
+      });
     }
-
     this.held.visible = heldAt !== null;
     if (heldAt !== null) {
-      this.held.position.set(heldAt.x, heldAt.y - 3);
-      // `drawHeld` builds the pole pointing straight up (-y); `poleAngle` is
-      // the world bearing it should point along (0 = +x, -π/2 = up), which is
-      // the same blade angle the swing's hit check reads (#199).
-      this.held.rotation = heldAt.poleAngle + Math.PI / 2;
+      // Swung at hip height; a sim angle measured with +y south is a negative turn about the vertical.
+      this.held.position.set(heldAt.x, 6, heldAt.y);
+      this.held.rotation.y = -heldAt.poleAngle;
     }
+    this.group.visible = plantedAt !== null || heldAt !== null;
+  }
 
-    // The pole's base while it is planted, the thief's own feet while he is
-    // swinging it — either way, where the thing it belongs to touches the
-    // floor (#73). A held pole tracks him closely enough that sorting it at
-    // his feet keeps it in his hands through every body he walks past.
-    if (plantedAt !== null) {
-      setFootY(this.container, plantedAt.y);
-    } else if (heldAt !== null) {
-      setFootY(this.container, heldAt.y);
-    }
-    this.container.visible = plantedAt !== null || heldAt !== null;
+  destroy(): void {
+    this.group.traverse((object) => {
+      if (object instanceof Mesh) {
+        const mesh = object as Mesh;
+        mesh.geometry.dispose();
+        (mesh.material as MeshStandardMaterial).dispose();
+      }
+    });
+    this.group.removeFromParent();
   }
 }

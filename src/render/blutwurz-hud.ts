@@ -1,4 +1,4 @@
-import type { Container } from 'pixi.js';
+import type { Container } from './gfx/index.js';
 import type { GameSim } from '../sim/game/sim.js';
 import { HUD_PALETTE } from './palette.js';
 import { TextPlate } from './ui/text-plate.js';

@@ -1699,7 +1699,7 @@ export class GameSim {
    * to damage," the same blast, no separate concept of range.
    *
    * A wall's distance is measured to the point on the room boundary its door
-   * gap is centred on (`render/room.ts`'s `createDoorView` draws the same
+   * gap is centred on (`render/world/scenery.ts`'s door pieces cut the same
    * point), not to the room's centre — a boss-sized room makes the far wall
    * of a `2x2` slot unreachable by a blast measured from the middle.
    */
@@ -1755,7 +1755,7 @@ export class GameSim {
    * The player is always clamped to the room's interior rectangle (see
    * `resolveAxis` in `systems/motion.ts`) — there is no physical gap in the
    * wall to walk through — so this is: touching the boundary at the point a
-   * door is drawn (`render/room.ts`'s `DOOR_SPAN` band, centred on that
+   * door is drawn (`render/world/scenery.ts`'s `DOOR_SPAN` gap, centred on that
    * door's own cell), with that door unlocked. This alone is only *touch* —
    * a room running along its own wall crosses the same band with no
    * intention of leaving through it, since the clamp above leaves an edge

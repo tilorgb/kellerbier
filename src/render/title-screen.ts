@@ -1,4 +1,4 @@
-import { Container, Graphics, type Renderer } from 'pixi.js';
+import { Container, Graphics } from './gfx/index.js';
 import { EFFECT_PALETTE } from './palette.js';
 import type { UiKit } from './ui/kit.js';
 import { Menu, type MenuItem, type MenuScreen } from './ui/menu.js';
@@ -37,7 +37,7 @@ export class TitleScreen implements MenuScreen {
   private width = 0;
   private height = 0;
 
-  constructor(kit: UiKit, renderer: Renderer, actions: TitleScreenActions) {
+  constructor(kit: UiKit, actions: TitleScreenActions) {
     this.view.visible = false;
 
     this.dim = new Graphics();
@@ -45,7 +45,7 @@ export class TitleScreen implements MenuScreen {
 
     // `title.ts`'s own doc comment names `TITLE_STYLES.floor` for "the game's
     // own name" alongside a floor's intro card — this is that name.
-    this.headline = new DisplayTitle(renderer, TITLE_STYLES.floor);
+    this.headline = new DisplayTitle(TITLE_STYLES.floor);
     this.headline.view.scale.set(HEADLINE_SCALE);
     this.headline.set('Kellerbier');
     this.view.addChild(this.headline.view);

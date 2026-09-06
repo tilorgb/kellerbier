@@ -1,32 +1,22 @@
-import { Container } from 'pixi.js';
 import type { RoomShape } from '../content/rooms/definition.js';
 import { GameSim, MAX_COLLIDER_RADIUS } from '../sim/game/sim.js';
 import type { RoomPlacement } from '../sim/room/template.js';
 import { MULTI_CELL_LAYOUT } from './definitions.js';
 import { installPixelFonts, UI_FONT_FAMILY } from '../render/ui/font.js';
-import { createRenderer, trackWindowSize } from '../render/app.js';
-import {
-  createBlobTexture,
-  createRingTexture,
-  createSilhouetteTexture,
-  createSolidTexture,
-  createWedgeTexture,
-} from '../render/placeholder-art.js';
-import { EntityView } from '../render/entities.js';
+import { canvasToFrame, createRenderer, trackWindowSize } from '../render/app.js';
 import { GameView } from '../render/view.js';
-import { buildAnimatedSets, loadFloorArt } from '../render/floor-art.js';
+import { loadFloorArt } from '../render/floor-art.js';
 import {
   bossIdsFrom,
   buildParticleArt,
   buildProjectileArt,
   doorTexturesFrom,
-  TELEGRAPH_RING_SPRITE,
 } from '../render/art-bundle.js';
 import { loadPlayerArt } from '../render/player-art.js';
 import { PARTICLE_PALETTE } from '../render/palette.js';
+import { dotTexture } from '../render/ui/marker-art.js';
 import { FixedTimestepLoop, runAnimationFrameLoop } from '../app/loop.js';
 import { InputSampler } from '../app/input/sampler.js';
-import { computeGameLayout } from '../render/resolution.js';
 
 export interface PlaytestHandle {
   destroy(): void;
@@ -47,11 +37,10 @@ function canonicalPlacement(shape: RoomShape): RoomPlacement | undefined {
 
 /**
  * Drops into `templateJson` in-engine, no disk round-trip and no rebuild —
- * the AC's "live playtest". Mounts as a fullscreen overlay over `host` (the
- * same assumption `createRenderer`/`trackWindowSize` already make about
- * sizing off the window) with its own `GameSim`/`GameView`/render loop,
- * entirely independent of the editor's own state; `destroy()` tears all of
- * it down and leaves the editor exactly as it was.
+ * the AC's "live playtest". Mounts as a fullscreen overlay over `host` with
+ * its own `GameSim`/`GameView`/render loop, entirely independent of the
+ * editor's own state; `destroy()` tears all of it down and leaves the editor
+ * exactly as it was.
  *
  * Built via `GameSim`'s `population: 'empty'` plus a direct `loadRoom` call
  * rather than the `roomTemplate` constructor option: the constructor's own
@@ -59,6 +48,10 @@ function canonicalPlacement(shape: RoomShape): RoomPlacement | undefined {
  * (whose `cells.length` will not match the single-cell default placement)
  * — `loadRoom` is the same public method the app layer already uses for a
  * room transition, just called once, directly, right after construction.
+ *
+ * The same renderer boot as `app/main.ts`, minus the HUD: a room author
+ * checking a layout sees exactly the room a run would show — the same walls,
+ * lights and sprites — because it is the same `GameView`.
  */
 export async function createPlaytest(
   host: HTMLElement,
@@ -76,11 +69,11 @@ export async function createPlaytest(
   exitButton.className = 'kb-editor-playtest-exit';
   overlay.appendChild(exitButton);
 
-  const app = await createRenderer(overlay);
+  const app = createRenderer(overlay);
   // The playtest view draws damage numbers, and they are drawn in the pixel
   // font like everything else — so the faces have to exist here too, not only
   // in `app/main.ts`. Idempotent, so the two entry points cannot build two.
-  installPixelFonts(app.renderer);
+  installPixelFonts();
 
   // Real floor/enemy art (#35) and Alois's own (#151) — a room author checking
   // their layout in Playtest has the exact same "which blob was that" problem a
@@ -106,83 +99,45 @@ export async function createPlaytest(
     playerArt,
     projectileArt: buildProjectileArt(
       projectileArt,
-      createBlobTexture(
-        app.renderer,
+      dotTexture(
         sim.tuning.shooting.shotRadius,
         PARTICLE_PALETTE.projectileFill,
         PARTICLE_PALETTE.projectileRim,
       ),
     ),
     projectileArtNames: sim.enemies.projectileArtNames.map((name) => (name === '' ? null : name)),
-    entity: createBlobTexture(
-      app.renderer,
+    entity: dotTexture(
       MAX_COLLIDER_RADIUS,
       PARTICLE_PALETTE.entityFill,
       PARTICLE_PALETTE.entityRim,
     ),
-    entityFlash: createBlobTexture(
-      app.renderer,
-      MAX_COLLIDER_RADIUS,
-      PARTICLE_PALETTE.entityFlash,
-      PARTICLE_PALETTE.entityFlash,
-    ),
-    telegraph:
-      vfxArt[TELEGRAPH_RING_SPRITE] ??
-      createRingTexture(
-        app.renderer,
-        EntityView.telegraphTextureRadius,
-        PARTICLE_PALETTE.telegraphRing,
-      ),
-    telegraphWedge: createWedgeTexture(
-      app.renderer,
-      EntityView.wedgeTextureLength,
-      EntityView.wedgeTextureHalfAngle,
-      PARTICLE_PALETTE.telegraphRing,
-    ),
     particleArt: buildParticleArt(
       vfxArt,
-      createBlobTexture(app.renderer, 2, PARTICLE_PALETTE.foamFill, PARTICLE_PALETTE.foamRim),
+      dotTexture(2, PARTICLE_PALETTE.foamFill, PARTICLE_PALETTE.foamRim),
     ),
-    decal: createBlobTexture(
-      app.renderer,
-      8,
-      PARTICLE_PALETTE.decalFill,
-      PARTICLE_PALETTE.decalRim,
-    ),
+    decal: dotTexture(8, PARTICLE_PALETTE.decalFill, PARTICLE_PALETTE.decalRim),
     numberFont: UI_FONT_FAMILY,
-    pedestalItem: createBlobTexture(
-      app.renderer,
+    pedestalItem: dotTexture(
       5,
       PARTICLE_PALETTE.pedestalItemFill,
       PARTICLE_PALETTE.pedestalItemFill,
     ),
-    pedestalBeam: createSolidTexture(app.renderer),
     pedestalPlinth: tileTextures.pedestal,
     doors: doorTexturesFrom(tileTextures),
     pickupArt,
     tileTextures,
-    bossShadow: enemyArt['boss-shadow'],
     bossIds: bossIdsFrom(spriteOrigins),
-    actorShadow: enemyArt['actor-shadow'],
     roomTiles,
     enemyArt,
-    enemyFlash: Object.fromEntries(
-      Object.entries(enemyArt).map(([id, texture]) => [
-        id,
-        createSilhouetteTexture(app.renderer, texture),
-      ]),
-    ),
-    enemyAnimation: buildAnimatedSets(enemyStrips, (texture) =>
-      createSilhouetteTexture(app.renderer, texture),
-    ),
+    enemyAnimation: enemyStrips,
   });
-  const game = new Container();
-  game.addChild(view.stage);
-  app.stage.addChild(game);
+  app.ui.root.addChild(view.labelLayer);
 
-  let layout = computeGameLayout(window.innerWidth, window.innerHeight, window.devicePixelRatio);
-  const windowSizeTracker = trackWindowSize(app, game, overlay, (applied) => {
-    layout = applied;
+  const windowSizeTracker = trackWindowSize(app.canvas, overlay, () => {
+    // Nothing to lay out: the frame is fixed and the playtest has no HUD.
+  });
+  app.ui.attachPointer(app.canvas, (clientX, clientY, out) => {
+    canvasToFrame(app.canvas, clientX, clientY, out);
   });
 
   const input = new InputSampler();
@@ -194,7 +149,10 @@ export async function createPlaytest(
       sim.step(input.sample());
     },
     render: (alpha) => {
-      view.sync(alpha, layout.scale, performance.now());
+      view.sync(alpha, performance.now());
+      app.render(() => {
+        view.render(app.renderer);
+      });
     },
   });
   const stopLoop = runAnimationFrameLoop(loop);
@@ -213,7 +171,8 @@ export async function createPlaytest(
     windowSizeTracker.dispose();
     stopKeyboard();
     stopGamepad();
-    app.destroy(true, { children: true });
+    view.destroy();
+    app.destroy();
     overlay.remove();
   }
 

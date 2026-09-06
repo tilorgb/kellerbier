@@ -1,4 +1,4 @@
-import type { Container } from 'pixi.js';
+import type { Container } from '../../render/gfx/index.js';
 import type { EntityAnimator } from '../../render/animation/animator.js';
 import { ANIMATION_STATE_IDS } from '../../render/animation/definition.js';
 import type { PlayerView } from '../../render/player-view.js';

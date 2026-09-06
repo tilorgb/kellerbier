@@ -1,5 +1,5 @@
-import type { Texture } from 'pixi.js';
-import type { DoorTextures } from './room.js';
+import type { Texture } from './gfx/index.js';
+import type { DoorTextures } from './world/scenery.js';
 import type { SpriteOrigin } from './floor-art.js';
 import { PLAYER_TAG_SPRITE_ORDER, type ProjectileArt } from './projectiles.js';
 import type { ParticleTextures } from './particles.js';

@@ -1,4 +1,4 @@
-import { Container, Sprite, type BitmapText } from 'pixi.js';
+import { Container, Sprite, type BitmapText } from './gfx/index.js';
 import type { GameSim } from '../sim/game/sim.js';
 import { HUD_PALETTE, UI_PALETTE } from './palette.js';
 import { iconRoles, type UiKit } from './ui/kit.js';
@@ -47,7 +47,8 @@ export class WalletHud {
     // hanging them from its top, or a 5-tall key floats above its own number.
     icon.position.set(0, Math.floor((UI_TEXT_HEIGHT - size.height) / 2));
     const count = uiText('0');
-    this.view.addChild(icon, count);
+    this.view.addChild(icon);
+    this.view.addChild(count);
     return { icon, count, width: size.width };
   }
 

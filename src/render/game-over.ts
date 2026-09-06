@@ -1,4 +1,4 @@
-import { Container, Graphics, type BitmapText, type Renderer } from 'pixi.js';
+import { Container, Graphics, type BitmapText } from './gfx/index.js';
 import { EFFECT_PALETTE, HUD_PALETTE } from './palette.js';
 import type { UiKit } from './ui/kit.js';
 import { Menu, type MenuItem, type MenuScreen } from './ui/menu.js';
@@ -60,7 +60,7 @@ export class GameOverScreen implements MenuScreen {
   private width = 0;
   private height = 0;
 
-  constructor(kit: UiKit, renderer: Renderer, actions: GameOverScreenActions) {
+  constructor(kit: UiKit, actions: GameOverScreenActions) {
     this.kit = kit;
     this.view.visible = false;
 
@@ -70,7 +70,7 @@ export class GameOverScreen implements MenuScreen {
     this.plate = new Container();
     this.view.addChild(this.plate);
 
-    this.headline = new DisplayTitle(renderer, TITLE_STYLES.threat);
+    this.headline = new DisplayTitle(TITLE_STYLES.threat);
     this.headline.view.scale.set(HEADLINE_SCALE);
     this.view.addChild(this.headline.view);
 

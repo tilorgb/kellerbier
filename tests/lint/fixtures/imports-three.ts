@@ -1,6 +1,6 @@
 // Fixture: a simulation file reaching for the renderer's library.
-import { Sprite } from 'pixi.js';
+import { Mesh } from 'three';
 
 export function draw(): unknown {
-  return Sprite;
+  return Mesh;
 }

@@ -1,4 +1,4 @@
-import { Container, Graphics, Sprite, type BitmapText, type Renderer } from 'pixi.js';
+import { Container, Graphics, Sprite, type BitmapText } from '../gfx/index.js';
 import { EFFECT_PALETTE, TITLE_PALETTE, UI_PALETTE } from '../palette.js';
 import { UI_ICONS } from './icons.js';
 import { DISPLAY_FACE, TEXT_FACE } from './font-compile.js';
@@ -55,11 +55,11 @@ export class UiKitGallery {
   /** Which button row the focus ring is on. Stepped by `K` re-presses so the ring is visibly a thing that moves. */
   private focusRow = 1;
 
-  constructor(kit: UiKit, renderer: Renderer) {
+  constructor(kit: UiKit) {
     this.view.visible = false;
     this.view.addChild(this.backdrop);
 
-    const title = new DisplayTitle(renderer, TITLE_STYLES.floor);
+    const title = new DisplayTitle(TITLE_STYLES.floor);
     title.set('UI-Kastl');
     // Clear of the dev app's own DOM toolbar, which sits over the canvas's
     // top-left corner and would otherwise eat the heading.

@@ -1,4 +1,4 @@
-import { Container, Graphics, type BitmapText, type Renderer } from 'pixi.js';
+import { Container, Graphics, type BitmapText } from './gfx/index.js';
 import type { RunResultsView, UnlockView } from '../app/meta/progress.js';
 import { EFFECT_PALETTE, UI_PALETTE } from './palette.js';
 import type { UiKit } from './ui/kit.js';
@@ -87,12 +87,12 @@ export class RunResultsScreen implements MenuScreen {
   private width = 0;
   private height = 0;
 
-  constructor(kit: UiKit, renderer: Renderer, actions: RunResultsScreenActions) {
+  constructor(kit: UiKit, actions: RunResultsScreenActions) {
     this.kit = kit;
     this.actions = actions;
     this.view.visible = false;
     this.view.addChild(this.backdrop);
-    this.title = new DisplayTitle(renderer, TITLE_STYLES.floor);
+    this.title = new DisplayTitle(TITLE_STYLES.floor);
     this.title.set('Results');
     this.view.addChild(this.title.view);
     this.view.addChild(this.content);

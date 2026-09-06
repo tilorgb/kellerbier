@@ -1,4 +1,4 @@
-import { Assets, type Texture } from 'pixi.js';
+import { loadTexture } from './gfx/index.js';
 import { cutStrip, type LoadedStrip } from './floor-art.js';
 import type { AnimationSidecar } from './animation/definition.js';
 import { PLAYER_FACING_IDS, type PlayerFacingId } from './animation/state.js';
@@ -75,7 +75,7 @@ export async function loadPlayerArt(): Promise<PlayerArt> {
       // declines to animate is the failure this issue exists to remove.
       throw new Error(`alois-${suffix}.strip.png has no alois-${suffix}.anim.json sidecar`);
     }
-    const base = await Assets.load<Texture>({ src: url, data: { scaleMode: 'nearest' } });
+    const base = await loadTexture(url);
     strips[suffix] = cutStrip(`alois-${suffix}`, base, sidecar);
   }
 

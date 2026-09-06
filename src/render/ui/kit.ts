@@ -1,4 +1,4 @@
-import { Container, NineSliceSprite, Sprite, type Renderer, type Texture } from 'pixi.js';
+import { Container, NineSliceSprite, Sprite, type Texture } from '../gfx/index.js';
 import { HUD_PALETTE, UI_PALETTE } from '../palette.js';
 import {
   FOCUS_CORNER,
@@ -14,7 +14,7 @@ import { artHeight, artWidth, pixelArtTexture, type ArtRoles } from './pixel-art
 
 /**
  * The UI kit: every frame, icon and state the HUD and (later) the menus draw
- * with, built once against a renderer and handed round.
+ * with, built once at boot and handed round.
  *
  * ## Why this is a kit rather than a pile of helpers
  *
@@ -169,26 +169,24 @@ export class UiKit {
   readonly solid: Texture;
 
   private readonly icons = new Map<string, Texture>();
-  private readonly renderer: Renderer;
 
-  constructor(renderer: Renderer) {
-    this.renderer = renderer;
-    this.panel = pixelArtTexture(renderer, FRAME_PANEL, PANEL_ROLES);
-    this.well = pixelArtTexture(renderer, FRAME_WELL, WELL_ROLES);
-    this.slot = pixelArtTexture(renderer, FRAME_SLOT, SLOT_ROLES);
-    this.knob = pixelArtTexture(renderer, KNOB, KNOB_ROLES);
-    this.focusCorner = pixelArtTexture(renderer, FOCUS_CORNER, FOCUS_ROLES);
-    this.solid = pixelArtTexture(renderer, ['f'], {
+  constructor() {
+    this.panel = pixelArtTexture(FRAME_PANEL, PANEL_ROLES);
+    this.well = pixelArtTexture(FRAME_WELL, WELL_ROLES);
+    this.slot = pixelArtTexture(FRAME_SLOT, SLOT_ROLES);
+    this.knob = pixelArtTexture(KNOB, KNOB_ROLES);
+    this.focusCorner = pixelArtTexture(FOCUS_CORNER, FOCUS_ROLES);
+    this.solid = pixelArtTexture(['f'], {
       outline: 0xffffff,
       fill: 0xffffff,
       highlight: 0xffffff,
       accent: 0xffffff,
     });
     const button: Record<ButtonState, Texture> = {
-      normal: pixelArtTexture(renderer, FRAME_BUTTON, BUTTON_ROLES.normal),
-      selected: pixelArtTexture(renderer, FRAME_BUTTON, BUTTON_ROLES.selected),
-      pressed: pixelArtTexture(renderer, FRAME_BUTTON, BUTTON_ROLES.pressed),
-      disabled: pixelArtTexture(renderer, FRAME_BUTTON, BUTTON_ROLES.disabled),
+      normal: pixelArtTexture(FRAME_BUTTON, BUTTON_ROLES.normal),
+      selected: pixelArtTexture(FRAME_BUTTON, BUTTON_ROLES.selected),
+      pressed: pixelArtTexture(FRAME_BUTTON, BUTTON_ROLES.pressed),
+      disabled: pixelArtTexture(FRAME_BUTTON, BUTTON_ROLES.disabled),
     };
     this.button = button;
   }
@@ -213,7 +211,7 @@ export class UiKit {
       // shape for "the wrong idea".
       throw new Error(`ui kit: no icon named "${name}"`);
     }
-    const texture = pixelArtTexture(this.renderer, art, roles);
+    const texture = pixelArtTexture(art, roles);
     this.icons.set(key, texture);
     return texture;
   }

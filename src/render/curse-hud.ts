@@ -1,4 +1,4 @@
-import { Container } from 'pixi.js';
+import { Container } from './gfx/index.js';
 import type { GameSim } from '../sim/game/sim.js';
 import { TICKS_PER_SECOND } from '../sim/time.js';
 import { HUD_PALETTE } from './palette.js';

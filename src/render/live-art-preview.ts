@@ -1,4 +1,4 @@
-import type { Texture } from 'pixi.js';
+import type { Texture } from './gfx/index.js';
 
 /**
  * The parent-window half of the pixel editor's (#108) live preview: the
@@ -101,7 +101,9 @@ export function applyLiveArtPreview(
     message.height,
   );
   ctx.putImageData(imageData, 0, 0);
-  texture.source.resource = canvas;
+  // Swap the pixels under the same GPU texture: every billboard and tile
+  // already drawing with it repaints on the next frame, no rebind anywhere.
+  texture.source.texture.image = canvas;
   texture.source.update();
   return true;
 }

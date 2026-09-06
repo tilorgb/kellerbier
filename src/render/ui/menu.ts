@@ -1,4 +1,4 @@
-import { Container, type BitmapText, type NineSliceSprite } from 'pixi.js';
+import { Container, type BitmapText, type NineSliceSprite } from '../gfx/index.js';
 import { UI_PALETTE } from '../palette.js';
 import { FocusRing, type UiKit } from './kit.js';
 import { UI_TEXT_HEIGHT, uiText, uiTextWidth } from './text.js';
@@ -48,8 +48,9 @@ interface MenuRow {
  * `render/` stays input-agnostic, the way `GameOverScreen`/`RunResultsScreen`
  * already are: this never reads a key or a gamepad itself. A caller drives
  * `moveFocus`/`activate` from whichever device it likes — `app/main.ts`
- * polls gamepad and keyboard once per rendered frame — and Pixi's own
- * pointer events cover the mouse without any extra wiring.
+ * polls gamepad and keyboard once per rendered frame — and the UI layer's
+ * own pointer events (`render/gfx/layer.ts`) cover the mouse without any
+ * extra wiring.
  */
 export class Menu {
   readonly view = new Container();

@@ -407,7 +407,7 @@ export const TITLE_PALETTE = {
 export const APP_BACKGROUND_COLOUR = 0x14101a;
 
 // ---------------------------------------------------------------------------
-// Room geometry — per-floor theme (render/room.ts)
+// Room geometry — per-floor theme (render/world/scenery.ts)
 // ---------------------------------------------------------------------------
 
 export interface RoomTheme {

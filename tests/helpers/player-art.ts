@@ -1,24 +1,26 @@
-import { Rectangle, Texture, TextureSource } from 'pixi.js';
+import { Texture as ThreeTexture } from 'three';
 import {
   compileAnimationSet,
   type AnimationSidecar,
 } from '../../src/render/animation/definition.js';
+import { Rectangle, Texture, TextureSource } from '../../src/render/gfx/index.js';
 import { PLAYER_BODY_KEYS, SCHLAUCH_OCTANTS, type PlayerArt } from '../../src/render/player-art.js';
 import type { LoadedStrip } from '../../src/render/floor-art.js';
 
 /**
  * A `PlayerArt` with no pixels behind it.
  *
- * `loadPlayerArt` needs a browser (`import.meta.glob`, `Assets.load`), and
+ * `loadPlayerArt` needs a browser (`import.meta.glob`, a PNG loader), and
  * everything worth testing about `PlayerView` — which strip a facing picks,
  * which frame a clip is on, where the Schlauch lands — is decided by the
  * *clips* and the frame count, not by what the frames look like. So the shapes
  * are real (the same clip names, the same frame counts the committed sidecars
- * author) and the textures are empty.
+ * author) and the textures are bare three.js textures with no image.
  *
- * The frame *sizes* are real too, because `PlayerView` derives its pixel scale
- * from the body texture's height: an empty texture would make Alois render at
- * an infinite scale, which is a bug worth not having in a test fixture.
+ * The frame *sizes* are real too, because a `Billboard` scales its quad to
+ * the frame's authored size (`docs/DECISIONS.md` #45): a zero-sized texture
+ * would make Alois a zero-sized quad, which is a bug worth not having in a
+ * test fixture.
  */
 export function stubPlayerArt(): PlayerArt {
   const body = Object.fromEntries(
@@ -55,12 +57,16 @@ const SCHLAUCH: AnimationSidecar = {
   loop: true,
 };
 
+/** A `width × height` texture with no pixels behind it — a bare three.js texture sized for the renderer. */
+export function blankTexture(width: number, height: number): Texture {
+  return new Texture(new TextureSource(new ThreeTexture(), width, height));
+}
+
 function stubStrip(name: string, sidecar: AnimationSidecar, width = 20, height = 32): LoadedStrip {
-  const source = new TextureSource({ width: width * sidecar.frames, height });
+  const source = new TextureSource(new ThreeTexture(), width * sidecar.frames, height);
   const frames = Array.from(
     { length: sidecar.frames },
-    (_unused, index) =>
-      new Texture({ source, frame: new Rectangle(index * width, 0, width, height) }),
+    (_unused, index) => new Texture(source, new Rectangle(index * width, 0, width, height)),
   );
   return { frames, clips: compileAnimationSet(name, sidecar, sidecar.frames) };
 }

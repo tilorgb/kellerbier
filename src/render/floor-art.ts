@@ -1,4 +1,4 @@
-import { Assets, Rectangle, Texture } from 'pixi.js';
+import { Texture, loadTexture } from './gfx/index.js';
 import {
   compileAnimationSet,
   type AnimationSidecar,
@@ -68,7 +68,7 @@ export interface FloorArt {
    * to.
    */
   readonly spriteOrigins: Readonly<Record<string, SpriteOrigin>>;
-  /** `roomTiles[floor].floorVariants`'s order, by name — `render/room.ts`'s `pickTileVariant` returns an index into this same order. */
+  /** `roomTiles[floor].floorVariants`'s order, by name — `render/tiles.ts`'s `pickTileVariant` returns an index into this same order. */
   readonly tileVariantNames: Readonly<Record<number, readonly string[]>>;
   /** `roomTiles[floor].blockVariants`'s order, by name — the obstacle equivalent of `tileVariantNames`, for click-to-pick (`app/sprite-pick.ts`). */
   readonly blockVariantNames: Readonly<Record<number, readonly string[]>>;
@@ -104,7 +104,7 @@ export interface FloorTileset {
   readonly wallLipCorner: string;
   /**
    * The obstacle tile — an authored wall block (`RoomObstacle`) — as a set of
-   * 2–4 variants `render/room.ts` mixes across a room per cell, the same way
+   * 2–4 variants `render/world/scenery.ts` mixes across a room per cell, the same way
    * `floorVariants` mixes the ground (#37's "living floor"). A single
    * obstacle sprite tiled identically down a three-cell wall read as a
    * repeated stamp; a boulder that is a different one each cell reads as a
@@ -126,6 +126,19 @@ export interface FloorTileset {
    * back to entry 0, which is why `barrel` is entry 0 on both sides.
    */
   readonly destructibles: readonly string[];
+  /**
+   * How tall the room's walls stand, in room units. A cellar's walls are
+   * walls; Dorf & Acker's `rural-wall` is a field's edge — a hedge-high band
+   * the player looks over, not a corridor. Part of the tileset because it is
+   * an art decision about what the wall tile *is*, made where the tile is
+   * named.
+   */
+  readonly wallHeight: number;
+  /**
+   * Which light rig the floor is lit by (`render/world/lighting.ts`): a
+   * cellar hangs bulbs; a field is under the sky.
+   */
+  readonly lighting: 'cellar' | 'daylight';
 }
 
 export const FLOOR_TILESETS: Readonly<Record<number, FloorTileset>> = {
@@ -141,6 +154,8 @@ export const FLOOR_TILESETS: Readonly<Record<number, FloorTileset>> = {
     // No Maibaum in a cellar — a floor-1 `maypole` prop would be a content
     // error, and falls back to the barrel rather than to nothing.
     destructibles: ['cellar-barrel'],
+    wallHeight: 26,
+    lighting: 'cellar',
   },
   // Dorf & Acker (#37): four floor variants, the "living floor".
   2: {
@@ -155,19 +170,23 @@ export const FLOOR_TILESETS: Readonly<Record<number, FloorTileset>> = {
       'rural-fieldstone-4',
     ],
     destructibles: ['rural-barrel', 'rural-maibaum-base'],
+    wallHeight: 10,
+    lighting: 'daylight',
   },
 };
 
-/** One floor's tileset with its names resolved to `Texture`s — what `render/room.ts` draws from. */
+/** One floor's tileset with its names resolved to `Texture`s — what `render/world/scenery.ts` builds from. */
 export interface RoomTileArt {
   readonly floorVariants: readonly Texture[];
   readonly wall: Texture;
   readonly wallLip: Texture;
   readonly wallLipCorner: Texture;
-  /** The obstacle variants, in `FloorTileset.blockVariants` order — `render/room.ts` picks one per cell. */
+  /** The obstacle variants, in `FloorTileset.blockVariants` order — `render/world/scenery.ts` picks one per cell. */
   readonly blockVariants: readonly Texture[];
   /** By `DESTRUCTIBLE_PROP_KINDS` index; a kind past the end draws entry 0. */
   readonly destructibles: readonly Texture[];
+  readonly wallHeight: number;
+  readonly lighting: 'cellar' | 'daylight';
 }
 
 /**
@@ -227,17 +246,12 @@ export interface LoadedStrip {
 }
 
 /**
- * What `EntityView` draws an animated body from: the strip's frames, the same
- * frames as white silhouettes for the hit flash (#37's per-enemy flash, one
- * per frame now rather than one per creature), and the clips.
- *
- * Assembled by `buildAnimatedSets` rather than by `loadFloorArt`, because a
- * silhouette needs a `Renderer` to generate and the loader deliberately has
- * no renderer — it is called from two entry points and from tests.
+ * What `EntityView` draws an animated body from — the strip as loaded. The
+ * hit flash used to need a white silhouette per frame generated against a
+ * renderer; in the 3D scene a flash is the billboard's emissive term, so the
+ * frames are all a body needs.
  */
-export interface AnimatedSpriteSet extends LoadedStrip {
-  readonly flashFrames: readonly Texture[];
-}
+export type AnimatedSpriteSet = LoadedStrip;
 
 /**
  * Every animation strip a *creature* is authored as, and every `*.anim.json`
@@ -352,17 +366,7 @@ export function cutStrip(name: string, base: Texture, sidecar: AnimationSidecar)
   const frameWidth = base.width / frameCount;
   const frames: Texture[] = [];
   for (let frame = 0; frame < frameCount; frame++) {
-    frames.push(
-      new Texture({
-        source: base.source,
-        frame: new Rectangle(
-          base.frame.x + frame * frameWidth,
-          base.frame.y,
-          frameWidth,
-          base.height,
-        ),
-      }),
-    );
+    frames.push(base.sub(frame * frameWidth, 0, frameWidth, base.height));
   }
   return { frames, clips: compileAnimationSet(name, sidecar, frameCount) };
 }
@@ -374,19 +378,8 @@ export function cutStrip(name: string, base: Texture, sidecar: AnimationSidecar)
  * bound to a renderer — passed in so this stays callable from the two entry
  * points that have one and from tests that do not.
  */
-export function buildAnimatedSets(
-  strips: Readonly<Record<string, LoadedStrip>>,
-  silhouette: (texture: Texture) => Texture,
-): Record<string, AnimatedSpriteSet> {
-  const sets: Record<string, AnimatedSpriteSet> = {};
-  for (const [name, strip] of Object.entries(strips)) {
-    sets[name] = { ...strip, flashFrames: strip.frames.map(silhouette) };
-  }
-  return sets;
-}
-
 async function loadNearest(src: string): Promise<Texture> {
-  return Assets.load<Texture>({ src, data: { scaleMode: 'nearest' } });
+  return loadTexture(src);
 }
 
 async function loadStrips(): Promise<Record<string, LoadedStrip>> {
@@ -557,5 +550,7 @@ function resolveTileset(
     wallLipCorner: need(tileset.wallLipCorner),
     blockVariants: tileset.blockVariants.map(need),
     destructibles: tileset.destructibles.map(need),
+    wallHeight: tileset.wallHeight,
+    lighting: tileset.lighting,
   };
 }

@@ -1,4 +1,4 @@
-import { Container, Graphics, type BitmapText, type Renderer } from 'pixi.js';
+import { Container, Graphics, type BitmapText } from './gfx/index.js';
 import { TITLE_PALETTE, UI_PALETTE } from './palette.js';
 import { DisplayTitle, TITLE_STYLES } from './ui/title.js';
 import { displayText, SeasonedText, UI_TEXT_HEIGHT } from './ui/text.js';
@@ -68,9 +68,11 @@ export class FloorTitleCard {
   private width = 0;
   private height = 0;
 
-  constructor(renderer: Renderer) {
+  constructor() {
     this.view.visible = false;
-    this.view.addChild(this.backdrop, this.border, this.rules);
+    this.view.addChild(this.backdrop);
+    this.view.addChild(this.border);
+    this.view.addChild(this.rules);
 
     // The ordinal is in the *display* face too, but at 1:1 — a card with two
     // sizes of one script reads as typography; a card with two scripts reads
@@ -78,7 +80,7 @@ export class FloorTitleCard {
     this.ordinal = displayText('', { colour: TITLE_PALETTE.rule });
     this.view.addChild(this.ordinal);
 
-    this.name = new DisplayTitle(renderer, TITLE_STYLES.floor);
+    this.name = new DisplayTitle(TITLE_STYLES.floor);
     this.name.view.scale.set(NAME_SCALE);
     this.view.addChild(this.name.view);
 
@@ -89,7 +91,7 @@ export class FloorTitleCard {
     // the same gold the card's own rules and border already use, so the
     // one dropped-in word reads as part of the card's chrome rather than a
     // competing colour.
-    this.subtitle = new SeasonedText(renderer, {
+    this.subtitle = new SeasonedText({
       colour: TITLE_PALETTE.cardSubtitle,
       accentColour: UI_PALETTE.accent,
     });

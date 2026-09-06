@@ -1,4 +1,4 @@
-import { Container, Graphics, type BitmapText, type Renderer } from 'pixi.js';
+import { Container, Graphics, type BitmapText } from './gfx/index.js';
 import { EFFECT_PALETTE, UI_PALETTE } from './palette.js';
 import type { UiKit } from './ui/kit.js';
 import { Menu, type MenuItem, type MenuScreen } from './ui/menu.js';
@@ -16,7 +16,7 @@ const GAP_ABOVE_MENU = 20;
 const CREDIT_LINES: readonly string[] = [
   'A game by tilorgb',
   'Built with Claude Code',
-  'Engine: PixiJS',
+  'Engine: three.js',
 ];
 
 export interface CreditsScreenActions {
@@ -39,13 +39,13 @@ export class CreditsScreen implements MenuScreen {
   private width = 0;
   private height = 0;
 
-  constructor(kit: UiKit, renderer: Renderer, actions: CreditsScreenActions) {
+  constructor(kit: UiKit, actions: CreditsScreenActions) {
     this.view.visible = false;
 
     this.dim = new Graphics();
     this.view.addChild(this.dim);
 
-    this.headline = new DisplayTitle(renderer, TITLE_STYLES.heading);
+    this.headline = new DisplayTitle(TITLE_STYLES.heading);
     this.headline.set('Credits');
     this.view.addChild(this.headline.view);
 

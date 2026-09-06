@@ -1,4 +1,3 @@
-import type { Renderer } from 'pixi.js';
 import type { UiKit } from '../render/ui/kit.js';
 import type { MenuScreen } from '../render/ui/menu.js';
 import { CreditsScreen } from '../render/credits-screen.js';
@@ -42,7 +41,6 @@ export class ScreenFlow {
 
 export interface ScreenFlowControllerDeps {
   readonly kit: UiKit;
-  readonly renderer: Renderer;
   readonly loop: FixedTimestepLoop;
   readonly gamepad: GamepadSource;
   /** Shared with whatever else in `main.ts` polls gamepad menu navigation (the game-over/victory/results screens) — see `GamepadMenuNav`'s own doc comment for why one instance is enough. */
@@ -74,7 +72,7 @@ export class ScreenFlowController {
 
   constructor(deps: ScreenFlowControllerDeps) {
     this.deps = deps;
-    this.title = new TitleScreen(deps.kit, deps.renderer, {
+    this.title = new TitleScreen(deps.kit, {
       onStart: () => {
         this.startFromTitle();
       },
@@ -95,7 +93,7 @@ export class ScreenFlowController {
       },
       canContinue: () => this.canContinueFlag,
     });
-    this.pause = new PauseScreen(deps.kit, deps.renderer, {
+    this.pause = new PauseScreen(deps.kit, {
       onResume: () => {
         this.closePause();
       },
@@ -106,7 +104,7 @@ export class ScreenFlowController {
         this.quitToTitle();
       },
     });
-    this.credits = new CreditsScreen(deps.kit, deps.renderer, {
+    this.credits = new CreditsScreen(deps.kit, {
       onBack: () => {
         this.closeCredits();
       },

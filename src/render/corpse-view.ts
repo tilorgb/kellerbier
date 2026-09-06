@@ -1,46 +1,59 @@
-import { Container, Graphics } from 'pixi.js';
+import { BoxGeometry, Group, Mesh, MeshStandardMaterial, SphereGeometry } from 'three';
 import type { GameSim } from '../sim/game/sim.js';
 
 /**
- * The corpse (#84): where the player fell, while Blutwurz is active — drawn
- * procedurally with `Graphics` rather than from a sprite sheet, the same
- * `docs/DECISIONS.md` #43 reasoning `maibaum-view.ts` already gives, so a
- * small marker needs no pixel art and no sign-off.
- *
- * Only ever visible in the one room it can possibly mean anything in:
- * `GameSim.corpsePosition`'s `x`/`y` are local to whichever room the
- * player died in, not a floor-wide space, so this checks `roomId` before
- * drawing at all — the same guard `stepBlutwurz`'s own touch check applies.
+ * The Blutwurz grave marker: a mound and a small cross where Alois fell, shown
+ * only in the room he fell in. It is the revival's target and a gameplay
+ * marker, so it is a real thing standing in the room, not a floor stain.
  */
-
 const MOUND = 0x3a3228;
-const MOUND_RIM = 0x554a3a;
 const MARKER = 0xc9c2a8;
 
-function drawMarker(g: Graphics): void {
-  g.ellipse(0, 0, 9, 4).fill(MOUND);
-  g.ellipse(0, -1, 9, 4).stroke({ width: 1, color: MOUND_RIM });
-  g.rect(-1, -12, 2, 10).fill(MARKER);
-  g.rect(-4, -10, 8, 2).fill(MARKER);
-}
-
 export class CorpseView {
-  readonly container = new Container();
-
-  private readonly marker = new Graphics();
+  readonly group = new Group();
 
   constructor() {
-    drawMarker(this.marker);
-    this.container.addChild(this.marker);
-    this.container.visible = false;
+    const mound = new Mesh(
+      new SphereGeometry(9, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+      new MeshStandardMaterial({ color: MOUND, roughness: 1 }),
+    );
+    mound.scale.set(1, 0.4, 0.55);
+    mound.receiveShadow = true;
+    this.group.add(mound);
+    const upright = new Mesh(
+      new BoxGeometry(2, 12, 1),
+      new MeshStandardMaterial({ color: MARKER, roughness: 0.9 }),
+    );
+    upright.position.set(0, 7, -1);
+    upright.castShadow = true;
+    this.group.add(upright);
+    const arm = new Mesh(
+      new BoxGeometry(8, 2, 1),
+      new MeshStandardMaterial({ color: MARKER, roughness: 0.9 }),
+    );
+    arm.position.set(0, 10, -1);
+    arm.castShadow = true;
+    this.group.add(arm);
+    this.group.visible = false;
   }
 
   sync(sim: GameSim): void {
     const corpse = sim.corpsePosition;
     const visible = corpse !== null && corpse.roomId === sim.roomId;
-    this.container.visible = visible;
+    this.group.visible = visible;
     if (visible) {
-      this.container.position.set(corpse.x, corpse.y);
+      this.group.position.set(corpse.x, 0, corpse.y);
     }
+  }
+
+  destroy(): void {
+    this.group.traverse((object) => {
+      if (object instanceof Mesh) {
+        const mesh = object as Mesh;
+        mesh.geometry.dispose();
+        (mesh.material as MeshStandardMaterial).dispose();
+      }
+    });
+    this.group.removeFromParent();
   }
 }

@@ -1,4 +1,4 @@
-import { Container, Sprite, type Texture } from 'pixi.js';
+import { Container, Sprite, type Texture } from './gfx/index.js';
 import {
   ETERNAL_HEALTH_MAX,
   PLAYER_HEALTH,

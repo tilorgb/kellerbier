@@ -1,55 +1,63 @@
-import { Container, Sprite, type Texture } from 'pixi.js';
+import {
+  Color,
+  DoubleSide,
+  InstancedMesh,
+  Matrix4,
+  MeshBasicMaterial,
+  PlaneGeometry,
+  Quaternion,
+  Vector3,
+  Group,
+} from 'three';
 import { lerp } from '../sim/math.js';
 import { ProjectileTeam, type ProjectileStore } from '../sim/projectile/store.js';
 import { ProjectileTag, type ProjectileTagId } from '../sim/projectile/tags.js';
+import type { Texture } from './gfx/index.js';
+import { ACTOR_PIXELS_PER_UNIT } from './resolution.js';
+import type { Lighting } from './world/lighting.js';
 
 /**
- * The sprite set every shot in flight is drawn from (#152).
+ * Every live shot, and the light it throws.
  *
- * Before this, one generated disc drew every projectile in the game: the
- * player's, every enemy's, and every tagged variant of both. `spriteFor`
- * below is the whole of what replaced it.
+ * ## Instanced by texture
+ *
+ * A bullet hell's projectiles are the one place count matters, so shots are
+ * not billboards one by one: every texture a shot can wear gets one
+ * `InstancedMesh` sized to the store's capacity, and a frame writes each live
+ * shot's transform into its texture's mesh. Eight or so draw calls for five
+ * thousand shots, whatever the mix.
+ *
+ * ## Which texture
+ *
+ * `spriteFor` is unchanged from the 2D renderer: a player shot wears the art
+ * of its highest-priority status tag (`PLAYER_TAG_SPRITE_ORDER` — a burning
+ * poisoned shot reads as burning), an enemy shot wears its enemy's own art if
+ * it has some, else the floor's, else the fallback. And a shot's size is
+ * still its collision radius: the one deliberate exception to "a sprite's
+ * canvas is its size" (#45), because `shotRadius` is tunable and items grow
+ * it, and the player has to see that.
+ *
+ * ## Height and light
+ *
+ * The simulation is flat. A player's thrown Maß gets a presentation-only arc
+ * over its first `ARC_TICKS`, and the first `SHOT_LIGHT_COUNT` player shots
+ * each carry a point light — where it hits is unchanged, what it lights up on
+ * the way is new. Enemy shots skim low and unlit, so the two teams read apart
+ * even before colour.
+ *
+ * #53's colourblind team markers ride along the same way: a second instanced
+ * layer, a dot over a player shot and a diamond over an enemy's, both pure
+ * white — brightness is the primary cue, the shape the backup.
  */
 export interface ProjectileArt {
-  /** Alois's shot with no tag that changes how it must be dodged. */
   readonly player: Texture;
-  /**
-   * Per-tag player shots, in the order they win.
-   *
-   * A shot can carry several tags at once — that composition is the entire
-   * mechanism synergies come from (#27) — so "which sprite" needs a fixed
-   * priority, not a lookup. The order is what the *player* has to react to,
-   * which is not the same as `tags.ts`'s two composition orders: those decide
-   * what a shot does, this decides what it must not be mistaken for. A
-   * burning shot that also homes is still, to the person dodging it, on fire.
-   */
   readonly playerTags: readonly { readonly tag: ProjectileTagId; readonly texture: Texture }[];
-  /** Enemy shots by the interned art name their firing behaviour named (`EnemyRegistry.projectileArtNames`). */
   readonly enemyByName: Readonly<Record<string, Texture>>;
-  /** The enemy shot for a floor whose shooter named no art of its own, by floor number. */
   readonly enemyByFloor: Readonly<Record<number, Texture>>;
-  /** What draws when nothing above resolves — a floor with no authored projectile art (#39-#43, parked). */
   readonly fallback: Texture;
-  /**
-   * #53's colourblind-safe marker pair (`docs/GAME_DESIGN.md` §12) —
-   * `placeholder-art.ts`'s `createDotMarkerTexture`/`createDiamondMarkerTexture`,
-   * generated once at boot. Optional: a `ProjectileArt` built without a
-   * renderer (a test's own hand-built one, say) simply never draws a marker,
-   * the same graceful omission `GameViewTextures`'s other optional fields get.
-   */
   readonly teamMarkers?: { readonly player: Texture; readonly enemy: Texture };
 }
 
-/**
- * How a shot's sprite is chosen, in one place so the rule is readable.
- *
- * Player shots read off their tag mask; enemy shots read off the art index
- * their firing behaviour authored (`FiringBehaviourBase.art`), falling back to
- * their floor's own shot. The floor is passed in rather than read from the
- * store because a projectile does not remember which room it was fired in and
- * has no reason to: every shot on screen was fired on the floor currently
- * loaded.
- */
 export function spriteFor(
   art: ProjectileArt,
   team: number,
@@ -74,16 +82,6 @@ export function spriteFor(
   return art.enemyByFloor[floor] ?? art.fallback;
 }
 
-/**
- * The tag priority `ProjectileArt.playerTags` is built in.
- *
- * Status effects first — they are what a hit *costs* beyond its damage, so
- * they are what the player most needs to see coming — then `piercing`, which
- * changes whether cover works, then `spectral`, which changes whether walls
- * do. Everything else (`homing`, `bouncing`, `splitting`, `sticky`, `arcing`,
- * `returning`, `orbiting`) changes where a shot goes, and a shot's *path* is
- * legible from watching it fly; its status payload is not.
- */
 export const PLAYER_TAG_SPRITE_ORDER: readonly { tag: ProjectileTagId; sprite: string }[] = [
   { tag: ProjectileTag.Burning, sprite: 'beer-burning' },
   { tag: ProjectileTag.Freezing, sprite: 'beer-freezing' },
@@ -92,60 +90,90 @@ export const PLAYER_TAG_SPRITE_ORDER: readonly { tag: ProjectileTagId; sprite: s
   { tag: ProjectileTag.Spectral, sprite: 'beer-spectral' },
 ];
 
-/** Whether the colourblind-safe marker (#53, `docs/GAME_DESIGN.md` §12) draws over every shot. */
 export interface ProjectileAccessibility {
   readonly colorblindPalette: boolean;
 }
 
 const DEFAULT_PROJECTILE_ACCESSIBILITY: ProjectileAccessibility = { colorblindPalette: false };
-
-/**
- * One pooled marker sprite per live shot, texture-swapped between
- * `art.teamMarkers.player`/`.enemy` by `store.team` — the same "swap the
- * texture, not the object" pattern the shot sprite itself already uses.
- * Both textures are pure white: brightness is the primary cue, the
- * dot-vs-diamond shape the secondary one, so "which shot can hurt me" never
- * depends on reading a hue. Drawn as textured `Sprite`s rather than
- * `Graphics` — `placeholder-art.ts`'s own doc comment is why: a few
- * thousand `Graphics` (this project's own stress scene runs 5,000
- * projectiles) break sprite batching and the draw-call budget with it.
- *
- * A separate sibling in `container` rather than a child of the shot sprite:
- * a child inherits the parent's scale, which is set from the *shot
- * texture's* native size (`sync`'s own `scale` above) — a marker's size
- * needs to track the shot's rendered radius instead, which is simpler to
- * compute directly than to back out of an inherited transform.
- */
 const MARKER_SCALE = 0.6;
+const ARC_TICKS = 50;
+const ARC_HEIGHT = 7;
+const PLAYER_SHOT_HEIGHT = 6;
+const ENEMY_SHOT_HEIGHT = 5;
+const SHOT_LIGHT_INTENSITY = 220;
 
-/**
- * Draws everything in flight.
- *
- * Sprites are handed out in draw order rather than bound to pool slots: which
- * sprite draws which bullet does not matter, and this way the sprite list stays
- * exactly as long as the most projectiles ever on screen at once — not as long
- * as the pool's capacity.
- *
- * Sprites are created on demand and then kept forever. Creating one is the only
- * allocation here, and it stops happening once the busiest moment of a run has
- * been seen.
- */
+const SCRATCH_MATRIX = new Matrix4();
+const SCRATCH_POSITION = new Vector3();
+const SCRATCH_QUATERNION = new Quaternion();
+const SCRATCH_SCALE = new Vector3();
+const SCRATCH_COLOR = new Color(0xffffff);
+const X_AXIS = new Vector3(1, 0, 0);
+
+/** One instanced layer of quads wearing one texture. */
+class InstancedSprites {
+  readonly mesh: InstancedMesh;
+  count = 0;
+
+  constructor(texture: Texture, capacity: number) {
+    const geometry = new PlaneGeometry(1, 1);
+    const [u0, v0, u1, v1] = texture.uvs();
+    const uv = geometry.getAttribute('uv');
+    uv.setXY(0, u0, v0);
+    uv.setXY(1, u1, v0);
+    uv.setXY(2, u0, v1);
+    uv.setXY(3, u1, v1);
+    const material = new MeshBasicMaterial({
+      map: texture.source.texture,
+      alphaTest: 0.5,
+      side: DoubleSide,
+      toneMapped: false,
+    });
+    this.mesh = new InstancedMesh(geometry, material, capacity);
+    this.mesh.count = 0;
+    this.mesh.frustumCulled = false;
+  }
+
+  begin(): void {
+    this.count = 0;
+  }
+
+  /** Places one quad, centred at the point, `size` room units square, leaning to the camera. */
+  add(x: number, height: number, z: number, size: number, lean: number): void {
+    if (this.count >= this.mesh.instanceMatrix.count) {
+      return;
+    }
+    SCRATCH_POSITION.set(x, height, z);
+    SCRATCH_QUATERNION.setFromAxisAngle(X_AXIS, lean);
+    SCRATCH_SCALE.set(size, size, 1);
+    SCRATCH_MATRIX.compose(SCRATCH_POSITION, SCRATCH_QUATERNION, SCRATCH_SCALE);
+    this.mesh.setMatrixAt(this.count, SCRATCH_MATRIX);
+    this.count += 1;
+  }
+
+  end(): void {
+    this.mesh.count = this.count;
+    this.mesh.instanceMatrix.needsUpdate = true;
+  }
+
+  dispose(): void {
+    this.mesh.geometry.dispose();
+    (this.mesh.material as MeshBasicMaterial).dispose();
+    this.mesh.dispose();
+    this.mesh.removeFromParent();
+  }
+}
+
 export class ProjectileView {
-  readonly container = new Container();
+  readonly group = new Group();
 
   private readonly store: ProjectileStore;
   private readonly art: ProjectileArt;
-  /** `art` index to sprite name, from the roster's interned table. Read per shot, so it is a plain array lookup. */
   private readonly artNames: readonly (string | null)[];
-  private readonly sprites: Sprite[] = [];
-  /**
-   * One pooled marker sprite per slot, alongside its shot — `null` entries
-   * hold the slot until #53's toggle first turns colourblind mode on, the
-   * same lazy-creation `spriteAt` already uses for the shot sprites
-   * themselves. Never created at all when `art.teamMarkers` is absent.
-   */
-  private readonly markers: (Sprite | null)[] = [];
+  private readonly layers = new Map<Texture, InstancedSprites>();
+  private readonly markerLayers = new Map<Texture, InstancedSprites>();
   private accessibility: ProjectileAccessibility = DEFAULT_PROJECTILE_ACCESSIBILITY;
+  private lean = 0;
+  private lighting: Lighting | null = null;
 
   constructor(
     store: ProjectileStore,
@@ -157,120 +185,103 @@ export class ProjectileView {
     this.artNames = artNames;
   }
 
-  /** Sprites created so far — the peak on-screen projectile count, in practice. */
-  get spriteCount(): number {
-    return this.sprites.length;
+  /** How many textures have been given an instanced layer so far. */
+  get layerCount(): number {
+    return this.layers.size;
   }
 
-  /** #53's settings-screen toggle. Held here rather than read from a global, same as `ParticleView.setAccessibility`. */
   setAccessibility(accessibility: ProjectileAccessibility): void {
     this.accessibility = accessibility;
+  }
+
+  setLean(lean: number): void {
+    this.lean = lean;
+  }
+
+  /** Where the shot lights come from; without one, shots are unlit. */
+  setLighting(lighting: Lighting | null): void {
+    this.lighting = lighting;
   }
 
   sync(alpha: number, floor: number): void {
     const store = this.store;
     const teamMarkers = this.art.teamMarkers;
     const markersOn = this.accessibility.colorblindPalette && teamMarkers !== undefined;
-    let used = 0;
-
+    for (const layer of this.layers.values()) {
+      layer.begin();
+    }
+    for (const layer of this.markerLayers.values()) {
+      layer.begin();
+    }
+    let lights = 0;
     store.forEachLive((index) => {
-      const slot = used;
-      const sprite = this.spriteAt(slot);
-      used += 1;
-      sprite.visible = true;
+      const team = store.team[index] ?? 0;
+      const isPlayer = team === ProjectileTeam.Player;
       const texture = spriteFor(
         this.art,
-        store.team[index] ?? 0,
+        team,
         store.tags[index] ?? 0,
         this.artNames[store.art[index] ?? 0] ?? null,
         floor,
       );
-      sprite.texture = texture;
-      // The deliberate exception to the actor grid (`docs/DECISIONS.md` #45):
-      // a shot is scaled to its own collider, not drawn at its authored size.
-      // `shotRadius` is tunable at runtime (`sim/tuning.ts`) and items change
-      // it, so here the sprite's size *is* live information — a bigger shot
-      // has to look bigger, the same way a telegraph ring's growth is the
-      // countdown. That is the line the grid rule draws: a body is a thing and
-      // is drawn at the grid; anything whose on-screen size is telling the
-      // player something is drawn at that size instead.
-      //
-      // Note the residual: the default `shotRadius` of 3 against 8px shot art
-      // is 1.5 internal pixels per authored pixel, which is resampled. The fix
-      // is art rather than code — 12x12 shot art is inside `projectile`'s spec
-      // and lands the default exactly on the grid — and is left for whoever
-      // next opens the projectile set.
       const radius = store.radius[index] ?? 1;
-      const scale = (radius * 2) / texture.height;
-      sprite.scale.set(scale);
-      sprite.position.set(
-        lerp(store.previousX[index] ?? 0, store.x[index] ?? 0, alpha),
-        lerp(store.previousY[index] ?? 0, store.y[index] ?? 0, alpha),
-      );
-
+      const x = lerp(store.previousX[index] ?? 0, store.x[index] ?? 0, alpha);
+      const z = lerp(store.previousY[index] ?? 0, store.y[index] ?? 0, alpha);
+      const t = Math.min(1, (store.ticksAlive[index] ?? 0) / ARC_TICKS);
+      const height = isPlayer
+        ? PLAYER_SHOT_HEIGHT + ARC_HEIGHT * Math.sin(t * Math.PI)
+        : ENEMY_SHOT_HEIGHT;
+      this.layerFor(texture, this.layers).add(x, height, z, radius * 2, this.lean);
       if (markersOn) {
-        const marker = this.markerAt(slot);
-        if (marker !== null) {
-          marker.texture =
-            store.team[index] === ProjectileTeam.Player ? teamMarkers.player : teamMarkers.enemy;
-          marker.visible = true;
-          marker.scale.set((radius * 2 * MARKER_SCALE) / marker.texture.height);
-          marker.position.copyFrom(sprite.position);
-        }
-      } else {
-        const marker = this.markers[slot];
-        if (marker !== undefined && marker !== null) {
-          marker.visible = false;
+        const marker = isPlayer ? teamMarkers.player : teamMarkers.enemy;
+        this.layerFor(marker, this.markerLayers).add(
+          x,
+          height + 0.5,
+          z,
+          radius * 2 * MARKER_SCALE,
+          this.lean,
+        );
+      }
+      if (isPlayer && this.lighting !== null) {
+        const light = this.lighting.shotLight(lights);
+        if (light !== null) {
+          light.position.set(x, height + 1, z);
+          light.intensity = SHOT_LIGHT_INTENSITY;
+          lights += 1;
         }
       }
     });
-
-    for (let slot = used; slot < this.sprites.length; slot++) {
-      const sprite = this.sprites[slot];
-      if (sprite === undefined) {
-        continue;
-      }
-      if (!sprite.visible) {
-        // Everything past the first hidden sprite was hidden last frame too.
-        break;
-      }
-      sprite.visible = false;
-      const marker = this.markers[slot];
-      if (marker !== undefined && marker !== null) {
-        marker.visible = false;
-      }
+    this.lighting?.dimShotLightsFrom(lights);
+    for (const layer of this.layers.values()) {
+      layer.end();
+    }
+    for (const layer of this.markerLayers.values()) {
+      layer.end();
     }
   }
 
-  /** Sprites are requested in order, so a push always lands at the wanted slot. */
-  private spriteAt(slot: number): Sprite {
-    const existing = this.sprites[slot];
+  private layerFor(texture: Texture, into: Map<Texture, InstancedSprites>): InstancedSprites {
+    const existing = into.get(texture);
     if (existing !== undefined) {
       return existing;
     }
-    const created = new Sprite(this.art.player);
-    created.anchor.set(0.5);
-    this.sprites.push(created);
-    this.container.addChild(created);
+    const created = new InstancedSprites(texture, this.store.capacity);
+    created.begin();
+    into.set(texture, created);
+    this.group.add(created.mesh);
     return created;
   }
 
-  /** Lazily creates the marker for `slot`, the same shape `spriteAt` follows — `null` when the feature has no art to draw. */
-  private markerAt(slot: number): Sprite | null {
-    const existing = this.markers[slot];
-    if (existing !== undefined) {
-      return existing;
+  destroy(): void {
+    for (const layer of [...this.layers.values(), ...this.markerLayers.values()]) {
+      layer.dispose();
     }
-    const teamMarkers = this.art.teamMarkers;
-    if (teamMarkers === undefined) {
-      this.markers[slot] = null;
-      return null;
-    }
-    const created = new Sprite(teamMarkers.player);
-    created.anchor.set(0.5);
-    created.visible = false;
-    this.markers[slot] = created;
-    this.container.addChild(created);
-    return created;
+    this.group.removeFromParent();
   }
 }
+
+export { InstancedSprites };
+/** Kept so a colourblind marker's per-instance tint could be driven later; white today. */
+export const MARKER_COLOUR = SCRATCH_COLOR;
+/** Room units per authored shot pixel — a shot's texture height maps to its diameter, not this, but exported for tests. */
+export const SHOT_PIXELS_PER_UNIT = ACTOR_PIXELS_PER_UNIT;

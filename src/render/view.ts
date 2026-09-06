@@ -1,740 +1,389 @@
-import { Container, type Graphics, type Texture } from 'pixi.js';
+import { Color, Scene, type WebGLRenderer } from 'three';
 import { ROOM_TRANSITION_TICKS, type GameSim, type RoomDirection } from '../sim/game/sim.js';
 import { roomFrameSize, type RoomGeometry } from '../sim/room/geometry.js';
 import { PLAYFIELD_HEIGHT, PLAYFIELD_WIDTH } from '../sim/room/playground.js';
 import type { CompiledDoor } from '../sim/room/template.js';
-import { clamp, lerp } from '../sim/math.js';
-import { AmbientLight } from './ambient-light.js';
+import type { EntityAnimator } from './animation/animator.js';
+import { BombFlightView } from './bomb-flight-view.js';
+import { CorpseView } from './corpse-view.js';
 import { DamageNumberView } from './damage-numbers.js';
 import { DecalView } from './decals.js';
 import { EntityView } from './entities.js';
+import type { AnimatedSpriteSet, RoomTileArt } from './floor-art.js';
+import { BitmapText, Container, type Texture } from './gfx/index.js';
+import { MachineView } from './machine-view.js';
+import { MaibaumView } from './maibaum-view.js';
 import { ParticleView, type ParticleAccessibility, type ParticleTextures } from './particles.js';
 import { PedestalView } from './pedestal-view.js';
-import { MachineView } from './machine-view.js';
-import { ProjectileView, type ProjectileArt } from './projectiles.js';
-import {
-  createDoorView,
-  createBlockView,
-  createRoomView,
-  createSecretHintView,
-  type DoorState,
-  type DoorTextures,
-  type DoorView,
-} from './room.js';
-import { adoptInto, createDepthLayer } from './depth.js';
-import { createPropView } from './prop-view.js';
-import { MaibaumView } from './maibaum-view.js';
-import { BombFlightView } from './bomb-flight-view.js';
-import { CorpseView } from './corpse-view.js';
-import { INTERNAL_HEIGHT, INTERNAL_WIDTH, WORLD_ZOOM } from './resolution.js';
-import { ENTITY_PALETTE } from './palette.js';
-import type { EntityAnimator } from './animation/animator.js';
-import type { AnimatedSpriteSet, RoomTileArt } from './floor-art.js';
 import type { PlayerArt } from './player-art.js';
 import { PlayerView } from './player-view.js';
+import { ProjectileView, type ProjectileArt } from './projectiles.js';
+import { UI_TEXT_HEIGHT } from './ui/text.js';
+import { ELEVATION, WorldCamera, type WorldPoint } from './world/camera.js';
+import { Lighting } from './world/lighting.js';
+import { type DoorState, type DoorTextures, Scenery } from './world/scenery.js';
 
+/**
+ * The game as a scene: everything the player sees in the room, and the fixed
+ * camera it is seen through.
+ *
+ * ## One class, same job
+ *
+ * `GameView` owns the three.js scene the way it used to own a Pixi container
+ * tree, and `app/main.ts` drives it the same way: construct it with the art,
+ * call `sync(alpha, nowMs)` once a rendered frame, `render()` to draw, ask it
+ * where the player is on screen for the overlays. The simulation is read, never
+ * written (`docs/DECISIONS.md` #2) — and it does not know this renderer
+ * exists any more than it knew the last one.
+ *
+ * ## What each frame does, in order
+ *
+ * 1. If the room changed under us, rebuild the scenery and re-light.
+ * 2. Doors: state changes, the leaf sliding aside, the room-clear pulse.
+ * 3. Every view reads its slice of the simulation.
+ * 4. The camera follows the player (clamped to the room), plus shake, sway,
+ *    the room-transition slide and the debug pan.
+ *
+ * ## Screen positions
+ *
+ * The HUD sits over the world in a separate 2D pass, so anything the HUD
+ * anchors to a world point — the vignette, a pedestal's name plate, a damage
+ * number — asks this class to project it. That is the one seam between the
+ * two passes, and it is one function.
+ */
 export interface GameViewTextures {
-  /**
-   * Alois's own strips (#151), replacing the single static player texture
-   * this used to be. He is animated, four-way and two-layered, so "the
-   * player's texture" stopped being a thing there is exactly one of.
-   */
   readonly playerArt: PlayerArt;
-  /** Every projectile sprite, and the rule for which shot draws which (#152). */
   readonly projectileArt: ProjectileArt;
-  /** `art` slot to sprite name, from `EnemyRegistry.projectileArtNames`. */
   readonly projectileArtNames: readonly (string | null)[];
+  /** What an un-drawn body falls back to. */
   readonly entity: Texture;
-  /** The entity shape in solid white, for the one-tick hit flash. */
-  readonly entityFlash: Texture;
-  /** The ring an enemy telegraphs an untargeted burst with. */
-  readonly telegraph: Texture;
-  /** The wedge a `Line`/`Arc` telegraph (a charge, a melee swing, #233) scales non-uniformly out of. */
-  readonly telegraphWedge: Texture;
-  /** One effect sprite per `ParticleKind` (#153), plus what an unauthored kind falls back to. */
   readonly particleArt: ParticleTextures;
   readonly decal: Texture;
-  /** Font family for damage numbers. */
+  /** The bitmap font family for damage numbers and pickup labels. */
   readonly numberFont: string;
-  /** A pedestal's floating item icon (#28). */
   readonly pedestalItem: Texture;
-  /** A pedestal's light beam. */
-  readonly pedestalBeam: Texture;
-  /** The plinth the item floats over (#152). Omitted leaves the beam hanging in mid-air, as it did before. */
   readonly pedestalPlinth?: Texture | undefined;
-  /** The two door sprites (#152). Omitted falls back to the flat coloured band. */
   readonly doors?: DoorTextures | undefined;
-  /** Pickup art (#152), keyed by `PickupDefinition.id`. */
   readonly pickupArt?: Readonly<Record<string, Texture>> | undefined;
-  /** The ground shadow a boss stands on (#152). Omitted leaves bosses drawn as they were. */
-  readonly bossShadow?: Texture | undefined;
-  /** Which ids draw off `bosses/` art, so only those get a shadow. */
   readonly bossIds?: ReadonlySet<string> | undefined;
-  /**
-   * The shared ground shadow every other standing/dropped body draws — the
-   * player, a walking enemy, a piece of loot. Omitted leaves them exactly as
-   * they were before this existed: no shadow at all, the same graceful
-   * fallback `bossShadow`'s absence already gets.
-   */
-  readonly actorShadow?: Texture | undefined;
-  /** Every tile in the tree by name — what `render/prop-view.ts` draws a room's `decorativeProps` from (#152). */
   readonly tileTextures?: Readonly<Record<string, Texture>> | undefined;
-  /**
-   * Real tile art (#35, #37, #152), keyed by floor number: the floor
-   * variants (`render/room.ts`'s `pickTileVariant` picks between them per
-   * cell), the wall band, the course where wall meets floor, what an obstacle
-   * is drawn as, and the floor's destructible prop. A floor with no entry
-   * here falls back to `createRoomView`'s flat palette fill — every floor but
-   * 1 and 2, today.
-   */
   readonly roomTiles: Readonly<Record<number, RoomTileArt>>;
-  /**
-   * Real character art (#35), keyed by `EnemyDefinition.id`. An enemy with
-   * no entry here falls back to `entity`, the shared blob every enemy used
-   * to draw as — every enemy floors 2-7 haven't been drawn yet, today.
-   */
   readonly enemyArt: Readonly<Record<string, Texture>>;
-  /**
-   * Each `enemyArt` entry's own hit-flash silhouette (#37's bug report) —
-   * `render/placeholder-art.ts`'s `createSilhouetteTexture`, one per id,
-   * built from that same texture so the flash is always that enemy's actual
-   * shape rather than `entityFlash`'s generic circle. An enemy with no
-   * `enemyArt` entry has no entry here either and falls back to
-   * `entityFlash`, the same fallback `enemyArt` itself uses for `entity`.
-   */
-  readonly enemyFlash: Readonly<Record<string, Texture>>;
-  /**
-   * Animated character art (#150), keyed by `EnemyDefinition.id` — the frames
-   * of that creature's strip, the same frames as flash silhouettes, and its
-   * compiled clips. An enemy in here animates; one that is not draws its
-   * single `enemyArt` texture forever, exactly as before.
-   *
-   * Built by `render/floor-art.ts`'s `buildAnimatedSets` from what
-   * `loadFloorArt` scanned, because the silhouettes need a renderer and the
-   * loader deliberately has none.
-   */
   readonly enemyAnimation: Readonly<Record<string, AnimatedSpriteSet>>;
 }
 
-/**
- * Everything `RenderView.setAccessibility` accepts: `ParticleAccessibility`'s
- * two fields, plus #53's colourblind-safe projectile marker toggle
- * (`ProjectileView.setAccessibility`'s own `ProjectileAccessibility`).
- * Combined here rather than passed as two separate arguments so `main.ts`
- * has one call site to make when any accessibility setting changes.
- */
 export interface RenderAccessibility extends ParticleAccessibility {
   readonly colorblindPalette: boolean;
 }
 
-/** What reduced motion multiplies screen shake by. A quarter still reads; nothing does not. */
 const REDUCED_MOTION_SHAKE = 0.25;
-
-/** Rendered frames the doors pulse for when a room clears. About a third of a second at 60 Hz. */
 const DOOR_PULSE_FRAMES = 20;
-/** How far the pulse dips the doors' alpha at its deepest. */
 const DOOR_PULSE_DEPTH = 0.55;
-
-/**
- * Rendered frames a door's open/close transition takes. Quicker than the
- * amber clear-pulse it plays alongside — a door swinging is a mechanical
- * beat, not a celebration — about a fifth of a second at 60 Hz.
- */
 const DOOR_TRANSITION_FRAMES = 12;
-/**
- * The depth-axis scale a door tile settles at mid-swing, never quite zero:
- * a door collapsed to nothing reads as a rendering glitch, not a door
- * edge-on, and the two overlapping tiles of the incoming/outgoing state
- * cover for the sliver either one leaves.
- */
 const DOOR_TRANSITION_MIN_SCALE = 0.08;
+/** Where the player's "screen position" is taken: mid-body, so the vignette centres on him, not his feet. */
+const PLAYER_ANCHOR_HEIGHT = 8;
 
-/**
- * Slides every door half in `view` apart from its partner along the
- * doorway's long axis — that axis is each sprite's own local x once its
- * `rotation` is applied (`render/room.ts`'s `doorHalfPlacements`), so this
- * only ever scales `scale.x`, toward the `anchor` at the sprite's outer edge.
- * A north/south door parts sideways, a west/east door up and down ("Isaac
- * like", `#196`). `1` is the door at rest; the transition sweeps this from
- * `DOOR_TRANSITION_MIN_SCALE` up to `1` (or back) over
- * `DOOR_TRANSITION_FRAMES`.
- *
- * `retractSign` carries the half's mirror (`-1` for the left/near half) and
- * `baseScale` the 32px→tile-grid factor (`docs/DECISIONS.md` #48), both
- * rebuilt into `scale.x` here rather than nudged — `progress` reaches `1` at
- * rest, and a bare `1` would be double the sprite's real on-screen size.
- * `scale.y` is left alone: `doorHalfPlacements` may have set it negative (a
- * south door's vertical flip), and the slide never touches the short axis.
- */
-function applyDoorSwingScale(view: DoorView, progress: number): void {
-  for (const { sprite, retractSign, baseScale } of view.sprites) {
-    sprite.scale.x = retractSign * baseScale * progress;
-  }
-}
-
-/**
- * The scene graph for one running game.
- *
- * Reads simulation state and writes sprite positions. It never writes back —
- * the arrow only ever points this way, which is what keeps the simulation
- * headless and the renderer replaceable.
- *
- * `sync` runs once per rendered frame, which on a 144 Hz display is more often
- * than the simulation ticks, so positions are interpolated between the previous
- * and current tick rather than snapped.
- */
 export class GameView {
-  readonly stage = new Container();
-
-  /** The container everything in the room lives in. The overlay draws into it. */
-  get worldLayer(): Container {
-    return this.world;
-  }
-
-  private readonly sim: GameSim;
-  private readonly roomTiles: Readonly<Record<number, RoomTileArt>>;
-  private readonly doorTextures: DoorTextures | undefined;
-  private readonly tileTextures: Readonly<Record<string, Texture>>;
+  readonly scene = new Scene();
+  readonly camera = new WorldCamera();
   /**
-   * Everything that stands on the floor, sorted by where it stands
-   * (`render/depth.ts`, `docs/DECISIONS.md` #73): the room's obstacles and
-   * furniture, every body `EntityView` draws, the player, the Maibaum.
-   *
-   * The one place in this file where child order is not decided here.
+   * World-anchored HUD text (damage numbers, prices) lives here. The caller
+   * puts this container on the UI layer at internal-pixel scale.
    */
-  private readonly depth: Container;
-  /** The room's decorative furniture (#152), adopted into `depth` and rebuilt per room. */
-  private propSprites: Container[];
-  /** The room's obstacles (#60), adopted into `depth` and rebuilt per room. */
-  private blockSprites: Container[];
-  /** Last `AmbientLight.tintRevision` the scenery was shaded for — `-1` until the first frame. */
-  private sceneryTintRevision = -1;
-  private readonly ambientLight: AmbientLight;
-  private readonly maibaumView: MaibaumView;
-  private readonly corpseView: CorpseView;
-  private readonly playerView: PlayerView;
-  private readonly projectiles: ProjectileView;
-  private readonly bombFlightView: BombFlightView;
-  private readonly entities: EntityView;
-  private readonly pedestals: PedestalView;
-  private readonly machine: MachineView;
-  private readonly particles: ParticleView;
-  private readonly decals: DecalView;
-  private readonly damageNumbers: DamageNumberView;
-  private roomGeometry: RoomGeometry;
-  private roomView: Container;
-  private doorView: DoorView;
-  /** The outgoing door state, kept alive and animated out while `doorView` animates in. */
-  private previousDoorView: DoorView | undefined;
-  private doorTransitionTicks = 0;
-  private doorsLocked: boolean;
-  /**
-   * Doorways that lead to an unopened key-locked treasure room (`#196`) —
-   * set by `app/main.ts` (which has the floor plan) on every room load, and
-   * drawn `locked` instead of `open` once the room's own enemies are down.
-   * Empty on a room with no such neighbour, which is almost every room.
-   */
-  private lockedDoorDirections: ReadonlySet<RoomDirection> = new Set();
-  private secretHintView: Graphics;
-  private secretHintDoors: readonly CompiledDoor[] = [];
+  readonly labelLayer = new Container();
 
-  /**
-   * Everything the camera shakes.
-   *
-   * The room, the bodies and the effects all sit inside one container that is
-   * offset each frame. The HUD does not, because a health bar that slides
-   * around when the player takes a hit is the fastest way to make shake
-   * unbearable.
-   */
-  private readonly world = new Container();
-
-  /**
-   * Free-camera offset, in pixels.
-   *
-   * Zero in a normal run. The debug overlay drives it so a scene can be looked
-   * at from outside the room — which is how a collider sitting where nothing is
-   * drawn gets found.
-   */
+  /** Debug free-camera pan, in room units. */
   cameraX = 0;
   cameraY = 0;
 
-  /**
-   * What screen shake is multiplied by before it is applied.
-   *
-   * Damped rather than removed under reduced motion: shake is the cheapest
-   * signal that a hit was *yours* rather than something that happened
-   * elsewhere on screen, and a quarter of it still reads where none at all
-   * does not. `GameSim.screenShakeScale` is the separate, sim-side control
-   * the debug tuning window drives; this one is the accessibility toggle's,
-   * and it is render-side because it must not change a replay.
-   */
-  private shakeScale = 1;
+  private readonly sim: GameSim;
+  private readonly textures: GameViewTextures;
+  private readonly lighting: Lighting;
+  private scenery: Scenery;
+  private roomGeometry: RoomGeometry;
+  private doorsLocked: boolean;
+  private lockedDoorDirections: ReadonlySet<RoomDirection> = new Set();
+  private secretHintDoors: readonly CompiledDoor[] = [];
+  private doorTransitionTicks = 0;
+  private doorPulseFrames = 0;
 
+  private readonly entities: EntityView;
+  private readonly playerView: PlayerView;
+  private readonly projectiles: ProjectileView;
+  private readonly particles: ParticleView;
+  private readonly decals: DecalView;
+  private readonly damageNumbers: DamageNumberView;
+  private readonly pedestals: PedestalView;
+  private readonly machine: MachineView;
+  private readonly maibaumView: MaibaumView;
+  private readonly bombFlightView: BombFlightView;
+  private readonly corpseView: CorpseView;
+
+  private shakeScale = 1;
   private accessibility: RenderAccessibility = {
     reducedMotion: false,
     reduceFlashes: false,
     colorblindPalette: false,
   };
-
-  /**
-   * Frames left of the amber pulse the doors give when a room clears (#153).
-   *
-   * Counted in rendered frames rather than simulation ticks because it is
-   * purely presentational and must not exist in a replay — and because the
-   * thing it decorates, the doors unlocking, is already visible without it.
-   */
-  private doorPulseFrames = 0;
+  private readonly point: WorldPoint = { x: 0, y: 0 };
 
   constructor(sim: GameSim, textures: GameViewTextures) {
     this.sim = sim;
-    this.roomTiles = textures.roomTiles;
-    this.doorTextures = textures.doors;
-    this.tileTextures = textures.tileTextures ?? {};
-    this.stage.addChild(this.world);
-    // The room is authored at half the internal resolution and blown up here,
-    // which is the whole of the camera for now. Scaling the container rather
-    // than every sprite keeps the debug overlay's world layer — hitboxes, the
-    // broadphase grid — lined up with what it is drawing over for free.
-    this.world.scale.set(WORLD_ZOOM);
+    this.textures = textures;
     this.roomGeometry = sim.room;
-    this.roomView = createRoomView(sim.room, sim.currentFloor, this.roomTiles[sim.currentFloor]);
-    this.world.addChild(this.roomView);
     this.doorsLocked = sim.doorsLocked;
-    this.doorView = createDoorView(
-      sim.room,
-      sim.doors,
-      this.doorStateFor.bind(this),
-      this.doorTextures,
-    );
-    this.world.addChild(this.doorView.container);
-    this.secretHintView = createSecretHintView(sim.room, []);
-    this.world.addChild(this.secretHintView);
 
-    // Ambient per-floor lighting: over the floor and walls, under everything
-    // that stands on them — see `ambient-light.ts`'s own doc comment for why
-    // it stops there. The scenery standing in it no longer gets its tone by
-    // being *under* this overlay, because since #73 it has to be above it to
-    // sort against the bodies; `tintScenery` shades it by the same light
-    // instead, sampled at its own foot line.
-    this.ambientLight = new AmbientLight();
-    this.ambientLight.onRoomChanged(sim.room, sim.currentFloor);
-    this.world.addChild(this.ambientLight.container);
+    this.lighting = new Lighting(this.scene);
+    this.scenery = this.buildScenery();
+    this.scene.add(this.scenery.group);
 
-    this.decals = new DecalView(sim.decals, textures.decal);
-    this.world.addChild(this.decals.container);
-
-    this.depth = createDepthLayer();
+    const makeLabel = (): BitmapText =>
+      new BitmapText({
+        text: '',
+        style: { fontFamily: textures.numberFont, fontSize: UI_TEXT_HEIGHT },
+      });
 
     this.entities = new EntityView(
       sim,
-      this.depth,
-      textures.entity,
-      textures.entityFlash,
-      textures.telegraph,
-      textures.telegraphWedge,
-      textures.enemyArt,
-      textures.enemyFlash,
-      textures.enemyAnimation,
-      textures.pickupArt,
-      textures.bossShadow,
-      textures.bossIds,
-      textures.actorShadow,
-      // `pedestalBeam` is already a generic 1x1 solid meant to be stretched
-      // into a bar — reused here rather than generating a second identical
-      // texture for the bomb cross telegraph's two bars (#210).
-      textures.pedestalBeam,
+      {
+        fallback: textures.entity,
+        enemyArt: textures.enemyArt,
+        enemyAnimation: textures.enemyAnimation,
+        pickupArt: textures.pickupArt ?? {},
+        bossIds: textures.bossIds ?? new Set(),
+      },
+      this.labelLayer,
+      makeLabel,
     );
-    this.entities.setTargetTextures(this.roomTiles[sim.currentFloor]?.destructibles);
-    // Ground shadows, telegraph shapes and death clips — everything
-    // `EntityView` draws that lies *on* the floor rather than standing on it.
-    // The bodies themselves went into `depth` when it was handed in above.
-    this.world.addChild(this.entities.container);
+    this.entities.setTargetTextures(textures.roomTiles[sim.currentFloor]?.destructibles);
+    this.scene.add(this.entities.group);
 
-    this.pedestals = new PedestalView(
-      sim,
-      textures.pedestalItem,
-      textures.pedestalBeam,
-      textures.pedestalPlinth,
-    );
-    this.world.addChild(this.pedestals.container);
-
-    // Der Losbrunnen (#218) reuses the same generic beam/plinth textures as
-    // a pedestal, tinted distinctly — see `MachineView`'s own doc comment.
-    this.machine = new MachineView(sim, textures.pedestalBeam, textures.pedestalPlinth);
-    this.world.addChild(this.machine.container);
-
-    // Blutwurz (#84): drawn just before the player, ground-level, so a
-    // corpse in the room the player is standing in reads as part of the
-    // floor rather than floating over it.
-    this.corpseView = new CorpseView();
-    this.world.addChild(this.corpseView.container);
-
-    // Everything that stands up, in one sorted layer (#73). Its members are
-    // added here and to it — never to `world` — and each writes its own foot
-    // line; the order between them is not this file's to decide any more.
-    //
-    // A pedestal and Der Losbrunnen stay below it rather than joining: both
-    // are a plinth under a light beam, and a beam is a glow rather than a
-    // body — sorting the three sprites of one against the room would put a
-    // barrel between a pedestal and its own light. The player therefore always
-    // draws in front of one, which is what they already did.
-    this.blockSprites = adoptInto(
-      this.depth,
-      createBlockView(sim.room, sim.currentFloor, this.roomTiles[sim.currentFloor]),
-    );
-    // A room's authored furniture (#152). Walk-through, still — nothing here
-    // has a collider — but no longer flat: a player south of the well is drawn
-    // in front of it and one north of it behind.
-    this.propSprites = adoptInto(
-      this.depth,
-      createPropView(sim.roomDecorativeProps, this.tileTextures),
-    );
-    this.playerView = new PlayerView(textures.playerArt, textures.actorShadow);
-    this.depth.addChild(this.playerView.container);
-    // The arena Maibaum (#199) — the object this whole layer generalises.
-    this.maibaumView = new MaibaumView(textures.actorShadow);
-    this.depth.addChild(this.maibaumView.container);
-    this.world.addChild(this.depth);
-
-    // Pickup labels and shop prices, over everything that stands.
-    this.world.addChild(this.entities.labelLayer);
+    this.playerView = new PlayerView(textures.playerArt);
+    this.scene.add(this.playerView.group);
 
     this.projectiles = new ProjectileView(
       sim.projectiles,
       textures.projectileArt,
       textures.projectileArtNames,
     );
-    this.world.addChild(this.projectiles.container);
-
-    // A Böllerschmeißer's lobbed bomb (#243): drawn above bodies and shots
-    // alike, the same z-order a real projectile takes, since it is — for the
-    // second it is in the air — exactly that.
-    this.bombFlightView = new BombFlightView();
-    this.world.addChild(this.bombFlightView.container);
+    this.projectiles.setLighting(this.lighting);
+    this.scene.add(this.projectiles.group);
 
     this.particles = new ParticleView(sim.particles, textures.particleArt);
-    this.world.addChild(this.particles.container);
+    this.scene.add(this.particles.group);
 
-    this.damageNumbers = new DamageNumberView(sim.damageNumbers, textures.numberFont);
-    this.world.addChild(this.damageNumbers.container);
+    this.decals = new DecalView(sim.decals, textures.decal);
+    this.scene.add(this.decals.group);
+
+    this.damageNumbers = new DamageNumberView(sim.damageNumbers, this.labelLayer, makeLabel);
+
+    this.pedestals = new PedestalView(sim, textures.pedestalItem, textures.pedestalPlinth);
+    this.scene.add(this.pedestals.group);
+
+    this.machine = new MachineView(sim, textures.pedestalPlinth);
+    this.scene.add(this.machine.group);
+
+    this.maibaumView = new MaibaumView();
+    this.scene.add(this.maibaumView.group);
+
+    this.bombFlightView = new BombFlightView();
+    this.scene.add(this.bombFlightView.group);
+
+    this.corpseView = new CorpseView();
+    this.scene.add(this.corpseView.group);
+
+    this.relight();
+    this.applyLean();
   }
 
-  /**
-   * Which effects the player has switched off (#153).
-   *
-   * Held here and pushed down rather than read from a module global, so a
-   * headless test or the room editor's playtest view gets the full set without
-   * having to know the setting exists. Never reaches `GameSim`: a
-   * reduced-motion run steps identically to a full one, or a recorded replay
-   * would not play back (`docs/DECISIONS.md` #41).
-   */
+  // ---------------------------------------------------------- settings
+
   setAccessibility(accessibility: RenderAccessibility): void {
     this.accessibility = accessibility;
     this.particles.setAccessibility(accessibility);
     this.entities.setRingPulses(!accessibility.reduceFlashes);
     this.shakeScale = accessibility.reducedMotion ? REDUCED_MOTION_SHAKE : 1;
-    this.ambientLight.setReducedMotion(accessibility.reducedMotion);
+    this.lighting.setReducedMotion(accessibility.reducedMotion);
     this.projectiles.setAccessibility({ colorblindPalette: accessibility.colorblindPalette });
   }
 
-  /** The frame animator, for the debug overlay's clip panel. */
+  /** The camera's angle above the floor — a debug knob; `ELEVATION` is the game's. */
+  setElevation(radians: number): void {
+    this.camera.setElevation(radians);
+    this.applyLean();
+  }
+
+  get elevation(): number {
+    return this.camera.elevation;
+  }
+
+  static get defaultElevation(): number {
+    return ELEVATION;
+  }
+
+  private applyLean(): void {
+    const lean = this.camera.lean;
+    this.entities.setLean(lean);
+    this.playerView.setLean(lean);
+    this.projectiles.setLean(lean);
+    this.particles.setLean(lean);
+    this.pedestals.setLean(lean);
+    this.scenery.setLean(lean);
+  }
+
   get animator(): EntityAnimator {
     return this.entities.animator;
   }
 
-  /**
-   * `alpha` is the fraction of a tick elapsed since the last simulation step.
-   *
-   * `outerZoom` is the whole-number scale `main.ts` fits the game to the
-   * window at (`GameLayout.scale`) — see the rounding comment below for why
-   * `sync` needs to know it.
-   *
-   * `nowMs` is the render clock animation clips advance on (#150). It defaults
-   * to reading the clock here so that every caller does not have to, but
-   * `app/main.ts` passes the reading it already took for its own frame timing:
-   * two `performance.now()` calls a frame that could disagree by a fraction of
-   * a millisecond is two clocks where one will do.
-   */
-  sync(alpha: number, outerZoom = 1, nowMs: number = performance.now()): void {
-    const roomChanged = this.sim.room !== this.roomGeometry;
+  get player(): PlayerView {
+    return this.playerView;
+  }
+
+  // ------------------------------------------------------------- frame
+
+  sync(alpha: number, nowMs: number = performance.now()): void {
+    const sim = this.sim;
+    const roomChanged = sim.room !== this.roomGeometry;
     if (roomChanged) {
-      // Before anything is drawn: the old room's bodies are gone, and they
-      // left because the room did, not because they died.
+      this.roomGeometry = sim.room;
       this.entities.resetAnimation();
-      this.world.removeChild(this.roomView);
-      this.roomView.destroy();
-      this.roomGeometry = this.sim.room;
-      this.roomView = createRoomView(
-        this.roomGeometry,
-        this.sim.currentFloor,
-        this.roomTiles[this.sim.currentFloor],
-      );
-      this.world.addChildAt(this.roomView, 0);
-      // Which barrel is a property of the floor, and a run crosses floors.
-      this.entities.setTargetTextures(this.roomTiles[this.sim.currentFloor]?.destructibles);
-    }
-    // Rebuilt on room change too: a fresh room's door state is not necessarily
-    // "locked", e.g. a cleared room re-entered still has none of its own enemies.
-    if (roomChanged || this.sim.doorsLocked !== this.doorsLocked) {
-      const justUnlocked = !this.sim.doorsLocked && !roomChanged;
-      this.doorsLocked = this.sim.doorsLocked;
-      const nextDoorView = createDoorView(
-        this.roomGeometry,
-        this.sim.doors,
-        this.doorStateFor.bind(this),
-        this.doorTextures,
-      );
-      // A swing animation needs the outgoing sprites kept around to animate
-      // out, not just a texture to snap away from — so the old `doorView`
-      // becomes `previousDoorView` and animates alongside the new one instead
-      // of being destroyed on the spot. That only makes sense between two
-      // real door states in the same room; a room change has no "outgoing
-      // door" to swing (the whole room just changed under it), and a
-      // transition already in flight when another one starts has nothing
-      // coherent to animate from, so both hard-cut instead.
-      if (this.previousDoorView !== undefined) {
-        this.world.removeChild(this.previousDoorView.container);
-        this.previousDoorView.container.destroy();
-        this.previousDoorView = undefined;
-      }
-      const canAnimate =
-        !roomChanged && this.doorView.sprites.length > 0 && nextDoorView.sprites.length > 0;
-      if (canAnimate) {
-        this.previousDoorView = this.doorView;
-        this.previousDoorView.container.alpha = 1;
+      this.entities.setTargetTextures(this.textures.roomTiles[sim.currentFloor]?.destructibles);
+      this.scenery.dispose();
+      this.scenery = this.buildScenery();
+      this.scene.add(this.scenery.group);
+      this.scenery.setLean(this.camera.lean);
+      this.doorsLocked = sim.doorsLocked;
+      this.doorTransitionTicks = 0;
+      this.doorPulseFrames = 0;
+      this.applyDoorStates();
+      this.relight();
+    } else if (sim.doorsLocked !== this.doorsLocked) {
+      const justUnlocked = !sim.doorsLocked;
+      this.doorsLocked = sim.doorsLocked;
+      this.applyDoorStates();
+      if (justUnlocked) {
+        // The leaves slide aside rather than vanish: start them shut and let the transition open them.
+        for (const door of this.scenery.doors) {
+          if (door.currentState === 'open') {
+            door.setState('closed');
+          }
+        }
         this.doorTransitionTicks = DOOR_TRANSITION_FRAMES;
-      } else {
-        this.world.removeChild(this.doorView.container);
-        this.doorView.container.destroy();
-        this.doorTransitionTicks = 0;
+        this.doorPulseFrames = DOOR_PULSE_FRAMES;
       }
-      this.doorView = nextDoorView;
-      this.world.addChildAt(this.doorView.container, 1);
-      if (this.previousDoorView !== undefined) {
-        this.world.addChildAt(this.previousDoorView.container, 1);
-      }
-      // The doors are what actually changed when a room cleared, so they are
-      // what says so (#153). Only on an unlock inside the same room — walking
-      // into an already-cleared room rebuilds the same view and has nothing to
-      // announce.
-      this.doorPulseFrames = justUnlocked ? DOOR_PULSE_FRAMES : 0;
     }
+
     if (this.doorTransitionTicks > 0) {
       this.doorTransitionTicks -= 1;
-      // 0 at the first animated frame, 1 once the swing completes.
       const progress = 1 - this.doorTransitionTicks / DOOR_TRANSITION_FRAMES;
-      applyDoorSwingScale(
-        this.doorView,
-        DOOR_TRANSITION_MIN_SCALE + (1 - DOOR_TRANSITION_MIN_SCALE) * progress,
-      );
-      if (this.previousDoorView !== undefined) {
-        applyDoorSwingScale(
-          this.previousDoorView,
-          DOOR_TRANSITION_MIN_SCALE + (1 - DOOR_TRANSITION_MIN_SCALE) * (1 - progress),
-        );
-        if (this.doorTransitionTicks === 0) {
-          this.world.removeChild(this.previousDoorView.container);
-          this.previousDoorView.container.destroy();
-          this.previousDoorView = undefined;
+      const swing = 1 - (DOOR_TRANSITION_MIN_SCALE + (1 - DOOR_TRANSITION_MIN_SCALE) * progress);
+      for (const door of this.scenery.doors) {
+        if (this.doorStateFor(door.door) === 'open') {
+          door.setSwing(Math.max(DOOR_TRANSITION_MIN_SCALE, swing));
+          if (this.doorTransitionTicks === 0) {
+            door.setState('open');
+            door.setSwing(1);
+          }
         }
       }
     }
     if (this.doorPulseFrames > 0) {
       this.doorPulseFrames -= 1;
       const progress = this.doorPulseFrames / DOOR_PULSE_FRAMES;
-      // Suppressed by `reduceFlashes`, and by nothing else: it is a bright
-      // thing that happens repeatedly over a run, which is the exact hazard
-      // that toggle exists for.
-      this.doorView.container.tint = ENTITY_PALETTE.normalTint;
-      this.doorView.container.alpha = this.accessibility.reduceFlashes
-        ? 1
-        : 1 - Math.sin(progress * Math.PI) * DOOR_PULSE_DEPTH;
-    } else {
-      this.doorView.container.alpha = 1;
+      const strength = this.accessibility.reduceFlashes
+        ? 0
+        : Math.sin(progress * Math.PI) * DOOR_PULSE_DEPTH;
+      for (const door of this.scenery.doors) {
+        door.setPulse(strength);
+      }
     }
-    // A bombed-open wall stops being a hint the same tick it stops being
-    // hidden — `setSecretHints` is what the caller (`app/main.ts`, which
-    // notices the reveal) calls to clear it; this only re-anchors the
-    // existing hint to a room that just changed under it.
-    if (roomChanged) {
-      this.world.removeChild(this.secretHintView);
-      this.secretHintView.destroy();
-      this.secretHintView = createSecretHintView(this.roomGeometry, this.secretHintDoors);
-      this.world.addChildAt(this.secretHintView, 2);
-      this.replaceScenery();
-      this.ambientLight.onRoomChanged(this.roomGeometry, this.sim.currentFloor);
-    }
-    this.ambientLight.sync(this.sim.tick);
-    // Shade the scenery to match the floor it stands on. Off a revision rather
-    // than every frame: Floor 1's lamp never moves, so a room is tinted once at
-    // load; only Floor 2's drifting cloud actually costs anything per frame,
-    // and then only while it is crossing.
-    if (this.ambientLight.tintRevision !== this.sceneryTintRevision) {
-      this.sceneryTintRevision = this.ambientLight.tintRevision;
-      this.tintScenery();
-    }
+
+    this.lighting.sync(sim.tick);
     this.decals.sync();
-    this.entities.sync(alpha, nowMs);
+    this.entities.sync(alpha, nowMs, this.projectPoint);
     this.pedestals.sync();
     this.machine.sync();
-    this.corpseView.sync(this.sim);
-    this.projectiles.sync(alpha, this.sim.currentFloor);
-    this.bombFlightView.sync(this.sim);
+    this.corpseView.sync(sim);
+    this.projectiles.sync(alpha, sim.currentFloor);
+    this.bombFlightView.sync(sim);
     this.particles.sync(alpha);
-    this.damageNumbers.sync(alpha);
+    this.playerView.sync(sim, alpha, nowMs);
+    this.maibaumView.sync(sim);
+    this.lighting.syncLantern(this.playerView.positionX, this.playerView.footZ, !sim.playerDead);
 
-    const index = this.sim.playerIndex;
-    const playerX = lerp(this.sim.previousX(index), this.sim.positionX(index), alpha);
-    const playerY = lerp(this.sim.previousY(index), this.sim.positionY(index), alpha);
-    this.playerView.sync(this.sim, alpha, nowMs);
-    // Both write their own foot line and the depth layer does the rest. This
-    // used to be four lines of hand-ordering here — the Maibaum's container
-    // pulled out of the world and re-inserted either side of the player, every
-    // frame, for the one prop in the game that could be walked behind (#199).
-    // #73 is that made general, and deleting this is most of the point.
-    this.maibaumView.sync(this.sim);
-    const follow = this.followOffset(playerX, playerY);
-
-    // Rounded, not left fractional — a camera offset by a fraction of a real
-    // screen pixel makes every sprite in the room resample, which on pixel
-    // art looks like the whole screen crawling. But rounded to the nearest
-    // *screen* pixel, not the nearest *room* pixel: a room pixel is already
-    // `WORLD_ZOOM * outerZoom` screen pixels wide, so rounding at room-pixel
-    // granularity throws away most of the resolution a slow, small motion
-    // like Promille sway (#17) actually needs to read as smooth rather than
-    // as a handful of visible steps a second. Shake never noticed, because a
-    // hit's shake is fast and large enough that the coarser grid was already
-    // below the threshold of "looks stepped" — sway lives exactly at that
-    // threshold, which is what made it look choppy.
-    const zoom = WORLD_ZOOM * Math.max(1, outerZoom);
-    const roundToScreenPixel = (value: number): number => Math.round(value * zoom) / zoom;
-    const slide = this.transitionSlideOffset(alpha);
-    this.world.position.set(
-      roundToScreenPixel(
-        follow.x + this.sim.shakeX * this.shakeScale + this.sim.swayX + this.cameraX + slide.x,
-      ),
-      roundToScreenPixel(
-        follow.y + this.sim.shakeY * this.shakeScale + this.sim.swayY + this.cameraY + slide.y,
-      ),
-    );
-  }
-
-  /**
-   * Swaps the room's static depth-layer members — its obstacles and its
-   * furniture — for the ones the newly loaded room authors.
-   *
-   * Destroyed rather than pooled, exactly as `createRoomView`'s output already
-   * is: a room load is not a per-frame event, and a pool of tile sprites keyed
-   * by nothing in particular would be more machinery than the thing it saves.
-   */
-  /**
-   * Shades every standing piece of scenery by the light at its own foot line
-   * (#73) — the darkening half, which it can no longer get by being drawn
-   * under `ambientLight.container`.
-   *
-   * The tint is a property of where a thing *stands*, so it is read at the
-   * sprite's own anchor, which is exactly its ground contact. Nothing here
-   * touches the bodies: an enemy in a dark corner stays as readable as one in
-   * the light, which is the rule this whole layer is arranged around.
-   */
-  private tintScenery(): void {
-    for (const sprite of this.blockSprites) {
-      sprite.tint = this.ambientLight.tintAt(sprite.x, sprite.y);
-    }
-    for (const sprite of this.propSprites) {
-      sprite.tint = this.ambientLight.tintAt(sprite.x, sprite.y);
-    }
-  }
-
-  private replaceScenery(): void {
-    for (const sprite of [...this.blockSprites, ...this.propSprites]) {
-      this.depth.removeChild(sprite);
-      sprite.destroy();
-    }
-    this.blockSprites = adoptInto(
-      this.depth,
-      createBlockView(
-        this.roomGeometry,
-        this.sim.currentFloor,
-        this.roomTiles[this.sim.currentFloor],
-      ),
-    );
-    this.propSprites = adoptInto(
-      this.depth,
-      createPropView(this.sim.roomDecorativeProps, this.tileTextures),
-    );
-    // The new room's scenery has never been shaded; `sync` re-reads the
-    // revision on the same frame, but a room whose lighting happens to be
-    // identical to the last one's would otherwise keep the old sprites' tint
-    // and hand the new ones white.
-    this.sceneryTintRevision = -1;
-  }
-
-  /**
-   * Camera-follow offset (#100): keeps the player centred on screen inside a
-   * room bigger than one screen, clamped so the room's own edges never pull
-   * away from the viewport and show empty space beyond them.
-   *
-   * A plain per-axis bounding-box clamp, deliberately — `L`'s dropped corner
-   * (#20's footprint) and `T`'s four dropped corners (#107) sit inside this
-   * clamp's range too, but that's fine left alone: the voids are real
-   * `RoomGeometry` wall (see `RoomGeometry`'s `voidRects` doc comment and
-   * `render/room.ts`'s wall-coloured fill for them), so the viewport showing
-   * a slice of one reads exactly like standing near any other wall — no
-   * different from a `1x1` room showing its own margin at screen edge. An
-   * earlier version of this method pushed the viewport fully clear of the
-   * void whenever it detected an overlap; for a `2x2`/`L`/`T` room the
-   * viewport (one screen) is wider *and* taller than half the room, so that
-   * overlap check was true almost always, and which axis it "fixed" flipped
-   * with tiny player movements — the camera would suddenly snap across to
-   * the middle of the next glued sub-room. Not clamping around the voids at
-   * all is both simpler and correct.
-   *
-   * Composed additively with shake/sway/the debug free camera in `sync`
-   * rather than owning `world.position` outright — that's what "doesn't
-   * fight the existing camera shake/sway" (#100's acceptance criterion)
-   * means in practice: this just moves the baseline they jitter around.
-   *
-   * A `1x1` room's frame is exactly one screen (`INTERNAL_WIDTH`/`HEIGHT` at
-   * `WORLD_ZOOM`), so the clamp range below collapses to a single value and
-   * this returns a constant `{0, 0}` there — the pre-#100 "whole room always
-   * on screen, no camera movement" behaviour falls out of the general case
-   * rather than needing its own branch.
-   *
-   * Follows instantly rather than easing toward the player: this is a
-   * twin-stick dodge-'em-up (`docs/GAME_DESIGN.md` §1) where the player's
-   * on-screen position has to match their hitbox exactly, and a lagging
-   * camera would put visible daylight between the sprite an attack is
-   * telegraphed at and where the body actually is.
-   */
-  private followOffset(
-    playerX: number,
-    playerY: number,
-  ): { readonly x: number; readonly y: number } {
-    const viewWidth = INTERNAL_WIDTH / WORLD_ZOOM;
-    const viewHeight = INTERNAL_HEIGHT / WORLD_ZOOM;
     const frame = roomFrameSize(this.roomGeometry);
-    const viewportX = clamp(playerX - viewWidth / 2, 0, Math.max(0, frame.width - viewWidth));
-    const viewportY = clamp(playerY - viewHeight / 2, 0, Math.max(0, frame.height - viewHeight));
-    return { x: -viewportX * WORLD_ZOOM, y: -viewportY * WORLD_ZOOM };
+    const slide = this.transitionSlideOffset(alpha);
+    this.camera.follow(
+      this.playerView.positionX,
+      this.playerView.positionY,
+      frame.width,
+      frame.height,
+      sim.shakeX * this.shakeScale + sim.swayX + this.cameraX + slide.x,
+      sim.shakeY * this.shakeScale + sim.swayY + this.cameraY + slide.y,
+    );
+    // Labels project after the camera has moved, or they lag a frame.
+    this.damageNumbers.sync(alpha, this.projectPoint);
+    this.labelLayer.prepare(1);
   }
 
-  /**
-   * Offset that slides a just-loaded room in from the direction travelled.
-   *
-   * `roomTransitionTicks` counts down from `ROOM_TRANSITION_TICKS` to 0; `alpha`
-   * fills the gap between ticks so the slide doesn't step at the sim's tick
-   * rate. The room the player is sliding *out of* is already gone by the time
-   * this runs — it's destroyed by `transitionTo` the same tick — so this only
-   * ever animates the incoming room sliding into place, not a two-room wipe.
-   */
+  /** Draws the world pass. The caller draws the UI pass over it. */
+  render(renderer: WebGLRenderer): void {
+    renderer.render(this.scene, this.camera.camera);
+  }
+
+  private readonly projectPoint = (x: number, height: number, z: number, out: WorldPoint): void => {
+    this.camera.project(x, height, z, out);
+  };
+
+  private buildScenery(): Scenery {
+    const sim = this.sim;
+    return new Scenery(
+      sim.room,
+      sim.currentFloor,
+      sim.doors,
+      sim.roomDecorativeProps,
+      {
+        tiles: this.textures.roomTiles[sim.currentFloor],
+        doors: this.textures.doors,
+        tileTextures: this.textures.tileTextures ?? {},
+      },
+      this.camera.lean,
+    );
+  }
+
+  private relight(): void {
+    const tiles = this.textures.roomTiles[this.sim.currentFloor];
+    this.lighting.onRoomChanged(
+      tiles?.lighting ?? 'cellar',
+      this.scenery.frameWidth,
+      this.scenery.frameHeight,
+      this.scenery.bulbs,
+    );
+    this.scene.background = new Color(this.lighting.backgroundColour);
+    this.scenery.setSecretHints(this.secretHintDoors);
+  }
+
+  private applyDoorStates(): void {
+    for (const door of this.scenery.doors) {
+      door.setState(this.doorStateFor(door.door));
+      door.setSwing(1);
+      door.setPulse(0);
+    }
+  }
+
+  private doorStateFor(door: CompiledDoor): DoorState {
+    if (this.doorsLocked) {
+      return 'closed';
+    }
+    return this.lockedDoorDirections.has(door.direction) ? 'locked' : 'open';
+  }
+
   private transitionSlideOffset(alpha: number): { readonly x: number; readonly y: number } {
     const ticksLeft = this.sim.roomTransitionTicks - alpha;
     if (ticksLeft <= 0) {
       return { x: 0, y: 0 };
     }
-    // Eased out, not linear: the "quick" in #96's brief reads as a fast start
-    // that settles, not a constant crawl for the entire budget.
     const remaining = Math.min(1, ticksLeft / ROOM_TRANSITION_TICKS);
     const eased = remaining * remaining;
     switch (this.sim.roomTransitionDirection) {
@@ -751,30 +400,13 @@ export class GameView {
     }
   }
 
-  /**
-   * Which of the current room's walls to draw a secret-room crack hint on.
-   *
-   * Called by `app/main.ts` right after a room load (it owns the floor plan
-   * and is the one place that knows a neighbour is `secret`/`supersecret`
-   * and not yet found) and again the moment it notices a hidden wall has
-   * opened, so the crack disappears the same tick the door does.
-   */
+  // ---------------------------------------------------------- app seams
+
   setSecretHints(doors: readonly CompiledDoor[]): void {
     this.secretHintDoors = doors;
-    this.world.removeChild(this.secretHintView);
-    this.secretHintView.destroy();
-    this.secretHintView = createSecretHintView(this.roomGeometry, doors);
-    this.world.addChildAt(this.secretHintView, 2);
+    this.scenery.setSecretHints(doors);
   }
 
-  /**
-   * The doorways that lead to an unopened key-locked treasure room (`#196`).
-   * Called by `app/main.ts` on every room load — it is the side that has the
-   * floor plan and the visited-room set; `GameSim` only knows the door
-   * geometry. Rebuilds the door layer in place (no slide — this is a load-time
-   * fact, not a state change a player watches happen) when the set actually
-   * changes and nothing is mid-transition.
-   */
   setLockedDoors(directions: Iterable<RoomDirection>): void {
     const next = new Set(directions);
     const same =
@@ -784,85 +416,61 @@ export class GameView {
     if (same || this.doorTransitionTicks > 0) {
       return;
     }
-    this.world.removeChild(this.doorView.container);
-    this.doorView.container.destroy();
-    this.doorView = createDoorView(
-      this.roomGeometry,
-      this.sim.doors,
-      this.doorStateFor.bind(this),
-      this.doorTextures,
-    );
-    this.world.addChildAt(this.doorView.container, 1);
+    this.applyDoorStates();
   }
 
-  /** Which of `open`/`closed`/`locked` a given door draws in this frame. */
-  private doorStateFor(door: CompiledDoor): DoorState {
-    if (this.doorsLocked) {
-      return 'closed';
-    }
-    return this.lockedDoorDirections.has(door.direction) ? 'locked' : 'open';
-  }
-
-  /**
-   * Where the player sprite actually lands on screen, in the same pixel
-   * space `app.stage` renders into — after `world`'s shake/sway offset,
-   * after `WORLD_ZOOM`, after every ancestor's own transform.
-   *
-   * `getGlobalPosition` walks the whole display-list chain rather than this
-   * class re-deriving it by hand, which is what keeps it correct if a
-   * container between here and the stage ever gets rescaled or repositioned
-   * for an unrelated reason. Call after `sync`, so it reflects this frame's
-   * layout — the vignette (#17) is the reason this exists: it has to follow
-   * the player exactly, camera-follow (#100) included, rather than assume
-   * screen centre the way it could before a room could be bigger than one
-   * screen.
-   */
+  /** The player's mid-body, in internal-frame pixels. */
   playerScreenPosition(): { readonly x: number; readonly y: number } {
-    return this.playerView.screenPosition();
+    const out = this.camera.project(
+      this.playerView.positionX,
+      PLAYER_ANCHOR_HEIGHT,
+      this.playerView.footZ,
+      this.point,
+    );
+    return { x: out.x, y: out.y };
   }
 
-  /** Alois's animation state, for the debug overlay's animation panel. */
-  get player(): PlayerView {
-    return this.playerView;
+  /** How many internal pixels `units` room units span at the player's feet — for a world-radius overlay. */
+  screenLengthAtPlayer(units: number): number {
+    return this.camera.projectedLength(this.playerView.positionX, this.playerView.footZ, units);
   }
 
-  /**
-   * Where pedestal `pedestalIndex`'s item icon lands on screen, for the
-   * approach name plate (#28) — `null` while it has nothing to show (empty,
-   * or not drawn this frame). Call after `sync`, same as `playerScreenPosition`.
-   */
   pedestalScreenPosition(pedestalIndex: number): { readonly x: number; readonly y: number } | null {
-    return this.pedestals.screenPositionFor(pedestalIndex);
+    const at = this.pedestals.itemWorldPosition(pedestalIndex);
+    if (at === null) {
+      return null;
+    }
+    const out = this.camera.project(at.x, at.height, at.z, this.point);
+    return { x: out.x, y: out.y };
   }
 
-  /** Where the current floor's Losbrunnen lands on screen, or `null` while nothing is drawn — same shape as `pedestalScreenPosition`. */
   machineScreenPosition(): { readonly x: number; readonly y: number } | null {
-    return this.machine.screenPosition();
+    const at = this.machine.worldPosition();
+    if (at === null) {
+      return null;
+    }
+    const out = this.camera.project(at.x, at.height, at.z, this.point);
+    return { x: out.x, y: out.y };
   }
 
-  /**
-   * Releases everything this view uniquely owns, once it has been swapped
-   * out of `app/main.ts`'s `startRun` for a fresh one on a restart.
-   *
-   * `stage.destroy({ children: true })` frees every sprite/container this
-   * view built, but deliberately *not* their textures (no `texture`/
-   * `textureSource` option): most of what they draw with is `viewTextures`
-   * — the art atlases `startRun` builds once and reuses across every
-   * restart (`viewTextures ??= {...}`) — and destroying a texture still
-   * referenced by the *next* run's sprites would blank them out.
-   *
-   * `ambientLight` is the one exception, handled separately before that:
-   * its lamp/cloud textures are canvases generated fresh in its own
-   * constructor, not shared with anything else, so nothing else will ever
-   * destroy them — leaving them here was a real leak, three new canvases
-   * uploaded as GPU textures on every single restart and never freed. A
-   * prime suspect for reports of a stray "shadow box" that only shows up
-   * after several retries (GPU texture pressure/eviction from the pile-up
-   * would take a few to bite), though not yet confirmed live as the actual
-   * mechanism — leaked regardless, and worth fixing on that basis alone.
-   */
+  /** The floor point under internal-frame pixels `(px, py)`, in room units — click-to-pick's question. */
+  worldPointAt(px: number, py: number): { readonly x: number; readonly y: number } | null {
+    return this.camera.unproject(px, py, { x: 0, y: 0 });
+  }
+
   destroy(): void {
-    this.ambientLight.destroy();
-    this.stage.destroy({ children: true });
+    this.scenery.dispose();
+    this.entities.destroy();
+    this.playerView.destroy();
+    this.projectiles.destroy();
+    this.particles.destroy();
+    this.decals.destroy();
+    this.damageNumbers.destroy();
+    this.pedestals.destroy();
+    this.machine.destroy();
+    this.maibaumView.destroy();
+    this.bombFlightView.destroy();
+    this.corpseView.destroy();
+    this.labelLayer.destroy({ children: true });
   }
 }

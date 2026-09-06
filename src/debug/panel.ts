@@ -1,4 +1,6 @@
-import { BitmapText, Container, Graphics } from 'pixi.js';
+import { BitmapText, Container, Graphics } from '../render/gfx/index.js';
+import { UI_FONT_FAMILY } from '../render/ui/font.js';
+import { UI_LINE_HEIGHT, UI_TEXT_HEIGHT } from '../render/ui/text.js';
 import type { GameSim } from '../sim/game/sim.js';
 import type { FrameMetrics } from './metrics.js';
 import type { DrawCallCounter } from './draw-calls.js';
@@ -31,20 +33,28 @@ export interface DebugPanel {
 }
 
 /**
- * Panel geometry, in screen pixels.
+ * Panel geometry, in UI pixels.
  *
- * Screen pixels, not game pixels: the panel layer sits outside the scaled game
- * container, so these are the sizes they are actually drawn at, on any window
- * and at any zoom. A panel that was sized to fit a 640x360 buffer had eight
- * pixels of glyph height whatever the display could do with them.
+ * UI pixels — the internal 640×360 frame — because that is the only frame
+ * there is now: the canvas *is* the internal resolution and CSS scales it up
+ * (`render/app.ts`), so a panel drawn at display resolution is no longer a
+ * thing a renderer here could do. The panels used to be sized in screen pixels
+ * for a 13px system monospace; they are now set in the pixel text face at 1:1,
+ * which is the one size it is crisp at, and laid out against 640×360. That
+ * makes a panel a larger share of the frame than it was on a big window, and
+ * the layout wraps into columns accordingly (`DebugOverlay.layOutPanels`).
+ *
+ * The face is proportional, so `padEnd` alignment in a panel is approximate
+ * rather than exact — most glyphs are four or five columns, and a column of
+ * numbers still reads as one.
  */
-export const PANEL_WIDTH = 248;
-export const PANEL_FONT_SIZE = 13;
+export const PANEL_WIDTH = 176;
+export const PANEL_FONT_SIZE = UI_TEXT_HEIGHT;
 /** Baseline spacing between lines of panel text. */
-export const PANEL_LINE_HEIGHT = 16;
+export const PANEL_LINE_HEIGHT = UI_LINE_HEIGHT;
 /** Where a panel's first line of content starts, below its title. */
-export const PANEL_CONTENT_TOP = 24;
-export const PANEL_PADDING = 6;
+export const PANEL_CONTENT_TOP = 18;
+export const PANEL_PADDING = 4;
 export const PANEL_TEXT_COLOUR = 0xd8cfc4;
 export const PANEL_DIM_COLOUR = 0x8a7f74;
 export const PANEL_WARN_COLOUR = 0xe0703a;
@@ -63,7 +73,7 @@ export function createPanelFrame(title: string, height: number): Container {
   container.addChild(plate);
 
   const heading = createLabel(title, PANEL_DIM_COLOUR);
-  heading.position.set(PANEL_PADDING, 5);
+  heading.position.set(PANEL_PADDING, 4);
   container.addChild(heading);
 
   return container;
@@ -72,14 +82,16 @@ export function createPanelFrame(title: string, height: number): Container {
 /**
  * A line of overlay text.
  *
- * `BitmapText` rather than `Text`: the overlay rewrites most of its lines every
- * frame, and a `Text` regenerates its texture whenever the string changes. An
+ * `BitmapText` in the game's own pixel text face: the overlay rewrites most of
+ * its lines every frame, and a bitmap label is a handful of quads into an atlas
+ * that already exists — no texture is generated when the string changes. An
  * overlay that costs a dozen texture uploads a frame is an overlay that changes
- * the timings it exists to report.
+ * the timings it exists to report. (The face has to be installed before the
+ * overlay mounts — `installPixelFonts()` at boot, which the HUD needs anyway.)
  */
 export function createLabel(text: string, colour: number = PANEL_TEXT_COLOUR): BitmapText {
   return new BitmapText({
     text,
-    style: { fontFamily: 'monospace', fontSize: PANEL_FONT_SIZE, fill: colour },
+    style: { fontFamily: UI_FONT_FAMILY, fontSize: PANEL_FONT_SIZE, fill: colour },
   });
 }

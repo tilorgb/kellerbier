@@ -1,4 +1,4 @@
-import type { Container } from 'pixi.js';
+import type { Container } from '../../render/gfx/index.js';
 import { STAT_IDS, STAT_LABELS } from '../../sim/stats/definition.js';
 import {
   type DebugContext,

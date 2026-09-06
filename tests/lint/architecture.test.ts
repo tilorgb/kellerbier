@@ -56,16 +56,16 @@ function messagesFor(result: ESLint.LintResult, ruleId: string): string[] {
 const SIM_FILE = `${process.cwd()}/src/sim/systems/fixture.ts`;
 
 describe('src/sim may not reach the layers above it', () => {
-  let pixi: ESLint.LintResult;
+  let three: ESLint.LintResult;
   let render: ESLint.LintResult;
 
   beforeAll(async () => {
-    pixi = await lintAs('imports-pixi.ts', SIM_FILE);
+    three = await lintAs('imports-three.ts', SIM_FILE);
     render = await lintAs('imports-render.ts', SIM_FILE);
   });
 
-  it('fails on importing pixi.js', () => {
-    expect(ruleIds(pixi)).toContain('no-restricted-imports');
+  it('fails on importing three.js', () => {
+    expect(ruleIds(three)).toContain('no-restricted-imports');
   });
 
   it('fails on importing the render layer', () => {
@@ -73,7 +73,7 @@ describe('src/sim may not reach the layers above it', () => {
   });
 
   it('explains why, and points at the document that argues for it', () => {
-    const [message = ''] = messagesFor(pixi, 'no-restricted-imports');
+    const [message = ''] = messagesFor(three, 'no-restricted-imports');
     expect(message).toMatch(/headless tests, determinism, replays/);
     expect(message).toMatch(/docs\/TECH_STACK\.md/);
   });

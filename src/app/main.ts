@@ -1,4 +1,4 @@
-import { Container, Point } from 'pixi.js';
+import { Container } from '../render/gfx/index.js';
 import { ENEMY_DEFINITIONS } from '../content/enemies/index.js';
 import {
   FLOOR_CONFIGS,
@@ -30,26 +30,17 @@ import {
   type InputFrame,
 } from '../sim/input/frame.js';
 import { InputPlayback, InputRecording } from '../sim/input/recording.js';
-import { createRenderer, trackWindowSize } from '../render/app.js';
 import {
-  createBlobTexture,
-  createDiamondMarkerTexture,
-  createDotMarkerTexture,
-  createRingTexture,
-  createSilhouetteTexture,
-  createSolidTexture,
-  createWedgeTexture,
-} from '../render/placeholder-art.js';
-import {
-  type GameLayout,
-  INTERNAL_HEIGHT,
-  INTERNAL_WIDTH,
-  computeGameLayout,
-} from '../render/resolution.js';
+  type GameRenderer,
+  canvasToFrame,
+  createRenderer,
+  trackWindowSize,
+} from '../render/app.js';
+import { diamondTexture, dotTexture } from '../render/ui/marker-art.js';
+import { INTERNAL_HEIGHT, INTERNAL_WIDTH, computeGameLayout } from '../render/resolution.js';
 import { ActiveItemHud } from '../render/active-item-hud.js';
 import { BossHealthHud } from '../render/boss-health-hud.js';
 import { CharacterHud } from '../render/character-hud.js';
-import { EntityView } from '../render/entities.js';
 import { GameOverScreen } from '../render/game-over.js';
 import { VictoryScreen } from '../render/victory-screen.js';
 import { RunResultsScreen } from '../render/run-results.js';
@@ -74,13 +65,12 @@ import { uiScaleFor, uiText, UI_TEXT_HEIGHT } from '../render/ui/text.js';
 import { Vignette } from '../render/vignette.js';
 import { BlaueStundeOverlay } from '../render/blaue-stunde-overlay.js';
 import { GameView } from '../render/view.js';
-import { FLOOR_TILESETS, buildAnimatedSets, loadFloorArt } from '../render/floor-art.js';
+import { FLOOR_TILESETS, loadFloorArt } from '../render/floor-art.js';
 import {
   bossIdsFrom,
   buildParticleArt,
   buildProjectileArt,
   doorTexturesFrom,
-  TELEGRAPH_RING_SPRITE,
 } from '../render/art-bundle.js';
 import { loadPlayerArt } from '../render/player-art.js';
 import { attachLiveArtPreviewListener } from '../render/live-art-preview.js';
@@ -196,7 +186,7 @@ const HUD_MARGIN = 6;
 const HUD_ROW_GAP = 2;
 
 /** How much bigger than one UI pixel the dev readout draws. Whole, like every other scale here. */
-const DEV_READOUT_SCALE = 2;
+const DEV_READOUT_SCALE = 1;
 
 /** Wrap width for the pedestal reveal's description, in UI pixels — a little under two-thirds of the frame. */
 const PEDESTAL_REVEAL_WRAP = 380;
@@ -209,6 +199,9 @@ const PEDESTAL_REVEAL_WRAP = 380;
  * than up, so a soft edge from upscaling never happens.
  */
 const PROJECTILE_MARKER_RADIUS = 8;
+
+/** Scratch point for click-to-pick's canvas→frame conversion. */
+const PICK_POINT = { x: 0, y: 0 };
 
 /** How far above a pedestal its name plate floats, in UI pixels. */
 const PEDESTAL_PLATE_LIFT = 18;
@@ -655,14 +648,13 @@ async function boot(): Promise<void> {
   // the way of a small screen entirely.
   const touchCapable = isTouchCapable();
 
-  const app = await createRenderer(host);
+  const app = createRenderer(host);
 
   // Before anything builds a label: `render/ui/text.ts` warns loudly if a
-  // `BitmapText` is made before the faces exist, because Pixi answers an
-  // unknown `fontFamily` by generating one from a browser face — which is
-  // silently the system-font HUD #154 exists to remove.
-  installPixelFonts(app.renderer);
-  const kit = new UiKit(app.renderer);
+  // `BitmapText` is made before the faces exist — a label with no font
+  // registered is exactly the missing HUD #154 exists to remove.
+  installPixelFonts();
+  const kit = new UiKit();
 
   // Accessibility settings (#33): persisted across reloads in `localStorage`,
   // read once here and mutated in place from then on — by the panel below,
@@ -801,16 +793,10 @@ async function boot(): Promise<void> {
    */
   let viewTextures: ConstructorParameters<typeof GameView>[1] | undefined;
 
-  // Everything drawn at the game's own resolution goes in here, and this is the
-  // only thing that ever gets scaled. Anything added to `app.stage` instead is
-  // drawn at the display's resolution, which is what the debug panels want.
-  const game = new Container();
-  app.stage.addChild(game);
-
-  // Drawn over the game rather than inside it, so its text is not made of game
-  // pixels. Kept above everything the game adds.
-  const uiLayer = new Container();
-  app.stage.addChild(uiLayer);
+  // The 2D pass drawn over the 3D world (`render/app.ts`): its root is the
+  // internal 640×360 frame, one UI pixel per internal pixel. Everything
+  // screen-space hangs off it; the world is `view`'s own scene.
+  const uiLayer = app.ui.root;
 
   // Added before everything else in `uiLayer`, so it darkens the game world
   // underneath without ever covering the HUD text, health row or game-over
@@ -848,6 +834,7 @@ async function boot(): Promise<void> {
    */
   const hud = uiText('', { colour: UI_PALETTE.textDim });
   hud.scale.set(DEV_READOUT_SCALE);
+  hud.position.set(HUD_MARGIN, INTERNAL_HEIGHT - HUD_MARGIN);
   hud.anchor.set(0, 1);
   // A dense instrument readout has no reader on a phone: nobody is holding a
   // controller in one hand and squinting at tick counts in the other, and it
@@ -861,7 +848,7 @@ async function boot(): Promise<void> {
   // having a column of debug text drawn across it.
   uiLayer.addChild(hudLayer);
 
-  const gameOverScreen = new GameOverScreen(kit, app.renderer, {
+  const gameOverScreen = new GameOverScreen(kit, {
     onRetry: () => {
       retryRun();
     },
@@ -872,7 +859,7 @@ async function boot(): Promise<void> {
       quitToTitle();
     },
   });
-  const victoryScreen = new VictoryScreen(kit, app.renderer, {
+  const victoryScreen = new VictoryScreen(kit, {
     onRetry: () => {
       retryRun();
     },
@@ -892,7 +879,7 @@ async function boot(): Promise<void> {
    * last run, unlocks, the run board — nothing else. Character select, seed
    * entry and the daily run are a real main menu's job, not built yet.
    */
-  const runResults = new RunResultsScreen(kit, app.renderer, {
+  const runResults = new RunResultsScreen(kit, {
     onNewRun: () => {
       // Same seed source `Enter` always used here — `pendingSeed`, rolled
       // once a run ends (`advanceDeathSequence`), not a fresh roll on the
@@ -915,7 +902,7 @@ async function boot(): Promise<void> {
    * piece below. A title card with a health row on top of it is a title card
    * that reads as a bug.
    */
-  const floorTitleCard = new FloorTitleCard(app.renderer);
+  const floorTitleCard = new FloorTitleCard();
   /** When the current floor card comes down, on the wall clock. Render-only — never sim state. */
   let floorCardUntil = 0;
 
@@ -929,7 +916,7 @@ async function boot(): Promise<void> {
    * same restraint the old `Text` version kept, and cheaper now that a
    * treated line is a texture rather than a string.
    */
-  const bossBanner = new DisplayTitle(app.renderer, TITLE_STYLES.threat);
+  const bossBanner = new DisplayTitle(TITLE_STYLES.threat);
   bossBanner.set('Bossraum');
   bossBanner.view.visible = false;
   hudLayer.addChild(bossBanner.view);
@@ -1064,7 +1051,7 @@ async function boot(): Promise<void> {
   const itemSetHud = new ItemSetHud(kit);
   hudLayer.addChild(itemSetHud.view);
 
-  const minimapHud = new MinimapHud(app.renderer, kit, {
+  const minimapHud = new MinimapHud(kit, {
     treasure: tileTextures['minimap-treasure'],
     shop: tileTextures['minimap-shop'],
     boss: tileTextures['minimap-boss'],
@@ -1090,7 +1077,7 @@ async function boot(): Promise<void> {
    * the game until M8's menus, and `CLAUDE.md` is explicit that a feature
    * nobody can experience is not finished however green the suite is.
    */
-  const kitGallery = new UiKitGallery(kit, app.renderer);
+  const kitGallery = new UiKitGallery(kit);
 
   // Last, and in this order: a floor card covers the HUD, the gallery covers
   // the card, and the game-over screen covers everything.
@@ -1122,21 +1109,17 @@ async function boot(): Promise<void> {
    * the one below it, which is exactly what a column of hand-written screen
    * offsets could not promise.
    */
-  const layoutHud = (applied: GameLayout): void => {
-    // #53's text-scale setting: a whole-number multiplier on top of the
-    // window's own integer zoom, so a bigger UI is always the same crisp
-    // pixel font at a bigger whole size — see `uiScaleFor`'s own doc comment.
-    const scale = uiScaleFor(applied, settings.textScale);
+  const layoutHud = (): void => {
+    // #53's text-scale setting: a whole-number multiplier on the UI's own
+    // pixel grid, so a bigger UI is always the same crisp pixel font at a
+    // bigger whole size — see `uiScaleFor`'s own doc comment. The frame the
+    // HUD lays out against shrinks by the same factor: the canvas is the
+    // internal resolution, whatever the window is.
+    const scale = uiScaleFor(settings.textScale);
     hudLayer.scale.set(scale);
-    hudLayer.position.set(applied.originX, applied.originY);
-    const width = Math.round((INTERNAL_WIDTH * applied.scale) / scale);
-    const height = Math.round((INTERNAL_HEIGHT * applied.scale) / scale);
+    const width = Math.round(INTERNAL_WIDTH / scale);
+    const height = Math.round(INTERNAL_HEIGHT / scale);
     uiFrame = { width, height };
-
-    hud.position.set(
-      applied.originX + HUD_MARGIN,
-      applied.originY + INTERNAL_HEIGHT * applied.scale - HUD_MARGIN,
-    );
 
     let y = HUD_MARGIN;
     healthHud.view.position.set(HUD_MARGIN, y);
@@ -1621,16 +1604,18 @@ async function boot(): Promise<void> {
   );
 
   const windowSizeTracker = trackWindowSize(
-    app,
-    game,
+    app.canvas,
     host,
     (applied) => {
       layout = applied;
-      layoutHud(applied);
-      vignette.resize(applied);
+      layoutHud();
+      vignette.resize();
     },
     forcedVideoScale,
   );
+  app.ui.attachPointer(app.canvas, (clientX, clientY, out) => {
+    canvasToFrame(app.canvas, clientX, clientY, out);
+  });
 
   const input = new InputSampler();
   // #53's Controls tab: the persisted rebinding (#5's own capture engine),
@@ -1816,7 +1801,7 @@ async function boot(): Promise<void> {
       // (#150) — the same reading this frame is already being timed from,
       // rather than a second `performance.now()` a fraction of a millisecond
       // later.
-      view.sync(alpha, layout.scale, started);
+      view.sync(alpha, started);
       healthHud.sync(sim);
       promilleHud.sync(sim, settings.neutralReskin);
       walletHud.sync(sim);
@@ -1956,9 +1941,9 @@ async function boot(): Promise<void> {
           pedestalNamePlateLabel = label;
           pedestalNamePlate.set(label);
         }
-        // `pedestalScreenPosition` is in stage space; `hudLayer` is scaled and
-        // offset, so the point has to come back into its local pixels before
-        // a plate laid out in UI pixels can use it.
+        // `pedestalScreenPosition` is in internal-frame pixels; `hudLayer` is
+        // scaled by the text setting, so the point comes back into its local
+        // pixels before a plate laid out in UI pixels can use it.
         const local = hudLayer.toLocal({ x: nameplateScreen.x, y: nameplateScreen.y });
         pedestalNamePlate.place(local.x, local.y - PEDESTAL_PLATE_LIFT);
         pedestalNamePlate.visible = true;
@@ -1986,7 +1971,13 @@ async function boot(): Promise<void> {
       advanceFloorCard(started);
       const playerScreen = view.playerScreenPosition();
       vignette.sync(sim, playerScreen.x, playerScreen.y);
-      blaueStundeOverlay.sync(sim, playerScreen.x, playerScreen.y, layout, settings.reducedMotion);
+      blaueStundeOverlay.sync(
+        sim,
+        playerScreen.x,
+        playerScreen.y,
+        view.screenLengthAtPlayer(sim.tuning.curse.blaueStundeVisionRadius),
+        settings.reducedMotion,
+      );
       if (replay !== null) {
         replayViewer.show();
         replayViewer.sync(
@@ -2000,6 +1991,10 @@ async function boot(): Promise<void> {
         replayViewer.hide();
       }
       overlay?.sync(alpha);
+      // The two passes: the world through `view`'s camera, then the UI over it.
+      app.render(() => {
+        view.render(app.renderer);
+      });
       overlay?.record(simMs, performance.now() - started, 0);
       simMs = 0;
     },
@@ -2007,7 +2002,6 @@ async function boot(): Promise<void> {
 
   screenController = new ScreenFlowController({
     kit,
-    renderer: app.renderer,
     loop,
     gamepad: input.gamepad,
     menuNav,
@@ -2205,8 +2199,7 @@ WASD move   arrows aim and fire
       projectileArt: {
         ...buildProjectileArt(
           projectileArt,
-          createBlobTexture(
-            app.renderer,
+          dotTexture(
             sim.tuning.shooting.shotRadius,
             PARTICLE_PALETTE.projectileFill,
             PARTICLE_PALETTE.projectileRim,
@@ -2217,98 +2210,57 @@ WASD move   arrows aim and fire
         // block, and drawn only when the settings screen's toggle is on
         // (`ProjectileView.setAccessibility`).
         teamMarkers: {
-          player: createDotMarkerTexture(app.renderer, PROJECTILE_MARKER_RADIUS, 0xffffff),
-          enemy: createDiamondMarkerTexture(app.renderer, PROJECTILE_MARKER_RADIUS, 0xffffff),
+          player: dotTexture(PROJECTILE_MARKER_RADIUS, 0xffffff),
+          enemy: diamondTexture(PROJECTILE_MARKER_RADIUS, 0xffffff),
         },
       },
       projectileArtNames: sim.enemies.projectileArtNames.map((name) => (name === '' ? null : name)),
-      entity: createBlobTexture(
-        app.renderer,
+      entity: dotTexture(
         MAX_COLLIDER_RADIUS,
         PARTICLE_PALETTE.entityFill,
         PARTICLE_PALETTE.entityRim,
       ),
-      entityFlash: createBlobTexture(
-        app.renderer,
-        MAX_COLLIDER_RADIUS,
-        PARTICLE_PALETTE.entityFlash,
-        PARTICLE_PALETTE.entityFlash,
-      ),
-      // The art-directed warning ring (#153) — a dashed arc set, authored at the
-      // size a `mid` enemy's telegraph is actually drawn, so it lands near 1:1
-      // where the generated ring it replaces already did. Still white and still
-      // tinted where it is drawn: one texture serves every telegraph.
-      telegraph:
-        vfxArt[TELEGRAPH_RING_SPRITE] ??
-        createRingTexture(
-          app.renderer,
-          EntityView.telegraphTextureRadius,
-          PARTICLE_PALETTE.telegraphRing,
-        ),
-      // The directional half of the same warning (#233) — no authored art yet,
-      // so this is `createRingTexture`'s own generated fallback, just a wedge
-      // instead of a ring: white, tinted where it is drawn.
-      telegraphWedge: createWedgeTexture(
-        app.renderer,
-        EntityView.wedgeTextureLength,
-        EntityView.wedgeTextureHalfAngle,
-        PARTICLE_PALETTE.telegraphRing,
-      ),
       particleArt: buildParticleArt(
         vfxArt,
-        createBlobTexture(app.renderer, 2, PARTICLE_PALETTE.foamFill, PARTICLE_PALETTE.foamRim),
+        dotTexture(2, PARTICLE_PALETTE.foamFill, PARTICLE_PALETTE.foamRim),
       ),
       // Dark and wet, not another body. A splash the same brown as a target
       // reads as "something is still standing there", which is the one
       // thing a corpse marker must not do.
-      decal: createBlobTexture(
-        app.renderer,
-        8,
-        PARTICLE_PALETTE.decalFill,
-        PARTICLE_PALETTE.decalRim,
-      ),
+      decal: dotTexture(8, PARTICLE_PALETTE.decalFill, PARTICLE_PALETTE.decalRim),
       numberFont: UI_FONT_FAMILY,
-      // Placeholder art (#34) — a plain bright disc and a soft vertical bar
-      // are enough to read as "an item floating on light" until real sprites
+      // Placeholder art (#34) — a plain bright disc in a beam of light is
+      // enough to read as "an item floating on light" until real sprites
       // land; `PedestalView` tints both per quality.
-      pedestalItem: createBlobTexture(
-        app.renderer,
+      pedestalItem: dotTexture(
         5,
         PARTICLE_PALETTE.pedestalItemFill,
         PARTICLE_PALETTE.pedestalItemFill,
       ),
-      pedestalBeam: createSolidTexture(app.renderer),
       pedestalPlinth: tileTextures.pedestal,
       doors: doorTexturesFrom(tileTextures),
       pickupArt,
       tileTextures,
-      bossShadow: enemyArt['boss-shadow'],
       bossIds: bossIdsFrom(spriteOrigins),
-      actorShadow: enemyArt['actor-shadow'],
       roomTiles,
       enemyArt,
-      enemyFlash: Object.fromEntries(
-        Object.entries(enemyArt).map(([id, texture]) => [
-          id,
-          createSilhouetteTexture(app.renderer, texture),
-        ]),
-      ),
-      // Animated creatures (#150): one silhouette per frame rather than per
-      // creature, built here because generating one needs the renderer.
-      enemyAnimation: buildAnimatedSets(enemyStrips, (texture) =>
-        createSilhouetteTexture(app.renderer, texture),
-      ),
+      // Animated creatures (#150): the strips as loaded — the hit flash is
+      // the billboard's emissive term now, so no silhouettes to build.
+      enemyAnimation: enemyStrips,
     };
     // `view` (`let view!: GameView`) is only actually unassigned on the
     // very first call, before boot's first `startRun` — every restart after
     // that has a real previous view to tear down. Captured before the
-    // reassignment just below, then destroyed only once the new one is
-    // already in `game` — removed from the display list first, per
-    // `GameView.destroy`'s own doc comment, then freed.
+    // reassignment just below, then destroyed only once the new one's label
+    // layer has taken its place on the UI pass.
     const previousView = typeof view !== 'undefined' ? view : undefined;
     view = new GameView(sim, viewTextures);
-    game.removeChildren();
-    game.addChild(view.stage);
+    // World-anchored text (damage numbers, prices) draws over the overlays
+    // and under the HUD: the same slot the previous view's layer held.
+    if (previousView !== undefined) {
+      uiLayer.removeChild(previousView.labelLayer);
+    }
+    uiLayer.addChildAt(view.labelLayer, uiLayer.getChildIndex(hud));
     previousView?.destroy();
     view.setSecretHints(crackHintsFor(floorPlan, currentRoomId, revealedEdges));
     view.setLockedDoors(lockedDoorsFor(floorPlan, currentRoomId, visitedRoomIds));
@@ -2368,7 +2320,7 @@ WASD move   arrows aim and fire
     promilleHud.setUnlocked(promilleUnlocked);
 
     refreshHud();
-    layoutHud(layout);
+    layoutHud();
     showFloorCard();
   }
 
@@ -3325,9 +3277,14 @@ WASD move   arrows aim and fire
       if (dock.activeEditorId() !== 'sprites') {
         return;
       }
-      const rect = app.canvas.getBoundingClientRect();
-      const global = new Point(event.clientX - rect.left, event.clientY - rect.top);
-      const local = view.worldLayer.toLocal(global);
+      canvasToFrame(app.canvas, event.clientX, event.clientY, PICK_POINT);
+      // The floor point under the cursor — a click on a sprite's raised
+      // pixels lands a little north of its feet, which is close enough for
+      // "which sprite is that".
+      const local = view.worldPointAt(PICK_POINT.x, PICK_POINT.y);
+      if (local === null) {
+        return;
+      }
 
       const enemyId = pickEnemyAt(sim, local.x, local.y);
       if (enemyId === null && pickPlayerAt(sim, local.x, local.y)) {
@@ -3431,7 +3388,7 @@ WASD move   arrows aim and fire
     // Text scale changes the HUD's own whole-number scale, which a settings
     // change must re-apply immediately rather than waiting for the next
     // window resize to happen to call `layoutHud` again.
-    layoutHud(layout);
+    layoutHud();
     // #53's slow-mode, applied live — but only during ordinary gameplay.
     // The death sequence and a scrubbed/paused replay each own `timeScale`
     // for the moment they are in (`advanceDeathSequence`'s narrative slowmo,
@@ -3570,7 +3527,7 @@ interface DebugOverlayHandle {
 async function mountDebugOverlay(
   sim: GameSim,
   view: GameView,
-  app: Awaited<ReturnType<typeof createRenderer>>,
+  app: GameRenderer,
   uiLayer: Container,
   gameScale: () => number,
 ): Promise<DebugOverlayHandle | null> {
@@ -3584,7 +3541,7 @@ async function mountDebugOverlay(
     uiLayer,
     gameScale,
     canvas: app.canvas,
-    gl: (app.renderer as unknown as { gl?: unknown }).gl ?? null,
+    renderer: app.renderer,
   });
 }
 

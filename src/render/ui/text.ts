@@ -1,5 +1,4 @@
-import { BitmapText, Sprite, type Renderer } from 'pixi.js';
-import type { GameLayout } from '../resolution.js';
+import { BitmapText, Sprite } from '../gfx/index.js';
 import { UI_PALETTE } from '../palette.js';
 import { DISPLAY_FACE, TEXT_FACE } from './font-compile.js';
 import { pixelFontsInstalled } from './font.js';
@@ -58,18 +57,17 @@ export function displayTextWidth(text: string): number {
 }
 
 /**
- * The whole-number scale the UI layer is drawn at for a given game layout.
+ * The whole-number scale the HUD layer is drawn at.
  *
- * Tied to the game's own integer zoom rather than computed separately, so the
- * HUD covers the same fraction of the frame at every window size — a 640×360
- * window and a 2560×1440 one show the same HUD, four times the device pixels.
- *
- * `textScale` is #53's seam: a whole-number multiplier a player can raise for
- * a larger UI. It multiplies rather than replacing, so "bigger text" cannot
- * produce a fractional scale however the two combine.
+ * The canvas *is* the internal frame now (`render/app.ts`), so one UI pixel is
+ * one internal pixel and the window's own zoom no longer enters into it — the
+ * frame is upscaled as a whole. What is left is #53's seam: `textScale`, a
+ * whole-number multiplier a player can raise for a larger UI. Whole, so
+ * "bigger text" is the same crisp pixel font at a bigger size and never a
+ * resampled one.
  */
-export function uiScaleFor(layout: GameLayout, textScale = 1): number {
-  return Math.max(1, Math.round(layout.scale)) * Math.max(1, Math.round(textScale));
+export function uiScaleFor(textScale = 1): number {
+  return Math.max(1, Math.round(textScale));
 }
 
 export interface UiTextOptions {
@@ -127,13 +125,9 @@ function makeText(
 ): BitmapText {
   if (import.meta.env.DEV && !pixelFontsInstalled() && !warnedMissingFont) {
     warnedMissingFont = true;
-    // Pixi answers an unknown `fontFamily` by generating a font from the
-    // browser's own face of that name — which silently produces exactly the
-    // system-font HUD #154 exists to remove, and looks merely "a bit off"
-    // rather than broken. Say so out loud instead.
     console.warn(
-      'ui text: the pixel font is not installed — call installPixelFont(renderer) at boot, ' +
-        'or every label here draws in a system font',
+      'ui text: the pixel font is not installed — call installPixelFonts() at boot before ' +
+        'building any label',
     );
   }
   return new BitmapText({
@@ -273,13 +267,11 @@ export interface SeasonedTextOptions {
 export class SeasonedText {
   readonly view = new Sprite();
 
-  private readonly renderer: Renderer;
   private readonly colour: number;
   private readonly accentColour: number;
   private current = '';
 
-  constructor(renderer: Renderer, options: SeasonedTextOptions = {}) {
-    this.renderer = renderer;
+  constructor(options: SeasonedTextOptions = {}) {
     this.colour = options.colour ?? UI_PALETTE.text;
     this.accentColour = options.accentColour ?? UI_PALETTE.accent;
   }
@@ -300,7 +292,7 @@ export class SeasonedText {
       this.colour,
       this.accentColour,
     );
-    this.view.texture = pixelsToTexture(this.renderer, width, height, colours);
+    this.view.texture = pixelsToTexture(width, height, colours);
     if (previous.width > 1) {
       previous.destroy(true);
     }

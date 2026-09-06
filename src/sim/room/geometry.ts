@@ -20,7 +20,7 @@ export const MAX_ROOM_SIGHT_BLOCKS = 16;
 /**
  * How wide a door gap is, in room units, centred on its wall.
  *
- * Single source of truth for both the door's drawn gap (`render/room.ts`) and
+ * Single source of truth for both the door's drawn gap (`render/world/scenery.ts`) and
  * the door-contact trigger (`GameSim.doorContact`) — they have to agree on
  * where the gap is, or the wall would visibly open somewhere the player
  * can't actually walk through.
@@ -56,7 +56,7 @@ export class RoomGeometry {
    *
    * Already carved out of `isClear`/collision as ordinary blocks (see
    * `sim/room/template.ts`'s `compileRoomTemplate`); this is exposed
-   * separately so `render/room.ts`'s `createRoomView` can draw them in the
+   * separately so `render/world/scenery.ts` can build them in the
    * wall's own colour instead of as generic obstacles — they're the room's
    * boundary standing in for the cells the floor-grid footprint didn't
    * claim, not pillars sitting in the middle of the room. Not used for
