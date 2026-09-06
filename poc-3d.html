@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kellerbier — 3D dungeon POC</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background: #07060a;
+        overflow: hidden;
+        font-family: monospace;
+        color: #cfc6bb;
+      }
+      #stage {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100vw;
+        height: 100vh;
+      }
+      #scene {
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;
+      }
+      #status {
+        position: absolute;
+        top: 8px;
+        left: 10px;
+        font-size: 13px;
+        text-shadow: 0 1px 0 #000;
+        pointer-events: none;
+      }
+      #help {
+        position: absolute;
+        bottom: 8px;
+        left: 10px;
+        font-size: 12px;
+        line-height: 1.5;
+        background: rgba(11, 10, 13, 0.75);
+        border: 1px solid #3a2f45;
+        border-radius: 4px;
+        padding: 6px 8px;
+      }
+      #help b {
+        color: #ffc24a;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage"><canvas id="scene" width="640" height="360"></canvas></div>
+    <div id="status"></div>
+    <div id="help">
+      <b>WASD</b> move · <b>arrows</b> aim · <b>space</b> fire · <b>E</b> bomb<br />
+      <b>V</b> camera (perspective / top-down / low) · <b>R</b> hi-res · <b>P</b> pause ·
+      <b>H</b> hide this<br />
+      clear the room, walk into a door → next room
+    </div>
+    <script type="module" src="/src/poc3d/main.ts"></script>
+  </body>
+</html>

@@ -48,6 +48,9 @@ export default defineConfig({
         editor: resolvePath('./editor.html'),
         'pixel-editor': resolvePath('./pixel-editor.html'),
         'audio-editor': resolvePath('./audio-editor.html'),
+        // The 3D-dungeon proof of concept (`src/poc3d/`): a second
+        // presentation of the same simulation, reachable at `/poc-3d.html`.
+        'poc-3d': resolvePath('./poc-3d.html'),
       },
     },
   },
