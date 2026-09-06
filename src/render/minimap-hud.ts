@@ -4,20 +4,15 @@ import {
   Graphics,
   type NineSliceSprite,
   Sprite,
-  type Renderer,
   type Texture,
-} from 'pixi.js';
+} from './gfx/index.js';
 import type { FloorPlan, FloorPlanRoom, RoomDoor, RoomRole } from '../sim/room/floor-plan.js';
 import { DIRECTION_OFFSET } from '../content/rooms/definition.js';
 import { computeVoidCells, voidCellKey } from '../sim/room/void-cells.js';
 import { cellBounds, roomOutlineSegments } from './room-outline.js';
-import {
-  createBlobTexture,
-  createDiamondTexture,
-  createTriangleTexture,
-} from './placeholder-art.js';
 import { HUD_PALETTE, UI_PALETTE } from './palette.js';
 import { type UiKit } from './ui/kit.js';
+import { diamondTexture, dotTexture, triangleTexture } from './ui/marker-art.js';
 import { uiText, uiTextWidth, UI_TEXT_HEIGHT } from './ui/text.js';
 
 /** Room for the floor's name above the compact map. */
@@ -64,7 +59,7 @@ function doorSurvivesCompile(
   return !voidKeys.has(voidCellKey({ x: cell.x + offset.x, y: cell.y + offset.y }));
 }
 
-/** Exported for `tests/unit/minimap-reveal.test.ts` — pure logic, no Pixi involved. */
+/** Exported for `tests/unit/minimap-reveal.test.ts` — pure logic, no renderer involved. */
 export function computeReveal(plan: FloorPlan, visitedRoomIds: ReadonlySet<string>): RevealState {
   const roleById = new Map(plan.rooms.map((room) => [room.id, room.role]));
   const revealed = new Set<string>(visitedRoomIds);
@@ -106,16 +101,15 @@ function drawMap(
 ): { width: number; height: number } {
   // `removeChildren()` alone only detaches the previous call's per-room
   // `Graphics`/icon `Sprite`s from the display list — it does not free their
-  // GPU-side geometry, which Pixi only reclaims once `.destroy()` runs.
+  // GPU-side geometry, which is only released once `.destroy()` runs.
   // `rebuild` fires on every room transition (`app/main.ts`), so without
   // this every step through a run — and every floor of the dev-only endless
   // loop, `advanceFloor` — leaks one `Graphics` per visible room. Plain
   // `.destroy()` (no options) leaves the icon textures in `icons` alone —
   // those are owned and shared by `MinimapHud`, not by the sprite.
-  for (const child of target.children) {
+  for (const child of target.removeChildren()) {
     child.destroy();
   }
-  target.removeChildren();
 
   const bounds = cellBounds(plan.rooms.flatMap((room) => room.cells));
 
@@ -167,16 +161,16 @@ function drawMap(
       for (const step of room.minimapRects) {
         const pxMinX = toPx(step.minX, bounds.minX, cellPx);
         const pxMinY = toPx(step.minY, bounds.minY, cellPx);
-        const graphics = roomGraphics.rect(
-          pxMinX,
-          pxMinY,
-          toPx(step.maxX, bounds.minX, cellPx) - pxMinX,
-          toPx(step.maxY, bounds.minY, cellPx) - pxMinY,
-        );
+        const pxWidth = toPx(step.maxX, bounds.minX, cellPx) - pxMinX;
+        const pxHeight = toPx(step.maxY, bounds.minY, cellPx) - pxMinY;
+        // A `fill` consumes the shape it is given, so the stroke gets the
+        // same rectangle drawn again rather than chaining off the fill.
         if (fillColour !== undefined) {
-          graphics.fill(fillColour);
+          roomGraphics.rect(pxMinX, pxMinY, pxWidth, pxHeight).fill(fillColour);
         }
-        graphics.stroke({ width: outlineWidth, color: outlineColour });
+        roomGraphics
+          .rect(pxMinX, pxMinY, pxWidth, pxHeight)
+          .stroke({ width: outlineWidth, color: outlineColour });
       }
     } else {
       if (fillColour !== undefined) {
@@ -285,19 +279,13 @@ export class MinimapHud {
    * is a constraint on the icon *set*, and swapping generated shapes for drawn
    * ones was never licence to change what the shapes mean.
    */
-  constructor(renderer: Renderer, kit: UiKit, authored: RoomIcons = {}) {
+  constructor(kit: UiKit, authored: RoomIcons = {}) {
     this.icons = {
-      treasure:
-        authored.treasure ?? createDiamondTexture(renderer, 4, HUD_PALETTE.minimapTreasureIcon),
+      treasure: authored.treasure ?? diamondTexture(4, HUD_PALETTE.minimapTreasureIcon),
       shop:
         authored.shop ??
-        createBlobTexture(
-          renderer,
-          4,
-          HUD_PALETTE.minimapShopIconFill,
-          HUD_PALETTE.minimapShopIconRim,
-        ),
-      boss: authored.boss ?? createTriangleTexture(renderer, 4, HUD_PALETTE.minimapBossIcon),
+        dotTexture(4, HUD_PALETTE.minimapShopIconFill, HUD_PALETTE.minimapShopIconRim),
+      boss: authored.boss ?? triangleTexture(4, HUD_PALETTE.minimapBossIcon),
     };
 
     this.header = uiText('');

@@ -1,4 +1,4 @@
-import { Container, Sprite, type BitmapText } from 'pixi.js';
+import { Container, Sprite, type BitmapText } from './gfx/index.js';
 import type { GameSim } from '../sim/game/sim.js';
 import { HUD_PALETTE, UI_PALETTE } from './palette.js';
 import { iconRoles, type UiKit } from './ui/kit.js';
@@ -42,7 +42,8 @@ export class CharacterHud {
     this.icon.position.set(0, Math.floor((UI_TEXT_HEIGHT - size.height) / 2));
     this.label = uiText('');
     this.label.position.set(size.width + ICON_GAP, 0);
-    this.view.addChild(this.icon, this.label);
+    this.view.addChild(this.icon);
+    this.view.addChild(this.label);
     this.view.visible = false;
   }
 

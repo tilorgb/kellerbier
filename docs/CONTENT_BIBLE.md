@@ -404,13 +404,13 @@ other item.
     could be hit — which is how the Kellerassel's redraw doubled it. Draw a bigger canvas when you
     want a bigger creature, and check `tests/content/sprite-scale.test.ts` agrees the collider
     still describes it.
-- **Internal resolution 640×360** for the game layer, scaled by a whole number of device
-  pixels. Never non-integer: a sprite drawn at 1.5× has some pixels one screen pixel wide and
-  some two. Menus, HUD text and anything else made of words are drawn outside that layer, at
-  the display's own resolution — so a HUD on a 4K monitor is not stuck with eight device pixels
-  of glyph height. Since #154 they are nonetheless laid out on the **frame's own grid**, at a
-  whole-number scale of it: the UI is drawn in a pixel font the project owns, and a pixel font
-  at a fractional size resamples exactly the way a tile does. See `docs/DECISIONS.md` #43.
+- **Internal resolution 640×360** for everything, scaled by a whole number of device pixels.
+  Never non-integer: a sprite drawn at 1.5× has some pixels one screen pixel wide and some
+  two. Since `docs/DECISIONS.md` #74 the canvas *is* that frame and the HUD, menus and every
+  word are drawn into it as a second pass — one UI pixel is one internal pixel, upscaled with
+  the room. They are laid out on the **frame's own grid** at a whole-number text scale: the UI
+  is drawn in a pixel font the project owns, and a pixel font at a fractional size resamples
+  exactly the way a tile does. See `docs/DECISIONS.md` #43 and #74.
 - **Two type faces, and the rule between them is legibility, not taste.** A 10-row text face for
   everything read while something is shooting at you, and a 16-row pixel Fraktur for the few
   things said in a raised voice — the game's name, a floor's title card, a boss plate, the word

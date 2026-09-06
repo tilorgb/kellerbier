@@ -88,9 +88,11 @@ Work is done when the row for its kind is fully true. Not when it works on your 
 
 ### Art — `art`
 
-- [ ] On-palette, and packed into the floor's atlas
+- [ ] On-palette, and passes the floor's atlas pipeline (validation and packing — the runtime
+      loads the PNGs, so this is the gate, not the delivery)
 - [ ] Legible at the internal resolution, against the floors it appears on
-- [ ] No batch-breakers: no per-sprite filters, no blend-mode changes
+- [ ] Renders as a billboard: alpha-tested cutout, no soft alpha on a world sprite — the shadow
+      pass and the depth buffer both read the same hard edge (`docs/DECISIONS.md` #74)
 - [ ] Silhouette reads at a glance — in a bullet hell the player sees shapes, not detail
 
 ### Audio — `audio`
@@ -121,7 +123,7 @@ declared in [`tools/roadmap/plan.json`](../tools/roadmap/plan.json) by giving th
 | `gameplay` | rules and systems the player interacts with |
 | `feel` | how something *feels* — movement, impact, response |
 | `content` | items, enemies, rooms, floors, text |
-| `art` | sprites, atlases, palette, effects |
+| `art` | sprites, the atlas pipeline, palette, lighting, effects |
 | `audio` | music and sound |
 | `tooling` | editors, harnesses, generators, the debug overlay |
 | `perf` | budgets, benchmarks, optimisation |

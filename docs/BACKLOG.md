@@ -40,7 +40,7 @@ What moved, concretely:
 
 | # | Issue |
 |---|---|
-| 1 | Scaffold project: TypeScript, Vite, PixiJS v8, strict config |
+| 1 | Scaffold project: TypeScript, Vite, PixiJS v8, strict config — Pixi replaced by three.js in M6 (`DECISIONS.md` #74) |
 | 2 | Fixed-timestep simulation loop with render interpolation |
 | 3 | Core ECS with Structure-of-Arrays component storage |
 | 4 | Seeded deterministic PRNG, and ban `Math.random` from `sim/` |
@@ -139,6 +139,8 @@ art sweep is the last moment "one more item" is cheap.
 | 153 | VFX quality pass: art-directed effects instead of generated ones |
 | 154 | Pixel font and UI kit |
 | 166 | The raisin is a build decision: the `rosinen` tag, the three pacts and Oma's Apfelkuchen |
+| — | 3D hurtbox: replace #283's northward hurtbox lift, whose 2D rationale no longer holds under the 56° camera (`DECISIONS.md` #74) |
+| — | Re-baseline the draw-call budget for the three.js scene — `TECH_STACK.md` §3's ≤ 20 was written for a sprite batcher and the bench cannot see the number (`DECISIONS.md` #74) |
 
 ## M7 — Meta-progression
 

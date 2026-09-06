@@ -1,7 +1,8 @@
-import { Container, Sprite, type Texture } from 'pixi.js';
+import { Group } from 'three';
 import { PLAYER_FOOTPRINT, type GameSim } from '../sim/game/sim.js';
 import { PromilleTier } from '../sim/game/promille.js';
 import { lerp } from '../sim/math.js';
+import { STATUS_EFFECT_STRIDE, STATUS_POISON } from '../sim/systems/status-effects.js';
 import {
   AnimationState,
   ClipStateResolver,
@@ -12,7 +13,6 @@ import {
 } from './animation/definition.js';
 import { MAX_FRAME_DELTA_MS } from './animation/animator.js';
 import {
-  PLAYER_FACING_IDS,
   PlayerFacing,
   resolvePlayerAnimationState,
   resolvePlayerHeading,
@@ -20,27 +20,31 @@ import {
   type PlayerFacingIndex,
   type PlayerHeading,
 } from './animation/state.js';
+import type { Texture } from './gfx/index.js';
+import { BLUTWURZ_SPIRIT_TINT, STATUS_POISON_TINT } from './palette.js';
 import { SCHLAUCH_OCTANTS, type PlayerArt, type PlayerBodyKey } from './player-art.js';
-import { ACTOR_SPRITE_SCALE } from './resolution.js';
-import { setFootY } from './depth.js';
-import { createGroundShadow, groundShadowFeetY, styleGroundShadow } from './ground-shadow.js';
-import { BLUTWURZ_SPIRIT_TINT, GROUND_SHADOW, STATUS_POISON_TINT } from './palette.js';
-import { STATUS_EFFECT_STRIDE, STATUS_POISON } from '../sim/systems/status-effects.js';
+import { ACTOR_PIXELS_PER_UNIT } from './resolution.js';
+import { Billboard } from './world/billboard.js';
 
 /**
- * Where the Schlauch's nozzle hangs off the body, per facing, in *authored*
- * pixels from the sprite's centre.
+ * Alois: a four-way body and the Schlauch he shoots from, two billboards
+ * standing at his footprint.
  *
- * Read off the art rather than guessed: the Zapfanlage's tank sits on Alois's
- * left hip, which is screen-right when he faces the camera, screen-left when
- * he faces away, and on the near flank side-on. The x figure is mirrored along
- * with the body, so the hose stays on the tank when he turns around.
+ * ## What the hose does in 3D
  *
- * Re-measured for the Trachten-chibi redraw, whose canvas is 20x32 rather than
- * the original 16x28: the keg is drawn at columns 16-19, rows 18-25, and the
- * sprite's centre is (10, 16), so its upper half sits a little over six pixels
- * out and four down. Facing away, the keg is drawn on his back instead and the
- * hose runs to the same hip, which is now the screen-left one.
+ * In the 2D renderer the nozzle was re-sorted in front of or behind the body
+ * by hand as the aim swung past north. Here the nozzle sits a little in front
+ * of the body along the view direction whenever it should be in front, and a
+ * little behind when the aim points away, and the depth buffer does the rest.
+ *
+ * ## What stayed exactly as it was
+ *
+ * The body direction and mirror (`resolvePlayerHeading`), the drunk strips
+ * from `DRUNK_FROM_TIER` up — read off the tier, not the drift, so turning
+ * drift off for accessibility does not sober him up — the sober strip for a
+ * flinch or a death, the poison and Blutwurz spirit tints, the nozzle's
+ * firing frame and its recoil. All of it is the same simulation state read
+ * by the same functions.
  */
 const SCHLAUCH_ANCHOR: Readonly<Record<PlayerFacingIndex, { x: number; y: number }>> = {
   [PlayerFacing.South]: { x: 6, y: 4 },
@@ -48,209 +52,92 @@ const SCHLAUCH_ANCHOR: Readonly<Record<PlayerFacingIndex, { x: number; y: number
   [PlayerFacing.Side]: { x: 5, y: 4 },
 };
 
-/**
- * Ticks the nozzle holds its firing frame after a shot.
- *
- * Six at 60 Hz is 100 ms, which is under the fastest fire delay the stat
- * pipeline will produce (`Fire Rate` floors at one tick, but Promille's
- * best realistic rate is nearer eight): a stream reads as a *stream* — nozzle
- * lit the whole time — while a tap reads as one flare. Longer and a single
- * shot looks like a held trigger; shorter and a burst strobes.
- */
 const FIRING_TICKS = 6;
-
-/** Ticks of that window the nozzle is also kicked back along its own aim. */
 const RECOIL_TICKS = 3;
-
-/** How far back, in authored pixels. One, against a 20x32 canvas. */
 const RECOIL_PIXELS = 1;
-
-/**
- * How far along the aim the nozzle sits, past the hip it is anchored to.
- *
- * Four authored pixels, which is what it takes to clear the torso. Without
- * it the hose is drawn from the hip *through* the body whenever he aims across
- * himself, and at 1x that reads as a band across his middle rather than as a
- * hose pointing somewhere. Three was the figure for the 16-wide body; the
- * Trachten-chibi redraw is 20 wide, so it takes one more.
- */
 const SCHLAUCH_REACH = 4;
-
-/**
- * From this tier up, Alois is drawn drunk.
- *
- * Beduselt rather than a number of the renderer's own choosing: it is exactly
- * where `promilleDriftScale` and `promilleWobbleAmplitude` start ramping, so
- * he begins *looking* unsteady on the same tier he begins *being* unsteady.
- *
- * Deliberately keyed off the tier and not off `sim.promilleDriftScale` — that
- * one is already multiplied by the no-drift accessibility toggle
- * (`GameSim.driftScale`), so reading it here would quietly make no-drift mode
- * sober Alois up. #151's acceptance criterion is the opposite: reduced-motion
- * and no-sway get "an Alois who is still readable and still drunk", which is
- * why the drunk read lives in authored *poses* — a lean, a wider stance,
- * half-lidded eyes, a flushed cheek — rather than in any motion this view
- * adds on top.
- */
 const DRUNK_FROM_TIER = PromilleTier.Beduselt;
+const SOBER_KEYS: Readonly<Record<PlayerFacingIndex, PlayerBodyKey>> = {
+  [PlayerFacing.South]: 'south',
+  [PlayerFacing.North]: 'north',
+  [PlayerFacing.Side]: 'side',
+};
+const DRUNK_KEYS: Readonly<Record<PlayerFacingIndex, PlayerBodyKey>> = {
+  [PlayerFacing.South]: 'drunk-south',
+  [PlayerFacing.North]: 'drunk-north',
+  [PlayerFacing.Side]: 'drunk-side',
+};
+/** How far in front of (or behind) the body the nozzle sits along the view direction, in room units. */
+const SCHLAUCH_DEPTH = 0.8;
 
-/**
- * Alois's own ground shadow — the shared `render/ground-shadow.ts` treatment
- * (`docs/DECISIONS.md` #61), same as every other body that stands on the
- * floor. It used to be a local copy of the maths (`#195`) with its centre at
- * `PLAYER_RADIUS * 0.85` — 2px up his shins, because his 32px canvas is not
- * his 14-unit collider — and an alpha faint enough to miss.
- */
-
-/**
- * Alois: body, and the Schlauch he shoots through (#151).
- *
- * Two sprites, not one, because a twin-stick game's whole proposition is that
- * where you are going and where you are shooting are two decisions. The body
- * is drawn in the direction he is *moving* — four ways, mirrored to three
- * strips — and the hose in the direction he is *aiming*, eight ways. Baking
- * the two together would be 32 versions of every walk frame; keeping them
- * apart is 8 extra frames total, and it is what makes "aim readable while
- * walking the other way" fall out for free rather than needing to be drawn.
- *
- * The clip machinery is #150's, unchanged: the same compiled sets, the same
- * `clipFrameAt`, the same #19 idle fallback. What this does *not* reuse is
- * `EntityAnimator` — that is a table keyed by entity slot with a corpse pool
- * hanging off it, and Alois is one body that never becomes a corpse (the sim
- * keeps his entity alive through death on purpose) and that changes clip set
- * whenever he turns a corner. Preserving clip phase across a set swap is the
- * thing the animator deliberately does *not* do — a recycled slot must not
- * inherit a stride — and is exactly what a body turning mid-walk needs.
- */
 export class PlayerView {
-  readonly container = new Container();
+  readonly group = new Group();
 
   private readonly art: PlayerArt;
-  private readonly body: Sprite;
-  private readonly schlauch: Sprite;
-  private readonly shadow: Sprite | undefined;
+  private readonly body = new Billboard();
+  private readonly schlauch = new Billboard();
   private readonly clipStates = new ClipStateResolver();
-
-  /** Authored pixels per world unit — the body's own scale, shared by the hose. */
-  private readonly pixelScale: number;
-  /**
-   * Where the body sprite's *centre* now sits in container-local space.
-   *
-   * The container is still placed at Alois's collider centre, but since #73
-   * the body stands on his footprint's south pole rather than being centred
-   * through it, so its middle is half a sprite above that line. Everything
-   * measured from the middle of the drawing — the hose's hip anchor, whose
-   * offsets are authored in pixels from the sprite's centre — is shifted by
-   * this rather than re-measured, so the art's own numbers stay the art's own
-   * numbers.
-   */
-  private readonly bodyCentreY: number;
-
   private facing: PlayerFacingIndex = PlayerFacing.South;
   private mirror = 1;
-  /** Reused, because `sync` runs every frame and must not allocate. */
   private readonly heading: PlayerHeading = { facing: PlayerFacing.South, mirror: 1 };
   private requested: AnimationStateIndex = AnimationState.Idle;
   private playing: AnimationStateIndex = AnimationState.Idle;
   private elapsedMs = 0;
   private lastNowMs: number | null = null;
-  private schlauchBehind = false;
-  /**
-   * The nozzle offset last written, so an unmoved hose is not written again.
-   *
-   * `NaN` until the first frame, which is the point: it compares unequal to
-   * everything, so the first `sync` always writes rather than needing a
-   * separate "have we drawn yet" flag.
-   */
-  private schlauchX = Number.NaN;
-  private schlauchY = Number.NaN;
+  private lean = 0;
+  private x = 0;
+  private y = 0;
 
-  constructor(art: PlayerArt, shadowTexture?: Texture) {
+  frame = 0;
+  schlauchFrame = 0;
+  private drunk = false;
+
+  constructor(art: PlayerArt) {
     this.art = art;
-    const southFrame = art.body.south.frames[0];
-    if (shadowTexture !== undefined && southFrame !== undefined) {
-      // Added first, so it always sits under the body and the hose — a
-      // container child order the two of them never have to know about.
-      // Seated under the south frame's last opaque row (the same across
-      // facings — a character plants on one ground line) and sized off the
-      // drawn body, by the same helpers every other body uses.
-      this.shadow = createGroundShadow(shadowTexture);
-      styleGroundShadow(
-        this.shadow,
-        shadowTexture,
-        southFrame.width * ACTOR_SPRITE_SCALE * GROUND_SHADOW.standingFootprint,
-      );
-      this.shadow.position.set(
-        0,
-        groundShadowFeetY(PLAYER_FOOTPRINT, southFrame, ACTOR_SPRITE_SCALE),
-      );
-      this.container.addChild(this.shadow);
+    const south = art.body.south.frames[0];
+    if (south !== undefined) {
+      this.body.setTexture(south);
     }
-    this.body = new Sprite(art.body.south.frames[0]);
-    // Standing on his footprint's south pole (`render/depth.ts`, #73) rather
-    // than centred through his collider. Alois is 32 authored pixels tall over
-    // a 10-unit footprint, so twelve of those pixels — his hat, head and
-    // shoulders — are now above anything he can be stopped by or shot in, and
-    // a rock's overhang covers his boots while his head clears it.
-    this.body.anchor.set(0.5, 1);
-    this.body.position.set(0, PLAYER_FOOTPRINT);
-    // Drawn on the actor grid, exactly like `EntityView` draws every enemy
-    // body: one authored pixel per internal pixel (`render/resolution.ts`'s
-    // `ACTOR_SPRITE_SCALE`, `docs/DECISIONS.md` #45). Authoring at a higher
-    // resolution for more detail (#26, #27) must not, by itself, change how
-    // big Alois reads in the room — and it no longer can, because size is the
-    // authored canvas rather than something inferred from it.
-    //
-    // This used to be `PLAYER_RADIUS / (texture.height / 2)`, which at 28
-    // authored pixels against a radius of 7 happens to come out at the same
-    // 0.5: Alois is the one body in the game already drawn on the grid, which
-    // is why he is the reference the rest of the roster is being brought to
-    // rather than the thing being changed. Worth stating plainly, because the
-    // comment this replaces got it wrong: an Alois pixel is *half* the size of
-    // a floor tile's, not the same. A 16px tile covers 16 world units, so it
-    // is drawn two internal pixels per authored pixel (`TILE_SPRITE_SCALE`);
-    // he is drawn at one. Foreground carries twice the detail of the
-    // background, deliberately.
-    this.pixelScale = ACTOR_SPRITE_SCALE;
-    this.body.scale.set(this.pixelScale);
-    this.bodyCentreY =
-      PLAYER_FOOTPRINT - ((southFrame?.frame.height ?? 0) * ACTOR_SPRITE_SCALE) / 2;
-    // The hose takes the *body's* scale rather than one of its own — two
-    // sprites sharing one character need one pixel size, or the nozzle renders
-    // at a different resolution than the hand holding it.
-    this.schlauch = new Sprite(art.schlauch.frames[0]);
-    this.schlauch.anchor.set(0.5, 0.5);
-    this.schlauch.scale.set(this.pixelScale);
-    this.container.addChild(this.body, this.schlauch);
+    const nozzle = art.schlauch.frames[0];
+    if (nozzle !== undefined) {
+      this.schlauch.setTexture(nozzle);
+    }
+    this.schlauch.castShadow = false;
+    this.body.visible = true;
+    this.schlauch.visible = true;
+    this.group.add(this.body.mesh, this.schlauch.mesh);
   }
 
-  /** Where Alois is drawn, for anything that needs to point at him on screen. */
-  screenPosition(): { readonly x: number; readonly y: number } {
-    const point = this.container.getGlobalPosition();
-    return { x: point.x, y: point.y };
+  setLean(lean: number): void {
+    this.lean = lean;
   }
 
-  /** The clip currently playing, for the debug overlay. */
+  /** Where he stands, in room units — the camera follows this and the lantern hangs over it. */
+  get positionX(): number {
+    return this.x;
+  }
+
+  get positionY(): number {
+    return this.y;
+  }
+
+  /** His feet, for anything that projects him to the screen. */
+  get footZ(): number {
+    return this.y + PLAYER_FOOTPRINT;
+  }
+
   get playingState(): AnimationStateIndex {
     return this.playing;
   }
 
-  /** The body strip currently drawn, for the debug overlay. */
   get bodyKey(): PlayerBodyKey {
     return this.keyFor(this.facing, this.drunk);
   }
 
-  /** The strip frame currently drawn, for the debug overlay. */
-  frame = 0;
+  get bodyTexture(): Texture | null {
+    return this.body.texture;
+  }
 
-  /** The Schlauch frame currently drawn, for the debug overlay. */
-  schlauchFrame = 0;
-
-  private drunk = false;
-
-  /**
-   * @hot — once per rendered frame.
-   */
   sync(sim: GameSim, alpha: number, nowMs: number): void {
     const deltaMs =
       this.lastNowMs === null
@@ -259,46 +146,28 @@ export class PlayerView {
     this.lastNowMs = nowMs;
 
     const index = sim.playerIndex;
-    const x = lerp(sim.previousX(index), sim.positionX(index), alpha);
-    const y = lerp(sim.previousY(index), sim.positionY(index), alpha);
-    this.container.position.set(x, y);
-    // What the depth layer sorts him against every rock, prop and body in the
-    // room (#73) — the same foot line his sprite stands on.
-    setFootY(this.container, y + PLAYER_FOOTPRINT);
+    this.x = lerp(sim.previousX(index), sim.positionX(index), alpha);
+    this.y = lerp(sim.previousY(index), sim.positionY(index), alpha);
 
     if (resolvePlayerHeading(sim, this.heading)) {
       this.facing = this.heading.facing;
       this.mirror = this.heading.mirror;
     }
     const state = resolvePlayerAnimationState(sim);
-    // A flinch is a flinch and a death is a death, drunk or not: those two
-    // clips are authored on the sober strips only, so being hit sobers the
-    // *art* up for as long as the clip runs. That is not a compromise — the
-    // alternative was six more poses that differ from the sober ones by a
-    // lean nobody reads through a hit flash — but it does have to be decided
-    // here rather than left to the #19 idle fallback, which would silently
-    // turn every drunk death into a drunk idle.
     this.drunk =
       sim.promilleTier >= DRUNK_FROM_TIER &&
       state !== AnimationState.Hurt &&
       state !== AnimationState.Death;
-
-    const set = this.art.body[this.keyFor(this.facing, this.drunk)].clips;
-    this.advance(set, state, deltaMs);
-
-    const clip = set.clips[this.playing] ?? set.idle;
+    const strip = this.art.body[this.keyFor(this.facing, this.drunk)];
+    this.advance(strip.clips, state, deltaMs);
+    const clip = strip.clips.clips[this.playing] ?? strip.clips.idle;
     this.frame = clipFrameAt(clip, this.elapsedMs);
-    const frames = this.art.body[this.keyFor(this.facing, this.drunk)].frames;
-    this.body.texture = frames[this.frame] ?? this.body.texture;
-    this.body.scale.set(this.pixelScale * this.mirror, this.pixelScale);
+    const frame = strip.frames[this.frame];
+    if (frame !== undefined) {
+      this.body.setTexture(frame, this.mirror);
+    }
+    this.body.place(this.x, 0.2, this.footZ, this.lean);
 
-    // Blutwurz (#84): "its own... palette" — a tint on the existing sprite
-    // rather than new pixel art, so the spirit walk reads as a distinct
-    // state at zero new-asset cost. White (no tint) the instant it ends,
-    // recovery or death alike. Blutwurz wins over a poison tint below: it is
-    // a whole distinct run-state the player deliberately entered, where
-    // poison is incidental damage-over-time — the rarer, more deliberate
-    // state should never be masked by the more common one.
     const poisoned = (sim.statusEffect.data[index * STATUS_EFFECT_STRIDE + STATUS_POISON] ?? 0) > 0;
     const spiritTint = sim.blutwurzActive
       ? BLUTWURZ_SPIRIT_TINT
@@ -307,25 +176,17 @@ export class PlayerView {
         : 0xffffff;
     this.body.tint = spiritTint;
     this.schlauch.tint = spiritTint;
+    const flashing = sim.playerHurtTick >= 0 && sim.tick - sim.playerHurtTick < 3;
+    this.body.flash = flashing;
 
     this.syncSchlauch(sim);
   }
 
+  /** Table lookup, not a template string: this runs every frame and a fresh string is garbage. */
   private keyFor(facing: PlayerFacingIndex, drunk: boolean): PlayerBodyKey {
-    const id = PLAYER_FACING_IDS[facing];
-    return drunk ? `drunk-${id}` : id;
+    return (drunk ? DRUNK_KEYS : SOBER_KEYS)[facing];
   }
 
-  /**
-   * Advances the clip clock.
-   *
-   * `elapsedMs` survives a set swap on purpose. Turning a corner, or crossing
-   * the Beduselt line mid-stride, swaps which strip is drawn but not what the
-   * body is *doing*; restarting the walk from its contact frame every time he
-   * turns is a visible stutter on every corner in the game. The clip lists are
-   * authored to the same shape across all six body strips precisely so the
-   * phase can carry.
-   */
   private advance(set: CompiledAnimationSet, state: AnimationStateIndex, deltaMs: number): void {
     if (this.requested !== state) {
       this.requested = state;
@@ -333,9 +194,6 @@ export class PlayerView {
       this.elapsedMs = 0;
     } else {
       this.elapsedMs += deltaMs;
-      // The set may have changed under a state that did not. Re-resolve, in
-      // case the new strip authors a clip the old one did not (the drunk
-      // strips deliberately author only `idle` and `move`).
       this.playing = this.clipStates.resolve(set, this.playing);
     }
     const clip = set.clips[this.playing] ?? set.idle;
@@ -352,51 +210,40 @@ export class PlayerView {
     const firing = sinceShot < FIRING_TICKS;
     const octant = schlauchOctant(aimX, aimY);
     this.schlauchFrame = firing ? SCHLAUCH_OCTANTS + octant : octant;
-    this.schlauch.texture = this.art.schlauch.frames[this.schlauchFrame] ?? this.schlauch.texture;
-
-    // Dead men do not hold the hose up. The body's death clip folds him onto
-    // the floor and the nozzle has nowhere sensible to be, so it goes away —
-    // the one piece of Alois that is not drawn on the game-over beat.
+    const frame = this.art.schlauch.frames[this.schlauchFrame];
+    if (frame !== undefined) {
+      this.schlauch.setTexture(frame);
+    }
     this.schlauch.visible = !sim.playerDead;
 
+    // The authored nozzle offset is in sprite pixels from the body's centre;
+    // on the billboard that is sideways along the quad and up its face.
     const anchor = SCHLAUCH_ANCHOR[this.facing];
     const reach = SCHLAUCH_REACH - (sinceShot < RECOIL_TICKS ? RECOIL_PIXELS : 0);
-    // Written only on the frame it moves, for the same reason the child
-    // reorder below is — and it turned out to matter more than the reorder.
-    // `tests/unit/player-animation.test.ts` measures what a second of drawing
-    // allocates, and touching this transform every frame put that measurement
-    // on a coin flip: whether V8 boxes the two doubles as `HeapNumber`s is
-    // settled once per process at tier-up, so the same unmodified loop read
-    // either the instrument's floor or about 25 bytes a frame above it.
-    // Bisected to this one line, and guarding it puts every run on the floor.
-    // `ObservablePoint.set` already ignores an unchanged value; what costs is
-    // reaching the transform at all.
-    const nozzleX = (anchor.x * this.mirror + aimX * reach) * this.pixelScale;
-    const nozzleY = (anchor.y + aimY * reach) * this.pixelScale + this.bodyCentreY;
-    if (nozzleX !== this.schlauchX || nozzleY !== this.schlauchY) {
-      this.schlauchX = nozzleX;
-      this.schlauchY = nozzleY;
-      this.schlauch.position.set(nozzleX, nozzleY);
-    }
-
-    // Aiming away from the camera puts the hose behind him. Reordered only on
-    // the frame it actually changes: a `Container` re-sort every frame is a
-    // cost paid sixty times a second for a thing that changes when the player
-    // sweeps the stick through the horizontal.
-    const behind = aimY < 0;
-    if (behind !== this.schlauchBehind) {
-      this.schlauchBehind = behind;
-      this.container.setChildIndex(this.schlauch, behind ? 0 : this.container.children.length - 1);
-    }
+    const nozzleX = (anchor.x * this.mirror + aimX * reach) / ACTOR_PIXELS_PER_UNIT;
+    const bodyHeight = this.body.heightUnits;
+    const nozzleUp = bodyHeight / 2 - (anchor.y + aimY * reach) / ACTOR_PIXELS_PER_UNIT;
+    const nozzleHeight =
+      this.schlauch.texture === null ? 0 : this.schlauch.texture.height / ACTOR_PIXELS_PER_UNIT;
+    // Along the leaning quad: "up" the face is (cos lean, -sin lean) in (y, z).
+    const upY = Math.cos(this.lean);
+    const upZ = Math.sin(this.lean);
+    const forward = aimY < 0 ? -SCHLAUCH_DEPTH : SCHLAUCH_DEPTH;
+    // The quad's normal points at the camera: (sin elevation, cos elevation) = (-sin lean, cos lean) in (y, z).
+    const normalY = -Math.sin(this.lean);
+    const normalZ = Math.cos(this.lean);
+    const along = nozzleUp - nozzleHeight / 2;
+    this.schlauch.place(
+      this.x + nozzleX,
+      0.2 + along * upY + forward * normalY,
+      this.footZ + along * upZ + forward * normalZ,
+      this.lean,
+    );
   }
 
-  /** Frees the GPU-side objects this view owns. */
   destroy(): void {
-    this.container.destroy({ children: true });
-  }
-
-  /** The texture the body is currently drawing, for tests. */
-  get bodyTexture(): Texture {
-    return this.body.texture;
+    this.body.dispose();
+    this.schlauch.dispose();
+    this.group.removeFromParent();
   }
 }

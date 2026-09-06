@@ -13,6 +13,7 @@ import { PlayerView } from '../../src/render/player-view.js';
 import { SCHLAUCH_OCTANTS } from '../../src/render/player-art.js';
 import { stubPlayerArt } from '../helpers/player-art.js';
 import { bytesPerPass } from '../helpers/allocation.js';
+import { billboardMeshes, frameShown, isMirrored } from '../helpers/billboard.js';
 
 /**
  * Alois's animation, headlessly (#151).
@@ -299,13 +300,47 @@ describe('PlayerView', () => {
   it('aims the hose independently of the way the body is walking', () => {
     const { game, player } = view();
     // Walking left, aiming right — the case a four-way body cannot express on
-    // its own, and the reason the Schlauch is its own layer.
+    // its own, and the reason the Schlauch is its own billboard.
     place(game, 100, 100, 104, 100);
     game.aimDirectionX = 1;
     game.aimDirectionY = 0;
     player.sync(game, 1, 0);
     expect(player.bodyKey).toBe('side');
     expect(player.schlauchFrame).toBe(schlauchOctant(1, 0));
+  });
+
+  it('mirrors the side strip on the body billboard when he walks right', () => {
+    const { game, player } = view();
+    const [body] = billboardMeshes(player.group);
+    if (body === undefined) {
+      throw new Error('the body billboard is the first quad in the player group');
+    }
+    // Authored facing left: walking left draws the strip as-is.
+    place(game, 100, 100, 104, 100);
+    player.sync(game, 1, 0);
+    expect(player.bodyKey).toBe('side');
+    expect(isMirrored(body)).toBe(false);
+    // Walking right swaps the U edges rather than needing a fourth direction.
+    place(game, 100, 100, 96, 100);
+    player.sync(game, 1, 16);
+    expect(player.bodyKey).toBe('side');
+    expect(isMirrored(body)).toBe(true);
+    // And whichever way he faces, the quad's UVs point at the frame the view says it shows.
+    const shown = player.bodyTexture;
+    expect(shown).not.toBeNull();
+    expect(frameShown(body, shown === null ? [] : [shown])).toBe(0);
+  });
+
+  it('stands both billboards at his feet, the nozzle in front of the body when he aims south', () => {
+    const { game, player } = view();
+    game.aimDirectionX = 0;
+    game.aimDirectionY = 1;
+    player.sync(game, 1, 0);
+    const [body, schlauch] = billboardMeshes(player.group);
+    expect(body?.position.x).toBe(100);
+    expect(body?.position.z).toBeCloseTo(player.footZ);
+    // Aiming toward the camera, the nozzle sits nearer it than the body does.
+    expect(schlauch?.position.z ?? 0).toBeGreaterThan(body?.position.z ?? 0);
   });
 });
 

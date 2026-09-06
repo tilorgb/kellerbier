@@ -1,4 +1,4 @@
-import { Container, Graphics, Rectangle, Sprite, type Renderer, type Texture } from 'pixi.js';
+import { Sprite, type Texture, textureFromPixels } from '../gfx/index.js';
 import { TITLE_PALETTE } from '../palette.js';
 import { DISPLAY_FACE, TEXT_FACE, type PixelFace } from './font-compile.js';
 
@@ -260,58 +260,13 @@ export function renderTitlePixels(face: PixelFace, text: string, style: TitleSty
  * line is a handful of flat bands, so this is a few dozen rectangles rather
  * than one per pixel.
  */
-export function pixelsToTexture(
-  renderer: Renderer,
-  width: number,
-  height: number,
-  colours: Int32Array,
-): Texture {
-  const graphics = new Graphics();
-  const distinct = new Set<number>();
-  for (const colour of colours) {
-    if (colour >= 0) {
-      distinct.add(colour);
-    }
-  }
-  for (const colour of distinct) {
-    let drew = false;
-    for (let y = 0; y < height; y++) {
-      let run = 0;
-      for (let x = 0; x <= width; x++) {
-        if (x < width && colours[y * width + x] === colour) {
-          run += 1;
-          continue;
-        }
-        if (run > 0) {
-          graphics.rect(x - run, y, run, 1);
-          drew = true;
-          run = 0;
-        }
-      }
-    }
-    if (drew) {
-      graphics.fill({ color: colour });
-    }
-  }
-
-  const texture = renderer.generateTexture({
-    target: graphics,
-    resolution: 1,
-    frame: new Rectangle(0, 0, Math.max(1, width), Math.max(1, height)),
-  });
-  graphics.destroy();
-  return texture;
+export function pixelsToTexture(width: number, height: number, colours: Int32Array): Texture {
+  return textureFromPixels(width, height, colours);
 }
 
-/** Draws `text` in `face` with `style` into a texture sized exactly to it. */
-export function titleTexture(
-  renderer: Renderer,
-  face: PixelFace,
-  text: string,
-  style: TitleStyle,
-): Texture {
+export function titleTexture(face: PixelFace, text: string, style: TitleStyle): Texture {
   const { width, height, colours } = renderTitlePixels(face, text, style);
-  return pixelsToTexture(renderer, width, height, colours);
+  return pixelsToTexture(width, height, colours);
 }
 
 /**
@@ -326,13 +281,11 @@ export function titleTexture(
 export class DisplayTitle {
   readonly view = new Sprite();
 
-  private readonly renderer: Renderer;
   private readonly face: PixelFace;
   private style: TitleStyle;
   private current = '';
 
-  constructor(renderer: Renderer, style: TitleStyle, face: PixelFace = DISPLAY_FACE) {
-    this.renderer = renderer;
+  constructor(style: TitleStyle, face: PixelFace = DISPLAY_FACE) {
     this.face = face;
     this.style = style;
   }
@@ -354,7 +307,7 @@ export class DisplayTitle {
 
   private rebuild(): void {
     const previous = this.view.texture;
-    this.view.texture = titleTexture(this.renderer, this.face, this.current, this.style);
+    this.view.texture = titleTexture(this.face, this.current, this.style);
     if (previous.width > 1) {
       previous.destroy(true);
     }
@@ -380,22 +333,14 @@ export class DisplayTitle {
 }
 
 /** A rule — the ornamental bar an old title card puts above and below its text. */
-export function ruleTexture(renderer: Renderer, colour: number, accent: number): Texture {
-  const graphics = new Graphics();
-  // A heavy bar with a hairline under it, and a diamond in the middle: the
-  // cheapest mark that reads as "this is a title card" rather than "this is a
-  // divider in a settings menu".
-  graphics.rect(0, 0, 9, 2).fill({ color: colour });
-  graphics.rect(0, 3, 9, 1).fill({ color: accent });
-  const container = new Container();
-  container.addChild(graphics);
-  const texture = renderer.generateTexture({
-    target: container,
-    resolution: 1,
-    frame: new Rectangle(0, 0, 9, 4),
-  });
-  container.destroy({ children: true });
-  return texture;
+export function ruleTexture(colour: number, accent: number): Texture {
+  const colours = new Int32Array(9 * 4).fill(-1);
+  for (let x = 0; x < 9; x++) {
+    colours[x] = colour;
+    colours[9 + x] = colour;
+    colours[27 + x] = accent;
+  }
+  return textureFromPixels(9, 4, colours);
 }
 
 /** The text face, for anything that wants a treated line at reading size. */

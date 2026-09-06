@@ -1,17 +1,49 @@
-import { Application, type Container, TextureSource } from 'pixi.js';
-import { type GameLayout, computeGameLayout } from './resolution.js';
+import { SRGBColorSpace, WebGLRenderer } from 'three';
+import { UiLayer } from './gfx/index.js';
 import { APP_BACKGROUND_COLOUR } from './palette.js';
+import {
+  type GameLayout,
+  INTERNAL_HEIGHT,
+  INTERNAL_WIDTH,
+  computeGameLayout,
+} from './resolution.js';
 
 /**
- * `host`'s own box in CSS pixels — what the renderer is sized to, rather than
- * `window.innerWidth`/`innerHeight` directly. `host` fills the whole window
- * in the shipped game, so historically the two were interchangeable; they
- * stop being the same the moment `host` shares the window with anything else
- * (`app/editor-dock.ts`'s split view puts an iframe panel next to it), and a
- * host not yet laid out (0x0, vanishingly rare but not impossible for the
- * very first read) falls back to the window rather than booting a zero-size
- * renderer.
+ * Booting the one renderer and mounting its canvas.
+ *
+ * ## One canvas, two passes
+ *
+ * The world is a three.js scene drawn with a perspective camera; the HUD,
+ * menus and screens are a 2D tree (`render/gfx/`) drawn over it with an
+ * orthographic camera in the same frame. One `WebGLRenderer`, one canvas, two
+ * `render()` calls a frame — the second without clearing.
+ *
+ * ## The canvas is the internal frame
+ *
+ * The canvas is exactly `INTERNAL_WIDTH × INTERNAL_HEIGHT` device pixels and
+ * CSS scales it up by a whole number (`computeGameLayout`), nearest-neighbour.
+ * That is the same integer-upscale contract `resolution.ts` always had, with
+ * the scaling moved from a Pixi container onto the element: every texel of
+ * pixel art lands on a whole block of screen pixels, lighting and shadows get
+ * the same chunky grain as the sprites they fall on, and the GPU draws a
+ * 640×360 image whatever the monitor is.
+ *
+ * The one thing this gives up is the old "HUD at display resolution" rule
+ * (`render/ui/font.ts`'s doc comment used to lean on it): the HUD now draws
+ * at internal pixels like everything else. It reads the same on screen — a
+ * UI pixel was already one internal pixel — it just no longer gets extra
+ * device pixels on a 4K monitor it could not use for pixel art anyway.
  */
+export interface GameRenderer {
+  readonly renderer: WebGLRenderer;
+  readonly canvas: HTMLCanvasElement;
+  /** The 2D pass drawn over the world. Its frame is the internal resolution. */
+  readonly ui: UiLayer;
+  /** Draw one frame: the caller's world pass, then the UI pass. */
+  render(world: () => void): void;
+  destroy(): void;
+}
+
 function hostBox(host: HTMLElement): { width: number; height: number } {
   const rect = host.getBoundingClientRect();
   if (rect.width > 0 && rect.height > 0) {
@@ -20,112 +52,80 @@ function hostBox(host: HTMLElement): { width: number; height: number } {
   return { width: window.innerWidth, height: window.innerHeight };
 }
 
-/**
- * Boots Pixi at `host`'s own resolution and mounts its canvas in it.
- *
- * The backing store is the size of `host` rather than the game's 640x360.
- * The game is drawn into a container scaled by a whole number of device pixels,
- * so the art is still one game pixel to an exact NxN block; what the full-size
- * canvas buys is everything drawn *outside* that container — debug panels now,
- * menus later — rendering at the display's resolution instead of at eight
- * pixels of glyph height.
- *
- * Every texture defaults to nearest-neighbour filtering: no smoothing is applied
- * to any texture anywhere in the game, ever.
- */
-export async function createRenderer(host: HTMLElement): Promise<Application> {
-  TextureSource.defaultOptions.scaleMode = 'nearest';
-
-  const { width, height } = hostBox(host);
-  const app = new Application();
-  await app.init({
-    width,
-    height,
-    background: APP_BACKGROUND_COLOUR,
-    antialias: false,
-    roundPixels: true,
-    // The renderer is told the display's pixel ratio and sizes its own backing
-    // store from it, which is what makes text land on real device pixels.
-    resolution: window.devicePixelRatio || 1,
-    autoDensity: true,
-    preference: 'webgl',
-    // Pixi defaults the WebGL context's own hint to 'default'. On a hybrid-GPU
-    // laptop that lets the browser hand this canvas the low-power integrated
-    // GPU instead of the discrete one, which is enough to make this game's
-    // otherwise cheap 2D pixel art render sluggishly.
-    powerPreference: 'high-performance',
-  });
-
-  const canvas = app.canvas;
+export function createRenderer(host: HTMLElement): GameRenderer {
+  const canvas = document.createElement('canvas');
+  canvas.width = INTERNAL_WIDTH;
+  canvas.height = INTERNAL_HEIGHT;
   canvas.style.imageRendering = 'pixelated';
   canvas.style.display = 'block';
   host.appendChild(canvas);
 
-  return app;
+  const renderer = new WebGLRenderer({
+    canvas,
+    antialias: false,
+    powerPreference: 'high-performance',
+  });
+  renderer.setPixelRatio(1);
+  renderer.setSize(INTERNAL_WIDTH, INTERNAL_HEIGHT, false);
+  renderer.setClearColor(APP_BACKGROUND_COLOUR, 1);
+  renderer.outputColorSpace = SRGBColorSpace;
+  renderer.shadowMap.enabled = true;
+
+  const ui = new UiLayer();
+  ui.resize(INTERNAL_WIDTH, INTERNAL_HEIGHT);
+
+  return {
+    renderer,
+    canvas,
+    ui,
+    render(world) {
+      renderer.autoClear = true;
+      renderer.sortObjects = true;
+      world();
+      ui.render(renderer);
+    },
+    destroy() {
+      ui.destroy();
+      renderer.dispose();
+      canvas.remove();
+    },
+  };
 }
 
-/**
- * Sizes and centres the game container for a window.
- *
- * Returns the layout it applied, because the HUD and other screen-space
- * overlays need the same numbers to position themselves and nothing else
- * knows them.
- */
+/** Scales the canvas element to `layout` — a whole number of CSS pixels per internal pixel. */
 export function applyGameLayout(
-  game: Container,
-  windowWidth: number,
-  windowHeight: number,
+  canvas: HTMLCanvasElement,
+  hostWidth: number,
+  hostHeight: number,
   pixelRatio = 1,
-  /** #53's Video-tab scale override — `undefined` is today's fit-to-window behaviour. */
   forcedScale?: number,
 ): GameLayout {
-  const layout = computeGameLayout(windowWidth, windowHeight, pixelRatio, forcedScale);
-  game.scale.set(layout.scale);
-  game.position.set(layout.originX, layout.originY);
+  const layout = computeGameLayout(hostWidth, hostHeight, pixelRatio, forcedScale);
+  canvas.style.width = `${String(Math.round(INTERNAL_WIDTH * layout.scale * 1000) / 1000)}px`;
+  canvas.style.height = `${String(Math.round(INTERNAL_HEIGHT * layout.scale * 1000) / 1000)}px`;
   return layout;
 }
 
-/**
- * Keeps the canvas filling `host` and the game at a whole-number scale
- * inside it. Returns a teardown function.
- *
- * A `ResizeObserver` on `host` rather than a `window` `resize` listener:
- * a window resize always changes `host`'s own box too, so this still covers
- * that case, but it *also* covers `host` changing size on its own — the
- * split view's divider being dragged, or its panel opening/closing — which a
- * `window`-only listener would never see since the window itself hasn't
- * resized.
- */
 export interface WindowSizeTracker {
-  /** Stops the `ResizeObserver`. */
   dispose(): void;
-  /**
-   * Re-applies the layout against the host's *current* box without waiting
-   * for an actual resize — #53's Video-tab scale override changing is not a
-   * resize, so nothing would otherwise trigger the `ResizeObserver` below.
-   */
   relayout(): void;
 }
 
+/**
+ * Keeps the canvas scaled to `host`'s box. Observes the host, not the
+ * window: the editor dock (`app/editor-dock.ts`) shrinks the game pane
+ * without the window changing.
+ */
 export function trackWindowSize(
-  app: Application,
-  game: Container,
+  canvas: HTMLCanvasElement,
   host: HTMLElement,
   onLayout: (layout: GameLayout) => void,
-  /**
-   * Reads #53's Video-tab scale override live on every call rather than
-   * snapshotting it once — so a settings change, applied via `relayout()`
-   * above, actually picks up the new value, the same way
-   * `mountDebugOverlay`'s own `() => layout.scale` getter stays live.
-   */
   getForcedScale?: () => number | undefined,
 ): WindowSizeTracker {
   const onResize = (): void => {
     const { width, height } = hostBox(host);
     const ratio = window.devicePixelRatio || 1;
-    app.renderer.resolution = ratio;
-    app.renderer.resize(width, height);
-    onLayout(applyGameLayout(game, width, height, ratio, getForcedScale?.()));
+    onLayout(applyGameLayout(canvas, width, height, ratio, getForcedScale?.()));
   };
   onResize();
   const observer = new ResizeObserver(onResize);
@@ -136,4 +136,21 @@ export function trackWindowSize(
     },
     relayout: onResize,
   };
+}
+
+/**
+ * Converts a CSS-pixel point on the canvas into internal pixels — the frame
+ * both the UI layer and the world camera's viewport are measured in.
+ */
+export function canvasToFrame(
+  canvas: HTMLCanvasElement,
+  clientX: number,
+  clientY: number,
+  out: { x: number; y: number },
+): void {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = rect.width > 0 ? INTERNAL_WIDTH / rect.width : 1;
+  const scaleY = rect.height > 0 ? INTERNAL_HEIGHT / rect.height : 1;
+  out.x = (clientX - rect.left) * scaleX;
+  out.y = (clientY - rect.top) * scaleY;
 }

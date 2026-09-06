@@ -1,4 +1,4 @@
-import { Container, Graphics, type Renderer } from 'pixi.js';
+import { Container, Graphics } from './gfx/index.js';
 import { EFFECT_PALETTE } from './palette.js';
 import type { UiKit } from './ui/kit.js';
 import { Menu, type MenuItem, type MenuScreen } from './ui/menu.js';
@@ -29,13 +29,13 @@ export class PauseScreen implements MenuScreen {
   private width = 0;
   private height = 0;
 
-  constructor(kit: UiKit, renderer: Renderer, actions: PauseScreenActions) {
+  constructor(kit: UiKit, actions: PauseScreenActions) {
     this.view.visible = false;
 
     this.dim = new Graphics();
     this.view.addChild(this.dim);
 
-    this.headline = new DisplayTitle(renderer, TITLE_STYLES.heading);
+    this.headline = new DisplayTitle(TITLE_STYLES.heading);
     this.headline.set('Paused');
     this.view.addChild(this.headline.view);
 

@@ -167,7 +167,9 @@ const STYLE = `
 
 .kb-editor-playtest-overlay {
   position: fixed; inset: 0; z-index: 50; background: var(--kb-color-surface-0);
+  display: flex; align-items: center; justify-content: center;
 }
+.kb-editor-playtest-overlay canvas { image-rendering: pixelated; }
 .kb-editor-playtest-exit {
   position: fixed; top: 10px; right: 10px; z-index: 51; font: 12px var(--kb-font-mono);
   color: var(--kb-color-text); background: var(--kb-color-surface-3); border: 1px solid var(--kb-color-surface-4);

@@ -1,6 +1,5 @@
-import { Sprite, Texture } from 'pixi.js';
+import { Sprite, Texture, textureFromImage } from './gfx/index.js';
 import type { GameSim } from '../sim/game/sim.js';
-import type { GameLayout } from './resolution.js';
 
 /**
  * Blaue Stunde (#49): heavy dusk, limited vision radius — a radial darkening
@@ -32,14 +31,22 @@ const REDUCED_MOTION_MAX_ALPHA = 0.65;
 /** How much wider the clear radius gets under `reducedMotion`. */
 const REDUCED_MOTION_RADIUS_SCALE = 1.5;
 
+/**
+ * Same construction as `Vignette`'s: a Canvas 2D radial gradient, uploaded
+ * linear because it is an alpha mask rather than colour, and `Texture.EMPTY`
+ * wherever there is no DOM so a headless test can still build the overlay.
+ */
 function createDarknessTexture(): Texture {
+  if (typeof document === 'undefined') {
+    return Texture.EMPTY;
+  }
   const size = 512;
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
   const context = canvas.getContext('2d');
   if (context === null) {
-    return Texture.from(canvas);
+    return Texture.EMPTY;
   }
   const centre = size / 2;
   const gradient = context.createRadialGradient(
@@ -54,7 +61,7 @@ function createDarknessTexture(): Texture {
   gradient.addColorStop(1, 'rgba(0, 0, 0, 1)');
   context.fillStyle = gradient;
   context.fillRect(0, 0, size, size);
-  return Texture.from(canvas);
+  return textureFromImage(canvas, true);
 }
 
 export class BlaueStundeOverlay {
@@ -70,12 +77,17 @@ export class BlaueStundeOverlay {
    * `screenX`/`screenY` are where the player renders this frame
    * (`GameView.playerScreenPosition()`), same as `Vignette.sync` — the clear
    * centre tracks the player exactly, camera shake/sway included.
+   *
+   * `screenRadius` is `tuning.curse.blaueStundeVisionRadius` already
+   * projected into internal pixels by the caller — the world is 3D now, so
+   * "how many screen pixels a world unit covers" is the camera's to answer,
+   * not a fixed `layout.scale` this overlay can multiply by itself.
    */
   sync(
     sim: GameSim,
     screenX: number,
     screenY: number,
-    layout: GameLayout,
+    screenRadius: number,
     reducedMotion: boolean,
   ): void {
     const active = sim.curse === 'blaue-stunde';
@@ -83,12 +95,10 @@ export class BlaueStundeOverlay {
     if (!active) {
       return;
     }
-    const radius =
-      sim.tuning.curse.blaueStundeVisionRadius * (reducedMotion ? REDUCED_MOTION_RADIUS_SCALE : 1);
-    // `radius` is world px at the edge of the texture's own clear fraction —
-    // sizing the sprite so that fraction lands there, in screen px, is the
-    // same "world px times `layout.scale`" conversion `Vignette.resize` uses.
-    const diameter = (radius / CLEAR_FRACTION) * 2 * layout.scale;
+    const radius = screenRadius * (reducedMotion ? REDUCED_MOTION_RADIUS_SCALE : 1);
+    // `radius` is screen px at the edge of the texture's own clear fraction —
+    // size the sprite so that fraction lands exactly there.
+    const diameter = (radius / CLEAR_FRACTION) * 2;
     this.view.width = diameter;
     this.view.height = diameter;
     this.view.alpha = reducedMotion ? REDUCED_MOTION_MAX_ALPHA : MAX_ALPHA;

@@ -30,7 +30,8 @@
     "playtest": "vitest run --config vitest.playtest.config.ts"
   },
   "dependencies": {
-    "pixi.js": "^8.20.0"
+    "@types/three": "^0.185.4",
+    "three": "^0.185.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",

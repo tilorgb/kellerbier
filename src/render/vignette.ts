@@ -1,6 +1,6 @@
-import { Sprite, Texture } from 'pixi.js';
+import { Sprite, Texture, textureFromImage } from './gfx/index.js';
 import type { GameSim } from '../sim/game/sim.js';
-import { INTERNAL_HEIGHT, INTERNAL_WIDTH, type GameLayout } from './resolution.js';
+import { INTERNAL_HEIGHT, INTERNAL_WIDTH } from './resolution.js';
 import { EFFECT_PALETTE, PROMILLE_KATER_TINT, PROMILLE_VIGNETTE_TINT } from './palette.js';
 
 /** Highest the vignette ever gets, even at Promille's max. Never fully opaque. */
@@ -17,10 +17,19 @@ const MAX_DISTORTION_ALPHA = 0.18;
 
 /**
  * A radial gradient, transparent centre to opaque edge, generated once via
- * `<canvas>` rather than pixi `Graphics` — a soft radial fade is a Canvas 2D
+ * `<canvas>` rather than `Graphics` — a soft radial fade is a Canvas 2D
  * gradient, not a shape, and there is no reason to reach for a shader for it.
+ *
+ * Uploaded linear (`textureFromImage(canvas, true)`): the pixels are an alpha
+ * mask the sprite's tint colours, not colour data, so they must not be
+ * sRGB-decoded on the way in.
  */
 function createVignetteTexture(): Texture {
+  if (typeof document === 'undefined') {
+    // No DOM is a headless/test environment, not a real failure — the caller
+    // just gets an unused blank texture.
+    return Texture.EMPTY;
+  }
   const size = 512;
   const canvas = document.createElement('canvas');
   canvas.width = size;
@@ -29,7 +38,7 @@ function createVignetteTexture(): Texture {
   if (context === null) {
     // No 2D context is a headless/test environment, not a real failure —
     // the caller just gets an unused blank texture.
-    return Texture.from(canvas);
+    return Texture.EMPTY;
   }
   const centre = size / 2;
   const gradient = context.createRadialGradient(
@@ -44,7 +53,7 @@ function createVignetteTexture(): Texture {
   gradient.addColorStop(1, 'rgba(0, 0, 0, 1)');
   context.fillStyle = gradient;
   context.fillRect(0, 0, size, size);
-  return Texture.from(canvas);
+  return textureFromImage(canvas, true);
 }
 
 /**
@@ -98,8 +107,8 @@ export class Vignette {
 
   /**
    * `screenX`/`screenY` are where the player actually renders this frame —
-   * `GameView.playerScreenPosition()` — so the clear centre of the tunnel
-   * tracks the player exactly, camera shake/sway and all.
+   * `GameView.playerScreenPosition()`, in internal pixels — so the clear
+   * centre of the tunnel tracks the player exactly, camera shake/sway and all.
    */
   /**
    * Whether the vignette breathes (#153).
@@ -161,13 +170,18 @@ export class Vignette {
     this.view.position.set(screenX, screenY);
   }
 
-  /** Call on every resize, same as the HUD's own `positionHud`. */
-  resize(layout: GameLayout): void {
+  /**
+   * Call on every resize, same as the HUD's own `positionHud`. Takes nothing:
+   * the game renders at a fixed internal frame (`INTERNAL_WIDTH` x
+   * `INTERNAL_HEIGHT`) and the UI layer is scaled up as a whole, so the
+   * overlay covers the same internal pixels whatever the window is.
+   */
+  resize(): void {
     // Independent width/height rather than a uniform scale: the gradient
     // stretches to the room's aspect ratio, which is what makes it cover a
     // landscape viewport corner to corner instead of leaving the top and
     // bottom unshaded.
-    this.view.width = INTERNAL_WIDTH * layout.scale * COVERAGE;
-    this.view.height = INTERNAL_HEIGHT * layout.scale * COVERAGE;
+    this.view.width = INTERNAL_WIDTH * COVERAGE;
+    this.view.height = INTERNAL_HEIGHT * COVERAGE;
   }
 }

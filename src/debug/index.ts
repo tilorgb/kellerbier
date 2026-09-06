@@ -1,4 +1,5 @@
-import type { Container } from 'pixi.js';
+import type { WebGLRenderer } from 'three';
+import type { Container } from '../render/gfx/index.js';
 import type { GameSim } from '../sim/game/sim.js';
 import type { GameView } from '../render/view.js';
 import { DebugOverlay } from './overlay.js';
@@ -6,6 +7,7 @@ import { createProjectileTagChooser } from './projectile-tag-chooser.js';
 import { createTuningWindow } from './tuning-window.js';
 
 export { DebugOverlay } from './overlay.js';
+export { DrawCallCounter, type DrawCallSource } from './draw-calls.js';
 export { FRAME_BUDGET_MS, FrameMetrics } from './metrics.js';
 export type { DebugPanel, DebugContext } from './panel.js';
 
@@ -13,16 +15,16 @@ export interface DebugOverlayHost {
   readonly sim: GameSim;
   readonly view: GameView;
   /**
-   * The layer panels are drawn into: outside the scaled game, at the display's
-   * own resolution. Panels drawn inside the game get eight pixels of glyph
-   * height blown up by the game's scale, which is legible only by accident.
+   * The 2D layer panels are drawn into, in UI pixels — the internal 640×360
+   * frame the HUD shares. Panels are pixel-font text, so they sit at 1:1 in
+   * that frame like every other label; the overlay lays them out against it.
    */
   readonly uiLayer: Container;
-  /** The game's current whole-number scale, for turning screen drags into room pans. */
+  /** The canvas's current whole-number scale (CSS px per internal px), for turning screen drags into room pans. */
   readonly gameScale: () => number;
   readonly canvas: HTMLCanvasElement;
-  /** The WebGL context to count draw calls on, if the renderer has one. */
-  readonly gl: unknown;
+  /** The renderer whose `info.render.calls` the counts panel reports. */
+  readonly renderer: WebGLRenderer;
 }
 
 /**
@@ -34,7 +36,7 @@ export interface DebugOverlayHost {
  */
 export function createDebugOverlay(host: DebugOverlayHost): DebugOverlay {
   const overlay = new DebugOverlay(host.sim, host.view, host.uiLayer, host.gameScale);
-  overlay.drawCalls.attach(host.gl);
+  overlay.drawCalls.attach(host.renderer);
   overlay.attach(window, host.canvas);
   // Independent of the debug overlay on purpose: the panels are for watching
   // what the game is doing, and this is for changing it. They get used at

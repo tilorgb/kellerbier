@@ -1,5 +1,5 @@
-import { Texture } from 'pixi.js';
 import { describe, expect, it } from 'vitest';
+import { type Texture, textureFromPixels } from '../../src/render/gfx/index.js';
 import {
   PLAYER_TAG_SPRITE_ORDER,
   spriteFor,
@@ -7,6 +7,11 @@ import {
 } from '../../src/render/projectiles.js';
 import { ProjectileTeam } from '../../src/sim/projectile/store.js';
 import { ProjectileTag } from '../../src/sim/projectile/tags.js';
+
+/** A fresh one-pixel texture — a distinct object each call. */
+function texture(): Texture {
+  return textureFromPixels(1, 1, new Int32Array([0xffffff]));
+}
 
 /**
  * One texture per role, all distinct objects so an assertion can say *which*
@@ -16,14 +21,14 @@ function art(): {
   readonly art: ProjectileArt;
   readonly named: Record<string, Texture>;
 } {
-  const player = new Texture();
-  const burning = new Texture();
-  const freezing = new Texture();
-  const piercing = new Texture();
-  const spore = new Texture();
-  const cellarDefault = new Texture();
-  const ruralDefault = new Texture();
-  const fallback = new Texture();
+  const player = texture();
+  const burning = texture();
+  const freezing = texture();
+  const piercing = texture();
+  const spore = texture();
+  const cellarDefault = texture();
+  const ruralDefault = texture();
+  const fallback = texture();
   return {
     art: {
       player,

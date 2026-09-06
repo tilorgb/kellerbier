@@ -14,6 +14,8 @@ useful thing on the page.
 
 ## 1. TypeScript, Vite, PixiJS and a custom ECS
 
+*Renderer superseded by #74: PixiJS was replaced by three.js in M6. The rest of the stack argument stands.*
+
 **Decided:** M0, before the first commit. **Full reasoning:** [`TECH_STACK.md`](TECH_STACK.md).
 
 A bullet hell in JavaScript is a legitimate concern, and the reputation is mostly earned by
@@ -31,6 +33,8 @@ avoided), native (a ceiling this game will not reach, paid for on every change).
 arrays, so the hot loop can move to WASM without touching game content.
 
 ## 2. The simulation may not import the renderer
+
+*Note from #74: "Pixi" here reads as "the renderer" — the rule is unchanged and now covers three.js.*
 
 **Decided:** M0. **Enforced by:** `tools/eslint/architecture.js`, with fixtures in
 `tests/lint/`.
@@ -1712,6 +1716,8 @@ The threshold (3.0) and the swatch sets (`floorBackgroundSwatches`) are untouche
 
 ## 40. A room's furniture is authored data the renderer looks up, and a floor's tileset is a five-name manifest
 
+*Render side superseded by #74: `prop-view.ts` and `room.ts` are gone — props and obstacles are billboards, walls are boxes (`render/world/scenery.ts`). The manifest stands, two fields longer (`wallHeight`, `lighting`).*
+
 **Decided:** M6, wiring #152's art into the renderer.
 
 Two gaps turned up together while looking for the last placeholders, and they have the same
@@ -1866,6 +1872,8 @@ rather than decorative. A new UI element declares its budget there or it is not 
 
 ## 43. UI art is screen-space, generated at boot, and lives in `src/render/ui/` — not in the atlas
 
+*Mechanics superseded by #74: UI art rasterises to `DataTexture`s via `textureFromPixels`, and the HUD draws at internal pixels, not "the display's own resolution". Where it lives and the role format stand.*
+
 **Decided:** M6, with #154. **Constrains:** every later HUD element, and M8's menus.
 
 The obvious home for a heart, a Biermarke and a panel corner is `assets/sprites/common/tiles/`,
@@ -1944,6 +1952,8 @@ an event, a handful of times a run, never per frame.
 than inventing colours, and anything that reads as a *label* uses `uiText`, not `displayText` —
 including headings inside a HUD element, where a raised voice would just be noise.
 ## 45. A sprite's canvas is its size on screen — the actor grid is one authored pixel per internal pixel
+
+*Mechanism superseded by #74: the Pixi `scale` is now a billboard's world size over `ACTOR_PIXELS_PER_UNIT`. The rule stands unchanged — a canvas height is literally how tall a thing stands.*
 
 **Decided:** M6, from an art-direction audit asking why sprites kept growing whenever they were
 redrawn with more detail. **Supersedes** the half of #27 that claimed pixel density was decoupled
@@ -2139,6 +2149,8 @@ not a patch on option 1.
 
 ## 48. A tile may draw at 32x32 on the actor grid, per asset, instead of only 16x16 on the room grid
 
+*`render/room.ts`'s `tileRect` is gone (#74); the per-asset choice stands, read by `render/tiles.ts`'s `tileGridScale`.*
+
 **Decided:** M8, #180, from a direct note that the committed floor/wall tiles read as low-detail
 next to character art. **Amends:** #45's tile half — not the actor half, which is untouched — by
 turning `TILE_SPRITE_SCALE` from the only grid room art draws on into the default one.
@@ -2196,6 +2208,8 @@ need its own grid constant and its own whole-number-scale proof the way 16 and 3
 one each; nothing here makes a third size cheap.
 
 ## 49. Every tile category redraws at 32x32 together, or not at all — mixed density within a category is the bug #48 left open
+
+*`prop-view.ts` is gone (#74): a prop is a billboard sized from its own texture, so the per-category rule is what remains.*
 
 **Decided:** M8, #182, closing the gap #48 (`#180`) deliberately left open: that decision redrew
 only floor 1 and floor 2's floor/wall/wall-lip, naming `cellar-plank`, `rural-hedge-block`, every
@@ -2552,6 +2566,8 @@ pixel art needs a sign-off round (`CLAUDE.md`) that a stat block does not.
 
 ## 55. Character art is chibi-proportioned: a head that is a third of the body, eyes with a sclera, and a silhouette prop
 
+*The wall-lip "continuous tiling band" is superseded by #74: the lip is the face of a wall box in `render/world/scenery.ts`. The proportions and palette tiers stand.*
+
 **Decided:** M8, redrawing Alois. The old roster is drawn at roughly realistic proportions —
 Alois was a 16×28 figure whose head was eight of those rows, with two pixels of eye and no
 mouth — and at the 640×360 internal frame that reads as "small person, far away" rather than as
@@ -2760,6 +2776,8 @@ argument for actually playtesting art in the running game, not just the build pa
 
 ## 56. A boss is its own enemy size class, drawn taller than its collider and standing on it
 
+*The anchor exception was generalised by #73 and its mechanics superseded by #74: every billboard is bottom-anchored on its footprint. The size class stands.*
+
 **Decided:** M8, #193, alongside #55's boss amendment. "Bosses can be bigger — 20-25% of the
 screen, look to Isaac" was the direction, and #45 makes that a decision with a consequence:
 since an authored pixel is an on-screen pixel, a boss drawn at a quarter of the 360-tall frame
@@ -2853,6 +2871,8 @@ reach for, and any melee mob has `meleeArc`. A graceful-degradation note: a
 throws at registry construction rather than producing a boss that never attacks.
 
 ## 58. A door is a half-tile mirrored into a whole, it parts along the doorway, and it has three states
+
+*Drawing superseded by #74: a door is `DoorPiece` in `render/world/scenery.ts` — a passage cut through the wall box, a leaf mesh, a glow light — and the Pixi `anchor:(1,1)` placement maths is gone. The half-texture and the three states stand.*
 
 **Decided:** M8, #196. The door was the one tile in that issue's scope that is *not*
 background — a thing the player walks at on purpose, with states they must tell apart across a
@@ -2950,6 +2970,8 @@ fall back to a lighter layout.
 
 ## 60. A floor's in-room obstacle is a set of 2–4 composed rock tiles the room mixes per cell, with no keyline
 
+*`render/room.ts` is gone (#74): the per-cell variant pick lives in `render/world/scenery.ts` via `tiles.ts`'s `pickTileVariant`; a rock is a billboard. The rule stands.*
+
 **Decided:** M8. The obstacle blocks looked like furniture — floor 1's `cellar-plank` read as a
 wooden hatch, floor 2's `rural-hedge-block` as a hedge with a blue frame — and a three-cell
 wall of them read as three copies of one stamp with a walkable-looking channel between
@@ -2985,6 +3007,8 @@ and `tests/content/sprite-coverage.test.ts` checks every entry exists. Floors 3-
 pixels whose RGB is the legal neutral `#1c1a1f`, so `findOffPalettePixel` still passes.
 
 ## 61. Anything the player acts on casts a ground shadow, from one shared function
+
+*Superseded by #74: the shadow map draws every standing sprite's real silhouette shadow through the alpha-tested depth pass; `ground-shadow.ts` and `inked-bounds.ts` are deleted, and scenery casts one too.*
 
 **Decided:** M8. #195 gave the player, ordinary enemies and dropped pickups a soft
 `common/characters/actor-shadow.png` blob, reusing the boss shadow's idea (#152), and left "the
@@ -3600,6 +3624,8 @@ over.
 
 ## 73. A body has two circles — a footprint it stands on and a hurtbox it is shot in — and everything that stands is drawn on one Y-sorted layer
 
+*"One sorted layer" and "the lighting had to follow them up" are superseded by #74: the depth buffer orders bodies and real lights shade them. The two circles stand; the hurtbox lift is #74's open item.*
+
 **Decided:** M8, from a direction note: *"comparing to Isaac there is one major difference which
 makes the game feel more immersive… almost all sprites have a certain perceived height. When Isaac
 moves to a stone block north of him we can see his head sticks out over the block. His hurtbox is
@@ -3739,3 +3765,117 @@ there is no second mechanism, and the Maibaum is the worked example of why. Any 
 taller from here gets its height for free and its hitbox unchanged, which is the point: this entry
 is the *permission* for the roster to grow upward, and #45's "a bigger canvas is a bigger body" now
 means a bigger *silhouette*, not a bigger hitbox.
+
+## 74. One renderer: three.js draws the world in 3D and the HUD as a 2D pass — sprites stay 2D
+
+**Decided:** M6, replacing PixiJS wholesale on the render side. **Supersedes** the Pixi mechanics in
+#1, #40, #43, #45, #48, #49, #55, #56, #58, #60, #61 and #73 — the rules those entries state mostly
+stand; the machinery under them does not. **Enforced by:** the architecture lint (#2), unchanged;
+`tests/content/sprite-scale.test.ts` for sprite size.
+
+### Why
+
+Lighting. The 2D room had grown three separate fakes for one missing thing: gradient sprites for
+the bulb's pool (#37/#243, then `tintAt` in #73), a blob sprite under every body for a shadow (#61),
+and a Y-sorted layer so a body could stand behind another (#73). Each was a hand-rolled
+approximation of what a depth buffer, a shadow map and a point light do for free, each had its own
+bugs (#73's "lit floor with unlit rock on top" is the worked example), and a fourth effect — a thrown
+Maß lighting the floor it flies over — was not reachable that way at all. The proof of concept
+(`/poc-3d.html`, since deleted) stood the authored sprites on a lit floor under a fixed camera and
+the room read as a *place*. That was the argument, and it was made by looking, not by benchmark.
+
+### What the world is now
+
+- **A fixed 56° perspective camera** (`render/world/camera.ts`), fitted once so exactly one
+  `320×180`-unit view — `INTERNAL / WORLD_ZOOM`, the frame the 2D game showed — fills the internal
+  frame, and targeting the same clamped viewport centre `followOffset` always computed. A `1x1`
+  room never scrolls; a `2x2` scrolls exactly as it did (`GAME_DESIGN.md`'s "Room shape and the
+  camera" still holds). 56° was chosen in the proof of concept against 38° (more drama, less
+  playfield) and 90° (the 2D game); `GameView.setElevation` is kept for tuning.
+- **Walls with height, per tileset.** `FloorTileset.wallHeight` (`render/floor-art.ts`): Der
+  Keller's are 26 units of wall, Dorf & Acker's `rural-wall` a 10-unit hedge the player looks over.
+  `FloorTileset.lighting` names the light rig. Both are decisions about what the wall tile *is*, so
+  they live where the tile is named (#40's manifest, two fields longer). The wall nearest the camera
+  is a kerb whatever the floor says, or it would hide the near rows.
+- **Real light and a shadow map** (`render/world/lighting.ts`). A cellar hangs a point light on
+  every `bulb` prop — two by default if none is authored, because a cellar with no light is a black
+  screen, not a mood. Daylight is a sky, a sun, and a cloud plane that *casts a shadow* through the
+  alpha-tested depth pass, so it darkens the barrels and the Bauer as it passes, not only the floor.
+  A key light from the camera's side does the shadow map, so a body's shadow falls behind it,
+  up-screen, off whatever the player is aiming at. Alois carries a lantern; every live player shot
+  carries a small point light of its own.
+- **Everything that stands is a 2D sprite standing up** (`render/world/billboard.ts`): a
+  bottom-anchored quad, leaned back by the camera's elevation so its projected height is exactly
+  its authored height, sized from the frame's pixel size over `ACTOR_PIXELS_PER_UNIT`. A frame is
+  chosen by moving the quad's UVs on one shared texture, never by binding another. Lit by a standard
+  material, and **the hit flash is the emissive term at full white** — the blown-out silhouette
+  #43 describes `placeholder-art.ts` faking with a texture swap, now a material property.
+  Obstacles, props, creatures, pickups, corpses alike: a boulder drawn as a textured box read as a
+  crate with rock wallpaper, and the authored tile already *is* the illusion of a rock.
+- **Flat things stay flat** (`render/world/flat.ts`): decals, telegraph shapes and plinths are
+  quads a hair above the floor plane, stacked by kind so overlaps order predictably.
+- **Projectiles and particles are instanced**: one `InstancedMesh` per projectile texture and per
+  particle kind. Five thousand shots is a handful of draws.
+- **Text is a HUD thing** (`render/world/label.ts`). Damage numbers, prices and pickup names have
+  to stay legible at any angle, so they live on the 2D pass and are placed each frame at the
+  projection of the world point they belong to. `GameView` projecting a point is the one seam
+  between the two passes.
+
+### The HUD did not get rewritten
+
+The alternatives for the screen-space half:
+
+- **Keep Pixi for the HUD on a second canvas.** Two renderers, two GL contexts, two texture
+  uploads of the same art, and a compositing seam exactly where the vignette and the damage numbers
+  need to know where the world is. Rejected.
+- **Port the HUD to DOM.** Crisp text for free, but the pixel fonts, the nine-slice kit and the
+  pointer model (#43, #154) would all be reauthored, and a DOM overlay can neither sit *under* a
+  world effect nor be captured with the frame. Rejected.
+- **Both renderers behind a flag.** Keeps a rollback and doubles every render-side change for as
+  long as the flag lives — and a flag like that is never removed. Rejected. **The user's decision:
+  one renderer, and delete the old one.**
+
+So `render/gfx/` is a small 2D scene graph with the vocabulary the HUD, menus and screens were
+already written in — `Container`, `Sprite`, `NineSliceSprite`, `BitmapText`, `Graphics`, `Texture`
+— drawn by three.js as an orthographic pass over the world (`render/gfx/layer.ts`,
+`render/app.ts`): painter's order is the whole depth model, depth test and sorting off. Pixel fonts
+and the UI kit are rasterised straight into `DataTexture`s by pure functions (`textureFromPixels`;
+`render/ui/font.ts`, `pixel-art.ts`) — Node-safe, no renderer, which is what keeps `CLAUDE.md`'s
+specimen-sheet sign-off working.
+
+**One canvas, exactly `INTERNAL_WIDTH × INTERNAL_HEIGHT` device pixels, CSS-upscaled by a whole
+number.** `resolution.ts`'s integer rule moved from a Pixi container onto the element, and lighting
+and shadows get the same chunky grain as the sprites they fall on. What this gives up is #43's "HUD
+at the display's own resolution": the HUD draws at internal pixels like everything else. It reads
+the same — a UI pixel was already one internal pixel — and `uiScaleFor(textScale)` is now only
+#53's text-scale multiplier.
+
+### What went
+
+`render/ambient-light.ts`, `ground-shadow.ts`, `inked-bounds.ts`, `depth.ts`, `placeholder-art.ts`,
+`prop-view.ts`, `room.ts` — the Y-sort layer, the fake shadows, the canvas-gradient ambient light,
+the generated Pixi textures. The depth buffer, the shadow map and real lights are what they were
+standing in for. The atlas under `assets/atlases/` was never loaded by the runtime, before or after:
+it is a validation and packing artefact (`tools/atlas-packer/`), and stays one.
+
+### Performance, honestly
+
+`TECH_STACK.md` §2's "≤ 20 draw calls, one atlas, batch everything" reasoning was written for a
+sprite batcher and is stale. The shape now is a few merged floor meshes, the wall boxes, one mesh
+per standing body, one `InstancedMesh` per projectile texture and per particle kind, and one 2D mesh
+per HUD element; the count comes from `renderer.info.render.calls` (debug overlay,
+`src/debug/draw-calls.ts`). The 12 ms frame budget stands. The draw-call row **has not been
+re-baselined** and is not asserted by the bench — it never was: the headless bench reports
+`drawCalls: null` — and GPU cost in general is unverified in CI, which has no GPU. That is a known
+gap, not a met budget.
+
+**Constrains:** `sim/` still never imports the renderer — it did not know Pixi existed and does not
+know three.js does (#2, same lint). `render/gfx/`'s vocabulary is the HUD's contract: a new HUD
+element is written against it, not against three.js directly. A billboard derives its world size
+from `ACTOR_PIXELS_PER_UNIT` and nothing else, so #45 holds unchanged — a canvas *height* is now
+literally how tall a thing stands. Per-floor wall height and lighting are tileset data, authored
+beside the tile names. A flash is emissive, a telegraph is a floor shape, a label is HUD text
+projected from a world point — one mechanism each, no second one. **Open:** #283's northward hurtbox
+lift is preserved in the sim, but its 2D rationale (a hitbox "under" a tall sprite) no longer
+describes the picture — a proper 3D hurtbox is a follow-up. The draw-call budget needs
+re-baselining against this scene, and the bench still cannot see it.

@@ -1,93 +1,106 @@
 /**
  * Counts real draw calls.
  *
- * Pixi does not publish a draw-call count, and the numbers that are easy to
- * reach — sprite counts, container children — are not the thing the budget in
- * docs/TECH_STACK.md §3 is written about. What breaks batching is a filter, a
- * blend-mode change or z-order churn, and none of those change the sprite
- * count at all: the only visible symptom is the draw call itself.
+ * The numbers that are easy to reach — sprite counts, container children — are
+ * not the thing the budget in docs/TECH_STACK.md §3 is written about. What
+ * breaks batching is a material change, a blend-mode change or z-order churn,
+ * and none of those change the sprite count at all: the only visible symptom
+ * is the draw call itself.
  *
- * So the WebGL context is wrapped. That is intrusive, which is why it happens
- * only when the overlay asks for it and only in a dev build.
+ * three.js publishes exactly that number as `renderer.info.render.calls`, so
+ * this reads it rather than wrapping the WebGL context the way the Pixi-era
+ * counter had to. One wrinkle: with `info.autoReset` on, three resets the
+ * counters at the start of *every* `render()` call, and a frame here is two of
+ * them — the world pass and the UI pass over it — so the value left after a
+ * frame would be the UI pass alone. The counter therefore takes the reset
+ * over while attached: `beginFrame` reads the whole of the previous frame and
+ * then zeroes the counters itself. `detach` gives `autoReset` back.
  */
 
-interface CountingContext {
-  drawElements: (...args: unknown[]) => void;
-  drawArrays: (...args: unknown[]) => void;
-  drawElementsInstanced?: (...args: unknown[]) => void;
+/** The slice of a `THREE.WebGLRenderer` this reads. Structural, so a test can hand in a stub. */
+export interface DrawCallSource {
+  readonly info: {
+    autoReset: boolean;
+    readonly render: { readonly calls: number };
+    reset(): void;
+  };
+}
+
+function isDrawCallSource(value: unknown): value is DrawCallSource {
+  if (value === null || typeof value !== 'object' || !('info' in value)) {
+    return false;
+  }
+  const info: unknown = value.info;
+  if (info === null || typeof info !== 'object' || !('render' in info) || !('reset' in info)) {
+    return false;
+  }
+  const render: unknown = info.render;
+  return (
+    typeof info.reset === 'function' &&
+    render !== null &&
+    typeof render === 'object' &&
+    'calls' in render &&
+    typeof render.calls === 'number'
+  );
 }
 
 export class DrawCallCounter {
-  /** Calls counted since the last `beginFrame`. */
-  private current = 0;
+  private source: DrawCallSource | null = null;
   private lastFrame = 0;
   private restore: (() => void) | null = null;
 
-  /** Draw calls in the frame that just finished, or -1 when not instrumented. */
+  /** Draw calls in the frame that just finished, or -1 when not attached to a renderer. */
   get lastFrameCalls(): number {
-    return this.restore === null ? -1 : this.lastFrame;
+    return this.source === null ? -1 : this.lastFrame;
+  }
+
+  /** `lastFrameCalls` under the name the frame loop reads it by. */
+  get count(): number {
+    return this.lastFrameCalls;
   }
 
   get instrumented(): boolean {
-    return this.restore !== null;
+    return this.source !== null;
   }
 
   /**
-   * Wraps a rendering context, if there is one to wrap.
+   * Starts reading a renderer's counters.
    *
-   * Returns false on WebGPU, where this technique does not apply — better an
+   * Returns false when handed something that does not publish them — better an
    * honest "not available" in the overlay than a plausible wrong number.
    */
-  attach(gl: unknown): boolean {
-    if (gl === null || typeof gl !== 'object') {
+  attach(renderer: unknown): boolean {
+    this.detach();
+    if (!isDrawCallSource(renderer)) {
       return false;
     }
-    const context = gl as CountingContext;
-    if (typeof context.drawElements !== 'function') {
-      return false;
-    }
-
-    // The originals are kept unbound and called against the context, so
-    // `detach` can put back the exact function that was there. Restoring a
-    // bound copy would leave the context subtly different from how it was
-    // found, which is not a thing a debug tool should do.
-    const originalElements = context.drawElements;
-    const originalArrays = context.drawArrays;
-    const originalInstanced = context.drawElementsInstanced;
-
-    context.drawElements = (...args: unknown[]): void => {
-      this.current += 1;
-      originalElements.call(context, ...args);
-    };
-    context.drawArrays = (...args: unknown[]): void => {
-      this.current += 1;
-      originalArrays.call(context, ...args);
-    };
-    if (originalInstanced !== undefined) {
-      context.drawElementsInstanced = (...args: unknown[]): void => {
-        this.current += 1;
-        originalInstanced.call(context, ...args);
-      };
-    }
-
+    const info = renderer.info;
+    const autoReset = info.autoReset;
+    info.autoReset = false;
+    info.reset();
+    this.source = renderer;
+    this.lastFrame = 0;
     this.restore = () => {
-      context.drawElements = originalElements;
-      context.drawArrays = originalArrays;
-      if (originalInstanced !== undefined) {
-        context.drawElementsInstanced = originalInstanced;
-      }
+      info.autoReset = autoReset;
     };
     return true;
   }
 
-  /** Call before rendering a frame. */
+  /**
+   * Call once per frame, before rendering it: banks the previous frame's count
+   * and zeroes the renderer's counters for this one.
+   */
   beginFrame(): void {
-    this.lastFrame = this.current;
-    this.current = 0;
+    if (this.source === null) {
+      return;
+    }
+    this.lastFrame = this.source.info.render.calls;
+    this.source.info.reset();
   }
 
   detach(): void {
     this.restore?.();
     this.restore = null;
+    this.source = null;
   }
 }

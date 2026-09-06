@@ -1,9 +1,10 @@
-import { Container, Graphics } from 'pixi.js';
+import { Container } from '../render/gfx/index.js';
+import { INTERNAL_HEIGHT, WORLD_ZOOM } from '../render/resolution.js';
+import type { GameView } from '../render/view.js';
 import { CollisionLayer } from '../sim/collision/layers.js';
 import { World } from '../sim/ecs/world.js';
 import type { GameSim } from '../sim/game/sim.js';
 import { BLOCK_STRIDE } from '../sim/room/geometry.js';
-import type { GameView } from '../render/view.js';
 import { DrawCallCounter } from './draw-calls.js';
 import { FrameMetrics } from './metrics.js';
 import { type DebugContext, type DebugPanel, PANEL_WIDTH } from './panel.js';
@@ -14,6 +15,7 @@ import { FrameGraphPanel } from './panels/frame-graph.js';
 import { PickupsPanel } from './panels/pickups.js';
 import { RunInfoPanel } from './panels/run-info.js';
 import { StatsPanel } from './panels/stats.js';
+import { WorldLines } from './world-lines.js';
 
 /** Collider outline colours, by layer. */
 const LAYER_COLOURS: readonly (readonly [number, number])[] = [
@@ -25,10 +27,10 @@ const LAYER_COLOURS: readonly (readonly [number, number])[] = [
   [CollisionLayer.Obstacle, 0xf29b6f],
 ];
 
-const PANEL_GAP = 6;
-const PANEL_MARGIN = 8;
-/** Column height assumed when the real one is unknown or absurdly small. */
-const MIN_PANEL_COLUMN_HEIGHT = 480;
+const PANEL_GAP = 4;
+const PANEL_MARGIN = 4;
+/** The height a column of panels has to fit in: the UI frame's, in UI pixels. */
+const PANEL_COLUMN_HEIGHT = INTERNAL_HEIGHT;
 
 /**
  * The tool we will look at more than any other.
@@ -66,11 +68,10 @@ export class DebugOverlay {
    * on every restart — the title screen's Start, the `R` key, the seed box —
    * and destroys the old view. The overlay was handed one of each at boot and
    * kept them, so from the first restart onward every panel read a simulation
-   * nobody was playing and `drawHitboxes` threw on a `Graphics` that had been
-   * destroyed along with the view that owned it. In practice that meant the
-   * overlay was broken in every session, since boot's own `startRun` runs
-   * before it is even mounted. `setContext` is what keeps it pointed at the
-   * live run.
+   * nobody was playing and `drawHitboxes` drew into a scene nobody was
+   * rendering. In practice that meant the overlay was broken in every
+   * session, since boot's own `startRun` runs before it is even mounted.
+   * `setContext` is what keeps it pointed at the live run.
    */
   private sim: GameSim;
   private view: GameView;
@@ -81,23 +82,17 @@ export class DebugOverlay {
   /**
    * Colliders and the grid, drawn in room space so they move with the camera.
    *
-   * Rebuilt by `setContext` rather than re-parented: these are children of the
-   * `GameView`'s own world container, and `GameView.destroy` takes its children
-   * down with it, so by the time a restart is visible these are already dead
-   * objects.
+   * Line geometry in the `GameView`'s three.js scene, rebuilt by `setContext`
+   * rather than re-parented: a restart's new view is a new scene, and the old
+   * one is destroyed along with everything that hung off it.
    */
-  private worldLayer = new Container();
-
-  private hitboxes = new Graphics();
-  private grid = new Graphics();
+  private hitboxes = new WorldLines();
+  private grid = new WorldLines();
 
   private readonly panels: DebugPanel[] = [];
   private readonly runInfo = new RunInfoPanel();
   /** Held because it is the one panel that reads the `GameView` directly, so it has to be re-pointed on a restart. */
   private readonly animationPanel: AnimationPanel;
-
-  /** Window height the current panel layout was computed for. */
-  private layoutHeight = 0;
 
   private visible = false;
   private showHitboxes = true;
@@ -113,9 +108,9 @@ export class DebugOverlay {
     this.view = view;
     this.gameScale = gameScale;
 
-    this.attachWorldLayer();
-    // Panels go to the screen layer, not into the game: they are text, and text
-    // made of game pixels is text nobody can read.
+    this.attachWorldLines();
+    // Panels go to the UI layer, not into the world: they are text, and text
+    // drawn in the room would be text that moves with the camera.
     uiLayer.addChild(this.panelLayer);
 
     this.animationPanel = new AnimationPanel(view.animator, view.player);
@@ -139,15 +134,16 @@ export class DebugOverlay {
     return this.sim.tuning;
   }
 
-  /** Builds this run's world-space graphics and hangs them off the live view. */
-  private attachWorldLayer(): void {
-    this.worldLayer = new Container();
-    this.hitboxes = new Graphics();
-    this.grid = new Graphics();
-    this.worldLayer.visible = this.visible;
-    this.worldLayer.addChild(this.grid);
-    this.worldLayer.addChild(this.hitboxes);
-    this.view.worldLayer.addChild(this.worldLayer);
+  /** Builds this run's world-space line displays and hangs them off the live view's scene. */
+  private attachWorldLines(): void {
+    this.hitboxes.dispose();
+    this.grid.dispose();
+    this.hitboxes = new WorldLines();
+    this.grid = new WorldLines();
+    this.hitboxes.visible = this.visible;
+    this.grid.visible = this.visible;
+    this.grid.attach(this.view.scene);
+    this.hitboxes.attach(this.view.scene);
   }
 
   /**
@@ -166,7 +162,7 @@ export class DebugOverlay {
     }
     this.sim = sim;
     this.view = view;
-    this.attachWorldLayer();
+    this.attachWorldLines();
     this.animationPanel.setSource(view.animator, view.player);
   }
 
@@ -191,12 +187,15 @@ export class DebugOverlay {
   setVisible(visible: boolean): void {
     this.visible = visible;
     this.panelLayer.visible = visible;
-    this.worldLayer.visible = visible;
+    this.hitboxes.visible = visible;
+    this.grid.visible = visible;
     if (!visible) {
-      // Leaving stale geometry in the display list would keep it being
-      // uploaded; clearing means a hidden overlay draws nothing at all.
-      this.hitboxes.clear();
-      this.grid.clear();
+      // Leaving stale geometry in the scene would keep it being drawn;
+      // emptying means a hidden overlay draws nothing at all.
+      this.hitboxes.begin();
+      this.hitboxes.end();
+      this.grid.begin();
+      this.grid.end();
     }
   }
 
@@ -224,14 +223,6 @@ export class DebugOverlay {
     };
     for (const panel of this.panels) {
       panel.update(context);
-    }
-
-    // A resized window changes how many panels fit in a column. Checked here
-    // rather than through a `resize` listener of its own: the overlay is
-    // already being asked to redraw itself once a frame, and only while it is
-    // visible, which is exactly when the answer matters.
-    if (this.layoutHeight !== Math.max(MIN_PANEL_COLUMN_HEIGHT, this.viewportHeight())) {
-      this.layOutPanels();
     }
 
     this.drawHitboxes();
@@ -294,12 +285,14 @@ export class DebugOverlay {
       if (!panning) {
         return;
       }
-      // The camera offset lives inside the scaled game, so a drag measured in
-      // screen pixels has to be divided by that scale to move the room by the
-      // distance the pointer actually travelled.
-      const scale = this.gameScale();
-      this.view.cameraX += (event.clientX - panFromX) / scale;
-      this.view.cameraY += (event.clientY - panFromY) / scale;
+      // The camera pan is in room units. A drag is measured in CSS pixels, so
+      // it is divided by the canvas's scale (CSS pixels per internal pixel)
+      // and then by the room's zoom (internal pixels per room unit), which
+      // moves the room by the distance the pointer actually travelled — the
+      // same feel the 2D camera had.
+      const unitsPerCssPixel = 1 / (this.gameScale() * WORLD_ZOOM);
+      this.view.cameraX += (event.clientX - panFromX) * unitsPerCssPixel;
+      this.view.cameraY += (event.clientY - panFromY) * unitsPerCssPixel;
       panFromX = event.clientX;
       panFromY = event.clientY;
     };
@@ -337,22 +330,27 @@ export class DebugOverlay {
     }
     this.domTools.length = 0;
     this.drawCalls.detach();
+    this.hitboxes.dispose();
+    this.grid.dispose();
+    this.panelLayer.destroy({ children: true });
   }
 
   /**
-   * Stacks the panels, wrapping into a second column when the window is not
+   * Stacks the panels, wrapping into further columns when the frame is not
    * tall enough for all of them.
    *
    * One column was fine for five panels and stopped being fine at seven: the
-   * art-pipeline panel already fell off the bottom of a 720-tall window before
-   * #150 added the animation panel, which is a debug panel nobody can read —
-   * the exact failure the overlay exists to prevent. The wrap deliberately
-   * overlaps the game rather than shrinking it: `DEBUG_PANEL_COLUMN_WIDTH` is
-   * what the HUD keeps clear of *permanently*, and a dev tool that is open for
-   * a few seconds at a time should not move the HUD around.
+   * art-pipeline panel already fell off the bottom before #150 added the
+   * animation panel, which is a debug panel nobody can read — the exact
+   * failure the overlay exists to prevent. The frame is the fixed 640×360
+   * (`panel.ts` on why), so this is computed when a panel is added rather than
+   * on a resize. The wrap deliberately overlaps the game rather than shrinking
+   * it: `DEBUG_PANEL_COLUMN_WIDTH` is what the HUD keeps clear of
+   * *permanently*, and a dev tool that is open for a few seconds at a time
+   * should not move the HUD around.
    */
   private layOutPanels(): void {
-    const available = Math.max(MIN_PANEL_COLUMN_HEIGHT, this.viewportHeight());
+    const available = PANEL_COLUMN_HEIGHT;
     let x = PANEL_MARGIN;
     let y = PANEL_MARGIN;
     for (const panel of this.panels) {
@@ -363,12 +361,6 @@ export class DebugOverlay {
       panel.view.position.set(x, y);
       y += panel.height + PANEL_GAP;
     }
-    this.layoutHeight = available;
-  }
-
-  /** The window's own height, in the same screen pixels the panel layer is drawn in. */
-  private viewportHeight(): number {
-    return typeof window === 'undefined' ? MIN_PANEL_COLUMN_HEIGHT : window.innerHeight;
   }
 
   /**
@@ -376,19 +368,24 @@ export class DebugOverlay {
    *
    * That is the point rather than a convenience: a hitbox display drawn from
    * sprite bounds would agree with the sprites and disagree with the damage,
-   * which is exactly the bug this is meant to find.
+   * which is exactly the bug this is meant to find. So the circles lie in the
+   * floor plane at the simulation's own `(x, y)` — the plane collision is
+   * computed in — however the sprite standing over them is drawn.
    *
    * **Two circles per body since `docs/DECISIONS.md` #73**, because there are
    * two: the solid one is the footprint — what it walks into, what pushes it,
-   * what its contact damage reaches — and the dashed-looking faint one above
-   * it is the hurtbox, what a shot has to cross. Drawing only the first would
-   * make every "my shot went through it" report unanswerable, which is the
-   * failure mode this whole display exists against. A body whose two circles
-   * are the same (a pickup, anything spawned before the split) draws one.
+   * what its contact damage reaches — and the faint one shifted up the room
+   * from it is the hurtbox, what a shot has to cross. Drawing only the first
+   * would make every "my shot went through it" report unanswerable, which is
+   * the failure mode this whole display exists against. A body whose two
+   * circles are the same (a pickup, anything spawned before the split) draws
+   * one.
    */
   private drawHitboxes(): void {
-    this.hitboxes.clear();
+    const lines = this.hitboxes;
+    lines.begin();
     if (!this.showHitboxes) {
+      lines.end();
       return;
     }
 
@@ -409,44 +406,53 @@ export class DebugOverlay {
       const x = sim.positionX(index);
       const y = sim.positionY(index);
       const footprint = sim.body.data[index * 2] ?? 0;
-      this.hitboxes.circle(x, y, footprint).stroke({ width: 1, color: colour });
+      lines.circle(x, y, footprint, colour);
       const hurtRadius = sim.hurtbox.data[index * 2] ?? 0;
       const hurtOffsetY = sim.hurtbox.data[index * 2 + 1] ?? 0;
       if (hurtRadius > 0 && (hurtRadius !== footprint || hurtOffsetY !== 0)) {
-        this.hitboxes
-          .circle(x, y + hurtOffsetY, hurtRadius)
-          .stroke({ width: 1, color: colour, alpha: 0.45 });
+        lines.circle(x, y + hurtOffsetY, hurtRadius, colour, 0.45);
       }
     }
 
     const projectiles = sim.projectiles;
     projectiles.forEachLive((slot) => {
-      this.hitboxes
-        .circle(projectiles.x[slot] ?? 0, projectiles.y[slot] ?? 0, projectiles.radius[slot] ?? 0)
-        .stroke({ width: 1, color: 0xf0c46a, alpha: 0.8 });
+      lines.circle(
+        projectiles.x[slot] ?? 0,
+        projectiles.y[slot] ?? 0,
+        projectiles.radius[slot] ?? 0,
+        0xf0c46a,
+        0.8,
+      );
     });
 
     // Room solids, so a wall that stops a shot somewhere unexpected is visible.
     const room = sim.room;
-    this.hitboxes
-      .rect(room.minX, room.minY, room.maxX - room.minX, room.maxY - room.minY)
-      .stroke({ width: 1, color: 0x556070, alpha: 0.6 });
+    lines.rect(room.minX, room.minY, room.maxX, room.maxY, 0x556070, 0.6);
     for (let block = 0; block < room.blockCount; block++) {
       const base = block * BLOCK_STRIDE;
-      const minX = room.blocks[base] ?? 0;
-      const minY = room.blocks[base + 1] ?? 0;
-      const maxX = room.blocks[base + 2] ?? 0;
-      const maxY = room.blocks[base + 3] ?? 0;
-      this.hitboxes
-        .rect(minX, minY, maxX - minX, maxY - minY)
-        .stroke({ width: 1, color: 0xf29b6f, alpha: 0.6 });
+      lines.rect(
+        room.blocks[base] ?? 0,
+        room.blocks[base + 1] ?? 0,
+        room.blocks[base + 2] ?? 0,
+        room.blocks[base + 3] ?? 0,
+        0xf29b6f,
+        0.6,
+      );
     }
+    lines.end();
   }
 
-  /** Cell occupancy, shaded. Empty cells are drawn as an outline only. */
+  /**
+   * Cell occupancy. Empty cells are a faint outline; an occupied cell is drawn
+   * in the grid's colour, brighter the fuller it is, with a second outline
+   * inset inside it — lines cannot fill, so the double border is what stands
+   * in for the shaded cell the 2D display drew.
+   */
   private drawGrid(): void {
-    this.grid.clear();
+    const lines = this.grid;
+    lines.begin();
     if (!this.showGrid) {
+      lines.end();
       return;
     }
 
@@ -454,19 +460,19 @@ export class DebugOverlay {
     const size = hash.cellSize;
     for (let row = 0; row < hash.rows; row++) {
       for (let column = 0; column < hash.columns; column++) {
+        const minX = column * size;
+        const minY = row * size;
         const occupancy = hash.occupancyAt(column, row);
         if (occupancy === 0) {
-          this.grid
-            .rect(column * size, row * size, size, size)
-            .stroke({ width: 1, color: 0x2e2637, alignment: 0, alpha: 0.5 });
+          lines.rect(minX, minY, minX + size, minY + size, 0x2e2637, 0.5);
           continue;
         }
-        this.grid
-          .rect(column * size, row * size, size, size)
-          .fill({ color: 0x6fa8dc, alpha: Math.min(0.5, 0.1 + occupancy * 0.08) })
-          .stroke({ width: 1, color: 0x6fa8dc, alignment: 0, alpha: 0.5 });
+        const alpha = Math.min(1, 0.4 + occupancy * 0.15);
+        lines.rect(minX, minY, minX + size, minY + size, 0x6fa8dc, alpha);
+        lines.rect(minX + 1, minY + 1, minX + size - 1, minY + size - 1, 0x6fa8dc, alpha * 0.6);
       }
     }
+    lines.end();
   }
 }
 

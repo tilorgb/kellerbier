@@ -2,7 +2,11 @@
 
 ## 1. Decision
 
-**TypeScript · Vite · PixiJS v8 · custom fixed-timestep ECS · Vitest · static web build.**
+**TypeScript · Vite · three.js · custom fixed-timestep ECS · Vitest · static web build.**
+
+three.js draws the room as a lit 3D scene under a fixed 56° camera and the HUD as a 2D pass over
+it; the sprites themselves stay 2D pixel art, standing up in the room (`DECISIONS.md` #74).
+PixiJS v8 was the renderer from M0 until M6.
 
 Desktop packaging via Tauri later if it is ever warranted. No engine editor, no scene format
 we do not control, no runtime we cannot unit-test headlessly.
@@ -15,12 +19,15 @@ breakdown of where the frames actually go.
 
 ### Rendering is not the bottleneck
 
-PixiJS v8 batches sprites into a small number of GPU draw calls on WebGL2 (WebGPU where
-available). Tens of thousands of batched sprites at 60 fps is routine on a mid-range GPU from
-the last decade. Isaac peaks somewhere around 300–800 simultaneous projectiles; even a
-Touhou-grade 3,000 is not close to the rendering ceiling. As long as every sprite shares a
-texture atlas and nothing forces a batch break (filters, blend-mode changes, z-order churn),
-the renderer is nearly free.
+The world is a three.js scene on WebGL2: a few merged floor meshes, a box per wall run, one
+billboard mesh per standing body, and one `InstancedMesh` per projectile texture and per particle
+kind — so five thousand shots are a handful of draws however many are in flight, and a room's
+draw count grows with the number of *bodies* in it, not the number of bullets. Isaac peaks
+somewhere around 300–800 simultaneous projectiles; even a Touhou-grade 3,000 is instanced away.
+What does cost is the lighting: a shadow-mapped key light means every caster is drawn twice, and
+each bulb and each live player shot is a point light in the shader. That cost is bounded by
+content (bulbs per room, `SHOT_LIGHT_COUNT`), not by the fight, and it is the one line item that
+is unverified in CI — the bench is headless and has no GPU (`DECISIONS.md` #74).
 
 ### The two things that actually kill JS games
 
@@ -43,7 +50,7 @@ unnecessary.
 | Broadphase | **Uniform spatial hash** sized to the largest common collider. Rebuilt each tick from typed arrays. | Benchmark |
 | Broadphase | **We never test projectile↔projectile.** Only projectile↔enemy, projectile↔player, projectile↔wall. All circle-vs-circle and circle-vs-AABB — no rotation, no polygon clipping. | Design constraint |
 | Frame pacing | **Fixed 60 Hz simulation** decoupled from render, with an accumulator, a max-steps-per-frame clamp (spiral-of-death guard) and render-side interpolation. | Determinism test |
-| Draw calls | One texture atlas per floor; sprites sorted into stable layers; no per-sprite filters. | Draw-call assertion in benchmark |
+| Draw calls | Instanced projectiles and particles; one mesh per body, not per sprite pixel; the HUD is one 2D mesh per element. Counted from `renderer.info` in the debug overlay. | Debug overlay (`O`); not asserted by the bench, which is headless |
 
 ### The escape hatch
 
@@ -79,7 +86,7 @@ These are commitments, not aspirations. They are checked in CI.
 | Simulation tick | **≤ 4 ms** at 5,000 projectiles + 200 enemies + 1,000 particles |
 | Full frame (sim + render) | **≤ 12 ms** in the same scene — a 40% headroom margin on 60 fps |
 | Steady-state heap growth | **0 bytes/frame** in the stress scene — gated at 512 KB/tick, see below |
-| Draw calls | **≤ 20** in a typical combat room |
+| Draw calls | *re-baseline pending; not asserted.* The ≤ 20 figure was written for a sprite batcher; the three.js scene has a different shape and no number has been measured against it yet (`DECISIONS.md` #74) |
 | Cold load to playable | **≤ 3 s** on a mid-range laptop over broadband |
 | Input-to-photon latency | **≤ 2 frames** |
 
@@ -155,9 +162,9 @@ simulation-tick or full-frame budget rows at all.
 ```
 content/     data — items, enemies, rooms, floors, loot tables (JSON + typed schemas)
     ↑
-sim/         pure deterministic game simulation. No Pixi import. No DOM. No Date.now().
+sim/         pure deterministic game simulation. No renderer import. No DOM. No Date.now().
     ↑
-render/      Pixi scene graph, sprites, particles, camera, interpolation
+render/      three.js: the lit 3D room, sprite billboards, the 2D HUD pass, camera, interpolation
     ↑
 app/         bootstrapping, input, audio, save, menus, screens
 ```
@@ -198,7 +205,9 @@ item id is unique, every localisation key resolves in every locale.
 ```
 src/
   sim/          ecs/  systems/  collision/  rng/  stats/  items/  rooms/  gen/
-  render/       pixi setup, sprite layers, particles, camera, hud
+  render/       three.js setup (app.ts), the scene (view.ts), views per thing, hud components
+    world/      camera, lighting, billboards, floor shapes, scenery, world-anchored labels
+    gfx/        the 2D scene graph the HUD is written in, drawn as an orthographic pass
     ui/         the pixel fonts, the UI kit, icons, display type (#154)
   app/          input, audio, save, screens, settings, localisation
   content/      items/  enemies/  rooms/  floors/  loot/   (+ schemas)
@@ -212,8 +221,12 @@ tools/
 ```
 
 `assets/` has no `fonts/` directory, and that is deliberate: the two pixel faces (#154) are
-*source*, not assets — bitmaps in `src/render/ui/`, rasterised into a texture at boot. So is the
-rest of the UI kit, for the reason in `docs/DECISIONS.md` #43.
+*source*, not assets — bitmaps in `src/render/ui/`, rasterised into a `DataTexture` at boot by a
+pure function. So is the rest of the UI kit, for the reason in `docs/DECISIONS.md` #43.
+
+`assets/atlases/` is a pipeline artefact: the packer validates and packs the floor's sprites, and
+the content tests read the result, but the runtime loads the PNGs — it never loaded the atlas,
+under either renderer.
 
 
 ## 6. Tooling
@@ -225,8 +238,10 @@ rest of the UI kit, for the reason in `docs/DECISIONS.md` #43.
 - **TypeScript strict mode**, `noUncheckedIndexedAccess` on. Non-negotiable.
 - **GitHub Actions**: typecheck → lint → test → content-validate → bench → build → deploy
   preview to GitHub Pages. Every PR gets a **playable link**.
-- **Debug overlay** (O): entity counts, frame graph, hitbox display, the stat inspector that
-  explains every modifier's contribution, room warp, item spawner.
+- **Debug overlay** (O): entity counts, frame graph, draw calls read from three.js's
+  `renderer.info` (`src/debug/draw-calls.ts`), hitboxes and the broadphase grid as lines on the
+  room floor, the stat inspector that explains every modifier's contribution, room warp, item
+  spawner.
 - **Tuning window** (T): every number in `sim/tuning.ts` on a slider bound to the live object,
   with a per-field reset and a copy that writes back only what moved. Tuning by feel through an
   edit-and-reload cycle finds the first value that is not obviously wrong, and stops there.

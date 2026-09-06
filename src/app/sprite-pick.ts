@@ -5,7 +5,7 @@ import type { GameSim } from '../sim/game/sim.js';
 import { ENEMY_STRIDE } from '../sim/systems/enemy.js';
 import { World } from '../sim/ecs/world.js';
 import { BLOCK_STRIDE } from '../sim/room/geometry.js';
-import { pickTileVariant } from '../render/room.js';
+import { pickTileVariant } from '../render/tiles.js';
 import { PROP_TILE_NAMES } from '../render/floor-art.js';
 
 /**
@@ -184,8 +184,8 @@ export function pickDecorativePropAt(sim: GameSim, worldX: number, worldY: numbe
  * Wall tool — `RoomObstacle`, `sim/room/geometry.ts`'s `RoomGeometry.blocks`
  * with `blockOverflyable` set).
  *
- * `render/room.ts` draws an obstacle rect as one boulder per cell, picked off
- * the same `pickTileVariant` hash the floor mix uses, so this resolves the
+ * `render/world/scenery.ts` stands an obstacle rect up as one boulder per
+ * cell, picked off the same `pickTileVariant` hash the floor mix uses, so this resolves the
  * click to the exact variant sitting under the cursor rather than always
  * variant 0 — the obstacle equivalent of `pickTileNameAt`.
  *
@@ -226,7 +226,7 @@ export function pickObstacleBlockNameAt(
  * The tile sprite name at `(worldX, worldY)`'s grid cell, for `floor` —
  * `null` outside the current room's own bounds, or if that floor has no
  * tile art loaded yet. Calls the exact same `pickTileVariant` hash
- * `render/room.ts` used when it actually drew that cell, so this returns
+ * `render/world/scenery.ts` used when it actually laid that cell, so this returns
  * the name of the texture really sitting there, not a guess.
  */
 export function pickTileNameAt(

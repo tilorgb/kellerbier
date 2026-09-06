@@ -1,14 +1,15 @@
+import { type Graphics, type Texture, textureFromPixels } from '../gfx/index.js';
+
 /**
  * Screen-space pixel art, authored in this file's own format rather than
  * packed into a floor atlas.
  *
  * `docs/DECISIONS.md` #43 is why UI art lives in `src/render/ui/` as source
- * instead of in `assets/sprites/`: the atlas pipeline's whole contract — 16×16
- * tiles, a per-floor palette, sprites drawn in the world at `WORLD_ZOOM` — is
- * about art that lives *in a room on a floor*. A heart, a Biermarke and a
- * panel corner live on the screen, at the UI's own integer scale, on every
- * floor at once. Holding them to a floor's five colours would be asking the
- * wrong question.
+ * instead of in `assets/sprites/`: the sprite pipeline's whole contract — 16×16
+ * tiles, a per-floor palette, sprites standing in a room — is about art that
+ * lives *in a room on a floor*. A heart, a Biermarke and a panel corner live on
+ * the screen, at the UI's own integer scale, on every floor at once. Holding
+ * them to a floor's five colours would be asking the wrong question.
  *
  * ## Roles, not colours
  *
@@ -24,12 +25,8 @@
  * | `a` | `accent` | the one colour that says *which* thing this is |
  *
  * One mug bitmap therefore draws red Maß, white Weißbier and dark Schwarzbier
- * — `HealthHud` already tinted a single generated mug three ways, and roles
- * keep that possible now that the mug has more than one colour in it. A tint
- * could not: a multiply only ever darkens, which is `placeholder-art.ts`'s own
- * note on why a hit flash swaps textures instead of tinting one.
+ * — a tint could not: a multiply only ever darkens.
  */
-import { Graphics, Rectangle, type Renderer, type Texture } from 'pixi.js';
 
 /** The colour roles a piece of UI art is drawn in. */
 export interface ArtRoles {
@@ -73,13 +70,25 @@ function colourFor(role: string, roles: ArtRoles): number | undefined {
   }
 }
 
+/** `art` as a colour grid, `-1` where it is transparent. Pure; the specimen tooling draws from this too. */
+export function renderPixelArt(art: PixelArt, roles: ArtRoles): Int32Array {
+  const width = artWidth(art);
+  const colours = new Int32Array(Math.max(1, width) * Math.max(1, art.length)).fill(-1);
+  for (let row = 0; row < art.length; row++) {
+    const line = art[row] ?? '';
+    for (let column = 0; column < line.length; column++) {
+      const colour = colourFor(line[column] ?? '.', roles);
+      if (colour !== undefined) {
+        colours[row * width + column] = colour;
+      }
+    }
+  }
+  return colours;
+}
+
 /**
- * Draws `art` into `graphics` at `(x, y)`.
- *
- * One `rect` per horizontal run of the same role rather than one per pixel:
- * a 12-wide mug is a handful of rectangles instead of 144, which matters
- * because these are built once at boot into a texture and a `Graphics` with
- * ten thousand commands is slow to build even once.
+ * Draws `art` into `graphics` at `(x, y)`, one `rect` per horizontal run of
+ * the same role rather than one per pixel.
  */
 export function drawPixelArt(
   graphics: Graphics,
@@ -116,14 +125,6 @@ export function drawPixelArt(
 }
 
 /** `art` as its own texture, sized exactly to the bitmap. */
-export function pixelArtTexture(renderer: Renderer, art: PixelArt, roles: ArtRoles): Texture {
-  const graphics = new Graphics();
-  drawPixelArt(graphics, art, roles);
-  const texture = renderer.generateTexture({
-    target: graphics,
-    resolution: 1,
-    frame: new Rectangle(0, 0, artWidth(art), artHeight(art)),
-  });
-  graphics.destroy();
-  return texture;
+export function pixelArtTexture(art: PixelArt, roles: ArtRoles): Texture {
+  return textureFromPixels(artWidth(art), artHeight(art), renderPixelArt(art, roles));
 }

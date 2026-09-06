@@ -21,7 +21,7 @@ const TECH_STACK = 'docs/TECH_STACK.md §4';
 const SIM_IMPORT_MESSAGE =
   `src/sim/ must not import from the layers above it. The simulation is a pure ` +
   `function of its seed and its input log; reaching into the renderer, the app ` +
-  `shell or Pixi takes headless tests, determinism, replays and the WASM seam ` +
+  `shell or three.js takes headless tests, determinism, replays and the WASM seam ` +
   `with it. Report what happened through the event queue instead. See ${TECH_STACK}.`;
 
 const DOM_MESSAGE =
@@ -41,7 +41,7 @@ export const architectureRules = [
           patterns: [
             { group: ['**/render/*', '**/render', '@render/*'], message: SIM_IMPORT_MESSAGE },
             { group: ['**/app/*', '**/app', '@app/*'], message: SIM_IMPORT_MESSAGE },
-            { group: ['pixi.js', 'pixi.js/*'], message: SIM_IMPORT_MESSAGE },
+            { group: ['three', 'three/*'], message: SIM_IMPORT_MESSAGE },
           ],
         },
       ],
@@ -104,7 +104,7 @@ export const architectureRules = [
         {
           patterns: [
             {
-              group: ['**/sim/**', '**/render/**', '**/app/**', 'pixi.js'],
+              group: ['**/sim/**', '**/render/**', '**/app/**', 'three', 'three/*'],
               allowTypeImports: true,
               message:
                 'src/content/ is data. It may import types, so that content is checked ' +

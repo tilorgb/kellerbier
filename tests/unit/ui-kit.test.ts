@@ -140,18 +140,19 @@ describe('render/ui scale', () => {
     // `resolution.ts`'s hard rule, applied to glyphs: a pixel font at a
     // fractional size resamples, and resampled pixel art stops reading as
     // pixel art.
-    for (const scale of [0, 0.5, 1, 1.4, 2, 3.6, 7]) {
-      for (const textScale of [1, 2, 3]) {
-        const applied = uiScaleFor({ scale, originX: 0, originY: 0 }, textScale);
-        expect(Number.isInteger(applied)).toBe(true);
-        expect(applied).toBeGreaterThanOrEqual(1);
-      }
+    for (const textScale of [0, 0.5, 1, 1.4, 2, 3.6, 7]) {
+      const applied = uiScaleFor(textScale);
+      expect(Number.isInteger(applied)).toBe(true);
+      expect(applied).toBeGreaterThanOrEqual(1);
     }
   });
 
-  it('multiplies the text scale rather than replacing the window scale', () => {
-    const layout = { scale: 3, originX: 0, originY: 0 };
-    expect(uiScaleFor(layout, 1)).toBe(3);
-    expect(uiScaleFor(layout, 2)).toBe(6);
+  it('is the text scale alone — the window zoom no longer enters into it', () => {
+    // The canvas *is* the internal frame now (`render/app.ts`): the frame is
+    // upscaled as a whole, so a player's "bigger text" is the only multiplier.
+    expect(uiScaleFor()).toBe(1);
+    expect(uiScaleFor(1)).toBe(1);
+    expect(uiScaleFor(2)).toBe(2);
+    expect(uiScaleFor(3)).toBe(3);
   });
 });

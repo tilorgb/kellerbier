@@ -40,7 +40,9 @@ regenerated automatically from the issue list on every issue event.
 
 ## Tech stack
 
-TypeScript · Vite · PixiJS v8 (WebGL/WebGPU) · custom fixed-timestep ECS · Vitest · deployed as a static web build.
+TypeScript · Vite · three.js (WebGL2) · custom fixed-timestep ECS · Vitest · deployed as a static web build.
+The room is a lit 3D scene under a fixed 56° camera; the sprites in it are 2D pixel art standing
+up, and the HUD is a 2D pass over the same canvas (`docs/DECISIONS.md` #74).
 
 Built performance-first: Structure-of-Arrays entity storage, object pooling, zero allocation
 in the frame loop, spatial-hash broadphase. Target budget is **5,000 active projectiles and
@@ -62,8 +64,8 @@ npm run build      # production static build
 
 **Controls:** `WASD` to move, arrow keys to aim and fire. `T` opens the tuning
 window — every feel constant on a slider, changed while the game runs. `O` opens the debug
-overlay — frame graph, entity and pool counts, draw calls, hitboxes (`H`) and the spatial-hash
-grid (`G`). Middle-drag pans the camera, `0` recentres, `C` copies the run's seed and tick for
+overlay — frame graph, entity and pool counts, draw calls (three.js's `renderer.info`), hitboxes
+(`H`) and the spatial-hash grid (`G`) as lines on the room floor. Middle-drag pans the camera, `0` recentres, `C` copies the run's seed and tick for
 a bug report. `B` cycles the Promille gate (#85) between following your save, forcing a sober
 run and forcing a promilled one, and restarts on the same seed — dev builds only, since in a
 release build it would hand a player the mechanic the unlock exists to make them earn. (Plain letters rather than F-keys or punctuation — a hosted preview's browser

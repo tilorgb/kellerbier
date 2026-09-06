@@ -14,7 +14,7 @@ import { ALL_BUCKET_IDS, CATEGORY_FOLDERS } from '../../tools/art/spec.mjs';
 import { BACKGROUND_SPRITE_NAMES, tileTierDeclared } from '../../tools/art/tiers.mjs';
 import { buildParticleArt, TELEGRAPH_RING_SPRITE } from '../../src/render/art-bundle.js';
 import { PARTICLE_KIND_IDS } from '../../src/sim/particle/store.js';
-import { Texture } from 'pixi.js';
+import { Texture } from '../../src/render/gfx/index.js';
 
 /** Stands in for a loaded texture — this test is about *which names exist*, not about pixels. */
 const PLACEHOLDER = Texture.EMPTY;

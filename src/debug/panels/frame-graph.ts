@@ -1,4 +1,4 @@
-import { type Container, Graphics } from 'pixi.js';
+import { type Container, Graphics } from '../../render/gfx/index.js';
 import {
   type DebugContext,
   type DebugPanel,
@@ -13,7 +13,7 @@ import {
 } from '../panel.js';
 import { FRAME_BUDGET_MS, SIM_BUDGET_MS } from '../metrics.js';
 
-const GRAPH_HEIGHT = 64;
+const GRAPH_HEIGHT = 48;
 const PANEL_HEIGHT = PANEL_CONTENT_TOP + GRAPH_HEIGHT + PANEL_LINE_HEIGHT * 2 + PANEL_PADDING;
 const GRAPH_TOP = PANEL_CONTENT_TOP;
 const GRAPH_LEFT = PANEL_PADDING;

@@ -1,4 +1,4 @@
-import { Container, type BitmapText, type NineSliceSprite } from 'pixi.js';
+import { Container, type BitmapText, type NineSliceSprite } from '../gfx/index.js';
 import type { UiKit } from './kit.js';
 import { uiText, type UiTextOptions } from './text.js';
 

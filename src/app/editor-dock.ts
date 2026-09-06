@@ -86,7 +86,7 @@ const STYLE = `
  *
  * Opens a docked `<iframe>` panel as a flex sibling of `#game-pane` inside
  * `#game-pane`'s parent, `#dock-root` (`index.html`) — never inside `#game`
- * itself, which stays exactly what `render/app.ts` mounts the Pixi canvas
+ * itself, which stays exactly what `render/app.ts` mounts the game canvas
  * into. Shrinking `#game-pane` is the only side effect on the game: its
  * `ResizeObserver` (`render/app.ts`'s `trackWindowSize`) picks up the new box
  * on its own, no coordination needed here.

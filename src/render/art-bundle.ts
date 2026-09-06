@@ -1,5 +1,4 @@
-import type { Texture } from 'pixi.js';
-import type { DoorTextures } from './room.js';
+import type { Texture } from './gfx/index.js';
 import type { SpriteOrigin } from './floor-art.js';
 import { PLAYER_TAG_SPRITE_ORDER, type ProjectileArt } from './projectiles.js';
 import type { ParticleTextures } from './particles.js';
@@ -55,22 +54,6 @@ export function buildProjectileArt(
     }
   }
   return { player, playerTags, enemyByName: projectileTextures, enemyByFloor, fallback };
-}
-
-/**
- * The door sprites, or `undefined` if `open` or `closed` is missing — a
- * half-authored door set falls back to the flat coloured band whole, rather
- * than drawing a sprite for one state and a rectangle for another. `locked`
- * (`#196`) is allowed to be absent on its own: `createDoorView` falls it back
- * to `closed`, per `docs/DECISIONS.md` #19.
- */
-export function doorTexturesFrom(
-  tileTextures: Readonly<Record<string, Texture>>,
-): DoorTextures | undefined {
-  const open = tileTextures['door-open'];
-  const closed = tileTextures['door-closed'];
-  const locked = tileTextures['door-locked'];
-  return open === undefined || closed === undefined ? undefined : { open, closed, locked };
 }
 
 /**

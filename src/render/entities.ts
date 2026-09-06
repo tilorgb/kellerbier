@@ -1,7 +1,7 @@
-import { Container, Sprite, Text, type Texture } from 'pixi.js';
+import { Group } from 'three';
 import { ROOM_TILE_UNITS } from '../content/rooms/definition.js';
-import { hurtboxRadiusOf } from '../sim/collision/footprint.js';
 import { CollisionLayer } from '../sim/collision/layers.js';
+import { hurtboxRadiusOf } from '../sim/collision/footprint.js';
 import { World } from '../sim/ecs/world.js';
 import type { GameSim } from '../sim/game/sim.js';
 import { propKindIndex } from '../sim/game/prop-kinds.js';
@@ -17,86 +17,55 @@ import {
   TelegraphShape,
 } from '../sim/systems/enemy.js';
 import { EntityAnimator } from './animation/animator.js';
-import { setFootY, standSprite } from './depth.js';
 import { AUTHORED_FACING, resolveAnimationState, resolveFacing } from './animation/state.js';
 import type { AnimatedSpriteSet } from './floor-art.js';
-import { ENTITY_PALETTE, GROUND_SHADOW } from './palette.js';
-import { groundShadowFeetY, styleGroundShadow } from './ground-shadow.js';
-import { ACTOR_SPRITE_SCALE } from './resolution.js';
-import { tileGridScale } from './room.js';
+import { type BitmapText, type Container, type Texture } from './gfx/index.js';
+import { ENTITY_PALETTE } from './palette.js';
+import { tileGridScale } from './tiles.js';
+import { Billboard } from './world/billboard.js';
+import { FloorBar, FloorRing, FloorWedge } from './world/flat.js';
+import { WorldLabel } from './world/label.js';
 
 /**
- * How much wider than the body a telegraph ring ends up.
+ * Every collidable body that is not the player: enemies, bosses, pickups,
+ * destructible props, placed Bierfassl bombs — each a `Billboard` standing at
+ * its footprint, plus the flat shapes on the floor that tell the player what
+ * is about to happen there.
  *
- * Wide enough to be read out of the corner of an eye while dodging something
- * else, and no wider — a ring that covers half the room says where the attack
- * is coming from and nothing about where it is safe to stand.
+ * ## What survived the move to 3D, and what did not
+ *
+ * The gameplay signals are all here and read from the same simulation state
+ * they always did: the hit flash (now the billboard's emissive term, so the
+ * frame's own shape blows out white — what the silhouette texture swap used to
+ * do), the invulnerable and elite tints, a boss's wind-up flush, a bomb's fuse
+ * ramp and blink, all four telegraph shapes sized by their countdown, the bomb
+ * cross the blast will actually fill, a pickup's spawn pop, shop prices and
+ * pickup labels, and the death clips of bodies that just left the world.
+ *
+ * What went: the hand-drawn ground shadows (the shadow map casts the
+ * silhouette), the foot-line sort (the depth buffer), and the scenery tinting
+ * (the lights fall on a body because it stands in them).
+ *
+ * ## Telegraphs lie on the floor
+ *
+ * A ring, a wedge, a bar is the area the attack will cover, so it is drawn
+ * *as* that area: flat on the floor, in room units, where the 2D game drew
+ * it over the body. Under a tilted camera a flat shape is exactly as
+ * foreshortened as the floor it marks, which is what makes "will that reach
+ * me" answerable at a glance.
  */
 const TELEGRAPH_SCALE = 2.6;
-
-/** Radius the ring texture is generated at, before it is scaled per body. */
-const TELEGRAPH_TEXTURE_RADIUS = 24;
-
-/**
- * How far a charge's directional warning (`TelegraphShape.Line`, #233)
- * reaches at the end of its wind-up, as a multiple of the body's own
- * radius — wider than `TELEGRAPH_SCALE` because a charge threatens a lane
- * across the room, not an area around the body.
- */
 const LINE_TELEGRAPH_SCALE = 6;
-
-/**
- * Half-angle a `Line` telegraph's wedge is drawn at, in radians — a narrow
- * cone that reads as "this direction" rather than as a real hit-space; the
- * charge itself is a point-wide line, so this is purely a legibility width,
- * not authored data the way `Arc`'s half-angle is.
- */
 const LINE_TELEGRAPH_HALF_ANGLE = 0.12;
-
-/** Length the wedge texture is generated at, before `Line`/`Arc` scale it non-uniformly per attack. */
-const WEDGE_TEXTURE_LENGTH = 32;
-
-/** Half-angle the wedge texture is generated at — `Line`/`Arc` both derive their own width from this by scaling `y` (`createWedgeTexture`'s own doc comment). */
-const WEDGE_TEXTURE_HALF_ANGLE = 0.3;
-
-/**
- * The `maypole` prop kind (#199). `MaibaumView` draws this one — tall,
- * walk-behind, and the Maibaum-Dieb's weapon once grabbed — so `EntityView`
- * leaves it alone rather than drawing a second short copy at the collider.
- */
 const MAYPOLE_PROP_KIND = propKindIndex('maypole');
-
-/** The pickup id whose art a placed Bierfassl reuses (#208) — see `bombTexture`'s own doc comment. */
 const BOMB_PICKUP_ID = 'bierfassl';
-
-/** Radians per millisecond of the telegraph ring's brightness pulse — a little under two a second. */
 const RING_PULSE_RATE = 0.011;
-
-/**
- * A boss's ground shadow: its own wider, flatter texture (`common/bosses/`),
- * drawn three times the *drawn* radius across and one tall at
- * `GROUND_SHADOW.bossAlpha`. Kept as its own thing rather than routed through
- * `styleGroundShadow` — #152 tuned it against the boss sprites specifically,
- * and a boss's silhouette really is that much wider than the padded canvas
- * measure the shared helper takes. Every *other* body here — enemy, pickup,
- * destructible target, placed Bierfassl — takes the shared treatment
- * (`docs/DECISIONS.md` #61). Both sit on the same foot line now (#73); what
- * differs is only how wide they are drawn.
- */
-const BOSS_SHADOW_WIDTH_SCALE = 3;
-const BOSS_SHADOW_HEIGHT_SCALE = 1;
-
-/**
- * How fast a placed Bierfassl's fuse-warning blink oscillates at its
- * fastest, once the fuse is past half burned — radians/ms, the same unit
- * `RING_PULSE_RATE` uses. Roughly four times that rate: a bomb about to go
- * off reads as urgent close up, where a telegraph ring is read at a glance
- * from across the room.
- */
 const BOMB_BLINK_RATE = 0.045;
+const LABEL_POINT = { x: 0, y: 0 };
+/** How far above the floor a pickup hovers, so its shadow separates it from the ground. */
+const PICKUP_LIFT = 1.5;
 
-/** `a` and `b` as `0xrrggbb`, blended per channel — `t` 0 is all `a`, 1 is all `b`. */
-function mixColor(a: number, b: number, t: number): number {
+export function mixColor(a: number, b: number, t: number): number {
   const k = Math.min(1, Math.max(0, t));
   const ar = (a >> 16) & 0xff;
   const ag = (a >> 8) & 0xff;
@@ -107,183 +76,35 @@ function mixColor(a: number, b: number, t: number): number {
   return (r << 16) | (g << 8) | bl;
 }
 
-/**
- * Draws the collidable things that are not the player: targets, enemies, and
- * the ring an enemy warns with before it attacks.
- *
- * Sprites are handed out in draw order and created on demand, the same way the
- * projectile layer does it — there are far fewer of these, but there is no
- * reason for a second pattern.
- */
+export interface EntityArt {
+  /** What a body with no art of its own draws as. */
+  readonly fallback: Texture;
+  readonly enemyArt: Readonly<Record<string, Texture>>;
+  readonly enemyAnimation: Readonly<Record<string, AnimatedSpriteSet>>;
+  readonly pickupArt: Readonly<Record<string, Texture>>;
+  readonly bossIds: ReadonlySet<string>;
+}
+
 export class EntityView {
-  readonly container = new Container();
+  /** Everything this view draws in the world. */
+  readonly group = new Group();
+  readonly animator = new EntityAnimator();
 
   private readonly sim: GameSim;
-  private readonly texture: Texture;
-  /**
-   * Per-enemy character art (#35), keyed by `EnemyDefinition.id`. An id with
-   * no entry — every enemy floors 2-7 haven't been drawn yet, plus the
-   * training target — falls back to `texture`, the shared blob every enemy
-   * used to draw as before this. The Shopkeeper left this fallback in #194,
-   * animated (`enemyAnimation` below), the last name `PENDING_REDRAW` held.
-   */
-  private readonly enemyTextures: Readonly<Record<string, Texture>>;
-  /**
-   * The same shape, solid white.
-   *
-   * Swapping the texture rather than tinting, because a tint multiplies and
-   * cannot make a dark sprite white. The flash is the single cheapest piece of
-   * impact feel and it has to actually be white to read.
-   */
-  private readonly flashTexture: Texture;
-  /**
-   * Each enemy's own hit-flash silhouette (#37), keyed the same way
-   * `enemyTextures` is. An id with no entry — the same ones that fall back
-   * to `texture` for `bodyTexture` — falls back to `flashTexture`, the
-   * generic circle, for its flash too.
-   */
-  private readonly enemyFlashTextures: Readonly<Record<string, Texture>>;
-  /**
-   * Animated character art (#150), keyed the same way `enemyTextures` is. An
-   * id in here draws off its current clip frame instead of a single static
-   * texture; an id that is not — every creature whose animation has not been
-   * drawn yet — takes exactly the path it took before this existed.
-   */
-  private readonly enemyAnimation: Readonly<Record<string, AnimatedSpriteSet>>;
-  /**
-   * Whose clip is where. Owned here rather than by `GameView` because this is
-   * the view that knows which bodies are on screen and which enemy definition
-   * each one is — the animator is a table keyed by entity, exactly like
-   * `sprites` below, and the two are populated by the same loop.
-   */
-  readonly animator = new EntityAnimator();
-  private readonly telegraphTexture: Texture;
-  /**
-   * The wedge every `Line`/`Arc` telegraph (#233) scales non-uniformly out of
-   * — `createWedgeTexture`'s own doc comment covers the shape and the maths
-   * that lets one texture cover a charge's narrow direction cone and a wide
-   * melee swing alike.
-   */
-  private readonly wedgeTexture: Texture;
-  /**
-   * A 1x1 solid, stretched into the two bars a bomb's cross telegraph is
-   * drawn from (#210) — the same generic "meant to be stretched" texture
-   * `main.ts`'s `pedestalBeam` already uses for a bar fill, since a cross's
-   * arms are rectangles and the ring pool's round texture cannot draw one.
-   * Undefined leaves a placed bomb with no telegraph at all, the same
-   * "missing texture, skip the effect" fallback every other optional texture
-   * here already takes. Reused for an enemy's own `Ground` telegraph (#233,
-   * Böllerschmeißer) — a square landing marker is the same "stretch a solid"
-   * job as a bomb's cross arm, just one bar instead of two.
-   */
-  private readonly barTexture: Texture | undefined;
-  private readonly sprites: Sprite[] = [];
-  private readonly corpses: Sprite[] = [];
-  private readonly rings: Sprite[] = [];
-  /** `Line`/`Arc` telegraphs (#233) — a directional wedge, not a ring. See `wedgeTexture`. */
-  private readonly wedges: Sprite[] = [];
-  /** Two per bomb telegraphed this frame — the horizontal arm, then the vertical one — plus one per `Ground` enemy telegraph (#233). See `barTexture`. */
-  private readonly bars: Sprite[] = [];
-  private readonly labels: Text[] = [];
-
-  /**
-   * Rings live in their own layer, under the bodies; labels live above them.
-   *
-   * Three pools drawn from one container would interleave as the population
-   * changes, and a warning (or a label) that flickers in front of and behind
-   * the thing making it is one that reads as a glitch.
-   */
-  /** Under everything, including the telegraph ring — a shadow is on the floor. */
-  private readonly shadowLayer = new Container();
-  private readonly ringLayer = new Container();
-  /**
-   * Corpses (#150's death clips) sit under everything living: a body on the
-   * floor must never hide the enemy that is still shooting at you.
-   */
-  private readonly corpseLayer = new Container();
-  /**
-   * Where the bodies go — **not** a container of this view's own.
-   *
-   * `GameView` hands in the one depth-sorted layer (`render/depth.ts`), and
-   * these sprites become direct children of it, interleaved with the rocks,
-   * the furniture and the player by where each one stands. A container of its
-   * own would sort as a single unit against them, which is exactly the "every
-   * enemy is either always in front of the player or always behind them"
-   * ordering #73 exists to end.
-   */
-  private readonly bodyLayer: Container;
-  /**
-   * Pickup labels and shop prices, above everything that stands (#73).
-   *
-   * Left out of the depth layer deliberately: a price tag is a caption, not a
-   * body, and one that a passing enemy could draw over is one a player cannot
-   * read at the moment they are deciding whether to buy.
-   */
-  readonly labelLayer = new Container();
-
-  /** Tint and label per pickup kind, indexed the same way `pickupKind` component values are. */
+  private readonly art: EntityArt;
+  private readonly bodies: Billboard[] = [];
+  private readonly corpses: Billboard[] = [];
+  private readonly rings: FloorRing[] = [];
+  private readonly wedges: FloorWedge[] = [];
+  private readonly bars: FloorBar[] = [];
+  private readonly labels: WorldLabel[] = [];
   private readonly pickupTints: readonly number[];
   private readonly pickupLabels: readonly string[];
-  /**
-   * Each pickup kind's own sprite (#152), indexed the same way — a Maß, a
-   * Biermarke, a Bierfassl, a Schlüssel, the food. A kind with no entry
-   * falls back to the tinted white disc and its two-letter label, which is
-   * what every pickup in the game looked like before this.
-   */
   private readonly pickupSprites: readonly (Texture | undefined)[];
-  /**
-   * The placed-Bierfassl sprite — the same texture `pickupSprites` draws the
-   * `bierfassl` pickup with (#208), so a bomb on the ground and a bomb
-   * underfoot read as the same object at the same size. Deliberately not a
-   * destructible prop's `targetTextures`/`propKind` path: a live bomb never
-   * gets a `propKind` (`GameSim.spawnBierfassl` builds it directly rather
-   * than through `spawnTarget`), so falling into that path read whatever
-   * prop kind `0` — `'barrel'` — happened to mean, at the floor's own
-   * tile-grid scale, which is why a planted bomb used to render as a room
-   * barrel. `undefined` (no `bierfassl` pickup art loaded) falls back to
-   * `texture`, the same shared blob every other unartworked body already
-   * falls back to.
-   */
   private readonly bombTexture: Texture | undefined;
-  /**
-   * What each destructible prop is drawn as on the floor currently loaded, by
-   * `DESTRUCTIBLE_PROP_KINDS` index (`FloorTileset.destructibles`).
-   *
-   * Targets are the one collidable body with neither an `EnemyDefinition.id`
-   * nor a pickup kind, so this is how a room's authored `barrel` and
-   * `maypole` props stop being the same brown blob every enemy used to be.
-   * Empty on a floor with no tileset, which falls back to `texture`.
-   */
   private targetTextures: readonly Texture[] = [];
-  /**
-   * The ground shadow a boss stands on (#152), and which ids get one.
-   *
-   * Only bosses. A boss sprite is two to three times the size of anything else
-   * in the room, and at that size a body with nothing under it reads as
-   * hovering rather than standing — which is the whole reason this is the one
-   * asset in `common/bosses/`. An ordinary enemy is small enough that its own
-   * silhouette does the job, and giving everything a shadow would put a
-   * second dark shape under every body in a game whose projectiles the player
-   * must not lose track of.
-   */
-  private readonly bossShadowTexture: Texture | undefined;
-  /**
-   * The generic ground shadow every non-boss body draws (loot, a walking
-   * enemy) — everything `bossShadowTexture` above deliberately excludes.
-   * Undefined leaves them exactly as they were before this: no shadow at all.
-   */
-  private readonly actorShadowTexture: Texture | undefined;
-  /**
-   * Whether the telegraph ring's brightness pulses (#153).
-   *
-   * The ring's *growth* is the information — it is the countdown — and always
-   * plays. The pulse on top of it is emphasis, and emphasis that repeats every
-   * telegraph is exactly what `reduceFlashes` exists to remove.
-   */
   private ringPulses = true;
-  private readonly bossIds: ReadonlySet<string>;
-  private readonly shadows: Sprite[] = [];
-  /** Reused across every telegraphing body each frame, so the scan never allocates — `enemyTelegraphShape`'s own contract, same as `BombFlightView`'s `scratch` field. */
+  private lean = 0;
   private readonly telegraphShape: EnemyTelegraphShapeInfo = {
     shape: TelegraphShape.Ring,
     progress: 0,
@@ -296,66 +117,57 @@ export class EntityView {
 
   constructor(
     sim: GameSim,
-    /** The one depth-sorted layer (`render/depth.ts`) every body is drawn into. */
-    bodyLayer: Container,
-    texture: Texture,
-    flashTexture: Texture,
-    telegraphTexture: Texture,
-    wedgeTexture: Texture,
-    enemyTextures: Readonly<Record<string, Texture>> = {},
-    enemyFlashTextures: Readonly<Record<string, Texture>> = {},
-    enemyAnimation: Readonly<Record<string, AnimatedSpriteSet>> = {},
-    pickupArt: Readonly<Record<string, Texture>> = {},
-    bossShadow?: Texture,
-    bossIds: ReadonlySet<string> = new Set(),
-    actorShadow?: Texture,
-    barTexture?: Texture,
+    art: EntityArt,
+    private readonly labelLayer: Container,
+    private readonly makeLabel: () => BitmapText,
   ) {
     this.sim = sim;
-    this.bodyLayer = bodyLayer;
-    this.texture = texture;
-    this.enemyTextures = enemyTextures;
-    this.flashTexture = flashTexture;
-    this.enemyFlashTextures = enemyFlashTextures;
-    this.enemyAnimation = enemyAnimation;
-    this.telegraphTexture = telegraphTexture;
-    this.wedgeTexture = wedgeTexture;
-    this.bossShadowTexture = bossShadow;
-    this.bossIds = bossIds;
-    this.actorShadowTexture = actorShadow;
-    this.bombTexture = pickupArt[BOMB_PICKUP_ID];
-    this.barTexture = barTexture;
-    this.container.addChild(this.shadowLayer);
-    this.container.addChild(this.ringLayer);
-    this.container.addChild(this.corpseLayer);
+    this.art = art;
+    this.bombTexture = art.pickupArt[BOMB_PICKUP_ID];
     this.pickupTints = sim.pickups.all.map((definition) => definition.tint);
     this.pickupLabels = sim.pickups.all.map((definition) => definition.label);
-    this.pickupSprites = sim.pickups.all.map((definition) => pickupArt[definition.id]);
+    this.pickupSprites = sim.pickups.all.map((definition) => art.pickupArt[definition.id]);
+  }
+
+  static get telegraphScale(): number {
+    return TELEGRAPH_SCALE;
+  }
+
+  /** The floor's destructible-prop art, by `DESTRUCTIBLE_PROP_KINDS` index. */
+  setTargetTextures(textures: readonly Texture[] | undefined): void {
+    this.targetTextures = textures ?? [];
+  }
+
+  setRingPulses(enabled: boolean): void {
+    this.ringPulses = enabled;
+  }
+
+  setLean(lean: number): void {
+    this.lean = lean;
+  }
+
+  /** Drops every animation and corpse — a room just changed under them. */
+  resetAnimation(): void {
+    this.animator.reset();
+    for (const corpse of this.corpses) {
+      corpse.visible = false;
+    }
+  }
+
+  /** How many billboards are live this frame — the benchmark's proxy for draw work. */
+  get spriteCount(): number {
+    return this.bodies.length;
   }
 
   /**
-   * Points the destructible-prop sprite at the floor now loaded.
-   *
-   * Called by `GameView` on every room load rather than passed once in the
-   * constructor: a run crosses floors and `EntityView` outlives the crossing,
-   * so "which barrel" is per-room state, not per-view state.
+   * `project` maps a world point (x, height, z) to internal-frame pixels — the
+   * camera's job, handed in so labels can sit over the heads they belong to.
    */
-  setTargetTextures(textures: readonly Texture[] = []): void {
-    this.targetTextures = textures;
-  }
-
-  /** `reduceFlashes` off means the telegraph ring may pulse; on means it only grows. */
-  setRingPulses(pulses: boolean): void {
-    this.ringPulses = pulses;
-  }
-
-  /**
-   * `nowMs` is a render-clock reading (`performance.now()`), not simulation
-   * time: clips advance on it, so animation runs at the display's rate and
-   * keeps running while the simulation is paused or single-stepped. Passed in
-   * rather than read here so a test can drive an exact 60 Hz or 144 Hz.
-   */
-  sync(alpha: number, nowMs: number): void {
+  sync(
+    alpha: number,
+    nowMs: number,
+    project: (x: number, height: number, z: number, out: { x: number; y: number }) => void,
+  ): void {
     this.animator.beginFrame(nowMs);
     const sim = this.sim;
     const world = sim.world;
@@ -372,76 +184,48 @@ export class EntityView {
     let wedgesUsed = 0;
     let barsUsed = 0;
     let labelsUsed = 0;
-    let shadowsUsed = 0;
     const highWater = world.highWater;
     for (let index = 0; index < highWater; index++) {
       if (states[index] !== World.ALIVE) {
         continue;
       }
-      if (((masks[index] ?? 0) & required) !== required) {
+      const mask = masks[index] ?? 0;
+      if ((mask & required) !== required) {
         continue;
       }
-      if (((collision[index * 2] ?? 0) & CollisionLayer.Player) !== 0) {
+      const layer = collision[index * 2] ?? 0;
+      if ((layer & CollisionLayer.Player) !== 0) {
         continue;
       }
+      const isEnemyBody = (mask & sim.enemyMask) === sim.enemyMask;
+      const isPickup = (layer & CollisionLayer.Pickup) !== 0;
+      const isBomb = (mask & sim.bombFuse.bit) !== 0;
       // The arena maypole is `MaibaumView`'s to draw (#199) — skip it here.
       if (
-        ((masks[index] ?? 0) & sim.enemyMask) !== sim.enemyMask &&
-        ((collision[index * 2] ?? 0) & CollisionLayer.Pickup) === 0 &&
-        ((masks[index] ?? 0) & sim.propKind.bit) !== 0 &&
+        !isEnemyBody &&
+        !isPickup &&
+        (mask & sim.propKind.bit) !== 0 &&
         (sim.propKind.data[index] ?? 0) === MAYPOLE_PROP_KIND
       ) {
         continue;
       }
 
-      // The **footprint** (#73): the circle on the floor, whose south pole is
-      // both where the sprite stands and what the depth layer sorts it by.
       const footprint = body[index * 2] ?? 1;
+      const hurtRadius = hurtboxRadiusOf(hurtbox[index * 2] ?? 0, footprint);
       const x = lerp(sim.previousX(index), sim.positionX(index), alpha);
       const y = lerp(sim.previousY(index), sim.positionY(index), alpha);
-      const footY = y + footprint;
-      // The drawn body, for everything that is about how big this thing
-      // *looks* rather than where it stands: the telegraph ring around it, a
-      // boss's shadow, a price tag under it. Falls back to the footprint for a
-      // body that never got a hurtbox, which is what every one of these read
-      // before the split.
-      const hurtRadius = hurtboxRadiusOf(hurtbox[index * 2] ?? 0, footprint);
-      const hurtCentreY = y + (hurtbox[index * 2 + 1] ?? 0);
+      const footZ = y + footprint;
 
-      const sprite = this.spriteAt(used);
-      used += 1;
-      sprite.visible = true;
-      const isPickup = ((collision[index * 2] ?? 0) & CollisionLayer.Pickup) !== 0;
-      // An enemy with its own art (#35) draws off that instead of the
-      // shared blob — everything else (the training target, and every enemy
-      // floors 2-7 haven't been drawn yet) still falls back to it, the same
-      // texture this whole view used to draw every enemy from.
-      const isEnemyBody = ((masks[index] ?? 0) & sim.enemyMask) === sim.enemyMask;
       const enemyId = isEnemyBody
         ? sim.enemies.at(sim.enemy.data[index * ENEMY_STRIDE] ?? 0).id
         : null;
-      const isBoss = enemyId !== null && this.bossIds.has(enemyId);
-      // A boss reads its wind-up off its own body, not the expanding ring (#193):
-      // 0 unless this is a boss that is telegraphing right now.
+      const isBoss = enemyId !== null && this.art.bossIds.has(enemyId);
       const bossTelegraph = isBoss ? enemyTelegraphProgress(sim, index) : 0;
-      // A placed Bierfassl (#208) — neither a pickup nor an enemy, but drawn
-      // off its own dedicated texture rather than falling into the
-      // destructible-prop path below, which is what used to draw it as a
-      // room barrel (see `bombTexture`'s doc comment).
-      const isBomb = ((masks[index] ?? 0) & sim.bombFuse.bit) !== 0;
-      // 0 for anything but a live bomb — how far through its fuse it is,
-      // driving the red flush/blink below the same way `bossTelegraph` drives
-      // a boss's own wind-up flush.
       const bombFuse = isBomb ? bombFuseProgress(sim, index) : 0;
-      // An animated creature (#150) resolves its frame first, because both
-      // `bodyTexture` and the flash silhouette below are that frame rather
-      // than one fixed texture. The animation state handed to the animator is
-      // a pure function of simulation state; the *frame* it comes back with is
-      // a function of the render clock, and that split is the whole of why
-      // animation can be smooth without the simulation being non-deterministic.
-      const animation = enemyId === null ? undefined : this.enemyAnimation[enemyId];
+
+      const animation = enemyId === null ? undefined : this.art.enemyAnimation[enemyId];
       let animationFrame = 0;
-      let flip = 1;
+      let mirror = 1;
       if (animation !== undefined) {
         animationFrame = this.animator.track(
           index,
@@ -451,63 +235,34 @@ export class EntityView {
           resolveFacing(sim, index),
           x,
           y,
-          // The drawn radius, not the footprint: the animator hands this to
-          // the corpse table, which uses it to stand a death clip on the same
-          // line the living body stood on. Feeding it the smaller circle would
-          // drop every corpse by the difference the frame its enemy died.
-          hurtRadius,
+          footprint,
         );
-        flip = this.animator.facingOf(index) === AUTHORED_FACING ? 1 : -1;
+        mirror = this.animator.facingOf(index) === AUTHORED_FACING ? 1 : -1;
       }
-      // Neither an enemy nor a pickup, and not a live bomb either: an
-      // authored destructible prop, drawn from the floor tileset rather than
-      // from `characters/`.
+
       const isPropTarget = !isPickup && enemyId === null && !isBomb;
       const pickupKindIndex = sim.pickupKind.data[index] ?? -1;
-      // A pickup with real art (#152) draws it untinted. One without still
-      // draws off the white-fill texture (the same one the hit flash uses),
-      // never the body texture: a tint multiplies the texture underneath it,
-      // and a bright tint over a dark base is exactly what read as
-      // "everything is a brown blob" — white is the one base a tint
-      // reproduces exactly.
       const pickupSprite = isPickup ? this.pickupSprites[pickupKindIndex] : undefined;
-      const bodyTexture =
+      const texture: Texture =
         pickupSprite ??
         (isPickup
-          ? this.flashTexture
+          ? this.art.fallback
           : animation !== undefined
-            ? (animation.frames[animationFrame] ?? this.texture)
+            ? (animation.frames[animationFrame] ?? this.art.fallback)
             : isBomb
-              ? (this.bombTexture ?? this.texture)
+              ? (this.bombTexture ?? this.art.fallback)
               : enemyId === null
-                ? // `isPropTarget` in every sense but the type checker's — this
-                  // spelling is what narrows `enemyId` for the branch below.
-                  // Drawn as whichever of the floor's own props it was spawned
-                  // from (#152) rather than as the shared blob.
-                  (this.targetTextures[sim.propKind.data[index] ?? 0] ??
+                ? (this.targetTextures[sim.propKind.data[index] ?? 0] ??
                   this.targetTextures[0] ??
-                  this.texture)
-                : (this.enemyTextures[enemyId] ?? this.texture));
-      // A hit flash is that enemy's own shape (#37's bug report — it used to
-      // be `flashTexture`'s generic circle for every enemy, wider than most
-      // of them): `enemyFlashTextures` is keyed the same way `enemyTextures`
-      // is, so an id with no dedicated art falls back to `flashTexture` the
-      // same way `bodyTexture` falls back to `texture`.
-      sprite.texture = isPickup
-        ? bodyTexture
-        : (flash[index] ?? 0) > 0
-          ? animation !== undefined
-            ? // An animated body flashes as the frame it is actually on, not
-              // as a single stand-in pose: the flash is the silhouette read
-              // (#37), and a walk cycle's silhouette changes every frame.
-              (animation.flashFrames[animationFrame] ?? this.flashTexture)
-            : enemyId === null
-              ? this.flashTexture
-              : (this.enemyFlashTextures[enemyId] ?? this.flashTexture)
-          : bodyTexture;
-      // A curled body has to look like one. Without this the player is told
-      // their shots are doing nothing only by the shots doing nothing.
-      sprite.tint = isPickup
+                  this.art.fallback)
+                : (this.art.enemyArt[enemyId] ?? this.art.fallback));
+
+      const billboard = this.bodyAt(used);
+      used += 1;
+      billboard.visible = true;
+      billboard.setTexture(texture, mirror);
+      billboard.flash = !isPickup && (flash[index] ?? 0) > 0;
+      billboard.tint = isPickup
         ? pickupSprite !== undefined
           ? ENTITY_PALETTE.normalTint
           : (this.pickupTints[pickupKindIndex] ?? ENTITY_PALETTE.unknownPickupTint)
@@ -525,10 +280,6 @@ export class EntityView {
                 ? mixColor(
                     ENTITY_PALETTE.normalTint,
                     ENTITY_PALETTE.bombFuseTint,
-                    // Reddens steadily as the fuse burns down; past the
-                    // halfway point an accelerating blink rides on top of
-                    // that ramp, so the last stretch before it goes off
-                    // reads as an urgent countdown rather than a flat glow.
                     Math.min(
                       1,
                       bombFuse +
@@ -537,484 +288,221 @@ export class EntityView {
                     ),
                   )
                 : ENTITY_PALETTE.normalTint;
-      // Drawn at the actor grid: one authored pixel per internal pixel,
-      // whatever the body is (`render/resolution.ts`, `docs/DECISIONS.md`
-      // #45). This used to be `radius / (bodyTexture.height / 2)` — size
-      // derived from the collider — which normalised height and left width
-      // free, so widening a canvas for more detail widened the body on
-      // screen instead. On-screen size is now the authored canvas and
-      // nothing else; `tests/content/sprite-scale.test.ts` is what keeps a
-      // canvas honest about the collider it is drawn over.
-      //
-      // A destructible prop is the one exception, and it is not really one:
-      // it is drawn from the floor's own *tile* art, so it takes the tile
-      // grid the identical sprite takes when `render/prop-view.ts` draws it
-      // as furniture. Before this the same barrel PNG rendered 25% larger as
-      // a target than as scenery, in the same room. `tileGridScale` (not a
-      // fixed constant, since #182) is what keeps that true whether the
-      // destructible's art is authored at 16 or 32.
-      const gridScale = isPropTarget ? tileGridScale(bodyTexture) : ACTOR_SPRITE_SCALE;
-      // A pickup pops in on spawn — a cosmetic-only bump read off the same
-      // countdown `stepPickups`' collection never touches, so it never
-      // affects the hitbox it's drawn over. Gated to `isPickup`: the
-      // component array is dense and reused across recycled ECS slots, so an
-      // enemy or prop created into a slot a just-collected pickup still had a
-      // few bounce ticks left in would otherwise inherit its pop.
+
+      // A prop tile draws on the tile grid (a 32px barrel covers one cell), a
+      // creature on the actor grid — the same two rules the 2D renderer had.
+      const gridScale = isPropTarget ? tileGridScale(texture) * 2 : 1;
       const bounceTicks = isPickup ? (sim.spawnBounce.data[index] ?? 0) : 0;
       const bounceMax = Math.max(1, sim.tuning.pickup.spawnBounceTicks);
       const bounceProgress = bounceTicks / bounceMax;
       const pop = bounceTicks > 0 ? 1 + 0.4 * Math.sin(bounceProgress * Math.PI) : 1;
-      // `flip` mirrors an animated body that is walking the other way. Every
-      // character sprite in the game is authored facing left
-      // (`render/animation/state.ts`'s `AUTHORED_FACING`), so this is 1 for a
-      // leftward body and -1 for a rightward one, and always 1 for anything
-      // with no animation set — which is what keeps a static sprite drawn
-      // exactly as it was before #150.
-      const spriteScale = gridScale * pop;
-      // Standing on the footprint's south pole, and sorted by it (#73). This
-      // used to be a centre anchor for everything but a boss, which #56 had
-      // already had to except — "a sprite two to three times taller than its
-      // hitbox, centred, sinks half of itself through the floor". That is true
-      // of *any* sprite taller than its hitbox, which is now every sprite,
-      // because the hitbox that matters on the floor is the footprint. So the
-      // boss case stopped being a case and became the rule, and there is no
-      // longer an anchor a recycled ECS slot could inherit wrongly.
-      standSprite(sprite, x, footY, spriteScale, flip);
-      setFootY(sprite, footY);
+      const lift = isPickup ? PICKUP_LIFT + Math.sin(nowMs * 0.004 + index) * 0.8 : 0;
+      billboard.place(x, 0.2 + lift, footZ, this.lean, gridScale * pop);
 
-      const priced = isPickup && ((masks[index] ?? 0) & sim.pickupPrice.bit) !== 0;
-      // The two-letter label was how a pickup said which one it was before it
-      // had a sprite (#152). Now the sprite says it, so the label survives
-      // only where it carries something the art cannot: a shop price, and any
-      // pickup whose art has not been drawn yet.
+      const priced = isPickup && (mask & sim.pickupPrice.bit) !== 0;
       if (isPickup && (priced || pickupSprite === undefined)) {
         const label = this.labelAt(labelsUsed);
         labelsUsed += 1;
-        label.visible = true;
         const kindLabel = this.pickupLabels[pickupKindIndex] ?? '?';
-        // A shop's stock reads its price the same way everything else in the
-        // wallet reads Biermarken — a plain number, no currency glyph — so
-        // this is legible before the player has ever seen a shop.
-        label.text = priced
+        label.text.text = priced
           ? pickupSprite === undefined
             ? `${kindLabel} · ${String(sim.pickupPrice.data[index] ?? 0)}`
             : String(sim.pickupPrice.data[index] ?? 0)
           : kindLabel;
-        // Under the sprite rather than across it once there is a sprite to be
-        // across: a price is a caption, and a caption over the middle of the
-        // thing it captions hides the thing. The offset is the sprite's own
-        // half-height (#208) rather than a fixed number — a fixed 8 was
-        // exactly half of the 16px canvas every pickup used to be authored
-        // at, so it stopped sitting under the art the moment that canvas
-        // grew, the same "offset tied to a size that can change instead of
-        // the actual sprite" mistake #204's ground-shadow fix already caught.
-        label.position.set(x, pickupSprite === undefined ? hurtCentreY : footY);
+        // Over the body's head: project its top and stand the label there.
+        project(x, billboard.heightUnits + lift + 2, footZ, LABEL_POINT);
+        label.place(LABEL_POINT.x, LABEL_POINT.y);
+        label.show();
       }
 
-      // Every body `EntityView` draws stands on the floor, so every one casts
-      // a ground shadow (`docs/DECISIONS.md` #61) — a walking enemy, a piece
-      // of loot, a destructible barrel, the placed Bierfassl. The corpse
-      // layer and the arena maypole are drawn elsewhere and skipped above; a
-      // shot in flight is a different pool entirely.
-      const shadowTexture = isBoss ? this.bossShadowTexture : this.actorShadowTexture;
-      if (shadowTexture !== undefined) {
-        const shadow = this.shadowAt(shadowsUsed, shadowTexture);
-        shadowsUsed += 1;
-        shadow.visible = true;
-        shadow.texture = shadowTexture;
-        if (isBoss) {
-          shadow.anchor.set(0.5);
-          shadow.alpha = GROUND_SHADOW.bossAlpha;
-          // Sized off the *drawn* radius, which is the number #152 tuned this
-          // against and which the footprint split deliberately left alone — a
-          // boss's shadow is as wide as the boss looks, not as wide as the
-          // circle it is pushed by.
-          shadow.scale.set(
-            (hurtRadius * BOSS_SHADOW_WIDTH_SCALE) / shadow.texture.width,
-            (hurtRadius * BOSS_SHADOW_HEIGHT_SCALE) / shadow.texture.height,
-          );
-          shadow.position.set(x, footY);
-        } else {
-          // Seated under the art's real bottom row (`groundShadowFeetY` →
-          // `inked-bounds.ts`), and narrowed to a real footprint — the padded
-          // canvas is far wider than where the thing meets the floor. A piece
-          // of loot, a keg or a barrel lies flat, so its footprint is tighter
-          // still.
-          const lies = isPickup || isPropTarget || isBomb;
-          const footprint = lies ? GROUND_SHADOW.lyingFootprint : GROUND_SHADOW.standingFootprint;
-          styleGroundShadow(
-            shadow,
-            shadowTexture,
-            Math.min(bodyTexture.width * gridScale * footprint, ROOM_TILE_UNITS * 0.6),
-          );
-          shadow.position.set(x, groundShadowFeetY(footY, bodyTexture, gridScale));
-        }
-      }
-
-      // The telegraph is for enemies the player might lose in the shuffle. A
-      // boss is a quarter of the screen and telegraphs off its own body
-      // (`bossTelegraph` above drives the red flush; its `telegraph` clip holds
-      // the strained pose) — a shape scaled to *that* collider would wrap the
-      // room and say nothing about where it is safe to stand.
       if (!isBoss && enemyTelegraphShape(sim, index, this.telegraphShape)) {
         const info = this.telegraphShape;
-        // Fades in with the growth, so the first frame of a telegraph does not
-        // pop. The extra pulse rides on top and is the only removable half:
-        // with `reduceFlashes` on, every shape below still grows and still
-        // fades in, it simply stops flickering while it does (#153).
         const pulse = this.ringPulses ? Math.sin(nowMs * RING_PULSE_RATE) * 0.12 : 0;
-        const alpha = Math.min(1, 0.35 + info.progress * 0.5 + pulse);
+        const shapeAlpha = Math.min(1, 0.35 + info.progress * 0.5 + pulse);
         switch (info.shape) {
           case TelegraphShape.Line: {
-            // A charge or an aimed dash: a narrow directional cone, not an
-            // area around the body — "get out of the line, sideways" only
-            // reads if the warning itself has a direction (#233).
             const wedge = this.wedgeAt(wedgesUsed);
             wedgesUsed += 1;
-            wedge.visible = true;
             const reach = hurtRadius * (1 + (LINE_TELEGRAPH_SCALE - 1) * info.progress);
-            this.scaleWedge(wedge, reach, LINE_TELEGRAPH_HALF_ANGLE);
-            wedge.rotation = info.angle;
-            wedge.alpha = alpha;
-            wedge.position.set(info.x, info.y);
+            wedge.place(info.x, info.y, info.angle, reach, LINE_TELEGRAPH_HALF_ANGLE, shapeAlpha);
             break;
           }
           case TelegraphShape.Arc: {
-            // A melee swing: the real swept footprint, growing from nothing
-            // to its full authored reach and width as the countdown ends —
-            // the last frame before the swing lands is the actual danger
-            // zone, not a stylised approximation of it.
             const wedge = this.wedgeAt(wedgesUsed);
             wedgesUsed += 1;
-            wedge.visible = true;
-            this.scaleWedge(wedge, info.reach * info.progress, info.arc / 2);
-            wedge.rotation = info.angle;
-            wedge.alpha = alpha;
-            wedge.position.set(info.x, info.y);
+            wedge.place(
+              info.x,
+              info.y,
+              info.angle,
+              info.reach * info.progress,
+              info.arc / 2,
+              shapeAlpha,
+            );
             break;
           }
           case TelegraphShape.Ground: {
-            // A landing zone away from the body (Böllerschmeißer, #233) — the
-            // one shape that is never centred on the thing making it, which
-            // is the whole point: the ring used to grow on the *thrower*
-            // while the danger was at the *landing spot*.
-            if (this.barTexture !== undefined) {
-              const marker = this.barAt(barsUsed);
-              barsUsed += 1;
-              marker.visible = true;
-              const size = info.reach * 2 * info.progress;
-              marker.width = size;
-              marker.height = size;
-              marker.alpha = alpha;
-              marker.position.set(info.x, info.y);
-            }
+            const marker = this.barAt(barsUsed);
+            barsUsed += 1;
+            const size = info.reach * 2 * info.progress;
+            marker.place(info.x, info.y, size, size, shapeAlpha);
             break;
           }
           default: {
-            // An untargeted burst, centred on the body — the shape every
-            // telegraph in the game used to draw, kept as-is for anything a
-            // radial spread of shots follows.
             const ring = this.ringAt(ringsUsed);
             ringsUsed += 1;
-            ring.visible = true;
-            // Grows out of the body over the wind-up, and is at its widest on
-            // the tick the attack leaves. The size is the countdown.
-            // Off the drawn radius, not the footprint: a telegraph is a
-            // legibility shape sized against the body a player is looking at
-            // (#153 tuned `TELEGRAPH_SCALE` against exactly that), so #73's
-            // smaller floor circle must not shrink it by a third.
             const ringRadius = hurtRadius * (1 + (TELEGRAPH_SCALE - 1) * info.progress);
-            ring.scale.set(ringRadius / (this.telegraphTexture.width / 2));
-            ring.alpha = alpha;
-            ring.position.set(info.x, info.y);
+            ring.place(info.x, info.y, ringRadius, shapeAlpha);
             break;
           }
         }
       }
 
-      // A placed Bierfassl telegraphs a cross, not a ring (#210) — the same
-      // shape `blastCandidate` (`sim/systems/bombs.ts`) actually damages,
-      // growing from nothing to the real blast reach as `bombFuse` counts
-      // down rather than a fixed multiple of the bomb's own tiny collider.
-      // `bombFuseProgress` already gates this to a live bomb (0 otherwise).
-      if (isBomb && bombFuse > 0 && this.barTexture !== undefined) {
+      if (isBomb && bombFuse > 0) {
+        // The exact cross `blastCandidate` damages: two arms, a tile wide.
         const armSpan = bombBlastArmLength(sim) * 2 * bombFuse;
         const pulse = this.ringPulses ? Math.sin(nowMs * RING_PULSE_RATE) * 0.12 : 0;
-        const alpha = Math.min(1, 0.35 + bombFuse * 0.5 + pulse);
-
-        const horizontalBar = this.barAt(barsUsed);
+        const barAlpha = Math.min(1, 0.35 + bombFuse * 0.5 + pulse);
+        this.barAt(barsUsed).place(x, y, armSpan, ROOM_TILE_UNITS, barAlpha);
         barsUsed += 1;
-        horizontalBar.visible = true;
-        horizontalBar.width = armSpan;
-        horizontalBar.height = ROOM_TILE_UNITS;
-        horizontalBar.alpha = alpha;
-        horizontalBar.position.set(x, y);
-
-        const verticalBar = this.barAt(barsUsed);
+        this.barAt(barsUsed).place(x, y, ROOM_TILE_UNITS, armSpan, barAlpha);
         barsUsed += 1;
-        verticalBar.visible = true;
-        verticalBar.width = ROOM_TILE_UNITS;
-        verticalBar.height = armSpan;
-        verticalBar.alpha = alpha;
-        verticalBar.position.set(x, y);
       }
     }
 
-    // Every body that was drawn last frame and not this one has left the
-    // world; the animator turns the ones that died into corpses here, which is
-    // why this runs before they are drawn below.
     this.animator.endFrame();
     this.syncCorpses();
 
-    for (let slot = used; slot < this.sprites.length; slot++) {
-      const sprite = this.sprites[slot];
-      if (sprite !== undefined) {
-        sprite.visible = false;
+    for (let slot = used; slot < this.bodies.length; slot++) {
+      const body = this.bodies[slot];
+      if (body !== undefined) {
+        body.visible = false;
       }
     }
-
     for (let slot = ringsUsed; slot < this.rings.length; slot++) {
-      const ring = this.rings[slot];
-      if (ring !== undefined) {
-        ring.visible = false;
-      }
+      this.rings[slot]?.hide();
     }
-
     for (let slot = wedgesUsed; slot < this.wedges.length; slot++) {
-      const wedge = this.wedges[slot];
-      if (wedge !== undefined) {
-        wedge.visible = false;
-      }
+      this.wedges[slot]?.hide();
     }
-
     for (let slot = barsUsed; slot < this.bars.length; slot++) {
-      const bar = this.bars[slot];
-      if (bar !== undefined) {
-        bar.visible = false;
-      }
+      this.bars[slot]?.hide();
     }
-
     for (let slot = labelsUsed; slot < this.labels.length; slot++) {
-      const label = this.labels[slot];
-      if (label !== undefined) {
-        label.visible = false;
-      }
-    }
-
-    for (let slot = shadowsUsed; slot < this.shadows.length; slot++) {
-      const shadow = this.shadows[slot];
-      if (shadow !== undefined) {
-        shadow.visible = false;
-      }
+      this.labels[slot]?.hide();
     }
   }
 
-  /**
-   * `initialTexture` seeds a freshly created sprite; a reused slot gets its
-   * texture (and alpha) overwritten by the caller regardless, since the same
-   * slot may draw a boss's shadow one frame and a mob's the next as bodies
-   * come and go.
-   */
-  private shadowAt(slot: number, initialTexture: Texture): Sprite {
-    const existing = this.shadows[slot];
-    if (existing !== undefined) {
-      return existing;
-    }
-    const created = new Sprite(initialTexture);
-    created.anchor.set(0.5);
-    this.shadows.push(created);
-    this.shadowLayer.addChild(created);
-    return created;
-  }
-
-  /**
-   * Draws the death clips of enemies that are no longer in the world.
-   *
-   * A corpse is entirely render-side state (`animation/animator.ts`'s corpse
-   * table): the simulation freed the entity the tick it died, nothing here can
-   * be hit or hit anything, and a room change throws the lot away
-   * (`resetAnimation`). It fades out rather than popping, over the tail of its
-   * linger.
-   */
+  /** Death clips of bodies no longer in the world, fading where they fell. */
   private syncCorpses(): void {
     const animator = this.animator;
     let used = 0;
     for (let entry = 0; entry < animator.corpseCount; entry++) {
-      const corpse = animator.corpseSlotAt(entry);
-      const clips = animator.corpseSetAt(corpse);
+      const slot = animator.corpseSlotAt(entry);
+      const clips = animator.corpseSetAt(slot);
       if (clips === null) {
         continue;
       }
-      const set = this.enemyAnimation[clips.name];
-      const texture = set?.frames[animator.corpseFrameAt(corpse)];
-      if (texture === undefined) {
+      const frame = this.art.enemyAnimation[clips.name]?.frames[animator.corpseFrameAt(slot)];
+      if (frame === undefined) {
         continue;
       }
-      const sprite = this.corpseAt(used);
+      const corpse = this.corpseAt(used);
       used += 1;
-      sprite.visible = true;
-      sprite.texture = texture;
-      sprite.alpha = animator.corpseAlphaAt(corpse);
-      // The same grid the living body was on — a corpse that changed size
-      // the frame the enemy died would read as the death, not as the clip.
-      sprite.scale.set(
-        ACTOR_SPRITE_SCALE * (animator.corpseFacingAt(corpse) === AUTHORED_FACING ? 1 : -1),
-        ACTOR_SPRITE_SCALE,
-      );
-      // Match the living body's anchor (#73): every body stands on its foot
-      // line, so a corpse does too and none of them jumps half a sprite-height
-      // the frame its enemy dies. The radius the animator recorded is the
-      // living body's *drawn* one, which is what its sprite was standing on.
-      sprite.anchor.set(0.5, 1);
-      sprite.position.set(
-        animator.corpseXAt(corpse),
-        animator.corpseYAt(corpse) + animator.corpseRadiusAt(corpse),
+      corpse.visible = true;
+      corpse.setTexture(frame, animator.corpseFacingAt(slot) === AUTHORED_FACING ? 1 : -1);
+      corpse.alpha = animator.corpseAlphaAt(slot);
+      corpse.flash = false;
+      corpse.tint = ENTITY_PALETTE.normalTint;
+      corpse.place(
+        animator.corpseXAt(slot),
+        0.2,
+        animator.corpseYAt(slot) + animator.corpseRadiusAt(slot),
+        this.lean,
       );
     }
     for (let slot = used; slot < this.corpses.length; slot++) {
-      const sprite = this.corpses[slot];
-      if (sprite !== undefined) {
-        sprite.visible = false;
+      const corpse = this.corpses[slot];
+      if (corpse !== undefined) {
+        corpse.visible = false;
       }
     }
   }
 
-  /**
-   * Forgets every clip phase and every corpse.
-   *
-   * Called by `GameView` on a room change: a body vanishing because its room
-   * unloaded is not a body dying, and without this a door transition would
-   * leave the new room strewn with the old one's corpses.
-   */
-  resetAnimation(): void {
-    this.animator.reset();
-    for (const sprite of this.corpses) {
-      sprite.visible = false;
+  private bodyAt(slot: number): Billboard {
+    const existing = this.bodies[slot];
+    if (existing !== undefined) {
+      return existing;
     }
+    const created = new Billboard();
+    this.bodies.push(created);
+    this.group.add(created.mesh);
+    return created;
   }
 
-  private corpseAt(slot: number): Sprite {
+  private corpseAt(slot: number): Billboard {
     const existing = this.corpses[slot];
     if (existing !== undefined) {
       return existing;
     }
-    const created = new Sprite(this.texture);
-    created.anchor.set(0.5);
+    const created = new Billboard();
     this.corpses.push(created);
-    this.corpseLayer.addChild(created);
+    this.group.add(created.mesh);
     return created;
   }
 
-  private spriteAt(slot: number): Sprite {
-    const existing = this.sprites[slot];
-    if (existing !== undefined) {
-      return existing;
-    }
-    const created = new Sprite(this.texture);
-    created.anchor.set(0.5);
-    this.sprites.push(created);
-    this.bodyLayer.addChild(created);
-    return created;
-  }
-
-  private ringAt(slot: number): Sprite {
+  private ringAt(slot: number): FloorRing {
     const existing = this.rings[slot];
     if (existing !== undefined) {
       return existing;
     }
-    const created = new Sprite(this.telegraphTexture);
-    created.anchor.set(0.5);
-    created.tint = ENTITY_PALETTE.telegraphRing;
+    const created = new FloorRing(ENTITY_PALETTE.telegraphRing);
     this.rings.push(created);
-    this.ringLayer.addChild(created);
+    this.group.add(created.mesh);
     return created;
   }
 
-  /**
-   * A `Line`/`Arc` telegraph's wedge (#233). Anchored at `(0, 0.5)` rather
-   * than centred — the tip of `wedgeTexture` sits on the body, and rotation
-   * alone points it at the aim direction, the same "anchor at the pivot"
-   * convention the pooled bodies above anchor at their own centre for.
-   */
-  private wedgeAt(slot: number): Sprite {
+  private wedgeAt(slot: number): FloorWedge {
     const existing = this.wedges[slot];
     if (existing !== undefined) {
       return existing;
     }
-    const created = new Sprite(this.wedgeTexture);
-    created.anchor.set(0, 0.5);
-    created.tint = ENTITY_PALETTE.telegraphRing;
+    const created = new FloorWedge(ENTITY_PALETTE.telegraphRing);
     this.wedges.push(created);
-    this.ringLayer.addChild(created);
+    this.group.add(created.mesh);
     return created;
   }
 
-  /**
-   * Scales a wedge sprite so its two straight edges span `halfAngle` out to
-   * `reach` — `createWedgeTexture`'s own doc comment covers the maths this
-   * leans on (a straight-edged wedge's width scales exactly with `y`, unlike
-   * a true arc's).
-   */
-  private scaleWedge(sprite: Sprite, reach: number, halfAngle: number): void {
-    const genericHalfWidth = WEDGE_TEXTURE_LENGTH * Math.tan(WEDGE_TEXTURE_HALF_ANGLE);
-    const halfWidth = reach * Math.tan(halfAngle);
-    sprite.scale.set(
-      reach / WEDGE_TEXTURE_LENGTH,
-      genericHalfWidth <= 0 ? 0 : halfWidth / genericHalfWidth,
-    );
-  }
-
-  /** One bar of a bomb's cross telegraph. `this.barTexture` must be defined — checked once by the caller rather than per bar. */
-  private barAt(slot: number): Sprite {
+  private barAt(slot: number): FloorBar {
     const existing = this.bars[slot];
     if (existing !== undefined) {
       return existing;
     }
-    const created = new Sprite(this.barTexture);
-    created.anchor.set(0.5);
-    created.tint = ENTITY_PALETTE.telegraphRing;
+    const created = new FloorBar(ENTITY_PALETTE.telegraphRing);
     this.bars.push(created);
-    this.ringLayer.addChild(created);
+    this.group.add(created.mesh);
     return created;
   }
 
-  private labelAt(slot: number): Text {
+  private labelAt(slot: number): WorldLabel {
     const existing = this.labels[slot];
     if (existing !== undefined) {
       return existing;
     }
-    const created = new Text({
-      text: '',
-      style: {
-        fill: ENTITY_PALETTE.pickupLabelText,
-        fontFamily: 'monospace',
-        fontSize: 6,
-        fontWeight: 'bold',
-      },
-    });
-    // Dark text on a light pickup reads at this size where a light outline
-    // on a dark fill would not — the fill colours here are pastel/bright by
-    // design (see `content/pickups/pickups.ts`), so this is the one label
-    // colour that works across all of them without per-kind styling.
-    created.anchor.set(0.5);
-    created.resolution = 2;
+    const created = new WorldLabel(this.makeLabel(), this.labelLayer);
     this.labels.push(created);
-    this.labelLayer.addChild(created);
     return created;
   }
 
-  /** The radius the ring texture must be generated at. */
-  static get telegraphTextureRadius(): number {
-    return TELEGRAPH_TEXTURE_RADIUS;
-  }
-
-  /** The length the wedge texture must be generated at (`createWedgeTexture`'s `length`). */
-  static get wedgeTextureLength(): number {
-    return WEDGE_TEXTURE_LENGTH;
-  }
-
-  /** The half-angle the wedge texture must be generated at (`createWedgeTexture`'s `halfAngle`). */
-  static get wedgeTextureHalfAngle(): number {
-    return WEDGE_TEXTURE_HALF_ANGLE;
+  destroy(): void {
+    for (const body of [...this.bodies, ...this.corpses]) {
+      body.dispose();
+    }
+    for (const shape of [...this.rings, ...this.wedges, ...this.bars]) {
+      shape.dispose();
+    }
+    for (const label of this.labels) {
+      label.dispose();
+    }
+    this.group.removeFromParent();
   }
 }
