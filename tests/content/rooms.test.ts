@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ENEMY_DEFINITIONS } from '../../src/content/enemies/index.js';
+import { FLOOR_CONFIGS } from '../../src/content/floors/definition.js';
 import cellarCrossroads from '../../src/content/rooms/cellar.json';
 import { ROOM_TEMPLATES } from '../../src/content/rooms/index.js';
 import {
@@ -7,8 +8,12 @@ import {
   ROOM_ROWS,
   ROOM_TILE_UNITS,
   isMultiCellRoomTemplate,
+  type RoomTemplate,
 } from '../../src/content/rooms/definition.js';
+import { generateFloor } from '../../src/sim/room/floor-plan.js';
+import { chooseSprinkle } from '../../src/sim/room/sprinkle.js';
 import { compileRoomTemplate, validateRoomTemplate } from '../../src/sim/room/template.js';
+import { Rng } from '../../src/sim/rng/rng.js';
 
 describe('room templates', () => {
   it('validates every registered authored room', () => {
@@ -38,6 +43,118 @@ describe('room templates', () => {
       );
       expect(ordinary.length).toBeGreaterThan(0);
     }
+  });
+
+  it('gives Floor 2 its own rural-only rooms, not just the cellar set with a new tileset (#273)', () => {
+    // Before #273, every non-boss template floor 2 could draw was tagged
+    // `cellar, rural` alike — the floor had no room of its own beyond its
+    // boss arena. The acceptance criterion is "at least four rural-only
+    // templates, spanning at least three shapes."
+    const templates = ROOM_TEMPLATES.map((room, index) =>
+      validateRoomTemplate(room, `room[${String(index)}]`, ENEMY_DEFINITIONS),
+    );
+    const ruralOnly = templates.filter(
+      (template) =>
+        template.metadata.floorTags.includes('rural') &&
+        !template.metadata.floorTags.includes('cellar'),
+    );
+    expect(ruralOnly.length).toBeGreaterThanOrEqual(4);
+    expect(
+      new Set(ruralOnly.map((template) => template.metadata.shape)).size,
+    ).toBeGreaterThanOrEqual(3);
+  });
+
+  it('stands the Maibaum in an ordinary room with something to do at it (#273)', () => {
+    // `docs/CONTENT_BIBLE.md` §1: "It can be climbed for a reward." Modelled
+    // as the existing pedestal mechanic (`sim/systems/pedestal.ts`) rather
+    // than a new interaction — the reward is exactly what pressing `use` at
+    // any other pedestal already gives, framed here as climbing the pole for
+    // it. The `maibaum` decorative prop itself is the plain two-tile scenery
+    // version (`render/floor-art.ts`'s `PROP_TILE_NAMES`), not the
+    // destructible `maypole` the boss arena's Maibaum-Dieb fight uses.
+    const templates = ROOM_TEMPLATES.map((room, index) =>
+      validateRoomTemplate(room, `room[${String(index)}]`, ENEMY_DEFINITIONS),
+    );
+    const maibaumRoom = templates.find((template) => template.id === 'dorf-maibaum');
+    if (maibaumRoom === undefined) {
+      throw new Error('dorf-maibaum template not found');
+    }
+    expect(maibaumRoom.metadata.specialRole).toBeUndefined();
+    const layouts = isMultiCellRoomTemplate(maibaumRoom) ? maibaumRoom.cells : [maibaumRoom];
+    const props = layouts.flatMap((layout) => layout.decorativeProps.map((prop) => prop.type));
+    expect(props).toContain('maibaum');
+    expect(props).toContain('pedestal');
+  });
+
+  it('the sprinkle roll actually reaches every new rural-only template on floor 2 (#273)', () => {
+    // Not enough that these templates are schema-valid and shape-eligible —
+    // the acceptance criterion is that a real floor 2 can actually roll
+    // them, the same real `generateFloor` + `chooseSprinkle` path
+    // `app/main.ts`'s `rebuildProceduralRooms` uses.
+    const pool: readonly RoomTemplate[] = ROOM_TEMPLATES.map((room, index) =>
+      validateRoomTemplate(room, `room[${String(index)}]`, ENEMY_DEFINITIONS),
+    );
+    const floor2Config = FLOOR_CONFIGS.find((config) => config.floor === 2);
+    if (floor2Config === undefined) {
+      throw new Error('no floor 2 config');
+    }
+    const expectedIds = new Set([
+      'dorf-maibaum',
+      'dorf-marktplatz',
+      'dorf-hopfengarten',
+      'dorf-stall',
+      'dorf-acker',
+    ]);
+    const seenIds = new Set<string>();
+    // A high sprinkle chance, same reasoning as `tests/unit/sprinkle.test.ts`:
+    // makes every eligible template turn up without needing an enormous N.
+    const authoredRoomChance = 0.6;
+    for (let seed = 0; seed < 3000 && seenIds.size < expectedIds.size; seed++) {
+      const plan = generateFloor(new Rng(seed + 1), floor2Config, pool);
+      const alreadyPlaced = new Set<string>();
+      for (const room of plan.rooms) {
+        if (room.role !== 'normal' || room.staircaseTemplateId !== undefined) {
+          continue;
+        }
+        const rng = new Rng(seed * 7919 + room.id.length + room.distanceFromStart);
+        const sprinkle = chooseSprinkle(
+          room,
+          floor2Config.floorTag,
+          pool,
+          alreadyPlaced,
+          authoredRoomChance,
+          rng,
+        );
+        if (sprinkle !== null) {
+          alreadyPlaced.add(sprinkle.id);
+          if (expectedIds.has(sprinkle.id)) {
+            seenIds.add(sprinkle.id);
+          }
+        }
+      }
+    }
+    expect([...seenIds].sort()).toEqual([...expectedIds].sort());
+  });
+
+  it('keeps the corruption crates pure scenery — no pickup, no plate, nobody comments (#273)', () => {
+    // `docs/CONTENT_BIBLE.md` §1: "Nobody comments on them." A crate prop
+    // must never carry a pickup or a special role of its own — the whole
+    // effect is that they're just there.
+    const templates = ROOM_TEMPLATES.map((room, index) =>
+      validateRoomTemplate(room, `room[${String(index)}]`, ENEMY_DEFINITIONS),
+    );
+    const crateTypes = new Set(['crate-opa', 'crate-neu', 'crate-stack']);
+    let checkedAny = false;
+    for (const template of templates) {
+      const layouts = isMultiCellRoomTemplate(template) ? template.cells : [template];
+      for (const layout of layouts) {
+        if (layout.decorativeProps.some((prop) => crateTypes.has(prop.type))) {
+          checkedAny = true;
+          expect(layout.pickupSpawns).toEqual([]);
+        }
+      }
+    }
+    expect(checkedAny).toBe(true);
   });
 
   it('loads the hand-authored JSON at the standard dimensions', () => {

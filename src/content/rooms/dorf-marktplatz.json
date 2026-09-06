@@ -1,0 +1,114 @@
+{
+  "id": "dorf-marktplatz",
+  "cells": [
+    {
+      "tileGrid": [
+        "###############",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "###############"
+      ],
+      "obstacles": [{ "x": 96, "y": 56, "width": 32, "height": 32 }],
+      "enemySpawns": [{ "x": 192, "y": 96, "group": "markt-stall-nw" }],
+      "spawnGroups": [
+        {
+          "id": "markt-stall-nw",
+          "count": 1,
+          "choices": [{ "enemyId": "gockel", "minFloor": 2, "maxFloor": 2 }]
+        }
+      ],
+      "pickupSpawns": [],
+      "hazards": [],
+      "decorativeProps": [{ "x": 48, "y": 32, "type": "bunting" }]
+    },
+    {
+      "tileGrid": [
+        "###############",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "###############"
+      ],
+      "obstacles": [],
+      "enemySpawns": [{ "x": 64, "y": 96, "group": "markt-crates-ne" }],
+      "spawnGroups": [
+        {
+          "id": "markt-crates-ne",
+          "count": 1,
+          "choices": [{ "enemyId": "bauer", "minFloor": 2, "maxFloor": 2 }]
+        }
+      ],
+      "pickupSpawns": [],
+      "hazards": [],
+      "decorativeProps": [
+        { "x": 192, "y": 32, "type": "crate-stack" },
+        { "x": 208, "y": 48, "type": "crate-opa" }
+      ]
+    },
+    {
+      "tileGrid": [
+        "###############",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "###############"
+      ],
+      "obstacles": [],
+      "enemySpawns": [{ "x": 192, "y": 48, "group": "markt-bandstand-sw" }],
+      "spawnGroups": [
+        {
+          "id": "markt-bandstand-sw",
+          "count": 1,
+          "choices": [{ "enemyId": "blaskapellist", "minFloor": 2, "maxFloor": 2 }]
+        }
+      ],
+      "pickupSpawns": [],
+      "hazards": [],
+      "decorativeProps": [{ "x": 64, "y": 96, "type": "bandstand" }]
+    },
+    {
+      "tileGrid": [
+        "###############",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "###############"
+      ],
+      "obstacles": [{ "x": 32, "y": 40, "width": 32, "height": 32 }],
+      "enemySpawns": [{ "x": 176, "y": 96, "group": "markt-stall-se" }],
+      "spawnGroups": [
+        {
+          "id": "markt-stall-se",
+          "count": 1,
+          "choices": [{ "enemyId": "boellerschmeisser", "minFloor": 2, "maxFloor": 2 }]
+        }
+      ],
+      "pickupSpawns": [{ "x": 120, "y": 96, "type": "bratwurst-half" }],
+      "hazards": [],
+      "decorativeProps": [{ "x": 208, "y": 32, "type": "bunting" }]
+    }
+  ],
+  "metadata": {
+    "floorTags": ["rural"],
+    "shape": "2x2",
+    "difficultyTier": 3,
+    "weight": 1
+  }
+}
