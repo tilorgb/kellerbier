@@ -5,12 +5,12 @@ import type { StatModifier } from '../../src/sim/stats/modifiers.js';
 
 function baseStats(overrides: Partial<Record<StatId, number>> = {}): BaseStats {
   return {
-    [StatId.Stammwuerze]: 10,
-    [StatId.Schluckfrequenz]: 20,
-    [StatId.Reichweite]: 30,
-    [StatId.Wurfkraft]: 3.5,
-    [StatId.Gschwindigkeit]: 1.8,
-    [StatId.Dusel]: 0,
+    [StatId.Damage]: 10,
+    [StatId.FireRate]: 20,
+    [StatId.Range]: 30,
+    [StatId.ShotSpeed]: 3.5,
+    [StatId.MoveSpeed]: 1.8,
+    [StatId.Luck]: 0,
     ...overrides,
   };
 }
@@ -18,7 +18,7 @@ function baseStats(overrides: Partial<Record<StatId, number>> = {}): BaseStats {
 function flatModifier(id: string, value: number): StatModifier[] {
   return [
     {
-      stat: StatId.Stammwuerze,
+      stat: StatId.Damage,
       op: 'add',
       value,
       source: { kind: 'item', id, label: id },
@@ -29,29 +29,29 @@ function flatModifier(id: string, value: number): StatModifier[] {
 describe('StatPipeline cache', () => {
   it('returns the base value with no modifiers registered', () => {
     const pipeline = new StatPipeline(() => baseStats());
-    expect(pipeline.value(StatId.Stammwuerze)).toBe(10);
+    expect(pipeline.value(StatId.Damage)).toBe(10);
   });
 
   it('applies modifiers registered under a source', () => {
     const pipeline = new StatPipeline(() => baseStats());
     pipeline.setSourceModifiers('item:sword', flatModifier('sword', 5));
-    expect(pipeline.value(StatId.Stammwuerze)).toBe(15);
+    expect(pipeline.value(StatId.Damage)).toBe(15);
   });
 
   it('removing a source exactly restores the previous value', () => {
     const pipeline = new StatPipeline(() => baseStats());
-    const before = pipeline.value(StatId.Stammwuerze);
+    const before = pipeline.value(StatId.Damage);
     pipeline.setSourceModifiers('item:sword', flatModifier('sword', 5));
-    expect(pipeline.value(StatId.Stammwuerze)).toBe(before + 5);
+    expect(pipeline.value(StatId.Damage)).toBe(before + 5);
     pipeline.clearSource('item:sword');
-    expect(pipeline.value(StatId.Stammwuerze)).toBe(before);
+    expect(pipeline.value(StatId.Damage)).toBe(before);
   });
 
   it('replacing a source does not double its old modifiers', () => {
     const pipeline = new StatPipeline(() => baseStats());
     pipeline.setSourceModifiers('item:sword', flatModifier('sword', 5));
     pipeline.setSourceModifiers('item:sword', flatModifier('sword', 5));
-    expect(pipeline.value(StatId.Stammwuerze)).toBe(15);
+    expect(pipeline.value(StatId.Damage)).toBe(15);
   });
 
   it('caches the resolved traces object while nothing changes', () => {
@@ -73,10 +73,10 @@ describe('StatPipeline cache', () => {
 
   it('picks up a live base-stat change even without a modifier change', () => {
     let damage = 10;
-    const pipeline = new StatPipeline(() => baseStats({ [StatId.Stammwuerze]: damage }));
-    expect(pipeline.value(StatId.Stammwuerze)).toBe(10);
+    const pipeline = new StatPipeline(() => baseStats({ [StatId.Damage]: damage }));
+    expect(pipeline.value(StatId.Damage)).toBe(10);
     damage = 25;
-    expect(pipeline.value(StatId.Stammwuerze)).toBe(25);
+    expect(pipeline.value(StatId.Damage)).toBe(25);
   });
 
   it('clearing a source that was never set is a no-op', () => {
@@ -84,6 +84,6 @@ describe('StatPipeline cache', () => {
     expect(() => {
       pipeline.clearSource('item:nothing');
     }).not.toThrow();
-    expect(pipeline.value(StatId.Stammwuerze)).toBe(10);
+    expect(pipeline.value(StatId.Damage)).toBe(10);
   });
 });

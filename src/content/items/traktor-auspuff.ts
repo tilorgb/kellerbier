@@ -8,7 +8,7 @@ import type { ItemDefinition } from '../../sim/item/definition.js';
 export const traktorAuspuff: ItemDefinition = {
   id: 'traktor-auspuff',
   name: 'Traktor-Auspuff',
-  description: 'Gschwindigkeit +25%, Dusel -3',
+  description: 'Move Speed +25%, Luck -3',
   flavourText: 'You can hear it two fields over. So can everything with a choice in the matter.',
   sprite: 'traktor-auspuff',
   pools: ['shop', 'boss', 'secret', 'curse'],
@@ -16,8 +16,8 @@ export const traktorAuspuff: ItemDefinition = {
   promilleRequirement: 'any',
   hooks: {
     modifyStats: () => [
-      { stat: 'gschwindigkeit', op: 'multiply', value: 1.25 },
-      { stat: 'dusel', op: 'add', value: -3 },
+      { stat: 'moveSpeed', op: 'multiply', value: 1.25 },
+      { stat: 'luck', op: 'add', value: -3 },
     ],
   },
 };

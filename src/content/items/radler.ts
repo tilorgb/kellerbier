@@ -3,8 +3,8 @@ import type { ItemDefinition } from '../../sim/item/definition.js';
 /**
  * Radler — beer cut with lemonade. Half the punch, twice the pace.
  *
- * A pure `modifyStats` item: `stammwuerze` halved, `schluckfrequenz` halved
- * right back — Schluckfrequenz is a tick *delay* (`sim/stats/definition.js`),
+ * A pure `modifyStats` item: `damage` halved, `fireRate` halved
+ * right back — Fire Rate is a tick *delay* (`sim/stats/definition.js`),
  * so halving it is what doubles the rate a shot actually fires at. Tagged
  * `impure` for Reinheitsgebot 1516, which strips and locks out every item
  * that mixes beer with something that is not beer.
@@ -12,7 +12,7 @@ import type { ItemDefinition } from '../../sim/item/definition.js';
 export const radler: ItemDefinition = {
   id: 'radler',
   name: 'Radler',
-  description: 'Damage -50%, fire rate +100%',
+  description: 'Damage -50%, Fire Rate +100%',
   flavourText: 'Half a beer. Twice the argument about whether it counts as one.',
   sprite: 'radler',
   pools: ['treasure', 'shop'],
@@ -21,8 +21,8 @@ export const radler: ItemDefinition = {
   tags: ['impure'],
   hooks: {
     modifyStats: () => [
-      { stat: 'stammwuerze', op: 'multiply', value: 0.5 },
-      { stat: 'schluckfrequenz', op: 'multiply', value: 0.5 },
+      { stat: 'damage', op: 'multiply', value: 0.5 },
+      { stat: 'fireRate', op: 'multiply', value: 0.5 },
     ],
   },
 };

@@ -7,7 +7,7 @@ import type { ItemDefinition } from '../../sim/item/definition.js';
 export const kraftbier: ItemDefinition = {
   id: 'kraftbier',
   name: 'Kraftbier',
-  description: 'Damage +40%, move speed -20%',
+  description: 'Damage +40%, Move Speed -20%',
   flavourText: 'The label does not say 9% for decoration.',
   sprite: 'kraftbier',
   pools: ['treasure', 'shop'],
@@ -15,8 +15,8 @@ export const kraftbier: ItemDefinition = {
   promilleRequirement: 'any',
   hooks: {
     modifyStats: () => [
-      { stat: 'stammwuerze', op: 'multiply', value: 1.4 },
-      { stat: 'gschwindigkeit', op: 'multiply', value: 0.8 },
+      { stat: 'damage', op: 'multiply', value: 1.4 },
+      { stat: 'moveSpeed', op: 'multiply', value: 0.8 },
     ],
   },
   /**
@@ -25,7 +25,7 @@ export const kraftbier: ItemDefinition = {
    * variant," not a bigger version of the same trade-off.
    */
   legendaryRoll: [
-    { stat: 'stammwuerze', op: 'multiply', value: 1.4 },
-    { stat: 'gschwindigkeit', op: 'multiply', value: 0.98 },
+    { stat: 'damage', op: 'multiply', value: 1.4 },
+    { stat: 'moveSpeed', op: 'multiply', value: 0.98 },
   ],
 };

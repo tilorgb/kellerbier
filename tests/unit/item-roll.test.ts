@@ -32,7 +32,7 @@ describe('itemEligibleForMachine', () => {
   it('is eligible when modifyStats returns something for the current state', () => {
     const item = new ItemRegistry([
       baseItem('a', {
-        hooks: { modifyStats: () => [{ stat: 'stammwuerze', op: 'add', value: 1 }] },
+        hooks: { modifyStats: () => [{ stat: 'damage', op: 'add', value: 1 }] },
       }),
     ]).at(0);
     expect(itemEligibleForMachine(item, runtimeState())).toBe(true);
@@ -59,7 +59,7 @@ describe('itemEligibleForMachine', () => {
         active: { maxCharge: 900 },
         hooks: {
           modifyStats: (state) =>
-            state.charge < 0 ? [{ stat: 'schluckfrequenz', op: 'multiply', value: 0.15 }] : [],
+            state.charge < 0 ? [{ stat: 'fireRate', op: 'multiply', value: 0.15 }] : [],
         },
       }),
     ]).at(0);
@@ -74,8 +74,8 @@ describe('machineRollTargets (#238)', () => {
       baseItem('a', {
         hooks: {
           modifyStats: () => [
-            { stat: 'stammwuerze', op: 'add', value: 1 },
-            { stat: 'gschwindigkeit', op: 'multiply', value: 1.1 },
+            { stat: 'damage', op: 'add', value: 1 },
+            { stat: 'moveSpeed', op: 'multiply', value: 1.1 },
           ],
         },
       }),
@@ -95,7 +95,7 @@ describe('machineRollTargets (#238)', () => {
     const item = new ItemRegistry([
       baseItem('a', {
         active: { maxCharge: 900 },
-        hooks: { modifyStats: () => [{ stat: 'stammwuerze', op: 'add', value: 1 }] },
+        hooks: { modifyStats: () => [{ stat: 'damage', op: 'add', value: 1 }] },
       }),
     ]).at(0);
     const targets = machineRollTargets(item, runtimeState());
@@ -105,13 +105,13 @@ describe('machineRollTargets (#238)', () => {
 });
 
 describe('machineRollTierWeight / selectMachineRollTier', () => {
-  it('is unaffected by Dusel for the two middle tiers', () => {
+  it('is unaffected by Luck for the two middle tiers', () => {
     const low = machineRollTierWeight('common', 0, DEFAULT_MACHINE_TUNING);
     const high = machineRollTierWeight('common', 50, DEFAULT_MACHINE_TUNING);
     expect(high).toBe(low);
   });
 
-  it('pushes weight up for rare/legendary and down for unlucky as Dusel rises', () => {
+  it('pushes weight up for rare/legendary and down for unlucky as Luck rises', () => {
     const rareLow = machineRollTierWeight('rare', 0, DEFAULT_MACHINE_TUNING);
     const rareHigh = machineRollTierWeight('rare', 20, DEFAULT_MACHINE_TUNING);
     expect(rareHigh).toBeGreaterThan(rareLow);
@@ -121,7 +121,7 @@ describe('machineRollTierWeight / selectMachineRollTier', () => {
     expect(unluckyHigh).toBeLessThan(unluckyLow);
   });
 
-  it('never goes negative even at extreme Dusel', () => {
+  it('never goes negative even at extreme Luck', () => {
     expect(machineRollTierWeight('unlucky', 10000, DEFAULT_MACHINE_TUNING)).toBeGreaterThanOrEqual(
       0,
     );
@@ -149,13 +149,13 @@ describe('machineRollTierWeight / selectMachineRollTier', () => {
 describe('rollItemStatModifiers', () => {
   const multiplyItem = new ItemRegistry([
     baseItem('multiply-item', {
-      hooks: { modifyStats: () => [{ stat: 'stammwuerze', op: 'multiply', value: 1.4 }] },
+      hooks: { modifyStats: () => [{ stat: 'damage', op: 'multiply', value: 1.4 }] },
     }),
   ]).at(0);
 
   const addItem = new ItemRegistry([
     baseItem('add-item', {
-      hooks: { modifyStats: () => [{ stat: 'stammwuerze', op: 'add', value: 0.2 }] },
+      hooks: { modifyStats: () => [{ stat: 'damage', op: 'add', value: 0.2 }] },
     }),
   ]).at(0);
 
@@ -213,8 +213,8 @@ describe('rollItemStatModifiers', () => {
   it('a legendary roll uses the authored legendaryRoll outright, replacing the generic delta', () => {
     const item = new ItemRegistry([
       baseItem('legendary-item', {
-        hooks: { modifyStats: () => [{ stat: 'stammwuerze', op: 'multiply', value: 1.4 }] },
-        legendaryRoll: [{ stat: 'stammwuerze', op: 'multiply', value: 2 }],
+        hooks: { modifyStats: () => [{ stat: 'damage', op: 'multiply', value: 1.4 }] },
+        legendaryRoll: [{ stat: 'damage', op: 'multiply', value: 2 }],
       }),
     ]).at(0);
     const result = rollItemStatModifiers(
@@ -224,7 +224,7 @@ describe('rollItemStatModifiers', () => {
       new Rng(1),
       DEFAULT_MACHINE_TUNING,
     );
-    expect(result.modifiers).toEqual([{ stat: 'stammwuerze', op: 'multiply', value: 2 }]);
+    expect(result.modifiers).toEqual([{ stat: 'damage', op: 'multiply', value: 2 }]);
     expect(result.usedLegendaryFallback).toBe(false);
   });
 
@@ -292,7 +292,7 @@ describe('rollItemStatModifiers', () => {
       const hybrid = new ItemRegistry([
         baseItem('hybrid', {
           active: { maxCharge: 900 },
-          hooks: { modifyStats: () => [{ stat: 'stammwuerze', op: 'add', value: 1 }] },
+          hooks: { modifyStats: () => [{ stat: 'damage', op: 'add', value: 1 }] },
         }),
       ]).at(0);
       // Try a spread of draws; every single result must be exactly one kind, never a mix.

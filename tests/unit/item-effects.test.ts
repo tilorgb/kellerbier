@@ -122,7 +122,7 @@ describe('GameSim.spawnItemProjectile', () => {
     expect(spawned).toEqual([slot]);
   });
 
-  it('defaults damage to the resolved Stammwürze, and normalises the direction', () => {
+  it('defaults damage to the resolved Damage, and normalises the direction', () => {
     const sim = new GameSim({ room: bareRoom(), population: 'empty' });
     const slot = sim.spawnItemProjectile(0, 0, 3, 4); // a 3-4-5 triangle, deliberately not a unit vector
     const speed = Math.hypot(
@@ -130,7 +130,7 @@ describe('GameSim.spawnItemProjectile', () => {
       sim.projectiles.velocityY[slot] ?? 0,
     );
     expect(speed).toBeCloseTo(sim.tuning.shooting.shotSpeed, 5);
-    expect(sim.projectiles.damage[slot]).toBe(Math.round(sim.stats.value('stammwuerze')));
+    expect(sim.projectiles.damage[slot]).toBe(Math.round(sim.stats.value('damage')));
   });
 
   it('a tag granted from onProjectileSpawn is captured by finalizeProjectileTags', () => {
@@ -264,20 +264,20 @@ describe('GameSim.banItemFromPool', () => {
 describe('GameSim.refreshItemStats', () => {
   it('re-resolves modifyStats immediately, without waiting for the next tick', () => {
     const item = baseItem('unstable', {
-      hooks: { modifyStats: (state) => [{ stat: 'stammwuerze', op: 'add', value: state.charge }] },
+      hooks: { modifyStats: (state) => [{ stat: 'damage', op: 'add', value: state.charge }] },
     });
     const sim = new GameSim({ room: bareRoom(), items: [item], population: 'empty' });
     sim.pickUpItem('unstable');
-    const base = sim.stats.value('stammwuerze');
+    const base = sim.stats.value('damage');
 
     // Mutating `charge` directly does not, by itself, dirty the pipeline —
     // only `pickUpItem`/`removeItem` do that automatically (see the doc
     // comment on `refreshItemStats`).
     sim.itemState('unstable').charge = 5;
-    expect(sim.stats.value('stammwuerze')).toBe(base);
+    expect(sim.stats.value('damage')).toBe(base);
 
     sim.refreshItemStats('unstable');
-    expect(sim.stats.value('stammwuerze')).toBe(base + 5);
+    expect(sim.stats.value('damage')).toBe(base + 5);
   });
 
   it('does nothing for an unknown id, rather than throwing', () => {
@@ -440,9 +440,7 @@ describe('#29 acceptance criteria', () => {
       await import('../../src/content/items/apfelkuchen-mit-rosinen.js');
     const { derRosinenklauber } = await import('../../src/content/items/der-rosinenklauber.js');
 
-    const unmodified = new GameSim({ room: bareRoom(), population: 'empty' }).stats.value(
-      'reichweite',
-    );
+    const unmodified = new GameSim({ room: bareRoom(), population: 'empty' }).stats.value('range');
 
     // The rosinen item first, then the Klauber.
     const simA = new GameSim({
@@ -451,10 +449,10 @@ describe('#29 acceptance criteria', () => {
       population: 'empty',
     });
     simA.pickUpItem('apfelkuchen-mit-rosinen');
-    const penalised = simA.stats.value('reichweite');
+    const penalised = simA.stats.value('range');
     expect(penalised).toBeLessThan(unmodified);
     simA.pickUpItem('der-rosinenklauber');
-    expect(simA.stats.value('reichweite')).toBeCloseTo(unmodified, 5);
+    expect(simA.stats.value('range')).toBeCloseTo(unmodified, 5);
 
     // The Klauber first, then the rosinen item.
     const simB = new GameSim({
@@ -464,11 +462,11 @@ describe('#29 acceptance criteria', () => {
     });
     simB.pickUpItem('der-rosinenklauber');
     simB.pickUpItem('apfelkuchen-mit-rosinen');
-    expect(simB.stats.value('reichweite')).toBeCloseTo(unmodified, 5);
+    expect(simB.stats.value('range')).toBeCloseTo(unmodified, 5);
 
     // Losing the Klauber restores the drawback.
     simB.removeItem('der-rosinenklauber');
-    expect(simB.stats.value('reichweite')).toBeCloseTo(penalised, 5);
+    expect(simB.stats.value('range')).toBeCloseTo(penalised, 5);
   });
 
   it('three independently-authored combinations of items compose into shots none of them describes alone', async () => {

@@ -17,14 +17,14 @@ const GRIP_TICKS = 2;
 export const haferlschuh: ItemDefinition = {
   id: 'haferlschuh',
   name: 'Haferlschuh',
-  description: 'Move speed +15%, immune to slick puddles',
+  description: 'Move Speed +15%, immune to slick puddles',
   flavourText: 'Every nail hand-driven by someone who takes this far too seriously.',
   sprite: 'haferlschuh',
   pools: ['treasure', 'shop'],
   quality: 0,
   promilleRequirement: 'any',
   hooks: {
-    modifyStats: () => [{ stat: 'gschwindigkeit', op: 'multiply', value: 1.15 }],
+    modifyStats: () => [{ stat: 'moveSpeed', op: 'multiply', value: 1.15 }],
     onTick: (ctx) => {
       ctx.sim.puddleImmuneTicks = Math.max(ctx.sim.puddleImmuneTicks, GRIP_TICKS);
     },

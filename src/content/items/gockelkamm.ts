@@ -8,7 +8,7 @@ import type { ItemDefinition } from '../../sim/item/definition.js';
 export const gockelkamm: ItemDefinition = {
   id: 'gockelkamm',
   name: 'Gockelkamm',
-  description: 'Schluckfrequenz +25%, Reichweite -15%',
+  description: 'Fire Rate +25%, Range -15%',
   flavourText: 'Crows the instant the sun even considers rising.',
   sprite: 'gockelkamm',
   pools: ['treasure', 'shop'],
@@ -16,8 +16,8 @@ export const gockelkamm: ItemDefinition = {
   promilleRequirement: 'any',
   hooks: {
     modifyStats: () => [
-      { stat: 'schluckfrequenz', op: 'multiply', value: 1.25 },
-      { stat: 'reichweite', op: 'multiply', value: 0.85 },
+      { stat: 'fireRate', op: 'multiply', value: 1.25 },
+      { stat: 'range', op: 'multiply', value: 0.85 },
     ],
   },
 };

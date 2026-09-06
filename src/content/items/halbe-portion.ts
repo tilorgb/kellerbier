@@ -2,7 +2,7 @@ import type { ItemDefinition } from '../../sim/item/definition.js';
 
 /** Trinkfest levels one copy costs, and the fire-rate perk it trades for. */
 const TRINKFEST_LOSS = 1;
-const SCHLUCKFREQUENZ_MULTIPLIER = 1 / 1.1;
+const FIRE_RATE_MULTIPLIER = 1 / 1.1;
 
 /**
  * Halbe Portion — a lightweight, in the old Bavarian sense of someone who
@@ -19,19 +19,17 @@ const SCHLUCKFREQUENZ_MULTIPLIER = 1 / 1.1;
 export const halbePortion: ItemDefinition = {
   id: 'halbe-portion',
   name: 'Halbe Portion',
-  description: 'Trinkfest -1 while held. Schluckfrequenz +10%',
+  description: 'Trinkfest -1 while held. Fire Rate +10%',
   flavourText: 'Two Radler in and already asking where the toilet is.',
   sprite: 'halbe-portion',
   pools: ['treasure', 'shop'],
   quality: 1,
   promilleRequirement: 'any',
-  // No tier gate — but it is Promille machinery all the same (sells Trinkfest for Schluckfrequenz),
+  // No tier gate — but it is Promille machinery all the same (sells Trinkfest for Fire Rate),
   // so a sober run never offers it (#85).
   needsPromille: true,
   hooks: {
-    modifyStats: () => [
-      { stat: 'schluckfrequenz', op: 'multiply', value: SCHLUCKFREQUENZ_MULTIPLIER },
-    ],
+    modifyStats: () => [{ stat: 'fireRate', op: 'multiply', value: FIRE_RATE_MULTIPLIER }],
     onPickup: (ctx) => {
       if (ctx.state.count === 1) {
         ctx.sim.lowerTrinkfest(TRINKFEST_LOSS);
@@ -42,5 +40,5 @@ export const halbePortion: ItemDefinition = {
     },
   },
   /** Der Losbrunnen's rarest roll (#218): the fire-rate perk this trades Trinkfest for, sharpened well past the ordinary version. */
-  legendaryRoll: [{ stat: 'schluckfrequenz', op: 'multiply', value: 1 / 1.3 }],
+  legendaryRoll: [{ stat: 'fireRate', op: 'multiply', value: 1 / 1.3 }],
 };

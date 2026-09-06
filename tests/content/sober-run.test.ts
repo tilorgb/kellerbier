@@ -70,7 +70,7 @@ const registry = new ItemRegistry(ITEM_DEFINITIONS);
 const SOBER_CONTEXT = {
   promilleUnlocked: false,
   floor: 1,
-  dusel: 0,
+  luck: 0,
   taken: new Set<string>(),
 };
 

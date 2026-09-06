@@ -13,17 +13,17 @@ const PROMILLE_PER_FLOOR = 0.3;
 export const teufelstrittRuss: ItemDefinition = {
   id: 'teufelstritt-russ',
   name: 'Teufelstritt-Ruß',
-  description: 'Stammwürze +15%. Promille +0.3 every floor',
+  description: 'Damage +15%. Promille +0.3 every floor',
   flavourText: 'Wipes off your boot easily enough. Never once off anything else.',
   sprite: 'teufelstritt-russ',
   pools: ['shop', 'devil', 'secret'],
   quality: 2,
   promilleRequirement: 'any',
-  // No tier gate — but it is Promille machinery all the same (its Stammwürze is paid for in Promille every floor),
+  // No tier gate — but it is Promille machinery all the same (its Damage is paid for in Promille every floor),
   // so a sober run never offers it (#85).
   needsPromille: true,
   hooks: {
-    modifyStats: () => [{ stat: 'stammwuerze', op: 'multiply', value: DAMAGE_MULTIPLIER }],
+    modifyStats: () => [{ stat: 'damage', op: 'multiply', value: DAMAGE_MULTIPLIER }],
     onFloorStart: (ctx) => {
       ctx.sim.addPromille(PROMILLE_PER_FLOOR);
     },

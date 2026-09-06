@@ -1,6 +1,6 @@
 import type { ItemDefinition } from '../../sim/item/definition.js';
 
-/** Shots between an extra aimed volley, and its damage relative to Stammwürze. */
+/** Shots between an extra aimed volley, and its damage relative to Damage. */
 const SHOTS_PER_VOLLEY = 5;
 const DAMAGE_SCALE = 0.7;
 
@@ -39,7 +39,7 @@ export const braumeisterVisier: ItemDefinition = {
       const playerIndex = sim.playerIndex;
       const originX = sim.positionX(playerIndex) + ctx.directionX * tuning.muzzleOffset;
       const originY = sim.positionY(playerIndex) + ctx.directionY * tuning.muzzleOffset;
-      const damage = Math.max(1, Math.round(sim.stats.value('stammwuerze') * DAMAGE_SCALE));
+      const damage = Math.max(1, Math.round(sim.stats.value('damage') * DAMAGE_SCALE));
       const slot = sim.spawnItemProjectile(originX, originY, ctx.directionX, ctx.directionY, {
         damage,
       });

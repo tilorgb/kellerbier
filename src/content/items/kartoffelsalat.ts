@@ -15,7 +15,7 @@ import type { ItemDefinition } from '../../sim/item/definition.js';
 export const kartoffelsalat: ItemDefinition = {
   id: 'kartoffelsalat',
   name: 'Kartoffelsalat',
-  description: 'Reichweite and Gschwindigkeit up. Wurfkraft down',
+  description: 'Range and Move Speed up. Shot Speed down',
   flavourText: 'Every family recipe is the only correct one and they cannot all be right.',
   sprite: 'kartoffelsalat',
   pools: ['treasure', 'shop'],
@@ -23,9 +23,9 @@ export const kartoffelsalat: ItemDefinition = {
   promilleRequirement: 'any',
   hooks: {
     modifyStats: () => [
-      { stat: 'reichweite', op: 'multiply', value: 1.2 },
-      { stat: 'gschwindigkeit', op: 'multiply', value: 1.1 },
-      { stat: 'wurfkraft', op: 'multiply', value: 0.85 },
+      { stat: 'range', op: 'multiply', value: 1.2 },
+      { stat: 'moveSpeed', op: 'multiply', value: 1.1 },
+      { stat: 'shotSpeed', op: 'multiply', value: 0.85 },
     ],
   },
 };

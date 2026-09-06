@@ -75,8 +75,8 @@ describe('characters (#47)', () => {
     const bare = new GameSim({ room: openRoom() });
     const chosen = simFor(alois.traits);
     expect(bare.character.id).toBe('alois');
-    expect(chosen.stats.value(StatId.Gschwindigkeit)).toBe(bare.stats.value(StatId.Gschwindigkeit));
-    for (const stat of [StatId.Stammwuerze, StatId.Schluckfrequenz, StatId.Reichweite]) {
+    expect(chosen.stats.value(StatId.MoveSpeed)).toBe(bare.stats.value(StatId.MoveSpeed));
+    for (const stat of [StatId.Damage, StatId.FireRate, StatId.Range]) {
       expect(chosen.stats.trace(stat).steps).toHaveLength(1);
     }
   });
@@ -92,14 +92,10 @@ describe('characters (#47)', () => {
   it('folds a character’s stat block into the pipeline as its own named source', () => {
     const fast = simFor(resi.traits);
     const plain = simFor(alois.traits);
-    expect(fast.stats.value(StatId.Gschwindigkeit)).toBeGreaterThan(
-      plain.stats.value(StatId.Gschwindigkeit),
-    );
+    expect(fast.stats.value(StatId.MoveSpeed)).toBeGreaterThan(plain.stats.value(StatId.MoveSpeed));
     // A delay, so faster firing is a smaller number — see `tuning.ts`.
-    expect(fast.stats.value(StatId.Schluckfrequenz)).toBeLessThan(
-      plain.stats.value(StatId.Schluckfrequenz),
-    );
-    const trace = fast.stats.trace(StatId.Gschwindigkeit);
+    expect(fast.stats.value(StatId.FireRate)).toBeLessThan(plain.stats.value(StatId.FireRate));
+    const trace = fast.stats.trace(StatId.MoveSpeed);
     expect(trace.steps.some((step) => step.stage === 'multiply' && step.source.id === 'resi')).toBe(
       true,
     );
@@ -157,7 +153,7 @@ describe('König Ludwig — flight and the purse (#47)', () => {
   it('spends a Biermarke on the drum, and loses the crown’s damage when the purse empties', () => {
     const sim = simFor(koenigLudwig.traits);
     const interval = Math.round(DEFAULT_CHARACTER_TUNING.purseDrainTicks);
-    const rich = sim.stats.value(StatId.Stammwuerze);
+    const rich = sim.stats.value(StatId.Damage);
     expect(sim.pursePowered).toBe(true);
 
     for (let tick = 0; tick < interval; tick++) {
@@ -170,32 +166,32 @@ describe('König Ludwig — flight and the purse (#47)', () => {
     }
     expect(sim.biermarken).toBe(0);
     expect(sim.pursePowered).toBe(false);
-    expect(sim.stats.value(StatId.Stammwuerze)).toBeLessThan(rich);
+    expect(sim.stats.value(StatId.Damage)).toBeLessThan(rich);
 
     // And a coin puts him straight back in the air.
     sim.addBiermarken(5);
     sim.step(IDLE);
     expect(sim.pursePowered).toBe(true);
-    expect(sim.stats.value(StatId.Stammwuerze)).toBe(rich);
+    expect(sim.stats.value(StatId.Damage)).toBe(rich);
   });
 });
 
 describe('Der Wolpertinger — the reroll (#47)', () => {
   it('rolls a stat block at run start and a different one on the next floor', () => {
     const sim = simFor(derWolpertinger.traits);
-    const first = sim.stats.value(StatId.Stammwuerze);
+    const first = sim.stats.value(StatId.Damage);
     expect(sim.chaosFloor).toBe(1);
     expect(first).not.toBe(sim.tuning.shooting.shotDamage);
 
     sim.loadRoom(cellarRoom, 2);
     expect(sim.chaosFloor).toBe(2);
-    expect(sim.stats.value(StatId.Stammwuerze)).not.toBe(first);
+    expect(sim.stats.value(StatId.Damage)).not.toBe(first);
   });
 
   it('is still the same monster on the same seed — chaos, not noise', () => {
     const a = simFor(derWolpertinger.traits);
     const b = simFor(derWolpertinger.traits);
-    for (const stat of [StatId.Stammwuerze, StatId.Gschwindigkeit, StatId.Reichweite]) {
+    for (const stat of [StatId.Damage, StatId.MoveSpeed, StatId.Range]) {
       expect(b.stats.value(stat)).toBe(a.stats.value(stat));
     }
   });
@@ -224,8 +220,8 @@ describe('Der Wolpertinger — the reroll (#47)', () => {
         sim.positionY(sim.playerIndex),
         sim.playerHealth,
         sim.projectiles.liveCount,
-        sim.stats.value(StatId.Stammwuerze),
-        sim.stats.value(StatId.Gschwindigkeit),
+        sim.stats.value(StatId.Damage),
+        sim.stats.value(StatId.MoveSpeed),
       ].join(':');
     };
     expect(play()).toBe(play());
@@ -233,9 +229,9 @@ describe('Der Wolpertinger — the reroll (#47)', () => {
 
   it('leaves everybody else’s stats exactly where they were', () => {
     const sim = simFor(resi.traits);
-    const before = sim.stats.value(StatId.Stammwuerze);
+    const before = sim.stats.value(StatId.Damage);
     sim.loadRoom(cellarRoom, 2);
-    expect(sim.stats.value(StatId.Stammwuerze)).toBe(before);
+    expect(sim.stats.value(StatId.Damage)).toBe(before);
     expect(sim.chaosFloor).toBe(-1);
   });
 });

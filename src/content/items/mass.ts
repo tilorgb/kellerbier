@@ -16,7 +16,7 @@ const RADIUS_SCALE = 2.5;
 export const mass: ItemDefinition = {
   id: 'mass',
   name: 'Maß',
-  description: 'One huge, slow shot instead of a stream. Damage +200%, fire rate -66%',
+  description: 'One huge, slow shot instead of a stream. Damage +200%, Fire Rate -66%',
   flavourText: 'One litre. One decision. No refills mid-fight.',
   sprite: 'mass',
   pools: ['shop', 'boss'],
@@ -24,9 +24,9 @@ export const mass: ItemDefinition = {
   promilleRequirement: 'any',
   hooks: {
     modifyStats: () => [
-      { stat: 'stammwuerze', op: 'multiply', value: 3 },
-      { stat: 'schluckfrequenz', op: 'multiply', value: 3 },
-      { stat: 'wurfkraft', op: 'multiply', value: 0.6 },
+      { stat: 'damage', op: 'multiply', value: 3 },
+      { stat: 'fireRate', op: 'multiply', value: 3 },
+      { stat: 'shotSpeed', op: 'multiply', value: 0.6 },
     ],
     onProjectileSpawn: (ctx) => {
       const radius = ctx.sim.projectiles.radius[ctx.projectile] ?? 0;

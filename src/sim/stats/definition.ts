@@ -6,40 +6,40 @@
  * identity rather than the resolver.
  */
 export const StatId = {
-  /** Damage. Bavarian: original gravity. */
-  Stammwuerze: 'stammwuerze',
+  /** Damage per hit. */
+  Damage: 'damage',
   /** Fire rate, stored as a tick delay — never a rate. See `tuning.ts`. */
-  Schluckfrequenz: 'schluckfrequenz',
+  FireRate: 'fireRate',
   /** Range, as projectile lifetime in ticks. */
-  Reichweite: 'reichweite',
+  Range: 'range',
   /** Shot speed, in pixels per tick. */
-  Wurfkraft: 'wurfkraft',
+  ShotSpeed: 'shotSpeed',
   /** Move speed, in pixels per tick. */
-  Gschwindigkeit: 'gschwindigkeit',
+  MoveSpeed: 'moveSpeed',
   /** Luck. Gates random proc chances; nothing reads it yet. */
-  Dusel: 'dusel',
+  Luck: 'luck',
 } as const;
 
 export type StatId = (typeof StatId)[keyof typeof StatId];
 
 /** Every stat, in the fixed order the debug overlay lists them. */
 export const STAT_IDS: readonly StatId[] = [
-  StatId.Stammwuerze,
-  StatId.Schluckfrequenz,
-  StatId.Reichweite,
-  StatId.Wurfkraft,
-  StatId.Gschwindigkeit,
-  StatId.Dusel,
+  StatId.Damage,
+  StatId.FireRate,
+  StatId.Range,
+  StatId.ShotSpeed,
+  StatId.MoveSpeed,
+  StatId.Luck,
 ];
 
-/** Bavarian display name for each stat, for the debug overlay. */
+/** Plain-English display name for each stat, for the debug overlay. */
 export const STAT_LABELS: Readonly<Record<StatId, string>> = {
-  [StatId.Stammwuerze]: 'Stammwürze',
-  [StatId.Schluckfrequenz]: 'Schluckfrequenz',
-  [StatId.Reichweite]: 'Reichweite',
-  [StatId.Wurfkraft]: 'Wurfkraft',
-  [StatId.Gschwindigkeit]: 'Gschwindigkeit',
-  [StatId.Dusel]: 'Dusel',
+  [StatId.Damage]: 'Damage',
+  [StatId.FireRate]: 'Fire Rate',
+  [StatId.Range]: 'Range',
+  [StatId.ShotSpeed]: 'Shot Speed',
+  [StatId.MoveSpeed]: 'Move Speed',
+  [StatId.Luck]: 'Luck',
 };
 
 /** The pipeline's starting point for every stat, before any modifier runs. */

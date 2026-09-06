@@ -16,8 +16,8 @@ function bareRoom(): RoomGeometry {
 describe('GameSim stat pipeline', () => {
   it('resolves to the base value with Promille sober', () => {
     const sim = new GameSim({ room: bareRoom() });
-    expect(sim.stats.value(StatId.Stammwuerze)).toBe(sim.tuning.shooting.shotDamage);
-    expect(sim.stats.value(StatId.Schluckfrequenz)).toBe(sim.tuning.shooting.fireDelayTicks);
+    expect(sim.stats.value(StatId.Damage)).toBe(sim.tuning.shooting.shotDamage);
+    expect(sim.stats.value(StatId.FireRate)).toBe(sim.tuning.shooting.fireDelayTicks);
   });
 
   it('traces Promille as a named source once a tier is active', () => {
@@ -25,7 +25,7 @@ describe('GameSim stat pipeline', () => {
     sim.tuning.promille.current = 3.5; // Vollrausch
     sim.step(createInputFrame());
 
-    const trace = sim.stats.trace(StatId.Stammwuerze);
+    const trace = sim.stats.trace(StatId.Damage);
     const multiplyStep = trace.steps.find((step) => step.stage === 'multiply');
     expect(multiplyStep).toBeDefined();
     expect(multiplyStep?.stage === 'multiply' && multiplyStep.source.kind).toBe('promille');
@@ -34,27 +34,25 @@ describe('GameSim stat pipeline', () => {
 
   it('removing the Promille modifier (sobering up) exactly restores the base value', () => {
     const sim = new GameSim({ room: bareRoom() });
-    const base = sim.stats.value(StatId.Stammwuerze);
+    const base = sim.stats.value(StatId.Damage);
 
     sim.tuning.promille.current = 3.5; // Vollrausch
     sim.step(createInputFrame());
-    expect(sim.stats.value(StatId.Stammwuerze)).not.toBe(base);
+    expect(sim.stats.value(StatId.Damage)).not.toBe(base);
 
     sim.tuning.promille.current = 0; // Nuchtern
     sim.step(createInputFrame());
-    expect(sim.stats.value(StatId.Stammwuerze)).toBe(base);
+    expect(sim.stats.value(StatId.Damage)).toBe(base);
   });
 
-  it('floors Schluckfrequenz at one tick rather than going to zero or negative', () => {
+  it('floors Fire Rate at one tick rather than going to zero or negative', () => {
     const sim = new GameSim({ room: bareRoom() });
     sim.tuning.shooting.fireDelayTicks = 1;
     sim.tuning.promille.current = 3.5; // Vollrausch: fire-rate bonus shrinks the delay further
     sim.step(createInputFrame());
 
-    expect(sim.stats.value(StatId.Schluckfrequenz)).toBeGreaterThanOrEqual(1);
-    const capStep = sim.stats
-      .trace(StatId.Schluckfrequenz)
-      .steps.find((step) => step.stage === 'cap');
+    expect(sim.stats.value(StatId.FireRate)).toBeGreaterThanOrEqual(1);
+    const capStep = sim.stats.trace(StatId.FireRate).steps.find((step) => step.stage === 'cap');
     expect(capStep).toBeDefined();
   });
 });

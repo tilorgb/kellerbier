@@ -14,7 +14,7 @@ const SHOCKWAVE_STRENGTH = 1.6;
  * Centred on the kill (`ctx.target`'s own position), not the player —
  * `perchtenrute.ts`'s own on-kill push is the precedent this mirrors, just
  * anchored at the body that died rather than at the player, and with no
- * drawback: Perchtenrute is `curse`-pooled and taxes Stammwürze for it,
+ * drawback: Perchtenrute is `curse`-pooled and taxes Damage for it,
  * this is a plain reward the way the rest of the set is.
  */
 export const braumeisterHammer: ItemDefinition = {

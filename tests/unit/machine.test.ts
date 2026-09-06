@@ -32,7 +32,7 @@ function baseItem(id: string, overrides: Partial<ItemDefinition> = {}): ItemDefi
     pools: ['boss'],
     quality: 0,
     promilleRequirement: 'any',
-    hooks: { modifyStats: () => [{ stat: 'stammwuerze', op: 'add', value: 1 }] },
+    hooks: { modifyStats: () => [{ stat: 'damage', op: 'add', value: 1 }] },
     ...overrides,
   };
 }
@@ -398,9 +398,9 @@ describe('Der Losbrunnen — rolls and cost (#218)', () => {
     sim.pickUpItem('a');
     standAtMachine(sim);
 
-    const before = sim.stats.value(StatId.Stammwuerze);
+    const before = sim.stats.value(StatId.Damage);
     feed(sim);
-    const after = sim.stats.value(StatId.Stammwuerze);
+    const after = sim.stats.value(StatId.Damage);
     expect(after).not.toBe(before);
     expect(sim.machinePreview?.lastRollSummary).toBeDefined();
   });
@@ -447,7 +447,7 @@ describe('Der Losbrunnen — rolls and cost (#218)', () => {
       sim.pickUpItem('a');
       standAtMachine(sim);
       feed(sim);
-      return sim.stats.value(StatId.Stammwuerze);
+      return sim.stats.value(StatId.Damage);
     };
     expect(run()).toBe(run());
   });
@@ -455,23 +455,23 @@ describe('Der Losbrunnen — rolls and cost (#218)', () => {
   it('losing the last copy of the fed item clears its roll source', () => {
     const sim = simWithDeadBoss([baseItem('a')]);
     sim.tuning.machine.breakChance = 0;
-    const withoutItem = sim.stats.value(StatId.Stammwuerze);
+    const withoutItem = sim.stats.value(StatId.Damage);
     sim.addBiermarken(10);
     sim.pickUpItem('a');
-    const withItemNoRoll = sim.stats.value(StatId.Stammwuerze);
+    const withItemNoRoll = sim.stats.value(StatId.Damage);
     expect(withItemNoRoll).toBe(withoutItem + 1); // sanity: the item's own flat +1
 
     standAtMachine(sim);
     feed(sim);
 
-    const withRoll = sim.stats.value(StatId.Stammwuerze);
+    const withRoll = sim.stats.value(StatId.Damage);
     expect(withRoll).not.toBe(withItemNoRoll); // the roll actually changed something
     sim.removeItem('a');
-    expect(sim.stats.value(StatId.Stammwuerze)).toBe(withoutItem); // roll source cleared too, not just the item's own
+    expect(sim.stats.value(StatId.Damage)).toBe(withoutItem); // roll source cleared too, not just the item's own
     // Picking it back up folds only its own honest `modifyStats` source —
     // the roll is gone, not silently reapplied.
     sim.pickUpItem('a');
-    expect(sim.stats.value(StatId.Stammwuerze)).toBe(withItemNoRoll);
+    expect(sim.stats.value(StatId.Damage)).toBe(withItemNoRoll);
   });
 });
 
@@ -804,7 +804,7 @@ describe('Der Losbrunnen — the redesigned picker: rolling, results and choosin
     sim.pickUpItem('a');
     standAtMachine(sim);
 
-    const before = sim.stats.value(StatId.Stammwuerze);
+    const before = sim.stats.value(StatId.Damage);
     sim.step(pressUse());
     sim.step(IDLE);
     sim.step(pressUse());
@@ -813,7 +813,7 @@ describe('Der Losbrunnen — the redesigned picker: rolling, results and choosin
 
     expect(sim.activeMachine?.broken).toBe(true);
     expect(sim.machineRollDisplay).toBeNull();
-    expect(sim.stats.value(StatId.Stammwuerze)).toBe(before); // nothing was ever applied
+    expect(sim.stats.value(StatId.Damage)).toBe(before); // nothing was ever applied
   });
 
   it('move cycles the current selection among three candidates, and use confirms whichever is selected', () => {

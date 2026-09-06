@@ -21,8 +21,8 @@ export interface ItemOfferContext {
   readonly promilleUnlocked: boolean;
   /** The current floor (`GameSim.currentFloor`) — deeper floors skew the draw toward rarer quality tiers. */
   readonly floor: number;
-  /** The player's resolved Dusel stat (`sim.stats.value(StatId.Dusel)`) — same skew, driven by a build choice instead of progress. */
-  readonly dusel: number;
+  /** The player's resolved Luck stat (`sim.stats.value(StatId.Luck)`) — same skew, driven by a build choice instead of progress. */
+  readonly luck: number;
   /**
    * Item ids already taken this run. Populated only when an offer is
    * actually accepted (`GameSim.takePedestalItem`), never when one is
@@ -68,7 +68,7 @@ const QUALITY_BASE_WEIGHT_KEYS = [
 
 /**
  * How heavily `item` is weighted in the draw: a per-tier base weight, biased
- * upward for higher tiers by both floor depth and the player's Dusel. Tier 0
+ * upward for higher tiers by both floor depth and the player's Luck. Tier 0
  * carries no bias (`quality * bias` is 0 there) by construction — depth and
  * luck are meant to make the *rare* tiers more likely, not to make the
  * common tier vanish.
@@ -83,12 +83,12 @@ export function itemOfferWeight(
     1 +
     item.quality *
       (Math.max(0, ctx.floor) * tuning.floorQualityBias +
-        Math.max(0, ctx.dusel) * tuning.duselQualityBias);
+        Math.max(0, ctx.luck) * tuning.luckQualityBias);
   return Math.max(0, base * bias);
 }
 
 /**
- * Draws one item from `pool`, weighted by quality/floor/Dusel among whatever
+ * Draws one item from `pool`, weighted by quality/floor/Luck among whatever
  * is currently eligible.
  *
  * Returns `undefined` — never throws — the moment nothing in the pool is

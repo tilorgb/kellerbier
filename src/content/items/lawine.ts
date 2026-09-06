@@ -1,6 +1,6 @@
 import type { ItemDefinition } from '../../sim/item/definition.js';
 
-/** Cooldown between avalanches (60/s), the blast's radius, its damage relative to Stammwürze, and its knockback strength. */
+/** Cooldown between avalanches (60/s), the blast's radius, its damage relative to Damage, and its knockback strength. */
 const COOLDOWN_TICKS = 600;
 const BLAST_RADIUS = 80;
 const DAMAGE_SCALE = 1.8;
@@ -32,7 +32,7 @@ export const lawine: ItemDefinition = {
       const playerIndex = sim.playerIndex;
       const x = sim.positionX(playerIndex);
       const y = sim.positionY(playerIndex);
-      const damage = Math.max(1, Math.round(sim.stats.value('stammwuerze') * DAMAGE_SCALE));
+      const damage = Math.max(1, Math.round(sim.stats.value('damage') * DAMAGE_SCALE));
       sim.applySplashDamage(x, y, BLAST_RADIUS, damage, playerIndex);
       sim.pushEnemiesNear(x, y, BLAST_RADIUS, PUSH_STRENGTH);
     },

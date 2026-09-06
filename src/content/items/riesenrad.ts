@@ -34,7 +34,7 @@ export const riesenrad: ItemDefinition = {
       const playerIndex = sim.playerIndex;
       const x = sim.positionX(playerIndex);
       const y = sim.positionY(playerIndex);
-      const damage = Math.max(1, Math.round(sim.stats.value('stammwuerze') * DAMAGE_SCALE));
+      const damage = Math.max(1, Math.round(sim.stats.value('damage') * DAMAGE_SCALE));
       const slot = sim.spawnItemProjectile(x, y, 1, 0, { damage });
       if (slot < 0) {
         return;

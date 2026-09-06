@@ -2,7 +2,7 @@ import type { ItemDefinition } from '../../sim/item/definition.js';
 
 /** Fire-rate bonus and the luck this trades away. */
 const RATE_BONUS = 0.25;
-const DUSEL_PENALTY = 2;
+const LUCK_PENALTY = 2;
 
 /**
  * Schmalzler — snuff, the traditional pinch. A jolt to the system; the
@@ -17,7 +17,7 @@ const DUSEL_PENALTY = 2;
 export const schmalzler: ItemDefinition = {
   id: 'schmalzler',
   name: 'Schmalzler',
-  description: 'Schluckfrequenz -25%. Dusel -2',
+  description: 'Fire Rate -25%. Luck -2',
   flavourText: 'One pinch and the whole Stammtisch knows exactly where you are sitting.',
   sprite: 'schmalzler',
   pools: ['shop', 'secret'],
@@ -25,8 +25,8 @@ export const schmalzler: ItemDefinition = {
   promilleRequirement: 'sober',
   hooks: {
     modifyStats: () => [
-      { stat: 'schluckfrequenz', op: 'multiply', value: 1 - RATE_BONUS },
-      { stat: 'dusel', op: 'add', value: -DUSEL_PENALTY },
+      { stat: 'fireRate', op: 'multiply', value: 1 - RATE_BONUS },
+      { stat: 'luck', op: 'add', value: -LUCK_PENALTY },
     ],
   },
 };

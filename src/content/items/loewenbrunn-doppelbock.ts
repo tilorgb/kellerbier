@@ -9,7 +9,7 @@ import type { ItemDefinition } from '../../sim/item/definition.js';
 export const loewenbrunnDoppelbock: ItemDefinition = {
   id: 'loewenbrunn-doppelbock',
   name: 'Löwenbrunn Doppelbock',
-  description: 'Damage +50%, fire rate -25%, shots pierce',
+  description: 'Damage +50%, Fire Rate -25%, shots pierce',
   flavourText: 'Brewed twice. Regretted once, the next morning.',
   sprite: 'loewenbrunn-doppelbock',
   pools: ['treasure', 'shop'],
@@ -17,8 +17,8 @@ export const loewenbrunnDoppelbock: ItemDefinition = {
   promilleRequirement: 'any',
   hooks: {
     modifyStats: () => [
-      { stat: 'stammwuerze', op: 'multiply', value: 1.5 },
-      { stat: 'schluckfrequenz', op: 'multiply', value: 4 / 3 },
+      { stat: 'damage', op: 'multiply', value: 1.5 },
+      { stat: 'fireRate', op: 'multiply', value: 4 / 3 },
     ],
     onProjectileSpawn: (ctx) => {
       ctx.sim.addProjectileTag(ctx.projectile, 'piercing');

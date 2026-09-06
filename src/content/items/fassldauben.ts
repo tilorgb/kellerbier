@@ -1,6 +1,6 @@
 import type { ItemDefinition } from '../../sim/item/definition.js';
 
-/** The four directions the staves fly, and their damage scale off Stammwürze. */
+/** The four directions the staves fly, and their damage scale off Damage. */
 const DIRECTIONS: readonly (readonly [number, number])[] = [
   [1, 0],
   [-1, 0],
@@ -31,7 +31,7 @@ export const fassldauben: ItemDefinition = {
   hooks: {
     onBombDetonate: (ctx) => {
       const sim = ctx.sim;
-      const damage = Math.max(1, Math.round(sim.stats.value('stammwuerze') * DAMAGE_SCALE));
+      const damage = Math.max(1, Math.round(sim.stats.value('damage') * DAMAGE_SCALE));
       for (const [dirX, dirY] of DIRECTIONS) {
         sim.spawnItemProjectile(ctx.x, ctx.y, dirX, dirY, { damage });
       }

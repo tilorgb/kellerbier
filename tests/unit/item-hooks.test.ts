@@ -195,19 +195,19 @@ describe('GameSim.pickUpItem / removeItem — stat pipeline integration', () => 
   it('folds modifyStats into the stat pipeline under item:<id>, scaled by stack count', () => {
     const item = baseItem('krug', {
       hooks: {
-        modifyStats: (state) => [{ stat: 'stammwuerze', op: 'add', value: state.count }],
+        modifyStats: (state) => [{ stat: 'damage', op: 'add', value: state.count }],
       },
     });
     const sim = new GameSim({ room: bareRoom(), items: [item] });
-    const base = sim.stats.value(StatId.Stammwuerze);
+    const base = sim.stats.value(StatId.Damage);
 
     sim.pickUpItem('krug');
-    expect(sim.stats.value(StatId.Stammwuerze)).toBe(base + 1);
+    expect(sim.stats.value(StatId.Damage)).toBe(base + 1);
 
     sim.pickUpItem('krug');
-    expect(sim.stats.value(StatId.Stammwuerze)).toBe(base + 2);
+    expect(sim.stats.value(StatId.Damage)).toBe(base + 2);
 
-    const trace = sim.stats.trace(StatId.Stammwuerze);
+    const trace = sim.stats.trace(StatId.Damage);
     const addStep = trace.steps.find((step) => step.stage === 'add');
     expect(addStep?.stage === 'add' && addStep.source.kind).toBe('item');
     expect(addStep?.stage === 'add' && addStep.source.id).toBe('krug');
@@ -215,18 +215,18 @@ describe('GameSim.pickUpItem / removeItem — stat pipeline integration', () => 
 
   it('removing every copy exactly restores the base value', () => {
     const item = baseItem('krug', {
-      hooks: { modifyStats: (state) => [{ stat: 'stammwuerze', op: 'add', value: state.count }] },
+      hooks: { modifyStats: (state) => [{ stat: 'damage', op: 'add', value: state.count }] },
     });
     const sim = new GameSim({ room: bareRoom(), items: [item] });
-    const base = sim.stats.value(StatId.Stammwuerze);
+    const base = sim.stats.value(StatId.Damage);
 
     sim.pickUpItem('krug');
     sim.pickUpItem('krug');
-    expect(sim.stats.value(StatId.Stammwuerze)).not.toBe(base);
+    expect(sim.stats.value(StatId.Damage)).not.toBe(base);
 
     sim.removeItem('krug');
     sim.removeItem('krug');
-    expect(sim.stats.value(StatId.Stammwuerze)).toBe(base);
+    expect(sim.stats.value(StatId.Damage)).toBe(base);
     expect(sim.hasItem('krug')).toBe(false);
   });
 
@@ -559,14 +559,14 @@ describe('item hooks respect promilleRequirement (#32)', () => {
   it('modifyStats folds in only while the requirement is met, and the pipeline notices a tier crossing on its own', () => {
     const item = baseItem('mutprobe', {
       promilleRequirement: 'rausch',
-      hooks: { modifyStats: () => [{ stat: 'stammwuerze', op: 'add', value: 5 }] },
+      hooks: { modifyStats: () => [{ stat: 'damage', op: 'add', value: 5 }] },
     });
     const sim = new GameSim({ room: bareRoom(), items: [item] });
-    const base = sim.stats.value(StatId.Stammwuerze);
+    const base = sim.stats.value(StatId.Damage);
     sim.pickUpItem('mutprobe');
 
     // Picked up while sober: the bonus never applies in the first place.
-    expect(sim.stats.value(StatId.Stammwuerze)).toBe(base);
+    expect(sim.stats.value(StatId.Damage)).toBe(base);
 
     // Nothing here calls `refreshItemStats` — crossing the tier boundary on
     // its own is exactly what `syncItemPromilleGate` has to notice. 3.5 is
@@ -575,16 +575,16 @@ describe('item hooks respect promilleRequirement (#32)', () => {
     // value sitting exactly on the boundary back under it before this same
     // tick's gate ever reads it. The assertion is `>`, not an exact sum,
     // because Vollrausch's own damage multiplier (a separate stat source,
-    // `syncPromilleModifiers`) also lands on `stammwuerze` here — this test
+    // `syncPromilleModifiers`) also lands on `damage` here — this test
     // only needs to show the item's own `add(5)` took effect, not pin down
     // the two sources' combined arithmetic.
     sim.tuning.promille.current = 3.5;
     sim.step(IDLE);
-    expect(sim.stats.value(StatId.Stammwuerze)).toBeGreaterThan(base);
+    expect(sim.stats.value(StatId.Damage)).toBeGreaterThan(base);
 
     sim.tuning.promille.current = 0; // back to Nüchtern
     sim.step(IDLE);
-    expect(sim.stats.value(StatId.Stammwuerze)).toBe(base);
+    expect(sim.stats.value(StatId.Damage)).toBe(base);
   });
 
   it('dispatchItemBeerPickup fires for a held item, gated by promilleRequirement like every other hook', () => {
