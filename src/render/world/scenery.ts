@@ -2,7 +2,6 @@ import {
   BoxGeometry,
   BufferAttribute,
   BufferGeometry,
-  DoubleSide,
   Group,
   LineBasicMaterial,
   LineSegments,
@@ -20,7 +19,7 @@ import {
 } from '../../sim/room/geometry.js';
 import { type CompiledDoor, doorCentre } from '../../sim/room/template.js';
 import { MAIBAUM_TOP_TILE, PROP_TILE_NAMES, type RoomTileArt } from '../floor-art.js';
-import type { Texture } from '../gfx/index.js';
+import { type Texture, textureFromPixels } from '../gfx/index.js';
 import { ROOM_HAZARD_PALETTE, roomThemeForFloor } from '../palette.js';
 import { pickTileVariant, tileGridScale } from '../tiles.js';
 import { Billboard } from './billboard.js';
@@ -56,15 +55,8 @@ import { DECAL_HEIGHT, FloorSprite, tilingTexture } from './flat.js';
  */
 export type DoorState = 'open' | 'closed' | 'locked';
 
-export interface DoorTextures {
-  readonly open: Texture;
-  readonly closed: Texture;
-  readonly locked?: Texture | undefined;
-}
-
 export interface SceneryArt {
   readonly tiles?: RoomTileArt | undefined;
-  readonly doors?: DoorTextures | undefined;
   readonly tileTextures: Readonly<Record<string, Texture>>;
 }
 
@@ -88,88 +80,178 @@ const FLAT_PROPS: ReadonlySet<string> = new Set(['boss-plate', 'shopkeeper-stand
 const warnedProps = new Set<string>();
 
 /**
- * One doorway: the passage cut through the wall, the leaf that stands in it
- * while it is shut, and the glow of the next room when it is open.
+ * One doorway: a frame set into the wall, a door hinged in it that swings open
+ * when the room is cleared, a dark passage behind, and the glow of the next
+ * room once the door stands open.
+ *
+ * Built in the doorway's own frame — the gap along local x, the room at +z,
+ * outward at -z — and turned to face its wall, so a north, south, east or
+ * west door is the same object rotated. The door is a single leaf as wide as
+ * the gap less its jambs, hinged on one side and swinging *outward* into the
+ * passage so it never intrudes on the playfield. The way into a boss room
+ * gets two leaves (`setDouble`), because a boss room's door should look like
+ * one.
+ *
+ * Collision is the simulation's `DOOR_SPAN` gap either way; the frame's jambs
+ * take two units off each side of what is drawn, not of what is walkable.
  */
 export class DoorPiece {
   readonly door: CompiledDoor;
   readonly group = new Group();
-  private readonly leaf: Mesh<PlaneGeometry, MeshStandardMaterial>;
+  /** The leaf pivots, hinged at the jambs: one for an ordinary door, two for a boss door. */
+  readonly hinges: Group[] = [];
   private readonly glow: PointLight;
-  private readonly textures: DoorTextures | undefined;
+  private readonly span: number;
+  private readonly doorHeight: number;
   private state: DoorState = 'closed';
-  private swing = 1;
+  private opennessValue = 0;
+  private double = false;
+  private lock: Mesh | null = null;
 
   constructor(
     door: CompiledDoor,
     centreX: number,
     centreZ: number,
     span: number,
-    height: number,
-    textures: DoorTextures | undefined,
+    wallHeight: number,
+    wall: Texture | undefined,
+    wallColour: number,
   ) {
     this.door = door;
-    this.textures = textures;
-    const alongX = door.direction === 'north' || door.direction === 'south';
-    const passageHeight = Math.max(height, ROOM_TILE_UNITS);
+    this.span = span;
+    const t = WALL_THICKNESS;
+    // A door in a tall wall stops short of the top so a lintel and a course of
+    // wall can sit over it; a gate in a low hedge stands above it.
+    this.doorHeight = wallHeight >= 16 ? Math.min(wallHeight - LINTEL, DOOR_HEIGHT) : GATE_HEIGHT;
+    const frameHeight = this.doorHeight + LINTEL;
 
-    // The passage: a dark box recessed a wall's thickness outward, so the gap
-    // reads as a way out rather than a black tile.
-    const passage = new Mesh(
-      new BoxGeometry(
-        alongX ? span : WALL_THICKNESS,
-        passageHeight,
-        alongX ? WALL_THICKNESS : span,
-      ),
-      new MeshStandardMaterial({ color: 0x0b0810, roughness: 1 }),
-    );
-    const outwardZ = door.direction === 'north' ? -1 : door.direction === 'south' ? 1 : 0;
-    const outwardX = door.direction === 'west' ? -1 : door.direction === 'east' ? 1 : 0;
-    passage.position.set(
-      centreX + outwardX * WALL_THICKNESS,
-      passageHeight / 2,
-      centreZ + outwardZ * WALL_THICKNESS,
-    );
-    passage.receiveShadow = true;
-    this.group.add(passage);
+    this.group.position.set(centreX, 0, centreZ);
+    this.group.rotation.y = DOOR_FACING[door.direction];
 
-    this.leaf = new Mesh(
-      new PlaneGeometry(span, passageHeight),
-      new MeshStandardMaterial({
-        side: DoubleSide,
-        roughness: 0.8,
-        color: textures === undefined ? ROOM_HAZARD_PALETTE.doorLocked : 0xffffff,
-      }),
+    // The passage: a dark floor through the wall and out past the door's
+    // swing, so an open leaf stands on something rather than on the room's
+    // wall texture. No back wall — the dark beyond the room is dark enough,
+    // and a box standing out there is a slab the camera sees over a side wall.
+    const reach = span + 2;
+    const floor = new Mesh(
+      new PlaneGeometry(span, reach + t / 2),
+      new MeshStandardMaterial({ color: 0x141018, roughness: 1 }),
     );
-    this.leaf.position.set(centreX, passageHeight / 2, centreZ);
-    if (!alongX) {
-      this.leaf.rotation.y = Math.PI / 2;
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.set(0, 0.06, -(reach + t / 2) / 2 + t / 4);
+    floor.receiveShadow = true;
+    this.group.add(floor);
+
+    // The frame: two jambs and a lintel in dark timber, proud of the wall face.
+    const timber = (): MeshStandardMaterial =>
+      new MeshStandardMaterial({ color: FRAME_TIMBER, roughness: 0.9 });
+    for (const side of [-1, 1]) {
+      const jamb = new Mesh(new BoxGeometry(JAMB, frameHeight, t + 1), timber());
+      jamb.position.set(side * (span / 2 - JAMB / 2), frameHeight / 2, 0);
+      jamb.castShadow = true;
+      this.group.add(jamb);
     }
-    this.leaf.castShadow = true;
-    this.group.add(this.leaf);
+    const lintel = new Mesh(new BoxGeometry(span, LINTEL, t + 1), timber());
+    lintel.position.set(0, this.doorHeight + LINTEL / 2, 0);
+    lintel.castShadow = true;
+    this.group.add(lintel);
+    // Wall above the lintel, so the run reads as one wall with a doorway cut in it.
+    if (wallHeight > frameHeight) {
+      const above =
+        wall === undefined
+          ? flatBox(wallColour, span, wallHeight - frameHeight, t)
+          : tiledBox(wall, span, wallHeight - frameHeight, t);
+      above.position.set(0, frameHeight + (wallHeight - frameHeight) / 2, 0);
+      this.group.add(above);
+    }
 
     this.glow = new PointLight(DOOR_GLOW, 0, 60, 2);
-    this.glow.position.set(centreX, 8, centreZ);
+    this.glow.position.set(0, 10, -t / 2);
     this.group.add(this.glow);
+
+    this.buildLeaves();
     this.setState('closed');
+  }
+
+  /** One leaf or two. Rebuilds the leaves; the state and openness carry over. */
+  setDouble(double: boolean): void {
+    if (double === this.double) {
+      return;
+    }
+    this.double = double;
+    this.buildLeaves();
+    this.setState(this.state);
+    this.setOpenness(this.opennessValue);
+  }
+
+  get isDouble(): boolean {
+    return this.double;
+  }
+
+  private buildLeaves(): void {
+    for (const hinge of this.hinges) {
+      hinge.traverse((object) => {
+        if (object instanceof Mesh) {
+          const mesh = object as Mesh;
+          mesh.geometry.dispose();
+          (mesh.material as MeshStandardMaterial).dispose();
+        }
+      });
+      this.group.remove(hinge);
+    }
+    this.hinges.length = 0;
+    this.lock = null;
+    const inner = this.span / 2 - JAMB;
+    const leafHeight = this.doorHeight - 0.5;
+    const leafWidth = this.double ? inner - 0.25 : inner * 2 - 0.5;
+    const sides = this.double ? [-1, 1] : [-1];
+    for (const side of sides) {
+      const hinge = new Group();
+      hinge.position.set(side * inner, 0, 0);
+      const leaf = new Mesh(
+        new BoxGeometry(leafWidth, leafHeight, LEAF_THICKNESS),
+        new MeshStandardMaterial({
+          map: tilingTexture(plankTexture(), leafWidth, leafHeight),
+          roughness: 0.85,
+        }),
+      );
+      // The leaf extends from its hinge toward the gap's centre.
+      leaf.position.set(-side * (leafWidth / 2), leafHeight / 2 + 0.25, 0);
+      leaf.castShadow = true;
+      leaf.receiveShadow = true;
+      hinge.add(leaf);
+      this.hinges.push(hinge);
+      this.group.add(hinge);
+    }
+    // A padlock on the leading edge, shown only while the door is key-locked.
+    const lock = new Mesh(
+      new BoxGeometry(2, 2.5, 1.2),
+      new MeshStandardMaterial({ color: LOCK_BRASS, roughness: 0.4, metalness: 0.6 }),
+    );
+    const firstHinge = this.hinges[0];
+    if (firstHinge !== undefined) {
+      const edge = this.double ? inner - 1.5 : inner * 2 - 2;
+      lock.position.set(edge, this.doorHeight * 0.45, LEAF_THICKNESS / 2 + 0.6);
+      firstHinge.add(lock);
+    }
+    this.lock = lock;
   }
 
   setState(state: DoorState): void {
     this.state = state;
-    const material = this.leaf.material;
-    const textures = this.textures;
-    if (textures !== undefined) {
-      const texture = state === 'locked' ? (textures.locked ?? textures.closed) : textures.closed;
-      const tiled = tilingTexture(texture, this.leaf.geometry.parameters.width, ROOM_TILE_UNITS);
-      material.map?.dispose();
-      material.map = tiled;
-      material.needsUpdate = true;
-    } else {
-      material.color.setHex(
-        state === 'locked' ? ROOM_HAZARD_PALETTE.doorLocked : ROOM_HAZARD_PALETTE.doorLocked,
-      );
+    if (this.lock !== null) {
+      this.lock.visible = state === 'locked';
     }
-    this.leaf.visible = state !== 'open';
+    for (const hinge of this.hinges) {
+      hinge.traverse((object) => {
+        if (object instanceof Mesh && object !== this.lock) {
+          ((object as Mesh).material as MeshStandardMaterial).color.setHex(
+            state === 'locked' ? LOCKED_TINT : 0xffffff,
+          );
+        }
+      });
+    }
+    this.setOpenness(state === 'open' ? 1 : 0);
     this.glow.intensity = state === 'open' ? 120 : 0;
   }
 
@@ -177,14 +259,19 @@ export class DoorPiece {
     return this.state;
   }
 
-  /** The leaf sliding aside: 0 is gone, 1 is fully across the gap. */
-  setSwing(progress: number): void {
-    this.swing = progress;
-    this.leaf.scale.x = Math.max(0.001, progress);
+  /** How far the door stands open: 0 shut, 1 swung fully outward. */
+  setOpenness(openness: number): void {
+    this.opennessValue = Math.max(0, Math.min(1, openness));
+    const angle = this.opennessValue * OPEN_ANGLE;
+    this.hinges.forEach((hinge, index) => {
+      // The left hinge swings positive, the right negative: both leaves go outward.
+      const sign = (this.double ? (index === 0 ? -1 : 1) : -1) * -1;
+      hinge.rotation.y = sign * angle;
+    });
   }
 
-  get swingProgress(): number {
-    return this.swing;
+  get openness(): number {
+    return this.opennessValue;
   }
 
   /** The room-clear amber pulse on the passage light. */
@@ -212,6 +299,58 @@ function disposeMeshes(root: Group): void {
       material.dispose();
     }
   });
+}
+
+/** Which way each wall's doorway faces: the local -z (outward) turned to point out of the room. */
+const DOOR_FACING: Readonly<Record<CompiledDoor['direction'], number>> = {
+  north: 0,
+  south: Math.PI,
+  west: Math.PI / 2,
+  east: -Math.PI / 2,
+};
+
+const DOOR_HEIGHT = 20;
+const GATE_HEIGHT = 12;
+const LINTEL = 2;
+const JAMB = 2;
+const LEAF_THICKNESS = 1.2;
+const OPEN_ANGLE = (95 / 180) * Math.PI;
+const FRAME_TIMBER = 0x3a2a1e;
+const LOCK_BRASS = 0xd6a53a;
+const LOCKED_TINT = 0xa8a0b8;
+
+let plankTextureCache: Texture | null = null;
+
+/**
+ * Vertical planks with two iron bands, drawn as pixels: the door is the one
+ * piece of room architecture with no authored tile, and a texture built from
+ * a palette needs no canvas, so the room editor's playtest and a headless
+ * test get the same door.
+ */
+function plankTexture(): Texture {
+  if (plankTextureCache !== null) {
+    return plankTextureCache;
+  }
+  const w = 16;
+  const h = 32;
+  const colours = new Int32Array(w * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const plank = Math.floor(x / 4);
+      let colour = plank % 2 === 0 ? 0x7a4a2a : 0x6e4226;
+      if (x % 4 === 0) {
+        colour = 0x3e2415;
+      } else if ((y * 7 + x * 3) % 11 === 0) {
+        colour = 0x85532f;
+      }
+      if (y === 6 || y === 7 || y === 24 || y === 25) {
+        colour = x % 4 === 2 ? 0x8a8a90 : 0x2a2a30;
+      }
+      colours[y * w + x] = colour;
+    }
+  }
+  plankTextureCache = textureFromPixels(w, h, colours);
+  return plankTextureCache;
 }
 
 /** A textured box that tiles at one authored tile per `ROOM_TILE_UNITS` on every face. */
@@ -429,7 +568,15 @@ export class Scenery {
           );
         }
         const centre = place(gapStart, gap.span);
-        const piece = new DoorPiece(gap.door, centre.x, centre.z, gap.span, height, this.art.doors);
+        const piece = new DoorPiece(
+          gap.door,
+          centre.x,
+          centre.z,
+          gap.span,
+          height,
+          this.art.tiles?.wall,
+          wallColour,
+        );
         this.doors.push(piece);
         this.group.add(piece.group);
         cursor = gapEnd;

@@ -61,7 +61,7 @@ export class PedestalView {
         continue;
       }
       const item = sim.items.at(pedestal.itemIndex);
-      const tint = ENTITY_PALETTE.itemQualityTints[item.quality] ?? ENTITY_PALETTE.normalTint;
+      const tint = ENTITY_PALETTE.itemQualityTints[item.quality];
       const slot = this.slotAt(used);
       this.slotForPedestal[index] = used;
       used += 1;
@@ -90,7 +90,7 @@ export class PedestalView {
       return null;
     }
     const slot = this.slots[at];
-    if (slot === undefined || !slot.group.visible) {
+    if (!slot?.group.visible) {
       return null;
     }
     return {

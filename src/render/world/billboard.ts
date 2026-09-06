@@ -86,13 +86,13 @@ export class Billboard {
     }
     this.textureValue = texture;
     this.mirrorValue = mirror;
-    const [, v0, , v1] = texture.uvs();
-    let [u0, , u1] = texture.uvs();
-    if (mirror < 0) {
-      const swap = u0;
-      u0 = u1;
-      u1 = swap;
-    }
+    // Indexed rather than destructured: destructuring goes through the
+    // iterator protocol and can allocate, and this runs on every frame change.
+    const uvs = texture.uvs();
+    const v0 = uvs[1];
+    const v1 = uvs[3];
+    const u0 = mirror < 0 ? uvs[2] : uvs[0];
+    const u1 = mirror < 0 ? uvs[0] : uvs[2];
     // PlaneGeometry's corners run top-left, top-right, bottom-left, bottom-right.
     this.uv.setXY(0, u0, v0);
     this.uv.setXY(1, u1, v0);

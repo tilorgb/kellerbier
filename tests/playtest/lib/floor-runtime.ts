@@ -26,7 +26,7 @@ import { validateStaircaseTemplate } from '../../../src/sim/room/staircase.js';
  * `advanceFloor`/`startRun` own for a real, UI-driven run — reimplemented
  * here, pure and headless, for `tests/playtest/`'s scripted bot.
  *
- * `main.ts` can't be imported from a Vitest run: it pulls in `pixi.js` and a
+ * `main.ts` can't be imported from a Vitest run: it pulls in `three` and a
  * DOM renderer the moment it's evaluated. So rather than extract that logic
  * into a shared module (a much larger refactor of a live, UI-coupled file
  * this change has no way to browser-verify), this module re-derives the same

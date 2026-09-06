@@ -6,12 +6,7 @@ import { installPixelFonts, UI_FONT_FAMILY } from '../render/ui/font.js';
 import { canvasToFrame, createRenderer, trackWindowSize } from '../render/app.js';
 import { GameView } from '../render/view.js';
 import { loadFloorArt } from '../render/floor-art.js';
-import {
-  bossIdsFrom,
-  buildParticleArt,
-  buildProjectileArt,
-  doorTexturesFrom,
-} from '../render/art-bundle.js';
+import { bossIdsFrom, buildParticleArt, buildProjectileArt } from '../render/art-bundle.js';
 import { loadPlayerArt } from '../render/player-art.js';
 import { PARTICLE_PALETTE } from '../render/palette.js';
 import { dotTexture } from '../render/ui/marker-art.js';
@@ -123,7 +118,6 @@ export async function createPlaytest(
       PARTICLE_PALETTE.pedestalItemFill,
     ),
     pedestalPlinth: tileTextures.pedestal,
-    doors: doorTexturesFrom(tileTextures),
     pickupArt,
     tileTextures,
     bossIds: bossIdsFrom(spriteOrigins),

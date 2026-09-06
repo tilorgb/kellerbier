@@ -1,23 +1,33 @@
 import { describe, expect, it } from 'vitest';
-import { Rectangle, Sprite, Texture, TextureSource, type Container } from 'pixi.js';
+import { Texture as ThreeTexture } from 'three';
 import { entityIndex } from '../../src/sim/ecs/entity.js';
 import { World } from '../../src/sim/ecs/world.js';
 import { GameSim } from '../../src/sim/game/sim.js';
 import { createInputFrame } from '../../src/sim/input/frame.js';
 import { RoomGeometry } from '../../src/sim/room/geometry.js';
+import { ROOM_TILE_UNITS } from '../../src/content/rooms/definition.js';
 import { EntityView } from '../../src/render/entities.js';
-import { createDepthLayer } from '../../src/render/depth.js';
-import { buildAnimatedSets, cutStrip, type AnimatedSpriteSet } from '../../src/render/floor-art.js';
-import { ACTOR_SPRITE_SCALE, TILE_SPRITE_SCALE } from '../../src/render/resolution.js';
+import { cutStrip, type AnimatedSpriteSet } from '../../src/render/floor-art.js';
+import {
+  BitmapText,
+  Container,
+  Rectangle,
+  Texture,
+  TextureSource,
+} from '../../src/render/gfx/index.js';
+import { ACTOR_PIXELS_PER_UNIT } from '../../src/render/resolution.js';
+import { installPixelFonts, UI_FONT_FAMILY } from '../../src/render/ui/font.js';
+import { UI_TEXT_HEIGHT } from '../../src/render/ui/text.js';
+import { billboardMeshes, frameShown, isMirrored } from '../helpers/billboard.js';
 
 /**
  * The loader and the view, headlessly.
  *
- * Pixi builds and updates a scene graph perfectly well with no renderer
+ * three.js builds and updates a scene graph perfectly well with no renderer
  * attached (the same property `tests/bench/scene.ts` leans on), so the
  * question this file can actually answer is the one that matters: does the
- * sprite a walking enemy is drawn with change frame by frame, and does a dead
- * one leave a corpse behind.
+ * frame a walking enemy's billboard points at change frame by frame, and does
+ * a dead one leave a corpse behind.
  */
 
 const FRAME_WIDTH = 24;
@@ -41,10 +51,14 @@ const SIDECAR = {
   },
 };
 
+installPixelFonts();
+
+function blank(width: number, height: number): Texture {
+  return new Texture(new TextureSource(new ThreeTexture(), width, height));
+}
+
 function stripTexture(): Texture {
-  return new Texture({
-    source: new TextureSource({ width: FRAME_WIDTH * FRAMES, height: FRAME_HEIGHT }),
-  });
+  return blank(FRAME_WIDTH * FRAMES, FRAME_HEIGHT);
 }
 
 describe('cutStrip', () => {
@@ -55,7 +69,7 @@ describe('cutStrip', () => {
       expect(frame.width).toBe(FRAME_WIDTH);
       expect(frame.height).toBe(FRAME_HEIGHT);
       // Contiguity, from the runtime's side: frame `n` is `n * frameWidth`
-      // along the same scanline, which is what makes a frame swap a rectangle
+      // along the same scanline, which is what makes a frame swap a UV
       // change rather than a texture bind.
       expect(frame.frame.x).toBe(index * FRAME_WIDTH);
       expect(frame.frame.y).toBe(0);
@@ -73,11 +87,8 @@ describe('cutStrip', () => {
   it('cuts a frame out of a strip that is itself a sub-rectangle', () => {
     // What a packed atlas hands back. The frame offsets have to be relative to
     // where the strip sits, not to the top-left of the whole sheet.
-    const source = new TextureSource({ width: 512, height: 512 });
-    const packed = new Texture({
-      source,
-      frame: new Rectangle(64, 128, FRAME_WIDTH * FRAMES, FRAME_HEIGHT),
-    });
+    const source = new TextureSource(new ThreeTexture(), 512, 512);
+    const packed = new Texture(source, new Rectangle(64, 128, FRAME_WIDTH * FRAMES, FRAME_HEIGHT));
     const { frames } = cutStrip('crawler', packed, SIDECAR);
     expect(frames[0]?.frame.x).toBe(64);
     expect(frames[0]?.frame.y).toBe(128);
@@ -85,17 +96,8 @@ describe('cutStrip', () => {
   });
 
   it('throws when the strip does not divide into the frames the sidecar declares', () => {
-    const odd = new Texture({ source: new TextureSource({ width: 100, height: FRAME_HEIGHT }) });
+    const odd = blank(100, FRAME_HEIGHT);
     expect(() => cutStrip('crawler', odd, SIDECAR)).toThrow(/does not divide into the 8 frame/);
-  });
-});
-
-describe('buildAnimatedSets', () => {
-  it('adds one flash silhouette per frame, not one per creature', () => {
-    const strips = { crawler: cutStrip('crawler', stripTexture(), SIDECAR) };
-    const sets = buildAnimatedSets(strips, () => Texture.EMPTY);
-    expect(sets.crawler?.flashFrames).toHaveLength(FRAMES);
-    expect(sets.crawler?.frames).toHaveLength(FRAMES);
   });
 });
 
@@ -118,82 +120,65 @@ function oneEnemySim(): { sim: GameSim; index: number } {
   return { sim, index: entityIndex(entity) };
 }
 
-function animatedView(sim: GameSim): {
-  view: EntityView;
-  set: AnimatedSpriteSet;
-  depth: Container;
-} {
-  const strip = cutStrip('kellerassel', stripTexture(), SIDECAR);
-  const sets = buildAnimatedSets({ kellerassel: strip }, () => Texture.EMPTY);
-  const set = sets.kellerassel;
-  if (set === undefined) {
-    throw new Error('unreachable: the set was just built');
-  }
-  const depth = createDepthLayer();
-  const view = new EntityView(
+function makeLabel(): BitmapText {
+  return new BitmapText({
+    text: '',
+    style: { fontFamily: UI_FONT_FAMILY, fontSize: UI_TEXT_HEIGHT },
+  });
+}
+
+function bareView(
+  sim: GameSim,
+  enemyAnimation: Record<string, AnimatedSpriteSet> = {},
+): EntityView {
+  return new EntityView(
     sim,
-    depth,
-    Texture.EMPTY,
-    Texture.EMPTY,
-    Texture.EMPTY,
-    Texture.EMPTY,
-    {},
-    {},
-    { kellerassel: set },
+    {
+      fallback: Texture.EMPTY,
+      enemyArt: {},
+      enemyAnimation,
+      pickupArt: {},
+      bossIds: new Set(),
+    },
+    new Container(),
+    makeLabel,
   );
-  return { view, set, depth };
 }
 
-/**
- * `EntityView` stacks its own layers shadows / rings / corpses, in that order,
- * so that a boss's ground shadow can never cover its own telegraph and a
- * corpse can never cover something still alive. The bodies are no longer among
- * them: since `docs/DECISIONS.md` #73 they are direct children of the shared
- * depth-sorted layer, ordered against the room's rocks and the player by where
- * each one stands. These two
- * readers depend on that order, and the first test below asserts it, so a
- * reshuffle fails there once rather than here four times.
- */
-const CORPSE_LAYER = 2;
-
-function spriteIn(view: EntityView, layer: number, slot = 0): Sprite | undefined {
-  return view.container.children[layer]?.children[slot] as Sprite | undefined;
+function animatedView(sim: GameSim): { view: EntityView; set: AnimatedSpriteSet } {
+  const set = cutStrip('kellerassel', stripTexture(), SIDECAR);
+  return { view: bareView(sim, { kellerassel: set }), set };
 }
 
-/**
- * A body sprite, which since `docs/DECISIONS.md` #73 lives in the shared
- * depth-sorted layer rather than in a layer of `EntityView`'s own — so it is
- * read out of the container the view was handed, not out of the view.
- */
-function bodyIn(depth: Container, slot = 0): Sprite | undefined {
-  return depth.children[slot] as Sprite | undefined;
-}
+/** Screen position the view never reads back here; labels only need *a* projection. */
+const project = (x: number, _height: number, z: number, out: { x: number; y: number }): void => {
+  out.x = x;
+  out.y = z;
+};
 
 describe('EntityView, drawing an animated enemy', () => {
   const idle = createInputFrame();
 
-  it('stacks corpses under living bodies', () => {
+  it('stands exactly one billboard per body', () => {
     const { sim } = oneEnemySim();
-    const { view, depth } = animatedView(sim);
-    view.sync(0, 0);
-    // Shadows, telegraph rings and corpses — the flat layers. The bodies
-    // themselves are in the depth layer now (#73), and the labels above it.
-    expect(view.container.children).toHaveLength(3);
-    expect(bodyIn(depth)).toBeInstanceOf(Sprite);
+    const { view } = animatedView(sim);
+    view.sync(0, 0, project);
+    expect(billboardMeshes(view.group)).toHaveLength(1);
+    expect(view.spriteCount).toBe(1);
   });
 
   it('walks through the move clip as the render clock advances', () => {
     const { sim } = oneEnemySim();
-    const { view, set, depth } = animatedView(sim);
+    const { view, set } = animatedView(sim);
     const drawn = new Set<number>();
     let nowMs = 0;
     for (let tick = 0; tick < 90; tick++) {
       sim.step(idle);
-      view.sync(0, nowMs);
+      view.sync(0, nowMs, project);
       nowMs += 1000 / 60;
-      // Which frame of the strip the body's sprite is pointing at.
-      const drawnTexture = bodyIn(depth)?.texture;
-      const frame = set.frames.findIndex((texture) => texture === drawnTexture);
+      // Which frame of the strip the body's quad is pointing at.
+      const body = billboardMeshes(view.group)[0];
+      const frame = body === undefined ? -1 : frameShown(body, set.frames);
       if (frame >= 0) {
         drawn.add(frame);
       }
@@ -205,7 +190,7 @@ describe('EntityView, drawing an animated enemy', () => {
 
   it('mirrors a body walking the other way', () => {
     const { sim, index } = oneEnemySim();
-    const { view, depth } = animatedView(sim);
+    const { view } = animatedView(sim);
     // Player is spawned at the room's centre-bottom; drop the enemy to the
     // player's left so it chases rightwards.
     sim.transform.data[index * 4] = 20;
@@ -213,10 +198,12 @@ describe('EntityView, drawing an animated enemy', () => {
     for (let tick = 0; tick < 40; tick++) {
       sim.step(idle);
     }
-    view.sync(0, 0);
+    view.sync(0, 0, project);
     expect(view.animator.facingOf(index)).toBe(1);
-    // Authored facing is left, so a rightward body draws with a negated x scale.
-    expect(bodyIn(depth)?.scale.x).toBeLessThan(0);
+    // Authored facing is left, so a rightward body draws with its U edges swapped.
+    const body = billboardMeshes(view.group)[0];
+    expect(body).toBeDefined();
+    expect(body !== undefined && isMirrored(body)).toBe(true);
   });
 
   /**
@@ -229,17 +216,17 @@ describe('EntityView, drawing an animated enemy', () => {
    * what could be hit. The Kellerassel went from 26x18 to 42x25 internal
    * pixels that way, on an unchanged radius of 7.
    *
-   * These two assert the property that replaced it from both sides: the drawn
-   * scale is the grid constant, and it does not move when either the texture
-   * or the collider does.
+   * These two assert the property that replaced it from both sides: the quad
+   * is the frame's authored size on the actor grid, and it does not move when
+   * the collider does.
    */
-  it('draws a body at the actor grid, not at a scale derived from its collider', () => {
+  it('draws a body at its authored size on the actor grid, not at a scale derived from its collider', () => {
     const { sim } = oneEnemySim();
-    const { view, depth } = animatedView(sim);
-    view.sync(0, 0);
-    const sprite = bodyIn(depth);
-    expect(sprite?.scale.y).toBe(ACTOR_SPRITE_SCALE);
-    expect(Math.abs(sprite?.scale.x ?? 0)).toBe(ACTOR_SPRITE_SCALE);
+    const { view } = animatedView(sim);
+    view.sync(0, 0, project);
+    const body = billboardMeshes(view.group)[0];
+    expect(body?.scale.x).toBeCloseTo(FRAME_WIDTH / ACTOR_PIXELS_PER_UNIT);
+    expect(body?.scale.y).toBeCloseTo(FRAME_HEIGHT / ACTOR_PIXELS_PER_UNIT);
   });
 
   it('draws the same body at the same size whatever its collider is', () => {
@@ -247,33 +234,30 @@ describe('EntityView, drawing an animated enemy', () => {
     for (const radius of [4, 7, 10, 20]) {
       const { sim, index } = oneEnemySim();
       sim.body.data[index * 2] = radius;
-      const { view, depth } = animatedView(sim);
-      view.sync(0, 0);
-      drawn.push(bodyIn(depth)?.scale.y ?? 0);
+      const { view } = animatedView(sim);
+      view.sync(0, 0, project);
+      drawn.push(billboardMeshes(view.group)[0]?.scale.y ?? 0);
     }
     // Four colliders spanning every size class in the game and one past it.
     // Under the old formula these were four different sizes.
-    expect(new Set(drawn)).toEqual(new Set([ACTOR_SPRITE_SCALE]));
+    expect(new Set(drawn)).toEqual(new Set([FRAME_HEIGHT / ACTOR_PIXELS_PER_UNIT]));
   });
 
-  it('draws a destructible prop at the same size as the identical tile as furniture', () => {
+  it('draws a destructible prop on the tile grid, one cell wide', () => {
     // A barrel is authored once, in the floor's tileset, and reaches the
-    // screen down two different paths: `render/prop-view.ts` draws the
-    // decorative ones at native size, `EntityView` draws the breakable ones.
-    // They used to disagree by 25% — 2.5 internal pixels per authored pixel
-    // against the room's own 2.0 — so the barrel you could smash was visibly
-    // bigger than the one beside it that you could not.
-    const sixteenPxTile = new Texture({ source: new TextureSource({ width: 16, height: 16 }) });
+    // screen down two different paths: `Scenery` stands the decorative ones
+    // on their cell, `EntityView` draws the breakable ones. They used to
+    // disagree by 25%, so the barrel you could smash was visibly bigger than
+    // the one beside it that you could not.
+    const sixteenPxTile = blank(16, 16);
     const { sim } = oneEnemySim();
-    const { view, depth } = animatedView(sim);
+    const { view } = animatedView(sim);
     view.setTargetTextures([sixteenPxTile]);
     sim.spawnTarget(60, 60);
     sim.world.flush();
-    view.sync(0, 0);
-    const scales = depth.children
-      .filter((child): child is Sprite => child instanceof Sprite && child.visible)
-      .map((sprite) => sprite.scale.y);
-    expect(scales).toContain(TILE_SPRITE_SCALE);
+    view.sync(0, 0, project);
+    const widths = billboardMeshes(view.group).map((mesh) => mesh.scale.x);
+    expect(widths).toContain(ROOM_TILE_UNITS);
   });
 
   it('draws a destructible authored at 32x32 on the same grid as its 16x16 counterpart', () => {
@@ -281,67 +265,87 @@ describe('EntityView, drawing an animated enemy', () => {
     // texture's width (`tileGridScale`), not a constant baked in for the
     // 16px case — otherwise redrawing one barrel PNG at 32x32 for more
     // detail silently doubles it on screen instead of just adding detail.
-    const thirtyTwoPxTile = new Texture({ source: new TextureSource({ width: 32, height: 32 }) });
+    const thirtyTwoPxTile = blank(32, 32);
     const { sim } = oneEnemySim();
-    const { view, depth } = animatedView(sim);
+    const { view } = animatedView(sim);
     view.setTargetTextures([thirtyTwoPxTile]);
     sim.spawnTarget(60, 60);
     sim.world.flush();
-    view.sync(0, 0);
-    const scales = depth.children
-      .filter((child): child is Sprite => child instanceof Sprite && child.visible)
-      .map((sprite) => sprite.scale.y);
-    expect(scales).toContain(TILE_SPRITE_SCALE / 2);
+    view.sync(0, 0, project);
+    const widths = billboardMeshes(view.group).map((mesh) => mesh.scale.x);
+    expect(widths).toContain(ROOM_TILE_UNITS);
+  });
+
+  it('blows a hit body out white through the emissive term', () => {
+    const { sim, index } = oneEnemySim();
+    const { view } = animatedView(sim);
+    view.sync(0, 0, project);
+    const body = billboardMeshes(view.group)[0];
+    expect(body?.material.emissive.r).toBe(0);
+
+    sim.flash.data[index] = 3;
+    view.sync(0, 16, project);
+    expect(body?.material.emissive.r).toBe(1);
+    expect(body?.material.emissive.g).toBe(1);
+    expect(body?.material.emissive.b).toBe(1);
+
+    sim.flash.data[index] = 0;
+    view.sync(0, 32, project);
+    expect(body?.material.emissive.r).toBe(0);
   });
 
   it('leaves a corpse playing the death clip when the body is gone', () => {
     const { sim, index } = oneEnemySim();
-    const { view } = animatedView(sim);
+    const { view, set } = animatedView(sim);
     let nowMs = 0;
-    view.sync(0, nowMs);
+    view.sync(0, nowMs, project);
     nowMs += 16;
 
     sim.world.destroy(sim.world.entityAt(index));
     sim.world.flush();
     // The frame that notices the body has left, then the frame that draws the
     // corpse the notice created.
-    view.sync(0, nowMs);
+    view.sync(0, nowMs, project);
     nowMs += 16;
-    view.sync(0, nowMs);
+    view.sync(0, nowMs, project);
 
     expect(view.animator.corpseCount).toBe(1);
     const corpse = view.animator.corpseSlotAt(0);
     // Frame 5 is the death clip's first pose in `SIDECAR` above.
     expect(view.animator.corpseFrameAt(corpse)).toBe(5);
-    // The corpse layer sits below the bodies, so a body on the floor can never
-    // hide something still shooting.
-    expect(spriteIn(view, CORPSE_LAYER)?.visible).toBe(true);
+    // The body's own billboard is hidden; the one still showing is the corpse,
+    // pointing at that death frame.
+    const shown = billboardMeshes(view.group);
+    expect(shown).toHaveLength(1);
+    const [only] = shown;
+    expect(only === undefined ? -1 : frameShown(only, set.frames)).toBe(5);
   });
 
   it('drops every corpse when the room changes under it', () => {
     const { sim, index } = oneEnemySim();
     const { view } = animatedView(sim);
-    view.sync(0, 0);
+    view.sync(0, 0, project);
     sim.world.destroy(sim.world.entityAt(index));
     sim.world.flush();
-    view.sync(0, 16);
-    view.sync(0, 32);
+    view.sync(0, 16, project);
+    view.sync(0, 32, project);
     expect(view.animator.corpseCount).toBe(1);
+    expect(billboardMeshes(view.group)).toHaveLength(1);
 
     view.resetAnimation();
     expect(view.animator.corpseCount).toBe(0);
-    expect(spriteIn(view, CORPSE_LAYER)?.visible).toBe(false);
+    expect(billboardMeshes(view.group)).toHaveLength(0);
   });
 
   it('draws an enemy with no animation set exactly as it did before', () => {
     const { sim } = oneEnemySim();
-    const still = Texture.EMPTY;
-    const depth = createDepthLayer();
-    const view = new EntityView(sim, depth, still, still, still, still, {}, {}, {});
+    const view = bareView(sim);
     sim.step(idle);
-    view.sync(0, 0);
+    view.sync(0, 0, project);
     expect(view.animator.trackedCount).toBe(0);
-    expect(bodyIn(depth)?.scale.x).toBeGreaterThan(0);
+    const body = billboardMeshes(view.group)[0];
+    expect(body).toBeDefined();
+    expect(body === undefined || isMirrored(body)).toBe(false);
   });
 });
 

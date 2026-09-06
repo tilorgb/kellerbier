@@ -102,11 +102,21 @@ tile next to Alois at true scale, and let the size be chosen along with the desi
 `tests/content/sprite-scale.test.ts` will catch a silhouette that has drifted away from the
 collider it is drawn over, but it is a wide band and a gate, not an art director.
 
+**Sprites are billboards now** (`docs/DECISIONS.md` #74): a 2D sprite standing up on the floor of a
+3D room, seen from a fixed 56° camera, lit and casting a real shadow. So "show the option on a real
+floor tile next to Alois at true scale" means a screenshot from the game's camera — a flat mock-up
+on a tile swatch no longer shows what the player sees, since the floor recedes and the sprite does
+not. And a sprite's canvas *height* is what it stands up as: a 24×16 character stands 16 internal
+pixels tall in the room, so widening a canvas still only widens it, and adding rows makes the
+thing taller on its feet. Show the candidates standing in the room, at the sizes proposed, not laid
+on a grid.
+
 In practice: render the options at a legible scale (upscaled, nearest-neighbour, no smoothing) and
 send them as an image rather than describing them in text. **UI art has a shortcut for this**: it
 is authored as source in `src/render/ui/` (`docs/DECISIONS.md` #43) and rasterised by pure
 functions — `PixelFace.glyph`, `drawPixelArt`, `renderTitlePixels` — so a throwaway Node script
-plus `pngjs` can render a specimen sheet without a browser or a renderer. #154's font, kit and
+plus `pngjs` can render a specimen sheet without a browser or a renderer (the same pixels
+`textureFromPixels` uploads at boot, so the sheet is what the game draws). #154's font, kit and
 title-card options were all signed off that way. If the art has a "how it repeats" or
 "how it varies" question — a tileset that mixes several variants across a floor, say — show that
 mixed/tiled, not just the individual swatches, since that's what the option actually reads like in

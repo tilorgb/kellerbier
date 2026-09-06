@@ -6,7 +6,7 @@
  *
  * Plain CSS custom properties, not Tailwind: these tools are a handful of
  * `<style>` blocks each, not a design surface large enough to earn a build
- * step, and the in-game renderer (Pixi/WebGL) is untouched by either choice.
+ * step, and the in-game renderer (three.js/WebGL) is untouched by either choice.
  */
 
 export const DEV_UI_TOKENS_STYLE = `

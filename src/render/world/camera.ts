@@ -34,6 +34,9 @@ export const VIEW_HEIGHT = INTERNAL_HEIGHT / WORLD_ZOOM;
 const FOV = 34;
 /** Fraction of the frame the fitted view fills, leaving a sliver so the wall tops are not clipped. */
 const FIT = 0.985;
+
+/** The shipped camera's numbers, for the dev tuning panel's `reset` and its readout. */
+export const GameViewDefaults = { elevation: ELEVATION, fov: FOV, fit: FIT } as const;
 /** Tallest thing the fit has to keep in frame: the back wall's top edge. */
 const FIT_HEIGHT = 26;
 
@@ -50,6 +53,8 @@ export interface WorldPoint {
 export class WorldCamera {
   readonly camera = new PerspectiveCamera(FOV, INTERNAL_WIDTH / INTERNAL_HEIGHT, 1, 2000);
   private elevationValue = ELEVATION;
+  private fovValue = FOV;
+  private fitValue = FIT;
   private distance = 300;
   private readonly direction = new Vector3();
   private readonly target = new Vector3();
@@ -71,6 +76,28 @@ export class WorldCamera {
     this.elevationValue = elevation;
     this.direction.set(0, Math.sin(elevation), Math.cos(elevation));
     this.fit();
+  }
+
+  /** The lens: a narrower field of view flattens the perspective, a wider one exaggerates it. Tuning knob. */
+  setFov(fov: number): void {
+    this.fovValue = fov;
+    this.camera.fov = fov;
+    this.camera.updateProjectionMatrix();
+    this.fit();
+  }
+
+  get fov(): number {
+    return this.fovValue;
+  }
+
+  /** How much of the frame one view fills: under 1 leaves a margin of wall around the room. Tuning knob. */
+  setFit(fit: number): void {
+    this.fitValue = fit;
+    this.fit();
+  }
+
+  get fitFraction(): number {
+    return this.fitValue;
   }
 
   /**
@@ -95,7 +122,7 @@ export class WorldCamera {
         SCRATCH.copy(corner).project(this.camera);
         extent = Math.max(extent, Math.abs(SCRATCH.x), Math.abs(SCRATCH.y));
       }
-      this.distance *= extent / FIT;
+      this.distance *= extent / this.fitValue;
     }
   }
 

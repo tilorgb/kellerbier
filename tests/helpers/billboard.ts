@@ -1,6 +1,6 @@
 import {
   type BufferAttribute,
-  type Mesh,
+  Mesh,
   MeshDepthMaterial,
   MeshStandardMaterial,
   type Object3D,
@@ -23,8 +23,8 @@ export type BillboardMesh = Mesh<PlaneGeometry, MeshStandardMaterial>;
 export function billboardMeshes(root: Object3D, visibleOnly = true): BillboardMesh[] {
   return root.children.filter(
     (child): child is BillboardMesh =>
-      (child as Mesh).isMesh === true &&
-      (child as Mesh).geometry instanceof PlaneGeometry &&
+      child instanceof Mesh &&
+      child.geometry instanceof PlaneGeometry &&
       (child as Mesh).material instanceof MeshStandardMaterial &&
       (child as Mesh).customDepthMaterial instanceof MeshDepthMaterial &&
       (!visibleOnly || child.visible),

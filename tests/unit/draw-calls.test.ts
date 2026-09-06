@@ -1,90 +1,82 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { DrawCallCounter } from '../../src/debug/draw-calls.js';
 
-/** The two entry points Pixi actually issues geometry through. */
-function fakeContext(): { drawElements: () => void; drawArrays: () => void; calls: number } {
-  const context = {
-    calls: 0,
-    drawElements(): void {
-      context.calls += 1;
-    },
-    drawArrays(): void {
-      context.calls += 1;
+/**
+ * A stand-in for the one thing the counter reads: three.js's
+ * `renderer.info`, which counts draw calls itself and resets once per
+ * `render()` unless told not to.
+ */
+function fakeRenderer(): {
+  info: { autoReset: boolean; render: { calls: number }; reset(): void };
+  draw(times: number): void;
+} {
+  const info = {
+    autoReset: true,
+    render: { calls: 0 },
+    reset(): void {
+      info.render.calls = 0;
     },
   };
-  return context;
+  return {
+    info,
+    draw(times: number): void {
+      info.render.calls += times;
+    },
+  };
 }
 
 describe('DrawCallCounter', () => {
-  it('counts both kinds of draw call, and still issues them', () => {
+  it('reports the previous frame at the start of the next', () => {
     const counter = new DrawCallCounter();
-    const gl = fakeContext();
-    expect(counter.attach(gl)).toBe(true);
+    const renderer = fakeRenderer();
+    expect(counter.attach(renderer)).toBe(true);
 
     counter.beginFrame();
-    gl.drawElements();
-    gl.drawElements();
-    gl.drawArrays();
+    renderer.draw(3);
     counter.beginFrame();
-
     expect(counter.lastFrameCalls).toBe(3);
-    // The wrapper is transparent: the real calls still happened.
-    expect(gl.calls).toBe(3);
   });
 
   it('reports per frame rather than cumulatively', () => {
     const counter = new DrawCallCounter();
-    const gl = fakeContext();
-    counter.attach(gl);
+    const renderer = fakeRenderer();
+    counter.attach(renderer);
 
     counter.beginFrame();
-    gl.drawElements();
+    renderer.draw(1);
     counter.beginFrame();
     expect(counter.lastFrameCalls).toBe(1);
 
-    gl.drawElements();
-    gl.drawElements();
+    renderer.draw(2);
     counter.beginFrame();
     expect(counter.lastFrameCalls).toBe(2);
   });
 
+  it('turns off the per-render reset so both passes of a frame are counted', () => {
+    const counter = new DrawCallCounter();
+    const renderer = fakeRenderer();
+    counter.attach(renderer);
+    // Two `render()` calls a frame (world, then UI): with `autoReset` on, the
+    // second would wipe the first's count before anyone read it.
+    expect(renderer.info.autoReset).toBe(false);
+  });
+
   it('says it cannot count rather than reporting a plausible wrong number', () => {
     const counter = new DrawCallCounter();
-    // WebGPU, or a renderer that exposes no context at all.
     expect(counter.attach(null)).toBe(false);
     expect(counter.attach({})).toBe(false);
     expect(counter.instrumented).toBe(false);
     expect(counter.lastFrameCalls).toBe(-1);
   });
 
-  it('puts the context back the way it found it', () => {
+  it('puts the renderer back the way it found it', () => {
     const counter = new DrawCallCounter();
-    const gl = fakeContext();
-    const original = gl.drawElements;
-    counter.attach(gl);
-    expect(gl.drawElements).not.toBe(original);
-
+    const renderer = fakeRenderer();
+    counter.attach(renderer);
     counter.detach();
-    expect(gl.drawElements).toBe(original);
+    expect(renderer.info.autoReset).toBe(true);
     expect(counter.instrumented).toBe(false);
-  });
-
-  it('is safe to detach twice', () => {
-    const counter = new DrawCallCounter();
-    counter.attach(fakeContext());
+    // Detaching twice is harmless.
     counter.detach();
-    expect(() => {
-      counter.detach();
-    }).not.toThrow();
-  });
-});
-
-describe('the counter is only ever wired up by the overlay', () => {
-  it('does nothing at all until it is attached', () => {
-    const counter = new DrawCallCounter();
-    const spy = vi.fn();
-    counter.beginFrame();
-    expect(spy).not.toHaveBeenCalled();
-    expect(counter.lastFrameCalls).toBe(-1);
   });
 });

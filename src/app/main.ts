@@ -66,12 +66,7 @@ import { Vignette } from '../render/vignette.js';
 import { BlaueStundeOverlay } from '../render/blaue-stunde-overlay.js';
 import { GameView } from '../render/view.js';
 import { FLOOR_TILESETS, loadFloorArt } from '../render/floor-art.js';
-import {
-  bossIdsFrom,
-  buildParticleArt,
-  buildProjectileArt,
-  doorTexturesFrom,
-} from '../render/art-bundle.js';
+import { bossIdsFrom, buildParticleArt, buildProjectileArt } from '../render/art-bundle.js';
 import { loadPlayerArt } from '../render/player-art.js';
 import { attachLiveArtPreviewListener } from '../render/live-art-preview.js';
 import { AmbienceTracker, SynthAmbienceAudio } from './audio/ambience.js';
@@ -111,6 +106,7 @@ import {
 import { downloadTelemetryFile } from './telemetry/file.js';
 import { createTouchControls, isTouchCapable } from './touch-controls.js';
 import { createEditorDock } from './editor-dock.js';
+import { type CameraTuningPanel, createCameraTuningPanel } from './camera-tuning.js';
 import {
   pickDecorativePropAt,
   pickEnemyAt,
@@ -513,6 +509,17 @@ function crackHintsFor(
  * `GameSim` itself only knows door geometry, not which template sits on the
  * far side — this is the side of the app that has the floor plan.
  */
+/** The directions of this room's doors that open onto the boss room — drawn as a double door. */
+function bossDoorsFor(plan: FloorPlan, roomId: string): RoomDirection[] {
+  const directions: RoomDirection[] = [];
+  for (const door of planRoom(plan, roomId).doors) {
+    if (planRoom(plan, door.neighborRoomId).role === 'boss') {
+      directions.push(door.direction);
+    }
+  }
+  return directions;
+}
+
 function lockedDoorsFor(
   plan: FloorPlan,
   roomId: string,
@@ -719,6 +726,16 @@ async function boot(): Promise<void> {
   let RUN_SEED = Number.isFinite(parsedSeed)
     ? Math.trunc(parsedSeed)
     : Math.floor(Math.random() * 1_000_000);
+  // Dev-only camera sliders (angle, lens, zoom), live on the current view.
+  // Beside the seed control, and for the same reason it is not on touch:
+  // there is no keyboard to type into either, and both cover the room.
+  const cameraTuning: CameraTuningPanel | undefined =
+    import.meta.env.DEV && !touchCapable
+      ? createCameraTuningPanel(host.parentElement ?? host, () =>
+          typeof view === 'undefined' ? undefined : view,
+        )
+      : undefined;
+
   const seedInput = document.getElementById('seed-input');
 
   // Rooms `N` has already stepped into. Preferring an unvisited neighbour
@@ -2238,7 +2255,6 @@ WASD move   arrows aim and fire
         PARTICLE_PALETTE.pedestalItemFill,
       ),
       pedestalPlinth: tileTextures.pedestal,
-      doors: doorTexturesFrom(tileTextures),
       pickupArt,
       tileTextures,
       bossIds: bossIdsFrom(spriteOrigins),
@@ -2255,6 +2271,7 @@ WASD move   arrows aim and fire
     // layer has taken its place on the UI pass.
     const previousView = typeof view !== 'undefined' ? view : undefined;
     view = new GameView(sim, viewTextures);
+    cameraTuning?.apply(view);
     // World-anchored text (damage numbers, prices) draws over the overlays
     // and under the HUD: the same slot the previous view's layer held.
     if (previousView !== undefined) {
@@ -2264,6 +2281,7 @@ WASD move   arrows aim and fire
     previousView?.destroy();
     view.setSecretHints(crackHintsFor(floorPlan, currentRoomId, revealedEdges));
     view.setLockedDoors(lockedDoorsFor(floorPlan, currentRoomId, visitedRoomIds));
+    view.setBossDoors(bossDoorsFor(floorPlan, currentRoomId));
     minimapHud.rebuild(floorPlan, currentRoomId, visitedRoomIds);
     // Both `sim` and `view` above are fresh objects and the old view has just
     // been destroyed, so anything holding the previous pair is now holding
@@ -2745,6 +2763,7 @@ WASD move   arrows aim and fire
     visitedRoomIds.add(neighborRoomId);
     view.setSecretHints(crackHintsFor(floorPlan, currentRoomId, revealedEdges));
     view.setLockedDoors(lockedDoorsFor(floorPlan, currentRoomId, visitedRoomIds));
+    view.setBossDoors(bossDoorsFor(floorPlan, currentRoomId));
     minimapHud.rebuild(floorPlan, currentRoomId, visitedRoomIds);
     refreshHud();
     return true;
@@ -2814,6 +2833,7 @@ WASD move   arrows aim and fire
     );
     view.setSecretHints(crackHintsFor(floorPlan, currentRoomId, revealedEdges));
     view.setLockedDoors(lockedDoorsFor(floorPlan, currentRoomId, visitedRoomIds));
+    view.setBossDoors(bossDoorsFor(floorPlan, currentRoomId));
     minimapHud.rebuild(floorPlan, currentRoomId, visitedRoomIds);
     refreshHud();
     showFloorCard();
@@ -2847,6 +2867,7 @@ WASD move   arrows aim and fire
     );
     view.setSecretHints(crackHintsFor(floorPlan, currentRoomId, revealedEdges));
     view.setLockedDoors(lockedDoorsFor(floorPlan, currentRoomId, visitedRoomIds));
+    view.setBossDoors(bossDoorsFor(floorPlan, currentRoomId));
     minimapHud.rebuild(floorPlan, currentRoomId, visitedRoomIds);
     refreshHud();
   }
@@ -2940,6 +2961,7 @@ WASD move   arrows aim and fire
     if (changed) {
       view.setSecretHints(crackHintsFor(floorPlan, currentRoomId, revealedEdges));
       view.setLockedDoors(lockedDoorsFor(floorPlan, currentRoomId, visitedRoomIds));
+      view.setBossDoors(bossDoorsFor(floorPlan, currentRoomId));
       minimapHud.rebuild(floorPlan, currentRoomId, visitedRoomIds);
       playSfx('secret-reveal');
     }
@@ -3197,6 +3219,7 @@ WASD move   arrows aim and fire
             );
             view.setSecretHints(crackHintsFor(floorPlan, currentRoomId, revealedEdges));
             view.setLockedDoors(lockedDoorsFor(floorPlan, currentRoomId, visitedRoomIds));
+            view.setBossDoors(bossDoorsFor(floorPlan, currentRoomId));
             minimapHud.rebuild(floorPlan, currentRoomId, visitedRoomIds);
           }
         }
@@ -3258,7 +3281,7 @@ WASD move   arrows aim and fire
     // Click-to-pick (#108's follow-up): while the Sprites editor is the
     // docked panel, a click on the game canvas resolves to whichever body is
     // under it and loads that sprite into the editor — `app.canvas`'s own
-    // pointer events, not Pixi's interaction system, since nothing in the
+    // pointer events, not the UI layer's hit-testing, since nothing in the
     // game otherwise uses stage-level pointer interactivity and DOM
     // coordinates are all this needs. Checked most-specific-first — enemy,
     // then Alois himself, then a destructible prop (a barrel, a Maibaum),
@@ -3352,6 +3375,7 @@ WASD move   arrows aim and fire
           );
           view.setSecretHints(crackHintsFor(floorPlan, currentRoomId, revealedEdges));
           view.setLockedDoors(lockedDoorsFor(floorPlan, currentRoomId, visitedRoomIds));
+          view.setBossDoors(bossDoorsFor(floorPlan, currentRoomId));
           minimapHud.rebuild(floorPlan, currentRoomId, visitedRoomIds);
           refreshHud();
           event.source?.postMessage(
@@ -3417,6 +3441,7 @@ WASD move   arrows aim and fire
   overlay = await mountDebugOverlay(sim, view, app, uiLayer, () => layout.scale);
   exposeDebugHandle(
     loop,
+    app,
     () => sim,
     () => view,
     (ms) => {
@@ -3566,6 +3591,8 @@ async function mountDebugOverlay(
 interface DebugHost {
   __kellerbier?: {
     loop: FixedTimestepLoop;
+    /** The renderer and its UI pass — for headless scripts that need to read the frame. */
+    app: GameRenderer;
     sim: GameSim;
     /**
      * The scene graph, for `view.animator` (#150): which clip and frame each
@@ -3652,6 +3679,7 @@ interface ProgressionHandle {
 
 function exposeDebugHandle(
   loop: FixedTimestepLoop,
+  app: GameRenderer,
   /**
    * Accessors, not values (as of #73's follow-up): `startRun` replaces both on
    * every restart, so a handle that captured them would hand the console a
@@ -3673,6 +3701,7 @@ function exposeDebugHandle(
   }
   (globalThis as unknown as DebugHost).__kellerbier = {
     loop,
+    app,
     get sim(): GameSim {
       return liveSim();
     },

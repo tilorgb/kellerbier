@@ -13,7 +13,6 @@ import {
 } from './animation/definition.js';
 import { MAX_FRAME_DELTA_MS } from './animation/animator.js';
 import {
-  PLAYER_FACING_IDS,
   PlayerFacing,
   resolvePlayerAnimationState,
   resolvePlayerHeading,
@@ -58,6 +57,16 @@ const RECOIL_TICKS = 3;
 const RECOIL_PIXELS = 1;
 const SCHLAUCH_REACH = 4;
 const DRUNK_FROM_TIER = PromilleTier.Beduselt;
+const SOBER_KEYS: Readonly<Record<PlayerFacingIndex, PlayerBodyKey>> = {
+  [PlayerFacing.South]: 'south',
+  [PlayerFacing.North]: 'north',
+  [PlayerFacing.Side]: 'side',
+};
+const DRUNK_KEYS: Readonly<Record<PlayerFacingIndex, PlayerBodyKey>> = {
+  [PlayerFacing.South]: 'drunk-south',
+  [PlayerFacing.North]: 'drunk-north',
+  [PlayerFacing.Side]: 'drunk-side',
+};
 /** How far in front of (or behind) the body the nozzle sits along the view direction, in room units. */
 const SCHLAUCH_DEPTH = 0.8;
 
@@ -173,9 +182,9 @@ export class PlayerView {
     this.syncSchlauch(sim);
   }
 
+  /** Table lookup, not a template string: this runs every frame and a fresh string is garbage. */
   private keyFor(facing: PlayerFacingIndex, drunk: boolean): PlayerBodyKey {
-    const id = PLAYER_FACING_IDS[facing];
-    return drunk ? `drunk-${id}` : id;
+    return (drunk ? DRUNK_KEYS : SOBER_KEYS)[facing];
   }
 
   private advance(set: CompiledAnimationSet, state: AnimationStateIndex, deltaMs: number): void {

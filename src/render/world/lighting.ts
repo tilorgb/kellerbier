@@ -98,6 +98,14 @@ export class Lighting {
   private readonly ambient = new AmbientLight(0xffffff, 1);
   private readonly hemisphere = new HemisphereLight(0xffffff, 0x000000, 1);
   private readonly key = new DirectionalLight(0xffffff, 1);
+  /**
+   * Two soft fills from the east and the west, no shadows: the side walls'
+   * inner faces look across the room, square to neither the key nor the
+   * camera, and without these they read as black slabs with a hole where the
+   * door is.
+   */
+  private readonly fillEast = new DirectionalLight(0xffffff, 1.2);
+  private readonly fillWest = new DirectionalLight(0xffffff, 1.2);
   private readonly lantern = new PointLight(0xffd9a6, 420, 120, 2);
   private readonly shotLights: PointLight[] = [];
   private readonly roomLights = new Group();
@@ -151,6 +159,14 @@ export class Lighting {
     this.hemisphere.intensity = colours.hemisphereIntensity;
     this.key.color.setHex(colours.key);
     this.key.intensity = colours.keyIntensity;
+    for (const [fill, side] of [
+      [this.fillEast, 1],
+      [this.fillWest, -1],
+    ] as const) {
+      fill.color.setHex(colours.key);
+      fill.position.set(frameWidth / 2 + side * frameWidth, 60, frameHeight / 2);
+      fill.target.position.set(frameWidth / 2, 0, frameHeight / 2);
+    }
     this.scene.background = null;
 
     // High on the camera's side, a touch east of centre; see the class comment.

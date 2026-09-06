@@ -1,5 +1,6 @@
-import { Texture } from 'pixi.js';
 import { compileAnimationSet } from '../../src/render/animation/definition.js';
+import { Texture, textureFromPixels } from '../../src/render/gfx/index.js';
+import { installPixelFonts, UI_FONT_FAMILY } from '../../src/render/ui/font.js';
 import { entityIndex } from '../../src/sim/ecs/entity.js';
 import { GameSim } from '../../src/sim/game/sim.js';
 import { PARTICLE_KIND_IDS, ParticleKind } from '../../src/sim/particle/store.js';
@@ -220,17 +221,18 @@ export function buildStressScene(): StressScene {
  * The renderer's scene graph for the stress scene, with no GPU behind it.
  *
  * `GameView.sync` is the CPU half of a rendered frame: it reads the simulation
- * and writes sprite transforms, and it is the half that scales with the five
- * thousand things on screen. Pixi builds and updates a scene graph perfectly
- * well without a renderer attached, so this part of the frame can be measured
- * on a machine with no display server — which is the whole point of a benchmark
+ * and writes mesh transforms and instance matrices, and it is the half that
+ * scales with the five thousand things on screen. three.js builds and updates
+ * a scene graph perfectly well without a renderer attached — nothing in
+ * `GameView.sync` touches one — so this part of the frame can be measured on
+ * a machine with no display server, which is the whole point of a benchmark
  * that has to run in CI.
  *
  * What cannot be measured here is the other half: draw calls and GPU time need
  * a real context. Those stay in the debug overlay (`O`), which counts them in
  * the browser against the same budget.
  */
-/** One floor's tileset, all `Texture.EMPTY` — the sprite *count* is what matters here. */
+/** One floor's tileset, every tile a blank pixel — the mesh *count* is what matters here. */
 function benchTileset(): RoomTileArt {
   return {
     floorVariants: [Texture.EMPTY],
@@ -239,10 +241,15 @@ function benchTileset(): RoomTileArt {
     wallLipCorner: Texture.EMPTY,
     blockVariants: [Texture.EMPTY],
     destructibles: [Texture.EMPTY],
+    wallHeight: 26,
+    lighting: 'cellar',
   };
 }
 
 export function buildHeadlessView(sim: GameSim): GameView {
+  // The damage-number and price labels are `BitmapText`, which needs the pixel
+  // fonts registered before the first label is made.
+  installPixelFonts();
   return new GameView(sim, {
     playerArt: stubPlayerArt(),
     projectileArt: {
@@ -254,43 +261,37 @@ export function buildHeadlessView(sim: GameSim): GameView {
     },
     projectileArtNames: [],
     entity: Texture.EMPTY,
-    entityFlash: Texture.EMPTY,
-    telegraph: Texture.EMPTY,
-    telegraphWedge: Texture.EMPTY,
     // A distinct texture object per kind rather than one shared `Texture.EMPTY`:
-    // the per-particle texture swap is exactly what #153 added to this loop, and
-    // a scene where every kind points at the same object would not measure it.
+    // every kind is its own instanced layer (#153), and a scene where every
+    // kind points at the same object would measure one layer instead of nine.
     particleArt: {
-      byKind: PARTICLE_KIND_IDS.map(() => new Texture()),
+      byKind: PARTICLE_KIND_IDS.map(() => textureFromPixels(1, 1, new Int32Array([0xffffff]))),
       fallback: Texture.EMPTY,
     },
     decal: Texture.EMPTY,
-    numberFont: 'monospace',
+    numberFont: UI_FONT_FAMILY,
     pedestalItem: Texture.EMPTY,
-    pedestalBeam: Texture.EMPTY,
     // The room the game actually builds, not a bare one: a real tileset means
-    // the wall band, the lip course and the obstacle tiles are all real
-    // sprites, and the frame budget covers the ~400 of them a floor-1 room
-    // now holds (#152) rather than measuring a scene that skips them.
-    // `Texture.EMPTY` throughout — what is being measured is the per-frame
-    // transform work, which costs the same whatever pixels a sprite points at.
+    // the floor cells, the wall boxes and the obstacle billboards are all real
+    // meshes, and the frame budget covers them rather than measuring a scene
+    // that skips them. `Texture.EMPTY` throughout — what is being measured is
+    // the per-frame transform work, which costs the same whatever pixels a
+    // quad points at.
     roomTiles: {
       1: benchTileset(),
       2: benchTileset(),
     },
     enemyArt: {},
-    enemyFlash: {},
     // Every creature in the stress roster animates, so the frame-time budget
     // covers the animator (#150) rather than measuring a scene that happens to
     // skip it. `Texture.EMPTY` for every frame: what is being measured is the
-    // per-body state resolution, clip advance and transform write, and those
-    // cost the same whatever pixels the frame points at.
+    // per-body state resolution, clip advance and UV write, and those cost the
+    // same whatever pixels the frame points at.
     enemyAnimation: Object.fromEntries(
       ROSTER.map((id) => [
         id,
         {
           frames: BENCH_STRIP_FRAMES.map(() => Texture.EMPTY),
-          flashFrames: BENCH_STRIP_FRAMES.map(() => Texture.EMPTY),
           clips: compileAnimationSet(id, BENCH_SIDECAR, BENCH_STRIP_FRAMES.length),
         },
       ]),

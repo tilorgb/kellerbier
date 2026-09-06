@@ -35,7 +35,8 @@ than after.
 ## M0 — Foundations
 *Exit: `npm run dev` opens a window with a fixed-timestep loop running, and CI is green.*
 
-Repo scaffolding, TypeScript strict, Vite, Pixi v8, the ECS core, the fixed-timestep loop,
+Repo scaffolding, TypeScript strict, Vite, Pixi v8 (replaced by three.js in M6, `DECISIONS.md`
+#74), the ECS core, the fixed-timestep loop,
 seeded RNG, input handling, the debug overlay, CI, and the GitHub Pages preview deploy.
 Boring, and everything else stands on it.
 
@@ -90,7 +91,8 @@ The milestone the original plan never had, and the gap it left is visible in the
 there is no animation system at all, and Alois himself is a procedurally generated shape. Sprite
 animation, the player's own art, the remaining floor 1 & 2 sprites, a VFX quality pass, the
 semantic palette, the pixel font and UI kit, and the art tooling that makes authoring the rest
-of it cheap.
+of it cheap. The renderer switch landed here too: the room became a lit 3D scene under a fixed
+camera, with the same 2D sprites standing in it (`DECISIONS.md` #74).
 
 ## M7 — Meta-progression
 *Exit: losing a run makes you want to start another one immediately.*

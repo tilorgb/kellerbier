@@ -76,17 +76,34 @@ export class Texture {
     return this.frame.height;
   }
 
-  /** `[u0, v0, u1, v1]` with `v0` the *top* edge — sources are uploaded top row first. */
-  uvs(): [number, number, number, number] {
+  private uvCache: readonly [number, number, number, number] | null = null;
+
+  /**
+   * `[u0, v0, u1, v1]` with `v0` the *top* edge — sources are uploaded top row
+   * first. Computed once and kept: a billboard asks for this every time it
+   * changes frame, which for a walking body is every few frames forever, and
+   * a fresh array each time is exactly the per-frame garbage the render loop
+   * is measured against. Call `invalidateUvs()` after changing `frame`.
+   */
+  uvs(): readonly [number, number, number, number] {
+    if (this.uvCache !== null) {
+      return this.uvCache;
+    }
     const { width, height } = this.source;
     if (width === 0 || height === 0) {
-      return [0, 1, 1, 0];
+      this.uvCache = [0, 1, 1, 0];
+      return this.uvCache;
     }
     const u0 = this.frame.x / width;
     const u1 = (this.frame.x + this.frame.width) / width;
     const v0 = 1 - this.frame.y / height;
     const v1 = 1 - (this.frame.y + this.frame.height) / height;
-    return [u0, v0, u1, v1];
+    this.uvCache = [u0, v0, u1, v1];
+    return this.uvCache;
+  }
+
+  invalidateUvs(): void {
+    this.uvCache = null;
   }
 
   /** A sub-rectangle of the same source. */

@@ -21,7 +21,7 @@ import { ProjectileView, type ProjectileArt } from './projectiles.js';
 import { UI_TEXT_HEIGHT } from './ui/text.js';
 import { ELEVATION, WorldCamera, type WorldPoint } from './world/camera.js';
 import { Lighting } from './world/lighting.js';
-import { type DoorState, type DoorTextures, Scenery } from './world/scenery.js';
+import { type DoorState, Scenery } from './world/scenery.js';
 
 /**
  * The game as a scene: everything the player sees in the room, and the fixed
@@ -63,7 +63,6 @@ export interface GameViewTextures {
   readonly numberFont: string;
   readonly pedestalItem: Texture;
   readonly pedestalPlinth?: Texture | undefined;
-  readonly doors?: DoorTextures | undefined;
   readonly pickupArt?: Readonly<Record<string, Texture>> | undefined;
   readonly bossIds?: ReadonlySet<string> | undefined;
   readonly tileTextures?: Readonly<Record<string, Texture>> | undefined;
@@ -79,8 +78,8 @@ export interface RenderAccessibility extends ParticleAccessibility {
 const REDUCED_MOTION_SHAKE = 0.25;
 const DOOR_PULSE_FRAMES = 20;
 const DOOR_PULSE_DEPTH = 0.55;
-const DOOR_TRANSITION_FRAMES = 12;
-const DOOR_TRANSITION_MIN_SCALE = 0.08;
+/** Frames a door takes to swing open once the room is cleared — half a second, a real door's pace. */
+const DOOR_TRANSITION_FRAMES = 30;
 /** Where the player's "screen position" is taken: mid-body, so the vignette centres on him, not his feet. */
 const PLAYER_ANCHOR_HEIGHT = 8;
 
@@ -104,6 +103,7 @@ export class GameView {
   private roomGeometry: RoomGeometry;
   private doorsLocked: boolean;
   private lockedDoorDirections: ReadonlySet<RoomDirection> = new Set();
+  private bossDoorDirections: ReadonlySet<RoomDirection> = new Set();
   private secretHintDoors: readonly CompiledDoor[] = [];
   private doorTransitionTicks = 0;
   private doorPulseFrames = 0;
@@ -194,6 +194,7 @@ export class GameView {
     this.scene.add(this.corpseView.group);
 
     this.relight();
+    this.applyDoorStates();
     this.applyLean();
   }
 
@@ -263,10 +264,11 @@ export class GameView {
       this.doorsLocked = sim.doorsLocked;
       this.applyDoorStates();
       if (justUnlocked) {
-        // The leaves slide aside rather than vanish: start them shut and let the transition open them.
+        // The doors swing open rather than vanish: start them shut and let
+        // the transition below carry them round.
         for (const door of this.scenery.doors) {
           if (door.currentState === 'open') {
-            door.setState('closed');
+            door.setOpenness(0);
           }
         }
         this.doorTransitionTicks = DOOR_TRANSITION_FRAMES;
@@ -277,14 +279,11 @@ export class GameView {
     if (this.doorTransitionTicks > 0) {
       this.doorTransitionTicks -= 1;
       const progress = 1 - this.doorTransitionTicks / DOOR_TRANSITION_FRAMES;
-      const swing = 1 - (DOOR_TRANSITION_MIN_SCALE + (1 - DOOR_TRANSITION_MIN_SCALE) * progress);
+      // Ease out: a door thrown open slows as it swings.
+      const eased = 1 - (1 - progress) ** 3;
       for (const door of this.scenery.doors) {
-        if (this.doorStateFor(door.door) === 'open') {
-          door.setSwing(Math.max(DOOR_TRANSITION_MIN_SCALE, swing));
-          if (this.doorTransitionTicks === 0) {
-            door.setState('open');
-            door.setSwing(1);
-          }
+        if (door.currentState === 'open') {
+          door.setOpenness(eased);
         }
       }
     }
@@ -338,18 +337,21 @@ export class GameView {
 
   private buildScenery(): Scenery {
     const sim = this.sim;
-    return new Scenery(
+    const scenery = new Scenery(
       sim.room,
       sim.currentFloor,
       sim.doors,
       sim.roomDecorativeProps,
       {
         tiles: this.textures.roomTiles[sim.currentFloor],
-        doors: this.textures.doors,
         tileTextures: this.textures.tileTextures ?? {},
       },
       this.camera.lean,
     );
+    for (const door of scenery.doors) {
+      door.setDouble(this.bossDoorDirections.has(door.door.direction));
+    }
+    return scenery;
   }
 
   private relight(): void {
@@ -367,7 +369,6 @@ export class GameView {
   private applyDoorStates(): void {
     for (const door of this.scenery.doors) {
       door.setState(this.doorStateFor(door.door));
-      door.setSwing(1);
       door.setPulse(0);
     }
   }
@@ -417,6 +418,18 @@ export class GameView {
       return;
     }
     this.applyDoorStates();
+  }
+
+  /**
+   * Which of this room's doors lead to the boss room — those get a double
+   * door. The floor plan knows; `app/main.ts` tells us, the same way it does
+   * for key-locked doors.
+   */
+  setBossDoors(directions: Iterable<RoomDirection>): void {
+    this.bossDoorDirections = new Set(directions);
+    for (const door of this.scenery.doors) {
+      door.setDouble(this.bossDoorDirections.has(door.door.direction));
+    }
   }
 
   /** The player's mid-body, in internal-frame pixels. */

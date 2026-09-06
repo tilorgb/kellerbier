@@ -1,5 +1,5 @@
-import { Texture } from 'pixi.js';
 import { describe, expect, it } from 'vitest';
+import { Texture, textureFromPixels } from '../../src/render/gfx/index.js';
 import { buildParticleArt, TELEGRAPH_RING_SPRITE } from '../../src/render/art-bundle.js';
 import { ParticleView } from '../../src/render/particles.js';
 import {
@@ -17,7 +17,7 @@ import type { EnemyDefinition } from '../../src/sim/enemy/definition.js';
 function vfx(): Record<string, Texture> {
   return Object.fromEntries(
     ['foam', 'splash', 'spark', 'dust', 'spore', 'shard', 'ember', 'glint', 'flash', 'ring'].map(
-      (name) => [name, new Texture()],
+      (name) => [name, textureFromPixels(1, 1, new Int32Array([0xffffff]))],
     ),
   );
 }
@@ -94,6 +94,29 @@ describe('the accessibility toggles suppress the right effects', () => {
     expect(view.draws(ParticleKind.Flash)).toBe(false);
     expect(view.draws(ParticleKind.Dust)).toBe(true);
     expect(view.draws(ParticleKind.Glint)).toBe(true);
+  });
+
+  it('applies the filter at draw time: a suppressed particle stays in the store and leaves the frame', () => {
+    // Suppressed here, never at spawn (`docs/DECISIONS.md` #41), so a replay is
+    // byte-identical whatever the toggles — which is why the *store* keeps all
+    // three and only the drawn count drops.
+    const store = new ParticleStore(16);
+    store.spawn(10, 10, 0, 0, 30, 2, ParticleKind.Foam);
+    store.spawn(20, 10, 0, 0, 30, 2, ParticleKind.Dust);
+    store.spawn(30, 10, 0, 0, 30, 2, ParticleKind.Flash);
+    const view = new ParticleView(store, buildParticleArt(vfx(), Texture.EMPTY));
+
+    view.sync(1);
+    expect(view.drawnCount).toBe(3);
+
+    view.setAccessibility({ reducedMotion: true, reduceFlashes: false });
+    view.sync(1);
+    expect(view.drawnCount).toBe(2);
+
+    view.setAccessibility({ reducedMotion: true, reduceFlashes: true });
+    view.sync(1);
+    expect(view.drawnCount).toBe(1);
+    expect(store.liveCount).toBe(3);
   });
 });
 
