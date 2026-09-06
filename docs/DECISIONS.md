@@ -3702,14 +3702,37 @@ of the frame a body may cover. `tests/art/blocks-authoring.test.ts` gained the a
 block's overhang rows are actually *inked*, because a tile that leaves them empty passes every other
 check, looks exactly like the old art, and silently has no effect.
 
-### Known trade, named rather than absorbed
+### The lighting had to follow them up
 
-The ambient light (#37/#243) sits over the floor and under everything that stands, and the
-obstacles and props moved up through it. The floor beneath them still darkens; the rock and the
-market stall themselves no longer do. Scenery cannot be both above the bodies for occlusion and
-below the light for tone without lighting the bodies too, which `docs/GAME_DESIGN.md` §1 rules out.
-The background palette tier (#62) is already doing most of that work; a per-sprite ambient tint is
-the follow-up if it reads bright.
+The ambient light (#37/#243) is not a light — it is gradient *sprites* laid over the floor at one
+fixed depth, so it shades what is under it and nothing else. That was invisible while nothing stood
+*in* it. Moving the obstacles and the furniture above it left the bulb pooling light on a floor and
+on nothing standing on it: a lit floor with unlit rock on top, which is a bug rather than a trade.
+
+So the light is applied to them a second way. `AmbientLight.tintAt(x, y)` answers what the lighting
+does to a body **standing at** a floor point, and `GameView.tintScenery` applies it as a `tint` to
+every rock and every prop. Three things make that faithful rather than approximate:
+
+- **Sampled at the foot line, one value for the whole sprite.** A rock's raised crown is not further
+  across the room than its base, it is above it — shading by where its pixels land on screen would
+  read height as depth and slide the falloff up its face. One value per object is also all the
+  falloff deserves: it varies over hundreds of world units and a rock is sixteen.
+- **Read back out of the same canvases the textures are uploaded from**, not re-derived from the
+  gradient stops, so the sampler and the GPU are looking at the same pixels by construction. A
+  changed stop, puff or blur radius moves both or neither.
+- **Off a revision counter**, so Floor 1's static lamp shades a room once at load and only Floor 2's
+  drifting cloud costs anything per frame. Floor 2 is exact besides: its cloud is already a
+  `multiply`, which is precisely what a tint is.
+
+**A tint can shade and shift hue; it cannot brighten.** So the bulb's *additive* glow becomes warmth
+rather than bloom (`KELLER_GLOW_WARMTH`): a rock in the pool reads warm instead of reading grey
+against a warm floor, but it does not blow out to white the way it did when it was drawn under the
+overlay. That is deliberate and was chosen by looking at it. Drawing the glow itself over the depth
+layer was tried first and is worse: it falls on the bodies too, and at the alpha the floor was tuned
+for it washes the foreground out — Alois under the bulb loses his outline and his shirt goes pink.
+The floor is the surface that pool was authored against; foreground art is not. What the roster
+gains for it is that an obstacle now reads as a solid thing to route around (#62's own words for the
+foreground tier) instead of blooming into the floor it stands on.
 
 **Constrains:** anything new that stands on the floor joins the depth layer and writes a foot line —
 there is no second mechanism, and the Maibaum is the worked example of why. Any sprite authored
