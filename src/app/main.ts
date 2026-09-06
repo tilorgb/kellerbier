@@ -2313,6 +2313,12 @@ WASD move   arrows aim and fire
     view.setSecretHints(crackHintsFor(floorPlan, currentRoomId, revealedEdges));
     view.setLockedDoors(lockedDoorsFor(floorPlan, currentRoomId, visitedRoomIds));
     minimapHud.rebuild(floorPlan, currentRoomId, visitedRoomIds);
+    // Both `sim` and `view` above are fresh objects and the old view has just
+    // been destroyed, so anything holding the previous pair is now holding
+    // corpses. `null` only on boot's own first call, which the `await` below
+    // this function's last use resolves a moment later by mounting against
+    // exactly these two.
+    overlay?.setContext(sim, view);
 
     summary = new RunSummaryTracker();
     telemetry = new TelemetryTracker();
@@ -3454,8 +3460,8 @@ WASD move   arrows aim and fire
   overlay = await mountDebugOverlay(sim, view, app, uiLayer, () => layout.scale);
   exposeDebugHandle(
     loop,
-    sim,
-    view,
+    () => sim,
+    () => view,
     (ms) => {
       stallMs = ms;
     },
@@ -3544,6 +3550,13 @@ interface DebugOverlayHandle {
   sync(alpha: number): void;
   record(simMs: number, renderMs: number, steps: number): void;
   readonly drawCalls: { beginFrame(): void };
+  /**
+   * Points the overlay at the run that just started. `startRun` builds a new
+   * `GameSim` and `GameView` every time and destroys the old view, so an
+   * overlay bound once at boot spends the whole session reading a simulation
+   * nobody is playing — see `DebugOverlay.setContext`.
+   */
+  setContext(sim: GameSim, view: GameView): void;
 }
 
 /**
@@ -3584,6 +3597,14 @@ async function mountDebugOverlay(
  * overlay's sliders arrive in #8:
  *
  *   __kellerbier.tuning.movement.maxSpeed = 4;
+ *
+ * `sim`, `view` and `tuning` are **getters** over whatever `startRun` last
+ * built, not the objects boot happened to see. They used to be the latter,
+ * which made every one of them a corpse from the first restart onward — and
+ * boot itself starts a run before this is exposed, so it was never once
+ * correct. A console session that restarts the run keeps working; a variable
+ * captured out of the handle (`const s = __kellerbier.sim`) does not, and
+ * should be re-read after a restart like anything else.
  */
 interface DebugHost {
   __kellerbier?: {
@@ -3674,8 +3695,16 @@ interface ProgressionHandle {
 
 function exposeDebugHandle(
   loop: FixedTimestepLoop,
-  sim: GameSim,
-  view: GameView,
+  /**
+   * Accessors, not values (as of #73's follow-up): `startRun` replaces both on
+   * every restart, so a handle that captured them would hand the console a
+   * simulation nobody is playing and a scene graph that has been destroyed —
+   * the same staleness `DebugOverlay.setContext` fixes for the overlay. As
+   * getters on the exposed object, `__kellerbier.sim` is whatever is running
+   * when it is read.
+   */
+  liveSim: () => GameSim,
+  liveView: () => GameView,
   stall: (ms: number) => void,
   settings: AccessibilitySettings,
   setAccessibilitySettings: (patch: Partial<AccessibilitySettings>) => void,
@@ -3687,9 +3716,15 @@ function exposeDebugHandle(
   }
   (globalThis as unknown as DebugHost).__kellerbier = {
     loop,
-    sim,
-    view,
-    tuning: sim.tuning,
+    get sim(): GameSim {
+      return liveSim();
+    },
+    get view(): GameView {
+      return liveView();
+    },
+    get tuning(): GameSim['tuning'] {
+      return liveSim().tuning;
+    },
     stall,
     settings,
     setAccessibilitySettings,
