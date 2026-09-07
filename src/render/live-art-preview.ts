@@ -1,4 +1,4 @@
-import type { Texture } from './gfx/index.js';
+import type { Texture, TextureSource } from './gfx/index.js';
 
 /**
  * The parent-window half of the pixel editor's (#108) live preview: the
@@ -18,7 +18,43 @@ import type { Texture } from './gfx/index.js';
  * textures `floor-art.ts` happens to have already loaded. `applied: false`
  * in the ack tells the pixel editor to say so rather than silently doing
  * nothing.
+ *
+ * ## Painting into a shared atlas sheet (#294)
+ *
+ * Since every sprite's `Texture` is now a `.sub()` view over one shared
+ * per-bucket atlas `TextureSource` rather than a `TextureSource` of its own,
+ * "replace the source's image" would repaint every other sprite packed into
+ * the same sheet with garbage. Instead each edited source is promoted once
+ * to a persistent `<canvas>` (seeded via `drawImage` from whatever image it
+ * had, so the rest of the sheet survives), and every edit after that is a
+ * `putImageData` at the target sprite's own `frame.x`/`frame.y` offset —
+ * `Texture.sub`'s offsets already compose absolutely against the sheet, the
+ * same vocabulary `cutStrip` cuts an animation frame with, so this is one
+ * `putImageData` call rather than a special case per sprite shape.
  */
+const compositeCanvases = new WeakMap<TextureSource, HTMLCanvasElement>();
+
+function compositeCanvasFor(source: TextureSource): CanvasRenderingContext2D | null {
+  const existing = compositeCanvases.get(source);
+  if (existing !== undefined) {
+    return existing.getContext('2d');
+  }
+  const canvas = document.createElement('canvas');
+  canvas.width = source.width;
+  canvas.height = source.height;
+  const ctx = canvas.getContext('2d');
+  if (ctx === null) {
+    return null;
+  }
+  const image = source.texture.image as CanvasImageSource | undefined;
+  if (image !== undefined) {
+    ctx.drawImage(image, 0, 0);
+  }
+  compositeCanvases.set(source, canvas);
+  source.texture.image = canvas;
+  return ctx;
+}
+
 export const LIVE_PREVIEW_MESSAGE_TYPE = 'kb-pixel-editor:preview';
 export const LIVE_PREVIEW_ACK_TYPE = 'kb-pixel-editor:preview-ack';
 
@@ -74,24 +110,14 @@ export function applyLiveArtPreview(
   if (texture === undefined) {
     return false;
   }
-  // A frame cut out of an animation strip (#150) shares one `TextureSource`
-  // with the rest of the strip, so replacing that source with a single frame's
-  // canvas would leave every *other* frame's rectangle pointing outside the
-  // image. The message says which sprite is being drawn but not which frame,
-  // so there is no correct place to write it either — an animated sprite
-  // simply has no live target yet, and reporting that honestly (the ack's
-  // `applied: false`, which the editor surfaces) is better than repainting the
-  // room with a garbled strip.
-  if (
-    texture.frame.width !== texture.source.width ||
-    texture.frame.height !== texture.source.height
-  ) {
+  // The message carries exactly one sprite's pixels — the target's own frame
+  // is that sprite's footprint in the sheet, so a size mismatch means the
+  // message isn't shaped like this sprite (e.g. an animation frame view,
+  // whose footprint is one frame of the strip, not the whole strip).
+  if (texture.frame.width !== message.width || texture.frame.height !== message.height) {
     return false;
   }
-  const canvas = document.createElement('canvas');
-  canvas.width = message.width;
-  canvas.height = message.height;
-  const ctx = canvas.getContext('2d');
+  const ctx = compositeCanvasFor(texture.source);
   if (ctx === null) {
     return false;
   }
@@ -100,10 +126,9 @@ export function applyLiveArtPreview(
     message.width,
     message.height,
   );
-  ctx.putImageData(imageData, 0, 0);
-  // Swap the pixels under the same GPU texture: every billboard and tile
-  // already drawing with it repaints on the next frame, no rebind anywhere.
-  texture.source.texture.image = canvas;
+  // Paint into the sheet at this sprite's own offset — everything else
+  // packed into the same sheet is untouched.
+  ctx.putImageData(imageData, texture.frame.x, texture.frame.y);
   texture.source.update();
   return true;
 }

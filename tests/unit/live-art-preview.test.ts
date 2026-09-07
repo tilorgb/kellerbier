@@ -44,7 +44,8 @@ describe('isLiveArtPreviewMessage', () => {
 
 /**
  * The swap itself: the message's pixels land under the *same* GPU texture,
- * so every billboard and tile already drawing with it repaints on the next
+ * composited into its shared sheet at the target sprite's own offset, so
+ * every billboard and tile already drawing with it repaints on the next
  * frame with nothing rebound. In Node there is no canvas, so a `document` and
  * an `ImageData` just wide enough for `putImageData` stand in.
  */
@@ -52,8 +53,12 @@ describe('applyLiveArtPreview', () => {
   interface FakeCanvas {
     width: number;
     height: number;
-    putCalls: number;
-    getContext(kind: string): { putImageData(): void } | null;
+    putCalls: { x: number; y: number }[];
+    drawCalls: number;
+    getContext(kind: string): {
+      putImageData(data: unknown, x: number, y: number): void;
+      drawImage(): void;
+    } | null;
   }
   let created: FakeCanvas[] = [];
   const globals = globalThis as { document?: unknown; ImageData?: unknown };
@@ -70,10 +75,14 @@ describe('applyLiveArtPreview', () => {
         const canvas: FakeCanvas = {
           width: 0,
           height: 0,
-          putCalls: 0,
+          putCalls: [],
+          drawCalls: 0,
           getContext: () => ({
-            putImageData: () => {
-              canvas.putCalls += 1;
+            putImageData: (_data: unknown, x: number, y: number) => {
+              canvas.putCalls.push({ x, y });
+            },
+            drawImage: () => {
+              canvas.drawCalls += 1;
             },
           }),
         };
@@ -125,7 +134,7 @@ describe('applyLiveArtPreview', () => {
     // The same three.js texture object, now backed by the canvas that was painted.
     const [canvas] = created;
     expect(canvas).toBeDefined();
-    expect(canvas?.putCalls).toBe(1);
+    expect(canvas?.putCalls).toEqual([{ x: 0, y: 0 }]);
     expect(canvas?.width).toBe(2);
     expect(texture.source.texture.image).toBe(canvas);
     expect(texture.source.texture.version).toBeGreaterThan(versionBefore);
@@ -136,13 +145,43 @@ describe('applyLiveArtPreview', () => {
     expect(applyLiveArtPreview({ 'something-else': texture }, message())).toBe(false);
   });
 
-  it('declines to repaint a frame cut out of an animation strip', () => {
-    // A strip's frames share one source, so replacing that source with one
-    // frame's canvas would leave every other frame pointing outside the image.
+  it("paints a sub-rectangle view into its shared sheet at the view's own offset", () => {
+    // Every sprite is a `.sub()` view over a shared per-bucket atlas sheet
+    // now (#294) — the composite has to land at the target's own offset in
+    // that sheet, not at (0, 0), or it would overwrite whatever else the
+    // sheet happens to have packed there.
+    created = [];
+    const sheet = new Texture(new TextureSource(new ThreeTexture(), 8, 4));
+    const view = sheet.sub(2, 1, 2, 2);
+
+    expect(applyLiveArtPreview({ 'crate-opa': view }, message())).toBe(true);
+
+    const [canvas] = created;
+    expect(canvas).toBeDefined();
+    // Promoted to a full-sheet canvas, not one sized to just the view.
+    expect(canvas?.width).toBe(8);
+    expect(canvas?.putCalls).toEqual([{ x: 2, y: 1 }]);
+  });
+
+  it('reuses the same composited canvas across repeated edits of the same sheet', () => {
+    created = [];
+    const sheet = new Texture(new TextureSource(new ThreeTexture(), 8, 4));
+    const view = sheet.sub(0, 0, 2, 2);
+
+    expect(applyLiveArtPreview({ 'crate-opa': view }, message())).toBe(true);
+    expect(applyLiveArtPreview({ 'crate-opa': view }, message())).toBe(true);
+
+    expect(created).toHaveLength(1);
+    expect(created[0]?.putCalls).toHaveLength(2);
+  });
+
+  it("rejects a message whose size does not match the target's own footprint", () => {
+    // An animation frame's footprint is one frame of the strip, not the
+    // whole strip — a message sized for the whole strip is not this sprite.
     const strip = new Texture(new TextureSource(new ThreeTexture(), 8, 2));
     const frame = strip.sub(2, 0, 2, 2);
     const versionBefore = strip.source.texture.version;
-    expect(applyLiveArtPreview({ 'crate-opa': frame }, message())).toBe(false);
+    expect(applyLiveArtPreview({ 'crate-opa': frame }, message(8, 2))).toBe(false);
     expect(strip.source.texture.version).toBe(versionBefore);
   });
 });

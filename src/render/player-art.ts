@@ -1,6 +1,4 @@
-import { loadTexture } from './gfx/index.js';
-import { cutStrip, type LoadedStrip } from './floor-art.js';
-import type { AnimationSidecar } from './animation/definition.js';
+import { cutStrip, loadAtlasSheets, type LoadedStrip } from './floor-art.js';
 import { PLAYER_FACING_IDS, type PlayerFacingId } from './animation/state.js';
 
 /**
@@ -27,8 +25,9 @@ import { PLAYER_FACING_IDS, type PlayerFacingId } from './animation/state.js';
  *   and honest about there being nothing to play (see
  *   `assets/sprites/README.md`).
  *
- * Found by `import.meta.glob` for the same reason `floor-art.ts` finds enemy
- * strips that way: adding or re-cutting one is dropping files in a folder.
+ * Cut from the `common` atlas sheet the same way `floor-art.ts` cuts every
+ * other strip (#294) — `loadAtlasSheets()` is shared with it so the sheet is
+ * fetched once regardless of which of the two loaders asks first.
  */
 export interface PlayerArt {
   /** Body strips by facing, sober and drunk. */
@@ -48,35 +47,27 @@ export const PLAYER_BODY_KEYS: readonly PlayerBodyKey[] = [
 /** How many aim directions the Schlauch is authored in, resting and firing alike. */
 export const SCHLAUCH_OCTANTS = 8;
 
-const STRIP_URLS: Record<string, string> = import.meta.glob(
-  '../../assets/sprites/common/characters/alois-*.strip.png',
-  { eager: true, query: '?url', import: 'default' },
-);
-
-const STRIP_SIDECARS: Record<string, AnimationSidecar> = import.meta.glob(
-  '../../assets/sprites/common/characters/alois-*.anim.json',
-  { eager: true, import: 'default' },
-);
-
-const STRIP_PATH_PATTERN = /\/characters\/alois-([a-z-]+)\.strip\.png$/;
+const ALOIS_FRAME_PATTERN = /^character\/alois-([a-z-]+)$/;
 
 export async function loadPlayerArt(): Promise<PlayerArt> {
   const strips: Record<string, LoadedStrip> = {};
-  for (const [path, url] of Object.entries(STRIP_URLS)) {
-    const suffix = STRIP_PATH_PATTERN.exec(path)?.[1];
-    if (suffix === undefined) {
-      continue;
+  const sheets = await loadAtlasSheets();
+  for (const { manifest, sheet } of sheets) {
+    for (const [key, frame] of Object.entries(manifest.frames)) {
+      const suffix = ALOIS_FRAME_PATTERN.exec(key)?.[1];
+      if (suffix === undefined) {
+        continue;
+      }
+      if (frame.animation === undefined) {
+        // Unreachable through the art pipeline — `tools/art/scan.mjs` fails the
+        // build on a strip with no sidecar. Thrown rather than skipped for the
+        // same reason `floor-art.ts` throws: a player sprite the game quietly
+        // declines to animate is the failure this issue exists to remove.
+        throw new Error(`alois-${suffix} has no alois-${suffix}.anim.json sidecar`);
+      }
+      const texture = sheet.sub(frame.x, frame.y, frame.width, frame.height);
+      strips[suffix] = cutStrip(`alois-${suffix}`, texture, frame.animation);
     }
-    const sidecar = STRIP_SIDECARS[path.replace('.strip.png', '.anim.json')];
-    if (sidecar === undefined) {
-      // Unreachable through the art pipeline — `tools/art/scan.mjs` fails the
-      // build on a strip with no sidecar. Thrown rather than skipped for the
-      // same reason `floor-art.ts` throws: a player sprite the game quietly
-      // declines to animate is the failure this issue exists to remove.
-      throw new Error(`alois-${suffix}.strip.png has no alois-${suffix}.anim.json sidecar`);
-    }
-    const base = await loadTexture(url);
-    strips[suffix] = cutStrip(`alois-${suffix}`, base, sidecar);
   }
 
   const body: Partial<Record<PlayerBodyKey, LoadedStrip>> = {};

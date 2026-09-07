@@ -4119,3 +4119,96 @@ stale (`GameView.notifyRoomContentChanged`) rather than disposing it inline, spe
 that call can land between frames, before `sync` has swapped the currently-displayed `Scenery`
 for its replacement — anything else that mutates a room's content out from under a live id should
 use the same lazy-invalidation seam, not call into `SceneryCache` directly.
+
+## 79. The atlas loads at runtime; body instancing and the CI perf harness stay out of #294
+
+**Decided:** #294 (tier 3 of the render audit, `docs/PERFORMANCE_AUDIT.md` F8/§5), which scoped
+four items — load the atlas, instance the bodies, re-baseline the draw-call budget, land a
+browser perf harness in CI. Only the first landed; the other three are deferred, each for a
+different reason, rather than attempted and left half-finished.
+
+**Item 1, landed as scoped.** `render/floor-art.ts` no longer globs and `loadTexture`s 113
+individual sprite files; `loadAtlasSheets()` loads the three packed sheets
+(`assets/atlases/{common,floor-1-cellar,floor-2-rural}.png`) and their manifests once, and every
+named sprite is a `Texture.sub()` view over the whole sheet — the same "rectangle view over a
+shared `TextureSource`" vocabulary `cutStrip` already cut an animation frame with, so packing a
+sprite into a sheet needed no new concept, only a second thing to cut a rectangle out of.
+`spriteOrigins` is now built directly from each manifest key's `<category>/<name>`, which is
+simpler than the old regex-matched-against-folder-name approach it replaces, not just
+differently sourced. The issue's own fallback option — keep the per-file path as a dev fallback —
+was not taken: maintaining two loaders that must produce byte-identical `Texture` frames is a
+second thing to keep in sync for a fallback nothing in this codebase's dev/test/prod split
+actually needs (`vitest`, `vite build` and `npm run dev` all run the atlas build first, per
+`tools/art/build-atlas.mjs`'s own dev-plugin and CLI entry points).
+
+`render/player-art.ts` was in scope too, though the issue names only `floor-art.ts`: Alois's own
+seven strips are authored under `common/characters/`, which is packed into `common`'s sheet
+alongside every other `common`-bucket sprite, so loading them through a second, separate glob
+would have both duplicated the fetch of `common.png` (once per loader, since `main.ts` and
+`editor/playtest.ts` both call `loadFloorArt()` and `loadPlayerArt()` in the same `Promise.all`)
+and left the "boot fetches 3 sprite requests" criterion measuring a number the second loader could
+silently break later. `loadAtlasSheets()` is exported from `floor-art.ts` and shared by both —
+memoized behind a module-level promise so whichever loader asks first pays the fetch and the other
+gets the same promise back, rather than each fetching its own copy of "the atlas, loaded."
+
+**The pixel editor's live preview (`render/live-art-preview.ts`) needed a real fix, not just a
+check**, per the issue's own callout. Every sprite's `Texture` is now a sub-rectangle of a *shared*
+per-bucket sheet rather than a `TextureSource` of its own, so the old "replace the whole image"
+strategy would have painted over every other sprite packed into the same sheet. It now promotes
+each edited sheet to a persistent `<canvas>` once (seeded via `drawImage` from whatever the sheet
+already was, so the rest of it survives) and composites every edit as a `putImageData` at the
+target sprite's own `frame.x`/`frame.y` — the same absolute-offset composition `Texture.sub`
+already does, so this is one code path rather than a special case per sprite shape. The one
+behavioural change: `app/main.ts`'s `attachLiveArtPreviewListener` call site now excludes animated
+`enemyArt` entries (those also present in `enemyStrips`) from the editable target map. Painting
+into an animation frame's own rectangle is technically safe post-fix, but a live-preview message
+does not say *which frame* it is drawing, and `enemyArt`'s entry for an animated name is always
+that strip's first frame — silently writing a paint stroke into "frame 0's rectangle" while the
+artist is looking at frame 3 in the docked editor would be a worse failure than the honest
+`applied: false` the exclusion produces instead.
+
+**Items 2 and 4, deferred.** Body instancing (`render/entities.ts`, `world/billboard.ts`) is the
+issue's own acknowledged highest-risk piece: a custom per-instance-UV shader, a fallback path for
+the alpha-fade case the issue's text says instancing cannot cover, a depth-sort rework because one
+`InstancedMesh` cannot rely on painter's-order the way separate meshes did, and an acceptance
+criterion ("compared frame-by-frame, not by eye") this session has no tooling to verify against.
+Landing it wrong would trade a linear-but-correct draw-call cost for a constant-but-subtly-broken
+one — sorting artifacts or a silhouette drifted from its collider are worse than the problem being
+solved. The actor pass therefore stays one draw call per standing body; #294's "actor pass under
+10 draw calls" acceptance criterion is not met by this change, and `TECH_STACK.md` §3's draw-call
+row says so rather than being marked done.
+
+The CI perf harness (item 4) is deferred for the same reason it was scoped out of #292 and #293
+before it: every number in all three tier issues came from Playwright driving the preinstalled
+Chromium by hand, and landing that as a repeatable CI gate (draw calls per pass under a ceiling,
+zero `linkProgram` after a warm-up tour, zero net geometry/texture growth across 20 crossings) is
+its own piece of infrastructure work — a `tests/perf/` suite plus a CI job — not a few extra lines
+alongside items 1-2. Instancing is also the harness's most interesting thing to gate on; landing
+the harness before the actor pass actually changes shape would mean writing its most important
+assertion twice.
+
+**What was actually measured, by hand, the same way #292/#293's numbers were:** boot's sprite/atlas
+network requests went from 113 individual PNGs to the three atlas sheets (zero requests under
+`assets/sprites/**`); a 30-room dev-`N` tour repeating #293's own churn check
+(`tests/unit/scenery-cache-gameview.test.ts`'s object-identity guarantee, unaffected by this
+issue) still shows zero `compileShader`/`linkProgram`/`deleteProgram` on a room revisit, confirming
+the atlas rewrite did not disturb #292/#293's caching; every sprite category (a tile, an animated
+enemy, a boss, a static character, a pickup, a projectile, vfx) was spot-checked visually in a live
+run and renders identically to before. `tests/content/atlas-manifests.test.ts` is the CI-checked
+half of that: it cross-validates the built `assets/atlases/*.json` manifests against
+`scanSprites()`'s ground truth (every committed sprite has a manifest frame, every frame fits
+inside its sheet, every animated sprite's sidecar round-trips through `compileAnimationSet` the
+same way `cutStrip`/`loadPlayerArt` use it at runtime) — a Node-only regression test for the format
+`floor-art.ts`/`player-art.ts` assume, standing in for the parts of "identical rendering" that
+*can* be checked without a browser.
+
+**Constrains:** a future change to the atlas manifest format (`tools/art/build.mjs`'s `frames`
+shape) must keep `tests/content/atlas-manifests.test.ts` passing or update it deliberately — it is
+the only thing pinning that contract down outside of a live-browser check. Landing instancing
+later should start from `ProjectileView`/`ParticleView`'s existing instanced-layer pattern (the
+issue's own suggestion) and needs to re-verify the same three churn/identity guarantees this entry
+measured by hand, plus the depth-sort and alpha-fade fallback the issue's scope section calls out
+still working. Whoever picks up item 4 should build its assertions around the counts this entry
+and #292/#293 already established as meaningful (draw calls per pass, `linkProgram`/`compileShader`
+deltas, `renderer.info.memory` deltas), not new metrics — those three are what the manual checks
+across all three tier issues converged on as hardware-independent and worth gating on.

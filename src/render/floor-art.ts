@@ -8,16 +8,31 @@ import {
 /**
  * Every authored sprite in the tree, loaded and shaped for the renderer.
  *
+ * ## Atlas sheets, not 113 individual PNGs (#294)
+ *
+ * `npm run dev`/`vitest`/`vite build` all run `tools/art/build-atlas.mjs`
+ * first (the "art pipeline: built N atlas(es)..." line at the top of every
+ * dev-server and test run), packing every authored sprite into one sheet per
+ * bucket — `assets/atlases/<bucketId>.png` plus a `.json` manifest of each
+ * sprite's `(x, y, width, height)` within it, an authored strip's `animation`
+ * sidecar carried along on its one (whole-strip) entry. This module used to
+ * load those 113 individual files at runtime and let the atlas sit unused
+ * (`docs/DECISIONS.md` #74's original call, superseded here); now it loads
+ * only the sheets — a fixed, small request count regardless of how many
+ * sprites the game grows to — and cuts every named `Texture` from them with
+ * `Texture.sub`, which is the same "a rectangle view over a shared
+ * `TextureSource`" vocabulary `cutStrip` already used to cut an individual
+ * strip into frames. A bucket with no sprites yet (an unparked floor with an
+ * empty `assets/sprites/floor-N/` tree) simply has no manifest to glob, same
+ * as it had no sprite files before.
+ *
  * ## Globs, not import lists
  *
- * Every category is discovered by `import.meta.glob` (#152). Before this,
- * static tiles and characters were a hand-maintained list of `import`
- * statements at the top of this file — nineteen of them by the time floor 2
- * landed, and exactly the "engine change required to add the next one" that
- * `CONTRIBUTING.md`'s content definition-of-done rules out. #150 had already
- * made animation strips a glob for that reason; #152 added forty-odd sprites
- * at once, which settled the argument for the rest. Adding a sprite is now
- * dropping a file in a folder, in the atlas build *and* at runtime.
+ * Every atlas file is discovered by `import.meta.glob` (#152, and before
+ * that every *sprite* file was): a floor whose bucket first gets sprites
+ * needs no change here, because `tools/art/build.mjs` only ever writes an
+ * atlas for a bucket it found sprites in — the glob picks it up the moment
+ * `npm run dev` next builds one.
  *
  * Names are the keys, and the maps are deliberately flat and complete rather
  * than filtered per consumer: an enemy looks itself up by
@@ -254,92 +269,96 @@ export interface LoadedStrip {
 export type AnimatedSpriteSet = LoadedStrip;
 
 /**
- * Every animation strip a *creature* is authored as, and every `*.anim.json`
- * beside one, resolved at build time by Vite.
- *
- * `characters`/`bosses` rather than every category, and every bucket
- * including `common` (#194): a floor bucket *is* a roster, and this map is
- * indexed by `EnemyDefinition.id`, which is why a floor's `characters/` and
- * `bosses/` both join it — a boss is in that roster like anything else
- * (`content/enemies/grosse-kellerassel.ts`). `common/characters/` is a
- * roster too, for the one enemy that appears on every floor rather than one
- * (the Shopkeeper); it also holds Alois's own strips (#151), which are keyed
- * by facing rather than by enemy id and loaded by `render/player-art.ts`
- * instead — those land in this map too, unused, the same "flat and
- * complete rather than filtered per consumer" this whole file already is.
+ * One atlas sheet's manifest, as `tools/art/build-atlas.mjs` writes it
+ * alongside the sheet — every packed sprite's rectangle within the sheet,
+ * keyed `"<category>/<name>"`, an animated strip's sidecar folded onto its
+ * one (whole-strip) entry as `animation`.
  */
-const STRIP_URLS: Record<string, string> = {
-  ...import.meta.glob<string>('../../assets/sprites/floor-*/characters/*.strip.png', {
-    eager: true,
-    query: '?url',
-    import: 'default',
-  }),
-  ...import.meta.glob<string>('../../assets/sprites/common/characters/*.strip.png', {
-    eager: true,
-    query: '?url',
-    import: 'default',
-  }),
-  ...import.meta.glob<string>('../../assets/sprites/floor-*/bosses/*.strip.png', {
-    eager: true,
-    query: '?url',
-    import: 'default',
-  }),
-};
+interface AtlasManifest {
+  readonly width: number;
+  readonly height: number;
+  readonly frames: Readonly<Record<string, AtlasFrame>>;
+}
 
-const STRIP_SIDECARS: Record<string, AnimationSidecar> = {
-  ...import.meta.glob<AnimationSidecar>('../../assets/sprites/floor-*/characters/*.anim.json', {
-    eager: true,
-    import: 'default',
-  }),
-  ...import.meta.glob<AnimationSidecar>('../../assets/sprites/common/characters/*.anim.json', {
-    eager: true,
-    import: 'default',
-  }),
-  ...import.meta.glob<AnimationSidecar>('../../assets/sprites/floor-*/bosses/*.anim.json', {
-    eager: true,
-    import: 'default',
-  }),
-};
+interface AtlasFrame {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+  readonly animation?: AnimationSidecar;
+}
 
-/** Every static sprite in the tree, by category. A strip matches `*.png` too, so `SPRITE_PATH_PATTERN` filters them back out. */
-const STATIC_TILE_URLS: Record<string, string> = import.meta.glob<string>(
-  '../../assets/sprites/*/tiles/*.png',
+const ATLAS_MANIFESTS: Record<string, AtlasManifest> = import.meta.glob<AtlasManifest>(
+  '../../assets/atlases/*.json',
+  { eager: true, import: 'default' },
+);
+
+const ATLAS_IMAGE_URLS: Record<string, string> = import.meta.glob<string>(
+  '../../assets/atlases/*.png',
   { eager: true, query: '?url', import: 'default' },
 );
 
-const STATIC_CHARACTER_URLS: Record<string, string> = import.meta.glob<string>(
-  '../../assets/sprites/*/characters/*.png',
-  { eager: true, query: '?url', import: 'default' },
-);
+const ATLAS_MANIFEST_PATH_PATTERN = /\/([^/]+)\.json$/;
 
-const STATIC_PROJECTILE_URLS: Record<string, string> = import.meta.glob<string>(
-  '../../assets/sprites/*/projectiles/*.png',
-  { eager: true, query: '?url', import: 'default' },
-);
+/** One loaded atlas sheet: its bucket id, manifest, and the whole sheet as a `Texture`. */
+export interface AtlasSheet {
+  readonly bucketId: string;
+  readonly manifest: AtlasManifest;
+  readonly sheet: Texture;
+}
 
-const STATIC_BOSS_URLS: Record<string, string> = import.meta.glob<string>(
-  '../../assets/sprites/*/bosses/*.png',
-  { eager: true, query: '?url', import: 'default' },
-);
+let atlasSheetsPromise: Promise<readonly AtlasSheet[]> | undefined;
 
-const STATIC_VFX_URLS: Record<string, string> = import.meta.glob<string>(
-  '../../assets/sprites/*/vfx/*.png',
-  { eager: true, query: '?url', import: 'default' },
-);
+/**
+ * Loads every atlas sheet exactly once, however many callers ask for it —
+ * `loadFloorArt` below and `player-art.ts`'s `loadPlayerArt` both need
+ * `common`'s sheet (Alois's own strips live in it, #151), and each calling
+ * `loadTexture` on it separately would mean two HTTP requests for the same
+ * PNG rather than the one boot's ≤ 3-sprite-requests budget wants.
+ */
+export function loadAtlasSheets(): Promise<readonly AtlasSheet[]> {
+  atlasSheetsPromise ??= Promise.all(
+    Object.entries(ATLAS_MANIFESTS).map(async ([manifestPath, manifest]) => {
+      const bucketId = ATLAS_MANIFEST_PATH_PATTERN.exec(manifestPath)?.[1];
+      if (bucketId === undefined) {
+        throw new Error(`atlas manifest at an unexpected path: ${manifestPath}`);
+      }
+      const imageUrl = ATLAS_IMAGE_URLS[manifestPath.replace(/\.json$/, '.png')];
+      if (imageUrl === undefined) {
+        throw new Error(`${bucketId} has an atlas manifest but no atlas image beside it`);
+      }
+      const sheet = await loadTexture(imageUrl);
+      return { bucketId, manifest, sheet };
+    }),
+  );
+  return atlasSheetsPromise;
+}
 
-const STRIP_PATH_PATTERN =
-  /\/assets\/sprites\/([^/]+)\/(?:characters|bosses)\/([^/]+)\.strip\.png$/;
-
-/** `(bucketId, name)` out of a sprite path, or `null` for an animation strip (which `STRIP_URLS` owns). */
-function parseSpritePath(path: string, folder: string): { bucketId: string; name: string } | null {
-  const pattern = new RegExp(`/assets/sprites/([^/]+)/${folder}/([^/]+)\\.png$`);
-  const match = pattern.exec(path);
-  const bucketId = match?.[1];
-  const name = match?.[2];
-  if (bucketId === undefined || name === undefined || name.endsWith('.strip')) {
-    return null;
+/** Where in `FloorArt` a frame of this category lands. */
+function targetsFor(
+  category: string,
+  targets: {
+    readonly tile: Record<string, Texture>;
+    readonly character: Record<string, Texture>;
+    readonly projectile: Record<string, Texture>;
+    readonly boss: Record<string, Texture>;
+    readonly vfx: Record<string, Texture>;
+  },
+): Record<string, Texture> {
+  switch (category) {
+    case 'tile':
+      return targets.tile;
+    case 'character':
+      return targets.character;
+    case 'projectile':
+      return targets.projectile;
+    case 'boss':
+      return targets.boss;
+    case 'vfx':
+      return targets.vfx;
+    default:
+      throw new Error(`atlas frame key names unknown category "${category}"`);
   }
-  return { bucketId, name };
 }
 
 /**
@@ -371,60 +390,6 @@ export function cutStrip(name: string, base: Texture, sidecar: AnimationSidecar)
   return { frames, clips: compileAnimationSet(name, sidecar, frameCount) };
 }
 
-/**
- * Adds the per-frame hit-flash silhouettes an `AnimatedSpriteSet` needs.
- *
- * `silhouette` is `render/placeholder-art.ts`'s `createSilhouetteTexture`
- * bound to a renderer — passed in so this stays callable from the two entry
- * points that have one and from tests that do not.
- */
-async function loadNearest(src: string): Promise<Texture> {
-  return loadTexture(src);
-}
-
-async function loadStrips(): Promise<Record<string, LoadedStrip>> {
-  const strips: Record<string, LoadedStrip> = {};
-  for (const [path, url] of Object.entries(STRIP_URLS)) {
-    const match = STRIP_PATH_PATTERN.exec(path);
-    const name = match?.[2];
-    if (name === undefined) {
-      continue;
-    }
-    const sidecarPath = path.replace('.strip.png', '.anim.json');
-    const sidecar = STRIP_SIDECARS[sidecarPath];
-    if (sidecar === undefined) {
-      // `tools/art/scan.mjs` already fails the build on a strip with no
-      // sidecar, so this is unreachable through the art pipeline. Thrown
-      // rather than skipped anyway: a strip the game silently declines to
-      // animate is the exact failure mode #150 is meant to remove.
-      throw new Error(`${name}.strip.png has no ${name}.anim.json sidecar next to it`);
-    }
-    const base = await loadNearest(url);
-    strips[name] = cutStrip(name, base, sidecar);
-  }
-  return strips;
-}
-
-/** Loads one glob's worth of static sprites into `(name, texture)` plus their origins. */
-async function loadStatics(
-  urls: Readonly<Record<string, string>>,
-  folder: string,
-  category: SpriteOrigin['category'],
-  into: Record<string, Texture>,
-  origins: Record<string, SpriteOrigin>,
-): Promise<void> {
-  await Promise.all(
-    Object.entries(urls).map(async ([path, url]) => {
-      const parsed = parseSpritePath(path, folder);
-      if (parsed === null) {
-        return;
-      }
-      into[parsed.name] = await loadNearest(url);
-      origins[parsed.name] = { bucketId: parsed.bucketId, category };
-    }),
-  );
-}
-
 const PICKUP_PREFIX = 'pickup-';
 
 /**
@@ -444,36 +409,30 @@ export async function loadFloorArt(): Promise<FloorArt> {
   const projectileTextures: Record<string, Texture> = {};
   const bossTextures: Record<string, Texture> = {};
   const vfxTextures: Record<string, Texture> = {};
+  const enemyStrips: Record<string, LoadedStrip> = {};
   const spriteOrigins: Record<string, SpriteOrigin> = {};
+  const targets = {
+    tile: tileTextures,
+    character: characterTextures,
+    projectile: projectileTextures,
+    boss: bossTextures,
+    vfx: vfxTextures,
+  };
 
-  const [enemyStrips] = await Promise.all([
-    loadStrips(),
-    loadStatics(STATIC_TILE_URLS, 'tiles', 'tile', tileTextures, spriteOrigins),
-    loadStatics(STATIC_CHARACTER_URLS, 'characters', 'character', characterTextures, spriteOrigins),
-    loadStatics(
-      STATIC_PROJECTILE_URLS,
-      'projectiles',
-      'projectile',
-      projectileTextures,
-      spriteOrigins,
-    ),
-    loadStatics(STATIC_BOSS_URLS, 'bosses', 'boss', bossTextures, spriteOrigins),
-    loadStatics(STATIC_VFX_URLS, 'vfx', 'vfx', vfxTextures, spriteOrigins),
-  ]);
-
-  // A strip's own name is a sprite origin too — click-to-pick has to resolve
-  // an animated creature to the file it was drawn in, same as a static one.
-  for (const path of Object.keys(STRIP_URLS)) {
-    const match = STRIP_PATH_PATTERN.exec(path);
-    const bucketId = match?.[1];
-    const name = match?.[2];
-    if (bucketId === undefined || name === undefined) {
-      continue;
+  const sheets = await loadAtlasSheets();
+  for (const { bucketId, manifest, sheet } of sheets) {
+    for (const [key, frame] of Object.entries(manifest.frames)) {
+      const slash = key.indexOf('/');
+      const category = key.slice(0, slash);
+      const name = key.slice(slash + 1);
+      const texture = sheet.sub(frame.x, frame.y, frame.width, frame.height);
+      spriteOrigins[name] = { bucketId, category: category as SpriteOrigin['category'] };
+      if (frame.animation !== undefined) {
+        enemyStrips[name] = cutStrip(name, texture, frame.animation);
+        continue;
+      }
+      targetsFor(category, targets)[name] = texture;
     }
-    spriteOrigins[name] = {
-      bucketId,
-      category: path.includes('/bosses/') ? 'boss' : 'character',
-    };
   }
 
   const pickupArt: Record<string, Texture> = {};
