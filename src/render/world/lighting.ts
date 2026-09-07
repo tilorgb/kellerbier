@@ -72,19 +72,24 @@ export const SHOT_LIGHT_COUNT = 8;
  * How many door glows can be lit across the whole scene at once.
  *
  * A `DoorPiece` owns one for its whole lifetime (constructed with the door,
- * released when the door is disposed), and — until #293 makes `Scenery`
- * persistent and drops the second live room — both the incoming room being
- * built and the outgoing room mid-slide can hold doors at the same time.
- * Measured across 300 generated floors on both authored floor tags
+ * released when the door is disposed). Two things can hold doors at once:
+ * the room-transition slide (the outgoing room, mid-slide, alongside the
+ * incoming one), and — since #293 — `SceneryCache` keeping up to
+ * `SCENERY_CACHE_CAPACITY` recently-visited rooms' whole `Scenery` alive
+ * (doors included) so a revisit rebuilds nothing. Measured across 300
+ * generated floors on both authored floor tags
  * (`tests/unit/lighting-pool.test.ts` pins the measurement), the worst room
- * had 5 doors and the 4+ case was under 1% of rooms; a single room's doors
- * fitting comfortably inside 8 is what this pool actually guarantees. Two
- * simultaneous worst-case rooms (5 + 5) would exceed it, but that pairing is
- * rare-squared, and overflow degrades gracefully — `acquireDoorGlow` returns
- * `null` and the door just doesn't glow (`docs/DECISIONS.md` #19) — rather
- * than reintroducing the count churn this pool exists to remove.
+ * had 5 doors and the 4+ case was under 1% of rooms; typical is 1–3. 12
+ * covers `SCENERY_CACHE_CAPACITY` (4) cached rooms at 3 doors each with
+ * headroom for the slide's extra room on top — a deliberately larger
+ * constant than tier 1 alone would have wanted (every point light is a
+ * per-fragment loop iteration — see F7), traded for not rebuilding a cached
+ * room's doors just to keep the pool small. Overflow beyond that still
+ * degrades gracefully — `acquireDoorGlow` returns `null` and the door just
+ * doesn't glow (`docs/DECISIONS.md` #19) — rather than reintroducing the
+ * count churn this pool exists to remove.
  */
-export const MAX_DOOR_GLOWS = 8;
+export const MAX_DOOR_GLOWS = 12;
 
 /**
  * How many bulb rigs (light + glass + cord) a cellar room can light at once.

@@ -1,4 +1,4 @@
-import { MeshStandardMaterial } from 'three';
+import { MeshStandardMaterial, RepeatWrapping } from 'three';
 import type { Texture } from '../gfx/index.js';
 import { tilingTexture } from './flat.js';
 
@@ -29,6 +29,8 @@ export class MaterialCache {
   private readonly tiled = new Map<Texture, Map<string, MeshStandardMaterial>>();
   /** The floor's own tile textures, used directly (never cloned): keyed by texture, then by roughness. */
   private readonly shared = new Map<Texture, Map<number, MeshStandardMaterial>>();
+  /** Tiling via a baked UV repeat rather than a per-size clone — see `repeatingMaterial`. */
+  private readonly repeating = new Map<Texture, MeshStandardMaterial>();
   /** No texture at all — a flat colour. */
   private readonly flat = new Map<string, MeshStandardMaterial>();
 
@@ -84,6 +86,38 @@ export class MaterialCache {
     return material;
   }
 
+  /**
+   * A material whose map tiles by a UV repeat *baked into the geometry*
+   * rather than a per-size texture clone's `.repeat` — what #293's merged
+   * wall/void geometry needs, since one merged mesh holds every wall run in
+   * the room and each run wants its own repeat count, which a single
+   * material's `.repeat` cannot vary by face. One instance per texture, ever
+   * — no per-size keying, unlike `tiledMaterial` — because the geometry is
+   * what varies now, not the material.
+   *
+   * This sets the *shared*, un-cloned texture's own wrap mode to `Repeat`,
+   * the first time any room asks for it. Safe today because a floor
+   * tileset's wall texture is its own dedicated image (`frame` covers the
+   * whole source, so wrapping repeats exactly that image) — `sharedMaterial`
+   * above never samples the same texture outside `[0,1]`, so this does not
+   * change how it looks. That stops being true the day `tiles.wall` becomes
+   * a sub-rectangle of a packed atlas (#294): repeating would then wrap into
+   * the *next* sprite in the sheet, not tile the same one. Whoever lands the
+   * atlas needs to either give walls their own unpacked sheet or replace
+   * this with a shader-level tiling trick.
+   */
+  repeatingMaterial(texture: Texture, roughness = 0.95): MeshStandardMaterial {
+    let material = this.repeating.get(texture);
+    if (material === undefined) {
+      const map = texture.source.texture;
+      map.wrapS = RepeatWrapping;
+      map.wrapT = RepeatWrapping;
+      material = new MeshStandardMaterial({ map, roughness });
+      this.repeating.set(texture, material);
+    }
+    return material;
+  }
+
   /** A solid-colour material with no map — a colour-only wall, a hazard, a door frame. */
   flatMaterial(
     colour: number,
@@ -126,11 +160,15 @@ export class MaterialCache {
         material.dispose();
       }
     }
+    for (const material of this.repeating.values()) {
+      material.dispose();
+    }
     for (const material of this.flat.values()) {
       material.dispose();
     }
     this.tiled.clear();
     this.shared.clear();
+    this.repeating.clear();
     this.flat.clear();
   }
 }

@@ -423,6 +423,129 @@ function flatBox(
   return mesh;
 }
 
+// ----------------------------------------------------- merged wall/void geometry
+
+/**
+ * Accumulates every wall and void box in the room into one buffer per
+ * (occluder layer × wall/top split) instead of one `Mesh` per box —
+ * `docs/PERFORMANCE_AUDIT.md` F3: a 38-mesh room reported 86 wall materials
+ * and 87–153 draw calls for the room pass alone. `finalizeWallGeometry`
+ * turns each of these into a single merged `Mesh`, so the whole room's
+ * walls and voids draw in at most four calls (two if the tileset has no
+ * distinct top/wallLip texture) regardless of how many wall runs the room
+ * has.
+ */
+interface MeshBuild {
+  readonly positions: number[];
+  readonly normals: number[];
+  readonly uvs: number[];
+  readonly indices: number[];
+}
+
+function newMeshBuild(): MeshBuild {
+  return { positions: [], normals: [], uvs: [], indices: [] };
+}
+
+/** UVs for a box going into a flat-colour merge — never sampled (no map), so any unit rect works. */
+const WHITE_UV: readonly [number, number, number, number] = [0, 0, 1, 1];
+
+function isMeshBuildEmpty(build: MeshBuild): boolean {
+  return build.positions.length === 0;
+}
+
+/**
+ * Appends one box, centred at `(cx, cy, cz)`, into `build` — `top` selects
+ * which of the box's six faces go in: `undefined` for all six (a flat-colour
+ * room, which has no separate top texture), `true` for only the top (`+y`)
+ * face, `false` for the other five. Never both `finalizeWallGeometry` splits
+ * for the same box: a face must land in exactly one merged mesh or the two
+ * would z-fight drawing over each other.
+ *
+ * Reads a throwaway `BoxGeometry`'s own attributes rather than deriving the
+ * box's 24 vertices by hand — three.js's own box triangulation is the
+ * reference, not a second copy of it to keep in sync. Each face's UV is
+ * scaled by how many `ROOM_TILE_UNITS` it spans, baked into the geometry
+ * instead of a texture's `.repeat` (`tiledBox`'s approach): the point of
+ * merging is that every box in the room shares one material, and a shared
+ * material has only one `.repeat` for the whole mesh.
+ */
+function appendBox(
+  build: MeshBuild,
+  cx: number,
+  cy: number,
+  cz: number,
+  width: number,
+  height: number,
+  depth: number,
+  baseUv: readonly [number, number, number, number],
+  top: boolean | undefined,
+): void {
+  const box = new BoxGeometry(width, height, depth);
+  const positionAttr = box.getAttribute('position');
+  const normalAttr = box.getAttribute('normal');
+  const uvAttr = box.getAttribute('uv');
+  const indexAttr = box.getIndex();
+  const [u0, v0, u1, v1] = baseUv;
+  // BoxGeometry's face order, 4 vertices each: +x, -x, +y, -y, +z, -z — the
+  // same order `tiledBox`'s own comment already documents. Face 2 is the top.
+  const faceRepeats: readonly [number, number][] = [
+    [depth / ROOM_TILE_UNITS, height / ROOM_TILE_UNITS],
+    [depth / ROOM_TILE_UNITS, height / ROOM_TILE_UNITS],
+    [width / ROOM_TILE_UNITS, depth / ROOM_TILE_UNITS],
+    [width / ROOM_TILE_UNITS, depth / ROOM_TILE_UNITS],
+    [width / ROOM_TILE_UNITS, height / ROOM_TILE_UNITS],
+    [width / ROOM_TILE_UNITS, height / ROOM_TILE_UNITS],
+  ];
+  for (let face = 0; face < 6; face++) {
+    if (top === true && face !== 2) {
+      continue;
+    }
+    if (top === false && face === 2) {
+      continue;
+    }
+    const [repeatU, repeatV] = faceRepeats[face] ?? [1, 1];
+    const base = build.positions.length / 3;
+    for (let v = 0; v < 4; v++) {
+      const i = face * 4 + v;
+      build.positions.push(
+        positionAttr.getX(i) + cx,
+        positionAttr.getY(i) + cy,
+        positionAttr.getZ(i) + cz,
+      );
+      build.normals.push(normalAttr.getX(i), normalAttr.getY(i), normalAttr.getZ(i));
+      build.uvs.push(
+        u0 + (u1 - u0) * uvAttr.getX(i) * repeatU,
+        v0 + (v1 - v0) * uvAttr.getY(i) * repeatV,
+      );
+    }
+    if (indexAttr !== null) {
+      // Each face's own 6 indices, in the source geometry, index into that
+      // face's 4 vertices starting at `face * 4` — offset by `base` (this
+      // merge's running vertex count) rather than the source's own `face * 4`.
+      for (let k = 0; k < 6; k++) {
+        build.indices.push(base + (indexAttr.getX(face * 6 + k) - face * 4));
+      }
+    }
+  }
+  box.dispose();
+}
+
+/** Turns an accumulated `MeshBuild` into a `Mesh`, or `null` if nothing was ever appended to it. */
+function finalizeMeshBuild(build: MeshBuild, material: MeshStandardMaterial): Mesh | null {
+  if (isMeshBuildEmpty(build)) {
+    return null;
+  }
+  const geometry = new BufferGeometry();
+  geometry.setAttribute('position', new BufferAttribute(new Float32Array(build.positions), 3));
+  geometry.setAttribute('normal', new BufferAttribute(new Float32Array(build.normals), 3));
+  geometry.setAttribute('uv', new BufferAttribute(new Float32Array(build.uvs), 2));
+  geometry.setIndex(build.indices);
+  const mesh = new Mesh(geometry, material);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  return mesh;
+}
+
 export class Scenery {
   readonly group = new Group();
   readonly doors: DoorPiece[] = [];
@@ -440,6 +563,20 @@ export class Scenery {
   private readonly flats: FloorSprite[] = [];
   private hints: LineSegments | null = null;
   private lean: number;
+  /**
+   * Every wall/void box in the room, accumulated by `addWallBox` during
+   * `buildWalls`/`buildVoids` instead of becoming its own `Mesh`, then
+   * merged once each into up to four meshes by `finalizeWalls` — see
+   * `docs/PERFORMANCE_AUDIT.md` F3. `body` is the five non-top faces (or all
+   * six, for a colour-only room with no separate wallLip texture); `top` is
+   * face `+y` only, drawn with the tileset's lit wallLip texture. Split by
+   * `OCCLUDER_LAYER` the same way individual wall meshes used to be — see
+   * `addWallBox`.
+   */
+  private readonly wallBodyOccluder = newMeshBuild();
+  private readonly wallBodyNonOccluder = newMeshBuild();
+  private readonly wallTopOccluder = newMeshBuild();
+  private readonly wallTopNonOccluder = newMeshBuild();
 
   constructor(
     room: RoomGeometry,
@@ -464,7 +601,8 @@ export class Scenery {
 
     this.buildFloor(theme.floor, theme.wall);
     this.buildWalls(doors, theme.wall);
-    this.buildVoids(theme.wall);
+    this.buildVoids();
+    this.finalizeWalls(theme.wall);
     this.buildBlocks(theme.block);
     this.buildHazards();
     this.buildProps(props);
@@ -595,7 +733,6 @@ export class Scenery {
             gapStart - cursor,
             height,
             direction,
-            wallColour,
           );
         }
         const centre = place(gapStart, gap.span);
@@ -615,7 +752,7 @@ export class Scenery {
         cursor = gapEnd;
       }
       if (to > cursor) {
-        this.addWallSegment(place(cursor, to - cursor), to - cursor, height, direction, wallColour);
+        this.addWallSegment(place(cursor, to - cursor), to - cursor, height, direction);
       }
     };
 
@@ -643,51 +780,97 @@ export class Scenery {
     length: number,
     height: number,
     direction: CompiledDoor['direction'],
-    wallColour: number,
   ): void {
     const alongX = direction === 'north' || direction === 'south';
-    const tiles = this.art.tiles;
     const width = alongX ? length : WALL_THICKNESS;
     const depth = alongX ? WALL_THICKNESS : length;
-    const mesh =
-      tiles === undefined
-        ? flatBox(this.materials, wallColour, width, height, depth)
-        : tiledBox(this.materials, tiles.wall, width, height, depth, tiles.wallLip);
-    mesh.position.set(centre.x, height / 2, centre.z);
     // See `world/layers.ts`'s `OCCLUDER_LAYER` doc comment: only the room's
     // own north wall carries the standing-sprite head-clip risk, so every
     // other wall is safe to occlude actors normally.
-    if (direction !== 'north') {
-      mesh.layers.enable(OCCLUDER_LAYER);
-    }
-    this.group.add(mesh);
+    this.addWallBox(centre.x, height / 2, centre.z, width, height, depth, direction !== 'north');
   }
 
-  private buildVoids(wallColour: number): void {
-    const tiles = this.art.tiles;
+  private buildVoids(): void {
     for (const rect of this.room.voidRects) {
       const width = rect.maxX - rect.minX;
       const depth = rect.maxY - rect.minY;
-      const mesh =
-        tiles === undefined
-          ? flatBox(this.materials, wallColour, width, this.wallHeight, depth)
-          : tiledBox(this.materials, tiles.wall, width, this.wallHeight, depth, tiles.wallLip);
-      mesh.position.set(
-        (rect.minX + rect.maxX) / 2,
-        this.wallHeight / 2,
-        (rect.minY + rect.maxY) / 2,
-      );
       // Same reasoning as `addWallSegment`: a void box that reaches the
       // interior's north edge is standing in for a north wall — a body can
       // be immediately south of it, so it carries the same head-clip risk
       // and stays off `OCCLUDER_LAYER`. One that doesn't (an L/T room's
       // south, east or west corner) is exactly as safe to occlude as an
       // ordinary wall.
-      if (rect.minY > this.room.minY) {
+      this.addWallBox(
+        (rect.minX + rect.maxX) / 2,
+        this.wallHeight / 2,
+        (rect.minY + rect.maxY) / 2,
+        width,
+        this.wallHeight,
+        depth,
+        rect.minY > this.room.minY,
+      );
+    }
+  }
+
+  /** Appends one wall or void box into the accumulator `finalizeWalls` will merge — see the field doc comment. */
+  private addWallBox(
+    cx: number,
+    cy: number,
+    cz: number,
+    width: number,
+    height: number,
+    depth: number,
+    occluder: boolean,
+  ): void {
+    const tiles = this.art.tiles;
+    const body = occluder ? this.wallBodyOccluder : this.wallBodyNonOccluder;
+    if (tiles === undefined) {
+      // No wallLip texture to draw the top separately with — every face goes
+      // in `body`, exactly like `flatBox` drew a whole box before merging.
+      appendBox(body, cx, cy, cz, width, height, depth, WHITE_UV, undefined);
+      return;
+    }
+    const top = occluder ? this.wallTopOccluder : this.wallTopNonOccluder;
+    appendBox(body, cx, cy, cz, width, height, depth, tiles.wall.uvs(), false);
+    appendBox(top, cx, cy, cz, width, height, depth, tiles.wallLip.uvs(), true);
+  }
+
+  /** Turns the four accumulated wall/void builds into up to four merged meshes. */
+  private finalizeWalls(wallColour: number): void {
+    const tiles = this.art.tiles;
+    const addMesh = (mesh: Mesh | null, name: string, occluder: boolean): void => {
+      if (mesh === null) {
+        return;
+      }
+      // A name, not a behaviour: `tests/unit/scenery-cache-gameview.test.ts`
+      // finds the merged wall mesh by it rather than guessing at one from
+      // shadow flags a `DoorPiece` leaf happens to share.
+      mesh.name = name;
+      if (occluder) {
         mesh.layers.enable(OCCLUDER_LAYER);
       }
       this.group.add(mesh);
+    };
+    if (tiles === undefined) {
+      const material = this.materials.flatMaterial(wallColour, { roughness: 0.95 });
+      addMesh(finalizeMeshBuild(this.wallBodyNonOccluder, material), 'scenery-wall', false);
+      addMesh(finalizeMeshBuild(this.wallBodyOccluder, material), 'scenery-wall-occluder', true);
+      return;
     }
+    const bodyMaterial = this.materials.repeatingMaterial(tiles.wall, 0.95);
+    const topMaterial = this.materials.repeatingMaterial(tiles.wallLip, 0.95);
+    addMesh(finalizeMeshBuild(this.wallBodyNonOccluder, bodyMaterial), 'scenery-wall-body', false);
+    addMesh(
+      finalizeMeshBuild(this.wallBodyOccluder, bodyMaterial),
+      'scenery-wall-body-occluder',
+      true,
+    );
+    addMesh(finalizeMeshBuild(this.wallTopNonOccluder, topMaterial), 'scenery-wall-top', false);
+    addMesh(
+      finalizeMeshBuild(this.wallTopOccluder, topMaterial),
+      'scenery-wall-top-occluder',
+      true,
+    );
   }
 
   // ------------------------------------------------------------ blocks
