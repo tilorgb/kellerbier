@@ -1812,6 +1812,48 @@ export function validateFloorPlan(
         problems.push(`mini-boss room ${room.id} ${problem}`);
       }
     }
+    // The soft-lock invariant #275's whole gate rests on: the key that opens
+    // the boss door is in a mini-boss room, so there must be a way to *reach*
+    // that room without already being past the door it opens. Rule 3
+    // (`minibossSlotProblem`) says removing a mini-boss room never
+    // disconnects the boss from the start; this is the converse, checked
+    // directly — a walk from the start to each mini-boss room that never
+    // steps through the boss room (or a bomb-only secret). A floor that
+    // fails this is a retry, exactly like one that fails rule 3; it must
+    // never reach a player, because a locked boss door whose key sits behind
+    // that same door is a dead run (`docs/DECISIONS.md` #19, #75).
+    for (const room of minibossRooms) {
+      const seen = new Set<string>([plan.startRoomId]);
+      const walk = [plan.startRoomId];
+      let reached = false;
+      for (let i = 0; i < walk.length && !reached; i += 1) {
+        const at = walk[i];
+        if (at === undefined || at === plan.bossRoomId) {
+          continue;
+        }
+        for (const neighborId of minibossContext.neighborsOf(at)) {
+          if (neighborId === room.id) {
+            reached = true;
+            break;
+          }
+          if (
+            neighborId === plan.bossRoomId ||
+            seen.has(neighborId) ||
+            !minibossContext.routable(neighborId)
+          ) {
+            continue;
+          }
+          seen.add(neighborId);
+          walk.push(neighborId);
+        }
+      }
+      if (!reached) {
+        problems.push(
+          `mini-boss room ${room.id} cannot be reached from the start without passing through the ` +
+            `boss room — its Meisterschlüssel (#275) would be unobtainable`,
+        );
+      }
+    }
   }
 
   const secretRoom = byId.get(plan.secretRoomId);

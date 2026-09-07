@@ -45,6 +45,15 @@ export type PickupEffect =
   | { readonly kind: 'bombs'; readonly amount: number }
   | { readonly kind: 'keys'; readonly amount: number }
   /**
+   * Der Meisterschlüssel (#275): grants the one key that opens the floor's
+   * boss door. No `amount` — it is a boolean on `GameSim`, not a count
+   * (`grantMeisterschluessel`): there is exactly one boss gate per floor.
+   * Deliberately its own effect kind rather than a `keys` entry, so it can
+   * never be confused with a Kellerschlüssel or wind up in a drop table —
+   * the whole point is that the critical-path key is not a weighted drop.
+   */
+  | { readonly kind: 'masterkey' }
+  /**
    * Wurst: the only health pickup in the game (#health-food-redesign). Heals
    * `pool` by `heal` and lowers Promille by `promille` — every tier of every
    * pool doubles as the "soberness" mechanic the old Brezn/Obazda/Radi food

@@ -67,10 +67,29 @@ function doorSurvivesCompile(
   return !voidKeys.has(voidCellKey({ x: cell.x + offset.x, y: cell.y + offset.y }));
 }
 
-/** Exported for `tests/unit/minimap-reveal.test.ts` — pure logic, no renderer involved. */
-export function computeReveal(plan: FloorPlan, visitedRoomIds: ReadonlySet<string>): RevealState {
+/**
+ * Exported for `tests/unit/minimap-reveal.test.ts` — pure logic, no renderer
+ * involved.
+ *
+ * `revealMinibossRooms` (#275): when set, the floor's mini-boss room icon(s)
+ * show even before the player has walked next to one. `app/main.ts` decides
+ * *when* that is (`minibossRoomsRevealed` — always on floor 1, and once a
+ * locked boss door has been seen on any later floor); this just adds the ids
+ * to the revealed set so their icons draw, the same way an adjacent room's
+ * icon already does.
+ */
+export function computeReveal(
+  plan: FloorPlan,
+  visitedRoomIds: ReadonlySet<string>,
+  revealMinibossRooms = false,
+): RevealState {
   const roleById = new Map(plan.rooms.map((room) => [room.id, room.role]));
   const revealed = new Set<string>(visitedRoomIds);
+  if (revealMinibossRooms) {
+    for (const id of plan.minibossRoomIds) {
+      revealed.add(id);
+    }
+  }
   for (const room of plan.rooms) {
     if (!visitedRoomIds.has(room.id)) {
       continue;
@@ -322,8 +341,13 @@ export class MinimapHud {
     this.overlayView.visible = false;
   }
 
-  rebuild(plan: FloorPlan, currentRoomId: string, visitedRoomIds: ReadonlySet<string>): void {
-    const reveal = computeReveal(plan, visitedRoomIds);
+  rebuild(
+    plan: FloorPlan,
+    currentRoomId: string,
+    visitedRoomIds: ReadonlySet<string>,
+    revealMinibossRooms = false,
+  ): void {
+    const reveal = computeReveal(plan, visitedRoomIds, revealMinibossRooms);
     const headerText = `${String(plan.floor)}. Stock — ${plan.floorName}`;
     this.header.text = headerText;
     this.header.position.set(-uiTextWidth(headerText), 0);

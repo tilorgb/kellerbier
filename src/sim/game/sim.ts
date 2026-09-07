@@ -1062,6 +1062,30 @@ export class GameSim {
   private bombsCount = 0;
 
   /**
+   * Der Meisterschlüssel (#275): the mini-boss's drop, the one thing that
+   * opens this floor's boss door. A single boolean, not a counter — there is
+   * exactly one boss gate per floor and carrying two keys would mean nothing
+   * (`docs/DECISIONS.md`'s Meisterschlüssel entry). Deliberately *not* a
+   * Kellerschlüssel: that currency drops from a weighted table and can never
+   * be allowed to gate the critical path (a run with no key and no mini-boss
+   * left is soft-locked). Set by `grantMeisterschluessel` — the mini-boss
+   * room's pickup — and cleared on floor advance (`clearFloorProgress`) and
+   * the moment it is spent opening the boss door (`transitionTo`).
+   */
+  private meisterschluesselHeld = false;
+  /**
+   * Whether this floor's boss door actually needs the Meisterschlüssel — set
+   * per floor by `configureFloorGate` from `FloorPlan.minibossRoomIds` being
+   * non-empty. A floor whose content has no mini-boss template gets no
+   * mini-boss room and therefore no lock (`docs/DECISIONS.md` #75): the gate
+   * is a property of the slot existing, never of "floor N should have one by
+   * now". Dropped back to `false` the instant the boss door is opened, so a
+   * Blutwurz (#84) spirit walk back to an already-entered boss room never
+   * finds it re-locked.
+   */
+  private bossDoorGated = false;
+
+  /**
    * Whether this run has the Promille mechanic at all (#85).
    *
    * Decided once, at construction, and never written again: a run is sober
@@ -1271,6 +1295,18 @@ export class GameSim {
    * `roomLootSnapshots` instead, same as any other room's loot.
    */
   private pendingBossPedestals: { readonly x: number; readonly y: number }[] = [];
+  /**
+   * Where the Meisterschlüssel (#275) will drop once a mini-boss room is
+   * cleared — the exact `pendingBossPedestals` shape, held back for the same
+   * reason: picking the key up is the beat that says the detour paid, and a
+   * key already sitting on the floor while the fight is on is not that. Set
+   * from the mini-boss's own spawn point when a `specialRole: 'miniboss'`
+   * room loads uncleared, drained by `step`'s room-clear check the tick the
+   * fight ends, and reset to `null` on every room load — a mini-boss room
+   * already cleared restores (or doesn't) its dropped key from
+   * `roomLootSnapshots` like any other pickup.
+   */
+  private pendingMinibossKey: { readonly x: number; readonly y: number } | null = null;
   /**
    * Whether this floor gets a Losbrunnen at all — rolled once per floor
    * entry (`applyCompiledRoom`'s "new floor" guard, alongside
@@ -1763,6 +1799,41 @@ export class GameSim {
     // Same reasoning again: a fresh floor's draw of a template id that a
     // previous floor happened to also use must not start pre-unlocked.
     this.unlockedKeyRoomIds.clear();
+    // Der Meisterschlüssel (#275) is per-floor: one gate, one key, consumed
+    // or dropped when the floor ends. `bossDoorGated` is not touched here —
+    // `configureFloorGate`, called right after this on a floor advance, owns
+    // it and re-derives it from the new floor's plan.
+    this.meisterschluesselHeld = false;
+  }
+
+  /**
+   * Whether this floor's boss door needs Der Meisterschlüssel (#275) — set
+   * per floor by `app/main.ts` from `FloorPlan.minibossRoomIds` being
+   * non-empty, at every point it (re)builds a floor: `startRun`,
+   * `advanceFloor`, the `G` room reroll. A floor whose content authors no
+   * mini-boss template has no mini-boss room and so no lock
+   * (`docs/DECISIONS.md` #75) — the gate rides the slot existing, never the
+   * floor number. Derived from the deterministic floor plan and consuming no
+   * RNG, so an input-log replay across a floor advance reaches the same gate
+   * state (`tests/determinism/floor-advance-replay.test.ts`).
+   */
+  configureFloorGate(gated: boolean): void {
+    this.bossDoorGated = gated;
+  }
+
+  /** Grants Der Meisterschlüssel (#275) — the mini-boss room's pickup, and the dev `J` shortcut. Idempotent: the gate is one boolean. */
+  grantMeisterschluessel(): void {
+    this.meisterschluesselHeld = true;
+  }
+
+  /** Whether Der Meisterschlüssel (#275) is in hand — shown in the wallet HUD, read by `app/main.ts` to draw the boss door locked. */
+  get meisterschluessel(): boolean {
+    return this.meisterschluesselHeld;
+  }
+
+  /** Whether this floor's boss door is currently gated *and* still shut — false once the key opens it, or on an ungated floor. See `configureFloorGate`. */
+  get bossDoorLocked(): boolean {
+    return this.bossDoorGated && !this.meisterschluesselHeld;
   }
 
   /**
@@ -1947,6 +2018,18 @@ export class GameSim {
     if (isKeyLocked) {
       this.unlockedKeyRoomIds.add(destination.source.id);
     }
+    // Der Meisterschlüssel gate (#275): a floor that has a mini-boss room
+    // (`bossDoorGated`, set per floor from `FloorPlan.minibossRoomIds`) keeps
+    // its boss door shut until the key the mini-boss drops is in hand.
+    // Refused on touch, the same as a key-locked treasure door above — but
+    // unlike a Kellerschlüssel the key is spent only on the actual crossing
+    // below, never on a brush past the threshold, so standing in the doorway
+    // with a key can never leave the run keyless and still outside.
+    const isGatedBossRoom =
+      this.bossDoorGated && destination.source.metadata.specialRole === 'boss';
+    if (isGatedBossRoom && !this.meisterschluesselHeld) {
+      return false;
+    }
     if (!force && !this.pressingToward(direction)) {
       this.doorCrossingDirection = null;
       this.doorCrossingTicks = 0;
@@ -1957,6 +2040,13 @@ export class GameSim {
     }
     this.doorCrossingDirection = null;
     this.doorCrossingTicks = 0;
+    if (isGatedBossRoom) {
+      // Spent on the way in, and the gate drops for the rest of the floor: a
+      // Blutwurz (#84) spirit walk back to this now-cleared boss room has to
+      // find the door open, not ask for a second key that no longer exists.
+      this.meisterschluesselHeld = false;
+      this.bossDoorGated = false;
+    }
     this.roomClearedIds.add(this.roomId);
     this.loadRoom(template, floor, direction, hiddenDoors, placement, entryCell);
     return true;
@@ -2108,6 +2198,7 @@ export class GameSim {
     this.bombableWalls.clear();
     this.pedestalList = [];
     this.pendingBossPedestals = [];
+    this.pendingMinibossKey = null;
     // Reset unconditionally, like `pedestalList` above — `restoreOrSpawnRoomLoot`,
     // called right after this, is what actually repopulates it (from a
     // snapshot, by spawning straight into a shop, or by pushing a fresh
@@ -2222,6 +2313,21 @@ export class GameSim {
         const elite =
           guaranteedElite || (eliteChance > 0 && this.random.enemies.nextFloat() < eliteChance);
         this.spawnEnemyKind(definition, spawn.x, spawn.y, elite);
+      }
+      // Der Meisterschlüssel (#275) is held back to the tick this room
+      // clears — the same reason a boss room's pedestal is (`step`'s
+      // room-clear check drains `pendingMinibossKey` alongside
+      // `pendingBossPedestals`). The mini-boss's own authored spawn point is
+      // the drop spot: it is the centre of an open arena, and a fixed anchor
+      // keeps the drop reproducible without tracking where a charging body
+      // happened to fall. A Blutwurz (#84) repopulate re-arms this the same
+      // way it re-spawns the fight — a second key for a second fight, which
+      // is exactly the spirit walk's own "cleared rooms come back" rule.
+      if (compiled.specialRole === 'miniboss') {
+        const keySpot = compiled.enemySpawns[0];
+        if (keySpot !== undefined) {
+          this.pendingMinibossKey = { x: keySpot.x, y: keySpot.y };
+        }
       }
       // Decorative props are art (#18) except a barrel, a destructible
       // obstacle a room author drops a Bierfassl at for free — `npm run dev`
@@ -5220,6 +5326,20 @@ export class GameSim {
         rewardLocations.push({ x: pending.x, y: pending.y });
       }
       this.pendingBossPedestals = [];
+      // Der Meisterschlüssel (#275) drops on the same held-until-clear tick,
+      // for the same reason: the key that opens the boss door is the mini-
+      // boss room's whole reward, and it should not be collectable before
+      // the fight it is the reward for is over.
+      if (this.pendingMinibossKey !== null) {
+        const spot = this.safeSpawnPoint(
+          this.pendingMinibossKey.x,
+          this.pendingMinibossKey.y,
+          this.pickups.get('meisterschluessel').radius,
+        );
+        this.spawnPickup('meisterschluessel', spot.x, spot.y);
+        rewardLocations.push({ x: spot.x, y: spot.y });
+        this.pendingMinibossKey = null;
+      }
       // Der Losbrunnen (#218) waits for the same tick — appearing mid-fight
       // would read as loot sitting out during a boss that hasn't dropped
       // anything yet.
