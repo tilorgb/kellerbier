@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { audioTimeForTick, buildScheduleIndex } from '../../src/app/audio/music.js';
+import {
+  MUSIC_SCHEDULE_LOOKAHEAD_SECONDS,
+  audioTimeForTick,
+  buildScheduleIndex,
+  resolveScheduleCursor,
+} from '../../src/app/audio/music.js';
 import { noteToFrequency } from '../../src/app/audio/synth.js';
 import type { TrackDefinition } from '../../src/app/audio/types.js';
 
@@ -62,6 +67,46 @@ describe('buildScheduleIndex', () => {
     expect(slow.get(0)?.[0]?.note).toBe('A4');
     expect(slow.get(30)?.[0]?.note).toBe('B4');
     expect(slow.get(40)?.[0]?.note).toBe('C4');
+  });
+});
+
+describe('resolveScheduleCursor', () => {
+  const LA = MUSIC_SCHEDULE_LOOKAHEAD_SECONDS;
+
+  it('leaves a cursor that is comfortably ahead of the audio clock alone', () => {
+    expect(resolveScheduleCursor(10.5, 10, LA)).toBe(10.5);
+  });
+
+  it('snaps a cursor that has fallen behind the audio clock up to just ahead of now', () => {
+    // The room-switch hitch: ticks stalled, the audio clock ran on, the cursor
+    // is now seconds in the past — where a note's envelope has already elapsed.
+    expect(resolveScheduleCursor(4.0, 12.0, LA)).toBeCloseTo(12.0 + LA, 10);
+  });
+
+  it('snaps a cursor sitting exactly on now forward too — never schedules at the raw clock', () => {
+    expect(resolveScheduleCursor(12.0, 12.0, LA)).toBeCloseTo(12.0 + LA, 10);
+  });
+
+  it('snaps a cursor that has sprinted far ahead back to now — debug single-step / fast-forward', () => {
+    expect(resolveScheduleCursor(30.0, 12.0, LA)).toBeCloseTo(12.0 + LA, 10);
+  });
+
+  it('tolerates a normal catch-up burst running a little ahead', () => {
+    // Five ticks scheduled in one frame ≈ 83ms ahead — still real playback.
+    expect(resolveScheduleCursor(12.0 + 5 / 60, 12.0, LA)).toBeCloseTo(12.0 + 5 / 60, 10);
+  });
+
+  it('holds the cursor steady across an even 60Hz run — the common case is a no-op', () => {
+    let cursor = 5 + LA;
+    let lastNow = 5;
+    for (let i = 0; i < 600; i += 1) {
+      lastNow = 5 + i / 60;
+      cursor = resolveScheduleCursor(cursor, lastNow, LA);
+      cursor += 1 / 60; // one tick scheduled
+    }
+    // After ten seconds of even ticks the cursor still sits exactly one
+    // lookahead past the clock — no drift accumulated in either direction.
+    expect(cursor - (lastNow + 1 / 60)).toBeCloseTo(LA, 6);
   });
 });
 

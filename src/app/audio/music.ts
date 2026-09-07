@@ -89,7 +89,7 @@ export function buildScheduleIndex(
 
 /**
  * Converts a simulation tick to an `AudioContext` timeline time, from a
- * fixed real-time anchor pair. Pure and `AudioContext`-free —
+ * real-time anchor pair. Pure and `AudioContext`-free —
  * `tests/unit/audio-music.test.ts` exercises this directly.
  */
 export function audioTimeForTick(
@@ -99,6 +99,53 @@ export function audioTimeForTick(
 ): number {
   return anchorAudioTime + (tick - anchorTick) / TICKS_PER_SECOND;
 }
+
+/** How far ahead of `ctx.currentTime` a resynced schedule cursor is placed — clear of "now". */
+export const MUSIC_SCHEDULE_LOOKAHEAD_SECONDS = 0.03;
+
+/**
+ * How far ahead of `ctx.currentTime` the cursor may legitimately run before
+ * it is treated as runaway. A healthy catch-up burst is a few ticks
+ * (`FixedTimestepLoop`'s `MAX_STEPS_PER_FRAME`, ~83ms); anything past this is
+ * the tick clock sprinting ahead of real time — debug single-stepping, a
+ * replay fast-forward — and the schedule should snap back to now.
+ */
+export const MUSIC_MAX_SCHEDULE_AHEAD_SECONDS = 0.5;
+
+/**
+ * Where the next batch of note starts should be scheduled from.
+ *
+ * `sync` walks a cursor forward one tick's worth (`1 / TICKS_PER_SECOND`) per
+ * tick it schedules. That stays aligned with the audio clock only while ticks
+ * run at exactly `TICKS_PER_SECOND` in real time — which `FixedTimestepLoop`
+ * abandons the moment it drops ticks under load (a room-switch hitch is the
+ * routine case) or runs slow-motion. The cursor then trails `ctx.currentTime`,
+ * and notes get scheduled further and further in the past, where their attack
+ * envelope has already elapsed by the time the browser reaches them: they play
+ * quieter and quieter until they are inaudible. That is the "the music fades
+ * out as you move through rooms" bug.
+ *
+ * When the cursor has fallen behind (or to) the audio clock — or sprinted far
+ * ahead of it — this snaps it back to just ahead of now. Pure, so
+ * `tests/unit/audio-music.test.ts` can pin the behaviour without a real
+ * `AudioContext`.
+ */
+export function resolveScheduleCursor(cursor: number, now: number, lookahead: number): number {
+  const floor = now + lookahead;
+  if (cursor < floor || cursor > now + MUSIC_MAX_SCHEDULE_AHEAD_SECONDS) {
+    return floor;
+  }
+  return cursor;
+}
+
+/**
+ * The longest run of ticks `sync` will schedule notes for in one call. A
+ * bigger gap than this means ticks were dropped (a stall) or never synced
+ * (audio arrived late) and their musical moment has passed — resume near the
+ * current tick rather than firing a backlog of notes. Comfortably above a
+ * healthy frame's catch-up (`FixedTimestepLoop`'s own `MAX_STEPS_PER_FRAME`).
+ */
+const MUSIC_MAX_CATCHUP_TICKS = 8;
 
 /**
  * Plays every note of `track` once, starting now — for a one-shot cue
@@ -148,8 +195,13 @@ export function playTrackOnce(
 export class MusicPlayer {
   private track: TrackDefinition | null = null;
   private lastScheduledTick = -1;
-  private realTimeAnchorTick: number | null = null;
-  private realTimeAnchorAudioTime = 0;
+  /**
+   * Audio-clock time the next unscheduled tick's notes fire at. Walks forward
+   * one tick's worth per scheduled tick, and is snapped back to ~now by
+   * `resolveScheduleCursor` whenever it trails the audio clock — see there.
+   * `NaN` until the first `sync` with a live `AudioContext` seeds it.
+   */
+  private scheduleCursor = Number.NaN;
   private tempoScale = 1;
   private detuneCents = 0;
   private effectiveTicksPerBeat = 0;
@@ -178,6 +230,9 @@ export class MusicPlayer {
     this.sampleVoice = null;
     this.track = track;
     this.lastScheduledTick = atTick - 1;
+    // A fresh track starts scheduling from ~now, not from wherever the last
+    // one's cursor had walked to.
+    this.scheduleCursor = Number.NaN;
     this.rebuildIndex();
   }
 
@@ -186,6 +241,7 @@ export class MusicPlayer {
     this.sampleVoice?.stop();
     this.sampleVoice = null;
     this.track = null;
+    this.scheduleCursor = Number.NaN;
   }
 
   /**
@@ -245,23 +301,33 @@ export class MusicPlayer {
       this.lastScheduledTick = tick;
       return;
     }
-    if (this.realTimeAnchorTick === null) {
-      this.realTimeAnchorTick = tick;
-      this.realTimeAnchorAudioTime = ctx.currentTime;
+    if (Number.isNaN(this.scheduleCursor)) {
+      this.scheduleCursor = ctx.currentTime;
+      this.lastScheduledTick = tick - 1;
     }
+    // Keep the schedule anchored to real time: whenever it has slipped behind
+    // the audio clock (dropped ticks, a stall, slow-motion) snap it forward so
+    // notes never land in the past — see `resolveScheduleCursor`.
+    this.scheduleCursor = resolveScheduleCursor(
+      this.scheduleCursor,
+      ctx.currentTime,
+      MUSIC_SCHEDULE_LOOKAHEAD_SECONDS,
+    );
     if (this.track.sample !== undefined) {
-      this.syncSample(ctx, destination, this.track.sample, tick);
+      this.syncSample(ctx, destination, this.track.sample);
       this.lastScheduledTick = tick;
       return;
     }
-    const from = this.lastScheduledTick + 1;
+    // Never fill more than a short catch-up: a wider gap is dropped ticks whose
+    // musical moment has gone, not notes worth firing late in a bunch.
+    const from = Math.max(this.lastScheduledTick + 1, tick - MUSIC_MAX_CATCHUP_TICKS + 1);
     for (let t = from; t <= tick; t += 1) {
       const posInLoop = ((t % this.loopTicks) + this.loopTicks) % this.loopTicks;
       const due = this.scheduleIndex.get(posInLoop);
       if (due === undefined) {
         continue;
       }
-      const startTime = audioTimeForTick(this.realTimeAnchorAudioTime, this.realTimeAnchorTick, t);
+      const startTime = audioTimeForTick(this.scheduleCursor, from, t);
       for (const event of due) {
         const instrument = instrumentsById.get(event.instrument);
         if (instrument === undefined) {
@@ -284,25 +350,24 @@ export class MusicPlayer {
         );
       }
     }
+    // Walk the cursor past every tick just scheduled, so the next call picks up
+    // exactly where this one left off while ticks keep real time.
+    this.scheduleCursor += (tick - from + 1) / TICKS_PER_SECOND;
     this.lastScheduledTick = tick;
   }
 
   /**
    * The sample-track half of `sync()`: starts the recording looping once its
-   * buffer has decoded, at the tick-derived audio time (`audioTimeForTick`,
-   * the exact same conversion the note branch uses) — a real recording is
-   * still started *from a tick*, never from `ctx.currentTime` directly, so
-   * it keeps #51's "no timing dependency the wrong way round" even though a
-   * looping sample has nothing further to schedule per tick after that.
-   * A no-op once `sampleVoice` exists, aside from re-asserting the sample's
-   * own gain/filter never drift out from under a Promille tier's filter
-   * changes (they don't touch this bus at all, so there's nothing to redo).
+   * buffer has decoded, at the schedule cursor's audio time — a real recording
+   * is still started from the same real-time-anchored cursor the note branch
+   * uses, never from `ctx.currentTime` read straight, so it keeps #51's "no
+   * timing dependency the wrong way round". A no-op once `sampleVoice` exists;
+   * a looping sample needs no further per-tick scheduling and does not drift.
    */
   private syncSample(
     ctx: AudioContext,
     destination: AudioNode,
     sample: NonNullable<TrackDefinition['sample']>,
-    tick: number,
   ): void {
     if (this.sampleVoice !== null) {
       return;
@@ -314,12 +379,14 @@ export class MusicPlayer {
       // gracefully" shape every other sample call site in this module uses.
       return;
     }
-    const startTime = audioTimeForTick(
-      this.realTimeAnchorAudioTime,
-      this.realTimeAnchorTick ?? tick,
-      tick,
+    const voice = playSampleBuffer(
+      ctx,
+      destination,
+      buffer,
+      sample.edit,
+      this.scheduleCursor,
+      true,
     );
-    const voice = playSampleBuffer(ctx, destination, buffer, sample.edit, startTime, true);
     voice.setPlaybackRate(this.tempoScale);
     this.sampleVoice = voice;
   }
