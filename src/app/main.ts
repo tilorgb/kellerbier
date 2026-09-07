@@ -737,10 +737,9 @@ async function boot(): Promise<void> {
   applyMixerSettings(preferences.mixer);
 
   // The floors' real tile and character art (#35), and Alois's own (#151) —
-  // see `assets/sprites/README.md`'s "nothing under here is loaded by the game
-  // directly" for why these go through plain imports rather than the atlas the
-  // pipeline builds: nothing in `render/` consumes that atlas yet, so both
-  // loaders load the source PNGs directly.
+  // both loaded from the packed atlas sheets rather than the 113 source PNGs
+  // (`render/floor-art.ts`'s `loadAtlasSheets`, #294); `loadPlayerArt` shares
+  // that same call so `common`'s sheet is fetched once for both.
   const [
     {
       roomTiles,
@@ -761,7 +760,19 @@ async function boot(): Promise<void> {
   // so one flat name -> `Texture` map is enough for the pixel editor's live
   // preview (#108) to find "the texture for this sprite" without also
   // needing the bucketId it was authored under.
-  attachLiveArtPreviewListener({ ...tileTextures, ...enemyArt });
+  //
+  // `enemyArt` carries an animated creature's *first frame* under its name
+  // too (so non-animation-aware lookups like this one don't need a separate
+  // map), which would let a live-preview message paint over just that one
+  // frame's rectangle while the editor believes it repainted the whole
+  // sprite — technically a safe write (`live-art-preview.ts` composites at
+  // the target's own offset in its shared sheet either way), but a
+  // misleading one, so animated names are excluded here rather than in the
+  // library function.
+  const staticArt = Object.fromEntries(
+    Object.entries(enemyArt).filter(([name]) => !(name in enemyStrips)),
+  );
+  attachLiveArtPreviewListener({ ...tileTextures, ...staticArt });
 
   // The run seed: fixed via the page's `?seed=` query param when present,
   // otherwise freshly randomised on every load. `?seed=`/`#seed-input`

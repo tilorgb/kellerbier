@@ -86,7 +86,8 @@ These are commitments, not aspirations. They are checked in CI.
 | Simulation tick | **≤ 4 ms** at 5,000 projectiles + 200 enemies + 1,000 particles |
 | Full frame (sim + render) | **≤ 12 ms** in the same scene — a 40% headroom margin on 60 fps |
 | Steady-state heap growth | **0 bytes/frame** in the stress scene — gated at 512 KB/tick, see below |
-| Draw calls | *re-baseline pending; not asserted.* The ≤ 20 figure was written for a sprite batcher; the three.js scene has a different shape and no number has been measured against it yet (`DECISIONS.md` #74) |
+| Draw calls | *per-pass re-baseline still pending; not asserted.* The ≤ 20 figure was written for a sprite batcher and does not apply to the three.js scene (`DECISIONS.md` #74). #294 landed atlas loading (below) but deliberately deferred body instancing (`DECISIONS.md` #79) — the actor pass is still one draw call per standing body, so the per-pass table this row wants is not honest to write down until that lands. |
+| Boot sprite requests | **3**, measured by hand in a browser, *not yet asserted in CI* (that is #294 item 4, deferred with the rest of the browser perf harness, `DECISIONS.md` #79) — every authored sprite loads from three packed atlas sheets (`assets/atlases/*.png`) instead of the 113 individual files it used to be (`render/floor-art.ts`'s `loadAtlasSheets`) |
 | Cold load to playable | **≤ 3 s** on a mid-range laptop over broadband |
 | Input-to-photon latency | **≤ 2 frames** |
 
