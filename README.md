@@ -36,6 +36,7 @@ regenerated automatically from the issue list on every issue event.
 | [docs/TECH_STACK.md](docs/TECH_STACK.md) | Engine choice, performance architecture and budgets, project layout, testing |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Milestones M0–M10 and what "done" means for each |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | Architectural decisions and the reasoning behind them |
+| [docs/PERFORMANCE_AUDIT.md](docs/PERFORMANCE_AUDIT.md) | Measured render-side audit: where the room-transition stutter comes from, and the plan |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Branches, commits, the definition of done, labels, bug reports |
 
 ## Tech stack
