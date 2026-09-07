@@ -24,7 +24,7 @@ import { ROOM_HAZARD_PALETTE, roomThemeForFloor } from '../palette.js';
 import { pickTileVariant, tileGridScale } from '../tiles.js';
 import { Billboard } from './billboard.js';
 import { DECAL_HEIGHT, FloorSprite, tilingTexture } from './flat.js';
-import { ACTOR_LAYER } from './layers.js';
+import { ACTOR_LAYER, OCCLUDER_LAYER } from './layers.js';
 
 /**
  * The room as a place: floor, walls with height, doorways, obstacles, props,
@@ -615,6 +615,12 @@ export class Scenery {
         ? flatBox(wallColour, width, height, depth)
         : tiledBox(tiles.wall, width, height, depth, tiles.wallLip);
     mesh.position.set(centre.x, height / 2, centre.z);
+    // See `world/layers.ts`'s `OCCLUDER_LAYER` doc comment: only the room's
+    // own north wall carries the standing-sprite head-clip risk, so every
+    // other wall is safe to occlude actors normally.
+    if (direction !== 'north') {
+      mesh.layers.enable(OCCLUDER_LAYER);
+    }
     this.group.add(mesh);
   }
 
@@ -632,6 +638,15 @@ export class Scenery {
         this.wallHeight / 2,
         (rect.minY + rect.maxY) / 2,
       );
+      // Same reasoning as `addWallSegment`: a void box that reaches the
+      // interior's north edge is standing in for a north wall — a body can
+      // be immediately south of it, so it carries the same head-clip risk
+      // and stays off `OCCLUDER_LAYER`. One that doesn't (an L/T room's
+      // south, east or west corner) is exactly as safe to occlude as an
+      // ordinary wall.
+      if (rect.minY > this.room.minY) {
+        mesh.layers.enable(OCCLUDER_LAYER);
+      }
       this.group.add(mesh);
     }
   }
