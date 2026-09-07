@@ -109,6 +109,10 @@ const STYLE = `
 .kb-bind-table td { padding: 2px 4px 2px 0; vertical-align: middle; }
 .kb-bind-table td.kb-bind-cell { width: 40%; }
 
+.kb-controller-status { margin: 0 0 10px; color: var(--kb-color-text-dim); }
+.kb-controller-status.kb-controller-on { color: var(--kb-color-text); }
+.kb-controller-status .kb-name { color: var(--kb-color-accent); }
+
 .kb-privacy-copy { color: var(--kb-color-text-dim); margin: 0 0 10px; }
 .kb-privacy-session { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; }
 .kb-privacy-session code { color: var(--kb-color-accent); font: inherit; }
@@ -524,10 +528,48 @@ function buildBindCell(
   return cell;
 }
 
-function buildControlsSection(deps: SettingsScreenDeps): HTMLElement {
+interface ControlsSection {
+  readonly el: HTMLElement;
+  /** Re-reads the pad and updates the status line — called on a timer while the panel is open. */
+  readonly syncControllerStatus: () => void;
+}
+
+function buildControlsSection(deps: SettingsScreenDeps): ControlsSection {
   const section = document.createElement('div');
   section.className = 'kb-settings-section';
   const capture = new BindingCapture(deps.preferences.controls.bindings);
+
+  // A live controller-status line. `navigator.getGamepads()` returns nothing
+  // for a pad until a button is pressed on it (a fingerprinting defence —
+  // `input/gamepad.ts`), and a browser-side gamepad-to-mouse mapper (Steam
+  // Input's desktop config is the common one) hides the pad from the page
+  // entirely while still driving the cursor with it. Both read to a player as
+  // "the controller does nothing", so the panel says which it is rather than
+  // leaving an unexplained absence — same reasoning as `input/gamepad.ts`'s
+  // "ask for the press" note.
+  const controllerStatus = document.createElement('p');
+  controllerStatus.className = 'kb-controller-status';
+  const syncControllerStatus = (): void => {
+    deps.gamepad.update();
+    if (deps.gamepad.connected) {
+      controllerStatus.classList.add('kb-controller-on');
+      controllerStatus.textContent = '';
+      const label = document.createElement('span');
+      label.className = 'kb-name';
+      label.textContent = deps.gamepad.id ?? 'Controller';
+      controllerStatus.append('Controller connected: ', label);
+      if (!deps.gamepad.isStandardMapping) {
+        controllerStatus.append(' — non-standard layout, rebind below if the buttons are wrong.');
+      }
+    } else {
+      controllerStatus.classList.remove('kb-controller-on');
+      controllerStatus.textContent =
+        'No controller detected. If one is plugged in, press a button on it. ' +
+        'Some tools (e.g. Steam Input) map a controller to the mouse and hide it from the browser — ' +
+        'turn that off for this pad if the sticks are moving the cursor.';
+    }
+  };
+  syncControllerStatus();
 
   const table = document.createElement('table');
   table.className = 'kb-bind-table';
@@ -588,8 +630,8 @@ function buildControlsSection(deps: SettingsScreenDeps): HTMLElement {
     },
   );
 
-  section.append(table, clearButton, deadZone.el, aimAssist.el);
-  return section;
+  section.append(controllerStatus, table, clearButton, deadZone.el, aimAssist.el);
+  return { el: section, syncControllerStatus };
 }
 
 function buildAccessibilitySection(deps: SettingsScreenDeps): HTMLElement {
@@ -814,10 +856,11 @@ export function createSettingsScreen(
   const body = document.createElement('div');
   body.className = 'kb-settings-body';
 
+  const controlsSection = buildControlsSection(deps);
   const sections: Record<(typeof TABS)[number]['id'], HTMLElement> = {
     video: buildVideoSection(deps),
     audio: buildAudioSection(deps),
-    controls: buildControlsSection(deps),
+    controls: controlsSection.el,
     accessibility: buildAccessibilitySection(deps),
     privacy: buildPrivacySection(deps),
   };
@@ -870,6 +913,16 @@ export function createSettingsScreen(
   };
   window.addEventListener('keydown', onKeyDown);
 
+  // Keep the Controls tab's controller-status line current while the panel is
+  // open: a pad announces itself only on a button press, which can happen any
+  // time after this screen is built. Twice a second is plenty for a line
+  // nobody is staring at, and costs one `navigator.getGamepads()` call.
+  const controllerPoll = window.setInterval(() => {
+    if (!panel.hidden) {
+      controlsSection.syncControllerStatus();
+    }
+  }, 500);
+
   document.body.append(toggle, panel);
 
   return {
@@ -877,6 +930,7 @@ export function createSettingsScreen(
       panel.hidden = false;
     },
     destroy(): void {
+      window.clearInterval(controllerPoll);
       window.removeEventListener('keydown', onKeyDown);
       toggle.remove();
       panel.remove();

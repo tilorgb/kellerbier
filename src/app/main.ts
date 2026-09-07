@@ -19,6 +19,7 @@ import { Rng } from '../sim/rng/rng.js';
 import {
   type CompiledDoor,
   type RoomPlacement,
+  compileRoomTemplate,
   validateRoomTemplate,
 } from '../sim/room/template.js';
 import { RngStream, createStreamRng } from '../sim/rng/streams.js';
@@ -1270,6 +1271,15 @@ async function boot(): Promise<void> {
   let bossGateHintTicks = 0;
   /** Three seconds at 60 ticks/second — long enough to read, short enough not to linger. */
   const KEY_HINT_TICKS = 180;
+  /**
+   * The neighbour `crossDoor` has already handed to `view.prewarmRoom` for the
+   * door the player is currently walking into (#289's crossing dwell), so the
+   * per-tick poll only recompiles it once. Reset on the crossing itself and
+   * whenever the player stops touching a door — `GameView`'s own prewarm cache
+   * (keyed by room id) still de-dupes the expensive scenery build across a
+   * reset, so a reset only ever costs one extra `compileRoomTemplate`.
+   */
+  let prewarmedNeighborId: string | null = null;
   /** Edge-detects `sim.bossDoorLocked` — the key is pickable up mid-room, with no transition to hang a door redraw off. See `advanceOneTick`. */
   let wasBossDoorLocked = false;
 
@@ -1809,6 +1819,11 @@ async function boot(): Promise<void> {
       if (enterNeighbor(touchedDoor)) {
         playSfx('door-open');
       }
+    } else {
+      // Stepped away from the door mid-dwell: let the next approach recompile.
+      // `GameView`'s own prewarm cache still holds the built scenery, so this
+      // costs nothing but one `compileRoomTemplate` if they come back.
+      prewarmedNeighborId = null;
     }
   }
 
@@ -2426,6 +2441,7 @@ WASD move   arrows aim and fire
     wasBlutwurzActive = false;
     keyHintTicks = 0;
     bossGateHintTicks = 0;
+    prewarmedNeighborId = null;
     wasBossDoorLocked = false;
     bossBannerShown = false;
     bossBanner.view.visible = false;
@@ -2797,6 +2813,45 @@ WASD move   arrows aim and fire
   }
 
   /**
+   * Compiles the neighbour room now and hands its geometry to
+   * `view.prewarmRoom`, so `GameView.sync` adopts a ready-built scene graph on
+   * the switch frame instead of constructing it there — where the cost stalls
+   * the frame long enough that #96's transition slide visibly jumps to catch
+   * up. Mirrors `GameSim.loadRoom`'s own hidden-door filtering so a not-yet-
+   * revealed secret door reads as solid wall, the same as after the real load.
+   */
+  function prewarmNeighborScenery(
+    neighborRoomId: string,
+    neighborRoom: FloorPlanRoom,
+    placement: RoomPlacement,
+  ): void {
+    const compiled = compileRoomTemplate(
+      roomTemplateFor(neighborRoom),
+      floorPlan.floor,
+      'room template',
+      ENEMY_DEFINITIONS,
+      placement,
+    );
+    const hidden = hiddenDoorsFor(floorPlan, neighborRoomId, revealedEdges);
+    const visibleDoors = compiled.doors.filter(
+      (door) =>
+        !hidden.some(
+          (h) =>
+            h.direction === door.direction &&
+            h.cellCol === door.cellCol &&
+            h.cellRow === door.cellRow,
+        ),
+    );
+    view.prewarmRoom(
+      neighborRoomId,
+      compiled.geometry,
+      floorPlan.floor,
+      visibleDoors,
+      compiled.decorativeProps,
+    );
+  }
+
+  /**
    * Crosses one specific door: resolves the real neighbour room on the other
    * side of it, works out exactly which of *that* room's cells the player
    * lands in (#100 — not always its first one), and hands both to
@@ -2808,7 +2863,8 @@ WASD move   arrows aim and fire
    * own `pressingToward` crossing check — see their doc comments. `N`'s tour
    * passes `true`: it teleports through doors a real player isn't standing
    * at, let alone walking into, so requiring movement input toward one would
-   * just make the shortcut silently do nothing.
+   * just make the shortcut silently do nothing. It also skips the scenery
+   * prewarm — the tour steps through faster than a build would help.
    */
   function crossDoor(
     exitCellIndex: number,
@@ -2827,34 +2883,50 @@ WASD move   arrows aim and fire
     // it always has exactly one door per direction, and it compiles through
     // `compileStaircaseRoom`, not `compileRoomTemplate` — see
     // `GameSim.transitionToStaircase`.
-    const succeeded =
-      neighborRoom.staircaseTemplateId !== undefined
-        ? sim.transitionToStaircase(
-            planStaircaseTemplate(neighborRoom),
+    const isStaircase = neighborRoom.staircaseTemplateId !== undefined;
+
+    // Prewarm the neighbour's scenery while the player is still pressing into
+    // this door and the switch hasn't fired. Not for the `N` tour (`force`),
+    // not for staircases (a separate compile path this doesn't cover), and at
+    // most once per neighbour per approach.
+    if (
+      !force &&
+      !isStaircase &&
+      !sim.doorsLocked &&
+      sim.pressingToward(direction) &&
+      prewarmedNeighborId !== neighborRoomId
+    ) {
+      prewarmNeighborScenery(neighborRoomId, neighborRoom, buildPlacement(neighborRoom));
+      prewarmedNeighborId = neighborRoomId;
+    }
+
+    const succeeded = isStaircase
+      ? sim.transitionToStaircase(
+          planStaircaseTemplate(neighborRoom),
+          floorPlan.floor,
+          direction,
+          hiddenDoorsFor(floorPlan, neighborRoomId, revealedEdges),
+          force,
+        )
+      : (() => {
+          const neighborPlacement = buildPlacement(neighborRoom);
+          const offset = DIRECTION_OFFSET[direction];
+          const targetX = exitCell.x + offset.x;
+          const targetY = exitCell.y + offset.y;
+          const entryCellIndex = neighborRoom.cells.findIndex(
+            (cell) => cell.x === targetX && cell.y === targetY,
+          );
+          const entryCell = neighborPlacement.cells[entryCellIndex] ?? { col: 0, row: 0 };
+          return sim.transitionTo(
+            roomTemplateFor(neighborRoom),
             floorPlan.floor,
             direction,
             hiddenDoorsFor(floorPlan, neighborRoomId, revealedEdges),
+            neighborPlacement,
+            entryCell,
             force,
-          )
-        : (() => {
-            const neighborPlacement = buildPlacement(neighborRoom);
-            const offset = DIRECTION_OFFSET[direction];
-            const targetX = exitCell.x + offset.x;
-            const targetY = exitCell.y + offset.y;
-            const entryCellIndex = neighborRoom.cells.findIndex(
-              (cell) => cell.x === targetX && cell.y === targetY,
-            );
-            const entryCell = neighborPlacement.cells[entryCellIndex] ?? { col: 0, row: 0 };
-            return sim.transitionTo(
-              roomTemplateFor(neighborRoom),
-              floorPlan.floor,
-              direction,
-              hiddenDoorsFor(floorPlan, neighborRoomId, revealedEdges),
-              neighborPlacement,
-              entryCell,
-              force,
-            );
-          })();
+          );
+        })();
     if (!succeeded) {
       // A heuristic, not a reason code out of `transitionTo`: the current
       // room's own enemies are the only other thing that blocks a
@@ -2889,6 +2961,12 @@ WASD move   arrows aim and fire
     }
     currentRoomId = neighborRoomId;
     visitedRoomIds.add(neighborRoomId);
+    // Tell the view to adopt the scenery prewarmed for this neighbour on its
+    // next room-change frame, rather than rebuild it there.
+    if (prewarmedNeighborId === neighborRoomId) {
+      view.confirmPrewarmedEntry(neighborRoomId);
+    }
+    prewarmedNeighborId = null;
     syncFloorPlanView();
     refreshHud();
     return true;
@@ -2935,6 +3013,10 @@ WASD move   arrows aim and fire
     currentRoomId = floorPlan.startRoomId;
     visitedRoomIds = new Set([currentRoomId]);
     revealedEdges = new Set<string>();
+    // New floor plan, new room ids — a neighbour prewarmed against the old
+    // plan must not be matched against the new one. `GameView.sync`'s own
+    // no-adopt path disposes the built scenery when this cut lands.
+    prewarmedNeighborId = null;
     // A new floor plan means new room ids, and a loop back round to floor 1
     // is a boss that has to be beaten again — see `creditedBossRooms`.
     creditedBossRooms = new Set<string>();
@@ -2983,6 +3065,7 @@ WASD move   arrows aim and fire
   function enterBlutwurzEntrance(): void {
     currentRoomId = floorPlan.startRoomId;
     visitedRoomIds.add(currentRoomId);
+    prewarmedNeighborId = null;
     sim.loadRoom(
       roomTemplateFor(planRoom(floorPlan, currentRoomId)),
       floorPlan.floor,

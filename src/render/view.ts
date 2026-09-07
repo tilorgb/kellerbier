@@ -21,7 +21,8 @@ import { UI_TEXT_HEIGHT } from './ui/text.js';
 import { ELEVATION, WorldCamera, type WorldPoint } from './world/camera.js';
 import { ACTOR_LAYER, OCCLUDER_LAYER } from './world/layers.js';
 import { Lighting } from './world/lighting.js';
-import { type DoorState, Scenery } from './world/scenery.js';
+import { RoomPrewarm } from './world/room-prewarm.js';
+import { type DecorativeProp, type DoorState, Scenery } from './world/scenery.js';
 
 /**
  * The game as a scene: everything the player sees in the room, and the fixed
@@ -177,6 +178,24 @@ export class GameView {
    * cut rather than a walked crossing.
    */
   private outgoingScenery: Scenery | null = null;
+  /**
+   * The room on the far side of a door the player is currently walking into,
+   * built during #289's crossing dwell so the switch frame adopts it rather
+   * than building it then — see `world/room-prewarm.ts` and `prewarmRoom`.
+   */
+  private readonly prewarm = new RoomPrewarm<Scenery>();
+  /**
+   * The room `confirmPrewarmedEntry` says we have just crossed into — the next
+   * room change adopts the prewarmed scenery iff it is still this one. `null`
+   * when the coming room change is a build, not an adopt.
+   */
+  private pendingAdoptKey: string | null = null;
+  /**
+   * The renderer, captured on the first `render` call, so `prewarmRoom` can
+   * `compileAsync` a prewarmed room's materials during the dwell. `null` only
+   * before the first frame, which is long before any door crossing.
+   */
+  private renderer: WebGLRenderer | null = null;
   /** Where the camera was actually aiming last frame — the slide's start point, for continuity into the next room. */
   private lastAimX = 0;
   private lastAimZ = 0;
@@ -345,9 +364,27 @@ export class GameView {
       this.roomGeometry = sim.room;
       this.entities.resetAnimation();
       this.entities.setTargetTextures(this.textures.roomTiles[sim.currentFloor]?.destructibles);
-      this.scenery = this.buildScenery();
+      // Adopt the room built during the crossing dwell when the app has
+      // confirmed we walked into it (`prewarmRoom` + `confirmPrewarmedEntry`);
+      // otherwise — a cut, a floor advance, a Blutwurz spirit walk, or simply
+      // too fast a crossing to have built one — drop any half-built reserve and
+      // build here.
+      const adopted =
+        this.pendingAdoptKey === null ? null : this.prewarm.take(this.pendingAdoptKey);
+      this.pendingAdoptKey = null;
+      if (adopted === null) {
+        this.prewarm.discard();
+      }
+      this.scenery = adopted ?? this.buildScenery();
       this.scene.add(this.scenery.group);
       this.scenery.setLean(this.camera.lean);
+      // A prewarmed room was built before the app knew which of *its* doors
+      // face the boss (`setBossDoors` runs on the crossing, after the build),
+      // so re-settle the double-door state now against the current set. A
+      // no-op for a freshly built room, which already matches.
+      for (const door of this.scenery.doors) {
+        door.setDouble(this.bossDoorDirections.has(door.door.direction));
+      }
       // A previous slide that never finished (two crossings in very quick
       // succession) loses its own outgoing room rather than leaking it.
       this.outgoingScenery?.dispose();
@@ -459,6 +496,7 @@ export class GameView {
 
   /** Draws the world pass. The caller draws the UI pass over it. */
   render(renderer: WebGLRenderer): void {
+    this.renderer = renderer;
     const camera = this.camera.camera;
 
     // Everything that stands in the room is on `ACTOR_LAYER` only (set on the
@@ -517,13 +555,27 @@ export class GameView {
 
   private buildScenery(): Scenery {
     const sim = this.sim;
+    return this.makeScenery(sim.room, sim.currentFloor, sim.doors, sim.roomDecorativeProps);
+  }
+
+  /**
+   * Builds a room's scene graph from explicit geometry rather than off `sim`,
+   * so `prewarmRoom` can build the *next* room while `sim` still describes the
+   * current one. `buildScenery` is the `sim.room`/`sim.doors`/… call of this.
+   */
+  private makeScenery(
+    room: RoomGeometry,
+    floor: number,
+    doors: readonly CompiledDoor[],
+    props: readonly DecorativeProp[],
+  ): Scenery {
     const scenery = new Scenery(
-      sim.room,
-      sim.currentFloor,
-      sim.doors,
-      sim.roomDecorativeProps,
+      room,
+      floor,
+      doors,
+      props,
       {
-        tiles: this.textures.roomTiles[sim.currentFloor],
+        tiles: this.textures.roomTiles[floor],
         tileTextures: this.textures.tileTextures ?? {},
       },
       this.camera.lean,
@@ -532,6 +584,50 @@ export class GameView {
       door.setDouble(this.bossDoorDirections.has(door.door.direction));
     }
     return scenery;
+  }
+
+  /**
+   * Build the room keyed `roomKey` — the one on the far side of a door the
+   * player is walking into — now, during #289's crossing dwell, so `sync`'s
+   * room-change branch adopts it off the shelf instead of building it on the
+   * switch frame. `app/main.ts` calls this every tick the player presses into
+   * an unlocked door, passing the same neighbour geometry it is about to try to
+   * cross into; repeat calls for a room already built are free. See
+   * `world/room-prewarm.ts`.
+   */
+  prewarmRoom(
+    roomKey: string,
+    room: RoomGeometry,
+    floor: number,
+    doors: readonly CompiledDoor[],
+    props: readonly DecorativeProp[],
+  ): void {
+    const built = this.prewarm.request(roomKey, () => this.makeScenery(room, floor, doors, props));
+    if (built === null || this.renderer === null) {
+      return;
+    }
+    // Warm the new room's materials/programs now, against the current scene's
+    // lighting, so the switch frame is not also paying the shader compile. The
+    // group is passed detached — `compile`'s material pass is `traverse`, not
+    // `traverseVisible`, so it need not be in the scene or visible. A rejected
+    // precompile just hands the cost back to the switch frame; it is never a
+    // reason to take the run down.
+    this.renderer.compileAsync(built.group, this.camera.camera, this.scene).catch(() => {
+      // Precompile is best-effort; the switch frame builds/uploads regardless.
+    });
+  }
+
+  /**
+   * Tells the view that the crossing into `roomKey` — the room last passed to
+   * `prewarmRoom` — has just been accepted by the sim, so `sync`'s next
+   * room-change branch adopts what was built for it rather than build afresh.
+   * `app/main.ts` calls this immediately after a successful `sim.transitionTo`
+   * into that neighbour. Passing the key (not just a flag) means a second
+   * crossing in the same frame, which replaces what is held, falls back to a
+   * clean build instead of adopting the wrong room.
+   */
+  confirmPrewarmedEntry(roomKey: string): void {
+    this.pendingAdoptKey = roomKey;
   }
 
   private relight(): void {
@@ -655,6 +751,8 @@ export class GameView {
 
   destroy(): void {
     this.scenery.dispose();
+    this.outgoingScenery?.dispose();
+    this.prewarm.discard();
     this.entities.destroy();
     this.playerView.destroy();
     this.projectiles.destroy();
