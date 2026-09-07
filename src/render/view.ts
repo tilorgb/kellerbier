@@ -1,4 +1,11 @@
-import { Color, MeshBasicMaterial, type Object3D, Scene, type WebGLRenderer } from 'three';
+import {
+  Color,
+  MeshBasicMaterial,
+  type Object3D,
+  Scene,
+  WebGLRenderTarget,
+  type WebGLRenderer,
+} from 'three';
 import { ROOM_TRANSITION_TICKS, type GameSim, type RoomDirection } from '../sim/game/sim.js';
 import { roomFrameSize, type RoomGeometry } from '../sim/room/geometry.js';
 import type { CompiledDoor } from '../sim/room/template.js';
@@ -192,10 +199,16 @@ export class GameView {
   private pendingAdoptKey: string | null = null;
   /**
    * The renderer, captured on the first `render` call, so `prewarmRoom` can
-   * `compileAsync` a prewarmed room's materials during the dwell. `null` only
+   * warm a prewarmed room's shaders and buffers during the dwell. `null` only
    * before the first frame, which is long before any door crossing.
    */
   private renderer: WebGLRenderer | null = null;
+  /**
+   * A 1×1 target `prewarmRoom` renders the incoming room into once, off-screen,
+   * to force its shader compile + geometry/texture upload during the dwell
+   * rather than on the switch frame. Created on first use.
+   */
+  private warmTarget: WebGLRenderTarget | null = null;
   /** Where the camera was actually aiming last frame — the slide's start point, for continuity into the next room. */
   private lastAimX = 0;
   private lastAimZ = 0;
@@ -606,15 +619,28 @@ export class GameView {
     if (built === null || this.renderer === null) {
       return;
     }
-    // Warm the new room's materials/programs now, against the current scene's
-    // lighting, so the switch frame is not also paying the shader compile. The
-    // group is passed detached — `compile`'s material pass is `traverse`, not
-    // `traverseVisible`, so it need not be in the scene or visible. A rejected
-    // precompile just hands the cost back to the switch frame; it is never a
-    // reason to take the run down.
-    this.renderer.compileAsync(built.group, this.camera.camera, this.scene).catch(() => {
-      // Precompile is best-effort; the switch frame builds/uploads regardless.
-    });
+    // Run the new room through the real render path once, into a 1×1 off-screen
+    // target, so every shader program the switch frame needs — across all three
+    // of `render`'s passes — is compiled and every buffer/texture uploaded
+    // *now*, during the dwell while the player is pressing into a door and the
+    // camera is still, instead of on the switch frame where the cost lands
+    // mid-slide and the whole game hitches. A plain `renderer.render` or
+    // `compileAsync` misses the occluder- and actor-pass program variants;
+    // the shadow pass is skipped here because its one depth program is shared
+    // and already warm from the current room. The group is added at the
+    // incoming room's origin, drawn, and removed — nothing of it shows until
+    // `sync` adopts it.
+    const renderer = this.renderer;
+    const target = (this.warmTarget ??= new WebGLRenderTarget(1, 1));
+    const previousTarget = renderer.getRenderTarget();
+    const previousShadowAutoUpdate = renderer.shadowMap.autoUpdate;
+    this.scene.add(built.group);
+    renderer.setRenderTarget(target);
+    renderer.shadowMap.autoUpdate = false;
+    this.render(renderer);
+    renderer.shadowMap.autoUpdate = previousShadowAutoUpdate;
+    renderer.setRenderTarget(previousTarget);
+    this.scene.remove(built.group);
   }
 
   /**
@@ -753,6 +779,7 @@ export class GameView {
     this.scenery.dispose();
     this.outgoingScenery?.dispose();
     this.prewarm.discard();
+    this.warmTarget?.dispose();
     this.entities.destroy();
     this.playerView.destroy();
     this.projectiles.destroy();

@@ -14,16 +14,14 @@
  * #289 gave the crossing a dwell: `tuning.movement.doorCrossingTicks` ticks of
  * the player pressing into an open door before it actually switches. That dwell
  * is dead time on the render side, and it is exactly long enough to build the
- * next room's scenery in. `app/main.ts` calls {@link request} each dwell tick
- * with the neighbour it is about to hand `sim.transitionTo`; on the crossing it
- * calls {@link GameView.confirmPrewarmedEntry} with that room's id, and
- * `GameView.sync` then {@link take}s it by that id — falling back to a normal
- * build if what is held has since been replaced (a second crossing in the same
- * frame) or was never the room arrived in.
- *
- * This class only owns the scene-graph *construction* off the switch frame.
- * `GameView.prewarmRoom` pairs a `renderer.compileAsync` on the fresh build
- * with it, so the shader/program warm-up is moved off that frame too.
+ * next room in. `GameView.prewarmRoom` builds it ({@link request}) and renders
+ * it once off-screen, so its scene graph, shader programs and GPU buffers are
+ * all ready before the switch frame — where the cost otherwise lands mid-slide
+ * and the whole game hitches. On the crossing `app/main.ts` calls
+ * {@link GameView.confirmPrewarmedEntry} with that room's id, and `GameView.sync`
+ * {@link take}s it by that id — falling back to a normal build if what is held
+ * has since been replaced (a second crossing in the same frame) or was never the
+ * room arrived in.
  */
 export interface DisposableScenery {
   dispose(): void;
