@@ -3,8 +3,8 @@ import type { GameSim } from '../game/sim.js';
 
 /**
  * The Losbrunnen's per-tick upkeep (#218): closing its picker the moment the
- * player steps out of range, and reading the move axis for a left/right tap
- * to cycle it while it's open.
+ * player steps out of range, and reading the move axes for a tap to cycle it
+ * while it's open.
  *
  * Deliberately not gated on any button — `use` (`sim/systems/pedestal.ts`'s
  * priority chain, `GameSim.useMachine`) is the machine's only *button*
@@ -27,5 +27,5 @@ export function stepMachine(sim: GameSim, input: Readonly<InputFrame>): void {
   // off the tick counter alone — see `GameSim.advanceMachineRoll`'s own doc
   // comment for why this can't be tied to wall-clock animation time.
   sim.advanceMachineRoll();
-  sim.cycleMachineFromAxis(input.moveX);
+  sim.cycleMachineFromAxis(input.moveX, input.moveY);
 }

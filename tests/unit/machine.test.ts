@@ -192,6 +192,13 @@ function tapMove(direction: 1 | -1): typeof IDLE {
   return frame;
 }
 
+/** A vertical move-axis tap — `S`/`W` (down/up), the natural axis for the picker's stacked card columns. `+1` is downward in screen space. */
+function tapMoveY(direction: 1 | -1): typeof IDLE {
+  const frame = createInputFrame();
+  frame.moveY = direction * 100;
+  return frame;
+}
+
 function moveRight(): typeof IDLE {
   const frame = createInputFrame();
   frame.moveX = 100;
@@ -365,6 +372,25 @@ describe('Der Losbrunnen — picker and feed, use-button only (#218)', () => {
     // Holding the same direction does not spin past the second item.
     sim.step(tapMove(1));
     expect(sim.machinePreview?.itemName).toBe(second);
+  });
+
+  it('cycles the preview on a vertical (up/down) tap too — the picker is a stacked column', () => {
+    const sim = simWithDeadBoss([baseItem('a'), baseItem('b')]);
+    sim.addBiermarken(10);
+    sim.pickUpItem('a');
+    sim.pickUpItem('b');
+    standAtMachine(sim);
+
+    sim.step(pressUse());
+    const first = sim.machinePreview?.itemName;
+    sim.step(IDLE); // release use, let the axis return to centre
+    sim.step(tapMoveY(1)); // 'S' — down one card
+    const second = sim.machinePreview?.itemName;
+    expect(second).not.toBe(first);
+
+    sim.step(IDLE);
+    sim.step(tapMoveY(-1)); // 'W' — back up
+    expect(sim.machinePreview?.itemName).toBe(first);
   });
 
   it('feeding closes the picker, and confirms whichever item was last previewed', () => {
@@ -844,6 +870,37 @@ describe('Der Losbrunnen — the redesigned picker: rolling, results and choosin
     sim.step(IDLE);
     expect(sim.machineRollDisplay).toBeNull();
     expect(sim.machinePreview?.state).toBe('fed');
+  });
+
+  it('a vertical (up/down) tap moves the results selection — the board is a stacked column', () => {
+    const sim = simWithDeadBoss([baseItem('a')]);
+    sim.tuning.machine.breakChance = 0;
+    sim.tuning.machine.unluckyWeight = 0;
+    sim.addBiermarken(10);
+    sim.pickUpItem('a');
+    standAtMachine(sim);
+
+    sim.step(pressUse());
+    sim.step(IDLE);
+    sim.step(pressUse());
+    sim.step(IDLE);
+    runRollAnimation(sim);
+
+    const initial = sim.machineRollDisplay;
+    if (initial?.phase !== 'choosing') throw new Error('expected a choosing phase');
+    expect(initial.candidates.findIndex((candidate) => candidate.selected)).toBe(0);
+
+    sim.step(tapMoveY(1)); // 'S' — down one card
+    sim.step(IDLE);
+    const afterDown = sim.machineRollDisplay;
+    if (afterDown?.phase !== 'choosing') throw new Error('expected a choosing phase');
+    expect(afterDown.candidates.findIndex((candidate) => candidate.selected)).toBe(1);
+
+    sim.step(tapMoveY(-1)); // 'W' — back up
+    sim.step(IDLE);
+    const afterUp = sim.machineRollDisplay;
+    if (afterUp?.phase !== 'choosing') throw new Error('expected a choosing phase');
+    expect(afterUp.candidates.findIndex((candidate) => candidate.selected)).toBe(0);
   });
 
   it('freezes the player for as long as the dialog is open, in every one of its phases', () => {

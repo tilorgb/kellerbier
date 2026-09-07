@@ -289,7 +289,7 @@ const PEDESTAL_RADIUS = 8;
 const LOSBRUNNEN_OFFSET_X = 36;
 const LOSBRUNNEN_OFFSET_Y = 0;
 
-/** Move-axis magnitude (of `AXIS_RESOLUTION`'s 127) that counts as a deliberate left/right tap for the Losbrunnen's picker — `cycleMachinePreviewFromAxis`. */
+/** Move-axis magnitude (of `AXIS_RESOLUTION`'s 127) that counts as a deliberate directional tap for the Losbrunnen's picker — `machineTapSign`. */
 const MACHINE_AXIS_TAP_THRESHOLD = 40;
 
 export type RoomDirection = 'north' | 'east' | 'south' | 'west';
@@ -4438,17 +4438,31 @@ export class GameSim {
   }
 
   /**
-   * Reads one tick's move axis for a left/right *tap* — a fresh push, not a
-   * held direction — and cycles the picker's preview on it. Called every
-   * tick by `sim/systems/machine.ts`'s `stepMachine`, regardless of `use`,
-   * which is why this needs its own edge detector (`machineCyclePreviousSign`)
-   * rather than `previousButtons`: there is no button here, only an axis,
-   * and reading it as a level rather than an edge would spin the preview
-   * every tick a direction is held instead of once per push.
+   * The directional tap for the Losbrunnen's picker, from one tick's move
+   * axes. Both of the redesigned picker's panes (#268) are a single vertical
+   * column of cards, so up/down is the natural axis and wins when it is the
+   * larger push; left/right is kept as an alias for the player who reaches
+   * for it. `+1` advances by one card (down, or right), `-1` steps back (up,
+   * or left) — `> 0` is downward in this engine's screen-space move axis
+   * (`sim/systems/movement.ts`). Zero unless a push clears
+   * `MACHINE_AXIS_TAP_THRESHOLD`.
    */
-  private cycleMachinePreviewFromAxis(moveX: number): void {
-    const sign: -1 | 0 | 1 =
-      moveX > MACHINE_AXIS_TAP_THRESHOLD ? 1 : moveX < -MACHINE_AXIS_TAP_THRESHOLD ? -1 : 0;
+  private machineTapSign(moveX: number, moveY: number): -1 | 0 | 1 {
+    const axis = Math.abs(moveY) >= Math.abs(moveX) ? moveY : moveX;
+    return axis > MACHINE_AXIS_TAP_THRESHOLD ? 1 : axis < -MACHINE_AXIS_TAP_THRESHOLD ? -1 : 0;
+  }
+
+  /**
+   * Reads one tick's move axes for a *tap* — a fresh push, not a held
+   * direction — and cycles the picker's preview on it. Called every tick by
+   * `sim/systems/machine.ts`'s `stepMachine`, regardless of `use`, which is
+   * why this needs its own edge detector (`machineCyclePreviousSign`) rather
+   * than `previousButtons`: there is no button here, only an axis, and
+   * reading it as a level rather than an edge would spin the preview every
+   * tick a direction is held instead of once per push.
+   */
+  private cycleMachinePreviewFromAxis(moveX: number, moveY: number): void {
+    const sign = this.machineTapSign(moveX, moveY);
     if (sign !== 0 && sign !== this.machineCyclePreviousSign) {
       this.cycleMachinePreview(sign);
     }
@@ -4472,9 +4486,8 @@ export class GameSim {
     phase.selectedIndex = (phase.selectedIndex + direction + count) % count;
   }
 
-  private cycleMachineChoiceFromAxis(moveX: number): void {
-    const sign: -1 | 0 | 1 =
-      moveX > MACHINE_AXIS_TAP_THRESHOLD ? 1 : moveX < -MACHINE_AXIS_TAP_THRESHOLD ? -1 : 0;
+  private cycleMachineChoiceFromAxis(moveX: number, moveY: number): void {
+    const sign = this.machineTapSign(moveX, moveY);
     if (sign !== 0 && sign !== this.machineCyclePreviousSign) {
       this.cycleMachineChoice(sign);
     }
@@ -4482,22 +4495,23 @@ export class GameSim {
   }
 
   /**
-   * Reads one tick's move axis for a left/right *tap* and routes it to
+   * Reads one tick's move axes for a directional *tap* and routes it to
    * whichever of the picker's two browsable moments is actually open right
    * now — item-select (`cycleMachinePreviewFromAxis`) or the results board
    * (`cycleMachineChoiceFromAxis`); neither is ever open at the same time as
-   * the other. Called every tick by `sim/systems/machine.ts`'s
-   * `stepMachine`, regardless of `use` — see that function's own doc
-   * comment for why this can't just live inside `useMachine`'s button-edge
-   * chain.
+   * the other. Both panes are vertical card columns, so up/down drives them
+   * (`machineTapSign`), with left/right kept as an alias. Called every tick
+   * by `sim/systems/machine.ts`'s `stepMachine`, regardless of `use` — see
+   * that function's own doc comment for why this can't just live inside
+   * `useMachine`'s button-edge chain.
    */
-  cycleMachineFromAxis(moveX: number): void {
+  cycleMachineFromAxis(moveX: number, moveY: number): void {
     if (this.machinePickerOpenValue) {
-      this.cycleMachinePreviewFromAxis(moveX);
+      this.cycleMachinePreviewFromAxis(moveX, moveY);
       return;
     }
     if (this.machineRollPhase.kind === 'choosing') {
-      this.cycleMachineChoiceFromAxis(moveX);
+      this.cycleMachineChoiceFromAxis(moveX, moveY);
       return;
     }
     this.machineCyclePreviousSign = 0;
