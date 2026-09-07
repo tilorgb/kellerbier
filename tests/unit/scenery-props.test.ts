@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { Scene } from 'three';
 import { ROOM_TILE_UNITS } from '../../src/content/rooms/definition.js';
 import { MAIBAUM_TOP_TILE, PROP_TILE_NAMES } from '../../src/render/floor-art.js';
 import { type Texture, textureFromPixels } from '../../src/render/gfx/index.js';
+import { Lighting } from '../../src/render/world/lighting.js';
+import { MaterialCache } from '../../src/render/world/material-cache.js';
 import { Scenery } from '../../src/render/world/scenery.js';
 import { DESTRUCTIBLE_PROP_KINDS, GameSim } from '../../src/sim/game/sim.js';
 import { RoomGeometry } from '../../src/sim/room/geometry.js';
@@ -37,7 +40,17 @@ function scenery(
   props: readonly { x: number; y: number; type: string }[],
   tileTextures: Readonly<Record<string, Texture>> = tiles,
 ): Scenery {
-  return new Scenery(new RoomGeometry(0, 0, 320, 180), 1, [], props, { tileTextures }, 0);
+  const lighting = new Lighting(new Scene());
+  return new Scenery(
+    new RoomGeometry(0, 0, 320, 180),
+    1,
+    [],
+    props,
+    { tileTextures },
+    0,
+    lighting,
+    new MaterialCache(),
+  );
 }
 
 describe('Scenery, standing decorative props', () => {

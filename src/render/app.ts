@@ -70,6 +70,11 @@ export function createRenderer(host: HTMLElement): GameRenderer {
   renderer.setClearColor(APP_BACKGROUND_COLOUR, 1);
   renderer.outputColorSpace = SRGBColorSpace;
   renderer.shadowMap.enabled = true;
+  // Off by default: the shadow map is otherwise re-rendered every frame for
+  // room architecture that is static within a room. `GameView.render` asks
+  // for a fresh one (`shadowMap.needsUpdate = true`) only on the frames
+  // something it shadows actually moved (`docs/PERFORMANCE_AUDIT.md` F6).
+  renderer.shadowMap.autoUpdate = false;
 
   const ui = new UiLayer();
   ui.resize(INTERNAL_WIDTH, INTERNAL_HEIGHT);

@@ -8,7 +8,7 @@ import {
   Mesh,
   MeshStandardMaterial,
   PlaneGeometry,
-  PointLight,
+  type PointLight,
 } from 'three';
 import { ROOM_TILE_UNITS } from '../../content/rooms/definition.js';
 import {
@@ -25,6 +25,8 @@ import { pickTileVariant, tileGridScale } from '../tiles.js';
 import { Billboard } from './billboard.js';
 import { DECAL_HEIGHT, FloorSprite, tilingTexture } from './flat.js';
 import { ACTOR_LAYER, OCCLUDER_LAYER } from './layers.js';
+import type { Lighting } from './lighting.js';
+import type { MaterialCache } from './material-cache.js';
 
 /**
  * The room as a place: floor, walls with height, doorways, obstacles, props,
@@ -66,7 +68,6 @@ const WALL_THICKNESS = ROOM_TILE_UNITS;
 const BLEED = ROOM_TILE_UNITS * 6;
 const TRELLIS_HEIGHT = 14;
 const DEFAULT_WALL_HEIGHT = 26;
-const DOOR_GLOW = 0xff9a3c;
 
 /** Props that are floor markings rather than things standing on the floor. */
 const FLAT_PROPS: ReadonlySet<string> = new Set(['boss-plate', 'shopkeeper-stand']);
@@ -94,13 +95,22 @@ export class DoorPiece {
   readonly group = new Group();
   /** The leaf pivots, hinged at the jambs: one for an ordinary door, two for a boss door. */
   readonly hinges: Group[] = [];
-  private readonly glow: PointLight;
+  private readonly lighting: Lighting;
+  private readonly materials: MaterialCache;
+  /**
+   * Claimed from `Lighting`'s fixed pool (`docs/PERFORMANCE_AUDIT.md` F1) —
+   * `null` only if the pool is exhausted (`docs/DECISIONS.md` #19: the door
+   * just doesn't glow). Released in `dispose`.
+   */
+  private readonly glow: PointLight | null;
   private readonly span: number;
   private readonly doorHeight: number;
   private state: DoorState = 'closed';
   private opennessValue = 0;
   private double = false;
   private lock: Mesh | null = null;
+  /** Parallel to `hinges` — kept so `disposeLeaves` can free each leaf's own (uncached) material. */
+  private readonly leaves: Mesh[] = [];
 
   constructor(
     door: CompiledDoor,
@@ -110,9 +120,13 @@ export class DoorPiece {
     wallHeight: number,
     wall: Texture | undefined,
     wallColour: number,
+    lighting: Lighting,
+    materials: MaterialCache,
   ) {
     this.door = door;
     this.span = span;
+    this.lighting = lighting;
+    this.materials = materials;
     const t = WALL_THICKNESS;
     // A door in a tall wall stops short of the top so a lintel and a course of
     // wall can sit over it; a gate in a low hedge stands above it.
@@ -129,7 +143,7 @@ export class DoorPiece {
     const reach = span + 2;
     const floor = new Mesh(
       new PlaneGeometry(span, reach + t / 2),
-      new MeshStandardMaterial({ color: 0x141018, roughness: 1 }),
+      materials.flatMaterial(0x141018, { roughness: 1 }),
     );
     floor.rotation.x = -Math.PI / 2;
     floor.position.set(0, 0.06, -(reach + t / 2) / 2 + t / 4);
@@ -137,15 +151,14 @@ export class DoorPiece {
     this.group.add(floor);
 
     // The frame: two jambs and a lintel in dark timber, proud of the wall face.
-    const timber = (): MeshStandardMaterial =>
-      new MeshStandardMaterial({ color: FRAME_TIMBER, roughness: 0.9 });
+    const timber = materials.flatMaterial(FRAME_TIMBER, { roughness: 0.9 });
     for (const side of [-1, 1]) {
-      const jamb = new Mesh(new BoxGeometry(JAMB, frameHeight, t + 1), timber());
+      const jamb = new Mesh(new BoxGeometry(JAMB, frameHeight, t + 1), timber);
       jamb.position.set(side * (span / 2 - JAMB / 2), frameHeight / 2, 0);
       jamb.castShadow = true;
       this.group.add(jamb);
     }
-    const lintel = new Mesh(new BoxGeometry(span, LINTEL, t + 1), timber());
+    const lintel = new Mesh(new BoxGeometry(span, LINTEL, t + 1), timber);
     lintel.position.set(0, this.doorHeight + LINTEL / 2, 0);
     lintel.castShadow = true;
     this.group.add(lintel);
@@ -153,15 +166,17 @@ export class DoorPiece {
     if (wallHeight > frameHeight) {
       const above =
         wall === undefined
-          ? flatBox(wallColour, span, wallHeight - frameHeight, t)
-          : tiledBox(wall, span, wallHeight - frameHeight, t);
+          ? flatBox(materials, wallColour, span, wallHeight - frameHeight, t)
+          : tiledBox(materials, wall, span, wallHeight - frameHeight, t);
       above.position.set(0, frameHeight + (wallHeight - frameHeight) / 2, 0);
       this.group.add(above);
     }
 
-    this.glow = new PointLight(DOOR_GLOW, 0, 60, 2);
-    this.glow.position.set(0, 10, -t / 2);
-    this.group.add(this.glow);
+    this.glow = lighting.acquireDoorGlow();
+    if (this.glow !== null) {
+      this.glow.position.set(0, 10, -t / 2);
+      this.group.add(this.glow);
+    }
 
     this.buildLeaves();
     this.setState('closed');
@@ -182,19 +197,27 @@ export class DoorPiece {
     return this.double;
   }
 
-  private buildLeaves(): void {
-    for (const hinge of this.hinges) {
-      hinge.traverse((object) => {
-        if (object instanceof Mesh) {
-          const mesh = object as Mesh;
-          mesh.geometry.dispose();
-          (mesh.material as MeshStandardMaterial).dispose();
-        }
-      });
-      this.group.remove(hinge);
+  /** Disposes the current leaves and lock — their geometry always, the leaves' own uncached material too. */
+  private disposeLeaves(): void {
+    for (let i = 0; i < this.hinges.length; i++) {
+      const hinge = this.hinges[i];
+      const leaf = this.leaves[i];
+      if (leaf !== undefined) {
+        leaf.geometry.dispose();
+        (leaf.material as MeshStandardMaterial).dispose();
+      }
+      if (hinge !== undefined) {
+        this.group.remove(hinge);
+      }
     }
+    this.lock?.geometry.dispose();
     this.hinges.length = 0;
+    this.leaves.length = 0;
     this.lock = null;
+  }
+
+  private buildLeaves(): void {
+    this.disposeLeaves();
     const inner = this.span / 2 - JAMB;
     const leafHeight = this.doorHeight - 0.5;
     const leafWidth = this.double ? inner - 0.25 : inner * 2 - 0.5;
@@ -202,6 +225,11 @@ export class DoorPiece {
     for (const side of sides) {
       const hinge = new Group();
       hinge.position.set(side * inner, 0, 0);
+      // The leaf's own material is never cached: `setState` tints it per-door
+      // (locked vs. not), which a shared instance would broadcast to every
+      // other door borrowing it. Its *shape* — textured, roughness-only — is
+      // the same as every wall material the cache does hand out, so its
+      // program stays warm anyway; only the instance is one-off.
       const leaf = new Mesh(
         new BoxGeometry(leafWidth, leafHeight, LEAF_THICKNESS),
         new MeshStandardMaterial({
@@ -215,12 +243,14 @@ export class DoorPiece {
       leaf.receiveShadow = true;
       hinge.add(leaf);
       this.hinges.push(hinge);
+      this.leaves.push(leaf);
       this.group.add(hinge);
     }
     // A padlock on the leading edge, shown only while the door is key-locked.
+    // Never tinted, so — unlike the leaf — it can safely borrow a shared material.
     const lock = new Mesh(
       new BoxGeometry(2, 2.5, 1.2),
-      new MeshStandardMaterial({ color: LOCK_BRASS, roughness: 0.4, metalness: 0.6 }),
+      this.materials.flatMaterial(LOCK_BRASS, { roughness: 0.4, metalness: 0.6 }),
     );
     const firstHinge = this.hinges[0];
     if (firstHinge !== undefined) {
@@ -236,17 +266,15 @@ export class DoorPiece {
     if (this.lock !== null) {
       this.lock.visible = state === 'locked';
     }
-    for (const hinge of this.hinges) {
-      hinge.traverse((object) => {
-        if (object instanceof Mesh && object !== this.lock) {
-          ((object as Mesh).material as MeshStandardMaterial).color.setHex(
-            state === 'locked' ? LOCKED_TINT : 0xffffff,
-          );
-        }
-      });
+    for (const leaf of this.leaves) {
+      (leaf.material as MeshStandardMaterial).color.setHex(
+        state === 'locked' ? LOCKED_TINT : 0xffffff,
+      );
     }
     this.setOpenness(state === 'open' ? 1 : 0);
-    this.glow.intensity = state === 'open' ? 120 : 0;
+    if (this.glow !== null) {
+      this.glow.intensity = state === 'open' ? 120 : 0;
+    }
   }
 
   get currentState(): DoorState {
@@ -270,27 +298,32 @@ export class DoorPiece {
 
   /** The room-clear amber pulse on the passage light. */
   setPulse(strength: number): void {
-    this.glow.intensity = this.state === 'open' ? 120 + strength * 400 : 0;
+    if (this.glow !== null) {
+      this.glow.intensity = this.state === 'open' ? 120 + strength * 400 : 0;
+    }
   }
 
   dispose(): void {
+    this.disposeLeaves();
+    this.lighting.releaseDoorGlow(this.glow);
     disposeMeshes(this.group);
     this.group.removeFromParent();
   }
 }
 
-/** Frees every mesh under `root` — geometry, material and the material's map. */
+/**
+ * Frees every mesh's geometry under `root`. Materials are not disposed here:
+ * everything a `Scenery`/`DoorPiece` builds now borrows its material from
+ * `MaterialCache` (kept alive for the run) rather than owning one — the one
+ * exception, a door leaf's per-instance tint, disposes itself explicitly in
+ * `disposeLeaves` before this ever sees it. Geometry stays per-instance; #293
+ * is where that gets pooled too.
+ */
 function disposeMeshes(root: Group): void {
   root.traverse((object) => {
-    if (!(object instanceof Mesh)) {
-      return;
-    }
-    const mesh = object as Mesh;
-    mesh.geometry.dispose();
-    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-    for (const material of materials) {
-      (material as MeshStandardMaterial).map?.dispose();
-      material.dispose();
+    if (object instanceof Mesh) {
+      const mesh = object as Mesh;
+      mesh.geometry.dispose();
     }
   });
 }
@@ -347,8 +380,16 @@ function plankTexture(): Texture {
   return plankTextureCache;
 }
 
-/** A textured box that tiles at one authored tile per `ROOM_TILE_UNITS` on every face. */
+/**
+ * A textured box that tiles at one authored tile per `ROOM_TILE_UNITS` on
+ * every face. The geometry is still built fresh per call — #293's wall merge
+ * is where that goes away — but every face's material is borrowed from
+ * `materials` rather than constructed, so the room's own wall/void run
+ * lengths (quantised to the room grid) recur across loads often enough for
+ * this to be a real cache hit, not just a keepalive.
+ */
 function tiledBox(
+  materials: MaterialCache,
   texture: Texture,
   width: number,
   height: number,
@@ -356,30 +397,26 @@ function tiledBox(
   topTexture: Texture = texture,
 ): Mesh {
   const geometry = new BoxGeometry(width, height, depth);
-  const side = (w: number, h: number): MeshStandardMaterial =>
-    new MeshStandardMaterial({ map: tilingTexture(texture, w, h), roughness: 0.95 });
-  const top = new MeshStandardMaterial({
-    map: tilingTexture(topTexture, width, depth),
-    roughness: 0.95,
-  });
+  const side = materials.tiledMaterial(texture, depth, height, { roughness: 0.95 });
+  const top = materials.tiledMaterial(topTexture, width, depth, { roughness: 0.95 });
+  const end = materials.tiledMaterial(texture, width, height, { roughness: 0.95 });
   // BoxGeometry material order: +x, -x, +y, -y, +z, -z.
-  const mesh = new Mesh(geometry, [
-    side(depth, height),
-    side(depth, height),
-    top,
-    top,
-    side(width, height),
-    side(width, height),
-  ]);
+  const mesh = new Mesh(geometry, [side, side, top, top, end, end]);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
   return mesh;
 }
 
-function flatBox(colour: number, width: number, height: number, depth: number): Mesh {
+function flatBox(
+  materials: MaterialCache,
+  colour: number,
+  width: number,
+  height: number,
+  depth: number,
+): Mesh {
   const mesh = new Mesh(
     new BoxGeometry(width, height, depth),
-    new MeshStandardMaterial({ color: colour, roughness: 0.95 }),
+    materials.flatMaterial(colour, { roughness: 0.95 }),
   );
   mesh.castShadow = true;
   mesh.receiveShadow = true;
@@ -397,6 +434,8 @@ export class Scenery {
 
   private readonly room: RoomGeometry;
   private readonly art: SceneryArt;
+  private readonly lighting: Lighting;
+  private readonly materials: MaterialCache;
   private readonly billboards: Billboard[] = [];
   private readonly flats: FloorSprite[] = [];
   private hints: LineSegments | null = null;
@@ -409,10 +448,14 @@ export class Scenery {
     props: readonly DecorativeProp[],
     art: SceneryArt,
     lean: number,
+    lighting: Lighting,
+    materials: MaterialCache,
   ) {
     this.room = room;
     this.art = art;
     this.lean = lean;
+    this.lighting = lighting;
+    this.materials = materials;
     this.wallHeight = art.tiles?.wallHeight ?? DEFAULT_WALL_HEIGHT;
     const frame = roomFrameSize(room);
     this.frameWidth = frame.width;
@@ -444,18 +487,15 @@ export class Scenery {
     const interiorH = room.maxY - room.minY;
 
     // The dark base under and beyond the walls, so nothing outside is void.
+    const bleedWidth = this.frameWidth + BLEED * 2;
+    const bleedHeight = this.frameHeight + BLEED * 2;
     const base = new Mesh(
-      new PlaneGeometry(this.frameWidth + BLEED * 2, this.frameHeight + BLEED * 2),
+      new PlaneGeometry(bleedWidth, bleedHeight),
       tiles === undefined
-        ? new MeshStandardMaterial({ color: wallColour, roughness: 1 })
-        : new MeshStandardMaterial({
-            map: tilingTexture(
-              tiles.wall,
-              this.frameWidth + BLEED * 2,
-              this.frameHeight + BLEED * 2,
-            ),
-            color: 0x555555,
+        ? this.materials.flatMaterial(wallColour, { roughness: 1 })
+        : this.materials.tiledMaterial(tiles.wall, bleedWidth, bleedHeight, {
             roughness: 1,
+            color: 0x555555,
           }),
     );
     base.rotation.x = -Math.PI / 2;
@@ -466,7 +506,7 @@ export class Scenery {
     if (tiles === undefined || tiles.floorVariants.length === 0) {
       const floor = new Mesh(
         new PlaneGeometry(interiorW, interiorH),
-        new MeshStandardMaterial({ color: floorColour, roughness: 0.9 }),
+        this.materials.flatMaterial(floorColour, { roughness: 0.9 }),
       );
       floor.rotation.x = -Math.PI / 2;
       floor.position.set(room.minX + interiorW / 2, 0, room.minY + interiorH / 2);
@@ -513,10 +553,7 @@ export class Scenery {
       geometry.setAttribute('uv', new BufferAttribute(uvs, 2));
       geometry.setAttribute('normal', new BufferAttribute(normals, 3));
       geometry.setIndex(new BufferAttribute(index, 1));
-      const mesh = new Mesh(
-        geometry,
-        new MeshStandardMaterial({ map: texture.source.texture, roughness: 0.85 }),
-      );
+      const mesh = new Mesh(geometry, this.materials.sharedMaterial(texture, 0.85));
       mesh.receiveShadow = true;
       this.group.add(mesh);
     });
@@ -570,6 +607,8 @@ export class Scenery {
           height,
           this.art.tiles?.wall,
           wallColour,
+          this.lighting,
+          this.materials,
         );
         this.doors.push(piece);
         this.group.add(piece.group);
@@ -612,8 +651,8 @@ export class Scenery {
     const depth = alongX ? WALL_THICKNESS : length;
     const mesh =
       tiles === undefined
-        ? flatBox(wallColour, width, height, depth)
-        : tiledBox(tiles.wall, width, height, depth, tiles.wallLip);
+        ? flatBox(this.materials, wallColour, width, height, depth)
+        : tiledBox(this.materials, tiles.wall, width, height, depth, tiles.wallLip);
     mesh.position.set(centre.x, height / 2, centre.z);
     // See `world/layers.ts`'s `OCCLUDER_LAYER` doc comment: only the room's
     // own north wall carries the standing-sprite head-clip risk, so every
@@ -631,8 +670,8 @@ export class Scenery {
       const depth = rect.maxY - rect.minY;
       const mesh =
         tiles === undefined
-          ? flatBox(wallColour, width, this.wallHeight, depth)
-          : tiledBox(tiles.wall, width, this.wallHeight, depth, tiles.wallLip);
+          ? flatBox(this.materials, wallColour, width, this.wallHeight, depth)
+          : tiledBox(this.materials, tiles.wall, width, this.wallHeight, depth, tiles.wallLip);
       mesh.position.set(
         (rect.minX + rect.maxX) / 2,
         this.wallHeight / 2,
@@ -672,7 +711,13 @@ export class Scenery {
       const maxX = blocks[i * BLOCK_STRIDE + 2] ?? 0;
       const maxY = blocks[i * BLOCK_STRIDE + 3] ?? 0;
       if (tiles === undefined || tiles.blockVariants.length === 0) {
-        const box = flatBox(blockColour, maxX - minX, ROOM_TILE_UNITS * 0.8, maxY - minY);
+        const box = flatBox(
+          this.materials,
+          blockColour,
+          maxX - minX,
+          ROOM_TILE_UNITS * 0.8,
+          maxY - minY,
+        );
         box.position.set((minX + maxX) / 2, ROOM_TILE_UNITS * 0.4, (minY + maxY) / 2);
         // A block stands in the room: second pass, like every other sprite.
         box.layers.set(ACTOR_LAYER);
@@ -720,8 +765,7 @@ export class Scenery {
       const maxY = room.puddles[i * BLOCK_STRIDE + 3] ?? 0;
       const mesh = new Mesh(
         new PlaneGeometry(maxX - minX, maxY - minY),
-        new MeshStandardMaterial({
-          color: ROOM_HAZARD_PALETTE.puddleFill,
+        this.materials.flatMaterial(ROOM_HAZARD_PALETTE.puddleFill, {
           roughness: 0.15,
           metalness: 0.6,
           transparent: true,
@@ -742,8 +786,7 @@ export class Scenery {
       const maxY = room.sightBlocks[i * BLOCK_STRIDE + 3] ?? 0;
       const mesh = new Mesh(
         new BoxGeometry(maxX - minX, TRELLIS_HEIGHT, maxY - minY),
-        new MeshStandardMaterial({
-          color: ROOM_HAZARD_PALETTE.trellisFill,
+        this.materials.flatMaterial(ROOM_HAZARD_PALETTE.trellisFill, {
           roughness: 0.9,
           transparent: true,
           opacity: 0.8,
@@ -843,10 +886,7 @@ export class Scenery {
     }
     const geometry = new BufferGeometry();
     geometry.setAttribute('position', new BufferAttribute(new Float32Array(points), 3));
-    this.hints = new LineSegments(
-      geometry,
-      new LineBasicMaterial({ color: ROOM_HAZARD_PALETTE.crack, transparent: true, opacity: 0.9 }),
-    );
+    this.hints = new LineSegments(geometry, secretHintMaterial());
     this.group.add(this.hints);
   }
 
@@ -867,3 +907,14 @@ export class Scenery {
 }
 
 const CRACK_SPAN = 10;
+
+let hintMaterialCache: LineBasicMaterial | null = null;
+
+/** The secret-hint crack material — one instance for the run, like every other material `Scenery` now borrows. */
+function secretHintMaterial(): LineBasicMaterial {
+  return (hintMaterialCache ??= new LineBasicMaterial({
+    color: ROOM_HAZARD_PALETTE.crack,
+    transparent: true,
+    opacity: 0.9,
+  }));
+}
