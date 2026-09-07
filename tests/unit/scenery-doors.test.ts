@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BoxGeometry, type Group, Mesh, PointLight } from 'three';
+import { BoxGeometry, type Group, Mesh, PointLight, Scene } from 'three';
 import { RoomGeometry } from '../../src/sim/room/geometry.js';
 import {
   type CompiledDoor,
@@ -7,6 +7,8 @@ import {
   ROOM_MARGIN_Y,
   doorCentre,
 } from '../../src/sim/room/template.js';
+import { Lighting } from '../../src/render/world/lighting.js';
+import { MaterialCache } from '../../src/render/world/material-cache.js';
 import { type DoorPiece, Scenery } from '../../src/render/world/scenery.js';
 
 /**
@@ -23,7 +25,8 @@ function room(): RoomGeometry {
 }
 
 function build(doors: readonly CompiledDoor[]): Scenery {
-  return new Scenery(room(), 1, doors, [], { tileTextures: {} }, -1);
+  const lighting = new Lighting(new Scene());
+  return new Scenery(room(), 1, doors, [], { tileTextures: {} }, -1, lighting, new MaterialCache());
 }
 
 /** The one door a single-door room has — thrown, not asserted, so the test reads straight. */

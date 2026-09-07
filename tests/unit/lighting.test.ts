@@ -12,6 +12,13 @@ import { TICKS_PER_SECOND } from '../../src/sim/time.js';
  * so the cloud tests stand in a `document` just wide enough to paint it; with
  * none (the bench) `Lighting` skips the cloud and `sync` is a no-op, which is
  * also asserted.
+ *
+ * `Lighting` now owns a fixed pool of bulb rigs (`docs/PERFORMANCE_AUDIT.md`
+ * F1/F7): every one of them is in the scene from the constructor on, and
+ * `onRoomChanged` only ever moves and (re)lights them, never adds or removes
+ * one. So "how many bulbs does this room have" is asked as "how many point
+ * lights are currently *lit*", not "how many are in the scene" — the total
+ * never changes; see `tests/unit/lighting-pool.test.ts` for that invariant.
  */
 
 /** The cloud's cycle, as the class comment describes it: across in sixteen seconds, once every fifty. */
@@ -34,9 +41,16 @@ function pointLights(scene: Scene): PointLight[] {
   return found;
 }
 
-/** A room's own lights are whatever point lights a cellar added beyond the lantern and the shot lights. */
-function roomLightCount(scene: Scene): number {
-  return pointLights(scene).length - 1 - SHOT_LIGHT_COUNT;
+/**
+ * A room's own bulbs are the lit lights at a bulb rig's own falloff distance
+ * (300 — see `buildBulbRig`; the lantern is 120, the shot lights 70, a door
+ * glow 60, all distinct). The lantern itself starts lit (`syncLantern` is
+ * what turns it off, and this file's rig tests never call it) even though
+ * this test file otherwise never touches it, so filtering on distance rather
+ * than just "lit" is what keeps it out of the count.
+ */
+function litBulbCount(scene: Scene): number {
+  return pointLights(scene).filter((light) => light.intensity > 0 && light.distance === 300).length;
 }
 
 function cloudOf(scene: Scene): Mesh | undefined {
@@ -57,7 +71,7 @@ describe('Lighting, choosing a rig for the room', () => {
       { x: 120, y: 40 },
       { x: 200, y: 40 },
     ]);
-    expect(roomLightCount(scene)).toBe(3);
+    expect(litBulbCount(scene)).toBe(3);
     const bulbs = pointLights(scene).filter((light) => light.position.x === 120);
     expect(bulbs).toHaveLength(1);
     expect(bulbs[0]?.position.z).toBe(40);
@@ -66,22 +80,22 @@ describe('Lighting, choosing a rig for the room', () => {
   it('gives a cellar with no authored bulb two by default, because a dark cellar is a black screen', () => {
     const { scene, lighting } = rig();
     lighting.onRoomChanged('cellar', 320, 180, []);
-    expect(roomLightCount(scene)).toBe(2);
+    expect(litBulbCount(scene)).toBe(2);
   });
 
   it('hangs no bulbs under daylight', () => {
     const { scene, lighting } = rig();
     lighting.onRoomChanged('daylight', 320, 180, [{ x: 40, y: 40 }]);
-    expect(roomLightCount(scene)).toBe(0);
+    expect(litBulbCount(scene)).toBe(0);
   });
 
   it("replaces the last room's lights rather than adding to them", () => {
     const { scene, lighting } = rig();
     lighting.onRoomChanged('cellar', 320, 180, [{ x: 40, y: 40 }]);
     lighting.onRoomChanged('cellar', 320, 180, [{ x: 80, y: 40 }]);
-    expect(roomLightCount(scene)).toBe(1);
+    expect(litBulbCount(scene)).toBe(1);
     lighting.onRoomChanged('daylight', 320, 180, []);
-    expect(roomLightCount(scene)).toBe(0);
+    expect(litBulbCount(scene)).toBe(0);
   });
 
   it('paints a different background behind each rig', () => {

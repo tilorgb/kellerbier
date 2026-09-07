@@ -28,6 +28,7 @@ import { UI_TEXT_HEIGHT } from './ui/text.js';
 import { ELEVATION, WorldCamera, type WorldPoint } from './world/camera.js';
 import { ACTOR_LAYER, OCCLUDER_LAYER } from './world/layers.js';
 import { Lighting } from './world/lighting.js';
+import { MaterialCache } from './world/material-cache.js';
 import { RoomPrewarm } from './world/room-prewarm.js';
 import { type DecorativeProp, type DoorState, Scenery } from './world/scenery.js';
 
@@ -169,6 +170,12 @@ export class GameView {
   private readonly sim: GameSim;
   private readonly textures: GameViewTextures;
   private readonly lighting: Lighting;
+  /**
+   * Materials `Scenery`/`DoorPiece` borrow instead of constructing fresh —
+   * kept alive for `GameView`'s whole lifetime so a room transition never
+   * relinks a shader it already linked (`docs/PERFORMANCE_AUDIT.md` F1).
+   */
+  private readonly materialCache = new MaterialCache();
   private scenery: Scenery;
   private roomGeometry: RoomGeometry;
   private doorsLocked: boolean;
@@ -177,6 +184,17 @@ export class GameView {
   private secretHintDoors: readonly CompiledDoor[] = [];
   private doorTransitionTicks = 0;
   private doorPulseFrames = 0;
+  /**
+   * True on any frame the shadow map needs a fresh render: `render` reads
+   * and clears this. `renderer.shadowMap.autoUpdate` is off (`app.ts`), so
+   * without this the map would freeze at whatever it last drew — set on a
+   * room change (new architecture on screen) and while a door is swinging or
+   * the cloud is crossing (`Lighting.cloudMoving`), since those are the only
+   * things that move and still cast (`docs/PERFORMANCE_AUDIT.md` F6;
+   * standing sprites do not cast at all — see `docs/DECISIONS.md` #74).
+   * Starts `true` so the very first frame draws one.
+   */
+  private shadowNeedsRefresh = true;
   /**
    * The room just left, kept alive (translated to sit adjacent to the new
    * one, in the direction just crossed) for the room-transition slide —
@@ -454,6 +472,7 @@ export class GameView {
       this.doorPulseFrames = 0;
       this.applyDoorStates();
       this.relight();
+      this.shadowNeedsRefresh = true;
     } else if (sim.doorsLocked !== this.doorsLocked) {
       const justUnlocked = !sim.doorsLocked;
       this.doorsLocked = sim.doorsLocked;
@@ -481,6 +500,12 @@ export class GameView {
           door.setOpenness(eased);
         }
       }
+      // A swinging leaf casts a shadow — set here, on the frame it actually
+      // moves, rather than inferred from `doorTransitionTicks` in `render`:
+      // by the time that runs this tick's decrement above has already
+      // happened, so reading the counter there would miss exactly the last
+      // frame of the swing (the one that lands the door fully open).
+      this.shadowNeedsRefresh = true;
     }
     if (this.doorPulseFrames > 0) {
       this.doorPulseFrames -= 1;
@@ -539,6 +564,14 @@ export class GameView {
     for (const group of this.actorGroups) {
       group.traverse(toActorLayer);
     }
+
+    // `renderer.shadowMap.autoUpdate` is off (`app.ts`) — F6's fix for a
+    // 2048² map re-rendered every frame for content that is static within a
+    // room. Ask for exactly one fresh render on the frames something the key
+    // light shadows actually moved; three.js clears this flag itself once
+    // the render below consumes it.
+    renderer.shadowMap.needsUpdate = this.shadowNeedsRefresh || this.lighting.cloudMoving;
+    this.shadowNeedsRefresh = false;
 
     // Pass one: the room — floor, walls, doors, decals, lights, shadows.
     renderer.render(this.scene, camera);
@@ -613,6 +646,8 @@ export class GameView {
         tileTextures: this.textures.tileTextures ?? {},
       },
       this.camera.lean,
+      this.lighting,
+      this.materialCache,
     );
     for (const door of scenery.doors) {
       door.setDouble(this.bossDoorDirections.has(door.door.direction));
@@ -848,6 +883,7 @@ export class GameView {
     this.outgoingScenery?.dispose();
     this.prewarm.discard();
     this.warmTarget?.dispose();
+    this.materialCache.dispose();
     this.entities.destroy();
     this.playerView.destroy();
     this.projectiles.destroy();

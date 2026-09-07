@@ -3820,9 +3820,15 @@ the room read as a *place*. That was the argument, and it was made by looking, n
   first, then everything on `ACTOR_LAYER` (every sprite, boulder, projectile, particle) draws again
   over it with the depth buffer cleared — the 2D renderer's painter's-order compositing, sprites
   still depth-sorted against each other. Lights are `enableAll`'d so the second pass is lit; the
-  key light's shadow camera too, so the sprites still cast. `scene.background` is nulled for the
-  pass — a `Color` background makes three force a colour clear on every `render`, `autoClear` or
-  not, which would wipe pass one.
+  key light's shadow camera too, so the sprites still cast.
+  *Corrected by #292: they do not.* three.js's shadow pass filters casters by the **viewing**
+  camera's layers (`renderObject`), not the shadow camera's — and pass one's camera, the one that
+  triggers the shadow render, is on layer 0 only. Enabling every layer on `key.shadow.camera` was
+  never enough on its own; standing sprites have never cast a shadow through this path. Left that
+  way for now (`docs/PERFORMANCE_AUDIT.md` F6): re-enabling it naively puts one shadow draw call
+  back per body, which needs to be sequenced against #294's instancing rather than done first.
+  `scene.background` is nulled for the pass — a `Color` background makes three force a colour
+  clear on every `render`, `autoClear` or not, which would wipe pass one.
 - **Flat things stay flat** (`render/world/flat.ts`): decals, telegraph shapes and plinths are
   quads a hair above the floor plane, stacked by kind so overlaps order predictably.
 - **Projectiles and particles are instanced**: one `InstancedMesh` per projectile texture and per

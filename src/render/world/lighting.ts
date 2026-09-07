@@ -2,7 +2,6 @@ import {
   AmbientLight,
   DirectionalLight,
   DoubleSide,
-  Group,
   HemisphereLight,
   Mesh,
   MeshBasicMaterial,
@@ -48,16 +47,57 @@ import { TICKS_PER_SECOND } from '../../sim/time.js';
  * shadow* through the same alpha-tested depth pass the sprites use: the
  * shadow it throws is a real one, it darkens the barrels and the Bauer as it
  * passes over them, not only the floor, and it costs one more caster.
+ *
+ * ## A constant point-light count (#292 / F1, F7)
+ *
+ * `numPointLights` is part of three.js's program cache key — every lit
+ * material's shader is keyed on it, so a scene where the count changes as
+ * rooms load and unload relinks every one of those shaders, twice per
+ * crossing. The fix is that the *set* of `PointLight`s added to the scene
+ * never changes after this constructor returns: the lantern, the shot
+ * lights, a fixed pool of door glows and a fixed pool of bulb rigs are all
+ * created once, here, and every later "add a light to this room" is really
+ * "claim an already-scene-resident light and move it." A slot nobody claims
+ * this room sits at intensity 0, still in the scene, still part of the
+ * count. See `MAX_DOOR_GLOWS`/`MAX_ROOM_BULBS` below for how the pools are
+ * sized, and `docs/DECISIONS.md` #74 for the shadow-casting decision that
+ * went with this change.
  */
 export type LightingRig = 'cellar' | 'daylight';
 
 /** Point lights riding along with live player shots. */
 export const SHOT_LIGHT_COUNT = 8;
 
+/**
+ * How many door glows can be lit across the whole scene at once.
+ *
+ * A `DoorPiece` owns one for its whole lifetime (constructed with the door,
+ * released when the door is disposed), and — until #293 makes `Scenery`
+ * persistent and drops the second live room — both the incoming room being
+ * built and the outgoing room mid-slide can hold doors at the same time.
+ * Measured across 300 generated floors on both authored floor tags
+ * (`tests/unit/lighting-pool.test.ts` pins the measurement), the worst room
+ * had 5 doors and the 4+ case was under 1% of rooms; a single room's doors
+ * fitting comfortably inside 8 is what this pool actually guarantees. Two
+ * simultaneous worst-case rooms (5 + 5) would exceed it, but that pairing is
+ * rare-squared, and overflow degrades gracefully — `acquireDoorGlow` returns
+ * `null` and the door just doesn't glow (`docs/DECISIONS.md` #19) — rather
+ * than reintroducing the count churn this pool exists to remove.
+ */
+export const MAX_DOOR_GLOWS = 8;
+
+/**
+ * How many bulb rigs (light + glass + cord) a cellar room can light at once.
+ * Authored content has never used more than one `bulb` prop; the unauthored
+ * default is two. 6 is headroom for content growth, not a measured ceiling.
+ */
+export const MAX_ROOM_BULBS = 6;
+
 const BULB_HEIGHT = 34;
 const CLOUD_HEIGHT = 90;
 const CLOUD_CYCLE_TICKS = TICKS_PER_SECOND * 50;
 const CLOUD_CROSS_TICKS = TICKS_PER_SECOND * 16;
+const DOOR_GLOW_COLOUR = 0xff9a3c;
 
 interface RigColours {
   readonly ambient: number;
@@ -93,6 +133,12 @@ const RIGS: Readonly<Record<LightingRig, RigColours>> = {
   },
 };
 
+interface BulbRig {
+  readonly light: PointLight;
+  readonly glass: Mesh;
+  readonly cord: Mesh;
+}
+
 export class Lighting {
   private readonly scene: Scene;
   private readonly ambient = new AmbientLight(0xffffff, 1);
@@ -108,23 +154,29 @@ export class Lighting {
   private readonly fillWest = new DirectionalLight(0xffffff, 1.2);
   private readonly lantern = new PointLight(0xffd9a6, 420, 120, 2);
   private readonly shotLights: PointLight[] = [];
-  private readonly roomLights = new Group();
-  private cloud: Mesh | null = null;
+  /** Fixed pool of door glows — see `MAX_DOOR_GLOWS`. `acquireDoorGlow`/`releaseDoorGlow` hand them out. */
+  private readonly doorGlows: PointLight[] = [];
+  private readonly doorGlowFree: boolean[] = [];
+  private warnedDoorGlowOverflow = false;
+  /** Fixed pool of bulb rigs — see `MAX_ROOM_BULBS`. Reassigned wholesale by `onRoomChanged`, not acquired/released. */
+  private readonly bulbRigs: BulbRig[] = [];
+  private warnedBulbOverflow = false;
+  /** One persistent cloud mesh, repositioned and resized per room rather than rebuilt — see `positionCloud`. */
+  private readonly cloud: Mesh | null;
   private cloudSpanX = 0;
   private cloudCentreZ = 0;
+  private cloudMovingValue = false;
   private rig: LightingRig = 'cellar';
   private reducedMotion = false;
 
   constructor(scene: Scene) {
     this.scene = scene;
-    scene.add(
-      this.ambient,
-      this.hemisphere,
-      this.key,
-      this.key.target,
-      this.lantern,
-      this.roomLights,
-    );
+    // `fillEast`/`fillWest` are deliberately not added to the scene here,
+    // unchanged from before #292: that was already the case before this
+    // pass, and re-attaching them would both be a visual change out of this
+    // issue's "no intended visual change" scope and a new NUM_DIR_LIGHTS
+    // shader-cache-key source — exactly the kind of churn this issue removes.
+    scene.add(this.ambient, this.hemisphere, this.key, this.key.target, this.lantern);
     // Every light reaches both render passes — GameView draws the actor layer
     // a second time (see `world/layers.ts`), and a light seen only on layer 0
     // would leave those sprites unlit in that pass.
@@ -132,17 +184,33 @@ export class Lighting {
       light.layers.enableAll();
     }
     this.key.castShadow = true;
-    this.key.shadow.mapSize.set(2048, 2048);
+    this.key.shadow.mapSize.set(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
     this.key.shadow.bias = -0.0004;
     this.key.shadow.normalBias = 0.6;
     // The shadow pass filters casters by its own camera's layers, not the
-    // light's — without this the actor-layer sprites cast no shadow.
+    // light's — without this the actor-layer sprites cast no shadow. (They
+    // do not currently cast at all — see the class doc and `docs/DECISIONS.md`
+    // #74 — but the room architecture that *is* on layer 0 still needs this.)
     this.key.shadow.camera.layers.enableAll();
     for (let i = 0; i < SHOT_LIGHT_COUNT; i++) {
       const light = new PointLight(0xffb347, 0, 70, 2);
       light.layers.enableAll();
       this.shotLights.push(light);
       scene.add(light);
+    }
+    for (let i = 0; i < MAX_DOOR_GLOWS; i++) {
+      const light = new PointLight(DOOR_GLOW_COLOUR, 0, 60, 2);
+      light.layers.enableAll();
+      this.doorGlows.push(light);
+      this.doorGlowFree.push(true);
+      scene.add(light);
+    }
+    for (let i = 0; i < MAX_ROOM_BULBS; i++) {
+      this.bulbRigs.push(this.buildBulbRig());
+    }
+    this.cloud = buildCloudMesh();
+    if (this.cloud !== null) {
+      scene.add(this.cloud);
     }
   }
 
@@ -193,82 +261,165 @@ export class Lighting {
     shadow.far = 700;
     shadow.updateProjectionMatrix();
 
-    this.roomLights.clear();
-    this.cloud = null;
     if (rig === 'cellar') {
-      const placed = bulbs.length > 0 ? bulbs : defaultBulbs(frameWidth, frameHeight);
-      for (const bulb of placed) {
-        this.addBulb(bulb.x, bulb.y);
-      }
+      this.hideCloud();
+      this.setBulbs(bulbs.length > 0 ? bulbs : defaultBulbs(frameWidth, frameHeight));
     } else {
-      this.addCloud(frameWidth, frameHeight);
+      this.setBulbs([]);
+      this.positionCloud(frameWidth, frameHeight);
     }
   }
 
-  /** A bare bulb on a cord: a warm point light with a small emissive glass where the filament is. */
-  private addBulb(x: number, z: number): void {
-    const light = new PointLight(0xffb870, 9000, 300, 2);
+  /** Lights exactly `placed.length` bulb rigs (clamped to the pool) and dims the rest. */
+  private setBulbs(placed: readonly { readonly x: number; readonly y: number }[]): void {
+    const count = Math.min(placed.length, MAX_ROOM_BULBS);
+    if (placed.length > MAX_ROOM_BULBS) {
+      this.warnBulbOverflow(placed.length);
+    }
+    for (let i = 0; i < count; i++) {
+      const bulb = placed[i];
+      const rig = this.bulbRigs[i];
+      if (bulb === undefined || rig === undefined) {
+        continue;
+      }
+      rig.light.position.set(bulb.x, BULB_HEIGHT, bulb.y);
+      rig.light.intensity = 9000;
+      rig.glass.position.copy(rig.light.position);
+      rig.glass.visible = true;
+      rig.cord.position.set(bulb.x, BULB_HEIGHT + 22, bulb.y);
+      rig.cord.visible = true;
+    }
+    for (let i = count; i < MAX_ROOM_BULBS; i++) {
+      const rig = this.bulbRigs[i];
+      if (rig === undefined) {
+        continue;
+      }
+      rig.light.intensity = 0;
+      rig.glass.visible = false;
+      rig.cord.visible = false;
+    }
+  }
+
+  private buildBulbRig(): BulbRig {
+    const light = new PointLight(0xffb870, 0, 300, 2);
     light.layers.enableAll();
-    light.position.set(x, BULB_HEIGHT, z);
-    this.roomLights.add(light);
+    this.scene.add(light);
     const glass = new Mesh(
       new SphereGeometry(2, 10, 8),
       new MeshBasicMaterial({ color: 0xfff1c8 }),
     );
-    glass.position.copy(light.position);
-    this.roomLights.add(glass);
+    glass.visible = false;
+    this.scene.add(glass);
     const cord = new Mesh(
       new CylinderGeometry(0.4, 0.4, 40, 4),
       new MeshBasicMaterial({ color: 0x141018 }),
     );
-    cord.position.set(x, BULB_HEIGHT + 22, z);
-    this.roomLights.add(cord);
+    cord.visible = false;
+    this.scene.add(cord);
+    return { light, glass, cord };
   }
 
-  private addCloud(frameWidth: number, frameHeight: number): void {
-    const texture = cloudTexture();
-    if (texture === null) {
+  private warnBulbOverflow(requested: number): void {
+    if (!import.meta.env.DEV || this.warnedBulbOverflow) {
+      return;
+    }
+    this.warnedBulbOverflow = true;
+    console.warn(
+      `Lighting: room asked for ${String(requested)} bulbs, pool holds ${String(MAX_ROOM_BULBS)} — ` +
+        'the rest go unlit (docs/DECISIONS.md #19).',
+    );
+  }
+
+  /** Claims a door glow for a `DoorPiece`'s whole lifetime, or `null` if the pool is exhausted. */
+  acquireDoorGlow(): PointLight | null {
+    for (let i = 0; i < this.doorGlowFree.length; i++) {
+      if (this.doorGlowFree[i] === true) {
+        this.doorGlowFree[i] = false;
+        const light = this.doorGlows[i];
+        if (light !== undefined) {
+          light.intensity = 0;
+          return light;
+        }
+      }
+    }
+    if (import.meta.env.DEV && !this.warnedDoorGlowOverflow) {
+      this.warnedDoorGlowOverflow = true;
+      console.warn(
+        `Lighting: door-glow pool exhausted at ${String(MAX_DOOR_GLOWS)} — ` +
+          'this door will not glow when open (docs/DECISIONS.md #19).',
+      );
+    }
+    return null;
+  }
+
+  /**
+   * Returns a light `acquireDoorGlow` handed out. Safe to call with `null`.
+   *
+   * Re-parents the light directly onto the scene root: a `DoorPiece` adds
+   * its glow as a child of its own group (so it tracks the room's
+   * transition-slide translation while the door is live), and that group is
+   * about to be disposed. Left as a child of it, the light would be pulled
+   * out of the scene graph along with it — invisible to three.js's light
+   * traversal, which is exactly the "count changed" bug this pool exists to
+   * prevent, just via a different door.
+   */
+  releaseDoorGlow(light: PointLight | null): void {
+    if (light === null) {
+      return;
+    }
+    const index = this.doorGlows.indexOf(light);
+    if (index === -1) {
+      return;
+    }
+    light.intensity = 0;
+    light.position.set(0, 0, 0);
+    this.scene.add(light);
+    this.doorGlowFree[index] = true;
+  }
+
+  private hideCloud(): void {
+    if (this.cloud !== null) {
+      this.cloud.visible = false;
+    }
+    this.cloudMovingValue = false;
+  }
+
+  /** Sizes and places the persistent cloud mesh for this room, rather than rebuilding its geometry. */
+  private positionCloud(frameWidth: number, frameHeight: number): void {
+    const cloud = this.cloud;
+    if (cloud === null) {
       return;
     }
     const width = frameWidth * 0.85;
     const depth = frameHeight * 0.6;
-    const material = new MeshBasicMaterial({
-      map: texture,
-      transparent: true,
-      opacity: 0,
-      depthWrite: false,
-      side: DoubleSide,
-    });
-    const cloud = new Mesh(new PlaneGeometry(width, depth), material);
-    cloud.customDepthMaterial = new MeshDepthMaterial({
-      depthPacking: RGBADepthPacking,
-      map: texture,
-      alphaTest: 0.5,
-    });
-    cloud.castShadow = true;
-    cloud.rotation.x = -Math.PI / 2;
-    cloud.position.set(-width, CLOUD_HEIGHT, frameHeight / 2);
+    cloud.scale.set(width, depth, 1);
     this.cloudSpanX = frameWidth + width;
     this.cloudCentreZ = frameHeight / 2;
-    this.roomLights.add(cloud);
-    this.cloud = cloud;
+    cloud.position.set(-width, CLOUD_HEIGHT, frameHeight / 2);
   }
 
   /** Drives the cloud along its cycle. Pure function of the tick, so a replay clouds over at the same moment. */
   sync(tick: number): void {
     const cloud = this.cloud;
-    if (cloud === null) {
+    if (cloud === null || this.rig !== 'daylight') {
       return;
     }
     const phase = tick % CLOUD_CYCLE_TICKS;
     if (phase >= CLOUD_CROSS_TICKS || this.reducedMotion) {
       cloud.visible = false;
+      this.cloudMovingValue = false;
       return;
     }
     cloud.visible = true;
+    this.cloudMovingValue = true;
     const t = phase / CLOUD_CROSS_TICKS;
-    const width = (cloud.geometry as PlaneGeometry).parameters.width;
+    const width = cloud.scale.x;
     cloud.position.set(-width / 2 + this.cloudSpanX * t, CLOUD_HEIGHT, this.cloudCentreZ);
+  }
+
+  /** Whether the cloud is currently visible and crossing — the shadow map needs a fresh render while it is. */
+  get cloudMoving(): boolean {
+    return this.cloudMovingValue;
   }
 
   /** Alois's lantern follows him; out when he is dead. */
@@ -306,8 +457,30 @@ function defaultBulbs(
   ];
 }
 
-/** A soft cloud silhouette painted into a canvas, or null with no DOM (the headless bench). */
+/**
+ * The shadow map's resolution — 640×360 is the whole game's internal frame,
+ * so 1024² is already 4.5× that frame's own pixel count; the 2048² this
+ * replaced was 18× it, re-rendered every frame for content that is static
+ * within a room (`docs/PERFORMANCE_AUDIT.md` F6). `GameView` also turns off
+ * `renderer.shadowMap.autoUpdate` and only asks for a fresh render on the
+ * frames something the key light shadows actually moved.
+ */
+export const SHADOW_MAP_SIZE = 1024;
+
+/**
+ * A soft cloud silhouette painted into a canvas, or null with no DOM (the
+ * headless bench). Built once and shared across every `Lighting` instance —
+ * but only a *successful* build is cached: a `Lighting` constructed before a
+ * DOM exists (this module loading in a worker, a test's own sequencing)
+ * leaves the next one free to try again, rather than a transient "no DOM
+ * yet" wrongly becoming a permanent "no cloud ever" for the whole process.
+ */
+let sharedCloudTexture: CanvasTexture | null = null;
+
 function cloudTexture(): CanvasTexture | null {
+  if (sharedCloudTexture !== null) {
+    return sharedCloudTexture;
+  }
   if (typeof document === 'undefined') {
     return null;
   }
@@ -335,8 +508,33 @@ function cloudTexture(): CanvasTexture | null {
     context.fillStyle = gradient;
     context.fillRect(0, 0, size, size);
   }
-  const texture = new CanvasTexture(canvas);
-  return texture;
+  sharedCloudTexture = new CanvasTexture(canvas);
+  return sharedCloudTexture;
+}
+
+/** A unit-square cloud plane, scaled and positioned per room by `positionCloud` rather than rebuilt. */
+function buildCloudMesh(): Mesh | null {
+  const texture = cloudTexture();
+  if (texture === null) {
+    return null;
+  }
+  const material = new MeshBasicMaterial({
+    map: texture,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    side: DoubleSide,
+  });
+  const cloud = new Mesh(new PlaneGeometry(1, 1), material);
+  cloud.customDepthMaterial = new MeshDepthMaterial({
+    depthPacking: RGBADepthPacking,
+    map: texture,
+    alphaTest: 0.5,
+  });
+  cloud.castShadow = true;
+  cloud.rotation.x = -Math.PI / 2;
+  cloud.visible = false;
+  return cloud;
 }
 
 const CLOUD_PUFFS: readonly { readonly x: number; readonly y: number; readonly r: number }[] = [
