@@ -4,6 +4,7 @@ import { World } from '../../src/sim/ecs/world.js';
 import cellarBoss from '../../src/content/rooms/cellar-boss.json';
 import cellarCrossroads from '../../src/content/rooms/cellar.json';
 import cellarMiniboss from '../../src/content/rooms/cellar-miniboss.json';
+import dorfMiniboss from '../../src/content/rooms/dorf-miniboss.json';
 import { GameSim } from '../../src/sim/game/sim.js';
 import { RoomGeometry } from '../../src/sim/room/geometry.js';
 import { isEnemyElite } from '../../src/sim/systems/enemy.js';
@@ -120,13 +121,33 @@ describe('elite modifier (#156)', () => {
     }
   });
 
-  it('makes every body in a mini-boss room an elite, even at a zero roll chance (#274)', () => {
-    // The mini-boss room's placeholder occupant *is* the elite modifier
-    // (#274) until its real fights land: a gate the player detours to and
-    // finds an ordinary body in is not a gate. Guaranteed, not rolled — so
-    // this holds with the roll chance pinned at zero.
+  it('makes a placeholder mini-boss occupant a guaranteed elite, even at a zero roll chance (#274)', () => {
+    // A mini-boss room whose slot still holds a *placeholder* — a floor enemy,
+    // because the floor has no authored mini-boss yet — makes it a guaranteed
+    // elite: a gate the player detours to and finds an ordinary body in is not
+    // a gate. Guaranteed, not rolled, so this holds at a zero roll chance.
+    // Floor 2 (`dorf-miniboss.json`) is still on `kuh`/`bauer` placeholders.
     const sim = emptySim();
     sim.tuning.enemy.eliteChanceBase = 0;
+    sim.tuning.enemy.eliteChancePerExtraFloor = 0;
+
+    sim.loadRoom(dorfMiniboss, 2);
+
+    const indices = liveEnemyIndices(sim);
+    expect(indices.length).toBeGreaterThan(0);
+    for (const index of indices) {
+      expect(isEnemyElite(sim, index)).toBe(true);
+    }
+  });
+
+  it('spawns a real mini-boss (#276) plain — never elite — so its authored health stands', () => {
+    // #276 gave floor 1 real fights (Der Rattenkönig / Die Zapfhahn-Orgel,
+    // rolled between). A real mini-boss (`bossBar`) carries its own health
+    // tuned against its own cycle (#66); the ×1.8 elite modifier on top would
+    // break that, so `applyCompiledRoom` spawns it plain even in the room that
+    // guarantees a placeholder elite.
+    const sim = emptySim();
+    sim.tuning.enemy.eliteChanceBase = 1;
     sim.tuning.enemy.eliteChancePerExtraFloor = 0;
 
     sim.loadRoom(cellarMiniboss, 1);
@@ -134,7 +155,7 @@ describe('elite modifier (#156)', () => {
     const indices = liveEnemyIndices(sim);
     expect(indices.length).toBeGreaterThan(0);
     for (const index of indices) {
-      expect(isEnemyElite(sim, index)).toBe(true);
+      expect(isEnemyElite(sim, index)).toBe(false);
     }
   });
 

@@ -3933,11 +3933,14 @@ to prevent is not a crash but a dead run: **a locked boss door with no key.** Th
 count is data-driven rather than a constant, and why #275 must gate its lock on
 `FloorPlan.minibossRoomIds` being non-empty rather than on "floor N has a mini-boss by now."
 
-**The placeholder occupant is a guaranteed elite (#156), not a rolled one.** Until F and G of #270
-land real mini-boss fights, the room holds one elite of a floor enemy in an authored open arena
-(`cellar-miniboss.json`, `dorf-miniboss.json` — no obstacles, like the two boss arenas). Guaranteed:
-a gate the player detours to and finds an ordinary body in is not a gate. It draws no extra number
-from `random.enemies`, so the elite roll every other room does stays byte-identical.
+**The placeholder occupant is a guaranteed elite (#156), not a rolled one** — but only while it
+*is* a placeholder. #276 (F of #270) gave floor 1 real fights: Der Rattenkönig and Die
+Zapfhahn-Orgel, rolled between as a `spawnGroups` content choice. `applyCompiledRoom`'s
+`guaranteedElite` now also checks `!bossBar`, so a real mini-boss spawns plain — it carries its own
+health tuned against its own cycle (#66), and the ×1.8 elite modifier on top would break that — while
+`dorf-miniboss.json`'s `kuh`/`bauer` placeholder stays a guaranteed elite until floor 2 gets its own
+roster. Guaranteed elites draw no extra number from `random.enemies`, so every other room's elite
+roll stays byte-identical. The authored open arena (no obstacles, like the two boss arenas) stands.
 
 **The playtest bot walks the detour now, one issue before it is forced.** `pathToBoss` takes
 waypoints and the harness feeds it the floor's mini-boss rooms; when #275 lands, the route that
@@ -4022,3 +4025,35 @@ tuning pass on a gated floor's boss does not cost a mini-boss fight each time.
 `FloorPlan.minibossRoomIds`, never the floor number. The boss-door lock and the treasure-door lock
 share the padlock tile and the `transitionTo` refusal shape but nothing else — they are two keys,
 and `docs/DECISIONS.md` #76 is the note that says a later economy pass must not merge them.
+
+## 77. Pixel-art candidates are generated on one of two tracks; the sign-off gate is the same on both
+
+**Decided:** tooling/workflow (#276, where the two Floor 1 mini-boss sprites were the first art to
+go through it), not tied to a milestone. Amends the `CLAUDE.md` "New pixel art needs sign-off"
+rule with *how* the options round produces its candidates, which #71 (the local diffusion
+pipeline) left implicit.
+
+**The rule was always "show options, let them be picked, then commit" — this is which machine
+draws the options.** On the home machine, the local ComfyUI install (#71) plus
+`D:\repos\ComfyUI\pixel-bench` (a one-click server; `start-pixel-bench.bat` brings up ComfyUI on
+`:8188` and the bench UI on `:8199`) is the fast way to a batch: its `/generate` endpoint takes a
+text prompt to a finished, background-keyed, downscaled, palette-snapped PNG in ~20 seconds with
+nothing clicked, so an agent can generate tens of candidates, cull the broken and off-style ones
+itself, and bring the user ~10 survivors. In the cloud — or any checkout without that GPU — there
+is no diffusion step: the options are authored as programmatic block art the way
+`tools/art/authoring/*.mjs` already builds Alois, the bosses and both floor rosters (#43/#55),
+rendered to a specimen sheet by a throwaway `pngjs` script, and the user is shown two or three.
+
+**Neither track is what gets signed off.** The generation method is a scaffold for producing
+candidates quickly and nothing more. What the user approves is the design and the canvas size
+(#45), and the finalists still have to be shown standing in the room at true scale next to Alois
+(#74 — a billboard in a 3D room, not a flat swatch) before any sprite lands in a commit. After a
+pick, the diffusion output or the block art is hand-cleaned and the animation frames and angles
+are authored from it, inside the picked direction, with no further sign-off round (the `CLAUDE.md`
+rule's existing "iterating within a picked direction" clause).
+
+**Constrains:** `pixel-bench` and everything under `D:\repos\ComfyUI` is never committed to this
+repo (#71). The only repo-side half of the diffusion path is `tools/art/diffusion-postprocess.mjs`
+and its CLI, which are deterministic and stay source. If the two tracks ever produce visibly
+different house styles for the same category, that is a bug in the prompts or the block authoring,
+not a reason to fork the sign-off gate.

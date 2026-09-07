@@ -80,6 +80,9 @@ export const grosseKellerassel: EnemyDefinition = {
   // (the health pool above) is that lever now; contact is just the thing
   // that punishes standing still.
   contactDamage: 1,
+  // Feeds the top-of-screen boss bar (#276) — as do its phase-two segments,
+  // which are still "the boss".
+  bossBar: true,
   initial: 'crawl',
   states: [
     {
@@ -176,6 +179,8 @@ export const kellerasselSegment: EnemyDefinition = {
   health: 8,
   contactDamage: 1,
   lootTier: 'weak',
+  // Phase two of the boss bar (#276) — the segments are what is left of it.
+  bossBar: true,
   initial: 'crawl',
   states: [
     {

@@ -36,6 +36,16 @@ export const EventKind = {
   AttackWindup: 7,
   /** A body's on-death `splitOnDeath` behaviour actually produced children. a: the body that died. */
   EnemySplit: 8,
+  /**
+   * A `summon` behaviour's wave came due this tick (#276, Der Rattenkönig).
+   * a: the summoner slot, b: the child's definition index, x/y: where to
+   * spawn, value: how many this wave, normalX: the max that may be alive at
+   * once, normalY: the spread. Read by `stepEnemySummons`, deferred out of
+   * `stepEnemies` so a spawn that grows the world never invalidates the
+   * arrays that loop caches — the same reason `splitOnDeath` spawns from a
+   * death event rather than inline.
+   */
+  EnemySummon: 9,
 } as const;
 
 export type EventKindId = (typeof EventKind)[keyof typeof EventKind];

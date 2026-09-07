@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { derStier, grosseKellerassel, maibaumDieb } from '../../src/content/enemies/index.js';
 import { entityIndex } from '../../src/sim/ecs/entity.js';
 import { World } from '../../src/sim/ecs/world.js';
+import { EventKind } from '../../src/sim/events/queue.js';
 import { GameSim, PLAYER_HEALTH, type GameSimOptions } from '../../src/sim/game/sim.js';
 import {
   InputAction,
@@ -180,5 +181,128 @@ describe('boss pacing (#232)', () => {
     ]) {
       expect(contactDamage * 2).toBeLessThanOrEqual(PLAYER_HEALTH / 2);
     }
+  });
+});
+
+/**
+ * #276 — the two Floor 1 mini-bosses, held to the same "tuned against a real
+ * sim, not picked as a number" standard, but with a mini-boss's own bar: no
+ * phase two, so it is meant to be shorter than a boss, and the "at least four
+ * cycles" figure is a boss rule. The hard requirement the issue names is that
+ * *neither outlasts Die Große Kellerassel* — a mini-boss the player fights
+ * longer than the floor's actual boss is the failure mode.
+ *
+ * The Orgel's foam knocks a hit body back, and #232's harness player never
+ * repositions — left alone it drifts out of its own shot's range and the
+ * fight stalls. So this pins the player at a fixed spot in range each tick:
+ * the measurement is "with shots landing, how long, how many cycles," which
+ * is what a boss's own `measureFight` gets for free from a boss that walks
+ * into the player rather than shoving them away.
+ */
+function measurePinnedFight(
+  bossId: string,
+  attackState: string,
+  shotDamage: number,
+  splitFraction = 0,
+): { ticks: number; cycles: number; died: boolean; waves: number } {
+  const sim = emptySim();
+  sim.tuning.shooting.shotDamage = shotDamage;
+  const player = sim.playerIndex;
+  const px = sim.positionX(player);
+  const py = sim.positionY(player);
+  const boss = place(sim, bossId, px + 64, py);
+  const maxHealth = sim.health.data[boss * 2 + 1] ?? 1;
+  const splitAt = splitFraction > 0 ? splitFraction * maxHealth : 0;
+
+  let cycles = 0;
+  let waves = 0;
+  let previous = stateName(sim, boss);
+  for (let tick = 0; tick < 6000; tick++) {
+    sim.step(aimAt(sim, player, boss));
+    // Undo the knockback the foam applied — a repositioning player's job.
+    sim.transform.data[player * 2] = px;
+    sim.transform.data[player * 2 + 1] = py;
+    sim.velocity.data[player * 2] = 0;
+    sim.velocity.data[player * 2 + 1] = 0;
+
+    sim.events.forEach((slot) => {
+      if (sim.events.kind[slot] === EventKind.EnemySummon) {
+        waves += 1;
+      }
+    });
+
+    if (!isAlive(sim, boss)) {
+      return { ticks: tick + 1, cycles, died: true, waves };
+    }
+    if (splitAt > 0 && (sim.health.data[boss * 2] ?? 0) <= splitAt) {
+      return { ticks: tick + 1, cycles, died: false, waves };
+    }
+    const current = stateName(sim, boss);
+    if (current === attackState && previous !== attackState) {
+      cycles += 1;
+    }
+    previous = current;
+  }
+  return { ticks: 6000, cycles, died: false, waves };
+}
+
+describe('mini-boss pacing (#276)', () => {
+  it('neither mini-boss is fought longer than Die Große Kellerassel', () => {
+    for (const shotDamage of [1, 2]) {
+      const bossTicks = measurePinnedFight('grosse-kellerassel', 'spit', shotDamage, 0.5).ticks;
+      for (const id of ['der-rattenkoenig', 'die-zapfhahn-orgel']) {
+        const mini = measurePinnedFight(id, 'rest', shotDamage);
+        expect(mini.died, `shotDamage=${String(shotDamage)}: ${id} never died`).toBe(true);
+        expect(
+          mini.ticks,
+          `shotDamage=${String(shotDamage)}: ${id} lasts ${String(mini.ticks)} ticks vs the boss's ${String(bossTicks)}`,
+        ).toBeLessThan(bossTicks);
+      }
+    }
+  });
+
+  it('Die Zapfhahn-Orgel plays its wind/spray rhythm several times over, twice at least at 6 DPS', () => {
+    for (const [shotDamage, floor] of [
+      [1, 4],
+      [2, 2],
+    ] as const) {
+      const result = measurePinnedFight('die-zapfhahn-orgel', 'wind', shotDamage);
+      expect(result.died, `shotDamage=${String(shotDamage)} never killed the Orgel`).toBe(true);
+      expect(
+        result.cycles,
+        `shotDamage=${String(shotDamage)}: only ${String(result.cycles)} wind/spray cycle(s)`,
+      ).toBeGreaterThanOrEqual(floor);
+    }
+  });
+
+  it('Der Rattenkönig shows its idea — it spawns Bierratten in waves — before a focused player ends it', () => {
+    for (const shotDamage of [1, 2]) {
+      const result = measurePinnedFight('der-rattenkoenig', 'screech', shotDamage);
+      expect(result.died, `shotDamage=${String(shotDamage)} never killed the king`).toBe(true);
+      expect(
+        result.waves,
+        `shotDamage=${String(shotDamage)}: only ${String(result.waves)} summon wave(s) before the king died`,
+      ).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it('a Bierratte summoned into the room is never an elite', () => {
+    const sim = emptySim();
+    const player = sim.playerIndex;
+    place(sim, 'der-rattenkoenig', sim.positionX(player) + 70, sim.positionY(player));
+    // Stand still and never fire — let the king spawn a couple of waves.
+    for (let tick = 0; tick < 400; tick++) {
+      sim.step(createInputFrame());
+    }
+    let rats = 0;
+    sim.world.forEach(sim.enemyMask, (index) => {
+      const base = index * ENEMY_STRIDE;
+      const compiled = sim.enemies.at(sim.enemy.data[base] ?? 0);
+      if (compiled.id === 'bierratte') {
+        rats += 1;
+        expect((sim.enemy.data[base + 3] ?? 0) & 0b100).toBe(0); // ENEMY_FLAG_ELITE
+      }
+    });
+    expect(rats).toBeGreaterThan(0);
   });
 });

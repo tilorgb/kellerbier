@@ -3,7 +3,9 @@ import { bauer } from './bauer.js';
 import { bierratte } from './bierratte.js';
 import { blaskapellist } from './blaskapellist.js';
 import { boellerschmeisser } from './boellerschmeisser.js';
+import { derRattenkoenig } from './der-rattenkoenig.js';
 import { derStier, maibaumDieb } from './der-stier.js';
+import { dieZapfhahnOrgel } from './die-zapfhahn-orgel.js';
 import { gartenzwerg } from './gartenzwerg.js';
 import { gockel } from './gockel.js';
 import { grosseKellerassel, kellerasselSegment } from './grosse-kellerassel.js';
@@ -46,6 +48,8 @@ export const ENEMY_DEFINITIONS: readonly EnemyDefinition[] = [
   derStier,
   maibaumDieb,
   boellerschmeisser,
+  derRattenkoenig,
+  dieZapfhahnOrgel,
 ];
 
 export {
@@ -53,7 +57,9 @@ export {
   bierratte,
   blaskapellist,
   boellerschmeisser,
+  derRattenkoenig,
   derStier,
+  dieZapfhahnOrgel,
   fasssplitter,
   gartenzwerg,
   gockel,

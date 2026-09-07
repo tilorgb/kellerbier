@@ -93,6 +93,8 @@ export const derStier: EnemyDefinition = {
   // wall to stop." Left explicit so the fight's feel does not move if the class
   // default ever does.
   mass: 20,
+  // Feeds the boss bar (#276); the Maibaum-Dieb he splits into does too.
+  bossBar: true,
   initial: 'approach',
   states: [
     {
@@ -130,7 +132,7 @@ export const derStier: EnemyDefinition = {
  * scaled with Der Stier's own by the same 0.75 ratio each time) is what he
  * spawns at when he still has a maypole to reach; the boss bar refills to
  * whichever pool he actually spawned with on its own, because
- * `GameSim.bossHealth` sums whatever `locksRoom` bodies are alive and Der
+ * `GameSim.bossHealth` sums whatever `bossBar` bodies are alive (#276) and Der
  * Stier's have just left the room. `PHASE_TWO_SPLIT.healthWithoutProp`
  * (`der-stier.ts`'s own doc comment) spawns him at 20 instead when no live
  * maypole remains — this field is only ever the armed number.
@@ -152,6 +154,8 @@ export const maibaumDieb: EnemyDefinition = {
   // Chubbier than the `normal` default of 3 so a dash is not shoved off line
   // by a player's own bump, the same reason Der Stier states his.
   mass: 6,
+  // Phase two of Der Stier's boss bar (#276).
+  bossBar: true,
   initial: 'approach',
   states: [
     {
