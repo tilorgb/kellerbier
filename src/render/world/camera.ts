@@ -136,9 +136,28 @@ export class WorldCamera {
   }
 
   /**
+   * The point `follow` would aim at for `playerX`/`playerY` in a room shaped
+   * `frameWidth`×`frameHeight`, with no shake/sway/slide/pan offset — the
+   * clamped-viewport centre alone. Exposed so `GameView`'s room-transition
+   * slide can ask "where is the camera naturally going to end up" without
+   * duplicating this clamp math.
+   */
+  targetFor(playerX: number, playerY: number, frameWidth: number, frameHeight: number): WorldPoint {
+    const viewportX = clamp(playerX - VIEW_WIDTH / 2, 0, Math.max(0, frameWidth - VIEW_WIDTH));
+    const viewportY = clamp(playerY - VIEW_HEIGHT / 2, 0, Math.max(0, frameHeight - VIEW_HEIGHT));
+    return {
+      x: viewportX + VIEW_WIDTH / 2,
+      y: viewportY + VIEW_HEIGHT / 2 - VIEW_HEIGHT * 0.02,
+    };
+  }
+
+  /**
    * Points the camera at the centre of the clamped viewport around the
    * player, offset by shake, sway, the room-transition slide and the debug
-   * pan — all in room units, all in the floor plane.
+   * pan — all in room units, all in the floor plane. Returns the exact point
+   * aimed at, so a caller can pick up from there — the room-transition slide
+   * uses it as where the camera was actually looking, for continuity into
+   * the next room.
    */
   follow(
     playerX: number,
@@ -147,14 +166,12 @@ export class WorldCamera {
     frameHeight: number,
     offsetX: number,
     offsetY: number,
-  ): void {
-    const viewportX = clamp(playerX - VIEW_WIDTH / 2, 0, Math.max(0, frameWidth - VIEW_WIDTH));
-    const viewportY = clamp(playerY - VIEW_HEIGHT / 2, 0, Math.max(0, frameHeight - VIEW_HEIGHT));
-    this.aim(
-      viewportX + VIEW_WIDTH / 2 + offsetX,
-      0,
-      viewportY + VIEW_HEIGHT / 2 - VIEW_HEIGHT * 0.02 + offsetY,
-    );
+  ): WorldPoint {
+    const target = this.targetFor(playerX, playerY, frameWidth, frameHeight);
+    const aimX = target.x + offsetX;
+    const aimZ = target.y + offsetY;
+    this.aim(aimX, 0, aimZ);
+    return { x: aimX, y: aimZ };
   }
 
   /** A world point to internal-frame pixels (0..640, 0..360). */

@@ -22,6 +22,21 @@ function walking(moveX: number, moveY: number): InputFrame {
   return frame;
 }
 
+/**
+ * Calls `sim.transitionTo` enough times running to satisfy the door-crossing
+ * dwell (`tuning.movement.doorCrossingTicks` — see `GameSim.crossingDwellElapsed`),
+ * returning the final call's result. A real crossing holds the same movement
+ * input across several ticks; these tests call `transitionTo` directly rather
+ * than stepping the sim, so this is what stands in for "kept walking into it."
+ */
+function crossAfterDwell(sim: GameSim, ...args: Parameters<GameSim['transitionTo']>): boolean {
+  let result = false;
+  for (let tick = 0; tick < sim.tuning.movement.doorCrossingTicks; tick++) {
+    result = sim.transitionTo(...args);
+  }
+  return result;
+}
+
 describe('room lifecycle', () => {
   it('locks doors until the authoritative enemy count reaches zero', () => {
     const sim = roomSim();
@@ -275,7 +290,7 @@ describe('key-locked treasure rooms', () => {
 
     // Now press north and touch again — crosses, without spending a second key.
     sim.step(walking(0, -1));
-    expect(sim.transitionTo(lockedRoom, 1, 'north')).toBe(true);
+    expect(crossAfterDwell(sim, lockedRoom, 1, 'north')).toBe(true);
     expect(sim.keys).toBe(0);
     expect(sim.roomId).toBe('test-treasure-locked');
   });
@@ -304,7 +319,7 @@ describe('crossing vs. touching a door', () => {
     const sim = clearedRoomSim();
     sim.step(walking(0, -1)); // holding north
     expect(sim.pressingToward('north')).toBe(true);
-    expect(sim.transitionTo(cellarCrossroads, 1, 'north')).toBe(true);
+    expect(crossAfterDwell(sim, cellarCrossroads, 1, 'north')).toBe(true);
   });
 
   it('does not cross a door merely touched while running along the wall it sits on', () => {
@@ -323,6 +338,16 @@ describe('crossing vs. touching a door', () => {
     const sim = clearedRoomSim();
     sim.step(walking(1, -1)); // north-east: has a real north component
     expect(sim.pressingToward('north')).toBe(true);
+    expect(crossAfterDwell(sim, cellarCrossroads, 1, 'north')).toBe(true);
+  });
+
+  it('does not switch until the door-crossing dwell has actually elapsed', () => {
+    const sim = clearedRoomSim();
+    sim.step(walking(0, -1)); // holding north
+    const dwell = sim.tuning.movement.doorCrossingTicks;
+    for (let tick = 0; tick < dwell - 1; tick++) {
+      expect(sim.transitionTo(cellarCrossroads, 1, 'north')).toBe(false);
+    }
     expect(sim.transitionTo(cellarCrossroads, 1, 'north')).toBe(true);
   });
 

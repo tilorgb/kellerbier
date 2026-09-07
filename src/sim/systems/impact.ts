@@ -295,16 +295,15 @@ export function applyDamageAt(
   const impulse = (damage * tuning.knockback) / mass;
   addPush(sim, target, -normalX * impulse, -normalY * impulse);
 
-  // Screenshake, directional and capped. Hitting something is what the player
-  // does constantly on a run that is going well, so it is the cheapest of the
-  // three: a kill earns more, and being hurt earns the most.
-  const shake =
-    target === sim.playerIndex
-      ? tuning.playerHitShake
-      : killed
-        ? tuning.deathShake
-        : damage * tuning.shakePerDamage;
-  sim.addShake(-normalX, -normalY, shake);
+  // Screenshake only for the player being hurt. Hitting an enemy used to
+  // shake the camera too — cheap feedback in the 2D game, but with the fixed
+  // 65° camera and the room reading as a real place rather than a flat
+  // sprite sheet, a shake on every one of the many hits a good run lands felt
+  // like noise rather than impact. Being hurt is still the rare event worth
+  // moving the camera for.
+  if (target === sim.playerIndex) {
+    sim.addShake(-normalX, -normalY, tuning.playerHitShake);
+  }
 
   // What a creature comes apart into is authored on the creature (#153) —
   // beer splashes, a Schimmelfleck does not — and falls back to beer for

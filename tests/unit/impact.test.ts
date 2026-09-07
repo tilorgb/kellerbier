@@ -163,7 +163,7 @@ describe('impact feel', () => {
 
   it('shakes the camera, caps it, and settles back to nothing', () => {
     const sim = new GameSim();
-    landOneShot(sim);
+    sim.addShake(1, 0, 1);
     expect(sim.shake).toBeGreaterThan(0);
     expect(sim.shake).toBeLessThanOrEqual(DEFAULT_IMPACT_TUNING.maxShake);
 
@@ -182,9 +182,12 @@ describe('impact feel', () => {
     expect(sim.shake).toBe(DEFAULT_IMPACT_TUNING.maxShake);
   });
 
+  // Hitting an enemy no longer shakes the camera (only the player being hurt
+  // does — see `impact.ts`'s `applyDamageAt`), so this exercises `addShake`
+  // directly rather than through `landOneShot`.
   it('has an accessibility scale that reaches actual zero', () => {
     const sim = new GameSim();
-    landOneShot(sim);
+    sim.addShake(1, 0, 1);
     expect(Math.abs(sim.shakeX) + Math.abs(sim.shakeY)).toBeGreaterThan(0);
 
     sim.screenShakeScale = 0;

@@ -82,6 +82,18 @@ export interface MovementTuning {
    * job (issue #35's acceptance criteria).
    */
   puddleSlip: number;
+  /**
+   * Ticks a player has to keep walking into an open, unlocked door before the
+   * room actually changes.
+   *
+   * Without this, the room switches the instant `GameSim.doorContact` and
+   * `pressingToward` both go true — the moment the player's edge reaches the
+   * wall, before they have visibly set foot in the doorframe at all. A short
+   * hold makes a crossing read as walking *through* a door rather than the
+   * door swapping the world out from under a graze at its threshold; `0`
+   * restores the instant switch.
+   */
+  doorCrossingTicks: number;
 }
 
 export interface ShootingTuning {
@@ -189,22 +201,16 @@ export interface ImpactTuning {
   knockback: number;
 
   /**
-   * Screenshake, in pixels of camera offset.
+   * Shake for a hit on the *player*, whatever caused it. In screen pixels of
+   * camera offset — the offset is applied to the room container from outside
+   * it, so the zoom the room is drawn at does not multiply it.
    *
-   * Screen pixels, not room units: the offset is applied to the room container
-   * from outside it, so the zoom the room is drawn at does not multiply it.
-   */
-  shakePerDamage: number;
-  deathShake: number;
-  /**
-   * Shake for a hit on the *player*, whatever caused it.
-   *
-   * Deliberately the largest shake in the game, and deliberately not the same
-   * number as the shake for hitting an enemy. A player having a good run hits
-   * something every few ticks, and a camera that jumps on every one of those
-   * never settles: the motion stops meaning anything and becomes noise laid
-   * over the run going well. Being hurt is the rare event, so it is the one
-   * worth moving the camera for.
+   * The only source of screenshake left: hitting or killing an enemy used to
+   * shake the camera too, but a player having a good
+   * run hits something every few ticks, and a camera that jumps on every one
+   * of those never settles — the motion stops meaning anything and becomes
+   * noise laid over the run going well. Being hurt is the rare event, so it
+   * is the one worth moving the camera for.
    */
   playerHitShake: number;
   /**
@@ -327,7 +333,14 @@ export interface EnemyTuning {
    * nothing, which is a different thing from a miss.
    */
   deflectParticles: number;
-  /** Shake for that splash. Small: nothing actually happened. */
+  /**
+   * Shake for that splash. Small: nothing actually happened.
+   *
+   * Kept, unlike the shake `applyDamageAt` used to add for an ordinary
+   * enemy hit or kill (see `ImpactTuning.playerHitShake`'s doc comment) —
+   * this one was already small and rare rather than the constant per-hit
+   * noise that prompted removing the others.
+   */
   deflectShake: number;
   /**
    * Chance a normal-room spawn (#156) is upgraded to an elite on Floor 1,
@@ -856,6 +869,10 @@ export const DEFAULT_MOVEMENT_TUNING: Readonly<MovementTuning> = {
   // strong enough to read as "the floor changed" the instant a player's
   // shoe touches one, short of throwing them somewhere they didn't aim.
   puddleSlip: 2,
+  // A third of a second at 60 ticks/second — long enough to read as a couple
+  // of steps into the frame, short enough that it never feels like the door
+  // is refusing to open.
+  doorCrossingTicks: 10,
 };
 
 export const DEFAULT_SHOOTING_TUNING: Readonly<ShootingTuning> = {
@@ -887,8 +904,6 @@ export const DEFAULT_IMPACT_TUNING: Readonly<ImpactTuning> = {
 
   knockback: 4,
 
-  shakePerDamage: 0.08,
-  deathShake: 0.3,
   playerHitShake: 2.4,
   maxShake: 2.5,
   shakeDamping: 0.78,

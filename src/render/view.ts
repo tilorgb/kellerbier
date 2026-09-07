@@ -1,7 +1,6 @@
-import { Color, type Object3D, Scene, type WebGLRenderer } from 'three';
+import { Color, MeshBasicMaterial, type Object3D, Scene, type WebGLRenderer } from 'three';
 import { ROOM_TRANSITION_TICKS, type GameSim, type RoomDirection } from '../sim/game/sim.js';
 import { roomFrameSize, type RoomGeometry } from '../sim/room/geometry.js';
-import { PLAYFIELD_HEIGHT, PLAYFIELD_WIDTH } from '../sim/room/playground.js';
 import type { CompiledDoor } from '../sim/room/template.js';
 import type { EntityAnimator } from './animation/animator.js';
 import { BombFlightView } from './bomb-flight-view.js';
@@ -20,7 +19,7 @@ import { PlayerView } from './player-view.js';
 import { ProjectileView, type ProjectileArt } from './projectiles.js';
 import { UI_TEXT_HEIGHT } from './ui/text.js';
 import { ELEVATION, WorldCamera, type WorldPoint } from './world/camera.js';
-import { ACTOR_LAYER } from './world/layers.js';
+import { ACTOR_LAYER, OCCLUDER_LAYER } from './world/layers.js';
 import { Lighting } from './world/lighting.js';
 import { type DoorState, Scenery } from './world/scenery.js';
 
@@ -45,17 +44,26 @@ import { type DoorState, Scenery } from './world/scenery.js';
  * 4. The camera follows the player (clamped to the room), plus shake, sway,
  *    the room-transition slide and the debug pan.
  *
- * ## Two world passes
+ * ## Two world passes, and an occluder pre-pass between them
  *
- * `render` draws the scene twice: the room (floor, walls, doors, decals), then
- * everything that *stands in* it (`world/layers.ts`'s `ACTOR_LAYER` — every
- * sprite, boulder, projectile, particle) again, over the top, with the depth
- * buffer cleared. A standing sprite is a quad leaned right back by the camera
- * angle, so at 65° its head is ~14 units behind its feet — inside the back
- * wall's box, and a single pass lets the wall's depth clip it. The second pass
- * is the 2D renderer's painter's-order compositing: sprites on top of the
- * room, still depth-sorted against each other so one body stands behind
- * another. The UI is a third pass, drawn by the caller.
+ * `render` draws the room (floor, walls, doors, decals), then clears depth
+ * and draws everything that *stands in* it (`world/layers.ts`'s
+ * `ACTOR_LAYER` — every sprite, boulder, projectile, particle) again, over
+ * the top. A standing sprite is a quad leaned right back by the camera angle,
+ * so at 65° its head is ~14 units behind its feet — inside the *north* wall's
+ * box if it stands there, and a single depth-tested pass lets that wall's
+ * depth clip it. But clearing depth for the whole second pass throws out
+ * every other wall's occlusion too, not just the one causing that — so
+ * between the clear and the actors, a depth-only pre-pass re-seeds the
+ * buffer with `OCCLUDER_LAYER` (every wall/void safe to occlude a body,
+ * which is all of them except the room's own north wall and any void
+ * standing in for one). Actors then draw depth-tested against that, so a
+ * body at the south wall reads as partly behind it the way a real foreground
+ * wall would, while the north wall still never clips a leaned-back head. The
+ * result is the 2D renderer's painter's-order compositing with real
+ * occlusion restored: sprites on top of the room, still depth-sorted against
+ * each other and against most of the architecture, so one body stands behind
+ * another — or behind a wall. The UI is a third pass, drawn by the caller.
  *
  * ## Screen positions
  *
@@ -101,6 +109,42 @@ function toActorLayer(object: Object3D): void {
   object.layers.set(ACTOR_LAYER);
 }
 
+/**
+ * Writes depth only, nothing else — for `OCCLUDER_LAYER`'s pre-pass. The
+ * geometry it draws is already on screen from pass one; this only needs to
+ * leave its depth behind for the actors that draw next to test against.
+ */
+const OCCLUDER_DEPTH_MATERIAL = new MeshBasicMaterial({ colorWrite: false });
+
+/**
+ * Where the room just left should sit, translated into the new room's own
+ * coordinate space so it appears immediately adjacent to it on the side the
+ * player just walked out through — the room-transition slide's whole trick.
+ *
+ * Every room's own local origin sits near `(0, 0)` (`roomFrameSize`'s doc
+ * comment), so lining up the wall the player crossed is just placing the
+ * outgoing room's far wall flush against the new room's near one: walking
+ * north put the old room south of the new one (offset by the new room's own
+ * height), walking south put it north (offset by the old room's height,
+ * negative), and east/west follow the same pattern on X.
+ */
+function outgoingRoomShift(
+  direction: RoomDirection,
+  previous: { readonly width: number; readonly height: number },
+  next: { readonly width: number; readonly height: number },
+): { readonly x: number; readonly z: number } {
+  switch (direction) {
+    case 'north':
+      return { x: 0, z: next.height };
+    case 'south':
+      return { x: 0, z: -previous.height };
+    case 'east':
+      return { x: -previous.width, z: 0 };
+    case 'west':
+      return { x: next.width, z: 0 };
+  }
+}
+
 export class GameView {
   readonly scene = new Scene();
   readonly camera = new WorldCamera();
@@ -125,6 +169,20 @@ export class GameView {
   private secretHintDoors: readonly CompiledDoor[] = [];
   private doorTransitionTicks = 0;
   private doorPulseFrames = 0;
+  /**
+   * The room just left, kept alive (translated to sit adjacent to the new
+   * one, in the direction just crossed) for the room-transition slide —
+   * see `sync`'s `roomChanged` branch and `transitionSlideOffset`. `null`
+   * once the slide has run its course, or when the last room change was a
+   * cut rather than a walked crossing.
+   */
+  private outgoingScenery: Scenery | null = null;
+  /** Where the camera was actually aiming last frame — the slide's start point, for continuity into the next room. */
+  private lastAimX = 0;
+  private lastAimZ = 0;
+  /** The slide's captured start delta, decaying to 0 over the transition — see `transitionSlideOffset`. */
+  private transitionOffsetX = 0;
+  private transitionOffsetY = 0;
 
   private readonly entities: EntityView;
   private readonly playerView: PlayerView;
@@ -281,13 +339,50 @@ export class GameView {
     const sim = this.sim;
     const roomChanged = sim.room !== this.roomGeometry;
     if (roomChanged) {
+      const outgoingScenery = this.scenery;
+      const previousFrame = roomFrameSize(this.roomGeometry);
+      const direction = sim.roomTransitionDirection;
       this.roomGeometry = sim.room;
       this.entities.resetAnimation();
       this.entities.setTargetTextures(this.textures.roomTiles[sim.currentFloor]?.destructibles);
-      this.scenery.dispose();
       this.scenery = this.buildScenery();
       this.scene.add(this.scenery.group);
       this.scenery.setLean(this.camera.lean);
+      // A previous slide that never finished (two crossings in very quick
+      // succession) loses its own outgoing room rather than leaking it.
+      this.outgoingScenery?.dispose();
+      const newFrame = roomFrameSize(this.roomGeometry);
+      if (direction !== null && !this.accessibility.reducedMotion) {
+        // Keep the room just left alive, moved to sit adjacent to the new
+        // one on the side just crossed, and work out how far the camera's
+        // last known aim point (also translated into that same shared
+        // space) sits from where it would naturally land in the new room —
+        // `transitionSlideOffset` eases that delta back to 0, which is what
+        // makes the camera appear to slide from the old room into this one
+        // rather than cut and then correct.
+        const shift = outgoingRoomShift(direction, previousFrame, newFrame);
+        outgoingScenery.group.position.set(shift.x, 0, shift.z);
+        this.outgoingScenery = outgoingScenery;
+        const natural = this.camera.targetFor(
+          sim.positionX(sim.playerIndex),
+          sim.positionY(sim.playerIndex),
+          newFrame.width,
+          newFrame.height,
+        );
+        this.transitionOffsetX = this.lastAimX + shift.x - natural.x;
+        this.transitionOffsetY = this.lastAimZ + shift.z - natural.y;
+      } else {
+        // `direction === null` is a cut (a floor advance, waking up
+        // elsewhere) — nobody walked through a door that was never opened,
+        // so this reads as a cut rather than a walk. Reduced motion skips
+        // the slide the same way for a different reason: a panning camera
+        // right after a scene swap is exactly the kind of motion that
+        // setting exists to remove.
+        outgoingScenery.dispose();
+        this.outgoingScenery = null;
+        this.transitionOffsetX = 0;
+        this.transitionOffsetY = 0;
+      }
       this.doorsLocked = sim.doorsLocked;
       this.doorTransitionTicks = 0;
       this.doorPulseFrames = 0;
@@ -347,7 +442,7 @@ export class GameView {
 
     const frame = roomFrameSize(this.roomGeometry);
     const slide = this.transitionSlideOffset(alpha);
-    this.camera.follow(
+    const aim = this.camera.follow(
       this.playerView.positionX,
       this.playerView.positionY,
       frame.width,
@@ -355,6 +450,8 @@ export class GameView {
       sim.shakeX * this.shakeScale + sim.swayX + this.cameraX + slide.x,
       sim.shakeY * this.shakeScale + sim.swayY + this.cameraY + slide.y,
     );
+    this.lastAimX = aim.x;
+    this.lastAimZ = aim.y;
     // Labels project after the camera has moved, or they lag a frame.
     this.damageNumbers.sync(alpha, this.projectPoint);
     this.labelLayer.prepare(1);
@@ -374,14 +471,14 @@ export class GameView {
     // Pass one: the room — floor, walls, doors, decals, lights, shadows.
     renderer.render(this.scene, camera);
 
-    // Pass two: the standing sprites, over the room, with the depth buffer
-    // cleared so a sprite leaning back into the wall behind it draws on top of
-    // it. They still sort against each other, so one body stands behind
-    // another. Shadows are the ones baked in pass one; nothing here casts anew.
+    // Pass two draws the standing sprites over the room with the depth buffer
+    // cleared, so a sprite leaning back into the wall behind it draws on top
+    // of it — see `world/layers.ts` for why, and why an occluder pre-pass
+    // below puts most of that depth straight back before the actors draw.
     //
-    // `scene.background` has to come off for this pass: a `Color` background
-    // makes three force a full colour clear at the start of every `render`,
-    // even with `autoClear` off, which would wipe pass one.
+    // `scene.background` has to come off for both of the passes below: a
+    // `Color` background makes three force a full colour clear at the start
+    // of every `render`, even with `autoClear` off, which would wipe pass one.
     const previousBackground = this.scene.background;
     const previousAutoClear = renderer.autoClear;
     const previousShadowAutoUpdate = renderer.shadowMap.autoUpdate;
@@ -389,8 +486,24 @@ export class GameView {
     this.scene.background = null;
     renderer.autoClear = false;
     renderer.shadowMap.autoUpdate = false;
-    camera.layers.set(ACTOR_LAYER);
     renderer.clearDepth();
+
+    // Between the clear and the actors: re-seed the depth buffer with
+    // `OCCLUDER_LAYER` (every wall/void except the room's own north one —
+    // see `world/layers.ts`), colour writes off since pass one already drew
+    // it. This is what lets a body standing at, say, the south wall read as
+    // partly behind it — the depth clear above still keeps the north wall
+    // from clipping a leaned-back head, since that layer never took part.
+    camera.layers.set(OCCLUDER_LAYER);
+    this.scene.overrideMaterial = OCCLUDER_DEPTH_MATERIAL;
+    renderer.render(this.scene, camera);
+    this.scene.overrideMaterial = null;
+
+    // Pass two: the standing sprites, over the room, depth-tested against
+    // the occluder buffer just seeded. They still sort against each other,
+    // so one body stands behind another. Shadows are the ones baked in pass
+    // one; nothing here casts anew.
+    camera.layers.set(ACTOR_LAYER);
     renderer.render(this.scene, camera);
     this.scene.background = previousBackground;
     camera.layers.mask = previousLayerMask;
@@ -447,25 +560,27 @@ export class GameView {
     return this.lockedDoorDirections.has(door.direction) ? 'locked' : 'open';
   }
 
+  /**
+   * The camera offset that carries the room-transition slide: `sync`'s
+   * `roomChanged` branch captures `transitionOffsetX`/`Y` as the exact gap
+   * between where the camera was last actually aiming and where it would
+   * naturally land in the new room, and this eases that gap back to 0 over
+   * `ROOM_TRANSITION_TICKS` — the camera visibly slides from the old view to
+   * the new one instead of cutting and then correcting. Once the slide is
+   * done, the outgoing room it was sliding away from is no longer needed.
+   */
   private transitionSlideOffset(alpha: number): { readonly x: number; readonly y: number } {
     const ticksLeft = this.sim.roomTransitionTicks - alpha;
     if (ticksLeft <= 0) {
+      if (this.outgoingScenery !== null) {
+        this.outgoingScenery.dispose();
+        this.outgoingScenery = null;
+      }
       return { x: 0, y: 0 };
     }
     const remaining = Math.min(1, ticksLeft / ROOM_TRANSITION_TICKS);
     const eased = remaining * remaining;
-    switch (this.sim.roomTransitionDirection) {
-      case 'north':
-        return { x: 0, y: -PLAYFIELD_HEIGHT * eased };
-      case 'south':
-        return { x: 0, y: PLAYFIELD_HEIGHT * eased };
-      case 'east':
-        return { x: PLAYFIELD_WIDTH * eased, y: 0 };
-      case 'west':
-        return { x: -PLAYFIELD_WIDTH * eased, y: 0 };
-      default:
-        return { x: 0, y: 0 };
-    }
+    return { x: this.transitionOffsetX * eased, y: this.transitionOffsetY * eased };
   }
 
   // ---------------------------------------------------------- app seams
