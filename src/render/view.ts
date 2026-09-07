@@ -1,4 +1,11 @@
-import { Color, MeshBasicMaterial, type Object3D, Scene, type WebGLRenderer } from 'three';
+import {
+  Color,
+  MeshBasicMaterial,
+  type Object3D,
+  Scene,
+  WebGLRenderTarget,
+  type WebGLRenderer,
+} from 'three';
 import { ROOM_TRANSITION_TICKS, type GameSim, type RoomDirection } from '../sim/game/sim.js';
 import { roomFrameSize, type RoomGeometry } from '../sim/room/geometry.js';
 import type { CompiledDoor } from '../sim/room/template.js';
@@ -21,7 +28,8 @@ import { UI_TEXT_HEIGHT } from './ui/text.js';
 import { ELEVATION, WorldCamera, type WorldPoint } from './world/camera.js';
 import { ACTOR_LAYER, OCCLUDER_LAYER } from './world/layers.js';
 import { Lighting } from './world/lighting.js';
-import { type DoorState, Scenery } from './world/scenery.js';
+import { RoomPrewarm } from './world/room-prewarm.js';
+import { type DecorativeProp, type DoorState, Scenery } from './world/scenery.js';
 
 /**
  * The game as a scene: everything the player sees in the room, and the fixed
@@ -177,6 +185,43 @@ export class GameView {
    * cut rather than a walked crossing.
    */
   private outgoingScenery: Scenery | null = null;
+  /**
+   * The room on the far side of a door the player is currently walking into,
+   * built during #289's crossing dwell so the switch frame adopts it rather
+   * than building it then — see `world/room-prewarm.ts` and `prewarmRoom`.
+   */
+  private readonly prewarm = new RoomPrewarm<Scenery>();
+  /**
+   * The room `confirmPrewarmedEntry` says we have just crossed into — the next
+   * room change adopts the prewarmed scenery iff it is still this one. `null`
+   * when the coming room change is a build, not an adopt.
+   */
+  private pendingAdoptKey: string | null = null;
+  /**
+   * The renderer, captured on the first `render` call, so `prewarmRoom` can
+   * warm a prewarmed room's shaders and buffers during the dwell. `null` only
+   * before the first frame, which is long before any door crossing.
+   */
+  private renderer: WebGLRenderer | null = null;
+  /**
+   * A 1×1 target `prewarmRoom` renders the incoming room into once, off-screen,
+   * to force its shader compile + geometry/texture upload during the dwell
+   * rather than on the switch frame. Created on first use.
+   */
+  private warmTarget: WebGLRenderTarget | null = null;
+  /**
+   * Rooms queued by `warmSceneryShaders` to have their shaders compiled — one
+   * drained per `render` so the whole floor's set warms across the frames the
+   * title card is up, never in one blocking burst. `floor` is fixed per fill.
+   */
+  private warmQueue: {
+    floor: number;
+    rooms: {
+      readonly geometry: RoomGeometry;
+      readonly doors: readonly CompiledDoor[];
+      readonly props: readonly DecorativeProp[];
+    }[];
+  } | null = null;
   /** Where the camera was actually aiming last frame — the slide's start point, for continuity into the next room. */
   private lastAimX = 0;
   private lastAimZ = 0;
@@ -205,9 +250,12 @@ export class GameView {
   };
   private readonly point: WorldPoint = { x: 0, y: 0 };
 
-  constructor(sim: GameSim, textures: GameViewTextures) {
+  constructor(sim: GameSim, textures: GameViewTextures, renderer?: WebGLRenderer) {
     this.sim = sim;
     this.textures = textures;
+    // Given up front so `warmSceneryShaders` can run before the first frame;
+    // `render` re-captures it anyway.
+    this.renderer = renderer ?? null;
     this.roomGeometry = sim.room;
     this.doorsLocked = sim.doorsLocked;
 
@@ -345,9 +393,27 @@ export class GameView {
       this.roomGeometry = sim.room;
       this.entities.resetAnimation();
       this.entities.setTargetTextures(this.textures.roomTiles[sim.currentFloor]?.destructibles);
-      this.scenery = this.buildScenery();
+      // Adopt the room built during the crossing dwell when the app has
+      // confirmed we walked into it (`prewarmRoom` + `confirmPrewarmedEntry`);
+      // otherwise — a cut, a floor advance, a Blutwurz spirit walk, or simply
+      // too fast a crossing to have built one — drop any half-built reserve and
+      // build here.
+      const adopted =
+        this.pendingAdoptKey === null ? null : this.prewarm.take(this.pendingAdoptKey);
+      this.pendingAdoptKey = null;
+      if (adopted === null) {
+        this.prewarm.discard();
+      }
+      this.scenery = adopted ?? this.buildScenery();
       this.scene.add(this.scenery.group);
       this.scenery.setLean(this.camera.lean);
+      // A prewarmed room was built before the app knew which of *its* doors
+      // face the boss (`setBossDoors` runs on the crossing, after the build),
+      // so re-settle the double-door state now against the current set. A
+      // no-op for a freshly built room, which already matches.
+      for (const door of this.scenery.doors) {
+        door.setDouble(this.bossDoorDirections.has(door.door.direction));
+      }
       // A previous slide that never finished (two crossings in very quick
       // succession) loses its own outgoing room rather than leaking it.
       this.outgoingScenery?.dispose();
@@ -455,10 +521,16 @@ export class GameView {
     // Labels project after the camera has moved, or they lag a frame.
     this.damageNumbers.sync(alpha, this.projectPoint);
     this.labelLayer.prepare(1);
+
+    // One queued room's shaders per frame — spread across the frames the floor
+    // title card is up. Here, not in `render`, so the off-screen warm render it
+    // triggers (which calls `render`) can't recurse into this.
+    this.drainWarmQueue();
   }
 
   /** Draws the world pass. The caller draws the UI pass over it. */
   render(renderer: WebGLRenderer): void {
+    this.renderer = renderer;
     const camera = this.camera.camera;
 
     // Everything that stands in the room is on `ACTOR_LAYER` only (set on the
@@ -517,13 +589,27 @@ export class GameView {
 
   private buildScenery(): Scenery {
     const sim = this.sim;
+    return this.makeScenery(sim.room, sim.currentFloor, sim.doors, sim.roomDecorativeProps);
+  }
+
+  /**
+   * Builds a room's scene graph from explicit geometry rather than off `sim`,
+   * so `prewarmRoom` can build the *next* room while `sim` still describes the
+   * current one. `buildScenery` is the `sim.room`/`sim.doors`/… call of this.
+   */
+  private makeScenery(
+    room: RoomGeometry,
+    floor: number,
+    doors: readonly CompiledDoor[],
+    props: readonly DecorativeProp[],
+  ): Scenery {
     const scenery = new Scenery(
-      sim.room,
-      sim.currentFloor,
-      sim.doors,
-      sim.roomDecorativeProps,
+      room,
+      floor,
+      doors,
+      props,
       {
-        tiles: this.textures.roomTiles[sim.currentFloor],
+        tiles: this.textures.roomTiles[floor],
         tileTextures: this.textures.tileTextures ?? {},
       },
       this.camera.lean,
@@ -532,6 +618,110 @@ export class GameView {
       door.setDouble(this.bossDoorDirections.has(door.door.direction));
     }
     return scenery;
+  }
+
+  /**
+   * Build the room keyed `roomKey` — the one on the far side of a door the
+   * player is walking into — now, during #289's crossing dwell, so `sync`'s
+   * room-change branch adopts it off the shelf instead of building it on the
+   * switch frame. `app/main.ts` calls this every tick the player presses into
+   * an unlocked door, passing the same neighbour geometry it is about to try to
+   * cross into; repeat calls for a room already built are free. See
+   * `world/room-prewarm.ts`.
+   */
+  prewarmRoom(
+    roomKey: string,
+    room: RoomGeometry,
+    floor: number,
+    doors: readonly CompiledDoor[],
+    props: readonly DecorativeProp[],
+  ): void {
+    const built = this.prewarm.request(roomKey, () => this.makeScenery(room, floor, doors, props));
+    if (built !== null) {
+      this.warmSceneryGroup(built.group);
+    }
+  }
+
+  /**
+   * Queue the floor's rooms to have every shader program their scenery can need
+   * compiled and their shared textures uploaded — `app/main.ts` calls this from
+   * `startRun` and `advanceFloor` with every room on the floor plan. Three
+   * compiles a material's program lazily on first draw, and each of `render`'s
+   * three passes needs its own variant, so without this the first time a room
+   * introduces a material the start room lacked (a colour-only block, a hazard,
+   * a boss door) the switch frame pays for it and the game hitches — the
+   * "stutter on the first room" a player hits.
+   *
+   * The queue drains one room per `render`, so the ~15-room floor set warms
+   * across the frames the floor title card is up rather than in one
+   * multi-hundred-millisecond block on `startRun`. The per-crossing
+   * `prewarmRoom` warm still runs; once this queue has passed it only has that
+   * room's own geometry buffers left to upload, not a program to compile.
+   */
+  warmSceneryShaders(
+    floor: number,
+    rooms: readonly {
+      readonly geometry: RoomGeometry;
+      readonly doors: readonly CompiledDoor[];
+      readonly props: readonly DecorativeProp[];
+    }[],
+  ): void {
+    this.warmQueue = { floor, rooms: [...rooms] };
+  }
+
+  /** Compiles one queued room's scenery shaders, if any are waiting. Called once per `sync`. */
+  private drainWarmQueue(): void {
+    const queue = this.warmQueue;
+    if (queue === null) {
+      return;
+    }
+    const next = queue.rooms.shift();
+    if (next === undefined) {
+      this.warmQueue = null;
+      return;
+    }
+    const scenery = this.makeScenery(next.geometry, queue.floor, next.doors, next.props);
+    this.warmSceneryGroup(scenery.group);
+    scenery.dispose();
+  }
+
+  /**
+   * Runs `group` through the real render path once, into a 1×1 off-screen
+   * target: every shader program `render`'s three passes need gets compiled and
+   * every buffer/texture uploaded now, not on the frame the group first shows.
+   * A plain `renderer.render` or `compileAsync` would miss the occluder- and
+   * actor-pass program variants. The shadow pass is skipped — its one depth
+   * program is shared and warms with the first room. `group` is added, drawn
+   * and removed; nothing of it is visible.
+   */
+  private warmSceneryGroup(group: Object3D): void {
+    const renderer = this.renderer;
+    if (renderer === null) {
+      return;
+    }
+    const target = (this.warmTarget ??= new WebGLRenderTarget(1, 1));
+    const previousTarget = renderer.getRenderTarget();
+    const previousShadowAutoUpdate = renderer.shadowMap.autoUpdate;
+    this.scene.add(group);
+    renderer.setRenderTarget(target);
+    renderer.shadowMap.autoUpdate = false;
+    this.render(renderer);
+    renderer.shadowMap.autoUpdate = previousShadowAutoUpdate;
+    renderer.setRenderTarget(previousTarget);
+    this.scene.remove(group);
+  }
+
+  /**
+   * Tells the view that the crossing into `roomKey` — the room last passed to
+   * `prewarmRoom` — has just been accepted by the sim, so `sync`'s next
+   * room-change branch adopts what was built for it rather than build afresh.
+   * `app/main.ts` calls this immediately after a successful `sim.transitionTo`
+   * into that neighbour. Passing the key (not just a flag) means a second
+   * crossing in the same frame, which replaces what is held, falls back to a
+   * clean build instead of adopting the wrong room.
+   */
+  confirmPrewarmedEntry(roomKey: string): void {
+    this.pendingAdoptKey = roomKey;
   }
 
   private relight(): void {
@@ -655,6 +845,9 @@ export class GameView {
 
   destroy(): void {
     this.scenery.dispose();
+    this.outgoingScenery?.dispose();
+    this.prewarm.discard();
+    this.warmTarget?.dispose();
     this.entities.destroy();
     this.playerView.destroy();
     this.projectiles.destroy();
