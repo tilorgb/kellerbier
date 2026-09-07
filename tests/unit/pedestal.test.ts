@@ -143,6 +143,18 @@ describe('pedestal pickup (#28)', () => {
     });
   });
 
+  it('shows the item flavour text on the reveal panel, not its description, when the item has one', () => {
+    const item = baseItem('bierkrug-test', { flavourText: 'One in each hand is a lifestyle.' });
+    const sim = simWithPedestal([item]);
+
+    sim.step(pressUse());
+
+    expect(sim.pedestalReveal).toEqual({
+      name: 'bierkrug-test',
+      description: 'One in each hand is a lifestyle.',
+    });
+  });
+
   it('refusing — never pressing use — leaves the pedestal and the inventory untouched', () => {
     const sim = simWithPedestal([baseItem('bierkrug-test')]);
     const index = sim.items.indexOf('bierkrug-test');

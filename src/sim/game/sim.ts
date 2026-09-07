@@ -3705,7 +3705,10 @@ export class GameSim {
     this.markItemStatsDirty(index);
     this.syncItemStatModifiers();
     const item = this.items.at(index);
-    this.reportCollected(item.name, item.description);
+    // Flavour text over the literal effect text here — the pedestal/HUD
+    // already show the mechanical description before a pickup, so the toast
+    // is where the funny line the item roster promises actually gets read.
+    this.reportCollected(item.name, item.flavourText || item.description);
     // After `reportCollected`, not before: a set completing on this exact
     // pickup has to force-clear the ordinary toast that call just started,
     // not race it.
@@ -4227,15 +4230,15 @@ export class GameSim {
     pedestal.itemIndex = -1;
     // `pickUpItem` already started the ordinary quick toast — suppressed
     // here in favour of the pedestal's own longer, more deliberate reveal
-    // below, which says the same name and description. Showing both at once
-    // reads as a UI glitch, not as two separate pieces of news. No hitstop:
-    // a pedestal pickup/swap used to freeze the sim for `pickupPauseTicks`
-    // while the reveal panel came up, but playtesting found the pause itself
-    // read as friction rather than as a beat worth noticing — the panel
-    // alone, held up longer, does that job instead.
+    // below, which says the same name and (now) the same flavour line.
+    // Showing both at once reads as a UI glitch, not as two separate pieces
+    // of news. No hitstop: a pedestal pickup/swap used to freeze the sim for
+    // `pickupPauseTicks` while the reveal panel came up, but playtesting
+    // found the pause itself read as friction rather than as a beat worth
+    // noticing — the panel alone, held up longer, does that job instead.
     this.toastTicks = 0;
     this.pedestalRevealName = item.name;
-    this.pedestalRevealDescription = item.description;
+    this.pedestalRevealDescription = item.flavourText || item.description;
     this.pedestalRevealTicks = Math.round(this.tuning.itemPool.revealHoldTicks);
   }
 
