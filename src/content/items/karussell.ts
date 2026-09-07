@@ -12,9 +12,8 @@ const PUSH_STRENGTH = 0.3;
  *
  * The stillness check is `ritterschild.ts`'s exact inverse — that item
  * rewards holding still, this one only works while moving — the same
- * `positionX`/`previousX` delta read for an opposite trigger, deliberately
- * paired the way `almabtrieb.ts` and `watschn.ts` share `onDamageTaken`
- * for two unrelated effects.
+ * `positionX`/`previousX` delta read `almabtrieb.ts` uses for its own
+ * moving-shot bonus, for a different effect.
  */
 export const karussell: ItemDefinition = {
   id: 'karussell',

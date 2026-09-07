@@ -639,23 +639,19 @@ export interface ItemPoolTuning {
 }
 
 /**
- * The two character verbs that are numbers rather than behaviour (#47).
+ * The character verb that is a number rather than behaviour (#47).
  *
- * Ludwig's purse and the Wolpertinger's reroll both have a "how much" that
- * has to be tunable at runtime, per `CONTRIBUTING.md`'s gameplay definition
- * of done — the *rules* themselves live in `sim/character/definition.ts` as
- * data on the roster, but nobody can feel whether a reroll's band is too
- * wide or too narrow without dragging it while playing.
+ * Ludwig's purse has a "how much" that has to be tunable at runtime, per
+ * `CONTRIBUTING.md`'s gameplay definition of done — the *rule* itself lives
+ * in `sim/character/definition.ts` as data on the roster, but nobody can
+ * feel whether the drain rate is too fast or too slow without dragging it
+ * while playing.
  */
 export interface CharacterTuning {
   /** Ticks between the Biermarken Ludwig's crown costs him. */
   purseDrainTicks: number;
   /** Ludwig's Damage multiplier while the purse still has something in it. */
   pursePowerMultiplier: number;
-  /** Lowest factor a Wolpertinger reroll can hand a stat. */
-  chaosMinFactor: number;
-  /** Highest. The band is deliberately wider upward than down — unfair in both directions, but playable. */
-  chaosMaxFactor: number;
 }
 
 /**
@@ -1095,8 +1091,6 @@ export const DEFAULT_CHARACTER_TUNING: Readonly<CharacterTuning> = {
   // drops are the thing keeping him in the air, not decoration.
   purseDrainTicks: 90,
   pursePowerMultiplier: 3,
-  chaosMinFactor: 0.6,
-  chaosMaxFactor: 1.8,
 };
 
 /**

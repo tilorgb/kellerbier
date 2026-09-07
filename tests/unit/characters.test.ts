@@ -8,16 +8,13 @@ import {
   setActionDown,
 } from '../../src/sim/input/frame.js';
 import { RoomGeometry } from '../../src/sim/room/geometry.js';
-import cellarRoom from '../../src/content/rooms/cellar.json';
 import { ProjectileTag, hasTag } from '../../src/sim/projectile/tags.js';
 import { StatId } from '../../src/sim/stats/definition.js';
 import { DEFAULT_CHARACTER_TUNING } from '../../src/sim/tuning.js';
 import type { CharacterTraits } from '../../src/sim/character/definition.js';
 import { alois } from '../../src/content/characters/alois.js';
-import { derWolpertinger } from '../../src/content/characters/der-wolpertinger.js';
 import { koenigLudwig } from '../../src/content/characters/koenig-ludwig.js';
 import { resi } from '../../src/content/characters/resi.js';
-import { sennerin } from '../../src/content/characters/sennerin.js';
 
 const IDLE = createInputFrame();
 
@@ -108,10 +105,6 @@ describe('characters (#47)', () => {
     expect(hasTag(brezn, ProjectileTag.Arcing)).toBe(true);
     expect(hasTag(brezn, ProjectileTag.Returning)).toBe(true);
 
-    const rung = simFor(sennerin.traits);
-    rung.step(aiming(1, 0));
-    expect(hasTag(firstShotTags(rung), ProjectileTag.Bouncing)).toBe(true);
-
     const plain = simFor(alois.traits);
     plain.step(aiming(1, 0));
     expect(firstShotTags(plain)).toBe(0);
@@ -173,105 +166,5 @@ describe('König Ludwig — flight and the purse (#47)', () => {
     sim.step(IDLE);
     expect(sim.pursePowered).toBe(true);
     expect(sim.stats.value(StatId.Damage)).toBe(rich);
-  });
-});
-
-describe('Der Wolpertinger — the reroll (#47)', () => {
-  it('rolls a stat block at run start and a different one on the next floor', () => {
-    const sim = simFor(derWolpertinger.traits);
-    const first = sim.stats.value(StatId.Damage);
-    expect(sim.chaosFloor).toBe(1);
-    expect(first).not.toBe(sim.tuning.shooting.shotDamage);
-
-    sim.loadRoom(cellarRoom, 2);
-    expect(sim.chaosFloor).toBe(2);
-    expect(sim.stats.value(StatId.Damage)).not.toBe(first);
-  });
-
-  it('is still the same monster on the same seed — chaos, not noise', () => {
-    const a = simFor(derWolpertinger.traits);
-    const b = simFor(derWolpertinger.traits);
-    for (const stat of [StatId.Damage, StatId.MoveSpeed, StatId.Range]) {
-      expect(b.stats.value(stat)).toBe(a.stats.value(stat));
-    }
-  });
-
-  /**
-   * `CONTRIBUTING.md`'s gameplay row: same seed, same input log, same run.
-   * The chaos character is the one whose rules could quietly break that —
-   * it is the only one that draws from an RNG stream mid-run — so it is the
-   * one the claim is checked on, across a floor change and everything the
-   * roll then feeds (shot damage, shot speed, movement).
-   */
-  it('replays identically from the same seed and the same input log', () => {
-    const script = (tick: number): InputFrame =>
-      tick % 3 === 0 ? aiming(1, 0) : held(tick % 2 === 0 ? 1 : -1, 1);
-    const play = (): string => {
-      const sim = simFor(derWolpertinger.traits);
-      for (let tick = 0; tick < 200; tick++) {
-        sim.step(script(tick));
-      }
-      sim.loadRoom(cellarRoom, 2);
-      for (let tick = 0; tick < 200; tick++) {
-        sim.step(script(tick));
-      }
-      return [
-        playerX(sim),
-        sim.positionY(sim.playerIndex),
-        sim.playerHealth,
-        sim.projectiles.liveCount,
-        sim.stats.value(StatId.Damage),
-        sim.stats.value(StatId.MoveSpeed),
-      ].join(':');
-    };
-    expect(play()).toBe(play());
-  });
-
-  it('leaves everybody else’s stats exactly where they were', () => {
-    const sim = simFor(resi.traits);
-    const before = sim.stats.value(StatId.Damage);
-    sim.loadRoom(cellarRoom, 2);
-    expect(sim.stats.value(StatId.Damage)).toBe(before);
-    expect(sim.chaosFloor).toBe(-1);
-  });
-});
-
-describe("D'Sennerin — her own ricochets (#47)", () => {
-  it('cannot be hit by a shot that has not come off anything yet', () => {
-    const sim = simFor(sennerin.traits);
-    placePlayer(sim, 320, 180);
-    const health = sim.playerHealth;
-    for (let tick = 0; tick < 20; tick++) {
-      sim.step(aiming(1, 0));
-    }
-    expect(sim.playerHealth).toBe(health);
-  });
-
-  it('is hit by her own Kuhglocke once it has come back off a wall', () => {
-    // A corridor barely wider than the shot's own flight: it leaves her, hits
-    // the far wall, bounces, and comes straight back through where she stands.
-    const room = new RoomGeometry(0, 0, 80, 360);
-    const sim = simFor(sennerin.traits, room);
-    placePlayer(sim, 40, 180);
-    const health = sim.playerHealth;
-    for (let tick = 0; tick < 60; tick++) {
-      sim.step(aiming(1, 0));
-      if (sim.playerHealth < health) {
-        break;
-      }
-    }
-    expect(sim.playerHealth).toBeLessThan(health);
-  });
-
-  it('never turns a bounced shot on a character without the rule', () => {
-    const room = new RoomGeometry(0, 0, 80, 360);
-    const sim = simFor(alois.traits, room);
-    sim.tuning.shooting.forcedTags |= ProjectileTag.Bouncing;
-    placePlayer(sim, 40, 180);
-    const health = sim.playerHealth;
-    for (let tick = 0; tick < 60; tick++) {
-      sim.step(aiming(1, 0));
-    }
-    expect(sim.playerHealth).toBe(health);
   });
 });

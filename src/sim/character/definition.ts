@@ -6,17 +6,14 @@ import type { ModifierOp } from '../stats/modifiers.js';
  * Who you are playing as, as data (#47).
  *
  * `docs/GAME_DESIGN.md` §3 is explicit that a character is **a different
- * verb, not a different stat spread**: König Ludwig flies and pays for it,
- * Der Wolpertinger is rerolled every floor, D'Sennerin's own ricochets can
- * hit her. A stat block alone cannot express any of those, and a
- * `CharacterDefinition` carrying functions would put behaviour in
- * `src/content/` — which the `content-is-data` lint rule (and the reasoning
- * behind it) rules out.
+ * verb, not a different stat spread**: König Ludwig flies and pays for it.
+ * A stat block alone cannot express that, and a `CharacterDefinition`
+ * carrying functions would put behaviour in `src/content/` — which the
+ * `content-is-data` lint rule (and the reasoning behind it) rules out.
  *
  * So a character is a stat block **plus a list of named rules**. The rule is
- * a string in the roster and a branch in the one system that owns it: flight
- * lives in `sim/systems/movement.ts`, the ricochet in
- * `sim/systems/collision.ts`. Adding the sixth character stays a data
+ * a string in the roster and a branch in the one system that owns it — flight
+ * lives in `sim/systems/movement.ts`. Adding the next character stays a data
  * change; adding a genuinely new *verb* is a rule id and the one system that
  * reads it, which is the honest cost of a verb that did not exist before.
  *
@@ -53,14 +50,6 @@ export const CharacterRule = {
    * the next coin.
    */
   Purse: 'purse',
-  /** Every stat rerolled on entering a floor (`GameSim.rerollChaosStats`). */
-  Chaos: 'chaos',
-  /**
-   * Her own shots can hit her once they have bounced at least once
-   * (`sim/systems/collision.ts`) — "small rooms become a danger to herself",
-   * stated as a rule rather than as a warning in the flavour text.
-   */
-  RicochetHurtsOwner: 'ricochetHurtsOwner',
 } as const;
 
 export type CharacterRuleId = (typeof CharacterRule)[keyof typeof CharacterRule];
@@ -69,8 +58,6 @@ export type CharacterRuleId = (typeof CharacterRule)[keyof typeof CharacterRule]
 export const CHARACTER_RULE_IDS: readonly CharacterRuleId[] = [
   CharacterRule.Flies,
   CharacterRule.Purse,
-  CharacterRule.Chaos,
-  CharacterRule.RicochetHurtsOwner,
 ];
 
 /** How a character plays. The half of a roster entry the simulation reads. */

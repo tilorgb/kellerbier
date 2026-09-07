@@ -337,37 +337,6 @@ describe('onBombDetonate', () => {
  * the three items individually describes.
  */
 describe('#29 acceptance criteria', () => {
-  it('Föhn nudges a homing+bouncing+arcing projectile without special-casing any of the three', async () => {
-    const { foehn } = await import('../../src/content/items/foehn.js');
-    const sim = new GameSim({ room: bareRoom(), items: [foehn], population: 'targets' });
-    sim.pickUpItem('foehn');
-
-    const slot = sim.projectiles.spawn(160, 90, 1, 0, 3, 1, 5000, ProjectileTeam.Player);
-    sim.addProjectileTag(slot, 'homing');
-    sim.addProjectileTag(slot, 'bouncing');
-    sim.addProjectileTag(slot, 'arcing');
-
-    // `sim.step` already runs the ordinary per-tick pipeline — homing/arcing
-    // steering and wall bounces through `stepProjectiles`, Föhn's wind
-    // through `stepItemTick` — so this is nothing more than playing the
-    // combination forward and watching for a crash or a non-finite value.
-    expect(() => {
-      for (let tick = 0; tick < 180; tick++) {
-        if (!sim.projectiles.isLive(slot)) {
-          break;
-        }
-        sim.step(IDLE);
-      }
-    }).not.toThrow();
-
-    if (sim.projectiles.isLive(slot)) {
-      const vx = sim.projectiles.velocityX[slot] ?? 0;
-      const vy = sim.projectiles.velocityY[slot] ?? 0;
-      expect(Number.isFinite(vx)).toBe(true);
-      expect(Number.isFinite(vy)).toBe(true);
-    }
-  });
-
   it('#166: Reinheitsgebot 1516 strips and permanently locks out every rosinen item already held, and leaves impure items alone', async () => {
     const { radler } = await import('../../src/content/items/radler.js');
     const { reinheitsgebot1516 } = await import('../../src/content/items/reinheitsgebot-1516.js');
@@ -469,57 +438,26 @@ describe('#29 acceptance criteria', () => {
     expect(simB.stats.value('range')).toBeCloseTo(penalised, 5);
   });
 
-  it('three independently-authored combinations of items compose into shots none of them describes alone', async () => {
-    const { russn } = await import('../../src/content/items/russn.js');
-    const { radi } = await import('../../src/content/items/radi.js');
-    const { bierdeckel } = await import('../../src/content/items/bierdeckel.js');
+  it('an independently-authored combination of items composes into a shot neither one describes alone', async () => {
     const { steinkrug } = await import('../../src/content/items/steinkrug.js');
     const { colaweizen } = await import('../../src/content/items/colaweizen.js');
 
-    // Combo 1: Russ'n's homing riding on Radi's arcing spiral — neither file
+    // Steinkrug's wall-ignoring splash landing on a target that Colaweizen
+    // then sticks to and slows — a splash that also traps. Neither file
     // mentions the other.
-    const comboA = new GameSim({ room: bareRoom(), items: [russn, radi], population: 'empty' });
-    comboA.pickUpItem('russn');
-    comboA.pickUpItem('radi');
-    comboA.step(aiming(1, 0));
-    const slotA = findLiveSlot(comboA);
-    expect(slotA).toBeGreaterThanOrEqual(0);
-    const tagsA = comboA.projectiles.tags[slotA] ?? 0;
-    expect(hasTag(tagsA, ProjectileTag.Homing)).toBe(true);
-    expect(hasTag(tagsA, ProjectileTag.Arcing)).toBe(true);
-
-    // Combo 2: Bierdeckel's boomerang, homing on the way back thanks to
-    // Russ'n — a returning shot that also chases, which neither item
-    // individually promises.
-    const comboB = new GameSim({
-      room: bareRoom(),
-      items: [russn, bierdeckel],
-      population: 'empty',
-    });
-    comboB.pickUpItem('russn');
-    comboB.pickUpItem('bierdeckel');
-    comboB.step(aiming(1, 0));
-    const slotB = findLiveSlot(comboB);
-    expect(slotB).toBeGreaterThanOrEqual(0);
-    const tagsB = comboB.projectiles.tags[slotB] ?? 0;
-    expect(hasTag(tagsB, ProjectileTag.Homing)).toBe(true);
-    expect(hasTag(tagsB, ProjectileTag.Returning)).toBe(true);
-
-    // Combo 3: Steinkrug's wall-ignoring splash landing on a target that
-    // Colaweizen then sticks to and slows — a splash that also traps.
-    const comboC = new GameSim({
+    const combo = new GameSim({
       room: bareRoom(),
       items: [steinkrug, colaweizen],
       population: 'empty',
     });
-    comboC.pickUpItem('steinkrug');
-    comboC.pickUpItem('colaweizen');
-    comboC.step(aiming(1, 0));
-    const slotC = findLiveSlot(comboC);
-    expect(slotC).toBeGreaterThanOrEqual(0);
-    const tagsC = comboC.projectiles.tags[slotC] ?? 0;
-    expect(hasTag(tagsC, ProjectileTag.Spectral)).toBe(true);
-    expect(hasTag(tagsC, ProjectileTag.Sticky)).toBe(true);
+    combo.pickUpItem('steinkrug');
+    combo.pickUpItem('colaweizen');
+    combo.step(aiming(1, 0));
+    const slot = findLiveSlot(combo);
+    expect(slot).toBeGreaterThanOrEqual(0);
+    const tags = combo.projectiles.tags[slot] ?? 0;
+    expect(hasTag(tags, ProjectileTag.Spectral)).toBe(true);
+    expect(hasTag(tags, ProjectileTag.Sticky)).toBe(true);
   });
 });
 
@@ -543,36 +481,6 @@ describe('#92 acceptance criteria — items that move Trinkfest', () => {
 
     // Last copy gone — the exact prior state comes back.
     sim.removeItem('bierbauch');
-    expect(sim.trinkfest).toBe(0);
-  });
-
-  it('Halbe Portion lowers Trinkfest on pickup and gives it back exactly on removal', async () => {
-    const { halbePortion } = await import('../../src/content/items/halbe-portion.js');
-    const sim = new GameSim({ room: bareRoom(), items: [halbePortion], population: 'empty' });
-    expect(sim.trinkfest).toBe(0);
-
-    sim.pickUpItem('halbe-portion');
-    expect(sim.trinkfest).toBe(-1);
-
-    sim.removeItem('halbe-portion');
-    expect(sim.trinkfest).toBe(0);
-  });
-
-  it('two Trinkfest items held together net out, in either pickup order', async () => {
-    const { bierbauch } = await import('../../src/content/items/bierbauch.js');
-    const { halbePortion } = await import('../../src/content/items/halbe-portion.js');
-    const sim = new GameSim({
-      room: bareRoom(),
-      items: [bierbauch, halbePortion],
-      population: 'empty',
-    });
-    sim.pickUpItem('bierbauch');
-    sim.pickUpItem('halbe-portion');
-    expect(sim.trinkfest).toBe(0);
-
-    sim.removeItem('bierbauch');
-    expect(sim.trinkfest).toBe(-1);
-    sim.removeItem('halbe-portion');
     expect(sim.trinkfest).toBe(0);
   });
 

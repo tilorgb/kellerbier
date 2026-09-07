@@ -96,12 +96,5 @@ export function characterStatus(sim: GameSim): CharacterStatus | null {
         }
       : { text: 'Purse empty — no power', icon: 'lock', tint: UI_PALETTE.textDisabled };
   }
-  if (traits.rules.includes('chaos')) {
-    return {
-      text: `Rerolls on floor ${String(sim.chaosFloor)}`,
-      icon: 'star',
-      tint: UI_PALETTE.accent,
-    };
-  }
   return null;
 }

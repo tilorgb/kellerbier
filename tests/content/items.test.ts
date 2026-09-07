@@ -81,14 +81,16 @@ describe('the item roster', () => {
 
 /**
  * #29's acceptance criteria, checked mechanically rather than only by
- * reading the files: every item has funny flavour text, none is filler, and
- * the roster reaches the milestone's size.
+ * reading the files: every item has funny flavour text and none is filler.
+ *
+ * The roster-size milestone assertions that used to live here (#29's "at
+ * least 28", #59's ten batches toward 120+) tracked the roster *growing*.
+ * The 2026-09 cut reversed that on purpose — 139 items down to 51, keeping
+ * only the ones whose design earns its slot — so a lower-bound count is no
+ * longer a meaningful regression check and is gone rather than bumped down
+ * to match.
  */
 describe('#29 — the first 25 items', () => {
-  it('reaches at least 25 new items on top of the three that proved the format', () => {
-    expect(ITEM_DEFINITIONS.length).toBeGreaterThanOrEqual(28);
-  });
-
   it('every item carries funny, non-empty flavour text', () => {
     for (const definition of ITEM_DEFINITIONS) {
       expect(
@@ -117,73 +119,6 @@ describe('#29 — the first 25 items', () => {
       expect(item.quality).toBeLessThanOrEqual(3);
       expect(['any', 'sober', 'rausch']).toContain(item.promilleRequirement);
     }
-  });
-});
-
-/**
- * #59's batches of ten toward the 120+ target — tracked here rather than in
- * a hundred separate issues, per the issue's own note. Bumped by ten (or
- * whatever the next batch lands) each time, the same way #29's own
- * milestone assertion above stayed in place as a floor once its count was
- * reached.
- */
-describe('#59 — batch 1 of ten toward 120+', () => {
-  it('reaches at least ten new items on top of #29 and #26', () => {
-    expect(ITEM_DEFINITIONS.length).toBeGreaterThanOrEqual(38);
-  });
-});
-
-describe('#59 — batch 2 of ten toward 120+', () => {
-  it('reaches at least twenty new items on top of #29 and #26', () => {
-    expect(ITEM_DEFINITIONS.length).toBeGreaterThanOrEqual(48);
-  });
-});
-
-describe('#59 — batch 3 of ten toward 120+', () => {
-  it('reaches at least thirty new items on top of #29 and #26', () => {
-    expect(ITEM_DEFINITIONS.length).toBeGreaterThanOrEqual(58);
-  });
-});
-
-describe('#59 — batch 4 of ten toward 120+', () => {
-  it('reaches at least forty new items on top of #29 and #26', () => {
-    expect(ITEM_DEFINITIONS.length).toBeGreaterThanOrEqual(68);
-  });
-});
-
-describe('#59 — batch 5 of ten toward 120+', () => {
-  it('reaches at least fifty new items on top of #29 and #26', () => {
-    expect(ITEM_DEFINITIONS.length).toBeGreaterThanOrEqual(78);
-  });
-});
-
-describe('#59 — batch 6 of ten toward 120+', () => {
-  it('reaches at least sixty new items on top of #29 and #26', () => {
-    expect(ITEM_DEFINITIONS.length).toBeGreaterThanOrEqual(88);
-  });
-});
-
-describe('#59 — batch 7 of ten toward 120+', () => {
-  it('reaches at least seventy new items on top of #29 and #26', () => {
-    expect(ITEM_DEFINITIONS.length).toBeGreaterThanOrEqual(98);
-  });
-});
-
-describe('#59 — batch 8 of ten toward 120+', () => {
-  it('reaches at least eighty new items on top of #29 and #26', () => {
-    expect(ITEM_DEFINITIONS.length).toBeGreaterThanOrEqual(108);
-  });
-});
-
-describe('#59 — batch 9 of ten toward 120+', () => {
-  it('reaches at least ninety new items on top of #29 and #26', () => {
-    expect(ITEM_DEFINITIONS.length).toBeGreaterThanOrEqual(118);
-  });
-});
-
-describe('#59 — batch 10 of ten toward 120+', () => {
-  it('reaches the 120+ milestone', () => {
-    expect(ITEM_DEFINITIONS.length).toBeGreaterThanOrEqual(120);
   });
 });
 
@@ -227,7 +162,7 @@ describe('#29 — held-together smoke test (stand-in for #30)', () => {
     expect(() => {
       for (let tick = 0; tick < 600; tick++) {
         // A slowly sweeping aim, so different shots find different enemies
-        // (and walls, for Steinkrug/Föhn/bouncing) rather than one fixed line.
+        // (and walls, for Steinkrug/bouncing) rather than one fixed line.
         const angle = (tick / 37) * Math.PI * 2;
         sim.step(aiming(angle));
 
@@ -242,10 +177,9 @@ describe('#29 — held-together smoke test (stand-in for #30)', () => {
           sim.world.flush();
         }
         if (tick % 5 === 0) {
-          // Whichever active item (Feuerwasser, Enzian) happens to be
-          // charged fires; the rest are no-ops per `useActiveItem`.
-          sim.useActiveItem('feuerwasser');
-          sim.useActiveItem('enzian');
+          // The one active item left in the roster fires once charged;
+          // otherwise this is a no-op per `useActiveItem`.
+          sim.useActiveItem('boellerschmeisser');
         }
 
         for (const stat of STAT_IDS) {

@@ -31,7 +31,7 @@ function fakeRun(overrides: Partial<TelemetryRunRecord> = {}): TelemetryRunRecor
     roomRole: 'normal',
     ticksSurvived: 900,
     deathCause: { word: 'Umgfalln', enemiesPresent: ['gockel'] },
-    itemsHeld: ['zwoa-drei-gsuffa'],
+    itemsHeld: ['bierkrug'],
     roomClears: [{ floor: 1, role: 'normal', ticks: 300 }],
     promilleTierTicks: { '0': 900 },
     ...overrides,

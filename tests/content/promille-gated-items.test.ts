@@ -1,16 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import {
-  fingerhakeln,
-  konterbier,
-  masskrugstemmen,
-  ruhigeHand,
-  zwoaDreiGsuffa,
-} from '../../src/content/items/index.js';
+import { fingerhakeln, konterbier, ruhigeHand } from '../../src/content/items/index.js';
 import { GameSim } from '../../src/sim/game/sim.js';
 import { PromilleTier, promilleDamageMultiplier } from '../../src/sim/game/promille.js';
 import { RoomGeometry } from '../../src/sim/room/geometry.js';
 import { StatId } from '../../src/sim/stats/definition.js';
-import { dispatchItemKill, dispatchItemShoot } from '../../src/sim/systems/items.js';
 import { createInputFrame } from '../../src/sim/input/frame.js';
 
 /**
@@ -18,7 +11,9 @@ import { createInputFrame } from '../../src/sim/input/frame.js';
  * exercised through the real content definitions rather than synthetic test
  * items — `tests/unit/item-hooks.test.ts`'s new describe block already
  * covers the generic engine gate in the abstract; this is "does it actually
- * hold for the four items the issue names, plus Konterbier."
+ * hold for the items that remain (Ruhige Hand, Fingerhakeln), plus
+ * Konterbier." Maßkrugstemmen and Zwoa, drei, gsuffa were part of this
+ * suite too until the 2026-09 roster cut removed both.
  *
  * Every "must not leak" assertion here is the failure mode #32 exists to
  * prevent: a `rausch` item's effect running while sober, or a `sober` one
@@ -88,30 +83,6 @@ describe('Ruhige Hand — the sober build', () => {
   });
 });
 
-describe('Maßkrugstemmen — hold fire to charge, only while in rausch', () => {
-  it('never charges (or applies) while sober; both start the moment rausch is reached', () => {
-    // `dispatchItemShoot` directly, the same way
-    // `tests/unit/item-hooks.test.ts`'s generic-gate tests do, rather than a
-    // `sim.step` loop: charge decays a point a tick (`DECAY_PER_TICK`), so a
-    // loop long enough to be sure a shot fired is also long enough for that
-    // shot's charge to have decayed away again by the time the loop ends —
-    // this isolates the one thing the test actually cares about, whether one
-    // shot's worth of charge sticks at all.
-    const sim = new GameSim({ room: bareRoom(), items: [masskrugstemmen] });
-    sim.pickUpItem('masskrugstemmen');
-    const base = sim.stats.value(StatId.Damage);
-
-    dispatchItemShoot(sim, 1, 0); // sober — must not charge
-    expect(sim.itemState('masskrugstemmen').charge).toBe(0);
-    expect(sim.stats.value(StatId.Damage)).toBe(base);
-
-    sim.tuning.promille.current = 3.0; // Vollrausch
-    dispatchItemShoot(sim, 1, 0);
-    expect(sim.itemState('masskrugstemmen').charge).toBeGreaterThan(0);
-    expect(sim.stats.value(StatId.Damage)).toBeGreaterThan(base);
-  });
-});
-
 describe('Fingerhakeln — contact damage and pull, only while in rausch', () => {
   it('does not advance its contact timer while sober, and does once in rausch', () => {
     const sim = new GameSim({ room: bareRoom(), items: [fingerhakeln], population: 'empty' });
@@ -122,26 +93,9 @@ describe('Fingerhakeln — contact damage and pull, only while in rausch', () =>
     sim.step(IDLE); // sober — onTick must not run at all
     expect(state.timer).toBe(startTimer);
 
-    sim.tuning.promille.current = 3.5; // comfortably inside Vollrausch — see the previous describe block's comment
+    sim.tuning.promille.current = 3.5; // comfortably inside Vollrausch
     sim.step(IDLE);
     expect(state.timer).toBe(startTimer - 1);
-  });
-});
-
-describe('Zwoa, drei, gsuffa — kill stacks, only while in rausch', () => {
-  it('does not stack (or apply) on a kill while sober; both start the moment rausch is reached', () => {
-    const sim = new GameSim({ room: bareRoom(), items: [zwoaDreiGsuffa] });
-    sim.pickUpItem('zwoa-drei-gsuffa');
-    const base = sim.stats.value(StatId.Damage);
-
-    dispatchItemKill(sim, 1); // sober — must not stack
-    expect(sim.itemState('zwoa-drei-gsuffa').charge).toBe(0);
-    expect(sim.stats.value(StatId.Damage)).toBe(base);
-
-    sim.tuning.promille.current = 3.0; // Vollrausch
-    dispatchItemKill(sim, 1);
-    expect(sim.itemState('zwoa-drei-gsuffa').charge).toBe(1);
-    expect(sim.stats.value(StatId.Damage)).toBeGreaterThan(base);
   });
 });
 

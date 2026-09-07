@@ -340,10 +340,10 @@ describe('ShotFired event (#234)', () => {
   it('reports exactly one event even with an item hooked into the same shot', () => {
     // `sim/systems/shooting.ts#fire` pushes `ShotFired` once, before
     // `dispatchItemProjectileSpawn` runs — an item's `onProjectileSpawn` hook
-    // (Spiegelsaal tags the shot to split later, on impact) must not cause a
-    // second push just because it reacted to the same squeeze.
+    // (Steinkrug tags the shot spectral, to sail over obstacles) must not
+    // cause a second push just because it reacted to the same squeeze.
     const sim = new GameSim({ room: openRoom() });
-    sim.inventory.pickUp(sim.items.indexOf('spiegelsaal'));
+    sim.inventory.pickUp(sim.items.indexOf('steinkrug'));
     sim.step(aiming(1, 0));
     expect(shotsFiredThisTick(sim).length).toBe(1);
     expect(sim.projectiles.liveCount).toBe(1);

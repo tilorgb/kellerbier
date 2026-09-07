@@ -34,10 +34,10 @@ export const apfelkuchenMitRosinen: ItemDefinition = {
   id: 'apfelkuchen-mit-rosinen',
   name: 'Apfelkuchen (mit Rosinen)',
   description: 'Heals 4. Damage +5%. Permanently Range -15%',
-  flavourText: 'Somebody picked through the crate. Somebody else did not check hard enough.',
+  flavourText: 'Worst Kuchen there is.',
   sprite: 'apfelkuchen-mit-rosinen',
   pools: ['treasure', 'shop'],
-  quality: 0,
+  quality: 1,
   promilleRequirement: 'any',
   tags: ['rosinen'],
   hooks: {

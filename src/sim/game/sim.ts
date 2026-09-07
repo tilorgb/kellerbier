@@ -164,21 +164,6 @@ export const PLAYER_RADIUS = 7;
  */
 export const PLAYER_FOOTPRINT = 5;
 
-/**
- * The stats Der Wolpertinger's per-floor reroll touches (#47).
- *
- * Luck is left out, and not by oversight: it is a multiplier over a base of
- * zero (`baseStats`), so rolling it would be the one stat where chaos
- * demonstrably does nothing. It joins the list the day something reads it.
- */
-const CHAOS_STATS: readonly StatId[] = [
-  StatId.Damage,
-  StatId.FireRate,
-  StatId.Range,
-  StatId.ShotSpeed,
-  StatId.MoveSpeed,
-];
-
 /** Collider radius of a training target — a mid-size body. */
 export const TARGET_RADIUS = ENEMY_PROFILES[EnemySize.Mid].radius;
 
@@ -1121,16 +1106,12 @@ export class GameSim {
    * than knowing how a roster stores its rules.
    */
   private readonly characterFlies: boolean;
-  private readonly characterRicochets: boolean;
   private readonly characterPurse: boolean;
-  private readonly characterChaos: boolean;
   /** Ticks since Ludwig's crown last cost him a Biermarke. */
   private purseTicks = 0;
   /** What `syncPurseModifiers` last built for: solvency, and the multiplier it used. */
   private lastPurseSolvent: boolean | null = null;
   private lastPurseMultiplier = Number.NaN;
-  /** The floor Der Wolpertinger's stats were last rolled for. -1 before the first roll. */
-  private lastChaosFloor = -1;
 
   /** Set once, the tick every pool empties with no eternal heart to spend. */
   private playerDeadFlag = false;
@@ -1444,13 +1425,11 @@ export class GameSim {
 
     this.character = options.character ?? NEUTRAL_TRAITS;
     this.characterFlies = hasCharacterRule(this.character, CharacterRule.Flies);
-    this.characterRicochets = hasCharacterRule(this.character, CharacterRule.RicochetHurtsOwner);
     this.characterPurse = hasCharacterRule(this.character, CharacterRule.Purse);
-    this.characterChaos = hasCharacterRule(this.character, CharacterRule.Chaos);
     // The innate half of a shot's behaviour (#47) — Resi's arcing, returning
-    // Brezn, D'Sennerin's ricochet. `forcedTags` is exactly the field
-    // `ShootingTuning` reserved for this, ORed rather than assigned so the
-    // debug tag chooser can still add to it while a character run is going.
+    // Brezn. `forcedTags` is exactly the field `ShootingTuning` reserved for
+    // this, ORed rather than assigned so the debug tag chooser can still add
+    // to it while a character run is going.
     for (const tag of this.character.shotTags) {
       this.tuning.shooting.forcedTags |= PROJECTILE_TAG_BY_NAME[tag];
     }
@@ -1544,11 +1523,6 @@ export class GameSim {
         this.spawnTrainingTargets();
       }
     }
-    // A chaos character always starts a run rolled, even in a sim that never
-    // loads a room template (the tuning playground, most tests): the room
-    // path above has already rolled for its own floor and this no-ops, and
-    // the playground path has not.
-    this.rerollChaosStats(this.currentFloorValue);
     // The purse rule registers its opening contribution here rather than
     // waiting for the first `step`: Ludwig walks in with a full purse, and a
     // run whose damage is only correct from tick 1 onward is a run whose
@@ -2262,10 +2236,6 @@ export class GameSim {
       this.machineCyclePreviousSign = 0;
       this.machineRollPhase = { kind: 'idle' };
     }
-    // "Stats reroll on every floor entry" (#47) — a floor, not a room: the
-    // guard inside is on the floor number, so walking back and forth through
-    // a door does not reroll anything.
-    this.rerollChaosStats(floor);
     this.currentFloorValue = floor;
     this.roomEnemyCount = 0;
     this.maypoleTaken = false;
@@ -2806,19 +2776,9 @@ export class GameSim {
     return this.characterFlies;
   }
 
-  /** D'Sennerin's own ricochets can come back at her — `sim/systems/collision.ts`. */
-  get ownShotsHurtOwner(): boolean {
-    return this.characterRicochets;
-  }
-
   /** Whether Ludwig's purse still has something in it — his damage rides on this. */
   get pursePowered(): boolean {
     return this.characterPurse && this.biermarkenCount > 0;
-  }
-
-  /** The floor Der Wolpertinger's stats were last rolled for, or -1 for anyone else. */
-  get chaosFloor(): number {
-    return this.characterChaos ? this.lastChaosFloor : -1;
   }
 
   /**
@@ -3412,11 +3372,10 @@ export class GameSim {
    * source `'character'`.
    *
    * Fixed is the point: this is who they are, and it never changes during a
-   * run. The rules that *do* move a stat mid-run each register their own
-   * source instead (`'character-purse'`, `'character-chaos'`) rather than
-   * rebuilding this one — so the stat inspector shows "Resi ×1.3" and
-   * "Geldbeutl ×3" as two separate lines with two separate reasons, which is
-   * the whole of what #25 bought.
+   * run. The rules that *do* move a stat mid-run register their own source
+   * instead (`'character-purse'`) rather than rebuilding this one — so the
+   * stat inspector shows "Resi ×1.3" and "Geldbeutl ×3" as two separate
+   * lines with two separate reasons, which is the whole of what #25 bought.
    */
   private applyCharacterStats(): void {
     if (this.character.stats.length === 0) {
@@ -3466,37 +3425,6 @@ export class GameSim {
     this.stats.setSourceModifiers('character-purse', [
       { stat: StatId.Damage, op: 'multiply', value: multiplier, source },
     ]);
-  }
-
-  /**
-   * Der Wolpertinger's reroll (#47): five multipliers, drawn on entering a
-   * floor, replacing the previous floor's outright.
-   *
-   * Drawn from the run's own `character` stream, so the same seed and the
-   * same route produce the same monster — "unfair in both directions" has to
-   * still be reproducible, or a Wolpertinger bug report cannot be replayed.
-   * A no-op for every other character, and for a second call on a floor
-   * already rolled (a room transition inside one floor is not a new floor).
-   */
-  private rerollChaosStats(floor: number): void {
-    if (!this.characterChaos || floor === this.lastChaosFloor) {
-      return;
-    }
-    this.lastChaosFloor = floor;
-    const tuning = this.tuning.character;
-    const span = tuning.chaosMaxFactor - tuning.chaosMinFactor;
-    const source = {
-      kind: 'character' as const,
-      id: 'wolpertinger',
-      label: `Wolpertinger (${String(floor)}. Stock)`,
-    };
-    const modifiers: StatModifier[] = CHAOS_STATS.map((stat) => ({
-      stat,
-      op: 'multiply' as const,
-      value: tuning.chaosMinFactor + this.random.character.nextFloat() * span,
-      source,
-    }));
-    this.stats.setSourceModifiers('character-chaos', modifiers);
   }
 
   /**

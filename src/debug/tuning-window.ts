@@ -407,8 +407,6 @@ const GROUPS: readonly GroupSpec[] = [
         hint: 'ticks per Biermarke the crown costs',
       },
       { key: 'pursePowerMultiplier', min: 1, max: 6, step: 0.25, hint: 'Ludwig damage while paid' },
-      { key: 'chaosMinFactor', min: 0.1, max: 1, step: 0.05, hint: 'worst a reroll can do' },
-      { key: 'chaosMaxFactor', min: 1, max: 4, step: 0.1, hint: 'best a reroll can do' },
     ],
   },
   {
