@@ -69,7 +69,7 @@ describe('TelemetryTracker (#54, #159)', () => {
 
     sim.step(idle());
     tracker.recordTick(sim, 1, 'start', 'normal', false);
-    sim.pickUpItem('zwoa-drei-gsuffa');
+    sim.pickUpItem('bierkrug');
     sim.step(idle());
     tracker.recordTick(sim, 1, 'start', 'normal', false);
     sim.step(idle());
@@ -83,7 +83,7 @@ describe('TelemetryTracker (#54, #159)', () => {
       roomRole: 'normal',
       ticksSurvived: sim.tick,
     });
-    expect(record.itemsHeld).toEqual(['zwoa-drei-gsuffa']);
+    expect(record.itemsHeld).toEqual(['bierkrug']);
   });
 
   it('accumulates ticks spent at each Promille tier', () => {

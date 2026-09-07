@@ -14,7 +14,7 @@ export const apfelkuchen: ItemDefinition = {
   id: 'apfelkuchen',
   name: 'Apfelkuchen',
   description: 'Heals 4. Damage +5%',
-  flavourText: "Oma's. Still warm, if you get down there before Opa does.",
+  flavourText: 'Best Kuchen there is.',
   sprite: 'apfelkuchen',
   pools: ['treasure', 'shop'],
   quality: 0,

@@ -98,13 +98,20 @@ describe('the real German UI strings fit the elements that draw them', () => {
   it('fits every pickup toast on a plate inside the frame', () => {
     // `pickupToast` is centred, so it may use the whole frame minus its own
     // plate padding — but a toast wider than that is a toast with its ends
-    // hanging off both sides of the screen.
+    // hanging off both sides of the screen. Unlike the pedestal reveal panel
+    // (`PEDESTAL_REVEAL_WRAP` in `app/main.ts`), this plate does not wrap, so
+    // a too-long line runs straight off the screen rather than growing taller.
     const budget = INTERNAL_WIDTH - PLATE_PADDING_X - HUD_MARGIN * 2;
     for (const pickup of PICKUP_DEFINITIONS) {
       fits(`${pickup.name} — ${pickup.description}`, budget, 'pickup toast');
     }
+    // An item's toast (`GameSim.pickUpItem`) shows its flavour text rather
+    // than its mechanical description — checked against the same unwrapped
+    // budget as the pickup toast above, since a character's starting items
+    // (the one path that reaches this toast rather than the wrapped pedestal
+    // reveal panel) can show it before the run's first room even loads.
     for (const item of ITEM_DEFINITIONS) {
-      fits(`${item.name} — ${item.description}`, budget, 'item toast');
+      fits(`${item.name} — ${item.flavourText ?? item.description}`, budget, 'item toast');
     }
   });
 
