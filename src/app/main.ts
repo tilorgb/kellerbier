@@ -3436,6 +3436,9 @@ WASD move   arrows aim and fire
         if (import.meta.env.DEV) {
           roomGenSalt += 1;
           rebuildProceduralRooms(floorPlan, RUN_SEED, sim.tuning.roomGen);
+          // The reroll lands under the same room id — without this, #293's
+          // `SceneryCache` would hand the pre-reroll `Scenery` straight back.
+          view.notifyRoomContentChanged(currentRoomId);
           const room = planRoom(floorPlan, currentRoomId);
           if (room.staircaseTemplateId === undefined) {
             const isStart = currentRoomId === floorPlan.startRoomId;

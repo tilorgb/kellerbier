@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { BoxGeometry, type Group, Mesh, PointLight, Scene } from 'three';
+import { BoxGeometry, type Group, Mesh, PointLight, Raycaster, Scene, Vector3 } from 'three';
+import { ROOM_TILE_UNITS } from '../../src/content/rooms/definition.js';
 import { RoomGeometry } from '../../src/sim/room/geometry.js';
 import {
   type CompiledDoor,
@@ -46,11 +47,23 @@ function glowOf(piece: DoorPiece): PointLight {
   return glow;
 }
 
-function wallBoxes(scenery: Scenery): Mesh<BoxGeometry>[] {
+/**
+ * The room's merged wall/void meshes (#293) — direct children of `group`,
+ * shadow-casting, unlike the floor/base planes (no `castShadow`) or a
+ * `DoorPiece`'s own architecture (nested under its own group, not `group`
+ * directly). `room()` below has no blocks/hazards/props, so nothing else
+ * direct-child-of-`group` casts a shadow either.
+ */
+function wallMeshes(scenery: Scenery): Mesh[] {
   return scenery.group.children.filter(
-    (child): child is Mesh<BoxGeometry> =>
-      child instanceof Mesh && child.geometry instanceof BoxGeometry,
+    (child): child is Mesh => child instanceof Mesh && child.castShadow,
   );
+}
+
+/** Whether a vertical ray through `(x, z)` hits any merged wall/void mesh — `true` means solid wall there. */
+function wallSolidAt(scenery: Scenery, x: number, z: number): boolean {
+  const raycaster = new Raycaster(new Vector3(x, 200, z), new Vector3(0, -1, 0), 0, 400);
+  return raycaster.intersectObjects(wallMeshes(scenery), false).length > 0;
 }
 
 describe('doorways in the wall', () => {
@@ -73,15 +86,14 @@ describe('doorways in the wall', () => {
   it('leaves the gap in the wall run', () => {
     const scenery = build([NORTH]);
     const centre = doorCentre(room(), NORTH);
-    const spanning = wallBoxes(scenery).filter((box) => {
-      const half = box.geometry.parameters.width / 2;
-      return (
-        Math.abs(box.position.z - (room().minY - 8)) < 0.01 &&
-        box.position.x - half < centre.x &&
-        box.position.x + half > centre.x
-      );
-    });
-    expect(spanning).toHaveLength(0);
+    const northWallZ = room().minY - ROOM_TILE_UNITS / 2;
+    // Dead centre of the doorway: no wall there.
+    expect(wallSolidAt(scenery, centre.x, northWallZ)).toBe(false);
+    // Just past the doorway's span, still well inside the wall run (the
+    // 240-wide room's north wall spans the whole width): solid either side.
+    const half = (scenery.doors[0]?.door.span ?? 24) / 2 + ROOM_TILE_UNITS / 2;
+    expect(wallSolidAt(scenery, centre.x - half, northWallZ)).toBe(true);
+    expect(wallSolidAt(scenery, centre.x + half, northWallZ)).toBe(true);
   });
 
   it('starts shut, dark, with one leaf on one hinge', () => {

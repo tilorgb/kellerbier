@@ -31,6 +31,7 @@ import { Lighting } from './world/lighting.js';
 import { MaterialCache } from './world/material-cache.js';
 import { RoomPrewarm } from './world/room-prewarm.js';
 import { type DecorativeProp, type DoorState, Scenery } from './world/scenery.js';
+import { SceneryCache } from './world/scenery-cache.js';
 
 /**
  * The game as a scene: everything the player sees in the room, and the fixed
@@ -176,8 +177,23 @@ export class GameView {
    * relinks a shader it already linked (`docs/PERFORMANCE_AUDIT.md` F1).
    */
   private readonly materialCache = new MaterialCache();
+  /**
+   * Whole recently-visited rooms, keyed by `GameSim.roomId` — a cache hit
+   * (`getOrBuildScenery`) hands back the same `Scenery` a revisit already
+   * built: geometry, materials, billboards, doors and their point lights,
+   * nothing to construct or upload again (`docs/PERFORMANCE_AUDIT.md` F2).
+   * `this.scenery`/`this.outgoingScenery` are always entries of this cache
+   * once set (see `getOrBuildScenery`), so every place that used to dispose
+   * one of them on a room change now only detaches it from the scene —
+   * disposal is this cache's job, on eviction or `clear()`.
+   */
+  private readonly sceneryCache = new SceneryCache();
+  /** Room ids `notifyRoomContentChanged` has flagged — see that method's doc comment. */
+  private readonly staleRoomIds = new Set<string>();
   private scenery: Scenery;
   private roomGeometry: RoomGeometry;
+  /** Tracked to clear `sceneryCache` on a floor change — see the field's own doc comment. */
+  private roomFloor: number;
   private doorsLocked: boolean;
   private lockedDoorDirections: ReadonlySet<RoomDirection> = new Set();
   private bossDoorDirections: ReadonlySet<RoomDirection> = new Set();
@@ -275,6 +291,7 @@ export class GameView {
     // `render` re-captures it anyway.
     this.renderer = renderer ?? null;
     this.roomGeometry = sim.room;
+    this.roomFloor = sim.currentFloor;
     this.doorsLocked = sim.doorsLocked;
 
     this.lighting = new Lighting(this.scene);
@@ -408,7 +425,17 @@ export class GameView {
       const outgoingScenery = this.scenery;
       const previousFrame = roomFrameSize(this.roomGeometry);
       const direction = sim.roomTransitionDirection;
+      // A generated room's id is a floor-plan slot name, not a run-wide one
+      // (`SceneryCache`'s own doc comment), so every cached room from the
+      // floor just left is potentially stale, id-collision or not — direction
+      // is always `null` on a floor change (a cut, never a walked crossing),
+      // so nothing below tries to keep `outgoingScenery` alive for a slide
+      // out of a room `clear()` is about to dispose.
+      if (sim.currentFloor !== this.roomFloor) {
+        this.sceneryCache.clear();
+      }
       this.roomGeometry = sim.room;
+      this.roomFloor = sim.currentFloor;
       this.entities.resetAnimation();
       this.entities.setTargetTextures(this.textures.roomTiles[sim.currentFloor]?.destructibles);
       // Adopt the room built during the crossing dwell when the app has
@@ -421,6 +448,11 @@ export class GameView {
       this.pendingAdoptKey = null;
       if (adopted === null) {
         this.prewarm.discard();
+      } else {
+        // A prewarmed room was never registered in `sceneryCache` — it lived
+        // in `prewarm` instead, so a later revisit would otherwise rebuild
+        // it despite it already being fully built.
+        this.sceneryCache.set(sim.roomId, adopted);
       }
       this.scenery = adopted ?? this.buildScenery();
       this.scene.add(this.scenery.group);
@@ -433,8 +465,10 @@ export class GameView {
         door.setDouble(this.bossDoorDirections.has(door.door.direction));
       }
       // A previous slide that never finished (two crossings in very quick
-      // succession) loses its own outgoing room rather than leaking it.
-      this.outgoingScenery?.dispose();
+      // succession) leaves its own outgoing room on screen — detach it. It
+      // stays cached for a future revisit (or was already disposed just
+      // above, on a floor change) rather than being rebuilt.
+      this.outgoingScenery?.group.removeFromParent();
       const newFrame = roomFrameSize(this.roomGeometry);
       if (direction !== null && !this.accessibility.reducedMotion) {
         // Keep the room just left alive, moved to sit adjacent to the new
@@ -461,8 +495,10 @@ export class GameView {
         // so this reads as a cut rather than a walk. Reduced motion skips
         // the slide the same way for a different reason: a panning camera
         // right after a scene swap is exactly the kind of motion that
-        // setting exists to remove.
-        outgoingScenery.dispose();
+        // setting exists to remove. Either way `outgoingScenery` just needs
+        // detaching, not disposing — it stays cached (or, on a floor change,
+        // was already disposed above).
+        outgoingScenery.group.removeFromParent();
         this.outgoingScenery = null;
         this.transitionOffsetX = 0;
         this.transitionOffsetY = 0;
@@ -620,15 +656,46 @@ export class GameView {
     this.camera.project(x, height, z, out);
   };
 
+  /** The current room, from `sceneryCache` if a previous visit is still held, built and cached fresh otherwise. */
   private buildScenery(): Scenery {
     const sim = this.sim;
-    return this.makeScenery(sim.room, sim.currentFloor, sim.doors, sim.roomDecorativeProps);
+    return this.getOrBuildScenery(
+      sim.roomId,
+      sim.room,
+      sim.currentFloor,
+      sim.doors,
+      sim.roomDecorativeProps,
+    );
+  }
+
+  private getOrBuildScenery(
+    roomId: string,
+    room: RoomGeometry,
+    floor: number,
+    doors: readonly CompiledDoor[],
+    props: readonly DecorativeProp[],
+  ): Scenery {
+    const stale = this.staleRoomIds.delete(roomId);
+    const cached = stale ? undefined : this.sceneryCache.get(roomId);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const scenery = this.makeScenery(room, floor, doors, props);
+    // Safe to replace a still-active entry here specifically: this only
+    // ever runs from `sync`, synchronously before `this.scenery` (or
+    // `this.outgoingScenery`) is reassigned to the result — see
+    // `notifyRoomContentChanged`.
+    this.sceneryCache.set(roomId, scenery);
+    return scenery;
   }
 
   /**
    * Builds a room's scene graph from explicit geometry rather than off `sim`,
    * so `prewarmRoom` can build the *next* room while `sim` still describes the
-   * current one. `buildScenery` is the `sim.room`/`sim.doors`/… call of this.
+   * current one. `buildScenery`/`getOrBuildScenery` are the `sim.room`/
+   * `sim.doors`/… calls of this — and, unlike them, this one never touches
+   * `sceneryCache`: `prewarmRoom` and `warmSceneryShaders` both call it
+   * directly for rooms that are not (yet, or ever) the one on screen.
    */
   private makeScenery(
     room: RoomGeometry,
@@ -792,13 +859,14 @@ export class GameView {
    * naturally land in the new room, and this eases that gap back to 0 over
    * `ROOM_TRANSITION_TICKS` — the camera visibly slides from the old view to
    * the new one instead of cutting and then correcting. Once the slide is
-   * done, the outgoing room it was sliding away from is no longer needed.
+   * done, the outgoing room it was sliding away from just needs detaching —
+   * it stays in `sceneryCache` for a future revisit.
    */
   private transitionSlideOffset(alpha: number): { readonly x: number; readonly y: number } {
     const ticksLeft = this.sim.roomTransitionTicks - alpha;
     if (ticksLeft <= 0) {
       if (this.outgoingScenery !== null) {
-        this.outgoingScenery.dispose();
+        this.outgoingScenery.group.removeFromParent();
         this.outgoingScenery = null;
       }
       return { x: 0, y: 0 };
@@ -813,6 +881,29 @@ export class GameView {
   setSecretHints(doors: readonly CompiledDoor[]): void {
     this.secretHintDoors = doors;
     this.scenery.setSecretHints(doors);
+  }
+
+  /**
+   * Marks `roomId`'s cached `Scenery`, if any, as stale — the next time
+   * that room is (re)built, `getOrBuildScenery` skips the cache hit and
+   * replaces the entry instead of handing it back. Only the dev `G` key
+   * (`app/main.ts`) needs this: it rerolls a procedural room's content and
+   * reloads it under the same id, and without this a reroll would silently
+   * show nothing new — `sync`'s room-change branch would hand back the
+   * pre-reroll `Scenery` straight from the cache.
+   *
+   * Deliberately lazy rather than disposing anything here: `roomId` is very
+   * likely the *currently on-screen* room (`G` reloads in place), and this
+   * can be called from outside `sync` (a keydown handler, not the frame
+   * loop) — disposing its `Scenery` immediately would free GPU buffers a
+   * `render` call between now and the next `sync` could still draw. Marking
+   * it stale defers the actual replace-and-dispose to `getOrBuildScenery`,
+   * which only ever runs from inside `sync`, right before `this.scenery` is
+   * reassigned to the (fresh) result — never a frame where the old one is
+   * both disposed and still on screen.
+   */
+  notifyRoomContentChanged(roomId: string): void {
+    this.staleRoomIds.add(roomId);
   }
 
   setLockedDoors(directions: Iterable<RoomDirection>): void {
@@ -879,8 +970,10 @@ export class GameView {
   }
 
   destroy(): void {
-    this.scenery.dispose();
-    this.outgoingScenery?.dispose();
+    // `this.scenery`/`this.outgoingScenery` are always entries of
+    // `sceneryCache` once set, so clearing it disposes both along with every
+    // other room it is holding onto.
+    this.sceneryCache.clear();
     this.prewarm.discard();
     this.warmTarget?.dispose();
     this.materialCache.dispose();

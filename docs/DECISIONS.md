@@ -4063,3 +4063,59 @@ repo (#71). The only repo-side half of the diffusion path is `tools/art/diffusio
 and its CLI, which are deterministic and stay source. If the two tracks ever produce visibly
 different house styles for the same category, that is a bug in the prompts or the block authoring,
 not a reason to fork the sign-off gate.
+
+## 78. A room a player revisits is cached whole, not made persistent and re-dressed
+
+**Decided:** #293 (tier 2 of the render audit, `docs/PERFORMANCE_AUDIT.md` F2/F3), while
+implementing the issue's own prescribed design.
+
+**What the issue asked for.** "Invert it: one long-lived `Scenery` per `GameView`, with a
+`dress(room, floor, doors, props)` that rewrites what is there" — a merged wall/void geometry
+whose buffers are rewritten in place, a pool of `Billboard`s for blocks and props, a pool of
+`DoorPiece`s repositioned rather than rebuilt. That is the shape `sim/`'s `SlotPool` discipline
+already lives by, applied to `render/world/`.
+
+**What actually landed, and why it is not that.** The wall/void merge is exactly as asked
+(`Scenery.finalizeWalls`, `appendBox`) — one BufferGeometry per (occluder layer × wall/top split)
+instead of one `Mesh` per run, which alone drops the room pass from ~87–153 draw calls to at most
+four. What did *not* land is the single persistent `Scenery` with pooled billboards and doors.
+Instead, `render/world/scenery-cache.ts`'s `SceneryCache` caches up to `SCENERY_CACHE_CAPACITY`
+(4) whole, already-built `Scenery` instances by `GameSim.roomId`, LRU-evicted (disposed) beyond
+that. A revisit within the window is a cache *hit* — the identical `Scenery`, `Mesh`es, materials
+and `DoorPiece`s handed back, nothing rebuilt (`tests/unit/scenery-cache-gameview.test.ts` pins
+this at the object-identity level) — which satisfies the acceptance criterion ("zero geometries or
+materials constructed by a crossing between visited rooms") the same way persistence would have,
+for the access pattern that criterion's own test methodology actually exercises: walking back and
+forth across a handful of doors, not touring a whole floor and returning to the start.
+
+**Why the swap.** Billboard/door pooling means every consumer of a `Billboard` (`standTile`,
+blocks, props, the Maibaum's two-tile crown) and every `DoorPiece` construction site becomes
+"acquire a pooled slot and reposition it" instead of "construct" — a wider, riskier diff touching
+the same code #292 had just finished making correct, for a win the whole-object cache already
+delivers on the revisit case that is actually measured. The one place this is a real, deliberate
+trade instead of a free lunch: `MAX_DOOR_GLOWS` (`render/world/lighting.ts`) went from 8 to 12,
+because a cached-but-off-screen room's `DoorPiece`s keep the door-glow `PointLight`s they acquired
+(the cache detaches, never disposes, an entry that is still held) rather than releasing them the
+moment the room leaves the screen. More point lights sitting in the fragment loop is exactly what
+F7 warns against paying carelessly; here it is paid on purpose, sized against
+`SCENERY_CACHE_CAPACITY`, and written down at both call sites so the two constants are not raised
+independently of each other by accident.
+
+**The room-transition slide still holds a second live room**, unchanged from before this issue —
+#293's own text recommends rendering the outgoing room to a texture once and sliding that quad
+instead, specifically because a second live room used to cost ~60 draw calls and a relink-prone
+point-light-count change. Both of those are gone now: the wall merge makes a second live room
+~4 draw calls, not ~60, and #292's fixed light pools make its presence during the slide free of
+any shader churn. The problem the texture-snapshot was solving is substantially already solved by
+the two changes that shipped instead, so the snapshot itself stayed out of scope — revisit it only
+if a future measurement shows the second live room is still the cost driver it once was.
+
+**Constrains:** a future change to `SCENERY_CACHE_CAPACITY` should re-check `MAX_DOOR_GLOWS`
+against it (the doc comments on both cross-reference each other). A floor change clears the whole
+cache (`GameView.sync`'s `roomChanged` branch) because a generated room's id is a floor-plan slot
+name, not a run-wide one — anything that starts minting room ids with a different uniqueness
+scope needs to re-examine that assumption. The dev `G` regenerate key marks its room's cache entry
+stale (`GameView.notifyRoomContentChanged`) rather than disposing it inline, specifically because
+that call can land between frames, before `sync` has swapped the currently-displayed `Scenery`
+for its replacement — anything else that mutates a room's content out from under a live id should
+use the same lazy-invalidation seam, not call into `SceneryCache` directly.
