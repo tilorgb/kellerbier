@@ -334,6 +334,15 @@ export interface EnemyTuning {
    */
   deflectParticles: number;
   /**
+   * Shake for that splash. Small: nothing actually happened.
+   *
+   * Kept, unlike the shake `applyDamageAt` used to add for an ordinary
+   * enemy hit or kill (see `ImpactTuning.playerHitShake`'s doc comment) —
+   * this one was already small and rare rather than the constant per-hit
+   * noise that prompted removing the others.
+   */
+  deflectShake: number;
+  /**
    * Chance a normal-room spawn (#156) is upgraded to an elite on Floor 1,
    * before `eliteChancePerExtraFloor` is added for every floor past it.
    * Never rolled for a special-room encounter (boss, treasure, shop,
@@ -938,6 +947,7 @@ export const DEFAULT_ENEMY_TUNING: Readonly<EnemyTuning> = {
   fireIntervalScale: 1,
   projectileSpeedScale: 0.9,
   deflectParticles: 6,
+  deflectShake: 0.3,
   // 8% on Floor 1, 14% on Floor 2 — noticeable without every third room
   // being an elite encounter. #54's own telemetry-driven pass is what
   // actually earns these numbers; this is a starting point, not a verdict.

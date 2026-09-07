@@ -164,6 +164,7 @@ const GROUPS: readonly GroupSpec[] = [
       { key: 'fireIntervalScale', min: 0.25, max: 4, step: 0.05, hint: 'gap between volleys' },
       { key: 'projectileSpeedScale', min: 0.25, max: 3, step: 0.05, hint: 'how fast they shoot' },
       { key: 'deflectParticles', min: 0, max: 30, step: 1, hint: 'foam off a shell' },
+      { key: 'deflectShake', min: 0, max: 3, step: 0.05, hint: 'shake off a shell' },
       {
         key: 'eliteChanceBase',
         min: 0,

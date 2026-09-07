@@ -426,6 +426,7 @@ function deflect(sim: GameSim, x: number, y: number, normalX: number, normalY: n
     sim.tuning.impact.particleSpread,
     1,
   );
+  sim.addShake(-normalX, -normalY, tuning.deflectShake);
 }
 
 /**
