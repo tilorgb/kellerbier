@@ -42,4 +42,33 @@ describe('crossing a floor advance replays deterministically (#271)', () => {
 
     expect(floor2Plan(1)).not.toEqual(floor2Plan(2));
   });
+
+  it('reproduces the Meisterschlüssel gate decision across a floor advance (#275)', () => {
+    // The gate is `FloorPlan.minibossRoomIds.length > 0`, re-derived at every
+    // floor entry from a deterministic plan with no RNG drawn — so two
+    // identically-seeded runs, stepped the same, reach the same decision.
+    function gateAfterAdvance(seed: number): boolean {
+      const sim = new GameSim({ seed });
+      for (let tick = 0; tick < 300; tick++) {
+        sim.step(createInputFrame());
+      }
+      const next = buildFloorPlan(sim.random.floor, 2);
+      // Mirror `app/main.ts`'s `advanceFloor` / the playtest harness.
+      sim.clearFloorProgress();
+      sim.configureFloorGate(next.minibossRoomIds.length > 0);
+      return sim.bossDoorLocked;
+    }
+
+    expect(gateAfterAdvance(0x1337_c0de)).toBe(gateAfterAdvance(0x1337_c0de));
+  });
+
+  it('clearFloorProgress wipes a held key, so a replayed floor advance starts keyless (#275)', () => {
+    const sim = new GameSim({ seed: 0x1337_c0de });
+    sim.configureFloorGate(true);
+    sim.grantMeisterschluessel();
+    expect(sim.meisterschluessel).toBe(true);
+
+    sim.clearFloorProgress();
+    expect(sim.meisterschluessel).toBe(false);
+  });
 });

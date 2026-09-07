@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ENEMY_DEFINITIONS } from '../../src/content/enemies/index.js';
 import {
+  BOSS_REWARD_DROP_TABLE,
   ENEMY_DROP_TABLES,
   PICKUP_DEFINITIONS,
   ROOM_CLEAR_DROP_TABLE,
@@ -81,6 +82,24 @@ describe('drop tables', () => {
 
   it('the room-clear table names only real pickups', () => {
     checkTable(registry, ROOM_CLEAR_DROP_TABLE, 'ROOM_CLEAR_DROP_TABLE');
+  });
+
+  it('never rolls Der Meisterschlüssel from any table', () => {
+    // #275: the key to the boss door cannot be a weighted drop. A run that
+    // rolls no Meisterschlüssel and has no mini-boss left to kill is
+    // soft-locked — the whole reason it is its own `masterkey` effect kind
+    // and not a `keys` entry. It is spawned by a mini-boss room clearing,
+    // nowhere else.
+    const tables: DropTable[] = [
+      ...LOOT_TIERS.map((tier) => ENEMY_DROP_TABLES[tier]),
+      ROOM_CLEAR_DROP_TABLE,
+      BOSS_REWARD_DROP_TABLE,
+    ];
+    for (const table of tables) {
+      for (const variant of ['sober', 'promilled'] as const) {
+        expect(table[variant].some((entry) => entry.pickupId === 'meisterschluessel')).toBe(false);
+      }
+    }
   });
 
   it('every enemy in the roster resolves to a known loot tier', () => {

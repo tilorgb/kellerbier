@@ -543,6 +543,61 @@ function lockedDoorsFor(
 }
 
 /**
+ * Every door of `roomId` that should draw locked right now: the key-locked
+ * treasure doors (`lockedDoorsFor`), plus — while this floor's boss door
+ * still needs Der Meisterschlüssel (#275) — the doors that open onto the
+ * boss room. The mini-boss key is `GameSim` state (`sim.bossDoorLocked`),
+ * the door geometry is the floor plan's; this is the seam where they meet,
+ * the same split `lockedDoorsFor` already sits on.
+ */
+function currentLockedDoors(
+  plan: FloorPlan,
+  roomId: string,
+  visitedRoomIds: ReadonlySet<string>,
+  bossDoorLocked: boolean,
+): RoomDirection[] {
+  const directions = lockedDoorsFor(plan, roomId, visitedRoomIds);
+  if (bossDoorLocked) {
+    for (const direction of bossDoorsFor(plan, roomId)) {
+      if (!directions.includes(direction)) {
+        directions.push(direction);
+      }
+    }
+  }
+  return directions;
+}
+
+/**
+ * Whether the mini-boss room icon(s) belong on the minimap yet (#275).
+ *
+ * Always on floor 1 — it is the tutorial, and a first-time player should not
+ * have to hunt the gate (`docs/CONTENT_BIBLE.md` §1). On any later floor,
+ * from the moment the player has stood next to a locked boss door — which is
+ * exactly "has visited a room adjacent to the boss room": the detour becomes
+ * legible the instant it becomes relevant, turning "wander until you find
+ * it" into "you know where it is, now get there". A floor with no mini-boss
+ * room (a content gap, `docs/DECISIONS.md` #75) reveals nothing — there is
+ * nothing to show and no lock to explain.
+ */
+function minibossRoomsRevealed(plan: FloorPlan, visitedRoomIds: ReadonlySet<string>): boolean {
+  if (plan.minibossRoomIds.length === 0) {
+    return false;
+  }
+  if (plan.floor === 1) {
+    return true;
+  }
+  const bossNeighbours = new Set(
+    planRoom(plan, plan.bossRoomId).doors.map((door) => door.neighborRoomId),
+  );
+  for (const visitedId of visitedRoomIds) {
+    if (bossNeighbours.has(visitedId)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Text for the plain `machinePrompt` line — the two states that stay a
  * single line because there is nothing to choose yet: `'broken'`/`'empty'`
  * (nothing a menu could offer), and a fresh `'unfed'` machine before its
@@ -1211,8 +1266,12 @@ async function boot(): Promise<void> {
 
   /** Ticks left to show the "needs a key" HUD line — see `enterNeighbor`. */
   let keyHintTicks = 0;
+  /** Ticks left to show the "boss door needs the Meisterschlüssel" HUD line (#275) — the boss-door counterpart of `keyHintTicks`. */
+  let bossGateHintTicks = 0;
   /** Three seconds at 60 ticks/second — long enough to read, short enough not to linger. */
   const KEY_HINT_TICKS = 180;
+  /** Edge-detects `sim.bossDoorLocked` — the key is pickable up mid-room, with no transition to hang a door redraw off. See `advanceOneTick`. */
+  let wasBossDoorLocked = false;
 
   /**
    * Boss rooms already paid for this run, keyed floor + floor-plan room.
@@ -1730,8 +1789,20 @@ async function boot(): Promise<void> {
     }
     checkBlutwurzTransition();
     checkSecretReveals();
+    // Der Meisterschlüssel (#275) can be picked up mid-room, and the gate
+    // drops on entering the boss room — neither is a floor-plan change with
+    // a transition to hang a redraw off, so edge-detect `sim.bossDoorLocked`
+    // and refresh the door art the same way `checkSecretReveals` does for a
+    // bombed wall.
+    if (sim.bossDoorLocked !== wasBossDoorLocked) {
+      wasBossDoorLocked = sim.bossDoorLocked;
+      syncFloorPlanView();
+    }
     if (keyHintTicks > 0) {
       keyHintTicks -= 1;
+    }
+    if (bossGateHintTicks > 0) {
+      bossGateHintTicks -= 1;
     }
     const touchedDoor = sim.doorContact;
     if (touchedDoor !== null) {
@@ -2068,6 +2139,16 @@ async function boot(): Promise<void> {
     const warmup = sim.roomWarmupTicks > 0 ? '  WARMUP' : '';
     const currentRole = planRoom(floorPlan, currentRoomId).role;
     const keyHint = keyHintTicks > 0 ? '  NEEDS A KELLERSCHLÜSSEL' : '';
+    // The mini-boss gate (#275): its "the boss door is shut" hint, the
+    // counterpart of `keyHint` above, plus a persistent readout of the gate
+    // state on the same bug-report line — "BOSS LOCKED" until the key is in
+    // hand, "MEISTERSCHLÜSSEL" once it is and before it is spent.
+    const bossGateHint = bossGateHintTicks > 0 ? '  BOSS DOOR — NEEDS THE MEISTERSCHLÜSSEL' : '';
+    const bossGateState = sim.bossDoorLocked
+      ? '  BOSS LOCKED'
+      : sim.meisterschluessel
+        ? '  MEISTERSCHLÜSSEL'
+        : '';
     // Trinkfest (#92) only earns space on this line once it has actually
     // moved off baseline — same reasoning as `PromilleHud`'s own label.
     const trinkfest = sim.trinkfest !== 0 ? `  trinkfest ${String(sim.trinkfest)}` : '';
@@ -2096,7 +2177,12 @@ async function boot(): Promise<void> {
     // the mechanic would hand a sober player the word the gate exists to
     // keep from them until Da Xaver says it.
     const overrideKeyHint = import.meta.env.DEV ? `   B promille gate (${promilleOverride})` : '';
-    hud.text = `seed ${String(RUN_SEED)}  ${character}  ${floorPlan.floorName}  room ${sim.roomId} (${currentRole})  doors ${roomState}${warmup}${keyHint}  enemies ${String(sim.liveEnemyCount)}
+    // Dev builds only — a shipped build never hands a player the key that
+    // skips a mini-boss fight (`docs/DECISIONS.md` #75's tuning-pass note),
+    // the same reasoning `src/debug/` is behind a dynamic import.
+    const grantKeyHint =
+      import.meta.env.DEV && sim.bossDoorLocked ? '   J grant Meisterschlüssel' : '';
+    hud.text = `seed ${String(RUN_SEED)}  ${character}  ${floorPlan.floorName}  room ${sim.roomId} (${currentRole})  doors ${roomState}${warmup}${keyHint}${bossGateHint}${bossGateState}  enemies ${String(sim.liveEnemyCount)}
   tick ${String(loop.tick)}  ${seconds}s  x${scale}${loop.paused ? '  PAUSED' : ''}
 hp ${String(hearts)}/${String(maxHearts)}  soul ${String(sim.playerSoulHealth)}  eternal ${String(sim.playerEternalHealth)}${invulnerable}${dead}${runState}${override}${promilleLine}
 shots ${String(shots.liveCount)}/${String(shots.capacity)}  particles ${String(
@@ -2105,7 +2191,29 @@ shots ${String(shots.liveCount)}/${String(shots.capacity)}  particles ${String(
 save ${String(activeRunRecorder.frameCount)} ticks logged${wasResumed ? '  (resumed)' : ''}
 WASD move   arrows aim and fire
   O debug   T tuning   I shot tags   Y settings   P pause   M ${isMuted() ? 'unmute' : 'mute'}   . step   [ ] time scale
-  N next room (after clear)   R restart (new seed)   C copy run   L load replay${overrideKeyHint}`;
+  N next room (after clear)   R restart (new seed)   C copy run   L load replay${overrideKeyHint}${grantKeyHint}`;
+  };
+
+  /**
+   * Re-pushes every floor-plan-derived view layer for the current room — the
+   * four calls that always move together after a room change, a secret
+   * reveal, or the mini-boss key changing hands (#275). Folding them into one
+   * closure is also what keeps `minimapHud.rebuild`'s new `revealMiniboss`
+   * argument and `currentLockedDoors`' boss-gate branch from having to be
+   * threaded through seven identical call sites by hand.
+   */
+  const syncFloorPlanView = (): void => {
+    view.setSecretHints(crackHintsFor(floorPlan, currentRoomId, revealedEdges));
+    view.setLockedDoors(
+      currentLockedDoors(floorPlan, currentRoomId, visitedRoomIds, sim.bossDoorLocked),
+    );
+    view.setBossDoors(bossDoorsFor(floorPlan, currentRoomId));
+    minimapHud.rebuild(
+      floorPlan,
+      currentRoomId,
+      visitedRoomIds,
+      minibossRoomsRevealed(floorPlan, visitedRoomIds),
+    );
   };
   /**
    * (Re)starts the run on `seed`: regenerates the floor plan and rebuilds
@@ -2204,6 +2312,12 @@ WASD move   arrows aim and fire
     // (`GameSim.swayScale`/`driftScale`/`wobbleScale`), not in `tuning`,
     // which `viewTextures`'s own comment notes is otherwise never rebuilt.
     applySettingsToSim(sim, settings);
+    // Der Meisterschlüssel gate (#275): whether floor 1's boss door needs the
+    // mini-boss's key, read off the plan just generated. `advanceFloor` does
+    // the same for every floor after this one. Derived from the deterministic
+    // plan and consuming no RNG, so a resumed run's replay reaches the same
+    // gate state.
+    sim.configureFloorGate(floorPlan.minibossRoomIds.length > 0);
     // A restart abandons whatever was being recorded for the previous run —
     // persisted immediately (not just reassigned in memory) so a crash right
     // after a restart resumes into the *new* run next time, not the one the
@@ -2283,10 +2397,7 @@ WASD move   arrows aim and fire
     }
     uiLayer.addChildAt(view.labelLayer, uiLayer.getChildIndex(hud));
     previousView?.destroy();
-    view.setSecretHints(crackHintsFor(floorPlan, currentRoomId, revealedEdges));
-    view.setLockedDoors(lockedDoorsFor(floorPlan, currentRoomId, visitedRoomIds));
-    view.setBossDoors(bossDoorsFor(floorPlan, currentRoomId));
-    minimapHud.rebuild(floorPlan, currentRoomId, visitedRoomIds);
+    syncFloorPlanView();
     // Both `sim` and `view` above are fresh objects and the old view has just
     // been destroyed, so anything holding the previous pair is now holding
     // corpses. `null` only on boot's own first call, which the `await` below
@@ -2314,6 +2425,8 @@ WASD move   arrows aim and fire
     deathPhaseTicks = 0;
     wasBlutwurzActive = false;
     keyHintTicks = 0;
+    bossGateHintTicks = 0;
+    wasBossDoorLocked = false;
     bossBannerShown = false;
     bossBanner.view.visible = false;
     pickupToastLabel = '';
@@ -2761,14 +2874,22 @@ WASD move   arrows aim and fire
       ) {
         keyHintTicks = KEY_HINT_TICKS;
       }
+      // The mini-boss gate's own version of the line above (#275) — the boss
+      // door refused because the Meisterschlüssel is not in hand yet. Same
+      // `pressingToward`/`!doorsLocked` guard, for the same reason.
+      if (
+        sim.pressingToward(direction) &&
+        !sim.doorsLocked &&
+        neighborRoom.role === 'boss' &&
+        sim.bossDoorLocked
+      ) {
+        bossGateHintTicks = KEY_HINT_TICKS;
+      }
       return false;
     }
     currentRoomId = neighborRoomId;
     visitedRoomIds.add(neighborRoomId);
-    view.setSecretHints(crackHintsFor(floorPlan, currentRoomId, revealedEdges));
-    view.setLockedDoors(lockedDoorsFor(floorPlan, currentRoomId, visitedRoomIds));
-    view.setBossDoors(bossDoorsFor(floorPlan, currentRoomId));
-    minimapHud.rebuild(floorPlan, currentRoomId, visitedRoomIds);
+    syncFloorPlanView();
     refreshHud();
     return true;
   }
@@ -2824,6 +2945,11 @@ WASD move   arrows aim and fire
     // already-cleared one) as already cleared. See
     // `GameSim.clearFloorProgress`'s doc comment.
     sim.clearFloorProgress();
+    // Der Meisterschlüssel gate (#275): re-derived for the new floor from
+    // its own plan, right after `clearFloorProgress` wiped the old floor's
+    // key. A dev-loop floor with a mini-boss room re-locks its boss door;
+    // one without (a content gap, `docs/DECISIONS.md` #75) does not.
+    sim.configureFloorGate(floorPlan.minibossRoomIds.length > 0);
     sim.loadRoom(
       roomTemplateFor(planRoom(floorPlan, currentRoomId)),
       floorPlan.floor,
@@ -2835,10 +2961,7 @@ WASD move   arrows aim and fire
       // (`startRun`) — a freshly reset floor starts safe too.
       true,
     );
-    view.setSecretHints(crackHintsFor(floorPlan, currentRoomId, revealedEdges));
-    view.setLockedDoors(lockedDoorsFor(floorPlan, currentRoomId, visitedRoomIds));
-    view.setBossDoors(bossDoorsFor(floorPlan, currentRoomId));
-    minimapHud.rebuild(floorPlan, currentRoomId, visitedRoomIds);
+    syncFloorPlanView();
     refreshHud();
     showFloorCard();
   }
@@ -2869,10 +2992,7 @@ WASD move   arrows aim and fire
       { col: 0, row: 0 },
       false,
     );
-    view.setSecretHints(crackHintsFor(floorPlan, currentRoomId, revealedEdges));
-    view.setLockedDoors(lockedDoorsFor(floorPlan, currentRoomId, visitedRoomIds));
-    view.setBossDoors(bossDoorsFor(floorPlan, currentRoomId));
-    minimapHud.rebuild(floorPlan, currentRoomId, visitedRoomIds);
+    syncFloorPlanView();
     refreshHud();
   }
 
@@ -2963,10 +3083,7 @@ WASD move   arrows aim and fire
       }
     }
     if (changed) {
-      view.setSecretHints(crackHintsFor(floorPlan, currentRoomId, revealedEdges));
-      view.setLockedDoors(lockedDoorsFor(floorPlan, currentRoomId, visitedRoomIds));
-      view.setBossDoors(bossDoorsFor(floorPlan, currentRoomId));
-      minimapHud.rebuild(floorPlan, currentRoomId, visitedRoomIds);
+      syncFloorPlanView();
       playSfx('secret-reveal');
     }
   }
@@ -3221,14 +3338,24 @@ WASD move   arrows aim and fire
               entryCell,
               isStart,
             );
-            view.setSecretHints(crackHintsFor(floorPlan, currentRoomId, revealedEdges));
-            view.setLockedDoors(lockedDoorsFor(floorPlan, currentRoomId, visitedRoomIds));
-            view.setBossDoors(bossDoorsFor(floorPlan, currentRoomId));
-            minimapHud.rebuild(floorPlan, currentRoomId, visitedRoomIds);
+            syncFloorPlanView();
           }
         }
         break;
       }
+      case 'j':
+      case 'J':
+        // Der Meisterschlüssel (#275), granted for free — `K` is already the
+        // kit gallery, so the boss key is `J`, its neighbour. Dev builds
+        // only, same gate and the same reason as `B`/`Y`/`G` above: without
+        // it, every tuning pass on a gated floor's boss costs a mini-boss
+        // fight first (`docs/DECISIONS.md` #75). The per-tick `bossDoorLocked`
+        // edge check in `advanceOneTick` picks the unlock up and redraws the
+        // door — nothing to do here but grant it.
+        if (import.meta.env.DEV) {
+          sim.grantMeisterschluessel();
+        }
+        break;
       default:
         return;
     }
@@ -3377,10 +3504,7 @@ WASD move   arrows aim and fire
             hiddenDoorsFor(floorPlan, currentRoomId, revealedEdges),
             buildPlacement(room),
           );
-          view.setSecretHints(crackHintsFor(floorPlan, currentRoomId, revealedEdges));
-          view.setLockedDoors(lockedDoorsFor(floorPlan, currentRoomId, visitedRoomIds));
-          view.setBossDoors(bossDoorsFor(floorPlan, currentRoomId));
-          minimapHud.rebuild(floorPlan, currentRoomId, visitedRoomIds);
+          syncFloorPlanView();
           refreshHud();
           event.source?.postMessage(
             { type: 'kb-room-editor:apply-ack', ok: true },

@@ -131,6 +131,26 @@ function totalEnemyHealth(sim: GameSim): number {
   return total;
 }
 
+/**
+ * The Meisterschlüssel (#275) lying on the current room's floor, or `null`.
+ * The bot walks to it before routing on to a locked boss door — otherwise
+ * `sim.transitionTo` refuses the boss room every tick and the run reads as
+ * stuck at its door.
+ */
+function minibossKeyOnFloor(sim: GameSim): { x: number; y: number } | null {
+  let found: { x: number; y: number } | null = null;
+  sim.world.forEach(sim.pickupKind.bit, (index) => {
+    if (found !== null) {
+      return;
+    }
+    const definitionIndex = sim.pickupKind.data[index] ?? -1;
+    if (definitionIndex >= 0 && sim.pickups.at(definitionIndex).id === 'meisterschluessel') {
+      found = { x: sim.positionX(index), y: sim.positionY(index) };
+    }
+  });
+  return found;
+}
+
 /** Fresh per tick: cheap (a handful of rooms), and always right after a room transition changes `currentRoomId`. */
 function decideTarget(
   sim: GameSim,
@@ -142,6 +162,7 @@ function decideTarget(
   | { readonly kind: 'combat' }
   | { readonly kind: 'stuck' }
   | { readonly kind: 'advanceFloor'; readonly x: number; readonly y: number }
+  | { readonly kind: 'collectKey'; readonly x: number; readonly y: number }
   | {
       readonly kind: 'crossDoor';
       readonly x: number;
@@ -150,6 +171,15 @@ function decideTarget(
     } {
   if (sim.liveEnemyCount > 0) {
     return { kind: 'combat' };
+  }
+  // #275: a locked boss door with the mini-boss's key on this room's floor —
+  // pick it up before heading anywhere, or the boss door refuses the bot for
+  // the rest of the run.
+  if (sim.bossDoorLocked) {
+    const key = minibossKeyOnFloor(sim);
+    if (key !== null) {
+      return { kind: 'collectKey', x: key.x, y: key.y };
+    }
   }
   const nextFloorDoor = sim.nextFloorDoor;
   if (nextFloorDoor !== null) {
@@ -200,6 +230,10 @@ export function runPlaytest(options: PlaytestOptions): PlaytestOutcome {
     for (const id of options.loadoutItemIds) {
       sim.pickUpItem(id);
     }
+    // The mini-boss gate (#275) — `app/main.ts` does this from the floor
+    // plan at every floor entry; the harness has to as well, or the bot
+    // walks straight to a boss door the real game keeps shut.
+    sim.configureFloorGate(floorPlan.minibossRoomIds.length > 0);
   } catch (error) {
     return {
       seed: options.seed,
@@ -326,6 +360,7 @@ export function runPlaytest(options: PlaytestOptions): PlaytestOutcome {
             floorPlan = buildFloorPlan(sim.random.floor, floorPlan.floor + 1);
             const nextStart = startRoomLoadOptions(floorPlan);
             sim.clearFloorProgress();
+            sim.configureFloorGate(floorPlan.minibossRoomIds.length > 0);
             sim.loadRoom(
               nextStart.roomTemplate,
               nextStart.floor,

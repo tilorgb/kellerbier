@@ -24,6 +24,12 @@ interface Slot {
  * localisation, since the icons carry the meaning and the numbers are the
  * only thing left to translate (nothing).
  *
+ * Der Meisterschlüssel (#275) is a fourth pair, but a special one: it is a
+ * boolean, not a count, and it only exists for part of a floor, so it shows
+ * only while it is held — a gold key with no number, appended after the
+ * three permanent slots. `ActiveItemHud`'s "bright the instant it matters"
+ * read, expressed as present-or-absent.
+ *
  * Screen-space, in `uiLayer`, same as every other HUD piece here.
  */
 export class WalletHud {
@@ -32,11 +38,19 @@ export class WalletHud {
   private readonly biermarken: Slot;
   private readonly keys: Slot;
   private readonly bombs: Slot;
+  private readonly master: Slot;
 
   constructor(kit: UiKit) {
     this.biermarken = this.makeSlot(kit, 'biermarke', HUD_PALETTE.minimapTreasureIcon);
     this.keys = this.makeSlot(kit, 'key', UI_PALETTE.knobFill);
     this.bombs = this.makeSlot(kit, 'fassl', UI_PALETTE.accent);
+    // Same key glyph as the Kellerschlüssel, gold rather than the knob
+    // colour and with no number beside it — two signals that this is the
+    // other key, not one more of the counted kind.
+    this.master = this.makeSlot(kit, 'key', 0xd9a441);
+    this.master.count.text = 'MS';
+    this.master.icon.visible = false;
+    this.master.count.visible = false;
     this.layOut();
   }
 
@@ -54,7 +68,7 @@ export class WalletHud {
 
   private layOut(): void {
     let x = 0;
-    for (const slot of [this.biermarken, this.keys, this.bombs]) {
+    for (const slot of [this.biermarken, this.keys, this.bombs, this.master]) {
       slot.icon.position.x = x;
       slot.count.position.set(x + slot.width + ICON_GAP, 0);
       // Two digits of room before the next pair, so a count ticking from 9 to
@@ -67,6 +81,10 @@ export class WalletHud {
     this.biermarken.count.text = String(sim.biermarken);
     this.keys.count.text = String(sim.keys);
     this.bombs.count.text = String(sim.bombs);
+    // Der Meisterschlüssel (#275): shown only while carried.
+    const held = sim.meisterschluessel;
+    this.master.icon.visible = held;
+    this.master.count.visible = held;
   }
 
   /** Height of the row in UI pixels. */

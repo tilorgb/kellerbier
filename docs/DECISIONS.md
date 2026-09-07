@@ -3957,3 +3957,68 @@ a floor is gated reads that, not the floor number. Rules 1-3 live in `minibossSl
 checked twice on purpose; loosening one means changing that function, not the caller. If the retry
 rate ever becomes a real cost, rule 1 (the 0.6 fraction) is the one to relax — 2 and 3 are the
 design.
+
+## 76. Der Meisterschlüssel: the boss door is locked until the floor's mini-boss is down, and the key is a boolean
+
+**Decided:** M8, #275 (item E of #270). **Builds on:** #75 (the mini-boss slot), #196 (the
+padlocked-door tile and the key-locked treasure room), #19 (content-gap degradation), #50 (input-log
+replay).
+
+The mini-boss room (#75) exists so the fight can be a *branch*, not a wall across the critical path.
+The lock that makes the branch mandatory: the mini-boss drops **Der Meisterschlüssel**, and the
+boss room's doors stay shut until it is in hand.
+
+**It is a boolean on `GameSim`, not a Kellerschlüssel and not a counter.** A Kellerschlüssel drops
+from a weighted table (`content/pickups/drop-tables.ts`), and #196 went out of its way to keep it
+away from any slot with more than one door for exactly this reason: a currency that *might* not drop
+can never gate a critical path, because a run with no key and no mini-boss left to kill is
+soft-locked. So the Meisterschlüssel is its own pickup with its own `{ kind: 'masterkey' }` effect,
+spawned only by a mini-boss room clearing — never rolled, never stocked in a shop
+(`tests/content/pickups.test.ts` enforces the absence). And it is one `meisterschluesselHeld`
+boolean, not a count: there is one boss gate per floor, and carrying two keys would mean nothing.
+It is cleared on floor advance and the instant it is spent (`transitionTo`).
+
+**The lock is enforced in `GameSim.transitionTo`, the same place #196's treasure lock is** — refused
+on touch when the destination is a `specialRole: 'boss'` room and the key is not held, spent on the
+actual crossing (not on a brush past the threshold, unlike a Kellerschlüssel — standing in a boss
+doorway with the key must never leave the run keyless and still outside). `bossDoorGated`, set per
+floor by `app/main.ts` from `FloorPlan.minibossRoomIds` being non-empty, is what turns the check on:
+**a floor whose content authors no mini-boss template has no mini-boss room and therefore no lock**
+(#75's rule, carried through — the gate rides the slot existing, never "floor N should have one by
+now"). Once the boss door opens, `bossDoorGated` drops for the rest of the floor, so a Blutwurz
+(#84) spirit walk back to the already-cleared boss room never finds it re-locked.
+
+**Determinism falls out for free.** The key drop is a mini-boss room clearing (deterministic), the
+pickup is a walk-over collection (deterministic), the gate flag is derived from the deterministic
+floor plan with no RNG drawn — so an input-log replay across a floor advance (#50,
+`tests/determinism/floor-advance-replay.test.ts`) reproduces the gate and key state, and a
+save/resume rides the same guarantee.
+
+**Finding the mini-boss room: revealed on the minimap once a locked boss door has been seen.** A
+mandatory off-path fight is only good if the detour is a route decision rather than a search. The
+mini-boss icon shows from the moment the player first stands next to a locked boss door — which is
+exactly "has visited a room adjacent to the boss room" (`minibossRoomsRevealed` in `app/main.ts`,
+feeding `computeReveal`'s new flag). On **floor 1 it is always visible**, because floor 1 is the
+tutorial (`CONTENT_BIBLE §1`: beatable by someone who has never played the genre). Options
+considered and rejected: always-visible everywhere (weakest exploration), and never (a bad first
+run on a 24-room XL floor).
+
+**The fallback, if the detour plays badly:** drop the key entirely and place the mini-boss room *on*
+the path, as the boss room's antechamber — zero backtracking, half the code, a guaranteed fight
+before the boss, at the cost of the exploration payoff and of being predictable. This is a real
+option, taken if a playtest says the backtrack is annoying, not tuned around.
+
+**No reachable soft-lock**, enumerated: a floor whose mini-boss content is missing gets no lock
+(#75); `validateFloorPlan` re-checks — independently of `assignRoles` — that every mini-boss room is
+reachable from the start *without* passing through the boss room (the converse of #75's rule 3), so
+the 10,000-floor sweep fails a generator change that breaks it; a Blutwurz spirit walk preserves the
+held/spent key (the sim is never recreated) and re-locks nothing; a re-entered cleared mini-boss
+room re-drops a key under Blutwurz's own "cleared rooms repopulate" rule (a second fight for a
+second key — coherent, not a bug); the dev floor loop's `advanceFloor` clears the key and
+re-derives the gate. A dev `J` shortcut and `sim.grantMeisterschluessel()` grant the key so a
+tuning pass on a gated floor's boss does not cost a mini-boss fight each time.
+
+**Constrains:** anything that needs "does this floor gate its boss" reads `sim.bossDoorLocked` /
+`FloorPlan.minibossRoomIds`, never the floor number. The boss-door lock and the treasure-door lock
+share the padlock tile and the `transitionTo` refusal shape but nothing else — they are two keys,
+and `docs/DECISIONS.md` #76 is the note that says a later economy pass must not merge them.

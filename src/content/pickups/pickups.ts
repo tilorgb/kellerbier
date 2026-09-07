@@ -175,6 +175,27 @@ export const kellerschluesselRing: PickupDefinition = {
   effect: { kind: 'keys', amount: 3 },
 };
 
+/**
+ * Der Meisterschlüssel (#275): the mini-boss's drop, and the only thing that
+ * opens the floor's boss door. Never rolled from a drop table and never
+ * stocked in a shop — it is spawned by a mini-boss room clearing, nowhere
+ * else (`docs/DECISIONS.md`'s Meisterschlüssel entry, and
+ * `tests/content/meisterschluessel.test.ts` which enforces the absence).
+ *
+ * Gold against the Kellerschlüssel's silver, and `MS` against its bare `K`,
+ * so the two never read as the same pickup — the placeholder-tier stand-in
+ * (#34) for the icon this gets once the art is signed off.
+ */
+export const meisterschluessel: PickupDefinition = {
+  id: 'meisterschluessel',
+  name: 'Meisterschlüssel',
+  description: 'Opens the boss door',
+  radius: RADIUS,
+  tint: 0xd9a441,
+  label: 'MS',
+  effect: { kind: 'masterkey' },
+};
+
 export const PICKUP_DEFINITIONS: readonly PickupDefinition[] = [
   massFull,
   massHalf,
@@ -191,4 +212,5 @@ export const PICKUP_DEFINITIONS: readonly PickupDefinition[] = [
   bierfasslPack,
   kellerschluessel,
   kellerschluesselRing,
+  meisterschluessel,
 ];

@@ -155,6 +155,9 @@ function collect(sim: GameSim, other: number): boolean {
     case 'keys':
       sim.addKeys(effect.amount);
       break;
+    case 'masterkey':
+      sim.grantMeisterschluessel();
+      break;
     case 'food':
       // Inert in a sober run is true of every Wurst pickup, by construction:
       // Promille sits at zero the whole run, so `lowerPromille` has nothing

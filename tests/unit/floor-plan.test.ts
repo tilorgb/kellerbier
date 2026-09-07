@@ -801,6 +801,58 @@ describe('mini-boss rooms (#274)', () => {
     expect(deadEnds / total).toBeGreaterThan(0.5);
   });
 
+  it('every generated mini-boss floor validates clean, soft-lock check included (#275)', () => {
+    // The #275 invariant `validateFloorPlan` now also enforces: every
+    // mini-boss room is reachable from the start *without* passing through
+    // the boss room — otherwise its Meisterschlüssel sits behind the very
+    // door it opens. Real generated floors must never trip it.
+    const pool = syntheticPoolWithMiniboss();
+    for (let seed = 0; seed < 400; seed++) {
+      const config = floorConfig(seed % FLOOR_CONFIGS.length);
+      const plan = generateFloor(new Rng(seed + 4300), config, pool);
+      expect(validateFloorPlan(plan, pool), `seed ${String(seed)}, ${config.name}`).toEqual([]);
+    }
+  });
+
+  it('reports a mini-boss room reachable only through the boss room as a soft-lock (#275)', () => {
+    // Relabel the boss to a mid-path room and the old boss room (still at
+    // max distance) to the mini-boss: its key is now behind the boss door.
+    // Needs a dead-end boss room so the old boss really has no other way in.
+    const pool = syntheticPoolWithMiniboss();
+    let plan: FloorPlan | undefined;
+    let bossRoom: FloorPlan['rooms'][number] | undefined;
+    for (let seed = 0; seed < 200 && bossRoom === undefined; seed++) {
+      const candidate = generateFloor(new Rng(seed + 1200), floorConfig(0), pool);
+      const room = candidate.rooms.find((r) => r.id === candidate.bossRoomId);
+      if (room !== undefined && neighborRoomIds(room.doors).length === 1) {
+        plan = candidate;
+        bossRoom = room;
+      }
+    }
+    if (plan === undefined || bossRoom === undefined) {
+      throw new Error('no dead-end boss room found to tamper with');
+    }
+    const midId = neighborRoomIds(bossRoom.doors)[0];
+    if (midId === undefined) {
+      throw new Error('boss room has no neighbour to promote');
+    }
+    const tampered: FloorPlan = {
+      ...plan,
+      bossRoomId: midId,
+      minibossRoomIds: [bossRoom.id],
+      rooms: plan.rooms.map((room) => {
+        if (room.id === midId) {
+          return { ...room, role: 'boss' as const };
+        }
+        if (room.id === bossRoom.id) {
+          return { ...room, role: 'miniboss' as const };
+        }
+        return room.role === 'miniboss' ? { ...room, role: 'normal' as const } : room;
+      }),
+    };
+    expect(validateFloorPlan(tampered).join('; ')).toContain('unobtainable');
+  });
+
   it('reports a mini-boss room placed against its own rules as a validation problem', () => {
     // `validateFloorPlan` re-derives rules 1-3 rather than trusting
     // `assignRoles` — this is what proves it, by relabelling the room next
