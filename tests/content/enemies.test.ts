@@ -273,6 +273,52 @@ describe('broken content', () => {
     ).toThrow(/not an enemy id/i);
   });
 
+  it('rejects summoning something that is not an enemy (#276)', () => {
+    expect(
+      build({
+        ...walker,
+        states: [
+          {
+            name: 'go',
+            behaviours: [
+              { behaviour: 'pause' },
+              {
+                behaviour: 'summon',
+                enemyId: 'nothing',
+                everyTicks: 60,
+                countPerWave: 1,
+                maxActive: 3,
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow(/not an enemy id/i);
+  });
+
+  it('rejects an enemy that summons itself, which never stops (#276)', () => {
+    expect(
+      build({
+        ...walker,
+        states: [
+          {
+            name: 'go',
+            behaviours: [
+              { behaviour: 'pause' },
+              {
+                behaviour: 'summon',
+                enemyId: 'walker',
+                everyTicks: 60,
+                countPerWave: 1,
+                maxActive: 3,
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow(/summons itself/i);
+  });
+
   it('rejects a body that cannot be killed', () => {
     expect(build({ ...walker, health: 0 })).toThrow(/health above zero/i);
   });

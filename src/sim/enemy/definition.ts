@@ -43,6 +43,7 @@ export type BehaviourName =
   | 'fireOnBeat'
   | 'meleeArc'
   | 'splitOnDeath'
+  | 'summon'
   | 'becomeInvulnerable'
   | 'telegraph'
   | 'grabProp'
@@ -292,6 +293,41 @@ export interface SplitOnDeathBehaviour {
 }
 
 /**
+ * Spawns more of a smaller enemy while alive, on a timer — the live-body
+ * counterpart to `splitOnDeath`, which only ever fires once, on death.
+ *
+ * Der Rattenkönig (#276) is the enemy this exists for: he sits in the middle
+ * of his arena and does not chase, and the whole fight is target priority —
+ * the room is survivable forever and unwinnable until the player stops
+ * shooting the Bierratten and starts shooting the thing making them. This
+ * primitive is that "thing making them."
+ *
+ * `maxActive` is the entire fairness knob. A wave is skipped, not queued,
+ * whenever `maxActive` of `enemyId` are already alive anywhere in the room —
+ * so the pressure plateaus instead of compounding into an unclearable screen,
+ * and a player who is keeping up with the adds never faces a fresh wave on
+ * top. Children are spawned exactly as `splitOnDeath`'s are: never elite,
+ * off the same `random.enemies` stream, so a replay reproduces the run.
+ *
+ * Declared on a *state* (like every behaviour), which is what lets a summoner
+ * pause its spawning during a telegraphed "screech" beat and resume it after
+ * — the same reason `splitOnDeath` is per-state.
+ */
+export interface SummonBehaviour {
+  readonly behaviour: 'summon';
+  /** The `id` of another enemy definition — the thing spawned. Never itself. */
+  readonly enemyId: string;
+  /** Ticks between waves. The first wave leaves on the tick the state begins. */
+  readonly everyTicks: number;
+  /** How many to spawn per wave, subject to the `maxActive` cap. */
+  readonly countPerWave: number;
+  /** No wave spawns while this many of `enemyId` are already alive in the room. */
+  readonly maxActive: number;
+  /** Pixels from the summoner the children appear at. Defaults to a body-length out. */
+  readonly spread?: number;
+}
+
+/**
  * Nothing can hurt it while this state is young.
  *
  * Shots still land — they splash off, loudly, because a bullet that vanishes
@@ -380,6 +416,7 @@ export type EnemyBehaviour =
   | FireOnBeatBehaviour
   | MeleeArcBehaviour
   | SplitOnDeathBehaviour
+  | SummonBehaviour
   | BecomeInvulnerableBehaviour
   | GrabPropBehaviour
   | LobTargetBehaviour
@@ -458,6 +495,18 @@ export interface EnemyDefinition {
    * doors must not seal just because it stands there peacefully.
    */
   readonly locksRoom?: boolean;
+  /**
+   * Whether this body's health feeds the top-of-screen boss/mini-boss bar
+   * (`GameSim.bossHealth`, `render/boss-health-hud.ts`). Defaults to `false`.
+   *
+   * Set on a boss, a mini-boss, and the smaller bodies a boss splits *into*
+   * that are still "the boss" (Die Große Kellerassel's segments) — never on
+   * an add. Der Rattenkönig (#276) is why this is a flag rather than just
+   * `locksRoom`: his summoned Bierratten lock the room like any enemy, but
+   * the bar tracks the king, and a bar that jumped up every time a rat
+   * spawned would read as losing ground for doing the right thing.
+   */
+  readonly bossBar?: boolean;
 }
 
 /** Primitives that decide where a body goes. Exactly one per state. */
@@ -483,6 +532,9 @@ export const ENTRY_BEHAVIOURS: readonly BehaviourName[] = [
 
 /** Primitives that run when the body dies in that state. */
 export const DEATH_BEHAVIOURS: readonly BehaviourName[] = ['splitOnDeath'];
+
+/** Primitives that spawn more bodies on a timer while alive (#276). */
+export const SUMMON_BEHAVIOURS: readonly BehaviourName[] = ['summon'];
 
 /** Primitives that put something in the air. `meleeArc` (#199) is handled on its own, not here. */
 export const FIRING_BEHAVIOURS: readonly BehaviourName[] = [

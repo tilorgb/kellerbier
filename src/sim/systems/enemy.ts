@@ -180,6 +180,9 @@ export function stepEnemies(sim: GameSim): void {
     if (state.meleeArc !== null) {
       applyMeleeArc(sim, index, state.meleeArc, ticks, selfX, selfY);
     }
+    if (state.summons.length > 0) {
+      queueSummonWaves(sim, index, state, ticks, selfX, selfY);
+    }
 
     enemy[base + 2] = ticks < MAX_STATE_TICKS ? ticks + 1 : ticks;
   }
@@ -805,6 +808,103 @@ function splitFromEvent(slot: number): void {
       }
       sim.spawnEnemyKind(split.definition, x, y, false, healthOverride);
     }
+  }
+}
+
+/**
+ * Pushes an `EnemySummon` event for every `summon` behaviour whose wave is due
+ * this tick — `ticks % everyTicks === 0`, the same "first one on the tick the
+ * state begins" rule the firing primitives use. The `maxActive` cap is checked
+ * later, in `stepEnemySummons`, off a fresh body count; here we only decide
+ * *that* a wave is due, off the tick counter alone, so a replay reproduces it.
+ *
+ * @hot — runs in the frame loop, allocation-free.
+ */
+function queueSummonWaves(
+  sim: GameSim,
+  index: number,
+  state: CompiledState,
+  ticks: number,
+  selfX: number,
+  selfY: number,
+): void {
+  for (const summon of state.summons) {
+    if (ticks % summon.everyTicks !== 0) {
+      continue;
+    }
+    sim.events.push(
+      EventKind.EnemySummon,
+      index,
+      summon.definition,
+      selfX,
+      selfY,
+      summon.maxActive,
+      summon.spread,
+      summon.countPerWave,
+    );
+  }
+}
+
+let summonSim: GameSim | null = null;
+
+/**
+ * Spawns the bodies that this tick's `EnemySummon` events asked for — deferred
+ * out of `stepEnemies` for the same reason `stepEnemyDeaths` is: `spawnEnemyKind`
+ * can grow the world, and a system loop that has cached its component arrays
+ * must not have them swapped underneath it. A wave is dropped, not queued,
+ * whenever `maxActive` of the child are already alive (`GameSim.roomEnemyCount`
+ * is doors-only; this counts the actual bodies).
+ */
+export function stepEnemySummons(sim: GameSim): void {
+  summonSim = sim;
+  sim.events.forEach(summonFromEvent);
+  summonSim = null;
+}
+
+function summonFromEvent(slot: number): void {
+  const sim = summonSim;
+  if (sim?.events.kind[slot] !== EventKind.EnemySummon) {
+    return;
+  }
+  const definition = sim.events.other[slot] ?? 0;
+  const maxActive = Math.round(sim.events.normalX[slot] ?? 0);
+  const spread = sim.events.normalY[slot] ?? 0;
+  const countPerWave = Math.round(sim.events.value[slot] ?? 0);
+  const atX = sim.events.x[slot] ?? 0;
+  const atY = sim.events.y[slot] ?? 0;
+
+  let live = 0;
+  const states = sim.world.states;
+  const masks = sim.world.masks;
+  const required = sim.enemyMask;
+  for (let i = 0; i < sim.world.highWater; i++) {
+    if (states[i] !== World.ALIVE) {
+      continue;
+    }
+    if (((masks[i] ?? 0) & required) !== required) {
+      continue;
+    }
+    if ((sim.enemy.data[i * ENEMY_STRIDE] ?? 0) === definition) {
+      live += 1;
+    }
+  }
+
+  const toSpawn = Math.min(countPerWave, maxActive - live);
+  if (toSpawn <= 0) {
+    return;
+  }
+
+  const childRadius = sim.enemies.at(definition).radius;
+  const offset = sim.random.enemies.nextFloat() * Math.PI * 2;
+  for (let child = 0; child < toSpawn; child++) {
+    const angle = offset + (child / toSpawn) * Math.PI * 2;
+    let x = atX + Math.cos(angle) * spread;
+    let y = atY + Math.sin(angle) * spread;
+    if (!sim.room.isClear(x, y, childRadius)) {
+      x = atX;
+      y = atY;
+    }
+    sim.spawnEnemyKind(definition, x, y, false);
   }
 }
 

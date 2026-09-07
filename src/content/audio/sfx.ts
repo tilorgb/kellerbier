@@ -379,6 +379,8 @@ export const ENEMY_SFX_CATEGORY: Readonly<Record<string, EnemySfxCategory>> = {
   'grosse-kellerassel': 'squelch',
   'kellerassel-segment': 'squelch',
   bierratte: 'squelch',
+  'der-rattenkoenig': 'squelch',
+  'die-zapfhahn-orgel': 'metal',
   schimmelfleck: 'squelch',
   schimmelspore: 'squelch',
   zapfhahn: 'squelch',

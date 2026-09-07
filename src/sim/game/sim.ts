@@ -107,6 +107,7 @@ import {
   meleeBladeAngle,
   stepEnemies,
   stepEnemyDeaths,
+  stepEnemySummons,
 } from '../systems/enemy.js';
 import { stepBombPlacement } from '../systems/bomb-placement.js';
 import { stepMachine } from '../systems/machine.js';
@@ -1616,7 +1617,7 @@ export class GameSim {
    * register.
    */
   get bossHealth(): { readonly current: number; readonly max: number } | null {
-    if (this.roomSpecialRole !== 'boss') {
+    if (this.roomSpecialRole !== 'boss' && this.roomSpecialRole !== 'miniboss') {
       return null;
     }
     let current = 0;
@@ -1632,7 +1633,9 @@ export class GameSim {
         continue;
       }
       const definition = this.enemies.at(this.enemy.data[index * ENEMY_STRIDE] ?? 0);
-      if (!definition.locksRoom) {
+      // `bossBar`, not `locksRoom` (#276): Der Rattenkönig's summoned
+      // Bierratten lock the room like any add, but the bar is the king.
+      if (!definition.bossBar) {
         continue;
       }
       any = true;
@@ -2290,14 +2293,6 @@ export class GameSim {
       // never a boss, treasure, shop or secret encounter, each of which is
       // already authored to be its own kind of harder.
       const eliteChance = compiled.specialRole === undefined ? this.eliteChanceForFloor(floor) : 0;
-      // A mini-boss room (#274) is the one special room whose "own kind of
-      // harder" *is* the elite modifier: until its real occupants land (F/G
-      // of #270), the fight worth detouring for is a guaranteed elite of one
-      // of the floor's own enemies, in an authored arena. Guaranteed, not
-      // rolled — a gate the player walks to and finds an ordinary body in is
-      // not a gate — so this never draws from `random.enemies`, and the
-      // elite roll below stays exactly as reproducible as it was.
-      const guaranteedElite = compiled.specialRole === 'miniboss';
       for (const spawn of compiled.enemySpawns) {
         if (entry !== null) {
           const dx = spawn.x - entry.x;
@@ -2310,6 +2305,17 @@ export class GameSim {
         if (definition < 0) {
           throw new Error(`room template enemy "${spawn.enemyId}" is not registered`);
         }
+        // A mini-boss room (#274) whose slot still holds a *placeholder* — a
+        // floor enemy, because the floor has no authored mini-boss yet — makes
+        // it a guaranteed elite (#156), so the gate the player detoured to is
+        // never just an ordinary body. A real mini-boss (`bossBar`, #276:
+        // floor 1's Der Rattenkönig and Die Zapfhahn-Orgel) is spawned plain:
+        // it carries its own health tuned against its own cycle (#66), and the
+        // ×1.8 elite modifier on top would break that. Guaranteed elites draw
+        // no number from `random.enemies`, so every other room's roll is
+        // byte-identical either way.
+        const guaranteedElite =
+          compiled.specialRole === 'miniboss' && !this.enemies.at(definition).bossBar;
         const elite =
           guaranteedElite || (eliteChance > 0 && this.random.enemies.nextFloat() < eliteChance);
         this.spawnEnemyKind(definition, spawn.x, spawn.y, elite);
@@ -5272,6 +5278,9 @@ export class GameSim {
     // Enemies decide after the player has moved and before bodies integrate, so
     // a body moves on the same tick as the decision that moved it.
     stepEnemies(this);
+    // A `summon` wave that came due inside `stepEnemies` is spawned here, out
+    // of that loop — `spawnEnemyKind` can grow the world (#276).
+    stepEnemySummons(this);
     // Before `stepBodies`, deliberately: `freezing` (#27) scales velocity
     // down, and that only slows this tick's movement if it runs before the
     // integration that reads velocity. Burn/poison damage has no such

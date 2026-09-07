@@ -12,6 +12,7 @@ import {
   type FireSpreadBehaviour,
   type MeleeArcBehaviour,
   MOVEMENT_BEHAVIOURS,
+  SUMMON_BEHAVIOURS,
 } from './definition.js';
 import { ENEMY_PROFILES, ENEMY_SIZE_BY_NAME, type EnemySizeId } from './size.js';
 import { propKindIndex } from '../game/prop-kinds.js';
@@ -79,6 +80,15 @@ export interface CompiledTransition {
   readonly propKind: number;
 }
 
+/** A `summon` with its child resolved to a definition index (#276). */
+export interface CompiledSummon {
+  readonly definition: number;
+  readonly everyTicks: number;
+  readonly countPerWave: number;
+  readonly maxActive: number;
+  readonly spread: number;
+}
+
 /** A `splitOnDeath` with its target resolved to a definition index. */
 export interface CompiledSplit {
   readonly definition: number;
@@ -137,6 +147,8 @@ export interface CompiledState {
   /** For a `grabProp` entry: `{ kind, reach }`. `null` for every other state (#199). */
   readonly grabProp: { readonly kind: number; readonly reach: number } | null;
   readonly splits: readonly CompiledSplit[];
+  /** `summon` behaviours on this state, children resolved to definition indices (#276). */
+  readonly summons: readonly CompiledSummon[];
   readonly transitions: readonly CompiledTransition[];
 }
 
@@ -154,6 +166,8 @@ export interface CompiledEnemy {
   readonly states: readonly CompiledState[];
   readonly lootTier: 'weak' | 'normal' | 'tough';
   readonly locksRoom: boolean;
+  /** Whether this body's health feeds the boss/mini-boss bar (#276). */
+  readonly bossBar: boolean;
   /**
    * The `ParticleKind` this creature comes apart into (#153), resolved from
    * the definition's authored `deathEffect` name.
@@ -303,6 +317,7 @@ export class EnemyRegistry {
       states,
       lootTier: definition.lootTier ?? 'normal',
       locksRoom: definition.locksRoom ?? true,
+      bossBar: definition.bossBar ?? false,
       deathEffect: compileDeathEffect(definition.deathEffect, where),
     };
   }
@@ -318,6 +333,7 @@ export class EnemyRegistry {
     let approachPropKind = -1;
     const firing: FiringBehaviour[] = [];
     const splits: CompiledSplit[] = [];
+    const summons: CompiledSummon[] = [];
     let telegraphTicks = 0;
     let invulnerableTicks = 0;
     let capturesLobTarget = false;
@@ -400,6 +416,33 @@ export class EnemyRegistry {
           }
           detonate = { damage: behaviour.damage, radius: behaviour.radius };
         }
+        continue;
+      }
+      if (SUMMON_BEHAVIOURS.includes(name) && behaviour.behaviour === 'summon') {
+        const summon = behaviour;
+        const child = this.byId.get(summon.enemyId);
+        if (child === undefined) {
+          throw new Error(`${where} summons "${summon.enemyId}", which is not an enemy id`);
+        }
+        if (summon.enemyId === definition.id) {
+          throw new Error(`${where} summons itself, which never stops. Summon a smaller enemy.`);
+        }
+        if (!(summon.everyTicks >= 1)) {
+          throw new Error(`${where}: "summon" needs everyTicks of at least 1`);
+        }
+        if (!(summon.countPerWave >= 1)) {
+          throw new Error(`${where}: "summon" needs countPerWave of at least 1`);
+        }
+        if (!(summon.maxActive >= 1)) {
+          throw new Error(`${where}: "summon" needs maxActive of at least 1`);
+        }
+        summons.push({
+          definition: child,
+          everyTicks: Math.round(summon.everyTicks),
+          countPerWave: Math.round(summon.countPerWave),
+          maxActive: Math.round(summon.maxActive),
+          spread: summon.spread ?? 14,
+        });
         continue;
       }
       if (DEATH_BEHAVIOURS.includes(name) && behaviour.behaviour === 'splitOnDeath') {
@@ -514,6 +557,7 @@ export class EnemyRegistry {
       approachPropKind,
       grabProp,
       splits,
+      summons,
       transitions,
     };
   }

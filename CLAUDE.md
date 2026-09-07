@@ -123,6 +123,22 @@ mixed/tiled, not just the individual swatches, since that's what the option actu
 play. Once a direction is picked, iterating within it (fixing a rendering bug, tightening a shape)
 doesn't need another round of sign-off — only a genuinely new design choice does.
 
+**How the options get generated has two tracks, decided by where the agent is running**
+(`docs/DECISIONS.md` #77). *On this machine* there is a local Stable-Diffusion pipeline
+(`docs/DECISIONS.md` #71): ComfyUI at `D:\repos\ComfyUI` with a pixel-art LoRA, plus
+`D:\repos\ComfyUI\pixel-bench` — a one-click server (`start-pixel-bench.bat`) whose `/generate`
+endpoint runs a prompt through the model and then `tools/art/diffusion-postprocess.mjs`'s
+deterministic downscale + palette-snap. Use it for the options round: generate a batch (tens of
+candidates), throw away the broken and off-style ones yourself, and bring the user ~10 survivors.
+*In the cloud, or anywhere without that GPU*, there is no diffusion step — author the options as
+programmatic block art the way `tools/art/authoring/*.mjs` already does (`docs/DECISIONS.md`
+#43/#55), rendered to a specimen sheet with a throwaway `pngjs` script, and bring the user two or
+three. Both tracks are just ways to *produce candidates fast*; neither changes the gate. The
+generation method is never what gets signed off — the design and the canvas size are, and the
+finalists still have to be shown standing in the room at true scale (per the billboards note
+above) before anything lands in a commit. Once a candidate is picked, the diffusion output (or
+the block art) is cleaned up by hand and the animation frames and angles are authored from it.
+
 ## Component-library lessons, for work outside this repo
 
 [`docs/COMPONENT_LIBRARY_LESSONS.md`](docs/COMPONENT_LIBRARY_LESSONS.md) is not about Kellerbier
