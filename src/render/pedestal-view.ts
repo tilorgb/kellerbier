@@ -1,9 +1,17 @@
-import { CylinderGeometry, Group, Mesh, MeshBasicMaterial, PointLight, DoubleSide } from 'three';
+import {
+  CylinderGeometry,
+  Group,
+  Mesh,
+  MeshBasicMaterial,
+  type PointLight,
+  DoubleSide,
+} from 'three';
 import type { GameSim } from '../sim/game/sim.js';
 import type { Texture } from './gfx/index.js';
 import { ENTITY_PALETTE } from './palette.js';
 import { Billboard } from './world/billboard.js';
 import { FloorSprite, PLINTH_HEIGHT } from './world/flat.js';
+import type { Lighting } from './world/lighting.js';
 
 /**
  * Item pedestals: a plinth on the floor, a beam of light standing on it in
@@ -20,10 +28,18 @@ const BEAM_RADIUS = 5;
 const BEAM_HEIGHT = 26;
 const BEAM_ALPHA = 0.3;
 const ITEM_HEIGHT = BEAM_HEIGHT * 0.6;
+const LIGHT_HEIGHT = BEAM_HEIGHT * 0.5;
+const LIGHT_INTENSITY = 600;
 
 interface PedestalSlot {
   readonly beam: Mesh<CylinderGeometry, MeshBasicMaterial>;
-  readonly light: PointLight;
+  /**
+   * Pooled from `Lighting` (`MAX_PROP_LIGHTS`), never a child of `group`:
+   * it lives at the scene root and `sync` drives its world position and
+   * intensity, so hiding a slot cannot change the scene's point-light count
+   * (`docs/DECISIONS.md` #80). `null` when the pool was exhausted.
+   */
+  readonly light: PointLight | null;
   readonly item: Billboard;
   readonly plinth: FloorSprite | null;
   readonly group: Group;
@@ -33,16 +49,23 @@ export class PedestalView {
   readonly group = new Group();
 
   private readonly sim: GameSim;
+  private readonly lighting: Lighting;
   private readonly itemTexture: Texture;
   private readonly plinthTexture: Texture | undefined;
   private readonly slots: PedestalSlot[] = [];
   private readonly slotForPedestal: number[] = [];
   private lean = 0;
 
-  constructor(sim: GameSim, itemTexture: Texture, plinthTexture?: Texture) {
+  constructor(sim: GameSim, lighting: Lighting, itemTexture: Texture, plinthTexture?: Texture) {
     this.sim = sim;
+    this.lighting = lighting;
     this.itemTexture = itemTexture;
     this.plinthTexture = plinthTexture;
+    // One slot built up front, hidden, so its beam, plinth and item materials
+    // are in the scene for `GameView.render`'s first-frame `renderer.compile`
+    // — otherwise their programs linked on the first crossing into a treasure
+    // room or shop (`docs/DECISIONS.md` #80). `sync` hides it until used.
+    this.slotAt(0).group.visible = false;
   }
 
   setLean(lean: number): void {
@@ -68,7 +91,11 @@ export class PedestalView {
       slot.group.visible = true;
       slot.group.position.set(pedestal.x, 0, pedestal.y);
       slot.beam.material.color.setHex(tint);
-      slot.light.color.setHex(tint);
+      if (slot.light !== null) {
+        slot.light.color.setHex(tint);
+        slot.light.position.set(pedestal.x, LIGHT_HEIGHT, pedestal.y);
+        slot.light.intensity = LIGHT_INTENSITY;
+      }
       const period = Math.max(1, tuning.bobPeriodTicks);
       const phase = ((pedestal.x + pedestal.y) / period) * Math.PI * 2;
       const bob = Math.sin((sim.tick / period) * Math.PI * 2 + phase) * tuning.bobAmplitude;
@@ -79,6 +106,9 @@ export class PedestalView {
       const slot = this.slots[index];
       if (slot !== undefined) {
         slot.group.visible = false;
+        if (slot.light !== null) {
+          slot.light.intensity = 0;
+        }
       }
     }
   }
@@ -118,9 +148,7 @@ export class PedestalView {
     );
     beam.position.y = BEAM_HEIGHT / 2;
     group.add(beam);
-    const light = new PointLight(0xffffff, 600, 90, 2);
-    light.position.y = BEAM_HEIGHT * 0.5;
-    group.add(light);
+    const light = this.lighting.acquirePropLight();
     const item = new Billboard();
     item.setTexture(this.itemTexture);
     item.visible = true;
@@ -146,6 +174,7 @@ export class PedestalView {
       slot.beam.material.dispose();
       slot.item.dispose();
       slot.plinth?.dispose();
+      this.lighting.releasePropLight(slot.light);
     }
     this.group.removeFromParent();
   }

@@ -98,6 +98,21 @@ export const MAX_DOOR_GLOWS = 12;
  */
 export const MAX_ROOM_BULBS = 6;
 
+/**
+ * How many prop lights — the white beam over an item pedestal
+ * (`render/pedestal-view.ts`) and over a vending machine
+ * (`render/machine-view.ts`) — can be lit at once. Those views used to own a
+ * `PointLight` each, parented under a per-slot group that was hidden when the
+ * room had no pedestal there: three.js's light traversal skips a hidden
+ * subtree, so `numPointLights` — a `#define` in every lit shader, and part of
+ * every program's cache key — changed with the room's pedestal count, and the
+ * whole lit program set relinked on the crossing (`docs/DECISIONS.md` #80).
+ * Authored rooms place at most one pedestal; a shop lays out a few. 8 is
+ * headroom, not a measured ceiling; overflow degrades the same way a door
+ * glow's does — the beam just casts no light.
+ */
+export const MAX_PROP_LIGHTS = 8;
+
 const BULB_HEIGHT = 34;
 const CLOUD_HEIGHT = 90;
 const CLOUD_CYCLE_TICKS = TICKS_PER_SECOND * 50;
@@ -163,6 +178,10 @@ export class Lighting {
   private readonly doorGlows: PointLight[] = [];
   private readonly doorGlowFree: boolean[] = [];
   private warnedDoorGlowOverflow = false;
+  /** Fixed pool of prop lights — see `MAX_PROP_LIGHTS`. `acquirePropLight`/`releasePropLight` hand them out. */
+  private readonly propLights: PointLight[] = [];
+  private readonly propLightFree: boolean[] = [];
+  private warnedPropLightOverflow = false;
   /** Fixed pool of bulb rigs — see `MAX_ROOM_BULBS`. Reassigned wholesale by `onRoomChanged`, not acquired/released. */
   private readonly bulbRigs: BulbRig[] = [];
   private warnedBulbOverflow = false;
@@ -208,6 +227,13 @@ export class Lighting {
       light.layers.enableAll();
       this.doorGlows.push(light);
       this.doorGlowFree.push(true);
+      scene.add(light);
+    }
+    for (let i = 0; i < MAX_PROP_LIGHTS; i++) {
+      const light = new PointLight(0xffffff, 0, 90, 2);
+      light.layers.enableAll();
+      this.propLights.push(light);
+      this.propLightFree.push(true);
       scene.add(light);
     }
     for (let i = 0; i < MAX_ROOM_BULBS; i++) {
@@ -360,13 +386,11 @@ export class Lighting {
   /**
    * Returns a light `acquireDoorGlow` handed out. Safe to call with `null`.
    *
-   * Re-parents the light directly onto the scene root: a `DoorPiece` adds
-   * its glow as a child of its own group (so it tracks the room's
-   * transition-slide translation while the door is live), and that group is
-   * about to be disposed. Left as a child of it, the light would be pulled
-   * out of the scene graph along with it — invisible to three.js's light
-   * traversal, which is exactly the "count changed" bug this pool exists to
-   * prevent, just via a different door.
+   * The light never left the scene root — a `DoorPiece` positions its glow in
+   * world space rather than parenting it (`DoorPiece.placeGlow`), precisely so
+   * that detaching a room's group (the cache, the end of the transition slide)
+   * cannot pull the light out of three.js's light traversal and change the
+   * count. All there is to release is to put it out and mark the slot free.
    */
   releaseDoorGlow(light: PointLight | null): void {
     if (light === null) {
@@ -377,9 +401,48 @@ export class Lighting {
       return;
     }
     light.intensity = 0;
-    light.position.set(0, 0, 0);
-    this.scene.add(light);
     this.doorGlowFree[index] = true;
+  }
+
+  /**
+   * Claims a prop light — a pedestal's or a machine's beam — for the caller's
+   * whole lifetime, or `null` if the pool is exhausted (the beam then simply
+   * casts no light; `docs/DECISIONS.md` #19). Handed out at intensity 0 and
+   * sitting at the scene root, where it must stay: the caller drives its
+   * world-space `position` and `intensity` every frame, and never parents it.
+   */
+  acquirePropLight(): PointLight | null {
+    for (let i = 0; i < this.propLightFree.length; i++) {
+      if (this.propLightFree[i] === true) {
+        this.propLightFree[i] = false;
+        const light = this.propLights[i];
+        if (light !== undefined) {
+          light.intensity = 0;
+          return light;
+        }
+      }
+    }
+    if (import.meta.env.DEV && !this.warnedPropLightOverflow) {
+      this.warnedPropLightOverflow = true;
+      console.warn(
+        `Lighting: prop-light pool exhausted at ${String(MAX_PROP_LIGHTS)} — ` +
+          'this pedestal or machine beam will cast no light (docs/DECISIONS.md #19).',
+      );
+    }
+    return null;
+  }
+
+  /** Returns a light `acquirePropLight` handed out. Safe to call with `null`. */
+  releasePropLight(light: PointLight | null): void {
+    if (light === null) {
+      return;
+    }
+    const index = this.propLights.indexOf(light);
+    if (index === -1) {
+      return;
+    }
+    light.intensity = 0;
+    this.propLightFree[index] = true;
   }
 
   private hideCloud(): void {

@@ -3,9 +3,14 @@ import { PointLight, Scene } from 'three';
 import { ENEMY_DEFINITIONS } from '../../src/content/enemies/index.js';
 import { FLOOR_CONFIGS } from '../../src/content/floors/definition.js';
 import { ROOM_TEMPLATES } from '../../src/content/rooms/index.js';
-import { Lighting, MAX_DOOR_GLOWS } from '../../src/render/world/lighting.js';
+import cellarHall from '../../src/content/rooms/cellar-hall.json';
+import cellarShop from '../../src/content/rooms/cellar-shop.json';
+import cellarTreasure from '../../src/content/rooms/cellar-treasure.json';
+import { Lighting, MAX_DOOR_GLOWS, MAX_PROP_LIGHTS } from '../../src/render/world/lighting.js';
 import { MaterialCache } from '../../src/render/world/material-cache.js';
 import { Scenery } from '../../src/render/world/scenery.js';
+import { GameSim } from '../../src/sim/game/sim.js';
+import { createInputFrame } from '../../src/sim/input/frame.js';
 import { generateFloor } from '../../src/sim/room/floor-plan.js';
 import { RoomGeometry } from '../../src/sim/room/geometry.js';
 import { Rng } from '../../src/sim/rng/rng.js';
@@ -15,6 +20,7 @@ import {
   ROOM_MARGIN_Y,
   validateRoomTemplate,
 } from '../../src/sim/room/template.js';
+import { buildHeadlessView } from '../bench/scene.js';
 
 /**
  * #292's central invariant: the number of `PointLight`s in the scene never
@@ -27,9 +33,15 @@ import {
  * #293 removes it.
  */
 
+/**
+ * What three.js itself counts into `numPointLights` — the lights it can reach
+ * by traversing *visible* objects from the scene root. A light under a hidden
+ * group, or in a group that has been detached from the scene, is not in the
+ * shader, so `traverse` would overcount exactly the cases that broke.
+ */
 function countPointLights(scene: Scene): number {
   let count = 0;
-  scene.traverse((object) => {
+  scene.traverseVisible((object) => {
     if (object instanceof PointLight) {
       count += 1;
     }
@@ -136,6 +148,118 @@ describe('Lighting/Scenery, a constant point-light count (#292)', () => {
     expect(countPointLights(scene)).toBe(baseline);
     outgoing.dispose();
     expect(countPointLights(scene)).toBe(baseline);
+  });
+});
+
+describe('Lighting/Scenery, a constant point-light count with rooms cached off screen (#80)', () => {
+  function build(
+    lighting: Lighting,
+    materials: MaterialCache,
+    doors: readonly CompiledDoor[],
+  ): Scenery {
+    return new Scenery(room(240, 144), 1, doors, [], { tileTextures: {} }, -1, lighting, materials);
+  }
+
+  it('keeps the count when a room is detached rather than disposed, and its glows go dark', () => {
+    const scene = new Scene();
+    const lighting = new Lighting(scene);
+    const materials = new MaterialCache();
+    const baseline = countPointLights(scene);
+
+    const cached = build(lighting, materials, CROSSROADS);
+    cached.attach(scene);
+    for (const door of cached.doors) {
+      door.setState('open');
+    }
+    expect(countPointLights(scene)).toBe(baseline);
+    const glows = cached.doors.map((door) => door.glowLight);
+    expect(glows.every((glow) => glow !== null && glow.intensity > 0)).toBe(true);
+
+    // Off screen, the way `SceneryCache` keeps a visited room: the glows
+    // stay in the scene (so the count holds) but must not light the room
+    // that is actually on screen.
+    cached.detach();
+    expect(countPointLights(scene)).toBe(baseline);
+    expect(glows.every((glow) => glow !== null && glow.intensity === 0)).toBe(true);
+
+    // Back on screen — as the outgoing room of a slide, shifted a room east —
+    // lit again, and the glows moved with the room they belong to.
+    const before = glows.map((glow) => glow?.position.clone());
+    cached.attach(scene, 300, 0);
+    expect(countPointLights(scene)).toBe(baseline);
+    glows.forEach((glow, index) => {
+      expect(glow?.intensity ?? 0).toBeGreaterThan(0);
+      expect(glow?.position.x).toBeCloseTo((before[index]?.x ?? 0) + 300);
+      expect(glow?.position.z).toBeCloseTo(before[index]?.z ?? 0);
+    });
+    // And a re-attach at the origin puts the room, and its glows, back.
+    cached.attach(scene);
+    expect(cached.group.position.x).toBe(0);
+    glows.forEach((glow, index) => {
+      expect(glow?.position.x).toBeCloseTo(before[index]?.x ?? 0);
+    });
+    // Glows are never children of the door: parenting them was the leak.
+    for (const door of cached.doors) {
+      expect(door.group.children.some((child) => child instanceof PointLight)).toBe(false);
+    }
+    cached.dispose();
+    expect(countPointLights(scene)).toBe(baseline);
+  });
+
+  it('hands out prop lights from a fixed, scene-resident pool and degrades to null past it', () => {
+    const scene = new Scene();
+    const lighting = new Lighting(scene);
+    const baseline = countPointLights(scene);
+    const claimed: PointLight[] = [];
+    for (let i = 0; i < MAX_PROP_LIGHTS; i++) {
+      const light = lighting.acquirePropLight();
+      expect(light).not.toBeNull();
+      if (light !== null) {
+        expect(light.parent).toBe(scene);
+        expect(light.intensity).toBe(0);
+        claimed.push(light);
+      }
+    }
+    expect(new Set(claimed).size).toBe(MAX_PROP_LIGHTS);
+    expect(lighting.acquirePropLight()).toBeNull();
+    expect(countPointLights(scene)).toBe(baseline);
+    const [first] = claimed;
+    if (first !== undefined) {
+      first.intensity = 600;
+      lighting.releasePropLight(first);
+      expect(first.intensity).toBe(0);
+      expect(lighting.acquirePropLight()).toBe(first);
+    }
+    expect(countPointLights(scene)).toBe(baseline);
+  });
+});
+
+describe('GameView, a constant point-light count across real room loads (#80)', () => {
+  it('holds across an empty hall, a pedestal room, a shop, a slide and a cached revisit', () => {
+    const sim = new GameSim({ roomTemplate: cellarHall, floor: 1, population: 'empty' });
+    const view = buildHeadlessView(sim);
+    view.sync(0);
+    const baseline = countPointLights(view.scene);
+    expect(baseline).toBeGreaterThan(0);
+
+    const visit = (template: unknown, direction: 'north' | null): void => {
+      sim.loadRoom(template, 1, direction, [], undefined, { col: 0, row: 0 }, false);
+      view.sync(0);
+      expect(countPointLights(view.scene)).toBe(baseline);
+      // A few frames into the room (and, with a direction, into the slide,
+      // which holds the outgoing room on screen too).
+      for (let i = 0; i < 3; i++) {
+        sim.step(createInputFrame());
+        view.sync(0);
+        expect(countPointLights(view.scene)).toBe(baseline);
+      }
+    };
+    visit(cellarTreasure, 'north');
+    expect(sim.activePedestals.length).toBeGreaterThan(0);
+    visit(cellarShop, 'north');
+    visit(cellarHall, 'north');
+    visit(cellarTreasure, null);
+    view.destroy();
   });
 });
 

@@ -118,6 +118,15 @@ export class ParticleView {
   constructor(store: ParticleStore, textures: ParticleTextures) {
     this.store = store;
     this.textures = textures;
+    // Every kind's layer up front rather than on the first particle of that
+    // kind: `GameView.render`'s one-off `renderer.compile` links the programs
+    // of whatever is in the scene on the first frame, and a layer that only
+    // appeared with the first dust puff in a shop linked its two programs on
+    // that crossing instead (`docs/DECISIONS.md` #80). Nine empty instanced
+    // meshes at count 0 cost nothing to keep around.
+    for (let kind = 0; kind < textures.byKind.length; kind++) {
+      this.layerFor(kind);
+    }
   }
 
   setAccessibility(accessibility: ParticleAccessibility): void {

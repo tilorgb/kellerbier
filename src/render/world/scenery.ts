@@ -7,6 +7,7 @@ import {
   LineSegments,
   Mesh,
   MeshStandardMaterial,
+  type Object3D,
   PlaneGeometry,
   type PointLight,
 } from 'three';
@@ -101,8 +102,21 @@ export class DoorPiece {
    * Claimed from `Lighting`'s fixed pool (`docs/PERFORMANCE_AUDIT.md` F1) —
    * `null` only if the pool is exhausted (`docs/DECISIONS.md` #19: the door
    * just doesn't glow). Released in `dispose`.
+   *
+   * Never a child of `group`: it stays at the scene root, where `Lighting`
+   * put it, and `placeGlow` moves it to the door's world position instead.
+   * Parenting it here was how the point-light count still changed after #292
+   * — a cached room's group leaves the scene graph with its doors' glows
+   * inside it, three.js counts only the lights it can traverse to, and every
+   * lit shader relinked on the count (`docs/DECISIONS.md` #80).
    */
-  private readonly glow: PointLight | null;
+  private glow: PointLight | null;
+  /** Where the glow's local `(0, 10, -t/2)` lands in room space once the door's rotation is applied. */
+  private readonly glowX: number;
+  private readonly glowZ: number;
+  /** Whether this door's room is on screen — a cached, detached room's doors must not light the live one. */
+  private live = false;
+  private pulseStrength = 0;
   private readonly span: number;
   private readonly doorHeight: number;
   private state: DoorState = 'closed';
@@ -172,14 +186,52 @@ export class DoorPiece {
       this.group.add(above);
     }
 
+    // The glow sits a half wall-thickness *behind* the door (through the
+    // passage, local -z), which after the door's facing rotation is a room
+    // space offset from the door's centre — worked out once here, so
+    // `placeGlow` is a couple of adds per call.
+    const facing = DOOR_FACING[door.direction];
+    this.glowX = centreX - (t / 2) * Math.sin(facing);
+    this.glowZ = centreZ - (t / 2) * Math.cos(facing);
     this.glow = lighting.acquireDoorGlow();
-    if (this.glow !== null) {
-      this.glow.position.set(0, 10, -t / 2);
-      this.group.add(this.glow);
-    }
+    this.placeGlow(0, 0);
 
     this.buildLeaves();
     this.setState('closed');
+  }
+
+  /** The pooled passage light behind this door, or `null` when the pool was exhausted. */
+  get glowLight(): PointLight | null {
+    return this.glow;
+  }
+
+  /**
+   * Moves the glow to this door's world position, given where the room's
+   * group currently sits — `(0, 0)` normally, the slide shift while this
+   * room is the outgoing one (`Scenery.setOffset`).
+   */
+  placeGlow(roomOffsetX: number, roomOffsetZ: number): void {
+    if (this.glow !== null) {
+      this.glow.position.set(this.glowX + roomOffsetX, 10, this.glowZ + roomOffsetZ);
+    }
+  }
+
+  /**
+   * Whether this door's room is currently attached to the scene. Off, the
+   * glow is dark whatever `setState`/`setPulse` say — the light itself never
+   * leaves the scene, so this is what keeps a cached room's open doors from
+   * lighting the room actually on screen.
+   */
+  setLive(live: boolean): void {
+    this.live = live;
+    this.applyGlow();
+  }
+
+  private applyGlow(): void {
+    if (this.glow === null) {
+      return;
+    }
+    this.glow.intensity = this.live && this.state === 'open' ? 120 + this.pulseStrength * 400 : 0;
   }
 
   /** One leaf or two. Rebuilds the leaves; the state and openness carry over. */
@@ -272,9 +324,8 @@ export class DoorPiece {
       );
     }
     this.setOpenness(state === 'open' ? 1 : 0);
-    if (this.glow !== null) {
-      this.glow.intensity = state === 'open' ? 120 : 0;
-    }
+    this.pulseStrength = 0;
+    this.applyGlow();
   }
 
   get currentState(): DoorState {
@@ -298,14 +349,18 @@ export class DoorPiece {
 
   /** The room-clear amber pulse on the passage light. */
   setPulse(strength: number): void {
-    if (this.glow !== null) {
-      this.glow.intensity = this.state === 'open' ? 120 + strength * 400 : 0;
-    }
+    this.pulseStrength = strength;
+    this.applyGlow();
   }
 
   dispose(): void {
     this.disposeLeaves();
     this.lighting.releaseDoorGlow(this.glow);
+    // Forgotten, not just released: the pool hands the same light to the
+    // next door built, and a late `setLive`/`setPulse` on this disposed
+    // piece (a floor change detaches the old slide's room after disposing
+    // the whole cache) must not reach into that door's light.
+    this.glow = null;
     disposeMeshes(this.group);
     this.group.removeFromParent();
   }
@@ -613,6 +668,42 @@ export class Scenery {
     this.lean = lean;
     for (const billboard of this.billboards) {
       billboard.mesh.rotation.x = lean;
+    }
+  }
+
+  /**
+   * Puts this room on screen: its group under `scene`, at `(offsetX, 0,
+   * offsetZ)` — the origin for the room being played, the slide shift for the
+   * outgoing one — and its door glows lit per their state. The only way a
+   * `Scenery` should ever join a scene: a bare `scene.add(group)` would leave
+   * the pooled glows dark (`DoorPiece.setLive`) and, for a room last seen
+   * sliding out, sitting a room's width from where it belongs.
+   */
+  attach(scene: Object3D, offsetX = 0, offsetZ = 0): void {
+    scene.add(this.group);
+    this.setOffset(offsetX, offsetZ);
+    for (const door of this.doors) {
+      door.setLive(true);
+    }
+  }
+
+  /**
+   * Takes this room off screen without disposing it — `SceneryCache` keeps it
+   * for a revisit. Its door glows go dark; the lights themselves stay in the
+   * scene, at the scene root, so three.js's light count does not move.
+   */
+  detach(): void {
+    this.group.removeFromParent();
+    for (const door of this.doors) {
+      door.setLive(false);
+    }
+  }
+
+  /** Moves the whole room — the transition slide — and its glows, which are not children of `group`, along with it. */
+  setOffset(offsetX: number, offsetZ: number): void {
+    this.group.position.set(offsetX, 0, offsetZ);
+    for (const door of this.doors) {
+      door.placeGlow(offsetX, offsetZ);
     }
   }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BoxGeometry, type Group, Mesh, PointLight, Raycaster, Scene, Vector3 } from 'three';
+import { BoxGeometry, type Group, Mesh, type PointLight, Raycaster, Scene, Vector3 } from 'three';
 import { ROOM_TILE_UNITS } from '../../src/content/rooms/definition.js';
 import { RoomGeometry } from '../../src/sim/room/geometry.js';
 import {
@@ -26,8 +26,22 @@ function room(): RoomGeometry {
 }
 
 function build(doors: readonly CompiledDoor[]): Scenery {
-  const lighting = new Lighting(new Scene());
-  return new Scenery(room(), 1, doors, [], { tileTextures: {} }, -1, lighting, new MaterialCache());
+  const scene = new Scene();
+  const lighting = new Lighting(scene);
+  const scenery = new Scenery(
+    room(),
+    1,
+    doors,
+    [],
+    { tileTextures: {} },
+    -1,
+    lighting,
+    new MaterialCache(),
+  );
+  // On screen, the way `GameView` puts a room there — a detached room's
+  // glows are deliberately dark (`DoorPiece.setLive`).
+  scenery.attach(scene);
+  return scenery;
 }
 
 /** The one door a single-door room has — thrown, not asserted, so the test reads straight. */
@@ -40,8 +54,8 @@ function firstDoor(scenery: Scenery): DoorPiece {
 }
 
 function glowOf(piece: DoorPiece): PointLight {
-  const glow = piece.group.children.find((child) => child instanceof PointLight);
-  if (glow === undefined) {
+  const glow = piece.glowLight;
+  if (glow === null) {
     throw new Error('a DoorPiece has a glow behind it');
   }
   return glow;

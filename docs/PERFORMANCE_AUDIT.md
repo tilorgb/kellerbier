@@ -138,6 +138,74 @@ point-light count and stop disposing materials, and the prewarm stops having any
 
 ---
 
+## 3b. Re-measured after #292/#293/#294: it still relinked, and the count still moved
+
+The user's report after all of tier 1-3 had landed: "the game often stutters or gets stuck for
+almost multiple seconds" on a room switch. Re-measured the same way as §3a — headless Chromium on
+SwiftShader, a real walk into each door (teleport to the threshold, hold the direction key through
+#289's dwell), every crossing after the first pass through a room — with one addition: every frame
+that linked a program also recorded `renderer.info.programs`' cache keys before and after, so the
+*parameter* that changed could be read off the key rather than guessed.
+
+| Per crossing, before this fix | Measured |
+|---|---|
+| `compileShader` / `linkProgram` on the dwell or switch frame | **4–40 / 2–20**, on almost every crossing |
+| Time inside `getProgramInfoLog`/`getShaderInfoLog` (the blocking link) | **0.6–2.4 s** per crossing (SwiftShader; a real driver is faster, but it is the same synchronous link, and D3D's HLSL compiler under ANGLE is the slow case players hit) |
+| Programs held by the renderer | **80 → 150 over 14 crossings**, never plateauing |
+| `numPointLights` in the linked programs' cache keys | **16, 17, 20, 21, 22, 23, 24, 26** — eight distinct values |
+
+Three causes, each of which #292's "constant point-light count" and #291's "warm at boot" were
+meant to have removed, and each of which they missed by one step:
+
+1. **The door glows were pooled but parented.** `DoorPiece` claimed a `PointLight` from
+   `Lighting`'s fixed pool — and then added it as a child of its own group so it would ride the
+   transition slide. #293's `SceneryCache` keeps a visited room *detached* rather than disposed,
+   and detaching the group took its doors' glows out of the scene graph with it. three.js only
+   counts the lights it can traverse to, so `numPointLights` was "the pool, minus every glow held by
+   a cached room, plus the outgoing room's during the slide": a different number after almost every
+   crossing, and every lit program relinked for each new value. `tests/unit/lighting-pool.test.ts`
+   counted with `traverse` over a scene the rooms were never removed from, so it kept passing.
+2. **The pedestal and machine lights were never pooled.** `PedestalView` made a `PointLight` per
+   slot under a group it hides when the room has no pedestal there; hidden subtrees are skipped by
+   the light traversal too. Treasure room, shop, machine room — each a different count.
+3. **The warm compiled the wrong program set.** `warmSceneryGroup` rendered the incoming room into
+   a 1×1 `WebGLRenderTarget`. A render target's `outputColorSpace` is linear; the canvas is sRGB;
+   the colour space is part of the program cache key. So #291's dwell-frame warm paid to link a
+   `srgb-linear` variant of every material and the switch frame then linked the `srgb` one it
+   actually draws with. The boot-time floor warm did the same, for every room on the floor.
+
+And underneath all three, the mechanism F1 named: three.js reference-counts programs per material,
+so with the count finally constant, any room whose disposal took a program's count to zero (a
+billboard's tinted material, a door leaf's, a floor sprite's — the per-instance ones
+`MaterialCache` does not hold) would still relink it on the next room that needed it.
+
+**Fix, in `src/render/world/`** (`docs/DECISIONS.md` #80):
+
+- Glows stay at the scene root for good; `DoorPiece.placeGlow` positions them in world space and
+  `Scenery.attach`/`detach`/`setOffset` carry a room's glows with its slide shift and darken them
+  while the room is cached off screen. `Lighting` grows a second pool, `MAX_PROP_LIGHTS`, for the
+  pedestal and machine beams, driven the same way.
+- `ProgramPins` (`world/program-pins.ts`) bumps every linked program's `usedTimes` once, so no
+  material disposal can ever delete one.
+- The warm renders into the canvas under a 1×1 scissor instead of a render target; the first
+  `render` runs `renderer.compile` over the persistent layers (bodies, pickups, particles, decals,
+  telegraphs, pedestal slots — each now seeded with one hidden instance so there is something to
+  compile), and `ProgramPins.settle` forces those deferred links to complete a couple per frame
+  behind the floor card, so their first draw is not a first link either.
+- `tests/unit/lighting-pool.test.ts` now counts with `traverseVisible` — what three counts — across
+  detached rooms, hidden pedestal slots, a slide and a cached revisit, through the real `GameView`.
+
+| Per crossing, after | Measured |
+|---|---|
+| `compileShader` / `linkProgram`, every crossing after the run's first | **0 / 0** (24 crossings, both floors' room types) |
+| Programs held by the renderer | **19–22**, flat |
+| `numPointLights` | **35**, always (1 lantern + 8 shot + 12 door glows + 6 bulbs + 8 prop) |
+| `GameView` JS time on the switch frame | **12–24 ms** under SwiftShader, from 600–2,400 ms |
+
+35 point lights in every lit fragment is F7's concern made larger, deliberately: the pools are sized
+for the worst room plus four cached ones, and a constant 35 costs a fixed per-fragment loop where a
+varying 16–26 cost a relink of every shader. Trimming the pools is F7's follow-up, not this one's.
+
 ## 4. Findings, ranked
 
 ### F1 — Shader programs are destroyed and relinked on every room transition
@@ -168,6 +236,11 @@ per-floor cache keyed by tileset + material shape, so nothing gets disposed and 
 **Status after #291:** (c) is done, thoroughly — see §3a. The switch frame is clean. (a) and (b)
 are untouched, which is why the compile still happens: it just happens on the dwell frame and, at
 median 8 compiles per crossing, when the slide ends and the outgoing room is disposed.
+
+**Status after #80 (`docs/DECISIONS.md`):** closed — see §3b. (a) holds for real now that glows and
+prop lights stay at the scene root; (b) is done not by caching materials but by pinning programs
+(`world/program-pins.ts`), which covers the per-instance materials a cache never would; (c)'s warm
+now compiles the variants the canvas actually draws. Zero links per crossing after the first.
 
 ### F2 — The room is rebuilt from scratch instead of re-dressed
 
@@ -245,6 +318,9 @@ regardless.
 
 **Fix:** cut `SHOT_LIGHT_COUNT`, replace the per-door glow with an emissive quad, and keep the
 total fixed — which F1 needs anyway.
+
+**Status after §3b:** the total is fixed, at 35. Cutting it is still open, and is now a pure
+throughput question rather than a stutter one.
 
 ### F8 — One draw call per standing body, and 113 separate sprite textures
 
