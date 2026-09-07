@@ -163,6 +163,7 @@ describe('the masterkey pickup (#275)', () => {
       sim.positionX(sim.playerIndex),
       sim.positionY(sim.playerIndex),
     );
+    sim.world.flush(); // the spawn is deferred until a flush — see tests/unit/pickups.test.ts
     sim.step(IDLE);
 
     expect(sim.meisterschluessel).toBe(true);
