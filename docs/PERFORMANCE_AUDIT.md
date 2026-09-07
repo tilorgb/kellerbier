@@ -86,6 +86,58 @@ is disposed. So the point-light count changes **twice per crossing**.
 
 ---
 
+## 3a. Re-measured after #291: the hitch moved, it did not go
+
+#291 ("prewarm the next room") built the incoming room's `Scenery` during #289's crossing dwell
+and warmed the whole floor's scenery programs behind the floor title card. **It works for the
+frame it targeted** — and it does not fix F1, because it treats where the compile *lands* rather
+than why there is a compile at all.
+
+Re-measured on `cea8b31`, replaying the real sequence `app/main.ts` performs
+(`prewarmRoom` → dwell → `confirmPrewarmedEntry` → `sim.loadRoom`) for every authored template on
+both floors, twice. The numbers below are the **second** pass — every room already visited once,
+the boot warm queue long since drained — so nothing here is a warm-up cost:
+
+| Phase of a crossing | `compileShader` | `linkProgram` | `deleteProgram` | `GameView.sync` |
+|---|---|---|---|---|
+| **Dwell** (player pressing into the door) | 182 total, **median 4** | 91 total, **median 2** | 36 | — |
+| **Switch frame** | 48 total, **median 0** | 24 total, **median 0** | 36 | 0.4–3.1 ms |
+| **Slide end** (~1 s later, outgoing room disposed) | 224 total, **median 8** | 112 total, **median 4** | 154 | — |
+
+*(30 crossings. Steady-state `sync` for comparison: 0.1 ms.)*
+
+Read that as three statements:
+
+1. **The switch frame is genuinely fixed** — median zero compiles. Credit where it is due. Six of
+   the thirty crossings still paid 4–8 compiles and up to 14 program deletions there, with `sync`
+   spikes of 2.5–3.1 ms, but the common case is clean.
+2. **Some of it moved onto the dwell frame** — median 4 compiles / 2 links on *every* approach,
+   plus 41–149 KB of buffer uploads. #291's own commit message predicts this ("onto the dwell
+   frame, where a driver without `KHR_parallel_shader_compile` still blocks ~100–400 ms while the
+   player presses the door"). To a player that is not a freeze on the switch; it is a door that
+   feels sticky, or input that feels dropped, in the moment before it opens.
+3. **Most of it moved to about a second later.** When the transition slide ends and
+   `outgoingScenery.dispose()` runs, the last user of those materials' programs goes with it
+   (`deleteProgram`) and the point-light count drops back — and the whole lit program set relinks:
+   **median 8 compiles / 4 links, on every crossing, forever.** That lands just as the camera
+   settles into the new room, which is a very plausible fit for "it still does not feel right".
+
+The point-light oscillation is visible in the same run: **15–17 point lights in a settled room,
+19–21 during the slide** while both rooms are in the scene. Twice per crossing, every crossing.
+
+Two things also got slightly worse, both consequences of F5 now running more often:
+
+- The leak (**F4**) is untouched and now fires on the dwell as well, because `prewarmRoom` builds
+  and disposes a `Scenery` of its own: `info.memory.geometries` **100 → 269** and `.textures`
+  **39 → 69** over 60 crossings.
+- The program cache grew **26 → 93** across the run rather than plateauing — each light-count
+  variant × material shape is another key.
+
+**Conclusion: the prewarm is worth keeping, and it is not a substitute for F1/F2/F4/F5.** Fix the
+point-light count and stop disposing materials, and the prewarm stops having anything to prewarm.
+
+---
+
 ## 4. Findings, ranked
 
 ### F1 — Shader programs are destroyed and relinked on every room transition
@@ -111,8 +163,11 @@ program cache does not help — the link still happens in-frame.
 **Fix:** (a) make the point-light count constant — pool the per-door glows and the bulbs to a fixed
 maximum and drive `intensity`, never add/remove lights; (b) reuse materials across rooms via a
 per-floor cache keyed by tileset + material shape, so nothing gets disposed and relinked;
-(c) `renderer.compileAsync(scene, camera)` at boot so a program's first appearance is never on a
-transition frame.
+(c) warm the program set once at boot rather than per room.
+
+**Status after #291:** (c) is done, thoroughly — see §3a. The switch frame is clean. (a) and (b)
+are untouched, which is why the compile still happens: it just happens on the dwell frame and, at
+median 8 compiles per crossing, when the slide ends and the outgoing room is disposed.
 
 ### F2 — The room is rebuilt from scratch instead of re-dressed
 
