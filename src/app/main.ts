@@ -18,6 +18,7 @@ import { validateStaircaseTemplate } from '../sim/room/staircase.js';
 import { Rng } from '../sim/rng/rng.js';
 import {
   type CompiledDoor,
+  type CompiledRoomTemplate,
   type RoomPlacement,
   compileRoomTemplate,
   validateRoomTemplate,
@@ -2403,7 +2404,7 @@ WASD move   arrows aim and fire
     // reassignment just below, then destroyed only once the new one's label
     // layer has taken its place on the UI pass.
     const previousView = typeof view !== 'undefined' ? view : undefined;
-    view = new GameView(sim, viewTextures);
+    view = new GameView(sim, viewTextures, app.renderer);
     cameraTuning?.apply(view);
     // World-anchored text (damage numbers, prices) draws over the overlays
     // and under the HUD: the same slot the previous view's layer held.
@@ -2413,6 +2414,10 @@ WASD move   arrows aim and fire
     uiLayer.addChildAt(view.labelLayer, uiLayer.getChildIndex(hud));
     previousView?.destroy();
     syncFloorPlanView();
+    // Compile the floor's whole scenery shader set now, behind the title card,
+    // so no room transition later pays a first-compile hitch. See
+    // `GameView.warmSceneryShaders`.
+    warmFloorShaders();
     // Both `sim` and `view` above are fresh objects and the old view has just
     // been destroyed, so anything holding the previous pair is now holding
     // corpses. `null` only on boot's own first call, which the `await` below
@@ -2813,27 +2818,33 @@ WASD move   arrows aim and fire
   }
 
   /**
-   * Compiles the neighbour room now and hands its geometry to
-   * `view.prewarmRoom`, so `GameView.sync` adopts a ready-built scene graph on
-   * the switch frame instead of constructing it there — where the cost stalls
-   * the frame long enough that #96's transition slide visibly jumps to catch
-   * up. Mirrors `GameSim.loadRoom`'s own hidden-door filtering so a not-yet-
-   * revealed secret door reads as solid wall, the same as after the real load.
+   * A room's compiled geometry, its visible doors (a not-yet-revealed secret
+   * door filtered out, mirroring `GameSim.loadRoom`) and its decorative props —
+   * everything `GameView` needs to build a room's scenery without loading it.
+   * `null` for a staircase, which compiles through a different path
+   * (`GameView` never prewarms one). Shared by `prewarmNeighborScenery` and
+   * `warmFloorShaders`.
    */
-  function prewarmNeighborScenery(
-    neighborRoomId: string,
-    neighborRoom: FloorPlanRoom,
-    placement: RoomPlacement,
-  ): void {
+  function sceneryInputsFor(
+    roomId: string,
+    room: FloorPlanRoom,
+  ): {
+    geometry: CompiledRoomTemplate['geometry'];
+    doors: CompiledDoor[];
+    props: CompiledRoomTemplate['decorativeProps'];
+  } | null {
+    if (room.staircaseTemplateId !== undefined) {
+      return null;
+    }
     const compiled = compileRoomTemplate(
-      roomTemplateFor(neighborRoom),
+      roomTemplateFor(room),
       floorPlan.floor,
       'room template',
       ENEMY_DEFINITIONS,
-      placement,
+      buildPlacement(room),
     );
-    const hidden = hiddenDoorsFor(floorPlan, neighborRoomId, revealedEdges);
-    const visibleDoors = compiled.doors.filter(
+    const hidden = hiddenDoorsFor(floorPlan, roomId, revealedEdges);
+    const doors = compiled.doors.filter(
       (door) =>
         !hidden.some(
           (h) =>
@@ -2842,13 +2853,37 @@ WASD move   arrows aim and fire
             h.cellRow === door.cellRow,
         ),
     );
-    view.prewarmRoom(
-      neighborRoomId,
-      compiled.geometry,
-      floorPlan.floor,
-      visibleDoors,
-      compiled.decorativeProps,
-    );
+    return { geometry: compiled.geometry, doors, props: compiled.decorativeProps };
+  }
+
+  /**
+   * Compiles the neighbour room now and hands its geometry to
+   * `view.prewarmRoom`, so `GameView.sync` adopts a ready-built scene graph on
+   * the switch frame instead of constructing it there — where the cost stalls
+   * the frame long enough that #96's transition slide visibly jumps to catch
+   * up.
+   */
+  function prewarmNeighborScenery(neighborRoomId: string, neighborRoom: FloorPlanRoom): void {
+    const inputs = sceneryInputsFor(neighborRoomId, neighborRoom);
+    if (inputs === null) {
+      return;
+    }
+    view.prewarmRoom(neighborRoomId, inputs.geometry, floorPlan.floor, inputs.doors, inputs.props);
+  }
+
+  /**
+   * Builds and off-screen-renders every room on the floor plan once, so every
+   * scenery shader program the floor can need is compiled up front — behind the
+   * floor title card — rather than the first room to introduce a new material
+   * paying for it on its switch frame (the "stutter on the first room" a player
+   * hits). Called from `startRun` and `advanceFloor`, after
+   * `rebuildProceduralRooms` so the generated rooms' real content is in place.
+   */
+  function warmFloorShaders(): void {
+    const inputs = floorPlan.rooms
+      .map((room) => sceneryInputsFor(room.id, room))
+      .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+    view.warmSceneryShaders(floorPlan.floor, inputs);
   }
 
   /**
@@ -2896,7 +2931,7 @@ WASD move   arrows aim and fire
       sim.pressingToward(direction) &&
       prewarmedNeighborId !== neighborRoomId
     ) {
-      prewarmNeighborScenery(neighborRoomId, neighborRoom, buildPlacement(neighborRoom));
+      prewarmNeighborScenery(neighborRoomId, neighborRoom);
       prewarmedNeighborId = neighborRoomId;
     }
 
@@ -3044,6 +3079,9 @@ WASD move   arrows aim and fire
       true,
     );
     syncFloorPlanView();
+    // Warm the new floor's scenery shaders behind its title card — see
+    // `GameView.warmSceneryShaders`.
+    warmFloorShaders();
     refreshHud();
     showFloorCard();
   }

@@ -209,6 +209,19 @@ export class GameView {
    * rather than on the switch frame. Created on first use.
    */
   private warmTarget: WebGLRenderTarget | null = null;
+  /**
+   * Rooms queued by `warmSceneryShaders` to have their shaders compiled — one
+   * drained per `render` so the whole floor's set warms across the frames the
+   * title card is up, never in one blocking burst. `floor` is fixed per fill.
+   */
+  private warmQueue: {
+    floor: number;
+    rooms: {
+      readonly geometry: RoomGeometry;
+      readonly doors: readonly CompiledDoor[];
+      readonly props: readonly DecorativeProp[];
+    }[];
+  } | null = null;
   /** Where the camera was actually aiming last frame — the slide's start point, for continuity into the next room. */
   private lastAimX = 0;
   private lastAimZ = 0;
@@ -237,9 +250,12 @@ export class GameView {
   };
   private readonly point: WorldPoint = { x: 0, y: 0 };
 
-  constructor(sim: GameSim, textures: GameViewTextures) {
+  constructor(sim: GameSim, textures: GameViewTextures, renderer?: WebGLRenderer) {
     this.sim = sim;
     this.textures = textures;
+    // Given up front so `warmSceneryShaders` can run before the first frame;
+    // `render` re-captures it anyway.
+    this.renderer = renderer ?? null;
     this.roomGeometry = sim.room;
     this.doorsLocked = sim.doorsLocked;
 
@@ -505,6 +521,11 @@ export class GameView {
     // Labels project after the camera has moved, or they lag a frame.
     this.damageNumbers.sync(alpha, this.projectPoint);
     this.labelLayer.prepare(1);
+
+    // One queued room's shaders per frame — spread across the frames the floor
+    // title card is up. Here, not in `render`, so the off-screen warm render it
+    // triggers (which calls `render`) can't recurse into this.
+    this.drainWarmQueue();
   }
 
   /** Draws the world pass. The caller draws the UI pass over it. */
@@ -616,31 +637,78 @@ export class GameView {
     props: readonly DecorativeProp[],
   ): void {
     const built = this.prewarm.request(roomKey, () => this.makeScenery(room, floor, doors, props));
-    if (built === null || this.renderer === null) {
+    if (built !== null) {
+      this.warmSceneryGroup(built.group);
+    }
+  }
+
+  /**
+   * Queue the floor's rooms to have every shader program their scenery can need
+   * compiled and their shared textures uploaded — `app/main.ts` calls this from
+   * `startRun` and `advanceFloor` with every room on the floor plan. Three
+   * compiles a material's program lazily on first draw, and each of `render`'s
+   * three passes needs its own variant, so without this the first time a room
+   * introduces a material the start room lacked (a colour-only block, a hazard,
+   * a boss door) the switch frame pays for it and the game hitches — the
+   * "stutter on the first room" a player hits.
+   *
+   * The queue drains one room per `render`, so the ~15-room floor set warms
+   * across the frames the floor title card is up rather than in one
+   * multi-hundred-millisecond block on `startRun`. The per-crossing
+   * `prewarmRoom` warm still runs; once this queue has passed it only has that
+   * room's own geometry buffers left to upload, not a program to compile.
+   */
+  warmSceneryShaders(
+    floor: number,
+    rooms: readonly {
+      readonly geometry: RoomGeometry;
+      readonly doors: readonly CompiledDoor[];
+      readonly props: readonly DecorativeProp[];
+    }[],
+  ): void {
+    this.warmQueue = { floor, rooms: [...rooms] };
+  }
+
+  /** Compiles one queued room's scenery shaders, if any are waiting. Called once per `sync`. */
+  private drainWarmQueue(): void {
+    const queue = this.warmQueue;
+    if (queue === null) {
       return;
     }
-    // Run the new room through the real render path once, into a 1×1 off-screen
-    // target, so every shader program the switch frame needs — across all three
-    // of `render`'s passes — is compiled and every buffer/texture uploaded
-    // *now*, during the dwell while the player is pressing into a door and the
-    // camera is still, instead of on the switch frame where the cost lands
-    // mid-slide and the whole game hitches. A plain `renderer.render` or
-    // `compileAsync` misses the occluder- and actor-pass program variants;
-    // the shadow pass is skipped here because its one depth program is shared
-    // and already warm from the current room. The group is added at the
-    // incoming room's origin, drawn, and removed — nothing of it shows until
-    // `sync` adopts it.
+    const next = queue.rooms.shift();
+    if (next === undefined) {
+      this.warmQueue = null;
+      return;
+    }
+    const scenery = this.makeScenery(next.geometry, queue.floor, next.doors, next.props);
+    this.warmSceneryGroup(scenery.group);
+    scenery.dispose();
+  }
+
+  /**
+   * Runs `group` through the real render path once, into a 1×1 off-screen
+   * target: every shader program `render`'s three passes need gets compiled and
+   * every buffer/texture uploaded now, not on the frame the group first shows.
+   * A plain `renderer.render` or `compileAsync` would miss the occluder- and
+   * actor-pass program variants. The shadow pass is skipped — its one depth
+   * program is shared and warms with the first room. `group` is added, drawn
+   * and removed; nothing of it is visible.
+   */
+  private warmSceneryGroup(group: Object3D): void {
     const renderer = this.renderer;
+    if (renderer === null) {
+      return;
+    }
     const target = (this.warmTarget ??= new WebGLRenderTarget(1, 1));
     const previousTarget = renderer.getRenderTarget();
     const previousShadowAutoUpdate = renderer.shadowMap.autoUpdate;
-    this.scene.add(built.group);
+    this.scene.add(group);
     renderer.setRenderTarget(target);
     renderer.shadowMap.autoUpdate = false;
     this.render(renderer);
     renderer.shadowMap.autoUpdate = previousShadowAutoUpdate;
     renderer.setRenderTarget(previousTarget);
-    this.scene.remove(built.group);
+    this.scene.remove(group);
   }
 
   /**
