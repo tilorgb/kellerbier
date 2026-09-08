@@ -85,7 +85,7 @@ import { EventQueue } from '../events/queue.js';
 import { DamageNumberStore } from '../particle/damage-numbers.js';
 import { DecalStore } from '../particle/decals.js';
 import { ParticleStore } from '../particle/store.js';
-import { doorPuff, roomClearRing, splashBurst } from '../particle/effects.js';
+import { boulderDebris, doorPuff, roomClearRing, splashBurst } from '../particle/effects.js';
 import { ProjectileStore, ProjectileTeam } from '../projectile/store.js';
 import { finalizeProjectileTags } from '../projectile/behavior.js';
 import {
@@ -276,6 +276,14 @@ const PEDESTAL_RADIUS = 8;
 const LOSBRUNNEN_OFFSET_X = 36;
 const LOSBRUNNEN_OFFSET_Y = 0;
 
+/**
+ * How far a mini-boss's consolation bundle (#278) spreads its three pickups
+ * from the missed pedestal's own spot — enough that a half-Maß, a Biermarke
+ * and a Kellerschlüssel read as three separate things on the floor rather
+ * than one stack, small enough that all three are still an obvious group.
+ */
+const MINIBOSS_CONSOLATION_SPREAD = 14;
+
 /** Move-axis magnitude (of `AXIS_RESOLUTION`'s 127) that counts as a deliberate directional tap for the Losbrunnen's picker — `machineTapSign`. */
 const MACHINE_AXIS_TAP_THRESHOLD = 40;
 
@@ -359,6 +367,8 @@ interface PedestalRuntime {
   readonly y: number;
   /** Registry index of the offered item, or -1 once taken or never filled (pool exhaustion). */
   itemIndex: number;
+  /** Biermarken it costs to take — `0` for every pedestal except a shop's (`tuning.itemPool.shopItemPrice`). */
+  readonly price: number;
 }
 
 /**
@@ -432,11 +442,11 @@ interface RoomLootSnapshot {
 /**
  * Which pool a room's pedestal draws from, by the room's own special role.
  *
- * `shop`/`supersecret` have no live pedestal spawn site today (no room JSON
- * places a `pedestal` prop in either) — the fallback below is defensive, not
- * reachable in practice, since live shop stocking from the `shop` pool is
- * its own follow-up (#28 only wires the pools that already have a room to
- * offer from: treasure, boss, secret).
+ * `shop` now draws from the `shop` pool — the shop rooms author a `pedestal`
+ * prop, `shopItemChance` decides whether it stocks anything on a given visit,
+ * and `shopItemPrice` is what taking it costs (`spawnPedestal` /
+ * `takePedestalItem`). `supersecret` still has no authored pedestal; the
+ * `default` is defensive.
  */
 const MACHINE_ROLL_TIER_LABELS: Readonly<Record<MachineRollTier, string>> = {
   unlucky: 'Unlucky',
@@ -477,13 +487,14 @@ function pedestalPoolForRole(role: RoomSpecialRole | undefined): ItemPoolId {
     case 'secret':
     case 'supersecret':
       return 'secret';
-    // A mini-boss room authors no pedestal today — its reward is #275's
-    // Kellerschlüssel, which is a pickup, not a pedestal item. Listed anyway
-    // so the day one does, it draws from the same pool a treasure room does
-    // rather than silently inheriting whatever `default` happened to be.
+    case 'shop':
+      return 'shop';
+    // A mini-boss room's own pedestal (#278) draws from the same pool a
+    // treasure room does — a lower-odds, held-back item roll on top of
+    // #275's Kellerschlüssel, which is a separate pickup, not a pedestal
+    // item.
     case 'miniboss':
     case 'treasure':
-    case 'shop':
     default:
       return 'treasure';
   }
@@ -1247,6 +1258,17 @@ export class GameSim {
   private maypoleTaken = false;
   private roomClearedIds = new Set<string>();
   /**
+   * Boulders a bomb has cleared this run (#4), by authored room id (same key
+   * as `roomClearedIds`) → a flat `[x, y, x, y, …]` of the removed blocks'
+   * centres. Replayed onto the freshly compiled `RoomGeometry` in
+   * `applyCompiledRoom` so a bombed path stays open on a revisit.
+   */
+  private readonly destroyedBoulders = new Map<string, number[]>();
+  /** Reused scratch for one blast's cleared-boulder centres — no per-detonation allocation. */
+  private readonly boulderBlastScratch: number[] = [];
+  /** Bumped whenever a boulder falls, so `app/main.ts` can rebuild the room's scenery. */
+  private bouldersChangedTickValue = -1;
+  /**
    * Key-locked treasure rooms (#196) a Kellerschlüssel has already been
    * spent to enter, keyed the same way `roomClearedIds` is — by the authored
    * template's own id, not a per-instance id — so leaving and walking back
@@ -1303,6 +1325,21 @@ export class GameSim {
    */
   private pendingMinibossKey: { readonly x: number; readonly y: number } | null = null;
   /**
+   * Where a mini-boss's own pedestal roll (#278) will resolve once its room
+   * clears — the exact `pendingMinibossKey` shape and reasoning, populated
+   * by `restoreOrSpawnRoomLoot` from the room's own authored `pedestal` prop
+   * (same field every other room's pedestal is authored with) rather than
+   * spawned eagerly the moment the room loads, for the same "the reward
+   * shouldn't already be standing there during the fight" reason a boss
+   * room's `pendingBossPedestals` is held back. Drained by `step`'s
+   * room-clear check the tick the fight ends — a 40%/20% item roll
+   * (`tuning.minibossReward`) rather than an unconditional spawn, since
+   * unlike a boss or treasure pedestal a mini-boss's is not guaranteed to
+   * hold anything (a miss pays the consolation bundle instead, never both).
+   * Reset to `null` on every room load, same as `pendingMinibossKey`.
+   */
+  private pendingMinibossPedestal: { readonly x: number; readonly y: number } | null = null;
+  /**
    * Whether this floor gets a Losbrunnen at all — rolled once per floor
    * entry (`applyCompiledRoom`'s "new floor" guard, alongside
    * `rollFloorCurse`) from `random.items`, so the decision is fixed the
@@ -1319,6 +1356,26 @@ export class GameSim {
    * alongside `floorHasLosbrunnen` on every new floor.
    */
   private losbrunnenClaimedThisFloor = false;
+  /**
+   * Whether *some* mini-boss room has already cleared this floor — #278's
+   * XL-floor fix for the gap #76 flagged as future work ("a key with
+   * nothing to unlock is a small lie to the player about what keys are").
+   *
+   * `step`'s room-clear drain of `pendingMinibossKey`/`pendingMinibossPedestal`
+   * reads this to decide whether the clear in progress is the floor's
+   * "first" mini-boss (guaranteed key, `firstItemChance`) or a "second" one
+   * (no key, `secondItemChance`), then sets it. A plain boolean is exact,
+   * not a simplification: that drain only ever runs once per distinct
+   * `roomId` (`roomClearedIds` blocks every later clear of the same
+   * physical room — a Blutwurz, #84, spirit walk re-fighting an
+   * already-cleared mini-boss room finds its *original*, still-uncollected
+   * key restored from `roomLootSnapshots` instead, #76's own "cleared rooms
+   * repopulate" rule, never a second pass through this drain), so this can
+   * only ever transition false-to-true once per floor, never need to tell
+   * one *room* apart from another. Reset alongside `floorHasLosbrunnen` on
+   * every new floor.
+   */
+  private minibossKeyGrantedThisFloor = false;
   /** The current floor's Losbrunnen, once it has actually spawned — see `MachineRuntime`. */
   private machineRuntime: MachineRuntime | null = null;
   /**
@@ -1396,6 +1453,21 @@ export class GameSim {
    * `inventory`.
    */
   private readonly takenItemIds = new Set<string>();
+  /**
+   * Where a charged active item's pending blast will land and how far through
+   * its fuse it is (#12) — set every tick by the item's own `onTick` while
+   * the fuse burns (`content/items/boellerschmeisser.ts`), cleared at the top
+   * of `stepItemTick` each tick so it vanishes the moment the item stops
+   * fusing. `EntityView` draws it as the same hatch disc a lobbed Böller
+   * telegraph uses, so every explosive in the game marks its ground the same
+   * way.
+   */
+  private activeItemBlastValue: {
+    x: number;
+    y: number;
+    radius: number;
+    progress: number;
+  } | null = null;
   /** Ticks left showing the pedestal pickup/swap reveal panel. See `pedestalReveal`. */
   private pedestalRevealTicks = 0;
   private pedestalRevealName = '';
@@ -1831,6 +1903,61 @@ export class GameSim {
   }
 
   /**
+   * Clears the destructible boulders a Bierfassl blast cross covers (#4) —
+   * called once per detonation by `stepBombs`. Each fallen boulder throws a
+   * dust burst and is recorded under this room's id (`destroyedBoulders`) so
+   * the path stays open when the player comes back. `bouldersChangedTick` is
+   * bumped so the renderer knows to rebuild the room.
+   */
+  breakBouldersInBlast(x: number, y: number, halfWidth: number, armLength: number): void {
+    const scratch = this.boulderBlastScratch;
+    scratch.length = 0;
+    const broken = this.room.breakBoulders(x, y, halfWidth, armLength, scratch);
+    if (broken === 0) {
+      return;
+    }
+    let record = this.destroyedBoulders.get(this.roomId);
+    if (record === undefined) {
+      record = [];
+      this.destroyedBoulders.set(this.roomId, record);
+    }
+    for (let i = 0; i + 1 < scratch.length; i += 2) {
+      const bx = scratch[i] ?? 0;
+      const by = scratch[i + 1] ?? 0;
+      record.push(bx, by);
+      boulderDebris(this, bx, by);
+    }
+    this.bouldersChangedTickValue = this.tick;
+  }
+
+  /**
+   * The tick a boulder last fell in the current room, or `-1` — `app/main.ts`
+   * polls this and rebuilds the room's scenery (the same in-place path a
+   * bombed secret wall uses) when it changes, so the cleared boulders stop
+   * being drawn.
+   */
+  get bouldersChangedTick(): number {
+    return this.bouldersChangedTickValue;
+  }
+
+  /**
+   * Replays this run's boulder destruction for the room authored as
+   * `templateId` onto `geometry` — the hook `app/main.ts` uses so a room
+   * *prewarmed* while the player walks back to it is built with the same
+   * cleared paths `applyCompiledRoom` gives the live one. A no-op for a room
+   * nothing has been bombed in.
+   */
+  reapplyDestroyedBoulders(templateId: string, geometry: RoomGeometry): void {
+    const record = this.destroyedBoulders.get(templateId);
+    if (record === undefined) {
+      return;
+    }
+    for (let i = 0; i + 1 < record.length; i += 2) {
+      geometry.clearBoulderAt(record[i] ?? 0, record[i + 1] ?? 0);
+    }
+  }
+
+  /**
    * Forgets every room this `GameSim` has ever marked cleared
    * (`roomClearedIds`) — call this once, before loading the first room of a
    * freshly *generated* floor layout, never for an ordinary same-floor
@@ -1993,6 +2120,20 @@ export class GameSim {
    * `entryCell` (so the player lands on the correct sub-room's wall when
    * walking in through a specific door, not always the room's first cell).
    * Both default to the single-cell case, which is every `1x1` room.
+   *
+   * `roomInstanceId` — the floor plan's own per-slot id for the room being
+   * loaded (`FloorPlanRoom.id`), when the caller has one. `roomId` (and so
+   * `roomClearedIds`/`roomLootSnapshots`) otherwise falls back to the
+   * *template's* own authored id (`compiled.source.id`), which two physical
+   * rooms share whenever they draw the same template — harmless across a
+   * floor boundary (`clearFloorProgress` wipes the tracking every floor
+   * advance) but not within one: an XL floor's two mini-boss slots (#271)
+   * draw from the same one-template-per-floor-tag pool today, so without a
+   * caller-supplied instance id they'd collide and the second room would
+   * read as pre-cleared — no fight, no key, no reward — the instant the
+   * first one is. `app/main.ts` passes the floor plan's own room id on every
+   * real load; a caller with no floor plan (a unit test, the room editor)
+   * gets the old template-id behaviour, which is exactly right for it.
    */
   loadRoom(
     template: unknown,
@@ -2002,6 +2143,7 @@ export class GameSim {
     placement?: RoomPlacement,
     entryCell: { readonly col: number; readonly row: number } = { col: 0, row: 0 },
     suppressContent = false,
+    roomInstanceId?: string,
   ): void {
     const compiled = compileRoomTemplate(
       template,
@@ -2019,7 +2161,7 @@ export class GameSim {
     this.applyCompiledRoom(
       {
         geometry: compiled.geometry,
-        id: compiled.source.id,
+        id: roomInstanceId ?? compiled.source.id,
         specialRole: compiled.source.metadata.specialRole,
         doors: compiled.doors,
         enemySpawns: suppressContent ? [] : compiled.enemySpawns,
@@ -2061,6 +2203,10 @@ export class GameSim {
    * it. `force` skips both of those checks for the handful of callers that
    * aren't a real player walking (`app/main.ts`'s `N` floor-tour shortcut) —
    * never for a live door-contact poll.
+   *
+   * `roomInstanceId` is `loadRoom`'s own parameter, forwarded through —see
+   * its doc comment for why a caller with a floor plan should always pass
+   * the destination room's own `FloorPlanRoom.id`.
    */
   transitionTo(
     template: unknown,
@@ -2070,6 +2216,7 @@ export class GameSim {
     placement?: RoomPlacement,
     entryCell?: { readonly col: number; readonly row: number },
     force = false,
+    roomInstanceId?: string,
   ): boolean {
     if (!this.roomTemplateLoaded || this.doorsLocked || !this.hasDoor(direction)) {
       return false;
@@ -2119,7 +2266,16 @@ export class GameSim {
       this.bossDoorGated = false;
     }
     this.roomClearedIds.add(this.roomId);
-    this.loadRoom(template, floor, direction, hiddenDoors, placement, entryCell);
+    this.loadRoom(
+      template,
+      floor,
+      direction,
+      hiddenDoors,
+      placement,
+      entryCell,
+      false,
+      roomInstanceId,
+    );
     return true;
   }
 
@@ -2270,6 +2426,7 @@ export class GameSim {
     this.pedestalList = [];
     this.pendingBossPedestals = [];
     this.pendingMinibossKey = null;
+    this.pendingMinibossPedestal = null;
     // Reset unconditionally, like `pedestalList` above — `restoreOrSpawnRoomLoot`,
     // called right after this, is what actually repopulates it (from a
     // snapshot, by spawning straight into a shop, or by pushing a fresh
@@ -2293,6 +2450,15 @@ export class GameSim {
       );
       if (match !== undefined) {
         this.bombableWalls.set(doorKey(match), match);
+      }
+    }
+    // Boulders this run has already bombed away in this room stay away
+    // (#4) — `this.room` is a fresh `RoomGeometry` compiled from the
+    // template, so the destruction has to be replayed onto it.
+    const bombed = this.destroyedBoulders.get(compiled.id);
+    if (bombed !== undefined) {
+      for (let i = 0; i + 1 < bombed.length; i += 2) {
+        this.room.clearBoulderAt(bombed[i] ?? 0, bombed[i + 1] ?? 0);
       }
     }
     this.roomSpecialRole = compiled.specialRole;
@@ -2326,6 +2492,9 @@ export class GameSim {
       // decided by whichever the player reaches first, not here — this
       // just clears last floor's claim.
       this.losbrunnenClaimedThisFloor = false;
+      // #278: nobody has fought either of this floor's (up to two)
+      // mini-bosses yet — see the field's own doc comment.
+      this.minibossKeyGrantedThisFloor = false;
       this.machineRuntime = null;
       this.pendingBossLosbrunnen = null;
       this.machinePreviewItemId = null;
@@ -2583,6 +2752,13 @@ export class GameSim {
           this.pendingBossLosbrunnen = { x: machineSpot.x, y: machineSpot.y };
           this.losbrunnenClaimedThisFloor = true;
         }
+      } else if (this.roomSpecialRole === 'miniboss' && this.roomEnemyCount > 0) {
+        // Held back the same way, and for the same reason, as the boss's own
+        // reward — `pendingMinibossPedestal`'s doc comment. Never a
+        // Losbrunnen host (#278's own explicit call-out: a third home turns
+        // a chance encounter into furniture) — only `pendingBossLosbrunnen`
+        // above ever claims `floorHasLosbrunnen`.
+        this.pendingMinibossPedestal = { x: safe.x, y: safe.y };
       } else {
         this.spawnPedestal(safe.x, safe.y);
       }
@@ -4222,10 +4398,18 @@ export class GameSim {
    * show."
    */
   private spawnPedestal(x: number, y: number): void {
-    const pool = pedestalPoolForRole(this.roomSpecialRole);
+    const role = this.roomSpecialRole;
+    // A shop's pedestal is priced, and only stocked on some visits — the roll
+    // (deterministic, off `random.items` like the offer itself) happens before
+    // the draw so a shop with no item this run also does not consume one.
+    if (role === 'shop') {
+      if (this.random.items.nextFloat() >= this.tuning.itemPool.shopItemChance) {
+        return;
+      }
+    }
     const offer = selectItemOffer(
       this.items,
-      pool,
+      pedestalPoolForRole(role),
       {
         promilleUnlocked: this.promilleUnlocked,
         floor: this.currentFloorValue,
@@ -4239,7 +4423,29 @@ export class GameSim {
       x,
       y,
       itemIndex: offer === undefined ? -1 : this.items.indexOf(offer.id),
+      price: role === 'shop' ? Math.max(0, Math.round(this.tuning.itemPool.shopItemPrice)) : 0,
     });
+  }
+
+  /**
+   * A mini-boss's guaranteed miss case (#278): a half-Maß, a Biermarke and a
+   * Kellerschlüssel, spread `MINIBOSS_CONSOLATION_SPREAD` apart around
+   * `(x, y)` and each nudged clear of a wall by `safeSpawnPoint` on its own.
+   * Costs the run nothing to receive and means a mandatory fight always
+   * resolves into *something* landing on the floor, never a bare miss —
+   * called only when the pedestal roll (`tuning.minibossReward`) misses;
+   * the two outcomes never both pay.
+   */
+  private spawnMinibossConsolationBundle(x: number, y: number): void {
+    const spots: readonly [string, number, number][] = [
+      ['mass-half', x - MINIBOSS_CONSOLATION_SPREAD, y],
+      ['biermarke-5', x + MINIBOSS_CONSOLATION_SPREAD, y],
+      ['kellerschluessel', x, y + MINIBOSS_CONSOLATION_SPREAD],
+    ];
+    for (const [pickupId, spotX, spotY] of spots) {
+      const safe = this.safeSpawnPoint(spotX, spotY, this.pickups.get(pickupId).radius);
+      this.spawnPickup(pickupId, safe.x, safe.y);
+    }
   }
 
   /** Every pedestal in the current room, for rendering. Read-only — mutate through `takePedestalItem`. */
@@ -4260,6 +4466,37 @@ export class GameSim {
       return null;
     }
     return { name: this.pedestalRevealName, description: this.pedestalRevealDescription };
+  }
+
+  /**
+   * Where a charged active item's blast will land while its fuse burns, and
+   * how far through the fuse it is (0..1) — `null` when nothing is fusing.
+   * `EntityView` draws the same hatch disc a lobbed Böller telegraph shows
+   * (#12). Set by the item's `onTick`; see `setActiveItemBlast`.
+   */
+  get activeItemBlastTelegraph(): {
+    readonly x: number;
+    readonly y: number;
+    readonly radius: number;
+    readonly progress: number;
+  } | null {
+    return this.activeItemBlastValue;
+  }
+
+  /**
+   * Called every fusing tick by an active item that goes off with a radial
+   * blast (`content/items/boellerschmeisser.ts`) — the one way
+   * `activeItemBlastTelegraph` is armed. Cleared automatically at the top of
+   * the next `stepItemTick`, so the item only has to keep calling this while
+   * it wants the marker shown.
+   */
+  setActiveItemBlast(x: number, y: number, radius: number, progress: number): void {
+    this.activeItemBlastValue = {
+      x,
+      y,
+      radius,
+      progress: Math.max(0, Math.min(1, progress)),
+    };
   }
 
   /**
@@ -4318,7 +4555,9 @@ export class GameSim {
   /**
    * Takes (or swaps for) the item on pedestal `pedestalIndex` — `use` near
    * an available pedestal, dispatched by `sim/systems/pedestal.ts`. A no-op
-   * if the pedestal has no item (already taken, or spawned empty).
+   * if the pedestal has no item (already taken, or spawned empty), or if it
+   * is a shop's priced pedestal and the player cannot pay `pedestal.price` —
+   * the item stays put for another look, same as an unaffordable shop pickup.
    *
    * An active item already held is removed outright first — the swap loses
    * it rather than returning it to the pedestal or any pool, the same
@@ -4330,6 +4569,9 @@ export class GameSim {
   takePedestalItem(pedestalIndex: number): void {
     const pedestal = this.pedestalList[pedestalIndex];
     if (pedestal === undefined || pedestal.itemIndex < 0) {
+      return;
+    }
+    if (pedestal.price > 0 && !this.spendBiermarken(pedestal.price)) {
       return;
     }
     const item = this.items.at(pedestal.itemIndex);
@@ -5394,16 +5636,43 @@ export class GameSim {
       // Der Meisterschlüssel (#275) drops on the same held-until-clear tick,
       // for the same reason: the key that opens the boss door is the mini-
       // boss room's whole reward, and it should not be collectable before
-      // the fight it is the reward for is over.
-      if (this.pendingMinibossKey !== null) {
-        const spot = this.safeSpawnPoint(
-          this.pendingMinibossKey.x,
-          this.pendingMinibossKey.y,
-          this.pickups.get('meisterschluessel').radius,
-        );
-        this.spawnPickup('meisterschluessel', spot.x, spot.y);
-        rewardLocations.push({ x: spot.x, y: spot.y });
-        this.pendingMinibossKey = null;
+      // the fight it is the reward for is over. And its own pedestal roll
+      // (#278) resolves here too — both read `isFirstMiniboss` off
+      // `minibossKeyGrantedThisFloor` before setting it, so whichever
+      // mini-boss room the player reaches first this floor is the one that
+      // pays the guaranteed key and the higher item odds; a second,
+      // different mini-boss room (XL floors only, #271) drops no key at all
+      // and rolls the lower odds.
+      if (this.pendingMinibossKey !== null || this.pendingMinibossPedestal !== null) {
+        const isFirstMiniboss = !this.minibossKeyGrantedThisFloor;
+        this.minibossKeyGrantedThisFloor = true;
+        if (this.pendingMinibossKey !== null) {
+          if (isFirstMiniboss) {
+            const spot = this.safeSpawnPoint(
+              this.pendingMinibossKey.x,
+              this.pendingMinibossKey.y,
+              this.pickups.get('meisterschluessel').radius,
+            );
+            this.spawnPickup('meisterschluessel', spot.x, spot.y);
+            rewardLocations.push({ x: spot.x, y: spot.y });
+          }
+          this.pendingMinibossKey = null;
+        }
+        if (this.pendingMinibossPedestal !== null) {
+          const pending = this.pendingMinibossPedestal;
+          const itemChance = isFirstMiniboss
+            ? this.tuning.minibossReward.firstItemChance
+            : this.tuning.minibossReward.secondItemChance;
+          if (this.random.items.chance(itemChance)) {
+            this.spawnPedestal(pending.x, pending.y);
+          } else {
+            // The miss case still pays — a compulsory fight that hands back
+            // nothing is a tax (#278's own framing).
+            this.spawnMinibossConsolationBundle(pending.x, pending.y);
+          }
+          rewardLocations.push({ x: pending.x, y: pending.y });
+          this.pendingMinibossPedestal = null;
+        }
       }
       // Der Losbrunnen (#218) waits for the same tick — appearing mid-fight
       // would read as loot sitting out during a boss that hasn't dropped
@@ -5426,7 +5695,10 @@ export class GameSim {
     }
     // Every held item's onTick, once this tick's outcomes (hits, kills, the
     // room-clear check above) have all already happened — an item reacting
-    // to "this tick" sees the whole of it, not a partial slice.
+    // to "this tick" sees the whole of it, not a partial slice. The active
+    // item's blast telegraph (#12) is cleared first, so an item that is no
+    // longer fusing stops re-arming it and it disappears.
+    this.activeItemBlastValue = null;
     stepItemTick(this);
     stepParticles(this);
     this.stepRespawns();
@@ -6171,11 +6443,25 @@ export class GameSim {
    * away from `(x, y)` if that point is blocked — so a caller that wants a
    * visual cue tied to the reward itself (`rollRoomClearLoot`'s ring, below)
    * can point it at the real spawn rather than assuming its own `(x, y)`.
+   *
+   * `guaranteed` drops the `null` "nothing" outcome from the roll entirely, so
+   * the table always yields a real pickup — an elite kill (#156) uses it, the
+   * "always drop loot" half of its risk-and-reward: still that enemy's own
+   * tier table, just with the miss taken out. The mix (which pickup) is
+   * unchanged; only the drop *rate* for that one roll goes to 1.
    */
-  dropLoot(table: DropTable, x: number, y: number): { x: number; y: number } | null {
+  dropLoot(
+    table: DropTable,
+    x: number,
+    y: number,
+    guaranteed = false,
+  ): { x: number; y: number } | null {
     const entries = this.promilleUnlocked ? table.promilled : table.sober;
     let total = 0;
     for (const entry of entries) {
+      if (guaranteed && entry.pickupId === null) {
+        continue;
+      }
       total += entry.weight * this.needMultiplierFor(entry.pickupId);
     }
     if (total <= 0) {
@@ -6184,6 +6470,9 @@ export class GameSim {
     let roll = this.random.items.nextFloat() * total;
     let chosen: string | null = null;
     for (const entry of entries) {
+      if (guaranteed && entry.pickupId === null) {
+        continue;
+      }
       roll -= entry.weight * this.needMultiplierFor(entry.pickupId);
       if (roll < 0) {
         chosen = entry.pickupId;

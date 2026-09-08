@@ -23,7 +23,7 @@ import { type BitmapText, type Container, type Texture } from './gfx/index.js';
 import { ENTITY_PALETTE } from './palette.js';
 import { tileGridScale } from './tiles.js';
 import { Billboard } from './world/billboard.js';
-import { FloorBar, FloorRing, FloorWedge } from './world/flat.js';
+import { FloorHazardBar, FloorHazardDisc, FloorRing, FloorWedge } from './world/flat.js';
 import { WorldLabel } from './world/label.js';
 
 /**
@@ -61,6 +61,20 @@ const MAYPOLE_PROP_KIND = propKindIndex('maypole');
 const BOMB_PICKUP_ID = 'bierfassl';
 const RING_PULSE_RATE = 0.011;
 const BOMB_BLINK_RATE = 0.045;
+/** Every explosion hatch (#3, #12) rests here and blinks up by `SWING` on top. */
+const BOMB_TELEGRAPH_MIN_ALPHA = 0.26;
+const BOMB_TELEGRAPH_ALPHA_SWING = 0.4;
+
+/**
+ * The blink alpha every explosion telegraph shares (#12) — a Bierfassl's
+ * crossed hatch, a lobbed Böller's disc, the player's own item. Rests dim
+ * and pulses brighter, faster the closer the fuse is to zero (`fuse` 0..1);
+ * a flat mid value with `ringPulses` off (reduced flashes).
+ */
+function hazardBlinkAlpha(nowMs: number, fuse: number, ringPulses: boolean): number {
+  const blink = ringPulses ? Math.sin(nowMs * BOMB_BLINK_RATE * (1 + fuse * 2)) * 0.5 + 0.5 : 0.5;
+  return BOMB_TELEGRAPH_MIN_ALPHA + blink * BOMB_TELEGRAPH_ALPHA_SWING;
+}
 const LABEL_POINT = { x: 0, y: 0 };
 /** How far above the floor a pickup hovers, so its shadow separates it from the ground. */
 const PICKUP_LIFT = 1.5;
@@ -96,7 +110,10 @@ export class EntityView {
   private readonly corpses: Billboard[] = [];
   private readonly rings: FloorRing[] = [];
   private readonly wedges: FloorWedge[] = [];
-  private readonly bars: FloorBar[] = [];
+  /** The bomb blast telegraph's crossed hatch arms (#3) — see `FloorHazardBar`. */
+  private readonly hazardBars: FloorHazardBar[] = [];
+  /** The radial-blast hatch disc — a lobbed Böller, the player's own item (#12). */
+  private readonly hazardDiscs: FloorHazardDisc[] = [];
   private readonly labels: WorldLabel[] = [];
   private readonly pickupTints: readonly number[];
   private readonly pickupLabels: readonly string[];
@@ -135,7 +152,8 @@ export class EntityView {
     // `Billboard` material shape, which `PedestalView` seeds the same way.
     this.ringAt(0).hide();
     this.wedgeAt(0).hide();
-    this.barAt(0).hide();
+    this.hazardBarAt(0).hide();
+    this.hazardDiscAt(0).hide();
     // Likewise one world label (a shop price, a pickup name) — `WorldLabel`
     // constructs hidden — so the first priced pickup does not link the label
     // text's program on the way into the shop.
@@ -195,7 +213,8 @@ export class EntityView {
     let used = 0;
     let ringsUsed = 0;
     let wedgesUsed = 0;
-    let barsUsed = 0;
+    let hazardBarsUsed = 0;
+    let hazardDiscsUsed = 0;
     let labelsUsed = 0;
     const highWater = world.highWater;
     for (let index = 0; index < highWater; index++) {
@@ -357,10 +376,18 @@ export class EntityView {
             break;
           }
           case TelegraphShape.Ground: {
-            const marker = this.barAt(barsUsed);
-            barsUsed += 1;
-            const size = info.reach * 2 * info.progress;
-            marker.place(info.x, info.y, size, size, shapeAlpha);
+            // A lobbed Böller's landing zone (#12): the same hazard hatch
+            // every explosive shows, as a disc for a radial blast, at its
+            // true radius from the moment the throw is readable — the fuse
+            // is in the blink, not a growing footprint.
+            const disc = this.hazardDiscAt(hazardDiscsUsed);
+            hazardDiscsUsed += 1;
+            disc.place(
+              info.x,
+              info.y,
+              info.reach,
+              hazardBlinkAlpha(nowMs, info.progress, this.ringPulses),
+            );
             break;
           }
           default: {
@@ -374,15 +401,33 @@ export class EntityView {
       }
 
       if (isBomb && bombFuse > 0) {
-        // The exact cross `blastCandidate` damages: two arms, a tile wide.
-        const armSpan = bombBlastArmLength(sim) * 2 * bombFuse;
-        const pulse = this.ringPulses ? Math.sin(nowMs * RING_PULSE_RATE) * 0.12 : 0;
-        const barAlpha = Math.min(1, 0.35 + bombFuse * 0.5 + pulse);
-        this.barAt(barsUsed).place(x, y, armSpan, ROOM_TILE_UNITS, barAlpha);
-        barsUsed += 1;
-        this.barAt(barsUsed).place(x, y, ROOM_TILE_UNITS, armSpan, barAlpha);
-        barsUsed += 1;
+        // The exact cross `blastCandidate` damages: two arms `armSpan` long,
+        // one tile wide. Shown at full size from the moment the Bierfassl is
+        // set down (#3) — it never grows; the fuse is read from the blink,
+        // not the footprint. It just blinks between a low rest alpha and a
+        // brighter one, faster as the countdown runs out, so the whole area
+        // that is about to be hit is legible the entire time.
+        const armSpan = bombBlastArmLength(sim) * 2;
+        const barAlpha = hazardBlinkAlpha(nowMs, bombFuse, this.ringPulses);
+        this.hazardBarAt(hazardBarsUsed).place(x, y, armSpan, ROOM_TILE_UNITS, barAlpha);
+        hazardBarsUsed += 1;
+        this.hazardBarAt(hazardBarsUsed).place(x, y, ROOM_TILE_UNITS, armSpan, barAlpha);
+        hazardBarsUsed += 1;
       }
+    }
+
+    // The player's own Böllerschmeißer item (#12): while its fuse burns, the
+    // same hatch disc marks where it will go off, following the player the
+    // way the blast itself does.
+    const itemBlast = sim.activeItemBlastTelegraph;
+    if (itemBlast !== null) {
+      this.hazardDiscAt(hazardDiscsUsed).place(
+        itemBlast.x,
+        itemBlast.y,
+        itemBlast.radius,
+        hazardBlinkAlpha(nowMs, itemBlast.progress, this.ringPulses),
+      );
+      hazardDiscsUsed += 1;
     }
 
     this.animator.endFrame();
@@ -400,8 +445,11 @@ export class EntityView {
     for (let slot = wedgesUsed; slot < this.wedges.length; slot++) {
       this.wedges[slot]?.hide();
     }
-    for (let slot = barsUsed; slot < this.bars.length; slot++) {
-      this.bars[slot]?.hide();
+    for (let slot = hazardBarsUsed; slot < this.hazardBars.length; slot++) {
+      this.hazardBars[slot]?.hide();
+    }
+    for (let slot = hazardDiscsUsed; slot < this.hazardDiscs.length; slot++) {
+      this.hazardDiscs[slot]?.hide();
     }
     for (let slot = labelsUsed; slot < this.labels.length; slot++) {
       this.labels[slot]?.hide();
@@ -488,13 +536,24 @@ export class EntityView {
     return created;
   }
 
-  private barAt(slot: number): FloorBar {
-    const existing = this.bars[slot];
+  private hazardBarAt(slot: number): FloorHazardBar {
+    const existing = this.hazardBars[slot];
     if (existing !== undefined) {
       return existing;
     }
-    const created = new FloorBar(ENTITY_PALETTE.telegraphRing);
-    this.bars.push(created);
+    const created = new FloorHazardBar(ENTITY_PALETTE.bombFuseTint);
+    this.hazardBars.push(created);
+    this.group.add(created.mesh);
+    return created;
+  }
+
+  private hazardDiscAt(slot: number): FloorHazardDisc {
+    const existing = this.hazardDiscs[slot];
+    if (existing !== undefined) {
+      return existing;
+    }
+    const created = new FloorHazardDisc(ENTITY_PALETTE.bombFuseTint);
+    this.hazardDiscs.push(created);
     this.group.add(created.mesh);
     return created;
   }
@@ -513,7 +572,7 @@ export class EntityView {
     for (const body of [...this.bodies, ...this.corpses]) {
       body.dispose();
     }
-    for (const shape of [...this.rings, ...this.wedges, ...this.bars]) {
+    for (const shape of [...this.rings, ...this.wedges, ...this.hazardBars, ...this.hazardDiscs]) {
       shape.dispose();
     }
     for (const label of this.labels) {

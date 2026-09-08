@@ -276,6 +276,57 @@ teaches something the floor's enemies were rehearsing.
 | Secret | **Der Radler** | The heretic who first cut beer with lemonade. Optional superboss, mirrors the player's own build back at them. |
 | Secret | **Die Ahnen von Walhalla** | The ancestors, in sequence, as an endurance gauntlet. |
 
+### Mini-bosses
+
+A third size class, between an elite and a boss (`docs/DECISIONS.md` #75/#76 have the placement
+and the key). One stands between the player and every floor's boss door — two on an XL floor —
+placed off the critical path so the fight is a detour, not a wall.
+
+| | Elite | **Mini-boss** | Boss |
+|---|---|---|---|
+| Health | ×1.8 of base | **~40% of the floor's boss** | 18–24, tuned against its own cycle (`docs/DECISIONS.md` #66) |
+| Phases | none | **none** | two minimum |
+| Ideas | its base enemy's | **one, new** | one that teaches the floor |
+| Room | any | **its own arena** | its own arena |
+| Health bar | no | **yes** | yes |
+| Art | recoloured base | **its own sprite** | its own sprite |
+
+No phase two is what keeps a mini-boss from reading as a second boss and turning a floor into two
+boss fights back to back. **A mini-boss never repeats its floor's own boss's signature move** —
+Der Stier's charge-and-stun is his alone, which is why neither Floor 2 mini-boss charges (the same
+reason the Maibaum-Dieb, his own phase two, is off limits to anything else); a mini-boss that
+shared the boss's headline attack would make the boss fight that follows it read as a rerun rather
+than an escalation. A roster is authored two deep per floor at minimum — one is a fight the second
+run already has memorised — rolled as a `spawnGroups` choice in the mini-boss arena, with
+`nearestFloorChoice`'s missing-roster fallback (`CLAUDE.md`) covering the floors that don't have
+one yet.
+
+**Floor 1 — Der Keller**
+- **Der Rattenkönig** — sits in the middle of the arena and never chases; spawns Bierratten in
+  capped waves and periodically screeches a fast burst. One idea: **target priority** — the room
+  is survivable indefinitely and unwinnable until the player stops shooting the rats and starts
+  shooting what is making them. Built from the Bierratte the floor already taught, plus the
+  `summon` primitive, and it directly rehearses Die Große Kellerassel's phase-two split.
+- **Die Zapfhahn-Orgel** — three taps on one wall, immobile, firing spray cones in sequence, each
+  a beat wider, then a long rest. One idea: **a safe lane that moves** — a rhythm to read, not a
+  body to dodge; the answer is footwork, not DPS. Built entirely from the Zapfhahn's existing
+  spray, no engine change required.
+
+**Floor 2 — Dorf & Acker**
+- **Die Blaskapelle** — three Blaskapellisten in formation, each firing the roster's expanding
+  sound ring on the same bar but an offset beat, so the rings overlap into a moving lattice rather
+  than arriving together. One idea: **the room is the attack** — there is no body to dodge, only a
+  pattern to stand inside, and killing one changes the pattern (staggered per-member health means
+  kill order is a real decision) rather than simply thinning it.
+- **Der Ladewagen** — the tractor and its trailer, driving a fixed circuit rather than chasing,
+  shedding hay bales that block both the player's shots and its own line back. One idea: **a soft
+  timer made of geometry** — the arena fills with cover that starts useful and becomes a maze the
+  player built by not finishing the fight fast enough. A DPS check that never says the words.
+
+Kept for a possible third floor-2 mini-boss: **Der Gartenzwerg-Reigen**, a ring of gnomes that
+plays dead, where kill order matters — good idea, worst art-cost-to-novelty ratio of the three
+considered, so it waits.
+
 ---
 
 ## 4. Item seeds

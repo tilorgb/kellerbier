@@ -188,6 +188,13 @@ const GROUPS: readonly GroupSpec[] = [
         step: 0.1,
         hint: 'elite contact damage',
       },
+      {
+        key: 'eliteAttackDamageMultiplier',
+        min: 1,
+        max: 3,
+        step: 0.1,
+        hint: 'elite shot/melee/splash damage',
+      },
       { key: 'eliteRadiusMultiplier', min: 1, max: 2, step: 0.05, hint: 'elite size' },
     ],
   },
@@ -311,6 +318,13 @@ const GROUPS: readonly GroupSpec[] = [
     fields: [
       { key: 'magnetRadius', min: 0, max: 100, step: 2, hint: 'px before a pickup drifts in' },
       { key: 'magnetSpeed', min: 0, max: 6, step: 0.1, hint: 'px/tick it closes the gap by' },
+      {
+        key: 'uncollectableNudgeSpeed',
+        min: 0,
+        max: 6,
+        step: 0.1,
+        hint: 'px/tick you shove a full-pool Wurst',
+      },
       { key: 'spawnBounceTicks', min: 0, max: 40, step: 1, hint: 'spawn-pop length' },
       { key: 'needMultiplier', min: 1, max: 6, step: 0.25, hint: 'weight boost when you are low' },
       { key: 'needThreshold', min: 0, max: 1, step: 0.05, hint: 'fraction of max counted as low' },
@@ -347,6 +361,14 @@ const GROUPS: readonly GroupSpec[] = [
       { key: 'revealHoldTicks', min: 0, max: 240, step: 5, hint: 'name+description panel length' },
       { key: 'bobAmplitude', min: 0, max: 10, step: 0.5, hint: 'pedestal item bob height, px' },
       { key: 'bobPeriodTicks', min: 10, max: 300, step: 5, hint: 'ticks per bob cycle' },
+      { key: 'shopItemPrice', min: 0, max: 60, step: 1, hint: 'Biermarken a shop pedestal costs' },
+      {
+        key: 'shopItemChance',
+        min: 0,
+        max: 1,
+        step: 0.05,
+        hint: 'chance a shop stocks a pedestal',
+      },
     ],
   },
   {

@@ -68,6 +68,22 @@ export function stepPickups(sim: GameSim): void {
   sim.setNearbyShopPickup(shopTouchState[SHOP_TOUCH_SLOT]);
 }
 
+/**
+ * Whether the player could actually take `other` right now. False for a Wurst
+ * whose pool is already full (`GameSim.healthPoolFull`) — the one pickup that
+ * sits there uncollectable. Such a pickup neither magnetises nor is collected;
+ * `candidate` shoves it out of the way instead, so "you can't use this" reads
+ * as the thing skittering away from your feet rather than as a line of text.
+ */
+function collectiblePickup(sim: GameSim, other: number): boolean {
+  const definitionIndex = sim.pickupKind.data[other] ?? -1;
+  if (definitionIndex < 0) {
+    return true;
+  }
+  const effect = sim.pickups.at(definitionIndex).effect;
+  return !(effect.kind === 'food' && sim.healthPoolFull(effect.pool));
+}
+
 /** Either queues a touching pickup for collection, or nudges a nearby one toward the player. */
 function candidate(other: number): void {
   const sim = activeSim;
@@ -85,14 +101,47 @@ function candidate(other: number): void {
   const playerY = player[PLAYER_Y] ?? 0;
   const playerRadius = player[PLAYER_RADIUS] ?? 0;
 
+  const priced = ((sim.world.masks[other] ?? 0) & sim.pickupPrice.bit) !== 0;
+  const collectible = !priced && collectiblePickup(sim, other);
+
   if (circlesOverlap(playerX, playerY, playerRadius, otherX, otherY, otherRadius)) {
     // A priced pickup is a shop's stock, not a free pickup: touching it only
     // surfaces what it is (`GameSim.shopPreview`) and lets the Use button buy
     // it (`attemptShopPurchase`, from `sim/systems/pedestal.ts`) — it is
     // never collected by walking over it.
-    const priced = ((sim.world.masks[other] ?? 0) & sim.pickupPrice.bit) !== 0;
     if (priced) {
       shopTouchState[SHOP_TOUCH_SLOT] = other;
+      return;
+    }
+    if (!collectible) {
+      // A full-pool Wurst: nudge it clear of the player instead of collecting
+      // it, so "can't take this" reads as the thing skittering off your feet.
+      // It is never pushed into a wall or an obstacle — a pickup wedged
+      // somewhere unreachable is worse than one underfoot — so a blocked step
+      // is redirected along whichever axis is still clear (it pinches around
+      // the corner), and if both are blocked it simply doesn't move.
+      let dx = otherX - playerX;
+      let dy = otherY - playerY;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      if (distance <= 0.0001) {
+        dx = 1;
+        dy = 0;
+      } else {
+        dx /= distance;
+        dy /= distance;
+      }
+      const step = sim.tuning.pickup.uncollectableNudgeSpeed;
+      const transform = sim.transform.data;
+      const stepX = otherX + dx * step;
+      const stepY = otherY + dy * step;
+      if (sim.room.isClear(stepX, stepY, otherRadius)) {
+        transform[other * 4] = stepX;
+        transform[other * 4 + 1] = stepY;
+      } else if (sim.room.isClear(stepX, otherY, otherRadius)) {
+        transform[other * 4] = stepX;
+      } else if (sim.room.isClear(otherX, stepY, otherRadius)) {
+        transform[other * 4 + 1] = stepY;
+      }
       return;
     }
     const count = collectedState[COLLECTED_COUNT] ?? 0;
@@ -100,6 +149,12 @@ function candidate(other: number): void {
       collected[count] = other;
       collectedState[COLLECTED_COUNT] = count + 1;
     }
+    return;
+  }
+
+  // A pickup the player can't take doesn't drift toward them either — it just
+  // lies there until bumped.
+  if (!collectible) {
     return;
   }
 
@@ -131,12 +186,12 @@ function collect(sim: GameSim, other: number): boolean {
   }
   const definition = sim.pickups.at(definitionIndex);
   const effect = definition.effect;
-  // A full pool refuses its Wurst outright — no heal, no Promille change.
-  // Checked before the price is paid below, not after: a shop selling a
-  // full-pool Wurst would otherwise take Biermarken for something the player
-  // then can't use.
+  // A full pool refuses its Wurst outright — no heal, no Promille change, and
+  // no toast: `stepPickups` never even queues a full-pool Wurst for collection
+  // (`candidate` shoves it aside instead), so this is only reached when the
+  // Use button buys one from a shop. Checked before the price is paid below,
+  // not after, so those Biermarken are not spent on something unusable.
   if (effect.kind === 'food' && sim.healthPoolFull(effect.pool)) {
-    sim.reportCollected(definition.name, 'Is scho voll — bleibt liegn.');
     return false;
   }
   const priced = ((sim.world.masks[other] ?? 0) & sim.pickupPrice.bit) !== 0;

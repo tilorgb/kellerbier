@@ -162,6 +162,12 @@ function explode(sim: GameSim, index: number): void {
   // for the same reason.
   sim.breakMachineFromBlast(x, y, armLength);
 
+  // Boulders in the cross are cleared — a bomb opens a path through
+  // destructible cover (#4). The exact cross `blastCandidate` damages
+  // through, so a boulder that would have shielded an enemy from the blast
+  // is exactly the one that goes.
+  sim.breakBouldersInBlast(x, y, BLAST_HALF_WIDTH, armLength);
+
   bombBlast(sim, x, y, sim.tuning.pickup.bombBlastArmTiles);
   sim.addShake(0, -1, tuning.bombBlastDamage);
   sim.world.destroy(sim.world.entityAt(index));

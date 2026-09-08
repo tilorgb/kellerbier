@@ -150,14 +150,18 @@ describe('Lighting, the lantern and the shot lights', () => {
 });
 
 describe('Lighting, the daylight cloud', () => {
-  /** A `document` just able to paint the cloud's soft alpha into a canvas. */
+  /** A `document` just able to paint the cloud's alpha into a canvas. */
   const canvasStub = {
     width: 0,
     height: 0,
     getContext: () => ({
       fillStyle: '',
+      filter: 'none',
       createRadialGradient: () => ({ addColorStop: () => undefined }),
       fillRect: () => undefined,
+      beginPath: () => undefined,
+      arc: () => undefined,
+      fill: () => undefined,
     }),
   };
   let hadDocument = false;

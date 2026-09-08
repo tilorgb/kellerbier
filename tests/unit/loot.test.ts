@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { GameSim } from '../../src/sim/game/sim.js';
 import { RoomGeometry } from '../../src/sim/room/geometry.js';
+import { entityIndex } from '../../src/sim/ecs/entity.js';
 import { createInputFrame } from '../../src/sim/input/frame.js';
 import type { DropTable } from '../../src/sim/pickup/definition.js';
 import { ProjectileTeam } from '../../src/sim/projectile/store.js';
+import { applyDamageAt } from '../../src/sim/systems/impact.js';
+import { stepLootDrops } from '../../src/sim/systems/loot.js';
 
 function bareRoom(): RoomGeometry {
   return new RoomGeometry(0, 0, 320, 180);
@@ -125,6 +128,29 @@ describe('GameSim.dropLoot around a blocked point', () => {
 });
 
 describe('loot on enemy death', () => {
+  it('an elite always leaves a pickup — every kill, not most of them (#156)', () => {
+    const sim = emptySim({ promilleUnlocked: false });
+    const bierratteId = sim.enemies.indexOf('bierratte');
+    const kills = 40;
+    for (let kill = 0; kill < kills; kill++) {
+      const x = 40 + (kill % 8) * 30;
+      const y = 30 + Math.floor(kill / 8) * 24;
+      sim.events.clear();
+      const enemy = sim.spawnEnemyKind(bierratteId, x, y, true);
+      sim.world.flush();
+      applyDamageAt(sim, entityIndex(enemy), 999, x, y, 0, 0, -1);
+      stepLootDrops(sim);
+      sim.world.flush();
+    }
+
+    let pickupCount = 0;
+    sim.world.forEach(sim.world.maskOf(sim.pickupKind), () => {
+      pickupCount += 1;
+    });
+    // One guaranteed drop per elite kill — no "nothing" roll for an elite.
+    expect(pickupCount).toBe(kills);
+  });
+
   it('drops a pickup entity, over enough kills, from the tier the enemy resolves to', () => {
     const sim = emptySim({ promilleUnlocked: true });
     const bierratteId = sim.enemies.indexOf('bierratte');

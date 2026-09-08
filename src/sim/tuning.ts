@@ -356,8 +356,20 @@ export interface EnemyTuning {
   eliteChanceMax: number;
   /** What an elite's health is multiplied by. "Tougher" — #156's own first example. */
   eliteHealthMultiplier: number;
-  /** What an elite's contact damage is multiplied by. Smaller than the health multiplier: a body worth shooting more, not a room worth avoiding entirely. */
+  /**
+   * What an elite's contact (body) damage is multiplied by. An elite is a
+   * risk-and-reward encounter now (the guaranteed drop in `systems/loot.ts` is
+   * the reward): it always hits hard, so `2` — walking into one costs double.
+   */
   eliteContactDamageMultiplier: number;
+  /**
+   * What an elite's *attack* damage — projectiles (`fireOne`), the melee arc
+   * (`applyMeleeArc`) and a lobbed bomb's splash (`detonateLobbedBomb`) — is
+   * multiplied by. The ranged half of "an elite always hits double": kept a
+   * separate knob from contact only because the two are applied at different
+   * points (contact at spawn, this at the moment the shot leaves).
+   */
+  eliteAttackDamageMultiplier: number;
   /**
    * What an elite's collider radius (and mass, matched to it) is multiplied
    * by — "elite variants read as elite at a glance, without needing a
@@ -557,6 +569,14 @@ export interface PickupTuning {
   magnetRadius: number;
   /** Pixels per tick a magnetised pickup closes the distance by. */
   magnetSpeed: number;
+  /**
+   * Pixels per tick the player shoves an *uncollectable* pickup (a Wurst on a
+   * full pool) as they walk into it — `sim/systems/pickup.ts`'s `candidate`.
+   * It never crosses a wall or obstacle: a blocked step redirects along the
+   * clear axis instead. Purely feel — the number that makes a full-health
+   * Bratwurst read as "kicked aside," not "collected."
+   */
+  uncollectableNudgeSpeed: number;
   /** Ticks the spawn-bounce visual runs for, purely cosmetic. */
   spawnBounceTicks: number;
   /** Weight multiplier applied to a drop-table entry the player is low on. */
@@ -636,6 +656,20 @@ export interface ItemPoolTuning {
   bobAmplitude: number;
   /** Ticks per full bob cycle. */
   bobPeriodTicks: number;
+  /**
+   * Biermarken a shop's item pedestal costs. Only a `shop`-role room's
+   * pedestal is priced; a treasure/boss/secret pedestal is free. `0` would
+   * make the shop item free — the price is the whole point of it being in a
+   * shop rather than a treasure room.
+   */
+  shopItemPrice: number;
+  /**
+   * Chance (0–1) a shop actually stocks an item pedestal on a given visit —
+   * rolled once when the room loads. Not every shop has the big-ticket item;
+   * a shop that always did would make the pedestal feel owed rather than
+   * found.
+   */
+  shopItemChance: number;
 }
 
 /**
@@ -763,6 +797,35 @@ export interface BlutwurzTuning {
 }
 
 /**
+ * A mini-boss's own reward roll (#278): a pedestal item chance that pays
+ * less than a real boss's (and less again for an XL floor's second
+ * mini-boss, whose Meisterschlüssel is already redundant) plus a guaranteed
+ * consolation on a miss, so the mandatory detour never resolves into
+ * nothing. Its own group rather than folded into `ItemPoolTuning` — which
+ * pool a pedestal draws from is `pedestalPoolForRole`'s business, but
+ * *whether* a mini-boss pedestal offers anything at all is this roll's own
+ * number, with no equivalent for an ordinary treasure-room pedestal (always
+ * filled) or a boss's (also always filled).
+ */
+export interface MinibossRewardTuning {
+  /**
+   * Chance the floor's first mini-boss clear rolls a real pedestal item,
+   * drawn from the `treasure` pool (`pedestalPoolForRole`). A miss still
+   * pays the consolation bundle — see `GameSim`'s room-clear handling.
+   */
+  firstItemChance: number;
+  /**
+   * Chance an XL floor's *second* mini-boss clear rolls a pedestal item —
+   * intentionally half of `firstItemChance` rather than equal to it: an XL
+   * floor should not double the run's expected item income just because it
+   * doubled the mini-boss count (see `docs/DECISIONS.md`'s mini-boss reward
+   * entry for the measured expected-items-per-run number this rate
+   * produces).
+   */
+  secondItemChance: number;
+}
+
+/**
  * Der Losbrunnen (#218): feed a held item's numeric traits a reroll, for an
  * increasing Biermarken price, with a chance the roll makes the item worse
  * and a chance the machine itself breaks. Its own group rather than folded
@@ -838,6 +901,7 @@ export interface SimTuning {
   readonly curse: CurseTuning;
   readonly blutwurz: BlutwurzTuning;
   readonly machine: MachineTuning;
+  readonly minibossReward: MinibossRewardTuning;
 }
 
 export const DEFAULT_MOVEMENT_TUNING: Readonly<MovementTuning> = {
@@ -951,7 +1015,8 @@ export const DEFAULT_ENEMY_TUNING: Readonly<EnemyTuning> = {
   eliteChancePerExtraFloor: 0.06,
   eliteChanceMax: 0.35,
   eliteHealthMultiplier: 1.8,
-  eliteContactDamageMultiplier: 1.3,
+  eliteContactDamageMultiplier: 2,
+  eliteAttackDamageMultiplier: 2,
   eliteRadiusMultiplier: 1.2,
 };
 
@@ -1028,6 +1093,7 @@ export const DEFAULT_PROMILLE_TUNING: Readonly<PromilleTuning> = {
 export const DEFAULT_PICKUP_TUNING: Readonly<PickupTuning> = {
   magnetRadius: 0,
   magnetSpeed: 1.4,
+  uncollectableNudgeSpeed: 1.8,
   spawnBounceTicks: 14,
   needMultiplier: 2,
   needThreshold: 0.5,
@@ -1050,6 +1116,8 @@ export const DEFAULT_ITEM_POOL_TUNING: Readonly<ItemPoolTuning> = {
   revealHoldTicks: 180,
   bobAmplitude: 3,
   bobPeriodTicks: 90,
+  shopItemPrice: 20,
+  shopItemChance: 0.5,
 };
 
 /**
@@ -1187,6 +1255,18 @@ export const DEFAULT_BLUTWURZ_TUNING: Readonly<BlutwurzTuning> = {
  * choice the player can see the price of before making it, not a surprise
  * after the first one.
  */
+/**
+ * The issue's own tabled rates (#278): 40% for the floor's first mini-boss,
+ * halved to 20% for an XL floor's second. The miss case is never a flat
+ * "nothing" — `GameSim`'s room-clear handling always pays the consolation
+ * bundle instead, so these two numbers are the *whole* item-income effect
+ * of the roll, not a chance of getting nothing at all.
+ */
+export const DEFAULT_MINIBOSS_REWARD_TUNING: Readonly<MinibossRewardTuning> = {
+  firstItemChance: 0.4,
+  secondItemChance: 0.2,
+};
+
 export const DEFAULT_MACHINE_TUNING: Readonly<MachineTuning> = {
   spawnChance: 0.85,
   baseCost: 1,
@@ -1222,6 +1302,7 @@ export function createTuning(): SimTuning {
     character: { ...DEFAULT_CHARACTER_TUNING },
     roomGen: { ...DEFAULT_ROOM_GEN_TUNING },
     machine: { ...DEFAULT_MACHINE_TUNING },
+    minibossReward: { ...DEFAULT_MINIBOSS_REWARD_TUNING },
   };
 }
 

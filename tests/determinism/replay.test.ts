@@ -140,13 +140,13 @@ describe('a replay reconstructed through the storage codec', () => {
   });
 
   it('stays well under 100 KB for a full-length run', async () => {
-    // `docs/GAME_DESIGN.md` §4: a run is 35-50 minutes. 45 minutes at
+    // `docs/GAME_DESIGN.md` §4: a run is 45-65 minutes. 55 minutes at
     // `TICKS_PER_SECOND` is the middle of that band, and every one of those
     // ticks carries a held direction, a held aim and a fire button toggling
     // every so often — an ordinary twin-stick session, not a pathological
     // one — which is exactly the repetition `codec.ts`'s doc comment claims
     // gzip finds.
-    const ticks = 45 * 60 * TICKS_PER_SECOND;
+    const ticks = 55 * 60 * TICKS_PER_SECOND;
     const frames = scriptedFrames(ticks);
     const recording = new InputRecording(frames.length);
     for (const frame of frames) {

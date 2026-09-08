@@ -7,7 +7,9 @@ import cellarMiniboss from '../../src/content/rooms/cellar-miniboss.json';
 import dorfMiniboss from '../../src/content/rooms/dorf-miniboss.json';
 import { GameSim } from '../../src/sim/game/sim.js';
 import { RoomGeometry } from '../../src/sim/room/geometry.js';
-import { isEnemyElite } from '../../src/sim/systems/enemy.js';
+import { createInputFrame } from '../../src/sim/input/frame.js';
+import { ProjectileTeam } from '../../src/sim/projectile/store.js';
+import { eliteAttackDamage, isEnemyElite } from '../../src/sim/systems/enemy.js';
 
 function bareRoom(): RoomGeometry {
   return new RoomGeometry(0, 0, 320, 180);
@@ -192,6 +194,50 @@ describe('elite modifier (#156)', () => {
     for (const index of indices) {
       expect(isEnemyElite(sim, index)).toBe(false);
     }
+  });
+
+  it('doubles attack damage (shot/melee/splash) for an elite, and leaves a plain body alone', () => {
+    const sim = emptySim();
+    const definition = sim.enemies.indexOf('bierratte');
+    const plain = entityIndex(sim.spawnEnemyKind(definition, 100, 100));
+    const elite = entityIndex(sim.spawnEnemyKind(definition, 200, 100, true));
+    sim.world.flush();
+
+    sim.tuning.enemy.eliteAttackDamageMultiplier = 2;
+    expect(eliteAttackDamage(sim, plain, 3)).toBe(3);
+    expect(eliteAttackDamage(sim, elite, 3)).toBe(6);
+    // Rounds, like the contact-damage and health scaling at spawn.
+    sim.tuning.enemy.eliteAttackDamageMultiplier = 1.5;
+    expect(eliteAttackDamage(sim, elite, 3)).toBe(5);
+  });
+
+  it("scales an elite's fired shot through the same path — a plain Bierratte's stays at its authored 1", () => {
+    const firstEnemyShotDamage = (elite: boolean): number => {
+      const sim = emptySim();
+      sim.tuning.enemy.eliteAttackDamageMultiplier = 2;
+      const definition = sim.enemies.indexOf('bierratte');
+      // Inside `scurry`'s 45px trigger, so it winds up and snipes.
+      sim.spawnEnemyKind(
+        definition,
+        sim.positionX(sim.playerIndex) + 30,
+        sim.positionY(sim.playerIndex),
+        elite,
+      );
+      sim.world.flush();
+      let damage = -1;
+      for (let tick = 0; tick < 60 && damage < 0; tick++) {
+        sim.step(createInputFrame());
+        sim.projectiles.forEachLive((index) => {
+          if (sim.projectiles.team[index] === ProjectileTeam.Enemy && damage < 0) {
+            damage = sim.projectiles.damage[index] ?? -1;
+          }
+        });
+      }
+      return damage;
+    };
+
+    expect(firstEnemyShotDamage(false)).toBe(1);
+    expect(firstEnemyShotDamage(true)).toBe(2);
   });
 
   it('rolls a higher chance on a later floor — difficulty rising across floors, per #156', () => {

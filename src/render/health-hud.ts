@@ -42,11 +42,18 @@ function fillFor(remaining: number, wurstIndex: number): Fill {
  * one thing on it that is supposed to hold still so the player can read it.
  *
  * "Draining rather than vanishing" (the acceptance criterion this exists
- * for) means the sprite count for every pool is fixed to what it could hold
- * — all three pools now have a real, enforced maximum
- * (`SOUL_HEALTH_MAX`/`ETERNAL_HEALTH_MAX`), not just a generous rendering
- * cap — and a spent icon switches to its empty texture rather than being
- * removed, so the row never gets shorter.
+ * for) means a spent icon switches to its empty texture rather than being
+ * removed, so the row never gets shorter *within a run*.
+ *
+ * What it does NOT mean is showing every container the pool could ever hold:
+ * a fresh run drew five empty Weißwurst and six empty Blutwurst the player
+ * had no way to fill yet, which reads as "you are missing eleven hearts,"
+ * not as headroom. Each pool now renders only as many containers as the
+ * player has actually had at once this run — a per-pool high-water mark
+ * (`*SeenHalves`), so an emptied container still shows (you can refill it)
+ * but one you have never earned does not. Red starts at the character's
+ * three; soul and eternal start hidden and appear the first time a Wurst
+ * grants one. `reset()` clears the marks — `app/main.ts` calls it per run.
  *
  * The Wurst are the kit's art (#154's mugs, redrawn for the redesign) rather
  * than a generated rounded rectangle: one tied-off-both-ends silhouette,
@@ -66,6 +73,13 @@ export class HealthHud {
   private readonly soulWurst: Sprite[] = [];
   private readonly redWurst: Sprite[] = [];
   private readonly eternalWurst: Sprite[] = [];
+
+  /** Highest half-heart count each pool has held this run — how many containers to draw. See the class doc comment. */
+  private redSeenHalves = 0;
+  private soulSeenHalves = 0;
+  private eternalSeenHalves = 0;
+  /** Whether the eternal row is currently drawn — flips `height`, which `app/main.ts`'s layout watches. */
+  private eternalRowShown = false;
 
   constructor(kit: UiKit) {
     this.kit = kit;
@@ -94,48 +108,78 @@ export class HealthHud {
     return sprite;
   }
 
-  sync(sim: GameSim): void {
-    let x = 0;
-    const soulHalves = sim.playerSoulHealth;
-    for (let index = 0; index < this.soulWurst.length; index++) {
-      const wurst = this.soulWurst[index];
-      if (wurst === undefined) {
-        continue;
-      }
-      wurst.texture = this.texture('soul', fillFor(soulHalves, index));
-      wurst.position.set(x, 0);
-      x += this.wurstWidth + WURST_GAP;
-    }
-
-    const redHalves = sim.playerHealth;
-    for (let index = 0; index < this.redWurst.length; index++) {
-      const wurst = this.redWurst[index];
-      if (wurst === undefined) {
-        continue;
-      }
-      wurst.texture = this.texture('red', fillFor(redHalves, index));
-      wurst.position.set(x, 0);
-      x += this.wurstWidth + WURST_GAP;
-    }
-
-    // Eternal hearts drain in halves now (health-food-redesign), the same
-    // shape as red and soul — see `fillFor` — rather than only ever showing
-    // full or hidden, on a second row under the row that does drain.
-    const eternalHalves = sim.playerEternalHealth;
-    let eternalX = 0;
-    for (let index = 0; index < this.eternalWurst.length; index++) {
-      const wurst = this.eternalWurst[index];
-      if (wurst === undefined) {
-        continue;
-      }
-      wurst.texture = this.texture('eternal', fillFor(eternalHalves, index));
-      wurst.position.set(eternalX, this.wurstHeight + WURST_GAP);
-      eternalX += this.wurstWidth + WURST_GAP;
-    }
+  /** Clears the per-run high-water marks — `app/main.ts` calls this on every `startRun`. */
+  reset(): void {
+    this.redSeenHalves = 0;
+    this.soulSeenHalves = 0;
+    this.eternalSeenHalves = 0;
   }
 
-  /** Height of the row stack in UI pixels, so `main.ts` can stack the next HUD under it. */
+  /** Icons to draw for a pool: enough for the most it has ever held this run, rounded up to a whole container. */
+  private static iconsFor(seenHalves: number): number {
+    return Math.ceil(seenHalves / HALF_UNITS_PER_ICON);
+  }
+
+  private layoutRow(
+    sprites: readonly Sprite[],
+    pool: Pool,
+    halves: number,
+    visibleIcons: number,
+    startX: number,
+    y: number,
+  ): number {
+    let x = startX;
+    for (let index = 0; index < sprites.length; index++) {
+      const wurst = sprites[index];
+      if (wurst === undefined) {
+        continue;
+      }
+      if (index >= visibleIcons) {
+        wurst.visible = false;
+        continue;
+      }
+      wurst.visible = true;
+      wurst.texture = this.texture(pool, fillFor(halves, index));
+      wurst.position.set(x, y);
+      x += this.wurstWidth + WURST_GAP;
+    }
+    return x;
+  }
+
+  sync(sim: GameSim): void {
+    // A container the player has had once stays drawn (emptied, ready to
+    // refill); one never earned is not drawn at all — see the class comment.
+    // Red also tracks the pool ceiling, which a heart-container item raises.
+    this.redSeenHalves = Math.max(this.redSeenHalves, sim.playerHealth, sim.playerMaxHealth);
+    this.soulSeenHalves = Math.max(this.soulSeenHalves, sim.playerSoulHealth);
+    this.eternalSeenHalves = Math.max(this.eternalSeenHalves, sim.playerEternalHealth);
+
+    const soulIcons = HealthHud.iconsFor(this.soulSeenHalves);
+    const redIcons = HealthHud.iconsFor(this.redSeenHalves);
+    const eternalIcons = HealthHud.iconsFor(this.eternalSeenHalves);
+
+    // Soul then red share the top row; eternal sits under them, and only if
+    // the player has ever banked one.
+    const afterSoul = this.layoutRow(this.soulWurst, 'soul', sim.playerSoulHealth, soulIcons, 0, 0);
+    this.layoutRow(this.redWurst, 'red', sim.playerHealth, redIcons, afterSoul, 0);
+    this.layoutRow(
+      this.eternalWurst,
+      'eternal',
+      sim.playerEternalHealth,
+      eternalIcons,
+      0,
+      this.wurstHeight + WURST_GAP,
+    );
+
+    this.eternalRowShown = eternalIcons > 0;
+  }
+
+  /**
+   * Height of the row stack in UI pixels, so `main.ts` can stack the next HUD
+   * under it. Drops to a single row until the player has banked an eternal
+   * heart — `app/main.ts` re-runs its HUD layout when this changes.
+   */
   get height(): number {
-    return this.wurstHeight * 2 + WURST_GAP;
+    return this.eternalRowShown ? this.wurstHeight * 2 + WURST_GAP : this.wurstHeight;
   }
 }

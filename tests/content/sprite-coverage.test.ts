@@ -84,7 +84,7 @@ describe('every registered pickup has art', () => {
 });
 
 /**
- * Item icons (`docs/DECISIONS.md` #83) landed batch by batch behind a
+ * Item icons (`docs/DECISIONS.md` #85) landed batch by batch behind a
  * placeholder disc; with the roster fully drawn, an item authored without
  * its `item-<sprite>.png` is a regression this catches on the pull request,
  * the same way a pickup without art is.

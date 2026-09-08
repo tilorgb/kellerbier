@@ -98,7 +98,7 @@ let dispatchSim: GameSim | null = null;
  * whichever item the nested pass visited last. With Spezi and
  * Braumeister-Visier the only spawners that was a once-in-five-shots skip
  * nobody noticed; the 2026-09 item pass made spawning from a hook the
- * normal case (`docs/DECISIONS.md` #82) and a fan of three came out as one.
+ * normal case (`docs/DECISIONS.md` #84) and a fan of three came out as one.
  *
  * So each `dispatchItemXxx` saves the fields it is about to overwrite into
  * a fixed frame on entry and restores them on exit. A preallocated stack of

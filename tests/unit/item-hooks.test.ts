@@ -630,7 +630,7 @@ describe('item hooks respect promilleRequirement (#32)', () => {
  * `endDispatch`): a hook that spawns a projectile runs a nested
  * `onProjectileSpawn` broadcast from inside the outer one, and neither the
  * items after it nor its own `ctx.state` may be lost to that. Found by the
- * 2026-09 item pass (`docs/DECISIONS.md` #82), when a fan of three plus a
+ * 2026-09 item pass (`docs/DECISIONS.md` #84), when a fan of three plus a
  * streak's three extras came out as four shots.
  */
 describe('nested dispatch from inside a hook', () => {

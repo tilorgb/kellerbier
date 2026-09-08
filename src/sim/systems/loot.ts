@@ -1,7 +1,7 @@
 import { ENEMY_DROP_TABLES } from '../../content/pickups/index.js';
 import { EventKind } from '../events/queue.js';
 import type { GameSim } from '../game/sim.js';
-import { ENEMY_STRIDE } from './enemy.js';
+import { ENEMY_STRIDE, isEnemyElite } from './enemy.js';
 
 /**
  * What a kill leaves behind.
@@ -40,5 +40,9 @@ function dropFromEvent(slot: number): void {
 
   const atX = sim.events.x[slot] ?? 0;
   const atY = sim.events.y[slot] ?? 0;
-  sim.dropLoot(ENEMY_DROP_TABLES[tier], atX, atY);
+  // An elite (#156) always leaves something — its own tier table, with the
+  // "nothing" outcome taken out (`GameSim.dropLoot`'s `guaranteed`). The
+  // reward half of "hits double, drops loot": the mask check above still
+  // holds here because entity teardown is deferred past the loot pass.
+  sim.dropLoot(ENEMY_DROP_TABLES[tier], atX, atY, isEnemyElite(sim, index));
 }

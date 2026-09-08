@@ -1,17 +1,19 @@
 import {
   BufferAttribute,
   BufferGeometry,
+  CircleGeometry,
   DoubleSide,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
+  NearestFilter,
   PlaneGeometry,
   RepeatWrapping,
   RingGeometry,
   type Texture as ThreeTexture,
 } from 'three';
 import { ROOM_TILE_UNITS } from '../../content/rooms/definition.js';
-import type { Texture } from '../gfx/index.js';
+import { type Texture, textureFromPixels } from '../gfx/index.js';
 
 /**
  * Things that lie on the floor: decals, telegraph shapes, plinths, the
@@ -213,12 +215,71 @@ export class FloorWedge {
 
 const WEDGE_STEPS = 12;
 
-/** A flat filled rectangle on the floor — the bomb cross's arms and the ground telegraph's marker. */
-export class FloorBar {
-  readonly mesh: Mesh<PlaneGeometry, MeshBasicMaterial>;
+/** Room-unit pixels one repeat of the hazard stripe covers on the floor. */
+const HAZARD_STRIPE_UNITS = 4;
 
-  constructor(colour: number) {
-    this.mesh = new Mesh(new PlaneGeometry(1, 1), flatColourMaterial(colour));
+let hazardStripeSource: Texture | null = null;
+
+/**
+ * One repeat of the diagonal hazard hatch — a chunky pixel band, white so a
+ * material's `color` tints it. Half on, half off, so the floor shows between
+ * the stripes, and seamless when tiled in either direction.
+ */
+function hazardStripeTexture(): Texture {
+  if (hazardStripeSource !== null) {
+    return hazardStripeSource;
+  }
+  const size = 8;
+  const pixels = new Int32Array(size * size).fill(-1);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      if ((x + y) % size < size / 2) {
+        pixels[y * size + x] = 0xffffff;
+      }
+    }
+  }
+  hazardStripeSource = textureFromPixels(size, size, pixels);
+  return hazardStripeSource;
+}
+
+/** One diagonal-hatch texture + material, tinted `tint` — shared shape for every explosion telegraph. */
+function hazardHatch(tint: number): { stripe: ThreeTexture; material: MeshBasicMaterial } {
+  const stripe = hazardStripeTexture().source.texture.clone();
+  stripe.wrapS = RepeatWrapping;
+  stripe.wrapT = RepeatWrapping;
+  stripe.magFilter = NearestFilter;
+  stripe.minFilter = NearestFilter;
+  stripe.generateMipmaps = false;
+  stripe.needsUpdate = true;
+  const material = new MeshBasicMaterial({
+    map: stripe,
+    color: tint,
+    transparent: true,
+    depthWrite: false,
+    side: DoubleSide,
+    toneMapped: false,
+    alphaTest: 0.05,
+  });
+  return { stripe, material };
+}
+
+/**
+ * A flat rectangle of the diagonal hazard hatch on the floor. Unlike
+ * `FloorBar` it is textured: chunky pixel stripes that stay a constant size
+ * on the floor however large the rectangle is (the repeat is set from the
+ * world size in `place`), tinted and blinked by the caller. Two of these
+ * crossed are the Bierfassl blast telegraph (#3) — shown full size from the
+ * moment the bomb is set down, never growing. Every explosive uses this
+ * hatch (#12): a Bierfassl the crossed bars, a splash the disc below.
+ */
+export class FloorHazardBar {
+  readonly mesh: Mesh<PlaneGeometry, MeshBasicMaterial>;
+  private readonly stripe: ThreeTexture;
+
+  constructor(tint: number) {
+    const { stripe, material } = hazardHatch(tint);
+    this.stripe = stripe;
+    this.mesh = new Mesh(new PlaneGeometry(1, 1), material);
     this.mesh.rotation.x = -Math.PI / 2;
     this.mesh.frustumCulled = false;
     this.mesh.visible = false;
@@ -227,6 +288,7 @@ export class FloorBar {
   place(x: number, z: number, width: number, depth: number, alpha: number): void {
     this.mesh.position.set(x, TELEGRAPH_HEIGHT, z);
     this.mesh.scale.set(width, depth, 1);
+    this.stripe.repeat.set(width / HAZARD_STRIPE_UNITS, depth / HAZARD_STRIPE_UNITS);
     this.mesh.material.opacity = alpha;
     this.mesh.visible = true;
   }
@@ -238,6 +300,48 @@ export class FloorBar {
   dispose(): void {
     this.mesh.geometry.dispose();
     this.mesh.material.dispose();
+    this.stripe.dispose();
+    this.mesh.removeFromParent();
+  }
+}
+
+/**
+ * The disc counterpart of `FloorHazardBar` — the same hatch, filling a
+ * circle, for a radial blast (the Böllerschmeißer's lobbed Böller and the
+ * player's own item, #12). `place` takes the blast radius; the stripes stay
+ * the same size on the floor whatever the radius.
+ */
+export class FloorHazardDisc {
+  readonly mesh: Mesh<CircleGeometry, MeshBasicMaterial>;
+  private readonly stripe: ThreeTexture;
+
+  constructor(tint: number) {
+    const { stripe, material } = hazardHatch(tint);
+    this.stripe = stripe;
+    this.mesh = new Mesh(new CircleGeometry(1, 40), material);
+    this.mesh.rotation.x = -Math.PI / 2;
+    this.mesh.frustumCulled = false;
+    this.mesh.visible = false;
+  }
+
+  place(x: number, z: number, radius: number, alpha: number): void {
+    this.mesh.position.set(x, TELEGRAPH_HEIGHT, z);
+    this.mesh.scale.set(radius, radius, 1);
+    // `CircleGeometry`'s UVs run 0..1 across the diameter, so match the bar's
+    // repeat maths on the full width.
+    this.stripe.repeat.set((radius * 2) / HAZARD_STRIPE_UNITS, (radius * 2) / HAZARD_STRIPE_UNITS);
+    this.mesh.material.opacity = alpha;
+    this.mesh.visible = true;
+  }
+
+  hide(): void {
+    this.mesh.visible = false;
+  }
+
+  dispose(): void {
+    this.mesh.geometry.dispose();
+    this.mesh.material.dispose();
+    this.stripe.dispose();
     this.mesh.removeFromParent();
   }
 }
