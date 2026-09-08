@@ -141,6 +141,13 @@ Isaac's skeleton, kept deliberately familiar:
   — the right stick snaps to the same eight directions the keys produce, rather than free-aiming
   at a point. No mouse aim (`docs/DECISIONS.md` #20). Shooting and moving are fully independent.
   Full gamepad and full rebinding.
+- **No dodge, roll, parry or block — a decision, not an omission** (`docs/DECISIONS.md` #89,
+  settled by #239 once the pressure pass had landed and could be measured). Alois's verbs are
+  Fire, Bomb, Use, Map, Pause, and that is the whole list. The answer to a room that is pressuring
+  you is where you stand, what you drink and what you have banked in the active slot — not a
+  button with invulnerability frames on it. There is exactly one thing that reopens the question,
+  and it is a sentence a real player says: *"I could see the hit coming and I had nothing to do
+  about it."*
 - **Floors** are a grid of rooms. The graph (which slots, which are special, where the doors
   are) is procedural; an ordinary room's *interior* — any shape — is generated too
   (`docs/DECISIONS.md` #59). Hand-authored templates fill the start room and the special rooms;
