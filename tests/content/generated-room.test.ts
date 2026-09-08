@@ -220,30 +220,19 @@ function isOpenTile(tileGrid: readonly string[], col: number, row: number): bool
 }
 
 /**
- * True if `direction`'s door opens onto a little dead-end notch: at most one
- * tile of elbow room on each side of the doorway, with no generous escape
- * route (two or more tiles of headroom) straight ahead either — the shape
- * that pins the player at the threshold and reads as a mistake, whether the
- * wall sits right at the mouth or one tile past it. A wall a real corridor's
- * width ahead, with room to step aside and carry on past it, is not flagged.
+ * True if `direction`'s door mouth touches a wall on every one of its three
+ * interior sides — forward, left, and right all immediately blocked, the
+ * only open neighbour the door itself. Touching a wall on some sides (a wall
+ * close ahead with room to step past it, or a wall to one side with a clear
+ * way forward) is an ordinary, unflagged shape; only every side at once
+ * leaves no real way to move once the player steps in.
  */
-function hasNarrowDoorApproach(tileGrid: readonly string[], direction: DoorDirection): boolean {
+function hasBoxedInDoor(tileGrid: readonly string[], direction: DoorDirection): boolean {
   const { col, row, forward, side } = doorMouthLocal(direction);
-  const openRun = (stepX: number, stepY: number): number => {
-    let run = 0;
-    let c = col + stepX;
-    let r = row + stepY;
-    while (run < 2 && isOpenTile(tileGrid, c, r)) {
-      run += 1;
-      c += stepX;
-      r += stepY;
-    }
-    return run;
-  };
-  if (openRun(forward.x, forward.y) >= 2) {
-    return false;
-  }
-  return openRun(side.x, side.y) <= 1 && openRun(-side.x, -side.y) <= 1;
+  const forwardOpen = isOpenTile(tileGrid, col + forward.x, row + forward.y);
+  const leftOpen = isOpenTile(tileGrid, col + side.x, row + side.y);
+  const rightOpen = isOpenTile(tileGrid, col - side.x, row - side.y);
+  return !forwardOpen && !leftOpen && !rightOpen;
 }
 
 describe('procedural room generator (POC)', () => {
@@ -281,6 +270,13 @@ describe('procedural room generator (POC)', () => {
             `seed ${String(seed)}: player enters stuck or a door is walled off`,
           ).toBe(true);
 
+          for (const direction of doors) {
+            expect(
+              hasBoxedInDoor(template.tileGrid, direction),
+              `seed ${String(seed)}: ${direction} door mouth is boxed in on every side`,
+            ).toBe(false);
+          }
+
           for (const spawn of compiled.enemySpawns) {
             expect(
               compiled.geometry.isClear(spawn.x, spawn.y, 3),
@@ -292,36 +288,37 @@ describe('procedural room generator (POC)', () => {
     }
   }
 
-  it('a narrow door approach is rarer than a roomy one, but still happens', () => {
-    // NARROW_DOOR_APPROACH_REJECT_CHANCE rerolls a narrow candidate most —
-    // not all — of the time; both shapes have to stay reachable outcomes
-    // (making the tight shape impossible was an overcorrection). This pins
-    // both halves of that: it still occurs sometimes, and less often than
-    // its ~5% unopposed rate (see the constant's own doc comment).
-    let narrow = 0;
-    const total = 1000;
-    for (let seed = 0; seed < total; seed++) {
-      const template = generateRoom({
-        roomId: `n${String(seed)}`,
-        floor: 1,
-        floorTag: 'cellar',
-        doors: ['north'],
-        distanceFromStart: 3,
-        bossDistance: 6,
-        rng: new Rng(roomGenSeed(9001, 1, `n${String(seed)}`, seed)),
-      });
-      if (hasNarrowDoorApproach(template.tileGrid, 'north')) {
-        narrow += 1;
+  it('a door mouth is never boxed in on every side, at scale', () => {
+    // hasBoxedInDoor is a hard reject in layoutGrid, not a rarity — this is
+    // the stress-test version of the per-seed check the main loop above
+    // already runs, at 20x the seed count and every door direction, since a
+    // guarantee this absolute deserves more than 50 seeds of confidence.
+    // Touching a wall on *some* sides stays a completely ordinary, unflagged
+    // shape (see hasBoxedInDoor's own doc comment) — this only rules out
+    // every side at once.
+    let boxedIn = 0;
+    let total = 0;
+    for (const direction of DOOR_DIRECTIONS) {
+      for (let seed = 0; seed < 1000; seed++) {
+        const template = generateRoom({
+          roomId: `bx${String(seed)}`,
+          floor: 1,
+          floorTag: 'cellar',
+          doors: [direction],
+          distanceFromStart: 3,
+          bossDistance: 6,
+          rng: new Rng(roomGenSeed(9001, 1, `bx${String(seed)}`, seed)),
+        });
+        total += 1;
+        if (hasBoxedInDoor(template.tileGrid, direction)) {
+          boxedIn += 1;
+        }
       }
     }
     expect(
-      narrow,
-      'a narrow approach never came up in 1000 rooms — the reject chance reads as a ban',
-    ).toBeGreaterThan(0);
-    expect(
-      narrow / total,
-      'a narrow approach is winning close to as often as its unopposed rate — NARROW_DOOR_APPROACH_REJECT_CHANCE is too weak to prefer a roomier layout when one is on offer',
-    ).toBeLessThan(0.06);
+      boxedIn,
+      `${String(boxedIn)}/${String(total)} doors were boxed in on every side — hasBoxedInDoor's reject isn't holding`,
+    ).toBe(0);
   });
 
   it('coverage lands in the tuned band, with rare sparse and busy rooms', () => {

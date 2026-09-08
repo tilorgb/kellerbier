@@ -28,13 +28,12 @@
  *   clears the one tile inside each door, a BFS from a mouth proves every other
  *   door is reachable, and `fillUnreachedPockets` seals any pocket the BFS could
  *   not reach so the whole walkable area is one region. Failing that, fall back
- *   to an empty room and warn once (`docs/DECISIONS.md` #19). A wall a real
- *   corridor's width ahead, with room to step aside and carry on past it, is
- *   the roomier of two fine ordinary shapes; a wall pinning the player at the
- *   threshold to a token step in any direction (`hasNarrowDoorApproach`) is
- *   the other, playable but a worse fit for the layout's own coverage
- *   band — `layoutGrid` reaches for the roomier shape when the retries on
- *   offer have one, never by forbidding the narrower one outright.
+ *   to an empty room and warn once (`docs/DECISIONS.md` #19). Touching a wall
+ *   on some of the mouth's sides is a fine, ordinary shape — a wall close
+ *   ahead with room to step past it, or a wall to one side with a clear way
+ *   forward; `hasBoxedInDoor` hard-rejects the layout only when *every* side
+ *   is blocked, since that is the one shape with no real way to move once
+ *   the player steps in, whatever the coarser BFS above made of it.
  * - A multi-cell room (`1x2`/`2x2`/`L`/`T`) is generated as one continuous grid
  *   spanning the shape's bounding box — the seams between glued sub-rooms carry
  *   no wall — then sliced back into per-sub-room `RoomSubLayout`s for
@@ -510,50 +509,26 @@ function doorApproachAxes(mouth: Cell): { readonly forward: Cell; readonly side:
   return { forward: { col: 0, row: -1 }, side: { col: 1, row: 0 } }; // south door
 }
 
-/** Open tiles from `start`, stepping by `step` each time, capped at `cap`. */
-function openRun(grid: RoomGrid, start: Cell, step: Cell, cap: number): number {
-  let run = 0;
-  let col = start.col + step.col;
-  let row = start.row + step.row;
-  while (run < cap && !blocked(grid, col, row)) {
-    run += 1;
-    col += step.col;
-    row += step.row;
-  }
-  return run;
-}
-
 /**
- * Chance `layoutGrid` throws away a candidate whose door approach is narrow
- * (`hasNarrowDoorApproach`) and rerolls, rather than a hard "never pick
- * this" ban — a tuning knob, not a rule. Measured (`generated-room.test.ts`)
- * at landing the shape in ~3% of doors — down from the ~5% it wins at
- * completely unopposed, roughly halved rather than engineered to zero.
+ * True if a door mouth touches a wall on every one of its three interior
+ * sides — forward, left, and right all immediately blocked, the only open
+ * neighbour the door itself. The player is free to touch a wall on any one
+ * (or two) of those sides; a wall close ahead with room to step past it, or
+ * a wall to one side with a clear way forward, are both fine, ordinary
+ * shapes. It is only when *every* side is blocked that there is no real way
+ * to move once they step in — a dead end a corner-hugging body could
+ * technically slip out of in continuous space (which is why the discrete
+ * `everyMouthReachable` BFS above doesn't always catch this — a diagonal
+ * squeeze past two touching rects is invisible to 4-connected tile
+ * adjacency), but that a player reads as being trapped.
  */
-const NARROW_DOOR_APPROACH_REJECT_CHANCE = 0.5;
-
-/**
- * True if a door opens onto a squeeze: at most one tile of elbow room to
- * either side of the doorway, with no generous escape route straight ahead
- * either (fewer than two tiles of headroom past the mouth). That combination
- * pins the player at the threshold able to shuffle a token step at best in
- * any direction — a little dead end, less common than the one ordinary shape
- * that's roomier: a wall not too far ahead with a real corridor's worth of
- * space to step aside and carry on past it. A wall blocking the mouth
- * outright is exactly as pinched by this test as one a tile further in —
- * "immediately" doesn't earn a pass just because it is close. Both shapes
- * are real, playable rooms; this only decides which one `layoutGrid` reaches
- * for first.
- */
-function hasNarrowDoorApproach(grid: RoomGrid, mouths: readonly Cell[]): boolean {
+function hasBoxedInDoor(grid: RoomGrid, mouths: readonly Cell[]): boolean {
   return mouths.some((mouth) => {
     const { forward, side } = doorApproachAxes(mouth);
-    if (openRun(grid, mouth, forward, 2) >= 2) {
-      return false;
-    }
-    const leftRoom = openRun(grid, mouth, side, 2);
-    const rightRoom = openRun(grid, mouth, { col: -side.col, row: -side.row }, 2);
-    return leftRoom <= 1 && rightRoom <= 1;
+    const forwardOpen = !blocked(grid, mouth.col + forward.col, mouth.row + forward.row);
+    const leftOpen = !blocked(grid, mouth.col + side.col, mouth.row + side.row);
+    const rightOpen = !blocked(grid, mouth.col - side.col, mouth.row - side.row);
+    return !forwardOpen && !leftOpen && !rightOpen;
   });
 }
 
@@ -721,22 +696,17 @@ function layoutGrid(
     if (!everyMouthReachable(candidate, candidateDistance, mouths)) {
       continue;
     }
-    // A narrow door approach is a real, occasionally-fine room feel, not a
-    // shape to forbid outright — see `hasNarrowDoorApproach`'s doc comment.
-    // A coverage-band scoring penalty can't express "rarer, not banned"
-    // here: `layoutGrid` keeps the best of up to `layoutRetries` attempts, so
-    // any nonzero penalty is beaten almost every time by whichever other
-    // attempt happens not to be narrow — measured at under 40 candidates,
-    // even the smallest penalty reads as a de facto ban, and only literally
-    // no penalty (no preference at all) lets the shape through at its
-    // natural rate. Rejecting most — not all — of the candidates that have
-    // it is what actually lands "rarer, still possible": most retries never
-    // see one, so it wins outright when the dice do land on one, without
-    // width-of-40 competition drowning it out to zero.
-    if (
-      hasNarrowDoorApproach(candidate, mouths) &&
-      rng.chance(NARROW_DOOR_APPROACH_REJECT_CHANCE)
-    ) {
+    // Rule 1, tightened: `everyMouthReachable`'s BFS runs on 4-connected tile
+    // adjacency, which misses a diagonal squeeze past two rects that touch
+    // corner-to-corner — continuous collision (what the player actually
+    // moves through) can still get out that way, so a mouth boxed in on
+    // every side can pass the BFS above while still reading as a dead end to
+    // a player. This is a hard reject, not a scoring preference: touching a
+    // wall on some sides is an ordinary room shape (see
+    // `hasBoxedInDoor`'s doc comment), but touching one on every side never
+    // is, so there is no "rare but real" case to preserve here the way there
+    // was for the narrower shape this replaced.
+    if (hasBoxedInDoor(candidate, mouths)) {
       continue;
     }
     fillUnreachedPockets(candidate, candidateDistance);
