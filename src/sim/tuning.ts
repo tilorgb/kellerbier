@@ -356,8 +356,20 @@ export interface EnemyTuning {
   eliteChanceMax: number;
   /** What an elite's health is multiplied by. "Tougher" — #156's own first example. */
   eliteHealthMultiplier: number;
-  /** What an elite's contact damage is multiplied by. Smaller than the health multiplier: a body worth shooting more, not a room worth avoiding entirely. */
+  /**
+   * What an elite's contact (body) damage is multiplied by. An elite is a
+   * risk-and-reward encounter now (the guaranteed drop in `systems/loot.ts` is
+   * the reward): it always hits hard, so `2` — walking into one costs double.
+   */
   eliteContactDamageMultiplier: number;
+  /**
+   * What an elite's *attack* damage — projectiles (`fireOne`), the melee arc
+   * (`applyMeleeArc`) and a lobbed bomb's splash (`detonateLobbedBomb`) — is
+   * multiplied by. The ranged half of "an elite always hits double": kept a
+   * separate knob from contact only because the two are applied at different
+   * points (contact at spawn, this at the moment the shot leaves).
+   */
+  eliteAttackDamageMultiplier: number;
   /**
    * What an elite's collider radius (and mass, matched to it) is multiplied
    * by — "elite variants read as elite at a glance, without needing a
@@ -557,6 +569,14 @@ export interface PickupTuning {
   magnetRadius: number;
   /** Pixels per tick a magnetised pickup closes the distance by. */
   magnetSpeed: number;
+  /**
+   * Pixels per tick the player shoves an *uncollectable* pickup (a Wurst on a
+   * full pool) as they walk into it — `sim/systems/pickup.ts`'s `candidate`.
+   * It never crosses a wall or obstacle: a blocked step redirects along the
+   * clear axis instead. Purely feel — the number that makes a full-health
+   * Bratwurst read as "kicked aside," not "collected."
+   */
+  uncollectableNudgeSpeed: number;
   /** Ticks the spawn-bounce visual runs for, purely cosmetic. */
   spawnBounceTicks: number;
   /** Weight multiplier applied to a drop-table entry the player is low on. */
@@ -636,6 +656,20 @@ export interface ItemPoolTuning {
   bobAmplitude: number;
   /** Ticks per full bob cycle. */
   bobPeriodTicks: number;
+  /**
+   * Biermarken a shop's item pedestal costs. Only a `shop`-role room's
+   * pedestal is priced; a treasure/boss/secret pedestal is free. `0` would
+   * make the shop item free — the price is the whole point of it being in a
+   * shop rather than a treasure room.
+   */
+  shopItemPrice: number;
+  /**
+   * Chance (0–1) a shop actually stocks an item pedestal on a given visit —
+   * rolled once when the room loads. Not every shop has the big-ticket item;
+   * a shop that always did would make the pedestal feel owed rather than
+   * found.
+   */
+  shopItemChance: number;
 }
 
 /**
@@ -981,7 +1015,8 @@ export const DEFAULT_ENEMY_TUNING: Readonly<EnemyTuning> = {
   eliteChancePerExtraFloor: 0.06,
   eliteChanceMax: 0.35,
   eliteHealthMultiplier: 1.8,
-  eliteContactDamageMultiplier: 1.3,
+  eliteContactDamageMultiplier: 2,
+  eliteAttackDamageMultiplier: 2,
   eliteRadiusMultiplier: 1.2,
 };
 
@@ -1058,6 +1093,7 @@ export const DEFAULT_PROMILLE_TUNING: Readonly<PromilleTuning> = {
 export const DEFAULT_PICKUP_TUNING: Readonly<PickupTuning> = {
   magnetRadius: 0,
   magnetSpeed: 1.4,
+  uncollectableNudgeSpeed: 1.8,
   spawnBounceTicks: 14,
   needMultiplier: 2,
   needThreshold: 0.5,
@@ -1080,6 +1116,8 @@ export const DEFAULT_ITEM_POOL_TUNING: Readonly<ItemPoolTuning> = {
   revealHoldTicks: 180,
   bobAmplitude: 3,
   bobPeriodTicks: 90,
+  shopItemPrice: 20,
+  shopItemChance: 0.5,
 };
 
 /**

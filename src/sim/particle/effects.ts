@@ -192,6 +192,12 @@ export function doorPuff(sim: GameSim, x: number, y: number): void {
 
 const DOOR_PUFF_COUNT = 6;
 
+/** A boulder a bomb just cleared (#4) — a burst of grey dust where it stood. */
+export function boulderDebris(sim: GameSim, x: number, y: number): void {
+  sim.particles.spawn(x, y, 0, 0, 12, 6, ParticleKind.Dust);
+  spray(sim, x, y, 0, 0, 10, ParticleKind.Dust, Math.PI, 1.2, 1.6, 1.4);
+}
+
 /**
  * A Bierfassl's own detonation (#210) — a Bomberman cross, not a ring:
  * everything the blast reaches already gets its own hit flash or death

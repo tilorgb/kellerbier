@@ -15,6 +15,7 @@ import {
   CanvasTexture,
 } from 'three';
 import { TICKS_PER_SECOND } from '../../sim/time.js';
+import { OCCLUDER_LAYER } from './layers.js';
 
 /**
  * Light. The reason the room is 3D.
@@ -287,8 +288,14 @@ export class Lighting {
     this.key.position.set(frameWidth * 0.62, 340, frameHeight * 1.5);
     this.key.target.position.set(frameWidth / 2, 0, frameHeight / 2);
     const shadow = this.key.shadow.camera;
-    shadow.left = -frameWidth * 0.75;
-    shadow.right = frameWidth * 0.75;
+    // Wide enough left/right that the drifting cloud's shadow (#11) is never
+    // clipped against the frustum edge — a straight cut there was most of why
+    // it read as a box. The daylight rig widens further than the cellar needs
+    // because only it has the cloud; the extra span costs a little shadow-map
+    // resolution, acceptable for a floor lit by a soft overcast key anyway.
+    const halfWidth = rig === 'daylight' ? frameWidth * 1.4 : frameWidth * 0.75;
+    shadow.left = -halfWidth;
+    shadow.right = halfWidth;
     shadow.top = frameHeight * 0.9;
     shadow.bottom = -frameHeight * 0.9;
     shadow.near = 50;
@@ -350,6 +357,16 @@ export class Lighting {
     );
     cord.visible = false;
     this.scene.add(cord);
+    // The bulb hangs in the room, not on the ceiling plane — an actor north
+    // of it is behind it. `GameView.render`'s pass two clears the depth
+    // buffer before drawing actors, so anything drawn only in pass one (this
+    // glass and cord, on the default layer) loses its depth and every actor
+    // then paints over it. Putting the rig on `OCCLUDER_LAYER` too gets its
+    // depth re-seeded by the occluder pre-pass, so a body behind the bulb
+    // reads as behind it again — the same footing as a wall — without the
+    // pass-one draw or the head-clip fix changing. See `world/layers.ts`.
+    glass.layers.enable(OCCLUDER_LAYER);
+    cord.layers.enable(OCCLUDER_LAYER);
     return { light, glass, cord };
   }
 
@@ -563,22 +580,20 @@ function cloudTexture(): CanvasTexture | null {
   if (context === null) {
     return null;
   }
-  context.fillStyle = 'rgba(0,0,0,1)';
+  // A union of many solid lobes, not soft gradients — the shadow's
+  // `alphaTest` cut then lands on a hard, unmistakably lumpy contour rather
+  // than somewhere on a gradient's falloff where the shape could read as a
+  // rounded rectangle (#11). The shadow map's own filtering is what softens
+  // the edge on the floor. A faint outer haze (`blur`) rounds the union's
+  // concave joins so it never looks like tiled circles either.
+  context.filter = 'blur(3px)';
   for (const puff of CLOUD_PUFFS) {
-    const gradient = context.createRadialGradient(
-      puff.x * size,
-      puff.y * size,
-      0,
-      puff.x * size,
-      puff.y * size,
-      puff.r * size,
-    );
-    gradient.addColorStop(0, 'rgba(0,0,0,1)');
-    gradient.addColorStop(0.7, 'rgba(0,0,0,0.9)');
-    gradient.addColorStop(1, 'rgba(0,0,0,0)');
-    context.fillStyle = gradient;
-    context.fillRect(0, 0, size, size);
+    context.beginPath();
+    context.arc(puff.x * size, puff.y * size, puff.r * size, 0, Math.PI * 2);
+    context.fillStyle = 'rgba(0,0,0,1)';
+    context.fill();
   }
+  context.filter = 'none';
   sharedCloudTexture = new CanvasTexture(canvas);
   return sharedCloudTexture;
 }
@@ -609,9 +624,13 @@ function buildCloudMesh(): Mesh | null {
 }
 
 const CLOUD_PUFFS: readonly { readonly x: number; readonly y: number; readonly r: number }[] = [
-  { x: 0.3, y: 0.5, r: 0.22 },
-  { x: 0.5, y: 0.42, r: 0.26 },
-  { x: 0.7, y: 0.52, r: 0.2 },
-  { x: 0.45, y: 0.6, r: 0.18 },
-  { x: 0.6, y: 0.6, r: 0.16 },
+  { x: 0.32, y: 0.48, r: 0.24 },
+  { x: 0.5, y: 0.4, r: 0.27 },
+  { x: 0.68, y: 0.5, r: 0.22 },
+  { x: 0.42, y: 0.6, r: 0.19 },
+  { x: 0.6, y: 0.62, r: 0.18 },
+  { x: 0.24, y: 0.56, r: 0.14 },
+  { x: 0.78, y: 0.42, r: 0.13 },
+  { x: 0.55, y: 0.52, r: 0.2 },
+  { x: 0.37, y: 0.38, r: 0.12 },
 ];

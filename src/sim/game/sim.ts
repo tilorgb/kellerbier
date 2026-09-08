@@ -85,7 +85,7 @@ import { EventQueue } from '../events/queue.js';
 import { DamageNumberStore } from '../particle/damage-numbers.js';
 import { DecalStore } from '../particle/decals.js';
 import { ParticleStore } from '../particle/store.js';
-import { doorPuff, roomClearRing, splashBurst } from '../particle/effects.js';
+import { boulderDebris, doorPuff, roomClearRing, splashBurst } from '../particle/effects.js';
 import { ProjectileStore, ProjectileTeam } from '../projectile/store.js';
 import { finalizeProjectileTags } from '../projectile/behavior.js';
 import {
@@ -366,6 +366,8 @@ interface PedestalRuntime {
   readonly y: number;
   /** Registry index of the offered item, or -1 once taken or never filled (pool exhaustion). */
   itemIndex: number;
+  /** Biermarken it costs to take — `0` for every pedestal except a shop's (`tuning.itemPool.shopItemPrice`). */
+  readonly price: number;
 }
 
 /**
@@ -439,11 +441,11 @@ interface RoomLootSnapshot {
 /**
  * Which pool a room's pedestal draws from, by the room's own special role.
  *
- * `shop`/`supersecret` have no live pedestal spawn site today (no room JSON
- * places a `pedestal` prop in either) — the fallback below is defensive, not
- * reachable in practice, since live shop stocking from the `shop` pool is
- * its own follow-up (#28 only wires the pools that already have a room to
- * offer from: treasure, boss, secret).
+ * `shop` now draws from the `shop` pool — the shop rooms author a `pedestal`
+ * prop, `shopItemChance` decides whether it stocks anything on a given visit,
+ * and `shopItemPrice` is what taking it costs (`spawnPedestal` /
+ * `takePedestalItem`). `supersecret` still has no authored pedestal; the
+ * `default` is defensive.
  */
 const MACHINE_ROLL_TIER_LABELS: Readonly<Record<MachineRollTier, string>> = {
   unlucky: 'Unlucky',
@@ -484,13 +486,14 @@ function pedestalPoolForRole(role: RoomSpecialRole | undefined): ItemPoolId {
     case 'secret':
     case 'supersecret':
       return 'secret';
+    case 'shop':
+      return 'shop';
     // A mini-boss room's own pedestal (#278) draws from the same pool a
     // treasure room does — a lower-odds, held-back item roll on top of
     // #275's Kellerschlüssel, which is a separate pickup, not a pedestal
     // item.
     case 'miniboss':
     case 'treasure':
-    case 'shop':
     default:
       return 'treasure';
   }
@@ -1243,6 +1246,17 @@ export class GameSim {
   private maypoleTaken = false;
   private roomClearedIds = new Set<string>();
   /**
+   * Boulders a bomb has cleared this run (#4), by authored room id (same key
+   * as `roomClearedIds`) → a flat `[x, y, x, y, …]` of the removed blocks'
+   * centres. Replayed onto the freshly compiled `RoomGeometry` in
+   * `applyCompiledRoom` so a bombed path stays open on a revisit.
+   */
+  private readonly destroyedBoulders = new Map<string, number[]>();
+  /** Reused scratch for one blast's cleared-boulder centres — no per-detonation allocation. */
+  private readonly boulderBlastScratch: number[] = [];
+  /** Bumped whenever a boulder falls, so `app/main.ts` can rebuild the room's scenery. */
+  private bouldersChangedTickValue = -1;
+  /**
    * Key-locked treasure rooms (#196) a Kellerschlüssel has already been
    * spent to enter, keyed the same way `roomClearedIds` is — by the authored
    * template's own id, not a per-instance id — so leaving and walking back
@@ -1427,6 +1441,21 @@ export class GameSim {
    * `inventory`.
    */
   private readonly takenItemIds = new Set<string>();
+  /**
+   * Where a charged active item's pending blast will land and how far through
+   * its fuse it is (#12) — set every tick by the item's own `onTick` while
+   * the fuse burns (`content/items/boellerschmeisser.ts`), cleared at the top
+   * of `stepItemTick` each tick so it vanishes the moment the item stops
+   * fusing. `EntityView` draws it as the same hatch disc a lobbed Böller
+   * telegraph uses, so every explosive in the game marks its ground the same
+   * way.
+   */
+  private activeItemBlastValue: {
+    x: number;
+    y: number;
+    radius: number;
+    progress: number;
+  } | null = null;
   /** Ticks left showing the pedestal pickup/swap reveal panel. See `pedestalReveal`. */
   private pedestalRevealTicks = 0;
   private pedestalRevealName = '';
@@ -1858,6 +1887,61 @@ export class GameSim {
       if (dx * dx + dy * dy <= radius * radius) {
         this.bombableWalls.delete(key);
       }
+    }
+  }
+
+  /**
+   * Clears the destructible boulders a Bierfassl blast cross covers (#4) —
+   * called once per detonation by `stepBombs`. Each fallen boulder throws a
+   * dust burst and is recorded under this room's id (`destroyedBoulders`) so
+   * the path stays open when the player comes back. `bouldersChangedTick` is
+   * bumped so the renderer knows to rebuild the room.
+   */
+  breakBouldersInBlast(x: number, y: number, halfWidth: number, armLength: number): void {
+    const scratch = this.boulderBlastScratch;
+    scratch.length = 0;
+    const broken = this.room.breakBoulders(x, y, halfWidth, armLength, scratch);
+    if (broken === 0) {
+      return;
+    }
+    let record = this.destroyedBoulders.get(this.roomId);
+    if (record === undefined) {
+      record = [];
+      this.destroyedBoulders.set(this.roomId, record);
+    }
+    for (let i = 0; i + 1 < scratch.length; i += 2) {
+      const bx = scratch[i] ?? 0;
+      const by = scratch[i + 1] ?? 0;
+      record.push(bx, by);
+      boulderDebris(this, bx, by);
+    }
+    this.bouldersChangedTickValue = this.tick;
+  }
+
+  /**
+   * The tick a boulder last fell in the current room, or `-1` — `app/main.ts`
+   * polls this and rebuilds the room's scenery (the same in-place path a
+   * bombed secret wall uses) when it changes, so the cleared boulders stop
+   * being drawn.
+   */
+  get bouldersChangedTick(): number {
+    return this.bouldersChangedTickValue;
+  }
+
+  /**
+   * Replays this run's boulder destruction for the room authored as
+   * `templateId` onto `geometry` — the hook `app/main.ts` uses so a room
+   * *prewarmed* while the player walks back to it is built with the same
+   * cleared paths `applyCompiledRoom` gives the live one. A no-op for a room
+   * nothing has been bombed in.
+   */
+  reapplyDestroyedBoulders(templateId: string, geometry: RoomGeometry): void {
+    const record = this.destroyedBoulders.get(templateId);
+    if (record === undefined) {
+      return;
+    }
+    for (let i = 0; i + 1 < record.length; i += 2) {
+      geometry.clearBoulderAt(record[i] ?? 0, record[i + 1] ?? 0);
     }
   }
 
@@ -2344,6 +2428,15 @@ export class GameSim {
       );
       if (match !== undefined) {
         this.bombableWalls.set(doorKey(match), match);
+      }
+    }
+    // Boulders this run has already bombed away in this room stay away
+    // (#4) — `this.room` is a fresh `RoomGeometry` compiled from the
+    // template, so the destruction has to be replayed onto it.
+    const bombed = this.destroyedBoulders.get(compiled.id);
+    if (bombed !== undefined) {
+      for (let i = 0; i + 1 < bombed.length; i += 2) {
+        this.room.clearBoulderAt(bombed[i] ?? 0, bombed[i + 1] ?? 0);
       }
     }
     this.roomSpecialRole = compiled.specialRole;
@@ -4269,10 +4362,18 @@ export class GameSim {
    * show."
    */
   private spawnPedestal(x: number, y: number): void {
-    const pool = pedestalPoolForRole(this.roomSpecialRole);
+    const role = this.roomSpecialRole;
+    // A shop's pedestal is priced, and only stocked on some visits — the roll
+    // (deterministic, off `random.items` like the offer itself) happens before
+    // the draw so a shop with no item this run also does not consume one.
+    if (role === 'shop') {
+      if (this.random.items.nextFloat() >= this.tuning.itemPool.shopItemChance) {
+        return;
+      }
+    }
     const offer = selectItemOffer(
       this.items,
-      pool,
+      pedestalPoolForRole(role),
       {
         promilleUnlocked: this.promilleUnlocked,
         floor: this.currentFloorValue,
@@ -4286,6 +4387,7 @@ export class GameSim {
       x,
       y,
       itemIndex: offer === undefined ? -1 : this.items.indexOf(offer.id),
+      price: role === 'shop' ? Math.max(0, Math.round(this.tuning.itemPool.shopItemPrice)) : 0,
     });
   }
 
@@ -4328,6 +4430,37 @@ export class GameSim {
       return null;
     }
     return { name: this.pedestalRevealName, description: this.pedestalRevealDescription };
+  }
+
+  /**
+   * Where a charged active item's blast will land while its fuse burns, and
+   * how far through the fuse it is (0..1) — `null` when nothing is fusing.
+   * `EntityView` draws the same hatch disc a lobbed Böller telegraph shows
+   * (#12). Set by the item's `onTick`; see `setActiveItemBlast`.
+   */
+  get activeItemBlastTelegraph(): {
+    readonly x: number;
+    readonly y: number;
+    readonly radius: number;
+    readonly progress: number;
+  } | null {
+    return this.activeItemBlastValue;
+  }
+
+  /**
+   * Called every fusing tick by an active item that goes off with a radial
+   * blast (`content/items/boellerschmeisser.ts`) — the one way
+   * `activeItemBlastTelegraph` is armed. Cleared automatically at the top of
+   * the next `stepItemTick`, so the item only has to keep calling this while
+   * it wants the marker shown.
+   */
+  setActiveItemBlast(x: number, y: number, radius: number, progress: number): void {
+    this.activeItemBlastValue = {
+      x,
+      y,
+      radius,
+      progress: Math.max(0, Math.min(1, progress)),
+    };
   }
 
   /**
@@ -4386,7 +4519,9 @@ export class GameSim {
   /**
    * Takes (or swaps for) the item on pedestal `pedestalIndex` — `use` near
    * an available pedestal, dispatched by `sim/systems/pedestal.ts`. A no-op
-   * if the pedestal has no item (already taken, or spawned empty).
+   * if the pedestal has no item (already taken, or spawned empty), or if it
+   * is a shop's priced pedestal and the player cannot pay `pedestal.price` —
+   * the item stays put for another look, same as an unaffordable shop pickup.
    *
    * An active item already held is removed outright first — the swap loses
    * it rather than returning it to the pedestal or any pool, the same
@@ -4398,6 +4533,9 @@ export class GameSim {
   takePedestalItem(pedestalIndex: number): void {
     const pedestal = this.pedestalList[pedestalIndex];
     if (pedestal === undefined || pedestal.itemIndex < 0) {
+      return;
+    }
+    if (pedestal.price > 0 && !this.spendBiermarken(pedestal.price)) {
       return;
     }
     const item = this.items.at(pedestal.itemIndex);
@@ -5521,7 +5659,10 @@ export class GameSim {
     }
     // Every held item's onTick, once this tick's outcomes (hits, kills, the
     // room-clear check above) have all already happened — an item reacting
-    // to "this tick" sees the whole of it, not a partial slice.
+    // to "this tick" sees the whole of it, not a partial slice. The active
+    // item's blast telegraph (#12) is cleared first, so an item that is no
+    // longer fusing stops re-arming it and it disappears.
+    this.activeItemBlastValue = null;
     stepItemTick(this);
     stepParticles(this);
     this.stepRespawns();
@@ -6266,11 +6407,25 @@ export class GameSim {
    * away from `(x, y)` if that point is blocked — so a caller that wants a
    * visual cue tied to the reward itself (`rollRoomClearLoot`'s ring, below)
    * can point it at the real spawn rather than assuming its own `(x, y)`.
+   *
+   * `guaranteed` drops the `null` "nothing" outcome from the roll entirely, so
+   * the table always yields a real pickup — an elite kill (#156) uses it, the
+   * "always drop loot" half of its risk-and-reward: still that enemy's own
+   * tier table, just with the miss taken out. The mix (which pickup) is
+   * unchanged; only the drop *rate* for that one roll goes to 1.
    */
-  dropLoot(table: DropTable, x: number, y: number): { x: number; y: number } | null {
+  dropLoot(
+    table: DropTable,
+    x: number,
+    y: number,
+    guaranteed = false,
+  ): { x: number; y: number } | null {
     const entries = this.promilleUnlocked ? table.promilled : table.sober;
     let total = 0;
     for (const entry of entries) {
+      if (guaranteed && entry.pickupId === null) {
+        continue;
+      }
       total += entry.weight * this.needMultiplierFor(entry.pickupId);
     }
     if (total <= 0) {
@@ -6279,6 +6434,9 @@ export class GameSim {
     let roll = this.random.items.nextFloat() * total;
     let chosen: string | null = null;
     for (const entry of entries) {
+      if (guaranteed && entry.pickupId === null) {
+        continue;
+      }
       roll -= entry.weight * this.needMultiplierFor(entry.pickupId);
       if (roll < 0) {
         chosen = entry.pickupId;

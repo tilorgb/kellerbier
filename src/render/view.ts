@@ -192,6 +192,7 @@ export class GameView {
   private lockedDoorDirections: ReadonlySet<RoomDirection> = new Set();
   private bossDoorDirections: ReadonlySet<RoomDirection> = new Set();
   private secretHintDoors: readonly CompiledDoor[] = [];
+  private secretDoorDirections: ReadonlySet<RoomDirection> = new Set();
   private doorTransitionTicks = 0;
   private doorPulseFrames = 0;
   /**
@@ -533,6 +534,31 @@ export class GameView {
         this.doorTransitionTicks = DOOR_TRANSITION_FRAMES;
         this.doorPulseFrames = DOOR_PULSE_FRAMES;
       }
+    } else if (this.staleRoomIds.has(sim.roomId)) {
+      // The current room's content changed under the player without a room
+      // transition — a secret wall blasted open (#5), or a dev reroll (`G`).
+      // Rebuild its scenery in place so the new wall/opening actually shows.
+      // Safe here for the same reason `getOrBuildScenery`'s cache-replace is:
+      // this runs inside `sync`, and `this.scenery` is reassigned before the
+      // next `render`.
+      const rebuilt = this.getOrBuildScenery(
+        sim.roomId,
+        sim.room,
+        sim.currentFloor,
+        sim.doors,
+        sim.roomDecorativeProps,
+      );
+      if (rebuilt !== this.scenery) {
+        this.scenery = rebuilt;
+        this.scenery.attach(this.scene);
+        this.scenery.setLean(this.camera.lean);
+        for (const door of this.scenery.doors) {
+          door.setDouble(this.bossDoorDirections.has(door.door.direction));
+        }
+        this.applyDoorStates();
+        this.relight();
+        this.shadowNeedsRefresh = true;
+      }
     }
 
     if (this.doorTransitionTicks > 0) {
@@ -731,6 +757,10 @@ export class GameView {
     floor: number,
     doors: readonly CompiledDoor[],
     props: readonly DecorativeProp[],
+    // Defaults to the current room's set; `prewarmRoom` passes the *next*
+    // room's, since a room built ahead of the crossing must know its own
+    // blasted secret walls, not the room being left (#5).
+    secretDoors: ReadonlySet<RoomDirection> = this.secretDoorDirections,
   ): Scenery {
     const scenery = new Scenery(
       room,
@@ -744,6 +774,7 @@ export class GameView {
       this.camera.lean,
       this.lighting,
       this.materialCache,
+      secretDoors,
     );
     for (const door of scenery.doors) {
       door.setDouble(this.bossDoorDirections.has(door.door.direction));
@@ -766,8 +797,12 @@ export class GameView {
     floor: number,
     doors: readonly CompiledDoor[],
     props: readonly DecorativeProp[],
+    secretDoors: Iterable<RoomDirection> = [],
   ): void {
-    const built = this.prewarm.request(roomKey, () => this.makeScenery(room, floor, doors, props));
+    const secretSet = new Set(secretDoors);
+    const built = this.prewarm.request(roomKey, () =>
+      this.makeScenery(room, floor, doors, props, secretSet),
+    );
     // Same shadow-map guard as `drainWarmQueue`; skipping the GPU warm here
     // only leaves the room's buffer upload to the switch frame, which is
     // cheap now that no program links there.
@@ -949,6 +984,16 @@ export class GameView {
   }
 
   /**
+   * Directions of this room's doorways that lead to a secret room (revealed
+   * or not) — so a bombed-open one draws as a blasted hole, not a hinged
+   * door (#5). Stored for the next `makeScenery`; the reveal itself already
+   * forces an in-place rebuild via `notifyRoomContentChanged`.
+   */
+  setSecretDoorDirections(directions: Iterable<RoomDirection>): void {
+    this.secretDoorDirections = new Set(directions);
+  }
+
+  /**
    * Marks `roomId`'s cached `Scenery`, if any, as stale — the next time
    * that room is (re)built, `getOrBuildScenery` skips the cache hit and
    * replaces the entry instead of handing it back. Only the dev `G` key
@@ -969,6 +1014,18 @@ export class GameView {
    */
   notifyRoomContentChanged(roomId: string): void {
     this.staleRoomIds.add(roomId);
+  }
+
+  /**
+   * Marks the room currently on screen stale by the id `getOrBuildScenery`
+   * actually keys on (`sim.roomId`, the authored template id — not the floor
+   * plan's slot id) — the version `notifyRoomContentChanged` needs when the
+   * caller can't tell the two apart. `sync`'s stale-room branch then rebuilds
+   * the scenery in place next frame, with no room transition: a bombed secret
+   * wall (#5) or a cleared boulder (#4).
+   */
+  markCurrentRoomStale(): void {
+    this.staleRoomIds.add(this.sim.roomId);
   }
 
   setLockedDoors(directions: Iterable<RoomDirection>): void {

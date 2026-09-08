@@ -454,6 +454,24 @@ function hiddenDoorsFor(
 }
 
 /**
+ * Directions of `roomId`'s doorways that lead to a secret or supersecret
+ * room, revealed or not — so `SceneryView` can draw the one the player
+ * bombed open as a blasted hole in the masonry rather than as an ordinary
+ * hinged door (#5). `crackHintsFor` is the reveal-time-only subset that
+ * still needs a crack; this is every one of them, for the whole run.
+ */
+function secretDoorsFor(plan: FloorPlan, roomId: string): RoomDirection[] {
+  const out: RoomDirection[] = [];
+  for (const door of planRoom(plan, roomId).doors) {
+    const role = planRoom(plan, door.neighborRoomId).role;
+    if (role === 'secret' || role === 'supersecret') {
+      out.push(door.direction);
+    }
+  }
+  return out;
+}
+
+/**
  * The doors `hiddenDoorsFor` would hide for `roomId` that should draw a
  * crack hint — every one of them except a supersecret's, which gets no hint
  * at all. "Deliberately obnoxious to find" (#23) is entirely this omission;
@@ -1294,6 +1312,8 @@ async function boot(): Promise<void> {
   let prewarmedNeighborId: string | null = null;
   /** Edge-detects `sim.bossDoorLocked` — the key is pickable up mid-room, with no transition to hang a door redraw off. See `advanceOneTick`. */
   let wasBossDoorLocked = false;
+  /** Edge-detects `sim.bouldersChangedTick` — a bombed boulder mutates the room with no transition. See `advanceOneTick`. */
+  let lastBouldersChangedTick = -1;
 
   /**
    * Boss rooms already paid for this run, keyed floor + floor-plan room.
@@ -1811,6 +1831,13 @@ async function boot(): Promise<void> {
     }
     checkBlutwurzTransition();
     checkSecretReveals();
+    // A bomb clearing a boulder (#4) mutates `sim.room` with no transition to
+    // hang a redraw off — poll the tick it last happened and rebuild the
+    // room's scenery in place, the same path `checkSecretReveals` uses.
+    if (sim.bouldersChangedTick !== lastBouldersChangedTick) {
+      lastBouldersChangedTick = sim.bouldersChangedTick;
+      view.markCurrentRoomStale();
+    }
     // Der Meisterschlüssel (#275) can be picked up mid-room, and the gate
     // drops on entering the boss room — neither is a floor-plan change with
     // a transition to hang a redraw off, so edge-detect `sim.bossDoorLocked`
@@ -1921,7 +1948,14 @@ async function boot(): Promise<void> {
       // rather than a second `performance.now()` a fraction of a millisecond
       // later.
       view.sync(alpha, started);
+      const healthRowHeightBefore = healthHud.height;
       healthHud.sync(sim);
+      // The eternal-heart row appears the first time the player banks a
+      // Blutwurst; that grows the HUD's health row, so the column below has to
+      // be re-stacked (`layoutHud` is otherwise only run on resize/startRun).
+      if (healthHud.height !== healthRowHeightBefore) {
+        layoutHud();
+      }
       promilleHud.sync(sim, settings.neutralReskin);
       walletHud.sync(sim);
       characterHud.sync(sim);
@@ -2054,8 +2088,14 @@ async function boot(): Promise<void> {
       const nameplateScreen =
         nearbyPedestal >= 0 ? view.pedestalScreenPosition(nearbyPedestal) : null;
       if (nameplateScreen !== null) {
-        const item = sim.items.at(sim.activePedestals[nearbyPedestal]?.itemIndex ?? -1);
-        const label = `${item.name}  [use]`;
+        const pedestal = sim.activePedestals[nearbyPedestal];
+        const item = sim.items.at(pedestal?.itemIndex ?? -1);
+        const price = pedestal?.price ?? 0;
+        // A shop's pedestal is priced (#2); every other one is free. The plate
+        // shows the cost in Biermarken before the player presses; pressing
+        // when they can't pay is a no-op, the same as an unaffordable pickup.
+        const label =
+          price > 0 ? `${item.name}  ·  ${String(price)}  [use]` : `${item.name}  [use]`;
         if (label !== pedestalNamePlateLabel) {
           pedestalNamePlateLabel = label;
           pedestalNamePlate.set(label);
@@ -2231,6 +2271,7 @@ WASD move   arrows aim and fire
    */
   const syncFloorPlanView = (): void => {
     view.setSecretHints(crackHintsFor(floorPlan, currentRoomId, revealedEdges));
+    view.setSecretDoorDirections(secretDoorsFor(floorPlan, currentRoomId));
     view.setLockedDoors(
       currentLockedDoors(floorPlan, currentRoomId, visitedRoomIds, sim.bossDoorLocked),
     );
@@ -2485,6 +2526,9 @@ WASD move   arrows aim and fire
     // and the column below it only closes up if the layout pass already
     // knows that. See `PromilleHud.setUnlocked`.
     promilleHud.setUnlocked(promilleUnlocked);
+    // The heart-container high-water marks are per-run — a restart starts the
+    // player back at three red containers, no soul or eternal row.
+    healthHud.reset();
 
     refreshHud();
     layoutHud();
@@ -2864,6 +2908,10 @@ WASD move   arrows aim and fire
             h.cellRow === door.cellRow,
         ),
     );
+    // A room the player bombed a boulder in on an earlier visit is compiled
+    // fresh here (boulders intact) — replay the destruction so a prewarmed
+    // or shader-warmed build matches the live one (#4).
+    sim.reapplyDestroyedBoulders(compiled.source.id, compiled.geometry);
     return { geometry: compiled.geometry, doors, props: compiled.decorativeProps };
   }
 
@@ -2879,7 +2927,14 @@ WASD move   arrows aim and fire
     if (inputs === null) {
       return;
     }
-    view.prewarmRoom(neighborRoomId, inputs.geometry, floorPlan.floor, inputs.doors, inputs.props);
+    view.prewarmRoom(
+      neighborRoomId,
+      inputs.geometry,
+      floorPlan.floor,
+      inputs.doors,
+      inputs.props,
+      secretDoorsFor(floorPlan, neighborRoomId),
+    );
   }
 
   /**
@@ -3219,6 +3274,10 @@ WASD move   arrows aim and fire
     }
     if (changed) {
       syncFloorPlanView();
+      // The wall is open in the sim now; rebuild the room's scenery so the
+      // solid wall segment there becomes the blasted opening (#5). `sync`'s
+      // stale-room branch does the rebuild in place, no room transition.
+      view.markCurrentRoomStale();
       playSfx('secret-reveal');
     }
   }

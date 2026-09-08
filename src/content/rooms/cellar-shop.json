@@ -28,6 +28,7 @@
   "hazards": [],
   "decorativeProps": [
     { "x": 120, "y": 40, "type": "shopkeeper-stand" },
+    { "x": 120, "y": 68, "type": "pedestal" },
     { "x": 200, "y": 100, "type": "losbrunnen" }
   ],
   "metadata": {

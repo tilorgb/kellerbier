@@ -493,8 +493,11 @@ export function roomThemeForFloor(floor: number): RoomTheme {
  * these to vary by floor either.
  */
 export const ROOM_HAZARD_PALETTE = {
-  puddleFill: 0x3c3e40,
-  puddleEdge: 0xd99a3f,
+  // A dank cellar-water blue, not the near-grey it used to be — a puddle that
+  // read as "a slightly darker floor tile" rather than as standing water.
+  puddleFill: 0x2f5066,
+  /** The wet edge — a lighter blue outline loop just inside a puddle's rim. */
+  puddleRim: 0x6a8c9c,
   trellisFill: 0x3f7a3a,
   trellisEdge: 0x7fbf6a,
   doorLocked: 0x5a2a2a,

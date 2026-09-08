@@ -3,6 +3,7 @@ import cellarCrossroads from '../../src/content/rooms/cellar.json';
 import { BOSS_REWARD_DROP_TABLE } from '../../src/content/pickups/drop-tables.js';
 import { EventKind } from '../../src/sim/events/queue.js';
 import { GameSim, PLAYER_FOOTPRINT } from '../../src/sim/game/sim.js';
+import { RoomGeometry } from '../../src/sim/room/geometry.js';
 import { type InputFrame, createInputFrame, quantiseAxis } from '../../src/sim/input/frame.js';
 import { ProjectileTeam } from '../../src/sim/projectile/store.js';
 import { ParticleKind } from '../../src/sim/particle/store.js';
@@ -398,6 +399,49 @@ describe('the shopkeeper', () => {
 
     expect(sim.liveEnemyCount).toBe(0);
     expect(sim.doorsLocked).toBe(false);
+  });
+});
+
+describe("a shop's priced item pedestal (#2)", () => {
+  function pricedShop(chance: number): GameSim {
+    const template = {
+      ...cellarCrossroads,
+      enemySpawns: [],
+      spawnGroups: [],
+      decorativeProps: [{ x: 120, y: 72, type: 'pedestal' }],
+      metadata: { ...cellarCrossroads.metadata, specialRole: 'shop' },
+    };
+    // No `roomTemplate` in the constructor, so the tuning is in place before
+    // the one and only room load.
+    const sim = new GameSim({ room: new RoomGeometry(0, 0, 320, 180) });
+    sim.tuning.itemPool.shopItemChance = chance;
+    sim.tuning.itemPool.shopItemPrice = 20;
+    sim.loadRoom(template, 1);
+    return sim;
+  }
+
+  it('stocks a pedestal priced at shopItemPrice when the stock roll passes', () => {
+    const sim = pricedShop(1);
+    expect(sim.activePedestals).toHaveLength(1);
+    expect(sim.activePedestals[0]?.price).toBe(20);
+    expect(sim.activePedestals[0]?.itemIndex).toBeGreaterThanOrEqual(0);
+  });
+
+  it('stocks nothing when the roll fails — the shop simply has no pedestal that visit', () => {
+    const sim = pricedShop(0);
+    expect(sim.activePedestals).toHaveLength(0);
+  });
+
+  it('will not hand the item over until the player can pay, then spends the Biermarken', () => {
+    const sim = pricedShop(1);
+    // Broke: pressing use is a no-op, the item stays.
+    sim.takePedestalItem(0);
+    expect(sim.activePedestals[0]?.itemIndex).toBeGreaterThanOrEqual(0);
+
+    sim.addBiermarken(25);
+    sim.takePedestalItem(0);
+    expect(sim.activePedestals[0]?.itemIndex).toBe(-1);
+    expect(sim.biermarken).toBe(5);
   });
 });
 

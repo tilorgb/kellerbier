@@ -174,6 +174,92 @@ export class RoomGeometry {
     this.blocks_ += 1;
   }
 
+  /**
+   * Removes the block at `index` by swapping the last one into its slot — the
+   * one way `blocks` ever shrinks. Only a bomb clearing a boulder
+   * (`breakBoulders`) does this; the caller has already established the block
+   * is destructible (`blockOverflyable[index] === 1`).
+   */
+  private removeBlock(index: number): void {
+    const last = this.blocks_ - 1;
+    if (index < 0 || index > last) {
+      return;
+    }
+    const base = index * BLOCK_STRIDE;
+    const lastBase = last * BLOCK_STRIDE;
+    for (let i = 0; i < BLOCK_STRIDE; i++) {
+      this.blocks[base + i] = this.blocks[lastBase + i] ?? 0;
+    }
+    this.blockOverflyable[index] = this.blockOverflyable[last] ?? 0;
+    this.blocks_ = last;
+  }
+
+  /**
+   * Clears every destructible boulder (`blockOverflyable === 1`) whose centre
+   * lies inside a Bomberman blast cross centred on `(cx, cy)` — `halfWidth`
+   * to each side of an arm, `armLength` along it. Each removed block's centre
+   * is pushed onto `outCentres` as an `x, y` pair (the caller reuses one
+   * array across detonations, so nothing here allocates). Returns how many
+   * fell.
+   *
+   * Whole-block, not per-cell: a merged boulder run the blast lands on the
+   * middle of goes entirely, which reads as "the bomb cleared that" rather
+   * than leaving a ragged half-wall a per-cell carve would. Structural walls
+   * and void stand-ins (`overflyable === 0`) are never touched.
+   */
+  breakBoulders(
+    cx: number,
+    cy: number,
+    halfWidth: number,
+    armLength: number,
+    outCentres: number[],
+  ): number {
+    let broken = 0;
+    for (let block = this.blocks_ - 1; block >= 0; block--) {
+      if ((this.blockOverflyable[block] ?? 0) !== 1) {
+        continue;
+      }
+      const base = block * BLOCK_STRIDE;
+      const bx = ((this.blocks[base] ?? 0) + (this.blocks[base + 2] ?? 0)) / 2;
+      const by = ((this.blocks[base + 1] ?? 0) + (this.blocks[base + 3] ?? 0)) / 2;
+      const dx = Math.abs(bx - cx);
+      const dy = Math.abs(by - cy);
+      const inHorizontalArm = dy <= halfWidth && dx <= armLength;
+      const inVerticalArm = dx <= halfWidth && dy <= armLength;
+      if (!inHorizontalArm && !inVerticalArm) {
+        continue;
+      }
+      outCentres.push(bx, by);
+      this.removeBlock(block);
+      broken += 1;
+    }
+    return broken;
+  }
+
+  /**
+   * Removes the destructible boulder whose rectangle contains `(x, y)`, if
+   * any — the path `GameSim` replays a per-room destruction record through on
+   * a room revisit (`applyCompiledRoom`), so a boulder bombed on the first
+   * visit is still gone on the second.
+   */
+  clearBoulderAt(x: number, y: number): void {
+    for (let block = this.blocks_ - 1; block >= 0; block--) {
+      if ((this.blockOverflyable[block] ?? 0) !== 1) {
+        continue;
+      }
+      const base = block * BLOCK_STRIDE;
+      if (
+        x >= (this.blocks[base] ?? 0) &&
+        x <= (this.blocks[base + 2] ?? 0) &&
+        y >= (this.blocks[base + 1] ?? 0) &&
+        y <= (this.blocks[base + 3] ?? 0)
+      ) {
+        this.removeBlock(block);
+        return;
+      }
+    }
+  }
+
   /** Adds a slick-puddle zone. Setup-time only, same contract as `addBlock`. */
   addPuddle(minX: number, minY: number, maxX: number, maxY: number): void {
     if (this.puddles_ >= MAX_ROOM_PUDDLES) {
