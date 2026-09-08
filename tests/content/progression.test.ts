@@ -26,12 +26,18 @@ describe('progression content', () => {
     expect(save.unlocks).toEqual([]);
   });
 
-  it('grants Promille for the boss the game actually has beyond floor 1', () => {
+  it("grants Promille on floor 1's boss, inside the shipping run (#236)", () => {
     // The floors that exist are 1 and 2 (`app/main.ts`'s
-    // HIGHEST_PLAYABLE_FLOOR); beating floor 2's boss is what grants
-    // Promille.
-    const save = withBossDefeat(createDefaultSave(), 2, PROGRESSION);
+    // HIGHEST_PLAYABLE_FLOOR), so floor 2's boss is the *last* boss of the
+    // shipping game — the gate that used to sit there handed the mechanic
+    // over after the only playthrough most players will take. Floor 1's boss
+    // is the gate now, and this is the test that says so.
+    const save = withBossDefeat(createDefaultSave(), 1, PROGRESSION);
     expect(save.unlocks).toEqual(['promille']);
+  });
+
+  it('does not grant Promille for a floor the gate is not on', () => {
+    expect(withBossDefeat(createDefaultSave(), 2, PROGRESSION).unlocks).toEqual([]);
   });
 
   it('grants the run board off a kill total a session actually reaches', () => {

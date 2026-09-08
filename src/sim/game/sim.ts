@@ -248,6 +248,28 @@ export const ROOM_TRANSITION_TICKS = 12;
 export const CURSE_ANNOUNCE_TICKS = 240;
 
 /**
+ * How long the mid-run Promille-unlock banner stays up (#236).
+ *
+ * Longer than a curse announcement: a curse is one floor's modifier and this
+ * is the game's signature mechanic arriving for the first time, in the one
+ * moment the run has to explain it. Still a banner rather than a pause — the
+ * boss room is cleared, so nothing is shooting at the player while they read
+ * it.
+ */
+export const PROMILLE_UNLOCK_ANNOUNCE_TICKS = 420;
+
+/**
+ * The drink the mid-run unlock hands over (#236) — a full Maß, so the meter
+ * lands in Angeheitert immediately and the player sees what the tier bonus
+ * does before the floor is over, rather than in Nüchtern where it reads as
+ * an empty bar.
+ */
+export const PROMILLE_UNLOCK_GIFT_PICKUP = 'mass-full';
+
+/** How far in front of the player the unlock's Maß lands, in room units. */
+export const PROMILLE_UNLOCK_GIFT_OFFSET = 16;
+
+/**
  * How long enemies stay inert after a room loads, in ticks (0.4s at 60
  * ticks/second) — long enough to register what just spawned before anything
  * moves or fires. See `stepEnemies` (`src/sim/systems/enemy.ts`), which
@@ -573,6 +595,12 @@ export interface GameSimOptions {
    * see `GameSim.promilleUnlocked` for what `false` actually turns off.
    */
   readonly promilleUnlocked?: boolean;
+  /**
+   * The floor whose boss switches Promille on mid-run for a run that started
+   * without it (#236). Defaults to `null` — no mid-run unlock, which is what
+   * every caller written before the gate moved meant.
+   */
+  readonly promilleUnlockFloor?: number | null;
   /**
    * Who the run is played as (#47). Defaults to `NEUTRAL_TRAITS` — Alois,
    * and exactly the run every test written before characters existed
@@ -1098,19 +1126,49 @@ export class GameSim {
   /**
    * Whether this run has the Promille mechanic at all (#85).
    *
-   * Decided once, at construction, and never written again: a run is sober
-   * or promilled from its first tick to its last. False means the meter
-   * reads zero forever (`get promille`), beer never drops (`dropLoot` rolls
-   * the `sober` half of every table), and no Promille item is ever offered
-   * (`itemEligibleForOffer`). `app/main.ts` sets it from the persisted
-   * `promille` unlock — see `app/promille-gate.ts` — and passes it through
-   * every `loadRoom`, so it survives a floor transition.
+   * False means the meter reads zero forever (`get promille`), beer never
+   * drops (`dropLoot` rolls the `sober` half of every table), and no
+   * Promille item is ever offered (`itemEligibleForOffer`). `app/main.ts`
+   * sets it from the persisted `promille` unlock — see
+   * `app/promille-gate.ts` — and passes it through every `loadRoom`, so it
+   * survives a floor transition.
+   *
+   * Written exactly once after construction, and only ever `false → true`,
+   * by `maybeUnlockPromille` (#236): the gate moved from Der Stier to the
+   * boss of `promilleUnlockFloor`, which is *inside* the shipping run rather
+   * than after it, so an unearned run has to be able to switch the mechanic
+   * on halfway through. There is no path back the other way — a run that has
+   * met the meter keeps it.
+   *
+   * Determinism survives that (`docs/DECISIONS.md` #86): the flip is a pure
+   * function of the run's own state (which floor, which room, whether it
+   * cleared), so a replay of the same seed and the same input log flips at
+   * the same tick. Nothing extra has to be recorded alongside the log.
    *
    * Defaults to `true` so that a test, a bench or an editor building a
    * `GameSim` without an opinion gets the full mechanic, which is what every
    * one of them meant before this flag existed.
    */
-  readonly promilleUnlocked: boolean;
+  private promilleUnlockedValue: boolean;
+
+  /**
+   * The floor whose boss switches Promille on mid-run, for a run that
+   * started without it (#236) — `null` for a run that never unlocks it on
+   * its own.
+   *
+   * A run parameter rather than content the sim reaches for: the gate itself
+   * is data in `content/progression/unlocks.ts`, and `app/main.ts` derives
+   * this from it (`resolvePromilleUnlockFloor`). The sim only knows "a boss on
+   * this floor turns it on", which is what makes moving the gate again a
+   * data change and not an engine one.
+   *
+   * Defaults to `null` so a `GameSim` built without an opinion behaves
+   * exactly as it did before this existed.
+   */
+  private readonly promilleUnlockFloorValue: number | null;
+
+  /** Ticks left of the mid-run Promille-unlock banner — see `promilleUnlockAnnounced`. */
+  private promilleUnlockAnnounceTicks = 0;
 
   /**
    * Who this run is being played as (#47), as data — see
@@ -1563,7 +1621,8 @@ export class GameSim {
     this.inventory = new ItemInventory(this.items);
     this.itemStatsDirty = new Uint8Array(this.items.count);
     this.dirtyItemIndices = new Int32Array(this.items.count);
-    this.promilleUnlocked = options.promilleUnlocked ?? true;
+    this.promilleUnlockedValue = options.promilleUnlocked ?? true;
+    this.promilleUnlockFloorValue = options.promilleUnlockFloor ?? null;
 
     this.broadphase = new SpatialHash({
       // The grid spans the room from the origin. Coordinates outside it clamp
@@ -3119,6 +3178,66 @@ export class GameSim {
     this.toastName = name;
     this.toastDescription = description;
     this.toastTicks = Math.round(this.tuning.pickup.toastTicks);
+  }
+
+  /**
+   * Whether this run has the Promille mechanic — see
+   * `promilleUnlockedValue`. A getter rather than a public field because the
+   * mid-run unlock (#236) can flip it once, and every reader outside this
+   * class only ever asks.
+   */
+  get promilleUnlocked(): boolean {
+    return this.promilleUnlockedValue;
+  }
+
+  /**
+   * Whether the mid-run Promille-unlock banner is still up (#236) — the same
+   * "goes false past its ticks" shape `curseAnnouncement` has. The wording
+   * lives in `render/promille-unlock-hud.ts`, not here: the meter has a
+   * neutral reskin (#33) and the sim has no business knowing which name the
+   * player has asked for.
+   */
+  get promilleUnlockAnnounced(): boolean {
+    return this.promilleUnlockAnnounceTicks > 0;
+  }
+
+  /**
+   * Switches Promille on because this floor's boss just went down (#236).
+   *
+   * Called from `step`'s room-clear branch, on the one tick a boss room
+   * becomes clear — the same tick the boss's pedestal spawns and the app
+   * commits the defeat to the save (`recordBossDefeat`), so the meter
+   * arrives with the rest of the reward rather than a beat later.
+   *
+   * `>=` rather than `===` on the floor: an endless run (`app/
+   * endless-floor-debug.ts`) or a future gate placed above a floor the run
+   * skipped past should still unlock rather than silently never firing.
+   */
+  private maybeUnlockPromille(): { x: number; y: number } | null {
+    const floor = this.promilleUnlockFloorValue;
+    if (this.promilleUnlockedValue || floor === null || this.currentFloorValue < floor) {
+      return null;
+    }
+    this.promilleUnlockedValue = true;
+    this.promilleUnlockAnnounceTicks = PROMILLE_UNLOCK_ANNOUNCE_TICKS;
+    // The mechanic arriving is a bigger deal than whatever quick pickup toast
+    // happened to still be on screen — the same suppression `rollFloorCurse`
+    // does for its own banner.
+    this.toastTicks = 0;
+    // And the first Maß, on the floor in front of the player, guaranteed
+    // rather than rolled. A meter that appears empty and then waits on a
+    // ~2% drop weight to move for the first time is an announcement, not an
+    // arrival: the point of moving the gate inside the run is that the
+    // player gets to *use* the mechanic on the floor they have left, so the
+    // unlock hands them the drink that demonstrates it.
+    const definition = this.pickups.get(PROMILLE_UNLOCK_GIFT_PICKUP);
+    const spot = this.safeSpawnPoint(
+      this.positionX(this.playerIndex),
+      this.positionY(this.playerIndex) + PROMILLE_UNLOCK_GIFT_OFFSET,
+      definition.radius,
+    );
+    this.spawnPickup(PROMILLE_UNLOCK_GIFT_PICKUP, spot.x, spot.y);
+    return spot;
   }
 
   /** The active floor curse (#49), or `null` on an uncursed floor. */
@@ -5683,6 +5802,17 @@ export class GameSim {
         rewardLocations.push({ x: spot.x, y: spot.y });
         this.pendingBossLosbrunnen = null;
       }
+      // Promille arriving mid-run (#236). Rolled after every other reward on
+      // this tick so the first Maß lands *on top of* the boss's own payout
+      // rather than instead of it, and so the drops above still roll the
+      // `sober` half of their tables — the run was sober right up until this
+      // line.
+      if (this.roomSpecialRole === 'boss') {
+        const unlockSpot = this.maybeUnlockPromille();
+        if (unlockSpot !== null) {
+          rewardLocations.push(unlockSpot);
+        }
+      }
       // The single most repeated success moment in the game, and until #153 it
       // had no celebration at all. A ring at each reward that actually
       // appeared, and a puff at each door that just unlocked — the
@@ -5754,6 +5884,9 @@ export class GameSim {
     }
     if (this.pedestalRevealTicks > 0) {
       this.pedestalRevealTicks -= 1;
+    }
+    if (this.promilleUnlockAnnounceTicks > 0) {
+      this.promilleUnlockAnnounceTicks -= 1;
     }
     if (this.curseAnnounceTicks > 0) {
       this.curseAnnounceTicks -= 1;

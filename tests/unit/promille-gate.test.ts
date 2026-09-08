@@ -2,16 +2,19 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   PROMILLE_OVERRIDE_KEY,
   nextPromilleOverride,
+  promilleUnlockFloor,
   promilleUnlockedIn,
   readPromilleOverride,
   resolvePromilleUnlocked,
+  resolvePromilleUnlockFloor,
   writePromilleOverride,
 } from '../../src/app/promille-gate.js';
 import { UNLOCK_PROMILLE } from '../../src/app/meta/index.js';
 import { createDefaultSave, type SaveData } from '../../src/app/save/schema.js';
-import { GameSim } from '../../src/sim/game/sim.js';
+import { GameSim, PROMILLE_UNLOCK_ANNOUNCE_TICKS } from '../../src/sim/game/sim.js';
 import { PromilleTier } from '../../src/sim/game/promille.js';
 import { RoomGeometry } from '../../src/sim/room/geometry.js';
+import type { SingleCellRoomTemplate } from '../../src/content/rooms/definition.js';
 import { StatId } from '../../src/sim/stats/definition.js';
 import { createInputFrame } from '../../src/sim/input/frame.js';
 import { installFakeLocalStorage } from '../helpers/fake-local-storage.js';
@@ -36,6 +39,63 @@ function bareRoom(): RoomGeometry {
 
 function saveWith(unlocks: readonly string[]): SaveData {
   return { ...createDefaultSave(), unlocks: [...unlocks] };
+}
+
+/** A `1x1` boss room with one live enemy — the shape #236's mid-run unlock keys off. */
+function bossRoom(id = 'test-promille-gate-boss-room'): SingleCellRoomTemplate {
+  return {
+    id,
+    tileGrid: [
+      '###############',
+      '#.............#',
+      '#.............#',
+      '#.............#',
+      '#.............#',
+      '#.............#',
+      '#.............#',
+      '#.............#',
+      '###############',
+    ],
+    obstacles: [],
+    enemySpawns: [{ x: 176, y: 64, group: 'boss' }],
+    spawnGroups: [
+      { id: 'boss', count: 1, choices: [{ enemyId: 'kellerassel', minFloor: 1, maxFloor: 7 }] },
+    ],
+    pickupSpawns: [],
+    hazards: [],
+    decorativeProps: [],
+    metadata: {
+      floorTags: ['test'],
+      shape: '1x1',
+      doors: { north: false, east: false, south: false, west: false },
+      difficultyTier: 1,
+      weight: 1,
+      specialRole: 'boss',
+    },
+  };
+}
+
+/** Kills the room's one enemy and runs the tick its clear-out actually resolves on. */
+function killBoss(sim: GameSim): void {
+  let enemyIndex = -1;
+  sim.world.forEach(sim.enemyMask, (index) => {
+    enemyIndex = index;
+  });
+  sim.kill(enemyIndex);
+  sim.world.flush();
+  sim.step(IDLE);
+  while (sim.frozen) {
+    sim.step(IDLE);
+  }
+}
+
+/** Every pickup id currently on the floor. */
+function livePickupIds(sim: GameSim): string[] {
+  const ids: string[] = [];
+  sim.world.forEach(sim.world.maskOf(sim.pickupKind), (index) => {
+    ids.push(sim.pickups.at(sim.pickupKind.data[index] ?? -1).id);
+  });
+  return ids;
 }
 
 afterEach(() => {
@@ -148,5 +208,108 @@ describe('a sober run has no Promille at all (#85)', () => {
     sim.addPromille(2);
     expect(sim.promille).toBeCloseTo(2, 5);
     expect(sim.promilleTier).toBe(PromilleTier.Beduselt);
+  });
+});
+
+/**
+ * The gate moved inside the run (#236). The floor it moved to is read out of
+ * the unlock's own condition rather than written down twice, and the flip
+ * itself is a `GameSim` event on the tick a boss room becomes clear — which
+ * is what keeps a resumed or replayed run reaching it at the same tick from
+ * the seed and the input log alone.
+ */
+describe('where an unearned run meets the meter (#236)', () => {
+  it('reads the floor out of the unlock data, not a second constant', () => {
+    expect(promilleUnlockFloor()).toBe(1);
+  });
+
+  it('gives a sober run the mid-run gate and a promilled one nothing to unlock', () => {
+    expect(resolvePromilleUnlockFloor(false)).toBe(promilleUnlockFloor());
+    expect(resolvePromilleUnlockFloor(true)).toBeNull();
+  });
+
+  it("switches the mechanic on when the gate floor's boss room clears", () => {
+    const sim = new GameSim({
+      seed: 7,
+      roomTemplate: bossRoom(),
+      floor: 1,
+      population: 'empty',
+      promilleUnlocked: false,
+      promilleUnlockFloor: 1,
+    });
+    expect(sim.promilleUnlocked).toBe(false);
+    // Sober right up to the tick the room clears: the boss's own drops still
+    // roll the `sober` half of their tables.
+    sim.addPromille(1);
+    expect(sim.promille).toBe(0);
+
+    killBoss(sim);
+
+    expect(sim.promilleUnlocked).toBe(true);
+    expect(sim.promilleUnlockAnnounced).toBe(true);
+    // And the first Maß is on the floor, so the meter has something to do
+    // before the floor is over rather than an empty bar and a ~2% drop roll.
+    expect(livePickupIds(sim)).toContain('mass-full');
+    sim.addPromille(1);
+    expect(sim.promille).toBeCloseTo(1, 5);
+    expect(sim.promilleTier).toBe(PromilleTier.Angeheitert);
+  });
+
+  it('does nothing on a boss room below the gate floor, and nothing twice', () => {
+    const belowGate = new GameSim({
+      seed: 7,
+      roomTemplate: bossRoom(),
+      floor: 1,
+      population: 'empty',
+      promilleUnlocked: false,
+      promilleUnlockFloor: 2,
+    });
+    killBoss(belowGate);
+    expect(belowGate.promilleUnlocked).toBe(false);
+    expect(belowGate.promilleUnlockAnnounced).toBe(false);
+    expect(livePickupIds(belowGate)).not.toContain('mass-full');
+
+    // A run that already had the meter never announces an arrival, and never
+    // gets a second free Maß for clearing the same kind of room.
+    const alreadyOn = new GameSim({
+      seed: 7,
+      roomTemplate: bossRoom(),
+      floor: 1,
+      population: 'empty',
+      promilleUnlocked: true,
+      promilleUnlockFloor: 1,
+    });
+    killBoss(alreadyOn);
+    expect(alreadyOn.promilleUnlockAnnounced).toBe(false);
+  });
+
+  it('leaves a run with no gate exactly as it was before the gate moved', () => {
+    const sim = new GameSim({
+      seed: 7,
+      roomTemplate: bossRoom(),
+      floor: 1,
+      population: 'empty',
+      promilleUnlocked: false,
+    });
+    killBoss(sim);
+    expect(sim.promilleUnlocked).toBe(false);
+  });
+
+  it('ages the banner out on its own clock', () => {
+    const sim = new GameSim({
+      seed: 7,
+      roomTemplate: bossRoom(),
+      floor: 1,
+      population: 'empty',
+      promilleUnlocked: false,
+      promilleUnlockFloor: 1,
+    });
+    killBoss(sim);
+    for (let tick = 0; tick < PROMILLE_UNLOCK_ANNOUNCE_TICKS; tick++) {
+      sim.step(IDLE);
+    }
+    expect(sim.promilleUnlockAnnounced).toBe(false);
+    // The mechanic itself does not age out with the banner.
+    expect(sim.promilleUnlocked).toBe(true);
   });
 });
