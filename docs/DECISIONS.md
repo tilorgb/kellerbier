@@ -4431,7 +4431,14 @@ not a substitute for a visible effect — the row exists for state, not for effe
 been drawn. Adding an item still means asking which of the three channels it shows through, and
 "none" is the same failing answer "no hook" already was.
 
-**Found while building it.** A stationary player projectile that survives its hit (`piercing`)
+**Found while building it.** Item hook dispatch was not re-entrant: a hook that spawned a shot
+(`spawnItemProjectile`) ran a nested `onProjectileSpawn` broadcast that, on exit, nulled the
+outer broadcast's `dispatchSim` and overwrote the shared scratch context — so every item sorted
+after the spawning one silently lost its hook for that broadcast, and the spawner came back to
+someone else's `ctx.state`. With Spezi and Braumeister-Visier the only spawners it was a
+once-in-five-shots skip; a fan of three plus a streak's extras coming out as *four* shots in the
+headless run is what exposed it. `sim/systems/items.ts` now saves and restores the dispatch state
+around every broadcast on a fixed, preallocated stack. Separately: a stationary player projectile that survives its hit (`piercing`)
 re-registers against a body still overlapping it every other tick — `lastHitTarget` lapses the
 moment a tick finds nothing — so Traktor-Auspuff's clouds pop on first contact rather than
 pierce, and the note is on the item for the next trail-shaped design. And the `splitting` tag

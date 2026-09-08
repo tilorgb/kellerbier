@@ -624,3 +624,95 @@ describe('item hooks respect promilleRequirement (#32)', () => {
     expect(log).toEqual(['konterbier-test']);
   });
 });
+
+/**
+ * Dispatch is re-entrant (`sim/systems/items.ts`'s `beginDispatch`/
+ * `endDispatch`): a hook that spawns a projectile runs a nested
+ * `onProjectileSpawn` broadcast from inside the outer one, and neither the
+ * items after it nor its own `ctx.state` may be lost to that. Found by the
+ * 2026-09 item pass (`docs/DECISIONS.md` #82), when a fan of three plus a
+ * streak's three extras came out as four shots.
+ */
+describe('nested dispatch from inside a hook', () => {
+  it('a spawning onShoot does not cut off later items, and sees its own state afterwards', () => {
+    const seen: string[] = [];
+    let stateAfterSpawn: ItemDefinition['id'] | null = null;
+    // Ids chosen so the spawner sorts first: `ItemInventory.forEachHeld`
+    // walks registry (id) order, and the bug only ever hit what came after.
+    const spawner = baseItem('a-spawner', {
+      hooks: {
+        onShoot: (ctx) => {
+          const sim = ctx.sim;
+          const playerIndex = sim.playerIndex;
+          sim.spawnItemProjectile(sim.positionX(playerIndex), sim.positionY(playerIndex), 0, 1);
+          // After the nested dispatch, `ctx.state` must still be this item's.
+          stateAfterSpawn = ctx.state === sim.itemState('a-spawner') ? 'a-spawner' : 'other';
+          seen.push('a-spawner');
+        },
+        onProjectileSpawn: () => {
+          seen.push('a-spawner:spawn');
+        },
+      },
+    });
+    const later = baseItem('b-later', {
+      hooks: {
+        onShoot: () => {
+          seen.push('b-later');
+        },
+        onProjectileSpawn: () => {
+          seen.push('b-later:spawn');
+        },
+      },
+    });
+    const sim = new GameSim({ room: bareRoom(), items: [spawner, later], population: 'empty' });
+    sim.pickUpItem('a-spawner');
+    sim.pickUpItem('b-later');
+
+    sim.step(aiming(1, 0));
+
+    // The nested spawn broadcast ran in the middle of the outer shoot
+    // broadcast, and the outer one carried on to `b-later` afterwards —
+    // then the aimed shot's own spawn broadcast ran once more for both.
+    expect(seen).toEqual([
+      'a-spawner:spawn',
+      'b-later:spawn',
+      'a-spawner',
+      'b-later',
+      'a-spawner:spawn',
+      'b-later:spawn',
+    ]);
+    expect(stateAfterSpawn).toBe('a-spawner');
+    expect(sim.projectiles.liveCount).toBe(2);
+  });
+
+  it('a spawning onTick does not skip the items after it that tick', () => {
+    let laterTicks = 0;
+    const familiar = baseItem('a-familiar', {
+      hooks: {
+        onTick: (ctx) => {
+          const sim = ctx.sim;
+          sim.spawnItemProjectile(
+            sim.positionX(sim.playerIndex),
+            sim.positionY(sim.playerIndex),
+            1,
+            0,
+          );
+        },
+      },
+    });
+    const counter = baseItem('b-counter', {
+      hooks: {
+        onTick: () => {
+          laterTicks += 1;
+        },
+      },
+    });
+    const sim = new GameSim({ room: bareRoom(), items: [familiar, counter], population: 'empty' });
+    sim.pickUpItem('a-familiar');
+    sim.pickUpItem('b-counter');
+    for (let tick = 0; tick < 10; tick++) {
+      sim.step(IDLE);
+    }
+    expect(laterTicks).toBe(10);
+  });
+});
