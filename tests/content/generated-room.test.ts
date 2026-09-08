@@ -196,9 +196,12 @@ function coveredTiles(obstacles: readonly { width: number; height: number }[]): 
 }
 
 /** Local (col,row) of the tile immediately inside a door's mouth, and the axes into the room from there. */
-function doorMouthLocal(
-  direction: DoorDirection,
-): { col: number; row: number; forward: Point; side: Point } {
+function doorMouthLocal(direction: DoorDirection): {
+  col: number;
+  row: number;
+  forward: Point;
+  side: Point;
+} {
   switch (direction) {
     case 'north':
       return { col: 7, row: 1, forward: { x: 0, y: 1 }, side: { x: 1, y: 0 } };
