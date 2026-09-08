@@ -57,6 +57,7 @@ import {
   promilleFireRateMultiplier,
   promilleRequirementMet,
   promilleScreenDistortion,
+  promilleShotHeat,
   promilleTierName,
   promilleTierOf,
   promilleWobbleAmplitude,
@@ -3588,6 +3589,13 @@ export class GameSim {
     // own doc comment on being the one place player health changes — so this
     // is the one stamp the flinch clip can trust.
     this.playerHurtTick_ = this.currentTick;
+    // ...and the one place the meter pays for a mistake (#311). A hit costs
+    // Promille as well as health, which is what turns the damage bonus from
+    // a timer into something skill holds on to. Before the lethal branch
+    // below, so a hit that ends the run has still spent it — nothing reads
+    // the meter after that, but "every landed hit costs Promille" being true
+    // of the mechanism beats it being true of most of the paths through it.
+    this.lowerPromille(this.tuning.promille.hitPromilleLoss);
 
     // Reaching exactly zero is lethal, same as going below it — a hit does
     // not need to overkill to end a run, it only needs to use up what is left.
@@ -3697,6 +3705,22 @@ export class GameSim {
   /** The screen-distortion penalty (#92) — see `promilleScreenDistortion`. Read by `render/vignette.ts`. */
   get promilleScreenDistortion(): number {
     return promilleScreenDistortion(this.promille, this.tuning.promille);
+  }
+
+  /**
+   * How hot the player's shots run right now (#311) — see
+   * `promilleShotHeat`. Read by `render/projectiles.ts`, which spends it on
+   * the shot's tint, its glow and the point light it carries.
+   *
+   * Not scaled by an accessibility multiplier the way `promilleSwayMagnitude`
+   * and friends are: those exist so a player who cannot take the *penalty*
+   * can turn it down without giving up the damage, and this is the damage's
+   * own readout. Turning it off would remove information, not motion. The
+   * one thing it does inherit is `get promille`'s sober-run gate, so a run
+   * without the mechanic has stone-cold shots by construction.
+   */
+  get promilleShotHeat(): number {
+    return promilleShotHeat(this.promille, this.tuning.promille);
   }
 
   /**

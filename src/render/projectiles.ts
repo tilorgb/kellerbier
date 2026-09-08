@@ -1,4 +1,5 @@
 import {
+  AdditiveBlending,
   Color,
   DoubleSide,
   InstancedMesh,
@@ -114,11 +115,52 @@ const PLAYER_SHOT_HEIGHT = 6;
 const ENEMY_SHOT_HEIGHT = 5;
 const SHOT_LIGHT_INTENSITY = 220;
 
+/**
+ * How far past `1` the renderer is willing to draw `promilleShotHeat`.
+ *
+ * The ramp is uncapped on purpose (a raised Trinkfest pushes the threshold
+ * out past it), and the same reasoning `Vignette`'s `MAX_DISTORTION_ALPHA`
+ * gives applies here: past a point "hotter" stops reading as hotter and
+ * starts reading as a white rectangle where the shot used to be.
+ */
+const MAX_SHOT_HEAT = 1.35;
+
+/**
+ * The instance colour a fully hot shot is multiplied by. Above `1` on red and
+ * green on purpose: the material is `toneMapped: false`, so channels past 1
+ * clip to white and the sprite's bright pixels become a white-hot core while
+ * its darker ones stay amber — which is what a flame does, and what a flat
+ * orange tint does not.
+ */
+const HOT_TINT_R = 1.9;
+const HOT_TINT_G = 1.15;
+const HOT_TINT_B = 0.45;
+
+/** Heat below which no glow is drawn at all — roughly the top of Angeheitert, so a sip warms the shot without setting it on fire. */
+const GLOW_FROM = 0.35;
+/** The additive glow's colour at full strength, before the ramp scales it down. */
+const GLOW_COLOUR = new Color(0xff7a1e);
+/** How much bigger than the shot the glow quad is drawn, at `GLOW_FROM` and at full heat. */
+const GLOW_SCALE_MIN = 1.3;
+const GLOW_SCALE_MAX = 2;
+/** The shot light's colour, cold end and hot end. */
+const SHOT_LIGHT_COOL = new Color(0xffb347);
+const SHOT_LIGHT_HOT = new Color(0xff5a1e);
+/** How much brighter a fully hot shot's point light burns. */
+const SHOT_LIGHT_HEAT_GAIN = 1.1;
+
 const SCRATCH_MATRIX = new Matrix4();
 const SCRATCH_POSITION = new Vector3();
 const SCRATCH_QUATERNION = new Quaternion();
 const SCRATCH_SCALE = new Vector3();
 const SCRATCH_COLOR = new Color(0xffffff);
+/** This frame's heat multiplier — recomputed once per `sync`, not per shot. */
+const HEAT_COLOR = new Color(0xffffff);
+/** This frame's glow colour, already scaled by the glow ramp. */
+const GLOW_TINT = new Color(0x000000);
+/** One shot's final instance colour: its item tint times `HEAT_COLOR`. */
+const SHOT_COLOR = new Color(0xffffff);
+const WHITE = new Color(0xffffff);
 const X_AXIS = new Vector3(1, 0, 0);
 
 /** `PROJECTILE_TINT_COLOURS` by store index, so the frame loop indexes an array rather than looking a name up. */
@@ -132,7 +174,16 @@ class InstancedSprites {
   readonly mesh: InstancedMesh;
   count = 0;
 
-  constructor(texture: Texture, capacity: number) {
+  /**
+   * `additive: true` builds the glow variant — the same geometry and the same
+   * alpha-tested cutout, blended additively with no depth write, so a hot
+   * shot's halo brightens whatever is behind it instead of punching a hole in
+   * it. Its own layer rather than a second pass over the main one because a
+   * material cannot be two blend modes at once, and per-instance strength is
+   * carried in the instance colour (a scaled `GLOW_COLOUR`) rather than in a
+   * per-material opacity, which could not vary per shot.
+   */
+  constructor(texture: Texture, capacity: number, additive = false) {
     const geometry = new PlaneGeometry(1, 1);
     const [u0, v0, u1, v1] = texture.uvs();
     const uv = geometry.getAttribute('uv');
@@ -145,6 +196,9 @@ class InstancedSprites {
       alphaTest: 0.5,
       side: DoubleSide,
       toneMapped: false,
+      ...(additive
+        ? { blending: AdditiveBlending, transparent: true, depthWrite: false }
+        : undefined),
     });
     this.mesh = new InstancedMesh(geometry, material, capacity);
     this.mesh.count = 0;
@@ -153,14 +207,26 @@ class InstancedSprites {
     // and so the program is linked with instance colours from its first
     // frame rather than relinked on the first tinted shot (see the class doc).
     this.mesh.setColorAt(0, SCRATCH_COLOR.setHex(NO_TINT));
+    // Behind the shots themselves, whatever three.js's own transparent sort
+    // would otherwise decide from a camera distance the two layers share.
+    this.mesh.renderOrder = additive ? -1 : 0;
   }
 
   begin(): void {
     this.count = 0;
   }
 
-  /** Places one quad, centred at the point, `size` room units square, leaning to the camera, multiplied by `tint` (an RGB hex; white for none). */
-  add(x: number, height: number, z: number, size: number, lean: number, tint = NO_TINT): void {
+  /**
+   * Places one quad, centred at the point, `size` room units square, leaning
+   * to the camera, multiplied by `tint`.
+   *
+   * A `Color` rather than a hex since #311: the caller composes an item tint
+   * with this frame's heat multiplier, and handing that composition back
+   * through a hex would mean packing and unpacking it every shot. The colour
+   * is read immediately, so a caller reusing one scratch instance is fine —
+   * and is what the frame loop does.
+   */
+  add(x: number, height: number, z: number, size: number, lean: number, tint: Color = WHITE): void {
     if (this.count >= this.mesh.instanceMatrix.count) {
       return;
     }
@@ -169,7 +235,7 @@ class InstancedSprites {
     SCRATCH_SCALE.set(size, size, 1);
     SCRATCH_MATRIX.compose(SCRATCH_POSITION, SCRATCH_QUATERNION, SCRATCH_SCALE);
     this.mesh.setMatrixAt(this.count, SCRATCH_MATRIX);
-    this.mesh.setColorAt(this.count, SCRATCH_COLOR.setHex(tint));
+    this.mesh.setColorAt(this.count, tint);
     this.count += 1;
   }
 
@@ -197,9 +263,12 @@ export class ProjectileView {
   private readonly artNames: readonly (string | null)[];
   private readonly layers = new Map<Texture, InstancedSprites>();
   private readonly markerLayers = new Map<Texture, InstancedSprites>();
+  private readonly glowLayers = new Map<Texture, InstancedSprites>();
   private accessibility: ProjectileAccessibility = DEFAULT_PROJECTILE_ACCESSIBILITY;
   private lean = 0;
   private lighting: Lighting | null = null;
+  /** `GameSim.promilleShotHeat`, clamped — see `setShotHeat`. */
+  private shotHeat = 0;
 
   constructor(
     store: ProjectileStore,
@@ -229,6 +298,20 @@ export class ProjectileView {
     this.lighting = lighting;
   }
 
+  /**
+   * How hot the player's shots run this frame (#311) — `GameSim.
+   * promilleShotHeat`, pushed in once a frame by `GameView` rather than read
+   * off a `sim` this class does not otherwise hold, the same shape
+   * `setLean`/`setLighting` already use.
+   *
+   * Clamped here rather than at the source: the ramp is deliberately
+   * uncapped so Trinkfest keeps escalating it, and how far past `1` is still
+   * legible is a rendering question (`MAX_SHOT_HEAT`).
+   */
+  setShotHeat(heat: number): void {
+    this.shotHeat = Math.min(MAX_SHOT_HEAT, Math.max(0, heat));
+  }
+
   sync(alpha: number, floor: number): void {
     const store = this.store;
     const teamMarkers = this.art.teamMarkers;
@@ -239,6 +322,24 @@ export class ProjectileView {
     for (const layer of this.markerLayers.values()) {
       layer.begin();
     }
+    for (const layer of this.glowLayers.values()) {
+      layer.begin();
+    }
+    // This frame's heat, resolved once rather than per shot: one player means
+    // one meter, so every shot on screen is equally hot however long ago it
+    // left the barrel. (Baking the heat into each shot at spawn was the other
+    // option and is worse — a shot fired sober would stay cold while crossing
+    // a room the player got drunk in, which reads as a rendering bug rather
+    // than as history.)
+    const heat = this.shotHeat;
+    HEAT_COLOR.setRGB(
+      1 + (HOT_TINT_R - 1) * heat,
+      1 + (HOT_TINT_G - 1) * heat,
+      1 + (HOT_TINT_B - 1) * heat,
+    );
+    const glow = heat <= GLOW_FROM ? 0 : (heat - GLOW_FROM) / (MAX_SHOT_HEAT - GLOW_FROM);
+    GLOW_TINT.copy(GLOW_COLOUR).multiplyScalar(glow);
+    const glowScale = GLOW_SCALE_MIN + (GLOW_SCALE_MAX - GLOW_SCALE_MIN) * glow;
     let lights = 0;
     store.forEachLive((index) => {
       const team = store.team[index] ?? 0;
@@ -257,9 +358,30 @@ export class ProjectileView {
       const height = isPlayer
         ? PLAYER_SHOT_HEIGHT + ARC_HEIGHT * Math.sin(t * Math.PI)
         : ENEMY_SHOT_HEIGHT;
-      // Only a player shot carries an item's tint; an enemy's sprite is its own.
-      const tint = isPlayer ? (TINT_BY_INDEX[store.tint[index] ?? 0] ?? NO_TINT) : NO_TINT;
-      this.layerFor(texture, this.layers).add(x, height, z, radius * 2, this.lean, tint);
+      // Only a player shot carries an item's tint — or the meter's heat; an
+      // enemy's sprite is its own, and an enemy shot getting brighter as the
+      // player drinks would read as the enemy being buffed.
+      if (isPlayer) {
+        SHOT_COLOR.setHex(TINT_BY_INDEX[store.tint[index] ?? 0] ?? NO_TINT).multiply(HEAT_COLOR);
+      } else {
+        SHOT_COLOR.setHex(NO_TINT);
+      }
+      this.layerFor(texture, this.layers).add(x, height, z, radius * 2, this.lean, SHOT_COLOR);
+      if (isPlayer && glow > 0) {
+        // Always the base player sprite, never `texture`: the halo is a
+        // flame shape, not a second copy of whatever status art the shot is
+        // wearing, and one glow layer means exactly one extra shader program
+        // for the whole effect rather than one per player-shot texture
+        // (`docs/DECISIONS.md` #80 — the room-crossing gate counts those).
+        this.layerFor(this.art.player, this.glowLayers, true).add(
+          x,
+          height,
+          z,
+          radius * 2 * glowScale,
+          this.lean,
+          GLOW_TINT,
+        );
+      }
       if (markersOn) {
         const marker = isPlayer ? teamMarkers.player : teamMarkers.enemy;
         this.layerFor(marker, this.markerLayers).add(
@@ -274,7 +396,8 @@ export class ProjectileView {
         const light = this.lighting.shotLight(lights);
         if (light !== null) {
           light.position.set(x, height + 1, z);
-          light.intensity = SHOT_LIGHT_INTENSITY;
+          light.intensity = SHOT_LIGHT_INTENSITY * (1 + SHOT_LIGHT_HEAT_GAIN * heat);
+          light.color.copy(SHOT_LIGHT_COOL).lerp(SHOT_LIGHT_HOT, Math.min(1, heat));
           lights += 1;
         }
       }
@@ -286,14 +409,21 @@ export class ProjectileView {
     for (const layer of this.markerLayers.values()) {
       layer.end();
     }
+    for (const layer of this.glowLayers.values()) {
+      layer.end();
+    }
   }
 
-  private layerFor(texture: Texture, into: Map<Texture, InstancedSprites>): InstancedSprites {
+  private layerFor(
+    texture: Texture,
+    into: Map<Texture, InstancedSprites>,
+    additive = false,
+  ): InstancedSprites {
     const existing = into.get(texture);
     if (existing !== undefined) {
       return existing;
     }
-    const created = new InstancedSprites(texture, this.store.capacity);
+    const created = new InstancedSprites(texture, this.store.capacity, additive);
     created.begin();
     into.set(texture, created);
     this.group.add(created.mesh);
@@ -301,7 +431,11 @@ export class ProjectileView {
   }
 
   destroy(): void {
-    for (const layer of [...this.layers.values(), ...this.markerLayers.values()]) {
+    for (const layer of [
+      ...this.layers.values(),
+      ...this.markerLayers.values(),
+      ...this.glowLayers.values(),
+    ]) {
       layer.dispose();
     }
     this.group.removeFromParent();

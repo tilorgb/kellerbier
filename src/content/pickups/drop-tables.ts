@@ -11,6 +11,20 @@ import type { DropTable, LootTier } from '../../sim/pickup/definition.js';
  * Maß (health-food-redesign) is now a pure Promille pickup, so it is exactly
  * as absent from a `sober` table as Bier was before it.
  *
+ * **#311 roughly tripled the Maß's weights**, and paid for them out of the
+ * *coins* in the same table rather than out of `null` or out of the Wurst.
+ * That keeps two things true at once. Every `null` is untouched, so a
+ * promilled run and a sober one drop something exactly as often as each
+ * other — `tests/content/sober-run.test.ts` gates on that, and a promilled
+ * run quietly paying out more would be the same "the real game with a
+ * feature missing" complaint pointed the other way. And the health is
+ * untouched (bar one point of `bratwurst-half` on the weak/normal tiers), so
+ * the trade a drinking run makes is money for beer, which is the trade it
+ * should be making. The sizing target is roughly `0.26` Promille for a
+ * cleared, hoovered room against `PromilleTuning.decayPerSecond`'s `0.006` —
+ * see that field for the arithmetic, and for why the pre-#311 numbers made
+ * the meter unreachable in the first place.
+ *
  * `null`'s weight is what actually sets the drop *rate* — the rest of a
  * table only decides the mix once something has already dropped. Originally
  * every tier dropped 45-80% of the time, on top of the guaranteed-ish
@@ -32,9 +46,9 @@ export const ENEMY_DROP_TABLES: Readonly<Record<LootTier, DropTable>> = {
   weak: {
     promilled: [
       { pickupId: null, weight: 500 },
-      { pickupId: 'biermarke-1', weight: 15 },
-      { pickupId: 'bratwurst-half', weight: 16 },
-      { pickupId: 'mass-half', weight: 6 },
+      { pickupId: 'biermarke-1', weight: 7 },
+      { pickupId: 'bratwurst-half', weight: 14 },
+      { pickupId: 'mass-half', weight: 16 },
       { pickupId: 'kellerschluessel', weight: 2 },
       { pickupId: 'bierfassl', weight: 1 },
     ],
@@ -49,16 +63,16 @@ export const ENEMY_DROP_TABLES: Readonly<Record<LootTier, DropTable>> = {
   normal: {
     promilled: [
       { pickupId: null, weight: 340 },
-      { pickupId: 'biermarke-1', weight: 15 },
-      { pickupId: 'biermarke-5', weight: 5 },
-      { pickupId: 'bratwurst-half', weight: 8 },
+      { pickupId: 'biermarke-1', weight: 6 },
+      { pickupId: 'biermarke-5', weight: 2 },
+      { pickupId: 'bratwurst-half', weight: 7 },
       { pickupId: 'bratwurst-full', weight: 5 },
       { pickupId: 'weisswurst-half', weight: 4 },
       { pickupId: 'weisswurst-full', weight: 1 },
-      { pickupId: 'mass-half', weight: 7 },
-      { pickupId: 'mass-full', weight: 2 },
-      { pickupId: 'kellerschluessel', weight: 3 },
-      { pickupId: 'bierfassl', weight: 2 },
+      { pickupId: 'mass-half', weight: 18 },
+      { pickupId: 'mass-full', weight: 6 },
+      { pickupId: 'kellerschluessel', weight: 2 },
+      { pickupId: 'bierfassl', weight: 1 },
     ],
     sober: [
       { pickupId: null, weight: 340 },
@@ -75,10 +89,10 @@ export const ENEMY_DROP_TABLES: Readonly<Record<LootTier, DropTable>> = {
   tough: {
     promilled: [
       { pickupId: null, weight: 240 },
-      { pickupId: 'biermarke-1', weight: 2 },
-      { pickupId: 'biermarke-5', weight: 15 },
-      { pickupId: 'biermarke-10', weight: 5 },
-      { pickupId: 'mass-full', weight: 10 },
+      { pickupId: 'biermarke-1', weight: 1 },
+      { pickupId: 'biermarke-5', weight: 6 },
+      { pickupId: 'biermarke-10', weight: 3 },
+      { pickupId: 'mass-full', weight: 22 },
       { pickupId: 'weisswurst-full', weight: 8 },
       { pickupId: 'blutwurst-full', weight: 2 },
       { pickupId: 'bratwurst-half', weight: 6 },
@@ -113,12 +127,13 @@ export const ENEMY_DROP_TABLES: Readonly<Record<LootTier, DropTable>> = {
 export const ROOM_CLEAR_DROP_TABLE: DropTable = {
   promilled: [
     { pickupId: null, weight: 38 },
-    { pickupId: 'biermarke-1', weight: 15 },
-    { pickupId: 'biermarke-5', weight: 20 },
-    { pickupId: 'mass-half', weight: 15 },
+    { pickupId: 'biermarke-1', weight: 10 },
+    { pickupId: 'biermarke-5', weight: 8 },
+    { pickupId: 'mass-half', weight: 26 },
+    { pickupId: 'mass-full', weight: 8 },
     { pickupId: 'bratwurst-half', weight: 10 },
     { pickupId: 'bratwurst-full', weight: 8 },
-    { pickupId: 'kellerschluessel', weight: 10 },
+    { pickupId: 'kellerschluessel', weight: 8 },
     { pickupId: 'bierfassl', weight: 8 },
   ],
   sober: [
@@ -148,8 +163,8 @@ export const ROOM_CLEAR_DROP_TABLE: DropTable = {
 export const BOSS_REWARD_DROP_TABLE: DropTable = {
   promilled: [
     { pickupId: null, weight: 100 },
-    { pickupId: 'biermarke-10', weight: 25 },
-    { pickupId: 'mass-full', weight: 20 },
+    { pickupId: 'biermarke-10', weight: 17 },
+    { pickupId: 'mass-full', weight: 28 },
     { pickupId: 'weisswurst-full', weight: 15 },
     { pickupId: 'blutwurst-full', weight: 8 },
     { pickupId: 'blutwurst-half', weight: 6 },

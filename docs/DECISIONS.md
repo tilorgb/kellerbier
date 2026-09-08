@@ -4697,3 +4697,66 @@ the other way would have made a drop table depend on an event later in the same 
 override's `sober` now pins a run's *start* rather than the whole run; that is not a lost
 capability so much as an honest one, since the sober game is floor 1 now and nothing past floor
 1's boss is a state the shipping build has.
+
+## 87. Promille is drained by mistakes, not by the clock — and the reward is drawn on the shots
+
+**Decided:** M8, #311 (item of #228). **Builds on:** #17 (the meter), #92 (Trinkfest and the
+penalties), #85/#236 (the gate, and moving it inside the run), #4 (graceful degradation as a
+policy — this is its opposite case: a number that degraded so gracefully nobody noticed it did
+nothing).
+
+The mechanic the design doc calls the reason this is not a reskin could not be reached. Measured
+on `main`: `decayPerSecond: 0.05` took **3.0 Promille a minute** while a cleared room paid back
+about **0.09** (2.3 kills at ~1.8% `mass-half`, plus a ~12% room-clear roll). Sixteen to thirty
+times more went out than came in, so no amount of drinking moved the meter and every tier above
+Nüchtern was a debug-slider state. A scripted bot that walks to every Maß it sees peaked at
+**0.50 Promille** across six seeds — literally one half-Maß, landing exactly on the Angeheitert
+boundary and decaying back out on the next tick.
+
+**The drain is the mistake, not the clock.** `docs/GAME_DESIGN.md` §5 always listed four ways down
+— time, Wurst, water, *being hit* — and only the clock was ever implemented, which is the whole
+bug in one sentence: the meter was drained by something the player cannot play against. Now a hit
+costs `hitPromilleLoss` (0.4) in `applyPlayerDamage`, the one chokepoint every landed hit passes
+through, and the clock is a slow bleed (0.006/s) sized to sit *under* what a floor drops. The
+result is a meter that behaves like a combo counter: the damage a player is carrying is a
+statement about how well they are playing, and a mistake takes it away twice over.
+
+**A flat cost per hit, not a proportional one.** A graze costs exactly what a maul does. Scaling
+it with damage would make the meter a second health bar with the same shape as the first, and the
+thing being punished is *getting hit*, not getting hit hard.
+
+**Beer was paid for out of the coins, not out of `null` and not out of the Wurst.** Tripling the
+Maß weights while leaving every `null` alone keeps a promilled run and a sober one dropping
+something exactly as often — `tests/content/sober-run.test.ts` gates on that, and #85's "the real
+game with a feature missing" complaint works in both directions. Taking it from Biermarken rather
+than Wurst means the trade a drinking run makes is money for beer, which is the trade it should
+be making.
+
+**A half-Maß is 0.6, not 0.5.** The arithmetic half was exactly `ANGEHEITERT_AT`, so the pickup
+bought one tick of the tier it was meant to reach. A drink has to clear the boundary it is for.
+Trivial, invisible in the code, and worth the third of the measured improvement it accounts for.
+
+**The reward had to go where the player is already looking.** Every penalty was on screen and the
+payoff was in a stat panel. `promilleShotHeat` ramps from 0 sober to 1 at the Umgfalln threshold
+and `render/projectiles.ts` spends it on three things at once: the instance colour (multiplied
+*into* the item tint, so a Spezi's brown shot goes hot brown rather than generic flame), one
+additive glow layer, and the point light each shot already carried. Deliberately shaped unlike
+its neighbouring ramps — it starts at zero Promille rather than at a tier boundary, because the
+damage bonus does too, and a shot that looked identical until Beduselt would be hiding the thing
+it exists to show.
+
+**Heat is a property of the frame, not of the shot.** Baking it in at spawn was the other option
+and is worse: a shot fired sober would stay cold while crossing a room the player got drunk in,
+which reads as a rendering bug rather than as history. One player means one meter.
+
+**One glow layer, not one per sprite.** The halo always wears the base player sprite even for a
+burning or poisoned shot — a flame shape, not a second copy of the status art — which caps the
+whole effect at exactly one extra shader program (`docs/DECISIONS.md` #80; the room-crossing gate
+counts those).
+
+**What the measurement says afterwards.** The same six seeds, the same bot: 100% Nüchtern and a
+0.50 peak before, against 54% Nüchtern / 23% Angeheitert / 17% Beduselt / 6% Vollrausch and a 3.23
+peak after. The bot dies on floor 1 in most of them, which is the right shape: the meter climbs
+with survival rather than with the clock. `PlaytestOutcome.peakPromille` was added for this — the
+tier distribution says where the meter *lived*, and "was the top of the ladder reachable at all"
+is a different question.
