@@ -4810,3 +4810,82 @@ as being.
 The tag is a fact about an item rather than a judgement about it (§8), so it should be the same
 fact every time: `raisins()` in `tools/art/authoring/items.mjs` is a shared helper for exactly
 that reason, and a player learns the dot once.
+
+## 89. No dodge roll. The answer to pressure is the meter, and the retreat bot is dead
+
+**Decided:** M8, #239 (the last item of #228). **Builds on:** #229/#230/#231/#232 (the pressure
+pass), #20 (no mouse aim), #46 (the fixed touch layout), #48 (the recorded input frame), #311 (the
+Promille rework), #309 (the difficulty relief pass).
+
+The question #239 exists to answer once instead of five times by accident: **should Alois have a
+dash, roll, parry or block?** Every roguelite called "tight" in the last decade has one, and it is
+usually the thing people name when they say a game feels good. Alois's whole verb list is Fire,
+Bomb, Use, Map, Pause.
+
+**The verdict is no.** Not deferred — decided, with a named trigger to reopen it.
+
+### The premise did flip, and that is why this had to be answered rather than assumed
+
+#239's original argument was that a dodge is an answer to a threat you cannot walk away from, and
+Kellerbier had not yet taken walking away off the table. That is no longer true. #228's own
+regression check was the retreat bot — "a scripted bot that does nothing but back away from the
+nearest enemy and fire at it survived a floor-1 tour untouched … when it can no longer clear a
+room unharmed, the pressure pass has worked."
+
+Re-run after #229–#232, 24 seeds, the `cautious` playtest profile (engage range 110, retreat
+margin 36, panics under 45% health — a retreat-and-fire bot by construction):
+
+```
+24 runs: 0 cleared floor 1 untouched, 21 died on floor 1, mean floor-1 damage 5.6 half-Wurst
+```
+
+Zero, from "untouched every time". The cheap escape is off the table, so the honest version of the
+question is now live: **does the player have an answer to the pressure they are now under?**
+
+### They do, and it is not a movement verb
+
+Three answers, all already in the game, and the pressure pass is what made two of them matter:
+
+1. **Positioning is a real answer now.** Every charge in the roster is linear and telegraphed
+   (#233 gave telegraphs a shape rather than one shared ring), so stepping out of a line is a
+   skill the game rewards. It was not a skill before, because nothing was ever *in* a line with
+   the player who was walking backwards anyway.
+2. **The committed, costly, high-risk verb is the Maß.** #311 turned Promille into exactly the
+   emotional beat a dodge roll provides — a deliberate, expensive commitment that trades safety
+   for power — except it is a build decision held across a whole floor rather than a button
+   pressed in a panic. Drinking to Vollrausch is +120% damage against a wobbling aim and a
+   knockdown one Maß away, and a hit costs Promille, so playing well is what holds it. Adding
+   i-frames on a button would blunt the exact risk that mechanic was just built to create.
+3. **Bombs and active items are the panic buttons the design already has.** `ActiveItemHud`,
+   charging and `useActiveItem` all exist; a charge-and-release defensive active is the same beat
+   as a dash and costs no input-layer change at all.
+
+### And the bill has not got smaller
+
+A dash still touches: the recorded input frame's byte layout (#48's replays), rebinding, gamepad,
+the fixed touch layout (#46), the accessibility suite, Promille's drift and momentum — a committed
+dash under Vollrausch is a design problem of its own — and every enemy telegraph in the roster,
+since a dash changes what "dodgeable" means for all of them. #309 had to spend a whole pass
+walking difficulty back after the pressure pass overshot; adding player power on top of that
+would mean re-tuning the roster a third time in one milestone.
+
+Isaac remains the proof by example: no dodge, and tight, because its rooms are dense and its
+enemies close. That is now true here too.
+
+### When to reopen
+
+One trigger, and it is a sentence a real player says, not a metric: **"I could see the hit coming
+and I had nothing to do about it."** That is the complaint a dodge answers and nothing else does.
+If #159's playtest loop surfaces it — as opposed to "it's hard now" or "I died a lot", which are
+the pressure pass working — reopen this immediately, and open the implementation issue naming the
+input-frame, replay, rebinding, gamepad, touch, accessibility and Promille consequences up front.
+
+The measurement is kept rather than quoted: `tests/playtest/retreat-bot.test.ts` fails if the
+retreat bot ever walks through floor 1 untouched again. A number that lives only in a decision doc
+rots quietly, and this one is load-bearing for the verdict above.
+
+**What this verdict is not backed by:** a human playtester. The retreat-bot number is a
+measurement of the *premise*, not of how the game feels in hands that did not tune it; #159 is
+what closes that gap, and it is deliberately not blocked on this decision. Recording the verdict
+now is the point — the argument is the artefact, so that the next person to have this idea finds
+it rather than re-deriving it.
