@@ -167,36 +167,47 @@ describe('Lighting/Scenery, a constant point-light count with rooms cached off s
     const baseline = countPointLights(scene);
 
     const cached = build(lighting, materials, CROSSROADS);
+    // Built but not yet on screen: no glow claimed, nothing to light.
+    expect(cached.doors.every((door) => door.glowLight === null)).toBe(true);
     cached.attach(scene);
     for (const door of cached.doors) {
       door.setState('open');
     }
     expect(countPointLights(scene)).toBe(baseline);
-    const glows = cached.doors.map((door) => door.glowLight);
-    expect(glows.every((glow) => glow !== null && glow.intensity > 0)).toBe(true);
+    const glowsOf = (): PointLight[] =>
+      cached.doors.map((door) => {
+        const glow = door.glowLight;
+        if (glow === null) {
+          throw new Error('an on-screen door holds a glow');
+        }
+        return glow;
+      });
+    const lit = glowsOf();
+    expect(lit.every((glow) => glow.intensity > 0)).toBe(true);
+    const before = lit.map((glow) => glow.position.clone());
 
-    // Off screen, the way `SceneryCache` keeps a visited room: the glows
-    // stay in the scene (so the count holds) but must not light the room
-    // that is actually on screen.
+    // Off screen, the way `SceneryCache` keeps a visited room: the glows go
+    // back to the pool, dark, and stay in the scene (so the count holds) —
+    // they must not light the room that is actually on screen.
     cached.detach();
     expect(countPointLights(scene)).toBe(baseline);
-    expect(glows.every((glow) => glow !== null && glow.intensity === 0)).toBe(true);
+    expect(cached.doors.every((door) => door.glowLight === null)).toBe(true);
+    expect(lit.every((glow) => glow.intensity === 0)).toBe(true);
 
     // Back on screen — as the outgoing room of a slide, shifted a room east —
-    // lit again, and the glows moved with the room they belong to.
-    const before = glows.map((glow) => glow?.position.clone());
+    // lit again, and the glows placed where the room now is.
     cached.attach(scene, 300, 0);
     expect(countPointLights(scene)).toBe(baseline);
-    glows.forEach((glow, index) => {
-      expect(glow?.intensity ?? 0).toBeGreaterThan(0);
-      expect(glow?.position.x).toBeCloseTo((before[index]?.x ?? 0) + 300);
-      expect(glow?.position.z).toBeCloseTo(before[index]?.z ?? 0);
+    glowsOf().forEach((glow, index) => {
+      expect(glow.intensity).toBeGreaterThan(0);
+      expect(glow.position.x).toBeCloseTo((before[index]?.x ?? 0) + 300);
+      expect(glow.position.z).toBeCloseTo(before[index]?.z ?? 0);
     });
     // And a re-attach at the origin puts the room, and its glows, back.
     cached.attach(scene);
     expect(cached.group.position.x).toBe(0);
-    glows.forEach((glow, index) => {
-      expect(glow?.position.x).toBeCloseTo(before[index]?.x ?? 0);
+    glowsOf().forEach((glow, index) => {
+      expect(glow.position.x).toBeCloseTo(before[index]?.x ?? 0);
     });
     // Glows are never children of the door: parenting them was the leak.
     for (const door of cached.doors) {
@@ -204,6 +215,11 @@ describe('Lighting/Scenery, a constant point-light count with rooms cached off s
     }
     cached.dispose();
     expect(countPointLights(scene)).toBe(baseline);
+    // Everything went back to the pool: a fresh room can claim them all.
+    const next = build(lighting, materials, CROSSROADS);
+    next.attach(scene);
+    expect(next.doors.every((door) => door.glowLight !== null)).toBe(true);
+    next.dispose();
   });
 
   it('hands out prop lights from a fixed, scene-resident pool and degrades to null past it', () => {
@@ -263,12 +279,14 @@ describe('GameView, a constant point-light count across real room loads (#80)', 
   });
 });
 
-describe('MAX_DOOR_GLOWS, sized against real content', () => {
-  it('covers every door on any single room the floor generator produces', () => {
-    const templates = ROOM_TEMPLATES.map((template, index) =>
-      validateRoomTemplate(template, `room[${String(index)}]`, ENEMY_DEFINITIONS),
-    );
+describe('the light pools, sized against real content', () => {
+  const templates = ROOM_TEMPLATES.map((template, index) =>
+    validateRoomTemplate(template, `room[${String(index)}]`, ENEMY_DEFINITIONS),
+  );
+
+  it('MAX_DOOR_GLOWS covers the two rooms a transition slide draws at once', () => {
     let maxDoors = 0;
+    let maxAdjacentPair = 0;
     let sampled = 0;
     for (let seed = 0; seed < 300; seed++) {
       for (let floorIndex = 0; floorIndex < FLOOR_CONFIGS.length; floorIndex++) {
@@ -283,17 +301,47 @@ describe('MAX_DOOR_GLOWS, sized against real content', () => {
           continue;
         }
         sampled += 1;
+        const byId = new Map(plan.rooms.map((generatedRoom) => [generatedRoom.id, generatedRoom]));
         for (const generatedRoom of plan.rooms) {
           maxDoors = Math.max(maxDoors, generatedRoom.doors.length);
+          // A glow is claimed while a room is on screen, and the slide has two
+          // rooms on screen: the one just left and the one just entered. The
+          // pool has to cover the worst such neighbouring pair, not the worst
+          // single room.
+          for (const door of generatedRoom.doors) {
+            const neighbour = byId.get(door.neighborRoomId);
+            if (neighbour !== undefined) {
+              maxAdjacentPair = Math.max(
+                maxAdjacentPair,
+                generatedRoom.doors.length + neighbour.doors.length,
+              );
+            }
+          }
         }
       }
     }
     // Sanity check on the harness itself: this failing means nothing generated.
     expect(sampled).toBeGreaterThan(100);
-    // The measured ceiling this pool's doc comment cites — a regression here
-    // means either content grew more doors-per-room than the pool assumes,
-    // or the generator changed shape. Either way, `MAX_DOOR_GLOWS` needs a
-    // second look before this assertion is just raised to match.
+    // The measured ceilings the pool's doc comment cites (5 and 9 today). A
+    // regression here means either content grew more doors-per-room than the
+    // pool assumes, or the generator changed shape. Either way,
+    // `MAX_DOOR_GLOWS` needs a second look before this assertion is just
+    // raised to match.
     expect(maxDoors).toBeLessThanOrEqual(MAX_DOOR_GLOWS);
+    expect(maxAdjacentPair).toBeLessThanOrEqual(MAX_DOOR_GLOWS);
+  });
+
+  it('MAX_PROP_LIGHTS covers the most pedestals any room template places, plus the machine', () => {
+    let maxPedestals = 0;
+    for (const template of templates) {
+      const props = (template as { decorativeProps?: readonly { type: string }[] }).decorativeProps;
+      maxPedestals = Math.max(
+        maxPedestals,
+        (props ?? []).filter((prop) => prop.type === 'pedestal').length,
+      );
+    }
+    expect(maxPedestals).toBeGreaterThan(0);
+    // One machine per floor (`GameSim.activeMachine`) on top of the pedestals.
+    expect(maxPedestals + 1).toBeLessThanOrEqual(MAX_PROP_LIGHTS);
   });
 });

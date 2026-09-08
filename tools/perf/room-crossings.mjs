@@ -3,11 +3,23 @@
  *
  * Usage:
  *   npm run dev                                   # in another terminal, port 5173
- *   node tools/perf/room-crossings.mjs [walk|tour] [crossings] [url]
+ *   node tools/perf/room-crossings.mjs [walk|tour] [crossings] [url] [--gate]
+ *   npm run perf:crossings                        # the CI gate: walk 12 --gate
  *
- * Needs `playwright-core` (not a project dependency — `npm i --no-save
- * playwright-core` once) and a Chromium to drive: the preinstalled one at
- * `/opt/pw-browsers` on the cloud runners, or set `CHROMIUM=/path/to/chrome`.
+ * Drives a Chromium: `CHROMIUM=/path/to/chrome` if set, else the first of the
+ * GitHub runner's Google Chrome, a system Chromium, or the Playwright-managed
+ * one under `/opt/pw-browsers` (the cloud dev containers). `playwright-core` is
+ * a devDependency; it downloads no browser of its own.
+ *
+ * `--gate` turns the report into a CI check (`.github/workflows/ci.yml`, the
+ * "room-crossing gate" job): it fails when any crossing after the run's first
+ * links a shader program, when the renderer's program count ends above
+ * `GATE_MAX_PROGRAMS`, or when fewer than `GATE_MIN_CROSSINGS` crossings
+ * actually happened (the walk teleports to a door and holds the key; a run's
+ * random floor can occasionally put a locked or hidden door in its way, which
+ * is a skipped crossing, not a failure). It gates on the *work*, never on
+ * SwiftShader's frame times — see `docs/PERFORMANCE_AUDIT.md` §1 and the CI
+ * section of §7.
  *
  * `walk` (default) is a real crossing: the player is teleported to a door's
  * threshold and the movement key toward it is held through #289's dwell, so the
@@ -32,15 +44,42 @@
  * that compiled a variant the frame does not draw.
  */
 /* global window */
-import { writeFileSync } from 'node:fs';
+import { existsSync, writeFileSync } from 'node:fs';
 
-const mode = process.argv[2] ?? 'walk';
-const crossings = Number(process.argv[3] ?? 20);
-const url = process.argv[4] ?? 'http://127.0.0.1:5173/';
+const gate = process.argv.includes('--gate');
+const positional = process.argv.slice(2).filter((arg) => !arg.startsWith('--'));
+const mode = positional[0] ?? 'walk';
+const crossings = Number(positional[1] ?? (gate ? 12 : 20));
+const url = positional[2] ?? 'http://127.0.0.1:5173/';
 const profile = process.env.PROFILE === '1';
 const showKeys = process.env.KEYS === '1';
 const diffInventory = process.env.INV === '1';
-const executablePath = process.env.CHROMIUM ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+
+/**
+ * The gate's thresholds. The program count plateaued at 22–24 across every
+ * measured run after `docs/DECISIONS.md` #80 (one lit and one unlit variant
+ * per material shape, the depth/occluder programs, the UI's); 40 is generous
+ * headroom for new material shapes and tight enough that a count that grows
+ * per crossing — the failure this exists to catch — trips it within the run.
+ */
+const GATE_MAX_PROGRAMS = 40;
+const GATE_MIN_CROSSINGS = Math.min(6, crossings);
+
+const BROWSER_CANDIDATES = [
+  process.env.CHROMIUM,
+  '/usr/bin/google-chrome',
+  '/usr/bin/google-chrome-stable',
+  '/usr/bin/chromium',
+  '/usr/bin/chromium-browser',
+  '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+];
+const executablePath = BROWSER_CANDIDATES.find((path) => path !== undefined && existsSync(path));
+if (executablePath === undefined) {
+  console.error(
+    'no Chromium found: set CHROMIUM=/path/to/chrome, or `npx playwright-core install chromium`',
+  );
+  process.exit(1);
+}
 
 let chromium;
 try {
@@ -109,6 +148,7 @@ const initScript = `
 })();
 `;
 
+console.log(`browser: ${executablePath}`);
 const browser = await chromium.launch({
   executablePath,
   headless: true,
@@ -369,3 +409,35 @@ console.log(
 console.log('renderer memory', memory);
 writeFileSync(`room-crossings-${mode}.json`, JSON.stringify(log, null, 1));
 await browser.close();
+
+if (gate) {
+  const failures = [];
+  if (log.length < GATE_MIN_CROSSINGS) {
+    failures.push(
+      `only ${log.length} of ${crossings} crossings happened (need ${GATE_MIN_CROSSINGS})`,
+    );
+  }
+  if (totalLinksAfterFirst > 0) {
+    const where = log
+      .slice(1)
+      .filter((entry) => entry.links > 0)
+      .map((entry) => `#${entry.c} ${entry.from} -> ${entry.to} (${entry.links})`)
+      .join(', ');
+    failures.push(
+      `${totalLinksAfterFirst} shader program(s) linked on a crossing after the first: ${where} — ` +
+        'a light joined the scene graph outside Lighting, a program-key input changed mid-run, ' +
+        'or the warm compiled a variant the frame does not draw (docs/DECISIONS.md #80)',
+    );
+  }
+  if (memory !== null && memory.programs > GATE_MAX_PROGRAMS) {
+    failures.push(`${memory.programs} programs held, above the ${GATE_MAX_PROGRAMS} ceiling`);
+  }
+  if (failures.length > 0) {
+    console.error('\nroom-crossing gate FAILED:');
+    for (const failure of failures) console.error(`  - ${failure}`);
+    process.exit(1);
+  }
+  console.log(
+    `\nroom-crossing gate passed: ${log.length} crossings, 0 links after the first, ${memory?.programs ?? '?'} programs`,
+  );
+}

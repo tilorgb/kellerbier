@@ -199,12 +199,16 @@ billboard's tinted material, a door leaf's, a floor sprite's — the per-instanc
 |---|---|
 | `compileShader` / `linkProgram`, every crossing after the run's first | **0 / 0** (24 crossings, both floors' room types) |
 | Programs held by the renderer | **19–22**, flat |
-| `numPointLights` | **35**, always (1 lantern + 8 shot + 12 door glows + 6 bulbs + 8 prop) |
+| `numPointLights` | **25**, always (1 lantern + 8 shot + 10 door glows + 3 bulbs + 3 prop; 35 before the pools were sized to measurement) |
 | `GameView` JS time on the switch frame | **12–24 ms** under SwiftShader, from 600–2,400 ms |
 
-35 point lights in every lit fragment is F7's concern made larger, deliberately: the pools are sized
-for the worst room plus four cached ones, and a constant 35 costs a fixed per-fragment loop where a
-varying 16–26 cost a relink of every shader. Trimming the pools is F7's follow-up, not this one's.
+The first cut fixed the count at 35 — the pools sized for the worst room plus four cached ones —
+because a constant 35 costs a fixed per-fragment loop where a varying 16–26 cost a relink of every
+shader. The follow-up then sized the pools to the measurement: a door claims its glow only while
+its room is on screen, so the glow pool covers the worst *adjacent pair* of rooms (9 doors across
+300 generated floors) rather than the cache; bulbs and prop lights dropped to the authored maximum
+plus one. 25 lights, and a settled room under SwiftShader went from 4.2 to 5.5 fps — directional,
+not a player's number, but the per-fragment cost moved by about the light count.
 
 ## 4. Findings, ranked
 
@@ -319,8 +323,10 @@ regardless.
 **Fix:** cut `SHOT_LIGHT_COUNT`, replace the per-door glow with an emissive quad, and keep the
 total fixed — which F1 needs anyway.
 
-**Status after §3b:** the total is fixed, at 35. Cutting it is still open, and is now a pure
-throughput question rather than a stutter one.
+**Status after §3b:** the total is fixed, and then cut to 25 by claiming door glows per attach
+instead of per lifetime and sizing every pool to its measured ceiling plus one
+(`tests/unit/lighting-pool.test.ts` pins the ceilings). The emissive-quad replacement for the
+glows is the remaining lever, and it is a visual change that needs its own sign-off.
 
 ### F8 — One draw call per standing body, and 113 separate sprite textures
 
@@ -414,3 +420,9 @@ yields are hardware-independent and make excellent gates. Suggested `tests/perf/
 - draw calls per frame under a ceiling for a reference room and a reference body count (F3/F8).
 
 Do **not** gate on SwiftShader timings — they are not representative. Gate on the work.
+
+**Status:** landed with §3b's follow-up as the "room-crossing gate" CI job — `npm run
+perf:crossings` runs `tools/perf/room-crossings.mjs walk 12 --gate` against the dev server in
+headless Chromium and fails on any `linkProgram` after the run's first crossing or more than 40
+programs held. The geometry/texture-growth and draw-call ceilings above are still open; the
+harness already records the numbers, so they are a threshold each, not new plumbing.

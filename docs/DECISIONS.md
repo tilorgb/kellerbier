@@ -4276,15 +4276,35 @@ into the live room's shadow map on the first frame of a floor — and the warm n
 whenever a shadow re-render is pending, since drawing lit materials before any shadow map exists
 binds an empty colour texture to a shadow sampler (a driver warning per draw).
 
-**What this costs and constrains.** `numPointLights` is now a constant 35 for every lit fragment
-(1 + 8 + 12 + 6 + 8), up from a varying 16–26 — F7's per-fragment loop, made larger and made
-fixed. That is the right trade for a stutter (a relink of every shader is hundreds of milliseconds;
-nine more loop iterations at 640×360 is not measurable) and the pools can be trimmed later as a
-pure throughput change. Anything that adds a light to the game adds it to `Lighting`'s
-constructor and a pool, never to a scene-graph node it owns — `tests/unit/lighting-pool.test.ts`'s
-`GameView` case is what fails if it does. Anything that changes a program-key input mid-run (a
-second shadow-casting light, tone mapping, a render-target pass) re-opens both rules and needs
-re-measuring with the harness in `tools/perf/room-crossings.mjs`.
+**What this costs and constrains.** `numPointLights` is a constant for every lit fragment — F7's
+per-fragment loop, made fixed. The first cut of this fixed it at 35 (1 lantern + 8 shot lights +
+12 door glows + 6 bulbs + 8 prop lights), up from a varying 16–26: the right trade for a stutter
+(a relink of every shader is hundreds of milliseconds; nine more loop iterations at 640×360 is
+not), and the pools were then sized to what is actually measured rather than padded. A door now
+claims its glow while its room is *on screen* (`Scenery.attach` claims, `detach` returns) instead
+of for its lifetime, so the glow pool covers the two rooms a slide draws rather than every room
+`SceneryCache` holds — the worst adjacent pair across 300 generated floors totals 9 doors, so
+`MAX_DOOR_GLOWS` is 10; bulbs are 3 (the unauthored default is two, authored content uses one);
+prop lights are 3 (one pedestal per authored room, one machine per floor, a spare). **25 point
+lights**, and under SwiftShader — directional only, as always — a settled room went from 4.2 to
+5.5 frames per second, a 30% cheaper lit fragment. `tests/unit/lighting-pool.test.ts` pins each
+pool to its measurement so content growth trips a test rather than a silent dark door. The
+audit's other F7 lever — replacing the glow lights with emissive quads — is a visual change and
+stays open for a sign-off round. Anything that adds a light to the game adds it to `Lighting`'s
+constructor and a pool, never to a scene-graph node it owns — the `GameView` case in that test is
+what fails if it does. Anything that changes a program-key input mid-run (a second shadow-casting
+light, tone mapping, a render-target pass) re-opens both rules and needs re-measuring with the
+harness in `tools/perf/room-crossings.mjs`.
+
+**The gate.** The same harness runs in CI as the "room-crossing gate" job (`npm run
+perf:crossings`): headless Chromium on SwiftShader against the dev server, twelve real door
+crossings, failing on any `linkProgram` after the run's first crossing or a program count above
+40. The audit deferred this as its own piece of infrastructure (#79); it is here because the
+relink came back twice after being fixed once, and nothing in the unit suite can see it — it lives
+between three.js's program cache and the driver. It gates on the work (calls, counts), never on a
+SwiftShader frame time. The run's *first* crossing is allowed a link or two: a shape nothing has
+drawn yet (a fading corpse, a room prop no other room has) links once per renderer lifetime and
+is pinned from then on.
 
 **Rejected:** compiling asynchronously (`KHR_parallel_shader_compile` / `renderer.compileAsync`)
 instead — it would hide the link on drivers that have it and leave the relink itself in place;

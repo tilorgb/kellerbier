@@ -99,9 +99,13 @@ export class DoorPiece {
   private readonly lighting: Lighting;
   private readonly materials: MaterialCache;
   /**
-   * Claimed from `Lighting`'s fixed pool (`docs/PERFORMANCE_AUDIT.md` F1) —
-   * `null` only if the pool is exhausted (`docs/DECISIONS.md` #19: the door
-   * just doesn't glow). Released in `dispose`.
+   * Claimed from `Lighting`'s fixed pool (`docs/PERFORMANCE_AUDIT.md` F1) for
+   * as long as this door's room is on screen — `setLive(true)` claims,
+   * `setLive(false)` and `dispose` return it — and `null` in between, or if
+   * the pool is exhausted (`docs/DECISIONS.md` #19: the door just doesn't
+   * glow). Claiming per attach rather than per lifetime is what lets the
+   * pool be sized for the two rooms a slide draws instead of every room
+   * `SceneryCache` holds (`MAX_DOOR_GLOWS`).
    *
    * Never a child of `group`: it stays at the scene root, where `Lighting`
    * put it, and `placeGlow` moves it to the door's world position instead.
@@ -110,13 +114,16 @@ export class DoorPiece {
    * inside it, three.js counts only the lights it can traverse to, and every
    * lit shader relinked on the count (`docs/DECISIONS.md` #80).
    */
-  private glow: PointLight | null;
+  private glow: PointLight | null = null;
   /** Where the glow's local `(0, 10, -t/2)` lands in room space once the door's rotation is applied. */
   private readonly glowX: number;
   private readonly glowZ: number;
   /** Whether this door's room is on screen — a cached, detached room's doors must not light the live one. */
   private live = false;
   private pulseStrength = 0;
+  /** The room group's current slide shift, so a glow claimed mid-slide lands in the right place. */
+  private roomOffsetX = 0;
+  private roomOffsetZ = 0;
   private readonly span: number;
   private readonly doorHeight: number;
   private state: DoorState = 'closed';
@@ -193,14 +200,12 @@ export class DoorPiece {
     const facing = DOOR_FACING[door.direction];
     this.glowX = centreX - (t / 2) * Math.sin(facing);
     this.glowZ = centreZ - (t / 2) * Math.cos(facing);
-    this.glow = lighting.acquireDoorGlow();
-    this.placeGlow(0, 0);
 
     this.buildLeaves();
     this.setState('closed');
   }
 
-  /** The pooled passage light behind this door, or `null` when the pool was exhausted. */
+  /** The pooled passage light behind this door while its room is on screen; `null` off screen or when the pool was exhausted. */
   get glowLight(): PointLight | null {
     return this.glow;
   }
@@ -211,19 +216,32 @@ export class DoorPiece {
    * room is the outgoing one (`Scenery.setOffset`).
    */
   placeGlow(roomOffsetX: number, roomOffsetZ: number): void {
+    this.roomOffsetX = roomOffsetX;
+    this.roomOffsetZ = roomOffsetZ;
     if (this.glow !== null) {
       this.glow.position.set(this.glowX + roomOffsetX, 10, this.glowZ + roomOffsetZ);
     }
   }
 
   /**
-   * Whether this door's room is currently attached to the scene. Off, the
-   * glow is dark whatever `setState`/`setPulse` say — the light itself never
-   * leaves the scene, so this is what keeps a cached room's open doors from
-   * lighting the room actually on screen.
+   * Whether this door's room is currently attached to the scene. Going live
+   * claims a glow from the pool and lights it per the door's state; going
+   * dark returns it. The light itself never leaves the scene either way, so
+   * the count holds, and a cached room's open doors cannot light the room
+   * actually on screen.
    */
   setLive(live: boolean): void {
+    if (live === this.live) {
+      return;
+    }
     this.live = live;
+    if (live) {
+      this.glow = this.lighting.acquireDoorGlow();
+      this.placeGlow(this.roomOffsetX, this.roomOffsetZ);
+    } else {
+      this.lighting.releaseDoorGlow(this.glow);
+      this.glow = null;
+    }
     this.applyGlow();
   }
 
@@ -355,12 +373,13 @@ export class DoorPiece {
 
   dispose(): void {
     this.disposeLeaves();
+    // Returns the glow if the room was still on screen. Forgotten as well as
+    // released: the pool hands the same light to the next door that goes
+    // live, and a late `setPulse` on this disposed piece must not reach into
+    // that door's light.
     this.lighting.releaseDoorGlow(this.glow);
-    // Forgotten, not just released: the pool hands the same light to the
-    // next door built, and a late `setLive`/`setPulse` on this disposed
-    // piece (a floor change detaches the old slide's room after disposing
-    // the whole cache) must not reach into that door's light.
     this.glow = null;
+    this.live = false;
     disposeMeshes(this.group);
     this.group.removeFromParent();
   }

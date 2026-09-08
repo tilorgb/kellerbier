@@ -71,32 +71,34 @@ export const SHOT_LIGHT_COUNT = 8;
 /**
  * How many door glows can be lit across the whole scene at once.
  *
- * A `DoorPiece` owns one for its whole lifetime (constructed with the door,
- * released when the door is disposed). Two things can hold doors at once:
- * the room-transition slide (the outgoing room, mid-slide, alongside the
- * incoming one), and — since #293 — `SceneryCache` keeping up to
- * `SCENERY_CACHE_CAPACITY` recently-visited rooms' whole `Scenery` alive
- * (doors included) so a revisit rebuilds nothing. Measured across 300
- * generated floors on both authored floor tags
- * (`tests/unit/lighting-pool.test.ts` pins the measurement), the worst room
- * had 5 doors and the 4+ case was under 1% of rooms; typical is 1–3. 12
- * covers `SCENERY_CACHE_CAPACITY` (4) cached rooms at 3 doors each with
- * headroom for the slide's extra room on top — a deliberately larger
- * constant than tier 1 alone would have wanted (every point light is a
- * per-fragment loop iteration — see F7), traded for not rebuilding a cached
- * room's doors just to keep the pool small. Overflow beyond that still
- * degrades gracefully — `acquireDoorGlow` returns `null` and the door just
- * doesn't glow (`docs/DECISIONS.md` #19) — rather than reintroducing the
- * count churn this pool exists to remove.
+ * A `DoorPiece` claims one while its room is *on screen* — `Scenery.attach`
+ * hands the room's doors their glows, `detach` takes them back — so the pool
+ * only has to cover the rooms three.js is actually drawing: the room being
+ * played and, for the ~1 s of the transition slide, the room just left. (Before
+ * #80's follow-up a door held its glow for its whole lifetime, so #293's
+ * `SceneryCache` kept up to four off-screen rooms' worth of glows claimed and
+ * the pool had to be 12; a cached room's glows are dark anyway.) Measured
+ * across 300 generated floors on both authored floor tags
+ * (`tests/unit/lighting-pool.test.ts` pins the measurement), the worst single
+ * room has 5 doors and the worst *adjacent pair* — the two rooms a slide holds
+ * — totals 9, in 34 of 22,000 pairs; 8 or more is under 2%. 10 covers the
+ * worst pair with one spare. Every point light is a per-fragment loop
+ * iteration in every lit shader (F7), so this is sized to the measurement, not
+ * padded. Overflow still degrades gracefully — `acquireDoorGlow` returns `null`
+ * and that door just doesn't glow for the slide (`docs/DECISIONS.md` #19) —
+ * rather than reintroducing the count churn this pool exists to remove.
  */
-export const MAX_DOOR_GLOWS = 12;
+export const MAX_DOOR_GLOWS = 10;
 
 /**
  * How many bulb rigs (light + glass + cord) a cellar room can light at once.
  * Authored content has never used more than one `bulb` prop; the unauthored
- * default is two. 6 is headroom for content growth, not a measured ceiling.
+ * default (`defaultBulbs`) is two. 3 is that plus one spare — trimmed from 6
+ * in #80's follow-up, since every slot is a per-fragment loop iteration in
+ * every lit shader whether or not a bulb hangs there (F7). A room that asks
+ * for more gets its first three lit and a one-time dev warning.
  */
-export const MAX_ROOM_BULBS = 6;
+export const MAX_ROOM_BULBS = 3;
 
 /**
  * How many prop lights — the white beam over an item pedestal
@@ -107,11 +109,12 @@ export const MAX_ROOM_BULBS = 6;
  * subtree, so `numPointLights` — a `#define` in every lit shader, and part of
  * every program's cache key — changed with the room's pedestal count, and the
  * whole lit program set relinked on the crossing (`docs/DECISIONS.md` #80).
- * Authored rooms place at most one pedestal; a shop lays out a few. 8 is
- * headroom, not a measured ceiling; overflow degrades the same way a door
- * glow's does — the beam just casts no light.
+ * Authored rooms place at most one pedestal (`tests/unit/lighting-pool.test.ts`
+ * measures it) and a floor has at most one machine, so 3 is both plus one
+ * spare; overflow degrades the same way a door glow's does — the beam just
+ * casts no light.
  */
-export const MAX_PROP_LIGHTS = 8;
+export const MAX_PROP_LIGHTS = 3;
 
 const BULB_HEIGHT = 34;
 const CLOUD_HEIGHT = 90;
