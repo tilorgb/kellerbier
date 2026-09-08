@@ -2942,10 +2942,18 @@ same as every other `SimTuning` value.
 
 **Rule 1: never trap the player.** The centre is not special-cased — it can be blocked like
 anything else. The player only ever *enters* a generated room through a door, landing in the
-never-solid wall-margin ring; `carveDoorMouths` clears the one tile inside each door, a BFS
-from that mouth proves every other door is reachable, and `fillUnreachedPockets` seals any
-pocket so the whole walkable area is one region. Props are additionally route-checked (a barrel
-that would plug a one-tile gap is rejected); hazards are walk-through. `tests/content/
+never-solid wall-margin ring; a BFS from that ring tile is what `fillUnreachedPockets` uses to
+seal any pocket, so the whole walkable area is one region. **Nothing is carved open in front of
+a door**: the tile straight ahead of where the player lands may be solid, so a room can meet
+them with a wall in their face and a step to take left or right — zero tiles of forward
+clearance is an ordinary shape, not a defect, and about one door in ten has it at the
+checked-in tuning. `hasBoxedInDoor` hard-rejects only the layout where *all three* interior
+tiles at a door (ahead, left, right) are walls at once, since then the door opens onto nothing
+but the margin lane. That check has to be pinned to those three tiles rather than to the
+neighbours of the landing tile itself: the ring runs unbroken around every cell, so a landing
+tile's own left and right are always open and asking about them says nothing. Props are
+additionally route-checked (a barrel that would plug a one-tile gap costs the walkable region
+more than its own tile, and is rejected); hazards are walk-through. `tests/content/
 generated-room.test.ts` re-derives all of this on the *compiled* geometry with the real player
 radius.
 
