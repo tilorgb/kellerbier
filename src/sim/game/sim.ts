@@ -275,6 +275,14 @@ const PEDESTAL_RADIUS = 8;
 const LOSBRUNNEN_OFFSET_X = 36;
 const LOSBRUNNEN_OFFSET_Y = 0;
 
+/**
+ * How far a mini-boss's consolation bundle (#278) spreads its three pickups
+ * from the missed pedestal's own spot — enough that a half-Maß, a Biermarke
+ * and a Kellerschlüssel read as three separate things on the floor rather
+ * than one stack, small enough that all three are still an obvious group.
+ */
+const MINIBOSS_CONSOLATION_SPREAD = 14;
+
 /** Move-axis magnitude (of `AXIS_RESOLUTION`'s 127) that counts as a deliberate directional tap for the Losbrunnen's picker — `machineTapSign`. */
 const MACHINE_AXIS_TAP_THRESHOLD = 40;
 
@@ -476,10 +484,10 @@ function pedestalPoolForRole(role: RoomSpecialRole | undefined): ItemPoolId {
     case 'secret':
     case 'supersecret':
       return 'secret';
-    // A mini-boss room authors no pedestal today — its reward is #275's
-    // Kellerschlüssel, which is a pickup, not a pedestal item. Listed anyway
-    // so the day one does, it draws from the same pool a treasure room does
-    // rather than silently inheriting whatever `default` happened to be.
+    // A mini-boss room's own pedestal (#278) draws from the same pool a
+    // treasure room does — a lower-odds, held-back item roll on top of
+    // #275's Kellerschlüssel, which is a separate pickup, not a pedestal
+    // item.
     case 'miniboss':
     case 'treasure':
     case 'shop':
@@ -1291,6 +1299,21 @@ export class GameSim {
    */
   private pendingMinibossKey: { readonly x: number; readonly y: number } | null = null;
   /**
+   * Where a mini-boss's own pedestal roll (#278) will resolve once its room
+   * clears — the exact `pendingMinibossKey` shape and reasoning, populated
+   * by `restoreOrSpawnRoomLoot` from the room's own authored `pedestal` prop
+   * (same field every other room's pedestal is authored with) rather than
+   * spawned eagerly the moment the room loads, for the same "the reward
+   * shouldn't already be standing there during the fight" reason a boss
+   * room's `pendingBossPedestals` is held back. Drained by `step`'s
+   * room-clear check the tick the fight ends — a 40%/20% item roll
+   * (`tuning.minibossReward`) rather than an unconditional spawn, since
+   * unlike a boss or treasure pedestal a mini-boss's is not guaranteed to
+   * hold anything (a miss pays the consolation bundle instead, never both).
+   * Reset to `null` on every room load, same as `pendingMinibossKey`.
+   */
+  private pendingMinibossPedestal: { readonly x: number; readonly y: number } | null = null;
+  /**
    * Whether this floor gets a Losbrunnen at all — rolled once per floor
    * entry (`applyCompiledRoom`'s "new floor" guard, alongside
    * `rollFloorCurse`) from `random.items`, so the decision is fixed the
@@ -1307,6 +1330,26 @@ export class GameSim {
    * alongside `floorHasLosbrunnen` on every new floor.
    */
   private losbrunnenClaimedThisFloor = false;
+  /**
+   * Whether *some* mini-boss room has already cleared this floor — #278's
+   * XL-floor fix for the gap #76 flagged as future work ("a key with
+   * nothing to unlock is a small lie to the player about what keys are").
+   *
+   * `step`'s room-clear drain of `pendingMinibossKey`/`pendingMinibossPedestal`
+   * reads this to decide whether the clear in progress is the floor's
+   * "first" mini-boss (guaranteed key, `firstItemChance`) or a "second" one
+   * (no key, `secondItemChance`), then sets it. A plain boolean is exact,
+   * not a simplification: that drain only ever runs once per distinct
+   * `roomId` (`roomClearedIds` blocks every later clear of the same
+   * physical room — a Blutwurz, #84, spirit walk re-fighting an
+   * already-cleared mini-boss room finds its *original*, still-uncollected
+   * key restored from `roomLootSnapshots` instead, #76's own "cleared rooms
+   * repopulate" rule, never a second pass through this drain), so this can
+   * only ever transition false-to-true once per floor, never need to tell
+   * one *room* apart from another. Reset alongside `floorHasLosbrunnen` on
+   * every new floor.
+   */
+  private minibossKeyGrantedThisFloor = false;
   /** The current floor's Losbrunnen, once it has actually spawned — see `MachineRuntime`. */
   private machineRuntime: MachineRuntime | null = null;
   /**
@@ -1971,6 +2014,20 @@ export class GameSim {
    * `entryCell` (so the player lands on the correct sub-room's wall when
    * walking in through a specific door, not always the room's first cell).
    * Both default to the single-cell case, which is every `1x1` room.
+   *
+   * `roomInstanceId` — the floor plan's own per-slot id for the room being
+   * loaded (`FloorPlanRoom.id`), when the caller has one. `roomId` (and so
+   * `roomClearedIds`/`roomLootSnapshots`) otherwise falls back to the
+   * *template's* own authored id (`compiled.source.id`), which two physical
+   * rooms share whenever they draw the same template — harmless across a
+   * floor boundary (`clearFloorProgress` wipes the tracking every floor
+   * advance) but not within one: an XL floor's two mini-boss slots (#271)
+   * draw from the same one-template-per-floor-tag pool today, so without a
+   * caller-supplied instance id they'd collide and the second room would
+   * read as pre-cleared — no fight, no key, no reward — the instant the
+   * first one is. `app/main.ts` passes the floor plan's own room id on every
+   * real load; a caller with no floor plan (a unit test, the room editor)
+   * gets the old template-id behaviour, which is exactly right for it.
    */
   loadRoom(
     template: unknown,
@@ -1980,6 +2037,7 @@ export class GameSim {
     placement?: RoomPlacement,
     entryCell: { readonly col: number; readonly row: number } = { col: 0, row: 0 },
     suppressContent = false,
+    roomInstanceId?: string,
   ): void {
     const compiled = compileRoomTemplate(
       template,
@@ -1997,7 +2055,7 @@ export class GameSim {
     this.applyCompiledRoom(
       {
         geometry: compiled.geometry,
-        id: compiled.source.id,
+        id: roomInstanceId ?? compiled.source.id,
         specialRole: compiled.source.metadata.specialRole,
         doors: compiled.doors,
         enemySpawns: suppressContent ? [] : compiled.enemySpawns,
@@ -2039,6 +2097,10 @@ export class GameSim {
    * it. `force` skips both of those checks for the handful of callers that
    * aren't a real player walking (`app/main.ts`'s `N` floor-tour shortcut) —
    * never for a live door-contact poll.
+   *
+   * `roomInstanceId` is `loadRoom`'s own parameter, forwarded through —see
+   * its doc comment for why a caller with a floor plan should always pass
+   * the destination room's own `FloorPlanRoom.id`.
    */
   transitionTo(
     template: unknown,
@@ -2048,6 +2110,7 @@ export class GameSim {
     placement?: RoomPlacement,
     entryCell?: { readonly col: number; readonly row: number },
     force = false,
+    roomInstanceId?: string,
   ): boolean {
     if (!this.roomTemplateLoaded || this.doorsLocked || !this.hasDoor(direction)) {
       return false;
@@ -2097,7 +2160,16 @@ export class GameSim {
       this.bossDoorGated = false;
     }
     this.roomClearedIds.add(this.roomId);
-    this.loadRoom(template, floor, direction, hiddenDoors, placement, entryCell);
+    this.loadRoom(
+      template,
+      floor,
+      direction,
+      hiddenDoors,
+      placement,
+      entryCell,
+      false,
+      roomInstanceId,
+    );
     return true;
   }
 
@@ -2248,6 +2320,7 @@ export class GameSim {
     this.pedestalList = [];
     this.pendingBossPedestals = [];
     this.pendingMinibossKey = null;
+    this.pendingMinibossPedestal = null;
     // Reset unconditionally, like `pedestalList` above — `restoreOrSpawnRoomLoot`,
     // called right after this, is what actually repopulates it (from a
     // snapshot, by spawning straight into a shop, or by pushing a fresh
@@ -2304,6 +2377,9 @@ export class GameSim {
       // decided by whichever the player reaches first, not here — this
       // just clears last floor's claim.
       this.losbrunnenClaimedThisFloor = false;
+      // #278: nobody has fought either of this floor's (up to two)
+      // mini-bosses yet — see the field's own doc comment.
+      this.minibossKeyGrantedThisFloor = false;
       this.machineRuntime = null;
       this.pendingBossLosbrunnen = null;
       this.machinePreviewItemId = null;
@@ -2561,6 +2637,13 @@ export class GameSim {
           this.pendingBossLosbrunnen = { x: machineSpot.x, y: machineSpot.y };
           this.losbrunnenClaimedThisFloor = true;
         }
+      } else if (this.roomSpecialRole === 'miniboss' && this.roomEnemyCount > 0) {
+        // Held back the same way, and for the same reason, as the boss's own
+        // reward — `pendingMinibossPedestal`'s doc comment. Never a
+        // Losbrunnen host (#278's own explicit call-out: a third home turns
+        // a chance encounter into furniture) — only `pendingBossLosbrunnen`
+        // above ever claims `floorHasLosbrunnen`.
+        this.pendingMinibossPedestal = { x: safe.x, y: safe.y };
       } else {
         this.spawnPedestal(safe.x, safe.y);
       }
@@ -4206,6 +4289,27 @@ export class GameSim {
     });
   }
 
+  /**
+   * A mini-boss's guaranteed miss case (#278): a half-Maß, a Biermarke and a
+   * Kellerschlüssel, spread `MINIBOSS_CONSOLATION_SPREAD` apart around
+   * `(x, y)` and each nudged clear of a wall by `safeSpawnPoint` on its own.
+   * Costs the run nothing to receive and means a mandatory fight always
+   * resolves into *something* landing on the floor, never a bare miss —
+   * called only when the pedestal roll (`tuning.minibossReward`) misses;
+   * the two outcomes never both pay.
+   */
+  private spawnMinibossConsolationBundle(x: number, y: number): void {
+    const spots: readonly [string, number, number][] = [
+      ['mass-half', x - MINIBOSS_CONSOLATION_SPREAD, y],
+      ['biermarke-5', x + MINIBOSS_CONSOLATION_SPREAD, y],
+      ['kellerschluessel', x, y + MINIBOSS_CONSOLATION_SPREAD],
+    ];
+    for (const [pickupId, spotX, spotY] of spots) {
+      const safe = this.safeSpawnPoint(spotX, spotY, this.pickups.get(pickupId).radius);
+      this.spawnPickup(pickupId, safe.x, safe.y);
+    }
+  }
+
   /** Every pedestal in the current room, for rendering. Read-only — mutate through `takePedestalItem`. */
   get activePedestals(): readonly PedestalRuntime[] {
     return this.pedestalList;
@@ -5358,16 +5462,43 @@ export class GameSim {
       // Der Meisterschlüssel (#275) drops on the same held-until-clear tick,
       // for the same reason: the key that opens the boss door is the mini-
       // boss room's whole reward, and it should not be collectable before
-      // the fight it is the reward for is over.
-      if (this.pendingMinibossKey !== null) {
-        const spot = this.safeSpawnPoint(
-          this.pendingMinibossKey.x,
-          this.pendingMinibossKey.y,
-          this.pickups.get('meisterschluessel').radius,
-        );
-        this.spawnPickup('meisterschluessel', spot.x, spot.y);
-        rewardLocations.push({ x: spot.x, y: spot.y });
-        this.pendingMinibossKey = null;
+      // the fight it is the reward for is over. And its own pedestal roll
+      // (#278) resolves here too — both read `isFirstMiniboss` off
+      // `minibossKeyGrantedThisFloor` before setting it, so whichever
+      // mini-boss room the player reaches first this floor is the one that
+      // pays the guaranteed key and the higher item odds; a second,
+      // different mini-boss room (XL floors only, #271) drops no key at all
+      // and rolls the lower odds.
+      if (this.pendingMinibossKey !== null || this.pendingMinibossPedestal !== null) {
+        const isFirstMiniboss = !this.minibossKeyGrantedThisFloor;
+        this.minibossKeyGrantedThisFloor = true;
+        if (this.pendingMinibossKey !== null) {
+          if (isFirstMiniboss) {
+            const spot = this.safeSpawnPoint(
+              this.pendingMinibossKey.x,
+              this.pendingMinibossKey.y,
+              this.pickups.get('meisterschluessel').radius,
+            );
+            this.spawnPickup('meisterschluessel', spot.x, spot.y);
+            rewardLocations.push({ x: spot.x, y: spot.y });
+          }
+          this.pendingMinibossKey = null;
+        }
+        if (this.pendingMinibossPedestal !== null) {
+          const pending = this.pendingMinibossPedestal;
+          const itemChance = isFirstMiniboss
+            ? this.tuning.minibossReward.firstItemChance
+            : this.tuning.minibossReward.secondItemChance;
+          if (this.random.items.chance(itemChance)) {
+            this.spawnPedestal(pending.x, pending.y);
+          } else {
+            // The miss case still pays — a compulsory fight that hands back
+            // nothing is a tax (#278's own framing).
+            this.spawnMinibossConsolationBundle(pending.x, pending.y);
+          }
+          rewardLocations.push({ x: pending.x, y: pending.y });
+          this.pendingMinibossPedestal = null;
+        }
       }
       // Der Losbrunnen (#218) waits for the same tick — appearing mid-fight
       // would read as loot sitting out during a boss that hasn't dropped
