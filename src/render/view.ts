@@ -599,6 +599,9 @@ export class GameView {
     this.pedestals.sync();
     this.machine.sync();
     this.corpseView.sync(sim);
+    // Promille's damage bonus, on the shots themselves (#311) — pushed in
+    // here rather than read inside `ProjectileView`, which holds no `sim`.
+    this.projectiles.setShotHeat(sim.promilleShotHeat);
     this.projectiles.sync(alpha, sim.currentFloor);
     this.bombFlightView.sync(sim);
     this.particles.sync(alpha);

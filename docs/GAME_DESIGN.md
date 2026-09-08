@@ -271,17 +271,38 @@ A second meter beside health, measured in **Promille** (0.0 – 5.0) — and one
 does not meet on their first run. See *When it turns on*, below.
 
 **Going up:** drinking Maß pickups, certain items, boss rewards, some devil pacts.
-**Coming down:** time (slow, continuous decay), eating Wurst, water fountains, being hit.
+**Coming down:** **being hit** (the main one), eating Wurst, water fountains, and time — a slow,
+continuous bleed that a floor's own drops comfortably outrun.
+
+That ordering is deliberate and was got wrong once. Until #311 the clock was the *only* drain and
+it took 3.0 Promille a minute against a room that paid back about 0.09, so no amount of drinking
+moved the meter and every tier below was reachable only from the debug slider. A meter drained by
+the clock is a countdown the player cannot argue with; a meter drained by *being hit* is a running
+statement about how well they are playing. The damage bonus is held by not getting hit, which is
+what makes drinking a decision rather than a timer.
 
 ### Tiers
 
 | Tier | Promille | Effect |
 |---|---|---|
 | **Nüchtern** (sober) | 0.0 – 0.4 | Baseline. A few items *require* this — precision builds live here. |
-| **Angeheitert** (tipsy) | 0.5 – 1.4 | +15% damage, +10% fire rate. Very slight camera sway. The sweet spot. |
-| **Beduselt** (drunk) | 1.5 – 2.9 | +35% damage, +25% fire rate. Movement has drift and momentum; aim wobbles. |
-| **Vollrausch** | 3.0 – 4.4 | +70% damage, +50% fire rate. Heavy drift, screen sway, aim wander. Rausch-tier item effects activate. |
+| **Angeheitert** (tipsy) | 0.5 – 1.4 | +25% damage, +12% fire rate. Very slight camera sway. The sweet spot. |
+| **Beduselt** (drunk) | 1.5 – 2.9 | +60% damage, +30% fire rate. Movement has drift and momentum; aim wobbles. |
+| **Vollrausch** | 3.0 – 4.4 | +120% damage, +55% fire rate. Heavy drift, screen sway, aim wander. Rausch-tier item effects activate. |
 | **Umgfalln** | 4.5+ | You fall over. Brief invulnerable knockdown, then you wake at 1.5 with a **Kater**. |
+
+The bonuses were raised across the board by #311. The old ones (+15/+35/+70% damage) were written
+for a meter nobody could reach, and read as nothing when they did land — +15% of a 3 DPS base gun
+is one point of damage, against a tier that already costs the player camera sway. A first Maß is
+now worth about 1.4× DPS and Vollrausch about 3.4×, which is the trade the penalties are asking to
+be paid for: by Vollrausch the aim wobble alone is throwing away a good share of the shots, and
+the next Maß is a knockdown.
+
+**And the reward is on the shots.** Player projectiles brighten as the meter climbs and read as
+burning at the top — the tint, an additive glow and the light each shot throws all ramp off the
+same value the HUD bar shows. Before #311 every one of Promille's *penalties* was on screen (sway,
+drift, wobble, a reddening vignette) and its payoff lived in a stat panel; a player could see the
+whole cost of being drunk and none of the point of it.
 
 **Kater (hangover)** is the punish: a timed debuff that drops damage and speed until you eat
 something. It is survivable and it is your own fault, which is the correct emotional note.
@@ -325,6 +346,8 @@ missing. It has to be complete on its own terms, which is mostly a drop-table qu
 - It splits the item pool into sober / drunk / agnostic, which multiplies synergy space at
   almost no authoring cost.
 - The control degradation is a real skill tax, so the damage bonus is earned rather than free.
+- Because a hit costs Promille, the meter doubles as a "how clean is this run" readout: a player
+  who is playing well is visibly hitting harder, and a mistake takes that away as well as health.
 - It is funny.
 
 ### Non-negotiable guardrails

@@ -394,8 +394,38 @@ export interface EnemyTuning {
 export interface PromilleTuning {
   /** Current Promille, 0–5. The debug slider drives this field directly. */
   current: number;
-  /** Promille lost per second, pure time decay — no eating/water/being-hit yet (#31). */
+  /**
+   * Promille lost per second to time alone.
+   *
+   * Deliberately a *slow bleed* rather than the meter's main drain (#311).
+   * At the pre-#311 `0.05` the clock took 3.0 Promille a minute while a
+   * cleared room paid back about `0.09` — the meter lost between sixteen and
+   * thirty times what a room could give it, so no amount of drinking moved
+   * it and every tier above Nüchtern was reachable only from the debug
+   * slider. The number that fixes that is not "a bit smaller": it has to sit
+   * below what a floor actually drops, or the mechanic is a countdown the
+   * player cannot play against.
+   *
+   * What takes Promille away instead is `hitPromilleLoss` — a mistake, which
+   * a player *can* play against — and eating (`lowerPromille`, Brezn/Obazda/
+   * Radi), which is a choice. `docs/GAME_DESIGN.md` §5 always listed all
+   * three; only the clock was ever implemented.
+   */
   decayPerSecond: number;
+  /**
+   * Promille knocked off by taking a hit (#311) — the drain the design doc
+   * has always listed ("Coming down: time, eating Wurst, water fountains,
+   * being hit") and nothing ever implemented.
+   *
+   * This is what makes the meter a decision rather than a timer. The bonus
+   * tiers are held by not getting hit, so the damage a player is carrying is
+   * a running statement about how well they are playing — and losing it
+   * hurts twice, once in health and once in the thing that was killing
+   * rooms quickly. Applied in `GameSim.applyPlayerDamage`, the one
+   * chokepoint every landed hit passes through, so contact, projectiles,
+   * hazards and a boss's slam all cost the same.
+   */
+  hitPromilleLoss: number;
   /**
    * Promille one full/half Maß pickup adds — the only alcohol pickups in the
    * game (#health-food-redesign). Sized for realism against `PROMILLE_MAX`
@@ -403,6 +433,9 @@ export interface PromilleTuning {
    * 4.0, deep in Vollrausch and about as drunk as a run gets on purpose; a
    * fifth crosses 4.5 and triggers Umgfalln — "four full Maß to properly
    * drunk, one more and you're knocked out."
+   *
+   * The half is deliberately *not* exactly half — see its own comment in
+   * `DEFAULT_PROMILLE_TUNING`.
    */
   massFullAmount: number;
   massHalfAmount: number;
@@ -485,6 +518,20 @@ export interface PromilleTuning {
   maxScreenDistortion: number;
   /** Ticks per full distortion pulse — fast and separate from sway/wobble's own periods, so it reads as a flicker, not another drift. */
   screenDistortionPeriodTicks: number;
+
+  /**
+   * How hot the player's shots run at the top of the meter (#311) — the
+   * reward's own readout, opposite every penalty above.
+   *
+   * Promille showed the player its whole cost (sway, drift, wobble, a
+   * reddening vignette) and none of its payoff: the damage bonus lived in a
+   * stat panel. This is the ramp `render/projectiles.ts` spends on tint,
+   * glow and the shot's point light, so a Vollrausch shot *looks* like it
+   * hits harder than a sober one. A dial rather than a constant in the
+   * renderer so it is inspectable next to the numbers it is drawing, and so
+   * `0` turns the whole effect off without touching the damage it reflects.
+   */
+  maxShotHeat: number;
 
   /** How long the Umgfalln knockdown holds the player still and invulnerable. */
   umgfallnKnockdownTicks: number;
@@ -1022,14 +1069,33 @@ export const DEFAULT_ENEMY_TUNING: Readonly<EnemyTuning> = {
 
 export const DEFAULT_PROMILLE_TUNING: Readonly<PromilleTuning> = {
   current: 0,
-  decayPerSecond: 0.05,
+  // 0.36 Promille a minute, down from 3.0 (#311). Sized against what a
+  // cleared room actually pays after this pass's drop-table change (~0.24
+  // Promille for a room the player hoovers) over the 30-60 s a room takes:
+  // roughly 0.18 lost to the clock against 0.24 gained, so a player who
+  // clears rooms and picks the beer up climbs slowly, and one who dawdles or
+  // gets hit does not. The old 0.05 lost 1.5-3.0 over the same room, which
+  // is why the meter never moved.
+  decayPerSecond: 0.006,
+  // A little under a half-Maß, so one hit reads on the bar as clearly as one
+  // drink does — enough that losing a tier to a mistake is a real event, not
+  // enough that a single unlucky contact wipes a floor's worth of drinking.
+  hitPromilleLoss: 0.4,
   // Realistic-scale replacement for the old beer-pickup amounts
   // (health-food-redesign): four full Maß (4 x 1.0 = 4.0) sits deep in
   // Vollrausch (>= 3.0) without reaching Umgfalln — "properly drunk" — and a
   // fifth (5.0) crosses `umgfallnThresholdFor`'s baseline 4.5 and knocks the
   // player out, matching `PROMILLE_MAX` exactly. Half a Maß is half that.
   massFullAmount: 1.0,
-  massHalfAmount: 0.5,
+  // 0.6, not the arithmetic half (#311). `ANGEHEITERT_AT` is exactly 0.5, so
+  // a half-Maß used to land precisely *on* the first tier boundary and decay
+  // back out of it on the very next tick — the pickup bought about one tick
+  // of Angeheitert, which is indistinguishable from it having done nothing.
+  // A drink has to clear the boundary it is meant to cross. The full Maß
+  // keeps its exact 1.0, so the realism sizing the field's own comment
+  // describes ("four full Maß to properly drunk, one more and you're knocked
+  // out") is unchanged.
+  massHalfAmount: 0.6,
 
   // Baseline — see the field's own doc comment for why this has to be 0.
   trinkfest: 0,
@@ -1039,19 +1105,28 @@ export const DEFAULT_PROMILLE_TUNING: Readonly<PromilleTuning> = {
   // stat stick.
   trinkfestStageWidth: 1.0,
 
-  angeheitertDamageBonus: 0.15,
-  angeheitertFireRateBonus: 0.1,
-  beduseltDamageBonus: 0.35,
-  beduseltFireRateBonus: 0.25,
-  vollrauschDamageBonus: 0.7,
-  vollrauschFireRateBonus: 0.5,
+  // Raised across the board by #311. The old numbers (0.15/0.35/0.7 damage)
+  // were written for a meter nobody could reach, and read as nothing when
+  // they did land: +15% of a 3 DPS base gun is one point of damage, against
+  // a tier that already costs the player camera sway. These are sized so
+  // that the *first* drink is felt (Angeheitert is ~1.4x DPS) and the top of
+  // the shipping ladder is a different character to play (Vollrausch is
+  // ~3.4x DPS) — which is the trade the penalties are asking to be paid for:
+  // by Vollrausch the aim wobble alone is throwing away a good share of the
+  // shots, and the next Maß is a knockdown.
+  angeheitertDamageBonus: 0.25,
+  angeheitertFireRateBonus: 0.12,
+  beduseltDamageBonus: 0.6,
+  beduseltFireRateBonus: 0.3,
+  vollrauschDamageBonus: 1.2,
+  vollrauschFireRateBonus: 0.55,
   // Meaningfully past Vollrausch's own numbers (#92's "unlocks higher damage
   // than the current Vollrausch ceiling"), each stage a clear step up from
   // the last — the whole point of paying for Trinkfest.
-  sturzbesoffenDamageBonus: 1.0,
-  sturzbesoffenFireRateBonus: 0.65,
-  filmrissDamageBonus: 1.4,
-  filmrissFireRateBonus: 0.8,
+  sturzbesoffenDamageBonus: 1.7,
+  sturzbesoffenFireRateBonus: 0.7,
+  filmrissDamageBonus: 2.2,
+  filmrissFireRateBonus: 0.85,
 
   maxDrift: 0.6,
   // Measured against a Normal enemy (radius 7, `src/sim/enemy/size.ts`) at a
@@ -1079,6 +1154,11 @@ export const DEFAULT_PROMILLE_TUNING: Readonly<PromilleTuning> = {
   maxScreenDistortion: 1,
   // Fast relative to sway (220) and wobble (145) — a flicker, not a drift.
   screenDistortionPeriodTicks: 50,
+
+  // Full heat at the baseline Umgfalln threshold — see `promilleShotHeat`.
+  // 1 rather than something smaller because the renderer decides how much of
+  // it to spend on each channel; this is "how hot can a shot get at all".
+  maxShotHeat: 1,
 
   umgfallnKnockdownTicks: 90,
   umgfallnWakePromille: 1.5,

@@ -31,6 +31,7 @@ function outcome(overrides: Partial<PlaytestOutcome>): PlaytestOutcome {
     damageTaken: 10,
     floors: [],
     promilleTierTicks: {},
+    peakPromille: 0,
     ...overrides,
   };
 }

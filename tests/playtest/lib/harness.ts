@@ -4,6 +4,7 @@ import { GameSim } from '../../../src/sim/game/sim.js';
 import type { FloorPlan } from '../../../src/sim/room/floor-plan.js';
 import { RngStream, createStreamRng } from '../../../src/sim/rng/streams.js';
 import { doorCentre } from '../../../src/sim/room/template.js';
+import { umgfallnThresholdFor } from '../../../src/sim/game/promille.js';
 import { combatInput, moveTowardInput, type SkillProfile } from './bot.js';
 import {
   buildFloorPlan,
@@ -101,6 +102,16 @@ export interface PlaytestOutcome {
    * comment on why only a crash fails the build).
    */
   readonly promilleTierTicks: Readonly<Record<string, number>>;
+  /**
+   * The highest Promille the run ever reached (#311).
+   *
+   * `promilleTierTicks` says where the meter *lived*; this says how far it
+   * ever got, which is the different question "is the top of the ladder
+   * reachable at all" — a run that touched Vollrausch once before a hit
+   * knocked it back down reads as 0% Vollrausch in the distribution and is
+   * not the same run as one that never came close.
+   */
+  readonly peakPromille: number;
 }
 
 /** ~20 minutes of ticks at 60 tps — generous against #54's own "about fifteen minutes" target for a full two-floor run. */
@@ -151,6 +162,53 @@ function minibossKeyOnFloor(sim: GameSim): { x: number; y: number } | null {
   return found;
 }
 
+/**
+ * The nearest Maß lying on the cleared room's floor, or `null`.
+ *
+ * #311 needs an answer to "can a player who drinks what a floor actually
+ * drops reach and hold a tier", and the bot could not answer it because it
+ * never picked anything up: it fought, then walked to the next door over
+ * whatever was on the ground. That made `promilleTierTicks` a reading of the
+ * decay curve alone, which is a fine measurement of the bug and no
+ * measurement at all of the fix.
+ *
+ * Narrow on purpose. It is not "collect every pickup" — that would change
+ * how much health the sweep carries into every fight and quietly move #54's
+ * whole baseline. It only fires with the room already clear (`decideTarget`
+ * checks combat first), so it never changes what a fight looks like: the
+ * only thing it replaces is part of the walk to the next door.
+ *
+ * `belowCeiling` is the one bit of judgement in it: a bot that drinks
+ * everything walks itself into Umgfalln and measures a knockdown loop rather
+ * than a player. Real players stop short of falling over, so this one does
+ * too, at one whole Maß below the threshold.
+ */
+function drinkOnFloor(sim: GameSim): { x: number; y: number } | null {
+  const ceiling =
+    umgfallnThresholdFor(sim.trinkfest, sim.tuning.promille) - sim.tuning.promille.massFullAmount;
+  if (sim.promille >= ceiling) {
+    return null;
+  }
+  const playerX = sim.positionX(sim.playerIndex);
+  const playerY = sim.positionY(sim.playerIndex);
+  let found: { x: number; y: number } | null = null;
+  let bestDistanceSquared = Number.POSITIVE_INFINITY;
+  sim.world.forEach(sim.pickupKind.bit, (index) => {
+    const definitionIndex = sim.pickupKind.data[index] ?? -1;
+    if (definitionIndex < 0 || sim.pickups.at(definitionIndex).effect.kind !== 'promille') {
+      return;
+    }
+    const x = sim.positionX(index);
+    const y = sim.positionY(index);
+    const distanceSquared = (x - playerX) ** 2 + (y - playerY) ** 2;
+    if (distanceSquared < bestDistanceSquared) {
+      bestDistanceSquared = distanceSquared;
+      found = { x, y };
+    }
+  });
+  return found;
+}
+
 /** Fresh per tick: cheap (a handful of rooms), and always right after a room transition changes `currentRoomId`. */
 function decideTarget(
   sim: GameSim,
@@ -163,6 +221,7 @@ function decideTarget(
   | { readonly kind: 'stuck' }
   | { readonly kind: 'advanceFloor'; readonly x: number; readonly y: number }
   | { readonly kind: 'collectKey'; readonly x: number; readonly y: number }
+  | { readonly kind: 'collectDrink'; readonly x: number; readonly y: number }
   | {
       readonly kind: 'crossDoor';
       readonly x: number;
@@ -180,6 +239,13 @@ function decideTarget(
     if (key !== null) {
       return { kind: 'collectKey', x: key.x, y: key.y };
     }
+  }
+  // #311: the room is clear, so a Maß on the floor is on the way out anyway.
+  // Before the door targets below, since walking through the door is what
+  // would otherwise leave it behind.
+  const drink = drinkOnFloor(sim);
+  if (drink !== null) {
+    return { kind: 'collectDrink', x: drink.x, y: drink.y };
   }
   const nextFloorDoor = sim.nextFloorDoor;
   if (nextFloorDoor !== null) {
@@ -247,6 +313,7 @@ export function runPlaytest(options: PlaytestOptions): PlaytestOutcome {
       damageTaken: 0,
       floors: [],
       promilleTierTicks: {},
+      peakPromille: 0,
     };
   }
 
@@ -271,6 +338,7 @@ export function runPlaytest(options: PlaytestOptions): PlaytestOutcome {
   let lastX = sim.positionX(sim.playerIndex);
   let lastY = sim.positionY(sim.playerIndex);
   const promilleTierTicks = new Map<number, number>();
+  let peakPromille = 0;
 
   let result: PlaytestResult = 'ranOut';
   let errorMessage: string | undefined;
@@ -313,6 +381,7 @@ export function runPlaytest(options: PlaytestOptions): PlaytestOutcome {
     floorTicks += 1;
     const tier = sim.promilleTier;
     promilleTierTicks.set(tier, (promilleTierTicks.get(tier) ?? 0) + 1);
+    peakPromille = Math.max(peakPromille, sim.promille);
 
     const healthAfter = sim.playerHealth + sim.playerSoulHealth + sim.playerEternalHealth;
     if (healthAfter < healthBefore) {
@@ -462,5 +531,6 @@ export function runPlaytest(options: PlaytestOptions): PlaytestOutcome {
     damageTaken: totalDamageTaken,
     floors: floorOutcomes,
     promilleTierTicks: promilleTierTicksOut,
+    peakPromille,
   };
 }

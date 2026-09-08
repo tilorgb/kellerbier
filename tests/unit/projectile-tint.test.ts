@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { InstancedMesh, type MeshBasicMaterial } from 'three';
+import { AdditiveBlending, InstancedMesh, NormalBlending, type MeshBasicMaterial } from 'three';
 import { GameSim } from '../../src/sim/game/sim.js';
 import type { ItemDefinition } from '../../src/sim/item/definition.js';
 import { ProjectileTeam } from '../../src/sim/projectile/store.js';
@@ -208,6 +208,146 @@ describe('ProjectileView — tint as instance colour', () => {
     view.sync(1, 1);
     const layer = layerFor(view, set.player);
     expect(layer?.instanceColor).not.toBeNull();
+    view.destroy();
+  });
+});
+
+/**
+ * Promille's shot heat (#311): the reward's readout, on the same instance
+ * colour the item tints ride on, plus its own additive glow layer and the
+ * shot light it brightens.
+ */
+describe('ProjectileView — Promille shot heat', () => {
+  /** Every instanced layer the view has built — `layerFor`'s `find`, widened to all of them. */
+  function layersOf(view: ProjectileView): InstancedMesh[] {
+    return view.group.children.filter((child) => child instanceof InstancedMesh) as InstancedMesh[];
+  }
+
+  function mainLayer(view: ProjectileView, wanted: Texture): InstancedMesh | undefined {
+    return layersOf(view).find(
+      (child) =>
+        (child.material as MeshBasicMaterial).map === wanted.source.texture &&
+        (child.material as MeshBasicMaterial).blending === NormalBlending,
+    );
+  }
+
+  function glowLayer(view: ProjectileView): InstancedMesh | undefined {
+    return layersOf(view).find(
+      (child) => (child.material as MeshBasicMaterial).blending === AdditiveBlending,
+    );
+  }
+
+  function playerShot(sim: GameSim): void {
+    sim.projectiles.spawn(10, 10, 1, 0, 3, 1, 30, ProjectileTeam.Player);
+  }
+
+  it('leaves a sober shot exactly as white as it was before any of this', () => {
+    const sim = new GameSim({ room: bareRoom(), population: 'empty' });
+    const set = art();
+    const view = new ProjectileView(sim.projectiles, set);
+    playerShot(sim);
+    view.setShotHeat(0);
+    view.sync(1, 1);
+    const colours = mainLayer(view, set.player)?.instanceColor;
+    expect(colours?.getX(0)).toBeCloseTo(1, 5);
+    expect(colours?.getY(0)).toBeCloseTo(1, 5);
+    expect(colours?.getZ(0)).toBeCloseTo(1, 5);
+    expect(glowLayer(view)).toBeUndefined();
+    view.destroy();
+  });
+
+  it('runs a hot shot red-over-blue and brighter than a sober one', () => {
+    const sim = new GameSim({ room: bareRoom(), population: 'empty' });
+    const set = art();
+    const view = new ProjectileView(sim.projectiles, set);
+    playerShot(sim);
+    view.setShotHeat(1);
+    view.sync(1, 1);
+    const colours = mainLayer(view, set.player)?.instanceColor;
+    const r = colours?.getX(0) ?? 0;
+    const b = colours?.getZ(0) ?? 0;
+    expect(r).toBeGreaterThan(1);
+    expect(b).toBeLessThan(1);
+    expect(r).toBeGreaterThan(b);
+    view.destroy();
+  });
+
+  it('multiplies an item tint rather than replacing it', () => {
+    // A Spezi's brown shot fired drunk should be a hot brown, not a generic
+    // flame: the item still says what it did.
+    const sim = new GameSim({ room: bareRoom(), population: 'empty' });
+    const set = art();
+    const view = new ProjectileView(sim.projectiles, set);
+    const shot = sim.projectiles.spawn(10, 10, 1, 0, 3, 1, 30, ProjectileTeam.Player);
+    sim.tintProjectile(shot, 'spezi');
+    view.setShotHeat(0);
+    view.sync(1, 1);
+    const cold = mainLayer(view, set.player)?.instanceColor?.getX(0) ?? 0;
+    view.setShotHeat(1);
+    view.sync(1, 1);
+    const hot = mainLayer(view, set.player)?.instanceColor?.getX(0) ?? 0;
+    // Still the tint's own hue relationship, just hotter.
+    expect(hot).toBeGreaterThan(cold);
+    expect(cold).toBeGreaterThan(0);
+    view.destroy();
+  });
+
+  it('never heats an enemy shot — the player drinking is not a buff for them', () => {
+    const sim = new GameSim({ room: bareRoom(), population: 'empty' });
+    const set = art();
+    const enemyTexture = set.enemyByFloor[1];
+    if (enemyTexture === undefined) {
+      throw new Error('fixture has no floor-1 enemy texture');
+    }
+    const view = new ProjectileView(sim.projectiles, set);
+    sim.projectiles.spawn(10, 10, 1, 0, 3, 1, 30, ProjectileTeam.Enemy);
+    view.setShotHeat(1);
+    view.sync(1, 1);
+    const colours = layersOf(view).find(
+      (child) => (child.material as MeshBasicMaterial).map === enemyTexture.source.texture,
+    )?.instanceColor;
+    expect(colours?.getX(0)).toBeCloseTo(1, 5);
+    expect(colours?.getZ(0)).toBeCloseTo(1, 5);
+    view.destroy();
+  });
+
+  it('adds exactly one additive glow layer once the shot is hot enough, however many sprites are in flight', () => {
+    const sim = new GameSim({ room: bareRoom(), population: 'empty' });
+    const set = art();
+    const view = new ProjectileView(sim.projectiles, set);
+    playerShot(sim);
+    playerShot(sim);
+    view.setShotHeat(1);
+    view.sync(1, 1);
+    const glow = glowLayer(view);
+    expect(glow).toBeDefined();
+    expect(glow?.count).toBe(2);
+    // One extra shader program for the whole effect — see the comment on the
+    // glow's `layerFor` call.
+    expect(
+      layersOf(view).filter(
+        (child) => (child.material as MeshBasicMaterial).blending === AdditiveBlending,
+      ),
+    ).toHaveLength(1);
+    // Behind the shots, and never writing depth over them.
+    expect(glow?.renderOrder).toBeLessThan(0);
+    expect((glow?.material as MeshBasicMaterial).depthWrite).toBe(false);
+    view.destroy();
+  });
+
+  it('clamps how far past full heat it will draw', () => {
+    const sim = new GameSim({ room: bareRoom(), population: 'empty' });
+    const set = art();
+    const view = new ProjectileView(sim.projectiles, set);
+    playerShot(sim);
+    // Trinkfest can push `promilleShotHeat` well past 1; the renderer decides
+    // how much of that is still legible rather than drawing a white square.
+    view.setShotHeat(50);
+    view.sync(1, 1);
+    const hottest = mainLayer(view, set.player)?.instanceColor?.getX(0) ?? 0;
+    view.setShotHeat(1.35);
+    view.sync(1, 1);
+    expect(mainLayer(view, set.player)?.instanceColor?.getX(0)).toBeCloseTo(hottest, 5);
     view.destroy();
   });
 });

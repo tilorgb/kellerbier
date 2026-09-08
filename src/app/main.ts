@@ -2302,8 +2302,13 @@ async function boot(): Promise<void> {
     // clipboard copy carries, and a meter that is not in the run should not
     // be in the readout of it either. What the run *is* gets said once, on
     // the seed line, where the override that pinned it is also named.
+    // Shot heat (#311) rides on this line rather than earning its own: it is
+    // a pure function of the number two fields to its left, and what a tuning
+    // pass actually wants to see is the pair — "3.10 Vollrausch, heat 0.69" —
+    // when deciding whether `maxShotHeat` is spending itself in the right
+    // place. Two decimals, like the meter itself.
     const promilleLine = sim.promilleUnlocked
-      ? `\n${meterLabel} ${sim.promille.toFixed(2)} ${tierLabel}${trinkfest}${knockedDown}`
+      ? `\n${meterLabel} ${sim.promille.toFixed(2)} ${tierLabel}${trinkfest}  heat ${sim.promilleShotHeat.toFixed(2)}${knockedDown}`
       : '';
     const runState = sim.promilleUnlocked ? '' : '  SOBER RUN';
     const override = promilleOverride === 'auto' ? '' : `  [${promilleOverride} forced]`;

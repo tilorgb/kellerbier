@@ -313,3 +313,32 @@ export function promilleSwayMagnitude(value: number, tuning: PromilleTuning): nu
 export function promilleScreenDistortion(value: number, tuning: PromilleTuning): number {
   return rampFrom(value, VOLLRAUSCH_AT) * tuning.maxScreenDistortion;
 }
+
+/**
+ * How hot the player's shots run (#311): `0` stone-cold sober, `1` at the
+ * baseline Umgfalln threshold, and past `1` through the Trinkfest stages.
+ *
+ * The one ramp here that is a *reward* readout rather than a penalty one, so
+ * it is shaped differently from its neighbours on purpose:
+ *
+ * - It starts at zero Promille, not at a tier boundary. Every other ramp
+ *   waits for the tier whose penalty it draws (drift and wobble at Beduselt,
+ *   distortion at Vollrausch), because a penalty that arrives before the
+ *   tier that announces it reads as the game breaking. A reward has the
+ *   opposite problem: the first sip already pays `angeheitertDamageBonus`,
+ *   and a shot that looks identical until Beduselt would be hiding it.
+ * - It is scaled against `UMGFALLN_AT`, not `PROMILLE_MAX`. What "as hot as
+ *   it gets" means is "as far as a baseline run can push before falling
+ *   over", which is the threshold, not the ceiling — a value between the two
+ *   is only ever reached mid-knockdown.
+ *
+ * Uncapped past `1` for the same reason `rampFrom` is: `value` can only
+ * exceed `UMGFALLN_AT` when Trinkfest has raised the threshold, and the
+ * renderer is what decides how far past `1` it is willing to draw.
+ */
+export function promilleShotHeat(value: number, tuning: PromilleTuning): number {
+  if (value <= 0) {
+    return 0;
+  }
+  return (value / UMGFALLN_AT) * tuning.maxShotHeat;
+}

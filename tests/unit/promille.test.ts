@@ -12,11 +12,13 @@ import {
   promilleMeterLabel,
   promilleRequirementMet,
   promilleScreenDistortion,
+  promilleShotHeat,
   promilleSwayMagnitude,
   promilleTierDisplayName,
   promilleTierName,
   promilleTierOf,
   promilleUnitSuffix,
+  umgfallnThresholdFor,
   promilleWobbleAmplitude,
   type PromilleTierId,
 } from '../../src/sim/game/promille.js';
@@ -718,7 +720,14 @@ describe('accessibility (#33): neutral reskin string layer', () => {
 describe('promille projectile damage', () => {
   it('scales projectile damage by the current tier multiplier', () => {
     const sim = emptySim();
-    sim.tuning.promille.current = 3.0; // Vollrausch
+    // Just *inside* Vollrausch, not exactly on its 3.0 boundary: `stepPromille`
+    // runs `decayPromille` before `stepShooting`, so a meter parked on the
+    // boundary is one tick of decay below it by the time the shot is spawned
+    // and the shot resolves at Beduselt's multiplier instead. This test read
+    // as passing for as long as it did only because Beduselt's `2 * 1.35` and
+    // Vollrausch's `2 * 1.7` both rounded to 3; #311's retune pulled them
+    // apart and the assertion started measuring what it always meant to.
+    sim.tuning.promille.current = 3.2;
     sim.tuning.shooting.shotDamage = 2;
     sim.tuning.shooting.fireDelayTicks = 100;
 
@@ -737,5 +746,132 @@ describe('promille projectile damage', () => {
     expect(found).not.toBe(-1);
     const expected = Math.round(2 * (1 + sim.tuning.promille.vollrauschDamageBonus));
     expect(sim.projectiles.damage[found]).toBe(expected);
+  });
+});
+
+/**
+ * #311: the meter had no way up and no readout for the reward it paid.
+ *
+ * Three separate claims, tested apart because they fail apart: a hit costs
+ * Promille (the drain that replaces the clock), the clock is now slower than
+ * what a floor drops (the arithmetic that makes the meter reachable at all),
+ * and the shot heat ramp reads the meter the reward is on (the readout).
+ */
+describe('a hit costs Promille (#311)', () => {
+  it('takes `hitPromilleLoss` off the meter on every landed hit', () => {
+    const sim = emptySim();
+    sim.addPromille(2);
+    const before = sim.promille;
+    sim.applyPlayerDamage(1);
+    expect(sim.promille).toBeCloseTo(before - sim.tuning.promille.hitPromilleLoss, 5);
+  });
+
+  it('costs the same whatever the hit was worth — a graze is as expensive as a maul', () => {
+    const light = emptySim();
+    light.addPromille(3);
+    light.applyPlayerDamage(1);
+    const heavy = emptySim();
+    heavy.addPromille(3);
+    heavy.applyPlayerDamage(3);
+    expect(heavy.promille).toBeCloseTo(light.promille, 5);
+  });
+
+  it('clamps at zero rather than going negative', () => {
+    const sim = emptySim();
+    sim.addPromille(0.1);
+    sim.applyPlayerDamage(1);
+    expect(sim.promille).toBe(0);
+  });
+
+  it('does nothing a hit that never lands would not — no damage, no cost', () => {
+    const sim = emptySim();
+    sim.addPromille(2);
+    const before = sim.promille;
+    sim.applyPlayerDamage(0);
+    expect(sim.promille).toBe(before);
+  });
+
+  it('can drop the player a whole tier, which is the point of it', () => {
+    const sim = emptySim();
+    // Just inside Beduselt, one hit short of falling out of it.
+    sim.addPromille(1.6);
+    expect(sim.promilleTier).toBe(PromilleTier.Beduselt);
+    sim.applyPlayerDamage(1);
+    expect(sim.promilleTier).toBe(PromilleTier.Angeheitert);
+  });
+});
+
+describe('the meter can actually be filled (#311)', () => {
+  it('loses less to a minute of the clock than one Maß is worth', () => {
+    // The pre-#311 failure, as arithmetic: at `0.05` the clock took 3.0 a
+    // minute against a full Maß's 1.0, so drinking could not keep up with
+    // standing still. Whatever the number is retuned to, it has to stay on
+    // this side of that line.
+    const tuning = DEFAULT_PROMILLE_TUNING;
+    expect(tuning.decayPerSecond * 60).toBeLessThan(tuning.massFullAmount);
+  });
+
+  it('gives a half Maß a tier to actually sit in', () => {
+    // `massHalfAmount` used to be exactly the Angeheitert boundary, so the
+    // pickup bought one tick of the tier and decayed straight back out.
+    const sim = emptySim();
+    sim.addPromille(sim.tuning.promille.massHalfAmount);
+    expect(sim.promilleTier).toBe(PromilleTier.Angeheitert);
+    for (let tick = 0; tick < 60; tick++) {
+      sim.step(idle());
+    }
+    expect(sim.promilleTier).toBe(PromilleTier.Angeheitert);
+  });
+
+  it('makes the first drink worth having and the top of the ladder worth risking', () => {
+    const tuning = DEFAULT_PROMILLE_TUNING;
+    const dps = (damage: number, fireRate: number): number => (1 + damage) * (1 + fireRate);
+    // A number the player can feel on the very first Maß...
+    expect(dps(tuning.angeheitertDamageBonus, tuning.angeheitertFireRateBonus)).toBeGreaterThan(
+      1.3,
+    );
+    // ...and one that reads as a different character at the top of the
+    // shipping ladder, which is what the wobble and the knockdown are the
+    // price of.
+    expect(dps(tuning.vollrauschDamageBonus, tuning.vollrauschFireRateBonus)).toBeGreaterThan(3);
+  });
+});
+
+describe('shot heat (#311)', () => {
+  const tuning: PromilleTuning = { ...DEFAULT_PROMILLE_TUNING };
+
+  it('is zero sober and climbs from the very first sip', () => {
+    expect(promilleShotHeat(0, tuning)).toBe(0);
+    // Every other ramp waits for the tier whose penalty it draws; this one
+    // does not, because the damage bonus does not either.
+    expect(promilleShotHeat(0.2, tuning)).toBeGreaterThan(0);
+    expect(promilleShotHeat(2, tuning)).toBeGreaterThan(promilleShotHeat(1, tuning));
+  });
+
+  it('reaches full heat at the baseline Umgfalln threshold, not at the ceiling', () => {
+    expect(promilleShotHeat(umgfallnThresholdFor(0, tuning), tuning)).toBeCloseTo(1, 5);
+    expect(promilleShotHeat(PROMILLE_MAX, tuning)).toBeGreaterThan(1);
+  });
+
+  it('keeps climbing past 1 through the Trinkfest stages, and the renderer caps it', () => {
+    // Uncapped here for the same reason `rampFrom` is — see
+    // `promilleShotHeat`. `ProjectileView.setShotHeat` is what decides how
+    // far past 1 is still legible.
+    expect(promilleShotHeat(6, tuning)).toBeGreaterThan(promilleShotHeat(5, tuning));
+  });
+
+  it('is off entirely for a sober run, like every other reading off the meter', () => {
+    const sim = new GameSim({ room: bareRoom(), promilleUnlocked: false });
+    sim.tuning.promille.current = 4;
+    expect(sim.promilleShotHeat).toBe(0);
+  });
+
+  it('turns off from tuning without touching the damage it reflects', () => {
+    const sim = emptySim();
+    sim.addPromille(3);
+    const damage = sim.stats.value(StatId.Damage);
+    sim.tuning.promille.maxShotHeat = 0;
+    expect(sim.promilleShotHeat).toBe(0);
+    expect(sim.stats.value(StatId.Damage)).toBe(damage);
   });
 });
