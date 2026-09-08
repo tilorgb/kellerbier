@@ -4382,3 +4382,62 @@ forever, velocity spinning a full circle around it, going nowhere. Fixed in the 
 because Der Ladewagen is the first content that uses the primitive and cannot drive a circuit
 without it. The general lesson is #7's: a primitive nothing has authored against yet is
 untested content-side, however carefully it was written.
+
+## 82. Difficulty relief and room readability: the constraints that outlast the batch
+
+A pass of player-help and readability changes. Most of it is local — a tuning number, a
+material swap — and lives in the code. These are the parts that constrain something else.
+
+### Every explosive telegraphs the same way, and it does not grow
+
+`FloorHazardBar` / `FloorHazardDisc` (`render/world/flat.ts`) are the one telegraph shape for
+anything that explodes: a red diagonal hazard hatch, shown at the blast's **true size from the
+moment it is armed**, blinking faster as the fuse runs out. The Bierfassl uses the crossed bars
+(its Bomberman shape), a radial blast the disc. A growing marker read as "the danger is still
+arriving" right up until it wasn't; a static one at full size with the countdown in the blink
+says "this whole area, in this many beats." The player's own Böllerschmeißer item routes through
+`GameSim.activeItemBlastTelegraph` — a per-tick value the item's `onTick` re-arms while its fuse
+burns and `stepItemTick` clears at the top of every tick, so a marker that is not being kept
+alive vanishes on its own. The rule going forward: a new explosive adds a hatch entry, never its
+own telegraph.
+
+### `dropLoot`'s `guaranteed` flag drops the miss, not the mix
+
+An elite always leaves loot (#1) by passing `guaranteed` to `GameSim.dropLoot`, which skips the
+`null` "nothing" entry when accumulating and rolling. It is still that enemy's own tier table
+and the same relative weights between the real pickups — only the drop *rate* for that one roll
+goes to 1. Anything else that wants "always drops something, from this table" uses the same
+flag rather than a second table.
+
+### A boulder a bomb clears is removed whole, and the destruction is the sim's to remember
+
+`RoomGeometry.breakBoulders` removes any `blockOverflyable` block whose **centre** the blast
+cross covers — the whole block, not a per-cell carve. A merged boulder run the blast lands the
+middle of goes entirely, which reads as "the bomb cleared that path" rather than leaving a
+ragged half-wall; free-standing clumps (the common generated case) are one or two tiles anyway.
+Structural walls and void stand-ins (`overflyable === 0`) are never touched. `GameSim` owns the
+"stays cleared" record (`destroyedBoulders`, keyed by authored template id like `roomClearedIds`)
+and replays it in `applyCompiledRoom` and through `reapplyDestroyedBoulders` for a prewarmed
+build — a fresh `RoomGeometry` is compiled per room load, so the removal has to be replayed onto
+it, not stored on it.
+
+### The renderer rebuilds a room's scenery in place when its content changes without a transition
+
+A bombed secret wall (#5) and a cleared boulder (#4) both mutate the current room with no room
+transition to hang a redraw off. `GameView.sync` grew a branch: when `staleRoomIds` holds the
+*current* room and nothing else changed, it rebuilds that room's `Scenery` in place — the same
+`getOrBuildScenery` cache-replace the room-change branch uses, which is safe here for the same
+reason (`sync` reassigns `this.scenery` before the next `render`). `app/main.ts` polls
+`sim.bouldersChangedTick` and calls `notifyRoomContentChanged` the way it already did for a
+secret reveal. A secret doorway that has been opened draws blasted (rubble, no leaf, no frame):
+`DoorPiece` gains a `blasted` flag, `Scenery` is told which directions are secret
+(`secretDoorDirections`), and `prewarmRoom` carries the *next* room's set so a room built ahead
+of the crossing knows its own blasted walls.
+
+### Doors have no roof now
+
+The lintel and the course of wall over a doorway are gone (#6); the jambs run full wall height.
+Every doorway is an open-topped portal. This was for the south wall — the camera only ever sees
+its back, and a capped doorway there gave the player no way to tell an open door from a shut
+one. Anything that later wants to draw *above* a doorway (a sign, a boss-door arch) is adding
+back something this removed on purpose, and should say why.

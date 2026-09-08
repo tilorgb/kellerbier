@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { type BufferGeometry, Mesh, MeshBasicMaterial, PlaneGeometry, RingGeometry } from 'three';
+import { type BufferGeometry, Mesh, MeshBasicMaterial, RingGeometry } from 'three';
 import { entityIndex } from '../../src/sim/ecs/entity.js';
 import { GameSim } from '../../src/sim/game/sim.js';
 import { createInputFrame } from '../../src/sim/input/frame.js';
@@ -18,10 +18,11 @@ import { ENEMY_STRIDE } from '../../src/sim/systems/enemy.js';
  * own `enemyTelegraphShape` suite covers the lookup itself; this is only about
  * what `EntityView.sync` does with the answer.
  *
- * The shapes are `render/world/flat.ts`'s `FloorRing`, `FloorWedge` and
- * `FloorBar`, told apart by the geometry each one is built on: a ring is a
- * `RingGeometry`, a bar a `PlaneGeometry`, and a wedge a fan built by hand
- * into a bare `BufferGeometry`.
+ * The flat-colour shapes are `render/world/flat.ts`'s `FloorRing` (a
+ * `RingGeometry`) and `FloorWedge` (a fan built by hand into a bare
+ * `BufferGeometry`). A lobbed Böller's ground marker is the textured
+ * `FloorHazardDisc` every explosive shares (#12), not one of these — see its
+ * own suite below.
  */
 
 const IDLE = createInputFrame();
@@ -78,7 +79,7 @@ const project = (x: number, _height: number, z: number, out: { x: number; y: num
 };
 
 type FlatMesh = Mesh<BufferGeometry, MeshBasicMaterial>;
-type Shape = 'ring' | 'wedge' | 'bar';
+type Shape = 'ring' | 'wedge';
 
 /** The flat colour shapes the view has on the floor this frame, with which pool each came from. */
 function visibleTelegraphs(view: EntityView): { shape: Shape; mesh: FlatMesh }[] {
@@ -87,17 +88,16 @@ function visibleTelegraphs(view: EntityView): { shape: Shape; mesh: FlatMesh }[]
     if (
       !(child instanceof Mesh) ||
       !child.visible ||
-      !(child.material instanceof MeshBasicMaterial)
+      !(child.material instanceof MeshBasicMaterial) ||
+      // The explosion hatch (`FloorHazardBar`/`FloorHazardDisc`) is textured,
+      // not one of the enemy telegraph's flat colour shapes — see the bomb
+      // and Böllerschmeißer suites below.
+      child.material.map !== null
     ) {
       continue;
     }
     const mesh = child;
-    const shape: Shape =
-      mesh.geometry instanceof RingGeometry
-        ? 'ring'
-        : mesh.geometry instanceof PlaneGeometry
-          ? 'bar'
-          : 'wedge';
+    const shape: Shape = mesh.geometry instanceof RingGeometry ? 'ring' : 'wedge';
     out.push({ shape, mesh: mesh as FlatMesh });
   }
   return out;
@@ -149,7 +149,7 @@ describe('EntityView, drawing a telegraph shape (#233)', () => {
     expect(drawn[0]?.mesh.position.z).toBeCloseTo(sim.positionY(enemy), 0);
   });
 
-  it("draws Böllerschmeißer's warning away from the thrower, at the spot the bomb will land", () => {
+  it("draws Böllerschmeißer's warning as a hatch disc where the bomb will land, not on the thrower (#12)", () => {
     const sim = bareSim();
     const player = sim.playerIndex;
     const enemy = place(
@@ -167,15 +167,70 @@ describe('EntityView, drawing a telegraph shape (#233)', () => {
     const view = harness(sim);
     view.sync(0, 0, project);
 
-    const drawn = visibleTelegraphs(view);
-    expect(drawn).toHaveLength(1);
-    const marker = drawn[0];
-    expect(marker?.shape).toBe('bar');
-    // Anchored on the player, not on the thrower's own body — the whole
-    // point being fixed rather than a ring the thrower would otherwise grow.
-    expect(marker?.mesh.position.x).toBeCloseTo(sim.positionX(player), 0);
-    expect(marker?.mesh.position.z).toBeCloseTo(sim.positionY(player), 0);
-    expect(marker?.mesh.position.x).not.toBeCloseTo(sim.positionX(enemy), 0);
+    // Not one of the flat-colour telegraph shapes any more — it is the same
+    // textured hatch every explosive shows.
+    expect(visibleTelegraphs(view)).toHaveLength(0);
+    const discs = view.group.children.filter(
+      (c): c is FlatMesh =>
+        c instanceof Mesh &&
+        c.visible &&
+        c.material instanceof MeshBasicMaterial &&
+        c.material.map !== null,
+    );
+    expect(discs).toHaveLength(1);
+    const marker = discs[0];
+    // Anchored on the player (where they stood when the throw began), not the
+    // thrower, and at the blast's true radius from the first frame.
+    expect(marker?.position.x).toBeCloseTo(sim.positionX(player), 0);
+    expect(marker?.position.z).toBeCloseTo(sim.positionY(player), 0);
+    expect(marker?.position.x).not.toBeCloseTo(sim.positionX(enemy), 0);
+    expect(marker?.scale.x).toBeGreaterThan(0);
+    expect(marker?.scale.x).toBeCloseTo(marker?.scale.y ?? 0, 5);
+  });
+
+  it('draws the bomb blast as two crossed hatch arms at full size from the moment it is placed (#3)', () => {
+    const sim = bareSim();
+    const player = sim.playerIndex;
+    const bx = sim.positionX(player) + 40;
+    const by = sim.positionY(player);
+    sim.spawnBierfassl(bx, by, 0, 0, false);
+    sim.world.flush();
+    sim.step(IDLE); // fuse ticks once — barely started
+
+    const view = harness(sim);
+
+    const hazardArms = (): FlatMesh[] =>
+      view.group.children.filter(
+        (c): c is FlatMesh =>
+          c instanceof Mesh &&
+          c.visible &&
+          c.material instanceof MeshBasicMaterial &&
+          c.material.map !== null,
+      );
+
+    view.sync(0, 0, project);
+    const early = hazardArms();
+    expect(early).toHaveLength(2);
+    // Centred on the bomb, and one arm long the other way.
+    for (const arm of early) {
+      expect(arm.position.x).toBeCloseTo(bx, 0);
+      expect(arm.position.z).toBeCloseTo(by, 0);
+    }
+    const armSpan = Math.max(...early.map((a) => Math.max(a.scale.x, a.scale.y)));
+    const width = Math.min(...early.map((a) => Math.min(a.scale.x, a.scale.y)));
+
+    // Run the fuse most of the way down and re-sync: the footprint must not
+    // have grown — only the blink alpha changes.
+    const fuseTicks = Math.round(sim.tuning.pickup.bombFuseTicks);
+    for (let tick = 0; tick < fuseTicks - 2; tick++) {
+      sim.step(IDLE);
+    }
+    view.sync(0, 1234, project);
+    const late = hazardArms();
+    expect(late).toHaveLength(2);
+    const lateSpan = Math.max(...late.map((a) => Math.max(a.scale.x, a.scale.y)));
+    expect(lateSpan).toBeCloseTo(armSpan, 3);
+    expect(Math.min(...late.map((a) => Math.min(a.scale.x, a.scale.y)))).toBeCloseTo(width, 3);
   });
 
   it('draws nothing for a body that is not telegraphing', () => {

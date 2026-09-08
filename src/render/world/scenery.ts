@@ -4,6 +4,7 @@ import {
   BufferGeometry,
   Group,
   LineBasicMaterial,
+  LineLoop,
   LineSegments,
   Mesh,
   MeshStandardMaterial,
@@ -126,6 +127,8 @@ export class DoorPiece {
   private roomOffsetZ = 0;
   private readonly span: number;
   private readonly doorHeight: number;
+  /** A secret wall bombed open (#5): a ragged hole with rubble, no leaf, no frame — always "open". */
+  private readonly blasted: boolean;
   private state: DoorState = 'closed';
   private opennessValue = 0;
   private double = false;
@@ -139,20 +142,23 @@ export class DoorPiece {
     centreZ: number,
     span: number,
     wallHeight: number,
-    wall: Texture | undefined,
-    wallColour: number,
     lighting: Lighting,
     materials: MaterialCache,
+    blasted = false,
   ) {
     this.door = door;
     this.span = span;
+    this.blasted = blasted;
     this.lighting = lighting;
     this.materials = materials;
     const t = WALL_THICKNESS;
-    // A door in a tall wall stops short of the top so a lintel and a course of
-    // wall can sit over it; a gate in a low hedge stands above it.
+    // The leaf's own height. The doorway above it is left open to the top of
+    // the wall — no lintel, no course of wall over it (it used to have both).
+    // A capped doorway on the *south* wall, which the camera only ever sees
+    // the back of, gave a player no way to tell an open door from a closed
+    // one: the leaf was hidden behind the cap either way. An open-topped gap
+    // always shows the leaf — swung aside, or filling the opening.
     this.doorHeight = wallHeight >= 16 ? Math.min(wallHeight - LINTEL, DOOR_HEIGHT) : GATE_HEIGHT;
-    const frameHeight = this.doorHeight + LINTEL;
 
     this.group.position.set(centreX, 0, centreZ);
     this.group.rotation.y = DOOR_FACING[door.direction];
@@ -171,26 +177,23 @@ export class DoorPiece {
     floor.receiveShadow = true;
     this.group.add(floor);
 
-    // The frame: two jambs and a lintel in dark timber, proud of the wall face.
-    const timber = materials.flatMaterial(FRAME_TIMBER, { roughness: 0.9 });
-    for (const side of [-1, 1]) {
-      const jamb = new Mesh(new BoxGeometry(JAMB, frameHeight, t + 1), timber);
-      jamb.position.set(side * (span / 2 - JAMB / 2), frameHeight / 2, 0);
-      jamb.castShadow = true;
-      this.group.add(jamb);
-    }
-    const lintel = new Mesh(new BoxGeometry(span, LINTEL, t + 1), timber);
-    lintel.position.set(0, this.doorHeight + LINTEL / 2, 0);
-    lintel.castShadow = true;
-    this.group.add(lintel);
-    // Wall above the lintel, so the run reads as one wall with a doorway cut in it.
-    if (wallHeight > frameHeight) {
-      const above =
-        wall === undefined
-          ? flatBox(materials, wallColour, span, wallHeight - frameHeight, t)
-          : tiledBox(materials, wall, span, wallHeight - frameHeight, t);
-      above.position.set(0, frameHeight + (wallHeight - frameHeight) / 2, 0);
-      this.group.add(above);
+    if (blasted) {
+      // A secret wall the player blew open (#5): no timber frame, no leaf —
+      // just a hole with a scatter of broken masonry across the threshold,
+      // and (below) the passage light spilling through so the room beyond
+      // reads as reachable.
+      this.buildRubble(span, wallHeight, materials);
+    } else {
+      // The frame: two jambs in dark timber, proud of the wall face, run the
+      // full wall height so the open-topped gap reads as a deliberate portal
+      // rather than a bite taken out of the wall. No lintel across the top.
+      const timber = materials.flatMaterial(FRAME_TIMBER, { roughness: 0.9 });
+      for (const side of [-1, 1]) {
+        const jamb = new Mesh(new BoxGeometry(JAMB, wallHeight, t + 1), timber);
+        jamb.position.set(side * (span / 2 - JAMB / 2), wallHeight / 2, 0);
+        jamb.castShadow = true;
+        this.group.add(jamb);
+      }
     }
 
     // The glow sits a half wall-thickness *behind* the door (through the
@@ -201,8 +204,47 @@ export class DoorPiece {
     this.glowX = centreX - (t / 2) * Math.sin(facing);
     this.glowZ = centreZ - (t / 2) * Math.cos(facing);
 
-    this.buildLeaves();
-    this.setState('closed');
+    if (blasted) {
+      // No leaf to build, and it is permanently open — the glow shines and
+      // `setState`/`setOpenness` are no-ops from here (see each).
+      this.state = 'open';
+      this.applyGlow();
+    } else {
+      this.buildLeaves();
+      this.setState('closed');
+    }
+  }
+
+  /**
+   * A handful of broken stones across a blasted secret doorway — deterministic
+   * (seeded off the door's span so it is the same every visit), pixel-free
+   * block geometry the same way the rest of the room's architecture is.
+   */
+  private buildRubble(span: number, wallHeight: number, materials: MaterialCache): void {
+    const stone = materials.flatMaterial(0x4a4650, { roughness: 1 });
+    const count = 5;
+    let s = Math.round(span * 7) % 97;
+    const rand = (): number => {
+      s = (s * 1103515245 + 12345) & 0x7fffffff;
+      return s / 0x7fffffff;
+    };
+    for (let i = 0; i < count; i++) {
+      const size = 2 + rand() * 3;
+      const chunk = new Mesh(new BoxGeometry(size, size * 0.8, size), stone);
+      chunk.position.set((rand() - 0.5) * (span - size), size * 0.4, (rand() - 0.4) * 4);
+      chunk.rotation.y = rand() * Math.PI;
+      chunk.castShadow = true;
+      chunk.receiveShadow = true;
+      this.group.add(chunk);
+    }
+    // A few stones still clinging to the top corners of the hole, so the edge
+    // reads as broken rather than cut.
+    for (const side of [-1, 1]) {
+      const jag = new Mesh(new BoxGeometry(3, 4, WALL_THICKNESS + 1), stone);
+      jag.position.set(side * (span / 2 - 2), wallHeight - 3, 0);
+      jag.castShadow = true;
+      this.group.add(jag);
+    }
   }
 
   /** The pooled passage light behind this door while its room is on screen; `null` off screen or when the pool was exhausted. */
@@ -254,7 +296,7 @@ export class DoorPiece {
 
   /** One leaf or two. Rebuilds the leaves; the state and openness carry over. */
   setDouble(double: boolean): void {
-    if (double === this.double) {
+    if (this.blasted || double === this.double) {
       return;
     }
     this.double = double;
@@ -332,6 +374,12 @@ export class DoorPiece {
   }
 
   setState(state: DoorState): void {
+    if (this.blasted) {
+      // A blasted hole has no leaf to swing and no lock to show — it stays
+      // "open" so its passage glow keeps shining. `applyDoorStates` still
+      // calls this every room settle; nothing to do.
+      return;
+    }
     this.state = state;
     if (this.lock !== null) {
       this.lock.visible = state === 'locked';
@@ -352,6 +400,9 @@ export class DoorPiece {
 
   /** How far the door stands open: 0 shut, 1 swung fully outward. */
   setOpenness(openness: number): void {
+    if (this.blasted) {
+      return;
+    }
     this.opennessValue = Math.max(0, Math.min(1, openness));
     const angle = this.opennessValue * OPEN_ANGLE;
     this.hinges.forEach((hinge, index) => {
@@ -395,9 +446,11 @@ export class DoorPiece {
  */
 function disposeMeshes(root: Group): void {
   root.traverse((object) => {
-    if (object instanceof Mesh) {
-      const mesh = object as Mesh;
-      mesh.geometry.dispose();
+    // Anything with its own geometry — a `Mesh`, or a `LineSegments`/
+    // `LineLoop` (the secret-wall crack hints, a puddle rim).
+    const geometry: unknown = (object as { geometry?: unknown }).geometry;
+    if (geometry instanceof BufferGeometry) {
+      geometry.dispose();
     }
   });
 }
@@ -419,6 +472,77 @@ const OPEN_ANGLE = (95 / 180) * Math.PI;
 const FRAME_TIMBER = 0x3a2a1e;
 const LOCK_BRASS = 0xd6a53a;
 const LOCKED_TINT = 0xa8a0b8;
+
+/** Rim vertices per puddle blob. */
+const PUDDLE_SEGMENTS = 40;
+/**
+ * Shared across every puddle rim — one colour, one line style, meant to
+ * outlive any single `Scenery` the way `MaterialCache`'s entries are.
+ */
+const PUDDLE_RIM_MATERIAL = new LineBasicMaterial({
+  color: ROOM_HAZARD_PALETTE.puddleRim,
+  transparent: true,
+  opacity: 0.8,
+});
+
+/** Wobble factor on a puddle's rim radius at `angle`, low-frequency so the blob stays rounded. */
+function puddleWobble(angle: number, seed: number): number {
+  return (
+    1 +
+    0.16 * Math.sin(angle * 3 + seed) +
+    0.1 * Math.sin(angle * 5 - seed * 1.7) +
+    0.05 * Math.sin(angle * 2 + seed * 0.6)
+  );
+}
+
+/**
+ * A wobbly ellipse in the floor plane (XZ, y = 0), centred on the origin and
+ * reaching a mean of `halfWidth` × `halfHeight`. `outline` gives just the rim
+ * ring (for a `LineLoop`); otherwise a triangle fan from the centre (for the
+ * filled `Mesh`), with every normal pointing straight up so the reflective
+ * material catches the bulb.
+ */
+function puddleBlobGeometry(
+  halfWidth: number,
+  halfHeight: number,
+  seed: number,
+  outline: boolean,
+): BufferGeometry {
+  const n = PUDDLE_SEGMENTS;
+  const geometry = new BufferGeometry();
+  if (outline) {
+    const positions = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      const r = puddleWobble(a, seed);
+      positions[i * 3] = Math.cos(a) * r * halfWidth;
+      positions[i * 3 + 2] = Math.sin(a) * r * halfHeight;
+    }
+    geometry.setAttribute('position', new BufferAttribute(positions, 3));
+    return geometry;
+  }
+  const positions = new Float32Array((n + 2) * 3);
+  const normals = new Float32Array((n + 2) * 3);
+  for (let v = 0; v < n + 2; v++) {
+    normals[v * 3 + 1] = 1;
+  }
+  for (let i = 0; i <= n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    const r = puddleWobble(a, seed);
+    positions[(i + 1) * 3] = Math.cos(a) * r * halfWidth;
+    positions[(i + 1) * 3 + 2] = Math.sin(a) * r * halfHeight;
+  }
+  // Wound so the front face points up (+y): the camera looks down onto the
+  // floor, and the reflective material is `side: FrontSide`.
+  const index: number[] = [];
+  for (let i = 0; i < n; i++) {
+    index.push(0, i + 2, i + 1);
+  }
+  geometry.setAttribute('position', new BufferAttribute(positions, 3));
+  geometry.setAttribute('normal', new BufferAttribute(normals, 3));
+  geometry.setIndex(index);
+  return geometry;
+}
 
 let plankTextureCache: Texture | null = null;
 
@@ -452,33 +576,6 @@ function plankTexture(): Texture {
   }
   plankTextureCache = textureFromPixels(w, h, colours);
   return plankTextureCache;
-}
-
-/**
- * A textured box that tiles at one authored tile per `ROOM_TILE_UNITS` on
- * every face. The geometry is still built fresh per call — #293's wall merge
- * is where that goes away — but every face's material is borrowed from
- * `materials` rather than constructed, so the room's own wall/void run
- * lengths (quantised to the room grid) recur across loads often enough for
- * this to be a real cache hit, not just a keepalive.
- */
-function tiledBox(
-  materials: MaterialCache,
-  texture: Texture,
-  width: number,
-  height: number,
-  depth: number,
-  topTexture: Texture = texture,
-): Mesh {
-  const geometry = new BoxGeometry(width, height, depth);
-  const side = materials.tiledMaterial(texture, depth, height, { roughness: 0.95 });
-  const top = materials.tiledMaterial(topTexture, width, depth, { roughness: 0.95 });
-  const end = materials.tiledMaterial(texture, width, height, { roughness: 0.95 });
-  // BoxGeometry material order: +x, -x, +y, -y, +z, -z.
-  const mesh = new Mesh(geometry, [side, side, top, top, end, end]);
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
-  return mesh;
 }
 
 function flatBox(
@@ -637,6 +734,8 @@ export class Scenery {
   private readonly flats: FloorSprite[] = [];
   private hints: LineSegments | null = null;
   private lean: number;
+  /** Doorway directions that lead to a secret room — a revealed one draws blasted, not hinged (#5). */
+  private secretDoorDirections: ReadonlySet<CompiledDoor['direction']> = new Set();
   /**
    * Every wall/void box in the room, accumulated by `addWallBox` during
    * `buildWalls`/`buildVoids` instead of becoming its own `Mesh`, then
@@ -661,12 +760,14 @@ export class Scenery {
     lean: number,
     lighting: Lighting,
     materials: MaterialCache,
+    secretDoorDirections: ReadonlySet<CompiledDoor['direction']> = new Set(),
   ) {
     this.room = room;
     this.art = art;
     this.lean = lean;
     this.lighting = lighting;
     this.materials = materials;
+    this.secretDoorDirections = secretDoorDirections;
     this.wallHeight = art.tiles?.wallHeight ?? DEFAULT_WALL_HEIGHT;
     const frame = roomFrameSize(room);
     this.frameWidth = frame.width;
@@ -674,7 +775,7 @@ export class Scenery {
     const theme = roomThemeForFloor(floor);
 
     this.buildFloor(theme.floor, theme.wall);
-    this.buildWalls(doors, theme.wall);
+    this.buildWalls(doors);
     this.buildVoids();
     this.finalizeWalls(theme.wall);
     this.buildBlocks(theme.block);
@@ -809,7 +910,7 @@ export class Scenery {
 
   // ------------------------------------------------------------- walls
 
-  private buildWalls(doors: readonly CompiledDoor[], wallColour: number): void {
+  private buildWalls(doors: readonly CompiledDoor[]): void {
     const room = this.room;
     const gaps = (
       direction: CompiledDoor['direction'],
@@ -852,10 +953,9 @@ export class Scenery {
           centre.z,
           gap.span,
           height,
-          this.art.tiles?.wall,
-          wallColour,
           this.lighting,
           this.materials,
+          this.secretDoorDirections.has(direction),
         );
         this.doors.push(piece);
         this.group.add(piece.group);
@@ -1050,46 +1150,85 @@ export class Scenery {
 
   private buildHazards(): void {
     const room = this.room;
-    // A slick puddle is the one thing in the room that reflects.
+    // A slick puddle is the one thing in the room that reflects. It is a
+    // wobbly blob, not the rectangle it used to be (which read as "a darker
+    // floor tile"): a triangle fan whose rim radius wanders with the angle,
+    // fitted to the authored rect, plus a lighter outline loop for the wet
+    // edge. The wobble is seeded off the rect's own corner, so two puddles in
+    // a room are shaped differently but each one is the same every visit.
+    const fillMaterial = this.materials.flatMaterial(ROOM_HAZARD_PALETTE.puddleFill, {
+      roughness: 0.15,
+      metalness: 0.6,
+      transparent: true,
+      opacity: 0.85,
+    });
     for (let i = 0; i < room.puddleCount; i++) {
       const minX = room.puddles[i * BLOCK_STRIDE] ?? 0;
       const minY = room.puddles[i * BLOCK_STRIDE + 1] ?? 0;
       const maxX = room.puddles[i * BLOCK_STRIDE + 2] ?? 0;
       const maxY = room.puddles[i * BLOCK_STRIDE + 3] ?? 0;
-      const mesh = new Mesh(
-        new PlaneGeometry(maxX - minX, maxY - minY),
-        this.materials.flatMaterial(ROOM_HAZARD_PALETTE.puddleFill, {
-          roughness: 0.15,
-          metalness: 0.6,
-          transparent: true,
-          opacity: 0.85,
-        }),
-      );
-      mesh.rotation.x = -Math.PI / 2;
-      mesh.position.set((minX + maxX) / 2, DECAL_HEIGHT, (minY + maxY) / 2);
-      mesh.receiveShadow = true;
-      this.group.add(mesh);
+      const cx = (minX + maxX) / 2;
+      const cz = (minY + maxY) / 2;
+      // The fan reaches to a mean radius of ~0.5 of the rect (with the wobble
+      // on top), so a puddle sits inside its authored footprint rather than
+      // spilling past it.
+      const halfW = (maxX - minX) / 2;
+      const halfH = (maxY - minY) / 2;
+      const seed = ((minX * 13 + minY * 7) % 628) / 100;
+
+      const fill = new Mesh(puddleBlobGeometry(halfW, halfH, seed, false), fillMaterial);
+      fill.position.set(cx, DECAL_HEIGHT, cz);
+      fill.receiveShadow = true;
+      this.group.add(fill);
+
+      const rim = new LineLoop(puddleBlobGeometry(halfW, halfH, seed, true), PUDDLE_RIM_MATERIAL);
+      rim.position.set(cx, DECAL_HEIGHT + 0.02, cz);
+      this.group.add(rim);
     }
     // A hop trellis blocks a shot's line but not a body: dense enough to hide
-    // behind, so it stands, and green enough to read as hops.
+    // behind, so it stands, and green enough to read as hops. Built as a row
+    // of posts with a top rail and a bine strung between them — not the solid
+    // translucent slab it used to be, which read as "a green box" a player
+    // could not tell was a see-through hop row rather than a wall.
+    const trellis = this.materials.flatMaterial(ROOM_HAZARD_PALETTE.trellisFill, {
+      roughness: 0.9,
+      transparent: true,
+      opacity: 0.92,
+    });
     for (let i = 0; i < room.sightBlockCount; i++) {
       const minX = room.sightBlocks[i * BLOCK_STRIDE] ?? 0;
       const minY = room.sightBlocks[i * BLOCK_STRIDE + 1] ?? 0;
       const maxX = room.sightBlocks[i * BLOCK_STRIDE + 2] ?? 0;
       const maxY = room.sightBlocks[i * BLOCK_STRIDE + 3] ?? 0;
-      const mesh = new Mesh(
-        new BoxGeometry(maxX - minX, TRELLIS_HEIGHT, maxY - minY),
-        this.materials.flatMaterial(ROOM_HAZARD_PALETTE.trellisFill, {
-          roughness: 0.9,
-          transparent: true,
-          opacity: 0.8,
-        }),
-      );
-      mesh.position.set((minX + maxX) / 2, TRELLIS_HEIGHT / 2, (minY + maxY) / 2);
-      mesh.castShadow = true;
-      // Stands in the room, hidden behind: second pass, like every other sprite.
-      mesh.layers.set(ACTOR_LAYER);
-      this.group.add(mesh);
+      const alongZ = maxY - minY >= maxX - minX;
+      const runLength = alongZ ? maxY - minY : maxX - minX;
+      const posts = Math.max(2, Math.round(runLength / 20) + 1);
+      const add = (mesh: Mesh): void => {
+        mesh.castShadow = true;
+        mesh.layers.set(ACTOR_LAYER);
+        this.group.add(mesh);
+      };
+      for (let p = 0; p < posts; p++) {
+        const t = posts === 1 ? 0.5 : p / (posts - 1);
+        const post = new Mesh(new BoxGeometry(1.6, TRELLIS_HEIGHT, 1.6), trellis);
+        post.position.set(
+          alongZ ? (minX + maxX) / 2 : minX + t * (maxX - minX),
+          TRELLIS_HEIGHT / 2,
+          alongZ ? minY + t * (maxY - minY) : (minY + maxY) / 2,
+        );
+        add(post);
+      }
+      // Top rail + a bine strung a third of the way down: two thin slabs that
+      // still block a shot's line (the sim already does) but read as strung
+      // wire, not wall.
+      for (const height of [TRELLIS_HEIGHT - 1, TRELLIS_HEIGHT * 0.55]) {
+        const rail = new Mesh(
+          new BoxGeometry(alongZ ? 1 : maxX - minX, 0.8, alongZ ? maxY - minY : 1),
+          trellis,
+        );
+        rail.position.set((minX + maxX) / 2, height, (minY + maxY) / 2);
+        add(rail);
+      }
     }
   }
 

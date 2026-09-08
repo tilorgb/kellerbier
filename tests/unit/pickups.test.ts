@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { GameSim, PLAYER_HEALTH, SOUL_HEALTH_MAX } from '../../src/sim/game/sim.js';
 import { entityIndex } from '../../src/sim/ecs/entity.js';
+import { World } from '../../src/sim/ecs/world.js';
 import { RoomGeometry } from '../../src/sim/room/geometry.js';
 import { InputAction, createInputFrame, setActionDown } from '../../src/sim/input/frame.js';
 
@@ -116,6 +117,58 @@ describe('pickup collection', () => {
     sim.step(idle());
     expect(sim.playerSoulHealth).toBe(SOUL_HEALTH_MAX);
     expect(sim.promille).toBeCloseTo(promilleBefore, 1);
+  });
+
+  it('a full-pool Wurst is shoved out of the way rather than collected or toasted', () => {
+    const sim = emptySim();
+    const index = sim.playerIndex;
+    // Red pool is full at run start — a Bratwurst has nothing to heal.
+    const px = sim.positionX(index);
+    const py = sim.positionY(index);
+    const wurst = entityIndex(sim.spawnPickup('bratwurst-full', px + 1, py));
+    sim.world.flush();
+
+    for (let tick = 0; tick < 20; tick++) {
+      sim.step(idle());
+    }
+
+    // Still on the floor, never collected, and no toast for a non-event.
+    expect(sim.world.states[wurst]).toBe(World.ALIVE);
+    expect(sim.playerHealth).toBe(PLAYER_HEALTH);
+    expect(sim.pickupToast).toBeNull();
+    // Pushed clear of the player's body rather than sitting inside it.
+    const dx = sim.positionX(wurst) - sim.positionX(index);
+    const dy = sim.positionY(wurst) - sim.positionY(index);
+    const playerRadius = sim.body.data[index * 2] ?? 0;
+    const wurstRadius = sim.body.data[wurst * 2] ?? 0;
+    expect(Math.hypot(dx, dy)).toBeGreaterThan(playerRadius + wurstRadius - 0.5);
+  });
+
+  it('never shoves a full-pool Wurst into a wall — it pinches along the clear axis instead', () => {
+    const room = bareRoom();
+    // A wall band east of centre; the player stands just west of it and the
+    // Wurst between them, so the shove direction points straight at the wall.
+    room.addBlock(175, 40, 220, 140);
+    const sim = new GameSim({ room });
+    const player = sim.playerIndex;
+    const doomed: number[] = [];
+    sim.world.forEach(sim.collidableMask, (i) => {
+      if (i !== player) doomed.push(i);
+    });
+    for (const i of doomed) sim.world.destroy(sim.world.entityAt(i));
+    sim.world.flush();
+
+    // Put the player right up against the wall's west face.
+    sim.transform.data[player * 4] = 168;
+    sim.transform.data[player * 4 + 1] = 90;
+    const wurst = entityIndex(sim.spawnPickup('bratwurst-full', 171, 90));
+    sim.world.flush();
+    const wurstRadius = sim.body.data[wurst * 2] ?? 0;
+
+    for (let tick = 0; tick < 40; tick++) {
+      sim.step(idle());
+      expect(sim.room.isClear(sim.positionX(wurst), sim.positionY(wurst), wurstRadius)).toBe(true);
+    }
   });
 });
 

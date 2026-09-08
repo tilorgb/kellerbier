@@ -517,6 +517,22 @@ function isSighted(sim: GameSim, index: number, toPlayerX: number, toPlayerY: nu
  * uses, and for the same reason: a turret against a wall that produces no shot
  * at all reads as the game having broken rather than as cover working.
  */
+/**
+ * `base` doubled (well — `eliteAttackDamageMultiplier`'d) when the body at
+ * `index` was rolled an elite (#156), otherwise `base` untouched. The one
+ * place an elite's *attack* damage is scaled: `fireOne`, `applyMeleeArc` and
+ * `detonateLobbedBomb` all route through here so "an elite always hits
+ * double" is one rule, not three that can drift apart. Contact damage is not
+ * here — it is scaled once at spawn, on the `contactDamage` component.
+ *
+ * @hot — called from the frame loop; `isEnemyElite` allocates nothing.
+ */
+export function eliteAttackDamage(sim: GameSim, index: number, base: number): number {
+  return isEnemyElite(sim, index)
+    ? Math.round(base * sim.tuning.enemy.eliteAttackDamageMultiplier)
+    : base;
+}
+
 function fireOne(sim: GameSim, index: number, angle: number, shot: FiringBehaviour): void {
   const directionX = Math.cos(angle);
   const directionY = Math.sin(angle);
@@ -539,7 +555,7 @@ function fireOne(sim: GameSim, index: number, angle: number, shot: FiringBehavio
     directionX * speed,
     directionY * speed,
     radius,
-    shot.damage,
+    eliteAttackDamage(sim, index, shot.damage),
     Math.max(1, Math.round(shot.lifetimeTicks)),
     ProjectileTeam.Enemy,
     0,
@@ -586,7 +602,13 @@ function detonateLobbedBomb(sim: GameSim, index: number, detonation: CompiledDet
   const motionBase = index * ENEMY_MOTION_STRIDE;
   const x = motion[motionBase] ?? sim.positionX(index);
   const y = motion[motionBase + 1] ?? sim.positionY(index);
-  sim.applySplashDamage(x, y, detonation.radius, detonation.damage, index);
+  sim.applySplashDamage(
+    x,
+    y,
+    detonation.radius,
+    eliteAttackDamage(sim, index, detonation.damage),
+    index,
+  );
   // #243: `applySplashDamage` alone leaves the blast itself invisible — a
   // real hit already flashes on whatever it caught, but there was nothing at
   // the landing spot for a player who dodged, or who was hit from off to one
@@ -749,7 +771,16 @@ function applyMeleeArc(
   const ny = distance === 0 ? Math.sin(aimAngle) : toY / distance;
   // The normal points from the swinger to the player — away from what hit
   // them, the convention every impact event uses.
-  sim.events.push(EventKind.Contact, playerIndex, index, selfX, selfY, nx, ny, swing.damage);
+  sim.events.push(
+    EventKind.Contact,
+    playerIndex,
+    index,
+    selfX,
+    selfY,
+    nx,
+    ny,
+    eliteAttackDamage(sim, index, swing.damage),
+  );
   if (swing.knockback > 0) {
     addPush(sim, playerIndex, nx * swing.knockback, ny * swing.knockback);
   }
