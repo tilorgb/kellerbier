@@ -4212,3 +4212,102 @@ still working. Whoever picks up item 4 should build its assertions around the co
 and #292/#293 already established as meaningful (draw calls per pass, `linkProgram`/`compileShader`
 deltas, `renderer.info.memory` deltas), not new metrics — those three are what the manual checks
 across all three tier issues converged on as hardware-independent and worth gating on.
+
+## 80. Lights never leave the scene, and a linked shader program is never deleted
+
+**Decided:** the room-switch stutter fix, after #291/#292/#293/#294 had each landed and the game
+still "stutters or gets stuck for almost multiple seconds" on a crossing. `docs/PERFORMANCE_AUDIT.md`
+§3b has the measurements; this is the two rules they produced and what they constrain.
+
+**What was actually happening.** Every lit material's shader program is keyed on, among other
+things, `numPointLights` — three.js bakes the light count into the GLSL as a `#define`, so a scene
+whose count changes needs a different program for every lit material, linked synchronously, on the
+frame the count changed. #292 made the *set* of `PointLight`s constant — a lantern, the shot
+lights, a pool of door glows, a pool of bulb rigs, all created once — and the count kept changing
+anyway, for three reasons that were each one step past where #292 stopped: a `DoorPiece` parented
+its pooled glow under its own group, and #293's cache detaches a visited room's group from the
+scene with the glows inside it (three counts only lights it can traverse to); `PedestalView` and
+`MachineView` still made their own `PointLight`s, under groups hidden when a room has none (a hidden
+subtree is not traversed either); and #291's shader warm rendered into a 1×1 `WebGLRenderTarget`,
+whose linear output colour space is *also* part of the program key, so it linked a second, unused
+set of programs on the dwell frame and the on-screen set still linked on the switch. Underneath
+that, F1's original mechanism: three reference-counts programs per material and `deleteProgram`s
+at zero, and rooms own a few per-instance materials each, so even a constant count would relink
+whatever the last disposed room had been the sole user of.
+
+**Rule 1 — a light is a scene-root resident, positioned in world space, never parented.** Every
+`PointLight` the game has is created by `Lighting`'s constructor and added to the scene root there;
+nothing else constructs one. A `DoorPiece`, a pedestal slot, the machine each *claim* one
+(`acquireDoorGlow`, the new `acquirePropLight`, pool `MAX_PROP_LIGHTS`) and drive its `position`
+and `intensity` — `DoorPiece.placeGlow` works the door's world position out from its centre and
+facing, and `Scenery.setOffset` re-places every door's glow when the room slides. What used to be
+"add the light to my group" is now "tell the light where my group is." The corollary is
+`Scenery.attach`/`detach`: the only way a room joins or leaves the scene, because a room that is
+off screen must have dark glows (`DoorPiece.setLive`) while its lights stay in the count — and
+`attach` also resets the group to the origin, which fixed a latent bug where a cached room last
+seen sliding *out* would have come back a room's width off. `tests/unit/lighting-pool.test.ts`
+counts with `traverseVisible`, the traversal three actually does, across detached rooms, hidden
+slots, a slide and a revisit through the real `GameView`.
+
+**Rule 2 — once linked, a program lives as long as the renderer.** `render/world/program-pins.ts`
+walks `renderer.info.programs` after every `GameView.render` and bumps each new program's
+`usedTimes` once, so no `material.dispose()` can take it to zero. This is deliberately the generic
+mechanism rather than the audit's "cache every material" — a billboard's tint, a door leaf's
+colour, a floor sprite's texture are per-instance for good reasons, and a cache would have to
+enumerate every material shape the renderer ever draws and be kept in step with each new one.
+Pinning needs no such list. It is safe *because of rule 1*: with every input to a program's key
+constant across a run (light count, shadow setup, output colour space, the material shapes), the
+set of programs this keeps alive is bounded — it plateaus at ~20 where before it climbed past 150.
+Memory-wise a program is a compiled GPU object in the low tens; textures and geometry are not
+pinned and are disposed exactly as before.
+
+**The warm follows both rules.** `GameView.warmSceneryGroup` renders into the canvas under a 1×1
+scissor, never a render target, so the variants it links are the ones the frame draws; and the
+first `render` runs `renderer.compile` over the whole scene so the persistent layers link behind
+the title card rather than on the first crossing into a room that has enemies or loot. Two
+details make that actually cover them: the views that build their meshes lazily (`PedestalView`'s
+slots, `EntityView`'s telegraph shapes and labels, `DecalView`, `ParticleView`'s per-kind layers)
+now build one hidden instance up front, so `compile` has something to compile; and because a
+driver defers the link itself until the first status query — which three makes on a program's
+first *draw* — `ProgramPins.settle` fetches a couple of newly linked programs' uniforms per frame,
+so a hidden mesh's program finishes linking behind the card, not the first time it shows.
+`warmSceneryGroup` also stopped consuming `shadowNeedsRefresh` — a warm room used to get baked
+into the live room's shadow map on the first frame of a floor — and the warm now waits a frame
+whenever a shadow re-render is pending, since drawing lit materials before any shadow map exists
+binds an empty colour texture to a shadow sampler (a driver warning per draw).
+
+**What this costs and constrains.** `numPointLights` is a constant for every lit fragment — F7's
+per-fragment loop, made fixed. The first cut of this fixed it at 35 (1 lantern + 8 shot lights +
+12 door glows + 6 bulbs + 8 prop lights), up from a varying 16–26: the right trade for a stutter
+(a relink of every shader is hundreds of milliseconds; nine more loop iterations at 640×360 is
+not), and the pools were then sized to what is actually measured rather than padded. A door now
+claims its glow while its room is *on screen* (`Scenery.attach` claims, `detach` returns) instead
+of for its lifetime, so the glow pool covers the two rooms a slide draws rather than every room
+`SceneryCache` holds — the worst adjacent pair across 300 generated floors totals 9 doors, so
+`MAX_DOOR_GLOWS` is 10; bulbs are 3 (the unauthored default is two, authored content uses one);
+prop lights are 3 (one pedestal per authored room, one machine per floor, a spare). **25 point
+lights**, and under SwiftShader — directional only, as always — a settled room went from 4.2 to
+5.5 frames per second, a 30% cheaper lit fragment. `tests/unit/lighting-pool.test.ts` pins each
+pool to its measurement so content growth trips a test rather than a silent dark door. The
+audit's other F7 lever — replacing the glow lights with emissive quads — is a visual change and
+stays open for a sign-off round. Anything that adds a light to the game adds it to `Lighting`'s
+constructor and a pool, never to a scene-graph node it owns — the `GameView` case in that test is
+what fails if it does. Anything that changes a program-key input mid-run (a second shadow-casting
+light, tone mapping, a render-target pass) re-opens both rules and needs re-measuring with the
+harness in `tools/perf/room-crossings.mjs`.
+
+**The gate.** The same harness runs in CI as the "room-crossing gate" job (`npm run
+perf:crossings`): headless Chromium on SwiftShader against the dev server, twelve real door
+crossings, failing on any `linkProgram` after the run's first crossing or a program count above
+40. The audit deferred this as its own piece of infrastructure (#79); it is here because the
+relink came back twice after being fixed once, and nothing in the unit suite can see it — it lives
+between three.js's program cache and the driver. It gates on the work (calls, counts), never on a
+SwiftShader frame time. The run's *first* crossing is allowed a link or two: a shape nothing has
+drawn yet (a fading corpse, a room prop no other room has) links once per renderer lifetime and
+is pinned from then on.
+
+**Rejected:** compiling asynchronously (`KHR_parallel_shader_compile` / `renderer.compileAsync`)
+instead — it would hide the link on drivers that have it and leave the relink itself in place;
+the fix is that there is nothing to link. Replacing the slide's live outgoing room with a snapshot
+(audit plan item 8) — it would have removed the *slide's* light-count swing but not the cache's,
+and the cache's was the larger one.

@@ -18,6 +18,10 @@ export class DecalView {
   constructor(store: DecalStore, texture: Texture) {
     this.store = store;
     this.texture = texture;
+    // One sprite up front, hidden, so the decal material is in the scene for
+    // `GameView.render`'s first-frame `renderer.compile` rather than linking
+    // on the first splat of the run (`docs/DECISIONS.md` #80).
+    this.spriteAt(0).visible = false;
   }
 
   sync(): void {

@@ -64,6 +64,49 @@ jobs:
           path: dist
           retention-days: 7
 
+  crossings:
+    name: room-crossing gate
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # The one perf number a diff can be judged on that CI can measure: a room
+    # crossing must link zero shader programs after the run's first. It was
+    # the stutter (docs/PERFORMANCE_AUDIT.md §3b), it came back twice after
+    # being fixed once, and a unit test cannot see it — it lives between
+    # three.js's program cache and the GL driver. Headless Chromium on
+    # SwiftShader counts the *work* (linkProgram calls, programs held), which
+    # is hardware-independent; it never gates on a frame time.
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # The dev server, not the build: the harness drives the game through
+      # the `__kellerbier` debug handle, which only a dev build exposes.
+      - name: Start the dev server
+        run: |
+          npm run dev -- --port 5173 --host 127.0.0.1 --strictPort > dev-server.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -sf -o /dev/null http://127.0.0.1:5173/; then exit 0; fi
+            sleep 1
+          done
+          echo "dev server did not come up"; cat dev-server.log; exit 1
+
+      - name: Walk twelve doors
+        env:
+          CHROMIUM: /usr/bin/google-chrome
+        run: npm run perf:crossings
+
+      - name: Dev server log
+        if: failure()
+        run: cat dev-server.log
+
   benchmark:
     name: frame-time delta
     needs: gate

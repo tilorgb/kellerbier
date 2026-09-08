@@ -1,11 +1,4 @@
-import {
-  Color,
-  MeshBasicMaterial,
-  type Object3D,
-  Scene,
-  WebGLRenderTarget,
-  type WebGLRenderer,
-} from 'three';
+import { Color, MeshBasicMaterial, type Object3D, Scene, Vector4, type WebGLRenderer } from 'three';
 import { ROOM_TRANSITION_TICKS, type GameSim, type RoomDirection } from '../sim/game/sim.js';
 import { roomFrameSize, type RoomGeometry } from '../sim/room/geometry.js';
 import type { CompiledDoor } from '../sim/room/template.js';
@@ -29,6 +22,7 @@ import { ELEVATION, WorldCamera, type WorldPoint } from './world/camera.js';
 import { ACTOR_LAYER, OCCLUDER_LAYER } from './world/layers.js';
 import { Lighting } from './world/lighting.js';
 import { MaterialCache } from './world/material-cache.js';
+import { ProgramPins } from './world/program-pins.js';
 import { RoomPrewarm } from './world/room-prewarm.js';
 import { type DecorativeProp, type DoorState, Scenery } from './world/scenery.js';
 import { SceneryCache } from './world/scenery-cache.js';
@@ -238,11 +232,16 @@ export class GameView {
    */
   private renderer: WebGLRenderer | null = null;
   /**
-   * A 1×1 target `prewarmRoom` renders the incoming room into once, off-screen,
-   * to force its shader compile + geometry/texture upload during the dwell
-   * rather than on the switch frame. Created on first use.
+   * Keeps every program the renderer links alive for good, so no room's
+   * disposal can ever cost a relink on a later crossing — see
+   * `world/program-pins.ts`. Fed after every `render`.
    */
-  private warmTarget: WebGLRenderTarget | null = null;
+  private readonly programPins = new ProgramPins();
+  /** Whether `render` has run `renderer.compile` over the persistent layers yet — once per view. */
+  private persistentLayersCompiled = false;
+  /** Scratch for `warmSceneryGroup` to save and restore the renderer's viewport and scissor. */
+  private readonly savedViewport = new Vector4();
+  private readonly savedScissor = new Vector4();
   /**
    * Rooms queued by `warmSceneryShaders` to have their shaders compiled — one
    * drained per `render` so the whole floor's set warms across the frames the
@@ -296,7 +295,7 @@ export class GameView {
 
     this.lighting = new Lighting(this.scene);
     this.scenery = this.buildScenery();
-    this.scene.add(this.scenery.group);
+    this.scenery.attach(this.scene);
 
     const makeLabel = (): BitmapText =>
       new BitmapText({
@@ -338,10 +337,15 @@ export class GameView {
 
     this.damageNumbers = new DamageNumberView(sim.damageNumbers, this.labelLayer, makeLabel);
 
-    this.pedestals = new PedestalView(sim, textures.pedestalItem, textures.pedestalPlinth);
+    this.pedestals = new PedestalView(
+      sim,
+      this.lighting,
+      textures.pedestalItem,
+      textures.pedestalPlinth,
+    );
     this.scene.add(this.pedestals.group);
 
-    this.machine = new MachineView(sim, textures.pedestalPlinth);
+    this.machine = new MachineView(sim, this.lighting, textures.pedestalPlinth);
     this.scene.add(this.machine.group);
 
     this.maibaumView = new MaibaumView();
@@ -443,6 +447,13 @@ export class GameView {
       // otherwise — a cut, a floor advance, a Blutwurz spirit walk, or simply
       // too fast a crossing to have built one — drop any half-built reserve and
       // build here.
+      // A previous slide that never finished (two crossings in very quick
+      // succession) leaves its own outgoing room on screen — detach it
+      // before the new room goes up, since straight back through the same
+      // door it *is* the new room, and `attach` below then puts it back. It
+      // stays cached for a future revisit (or was already disposed just
+      // above, on a floor change) rather than being rebuilt.
+      this.outgoingScenery?.detach();
       const adopted =
         this.pendingAdoptKey === null ? null : this.prewarm.take(this.pendingAdoptKey);
       this.pendingAdoptKey = null;
@@ -455,7 +466,10 @@ export class GameView {
         this.sceneryCache.set(sim.roomId, adopted);
       }
       this.scenery = adopted ?? this.buildScenery();
-      this.scene.add(this.scenery.group);
+      // `attach`, never a bare `scene.add`: it also resets the group to the
+      // origin (a cached room last seen sliding *out* still carries that
+      // shift) and lights its door glows (`Scenery.attach`).
+      this.scenery.attach(this.scene);
       this.scenery.setLean(this.camera.lean);
       // A prewarmed room was built before the app knew which of *its* doors
       // face the boss (`setBossDoors` runs on the crossing, after the build),
@@ -464,11 +478,6 @@ export class GameView {
       for (const door of this.scenery.doors) {
         door.setDouble(this.bossDoorDirections.has(door.door.direction));
       }
-      // A previous slide that never finished (two crossings in very quick
-      // succession) leaves its own outgoing room on screen — detach it. It
-      // stays cached for a future revisit (or was already disposed just
-      // above, on a floor change) rather than being rebuilt.
-      this.outgoingScenery?.group.removeFromParent();
       const newFrame = roomFrameSize(this.roomGeometry);
       if (direction !== null && !this.accessibility.reducedMotion) {
         // Keep the room just left alive, moved to sit adjacent to the new
@@ -479,7 +488,7 @@ export class GameView {
         // makes the camera appear to slide from the old room into this one
         // rather than cut and then correct.
         const shift = outgoingRoomShift(direction, previousFrame, newFrame);
-        outgoingScenery.group.position.set(shift.x, 0, shift.z);
+        outgoingScenery.setOffset(shift.x, shift.z);
         this.outgoingScenery = outgoingScenery;
         const natural = this.camera.targetFor(
           sim.positionX(sim.playerIndex),
@@ -498,7 +507,7 @@ export class GameView {
         // setting exists to remove. Either way `outgoingScenery` just needs
         // detaching, not disposing — it stays cached (or, on a floor change,
         // was already disposed above).
-        outgoingScenery.group.removeFromParent();
+        outgoingScenery.detach();
         this.outgoingScenery = null;
         this.transitionOffsetX = 0;
         this.transitionOffsetY = 0;
@@ -594,6 +603,19 @@ export class GameView {
     this.renderer = renderer;
     const camera = this.camera.camera;
 
+    // The layers that live for the whole run — bodies, pickups, projectiles,
+    // particles, decals, pedestals, price plates — sit in the scene from the
+    // first frame but mostly draw nothing until a room has enemies or loot,
+    // so three would otherwise compile their programs on the first crossing
+    // into such a room. `compile` walks every mesh in the scene, hidden or
+    // empty, and links their programs now, against the canvas (so the
+    // right `outputColorSpace` variant) and the final light count. Once
+    // per view; `warmSceneryShaders`/`prewarmRoom` cover the rooms.
+    if (!this.persistentLayersCompiled) {
+      this.persistentLayersCompiled = true;
+      renderer.compile(this.scene, camera);
+    }
+
     // Everything that stands in the room is on `ACTOR_LAYER` only (set on the
     // `Billboard`, on the block boxes and trellis, and swept here for the
     // pooled meshes those groups grow). Pass one draws the room without them.
@@ -650,6 +672,13 @@ export class GameView {
     camera.layers.mask = previousLayerMask;
     renderer.autoClear = previousAutoClear;
     renderer.shadowMap.autoUpdate = previousShadowAutoUpdate;
+
+    // Anything the passes above linked for the first time stays linked for
+    // the life of the renderer, and anything `compile` linked for a mesh not
+    // yet drawn finishes linking over the next frames rather than on its
+    // first draw — see `world/program-pins.ts`.
+    this.programPins.pin(renderer);
+    this.programPins.settle();
   }
 
   private readonly projectPoint = (x: number, height: number, z: number, out: WorldPoint): void => {
@@ -739,7 +768,10 @@ export class GameView {
     props: readonly DecorativeProp[],
   ): void {
     const built = this.prewarm.request(roomKey, () => this.makeScenery(room, floor, doors, props));
-    if (built !== null) {
+    // Same shadow-map guard as `drainWarmQueue`; skipping the GPU warm here
+    // only leaves the room's buffer upload to the switch frame, which is
+    // cheap now that no program links there.
+    if (built !== null && !this.shadowNeedsRefresh) {
       this.warmSceneryGroup(built.group);
     }
   }
@@ -771,10 +803,18 @@ export class GameView {
     this.warmQueue = { floor, rooms: [...rooms] };
   }
 
-  /** Compiles one queued room's scenery shaders, if any are waiting. Called once per `sync`. */
+  /**
+   * Compiles one queued room's scenery shaders, if any are waiting. Called once
+   * per `sync`. Waits a frame whenever the shadow map is about to be
+   * re-rendered: the warm draws lit materials with the key light's shadow
+   * sampler, and on the first frame of a floor (or the frame of a room change)
+   * there is no shadow map yet for it to sample — three binds an empty colour
+   * texture to a `sampler2DShadow` and the driver logs a format mismatch per
+   * draw. Letting the real render go first costs the warm one frame.
+   */
   private drainWarmQueue(): void {
     const queue = this.warmQueue;
-    if (queue === null) {
+    if (queue === null || this.shadowNeedsRefresh) {
       return;
     }
     const next = queue.rooms.shift();
@@ -788,27 +828,52 @@ export class GameView {
   }
 
   /**
-   * Runs `group` through the real render path once, into a 1×1 off-screen
-   * target: every shader program `render`'s three passes need gets compiled and
-   * every buffer/texture uploaded now, not on the frame the group first shows.
-   * A plain `renderer.render` or `compileAsync` would miss the occluder- and
-   * actor-pass program variants. The shadow pass is skipped — its one depth
-   * program is shared and warms with the first room. `group` is added, drawn
-   * and removed; nothing of it is visible.
+   * Runs `group` through the real render path once, so every shader program
+   * `render`'s three passes need is compiled and every buffer/texture uploaded
+   * now, not on the frame the group first shows. A plain `renderer.render` or
+   * `compileAsync` would miss the occluder- and actor-pass program variants.
+   *
+   * It draws into the *canvas* — the default framebuffer, under a 1×1 scissor
+   * — and not an offscreen `WebGLRenderTarget`, because the target decides a
+   * program's `outputColorSpace` parameter, which is part of its cache key:
+   * a render target is always linear, the canvas is sRGB. The first version
+   * of this warmed a 1×1 target and so compiled a complete second program
+   * set the real frame never used, while the on-screen variants still linked
+   * on the crossing (`docs/PERFORMANCE_AUDIT.md` §3b). The pixel it writes is
+   * cleared by the real frame's pass one moments later.
+   *
+   * The shadow map is left alone: `autoUpdate` is already off (`app.ts`) and
+   * `needsUpdate` is forced off here — with `shadowNeedsRefresh` preserved
+   * for the real render — so a warm room never gets baked into the live
+   * room's shadow map, and the one shared depth program warms with the first
+   * room anyway. `group` is added, drawn and removed; nothing of it is visible.
    */
   private warmSceneryGroup(group: Object3D): void {
     const renderer = this.renderer;
     if (renderer === null) {
       return;
     }
-    const target = (this.warmTarget ??= new WebGLRenderTarget(1, 1));
     const previousTarget = renderer.getRenderTarget();
     const previousShadowAutoUpdate = renderer.shadowMap.autoUpdate;
+    const previousShadowNeedsUpdate = renderer.shadowMap.needsUpdate;
+    const previousScissorTest = renderer.getScissorTest();
+    const shadowNeedsRefresh = this.shadowNeedsRefresh;
+    renderer.getViewport(this.savedViewport);
+    renderer.getScissor(this.savedScissor);
     this.scene.add(group);
-    renderer.setRenderTarget(target);
+    renderer.setRenderTarget(null);
+    renderer.setScissorTest(true);
+    renderer.setScissor(0, 0, 1, 1);
+    renderer.setViewport(0, 0, 1, 1);
     renderer.shadowMap.autoUpdate = false;
+    this.shadowNeedsRefresh = false;
     this.render(renderer);
+    this.shadowNeedsRefresh = shadowNeedsRefresh;
+    renderer.shadowMap.needsUpdate = previousShadowNeedsUpdate;
     renderer.shadowMap.autoUpdate = previousShadowAutoUpdate;
+    renderer.setViewport(this.savedViewport);
+    renderer.setScissor(this.savedScissor);
+    renderer.setScissorTest(previousScissorTest);
     renderer.setRenderTarget(previousTarget);
     this.scene.remove(group);
   }
@@ -866,7 +931,7 @@ export class GameView {
     const ticksLeft = this.sim.roomTransitionTicks - alpha;
     if (ticksLeft <= 0) {
       if (this.outgoingScenery !== null) {
-        this.outgoingScenery.group.removeFromParent();
+        this.outgoingScenery.detach();
         this.outgoingScenery = null;
       }
       return { x: 0, y: 0 };
@@ -975,7 +1040,6 @@ export class GameView {
     // other room it is holding onto.
     this.sceneryCache.clear();
     this.prewarm.discard();
-    this.warmTarget?.dispose();
     this.materialCache.dispose();
     this.entities.destroy();
     this.playerView.destroy();

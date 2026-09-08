@@ -127,6 +127,19 @@ export class EntityView {
     this.pickupTints = sim.pickups.all.map((definition) => definition.tint);
     this.pickupLabels = sim.pickups.all.map((definition) => definition.label);
     this.pickupSprites = sim.pickups.all.map((definition) => art.pickupArt[definition.id]);
+    // One of each telegraph shape built up front, hidden, so their (unlit,
+    // colour-only) materials are in the scene for `GameView.render`'s
+    // first-frame `renderer.compile` — otherwise the first enemy to telegraph
+    // an attack linked their programs mid-fight (`docs/DECISIONS.md` #80).
+    // Bodies and corpses need no such seed: they share the pedestal item's
+    // `Billboard` material shape, which `PedestalView` seeds the same way.
+    this.ringAt(0).hide();
+    this.wedgeAt(0).hide();
+    this.barAt(0).hide();
+    // Likewise one world label (a shop price, a pickup name) — `WorldLabel`
+    // constructs hidden — so the first priced pickup does not link the label
+    // text's program on the way into the shop.
+    this.labelAt(0);
   }
 
   static get telegraphScale(): number {
