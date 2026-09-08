@@ -24,11 +24,17 @@
  *   in most rooms, a near-empty or cluttered one only occasionally. The mob
  *   fight is the challenge, not the walk. The room centre is *not* special-cased.
  * - Rule 1: never trap the player. The player only ever enters a generated room
- *   through a door, landing in the never-solid wall-margin ring; `carveDoorMouths`
- *   clears the one tile inside each door, a BFS from a mouth proves every other
- *   door is reachable, and `fillUnreachedPockets` seals any pocket the BFS could
- *   not reach so the whole walkable area is one region. Failing that, fall back
- *   to an empty room and warn once (`docs/DECISIONS.md` #19).
+ *   through a door, landing in the never-solid wall-margin ring; a BFS from
+ *   that ring tile is what `fillUnreachedPockets` uses to seal any pocket it
+ *   could not reach, so the whole walkable area is one region. Failing that,
+ *   fall back to an empty room and warn once (`docs/DECISIONS.md` #19).
+ *   Nothing is carved open in front of a door: the tile straight ahead of the
+ *   player may be solid, so a room can meet them with a wall in their face and
+ *   a step to take left or right — zero tiles of forward clearance is an
+ *   ordinary shape, not a defect. `hasBoxedInDoor` hard-rejects only the
+ *   layout where *all three* interior tiles at a door (ahead, left, right) are
+ *   blocked at once, since then the door opens onto nothing but the margin
+ *   lane.
  * - A multi-cell room (`1x2`/`2x2`/`L`/`T`) is generated as one continuous grid
  *   spanning the shape's bounding box — the seams between glued sub-rooms carry
  *   no wall — then sliced back into per-sub-room `RoomSubLayout`s for
@@ -301,12 +307,50 @@ interface Cell {
 const DOOR_INNER_COL = (ROOM_COLUMNS - 1) / 2; // 7
 const DOOR_INNER_ROW = (ROOM_ROWS - 1) / 2; // 4
 
-/** Where a body stands the instant it walks through `(cellCol,cellRow)`'s `direction` door — in whole-grid tiles. */
-function doorMouth(cellCol: number, cellRow: number, direction: DoorDirection): Cell {
+/**
+ * The four tiles a door is judged by, in whole-grid coordinates.
+ *
+ * The player walking through a door lands on `entry` — a tile of the
+ * wall-margin ring (`inInterior`'s outermost course), which no obstacle can
+ * ever be stamped into, so it is the one tile that is guaranteed open and
+ * therefore the only sound anchor for the reachability BFS.
+ *
+ * `ahead`/`left`/`right` are the three *interior* tiles at that door: the one
+ * straight in front of the player and the two flanking it. Any of them may be
+ * solid — a wall right in front of the entry point (zero tiles of forward
+ * clearance, step in and turn) is a deliberate, ordinary room shape. What is
+ * never allowed is all three at once: `hasBoxedInDoor` rejects that layout,
+ * because then the door opens onto nothing but the margin lane.
+ */
+interface DoorApproach {
+  readonly entry: Cell;
+  readonly ahead: Cell;
+  readonly left: Cell;
+  readonly right: Cell;
+}
+
+/** The approach tiles of `(cellCol,cellRow)`'s `direction` door — see `DoorApproach`. */
+function doorApproach(cellCol: number, cellRow: number, direction: DoorDirection): DoorApproach {
   const offset = DIRECTION_OFFSET[direction];
+  const centreCol = cellCol * ROOM_COLUMNS + DOOR_INNER_COL;
+  const centreRow = cellRow * ROOM_ROWS + DOOR_INNER_ROW;
+  // The ring is one tile thick, so `entry` is the full half-span out from the
+  // cell centre and `ahead` is one step back in from it.
+  const entry = {
+    col: centreCol + offset.x * DOOR_INNER_COL,
+    row: centreRow + offset.y * DOOR_INNER_ROW,
+  };
+  const ahead = {
+    col: centreCol + offset.x * (DOOR_INNER_COL - 1),
+    row: centreRow + offset.y * (DOOR_INNER_ROW - 1),
+  };
+  // Along the wall the door sits in: the cross-axis of the way in.
+  const side = offset.x !== 0 ? { col: 0, row: 1 } : { col: 1, row: 0 };
   return {
-    col: cellCol * ROOM_COLUMNS + DOOR_INNER_COL + offset.x * (DOOR_INNER_COL - 1),
-    row: cellRow * ROOM_ROWS + DOOR_INNER_ROW + offset.y * (DOOR_INNER_ROW - 1),
+    entry,
+    ahead,
+    left: { col: ahead.col + side.col, row: ahead.row + side.row },
+    right: { col: ahead.col - side.col, row: ahead.row - side.row },
   };
 }
 
@@ -432,11 +476,22 @@ function countInteriorSolid(grid: RoomGrid): number {
   return count;
 }
 
-/** Clears the one tile immediately inside each door mouth. */
-function carveDoorMouths(grid: RoomGrid, mouths: readonly Cell[]): void {
-  for (const mouth of mouths) {
-    setSolid(grid, mouth.col, mouth.row, false);
+/**
+ * A wall-margin ring tile of some real (non-void) cell — the BFS anchor for
+ * the degenerate case of a room with no doors at all, which the floor plan
+ * never produces but the signatures allow. Any ring tile does: the ring is
+ * never solid and is continuous across a glued seam, so one of them reaches
+ * all of them.
+ */
+function firstRingTile(grid: RoomGrid): Cell {
+  for (let row = 0; row < grid.rows; row++) {
+    for (let col = 0; col < grid.cols; col++) {
+      if (!blocked(grid, col, row) && !inInterior(grid, col, row)) {
+        return { col, row };
+      }
+    }
   }
+  return { col: 0, row: 0 };
 }
 
 const UNREACHED = -1;
@@ -480,12 +535,55 @@ function bfsDistances(grid: RoomGrid, start: Cell): Int16Array {
   return distance;
 }
 
-function everyMouthReachable(
+/** How many tiles a `bfsDistances` sweep reached — the size of the walkable region. */
+function reachableCount(distance: Int16Array): number {
+  let count = 0;
+  for (let index = 0; index < distance.length; index++) {
+    if (distAt(distance, index) >= 0) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+function everyDoorReachable(
   grid: RoomGrid,
   distance: Int16Array,
-  mouths: readonly Cell[],
+  doors: readonly DoorApproach[],
 ): boolean {
-  return mouths.every((mouth) => distAt(distance, tileIndex(grid, mouth.col, mouth.row)) >= 0);
+  return doors.every(
+    (door) => distAt(distance, tileIndex(grid, door.entry.col, door.entry.row)) >= 0,
+  );
+}
+
+/**
+ * True if a door's three interior tiles — the one straight ahead of where the
+ * player lands, and the two flanking it — are *all* blocked, leaving the
+ * margin ring as the only thing the door opens onto.
+ *
+ * A wall on any one (or two) of those is a fine, ordinary shape, including the
+ * one this replaced a forced buffer with: a wall immediately ahead, zero tiles
+ * of clearance, step through the door and turn left or right. It is only when
+ * every way in is blocked at once that the door stops being a way into the
+ * room at all — a player who walks in and has to shuffle sideways along the
+ * wall band to find an opening reads that as a dead end, whatever the coarser
+ * `everyDoorReachable` BFS makes of it (that BFS runs on the always-open ring,
+ * which connects every door to every other door by construction, so it can
+ * never catch this on its own).
+ *
+ * These three tiles, rather than the neighbours of `entry` itself: `entry` is
+ * where the player actually stands, but its own left and right neighbours are
+ * more ring, which is open all the way around every cell — asking whether
+ * *they* are blocked would answer "no" every time. The three interior tiles at
+ * the door are the version of "boxed in on every side" that says anything.
+ */
+function hasBoxedInDoor(grid: RoomGrid, doors: readonly DoorApproach[]): boolean {
+  return doors.some(
+    (door) =>
+      blocked(grid, door.ahead.col, door.ahead.row) &&
+      blocked(grid, door.left.col, door.left.row) &&
+      blocked(grid, door.right.col, door.right.row),
+  );
 }
 
 /**
@@ -630,15 +728,15 @@ function layoutGrid(
   gridCols: number,
   gridRows: number,
   voidCells: readonly Cell[],
-  mouths: readonly Cell[],
+  doors: readonly DoorApproach[],
   cellCount: number,
 ): { readonly layout: Layout; readonly found: boolean } {
   const symmetry = voidCells.length > 0 ? 'none' : rng.weightedPick(SYMMETRY_WEIGHTS);
-  const seedMouth = mouths[0] ?? { col: DOOR_INNER_COL, row: DOOR_INNER_ROW };
   const { targetLow, targetHigh } = coverageBand(rng, params, cellCount);
 
   const empty = makeGrid(gridCols, gridRows, voidCells);
-  let best: Layout = { grid: empty, distance: bfsDistances(empty, seedMouth) };
+  const seed = doors[0]?.entry ?? firstRingTile(empty);
+  let best: Layout = { grid: empty, distance: bfsDistances(empty, seed) };
   let bestMiss = Number.POSITIVE_INFINITY;
   let found = false;
 
@@ -646,10 +744,24 @@ function layoutGrid(
     const candidate = makeGrid(gridCols, gridRows, voidCells);
     stampCoverWalls(candidate, rng, symmetry, rng.nextInt(0, params.maxCoverWalls * cellCount + 1));
     stampScatter(candidate, rng, symmetry, rng.nextInt(0, params.maxScatter * cellCount + 1));
-    carveDoorMouths(candidate, mouths);
+    // Nothing is carved open at a door: the tile ahead of one is allowed to be
+    // solid, so a room can greet the player with a wall in their face and a
+    // step to take left or right. The BFS below starts from the wall-margin
+    // ring instead, which no obstacle can occupy.
 
-    const candidateDistance = bfsDistances(candidate, seedMouth);
-    if (!everyMouthReachable(candidate, candidateDistance, mouths)) {
+    const candidateDistance = bfsDistances(candidate, seed);
+    if (!everyDoorReachable(candidate, candidateDistance, doors)) {
+      continue;
+    }
+    // Rule 1, at the door: the BFS above proves the walkable region reaches
+    // every door's entry tile, but every entry tile is on the same always-open
+    // ring, so it can never fail on its own — and it says nothing about
+    // whether a door opens onto the *room*. `hasBoxedInDoor` is what does: a
+    // hard reject, not a scoring preference, for the one shape where all three
+    // interior tiles at a door are walled off. Touching a wall on some of them
+    // (including straight ahead) stays an ordinary room shape — see
+    // `hasBoxedInDoor`'s doc comment.
+    if (hasBoxedInDoor(candidate, doors)) {
       continue;
     }
     fillUnreachedPockets(candidate, candidateDistance);
@@ -726,12 +838,12 @@ function tileAgainstCover(grid: RoomGrid, col: number, row: number): boolean {
 
 /**
  * Every interior tile that is open, reachable, has room for a body's collider,
- * and is at least `doorGap` from every door mouth.
+ * and is at least `doorGap` from the tile straight ahead of every door.
  */
 function openTiles(
   grid: RoomGrid,
   distance: Int16Array,
-  mouths: readonly Cell[],
+  doors: readonly DoorApproach[],
   doorGap: number,
 ): PlacedTile[] {
   const tiles: PlacedTile[] = [];
@@ -749,8 +861,9 @@ function openTiles(
         continue;
       }
       if (
-        mouths.some(
-          (mouth) => Math.abs(mouth.col - col) <= doorGap && Math.abs(mouth.row - row) <= doorGap,
+        doors.some(
+          (door) =>
+            Math.abs(door.ahead.col - col) <= doorGap && Math.abs(door.ahead.row - row) <= doorGap,
         )
       ) {
         continue;
@@ -906,7 +1019,7 @@ function placeHazards(
   ctx: RoomGenContext,
   grid: RoomGrid,
   distance: Int16Array,
-  mouths: readonly Cell[],
+  doors: readonly DoorApproach[],
   cellCount: number,
   params: RoomGenTuning,
 ): { readonly col: number; readonly row: number; readonly type: string }[] {
@@ -942,8 +1055,8 @@ function placeHazards(
           continue;
         }
         if (
-          mouths.some(
-            (mouth) => Math.abs(mouth.col - col) <= 2 && Math.abs(mouth.row - row) <= 2,
+          doors.some(
+            (door) => Math.abs(door.ahead.col - col) <= 2 && Math.abs(door.ahead.row - row) <= 2,
           ) ||
           patches.some((patch) => Math.abs(patch.col - col) < 3 && Math.abs(patch.row - row) < 3)
         ) {
@@ -984,7 +1097,7 @@ function placeProps(
   candidates: readonly PlacedTile[],
   enemies: readonly PlacedEnemy[],
   pickup: PlacedTile | null,
-  mouths: readonly Cell[],
+  doors: readonly DoorApproach[],
   cellCount: number,
   params: RoomGenTuning,
 ): PlacedProp[] {
@@ -993,7 +1106,7 @@ function placeProps(
     return [];
   }
   const kinds = PROP_KINDS[ctx.floorTag] ?? FALLBACK_PROP_KINDS;
-  const seedMouth = mouths[0] ?? { col: DOOR_INNER_COL, row: DOOR_INNER_ROW };
+  const seed = doors[0]?.entry ?? firstRingTile(grid);
 
   const usable = candidates.filter((tile) => {
     if (
@@ -1023,6 +1136,7 @@ function placeProps(
 
   const props: PlacedProp[] = [];
   const scratch: RoomGrid = { ...grid, solid: grid.solid.slice() };
+  let reachable = reachableCount(bfsDistances(scratch, seed));
   for (const { tile } of withCover) {
     if (props.length >= target) {
       break;
@@ -1036,10 +1150,19 @@ function placeProps(
     }
     const index = tileIndex(scratch, tile.col, tile.row);
     scratch.solid[index] = true;
-    if (!everyMouthReachable(scratch, bfsDistances(scratch, seedMouth), mouths)) {
+    // A prop is furniture in the middle of the room (the `openTiles` door gap
+    // keeps it away from the doors), so what it can break is not a door being
+    // walled off — every door opens onto the always-open margin ring, so no
+    // barrel can ever disconnect one from another — but a *pocket*: plug the
+    // single tile joining two halves of a room and everything past it is
+    // walled off. So the check is that the barrel costs the walkable region
+    // exactly its own tile and nothing else.
+    const afterReachable = reachableCount(bfsDistances(scratch, seed));
+    if (afterReachable !== reachable - 1) {
       scratch.solid[index] = false;
       continue;
     }
+    reachable = afterReachable;
     props.push({ col: tile.col, row: tile.row, x: tile.x, y: tile.y, type: ctx.rng.pick(kinds) });
   }
   return props;
@@ -1127,19 +1250,19 @@ export function generateRoom(
   spec: RoomGenSpec,
   params: RoomGenTuning = DEFAULT_ROOM_GEN_TUNING,
 ): SingleCellRoomTemplate {
-  const mouths = spec.doors.map((direction) => doorMouth(0, 0, direction));
-  const { layout, found } = layoutGrid(spec.rng, params, 1, 1, [], mouths, 1);
+  const approaches = spec.doors.map((direction) => doorApproach(0, 0, direction));
+  const { layout, found } = layoutGrid(spec.rng, params, 1, 1, [], approaches, 1);
   if (!found) {
     warnFallback(spec);
   }
 
-  const candidates = openTiles(layout.grid, layout.distance, mouths, 2);
+  const candidates = openTiles(layout.grid, layout.distance, approaches, 2);
   const enemies = placeEnemies(spec, candidates, 1, params);
   const pickup = spec.rng.chance(params.pickupChance)
     ? pickPickup(spec.rng.shuffle(candidates.slice()), enemies)
     : null;
-  const hazards = placeHazards(spec, layout.grid, layout.distance, mouths, 1, params);
-  const props = placeProps(spec, layout.grid, candidates, enemies, pickup, mouths, 1, params);
+  const hazards = placeHazards(spec, layout.grid, layout.distance, approaches, 1, params);
+  const props = placeProps(spec, layout.grid, candidates, enemies, pickup, approaches, 1, params);
 
   const sub = subLayoutFor(layout.grid, { col: 0, row: 0 }, enemies, pickup, hazards, props);
   return {
@@ -1185,12 +1308,12 @@ export function generateMultiCellRoom(
     }
   }
 
-  const mouths = spec.doors
+  const approaches = spec.doors
     .map((door) => {
       const cell = realCells[door.cellIndex];
-      return cell === undefined ? null : doorMouth(cell.col, cell.row, door.direction);
+      return cell === undefined ? null : doorApproach(cell.col, cell.row, door.direction);
     })
-    .filter((mouth): mouth is Cell => mouth !== null);
+    .filter((approach): approach is DoorApproach => approach !== null);
 
   const cellCount = realCells.length;
   const { layout, found } = layoutGrid(
@@ -1199,26 +1322,26 @@ export function generateMultiCellRoom(
     gridCols,
     gridRows,
     voidCells,
-    mouths,
+    approaches,
     cellCount,
   );
   if (!found) {
     warnFallback(spec);
   }
 
-  const candidates = openTiles(layout.grid, layout.distance, mouths, 2);
+  const candidates = openTiles(layout.grid, layout.distance, approaches, 2);
   const enemies = placeEnemies(spec, candidates, cellCount, params);
   const pickup = spec.rng.chance(params.pickupChance)
     ? pickPickup(spec.rng.shuffle(candidates.slice()), enemies)
     : null;
-  const hazards = placeHazards(spec, layout.grid, layout.distance, mouths, cellCount, params);
+  const hazards = placeHazards(spec, layout.grid, layout.distance, approaches, cellCount, params);
   const props = placeProps(
     spec,
     layout.grid,
     candidates,
     enemies,
     pickup,
-    mouths,
+    approaches,
     cellCount,
     params,
   );

@@ -126,32 +126,73 @@ function doorSpawnPoint(geometry: RoomGeometry, direction: DoorDirection): Point
   }
 }
 
-/** Centre of the interior tile immediately inside this door — on the 8px flood lattice. */
-function doorInnerTileCentre(geometry: RoomGeometry, direction: DoorDirection): Point {
+/**
+ * Centre of the wall-margin ring tile the player lands on coming through this
+ * door — the flood start, and the only tile at a door that is open by
+ * construction. The tile *inside* it may be solid: a generated room is allowed
+ * to meet the player with a wall in their face (zero forward clearance), so
+ * flooding from there would be flooding from inside a rock.
+ */
+function doorEntryTileCentre(geometry: RoomGeometry, direction: DoorDirection): Point {
   const centre = doorCentre(geometry, { direction, cellCol: 0, cellRow: 0 });
   switch (direction) {
     case 'north':
-      return { x: centre.x, y: geometry.minY + 24 };
+      return { x: centre.x, y: geometry.minY + 8 };
     case 'south':
-      return { x: centre.x, y: geometry.maxY - 24 };
+      return { x: centre.x, y: geometry.maxY - 8 };
     case 'west':
-      return { x: geometry.minX + 24, y: centre.y };
+      return { x: geometry.minX + 8, y: centre.y };
     case 'east':
-      return { x: geometry.maxX - 24, y: centre.y };
+      return { x: geometry.maxX - 8, y: centre.y };
   }
 }
 
-/** Centre of the interior tile immediately inside a compiled door, on the flood lattice. */
+/** Centre of the tile straight ahead of `doorEntryTileCentre` — the one that may be a wall. */
+function doorAheadTileCentre(geometry: RoomGeometry, direction: DoorDirection): Point {
+  const entry = doorEntryTileCentre(geometry, direction);
+  switch (direction) {
+    case 'north':
+      return { x: entry.x, y: entry.y + 16 };
+    case 'south':
+      return { x: entry.x, y: entry.y - 16 };
+    case 'west':
+      return { x: entry.x + 16, y: entry.y };
+    case 'east':
+      return { x: entry.x - 16, y: entry.y };
+  }
+}
+
+/** The two tiles flanking `doorAheadTileCentre` — the sideways ways into the room. */
+function doorFlankTileCentres(geometry: RoomGeometry, direction: DoorDirection): [Point, Point] {
+  const ahead = doorAheadTileCentre(geometry, direction);
+  const alongX = direction === 'north' || direction === 'south';
+  return [
+    { x: ahead.x + (alongX ? 16 : 0), y: ahead.y + (alongX ? 0 : 16) },
+    { x: ahead.x - (alongX ? 16 : 0), y: ahead.y - (alongX ? 0 : 16) },
+  ];
+}
+
+/** Centre of the margin-ring tile a compiled door drops the player on, on the flood lattice. */
 function doorTileCentre(geometry: RoomGeometry, door: CompiledDoor): Point {
-  const localCol = door.direction === 'east' ? 13 : door.direction === 'west' ? 1 : 7;
-  const localRow = door.direction === 'south' ? 7 : door.direction === 'north' ? 1 : 4;
+  const localCol = door.direction === 'east' ? 14 : door.direction === 'west' ? 0 : 7;
+  const localRow = door.direction === 'south' ? 8 : door.direction === 'north' ? 0 : 4;
   const bigCol = door.cellCol * 15 + localCol;
   const bigRow = door.cellRow * 9 + localRow;
   return { x: geometry.minX + bigCol * 16 + 8, y: geometry.minY + bigRow * 16 + 8 };
 }
 
-/** Every compiled door reachable from the first, on the compiled geometry with the player radius. */
-function multiCellDoorsConnect(geometry: RoomGeometry, doors: readonly CompiledDoor[]): boolean {
+/**
+ * Every compiled door — and every enemy the room spawns — reachable from the
+ * first door, on the compiled geometry with the player radius. The enemies are
+ * what make this a real check of the glued seams: the doors sit on the margin
+ * ring, which is continuous across a seam by construction, while the bodies are
+ * scattered through the sub-rooms' interiors.
+ */
+function multiCellDoorsConnect(
+  geometry: RoomGeometry,
+  doors: readonly CompiledDoor[],
+  enemySpawns: readonly Point[] = [],
+): boolean {
   const first = doors[0];
   if (first === undefined) {
     return true;
@@ -159,6 +200,9 @@ function multiCellDoorsConnect(geometry: RoomGeometry, doors: readonly CompiledD
   const start = doorTileCentre(geometry, first);
   const visited = reachableSet(geometry, start.x, start.y);
   if (visited.length === 0) {
+    return false;
+  }
+  if (!enemySpawns.every((enemy) => nearVisited(visited, enemy.x, enemy.y))) {
     return false;
   }
   return doors.slice(1).every((door) => {
@@ -169,30 +213,87 @@ function multiCellDoorsConnect(geometry: RoomGeometry, doors: readonly CompiledD
 
 /**
  * Rule 1: the player only ever enters a generated room through a door. For
- * every door: the point they land on must be clear, and from just inside that
- * door every other door must be reachable — i.e. the whole walkable area is one
- * region and no door is walled off.
+ * every door: the point they land on must be clear, every other door must be
+ * reachable from there, and so must every enemy the room spawns — i.e. the
+ * whole walkable area is one region, with nothing walled off from the player.
+ *
+ * The doors-reach-doors half is nearly free now that the flood starts on the
+ * always-open margin ring (which runs unbroken around every cell), so the
+ * enemies half is what carries this: it is the part that has to cross the
+ * room's actual interior.
  */
-function entryIsSafe(geometry: RoomGeometry, doors: readonly CompiledDoor[]): boolean {
+function entryIsSafe(
+  geometry: RoomGeometry,
+  doors: readonly CompiledDoor[],
+  enemySpawns: readonly Point[] = [],
+): boolean {
   return doors.every((door) => {
     const spawn = doorSpawnPoint(geometry, door.direction);
     if (!geometry.isClear(spawn.x, spawn.y, PLAYER_FOOTPRINT)) {
       return false;
     }
-    const inner = doorInnerTileCentre(geometry, door.direction);
-    const visited = reachableSet(geometry, inner.x, inner.y);
+    const entry = doorEntryTileCentre(geometry, door.direction);
+    const visited = reachableSet(geometry, entry.x, entry.y);
     if (visited.length === 0) {
       return false;
     }
+    if (!enemySpawns.every((enemy) => nearVisited(visited, enemy.x, enemy.y))) {
+      return false;
+    }
     return doors.every((other) => {
-      const otherInner = doorInnerTileCentre(geometry, other.direction);
-      return nearVisited(visited, otherInner.x, otherInner.y);
+      const otherEntry = doorEntryTileCentre(geometry, other.direction);
+      return nearVisited(visited, otherEntry.x, otherEntry.y);
     });
   });
 }
 
 function coveredTiles(obstacles: readonly { width: number; height: number }[]): number {
   return obstacles.reduce((sum, o) => sum + (o.width * o.height) / (16 * 16), 0);
+}
+
+/**
+ * Local (col,row) of the interior tile straight ahead of where a door drops
+ * the player — the generator's `DoorApproach.ahead` — plus the axis along the
+ * wall, which is where its two flanking tiles are.
+ */
+function doorAheadLocal(direction: DoorDirection): { col: number; row: number; side: Point } {
+  switch (direction) {
+    case 'north':
+      return { col: 7, row: 1, side: { x: 1, y: 0 } };
+    case 'south':
+      return { col: 7, row: 7, side: { x: 1, y: 0 } };
+    case 'west':
+      return { col: 1, row: 4, side: { x: 0, y: 1 } };
+    case 'east':
+      return { col: 13, row: 4, side: { x: 0, y: 1 } };
+  }
+}
+
+function isOpenTile(tileGrid: readonly string[], col: number, row: number): boolean {
+  const line = tileGrid[row];
+  return line !== undefined && col >= 0 && col < line.length && line[col] === '.';
+}
+
+/** True if the tile straight ahead of `direction`'s door is a wall — zero forward clearance. */
+function hasZeroForwardClearance(tileGrid: readonly string[], direction: DoorDirection): boolean {
+  const { col, row } = doorAheadLocal(direction);
+  return !isOpenTile(tileGrid, col, row);
+}
+
+/**
+ * True if all three interior tiles at `direction`'s door — the one straight
+ * ahead of where the player lands and the two flanking it — are walls, leaving
+ * the wall-margin ring as the only thing the door opens onto. A wall on some
+ * of them is an ordinary, unflagged shape, including one immediately ahead
+ * (step in, turn left or right); only all three at once means there is no way
+ * into the room from this door at all.
+ */
+function hasBoxedInDoor(tileGrid: readonly string[], direction: DoorDirection): boolean {
+  const { col, row, side } = doorAheadLocal(direction);
+  const aheadOpen = isOpenTile(tileGrid, col, row);
+  const leftOpen = isOpenTile(tileGrid, col + side.x, row + side.y);
+  const rightOpen = isOpenTile(tileGrid, col - side.x, row - side.y);
+  return !aheadOpen && !leftOpen && !rightOpen;
 }
 
 describe('procedural room generator (POC)', () => {
@@ -226,9 +327,16 @@ describe('procedural room generator (POC)', () => {
           expect(compiled.geometry.blockCount).toBeLessThanOrEqual(MAX_ROOM_BLOCKS);
           expect(compiled.doors.map((door) => door.direction).sort()).toEqual([...doors].sort());
           expect(
-            entryIsSafe(compiled.geometry, compiled.doors),
-            `seed ${String(seed)}: player enters stuck or a door is walled off`,
+            entryIsSafe(compiled.geometry, compiled.doors, compiled.enemySpawns),
+            `seed ${String(seed)}: player enters stuck, a door is walled off, or an enemy is`,
           ).toBe(true);
+
+          for (const direction of doors) {
+            expect(
+              hasBoxedInDoor(template.tileGrid, direction),
+              `seed ${String(seed)}: ${direction} door has no way into the room on any of its three sides`,
+            ).toBe(false);
+          }
 
           for (const spawn of compiled.enemySpawns) {
             expect(
@@ -240,6 +348,112 @@ describe('procedural room generator (POC)', () => {
       });
     }
   }
+
+  it('a door is never boxed in on every side, and often opens straight onto a wall, at scale', () => {
+    // Two sides of the same rule, measured over the same sweep — 20x the main
+    // loop's seed count, every door direction, because both halves are
+    // statistical claims about the generator rather than facts about one seed.
+    //
+    // hasBoxedInDoor is a hard reject in layoutGrid, so it must never happen:
+    // a door whose three interior tiles are all walls opens onto nothing but
+    // the margin lane. Zero *forward* clearance is the opposite — nothing
+    // carves the tile in front of a door open any more, so a wall right in the
+    // player's face (step in, turn left or right) has to actually show up in
+    // play, not merely be permitted in principle. It used to be structurally
+    // impossible: the ring plus a force-carved mouth guaranteed two open tiles
+    // ahead of every door, and this same sweep counted 0.
+    let boxedIn = 0;
+    let zeroClearance = 0;
+    let total = 0;
+    for (const direction of DOOR_DIRECTIONS) {
+      for (let seed = 0; seed < 1000; seed++) {
+        const template = generateRoom({
+          roomId: `bx${String(seed)}`,
+          floor: 1,
+          floorTag: 'cellar',
+          doors: [direction],
+          distanceFromStart: 3,
+          bossDistance: 6,
+          rng: new Rng(roomGenSeed(9001, 1, `bx${String(seed)}`, seed)),
+        });
+        total += 1;
+        if (hasBoxedInDoor(template.tileGrid, direction)) {
+          boxedIn += 1;
+        }
+        if (hasZeroForwardClearance(template.tileGrid, direction)) {
+          zeroClearance += 1;
+        }
+      }
+    }
+    expect(
+      boxedIn,
+      `${String(boxedIn)}/${String(total)} doors had all three interior sides blocked — hasBoxedInDoor's reject isn't holding`,
+    ).toBe(0);
+    // ~10% of doors at the checked-in tuning. The bar is deliberately far
+    // below that: this is "the shape happens", not a tuned frequency.
+    expect(
+      zeroClearance / total,
+      `only ${String(zeroClearance)}/${String(total)} doors opened straight onto a wall — the forward buffer is back`,
+    ).toBeGreaterThan(0.02);
+  });
+
+  it('a zero-clearance door is walkable: the landing tile is clear and a side step gets in', () => {
+    // The tile-grid claim above, re-derived on the *compiled* geometry with
+    // the real player collider — the same standard entryIsSafe holds the rest
+    // of the generator to. A wall immediately ahead must not overlap where the
+    // player is put down, and at least one of the two tiles flanking it has to
+    // be both clear and reachable from that landing tile, or "turn left or
+    // right" is not actually an option.
+    let checked = 0;
+    for (const direction of DOOR_DIRECTIONS) {
+      for (let seed = 0; seed < 250; seed++) {
+        const source = `zc-${direction}-${String(seed)}`;
+        const template = generateRoom({
+          roomId: source,
+          floor: 1,
+          floorTag: 'cellar',
+          doors: [direction],
+          distanceFromStart: 3,
+          bossDistance: 6,
+          rng: new Rng(roomGenSeed(9001, 1, `bx${String(seed)}`, seed)),
+        });
+        if (!hasZeroForwardClearance(template.tileGrid, direction)) {
+          continue;
+        }
+        checked += 1;
+        const compiled = compileRoomTemplate(
+          validateRoomTemplate(template, source, ENEMY_DEFINITIONS),
+          1,
+          source,
+          ENEMY_DEFINITIONS,
+          placementFor([direction]),
+        );
+        const geometry = compiled.geometry;
+        const spawn = doorSpawnPoint(geometry, direction);
+        expect(
+          geometry.isClear(spawn.x, spawn.y, PLAYER_FOOTPRINT),
+          `${source}: the player lands inside the wall in front of the door`,
+        ).toBe(true);
+        const ahead = doorAheadTileCentre(geometry, direction);
+        expect(
+          geometry.isClear(ahead.x, ahead.y, PLAYER_FOOTPRINT),
+          `${source}: the tile ahead was supposed to be solid`,
+        ).toBe(false);
+        const entry = doorEntryTileCentre(geometry, direction);
+        const visited = reachableSet(geometry, entry.x, entry.y);
+        const flanks = doorFlankTileCentres(geometry, direction);
+        expect(
+          flanks.some(
+            (flank) =>
+              geometry.isClear(flank.x, flank.y, PLAYER_FOOTPRINT) &&
+              nearVisited(visited, flank.x, flank.y),
+          ),
+          `${source}: wall ahead and no way in to either side`,
+        ).toBe(true);
+      }
+    }
+    expect(checked, 'no zero-clearance door turned up in the sweep at all').toBeGreaterThan(10);
+  });
 
   it('coverage lands in the tuned band, with rare sparse and busy rooms', () => {
     // An explicit "moderate" tuning — this test is about the *mechanism*, not
@@ -468,8 +682,8 @@ describe('procedural room generator (POC)', () => {
         );
         expect(compiled.geometry.blockCount).toBeLessThanOrEqual(MAX_ROOM_BLOCKS);
         expect(
-          multiCellDoorsConnect(compiled.geometry, compiled.doors),
-          `${shape} seed ${String(seed)}: a door is walled off`,
+          multiCellDoorsConnect(compiled.geometry, compiled.doors, compiled.enemySpawns),
+          `${shape} seed ${String(seed)}: a door or an enemy is walled off`,
         ).toBe(true);
         for (const spawn of compiled.enemySpawns) {
           expect(
