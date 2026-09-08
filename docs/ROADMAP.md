@@ -124,10 +124,12 @@ before a run has a shape — and an encounter pass has nowhere to land in a floo
 
 #270 is the one place this plan has knowingly **added** scope to the shipping game rather than
 deferring it, and it is the reason M9 moves. That is a trade worth naming rather than absorbing:
-two floors that are each twice as long, with a fight between the player and each boss door, is a
-different demo from the one the refocus originally scoped, and it costs a mini-boss roster and its
-art on top of the systems. The alternative — shipping a fifteen-minute game whose floors end four
-rooms in — is what the measurement argued against.
+two floors that are each roughly a third longer to the boss door (measured, not the "twice as
+long" this section first guessed — `docs/GAME_DESIGN.md` §4 has the real numbers), with a
+mandatory fight between the player and each of those doors, is a different demo from the one the
+refocus originally scoped, and it costs a mini-boss roster and its art on top of the systems. The
+alternative — shipping a fifteen-minute game whose floors end four rooms in — is what the
+measurement argued against.
 
 ## M9 — Release
 *Exit: strangers are playing it — the two-floor game is out on itch.io and feedback is coming

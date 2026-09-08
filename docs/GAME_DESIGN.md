@@ -147,15 +147,56 @@ Isaac's skeleton, kept deliberately familiar:
   any other authored room is "sprinkled" into ordinary slots at a tunable rate.
 - **Doors lock** on entering a room with live enemies and open on clear. Cleared rooms stay
   cleared.
-- **Special rooms** per floor: Treasure (one item on a pedestal), Shop, Boss, Secret,
-  Super-secret, and one of Devil/Angel after a boss.
+- **Special rooms** per floor: Treasure (one item on a pedestal), Shop, Boss, **Mini-boss** (a
+  mandatory fight gating the boss door — see below), Secret, Super-secret, and one of Devil/Angel
+  after a boss.
 - **Between floors** a short transition and, at chapter breaks, a story card.
-- A run is 7 floors and should take a competent player **35–50 minutes**.
+- A run is 7 floors and should take a competent player **45–65 minutes** — up from the 35–50
+  minute figure this doc carried since M2, re-derived rather than re-guessed: #270/#271's own
+  measurements (500 seeds per config, real `generateFloor`) put both playable floors' room count
+  and boss distance roughly 25–40% higher than they were before this epic (floor 1: 11.1 → 13.91
+  rooms, +25%; 3.94 → 5.44 doors to the boss, +38%; floor 2: 12.2 → 16.23 rooms, +33%; 4.27 → 5.70
+  doors, +33% — all means, non-XL), and #274/#275 add a mandatory off-path mini-boss fight — tuned
+  to roughly 40% of the floor boss's own cycle (`docs/CONTENT_BIBLE.md` §3's mini-boss contract) —
+  plus the round trip to reach it, on every floor, which did not exist at all in the old estimate.
+  No fresh human playtest exists to pin the number tighter than that: the range moves by roughly
+  the same ~30% the generator's own numbers moved by on average, not by a fresh guess, and it
+  should move again the next time someone measures it rather than being carried untouched for
+  another four milestones.
 
 ### Floor generation rules
 
 - Start room is always empty, hand-authored, and has the floor's exits.
-- Boss room is placed at maximum walking distance from start.
+- Boss room is placed at maximum walking distance from start, and no closer than the floor's
+  `minBossDistance` (`content/floors/definition.ts`) — 5 doors on floors 1–2 today. "Maximum
+  distance" sounds like it should already guarantee a long walk, and it does not: `buildSkeleton`
+  grows a compact blob from the start cell, so the graph's diameter rises with roughly √rooms
+  rather than with room count, and the *farthest* room from the start was, before this epic,
+  still only 3.94 doors out on average (mean of 500 seeds, floor 1) — one run in four managed even
+  five. `minBossDistance` is enforced the cheap, provably-unbiased way: `tryGenerateFloor` rejects
+  and retries a floor plan whose boss room falls short, rather than reaching for a corridor-biased
+  growth algorithm (`docs/DECISIONS.md` #75 makes the same call for the mini-boss slot below, for
+  the same reason).
+- **A mini-boss stands between the player and the boss door.** One per floor, two on an XL floor,
+  placed off the critical path in the floor's last third — never adjacent to the boss room, and
+  never on the only route to it, so the fight is a detour rather than a wall (`docs/DECISIONS.md`
+  #75). Killing it drops **Der Meisterschlüssel**, the only thing that opens the boss room; the
+  boss door reads as locked (the same padlock tile a key-locked treasure room uses) until it is in
+  hand (`docs/DECISIONS.md` #76). The mini-boss room is revealed on the minimap once the player has
+  stood next to a locked boss door — always visible from the start on floor 1, since floor 1 is
+  the tutorial. A floor whose content has no mini-boss template authored yet (floors 3–7, parked in
+  M10) gets no mini-boss slot and therefore no lock: the gate rides the slot actually existing,
+  never the floor number, so a content gap degrades to "no detour" rather than a soft-locked run.
+- **A floor may roll XL.** Once per generation attempt, from the floor's own seeded RNG stream, a
+  floor has a chance (`xlChance`: 0 on floor 1 until a save has beaten a boss at least once, then
+  15%; 25% on floor 2 and every floor after) to grow by `xlRoomMultiplier` — 1.7× today — which
+  scales room count directly and `minBossDistance` by that multiplier's square root (the generator's
+  own diameter rises with √rooms, so scaling the distance floor by the room multiplier directly
+  would ask for a straighter floor than the extra rooms alone produce). An XL floor also gets a
+  second mini-boss room instead of one. The floor's title card announces it — an XL floor that
+  doesn't say so reads as the game dragging, not as a lucky roll. Floor 1 is suppressed to 0%
+  for a save that has never beaten a boss, so a first-time player's tutorial floor is never the
+  unlucky big one.
 - Treasure and Shop are dead-ends where possible.
 - An ordinary room of any shape (`1x1` through `T`) is **procedurally generated**
   (`sim/room/generate-room.ts`): obstacle cover aimed at a tuned band, a per-floor enemy roster

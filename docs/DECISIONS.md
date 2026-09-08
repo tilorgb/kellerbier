@@ -4457,3 +4457,41 @@ in-page room editor's own template preview) keeps the old template-id fallback, 
 right for it. Staircases were deliberately left alone — a mini-boss room is never one, and widening
 scope to a second, unrelated collision class this issue didn't need to prove is exactly what
 `CLAUDE.md` warns against doing without cause.
+
+## 83. Two keys, not one, and the mini-boss is a branch — the two questions #270 owed an answer to
+
+**Decided:** M8, #279 (item I of #270, the epic's closing write-up). **The verdicts themselves were
+made earlier**, while implementing #274/#275, and are already written down in full in #75 and #76;
+this entry exists because #270 asked for both of them in one place, findable without knowing which
+implementation issue happened to be open when each was settled — the same standing #239 gives its
+own decisions: the reasoning is the artefact, not the verdict, and it should not cost a reader two
+lookups to find both halves of one design rule.
+
+**1. Why there are two kinds of key, and why a later pass must never merge them.** A
+Kellerschlüssel drops from a weighted table (`content/pickups/drop-tables.ts`) and can therefore
+never gate the critical path — a run with no key and nothing left to produce one is a soft-lock,
+which is exactly why #196 kept `keyLocked` treasure templates out of any slot with more than one
+door in the first place. A Meisterschlüssel is the opposite kind of thing on purpose: granted by a
+fight that a floor's own content guarantees is present (or, if it isn't, the lock never engages at
+all — #75's content-gap rule), never rolled, never stocked in a shop, one boolean per floor rather
+than a count. The two share a padlock tile and a `transitionTo` refusal shape and nothing else.
+Full mechanics: #76.
+
+**2. Off-path with a key, not on-path as an antechamber.** #75/#76 chose the branch: the mini-boss
+room sits in the floor's last third, never adjacent to the boss room, and never on the only route
+to it, so finding it and fighting it is a route decision rather than a wall the run walks through
+automatically. The evidence that settled it is the same evidence #270 opened with — a boss at
+3.94 doors from the start (mean of 500 seeds, floor 1) meant the floor was over before a run had a
+shape, and an *on-path* mini-boss would have bought length without buying a decision, exactly the
+"more of the same" failure #270's own measurements warned against for a longer floor generally.
+An off-path fight behind a key spends the same room budget on a choice — take the detour now, or
+keep exploring and come back — instead of a second corridor segment. The rejected alternative (drop
+the key, place the mini-boss as the boss room's antechamber) is not a straw man and is not closed
+off: it is cheaper by half the code and a legitimate fallback if a playtest ever says the backtrack
+plays badly, and #76 records it as exactly that — a decision to revisit with evidence, not a door
+nailed shut.
+
+**Constrains:** `docs/GAME_DESIGN.md` §4 and `docs/CONTENT_BIBLE.md`'s mini-boss section describe
+the shipped shape (off-path, two keys); a change to either verdict gets a new entry that supersedes
+this one (this file's own top-of-page rule), not an edit to it or to #75/#76, which stay as the
+record of what was reasoned through at the time.
