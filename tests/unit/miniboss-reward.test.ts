@@ -165,4 +165,32 @@ describe('mini-boss reward roll (#278)', () => {
     expect(sim.activePedestals.length).toBe(1); // the item roll itself still ran
     expect(sim.activeMachine).toBeNull(); // but never as a Losbrunnen
   });
+
+  it('is deterministic under replay: the same seed and route land the same roll, hit or miss', () => {
+    function run(seed: number): {
+      pedestalItemIndex: number;
+      key: boolean;
+      consolationKinds: string[];
+    } {
+      const sim = new GameSim({ roomTemplate: cellarMiniboss, floor: 1, seed });
+      clearMiniboss(sim);
+      const kinds: string[] = [];
+      sim.world.forEach(sim.pickupKind.bit, (index) => {
+        const d = sim.pickupKind.data[index] ?? -1;
+        if (d >= 0) kinds.push(sim.pickups.at(d).id);
+      });
+      return {
+        pedestalItemIndex: sim.activePedestals[0]?.itemIndex ?? -1,
+        key: kinds.includes('meisterschluessel'),
+        consolationKinds: kinds.filter((k) => k !== 'meisterschluessel').sort(),
+      };
+    }
+
+    // Real (un-forced) rates — two different seeds, each replayed twice, to
+    // exercise both the seed-to-seed spread and the same-seed reproduction
+    // `random.items` guarantees.
+    for (const seed of [1, 2]) {
+      expect(run(seed)).toEqual(run(seed));
+    }
+  });
 });
