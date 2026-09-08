@@ -29,8 +29,16 @@ const TICKS_PER_PASS = 60;
  *
  * Well above what the loop measures, and far below what one object per
  * projectile per tick would cost — which is the regression it is here to catch.
+ *
+ * 64 KB read fine locally but failed CI twice on this exact test (71.9 KB,
+ * then 65.6 KB — barely over) with no code change behind either run: the
+ * `tests/helpers/allocation.ts` doc comment already has a precedent for
+ * this shape of flake (a 128 KB budget once failed at 141 KB on "the same
+ * loop allocating the same nothing"). 128 KB keeps real margin over both
+ * observed failures while staying two orders of magnitude below what an
+ * actual per-tick allocation would cost.
  */
-const ZERO_ALLOCATION_BUDGET_BYTES = 64 * 1024;
+const ZERO_ALLOCATION_BUDGET_BYTES = 128 * 1024;
 
 function firing(): InputFrame {
   const frame = createInputFrame();
