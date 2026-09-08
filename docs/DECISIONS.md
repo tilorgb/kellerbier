@@ -4383,7 +4383,120 @@ because Der Ladewagen is the first content that uses the primitive and cannot dr
 without it. The general lesson is #7's: a primitive nothing has authored against yet is
 untested content-side, however carefully it was written.
 
-## 82. Difficulty relief and room readability: the constraints that outlast the batch
+## 82. A mini-boss pays too, at half a boss's confidence — and a room's identity has to survive two of it on one floor
+
+**Decided:** M8, #278 (item H of #270). **Builds on:** #75/#76 (the mini-boss slot and its key),
+#28 (pedestals), #218/#238 (Der Losbrunnen, whose second-home reasoning this explicitly declines
+to extend a third time), #271 (XL floors, two mini-boss rooms).
+
+A longer floor (#270) pays more from the per-room-clear roll automatically — 16 rooms fire it more
+often than 11 — but a floor still hands out exactly one boss pedestal regardless of length, and the
+mini-boss fight #275 already made mandatory was paying nothing at all beyond the Meisterschlüssel.
+Both gaps get closed the same way #28's pedestal already closes them for a boss room: a real item,
+held back on the room's own authored `pedestal` prop until the fight actually ends
+(`GameSim.pendingMinibossPedestal`, the exact `pendingBossPedestals` shape and reasoning), drawn
+from the `treasure` pool (`pedestalPoolForRole` already reserved this for the day it happened). The
+odds are lower than a boss's guaranteed pedestal — 40% for a floor's first mini-boss, 20% for an
+XL floor's second — and a miss is never a bare nothing: it pays a consolation bundle (a half-Maß, a
+Biermarke, a Kellerschlüssel) that costs the run nothing to receive but means the room always
+resolves into *something* landing on the floor. Both `sim/tuning.ts`'s `MinibossRewardTuning` rates
+move at runtime, same as every other roll in the file. **Not eligible for the Losbrunnen slot** —
+#238 already gave the machine a second home (the boss room's own reward spot) precisely so a third
+home never turns a chance encounter into furniture; a mini-boss pedestal never populates
+`pendingBossLosbrunnen` and the reward-roll code path that fills it is boss-only.
+
+Measured over 20,000 simulated seeds (real `generateFloor` calls for both playable floors, off the
+same continuing `floor` RNG stream a live run advances, plus a real coin flip per mini-boss slot
+found at the tuned rates): **0.876 extra pedestal items per two-floor run** — close to, and
+slightly above, the issue's own back-of-envelope 0.8, because floor 2's higher `xlChance` (0.25 vs
+floor 1's 0.15) means real XL floors show up 19.8% of the time across both floors combined, each
+contributing an extra 0.2-chance slot the naive per-floor-average missed.
+
+**The second mini-boss on an XL floor drops no key, and only pays the lower rate.** Its
+Meisterschlüssel would be strictly redundant — the first one already opens the one boss gate a
+floor has — and #278's own words are the reasoning: "a key with nothing to unlock is a small lie to
+the player about what keys are." `GameSim.minibossKeyGrantedThisFloor`, a plain boolean reset every
+floor start, is read (then set) by the room-clear drain that spawns `pendingMinibossKey`/rolls
+`pendingMinibossPedestal`: false means this clear is the floor's first mini-boss (guaranteed key,
+`firstItemChance`), true means every mini-boss clear after it this floor is a "second" (no key,
+`secondItemChance`). A plain boolean is exact, not a shortcut, because that drain only ever runs
+once per distinct `roomId` — `roomClearedIds` blocks every later clear of the same physical room
+from reaching it again, Blutwurz (#84) included, so there is never a need to tell one mini-boss
+room apart from another once granted. A Blutwurz spirit walk re-fighting an *already-cleared*
+mini-boss room still leaves its key collectible, exactly as before this issue — but not through this
+gate: the original, uncollected pickup is what `roomLootSnapshots`/`restoreOrSpawnRoomLoot` already
+put back on every reload of an unfinished room, key included, which is the actual mechanism #76's
+"cleared rooms repopulate" note was describing all along.
+
+**The bug this ran into, and had to fix first: two mini-boss rooms on one floor can be the same
+room as far as `GameSim` is concerned.** `roomId` — and so `roomClearedIds`, the thing that decides
+whether a room's enemies spawn at all — has always been keyed by the *template's own authored id*
+(`compiled.source.id`), not a per-slot id from the floor plan (`GameSim.clearFloorProgress`'s own
+doc comment already flagged this as a known, tolerated *cross-floor* collision — different floors
+draw from different `floorTag` pools, so it stays rare). What nobody had hit yet: an XL floor's two
+mini-boss slots draw from the *same* one-template-per-floor-tag pool that exists today
+(`dorf-miniboss`/`cellar-miniboss`, the only mini-boss template authored per tag), so both slots
+resolve to the identical template *within one floor* — a same-floor collision the cross-floor
+framing never covered. Measured directly (`generateFloor` on a forced-XL floor 2, seed 0): both
+mini-boss room instances came back `templateId: 'dorf-miniboss'`. The player-visible failure: clear
+the first mini-boss, walk into the second, physically distinct room, and it reads as already
+cleared — no enemies, no key, no reward, the instant the first one is, because
+`roomClearedIds.has('dorf-miniboss')` is already true. This is exactly the "reachable through the
+real progression" gap `CLAUDE.md` calls out, not a corner of #278 — the second mini-boss's reward
+economy is moot if the room can never actually be fought.
+
+The fix: `GameSim.loadRoom`/`transitionTo` grew an optional trailing `roomInstanceId`, used as
+`roomId` in place of the template's own id whenever a caller supplies one. `app/main.ts` (every real
+room-load call site — `crossDoor`, `advanceFloor`, the Blutwurz entrance, the `G`/room-editor dev
+tools) and the playtest harness now pass the floor plan's own `FloorPlanRoom.id`, which is unique
+per physical slot even when two slots share a template. Safe everywhere it's threaded through,
+because every one of `roomClearedIds`/`roomLootSnapshots`/`unlockedKeyRoomIds` is fully wiped on
+every floor advance (`clearFloorProgress`) regardless — so a per-floor-unique instance id closes the
+same-floor gap with no new cross-floor one opened. A caller with no floor plan (a unit test, the
+in-page room editor's own template preview) keeps the old template-id fallback, which is exactly
+right for it. Staircases were deliberately left alone — a mini-boss room is never one, and widening
+scope to a second, unrelated collision class this issue didn't need to prove is exactly what
+`CLAUDE.md` warns against doing without cause.
+
+## 83. Two keys, not one, and the mini-boss is a branch — the two questions #270 owed an answer to
+
+**Decided:** M8, #279 (item I of #270, the epic's closing write-up). **The verdicts themselves were
+made earlier**, while implementing #274/#275, and are already written down in full in #75 and #76;
+this entry exists because #270 asked for both of them in one place, findable without knowing which
+implementation issue happened to be open when each was settled — the same standing #239 gives its
+own decisions: the reasoning is the artefact, not the verdict, and it should not cost a reader two
+lookups to find both halves of one design rule.
+
+**1. Why there are two kinds of key, and why a later pass must never merge them.** A
+Kellerschlüssel drops from a weighted table (`content/pickups/drop-tables.ts`) and can therefore
+never gate the critical path — a run with no key and nothing left to produce one is a soft-lock,
+which is exactly why #196 kept `keyLocked` treasure templates out of any slot with more than one
+door in the first place. A Meisterschlüssel is the opposite kind of thing on purpose: granted by a
+fight that a floor's own content guarantees is present (or, if it isn't, the lock never engages at
+all — #75's content-gap rule), never rolled, never stocked in a shop, one boolean per floor rather
+than a count. The two share a padlock tile and a `transitionTo` refusal shape and nothing else.
+Full mechanics: #76.
+
+**2. Off-path with a key, not on-path as an antechamber.** #75/#76 chose the branch: the mini-boss
+room sits in the floor's last third, never adjacent to the boss room, and never on the only route
+to it, so finding it and fighting it is a route decision rather than a wall the run walks through
+automatically. The evidence that settled it is the same evidence #270 opened with — a boss at
+3.94 doors from the start (mean of 500 seeds, floor 1) meant the floor was over before a run had a
+shape, and an *on-path* mini-boss would have bought length without buying a decision, exactly the
+"more of the same" failure #270's own measurements warned against for a longer floor generally.
+An off-path fight behind a key spends the same room budget on a choice — take the detour now, or
+keep exploring and come back — instead of a second corridor segment. The rejected alternative (drop
+the key, place the mini-boss as the boss room's antechamber) is not a straw man and is not closed
+off: it is cheaper by half the code and a legitimate fallback if a playtest ever says the backtrack
+plays badly, and #76 records it as exactly that — a decision to revisit with evidence, not a door
+nailed shut.
+
+**Constrains:** `docs/GAME_DESIGN.md` §4 and `docs/CONTENT_BIBLE.md`'s mini-boss section describe
+the shipped shape (off-path, two keys); a change to either verdict gets a new entry that supersedes
+this one (this file's own top-of-page rule), not an edit to it or to #75/#76, which stay as the
+record of what was reasoned through at the time.
+
+## 83. Difficulty relief and room readability: the constraints that outlast the batch
 
 A pass of player-help and readability changes. Most of it is local — a tuning number, a
 material swap — and lives in the code. These are the parts that constrain something else.
@@ -4427,12 +4540,13 @@ A bombed secret wall (#5) and a cleared boulder (#4) both mutate the current roo
 transition to hang a redraw off. `GameView.sync` grew a branch: when `staleRoomIds` holds the
 *current* room and nothing else changed, it rebuilds that room's `Scenery` in place — the same
 `getOrBuildScenery` cache-replace the room-change branch uses, which is safe here for the same
-reason (`sync` reassigns `this.scenery` before the next `render`). `app/main.ts` polls
-`sim.bouldersChangedTick` and calls `notifyRoomContentChanged` the way it already did for a
-secret reveal. A secret doorway that has been opened draws blasted (rubble, no leaf, no frame):
-`DoorPiece` gains a `blasted` flag, `Scenery` is told which directions are secret
-(`secretDoorDirections`), and `prewarmRoom` carries the *next* room's set so a room built ahead
-of the crossing knows its own blasted walls.
+reason (`sync` reassigns `this.scenery` before the next `render`). The stale flag is keyed on
+`sim.roomId` (the authored template id `getOrBuildScenery` also keys on, not the floor plan's
+slot id): `app/main.ts` polls `sim.bouldersChangedTick` and, on a secret reveal, calls
+`GameView.markCurrentRoomStale()`, which resolves that id itself. A secret doorway that has been
+opened draws blasted (rubble, no leaf, no frame): `DoorPiece` gains a `blasted` flag, `Scenery`
+is told which directions are secret (`secretDoorDirections`), and `prewarmRoom` carries the
+*next* room's set so a room built ahead of the crossing knows its own blasted walls.
 
 ### Doors have no roof now
 

@@ -109,7 +109,7 @@ export interface DailyRunRecord {
  *
  * `frames` is `InputRecording.toBytes()` gzip-compressed and base64-encoded
  * (`app/replay/codec.ts`) — the packed bytes alone are already dense (five
- * bytes a tick), but a full 35-50 minute run (`docs/GAME_DESIGN.md` §4) is
+ * bytes a tick), but a full 45-65 minute run (`docs/GAME_DESIGN.md` §4) is
  * still the better part of a megabyte raw, and the acceptance criterion is a
  * shareable file under 100 KB. Compression is what closes that gap: real
  * play holds an axis or a button for many ticks at a stretch, which gzip's

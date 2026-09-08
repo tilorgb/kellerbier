@@ -797,6 +797,35 @@ export interface BlutwurzTuning {
 }
 
 /**
+ * A mini-boss's own reward roll (#278): a pedestal item chance that pays
+ * less than a real boss's (and less again for an XL floor's second
+ * mini-boss, whose Meisterschlüssel is already redundant) plus a guaranteed
+ * consolation on a miss, so the mandatory detour never resolves into
+ * nothing. Its own group rather than folded into `ItemPoolTuning` — which
+ * pool a pedestal draws from is `pedestalPoolForRole`'s business, but
+ * *whether* a mini-boss pedestal offers anything at all is this roll's own
+ * number, with no equivalent for an ordinary treasure-room pedestal (always
+ * filled) or a boss's (also always filled).
+ */
+export interface MinibossRewardTuning {
+  /**
+   * Chance the floor's first mini-boss clear rolls a real pedestal item,
+   * drawn from the `treasure` pool (`pedestalPoolForRole`). A miss still
+   * pays the consolation bundle — see `GameSim`'s room-clear handling.
+   */
+  firstItemChance: number;
+  /**
+   * Chance an XL floor's *second* mini-boss clear rolls a pedestal item —
+   * intentionally half of `firstItemChance` rather than equal to it: an XL
+   * floor should not double the run's expected item income just because it
+   * doubled the mini-boss count (see `docs/DECISIONS.md`'s mini-boss reward
+   * entry for the measured expected-items-per-run number this rate
+   * produces).
+   */
+  secondItemChance: number;
+}
+
+/**
  * Der Losbrunnen (#218): feed a held item's numeric traits a reroll, for an
  * increasing Biermarken price, with a chance the roll makes the item worse
  * and a chance the machine itself breaks. Its own group rather than folded
@@ -872,6 +901,7 @@ export interface SimTuning {
   readonly curse: CurseTuning;
   readonly blutwurz: BlutwurzTuning;
   readonly machine: MachineTuning;
+  readonly minibossReward: MinibossRewardTuning;
 }
 
 export const DEFAULT_MOVEMENT_TUNING: Readonly<MovementTuning> = {
@@ -1225,6 +1255,18 @@ export const DEFAULT_BLUTWURZ_TUNING: Readonly<BlutwurzTuning> = {
  * choice the player can see the price of before making it, not a surprise
  * after the first one.
  */
+/**
+ * The issue's own tabled rates (#278): 40% for the floor's first mini-boss,
+ * halved to 20% for an XL floor's second. The miss case is never a flat
+ * "nothing" — `GameSim`'s room-clear handling always pays the consolation
+ * bundle instead, so these two numbers are the *whole* item-income effect
+ * of the roll, not a chance of getting nothing at all.
+ */
+export const DEFAULT_MINIBOSS_REWARD_TUNING: Readonly<MinibossRewardTuning> = {
+  firstItemChance: 0.4,
+  secondItemChance: 0.2,
+};
+
 export const DEFAULT_MACHINE_TUNING: Readonly<MachineTuning> = {
   spawnChance: 0.85,
   baseCost: 1,
@@ -1260,6 +1302,7 @@ export function createTuning(): SimTuning {
     character: { ...DEFAULT_CHARACTER_TUNING },
     roomGen: { ...DEFAULT_ROOM_GEN_TUNING },
     machine: { ...DEFAULT_MACHINE_TUNING },
+    minibossReward: { ...DEFAULT_MINIBOSS_REWARD_TUNING },
   };
 }
 

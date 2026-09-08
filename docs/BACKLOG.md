@@ -204,6 +204,14 @@ mini-boss fight between the player and the boss door.
 Unlike #228 it adds systems — a room role, a per-floor key, two rosters and their art — so it
 delays M9 deliberately rather than accidentally.
 
+*What shipped differs from the plan in one place worth flagging:* #272 originally proposed a
+second treasure room on XL floors as the fix for a longer floor's flat pedestal income. That never
+landed — #271 didn't pick it up, and no later issue in this epic added a second treasure room. The
+same gap got closed a different way instead: #278's mini-boss pedestal roll (40%/20%, plus a
+guaranteed consolation bundle on a miss) scales item income with floor length without a second
+special room, at ~0.876 extra items per two-floor run (measured). #272's own unchecked acceptance
+criterion for the second treasure room should be read as superseded, not outstanding.
+
 | # | Issue |
 |---|---|
 | 271 | Floor size, the XL roll and a minimum boss distance |
