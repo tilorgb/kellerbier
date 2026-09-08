@@ -297,14 +297,24 @@ the game. Items are filtered out of the pools wherever the meter is what they ar
 decision, and equally the ones that spend, refund, cap or tolerate it at no particular tier —
 Konterbier clears a hangover that cannot happen.
 
-The unlock is granted the first time the player beats **Der Stier**, and it is announced on the
-results screen the run ends into: the Maß is on the table from the next run on.
+The unlock is granted the first time the player beats **Die Große Kellerassel**, floor 1's boss.
+It is announced *there*, over the cleared boss room — a banner, the unlock fanfare, and a full
+Maß on the floor in front of the player — and the meter appears in the HUD the same tick. From
+that moment on the run is a promilled one: beer drops, and Promille items enter the pools.
 
 The reason is pacing. The opening should read as a familiar twin-stick roguelite — shoot,
 dodge, pick things up — so that the game teaches one mechanic at a time rather than all of them
 at once. It also makes the unlock worth having: a player who has already played the sober game
 understands exactly what the beer is changing, which is not true of a mechanic that was
 switched on before they knew what the baseline was.
+
+The gate sat on **Der Stier** — floor 2's boss — until #236. That was written against the
+seven-floor plan, where beating him ends chapter two of seven. In the two-floor game M9 ships he
+is the *last* boss, so a first-time player finished the entire game and was then told the
+signature mechanic had unlocked. Floor 1's boss keeps the whole teaching beat — a full floor
+sober, learning to move and shoot — and still leaves a floor to spend the mechanic on. The gate
+itself is one field in `content/progression/unlocks.ts`; moving it again is a data change, and
+`app/promille-gate.ts` reads the floor back out of it rather than writing it down twice.
 
 The failure mode to watch for is a sober run that feels like the real game with a feature
 missing. It has to be complete on its own terms, which is mostly a drop-table question.

@@ -170,13 +170,18 @@ export interface ActiveRunSave {
    *
    * Recorded with the log rather than re-derived from `unlocks` on resume,
    * because the two genuinely disagree in the case that matters: the
-   * Promille unlock is granted the moment Der Stier goes down
+   * Promille unlock is granted the moment the gate's boss goes down
    * (`withBossDefeat` commits immediately, on purpose), so a player who
-   * beats him and then closes the tab has a save whose `unlocks` say
-   * "promilled" describing a run that was sober for every tick it recorded.
-   * Rebuilding that run promilled would replay the same inputs against
-   * different drop tables and a different item pool, and the resumed run
-   * would quietly not be the run that was saved.
+   * beats it and then closes the tab has a save whose `unlocks` say
+   * "promilled" describing a run that was sober for every tick before that.
+   * Rebuilding that run promilled from tick zero would replay the same inputs
+   * against different drop tables and a different item pool, and the resumed
+   * run would quietly not be the run that was saved.
+   *
+   * Still exactly one boolean since #236 moved the gate inside the run: what
+   * this records is where the run *started*, and the mid-run flip is a pure
+   * function of that plus the run's own play (`GameSim.maybeUnlockPromille`),
+   * so a resume reaches it again at the same tick without a second field.
    *
    * This is also what #85's "the state is part of the run's parameters"
    * means for a shared seed: a run is reproduced by its seed *and* this

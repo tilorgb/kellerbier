@@ -4651,3 +4651,49 @@ keys `item-<sprite>` the way it keys `pickup-<id>`, and `PedestalView` falls bac
 an item not yet drawn — `CLAUDE.md`'s content-gap shape, so the roster can ship half-drawn
 without a broken pedestal. An icon the round found doubtful (the tuba, the belly) is redrawn in
 the next batch rather than committed on a shrug.
+
+## 86. The Promille gate moved inside the run, and the flip stays a simulation event
+
+**Decided:** M7/M8, #236 (item of #228). **Builds on:** #85 (the gate itself, and the sober run
+it creates), #51 (a boss defeat commits to the save the moment it happens), #48 (replays are a
+seed plus an input log and nothing else).
+
+The gate was `bossDefeated: 2` — Der Stier. Against the seven-floor plan that is the end of
+chapter two of seven; against the two-floor game M9 actually ships it is the end of the *game*.
+A first-time player therefore finished the whole thing and was then told, on the results screen,
+that the mechanic `docs/GAME_DESIGN.md` §5 calls "the mechanic that makes Kellerbier its own game
+rather than a reskin" had just unlocked. For most itch.io visitors that was the only playthrough,
+so the signature system shipped effectively switched off.
+
+**Floor 1's boss, not "the first boss defeated".** Both survive M10 unparking; the floor number is
+the one that stays a single field in `content/progression/unlocks.ts`, and `app/promille-gate.ts`
+reads it back out of the unlock's own condition (`promilleUnlockFloor`) rather than writing it
+down a second time. Moving the gate again is still a data change. #85's teaching argument is
+untouched: a new player still spends a whole floor sober learning to move and shoot.
+
+**The flip is the sim's, and that is what keeps determinism free.** The obvious implementation is
+the app noticing the save changed and reaching into the run. That would make a replay's outcome
+depend on the save of whoever is watching it — precisely the divergence `ActiveRunSave.
+promilleUnlocked` exists to prevent. Instead `GameSim` takes a `promilleUnlockFloor` run parameter
+and flips itself in `step`'s room-clear branch, on the tick a boss room on that floor becomes
+clear. The flip is then a pure function of the run's own state, so the same seed and the same
+input log flip at the same tick, and *nothing new has to be recorded*: `promilleUnlockFloor` is
+derived from the already-recorded `promilleUnlocked` flag (`resolvePromilleUnlockFloor`), so
+neither `ActiveRunSave` nor `ReplayRecord` grew a field and no migration was needed.
+
+**An arrival, not a notification.** The unlock now happens mid-fight-cleanup instead of on a
+screen built to explain things, so it brings its own beat: a banner
+(`render/promille-unlock-hud.ts`), the same `ui-unlock-fanfare` the results screen plays, the HUD
+row appearing (which re-stacks the column — the eternal-heart row's precedent), and **a full Maß
+on the floor**. The last one is the part that is easy to leave out and is not optional: a meter
+that appears empty and then waits on a ~2% per-kill drop weight to move for the first time is an
+announcement, not an arrival, and the whole point of moving the gate inside the run is that the
+player gets to *use* the mechanic on the floor they have left.
+
+**What deliberately did not change.** `promilleUnlocked: false` is still the sim's default-off
+switch for everything the mechanic touches, and the boss's own drops on the unlocking tick still
+roll the `sober` half of their tables — the run was sober right up to that line, and rolling it
+the other way would have made a drop table depend on an event later in the same tick. The dev
+override's `sober` now pins a run's *start* rather than the whole run; that is not a lost
+capability so much as an honest one, since the sober game is floor 1 now and nothing past floor
+1's boss is a state the shipping build has.

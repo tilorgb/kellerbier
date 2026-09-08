@@ -285,7 +285,7 @@ describe('meta-progression', () => {
     it('round-trips an earned unlock: beat a boss, reload, it is still there', () => {
       installFakeLocalStorage();
       resetProgress();
-      recordBossDefeat(2);
+      recordBossDefeat(1);
       recordRunOutcome(run({ kills: 3, floor: 1 }));
 
       // Everything below reads the save back out of storage rather than

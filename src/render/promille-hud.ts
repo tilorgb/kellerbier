@@ -73,8 +73,10 @@ export class PromilleHud {
     // A sober run (#85) has no meter at all — not an empty one. `setUnlocked`
     // is what actually hides the row and closes the gap it leaves in the HUD
     // column; this is the guard that stops a frame syncing into a hidden
-    // widget, and it is a plain early return because `sim.promilleUnlocked`
-    // cannot change under a live run.
+    // widget. Since #236 `sim.promilleUnlocked` *can* flip mid-run, on the
+    // boss that unlocks it — `app/main.ts` watches that edge and calls
+    // `setUnlocked`/`layoutHud`, so by the time this early return stops
+    // guarding, the row it is guarding is already on screen.
     if (!sim.promilleUnlocked) {
       return;
     }

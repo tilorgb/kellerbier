@@ -65,6 +65,7 @@ import { TextPlate } from '../render/ui/text-plate.js';
 import { DisplayTitle, TITLE_STYLES } from '../render/ui/title.js';
 import { UiKitGallery } from '../render/ui/gallery.js';
 import { uiScaleFor, uiText, UI_TEXT_HEIGHT } from '../render/ui/text.js';
+import { PromilleUnlockHud } from '../render/promille-unlock-hud.js';
 import { Vignette } from '../render/vignette.js';
 import { BlaueStundeOverlay } from '../render/blaue-stunde-overlay.js';
 import { GameView } from '../render/view.js';
@@ -144,6 +145,7 @@ import {
   nextPromilleOverride,
   readPromilleOverride,
   resolvePromilleUnlocked,
+  resolvePromilleUnlockFloor,
   writePromilleOverride,
 } from './promille-gate.js';
 import { readEndlessFloors, writeEndlessFloors } from './endless-floor-debug.js';
@@ -1183,6 +1185,9 @@ async function boot(): Promise<void> {
   /** A floor's curse (#49): the entry announcement and Sperrstunde's countdown. */
   const curseHud = new CurseHud(kit);
   hudLayer.addChild(curseHud.view);
+  /** The mid-run Promille arrival (#236) — its own banner, over the cleared boss room. */
+  const promilleUnlockHud = new PromilleUnlockHud(kit);
+  hudLayer.addChild(promilleUnlockHud.view);
 
   /** The spirit walk (#84): a small persistent "you are doing this" readout. */
   const blutwurzHud = new BlutwurzHud(kit);
@@ -1273,6 +1278,7 @@ async function boot(): Promise<void> {
     minimapHud.view.position.set(width - HUD_MARGIN, HUD_MARGIN);
     minimapHud.overlayView.position.set(centreX, Math.round(height / 2));
     curseHud.resize(width, height);
+    promilleUnlockHud.resize(width, height);
     blutwurzHud.place(centreX, Math.round(height * 0.06));
 
     replayViewer.view.position.set(
@@ -1386,6 +1392,14 @@ async function boot(): Promise<void> {
     return resolvePromilleUnlocked(loadSave(), promilleOverride);
   }
 
+  /**
+   * Whether the Promille HUD row is currently shown — the edge the frame
+   * loop watches for the mid-run unlock (#236). Tracked here rather than
+   * read off `promilleHud.view.visible` so the reason it changes is written
+   * down in one place, next to the run parameter it starts from.
+   */
+  let promilleRowShown = false;
+
   /** Whether the loop was already paused when the results screen opened, so closing it doesn't un-pause a debug pause. */
   let pausedBeforeRunResults = false;
 
@@ -1451,6 +1465,26 @@ async function boot(): Promise<void> {
     }
     creditedBossRooms.add(key);
     recordBossDefeat(floorPlan.floor);
+  }
+
+  /** Whether the meter was already on last tick — the edge `checkPromilleUnlockSting` keys off. */
+  let promilleWasUnlockedLastTick = false;
+
+  /**
+   * Plays the unlock fanfare on the tick Promille switches on mid-run
+   * (#236) — the same sound the results screen plays for an unlock earned,
+   * because it is the same event, just heard where it now actually happens.
+   *
+   * `live` gates the sound the same way `checkRoomClearSting` does, and the
+   * edge is tracked in both cases so a resumed run's fast-forward leaves
+   * this where the live run it is reconstructing had it.
+   */
+  function checkPromilleUnlockSting(live: boolean): void {
+    const unlocked = sim.promilleUnlocked;
+    if (live && unlocked && !promilleWasUnlockedLastTick) {
+      playSfx('ui-unlock-fanfare');
+    }
+    promilleWasUnlockedLastTick = unlocked;
   }
 
   /** Whether the player read as critical (≤2 half-Maß of red health) last tick — the edge `checkLowHealthSting` keys off. */
@@ -1825,6 +1859,7 @@ async function boot(): Promise<void> {
       justCleared,
     );
     creditBossDefeat(live, justCleared);
+    checkPromilleUnlockSting(live);
     checkLowHealthSting(live);
     advanceDeathSequence();
     // The bindable `pause` action (`Bindable.Pause` — Escape by default,
@@ -1970,6 +2005,16 @@ async function boot(): Promise<void> {
       if (healthHud.height !== healthRowHeightBefore) {
         layoutHud();
       }
+      // Promille arriving mid-run (#236): the meter's HUD row is hidden for a
+      // sober run, so the row has to be shown and the column re-stacked the
+      // frame the sim flips — the same shape the eternal-heart row above
+      // already needs, and for the same reason (`layoutHud` otherwise only
+      // runs on a resize or a run start).
+      if (sim.promilleUnlocked !== promilleRowShown) {
+        promilleRowShown = sim.promilleUnlocked;
+        promilleHud.setUnlocked(promilleRowShown);
+        layoutHud();
+      }
       promilleHud.sync(sim, settings.neutralReskin);
       walletHud.sync(sim);
       characterHud.sync(sim);
@@ -2000,6 +2045,7 @@ async function boot(): Promise<void> {
       }
       bossHealthHud.sync(sim);
       curseHud.sync(sim);
+      promilleUnlockHud.sync(sim, settings.neutralReskin);
       blutwurzHud.sync(sim);
       minimapHud.setMapOpen(isActionDown(input.frame, InputAction.Map));
       // Nebel (#49): no minimap for the floor — render-only, the same
@@ -2389,11 +2435,17 @@ WASD move   arrows aim and fire
       // rather than the first real encounter — no enemies, no drops,
       // whatever the chosen template itself authors.
       suppressRoomContent: true,
-      // Sober or promilled, decided here and never again for this run (#85).
-      // Passed as a `GameSim` option rather than set afterwards because the
-      // very first room is populated inside the constructor, and its drop
-      // table has to already know which half to roll.
+      // Sober or promilled, decided here (#85). Passed as a `GameSim` option
+      // rather than set afterwards because the very first room is populated
+      // inside the constructor, and its drop table has to already know which
+      // half to roll.
       promilleUnlocked,
+      // Where an unearned run meets the meter (#236): the boss of the floor
+      // `content/progression/unlocks.ts` gates the unlock on. Derived from
+      // `promilleUnlocked` alone, so a resumed or replayed run reaches the
+      // same answer without the flag having to ride along in the log — see
+      // `resolvePromilleUnlockFloor`.
+      promilleUnlockFloor: resolvePromilleUnlockFloor(promilleUnlocked),
     });
     // The start room is hand-authored (loaded just above); the procedural
     // `normal` rooms are built now that `sim` — and its live `tuning.roomGen`
@@ -2517,6 +2569,7 @@ WASD move   arrows aim and fire
     ambienceTracker.reset();
     creditedBossRooms = new Set<string>();
     roomClearedLastTick = false;
+    promilleWasUnlockedLastTick = promilleUnlocked;
     playerWasLowHealthLastTick = false;
     deathPhase = 'alive';
     deathPhaseTicks = 0;
@@ -2550,6 +2603,7 @@ WASD move   arrows aim and fire
     // Before `layoutHud`, not after: the meter's row is gone in a sober run,
     // and the column below it only closes up if the layout pass already
     // knows that. See `PromilleHud.setUnlocked`.
+    promilleRowShown = promilleUnlocked;
     promilleHud.setUnlocked(promilleUnlocked);
     // The heart-container high-water marks are per-run — a restart starts the
     // player back at three red containers, no soul or eternal row.
@@ -2611,11 +2665,11 @@ WASD move   arrows aim and fire
     try {
       RUN_SEED = activeRun.seed;
       // The run's own recorded state, never the save's current unlock: the
-      // Promille unlock is committed the instant Der Stier falls, so a player
-      // who beat him and closed the tab has a save that says "promilled"
-      // about a log that was recorded sober. Replaying those inputs against
-      // the wrong drop tables would resume a different run — see
-      // `ActiveRunSave.promilleUnlocked`.
+      // Promille unlock is committed the instant the gate's boss falls, so a
+      // player who beat it and closed the tab has a save that says
+      // "promilled" about a log that was recorded sober from tick zero.
+      // Replaying those inputs against the wrong drop tables would resume a
+      // different run — see `ActiveRunSave.promilleUnlocked`.
       // Same argument for the character (#47): the table writes a choice the
       // moment the player cycles to it, mid-run included, so the save's
       // current pick can already describe somebody other than whoever
