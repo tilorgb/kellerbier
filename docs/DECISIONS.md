@@ -4444,3 +4444,37 @@ moment a tick finds nothing — so Traktor-Auspuff's clouds pop on first contact
 pierce, and the note is on the item for the next trail-shaped design. And the `splitting` tag
 had never been granted by any authored item, so `spawnSplitChildren` had never inherited a
 child's presentational fields (`art`, `tint`) — it does now.
+
+## 83. Item icons are plain objects on the pickups' 24×24 canvas, composed from source, landed batch by batch
+
+**Decided:** the 2026-09 item pass, second half — the pixel art for the 51-item roster, after
+#82 settled the effects.
+
+**What was chosen, and against what.** `CLAUDE.md`'s sign-off round, cloud track (#77): three
+programmatic directions for the first ten items, rendered at 6× beside Alois and the pickups.
+*A, the plain object* — the item itself filling the canvas, one step of palette shading, 1px
+`#000000` ink — won over *B*, the same object drawn smaller on a round beer-mat badge, and *C*, a
+2px-ink variant with one feature oversized (the object equivalent of #55's chibi rule). A is the
+pickups' own language: `pickup-mass-full.png` and friends are 24×24 on exactly these rules, so an
+item on a pedestal and a Maß on the floor read as one family of object, and the pedestal's
+quality-coloured beam and light stay the thing that says "this one is an item". B's badge would
+have said it twice; C's weight sat oddly next to the pickups it shares a room with.
+
+**The canvas is the pickups' canvas.** #45 makes 24×24 the icon's size on screen — three-quarters
+of Alois — which was shown standing on real pedestals from the game camera before anything was
+committed, per the billboards note in `CLAUDE.md`. The icon is drawn untinted; the tint the
+placeholder disc still wears for an item with no art yet is what marks the gap.
+
+**Composed from source, like Alois and the bosses.** `tools/art/authoring/items.mjs` draws each
+icon from a small raster kit (discs, lines, rects, a grid stamp) and `npm run art:items` writes
+`assets/sprites/common/characters/item-<id>.png`; `tests/art/items-authoring.test.ts` holds the
+PNGs byte-identical to the source and checks palette, canvas and the hard ink edge — a painted
+pixel on the canvas border fails, which is why every drawing keeps one pixel of margin. #55's
+"a Kellerassel belongs in the editor" argument does not apply: fifty-one small drawings in one
+language *is* the repetition problem composing solves.
+
+**Batches, not a big bang.** Ten items per round, each round shown before it lands; the loader
+keys `item-<sprite>` the way it keys `pickup-<id>`, and `PedestalView` falls back to the disc for
+an item not yet drawn — `CLAUDE.md`'s content-gap shape, so the roster can ship half-drawn
+without a broken pedestal. An icon the round found doubtful (the tuba, the belly) is redrawn in
+the next batch rather than committed on a shrug.

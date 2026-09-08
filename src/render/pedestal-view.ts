@@ -23,6 +23,13 @@ import type { Lighting } from './world/lighting.js';
  * glows before the player has read what is in it. The bob is unchanged: a
  * sine on the tick with a phase from the pedestal's position, so two pedestals
  * never lock step.
+ *
+ * The item itself is its authored icon (`FloorArt.itemArt`, keyed by
+ * `ItemDefinition.sprite` — `tools/art/authoring/items.mjs`), drawn untinted
+ * so its own colours show; the beam and the light still carry the quality
+ * colour. An item whose art is not authored yet falls back to `itemTexture`,
+ * the generated disc, tinted by quality as it always was — the content-gap
+ * shape `CLAUDE.md` asks for while the roster is drawn batch by batch.
  */
 const BEAM_RADIUS = 5;
 const BEAM_HEIGHT = 26;
@@ -30,6 +37,8 @@ const BEAM_ALPHA = 0.3;
 const ITEM_HEIGHT = BEAM_HEIGHT * 0.6;
 const LIGHT_HEIGHT = BEAM_HEIGHT * 0.5;
 const LIGHT_INTENSITY = 600;
+/** An authored icon is drawn in its own colours — the quality tint stays on the beam and the light. */
+const UNTINTED = 0xffffff;
 
 interface PedestalSlot {
   readonly beam: Mesh<CylinderGeometry, MeshBasicMaterial>;
@@ -51,15 +60,23 @@ export class PedestalView {
   private readonly sim: GameSim;
   private readonly lighting: Lighting;
   private readonly itemTexture: Texture;
+  private readonly itemArt: Readonly<Record<string, Texture>>;
   private readonly plinthTexture: Texture | undefined;
   private readonly slots: PedestalSlot[] = [];
   private readonly slotForPedestal: number[] = [];
   private lean = 0;
 
-  constructor(sim: GameSim, lighting: Lighting, itemTexture: Texture, plinthTexture?: Texture) {
+  constructor(
+    sim: GameSim,
+    lighting: Lighting,
+    itemTexture: Texture,
+    plinthTexture?: Texture,
+    itemArt: Readonly<Record<string, Texture>> = {},
+  ) {
     this.sim = sim;
     this.lighting = lighting;
     this.itemTexture = itemTexture;
+    this.itemArt = itemArt;
     this.plinthTexture = plinthTexture;
     // One slot built up front, hidden, so its beam, plinth and item materials
     // are in the scene for `GameView.render`'s first-frame `renderer.compile`
@@ -99,7 +116,9 @@ export class PedestalView {
       const period = Math.max(1, tuning.bobPeriodTicks);
       const phase = ((pedestal.x + pedestal.y) / period) * Math.PI * 2;
       const bob = Math.sin((sim.tick / period) * Math.PI * 2 + phase) * tuning.bobAmplitude;
-      slot.item.tint = tint;
+      const art = this.itemArt[item.sprite];
+      slot.item.setTexture(art ?? this.itemTexture);
+      slot.item.tint = art === undefined ? tint : UNTINTED;
       slot.item.place(0, ITEM_HEIGHT + bob, 0, this.lean);
     }
     for (let index = used; index < this.slots.length; index++) {

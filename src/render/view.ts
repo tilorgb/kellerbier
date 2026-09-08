@@ -86,8 +86,11 @@ export interface GameViewTextures {
   readonly decal: Texture;
   /** The bitmap font family for damage numbers and pickup labels. */
   readonly numberFont: string;
+  /** What a pedestal shows for an item with no authored art yet — see `PedestalView`. */
   readonly pedestalItem: Texture;
   readonly pedestalPlinth?: Texture | undefined;
+  /** Authored item icons by `ItemDefinition.sprite` (`FloorArt.itemArt`); an item missing here draws `pedestalItem`. */
+  readonly itemArt?: Readonly<Record<string, Texture>> | undefined;
   readonly pickupArt?: Readonly<Record<string, Texture>> | undefined;
   readonly bossIds?: ReadonlySet<string> | undefined;
   readonly tileTextures?: Readonly<Record<string, Texture>> | undefined;
@@ -342,6 +345,7 @@ export class GameView {
       this.lighting,
       textures.pedestalItem,
       textures.pedestalPlinth,
+      textures.itemArt ?? {},
     );
     this.scene.add(this.pedestals.group);
 
