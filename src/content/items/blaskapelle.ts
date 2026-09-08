@@ -38,13 +38,13 @@ export const blaskapelle: ItemDefinition = {
       const sim = ctx.sim;
       const playerIndex = sim.playerIndex;
       const damage = Math.max(1, Math.round(sim.stats.value('damage') * DAMAGE_SCALE));
-      sim.applySplashDamage(
-        sim.positionX(playerIndex),
-        sim.positionY(playerIndex),
-        RING_RADIUS,
-        damage,
-        playerIndex,
-      );
+      const x = sim.positionX(playerIndex);
+      const y = sim.positionY(playerIndex);
+      sim.applySplashDamage(x, y, RING_RADIUS, damage, playerIndex);
+      // The ring itself (#243's `splashBurst`): `applySplashDamage` draws
+      // nothing, and a band that only showed on the enemies it happened to
+      // reach read as enemies flinching for no reason.
+      sim.splashBurst(x, y, RING_RADIUS);
     },
   },
 };

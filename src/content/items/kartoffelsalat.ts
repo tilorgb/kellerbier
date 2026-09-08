@@ -1,31 +1,33 @@
 import type { ItemDefinition } from '../../sim/item/definition.js';
 
+const RANGE_MULTIPLIER = 1.15;
+
 /**
- * Kartoffelsalat — the festival side dish everyone fills up on. Hearty and
- * heavy: it carries you further and lets you outrun trouble, at the cost of
- * how hard your shots leave the barrel.
+ * Kartoffelsalat — every family has the one correct recipe, and they cannot
+ * all be right. Shots split on impact (#27's `splitting`): whatever they
+ * hit, two smaller chunks fly on past it, so a shot into the front of a
+ * crowd keeps going into the back of it.
  *
- * Stat-only, no hook beyond `modifyStats` — the same shape `gamsbart.ts`,
- * `haferlschuh.ts` and `kraftbier.ts` already ship, and `hasModifyStats`'s
- * end-to-end format proof does not need a fourth example to still be true;
- * this is here because the trade-off itself (range and speed for shot
- * speed) is one the roster did not have yet, not because the mechanism is
- * new.
+ * `splitting` was the one tag in `sim/projectile/tags.ts` no item in the
+ * roster granted; the item that used to sit here was "Range and Move Speed
+ * up, Shot Speed down" — three numbers and nothing to see. The chunks
+ * inherit the parent's `kartoffel` tint (`sim/projectile/behavior.ts`'s
+ * `spawnSplitChildren`) so the whole spray reads as one salad.
  */
 export const kartoffelsalat: ItemDefinition = {
   id: 'kartoffelsalat',
   name: 'Kartoffelsalat',
-  description: 'Range and Move Speed up. Shot Speed down',
+  description: 'Shots split into two chunks on impact. Range +15%',
   flavourText: 'Every family recipe is the only correct one and they cannot all be right.',
   sprite: 'kartoffelsalat',
   pools: ['treasure', 'shop'],
-  quality: 0,
+  quality: 1,
   promilleRequirement: 'any',
   hooks: {
-    modifyStats: () => [
-      { stat: 'range', op: 'multiply', value: 1.2 },
-      { stat: 'moveSpeed', op: 'multiply', value: 1.1 },
-      { stat: 'shotSpeed', op: 'multiply', value: 0.85 },
-    ],
+    modifyStats: () => [{ stat: 'range', op: 'multiply', value: RANGE_MULTIPLIER }],
+    onProjectileSpawn: (ctx) => {
+      ctx.sim.addProjectileTag(ctx.projectile, 'splitting');
+      ctx.sim.tintProjectile(ctx.projectile, 'kartoffel');
+    },
   },
 };

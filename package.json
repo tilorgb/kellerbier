@@ -21,6 +21,7 @@
     "art:floor2": "node tools/art/authoring/build-floor2-roster.mjs",
     "art:minibosses2": "node tools/art/authoring/build-floor2-minibosses.mjs",
     "art:shopkeeper": "node tools/art/authoring/build-shopkeeper.mjs",
+    "art:items": "node tools/art/authoring/build-items.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

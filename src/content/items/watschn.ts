@@ -40,6 +40,10 @@ export const watschn: ItemDefinition = {
       const damage = Math.max(1, Math.round(sim.stats.value('damage') * DAMAGE_SCALE));
       sim.applySplashDamage(x, y, SLAP_RADIUS, damage, playerIndex);
       sim.pushEnemiesNear(x, y, SLAP_RADIUS, PUSH_STRENGTH);
+      // Drawn (#243's `splashBurst`): the slap goes off on the same tick the
+      // player's own hurt flash does, and without its own ring it read as
+      // the enemies being knocked back by *taking* the hit.
+      sim.splashBurst(x, y, SLAP_RADIUS);
     },
     onTick: (ctx) => {
       const state = ctx.state;

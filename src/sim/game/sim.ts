@@ -93,6 +93,7 @@ import {
   PROJECTILE_TAG_BY_NAME,
   type ProjectileTagName,
 } from '../projectile/tags.js';
+import { PROJECTILE_TINT_INDEX, type ProjectileTintName } from '../projectile/tints.js';
 import { NO_SLOT } from '../pool/slot-pool.js';
 import { vectorLength } from '../math.js';
 import { addPush, stepPlayerMovement } from '../systems/movement.js';
@@ -1072,6 +1073,17 @@ export class GameSim {
    */
   private meisterschluesselHeld = false;
   /**
+   * Whether the floor's secret and supersecret rooms show on the minimap
+   * before the player has found them — the "unlock item" `computeReveal`
+   * (`render/minimap-hud.ts`) always reserved a lift for, which Schlüsselbund
+   * (`content/items/schluesselbund.ts`) now is. Run-scoped rather than
+   * per-floor: it is a property of what the player carries, not of the
+   * floor, so `clearFloorProgress` leaves it alone and the item's own
+   * `onRemove` is what takes it away. Presentational — nothing in `step`
+   * reads it — so it can never move a replay.
+   */
+  private secretRoomsRevealedFlag = false;
+  /**
    * Whether this floor's boss door actually needs the Meisterschlüssel — set
    * per floor by `configureFloorGate` from `FloorPlan.minibossRoomIds` being
    * non-empty. A floor whose content has no mini-boss template gets no
@@ -2005,6 +2017,16 @@ export class GameSim {
   /** Whether Der Meisterschlüssel (#275) is in hand — shown in the wallet HUD, read by `app/main.ts` to draw the boss door locked. */
   get meisterschluessel(): boolean {
     return this.meisterschluesselHeld;
+  }
+
+  /** Turns the minimap's secret-room reveal on or off — an item's `onPickup`/`onRemove` pair. See `secretRoomsRevealedFlag`. */
+  setSecretRoomsRevealed(revealed: boolean): void {
+    this.secretRoomsRevealedFlag = revealed;
+  }
+
+  /** Whether the minimap should show this floor's secret rooms unfound — read by `app/main.ts`'s floor-plan view sync. */
+  get secretRoomsRevealed(): boolean {
+    return this.secretRoomsRevealedFlag;
   }
 
   /** Whether this floor's boss door is currently gated *and* still shut — false once the key opens it, or on an ungated floor. See `configureFloorGate`. */
@@ -4122,6 +4144,20 @@ export class GameSim {
    */
   addProjectileTag(projectile: number, tag: ProjectileTagName): void {
     grantProjectileTag(this.projectiles, projectile, PROJECTILE_TAG_BY_NAME[tag]);
+  }
+
+  /**
+   * Paints a shot in a named `ProjectileTint` (`sim/projectile/tints.ts`) —
+   * the content-safe entry point for the item roster's "every item is
+   * visible on the shot it changed" rule, the exact shape `addProjectileTag`
+   * takes for a tag. Purely presentational: nothing in `step` reads
+   * `ProjectileStore.tint`, so a tint can never move a replay. The last item
+   * to tint a shot wins, in `ItemInventory.forEachHeld`'s deterministic id
+   * order — good enough for a colour, and the same rule two items writing
+   * the same projectile field already live by.
+   */
+  tintProjectile(projectile: number, tint: ProjectileTintName): void {
+    this.projectiles.tint[projectile] = PROJECTILE_TINT_INDEX[tint];
   }
 
   /**

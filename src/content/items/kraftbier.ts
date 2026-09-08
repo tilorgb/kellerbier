@@ -18,6 +18,14 @@ export const kraftbier: ItemDefinition = {
       { stat: 'damage', op: 'multiply', value: 1.4 },
       { stat: 'moveSpeed', op: 'multiply', value: 0.8 },
     ],
+    // A 9% beer pours darker and heavier: `dunkel` tint and a fatter shot,
+    // so the trade a player made is on the shot they fire and not only in
+    // how slowly they walk.
+    onProjectileSpawn: (ctx) => {
+      const projectiles = ctx.sim.projectiles;
+      projectiles.radius[ctx.projectile] = (projectiles.radius[ctx.projectile] ?? 0) * 1.3;
+      ctx.sim.tintProjectile(ctx.projectile, 'dunkel');
+    },
   },
   /**
    * Der Losbrunnen's rarest roll (#218): the same damage bump, the move

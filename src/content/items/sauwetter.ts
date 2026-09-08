@@ -27,6 +27,10 @@ export const sauwetter: ItemDefinition = {
   pools: ['shop', 'boss', 'secret', 'curse'],
   quality: 2,
   promilleRequirement: 'any',
+  // The forecast: which weather the *next* squeeze carries. The shot itself
+  // already wears the status's sprite; this is what lets a player hold fire
+  // for the freeze rather than discover it in flight.
+  status: (ctx) => `next: ${WEATHER[(ctx.state.charge + 1) % WEATHER.length] ?? ''}`,
   hooks: {
     onShoot: (ctx) => {
       ctx.state.charge += 1;

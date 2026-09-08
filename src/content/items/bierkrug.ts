@@ -9,6 +9,9 @@ import type { ItemDefinition } from '../../sim/item/definition.js';
  * is #29's job — this exists so the format has one working, shipped example
  * rather than only ones invented for a test file.
  */
+/** How much fatter each held Bierkrug makes a shot. */
+const RADIUS_PER_STACK = 0.12;
+
 export const bierkrug: ItemDefinition = {
   id: 'bierkrug',
   name: 'Bierkrug',
@@ -26,5 +29,14 @@ export const bierkrug: ItemDefinition = {
     // `StatId` (`sim/stats/definition.js`) is a value the pipeline reads its
     // string ids off of.
     modifyStats: (state) => [{ stat: 'damage', op: 'add', value: state.count }],
+    // A bigger mug is a bigger shot: +12% radius per stack, so the extra
+    // damage is something a player sees leave the barrel rather than a number
+    // in the debug overlay. The hit circle grows with it (`mass.ts`'s
+    // precedent), which is the small real upside of a fatter shot.
+    onProjectileSpawn: (ctx) => {
+      const projectiles = ctx.sim.projectiles;
+      projectiles.radius[ctx.projectile] =
+        (projectiles.radius[ctx.projectile] ?? 0) * (1 + RADIUS_PER_STACK * ctx.state.count);
+    },
   },
 };

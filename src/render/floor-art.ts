@@ -70,6 +70,13 @@ export interface FloorArt {
   readonly enemyStrips: Readonly<Record<string, LoadedStrip>>;
   /** Pickup art (#152), keyed by `PickupDefinition.id` — authored as `common/characters/pickup-<id>.png`. */
   readonly pickupArt: Readonly<Record<string, Texture>>;
+  /**
+   * Item pedestal art, keyed by `ItemDefinition.sprite` — authored as
+   * `common/characters/item-<sprite>.png` by `tools/art/authoring/items.mjs`.
+   * Sparse while the roster is drawn batch by batch: an item with no entry
+   * keeps the placeholder disc (`render/pedestal-view.ts`).
+   */
+  readonly itemArt: Readonly<Record<string, Texture>>;
   /** Projectile art (#152), keyed by sprite name (`beer`, `beer-burning`, `tap-drip`, ...). */
   readonly projectileArt: Readonly<Record<string, Texture>>;
   /** Effect art (#153), keyed by sprite name (`foam`, `spark`, `glint`, `ring`, ...). */
@@ -438,6 +445,7 @@ function standaloneTile(texture: Texture): Texture {
 }
 
 const PICKUP_PREFIX = 'pickup-';
+const ITEM_PREFIX = 'item-';
 
 /**
  * Loads every authored sprite and returns it shaped for `GameViewTextures`.
@@ -483,9 +491,12 @@ export async function loadFloorArt(): Promise<FloorArt> {
   }
 
   const pickupArt: Record<string, Texture> = {};
+  const itemArt: Record<string, Texture> = {};
   for (const [name, texture] of Object.entries(characterTextures)) {
     if (name.startsWith(PICKUP_PREFIX)) {
       pickupArt[name.slice(PICKUP_PREFIX.length)] = texture;
+    } else if (name.startsWith(ITEM_PREFIX)) {
+      itemArt[name.slice(ITEM_PREFIX.length)] = texture;
     }
   }
 
@@ -534,6 +545,7 @@ export async function loadFloorArt(): Promise<FloorArt> {
     },
     enemyStrips,
     pickupArt,
+    itemArt,
     projectileArt: projectileTextures,
     vfxArt: vfxTextures,
     tileTextures,

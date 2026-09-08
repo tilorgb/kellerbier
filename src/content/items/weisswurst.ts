@@ -23,9 +23,21 @@ export const weisswurst: ItemDefinition = {
   pools: ['treasure', 'shop'],
   quality: 1,
   promilleRequirement: 'any',
+  // The HUD row is how a player learns the tradition ended: the shots turn
+  // back to beer at the same moment, but a colour that quietly stops is easy
+  // to miss on a floor whose everything else just changed too.
+  status: (ctx) => (ctx.state.charge > 0 ? 'still before noon' : 'past noon — no bonus'),
   hooks: {
     modifyStats: (state) =>
       state.charge > 0 ? [{ stat: 'damage', op: 'multiply', value: DAMAGE_MULTIPLIER }] : [],
+    // White shots while the bonus holds — the sausage in the beer — and
+    // ordinary ones the floor it stops, so the loss is visible on the very
+    // first shot of floor 4.
+    onProjectileSpawn: (ctx) => {
+      if (ctx.state.charge > 0) {
+        ctx.sim.tintProjectile(ctx.projectile, 'weiss');
+      }
+    },
     onPickup: (ctx) => {
       ctx.state.charge = ctx.sim.currentFloor <= LAST_FLOOR ? 1 : 0;
     },

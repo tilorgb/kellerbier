@@ -41,6 +41,10 @@ export const lebkuchenherz: ItemDefinition = {
   pools: ['treasure', 'shop', 'boss'],
   quality: 1,
   promilleRequirement: 'any',
+  // The slogan "overhead" the description promises — the HUD row is where
+  // it actually reads, in the heart's own words, so a player can see which
+  // heart they are carrying this floor without opening the debug overlay.
+  status: (ctx) => SLOGANS[ctx.state.charge % SLOGANS.length]?.text ?? '',
   hooks: {
     modifyStats: (state) => {
       const slogan = SLOGANS[state.charge % SLOGANS.length];

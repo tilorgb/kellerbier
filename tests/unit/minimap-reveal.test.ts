@@ -59,6 +59,33 @@ function plan(rooms: readonly FloorPlanRoom[]): FloorPlan {
   };
 }
 
+describe('minimap reveal — the secret-room unlock (Schlüsselbund)', () => {
+  it('adjacency never reveals a secret room, and the unlock flag reveals both secret rooms wherever they are', () => {
+    const t = tRoom();
+    const floorPlan = {
+      ...plan([
+        t,
+        bareRoom('bar-left-neighbor', 'secret'),
+        bareRoom('bar-right-neighbor'),
+        bareRoom('void-swallowed-neighbor'),
+        bareRoom('far-supersecret', 'supersecret'),
+      ]),
+      secretRoomId: 'bar-left-neighbor',
+      supersecretRoomId: 'far-supersecret',
+    };
+
+    const withoutItem = computeReveal(floorPlan, new Set(['t']));
+    expect(withoutItem.revealed.has('bar-left-neighbor')).toBe(false);
+    expect(withoutItem.revealed.has('far-supersecret')).toBe(false);
+
+    const withItem = computeReveal(floorPlan, new Set(['t']), false, true);
+    expect(withItem.revealed.has('bar-left-neighbor')).toBe(true);
+    expect(withItem.revealed.has('far-supersecret')).toBe(true);
+    // Revealed is not visited: the icon shows, the room still has to be entered.
+    expect(withItem.visited.has('bar-left-neighbor')).toBe(false);
+  });
+});
+
 describe('minimap reveal (#107 follow-up)', () => {
   it('never reveals a neighbour whose only door into it was dropped as void', () => {
     const t = tRoom();

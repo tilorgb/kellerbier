@@ -1,19 +1,21 @@
 import type { ItemDefinition } from '../../sim/item/definition.js';
 
 /**
- * Bierdeckel — a beer coaster, thrown flat. Flies out, turns, and comes back
- * through whatever is in the way a second time.
+ * Bierdeckel — a beer mat flicked across the tent. Shots ricochet off the
+ * walls (#27's `bouncing`) instead of splashing on them, so a shot fired at
+ * nothing comes back off the far wall at an angle, and a narrow room turns
+ * into a pinball table.
  *
- * A one-tag item: `returning` (#27) already is "fly out, then turn back
- * toward the muzzle," which is exactly a boomerang. Nothing else to add —
- * the tag composition rules in `sim/projectile/tags.ts` are what let this
- * combine with anything else granted at the same time without either item
- * knowing the other exists.
+ * Luftballon (`luftballon.ts`) used to share this item's exact effect
+ * (`returning`) under a different name, which is the one thing a roster
+ * cannot afford twice; the balloon keeps the string-comes-back idea, the
+ * mat is the thing you flick and watch bounce. Tinted `pappe` — cardboard —
+ * so the ricocheting shot is visibly not beer.
  */
 export const bierdeckel: ItemDefinition = {
   id: 'bierdeckel',
   name: 'Bierdeckel',
-  description: 'Shots return to you, damaging on the way back',
+  description: 'Shots ricochet off walls',
   flavourText: 'Also doubles as a coaster, if you can bear to put it down.',
   sprite: 'bierdeckel',
   pools: ['treasure', 'shop'],
@@ -21,7 +23,8 @@ export const bierdeckel: ItemDefinition = {
   promilleRequirement: 'any',
   hooks: {
     onProjectileSpawn: (ctx) => {
-      ctx.sim.addProjectileTag(ctx.projectile, 'returning');
+      ctx.sim.addProjectileTag(ctx.projectile, 'bouncing');
+      ctx.sim.tintProjectile(ctx.projectile, 'pappe');
     },
   },
 };

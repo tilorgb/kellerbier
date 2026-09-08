@@ -34,6 +34,11 @@ export const reinheitsgebot1516: ItemDefinition = {
   promilleRequirement: 'any',
   hooks: {
     modifyStats: () => [{ stat: 'damage', op: 'multiply', value: 1.5 }],
+    // The pure pour: gold shots for the rest of the run, so the pact a
+    // player signed is on every shot they fire.
+    onProjectileSpawn: (ctx) => {
+      ctx.sim.tintProjectile(ctx.projectile, 'gold');
+    },
     onPickup: (ctx) => {
       const sim = ctx.sim;
       for (const item of sim.items.all) {

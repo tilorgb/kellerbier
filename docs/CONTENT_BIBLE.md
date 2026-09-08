@@ -342,7 +342,7 @@ Roughly 30 to start; target **120+ by v1**. Every one changes how you play.
 | **Russ'n** | Weißbier and lemonade. Shots gain `homing`. |
 | **Maß** | One enormous slow projectile instead of a stream. Massive damage, terrible coverage. |
 | **Steinkrug** | Shots become thrown stone mugs: they arc over obstacles and shatter into splash damage. |
-| **Bierdeckel** | Coaster boomerang — returns to you and damages on the way back. |
+| **Bierdeckel** | A flicked beer mat: shots gain `bouncing` and ricochet off walls. (Was a second `returning` item; Luftballon keeps that one.) |
 | **Colaweizen** | Shots gain `sticky` and slow enemies. You take a permanent damage penalty. Impure and everyone knows it. |
 | **Radi** | Spiral-cut radish: shots travel in a helix. Awful at close range, superb at long. |
 | **Enzian** | Schnapps. Ten seconds of enormous fire rate on a cooldown, then +1.0 Promille. |

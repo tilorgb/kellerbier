@@ -95,6 +95,20 @@ export class ProjectileStore {
    * occupant's sprite is a bug a player would see.
    */
   readonly art: Uint8Array;
+  /**
+   * Which `ProjectileTint` (`sim/projectile/tints.ts`) this shot is drawn
+   * in — an index into `PROJECTILE_TINT_NAMES`, 0 for "untinted, the sprite's
+   * own colours". Presentational, like `art`, and stored here for the same
+   * reason: a shot in flight is typed arrays and nothing that remembers which
+   * item touched it, and the item roster's "every item is visible on the
+   * shot it changed" rule (Spezi's second shot is brown, Almabtrieb's moving
+   * shot is a different colour) needs the renderer to know. Written by
+   * `spawn` like every other field — a fresh shot wearing the last
+   * occupant's colour is a bug a player would see — and inherited by a
+   * `splitting` shot's children (`sim/projectile/behavior.ts`), since they
+   * are still the same item's shot.
+   */
+  readonly tint: Uint8Array;
 
   private readonly pool: SlotPool;
 
@@ -113,6 +127,7 @@ export class ProjectileStore {
     this.generation = new Uint32Array(capacity);
     this.tags = new Uint32Array(capacity);
     this.art = new Uint8Array(capacity);
+    this.tint = new Uint8Array(capacity);
     this.spawnX = new Float32Array(capacity);
     this.spawnY = new Float32Array(capacity);
     this.ticksAlive = new Int16Array(capacity);
@@ -163,6 +178,7 @@ export class ProjectileStore {
     team: ProjectileTeamId,
     tags = 0,
     art = 0,
+    tint = 0,
   ): number {
     const index = this.pool.acquire();
     if (index === NO_SLOT) {
@@ -196,6 +212,7 @@ export class ProjectileStore {
     this.stickyTarget[index] = -1;
     this.lastHitTarget[index] = -1;
     this.art[index] = art;
+    this.tint[index] = tint;
     return index;
   }
 

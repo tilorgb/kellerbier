@@ -49,6 +49,7 @@ import { RunResultsScreen } from '../render/run-results.js';
 import { MachinePickerScreen, type MachinePickerView } from '../render/machine-picker.js';
 import { HealthHud } from '../render/health-hud.js';
 import { ItemGateHud } from '../render/item-gate-hud.js';
+import { ItemStatusHud } from '../render/item-status-hud.js';
 import { MinimapHud } from '../render/minimap-hud.js';
 import { CurseHud } from '../render/curse-hud.js';
 import { BlutwurzHud } from '../render/blutwurz-hud.js';
@@ -764,6 +765,7 @@ async function boot(): Promise<void> {
       enemyArt,
       enemyStrips,
       pickupArt,
+      itemArt,
       projectileArt,
       vfxArt,
       tileTextures,
@@ -841,6 +843,8 @@ async function boot(): Promise<void> {
    * either room it touches.
    */
   let revealedEdges: Set<string>;
+  /** What `sim.secretRoomsRevealed` read at the last floor-plan view sync — see the frame loop's Schlüsselbund check. */
+  let secretRoomsShown = false;
   // The room is populated with the authored roster rather than the training
   // targets: the targets are the rig impact feel was tuned against, and the
   // game is the thing with enemies in it.
@@ -1150,6 +1154,14 @@ async function boot(): Promise<void> {
   const itemGateHud = new ItemGateHud(kit);
   hudLayer.addChild(itemGateHud.view);
 
+  /**
+   * One row per held item with a live state readout (`ItemDefinition.status`)
+   * — Lederhosn's absorbed hit, Gartenzwerg-Hut's streak, Lebkuchenherz's
+   * slogan. Hidden entirely (`ItemStatusHud.sync`) for a run holding none.
+   */
+  const itemStatusHud = new ItemStatusHud();
+  hudLayer.addChild(itemStatusHud.view);
+
   /** Item sets (#137): the "N/M held" progress row and the completion banner. */
   const itemSetHud = new ItemSetHud(kit);
   hudLayer.addChild(itemSetHud.view);
@@ -1246,6 +1258,8 @@ async function boot(): Promise<void> {
     y += activeItemHud.height + HUD_ROW_GAP;
     itemGateHud.view.position.set(HUD_MARGIN, y);
     y += itemGateHud.height + HUD_ROW_GAP;
+    itemStatusHud.view.position.set(HUD_MARGIN, y);
+    y += itemStatusHud.height + HUD_ROW_GAP;
 
     const centreX = Math.round(width / 2);
     itemSetHud.place(HUD_MARGIN, y, centreX, Math.round(height * 0.32));
@@ -1975,7 +1989,15 @@ async function boot(): Promise<void> {
           : actionPrompt(input.bindings, Bindable.Use, device, glyphSet);
       activeItemHud.sync(sim, activatePrompt);
       itemGateHud.sync(sim);
+      itemStatusHud.sync(sim);
       itemSetHud.sync(sim);
+      // Schlüsselbund picked up (or lost) mid-room: the minimap is only
+      // rebuilt on a room change otherwise, and "the secret rooms appear on
+      // the map" has to happen the moment the item is taken to read as the
+      // item doing it.
+      if (sim.secretRoomsRevealed !== secretRoomsShown) {
+        syncFloorPlanView();
+      }
       bossHealthHud.sync(sim);
       curseHud.sync(sim);
       blutwurzHud.sync(sim);
@@ -2281,7 +2303,9 @@ WASD move   arrows aim and fire
       currentRoomId,
       visitedRoomIds,
       minibossRoomsRevealed(floorPlan, visitedRoomIds),
+      sim.secretRoomsRevealed,
     );
+    secretRoomsShown = sim.secretRoomsRevealed;
   };
   /**
    * (Re)starts the run on `seed`: regenerates the floor plan and rebuilds
@@ -2442,6 +2466,7 @@ WASD move   arrows aim and fire
       ),
       pedestalPlinth: tileTextures.pedestal,
       pickupArt,
+      itemArt,
       tileTextures,
       bossIds: bossIdsFrom(spriteOrigins),
       roomTiles,

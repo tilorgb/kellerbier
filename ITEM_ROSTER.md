@@ -8,6 +8,12 @@ Cut down hard from a 139-item roster to 51 by hand (2026-09) — see the item-li
 this pass: keep only the items whose design earns its slot, drop the boring/offensive/
 over-represented-Alpine ones, and bring items back in later if they turn out to be worth it.
 
+Redesigned for fun and visibility (2026-09, second pass): every item now either changes how a
+room is played or is a deliberately basic stat item, and every item shows itself on screen —
+on the shot it changed (a tinted shot, a bigger one, a fan of them), in the room (a drawn
+shockwave, an exhaust trail, enemies shoved), or on a HUD row (`ItemDefinition.status`). See
+`docs/DECISIONS.md`'s "every item is visible" entry for the rules this pass introduced.
+
 **How to use this file:** make edits directly in this table (change descriptions, effects,
 quality, pools, active/passive, etc.), add new rows for new items, or delete rows for items
 to remove, then hand the updated file back and the corresponding `src/content/items/*.ts`
@@ -20,7 +26,7 @@ Columns:
 - **Name** — the in-game (German) name.
 - **Type** — `Active` (has a use button and charge bar) or `Passive` (always on while held).
 - **Effect** — the short, literal effect text shown to the player.
-- **Flavour Text** — in-character flavour line (not yet shown in-game, but authored).
+- **Flavour Text** — in-character flavour line, shown on the pickup toast.
 - **Quality** — rarity/power tier, 0 (weakest) to 3 (strongest).
 - **Pools** — which pools the item can be offered from (Treasure, Shop, Boss, Devil, Angel, Secret, Curse).
 - **Promille Req.** — `Any`, `Sober` (never appears once Promille is unlocked), or `Rausch` (requires a Promille tier).
@@ -30,16 +36,16 @@ Columns:
 | almabtrieb | Almabtrieb | Passive | Shooting while moving has 2x damage. The "moving shots" have different color. | Run and Gun | 2 | Treasure, Shop, Boss | Any |
 | apfelkuchen | Apfelkuchen | Passive | Heals 4. Damage +5% | Best Kuchen there is. | 0 | Treasure, Shop | Any |
 | apfelkuchen-mit-rosinen | Apfelkuchen (mit Rosinen) | Passive | Heals 4. Damage +5%. Permanently Range -15% | Worst Kuchen there is. | 1 | Treasure, Shop | Any |
-| bauern-mistgabel | Bauern-Mistgabel | Passive | The first shot fired in every room deals bonus damage | Telegraphs the whole thing from a mile off. Still works every single time. | 1 | Treasure, Shop, Boss | Any |
-| bierbank | Bierbank | Passive | Luck +1, Range +5% | Reserved. Nobody has ever admitted to reserving it. | 0 | Treasure, Shop | Any |
+| bauern-mistgabel | Bauern-Mistgabel | Passive | Shots become a short pitchfork jab: three piercing prongs, 2x damage, no range | Telegraphs the whole thing from a mile off. Still works every single time. | 2 | Shop, Boss, Secret | Any |
+| bierbank | Bierbank | Passive | Fires two shots side by side. Damage -20% | Reserved. Nobody has ever admitted to reserving it. | 1 | Treasure, Shop | Any |
 | bierbauch | Bierbauch | Passive | Trinkfest +1 while held. Move Speed -8% | Not fat. Storage. | 2 | Treasure, Shop, Boss | Any |
-| bierdeckel | Bierdeckel | Passive | Shots return to you, damaging on the way back | Also doubles as a coaster, if you can bear to put it down. | 1 | Treasure, Shop | Any |
+| bierdeckel | Bierdeckel | Passive | Shots ricochet off walls | Also doubles as a coaster, if you can bear to put it down. | 1 | Treasure, Shop | Any |
 | bierkrug | Bierkrug | Passive | Damage +1 per stack | One in each hand is not a stack. It is a lifestyle. | 0 | Treasure, Shop | Any |
 | blaskapelle | Blaskapelle | Passive | A sound ring damages everything around you every few seconds | The tuba player has never once needed to breathe. | 2 | Treasure, Shop, Boss | Any |
 | blutwurz | Blutwurz | Passive | A death does not end the run — if you can walk back for the corpse | Blut. Geist. Same word, in two languages that never talk to each other. | 3 | Treasure, Shop, Boss | Any |
 | boellerschmeisser | Böllerschmeißer | Active (charge 420) | Active: drop a lit Böller — it goes off where you stand, one second later | The landing spot is marked. Nobody ever moves in time regardless. | 2 | Shop, Boss, Secret | Any |
 | braumeister-hammer | Braumeister-Hammer | Passive | A kill sends a shockwave through whatever else is nearby | The casks that don't tap the easy way meet this instead. | 2 | Boss, Secret | Any |
-| braumeister-schuerze | Braumeister-Schürze | Passive | Damage +0.2 | He aims the way he pours. It never spills. | 1 | Treasure, Shop | Any |
+| braumeister-schuerze | Braumeister-Schürze | Passive | Fires a fan of three shots. Damage -30% | He aims the way he pours. It never spills. | 2 | Treasure, Shop, Boss | Any |
 | braumeister-visier | Braumeister-Visier | Passive | Every 5th shot fires an extra, piercing volley | He has fired the same shot ten thousand times. It has never once missed. | 2 | Shop, Boss | Any |
 | brezn | Brezn | Passive | An orbiting pretzel that damages enemies on contact | Lightly salted. Heavily weaponised. | 1 | Treasure, Shop | Any |
 | brotzeitbrett | Brotzeitbrett | Passive | Clearing a room heals 1 and grants a Biermarken | Radishes, cheese, a pretzel. Nobody has ever once finished one alone. | 0 | Treasure, Shop | Any |
@@ -47,12 +53,12 @@ Columns:
 | der-ordner | Der Ordner | Passive | Familiar that shoves enemies away from you | Arms crossed. Opinions closed. | 1 | Treasure, Shop, Boss | Any |
 | der-rosinenklauber | Der Rosinenklauber | Passive | Rosinen items lose their drawback. Locks out both purity pacts | He is not defending the raisins. He is just eating them. | 3 | Devil, Secret | Any |
 | feierabendbier | Feierabendbier | Passive | Heals a little at the start of every floor. Costs a little Promille | Earned the second the shift ends. Not one second before. | 1 | Treasure, Shop | Any |
-| feuerwehrhelm | Feuerwehrhelm | Passive | Move Speed +10%, Shot Speed +10% | Rated to withstand heat, impact, and at least one Böllerschmeißer. | 1 | Treasure, Shop | Any |
+| feuerwehrhelm | Feuerwehrhelm | Passive | Shots are hose water: every hit shoves its target back. Shot Speed +25% | Rated to withstand heat, impact, and at least one Böllerschmeißer. | 1 | Treasure, Shop | Any |
 | fingerhakeln | Fingerhakeln | Passive | Contact damage, and drags nearby enemies toward you | The loser buys the next round. There is always a next round. | 2 | Shop, Boss, Secret | Rausch |
-| gartenzwerg-hut | Gartenzwerg-Hut | Passive | Luck rises the longer you go without taking a hit; one hit resets it | Face down in the flower bed. Somehow this is still the lucky pose. | 1 | Treasure, Shop | Any |
+| gartenzwerg-hut | Gartenzwerg-Hut | Passive | Every 5 seconds without taking a hit adds an extra shot to your volley (up to 3). One hit resets it | Face down in the flower bed. Somehow this is still the lucky pose. | 2 | Treasure, Shop, Boss | Any |
 | haferlschuh | Haferlschuh | Passive | Move Speed +15%, immune to slick puddles | Every nail hand-driven by someone who takes this far too seriously. | 0 | Treasure, Shop | Any |
 | hendlgeruch | Hendlgeruch | Passive | Constantly pulls distant enemies toward you | Carries for a kilometre. Everyone within a kilometre now has plans. | 1 | Treasure, Shop, Secret | Any |
-| kartoffelsalat | Kartoffelsalat | Passive | Range and Move Speed up. Shot Speed down | Every family recipe is the only correct one and they cannot all be right. | 0 | Treasure, Shop | Any |
+| kartoffelsalat | Kartoffelsalat | Passive | Shots split into two chunks on impact. Range +15% | Every family recipe is the only correct one and they cannot all be right. | 1 | Treasure, Shop | Any |
 | karussell | Karussell | Passive | Moving pushes nearby enemies along with you | The operator has not once checked a safety harness. The line never gets shorter. | 1 | Treasure, Shop | Any |
 | konterbier | Konterbier | Passive | Drinking while hungover instantly clears the Kater | Hair of the dog. The dog remembers you fondly. | 1 | Treasure, Shop | Any |
 | kraftbier | Kraftbier | Passive | Damage +40%, Move Speed -20% | The label does not say 9% for decoration. | 1 | Treasure, Shop | Any |
@@ -69,12 +75,12 @@ Columns:
 | riesenrad | Riesenrad | Passive | A slow-orbiting gondola that damages and freezes on contact | Officially rated for six people. You are, at this point, the only one who fits. | 2 | Treasure, Shop, Boss | Any |
 | ruhige-hand | Ruhige Hand | Passive | Damage +40% while under 0.5 Promille | The only item in the tent trying to talk you out of another round. | 2 | Shop, Boss, Secret | Sober |
 | sauwetter | Sauwetter | Passive | Shots carry a different status effect every shot: burning, freezing, poison | Four seasons in one afternoon. Occasionally in one minute. | 2 | Shop, Boss, Secret, Curse | Any |
-| schluesselbund | Schlüsselbund | Passive | Clearing a room grants a key | Fits every lock in the Keller. Explaining why is above your pay grade. | 0 | Treasure, Shop | Any |
+| schluesselbund | Schlüsselbund | Passive | Shows the floor's secret rooms on the map. Clearing a room grants a key | Fits every lock in the Keller. Explaining why is above your pay grade. | 1 | Treasure, Shop, Secret | Any |
 | schuhplattler | Schuhplattler | Passive | Stand still for a moment to release a damaging shockwave | The physics of it are unclear. The enthusiasm is not. | 2 | Shop, Boss | Any |
 | spezi | Spezi | Passive | Fires a second, diverging shot | Nobody agrees on the ratio. Everybody has an opinion. | 1 | Treasure, Shop | Any |
 | steckerlfisch | Steckerlfisch | Passive | Shots burn on hit | Cooked over an open flame for an hour. The shots learned fast. | 1 | Treasure, Shop | Any |
 | steinkrug | Steinkrug | Passive | Shots fly over obstacles and splash on impact | Not aerodynamic. Not meant to be. | 1 | Treasure, Shop | Any |
 | sudordnung-1493 | Sudordnung 1493 | Passive | Locks out every rosinen and impure item. Damage +65% | Twenty-three years earlier and stricter. Nobody remembers why it lost. | 3 | Shop, Boss, Devil | Any |
-| traktor-auspuff | Traktor-Auspuff | Passive | Move Speed +25%, Luck -3 | You can hear it two fields over. So can everything with a choice in the matter. | 1 | Shop, Boss, Secret, Curse | Any |
+| traktor-auspuff | Traktor-Auspuff | Passive | Moving leaves a trail of poison exhaust clouds behind you. Move Speed +15% | You can hear it two fields over. So can everything with a choice in the matter. | 1 | Shop, Boss, Secret, Curse | Any |
 | watschn | Watschn | Passive | Getting hit sends a damaging shockwave out from you | The Bavarian conflict-resolution method. Surprisingly effective. | 2 | Shop, Boss, Secret | Rausch |
 | weisswurst | Weißwurst | Passive | Damage +30% before floor 4. Nothing after | The tradition says before the noon bell. The run says before the Brauerei. | 1 | Treasure, Shop | Any |

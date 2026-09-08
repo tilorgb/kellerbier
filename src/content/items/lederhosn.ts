@@ -21,6 +21,9 @@ export const lederhosn: ItemDefinition = {
   pools: ['treasure', 'shop'],
   quality: 2,
   promilleRequirement: 'any',
+  // Whether the next hit is free — the one thing a player holding this
+  // decides their next dodge on, and the one thing nothing on screen showed.
+  status: (ctx) => (ctx.state.charge > 0 ? 'will take the next hit' : 'spent until room clear'),
   hooks: {
     onPickup: (ctx) => {
       ctx.state.charge = 1;

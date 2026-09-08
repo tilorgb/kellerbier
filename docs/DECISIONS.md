@@ -4555,3 +4555,99 @@ Every doorway is an open-topped portal. This was for the south wall — the came
 its back, and a capped doorway there gave the player no way to tell an open door from a shut
 one. Anything that later wants to draw *above* a doorway (a sign, a boss-door arch) is adding
 back something this removed on purpose, and should say why.
+
+## 84. Every item is visible, and the boring half of the roster got a real design
+
+**Decided:** the 2026-09 item pass, after the 139→51 cut (#299) — a second, hand-driven pass
+over what survived it.
+
+**The problem the cut left behind.** Fifty-one items whose *designs* earned their slot still
+included nine whose whole effect was a stat line — Bierbank ("Luck +1, Range +5%"),
+Braumeister-Schürze ("Damage +0.2"), Feuerwehrhelm, Kartoffelsalat, Traktor-Auspuff, a
+Gartenzwerg-Hut whose entire payoff was Luck, a Bauern-Mistgabel that was a first-shot damage
+bump — and two (Bierdeckel, Luftballon) that were the same `returning` tag under two names.
+`docs/GAME_DESIGN.md` §8's hard rule is "an item must be recognisable in one sentence and change
+how you play", and "+5% range" fails the second half however well it passes the first. Worse,
+almost nothing an item did was *visible*: Almabtrieb's description promised its moving shots a
+different colour and nothing drew one, Blaskapelle's ring dealt damage with no ring, Lederhosn's
+one absorbed hit and Weißwurst's noon bell had no on-screen state at all.
+
+**Rule one: most items change the verb, a few change the numbers — on purpose.** The redesigned
+nine map onto shapes the engine already had and the roster had never used: `bouncing`
+(Bierdeckel, a flicked mat), `splitting` (Kartoffelsalat), knockback-on-hit (Feuerwehrhelm, hose
+water), a parallel double shot (Bierbank), a triple fan (Braumeister-Schürze), a no-hit streak
+that grows the fan (Gartenzwerg-Hut), a trail of stationary poison clouds (Traktor-Auspuff), a
+melee-range jab replacing the gun outright (Bauern-Mistgabel), and the minimap's long-reserved
+secret-room unlock (Schlüsselbund). Deliberately *kept* as plain stat items: Apfelkuchen,
+Bierkrug, Kraftbier, Radler, Platzangst, the Promille machinery (Bierbauch, Feierabendbier,
+Konterbier) and the room-clear economy (Brotzeitbrett). A roster where every item is a build
+pivot has no cheap early pickups; the point is the ratio, not the absence.
+
+**Rule two: every item shows itself, through one of three channels.** (1) *On the shot*: a
+per-projectile tint (`ProjectileStore.tint`, `sim/projectile/tints.ts`, `GameSim.tintProjectile`)
+the renderer applies as an instanced colour, so Spezi's second shot is brown, Colaweizen's is
+cola-dark, Almabtrieb's moving shot finally has its colour, Weißwurst's shots go white until noon
+— alongside the existing size channel (Bierkrug, Kraftbier and Radler now change the shot's
+radius). Names live in `sim/` so content can name one as a string literal under
+`content-is-data`; RGB values live in `render/palette.ts`, and nothing in `step` reads the field,
+so a tint can never move a replay. (2) *In the room*: area items draw the area they hit
+(`splashBurst` on Blaskapelle, Schuhplattler, Watschn, Braumeister-Hammer, Steinkrug). (3) *On a
+HUD row*: `ItemDefinition.status`, a pure reader the renderer polls (`render/item-status-hud.ts`),
+for the items whose effect is a counter or a condition — Lederhosn's absorbed hit, Gartenzwerg's
+streak, Lebkuchenherz's slogan, Visier's volley countdown, Neuschwanstein's next bill. It is a
+query, not a hook: declared beside `hooks`, never in them, so `items.test.ts`'s "no filler" check
+(an item must declare a hook) is not satisfied by a readout alone.
+
+**What this does not license.** A tint is not a substitute for a sprite when a tag has one
+(`PLAYER_TAG_SPRITE_ORDER` still wins the texture; the tint multiplies it), and a status row is
+not a substitute for a visible effect — the row exists for state, not for effects that could have
+been drawn. Adding an item still means asking which of the three channels it shows through, and
+"none" is the same failing answer "no hook" already was.
+
+**Found while building it.** Item hook dispatch was not re-entrant: a hook that spawned a shot
+(`spawnItemProjectile`) ran a nested `onProjectileSpawn` broadcast that, on exit, nulled the
+outer broadcast's `dispatchSim` and overwrote the shared scratch context — so every item sorted
+after the spawning one silently lost its hook for that broadcast, and the spawner came back to
+someone else's `ctx.state`. With Spezi and Braumeister-Visier the only spawners it was a
+once-in-five-shots skip; a fan of three plus a streak's extras coming out as *four* shots in the
+headless run is what exposed it. `sim/systems/items.ts` now saves and restores the dispatch state
+around every broadcast on a fixed, preallocated stack. Separately: a stationary player projectile that survives its hit (`piercing`)
+re-registers against a body still overlapping it every other tick — `lastHitTarget` lapses the
+moment a tick finds nothing — so Traktor-Auspuff's clouds pop on first contact rather than
+pierce, and the note is on the item for the next trail-shaped design. And the `splitting` tag
+had never been granted by any authored item, so `spawnSplitChildren` had never inherited a
+child's presentational fields (`art`, `tint`) — it does now.
+
+## 85. Item icons are plain objects on the pickups' 24×24 canvas, composed from source, landed batch by batch
+
+**Decided:** the 2026-09 item pass, second half — the pixel art for the 51-item roster, after
+#82 settled the effects.
+
+**What was chosen, and against what.** `CLAUDE.md`'s sign-off round, cloud track (#77): three
+programmatic directions for the first ten items, rendered at 6× beside Alois and the pickups.
+*A, the plain object* — the item itself filling the canvas, one step of palette shading, 1px
+`#000000` ink — won over *B*, the same object drawn smaller on a round beer-mat badge, and *C*, a
+2px-ink variant with one feature oversized (the object equivalent of #55's chibi rule). A is the
+pickups' own language: `pickup-mass-full.png` and friends are 24×24 on exactly these rules, so an
+item on a pedestal and a Maß on the floor read as one family of object, and the pedestal's
+quality-coloured beam and light stay the thing that says "this one is an item". B's badge would
+have said it twice; C's weight sat oddly next to the pickups it shares a room with.
+
+**The canvas is the pickups' canvas.** #45 makes 24×24 the icon's size on screen — three-quarters
+of Alois — which was shown standing on real pedestals from the game camera before anything was
+committed, per the billboards note in `CLAUDE.md`. The icon is drawn untinted; the tint the
+placeholder disc still wears for an item with no art yet is what marks the gap.
+
+**Composed from source, like Alois and the bosses.** `tools/art/authoring/items.mjs` draws each
+icon from a small raster kit (discs, lines, rects, a grid stamp) and `npm run art:items` writes
+`assets/sprites/common/characters/item-<id>.png`; `tests/art/items-authoring.test.ts` holds the
+PNGs byte-identical to the source and checks palette, canvas and the hard ink edge — a painted
+pixel on the canvas border fails, which is why every drawing keeps one pixel of margin. #55's
+"a Kellerassel belongs in the editor" argument does not apply: fifty-one small drawings in one
+language *is* the repetition problem composing solves.
+
+**Batches, not a big bang.** Ten items per round, each round shown before it lands; the loader
+keys `item-<sprite>` the way it keys `pickup-<id>`, and `PedestalView` falls back to the disc for
+an item not yet drawn — `CLAUDE.md`'s content-gap shape, so the roster can ship half-drawn
+without a broken pedestal. An icon the round found doubtful (the tuba, the belly) is redrawn in
+the next batch rather than committed on a shrug.

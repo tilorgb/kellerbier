@@ -77,11 +77,18 @@ function doorSurvivesCompile(
  * locked boss door has been seen on any later floor); this just adds the ids
  * to the revealed set so their icons draw, the same way an adjacent room's
  * icon already does.
+ *
+ * `revealSecretRooms`: the unlock item the adjacency rule below always
+ * deferred to (Schlüsselbund, `content/items/schluesselbund.ts`, via
+ * `GameSim.secretRoomsRevealed`). It adds the secret and supersecret room
+ * ids the same way — the rooms show where they are, with their icons; walking
+ * in or bombing the wall is still how the player gets there.
  */
 export function computeReveal(
   plan: FloorPlan,
   visitedRoomIds: ReadonlySet<string>,
   revealMinibossRooms = false,
+  revealSecretRooms = false,
 ): RevealState {
   const roleById = new Map(plan.rooms.map((room) => [room.id, room.role]));
   const revealed = new Set<string>(visitedRoomIds);
@@ -89,6 +96,10 @@ export function computeReveal(
     for (const id of plan.minibossRoomIds) {
       revealed.add(id);
     }
+  }
+  if (revealSecretRooms) {
+    revealed.add(plan.secretRoomId);
+    revealed.add(plan.supersecretRoomId);
   }
   for (const room of plan.rooms) {
     if (!visitedRoomIds.has(room.id)) {
@@ -102,7 +113,8 @@ export function computeReveal(
       // A secret/supersecret room is found by bombing a wall (#23) or
       // walking into it, not by standing next to it — adjacency alone
       // must never reveal one, the same way its icon is already withheld
-      // below. Only an unlock item gets to lift this (none exists yet).
+      // below. Only an unlock item gets to lift this (`revealSecretRooms`,
+      // above — Schlüsselbund).
       const neighborRole = roleById.get(door.neighborRoomId);
       if (neighborRole === 'secret' || neighborRole === 'supersecret') {
         continue;
@@ -346,8 +358,9 @@ export class MinimapHud {
     currentRoomId: string,
     visitedRoomIds: ReadonlySet<string>,
     revealMinibossRooms = false,
+    revealSecretRooms = false,
   ): void {
-    const reveal = computeReveal(plan, visitedRoomIds, revealMinibossRooms);
+    const reveal = computeReveal(plan, visitedRoomIds, revealMinibossRooms, revealSecretRooms);
     const headerText = `${String(plan.floor)}. Stock — ${plan.floorName}`;
     this.header.text = headerText;
     this.header.position.set(-uiTextWidth(headerText), 0);
