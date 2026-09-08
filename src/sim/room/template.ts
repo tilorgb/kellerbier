@@ -446,11 +446,17 @@ export function compileRoomTemplate(
         group.count === 1 && resolved.length > 1 ? chooseSpawnIndex(resolved.length) : -1;
       for (let index = 0; index < group.count; index++) {
         const choiceIndex = singleChoiceIndex >= 0 ? singleChoiceIndex : index % resolved.length;
-        enemySpawns.push({
-          x: cellOffsetX + spawn.x + (index - (group.count - 1) / 2) * 8,
-          y: cellOffsetY + spawn.y,
-          enemyId: resolved[choiceIndex]?.enemyId ?? '',
-        });
+        const choice = resolved[choiceIndex];
+        const x = cellOffsetX + spawn.x + (index - (group.count - 1) / 2) * 8;
+        const y = cellOffsetY + spawn.y;
+        enemySpawns.push({ x, y, enemyId: choice?.enemyId ?? '' });
+        // A multi-body choice (#277's Die Blaskapelle) places its formation
+        // around the same point, and only on the run that actually rolled it
+        // — see `RoomSpawnEscort`. Offsets are authored, not spread: where
+        // the three stand relative to each other is the fight.
+        for (const escort of choice?.escorts ?? []) {
+          enemySpawns.push({ x: x + escort.dx, y: y + escort.dy, enemyId: escort.enemyId });
+        }
       }
     }
 
@@ -636,7 +642,25 @@ function spawnGroup(
     ) {
       fail(where, 'must have a valid positive minFloor and maxFloor');
     }
-    return { enemyId, minFloor, maxFloor };
+    // An escort naming an enemy that does not exist is a content *bug*, not a
+    // content gap, so it throws here rather than degrading the way a missing
+    // floor choice does (`nearestFloorChoice`, `docs/DECISIONS.md` #7/#19).
+    const escorts =
+      item.escorts === undefined
+        ? []
+        : records(item.escorts, `${where}.escorts`).map((entry, escortIndex) => {
+            const at = `${where}.escorts[${String(escortIndex)}]`;
+            const escortId = requiredString(entry.enemyId, `${at}.enemyId`);
+            if (enemyCatalog.length > 0 && !catalogIds.has(escortId)) {
+              fail(`${at}.enemyId`, `does not name a registered enemy`);
+            }
+            return {
+              enemyId: escortId,
+              dx: number(entry.dx, `${at}.dx`),
+              dy: number(entry.dy, `${at}.dy`),
+            };
+          });
+    return { enemyId, minFloor, maxFloor, ...(escorts.length === 0 ? {} : { escorts }) };
   });
   if (choices.length === 0) {
     fail(`${source}.choices`, 'must not be empty');

@@ -396,4 +396,8 @@ export const ENEMY_SFX_CATEGORY: Readonly<Record<string, EnemySfxCategory>> = {
   gockel: 'animal',
   'der-stier': 'animal',
   blaskapellist: 'oompah',
+  'die-blaskapelle-tuba': 'oompah',
+  'die-blaskapelle-trompete': 'oompah',
+  'die-blaskapelle-posaune': 'oompah',
+  'der-ladewagen': 'metal',
 };

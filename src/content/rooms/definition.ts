@@ -79,10 +79,35 @@ export interface RoomEnemySpawn {
   readonly group: string;
 }
 
+/**
+ * One extra body placed alongside a `RoomSpawnChoice` when that choice wins
+ * the roll, at a fixed offset from the group's own spawn point (#277).
+ *
+ * A mini-boss is not always one body: Die Blaskapelle is three players
+ * standing in formation, and #277's kept third idea — Der Gartenzwerg-Reigen
+ * — is a ring of five. Their *positions relative to each other* are the whole
+ * fight ("a pattern to stand inside", "kill order is a real decision"), which
+ * makes them an authored formation rather than a scatter, and puts them here
+ * rather than in the `count`/`spread` cluster a group already has.
+ *
+ * On the choice rather than on the group, because that is the unit the roll
+ * picks: an escort list on the group would place the tuba's two bandmates
+ * next to Der Ladewagen on the run that rolled the tractor.
+ */
+export interface RoomSpawnEscort {
+  readonly enemyId: string;
+  /** Pixels east of the group's spawn point. */
+  readonly dx: number;
+  /** Pixels south of the group's spawn point. */
+  readonly dy: number;
+}
+
 export interface RoomSpawnChoice {
   readonly enemyId: string;
   readonly minFloor: number;
   readonly maxFloor: number;
+  /** Bodies placed with this one, at authored offsets, when it wins the roll (#277). */
+  readonly escorts?: readonly RoomSpawnEscort[];
 }
 
 export interface RoomSpawnGroup {

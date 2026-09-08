@@ -183,6 +183,9 @@ export function stepEnemies(sim: GameSim): void {
     if (state.summons.length > 0) {
       queueSummonWaves(sim, index, state, ticks, selfX, selfY);
     }
+    if (state.propDrops.length > 0) {
+      queuePropDrops(sim, index, state, ticks, selfX, selfY);
+    }
 
     enemy[base + 2] = ticks < MAX_STATE_TICKS ? ticks + 1 : ticks;
   }
@@ -398,9 +401,19 @@ function applyMovement(
       const tangentY = radialX * turn;
       // Radial correction is a fraction of the orbit speed, so a body pushed
       // off its ring returns to it over a second rather than snapping back.
+      //
+      // `radial` points *away* from the centre, and `correction` is positive
+      // when the body is inside the ring — so it is added, not subtracted
+      // (#277). Subtracting it, as this did until Der Ladewagen became the
+      // first content to use the primitive, inverted the whole correction: a
+      // body inside its ring was pulled further in and one outside pushed
+      // further out. A body spawned *on* its own orbit centre — which is what
+      // an authored `orbitPoint` enemy always is, since the centre is its
+      // spawn point — therefore never left it: it oscillated one pixel back
+      // and forth forever while its velocity spun a full circle around it.
       const correction = clamp((behaviour.radius - out) * 0.1, -speed, speed);
-      velocity[base] = tangentX * speed - radialX * correction;
-      velocity[base + 1] = tangentY * speed - radialY * correction;
+      velocity[base] = tangentX * speed + radialX * correction;
+      velocity[base + 1] = tangentY * speed + radialY * correction;
       return;
     }
     default:
@@ -425,7 +438,15 @@ function applyFiring(
     const interval = Math.max(1, Math.round(shot.everyTicks * scale));
 
     if (shot.behaviour === 'fireOnBeat') {
-      if (sim.tick % interval === 0) {
+      // The offset is scaled with the bar it sits inside (#277): an author
+      // writing "a third of a beat behind the tuba" means a third of whatever
+      // `fireIntervalScale` has made the beat, or a difficulty knob would
+      // silently re-voice the lattice into a different chord. Normalised into
+      // `[0, interval)` so an offset of a whole beat, or a negative one, is
+      // the downbeat rather than a rhythm that never fires.
+      const offset =
+        ((Math.round((shot.beatOffset ?? 0) * scale) % interval) + interval) % interval;
+      if ((sim.tick + interval - offset) % interval === 0) {
         const shots = Math.max(1, Math.round(shot.shots));
         const step = (Math.PI * 2) / shots;
         for (let ray = 0; ray < shots; ray++) {
@@ -907,6 +928,107 @@ function summonFromEvent(slot: number): void {
     sim.spawnEnemyKind(definition, x, y, false);
   }
 }
+
+/**
+ * Pushes an `EnemyDropProp` event for every `dropProp` behaviour whose drop is
+ * due this tick, at the point *behind* the body along its current heading —
+ * the `summon` counterpart, and due on the same "first one on the tick the
+ * state begins" rule (#277).
+ *
+ * The landing point is decided here, where the dropper's velocity is still the
+ * one it moved with this tick; the `maxActive` cap and the "is that spot
+ * actually free" check both happen later, in `stepEnemyPropDrops`, off a fresh
+ * count. A stationary body (`pause`, or one a wall has stopped) has no heading
+ * and leaves the bale underfoot, which is the honest reading of "behind" for
+ * something that is not going anywhere.
+ *
+ * @hot — runs in the frame loop, allocation-free.
+ */
+function queuePropDrops(
+  sim: GameSim,
+  index: number,
+  state: CompiledState,
+  ticks: number,
+  selfX: number,
+  selfY: number,
+): void {
+  const velocity = sim.velocity.data;
+  const vx = velocity[index * 2] ?? 0;
+  const vy = velocity[index * 2 + 1] ?? 0;
+  const speed = Math.hypot(vx, vy);
+  for (const drop of state.propDrops) {
+    if (ticks % drop.everyTicks !== 0) {
+      continue;
+    }
+    const atX = speed === 0 ? selfX : selfX - (vx / speed) * drop.behind;
+    const atY = speed === 0 ? selfY : selfY - (vy / speed) * drop.behind;
+    sim.events.push(
+      EventKind.EnemyDropProp,
+      index,
+      drop.kind,
+      atX,
+      atY,
+      drop.maxActive,
+      drop.radius,
+      drop.health,
+    );
+  }
+}
+
+let propDropSim: GameSim | null = null;
+
+/**
+ * Spawns the props this tick's `EnemyDropProp` events asked for — deferred out
+ * of `stepEnemies` for the same reason `stepEnemySummons` is: `spawnTarget`
+ * grows the world, and a system loop that has cached its component arrays must
+ * not have them swapped underneath it.
+ *
+ * Four ways a drop is skipped rather than queued: the cap is already met, the
+ * spot is not clear of the room's own walls and blocks, another prop is
+ * already standing there, or the player is — a bale materialising on top of
+ * the player would shove them with no warning and no way to have avoided it,
+ * which is the one thing an arena that degrades must never do.
+ */
+export function stepEnemyPropDrops(sim: GameSim): void {
+  propDropSim = sim;
+  sim.events.forEach(propDropFromEvent);
+  propDropSim = null;
+}
+
+function propDropFromEvent(slot: number): void {
+  const sim = propDropSim;
+  if (sim?.events.kind[slot] !== EventKind.EnemyDropProp) {
+    return;
+  }
+  const kind = sim.events.other[slot] ?? 0;
+  const maxActive = Math.round(sim.events.normalX[slot] ?? 0);
+  const radius = sim.events.normalY[slot] ?? 0;
+  const health = sim.events.value[slot] ?? 0;
+  const atX = sim.events.x[slot] ?? 0;
+  const atY = sim.events.y[slot] ?? 0;
+
+  if (sim.countProps(kind) >= maxActive) {
+    return;
+  }
+  if (!sim.room.isClear(atX, atY, radius)) {
+    return;
+  }
+  if (sim.propWithin(atX, atY, radius)) {
+    return;
+  }
+  const player = sim.playerIndex;
+  const reach = radius + (sim.hurtbox.data[player * 2] ?? 0);
+  if (Math.hypot(sim.positionX(player) - atX, sim.positionY(player) - atY) < reach) {
+    return;
+  }
+  // Heavy: a hay bale is cover, and cover a body could shove around the room
+  // would stop reading as terrain. `PROP_DROP_MASS` is well above the `mid`
+  // class's own 6.
+  sim.spawnTarget(atX, atY, radius, kind, health, PROP_DROP_MASS);
+}
+
+/** What a dropped prop weighs — see `propDropFromEvent`. */
+const PROP_DROP_MASS = 24;
 
 /** Marks a body as having been hit, for the next tick's `onHit` transitions. */
 export function markEnemyHit(sim: GameSim, index: number): void {

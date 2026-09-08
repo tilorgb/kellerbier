@@ -12,6 +12,7 @@ import {
   type FireSpreadBehaviour,
   type MeleeArcBehaviour,
   MOVEMENT_BEHAVIOURS,
+  PROP_DROP_BEHAVIOURS,
   SUMMON_BEHAVIOURS,
 } from './definition.js';
 import { ENEMY_PROFILES, ENEMY_SIZE_BY_NAME, type EnemySizeId } from './size.js';
@@ -89,6 +90,16 @@ export interface CompiledSummon {
   readonly spread: number;
 }
 
+/** A `dropProp` with its prop resolved to a `DESTRUCTIBLE_PROP_KINDS` index (#277). */
+export interface CompiledPropDrop {
+  readonly kind: number;
+  readonly everyTicks: number;
+  readonly maxActive: number;
+  readonly health: number;
+  readonly radius: number;
+  readonly behind: number;
+}
+
 /** A `splitOnDeath` with its target resolved to a definition index. */
 export interface CompiledSplit {
   readonly definition: number;
@@ -149,6 +160,8 @@ export interface CompiledState {
   readonly splits: readonly CompiledSplit[];
   /** `summon` behaviours on this state, children resolved to definition indices (#276). */
   readonly summons: readonly CompiledSummon[];
+  /** `dropProp` behaviours on this state, props resolved to kind indices (#277). */
+  readonly propDrops: readonly CompiledPropDrop[];
   readonly transitions: readonly CompiledTransition[];
 }
 
@@ -334,6 +347,7 @@ export class EnemyRegistry {
     const firing: FiringBehaviour[] = [];
     const splits: CompiledSplit[] = [];
     const summons: CompiledSummon[] = [];
+    const propDrops: CompiledPropDrop[] = [];
     let telegraphTicks = 0;
     let invulnerableTicks = 0;
     let capturesLobTarget = false;
@@ -442,6 +456,27 @@ export class EnemyRegistry {
           countPerWave: Math.round(summon.countPerWave),
           maxActive: Math.round(summon.maxActive),
           spread: summon.spread ?? 14,
+        });
+        continue;
+      }
+      if (PROP_DROP_BEHAVIOURS.includes(name) && behaviour.behaviour === 'dropProp') {
+        const drop = behaviour;
+        if (!(drop.everyTicks >= 1)) {
+          throw new Error(`${where}: "dropProp" needs everyTicks of at least 1`);
+        }
+        if (!(drop.maxActive >= 1)) {
+          throw new Error(`${where}: "dropProp" needs maxActive of at least 1`);
+        }
+        if (!(drop.health > 0)) {
+          throw new Error(`${where}: "dropProp" needs health above zero`);
+        }
+        propDrops.push({
+          kind: resolvePropKind(drop.propKind, `${where}: "dropProp"`),
+          everyTicks: Math.round(drop.everyTicks),
+          maxActive: Math.round(drop.maxActive),
+          health: drop.health,
+          radius: drop.radius ?? 6,
+          behind: drop.behind ?? 12,
         });
         continue;
       }
@@ -558,6 +593,7 @@ export class EnemyRegistry {
       grabProp,
       splits,
       summons,
+      propDrops,
       transitions,
     };
   }

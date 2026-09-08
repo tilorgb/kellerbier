@@ -44,6 +44,7 @@ export type BehaviourName =
   | 'meleeArc'
   | 'splitOnDeath'
   | 'summon'
+  | 'dropProp'
   | 'becomeInvulnerable'
   | 'telegraph'
   | 'grabProp'
@@ -213,6 +214,21 @@ export interface FireOnBeatBehaviour extends FiringBehaviourBase {
   readonly behaviour: 'fireOnBeat';
   /** Shots evenly spaced around a full circle — a ring, not an aimed fan. */
   readonly shots: number;
+  /**
+   * Ticks this body's beat sits *after* the bar line, so several bodies
+   * sharing one `everyTicks` ring on different beats instead of together
+   * (#277, Die Blaskapelle). Defaults to 0 — the downbeat, which is where
+   * every `fireOnBeat` enemy before this one fired.
+   *
+   * Offsetting the *clock*, not the state machine, is the whole point: the
+   * three Blaskapellisten of the mini-boss are three separate bodies with
+   * separate state timers, and anything counted from "when this body entered
+   * its state" would drift with when each one happened to spawn. Read against
+   * `sim.tick` like the beat itself, so an eighth-note behind the tuba stays
+   * an eighth-note behind it for the whole fight, and killing one leaves a
+   * *hole* in the bar rather than slowing the bar down.
+   */
+  readonly beatOffset?: number;
 }
 
 /**
@@ -328,6 +344,45 @@ export interface SummonBehaviour {
 }
 
 /**
+ * Leaves a solid, destructible prop behind it on a timer — the terrain
+ * counterpart to `summon`, which grows the room's *bodies*.
+ *
+ * Der Ladewagen (#277) is the enemy this exists for: it drives its circuit
+ * and sheds hay bales out the back, and the bales are `Obstacle`-layer props
+ * exactly like an authored barrel — so they block the player's shots *and*
+ * the Ladewagen's own line back, and the arena quietly fills with cover the
+ * player built by not killing the thing fast enough. A soft timer made of
+ * geometry rather than a hidden clock.
+ *
+ * `maxActive` is the same fairness knob `summon` carries, and matters more
+ * here: a prop, unlike a body, never walks away or dies of its own accord, so
+ * an uncapped dropper eventually walls a player into a corner they cannot
+ * shoot out of. A drop is skipped, not queued, once the cap is met, and one
+ * that would land inside a wall or on top of the player is skipped too.
+ *
+ * `propKind` names a `DESTRUCTIBLE_PROP_KINDS` entry, resolved at
+ * construction (`docs/DECISIONS.md` #7): a typo fails the build.
+ */
+export interface DropPropBehaviour {
+  readonly behaviour: 'dropProp';
+  /** Which destructible prop to leave — a `DESTRUCTIBLE_PROP_KINDS` name. */
+  readonly propKind: string;
+  /** Ticks between drops. The first drop lands on the tick the state begins. */
+  readonly everyTicks: number;
+  /** No drop lands while this many of `propKind` are already standing in the room. */
+  readonly maxActive: number;
+  /** The dropped prop's own health — how long it takes the player to clear a lane back. */
+  readonly health: number;
+  /** The prop's drawn radius, in pixels. Defaults to the barrel's. */
+  readonly radius?: number;
+  /**
+   * How far *behind* the body it lands, along the direction it is travelling.
+   * Defaults to a body-length out. A stationary dropper leaves it underfoot.
+   */
+  readonly behind?: number;
+}
+
+/**
  * Nothing can hurt it while this state is young.
  *
  * Shots still land — they splash off, loudly, because a bullet that vanishes
@@ -417,6 +472,7 @@ export type EnemyBehaviour =
   | MeleeArcBehaviour
   | SplitOnDeathBehaviour
   | SummonBehaviour
+  | DropPropBehaviour
   | BecomeInvulnerableBehaviour
   | GrabPropBehaviour
   | LobTargetBehaviour
@@ -535,6 +591,9 @@ export const DEATH_BEHAVIOURS: readonly BehaviourName[] = ['splitOnDeath'];
 
 /** Primitives that spawn more bodies on a timer while alive (#276). */
 export const SUMMON_BEHAVIOURS: readonly BehaviourName[] = ['summon'];
+
+/** Primitives that leave solid props behind on a timer while alive (#277). */
+export const PROP_DROP_BEHAVIOURS: readonly BehaviourName[] = ['dropProp'];
 
 /** Primitives that put something in the air. `meleeArc` (#199) is handled on its own, not here. */
 export const FIRING_BEHAVIOURS: readonly BehaviourName[] = [

@@ -126,9 +126,44 @@ describe('elite modifier (#156)', () => {
     // because the floor has no authored mini-boss yet — makes it a guaranteed
     // elite: a gate the player detours to and finds an ordinary body in is not
     // a gate. Guaranteed, not rolled, so this holds at a zero roll chance.
-    // Floor 2 (`dorf-miniboss.json`) is still on `kuh`/`bauer` placeholders.
+    //
+    // Authored inline rather than pointed at a room in the tree, because as of
+    // #277 there is no placeholder left to point at: floor 1 (#276) and floor
+    // 2 both have real rosters now, and floors 3-7 are parked (`M10`). The
+    // path is still the one every unparked floor will arrive through, and it
+    // is the one that must not quietly stop working while nothing uses it —
+    // so the placeholder is the *test's*, not the content's.
+    const placeholderMiniboss = {
+      ...dorfMiniboss,
+      spawnGroups: [
+        {
+          id: 'miniboss',
+          count: 1,
+          choices: [{ enemyId: 'kuh', minFloor: 2, maxFloor: 2 }],
+        },
+      ],
+    };
     const sim = emptySim();
     sim.tuning.enemy.eliteChanceBase = 0;
+    sim.tuning.enemy.eliteChancePerExtraFloor = 0;
+
+    sim.loadRoom(placeholderMiniboss, 2);
+
+    const indices = liveEnemyIndices(sim);
+    expect(indices.length).toBeGreaterThan(0);
+    for (const index of indices) {
+      expect(isEnemyElite(sim, index)).toBe(true);
+    }
+  });
+
+  it("spawns floor 2's real mini-bosses (#277) plain, all three of a Blaskapelle included", () => {
+    // The same guarantee the floor-1 case below makes, on the floor where a
+    // mini-boss is three bodies: an escort (`RoomSpawnEscort`) is spawned
+    // through the same loop as the choice that brought it, so if the gate read
+    // the group's winner rather than each body's own `bossBar`, two thirds of
+    // a band would come up elite.
+    const sim = emptySim();
+    sim.tuning.enemy.eliteChanceBase = 1;
     sim.tuning.enemy.eliteChancePerExtraFloor = 0;
 
     sim.loadRoom(dorfMiniboss, 2);
@@ -136,7 +171,7 @@ describe('elite modifier (#156)', () => {
     const indices = liveEnemyIndices(sim);
     expect(indices.length).toBeGreaterThan(0);
     for (const index of indices) {
-      expect(isEnemyElite(sim, index)).toBe(true);
+      expect(isEnemyElite(sim, index)).toBe(false);
     }
   });
 

@@ -166,8 +166,9 @@ export const FLOOR_TILESETS: Readonly<Record<number, FloorTileset>> = {
     wallLip: 'cellar-wall-lip',
     wallLipCorner: 'cellar-wall-lip-corner',
     blockVariants: ['cellar-boulder-1', 'cellar-boulder-2', 'cellar-boulder-3', 'cellar-boulder-4'],
-    // No Maibaum in a cellar — a floor-1 `maypole` prop would be a content
-    // error, and falls back to the barrel rather than to nothing.
+    // No Maibaum and no hay in a cellar — a floor-1 `maypole` or `bale` prop
+    // would be a content error, and falls back to the barrel rather than to
+    // nothing.
     destructibles: ['cellar-barrel'],
     wallHeight: 26,
     lighting: 'cellar',
@@ -184,7 +185,10 @@ export const FLOOR_TILESETS: Readonly<Record<number, FloorTileset>> = {
       'rural-fieldstone-3',
       'rural-fieldstone-4',
     ],
-    destructibles: ['rural-barrel', 'rural-maibaum-base'],
+    // `bale` (#277) is Der Ladewagen's dropped hay — the same `rural-hay-bale`
+    // tile the floor's rooms already decorate with, now also standing in for
+    // a real destructible body.
+    destructibles: ['rural-barrel', 'rural-maibaum-base', 'rural-hay-bale'],
     wallHeight: 10,
     lighting: 'daylight',
   },
