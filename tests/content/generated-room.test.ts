@@ -195,6 +195,53 @@ function coveredTiles(obstacles: readonly { width: number; height: number }[]): 
   return obstacles.reduce((sum, o) => sum + (o.width * o.height) / (16 * 16), 0);
 }
 
+/** Local (col,row) of the tile immediately inside a door's mouth, and the axes into the room from there. */
+function doorMouthLocal(
+  direction: DoorDirection,
+): { col: number; row: number; forward: Point; side: Point } {
+  switch (direction) {
+    case 'north':
+      return { col: 7, row: 1, forward: { x: 0, y: 1 }, side: { x: 1, y: 0 } };
+    case 'south':
+      return { col: 7, row: 7, forward: { x: 0, y: -1 }, side: { x: 1, y: 0 } };
+    case 'west':
+      return { col: 1, row: 4, forward: { x: 1, y: 0 }, side: { x: 0, y: 1 } };
+    case 'east':
+      return { col: 13, row: 4, forward: { x: -1, y: 0 }, side: { x: 0, y: 1 } };
+  }
+}
+
+function isOpenTile(tileGrid: readonly string[], col: number, row: number): boolean {
+  const line = tileGrid[row];
+  return line !== undefined && col >= 0 && col < line.length && line[col] === '.';
+}
+
+/**
+ * True if `direction`'s door opens onto a little dead-end notch: headroom to
+ * walk at least one tile past the mouth, but at most one tile of elbow room
+ * on each side of the doorway itself — the shape that reads as a mistake
+ * rather than a real alcove. A wall right at the mouth (no headroom at all —
+ * an ordinary, immediate "turn now") is not flagged.
+ */
+function hasNarrowDoorApproach(tileGrid: readonly string[], direction: DoorDirection): boolean {
+  const { col, row, forward, side } = doorMouthLocal(direction);
+  if (!isOpenTile(tileGrid, col + forward.x, row + forward.y)) {
+    return false;
+  }
+  const openRun = (stepX: number, stepY: number): number => {
+    let run = 0;
+    let c = col + stepX;
+    let r = row + stepY;
+    while (run < 2 && isOpenTile(tileGrid, c, r)) {
+      run += 1;
+      c += stepX;
+      r += stepY;
+    }
+    return run;
+  };
+  return openRun(side.x, side.y) <= 1 && openRun(-side.x, -side.y) <= 1;
+}
+
 describe('procedural room generator (POC)', () => {
   for (const { floor, tag } of FLOORS) {
     for (const doors of DOOR_SETS) {
@@ -229,6 +276,13 @@ describe('procedural room generator (POC)', () => {
             entryIsSafe(compiled.geometry, compiled.doors),
             `seed ${String(seed)}: player enters stuck or a door is walled off`,
           ).toBe(true);
+
+          for (const direction of doors) {
+            expect(
+              hasNarrowDoorApproach(template.tileGrid, direction),
+              `seed ${String(seed)}: ${direction} door opens onto a little dead-end notch`,
+            ).toBe(false);
+          }
 
           for (const spawn of compiled.enemySpawns) {
             expect(

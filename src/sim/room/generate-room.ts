@@ -28,7 +28,11 @@
  *   clears the one tile inside each door, a BFS from a mouth proves every other
  *   door is reachable, and `fillUnreachedPockets` seals any pocket the BFS could
  *   not reach so the whole walkable area is one region. Failing that, fall back
- *   to an empty room and warn once (`docs/DECISIONS.md` #19).
+ *   to an empty room and warn once (`docs/DECISIONS.md` #19). A wall right at the
+ *   mouth (an immediate, one-tile "turn now") is a fine ordinary shape and is
+ *   never avoided; `hasNarrowDoorApproach` only rejects the layout when there is
+ *   headroom to walk further in but just one tile of elbow room on both sides of
+ *   the doorway — the little dead-end notch a player reads as a mistake.
  * - A multi-cell room (`1x2`/`2x2`/`L`/`T`) is generated as one continuous grid
  *   spanning the shape's bounding box — the seams between glued sub-rooms carry
  *   no wall — then sliced back into per-sub-room `RoomSubLayout`s for
@@ -488,6 +492,56 @@ function everyMouthReachable(
   return mouths.every((mouth) => distAt(distance, tileIndex(grid, mouth.col, mouth.row)) >= 0);
 }
 
+/** Which way is "into the room" and "along the wall" from a door mouth, inferred from its position. */
+function doorApproachAxes(mouth: Cell): { readonly forward: Cell; readonly side: Cell } {
+  const localCol = mouth.col % ROOM_COLUMNS;
+  const localRow = mouth.row % ROOM_ROWS;
+  if (localCol === 1) {
+    return { forward: { col: 1, row: 0 }, side: { col: 0, row: 1 } }; // west door
+  }
+  if (localCol === ROOM_COLUMNS - 2) {
+    return { forward: { col: -1, row: 0 }, side: { col: 0, row: 1 } }; // east door
+  }
+  if (localRow === 1) {
+    return { forward: { col: 0, row: 1 }, side: { col: 1, row: 0 } }; // north door
+  }
+  return { forward: { col: 0, row: -1 }, side: { col: 1, row: 0 } }; // south door
+}
+
+/** Open tiles from `start`, stepping by `step` each time, capped at `cap`. */
+function openRun(grid: RoomGrid, start: Cell, step: Cell, cap: number): number {
+  let run = 0;
+  let col = start.col + step.col;
+  let row = start.row + step.row;
+  while (run < cap && !blocked(grid, col, row)) {
+    run += 1;
+    col += step.col;
+    row += step.row;
+  }
+  return run;
+}
+
+/**
+ * True if a door opens onto a squeeze: real headroom straight ahead (at
+ * least one tile past the mouth) but at most one tile of elbow room to
+ * either side of the doorway itself. That shape reads as a little dead end —
+ * inviting the player two steps in only to force an immediate turn — rather
+ * than the two ordinary shapes that are perfectly fine: a wall right at the
+ * mouth (no headroom, so the turn is expected immediately) or a real
+ * approach with room to move on at least one side.
+ */
+function hasNarrowDoorApproach(grid: RoomGrid, mouths: readonly Cell[]): boolean {
+  return mouths.some((mouth) => {
+    const { forward, side } = doorApproachAxes(mouth);
+    if (openRun(grid, mouth, forward, 1) === 0) {
+      return false;
+    }
+    const leftRoom = openRun(grid, mouth, side, 2);
+    const rightRoom = openRun(grid, mouth, { col: -side.col, row: -side.row }, 2);
+    return leftRoom <= 1 && rightRoom <= 1;
+  });
+}
+
 /**
  * Rule 1: never leave a dead pocket. Any open interior tile the door-mouth BFS
  * did not reach is walled off from the rest of the room — fill it solid so the
@@ -650,6 +704,9 @@ function layoutGrid(
 
     const candidateDistance = bfsDistances(candidate, seedMouth);
     if (!everyMouthReachable(candidate, candidateDistance, mouths)) {
+      continue;
+    }
+    if (hasNarrowDoorApproach(candidate, mouths)) {
       continue;
     }
     fillUnreachedPockets(candidate, candidateDistance);
