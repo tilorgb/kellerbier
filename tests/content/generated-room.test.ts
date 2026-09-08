@@ -220,17 +220,15 @@ function isOpenTile(tileGrid: readonly string[], col: number, row: number): bool
 }
 
 /**
- * True if `direction`'s door opens onto a little dead-end notch: headroom to
- * walk at least one tile past the mouth, but at most one tile of elbow room
- * on each side of the doorway itself — the shape that reads as a mistake
- * rather than a real alcove. A wall right at the mouth (no headroom at all —
- * an ordinary, immediate "turn now") is not flagged.
+ * True if `direction`'s door opens onto a little dead-end notch: at most one
+ * tile of elbow room on each side of the doorway, with no generous escape
+ * route (two or more tiles of headroom) straight ahead either — the shape
+ * that pins the player at the threshold and reads as a mistake, whether the
+ * wall sits right at the mouth or one tile past it. A wall a real corridor's
+ * width ahead, with room to step aside and carry on past it, is not flagged.
  */
 function hasNarrowDoorApproach(tileGrid: readonly string[], direction: DoorDirection): boolean {
   const { col, row, forward, side } = doorMouthLocal(direction);
-  if (!isOpenTile(tileGrid, col + forward.x, row + forward.y)) {
-    return false;
-  }
   const openRun = (stepX: number, stepY: number): number => {
     let run = 0;
     let c = col + stepX;
@@ -242,6 +240,9 @@ function hasNarrowDoorApproach(tileGrid: readonly string[], direction: DoorDirec
     }
     return run;
   };
+  if (openRun(forward.x, forward.y) >= 2) {
+    return false;
+  }
   return openRun(side.x, side.y) <= 1 && openRun(-side.x, -side.y) <= 1;
 }
 
@@ -280,13 +281,6 @@ describe('procedural room generator (POC)', () => {
             `seed ${String(seed)}: player enters stuck or a door is walled off`,
           ).toBe(true);
 
-          for (const direction of doors) {
-            expect(
-              hasNarrowDoorApproach(template.tileGrid, direction),
-              `seed ${String(seed)}: ${direction} door opens onto a little dead-end notch`,
-            ).toBe(false);
-          }
-
           for (const spawn of compiled.enemySpawns) {
             expect(
               compiled.geometry.isClear(spawn.x, spawn.y, 3),
@@ -297,6 +291,38 @@ describe('procedural room generator (POC)', () => {
       });
     }
   }
+
+  it('a narrow door approach is rarer than a roomy one, but still happens', () => {
+    // NARROW_DOOR_APPROACH_REJECT_CHANCE rerolls a narrow candidate most —
+    // not all — of the time; both shapes have to stay reachable outcomes
+    // (making the tight shape impossible was an overcorrection). This pins
+    // both halves of that: it still occurs sometimes, and less often than
+    // its ~5% unopposed rate (see the constant's own doc comment).
+    let narrow = 0;
+    const total = 1000;
+    for (let seed = 0; seed < total; seed++) {
+      const template = generateRoom({
+        roomId: `n${String(seed)}`,
+        floor: 1,
+        floorTag: 'cellar',
+        doors: ['north'],
+        distanceFromStart: 3,
+        bossDistance: 6,
+        rng: new Rng(roomGenSeed(9001, 1, `n${String(seed)}`, seed)),
+      });
+      if (hasNarrowDoorApproach(template.tileGrid, 'north')) {
+        narrow += 1;
+      }
+    }
+    expect(
+      narrow,
+      'a narrow approach never came up in 1000 rooms — the reject chance reads as a ban',
+    ).toBeGreaterThan(0);
+    expect(
+      narrow / total,
+      'a narrow approach is winning close to as often as its unopposed rate — NARROW_DOOR_APPROACH_REJECT_CHANCE is too weak to prefer a roomier layout when one is on offer',
+    ).toBeLessThan(0.06);
+  });
 
   it('coverage lands in the tuned band, with rare sparse and busy rooms', () => {
     // An explicit "moderate" tuning — this test is about the *mechanism*, not

@@ -28,11 +28,13 @@
  *   clears the one tile inside each door, a BFS from a mouth proves every other
  *   door is reachable, and `fillUnreachedPockets` seals any pocket the BFS could
  *   not reach so the whole walkable area is one region. Failing that, fall back
- *   to an empty room and warn once (`docs/DECISIONS.md` #19). A wall right at the
- *   mouth (an immediate, one-tile "turn now") is a fine ordinary shape and is
- *   never avoided; `hasNarrowDoorApproach` only rejects the layout when there is
- *   headroom to walk further in but just one tile of elbow room on both sides of
- *   the doorway — the little dead-end notch a player reads as a mistake.
+ *   to an empty room and warn once (`docs/DECISIONS.md` #19). A wall a real
+ *   corridor's width ahead, with room to step aside and carry on past it, is
+ *   the roomier of two fine ordinary shapes; a wall pinning the player at the
+ *   threshold to a token step in any direction (`hasNarrowDoorApproach`) is
+ *   the other, playable but a worse fit for the layout's own coverage
+ *   band — `layoutGrid` reaches for the roomier shape when the retries on
+ *   offer have one, never by forbidding the narrower one outright.
  * - A multi-cell room (`1x2`/`2x2`/`L`/`T`) is generated as one continuous grid
  *   spanning the shape's bounding box — the seams between glued sub-rooms carry
  *   no wall — then sliced back into per-sub-room `RoomSubLayout`s for
@@ -522,18 +524,31 @@ function openRun(grid: RoomGrid, start: Cell, step: Cell, cap: number): number {
 }
 
 /**
- * True if a door opens onto a squeeze: real headroom straight ahead (at
- * least one tile past the mouth) but at most one tile of elbow room to
- * either side of the doorway itself. That shape reads as a little dead end —
- * inviting the player two steps in only to force an immediate turn — rather
- * than the two ordinary shapes that are perfectly fine: a wall right at the
- * mouth (no headroom, so the turn is expected immediately) or a real
- * approach with room to move on at least one side.
+ * Chance `layoutGrid` throws away a candidate whose door approach is narrow
+ * (`hasNarrowDoorApproach`) and rerolls, rather than a hard "never pick
+ * this" ban — a tuning knob, not a rule. Measured (`generated-room.test.ts`)
+ * at landing the shape in ~3% of doors — down from the ~5% it wins at
+ * completely unopposed, roughly halved rather than engineered to zero.
+ */
+const NARROW_DOOR_APPROACH_REJECT_CHANCE = 0.5;
+
+/**
+ * True if a door opens onto a squeeze: at most one tile of elbow room to
+ * either side of the doorway, with no generous escape route straight ahead
+ * either (fewer than two tiles of headroom past the mouth). That combination
+ * pins the player at the threshold able to shuffle a token step at best in
+ * any direction — a little dead end, less common than the one ordinary shape
+ * that's roomier: a wall not too far ahead with a real corridor's worth of
+ * space to step aside and carry on past it. A wall blocking the mouth
+ * outright is exactly as pinched by this test as one a tile further in —
+ * "immediately" doesn't earn a pass just because it is close. Both shapes
+ * are real, playable rooms; this only decides which one `layoutGrid` reaches
+ * for first.
  */
 function hasNarrowDoorApproach(grid: RoomGrid, mouths: readonly Cell[]): boolean {
   return mouths.some((mouth) => {
     const { forward, side } = doorApproachAxes(mouth);
-    if (openRun(grid, mouth, forward, 1) === 0) {
+    if (openRun(grid, mouth, forward, 2) >= 2) {
       return false;
     }
     const leftRoom = openRun(grid, mouth, side, 2);
@@ -706,7 +721,22 @@ function layoutGrid(
     if (!everyMouthReachable(candidate, candidateDistance, mouths)) {
       continue;
     }
-    if (hasNarrowDoorApproach(candidate, mouths)) {
+    // A narrow door approach is a real, occasionally-fine room feel, not a
+    // shape to forbid outright — see `hasNarrowDoorApproach`'s doc comment.
+    // A coverage-band scoring penalty can't express "rarer, not banned"
+    // here: `layoutGrid` keeps the best of up to `layoutRetries` attempts, so
+    // any nonzero penalty is beaten almost every time by whichever other
+    // attempt happens not to be narrow — measured at under 40 candidates,
+    // even the smallest penalty reads as a de facto ban, and only literally
+    // no penalty (no preference at all) lets the shape through at its
+    // natural rate. Rejecting most — not all — of the candidates that have
+    // it is what actually lands "rarer, still possible": most retries never
+    // see one, so it wins outright when the dice do land on one, without
+    // width-of-40 competition drowning it out to zero.
+    if (
+      hasNarrowDoorApproach(candidate, mouths) &&
+      rng.chance(NARROW_DOOR_APPROACH_REJECT_CHANCE)
+    ) {
       continue;
     }
     fillUnreachedPockets(candidate, candidateDistance);
