@@ -2971,6 +2971,7 @@ WASD move   arrows aim and fire
             neighborPlacement,
             entryCell,
             force,
+            neighborRoomId,
           );
         })();
     if (!succeeded) {
@@ -3088,6 +3089,7 @@ WASD move   arrows aim and fire
       // Same "quick, safe tutorial beat" as the run's real first room
       // (`startRun`) — a freshly reset floor starts safe too.
       true,
+      currentRoomId,
     );
     syncFloorPlanView();
     // Warm the new floor's scenery shaders behind its title card — see
@@ -3123,6 +3125,7 @@ WASD move   arrows aim and fire
       undefined,
       { col: 0, row: 0 },
       false,
+      currentRoomId,
     );
     syncFloorPlanView();
     refreshHud();
@@ -3472,6 +3475,7 @@ WASD move   arrows aim and fire
               placement,
               entryCell,
               isStart,
+              currentRoomId,
             );
             syncFloorPlanView();
           }
@@ -3638,6 +3642,9 @@ WASD move   arrows aim and fire
             null,
             hiddenDoorsFor(floorPlan, currentRoomId, revealedEdges),
             buildPlacement(room),
+            { col: 0, row: 0 },
+            false,
+            currentRoomId,
           );
           syncFloorPlanView();
           refreshHud();

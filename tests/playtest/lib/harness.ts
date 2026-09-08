@@ -369,6 +369,7 @@ export function runPlaytest(options: PlaytestOptions): PlaytestOutcome {
               nextStart.roomPlacement,
               { col: 0, row: 0 },
               true,
+              floorPlan.startRoomId,
             );
           } catch (error) {
             result = 'crashed';
@@ -400,6 +401,8 @@ export function runPlaytest(options: PlaytestOptions): PlaytestOutcome {
               crossing.hiddenDoors,
               crossing.placement,
               crossing.entryCell,
+              false,
+              crossing.neighborRoomId,
             );
         if (succeeded) {
           currentRoomId = crossing.neighborRoomId;
