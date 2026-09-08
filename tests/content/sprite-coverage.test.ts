@@ -2,6 +2,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ENEMY_DEFINITIONS } from '../../src/content/enemies/index.js';
+import { ITEM_DEFINITIONS } from '../../src/content/items/index.js';
 import { PICKUP_DEFINITIONS } from '../../src/content/pickups/index.js';
 import { ROOM_TEMPLATES } from '../../src/content/rooms/index.js';
 import { validateRoomTemplate } from '../../src/sim/room/template.js';
@@ -79,6 +80,18 @@ describe('every registered enemy has art', () => {
 describe('every registered pickup has art', () => {
   it.each(PICKUP_DEFINITIONS.map((definition) => definition.id))('%s', (id) => {
     expect(characterNames).toContain(`pickup-${id}`);
+  });
+});
+
+/**
+ * Item icons (`docs/DECISIONS.md` #83) landed batch by batch behind a
+ * placeholder disc; with the roster fully drawn, an item authored without
+ * its `item-<sprite>.png` is a regression this catches on the pull request,
+ * the same way a pickup without art is.
+ */
+describe('every registered item has art', () => {
+  it.each(ITEM_DEFINITIONS.map((definition) => definition.sprite))('%s', (sprite) => {
+    expect(characterNames).toContain(`item-${sprite}`);
   });
 });
 
