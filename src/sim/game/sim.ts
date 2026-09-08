@@ -107,6 +107,7 @@ import {
   meleeBladeAngle,
   stepEnemies,
   stepEnemyDeaths,
+  stepEnemyPropDrops,
   stepEnemySummons,
 } from '../systems/enemy.js';
 import { stepBombPlacement } from '../systems/bomb-placement.js';
@@ -1693,6 +1694,77 @@ export class GameSim {
       return { x: selfX, y: selfY, poleAngle };
     }
     return null;
+  }
+
+  /**
+   * How many live destructible props of a `DESTRUCTIBLE_PROP_KINDS` index are
+   * standing in the room — `dropProp`'s `maxActive` cap (#277).
+   *
+   * A walk rather than a counter, for the same reason `bossHealth` is one: a
+   * count kept up to date would have to be decremented from every path that
+   * can destroy a prop (a shot, a bomb's splash, the Maibaum-Dieb picking one
+   * up, a room reset), and one missed decrement is a Ladewagen that silently
+   * stops dropping bales for the rest of the run. This is called at most once
+   * per drop event — a handful of times a fight, never per body per tick.
+   *
+   * The `isEnemyBody` skip is not defensive: **every enemy carries the
+   * `propKind` component**, because `spawnEnemyKind` builds on `spawnTarget`
+   * and inherits its components — and an enemy's kind is left at 0, which is
+   * `barrel`. So "has the propKind bit" means "is a body", not "is a prop",
+   * and without this a Ladewagen would count *itself* as a bale.
+   * `maypolePlanted` above only sidesteps the same trap by accident, because
+   * no enemy is ever kind 1.
+   */
+  countProps(kind: number): number {
+    const states = this.world.states;
+    const masks = this.world.masks;
+    const propBit = this.propKind.bit;
+    const enemyMask = this.enemyMask;
+    let count = 0;
+    for (let index = 0; index < this.world.highWater; index++) {
+      if (states[index] !== World.ALIVE || ((masks[index] ?? 0) & propBit) === 0) {
+        continue;
+      }
+      if (isEnemyBody(masks[index] ?? 0, enemyMask)) {
+        continue;
+      }
+      if ((this.propKind.data[index] ?? 0) === kind) {
+        count += 1;
+      }
+    }
+    return count;
+  }
+
+  /**
+   * Whether any live destructible prop's own circle overlaps a spot — the
+   * other half of `dropProp`'s placement rule (#277).
+   *
+   * `RoomGeometry.isClear` answers "is this inside the room's walls or
+   * blocks", which knows nothing about entities, so without this a Ladewagen
+   * crawling through its `unload` beat would stack four bales on one pixel
+   * and produce a single-tile wall with quadruple health instead of the arc
+   * the state is written to lay down.
+   */
+  propWithin(x: number, y: number, radius: number): boolean {
+    const states = this.world.states;
+    const masks = this.world.masks;
+    const propBit = this.propKind.bit;
+    const enemyMask = this.enemyMask;
+    for (let index = 0; index < this.world.highWater; index++) {
+      if (states[index] !== World.ALIVE || ((masks[index] ?? 0) & propBit) === 0) {
+        continue;
+      }
+      if (isEnemyBody(masks[index] ?? 0, enemyMask)) {
+        continue;
+      }
+      const reach = radius + (this.hurtbox.data[index * 2] ?? 0);
+      const dx = this.positionX(index) - x;
+      const dy = this.positionY(index) - y;
+      if (dx * dx + dy * dy < reach * reach) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
@@ -5226,6 +5298,9 @@ export class GameSim {
     // A `summon` wave that came due inside `stepEnemies` is spawned here, out
     // of that loop — `spawnEnemyKind` can grow the world (#276).
     stepEnemySummons(this);
+    // The same for a `dropProp` bale Der Ladewagen shed this tick (#277):
+    // `spawnTarget` grows the world exactly as `spawnEnemyKind` does.
+    stepEnemyPropDrops(this);
     // Before `stepBodies`, deliberately: `freezing` (#27) scales velocity
     // down, and that only slows this tick's movement if it runs before the
     // integration that reads velocity. Burn/poison damage has no such
@@ -6146,4 +6221,16 @@ export class GameSim {
     collision[index * 2] = layer;
     collision[index * 2 + 1] = collisionMaskFor(layer);
   }
+}
+
+/**
+ * Whether a component mask belongs to an enemy body rather than a plain prop.
+ *
+ * `GameSim.countProps`/`propWithin` (#277) both need it, and both need the
+ * same reason written down once: an enemy is spawned through `spawnTarget`
+ * and so carries `propKind` like a barrel does. See `countProps`' own doc
+ * comment.
+ */
+function isEnemyBody(mask: number, enemyMask: number): boolean {
+  return (mask & enemyMask) === enemyMask;
 }

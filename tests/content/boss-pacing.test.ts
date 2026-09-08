@@ -1,9 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { derStier, grosseKellerassel, maibaumDieb } from '../../src/content/enemies/index.js';
+import {
+  blaskapellePosaune,
+  blaskapelleTrompete,
+  blaskapelleTuba,
+  derLadewagen,
+  derStier,
+  dieZapfhahnOrgel,
+  grosseKellerassel,
+  maibaumDieb,
+} from '../../src/content/enemies/index.js';
 import { entityIndex } from '../../src/sim/ecs/entity.js';
 import { World } from '../../src/sim/ecs/world.js';
 import { EventKind } from '../../src/sim/events/queue.js';
 import { GameSim, PLAYER_HEALTH, type GameSimOptions } from '../../src/sim/game/sim.js';
+import { propKindIndex } from '../../src/sim/game/prop-kinds.js';
 import {
   InputAction,
   createInputFrame,
@@ -304,5 +314,144 @@ describe('mini-boss pacing (#276)', () => {
       }
     });
     expect(rats).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * #277 — Dorf & Acker's two mini-bosses, held to the same bar #276's pair are:
+ * tuned against a real sim rather than picked as a number (`docs/DECISIONS.md`
+ * #66), and — the hard requirement the issue names — **neither outlasts Der
+ * Stier**, the floor's actual boss. A mini-boss the player fights longer than
+ * the boss on the same floor is the failure mode.
+ *
+ * Der Stier's fight is measured to the end of *phase one* — the point his
+ * `splitOnDeath` hands over to the Maibaum-Dieb (#199) — because that is the
+ * comparable quantity: a mini-boss has no phase two by definition (#276's own
+ * contract table), so comparing it against a two-phase total would be
+ * comparing it against a fight it is not allowed to be.
+ *
+ * Die Blaskapelle is three bodies, so it needs its own harness: `measureFight`
+ * shoots one thing until it dies, and this fight is over when all three are
+ * down. `measureBandFight` kills them in an authored order, which is also how
+ * it checks the fight's own idea — the lattice changes rather than thins, so
+ * the order is a decision and each member has to be individually killable.
+ */
+function measureBandFight(
+  order: readonly string[],
+  shotDamage: number,
+): { ticks: number; ringsWhileTwoLeft: number; killed: number } {
+  const sim = emptySim();
+  sim.tuning.shooting.shotDamage = shotDamage;
+  const player = sim.playerIndex;
+  const px = sim.positionX(player);
+  const py = sim.positionY(player);
+  // The authored formation from `dorf-miniboss.json`, relative to the spawn
+  // point: tuba centre, trumpet and trombone flanking and a little forward.
+  const placed = new Map<string, number>();
+  placed.set('die-blaskapelle-tuba', place(sim, 'die-blaskapelle-tuba', px + 70, py));
+  placed.set('die-blaskapelle-trompete', place(sim, 'die-blaskapelle-trompete', px + 26, py + 14));
+  placed.set('die-blaskapelle-posaune', place(sim, 'die-blaskapelle-posaune', px + 114, py + 14));
+
+  let killed = 0;
+  let ringsWhileTwoLeft = 0;
+  let previousShots = 0;
+  let ticks = 0;
+  for (const id of order) {
+    const target = placed.get(id) ?? -1;
+    for (; ticks < 9000; ticks++) {
+      if (!isAlive(sim, target)) {
+        killed += 1;
+        break;
+      }
+      sim.step(aimAt(sim, player, target));
+      // The player's job, done by the harness: a mini-boss that shoves is not
+      // what is being measured here.
+      sim.transform.data[player * 2] = px;
+      sim.transform.data[player * 2 + 1] = py;
+      sim.velocity.data[player * 2] = 0;
+      sim.velocity.data[player * 2 + 1] = 0;
+      const live = sim.projectiles.liveCount;
+      if (killed === 1 && live > previousShots) {
+        ringsWhileTwoLeft += 1;
+      }
+      previousShots = live;
+    }
+  }
+  return { ticks, ringsWhileTwoLeft, killed };
+}
+
+describe('floor 2 mini-boss pacing (#277)', () => {
+  it('Der Ladewagen dies inside its own cycle, and well before Der Stier does', () => {
+    for (const shotDamage of [1, 2]) {
+      const stier = measurePinnedFight('der-stier', 'charge', shotDamage).ticks;
+      const wagen = measurePinnedFight('der-ladewagen', 'unload', shotDamage);
+      expect(wagen.died, `shotDamage=${String(shotDamage)}: Der Ladewagen never died`).toBe(true);
+      expect(
+        wagen.ticks,
+        `shotDamage=${String(shotDamage)}: Der Ladewagen lasts ${String(wagen.ticks)} ticks vs Der Stier's ${String(stier)}`,
+      ).toBeLessThan(stier);
+      // Its one idea has to actually be shown: the arena has to degrade at
+      // least once — the telegraphed dumping run — before the fight ends.
+      expect(
+        wagen.cycles,
+        `shotDamage=${String(shotDamage)}: only ${String(wagen.cycles)} unload beat(s)`,
+      ).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it('Der Ladewagen fills the arena as the fight runs, and stops at the cap', () => {
+    const sim = emptySim();
+    const player = sim.playerIndex;
+    place(sim, 'der-ladewagen', sim.positionX(player) + 70, sim.positionY(player));
+    // Stand still and never fire — the losing line, and the one that shows
+    // what the soft timer actually does.
+    for (let tick = 0; tick < 2000; tick++) {
+      sim.step(createInputFrame());
+    }
+    const bales = sim.countProps(propKindIndex('bale'));
+    expect(bales).toBeGreaterThanOrEqual(6);
+    expect(bales).toBeLessThanOrEqual(10);
+  });
+
+  it('Die Blaskapelle is over faster than Der Stier, whichever order it is taken in', () => {
+    const orders = [
+      ['die-blaskapelle-trompete', 'die-blaskapelle-posaune', 'die-blaskapelle-tuba'],
+      ['die-blaskapelle-tuba', 'die-blaskapelle-posaune', 'die-blaskapelle-trompete'],
+    ];
+    for (const shotDamage of [1, 2]) {
+      const stier = measurePinnedFight('der-stier', 'charge', shotDamage).ticks;
+      for (const order of orders) {
+        const band = measureBandFight(order, shotDamage);
+        expect(band.killed, `shotDamage=${String(shotDamage)}: the band did not all die`).toBe(3);
+        expect(
+          band.ticks,
+          `shotDamage=${String(shotDamage)}: the band lasts ${String(band.ticks)} ticks vs Der Stier's ${String(stier)}`,
+        ).toBeLessThan(stier);
+      }
+    }
+  });
+
+  it('killing one bandsman changes the pattern rather than ending it', () => {
+    // The fight's one idea, as a measurement: with one of the three down the
+    // room is still ringing. A mini-boss whose first kill turned the lattice
+    // off would be three health bars, not a pattern to stand inside.
+    const band = measureBandFight(
+      ['die-blaskapelle-trompete', 'die-blaskapelle-posaune', 'die-blaskapelle-tuba'],
+      2,
+    );
+    expect(band.ringsWhileTwoLeft).toBeGreaterThan(0);
+  });
+
+  it("the floor-2 pair is not a bigger health pool than floor 1's", () => {
+    // #231's cautionary tale, as a check rather than as a promise: the step up
+    // from floor 1 has to come from the question the fight asks, so the pools
+    // stay the same order of number. Die Zapfhahn-Orgel is 34; the band is 38
+    // across three bodies and Der Ladewagen 28.
+    const band = blaskapelleTuba.health + blaskapelleTrompete.health + blaskapellePosaune.health;
+    expect(band).toBeLessThanOrEqual(Math.round(dieZapfhahnOrgel.health * 1.25));
+    expect(derLadewagen.health).toBeLessThanOrEqual(Math.round(dieZapfhahnOrgel.health * 1.25));
+    // ...and neither is anywhere near the floor's boss.
+    expect(band).toBeLessThan(derStier.health);
+    expect(derLadewagen.health).toBeLessThan(derStier.health);
   });
 });

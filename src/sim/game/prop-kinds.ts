@@ -11,8 +11,18 @@
  * #199) without importing the running simulation — the same cycle-avoidance
  * `sim/enemy/size.ts` is split out for. `game/sim.ts` re-exports it, so every
  * existing `from '.../game/sim.js'` import still resolves.
+ *
+ * `bale` (#277) is Der Ladewagen's dropped hay bale — a prop no room authors,
+ * put in the world at runtime by the `dropProp` behaviour. Deliberately *not*
+ * the `"hay-bale"` name floor 2's rooms already use in their
+ * `decorativeProps`: that one is scenery, and promoting it to a destructible
+ * kind here would retroactively turn four authored floor-2 rooms' decoration
+ * into shootable cover — a content change riding along in a mini-boss fight,
+ * which `CONTRIBUTING.md` asks changes not to do. Same hay, same sprite
+ * (`render/floor-art.ts` names `rural-hay-bale` for both), two different
+ * things: one is drawn, one is in the way.
  */
-export const DESTRUCTIBLE_PROP_KINDS = ['barrel', 'maypole'] as const;
+export const DESTRUCTIBLE_PROP_KINDS = ['barrel', 'maypole', 'bale'] as const;
 
 export type DestructiblePropKind = (typeof DESTRUCTIBLE_PROP_KINDS)[number];
 

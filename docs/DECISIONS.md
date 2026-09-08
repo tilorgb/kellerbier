@@ -4311,3 +4311,66 @@ instead — it would hide the link on drivers that have it and leave the relink 
 the fix is that there is nothing to link. Replacing the slide's live outgoing room with a snapshot
 (audit plan item 8) — it would have removed the *slide's* light-count swing but not the cache's,
 and the cache's was the larger one.
+
+## 81. An enemy may change the arena: `dropProp` puts terrain in the world, and a spawn choice may place a squad
+
+**Decided:** #277 (Dorf & Acker's mini-bosses), while implementing Der Ladewagen and Die
+Blaskapelle.
+
+**The bet #14 made, and the two places it needed widening.** Every enemy in the game is a size,
+four numbers and a state machine built out of named primitives, and the whole schedule rests on
+"adding an enemy needs no engine change." Floor 2's mini-bosses are the first two fights that
+could not be authored inside it, and it is worth saying precisely *why*, because "the primitive
+list grew" is only defensible if it grows for a class of fight rather than for one enemy.
+
+**`dropProp` — a body that leaves terrain behind it.** `summon` (#276) grows the room's *bodies*;
+nothing could grow its *geometry*. Der Ladewagen's one idea is a soft timer made of geometry —
+it sheds hay bales as it drives a circuit, they are solid to shots from both teams, and the arena
+degrades while the player is standing in it. The primitive is the smallest general form of that:
+a prop kind, a cadence, a cap, the dropped prop's health, and how far behind the body it lands.
+It is built on `spawnTarget`, the same call an authored `decorativeProps` barrel goes through, so
+a dropped bale *is* a barrel as far as collision, shots, splash and the renderer are concerned —
+there is no second kind of terrain. It is deferred out of `stepEnemies` off an `EnemyDropProp`
+event for the same reason `summon` and `splitOnDeath` are: spawning grows the world, and a system
+loop that has cached its component arrays must not have them swapped underneath it.
+
+`maxActive` is not a performance knob, it is the fairness one, and it matters more here than it
+does on `summon`: a body walks away or dies, a prop does neither, so an uncapped dropper
+eventually walls a player into a corner they cannot shoot out of. Three further skips are part of
+the primitive rather than of the content: a drop inside a wall, a drop overlapping another prop,
+and a drop on top of the player. The last is the one an arena that degrades must never do — a
+bale appearing under the player shoves them with no warning and nothing they could have done.
+
+**`RoomSpawnChoice.escorts` — a mini-boss may be more than one body.** Die Blaskapelle is three
+Blaskapellisten standing in formation, and the fight is that killing one *changes* the pattern
+rather than thinning it: three healths, three positions, three things to aim at. A room's
+`spawnGroups` could already place `count` bodies of one rolled choice, spread mechanically 8px
+apart — the wrong tool twice over, since the three are different enemy ids and where they stand
+relative to each other is the fight. Escorts hang off the **choice**, not the group, because the
+choice is what the roll picks: on the group, the run that rolled Der Ladewagen would get two
+bandsmen standing beside a tractor. It is data-only — the compile emits ordinary `enemySpawns`
+entries — so nothing downstream knows a squad from three separately authored spawns. The kept
+third idea in #277, Der Gartenzwerg-Reigen (a ring of gnomes), is the same shape with five.
+
+**`fireOnBeat.beatOffset` — the offset rides the room clock, not the body clock.** `fireOnBeat`
+(#37) already fires off `sim.tick` rather than off ticks-in-state, so that two Blaskapellisten
+ring together whenever each entered its firing state. The mini-boss needs the opposite of
+together and the same property underneath: an eighth behind the tuba has to *stay* an eighth
+behind it, for the whole fight, regardless of spawn order. So the offset is taken against the
+same clock, and scaled with `fireIntervalScale` alongside the bar it sits inside — a difficulty
+knob that stretched the beat but not the offsets would silently re-voice the lattice.
+
+**What this does not license.** None of these is a per-enemy hook. A primitive earns its place by
+being the general form of a *kind* of fight the format cannot express at all — "an enemy that
+changes the room's geometry", "a mini-boss that is a formation" — never by being the shortest
+path to one creature. The test for the next one is the same: could a second, unrelated enemy be
+authored out of it without touching `sim/`?
+
+**Found while building it:** `orbitPoint` had never been used by any authored enemy, and its
+radial correction was inverted — a body inside its ring was pulled further in, one outside pushed
+further out. Since an `orbitPoint` body's ring is centred on its own spawn point, every such
+enemy would have started exactly at the degenerate centre and oscillated one pixel back and forth
+forever, velocity spinning a full circle around it, going nowhere. Fixed in the same change
+because Der Ladewagen is the first content that uses the primitive and cannot drive a circuit
+without it. The general lesson is #7's: a primitive nothing has authored against yet is
+untested content-side, however carefully it was written.

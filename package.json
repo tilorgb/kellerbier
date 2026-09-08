@@ -19,6 +19,7 @@
     "art:floor1": "node tools/art/authoring/build-floor1-roster.mjs",
     "art:minibosses": "node tools/art/authoring/build-floor1-minibosses.mjs",
     "art:floor2": "node tools/art/authoring/build-floor2-roster.mjs",
+    "art:minibosses2": "node tools/art/authoring/build-floor2-minibosses.mjs",
     "art:shopkeeper": "node tools/art/authoring/build-shopkeeper.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",

@@ -251,6 +251,141 @@ describe('room templates', () => {
     expect(compiled.enemyIds).toEqual(['kellerassel', 'kellerassel']);
   });
 
+  it("floor 2's mini-boss slot is reached through the real progression, and holds a real fight (#277)", () => {
+    // `CLAUDE.md`'s "reachable means through the real progression, not just a
+    // direct load": loading `dorf-miniboss.json` by hand proves the band
+    // renders, not that a player ever meets it. This walks the same
+    // `generateFloor` path `app/main.ts` does, on the floor-2 config, and
+    // checks the slot is placed *and* what compiles into it.
+    //
+    // Floor 2 is already inside `HIGHEST_PLAYABLE_FLOOR`, so there is no gate
+    // constant to bump here — this issue replaces a shipped room's occupants
+    // rather than adding a floor. That is exactly why it is worth a test: the
+    // gate being already open is easy to assume and cheap to check.
+    const pool: readonly RoomTemplate[] = ROOM_TEMPLATES.map((room, index) =>
+      validateRoomTemplate(room, `room[${String(index)}]`, ENEMY_DEFINITIONS),
+    );
+    const floor2Config = FLOOR_CONFIGS.find((config) => config.floor === 2);
+    if (floor2Config === undefined) {
+      throw new Error('no floor 2 config');
+    }
+
+    const rolled = new Set<string>();
+    for (let seed = 0; seed < 40; seed++) {
+      const plan = generateFloor(new Rng(seed + 1), floor2Config, pool);
+      expect(
+        plan.minibossRoomIds.length,
+        `seed ${String(seed)} placed no mini-boss room`,
+      ).toBeGreaterThanOrEqual(1);
+      for (const roomId of plan.minibossRoomIds) {
+        const slot = plan.rooms.find((room) => room.id === roomId);
+        const template = pool.find((room) => room.id === slot?.templateId);
+        expect(template?.id).toBe('dorf-miniboss');
+        // The same `chooseSpawnIndex` callback `GameSim.loadRoom` supplies from
+        // the run's own enemy stream — without it a `count: 1` group always
+        // lands on choice 0 and the second fight would never appear.
+        const roll = new Rng(seed + 101);
+        const compiled = compileRoomTemplate(
+          template,
+          2,
+          'dorf-miniboss.json',
+          ENEMY_DEFINITIONS,
+          { cells: [{ col: 0, row: 0 }] },
+          (count) => Math.floor(roll.nextFloat() * count),
+        );
+        for (const id of compiled.enemyIds) {
+          rolled.add(id);
+        }
+      }
+    }
+
+    // Both fights turn up across the seeds — the slot is a real roll, not one
+    // authored fight with a second one nobody meets — and the band always
+    // arrives as all three of itself.
+    expect(rolled.has('der-ladewagen')).toBe(true);
+    expect(rolled.has('die-blaskapelle-tuba')).toBe(true);
+    expect(rolled.has('die-blaskapelle-trompete')).toBe(true);
+    expect(rolled.has('die-blaskapelle-posaune')).toBe(true);
+    // ...and nothing else: the placeholder Kuh/Bauer are gone from the slot.
+    expect([...rolled].sort()).toEqual([
+      'der-ladewagen',
+      'die-blaskapelle-posaune',
+      'die-blaskapelle-trompete',
+      'die-blaskapelle-tuba',
+    ]);
+  });
+
+  it("places a choice's escorts with it, and only on the run that rolled it (#277)", () => {
+    // Die Blaskapelle is three bodies standing in an authored formation, and
+    // the formation is the fight. Escorts hang off the *choice* rather than
+    // the group so the run that rolls Der Ladewagen does not get two
+    // bandsmen standing next to a tractor.
+    const template = {
+      ...cellarCrossroads,
+      enemySpawns: [{ x: 120, y: 72, group: 'melee' }],
+      spawnGroups: [
+        {
+          id: 'melee',
+          count: 1,
+          choices: [
+            {
+              enemyId: 'die-blaskapelle-tuba',
+              minFloor: 2,
+              maxFloor: 2,
+              escorts: [
+                { enemyId: 'die-blaskapelle-trompete', dx: -44, dy: 14 },
+                { enemyId: 'die-blaskapelle-posaune', dx: 44, dy: 14 },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const compiled = compileRoomTemplate(template, 2, 'band.json', ENEMY_DEFINITIONS);
+    expect(compiled.enemyIds).toEqual([
+      'die-blaskapelle-tuba',
+      'die-blaskapelle-trompete',
+      'die-blaskapelle-posaune',
+    ]);
+    // Positions are asserted as *offsets from the leader*, not absolutes: the
+    // formation is the authored thing, and where the group's own spawn point
+    // ends up is the template's business.
+    const [tuba, trompete, posaune] = compiled.enemySpawns;
+    expect(tuba).toBeDefined();
+    expect([(trompete?.x ?? 0) - (tuba?.x ?? 0), (trompete?.y ?? 0) - (tuba?.y ?? 0)]).toEqual([
+      -44, 14,
+    ]);
+    expect([(posaune?.x ?? 0) - (tuba?.x ?? 0), (posaune?.y ?? 0) - (tuba?.y ?? 0)]).toEqual([
+      44, 14,
+    ]);
+  });
+
+  it('rejects an escort naming an enemy that does not exist (#277)', () => {
+    // A gap degrades (`nearestFloorChoice`); a *bug* throws, per
+    // `docs/DECISIONS.md` #7 — and a misspelled escort is the second.
+    const template = {
+      ...cellarCrossroads,
+      spawnGroups: [
+        {
+          id: 'melee',
+          count: 1,
+          choices: [
+            {
+              enemyId: 'kellerassel',
+              minFloor: 1,
+              maxFloor: 1,
+              escorts: [{ enemyId: 'die-blaskapelle-trompette', dx: 8, dy: 0 }],
+            },
+          ],
+        },
+      ],
+    };
+    expect(() => validateRoomTemplate(template, 'typo.json', ENEMY_DEFINITIONS)).toThrow(
+      /escorts\[0\]\.enemyId: does not name a registered enemy/,
+    );
+  });
+
   it('picks whichever authored choice is nearest the requested floor, either direction', () => {
     const template = {
       ...cellarCrossroads,

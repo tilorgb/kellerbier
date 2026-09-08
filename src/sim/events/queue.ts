@@ -46,6 +46,15 @@ export const EventKind = {
    * death event rather than inline.
    */
   EnemySummon: 9,
+  /**
+   * A `dropProp` behaviour's drop came due this tick (#277, Der Ladewagen).
+   * a: the dropper slot, b: the `DESTRUCTIBLE_PROP_KINDS` index, x/y: where
+   * the prop lands, value: its health, normalX: the max that may stand at
+   * once, normalY: its radius. Read by `stepEnemyPropDrops`, deferred out of
+   * `stepEnemies` for the same reason `EnemySummon` is: spawning grows the
+   * world, and that loop caches its component arrays.
+   */
+  EnemyDropProp: 10,
 } as const;
 
 export type EventKindId = (typeof EventKind)[keyof typeof EventKind];
