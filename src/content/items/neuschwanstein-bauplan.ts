@@ -22,6 +22,10 @@ export const neuschwansteinBauplan: ItemDefinition = {
   pools: ['shop', 'boss', 'devil'],
   quality: 2,
   promilleRequirement: 'any',
+  // The bill for the next floor, up front — the item is a loan, and a loan
+  // whose next instalment is a surprise is not a decision, it is a trap.
+  status: (ctx) =>
+    `next floor costs ${String(Math.max(0, ctx.sim.currentFloor + 1) * COST_PER_FLOOR)} Biermarken`,
   hooks: {
     modifyStats: () => [
       { stat: 'damage', op: 'multiply', value: 1.3 },

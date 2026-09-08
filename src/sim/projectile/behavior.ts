@@ -401,6 +401,11 @@ function spawnSplitChildren(sim: GameSim, slot: number, hitX: number, hitY: numb
   // The stored value is always a valid `ProjectileTeamId` — it was written by
   // an earlier `spawn` call that required one.
   const team = (projectiles.team[slot] ?? 0) as ProjectileTeamId;
+  // A child is still the same item's shot, so it keeps the parent's sprite
+  // and colour — a Kartoffelsalat chunk that came out beer-coloured would
+  // read as a different weapon firing.
+  const art = projectiles.art[slot] ?? 0;
+  const tint = projectiles.tint[slot] ?? 0;
 
   for (let child = 0; child < count; child++) {
     const t = count === 1 ? 0 : -spread / 2 + (spread * child) / (count - 1);
@@ -415,6 +420,8 @@ function spawnSplitChildren(sim: GameSim, slot: number, hitX: number, hitY: numb
       childLifetime,
       team,
       childTags,
+      art,
+      tint,
     );
     if (childSlot === NO_SLOT) {
       continue;

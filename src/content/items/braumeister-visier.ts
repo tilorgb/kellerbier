@@ -26,6 +26,9 @@ export const braumeisterVisier: ItemDefinition = {
   pools: ['shop', 'boss'],
   quality: 2,
   promilleRequirement: 'any',
+  // Counting down to the volley, so the fifth shot is something a player
+  // times a doorway peek around rather than a surprise.
+  status: (ctx) => `volley in ${String(SHOTS_PER_VOLLEY - ctx.state.charge)}`,
   hooks: {
     onShoot: (ctx) => {
       const state = ctx.state;

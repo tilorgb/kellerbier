@@ -35,6 +35,10 @@ export const steinkrug: ItemDefinition = {
         Math.max(1, Math.round(ctx.damage * SPLASH_DAMAGE_SCALE)),
         ctx.target,
       );
+      // The mug shattering (#243's `splashBurst`), at the size the shards
+      // actually reach — a splash a player cannot see is a splash they
+      // cannot aim for.
+      ctx.sim.splashBurst(ctx.hitX, ctx.hitY, SPLASH_RADIUS);
     },
   },
 };

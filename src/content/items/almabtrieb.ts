@@ -12,8 +12,10 @@ const MOVING_SHOT_MULTIPLIER = 2;
  * against `previousX`/`previousY`, the pair render interpolation already
  * tracks — just inverted and without a timer, since the bonus is a per-shot
  * check rather than something that has to build up. `onProjectileSpawn` is
- * where it lands, the same hook `bauern-mistgabel.ts` uses to touch a fired
- * shot's own damage field.
+ * where it lands, the same hook `mass.ts` uses to touch a fired shot's own
+ * fields. The "different colour" the description promises is
+ * `tintProjectile`'s `almabtrieb` — the only way a player can tell which of
+ * two identical-looking shots is the one hitting twice as hard.
  */
 export const almabtrieb: ItemDefinition = {
   id: 'almabtrieb',
@@ -37,6 +39,7 @@ export const almabtrieb: ItemDefinition = {
       projectiles.damage[ctx.projectile] = Math.round(
         (projectiles.damage[ctx.projectile] ?? 0) * MOVING_SHOT_MULTIPLIER,
       );
+      sim.tintProjectile(ctx.projectile, 'almabtrieb');
     },
   },
 };

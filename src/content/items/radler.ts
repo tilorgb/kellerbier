@@ -24,5 +24,12 @@ export const radler: ItemDefinition = {
       { stat: 'damage', op: 'multiply', value: 0.5 },
       { stat: 'fireRate', op: 'multiply', value: 0.5 },
     ],
+    // Half lemonade: paler and smaller shots, twice as many of them. The
+    // stream should look as thin as it hits.
+    onProjectileSpawn: (ctx) => {
+      const projectiles = ctx.sim.projectiles;
+      projectiles.radius[ctx.projectile] = (projectiles.radius[ctx.projectile] ?? 0) * 0.75;
+      ctx.sim.tintProjectile(ctx.projectile, 'radler');
+    },
   },
 };

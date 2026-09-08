@@ -29,12 +29,13 @@ export const braumeisterHammer: ItemDefinition = {
   hooks: {
     onKill: (ctx) => {
       const sim = ctx.sim;
-      sim.pushEnemiesNear(
-        sim.positionX(ctx.target),
-        sim.positionY(ctx.target),
-        SHOCKWAVE_RADIUS,
-        SHOCKWAVE_STRENGTH,
-      );
+      const x = sim.positionX(ctx.target);
+      const y = sim.positionY(ctx.target);
+      sim.pushEnemiesNear(x, y, SHOCKWAVE_RADIUS, SHOCKWAVE_STRENGTH);
+      // The hammer coming down (#243's `splashBurst`) — a kill already throws
+      // its own death effect, but the *ring* is what tells the player the
+      // scatter around it was theirs.
+      sim.splashBurst(x, y, SHOCKWAVE_RADIUS);
     },
   },
 };

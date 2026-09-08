@@ -12,7 +12,9 @@ import {
 import { lerp } from '../sim/math.js';
 import { ProjectileTeam, type ProjectileStore } from '../sim/projectile/store.js';
 import { ProjectileTag, type ProjectileTagId } from '../sim/projectile/tags.js';
+import { PROJECTILE_TINT_NAMES } from '../sim/projectile/tints.js';
 import type { Texture } from './gfx/index.js';
+import { PROJECTILE_TINT_COLOURS } from './palette.js';
 import { ACTOR_PIXELS_PER_UNIT } from './resolution.js';
 import type { Lighting } from './world/lighting.js';
 
@@ -48,6 +50,16 @@ import type { Lighting } from './world/lighting.js';
  * #53's colourblind team markers ride along the same way: a second instanced
  * layer, a dot over a player shot and a diamond over an enemy's, both pure
  * white — brightness is the primary cue, the shape the backup.
+ *
+ * ## Tint
+ *
+ * A shot's `ProjectileStore.tint` (`sim/projectile/tints.ts`) multiplies its
+ * sprite through the mesh's per-instance colour — the same attribute
+ * `ParticleView` already fades particles with — so an item can colour the
+ * shots it touched (a brown Spezi, a white Weißwurst) without a sprite of its
+ * own. The attribute is allocated at layer construction, never on first use,
+ * for the reason `ParticleView` gives: a layer that grows an attribute
+ * mid-run relinks its program on that frame (`docs/DECISIONS.md` #80).
  */
 export interface ProjectileArt {
   readonly player: Texture;
@@ -109,6 +121,12 @@ const SCRATCH_SCALE = new Vector3();
 const SCRATCH_COLOR = new Color(0xffffff);
 const X_AXIS = new Vector3(1, 0, 0);
 
+/** `PROJECTILE_TINT_COLOURS` by store index, so the frame loop indexes an array rather than looking a name up. */
+const TINT_BY_INDEX: readonly number[] = PROJECTILE_TINT_NAMES.map(
+  (name) => PROJECTILE_TINT_COLOURS[name],
+);
+const NO_TINT = 0xffffff;
+
 /** One instanced layer of quads wearing one texture. */
 class InstancedSprites {
   readonly mesh: InstancedMesh;
@@ -131,14 +149,18 @@ class InstancedSprites {
     this.mesh = new InstancedMesh(geometry, material, capacity);
     this.mesh.count = 0;
     this.mesh.frustumCulled = false;
+    // Allocate the colour attribute up front so `setColorAt` never does —
+    // and so the program is linked with instance colours from its first
+    // frame rather than relinked on the first tinted shot (see the class doc).
+    this.mesh.setColorAt(0, SCRATCH_COLOR.setHex(NO_TINT));
   }
 
   begin(): void {
     this.count = 0;
   }
 
-  /** Places one quad, centred at the point, `size` room units square, leaning to the camera. */
-  add(x: number, height: number, z: number, size: number, lean: number): void {
+  /** Places one quad, centred at the point, `size` room units square, leaning to the camera, multiplied by `tint` (an RGB hex; white for none). */
+  add(x: number, height: number, z: number, size: number, lean: number, tint = NO_TINT): void {
     if (this.count >= this.mesh.instanceMatrix.count) {
       return;
     }
@@ -147,12 +169,16 @@ class InstancedSprites {
     SCRATCH_SCALE.set(size, size, 1);
     SCRATCH_MATRIX.compose(SCRATCH_POSITION, SCRATCH_QUATERNION, SCRATCH_SCALE);
     this.mesh.setMatrixAt(this.count, SCRATCH_MATRIX);
+    this.mesh.setColorAt(this.count, SCRATCH_COLOR.setHex(tint));
     this.count += 1;
   }
 
   end(): void {
     this.mesh.count = this.count;
     this.mesh.instanceMatrix.needsUpdate = true;
+    if (this.mesh.instanceColor !== null) {
+      this.mesh.instanceColor.needsUpdate = true;
+    }
   }
 
   dispose(): void {
@@ -231,7 +257,9 @@ export class ProjectileView {
       const height = isPlayer
         ? PLAYER_SHOT_HEIGHT + ARC_HEIGHT * Math.sin(t * Math.PI)
         : ENEMY_SHOT_HEIGHT;
-      this.layerFor(texture, this.layers).add(x, height, z, radius * 2, this.lean);
+      // Only a player shot carries an item's tint; an enemy's sprite is its own.
+      const tint = isPlayer ? (TINT_BY_INDEX[store.tint[index] ?? 0] ?? NO_TINT) : NO_TINT;
+      this.layerFor(texture, this.layers).add(x, height, z, radius * 2, this.lean, tint);
       if (markersOn) {
         const marker = isPlayer ? teamMarkers.player : teamMarkers.enemy;
         this.layerFor(marker, this.markerLayers).add(

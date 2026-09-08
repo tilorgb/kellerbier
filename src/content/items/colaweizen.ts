@@ -26,6 +26,10 @@ export const colaweizen: ItemDefinition = {
     modifyStats: () => [{ stat: 'damage', op: 'multiply', value: 0.8 }],
     onProjectileSpawn: (ctx) => {
       ctx.sim.addProjectileTag(ctx.projectile, 'sticky');
+      // Cola-dark: a sticky shot riding an enemy for a second and a half is
+      // the item's whole effect, and beer-coloured it read as a shot that
+      // forgot to despawn.
+      ctx.sim.tintProjectile(ctx.projectile, 'cola');
     },
     onHit: (ctx) => {
       ctx.sim.applyStatusEffect(ctx.target, 'freeze', SLOW_TICKS);

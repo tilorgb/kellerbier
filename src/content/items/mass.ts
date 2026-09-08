@@ -31,6 +31,9 @@ export const mass: ItemDefinition = {
     onProjectileSpawn: (ctx) => {
       const radius = ctx.sim.projectiles.radius[ctx.projectile] ?? 0;
       ctx.sim.projectiles.radius[ctx.projectile] = radius * RADIUS_SCALE;
+      // A litre pours dark; the one shot should not look like a bigger version
+      // of the stream it replaced.
+      ctx.sim.tintProjectile(ctx.projectile, 'dunkel');
     },
   },
 };

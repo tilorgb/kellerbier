@@ -171,6 +171,24 @@ export type ItemBeerPickupHook = ItemHook;
 export type ItemLethalDamageHook = ItemHook;
 
 /**
+ * A one-line, player-facing readout of an item's *current* state — "3/5",
+ * "ready", "Für mein Schatzi", "next floor: -10" — or `''` for "nothing
+ * worth a row right now". Read every rendered frame by
+ * `render/item-status-hud.ts`, never by the simulation, so it is a query
+ * rather than a hook: it is declared on `ItemDefinition.status` rather than
+ * in `ItemHooks`, must not mutate anything, and cannot move a replay.
+ *
+ * Exists for the roster rule that every item has to be *visible* while held
+ * (`CLAUDE.md`'s "a feature nobody can experience isn't finished"). Most
+ * items show themselves on the shot they changed or on the enemy they
+ * moved; the ones whose whole effect is a counter, a charge or a per-floor
+ * condition — Lederhosn's one absorbed hit, Gartenzwerg-Hut's streak,
+ * Lebkuchenherz's slogan, Weißwurst's noon bell — had nothing on screen at
+ * all before this, short of the debug overlay.
+ */
+export type ItemStatusReader = (ctx: ItemHookContext) => string;
+
+/**
  * Every hook an item can declare, per `docs/GAME_DESIGN.md` §8's list plus
  * `onPickup`/`onRemove` (the pairing acceptance criterion #4 — "picking up
  * and losing an item returns the player to exactly the prior state" — needs
@@ -268,6 +286,8 @@ export interface ItemDefinition {
   readonly tags?: readonly string[];
   readonly active?: ActiveItemDefinition;
   readonly hooks?: ItemHooks;
+  /** See `ItemStatusReader`. Optional: an item whose effect is already visible in the room declares none. */
+  readonly status?: ItemStatusReader;
   /**
    * The hand-authored payoff for a Losbrunnen's rarest roll (#218) — replaces
    * the machine's own generic delta outright rather than adding to it, the

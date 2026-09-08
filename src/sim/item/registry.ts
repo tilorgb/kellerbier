@@ -5,6 +5,7 @@ import {
   type ItemPoolId,
   type ItemQuality,
   type ItemStatModifier,
+  type ItemStatusReader,
   ITEM_POOLS,
   type PromilleRequirement,
 } from './definition.js';
@@ -29,6 +30,8 @@ export interface CompiledItem {
   readonly tags: readonly string[];
   readonly active: ActiveItemDefinition | undefined;
   readonly hooks: ItemHooks;
+  /** See `ItemStatusReader`. `undefined` when the item shows no HUD row. */
+  readonly status: ItemStatusReader | undefined;
   /** See `ItemDefinition.legendaryRoll`. `undefined` when the item has no authored legendary payoff yet. */
   readonly legendaryRoll: readonly ItemStatModifier[] | undefined;
 }
@@ -158,6 +161,7 @@ export class ItemRegistry {
       tags: definition.tags ?? [],
       active: definition.active,
       hooks: definition.hooks ?? {},
+      status: definition.status,
       legendaryRoll: definition.legendaryRoll,
     };
   }

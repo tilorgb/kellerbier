@@ -1,5 +1,6 @@
 import { PromilleTier, type PromilleTierId } from '../sim/game/promille.js';
 import type { MachineRollTier } from '../sim/item/roll.js';
+import type { ProjectileTintName } from '../sim/projectile/tints.js';
 
 /**
  * Every colour `render/` draws with, named by what it means rather than left
@@ -169,6 +170,39 @@ export const BLUTWURZ_SPIRIT_TINT = 0x9ec8e8;
  * mistakable for each other on the rare run where both are active.
  */
 export const STATUS_POISON_TINT = 0x8fbf3a;
+
+/**
+ * What each named `ProjectileTint` (`sim/projectile/tints.ts`) multiplies a
+ * player shot's sprite by — the roster's "every item is visible on the shot
+ * it changed" rule made concrete. A multiply can only darken, so the base
+ * `beer` sprite (`PARTICLE_PALETTE.projectileFill`'s amber family) is what
+ * these are chosen against: a brown Spezi reads as brown *beer*, a white
+ * Weißwurst shot reads as the amber gone pale, and 'none' is pure white so an
+ * untinted shot draws exactly as it always has. Every entry is deliberately
+ * far from its neighbours in hue or brightness rather than a subtle shade,
+ * because a shot is a few pixels wide and lit by its own point light.
+ */
+export const PROJECTILE_TINT_COLOURS: Readonly<Record<ProjectileTintName, number>> = {
+  none: 0xffffff,
+  almabtrieb: 0xff9a3c,
+  spezi: 0x8a4a1e,
+  cola: 0x3a2418,
+  radler: 0xfff6a0,
+  dunkel: 0x7a4a22,
+  weiss: 0xfff8f0,
+  wasser: 0x9ad8ff,
+  stahl: 0xb8c4d0,
+  kartoffel: 0xf0e070,
+  rosine: 0x5a2a4a,
+  gold: 0xffd24a,
+  abgas: 0x6a6a5a,
+  feder: 0xf4f4ff,
+  pappe: 0xc8a878,
+  ballon: 0xff5a5a,
+  zwerg: 0xff6a4a,
+  schaum: 0xfff0c0,
+  holz: 0xa0703a,
+};
 
 export const EFFECT_PALETTE = {
   /** The reddening the vignette tints toward as Trinkfest screen-distortion climbs — pure white (`ENTITY_PALETTE.normalTint`) is "no distortion." */

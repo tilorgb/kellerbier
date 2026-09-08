@@ -12,7 +12,9 @@ const SPREAD_RADIANS = 0.12;
  * than in `onProjectileSpawn` — the primary shot does not exist yet to
  * duplicate. `ctx.sim.spawnItemProjectile` runs the companion through the
  * exact same tag/hook pipeline the primary shot gets, so anything else held
- * (Russ'n's homing, say) applies to both.
+ * (a Steckerlfisch's burn, say) applies to both. The companion is tinted
+ * `spezi` — brown, cola into the orange — *after* that pipeline has run, so
+ * whichever shot the Spezi added is the one a player can point at.
  */
 export const spezi: ItemDefinition = {
   id: 'spezi',
@@ -35,7 +37,10 @@ export const spezi: ItemDefinition = {
       const playerIndex = sim.playerIndex;
       const originX = sim.positionX(playerIndex) + dirX * tuning.muzzleOffset;
       const originY = sim.positionY(playerIndex) + dirY * tuning.muzzleOffset;
-      sim.spawnItemProjectile(originX, originY, dirX, dirY);
+      const slot = sim.spawnItemProjectile(originX, originY, dirX, dirY);
+      if (slot >= 0) {
+        sim.tintProjectile(slot, 'spezi');
+      }
     },
   },
 };

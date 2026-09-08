@@ -47,13 +47,12 @@ export const schuhplattler: ItemDefinition = {
       }
       state.timer = 0;
       const damage = Math.max(1, Math.round(sim.stats.value('damage') * DAMAGE_SCALE));
-      sim.applySplashDamage(
-        sim.positionX(playerIndex),
-        sim.positionY(playerIndex),
-        SHOCKWAVE_RADIUS,
-        damage,
-        playerIndex,
-      );
+      const x = sim.positionX(playerIndex);
+      const y = sim.positionY(playerIndex);
+      sim.applySplashDamage(x, y, SHOCKWAVE_RADIUS, damage, playerIndex);
+      // The slap on the floor, drawn (#243's `splashBurst`) — standing still
+      // for a moment has to visibly *do* something, or nobody learns to.
+      sim.splashBurst(x, y, SHOCKWAVE_RADIUS);
     },
   },
 };

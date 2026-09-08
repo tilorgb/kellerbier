@@ -4382,3 +4382,58 @@ forever, velocity spinning a full circle around it, going nowhere. Fixed in the 
 because Der Ladewagen is the first content that uses the primitive and cannot drive a circuit
 without it. The general lesson is #7's: a primitive nothing has authored against yet is
 untested content-side, however carefully it was written.
+
+## 82. Every item is visible, and the boring half of the roster got a real design
+
+**Decided:** the 2026-09 item pass, after the 139→51 cut (#299) — a second, hand-driven pass
+over what survived it.
+
+**The problem the cut left behind.** Fifty-one items whose *designs* earned their slot still
+included nine whose whole effect was a stat line — Bierbank ("Luck +1, Range +5%"),
+Braumeister-Schürze ("Damage +0.2"), Feuerwehrhelm, Kartoffelsalat, Traktor-Auspuff, a
+Gartenzwerg-Hut whose entire payoff was Luck, a Bauern-Mistgabel that was a first-shot damage
+bump — and two (Bierdeckel, Luftballon) that were the same `returning` tag under two names.
+`docs/GAME_DESIGN.md` §8's hard rule is "an item must be recognisable in one sentence and change
+how you play", and "+5% range" fails the second half however well it passes the first. Worse,
+almost nothing an item did was *visible*: Almabtrieb's description promised its moving shots a
+different colour and nothing drew one, Blaskapelle's ring dealt damage with no ring, Lederhosn's
+one absorbed hit and Weißwurst's noon bell had no on-screen state at all.
+
+**Rule one: most items change the verb, a few change the numbers — on purpose.** The redesigned
+nine map onto shapes the engine already had and the roster had never used: `bouncing`
+(Bierdeckel, a flicked mat), `splitting` (Kartoffelsalat), knockback-on-hit (Feuerwehrhelm, hose
+water), a parallel double shot (Bierbank), a triple fan (Braumeister-Schürze), a no-hit streak
+that grows the fan (Gartenzwerg-Hut), a trail of stationary poison clouds (Traktor-Auspuff), a
+melee-range jab replacing the gun outright (Bauern-Mistgabel), and the minimap's long-reserved
+secret-room unlock (Schlüsselbund). Deliberately *kept* as plain stat items: Apfelkuchen,
+Bierkrug, Kraftbier, Radler, Platzangst, the Promille machinery (Bierbauch, Feierabendbier,
+Konterbier) and the room-clear economy (Brotzeitbrett). A roster where every item is a build
+pivot has no cheap early pickups; the point is the ratio, not the absence.
+
+**Rule two: every item shows itself, through one of three channels.** (1) *On the shot*: a
+per-projectile tint (`ProjectileStore.tint`, `sim/projectile/tints.ts`, `GameSim.tintProjectile`)
+the renderer applies as an instanced colour, so Spezi's second shot is brown, Colaweizen's is
+cola-dark, Almabtrieb's moving shot finally has its colour, Weißwurst's shots go white until noon
+— alongside the existing size channel (Bierkrug, Kraftbier and Radler now change the shot's
+radius). Names live in `sim/` so content can name one as a string literal under
+`content-is-data`; RGB values live in `render/palette.ts`, and nothing in `step` reads the field,
+so a tint can never move a replay. (2) *In the room*: area items draw the area they hit
+(`splashBurst` on Blaskapelle, Schuhplattler, Watschn, Braumeister-Hammer, Steinkrug). (3) *On a
+HUD row*: `ItemDefinition.status`, a pure reader the renderer polls (`render/item-status-hud.ts`),
+for the items whose effect is a counter or a condition — Lederhosn's absorbed hit, Gartenzwerg's
+streak, Lebkuchenherz's slogan, Visier's volley countdown, Neuschwanstein's next bill. It is a
+query, not a hook: declared beside `hooks`, never in them, so `items.test.ts`'s "no filler" check
+(an item must declare a hook) is not satisfied by a readout alone.
+
+**What this does not license.** A tint is not a substitute for a sprite when a tag has one
+(`PLAYER_TAG_SPRITE_ORDER` still wins the texture; the tint multiplies it), and a status row is
+not a substitute for a visible effect — the row exists for state, not for effects that could have
+been drawn. Adding an item still means asking which of the three channels it shows through, and
+"none" is the same failing answer "no hook" already was.
+
+**Found while building it.** A stationary player projectile that survives its hit (`piercing`)
+re-registers against a body still overlapping it every other tick — `lastHitTarget` lapses the
+moment a tick finds nothing — so Traktor-Auspuff's clouds pop on first contact rather than
+pierce, and the note is on the item for the next trail-shaped design. And the `splitting` tag
+had never been granted by any authored item, so `spawnSplitChildren` had never inherited a
+child's presentational fields (`art`, `tint`) — it does now.

@@ -57,6 +57,10 @@ export const ludwigsSchwan: ItemDefinition = {
       );
       if (slot >= 0) {
         sim.addProjectileTag(slot, 'homing');
+        // A feather, not a beer: `homing` has no sprite of its own
+        // (`PLAYER_TAG_SPRITE_ORDER`), so the tint is what tells the swan's
+        // shot from the player's.
+        sim.tintProjectile(slot, 'feder');
       }
     },
     onFloorStart: (ctx) => {

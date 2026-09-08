@@ -48,6 +48,15 @@ export const apfelkuchenMitRosinen: ItemDefinition = {
             { stat: 'damage', op: 'multiply', value: DAMAGE_MULTIPLIER },
             { stat: 'range', op: 'multiply', value: RANGE_MULTIPLIER },
           ],
+    onProjectileSpawn: (ctx) => {
+      // The raisin got into the shots too: while the Range penalty is live
+      // (no Rosinenklauber), every shot is raisin-dark, so "why is my range
+      // short" has a visible answer. The Klauber eating the raisins clears
+      // the colour along with the drawback.
+      if (ctx.state.charge <= 0) {
+        ctx.sim.tintProjectile(ctx.projectile, 'rosine');
+      }
+    },
     onPickup: (ctx) => {
       ctx.sim.addPlayerHealth(HEAL_AMOUNT);
       // `GameSim.pickUpItem` resolves `modifyStats` *before* `onPickup` runs,

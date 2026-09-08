@@ -22,6 +22,11 @@ export const sudordnung1493: ItemDefinition = {
   promilleRequirement: 'any',
   hooks: {
     modifyStats: () => [{ stat: 'damage', op: 'multiply', value: 1.65 }],
+    // Same gold as Reinheitsgebot's — the two pacts are one colour on purpose,
+    // the older law being the stricter reading of the same rule.
+    onProjectileSpawn: (ctx) => {
+      ctx.sim.tintProjectile(ctx.projectile, 'gold');
+    },
     onPickup: (ctx) => {
       const sim = ctx.sim;
       for (const item of sim.items.all) {
