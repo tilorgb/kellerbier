@@ -4760,3 +4760,53 @@ peak after. The bot dies on floor 1 in most of them, which is the right shape: t
 with survival rather than with the clock. `PlaytestOutcome.peakPromille` was added for this — the
 tier distribution says where the meter *lived*, and "was the top of the ladder reachable at all"
 is a different question.
+
+## 88. The raisins got a pool, and the purity pacts got a price
+
+**Decided:** M8, #237 (item of #228). **Builds on:** #166 (the tag, the pacts and the
+strip-and-ban behaviour), #299 (the 139 → 51 cut), #310 (the item icon language), #24 (the run's
+own premise).
+
+`docs/GAME_DESIGN.md` §2 says the run is about a raisin that got into the beer. The item pool
+contained one raisin. Three quality-3 items existed whose entire cost — or entire payoff — was a
+restriction on a set of size one: Reinheitsgebot 1516 (+50% damage for locking out an apple cake
+whose own text reads "Permanently Range -15%"), Sudordnung 1493 (+65% for that plus four soft
+drinks), and Der Rosinenklauber, which protects the set and so was strictly the worst of the
+three. Measured across 4,000 simulated two-floor runs of eight offers: **16.1%** were offered a
+`rosinen` item at all.
+
+**#166 was not wrong.** It landed the system — the tag, the pacts, the hooks, the strip-and-ban —
+correctly and completely. What did not land was the content the system exists to serve, and that
+is a failure mode with no test to catch it, because every unit test about a mechanic passes
+whether the mechanic has one member or fifty. `tests/content/rosinen-pool.test.ts` is the gate
+that was missing: pool size, which pools the tag reaches, the measured offer rate, and how much of
+each pool the pacts actually lock out.
+
+**Ten items, and the shape is §8's, strictly.** A clean item plus an upgrade plus one legible
+cost, never hidden and never delayed. Several are deliberately among the strongest things in the
+roster — that is the line the whole mechanic hangs on, and one mediocre apple cake did not deliver
+it. Rumtopf (+80% damage, and nothing at all below Vollrausch) and Rosinenschnaps (+45% damage,
+and every kill pours you another one) are the two that make a purist actually hesitate; #311 is
+what made the second one's cost mean something, since a Promille meter nobody could move was not a
+currency anything could be priced in.
+
+**The costs are stats, never reach.** Two of the ten were drafted paying in Range — Rosinenschnecke
+as `orbiting` shots at Range -55%, Semmelknödel as `arcing` at Range -40% — and both softlocked
+about 25 of 30 fuzz seeds. The reason is the same for both and worth writing down: *an item that
+removes reach can make a room unwinnable*, and a boss room it cannot finish is a run that ends
+there rather than a build that plays differently. They became `homing` at -20% damage and a
+slow-but-heavy shot at -40% Shot Speed. Damage and Shot Speed can go as low as the design likes;
+Range is the one axis where the drawback can stop being a drawback and start being a wall.
+
+**The pacts were re-priced against the pool that now exists**, not the one that was imagined:
++50% → +35% for 1516, +65% → +50% for 1493, the 15-point gap between them kept because it is what
+the four `impure` items are worth. The lockout costs ~1.25 offers a run now (76.8% of runs see at
+least one raisin, up from 16.1%), including two quality-3 items — so taking a pact early, with a
+whole run to spend the damage on and the pool mostly unseen, is good; taking one on floor 2, or
+onto a raisin build already assembled, is not. That is the decision the item was always described
+as being.
+
+**The icons are one batch in #310's language, and the raisin is drawn identically on all of them.**
+The tag is a fact about an item rather than a judgement about it (§8), so it should be the same
+fact every time: `raisins()` in `tools/art/authoring/items.mjs` is a shared helper for exactly
+that reason, and a player learns the dot once.

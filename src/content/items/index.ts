@@ -1,7 +1,8 @@
 import type { ItemDefinition } from '../../sim/item/definition.js';
 import { almabtrieb } from './almabtrieb.js';
-import { apfelkuchen } from './apfelkuchen.js';
 import { apfelkuchenMitRosinen } from './apfelkuchen-mit-rosinen.js';
+import { apfelkuchen } from './apfelkuchen.js';
+import { apfelstrudel } from './apfelstrudel.js';
 import { bauernMistgabel } from './bauern-mistgabel.js';
 import { bierbank } from './bierbank.js';
 import { bierbauch } from './bierbauch.js';
@@ -22,10 +23,12 @@ import { feierabendbier } from './feierabendbier.js';
 import { feuerwehrhelm } from './feuerwehrhelm.js';
 import { fingerhakeln } from './fingerhakeln.js';
 import { gartenzwergHut } from './gartenzwerg-hut.js';
+import { gugelhupf } from './gugelhupf.js';
 import { haferlschuh } from './haferlschuh.js';
 import { hendlgeruch } from './hendlgeruch.js';
 import { kartoffelsalat } from './kartoffelsalat.js';
 import { karussell } from './karussell.js';
+import { kletzenbrot } from './kletzenbrot.js';
 import { konterbier } from './konterbier.js';
 import { kraftbier } from './kraftbier.js';
 import { lebkuchenherz } from './lebkuchenherz.js';
@@ -39,17 +42,24 @@ import { platzangst } from './platzangst.js';
 import { radler } from './radler.js';
 import { reinheitsgebot1516 } from './reinheitsgebot-1516.js';
 import { riesenrad } from './riesenrad.js';
+import { rosinenbrot } from './rosinenbrot.js';
+import { rosinenschnaps } from './rosinenschnaps.js';
+import { rosinenschnecke } from './rosinenschnecke.js';
 import { ruhigeHand } from './ruhige-hand.js';
+import { rumtopf } from './rumtopf.js';
 import { sauwetter } from './sauwetter.js';
 import { schluesselbund } from './schluesselbund.js';
 import { schuhplattler } from './schuhplattler.js';
+import { semmelknoedel } from './semmelknoedel.js';
 import { spezi } from './spezi.js';
 import { steckerlfisch } from './steckerlfisch.js';
 import { steinkrug } from './steinkrug.js';
+import { studentenfutter } from './studentenfutter.js';
 import { sudordnung1493 } from './sudordnung-1493.js';
 import { traktorAuspuff } from './traktor-auspuff.js';
 import { watschn } from './watschn.js';
 import { weisswurst } from './weisswurst.js';
+import { zwetschgendatschi } from './zwetschgendatschi.js';
 
 /**
  * Every item in the game.
@@ -65,11 +75,18 @@ import { weisswurst } from './weisswurst.js';
  * that once shipped — the milestone-count tests that tracked growth toward
  * 120+ are gone with it (`tests/content/items.test.ts`); this file is the
  * roster now, not a waypoint toward a bigger one.
+ *
+ * Back to 61 with #237's ten `rosinen` items. That is not the old roster
+ * creeping back: the run is *about* raisins and the pool contained exactly
+ * one, so three quality-3 items existed whose entire cost was a restriction
+ * on a set of size one. Every addition here is a member of that set and is
+ * held to the same bar the cut was made against.
  */
 export const ITEM_DEFINITIONS: readonly ItemDefinition[] = [
   almabtrieb,
   apfelkuchen,
   apfelkuchenMitRosinen,
+  apfelstrudel,
   bauernMistgabel,
   bierbank,
   bierbauch,
@@ -90,10 +107,12 @@ export const ITEM_DEFINITIONS: readonly ItemDefinition[] = [
   feuerwehrhelm,
   fingerhakeln,
   gartenzwergHut,
+  gugelhupf,
   haferlschuh,
   hendlgeruch,
   kartoffelsalat,
   karussell,
+  kletzenbrot,
   konterbier,
   kraftbier,
   lebkuchenherz,
@@ -107,17 +126,24 @@ export const ITEM_DEFINITIONS: readonly ItemDefinition[] = [
   radler,
   reinheitsgebot1516,
   riesenrad,
+  rosinenbrot,
+  rosinenschnaps,
+  rosinenschnecke,
   ruhigeHand,
+  rumtopf,
   sauwetter,
   schluesselbund,
   schuhplattler,
+  semmelknoedel,
   spezi,
   steckerlfisch,
   steinkrug,
+  studentenfutter,
   sudordnung1493,
   traktorAuspuff,
   watschn,
   weisswurst,
+  zwetschgendatschi,
 ];
 
 export {

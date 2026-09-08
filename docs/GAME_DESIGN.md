@@ -426,6 +426,12 @@ Detailed item seeds live in [CONTENT_BIBLE.md](CONTENT_BIBLE.md). The *system*:
   cost.** Tempting on the pedestal, regretted specifically rather than generally. It never
   inflicts a hidden or delayed penalty and it never lies in its description, because the
   interesting decision is the one made with full information.
+- **A drawback is never reach.** Damage, Fire Rate, Shot Speed, Move Speed and health can be
+  taken as low as a design wants; Range cannot, because an item that removes reach can leave a
+  room genuinely unwinnable against anything that keeps its distance — and a boss room a build
+  cannot finish is a run that ends there, not a build that plays differently. Found the hard way
+  in #237, where two raisin items drafted as "no range, huge damage" softlocked ~25 of 30 fuzz
+  seeds each. This is a rule for every item, not only the tainted ones.
 - Items live in **pools** (treasure, shop, boss, devil, angel, secret, curse) and are removed
   from the pool once taken in a run.
 

@@ -1685,10 +1685,251 @@ function weisswurst(cv) {
 
 // ----------------------------------------------------------------- the roster
 /** id → drawing function, in the signed-off direction. */
+// ------------------------------------------------- #237's rosinen batch
+/**
+ * The raisin itself, and the one thing every `rosinen` item has in common on
+ * screen: a near-black dot with a single plum highlight. Shared rather than
+ * redrawn per item on purpose — the tag is a fact about the item
+ * (`docs/GAME_DESIGN.md` §8), so it should be the same fact every time, the
+ * way `cake`'s own raisin variant already draws it.
+ */
+function raisins(cv, spots, r = 1) {
+  for (const [x, y] of spots) {
+    disc(cv, x, y, r, X);
+    put(cv, Math.round(x), Math.round(y) - 1, sh(PURPLE, -2));
+  }
+}
+
+/** Rosinenbrot: a domed loaf, three slashes across the crust, raisins showing through. */
+function rosinenbrot(cv) {
+  ellipse(cv, 12, 14, 9.5, 6, BROWN);
+  ellipse(cv, 12, 12.5, 9, 4.5, sh(BROWN, 2));
+  hline(cv, 4, 20, 19, sh(BROWN2, 1));
+  for (const x of [7, 12, 17]) line(cv, x - 2, 11, x + 1, 8, sh(CREAM, -1));
+  raisins(cv, [
+    [8, 14],
+    [13, 15],
+    [17, 13],
+    [11, 11],
+  ]);
+  ink(cv);
+}
+
+/** Zwetschgendatschi: the tray cake, plum halves in rows, raisins between them. */
+function zwetschgendatschi(cv) {
+  rect(cv, 2, 7, 20, 11, AMBER);
+  rect(cv, 2, 7, 20, 2, sh(AMBER, 2));
+  hline(cv, 2, 21, 17, sh(BROWN, 1));
+  for (let row = 0; row < 2; row++)
+    for (let col = 0; col < 4; col++) {
+      const cx = 5 + col * 5;
+      const cy = 10 + row * 4;
+      ellipse(cv, cx, cy, 2, 1.6, WINE);
+      put(cv, cx - 1, cy - 1, sh(WINE, 2));
+    }
+  raisins(cv, [
+    [7.5, 12],
+    [17.5, 12],
+    [12.5, 15.5],
+  ]);
+  ink(cv);
+}
+
+/** Rosinenschnaps: a stubby bottle, cork in, raisins settled at the bottom. */
+function rosinenschnaps(cv) {
+  rect(cv, 8, 3, 8, 3, sh(BROWN2, 1));
+  rect(cv, 9, 6, 6, 3, sh(GREEN, -2));
+  rect(cv, 6, 9, 12, 12, sh(GREEN, -1));
+  rect(cv, 7, 10, 3, 10, sh(GREEN, 1));
+  rect(cv, 8, 13, 8, 6, sh(WINE, -1));
+  rect(cv, 8, 13, 8, 1, sh(WINE, 1));
+  raisins(cv, [
+    [10, 18],
+    [13.5, 18.5],
+    [12, 16.5],
+  ]);
+  put(cv, 16, 11, W);
+  ink(cv);
+}
+
+/**
+ * Gugelhupf: the fluted ring cake, turned out of its mould — narrow at the
+ * top, flaring to the base, with the mould's hole reading as a crater in the
+ * top surface rather than as a see-through gap (from this camera a hole
+ * punched clean through would just read as a bite taken out of it).
+ */
+function gugelhupf(cv) {
+  for (let y = 7; y <= 19; y++) {
+    const t = (y - 7) / 12;
+    const half = Math.round(5 + t * 4);
+    hline(cv, 12 - half, 11 + half, y, y > 17 ? sh(BROWN, -1) : BROWN);
+  }
+  // Flutes: alternating light/dark columns down the flank.
+  for (const x of [5, 9, 13, 17]) vline(cv, x, 9, 19, sh(BROWN, 1));
+  for (const x of [7, 11, 15, 19]) vline(cv, x, 10, 19, sh(BROWN, -1));
+  // Top surface, and the mould's hole sunk into the middle of it.
+  ellipse(cv, 11.5, 7.5, 5.5, 2.5, sh(BROWN, 2));
+  ellipse(cv, 11.5, 7.5, 2, 1, sh(BROWN2, 1));
+  // Icing sugar, following the rim rather than sitting on it as a bar.
+  for (const [x, y] of [
+    [7, 9],
+    [10, 10],
+    [14, 9],
+    [17, 10],
+    [12, 11],
+  ])
+    put(cv, x, y, CREAM2);
+  raisins(cv, [
+    [8, 14],
+    [15, 13],
+    [12, 17],
+  ]);
+  ink(cv);
+}
+
+/** Semmelknödel: two pale dumplings, the near one showing its raisins. */
+function semmelknoedel(cv) {
+  disc(cv, 15.5, 9, 5, sh(CREAM, -1));
+  disc(cv, 14.5, 8, 3, CREAM);
+  disc(cv, 9.5, 14.5, 7, CREAM);
+  disc(cv, 8, 12.5, 4, CREAM2);
+  raisins(cv, [
+    [7, 16],
+    [12, 16],
+    [10, 12],
+    [16, 9],
+  ]);
+  ink(cv);
+}
+
+/** Studentenfutter: the paper cone, nuts and raisins over the lip. */
+function studentenfutter(cv) {
+  for (let y = 9; y <= 21; y++) {
+    const half = Math.max(0, Math.round(7 - (y - 9) * 0.55));
+    hline(cv, 12 - half, 11 + half, y, y % 2 === 0 ? CREAM : CREAM2);
+  }
+  hline(cv, 5, 18, 9, sh(CREAM, -2));
+  hline(cv, 5, 18, 8, sh(CREAM, -1));
+  for (const [x, y] of [
+    [7, 6],
+    [11, 4],
+    [16, 6],
+  ]) {
+    ellipse(cv, x, y, 2, 1.6, BROWN);
+    put(cv, x - 1, y - 1, sh(BROWN, 2));
+  }
+  raisins(cv, [
+    [9, 7],
+    [14, 4.5],
+    [18, 8],
+    [12, 12],
+  ]);
+  ink(cv);
+}
+
+/** Kletzenbrot: a cut slice of the dark winter loaf, fruit packed edge to edge. */
+function kletzenbrot(cv) {
+  ellipse(cv, 12, 12.5, 9.5, 7.5, sh(BROWN2, 2));
+  ellipse(cv, 12, 12.5, 8, 6, BROWN2);
+  for (const [x, y] of [
+    [8, 9],
+    [15, 10],
+    [11, 14],
+    [17, 14],
+    [7, 15],
+  ]) {
+    ellipse(cv, x, y, 1.6, 1.2, WINE);
+    put(cv, x, y - 1, sh(WINE, 2));
+  }
+  raisins(cv, [
+    [12, 10],
+    [9, 12],
+    [15.5, 16],
+    [13.5, 13],
+  ]);
+  ink(cv);
+}
+
+/** Rosinenschnecke: the swirl bun from above, wound in on itself. */
+function rosinenschnecke(cv) {
+  disc(cv, 12, 12, 10, AMBER);
+  disc(cv, 12, 12, 9, sh(AMBER, 1));
+  for (let a = 0; a < 900; a += 3) {
+    const rad = (a * Math.PI) / 180;
+    const r = 1.5 + a / 130;
+    if (r > 9) break;
+    put(cv, Math.round(12 + Math.cos(rad) * r), Math.round(12 + Math.sin(rad) * r), sh(BROWN, 1));
+  }
+  raisins(cv, [
+    [12, 8],
+    [16, 13],
+    [9, 15],
+    [14, 17],
+  ]);
+  ink(cv);
+}
+
+/**
+ * Apfelstrudel: the pastry log, cut at the near end so the spiral of apple
+ * and raisin shows. Golden pastry rather than pale dough — at 24×24 the cut
+ * end is the whole identity of the thing, so it gets the contrast.
+ */
+function apfelstrudel(cv) {
+  // The log, lying across the canvas, rounded at the far end.
+  for (let y = 8; y <= 17; y++) {
+    const shade = y < 10 ? sh(AMBER, 2) : y > 15 ? sh(AMBER, -1) : AMBER;
+    hline(cv, 4, 17, y, shade);
+  }
+  ellipse(cv, 4, 12.5, 2, 5, sh(AMBER, 1));
+  // Score marks across the pastry, the way a strudel is slashed before baking.
+  for (const x of [7, 10, 13]) line(cv, x, 8, x - 1, 17, sh(BROWN, 1));
+  // The cut end: pastry rim, filling, and the spiral wound inside it.
+  ellipse(cv, 18, 12.5, 3.5, 5.5, sh(CREAM, -1));
+  ellipse(cv, 18, 12.5, 2.5, 4, sh(WINE, -1));
+  ellipse(cv, 18, 12.5, 1.5, 2.5, sh(AMBER, 1));
+  put(cv, 18, 12, sh(WINE, 1));
+  // Icing sugar, dusted along the top.
+  for (const [x, y] of [
+    [6, 6],
+    [9, 7],
+    [12, 6],
+    [15, 7],
+  ])
+    put(cv, x, y, CREAM2);
+  raisins(cv, [
+    [8, 12],
+    [13, 14],
+  ]);
+  ink(cv);
+}
+
+/** Rumtopf: the stoneware crock, cloth tied over the lid, fruit dark inside. */
+function rumtopf(cv) {
+  for (let y = 8; y <= 20; y++) {
+    const t = (y - 8) / 12;
+    const half = Math.round(6 + Math.sin(t * Math.PI) * 2.5);
+    hline(cv, 12 - half, 11 + half, y, y > 17 ? sh(STEEL2, -1) : STEEL2);
+  }
+  for (let y = 9; y <= 19; y++)
+    put(cv, 12 - Math.round(6 + Math.sin(((y - 8) / 12) * Math.PI) * 2.5) + 1, y, sh(STEEL2, 2));
+  rect(cv, 5, 5, 14, 4, CREAM);
+  rect(cv, 5, 5, 14, 1, CREAM2);
+  hline(cv, 4, 19, 9, sh(BROWN, -1));
+  hline(cv, 4, 19, 10, sh(BROWN, -1));
+  rect(cv, 8, 12, 8, 6, sh(WINE, -1));
+  raisins(cv, [
+    [10, 14],
+    [14, 15],
+    [12, 17],
+  ]);
+  ink(cv);
+}
+
 export const ITEM_ART = {
   almabtrieb: (cv) => cow(cv, 1.5, 2, 21, false),
   apfelkuchen: (cv) => cake(cv, 1, 4, 22, false, false),
   'apfelkuchen-mit-rosinen': (cv) => cake(cv, 1, 4, 22, false, true),
+  apfelstrudel: (cv) => apfelstrudel(cv),
   'bauern-mistgabel': (cv) => fork(cv, false),
   bierbank: (cv) => bench(cv, 1, 5, 21, false),
   bierbauch: (cv) => bellyBarrel(cv),
@@ -1709,10 +1950,12 @@ export const ITEM_ART = {
   feuerwehrhelm: (cv) => helm(cv),
   fingerhakeln: (cv) => hakeln(cv),
   'gartenzwerg-hut': (cv) => zwergHut(cv),
+  gugelhupf: (cv) => gugelhupf(cv),
   haferlschuh: (cv) => schuh(cv),
   hendlgeruch: (cv) => hendl(cv),
   kartoffelsalat: (cv) => salat(cv),
   karussell: (cv) => karussell(cv),
+  kletzenbrot: (cv) => kletzenbrot(cv),
   konterbier: (cv) => konter(cv),
   kraftbier: (cv) => kraft(cv),
   lebkuchenherz: (cv) => herz(cv),
@@ -1726,17 +1969,24 @@ export const ITEM_ART = {
   radler: (cv) => radler(cv),
   'reinheitsgebot-1516': (cv) => gebot(cv),
   riesenrad: (cv) => riesenrad(cv),
+  rosinenbrot: (cv) => rosinenbrot(cv),
+  rosinenschnaps: (cv) => rosinenschnaps(cv),
+  rosinenschnecke: (cv) => rosinenschnecke(cv),
   'ruhige-hand': (cv) => ruhigeHand(cv),
+  rumtopf: (cv) => rumtopf(cv),
   sauwetter: (cv) => sauwetter(cv),
   schluesselbund: (cv) => schluesselbund(cv),
   schuhplattler: (cv) => schuhplattler(cv),
+  semmelknoedel: (cv) => semmelknoedel(cv),
   spezi: (cv) => spezi(cv),
   steckerlfisch: (cv) => fisch(cv),
   steinkrug: (cv) => steinkrug(cv),
+  studentenfutter: (cv) => studentenfutter(cv),
   'sudordnung-1493': (cv) => sudordnung(cv),
   'traktor-auspuff': (cv) => auspuff(cv),
   watschn: (cv) => watschn(cv),
   weisswurst: (cv) => weisswurst(cv),
+  zwetschgendatschi: (cv) => zwetschgendatschi(cv),
 };
 
 /** One finished 24×24 frame for `id`, in the `{ name, width, height, px }` shape the other authoring modules use. */

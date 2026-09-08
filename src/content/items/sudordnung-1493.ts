@@ -10,18 +10,24 @@ const STRIPPED_TAGS = ['rosinen', 'impure'] as const;
  * tagged `rosinen` *or* `impure` is banned from the pool and, if already
  * held, stripped outright. The deep-cut purist's pact — 1516 was already the
  * compromise — so the Damage bonus is bigger to match.
+ *
+ * Retuned from +65% to +50% alongside 1516's own +50% → +35% (#237), and for
+ * the same reason: both numbers were chosen against an *imagined* pool, and
+ * the real one now costs something. The gap between the two pacts stays 15
+ * points, which is what the extra four `impure` items are worth — a small
+ * set, and still the smaller half of what this locks away.
  */
 export const sudordnung1493: ItemDefinition = {
   id: 'sudordnung-1493',
   name: 'Sudordnung 1493',
-  description: 'Locks out every rosinen and impure item. Damage +65%',
+  description: 'Locks out every rosinen and impure item. Damage +50%',
   flavourText: 'Twenty-three years earlier and stricter. Nobody remembers why it lost.',
   sprite: 'sudordnung-1493',
   pools: ['shop', 'boss', 'devil'],
   quality: 3,
   promilleRequirement: 'any',
   hooks: {
-    modifyStats: () => [{ stat: 'damage', op: 'multiply', value: 1.65 }],
+    modifyStats: () => [{ stat: 'damage', op: 'multiply', value: 1.5 }],
     // Same gold as Reinheitsgebot's — the two pacts are one colour on purpose,
     // the older law being the stricter reading of the same rule.
     onProjectileSpawn: (ctx) => {
