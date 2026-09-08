@@ -1,4 +1,4 @@
-import { Texture, loadTexture } from './gfx/index.js';
+import { Texture, loadTexture, textureFromImage } from './gfx/index.js';
 import {
   compileAnimationSet,
   type AnimationSidecar,
@@ -394,6 +394,49 @@ export function cutStrip(name: string, base: Texture, sidecar: AnimationSidecar)
   return { frames, clips: compileAnimationSet(name, sidecar, frameCount) };
 }
 
+/**
+ * A standalone copy of `texture`'s pixels, on a `TextureSource` of its own
+ * whose one frame is the whole thing — not a `.sub()` view sharing a
+ * `TextureSource` with every other sprite packed into its atlas sheet.
+ *
+ * `MaterialCache.repeatingMaterial` and `world/flat.ts`'s `tilingTexture`
+ * both tile a texture by setting `RepeatWrapping` (or baking a UV repeat)
+ * against that texture's own source, correct only when the source's one
+ * frame *is* the whole image — true before #294, and exactly the assumption
+ * `repeatingMaterial`'s own doc comment flagged the shared atlas (#294)
+ * would break: repeating past a wall tile's sub-rectangle samples whatever
+ * the packer happened to place next to it in the sheet — another tile, a
+ * door, or (the bug this fixes) a mob's own sprite — instead of wrapping
+ * back into another copy of the same tile. `resolveTileset` below is the
+ * only place a wall/wallLip texture is ever read, so cropping it out to its
+ * own canvas-backed source there restores the pre-#294 "this source is this
+ * one tile" invariant repeat-tiling needs, while every other sprite keeps
+ * sharing its bucket's sheet.
+ */
+function standaloneTile(texture: Texture): Texture {
+  const { frame, source } = texture;
+  const canvas = document.createElement('canvas');
+  canvas.width = frame.width;
+  canvas.height = frame.height;
+  const ctx = canvas.getContext('2d');
+  if (ctx === null) {
+    throw new Error('standaloneTile: 2D canvas context unavailable');
+  }
+  const image = source.texture.image as CanvasImageSource;
+  ctx.drawImage(
+    image,
+    frame.x,
+    frame.y,
+    frame.width,
+    frame.height,
+    0,
+    0,
+    frame.width,
+    frame.height,
+  );
+  return textureFromImage(canvas);
+}
+
 const PICKUP_PREFIX = 'pickup-';
 
 /**
@@ -443,6 +486,25 @@ export async function loadFloorArt(): Promise<FloorArt> {
   for (const [name, texture] of Object.entries(characterTextures)) {
     if (name.startsWith(PICKUP_PREFIX)) {
       pickupArt[name.slice(PICKUP_PREFIX.length)] = texture;
+    }
+  }
+
+  // A wall/wallLip tile is the one thing in `tileTextures` ever repeat-tiled
+  // by wrapping (`MaterialCache.repeatingMaterial`, `world/flat.ts`'s
+  // `tilingTexture`) rather than looked up by its own frame — see
+  // `standaloneTile`'s doc comment for why that needs its own un-shared
+  // source. Replacing it here, in `tileTextures` itself, keeps the pixel
+  // editor's live preview (which also reads this map) pointed at the same
+  // object the renderer uses, instead of a copy it can no longer paint into.
+  const wallTileNames = new Set<string>();
+  for (const tileset of Object.values(FLOOR_TILESETS)) {
+    wallTileNames.add(tileset.wall);
+    wallTileNames.add(tileset.wallLip);
+  }
+  for (const name of wallTileNames) {
+    const texture = tileTextures[name];
+    if (texture !== undefined) {
+      tileTextures[name] = standaloneTile(texture);
     }
   }
 

@@ -29,7 +29,8 @@
     "format": "prettier --write .",
     "bench": "vitest run --config vitest.bench.config.ts",
     "fuzz": "vitest run --config vitest.fuzz.config.ts",
-    "playtest": "vitest run --config vitest.playtest.config.ts"
+    "playtest": "vitest run --config vitest.playtest.config.ts",
+    "perf:crossings": "node tools/perf/room-crossings.mjs walk 12 --gate"
   },
   "dependencies": {
     "@types/three": "^0.185.4",
@@ -42,6 +43,7 @@
     "eslint": "^10.9.0",
     "eslint-config-prettier": "^10.1.8",
     "globals": "^17.11.0",
+    "playwright-core": "^1.58.2",
     "pngjs": "^7.0.0",
     "prettier": "^3.6.2",
     "typescript": "^5.9.3",

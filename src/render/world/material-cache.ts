@@ -96,15 +96,21 @@ export class MaterialCache {
    * what varies now, not the material.
    *
    * This sets the *shared*, un-cloned texture's own wrap mode to `Repeat`,
-   * the first time any room asks for it. Safe today because a floor
+   * the first time any room asks for it. Safe only because a floor
    * tileset's wall texture is its own dedicated image (`frame` covers the
    * whole source, so wrapping repeats exactly that image) — `sharedMaterial`
    * above never samples the same texture outside `[0,1]`, so this does not
-   * change how it looks. That stops being true the day `tiles.wall` becomes
-   * a sub-rectangle of a packed atlas (#294): repeating would then wrap into
-   * the *next* sprite in the sheet, not tile the same one. Whoever lands the
-   * atlas needs to either give walls their own unpacked sheet or replace
-   * this with a shader-level tiling trick.
+   * change how it looks.
+   *
+   * `tiles.wall`/`tiles.wallLip` did become sub-rectangles of a packed atlas
+   * with #294 — this comment called that out in advance, and for one release
+   * it went unfixed: repeating wrapped into whatever sprite the packer placed
+   * next to the wall tile in its bucket's sheet, which for a room whose
+   * bucket also holds that floor's enemies could be a mob's own art showing
+   * up tiled across the walls. `render/floor-art.ts`'s `standaloneTile` is
+   * the fix — it crops the wall/wallLip frame out to its own canvas-backed
+   * source before anything here ever sees it, so this texture's `frame`
+   * covers its whole source again, same as before #294.
    */
   repeatingMaterial(texture: Texture, roughness = 0.95): MeshStandardMaterial {
     let material = this.repeating.get(texture);

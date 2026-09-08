@@ -46,3 +46,7 @@ Thumbs.db
 npm-debug.log*
 yarn-error.log*
 dist-treeshake-test
+
+# tools/perf/room-crossings.mjs writes its per-run report and CPU profile next to where it ran
+room-crossings-*.json
+room-crossings.cpuprofile

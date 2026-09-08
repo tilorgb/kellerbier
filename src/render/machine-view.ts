@@ -1,8 +1,16 @@
-import { CylinderGeometry, DoubleSide, Group, Mesh, MeshBasicMaterial, PointLight } from 'three';
+import {
+  CylinderGeometry,
+  DoubleSide,
+  Group,
+  Mesh,
+  MeshBasicMaterial,
+  type PointLight,
+} from 'three';
 import type { GameSim } from '../sim/game/sim.js';
 import type { Texture } from './gfx/index.js';
 import { ENTITY_PALETTE } from './palette.js';
 import { FloorSprite, PLINTH_HEIGHT } from './world/flat.js';
+import type { Lighting } from './world/lighting.js';
 
 /**
  * Der Losbrunnen (#218): at most one per room, a plinth and a beam in the
@@ -17,12 +25,15 @@ export class MachineView {
   readonly group = new Group();
 
   private readonly sim: GameSim;
+  private readonly lighting: Lighting;
   private readonly beam: Mesh<CylinderGeometry, MeshBasicMaterial>;
-  private readonly light: PointLight;
+  /** Pooled from `Lighting`, driven in world space, never parented — see `PedestalSlot.light`. */
+  private readonly light: PointLight | null;
   private readonly plinth: FloorSprite | null;
 
-  constructor(sim: GameSim, plinthTexture?: Texture) {
+  constructor(sim: GameSim, lighting: Lighting, plinthTexture?: Texture) {
     this.sim = sim;
+    this.lighting = lighting;
     this.beam = new Mesh(
       new CylinderGeometry(BEAM_RADIUS, BEAM_RADIUS, BEAM_HEIGHT, 12, 1, true),
       new MeshBasicMaterial({
@@ -35,9 +46,7 @@ export class MachineView {
     );
     this.beam.position.y = BEAM_HEIGHT / 2;
     this.group.add(this.beam);
-    this.light = new PointLight(0xffffff, 500, 90, 2);
-    this.light.position.y = BEAM_HEIGHT / 2;
-    this.group.add(this.light);
+    this.light = lighting.acquirePropLight();
     if (plinthTexture !== undefined) {
       this.plinth = new FloorSprite(true);
       this.plinth.setTexture(plinthTexture);
@@ -54,13 +63,19 @@ export class MachineView {
     const machine = this.sim.activeMachine;
     if (machine === null) {
       this.group.visible = false;
+      if (this.light !== null) {
+        this.light.intensity = 0;
+      }
       return;
     }
     this.group.visible = true;
     const tint = machine.broken ? ENTITY_PALETTE.machineBrokenTint : ENTITY_PALETTE.machineTint;
     this.beam.material.color.setHex(tint);
-    this.light.color.setHex(tint);
-    this.light.intensity = machine.broken ? 150 : 500;
+    if (this.light !== null) {
+      this.light.color.setHex(tint);
+      this.light.intensity = machine.broken ? 150 : 500;
+      this.light.position.set(machine.x, BEAM_HEIGHT / 2, machine.y);
+    }
     if (this.plinth !== null) {
       this.plinth.tint = tint;
     }
@@ -79,6 +94,7 @@ export class MachineView {
     this.beam.geometry.dispose();
     this.beam.material.dispose();
     this.plinth?.dispose();
+    this.lighting.releasePropLight(this.light);
     this.group.removeFromParent();
   }
 }
