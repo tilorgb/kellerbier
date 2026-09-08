@@ -150,13 +150,28 @@ describe('#29 — held-together smoke test (stand-in for #30)', () => {
     // Sudordnung 1493 strips every already-held `rosinen` or `impure` item,
     // the moment each is picked up — expected here, not a bug this smoke
     // test should flag, so the expectation accounts for it rather than
-    // assuming every definition stays held. Whichever of the two pacts is
-    // picked up first strips both tags' worth of items outright; the other
-    // then finds nothing left to strip, so the net stripped count is the
-    // union of both tags regardless of pickup order (#166).
-    const strippedCount = ITEM_DEFINITIONS.filter((definition) =>
-      (definition.tags ?? []).some((tag) => tag === 'impure' || tag === 'rosinen'),
-    ).length;
+    // assuming every definition stays held.
+    //
+    // A pact only ever strips what is *already* in the inventory, so which
+    // items survive depends on where they sit in `ITEM_DEFINITIONS` relative
+    // to the two pacts. That used to be invisible: every tagged item in the
+    // roster happened to come before both pacts, so "the union of both tags"
+    // was the right count by luck. #237's `rosinen` batch put items on both
+    // sides of them and the assertion started over-counting, which is a bug
+    // in the expectation and not in the pacts.
+    const indexOf = (id: string): number =>
+      ITEM_DEFINITIONS.findIndex((definition) => definition.id === id);
+    const reinheitsgebotAt = indexOf('reinheitsgebot-1516');
+    const sudordnungAt = indexOf('sudordnung-1493');
+    const strippedCount = ITEM_DEFINITIONS.filter((definition, index) => {
+      const tags = definition.tags ?? [];
+      // `rosinen` is stripped by either pact, so it survives only past both.
+      if (tags.includes('rosinen')) {
+        return index < Math.max(reinheitsgebotAt, sudordnungAt);
+      }
+      // `impure` is Sudordnung's alone (#166 narrowed Reinheitsgebot to raisins).
+      return tags.includes('impure') && index < sudordnungAt;
+    }).length;
     expect(sim.inventory.count).toBe(ITEM_DEFINITIONS.length - strippedCount);
 
     expect(() => {
