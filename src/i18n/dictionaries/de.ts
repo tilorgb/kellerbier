@@ -19,6 +19,7 @@ export const de: Record<DictKey, string> = {
   'ui.title.settings': 'Einstellungen',
   'ui.title.credits': 'Mitwirkende',
   'ui.title.quit': 'Beenden',
+  'ui.title.tagline': 'Ein bayerisches Keller-Roguelike',
 
   'ui.pause.headline': 'Pause',
   'ui.pause.resume': 'Fortsetzen',
@@ -115,6 +116,7 @@ export const de: Record<DictKey, string> = {
   // --- Settings screen -----------------------------------------------------
   'ui.settings.toggle': 'Einstellungen',
   'ui.settings.title': 'Einstellungen',
+  'ui.settings.hint': 'Links/Rechts ändern   Enter bestätigen   Tab wechselt Reiter   Esc zurück',
 
   'ui.settings.tab.video': 'Video',
   'ui.settings.tab.audio': 'Audio',
@@ -126,10 +128,14 @@ export const de: Record<DictKey, string> = {
   'ui.settings.video.windowScale': 'Fenstergröße',
   'ui.settings.video.auto': 'Automatisch',
   'ui.settings.video.toggleFullscreen': 'Vollbild umschalten',
+  'ui.settings.video.fullscreen': 'Vollbild',
   'ui.settings.video.screenshake': 'Bildschirm-Wackler',
   'ui.settings.video.camerasway': 'Kameraschwanken',
   'ui.settings.video.hitstop': 'Trefferstopp',
   'ui.settings.video.reduceFlashing': 'Blitzeffekte reduzieren',
+
+  'ui.settings.value.on': 'An',
+  'ui.settings.value.off': 'Aus',
 
   'ui.settings.audio.master': 'Gesamt',
   'ui.settings.audio.music': 'Musik',
@@ -137,6 +143,7 @@ export const de: Record<DictKey, string> = {
   'ui.settings.audio.voice': 'Stimme',
 
   'ui.settings.controls.action': 'Aktion',
+  'ui.settings.controls.rebindFor': 'Belegung für',
   'ui.settings.controls.keyboard': 'Tastatur',
   'ui.settings.controls.gamepad': 'Gamepad',
   'ui.settings.controls.connectedPrefix': 'Controller verbunden: ',

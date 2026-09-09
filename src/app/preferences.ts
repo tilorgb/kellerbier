@@ -40,7 +40,7 @@ export const MAX_VIDEO_SCALE = 8;
 
 /**
  * Plain mutable fields throughout this file's types, not `readonly` —
- * `settings-screen.ts` mutates a live `Preferences` in place, the same
+ * `settings-menu.ts` mutates a live `Preferences` in place, the same
  * object `app/main.ts` holds and re-applies from on every change, matching
  * `settings.ts`'s own `AccessibilitySettings` convention.
  */
