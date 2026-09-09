@@ -17,6 +17,8 @@ describe('ScreenFlow', () => {
     expect(flow.is('paused')).toBe(true);
     flow.goTo('credits');
     expect(flow.current).toBe('credits');
+    flow.goTo('settings');
+    expect(flow.is('settings')).toBe(true);
     flow.goTo('title');
     expect(flow.current).toBe('title');
   });

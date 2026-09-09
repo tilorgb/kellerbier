@@ -5143,3 +5143,68 @@ had already chosen. The bible and `CLAUDE.md` now both say the harder thing outr
 invent or substitute Bavarian and German names.** Ask, and use exactly what comes back, including
 when the answer is an English word. A plausible-looking invention is worse than a plain English
 placeholder, because it reads as authentic to everyone who cannot check it.
+
+## 93. The front door is a poster, and the settings are a menu — the DOM panel is gone
+
+**Decided:** the menu pass after #158. **Builds on:** #43 (UI art is screen-space source in
+`src/render/ui/`), #44 (two faces, and what the broken one is for), #53 (the settings screen
+itself), #67/#158 (`ScreenFlow` and the title/pause/credits screens). **Constrains:** every screen
+a player operates without a mouse.
+
+Three things that had grown apart, settled together.
+
+**A title screen is not a pause menu with a different word on it.** #158 gave both the same
+shape — a dim over the game, a centred headline, a centred column of buttons — and the result was
+a front door that read as an interruption. The two want opposite things. Pause is *over* a run and
+should show as much of it as it can: it stays centred, small and translucent, and it keeps that
+shape. The title screen has no run behind it to respect, so it is opaque, edge to edge, and split:
+the choices down the left, the game's name and a poster filling the pane to the right. The split
+is also what makes the settings screen work from here (below) — the menu column never moves, so
+opening settings is a pane changing rather than the screen jumping.
+
+**The main menu's buttons are set in the display face, and nothing else new is.** #44's rule is
+not stylistic — Fraktur is measurably slower to read, so it is allowed exactly where nothing is
+happening — and its test is "is anything shooting at you?". On the title screen, nothing is, and
+never will be. So `Menu` takes a face, the title screen asks for the display one, and every other
+menu in the game (the pause list over a live run, the credits' Back, a death screen's Retry, every
+row of the settings screen) stays in the text face. The exception is one screen wide, and the rule
+it comes from is unchanged.
+
+**The settings screen is drawn by the game, because a gamepad cannot use the DOM.** #53 shipped
+settings as an HTML overlay with real `<input type="range">`s and `<select>`s, which was the right
+call for a screen that had to exist before the UI kit did. It has two costs that a menu cannot
+keep paying. A browser gives a gamepad no focus model at all, so the one screen a player opens *to
+fix their controller* was the one screen the controller could not operate. And it is visibly a
+different program from the game behind it: system fonts and CSS widgets over a pixel-art frame.
+So it is now `render/settings-screen.ts`, drawn from the same kit as the HUD and driven the way
+`Menu` already is — `render/` reads no input, and `ScreenFlowController` calls
+`moveFocus`/`adjust`/`activate`/`cycleTab` from whichever device is talking.
+
+Three consequences worth naming, because they are the design, not the implementation:
+
+- **Every row is operable with four directions and two buttons.** That is why a slider is a
+  stepped value rather than something you drag, and why a rebind row arms a capture in place
+  instead of opening a dialog. A mouse still works — the UI layer's own pointer events cover it —
+  but it is never the thing a control is *designed* around.
+- **While a rebind is armed, every input belongs to the capture.** Arrows and Escape are perfectly
+  reasonable things to bind, so `SettingsMenu.capturing` is checked before menu navigation gets a
+  look, on both the keyboard and the pad. The old panel could not have this: its per-row `window`
+  listener and the menu's own keys were unaware of each other.
+- **Scrolling is by whole rows, with no mask.** The 2D layer has no clipping rectangle and this
+  screen is not a good enough reason to give it one, so rows are laid out until the next one would
+  not *fully* fit and the rest are hidden. Nothing is ever drawn half-cut.
+
+The split between `app/settings-menu.ts` and `render/settings-screen.ts` is what keeps the
+drawing in `render/`: the screen is handed rows as data — a label, a getter, a setter, a
+formatter — and never learns that a value is persisted in `localStorage`, that a rebind reads a
+`KeyboardEvent`, or that "Fullscreen" is `document.fullscreenElement`.
+
+**The key art is composed, not typed.** `tools/art/authoring/compose.mjs` exists because Alois is
+forty-four frames of a dozen hand-typed blocks. The poster is the opposite shape: one drawing far
+too large to type — 128×104 is thirteen thousand characters, and one short row shifts everything
+under it — but made of shapes. So `tools/art/authoring/draw.mjs` draws it (ellipses, polygons,
+lines, one outline pass at the end) and `npm run art:title` writes the data the game imports, with
+the same drift test `alois.mjs` has. It is drawn at two internal pixels per authored pixel, which
+is a deliberate exception to #45's "a canvas is its size on screen": that rule is about *sprites*,
+which stand in a room next to a player, and a 640×360 frame is not big enough to hold an
+illustration at the HUD's own pixel.
