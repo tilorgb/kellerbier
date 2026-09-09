@@ -295,7 +295,7 @@ what makes drinking a decision rather than a timer.
 | **Nüchtern** (sober) | 0.0 – 0.4 | Baseline. A few items *require* this — precision builds live here. |
 | **Angeheitert** (tipsy) | 0.5 – 1.4 | +25% damage, +12% fire rate. The room starts closing in. The sweet spot. |
 | **Beduselt** (drunk) | 1.5 – 2.9 | +60% damage, +30% fire rate. Movement has drift and momentum; aim wobbles; what is still visible starts to smear. |
-| **Vollrausch** | 3.0 – 4.4 | +120% damage, +55% fire rate. Heavy drift, aim wander, a tunnel about a third of its sober width, a room gone soft and grey, and a hurtbox grown to the size you are drawn. Rausch-tier item effects activate. |
+| **Vollrausch** | 3.0 – 4.4 | +120% damage, +55% fire rate. Heavy drift, aim wander, a tunnel about a third of its sober width, and a room gone soft and grey. Rausch-tier item effects activate. |
 | **Umgfalln** | 4.5+ | You fall over. Brief invulnerable knockdown, then you wake at 1.5 with a **Kater**. |
 
 The bonuses were raised across the board by #311. The old ones (+15/+35/+70% damage) were written
@@ -323,16 +323,16 @@ away without moving anything:
 Both curves are weighted toward their top end rather than straight lines, so the sweet spot stays
 sharp and Vollrausch is where the room really goes.
 
-**And they will hit you sober.** The penalties above cost the player his *senses*; none of them
-changes how often the room actually connects, so a good player could drink to the top of the meter
-and simply keep not being hit — the reward real, the risk atmosphere. So the drunk player is also
-a **bigger target**: his hurtbox grows with the meter, from the circle smaller than his sprite
-that a sober run is quietly given, up to exactly the size he is drawn. Never past it — a hit from
-outside the drawing is a hit the player will not believe was theirs.
+**And they will hit you sober.** Nothing in the meter reaches over and widens the player's
+hitbox, and nothing should: the penalties above already make a drunk run get hit more, because a
+player who cannot see far, cannot see clearly, and is carrying triple damage plays further forward
+than a sober one and reads the room later. The mechanic that closes the loop is the drain, not a
+handicap — **a hit costs Promille**, more than any meal does.
 
-That closes the loop, because **a hit costs Promille**. The drunker the run, the more it gets hit;
-the more it gets hit, the more sober it becomes. The meter is self-limiting rather than a
-ratchet, and the fantasy is the right one: you feel indestructible, and the room disagrees.
+So the drunker the run, the more it gets hit; the more it gets hit, the more sober it becomes. The
+meter is self-limiting rather than a ratchet, and the fantasy is the right one: you feel
+indestructible, and the room disagrees. The design is what makes you easier to hit; adding a
+second, mechanical version of the same idea would be charging twice for it.
 
 **The two ways down are not equal, and must not be.** Eating is a *choice*, made with a pickup in
 front of you; a hit is a *mistake* the room made for you. A hit therefore always sobers harder

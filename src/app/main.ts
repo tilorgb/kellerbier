@@ -2334,9 +2334,9 @@ async function boot(): Promise<void> {
     // sight penalties ride along for exactly the same reason — a tuning pass
     // on `maxTunnelVision`/`maxGloom` wants the whole row at once, and both
     // are otherwise invisible as numbers: what the player sees is a dark,
-    // soft room, which says nothing about where on its ramp either one is.
+    // soft room, which says nothing about where on either ramp it is.
     const promilleLine = sim.promilleUnlocked
-      ? `\n${meterLabel} ${sim.promille.toFixed(2)} ${tierLabel}${trinkfest}  heat ${sim.promilleShotHeat.toFixed(2)}  tunnel ${sim.promilleTunnelVision.toFixed(2)}  gloom ${sim.promilleGloom.toFixed(2)}  target ${sim.promilleHurtboxScale.toFixed(2)}x${knockedDown}`
+      ? `\n${meterLabel} ${sim.promille.toFixed(2)} ${tierLabel}${trinkfest}  heat ${sim.promilleShotHeat.toFixed(2)}  tunnel ${sim.promilleTunnelVision.toFixed(2)}  gloom ${sim.promilleGloom.toFixed(2)}${knockedDown}`
       : '';
     const runState = sim.promilleUnlocked ? '' : '  SOBER RUN';
     const override = promilleOverride === 'auto' ? '' : `  [${promilleOverride} forced]`;

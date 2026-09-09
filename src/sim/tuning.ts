@@ -504,17 +504,6 @@ export interface PromilleTuning {
   maxWobble: number;
 
   /**
-   * How much bigger a target the player is at the baseline Umgfalln
-   * threshold, as a fraction of his sober hurtbox — see
-   * `promilleHurtboxScale`, which is where the shape and the reasoning live.
-   *
-   * The one Promille penalty that is not about what the player can see or
-   * how well he can aim: it is about how often the room actually connects.
-   * `0` turns it off completely and leaves a drunk run exactly as hard to
-   * hit as a sober one.
-   */
-  maxHurtboxGrowth: number;
-  /**
    * Ticks per full wobble sweep. Deliberately its own field rather than
    * reusing `swayPeriodTicks` — the miss-rate calibration on `maxWobble`
    * doesn't depend on sweep speed, but sway wants to run much slower than
@@ -1138,10 +1127,13 @@ export const DEFAULT_PROMILLE_TUNING: Readonly<PromilleTuning> = {
   // not — see the field's own comment. Also the number that makes "they will
   // hit you sober" true rather than decorative: at Vollrausch, three landed
   // hits put the player back in Beduselt, and a player who keeps taking them
-  // ends up sober rather than merely bruised. Paired with
-  // `maxHurtboxGrowth`, which is what makes those hits land in the first
-  // place, this is the meter's own negative feedback loop — the drunker the
-  // run, the harder it is to stay there.
+  // ends up sober rather than merely bruised. This is also the meter's own
+  // negative feedback loop, and the reason it needs no separate "easier to
+  // hit" mechanic: a drunk player is already fighting through a closing
+  // tunnel and a smearing room with a damage bonus that rewards pushing
+  // further in, so the hits arrive on their own — and each one takes real
+  // Promille back, which makes the top of the meter somewhere you keep
+  // earning rather than somewhere you arrive.
   hitPromilleLoss: 0.7,
   // Realistic-scale replacement for the old beer-pickup amounts
   // (health-food-redesign): four full Maß (4 x 1.0 = 4.0) sits deep in
@@ -1189,16 +1181,6 @@ export const DEFAULT_PROMILLE_TUNING: Readonly<PromilleTuning> = {
   sturzbesoffenFireRateBonus: 0.7,
   filmrissDamageBonus: 2.2,
   filmrissFireRateBonus: 0.85,
-
-  // 0.4: the player's sober hurtbox is `PLAYER_FOOTPRINT` (5) against a drawn
-  // radius of `PLAYER_RADIUS` (7), so full ramp lands the hurtbox exactly on
-  // the size he already looks. Sober, the game quietly gives him a circle
-  // smaller than his sprite; drunk, it takes that back and hits him for what
-  // is on screen. Deliberately not past it — a hurtbox *larger* than the
-  // drawing is a hit the player cannot see coming and would not believe,
-  // which is the "the player must always believe a death was theirs"
-  // guardrail in `docs/GAME_DESIGN.md` §5.
-  maxHurtboxGrowth: 0.4,
 
   maxDrift: 0.6,
   // Measured against a Normal enemy (radius 7, `src/sim/enemy/size.ts`) at a

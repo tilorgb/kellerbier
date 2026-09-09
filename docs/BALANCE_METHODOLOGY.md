@@ -47,6 +47,14 @@ live (`tests/playtest/lib/harness.ts`, `tests/playtest/lib/report.ts`):
   honest fix is either many more combinations than a per-commit CI budget allows, or dedicated
   single-item isolation runs — both are future work, not something this pass claims to have
   solved.
+- **Adding or removing an item re-rolls every loadout, so win rates do not compare across a
+  roster change.** `LOADOUTS` is drawn from `ITEM_DEFINITIONS` by a seeded combination generator
+  (`tests/playtest/run.test.ts`), so a 62nd item does not add one run to the sweep — it changes
+  which items every drawn combination contains, and the whole sweep plays out differently. The
+  Sixpack landing moved the sweep's win rate from 50% to 27.5% on the same seeds, and that number
+  is not evidence about the Sixpack: it is forty different runs. Compare win rates only between
+  commits with the same roster; across a content change, the sweep is a crash gate and nothing
+  more.
 - **The bot never touches Promille.** It paths to the boss and fights; nothing about the
   simulator sweep drinks, eats, or otherwise raises the meter, so its own Promille tier usage
   table is not evidence about tier balance — only real telemetry is. The field is carried through

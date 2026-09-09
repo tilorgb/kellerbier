@@ -5042,27 +5042,24 @@ landing within a pixel or two of where it already was. Deliberately not `t²`, w
 the first Maß free — the reason the tunnel ramp starts at the first sip rather than at a tier
 boundary is that a drink the player cannot feel is a drink that did not happen.
 
-**The drunk player is a bigger target.** This is the one that was actually missing. Every penalty
-in this entry costs the player his *senses*, and none of them changes how often the room connects
-— so a good player could drink to the top of the meter and keep not being hit. The reward was
-real and the risk was atmosphere. `promilleHurtboxScale` grows the player's hurtbox with the
-meter, from `PLAYER_FOOTPRINT` (5, the one hurtbox in the game deliberately smaller than its
-sprite) to `PLAYER_RADIUS` (7, the size he is drawn) at the baseline Umgfalln threshold.
+**A bigger hitbox was built, and then taken back out — "easier to hit" was figurative.** Worth
+recording because the reasoning that produced it is seductive and wrong. The argument was: every
+penalty in this entry costs the player his *senses*, none of them changes how often the room
+connects, so a good player can drink to the top of the meter and keep not being hit — reward real,
+risk atmosphere. `promilleHurtboxScale` grew the player's hurtbox from `PLAYER_FOOTPRINT` (5, the
+one hurtbox in the game deliberately smaller than its sprite) to `PLAYER_RADIUS` (7, the size he is
+drawn) and it worked exactly as designed.
 
-Three deliberate choices in that one number:
-
-- **A bigger target, not a damage multiplier**, which is what the previous version of this section
-  proposed. What should get worse is how often the room lands a hit, not what a hit is worth: a
-  bigger hurtbox still rewards the player who dodges well, where doubled damage punishes the
-  mistake he already made a second time.
-- **Never past the drawing.** A hurtbox larger than the sprite is a hit the player cannot see
-  coming and will not believe was his — the §5 guardrail, and the reason 0.4 is the growth rather
-  than something rounder.
-- **It saturates at `UMGFALLN_AT`, not with the ramp.** Trinkfest is sold as tolerance; letting it
-  keep inflating the hurtbox would mean the thing a player buys to survive more Promille also
-  buys him a beating. It is also the only Promille ramp here the *simulation* spends rather than
-  a renderer, so unlike its neighbours it clamps at the number instead of leaving that to a
-  consumer.
+It was still the wrong mechanic, because the premise is false. A drunk run *already* gets hit more,
+and not by accident: the player cannot see far, cannot see clearly, and is carrying up to triple
+damage — which is an invitation to play further forward — so he reads the room later and commits
+harder. The penalties above are not only atmosphere; they are the difficulty, working through the
+player rather than through his collider. Adding a hitbox handicap on top charges twice for the same
+idea, and it charges in the one currency §5's guardrail protects: a hit the player cannot see
+coming is a hit he will not believe was his. **A design that already produces the outcome does not
+need a mechanic that also produces it** — and "the risk is not felt" is a brief to make the
+existing penalties bite harder, which is what the curve change above actually is, not a brief to
+add a new one.
 
 **And a hit now sobers harder than a meal.** `hitPromilleLoss` 0.4 → 0.7. There are two ways down
 the meter and they are meant to read differently — eating is a choice made with a pickup in front
@@ -5073,9 +5070,10 @@ noticed because nothing compared the two numbers; `promille.test.ts` now does, a
 `PickupEffect.promille` on the roster rather than against a hardcoded 0.5, so a new pickup cannot
 re-break it.
 
-Together those three make the meter self-limiting instead of a ratchet: the drunker the run, the
-more it gets hit, and the more it gets hit the more sober it becomes. The fantasy is the right one
-— you feel indestructible and the room disagrees.
+Together the tighter curves and the heavier drain make the meter self-limiting instead of a
+ratchet: the drunker the run, the more it gets hit — by the design, not by a handicap — and the
+more it gets hit the more sober it becomes. The fantasy is the right one: you feel indestructible
+and the room disagrees.
 
 ## 92. The Sixpack banks Promille, and a Maß is *offered* to items before it is drunk
 
