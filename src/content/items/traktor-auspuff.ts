@@ -30,8 +30,8 @@ const MOVE_SPEED_MULTIPLIER = 1.15;
 export const traktorAuspuff: ItemDefinition = {
   id: 'traktor-auspuff',
   name: 'Traktor-Auspuff',
-  description: 'Moving leaves a trail of poison exhaust clouds behind you. Move Speed +15%',
-  flavourText: 'You can hear it two fields over. So can everything with a choice in the matter.',
+  description: 'items.traktor-auspuff.description',
+  flavourText: 'items.traktor-auspuff.flavourText',
   sprite: 'traktor-auspuff',
   pools: ['shop', 'boss', 'secret', 'curse'],
   quality: 1,

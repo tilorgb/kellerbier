@@ -15,8 +15,8 @@ const SLOW_TICKS = 90;
 export const colaweizen: ItemDefinition = {
   id: 'colaweizen',
   name: 'Colaweizen',
-  description: 'Shots stick and slow enemies. Damage -20%',
-  flavourText: 'Somewhere, a Reinheitsgebot enforcer is quietly weeping.',
+  description: 'items.colaweizen.description',
+  flavourText: 'items.colaweizen.flavourText',
   sprite: 'colaweizen',
   pools: ['treasure', 'shop'],
   quality: 1,

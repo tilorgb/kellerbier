@@ -1,4 +1,6 @@
 import { Container, Graphics } from './gfx/index.js';
+import type { Locale } from '../i18n/locale.js';
+import { t } from '../i18n/translate.js';
 import { EFFECT_PALETTE } from './palette.js';
 import type { UiKit } from './ui/kit.js';
 import { Menu, type MenuItem, type MenuScreen } from './ui/menu.js';
@@ -23,29 +25,44 @@ export interface PauseScreenActions {
 export class PauseScreen implements MenuScreen {
   readonly view = new Container();
 
+  private readonly actions: PauseScreenActions;
   private readonly dim: Graphics;
   private readonly headline: DisplayTitle;
   private readonly menu: Menu;
   private width = 0;
   private height = 0;
 
-  constructor(kit: UiKit, actions: PauseScreenActions) {
+  constructor(kit: UiKit, actions: PauseScreenActions, locale: Locale) {
+    this.actions = actions;
     this.view.visible = false;
 
     this.dim = new Graphics();
     this.view.addChild(this.dim);
 
     this.headline = new DisplayTitle(TITLE_STYLES.heading);
-    this.headline.set('Paused');
+    this.headline.set(t(locale, 'ui.pause.headline'));
     this.view.addChild(this.headline.view);
 
-    const items: MenuItem[] = [
-      { label: 'Resume', onSelect: actions.onResume },
-      { label: 'Settings', onSelect: actions.onSettings },
-      { label: 'Quit to Title', onSelect: actions.onQuitToTitle },
-    ];
-    this.menu = new Menu(kit, items);
+    this.menu = new Menu(kit, this.menuItems(locale));
     this.view.addChild(this.menu.view);
+  }
+
+  private menuItems(locale: Locale): MenuItem[] {
+    const actions = this.actions;
+    return [
+      { label: t(locale, 'ui.pause.resume'), onSelect: actions.onResume },
+      { label: t(locale, 'ui.pause.settings'), onSelect: actions.onSettings },
+      { label: t(locale, 'ui.pause.quitToTitle'), onSelect: actions.onQuitToTitle },
+    ];
+  }
+
+  /** Rebuilds the headline and menu labels in `locale` — call whenever the player changes the language. */
+  setLocale(locale: Locale): void {
+    this.headline.set(t(locale, 'ui.pause.headline'));
+    this.menu.setItems(this.menuItems(locale));
+    if (this.view.visible) {
+      this.layOut();
+    }
   }
 
   get visible(): boolean {

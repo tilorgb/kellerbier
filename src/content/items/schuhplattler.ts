@@ -24,8 +24,8 @@ const DAMAGE_SCALE = 1.5;
 export const schuhplattler: ItemDefinition = {
   id: 'schuhplattler',
   name: 'Schuhplattler',
-  description: 'Stand still for a moment to release a damaging shockwave',
-  flavourText: 'The physics of it are unclear. The enthusiasm is not.',
+  description: 'items.schuhplattler.description',
+  flavourText: 'items.schuhplattler.flavourText',
   sprite: 'schuhplattler',
   pools: ['shop', 'boss'],
   quality: 2,

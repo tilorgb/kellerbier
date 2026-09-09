@@ -20,6 +20,7 @@ import {
   type MixerSettings,
   sanitizeMixerSettings,
 } from './audio/mixer.js';
+import { DEFAULT_LOCALE, isLocale, type Locale } from '../i18n/locale.js';
 import { loadSave, updateSave } from './save/storage.js';
 
 /**
@@ -55,6 +56,8 @@ export interface Preferences {
   video: VideoPreferences;
   mixer: MixerSettings;
   controls: ControlsPreferences;
+  /** The Language tab (#52) — `en` by default, so a fresh install shows English. */
+  locale: Locale;
 }
 
 /**
@@ -73,6 +76,7 @@ export function createDefaultPreferences(): Preferences {
       gamepadDeadZone: DEFAULT_DEAD_ZONE,
       aimAssist: false,
     },
+    locale: DEFAULT_LOCALE,
   };
 }
 
@@ -132,6 +136,7 @@ export function sanitizePreferences(candidate: unknown): Preferences {
     video: sanitizeVideoPreferences(source.video),
     mixer: sanitizeMixerSettings(source.mixer),
     controls: sanitizeControlsPreferences(source.controls),
+    locale: isLocale(source.locale) ? source.locale : DEFAULT_LOCALE,
   };
 }
 

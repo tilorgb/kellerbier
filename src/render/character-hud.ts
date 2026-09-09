@@ -1,5 +1,7 @@
 import { Container, Sprite, type BitmapText } from './gfx/index.js';
 import type { GameSim } from '../sim/game/sim.js';
+import type { Locale } from '../i18n/locale.js';
+import { t } from '../i18n/translate.js';
 import { HUD_PALETTE, UI_PALETTE } from './palette.js';
 import { iconRoles, type UiKit } from './ui/kit.js';
 import { uiText, UI_TEXT_HEIGHT } from './ui/text.js';
@@ -34,9 +36,12 @@ export class CharacterHud {
   private readonly kit: UiKit;
   private readonly icon: Sprite;
   private readonly label: BitmapText;
+  private locale: Locale;
+  private lastSim: GameSim | null = null;
 
-  constructor(kit: UiKit) {
+  constructor(kit: UiKit, locale: Locale) {
     this.kit = kit;
+    this.locale = locale;
     const size = kit.iconSize('star');
     this.icon = new Sprite(kit.icon('star', iconRoles(UI_PALETTE.accent)));
     this.icon.position.set(0, Math.floor((UI_TEXT_HEIGHT - size.height) / 2));
@@ -47,8 +52,17 @@ export class CharacterHud {
     this.view.visible = false;
   }
 
+  /** Rebuilds the current label in `locale` — call whenever the player changes the language. */
+  setLocale(locale: Locale): void {
+    this.locale = locale;
+    if (this.lastSim !== null) {
+      this.sync(this.lastSim);
+    }
+  }
+
   sync(sim: GameSim): void {
-    const status = characterStatus(sim);
+    this.lastSim = sim;
+    const status = characterStatus(sim, this.locale);
     if (status === null) {
       this.view.visible = false;
       return;
@@ -85,16 +99,20 @@ interface CharacterStatus {
  * A free function rather than a method so the wording is testable without a
  * renderer, the same split `app/meta/progress.ts` keeps for the hub's text.
  */
-export function characterStatus(sim: GameSim): CharacterStatus | null {
+export function characterStatus(sim: GameSim, locale: Locale): CharacterStatus | null {
   const traits = sim.character;
   if (traits.rules.includes('purse')) {
     return sim.pursePowered
       ? {
-          text: `Purse: ${String(sim.biermarken)} — flying`,
+          text: t(locale, 'ui.hud.purseFlying', { biermarken: sim.biermarken }),
           icon: 'biermarke',
           tint: HUD_PALETTE.minimapTreasureIcon,
         }
-      : { text: 'Purse empty — no power', icon: 'lock', tint: UI_PALETTE.textDisabled };
+      : {
+          text: t(locale, 'ui.hud.purseEmpty'),
+          icon: 'lock',
+          tint: UI_PALETTE.textDisabled,
+        };
   }
   return null;
 }

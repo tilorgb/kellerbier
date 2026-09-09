@@ -16,8 +16,8 @@ const PROMILLE_COST = 0.4;
 export const feierabendbier: ItemDefinition = {
   id: 'feierabendbier',
   name: 'Feierabendbier',
-  description: 'Heals a little at the start of every floor. Costs a little Promille',
-  flavourText: 'Earned the second the shift ends. Not one second before.',
+  description: 'items.feierabendbier.description',
+  flavourText: 'items.feierabendbier.flavourText',
   sprite: 'feierabendbier',
   pools: ['treasure', 'shop'],
   quality: 1,

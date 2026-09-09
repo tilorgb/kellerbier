@@ -20,8 +20,8 @@ const SHOT_SPEED_MULTIPLIER = 0.6;
 export const semmelknoedel: ItemDefinition = {
   id: 'semmelknoedel',
   name: 'Semmelknödel',
-  description: 'Shots hit for 2x and travel heavily. Shot Speed -40%',
-  flavourText: 'Heavy enough to be an argument.',
+  description: 'items.semmelknoedel.description',
+  flavourText: 'items.semmelknoedel.flavourText',
   sprite: 'semmelknoedel',
   pools: ['treasure', 'shop', 'boss'],
   quality: 2,

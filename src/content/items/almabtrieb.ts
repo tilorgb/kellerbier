@@ -20,8 +20,8 @@ const MOVING_SHOT_MULTIPLIER = 2;
 export const almabtrieb: ItemDefinition = {
   id: 'almabtrieb',
   name: 'Almabtrieb',
-  description: 'Shooting while moving has 2x damage. The "moving shots" have different color.',
-  flavourText: 'Run and Gun',
+  description: 'items.almabtrieb.description',
+  flavourText: 'items.almabtrieb.flavourText',
   sprite: 'almabtrieb',
   pools: ['treasure', 'shop', 'boss'],
   quality: 2,

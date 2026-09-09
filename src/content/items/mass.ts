@@ -16,8 +16,8 @@ const RADIUS_SCALE = 2.5;
 export const mass: ItemDefinition = {
   id: 'mass',
   name: 'Maß',
-  description: 'One huge, slow shot instead of a stream. Damage +200%, Fire Rate -66%',
-  flavourText: 'One litre. One decision. No refills mid-fight.',
+  description: 'items.mass.description',
+  flavourText: 'items.mass.flavourText',
   sprite: 'mass',
   pools: ['shop', 'boss'],
   quality: 2,

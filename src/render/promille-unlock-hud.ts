@@ -1,6 +1,8 @@
 import { Container } from './gfx/index.js';
 import type { GameSim } from '../sim/game/sim.js';
 import { promilleMeterLabel } from '../sim/game/promille.js';
+import type { Locale } from '../i18n/locale.js';
+import { t } from '../i18n/translate.js';
 import { HUD_PALETTE } from './palette.js';
 import { TextPlate } from './ui/text-plate.js';
 import type { UiKit } from './ui/kit.js';
@@ -30,12 +32,20 @@ export class PromilleUnlockHud {
   private readonly headline: TextPlate;
   private readonly hint: TextPlate;
   private label = '';
+  private locale: Locale;
 
-  constructor(kit: UiKit) {
+  constructor(kit: UiKit, locale: Locale) {
+    this.locale = locale;
     this.headline = new TextPlate(kit, { colour: HUD_PALETTE.toastText });
     this.view.addChild(this.headline.view);
     this.hint = new TextPlate(kit, { colour: HUD_PALETTE.toastText });
     this.view.addChild(this.hint.view);
+  }
+
+  /** Forces the next `sync` to rebuild both plates — `sync` only recomputes when its cache key changes. */
+  setLocale(locale: Locale): void {
+    this.locale = locale;
+    this.label = '';
   }
 
   sync(sim: GameSim, neutralReskin: boolean): void {
@@ -50,11 +60,12 @@ export class PromilleUnlockHud {
     // its glyphs out, and this banner is up for several hundred ticks.
     if (this.label !== meter) {
       this.label = meter;
-      this.headline.set(`${meter} unlocked`);
+      this.headline.set(t(this.locale, 'ui.hud.promilleUnlocked', { meter }));
       this.hint.set(
-        neutralReskin
-          ? 'Charging up hits harder. Too much and you go down.'
-          : 'The Maß hits harder. Too much and you fall over.',
+        t(
+          this.locale,
+          neutralReskin ? 'ui.hud.promilleUnlockHintNeutral' : 'ui.hud.promilleUnlockHint',
+        ),
       );
     }
     this.headline.visible = true;

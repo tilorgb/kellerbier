@@ -15,8 +15,8 @@ const RADIUS_PER_STACK = 0.12;
 export const bierkrug: ItemDefinition = {
   id: 'bierkrug',
   name: 'Bierkrug',
-  description: 'Damage +1 per stack',
-  flavourText: 'One in each hand is not a stack. It is a lifestyle.',
+  description: 'items.bierkrug.description',
+  flavourText: 'items.bierkrug.flavourText',
   sprite: 'bierkrug',
   pools: ['treasure', 'shop'],
   quality: 0,

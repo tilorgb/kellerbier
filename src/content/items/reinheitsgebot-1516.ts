@@ -40,8 +40,8 @@ import type { ItemDefinition } from '../../sim/item/definition.js';
 export const reinheitsgebot1516: ItemDefinition = {
   id: 'reinheitsgebot-1516',
   name: 'Reinheitsgebot 1516',
-  description: 'Locks out every rosinen item. Damage +35%',
-  flavourText: 'Water, barley, hops. Written before anyone thought to mention raisins.',
+  description: 'items.reinheitsgebot-1516.description',
+  flavourText: 'items.reinheitsgebot-1516.flavourText',
   sprite: 'reinheitsgebot-1516',
   pools: ['shop', 'boss', 'devil'],
   quality: 3,

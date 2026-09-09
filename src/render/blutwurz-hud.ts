@@ -1,5 +1,7 @@
 import type { Container } from './gfx/index.js';
 import type { GameSim } from '../sim/game/sim.js';
+import type { Locale } from '../i18n/locale.js';
+import { t } from '../i18n/translate.js';
 import { HUD_PALETTE } from './palette.js';
 import { TextPlate } from './ui/text-plate.js';
 import type { UiKit } from './ui/kit.js';
@@ -14,12 +16,19 @@ import type { UiKit } from './ui/kit.js';
  */
 export class BlutwurzHud {
   private readonly plate: TextPlate;
+  private locale: Locale;
 
   readonly view: Container;
 
-  constructor(kit: UiKit) {
+  constructor(kit: UiKit, locale: Locale) {
+    this.locale = locale;
     this.plate = new TextPlate(kit, { colour: HUD_PALETTE.toastText });
     this.view = this.plate.view;
+  }
+
+  /** `sync` re-derives the label from `sim` each frame, so this only has to remember the new locale. */
+  setLocale(locale: Locale): void {
+    this.locale = locale;
   }
 
   sync(sim: GameSim): void {
@@ -27,7 +36,7 @@ export class BlutwurzHud {
       this.plate.visible = false;
       return;
     }
-    this.plate.set('Blutwurz — find your corpse');
+    this.plate.set(t(this.locale, 'ui.hud.blutwurzActive'));
     this.plate.visible = true;
   }
 

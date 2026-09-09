@@ -271,18 +271,23 @@ export interface ItemDefinition {
   /** The name a player would see. German, per docs/CONTENT_BIBLE.md. */
   readonly name: string;
   /**
-   * A short, plain-language translation of what it does — "Damage +1 per
-   * stack", not a sentence of flavour text. Shown alongside `name` on the
-   * pickup toast (`GameSim.pickupToast`/`reportCollected`), the same
-   * short-and-literal convention `PickupDefinition.description` uses.
+   * A **localisation key** (`src/i18n/translate.ts#DictKey`), not literal
+   * text — `src/content/` may only import types (`content-is-data`, the
+   * architecture lint rule), so a content file can never call `t()` itself.
+   * By convention `items.<id>.description`, resolved by whatever renders it
+   * (`GameSim.pickupToast`/`reportCollected` and friends pass the key
+   * through unchanged; the render layer is what calls `t()`). A short,
+   * plain-language translation of what the item does — "Damage +1 per
+   * stack", not a sentence of flavour text — the same short-and-literal
+   * convention `PickupDefinition.description` uses.
    */
   readonly description: string;
   /**
-   * Funny, in-character text — #29's "flavour text that is funny" acceptance
-   * criterion. Never shown by any system yet (that is #58's job); it exists
-   * now so it is authored alongside the item rather than bolted on after the
-   * fact, the same reason a localisation key is reserved on day one even
-   * before #52 wires up the layer that reads it.
+   * A localisation key too (`items.<id>.flavourText`), same rules as
+   * `description` above. Funny, in-character text — #29's "flavour text
+   * that is funny" acceptance criterion — shown on the pickup toast and the
+   * pedestal reveal panel in preference to `description` when present
+   * (`GameSim.reportCollected`/`advancePedestalReveal`).
    */
   readonly flavourText?: string;
   /** Placeholder-art key until real icons exist (#34), same convention as `PickupDefinition.label`. */

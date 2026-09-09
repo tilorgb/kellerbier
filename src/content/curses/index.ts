@@ -5,31 +5,36 @@ import type { CurseDefinition } from '../../sim/curse/definition.js';
  * list, roster sorted by nothing but declaration order since there are only
  * ever five" convention `content/enemies/index.js` and `content/items/index.js`
  * use for their own rosters.
+ *
+ * `description` is a localisation key (`curses.<id>.description`), not
+ * literal text — see `src/sim/item/definition.ts`'s identical note on
+ * `ItemDefinition.description` for why content holds a key rather than a
+ * value here.
  */
 export const CURSE_DEFINITIONS: readonly CurseDefinition[] = [
   {
     id: 'nebel',
     name: 'Nebel',
-    description: 'Fog off the river. No minimap for the floor.',
+    description: 'curses.nebel.description',
   },
   {
     id: 'kater',
     name: 'Kater',
-    description: 'You start the floor hungover.',
+    description: 'curses.kater.description',
   },
   {
     id: 'sperrstunde',
     name: 'Sperrstunde',
-    description: 'Last call. Dawdle and the Ordner come for you.',
+    description: 'curses.sperrstunde.description',
   },
   {
     id: 'foehn',
     name: 'Föhn',
-    description: 'The alpine wind pushes every shot in the room.',
+    description: 'curses.foehn.description',
   },
   {
     id: 'blaue-stunde',
     name: 'Blaue Stunde',
-    description: 'Heavy dusk. Your sight only carries so far.',
+    description: 'curses.blaue-stunde.description',
   },
 ];

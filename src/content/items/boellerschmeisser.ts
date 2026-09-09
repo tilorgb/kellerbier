@@ -22,8 +22,8 @@ const PUSH_STRENGTH = 1.8;
 export const boellerschmeisser: ItemDefinition = {
   id: 'boellerschmeisser',
   name: 'Böllerschmeißer',
-  description: 'Active: drop a lit Böller — it goes off where you stand, one second later',
-  flavourText: 'The landing spot is marked. Nobody ever moves in time regardless.',
+  description: 'items.boellerschmeisser.description',
+  flavourText: 'items.boellerschmeisser.flavourText',
   sprite: 'boellerschmeisser',
   pools: ['shop', 'boss', 'secret'],
   quality: 2,

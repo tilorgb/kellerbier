@@ -19,8 +19,8 @@ const SPREAD_RADIANS = 0.12;
 export const spezi: ItemDefinition = {
   id: 'spezi',
   name: 'Spezi',
-  description: 'Fires a second, diverging shot',
-  flavourText: 'Nobody agrees on the ratio. Everybody has an opinion.',
+  description: 'items.spezi.description',
+  flavourText: 'items.spezi.flavourText',
   sprite: 'spezi',
   pools: ['treasure', 'shop'],
   quality: 1,

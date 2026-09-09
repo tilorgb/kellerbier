@@ -22,8 +22,8 @@ const PULL_STRENGTH = 0.2;
 export const fingerhakeln: ItemDefinition = {
   id: 'fingerhakeln',
   name: 'Fingerhakeln',
-  description: 'Contact damage, and drags nearby enemies toward you',
-  flavourText: 'The loser buys the next round. There is always a next round.',
+  description: 'items.fingerhakeln.description',
+  flavourText: 'items.fingerhakeln.flavourText',
   sprite: 'fingerhakeln',
   pools: ['shop', 'boss', 'secret'],
   quality: 2,

@@ -1,4 +1,6 @@
 import { Container, Graphics, type BitmapText } from './gfx/index.js';
+import type { Locale } from '../i18n/locale.js';
+import { t, type DictKey } from '../i18n/translate.js';
 import { TITLE_PALETTE, UI_PALETTE } from './palette.js';
 import { DisplayTitle, TITLE_STYLES } from './ui/title.js';
 import { displayText, SeasonedText, UI_TEXT_HEIGHT } from './ui/text.js';
@@ -10,19 +12,20 @@ const NAME_SCALE = 3;
 const RULE_SPAN = 0.62;
 
 /**
- * Ordinals for the seven floors — a card says "First Floor", not "Floor 1".
- * Plain English (#221): the ordinal is read on every floor transition, which
- * makes it functional text under `docs/CONTENT_BIBLE.md` §0, not flavour.
+ * Ordinal keys for the seven floors — a card says "First Floor", not
+ * "Floor 1". Functional text under `docs/CONTENT_BIBLE.md` §0 (read on
+ * every floor transition), so every locale gets its own real word rather
+ * than a number.
  */
-const ORDINALS: readonly string[] = [
-  'Zeroth',
-  'First',
-  'Second',
-  'Third',
-  'Fourth',
-  'Fifth',
-  'Sixth',
-  'Seventh',
+const ORDINAL_KEYS: readonly DictKey[] = [
+  'ui.floorTitleCard.ordinal.0',
+  'ui.floorTitleCard.ordinal.1',
+  'ui.floorTitleCard.ordinal.2',
+  'ui.floorTitleCard.ordinal.3',
+  'ui.floorTitleCard.ordinal.4',
+  'ui.floorTitleCard.ordinal.5',
+  'ui.floorTitleCard.ordinal.6',
+  'ui.floorTitleCard.ordinal.7',
 ];
 
 /**
@@ -65,10 +68,14 @@ export class FloorTitleCard {
   private readonly subtitle: SeasonedText;
   private readonly xlBadge: BitmapText;
 
+  private locale: Locale;
+  private lastFloor = 0;
+  private lastExtraLarge = false;
   private width = 0;
   private height = 0;
 
-  constructor() {
+  constructor(locale: Locale) {
+    this.locale = locale;
     this.view.visible = false;
     this.view.addChild(this.backdrop);
     this.view.addChild(this.border);
@@ -107,17 +114,42 @@ export class FloorTitleCard {
     this.view.addChild(this.xlBadge);
   }
 
-  /** Shows the card for `floor`, named and described. Sizes in UI pixels. */
+  /**
+   * Shows the card for `floor`, named and described. `flavour` is already
+   * resolved text (the caller — `app/main.ts` — calls `t()` on the floor's
+   * `flavour` key, since this class has no content-registry access). Sizes
+   * in UI pixels.
+   */
   show(floor: number, floorName: string, flavour: string, extraLarge = false): void {
-    this.ordinal.text = `${ORDINALS[floor] ?? 'Further'} Floor`;
+    this.lastFloor = floor;
+    this.lastExtraLarge = extraLarge;
+    this.ordinal.text = this.ordinalLabel(floor);
     this.name.set(floorName);
     this.subtitle.set(flavour);
     // Wording deliberately plain (#221) and provisional — #58's chapter-card
     // work owns picking this for real; this is a marker, not a punchline.
-    this.xlBadge.text = extraLarge ? 'An unusually large floor.' : '';
+    this.xlBadge.text = extraLarge ? t(this.locale, 'ui.floorTitleCard.xlBadge') : '';
     this.view.visible = true;
     this.view.alpha = 1;
     this.layOut();
+  }
+
+  private ordinalLabel(floor: number): string {
+    const locale = this.locale;
+    const key = ORDINAL_KEYS[floor];
+    const ordinalWord =
+      key === undefined ? t(locale, 'ui.floorTitleCard.ordinal.further') : t(locale, key);
+    return t(locale, 'ui.floorTitleCard.floorLabel', { ordinal: ordinalWord });
+  }
+
+  /** Rebuilds the ordinal and XL badge in `locale` — the name/flavour stay whatever the caller last supplied. */
+  setLocale(locale: Locale): void {
+    this.locale = locale;
+    this.ordinal.text = this.ordinalLabel(this.lastFloor);
+    this.xlBadge.text = this.lastExtraLarge ? t(locale, 'ui.floorTitleCard.xlBadge') : '';
+    if (this.view.visible) {
+      this.layOut();
+    }
   }
 
   hide(): void {

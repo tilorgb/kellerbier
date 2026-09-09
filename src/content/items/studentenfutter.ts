@@ -25,8 +25,8 @@ const MOVE_SPEED_MULTIPLIER = 0.9;
 export const studentenfutter: ItemDefinition = {
   id: 'studentenfutter',
   name: 'Studentenfutter',
-  description: 'Damage +8% per kill in a room, up to +48%. Resets on clear. Move Speed -10%',
-  flavourText: 'One handful. Every time. One handful.',
+  description: 'items.studentenfutter.description',
+  flavourText: 'items.studentenfutter.flavourText',
   sprite: 'studentenfutter',
   pools: ['treasure', 'shop', 'boss'],
   quality: 2,

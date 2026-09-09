@@ -27,9 +27,8 @@ const COST_PER_FLOOR = 3;
 export const ludwigsSchwan: ItemDefinition = {
   id: 'ludwigs-schwan',
   name: 'Ludwigs Schwan',
-  description:
-    'Familiar fires a homing feather every couple of seconds. Costs Biermarken per floor',
-  flavourText: 'Paddles in perfect circles. Sends you the bill.',
+  description: 'items.ludwigs-schwan.description',
+  flavourText: 'items.ludwigs-schwan.flavourText',
   sprite: 'ludwigs-schwan',
   pools: ['treasure', 'shop', 'secret'],
   quality: 1,

@@ -146,3 +146,30 @@ describe('src/content is data', () => {
     expect(message).toMatch(/adding an enemy has to stay a data change/);
   });
 });
+
+describe('player-facing UI text may not be hardcoded (#52)', () => {
+  const RENDER_FILE = `${process.cwd()}/src/render/fixture.ts`;
+
+  it('fails on a prose-shaped string literal, and says to use t()', async () => {
+    const result = await lintAs('hardcoded-ui-string.ts', RENDER_FILE);
+    expect(ruleIds(result)).toContain('kellerbier/no-hardcoded-ui-string');
+    const [message = ''] = messagesFor(result, 'kellerbier/no-hardcoded-ui-string');
+    expect(message).toMatch(/localisation layer/);
+    expect(message).toMatch(/t\(locale, key\)/);
+  });
+
+  it('leaves a translation key, a console diagnostic and CSS alone', async () => {
+    const result = await lintAs('ui-string-exemptions.ts', RENDER_FILE);
+    expect(ruleIds(result)).not.toContain('kellerbier/no-hardcoded-ui-string');
+  });
+
+  it('leaves the debug overlay, editors and dev UI kit alone', async () => {
+    const result = await lintAs('hardcoded-ui-string.ts', `${process.cwd()}/src/debug/fixture.ts`);
+    expect(ruleIds(result)).not.toContain('kellerbier/no-hardcoded-ui-string');
+  });
+
+  it('leaves src/sim and src/content alone — this is a render/app-layer rule', async () => {
+    const result = await lintAs('hardcoded-ui-string.ts', SIM_FILE);
+    expect(ruleIds(result)).not.toContain('kellerbier/no-hardcoded-ui-string');
+  });
+});

@@ -1,4 +1,5 @@
 import { kellerbierPlugin } from './no-hot-allocation.js';
+import { noHardcodedUiString } from './no-hardcoded-ui-string.js';
 
 /**
  * The layering, enforced mechanically.
@@ -17,6 +18,8 @@ import { kellerbierPlugin } from './no-hot-allocation.js';
  */
 
 const TECH_STACK = 'docs/TECH_STACK.md §4';
+
+const uiPlugin = { rules: { 'no-hardcoded-ui-string': noHardcodedUiString } };
 
 const SIM_IMPORT_MESSAGE =
   `src/sim/ must not import from the layers above it. The simulation is a pure ` +
@@ -114,6 +117,40 @@ export const architectureRules = [
           ],
         },
       ],
+    },
+  },
+  {
+    name: 'kellerbier/no-hardcoded-ui-string',
+    // Scoped to the player-facing screens and HUD, not blanket `render/`/
+    // `app/` — the debug overlay, the room/pixel/audio editors and the dev
+    // UI kit are developer tooling, not the localisation surface #52 covers
+    // (CLAUDE.md and CONTENT_BIBLE.md's own functional/flavour split is
+    // about what a *player* reads). `src/i18n/` is excluded because the
+    // dictionaries are the one place literal UI text belongs.
+    files: ['src/render/**/*.ts', 'src/app/**/*.ts'],
+    ignores: [
+      'src/debug/**',
+      'src/editor/**',
+      'src/pixel-editor/**',
+      'src/audio-editor/**',
+      'src/dev-ui/**',
+      'src/render/gfx/**',
+      // A font/UI specimen sheet for design sign-off (CLAUDE.md's "new pixel
+      // art needs sign-off" section) — a review tool, never shown to a player.
+      'src/render/ui/gallery.ts',
+      // The room/sprite/audio editor's dock — dev tooling that happens to
+      // live in `app/` rather than `src/editor/`.
+      'src/app/editor-dock.ts',
+      // `import.meta.env.DEV`-only camera tuning panel.
+      'src/app/camera-tuning.ts',
+      // Physical input glyph names ("D-Pad Up", "L Shift") — hardware labels,
+      // not game UI copy; a controller's own silkscreen doesn't localise.
+      'src/app/input/glyphs.ts',
+      '**/*.test.ts',
+    ],
+    plugins: { kellerbier: uiPlugin },
+    rules: {
+      'kellerbier/no-hardcoded-ui-string': 'error',
     },
   },
 ];

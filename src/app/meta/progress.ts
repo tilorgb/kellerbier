@@ -1,4 +1,6 @@
 import { FLOOR_CONFIGS } from '../../content/floors/definition.js';
+import type { Locale } from '../../i18n/locale.js';
+import { t } from '../../i18n/translate.js';
 import { type CharacterTraits, NEUTRAL_TRAITS } from '../../sim/character/definition.js';
 import { dailySeed } from '../../sim/rng/daily.js';
 import { TICKS_PER_SECOND } from '../../sim/time.js';
@@ -402,30 +404,47 @@ export interface RunResultsView {
   readonly totalKills: number;
 }
 
-export function buildRunResultsView(save: SaveData, content: ProgressionContent): RunResultsView {
+export function buildRunResultsView(
+  save: SaveData,
+  content: ProgressionContent,
+  locale: Locale,
+): RunResultsView {
   const lastRun = save.lastRun === null ? null : runFactsFrom(save.lastRun);
   const unlocked = new Set(save.unlocks);
   return {
     lastRun,
-    lastRunLine: lastRunLine(lastRun),
+    lastRunLine: lastRunLine(lastRun, locale),
     unlocks: content.unlocks.map((unlock) => unlockView(save, unlock, unlocked)),
-    board: unlocked.has(UNLOCK_BOARD) ? save.bestRuns.map(boardRow) : null,
+    board: unlocked.has(UNLOCK_BOARD)
+      ? save.bestRuns.map((record, index) => boardRow(record, locale, index))
+      : null,
     runsPlayed: statistic(save, STAT_RUNS),
     totalKills: statistic(save, STAT_KILLS),
   };
 }
 
 /** One line of the run board: place, how long it lasted, how much it took with it. */
-export function boardRow(record: BestRunRecord, index = 0): string {
+export function boardRow(record: BestRunRecord, locale: Locale, index = 0): string {
   const run = runFactsFrom(record);
-  return `${String(index + 1)}.  ${seconds(run.seconds)}   ${String(run.kills)} killed   ${run.floorName}`;
+  return t(locale, 'ui.results.boardRow', {
+    place: index + 1,
+    seconds: seconds(run.seconds),
+    kills: run.kills,
+    floor: run.floorName,
+  });
 }
 
 /** The last run as the one line the results screen leads with. Plain English (#221) — read every time the screen opens. */
-export function lastRunLine(run: RunFacts | null): string {
+export function lastRunLine(run: RunFacts | null, locale: Locale): string {
   if (run === null) {
-    return 'No run played yet — the cellar is waiting.';
+    return t(locale, 'ui.results.noLastRun');
   }
-  const word = run.deathWord === null ? '' : `  "${run.deathWord}"`;
-  return `Last run — ${seconds(run.seconds)}  ·  ${String(run.kills)} killed  ·  ${run.floorName}${word}`;
+  const word =
+    run.deathWord === null ? '' : t(locale, 'ui.results.lastRunDeathWord', { word: run.deathWord });
+  return t(locale, 'ui.results.lastRun', {
+    seconds: seconds(run.seconds),
+    kills: run.kills,
+    floor: run.floorName,
+    word,
+  });
 }

@@ -12,8 +12,8 @@ const PUSH_STRENGTH = 0.35;
 export const derOrdner: ItemDefinition = {
   id: 'der-ordner',
   name: 'Der Ordner',
-  description: 'Familiar that shoves enemies away from you',
-  flavourText: 'Arms crossed. Opinions closed.',
+  description: 'items.der-ordner.description',
+  flavourText: 'items.der-ordner.flavourText',
   sprite: 'der-ordner',
   pools: ['treasure', 'shop', 'boss'],
   quality: 1,

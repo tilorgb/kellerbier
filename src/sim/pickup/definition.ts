@@ -11,10 +11,16 @@ export interface PickupDefinition {
   readonly id: string;
   /** The name a player would see. German, per docs/CONTENT_BIBLE.md. */
   readonly name: string;
-  /** A short, plain-language translation of what it does — "Bomb", "Currency +5". Shown on the pickup toast (#26). */
+  /**
+   * A localisation key (`pickups.<id>.description`), not literal text — see
+   * `sim/item/definition.ts`'s identical note on `ItemDefinition.description`.
+   * A short, plain-language translation of what it does — "Bomb",
+   * "Currency +5". Shown on the pickup toast (#26).
+   */
   readonly description: string;
   /**
-   * What `description` says in a **sober run** (#85), for the pickups whose
+   * A localisation key too (`pickups.<id>.soberDescription`). What
+   * `description` says in a **sober run** (#85), for the pickups whose
    * honest description names a mechanic that run does not have — the three
    * food items, whose "lowers Promille" half has nothing to lower.
    *

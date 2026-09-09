@@ -24,8 +24,8 @@ const DAMAGE_MULTIPLIER = 1.4;
 export const ruhigeHand: ItemDefinition = {
   id: 'ruhige-hand',
   name: 'Ruhige Hand',
-  description: 'Damage +40% while under 0.5 Promille',
-  flavourText: 'The only item in the tent trying to talk you out of another round.',
+  description: 'items.ruhige-hand.description',
+  flavourText: 'items.ruhige-hand.flavourText',
   sprite: 'ruhige-hand',
   pools: ['shop', 'boss', 'secret'],
   quality: 2,

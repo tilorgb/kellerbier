@@ -17,8 +17,8 @@ const RANGE_MULTIPLIER = 1.15;
 export const kartoffelsalat: ItemDefinition = {
   id: 'kartoffelsalat',
   name: 'Kartoffelsalat',
-  description: 'Shots split into two chunks on impact. Range +15%',
-  flavourText: 'Every family recipe is the only correct one and they cannot all be right.',
+  description: 'items.kartoffelsalat.description',
+  flavourText: 'items.kartoffelsalat.flavourText',
   sprite: 'kartoffelsalat',
   pools: ['treasure', 'shop'],
   quality: 1,

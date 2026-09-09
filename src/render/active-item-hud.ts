@@ -1,6 +1,8 @@
 import { Container, Sprite, type BitmapText } from './gfx/index.js';
 import type { GameSim } from '../sim/game/sim.js';
 import { promilleRequirementMet } from '../sim/game/promille.js';
+import type { Locale } from '../i18n/locale.js';
+import { t } from '../i18n/translate.js';
 import { HUD_PALETTE } from './palette.js';
 import { iconRoles, type UiKit } from './ui/kit.js';
 import { uiText, UI_TEXT_HEIGHT } from './ui/text.js';
@@ -41,9 +43,12 @@ export class ActiveItemHud {
   private readonly label: BitmapText;
 
   private heldId: string | null = null;
+  private locale: Locale;
+  private lastSync: { readonly sim: GameSim; readonly activatePrompt: string | null } | null = null;
 
-  constructor(kit: UiKit) {
+  constructor(kit: UiKit, locale: Locale) {
     this.kit = kit;
+    this.locale = locale;
 
     const slot = kit.slotSprite(SLOT_SIZE, SLOT_SIZE);
     this.view.addChild(slot);
@@ -80,7 +85,16 @@ export class ActiveItemHud {
    * dropped, the same reasoning `actionPrompt`'s own doc comment gives for
    * returning `null` instead of an empty string.
    */
+  /** Rebuilds the current label in `locale` — call whenever the player changes the language. */
+  setLocale(locale: Locale): void {
+    this.locale = locale;
+    if (this.lastSync !== null) {
+      this.sync(this.lastSync.sim, this.lastSync.activatePrompt);
+    }
+  }
+
   sync(sim: GameSim, activatePrompt: string | null): void {
+    this.lastSync = { sim, activatePrompt };
     const id = sim.heldActiveItemId();
     this.heldId = id;
     if (id === null) {
@@ -116,13 +130,17 @@ export class ActiveItemHud {
     this.icon.texture = this.kit.icon(dormant ? 'lock' : 'star', iconRoles(tint));
     this.barFill.tint = tint;
 
-    const prompt = activatePrompt ?? 'unbound';
+    const locale = this.locale;
+    const prompt = activatePrompt ?? t(locale, 'ui.hud.unbound');
     const percent = Math.round(ratio * 100);
     this.label.text = dormant
-      ? `${item.name} (${item.promilleRequirement})`
+      ? t(locale, 'ui.hud.activeItemDormant', {
+          name: item.name,
+          requirement: item.promilleRequirement,
+        })
       : ready
-        ? `${item.name} [${prompt}]`
-        : `${item.name} ${String(percent)}%`;
+        ? t(locale, 'ui.hud.activeItemReady', { name: item.name, prompt })
+        : t(locale, 'ui.hud.activeItemCharging', { name: item.name, percent });
   }
 
   /** The item this HUD is currently showing, or `null` — for tests. */

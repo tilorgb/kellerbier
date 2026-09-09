@@ -18,8 +18,8 @@ const DAMAGE_SCALE = 0.35;
 export const blaskapelle: ItemDefinition = {
   id: 'blaskapelle',
   name: 'Blaskapelle',
-  description: 'A sound ring damages everything around you every few seconds',
-  flavourText: 'The tuba player has never once needed to breathe.',
+  description: 'items.blaskapelle.description',
+  flavourText: 'items.blaskapelle.flavourText',
   sprite: 'blaskapelle',
   pools: ['treasure', 'shop', 'boss'],
   quality: 2,

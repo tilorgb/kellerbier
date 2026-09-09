@@ -32,8 +32,8 @@ const PRONG_DAMAGE_SCALE = 2.2;
 export const bauernMistgabel: ItemDefinition = {
   id: 'bauern-mistgabel',
   name: 'Bauern-Mistgabel',
-  description: 'Shots become a short pitchfork jab: three piercing prongs, 2x damage, no range',
-  flavourText: 'Telegraphs the whole thing from a mile off. Still works every single time.',
+  description: 'items.bauern-mistgabel.description',
+  flavourText: 'items.bauern-mistgabel.flavourText',
   sprite: 'bauern-mistgabel',
   pools: ['shop', 'boss', 'secret'],
   quality: 2,

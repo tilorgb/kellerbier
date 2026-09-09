@@ -176,7 +176,7 @@ describe('meta-progression', () => {
 
   describe('the results screen', () => {
     function view(save: SaveData) {
-      return buildRunResultsView(save, CONTENT);
+      return buildRunResultsView(save, CONTENT, 'en');
     }
 
     it('leads with the last run, or says there was none', () => {
@@ -295,9 +295,9 @@ describe('meta-progression', () => {
       const reloaded = loadSave();
       expect(reloaded.unlocks).toContain('promille');
       expect(reloaded.lastRun?.kills).toBe(3);
-      expect(runResultsView(reloaded).unlocks.find((u) => u.id === 'promille')?.unlocked).toBe(
-        true,
-      );
+      expect(
+        runResultsView('en', reloaded).unlocks.find((u) => u.id === 'promille')?.unlocked,
+      ).toBe(true);
     });
 
     it('records a daily run once, and a second attempt the same day is a no-op (#48)', () => {
@@ -329,7 +329,7 @@ describe('the run-start roster (#47)', () => {
 
   it('offers only the free character until something has been beaten', () => {
     const save = createDefaultSave();
-    const view = buildRunResultsView(save, CONTENT);
+    const view = buildRunResultsView(save, CONTENT, 'en');
     expect(view.lastRun).toBeNull();
     expect(CONTENT.characters.map((character) => characterUnlocked(save, character))).toEqual([
       true,
@@ -376,8 +376,8 @@ describe('the run-start roster (#47)', () => {
   it('opens everything at once for the debug handle, roster and unlocks alike', () => {
     const save = withEverythingUnlocked(createDefaultSave(), CONTENT);
     expect(CONTENT.characters.every((character) => characterUnlocked(save, character))).toBe(true);
-    expect(buildRunResultsView(save, CONTENT).unlocks.every((unlock) => unlock.unlocked)).toBe(
-      true,
-    );
+    expect(
+      buildRunResultsView(save, CONTENT, 'en').unlocks.every((unlock) => unlock.unlocked),
+    ).toBe(true);
   });
 });

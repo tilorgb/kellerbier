@@ -35,8 +35,8 @@ const SLOGANS = [
 export const lebkuchenherz: ItemDefinition = {
   id: 'lebkuchenherz',
   name: 'Lebkuchenherz',
-  description: 'A slogan overhead with a small stat effect that changes floor to floor',
-  flavourText: '"Ein Prosit" was already taken by the mug next to it.',
+  description: 'items.lebkuchenherz.description',
+  flavourText: 'items.lebkuchenherz.flavourText',
   sprite: 'lebkuchenherz',
   pools: ['treasure', 'shop', 'boss'],
   quality: 1,

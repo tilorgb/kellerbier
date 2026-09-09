@@ -19,8 +19,8 @@ const DAMAGE_MULTIPLIER = 0.8;
 export const rosinenschnecke: ItemDefinition = {
   id: 'rosinenschnecke',
   name: 'Rosinenschnecke',
-  description: 'Shots curl toward whatever is nearest. Damage -20%',
-  flavourText: 'Wound tight enough that nobody can find the end of it.',
+  description: 'items.rosinenschnecke.description',
+  flavourText: 'items.rosinenschnecke.flavourText',
   sprite: 'rosinenschnecke',
   pools: ['treasure', 'shop', 'boss'],
   quality: 2,

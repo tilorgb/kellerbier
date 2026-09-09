@@ -22,8 +22,8 @@ const PROMILLE_PER_KILL = 0.1;
 export const rosinenschnaps: ItemDefinition = {
   id: 'rosinenschnaps',
   name: 'Rosinenschnaps',
-  description: 'Damage +45%. Every kill adds 0.1 Promille',
-  flavourText: 'Grandmother made it. Grandmother is not sorry.',
+  description: 'items.rosinenschnaps.description',
+  flavourText: 'items.rosinenschnaps.flavourText',
   sprite: 'rosinenschnaps',
   pools: ['shop', 'boss', 'devil'],
   quality: 3,

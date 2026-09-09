@@ -13,8 +13,8 @@ const DAMAGE_SCALE = 0.9;
 export const riesenrad: ItemDefinition = {
   id: 'riesenrad',
   name: 'Riesenrad',
-  description: 'A slow-orbiting gondola that damages and freezes on contact',
-  flavourText: 'Officially rated for six people. You are, at this point, the only one who fits.',
+  description: 'items.riesenrad.description',
+  flavourText: 'items.riesenrad.flavourText',
   sprite: 'riesenrad',
   pools: ['treasure', 'shop', 'boss'],
   quality: 2,

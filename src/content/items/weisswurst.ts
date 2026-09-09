@@ -17,8 +17,8 @@ const DAMAGE_MULTIPLIER = 1.3;
 export const weisswurst: ItemDefinition = {
   id: 'weisswurst',
   name: 'Weißwurst',
-  description: 'Damage +30% before floor 4. Nothing after',
-  flavourText: 'The tradition says before the noon bell. The run says before the Brauerei.',
+  description: 'items.weisswurst.description',
+  flavourText: 'items.weisswurst.flavourText',
   sprite: 'weisswurst',
   pools: ['treasure', 'shop'],
   quality: 1,

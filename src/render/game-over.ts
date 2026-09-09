@@ -1,4 +1,6 @@
 import { Container, Graphics, type BitmapText } from './gfx/index.js';
+import type { Locale } from '../i18n/locale.js';
+import { t } from '../i18n/translate.js';
 import { EFFECT_PALETTE, HUD_PALETTE } from './palette.js';
 import type { UiKit } from './ui/kit.js';
 import { Menu, type MenuItem, type MenuScreen } from './ui/menu.js';
@@ -51,17 +53,22 @@ export interface GameOverScreenActions {
 export class GameOverScreen implements MenuScreen {
   readonly view = new Container();
 
+  private readonly actions: GameOverScreenActions;
   private readonly dim: Graphics;
   private readonly plate: Container;
   private readonly headline: DisplayTitle;
   private readonly summary: BitmapText;
   private readonly menu: Menu;
   private readonly kit: UiKit;
+  private locale: Locale;
+  private lastInfo: RunSummaryText | null = null;
   private width = 0;
   private height = 0;
 
-  constructor(kit: UiKit, actions: GameOverScreenActions) {
+  constructor(kit: UiKit, actions: GameOverScreenActions, locale: Locale) {
     this.kit = kit;
+    this.actions = actions;
+    this.locale = locale;
     this.view.visible = false;
 
     this.dim = new Graphics();
@@ -77,22 +84,48 @@ export class GameOverScreen implements MenuScreen {
     this.summary = uiText('', { colour: HUD_PALETTE.gameOverSummary });
     this.view.addChild(this.summary);
 
-    const items: MenuItem[] = [
-      { label: 'Retry', onSelect: actions.onRetry },
-      { label: 'Results', onSelect: actions.onResults },
-      { label: 'Hub', onSelect: actions.onHub },
-    ];
-    this.menu = new Menu(kit, items);
+    this.menu = new Menu(kit, this.menuItems());
     this.view.addChild(this.menu.view);
+  }
+
+  private menuItems(): MenuItem[] {
+    const locale = this.locale;
+    const actions = this.actions;
+    return [
+      { label: t(locale, 'ui.gameOver.retry'), onSelect: actions.onRetry },
+      { label: t(locale, 'ui.gameOver.results'), onSelect: actions.onResults },
+      { label: t(locale, 'ui.gameOver.hub'), onSelect: actions.onHub },
+    ];
+  }
+
+  /** Rebuilds the summary and menu labels in `locale` — call whenever the player changes the language. */
+  setLocale(locale: Locale): void {
+    this.locale = locale;
+    this.menu.setItems(this.menuItems());
+    if (this.lastInfo !== null) {
+      this.applySummary(this.lastInfo);
+    }
+    if (this.view.visible) {
+      this.layOut();
+    }
   }
 
   get visible(): boolean {
     return this.view.visible;
   }
 
+  private applySummary(info: RunSummaryText): void {
+    this.summary.text = t(this.locale, 'ui.gameOver.summary', {
+      seconds: info.seconds.toFixed(1),
+      kills: info.kills,
+      floor: info.floor,
+    });
+  }
+
   show(info: RunSummaryText): void {
+    this.lastInfo = info;
     this.headline.set(info.word);
-    this.summary.text = `${info.seconds.toFixed(1)}s survived   ${String(info.kills)} killed   ${info.floor}`;
+    this.applySummary(info);
     this.view.visible = true;
     this.menu.refresh();
     this.layOut();

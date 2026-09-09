@@ -1,4 +1,5 @@
 import { PROGRESSION } from '../../content/progression/index.js';
+import type { Locale } from '../../i18n/locale.js';
 import type { BestRunRecord, DailyRunRecord, SaveData } from '../save/schema.js';
 import { loadSave, updateSave } from '../save/storage.js';
 import {
@@ -69,8 +70,8 @@ export function recordDailyRunOutcome(record: DailyRunRecord): SaveData {
 }
 
 /** Everything the results screen draws, from the save on disk (or the one handed in, for a test). */
-export function runResultsView(save: SaveData = loadSave()): RunResultsView {
-  return buildRunResultsView(save, PROGRESSION);
+export function runResultsView(locale: Locale, save: SaveData = loadSave()): RunResultsView {
+  return buildRunResultsView(save, PROGRESSION, locale);
 }
 
 export { PROGRESSION } from '../../content/progression/index.js';

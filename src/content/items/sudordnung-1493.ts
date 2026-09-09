@@ -20,8 +20,8 @@ const STRIPPED_TAGS = ['rosinen', 'impure'] as const;
 export const sudordnung1493: ItemDefinition = {
   id: 'sudordnung-1493',
   name: 'Sudordnung 1493',
-  description: 'Locks out every rosinen and impure item. Damage +50%',
-  flavourText: 'Twenty-three years earlier and stricter. Nobody remembers why it lost.',
+  description: 'items.sudordnung-1493.description',
+  flavourText: 'items.sudordnung-1493.flavourText',
   sprite: 'sudordnung-1493',
   pools: ['shop', 'boss', 'devil'],
   quality: 3,

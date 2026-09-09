@@ -1,4 +1,6 @@
 import { Container, Graphics, type BitmapText } from './gfx/index.js';
+import type { Locale } from '../i18n/locale.js';
+import { t, type DictKey } from '../i18n/translate.js';
 import { EFFECT_PALETTE, UI_PALETTE } from './palette.js';
 import type { UiKit } from './ui/kit.js';
 import { Menu, type MenuItem, type MenuScreen } from './ui/menu.js';
@@ -13,10 +15,10 @@ const GAP_ABOVE_MENU = 20;
  * flavour text, since there is no in-fiction voice for "who built this" the
  * way there is for a boss plate or a death word.
  */
-const CREDIT_LINES: readonly string[] = [
-  'A game by tilorgb',
-  'Built with Claude Code',
-  'Engine: three.js',
+const CREDIT_LINE_KEYS: readonly DictKey[] = [
+  'ui.credits.line1',
+  'ui.credits.line2',
+  'ui.credits.line3',
 ];
 
 export interface CreditsScreenActions {
@@ -32,6 +34,7 @@ export interface CreditsScreenActions {
 export class CreditsScreen implements MenuScreen {
   readonly view = new Container();
 
+  private readonly actions: CreditsScreenActions;
   private readonly dim: Graphics;
   private readonly headline: DisplayTitle;
   private readonly creditLabels: BitmapText[] = [];
@@ -39,25 +42,44 @@ export class CreditsScreen implements MenuScreen {
   private width = 0;
   private height = 0;
 
-  constructor(kit: UiKit, actions: CreditsScreenActions) {
+  constructor(kit: UiKit, actions: CreditsScreenActions, locale: Locale) {
+    this.actions = actions;
     this.view.visible = false;
 
     this.dim = new Graphics();
     this.view.addChild(this.dim);
 
     this.headline = new DisplayTitle(TITLE_STYLES.heading);
-    this.headline.set('Credits');
+    this.headline.set(t(locale, 'ui.credits.headline'));
     this.view.addChild(this.headline.view);
 
-    for (const line of CREDIT_LINES) {
-      const label = uiText(line, { colour: UI_PALETTE.textDim });
+    for (const key of CREDIT_LINE_KEYS) {
+      const label = uiText(t(locale, key), { colour: UI_PALETTE.textDim });
       this.creditLabels.push(label);
       this.view.addChild(label);
     }
 
-    const items: MenuItem[] = [{ label: 'Back', onSelect: actions.onBack }];
-    this.menu = new Menu(kit, items);
+    this.menu = new Menu(kit, this.menuItems(locale));
     this.view.addChild(this.menu.view);
+  }
+
+  private menuItems(locale: Locale): MenuItem[] {
+    return [{ label: t(locale, 'ui.credits.back'), onSelect: this.actions.onBack }];
+  }
+
+  /** Rebuilds every label in `locale` — call whenever the player changes the language. */
+  setLocale(locale: Locale): void {
+    this.headline.set(t(locale, 'ui.credits.headline'));
+    CREDIT_LINE_KEYS.forEach((key, index) => {
+      const label = this.creditLabels[index];
+      if (label !== undefined) {
+        label.text = t(locale, key);
+      }
+    });
+    this.menu.setItems(this.menuItems(locale));
+    if (this.view.visible) {
+      this.layOut();
+    }
   }
 
   get visible(): boolean {

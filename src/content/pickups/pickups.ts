@@ -18,11 +18,14 @@ const RADIUS = 4;
  * Maß — full and half — is the only Promille pickup, replacing Bier. It no
  * longer heals at all; see the `promille` effect's own doc comment in
  * `sim/pickup/definition.ts` for how big a swig it actually is.
+ *
+ * `description`/`soberDescription` are localisation keys, not literal text —
+ * see `sim/item/definition.ts`'s identical note on `ItemDefinition.description`.
  */
 export const massFull: PickupDefinition = {
   id: 'mass-full',
   name: 'Maß',
-  description: 'Raises Promille',
+  description: 'pickups.mass-full.description',
   radius: RADIUS,
   tint: 0xd9403a,
   label: 'M+',
@@ -32,7 +35,7 @@ export const massFull: PickupDefinition = {
 export const massHalf: PickupDefinition = {
   id: 'mass-half',
   name: 'Halbe Maß',
-  description: 'Raises Promille (less)',
+  description: 'pickups.mass-half.description',
   radius: RADIUS,
   tint: 0xd9403a,
   label: 'M',
@@ -42,8 +45,8 @@ export const massHalf: PickupDefinition = {
 export const bratwurstFull: PickupDefinition = {
   id: 'bratwurst-full',
   name: 'Bratwurst',
-  description: 'Heal, lowers Promille',
-  soberDescription: 'Health +2',
+  description: 'pickups.bratwurst-full.description',
+  soberDescription: 'pickups.bratwurst-full.soberDescription',
   radius: RADIUS,
   tint: 0xd92b3c,
   label: 'Br+',
@@ -53,8 +56,8 @@ export const bratwurstFull: PickupDefinition = {
 export const bratwurstHalf: PickupDefinition = {
   id: 'bratwurst-half',
   name: 'Halbe Bratwurst',
-  description: 'Heal, lowers Promille',
-  soberDescription: 'Health +1',
+  description: 'pickups.bratwurst-half.description',
+  soberDescription: 'pickups.bratwurst-half.soberDescription',
   radius: RADIUS,
   tint: 0xd92b3c,
   label: 'Br',
@@ -64,8 +67,8 @@ export const bratwurstHalf: PickupDefinition = {
 export const weisswurstFull: PickupDefinition = {
   id: 'weisswurst-full',
   name: 'Weißwurst',
-  description: 'Soul heart, lowers Promille',
-  soberDescription: 'Soul heart +2',
+  description: 'pickups.weisswurst-full.description',
+  soberDescription: 'pickups.weisswurst-full.soberDescription',
   radius: RADIUS,
   tint: 0xe8e2d0,
   label: 'Ww+',
@@ -75,8 +78,8 @@ export const weisswurstFull: PickupDefinition = {
 export const weisswurstHalf: PickupDefinition = {
   id: 'weisswurst-half',
   name: 'Halbe Weißwurst',
-  description: 'Soul heart, lowers Promille',
-  soberDescription: 'Soul heart +1',
+  description: 'pickups.weisswurst-half.description',
+  soberDescription: 'pickups.weisswurst-half.soberDescription',
   radius: RADIUS,
   tint: 0xe8e2d0,
   label: 'Ww',
@@ -86,8 +89,8 @@ export const weisswurstHalf: PickupDefinition = {
 export const blutwurstFull: PickupDefinition = {
   id: 'blutwurst-full',
   name: 'Blutwurst',
-  description: 'Eternal heart, lowers Promille',
-  soberDescription: 'Eternal heart +2',
+  description: 'pickups.blutwurst-full.description',
+  soberDescription: 'pickups.blutwurst-full.soberDescription',
   radius: RADIUS,
   tint: 0x1c1a1f,
   label: 'Bl+',
@@ -97,8 +100,8 @@ export const blutwurstFull: PickupDefinition = {
 export const blutwurstHalf: PickupDefinition = {
   id: 'blutwurst-half',
   name: 'Halbe Blutwurst',
-  description: 'Eternal heart, lowers Promille',
-  soberDescription: 'Eternal heart +1',
+  description: 'pickups.blutwurst-half.description',
+  soberDescription: 'pickups.blutwurst-half.soberDescription',
   radius: RADIUS,
   tint: 0x1c1a1f,
   label: 'Bl',
@@ -108,7 +111,7 @@ export const blutwurstHalf: PickupDefinition = {
 export const biermarke1: PickupDefinition = {
   id: 'biermarke-1',
   name: 'Biermarke',
-  description: 'Currency +1',
+  description: 'pickups.biermarke-1.description',
   radius: RADIUS,
   tint: 0xd4af37,
   label: '1',
@@ -118,7 +121,7 @@ export const biermarke1: PickupDefinition = {
 export const biermarke5: PickupDefinition = {
   id: 'biermarke-5',
   name: 'Biermarke',
-  description: 'Currency +5',
+  description: 'pickups.biermarke-5.description',
   radius: RADIUS,
   tint: 0xe8c94a,
   label: '5',
@@ -128,7 +131,7 @@ export const biermarke5: PickupDefinition = {
 export const biermarke10: PickupDefinition = {
   id: 'biermarke-10',
   name: 'Biermarke',
-  description: 'Currency +10',
+  description: 'pickups.biermarke-10.description',
   radius: RADIUS,
   tint: 0xf5de6b,
   label: '10',
@@ -138,7 +141,7 @@ export const biermarke10: PickupDefinition = {
 export const bierfassl: PickupDefinition = {
   id: 'bierfassl',
   name: 'Bierfassl',
-  description: 'Bomb +1',
+  description: 'pickups.bierfassl.description',
   radius: RADIUS,
   tint: 0xb5651d,
   label: 'Fa',
@@ -148,7 +151,7 @@ export const bierfassl: PickupDefinition = {
 export const bierfasslPack: PickupDefinition = {
   id: 'bierfassl-pack',
   name: 'Bierfassl-Packerl',
-  description: 'Bomb +3',
+  description: 'pickups.bierfassl-pack.description',
   radius: RADIUS,
   tint: 0xb5651d,
   label: 'Fa+',
@@ -158,7 +161,7 @@ export const bierfasslPack: PickupDefinition = {
 export const kellerschluessel: PickupDefinition = {
   id: 'kellerschluessel',
   name: 'Kellerschlüssel',
-  description: 'Key +1',
+  description: 'pickups.kellerschluessel.description',
   radius: RADIUS,
   tint: 0xc9c9d4,
   label: 'K',
@@ -168,7 +171,7 @@ export const kellerschluessel: PickupDefinition = {
 export const kellerschluesselRing: PickupDefinition = {
   id: 'kellerschluessel-ring',
   name: 'Schlüsselbund',
-  description: 'Key +3',
+  description: 'pickups.kellerschluessel-ring.description',
   radius: RADIUS,
   tint: 0xc9c9d4,
   label: 'K+',
@@ -189,7 +192,7 @@ export const kellerschluesselRing: PickupDefinition = {
 export const meisterschluessel: PickupDefinition = {
   id: 'meisterschluessel',
   name: 'Meisterschlüssel',
-  description: 'Opens the boss door',
+  description: 'pickups.meisterschluessel.description',
   radius: RADIUS,
   tint: 0xd9a441,
   label: 'MS',

@@ -17,8 +17,8 @@ const SHOT_SPEED_MULTIPLIER = 0.75;
 export const gugelhupf: ItemDefinition = {
   id: 'gugelhupf',
   name: 'Gugelhupf',
-  description: 'Shots ring back to you, hitting again on the way. Shot Speed -25%',
-  flavourText: 'A cake with a hole in it, so it cooks through. That is the whole trick.',
+  description: 'items.gugelhupf.description',
+  flavourText: 'items.gugelhupf.flavourText',
   sprite: 'gugelhupf',
   pools: ['treasure', 'shop', 'boss'],
   quality: 2,

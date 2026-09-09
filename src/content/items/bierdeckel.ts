@@ -15,8 +15,8 @@ import type { ItemDefinition } from '../../sim/item/definition.js';
 export const bierdeckel: ItemDefinition = {
   id: 'bierdeckel',
   name: 'Bierdeckel',
-  description: 'Shots ricochet off walls',
-  flavourText: 'Also doubles as a coaster, if you can bear to put it down.',
+  description: 'items.bierdeckel.description',
+  flavourText: 'items.bierdeckel.flavourText',
   sprite: 'bierdeckel',
   pools: ['treasure', 'shop'],
   quality: 1,

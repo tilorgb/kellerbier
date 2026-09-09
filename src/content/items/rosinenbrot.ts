@@ -18,8 +18,8 @@ const RANGE_MULTIPLIER = 0.8;
 export const rosinenbrot: ItemDefinition = {
   id: 'rosinenbrot',
   name: 'Rosinenbrot',
-  description: 'Shots pierce one extra enemy. Range -20%',
-  flavourText: 'Somebody picks them out. Somebody always picks them out.',
+  description: 'items.rosinenbrot.description',
+  flavourText: 'items.rosinenbrot.flavourText',
   sprite: 'rosinenbrot',
   pools: ['treasure', 'shop'],
   quality: 1,

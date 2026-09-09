@@ -26,8 +26,8 @@ const EXTRA_SHOT_DAMAGE_SCALE = 0.75;
 export const gartenzwergHut: ItemDefinition = {
   id: 'gartenzwerg-hut',
   name: 'Gartenzwerg-Hut',
-  description: 'Every 5s without a hit adds an extra shot (up to 3). One hit resets it',
-  flavourText: 'Face down in the flower bed. Somehow this is still the lucky pose.',
+  description: 'items.gartenzwerg-hut.description',
+  flavourText: 'items.gartenzwerg-hut.flavourText',
   sprite: 'gartenzwerg-hut',
   pools: ['treasure', 'shop', 'boss'],
   quality: 2,

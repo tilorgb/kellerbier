@@ -17,6 +17,8 @@ import { BindingCapture } from './input/rebind.js';
 import type { GamepadSource } from './input/gamepad.js';
 import type { ActiveDevice } from './input/sampler.js';
 import type { TelemetryStore } from './telemetry/schema.js';
+import { LOCALES, LOCALE_NAMES } from '../i18n/locale.js';
+import { t, type DictKey } from '../i18n/translate.js';
 
 /**
  * The settings screen (#53): Video, Audio, Controls and Accessibility, in
@@ -119,21 +121,21 @@ const STYLE = `
 .kb-privacy-buttons { display: flex; gap: 8px; }
 `;
 
-/** Human-readable action names, in the order the rebind table lists them. */
-const ACTION_LABELS: Readonly<Record<BindableAction, string>> = {
-  moveUp: 'Move up',
-  moveDown: 'Move down',
-  moveLeft: 'Move left',
-  moveRight: 'Move right',
-  aimUp: 'Aim up',
-  aimDown: 'Aim down',
-  aimLeft: 'Aim left',
-  aimRight: 'Aim right',
-  fire: 'Fire',
-  bomb: 'Bomb',
-  use: 'Use',
-  map: 'Map',
-  pause: 'Pause',
+/** Localisation keys for each bindable action, in the order the rebind table lists them. */
+const ACTION_LABEL_KEYS: Readonly<Record<BindableAction, DictKey>> = {
+  moveUp: 'ui.settings.action.moveUp',
+  moveDown: 'ui.settings.action.moveDown',
+  moveLeft: 'ui.settings.action.moveLeft',
+  moveRight: 'ui.settings.action.moveRight',
+  aimUp: 'ui.settings.action.aimUp',
+  aimDown: 'ui.settings.action.aimDown',
+  aimLeft: 'ui.settings.action.aimLeft',
+  aimRight: 'ui.settings.action.aimRight',
+  fire: 'ui.settings.action.fire',
+  bomb: 'ui.settings.action.bomb',
+  use: 'ui.settings.action.use',
+  map: 'ui.settings.action.map',
+  pause: 'ui.settings.action.pause',
 };
 
 export interface SettingsScreenHandle {
@@ -145,6 +147,15 @@ export interface SettingsScreenHandle {
 export interface SettingsScreenOptions {
   /** See `kb-settings-toggle`'s own CSS comment. */
   readonly placement?: 'bottom-left' | 'top-center';
+  /**
+   * Opened immediately, on `initialTab` (defaulting to `'video'`) — what a
+   * locale change asks for (`app/main.ts`'s `applyPreferencesChange`
+   * destroys and rebuilds this whole DOM screen to relabel it, and reopens
+   * it exactly where the player was so picking a language doesn't also
+   * close the panel on them).
+   */
+  readonly initialOpen?: boolean;
+  readonly initialTab?: SettingsTabId;
 }
 
 export interface SettingsScreenDeps {
@@ -290,15 +301,16 @@ function makeSelect<T extends string | number>(
 function buildVideoSection(deps: SettingsScreenDeps): HTMLElement {
   const section = document.createElement('div');
   section.className = 'kb-settings-section';
+  const locale = deps.preferences.locale;
 
   const scaleChoices: { value: number | 'auto'; label: string }[] = [
-    { value: 'auto', label: 'Auto' },
+    { value: 'auto', label: t(locale, 'ui.settings.video.auto') },
   ];
   for (let scale = 1; scale <= MAX_VIDEO_SCALE; scale += 1) {
     scaleChoices.push({ value: scale, label: `${String(scale)}x` });
   }
   const scaleSelect = makeSelect(
-    'Window scale',
+    t(locale, 'ui.settings.video.windowScale'),
     scaleChoices,
     () => deps.preferences.video.scale,
     (value) => {
@@ -310,7 +322,7 @@ function buildVideoSection(deps: SettingsScreenDeps): HTMLElement {
   const fullscreenButton = document.createElement('button');
   fullscreenButton.type = 'button';
   fullscreenButton.className = 'kb-btn';
-  fullscreenButton.textContent = 'Toggle fullscreen';
+  fullscreenButton.textContent = t(locale, 'ui.settings.video.toggleFullscreen');
   fullscreenButton.addEventListener('click', () => {
     if (document.fullscreenElement !== null) {
       void document.exitFullscreen();
@@ -320,7 +332,7 @@ function buildVideoSection(deps: SettingsScreenDeps): HTMLElement {
   });
 
   const screenshake = makeSlider(
-    'Screenshake',
+    t(locale, 'ui.settings.video.screenshake'),
     0,
     100,
     1,
@@ -333,7 +345,7 @@ function buildVideoSection(deps: SettingsScreenDeps): HTMLElement {
   );
 
   const sway = makeSlider(
-    'Camera sway',
+    t(locale, 'ui.settings.video.camerasway'),
     0,
     100,
     1,
@@ -346,7 +358,7 @@ function buildVideoSection(deps: SettingsScreenDeps): HTMLElement {
   );
 
   const hitstop = makeSlider(
-    'Hitstop',
+    t(locale, 'ui.settings.video.hitstop'),
     0,
     100,
     1,
@@ -359,7 +371,7 @@ function buildVideoSection(deps: SettingsScreenDeps): HTMLElement {
   );
 
   const flashReduction = makeCheckbox(
-    'Reduce flashing',
+    t(locale, 'ui.settings.video.reduceFlashing'),
     () => deps.settings.reduceFlashes,
     (v) => {
       deps.settings.reduceFlashes = v;
@@ -381,6 +393,7 @@ function buildVideoSection(deps: SettingsScreenDeps): HTMLElement {
 function buildAudioSection(deps: SettingsScreenDeps): HTMLElement {
   const section = document.createElement('div');
   section.className = 'kb-settings-section';
+  const locale = deps.preferences.locale;
 
   const percent = (v: number): string => `${String(Math.round(v))}%`;
   const makeBusSlider = (
@@ -403,28 +416,28 @@ function buildAudioSection(deps: SettingsScreenDeps): HTMLElement {
 
   section.append(
     makeBusSlider(
-      'Master',
+      t(locale, 'ui.settings.audio.master'),
       () => deps.preferences.mixer.master,
       (v) => {
         deps.preferences.mixer.master = v;
       },
     ),
     makeBusSlider(
-      'Music',
+      t(locale, 'ui.settings.audio.music'),
       () => deps.preferences.mixer.music,
       (v) => {
         deps.preferences.mixer.music = v;
       },
     ),
     makeBusSlider(
-      'SFX',
+      t(locale, 'ui.settings.audio.sfx'),
       () => deps.preferences.mixer.sfx,
       (v) => {
         deps.preferences.mixer.sfx = v;
       },
     ),
     makeBusSlider(
-      'Voice',
+      t(locale, 'ui.settings.audio.voice'),
       () => deps.preferences.mixer.voice,
       (v) => {
         deps.preferences.mixer.voice = v;
@@ -460,6 +473,7 @@ function buildBindCell(
     const labels = bindingLabels(deps.preferences.controls.bindings, action, device, set);
     return labels.length === 0 ? '—' : labels.join(' / ');
   };
+  const locale = deps.preferences.locale;
 
   const refresh = (): void => {
     button.textContent = label();
@@ -479,7 +493,10 @@ function buildBindCell(
       return;
     }
     capture.begin(action, device, 'replace');
-    button.textContent = device === 'keyboard' ? 'Press a key…' : 'Press a button…';
+    button.textContent =
+      device === 'keyboard'
+        ? t(locale, 'ui.settings.controls.pressKey')
+        : t(locale, 'ui.settings.controls.pressButton');
     button.classList.add('kb-capturing');
 
     if (device === 'keyboard') {
@@ -538,6 +555,7 @@ function buildControlsSection(deps: SettingsScreenDeps): ControlsSection {
   const section = document.createElement('div');
   section.className = 'kb-settings-section';
   const capture = new BindingCapture(deps.preferences.controls.bindings);
+  const locale = deps.preferences.locale;
 
   // A live controller-status line. `navigator.getGamepads()` returns nothing
   // for a pad until a button is pressed on it (a fingerprinting defence —
@@ -556,17 +574,14 @@ function buildControlsSection(deps: SettingsScreenDeps): ControlsSection {
       controllerStatus.textContent = '';
       const label = document.createElement('span');
       label.className = 'kb-name';
-      label.textContent = deps.gamepad.id ?? 'Controller';
-      controllerStatus.append('Controller connected: ', label);
+      label.textContent = deps.gamepad.id ?? t(locale, 'ui.settings.controls.controllerFallback');
+      controllerStatus.append(t(locale, 'ui.settings.controls.connectedPrefix'), label);
       if (!deps.gamepad.isStandardMapping) {
-        controllerStatus.append(' — non-standard layout, rebind below if the buttons are wrong.');
+        controllerStatus.append(t(locale, 'ui.settings.controls.nonStandard'));
       }
     } else {
       controllerStatus.classList.remove('kb-controller-on');
-      controllerStatus.textContent =
-        'No controller detected. If one is plugged in, press a button on it. ' +
-        'Some tools (e.g. Steam Input) map a controller to the mouse and hide it from the browser — ' +
-        'turn that off for this pad if the sticks are moving the cursor.';
+      controllerStatus.textContent = t(locale, 'ui.settings.controls.none');
     }
   };
   syncControllerStatus();
@@ -574,7 +589,11 @@ function buildControlsSection(deps: SettingsScreenDeps): ControlsSection {
   const table = document.createElement('table');
   table.className = 'kb-bind-table';
   const head = document.createElement('tr');
-  for (const label of ['Action', 'Keyboard', 'Gamepad']) {
+  for (const label of [
+    t(locale, 'ui.settings.controls.action'),
+    t(locale, 'ui.settings.controls.keyboard'),
+    t(locale, 'ui.settings.controls.gamepad'),
+  ]) {
     const th = document.createElement('th');
     th.textContent = label;
     head.appendChild(th);
@@ -591,7 +610,7 @@ function buildControlsSection(deps: SettingsScreenDeps): ControlsSection {
   for (const action of ALL_BINDABLE_ACTIONS) {
     const row = document.createElement('tr');
     const nameCell = document.createElement('td');
-    nameCell.textContent = ACTION_LABELS[action];
+    nameCell.textContent = t(locale, ACTION_LABEL_KEYS[action]);
     row.appendChild(nameCell);
     row.appendChild(buildBindCell(deps, capture, action, 'keyboard', refreshAll));
     row.appendChild(buildBindCell(deps, capture, action, 'gamepad', refreshAll));
@@ -601,7 +620,7 @@ function buildControlsSection(deps: SettingsScreenDeps): ControlsSection {
   const clearButton = document.createElement('button');
   clearButton.type = 'button';
   clearButton.className = 'kb-btn';
-  clearButton.textContent = 'Reset all bindings';
+  clearButton.textContent = t(locale, 'ui.settings.controls.resetBindings');
   clearButton.addEventListener('click', () => {
     resetBindings(deps.preferences.controls.bindings);
     saveAndApplyPreferences(deps);
@@ -609,7 +628,7 @@ function buildControlsSection(deps: SettingsScreenDeps): ControlsSection {
   });
 
   const deadZone = makeSlider(
-    'Gamepad dead zone',
+    t(locale, 'ui.settings.controls.deadZone'),
     0,
     100,
     1,
@@ -622,7 +641,7 @@ function buildControlsSection(deps: SettingsScreenDeps): ControlsSection {
   );
 
   const aimAssist = makeCheckbox(
-    'Aim assist',
+    t(locale, 'ui.settings.controls.aimAssist'),
     () => deps.preferences.controls.aimAssist,
     (v) => {
       deps.preferences.controls.aimAssist = v;
@@ -637,9 +656,10 @@ function buildControlsSection(deps: SettingsScreenDeps): ControlsSection {
 function buildAccessibilitySection(deps: SettingsScreenDeps): HTMLElement {
   const section = document.createElement('div');
   section.className = 'kb-settings-section';
+  const locale = deps.preferences.locale;
 
   const colorblind = makeCheckbox(
-    'Colourblind-safe projectile marker',
+    t(locale, 'ui.settings.accessibility.colourblind'),
     () => deps.settings.colorblindPalette,
     (v) => {
       deps.settings.colorblindPalette = v;
@@ -648,7 +668,7 @@ function buildAccessibilitySection(deps: SettingsScreenDeps): HTMLElement {
   );
 
   const textScale = makeSelect(
-    'Text scale',
+    t(locale, 'ui.settings.accessibility.textScale'),
     TEXT_SCALE_OPTIONS.map((value) => ({ value, label: `${String(Math.round(value * 100))}%` })),
     () => deps.settings.textScale,
     (v) => {
@@ -658,7 +678,7 @@ function buildAccessibilitySection(deps: SettingsScreenDeps): HTMLElement {
   );
 
   const noDrift = makeCheckbox(
-    'No-drift mode',
+    t(locale, 'ui.settings.accessibility.noDrift'),
     () => deps.settings.noDrift,
     (v) => {
       deps.settings.noDrift = v;
@@ -667,7 +687,7 @@ function buildAccessibilitySection(deps: SettingsScreenDeps): HTMLElement {
   );
 
   const neutralReskin = makeCheckbox(
-    'Neutral reskin (Kraft)',
+    t(locale, 'ui.settings.accessibility.neutralReskin'),
     () => deps.settings.neutralReskin,
     (v) => {
       deps.settings.neutralReskin = v;
@@ -676,7 +696,7 @@ function buildAccessibilitySection(deps: SettingsScreenDeps): HTMLElement {
   );
 
   const reducedMotion = makeCheckbox(
-    'Reduced motion',
+    t(locale, 'ui.settings.accessibility.reducedMotion'),
     () => deps.settings.reducedMotion,
     (v) => {
       deps.settings.reducedMotion = v;
@@ -685,10 +705,13 @@ function buildAccessibilitySection(deps: SettingsScreenDeps): HTMLElement {
   );
 
   const slowMode = makeSelect(
-    'Slow-mode',
+    t(locale, 'ui.settings.accessibility.slowMode'),
     SLOW_MODE_OPTIONS.map((value) => ({
       value,
-      label: value === 1 ? 'Off' : `${String(Math.round(value * 100))}%`,
+      label:
+        value === 1
+          ? t(locale, 'ui.settings.accessibility.slowModeOff')
+          : `${String(Math.round(value * 100))}%`,
     })),
     () => deps.settings.slowModeScale,
     (v) => {
@@ -698,7 +721,7 @@ function buildAccessibilitySection(deps: SettingsScreenDeps): HTMLElement {
   );
 
   const reduceAudioDistortion = makeCheckbox(
-    'Reduce Promille audio distortion',
+    t(locale, 'ui.settings.accessibility.reduceAudioDistortion'),
     () => deps.settings.reduceAudioDistortion,
     (v) => {
       deps.settings.reduceAudioDistortion = v;
@@ -727,16 +750,11 @@ function buildAccessibilitySection(deps: SettingsScreenDeps): HTMLElement {
 function buildPrivacySection(deps: SettingsScreenDeps): HTMLElement {
   const section = document.createElement('div');
   section.className = 'kb-settings-section';
+  const locale = deps.preferences.locale;
 
   const copy = document.createElement('p');
   copy.className = 'kb-privacy-copy';
-  copy.textContent =
-    'Playtest telemetry is off by default. Turning it on records, on this device only, ' +
-    'how each run ends (won or died, on which floor), how long each room took to clear, ' +
-    'which items were held, and how much time was spent at each Promille tier. Nothing ' +
-    'else — no name, no account, no location, no way to identify who played. A run is ' +
-    'kept here until you export it as a file yourself; nothing is ever sent anywhere ' +
-    'automatically.';
+  copy.textContent = t(locale, 'ui.settings.privacy.copy');
 
   const sessionRow = document.createElement('div');
   sessionRow.className = 'kb-privacy-session';
@@ -750,7 +768,7 @@ function buildPrivacySection(deps: SettingsScreenDeps): HTMLElement {
   const exportButton = document.createElement('button');
   exportButton.type = 'button';
   exportButton.className = 'kb-btn';
-  exportButton.textContent = 'Export as file';
+  exportButton.textContent = t(locale, 'ui.settings.privacy.exportButton');
   exportButton.addEventListener('click', () => {
     deps.telemetry.export();
   });
@@ -758,7 +776,7 @@ function buildPrivacySection(deps: SettingsScreenDeps): HTMLElement {
   const clearButton = document.createElement('button');
   clearButton.type = 'button';
   clearButton.className = 'kb-btn';
-  clearButton.textContent = 'Clear';
+  clearButton.textContent = t(locale, 'ui.settings.privacy.clearButton');
   clearButton.addEventListener('click', () => {
     deps.telemetry.clear();
     refresh();
@@ -770,18 +788,21 @@ function buildPrivacySection(deps: SettingsScreenDeps): HTMLElement {
 
   const refresh = (): void => {
     const store = deps.telemetry.get();
-    sessionLabel.textContent = store.sessionId === null ? '' : 'Session';
+    sessionLabel.textContent =
+      store.sessionId === null ? '' : t(locale, 'ui.settings.privacy.session');
     sessionValue.textContent = store.sessionId ?? '';
     sessionRow.hidden = store.sessionId === null;
     runCount.textContent = store.optedIn
-      ? `${String(store.runs.length)} run${store.runs.length === 1 ? '' : 's'} recorded, waiting to be exported.`
+      ? store.runs.length === 1
+        ? t(locale, 'ui.settings.privacy.runsRecordedOne')
+        : t(locale, 'ui.settings.privacy.runsRecordedOther', { count: store.runs.length })
       : '';
     exportButton.hidden = store.runs.length === 0;
     clearButton.hidden = store.runs.length === 0;
   };
 
   const toggle = makeCheckbox(
-    'Share anonymous playtest telemetry',
+    t(locale, 'ui.settings.privacy.shareToggle'),
     () => deps.telemetry.get().optedIn,
     (value) => {
       if (value) {
@@ -799,16 +820,51 @@ function buildPrivacySection(deps: SettingsScreenDeps): HTMLElement {
   return section;
 }
 
-const TABS: readonly {
-  readonly id: 'video' | 'audio' | 'controls' | 'accessibility' | 'privacy';
-  readonly label: string;
-}[] = [
-  { id: 'video', label: 'Video' },
-  { id: 'audio', label: 'Audio' },
-  { id: 'controls', label: 'Controls' },
-  { id: 'accessibility', label: 'Accessibility' },
-  { id: 'privacy', label: 'Privacy' },
+/**
+ * The Language tab (#52): one select over the three locales, in each
+ * locale's own name (`LOCALE_NAMES`) rather than translated, the same
+ * reason a language menu never translates its own entries — a player who
+ * cannot yet read the current locale still has to be able to find their
+ * own.
+ */
+function buildLanguageSection(deps: SettingsScreenDeps): HTMLElement {
+  const section = document.createElement('div');
+  section.className = 'kb-settings-section';
+  const locale = deps.preferences.locale;
+
+  const select = makeSelect(
+    t(locale, 'ui.settings.tab.language'),
+    LOCALES.map((value) => ({ value, label: LOCALE_NAMES[value] })),
+    () => deps.preferences.locale,
+    (value) => {
+      deps.preferences.locale = value;
+      saveAndApplyPreferences(deps);
+    },
+  );
+
+  section.append(select.el);
+  return section;
+}
+
+type SettingsTabId = 'video' | 'audio' | 'controls' | 'accessibility' | 'privacy' | 'language';
+
+const TAB_IDS: readonly SettingsTabId[] = [
+  'video',
+  'audio',
+  'controls',
+  'accessibility',
+  'privacy',
+  'language',
 ];
+
+const TAB_LABEL_KEYS: Readonly<Record<SettingsTabId, DictKey>> = {
+  video: 'ui.settings.tab.video',
+  audio: 'ui.settings.tab.audio',
+  controls: 'ui.settings.tab.controls',
+  accessibility: 'ui.settings.tab.accessibility',
+  privacy: 'ui.settings.tab.privacy',
+  language: 'ui.settings.tab.language',
+};
 
 /**
  * Builds and mounts the settings screen. `deps.settings`/`deps.preferences`
@@ -826,21 +882,22 @@ export function createSettingsScreen(
   style.textContent = STYLE;
   document.head.appendChild(style);
 
+  const locale = deps.preferences.locale;
   const topCenter = options.placement === 'top-center';
 
   const panel = document.createElement('div');
   panel.className = 'kb-settings';
-  panel.hidden = true;
+  panel.hidden = !(options.initialOpen ?? false);
 
   const toggle = document.createElement('button');
   toggle.type = 'button';
   toggle.className = topCenter ? 'kb-settings-toggle kb-settings-top-center' : 'kb-settings-toggle';
-  toggle.textContent = 'settings';
+  toggle.textContent = t(locale, 'ui.settings.toggle');
 
   const header = document.createElement('div');
   header.className = 'kb-settings-header';
   const title = document.createElement('h1');
-  title.textContent = 'Settings';
+  title.textContent = t(locale, 'ui.settings.title');
   const closeButton = document.createElement('button');
   closeButton.type = 'button';
   closeButton.className = 'kb-settings-close';
@@ -857,39 +914,40 @@ export function createSettingsScreen(
   body.className = 'kb-settings-body';
 
   const controlsSection = buildControlsSection(deps);
-  const sections: Record<(typeof TABS)[number]['id'], HTMLElement> = {
+  const sections: Record<SettingsTabId, HTMLElement> = {
     video: buildVideoSection(deps),
     audio: buildAudioSection(deps),
     controls: controlsSection.el,
     accessibility: buildAccessibilitySection(deps),
     privacy: buildPrivacySection(deps),
+    language: buildLanguageSection(deps),
   };
-  for (const tab of TABS) {
-    sections[tab.id].hidden = true;
-    body.appendChild(sections[tab.id]);
+  for (const id of TAB_IDS) {
+    sections[id].hidden = true;
+    body.appendChild(sections[id]);
   }
 
   const tabButtons: HTMLButtonElement[] = [];
-  let activeTab: (typeof TABS)[number]['id'] = 'video';
+  let activeTab: SettingsTabId = options.initialTab ?? 'video';
 
-  const selectTab = (id: (typeof TABS)[number]['id']): void => {
+  const selectTab = (id: SettingsTabId): void => {
     activeTab = id;
-    for (const tab of TABS) {
-      sections[tab.id].hidden = tab.id !== id;
+    for (const tabId of TAB_IDS) {
+      sections[tabId].hidden = tabId !== id;
     }
     for (const button of tabButtons) {
       button.classList.toggle('kb-active', button.dataset.tab === id);
     }
   };
 
-  for (const tab of TABS) {
+  for (const id of TAB_IDS) {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'kb-settings-tab';
-    button.textContent = tab.label;
-    button.dataset.tab = tab.id;
+    button.textContent = t(locale, TAB_LABEL_KEYS[id]);
+    button.dataset.tab = id;
     button.addEventListener('click', () => {
-      selectTab(tab.id);
+      selectTab(id);
     });
     tabButtons.push(button);
     tabBar.appendChild(button);

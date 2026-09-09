@@ -17,8 +17,8 @@ const GRIP_TICKS = 2;
 export const haferlschuh: ItemDefinition = {
   id: 'haferlschuh',
   name: 'Haferlschuh',
-  description: 'Move Speed +15%, immune to slick puddles',
-  flavourText: 'Every nail hand-driven by someone who takes this far too seriously.',
+  description: 'items.haferlschuh.description',
+  flavourText: 'items.haferlschuh.flavourText',
   sprite: 'haferlschuh',
   pools: ['treasure', 'shop'],
   quality: 0,

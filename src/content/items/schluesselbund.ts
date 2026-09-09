@@ -18,8 +18,8 @@ const KEY_AMOUNT = 1;
 export const schluesselbund: ItemDefinition = {
   id: 'schluesselbund',
   name: 'Schlüsselbund',
-  description: "Shows the floor's secret rooms on the map. Clearing a room grants a key",
-  flavourText: 'Fits every lock in the Keller. Explaining why is above your pay grade.',
+  description: 'items.schluesselbund.description',
+  flavourText: 'items.schluesselbund.flavourText',
   sprite: 'schluesselbund',
   pools: ['treasure', 'shop', 'secret'],
   quality: 1,

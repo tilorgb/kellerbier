@@ -1,5 +1,7 @@
 import { Container, type BitmapText } from './gfx/index.js';
 import type { GameSim } from '../sim/game/sim.js';
+import type { Locale } from '../i18n/locale.js';
+import { t, type DictKey } from '../i18n/translate.js';
 import { HUD_PALETTE } from './palette.js';
 import { TextPlate } from './ui/text-plate.js';
 import type { UiKit } from './ui/kit.js';
@@ -23,14 +25,21 @@ export class ItemSetHud {
   private readonly progressLabel: BitmapText;
   private readonly completion: TextPlate;
   private completionLabel = '';
+  private locale: Locale;
 
-  constructor(kit: UiKit) {
+  constructor(kit: UiKit, locale: Locale) {
+    this.locale = locale;
     this.progressLabel = uiText('', { colour: HUD_PALETTE.toastText });
     this.view.addChild(this.progressLabel);
     this.progressLabel.visible = false;
 
     this.completion = new TextPlate(kit, { colour: HUD_PALETTE.toastText });
     this.view.addChild(this.completion.view);
+  }
+
+  /** `sync` re-derives every label from `sim` each frame, so this only has to remember the new locale. */
+  setLocale(locale: Locale): void {
+    this.locale = locale;
   }
 
   sync(sim: GameSim): void {
@@ -51,7 +60,8 @@ export class ItemSetHud {
 
     const reveal = sim.setCompletionReveal;
     if (reveal !== null) {
-      const label = `${reveal.name} complete! ${reveal.description}`;
+      const description = t(this.locale, reveal.description as DictKey, { name: reveal.name });
+      const label = t(this.locale, 'ui.hud.setComplete', { name: reveal.name, description });
       if (label !== this.completionLabel) {
         this.completionLabel = label;
         this.completion.set(label);

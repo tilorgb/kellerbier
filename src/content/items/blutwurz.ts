@@ -20,8 +20,8 @@ import type { ItemDefinition } from '../../sim/item/definition.js';
 export const blutwurz: ItemDefinition = {
   id: 'blutwurz',
   name: 'Blutwurz',
-  description: 'A death does not end the run — if you can walk back for the corpse',
-  flavourText: 'Blut. Geist. Same word, in two languages that never talk to each other.',
+  description: 'items.blutwurz.description',
+  flavourText: 'items.blutwurz.flavourText',
   sprite: 'blutwurz',
   pools: ['treasure', 'shop', 'boss'],
   quality: 3,

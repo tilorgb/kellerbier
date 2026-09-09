@@ -13,8 +13,8 @@ const DAMAGE_MULTIPLIER = 1.05;
 export const apfelkuchen: ItemDefinition = {
   id: 'apfelkuchen',
   name: 'Apfelkuchen',
-  description: 'Heals 4. Damage +5%',
-  flavourText: 'Best Kuchen there is.',
+  description: 'items.apfelkuchen.description',
+  flavourText: 'items.apfelkuchen.flavourText',
   sprite: 'apfelkuchen',
   pools: ['treasure', 'shop'],
   quality: 0,

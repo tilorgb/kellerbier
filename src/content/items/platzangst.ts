@@ -8,8 +8,8 @@ import type { ItemDefinition } from '../../sim/item/definition.js';
 export const platzangst: ItemDefinition = {
   id: 'platzangst',
   name: 'Platzangst',
-  description: 'Damage +50%, Range -50%',
-  flavourText: 'Every festival tent, elbow to elbow. You made your peace with this a while ago.',
+  description: 'items.platzangst.description',
+  flavourText: 'items.platzangst.flavourText',
   sprite: 'platzangst',
   pools: ['shop', 'boss', 'secret', 'curse'],
   quality: 2,

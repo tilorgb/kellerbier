@@ -1,5 +1,7 @@
 import { Container, Graphics, type BitmapText } from './gfx/index.js';
 import type { RunResultsView, UnlockView } from '../app/meta/progress.js';
+import type { Locale } from '../i18n/locale.js';
+import { t } from '../i18n/translate.js';
 import { EFFECT_PALETTE, UI_PALETTE } from './palette.js';
 import type { UiKit } from './ui/kit.js';
 import { Menu, type MenuItem, type MenuScreen } from './ui/menu.js';
@@ -84,16 +86,18 @@ export class RunResultsScreen implements MenuScreen {
 
   private state: RunResultsView | null = null;
   private runOver = true;
+  private locale: Locale;
   private width = 0;
   private height = 0;
 
-  constructor(kit: UiKit, actions: RunResultsScreenActions) {
+  constructor(kit: UiKit, actions: RunResultsScreenActions, locale: Locale) {
     this.kit = kit;
     this.actions = actions;
+    this.locale = locale;
     this.view.visible = false;
     this.view.addChild(this.backdrop);
     this.title = new DisplayTitle(TITLE_STYLES.floor);
-    this.title.set('Results');
+    this.title.set(t(locale, 'ui.results.headline'));
     this.view.addChild(this.title.view);
     this.view.addChild(this.content);
     this.menu = new Menu(kit, this.menuItems());
@@ -101,12 +105,23 @@ export class RunResultsScreen implements MenuScreen {
   }
 
   private menuItems(): MenuItem[] {
+    const locale = this.locale;
     return this.runOver
       ? [
-          { label: 'New Run', onSelect: this.actions.onNewRun },
-          { label: 'Close', onSelect: this.actions.onClose },
+          { label: t(locale, 'ui.results.newRun'), onSelect: this.actions.onNewRun },
+          { label: t(locale, 'ui.results.close'), onSelect: this.actions.onClose },
         ]
-      : [{ label: 'Back to Run', onSelect: this.actions.onClose }];
+      : [{ label: t(locale, 'ui.results.backToRun'), onSelect: this.actions.onClose }];
+  }
+
+  /** Rebuilds every label in `locale` — call whenever the player changes the language. */
+  setLocale(locale: Locale): void {
+    this.locale = locale;
+    this.title.set(t(locale, 'ui.results.headline'));
+    this.menu.setItems(this.menuItems());
+    if (this.view.visible) {
+      this.layOut();
+    }
   }
 
   get visible(): boolean {
@@ -174,7 +189,7 @@ export class RunResultsScreen implements MenuScreen {
     this.addCentred(state.lastRunLine, centreX, lastRunY, UI_PALETTE.textDim);
     const statsY = lastRunY + UI_LINE_HEIGHT;
     this.addCentred(
-      `Runs: ${String(state.runsPlayed)}    Kills: ${String(state.totalKills)}`,
+      t(this.locale, 'ui.results.stats', { runs: state.runsPlayed, kills: state.totalKills }),
       centreX,
       statsY,
       UI_PALETTE.textDim,
@@ -201,7 +216,13 @@ export class RunResultsScreen implements MenuScreen {
     const rightX = leftX + UNLOCKS_WIDTH + PANEL_GAP;
 
     this.drawUnlocksPanel(unlockEntries, leftX, bandCentre + unlocksHeight / 2, unlocksHeight);
-    this.drawPanel('The Board', boardRowsData, rightX, bandCentre + boardHeight / 2, BOARD_WIDTH);
+    this.drawPanel(
+      t(this.locale, 'ui.results.theBoard'),
+      boardRowsData,
+      rightX,
+      bandCentre + boardHeight / 2,
+      BOARD_WIDTH,
+    );
 
     this.menu.view.position.set(Math.round(centreX - this.menu.width / 2), menuTop);
   }
@@ -240,7 +261,7 @@ export class RunResultsScreen implements MenuScreen {
     const panel = this.kit.panelSprite(UNLOCKS_WIDTH, height);
     panel.position.set(x, y);
     this.content.addChild(panel);
-    const heading = uiText('Unlocked', { colour: UI_PALETTE.accent });
+    const heading = uiText(t(this.locale, 'ui.results.unlocked'), { colour: UI_PALETTE.accent });
     heading.position.set(x + PAD, y + PAD);
     this.content.addChild(heading);
     let rowY = y + PAD + UI_LINE_HEIGHT;
@@ -256,10 +277,13 @@ export class RunResultsScreen implements MenuScreen {
   private boardRows(state: RunResultsView): readonly PanelRow[] {
     const board = state.board;
     if (board === null) {
-      return [{ text: 'The board is still empty —' }, { text: 'nobody has written on it yet.' }];
+      return [
+        { text: t(this.locale, 'ui.results.boardEmptyLine1') },
+        { text: t(this.locale, 'ui.results.boardEmptyLine2') },
+      ];
     }
     return board.length === 0
-      ? [{ text: 'No runs on the board yet.' }]
+      ? [{ text: t(this.locale, 'ui.results.noRunsYet') }]
       : board.slice(0, BOARD_ROWS).map((text) => ({ text }));
   }
 

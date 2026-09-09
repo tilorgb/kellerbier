@@ -20,8 +20,8 @@ const SHOCKWAVE_STRENGTH = 1.6;
 export const braumeisterHammer: ItemDefinition = {
   id: 'braumeister-hammer',
   name: 'Braumeister-Hammer',
-  description: 'A kill sends a shockwave through whatever else is nearby',
-  flavourText: "The casks that don't tap the easy way meet this instead.",
+  description: 'items.braumeister-hammer.description',
+  flavourText: 'items.braumeister-hammer.flavourText',
   sprite: 'braumeister-hammer',
   pools: ['boss', 'secret'],
   quality: 2,

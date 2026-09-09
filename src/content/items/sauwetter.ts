@@ -21,8 +21,8 @@ const WEATHER = ['burning', 'freezing', 'poison'] as const;
 export const sauwetter: ItemDefinition = {
   id: 'sauwetter',
   name: 'Sauwetter',
-  description: 'Shots carry a different status effect every shot: burning, freezing, poison',
-  flavourText: 'Four seasons in one afternoon. Occasionally in one minute.',
+  description: 'items.sauwetter.description',
+  flavourText: 'items.sauwetter.flavourText',
   sprite: 'sauwetter',
   pools: ['shop', 'boss', 'secret', 'curse'],
   quality: 2,

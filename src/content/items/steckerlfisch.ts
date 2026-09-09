@@ -7,8 +7,8 @@ import type { ItemDefinition } from '../../sim/item/definition.js';
 export const steckerlfisch: ItemDefinition = {
   id: 'steckerlfisch',
   name: 'Steckerlfisch',
-  description: 'Shots burn on hit',
-  flavourText: 'Cooked over an open flame for an hour. The shots learned fast.',
+  description: 'items.steckerlfisch.description',
+  flavourText: 'items.steckerlfisch.flavourText',
   sprite: 'steckerlfisch',
   pools: ['treasure', 'shop'],
   quality: 1,

@@ -1,4 +1,6 @@
 import { Container, Graphics } from './gfx/index.js';
+import type { Locale } from '../i18n/locale.js';
+import { t } from '../i18n/translate.js';
 import { EFFECT_PALETTE } from './palette.js';
 import type { UiKit } from './ui/kit.js';
 import { Menu, type MenuItem, type MenuScreen } from './ui/menu.js';
@@ -31,34 +33,54 @@ export interface TitleScreenActions {
 export class TitleScreen implements MenuScreen {
   readonly view = new Container();
 
+  private readonly actions: TitleScreenActions;
   private readonly dim: Graphics;
   private readonly headline: DisplayTitle;
   private readonly menu: Menu;
   private width = 0;
   private height = 0;
 
-  constructor(kit: UiKit, actions: TitleScreenActions) {
+  constructor(kit: UiKit, actions: TitleScreenActions, locale: Locale) {
+    this.actions = actions;
     this.view.visible = false;
 
     this.dim = new Graphics();
     this.view.addChild(this.dim);
 
     // `title.ts`'s own doc comment names `TITLE_STYLES.floor` for "the game's
-    // own name" alongside a floor's intro card — this is that name.
+    // own name" alongside a floor's intro card — this is that name. The
+    // game's own title is a proper noun, unchanged in every locale, the
+    // same rule an item's name follows (`docs/CONTENT_BIBLE.md` §0).
     this.headline = new DisplayTitle(TITLE_STYLES.floor);
     this.headline.view.scale.set(HEADLINE_SCALE);
     this.headline.set('Kellerbier');
     this.view.addChild(this.headline.view);
 
-    const items: MenuItem[] = [
-      { label: 'Start', onSelect: actions.onStart },
-      { label: 'Continue', onSelect: actions.onContinue, disabled: () => !actions.canContinue() },
-      { label: 'Settings', onSelect: actions.onSettings },
-      { label: 'Credits', onSelect: actions.onCredits },
-      { label: 'Quit', onSelect: actions.onQuit },
-    ];
-    this.menu = new Menu(kit, items);
+    this.menu = new Menu(kit, this.menuItems(locale));
     this.view.addChild(this.menu.view);
+  }
+
+  private menuItems(locale: Locale): MenuItem[] {
+    const actions = this.actions;
+    return [
+      { label: t(locale, 'ui.title.start'), onSelect: actions.onStart },
+      {
+        label: t(locale, 'ui.title.continue'),
+        onSelect: actions.onContinue,
+        disabled: () => !actions.canContinue(),
+      },
+      { label: t(locale, 'ui.title.settings'), onSelect: actions.onSettings },
+      { label: t(locale, 'ui.title.credits'), onSelect: actions.onCredits },
+      { label: t(locale, 'ui.title.quit'), onSelect: actions.onQuit },
+    ];
+  }
+
+  /** Rebuilds the menu's labels in `locale` — call whenever the player changes the language. */
+  setLocale(locale: Locale): void {
+    this.menu.setItems(this.menuItems(locale));
+    if (this.view.visible) {
+      this.layOut();
+    }
   }
 
   get visible(): boolean {

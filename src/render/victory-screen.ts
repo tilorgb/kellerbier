@@ -1,4 +1,6 @@
 import { Container, Graphics, type BitmapText } from './gfx/index.js';
+import type { Locale } from '../i18n/locale.js';
+import { t } from '../i18n/translate.js';
 import { EFFECT_PALETTE, HUD_PALETTE, UI_PALETTE } from './palette.js';
 import type { UiKit } from './ui/kit.js';
 import { Menu, type MenuItem, type MenuScreen } from './ui/menu.js';
@@ -46,6 +48,7 @@ export interface VictoryScreenActions {
 export class VictoryScreen implements MenuScreen {
   readonly view = new Container();
 
+  private readonly actions: VictoryScreenActions;
   private readonly dim: Graphics;
   private readonly plate: Container;
   private readonly headline: DisplayTitle;
@@ -53,11 +56,15 @@ export class VictoryScreen implements MenuScreen {
   private readonly summary: BitmapText;
   private readonly menu: Menu;
   private readonly kit: UiKit;
+  private locale: Locale;
+  private lastInfo: VictorySummaryText | null = null;
   private width = 0;
   private height = 0;
 
-  constructor(kit: UiKit, actions: VictoryScreenActions) {
+  constructor(kit: UiKit, actions: VictoryScreenActions, locale: Locale) {
     this.kit = kit;
+    this.actions = actions;
+    this.locale = locale;
     this.view.visible = false;
 
     this.dim = new Graphics();
@@ -68,26 +75,56 @@ export class VictoryScreen implements MenuScreen {
 
     this.headline = new DisplayTitle(TITLE_STYLES.floor);
     this.headline.view.scale.set(HEADLINE_SCALE);
-    this.headline.set('Sieg!');
+    this.headline.set(t(locale, 'ui.victory.headline'));
     this.view.addChild(this.headline.view);
 
     // Short and plain (#221), not the two-line dialect paragraph this used
     // to be. #58 (story delivery) replaces this beat properly; until then
     // it stays a placeholder beat — "the moment of quiet" #155 asks for,
     // not the finished narrative #58 will eventually write.
-    this.epilogue = uiText('To be continued.', { colour: UI_PALETTE.text, align: 'center' });
+    this.epilogue = uiText(t(locale, 'ui.victory.epilogue'), {
+      colour: UI_PALETTE.text,
+      align: 'center',
+    });
     this.view.addChild(this.epilogue);
 
     this.summary = uiText('', { colour: HUD_PALETTE.gameOverSummary });
     this.view.addChild(this.summary);
 
-    const items: MenuItem[] = [
-      { label: 'Retry', onSelect: actions.onRetry },
-      { label: 'Results', onSelect: actions.onResults },
-      { label: 'Hub', onSelect: actions.onHub },
-    ];
-    this.menu = new Menu(kit, items);
+    this.menu = new Menu(kit, this.menuItems());
     this.view.addChild(this.menu.view);
+  }
+
+  private menuItems(): MenuItem[] {
+    const locale = this.locale;
+    const actions = this.actions;
+    return [
+      { label: t(locale, 'ui.victory.retry'), onSelect: actions.onRetry },
+      { label: t(locale, 'ui.victory.results'), onSelect: actions.onResults },
+      { label: t(locale, 'ui.victory.hub'), onSelect: actions.onHub },
+    ];
+  }
+
+  private applySummary(info: VictorySummaryText): void {
+    this.summary.text = t(this.locale, 'ui.victory.summary', {
+      seconds: info.seconds.toFixed(1),
+      kills: info.kills,
+      floor: info.floor,
+    });
+  }
+
+  /** Rebuilds every label in `locale` — call whenever the player changes the language. */
+  setLocale(locale: Locale): void {
+    this.locale = locale;
+    this.headline.set(t(locale, 'ui.victory.headline'));
+    this.epilogue.text = t(locale, 'ui.victory.epilogue');
+    this.menu.setItems(this.menuItems());
+    if (this.lastInfo !== null) {
+      this.applySummary(this.lastInfo);
+    }
+    if (this.view.visible) {
+      this.layOut();
+    }
   }
 
   get visible(): boolean {
@@ -95,7 +132,8 @@ export class VictoryScreen implements MenuScreen {
   }
 
   show(info: VictorySummaryText): void {
-    this.summary.text = `${info.seconds.toFixed(1)}s   ${String(info.kills)} killed   ${info.floor}`;
+    this.lastInfo = info;
+    this.applySummary(info);
     this.view.visible = true;
     this.menu.refresh();
     this.layOut();

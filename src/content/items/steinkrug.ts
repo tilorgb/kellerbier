@@ -17,8 +17,8 @@ const SPLASH_DAMAGE_SCALE = 0.5;
 export const steinkrug: ItemDefinition = {
   id: 'steinkrug',
   name: 'Steinkrug',
-  description: 'Shots fly over obstacles and splash on impact',
-  flavourText: 'Not aerodynamic. Not meant to be.',
+  description: 'items.steinkrug.description',
+  flavourText: 'items.steinkrug.flavourText',
   sprite: 'steinkrug',
   pools: ['treasure', 'shop'],
   quality: 1,
