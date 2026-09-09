@@ -4890,7 +4890,58 @@ what closes that gap, and it is deliberately not blocked on this decision. Recor
 now is the point — the argument is the artefact, so that the next person to have this idea finds
 it rather than re-deriving it.
 
-## 90. Being drunk takes your sight, not your camera — and the blur is a framebuffer copy, not a render target
+## 90. The dispatch-depth guard is leak-proof now, and 64 is what a real 25-item build needs
+
+**Decided:** M8, #314. **Builds on:** #26/#27 (the item hook dispatch system and its budget),
+#30 (the synergy fuzz harness), #84 (nested dispatch from inside a hook, `docs/DECISIONS.md`'s
+sibling note in `sim/systems/items.ts`'s own doc comment), #237 (the roster growth that made the
+symptom louder).
+
+`npm run fuzz` had been red on `main` long enough that the number it reported stopped being
+information: 4,080 of 10,000 combinations failing with the same message. Two bugs, stacked. The
+real one: `MAX_DEPTH` (8) is a guard against a hook re-entering the dispatch system too deep, and
+`beginDispatch`/`endDispatch` are hand-paired at eleven call sites with no `try`/`finally` — so a
+hook that legitimately tripped the guard threw *before* its matching `endDispatch` ran, and every
+frame above it on the call stack did the same on the way out. The dispatch depth is module-level
+state (`depthSlot`), deliberately shared across every `GameSim` the fuzz harness builds in one
+process for the reasons #26's own doc comment gives — so one real trip left the counter stuck
+raised, and every combination that ran afterwards inherited it. 4,079 of the 4,080 were never real
+failures at all; they were one crash's shadow.
+
+**The fix is `try`/`finally` at all eleven dispatch sites**, wrapping the `forEachHeld` call so
+`endDispatch` always runs, however the dispatch — or anything nested inside it — exits.
+`GameSim`'s constructor also calls the new `resetItemDispatchState()` unconditionally, on top of
+that: belt and braces, because "module-level state shared by a long-lived process" is exactly the
+shape of bug that comes back, and a one-line reset at the one place every sim is born is cheap
+insurance against whatever the next version of it looks like.
+
+**That alone took 4,080 down to 80 — and 80 was still real, just wrong to gate on.** Every one of
+the 80 was the same message, `nested more than 8 deep`, and 77 of them were 25-item combinations.
+`MAX_DEPTH`'s original comment assumed "real nesting is two deep — a hook spawns, the spawn
+dispatches" — true for *one* spawner item, which is what #84 was written against. It stops being
+true once a build can hold several different spawner items at once (Spezi, Braumeister-Visier,
+Braumeister-Hammer and others are all spawners now): each one's spawn dispatch can land on a
+held item whose own hook spawns again, and that chain nests once *per spawner in the build*, not
+twice total. A 25-item roster makes holding several of them simultaneously the unsurprising case,
+not the edge one.
+
+Measured by running the guard with progressively higher ceilings against the full, deterministic
+10,000-combination sweep (same seeds every time): 11 crashes remained at a ceiling of 16, 1
+remained at 24 and again at 32 (the same seed both times), and 0 remained at 48 and at 64. The
+one seed that needed more than 32 is a 25-item build stacking `braumeister-hammer`,
+`braumeister-visier` and `braumeister-schuerze` together with several other spawners — a real,
+finite chain, not a runaway: every ceiling tested completed the full sweep in about the same
+40 seconds, so this was never an infinite loop hiding behind a low bound. `MAX_DEPTH` is now 64 —
+comfortable headroom above the worst case this roster produces today, while still catching what
+the guard actually exists to catch: a hook that is *unboundedly* re-entering itself, not a
+large-but-finite fan of legitimately spawning items. `tests/unit/item-hooks.test.ts`'s #314
+regression tests pin the leak-proof behaviour without hardcoding the exact ceiling, so a future
+roster that needs the number raised again does not also need to touch those tests.
+
+`npm run fuzz` on `main` now reports zero crashes and zero non-finite values across all 10,000
+combinations — the nightly job (`.github/workflows/fuzz.yml`) going red again will mean something.
+
+## 91. Being drunk takes your sight, not your camera — and the blur is a framebuffer copy, not a render target
 
 Promille's headline penalty was **camera sway**: the whole frame drifting in a slow 12-pixel
 circle, always, from the first sip. It was the effect that made the mechanic read as drunk at a

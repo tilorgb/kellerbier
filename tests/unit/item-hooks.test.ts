@@ -716,3 +716,83 @@ describe('nested dispatch from inside a hook', () => {
     expect(laterTicks).toBe(10);
   });
 });
+
+/**
+ * #314: a hook nested past `MAX_DEPTH` (`sim/systems/items.ts`) throws by
+ * design — but `beginDispatch`/`endDispatch` used to be paired by hand at
+ * each dispatch site with no `try`/`finally`, so a throw from deep inside a
+ * nested dispatch chain unwound the JS stack without ever running the
+ * matching `endDispatch`s, leaving the module-level dispatch depth stuck
+ * raised. Because that depth is shared by every `GameSim` in the process,
+ * the very next dispatch — on a fresh sim, over an item with nothing wrong
+ * with it — hit the same "nested too deep" guard immediately. That is
+ * exactly what turned one legitimately-too-deep synergy fuzz combination
+ * into 4,080 identical failures: the first crash poisoned every combination
+ * that ran after it in the same process.
+ */
+describe('a throwing hook does not leave the dispatch depth raised (#314)', () => {
+  it('an unrelated dispatch right after a deep-nesting throw still fires normally', () => {
+    // Recurses through `stepItemTick` on every tick, so this alone drives
+    // the dispatch depth past `MAX_DEPTH` and throws.
+    const recursive = baseItem('rekursion', {
+      hooks: {
+        onTick: (ctx) => {
+          stepItemTick(ctx.sim);
+        },
+      },
+    });
+    const deepSim = new GameSim({ room: bareRoom(), items: [recursive] });
+    deepSim.pickUpItem('rekursion');
+
+    expect(() => {
+      stepItemTick(deepSim);
+    }).toThrow(/nested more than \d+ deep/i);
+
+    // A completely unrelated sim, with an item that does nothing unusual —
+    // this must dispatch normally, not inherit the depth the sim above blew
+    // past.
+    const log: string[] = [];
+    const item = baseItem('unbeteiligt', { hooks: { onKill: (ctx) => log.push(ctx.itemId) } });
+    const sim = new GameSim({ room: bareRoom(), items: [item] });
+    sim.pickUpItem('unbeteiligt');
+
+    expect(() => {
+      dispatchItemKill(sim, 1);
+    }).not.toThrow();
+    expect(log).toEqual(['unbeteiligt']);
+  });
+
+  it('the same sim recurses the same full depth again on the very next dispatch', () => {
+    // Deliberately doesn't hardcode `MAX_DEPTH` (`sim/systems/items.ts`,
+    // not exported) — this asserts the *shape* of the reset instead: the
+    // second call must recurse just as deep as the first, not fail on its
+    // very first nesting the way a leaked depth would.
+    let hookCalls = 0;
+    const recursive = baseItem('rekursion', {
+      hooks: {
+        onTick: (ctx) => {
+          hookCalls += 1;
+          stepItemTick(ctx.sim);
+        },
+      },
+    });
+    const sim = new GameSim({ room: bareRoom(), items: [recursive] });
+    sim.pickUpItem('rekursion');
+
+    expect(() => {
+      stepItemTick(sim);
+    }).toThrow(/nested more than \d+ deep/i);
+    const callsBeforeFirstThrow = hookCalls;
+    expect(callsBeforeFirstThrow).toBeGreaterThan(0);
+
+    // If the depth had leaked at its max, this call's own `beginDispatch`
+    // would throw immediately, without ever reaching `onTick` again —
+    // `hookCalls` would stay exactly where it was. Recursing the same
+    // number of levels again proves the depth actually unwound to zero
+    // after the first throw.
+    expect(() => {
+      stepItemTick(sim);
+    }).toThrow(/nested more than \d+ deep/i);
+    expect(hookCalls).toBe(callsBeforeFirstThrow * 2);
+  });
+});

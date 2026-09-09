@@ -124,6 +124,7 @@ import {
   dispatchItemLethalDamage,
   dispatchItemProjectileSpawn,
   dispatchItemRoomClear,
+  resetItemDispatchState,
   stepItemTick,
 } from '../systems/items.js';
 import { stepPedestal } from '../systems/pedestal.js';
@@ -1562,6 +1563,11 @@ export class GameSim {
   private freshBombEntity: Entity | null = null;
 
   constructor(options: GameSimOptions = {}) {
+    // Belt-and-braces per-run reset — see `resetItemDispatchState`'s doc
+    // comment (#314): `sim/systems/items.ts`'s dispatch depth is
+    // module-level state shared by every `GameSim` a long-lived process
+    // (the fuzz harness, the playtest sweep) builds.
+    resetItemDispatchState();
     this.seed = options.seed ?? 0;
     this.world = new World({ capacity: options.capacity ?? DEFAULT_CAPACITY });
     this.random = createRunRandom(this.seed);
