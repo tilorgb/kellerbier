@@ -65,6 +65,16 @@ const MAIN_THEME_MELODY: readonly (readonly [beat: number, note: string, duratio
   ];
 
 export const floor1DerKeller: TrackDefinition = {
+  sample: {
+    assetId: '01-consolidated',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 341.3333333333333,
+      fadeInSeconds: 0.02,
+      fadeOutSeconds: 0.05,
+      gain: 1,
+    },
+  },
   id: 'floor-1-der-keller',
   title: 'Der Keller',
   ticksPerBeat: TICKS_PER_BEAT,
@@ -81,6 +91,16 @@ export const floor1DerKeller: TrackDefinition = {
 };
 
 export const floor2DorfUndAcker: TrackDefinition = {
+  sample: {
+    assetId: '01-consolidated',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 341.3333333333333,
+      fadeInSeconds: 0.02,
+      fadeOutSeconds: 0.05,
+      gain: 1,
+    },
+  },
   id: 'floor-2-dorf-acker',
   title: 'Dorf & Acker',
   ticksPerBeat: TICKS_PER_BEAT,
@@ -189,6 +209,16 @@ function bumpOctave(note: string, by: number): string {
 // --- Boss themes -----------------------------------------------------------
 
 export const bossKellerassel: TrackDefinition = {
+  sample: {
+    assetId: '01-consolidated',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 341.3333333333333,
+      fadeInSeconds: 0.02,
+      fadeOutSeconds: 0.05,
+      gain: 1,
+    },
+  },
   id: 'boss-kellerassel',
   title: 'Die Große Kellerassel',
   // Slower grid (90 BPM) — the tutorial boss, gentle on purpose.
@@ -205,6 +235,16 @@ export const bossKellerassel: TrackDefinition = {
 };
 
 export const bossDerStier: TrackDefinition = {
+  sample: {
+    assetId: '01-consolidated',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 341.3333333333333,
+      fadeInSeconds: 0.02,
+      fadeOutSeconds: 0.05,
+      gain: 1,
+    },
+  },
   id: 'boss-der-stier',
   title: 'Der Stier',
   // Faster grid (180 BPM) — the charge-and-stun loop this fight runs on.
@@ -291,6 +331,16 @@ export const bossDerStier: TrackDefinition = {
 // --- Menu, hub and the ending ----------------------------------------------
 
 export const titleTheme: TrackDefinition = {
+  sample: {
+    assetId: '01-consolidated',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 341.3333333333333,
+      fadeInSeconds: 0.02,
+      fadeOutSeconds: 0.05,
+      gain: 1,
+    },
+  },
   id: 'title-theme',
   title: 'Title',
   ticksPerBeat: TICKS_PER_BEAT,
@@ -333,6 +383,16 @@ export const hubTheme: TrackDefinition = {
 };
 
 export const victoryTheme: TrackDefinition = {
+  sample: {
+    assetId: '01-consolidated',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 341.3333333333333,
+      fadeInSeconds: 0.02,
+      fadeOutSeconds: 0.05,
+      gain: 1,
+    },
+  },
   id: 'victory-theme',
   title: 'Victory',
   ticksPerBeat: TICKS_PER_BEAT,
