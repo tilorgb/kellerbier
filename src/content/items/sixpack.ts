@@ -73,8 +73,8 @@ export function sixpackFilledSlots(
 export const sixpack: ItemDefinition = {
   id: 'sixpack',
   name: 'Sixpack',
-  description: 'Active: Maß you pick up go in the carrier — press to drink one',
-  flavourText: 'Six bottles is not hoarding. Six bottles is planning.',
+  description: 'items.sixpack.description',
+  flavourText: 'items.sixpack.flavourText',
   sprite: 'sixpack',
   pools: ['treasure', 'shop', 'boss', 'secret'],
   quality: 2,

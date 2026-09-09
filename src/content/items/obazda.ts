@@ -16,8 +16,8 @@ const SLOW_TICKS = 12;
 export const obazda: ItemDefinition = {
   id: 'obazda',
   name: 'Obazda',
-  description: 'Slows enemies near you',
-  flavourText: 'Technically a dip. Structurally closer to mortar.',
+  description: 'items.obazda.description',
+  flavourText: 'items.obazda.flavourText',
   sprite: 'obazda',
   pools: ['treasure', 'shop'],
   quality: 1,

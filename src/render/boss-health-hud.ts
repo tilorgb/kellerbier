@@ -1,5 +1,7 @@
 import { Container, Sprite, type BitmapText } from './gfx/index.js';
 import type { GameSim } from '../sim/game/sim.js';
+import type { Locale } from '../i18n/locale.js';
+import { t } from '../i18n/translate.js';
 import { HUD_PALETTE, UI_PALETTE } from './palette.js';
 import { type UiKit } from './ui/kit.js';
 import { uiText, uiTextWidth, UI_TEXT_HEIGHT } from './ui/text.js';
@@ -30,7 +32,7 @@ export class BossHealthHud {
   private readonly fill: Sprite;
   private readonly label: BitmapText;
 
-  constructor(kit: UiKit) {
+  constructor(kit: UiKit, locale: Locale) {
     const well = kit.wellSprite(BAR_WIDTH, BAR_HEIGHT);
     well.position.set(-BAR_WIDTH / 2, 0);
     this.view.addChild(well);
@@ -41,14 +43,24 @@ export class BossHealthHud {
     this.fill.height = BAR_HEIGHT - BAR_INSET * 2;
     this.view.addChild(this.fill);
 
-    this.label = uiText('BOSS', { colour: UI_PALETTE.accent });
+    this.label = uiText(t(locale, 'ui.hud.bossLabel'), { colour: UI_PALETTE.accent });
+    this.view.addChild(this.label);
     // Positioned rather than anchored: `BitmapText`'s anchor is applied to its
     // whole line box, and the exact centring wanted here is over the bar,
     // which is the thing whose width is known.
-    this.label.position.set(-Math.round(uiTextWidth('BOSS') / 2), -UI_TEXT_HEIGHT - 2);
-    this.view.addChild(this.label);
+    this.positionLabel();
 
     this.view.visible = false;
+  }
+
+  private positionLabel(): void {
+    this.label.position.set(-Math.round(uiTextWidth(this.label.text) / 2), -UI_TEXT_HEIGHT - 2);
+  }
+
+  /** Rebuilds the heading in `locale` — call whenever the player changes the language. */
+  setLocale(locale: Locale): void {
+    this.label.text = t(locale, 'ui.hud.bossLabel');
+    this.positionLabel();
   }
 
   sync(sim: GameSim): void {

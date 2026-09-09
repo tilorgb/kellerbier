@@ -1,6 +1,13 @@
 import type { ItemDefinition } from '../../sim/item/definition.js';
 
-/** Shots between an extra aimed volley, and its damage relative to Damage. */
+/**
+ * Shots between an extra aimed volley, and its damage relative to Damage.
+ *
+ * Content can only hold translation *keys* (#52's `content-is-data` lint
+ * rule bars a value import of `t()` here), so the description's "5" is a
+ * hand-authored number in `src/i18n/dictionaries/*.ts` rather than derived
+ * from this constant — retune it there too if this ever changes.
+ */
 const SHOTS_PER_VOLLEY = 5;
 const DAMAGE_SCALE = 0.7;
 
@@ -20,8 +27,8 @@ const DAMAGE_SCALE = 0.7;
 export const braumeisterVisier: ItemDefinition = {
   id: 'braumeister-visier',
   name: 'Braumeister-Visier',
-  description: `Every ${String(SHOTS_PER_VOLLEY)}th shot fires an extra, piercing volley`,
-  flavourText: 'He has fired the same shot ten thousand times. It has never once missed.',
+  description: 'items.braumeister-visier.description',
+  flavourText: 'items.braumeister-visier.flavourText',
   sprite: 'braumeister-visier',
   pools: ['shop', 'boss'],
   quality: 2,

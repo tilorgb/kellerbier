@@ -12,8 +12,8 @@ const BIERMARKEN_AMOUNT = 1;
 export const brotzeitbrett: ItemDefinition = {
   id: 'brotzeitbrett',
   name: 'Brotzeitbrett',
-  description: 'Clearing a room heals 1 and grants a Biermarken',
-  flavourText: 'Radishes, cheese, a pretzel. Nobody has ever once finished one alone.',
+  description: 'items.brotzeitbrett.description',
+  flavourText: 'items.brotzeitbrett.flavourText',
   sprite: 'brotzeitbrett',
   pools: ['treasure', 'shop'],
   quality: 0,

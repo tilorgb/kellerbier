@@ -190,7 +190,7 @@ describe('priced pickup', () => {
     expect(sim.playerHealth).toBe(damaged);
     expect(sim.shopPreview).toEqual({
       name: 'Maß',
-      description: 'Raises Promille',
+      description: 'pickups.mass-full.description',
       price: 5,
       affordable: true,
     });
@@ -326,7 +326,10 @@ describe('pickup toast', () => {
     sim.world.flush();
 
     sim.step(idle());
-    expect(sim.pickupToast).toEqual({ name: 'Bierfassl', description: 'Bomb +1' });
+    expect(sim.pickupToast).toEqual({
+      name: 'Bierfassl',
+      description: 'pickups.bierfassl.description',
+    });
 
     for (let tick = 0; tick < sim.tuning.pickup.toastTicks; tick++) {
       sim.step(idle());
@@ -345,6 +348,9 @@ describe('pickup toast', () => {
     sim.spawnPickup('biermarke-1', sim.positionX(index), sim.positionY(index));
     sim.world.flush();
     sim.step(idle());
-    expect(sim.pickupToast).toEqual({ name: 'Biermarke', description: 'Currency +1' });
+    expect(sim.pickupToast).toEqual({
+      name: 'Biermarke',
+      description: 'pickups.biermarke-1.description',
+    });
   });
 });

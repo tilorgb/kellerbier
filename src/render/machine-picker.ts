@@ -1,5 +1,7 @@
 import { Container, Graphics, Sprite } from './gfx/index.js';
 import type { MachineRollTier } from '../sim/item/roll.js';
+import type { Locale } from '../i18n/locale.js';
+import { t } from '../i18n/translate.js';
 import { EFFECT_PALETTE, HUD_PALETTE, UI_PALETTE } from './palette.js';
 import { FocusRing, type UiKit } from './ui/kit.js';
 import { UI_LINE_HEIGHT, UI_TEXT_HEIGHT, uiText, uiTextWidth } from './ui/text.js';
@@ -102,11 +104,13 @@ export class MachinePickerScreen {
   private readonly content = new Container();
 
   private state: MachinePickerView | null = null;
+  private locale: Locale;
   private width = 0;
   private height = 0;
 
-  constructor(kit: UiKit) {
+  constructor(kit: UiKit, locale: Locale) {
     this.kit = kit;
+    this.locale = locale;
     this.view.visible = false;
     this.view.addChild(this.backdrop);
     this.view.addChild(this.panel);
@@ -137,6 +141,14 @@ export class MachinePickerScreen {
 
   hide(): void {
     this.view.visible = false;
+  }
+
+  /** Rebuilds every label in `locale` — call whenever the player changes the language. */
+  setLocale(locale: Locale): void {
+    this.locale = locale;
+    if (this.view.visible) {
+      this.layOut();
+    }
   }
 
   /** Call on every resize. Dimensions in UI pixels. */
@@ -249,7 +261,9 @@ export class MachinePickerScreen {
 
     let selectedResultBox: { x: number; y: number; width: number; height: number } | null = null;
     if (state.phase === 'rolling') {
-      const label = uiText('Rolling…', { colour: UI_PALETTE.textDim });
+      const label = uiText(t(this.locale, 'ui.machinePicker.rollingLabel'), {
+        colour: UI_PALETTE.textDim,
+      });
       label.position.set(rightX, columnsTop);
       this.content.addChild(label);
 
@@ -279,7 +293,7 @@ export class MachinePickerScreen {
         badge.position.set(Math.round(rightX + (RESULT_WIDTH - BADGE_WIDTH) / 2), y);
         this.content.addChild(badge);
 
-        const badgeText = 'UNLUCKY';
+        const badgeText = t(this.locale, 'ui.machinePicker.unluckyBadge');
         const badgeLabel = uiText(badgeText, { colour: 0xffffff });
         badgeLabel.position.set(
           Math.round(rightX + (RESULT_WIDTH - uiTextWidth(badgeText)) / 2),
@@ -312,14 +326,19 @@ export class MachinePickerScreen {
         }
       });
     } else {
-      const placeholder = uiText('choose an item to begin', { colour: UI_PALETTE.textDim });
+      const placeholder = uiText(t(this.locale, 'ui.machinePicker.choosePlaceholder'), {
+        colour: UI_PALETTE.textDim,
+      });
       placeholder.position.set(rightX, columnsTop);
       this.content.addChild(placeholder);
     }
     this.resultFocusRing.sync(selectedResultBox);
 
     let y = columnsTop + columnsHeight + SECTION_GAP;
-    const costLine = `${String(state.cost)} Biermarken   ${String(Math.round(state.breakChance * 100))}% to break`;
+    const costLine = t(this.locale, 'ui.machinePicker.costLine', {
+      cost: state.cost,
+      breakChance: Math.round(state.breakChance * 100),
+    });
     this.addCentred(
       costLine,
       panelLeft + Math.round(panelWidth / 2),

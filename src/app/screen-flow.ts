@@ -3,6 +3,7 @@ import type { MenuScreen } from '../render/ui/menu.js';
 import { CreditsScreen } from '../render/credits-screen.js';
 import { PauseScreen } from '../render/pause-screen.js';
 import { TitleScreen } from '../render/title-screen.js';
+import type { Locale } from '../i18n/locale.js';
 import type { GamepadMenuNav } from './input/menu-nav.js';
 import type { GamepadSource } from './input/gamepad.js';
 import type { FixedTimestepLoop } from './loop.js';
@@ -41,6 +42,7 @@ export class ScreenFlow {
 
 export interface ScreenFlowControllerDeps {
   readonly kit: UiKit;
+  readonly locale: Locale;
   readonly loop: FixedTimestepLoop;
   readonly gamepad: GamepadSource;
   /** Shared with whatever else in `main.ts` polls gamepad menu navigation (the game-over/victory/results screens) — see `GamepadMenuNav`'s own doc comment for why one instance is enough. */
@@ -72,43 +74,62 @@ export class ScreenFlowController {
 
   constructor(deps: ScreenFlowControllerDeps) {
     this.deps = deps;
-    this.title = new TitleScreen(deps.kit, {
-      onStart: () => {
-        this.startFromTitle();
+    this.title = new TitleScreen(
+      deps.kit,
+      {
+        onStart: () => {
+          this.startFromTitle();
+        },
+        onContinue: () => {
+          this.continueFromTitle();
+        },
+        onSettings: () => {
+          deps.openSettings();
+        },
+        onCredits: () => {
+          this.openCredits();
+        },
+        onQuit: () => {
+          // Best-effort, same as every other web game's "quit": `window.close`
+          // only ever succeeds on a tab a script opened, so on an ordinary tab
+          // this is a silent no-op rather than an error a player has to see.
+          window.close();
+        },
+        canContinue: () => this.canContinueFlag,
       },
-      onContinue: () => {
-        this.continueFromTitle();
+      deps.locale,
+    );
+    this.pause = new PauseScreen(
+      deps.kit,
+      {
+        onResume: () => {
+          this.closePause();
+        },
+        onSettings: () => {
+          deps.openSettings();
+        },
+        onQuitToTitle: () => {
+          this.quitToTitle();
+        },
       },
-      onSettings: () => {
-        deps.openSettings();
+      deps.locale,
+    );
+    this.credits = new CreditsScreen(
+      deps.kit,
+      {
+        onBack: () => {
+          this.closeCredits();
+        },
       },
-      onCredits: () => {
-        this.openCredits();
-      },
-      onQuit: () => {
-        // Best-effort, same as every other web game's "quit": `window.close`
-        // only ever succeeds on a tab a script opened, so on an ordinary tab
-        // this is a silent no-op rather than an error a player has to see.
-        window.close();
-      },
-      canContinue: () => this.canContinueFlag,
-    });
-    this.pause = new PauseScreen(deps.kit, {
-      onResume: () => {
-        this.closePause();
-      },
-      onSettings: () => {
-        deps.openSettings();
-      },
-      onQuitToTitle: () => {
-        this.quitToTitle();
-      },
-    });
-    this.credits = new CreditsScreen(deps.kit, {
-      onBack: () => {
-        this.closeCredits();
-      },
-    });
+      deps.locale,
+    );
+  }
+
+  /** Rebuilds every title/pause/credits label in `locale` — call whenever the player changes the language. */
+  setLocale(locale: Locale): void {
+    this.title.setLocale(locale);
+    this.pause.setLocale(locale);
+    this.credits.setLocale(locale);
   }
 
   get current(): Screen {

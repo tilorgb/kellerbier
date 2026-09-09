@@ -16,8 +16,8 @@ const DAMAGE_MULTIPLIER = 0.75;
 export const apfelstrudel: ItemDefinition = {
   id: 'apfelstrudel',
   name: 'Apfelstrudel',
-  description: 'Shots split apart on impact. Damage -25%',
-  flavourText: 'Pulled thin enough to read a newspaper through. Nobody has tried.',
+  description: 'items.apfelstrudel.description',
+  flavourText: 'items.apfelstrudel.flavourText',
   sprite: 'apfelstrudel',
   pools: ['treasure', 'shop', 'boss'],
   quality: 2,

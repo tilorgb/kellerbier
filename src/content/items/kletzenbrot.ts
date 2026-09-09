@@ -16,8 +16,8 @@ const DAMAGE_MULTIPLIER = 0.85;
 export const kletzenbrot: ItemDefinition = {
   id: 'kletzenbrot',
   name: 'Kletzenbrot',
-  description: 'Shots poison what they hit. Damage -15%',
-  flavourText: 'Keeps for a month. Tastes like it has.',
+  description: 'items.kletzenbrot.description',
+  flavourText: 'items.kletzenbrot.flavourText',
   sprite: 'kletzenbrot',
   pools: ['shop', 'boss', 'secret'],
   quality: 2,

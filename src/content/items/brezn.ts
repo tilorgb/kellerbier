@@ -24,8 +24,8 @@ const DAMAGE_SCALE = 0.5;
 export const brezn: ItemDefinition = {
   id: 'brezn',
   name: 'Brezn',
-  description: 'An orbiting pretzel that damages enemies on contact',
-  flavourText: 'Lightly salted. Heavily weaponised.',
+  description: 'items.brezn.description',
+  flavourText: 'items.brezn.flavourText',
   sprite: 'brezn',
   pools: ['treasure', 'shop'],
   quality: 1,

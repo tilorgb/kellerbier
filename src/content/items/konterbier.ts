@@ -20,8 +20,8 @@ import type { ItemDefinition } from '../../sim/item/definition.js';
 export const konterbier: ItemDefinition = {
   id: 'konterbier',
   name: 'Konterbier',
-  description: 'Drinking while hungover instantly clears the Kater',
-  flavourText: 'Hair of the dog. The dog remembers you fondly.',
+  description: 'items.konterbier.description',
+  flavourText: 'items.konterbier.flavourText',
   sprite: 'konterbier',
   pools: ['treasure', 'shop'],
   quality: 1,

@@ -13,8 +13,8 @@ const PULL_STRENGTH = 0.15;
 export const hendlgeruch: ItemDefinition = {
   id: 'hendlgeruch',
   name: 'Hendlgeruch',
-  description: 'Constantly pulls distant enemies toward you',
-  flavourText: 'Carries for a kilometre. Everyone within a kilometre now has plans.',
+  description: 'items.hendlgeruch.description',
+  flavourText: 'items.hendlgeruch.flavourText',
   sprite: 'hendlgeruch',
   pools: ['treasure', 'shop', 'secret'],
   quality: 1,

@@ -15,8 +15,8 @@ import type { ItemDefinition } from '../../sim/item/definition.js';
 export const lederhosn: ItemDefinition = {
   id: 'lederhosn',
   name: 'Lederhosn',
-  description: 'Absorbs one hit per room',
-  flavourText: 'Stiff enough to stand up on its own. Some say it already does.',
+  description: 'items.lederhosn.description',
+  flavourText: 'items.lederhosn.flavourText',
   sprite: 'lederhosn',
   pools: ['treasure', 'shop'],
   quality: 2,

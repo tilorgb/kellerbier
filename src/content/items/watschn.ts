@@ -20,8 +20,8 @@ const COOLDOWN_TICKS = 30;
 export const watschn: ItemDefinition = {
   id: 'watschn',
   name: 'Watschn',
-  description: 'Getting hit sends a damaging shockwave out from you',
-  flavourText: 'The Bavarian conflict-resolution method. Surprisingly effective.',
+  description: 'items.watschn.description',
+  flavourText: 'items.watschn.flavourText',
   sprite: 'watschn',
   pools: ['shop', 'boss', 'secret'],
   quality: 2,

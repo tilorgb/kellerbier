@@ -5497,7 +5497,13 @@ export class GameSim {
           this.stats.setSourceModifiers(key, modifiers);
         }
         this.setRevealName = set.name;
-        this.setRevealDescription = `The full ${set.name} set — every piece is doing more together.`;
+        // A localisation key, not literal text — `render/item-set-hud.ts`
+        // resolves it with `set.name` as the `{name}` interpolation var. Sim
+        // never calls `t()` itself: the string must not depend on the
+        // player's locale setting, the same "a settings toggle changes
+        // presentation, never simulation state" rule `docs/DECISIONS.md` #41
+        // holds accessibility settings to.
+        this.setRevealDescription = 'ui.hud.setCompletionDescription';
         this.setRevealTicks = Math.round(this.tuning.itemPool.revealHoldTicks);
         this.toastTicks = 0;
         this.pedestalRevealTicks = 0;

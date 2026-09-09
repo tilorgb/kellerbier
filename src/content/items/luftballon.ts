@@ -8,8 +8,8 @@ import type { ItemDefinition } from '../../sim/item/definition.js';
 export const luftballon: ItemDefinition = {
   id: 'luftballon',
   name: 'Luftballon',
-  description: 'Shots return to you after traveling their full range',
-  flavourText: 'Filled with helium. The shots do not need it, but morale does.',
+  description: 'items.luftballon.description',
+  flavourText: 'items.luftballon.flavourText',
   sprite: 'luftballon',
   pools: ['treasure', 'shop'],
   quality: 1,

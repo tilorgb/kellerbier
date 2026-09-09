@@ -21,8 +21,8 @@ const RANGE_MULTIPLIER = 0.85;
 export const zwetschgendatschi: ItemDefinition = {
   id: 'zwetschgendatschi',
   name: 'Zwetschgendatschi',
-  description: 'Clearing a room without being hit heals 1. Range -15%',
-  flavourText: 'The plums are the point. The raisins are an opinion.',
+  description: 'items.zwetschgendatschi.description',
+  flavourText: 'items.zwetschgendatschi.flavourText',
   sprite: 'zwetschgendatschi',
   pools: ['treasure', 'shop'],
   quality: 1,

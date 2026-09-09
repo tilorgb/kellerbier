@@ -127,6 +127,8 @@ import {
   saveSettings,
 } from './settings.js';
 import { loadPreferences } from './preferences.js';
+import { t, type DictKey } from '../i18n/translate.js';
+import type { Locale } from '../i18n/locale.js';
 import { ActiveRunRecorder, decodeActiveRunFrames, persistActiveRun } from './save/active-run.js';
 import type { CharacterTraits } from '../sim/character/definition.js';
 import { loadSave } from './save/storage.js';
@@ -630,19 +632,22 @@ function minibossRoomsRevealed(plan: FloorPlan, visitedRoomIds: ReadonlySet<stri
  * about to reroll — `machinePickerView` below takes over and
  * `MachinePickerScreen` draws it instead (#238).
  */
-function machineHudLabel(preview: {
-  readonly state: 'empty' | 'unfed' | 'fed' | 'broken';
-  readonly itemName: string | undefined;
-}): string {
+function machineHudLabel(
+  locale: Locale,
+  preview: {
+    readonly state: 'empty' | 'unfed' | 'fed' | 'broken';
+    readonly itemName: string | undefined;
+  },
+): string {
   switch (preview.state) {
     case 'broken':
-      return 'Losbrunnen — kaputt.';
+      return t(locale, 'ui.machinePicker.kaputt');
     case 'empty':
       return preview.itemName === undefined
-        ? 'Losbrunnen — nothing to feed it.'
-        : `Losbrunnen — ${preview.itemName} is gone.`;
+        ? t(locale, 'ui.machinePicker.emptyNothing')
+        : t(locale, 'ui.machinePicker.emptyGone', { itemName: preview.itemName });
     case 'unfed':
-      return 'Losbrunnen  [use: choose an item]';
+      return t(locale, 'ui.machinePicker.unfedHint');
     case 'fed':
       // Unreachable from `main.ts` — `'fed'` always routes to the picker
       // screen instead — kept exhaustive so a future caller can't forget it.
@@ -659,6 +664,7 @@ function machineHudLabel(preview: {
  * `activatePrompt` does.
  */
 function machinePickerView(
+  locale: Locale,
   sim: GameSim,
   preview: {
     readonly state: 'empty' | 'unfed' | 'fed' | 'broken';
@@ -676,14 +682,17 @@ function machinePickerView(
       ? choices.map((choice) => ({
           id: choice.id,
           name: choice.name,
-          description: choice.description,
+          description: t(locale, choice.description as DictKey),
           selected: choice.selected,
         }))
       : [
           {
             id: '',
             name: preview.itemName ?? '',
-            description: preview.itemDescription ?? '',
+            description:
+              preview.itemDescription === undefined
+                ? ''
+                : t(locale, preview.itemDescription as DictKey),
             selected: true,
           },
         ];
@@ -697,18 +706,18 @@ function machinePickerView(
 
   const hint =
     phase === 'rolling'
-      ? '…'
+      ? t(locale, 'ui.machinePicker.rollingHint')
       : phase === 'results'
         ? results.length > 1
-          ? '[move] choose   [use] confirm'
-          : '[use] confirm'
+          ? t(locale, 'ui.machinePicker.moveChooseUseConfirm')
+          : t(locale, 'ui.machinePicker.useConfirm')
         : preview.state === 'unfed'
           ? preview.affordable
-            ? '[move] browse   [use] feed'
-            : 'not enough Biermarken'
+            ? t(locale, 'ui.machinePicker.browseAndFeed')
+            : t(locale, 'ui.machinePicker.notEnoughBiermarken')
           : preview.affordable
-            ? '[use] reroll'
-            : 'not enough Biermarken';
+            ? t(locale, 'ui.machinePicker.useReroll')
+            : t(locale, 'ui.machinePicker.notEnoughBiermarken');
   return {
     cards,
     phase,
@@ -958,28 +967,36 @@ async function boot(): Promise<void> {
   // having a column of debug text drawn across it.
   uiLayer.addChild(hudLayer);
 
-  const gameOverScreen = new GameOverScreen(kit, {
-    onRetry: () => {
-      retryRun();
+  const gameOverScreen = new GameOverScreen(
+    kit,
+    {
+      onRetry: () => {
+        retryRun();
+      },
+      onResults: () => {
+        openRunResults();
+      },
+      onHub: () => {
+        quitToTitle();
+      },
     },
-    onResults: () => {
-      openRunResults();
+    preferences.locale,
+  );
+  const victoryScreen = new VictoryScreen(
+    kit,
+    {
+      onRetry: () => {
+        retryRun();
+      },
+      onResults: () => {
+        openRunResults();
+      },
+      onHub: () => {
+        quitToTitle();
+      },
     },
-    onHub: () => {
-      quitToTitle();
-    },
-  });
-  const victoryScreen = new VictoryScreen(kit, {
-    onRetry: () => {
-      retryRun();
-    },
-    onResults: () => {
-      openRunResults();
-    },
-    onHub: () => {
-      quitToTitle();
-    },
-  });
+    preferences.locale,
+  );
 
   /**
    * The results screen — a stylized statistics page opened with `T` and
@@ -989,19 +1006,23 @@ async function boot(): Promise<void> {
    * last run, unlocks, the run board — nothing else. Character select, seed
    * entry and the daily run are a real main menu's job, not built yet.
    */
-  const runResults = new RunResultsScreen(kit, {
-    onNewRun: () => {
-      // Same seed source `Enter` always used here — `pendingSeed`, rolled
-      // once a run ends (`advanceDeathSequence`), not a fresh roll on the
-      // spot the way the global `R` key (`retryRun`) works.
-      closeRunResults();
-      startRun(pendingSeed);
-      playSfx('ui-confirm');
+  const runResults = new RunResultsScreen(
+    kit,
+    {
+      onNewRun: () => {
+        // Same seed source `Enter` always used here — `pendingSeed`, rolled
+        // once a run ends (`advanceDeathSequence`), not a fresh roll on the
+        // spot the way the global `R` key (`retryRun`) works.
+        closeRunResults();
+        startRun(pendingSeed);
+        playSfx('ui-confirm');
+      },
+      onClose: () => {
+        closeRunResults();
+      },
     },
-    onClose: () => {
-      closeRunResults();
-    },
-  });
+    preferences.locale,
+  );
 
   /**
    * The floor's title card (#154) — the screen-filling Fraktur plate a floor
@@ -1012,7 +1033,7 @@ async function boot(): Promise<void> {
    * piece below. A title card with a health row on top of it is a title card
    * that reads as a bug.
    */
-  const floorTitleCard = new FloorTitleCard();
+  const floorTitleCard = new FloorTitleCard(preferences.locale);
   /** When the current floor card comes down, on the wall clock. Render-only — never sim state. */
   let floorCardUntil = 0;
 
@@ -1027,7 +1048,7 @@ async function boot(): Promise<void> {
    * treated line is a texture rather than a string.
    */
   const bossBanner = new DisplayTitle(TITLE_STYLES.threat);
-  bossBanner.set('Bossraum');
+  bossBanner.set(t(preferences.locale, 'ui.hud.bossBanner'));
   bossBanner.view.visible = false;
   hudLayer.addChild(bossBanner.view);
   let bossBannerShown = false;
@@ -1037,7 +1058,7 @@ async function boot(): Promise<void> {
    * doc comment for why it reads `sim.bossHealth` rather than anything named
    * after this specific boss.
    */
-  const bossHealthHud = new BossHealthHud(kit);
+  const bossHealthHud = new BossHealthHud(kit, preferences.locale);
   hudLayer.addChild(bossHealthHud.view);
 
   /**
@@ -1091,7 +1112,7 @@ async function boot(): Promise<void> {
    * machine in Diablo... mixed with the reward dialog in Vampire
    * Survivors."
    */
-  const machinePicker = new MachinePickerScreen(kit);
+  const machinePicker = new MachinePickerScreen(kit, preferences.locale);
   /** Serialized last-drawn `MachinePickerView`, so a frame with nothing new doesn't rebuild the whole screen. */
   let machinePickerViewCache: string | null = null;
   /** The last-drawn view's own `phase`, so confirming a result (`'results'` → `'select'` while still open) gets its own sfx cue rather than reusing `ui-open`/`ui-close`. */
@@ -1139,14 +1160,14 @@ async function boot(): Promise<void> {
    * The character's own row (#47) — hidden for a character whose rules have
    * no state to watch, so an Alois run's HUD is unchanged.
    */
-  const characterHud = new CharacterHud(kit);
+  const characterHud = new CharacterHud(kit, preferences.locale);
   hudLayer.addChild(characterHud.view);
 
   /**
    * Hidden entirely (`ActiveItemHud.sync`) whenever no active item is held,
    * so an ordinary run without one never shows an empty row.
    */
-  const activeItemHud = new ActiveItemHud(kit);
+  const activeItemHud = new ActiveItemHud(kit, preferences.locale);
   hudLayer.addChild(activeItemHud.view);
   /**
    * The Sixpack's banked Maß — its own row under the active-item
@@ -1173,7 +1194,7 @@ async function boot(): Promise<void> {
   hudLayer.addChild(itemStatusHud.view);
 
   /** Item sets (#137): the "N/M held" progress row and the completion banner. */
-  const itemSetHud = new ItemSetHud(kit);
+  const itemSetHud = new ItemSetHud(kit, preferences.locale);
   hudLayer.addChild(itemSetHud.view);
 
   const minimapHud = new MinimapHud(kit, {
@@ -1191,14 +1212,14 @@ async function boot(): Promise<void> {
   hudLayer.addChild(minimapHud.overlayView);
 
   /** A floor's curse (#49): the entry announcement and Sperrstunde's countdown. */
-  const curseHud = new CurseHud(kit);
+  const curseHud = new CurseHud(kit, preferences.locale);
   hudLayer.addChild(curseHud.view);
   /** The mid-run Promille arrival (#236) — its own banner, over the cleared boss room. */
-  const promilleUnlockHud = new PromilleUnlockHud(kit);
+  const promilleUnlockHud = new PromilleUnlockHud(kit, preferences.locale);
   hudLayer.addChild(promilleUnlockHud.view);
 
   /** The spirit walk (#84): a small persistent "you are doing this" readout. */
-  const blutwurzHud = new BlutwurzHud(kit);
+  const blutwurzHud = new BlutwurzHud(kit, preferences.locale);
   hudLayer.addChild(blutwurzHud.view);
 
   /**
@@ -1531,7 +1552,7 @@ async function boot(): Promise<void> {
     }
     pausedBeforeRunResults = loop.paused;
     loop.paused = true;
-    runResults.show(runResultsView(), deathPhase === 'over');
+    runResults.show(runResultsView(preferences.locale), deathPhase === 'over');
     playSfx('ui-open');
   }
 
@@ -2044,7 +2065,7 @@ async function boot(): Promise<void> {
       // is already labelled "Use", so the prompt just points at it.
       const activatePrompt =
         input.activeDevice === 'touch'
-          ? 'Tap Use'
+          ? t(preferences.locale, 'ui.hud.tapUse')
           : actionPrompt(input.bindings, Bindable.Use, device, glyphSet);
       activeItemHud.sync(sim, activatePrompt);
       // The carrier's row appears the moment the item is picked up and goes
@@ -2089,7 +2110,7 @@ async function boot(): Promise<void> {
       }
       const toast = sim.pickupToast;
       if (toast !== null) {
-        const label = `${toast.name} — ${toast.description}`;
+        const label = `${toast.name} — ${t(preferences.locale, toast.description as DictKey)}`;
         if (label !== pickupToastLabel) {
           pickupToastLabel = label;
           pickupToast.set(label);
@@ -2104,9 +2125,10 @@ async function boot(): Promise<void> {
       const preview = sim.shopPreview;
       if (preview !== null) {
         const price = `${String(preview.price)} Biermarken`;
+        const description = t(preferences.locale, preview.description as DictKey);
         const label = preview.affordable
-          ? `${preview.name} — ${preview.description} — ${price}  [use]`
-          : `${preview.name} — ${preview.description} — ${price} (not enough)`;
+          ? `${preview.name} — ${description} — ${price}  ${t(preferences.locale, 'ui.hud.useHint')}`
+          : `${preview.name} — ${description} — ${price} ${t(preferences.locale, 'ui.hud.notEnough')}`;
         if (label !== shopPreviewLabel) {
           shopPreviewLabel = label;
           shopPreview.set(label);
@@ -2131,7 +2153,7 @@ async function boot(): Promise<void> {
           machinePrompt.visible = false;
           machinePromptLabel = '';
         }
-        const view = machinePickerView(sim, machine);
+        const view = machinePickerView(preferences.locale, sim, machine);
         const serialized = JSON.stringify(view);
         if (serialized !== machinePickerViewCache) {
           machinePickerViewCache = serialized;
@@ -2157,7 +2179,7 @@ async function boot(): Promise<void> {
           playSfx('ui-close');
         }
         if (machine !== null) {
-          const label = machineHudLabel(machine);
+          const label = machineHudLabel(preferences.locale, machine);
           if (label !== machinePromptLabel) {
             machinePromptLabel = label;
             machinePrompt.set(label);
@@ -2186,8 +2208,9 @@ async function boot(): Promise<void> {
         // A shop's pedestal is priced (#2); every other one is free. The plate
         // shows the cost in Biermarken before the player presses; pressing
         // when they can't pay is a no-op, the same as an unaffordable pickup.
+        const useHint = t(preferences.locale, 'ui.hud.useHint');
         const label =
-          price > 0 ? `${item.name}  ·  ${String(price)}  [use]` : `${item.name}  [use]`;
+          price > 0 ? `${item.name}  ·  ${String(price)}  ${useHint}` : `${item.name}  ${useHint}`;
         if (label !== pedestalNamePlateLabel) {
           pedestalNamePlateLabel = label;
           pedestalNamePlate.set(label);
@@ -2204,7 +2227,7 @@ async function boot(): Promise<void> {
       }
       const reveal = sim.pedestalReveal;
       if (reveal !== null) {
-        const label = `${reveal.name}\n${reveal.description}`;
+        const label = `${reveal.name}\n${t(preferences.locale, reveal.description as DictKey)}`;
         if (label !== pedestalRevealLabel) {
           pedestalRevealLabel = label;
           pedestalReveal.set(label);
@@ -2253,6 +2276,7 @@ async function boot(): Promise<void> {
 
   screenController = new ScreenFlowController({
     kit,
+    locale: preferences.locale,
     loop,
     gamepad: input.gamepad,
     menuNav,
@@ -2349,14 +2373,19 @@ async function boot(): Promise<void> {
     // skips a mini-boss fight (`docs/DECISIONS.md` #75's tuning-pass note),
     // the same reasoning `src/debug/` is behind a dynamic import.
     const grantKeyHint =
-      import.meta.env.DEV && sim.bossDoorLocked ? '   J grant Meisterschlüssel' : '';
+      import.meta.env.DEV && sim.bossDoorLocked
+        ? // eslint-disable-next-line kellerbier/no-hardcoded-ui-string -- the O-debug hint line: dev-only, never localised.
+          '   J grant Meisterschlüssel'
+        : '';
+    // eslint-disable-next-line kellerbier/no-hardcoded-ui-string -- the O-debug bug-report line: dev-only, never localised.
+    const resumedHint = wasResumed ? '  (resumed)' : '';
     hud.text = `seed ${String(RUN_SEED)}  ${character}  ${floorPlan.floorName}  room ${sim.roomId} (${currentRole})  doors ${roomState}${warmup}${keyHint}${bossGateHint}${bossGateState}  enemies ${String(sim.liveEnemyCount)}
   tick ${String(loop.tick)}  ${seconds}s  x${scale}${loop.paused ? '  PAUSED' : ''}
 hp ${String(hearts)}/${String(maxHearts)}  soul ${String(sim.playerSoulHealth)}  eternal ${String(sim.playerEternalHealth)}${invulnerable}${dead}${runState}${override}${promilleLine}
 shots ${String(shots.liveCount)}/${String(shots.capacity)}  particles ${String(
       particles.liveCount,
     )}/${String(particles.capacity)}${shots.overflows > 0 ? '  SHOT OVERFLOW' : ''}
-save ${String(activeRunRecorder.frameCount)} ticks logged${wasResumed ? '  (resumed)' : ''}
+save ${String(activeRunRecorder.frameCount)} ticks logged${resumedHint}
 WASD move   arrows aim and fire
   O debug   T tuning   I shot tags   Y settings   P pause   M ${isMuted() ? 'unmute' : 'mute'}   . step   [ ] time scale
   N next room (after clear)   R restart (new seed)   C copy run   L load replay${overrideKeyHint}${grantKeyHint}`;
@@ -2381,6 +2410,7 @@ WASD move   arrows aim and fire
       floorPlan,
       currentRoomId,
       visitedRoomIds,
+      preferences.locale,
       minibossRoomsRevealed(floorPlan, visitedRoomIds),
       sim.secretRoomsRevealed,
     );
@@ -2657,7 +2687,14 @@ WASD move   arrows aim and fire
    */
   function showFloorCard(): void {
     const config = floorConfig(floorPlan.floor);
-    floorTitleCard.show(floorPlan.floor, config.name, config.flavour, floorPlan.extraLarge);
+    // `config.flavour` is a localisation key (`content-is-data` bars content
+    // from calling `t()` itself) — resolved here, in the render/app layer.
+    floorTitleCard.show(
+      floorPlan.floor,
+      config.name,
+      t(preferences.locale, config.flavour as DictKey),
+      floorPlan.extraLarge,
+    );
     floorCardUntil = performance.now() + FLOOR_CARD_MS;
     playSfx('floor-card-whoosh');
   }
@@ -2837,7 +2874,7 @@ WASD move   arrows aim and fire
   function loadReplayFromFile(): void {
     if (
       deathPhase !== 'over' &&
-      !window.confirm('Load a replay now? This ends the run in progress.')
+      !window.confirm(t(preferences.locale, 'ui.hud.confirmLoadReplay'))
     ) {
       return;
     }
@@ -2976,6 +3013,7 @@ WASD move   arrows aim and fire
           startRun(found);
           return;
         }
+        // eslint-disable-next-line kellerbier/no-hardcoded-ui-string -- the dev-only seed-finder tool's own button, not shipped UI.
         seedFindButton.textContent = 'no match';
         window.setTimeout(() => {
           seedFindButton.textContent = originalLabel;
@@ -3006,7 +3044,9 @@ WASD move   arrows aim and fire
     const compiled = compileRoomTemplate(
       roomTemplateFor(room),
       floorPlan.floor,
-      'room template',
+      // `source`'s own default is this same diagnostic label — nothing here
+      // overrides it, so there is nothing to pass.
+      undefined,
       ENEMY_DEFINITIONS,
       buildPlacement(room),
     );
@@ -3872,14 +3912,94 @@ WASD move   arrows aim and fire
   // live counterpart — the settings screen's own change path, the same
   // shape as `applyAccessibilityChange` above. `preferences` is mutated in
   // place by that screen, so this just re-reads it and pushes it back out.
+  let lastLocale: Locale = preferences.locale;
   const applyPreferencesChange = (): void => {
     applyMixerSettings(preferences.mixer);
     input.bindings = preferences.controls.bindings;
     input.gamepad.deadZone = preferences.controls.gamepadDeadZone;
     input.aimAssistEnabled = preferences.controls.aimAssist;
     windowSizeTracker.relayout();
+    if (preferences.locale !== lastLocale) {
+      lastLocale = preferences.locale;
+      applyLocaleChange();
+    }
   };
   applyPreferencesChange();
+
+  /**
+   * Rebuilds the settings screen's whole DOM tree in the current locale —
+   * the only way to relabel it, since #52's Language tab lives inside it
+   * and every label was built once from plain-DOM `textContent`, not from a
+   * live binding. `settingsHandle` is `let` (see its declaration) exactly
+   * so `applyLocaleChange` can swap it out.
+   */
+  function buildSettingsScreen(
+    options: Parameters<typeof createSettingsScreen>[1] = {},
+  ): SettingsScreenHandle {
+    return createSettingsScreen(
+      {
+        settings,
+        preferences,
+        gamepad: input.gamepad,
+        getActiveDevice: () => input.activeDevice,
+        onAccessibilityChange: applyAccessibilityChange,
+        onPreferencesChange: applyPreferencesChange,
+        telemetry: {
+          get: loadTelemetry,
+          optIn: () => {
+            optIntoTelemetry();
+          },
+          optOut: () => {
+            optOutOfTelemetry();
+          },
+          export: () => {
+            downloadTelemetryFile(loadTelemetry());
+          },
+          clear: () => {
+            clearTelemetryRuns();
+          },
+        },
+      },
+      { placement: touchCapable ? 'top-center' : 'bottom-left', ...options },
+    );
+  }
+
+  /**
+   * Relabels every locale-aware view in one pass, called once from
+   * `applyPreferencesChange` the moment `preferences.locale` actually
+   * changes. The settings screen itself is plain DOM built once from
+   * `textContent` (`app/settings-screen.ts`), so it cannot be relabelled in
+   * place the way the pixel-font screens below are — it is destroyed and
+   * rebuilt instead, reopened on the Language tab it was just changed from
+   * so the player doesn't lose their place.
+   */
+  function applyLocaleChange(): void {
+    const locale = preferences.locale;
+    screenController?.setLocale(locale);
+    gameOverScreen.setLocale(locale);
+    victoryScreen.setLocale(locale);
+    runResults.setLocale(locale);
+    machinePicker.setLocale(locale);
+    floorTitleCard.setLocale(locale);
+    activeItemHud.setLocale(locale);
+    bossHealthHud.setLocale(locale);
+    curseHud.setLocale(locale);
+    itemSetHud.setLocale(locale);
+    characterHud.setLocale(locale);
+    promilleUnlockHud.setLocale(locale);
+    blutwurzHud.setLocale(locale);
+    if (runResults.visible) {
+      runResults.update(runResultsView(locale));
+    }
+    bossBanner.set(t(locale, 'ui.hud.bossBanner'));
+    // Re-derives the minimap header (`{floor}. Stock — {name}`) and the rest
+    // of the room-plan-derived view layers — cheap and idempotent, the same
+    // call a room change or a secret reveal already makes.
+    syncFloorPlanView();
+    const wasOpen = settingsHandle !== null;
+    settingsHandle?.destroy();
+    settingsHandle = buildSettingsScreen({ initialOpen: wasOpen, initialTab: 'language' });
+  }
 
   overlay = await mountDebugOverlay(sim, view, app, uiLayer, () => layout.scale);
   exposeDebugHandle(
@@ -3904,13 +4024,13 @@ WASD move   arrows aim and fire
       unlockEverything: () => {
         unlockEverything();
         if (runResults.visible) {
-          runResults.update(runResultsView());
+          runResults.update(runResultsView(preferences.locale));
         }
       },
       selectCharacter: (id: string) => {
         selectCharacter(id);
         if (runResults.visible) {
-          runResults.update(runResultsView());
+          runResults.update(runResultsView(preferences.locale));
         }
       },
     },
@@ -3937,32 +4057,7 @@ WASD move   arrows aim and fire
   // already claims all four corners (move/aim sticks bottom-left/right,
   // map/pause top-left/right), so bottom-left — this panel's normal spot —
   // would sit right under the move stick.
-  settingsHandle = createSettingsScreen(
-    {
-      settings,
-      preferences,
-      gamepad: input.gamepad,
-      getActiveDevice: () => input.activeDevice,
-      onAccessibilityChange: applyAccessibilityChange,
-      onPreferencesChange: applyPreferencesChange,
-      telemetry: {
-        get: loadTelemetry,
-        optIn: () => {
-          optIntoTelemetry();
-        },
-        optOut: () => {
-          optOutOfTelemetry();
-        },
-        export: () => {
-          downloadTelemetryFile(loadTelemetry());
-        },
-        clear: () => {
-          clearTelemetryRuns();
-        },
-      },
-    },
-    { placement: touchCapable ? 'top-center' : 'bottom-left' },
-  );
+  settingsHandle = buildSettingsScreen();
 }
 
 /**

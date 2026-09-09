@@ -41,8 +41,8 @@ function syncRosinenItems(sim: GameSim, suppressed: boolean): void {
 export const derRosinenklauber: ItemDefinition = {
   id: 'der-rosinenklauber',
   name: 'Der Rosinenklauber',
-  description: 'Rosinen items lose their drawback. Locks out both purity pacts',
-  flavourText: 'He is not defending the raisins. He is just eating them.',
+  description: 'items.der-rosinenklauber.description',
+  flavourText: 'items.der-rosinenklauber.flavourText',
   sprite: 'der-rosinenklauber',
   pools: ['devil', 'secret'],
   quality: 3,

@@ -19,8 +19,8 @@ const DAMAGE_MULTIPLIER = 0.8;
 export const bierbank: ItemDefinition = {
   id: 'bierbank',
   name: 'Bierbank',
-  description: 'Fires two shots side by side. Damage -20%',
-  flavourText: 'Reserved. Nobody has ever admitted to reserving it.',
+  description: 'items.bierbank.description',
+  flavourText: 'items.bierbank.flavourText',
   sprite: 'bierbank',
   pools: ['treasure', 'shop'],
   quality: 1,

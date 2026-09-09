@@ -18,8 +18,8 @@ const PUSH_STRENGTH = 0.3;
 export const karussell: ItemDefinition = {
   id: 'karussell',
   name: 'Karussell',
-  description: 'Moving pushes nearby enemies along with you',
-  flavourText: 'The operator has not once checked a safety harness. The line never gets shorter.',
+  description: 'items.karussell.description',
+  flavourText: 'items.karussell.flavourText',
   sprite: 'karussell',
   pools: ['treasure', 'shop'],
   quality: 1,

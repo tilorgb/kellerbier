@@ -22,8 +22,8 @@ const DAMAGE_MULTIPLIER = 1.8;
 export const rumtopf: ItemDefinition = {
   id: 'rumtopf',
   name: 'Rumtopf',
-  description: 'Damage +80% — but only in Vollrausch or deeper',
-  flavourText: 'Lid on since June. Nobody has looked.',
+  description: 'items.rumtopf.description',
+  flavourText: 'items.rumtopf.flavourText',
   sprite: 'rumtopf',
   pools: ['devil', 'secret'],
   quality: 3,

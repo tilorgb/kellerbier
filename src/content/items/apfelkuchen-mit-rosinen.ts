@@ -33,8 +33,8 @@ const KLAUBER_ID = 'der-rosinenklauber';
 export const apfelkuchenMitRosinen: ItemDefinition = {
   id: 'apfelkuchen-mit-rosinen',
   name: 'Apfelkuchen (mit Rosinen)',
-  description: 'Heals 4. Damage +5%. Permanently Range -15%',
-  flavourText: 'Worst Kuchen there is.',
+  description: 'items.apfelkuchen-mit-rosinen.description',
+  flavourText: 'items.apfelkuchen-mit-rosinen.flavourText',
   sprite: 'apfelkuchen-mit-rosinen',
   pools: ['treasure', 'shop'],
   quality: 1,

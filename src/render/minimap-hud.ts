@@ -10,6 +10,8 @@ import type { FloorPlan, FloorPlanRoom, RoomDoor, RoomRole } from '../sim/room/f
 import { DIRECTION_OFFSET } from '../content/rooms/definition.js';
 import { computeVoidCells, voidCellKey } from '../sim/room/void-cells.js';
 import { cellBounds, roomOutlineSegments } from './room-outline.js';
+import type { Locale } from '../i18n/locale.js';
+import { t } from '../i18n/translate.js';
 import { HUD_PALETTE, UI_PALETTE } from './palette.js';
 import { type UiKit } from './ui/kit.js';
 import {
@@ -357,11 +359,15 @@ export class MinimapHud {
     plan: FloorPlan,
     currentRoomId: string,
     visitedRoomIds: ReadonlySet<string>,
+    locale: Locale,
     revealMinibossRooms = false,
     revealSecretRooms = false,
   ): void {
     const reveal = computeReveal(plan, visitedRoomIds, revealMinibossRooms, revealSecretRooms);
-    const headerText = `${String(plan.floor)}. Stock — ${plan.floorName}`;
+    const headerText = t(locale, 'ui.hud.minimapHeader', {
+      floor: plan.floor,
+      name: plan.floorName,
+    });
     this.header.text = headerText;
     this.header.position.set(-uiTextWidth(headerText), 0);
 

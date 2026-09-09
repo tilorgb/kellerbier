@@ -18,8 +18,8 @@ const DAMAGE_MULTIPLIER = 0.7;
 export const braumeisterSchuerze: ItemDefinition = {
   id: 'braumeister-schuerze',
   name: 'Braumeister-Schürze',
-  description: 'Fires a fan of three shots. Damage -30%',
-  flavourText: 'He aims the way he pours. It never spills.',
+  description: 'items.braumeister-schuerze.description',
+  flavourText: 'items.braumeister-schuerze.flavourText',
   sprite: 'braumeister-schuerze',
   pools: ['treasure', 'shop', 'boss'],
   quality: 2,

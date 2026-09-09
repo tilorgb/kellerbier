@@ -23,8 +23,8 @@ const SHOT_SPEED_MULTIPLIER = 1.25;
 export const feuerwehrhelm: ItemDefinition = {
   id: 'feuerwehrhelm',
   name: 'Feuerwehrhelm',
-  description: 'Shots are hose water: every hit shoves its target back. Shot Speed +25%',
-  flavourText: 'Rated to withstand heat, impact, and at least one Böllerschmeißer.',
+  description: 'items.feuerwehrhelm.description',
+  flavourText: 'items.feuerwehrhelm.flavourText',
   sprite: 'feuerwehrhelm',
   pools: ['treasure', 'shop'],
   quality: 1,

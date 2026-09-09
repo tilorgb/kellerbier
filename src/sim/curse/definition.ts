@@ -19,6 +19,10 @@ export interface CurseDefinition {
   readonly id: CurseId;
   /** The name a player would see, on the floor-entry announcement. */
   readonly name: string;
-  /** One line on what it does — shown under `name` on the announcement banner. */
+  /**
+   * A localisation key (`curses.<id>.description`), not literal text — see
+   * `sim/item/definition.ts`'s identical note on `ItemDefinition.description`.
+   * One line on what it does — shown under `name` on the announcement banner.
+   */
   readonly description: string;
 }

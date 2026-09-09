@@ -12,8 +12,8 @@ import type { ItemDefinition } from '../../sim/item/definition.js';
 export const radler: ItemDefinition = {
   id: 'radler',
   name: 'Radler',
-  description: 'Damage -50%, Fire Rate +100%',
-  flavourText: 'Half a beer. Twice the argument about whether it counts as one.',
+  description: 'items.radler.description',
+  flavourText: 'items.radler.flavourText',
   sprite: 'radler',
   pools: ['treasure', 'shop'],
   quality: 0,

@@ -14,6 +14,7 @@ import { ITEM_POOLS, type ItemPoolId } from '../../src/sim/item/definition.js';
 import { ItemRegistry } from '../../src/sim/item/registry.js';
 import { itemEligibleForOffer } from '../../src/sim/item/pool.js';
 import { type DropTable, pickupDescriptionFor } from '../../src/sim/pickup/definition.js';
+import { t, type DictKey } from '../../src/i18n/translate.js';
 
 /**
  * The content half of the Promille gate (#85), checked at build time.
@@ -63,6 +64,16 @@ const PROMILLE_WORDS = [
 function leakedWords(text: string): string[] {
   const lower = text.toLowerCase();
   return PROMILLE_WORDS.filter((word) => new RegExp(`\\b${word}\\b`, 'u').test(lower));
+}
+
+/**
+ * `description`/`soberDescription` hold localisation keys, not text (#52) —
+ * this suite's "never says the word" claim is about the real, rendered
+ * English copy, so every check below resolves through the English
+ * dictionary before scanning it.
+ */
+function resolve(key: string): string {
+  return t('en', key as DictKey);
 }
 
 const registry = new ItemRegistry(ITEM_DEFINITIONS);
@@ -183,7 +194,7 @@ describe('a sober run never says the word (#85)', () => {
     // plain-language translation of what it does — gives it away.
     for (const pool of ITEM_POOLS) {
       for (const item of soberPool(pool)) {
-        expect({ id: item.id, leaked: leakedWords(item.description) }).toEqual({
+        expect({ id: item.id, leaked: leakedWords(resolve(item.description)) }).toEqual({
           id: item.id,
           leaked: [],
         });
@@ -210,7 +221,7 @@ describe('a sober run never says the word (#85)', () => {
       if (!dropped.has(pickup.id)) {
         continue;
       }
-      const description = pickupDescriptionFor(pickup, false);
+      const description = resolve(pickupDescriptionFor(pickup, false));
       expect({ id: pickup.id, leaked: leakedWords(description) }).toEqual({
         id: pickup.id,
         leaked: [],
@@ -225,7 +236,7 @@ describe('a sober run never says the word (#85)', () => {
     const food = PICKUP_DEFINITIONS.filter((pickup) => pickup.effect.kind === 'food');
     expect(food.length).toBeGreaterThan(0);
     for (const pickup of food) {
-      expect(leakedWords(pickupDescriptionFor(pickup, true))).toContain('promille');
+      expect(leakedWords(resolve(pickupDescriptionFor(pickup, true)))).toContain('promille');
       expect(pickupDescriptionFor(pickup, false)).not.toBe(pickup.description);
     }
   });

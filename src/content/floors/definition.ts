@@ -12,6 +12,19 @@ import type { RoomGenTuning } from '../../sim/tuning.js';
 
 export interface FloorConfig {
   readonly floor: number;
+  /**
+   * The floor's real name — Bavarian/German, per `docs/CONTENT_BIBLE.md` §0
+   * and §1's own floor headers, and unchanged across every locale, the same
+   * rule an item's `name` follows. Not translated: a `t()` lookup would need
+   * a value import this file cannot make (`content-is-data`), and the rule
+   * is "stays Bavarian in every locale" anyway, so there is nothing to look
+   * up. Floor 7 stays "Die Wiesn" for the trademark reason given on its own
+   * entry below; floors 1-6 previously held an English gloss of this same
+   * name here (`docs/DECISIONS.md`-adjacent debt from before this issue) —
+   * fixed as part of #52, since a floor name is exactly the class of string
+   * the naming rule already covered and the title card was showing untranslated
+   * English instead.
+   */
   readonly name: string;
   readonly floorTag: string;
   /** Inclusive. The generator rolls a target room count in this range, minus one reserved for the secret room. */
@@ -42,16 +55,16 @@ export interface FloorConfig {
    */
   readonly xlRoomMultiplier: number;
   /**
+   * A localisation key (`floors.<floorTag>.flavour`), not literal text — see
+   * `sim/item/definition.ts`'s identical note on `ItemDefinition.description`.
    * One line, in the floor's own voice, for its title card (#154).
    *
    * Grounded in `docs/CONTENT_BIBLE.md` §1's description of the floor rather
    * than invented from nothing — the card is meant to say what the chapter
-   * is, and the chapter is already written down. Plain English carrying one
-   * seasoned Bavarian word, marked `*like this*` and rendered by
+   * is, and the chapter is already written down. Each locale's line carries
+   * one seasoned Bavarian word, marked `*like this*` and rendered by
    * `render/ui/text.ts`'s `SeasonedText` — `docs/CONTENT_BIBLE.md` §0's "a
-   * word, not a sentence" rule (#221), not a translated German sentence.
-   * Data, like everything else on this record: a floor's card needs no
-   * engine change, only a row.
+   * word, not a sentence" rule (#221) applies per locale, not only to English.
    */
   readonly flavour: string;
 }
@@ -112,7 +125,8 @@ export const ROOM_GEN_FLOOR_OVERRIDES: Readonly<Record<string, Partial<RoomGenTu
 export const FLOOR_CONFIGS: readonly FloorConfig[] = [
   {
     floor: 1,
-    name: 'The Cellar',
+    // `docs/CONTENT_BIBLE.md` §1: "Floor 1 — Der Keller".
+    name: 'Der Keller',
     floorTag: 'cellar',
     minRooms: 11,
     maxRooms: 14,
@@ -125,11 +139,12 @@ export const FLOOR_CONFIGS: readonly FloorConfig[] = [
     // steady-state chance once that condition is met.
     xlChance: 0.15,
     xlRoomMultiplier: 1.7,
-    flavour: 'Watch your *Fiaß*.',
+    flavour: 'floors.cellar.flavour',
   },
   {
     floor: 2,
-    name: 'Village & Fields',
+    // `docs/CONTENT_BIBLE.md` §1: "Floor 2 — Dorf & Acker".
+    name: 'Dorf & Acker',
     floorTag: 'rural',
     minRooms: 13,
     maxRooms: 17,
@@ -137,11 +152,12 @@ export const FLOOR_CONFIGS: readonly FloorConfig[] = [
     minBossDistance: 5,
     xlChance: 0.25,
     xlRoomMultiplier: 1.7,
-    flavour: 'Sunny, peaceful, *Blaskapell’n*.',
+    flavour: 'floors.rural.flavour',
   },
   {
     floor: 3,
-    name: 'The Forest',
+    // `docs/CONTENT_BIBLE.md` §1: "Floor 3 — Der Wald".
+    name: 'Der Wald',
     floorTag: 'wald',
     minRooms: 12,
     maxRooms: 16,
@@ -149,11 +165,12 @@ export const FLOOR_CONFIGS: readonly FloorConfig[] = [
     minBossDistance: 5,
     xlChance: 0.25,
     xlRoomMultiplier: 1.7,
-    flavour: 'Oh, deer!',
+    flavour: 'floors.wald.flavour',
   },
   {
     floor: 4,
-    name: 'The Alps',
+    // `docs/CONTENT_BIBLE.md` §1: "Floor 4 — Die Alpen".
+    name: 'Die Alpen',
     floorTag: 'alpen',
     minRooms: 12,
     maxRooms: 16,
@@ -161,11 +178,12 @@ export const FLOOR_CONFIGS: readonly FloorConfig[] = [
     minBossDistance: 5,
     xlChance: 0.25,
     xlRoomMultiplier: 1.7,
-    flavour: 'Thin air and hard *Haxn*.',
+    flavour: 'floors.alpen.flavour',
   },
   {
     floor: 5,
-    name: 'Neuschwanstein Castle',
+    // `docs/CONTENT_BIBLE.md` §1: "Floor 5 — Schloss Neuschwanstein".
+    name: 'Schloss Neuschwanstein',
     floorTag: 'schloss',
     minRooms: 13,
     maxRooms: 17,
@@ -173,11 +191,12 @@ export const FLOOR_CONFIGS: readonly FloorConfig[] = [
     minBossDistance: 6,
     xlChance: 0.25,
     xlRoomMultiplier: 1.7,
-    flavour: 'Locals describe its beauty as "*basst scho*."',
+    flavour: 'floors.schloss.flavour',
   },
   {
     floor: 6,
-    name: 'The Brewery',
+    // `docs/CONTENT_BIBLE.md` §1: "Floor 6 — Die Brauerei".
+    name: 'Die Brauerei',
     floorTag: 'brauerei',
     minRooms: 13,
     maxRooms: 17,
@@ -185,7 +204,7 @@ export const FLOOR_CONFIGS: readonly FloorConfig[] = [
     minBossDistance: 6,
     xlChance: 0.25,
     xlRoomMultiplier: 1.7,
-    flavour: 'Someone put a *Rausch* in my last beer.',
+    flavour: 'floors.brauerei.flavour',
   },
   {
     floor: 7,
@@ -199,7 +218,7 @@ export const FLOOR_CONFIGS: readonly FloorConfig[] = [
     minBossDistance: 6,
     xlChance: 0.25,
     xlRoomMultiplier: 1.7,
-    flavour: 'Ole, ole, ole!',
+    flavour: 'floors.wiesn.flavour',
   },
 ];
 

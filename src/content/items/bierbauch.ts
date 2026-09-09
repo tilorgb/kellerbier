@@ -33,8 +33,8 @@ const MOVE_SPEED_MULTIPLIER = 0.92;
 export const bierbauch: ItemDefinition = {
   id: 'bierbauch',
   name: 'Bierbauch',
-  description: 'Trinkfest +1 while held. Move Speed -8%',
-  flavourText: 'Not fat. Storage.',
+  description: 'items.bierbauch.description',
+  flavourText: 'items.bierbauch.flavourText',
   sprite: 'bierbauch',
   pools: ['treasure', 'shop', 'boss'],
   quality: 2,

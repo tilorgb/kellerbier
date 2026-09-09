@@ -7,8 +7,8 @@ import type { ItemDefinition } from '../../sim/item/definition.js';
 export const kraftbier: ItemDefinition = {
   id: 'kraftbier',
   name: 'Kraftbier',
-  description: 'Damage +40%, Move Speed -20%',
-  flavourText: 'The label does not say 9% for decoration.',
+  description: 'items.kraftbier.description',
+  flavourText: 'items.kraftbier.flavourText',
   sprite: 'kraftbier',
   pools: ['treasure', 'shop'],
   quality: 1,

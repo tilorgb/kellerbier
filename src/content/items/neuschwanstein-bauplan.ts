@@ -16,8 +16,8 @@ const COST_PER_FLOOR = 5;
 export const neuschwansteinBauplan: ItemDefinition = {
   id: 'neuschwanstein-bauplan',
   name: 'Neuschwanstein-Bauplan',
-  description: 'Large stat boost. Costs more Biermarken every floor',
-  flavourText: 'An unfinished wing, drawn in impressive detail.',
+  description: 'items.neuschwanstein-bauplan.description',
+  flavourText: 'items.neuschwanstein-bauplan.flavourText',
   sprite: 'neuschwanstein-bauplan',
   pools: ['shop', 'boss', 'devil'],
   quality: 2,
