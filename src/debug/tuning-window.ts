@@ -206,6 +206,13 @@ const GROUPS: readonly GroupSpec[] = [
       // every tier, bonus, drift, wobble and sway reacts on the next tick.
       { key: 'current', min: 0, max: 5, step: 0.1, hint: 'current Promille — the slider' },
       { key: 'decayPerSecond', min: 0, max: 0.5, step: 0.01, hint: 'Promille lost per second' },
+      {
+        key: 'hitPromilleLoss',
+        min: 0,
+        max: 2,
+        step: 0.05,
+        hint: 'Promille a landed hit sobers you by',
+      },
       { key: 'massFullAmount', min: 0, max: 3, step: 0.1, hint: 'Promille per full Maß' },
       { key: 'massHalfAmount', min: 0, max: 3, step: 0.1, hint: 'Promille per half Maß' },
       {
@@ -267,6 +274,13 @@ const GROUPS: readonly GroupSpec[] = [
         max: 3,
         step: 0.05,
         hint: '+fire rate, Filmriss',
+      },
+      {
+        key: 'maxHurtboxGrowth',
+        min: 0,
+        max: 1,
+        step: 0.05,
+        hint: 'how much bigger a target, drunk',
       },
       { key: 'maxDrift', min: 0, max: 2, step: 0.05, hint: 'sluggishness at full ramp' },
       { key: 'maxWobble', min: 0, max: 0.6, step: 0.01, hint: 'aim wobble, radians' },

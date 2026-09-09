@@ -56,6 +56,7 @@ import {
   promilleDriftScale,
   promilleFireRateMultiplier,
   promilleGloom,
+  promilleHurtboxScale,
   promilleRequirementMet,
   promilleScreenDistortion,
   promilleShotHeat,
@@ -3737,6 +3738,41 @@ export class GameSim {
   }
 
   /**
+   * How much bigger a target the player currently is — see
+   * `promilleHurtboxScale`. Unlike every other reading here this one is not
+   * for a renderer: `syncPromilleHurtbox` writes it into the hurtbox
+   * component every tick and the collision system reads it there. Exposed
+   * because a number the simulation acts on has to be inspectable
+   * (`docs/CONTRIBUTING.md`'s "if you cannot see it, you cannot tune it"),
+   * and because the debug overlay's hitbox view draws the component itself.
+   */
+  get promilleHurtboxScale(): number {
+    return promilleHurtboxScale(this.promille, this.tuning.promille);
+  }
+
+  /**
+   * Resizes the player's hurtbox to match the meter. Called from
+   * `stepPromille` before anything can be hit this tick, and once at spawn so
+   * a sim that is inspected without ever stepping still reads correctly.
+   *
+   * Only the radius moves. The vertical offset
+   * (`hurtboxOffsetY(PLAYER_RADIUS, PLAYER_FOOTPRINT)`) is about where on the
+   * billboard the circle sits, not how big it is, and a circle that drifted
+   * up his body as he drank would be a different bug wearing this one's
+   * clothes.
+   *
+   * Runs every tick, so it allocates nothing — deliberately a single write
+   * into the existing component array rather than anything cleverer. It
+   * carries no hot-file lint marker of its own: that marker is file-scoped
+   * (`tools/eslint/no-hot-allocation.js`) and this file is not one, while
+   * `sim/systems/promille.ts` — which calls this every tick — is.
+   */
+  syncPromilleHurtbox(): void {
+    this.hurtbox.data[this.playerIndex * 2] =
+      PLAYER_FOOTPRINT * promilleHurtboxScale(this.promille, this.tuning.promille);
+  }
+
+  /**
    * How hot the player's shots run right now (#311) — see
    * `promilleShotHeat`. Read by `render/projectiles.ts`, which spends it on
    * the shot's tint, its glow and the point light it carries.
@@ -6055,6 +6091,10 @@ export class GameSim {
     const hurtbox = this.hurtbox.data;
     hurtbox[index * 2] = PLAYER_FOOTPRINT;
     hurtbox[index * 2 + 1] = hurtboxOffsetY(PLAYER_RADIUS, PLAYER_FOOTPRINT);
+    // A run that starts already promilled (a replay, a debug override, an
+    // item that opens on Promille) has to be the right size on its first
+    // tick, not on its second — `stepPromille` keeps it there from then on.
+    this.syncPromilleHurtbox();
 
     // The character's own pool (#47), not the engine's default: Resi walks in
     // on four Maß and D'Sennerin on five, and `PLAYER_HEALTH` is what

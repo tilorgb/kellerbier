@@ -344,6 +344,42 @@ export function promilleShotHeat(value: number, tuning: PromilleTuning): number 
 }
 
 /**
+ * How much bigger a target the player is right now — a multiplier on his
+ * hurtbox radius, `1` stone-cold sober.
+ *
+ * "They will hit you sober." Promille's cost was, until this, entirely a cost
+ * to the player's *senses*: he could not see far, could not see clearly, and
+ * his aim wandered. What none of that changed is how often the room actually
+ * connects, so a good player could drink to the top of the meter and simply
+ * keep not getting hit — the reward was real and the risk was atmosphere.
+ * This is the risk: drunk, he is clumsy, and the room hits him for the size
+ * he is drawn rather than the smaller circle a sober run is quietly given
+ * (`PLAYER_FOOTPRINT` — the one hurtbox in the game deliberately smaller than
+ * its sprite). Getting hit costs Promille (`hitPromilleLoss`), so the meter
+ * is self-limiting: the drunker the run, the harder it is to hold there.
+ *
+ * Two things it is deliberately *not*:
+ *
+ * - It is not a damage multiplier. What should get worse is how often the
+ *   room lands a hit, not what a hit is worth: a bigger target means the
+ *   player who dodges well is still rewarded for it, where doubled damage
+ *   punishes the mistake he already made twice over.
+ * - It is not uncapped past `1` the way every *render* ramp here is. This one
+ *   is spent by the simulation, so the clamp belongs with the number rather
+ *   than with a consumer, and it saturates at `UMGFALLN_AT` — the baseline
+ *   knockdown threshold, "as far as a run can push before falling over",
+ *   scaled the same way `promilleShotHeat` is. Trinkfest is sold as
+ *   *tolerance*; letting it keep inflating the hurtbox past the baseline
+ *   threshold would make the thing that buys headroom also buy a beating.
+ */
+export function promilleHurtboxScale(value: number, tuning: PromilleTuning): number {
+  if (value <= 0) {
+    return 1;
+  }
+  return 1 + Math.min(1, value / UMGFALLN_AT) * tuning.maxHurtboxGrowth;
+}
+
+/**
  * How far the room closes in around the player (#promille-risk-reward): `0`
  * stone-cold sober, `1` at the pre-#92 ceiling, climbing past `1` through the
  * Trinkfest stages like every ramp above.

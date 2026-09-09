@@ -90,14 +90,16 @@ const COVERAGE = 2.2;
  * `DEEPEST_APERTURE` are the renderer deciding how far it is willing to close
  * the tunnel, exactly as `MAX_DISTORTION_ALPHA` does for #92's pulse. Chosen
  * against the frame rather than by feel alone: at `1` the clear radius runs
- * about 124x70 internal pixels, so the player still sees a body's length of
- * room in every direction and every shot that is about to hit him — the
- * "the player must always believe a death was theirs" guardrail
- * (`docs/GAME_DESIGN.md` §5) is what stops this going further.
+ * about 86x48 internal pixels — roughly three body-lengths of room in every
+ * direction, so a shot already on its way to the player is still visible
+ * before it arrives. That is the floor the "the player must always believe a
+ * death was theirs" guardrail (`docs/GAME_DESIGN.md` §5) puts under this, and
+ * it is the reason it did not go further when the first playtest asked for a
+ * tighter tunnel than 0.49.
  */
-const CLOSED_APERTURE = 0.49;
+const CLOSED_APERTURE = 0.34;
 /** The floor the Trinkfest stages close to. Past this the tunnel stops tightening and only the murk keeps rising. */
-const DEEPEST_APERTURE = 0.38;
+const DEEPEST_APERTURE = 0.26;
 /**
  * How far past `1` the ramp keeps closing before it lands on
  * `DEEPEST_APERTURE`. Sized to the deepest the *game* can go rather than to
@@ -118,6 +120,29 @@ const DEEP_TUNNEL_SPAN = 0.4;
  * makes for its own vision radius.
  */
 const REDUCED_MOTION_TUNNEL = 0.5;
+
+/**
+ * Bends the ramp toward its top end before it is spent.
+ *
+ * The first playtest asked for a *tighter* tunnel without a heavier
+ * Angeheitert — "more with higher Promille values" — and those two pull
+ * against each other on a straight line: raising the ceiling on a linear ramp
+ * raises the first sip by the same proportion. This is the shape that lets
+ * both be true, weighting the back half of the ramp about 1.7x the front, so
+ * `CLOSED_APERTURE` could drop from 0.49 to 0.34 while Angeheitert stayed
+ * within a pixel or two of where it already was.
+ *
+ * Deliberately not the obvious `t * t`, which would make the first Maß cost
+ * almost nothing — the whole reason this ramp starts at the first sip rather
+ * than at a tier boundary (see `promilleTunnelVision`) is that a drink the
+ * player cannot feel is a drink that did not happen. `render/gloom.ts` bends
+ * its own ramp with the same shape, for the same reason; the two are
+ * independent numbers that happen to want the same curve, not one constant
+ * split in half.
+ */
+function lateBias(t: number): number {
+  return t * (0.6 + 0.4 * t);
+}
 
 /** Below this much tunnel vision the screen does not breathe — a sober run has no reason to. */
 const BREATH_FROM = 0.25;
@@ -270,7 +295,7 @@ export class Vignette {
    */
   private applyAperture(tunnel: number): void {
     const softened = tunnel * (this.reducedMotion ? REDUCED_MOTION_TUNNEL : 1);
-    const closed = Math.min(1, Math.max(0, softened)) * (1 - CLOSED_APERTURE);
+    const closed = lateBias(Math.min(1, Math.max(0, softened))) * (1 - CLOSED_APERTURE);
     // Past the pre-#92 ceiling the Trinkfest stages keep closing, but on a
     // second, shallower slope and onto a hard floor — the ramp itself is
     // unbounded and a tunnel that keeps shrinking with it would eventually

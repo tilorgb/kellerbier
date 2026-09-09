@@ -2312,7 +2312,7 @@ async function boot(): Promise<void> {
     // are otherwise invisible as numbers: what the player sees is a dark,
     // soft room, which says nothing about where on its ramp either one is.
     const promilleLine = sim.promilleUnlocked
-      ? `\n${meterLabel} ${sim.promille.toFixed(2)} ${tierLabel}${trinkfest}  heat ${sim.promilleShotHeat.toFixed(2)}  tunnel ${sim.promilleTunnelVision.toFixed(2)}  gloom ${sim.promilleGloom.toFixed(2)}${knockedDown}`
+      ? `\n${meterLabel} ${sim.promille.toFixed(2)} ${tierLabel}${trinkfest}  heat ${sim.promilleShotHeat.toFixed(2)}  tunnel ${sim.promilleTunnelVision.toFixed(2)}  gloom ${sim.promilleGloom.toFixed(2)}  target ${sim.promilleHurtboxScale.toFixed(2)}x${knockedDown}`
       : '';
     const runState = sim.promilleUnlocked ? '' : '  SOBER RUN';
     const override = promilleOverride === 'auto' ? '' : `  [${promilleOverride} forced]`;

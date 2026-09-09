@@ -108,10 +108,10 @@ void main() {
 `;
 
 /** How much of the frame the blur may replace at full ramp. Never all of it — a totally soft frame reads as broken, not as drunk. */
-const MAX_AMOUNT = 0.8;
+const MAX_AMOUNT = 0.9;
 /** Blur radius in internal pixels at zero gloom and at full ramp. One internal pixel is three screen pixels at the common upscale. */
 const MIN_RADIUS = 0.9;
-const MAX_RADIUS = 3.2;
+const MAX_RADIUS = 4.6;
 /**
  * How far past `1` the ramp keeps biting before it saturates — the Trinkfest
  * stages, sized to the ceiling the meter can actually reach the way
@@ -120,7 +120,20 @@ const MAX_RADIUS = 3.2;
  */
 const DEEP_SPAN = 0.6;
 /** How much of the colour is drained at full ramp. */
-const MAX_MURK = 0.55;
+const MAX_MURK = 0.68;
+
+/**
+ * Bends the ramp toward its top end before it is spent — the same shape and
+ * the same reason as `Vignette`'s own `lateBias`, which documents it: the
+ * first playtest wanted a blurrier Vollrausch without a blurrier Beduselt,
+ * and a straight line cannot give both. With it, `MAX_RADIUS` could go from
+ * 3.2 to 4.6 internal pixels — from a soft room to one the player is
+ * genuinely reading through — while the tier the blur *starts* at got very
+ * slightly gentler rather than harsher.
+ */
+function lateBias(t: number): number {
+  return t * (0.6 + 0.4 * t);
+}
 /**
  * What the drained colour goes toward: cold, damp cellar, and a shade under
  * the luma it replaces rather than level with it. Level with it was the first
@@ -187,7 +200,7 @@ export class GloomBlur {
    */
   setGloom(gloom: number): void {
     const clamped = Math.max(0, gloom);
-    const ramp = Math.min(1, clamped);
+    const ramp = lateBias(Math.min(1, clamped));
     // Past `1` (the pre-#92 ceiling) the mix is spent, so the Trinkfest
     // stages keep escalating on the radius and the colour drain instead —
     // the same "the alpha is capped, so make the effect itself worse"

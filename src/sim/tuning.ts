@@ -407,8 +407,8 @@ export interface PromilleTuning {
    * player cannot play against.
    *
    * What takes Promille away instead is `hitPromilleLoss` — a mistake, which
-   * a player *can* play against — and eating (`lowerPromille`, Brezn/Obazda/
-   * Radi), which is a choice. `docs/GAME_DESIGN.md` §5 always listed all
+   * a player *can* play against — and eating (`lowerPromille`, the Wurst
+   * pickups), which is a choice. `docs/GAME_DESIGN.md` §5 always listed all
    * three; only the clock was ever implemented.
    */
   decayPerSecond: number;
@@ -424,6 +424,15 @@ export interface PromilleTuning {
    * rooms quickly. Applied in `GameSim.applyPlayerDamage`, the one
    * chokepoint every landed hit passes through, so contact, projectiles,
    * hazards and a boss's slam all cost the same.
+   *
+   * **A hit must always sober harder than a meal does.** There are two ways
+   * down the meter and they are meant to read differently: eating is a
+   * *choice* the player makes with a pickup in front of them, a hit is a
+   * *mistake* the room made for them. If the mistake is the cheaper of the
+   * two, the meter stops being a readout of how well the run is going. This
+   * was quietly wrong until the risk/reward pass — a full Wurst took 0.5 and
+   * a hit took 0.4 — so this number is now sized above the largest
+   * `PickupEffect.promille` on the roster rather than next to it.
    */
   hitPromilleLoss: number;
   /**
@@ -493,6 +502,18 @@ export interface PromilleTuning {
   maxDrift: number;
   /** Aim wobble amplitude at full ramp, in radians. */
   maxWobble: number;
+
+  /**
+   * How much bigger a target the player is at the baseline Umgfalln
+   * threshold, as a fraction of his sober hurtbox — see
+   * `promilleHurtboxScale`, which is where the shape and the reasoning live.
+   *
+   * The one Promille penalty that is not about what the player can see or
+   * how well he can aim: it is about how often the room actually connects.
+   * `0` turns it off completely and leaves a drunk run exactly as hard to
+   * hit as a sober one.
+   */
+  maxHurtboxGrowth: number;
   /**
    * Ticks per full wobble sweep. Deliberately its own field rather than
    * reusing `swayPeriodTicks` — the miss-rate calibration on `maxWobble`
@@ -1113,10 +1134,15 @@ export const DEFAULT_PROMILLE_TUNING: Readonly<PromilleTuning> = {
   // gets hit does not. The old 0.05 lost 1.5-3.0 over the same room, which
   // is why the meter never moved.
   decayPerSecond: 0.006,
-  // A little under a half-Maß, so one hit reads on the bar as clearly as one
-  // drink does — enough that losing a tier to a mistake is a real event, not
-  // enough that a single unlucky contact wipes a floor's worth of drinking.
-  hitPromilleLoss: 0.4,
+  // Above the biggest meal on the roster (a full Wurst, 0.5), which 0.4 was
+  // not — see the field's own comment. Also the number that makes "they will
+  // hit you sober" true rather than decorative: at Vollrausch, three landed
+  // hits put the player back in Beduselt, and a player who keeps taking them
+  // ends up sober rather than merely bruised. Paired with
+  // `maxHurtboxGrowth`, which is what makes those hits land in the first
+  // place, this is the meter's own negative feedback loop — the drunker the
+  // run, the harder it is to stay there.
+  hitPromilleLoss: 0.7,
   // Realistic-scale replacement for the old beer-pickup amounts
   // (health-food-redesign): four full Maß (4 x 1.0 = 4.0) sits deep in
   // Vollrausch (>= 3.0) without reaching Umgfalln — "properly drunk" — and a
@@ -1163,6 +1189,16 @@ export const DEFAULT_PROMILLE_TUNING: Readonly<PromilleTuning> = {
   sturzbesoffenFireRateBonus: 0.7,
   filmrissDamageBonus: 2.2,
   filmrissFireRateBonus: 0.85,
+
+  // 0.4: the player's sober hurtbox is `PLAYER_FOOTPRINT` (5) against a drawn
+  // radius of `PLAYER_RADIUS` (7), so full ramp lands the hurtbox exactly on
+  // the size he already looks. Sober, the game quietly gives him a circle
+  // smaller than his sprite; drunk, it takes that back and hits him for what
+  // is on screen. Deliberately not past it — a hurtbox *larger* than the
+  // drawing is a hit the player cannot see coming and would not believe,
+  // which is the "the player must always believe a death was theirs"
+  // guardrail in `docs/GAME_DESIGN.md` §5.
+  maxHurtboxGrowth: 0.4,
 
   maxDrift: 0.6,
   // Measured against a Normal enemy (radius 7, `src/sim/enemy/size.ts`) at a

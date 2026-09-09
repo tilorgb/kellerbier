@@ -278,8 +278,8 @@ A second meter beside health, measured in **Promille** (0.0 – 5.0) — and one
 does not meet on their first run. See *When it turns on*, below.
 
 **Going up:** drinking Maß pickups, certain items, boss rewards, some devil pacts.
-**Coming down:** **being hit** (the main one), eating Wurst, water fountains, and time — a slow,
-continuous bleed that a floor's own drops comfortably outrun.
+**Coming down:** **being hit** (the main one, and always the biggest single drop), eating Wurst,
+water fountains, and time — a slow, continuous bleed that a floor's own drops comfortably outrun.
 
 That ordering is deliberate and was got wrong once. Until #311 the clock was the *only* drain and
 it took 3.0 Promille a minute against a room that paid back about 0.09, so no amount of drinking
@@ -295,7 +295,7 @@ what makes drinking a decision rather than a timer.
 | **Nüchtern** (sober) | 0.0 – 0.4 | Baseline. A few items *require* this — precision builds live here. |
 | **Angeheitert** (tipsy) | 0.5 – 1.4 | +25% damage, +12% fire rate. The room starts closing in. The sweet spot. |
 | **Beduselt** (drunk) | 1.5 – 2.9 | +60% damage, +30% fire rate. Movement has drift and momentum; aim wobbles; what is still visible starts to smear. |
-| **Vollrausch** | 3.0 – 4.4 | +120% damage, +55% fire rate. Heavy drift, aim wander, a tunnel about a third of its sober width, and a room gone soft and grey. Rausch-tier item effects activate. |
+| **Vollrausch** | 3.0 – 4.4 | +120% damage, +55% fire rate. Heavy drift, aim wander, a tunnel about a third of its sober width, a room gone soft and grey, and a hurtbox grown to the size you are drawn. Rausch-tier item effects activate. |
 | **Umgfalln** | 4.5+ | You fall over. Brief invulnerable knockdown, then you wake at 1.5 with a **Kater**. |
 
 The bonuses were raised across the board by #311. The old ones (+15/+35/+70% damage) were written
@@ -313,12 +313,32 @@ whisper (12 px of drift down to 3) and its job was handed to two penalties that 
 away without moving anything:
 
 - **The tunnel closes in.** The vignette's clear radius shrinks with the meter — a tenth of the
-  sober sight radius gone through Angeheitert, about a third by Vollrausch, half of it by the
-  last Maß before Umgfalln. A drunk player is fighting in a smaller room than a sober one.
+  sober sight radius gone through Angeheitert, a third by Vollrausch, and better than half of it
+  by the last Maß before Umgfalln. A drunk player is fighting in a smaller room than a sober one.
 - **What is left goes murky.** From Beduselt up the world pass is blurred and drained of colour
   — the room defocuses, the stones smear, the warm cellar light goes grey. The HUD is never
   touched: health, the meter and the item row stay pin-sharp at any Promille, which is what lets
   the world effect be as strong as it is.
+
+Both curves are weighted toward their top end rather than straight lines, so the sweet spot stays
+sharp and Vollrausch is where the room really goes.
+
+**And they will hit you sober.** The penalties above cost the player his *senses*; none of them
+changes how often the room actually connects, so a good player could drink to the top of the meter
+and simply keep not being hit — the reward real, the risk atmosphere. So the drunk player is also
+a **bigger target**: his hurtbox grows with the meter, from the circle smaller than his sprite
+that a sober run is quietly given, up to exactly the size he is drawn. Never past it — a hit from
+outside the drawing is a hit the player will not believe was theirs.
+
+That closes the loop, because **a hit costs Promille**. The drunker the run, the more it gets hit;
+the more it gets hit, the more sober it becomes. The meter is self-limiting rather than a
+ratchet, and the fantasy is the right one: you feel indestructible, and the room disagrees.
+
+**The two ways down are not equal, and must not be.** Eating is a *choice*, made with a pickup in
+front of you; a hit is a *mistake* the room made for you. A hit therefore always sobers harder
+than the biggest meal on the roster does — 0.7 against 0.5. This was quietly the wrong way round
+until the risk/reward pass (0.4 against 0.5), which made the meter a worse readout of how well a
+run was going than it looked.
 
 Both are stationary, both scale continuously, and both take *information* rather than *control*
 — which is the honest version of the trade the tier table is offering. Triple damage should cost

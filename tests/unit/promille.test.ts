@@ -9,6 +9,7 @@ import {
   promilleDriftScale,
   promilleFireRateMultiplier,
   promilleGloom,
+  promilleHurtboxScale,
   promilleKaterLabel,
   promilleMeterLabel,
   promilleRequirementMet,
@@ -35,6 +36,8 @@ import {
   quantiseAxis,
   setActionDown,
 } from '../../src/sim/input/frame.js';
+import { PICKUP_DEFINITIONS } from '../../src/content/pickups/index.js';
+import { PLAYER_FOOTPRINT, PLAYER_RADIUS } from '../../src/sim/game/sim.js';
 import { entityIndex } from '../../src/sim/ecs/entity.js';
 import { StatId } from '../../src/sim/stats/definition.js';
 
@@ -161,6 +164,81 @@ describe('promille tiers', () => {
     expect(promilleSwayMagnitude(PROMILLE_MAX, tuning)).toBeLessThan(6);
     expect(promilleTunnelVision(PROMILLE_MAX, tuning)).toBeGreaterThan(0);
     expect(promilleGloom(PROMILLE_MAX, tuning)).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * "They will hit you sober" — the risk half of the risk/reward pass.
+ *
+ * Every other Promille penalty costs the player's *senses*; this one costs
+ * him his hitbox, which is the only one that changes how often the room
+ * actually connects. Tested apart from the ramps above because it is the one
+ * reading here the simulation acts on rather than a renderer.
+ */
+describe('the drunk player is a bigger target', () => {
+  const tuning = DEFAULT_PROMILLE_TUNING;
+
+  it('is exactly 1 at zero and grows from the first drop', () => {
+    expect(promilleHurtboxScale(0, tuning)).toBe(1);
+    expect(promilleHurtboxScale(-1, tuning)).toBe(1);
+    expect(promilleHurtboxScale(0.5, tuning)).toBeGreaterThan(1);
+    expect(promilleHurtboxScale(3, tuning)).toBeGreaterThan(promilleHurtboxScale(1, tuning));
+  });
+
+  it('saturates at the baseline knockdown threshold rather than climbing with Trinkfest', () => {
+    // Trinkfest is sold as tolerance. If it also kept inflating the hurtbox,
+    // the thing a player buys to survive more Promille would be buying them
+    // a beating as well — see `promilleHurtboxScale`'s own comment.
+    const full = 1 + tuning.maxHurtboxGrowth;
+    expect(promilleHurtboxScale(4.5, tuning)).toBeCloseTo(full);
+    expect(promilleHurtboxScale(5, tuning)).toBeCloseTo(full);
+    expect(promilleHurtboxScale(7, tuning)).toBeCloseTo(full);
+  });
+
+  it('never grows the hurtbox past the size the player is drawn', () => {
+    // The guardrail on this number: a hurtbox larger than the sprite is a hit
+    // the player cannot see coming and will not believe was theirs
+    // (`docs/GAME_DESIGN.md` §5).
+    expect(PLAYER_FOOTPRINT * promilleHurtboxScale(PROMILLE_MAX, tuning)).toBeLessThanOrEqual(
+      PLAYER_RADIUS,
+    );
+  });
+
+  it('resizes the live hurtbox on the tick the meter moves, not the tick after', () => {
+    const sim = emptySim();
+    const sober = sim.hurtbox.data[sim.playerIndex * 2];
+    expect(sober).toBeCloseTo(PLAYER_FOOTPRINT);
+
+    sim.addPromille(4.4);
+    sim.step(idle());
+    const drunk = sim.hurtbox.data[sim.playerIndex * 2] ?? 0;
+    expect(drunk).toBeGreaterThan(sober ?? 0);
+    // `hurtbox` is a Float32Array, so this is a float32-precision comparison
+    // against a float64 expectation, not a loose one.
+    expect(drunk).toBeCloseTo(PLAYER_FOOTPRINT * sim.promilleHurtboxScale, 4);
+
+    // ...and shrinks back as the run sobers up, which is what closes the loop
+    // with `hitPromilleLoss`: getting hit makes you smaller again.
+    sim.applyPlayerDamage(1);
+    sim.step(idle());
+    expect(sim.hurtbox.data[sim.playerIndex * 2] ?? 0).toBeLessThan(drunk);
+  });
+
+  it('leaves the hurtbox alone in a sober run, whatever the debug slider says', () => {
+    const sim = new GameSim({ room: bareRoom(), promilleUnlocked: false });
+    sim.tuning.promille.current = 4;
+    sim.step(idle());
+    expect(sim.hurtbox.data[sim.playerIndex * 2]).toBeCloseTo(PLAYER_FOOTPRINT);
+  });
+
+  it('turns off completely from tuning, leaving every other penalty alone', () => {
+    const sim = emptySim();
+    sim.tuning.promille.maxHurtboxGrowth = 0;
+    sim.addPromille(4.4);
+    sim.step(idle());
+    expect(sim.hurtbox.data[sim.playerIndex * 2]).toBeCloseTo(PLAYER_FOOTPRINT);
+    expect(sim.promilleTunnelVision).toBeGreaterThan(0);
+    expect(sim.promilleGloom).toBeGreaterThan(0);
   });
 });
 
@@ -851,6 +929,22 @@ describe('a hit costs Promille (#311)', () => {
     const before = sim.promille;
     sim.applyPlayerDamage(0);
     expect(sim.promille).toBe(before);
+  });
+
+  it('sobers harder than any meal on the roster does', () => {
+    // "They will hit you sober": there are two ways down the meter and they
+    // are meant to read differently — eating is a choice made with a pickup
+    // in front of you, a hit is a mistake the room made for you. This was
+    // quietly the wrong way round until the risk/reward pass (a full Wurst
+    // took 0.5, a hit took 0.4), which is exactly the sort of thing nothing
+    // notices without a test comparing the two directly.
+    const biggestMeal = Math.max(
+      ...PICKUP_DEFINITIONS.map((pickup) =>
+        pickup.effect.kind === 'food' ? (pickup.effect.promille ?? 0) : 0,
+      ),
+    );
+    expect(biggestMeal).toBeGreaterThan(0);
+    expect(DEFAULT_PROMILLE_TUNING.hitPromilleLoss).toBeGreaterThan(biggestMeal);
   });
 
   it('can drop the player a whole tier, which is the point of it', () => {
