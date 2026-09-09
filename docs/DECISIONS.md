@@ -5076,3 +5076,72 @@ re-break it.
 Together those three make the meter self-limiting instead of a ratchet: the drunker the run, the
 more it gets hit, and the more it gets hit the more sober it becomes. The fantasy is the right one
 — you feel indestructible and the room disagrees.
+
+## 92. The Sixpack banks Promille, and a Maß is *offered* to items before it is drunk
+
+**Decided:** the risk/reward playtest pass. **Builds on:** #26/#32 (item hooks and the beer-pickup
+hook), #85 (Promille machinery in a sober run), #91 (the risk/reward pass this is the answer to).
+
+Promille is a meter you cannot bank. A Maß on the floor is worth whatever it is worth *the moment
+you walk over it*, so a player at 4.2 has to leave beer lying there or fall over, and one who has
+just been knocked back to sober by a hit — which #91 made much more likely — has nothing to climb
+with until the floor drops another. §5's whole risk/reward argument is a decision about how drunk
+to be, and until this item the player could only make that decision at the instant a pickup
+happened to be under their feet. The Sixpack is that decision, unhooked from the pickup: bank six
+Maß through a floor you want to fight sober, cash them in on the boss.
+
+### The hook had to fire before the beer, not after
+
+`onBeerPickup` already existed (#32's Konterbier) and storing a Maß from it was tried first. It is
+a real bug, not merely inelegant: that hook runs *after* `addPromille`, so a carrier intercepting a
+Maß at 4.4 Promille would have to un-drink one the player had already fallen over from. Umgfalln
+is not a number you can put back.
+
+So `onBeerOffered` is its own hook, fired before the drink, and it uses the claim-a-flag shape
+`onLethalDamage` established: hooks are broadcast to every held item and a broadcast has no single
+answer to return, so a hook calls `GameSim.claimOfferedBeer` and the engine reads the flag once
+dispatch is done. `offerBeerToItems` owns the reset-dispatch-read sequence rather than leaving the
+reset to its caller, which is the one thing the `blutwurzActive` version of this pattern gets
+wrong and is worth not repeating.
+
+Two consequences fall out of the ordering, and both are the point:
+
+- **`onBeerPickup` does not fire on a stored Maß**, because no beer was drunk. Konterbier must not
+  clear a Kater off a bottle that went into a carrier.
+- **The toast is decided by the offer too.** The offer moved *above* `reportCollected`, not merely
+  above `addPromille`: "Maß — Raises Promille" over a meter that did not move is exactly the kind
+  of thing a player reports as a bug. It reads "Stored, not drunk", which deliberately does not
+  name the Sixpack — the hook is open to any item that banks beer, and a toast naming one of them
+  goes stale the moment a second exists.
+
+### Three rules that keep the item simple
+
+- **It stores Promille, not bottles.** A half Maß fills 0.6 of a slot. Counting bottles would
+  upgrade every half Maß to a full one for free the moment you picked the carrier up.
+- **A Maß that does not fit is drunk, not split.** No partial deposits. The pack is full, so you
+  drink it, exactly as you would without the item — which is also the whole answer to "what
+  happens when it is full", and the least surprising one available.
+- **The charge bar is not a cooldown.** `maxCharge` is 1 and `state.charge` is a plain readiness
+  flag kept up whenever there is anything to pour. The limit on this item is how much beer the
+  room has handed out, which is a resource already on screen; a bar that filled on its own would
+  be a second, invisible economy competing with it.
+
+### It gets a HUD row, and gives up its status line for it
+
+Six containers you read the *shape* of beat a fraction you read the digits of — the same argument
+`HealthHud` already makes for drawing Wurst instead of "6/6". So `render/sixpack-hud.ts` is a row
+of six bottles under the active-item slot, appearing and disappearing with the item (and taking
+its row gap with it, like the Promille bar in a sober run). The item therefore declares **no**
+`ItemStatusReader`, unlike most items whose effect is a counter: two rows counting the same
+bottles is worse than one, and the roster's "every item is visible while held" rule is met by the
+better of the two readouts rather than by both.
+
+### The name is the user's, and so is every Bavarian word
+
+This item shipped as "Sechsertragerl" for about ten minutes. It was proposed as *the Sixpack*, and
+renamed on the strength of `CONTENT_BIBLE.md` §0's "item names stay Bavarian in all locales" —
+which was the wrong call twice over: the rule is a style guide, and the person it is written for
+had already chosen. The bible and `CLAUDE.md` now both say the harder thing outright: **do not
+invent or substitute Bavarian and German names.** Ask, and use exactly what comes back, including
+when the answer is an English word. A plausible-looking invention is worse than a plain English
+placeholder, because it reads as authentic to everyone who cannot check it.

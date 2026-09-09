@@ -940,7 +940,7 @@ describe('a hit costs Promille (#311)', () => {
     // notices without a test comparing the two directly.
     const biggestMeal = Math.max(
       ...PICKUP_DEFINITIONS.map((pickup) =>
-        pickup.effect.kind === 'food' ? (pickup.effect.promille ?? 0) : 0,
+        pickup.effect.kind === 'food' ? pickup.effect.promille : 0,
       ),
     );
     expect(biggestMeal).toBeGreaterThan(0);

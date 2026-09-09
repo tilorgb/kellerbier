@@ -95,6 +95,45 @@ export const ICON_FASSL: PixelArt = [
   '.ooooooo.',
 ];
 
+/**
+ * A bottle standing in a carrier — one slot of the Sixpack's row,
+ * full. Narrower than it is tall on purpose: six of these sit side by side in
+ * one HUD row, so the silhouette has to survive being read as a *set* at nine
+ * pixels apart, which a mug shape (`ICON_PROMILLE`) does not — six mugs in a
+ * row read as a bar chart. A bottle is a tall thing with a neck, and six tall
+ * things with necks read as a crate of beer at a glance.
+ */
+export const ICON_BOTTLE_FULL: PixelArt = [
+  '.ooo.',
+  '.ofo.',
+  '.ofo.',
+  'ooooo',
+  'ohffo',
+  'ohffo',
+  'ohffo',
+  'ohffo',
+  'oaffo',
+  '.ooo.',
+];
+
+/**
+ * The same bottle, empty. Drawn rather than removed, for the reason
+ * `ICON_WURST_EMPTY` states: a row that got shorter as it emptied would read
+ * as a HUD element failing to draw rather than as a resource being spent.
+ */
+export const ICON_BOTTLE_EMPTY: PixelArt = [
+  '.ooo.',
+  '.o.o.',
+  '.o.o.',
+  'ooooo',
+  'o...o',
+  'o...o',
+  'o...o',
+  'o...o',
+  'o...o',
+  '.ooo.',
+];
+
 /** A drop — the Promille meter's own mark, and what a tier icon is built from. */
 export const ICON_PROMILLE: PixelArt = [
   '...o...',
@@ -179,6 +218,8 @@ export const UI_ICONS: Readonly<Record<string, PixelArt>> = {
   key: ICON_KEY,
   fassl: ICON_FASSL,
   promille: ICON_PROMILLE,
+  'bottle-full': ICON_BOTTLE_FULL,
+  'bottle-empty': ICON_BOTTLE_EMPTY,
   lock: ICON_LOCK,
   skull: ICON_SKULL,
   star: ICON_STAR,

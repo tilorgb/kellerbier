@@ -41,6 +41,7 @@ import {
 import { diamondTexture, dotTexture } from '../render/ui/marker-art.js';
 import { INTERNAL_HEIGHT, INTERNAL_WIDTH, computeGameLayout } from '../render/resolution.js';
 import { ActiveItemHud } from '../render/active-item-hud.js';
+import { SixpackHud } from '../render/sixpack-hud.js';
 import { BossHealthHud } from '../render/boss-health-hud.js';
 import { CharacterHud } from '../render/character-hud.js';
 import { GameOverScreen } from '../render/game-over.js';
@@ -1147,6 +1148,13 @@ async function boot(): Promise<void> {
    */
   const activeItemHud = new ActiveItemHud(kit);
   hudLayer.addChild(activeItemHud.view);
+  /**
+   * The Sixpack's banked Maß — its own row under the active-item
+   * slot, since it is the thing the player reads to decide whether to press
+   * that slot's button. Hidden, and zero-height, without the carrier.
+   */
+  const sixpackHud = new SixpackHud(kit);
+  hudLayer.addChild(sixpackHud.view);
 
   /**
    * #32's "item activation state is unambiguous in the HUD" for every held
@@ -1261,6 +1269,12 @@ async function boot(): Promise<void> {
     y += characterHud.height + HUD_ROW_GAP;
     activeItemHud.view.position.set(HUD_MARGIN, y);
     y += activeItemHud.height + HUD_ROW_GAP;
+    // Same "no row, no gap" rule the Promille bar follows above: a carrier
+    // the player is not holding leaves no blank line behind.
+    sixpackHud.view.position.set(HUD_MARGIN, y);
+    if (sixpackHud.view.visible) {
+      y += sixpackHud.height + HUD_ROW_GAP;
+    }
     itemGateHud.view.position.set(HUD_MARGIN, y);
     y += itemGateHud.height + HUD_ROW_GAP;
     itemStatusHud.view.position.set(HUD_MARGIN, y);
@@ -2033,6 +2047,16 @@ async function boot(): Promise<void> {
           ? 'Tap Use'
           : actionPrompt(input.bindings, Bindable.Use, device, glyphSet);
       activeItemHud.sync(sim, activatePrompt);
+      // The carrier's row appears the moment the item is picked up and goes
+      // again if it is swapped away, which grows and shrinks the column —
+      // same shape (and same reason) as the eternal-heart and Promille rows
+      // above, since `layoutHud` otherwise only runs on a resize or a run
+      // start.
+      const sixpackRowShown = sixpackHud.view.visible;
+      sixpackHud.sync(sim);
+      if (sixpackHud.view.visible !== sixpackRowShown) {
+        layoutHud();
+      }
       itemGateHud.sync(sim);
       itemStatusHud.sync(sim);
       itemSetHud.sync(sim);

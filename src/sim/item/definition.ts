@@ -156,6 +156,33 @@ export type ItemBombDetonateHook = (
 export type ItemBeerPickupHook = ItemHook;
 
 /**
+ * Fires **before** a Maß is drunk, offering it to every held item first: an
+ * item may take the beer instead, by calling `GameSim.claimOfferedBeer`, in
+ * which case nothing is drunk this tick and `onBeerPickup` never runs.
+ *
+ * The claim-a-flag shape rather than a return value is `onLethalDamage`'s,
+ * for the same reason — hooks are broadcast to every held item and a
+ * broadcast has no single answer to return, so the engine reads a flag off
+ * `sim` once dispatch is done. It is a *separate* hook from `onBeerPickup`
+ * rather than that hook gaining the power to cancel, because the two happen
+ * at different moments and mean different things: `onBeerPickup` is "a beer
+ * was drunk" (Konterbier clears a Kater off it, which storing a bottle must
+ * not do), and this is "a beer is on offer."
+ *
+ * Added for the Sixpack, which stores Maß instead of drinking them.
+ * Doing that from `onBeerPickup` was tried first and is a real bug, not
+ * merely inelegant: that hook runs *after* `addPromille`, so a full pack
+ * intercepting a Maß at 4.4 Promille would have to un-drink one the player
+ * had already fallen over from.
+ *
+ * `amount` is the Promille the beer is worth, already resolved from
+ * `PromilleTuning` by `sim/systems/pickup.ts` — a hook must never re-derive
+ * it from the pickup's `size`, or a Losbrunnen-style tuning change would
+ * move one of the two numbers and not the other.
+ */
+export type ItemBeerOfferedHook = (ctx: ItemHookContext & { readonly amount: number }) => void;
+
+/**
  * Fires from `GameSim.applyPlayerDamage`'s lethal branch, once an eternal
  * heart has already been ruled out — the last chance, before the run ends
  * for real, for a held item to do something about it. Added for #84's
@@ -216,6 +243,8 @@ export interface ItemHooks {
   readonly onBombDetonate?: ItemBombDetonateHook;
   /** See `ItemBeerPickupHook`. */
   readonly onBeerPickup?: ItemBeerPickupHook;
+  /** See `ItemBeerOfferedHook`. Runs before `onBeerPickup`, and can stop it happening at all. */
+  readonly onBeerOffered?: ItemBeerOfferedHook;
   /** See `ItemLethalDamageHook`. */
   readonly onLethalDamage?: ItemLethalDamageHook;
 }

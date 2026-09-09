@@ -25,6 +25,15 @@ import { dispatchItemBeerPickup } from './items.js';
 const PLAYER_X = 0;
 const PLAYER_Y = 1;
 const PLAYER_RADIUS = 2;
+
+/**
+ * What the toast says when a held item took the Maß instead of the player
+ * drinking it. Plain English and literal, like every other pickup
+ * description (`pickupDescriptionFor`) — and deliberately not naming the
+ * Sixpack, since the hook is open to any item that stores beer and a toast
+ * that named one of them would go stale the moment a second one existed.
+ */
+const STORED_DESCRIPTION = 'Stored, not drunk';
 const PLAYER_SLOTS = 3;
 const player = new Float64Array(PLAYER_SLOTS);
 
@@ -198,7 +207,25 @@ function collect(sim: GameSim, other: number): boolean {
   if (priced && !sim.spendBiermarken(sim.pickupPrice.data[other] ?? 0)) {
     return false;
   }
-  sim.reportCollected(definition.name, pickupDescriptionFor(definition, sim.promilleUnlocked));
+  // A Maß is offered to held items *before* the toast, not only before the
+  // drink: with the Sixpack in hand the beer goes into the carrier, and a
+  // toast reading "Maß — Raises Promille" over a meter that did not move is
+  // exactly the kind of thing a player reports as a bug. See
+  // `ItemBeerOfferedHook`.
+  const stored =
+    effect.kind === 'promille' &&
+    sim.offerBeerToItems(
+      effect.size === 'full'
+        ? sim.tuning.promille.massFullAmount
+        : sim.tuning.promille.massHalfAmount,
+    );
+  sim.reportCollected(
+    definition.name,
+    stored ? STORED_DESCRIPTION : pickupDescriptionFor(definition, sim.promilleUnlocked),
+  );
+  if (stored) {
+    return true;
+  }
 
   switch (effect.kind) {
     case 'currency':
@@ -236,6 +263,9 @@ function collect(sim: GameSim, other: number): boolean {
         effect.size === 'full'
           ? sim.tuning.promille.massFullAmount
           : sim.tuning.promille.massHalfAmount;
+      // The offer already happened, above the toast — a claimed Maß returned
+      // before this switch ran, so reaching here means nothing took it and it
+      // is drunk exactly as it always was.
       sim.addPromille(amount);
       // A Maß never clears Kater on its own (that is `food`'s job, above) —
       // Konterbier (#32) is what makes drinking through a hangover work, so

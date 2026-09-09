@@ -51,6 +51,7 @@ import { sauwetter } from './sauwetter.js';
 import { schluesselbund } from './schluesselbund.js';
 import { schuhplattler } from './schuhplattler.js';
 import { semmelknoedel } from './semmelknoedel.js';
+import { sixpack } from './sixpack.js';
 import { spezi } from './spezi.js';
 import { steckerlfisch } from './steckerlfisch.js';
 import { steinkrug } from './steinkrug.js';
@@ -135,6 +136,7 @@ export const ITEM_DEFINITIONS: readonly ItemDefinition[] = [
   schluesselbund,
   schuhplattler,
   semmelknoedel,
+  sixpack,
   spezi,
   steckerlfisch,
   steinkrug,
@@ -191,6 +193,7 @@ export {
   sauwetter,
   schluesselbund,
   schuhplattler,
+  sixpack,
   spezi,
   steckerlfisch,
   steinkrug,

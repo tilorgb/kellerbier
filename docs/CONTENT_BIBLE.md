@@ -49,6 +49,15 @@ Read this before authoring any content.
   sets — the fun stays the fun, the honesty sits under it for whoever looks.
 
 **Language.**
+- **Bavarian and German names are the project owner's to choose, never an author's to
+  invent.** This is a hard rule and it applies to every agent and every contributor who is not
+  the owner: do not coin a Bavarian or German name for an item, enemy, room, floor, boss,
+  pickup or anything else, do not "correct" one that has been given, and do not substitute a
+  more dialect-authentic word for the one you were handed. If a name is needed and none has
+  been given, ask for it and use exactly what comes back — including when the answer is an
+  English word like *Sixpack*. The dialect is somebody's actual language and the joke only
+  lands if it is right; a plausible-looking invention is worse than a plain English placeholder,
+  because it reads as authentic to everyone who cannot check it.
 - Content is authored in Bavarian/German names with English descriptions.
 - Ship English, German, and **Boarisch** (Bavarian dialect) as a joke locale that is
   nonetheless a real, complete translation. Item *names* stay Bavarian in all locales.

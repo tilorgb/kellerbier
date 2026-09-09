@@ -122,6 +122,7 @@ import { applyDamageAt, stepImpact, stepParticles } from '../systems/impact.js';
 import { stepLootDrops } from '../systems/loot.js';
 import {
   dispatchItemFloorStart,
+  dispatchItemBeerOffered,
   dispatchItemLethalDamage,
   dispatchItemProjectileSpawn,
   dispatchItemRoomClear,
@@ -4251,6 +4252,45 @@ export class GameSim {
     }
     const factor = this.activeItemCooldownFactor.get(item.id) ?? 1;
     return Math.max(1, Math.round(active.maxCharge * factor));
+  }
+
+  /**
+   * Whether a held item took the Maß currently being offered — see
+   * `ItemBeerOfferedHook`. Reset and read by `offerBeerToItems`; a hook is
+   * what sets it, through `claimOfferedBeer`.
+   */
+  private offeredBeerClaimedFlag = false;
+
+  /** @see offeredBeerClaimed — read by `sim/systems/items.ts`'s dispatch so a second item cannot claim the same Maß. */
+  get offeredBeerClaimed(): boolean {
+    return this.offeredBeerClaimedFlag;
+  }
+
+  /**
+   * Called from an `onBeerOffered` hook to take the Maß out of the player's
+   * hand: nothing is drunk, `onBeerPickup` never fires, and the item is on
+   * the hook for storing what it just took. Meaningless — and harmless —
+   * outside a beer offer, since `offerBeerToItems` clears the flag before
+   * every dispatch.
+   */
+  claimOfferedBeer(): void {
+    this.offeredBeerClaimedFlag = true;
+  }
+
+  /**
+   * Offers a Maß worth `amount` Promille to every held item before it is
+   * drunk. Returns `true` if one of them took it, in which case the caller
+   * must not drink it.
+   *
+   * The reset-dispatch-read sequence is here rather than at the call site so
+   * a future second caller cannot forget the reset and inherit the last
+   * offer's answer — the one thing the `blutwurzActive` version of this
+   * pattern leaves to its caller, and the one thing worth not repeating.
+   */
+  offerBeerToItems(amount: number): boolean {
+    this.offeredBeerClaimedFlag = false;
+    dispatchItemBeerOffered(this, amount);
+    return this.offeredBeerClaimedFlag;
   }
 
   /** Adds charge to a held active item, capped at its (possibly rerolled) `maxCharge`. A no-op for an item that is not held or not active. */

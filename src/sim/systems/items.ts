@@ -541,6 +541,49 @@ export function dispatchItemBeerPickup(sim: GameSim): void {
   }
 }
 
+function visitBeerOffered(index: number, state: ItemRuntimeState): void {
+  const sim = dispatchSim;
+  if (sim === null) {
+    return;
+  }
+  // First claim wins: once an item has taken the beer there is no beer left
+  // to offer, so a second Sixpack-shaped item cannot store the same
+  // Maß twice. Nothing on the roster can hold two of these at once today —
+  // an active item is swapped, not stacked — but the flag is the whole
+  // protocol here and reading it costs one branch.
+  if (sim.offeredBeerClaimed) {
+    return;
+  }
+  const item = sim.items.at(index);
+  if (!promilleRequirementMet(item.promilleRequirement, scratch.tier)) {
+    return;
+  }
+  const hook = item.hooks.onBeerOffered;
+  if (hook === undefined) {
+    return;
+  }
+  scratch.itemId = item.id;
+  scratch.state = state;
+  hook(scratch);
+}
+
+/**
+ * Offers a Maß to every held item *before* it is drunk — see
+ * `ItemBeerOfferedHook`. `GameSim.offerBeerToItems` resets the claim flag,
+ * calls this, and reads the flag back to decide whether the beer still has
+ * to be drunk, the same way it checks `blutwurzActive` after
+ * `dispatchItemLethalDamage`.
+ */
+export function dispatchItemBeerOffered(sim: GameSim, amount: number): void {
+  beginDispatch(sim);
+  try {
+    scratch.amount = amount;
+    sim.inventory.forEachHeld(visitBeerOffered);
+  } finally {
+    endDispatch();
+  }
+}
+
 function visitLethalDamage(index: number, state: ItemRuntimeState): void {
   const sim = dispatchSim;
   if (sim === null) {
