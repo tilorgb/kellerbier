@@ -105,11 +105,22 @@ let dispatchSim: GameSim | null = null;
  * frames rather than locals per function, because eleven dispatchers each
  * saving fourteen fields by hand is exactly the copy-paste that drifts; and
  * fixed-depth rather than growable so the hot path (`stepItemTick`, once a
- * tick) allocates nothing. `MAX_DEPTH` is generous: real nesting is two
- * deep (a hook spawns, the spawn dispatches), and a hook that recursed
- * deeper than eight would be a content bug worth the thrown error.
+ * tick) allocates nothing.
+ *
+ * `MAX_DEPTH` used to be 8, sized for one item recursing into itself two
+ * deep (a hook spawns, the spawn dispatches) — the shape a single buggy
+ * item takes. #314's synergy fuzz sweep found that assumption wrong for a
+ * *combination* of items: a 25-item build can easily hold several different
+ * spawner items (Spezi, Braumeister-Visier and friends — see above), each
+ * one's spawn dispatching into the next one's hook, and that chain nests
+ * once per spawner in play rather than twice total. Measured against the
+ * full 10,000-combination sweep, the deepest a real (non-buggy) chain
+ * reached needed more than 32 but no more than 48; 64 leaves real headroom
+ * above that without giving up the guard's actual job, which is still
+ * exactly what it was: catching a hook that is *unboundedly* re-entering
+ * itself, not a large-but-finite fan of legitimately spawning items.
  */
-const MAX_DEPTH = 8;
+const MAX_DEPTH = 64;
 interface SavedFrame {
   sim: GameSim | null;
   itemId: string;
@@ -212,6 +223,21 @@ function endDispatch(): void {
   scratch.y = frame.y;
 }
 
+/**
+ * Drops the dispatch depth (and the in-flight `dispatchSim`) back to zero.
+ * `beginDispatch`/`endDispatch` are now paired with `try`/`finally` at every
+ * dispatch site, so a throwing hook can no longer leave `depthSlot` raised
+ * for the next `GameSim` in the process — but `depthSlot` is still
+ * module-level state shared by every sim the fuzz harness and playtest
+ * sweep build, so `GameSim`'s constructor calls this anyway as a per-run
+ * reset: belt and braces against whatever the next bug in this shape turns
+ * out to be (#314).
+ */
+export function resetItemDispatchState(): void {
+  depthSlot[0] = 0;
+  dispatchSim = null;
+}
+
 function visitTick(index: number, state: ItemRuntimeState): void {
   const sim = dispatchSim;
   if (sim === null) {
@@ -233,8 +259,11 @@ function visitTick(index: number, state: ItemRuntimeState): void {
 /** Advances every held item's `onTick` hook by one tick. */
 export function stepItemTick(sim: GameSim): void {
   beginDispatch(sim);
-  sim.inventory.forEachHeld(visitTick);
-  endDispatch();
+  try {
+    sim.inventory.forEachHeld(visitTick);
+  } finally {
+    endDispatch();
+  }
 }
 
 function visitShoot(index: number, state: ItemRuntimeState): void {
@@ -258,10 +287,13 @@ function visitShoot(index: number, state: ItemRuntimeState): void {
 /** Fires when the player fires — see `sim/systems/shooting.ts`'s `fire`. */
 export function dispatchItemShoot(sim: GameSim, directionX: number, directionY: number): void {
   beginDispatch(sim);
-  scratch.directionX = directionX;
-  scratch.directionY = directionY;
-  sim.inventory.forEachHeld(visitShoot);
-  endDispatch();
+  try {
+    scratch.directionX = directionX;
+    scratch.directionY = directionY;
+    sim.inventory.forEachHeld(visitShoot);
+  } finally {
+    endDispatch();
+  }
 }
 
 function visitProjectileSpawn(index: number, state: ItemRuntimeState): void {
@@ -285,9 +317,12 @@ function visitProjectileSpawn(index: number, state: ItemRuntimeState): void {
 /** Fires once a projectile the player fired actually enters the world. */
 export function dispatchItemProjectileSpawn(sim: GameSim, projectile: number): void {
   beginDispatch(sim);
-  scratch.projectile = projectile;
-  sim.inventory.forEachHeld(visitProjectileSpawn);
-  endDispatch();
+  try {
+    scratch.projectile = projectile;
+    sim.inventory.forEachHeld(visitProjectileSpawn);
+  } finally {
+    endDispatch();
+  }
 }
 
 function visitHit(index: number, state: ItemRuntimeState): void {
@@ -317,12 +352,15 @@ export function dispatchItemHit(
   hitY: number,
 ): void {
   beginDispatch(sim);
-  scratch.target = target;
-  scratch.damage = damage;
-  scratch.hitX = hitX;
-  scratch.hitY = hitY;
-  sim.inventory.forEachHeld(visitHit);
-  endDispatch();
+  try {
+    scratch.target = target;
+    scratch.damage = damage;
+    scratch.hitX = hitX;
+    scratch.hitY = hitY;
+    sim.inventory.forEachHeld(visitHit);
+  } finally {
+    endDispatch();
+  }
 }
 
 function visitKill(index: number, state: ItemRuntimeState): void {
@@ -346,9 +384,12 @@ function visitKill(index: number, state: ItemRuntimeState): void {
 /** Fires when a hit the player caused kills something that isn't the player. */
 export function dispatchItemKill(sim: GameSim, target: number): void {
   beginDispatch(sim);
-  scratch.target = target;
-  sim.inventory.forEachHeld(visitKill);
-  endDispatch();
+  try {
+    scratch.target = target;
+    sim.inventory.forEachHeld(visitKill);
+  } finally {
+    endDispatch();
+  }
 }
 
 function visitDamageTaken(index: number, state: ItemRuntimeState): void {
@@ -372,9 +413,12 @@ function visitDamageTaken(index: number, state: ItemRuntimeState): void {
 /** Fires whenever the player takes damage, from a shot or from contact. */
 export function dispatchItemDamageTaken(sim: GameSim, amount: number): void {
   beginDispatch(sim);
-  scratch.amount = amount;
-  sim.inventory.forEachHeld(visitDamageTaken);
-  endDispatch();
+  try {
+    scratch.amount = amount;
+    sim.inventory.forEachHeld(visitDamageTaken);
+  } finally {
+    endDispatch();
+  }
 }
 
 function visitRoomClear(index: number, state: ItemRuntimeState): void {
@@ -398,8 +442,11 @@ function visitRoomClear(index: number, state: ItemRuntimeState): void {
 /** Fires the tick a room's last enemy dies — see `GameSim.step`. Once per room, never re-fired on re-entry. */
 export function dispatchItemRoomClear(sim: GameSim): void {
   beginDispatch(sim);
-  sim.inventory.forEachHeld(visitRoomClear);
-  endDispatch();
+  try {
+    sim.inventory.forEachHeld(visitRoomClear);
+  } finally {
+    endDispatch();
+  }
 }
 
 function visitFloorStart(index: number, state: ItemRuntimeState): void {
@@ -423,9 +470,12 @@ function visitFloorStart(index: number, state: ItemRuntimeState): void {
 /** Fires the first room loaded on a new floor — see `GameSim.applyCompiledRoom`. */
 export function dispatchItemFloorStart(sim: GameSim, floor: number): void {
   beginDispatch(sim);
-  scratch.floor = floor;
-  sim.inventory.forEachHeld(visitFloorStart);
-  endDispatch();
+  try {
+    scratch.floor = floor;
+    sim.inventory.forEachHeld(visitFloorStart);
+  } finally {
+    endDispatch();
+  }
 }
 
 function visitBombDetonate(index: number, state: ItemRuntimeState): void {
@@ -449,10 +499,13 @@ function visitBombDetonate(index: number, state: ItemRuntimeState): void {
 /** Fires when a Bierfassl goes off — see `sim/systems/bombs.ts`'s `explode`. */
 export function dispatchItemBombDetonate(sim: GameSim, x: number, y: number): void {
   beginDispatch(sim);
-  scratch.x = x;
-  scratch.y = y;
-  sim.inventory.forEachHeld(visitBombDetonate);
-  endDispatch();
+  try {
+    scratch.x = x;
+    scratch.y = y;
+    sim.inventory.forEachHeld(visitBombDetonate);
+  } finally {
+    endDispatch();
+  }
 }
 
 function visitBeerPickup(index: number, state: ItemRuntimeState): void {
@@ -481,8 +534,11 @@ function visitBeerPickup(index: number, state: ItemRuntimeState): void {
  */
 export function dispatchItemBeerPickup(sim: GameSim): void {
   beginDispatch(sim);
-  sim.inventory.forEachHeld(visitBeerPickup);
-  endDispatch();
+  try {
+    sim.inventory.forEachHeld(visitBeerPickup);
+  } finally {
+    endDispatch();
+  }
 }
 
 function visitLethalDamage(index: number, state: ItemRuntimeState): void {
@@ -511,6 +567,9 @@ function visitLethalDamage(index: number, state: ItemRuntimeState): void {
  */
 export function dispatchItemLethalDamage(sim: GameSim): void {
   beginDispatch(sim);
-  sim.inventory.forEachHeld(visitLethalDamage);
-  endDispatch();
+  try {
+    sim.inventory.forEachHeld(visitLethalDamage);
+  } finally {
+    endDispatch();
+  }
 }
