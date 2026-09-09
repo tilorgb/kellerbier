@@ -55,13 +55,15 @@ import {
   promilleDamageMultiplier,
   promilleDriftScale,
   promilleFireRateMultiplier,
+  promilleGloom,
   promilleRequirementMet,
   promilleScreenDistortion,
   promilleShotHeat,
+  promilleSwayMagnitude,
   promilleTierName,
   promilleTierOf,
+  promilleTunnelVision,
   promilleWobbleAmplitude,
-  promilleSwayMagnitude,
 } from './promille.js';
 import { DOOR_SPAN, type RoomGeometry } from '../room/geometry.js';
 import { createPlaygroundRoom } from '../room/playground.js';
@@ -3705,6 +3707,27 @@ export class GameSim {
   /** The screen-distortion penalty (#92) — see `promilleScreenDistortion`. Read by `render/vignette.ts`. */
   get promilleScreenDistortion(): number {
     return promilleScreenDistortion(this.promille, this.tuning.promille);
+  }
+
+  /**
+   * How far the room has closed in around the player — see
+   * `promilleTunnelVision`. Read by `render/vignette.ts`, which turns it into
+   * the clear radius of the tunnel it already draws.
+   *
+   * Unscaled here, like `promilleScreenDistortion` and unlike
+   * `promilleSwayMagnitude`: `swayScale`/`driftScale`/`wobbleScale` are
+   * *simulation* scales, because sway, drift and wobble all move something
+   * the player is aiming with. Sight is drawn, never simulated, so its
+   * accessibility softening lives where every other render-only suppression
+   * does — see `docs/DECISIONS.md` #41 and `Vignette.setReducedMotion`.
+   */
+  get promilleTunnelVision(): number {
+    return promilleTunnelVision(this.promille, this.tuning.promille);
+  }
+
+  /** The murk inside that tunnel — see `promilleGloom`. Read by `render/gloom.ts`. */
+  get promilleGloom(): number {
+    return promilleGloom(this.promille, this.tuning.promille);
   }
 
   /**

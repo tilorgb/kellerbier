@@ -274,6 +274,14 @@ const GROUPS: readonly GroupSpec[] = [
       { key: 'wobblePeriodTicks', min: 10, max: 300, step: 5, hint: 'ticks per wobble sweep' },
       { key: 'swayPeriodTicks', min: 10, max: 600, step: 10, hint: 'ticks per sway loop' },
       {
+        key: 'maxTunnelVision',
+        min: 0,
+        max: 3,
+        step: 0.05,
+        hint: 'how far sight closes in at full ramp',
+      },
+      { key: 'maxGloom', min: 0, max: 4, step: 0.05, hint: 'blur/murk at full ramp' },
+      {
         key: 'maxScreenDistortion',
         min: 0,
         max: 3,

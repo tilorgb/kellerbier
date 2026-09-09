@@ -4889,3 +4889,99 @@ measurement of the *premise*, not of how the game feels in hands that did not tu
 what closes that gap, and it is deliberately not blocked on this decision. Recording the verdict
 now is the point — the argument is the artefact, so that the next person to have this idea finds
 it rather than re-deriving it.
+
+## 90. Being drunk takes your sight, not your camera — and the blur is a framebuffer copy, not a render target
+
+Promille's headline penalty was **camera sway**: the whole frame drifting in a slow 12-pixel
+circle, always, from the first sip. It was the effect that made the mechanic read as drunk at a
+glance, and it was the wrong one.
+
+A moving frame is a nausea generator. `docs/GAME_DESIGN.md` §5 already knew half of this — it has
+required a sway accessibility toggle since #33, on exactly the grounds that "motion sickness is a
+real accessibility issue, not an optional nicety." What the guardrail missed is that a slider
+does not help the player it is written for: someone who starts feeling ill ten minutes into a
+roguelite does not diagnose it, open a settings screen and find the camera-sway row. They stop
+playing, and they do not say why. A default that needs a setting to be comfortable is a default
+that is wrong.
+
+### What replaced it
+
+Sway is cut to a quarter (`maxSway` 12 → 3) rather than removed — a slow, small drift still says
+"this run is drunk" and no longer says it loudly enough to be the reason someone quits. Its job
+went to two penalties that take something away without moving anything:
+
+- **`promilleTunnelVision`** — the vignette's clear radius closes with the meter. Shaped exactly
+  like the sway ramp it replaces (a straight ratio of the value, starting at the first sip, not
+  at a tier boundary), because it is inheriting sway's role and a first Maß that costs nothing at
+  all is a first Maß the player does not feel.
+- **`promilleGloom`** — the world pass, blurred and drained of colour, from Beduselt up. Later
+  than the tunnel on purpose: a blur reads far stronger than a narrowing, and Angeheitert is the
+  design doc's "sweet spot", so it pays peripheral vision and keeps a readable room.
+
+Both are unbounded ramps whose renderers decide how far past `1` they will draw, like
+`maxScreenDistortion` and `maxShotHeat` before them — and both bottom out at the deepest the
+meter can actually be driven (7.0 Promille, `promilleCapFor` at `TRINKFEST_MAX`) rather than at a
+round number, so nothing is left unspent below a value no player will ever reach.
+
+**The HUD is never blurred, and that is what makes the strength affordable.** The murk is the last
+thing `GameView.render` draws; the HUD, the vignette and every toast are the UI pass `app.ts`
+draws over it. A player who cannot read their own health bar is looking at a bug, not at a
+difficulty setting.
+
+**Accessibility moved with it.** The two new penalties carry *no* simulation-side scale, unlike
+`swayScale`/`driftScale`/`wobbleScale`. Those exist because sway, drift and wobble move something
+the player is aiming with; sight is drawn and never simulated, so the softening lives in
+`Vignette.setReducedMotion` and `GameView`'s own `REDUCED_MOTION_GLOOM` — render-side, per #41,
+where it cannot make a reduced-motion run step differently from a full one. Softened rather than
+switched off, for the reason `app/settings.ts` gives about damped screenshake: with sway a
+whisper, these two *are* the meter's visual language now, and a toggle that removes information
+is not an accessibility toggle.
+
+### The tunnel closes by growing the frame, not by shrinking the sprite
+
+The obvious way to tighten a vignette is to scale its quad down. It does not work here: the
+vignette follows the *player*, not screen centre, and a quad small enough to be a tight tunnel is
+too small to still cover the screen corners once camera-follow (#100) has the player off centre —
+the uncovered corner reads as a hole punched in the dark. Compositing a fill behind it does not
+fix that either; a backdrop at the same alpha double-blends everywhere the gradient is already
+opaque, so the seam moves rather than disappearing.
+
+What works is the opposite move. The quad keeps its full `COVERAGE`, and the sprite reads a
+`Rectangle` frame **larger than the texture**. The same 512 pixels of gradient are squeezed into a
+smaller part of the quad, and every sample outside them lands past the texture's own bounds —
+where `ClampToEdgeWrapping` returns the border texel, which the generated gradient makes fully
+opaque all the way round. So the fill outside the tunnel is the same pixel the gradient ends at,
+at the same alpha, by construction: no seam, no second sprite, no extra draw call. It is also
+free most frames, since the frame only changes when the aperture actually moves and Promille
+drifts by 0.006 a second.
+
+### The blur copies the framebuffer, because a render target costs every shader in the game
+
+The natural way to blur a frame is to render the world into a `WebGLRenderTarget` and sample it.
+That is exactly the trap `GameView.warmSceneryGroup`'s own doc comment describes from the other
+side: three keys a material's program on the colour space it writes into, and a non-XR render
+target is always the working (linear) space while the canvas is sRGB. Routing the world through a
+target would compile a complete second program set — and, if the target were only used while the
+player was drunk, it would compile it *mid-run*, on the frame someone crossed into Beduselt.
+That is the blocking `linkProgram` #80 and `tools/perf/room-crossings.mjs` exist to prevent.
+
+`copyFramebufferToTexture` sidesteps the whole question. The world draws to the canvas exactly as
+it always has; the finished 640×360 frame is copied into a `FramebufferTexture` with one GPU-side
+`copyTexSubImage2D`, and a single clip-space quad draws it back through a 13-tap tent, blended at
+an alpha the ramp sets. One extra program, linked at boot alongside everything else
+`GameView.render` compiles on its first frame — the crossing gate still reports zero links after
+the first crossing, at 26 programs against a ceiling of 40.
+
+Measured rather than eyeballed: horizontal edge energy over the middle of the frame drops from
+3.03 sober to 1.87 at 4.4 Promille, and holds at 2.93 with `maxGloom` set to 0 at the same
+Promille — so the softening is the blur doing its job, not the vignette's darkening being
+mistaken for one.
+
+### What this does not do
+
+It does not make the meter *harder*. Every damage and fire-rate number is untouched, and so is
+every drain: this pass changes what being drunk costs the player's senses, not what it costs
+their health. Whether the reward still outruns the risk once the penalties are legible is a
+playtest question, and the obvious next lever if the answer is no is a damage-*taken* multiplier
+that rises with the meter (capped, so a hit at Filmriss is at most double). That is deliberately
+not in this change: two balance levers pulled at once cannot be told apart afterwards.

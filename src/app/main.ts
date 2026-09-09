@@ -2306,9 +2306,13 @@ async function boot(): Promise<void> {
     // a pure function of the number two fields to its left, and what a tuning
     // pass actually wants to see is the pair — "3.10 Vollrausch, heat 0.69" —
     // when deciding whether `maxShotHeat` is spending itself in the right
-    // place. Two decimals, like the meter itself.
+    // place. Two decimals, like the meter itself. The risk/reward pass's two
+    // sight penalties ride along for exactly the same reason — a tuning pass
+    // on `maxTunnelVision`/`maxGloom` wants the whole row at once, and both
+    // are otherwise invisible as numbers: what the player sees is a dark,
+    // soft room, which says nothing about where on its ramp either one is.
     const promilleLine = sim.promilleUnlocked
-      ? `\n${meterLabel} ${sim.promille.toFixed(2)} ${tierLabel}${trinkfest}  heat ${sim.promilleShotHeat.toFixed(2)}${knockedDown}`
+      ? `\n${meterLabel} ${sim.promille.toFixed(2)} ${tierLabel}${trinkfest}  heat ${sim.promilleShotHeat.toFixed(2)}  tunnel ${sim.promilleTunnelVision.toFixed(2)}  gloom ${sim.promilleGloom.toFixed(2)}${knockedDown}`
       : '';
     const runState = sim.promilleUnlocked ? '' : '  SOBER RUN';
     const override = promilleOverride === 'auto' ? '' : `  [${promilleOverride} forced]`;
@@ -3821,6 +3825,8 @@ WASD move   arrows aim and fire
     // renderer instead, on the same change path as everything else.
     view.setAccessibility(settings);
     vignette.setPulses(!settings.reduceFlashes);
+    // The tunnel's own reduced-motion softening — see `Vignette.setReducedMotion`.
+    vignette.setReducedMotion(settings.reducedMotion);
     promilleHud.sync(sim, settings.neutralReskin);
     // Text scale changes the HUD's own whole-number scale, which a settings
     // change must re-apply immediately rather than waiting for the next

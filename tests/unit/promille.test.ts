@@ -8,6 +8,7 @@ import {
   promilleDamageMultiplier,
   promilleDriftScale,
   promilleFireRateMultiplier,
+  promilleGloom,
   promilleKaterLabel,
   promilleMeterLabel,
   promilleRequirementMet,
@@ -17,6 +18,7 @@ import {
   promilleTierDisplayName,
   promilleTierName,
   promilleTierOf,
+  promilleTunnelVision,
   promilleUnitSuffix,
   umgfallnThresholdFor,
   promilleWobbleAmplitude,
@@ -121,6 +123,44 @@ describe('promille tiers', () => {
     expect(promilleScreenDistortion(2.9, tuning)).toBe(0);
     expect(promilleScreenDistortion(3.0, tuning)).toBe(0);
     expect(promilleScreenDistortion(PROMILLE_MAX, tuning)).toBeCloseTo(tuning.maxScreenDistortion);
+  });
+
+  it('ramps tunnel vision from the first sip, exactly as sway used to', () => {
+    const tuning = DEFAULT_PROMILLE_TUNING;
+    // The point of the risk/reward pass: sight is the penalty that took over
+    // sway's job, so it has to start where sway did — at the bottom, not at
+    // a tier boundary — or the first Maß costs the player nothing at all.
+    expect(promilleTunnelVision(0, tuning)).toBe(0);
+    expect(promilleTunnelVision(0.5, tuning)).toBeGreaterThan(0);
+    expect(promilleTunnelVision(0.5, tuning)).toBeLessThan(tuning.maxTunnelVision);
+    expect(promilleTunnelVision(PROMILLE_MAX, tuning)).toBeCloseTo(tuning.maxTunnelVision);
+    // Monotone: every extra Maß takes more of the room away, never less.
+    expect(promilleTunnelVision(3, tuning)).toBeGreaterThan(promilleTunnelVision(1.5, tuning));
+  });
+
+  it('holds the murk off until Beduselt — the tier where control itself starts to go', () => {
+    const tuning = DEFAULT_PROMILLE_TUNING;
+    // Angeheitert is the design doc's "sweet spot". It pays a little
+    // peripheral vision (above) and keeps a readable room, which is what
+    // makes the blur a step down the ladder rather than the first rung.
+    expect(promilleGloom(0, tuning)).toBe(0);
+    expect(promilleGloom(1.4, tuning)).toBe(0);
+    expect(promilleGloom(1.5, tuning)).toBe(0);
+    expect(promilleGloom(2.5, tuning)).toBeGreaterThan(0);
+    expect(promilleGloom(2.5, tuning)).toBeLessThan(tuning.maxGloom);
+    expect(promilleGloom(PROMILLE_MAX, tuning)).toBeCloseTo(tuning.maxGloom);
+  });
+
+  it('keeps camera sway a whisper next to the sight penalties it handed the job to', () => {
+    // Not a number this pins, a *relationship*: sway is what makes people
+    // stop playing, so whatever it is tuned to, it may not be the loudest
+    // thing the meter does. At the top of the meter it is a handful of
+    // internal pixels — under 1% of the 640-pixel frame — while the tunnel
+    // and the murk are both at their own full ramp.
+    const tuning = DEFAULT_PROMILLE_TUNING;
+    expect(promilleSwayMagnitude(PROMILLE_MAX, tuning)).toBeLessThan(6);
+    expect(promilleTunnelVision(PROMILLE_MAX, tuning)).toBeGreaterThan(0);
+    expect(promilleGloom(PROMILLE_MAX, tuning)).toBeGreaterThan(0);
   });
 });
 
@@ -247,6 +287,8 @@ describe('Trinkfest (#92)', () => {
     expect(promilleWobbleAmplitude(deepValue, tuning)).toBeGreaterThan(tuning.maxWobble);
     expect(promilleSwayMagnitude(deepValue, tuning)).toBeGreaterThan(tuning.maxSway);
     expect(promilleScreenDistortion(deepValue, tuning)).toBeGreaterThan(tuning.maxScreenDistortion);
+    expect(promilleTunnelVision(deepValue, tuning)).toBeGreaterThan(tuning.maxTunnelVision);
+    expect(promilleGloom(deepValue, tuning)).toBeGreaterThan(tuning.maxGloom);
   });
 
   it('raiseTrinkfest/lowerTrinkfest move GameSim.trinkfest and leave Promille itself untouched', () => {
@@ -636,6 +678,26 @@ describe('accessibility (#33): no-drift mode', () => {
     expect(sim.promilleScreenDistortion).toBeGreaterThan(0);
   });
 
+  it('leaves the tunnel and the murk untouched too — they are drawn, never simulated', () => {
+    // Same reasoning as screen distortion above, and the reason the two new
+    // getters carry no sim-side scale at all: `driftScale`/`wobbleScale`
+    // exist because drift and wobble move something the player is aiming
+    // with. Sight is render-only, so its accessibility softening lives in
+    // `render/vignette.ts` and `render/view.ts` (`docs/DECISIONS.md` #41),
+    // where it cannot change what the simulation does.
+    const sim = emptySim();
+    sim.tuning.promille.current = PROMILLE_MAX;
+    const tunnel = sim.promilleTunnelVision;
+    const gloom = sim.promilleGloom;
+    sim.driftScale = 0;
+    sim.wobbleScale = 0;
+    sim.swayScale = 0;
+    expect(sim.promilleTunnelVision).toBe(tunnel);
+    expect(sim.promilleGloom).toBe(gloom);
+    expect(tunnel).toBeGreaterThan(0);
+    expect(gloom).toBeGreaterThan(0);
+  });
+
   it('actually speeds up the player turning around, not just the inspected getter', () => {
     const withDrift = emptySim();
     const noDrift = emptySim();
@@ -864,6 +926,10 @@ describe('shot heat (#311)', () => {
     const sim = new GameSim({ room: bareRoom(), promilleUnlocked: false });
     sim.tuning.promille.current = 4;
     expect(sim.promilleShotHeat).toBe(0);
+    // The two sight penalties inherit the same one gate — a sober run sees
+    // the whole room, sharp, however the debug slider is left.
+    expect(sim.promilleTunnelVision).toBe(0);
+    expect(sim.promilleGloom).toBe(0);
   });
 
   it('turns off from tuning without touching the damage it reflects', () => {
