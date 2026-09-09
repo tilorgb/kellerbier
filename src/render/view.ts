@@ -8,6 +8,7 @@ import { CorpseView } from './corpse-view.js';
 import { DamageNumberView } from './damage-numbers.js';
 import { DecalView } from './decals.js';
 import { EntityView } from './entities.js';
+import { GloomBlur } from './gloom.js';
 import type { AnimatedSpriteSet, RoomTileArt } from './floor-art.js';
 import { BitmapText, Container, type Texture } from './gfx/index.js';
 import { MachineView } from './machine-view.js';
@@ -104,6 +105,8 @@ export interface RenderAccessibility extends ParticleAccessibility {
 }
 
 const REDUCED_MOTION_SHAKE = 0.25;
+/** How much of Promille's murk a `reducedMotion` run takes — the same call `Vignette` makes for the tunnel. */
+const REDUCED_MOTION_GLOOM = 0.5;
 const DOOR_PULSE_FRAMES = 20;
 const DOOR_PULSE_DEPTH = 0.55;
 /** Frames a door takes to swing open once the room is cleared — half a second, a real door's pace. */
@@ -223,6 +226,13 @@ export class GameView {
    * than building it then — see `world/room-prewarm.ts` and `prewarmRoom`.
    */
   private readonly prewarm = new RoomPrewarm<Scenery>();
+
+  /**
+   * Promille's murk (`render/gloom.ts`), drawn over the two world passes and
+   * under the UI. Owned here rather than by `app/main.ts` because it has to
+   * run *inside* `render`, between the actors and the HUD.
+   */
+  private readonly gloom = new GloomBlur();
   /**
    * The room `confirmPrewarmedEntry` says we have just crossed into — the next
    * room change adopts the prewarmed scenery iff it is still this one. `null`
@@ -243,6 +253,9 @@ export class GameView {
   private readonly programPins = new ProgramPins();
   /** Whether `render` has run `renderer.compile` over the persistent layers yet — once per view. */
   private persistentLayersCompiled = false;
+  /** Set while `warmSceneryGroup` is driving `render` off-screen — see its use in `render`. */
+  private warming = false;
+
   /** Scratch for `warmSceneryGroup` to save and restore the renderer's viewport and scissor. */
   private readonly savedViewport = new Vector4();
   private readonly savedScissor = new Vector4();
@@ -602,6 +615,16 @@ export class GameView {
     // Promille's damage bonus, on the shots themselves (#311) — pushed in
     // here rather than read inside `ProjectileView`, which holds no `sim`.
     this.projectiles.setShotHeat(sim.promilleShotHeat);
+    // Promille's murk (the risk/reward pass): pushed in here for the same
+    // reason as the line above — `GloomBlur` holds no `sim`, and `render` is
+    // reached by the shader warm too, which must not read the live meter.
+    // Softened rather than removed under `reducedMotion`, matching
+    // `Vignette`'s own tunnel: a blurred room is information about how drunk
+    // this run is, and this is the accessibility split `docs/DECISIONS.md`
+    // #41 draws — never suppressed in the simulation, only in what is drawn.
+    this.gloom.setGloom(
+      sim.promilleGloom * (this.accessibility.reducedMotion ? REDUCED_MOTION_GLOOM : 1),
+    );
     this.projectiles.sync(alpha, sim.currentFloor);
     this.bombFlightView.sync(sim);
     this.particles.sync(alpha);
@@ -647,6 +670,9 @@ export class GameView {
     if (!this.persistentLayersCompiled) {
       this.persistentLayersCompiled = true;
       renderer.compile(this.scene, camera);
+      // The murk's own quad, linked with everything else rather than on the
+      // frame the player first crosses into Beduselt — see `GloomBlur.compile`.
+      this.gloom.compile(renderer);
     }
 
     // Everything that stands in the room is on `ACTOR_LAYER` only (set on the
@@ -712,6 +738,14 @@ export class GameView {
     // first draw — see `world/program-pins.ts`.
     this.programPins.pin(renderer);
     this.programPins.settle();
+
+    // Last, over everything the world drew and under everything the UI pass
+    // will: Promille's murk. Skipped while a scenery warm is running — that
+    // draws this whole method into a 1x1 scissor and has no frame worth
+    // copying, and the copy is sized to the canvas, not to the scissor.
+    if (!this.warming) {
+      this.gloom.render(renderer);
+    }
   }
 
   private readonly projectPoint = (x: number, height: number, z: number, out: WorldPoint): void => {
@@ -909,7 +943,9 @@ export class GameView {
     renderer.setViewport(0, 0, 1, 1);
     renderer.shadowMap.autoUpdate = false;
     this.shadowNeedsRefresh = false;
+    this.warming = true;
     this.render(renderer);
+    this.warming = false;
     this.shadowNeedsRefresh = shadowNeedsRefresh;
     renderer.shadowMap.needsUpdate = previousShadowNeedsUpdate;
     renderer.shadowMap.autoUpdate = previousShadowAutoUpdate;
@@ -1116,6 +1152,7 @@ export class GameView {
     this.maibaumView.destroy();
     this.bombFlightView.destroy();
     this.corpseView.destroy();
+    this.gloom.dispose();
     this.labelLayer.destroy({ children: true });
   }
 }

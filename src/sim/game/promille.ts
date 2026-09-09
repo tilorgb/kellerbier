@@ -342,3 +342,51 @@ export function promilleShotHeat(value: number, tuning: PromilleTuning): number 
   }
   return (value / UMGFALLN_AT) * tuning.maxShotHeat;
 }
+
+/**
+ * How far the room closes in around the player (#promille-risk-reward): `0`
+ * stone-cold sober, `1` at the pre-#92 ceiling, climbing past `1` through the
+ * Trinkfest stages like every ramp above.
+ *
+ * Shaped exactly like `promilleSwayMagnitude` — a straight ratio of the
+ * value, starting at the first sip rather than at a tier boundary — because
+ * it is the penalty that *replaces* most of sway's job. Sway announced "you
+ * are drunk" by moving the whole frame, which is the one drunk effect that
+ * reliably makes people put the game down (motion sickness is a real
+ * accessibility issue, per `docs/GAME_DESIGN.md` §5's own guardrail, and it
+ * turns out to be a real *retention* issue too). Taking sight away says the
+ * same thing without moving anything: the tunnel the vignette already draws
+ * simply closes, so the player can see less of the room they are fighting in
+ * the drunker they get.
+ *
+ * `render/vignette.ts` is what spends this, and — as with every ramp here —
+ * it is the renderer that decides how far past `1` it is willing to draw.
+ */
+export function promilleTunnelVision(value: number, tuning: PromilleTuning): number {
+  if (value <= 0) {
+    return 0;
+  }
+  return (value / PROMILLE_MAX) * tuning.maxTunnelVision;
+}
+
+/**
+ * The murk over whatever is still inside the tunnel: a defocusing, colour-
+ * draining blur of the world pass (`render/gloom.ts`). Zero through
+ * Nüchtern and Angeheitert, starting exactly where drift and aim wobble do
+ * (Beduselt — the tier the design doc describes as the one where control
+ * itself starts to go), `1` at the pre-#92 ceiling, and climbing past it
+ * through the Trinkfest stages.
+ *
+ * The other half of the same swap `promilleTunnelVision` describes: not
+ * being able to see *far* is the tunnel, not being able to see *clearly* is
+ * this. Both are stationary — nothing about them moves the camera — which is
+ * the whole point of preferring them to sway.
+ *
+ * Deliberately later than the tunnel rather than alongside it. A blur reads
+ * as much stronger than a narrowing, and Angeheitert is the design doc's
+ * "sweet spot": the first Maß should cost a little peripheral vision, not
+ * the ability to read the room.
+ */
+export function promilleGloom(value: number, tuning: PromilleTuning): number {
+  return rampFrom(value, BEDUSELT_AT) * tuning.maxGloom;
+}

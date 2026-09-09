@@ -407,8 +407,8 @@ export interface PromilleTuning {
    * player cannot play against.
    *
    * What takes Promille away instead is `hitPromilleLoss` — a mistake, which
-   * a player *can* play against — and eating (`lowerPromille`, Brezn/Obazda/
-   * Radi), which is a choice. `docs/GAME_DESIGN.md` §5 always listed all
+   * a player *can* play against — and eating (`lowerPromille`, the Wurst
+   * pickups), which is a choice. `docs/GAME_DESIGN.md` §5 always listed all
    * three; only the clock was ever implemented.
    */
   decayPerSecond: number;
@@ -424,6 +424,15 @@ export interface PromilleTuning {
    * rooms quickly. Applied in `GameSim.applyPlayerDamage`, the one
    * chokepoint every landed hit passes through, so contact, projectiles,
    * hazards and a boss's slam all cost the same.
+   *
+   * **A hit must always sober harder than a meal does.** There are two ways
+   * down the meter and they are meant to read differently: eating is a
+   * *choice* the player makes with a pickup in front of them, a hit is a
+   * *mistake* the room made for them. If the mistake is the cheaper of the
+   * two, the meter stops being a readout of how well the run is going. This
+   * was quietly wrong until the risk/reward pass — a full Wurst took 0.5 and
+   * a hit took 0.4 — so this number is now sized above the largest
+   * `PickupEffect.promille` on the roster rather than next to it.
    */
   hitPromilleLoss: number;
   /**
@@ -493,6 +502,7 @@ export interface PromilleTuning {
   maxDrift: number;
   /** Aim wobble amplitude at full ramp, in radians. */
   maxWobble: number;
+
   /**
    * Ticks per full wobble sweep. Deliberately its own field rather than
    * reusing `swayPeriodTicks` — the miss-rate calibration on `maxWobble`
@@ -500,10 +510,46 @@ export interface PromilleTuning {
    * wobble to read as a smooth drift instead of a jitter.
    */
   wobblePeriodTicks: number;
-  /** Camera sway at full ramp, in pixels. */
+  /**
+   * Camera sway at full ramp, in pixels.
+   *
+   * Deliberately small since the risk/reward pass: sway used to be Promille's
+   * loudest penalty and it is the one that makes people stop playing — a
+   * frame that never stops moving is motion sickness, which
+   * `docs/GAME_DESIGN.md` §5 already called out as an accessibility issue and
+   * which turns out to cost players who never open the accessibility screen
+   * to say so. What replaced most of it is `maxTunnelVision` and `maxGloom`
+   * below: penalties that take sight away instead of moving the camera. What
+   * is left here is a slow drift that still says "this run is drunk" without
+   * being the reason someone quits.
+   */
   maxSway: number;
   /** Ticks per full sway loop — slow, so it reads as drifting rather than jittering. */
   swayPeriodTicks: number;
+
+  /**
+   * How far the room closes in around the player at full ramp — see
+   * `promilleTunnelVision`. `render/vignette.ts` spends it on the clear
+   * radius of the tunnel it already draws, so the drunker the run the less
+   * of the room is visible around the player.
+   *
+   * A ramp scale rather than a radius in pixels: how tight "fully closed"
+   * actually is belongs to the renderer, which is the only thing that knows
+   * how big the frame is, exactly as `maxScreenDistortion` and `maxShotHeat`
+   * already work.
+   */
+  maxTunnelVision: number;
+  /**
+   * How murky what is left inside that tunnel gets at full ramp — see
+   * `promilleGloom`, drawn by `render/gloom.ts` as a defocusing,
+   * colour-draining blur over the world pass (never over the HUD, which
+   * stays readable at any Promille).
+   *
+   * `0` switches the whole pass off, which is what a machine that cannot
+   * afford another full-screen pass — or a player who cannot read a blurred
+   * screen — gets.
+   */
+  maxGloom: number;
 
   /**
    * The third penalty #92 asks for, alongside sway and aim wobble/spray:
@@ -1077,10 +1123,18 @@ export const DEFAULT_PROMILLE_TUNING: Readonly<PromilleTuning> = {
   // gets hit does not. The old 0.05 lost 1.5-3.0 over the same room, which
   // is why the meter never moved.
   decayPerSecond: 0.006,
-  // A little under a half-Maß, so one hit reads on the bar as clearly as one
-  // drink does — enough that losing a tier to a mistake is a real event, not
-  // enough that a single unlucky contact wipes a floor's worth of drinking.
-  hitPromilleLoss: 0.4,
+  // Above the biggest meal on the roster (a full Wurst, 0.5), which 0.4 was
+  // not — see the field's own comment. Also the number that makes "they will
+  // hit you sober" true rather than decorative: at Vollrausch, three landed
+  // hits put the player back in Beduselt, and a player who keeps taking them
+  // ends up sober rather than merely bruised. This is also the meter's own
+  // negative feedback loop, and the reason it needs no separate "easier to
+  // hit" mechanic: a drunk player is already fighting through a closing
+  // tunnel and a smearing room with a damage bonus that rewards pushing
+  // further in, so the hits arrive on their own — and each one takes real
+  // Promille back, which makes the top of the meter somewhere you keep
+  // earning rather than somewhere you arrive.
+  hitPromilleLoss: 0.7,
   // Realistic-scale replacement for the old beer-pickup amounts
   // (health-food-redesign): four full Maß (4 x 1.0 = 4.0) sits deep in
   // Vollrausch (>= 3.0) without reaching Umgfalln — "properly drunk" — and a
@@ -1143,10 +1197,27 @@ export const DEFAULT_PROMILLE_TUNING: Readonly<PromilleTuning> = {
    * but sway wants to be much slower than wobble to read as smooth rather
    * than jittery, and coupling the two would fight both goals. */
   wobblePeriodTicks: 145,
-  maxSway: 12,
+  // 3, down from 12. See the field's own comment: the risk/reward pass moved
+  // Promille's headline penalty off the camera and onto the player's sight,
+  // and what is left here is a ~9-screen-pixel drift at the top of the meter
+  // on a 3x-upscaled frame — legible as unsteadiness, well under the
+  // threshold where a continuously moving frame starts making people ill.
+  maxSway: 3,
   /** Ticks per full sway loop. Slow on purpose — this is what separates a
    * gentle drift from a jitter that gets mistaken for hit-shake. */
   swayPeriodTicks: 220,
+
+  // 1 at the old ceiling, ~1.75 by the top of Filmriss, same shape as
+  // `maxScreenDistortion`. What that buys on screen is `render/vignette.ts`'s
+  // business: roughly a tenth of the sober sight radius gone by the end of
+  // Angeheitert, a third by Vollrausch, and half of it by the last Maß before
+  // Umgfalln.
+  maxTunnelVision: 1,
+  // Same 0-1-and-beyond shape. Starts at Beduselt rather than at the first
+  // sip (`promilleGloom`), so the sweet spot stays sharp and the tier where
+  // the design doc says control itself starts to go is where the room starts
+  // to smear.
+  maxGloom: 1,
 
   // 1 at the old ceiling, ~1.75 by the top of Filmriss (level 2) — a visible
   // difference without the screen becoming unreadable; see `render/

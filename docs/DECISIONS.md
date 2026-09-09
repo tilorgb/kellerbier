@@ -4940,3 +4940,206 @@ roster that needs the number raised again does not also need to touch those test
 
 `npm run fuzz` on `main` now reports zero crashes and zero non-finite values across all 10,000
 combinations — the nightly job (`.github/workflows/fuzz.yml`) going red again will mean something.
+
+## 91. Being drunk takes your sight, not your camera — and the blur is a framebuffer copy, not a render target
+
+Promille's headline penalty was **camera sway**: the whole frame drifting in a slow 12-pixel
+circle, always, from the first sip. It was the effect that made the mechanic read as drunk at a
+glance, and it was the wrong one.
+
+A moving frame is a nausea generator. `docs/GAME_DESIGN.md` §5 already knew half of this — it has
+required a sway accessibility toggle since #33, on exactly the grounds that "motion sickness is a
+real accessibility issue, not an optional nicety." What the guardrail missed is that a slider
+does not help the player it is written for: someone who starts feeling ill ten minutes into a
+roguelite does not diagnose it, open a settings screen and find the camera-sway row. They stop
+playing, and they do not say why. A default that needs a setting to be comfortable is a default
+that is wrong.
+
+### What replaced it
+
+Sway is cut to a quarter (`maxSway` 12 → 3) rather than removed — a slow, small drift still says
+"this run is drunk" and no longer says it loudly enough to be the reason someone quits. Its job
+went to two penalties that take something away without moving anything:
+
+- **`promilleTunnelVision`** — the vignette's clear radius closes with the meter. Shaped exactly
+  like the sway ramp it replaces (a straight ratio of the value, starting at the first sip, not
+  at a tier boundary), because it is inheriting sway's role and a first Maß that costs nothing at
+  all is a first Maß the player does not feel.
+- **`promilleGloom`** — the world pass, blurred and drained of colour, from Beduselt up. Later
+  than the tunnel on purpose: a blur reads far stronger than a narrowing, and Angeheitert is the
+  design doc's "sweet spot", so it pays peripheral vision and keeps a readable room.
+
+Both are unbounded ramps whose renderers decide how far past `1` they will draw, like
+`maxScreenDistortion` and `maxShotHeat` before them — and both bottom out at the deepest the
+meter can actually be driven (7.0 Promille, `promilleCapFor` at `TRINKFEST_MAX`) rather than at a
+round number, so nothing is left unspent below a value no player will ever reach.
+
+**The HUD is never blurred, and that is what makes the strength affordable.** The murk is the last
+thing `GameView.render` draws; the HUD, the vignette and every toast are the UI pass `app.ts`
+draws over it. A player who cannot read their own health bar is looking at a bug, not at a
+difficulty setting.
+
+**Accessibility moved with it.** The two new penalties carry *no* simulation-side scale, unlike
+`swayScale`/`driftScale`/`wobbleScale`. Those exist because sway, drift and wobble move something
+the player is aiming with; sight is drawn and never simulated, so the softening lives in
+`Vignette.setReducedMotion` and `GameView`'s own `REDUCED_MOTION_GLOOM` — render-side, per #41,
+where it cannot make a reduced-motion run step differently from a full one. Softened rather than
+switched off, for the reason `app/settings.ts` gives about damped screenshake: with sway a
+whisper, these two *are* the meter's visual language now, and a toggle that removes information
+is not an accessibility toggle.
+
+### The tunnel closes by growing the frame, not by shrinking the sprite
+
+The obvious way to tighten a vignette is to scale its quad down. It does not work here: the
+vignette follows the *player*, not screen centre, and a quad small enough to be a tight tunnel is
+too small to still cover the screen corners once camera-follow (#100) has the player off centre —
+the uncovered corner reads as a hole punched in the dark. Compositing a fill behind it does not
+fix that either; a backdrop at the same alpha double-blends everywhere the gradient is already
+opaque, so the seam moves rather than disappearing.
+
+What works is the opposite move. The quad keeps its full `COVERAGE`, and the sprite reads a
+`Rectangle` frame **larger than the texture**. The same 512 pixels of gradient are squeezed into a
+smaller part of the quad, and every sample outside them lands past the texture's own bounds —
+where `ClampToEdgeWrapping` returns the border texel, which the generated gradient makes fully
+opaque all the way round. So the fill outside the tunnel is the same pixel the gradient ends at,
+at the same alpha, by construction: no seam, no second sprite, no extra draw call. It is also
+free most frames, since the frame only changes when the aperture actually moves and Promille
+drifts by 0.006 a second.
+
+### The blur copies the framebuffer, because a render target costs every shader in the game
+
+The natural way to blur a frame is to render the world into a `WebGLRenderTarget` and sample it.
+That is exactly the trap `GameView.warmSceneryGroup`'s own doc comment describes from the other
+side: three keys a material's program on the colour space it writes into, and a non-XR render
+target is always the working (linear) space while the canvas is sRGB. Routing the world through a
+target would compile a complete second program set — and, if the target were only used while the
+player was drunk, it would compile it *mid-run*, on the frame someone crossed into Beduselt.
+That is the blocking `linkProgram` #80 and `tools/perf/room-crossings.mjs` exist to prevent.
+
+`copyFramebufferToTexture` sidesteps the whole question. The world draws to the canvas exactly as
+it always has; the finished 640×360 frame is copied into a `FramebufferTexture` with one GPU-side
+`copyTexSubImage2D`, and a single clip-space quad draws it back through a 13-tap tent, blended at
+an alpha the ramp sets. One extra program, linked at boot alongside everything else
+`GameView.render` compiles on its first frame — the crossing gate still reports zero links after
+the first crossing, at 26 programs against a ceiling of 40.
+
+Measured rather than eyeballed: horizontal edge energy over the middle of the frame drops from
+3.03 sober to 1.87 at 4.4 Promille, and holds at 2.93 with `maxGloom` set to 0 at the same
+Promille — so the softening is the blur doing its job, not the vignette's darkening being
+mistaken for one.
+
+### The follow-up: they will hit you sober
+
+The first playtest answered the question the paragraph this replaces left open, and the answer was
+that legible penalties are not the same as felt risk. Three changes came out of it.
+
+**The curves are weighted toward the top.** "More at higher Promille, not more everywhere" cannot
+be had from a straight line — raising the ceiling on a linear ramp raises the first sip in the
+same proportion. Both renderers now bend their ramp with the same `lateBias(t) = t * (0.6 + 0.4t)`
+before spending it, which weights the back half about 1.7x the front. That bought
+`CLOSED_APERTURE` 0.49 → 0.34 and the blur radius 3.2 → 4.6 internal pixels with Angeheitert
+landing within a pixel or two of where it already was. Deliberately not `t²`, which would make
+the first Maß free — the reason the tunnel ramp starts at the first sip rather than at a tier
+boundary is that a drink the player cannot feel is a drink that did not happen.
+
+**A bigger hitbox was built, and then taken back out — "easier to hit" was figurative.** Worth
+recording because the reasoning that produced it is seductive and wrong. The argument was: every
+penalty in this entry costs the player his *senses*, none of them changes how often the room
+connects, so a good player can drink to the top of the meter and keep not being hit — reward real,
+risk atmosphere. `promilleHurtboxScale` grew the player's hurtbox from `PLAYER_FOOTPRINT` (5, the
+one hurtbox in the game deliberately smaller than its sprite) to `PLAYER_RADIUS` (7, the size he is
+drawn) and it worked exactly as designed.
+
+It was still the wrong mechanic, because the premise is false. A drunk run *already* gets hit more,
+and not by accident: the player cannot see far, cannot see clearly, and is carrying up to triple
+damage — which is an invitation to play further forward — so he reads the room later and commits
+harder. The penalties above are not only atmosphere; they are the difficulty, working through the
+player rather than through his collider. Adding a hitbox handicap on top charges twice for the same
+idea, and it charges in the one currency §5's guardrail protects: a hit the player cannot see
+coming is a hit he will not believe was his. **A design that already produces the outcome does not
+need a mechanic that also produces it** — and "the risk is not felt" is a brief to make the
+existing penalties bite harder, which is what the curve change above actually is, not a brief to
+add a new one.
+
+**And a hit now sobers harder than a meal.** `hitPromilleLoss` 0.4 → 0.7. There are two ways down
+the meter and they are meant to read differently — eating is a choice made with a pickup in front
+of you, a hit is a mistake the room made for you — and the mistake being the *cheaper* of the two
+made the meter a worse readout of how well a run was going than it looked. A full Wurst has always
+taken 0.5, so 0.4 was quietly the wrong way round for the whole life of the mechanic. Nothing
+noticed because nothing compared the two numbers; `promille.test.ts` now does, against the largest
+`PickupEffect.promille` on the roster rather than against a hardcoded 0.5, so a new pickup cannot
+re-break it.
+
+Together the tighter curves and the heavier drain make the meter self-limiting instead of a
+ratchet: the drunker the run, the more it gets hit — by the design, not by a handicap — and the
+more it gets hit the more sober it becomes. The fantasy is the right one: you feel indestructible
+and the room disagrees.
+
+## 92. The Sixpack banks Promille, and a Maß is *offered* to items before it is drunk
+
+**Decided:** the risk/reward playtest pass. **Builds on:** #26/#32 (item hooks and the beer-pickup
+hook), #85 (Promille machinery in a sober run), #91 (the risk/reward pass this is the answer to).
+
+Promille is a meter you cannot bank. A Maß on the floor is worth whatever it is worth *the moment
+you walk over it*, so a player at 4.2 has to leave beer lying there or fall over, and one who has
+just been knocked back to sober by a hit — which #91 made much more likely — has nothing to climb
+with until the floor drops another. §5's whole risk/reward argument is a decision about how drunk
+to be, and until this item the player could only make that decision at the instant a pickup
+happened to be under their feet. The Sixpack is that decision, unhooked from the pickup: bank six
+Maß through a floor you want to fight sober, cash them in on the boss.
+
+### The hook had to fire before the beer, not after
+
+`onBeerPickup` already existed (#32's Konterbier) and storing a Maß from it was tried first. It is
+a real bug, not merely inelegant: that hook runs *after* `addPromille`, so a carrier intercepting a
+Maß at 4.4 Promille would have to un-drink one the player had already fallen over from. Umgfalln
+is not a number you can put back.
+
+So `onBeerOffered` is its own hook, fired before the drink, and it uses the claim-a-flag shape
+`onLethalDamage` established: hooks are broadcast to every held item and a broadcast has no single
+answer to return, so a hook calls `GameSim.claimOfferedBeer` and the engine reads the flag once
+dispatch is done. `offerBeerToItems` owns the reset-dispatch-read sequence rather than leaving the
+reset to its caller, which is the one thing the `blutwurzActive` version of this pattern gets
+wrong and is worth not repeating.
+
+Two consequences fall out of the ordering, and both are the point:
+
+- **`onBeerPickup` does not fire on a stored Maß**, because no beer was drunk. Konterbier must not
+  clear a Kater off a bottle that went into a carrier.
+- **The toast is decided by the offer too.** The offer moved *above* `reportCollected`, not merely
+  above `addPromille`: "Maß — Raises Promille" over a meter that did not move is exactly the kind
+  of thing a player reports as a bug. It reads "Stored, not drunk", which deliberately does not
+  name the Sixpack — the hook is open to any item that banks beer, and a toast naming one of them
+  goes stale the moment a second exists.
+
+### Three rules that keep the item simple
+
+- **It stores Promille, not bottles.** A half Maß fills 0.6 of a slot. Counting bottles would
+  upgrade every half Maß to a full one for free the moment you picked the carrier up.
+- **A Maß that does not fit is drunk, not split.** No partial deposits. The pack is full, so you
+  drink it, exactly as you would without the item — which is also the whole answer to "what
+  happens when it is full", and the least surprising one available.
+- **The charge bar is not a cooldown.** `maxCharge` is 1 and `state.charge` is a plain readiness
+  flag kept up whenever there is anything to pour. The limit on this item is how much beer the
+  room has handed out, which is a resource already on screen; a bar that filled on its own would
+  be a second, invisible economy competing with it.
+
+### It gets a HUD row, and gives up its status line for it
+
+Six containers you read the *shape* of beat a fraction you read the digits of — the same argument
+`HealthHud` already makes for drawing Wurst instead of "6/6". So `render/sixpack-hud.ts` is a row
+of six bottles under the active-item slot, appearing and disappearing with the item (and taking
+its row gap with it, like the Promille bar in a sober run). The item therefore declares **no**
+`ItemStatusReader`, unlike most items whose effect is a counter: two rows counting the same
+bottles is worse than one, and the roster's "every item is visible while held" rule is met by the
+better of the two readouts rather than by both.
+
+### The name is the user's, and so is every Bavarian word
+
+This item shipped as "Sechsertragerl" for about ten minutes. It was proposed as *the Sixpack*, and
+renamed on the strength of `CONTENT_BIBLE.md` §0's "item names stay Bavarian in all locales" —
+which was the wrong call twice over: the rule is a style guide, and the person it is written for
+had already chosen. The bible and `CLAUDE.md` now both say the harder thing outright: **do not
+invent or substitute Bavarian and German names.** Ask, and use exactly what comes back, including
+when the answer is an English word. A plausible-looking invention is worse than a plain English
+placeholder, because it reads as authentic to everyone who cannot check it.

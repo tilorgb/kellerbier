@@ -84,6 +84,20 @@ is never a substitute for catching the gap in CI in the first place —
 its tags claim it works on) is what should catch this class of gap on a pull request; the runtime
 fallback is what protects a player on the rare gap that reaches them anyway.
 
+## Never invent a Bavarian or German name
+
+`docs/CONTENT_BIBLE.md` §0 now states this as a content rule; it is repeated here because it is
+an agent rule first. **The user names things.** Do not coin a Bavarian or German name for an
+item, enemy, room, floor or anything else, do not swap the name you were given for a more
+dialect-authentic one, and do not argue the bible's "item names stay Bavarian" line at somebody
+who just told you what the item is called. If a name is needed and none was given, ask, and then
+use exactly what comes back — the answer may well be an English word, and that is the answer.
+
+The Sixpack is the worked example: it was proposed as "the sixpack", renamed to
+"Sechsertragerl" on the strength of the naming rule, and renamed straight back. Applying a style
+rule to a name the user has already chosen is not following the style guide, it is overruling the
+person the guide is written for.
+
 ## New pixel art needs sign-off before it's committed
 
 Whenever a change adds or replaces pixel art — a tile, a character sprite, a projectile, a boss,

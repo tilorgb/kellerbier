@@ -1025,6 +1025,40 @@ function konter(cv) {
   ink(cv);
 }
 
+/**
+ * Sixpack: the wooden carrier, seen slightly from above — six capped bottles
+ * looking up out of its mouth, slat joints down the lit front. Picked in the
+ * 2026-09 option round out of three shown at true scale on a cellar floor
+ * beside Alois: a cardboard six-pack with a handle, this crate, and the six
+ * bottles strapped together with no box. The crate won for sitting with the
+ * barrels and the Fassl already in the cellar rather than beside them, and
+ * because the caps looking up out of it are the one reading that says
+ * *six* at 24 pixels.
+ */
+function sixpack(cv) {
+  // Front and side, lit from the top, with a rim board along the bottom.
+  // One step off the base each way, and no further: `SHADE_STEPS` is
+  // -2..2 and `assertOnPalette` rejects anything off that ramp.
+  rect(cv, 2, 8, 20, 13, sh(WOOD, 1));
+  rect(cv, 2, 8, 20, 2, sh(WOOD, 2));
+  rect(cv, 2, 19, 20, 2, sh(WOOD, -1));
+  // Slat joints: left unpainted so `ink` draws them, the same trick that
+  // separates the bottles below rather than a hand-placed dark line.
+  vline(cv, 8, 11, 18, null);
+  vline(cv, 15, 11, 18, null);
+  // The open mouth, and six caps in it — three across, two deep.
+  rect(cv, 2, 2, 20, 6, BROWN2);
+  for (let row = 0; row < 2; row++) {
+    for (let col = 0; col < 3; col++) {
+      const x = 4 + col * 6;
+      const y = 3 + row * 3;
+      rect(cv, x, y, 3, 2, GOLD);
+      hline(cv, x, x + 2, y, sh(GOLD, 2));
+    }
+  }
+  ink(cv);
+}
+
 // Kraftbier: a stout dark bottle with a "9%" badge and a flexing-arm silhouette.
 function kraft(cv) {
   rect(cv, 8, 7, 9, 15, BROWN2);
@@ -1982,6 +2016,7 @@ export const ITEM_ART = {
   steckerlfisch: (cv) => fisch(cv),
   steinkrug: (cv) => steinkrug(cv),
   studentenfutter: (cv) => studentenfutter(cv),
+  sixpack: (cv) => sixpack(cv),
   'sudordnung-1493': (cv) => sudordnung(cv),
   'traktor-auspuff': (cv) => auspuff(cv),
   watschn: (cv) => watschn(cv),

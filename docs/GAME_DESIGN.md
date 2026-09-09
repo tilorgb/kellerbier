@@ -278,8 +278,8 @@ A second meter beside health, measured in **Promille** (0.0 – 5.0) — and one
 does not meet on their first run. See *When it turns on*, below.
 
 **Going up:** drinking Maß pickups, certain items, boss rewards, some devil pacts.
-**Coming down:** **being hit** (the main one), eating Wurst, water fountains, and time — a slow,
-continuous bleed that a floor's own drops comfortably outrun.
+**Coming down:** **being hit** (the main one, and always the biggest single drop), eating Wurst,
+water fountains, and time — a slow, continuous bleed that a floor's own drops comfortably outrun.
 
 That ordering is deliberate and was got wrong once. Until #311 the clock was the *only* drain and
 it took 3.0 Promille a minute against a room that paid back about 0.09, so no amount of drinking
@@ -293,9 +293,9 @@ what makes drinking a decision rather than a timer.
 | Tier | Promille | Effect |
 |---|---|---|
 | **Nüchtern** (sober) | 0.0 – 0.4 | Baseline. A few items *require* this — precision builds live here. |
-| **Angeheitert** (tipsy) | 0.5 – 1.4 | +25% damage, +12% fire rate. Very slight camera sway. The sweet spot. |
-| **Beduselt** (drunk) | 1.5 – 2.9 | +60% damage, +30% fire rate. Movement has drift and momentum; aim wobbles. |
-| **Vollrausch** | 3.0 – 4.4 | +120% damage, +55% fire rate. Heavy drift, screen sway, aim wander. Rausch-tier item effects activate. |
+| **Angeheitert** (tipsy) | 0.5 – 1.4 | +25% damage, +12% fire rate. The room starts closing in. The sweet spot. |
+| **Beduselt** (drunk) | 1.5 – 2.9 | +60% damage, +30% fire rate. Movement has drift and momentum; aim wobbles; what is still visible starts to smear. |
+| **Vollrausch** | 3.0 – 4.4 | +120% damage, +55% fire rate. Heavy drift, aim wander, a tunnel about a third of its sober width, and a room gone soft and grey. Rausch-tier item effects activate. |
 | **Umgfalln** | 4.5+ | You fall over. Brief invulnerable knockdown, then you wake at 1.5 with a **Kater**. |
 
 The bonuses were raised across the board by #311. The old ones (+15/+35/+70% damage) were written
@@ -304,6 +304,46 @@ is one point of damage, against a tier that already costs the player camera sway
 now worth about 1.4× DPS and Vollrausch about 3.4×, which is the trade the penalties are asking to
 be paid for: by Vollrausch the aim wobble alone is throwing away a good share of the shots, and
 the next Maß is a knockdown.
+
+**The penalties take sight, not the camera.** Promille's loudest cost used to be *camera sway*
+— the whole frame drifting in a slow circle — and that was a mistake for a reason no amount of
+tuning fixes: a frame that never stops moving makes people motion-sick, and a player who feels
+ill does not open the accessibility screen to say so, they stop playing. So sway was cut to a
+whisper (12 px of drift down to 3) and its job was handed to two penalties that take something
+away without moving anything:
+
+- **The tunnel closes in.** The vignette's clear radius shrinks with the meter — a tenth of the
+  sober sight radius gone through Angeheitert, a third by Vollrausch, and better than half of it
+  by the last Maß before Umgfalln. A drunk player is fighting in a smaller room than a sober one.
+- **What is left goes murky.** From Beduselt up the world pass is blurred and drained of colour
+  — the room defocuses, the stones smear, the warm cellar light goes grey. The HUD is never
+  touched: health, the meter and the item row stay pin-sharp at any Promille, which is what lets
+  the world effect be as strong as it is.
+
+Both curves are weighted toward their top end rather than straight lines, so the sweet spot stays
+sharp and Vollrausch is where the room really goes.
+
+**And they will hit you sober.** Nothing in the meter reaches over and widens the player's
+hitbox, and nothing should: the penalties above already make a drunk run get hit more, because a
+player who cannot see far, cannot see clearly, and is carrying triple damage plays further forward
+than a sober one and reads the room later. The mechanic that closes the loop is the drain, not a
+handicap — **a hit costs Promille**, more than any meal does.
+
+So the drunker the run, the more it gets hit; the more it gets hit, the more sober it becomes. The
+meter is self-limiting rather than a ratchet, and the fantasy is the right one: you feel
+indestructible, and the room disagrees. The design is what makes you easier to hit; adding a
+second, mechanical version of the same idea would be charging twice for it.
+
+**The two ways down are not equal, and must not be.** Eating is a *choice*, made with a pickup in
+front of you; a hit is a *mistake* the room made for you. A hit therefore always sobers harder
+than the biggest meal on the roster does — 0.7 against 0.5. This was quietly the wrong way round
+until the risk/reward pass (0.4 against 0.5), which made the meter a worse readout of how well a
+run was going than it looked.
+
+Both are stationary, both scale continuously, and both take *information* rather than *control*
+— which is the honest version of the trade the tier table is offering. Triple damage should cost
+something the player can feel losing; "I cannot see what is shooting me" is that, and "the
+screen will not hold still" was only ever nausea wearing a difficulty costume.
 
 **And the reward is on the shots.** Player projectiles brighten as the meter climbs and read as
 burning at the top — the tint, an additive glow and the light each shot throws all ramp off the
@@ -363,7 +403,17 @@ missing. It has to be complete on its own terms, which is mostly a drop-table qu
   death was theirs. Tune conservatively; the visual exaggeration should outrun the mechanical
   penalty.
 - Camera sway needs an accessibility toggle that reduces it to near-zero without touching the
-  stat bonuses (motion sickness is a real accessibility issue, not an optional nicety).
+  stat bonuses (motion sickness is a real accessibility issue, not an optional nicety). The
+  toggle is not the whole answer, and never was: the default has to be comfortable for a player
+  who never finds the settings screen, which is why sway is now a whisper by default rather than
+  a slider people are expected to discover.
+- The sight penalties are softened for a reduced-motion run, never switched off. They are the
+  meter's remaining visual language — with sway gone quiet they are most of how a player knows
+  how drunk they are — and an accessibility toggle that removes information is not an
+  accessibility toggle.
+- **The HUD is never impaired.** Whatever happens to the world, health, the meter, the item row
+  and every toast stay sharp and unobscured. A player must always be able to read their own
+  state; taking that away is not difficulty, it is a bug that looks like one.
 - An option to relabel the meter as a generic "Rausch/Power" with non-alcoholic art, for
   streamers and storefronts that need it.
 

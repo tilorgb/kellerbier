@@ -1,6 +1,6 @@
 # Kellerbier Item Roster
 
-Full list of all 61 items currently authored in `src/content/items/`. Generated from the
+Full list of all 62 items currently authored in `src/content/items/`. Generated from the
 item definitions themselves (`src/sim/item/definition.ts`), so it reflects exactly what is
 live in the game, not a design doc that can drift from the code.
 
@@ -92,6 +92,7 @@ Columns:
 | schluesselbund | Schlüsselbund | Passive | Shows the floor's secret rooms on the map. Clearing a room grants a key | Fits every lock in the Keller. Explaining why is above your pay grade. | 1 | Treasure, Shop, Secret | Any |
 | schuhplattler | Schuhplattler | Passive | Stand still for a moment to release a damaging shockwave | The physics of it are unclear. The enthusiasm is not. | 2 | Shop, Boss | Any |
 | semmelknoedel | Semmelknödel | Passive | Shots hit for 2x and travel heavily. Shot Speed -40% | Heavy enough to be an argument. | 2 | Treasure, Shop, Boss | Any |
+| sixpack | Sixpack | Active (charge 1) | Active: Maß you pick up go in the carrier — press to drink one | Six bottles is not hoarding. Six bottles is planning. | 2 | Treasure, Shop, Boss, Secret | Any |
 | spezi | Spezi | Passive | Fires a second, diverging shot | Nobody agrees on the ratio. Everybody has an opinion. | 1 | Treasure, Shop | Any |
 | steckerlfisch | Steckerlfisch | Passive | Shots burn on hit | Cooked over an open flame for an hour. The shots learned fast. | 1 | Treasure, Shop | Any |
 | steinkrug | Steinkrug | Passive | Shots fly over obstacles and splash on impact | Not aerodynamic. Not meant to be. | 1 | Treasure, Shop | Any |
