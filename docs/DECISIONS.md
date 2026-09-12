@@ -5270,3 +5270,40 @@ cost, and #58's chapter cards/boss plates will each add one more of the same sha
 components (skip-on-first-viewing, the three-second budget from #58's acceptance criteria) don't
 exist yet — this issue only proves the asset pipeline and the swap-in mechanism work, on the one
 screen (`TitleScreen`) that already existed to prove it on.
+
+## 95. The house style pivots to 90s cartoon; the bench gets per-preset defaults; two named characters in one frame is unsolved
+
+**Decided:** #322, same session as #94, after generating and comparing painterly, 90s-Western-cartoon
+and 90s-anime candidates side by side. **Amends #94's style-suffix claim** — everything else in #94
+stands.
+
+**Painterly lost the comparison.** #94's `STYLE_SUFFIX` baked in "painterly digital illustration,
+hand-painted" as an assumption, not a decided style — nobody had actually compared it against
+alternatives yet. Once cartoon and anime candidates existed side by side, 90s Western cartoon (bold
+black outlines, flat cel shading, saturated colour, Disney-Afternoon-era look) was the clear pick.
+`keyart-bench/server.mjs`'s `STYLE_SUFFIX` now says exactly that instead. The committed
+`assets/art/title/backdrop.png` from #94/#322 is still the painterly candidate — this decision does
+not retroactively replace it, since no cartoon candidate has been through the sign-off step
+(`CLAUDE.md`'s "New pixel art needs sign-off," extended to key art by #94) yet. Swapping it is a
+follow-up once one is picked, not an automatic consequence of picking the house style.
+
+**Named characters need locking down explicitly, every time, or the model invents its own.** A
+"cartoon" style keyword plus "a monster" in the same prompt was enough to turn Alois into a green
+goblin in the first batch — the model happily reads "make it cartoony" as license to genericize
+every subject, not just the rendering technique. `keyart-bench`'s `PRESETS` now carry a
+`defaultPrompt` per use case (`ALOIS`/`DER_STIER` constants, built from the real bestiary in
+`docs/CONTENT_BIBLE.md` and `tools/art/authoring/alois.mjs`, not invented) so the tool no longer
+needs the exact same long prompt retyped by hand each session, and so what ships as the default is
+actually on-roster instead of a placeholder that mentions monsters (a slime, a barrel-golem) this
+game doesn't have.
+
+**Alois and Der Stier together in one frame does not work yet, on this checkpoint.** Every batch
+that asked for both — hero and boss, interacting — either dropped Alois's specific outfit entirely
+or fused the two into one generic mascot figure. Solo prompts (Alois alone, or the boss alone) are
+reliable; the moment a second named subject enters the same prompt, character fidelity degrades
+sharply. This is a known SDXL weakness (compound multi-attribute character descriptions plus
+multi-subject composition, together, push past what pure text conditioning reliably controls) with
+no cheap fix — the real options are a small LoRA trained on Alois's actual sprite art, ControlNet
+pose guidance, or hand-compositing two solo generations. `keyart-bench`'s default prompts are
+single-subject *on purpose* until one of those is built: promising a two-character shot by default
+would mean shipping candidates that quietly stop matching the brief.
