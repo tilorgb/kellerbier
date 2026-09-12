@@ -1,4 +1,4 @@
-import { Container, Graphics, Sprite, type BitmapText } from './gfx/index.js';
+import { Container, Graphics, Sprite, type BitmapText, type Texture } from './gfx/index.js';
 import type { Locale } from '../i18n/locale.js';
 import { t } from '../i18n/translate.js';
 import { TITLE_PALETTE, UI_PALETTE } from './palette.js';
@@ -62,6 +62,21 @@ export interface TitleScreenOptions {
  * goes back to. `contentBox` is the seam: this screen owns the geometry and
  * hands the rectangle out; `ScreenFlowController` puts the settings panel in
  * it.
+ *
+ * ## The poster has two tiers, loaded and swapped, never blocked on
+ *
+ * `TITLE_KEY_ART`'s procedural block poster is drawn from the very first
+ * frame — it is data, not an asset fetch, so it can never be "still loading."
+ * `setPoster` (issue #322) is a later, optional upgrade: once a real
+ * illustrated PNG (generated through the local SDXL key-art pipeline,
+ * `docs/DECISIONS.md` #94) finishes loading, `app/main.ts` swaps it in and the
+ * layout switches from "small poster stacked under the headline in the pane"
+ * to "one full-bleed illustration behind the whole frame, headline overlaid
+ * near the top, the menu column backed by a translucent scrim instead of a
+ * flat fill" — the composition the reference key art actually uses. If the
+ * load fails or is slow, the procedural poster keeps the screen usable in the
+ * meantime — the same graceful-degradation shape `docs/DECISIONS.md` #19 asks
+ * for content gaps, applied to an asset fetch instead.
  */
 export class TitleScreen implements MenuScreen {
   readonly view = new Container();
@@ -78,6 +93,7 @@ export class TitleScreen implements MenuScreen {
   private headlineScale = HEADLINE_SCALE;
   private settingsOpen = false;
   private pane = { x: 0, y: 0, width: 0, height: 0 };
+  private hasRealPoster = false;
 
   constructor(
     kit: UiKit,
@@ -169,6 +185,20 @@ export class TitleScreen implements MenuScreen {
     return { ...this.pane };
   }
 
+  /**
+   * Swaps the procedural block poster for a real illustrated backdrop once
+   * one has finished loading — see the class doc comment's "two tiers" note.
+   * Safe to call before the first `show()`/`resize()`; the next layout pass
+   * picks it up.
+   */
+  setPoster(texture: Texture): void {
+    this.art.texture = texture;
+    this.hasRealPoster = true;
+    if (this.view.visible) {
+      this.layOut();
+    }
+  }
+
   /** Steps the name and poster aside (or brings them back) while settings has the pane. */
   setSettingsOpen(open: boolean): void {
     this.settingsOpen = open;
@@ -192,16 +222,21 @@ export class TitleScreen implements MenuScreen {
 
     // Opaque, not a dim: there is no run behind the title screen, and letting
     // the last frame of one show through is what made this read as a pause
-    // menu. The two-tone split is the whole of the "chrome" — a hard vertical
-    // edge where the menu column meets the poster.
+    // menu. Without a real poster the "chrome" is a flat two-tone split; with
+    // one, the illustration runs edge to edge and the menu column gets a
+    // translucent scrim instead — see the class doc comment's "two tiers".
     const menuWidth = this.menu.width;
     const columnRight = MARGIN + menuWidth + COLUMN_GAP;
     this.background.clear();
-    this.background.rect(0, 0, width, height).fill({ color: TITLE_PALETTE.cardEdge });
-    this.background
-      .rect(columnRight, 0, width - columnRight, height)
-      .fill({ color: TITLE_PALETTE.cardBackdrop });
-    this.background.rect(columnRight - 1, 0, 1, height).fill({ color: TITLE_PALETTE.ruleShade });
+    if (this.hasRealPoster) {
+      this.background.rect(0, 0, width, height).fill({ color: TITLE_PALETTE.cardEdge });
+    } else {
+      this.background.rect(0, 0, width, height).fill({ color: TITLE_PALETTE.cardEdge });
+      this.background
+        .rect(columnRight, 0, width - columnRight, height)
+        .fill({ color: TITLE_PALETTE.cardBackdrop });
+      this.background.rect(columnRight - 1, 0, 1, height).fill({ color: TITLE_PALETTE.ruleShade });
+    }
 
     const menuTop = Math.round(height / 2 - this.menu.height / 2);
     this.menu.view.position.set(MARGIN, menuTop);
@@ -217,13 +252,42 @@ export class TitleScreen implements MenuScreen {
       return;
     }
 
+    const paneCentreX = Math.round(paneLeft + paneWidth / 2);
+
+    if (this.hasRealPoster) {
+      // Full-bleed, contain-fit within the whole frame rather than the pane —
+      // this gfx layer has no clip/mask, so "fit inside and never overflow
+      // onto the menu scrim" is the only safe way to size an arbitrary-aspect
+      // photo. The headline draws after `this.art` in child order (set in the
+      // constructor), so it overlays the illustration for free.
+      const fitScale = Math.min(width / this.art.texture.width, height / this.art.texture.height);
+      const artWidth = this.art.texture.width * fitScale;
+      const artHeight = this.art.texture.height * fitScale;
+      this.art.width = artWidth;
+      this.art.height = artHeight;
+      this.art.position.set(
+        Math.round((width - artWidth) / 2),
+        Math.round((height - artHeight) / 2),
+      );
+
+      this.headlineScale =
+        this.headline.width * HEADLINE_SCALE <= width - MARGIN * 2 ? HEADLINE_SCALE : 1;
+      this.headline.view.scale.set(this.headlineScale);
+      this.headline.place(paneCentreX, MARGIN);
+
+      this.background
+        .rect(0, 0, columnRight, height)
+        .fill({ color: TITLE_PALETTE.cardEdge, alpha: 0.82 });
+      this.background.rect(columnRight - 1, 0, 1, height).fill({ color: TITLE_PALETTE.ruleShade });
+      return;
+    }
+
     // The name at 2× is the intent; a frame too narrow for it (a large text
     // scale, a very small window) drops to 1× rather than overflowing the
     // pane, which is `docs/DECISIONS.md` #19's graceful degradation applied to
     // a layout rather than to content.
     this.headlineScale = this.headline.width * HEADLINE_SCALE <= paneWidth ? HEADLINE_SCALE : 1;
     this.headline.view.scale.set(this.headlineScale);
-    const paneCentreX = Math.round(paneLeft + paneWidth / 2);
     const headlineHeight = this.headline.height * this.headlineScale;
 
     const artWidth = keyArtWidth(TITLE_KEY_ART) * this.artScale;

@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Key Art Integrate</title>
+    <style>
+      :root {
+        --bg: #1c1815;
+        --surface: #262019;
+        --edge: #453b2e;
+        --ink: #ede6d8;
+        --muted: #b4a993;
+        --amber: #e0a94b;
+        --amber-ink: #2a1c08;
+        --teal: #7fada4;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: 'Segoe UI', system-ui, sans-serif;
+        display: flex;
+        justify-content: center;
+        padding: 32px 16px 80px;
+      }
+      main {
+        width: 100%;
+        max-width: 900px;
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+      }
+      h1 {
+        font-size: 1.4rem;
+        margin: 0 0 4px;
+      }
+      .sub {
+        color: var(--muted);
+        margin: 0 0 8px;
+        font-size: 0.9rem;
+      }
+      label {
+        display: block;
+        font-size: 0.82rem;
+        color: var(--muted);
+        margin-bottom: 4px;
+      }
+      input[type='text'],
+      select {
+        width: 100%;
+        background: var(--surface);
+        border: 1px solid var(--edge);
+        color: var(--ink);
+        border-radius: 5px;
+        padding: 8px 10px;
+        font-family: inherit;
+        font-size: 0.92rem;
+      }
+      .field {
+        margin-bottom: 14px;
+      }
+      .row {
+        display: flex;
+        gap: 16px;
+      }
+      .row > div {
+        flex: 1;
+      }
+      .slider-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .slider-row input[type='range'] {
+        flex: 1;
+      }
+      .slider-val {
+        font-family: monospace;
+        color: var(--teal);
+        min-width: 4ch;
+        text-align: right;
+      }
+      button {
+        background: var(--amber);
+        color: var(--amber-ink);
+        border: none;
+        border-radius: 5px;
+        padding: 12px 20px;
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      button.secondary {
+        background: var(--surface);
+        color: var(--ink);
+        border: 1px solid var(--edge);
+        padding: 8px 14px;
+        font-size: 0.85rem;
+      }
+      #dropzone {
+        border: 2px dashed var(--edge);
+        border-radius: 8px;
+        padding: 22px;
+        text-align: center;
+        color: var(--muted);
+        font-size: 0.88rem;
+      }
+      #dropzone.drag {
+        border-color: var(--amber);
+        color: var(--ink);
+      }
+      .canvas-wrap {
+        background: var(--surface);
+        border: 1px solid var(--edge);
+        border-radius: 6px;
+        padding: 10px;
+      }
+      #stage {
+        display: block;
+        margin: 0 auto;
+        cursor: move;
+        max-width: 100%;
+      }
+      .status {
+        font-size: 0.88rem;
+        color: var(--muted);
+        min-height: 1.2em;
+      }
+      .status.error {
+        color: #d97a52;
+      }
+      .status.ok {
+        color: #8fbf6a;
+      }
+      code {
+        font-family: monospace;
+        background: #14110d;
+        padding: 1px 5px;
+        border-radius: 3px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div>
+        <h1>Key Art Integrate</h1>
+        <p class="sub">
+          Load a candidate from Key Art Bench, crop it to the target frame, and save it straight
+          into <code>assets/art/</code>.
+        </p>
+      </div>
+
+      <div class="field">
+        <label for="sourcePath"
+          >Load by path (e.g. a Key Art Bench candidate under ComfyUI's output folder)</label
+        >
+        <div class="row">
+          <input
+            type="text"
+            id="sourcePath"
+            placeholder="D:\repos\ComfyUI\output\keyart-candidates\keyart_00001_.png"
+          />
+          <button type="button" class="secondary" id="loadPathBtn" style="flex: 0 0 auto">
+            Load
+          </button>
+        </div>
+      </div>
+
+      <div id="dropzone">
+        or drag a PNG file here / click to browse<input
+          type="file"
+          id="fileInput"
+          accept="image/png"
+          style="display: none"
+        />
+      </div>
+
+      <div class="row">
+        <div class="field">
+          <label for="preset">Target frame</label>
+          <select id="preset"></select>
+        </div>
+        <div class="field">
+          <label for="cropSize">Crop size (drag the box to reposition)</label>
+          <div class="slider-row">
+            <input type="range" id="cropSize" min="10" max="100" step="1" value="100" />
+            <span class="slider-val" id="cropSizeVal">100%</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="canvas-wrap">
+        <canvas id="stage" width="760" height="520"></canvas>
+      </div>
+
+      <div class="row">
+        <div class="field">
+          <label for="category">Category folder (under assets/art/)</label>
+          <input type="text" id="category" value="title" />
+        </div>
+        <div class="field">
+          <label for="filename">Filename</label>
+          <input type="text" id="filename" value="backdrop.png" />
+        </div>
+      </div>
+
+      <div>
+        <button id="saveBtn" disabled>Crop & save to game</button>
+        <div class="status" id="status"></div>
+      </div>
+    </main>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const stage = $('stage');
+      const ctx = stage.getContext('2d');
+
+      let PRESETS = {};
+      let image = null; // the loaded HTMLImageElement, natural size
+      let displayScale = 1; // natural-image px -> canvas px
+      let crop = { x: 0, y: 0, w: 0, h: 0 }; // in natural-image pixels
+      let dragStart = null;
+
+      async function loadPresets() {
+        PRESETS = await fetch('/presets').then((r) => r.json());
+        const select = $('preset');
+        select.innerHTML = '';
+        for (const [key, preset] of Object.entries(PRESETS)) {
+          const opt = document.createElement('option');
+          opt.value = key;
+          opt.textContent = `${preset.label} (${preset.width}×${preset.height})`;
+          select.appendChild(opt);
+        }
+        select.addEventListener('change', () => {
+          $('category').value = select.value;
+          $('filename').value = PRESETS[select.value].defaultName;
+          resetCrop();
+          draw();
+        });
+      }
+
+      function currentAspect() {
+        const preset = PRESETS[$('preset').value];
+        return preset.width / preset.height;
+      }
+
+      function resetCrop() {
+        if (!image) return;
+        const aspect = currentAspect();
+        const sizeFrac = Number($('cropSize').value) / 100;
+        let w, h;
+        if (image.naturalWidth / image.naturalHeight > aspect) {
+          h = image.naturalHeight * sizeFrac;
+          w = h * aspect;
+        } else {
+          w = image.naturalWidth * sizeFrac;
+          h = w / aspect;
+        }
+        crop = {
+          x: (image.naturalWidth - w) / 2,
+          y: (image.naturalHeight - h) / 2,
+          w,
+          h,
+        };
+        clampCrop();
+      }
+
+      function clampCrop() {
+        if (!image) return;
+        crop.x = Math.max(0, Math.min(crop.x, image.naturalWidth - crop.w));
+        crop.y = Math.max(0, Math.min(crop.y, image.naturalHeight - crop.h));
+      }
+
+      function draw() {
+        if (!image) return;
+        const maxW = 760;
+        displayScale = Math.min(1, maxW / image.naturalWidth);
+        const dispW = Math.round(image.naturalWidth * displayScale);
+        const dispH = Math.round(image.naturalHeight * displayScale);
+        stage.width = dispW;
+        stage.height = dispH;
+
+        ctx.drawImage(image, 0, 0, dispW, dispH);
+        ctx.fillStyle = 'rgba(0,0,0,0.55)';
+        ctx.fillRect(0, 0, dispW, dispH);
+
+        const cx = crop.x * displayScale;
+        const cy = crop.y * displayScale;
+        const cw = crop.w * displayScale;
+        const ch = crop.h * displayScale;
+        ctx.drawImage(image, crop.x, crop.y, crop.w, crop.h, cx, cy, cw, ch);
+        ctx.strokeStyle = '#e0a94b';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(cx, cy, cw, ch);
+      }
+
+      function setImage(img) {
+        image = img;
+        resetCrop();
+        draw();
+        $('saveBtn').disabled = false;
+        setStatus('', '');
+      }
+
+      function setStatus(text, cls) {
+        const el = $('status');
+        el.className = 'status' + (cls ? ' ' + cls : '');
+        el.textContent = text;
+      }
+
+      $('loadPathBtn').addEventListener('click', () => {
+        const p = $('sourcePath').value.trim();
+        if (!p) return;
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => setImage(img);
+        img.onerror = () =>
+          setStatus('Could not load that path — check it exists and is a .png', 'error');
+        img.src = '/source?path=' + encodeURIComponent(p);
+      });
+
+      function loadFile(file) {
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          const img = new Image();
+          img.onload = () => setImage(img);
+          img.src = reader.result;
+        };
+        reader.readAsDataURL(file);
+      }
+
+      const dropzone = $('dropzone');
+      dropzone.addEventListener('click', () => $('fileInput').click());
+      $('fileInput').addEventListener('change', (e) => loadFile(e.target.files[0]));
+      dropzone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropzone.classList.add('drag');
+      });
+      dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+      dropzone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropzone.classList.remove('drag');
+        loadFile(e.dataTransfer.files[0]);
+      });
+
+      stage.addEventListener('pointerdown', (e) => {
+        if (!image) return;
+        const rect = stage.getBoundingClientRect();
+        dragStart = {
+          px: e.clientX - rect.left,
+          py: e.clientY - rect.top,
+          cropX: crop.x,
+          cropY: crop.y,
+        };
+      });
+      window.addEventListener('pointermove', (e) => {
+        if (!dragStart || !image) return;
+        const rect = stage.getBoundingClientRect();
+        const dx = (e.clientX - rect.left - dragStart.px) / displayScale;
+        const dy = (e.clientY - rect.top - dragStart.py) / displayScale;
+        crop.x = dragStart.cropX + dx;
+        crop.y = dragStart.cropY + dy;
+        clampCrop();
+        draw();
+      });
+      window.addEventListener('pointerup', () => {
+        dragStart = null;
+      });
+
+      $('cropSize').addEventListener('input', () => {
+        $('cropSizeVal').textContent = $('cropSize').value + '%';
+        resetCrop();
+        draw();
+      });
+
+      $('saveBtn').addEventListener('click', async () => {
+        if (!image) return;
+        const preset = PRESETS[$('preset').value];
+        const out = document.createElement('canvas');
+        out.width = preset.width;
+        out.height = preset.height;
+        out
+          .getContext('2d')
+          .drawImage(image, crop.x, crop.y, crop.w, crop.h, 0, 0, preset.width, preset.height);
+        out.toBlob(async (blob) => {
+          try {
+            const params = new URLSearchParams({
+              category: $('category').value || 'title',
+              filename: $('filename').value || preset.defaultName,
+            });
+            const res = await fetch('/save?' + params.toString(), { method: 'POST', body: blob });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'save failed');
+            setStatus(`Saved ${data.bytes.toLocaleString()} bytes to ${data.savedTo}`, 'ok');
+          } catch (err) {
+            setStatus('Error: ' + err.message, 'error');
+          }
+        }, 'image/png');
+      });
+
+      loadPresets();
+    </script>
+  </body>
+</html>
