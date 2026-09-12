@@ -1,5 +1,6 @@
 import { Container, loadTexture } from '../render/gfx/index.js';
 import titleBackdropUrl from '../../assets/art/title/backdrop.png';
+import openingCardArtUrl from '../../assets/art/story/opening.png';
 import { ENEMY_DEFINITIONS } from '../content/enemies/index.js';
 import {
   FLOOR_CONFIGS,
@@ -60,6 +61,7 @@ import { PromilleHud } from '../render/promille-hud.js';
 import { WalletHud } from '../render/wallet-hud.js';
 import { HUD_PALETTE, PARTICLE_PALETTE, UI_PALETTE } from '../render/palette.js';
 import { FloorTitleCard } from '../render/floor-title-card.js';
+import { StoryCard } from '../render/story-card.js';
 import { ReplayViewer } from '../render/replay-viewer.js';
 import { installPixelFonts, UI_FONT_FAMILY } from '../render/ui/font.js';
 import { UiKit } from '../render/ui/kit.js';
@@ -133,6 +135,7 @@ import type { Locale } from '../i18n/locale.js';
 import { ActiveRunRecorder, decodeActiveRunFrames, persistActiveRun } from './save/active-run.js';
 import type { CharacterTraits } from '../sim/character/definition.js';
 import { loadSave } from './save/storage.js';
+import { STORY_BEAT_OPENING, hasSeenStoryBeat, markStoryBeatSeen } from './story/beats.js';
 import {
   recordBossDefeat,
   recordRunOutcome,
@@ -1029,6 +1032,16 @@ async function boot(): Promise<void> {
   let floorCardUntil = 0;
 
   /**
+   * The one-time illustrated story beat (#58) — the opening, so far. Sits
+   * over `floorTitleCard` in the same z-order slot: both are opaque,
+   * full-frame plates that cover the run rather than sitting under it, so
+   * only one is ever meant to be visible at once. See `dismissStoryCard`.
+   */
+  const storyCard = new StoryCard(preferences.locale);
+  /** Set when `startRun` deferred floor 1's own card behind the opening beat — see `dismissStoryCard`. */
+  let floorCardPendingAfterStory = false;
+
+  /**
    * The boss room's intro plate (#23): shown for the room's warmup window
    * (`sim.roomWarmupTicks`, the same "enemies stand inert" beat every room
    * already gets) whenever that room's role is `'boss'`.
@@ -1223,9 +1236,11 @@ async function boot(): Promise<void> {
    */
   const kitGallery = new UiKitGallery(kit);
 
-  // Last, and in this order: a floor card covers the HUD, the gallery covers
-  // the card, and the game-over screen covers everything.
+  // Last, and in this order: a floor card covers the HUD, the story card
+  // covers the floor card (see `storyCard`'s own doc comment), the gallery
+  // covers both, and the game-over screen covers everything.
   hudLayer.addChild(floorTitleCard.view);
+  hudLayer.addChild(storyCard.view);
   hudLayer.addChild(kitGallery.view);
   hudLayer.addChild(gameOverScreen.view);
   hudLayer.addChild(victoryScreen.view);
@@ -1320,6 +1335,7 @@ async function boot(): Promise<void> {
     // `layoutHud` — before `loop`/`input` exist to build this from.
     screenController?.resize(width, height);
     floorTitleCard.resize(width, height);
+    storyCard.resize(width, height);
     kitGallery.resize(width, height);
   };
 
@@ -1586,6 +1602,17 @@ async function boot(): Promise<void> {
    */
   function pollMenuGamepad(): void {
     if (screenController?.pollGamepad() === true) {
+      return;
+    }
+    // Same "any button skips it" rule the keydown handler applies — a
+    // one-time intro card is not a menu with a specific confirm button, so
+    // any of `menuNav`'s tracked edges (whichever button the player reaches
+    // for first) dismisses it.
+    if (storyCard.visible) {
+      const edges = menuNav.poll(input.gamepad);
+      if (edges.up || edges.down || edges.confirm || edges.cancel) {
+        dismissStoryCard();
+      }
       return;
     }
     if (!runResults.visible && deathPhase !== 'over') {
@@ -2348,6 +2375,18 @@ async function boot(): Promise<void> {
       }
     });
 
+  // Same never-block-boot-on-it shape as the title backdrop above — the
+  // opening card (#58) is text-only until this resolves.
+  loadTexture(openingCardArtUrl)
+    .then((texture) => {
+      storyCard.setArt(texture);
+    })
+    .catch((err: unknown) => {
+      if (import.meta.env.DEV) {
+        console.warn('opening card art failed to load, keeping the text-only card', err);
+      }
+    });
+
   // Refreshing the HUD regenerates a texture, so it runs on a slow cadence
   // rather than every frame.
   const refreshHud = (): void => {
@@ -2717,7 +2756,30 @@ WASD move   arrows aim and fire
 
     refreshHud();
     layoutHud();
-    showFloorCard();
+    // The opening (#58) shows once, ever, before floor 1's own card gets a
+    // turn — this fires from `startRun`, which is also `retryRun`'s function
+    // (the global `R` key, every "Retry" button), so `seenStoryBeats` rather
+    // than any in-memory flag is what stops this from replaying on the
+    // player's second run, let alone their five hundredth.
+    if (hasSeenStoryBeat(loadSave(), STORY_BEAT_OPENING)) {
+      showFloorCard();
+    } else {
+      storyCard.show(t(preferences.locale, 'ui.story.opening'));
+      floorCardPendingAfterStory = true;
+    }
+  }
+
+  /** Hides the opening card, records it seen for good, and raises floor 1's own card in its place. */
+  function dismissStoryCard(): void {
+    if (!storyCard.visible) {
+      return;
+    }
+    storyCard.hide();
+    markStoryBeatSeen(STORY_BEAT_OPENING);
+    if (floorCardPendingAfterStory) {
+      floorCardPendingAfterStory = false;
+      showFloorCard();
+    }
   }
 
   /**
@@ -3485,6 +3547,14 @@ WASD move   arrows aim and fire
     if (screenController.handleKeydown(event)) {
       return;
     }
+    // The opening card (#58) swallows every key while it is up — any key
+    // skips it, the same "press anything to continue" convention most games
+    // use for a one-time intro, rather than requiring one specific button.
+    if (storyCard.visible) {
+      event.preventDefault();
+      dismissStoryCard();
+      return;
+    }
     // `Y` opens the settings from anywhere — the shortcut the DOM panel this
     // screen replaced had, kept because a player's muscle memory (and every
     // bug report that names it) still points at it. Mid-run it pauses first;
@@ -3993,6 +4063,7 @@ WASD move   arrows aim and fire
     runResults.setLocale(locale);
     machinePicker.setLocale(locale);
     floorTitleCard.setLocale(locale);
+    storyCard.setLocale(locale);
     activeItemHud.setLocale(locale);
     bossHealthHud.setLocale(locale);
     curseHud.setLocale(locale);
