@@ -250,6 +250,13 @@ export const bar: Record<DictKey, string> = {
   'pickups.kellerschluessel-ring.description': 'Schlüssl +3',
   'pickups.meisterschluessel.description': 'Macht d’Bosstür auf',
 
+  // --- Enemies (name stays Bavarian in every locale) ----------------------
+  // Boss intro plate (#58/#327) — draft, pending sign-off. NOT reviewed by a
+  // native speaker, same flag as the opening card's own bar text.
+  'enemies.der-stier.title': 'Hüata vom Maibam',
+  'enemies.der-stier.epithet':
+    'Zwoa Hörndln, oa Meinung: Da Maibam bleibt precise do, wo er steht.',
+
   // --- Items (name stays Bavarian in every locale) -----------------------
   'items.almabtrieb.description':
     'Schiaßn im Renna macht 2x Schadn. D’Renn-Gschoss ham a andare Farb.',

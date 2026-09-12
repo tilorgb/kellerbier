@@ -58,6 +58,19 @@ export const ENEMY_DEFINITIONS: readonly EnemyDefinition[] = [
   derLadewagen,
 ];
 
+/**
+ * The authored definition for `id`, or `undefined`.
+ *
+ * The render layer's own lookup seam (#58/#327's boss intro plate is the
+ * first consumer): `GameSim.bossDefinition` only ever exposes the compiled,
+ * sim-side `CompiledEnemy` — deliberately stripped of anything the frame
+ * loop never reads, `title`/`epithet` included — so a caller that wants the
+ * presentational fields resolves the id back to this list instead.
+ */
+export function enemyDefinitionById(id: string): EnemyDefinition | undefined {
+  return ENEMY_DEFINITIONS.find((enemy) => enemy.id === id);
+}
+
 export {
   bauer,
   bierratte,

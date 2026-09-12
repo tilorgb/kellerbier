@@ -244,6 +244,12 @@ export const de: Record<DictKey, string> = {
   'pickups.kellerschluessel-ring.description': 'Schlüssel +3',
   'pickups.meisterschluessel.description': 'Öffnet die Bosstür',
 
+  // --- Enemies (name stays Bavarian in every locale) ----------------------
+  // Boss intro plate (#58/#327) — draft, pending sign-off.
+  'enemies.der-stier.title': 'Wächter des Maibaums',
+  'enemies.der-stier.epithet':
+    'Zwei Hörner, eine Meinung: Der Maibaum bleibt genau da, wo er steht.',
+
   // --- Items (name stays Bavarian in every locale) -----------------------
   'items.almabtrieb.description':
     'Schüsse im Laufen machen 2x Schaden. "Laufschüsse" haben eine andere Farbe.',

@@ -1,7 +1,7 @@
 import { Container, loadTexture } from '../render/gfx/index.js';
 import titleBackdropUrl from '../../assets/art/title/backdrop.png';
 import openingCardArtUrl from '../../assets/art/story/opening.png';
-import { ENEMY_DEFINITIONS } from '../content/enemies/index.js';
+import { ENEMY_DEFINITIONS, enemyDefinitionById } from '../content/enemies/index.js';
 import {
   FLOOR_CONFIGS,
   HIGHEST_PLAYABLE_FLOOR,
@@ -61,12 +61,12 @@ import { PromilleHud } from '../render/promille-hud.js';
 import { WalletHud } from '../render/wallet-hud.js';
 import { HUD_PALETTE, PARTICLE_PALETTE, UI_PALETTE } from '../render/palette.js';
 import { FloorTitleCard } from '../render/floor-title-card.js';
+import { BossIntroPlate } from '../render/boss-intro-plate.js';
 import { StoryCard } from '../render/story-card.js';
 import { ReplayViewer } from '../render/replay-viewer.js';
 import { installPixelFonts, UI_FONT_FAMILY } from '../render/ui/font.js';
 import { UiKit } from '../render/ui/kit.js';
 import { TextPlate } from '../render/ui/text-plate.js';
-import { DisplayTitle, TITLE_STYLES } from '../render/ui/title.js';
 import { UiKitGallery } from '../render/ui/gallery.js';
 import { uiScaleFor, uiText, UI_TEXT_HEIGHT } from '../render/ui/text.js';
 import { PromilleUnlockHud } from '../render/promille-unlock-hud.js';
@@ -228,6 +228,17 @@ const PEDESTAL_PLATE_LIFT = 18;
  */
 const FLOOR_CARD_MS = 2600;
 const FLOOR_CARD_FADE_MS = 700;
+
+/**
+ * How long the boss intro plate (#58/#327) stays up — the same wall-clock
+ * reasoning `FLOOR_CARD_MS` gives, not tied to `sim.roomWarmupTicks`
+ * (0.4s, tuned for "enemies stay inert," not for reading three lines). Kept
+ * under #58's own "two seconds maximum" for this category. Safe to decouple
+ * from the warmup precisely because this plate has no backing dim — the
+ * boss is fully visible underneath the whole time, so a player is never
+ * asked to react to something the plate is hiding.
+ */
+const BOSS_PLATE_MS = 1900;
 
 function floorConfig(floorNumber: number): FloorConfig {
   const config = FLOOR_CONFIGS.find((candidate) => candidate.floor === floorNumber);
@@ -1042,20 +1053,20 @@ async function boot(): Promise<void> {
   let floorCardPendingAfterStory = false;
 
   /**
-   * The boss room's intro plate (#23): shown for the room's warmup window
-   * (`sim.roomWarmupTicks`, the same "enemies stand inert" beat every room
-   * already gets) whenever that room's role is `'boss'`.
-   *
-   * Drawn in the display face's threat treatment — the same Fraktur the floor
-   * card uses, bled red. Rebuilt only on the edge it becomes visible, the
-   * same restraint the old `Text` version kept, and cheaper now that a
-   * treated line is a texture rather than a string.
+   * The boss room's intro plate (#23, upgraded to a real name/title/epithet
+   * plate by #58/#327): shown for the room's warmup window
+   * (`sim.roomWarmupTicks`, extended to `BOSS_ROOM_WARMUP_TICKS` for a boss
+   * room specifically) whenever that room's role is `'boss'`. Content comes
+   * from `sim.bossDefinition` — see `BossIntroPlate`'s own doc comment for
+   * why this stays a bare-text-over-the-live-room reveal rather than an
+   * opaque cutscene plate.
    */
-  const bossBanner = new DisplayTitle(TITLE_STYLES.threat);
-  bossBanner.set(t(preferences.locale, 'ui.hud.bossBanner'));
-  bossBanner.view.visible = false;
-  hudLayer.addChild(bossBanner.view);
+  const bossIntroPlate = new BossIntroPlate();
+  bossIntroPlate.hide();
+  hudLayer.addChild(bossIntroPlate.view);
   let bossBannerShown = false;
+  /** When the boss intro plate comes down, on the wall clock. Render-only — never sim state. */
+  let bossPlateUntil = 0;
 
   /**
    * The boss room's own health bar (#36) — see `render/boss-health-hud.ts`'s
@@ -1310,7 +1321,8 @@ async function boot(): Promise<void> {
     const centreX = Math.round(width / 2);
     itemSetHud.place(HUD_MARGIN, y, centreX, Math.round(height * 0.32));
     bossHealthHud.view.position.set(centreX, HUD_MARGIN + UI_TEXT_HEIGHT + 2);
-    bossBanner.place(centreX, Math.round(height * 0.26));
+    bossIntroPlate.resize(width);
+    bossIntroPlate.place(centreX, Math.round(height * 0.26));
     pickupToast.place(centreX, Math.round(height * 0.2));
     shopPreview.place(centreX, Math.round(height * 0.85));
     machinePrompt.place(centreX, Math.round(height * 0.78));
@@ -2120,11 +2132,26 @@ async function boot(): Promise<void> {
         minimapHud.view.visible = false;
         minimapHud.overlayView.visible = false;
       }
-      const showBossBanner =
+      // The rising edge alone — once per boss-room entry, when warmup starts.
+      // Hiding is the plate's own wall-clock timer (`advanceBossIntroPlate`),
+      // not warmup ending: `BOSS_PLATE_MS` is deliberately longer than
+      // `ROOM_WARMUP_TICKS`' 0.4s, which is safe only because this plate has
+      // no backing dim — see `BOSS_PLATE_MS`'s own doc comment.
+      const enteringBossRoom =
         sim.roomWarmupTicks > 0 && planRoom(floorPlan, currentRoomId).role === 'boss';
-      if (showBossBanner !== bossBannerShown) {
-        bossBannerShown = showBossBanner;
-        bossBanner.view.visible = showBossBanner;
+      if (enteringBossRoom !== bossBannerShown) {
+        bossBannerShown = enteringBossRoom;
+        if (enteringBossRoom) {
+          const compiled = sim.bossDefinition;
+          const content = compiled === null ? undefined : enemyDefinitionById(compiled.id);
+          bossIntroPlate.show(
+            compiled?.name ?? t(preferences.locale, 'ui.hud.bossBanner'),
+            preferences.locale,
+            content?.title,
+            content?.epithet,
+          );
+          bossPlateUntil = performance.now() + BOSS_PLATE_MS;
+        }
       }
       const toast = sim.pickupToast;
       if (toast !== null) {
@@ -2261,6 +2288,7 @@ async function boot(): Promise<void> {
         pedestalRevealLabel = '';
       }
       advanceFloorCard(started);
+      advanceBossIntroPlate(started);
       const playerScreen = view.playerScreenPosition();
       vignette.sync(sim, playerScreen.x, playerScreen.y);
       blaueStundeOverlay.sync(
@@ -2724,7 +2752,7 @@ WASD move   arrows aim and fire
     prewarmedNeighborId = null;
     wasBossDoorLocked = false;
     bossBannerShown = false;
-    bossBanner.view.visible = false;
+    bossIntroPlate.hide();
     pickupToastLabel = '';
     pickupToast.visible = false;
     shopPreviewLabel = '';
@@ -2815,6 +2843,13 @@ WASD move   arrows aim and fire
       return;
     }
     floorTitleCard.setFade(Math.min(1, remaining / FLOOR_CARD_FADE_MS));
+  }
+
+  /** Takes the boss intro plate down once `BOSS_PLATE_MS` has passed. A hard cut, same as the banner it replaced — no fade to own. */
+  function advanceBossIntroPlate(now: number): void {
+    if (bossIntroPlate.visible && now >= bossPlateUntil) {
+      bossIntroPlate.hide();
+    }
   }
 
   /**
@@ -4074,7 +4109,16 @@ WASD move   arrows aim and fire
     if (runResults.visible) {
       runResults.update(runResultsView(locale));
     }
-    bossBanner.set(t(locale, 'ui.hud.bossBanner'));
+    if (bossIntroPlate.visible) {
+      const compiled = sim.bossDefinition;
+      const content = compiled === null ? undefined : enemyDefinitionById(compiled.id);
+      bossIntroPlate.show(
+        compiled?.name ?? t(locale, 'ui.hud.bossBanner'),
+        locale,
+        content?.title,
+        content?.epithet,
+      );
+    }
     // Re-derives the minimap header (`{floor}. Stock — {name}`) and the rest
     // of the room-plan-derived view layers — cheap and idempotent, the same
     // call a room change or a secret reveal already makes.

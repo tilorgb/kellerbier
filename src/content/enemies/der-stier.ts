@@ -74,6 +74,9 @@ const PHASE_TWO_SPLIT: SplitOnDeathBehaviour = {
 export const derStier: EnemyDefinition = {
   id: 'der-stier',
   name: 'Der Stier',
+  // Boss intro plate (#58/#327) — draft text, pending sign-off; see the PR.
+  title: 'enemies.der-stier.title',
+  epithet: 'enemies.der-stier.epithet',
   // `boss` since #193 (`sim/enemy/size.ts`, `docs/DECISIONS.md` #56).
   size: 'boss',
   // #260: was 80; #232 before that: was 24. See the module doc comment —

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ENEMY_DEFINITIONS,
   derStier,
+  enemyDefinitionById,
   grosseKellerassel,
   kellerassel,
 } from '../../src/content/enemies/index.js';
@@ -33,6 +34,13 @@ describe('the enemy roster', () => {
       // The name is what a player reads. German, per docs/CONTENT_BIBLE.md.
       expect(definition.name.length).toBeGreaterThan(0);
     }
+  });
+
+  it('resolves an id back to its authored definition, for the boss intro plate (#58/#327)', () => {
+    expect(enemyDefinitionById('der-stier')).toBe(derStier);
+    expect(enemyDefinitionById('der-stier')?.title).toBe('enemies.der-stier.title');
+    expect(enemyDefinitionById('der-stier')?.epithet).toBe('enemies.der-stier.epithet');
+    expect(enemyDefinitionById('not-a-real-enemy-id')).toBeUndefined();
   });
 
   it('leaves no state stranded', () => {

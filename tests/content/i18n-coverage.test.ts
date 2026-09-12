@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { LOCALES } from '../../src/i18n/locale.js';
 import { bar, de, dictKeys, en, t } from '../../src/i18n/translate.js';
 import { CURSE_DEFINITIONS } from '../../src/content/curses/index.js';
+import { ENEMY_DEFINITIONS } from '../../src/content/enemies/index.js';
 import { FLOOR_CONFIGS } from '../../src/content/floors/definition.js';
 import { ITEM_DEFINITIONS } from '../../src/content/items/index.js';
 import { PICKUP_DEFINITIONS } from '../../src/content/pickups/index.js';
@@ -112,6 +113,15 @@ describe('the localisation layer (#52)', () => {
     }
     for (const floor of FLOOR_CONFIGS) {
       referenced.add(floor.flavour);
+    }
+    // Boss intro plate (#58/#327) — most enemies have neither key yet.
+    for (const enemy of ENEMY_DEFINITIONS) {
+      if (enemy.title !== undefined) {
+        referenced.add(enemy.title);
+      }
+      if (enemy.epithet !== undefined) {
+        referenced.add(enemy.epithet);
+      }
     }
 
     const canonical = new Set<string>(dictKeys());

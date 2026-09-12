@@ -259,6 +259,11 @@ export const en = {
   'pickups.kellerschluessel-ring.description': 'Key +3',
   'pickups.meisterschluessel.description': 'Opens the boss door',
 
+  // --- Enemies (name stays Bavarian in every locale) ----------------------
+  // Boss intro plate (#58/#327) — draft, pending sign-off.
+  'enemies.der-stier.title': 'Guardian of the Maypole',
+  'enemies.der-stier.epithet': 'Two horns, one grudge: the maypole stays exactly where it is.',
+
   // --- Items (name stays Bavarian in every locale) -----------------------
   'items.almabtrieb.description':
     'Shooting while moving has 2x damage. The "moving shots" have different color.',

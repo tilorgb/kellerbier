@@ -726,6 +726,16 @@ describe('Die Große Kellerassel (#36)', () => {
     expect(sim.bossHealth).toBeNull();
   });
 
+  it('exposes the compiled boss for the intro plate (#58/#327) the instant the room loads, and null once cleared', () => {
+    const sim = bossFightSim();
+    expect(sim.bossDefinition?.id).toBe('grosse-kellerassel');
+    expect(sim.bossDefinition?.name).toBe('Die Große Kellerassel');
+
+    sim.kill(bossIndex(sim));
+    sim.world.flush();
+    expect(sim.bossDefinition).toBeNull();
+  });
+
   it('splits into three segments at half health, and the door stays locked through the split', () => {
     const sim = bossFightSim();
     const boss = bossIndex(sim);
