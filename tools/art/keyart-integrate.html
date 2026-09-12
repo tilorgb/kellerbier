@@ -211,6 +211,17 @@
         </div>
       </div>
 
+      <div class="field">
+        <label for="pixelation"
+          >Pixelation (downscale then nearest-neighbour back up — also softens small
+          inconsistencies, and leaves fewer effective pixels to touch up by hand)</label
+        >
+        <div class="slider-row">
+          <input type="range" id="pixelation" min="1" max="8" step="1" value="1" />
+          <span class="slider-val" id="pixelationVal">off</span>
+        </div>
+      </div>
+
       <div>
         <button id="saveBtn" disabled>Crop & save to game</button>
         <div class="status" id="status"></div>
@@ -381,15 +392,43 @@
         draw();
       });
 
+      $('pixelation').addEventListener('input', () => {
+        const factor = Number($('pixelation').value);
+        $('pixelationVal').textContent = factor <= 1 ? 'off' : `1/${factor}`;
+      });
+
+      /**
+       * Downscales to `preset.width/factor` × `preset.height/factor` (smoothed —
+       * a real anti-aliased downscale, not nearest-neighbour) and draws that back
+       * up to full size with smoothing off, so the result is genuinely chunky
+       * rather than just blurry. `factor` 1 is a no-op copy.
+       */
+      function pixelate(sourceCanvas, width, height, factor) {
+        if (factor <= 1) return sourceCanvas;
+        const small = document.createElement('canvas');
+        small.width = Math.max(1, Math.round(width / factor));
+        small.height = Math.max(1, Math.round(height / factor));
+        small.getContext('2d').drawImage(sourceCanvas, 0, 0, small.width, small.height);
+
+        const out = document.createElement('canvas');
+        out.width = width;
+        out.height = height;
+        const outCtx = out.getContext('2d');
+        outCtx.imageSmoothingEnabled = false;
+        outCtx.drawImage(small, 0, 0, width, height);
+        return out;
+      }
+
       $('saveBtn').addEventListener('click', async () => {
         if (!image) return;
         const preset = PRESETS[$('preset').value];
-        const out = document.createElement('canvas');
-        out.width = preset.width;
-        out.height = preset.height;
-        out
+        const cropped = document.createElement('canvas');
+        cropped.width = preset.width;
+        cropped.height = preset.height;
+        cropped
           .getContext('2d')
           .drawImage(image, crop.x, crop.y, crop.w, crop.h, 0, 0, preset.width, preset.height);
+        const out = pixelate(cropped, preset.width, preset.height, Number($('pixelation').value));
         out.toBlob(async (blob) => {
           try {
             const params = new URLSearchParams({
