@@ -89,6 +89,11 @@ export const de: Record<DictKey, string> = {
   'ui.floorTitleCard.floorLabel': '{ordinal} Stock',
   'ui.floorTitleCard.xlBadge': 'Ein ungewöhnlich großer Stock.',
 
+  // --- Story cards (#58) -----------------------------------------
+  'ui.storyCard.skipHint': 'Drücken zum Überspringen',
+  'ui.story.opening':
+    'Opas letztes Pfeitinger ist leer. Die volle Kiste daneben ist dasselbe Bier, aber das Etikett ist neu: Wasser, Malz, Hopfen — und Rosinen.\n\nAlois nimmt Opas Trink-Rucksack vom Haken, füllt ihn mit der verdorbenen Kiste und stellt ihn von trinken auf schießen.',
+
   // --- HUD -----------------------------------------------------
   'ui.hud.bossBanner': 'Bossraum',
   'ui.hud.useHint': '[Aktion]',

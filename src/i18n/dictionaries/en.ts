@@ -101,6 +101,11 @@ export const en = {
   'ui.floorTitleCard.floorLabel': '{ordinal} Floor',
   'ui.floorTitleCard.xlBadge': 'An unusually large floor.',
 
+  // --- Story cards (#58) -----------------------------------------
+  'ui.storyCard.skipHint': 'Press to skip',
+  'ui.story.opening':
+    "Opa's last Pfeitinger is empty. The full crate beside it is the same beer, but the label is new: water, malt, hops — and raisins.\n\nAlois takes Opa's Trink-Rucksack down off its hook, fills it with the tainted crate, and switches it from trinken to schießen.",
+
   // --- HUD -----------------------------------------------------
   'ui.hud.bossBanner': 'Boss Room',
   'ui.hud.useHint': '[use]',

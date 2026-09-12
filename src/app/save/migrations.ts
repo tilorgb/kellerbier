@@ -145,6 +145,17 @@ const v5ToV6: SaveMigration = (raw) => ({ ...raw, schemaVersion: 6 });
  */
 const v6ToV7: SaveMigration = (raw) => ({ ...raw, schemaVersion: 7 });
 
+/**
+ * v7 -> v8 (#58): `seenStoryBeats` is new storage, same reasoning `v5ToV6`
+ * and `v6ToV7` give for `preferences`/`telemetry` — nothing before this
+ * version had a one-time story card to have seen. Back-filling every
+ * existing save as having already seen the opening (rather than starting
+ * empty) would mean every pre-#58 player quietly never sees it at all,
+ * which is the opposite of what a returning player should get from the
+ * feature landing.
+ */
+const v7ToV8: SaveMigration = (raw) => ({ ...raw, schemaVersion: 8, seenStoryBeats: [] });
+
 export const MIGRATIONS: readonly SaveMigration[] = [
   v0ToV1,
   v1ToV2,
@@ -153,6 +164,7 @@ export const MIGRATIONS: readonly SaveMigration[] = [
   v4ToV5,
   v5ToV6,
   v6ToV7,
+  v7ToV8,
 ];
 
 function versionOf(raw: Record<string, unknown>): number {

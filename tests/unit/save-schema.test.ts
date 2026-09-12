@@ -20,11 +20,13 @@ describe('save schema sanitisation (#45)', () => {
       dailyRunHistory: [{ date: '2026-01-01', seed: 1, ticksSurvived: 100, kills: 2 }],
       bestRuns: 'not-an-array',
       activeRun: { seed: 7, frames: [1, 2, 3, 4, 5] },
+      seenStoryBeats: ['opening', 42, null],
     });
 
     expect(sanitized.settings).toEqual({ ...DEFAULT_ACCESSIBILITY_SETTINGS, swayScale: 0.5 });
     // Non-string entries are dropped, not enough to throw the whole array away.
     expect(sanitized.unlocks).toEqual(['boss-kellerassel']);
+    expect(sanitized.seenStoryBeats).toEqual(['opening']);
     expect(sanitized.achievements).toEqual([]);
     expect(sanitized.statistics).toEqual({ kills: 3 });
     expect(sanitized.dailyRunHistory).toEqual([
