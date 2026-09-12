@@ -5208,3 +5208,102 @@ the same drift test `alois.mjs` has. It is drawn at two internal pixels per auth
 is a deliberate exception to #45's "a canvas is its size on screen": that rule is about *sprites*,
 which stand in a room next to a player, and a 640×360 frame is not big enough to hold an
 illustration at the HUD's own pixel.
+
+## 94. The title poster gets a second, optional tier: a real illustration, generated on a second local diffusion track
+
+**Decided:** #322, asked for as groundwork for #58 (story delivery: chapter cards, boss plates).
+**Builds on:** #71/#77 (the local diffusion pipeline and its two-track sign-off gate), #93 (the
+title screen's poster/pane split), #19 (graceful degradation for a content gap).
+
+#93's procedural poster (`tools/art/authoring/draw.mjs`, `TITLE_KEY_ART`) is staying — it is data,
+drawn from the very first frame, and nothing about it was wrong. What #58 needs (a title screen
+that reads as a real illustrated front door, plus the same treatment for chapter cards and boss
+plates) is a *second* tier above it: a real painterly PNG, swapped in once it loads. `TitleScreen`
+now has two poster paths, chosen by whether `setPoster(texture)` has been called yet — see its own
+doc comment. Nothing about #93's "no clip rectangle" constraint changes: the real poster is sized
+by contain-fit (`Math.min(width/tex.width, height/tex.height)`, centred) precisely because this
+layer still has no mask, so an arbitrary-aspect photo has to fit inside the frame rather than be
+cropped to it at render time — cropping happens once, ahead of time, in the tool below.
+
+**Why not the pixel-sprite pipeline (#71/#77).** `D:\repos\ComfyUI\pixel-bench` is SD1.5 plus a
+pixel-art LoRA plus a hard postprocess (background-key, box-filter downscale, quantize to a
+~40-colour floor palette) — tuned for small atlas tiles. Full-bleed painterly illustration run
+through that palette-quantize step loses exactly the soft gradient and lighting that makes it read
+as key art. So this is a second, sibling ComfyUI-adjacent tool, `D:\repos\ComfyUI\keyart-bench`
+(never committed here, same rule as pixel-bench, #71): SDXL base checkpoint
+(`stable-diffusion-xl-base-1.0`, official Hugging Face mirror), no LoRA, `CLIPTextEncodeSDXL`
+(plain `CLIPTextEncode` skips the resolution conditioning SDXL was trained with, which shows as
+distortion at the non-square aspects every one of this tool's presets uses), `dpmpp_2m`/`karras`
+in place of pixel-bench's `euler`/`normal` — a real quality difference for continuous-tone output,
+not a style preference. Four aspect presets cover the #58 categories (title, chapter card, boss
+plate, manga panel) at SDXL's own native resolution buckets, and a consistent style-suffix string
+is appended to every prompt so the four categories read as one game's art rather than four
+unrelated generations. `count` generates a batch in one request (up to 6) because #77's sign-off
+gate — generate many, cull the broken and off-style ones, bring the user the survivors — is the
+point, not a single roll of the dice. No bespoke inpaint/mask tooling was built for touch-ups:
+ComfyUI's own web UI already has a mask editor, and re-implementing that behind an API would be
+solving an already-solved problem for one candidate at a time.
+
+**GPU choice, for whoever revisits this.** This machine's RTX 2070 Super is 8GB VRAM. Flux (the
+strongest open model as of this decision) needs quantization to fit that budget, which claws back
+much of the quality gain that makes it worth using, plus a separate T5 encoder that eats more of
+the same 8GB — on this card that trade reproduces the "looks like slop" complaint SD1.5 already
+earns, just slower. SDXL unquantized is the realistic ceiling here: no exotic ComfyUI nodes,
+~20–40s/image at these resolutions, and a full model generation ahead of SD1.5 on coherence. This
+is a hardware-specific call, not a permanent one — revisit it if the GPU changes.
+
+**The crop step is deterministic and stays in this repo, same split as `diffusion-postprocess.mjs`
+(#71).** `tools/art/keyart-integrate.mjs` + `keyart-integrate.html` is a tiny local server and
+canvas UI: load a candidate (by path, or drag-and-drop), position a crop box locked to the chosen
+preset's aspect ratio, and save. The actual pixel work — crop and resize — happens in the
+browser's own `drawImage`, not hand-rolled in Node: it is exactly the resize this needs, already
+correct, already fast. Output lands at `assets/art/<category>/<file>.png`, a new asset tree that is
+deliberately outside `assets/atlases/` — this is full-bleed illustration with no palette contract
+and no atlas packing, not a sprite.
+
+**Boot sprite requests goes from 3 to 4** (`docs/TECH_STACK.md`) — the title backdrop is a fourth
+standalone `loadTexture` call alongside the three atlas sheets. Conscious, not silent: it is one
+PNG, loaded once at boot, behind a screen the player sits on for seconds rather than a per-frame
+cost, and #58's chapter cards/boss plates will each add one more of the same shape when they land.
+
+**What #322 deliberately left for #58 itself:** the chapter-card and boss-plate *render*
+components (skip-on-first-viewing, the three-second budget from #58's acceptance criteria) don't
+exist yet — this issue only proves the asset pipeline and the swap-in mechanism work, on the one
+screen (`TitleScreen`) that already existed to prove it on.
+
+## 95. The house style pivots to 90s cartoon; the bench gets per-preset defaults; two named characters in one frame is unsolved
+
+**Decided:** #322, same session as #94, after generating and comparing painterly, 90s-Western-cartoon
+and 90s-anime candidates side by side. **Amends #94's style-suffix claim** — everything else in #94
+stands.
+
+**Painterly lost the comparison.** #94's `STYLE_SUFFIX` baked in "painterly digital illustration,
+hand-painted" as an assumption, not a decided style — nobody had actually compared it against
+alternatives yet. Once cartoon and anime candidates existed side by side, 90s Western cartoon (bold
+black outlines, flat cel shading, saturated colour, Disney-Afternoon-era look) was the clear pick.
+`keyart-bench/server.mjs`'s `STYLE_SUFFIX` now says exactly that instead. The committed
+`assets/art/title/backdrop.png` from #94/#322 is still the painterly candidate — this decision does
+not retroactively replace it, since no cartoon candidate has been through the sign-off step
+(`CLAUDE.md`'s "New pixel art needs sign-off," extended to key art by #94) yet. Swapping it is a
+follow-up once one is picked, not an automatic consequence of picking the house style.
+
+**Named characters need locking down explicitly, every time, or the model invents its own.** A
+"cartoon" style keyword plus "a monster" in the same prompt was enough to turn Alois into a green
+goblin in the first batch — the model happily reads "make it cartoony" as license to genericize
+every subject, not just the rendering technique. `keyart-bench`'s `PRESETS` now carry a
+`defaultPrompt` per use case (`ALOIS`/`DER_STIER` constants, built from the real bestiary in
+`docs/CONTENT_BIBLE.md` and `tools/art/authoring/alois.mjs`, not invented) so the tool no longer
+needs the exact same long prompt retyped by hand each session, and so what ships as the default is
+actually on-roster instead of a placeholder that mentions monsters (a slime, a barrel-golem) this
+game doesn't have.
+
+**Alois and Der Stier together in one frame does not work yet, on this checkpoint.** Every batch
+that asked for both — hero and boss, interacting — either dropped Alois's specific outfit entirely
+or fused the two into one generic mascot figure. Solo prompts (Alois alone, or the boss alone) are
+reliable; the moment a second named subject enters the same prompt, character fidelity degrades
+sharply. This is a known SDXL weakness (compound multi-attribute character descriptions plus
+multi-subject composition, together, push past what pure text conditioning reliably controls) with
+no cheap fix — the real options are a small LoRA trained on Alois's actual sprite art, ControlNet
+pose guidance, or hand-compositing two solo generations. `keyart-bench`'s default prompts are
+single-subject *on purpose* until one of those is built: promising a two-character shot by default
+would mean shipping candidates that quietly stop matching the brief.

@@ -1,4 +1,5 @@
-import { Container } from '../render/gfx/index.js';
+import { Container, loadTexture } from '../render/gfx/index.js';
+import titleBackdropUrl from '../../assets/art/title/backdrop.png';
 import { ENEMY_DEFINITIONS } from '../content/enemies/index.js';
 import {
   FLOOR_CONFIGS,
@@ -2331,6 +2332,21 @@ async function boot(): Promise<void> {
   // its own first layout, or that would be a stale `INTERNAL_WIDTH`/
   // `INTERNAL_HEIGHT` guess.
   screenController.resize(uiFrame.width, uiFrame.height);
+
+  // Swaps the procedural block poster for the real illustrated backdrop once
+  // it loads (#322) — never blocks boot on it. A failed/slow fetch just
+  // leaves the procedural poster up, the same graceful-degradation shape
+  // `docs/DECISIONS.md` #19 asks for a content gap, applied to an asset
+  // fetch instead.
+  loadTexture(titleBackdropUrl)
+    .then((texture) => {
+      screenController.title.setPoster(texture);
+    })
+    .catch((err: unknown) => {
+      if (import.meta.env.DEV) {
+        console.warn('title backdrop failed to load, keeping the procedural poster', err);
+      }
+    });
 
   // Refreshing the HUD regenerates a texture, so it runs on a slow cadence
   // rather than every frame.
