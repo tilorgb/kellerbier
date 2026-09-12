@@ -1,7 +1,14 @@
 import { Container, type BitmapText, type NineSliceSprite } from '../gfx/index.js';
 import { UI_PALETTE } from '../palette.js';
 import { FocusRing, type UiKit } from './kit.js';
-import { UI_TEXT_HEIGHT, uiText, uiTextWidth } from './text.js';
+import {
+  DISPLAY_TEXT_HEIGHT,
+  UI_TEXT_HEIGHT,
+  displayText,
+  displayTextWidth,
+  uiText,
+  uiTextWidth,
+} from './text.js';
 
 /** One row of a `Menu`. */
 export interface MenuItem {
@@ -25,11 +32,57 @@ export interface MenuScreen {
   activate(): void;
 }
 
-const BUTTON_HEIGHT = UI_TEXT_HEIGHT + 6;
-const BUTTON_GAP = 4;
-const LABEL_PAD_X = 10;
-const LABEL_PAD_Y = 3;
-const MIN_WIDTH = 90;
+/**
+ * Which face a menu's labels are set in, and everything that follows from it.
+ *
+ * `docs/DECISIONS.md` #44 keeps the display face off anything read under fire
+ * and names the main menu's own buttons as the one list that is not: nothing
+ * is shooting at a player reading the title screen, and the game's front door
+ * is exactly where its voice should be loudest. Every other menu — the pause
+ * list over a live run, the credits' Back, a death screen's Retry — stays in
+ * the text face.
+ */
+export type MenuFace = 'text' | 'display';
+
+interface FaceMetrics {
+  readonly buttonHeight: number;
+  readonly buttonGap: number;
+  readonly padX: number;
+  readonly padY: number;
+  readonly minWidth: number;
+  readonly measure: (text: string) => number;
+  readonly make: (text: string) => BitmapText;
+}
+
+const FACES: Readonly<Record<MenuFace, FaceMetrics>> = {
+  text: {
+    buttonHeight: UI_TEXT_HEIGHT + 6,
+    buttonGap: 4,
+    padX: 10,
+    padY: 3,
+    minWidth: 90,
+    measure: uiTextWidth,
+    make: (text) => uiText(text, { colour: UI_PALETTE.text }),
+  },
+  // The display cell is 16 rows to the text face's 10, so its rows need more
+  // air around them or the Fraktur's descenders sit on the bevel.
+  display: {
+    buttonHeight: DISPLAY_TEXT_HEIGHT + 6,
+    buttonGap: 5,
+    padX: 12,
+    padY: 3,
+    minWidth: 120,
+    measure: displayTextWidth,
+    make: (text) => displayText(text, { colour: UI_PALETTE.text }),
+  },
+};
+
+export interface MenuOptions {
+  /** Defaults to `'text'` — see `MenuFace`. */
+  readonly face?: MenuFace;
+  /** Widens every row to at least this many UI pixels; the widest label still wins. */
+  readonly minWidth?: number;
+}
 
 interface MenuRow {
   readonly item: MenuItem;
@@ -57,13 +110,18 @@ export class Menu {
 
   private readonly kit: UiKit;
   private readonly focusRing: FocusRing;
+  private readonly metrics: FaceMetrics;
+  private readonly minWidth: number;
   private readonly rows: MenuRow[] = [];
   private focusIndex = 0;
-  private menuWidth = MIN_WIDTH;
+  private menuWidth: number;
 
-  constructor(kit: UiKit, items: readonly MenuItem[]) {
+  constructor(kit: UiKit, items: readonly MenuItem[], options: MenuOptions = {}) {
     this.kit = kit;
     this.focusRing = new FocusRing(kit);
+    this.metrics = FACES[options.face ?? 'text'];
+    this.minWidth = Math.max(this.metrics.minWidth, options.minWidth ?? 0);
+    this.menuWidth = this.minWidth;
     this.setItems(items);
   }
 
@@ -71,17 +129,18 @@ export class Menu {
   setItems(items: readonly MenuItem[]): void {
     this.view.removeChildren();
     this.rows.length = 0;
+    const { buttonHeight, buttonGap, padX, padY, measure, make } = this.metrics;
     this.menuWidth = Math.max(
-      MIN_WIDTH,
-      ...items.map((item) => uiTextWidth(item.label) + LABEL_PAD_X * 2),
+      this.minWidth,
+      ...items.map((item) => measure(item.label) + padX * 2),
     );
     items.forEach((item, index) => {
       const container = new Container();
-      container.position.set(0, index * (BUTTON_HEIGHT + BUTTON_GAP));
-      const background = this.kit.buttonSprite('normal', this.menuWidth, BUTTON_HEIGHT);
+      container.position.set(0, index * (buttonHeight + buttonGap));
+      const background = this.kit.buttonSprite('normal', this.menuWidth, buttonHeight);
       container.addChild(background);
-      const label = uiText(item.label, { colour: UI_PALETTE.text });
-      label.position.set(LABEL_PAD_X, LABEL_PAD_Y);
+      const label = make(item.label);
+      label.position.set(padX, padY);
       container.addChild(label);
       container.eventMode = 'static';
       container.cursor = 'pointer';
@@ -108,7 +167,13 @@ export class Menu {
   get height(): number {
     return this.rows.length === 0
       ? 0
-      : this.rows.length * (BUTTON_HEIGHT + BUTTON_GAP) - BUTTON_GAP;
+      : this.rows.length * (this.metrics.buttonHeight + this.metrics.buttonGap) -
+          this.metrics.buttonGap;
+  }
+
+  /** The height of one row, for a caller lining something else up with it. */
+  get rowHeight(): number {
+    return this.metrics.buttonHeight;
   }
 
   /**
@@ -189,7 +254,7 @@ export class Menu {
       x: focused.container.position.x,
       y: focused.container.position.y,
       width: this.menuWidth,
-      height: BUTTON_HEIGHT,
+      height: this.metrics.buttonHeight,
     });
   }
 }

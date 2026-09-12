@@ -26,6 +26,7 @@ export const bar: Record<DictKey, string> = {
   'ui.title.settings': 'Einstellunga',
   'ui.title.credits': 'Mitgwirkt ham',
   'ui.title.quit': 'Aufhean',
+  'ui.title.tagline': 'A boarisches Kella-Roguelike',
 
   'ui.pause.headline': 'Pausn',
   'ui.pause.resume': 'Weiterspün',
@@ -121,6 +122,7 @@ export const bar: Record<DictKey, string> = {
   // --- Settings screen -----------------------------------------------------
   'ui.settings.toggle': 'Einstellunga',
   'ui.settings.title': 'Einstellunga',
+  'ui.settings.hint': 'Links/Rechts ändern   Enter bstätign   Tab wechslt Reiter   Esc zruck',
 
   'ui.settings.tab.video': 'Buidl',
   'ui.settings.tab.audio': 'Ton',
@@ -132,10 +134,14 @@ export const bar: Record<DictKey, string> = {
   'ui.settings.video.windowScale': 'Fenstagrößn',
   'ui.settings.video.auto': 'Automatisch',
   'ui.settings.video.toggleFullscreen': 'Vollbuidl um- und ausschoitn',
+  'ui.settings.video.fullscreen': 'Vollbuidl',
   'ui.settings.video.screenshake': 'Buidlwackla',
   'ui.settings.video.camerasway': 'Kamera-Gschwankl',
   'ui.settings.video.hitstop': 'Treffastopp',
   'ui.settings.video.reduceFlashing': 'Blitzeffekt runterdrahn',
+
+  'ui.settings.value.on': 'An',
+  'ui.settings.value.off': 'Aus',
 
   'ui.settings.audio.master': 'Ois zsamm',
   'ui.settings.audio.music': 'Musi',
@@ -143,6 +149,7 @@ export const bar: Record<DictKey, string> = {
   'ui.settings.audio.voice': 'Stimm',
 
   'ui.settings.controls.action': 'Aktion',
+  'ui.settings.controls.rebindFor': 'Bleng für',
   'ui.settings.controls.keyboard': 'Tastatua',
   'ui.settings.controls.gamepad': 'Gamepad',
   'ui.settings.controls.connectedPrefix': 'Controller drau: ',

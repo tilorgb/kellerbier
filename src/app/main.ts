@@ -99,7 +99,7 @@ import { ScreenFlowController } from './screen-flow.js';
 import { RunSummaryTracker, buildRunDetailsText, runDetailsFrom } from './run-summary.js';
 import { buildReplayRecord, loadReplayFrames, saveReplay } from './replay/store.js';
 import { downloadReplayFile, parseReplayText } from './replay/file.js';
-import { createSettingsScreen, type SettingsScreenHandle } from './settings-screen.js';
+import { SettingsMenu } from './settings-menu.js';
 import { TelemetryTracker } from './telemetry/tracker.js';
 import {
   clearTelemetryRuns,
@@ -879,16 +879,6 @@ async function boot(): Promise<void> {
   // `GamepadMenuNav`'s doc comment for why one instance covers every
   // `Menu`-backed screen rather than one each.
   const menuNav = new GamepadMenuNav();
-  /**
-   * The DOM settings panel (#53) — created near the very end of `boot`,
-   * after an `await` the title/pause screens' own "Settings" button can in
-   * principle run ahead of (a dev build's debug-overlay import genuinely
-   * takes a few frames; a production build's is one microtask, but nothing
-   * here should rely on that being fast enough not to matter). `null` until
-   * then, so that button is a harmless no-op instead of a crash in the
-   * astronomically unlikely case it is clicked in that window.
-   */
-  let settingsHandle: SettingsScreenHandle | null = null;
   /**
    * The in-progress run's input log (#45). Reset by every `startRun`
    * (a restart abandons whatever was being recorded, the same as a fresh
@@ -2274,6 +2264,42 @@ async function boot(): Promise<void> {
     },
   });
 
+  // Built here rather than at the end of `boot` (where the DOM panel this
+  // replaced was): the settings screen is now one of the menus
+  // `ScreenFlowController` owns, so its content has to exist before that
+  // controller does. Everything it needs — the live `settings`/`preferences`
+  // objects, the pad, the telemetry store — already does.
+  const settingsMenu = new SettingsMenu({
+    settings,
+    preferences,
+    gamepad: input.gamepad,
+    // Called through a closure rather than passed directly: both live further
+    // down `boot`, after the `await` that mounts the debug overlay, and
+    // nothing can change a setting before a player has a screen to change it
+    // on.
+    onAccessibilityChange: () => {
+      applyAccessibilityChange();
+    },
+    onPreferencesChange: () => {
+      applyPreferencesChange();
+    },
+    telemetry: {
+      get: loadTelemetry,
+      optIn: () => {
+        optIntoTelemetry();
+      },
+      optOut: () => {
+        optOutOfTelemetry();
+      },
+      export: () => {
+        downloadTelemetryFile(loadTelemetry());
+      },
+      clear: () => {
+        clearTelemetryRuns();
+      },
+    },
+  });
+
   screenController = new ScreenFlowController({
     kit,
     locale: preferences.locale,
@@ -2281,9 +2307,7 @@ async function boot(): Promise<void> {
     gamepad: input.gamepad,
     menuNav,
     startNewRun: retryRun,
-    openSettings: () => {
-      settingsHandle?.open();
-    },
+    settingsMenu,
     playOpenSound: () => {
       playSfx('ui-open');
     },
@@ -2298,6 +2322,9 @@ async function boot(): Promise<void> {
   hudLayer.addChild(screenController.pause.view);
   hudLayer.addChild(screenController.credits.view);
   hudLayer.addChild(screenController.title.view);
+  // Over the title screen's own pane and over the pause menu's dim alike, so
+  // it is last of the four.
+  hudLayer.addChild(screenController.settings.view);
   // `layoutHud`'s own boot-time call already ran once, before this existed —
   // catch it up to the real frame size before the title screen (raised
   // further down, once `resumeActiveRun`/`startRun` have actually run) gets
@@ -3442,6 +3469,15 @@ WASD move   arrows aim and fire
     if (screenController.handleKeydown(event)) {
       return;
     }
+    // `Y` opens the settings from anywhere — the shortcut the DOM panel this
+    // screen replaced had, kept because a player's muscle memory (and every
+    // bug report that names it) still points at it. Mid-run it pauses first;
+    // see `ScreenFlowController.openSettings`.
+    if (event.code === 'KeyY') {
+      event.preventDefault();
+      screenController.openSettings();
+      return;
+    }
     // Replay playback (#48) swallows every key of its own before either of
     // the two switches below get a look — none of the hub's or the live
     // game's keys make sense over a run that is being watched, not played.
@@ -3927,51 +3963,11 @@ WASD move   arrows aim and fire
   applyPreferencesChange();
 
   /**
-   * Rebuilds the settings screen's whole DOM tree in the current locale —
-   * the only way to relabel it, since #52's Language tab lives inside it
-   * and every label was built once from plain-DOM `textContent`, not from a
-   * live binding. `settingsHandle` is `let` (see its declaration) exactly
-   * so `applyLocaleChange` can swap it out.
-   */
-  function buildSettingsScreen(
-    options: Parameters<typeof createSettingsScreen>[1] = {},
-  ): SettingsScreenHandle {
-    return createSettingsScreen(
-      {
-        settings,
-        preferences,
-        gamepad: input.gamepad,
-        getActiveDevice: () => input.activeDevice,
-        onAccessibilityChange: applyAccessibilityChange,
-        onPreferencesChange: applyPreferencesChange,
-        telemetry: {
-          get: loadTelemetry,
-          optIn: () => {
-            optIntoTelemetry();
-          },
-          optOut: () => {
-            optOutOfTelemetry();
-          },
-          export: () => {
-            downloadTelemetryFile(loadTelemetry());
-          },
-          clear: () => {
-            clearTelemetryRuns();
-          },
-        },
-      },
-      { placement: touchCapable ? 'top-center' : 'bottom-left', ...options },
-    );
-  }
-
-  /**
    * Relabels every locale-aware view in one pass, called once from
    * `applyPreferencesChange` the moment `preferences.locale` actually
-   * changes. The settings screen itself is plain DOM built once from
-   * `textContent` (`app/settings-screen.ts`), so it cannot be relabelled in
-   * place the way the pixel-font screens below are — it is destroyed and
-   * rebuilt instead, reopened on the Language tab it was just changed from
-   * so the player doesn't lose their place.
+   * changes. The settings screen is one of `screenController`'s own menus
+   * (#321) — its `setLocale` rebuilds `settingsMenu`'s rows and hands the
+   * fresh labels straight to the canvas screen, no DOM tree to tear down.
    */
   function applyLocaleChange(): void {
     const locale = preferences.locale;
@@ -3996,9 +3992,6 @@ WASD move   arrows aim and fire
     // of the room-plan-derived view layers — cheap and idempotent, the same
     // call a room change or a secret reveal already makes.
     syncFloorPlanView();
-    const wasOpen = settingsHandle !== null;
-    settingsHandle?.destroy();
-    settingsHandle = buildSettingsScreen({ initialOpen: wasOpen, initialTab: 'language' });
   }
 
   overlay = await mountDebugOverlay(sim, view, app, uiLayer, () => layout.scale);
@@ -4051,13 +4044,6 @@ WASD move   arrows aim and fire
       },
     },
   );
-  // Not gated behind `import.meta.env.DEV` like `mountDebugOverlay` above —
-  // this is the player-facing half of #33/#53, so it has to ship in a
-  // production build. Moved to top-centre on touch: `touch-controls.ts`
-  // already claims all four corners (move/aim sticks bottom-left/right,
-  // map/pause top-left/right), so bottom-left — this panel's normal spot —
-  // would sit right under the move stick.
-  settingsHandle = buildSettingsScreen();
 }
 
 /**

@@ -29,6 +29,9 @@ export const en = {
   'ui.title.settings': 'Settings',
   'ui.title.credits': 'Credits',
   'ui.title.quit': 'Quit',
+  // The full-screen title screen's own footer (#321) — the centred menu's
+  // old tagline had no locale to worry about; this one does.
+  'ui.title.tagline': 'A Bavarian cellar-crawling roguelike',
 
   'ui.pause.headline': 'Paused',
   'ui.pause.resume': 'Resume',
@@ -124,6 +127,10 @@ export const en = {
   // --- Settings screen -----------------------------------------------------
   'ui.settings.toggle': 'settings',
   'ui.settings.title': 'Settings',
+  // The canvas settings screen's own footer (#321) — the DOM panel it
+  // replaced needed no such line; a gamepad's controls aren't self-evident
+  // the way a mouse over a `<input type="range">` is.
+  'ui.settings.hint': 'Left/Right change   Enter select   Tab switches tabs   Esc back',
 
   'ui.settings.tab.video': 'Video',
   'ui.settings.tab.audio': 'Audio',
@@ -135,10 +142,17 @@ export const en = {
   'ui.settings.video.windowScale': 'Window scale',
   'ui.settings.video.auto': 'Auto',
   'ui.settings.video.toggleFullscreen': 'Toggle fullscreen',
+  'ui.settings.video.fullscreen': 'Fullscreen',
   'ui.settings.video.screenshake': 'Screenshake',
   'ui.settings.video.camerasway': 'Camera sway',
   'ui.settings.video.hitstop': 'Hitstop',
   'ui.settings.video.reduceFlashing': 'Reduce flashing',
+
+  // Generic on/off, for a row whose value is just that (#321's canvas
+  // "Fullscreen" row, a toggle row's own right-hand readout) — distinct from
+  // `slowModeOff` above, which is a specific option's own label.
+  'ui.settings.value.on': 'On',
+  'ui.settings.value.off': 'Off',
 
   'ui.settings.audio.master': 'Master',
   'ui.settings.audio.music': 'Music',
@@ -146,6 +160,7 @@ export const en = {
   'ui.settings.audio.voice': 'Voice',
 
   'ui.settings.controls.action': 'Action',
+  'ui.settings.controls.rebindFor': 'Rebind for',
   'ui.settings.controls.keyboard': 'Keyboard',
   'ui.settings.controls.gamepad': 'Gamepad',
   'ui.settings.controls.connectedPrefix': 'Controller connected: ',

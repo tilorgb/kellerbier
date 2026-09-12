@@ -2,11 +2,13 @@ import type { UiKit } from '../render/ui/kit.js';
 import type { MenuScreen } from '../render/ui/menu.js';
 import { CreditsScreen } from '../render/credits-screen.js';
 import { PauseScreen } from '../render/pause-screen.js';
+import { SettingsScreen } from '../render/settings-screen.js';
 import { TitleScreen } from '../render/title-screen.js';
 import type { Locale } from '../i18n/locale.js';
 import type { GamepadMenuNav } from './input/menu-nav.js';
 import type { GamepadSource } from './input/gamepad.js';
 import type { FixedTimestepLoop } from './loop.js';
+import type { SettingsMenu } from './settings-menu.js';
 
 /**
  * The top-level screens a player moves through (#158): the title screen,
@@ -22,7 +24,7 @@ import type { FixedTimestepLoop } from './loop.js';
  * is still looking at the run, on the screen it ends on. See
  * `docs/DECISIONS.md` #67 for the full reasoning.
  */
-export type Screen = 'title' | 'run' | 'paused' | 'credits';
+export type Screen = 'title' | 'run' | 'paused' | 'credits' | 'settings';
 
 export class ScreenFlow {
   private screen: Screen = 'title';
@@ -49,7 +51,12 @@ export interface ScreenFlowControllerDeps {
   readonly menuNav: GamepadMenuNav;
   /** A fresh random-seed run — the same primitive the global `R` key and the game-over/victory screens' own "Retry" call. */
   readonly startNewRun: () => void;
-  readonly openSettings: () => void;
+  /**
+   * The settings themselves — what the tabs are, and the rebind capture that
+   * swallows input while it is armed. `render/` never sees this; the screen
+   * gets `tabs`, and this controller asks the rest of it who input belongs to.
+   */
+  readonly settingsMenu: SettingsMenu;
   readonly playOpenSound: () => void;
   readonly playCloseSound: () => void;
 }
@@ -67,10 +74,15 @@ export class ScreenFlowController {
   readonly title: TitleScreen;
   readonly pause: PauseScreen;
   readonly credits: CreditsScreen;
+  readonly settings: SettingsScreen;
 
   private readonly flow = new ScreenFlow();
   private readonly deps: ScreenFlowControllerDeps;
   private canContinueFlag = false;
+  /** Which screen Settings was opened from, and therefore what closing it goes back to. */
+  private settingsOrigin: 'title' | 'paused' = 'title';
+  private width = 0;
+  private height = 0;
 
   constructor(deps: ScreenFlowControllerDeps) {
     this.deps = deps;
@@ -84,7 +96,7 @@ export class ScreenFlowController {
           this.continueFromTitle();
         },
         onSettings: () => {
-          deps.openSettings();
+          this.openSettings();
         },
         onCredits: () => {
           this.openCredits();
@@ -106,7 +118,7 @@ export class ScreenFlowController {
           this.closePause();
         },
         onSettings: () => {
-          deps.openSettings();
+          this.openSettings();
         },
         onQuitToTitle: () => {
           this.quitToTitle();
@@ -123,13 +135,25 @@ export class ScreenFlowController {
       },
       deps.locale,
     );
+    this.settings = new SettingsScreen(
+      deps.kit,
+      deps.settingsMenu.tabs,
+      {
+        onClose: () => {
+          this.closeSettings();
+        },
+      },
+      deps.locale,
+    );
   }
 
-  /** Rebuilds every title/pause/credits label in `locale` — call whenever the player changes the language. */
+  /** Rebuilds every title/pause/credits/settings label in `locale` — call whenever the player changes the language. */
   setLocale(locale: Locale): void {
     this.title.setLocale(locale);
     this.pause.setLocale(locale);
     this.credits.setLocale(locale);
+    this.deps.settingsMenu.setLocale(locale);
+    this.settings.setLocale(locale, this.deps.settingsMenu.tabs);
   }
 
   get current(): Screen {
@@ -142,9 +166,12 @@ export class ScreenFlowController {
 
   /** Call on every resize. Dimensions in UI pixels. */
   resize(width: number, height: number): void {
+    this.width = width;
+    this.height = height;
     this.title.resize(width, height);
     this.pause.resize(width, height);
     this.credits.resize(width, height);
+    this.placeSettings();
   }
 
   /** Marks the flow as being in a run — `main.ts`'s `retryRun` calls this right before `startRun`. */
@@ -166,6 +193,8 @@ export class ScreenFlowController {
     this.deps.loop.paused = true;
     this.canContinueFlag = continuable;
     this.pause.hide();
+    this.settings.hide();
+    this.title.setSettingsOpen(false);
     this.title.show();
   }
 
@@ -200,6 +229,82 @@ export class ScreenFlowController {
     this.pause.hide();
     this.deps.loop.paused = false;
     this.deps.playCloseSound();
+  }
+
+  /**
+   * Settings, from wherever it was asked for.
+   *
+   * From the title screen it takes the right pane — the name and poster step
+   * aside and the menu column stays put, so the screen does not jump and the
+   * player can see what they came from. Over a paused run there is no pane to
+   * take, so it is a panel in the middle with its own dim, and the pause list
+   * goes away underneath it rather than showing round the edges.
+   */
+  openSettings(): void {
+    if (this.flow.is('settings')) {
+      return;
+    }
+    // Asked for mid-run (the `Y` shortcut): pause first, so the run is
+    // actually stopped while the settings are open and closing them lands on
+    // the pause menu rather than dropping the player straight back into a
+    // fight they had stepped away from.
+    if (this.flow.is('run')) {
+      this.openPause();
+    }
+    this.settingsOrigin = this.flow.is('paused') ? 'paused' : 'title';
+    if (this.settingsOrigin === 'paused') {
+      this.pause.hide();
+    } else {
+      this.title.setSettingsOpen(true);
+    }
+    this.flow.goTo('settings');
+    this.settings.show();
+    this.placeSettings();
+    this.deps.playOpenSound();
+  }
+
+  closeSettings(): void {
+    if (!this.flow.is('settings')) {
+      return;
+    }
+    this.deps.settingsMenu.cancelCapture();
+    this.settings.hide();
+    if (this.settingsOrigin === 'paused') {
+      this.flow.goTo('paused');
+      this.pause.show();
+    } else {
+      this.flow.goTo('title');
+      this.title.setSettingsOpen(false);
+    }
+    this.deps.playCloseSound();
+  }
+
+  /**
+   * The settings panel's box, in UI pixels.
+   *
+   * On the title screen the geometry belongs to `TitleScreen` — it is that
+   * screen's own right pane — so this asks rather than recomputing it. Over a
+   * paused run it is a centred panel, capped so it stays a panel on a large
+   * frame and shrinks to the margins on a small one.
+   */
+  private placeSettings(): void {
+    if (this.width <= 0 || this.height <= 0) {
+      return;
+    }
+    if (this.settingsOrigin === 'title') {
+      const pane = this.title.contentBox();
+      this.settings.place(pane.x, pane.y, pane.width, pane.height, false);
+      return;
+    }
+    const width = Math.min(this.width - 48, 400);
+    const height = Math.min(this.height - 32, 300);
+    this.settings.place(
+      Math.round((this.width - width) / 2),
+      Math.round((this.height - height) / 2),
+      width,
+      height,
+      true,
+    );
   }
 
   private openCredits(): void {
@@ -237,6 +342,8 @@ export class ScreenFlowController {
         return this.pause;
       case 'credits':
         return this.credits;
+      case 'settings':
+        return this.settings;
       case 'run':
         return null;
     }
@@ -251,6 +358,14 @@ export class ScreenFlowController {
     if (this.flow.is('run')) {
       return false;
     }
+    // A rebind row that is waiting for an input owns every key until it has
+    // one — including the arrows and Escape, which are perfectly reasonable
+    // things to bind and would otherwise navigate the menu instead.
+    if (this.flow.is('settings') && this.deps.settingsMenu.handleKeydown(event)) {
+      this.settings.refresh();
+      event.preventDefault();
+      return true;
+    }
     const menuScreen = this.currentMenuScreen();
     switch (event.key) {
       case 'ArrowUp':
@@ -263,6 +378,27 @@ export class ScreenFlowController {
       case 'S':
         menuScreen?.moveFocus(1);
         break;
+      case 'ArrowLeft':
+      case 'a':
+      case 'A':
+        this.adjustSettings(-1);
+        break;
+      case 'ArrowRight':
+      case 'd':
+      case 'D':
+        this.adjustSettings(1);
+        break;
+      case 'Tab':
+        this.cycleSettingsTab(event.shiftKey ? -1 : 1);
+        break;
+      case 'q':
+      case 'Q':
+        this.cycleSettingsTab(-1);
+        break;
+      case 'e':
+      case 'E':
+        this.cycleSettingsTab(1);
+        break;
       case 'Enter':
       case ' ':
         menuScreen?.activate();
@@ -272,6 +408,8 @@ export class ScreenFlowController {
           this.closePause();
         } else if (this.flow.is('credits')) {
           this.closeCredits();
+        } else if (this.flow.is('settings')) {
+          this.closeSettings();
         }
         break;
       default:
@@ -292,6 +430,15 @@ export class ScreenFlowController {
     if (this.flow.is('run')) {
       return false;
     }
+    // Same rule as `handleKeydown`: while a rebind is armed the pad belongs to
+    // the capture, and the button that takes the binding must not also press
+    // the row it was taken on.
+    if (this.flow.is('settings') && this.deps.settingsMenu.capturing) {
+      if (this.deps.settingsMenu.poll()) {
+        this.settings.refresh();
+      }
+      return true;
+    }
     const edges = this.deps.menuNav.poll(this.deps.gamepad);
     const menuScreen = this.currentMenuScreen();
     if (edges.up) {
@@ -299,6 +446,18 @@ export class ScreenFlowController {
     }
     if (edges.down) {
       menuScreen?.moveFocus(1);
+    }
+    if (edges.left) {
+      this.adjustSettings(-1);
+    }
+    if (edges.right) {
+      this.adjustSettings(1);
+    }
+    if (edges.prevTab) {
+      this.cycleSettingsTab(-1);
+    }
+    if (edges.nextTab) {
+      this.cycleSettingsTab(1);
     }
     if (edges.confirm) {
       menuScreen?.activate();
@@ -308,8 +467,23 @@ export class ScreenFlowController {
         this.closePause();
       } else if (this.flow.is('credits')) {
         this.closeCredits();
+      } else if (this.flow.is('settings')) {
+        this.closeSettings();
       }
     }
     return true;
+  }
+
+  /** Left/right, which only the settings screen has anything to do with. */
+  private adjustSettings(delta: 1 | -1): void {
+    if (this.flow.is('settings')) {
+      this.settings.adjust(delta);
+    }
+  }
+
+  private cycleSettingsTab(delta: 1 | -1): void {
+    if (this.flow.is('settings')) {
+      this.settings.cycleTab(delta);
+    }
   }
 }

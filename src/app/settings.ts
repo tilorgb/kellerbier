@@ -29,7 +29,7 @@ import { loadSave, updateSave } from './save/storage.js';
  */
 export interface AccessibilitySettings {
   /**
-   * 0 (silent) to 1 (full) — `app/settings-screen.ts`'s slider is 0-100%,
+   * 0 (silent) to 1 (full) — `app/settings-menu.ts`'s slider is 0-100%,
    * stored here as a fraction so it plugs straight into `GameSim.swayScale`.
    * 0 must produce a literally-zero camera offset, not merely a small one —
    * `GameSim.swayScale`'s own doc comment, and `promille.test.ts`, are what
