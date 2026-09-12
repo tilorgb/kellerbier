@@ -36,7 +36,11 @@
   ],
   "pickupSpawns": [],
   "hazards": [],
-  "decorativeProps": [{ "x": 224, "y": 72, "type": "barrel" }],
+  "decorativeProps": [
+    { "x": 224, "y": 72, "type": "barrel" },
+    { "x": 16, "y": 104, "type": "crate-opa" },
+    { "x": 48, "y": 104, "type": "crate-neu" }
+  ],
   "metadata": {
     "floorTags": ["cellar", "rural"],
     "shape": "1x1",

@@ -39,7 +39,8 @@ export const de: Record<DictKey, string> = {
   'ui.gameOver.summary': '{seconds}s überlebt   {kills} getötet   {floor}',
 
   'ui.victory.headline': 'Sieg!',
-  'ui.victory.epilogue': 'Fortsetzung folgt.',
+  'ui.victory.epilogue':
+    'Der Stier fällt. Draußen rollt ein beladener Lieferwagen vom Marktplatz — Richtung Süden.\nDieses Kapitel ist vorbei. Der Weg geht weiter.',
   'ui.victory.retry': 'Nochmal',
   'ui.victory.results': 'Ergebnisse',
   'ui.victory.hub': 'Titel',

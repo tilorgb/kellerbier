@@ -51,7 +51,8 @@
       "hazards": [],
       "decorativeProps": [
         { "x": 192, "y": 32, "type": "crate-stack" },
-        { "x": 208, "y": 48, "type": "crate-opa" }
+        { "x": 208, "y": 48, "type": "crate-opa" },
+        { "x": 176, "y": 64, "type": "crate-neu" }
       ]
     },
     {
