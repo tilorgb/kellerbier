@@ -62,8 +62,18 @@ import {
  * this project (`AccessibilitySettings`'s own doc comment) — a fresh
  * install, or a save from before this field existed, collects nothing until
  * a player explicitly turns it on.
+ *
+ * v8 (#58) adds `seenStoryBeats`: which one-time story cards (the opening,
+ * so far) this save has already been shown. A story beat has to persist
+ * across every future `retryRun` — the same function fires on "Neues Spiel"
+ * and on every death's "Retry" alike (`app/main.ts`'s `retryRun`), so nothing
+ * in memory distinguishes a player's very first run from their five
+ * hundredth. Kept as an id list, the same shape `unlocks` already is, rather
+ * than a single `hasSeenOpening: boolean` — the chapter-two ending and any
+ * later one-time beat get to reuse this store instead of each growing their
+ * own flag.
  */
-export const SAVE_SCHEMA_VERSION = 7;
+export const SAVE_SCHEMA_VERSION = 8;
 
 /**
  * The character a save with no opinion starts as (#47).
@@ -296,8 +306,14 @@ export interface SaveDataV7 extends Omit<SaveDataV6, 'schemaVersion'> {
   readonly telemetry: TelemetryStore;
 }
 
-/** The current schema version. A union the day a v8 lands and something still reads a v7. */
-export type SaveData = SaveDataV7;
+/** v8 (#58): `seenStoryBeats` — see `SAVE_SCHEMA_VERSION`'s own doc comment above. */
+export interface SaveDataV8 extends Omit<SaveDataV7, 'schemaVersion'> {
+  readonly schemaVersion: 8;
+  readonly seenStoryBeats: readonly string[];
+}
+
+/** The current schema version. A union the day a v9 lands and something still reads a v8. */
+export type SaveData = SaveDataV8;
 
 /** How many `bestRuns` entries a finished run keeps — see `app/meta/progress.ts`'s `withRunOutcome`. */
 export const MAX_BEST_RUNS = 10;
@@ -320,6 +336,7 @@ export function createDefaultSave(): SaveData {
     selectedCharacter: DEFAULT_CHARACTER_ID,
     preferences: createDefaultPreferences(),
     telemetry: createDefaultTelemetryStore(),
+    seenStoryBeats: [],
   };
 }
 
@@ -524,5 +541,6 @@ export function sanitizeSave(value: unknown): SaveData {
         : DEFAULT_CHARACTER_ID,
     preferences: sanitizePreferences(source.preferences),
     telemetry: sanitizeTelemetryStore(source.telemetry),
+    seenStoryBeats: sanitizeStringArray(source.seenStoryBeats),
   };
 }

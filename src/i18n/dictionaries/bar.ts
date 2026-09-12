@@ -96,6 +96,12 @@ export const bar: Record<DictKey, string> = {
   'ui.floorTitleCard.floorLabel': '{ordinal} Stock',
   'ui.floorTitleCard.xlBadge': 'A ungwöhnli grousa Stock.',
 
+  // --- Story cards (#58) -----------------------------------------
+  // NOT reviewed by a native speaker — flagged for a real Boarisch pass.
+  'ui.storyCard.skipHint': 'Drucka zum Iwaspringa',
+  'ui.story.opening':
+    "Opas letzts Pfeitinger is leer. De volle Kistn daneb is 's gleiche Bier, aba's Etikett is neu: Wasser, Malz, Hopfn — und Rosinen.\n\nDer Alois nimmt eahm sein Trink-Rucksack vom Hakn, füllt eahm mit der versautn Kistn und stellt'n vo trinkn auf schiaßn.",
+
   // --- HUD -----------------------------------------------------
   'ui.hud.bossBanner': 'Bossraum',
   'ui.hud.useHint': '[Aktion]',
