@@ -114,13 +114,17 @@ describe('the localisation layer (#52)', () => {
     for (const floor of FLOOR_CONFIGS) {
       referenced.add(floor.flavour);
     }
-    // Boss intro plate (#58/#327) — most enemies have neither key yet.
+    // Boss intro plate (#58/#327) and villager one-liners (#58/#330) — most
+    // enemies have none of these keys yet.
     for (const enemy of ENEMY_DEFINITIONS) {
       if (enemy.title !== undefined) {
         referenced.add(enemy.title);
       }
       if (enemy.epithet !== undefined) {
         referenced.add(enemy.epithet);
+      }
+      if (enemy.line !== undefined) {
+        referenced.add(enemy.line);
       }
     }
 

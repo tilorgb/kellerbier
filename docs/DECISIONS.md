@@ -5349,3 +5349,52 @@ entirely) rather than silently dropped or improvised without design review — `
 and `GAME_DESIGN.md` §2 are explicit enough about the *tone* of these lines ("not written as fools
 or as victims") that inventing the delivery mechanism under a code-only pass would risk getting
 both the mechanism and the tone wrong at once.
+
+## 97. The villager one-liner gets its attachment point after all: an enemy's own `line`, toasted the first time its id is seen
+
+**Decided:** #330, following straight on from #96 above.
+
+**The gap #96 flagged gets a mechanism, not just a tracking issue.** On reflection the "small
+in-room NPC-speech-bubble system" #96 deferred was smaller than it first looked, because two
+pieces of it already existed and only needed connecting: `EnemyDefinition` already had a slot for
+optional, render-layer-only presentational text (`title`/`epithet`, #327's boss intro plate), and
+`TextPlate` already was the "a message the player has half a second to read, over any floor's
+background" primitive (`pickupToast`, the pedestal reveal, the shop preview). `EnemyDefinition`
+gains a third such field, `line` — a villager's one-liner, `bauer` (Floor 2's plainest "a person
+from the village" body) the first and so far only carrier of it — shown in a `TextPlate` toast the
+first time that enemy id is spawned in a run.
+
+**Neutral ids in the sim, content resolved in the render layer — the same split `bossDefinition`/
+`enemyDefinitionById` draw, for the same reason.** `GameSim.newlyEncounteredEnemyIds` reports which
+enemy ids `loadRoom` just introduced for the first time this run; it has no way to know which one,
+if any, actually has a `line` to show, because `CompiledEnemy` — the only shape the sim's own enemy
+registry carries — is deliberately stripped of presentation-only fields (the `TS2741` that
+surfaced this exact boundary while building #327). `main.ts` resolves the ids back through
+`enemyDefinitionById` and picks the first that actually has a line, so a room that introduces
+several new ids at once (a real case: two different enemy types can share a room) never has one
+undecorated id blank out a decorated one sitting next to it in the same batch.
+
+**Ticked down in the sim, not timed on a wall clock — deliberately the opposite choice from the
+boss intro plate.** `GameSim.newEnemyTicks` counts down the same way `toastTicks` does, and for the
+same stated reason (`toastTicks`'s own doc comment): a replay has to show the same toast for the
+same duration, not whatever a `setTimeout` on the machine replaying it happens to produce.
+`BossIntroPlate`'s `BOSS_PLATE_MS` wall-clock timer was the right call *there* specifically because
+nothing about a boss room's fairness depended on it (the boss stays fully visible throughout
+either way) — that argument does not carry over to an ordinary room's toast, so this reaches for
+the more common, more conservative pattern instead of repeating the newer one by default.
+
+**Excluded from boss and mini-boss rooms at the sim level**, even though nothing in the roster
+today would actually collide (no boss or mini-boss carries a `line`): `BossIntroPlate` already owns
+the moment those rooms present themselves, and building the exclusion into `loadRoom` rather than
+trusting future content to never cross the streams is the same "correct by construction, not by
+accident" instinct the rest of this codebase's content-validation culture already asks for.
+
+**The English and German lines are real; the Boarisch one is the German line, verbatim, on
+purpose.** `docs/CONTENT_BIBLE.md` §0's tone rule is written into the line itself — Bauer
+genuinely prefers the new Pfeitinger ("New batch's smoother, if you ask me" / "Die neue Charge ist
+milder, wenn du mich fragst"), not written as a fool or a victim, and the raisin itself is never
+named or explained. The Bavarian entry is left as the German text rather than a guessed dialect
+rendering: this project's standing rule is that Bavarian and German phrasing is the project
+owner's to pitch, not an agent's to invent, even when an earlier pass in this same codebase
+(`enemies.der-stier.title`/`epithet`, #327/#328) did draft dialect text with a "not reviewed by a
+native speaker" flag instead. Consistency with the stricter reading was chosen deliberately here.

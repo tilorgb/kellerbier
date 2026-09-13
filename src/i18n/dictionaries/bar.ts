@@ -256,6 +256,10 @@ export const bar: Record<DictKey, string> = {
   'enemies.der-stier.title': 'Hüata vom Maibam',
   'enemies.der-stier.epithet':
     'Zwoa Hörndln, oa Meinung: Da Maibam bleibt precise do, wo er steht.',
+  // Villager one-liner (#58/#330) — the German line, verbatim, until the real
+  // Boarisch phrasing is pitched. Left plain rather than guessed at dialect,
+  // per this project's "the user names/phrases things" rule.
+  'enemies.bauer.line': 'Die neue Charge ist milder, wenn du mich fragst.',
 
   // --- Items (name stays Bavarian in every locale) -----------------------
   'items.almabtrieb.description':

@@ -250,6 +250,8 @@ export const de: Record<DictKey, string> = {
   'enemies.der-stier.title': 'Wächter des Maibaums',
   'enemies.der-stier.epithet':
     'Zwei Hörner, eine Meinung: Der Maibaum bleibt genau da, wo er steht.',
+  // Villager one-liner (#58/#330) — draft, pending sign-off.
+  'enemies.bauer.line': 'Die neue Charge ist milder, wenn du mich fragst.',
 
   // --- Items (name stays Bavarian in every locale) -----------------------
   'items.almabtrieb.description':

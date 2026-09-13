@@ -544,6 +544,16 @@ export interface EnemyDefinition {
    * rather than the display one.
    */
   readonly epithet?: string;
+  /**
+   * A localisation key (`enemies.<id>.line`), same convention as `title`
+   * above — a villager's one-liner (#58/#330), shown in a `TextPlate` toast
+   * the first time this enemy type is encountered in a run. Unset for
+   * everything without one; only an enemy standing in for an ordinary
+   * Oberniederburg resident (`bauer`, today) carries it. `docs/CONTENT_BIBLE.md`
+   * §0's tone rule applies directly: an NPC who genuinely prefers the new
+   * Pfeitinger, not written as a fool or a victim.
+   */
+  readonly line?: string;
   /** The `name` of the state it spawns in. */
   readonly initial: string;
   readonly states: readonly EnemyState[];

@@ -264,6 +264,8 @@ export const en = {
   // Boss intro plate (#58/#327) — draft, pending sign-off.
   'enemies.der-stier.title': 'Guardian of the Maypole',
   'enemies.der-stier.epithet': 'Two horns, one grudge: the maypole stays exactly where it is.',
+  // Villager one-liner (#58/#330) — draft, pending sign-off.
+  'enemies.bauer.line': "New batch's smoother, if you ask me.",
 
   // --- Items (name stays Bavarian in every locale) -----------------------
   'items.almabtrieb.description':
