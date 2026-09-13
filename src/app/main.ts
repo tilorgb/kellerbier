@@ -1,5 +1,5 @@
 import { Container, loadTexture } from '../render/gfx/index.js';
-import titleBackdropUrl from '../../assets/art/title/backdrop.png';
+import titlePostcardUrl from '../../assets/art/title/postcard.png';
 import openingCardArtUrl from '../../assets/art/story/opening.png';
 import { ENEMY_DEFINITIONS, enemyDefinitionById } from '../content/enemies/index.js';
 import {
@@ -2423,18 +2423,19 @@ async function boot(): Promise<void> {
   // `INTERNAL_HEIGHT` guess.
   screenController.resize(uiFrame.width, uiFrame.height);
 
-  // Swaps the procedural block poster for the real illustrated backdrop once
-  // it loads (#322) — never blocks boot on it. A failed/slow fetch just
-  // leaves the procedural poster up, the same graceful-degradation shape
+  // Swaps a real illustration into the title postcard once it loads — never
+  // blocks boot on it. The wallpaper and the postcard's own frame are up
+  // from the first frame either way; a failed/slow fetch just leaves the
+  // postcard's picture empty, the same graceful-degradation shape
   // `docs/DECISIONS.md` #19 asks for a content gap, applied to an asset
   // fetch instead.
-  loadTexture(titleBackdropUrl)
+  loadTexture(titlePostcardUrl)
     .then((texture) => {
-      screenController.title.setPoster(texture);
+      screenController.title.setPostcardArt(texture);
     })
     .catch((err: unknown) => {
       if (import.meta.env.DEV) {
-        console.warn('title backdrop failed to load, keeping the procedural poster', err);
+        console.warn('title postcard art failed to load, keeping the empty frame', err);
       }
     });
 

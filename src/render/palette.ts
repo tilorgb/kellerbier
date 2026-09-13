@@ -437,6 +437,8 @@ export const TITLE_PALETTE = {
   cardEdge: 0x14100c,
   /** The line of flavour under a floor's name. */
   cardSubtitle: 0xb8ac9c,
+  /** The title screen's wallpaper motif, one notch lighter than `cardBackdrop` — quiet enough to sit behind a postcard. */
+  ornamentTone: 0x241a12,
 } as const;
 
 /** The colour behind everything — cellar dark, not black (`render/app.ts`). */

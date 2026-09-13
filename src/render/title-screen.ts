@@ -1,13 +1,13 @@
-import { Container, Graphics, Sprite, type BitmapText, type Texture } from './gfx/index.js';
+import { Container, Sprite, type BitmapText, type Texture } from './gfx/index.js';
 import type { Locale } from '../i18n/locale.js';
 import { t } from '../i18n/translate.js';
-import { TITLE_PALETTE, UI_PALETTE } from './palette.js';
+import { UI_PALETTE } from './palette.js';
 import type { UiKit } from './ui/kit.js';
-import { keyArtHeight, keyArtTexture, keyArtWidth, type KeyArt } from './ui/key-art.js';
-import { TITLE_KEY_ART } from './ui/title-key-art.js';
+import { ornamentTexture } from './ui/ornament.js';
 import { Menu, type MenuItem, type MenuScreen } from './ui/menu.js';
 import { UI_LINE_HEIGHT, uiText, uiTextWidth } from './ui/text.js';
 import { DisplayTitle, TITLE_STYLES } from './ui/title.js';
+import { Postcard } from './postcard.js';
 
 /** How much bigger than its authored size the name is drawn, when there is room for it. */
 const HEADLINE_SCALE = 2;
@@ -17,8 +17,14 @@ const MARGIN = 24;
 const COLUMN_GAP = 24;
 const MENU_MIN_WIDTH = 148;
 const GAP_UNDER_HEADLINE = 12;
-/** Below this the right pane is not worth drawing a poster into, and the layout centres instead. */
-const MIN_PANE_WIDTH = 200;
+/**
+ * Width-to-height ratio the title postcard's own box is laid out at,
+ * matching `assets/art/title/postcard.png`'s native 832×1216 — `Postcard`
+ * contain-fits whatever it is actually given, so a different-aspect
+ * replacement still renders correctly, just with a little more or less
+ * letterboxing inside the frame.
+ */
+const POSTCARD_ASPECT = 832 / 1216;
 
 export interface TitleScreenActions {
   readonly onStart: () => void;
@@ -28,11 +34,6 @@ export interface TitleScreenActions {
   readonly onQuit: () => void;
   /** Re-checked on every `show()` — whether a save exists to resume into. */
   readonly canContinue: () => boolean;
-}
-
-export interface TitleScreenOptions {
-  /** Overridable so a specimen tool or a test can draw the layout without the real poster. */
-  readonly keyArt?: KeyArt;
 }
 
 /**
@@ -48,44 +49,52 @@ export interface TitleScreenOptions {
  * it can, so it stays centred, small and translucent; the title screen has no
  * run behind it to respect and should fill the frame.
  *
- * So the two diverge deliberately. This is opaque, edge to edge, and split:
- * the choices down the left in the display face (`docs/DECISIONS.md` #44 —
- * nothing is shooting at anyone here), the game's name and its poster filling
- * everything to the right. `PauseScreen` keeps the centred dim it always had.
+ * So the two diverge deliberately. This is opaque, edge to edge, and laid
+ * out in two columns — the choices down the left in the display face
+ * (`docs/DECISIONS.md` #44 — nothing is shooting at anyone here), the game's
+ * name and its postcard to the right — but the same wallpaper runs under
+ * both columns with nothing drawn between them. An earlier pass darkened the
+ * menu column with its own scrim and a hard rule at the seam, which read as
+ * two panels glued together rather than one scene; dropping that is what
+ * makes the choices feel like they are standing on the same postcard-covered
+ * table as the picture beside them, not boxed off from it.
+ *
+ * ## A wallpaper and a postcard, not a full-bleed photo
+ *
+ * The screen used to swap a procedural poster for one full-bleed illustrated
+ * backdrop once a real PNG loaded (#322) — the whole frame became the
+ * picture. That is retired: the background is now `ornamentTexture`'s
+ * Rautenmuster, drawn at boot and never anything else, and the game's own
+ * motif sits in a discrete `Postcard` in the right pane instead of stretched
+ * behind everything. The same postcard object is what `StoryCard` puts a
+ * story beat's illustration inside — the title screen, the opening, and any
+ * future chapter card are one physical object with a different picture in
+ * it, not three different treatments.
+ *
+ * `setPostcardArt` is the one asset swap left: the postcard's frame and the
+ * wallpaper behind it are both up from the very first frame (one is a
+ * repeating pattern, the other has no picture in it yet), and a real
+ * illustration fades into the card once it loads — the same
+ * never-block-boot-on-it shape `docs/DECISIONS.md` #19 asks for a content
+ * gap, applied to an asset fetch instead.
  *
  * ## The right pane is a pane, not a picture
  *
  * Opening Settings from here does not put a dialog over the screen — it hands
- * the right pane to `SettingsScreen`, and the name and poster step aside for
+ * the right pane to `SettingsScreen`, and the name and postcard step aside for
  * as long as it is up. The menu column stays exactly where it was, so the
  * screen never jumps and there is never a question about what the Escape key
  * goes back to. `contentBox` is the seam: this screen owns the geometry and
  * hands the rectangle out; `ScreenFlowController` puts the settings panel in
  * it.
- *
- * ## The poster has two tiers, loaded and swapped, never blocked on
- *
- * `TITLE_KEY_ART`'s procedural block poster is drawn from the very first
- * frame — it is data, not an asset fetch, so it can never be "still loading."
- * `setPoster` (issue #322) is a later, optional upgrade: once a real
- * illustrated PNG (generated through the local SDXL key-art pipeline,
- * `docs/DECISIONS.md` #94) finishes loading, `app/main.ts` swaps it in and the
- * layout switches from "small poster stacked under the headline in the pane"
- * to "one full-bleed illustration behind the whole frame, headline overlaid
- * near the top, the menu column backed by a translucent scrim instead of a
- * flat fill" — the composition the reference key art actually uses. If the
- * load fails or is slow, the procedural poster keeps the screen usable in the
- * meantime — the same graceful-degradation shape `docs/DECISIONS.md` #19 asks
- * for content gaps, applied to an asset fetch instead.
  */
 export class TitleScreen implements MenuScreen {
   readonly view = new Container();
 
   private readonly actions: TitleScreenActions;
-  private readonly background: Graphics;
+  private readonly wallpaper = new Sprite();
   private readonly headline: DisplayTitle;
-  private readonly art: Sprite;
-  private readonly artScale: number;
+  private readonly postcard = new Postcard();
   private readonly footer: BitmapText;
   private readonly menu: Menu;
   private width = 0;
@@ -93,25 +102,14 @@ export class TitleScreen implements MenuScreen {
   private headlineScale = HEADLINE_SCALE;
   private settingsOpen = false;
   private pane = { x: 0, y: 0, width: 0, height: 0 };
-  private hasRealPoster = false;
+  private wallpaperWidth = -1;
+  private wallpaperHeight = -1;
 
-  constructor(
-    kit: UiKit,
-    actions: TitleScreenActions,
-    locale: Locale,
-    options: TitleScreenOptions = {},
-  ) {
+  constructor(kit: UiKit, actions: TitleScreenActions, locale: Locale) {
     this.actions = actions;
     this.view.visible = false;
 
-    this.background = new Graphics();
-    this.view.addChild(this.background);
-
-    const keyArt = options.keyArt ?? TITLE_KEY_ART;
-    this.artScale = keyArt.scale;
-    this.art = new Sprite(keyArtTexture(keyArt));
-    this.art.scale.set(this.artScale);
-    this.view.addChild(this.art);
+    this.view.addChild(this.wallpaper);
 
     // `title.ts`'s own doc comment names `TITLE_STYLES.floor` for "the game's
     // own name" alongside a floor's intro card — this is that name. The
@@ -120,6 +118,8 @@ export class TitleScreen implements MenuScreen {
     this.headline = new DisplayTitle(TITLE_STYLES.floor);
     this.headline.set('Kellerbier');
     this.view.addChild(this.headline.view);
+
+    this.view.addChild(this.postcard.view);
 
     this.menu = new Menu(kit, this.menuItems(locale), {
       face: 'display',
@@ -186,20 +186,16 @@ export class TitleScreen implements MenuScreen {
   }
 
   /**
-   * Swaps the procedural block poster for a real illustrated backdrop once
-   * one has finished loading — see the class doc comment's "two tiers" note.
-   * Safe to call before the first `show()`/`resize()`; the next layout pass
+   * Swaps a real illustration into the title postcard once one has finished
+   * loading — see the class doc comment's wallpaper-and-postcard note. Safe
+   * to call before the first `show()`/`resize()`; the next layout pass
    * picks it up.
    */
-  setPoster(texture: Texture): void {
-    this.art.texture = texture;
-    this.hasRealPoster = true;
-    if (this.view.visible) {
-      this.layOut();
-    }
+  setPostcardArt(texture: Texture): void {
+    this.postcard.setArt(texture);
   }
 
-  /** Steps the name and poster aside (or brings them back) while settings has the pane. */
+  /** Steps the name and postcard aside (or brings them back) while settings has the pane. */
   setSettingsOpen(open: boolean): void {
     this.settingsOpen = open;
     if (this.view.visible) {
@@ -220,23 +216,20 @@ export class TitleScreen implements MenuScreen {
       return;
     }
 
-    // Opaque, not a dim: there is no run behind the title screen, and letting
-    // the last frame of one show through is what made this read as a pause
-    // menu. Without a real poster the "chrome" is a flat two-tone split; with
-    // one, the illustration runs edge to edge and the menu column gets a
-    // translucent scrim instead — see the class doc comment's "two tiers".
+    if (width !== this.wallpaperWidth || height !== this.wallpaperHeight) {
+      const previous = this.wallpaper.texture;
+      this.wallpaper.texture = ornamentTexture(width, height);
+      this.wallpaper.width = width;
+      this.wallpaper.height = height;
+      if (previous.width > 1) {
+        previous.destroy(true);
+      }
+      this.wallpaperWidth = width;
+      this.wallpaperHeight = height;
+    }
+
     const menuWidth = this.menu.width;
     const columnRight = MARGIN + menuWidth + COLUMN_GAP;
-    this.background.clear();
-    if (this.hasRealPoster) {
-      this.background.rect(0, 0, width, height).fill({ color: TITLE_PALETTE.cardEdge });
-    } else {
-      this.background.rect(0, 0, width, height).fill({ color: TITLE_PALETTE.cardEdge });
-      this.background
-        .rect(columnRight, 0, width - columnRight, height)
-        .fill({ color: TITLE_PALETTE.cardBackdrop });
-      this.background.rect(columnRight - 1, 0, 1, height).fill({ color: TITLE_PALETTE.ruleShade });
-    }
 
     const menuTop = Math.round(height / 2 - this.menu.height / 2);
     this.menu.view.position.set(MARGIN, menuTop);
@@ -247,40 +240,12 @@ export class TitleScreen implements MenuScreen {
     this.pane = { x: paneLeft, y: MARGIN, width: paneWidth, height: height - MARGIN * 2 };
 
     this.headline.view.visible = !this.settingsOpen;
-    this.art.visible = !this.settingsOpen;
+    this.postcard.view.visible = !this.settingsOpen;
     if (this.settingsOpen) {
       return;
     }
 
     const paneCentreX = Math.round(paneLeft + paneWidth / 2);
-
-    if (this.hasRealPoster) {
-      // Full-bleed, contain-fit within the whole frame rather than the pane —
-      // this gfx layer has no clip/mask, so "fit inside and never overflow
-      // onto the menu scrim" is the only safe way to size an arbitrary-aspect
-      // photo. The headline draws after `this.art` in child order (set in the
-      // constructor), so it overlays the illustration for free.
-      const fitScale = Math.min(width / this.art.texture.width, height / this.art.texture.height);
-      const artWidth = this.art.texture.width * fitScale;
-      const artHeight = this.art.texture.height * fitScale;
-      this.art.width = artWidth;
-      this.art.height = artHeight;
-      this.art.position.set(
-        Math.round((width - artWidth) / 2),
-        Math.round((height - artHeight) / 2),
-      );
-
-      this.headlineScale =
-        this.headline.width * HEADLINE_SCALE <= width - MARGIN * 2 ? HEADLINE_SCALE : 1;
-      this.headline.view.scale.set(this.headlineScale);
-      this.headline.place(paneCentreX, MARGIN);
-
-      this.background
-        .rect(0, 0, columnRight, height)
-        .fill({ color: TITLE_PALETTE.cardEdge, alpha: 0.82 });
-      this.background.rect(columnRight - 1, 0, 1, height).fill({ color: TITLE_PALETTE.ruleShade });
-      return;
-    }
 
     // The name at 2× is the intent; a frame too narrow for it (a large text
     // scale, a very small window) drops to 1× rather than overflowing the
@@ -289,18 +254,21 @@ export class TitleScreen implements MenuScreen {
     this.headlineScale = this.headline.width * HEADLINE_SCALE <= paneWidth ? HEADLINE_SCALE : 1;
     this.headline.view.scale.set(this.headlineScale);
     const headlineHeight = this.headline.height * this.headlineScale;
+    this.headline.place(paneCentreX, MARGIN);
 
-    const artWidth = keyArtWidth(TITLE_KEY_ART) * this.artScale;
-    const artHeight = keyArtHeight(TITLE_KEY_ART) * this.artScale;
-    const blockHeight = headlineHeight + GAP_UNDER_HEADLINE + artHeight;
-    const top = Math.round(MARGIN + (height - MARGIN * 2 - blockHeight) / 2);
-
-    this.headline.place(paneCentreX, top);
-    this.art.visible = paneWidth >= MIN_PANE_WIDTH && artHeight + headlineHeight < height;
-    this.art.position.set(
-      Math.round(paneCentreX - artWidth / 2),
-      Math.round(top + headlineHeight + GAP_UNDER_HEADLINE),
-    );
+    const cardTop = MARGIN + headlineHeight + GAP_UNDER_HEADLINE;
+    const availWidth = paneWidth;
+    const availHeight = height - MARGIN - cardTop;
+    let cardWidth = availHeight * POSTCARD_ASPECT;
+    let cardHeight = availHeight;
+    if (cardWidth > availWidth) {
+      cardWidth = availWidth;
+      cardHeight = availWidth / POSTCARD_ASPECT;
+    }
+    const cardX = Math.round(paneLeft + (availWidth - cardWidth) / 2);
+    const cardY = Math.round(cardTop + (availHeight - cardHeight) / 2);
+    this.postcard.view.position.set(cardX, cardY);
+    this.postcard.resize(Math.round(cardWidth), Math.round(cardHeight));
   }
 
   /** How wide the footer line draws — the layout keeps the menu column at least this wide. */

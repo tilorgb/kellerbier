@@ -4,6 +4,7 @@ import { t } from '../i18n/translate.js';
 import { EFFECT_PALETTE, HUD_PALETTE } from './palette.js';
 import type { UiKit } from './ui/kit.js';
 import { Menu, type MenuItem, type MenuScreen } from './ui/menu.js';
+import { PostcardPanel } from './postcard-panel.js';
 import { DisplayTitle, TITLE_STYLES } from './ui/title.js';
 import { uiText, uiTextWidth } from './ui/text.js';
 
@@ -55,18 +56,16 @@ export class GameOverScreen implements MenuScreen {
 
   private readonly actions: GameOverScreenActions;
   private readonly dim: Graphics;
-  private readonly plate: Container;
+  private readonly plate = new PostcardPanel();
   private readonly headline: DisplayTitle;
   private readonly summary: BitmapText;
   private readonly menu: Menu;
-  private readonly kit: UiKit;
   private locale: Locale;
   private lastInfo: RunSummaryText | null = null;
   private width = 0;
   private height = 0;
 
   constructor(kit: UiKit, actions: GameOverScreenActions, locale: Locale) {
-    this.kit = kit;
     this.actions = actions;
     this.locale = locale;
     this.view.visible = false;
@@ -74,8 +73,7 @@ export class GameOverScreen implements MenuScreen {
     this.dim = new Graphics();
     this.view.addChild(this.dim);
 
-    this.plate = new Container();
-    this.view.addChild(this.plate);
+    this.view.addChild(this.plate.view);
 
     this.headline = new DisplayTitle(TITLE_STYLES.threat);
     this.headline.view.scale.set(HEADLINE_SCALE);
@@ -169,10 +167,8 @@ export class GameOverScreen implements MenuScreen {
     const plateX = Math.round(centreX - plateWidth / 2);
     const plateY = Math.round(centreY + 4);
 
-    this.plate.removeChildren();
-    const panel = this.kit.panelSprite(plateWidth, plateHeight);
-    this.plate.addChild(panel);
-    this.plate.position.set(plateX, plateY);
+    this.plate.view.position.set(plateX, plateY);
+    this.plate.resize(plateWidth, plateHeight);
 
     this.summary.position.set(Math.round(centreX - summaryWidth / 2), plateY + PLATE_PADDING);
     this.menu.view.position.set(

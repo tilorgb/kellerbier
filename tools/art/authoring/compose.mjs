@@ -44,8 +44,8 @@ export const PIXEL_KEYS = {
   H: 0x54402e, // hair
   D: 0x36291e, // hair in shadow
   L: 0x72573e, // hair highlight
-  R: 0xd92b3c, // Trachtenhemd red
-  M: 0xb6212f, // open mouth
+  R: 0x3f7a3a, // Trachtenweste green
+  M: 0xb6212f, // open mouth, and the Hut's brim, in its own shadow
   W: 0xffffff, // eye highlight
   E: 0x274b6b, // iris
   B: 0x8a5a24, // Lederhosen leather
@@ -56,8 +56,8 @@ export const PIXEL_KEYS = {
   A: 0xd4af37, // the Trink-Rucksack's brass, and the Lederhosen buttons
   a: 0xb69427, // brass in shadow
   P: 0xe893a8, // cheek flush
-  T: 0x3f7a3a, // Trachtenhut felt
-  t: 0x2f5b2b, // the Hut's brim, in its own shadow
+  T: 0xd92b3c, // Trachtenhut felt
+  t: 0xb6212f, // the Hut's brim, in its own shadow
   F: 0xf5f0e6, // Gamsbart, and the foam leaving the Schlauch
   o: 0xd99a3f, // the beer behind the foam
 };

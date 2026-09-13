@@ -4,11 +4,13 @@ import { t, type DictKey } from '../i18n/translate.js';
 import { EFFECT_PALETTE, UI_PALETTE } from './palette.js';
 import type { UiKit } from './ui/kit.js';
 import { Menu, type MenuItem, type MenuScreen } from './ui/menu.js';
+import { PostcardPanel } from './postcard-panel.js';
 import { DisplayTitle, TITLE_STYLES } from './ui/title.js';
 import { UI_LINE_HEIGHT, uiText, uiTextWidth } from './ui/text.js';
 
 const GAP_BELOW_HEADLINE = 14;
 const GAP_ABOVE_MENU = 20;
+const PANEL_PADDING = 16;
 
 /**
  * Who and what made the game — plain, factual lines rather than authored
@@ -36,6 +38,7 @@ export class CreditsScreen implements MenuScreen {
 
   private readonly actions: CreditsScreenActions;
   private readonly dim: Graphics;
+  private readonly panel = new PostcardPanel();
   private readonly headline: DisplayTitle;
   private readonly creditLabels: BitmapText[] = [];
   private readonly menu: Menu;
@@ -48,6 +51,7 @@ export class CreditsScreen implements MenuScreen {
 
     this.dim = new Graphics();
     this.view.addChild(this.dim);
+    this.view.addChild(this.panel.view);
 
     this.headline = new DisplayTitle(TITLE_STYLES.heading);
     this.headline.set(t(locale, 'ui.credits.headline'));
@@ -121,10 +125,21 @@ export class CreditsScreen implements MenuScreen {
 
     const centreX = Math.round(width / 2);
     const linesHeight = this.creditLabels.length * UI_LINE_HEIGHT;
-    const totalHeight =
+    const contentHeight =
       this.headline.height + GAP_BELOW_HEADLINE + linesHeight + GAP_ABOVE_MENU + this.menu.height;
-    let top = Math.round(height / 2 - totalHeight / 2);
+    const contentWidth = Math.max(
+      this.headline.width,
+      this.menu.width,
+      ...this.creditLabels.map((label) => uiTextWidth(label.text)),
+    );
+    const panelWidth = contentWidth + PANEL_PADDING * 2;
+    const panelHeight = contentHeight + PANEL_PADDING * 2;
+    const panelX = Math.round(centreX - panelWidth / 2);
+    const panelY = Math.round(height / 2 - panelHeight / 2);
+    this.panel.view.position.set(panelX, panelY);
+    this.panel.resize(panelWidth, panelHeight);
 
+    let top = panelY + PANEL_PADDING;
     this.headline.place(centreX, top);
     top += this.headline.height + GAP_BELOW_HEADLINE;
 

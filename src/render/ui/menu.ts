@@ -1,5 +1,5 @@
-import { Container, type BitmapText, type NineSliceSprite } from '../gfx/index.js';
-import { UI_PALETTE } from '../palette.js';
+import { Container, Graphics, type BitmapText } from '../gfx/index.js';
+import { TITLE_PALETTE, UI_PALETTE } from '../palette.js';
 import { FocusRing, type UiKit } from './kit.js';
 import {
   DISPLAY_TEXT_HEIGHT,
@@ -45,8 +45,9 @@ export interface MenuScreen {
 export type MenuFace = 'text' | 'display';
 
 interface FaceMetrics {
-  readonly buttonHeight: number;
-  readonly buttonGap: number;
+  readonly rowHeight: number;
+  /** Space between two rows, where the divider rule is drawn. */
+  readonly rowGap: number;
   readonly padX: number;
   readonly padY: number;
   readonly minWidth: number;
@@ -56,8 +57,8 @@ interface FaceMetrics {
 
 const FACES: Readonly<Record<MenuFace, FaceMetrics>> = {
   text: {
-    buttonHeight: UI_TEXT_HEIGHT + 6,
-    buttonGap: 4,
+    rowHeight: UI_TEXT_HEIGHT + 6,
+    rowGap: 5,
     padX: 10,
     padY: 3,
     minWidth: 90,
@@ -67,8 +68,8 @@ const FACES: Readonly<Record<MenuFace, FaceMetrics>> = {
   // The display cell is 16 rows to the text face's 10, so its rows need more
   // air around them or the Fraktur's descenders sit on the bevel.
   display: {
-    buttonHeight: DISPLAY_TEXT_HEIGHT + 6,
-    buttonGap: 5,
+    rowHeight: DISPLAY_TEXT_HEIGHT + 6,
+    rowGap: 6,
     padX: 12,
     padY: 3,
     minWidth: 120,
@@ -87,16 +88,29 @@ export interface MenuOptions {
 interface MenuRow {
   readonly item: MenuItem;
   readonly container: Container;
-  readonly background: NineSliceSprite;
+  /** Invisible — `hitArea`'s only job is giving the row a click/tap target the width of the whole menu, not just its label's glyphs. */
+  readonly hitArea: Graphics;
   readonly label: BitmapText;
   disabled: boolean;
 }
 
 /**
- * A vertical list of buttons — the one interactive-menu primitive every M8
- * screen (title, pause, credits, the death/victory buttons, the results
- * screen) is built out of, on top of the frames `UiKit` already draws and
- * the `FocusRing` #154 built but left without a consumer.
+ * A vertical list of choices — the one interactive-menu primitive every
+ * `Menu`-backed screen (title, pause, credits, the death/victory buttons,
+ * the results screen) is built out of.
+ *
+ * ## Plain rows, not boxed buttons
+ *
+ * A row used to be its own beveled `NineSliceSprite` — a HUD-style button.
+ * The menu redesign retired that: a `Menu` draws no background of its own at
+ * all any more, just a label per row and a thin rule between consecutive
+ * ones (`TITLE_PALETTE.rule`/`ruleShade`, the same two lines a postcard's own
+ * border is drawn in). Whatever card a screen wants behind its choices —
+ * `PostcardPanel`, or nothing, the way the title screen's own wallpaper
+ * already is one — is that screen's decision, not this class's; a `Menu` is
+ * content, never its own container. Focus is still the same four-corner
+ * `FocusRing` `docs/DECISIONS.md` #154 built, framing the whole row rather
+ * than a button that used to change colour under it.
  *
  * `render/` stays input-agnostic, the way `GameOverScreen`/`RunResultsScreen`
  * already are: this never reads a key or a gamepad itself. A caller drives
@@ -108,8 +122,8 @@ interface MenuRow {
 export class Menu {
   readonly view = new Container();
 
-  private readonly kit: UiKit;
   private readonly focusRing: FocusRing;
+  private readonly dividers = new Graphics();
   private readonly metrics: FaceMetrics;
   private readonly minWidth: number;
   private readonly rows: MenuRow[] = [];
@@ -117,7 +131,6 @@ export class Menu {
   private menuWidth: number;
 
   constructor(kit: UiKit, items: readonly MenuItem[], options: MenuOptions = {}) {
-    this.kit = kit;
     this.focusRing = new FocusRing(kit);
     this.metrics = FACES[options.face ?? 'text'];
     this.minWidth = Math.max(this.metrics.minWidth, options.minWidth ?? 0);
@@ -129,19 +142,23 @@ export class Menu {
   setItems(items: readonly MenuItem[]): void {
     this.view.removeChildren();
     this.rows.length = 0;
-    const { buttonHeight, buttonGap, padX, padY, measure, make } = this.metrics;
+    const { rowHeight, rowGap, padX, padY, measure, make } = this.metrics;
     this.menuWidth = Math.max(
       this.minWidth,
       ...items.map((item) => measure(item.label) + padX * 2),
     );
     items.forEach((item, index) => {
       const container = new Container();
-      container.position.set(0, index * (buttonHeight + buttonGap));
-      const background = this.kit.buttonSprite('normal', this.menuWidth, buttonHeight);
-      container.addChild(background);
+      container.position.set(0, index * (rowHeight + rowGap));
+
+      const hitArea = new Graphics();
+      hitArea.rect(0, 0, this.menuWidth, rowHeight).fill({ color: 0x000000, alpha: 0 });
+      container.addChild(hitArea);
+
       const label = make(item.label);
       label.position.set(padX, padY);
       container.addChild(label);
+
       container.eventMode = 'static';
       container.cursor = 'pointer';
       container.on('pointerover', () => {
@@ -152,8 +169,20 @@ export class Menu {
         this.activate();
       });
       this.view.addChild(container);
-      this.rows.push({ item, container, background, label, disabled: item.disabled?.() ?? false });
+      this.rows.push({ item, container, hitArea, label, disabled: item.disabled?.() ?? false });
     });
+
+    this.dividers.clear();
+    for (let index = 0; index < items.length - 1; index++) {
+      const y = index * (rowHeight + rowGap) + rowHeight + Math.round((rowGap - 2) / 2);
+      this.dividers
+        .rect(0, y, this.menuWidth, 1)
+        .fill({ color: TITLE_PALETTE.rule })
+        .rect(0, y + 1, this.menuWidth, 1)
+        .fill({ color: TITLE_PALETTE.ruleShade });
+    }
+    this.view.addChild(this.dividers);
+
     this.view.addChild(this.focusRing.view);
     this.focusIndex = this.firstEnabledIndex();
     this.refresh();
@@ -167,17 +196,16 @@ export class Menu {
   get height(): number {
     return this.rows.length === 0
       ? 0
-      : this.rows.length * (this.metrics.buttonHeight + this.metrics.buttonGap) -
-          this.metrics.buttonGap;
+      : this.rows.length * (this.metrics.rowHeight + this.metrics.rowGap) - this.metrics.rowGap;
   }
 
   /** The height of one row, for a caller lining something else up with it. */
   get rowHeight(): number {
-    return this.metrics.buttonHeight;
+    return this.metrics.rowHeight;
   }
 
   /**
-   * Re-checks every item's `disabled`, redraws button/label state and moves
+   * Re-checks every item's `disabled`, redraws label/focus state and moves
    * focus off a row that just became disabled. Call whenever a screen opens
    * or whenever something that feeds a `disabled` predicate might have
    * changed (a save just written, say).
@@ -186,7 +214,6 @@ export class Menu {
     for (const row of this.rows) {
       row.disabled = row.item.disabled?.() ?? false;
       row.container.eventMode = row.disabled ? 'none' : 'static';
-      row.label.tint = row.disabled ? UI_PALETTE.textDisabled : UI_PALETTE.text;
     }
     if (this.rows[this.focusIndex]?.disabled === true) {
       this.focusIndex = this.firstEnabledIndex();
@@ -240,10 +267,11 @@ export class Menu {
 
   private syncVisualState(): void {
     this.rows.forEach((row, index) => {
-      row.background.texture =
-        this.kit.button[
-          row.disabled ? 'disabled' : index === this.focusIndex ? 'selected' : 'normal'
-        ];
+      row.label.tint = row.disabled
+        ? UI_PALETTE.textDisabled
+        : index === this.focusIndex
+          ? UI_PALETTE.accent
+          : UI_PALETTE.text;
     });
     const focused = this.rows[this.focusIndex];
     if (focused === undefined || focused.disabled) {
@@ -254,7 +282,7 @@ export class Menu {
       x: focused.container.position.x,
       y: focused.container.position.y,
       width: this.menuWidth,
-      height: this.metrics.buttonHeight,
+      height: this.metrics.rowHeight,
     });
   }
 }
