@@ -39,6 +39,7 @@
     { "x": 28, "y": 116, "type": "hay-bale" },
     { "x": 212, "y": 116, "type": "hay-bale" },
     { "x": 120, "y": 24, "type": "crate-stack" },
+    { "x": 168, "y": 48, "type": "crate-neu" },
     { "x": 120, "y": 116, "type": "pedestal" }
   ],
   "metadata": {

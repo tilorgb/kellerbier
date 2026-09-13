@@ -5307,3 +5307,45 @@ no cheap fix — the real options are a small LoRA trained on Alois's actual spr
 pose guidance, or hand-compositing two solo generations. `keyart-bench`'s default prompts are
 single-subject *on purpose* until one of those is built: promising a two-character shot by default
 would mean shipping candidates that quietly stop matching the brief.
+
+## 96. Floor 1 & 2 get their environmental-storytelling crates, the ending stops saying "To be continued", and Stammtisch's two barks lose their home
+
+**Decided:** #329 (part of #58's remaining scope).
+
+**The crates.** `docs/CONTENT_BIBLE.md`'s floor 1 spec (the two crates in the cellar start room)
+and floor 2 spec (new-label crates "stacked outside the Wirtshaus, on trailers, behind the
+Marktstand") get their `crate-neu` placements: `cellar-pillars.json` (start room, beside the
+existing `crate-opa`), `dorf-marktplatz.json` (the literal Marktstand match, in the cell that
+already carries a `crate-stack`/`crate-opa` pair — a third crate there makes the "at scale" point
+directly rather than introducing a new location), and `dorf-miniboss.json` (the room `der-ladewagen`
+— the loading wagon — can spawn in, matching "on trailers" without inventing a new room).
+
+**The chapter-two ending is real text now.** `VictoryScreen`'s epilogue said "To be continued."
+since #155 shipped it as a named placeholder — its own doc comment flagged #58's real cliffhanger
+as the thing that would eventually replace it. It now carries the actual beat
+`docs/CONTENT_BIBLE.md`/`docs/ROADMAP.md` describe: Der Stier falling, and the delivery lorry
+pulling out of the village square, southbound and loaded — plus a plain, confident "more to come"
+line, satisfying that half of #58's scope without a separate frame. Stays plain wrapped text rather
+than a dedicated `StoryCard`-style illustrated card: #155's win screen is already the "moment of
+quiet" that beat needs, and there is no ending illustration yet to put on one. A matching
+illustrated card is the natural follow-up once that art exists — the same two-tier path the title
+screen (#94) and the opening (#58/#324) already took, procedural-or-plain first, real art swapped
+in once generated and signed off — not a blocker for landing the real words now.
+`ui.victory.epilogue` picked up a second line and a `wrapWidth`, so `VictoryScreen` now rebuilds it
+on width change the same way `StoryCard`'s body text and `BossIntroPlate`'s title/epithet already
+do (`BitmapText`'s word-wrap is fixed at construction).
+
+**Two of #58's scope bullets lost their home when #63 removed the Stammtisch, and neither gets one
+here.** #58 was written against a Stammtisch hub (#46) that `docs/DECISIONS.md` #63 later removed
+outright, replacing it with a plain `RunResultsScreen` — no NPC hub, no `regulars.ts`, no
+`pickLine`. That takes two of #58's bullets down with it: "Stammtisch one-liners from the regulars"
+and "the 'commits both ways' barks" (villagers who genuinely prefer the new Pfeitinger, played
+straight rather than as fools or victims) both explicitly hang off "the regulars" in #58's own text.
+There is no in-run moment left that plays a line of dialogue at the player outside combat — the
+closest thing, `BossIntroPlate`'s title/epithet fields, only ever fires for a boss, and stretching
+it to cover two barks it was never designed for would be worse than admitting the gap. Filed as
+its own follow-up (a small in-room NPC-speech-bubble system, or a different attachment point
+entirely) rather than silently dropped or improvised without design review — `docs/CONTENT_BIBLE.md`
+and `GAME_DESIGN.md` §2 are explicit enough about the *tone* of these lines ("not written as fools
+or as victims") that inventing the delivery mechanism under a code-only pass would risk getting
+both the mechanism and the tone wrong at once.

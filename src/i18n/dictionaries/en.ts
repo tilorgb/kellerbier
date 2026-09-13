@@ -51,7 +51,8 @@ export const en = {
   'ui.gameOver.summary': '{seconds}s survived   {kills} killed   {floor}',
 
   'ui.victory.headline': 'Victory!',
-  'ui.victory.epilogue': 'To be continued.',
+  'ui.victory.epilogue':
+    'Der Stier falls. Outside, a lorry pulls out of the square — loaded, and headed south.\nThis chapter is over. More of the road is coming.',
   'ui.victory.retry': 'Retry',
   'ui.victory.results': 'Results',
   'ui.victory.hub': 'Hub',

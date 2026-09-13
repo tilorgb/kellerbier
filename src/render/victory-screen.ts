@@ -15,6 +15,12 @@ const PLATE_PADDING = 8;
 
 const GAP_ABOVE_MENU = 10;
 
+/** Gap between the (now multi-line) epilogue and the summary plate beneath it. */
+const GAP_BELOW_EPILOGUE = 16;
+
+/** Margin either side of the epilogue's wrap width, in UI pixels. */
+const EPILOGUE_MARGIN = 40;
+
 /** What the screen shows. Assembled by whoever tracks the run, not read from `GameSim` directly. */
 export interface VictorySummaryText {
   readonly seconds: number;
@@ -39,11 +45,18 @@ export interface VictoryScreenActions {
  * appears — so a win reads as a different feeling from a death rather than a
  * re-skinned loss screen.
  *
- * The epilogue line is deliberately short and not character-specific: #58
- * (story delivery, chapter cards, the real chapter-two cliffhanger) is M8
- * scope and not built yet. This is "the moment of quiet" #155 itself asks
- * for — a beat that closes the run — not the finished narrative beat #58
- * will eventually replace it with.
+ * The epilogue carries #58's chapter-two cliffhanger and its "more to come"
+ * frame: Der Stier falling and the delivery lorry pulling out of the square
+ * are the direction the ending promises, without saying what is upstream —
+ * `docs/CONTENT_BIBLE.md`'s own acceptance bar for it is a playtester
+ * calling it a cliffhanger unprompted. It stays plain text rather than a
+ * dedicated illustrated card (the `StoryCard` shape `startRun`'s opening
+ * beat uses): the win screen already is the "moment of quiet" #155 asks
+ * for, and stacking a second full-frame card behind it would cost the
+ * player another skip for prose that reads fine as an epilogue. A matching
+ * illustrated ending card is the natural follow-up once art exists for the
+ * scene, the same way the title screen graduated from block art to a real
+ * backdrop.
  */
 export class VictoryScreen implements MenuScreen {
   readonly view = new Container();
@@ -52,7 +65,7 @@ export class VictoryScreen implements MenuScreen {
   private readonly dim: Graphics;
   private readonly plate: Container;
   private readonly headline: DisplayTitle;
-  private readonly epilogue: BitmapText;
+  private epilogue: BitmapText;
   private readonly summary: BitmapText;
   private readonly menu: Menu;
   private readonly kit: UiKit;
@@ -60,6 +73,7 @@ export class VictoryScreen implements MenuScreen {
   private lastInfo: VictorySummaryText | null = null;
   private width = 0;
   private height = 0;
+  private epilogueWrapWidth = 0;
 
   constructor(kit: UiKit, actions: VictoryScreenActions, locale: Locale) {
     this.kit = kit;
@@ -78,14 +92,10 @@ export class VictoryScreen implements MenuScreen {
     this.headline.set(t(locale, 'ui.victory.headline'));
     this.view.addChild(this.headline.view);
 
-    // Short and plain (#221), not the two-line dialect paragraph this used
-    // to be. #58 (story delivery) replaces this beat properly; until then
-    // it stays a placeholder beat — "the moment of quiet" #155 asks for,
-    // not the finished narrative #58 will eventually write.
-    this.epilogue = uiText(t(locale, 'ui.victory.epilogue'), {
-      colour: UI_PALETTE.text,
-      align: 'center',
-    });
+    // Built for real in `layOut`, once a wrap width is known — same
+    // rebuild-on-wrapWidth-change reason `StoryCard`'s own body text gives:
+    // `BitmapText`'s word-wrap is fixed at construction.
+    this.epilogue = uiText('', { colour: UI_PALETTE.text, align: 'center' });
     this.view.addChild(this.epilogue);
 
     this.summary = uiText('', { colour: HUD_PALETTE.gameOverSummary });
@@ -117,7 +127,6 @@ export class VictoryScreen implements MenuScreen {
   setLocale(locale: Locale): void {
     this.locale = locale;
     this.headline.set(t(locale, 'ui.victory.headline'));
-    this.epilogue.text = t(locale, 'ui.victory.epilogue');
     this.menu.setItems(this.menuItems());
     if (this.lastInfo !== null) {
       this.applySummary(this.lastInfo);
@@ -171,17 +180,26 @@ export class VictoryScreen implements MenuScreen {
 
     this.headline.place(centreX, Math.round(centreY - this.headline.height * HEADLINE_SCALE - 34));
 
-    const epilogueWidth = uiTextWidth(this.epilogue.text);
-    this.epilogue.position.set(
-      Math.round(centreX - epilogueWidth / 2),
-      Math.round(centreY - (this.headline.height * HEADLINE_SCALE) / 2 + 10),
-    );
+    const epilogueText = t(this.locale, 'ui.victory.epilogue');
+    const wrapWidth = Math.max(1, width - EPILOGUE_MARGIN * 2);
+    if (wrapWidth !== this.epilogueWrapWidth) {
+      this.epilogueWrapWidth = wrapWidth;
+      this.view.removeChild(this.epilogue);
+      this.epilogue.destroy();
+      this.epilogue = uiText(epilogueText, { colour: UI_PALETTE.text, align: 'center', wrapWidth });
+      this.view.addChild(this.epilogue);
+    } else if (this.epilogue.text !== epilogueText) {
+      this.epilogue.text = epilogueText;
+    }
+
+    const epilogueTop = Math.round(centreY - (this.headline.height * HEADLINE_SCALE) / 2 + 10);
+    this.epilogue.position.set(Math.round(centreX - this.epilogue.width / 2), epilogueTop);
 
     const summaryWidth = uiTextWidth(this.summary.text);
     const plateWidth = Math.max(summaryWidth, this.menu.width) + PLATE_PADDING * 2;
     const plateHeight = PLATE_PADDING * 3 + this.summary.height + GAP_ABOVE_MENU + this.menu.height;
     const plateX = Math.round(centreX - plateWidth / 2);
-    const plateY = Math.round(centreY + 30);
+    const plateY = Math.round(epilogueTop + this.epilogue.height + GAP_BELOW_EPILOGUE);
 
     this.plate.removeChildren();
     const panel = this.kit.panelSprite(plateWidth, plateHeight);
