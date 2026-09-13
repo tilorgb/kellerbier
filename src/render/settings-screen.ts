@@ -2,6 +2,7 @@ import { Container, Graphics, Sprite, type BitmapText, type NineSliceSprite } fr
 import type { Locale } from '../i18n/locale.js';
 import { t } from '../i18n/translate.js';
 import { UI_PALETTE } from './palette.js';
+import { PostcardPanel } from './postcard-panel.js';
 import { FocusRing, iconRoles, type UiKit } from './ui/kit.js';
 import type { MenuScreen } from './ui/menu.js';
 import { isFocusable, type SettingsRow, type SettingsTab } from './ui/settings-model.js';
@@ -88,12 +89,11 @@ export class SettingsScreen implements MenuScreen {
   private readonly actions: SettingsScreenActions;
   private locale: Locale;
   private readonly backdrop: Graphics;
-  private readonly panel: NineSliceSprite;
+  private readonly panel = new PostcardPanel();
   private readonly heading: DisplayTitle;
   private readonly tabStrip = new Container();
   private readonly tabUnderline: Sprite;
   private readonly rowsLayer = new Container();
-  private readonly selection: NineSliceSprite;
   private readonly focusRing: FocusRing;
   private readonly hint: BitmapText;
   private readonly scrollUp: Sprite;
@@ -103,6 +103,8 @@ export class SettingsScreen implements MenuScreen {
   private tabIndex = 0;
   private focusIndex = 0;
   private scrollIndex = 0;
+  /** Whether this open has its own card (a pause-menu takeover) or sits inside a pane that is already opaque (the title screen). */
+  private dimmed = false;
   private box = { x: 0, y: 0, width: 0, height: 0 };
 
   constructor(
@@ -122,8 +124,7 @@ export class SettingsScreen implements MenuScreen {
     this.backdrop = new Graphics();
     this.view.addChild(this.backdrop);
 
-    this.panel = kit.panelSprite(64, 64);
-    this.view.addChild(this.panel);
+    this.view.addChild(this.panel.view);
 
     this.heading = new DisplayTitle(TITLE_STYLES.heading);
     this.heading.set(t(locale, 'ui.settings.title'));
@@ -134,9 +135,6 @@ export class SettingsScreen implements MenuScreen {
     this.tabStrip.addChild(this.tabUnderline);
     this.view.addChild(this.tabStrip);
 
-    this.selection = kit.buttonSprite('selected', 32, ROW_HEIGHT);
-    this.selection.visible = false;
-    this.view.addChild(this.selection);
     this.view.addChild(this.rowsLayer);
 
     this.focusRing = new FocusRing(kit);
@@ -215,6 +213,7 @@ export class SettingsScreen implements MenuScreen {
    */
   place(x: number, y: number, width: number, height: number, dim: boolean): void {
     this.box = { x, y, width, height };
+    this.dimmed = dim;
     this.backdrop.visible = dim;
     if (dim) {
       this.backdrop.clear();
@@ -408,9 +407,14 @@ export class SettingsScreen implements MenuScreen {
     if (width <= 0 || height <= 0) {
       return;
     }
-    this.panel.position.set(x, y);
-    this.panel.width = width;
-    this.panel.height = height;
+    // A pause-menu takeover gets its own card; on the title screen the pane
+    // is already the postcard's own wallpaper, and a second one here would
+    // draw the same pattern a second time, out of phase with the first.
+    this.panel.view.visible = this.dimmed;
+    if (this.dimmed) {
+      this.panel.view.position.set(x, y);
+      this.panel.resize(width, height);
+    }
 
     const innerLeft = x + PAD;
     const innerRight = x + width - PAD;
@@ -503,9 +507,11 @@ export class SettingsScreen implements MenuScreen {
     for (const tab of this.tabs) {
       for (const rowView of tab.rows) {
         rowView.container.visible = false;
+        if (rowView.row.kind !== 'note') {
+          rowView.label.tint = UI_PALETTE.text;
+        }
       }
     }
-    this.selection.visible = false;
     this.focusRing.sync(null);
 
     let y = top;
@@ -523,10 +529,7 @@ export class SettingsScreen implements MenuScreen {
       rowView.container.position.set(left, y);
       this.layOutRow(rowView, width);
       if (index === this.focusIndex && isFocusable(rowView.row)) {
-        this.selection.visible = true;
-        this.selection.position.set(left - 2, y - 1);
-        this.selection.width = width + 4;
-        this.selection.height = rowView.height;
+        rowView.label.tint = UI_PALETTE.accent;
         this.focusRing.sync({ x: left - 2, y: y - 1, width: width + 4, height: rowView.height });
       }
       last = index;

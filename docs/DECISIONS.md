@@ -5398,3 +5398,78 @@ rendering: this project's standing rule is that Bavarian and German phrasing is 
 owner's to pitch, not an agent's to invent, even when an earlier pass in this same codebase
 (`enemies.der-stier.title`/`epithet`, #327/#328) did draft dialect text with a "not reviewed by a
 native speaker" flag instead. Consistency with the stricter reading was chosen deliberately here.
+
+## 98. The title screen trades its poster for a wallpaper and a postcard; every menu drops its beveled buttons for the same look; Alois's locked colours flip
+
+**Decided:** this session, prompted by "the title screen looks pixely, something is wrong" plus a
+request to reuse the same postcard motif for storytelling throughout the game. **Amends #94/#95**
+(Alois's locked colours) and **retires #94/#322**'s full-bleed poster tier. **Builds on:** #43 (UI
+art as screen-space source), #19 (graceful degradation for a content gap).
+
+**The full-bleed poster is gone; the game's motif is a discrete `Postcard` object instead.**
+`assets/art/title/backdrop.png` — #94/#322's real-illustration tier — was still the painterly
+candidate #95 explicitly said had never been through a cartoon-style sign-off round, and stretching
+it edge-to-edge behind the whole frame was the actual "pixely, something's wrong" complaint: a
+non-integer contain-fit scale on a painterly image reads as a broken pixel grid, not as art. Rather
+than regenerate a new full-bleed candidate, `TitleScreen` (`src/render/title-screen.ts`) drops the
+two-tier poster system entirely. The background is now `ui/ornament.ts`'s `ornamentTexture` — a
+Rautenmuster (the Bavarian-flag diamond lattice), drawn tone-on-tone straight from
+`TITLE_PALETTE.cardBackdrop`/`ornamentTone`, generated once at layout and never "still loading" the
+way a fetched PNG can be. The game's own motif — Alois on a bench above the village, the calm
+before the tainted-beer story starts — sits in `assets/art/title/postcard.png`, contain-fit inside
+a new `Postcard` component (`src/render/postcard.ts`) sized to the source art's own 832×1216
+aspect. `StoryCard` (the opening beat's full-frame illustrated card) is rebuilt on top of the same
+`Postcard` rather than duplicating its backdrop/border/art-fit logic a second time — one physical
+object, a different picture and caption in it depending on where it shows up. `TITLE_KEY_ART`
+(`ui/title-key-art.ts`) and its authoring pipeline/test are **not** removed — nothing left
+references them from `TitleScreen` any more, but deleting a tested, documented authoring module was
+judged out of scope for this change; it is now genuinely dead code and a fair target for its own
+cleanup pass.
+
+**Every `Menu`-backed screen drops its beveled per-row buttons for the same postcard language.**
+`ui/menu.ts`'s `Menu` used to give each row its own `NineSliceSprite` button in one of four bevel
+states (`UiKit.button`). That is gone: a row is now a label and nothing else, rows are separated by
+a thin gold/bronze rule (the same two colours a postcard's own border is drawn in), and the focused
+row gets `FocusRing`'s four corner brackets plus a gold tint on its label instead of a filled
+background. A borderless list still needs its own click/tap target the width of the row rather than
+just its glyphs, which is what each row's invisible, alpha-0 `Graphics` hit-rect is for. `UiKit`'s
+beveled `button`/`panel` textures are untouched and still serve callers that were never part of
+this — `machine-picker.ts`'s vending-machine choice UI and `settings-screen.ts`'s slider/track
+chrome — this only changed what a *menu list* draws, not the whole kit.
+
+**A new `PostcardPanel` (`src/render/postcard-panel.ts`) is the card a menu sits inside, where one
+is needed at all.** It is `Postcard` without art or a caption: a gold border and the same
+`ornamentTexture` as paper, nothing else — content is the caller's, exactly the split `Postcard`
+already makes between frame and picture. `PauseScreen`, `CreditsScreen`, `GameOverScreen` and
+`VictoryScreen` each swap their old `kit.panelSprite` plate for one of these. `TitleScreen` itself
+gets **no** `PostcardPanel` around its menu column — it already sits on the screen's own
+full-frame wallpaper, and wrapping it a second time is exactly what an earlier pass in this same
+session got wrong: a `Graphics` scrim plus a hard rule at the seam between the menu column and the
+picture pane, which read as two panels glued together rather than one scene the choices and the
+postcard both stand on. Dropping the scrim entirely — no divider, one wallpaper under both columns
+— is what actually answered "the menu shouldn't be split from the content." `SettingsScreen`
+inherits the same either/or: opened as a pause-menu takeover it gets a real `PostcardPanel`
+(`dimmed` true); opened from the title screen's own pane it gets none (`dimmed` false), for the
+identical reason. Its own flat "selected row" `NineSliceSprite` is gone too, replaced by the same
+`FocusRing`-plus-gold-tint `Menu` now uses, so the one screen that was still showing a mono-coloured
+highlight box stopped being the odd one out.
+
+**Alois's locked colours (#94/#95: green Trachtenhut, red vest/suspenders) flip to a red hat and a
+green vest, and he gains a beard.** The new title postcard (six SDXL passes through
+`keyart-bench`'s `postcard` preset, picked and refined over two rounds) consistently rendered best
+with that combination rather than the originally locked one — SDXL's well-documented refusal to
+keep the hat/shirt colour binding stable across prompts (#95's own finding) means "which way round"
+was never fully within anyone's control candidate to candidate, and the chosen candidate happened
+to land the other way. Rather than fight the model for a specific candidate's colours, the call was
+made to move the *character's* locked design to match the picked art, so the title postcard and the
+in-game player read as the same person. `tools/art/authoring/alois.mjs`'s `PIXEL_KEYS` (in
+`compose.mjs`) had its `T` (hat) and `R` (torso) hex values swapped, and the last two rows of every
+south/side head block (idle, blink, hurt, drunk — eight blocks; `head-north`, the back of his head,
+is untouched since no face is visible from behind) were recoloured from skin (`S`) to hair (`H`) for
+a jawline beard. Verified as an actual in-game billboard, not a flat swatch, per this file's own
+sprite sign-off rule (`CLAUDE.md`): both the front-facing idle frame and the side-facing walk frame
+were checked standing in a real room, in `npm run dev`. **Left for a follow-up:**
+`D:\repos\ComfyUI\keyart-bench`'s own `ALOIS` prompt constant (never committed here, #94's own
+rule) still states the old green-hat/red-vest description, so the next key-art generation round
+should update it to match, and #325 — the issue that locked the old colours in the first place, now
+closed — is stale history rather than something to reopen.

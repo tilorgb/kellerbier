@@ -71,8 +71,8 @@ export const headSouth = g('head-south', [
   '...KSSEEESSEEESSK...',
   '...KSPSSSSSSSSPSK...',
   '....KSSSSKKSSSSK....',
-  '.....KSSSSSSSSK.....',
-  '.......KSSSSK.......',
+  '.....KHHHHHHHHK.....',
+  '.......KHHHHK.......',
 ]);
 
 export const headSouthBlink = g('head-south-blink', [
@@ -84,8 +84,8 @@ export const headSouthBlink = g('head-south-blink', [
   '...KSSSSSSSSSSSSK...',
   '...KSPSSSSSSSSPSK...',
   '....KSSSSKKSSSSK....',
-  '.....KSSSSSSSSK.....',
-  '.......KSSSSK.......',
+  '.....KHHHHHHHHK.....',
+  '.......KHHHHK.......',
 ]);
 
 /** Eyes screwed shut into two carets, mouth open. */
@@ -98,8 +98,8 @@ export const headSouthHurt = g('head-south-hurt', [
   '...KSSSSSSSSSSSSK...',
   '...KSPSSSSSSSSPSK...',
   '....KSSKKMMKKSSK....',
-  '.....KSSSSSSSSK.....',
-  '.......KSSSSK.......',
+  '.....KHHHHHHHHK.....',
+  '.......KHHHHK.......',
 ]);
 
 /** Half-lidded, flushed, grinning. */
@@ -112,8 +112,8 @@ export const headSouthDrunk = g('head-south-drunk', [
   '...KSSEEESSEEESSK...',
   '...KPPSSSSSSSSPPK...',
   '....KSSKKMMKKSSK....',
-  '.....KSSSSSSSSK.....',
-  '.......KSSSSK.......',
+  '.....KHHHHHHHHK.....',
+  '.......KHHHHK.......',
 ]);
 
 export const headNorth = g('head-north', [
@@ -138,8 +138,8 @@ export const headSide = g('head-side', [
   '.KSSEEESSSHHHHHHK...',
   '..KSPSSSSSHHHHHHK...',
   '..KKSSSSSSHHHHHK....',
-  '...KSSSSSSHHHHK.....',
-  '......KSSSSK........',
+  '...KHHHHHHHHHHK.....',
+  '......KHHHHK........',
 ]);
 
 export const headSideBlink = g('head-side-blink', [
@@ -151,8 +151,8 @@ export const headSideBlink = g('head-side-blink', [
   '.KSSSSSSSSHHHHHHK...',
   '..KSPSSSSSHHHHHHK...',
   '..KKSSSSSSHHHHHK....',
-  '...KSSSSSSHHHHK.....',
-  '......KSSSSK........',
+  '...KHHHHHHHHHHK.....',
+  '......KHHHHK........',
 ]);
 
 export const headSideHurt = g('head-side-hurt', [
@@ -164,8 +164,8 @@ export const headSideHurt = g('head-side-hurt', [
   '.KSSSSSSSSHHHHHHK...',
   '..KSPSSSSSHHHHHHK...',
   '..KKMMSSSSHHHHHK....',
-  '...KSSSSSSHHHHK.....',
-  '......KSSSSK........',
+  '...KHHHHHHHHHHK.....',
+  '......KHHHHK........',
 ]);
 
 export const headSideDrunk = g('head-side-drunk', [
@@ -177,8 +177,8 @@ export const headSideDrunk = g('head-side-drunk', [
   '.KSSEEESSSHHHHHHK...',
   '..KPPSSSSSHHHHHHK...',
   '..KKMMSSSSHHHHHK....',
-  '...KSSSSSSHHHHK.....',
-  '......KSSSSK........',
+  '...KHHHHHHHHHHK.....',
+  '......KHHHHK........',
 ]);
 
 // -------------------------------------------------------------------- torsos

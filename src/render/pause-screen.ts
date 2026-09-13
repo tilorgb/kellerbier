@@ -4,9 +4,11 @@ import { t } from '../i18n/translate.js';
 import { EFFECT_PALETTE } from './palette.js';
 import type { UiKit } from './ui/kit.js';
 import { Menu, type MenuItem, type MenuScreen } from './ui/menu.js';
+import { PostcardPanel } from './postcard-panel.js';
 import { DisplayTitle, TITLE_STYLES } from './ui/title.js';
 
 const GAP_BELOW_HEADLINE = 14;
+const PANEL_PADDING = 16;
 
 export interface PauseScreenActions {
   readonly onResume: () => void;
@@ -27,6 +29,7 @@ export class PauseScreen implements MenuScreen {
 
   private readonly actions: PauseScreenActions;
   private readonly dim: Graphics;
+  private readonly panel = new PostcardPanel();
   private readonly headline: DisplayTitle;
   private readonly menu: Menu;
   private width = 0;
@@ -38,6 +41,7 @@ export class PauseScreen implements MenuScreen {
 
     this.dim = new Graphics();
     this.view.addChild(this.dim);
+    this.view.addChild(this.panel.view);
 
     this.headline = new DisplayTitle(TITLE_STYLES.heading);
     this.headline.set(t(locale, 'ui.pause.headline'));
@@ -104,9 +108,15 @@ export class PauseScreen implements MenuScreen {
 
     const centreX = Math.round(width / 2);
     const centreY = Math.round(height / 2);
-    const totalHeight = this.headline.height + GAP_BELOW_HEADLINE + this.menu.height;
-    const top = Math.round(centreY - totalHeight / 2);
+    const contentHeight = this.headline.height + GAP_BELOW_HEADLINE + this.menu.height;
+    const panelWidth = Math.max(this.headline.width, this.menu.width) + PANEL_PADDING * 2;
+    const panelHeight = contentHeight + PANEL_PADDING * 2;
+    const panelX = Math.round(centreX - panelWidth / 2);
+    const panelY = Math.round(centreY - panelHeight / 2);
+    this.panel.view.position.set(panelX, panelY);
+    this.panel.resize(panelWidth, panelHeight);
 
+    const top = panelY + PANEL_PADDING;
     this.headline.place(centreX, top);
     this.menu.view.position.set(
       Math.round(centreX - this.menu.width / 2),
