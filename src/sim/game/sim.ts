@@ -1071,6 +1071,29 @@ export class GameSim {
   private toastDescription = '';
   private toastTicks = 0;
 
+  /**
+   * Every enemy id this run has already spawned at least once — checked by
+   * `loadRoom`'s spawn loop to decide `newEnemyIds` below. Never persisted or
+   * reset mid-run (a fresh `GameSim` per real run already gives every run a
+   * clean set), the same "a new instance is the reset" shape `startRun`
+   * already relies on elsewhere.
+   */
+  private readonly encounteredEnemyIds = new Set<string>();
+  /**
+   * The ids `loadRoom` just spawned into the current room for the first time
+   * this run, and how many ticks that fact stays reportable — the villager
+   * one-liner's trigger (#58/#330). Neutral ids only, the same
+   * `CompiledEnemy` boundary `bossDefinition` already draws: this class has
+   * no way to know which id, if any, actually has a `line` to show — that
+   * lives on the authored `EnemyDefinition`, resolved back by
+   * `enemyDefinitionById` in the render layer, which also owns deciding
+   * which one (of possibly several) to actually put in a toast. Ticked down
+   * the same deterministic way `toastTicks` is, for the replay reason its
+   * own doc comment gives.
+   */
+  private newEnemyIds: readonly string[] = [];
+  private newEnemyTicks = 0;
+
   /** The active floor curse (#49), rolled once per floor by `rollFloorCurse`. `null` on an uncursed floor. */
   private curseIdValue: CurseId | null = null;
   /** Ticks left showing the curse-entry announcement banner. See `curseAnnouncement`. */
@@ -2630,6 +2653,13 @@ export class GameSim {
       // never a boss, treasure, shop or secret encounter, each of which is
       // already authored to be its own kind of harder.
       const eliteChance = compiled.specialRole === undefined ? this.eliteChanceForFloor(floor) : 0;
+      // Villager one-liners (#58/#330) stay out of boss and mini-boss rooms —
+      // `BossIntroPlate` already owns the moment those rooms present
+      // themselves, and a second toast fighting it for the player's eye
+      // would read as clutter, not as a second beat.
+      const tracksNewEnemies =
+        compiled.specialRole !== 'boss' && compiled.specialRole !== 'miniboss';
+      const newEnemyIdsThisLoad: string[] = [];
       for (const spawn of compiled.enemySpawns) {
         if (entry !== null) {
           const dx = spawn.x - entry.x;
@@ -2656,6 +2686,14 @@ export class GameSim {
         const elite =
           guaranteedElite || (eliteChance > 0 && this.random.enemies.nextFloat() < eliteChance);
         this.spawnEnemyKind(definition, spawn.x, spawn.y, elite);
+        if (tracksNewEnemies && !this.encounteredEnemyIds.has(spawn.enemyId)) {
+          this.encounteredEnemyIds.add(spawn.enemyId);
+          newEnemyIdsThisLoad.push(spawn.enemyId);
+        }
+      }
+      if (newEnemyIdsThisLoad.length > 0) {
+        this.newEnemyIds = newEnemyIdsThisLoad;
+        this.newEnemyTicks = Math.round(this.tuning.pickup.toastTicks);
       }
       // Der Meisterschlüssel (#275) is held back to the tick this room
       // clears — the same reason a boss room's pedestal is (`step`'s
@@ -3223,6 +3261,16 @@ export class GameSim {
     this.toastName = name;
     this.toastDescription = description;
     this.toastTicks = Math.round(this.tuning.pickup.toastTicks);
+  }
+
+  /**
+   * The enemy ids `loadRoom` most recently introduced for the first time
+   * this run, for as long as that fact is still fresh — `[]` once
+   * `newEnemyTicks` has run out or nothing new spawned. See `newEnemyIds`'s
+   * own doc comment for why this carries ids rather than resolved text.
+   */
+  get newlyEncounteredEnemyIds(): readonly string[] {
+    return this.newEnemyTicks > 0 ? this.newEnemyIds : [];
   }
 
   /**
@@ -6015,6 +6063,9 @@ export class GameSim {
 
     if (this.toastTicks > 0) {
       this.toastTicks -= 1;
+    }
+    if (this.newEnemyTicks > 0) {
+      this.newEnemyTicks -= 1;
     }
     if (this.pedestalRevealTicks > 0) {
       this.pedestalRevealTicks -= 1;

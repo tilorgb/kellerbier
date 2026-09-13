@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   ENEMY_DEFINITIONS,
+  bauer,
   derStier,
   enemyDefinitionById,
   grosseKellerassel,
@@ -41,6 +42,11 @@ describe('the enemy roster', () => {
     expect(enemyDefinitionById('der-stier')?.title).toBe('enemies.der-stier.title');
     expect(enemyDefinitionById('der-stier')?.epithet).toBe('enemies.der-stier.epithet');
     expect(enemyDefinitionById('not-a-real-enemy-id')).toBeUndefined();
+  });
+
+  it('resolves the villager one-liner (#58/#330)', () => {
+    expect(enemyDefinitionById('bauer')).toBe(bauer);
+    expect(enemyDefinitionById('bauer')?.line).toBe('enemies.bauer.line');
   });
 
   it('leaves no state stranded', () => {

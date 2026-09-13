@@ -837,3 +837,57 @@ describe('clearFloorProgress', () => {
     expect(sim.liveEnemyCount).toBe(2);
   });
 });
+
+describe('villager one-liners (#58/#330)', () => {
+  it('reports a first-seen enemy id once, deduped across a room that spawns two of it', () => {
+    // `cellar-crossroads`'s "melee" spawn group resolves to `bauer` at floor
+    // 2 (`content/rooms/cellar.json`) — two spawn points sharing one choice
+    // list, the same room `roomSim()` above uses for floor 1's `kellerassel`.
+    const sim = new GameSim({ roomTemplate: cellarCrossroads, floor: 2, population: 'empty' });
+    expect(sim.newlyEncounteredEnemyIds).toEqual(['bauer']);
+  });
+
+  it('stops reporting an id once seen, but reports a genuinely new one', () => {
+    const sim = new GameSim({ roomTemplate: cellarCrossroads, floor: 2, population: 'empty' });
+    expect(sim.newlyEncounteredEnemyIds).toEqual(['bauer']);
+
+    const mixedRoom = {
+      ...cellarCrossroads,
+      id: 'test-mixed-melee',
+      enemySpawns: [
+        { x: 176, y: 64, group: 'melee' },
+        { x: 208, y: 112, group: 'other' },
+      ],
+      spawnGroups: [
+        ...cellarCrossroads.spawnGroups,
+        { id: 'other', count: 1, choices: [{ enemyId: 'gockel', minFloor: 1, maxFloor: 7 }] },
+      ],
+    };
+    sim.loadRoom(mixedRoom, 2, null, [], undefined, { col: 0, row: 0 }, false);
+    expect(sim.newlyEncounteredEnemyIds).toEqual(['gockel']);
+  });
+
+  it('never reports a new id from a boss or mini-boss room', () => {
+    const bossRoom = {
+      ...cellarCrossroads,
+      id: 'test-bark-boss-room',
+      enemySpawns: [{ x: 176, y: 64, group: 'boss' }],
+      spawnGroups: [
+        { id: 'boss', count: 1, choices: [{ enemyId: 'bauer', minFloor: 1, maxFloor: 7 }] },
+      ],
+      metadata: { ...cellarCrossroads.metadata, specialRole: 'boss' },
+    };
+    const sim = new GameSim({ roomTemplate: bossRoom, floor: 1, population: 'empty' });
+    expect(sim.newlyEncounteredEnemyIds).toEqual([]);
+  });
+
+  it('ages out after the same window the pickup toast uses', () => {
+    const sim = new GameSim({ roomTemplate: cellarCrossroads, floor: 2, population: 'empty' });
+    expect(sim.newlyEncounteredEnemyIds).toEqual(['bauer']);
+
+    for (let tick = 0; tick < sim.tuning.pickup.toastTicks; tick++) {
+      sim.step();
+    }
+    expect(sim.newlyEncounteredEnemyIds).toEqual([]);
+  });
+});

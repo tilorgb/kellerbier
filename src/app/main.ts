@@ -1094,6 +1094,22 @@ async function boot(): Promise<void> {
   let pickupToastLabel = '';
 
   /**
+   * A villager's one-liner (#58/#330), the first time this run spawns an
+   * enemy type carrying `EnemyDefinition.line` — the "commits both ways"
+   * NPCs `docs/CONTENT_BIBLE.md` §0 asks for. Same `TextPlate`, same
+   * sim-ticks-down presentation state as `pickupToast` right above, driven
+   * by `sim.newlyEncounteredEnemyIds` instead of `sim.pickupToast`: the sim
+   * only ever reports *which ids* are new (`GameSim.newEnemyIds`'s own doc
+   * comment explains why), so resolving that to actual line text — and
+   * picking one, on the rare room that introduces more than one new id at
+   * once — is this layer's job, the same split `bossDefinition`/
+   * `enemyDefinitionById` already draw for the boss intro plate.
+   */
+  const villagerBark = new TextPlate(kit, { colour: HUD_PALETTE.toastText });
+  hudLayer.addChild(villagerBark.view);
+  let villagerBarkLabel = '';
+
+  /**
    * A shop item's preview — "here is what this is," on touch, not a purchase.
    * Fixed HUD position rather than anchored to the item itself the way the
    * pedestal name plate is: a shop room is a bare floor with a handful of
@@ -1324,6 +1340,7 @@ async function boot(): Promise<void> {
     bossIntroPlate.resize(width);
     bossIntroPlate.place(centreX, Math.round(height * 0.26));
     pickupToast.place(centreX, Math.round(height * 0.2));
+    villagerBark.place(centreX, Math.round(height * 0.12));
     shopPreview.place(centreX, Math.round(height * 0.85));
     machinePrompt.place(centreX, Math.round(height * 0.78));
     pedestalReveal.placeCentred(centreX, Math.round(height / 2));
@@ -2167,6 +2184,24 @@ async function boot(): Promise<void> {
         pickupToast.visible = false;
         pickupToastLabel = '';
       }
+      // First id in `newlyEncounteredEnemyIds` that actually has a `line` —
+      // see `villagerBark`'s own doc comment for why picking one is this
+      // layer's job, not the sim's.
+      const barkLine = sim.newlyEncounteredEnemyIds
+        .map((id) => enemyDefinitionById(id)?.line)
+        .find((line): line is string => line !== undefined);
+      if (barkLine !== undefined) {
+        const label = t(preferences.locale, barkLine as DictKey);
+        if (label !== villagerBarkLabel) {
+          villagerBarkLabel = label;
+          villagerBark.set(label);
+          villagerBark.place(Math.round(uiFrame.width / 2), Math.round(uiFrame.height * 0.12));
+        }
+        villagerBark.visible = true;
+      } else if (villagerBark.visible) {
+        villagerBark.visible = false;
+        villagerBarkLabel = '';
+      }
       const preview = sim.shopPreview;
       if (preview !== null) {
         const price = `${String(preview.price)} Biermarken`;
@@ -2755,6 +2790,8 @@ WASD move   arrows aim and fire
     bossIntroPlate.hide();
     pickupToastLabel = '';
     pickupToast.visible = false;
+    villagerBarkLabel = '';
+    villagerBark.visible = false;
     shopPreviewLabel = '';
     shopPreview.visible = false;
     machinePromptLabel = '';

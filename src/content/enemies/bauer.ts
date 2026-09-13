@@ -18,6 +18,13 @@ import type { EnemyDefinition } from '../../sim/enemy/definition.js';
  * this number being pushed any higher. `lunge`'s own 2.2 (already faster
  * than `stalk`, and unaffected by this note) is untouched, so the two states
  * keep their relative order — a brisk close followed by a real burst.
+ *
+ * `line` (#58/#330) is the ordinary Oberniederburg resident who "genuinely
+ * prefers the new Pfeitinger" — `docs/CONTENT_BIBLE.md` §0's tone rule for
+ * that voice, not written as a fool or a victim. Bauer carries it rather
+ * than any other floor 2 body because he is the roster's plainest villager;
+ * the other rural enemies (Gockel, Blaskapellist, Böllerschmeißer) each read
+ * as a specific bit rather than as "a person from the village."
  */
 export const bauer: EnemyDefinition = {
   id: 'bauer',
@@ -25,6 +32,7 @@ export const bauer: EnemyDefinition = {
   size: 'normal',
   health: 3,
   contactDamage: 1,
+  line: 'enemies.bauer.line',
   initial: 'plow',
   states: [
     {
