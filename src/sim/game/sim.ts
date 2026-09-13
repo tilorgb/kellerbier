@@ -10,7 +10,7 @@ import {
 } from '../../content/pickups/index.js';
 import type { RoomSpecialRole } from '../../content/rooms/definition.js';
 import type { EnemyDefinition } from '../enemy/definition.js';
-import { EnemyRegistry } from '../enemy/registry.js';
+import { EnemyRegistry, type CompiledEnemy } from '../enemy/registry.js';
 import { ENEMY_PROFILES, EnemySize, type EnemySizeId } from '../enemy/size.js';
 import type { InputFrame } from '../input/frame.js';
 import { createInputFrame } from '../input/frame.js';
@@ -1771,6 +1771,41 @@ export class GameSim {
       max += this.health.data[index * 2 + 1] ?? 0;
     }
     return any ? { current, max } : null;
+  }
+
+  /**
+   * The compiled enemy of the first live `bossBar` body in the room, for
+   * the boss intro plate (#58/#327) — read once, during the room's warmup
+   * window, before anything has had a chance to split (`PHASE_TWO_SPLIT`
+   * fires no earlier than `approach`, which warmup itself blocks). Unlike
+   * `bossHealth` above this does not sum across bodies: the plate names one
+   * boss, not a total.
+   *
+   * This is the *compiled* enemy — `name` and `id` only, nothing
+   * presentational like a title or an epithet, which the frame loop never
+   * reads and compilation drops accordingly. A caller wanting those
+   * resolves `.id` through `content/enemies/index.ts`'s
+   * `enemyDefinitionById` instead; `app/main.ts` does exactly that.
+   */
+  get bossDefinition(): CompiledEnemy | null {
+    if (this.roomSpecialRole !== 'boss' && this.roomSpecialRole !== 'miniboss') {
+      return null;
+    }
+    const states = this.world.states;
+    const masks = this.world.masks;
+    for (let index = 0; index < this.world.highWater; index++) {
+      if (states[index] !== World.ALIVE) {
+        continue;
+      }
+      if (((masks[index] ?? 0) & this.enemyMask) !== this.enemyMask) {
+        continue;
+      }
+      const definition = this.enemies.at(this.enemy.data[index * ENEMY_STRIDE] ?? 0);
+      if (definition.bossBar) {
+        return definition;
+      }
+    }
+    return null;
   }
 
   /**

@@ -529,6 +529,21 @@ export interface EnemyDefinition {
   readonly contactDamage: number;
   /** Overrides the size class's mass, for a body unusually heavy for its size. */
   readonly mass?: number;
+  /**
+   * A localisation key (`enemies.<id>.title`), same convention
+   * `ItemDefinition.flavourText` uses — resolved by the render layer, never
+   * read directly here. The boss intro plate's middle line (#58/#327); unset
+   * for everything that isn't a boss, since nothing else shows one.
+   */
+  readonly title?: string;
+  /**
+   * A localisation key (`enemies.<id>.epithet`), same convention as `title`
+   * above. The boss intro plate's bottom line — the one line on the plate
+   * actually meant to be read as a sentence, same reasoning
+   * `FloorTitleCard`'s own flavour line gives for staying in the text face
+   * rather than the display one.
+   */
+  readonly epithet?: string;
   /** The `name` of the state it spawns in. */
   readonly initial: string;
   readonly states: readonly EnemyState[];
