@@ -3,17 +3,19 @@ import type { Locale } from '../i18n/locale.js';
 import { t, type DictKey } from '../i18n/translate.js';
 import { UI_PALETTE } from './palette.js';
 import { Postcard } from './postcard.js';
+import { postcardBoxForPicture } from './ui/postcard-paper.js';
 import { DisplayTitle, TITLE_STYLES } from './ui/title.js';
 import { uiText } from './ui/text.js';
 
 const GAP_UNDER_NAME = 6;
 const GAP_UNDER_TITLE = 4;
-const GAP_UNDER_ART = 8;
+/** Clear of the card's own shadow (`POSTCARD_SHADOW_OFFSET`), not just its bottom edge. */
+const GAP_UNDER_ART = 12;
 
-/** The boss-plate art's own aspect — `keyart-bench`'s `bossPlate` preset, 1344×768. */
+/** The boss-plate art's own aspect — `keyart-bench`'s `bossPlate` preset, 1344×768. Used until a real texture says otherwise. */
 const ART_ASPECT = 1344 / 768;
-/** How wide the postcard sits, in UI pixels — a picture, not the whole frame. */
-const ART_WIDTH = 260;
+/** How wide the *picture* sits, in UI pixels — the card is this plus its paper margins and franked foot. */
+const PICTURE_WIDTH = 232;
 
 /**
  * The boss room's intro plate (#58/#327): a name, a title and a one-line
@@ -46,7 +48,7 @@ const ART_WIDTH = 260;
 export class BossIntroPlate {
   readonly view = new Container();
 
-  private readonly postcard = new Postcard();
+  private readonly postcard = new Postcard({ seed: 5 });
   private readonly nameLine: DisplayTitle;
   private titleLine: BitmapText;
   private epithetLine: BitmapText;
@@ -54,6 +56,8 @@ export class BossIntroPlate {
   private titleText = '';
   private epithetText = '';
   private hasArt = false;
+  /** The mounted picture's own aspect, from the texture `show` was given. */
+  private artAspect = ART_ASPECT;
   private wrapWidth = 0;
   private width = 0;
   /** Where `place` last put the plate — re-applied by `show`, see there. */
@@ -91,6 +95,7 @@ export class BossIntroPlate {
     this.epithetText = epithetKey === undefined ? '' : t(locale, epithetKey as DictKey);
     this.hasArt = art !== undefined;
     if (art !== undefined) {
+      this.artAspect = art.height === 0 ? ART_ASPECT : art.width / art.height;
       this.postcard.setArt(art);
     }
     this.postcard.view.visible = this.hasArt;
@@ -128,10 +133,10 @@ export class BossIntroPlate {
     this.layOut();
     let cursor = top;
     if (this.hasArt) {
-      const artHeight = Math.round(ART_WIDTH / ART_ASPECT);
-      this.postcard.view.position.set(Math.round(centreX - ART_WIDTH / 2), Math.round(cursor));
-      this.postcard.resize(ART_WIDTH, artHeight);
-      cursor += artHeight + GAP_UNDER_ART;
+      const card = postcardBoxForPicture(PICTURE_WIDTH, this.artAspect);
+      this.postcard.view.position.set(Math.round(centreX - card.width / 2), Math.round(cursor));
+      this.postcard.resize(card.width, card.height);
+      cursor += card.height + GAP_UNDER_ART;
     }
     this.nameLine.place(centreX, cursor);
     const titleTop = cursor + this.nameLine.height + GAP_UNDER_NAME;

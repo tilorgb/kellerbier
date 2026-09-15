@@ -5794,3 +5794,83 @@ passing; and — the part #99 and #100 could not do — a headless run through t
 (`J`, then `N` room by room with the room cleared) into `cellar-boss`, screenshotting the plate at
 its intended size and Die Große Kellerassel walking and flushing red on its telegraph, then
 `dorf-boss` applied through the room editor's message path for Der Stier as a live billboard.
+
+## 103. The postcard becomes a postcard: card stock, a mounted picture and a franked corner, and the story beat turns the card over
+
+**Decided:** this session, on the report that the postcard concept is visible on the title screen
+but *"with our story beats as well as our boss presentation this was somehow skipped — these
+artworks are mostly shown as is and are not packaged in a postcard."* **Builds on #98/#99** (one
+`Postcard` object across title, story and boss) and **finishes what they started**: the object
+existed, the *card* did not.
+
+**The diagnosis: #98 shipped a frame, and only one screen had a postcard.** `Postcard` drew a
+near-black plate (`TITLE_PALETTE.cardEdge`) with a two-pixel gold rule inset six pixels, and
+contain-fit an illustration inside it. The title screen still read as a postcard for a reason that
+had nothing to do with that frame — `assets/art/title/postcard.png` carries a printed cream border
+*baked into the picture* by the model that generated it. The opening beat's illustration is
+full-bleed, and a boss's is a bare 1344×768 crop, so on those two screens the "postcard" was a
+rectangle of art with a thin gold line around it. A player had no way to learn that the three were
+meant to be the same object, which was #98's entire premise.
+
+**So the card stops being a border and starts being paper.** `src/render/ui/postcard-paper.ts` is
+new, and it is pure in the way `ui/ornament.ts` and `ui/title.ts` are — `renderPostcardPixels`
+returns a colour grid, `postcardGeometry` returns the rectangles, no renderer and no DOM. The sheet
+is off-white card stock (`POSTCARD_PALETTE`, picked off the bone ramp the display face already
+uses) with hash-based print grain and foxing, a bitten cut edge and an ink keyline with the corners
+knocked off; the illustration is *mounted* on it inside its own keyline, in a window the paper
+punches out (`-1`) so the art sprite shows through rather than being drawn over a fill nobody sees;
+and the card casts a real shadow on whatever it is lying on. The one detail that carries the whole
+read, in a single glance and no words, is the franking: a 21×25 perforated stamp carrying the
+Raute in the flag's blue, struck by a dithered postmark ring whose killer bars run off it onto the
+paper. The stamp is deliberately **wordless** — a stamp is exactly the kind of place an agent would
+invent a Bavarian place name, and naming is the project owner's (`CLAUDE.md`,
+`docs/CONTENT_BIBLE.md` §0) — and the postmark's date is two ink marks rather than characters, for
+the same reason plus the fact that an illegible strike is what the real thing looks like.
+
+**The story beat turns the card over.** The opening beat's two paragraphs never fit under a picture
+without squeezing the picture into a strip, which is what the old `artSplit: 0.68` full-frame card
+did. A real postcard solves that by having a back, so `postcardGeometry` has two layouts and picks
+between them from the card's own box: a **front** (picture mounted high, franking in the foot,
+clear of the illustration) for a card with no message — the title screen's and a boss's — and a
+**divided back** (picture left, message right of a printed divider, franking up in the corner where
+a stamp actually goes) for a card that has one *and* is at least 360 wide and landscape. Too narrow
+to divide falls back to the front with its caption in the foot, which is #19's graceful degradation
+applied to a layout rather than to content. No caller picks a layout.
+
+`StoryCard` stops being the whole frame: the card is inset 24/40 with the room dimmed behind it, so
+its shadow falls on something and it reads as an object somebody is holding up. `BossIntroPlate`
+and `TitleScreen` size their cards with `postcardBoxForPicture`/`postcardBoxWithin` — the card is
+the picture's box *plus* its paper, rather than the picture's box being the card. Caption colour
+moved to the paper's ink, and the caption is measured before it is placed:
+`postcardCaptionWrapWidth` is deliberately independent of the caption's height so the two-step is
+not circular.
+
+**The sign-off round happened the cloud way** (`CLAUDE.md`, #77): no diffusion available, so three
+candidate treatments were authored as programmatic block art and rendered at true 640×360 scale, in
+all three places a card appears, by `tools/art/postcard-specimens.mjs` — a throwaway-style specimen
+tool in the shape of `block-specimens.mjs`, except that it loads the real TS modules through Vite's
+SSR loader, so the sheet is drawn by the same functions the game uploads as a texture rather than
+by a mock-up of them. The three were *franked foot* (one layout everywhere), *divided back* (the
+one that shipped) and *album mount* (photo corners, no stamp). The follow-up instruction on the
+picked option — *"if we're doing stamps, that's fine by me, but those should then also be used in
+the title screen postcard"* — is why the title card is franked too rather than being left as the
+one unstamped card.
+
+**One bug the specimen round caught, and a test now keeps caught:** `renderPostcardPixels` will not
+overflow a foot too shallow to hold a stamp, it just draws no franking — and `FOOT` at 30 was
+exactly that, once the picture's keyline and the card's bottom margin took their bites. The boss
+card and the title card both came out unfranked, which is the one detail that says postcard missing
+from two of the three screens that exist to say it. `FOOT` is 42, and
+`tests/unit/postcard-paper.test.ts` asserts a stamp and a cancellation actually exist on every card
+`postcardBoxForPicture` sizes, across four picture widths and three art aspects.
+
+**Constrains:** a screen that shows an illustration shows it on a `Postcard`, and the card's
+appearance lives in `ui/postcard-paper.ts` — a caller sizes a card and hands it art and maybe a
+message, and never draws a border, a stamp or a caption band itself. New card chrome is authored as
+pixels there and signed off through `node tools/art/postcard-specimens.mjs`, not as a committed PNG.
+
+Verified: `tests/unit/postcard-paper.test.ts` (12) and `tests/unit/postcard.test.ts` (5) new, full
+suite green, `tsc`/`eslint`/`prettier` clean — and, per `CLAUDE.md`'s "run it" rule, all three
+screens shot from a headless `npm run dev`: the title card, the opening beat as a divided back over
+the dimmed cellar, and Die Große Kellerassel's plate reached through a real door transition (`J`
+for the key, then `N` room by room with each room cleared), not forced from the console.

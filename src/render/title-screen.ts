@@ -8,6 +8,7 @@ import { Menu, type MenuItem, type MenuScreen } from './ui/menu.js';
 import { UI_LINE_HEIGHT, uiText, uiTextWidth } from './ui/text.js';
 import { DisplayTitle, TITLE_STYLES } from './ui/title.js';
 import { Postcard } from './postcard.js';
+import { postcardBoxWithin } from './ui/postcard-paper.js';
 
 /** How much bigger than its authored size the name is drawn, when there is room for it. */
 const HEADLINE_SCALE = 2;
@@ -18,13 +19,14 @@ const COLUMN_GAP = 24;
 const MENU_MIN_WIDTH = 148;
 const GAP_UNDER_HEADLINE = 12;
 /**
- * Width-to-height ratio the title postcard's own box is laid out at,
- * matching `assets/art/title/postcard.png`'s native 832×1216 — `Postcard`
- * contain-fits whatever it is actually given, so a different-aspect
- * replacement still renders correctly, just with a little more or less
- * letterboxing inside the frame.
+ * `assets/art/title/postcard.png`'s native 832×1216, which the card's own box
+ * is sized around — the card is the picture's box plus the paper margins and
+ * the franked foot, which is what `postcardBoxWithin` works out. `Postcard`
+ * fits whatever texture it is actually given to its own window, so a
+ * different-aspect replacement still renders correctly, just with the paper
+ * margins absorbing the difference.
  */
-const POSTCARD_ASPECT = 832 / 1216;
+const TITLE_ART_ASPECT = 832 / 1216;
 
 export interface TitleScreenActions {
   readonly onStart: () => void;
@@ -94,7 +96,7 @@ export class TitleScreen implements MenuScreen {
   private readonly actions: TitleScreenActions;
   private readonly wallpaper = new Sprite();
   private readonly headline: DisplayTitle;
-  private readonly postcard = new Postcard();
+  private readonly postcard = new Postcard({ seed: 9 });
   private readonly footer: BitmapText;
   private readonly menu: Menu;
   private width = 0;
@@ -259,16 +261,11 @@ export class TitleScreen implements MenuScreen {
     const cardTop = MARGIN + headlineHeight + GAP_UNDER_HEADLINE;
     const availWidth = paneWidth;
     const availHeight = height - MARGIN - cardTop;
-    let cardWidth = availHeight * POSTCARD_ASPECT;
-    let cardHeight = availHeight;
-    if (cardWidth > availWidth) {
-      cardWidth = availWidth;
-      cardHeight = availWidth / POSTCARD_ASPECT;
-    }
-    const cardX = Math.round(paneLeft + (availWidth - cardWidth) / 2);
-    const cardY = Math.round(cardTop + (availHeight - cardHeight) / 2);
+    const card = postcardBoxWithin(availWidth, availHeight, TITLE_ART_ASPECT);
+    const cardX = Math.round(paneLeft + (availWidth - card.width) / 2);
+    const cardY = Math.round(cardTop + (availHeight - card.height) / 2);
     this.postcard.view.position.set(cardX, cardY);
-    this.postcard.resize(Math.round(cardWidth), Math.round(cardHeight));
+    this.postcard.resize(card.width, card.height);
   }
 
   /** How wide the footer line draws — the layout keeps the menu column at least this wide. */

@@ -1,50 +1,75 @@
 import { Container, Graphics, Sprite, type BitmapText, type Texture } from './gfx/index.js';
-import { TITLE_PALETTE, UI_PALETTE } from './palette.js';
+import { POSTCARD_PALETTE } from './palette.js';
+import {
+  POSTCARD_SHADOW_OFFSET,
+  postcardCaptionWrapWidth,
+  postcardGeometry,
+  postcardTexture,
+  type PostcardGeometry,
+  type PostcardPaperOptions,
+} from './ui/postcard-paper.js';
 import { uiText } from './ui/text.js';
 
-const MARGIN = 10;
-const CAPTION_GAP = 10;
+/** How dark the card's own shadow is, over whatever it is lying on. */
+const SHADOW_ALPHA = 0.45;
 
 export interface PostcardOptions {
-  /** Fraction of the card's own height the art zone gets once a caption is set. Ignored if `setCaption` is never called. */
-  readonly artSplit?: number;
+  /**
+   * Which sheet of paper this is: the grain and foxing are a hash of it, so
+   * two cards on screen at once are not the same sheet twice and one card
+   * keeps its own paper across a resize.
+   */
+  readonly seed?: number;
 }
 
 /**
- * The physical postcard: a bordered plate holding one illustration, with an
- * optional caption band underneath — the shared frame the title screen's
- * right pane and `StoryCard`'s full-frame story beats both sit inside, so
- * every motif the game shows a player (the title, the opening, a future
- * chapter beat) reads as the same object with a different picture in it,
- * per the title-screen redesign that put a postcard on the title screen
- * itself rather than a full-bleed backdrop.
+ * The physical postcard: a printed sheet of card stock with one illustration
+ * mounted on it, an optional message, and a franked corner — the object the
+ * title screen's right pane, `StoryCard`'s story beats and `BossIntroPlate`'s
+ * reveal all hold, so every motif the game shows a player reads as the same
+ * thing posted from the same place.
+ *
+ * The paper itself is `ui/postcard-paper.ts`: it draws the sheet, punches the
+ * picture's window out of it and hands back the geometry. This class is the
+ * scene-graph half — the shadow the card casts, the illustration sprite in the
+ * window, and the caption set in the paper — and it owns nothing about how a
+ * postcard *looks*.
  *
  * Two-tier art loading, same shape as every illustrated screen in this game
- * (`docs/DECISIONS.md` #19 applied to an asset fetch): the frame and border
- * are up the moment `resize` is called, `setArt` swaps a real texture in
- * once one resolves, and a card that never gets a caption never reserves
- * room for one — `TitleScreen`'s postcard has no caption at all, only art.
+ * (`docs/DECISIONS.md` #19 applied to an asset fetch): the sheet is up the
+ * moment `resize` is called, `setArt` swaps a real texture into its window
+ * once one resolves, and a card that never gets a caption never reserves room
+ * for one — `TitleScreen`'s postcard has no caption at all, only art.
+ *
+ * The caption is measured before it is placed: `postcardCaptionWrapWidth` says
+ * how wide the text wraps for this card's box, the wrapped text's own height
+ * is what the paper then reserves, and the layout (a front with a caption in
+ * the foot, or a divided back with a message beside the picture) falls out of
+ * the box in `postcardGeometry`. A caller never picks the layout.
  */
 export class Postcard {
   readonly view = new Container();
 
-  private readonly backdrop = new Graphics();
-  private readonly border = new Graphics();
+  private readonly shadow = new Graphics();
+  private readonly paper = new Sprite();
   private readonly art = new Sprite();
   private caption: BitmapText | null = null;
   private captionText = '';
   private captionWrapWidth = -1;
   private hasArt = false;
+  private artAspect: number | undefined;
   private width = 0;
   private height = 0;
-  private readonly artSplit: number;
+  private readonly seed: number;
+  /** What the current paper texture was drawn for — a redraw is a texture upload, so it is not done per layout. */
+  private paperKey = '';
 
   constructor(options: PostcardOptions = {}) {
-    this.artSplit = options.artSplit ?? 1;
-    this.view.addChild(this.backdrop);
+    this.seed = options.seed ?? 1;
+    this.view.addChild(this.shadow);
+    this.view.addChild(this.paper);
     this.art.visible = false;
     this.view.addChild(this.art);
-    this.view.addChild(this.border);
   }
 
   /** Swaps a real illustration in once one has finished loading — safe to call before or after `resize`. */
@@ -52,10 +77,11 @@ export class Postcard {
     this.art.texture = texture;
     this.hasArt = true;
     this.art.visible = true;
+    this.artAspect = texture.height === 0 ? undefined : texture.width / texture.height;
     this.layOut();
   }
 
-  /** Shows (or updates) the caption band under the art. First call is what reserves the band's room. */
+  /** Shows (or updates) the card's message. First call is what reserves room for it. */
   setCaption(text: string): void {
     this.captionText = text;
     this.layOut();
@@ -74,52 +100,64 @@ export class Postcard {
       return;
     }
 
-    this.backdrop.clear();
-    this.backdrop.rect(0, 0, width, height).fill({ color: TITLE_PALETTE.cardEdge });
+    const captionHeight = this.layOutCaptionText();
+    const options: PostcardPaperOptions = {
+      ...(this.artAspect === undefined ? {} : { artAspect: this.artAspect }),
+      captionHeight,
+      seed: this.seed,
+    };
+    const geometry = postcardGeometry(width, height, options);
 
-    const inset = 6;
-    this.border.clear();
-    this.border
-      .rect(inset, inset, width - inset * 2, 2)
-      .rect(inset, height - inset - 2, width - inset * 2, 2)
-      .rect(inset, inset, 2, height - inset * 2)
-      .rect(width - inset - 2, inset, 2, height - inset * 2)
-      .fill({ color: TITLE_PALETTE.rule });
+    // Joined rather than interpolated: these are the four numbers a sheet is
+    // drawn from, and re-drawing one is a texture upload.
+    const key = [width, height, captionHeight, Math.round((this.artAspect ?? 0) * 1000)].join(':');
+    if (key !== this.paperKey) {
+      const previous = this.paper.texture;
+      this.paper.texture = postcardTexture(width, height, options);
+      if (previous.width > 1) {
+        previous.destroy(true);
+      }
+      this.paperKey = key;
+    }
+    this.paper.width = width;
+    this.paper.height = height;
 
-    const hasCaption = this.captionText.length > 0;
-    const artBottom = hasCaption ? Math.round(height * this.artSplit) : height - MARGIN;
+    this.shadow.clear();
+    this.shadow
+      .rect(POSTCARD_SHADOW_OFFSET, POSTCARD_SHADOW_OFFSET, width, height)
+      .fill({ color: POSTCARD_PALETTE.shadow, alpha: SHADOW_ALPHA });
+
     if (this.hasArt) {
-      const zoneWidth = width - MARGIN * 2;
-      const zoneHeight = artBottom - MARGIN;
-      const fitScale = Math.min(
-        zoneWidth / this.art.texture.width,
-        zoneHeight / this.art.texture.height,
-      );
-      const artWidth = this.art.texture.width * fitScale;
-      const artHeight = this.art.texture.height * fitScale;
-      this.art.width = artWidth;
-      this.art.height = artHeight;
-      this.art.position.set(
-        Math.round(MARGIN + (zoneWidth - artWidth) / 2),
-        Math.round(MARGIN + (zoneHeight - artHeight) / 2),
-      );
+      this.art.width = geometry.picture.width;
+      this.art.height = geometry.picture.height;
+      this.art.position.set(geometry.picture.x, geometry.picture.y);
     }
 
-    if (!hasCaption) {
+    this.placeCaption(geometry);
+  }
+
+  /**
+   * Builds the caption at this box's wrap width, if there is one, and returns
+   * how tall it draws — which is what the paper reserves for it. Nothing is
+   * positioned here: where the band ends up is `postcardGeometry`'s answer,
+   * and that answer needs this number first.
+   */
+  private layOutCaptionText(): number {
+    if (this.captionText.length === 0) {
       if (this.caption !== null) {
         this.view.removeChild(this.caption);
         this.caption.destroy();
         this.caption = null;
         this.captionWrapWidth = -1;
       }
-      return;
+      return 0;
     }
 
-    this.border
-      .rect(MARGIN, artBottom, width - MARGIN * 2, 1)
-      .fill({ color: TITLE_PALETTE.ruleShade });
-
-    const wrapWidth = width - MARGIN * 4;
+    const wrapWidth = postcardCaptionWrapWidth(
+      this.width,
+      this.height,
+      this.artAspect === undefined ? {} : { artAspect: this.artAspect },
+    );
     if (this.caption === null || wrapWidth !== this.captionWrapWidth) {
       if (this.caption !== null) {
         this.view.removeChild(this.caption);
@@ -127,20 +165,29 @@ export class Postcard {
       }
       this.captionWrapWidth = wrapWidth;
       this.caption = uiText(this.captionText, {
-        colour: UI_PALETTE.text,
-        align: 'center',
+        colour: POSTCARD_PALETTE.ink,
         wrapWidth,
       });
       this.view.addChild(this.caption);
     } else if (this.caption.text !== this.captionText) {
       this.caption.text = this.captionText;
     }
+    return Math.round(this.caption.height);
+  }
 
-    const textZoneTop = artBottom + CAPTION_GAP;
-    const textZoneHeight = height - MARGIN - textZoneTop;
-    this.caption.position.set(
-      Math.round(width / 2 - this.caption.width / 2),
-      Math.round(textZoneTop + (textZoneHeight - this.caption.height) / 2),
+  private placeCaption(geometry: PostcardGeometry): void {
+    const caption = this.caption;
+    const band = geometry.caption;
+    if (caption === null || band === null) {
+      return;
+    }
+    // Set from the band's left edge — a message on a postcard is written, not
+    // centred — and centred vertically in whatever the band turned out to be,
+    // so a short message on a tall divided back sits in the middle of its half
+    // rather than clinging to the franking above it.
+    caption.position.set(
+      band.x,
+      Math.round(band.y + Math.max(0, (band.height - caption.height) / 2)),
     );
   }
 }
