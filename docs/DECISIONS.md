@@ -5874,3 +5874,41 @@ suite green, `tsc`/`eslint`/`prettier` clean — and, per `CLAUDE.md`'s "run it"
 screens shot from a headless `npm run dev`: the title card, the opening beat as a divided back over
 the dimmed cellar, and Die Große Kellerassel's plate reached through a real door transition (`J`
 for the key, then `N` room by room with each room cleared), not forced from the console.
+
+## 104. The boss intro plate actually pauses the room instead of merely covering it
+
+**Decided:** this session, on the report that *"the current artwork presentation of the bosses is
+not a proper 'pause' screen... otherwise the boss can attack while the player has the presentation
+on screen."* Reverses the specific premise #97 stated about this plate — see below.
+
+**The bug was exactly the premise #97 wrote down.** `BossIntroPlate` (#58/#327) went up over a
+fully live room on the stated reasoning that "the boss stays fully visible underneath the whole
+time" made the reveal fair on its own — no dim, no pause, `BOSS_PLATE_MS` (1.9s) timed well past
+`sim.roomWarmupTicks`' own 0.4s inert window. That gap between the two timers was the whole bug:
+for a bit over a second of every boss room's opening, the plate was still covering the fight while
+the boss was free to act underneath it. A player had no way to see, let alone react to, a hit
+landing during its own introduction.
+
+**The fix is `loop.paused`, not the fade.** `app/main.ts`'s `advanceBossIntroPlate` now drives a
+small state machine (`'fadeIn' → 'hold' → 'fadeOut'`) gated behind `loop.paused`, set the instant
+the boss-room warmup edge fires and cleared only once the fade back to the room finishes. The fade
+— a new `bossPlateFade` `Graphics`, raised topmost in `hudLayer` over every other HUD element, not
+just the room — is what makes the moment *read* as a pause; `loop.paused` is what actually makes it
+one. `render:` keeps advancing the fade's own wall-clock timer regardless (the same "keeps working
+while ticks don't" property `pollMenuGamepad` already relies on), so the sequence still resolves on
+its own with nothing else driving it.
+
+**Total time is held to #58's own two-second ceiling for this category**, tighter than the doc's
+blanket three-second rule for any non-skippable sequence: `BOSS_PLATE_FADE_MS` (250ms) each way
+plus `BOSS_PLATE_MS`'s new, shorter hold (1.5s, down from 1.9s) comes to exactly 2.0s.
+
+**`BossIntroPlate` itself is unchanged** — it still draws no dim of its own and knows nothing about
+being paused; only what sits behind it in `main.ts` changed. The plate's own doc comment and boot-
+time construction comment referenced a `BOSS_ROOM_WARMUP_TICKS` that was never actually implemented
+(a stale claim from an earlier draft of #327/#58); both are corrected to describe what the code
+actually does now.
+
+**Not verified this session** — no dev server run, no `tsc`/`eslint`/`vitest` pass. The change is
+render/app-layer only (`app/main.ts`, `render/boss-intro-plate.ts`'s doc comment), touches no sim
+state and no existing test asserts on the old timing, but it still needs the standard "played it
+through a real boss door" check before this counts as done per `CONTRIBUTING.md`.

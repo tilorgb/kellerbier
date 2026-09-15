@@ -1,4 +1,4 @@
-import { Container, loadTexture, type Texture } from '../render/gfx/index.js';
+import { Container, Graphics, loadTexture, type Texture } from '../render/gfx/index.js';
 import titlePostcardUrl from '../../assets/art/title/postcard.png';
 import openingCardArtUrl from '../../assets/art/story/opening.png';
 import derStierArtUrl from '../../assets/art/bosses/der-stier.png';
@@ -61,7 +61,7 @@ import { BlutwurzHud } from '../render/blutwurz-hud.js';
 import { ItemSetHud } from '../render/item-set-hud.js';
 import { PromilleHud } from '../render/promille-hud.js';
 import { WalletHud } from '../render/wallet-hud.js';
-import { HUD_PALETTE, PARTICLE_PALETTE, UI_PALETTE } from '../render/palette.js';
+import { EFFECT_PALETTE, HUD_PALETTE, PARTICLE_PALETTE, UI_PALETTE } from '../render/palette.js';
 import { FloorTitleCard } from '../render/floor-title-card.js';
 import { BossIntroPlate } from '../render/boss-intro-plate.js';
 import { StoryCard } from '../render/story-card.js';
@@ -232,15 +232,28 @@ const FLOOR_CARD_MS = 2600;
 const FLOOR_CARD_FADE_MS = 700;
 
 /**
- * How long the boss intro plate (#58/#327) stays up — the same wall-clock
- * reasoning `FLOOR_CARD_MS` gives, not tied to `sim.roomWarmupTicks`
- * (0.4s, tuned for "enemies stay inert," not for reading three lines). Kept
- * under #58's own "two seconds maximum" for this category. Safe to decouple
- * from the warmup precisely because this plate has no backing dim — the
- * boss is fully visible underneath the whole time, so a player is never
- * asked to react to something the plate is hiding.
+ * How long the boss intro plate (#58/#327) stays fully up, once faded in —
+ * the same wall-clock reasoning `FLOOR_CARD_MS` gives, not tied to
+ * `sim.roomWarmupTicks` (0.4s, tuned for "enemies stay inert," not for
+ * reading three lines).
+ *
+ * This used to be the plate's *entire* on-screen time, with no backing dim,
+ * on the premise that "the boss stays fully visible underneath the whole
+ * time" kept things fair. It didn't: `roomWarmupTicks` only holds enemies
+ * inert for its own 0.4s, so for the rest of `BOSS_PLATE_MS` the boss was
+ * free to attack while the plate covered the room a player would otherwise
+ * be reacting to. `advanceBossIntroPlate` now pairs the plate with a real
+ * `loop.paused` and a `bossPlateFade` to black either side of it, so nothing
+ * in the room can act while the reveal is up — fade to black, the plate,
+ * fade back, then play resumes. Total time (`BOSS_PLATE_FADE_MS` twice plus
+ * this) is held to #58's own "two seconds, maximum" for this category —
+ * tighter than the doc's blanket "three seconds" ceiling for any
+ * non-skippable sequence, since a boss plate is the one that fires on every
+ * single boss-room entry rather than once per run.
  */
-const BOSS_PLATE_MS = 1900;
+const BOSS_PLATE_MS = 1500;
+/** Each leg of the boss intro plate's fade to and from black. */
+const BOSS_PLATE_FADE_MS = 250;
 
 function floorConfig(floorNumber: number): FloorConfig {
   const config = FLOOR_CONFIGS.find((candidate) => candidate.floor === floorNumber);
@@ -1056,17 +1069,32 @@ async function boot(): Promise<void> {
 
   /**
    * The boss room's intro plate (#23, upgraded to a real name/title/epithet
-   * plate by #58/#327): shown for the room's warmup window
-   * (`sim.roomWarmupTicks`, extended to `BOSS_ROOM_WARMUP_TICKS` for a boss
-   * room specifically) whenever that room's role is `'boss'`. Content comes
-   * from `sim.bossDefinition` — see `BossIntroPlate`'s own doc comment for
-   * why this stays a bare-text-over-the-live-room reveal rather than an
-   * opaque cutscene plate.
+   * plate by #58/#327): raised on the room's warmup edge
+   * (`sim.roomWarmupTicks` going positive) whenever that room's role is
+   * `'boss'`. Content comes from `sim.bossDefinition` — see
+   * `BossIntroPlate`'s own doc comment for the text/art tiers.
+   *
+   * Paired with `bossPlateFade` and `advanceBossIntroPlate`'s state machine
+   * below, added to `hudLayer` together, topmost, once every other HUD
+   * element has had its turn — see that `addChild` pair's own comment.
    */
   const bossIntroPlate = new BossIntroPlate();
   bossIntroPlate.hide();
-  hudLayer.addChild(bossIntroPlate.view);
   let bossBannerShown = false;
+  /**
+   * Fades the whole frame to black around the plate (see `BOSS_PLATE_MS`'s
+   * doc comment for why): drawn once here and resized in `layoutHud`, same
+   * as `PauseScreen`'s own full-frame `dim`. Alpha is driven by
+   * `advanceBossIntroPlate`, never touched anywhere else.
+   */
+  const bossPlateFade = new Graphics();
+  bossPlateFade.visible = false;
+  /** `advanceBossIntroPlate`'s own state machine — `'idle'` when no plate is in flight. */
+  let bossPlatePhase: 'idle' | 'fadeIn' | 'hold' | 'fadeOut' = 'idle';
+  /** When the current `bossPlatePhase` leg ends, on the wall clock. */
+  let bossPlatePhaseUntil = 0;
+  /** The deferred `bossIntroPlate.show(...)` call, run once the fade-in reaches solid black. */
+  let bossPlateReveal: (() => void) | null = null;
 
   /**
    * One postcard texture per boss id that has art authored — floors 3-7
@@ -1094,8 +1122,6 @@ async function boot(): Promise<void> {
         }
       });
   }
-  /** When the boss intro plate comes down, on the wall clock. Render-only — never sim state. */
-  let bossPlateUntil = 0;
 
   /**
    * The boss room's own health bar (#36) — see `render/boss-health-hud.ts`'s
@@ -1366,6 +1392,8 @@ async function boot(): Promise<void> {
     const centreX = Math.round(width / 2);
     itemSetHud.place(HUD_MARGIN, y, centreX, Math.round(height * 0.32));
     bossHealthHud.view.position.set(centreX, HUD_MARGIN + UI_TEXT_HEIGHT + 2);
+    bossPlateFade.clear();
+    bossPlateFade.rect(0, 0, width, height).fill({ color: EFFECT_PALETTE.gameOverDim });
     bossIntroPlate.resize(width);
     bossIntroPlate.place(centreX, Math.round(height * 0.16));
     pickupToast.place(centreX, Math.round(height * 0.2));
@@ -2179,10 +2207,9 @@ async function boot(): Promise<void> {
         minimapHud.overlayView.visible = false;
       }
       // The rising edge alone — once per boss-room entry, when warmup starts.
-      // Hiding is the plate's own wall-clock timer (`advanceBossIntroPlate`),
-      // not warmup ending: `BOSS_PLATE_MS` is deliberately longer than
-      // `ROOM_WARMUP_TICKS`' 0.4s, which is safe only because this plate has
-      // no backing dim — see `BOSS_PLATE_MS`'s own doc comment.
+      // Taking it down again is `advanceBossIntroPlate`'s own phase machine,
+      // not warmup ending — see `BOSS_PLATE_MS`'s doc comment for why the two
+      // are deliberately no longer the same clock.
       const enteringBossRoom =
         sim.roomWarmupTicks > 0 && planRoom(floorPlan, currentRoomId).role === 'boss';
       if (enteringBossRoom !== bossBannerShown) {
@@ -2190,14 +2217,23 @@ async function boot(): Promise<void> {
         if (enteringBossRoom) {
           const compiled = sim.bossDefinition;
           const content = compiled === null ? undefined : enemyDefinitionById(compiled.id);
-          bossIntroPlate.show(
-            compiled?.name ?? t(preferences.locale, 'ui.hud.bossBanner'),
-            preferences.locale,
-            content?.title,
-            content?.epithet,
-            compiled === null ? undefined : bossArtByEnemyId.get(compiled.id),
-          );
-          bossPlateUntil = performance.now() + BOSS_PLATE_MS;
+          const name = compiled?.name ?? t(preferences.locale, 'ui.hud.bossBanner');
+          const art = compiled === null ? undefined : bossArtByEnemyId.get(compiled.id);
+          // Deferred until the fade-in actually reaches solid black
+          // (`advanceBossIntroPlate`'s `'fadeIn'` leg) — showing it now would
+          // pop the text in over the still-visible room instead of behind
+          // the fade, the same ordering bug a straight cut would have.
+          bossPlateReveal = () => {
+            bossIntroPlate.show(name, preferences.locale, content?.title, content?.epithet, art);
+          };
+          bossPlatePhase = 'fadeIn';
+          bossPlatePhaseUntil = performance.now() + BOSS_PLATE_FADE_MS;
+          bossPlateFade.visible = true;
+          bossPlateFade.alpha = 0;
+          // Stops the room dead the instant the reveal starts, not just once
+          // the fade finishes landing — see `advanceBossIntroPlate`'s own
+          // doc comment for why this is the actual fix, not the fade.
+          loop.paused = true;
         }
       }
       const toast = sim.pickupToast;
@@ -2436,6 +2472,15 @@ async function boot(): Promise<void> {
       playSfx('ui-close');
     },
   });
+  // The boss intro plate and its fade-to-black (`docs/DECISIONS.md` #104): raised over
+  // every ordinary HUD element added above, so the fade genuinely hides the
+  // room *and* the health/item/minimap HUD rather than leaving them peeking
+  // out around a plate that used to sit under them. Still under the title/
+  // pause/credits/settings screens below — those can't actually open while
+  // `advanceBossIntroPlate` holds `loop.paused` (see that function), but
+  // there is no reason to fight them for the top slot if that ever changes.
+  hudLayer.addChild(bossPlateFade);
+  hudLayer.addChild(bossIntroPlate.view);
   // Topmost of all (#158): the title, pause and credits screens each cover
   // the entire frame while they're up, over the run and over each other's
   // end screens alike — there is nothing a player should see peeking out
@@ -2913,10 +2958,49 @@ WASD move   arrows aim and fire
     floorTitleCard.setFade(Math.min(1, remaining / FLOOR_CARD_FADE_MS));
   }
 
-  /** Takes the boss intro plate down once `BOSS_PLATE_MS` has passed. A hard cut, same as the banner it replaced — no fade to own. */
+  /**
+   * Drives the boss intro plate's whole reveal: fade to black, the plate
+   * itself, fade back, then hand the room back to the player — genuinely
+   * paused throughout (`loop.paused`, set the instant `bossPlatePhase`
+   * leaves `'idle'`, in the boss-room-entry block above), not merely
+   * covered. That is the actual fix for the boss being able to attack
+   * during its own reveal: the fade makes the moment read as a pause, but
+   * `loop.paused` is what makes it one. Runs every rendered frame
+   * regardless of the pause it is itself holding — see `render:`'s own
+   * comment on `pollMenuGamepad` for why that keeps working.
+   */
   function advanceBossIntroPlate(now: number): void {
-    if (bossIntroPlate.visible && now >= bossPlateUntil) {
-      bossIntroPlate.hide();
+    if (bossPlatePhase === 'idle') {
+      return;
+    }
+    const remaining = bossPlatePhaseUntil - now;
+    switch (bossPlatePhase) {
+      case 'fadeIn':
+        bossPlateFade.alpha = Math.min(1, 1 - remaining / BOSS_PLATE_FADE_MS);
+        if (remaining <= 0) {
+          bossPlateFade.alpha = 1;
+          bossPlateReveal?.();
+          bossPlateReveal = null;
+          bossPlatePhase = 'hold';
+          bossPlatePhaseUntil = now + BOSS_PLATE_MS;
+        }
+        break;
+      case 'hold':
+        if (remaining <= 0) {
+          bossIntroPlate.hide();
+          bossPlatePhase = 'fadeOut';
+          bossPlatePhaseUntil = now + BOSS_PLATE_FADE_MS;
+        }
+        break;
+      case 'fadeOut':
+        bossPlateFade.alpha = Math.max(0, remaining / BOSS_PLATE_FADE_MS);
+        if (remaining <= 0) {
+          bossPlateFade.alpha = 0;
+          bossPlateFade.visible = false;
+          bossPlatePhase = 'idle';
+          loop.paused = false;
+        }
+        break;
     }
   }
 

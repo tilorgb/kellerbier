@@ -23,11 +23,20 @@ const PICTURE_WIDTH = 232;
  * (#23) — plus, where one has been authored, a small illustrated `Postcard`
  * above the text (the boss-postcard redesign, `docs/DECISIONS.md` #98's
  * successor). Same non-opaque, bare-text-over-the-live-room composition the
- * old banner used for everything below the picture — the boss is standing
- * right there, inert for exactly as long as this is up (see `app/main.ts`'s
- * boss-specific warmup window), which is the point: this is a reveal, not a
- * cutscene. The postcard itself is opaque (it has to be, to hold a picture),
- * but it is sized as an object on the room, not a dim over it.
+ * old banner used for everything below the picture — this plate still draws
+ * no dim of its own.
+ *
+ * What sits *behind* it changed, though: this used to go up over a fully
+ * live room, on the premise that the boss stayed visible and in play the
+ * whole time made the reveal fair on its own. It didn't — the room's
+ * ordinary warmup window is far shorter than this plate stays up, so the
+ * boss could act while it was still on screen. `app/main.ts`'s
+ * `advanceBossIntroPlate` now fades the whole frame to black before raising
+ * this (and back before taking it down), with `loop.paused` held for the
+ * entire sequence — this class still knows nothing about that; it only
+ * renders whatever `show`/`hide` tell it to, same as always. The postcard
+ * itself is opaque (it has to be, to hold a picture), but it is sized as an
+ * object on the (now paused) room, not a dim over it.
  *
  * `name` keeps the exact `DisplayTitle(TITLE_STYLES.threat)` treatment the
  * old banner had. `title` and `epithet` are in the text face, same
