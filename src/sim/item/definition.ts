@@ -131,12 +131,12 @@ export type ItemKillHook = (ctx: ItemHookContext & { readonly target: number }) 
 export type ItemDamageTakenHook = (ctx: ItemHookContext & { readonly amount: number }) => void;
 export type ItemFloorStartHook = (ctx: ItemHookContext & { readonly floor: number }) => void;
 /**
- * Fires when a Bierfassl the player is standing near goes off (#29,
- * `sim/systems/bombs.ts`'s `explode`) — the moment `Fassldauben` needs to add
- * its staves to the blast. Not in #26's original nine; a bomb detonating
- * turned out to be exactly the kind of named moment the others are, so it
- * gets the same broadcast-to-every-held-item treatment rather than a
- * bomb-specific special case.
+ * Fires when any explosion goes off nearby (#29, `GameSim.triggerExplosion`)
+ * — a planted Bierfassl, a thrown Böllerschmeißer, or an enemy's lobbed one
+ * alike — the moment `Fassldauben` needs to add its staves to the blast. Not
+ * in #26's original nine; a detonation turned out to be exactly the kind of
+ * named moment the others are, so it gets the same broadcast-to-every-held-
+ * item treatment rather than a bomb-specific special case.
  */
 export type ItemBombDetonateHook = (
   ctx: ItemHookContext & { readonly x: number; readonly y: number },

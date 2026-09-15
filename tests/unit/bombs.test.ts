@@ -341,4 +341,39 @@ describe('bombable (hidden) walls', () => {
     expect(sim.doors.some((door) => door.direction === 'north' && door.cellCol === 0)).toBe(true);
     expect(sim.doors.some((door) => door.direction === 'north' && door.cellCol === 1)).toBe(false);
   });
+
+  /**
+   * Regression: the Böllerschmeißer item's own detonation used to skip
+   * `revealBombableWalls` entirely (it only dealt damage and drew the burst),
+   * so throwing it at a secret wall did nothing even though a planted
+   * Bierfassl in the same spot would have opened it. Now both explosion
+   * sources go through `GameSim.triggerExplosion`.
+   */
+  it('reveals it once a thrown Böllerschmeißer explodes near that wall, same as a Bierfassl', () => {
+    const sim = new GameSim({
+      roomTemplate: template,
+      floor: 1,
+      population: 'empty',
+      hiddenDoors: [{ direction: 'north', cellCol: 0, cellRow: 0 }],
+    });
+    sim.pickUpItem('boellerschmeisser');
+    sim.chargeActiveItem(
+      'boellerschmeisser',
+      sim.effectiveMaxCharge(sim.items.get('boellerschmeisser')),
+    );
+
+    const centreX = (sim.room.minX + sim.room.maxX) / 2;
+    const base = sim.playerIndex * 4;
+    sim.transform.data[base] = centreX;
+    sim.transform.data[base + 1] = sim.room.minY + 2;
+    sim.transform.data[base + 2] = centreX;
+    sim.transform.data[base + 3] = sim.room.minY + 2;
+
+    expect(sim.useActiveItem('boellerschmeisser')).toBe(true);
+    for (let tick = 0; tick < 90; tick++) {
+      sim.step(createInputFrame());
+    }
+
+    expect(sim.doors.some((door) => door.direction === 'north')).toBe(true);
+  });
 });

@@ -120,8 +120,9 @@ import { stepBombs } from '../systems/bombs.js';
 import { applyDamageAt, stepImpact, stepParticles } from '../systems/impact.js';
 import { stepLootDrops } from '../systems/loot.js';
 import {
-  dispatchItemFloorStart,
   dispatchItemBeerOffered,
+  dispatchItemBombDetonate,
+  dispatchItemFloorStart,
   dispatchItemLethalDamage,
   dispatchItemProjectileSpawn,
   dispatchItemRoomClear,
@@ -2005,10 +2006,38 @@ export class GameSim {
   }
 
   /**
+   * The one chokepoint for "what does the room, and everything holding an
+   * item, do when *any* explosion goes off nearby" — a planted Bierfassl
+   * (`sim/systems/bombs.ts`'s `explode`), the player's own thrown
+   * Böllerschmeißer (`content/items/boellerschmeisser.ts`), or an enemy's
+   * lobbed one (`sim/systems/enemy.ts`'s `detonateLobbedBomb`). Every
+   * explosion source calls this once, with whatever radius it already uses
+   * to find what it damages, so a new "thing an explosion affects" — a
+   * chest, say — is wired in exactly once here rather than once per source.
+   * That is also why this exists at all: the Böllerschmeißer item used to
+   * call `revealBombableWalls` on its own and simply never did, which is
+   * exactly the class of bug a single call site forecloses.
+   *
+   * Deliberately does not deal damage — a Bierfassl's blast is a
+   * Bomberman-style cross, a splash source's is a circle, and that shape
+   * difference is intentional (see `bombs.ts`'s own doc comment); each
+   * source still deals its own damage through its own chokepoint
+   * (`applyDamageAt` for the cross, `applySplashDamage` for a circle).
+   * Everything gathered here is already measured as a plain circle for
+   * every source, cross-shaped blast included (`revealBombableWalls` and
+   * `breakMachineFromBlast` always were), so one radius covers all of them.
+   */
+  triggerExplosion(x: number, y: number, radius: number): void {
+    this.revealBombableWalls(x, y, radius);
+    this.breakMachineFromBlast(x, y, radius);
+    dispatchItemBombDetonate(this, x, y);
+  }
+
+  /**
    * Opens any bombable wall within `radius` of `(x, y)`. Called once per
-   * explosion by `stepBombs` (`sim/systems/bombs.ts`) with the blast's own
-   * position and radius — "close enough to reveal" is exactly "close enough
-   * to damage," the same blast, no separate concept of range.
+   * explosion by `triggerExplosion` with the blast's own position and
+   * radius — "close enough to reveal" is exactly "close enough to damage,"
+   * the same blast, no separate concept of range.
    *
    * A wall's distance is measured to the point on the room boundary its door
    * gap is centred on (`render/world/scenery.ts`'s door pieces cut the same
@@ -5345,11 +5374,11 @@ export class GameSim {
 
   /**
    * Breaks the current floor's Losbrunnen if a detonation at `(x, y)` landed
-   * within `radius` of it — `sim/systems/bombs.ts`'s `explode`, on every
-   * Bierfassl blast regardless of what set it off. The one way to destroy
-   * the machine outright rather than merely risking a bad roll — a real
-   * cost for planting a bomb carelessly near it, never a side effect of
-   * ordinary browsing (`machinePickerOpenValue`'s doc comment).
+   * within `radius` of it — `triggerExplosion`, on every explosion
+   * regardless of what set it off. The one way to destroy the machine
+   * outright rather than merely risking a bad roll — a real cost for
+   * exploding something carelessly near it, never a side effect of ordinary
+   * browsing (`machinePickerOpenValue`'s doc comment).
    */
   breakMachineFromBlast(x: number, y: number, radius: number): void {
     const machine = this.machineRuntime;
