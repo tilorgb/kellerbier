@@ -496,7 +496,7 @@ function visitBombDetonate(index: number, state: ItemRuntimeState): void {
   hook(scratch);
 }
 
-/** Fires when a Bierfassl goes off — see `sim/systems/bombs.ts`'s `explode`. */
+/** Fires when any explosion goes off — see `GameSim.triggerExplosion`. */
 export function dispatchItemBombDetonate(sim: GameSim, x: number, y: number): void {
   beginDispatch(sim);
   try {

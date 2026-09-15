@@ -596,6 +596,10 @@ function captureLobTarget(sim: GameSim, index: number): void {
  * itself, so a lobbed bomb never catches its own thrower in its blast — it
  * can still catch every *other* enemy standing in the radius, same as a
  * player's own splash would (`applySplashDamage`'s own doc comment).
+ *
+ * Also runs the blast through `GameSim.triggerExplosion`, same as every
+ * other explosion source — a Böller an enemy lobs at a secret wall opens it
+ * exactly as one the player throws does.
  */
 function detonateLobbedBomb(sim: GameSim, index: number, detonation: CompiledDetonation): void {
   const motion = sim.enemyMotion.data;
@@ -614,6 +618,7 @@ function detonateLobbedBomb(sim: GameSim, index: number, detonation: CompiledDet
   // the landing spot for a player who dodged, or who was hit from off to one
   // side, to actually see.
   sim.splashBurst(x, y, detonation.radius);
+  sim.triggerExplosion(x, y, detonation.radius);
 }
 
 /**

@@ -4,7 +4,6 @@ import { World } from '../ecs/world.js';
 import type { GameSim } from '../game/sim.js';
 import { bombBlast } from '../particle/effects.js';
 import { applyDamageAt } from './impact.js';
-import { dispatchItemBombDetonate } from './items.js';
 
 /**
  * The Bierfassl: a fuse that counts down, a roll that slows, and a blast that
@@ -141,26 +140,16 @@ function explode(sim: GameSim, index: number): void {
   sim.broadphase.query(x, y, armLength, blastCandidate);
   activeSim = null;
 
-  // Same blast, same reach as the damage above — a secret room's wall opens
-  // exactly when a Bierfassl set off near it would also have hurt something
-  // standing there. Circular rather than cross-shaped: a door dead-centre on
-  // a diagonal from the bomb is a rarer miss than the corners `broadphase`
-  // already over-fetches above, and a wall opening slightly too generously
-  // is a friendlier failure than a bomb dropped one pixel off-axis leaving a
-  // player unable to open a route they can plainly see the blast reached.
-  sim.revealBombableWalls(x, y, armLength);
-
-  // #29: an item that changes what a detonation does (Fassldauben's staves)
-  // hears about it here, after the blast itself is queried but before the
-  // bomb entity is gone — same "broadcast to every held item" shape as any
-  // other item hook, just for a moment #26 did not originally name.
-  dispatchItemBombDetonate(sim, x, y);
-
-  // Der Losbrunnen (#218): the one way to destroy it outright rather than
-  // merely risk a bad roll — a real cost for planting a bomb carelessly
-  // near it. Same circular over-fetch radius as the wall reveal just above,
-  // for the same reason.
-  sim.breakMachineFromBlast(x, y, armLength);
+  // Same blast, same reach as the damage above — everything else an
+  // explosion affects (a secret room's wall, the Losbrunnen, an item that
+  // changes what a detonation does) goes through the one shared chokepoint
+  // every explosion source calls, `GameSim.triggerExplosion`. Circular
+  // rather than cross-shaped: a door dead-centre on a diagonal from the bomb
+  // is a rarer miss than the corners `broadphase` already over-fetches
+  // above, and a wall opening slightly too generously is a friendlier
+  // failure than a bomb dropped one pixel off-axis leaving a player unable
+  // to open a route they can plainly see the blast reached.
+  sim.triggerExplosion(x, y, armLength);
 
   // Boulders in the cross are cleared — a bomb opens a path through
   // destructible cover (#4). The exact cross `blastCandidate` damages

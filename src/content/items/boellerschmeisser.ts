@@ -45,6 +45,12 @@ export const boellerschmeisser: ItemDefinition = {
           const damage = Math.max(1, Math.round(sim.stats.value('damage') * DAMAGE_SCALE));
           sim.applySplashDamage(x, y, BLAST_RADIUS, damage, playerIndex);
           sim.pushEnemiesNear(x, y, BLAST_RADIUS, PUSH_STRENGTH);
+          // Same blast, same reach as the damage above — everything else an
+          // explosion affects (a secret room's wall, the Losbrunnen) goes
+          // through `GameSim.triggerExplosion`, the one chokepoint every
+          // explosion source calls; this item used to skip it entirely, so a
+          // Böller lobbed at a secret wall did nothing.
+          sim.triggerExplosion(x, y, BLAST_RADIUS);
           // #243: the enemy's own mirrored fix — nothing else draws the boom.
           sim.splashBurst(x, y, BLAST_RADIUS);
         } else {
