@@ -5473,3 +5473,240 @@ were checked standing in a real room, in `npm run dev`. **Left for a follow-up:*
 rule) still states the old green-hat/red-vest description, so the next key-art generation round
 should update it to match, and #325 — the issue that locked the old colours in the first place, now
 closed — is stale history rather than something to reopen.
+
+## 99. Boss-room postcards land; the opening card catches up to #98's colours; bosses partially amend #193's "full chibi"
+
+**Decided:** this session, continuing #98's postcard redesign into the boss rooms specifically, plus
+fixing a stale piece of art #98 missed. **Amends #193** (bosses locked to "full chibi") for the two
+bosses that exist today — not the roster rule itself, which still holds for every non-boss enemy and
+for Alois.
+
+**`assets/art/story/opening.png` was still the pre-#98 Alois** — green hat, no beard — because #98's
+recolour only touched the *in-game sprite* and the *title postcard*; the opening story beat's own
+illustration was generated earlier in the same session, before the colour flip, and nobody had
+reason to look at it again until a player pointed out "the blond anime character" during the
+opening beat specifically. Regenerated through the same `chapterCard` preset and vintage-postcard
+prompt language as everything else this session (red Trachtenhut, green waistcoat, beard, the
+cellar scene `ui.story.opening`'s own text describes — Opa's empty bottle, the new label, the
+Trink-Rucksack on its hook), picked from six candidates on the same "on-brief colours, on-brief
+scene" bar as every other pick this session.
+
+**The boss-room intro plate gets an illustrated tier.** `BossIntroPlate` (#58/#327) now holds a
+`Postcard` above its existing name/title/epithet text, shown whenever `app/main.ts` has a texture
+for the boss's id — `assets/art/bosses/der-stier.png` and `assets/art/bosses/grosse-kellerassel.png`,
+generated through `keyart-bench`'s existing `bossPlate` preset (1344×768, sitting unused since #94
+first built it — see #94's own "left for #58" note). No art authored for a boss falls back to the
+plate's original text-only banner, same #19 shape as everything else illustrated. The plate is still
+non-opaque outside the postcard itself — the boss stands visible behind it the whole time, unchanged
+from #327's original "reveal, not a cutscene" reasoning.
+
+**Getting the scene right took two rounds.** The first batch of `bossPlate` candidates for Der Stier
+defaulted to a stone-arena/cellar setting (the preset's own placeholder prompt) — wrong for Floor
+2's boss specifically, whose room is the village square, per `docs/CONTENT_BIBLE.md`'s "Bull in the
+village square" and the "Dorf & Acker" flavour (sunny, half-timbered houses, a Maibaum, hop-field
+bunting). A second round moved him to open pasture instead of the village street on a further note —
+fifteen candidates, most of which lost the "green wreath around the neck" detail once the scene
+became a full-body shot in a field rather than a close portrait; candidate 12 (dark coat, correct
+horns, an aged-paper postcard border, the wreath itself lost) was picked anyway, on the reasoning
+that the wreath is something the *sprite* still carries even where the picked key art doesn't.
+Kellerassel's own first batch defaulted toward a fantasy-monster read (glossy armour plate, fangs,
+a curled rhino horn) that a playtester called "too fantasy style" and asked for a second pass with
+no requirement for big eyes — the second batch, prompted toward "realistic-looking... no exaggerated
+cartoon eyes," landed candidate 1 (muted grey, ordinary small eyes, long antennae, the actual cellar
+setting) on the first retry.
+
+**The sprites themselves move toward the picked art, not all the way to it.** #193's "full chibi,
+one angled brow, the threat is scale and motion" reasoning is not overturned — Alois and every
+ordinary enemy stay exactly as chibi as they were, and this is deliberately scoped to the two
+existing bosses only, per this session's own framing: "the chibi style should work for our
+characters... but the boss sprites should be modelled after the actual postcard artwork." Both
+bosses are still drawn procedurally (`tools/art/authoring/bosses.mjs`'s `kellerasselFrame`/
+`stierFrame`, unchanged since #55/#56 — see that file's own doc comment), so "move toward the art"
+meant retuning the same drawing functions' parameters and palette rather than a from-scratch redraw,
+and the frame *count* and the state-machine's own attack timing are untouched — `STIER_FRAMES`/
+`KELLERASSEL_FRAMES` still have exactly the seven entries `assets/sprites/*/bosses/*.anim.json`
+already indexes by position, so no gameplay behaviour changed, only what each frame draws.
+
+- **Die Große Kellerassel's `CELLAR` palette moved off the brown/amber chitin ramp it drew from
+  before and onto the cellar's own dominant concrete greys** (`FLOOR_PALETTES.cellar`'s three grey
+  entries) instead — `docs/CONTENT_BIBLE.md`'s Floor 1 line ("bare-concrete grey dominates... one
+  warm amber light source") had the amber accent describing the *room's* lighting, not licence for
+  the creature living in it to be amber-coloured. Every value used is still a real shade of the
+  legal five-plus-neutrals set (`tools/art/palette.mjs`'s `legalPixelColorsFor`), just re-picked from
+  the grey ramp. `kellerasselFace`'s eyes shrank from a `7×8` cartoon-round pair to an ordinary
+  `3×3`, and its antennae grew from a single 9px stroke into a two-segment 20px curve — both aimed
+  at the one thing a playtester actually asked for: something that reads as an Assel rather than a
+  plush toy, without needing to be cute to read as a boss.
+- **Der Stier's horns scaled up ~35%, his barrel-shaped body flattened (`ry` cut roughly a fifth
+  across all three overlapping ellipses) to reveal more of the legs underneath instead of hiding
+  them under a rounder belly, and the green wreath moved from a nearly invisible single dot low on
+  the shoulder to a visible band drawn *after* the head** (it used to draw before, and the neck mass
+  painted over most of it) **at the actual neck-to-shoulder seam.** The body-flattening fix is the
+  same insight as the eye/antenna one: nothing about the *silhouette*'s ground contact or the
+  collider changed (`SGROUND` and every leg rectangle's own coordinates are untouched, confirmed by
+  `tests/art/sprite-scale.test.ts` staying green), only how much of the already-drawn leg geometry
+  the torso was covering up.
+- Verified the same way #98's Alois recolour was: `tests/art/*` and `tests/content/boss-pacing.test.ts`
+  green, then both bosses checked as actual in-game billboards (not flat swatches) via the debug
+  Rooms panel's "Apply to running game" against `cellar-boss`/`dorf-boss` — which is also how the
+  gap in this verification path was found: forcing a room via that panel does not replay a real door
+  transition, so `sim.bossDefinition`'s warmup edge that raises `BossIntroPlate` never fires through
+  it. The plate's own code was not exercised live this session as a result — it is a straightforward
+  reuse of the `Postcard` component `docs/DECISIONS.md` #98 already proved live in four other
+  screens, so the risk is judged low, but it is honestly a gap rather than a confirmed-live feature,
+  and worth a real playthrough check before calling it done.
+
+## 100. Boss sprites stop approximating the postcard art and start being it
+
+**Decided:** this session, following straight on from #99. #99's redraw retuned
+`kellerasselFrame`/`stierFrame`'s existing primitive-drawing parameters and palette toward the
+picked key art — proportions, colours, feature sizes — without changing the authoring technique
+itself. Repeated playtest feedback rejected round after round of that retuning (a Kellerassel with
+"a big human head," a Stier that stayed "too cute / chibi" no matter how the ellipses were resized)
+and the last piece of feedback named the actual problem directly: *"Your current approach seems to
+be more like a best guess... Maybe we need to generate actual pictures for the bosses and then
+transform them into the game sprite pixel by pixel."* This entry is that — for both existing
+bosses, the sprite is no longer a hand-composed approximation of the key art; it is the key art
+itself, cut out and pixelated.
+
+**Two dead ends came first and are worth recording so nobody re-walks them.**
+
+- **A literal reference-driven redraw still guesses.** Before reaching for the actual key art, this
+  session tried generating a *fresh* AI reference (a clean quadruped on a flat background, this
+  time, rather than the busy postcard scene) purely to measure proportions from, then hand-encoding
+  those measurements back into `stierBody`'s ellipses. The proportions were more accurate — the
+  reference's own torso is wider and shallower than the previous pass's guess, and its legs are
+  closer to full length, not stubby — but the result still read as a rounded-rect-with-caps, because
+  the *technique* was still "compose primitives," just against better numbers. One further attempt
+  transplanted the reference's own per-row silhouette verbatim (fixing a genuine bug along the way —
+  `downscaleBoxFilter` required an exact-divisor target size, which no real sprite canvas is; the
+  fix was an inverse/fractional-block box filter, not avoiding non-square targets) and it read as a
+  flat slab with legs bolted under it. A traced photo edge doesn't carry the rounded, shaded quality
+  this game's block-primitive style needs to still look like an animal. Proportions can be measured
+  from a reference and fed into hand-composed art; *shape fidelity* cannot be approximated that way
+  no matter how good the reference is.
+- **Blind nearest-colour quantization is blind to which hue a coat should be.** The first real
+  cutout attempt (Der Stier, whose floor's legal palette — `FLOOR_PALETTES.rural` — is green/blue/
+  cream with no brown at all) quantized against the floor's *full* legal set and the coat's warm
+  brown snapped to rural green, because green is numerically nearer the brown than any grey is.
+  Restricting the *candidate colours* to neutrals-plus-cream fixed the hue but, quantizing against
+  only the five raw base values, banded the shading flat and lost the illustration's own modelling.
+  The actual fix needed both halves at once: restrict *which hues* are eligible (no green, no blue —
+  a coat has no business being either) while keeping each eligible hue's *entire* `legalPixelColorsFor`
+  shade ramp (19 tones once the ±2-step ramp is expanded, not 5) — hue restriction and shade-count
+  are independent knobs, and this bug was turning both at once and only noticing the one that broke
+  the colour, not the one that broke the shading.
+
+**The technique that worked, for both bosses:**
+
+1. Crop the boss's own `assets/art/bosses/*.png` (already committed, already signed off, no new
+   generation) down to just the creature.
+2. Key out the background. Der Stier's postcard is a bright, roughly uniform field-and-sky scene
+   against a near-black coat, so a *luminance* flood fill from the border (background = bright and
+   reachable from an edge without crossing something dark, the same "stops at a sharp edge" logic
+   `removeBackground`'s corner-colour version already used, just keyed on brightness instead of one
+   sampled hue) cleanly separates the two. Die Große Kellerassel's cellar scene has no such
+   uniformity — dark stone wall, a lit floor, barrels, all mixed — so automated keying was abandoned
+   in favour of a tighter manual crop (excluding the barrels outright) plus a hand-fit piecewise
+   curve clearing the stone arch above the shell's own silhouette. Both are legitimate; which one
+   applies is a property of the source scene's own lighting uniformity, not a preference.
+3. Downscale straight to the sprite's real canvas (116×100, 140×86) through an inverse/fractional
+   box filter — see the divisibility fix above — and quantize to the floor's legal palette, hue-
+   restricted where the floor's own hues would lie about the subject's colour (Der Stier, no brown
+   on this floor) and left at the *full* legal set where they wouldn't (Die Große Kellerassel:
+   `floor-1-cellar`'s `CELLAR` already has both a brown shell ramp and a separate grey head/leg
+   ramp, so there is no wrong-hue snap to guard against).
+4. Hand-clean what the crop/key still leaves — a fence post, a grass sprig, a stray highlight
+   fragment from the background — pixel-rectangle by pixel-rectangle at the *sprite's* resolution,
+   not the source's; far fewer pixels to reason about once it's already been downscaled.
+5. Stamp the cleaned raster onto the sprite canvas (`stampArt`, new in `bosses.mjs`) instead of
+   drawing it from primitives.
+
+**Animation is now whole-sprite transforms, not limb articulation, and that is an honest
+trade-off, not a hidden regression.** A static raster has no separable legs or head to re-pose per
+frame the way `stierBody`/`stierHead`/`kellerasselBody`/`kellerasselHead`'s primitives could — those
+functions are deleted now, not kept unused. `stampArt` instead takes a squash/stretch scale (around
+the art's own ground-anchored bottom edge, so a crouch or a stretch reads as weight shifting on
+planted feet, not the sprite floating), a lean/dip pixel offset, and a shade-step hit-flash tint
+(walking `nudgeShade`'s ramp, not an arbitrary RGB lerp toward white that would land off-palette).
+`STIER_FRAMES`/`KELLERASSEL_FRAMES` still have exactly seven entries in the same order — attack
+timing and the state machine are untouched, only what each frame draws — but a walk cycle is now a
+weight-shift and a telegraph is a crouch-and-lean rather than independent leg swaps. Both bosses'
+`death-1`/`death-2` frames (Der Stier's collapsed-on-its-side pose, Kellerassel's `roll`/`curl`)
+still use the old hand-drawn primitives unchanged, since a static side-view raster has no natural
+"lying down" or "curled into a ball" pose to derive — a visible style seam between the standing
+frames and the death frames that is a known, accepted gap rather than an oversight.
+
+**A real rendering bug came out of the first squash/stretch pass**, worth naming because it will
+recur if `stampArt` grows a third caller: forward-mapping (walk the *source* pixels, compute where
+each one lands) leaves unset gaps in the destination whenever a non-uniform scale spreads adjacent
+source pixels apart, and `inkOutline` then paints those gaps in as a stray black seam bisecting the
+sprite. The fix is inverse mapping — walk the *destination* bounds and sample the source for each
+one — which guarantees full coverage regardless of scale direction. Any future raster transform in
+this file should default to inverse mapping for the same reason a downscaler defaults to averaging
+over a source block rather than picking one sample: forward-mapped scale-up always has this hole.
+
+Verified: `npx tsc --noEmit` clean, full suite (2572 tests) green, both strips rebuilt via
+`npm run art:bosses` with `assertOnPalette` passing (no manual palette exception needed for either
+boss), and both checked as live in-game billboards via the debug Rooms panel's "Apply to running
+game" against `cellar-boss`/`dorf-boss` — the same verification path and the same known gap #99
+already recorded (this does not replay a real door transition, so `BossIntroPlate`'s warmup-edge
+trigger isn't exercised through it).
+
+## 101. #100's boss cutouts get simplified, given real leg motion, and one has its silhouette re-traced — three playtest rounds after the fact
+
+**Decided:** this session, immediately following #100. Three more playtest passes, each catching
+something #100's "cut out and pixelate the key art" technique got right in outline but wrong in
+execution.
+
+**"It looks like a picture, not a creature."** #100's quantization preserved the illustration's
+own smooth painterly gradient — every `legalPixelColorsFor` shade of the eligible hues, which for
+Der Stier alone was 19 tones. That is more shading resolution than the illustration needed and
+more than deliberate pixel art ever uses: real pixel art commits to 2-3 flat bands per material,
+not a smooth ramp. Fixed by lightly box-blurring the cutout before quantizing (merges the
+illustration's fine brushwork into its surrounding gradient instead of preserving it stroke for
+stroke) and cutting the candidate palette down to 3 shade-steps per hue instead of the full ±2
+ramp. Both bosses read as flat, deliberately-shaded shapes now rather than a downsized photo.
+
+**"It should look like it can move."** #100 shipped whole-sprite squash/stretch/lean — the torso
+leaning or crouching, never the legs moving independently — because a flat raster has no separate
+limbs to re-pose. Two real per-leg approaches were tried and rejected before landing on a third:
+
+- Cutting each leg into its own source image and rotating it around a hip pivot (genuine
+  per-limb articulation). Technically correct, but Der Stier's two leg *pairs* (near and far leg
+  merged in this side view, same as the reference) only support a crude two-phase gait this way,
+  and the technique doesn't extend to the Kellerassel's seven legs at all.
+- Slicing the leg row into discrete rectangular strips, each independently offset (`stampArt`'s
+  `srcClip`, since removed). Real per-leg offsets, but the strip edges cut across the source at a
+  flat line the actual silhouette doesn't follow — it read as pasted-together boxes, not legs.
+- **What shipped:** `stampArtRippled` — every source column gets its own vertical offset from a
+  travelling sine wave, confined to the leg band. No seams (the offset between column x and x+1
+  differs by a fraction of a pixel), and a travelling wave is the right *shape* of motion for a
+  many-legged gait besides — a metachronal ripple down the body, not a rigid swing.
+
+**That technique does not generalize to every leg, and shipping it uniformly broke the
+Kellerassel specifically.** The ripple reads fine on Der Stier because each leg is one large,
+simple hoof mass — shearing neighbouring columns by a slightly different amount just tilts the
+blob smoothly. Die Große Kellerassel's legs are thin, multi-segment joints only a couple of pixels
+wide; the same per-column shift tore each one into disconnected diagonal fragments, and
+`inkOutline` rang every fragment separately — a playtester's exact words were "outlines way off
+the body, looks cut out with scissors." Fixed by retracting the ripple for this creature only:
+its legs are static, stamped once with the shell, while `bodyDip`/`squash`/`bodyLean`/`tint` still
+carry the weight-shift/recoil/hit-flash reads every frame needs. Der Stier keeps the ripple. The
+lesson generalizes past this one pair of sprites: a per-column pixel transform's safety depends on
+how much fine detail the source has *in that column*, not on whether the transform produced clean
+edges on the last sprite it was tried on.
+
+**Die Große Kellerassel's cutout silhouette was re-traced.** #100's hand-fit background curve for
+this creature (no single flat background to key, unlike Der Stier's field) badly underestimated
+how high the shell actually sits across most of its length — the curve said the shell's top edge
+was 50-100px lower than it actually is for x=300-900, leaving a wide wedge of the stone-arch
+background baked into the sprite as opaque pixels. That is what read as "a picture" in the most
+literal sense: a visible rectangular corner of the scene behind the creature. Re-traced at roughly
+25 points along the actual shell curve (was 7) and the foot-line tightened to match where the legs
+actually end rather than a guessed flat cutoff. The silhouette is organic now — no rectangular
+background wedge, no picture-edge.
+
+Verified the same way as #100: `npx tsc --noEmit` clean, full suite (2572 tests) green, both
+strips rebuilt via `npm run art:bosses` with `assertOnPalette` passing, both checked as live
+in-game billboards via the debug Rooms panel against `cellar-boss`/`dorf-boss`.

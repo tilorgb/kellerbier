@@ -1,6 +1,8 @@
-import { Container, loadTexture } from '../render/gfx/index.js';
+import { Container, loadTexture, type Texture } from '../render/gfx/index.js';
 import titlePostcardUrl from '../../assets/art/title/postcard.png';
 import openingCardArtUrl from '../../assets/art/story/opening.png';
+import derStierArtUrl from '../../assets/art/bosses/der-stier.png';
+import grosseKellerasselArtUrl from '../../assets/art/bosses/grosse-kellerassel.png';
 import { ENEMY_DEFINITIONS, enemyDefinitionById } from '../content/enemies/index.js';
 import {
   FLOOR_CONFIGS,
@@ -1065,6 +1067,33 @@ async function boot(): Promise<void> {
   bossIntroPlate.hide();
   hudLayer.addChild(bossIntroPlate.view);
   let bossBannerShown = false;
+
+  /**
+   * One postcard texture per boss id that has art authored — floors 3-7
+   * (parked) have none yet, and `BossIntroPlate.show` falls back to its
+   * text-only banner for those, the same content-gap grace `docs/
+   * DECISIONS.md` #19 asks for. Never blocks boot: each texture swaps in
+   * whenever its own `loadTexture` resolves, same shape as the title
+   * postcard and the opening card art below.
+   */
+  const bossArtByEnemyId = new Map<string, Texture>();
+  for (const [id, url] of [
+    ['der-stier', derStierArtUrl],
+    ['grosse-kellerassel', grosseKellerasselArtUrl],
+  ] as const) {
+    loadTexture(url)
+      .then((texture) => {
+        bossArtByEnemyId.set(id, texture);
+      })
+      .catch((err: unknown) => {
+        if (import.meta.env.DEV) {
+          console.warn(
+            `boss plate art for "${id}" failed to load, keeping the text-only plate`,
+            err,
+          );
+        }
+      });
+  }
   /** When the boss intro plate comes down, on the wall clock. Render-only — never sim state. */
   let bossPlateUntil = 0;
 
@@ -1338,7 +1367,7 @@ async function boot(): Promise<void> {
     itemSetHud.place(HUD_MARGIN, y, centreX, Math.round(height * 0.32));
     bossHealthHud.view.position.set(centreX, HUD_MARGIN + UI_TEXT_HEIGHT + 2);
     bossIntroPlate.resize(width);
-    bossIntroPlate.place(centreX, Math.round(height * 0.26));
+    bossIntroPlate.place(centreX, Math.round(height * 0.16));
     pickupToast.place(centreX, Math.round(height * 0.2));
     villagerBark.place(centreX, Math.round(height * 0.12));
     shopPreview.place(centreX, Math.round(height * 0.85));
@@ -2166,6 +2195,7 @@ async function boot(): Promise<void> {
             preferences.locale,
             content?.title,
             content?.epithet,
+            compiled === null ? undefined : bossArtByEnemyId.get(compiled.id),
           );
           bossPlateUntil = performance.now() + BOSS_PLATE_MS;
         }
@@ -4155,6 +4185,7 @@ WASD move   arrows aim and fire
         locale,
         content?.title,
         content?.epithet,
+        compiled === null ? undefined : bossArtByEnemyId.get(compiled.id),
       );
     }
     // Re-derives the minimap header (`{floor}. Stock — {name}`) and the rest
