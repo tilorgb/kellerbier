@@ -441,6 +441,40 @@ export const TITLE_PALETTE = {
   ornamentTone: 0x241a12,
 } as const;
 
+/**
+ * The card stock itself (`render/ui/postcard-paper.ts`) — the ink and paper a
+ * vintage Bavarian postcard is *printed on*, as opposed to `TITLE_PALETTE`,
+ * which is the type printed on top of it.
+ *
+ * Kept as its own group for the same reason `TITLE_PALETTE` is: these answer
+ * "what is this object made of" rather than "what colour is this text". A
+ * postcard is paper before it is a picture frame, and every value here is
+ * picked off the bone ramp the display face already uses, so a card and the
+ * caption on it read as one printed object.
+ */
+export const POSTCARD_PALETTE = {
+  /** Card stock. The same off-white the title key art's own border is drawn in. */
+  paper: 0xe8e2d0,
+  /** Print grain and the wear along a cut edge — one notch down from `paper`. */
+  paperGrain: 0xd7cdb8,
+  /** Foxing: the age spots and the shaded half of a photo corner. */
+  paperShade: 0xb8ac9c,
+  /** The card's own cut edge, under the ink keyline. */
+  paperEdge: 0x8a7f74,
+  /** Printer's ink: the keyline around the card and around the picture. */
+  ink: 0x1c1a1f,
+  /** A cancellation's faded violet-black, the one ink on the card that is not the printer's. */
+  postmarkInk: 0x4a3f52,
+  /** The stamp's engraved frame and its lettering-free motif field. */
+  stampInk: 0x8a1f22,
+  /** The stamp's own paper — a shade whiter than the card's, so it reads as stuck on. */
+  stampPaper: 0xf5f0e6,
+  /** The Raute on the stamp — the flag's blue, the only place on a card it appears. */
+  stampBlue: 0x274b6b,
+  /** What a card casts on whatever it is lying on. */
+  shadow: 0x120c0a,
+} as const;
+
 /** The colour behind everything — cellar dark, not black (`render/app.ts`). */
 export const APP_BACKGROUND_COLOUR = 0x14101a;
 
