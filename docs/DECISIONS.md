@@ -5781,7 +5781,8 @@ bull's knees go and he lies where he fell; the woodlouse splays, sinks and rolls
 hard-coding seven. Attack timing and the state machines are untouched, same as #100.
 
 **Constrains:** a boss's art is its `assets/art/bosses/*.png` plus a `*_SPECS` block in
-`bosses.mjs` — new pose, new polygon, `npm run art:bosses`. The pipeline is a pure function of
+`bosses.mjs` — new pose, new polygon, `npm run art:bosses`. The step-by-step, with the knobs and
+the preview tool (`npm run art:boss-preview`), is [`BOSS_SPRITES.md`](BOSS_SPRITES.md). The pipeline is a pure function of
 those, so the byte-for-byte guard still holds. Floors 3-7's bosses (#39-#43) get their sprite by
 adding a rig, not by drawing 160×160 by hand and not by cutting a picture out. `tools/art/
 authoring/sources/` is gone. The canvases (116×100, 140×86) are unchanged from #193/#199 — size

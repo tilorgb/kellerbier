@@ -20,6 +20,9 @@ import { nudgeShade } from '../palette.mjs';
  * art, the polygons and the palette), so `tests/art/boss-authoring.test.ts`'s
  * byte-for-byte guard keeps working.
  *
+ * `docs/BOSS_SPRITES.md` is the step-by-step for authoring a new boss with this;
+ * `boss-rig-preview.mjs` draws the polygons over the art and the frames as a sheet.
+ *
  * Coordinates: polygons and pivots are in *source* (key-art) pixels — the
  * numbers a person reads off the illustration — and a `Mapping` converts them
  * to sprite pixels once, so a part's mask and its joint are authored against

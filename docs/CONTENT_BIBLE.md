@@ -498,6 +498,10 @@ other item.
   on top before signing it off.
 - Animation: 4–6 frames for walk cycles, 2 frames for idle, generous squash and stretch on
   impacts. Hit flashes are white, one frame, always.
+- **Bosses are cut-out rigs traced from their own postcard art**, not hand-drawn and not
+  downsampled pictures (`docs/DECISIONS.md` #102): flat two-to-four-tone materials, every part
+  inked on its own edge, twelve frames covering idle, walk, telegraph, hurt and death.
+  [`docs/BOSS_SPRITES.md`](BOSS_SPRITES.md) is the recipe.
 
 ## 6. Audio direction
 

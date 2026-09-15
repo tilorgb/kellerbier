@@ -1042,6 +1042,21 @@ export const STRIPS = {
 };
 export const SINGLES = {};
 
+/**
+ * The rigs themselves — key art, part specs and a default overlay crop
+ * (`[x0, y0, x1, y1, scale]` in key-art pixels) — for
+ * `boss-rig-preview.mjs`, which draws the polygons over the art. The
+ * Maibaum-Dieb is hand-drawn and has no rig.
+ */
+export const BOSS_RIGS = {
+  'grosse-kellerassel': {
+    art: KELLERASSEL_ART,
+    specs: ASSEL_SPECS,
+    previewCrop: [40, 60, 1200, 720, 0.75],
+  },
+  'der-stier': { art: STIER_ART, specs: STIER_SPECS, previewCrop: [520, 120, 1220, 720, 1.2] },
+};
+
 /** Which floor bucket each strip/single is authored against. */
 export const BOSS_BUCKETS = {
   'grosse-kellerassel': 'floor-1-cellar',

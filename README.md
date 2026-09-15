@@ -37,6 +37,7 @@ regenerated automatically from the issue list on every issue event.
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Milestones M0–M10 and what "done" means for each |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | Architectural decisions and the reasoning behind them |
 | [docs/PERFORMANCE_AUDIT.md](docs/PERFORMANCE_AUDIT.md) | Measured render-side audit: where the room-transition stutter comes from, and the plan |
+| [docs/BOSS_SPRITES.md](docs/BOSS_SPRITES.md) | How a boss sprite is made: key art → cut-out rig → twelve-frame strip, step by step |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Branches, commits, the definition of done, labels, bug reports |
 
 ## Tech stack

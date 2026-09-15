@@ -153,6 +153,12 @@ finalists still have to be shown standing in the room at true scale (per the bil
 above) before anything lands in a commit. Once a candidate is picked, the diffusion output (or
 the block art) is cleaned up by hand and the animation frames and angles are authored from it.
 
+**A boss is the exception to "cleaned up by hand"**: its sprite is a rig cut from its own signed-off
+key art (`docs/DECISIONS.md` #102), and [`docs/BOSS_SPRITES.md`](docs/BOSS_SPRITES.md) is the
+step-by-step for getting from the postcard to a twelve-frame strip — polygons, materials, poses,
+the preview tool, and what the live check through the real boss door looks like. Follow it rather
+than drawing a 160×160 boss by hand or cutting the picture out whole.
+
 ## Component-library lessons, for work outside this repo
 
 [`docs/COMPONENT_LIBRARY_LESSONS.md`](docs/COMPONENT_LIBRARY_LESSONS.md) is not about Kellerbier
