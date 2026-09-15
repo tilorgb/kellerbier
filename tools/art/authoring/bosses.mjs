@@ -1,53 +1,59 @@
-import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { encodePng, decodePng } from '../png.mjs';
-import { legalPixelColorsFor, nudgeShade } from '../palette.mjs';
+import { encodePng } from '../png.mjs';
+import { legalPixelColorsFor } from '../palette.mjs';
+import { loadKeyArt, mapping, cutPart, drawnPart, pixelPart, composeFrame } from './boss-rig.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
+const KEY_ART = path.join(HERE, '../../../assets/art/bosses');
 
 /**
- * Die Große Kellerassel, Der Stier and the Maibaum-Dieb, as blocks and frame
- * lists — the same argument `tools/art/authoring/alois.mjs` and `docs/
- * DECISIONS.md` #55/#43 make, applied to the two sprites that turned out to
- * have the same problem: a boss strip is seven frames holding three or four
- * distinct drawings (two idles, a walk contact, a telegraph, a flinch, three
- * death beats) of one big body re-posed, and hand-editing seven copies of a
- * head is how a walk cycle ends up one pixel off on frame 3.
+ * Die Große Kellerassel, Der Stier and the Maibaum-Dieb, as frame lists.
  *
- * `docs/DECISIONS.md` #55 said "Alois alone is composed"; #56's amendment is
- * that the two chibi bosses join him, for his reasons, and the Kellerassel-in-
- * the-editor line it drew now means the *floor* Kellerassel, not this one.
+ * The two big bosses are **cel-traced rigs** (`./boss-rig.mjs`, `docs/
+ * DECISIONS.md` #102): the boss's own signed-off key art in
+ * `assets/art/bosses/` is cut along hand-placed polygons into a body, a head,
+ * legs, a tail or a pair of feelers; each part is downscaled straight to the
+ * sprite's canvas, flattened to two to four tones of one legal palette
+ * material, given its own ink edge, and re-posed per frame — legs swing at
+ * the hip, the head drops at the neck, the body squashes on planted feet.
+ * That is what makes the sprite both *recognisably the postcard* (its
+ * shapes and colour placement are the illustration's) and *a game
+ * character* (flat ink-outlined fills like the rest of the roster, and a
+ * real walk cycle, telegraph, flinch and death instead of one raster
+ * warped about). #100/#101's "cut out the picture and pixelate it"
+ * technique is gone: its output read as a photograph, not a creature, and a
+ * single frozen raster had nothing to articulate.
  *
- * The art direction is full chibi (#193, chosen from an option round): the
- * boss is as cute as the roster and the threat is scale, motion and the
- * telegraph pose. A slightly angled dark brow is the one concession — cute,
- * but it wants to hurt you.
+ * The Maibaum-Dieb (#199) is small enough to stay hand-drawn as pixel grids,
+ * the way `alois.mjs` does its heads — the right tool for a 24×34 face.
  *
  * Everything is authored **facing left** (`render/animation/state.ts`'s
  * `AUTHORED_FACING`); the engine mirrors it when the body moves right.
+ * Ground contact is on the canvas's bottom rows (`docs/DECISIONS.md` #56).
+ *
+ * Frame order is what each boss's `.anim.json` indexes by position:
+ *
+ *   0 idle-a · 1 idle-b · 2-5 walk · 6-7 telegraph · 8 hurt · 9-11 death
+ *
+ * `npm run art:bosses` writes the strips; `tests/art/boss-authoring.test.ts`
+ * re-encodes and compares byte for byte.
  */
 
 // ----------------------------------------------------------------- palettes
-// Rebuilt against the boss's own postcard art (docs/DECISIONS.md #99/#100):
-// the reference is two visibly different materials, not one tone re-shaded —
-// a warm tan-brown segmented shell and a distinctly cooler pale-grey head
-// and legs, the same way a real woodlouse's carapace and its legs read as
-// different textures. `d/m/l/L` stay the wood ramp (`FLOOR_PALETTES.cellar`'s
-// `0x54402e`) for the shell; `h/H` are the grey ramp instead of the wood one
-// for the head, so the two actually contrast the way the reference's do.
+// Every value below is a real shade of its floor's legal set
+// (`tools/art/palette.mjs`'s `legalPixelColorsFor`), checked at import.
 const CELLAR = {
   K: 0x000000, // outline ink
-  x: 0x1c1a1f, // deepest shadow (leg joints, segment recesses)
+  x: 0x1c1a1f, // deepest shadow (the underbody the legs hang from)
   d: 0x36291e, // shell, darkest (segment recess)
   m: 0x54402e, // shell, base
   l: 0x72573e, // shell, lit
-  L: 0x8f6d4e, // shell, highlight / gloss streak
-  h: 0x4a4d50, // head, base — cooler grey, a different material from the shell
-  H: 0x71767b, // head, lit
-  g: 0x343638, // legs
+  L: 0x8f6d4e, // shell, highlight rim
+  h: 0x343638, // head + legs, shadow
+  H: 0x4a4d50, // head + legs, base
   G: 0x606468, // legs, lit
-  W: 0xffffff, // eye white + glint
+  F: 0x71767b, // head dome highlight, feelers lit
 };
 const RURAL = {
   K: 0x000000,
@@ -59,6 +65,7 @@ const RURAL = {
   W: 0xffffff, // horn + eye white
   r: 0xe8e2d0, // cream (muzzle, horn core, shirt)
   R: 0xd9cfb1, // cream shadow
+  q: 0xcabc92, // cream, deepest — the horn's underside
   b: 0x2e4f8c, // Bavarian blue
   B: 0x3962af, // blue, lit
   n: 0x3f7a3a, // wreath green
@@ -93,31 +100,6 @@ function set(cv, x, y, colour) {
   if (x < 0 || y < 0 || x >= cv.w || y >= cv.h) return;
   cv.px[y][x] = colour;
 }
-function fillEllipse(cv, cx, cy, rx, ry, colour) {
-  for (let y = -Math.ceil(ry); y <= Math.ceil(ry); y++)
-    for (let x = -Math.ceil(rx); x <= Math.ceil(rx); x++)
-      if ((x * x) / (rx * rx) + (y * y) / (ry * ry) <= 1) set(cv, cx + x, cy + y, colour);
-}
-/** 1px ink around every painted pixel that borders emptiness. */
-function inkOutline(cv, ink) {
-  const snap = cv.px.map((row) => [...row]);
-  const on = (x, y) => x >= 0 && y >= 0 && x < cv.w && y < cv.h && snap[y][x] !== null;
-  for (let y = 0; y < cv.h; y++)
-    for (let x = 0; x < cv.w; x++) {
-      if (on(x, y)) continue;
-      if (
-        on(x - 1, y) ||
-        on(x + 1, y) ||
-        on(x, y - 1) ||
-        on(x, y + 1) ||
-        on(x - 1, y - 1) ||
-        on(x + 1, y - 1) ||
-        on(x - 1, y + 1) ||
-        on(x + 1, y + 1)
-      )
-        cv.px[y][x] = ink;
-    }
-}
 
 /** Throws if any painted pixel is not legal for `bucket` (`tools/art/palette.mjs`). */
 export function assertOnPalette(bucket, frames) {
@@ -136,151 +118,6 @@ export function assertOnPalette(bucket, frames) {
 
 function finish(name, cv) {
   return { name, width: cv.w, height: cv.h, px: cv.px };
-}
-
-/**
- * Stamps a pre-authored raster source onto `cv` — opaque pixels only,
- * `(ox, oy)` offset. `sources/*.png` are not generated: they're the boss's
- * own chosen key art (`assets/art/bosses/*.png`), background-keyed and
- * downscaled straight to this sprite's canvas through
- * `tools/art/diffusion-postprocess.mjs`, hand-cleaned of the reference
- * illustration's fence/grass fragments, then quantized against a
- * *restricted* legal set: every `legalPixelColorsFor` shade of this
- * floor's neutrals and its one cream hue (19 tones once the ±2-step ramp
- * is expanded), but none of the two green or two blue base hues' ramps.
- * A first pass quantized against the floor's full legal palette and
- * snapped the coat's warm brown to rural green — nearest-colour is blind
- * to "a coat has no business being this hue" — and a second pass
- * restricted the *count* of legal tones to just the five base hues, which
- * fixed the colour but banded the shading flat and lost the illustration's
- * own modelling. Restricting which *hues* are eligible while keeping their
- * *full derived ramp* gets both: grayscale-plus-cream only, but with all
- * the shade steps the palette system already grants any legal colour.
- */
-const artCache = new Map();
-function loadArt(srcPath) {
-  let art = artCache.get(srcPath);
-  if (!art) {
-    art = decodePng(readFileSync(srcPath));
-    artCache.set(srcPath, art);
-  }
-  return art;
-}
-
-/**
- * `stampArt` plus the whole-sprite transforms a single static raster can
- * still carry (#104): this source has no separable limbs to re-pose per
- * frame the way `stierBody`/`stierHead`'s primitives could, so the walk/
- * telegraph/hurt beats are squash-stretch and lean around a ground-anchored
- * pivot (`pivotY` defaults to the art's own bottom edge, so a squat or
- * stretch reads as the animal's weight shifting on planted feet, not the
- * whole sprite floating) plus an optional hit-flash `tint`, rather than
- * independent leg or head articulation. `tint` is a *step count*, not a
- * blend fraction — every stamped pixel is already one of the bucket's own
- * legal shades, so flashing it lighter means walking `tint` steps up its
- * own `nudgeShade` ramp (clamped at white), not an arbitrary RGB lerp
- * toward white that would land off-palette. `rotate` (degrees, clockwise)
- * turns the whole raster around the same pivot — a death pose "toppling"
- * the standing art rather than needing a separately-posed lying-down
- * source (#105).
- */
-function stampArt(
-  cv,
-  srcPath,
-  bucket,
-  { ox = 0, oy = 0, sx = 1, sy = 1, rotate = 0, pivotX, pivotY, tint = 0 } = {},
-) {
-  const { width, height, pixels } = loadArt(srcPath);
-  const px0 = pivotX ?? width / 2;
-  const py0 = pivotY ?? height;
-  const rad = (rotate * Math.PI) / 180;
-  const cos = Math.cos(rad);
-  const sin = Math.sin(rad);
-  const sampleAt = (sxCoord, syCoord) => {
-    const x = Math.round(sxCoord);
-    const y = Math.round(syCoord);
-    if (x < 0 || y < 0 || x >= width || y >= height) return null;
-    const i = (y * width + x) * 4;
-    if (pixels[i + 3] < 128) return null;
-    let hex = (pixels[i] << 16) | (pixels[i + 1] << 8) | pixels[i + 2];
-    for (let step = 0; step < tint; step++) hex = nudgeShade(bucket, hex, 1);
-    return hex;
-  };
-  // Inverse (destination-to-source) mapping, not forward: walking the
-  // destination bounds and sampling the source for each one, not the other
-  // way round. A non-uniform `sx`/`sy` stretch (or a `rotate`) forward-
-  // mapped from the source instead spreads adjacent source pixels apart in
-  // the destination, leaving unset gaps between them that `inkOutline`
-  // then paints in as a stray internal seam — happened on the first
-  // `squash`/`stretch` pass here, visible as a black line straight through
-  // the torso on every non-1.0-scale frame. A `rotate`d stamp can land
-  // anywhere in the canvas, so its destination bounds are the whole canvas
-  // rather than the tight scale-only box below.
-  let x0, x1, y0, y1;
-  if (rotate !== 0) {
-    x0 = 0;
-    x1 = cv.w - 1;
-    y0 = 0;
-    y1 = cv.h - 1;
-  } else {
-    x0 = Math.floor(px0 + (0 - px0) * Math.min(1, sx) + Math.min(0, ox) - 2);
-    x1 = Math.ceil(px0 + (width - px0) * Math.max(1, sx) + Math.max(0, ox) + 2);
-    y0 = Math.floor(py0 + (0 - py0) * Math.min(1, sy) + Math.min(0, oy) - 2);
-    y1 = Math.ceil(py0 + (height - py0) * Math.max(1, sy) + Math.max(0, oy) + 2);
-  }
-  for (let ty = y0; ty <= y1; ty++) {
-    for (let tx = x0; tx <= x1; tx++) {
-      const dx = tx - ox - px0;
-      const dy = ty - oy - py0;
-      const rx = dx * cos + dy * sin;
-      const ry = -dx * sin + dy * cos;
-      const hex = sampleAt(px0 + rx / sx, py0 + ry / sy);
-      if (hex !== null) set(cv, tx, ty, hex);
-    }
-  }
-}
-
-/**
- * Stamps `srcPath` with every column in `[bandY0, bandY1]` given its own
- * small vertical offset — a travelling sine wave across x, `waveLength`
- * pixels per full cycle, `waveAmplitude` pixels of lift at its peak,
- * `phase` (0-1) sliding the wave along for successive frames (#107). This
- * is what gives the legs real per-frame motion without either of the two
- * ways that were tried and rejected first: cutting legs into separate
- * source images (real per-limb rotation, but two hip-pivoted rigid pieces
- * only manage a crude two-phase gait) and cutting the leg band into
- * discrete rectangular strips with `stampArt`'s `srcClip` (independent
- * per-leg offsets, but the strip edges cut across the source at a flat
- * line the real silhouette doesn't follow, so it read as pasted-together
- * boxes, not legs). A per-column wave has no seams to speak of — the
- * offset between column x and x+1 differs by a fraction of a pixel — and
- * it's the right shape for a many-legged animal's real gait anyway: a
- * metachronal ripple down the body, not legs swinging as rigid pairs.
- * Forward-mapped (source column to destination column) rather than the
- * inverse mapping `stampArt` uses elsewhere in this file: safe here only
- * because the wave's per-column slope stays under 1px (amplitude·2π /
- * waveLength), so it can't open the forward-mapping gaps that motivated
- * inverse mapping in the first place — a larger amplitude or shorter
- * waveLength would need to go back to it.
- */
-function stampArtRippled(
-  cv,
-  srcPath,
-  bucket,
-  { ox = 0, oy = 0, tint = 0, bandY0, bandY1, waveAmplitude = 0, waveLength = 20, phase = 0 } = {},
-) {
-  const { width, height, pixels } = loadArt(srcPath);
-  for (let x = 0; x < width; x++) {
-    const colShift = waveAmplitude * Math.sin(2 * Math.PI * (x / waveLength + phase));
-    for (let y = 0; y < height; y++) {
-      const i = (y * width + x) * 4;
-      if (pixels[i + 3] < 128) continue;
-      let hex = (pixels[i] << 16) | (pixels[i + 1] << 8) | pixels[i + 2];
-      for (let step = 0; step < tint; step++) hex = nudgeShade(bucket, hex, 1);
-      const inBand = bandY0 !== undefined && y >= bandY0 && y <= bandY1;
-      set(cv, x + ox, y + oy + (inBand ? colShift : 0), hex);
-    }
-  }
 }
 
 /** Frames → horizontal strip PNG bytes, in `assets/sprites/README.md`'s layout. */
@@ -312,219 +149,600 @@ export function encodeSingle(frame) {
   return encodeStrip(frame.name, [frame]);
 }
 
+/** A tapered stroke from `a` to `b`, `wa`/`wb` wide at each end, as a polygon — a leg, a feeler. */
+function stroke([ax, ay], [bx, by], wa, wb) {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const len = Math.hypot(dx, dy);
+  const nx = -dy / len;
+  const ny = dx / len;
+  return [
+    [ax + (nx * wa) / 2, ay + (ny * wa) / 2],
+    [bx + (nx * wb) / 2, by + (ny * wb) / 2],
+    [bx - (nx * wb) / 2, by - (ny * wb) / 2],
+    [ax - (nx * wa) / 2, ay - (ny * wa) / 2],
+  ];
+}
+
+/** Cuts every part in `specs` (see `cutPart`) and attaches its pivot in sprite pixels. */
+function cutParts(art, map, specs) {
+  const parts = {};
+  for (const [name, spec] of Object.entries(specs)) {
+    parts[name] = {
+      ...cutPart(art, map, { name, ...spec }),
+      pivot: spec.pivot ? map.toSprite(...spec.pivot) : undefined,
+    };
+  }
+  return parts;
+}
+
 // ============================================================ KELLERASSEL
-// Canvas 140x86, head/front to the left, bottom-anchored (#193).
+// Canvas 140×86, head to the left, feet on the bottom rows. The rig: the
+// shell (one piece — a woodlouse's plates flex as a whole, and the art's
+// segment grooves survive the 4-tone flattening as the shell's own texture),
+// the dark underbody the legs hang from, a grey head that rears at the neck,
+// two feelers, and seven legs each swinging at its own hip.
 const KW = 140,
   KH = 86;
+const KELLERASSEL_ART = path.join(KEY_ART, 'grosse-kellerassel.png');
+// Key-art pixel → sprite pixel: the creature spans ~1110 source px across
+// the 1344-wide postcard; 0.125 lands it at 139 px wide, feet on row 84.
+const KELLERASSEL_MAP = mapping({ scale: 0.125, originX: 55, originY: 700, dstX: 0.5, dstY: 84.5 });
 
-const KELLERASSEL_ART = path.join(HERE, 'sources/grosse-kellerassel-idle.png');
+const SHELL = { tones: [CELLAR.d, CELLAR.m, CELLAR.l, CELLAR.L], cuts: [0.22, 0.6, 0.9] };
+const UNDERBODY = { tones: [CELLAR.x, CELLAR.d], cuts: [0.6] };
+const ASSEL_HEAD = { tones: [CELLAR.h, CELLAR.H, CELLAR.F], cuts: [0.3, 0.75] };
+const ASSEL_LEG = { tones: [CELLAR.h, CELLAR.H, CELLAR.G], cuts: [0.35, 0.8] };
+const FEELER = { tones: [CELLAR.H, CELLAR.F], cuts: [0.5] };
+
+// Hip → foot, in key-art pixels, front leg first.
+const ASSEL_LEG_STROKES = [
+  [
+    [420, 505],
+    [347, 647],
+  ],
+  [
+    [507, 512],
+    [487, 633],
+  ],
+  [
+    [613, 518],
+    [567, 680],
+  ],
+  [
+    [727, 525],
+    [677, 687],
+  ],
+  [
+    [820, 525],
+    [771, 653],
+  ],
+  [
+    [927, 512],
+    [877, 620],
+  ],
+  [
+    [1047, 492],
+    [1007, 593],
+  ],
+];
+
+const ASSEL_SPECS = {
+  under: {
+    polygon: [
+      [330, 470],
+      [1150, 470],
+      [1152, 545],
+      [1067, 552],
+      [933, 550],
+      [800, 545],
+      [667, 545],
+      [560, 540],
+      [467, 535],
+      [387, 525],
+      [333, 505],
+    ],
+    material: UNDERBODY,
+  },
+  shell: {
+    // Traced along the shell's actual rim — #101's rectangular background
+    // wedge was a polygon that guessed this edge 50-100px too low.
+    polygon: [
+      [313, 450],
+      [327, 370],
+      [360, 303],
+      [413, 237],
+      [480, 183],
+      [560, 143],
+      [640, 117],
+      [720, 103],
+      [800, 110],
+      [880, 123],
+      [960, 157],
+      [1027, 210],
+      [1080, 277],
+      [1120, 357],
+      [1147, 437],
+      [1153, 490],
+      [1147, 503],
+      [1067, 510],
+      [933, 503],
+      [800, 497],
+      [667, 497],
+      [560, 490],
+      [467, 483],
+      [387, 477],
+      [333, 463],
+    ],
+    material: SHELL,
+    pivot: [730, 500],
+  },
+  head: {
+    polygon: [
+      [285, 395],
+      [330, 378],
+      [400, 378],
+      [440, 395],
+      [455, 440],
+      [450, 500],
+      [420, 560],
+      [380, 590],
+      [330, 590],
+      [290, 560],
+      [265, 500],
+      [262, 440],
+    ],
+    material: ASSEL_HEAD,
+    pivot: [430, 470],
+  },
+  feelerA: {
+    polygon: stroke([275, 478], [63, 641], 22, 10),
+    coverage: 0.3,
+    material: FEELER,
+    blur: 0,
+    pivot: [278, 480],
+  },
+  feelerB: {
+    polygon: stroke([282, 522], [196, 620], 20, 10),
+    coverage: 0.3,
+    material: FEELER,
+    blur: 0,
+    pivot: [284, 522],
+  },
+};
+ASSEL_LEG_STROKES.forEach(([hip, foot], i) => {
+  ASSEL_SPECS[`leg${i + 1}`] = {
+    polygon: stroke(hip, foot, 52, 30),
+    coverage: 0.45,
+    material: ASSEL_LEG,
+    pivot: hip,
+  };
+});
+
+const AP = cutParts(loadKeyArt(KELLERASSEL_ART), KELLERASSEL_MAP, ASSEL_SPECS);
+const ASSEL_LEGS = [1, 2, 3, 4, 5, 6, 7].map((i) => AP[`leg${i}`]);
+const ASSEL_EYE = drawnPart('eye', ['K'], { K: CELLAR.K }, 32, 62);
 
 /**
- * Standing/walking/hurting frames (#108, retracting #107's per-column
- * ripple for this creature specifically): the ripple reads fine on Der
- * Stier's legs because each is one large, simple hoof mass — shifting
- * neighbouring columns by a slightly different amount just shears the
- * blob smoothly. Die Große Kellerassel's legs are the opposite: several
- * thin, multi-segment joints only a couple of pixels wide, and the same
- * per-column shift tears each one into disconnected diagonal fragments —
- * `inkOutline` then rings every fragment separately, which is exactly the
- * "outline is off the body, looks cut out with scissors" read. So this
- * creature's legs go back to being static, stamped once with the shell
- * and head; `bodyDip`/`squash`/`bodyLean`/`tint` still move the whole
- * animal for the weight-shift/recoil/hit-flash reads every other frame
- * needs, just without the per-leg articulation the ripple can't safely
- * give this particular silhouette.
+ * One Kellerassel pose. `legs` is a rotation per leg (degrees, positive
+ * swings the foot forward), `head`/`feelers` rotate at the neck (negative
+ * rears up), `dip` drops the shell and head on planted legs, `sx`/`sy`
+ * squash the body about the ground, `tint` is the hit-flash shade step.
  */
-function kellerasselStandingFrame(
-  name,
-  { squash = 0, stretch = 0, bodyDip = 0, bodyLean = 0, tint = 0 },
-) {
-  const cv = canvas(KW, KH);
-  const sy = 1 - squash + stretch;
-  const sx = 1 + squash * 0.6 - stretch * 0.3;
-  stampArt(cv, KELLERASSEL_ART, 'floor-1-cellar', { ox: bodyLean, oy: bodyDip, sx, sy, tint });
-  inkOutline(cv, CELLAR.K);
-  return finish(name, cv);
+function asselPose(name, o = {}) {
+  const t = o.tint ?? 0;
+  const dip = o.dip ?? 0;
+  const lay = (part, extra = {}) => ({ part, pivot: part.pivot, tint: t, ...extra });
+  const legRot = o.legs ?? ASSEL_LEGS.map(() => 0);
+  const headT = { dy: dip + (o.headDy ?? 0), rotate: o.head ?? 0, pivot: AP.head.pivot };
+  const body = { dy: dip, sx: o.sx ?? 1, sy: o.sy ?? 1, pivot: [72, 84] };
+  return composeFrame(
+    name,
+    KW,
+    KH,
+    [
+      lay(AP.under, body),
+      ...ASSEL_LEGS.map((leg, i) => lay(leg, { rotate: legRot[i], dy: o.legDy ?? 0 })),
+      lay(AP.shell, body),
+      lay(AP.head, headT),
+      { part: ASSEL_EYE, ...headT, ink: false },
+      lay(AP.feelerA, {
+        ...headT,
+        rotate: (o.head ?? 0) + (o.feelers ?? 0),
+        pivot: AP.feelerA.pivot,
+      }),
+      lay(AP.feelerB, {
+        ...headT,
+        rotate: (o.head ?? 0) + (o.feelers ?? 0) * 0.7,
+        pivot: AP.feelerB.pivot,
+      }),
+    ],
+    o.global ?? {},
+    'floor-1-cellar',
+  );
 }
-
-/** Death frames: the whole (unsliced) art rotated as one piece — same reasoning as `stierDeadFrame`. */
-function kellerasselDeadFrame(name, { rotate, pivotX, pivotY, scale, dip = 0, tint = 0 }) {
-  const cv = canvas(KW, KH);
-  stampArt(cv, KELLERASSEL_ART, 'floor-1-cellar', {
-    oy: dip,
-    sx: scale,
-    sy: scale,
-    rotate,
-    pivotX,
-    pivotY,
-    tint,
-  });
-  inkOutline(cv, CELLAR.K);
-  return finish(name, cv);
-}
+/** The walk: a metachronal wave down the seven legs — the gait a many-legged animal actually has. */
+const asselWave = (f, amp = 13) =>
+  ASSEL_LEGS.map((_, i) =>
+    Math.round(amp * Math.sin((2 * Math.PI * f) / 4 + (i * 2 * Math.PI) / 3.5)),
+  );
 
 export const KELLERASSEL_FRAMES = [
-  kellerasselStandingFrame('kellerassel-idle', {}),
-  kellerasselStandingFrame('kellerassel-idle-b', { bodyDip: -1 }),
-  kellerasselStandingFrame('kellerassel-walk', { stretch: 0.02, bodyDip: -1 }),
-  kellerasselStandingFrame('kellerassel-telegraph', { squash: 0.07, bodyLean: -2, bodyDip: 2 }),
-  kellerasselStandingFrame('kellerassel-hurt', { squash: 0.04, bodyLean: 3, tint: 2 }),
-  // both death beats topple the same art around a pivot near the tail
-  // (#105, the same technique as Der Stier's death-2) instead of the old
-  // separately hand-drawn "tipped onto its back" / "curled ball" poses —
-  // neither of those silhouettes exists in a side-view raster of an
-  // elongated body, so rather than fight the art into an unreachable shape
-  // this rolls it further onto its back in two stages, which *is* a real
-  // silhouette a rotation can reach.
-  kellerasselDeadFrame('kellerassel-death-1', {
-    rotate: 45,
-    pivotX: 70,
-    pivotY: 43,
-    scale: 0.6,
-    dip: 2,
-    tint: 1,
+  asselPose('kellerassel-idle-a'),
+  asselPose('kellerassel-idle-b', { dip: 1, feelers: -4 }),
+  asselPose('kellerassel-walk-1', { legs: asselWave(0) }),
+  asselPose('kellerassel-walk-2', { legs: asselWave(1), dip: -1 }),
+  asselPose('kellerassel-walk-3', { legs: asselWave(2) }),
+  asselPose('kellerassel-walk-4', { legs: asselWave(3), dip: -1 }),
+  // the wind-up before `spit`: rears up, feelers forward, front legs off the floor
+  asselPose('kellerassel-telegraph-a', {
+    head: -22,
+    headDy: -4,
+    feelers: -26,
+    sx: 0.97,
+    legs: [22, 16, 0, 0, 0, 0, 0],
   }),
-  kellerasselDeadFrame('kellerassel-death-2', {
-    rotate: 90,
-    pivotX: 70,
-    pivotY: 43,
-    scale: 0.55,
+  asselPose('kellerassel-telegraph-b', {
+    head: -32,
+    headDy: -7,
+    feelers: -40,
+    sx: 0.95,
+    legs: [30, 24, 6, 0, 0, 0, -4],
+  }),
+  asselPose('kellerassel-hurt', {
+    head: 10,
+    sy: 0.94,
+    sx: 1.03,
+    tint: 1,
+    legs: [-10, 10, -10, 10, -10, 10, -10],
+  }),
+  // legs splay, the body sinks, then it ends the way a woodlouse ends: on its back, legs up
+  asselPose('kellerassel-death-1', {
+    head: 14,
     dip: 3,
-    tint: 2,
+    legs: [34, 30, 20, 0, -20, -30, -34],
+    feelers: 10,
+  }),
+  asselPose('kellerassel-death-2', {
+    head: 26,
+    dip: 8,
+    sy: 0.88,
+    legDy: 6,
+    legs: [80, 76, 60, 0, -60, -76, -80],
+    feelers: 20,
+  }),
+  asselPose('kellerassel-death-3', {
+    head: 6,
+    legs: [12, 8, 4, 0, -4, -8, -12],
+    global: { sy: -1, pivot: [70, 46] },
   }),
 ];
 
 // ================================================================ STIER
-// Redrawn #199 toward a stocky 3/4-view bull (the front-on "head on a tower"
-// read was the bug the head-seam fix could only paper over). Head sits up on
-// the shoulders and forward, connected by a real neck; the body carries the
-// mass. Facing LEFT, feet on `SGROUND`, bottom-anchored (#193). ~80% of the
-// old height, and the head + horns sit forward of / above the collider so the
-// dangerous part a player reads is the body.
+// Canvas 116×100, head to the left, hooves on the bottom rows. The rig: a
+// torso, a head with its two horns and muzzle, a tail, and two legs cut from
+// the art — the postcard shows only three legs clearly, so the far pair are
+// the near pair again, set back and a shade darker.
 const SW = 116,
-  SH = 100,
-  SGROUND = 96;
+  SH = 100;
+const STIER_ART = path.join(KEY_ART, 'der-stier.png');
+// The bull spans ~665 source px from horn tip to tail; 0.17 makes him 113 px wide, hooves on row 98.
+const STIER_MAP = mapping({ scale: 0.17, originX: 530, originY: 707, dstX: 1, dstY: 98.5 });
 
-/**
- * The green wreath around the neck (#99: moved to actually wrap the neck,
- * and to draw after the head so the collar doesn't paint over it — it used
- * to sit low on the shoulder, mostly hidden under the neck mass, and read
- * as a stray dot rather than a wreath).
- */
-function stierWreath(cv, P, by) {
-  for (let i = 0; i < 7; i++) {
-    const t = i / 6;
-    const ax = 32 + t * 16;
-    const ay = by - 9 + t * 3;
-    fillEllipse(cv, ax, ay, 3, 3, i % 2 ? P.N : P.n);
-  }
-}
+const COAT = { tones: [RURAL.c, RURAL.C, RURAL.H], cuts: [0.4, 0.82] };
+const STIER_LEG = { tones: [RURAL.c, RURAL.C, RURAL.H], cuts: [0.55, 0.92] };
+const HORN = { tones: [RURAL.q, RURAL.r], cuts: [0.4] };
+const MUZZLE = { tones: [RURAL.q, RURAL.R, RURAL.r], cuts: [0.3, 0.7] };
 
-/**
- * `squash`/`stretch`/`dip`/`lean`/`tint` are whole-sprite dials, not limb
- * poses (#104's follow-up) — a static raster has no separable legs or head
- * to re-pose per frame, so a walk's weight-shift, a telegraph's crouch, a
- * hurt recoil and a death crumple are all squash-stretch and lean around
- * the art's own ground-anchored bottom edge (`stampArt`'s `pivotY`
- * default) instead. Squash pulls the sprite shorter and a little wider
- * (`sy` down, `sx` up); stretch does the opposite; `dip`/`lean` are a
- * straight pixel offset; `tint` is `stampArt`'s shade-step hit flash.
- */
-const STIER_ART = path.join(HERE, 'sources/der-stier-full.png');
-// the leg band's own y-range in the source art — everything below this is
-// the front/rear hoof mass, everything above is torso and stays still.
-// `waveLength` is set so the front leg (~x46) and rear leg (~x98) — the
-// two legs actually land half a wave apart, i.e. opposite phase.
-const STIER_LEG_BAND = { bandY0: 76, bandY1: 88, waveLength: 104 };
-
-/**
- * Standing/walking/hurting frames (#107, replacing #106's two-hinge
- * attempt — see `stampArtRippled`'s doc comment for why that one got
- * replaced): the torso stamps normally, then the same source re-stamps
- * with a per-column ripple confined to the leg band, so the body stays
- * still while the legs carry all the motion.
- */
-function stierStandingFrame(
-  name,
-  {
-    wavePhase = 0,
-    waveAmplitude = 2,
-    squash = 0,
-    stretch = 0,
-    bodyDip = 0,
-    bodyLean = 0,
-    tint = 0,
+const STIER_SPECS = {
+  tail: {
+    polygon: [
+      [1160, 395],
+      [1192, 395],
+      [1195, 470],
+      [1186, 560],
+      [1162, 560],
+      [1158, 470],
+    ],
+    key: 'dark',
+    keyThreshold: 0.5,
+    erode: 1,
+    blur: 2,
+    material: { tones: [RURAL.c, RURAL.C], cuts: [0.6] },
+    pivot: [1175, 400],
   },
-) {
-  const cv = canvas(SW, SH);
-  const sy = 1 - squash + stretch;
-  const sx = 1 + squash * 0.6 - stretch * 0.3;
-  stampArt(cv, STIER_ART, 'floor-2-rural', { ox: bodyLean, oy: bodyDip, sx, sy, tint });
-  stampArtRippled(cv, STIER_ART, 'floor-2-rural', {
-    ox: bodyLean,
-    oy: bodyDip,
-    tint,
-    waveAmplitude,
-    phase: wavePhase,
-    ...STIER_LEG_BAND,
-  });
-  stierWreath(cv, RURAL, SGROUND - 40 + bodyDip * 0.5);
-  inkOutline(cv, RURAL.K);
-  return finish(name, cv);
-}
+  frontLeg: {
+    polygon: [
+      [735, 500],
+      [800, 500],
+      [806, 560],
+      [806, 640],
+      [812, 703],
+      [750, 705],
+      [752, 650],
+      [748, 580],
+    ],
+    blur: 2,
+    material: STIER_LEG,
+    pivot: [770, 505],
+  },
+  rearLeg: {
+    polygon: [
+      [1060, 470],
+      [1160, 470],
+      [1160, 540],
+      [1140, 600],
+      [1142, 703],
+      [1072, 705],
+      [1080, 640],
+      [1070, 560],
+    ],
+    blur: 2,
+    material: STIER_LEG,
+    pivot: [1110, 478],
+  },
+  torso: {
+    // The back line and belly of the postcard bull; `key: 'dark'` drops the
+    // bright field and sky the polygon can't help including at the rump.
+    polygon: [
+      [790, 250],
+      [800, 222],
+      [880, 208],
+      [953, 203],
+      [1010, 206],
+      [1062, 216],
+      [1128, 245],
+      [1178, 278],
+      [1195, 337],
+      [1191, 395],
+      [1178, 453],
+      [1150, 495],
+      [1100, 518],
+      [1040, 528],
+      [950, 530],
+      [850, 524],
+      [770, 520],
+      [725, 508],
+      [705, 470],
+      [700, 420],
+      [706, 380],
+      [730, 330],
+    ],
+    key: 'dark',
+    keyThreshold: 0.42,
+    blur: 2,
+    material: COAT,
+    pivot: [740, 320],
+  },
+  head: {
+    // Horn tips to chin, back edge along the neck fold; the horns themselves
+    // are keyed out here (bright) and cut again below as their own parts.
+    polygon: [
+      [539, 134],
+      [534, 155],
+      [542, 200],
+      [560, 235],
+      [551, 276],
+      [548, 300],
+      [562, 310],
+      [575, 352],
+      [578, 388],
+      [583, 430],
+      [600, 438],
+      [650, 432],
+      [667, 428],
+      [683, 411],
+      [711, 378],
+      [739, 322],
+      [761, 278],
+      [770, 255],
+      [784, 240],
+      [784, 153],
+      [764, 134],
+      [742, 153],
+      [735, 205],
+      [714, 232],
+      [700, 225],
+      [660, 222],
+      [614, 225],
+      [600, 232],
+      [590, 215],
+      [576, 200],
+      [562, 145],
+    ],
+    key: 'dark',
+    keyThreshold: 0.5,
+    material: COAT,
+    pivot: [745, 300],
+  },
+  hornL: {
+    polygon: [
+      [536, 132],
+      [548, 130],
+      [566, 150],
+      [580, 190],
+      [596, 225],
+      [600, 245],
+      [575, 245],
+      [560, 220],
+      [545, 190],
+      [535, 160],
+    ],
+    key: 'light',
+    keyThreshold: 0.45,
+    coverage: 0.4,
+    material: HORN,
+  },
+  hornR: {
+    polygon: [
+      [758, 132],
+      [770, 130],
+      [788, 150],
+      [786, 205],
+      [772, 245],
+      [750, 245],
+      [752, 220],
+      [746, 190],
+      [735, 160],
+    ],
+    key: 'light',
+    keyThreshold: 0.45,
+    coverage: 0.4,
+    material: HORN,
+  },
+  muzzle: {
+    polygon: [
+      [583, 382],
+      [655, 382],
+      [655, 432],
+      [600, 438],
+      [583, 430],
+    ],
+    key: 'light',
+    keyThreshold: 0.4,
+    material: MUZZLE,
+  },
+};
+const SP = cutParts(loadKeyArt(STIER_ART), STIER_MAP, STIER_SPECS);
+const STIER_EYE = drawnPart('eye', ['WW', 'KW'], { W: RURAL.W, K: RURAL.K }, 25, 29);
+/** The green wreath round his neck (`docs/CONTENT_BIBLE.md`) — beads along the neck seam; the picked key art lost it (#99). */
+const STIER_WREATH = pixelPart(
+  'wreath',
+  Array.from({ length: 8 }, (_, i) => {
+    const t = i / 7;
+    const x = Math.round(41 - t * 13 + Math.sin(t * Math.PI) * 2);
+    const y = Math.round(22 + t * 26);
+    const c = i % 2 ? RURAL.N : RURAL.n;
+    return [
+      [0, 0],
+      [1, 0],
+      [0, 1],
+      [1, 1],
+      [-1, 0],
+      [2, 0],
+      [0, -1],
+      [0, 2],
+    ].map(([dx, dy]) => [x + dx, y + dy, c]);
+  }).flat(),
+);
 
-/** Death frames (#105): the combined art, rotated as one piece — a fallen bull's legs stay put relative to its own body, so there's no swing left to give them. */
-function stierDeadFrame(name, { rotate, pivotX, pivotY, scale, dip = 0, tint = 0 }) {
-  const cv = canvas(SW, SH);
-  stampArt(cv, STIER_ART, 'floor-2-rural', {
-    oy: dip,
-    sx: scale,
-    sy: scale,
-    rotate,
-    pivotX,
-    pivotY,
-    tint,
+/**
+ * One Der Stier pose. Leg angles are degrees at the hip, positive swinging
+ * the hoof forward (toward the head); `head` rotates at the neck, positive
+ * lowering it; `dip` drops torso and head on planted legs and `legDy`
+ * follows it when the legs fold; `sx`/`sy` squash the torso about the ground.
+ */
+function stierPose(name, o = {}) {
+  const t = o.tint ?? 0;
+  const dip = o.dip ?? 0;
+  const legDy = o.legDy ?? 0;
+  const lay = (part, extra = {}) => ({ part, pivot: part.pivot, tint: t, ...extra });
+  const headT = { dy: dip, rotate: o.head ?? 0, pivot: SP.head.pivot };
+  const far = (part, dx) => ({
+    dx,
+    dy: -4 + legDy,
+    tint: t - 1,
+    pivot: [part.pivot[0] + dx, part.pivot[1] - 4],
   });
-  inkOutline(cv, RURAL.K);
-  return finish(name, cv);
+  return composeFrame(
+    name,
+    SW,
+    SH,
+    [
+      lay(SP.frontLeg, { ...far(SP.frontLeg, 9), rotate: o.farFront ?? 0 }),
+      lay(SP.rearLeg, { ...far(SP.rearLeg, -9), rotate: o.farRear ?? 0 }),
+      lay(SP.tail, { rotate: o.tail ?? 0, dy: o.tailDy ?? 0 }),
+      lay(SP.frontLeg, { rotate: o.frontNear ?? 0, dy: (o.frontLift ?? 0) + legDy }),
+      lay(SP.rearLeg, { rotate: o.rearNear ?? 0, dy: (o.rearLift ?? 0) + legDy }),
+      lay(SP.torso, { dy: dip, sy: o.sy ?? 1, sx: o.sx ?? 1, pivot: [58, 98] }),
+      lay(SP.head, headT),
+      lay(SP.hornL, headT),
+      lay(SP.hornR, headT),
+      lay(SP.muzzle, { ...headT, ink: false }),
+      { part: STIER_EYE, ...headT, ink: false },
+      { part: STIER_WREATH, ...headT, ink: false },
+    ],
+    o.global ?? {},
+    'floor-2-rural',
+  );
 }
 
 export const STIER_FRAMES = [
-  stierStandingFrame('stier-idle', { wavePhase: 0 }),
-  stierStandingFrame('stier-walk', { wavePhase: 0.35, waveAmplitude: 3, bodyDip: -1 }),
-  stierStandingFrame('stier-idle-b', { wavePhase: 0.15, bodyDip: -2 }),
-  stierStandingFrame('stier-telegraph', {
-    wavePhase: 0.5,
-    waveAmplitude: 1,
-    squash: 0.08,
-    bodyDip: 2,
+  stierPose('stier-idle-a'),
+  stierPose('stier-idle-b', { dip: 1, tail: 8, head: 1 }),
+  // a quadruped walk: diagonal pairs, near and far legs half a cycle apart
+  stierPose('stier-walk-1', { frontNear: 18, rearNear: -16, farFront: -12, farRear: 12, head: 2 }),
+  stierPose('stier-walk-2', {
+    frontNear: 6,
+    rearNear: -5,
+    farFront: -4,
+    farRear: 4,
+    dip: -1,
+    frontLift: -2,
   }),
-  stierStandingFrame('stier-hurt', {
-    wavePhase: 0.65,
-    waveAmplitude: 3,
-    squash: 0.05,
-    bodyLean: 4,
-    tint: 2,
+  stierPose('stier-walk-3', { frontNear: -16, rearNear: 18, farFront: 12, farRear: -12, head: -2 }),
+  stierPose('stier-walk-4', {
+    frontNear: -5,
+    rearNear: 6,
+    farFront: 4,
+    farRear: -4,
+    dip: -1,
+    rearLift: -2,
   }),
-  stierStandingFrame('stier-death-1', {
-    wavePhase: 0.2,
-    waveAmplitude: 4,
-    squash: 0.12,
-    bodyDip: 5,
-    bodyLean: -3,
-    tint: 1,
+  // the charge wind-up: head down, horns forward, pawing the ground
+  stierPose('stier-telegraph-a', {
+    head: 20,
+    dip: 3,
+    sy: 0.95,
+    sx: 1.03,
+    frontNear: 16,
+    frontLift: -4,
+    rearNear: -6,
+    farRear: -4,
   }),
-  // toppled fully onto his side — the same art, rotated around a pivot
-  // near the hind legs (#105) rather than a separately hand-drawn
-  // collapsed pose, so the death beat still reads as *this* bull, not a
-  // different, flatter drawing standing in for him
-  stierDeadFrame('stier-death-2', {
-    rotate: 65,
-    pivotX: 63,
-    pivotY: 50,
-    scale: 0.68,
-    dip: 1,
-    tint: 1,
+  stierPose('stier-telegraph-b', {
+    head: 24,
+    dip: 4,
+    sy: 0.94,
+    sx: 1.04,
+    frontNear: -3,
+    rearNear: -8,
+    farRear: -6,
+    tail: 12,
+  }),
+  stierPose('stier-hurt', { head: -16, dip: -2, sy: 1.03, tint: 1, frontNear: -8, rearNear: 6 }),
+  // front knees go, the body comes down, and he lies where he fell
+  stierPose('stier-death-1', {
+    head: 12,
+    dip: 6,
+    legDy: 4,
+    frontNear: 34,
+    farFront: 30,
+    rearNear: -8,
+    farRear: -6,
+    sy: 0.97,
+  }),
+  stierPose('stier-death-2', {
+    head: 30,
+    dip: 17,
+    legDy: 14,
+    frontNear: 64,
+    farFront: 58,
+    rearNear: -44,
+    farRear: -38,
+    tail: 20,
+    tailDy: 12,
+  }),
+  stierPose('stier-death-3', {
+    head: 46,
+    dip: 27,
+    legDy: 25,
+    frontNear: 92,
+    farFront: 86,
+    rearNear: -84,
+    farRear: -78,
+    tail: 45,
+    tailDy: 24,
   }),
 ];
 
@@ -823,6 +1041,21 @@ export const STRIPS = {
   'der-stier-maibaum-dieb': DIEB_FRAMES,
 };
 export const SINGLES = {};
+
+/**
+ * The rigs themselves — key art, part specs and a default overlay crop
+ * (`[x0, y0, x1, y1, scale]` in key-art pixels) — for
+ * `boss-rig-preview.mjs`, which draws the polygons over the art. The
+ * Maibaum-Dieb is hand-drawn and has no rig.
+ */
+export const BOSS_RIGS = {
+  'grosse-kellerassel': {
+    art: KELLERASSEL_ART,
+    specs: ASSEL_SPECS,
+    previewCrop: [40, 60, 1200, 720, 0.75],
+  },
+  'der-stier': { art: STIER_ART, specs: STIER_SPECS, previewCrop: [520, 120, 1220, 720, 1.2] },
+};
 
 /** Which floor bucket each strip/single is authored against. */
 export const BOSS_BUCKETS = {

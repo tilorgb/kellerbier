@@ -15,3 +15,20 @@ export declare const BOSS_BUCKETS: Readonly<Record<string, string>>;
 export declare function encodeStrip(name: string, frames: readonly BossFrame[]): Buffer;
 export declare function encodeSingle(frame: BossFrame): Buffer;
 export declare function assertOnPalette(bucket: string, frames: readonly BossFrame[]): void;
+
+/** A rig's key art, part specs and default preview crop — see `boss-rig-preview.mjs`. */
+export declare const BOSS_RIGS: Readonly<
+  Record<
+    string,
+    {
+      readonly art: string;
+      readonly specs: Readonly<
+        Record<
+          string,
+          { readonly polygon: readonly (readonly number[])[]; readonly pivot?: readonly number[] }
+        >
+      >;
+      readonly previewCrop: readonly number[];
+    }
+  >
+>;

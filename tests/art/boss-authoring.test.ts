@@ -12,12 +12,14 @@ import {
 import { decodePng } from '../../tools/art/png.mjs';
 
 /**
- * The same guard `alois-authoring.test.ts` puts on Alois, for the two chibi
- * bosses that joined him under `docs/DECISIONS.md` #55/#56: the committed PNG
- * *is* what `tools/art/authoring/bosses.mjs` produces, byte for byte, so the
- * source cannot silently drift from the art the game loads. Editing a block
- * and running `npm run art:bosses` is what lands a change; a hand edit in the
- * pixel editor gets reverted the next build with nothing to notice.
+ * The same guard `alois-authoring.test.ts` puts on Alois, for the bosses that
+ * joined him under `docs/DECISIONS.md` #55/#56 (and, since #102, are rigs
+ * cut from their own key art rather than blocks): the committed PNG *is*
+ * what `tools/art/authoring/bosses.mjs` produces, byte for byte, so the
+ * source cannot silently drift from the art the game loads. Editing a
+ * polygon or a pose and running `npm run art:bosses` is what lands a change;
+ * a hand edit in the pixel editor gets reverted the next build with nothing
+ * to notice.
  */
 
 const SPRITES = fileURLToPath(new URL('../../assets/sprites/', import.meta.url));
@@ -38,8 +40,8 @@ const strips = Object.entries(STRIPS);
 const singles = Object.entries(SINGLES);
 
 describe("the chibi bosses' committed art is what the authoring source produces", () => {
-  it.each(strips)('%s: seven frames, matching its .anim.json', async (name, frames) => {
-    expect(frames).toHaveLength(7);
+  it.each(strips)('%s: as many frames as its .anim.json indexes', async (name, frames) => {
+    expect(frames.length).toBeGreaterThanOrEqual(7);
     const sidecar = JSON.parse(await readFile(pathFor(name, '.anim.json'), 'utf8')) as {
       frames: number;
     };

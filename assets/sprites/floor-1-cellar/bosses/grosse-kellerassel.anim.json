@@ -1,32 +1,32 @@
 {
-  "frames": 7,
+  "frames": 12,
   "frameDurationMs": 120,
   "loop": true,
   "clips": {
     "idle": {
       "frames": [0, 1],
-      "frameDurationMs": 420,
+      "frameDurationMs": 520,
       "mode": "pingPong"
     },
     "move": {
-      "frames": [0, 1, 0, 2],
+      "frames": [2, 3, 4, 5],
       "frameDurationMs": 120,
       "mode": "loop"
     },
     "telegraph": {
-      "frames": [0, 3],
+      "frames": [6, 7],
       "frameDurationMs": 110,
       "mode": "pingPong"
     },
     "hurt": {
-      "frames": [4],
+      "frames": [8],
       "frameDurationMs": 90,
       "mode": "once",
       "onEnd": "idle"
     },
     "death": {
-      "frames": [4, 5, 6],
-      "frameDurationMs": 140,
+      "frames": [9, 10, 11],
+      "frameDurationMs": 150,
       "mode": "once",
       "onEnd": "hold"
     }

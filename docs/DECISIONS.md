@@ -5710,3 +5710,87 @@ background wedge, no picture-edge.
 Verified the same way as #100: `npx tsc --noEmit` clean, full suite (2572 tests) green, both
 strips rebuilt via `npm run art:bosses` with `assertOnPalette` passing, both checked as live
 in-game billboards via the debug Rooms panel against `cellar-boss`/`dorf-boss`.
+
+## 102. Boss sprites are cel-traced rigs cut from their key art — and the intro plate sizes itself on `show`
+
+**Decided:** this session, after a playtest of #99-#101's result: *"the artwork was zoomed way too
+big, I only saw like a quarter of the picture"* on entering the boss room, and *"the actual boss
+we are now fighting doesn't look like a moving character at all … laughable."* Both were real,
+both reproduced headlessly through the actual door transition (`J` for the key, `N` through the
+floor), and both are fixed here. **Supersedes #100 and #101's technique**; keeps #99's postcard
+tier and #56's size class.
+
+**The plate bug was a layout ordering bug, not an art one.** `BossIntroPlate.place` is the only
+thing that sizes its `Postcard`, and `app/main.ts`'s resize handler calls it at boot, while the
+plate is hidden and has no art. `show` — the boss-room warmup edge, seconds or minutes later —
+set the texture and re-laid the text but never re-placed, so the postcard was still unsized and
+`Postcard` draws an unsized card's art sprite at the texture's native size: the 1344×768 key art
+over a 640×360 frame, top-left quarter visible. `show` now re-runs `place` with the last placement.
+`tests/unit/boss-intro-plate.test.ts` drives the plate in exactly that order (placed hidden, shown
+later with a 1344×768 texture) and fails on the old code with "expected 1344 to be less than 384".
+#99 recorded honestly that the plate had never been exercised live because the debug Rooms panel
+skips the transition; this is the bug that gap was hiding.
+
+**Why the cutout sprites failed, in one sentence:** a photograph downsampled to 116 px is still a
+photograph. #100 was right that hand-composed primitives never resemble the art and #101 was right
+that smooth gradients read as "a picture, not a creature", but flattening the *whole* raster with
+one quantizer still left the illustration's brushwork, its cast shadows and (for the Kellerassel)
+a wedge of stone wall inside the silhouette, with one ink line around the union — nothing the rest
+of the roster's flat-ink style has, and nothing that could articulate: a walk was a ripple or a
+squash of the frozen image, because there were no limbs to move.
+
+**What replaced it is the third position between "redraw" and "photograph": cut-out animation.**
+`tools/art/authoring/boss-rig.mjs`:
+
+1. The boss's own signed-off `assets/art/bosses/*.png` is cut into parts along hand-placed
+   polygons in *key-art* coordinates (the numbers a person reads off the illustration with a grid
+   overlay): Der Stier is a torso, a head, two horns, a muzzle, a tail and two legs; Die Große
+   Kellerassel is a shell, the dark underbody the legs hang from, a head, two feelers and seven
+   legs. Where a polygon can't help including background, a luminance key drops it (`'dark'` keeps
+   a near-black bull against a bright field, `'light'` a cream horn against a dark head); where
+   the background is as mid-toned as the subject (every Kellerassel leg), the polygon is simply
+   tight and unkeyed — keying those tore the legs into fragments, the same lesson as #101's ripple.
+2. Each part is box-downscaled straight to the sprite's canvas and **flattened per material to
+   two to four tones by luminance quantile within the part** — a coat is `1c1a1f/332f38/494451`
+   with the cuts at the 40th and 82nd percentile of *its own* pixels, a shell four browns, a horn
+   two creams. Banding per part rather than nearest-colour against a palette is what makes the
+   shading deliberate: the light tone lands on the shoulder because that is the brightest part of
+   the coat, not because some sky pixel was numerically closer to cream.
+3. Each part is **inked on its own edge after it is posed**, so a leg in front of a leg keeps its
+   line, and the head's edge against the shoulder is a drawn fold. This is the single change that
+   moved the read from "picture" to "character" — it is what every sprite on the roster already
+   has.
+4. Frames are compositions: every part gets a rotation about its pivot (a hip, the neck), an
+   offset, a squash about the ground, and a shade-step tint; the whole body can take a global
+   transform (the Kellerassel's last death beat is the pose flipped about its own centre — a
+   woodlouse dies on its back, legs up). Inverse-mapped throughout, per #100's hole lesson.
+
+Two choices in that list are deliberate limits, not oversights. The postcard bull shows three legs
+clearly, so **the far pair are the near pair again**, set back 9 px, up 4 px and one shade darker —
+a clean silhouette and a real diagonal-pair gait beat a faithful cut of a leg the illustrator
+half-drew. And **the wreath is still hand-placed pixels** (#99: the picked key art lost it), beads
+along the neck seam, moving with the head.
+
+**Twelve frames each, and the sidecars use all five states properly.** `0-1` idle (a breath, a
+tail flick, a feeler twitch), `2-5` a four-frame walk (`docs/CONTENT_BIBLE.md` §5's "4-6 frames" —
+the old strips had one walk contact), `6-7` telegraph (Der Stier drops his head, horns forward,
+and paws; the Kellerassel rears at the neck with its feelers forward before `spit`), `8` hurt
+(recoil plus one shade step — the engine's white emissive flash does the rest), `9-11` death (the
+bull's knees go and he lies where he fell; the woodlouse splays, sinks and rolls onto its back).
+`tests/art/boss-authoring.test.ts` now checks the frame count against the sidecar instead of
+hard-coding seven. Attack timing and the state machines are untouched, same as #100.
+
+**Constrains:** a boss's art is its `assets/art/bosses/*.png` plus a `*_SPECS` block in
+`bosses.mjs` — new pose, new polygon, `npm run art:bosses`. The step-by-step, with the knobs and
+the preview tool (`npm run art:boss-preview`), is [`BOSS_SPRITES.md`](BOSS_SPRITES.md). The pipeline is a pure function of
+those, so the byte-for-byte guard still holds. Floors 3-7's bosses (#39-#43) get their sprite by
+adding a rig, not by drawing 160×160 by hand and not by cutting a picture out. `tools/art/
+authoring/sources/` is gone. The canvases (116×100, 140×86) are unchanged from #193/#199 — size
+was not re-decided here, only what fills it.
+
+Verified: `tests/unit/boss-intro-plate.test.ts` red on the old plate, green now; full suite
+(2574 tests), `tsc`, `eslint`, `prettier` clean; both strips rebuilt with `assertOnPalette`
+passing; and — the part #99 and #100 could not do — a headless run through the real floor
+(`J`, then `N` room by room with the room cleared) into `cellar-boss`, screenshotting the plate at
+its intended size and Die Große Kellerassel walking and flushing red on its telegraph, then
+`dorf-boss` applied through the room editor's message path for Der Stier as a live billboard.

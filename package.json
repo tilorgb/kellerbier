@@ -15,6 +15,7 @@
     "art:diffusion-postprocess": "node tools/art/diffusion-postprocess-cli.mjs",
     "art:alois": "node tools/art/authoring/build-alois.mjs",
     "art:bosses": "node tools/art/authoring/build-bosses.mjs",
+    "art:boss-preview": "node tools/art/authoring/boss-rig-preview.mjs",
     "art:blocks": "node tools/art/authoring/build-blocks.mjs",
     "art:floor1": "node tools/art/authoring/build-floor1-roster.mjs",
     "art:minibosses": "node tools/art/authoring/build-floor1-minibosses.mjs",

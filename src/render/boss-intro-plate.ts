@@ -56,6 +56,9 @@ export class BossIntroPlate {
   private hasArt = false;
   private wrapWidth = 0;
   private width = 0;
+  /** Where `place` last put the plate — re-applied by `show`, see there. */
+  private placedCentreX = 0;
+  private placedTop = 0;
 
   constructor() {
     this.postcard.view.visible = false;
@@ -92,7 +95,14 @@ export class BossIntroPlate {
     }
     this.postcard.view.visible = this.hasArt;
     this.view.visible = true;
-    this.layOut();
+    // Re-place, not just re-lay-out: `place` is the only thing that sizes
+    // the postcard, and the resize handler calls it while the plate is still
+    // hidden with no art — so a plate that was placed hidden and then shown
+    // with art had a postcard that had never been sized, and `Postcard`
+    // draws an unsized card's art at the texture's native size (the whole
+    // 1344×768 key art over a 640×360 frame — a player saw the top-left
+    // quarter of the picture and nothing else).
+    this.place(this.placedCentreX, this.placedTop);
   }
 
   hide(): void {
@@ -113,6 +123,8 @@ export class BossIntroPlate {
 
   /** Centres the whole plate on `centreX`, with its top (the postcard's, or the name's) at `top`. UI pixels. */
   place(centreX: number, top: number): void {
+    this.placedCentreX = centreX;
+    this.placedTop = top;
     this.layOut();
     let cursor = top;
     if (this.hasArt) {
