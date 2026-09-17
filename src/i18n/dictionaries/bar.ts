@@ -274,47 +274,41 @@ export const bar: Record<DictKey, string> = {
     'So dünn zong, dass ma a Zeitung durchlesn kannt. Probiert hod’s no koana.',
   'items.bauern-mistgabel.description':
     'Kurza Mistgobl-Stoß: drei durchdringade Zinkn, 2x Schadn, koane Reichweitn',
-  'items.bauern-mistgabel.flavourText':
-    'Kündigt si scho vo weitem o. Funktioniert trotzdem jedsmoi.',
+  'items.bauern-mistgabel.flavourText': 'I dawisch eich olle zwoa.',
   'items.bierbank.description': 'Schiaßt zwoa Gschoss nebnanand. Schadn -20%',
-  'items.bierbank.flavourText': 'Reserviert. Zuagebm, dass a ma reserviert hod, hod no koana.',
+  'items.bierbank.flavourText': 'Glück aufi.',
   'items.bierbauch.description': 'Trinkfest +1 solang du’n dabei host. Lauftempo -8%',
-  'items.bierbauch.flavourText': 'Koa Fett. Stauraum.',
+  'items.bierbauch.flavourText': 'Do passn a poar nei.',
   'items.bierdeckel.description': 'Gschoss prallen vo Mauern o',
-  'items.bierdeckel.flavourText':
-    'Geht aa als Untersetza, falls d’s übers Herz bringst, eam higzlegn.',
+  'items.bierdeckel.flavourText': 'Boarischa Bumerang',
   'items.bierkrug.description': 'Schadn +1 pro Stapl',
-  'items.bierkrug.flavourText': 'Oana in jeda Hand is koa Stapl. Des is a Lebnsart.',
+  'items.bierkrug.flavourText': 'Im Bierzelt de liabste Waffn.',
   'items.blaskapelle.description': 'A Klangring beschädigt ois um di rum, olle poa Sekundn',
-  'items.blaskapelle.flavourText': 'Da Tubabläsa hod no nia a oanzigs Moi Luft hoin miaßn.',
+  'items.blaskapelle.flavourText': 'Tröööööt.',
   'items.blutwurz.description':
     'A Tod is ned s’End vom Lauf — solang d’ zruck zur Leich lafn konnst',
-  'items.blutwurz.flavourText':
-    'Blut. Geist. S’gleiche Woat, in zwoa Sprachn, de nia mitanand redn.',
+  'items.blutwurz.flavourText': 'Ma sogt, a Schluck weckt sogar de Totn auf.',
   'items.boellerschmeisser.description':
     'Aktiv: an brennadn Böller higebm — der geht do, wo d’ stehst, a Sekundn später hi',
-  'items.boellerschmeisser.flavourText':
-    'D’Landstön is markiert. Trotzdem geht nia oana rechtzeitig weg.',
+  'items.boellerschmeisser.flavourText': 'Ned auf andere schmeißn!',
   'items.braumeister-hammer.description':
     'A Kill schickt a Druckwön durch ois, was sunst no in da Näh is',
-  'items.braumeister-hammer.flavourText':
-    'D’Fassl, de si ned auf de easchte Oat ozapfn lassn, kriang statt dem des do.',
+  'items.braumeister-hammer.flavourText': 'Der mit’m Wumms.',
   'items.braumeister-schuerze.description': 'Schiaßt an Fächa aus drei Gschoss. Schadn -30%',
-  'items.braumeister-schuerze.flavourText': 'Er zielt, wia er oaschenkt. Geht nia daneb’n.',
+  'items.braumeister-schuerze.flavourText': 'Stoak und sexy',
   'items.braumeister-visier.description': 'Jeda 5. Schuss schiaßt a zsätzlis, durchdringads Salvn',
-  'items.braumeister-visier.flavourText':
-    'Er hod den gleichn Schuss scho zehntausndmoi obgebm. No nia daneb’n gwesn.',
+  'items.braumeister-visier.flavourText': 'A guada Schuss braucht a guads Aug.',
   'items.brezn.description': 'A kreisade Brezn, de Gegna bei Berührung beschädigt',
-  'items.brezn.flavourText': 'Leicht gsoizn. Schwer bewaffnet.',
+  'items.brezn.flavourText': 'Brezn-Schuss!',
   'items.brotzeitbrett.description': 'A Zimma räum bringt 1 Hoiung und a Biermarkn',
-  'items.brotzeitbrett.flavourText': 'Radi, Kaas, a Brezn. Gonz alloa ferti wead damit no koana.',
+  'items.brotzeitbrett.flavourText': 'A schnelle Brotzeit nochm Aufraama.',
   'items.colaweizen.description': 'Gschoss bleim pickn und langsam de Gegna. Schadn -20%',
-  'items.colaweizen.flavourText': 'Iagendwo greint grod stad a Reinheitsgebot-Prüfa.',
+  'items.colaweizen.flavourText': 'Pickad, zuckrig, grauslig.',
   'items.der-ordner.description': 'Vertraute, de Gegna vo dia wegschubst',
-  'items.der-ordner.flavourText': 'Oarm vaschränkt. Moanung gmacht.',
+  'items.der-ordner.flavourText': 'Lassts eam durch!',
   'items.der-rosinenklauber.description':
     'Rosinen-Sacha valiern iahn Nochteil. Sperrt boade Reinheitspakte',
-  'items.der-rosinenklauber.flavourText': 'Er vateidigt de Rosinen ned. Er isst’s bloß auf.',
+  'items.der-rosinenklauber.flavourText': 'Rett di vor de grauslign Rosinen.',
   'items.feierabendbier.description': 'Hoit a bissl am Ofang vo jedm Stock. Kost a bissl Promille',
   'items.feierabendbier.flavourText':
     'Vadient in dera Sekundn, wo d’Schicht aus is. Koane Sekundn frira.',
