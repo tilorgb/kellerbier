@@ -1,9 +1,9 @@
 import type { CurseDefinition } from '../../sim/curse/definition.js';
 
 /**
- * The five curses (#49, `docs/GAME_DESIGN.md` §10), as data — the same "one
+ * The four curses (#49, `docs/GAME_DESIGN.md` §10), as data — the same "one
  * list, roster sorted by nothing but declaration order since there are only
- * ever five" convention `content/enemies/index.js` and `content/items/index.js`
+ * ever four" convention `content/enemies/index.js` and `content/items/index.js`
  * use for their own rosters.
  *
  * `description` is a localisation key (`curses.<id>.description`), not
@@ -21,11 +21,6 @@ export const CURSE_DEFINITIONS: readonly CurseDefinition[] = [
     id: 'kater',
     name: 'Kater',
     description: 'curses.kater.description',
-  },
-  {
-    id: 'sperrstunde',
-    name: 'Sperrstunde',
-    description: 'curses.sperrstunde.description',
   },
   {
     id: 'foehn',

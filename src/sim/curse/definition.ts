@@ -12,7 +12,7 @@
  * `GameSim`/the renderer.
  */
 
-export const CURSE_IDS = ['nebel', 'kater', 'sperrstunde', 'foehn', 'blaue-stunde'] as const;
+export const CURSE_IDS = ['nebel', 'kater', 'foehn', 'blaue-stunde'] as const;
 export type CurseId = (typeof CURSE_IDS)[number];
 
 export interface CurseDefinition {

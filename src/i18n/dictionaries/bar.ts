@@ -111,8 +111,6 @@ export const bar: Record<DictKey, string> = {
   'ui.hud.notEnough': '(ned gnua)',
   'ui.hud.setCompletionDescription': 'S’ganze {name}-Set — jeds Teil wirkt stärka im Verbund.',
   'ui.hud.setComplete': '{name} komplett! {description}',
-  'ui.hud.sperrstundeCountdown': 'Sperrstunde — {seconds}s',
-  'ui.hud.sperrstundeComing': 'Sperrstunde — da Ordner kimmt',
   'ui.hud.minimapHeader': '{floor}. Stock — {name}',
   'ui.hud.bossLabel': 'BOSS',
   'ui.hud.tapUse': 'Antippn',
@@ -225,7 +223,6 @@ export const bar: Record<DictKey, string> = {
   // --- Curses -----------------------------------------------------
   'curses.nebel.description': 'Nebe vom Fluss. Koa Minikartn auf dem Stock.',
   'curses.kater.description': 'Du fangst den Stock mit an Kater o.',
-  'curses.sperrstunde.description': 'Letzte Rundn. Bummelst, kimmt da Ordner.',
   'curses.foehn.description': 'Da Föhn druckt jed’n Schuss im Raum.',
   'curses.blaue-stunde.description': 'Tiafe Dämmarung. Dei Sicht langt bloß so weit.',
 

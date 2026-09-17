@@ -104,8 +104,6 @@ export const de: Record<DictKey, string> = {
   'ui.hud.setCompletionDescription':
     'Das komplette {name}-Set — jedes Teil wirkt stärker im Verbund.',
   'ui.hud.setComplete': '{name} komplett! {description}',
-  'ui.hud.sperrstundeCountdown': 'Sperrstunde — {seconds}s',
-  'ui.hud.sperrstundeComing': 'Sperrstunde — der Ordner kommt',
   'ui.hud.minimapHeader': '{floor}. Stock — {name}',
   'ui.hud.bossLabel': 'BOSS',
   'ui.hud.tapUse': 'Antippen',
@@ -219,7 +217,6 @@ export const de: Record<DictKey, string> = {
   // --- Curses -----------------------------------------------------
   'curses.nebel.description': 'Nebel vom Fluss. Keine Minikarte auf diesem Stock.',
   'curses.kater.description': 'Du startest den Stock mit einem Kater.',
-  'curses.sperrstunde.description': 'Letzte Runde. Trödeln, und der Ordner holt dich.',
   'curses.foehn.description': 'Der Alpenwind schiebt jeden Schuss im Raum.',
   'curses.blaue-stunde.description': 'Tiefe Dämmerung. Deine Sicht reicht nur so weit.',
 

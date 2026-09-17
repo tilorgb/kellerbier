@@ -508,7 +508,6 @@ Occasional, announced on floor entry, mostly negative and always thematic.
 
 - **Nebel** — no minimap.
 - **Kater** — start the floor hungover.
-- **Sperrstunde** (last call) — a floor timer; when it runs out, the Ordner come for you.
 - **Föhn** — the alpine headache wind blows across every room, pushing all projectiles.
 - **Blaue Stunde** — heavy darkness, limited vision radius.
 

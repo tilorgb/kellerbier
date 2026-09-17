@@ -1342,7 +1342,7 @@ async function boot(progress: BootProgress): Promise<void> {
   // aligned with the room even in a letterboxed viewport.
   hudLayer.addChild(minimapHud.overlayView);
 
-  /** A floor's curse (#49): the entry announcement and Sperrstunde's countdown. */
+  /** A floor's curse (#49): the entry announcement. */
   const curseHud = new CurseHud(kit, preferences.locale);
   hudLayer.addChild(curseHud.view);
   /** The mid-run Promille arrival (#236) — its own banner, over the cleared boss room. */

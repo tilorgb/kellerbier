@@ -44,22 +44,22 @@ Columns:
 | apfelkuchen | Apfelkuchen | Passive | Heals 4. Damage +5% | Best Kuchen there is. | 0 | Treasure, Shop | Any |
 | apfelkuchen-mit-rosinen | Apfelkuchen (mit Rosinen) | Passive | Heals 4. Damage +5%. Permanently Range -15% | Worst Kuchen there is. | 1 | Treasure, Shop | Any |
 | apfelstrudel | Apfelstrudel | Passive | Shots split apart on impact. Damage -25% | Pulled thin enough to read a newspaper through. Nobody has tried. | 2 | Treasure, Shop, Boss | Any |
-| bauern-mistgabel | Bauern-Mistgabel | Passive | Shots become a short pitchfork jab: three piercing prongs, 2x damage, no range | Telegraphs the whole thing from a mile off. Still works every single time. | 2 | Shop, Boss, Secret | Any |
-| bierbank | Bierbank | Passive | Fires two shots side by side. Damage -20% | Reserved. Nobody has ever admitted to reserving it. | 1 | Treasure, Shop | Any |
-| bierbauch | Bierbauch | Passive | Trinkfest +1 while held. Move Speed -8% | Not fat. Storage. | 2 | Treasure, Shop, Boss | Any |
-| bierdeckel | Bierdeckel | Passive | Shots ricochet off walls | Also doubles as a coaster, if you can bear to put it down. | 1 | Treasure, Shop | Any |
-| bierkrug | Bierkrug | Passive | Damage +1 per stack | One in each hand is not a stack. It is a lifestyle. | 0 | Treasure, Shop | Any |
-| blaskapelle | Blaskapelle | Passive | A sound ring damages everything around you every few seconds | The tuba player has never once needed to breathe. | 2 | Treasure, Shop, Boss | Any |
-| blutwurz | Blutwurz | Passive | A death does not end the run — if you can walk back for the corpse | Blut. Geist. Same word, in two languages that never talk to each other. | 3 | Treasure, Shop, Boss | Any |
-| boellerschmeisser | Böllerschmeißer | Active (charge 420) | Active: drop a lit Böller — it goes off where you stand, one second later | The landing spot is marked. Nobody ever moves in time regardless. | 2 | Shop, Boss, Secret | Any |
-| braumeister-hammer | Braumeister-Hammer | Passive | A kill sends a shockwave through whatever else is nearby | The casks that don't tap the easy way meet this instead. | 2 | Boss, Secret | Any |
-| braumeister-schuerze | Braumeister-Schürze | Passive | Fires a fan of three shots. Damage -30% | He aims the way he pours. It never spills. | 2 | Treasure, Shop, Boss | Any |
-| braumeister-visier | Braumeister-Visier | Passive | Every 5th shot fires an extra, piercing volley | He has fired the same shot ten thousand times. It has never once missed. | 2 | Shop, Boss | Any |
-| brezn | Brezn | Passive | An orbiting pretzel that damages enemies on contact | Lightly salted. Heavily weaponised. | 1 | Treasure, Shop | Any |
-| brotzeitbrett | Brotzeitbrett | Passive | Clearing a room heals 1 and grants a Biermarken | Radishes, cheese, a pretzel. Nobody has ever once finished one alone. | 0 | Treasure, Shop | Any |
-| colaweizen | Colaweizen | Passive | Shots stick and slow enemies. Damage -20% | Somewhere, a Reinheitsgebot enforcer is quietly weeping. | 1 | Treasure, Shop | Any |
-| der-ordner | Der Ordner | Passive | Familiar that shoves enemies away from you | Arms crossed. Opinions closed. | 1 | Treasure, Shop, Boss | Any |
-| der-rosinenklauber | Der Rosinenklauber | Passive | Rosinen items lose their drawback. Locks out both purity pacts | He is not defending the raisins. He is just eating them. | 3 | Devil, Secret | Any |
+| bauern-mistgabel | Bauern-Mistgabel | Passive | Shots become a short pitchfork jab: three piercing prongs, 2x damage, no range | I will get you both.                                                       | 2 | Shop, Boss, Secret | Any |
+| bierbank | Bierbank | Passive | Fires two shots side by side. Damage -20% | Luck up.                                            | 1 | Treasure, Shop | Any |
+| bierbauch | Bierbauch | Passive | Trinkfest +1 while held. Move Speed -8% | Fits a few.       | 2 | Treasure, Shop, Boss | Any |
+| bierdeckel | Bierdeckel | Passive | Shots ricochet off walls | Bavarian boomerang                                         | 1 | Treasure, Shop | Any |
+| bierkrug | Bierkrug | Passive | Damage +1 per stack | Weapon of choice in the Bierzelt.                   | 0 | Treasure, Shop | Any |
+| blaskapelle | Blaskapelle | Passive | A sound ring damages everything around you every few seconds | Tröööööt.                                         | 2 | Treasure, Shop, Boss | Any |
+| blutwurz | Blutwurz | Passive | A death does not end the run — if you can walk back for the corpse | They say a sip can wake up the dead.                                    | 3 | Treasure, Shop, Boss | Any |
+| boellerschmeisser | Böllerschmeißer | Active (charge 420) | Active: drop a lit Böller — it goes off where you stand, one second later | Don't throw at others!                                            | 2 | Shop, Boss, Secret | Any |
+| braumeister-hammer | Braumeister-Hammer | Passive | A kill sends a shockwave through whatever else is nearby | The one with the oomph.                                  | 2 | Boss, Secret | Any |
+| braumeister-schuerze | Braumeister-Schürze | Passive | Fires a fan of three shots. Damage -30% | Strong and sexy                            | 2 | Treasure, Shop, Boss | Any |
+| braumeister-visier | Braumeister-Visier | Passive | Every 5th shot fires an extra, piercing volley | A good shot needs a good eye.                                            | 2 | Shop, Boss | Any |
+| brezn | Brezn | Passive | An orbiting pretzel that damages enemies on contact | Pretzl shot!                        | 1 | Treasure, Shop | Any |
+| brotzeitbrett | Brotzeitbrett | Passive | Clearing a room heals 1 and grants a Biermarken | A quick snack after cleaning up.                                      | 0 | Treasure, Shop | Any |
+| colaweizen | Colaweizen | Passive | Shots stick and slow enemies. Damage -20% | Sticky, sugary, disgusting.                              | 1 | Treasure, Shop | Any |
+| der-ordner | Der Ordner | Passive | Familiar that shoves enemies away from you | Let him through!               | 1 | Treasure, Shop, Boss | Any |
+| der-rosinenklauber | Der Rosinenklauber | Passive | Rosinen items lose their drawback. Locks out both purity pacts | Saves you from those disgusting raisins.                 | 3 | Devil, Secret | Any |
 | feierabendbier | Feierabendbier | Passive | Heals a little at the start of every floor. Costs a little Promille | Earned the second the shift ends. Not one second before. | 1 | Treasure, Shop | Any |
 | feuerwehrhelm | Feuerwehrhelm | Passive | Shots are hose water: every hit shoves its target back. Shot Speed +25% | Rated to withstand heat, impact, and at least one Böllerschmeißer. | 1 | Treasure, Shop | Any |
 | fingerhakeln | Fingerhakeln | Passive | Contact damage, and drags nearby enemies toward you | The loser buys the next round. There is always a next round. | 2 | Shop, Boss, Secret | Rausch |

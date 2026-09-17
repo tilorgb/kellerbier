@@ -115,8 +115,6 @@ export const en = {
   'ui.hud.notEnough': '(not enough)',
   'ui.hud.setCompletionDescription': 'The full {name} set — every piece is doing more together.',
   'ui.hud.setComplete': '{name} complete! {description}',
-  'ui.hud.sperrstundeCountdown': 'Sperrstunde — {seconds}s',
-  'ui.hud.sperrstundeComing': 'Sperrstunde — the Ordner are coming',
   'ui.hud.minimapHeader': '{floor}. Floor — {name}',
   'ui.hud.bossLabel': 'BOSS',
   'ui.hud.tapUse': 'Tap Use',
@@ -234,7 +232,6 @@ export const en = {
   // --- Curses -----------------------------------------------------
   'curses.nebel.description': 'Fog off the river. No minimap for the floor.',
   'curses.kater.description': 'You start the floor hungover.',
-  'curses.sperrstunde.description': 'Last call. Dawdle and the Ordner come for you.',
   'curses.foehn.description': 'The alpine wind pushes every shot in the room.',
   'curses.blaue-stunde.description': 'Heavy dusk. Your sight only carries so far.',
 
@@ -282,48 +279,41 @@ export const en = {
     'Pulled thin enough to read a newspaper through. Nobody has tried.',
   'items.bauern-mistgabel.description':
     'Shots become a short pitchfork jab: three piercing prongs, 2x damage, no range',
-  'items.bauern-mistgabel.flavourText':
-    'Telegraphs the whole thing from a mile off. Still works every single time.',
+  'items.bauern-mistgabel.flavourText': 'I will get you both.',
   'items.bierbank.description': 'Fires two shots side by side. Damage -20%',
-  'items.bierbank.flavourText': 'Reserved. Nobody has ever admitted to reserving it.',
+  'items.bierbank.flavourText': 'Luck up.',
   'items.bierbauch.description': 'Trinkfest +1 while held. Move Speed -8%',
-  'items.bierbauch.flavourText': 'Not fat. Storage.',
+  'items.bierbauch.flavourText': 'Fits a few.',
   'items.bierdeckel.description': 'Shots ricochet off walls',
-  'items.bierdeckel.flavourText': 'Also doubles as a coaster, if you can bear to put it down.',
+  'items.bierdeckel.flavourText': 'Bavarian boomerang',
   'items.bierkrug.description': 'Damage +1 per stack',
-  'items.bierkrug.flavourText': 'One in each hand is not a stack. It is a lifestyle.',
+  'items.bierkrug.flavourText': 'Weapon of choice in the Bierzelt.',
   'items.blaskapelle.description': 'A sound ring damages everything around you every few seconds',
-  'items.blaskapelle.flavourText': 'The tuba player has never once needed to breathe.',
+  'items.blaskapelle.flavourText': 'Tröööööt.',
   'items.blutwurz.description':
     'A death does not end the run — if you can walk back for the corpse',
-  'items.blutwurz.flavourText':
-    'Blut. Geist. Same word, in two languages that never talk to each other.',
+  'items.blutwurz.flavourText': 'They say a sip can wake up the dead.',
   'items.boellerschmeisser.description':
     'Active: drop a lit Böller — it goes off where you stand, one second later',
-  'items.boellerschmeisser.flavourText':
-    'The landing spot is marked. Nobody ever moves in time regardless.',
+  'items.boellerschmeisser.flavourText': "Don't throw at others!",
   'items.braumeister-hammer.description':
     'A kill sends a shockwave through whatever else is nearby',
-  'items.braumeister-hammer.flavourText':
-    "The casks that don't tap the easy way meet this instead.",
+  'items.braumeister-hammer.flavourText': 'The one with the oomph.',
   'items.braumeister-schuerze.description': 'Fires a fan of three shots. Damage -30%',
-  'items.braumeister-schuerze.flavourText': 'He aims the way he pours. It never spills.',
+  'items.braumeister-schuerze.flavourText': 'Strong and sexy',
   'items.braumeister-visier.description': 'Every 5th shot fires an extra, piercing volley',
-  'items.braumeister-visier.flavourText':
-    'He has fired the same shot ten thousand times. It has never once missed.',
+  'items.braumeister-visier.flavourText': 'A good shot needs a good eye.',
   'items.brezn.description': 'An orbiting pretzel that damages enemies on contact',
-  'items.brezn.flavourText': 'Lightly salted. Heavily weaponised.',
+  'items.brezn.flavourText': 'Pretzl shot!',
   'items.brotzeitbrett.description': 'Clearing a room heals 1 and grants a Biermarken',
-  'items.brotzeitbrett.flavourText':
-    'Radishes, cheese, a pretzel. Nobody has ever once finished one alone.',
+  'items.brotzeitbrett.flavourText': 'A quick snack after cleaning up.',
   'items.colaweizen.description': 'Shots stick and slow enemies. Damage -20%',
-  'items.colaweizen.flavourText': 'Somewhere, a Reinheitsgebot enforcer is quietly weeping.',
+  'items.colaweizen.flavourText': 'Sticky, sugary, disgusting.',
   'items.der-ordner.description': 'Familiar that shoves enemies away from you',
-  'items.der-ordner.flavourText': 'Arms crossed. Opinions closed.',
+  'items.der-ordner.flavourText': 'Let him through!',
   'items.der-rosinenklauber.description':
     'Rosinen items lose their drawback. Locks out both purity pacts',
-  'items.der-rosinenklauber.flavourText':
-    'He is not defending the raisins. He is just eating them.',
+  'items.der-rosinenklauber.flavourText': 'Saves you from those disgusting raisins.',
   'items.feierabendbier.description':
     'Heals a little at the start of every floor. Costs a little Promille',
   'items.feierabendbier.flavourText': 'Earned the second the shift ends. Not one second before.',
