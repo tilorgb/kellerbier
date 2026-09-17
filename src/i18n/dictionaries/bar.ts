@@ -46,7 +46,8 @@ export const bar: Record<DictKey, string> = {
   'ui.gameOver.summary': '{seconds}s duachghoitn   {kills} dawischt   {floor}',
 
   'ui.victory.headline': 'Sieg!',
-  'ui.victory.epilogue': 'Geht no weiter.',
+  'ui.victory.epilogue':
+    'Der Stier foit. Draußn roit a Liefawong vom Marktplatz — voi belodn und Richtung Südn.\nDes Kapitl is aus. Der Weg geht no weiter.',
   'ui.victory.retry': 'No amoi',
   'ui.victory.results': 'Ergebnis',
   'ui.victory.hub': 'Titl',
@@ -101,6 +102,8 @@ export const bar: Record<DictKey, string> = {
   'ui.storyCard.skipHint': 'Drucka zum Iwaspringa',
   'ui.story.opening':
     "Opas letzts Pfeitinger is leer. De volle Kistn daneb is 's gleiche Bier, aba's Etikett is neu: Wasser, Malz, Hopfn — und Rosinen.\n\nDer Alois nimmt eahm sein Trink-Rucksack vom Hakn, füllt eahm mit der versautn Kistn und stellt'n vo trinkn auf schiaßn.",
+  'ui.story.chapterTwo':
+    "D'Kellertreppn nauf, und Oberniederburg hat an schäna Nachmittag. De neichn Kistn staplt si vorm Wirtshaus, auf de Anhänger, hinterm Marktstand — am hellichtn Tag, und koaner am Platz hat's für nötig ghoitn, wos dazua z'sogn.\n\nEs war also nia bloaß dem Opa sei Kistn. Irgendwer schickt de do, lasterweis, und de kemma von weiter obn im Tal, ois wo da Alois je an Grund ghabt hätt hinzfahrn.",
 
   // --- HUD -----------------------------------------------------
   'ui.hud.bossBanner': 'Bossraum',

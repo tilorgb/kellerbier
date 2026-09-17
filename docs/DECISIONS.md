@@ -5912,3 +5912,68 @@ actually does now.
 render/app-layer only (`app/main.ts`, `render/boss-intro-plate.ts`'s doc comment), touches no sim
 state and no existing test asserts on the old timing, but it still needs the standard "played it
 through a real boss door" check before this counts as done per `CONTRIBUTING.md`.
+
+## 105. #58's last missing scope bullet: the card *between* chapters, and the stale-translation gate that found a second gap
+
+**Decided:** #58's remaining scope, after its own status comments recorded everything else as
+landed. **Builds on:** #94 (the chapter-card render component, explicitly deferred to #58 itself),
+#96 (the chapter-two ending, and its two-tier "plain words now, real art later" path), #103 (the
+postcard motif), #19 (graceful degradation for a content gap).
+
+**What was actually still open.** #58 asks for "chapter cards — a single illustrated still with
+one or two lines of text, *between chapters*", plural, and `GAME_DESIGN.md` §2 says the same
+("a short illustrated card between chapters"). Only one card existed: the opening (#324), which is
+the card *before* the first chapter, a different job. #94's own closing note is explicit that "the
+chapter-card render components don't exist yet — this issue only proves the asset pipeline," and
+#58's final status comment lists every other bullet as landed without listing this one. So the gap
+was a real omission rather than a deliberate cut, and `CONTENT_BIBLE.md` §1's "each floor is a
+chapter" makes the missing card an exact one: floor 1 → floor 2, the cellar steps up into the
+village.
+
+**It is a beat in the same store, not a new mechanism.** `app/story/beats.ts` was already keyed by
+an arbitrary string id and `StoryCard` was already the right component; what was hardcoded was the
+*caller*. `main.ts`'s `dismissStoryCard` marked `STORY_BEAT_OPENING` seen by name, which would have
+recorded the wrong beat the moment a second one existed. `showStoryBeatOrFloorCard(beat, key)` now
+owns the whole "show it if unseen, queue the floor card behind it" shape both call sites need, and
+the card itself reports which beat is up (`StoryCard.beat`) rather than the caller assuming.
+
+**Gated on the floor arrived at, not the floor left behind.** `advanceFloor` wraps back round to
+floor 1 under the dev-only endless loop (`Y`), so "came from floor 1" is not the same question as
+"arrived on floor 2". The beat is the arrival, and `seenStoryBeats` holds it to one anyway.
+
+**Art per beat, not per card — and an empty window is not a hole.** One `StoryCard` carries every
+beat, so `setArt` is keyed by beat id: chapter two has no illustration yet (there is no GPU on the
+cloud track, and #77's sign-off gate is the point, not a formality), and without the split it would
+have silently inherited the opening's Sunday-lunch cellar. It ships text-only, the same two-tier
+path #94/#96 took, with a real illustration the natural follow-up once one is generated and signed
+off. That surfaced a latent bug in `Postcard`: `ui/postcard-paper.ts` punches the picture's window
+clean out of the sheet, on the stated reasoning that "a colour under a sprite is a colour nobody
+ever sees" — true until a card had no sprite, at which point the dimmed room showed straight
+through the card and it read as a cut-out. `Postcard` now fills an artless window with blank card
+stock, which also improves the case that reasoning was written for (a title postcard whose art
+fetch failed was previously a hole too).
+
+**The stale-translation gate, and the second gap it found.** #96 replaced `ui.victory.epilogue`'s
+"To be continued" placeholder with the real chapter-two ending — in `en` and `de`. `bar` kept its
+one-line placeholder ("Geht no weiter."), and nothing failed: `tests/content/i18n-coverage.test.ts`
+checked that every key exists, is non-empty, and uses the same `{placeholders}`, all of which a
+stale translation passes. A Boarisch player has been finishing the game on the old text ever since.
+The new check is line structure: a deliberate `\n` in English is *content* — a second paragraph, a
+second beat — and a locale with fewer lines has dropped it rather than compressed it. Length is
+deliberately not checked; a translation is free to be much shorter or longer. Run across the
+existing dictionaries it flagged exactly one key, the one above, which is the evidence that it is
+a gate rather than noise.
+
+**The dialect lines are agent-drafted and want a native pass**, flagged the way #327/#328 flagged
+Der Stier's title and epithet. #97 chose the stricter reading for the villager one-liner — leaving
+Boarisch as the German text verbatim, since "the user pitches Bavarian phrasing" — but that was a
+*new* line being invented. Both lines here translate content the project owner has already signed
+off in English and German into a locale whose own doc comment promises "every key `en.ts` declares
+has a real dialect line here," so leaving German in the middle of it would break the file's stated
+completeness for no gain. `CLAUDE.md`'s hard rule is about **names**, and no name is coined here.
+
+**Verified in the dev app, through the real progression** (`CLAUDE.md`'s "reachable means through
+the real progression"): a headless run on a cleared save takes the opening card, clears floor 1,
+walks the cleared boss room's next-floor exit, and lands on the chapter-two card, which then hands
+floor 2's own title card its turn on dismissal; a reload confirms it does not come back. The
+victory epilogue was checked in all three locales on the screen itself.

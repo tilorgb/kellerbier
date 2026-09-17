@@ -94,6 +94,8 @@ export const de: Record<DictKey, string> = {
   'ui.storyCard.skipHint': 'Drücken zum Überspringen',
   'ui.story.opening':
     'Opas letztes Pfeitinger ist leer. Die volle Kiste daneben ist dasselbe Bier, aber das Etikett ist neu: Wasser, Malz, Hopfen — und Rosinen.\n\nAlois nimmt Opas Trink-Rucksack vom Haken, füllt ihn mit der verdorbenen Kiste und stellt ihn von trinken auf schießen.',
+  'ui.story.chapterTwo':
+    'Die Kellertreppe hinauf, und Oberniederburg hat einen schönen Nachmittag. Die neuen Kisten stapeln sich vor dem Wirtshaus, auf den Anhängern, hinter dem Marktstand — am helllichten Tag, und keiner am Platz hat es für nötig gehalten, etwas dazu zu sagen.\n\nEs war also nie nur Opas Kiste. Irgendwer schickt die hier, lasterweise, und sie kommen von weiter oben aus dem Tal, als Alois je einen Grund hatte hinzufahren.',
 
   // --- HUD -----------------------------------------------------
   'ui.hud.bossBanner': 'Bossraum',

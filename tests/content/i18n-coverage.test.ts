@@ -87,6 +87,44 @@ describe('the localisation layer (#52)', () => {
   });
 
   /**
+   * Every locale breaks a multi-line string into the same number of lines
+   * English does — the gate that catches a *stale* translation, which every
+   * check above is blind to.
+   *
+   * The concrete miss this exists for (#58): `ui.victory.epilogue` was a
+   * one-line placeholder ("To be continued") in all three locales until
+   * `docs/DECISIONS.md` #96 replaced it with the real two-line chapter-two
+   * ending — in `en` and `de` only. `bar` kept its one-line placeholder, and
+   * nothing failed: the key was present, non-empty, and had no placeholders
+   * to compare. A Boarisch player finished the game on the old text for as
+   * long as that lasted.
+   *
+   * Line count rather than length, because a translation is free to be much
+   * shorter or longer than its English source, but a deliberate line break in
+   * English is structure — a second paragraph, a second beat — and a locale
+   * that dropped one has dropped the content, not compressed it.
+   */
+  it('gives every locale the same line structure English has', () => {
+    const lineCount = (text: string): number => text.split('\n').length;
+    const mismatches: string[] = [];
+    for (const key of dictKeys()) {
+      const englishLines = lineCount(en[key]);
+      for (const locale of LOCALES) {
+        if (locale === 'en') {
+          continue;
+        }
+        const localeLines = lineCount(dictionaries[locale][key]);
+        if (localeLines !== englishLines) {
+          mismatches.push(
+            `"${key}" in "${locale}": ${String(localeLines)} line(s), English has ${String(englishLines)}`,
+          );
+        }
+      }
+    }
+    expect(mismatches).toEqual([]);
+  });
+
+  /**
    * Every content-authored key — an item, a curse, a pickup or a floor's
    * `description`/`flavourText` — actually exists in the dictionary. This
    * is the other direction from the coverage checks above: a typo'd key in

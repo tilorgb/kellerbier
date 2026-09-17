@@ -137,7 +137,12 @@ import type { Locale } from '../i18n/locale.js';
 import { ActiveRunRecorder, decodeActiveRunFrames, persistActiveRun } from './save/active-run.js';
 import type { CharacterTraits } from '../sim/character/definition.js';
 import { loadSave } from './save/storage.js';
-import { STORY_BEAT_OPENING, hasSeenStoryBeat, markStoryBeatSeen } from './story/beats.js';
+import {
+  STORY_BEAT_CHAPTER_TWO,
+  STORY_BEAT_OPENING,
+  hasSeenStoryBeat,
+  markStoryBeatSeen,
+} from './story/beats.js';
 import {
   recordBossDefeat,
   recordRunOutcome,
@@ -230,6 +235,16 @@ const PEDESTAL_PLATE_LIFT = 18;
  */
 const FLOOR_CARD_MS = 2600;
 const FLOOR_CARD_FADE_MS = 700;
+
+/**
+ * Which floor `STORY_BEAT_CHAPTER_TWO`'s card announces — floor 2, the
+ * village, because `docs/CONTENT_BIBLE.md` §1 makes each floor a chapter and
+ * the village is chapter two. Named rather than written as a bare `2` at
+ * `advanceFloor`'s call site: the number is the *chapter* the card is for,
+ * not an arithmetic step, and floors 3-7 each getting their own card is the
+ * expected shape once they unpark (`docs/ROADMAP.md` M10).
+ */
+const CHAPTER_TWO_FLOOR = 2;
 
 /**
  * How long the boss intro plate (#58/#327) stays fully up, once faded in —
@@ -1064,7 +1079,7 @@ async function boot(): Promise<void> {
    * only one is ever meant to be visible at once. See `dismissStoryCard`.
    */
   const storyCard = new StoryCard(preferences.locale);
-  /** Set when `startRun` deferred floor 1's own card behind the opening beat — see `dismissStoryCard`. */
+  /** Set when a story beat pushed the floor's own card behind it — see `showStoryBeat`/`dismissStoryCard`. */
   let floorCardPendingAfterStory = false;
 
   /**
@@ -2515,10 +2530,13 @@ async function boot(): Promise<void> {
     });
 
   // Same never-block-boot-on-it shape as the title backdrop above — the
-  // opening card (#58) is text-only until this resolves.
+  // opening card (#58) is text-only until this resolves. Registered against
+  // the beat it belongs to, not against the card: chapter two's beat shares
+  // this same `StoryCard` and has no illustration of its own yet, and must
+  // show an empty picture window rather than the opening's picture.
   loadTexture(openingCardArtUrl)
     .then((texture) => {
-      storyCard.setArt(texture);
+      storyCard.setArt(STORY_BEAT_OPENING, texture);
     })
     .catch((err: unknown) => {
       if (import.meta.env.DEV) {
@@ -2902,21 +2920,42 @@ WASD move   arrows aim and fire
     // (the global `R` key, every "Retry" button), so `seenStoryBeats` rather
     // than any in-memory flag is what stops this from replaying on the
     // player's second run, let alone their five hundredth.
-    if (hasSeenStoryBeat(loadSave(), STORY_BEAT_OPENING)) {
-      showFloorCard();
-    } else {
-      storyCard.show(t(preferences.locale, 'ui.story.opening'));
-      floorCardPendingAfterStory = true;
-    }
+    showStoryBeatOrFloorCard(STORY_BEAT_OPENING, 'ui.story.opening');
   }
 
-  /** Hides the opening card, records it seen for good, and raises floor 1's own card in its place. */
+  /**
+   * Raises `beat`'s one-time story card if this save has never seen it, with
+   * the floor's own card queued up behind it — and goes straight to the floor
+   * card if it has.
+   *
+   * The two are deliberately sequential rather than simultaneous: both are
+   * opaque and both live in the same z-order slot (see `storyCard`'s own doc
+   * comment), so a beat that fires on arrival somewhere new has to hand the
+   * floor card its turn afterwards rather than covering it. `hasSeenStoryBeat`
+   * reads the save rather than any in-memory flag for the reason `startRun`'s
+   * call site already spells out — `startRun` *is* the retry path, so an
+   * in-memory flag would replay the opening on every restart of a fresh save.
+   */
+  function showStoryBeatOrFloorCard(beat: string, text: DictKey): void {
+    if (hasSeenStoryBeat(loadSave(), beat)) {
+      showFloorCard();
+      return;
+    }
+    storyCard.show(beat, t(preferences.locale, text));
+    floorCardPendingAfterStory = true;
+  }
+
+  /** Hides whichever beat is up, records it seen for good, and raises the floor's own card in its place. */
   function dismissStoryCard(): void {
     if (!storyCard.visible) {
       return;
     }
+    // Read before `hide`, which is what takes the beat back off the card.
+    const beat = storyCard.beat;
     storyCard.hide();
-    markStoryBeatSeen(STORY_BEAT_OPENING);
+    if (beat !== null) {
+      markStoryBeatSeen(beat);
+    }
     if (floorCardPendingAfterStory) {
       floorCardPendingAfterStory = false;
       showFloorCard();
@@ -3595,7 +3634,18 @@ WASD move   arrows aim and fire
     // `GameView.warmSceneryShaders`.
     warmFloorShaders();
     refreshHud();
-    showFloorCard();
+    // Chapter two's card (#58): the one card `GAME_DESIGN.md` §2 asks for
+    // *between* chapters, as against the opening, which sits before the first
+    // one. Gated on the floor actually arrived at rather than on the floor
+    // left behind, because the dev-only endless loop wraps back round to
+    // floor 1 (see this function's own doc comment) — "arriving on floor 2"
+    // is the beat, however many times a `Y`-key loop passes through it, and
+    // `seenStoryBeats` stops it at one anyway.
+    if (nextFloor === CHAPTER_TWO_FLOOR) {
+      showStoryBeatOrFloorCard(STORY_BEAT_CHAPTER_TWO, 'ui.story.chapterTwo');
+    } else {
+      showFloorCard();
+    }
   }
 
   /**

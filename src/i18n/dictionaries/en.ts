@@ -106,6 +106,8 @@ export const en = {
   'ui.storyCard.skipHint': 'Press to skip',
   'ui.story.opening':
     "Opa's last Pfeitinger is empty. The full crate beside it is the same beer, but the label is new: water, malt, hops — and raisins.\n\nAlois takes Opa's Trink-Rucksack down off its hook, fills it with the tainted crate, and switches it from trinken to schießen.",
+  'ui.story.chapterTwo':
+    "Up the steps, and Oberniederburg is having a lovely afternoon. The new crates are stacked outside the Wirtshaus, on the trailers, behind the Marktstand — in broad daylight, and nobody in the square has thought to mention them.\n\nSo it was never just Opa's crate. Somebody is sending these, by the lorryload, and they come from further up the valley than Alois has ever had a reason to go.",
 
   // --- HUD -----------------------------------------------------
   'ui.hud.bossBanner': 'Boss Room',

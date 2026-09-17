@@ -1,4 +1,4 @@
-import { Container, Graphics, Sprite, type BitmapText, type Texture } from './gfx/index.js';
+import { Container, Graphics, Sprite, Texture, type BitmapText } from './gfx/index.js';
 import { POSTCARD_PALETTE } from './palette.js';
 import {
   POSTCARD_SHADOW_OFFSET,
@@ -52,6 +52,8 @@ export class Postcard {
 
   private readonly shadow = new Graphics();
   private readonly paper = new Sprite();
+  /** Blank card stock filling the punched window while there is no picture — see `layOut`. */
+  private readonly mount = new Graphics();
   private readonly art = new Sprite();
   private caption: BitmapText | null = null;
   private captionText = '';
@@ -68,6 +70,7 @@ export class Postcard {
     this.seed = options.seed ?? 1;
     this.view.addChild(this.shadow);
     this.view.addChild(this.paper);
+    this.view.addChild(this.mount);
     this.art.visible = false;
     this.view.addChild(this.art);
   }
@@ -78,6 +81,24 @@ export class Postcard {
     this.hasArt = true;
     this.art.visible = true;
     this.artAspect = texture.height === 0 ? undefined : texture.width / texture.height;
+    this.layOut();
+  }
+
+  /**
+   * Takes the illustration back out of the window — the sheet keeps its shape
+   * and the picture is empty again, exactly as it was before the first
+   * `setArt`. One `Postcard` instance outliving several different pictures is
+   * the reason this exists: `StoryCard` shows more than one beat off the same
+   * card, and a beat with no art of its own must not inherit the last one's.
+   */
+  clearArt(): void {
+    if (!this.hasArt) {
+      return;
+    }
+    this.art.texture = Texture.EMPTY;
+    this.hasArt = false;
+    this.art.visible = false;
+    this.artAspect = undefined;
     this.layOut();
   }
 
@@ -127,10 +148,27 @@ export class Postcard {
       .rect(POSTCARD_SHADOW_OFFSET, POSTCARD_SHADOW_OFFSET, width, height)
       .fill({ color: POSTCARD_PALETTE.shadow, alpha: SHADOW_ALPHA });
 
+    // The sheet has a real hole where the picture goes (`drawPictureKeyline`
+    // punches it, on the reasoning that a sprite always covers it) — so a card
+    // with no picture needs something *in* the window, or the room behind the
+    // card shows straight through it and the card reads as a cut-out rather
+    // than as an unprinted one. Blank stock, a shade darker than the sheet, is
+    // what an empty mount looks like. Cleared the moment art arrives, which is
+    // every case this class had before a beat existed without its own picture.
+    this.mount.clear();
     if (this.hasArt) {
       this.art.width = geometry.picture.width;
       this.art.height = geometry.picture.height;
       this.art.position.set(geometry.picture.x, geometry.picture.y);
+    } else {
+      this.mount
+        .rect(
+          geometry.picture.x,
+          geometry.picture.y,
+          geometry.picture.width,
+          geometry.picture.height,
+        )
+        .fill({ color: POSTCARD_PALETTE.paperShade });
     }
 
     this.placeCaption(geometry);
