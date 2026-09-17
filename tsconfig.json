@@ -38,6 +38,7 @@
     "tests",
     "tools",
     "vite.config.ts",
+    "vite.release.config.ts",
     "vitest.bench.config.ts",
     "vitest.fuzz.config.ts",
     "vitest.playtest.config.ts"

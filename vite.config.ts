@@ -8,9 +8,22 @@ import { roomEditorServerPlugin } from './tools/room-editor/server.mjs';
 const resolvePath = (relative: string): string => fileURLToPath(new URL(relative, import.meta.url));
 
 export default defineConfig({
-  // Relative asset URLs, so a production build also runs from `file://`
-  // and from any static host served out of a subdirectory.
+  // Relative asset URLs, so a production build also runs from any static host
+  // served out of a subdirectory — the CI preview publishes pull requests to
+  // `pr/<number>/` under the repo's Pages site, not the site root.
+  //
+  // This is *not* on its own enough to run from `file://`, which the comment
+  // here used to claim: a `<script type="module">` is fetched under CORS even
+  // from a local file, and every asset next to it would be a cross-origin
+  // read that taints the WebGL textures it feeds. Actually opening a build by
+  // double-clicking it is what `vite.release.config.ts` is for — one file, one
+  // classic script, every asset a `data:` URI.
   base: './',
+  define: {
+    // `src/app/build-mode.ts`. Three builds, not two — see its doc comment.
+    // `vite.release.config.ts` is the only thing that flips this.
+    __KELLERBIER_RELEASE__: 'false',
+  },
   // Dev-only: `configureServer` middleware never runs under `vite build`, so
   // the room editor's (#24) and pixel editor's (#108) save endpoints never
   // reach a production bundle.

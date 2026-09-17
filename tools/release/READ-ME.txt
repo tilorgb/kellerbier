@@ -1,0 +1,47 @@
+KELLERBIER
+A Bavarian cellar-crawling roguelike bullet hell.
+
+
+HOW TO PLAY IT
+
+  Double-click Kellerbier.html. That is the whole installation.
+
+  It is one self-contained file — the game, its art and its music are all
+  inside it — so it runs straight off your disk with nothing to install and
+  no internet connection needed. Any current Chrome, Firefox, Edge or Safari
+  will do. It takes a couple of seconds to start; there is a loading bar.
+
+
+CONTROLS
+
+  WASD .............. move
+  Arrow keys ........ aim and fire
+  Space ............. fire
+  E ................. bomb
+  Q ................. use the item you are carrying
+  Tab ............... map
+  Escape ............ pause
+
+  A gamepad works too: stick or d-pad to move, right trigger to fire, left
+  trigger to bomb, A/cross to use.
+
+  All of it is rebindable under Settings -> Controls, from the title screen
+  or the pause menu. That screen is also where the volume sliders and the
+  accessibility options live.
+
+
+WHAT YOU ARE PLAYING
+
+  Two chapters of a seven-chapter game. The cellar and the village above it
+  are finished and have a real ending; the five floors below them are not
+  built yet. A run is roughly fifteen minutes.
+
+  It saves as you go, in the browser's own storage — closing the window and
+  opening the file again picks up where you left off.
+
+
+IF SOMETHING GOES WRONG
+
+  Press C at any time. That copies the seed, the character, the items and
+  what was happening to your clipboard — paste that into whatever you use to
+  tell me about it, and the exact run can be replayed from it.

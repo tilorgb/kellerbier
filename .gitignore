@@ -3,10 +3,12 @@ node_modules/
 .pnp
 .pnp.js
 
-# build output
-dist/
-dist-ssr/
-build/
+# build output. Anchored with a leading slash: an unanchored `build/` matches a
+# directory of that name at any depth, which quietly swallowed `tests/build/`
+# — the release build's own test — the moment one existed.
+/dist/
+/dist-ssr/
+/build/
 *.local
 
 # test & coverage
@@ -51,3 +53,8 @@ dist-treeshake-test
 room-crossings-*.json
 room-crossings.cpuprofile
 tools/art/authoring/preview/
+
+# `npm run build:release` output — the one-file build handed to a player.
+# Build output, like /dist/: 17 MB of base64 rebuilt from source in a second.
+# Anchored, so it does not also hide `tools/release/`, which builds it.
+/release/

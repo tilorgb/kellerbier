@@ -115,7 +115,8 @@ import {
 } from './telemetry/store.js';
 import { downloadTelemetryFile } from './telemetry/file.js';
 import { createTouchControls, isTouchCapable } from './touch-controls.js';
-import { createEditorDock } from './editor-dock.js';
+import { IS_RELEASE_BUILD } from './build-mode.js';
+import { type BootProgress, createBootProgress } from './boot-progress.js';
 import { type CameraTuningPanel, createCameraTuningPanel } from './camera-tuning.js';
 import {
   pickDecorativePropAt,
@@ -776,7 +777,7 @@ function machinePickerView(
   };
 }
 
-async function boot(): Promise<void> {
+async function boot(progress: BootProgress): Promise<void> {
   const host = document.getElementById('game');
   if (host === null) {
     throw new Error('Missing #game host element in index.html');
@@ -795,6 +796,11 @@ async function boot(): Promise<void> {
   // registered is exactly the missing HUD #154 exists to remove.
   installPixelFonts();
   const kit = new UiKit();
+  // First milestone (`app/boot-progress.ts`): there is a renderer and there
+  // are fonts. Awaited, like every `advance` below, because the rest of boot
+  // is synchronous and a bar that is never given a frame to paint in arrives
+  // at 100% without ever having been seen at anything else.
+  await progress.advance('renderer');
 
   // Accessibility settings (#33): persisted across reloads in `localStorage`,
   // read once here and mutated in place from then on — by the panel below,
@@ -832,6 +838,7 @@ async function boot(): Promise<void> {
     },
     playerArt,
   ] = await Promise.all([loadFloorArt(), loadPlayerArt()]);
+  await progress.advance('art');
   // Sprite names are unique across floors and categories by the existing
   // authoring convention (`cellar-floor`, `rural-floor-2`, `kellerassel`, ...),
   // so one flat name -> `Texture` map is enough for the pixel editor's live
@@ -880,6 +887,17 @@ async function boot(): Promise<void> {
           typeof view === 'undefined' ? undefined : view,
         )
       : undefined;
+
+  // `#seed-control` (`index.html`) is a dev convenience — type a seed, pin a
+  // run, hunt for a floor shape — and it is markup, not a component, so it is
+  // on screen the moment the page paints whatever this module then does. A
+  // release build removes the whole panel rather than hiding it: every
+  // `getElementById` below is already null-guarded (a headless harness mounts
+  // the game into its own page and has never had one), so taking the element
+  // away is all that is needed to take its behaviour away with it.
+  if (IS_RELEASE_BUILD) {
+    document.getElementById('seed-control')?.remove();
+  }
 
   const seedInput = document.getElementById('seed-input');
 
@@ -994,7 +1012,19 @@ async function boot(): Promise<void> {
   // controller in one hand and squinting at tick counts in the other, and it
   // would eat a meaningful slice of an already-small screen for nothing a
   // touch player can act on.
-  hud.visible = !touchCapable;
+  //
+  // Nor in a release build, for a stronger version of the same reason: five
+  // lines of tick counts, pool occupancy and a list of playtest keys across
+  // the bottom of the screen is the single most obvious tell that what
+  // somebody has been handed is not a finished game. It stays in the CI
+  // preview, where the seed and the room id on it are what turn "it broke" in
+  // a review into a reproducible report (`app/build-mode.ts`).
+  //
+  // A player is not left without a control reference by this: Settings →
+  // Controls lists every action and its binding, localised, and is reachable
+  // from the title screen and the pause menu alike. The readout's own
+  // `WASD move / arrows aim and fire` line was never the real one.
+  hud.visible = !touchCapable && !IS_RELEASE_BUILD;
   uiLayer.addChild(hud);
 
   // Added after the readout so anything screen-filling in here — a floor
@@ -1965,6 +1995,7 @@ async function boot(): Promise<void> {
   const footsteps = new FootstepTracker();
   attachAudioUnlockListener();
   preloadContentAudioSamples();
+  await progress.advance('audio');
 
   // The overlay is created asynchronously and may never arrive — in a
   // production build the import below is never reached and the whole of
@@ -2547,6 +2578,13 @@ async function boot(): Promise<void> {
   // Refreshing the HUD regenerates a texture, so it runs on a slow cadence
   // rather than every frame.
   const refreshHud = (): void => {
+    // Every line below is assembled only to be handed to `hud.text`, which
+    // rasterises a fresh texture for it — so when nobody can see the readout
+    // (a phone, a release build) this is pure work, a hundred times a minute,
+    // for a node that is never drawn.
+    if (!hud.visible) {
+      return;
+    }
     const seconds = (loop.tick / TICKS_PER_SECOND).toFixed(2);
     const scale = loop.timeScale.toFixed(2);
     const shots = sim.projectiles;
@@ -3261,6 +3299,7 @@ WASD move   arrows aim and fire
     startRun(RUN_SEED);
   }
   screenController.showTitle(hadResumableRun);
+  await progress.advance('world');
 
   if (seedInput instanceof HTMLInputElement) {
     seedInput.addEventListener('change', () => {
@@ -3880,13 +3919,24 @@ WASD move   arrows aim and fire
         toggleMute();
         break;
       case '.':
-        loop.stepOnce();
+        // Frame-step, halve and double the clock: the three keys a playtest
+        // is run with, and three cheats in a build handed to a player — stop
+        // time and a bullet hell stops being one. Not `import.meta.env.DEV`,
+        // because the CI preview a reviewer plays a pull request on is where
+        // they earn their keep (`app/build-mode.ts`).
+        if (!IS_RELEASE_BUILD) {
+          loop.stepOnce();
+        }
         break;
       case '[':
-        loop.timeScale = Math.max(0.05, loop.timeScale / 2);
+        if (!IS_RELEASE_BUILD) {
+          loop.timeScale = Math.max(0.05, loop.timeScale / 2);
+        }
         break;
       case ']':
-        loop.timeScale = Math.min(8, loop.timeScale * 2);
+        if (!IS_RELEASE_BUILD) {
+          loop.timeScale = Math.min(8, loop.timeScale * 2);
+        }
         break;
       case 'r':
       case 'R':
@@ -3988,6 +4038,14 @@ WASD move   arrows aim and fire
         break;
       case 'n':
       case 'N': {
+        if (IS_RELEASE_BUILD) {
+          // Walking through a closed door on demand is the whole floor
+          // handed over for free — a release build has no business
+          // teleporting anybody anywhere. Same gate and the same reason as
+          // `.`/`[`/`]` above, and kept out of the `if (...)` body below so
+          // the tour logic reads as one block.
+          break;
+        }
         // Walks the generated floor depth-first: an unvisited door first,
         // backtracking through an already-seen room only once every door
         // from here has been used. Now that `sim.doorContact` triggers a
@@ -4086,20 +4144,33 @@ WASD move   arrows aim and fire
   runAnimationFrameLoop(loop);
   window.setInterval(refreshHud, 100);
 
-  // The room editor (#24) / pixel editor (#108) split-view toggle. Ships
-  // unconditionally on desktop, unlike the debug overlay below — see
-  // `editor-dock.ts`'s doc comment for why it can't live behind that
-  // `import.meta.env.DEV` gate and still be reachable from a published
-  // preview build. Placed here, not at the top of `boot`, because pausing
-  // and the room-sync messages below both need `loop`/`sim`/`floorPlan`,
-  // which do not exist yet that early.
+  // The room editor (#24) / pixel editor (#108) split-view toggle. Ships on
+  // desktop in the dev server *and* in the CI-published preview build, unlike
+  // the debug overlay below — see `editor-dock.ts`'s doc comment for why it
+  // can't live behind that `import.meta.env.DEV` gate and still be reachable
+  // from a preview a reviewer is playing. Placed here, not at the top of
+  // `boot`, because pausing and the room-sync messages below both need
+  // `loop`/`sim`/`floorPlan`, which do not exist yet that early.
+  //
+  // What it must *not* ship in is a build handed to a player: three buttons
+  // labelled Rooms/Sprites/Audio, opening tools for building the game, are
+  // not part of the game, and the pages they open (`editor.html` and friends)
+  // are not in a release build to open in the first place. `IS_RELEASE_BUILD`
+  // rather than `import.meta.env.DEV` is exactly the distinction
+  // `app/build-mode.ts` exists to draw.
+  //
+  // The import is dynamic and inside the guard for the same reason
+  // `mountDebugOverlay`'s is: that is what actually drops the module (and the
+  // ~190 KB pixel editor behind it) from the bundle, rather than merely
+  // leaving it unreferenced.
   //
   // Skipped on touch: there is no keyboard-and-mouse editing session to be
   // had on a phone, the split view has nowhere to put a panel next to the
   // game on a small screen, and the toggle buttons would otherwise sit
   // directly on top of `touch-controls.ts`'s map button.
-  const dockRoot = touchCapable ? null : document.getElementById('dock-root');
+  const dockRoot = touchCapable || IS_RELEASE_BUILD ? null : document.getElementById('dock-root');
   if (dockRoot !== null) {
+    const { createEditorDock } = await import('./editor-dock.js');
     let pausedBeforeDock = false;
     const dock = createEditorDock(dockRoot, {
       // Pausing while any editor is docked is what makes it safe to hand the
@@ -4578,6 +4649,21 @@ function exposeDebugHandle(
   console.warn('__kellerbier is exposed for debugging (dev build only)');
 }
 
-void boot().catch((error: unknown) => {
-  console.error('Kellerbier failed to boot', error);
-});
+const bootProgress = createBootProgress();
+void boot(bootProgress)
+  .then(() => {
+    // After `boot` resolves, not at its last milestone: `runAnimationFrameLoop`
+    // has started by then but the title screen's first frame is still one
+    // `requestAnimationFrame` away, and taking the cover off before it is
+    // drawn shows the empty canvas the cover exists to hide.
+    requestAnimationFrame(() => {
+      bootProgress.done();
+    });
+  })
+  .catch((error: unknown) => {
+    console.error('Kellerbier failed to boot', error);
+    // A build that throws on the way up used to leave a black page and a
+    // console message nobody outside this repo would think to open. The bar
+    // is replaced by `index.html`'s "this did not start" panel instead.
+    bootProgress.fail();
+  });
