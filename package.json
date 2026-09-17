@@ -11,6 +11,8 @@
   "scripts": {
     "dev": "vite",
     "build": "npm run typecheck && vite build",
+    "build:release": "npm run typecheck && vite build --config vite.release.config.ts",
+    "release:smoke": "node tools/release/smoke.mjs",
     "build:atlas": "node tools/art/build-atlas.mjs",
     "art:diffusion-postprocess": "node tools/art/diffusion-postprocess-cli.mjs",
     "art:alois": "node tools/art/authoring/build-alois.mjs",

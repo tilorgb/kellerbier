@@ -5977,3 +5977,82 @@ the real progression"): a headless run on a cleared save takes the opening card,
 walks the cleared boss room's next-floor exit, and lands on the chapter-two card, which then hands
 floor 2's own title card its turn on dismissal; a reload confirms it does not come back. The
 victory epilogue was checked in all three locales on the screen itself.
+
+## 106. A third build, and a single file: `npm run build:release`
+
+**Status:** accepted · **Issue:** #56 (partial) · **Supersedes nothing**
+
+**Two builds were one too few.** `import.meta.env.DEV` split the dev server from everything
+Rollup minifies, and that split does real work — it is what compiles `src/debug/` out
+(`app/main.ts`'s `mountDebugOverlay`, dynamic import inside the guard so the chunk is dropped
+rather than merely unreferenced). What it cannot express is that the *production* build is also
+a development artefact. `.github/workflows/ci.yml`'s `preview` job publishes it as the playable
+preview a reviewer plays a pull request on, and `editor-dock.ts`'s doc comment says in as many
+words that the room/sprite/audio editors must be reachable there. A player build wants the
+opposite. So `src/app/build-mode.ts`'s `IS_RELEASE_BUILD` is a second axis, not a rename of the
+first, and `vite.release.config.ts` is the only thing that flips it.
+
+What it removes, and why each one rather than as a batch: the three editor-dock buttons (tools
+for building the game, opening pages a release build does not contain); `#seed-control` (type a
+seed, hunt for a floor shape); `.`, `[`, `]` and `N` (frame-step, halve and double the clock,
+walk through a closed door — stop time and a bullet hell stops being one); and the bottom-left
+readout, which was the surprise. Its own doc comment already called it "the dev-only readout"
+and it had been shipping in every desktop build since it was written: five lines of tick counts,
+pool occupancy and a list of playtest keys across the bottom of the screen, which is the single
+most obvious tell that what somebody has been handed is not a finished game. Guarding
+`refreshHud` on `hud.visible` also stops it rasterising a fresh texture ten times a second on
+touch devices, where it has been invisible and recomputed since the day it was hidden there.
+
+**One file, because a zipped `dist/` does not work.** This is the part that looks like it should
+and does not, so it is worth recording in full:
+
+- `<script type="module">` is fetched under CORS *even from `file://`* — a local page is an
+  opaque origin, so the entry request is cross-origin and blocked. The page opens to a black
+  screen and a console error.
+- A classic `<script>` gets past that and straight into the next one: every PNG beside it is then
+  a cross-origin image, and `texImage2D` refuses a cross-origin image. The atlases *are* the art.
+- `fetch()` of a `file://` URL is blocked outright, which is how `audio/sample-player.ts` reads
+  the music.
+
+All three disappear if there is nothing to fetch. A `data:` URI is same-origin by definition, so
+textures upload and `fetch()` resolves, and an inline classic script is not fetched at all. Hence
+`assetsInlineLimit: Infinity`, `format: 'iife'`, `inlineDynamicImports`, and
+`tools/release/single-file-plugin.mjs` folding the chunk into the page. The cost is base64's
+third, paid once off a local disk: 17 MB. That is the right trade for a file somebody
+double-clicks and the wrong one for a web host, so `npm run build` is untouched and still emits
+the normal cacheable folder for itch.io and the preview.
+
+**Three bugs, each invisible until a browser opened the artefact**, which is why
+`tests/build/release-bundle.test.ts` exists and why it spawns the real CLI:
+
+1. `String.prototype.replace` reads `$&`, `` $` ``, `$'` and `$1` out of a *replacement string*.
+   three.js builds its property-binding regex from a literal `` `$` ``; as a replacement pattern
+   that means "every character before the match", so inlining the bundle spliced the first half
+   of the HTML document into the middle of the JavaScript. `missing ) after argument list`.
+   Everything inlines through a replacer *function* now, which is not scanned for those patterns.
+2. `vite build` hoists the entry into `<head>`. Harmless for a module (deferred by definition)
+   and fatal for a classic script, which runs where it stands: `boot`'s first line looked up
+   `#game` against a `<body>` that did not exist. The script is re-inserted at the end of `<body>`.
+3. The test first called Vite's `build()` API in-process and passed while the shipped bundle
+   differed: Vitest sets `NODE_ENV=test`, which is one of the inputs Vite derives `isProduction`
+   from, so `import.meta.env.DEV` came back `true` and the whole debug overlay returned to a
+   bundle `npm run build:release` does not contain. A test that passes against a bundle nobody
+   ships is worse than no test.
+
+**The loading screen is `index.html`'s, not the renderer's.** Nothing a player can see exists
+until `boot()` finishes — bundle parsed, atlases decoded, fonts compiled, floor one generated —
+and a black window is indistinguishable from a broken download to the person doing you the
+favour of trying your game. So the markup and styling are plain HTML and CSS, painted before a
+line of the game's JavaScript runs, which also rules out labelling it from `src/i18n/`; the bar
+carries no words at all, and the failure panel is unhidden rather than composed.
+`app/boot-progress.ts`'s `advance` resolves after a real animation frame and `boot` awaits it,
+because boot has exactly one `await` of its own and a bar updated at four synchronous points
+repaints at none of them — it would arrive at 100% having never been seen at anything else. Four
+extra frames, deliberately, to make the bar a progress bar rather than a picture of one.
+
+**What this does not close.** #56 is the milestone, and this is its production-build and
+loading-experience bullets only: the itch.io page, the trailer, the four-browser compatibility
+matrix, the feedback channel and the post-launch plan are all still open. Cold load to playable
+measured 3.5–4.1 s in headless Chromium on SwiftShader in a container — above the issue's 3 s
+bar, but software rasterisation on a shared machine is not the mid-range laptop over broadband
+that number is about, so it is a figure to re-measure on real hardware rather than a result.

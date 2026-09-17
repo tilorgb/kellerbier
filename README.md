@@ -61,7 +61,8 @@ npm run bench      # performance budget, run on its own so the timings mean some
 npm run fuzz       # synergy fuzz harness — 10,000 item combinations, nightly + on demand
 npm run lint       # ESLint, including the architecture rules, plus Prettier
 npm run typecheck  # tsc --noEmit
-npm run build      # production static build
+npm run build      # production static build (the folder CI publishes as the playable preview)
+npm run build:release  # the build you hand to a person: one self-contained release/Kellerbier.html
 ```
 
 **Controls:** `WASD` to move, arrow keys to aim and fire. `T` opens the tuning
@@ -77,6 +78,39 @@ key on a non-US keyboard layout.)
 **Room editor:** with `npm run dev` running, open `/editor.html` to author room templates —
 grid, palette, metadata, inline validation, browse/duplicate, and a live in-engine playtest of
 the room you're editing. Dev-only; see `docs/TECH_STACK.md` §6.
+
+## Giving the build to somebody
+
+`npm run build:release` writes `release/Kellerbier.html` and a plain-text `READ-ME.txt` next to
+it. Send the two of them; the person double-clicks the HTML and plays. There is nothing to
+install, no server to start and no internet connection involved — the game, its atlases, its
+key art and its music are all inside that one file, which is why it is about 17 MB.
+
+It is a *third* build, not a renamed `npm run build` (see `src/app/build-mode.ts` and
+`docs/DECISIONS.md` #106):
+
+| | `npm run dev` | `npm run build` | `npm run build:release` |
+|---|---|---|---|
+| debug overlay (`O`), `__kellerbier` | yes | no | no |
+| room/sprite/audio editors | yes | yes | no |
+| seed panel, dev readout, `.`/`[`/`]`/`N` | yes | yes | no |
+| output | — | `dist/`, many files | `release/Kellerbier.html`, one file |
+
+`npm run build`'s folder is what CI publishes as the playable preview, and it keeps the editors
+and the seed/room readout on purpose: that is what makes a pull request reviewable and a bug
+report reproducible. A release build is the opposite request — it is the game with none of the
+workshop left in it — so the two cannot be the same artefact. `tests/build/release-bundle.test.ts`
+runs the real release build and asserts both halves of that, on every pull request.
+
+What that test cannot cover — three.js initialising, the atlases uploading as textures out of
+their `data:` URIs, `localStorage` being writable from a `file://` origin — needs a browser, so
+it is a command rather than a CI step: `npm run release:smoke` opens the built file in a headless
+Chromium, plays a few seconds of it through real key presses and reports what it found
+(`--shots <dir>` to keep the screenshots).
+
+The plain `dist/` folder is still what goes to a web host (itch.io, GitHub Pages): a single
+17 MB page is the right trade for something read off a local disk and the wrong one for
+something downloaded over a connection, where separate, cacheable, un-base64'd files win.
 
 ## Continuous integration
 
