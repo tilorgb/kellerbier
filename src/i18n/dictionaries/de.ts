@@ -91,7 +91,7 @@ export const de: Record<DictKey, string> = {
   'ui.floorTitleCard.xlBadge': 'Ein ungewöhnlich großer Stock.',
 
   // --- Story cards (#58) -----------------------------------------
-  'ui.storyCard.skipHint': 'Drücken zum Überspringen',
+  'ui.storyCard.holdHint': '{button} halten zum Fortfahren',
   'ui.story.opening':
     'Opas letztes Pfeitinger ist leer. Die volle Kiste daneben ist dasselbe Bier, aber das Etikett ist neu: Wasser, Malz, Hopfen — und Rosinen.\n\nAlois nimmt Opas Trink-Rucksack vom Haken, füllt ihn mit der verdorbenen Kiste und stellt ihn von trinken auf schießen.',
   'ui.story.chapterTwo':
@@ -104,8 +104,6 @@ export const de: Record<DictKey, string> = {
   'ui.hud.setCompletionDescription':
     'Das komplette {name}-Set — jedes Teil wirkt stärker im Verbund.',
   'ui.hud.setComplete': '{name} komplett! {description}',
-  'ui.hud.sperrstundeCountdown': 'Sperrstunde — {seconds}s',
-  'ui.hud.sperrstundeComing': 'Sperrstunde — der Ordner kommt',
   'ui.hud.minimapHeader': '{floor}. Stock — {name}',
   'ui.hud.bossLabel': 'BOSS',
   'ui.hud.tapUse': 'Antippen',
@@ -219,7 +217,6 @@ export const de: Record<DictKey, string> = {
   // --- Curses -----------------------------------------------------
   'curses.nebel.description': 'Nebel vom Fluss. Keine Minikarte auf diesem Stock.',
   'curses.kater.description': 'Du startest den Stock mit einem Kater.',
-  'curses.sperrstunde.description': 'Letzte Runde. Trödeln, und der Ordner holt dich.',
   'curses.foehn.description': 'Der Alpenwind schiebt jeden Schuss im Raum.',
   'curses.blaue-stunde.description': 'Tiefe Dämmerung. Deine Sicht reicht nur so weit.',
 
@@ -268,51 +265,43 @@ export const de: Record<DictKey, string> = {
     'So dünn ausgezogen, dass man eine Zeitung durchlesen könnte. Probiert hat es noch niemand.',
   'items.bauern-mistgabel.description':
     'Kurzer Mistgabelstoß: drei durchdringende Zinken, 2x Schaden, keine Reichweite',
-  'items.bauern-mistgabel.flavourText':
-    'Kündigt sich schon von Weitem an. Funktioniert trotzdem jedes einzelne Mal.',
+  'items.bauern-mistgabel.flavourText': 'Ich krieg euch beide.',
   'items.bierbank.description': 'Feuert zwei Schüsse nebeneinander. Schaden -20%',
-  'items.bierbank.flavourText': 'Reserviert. Zugegeben hat das reservieren noch nie jemand.',
+  'items.bierbank.flavourText': 'Glück rauf.',
   'items.bierbauch.description': 'Trinkfest +1 solange gehalten. Lauftempo -8%',
-  'items.bierbauch.flavourText': 'Kein Fett. Stauraum.',
+  'items.bierbauch.flavourText': 'Da passen ein paar rein.',
   'items.bierdeckel.description': 'Schüsse prallen von Wänden ab',
-  'items.bierdeckel.flavourText':
-    'Funktioniert auch als Untersetzer, falls man es übers Herz bringt, ihn abzulegen.',
+  'items.bierdeckel.flavourText': 'Bayerischer Bumerang',
   'items.bierkrug.description': 'Schaden +1 pro Stapel',
-  'items.bierkrug.flavourText': 'Einer in jeder Hand ist kein Stapel. Das ist ein Lebensstil.',
+  'items.bierkrug.flavourText': 'Die Waffe der Wahl im Bierzelt.',
   'items.blaskapelle.description':
     'Ein Klangring beschädigt alles um dich herum, alle paar Sekunden',
-  'items.blaskapelle.flavourText': 'Der Tubaspieler musste noch nie ein einziges Mal Luft holen.',
+  'items.blaskapelle.flavourText': 'Tröööööt.',
   'items.blutwurz.description':
     'Ein Tod beendet den Lauf nicht — solange du zur Leiche zurücklaufen kannst',
-  'items.blutwurz.flavourText':
-    'Blut. Geist. Dasselbe Wort, in zwei Sprachen, die nie miteinander reden.',
+  'items.blutwurz.flavourText': 'Man sagt, ein Schluck weckt sogar die Toten auf.',
   'items.boellerschmeisser.description':
     'Aktiv: brennenden Böller ablegen — geht eine Sekunde später dort los, wo du stehst',
-  'items.boellerschmeisser.flavourText':
-    'Die Landestelle ist markiert. Trotzdem geht nie jemand rechtzeitig weg.',
+  'items.boellerschmeisser.flavourText': 'Nicht auf andere werfen!',
   'items.braumeister-hammer.description':
     'Ein Kill schickt eine Druckwelle durch alles andere in der Nähe',
-  'items.braumeister-hammer.flavourText':
-    'Die Fässer, die sich nicht auf die leichte Art anzapfen lassen, kriegen stattdessen das hier.',
+  'items.braumeister-hammer.flavourText': 'Der mit dem gewissen Wumms.',
   'items.braumeister-schuerze.description': 'Feuert einen Fächer aus drei Schüssen. Schaden -30%',
-  'items.braumeister-schuerze.flavourText': 'Er zielt, wie er einschenkt. Es geht nie daneben.',
+  'items.braumeister-schuerze.flavourText': 'Stark und sexy',
   'items.braumeister-visier.description':
     'Jeder 5. Schuss feuert eine zusätzliche, durchdringende Salve',
-  'items.braumeister-visier.flavourText':
-    'Er hat denselben Schuss schon zehntausend Mal abgegeben. Er hat noch nie danebengelegen.',
+  'items.braumeister-visier.flavourText': 'Ein guter Schuss braucht ein gutes Auge.',
   'items.brezn.description': 'Eine kreisende Brezn, die Gegner bei Berührung beschädigt',
-  'items.brezn.flavourText': 'Leicht gesalzen. Schwer bewaffnet.',
+  'items.brezn.flavourText': 'Brezn-Schuss!',
   'items.brotzeitbrett.description': 'Einen Raum räumen heilt 1 und bringt eine Biermarke',
-  'items.brotzeitbrett.flavourText':
-    'Radi, Käse, eine Brezn. Allein aufgegessen hat das noch niemand.',
+  'items.brotzeitbrett.flavourText': 'Eine schnelle Brotzeit nach dem Aufräumen.',
   'items.colaweizen.description': 'Schüsse bleiben kleben und verlangsamen Gegner. Schaden -20%',
-  'items.colaweizen.flavourText': 'Irgendwo weint gerade still ein Reinheitsgebot-Prüfer.',
+  'items.colaweizen.flavourText': 'Klebrig, zuckrig, eklig.',
   'items.der-ordner.description': 'Vertrauter, der Gegner von dir wegschubst',
-  'items.der-ordner.flavourText': 'Arme verschränkt. Meinung gemacht.',
+  'items.der-ordner.flavourText': 'Lasst ihn durch!',
   'items.der-rosinenklauber.description':
     'Rosinen-Gegenstände verlieren ihren Nachteil. Sperrt beide Reinheitspakte',
-  'items.der-rosinenklauber.flavourText':
-    'Er verteidigt die Rosinen nicht. Er isst sie einfach nur auf.',
+  'items.der-rosinenklauber.flavourText': 'Rettet dich vor diesen ekligen Rosinen.',
   'items.feierabendbier.description':
     'Heilt ein wenig am Anfang jedes Stocks. Kostet ein wenig Promille',
   'items.feierabendbier.flavourText':

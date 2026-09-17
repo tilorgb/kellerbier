@@ -94,8 +94,9 @@ import {
   isMuted,
   toggleMute,
 } from './audio/context.js';
-import { Bindable } from './input/bindings.js';
-import { actionPrompt, detectGlyphSet } from './input/glyphs.js';
+import { Bindable, GamepadButton } from './input/bindings.js';
+import { actionPrompt, detectGlyphSet, gamepadButtonLabel, keyLabel } from './input/glyphs.js';
+import { HoldToSkip } from './input/hold-to-skip.js';
 import { GamepadMenuNav } from './input/menu-nav.js';
 import { InputSampler } from './input/sampler.js';
 import { playRumble } from './input/rumble.js';
@@ -1108,7 +1109,12 @@ async function boot(progress: BootProgress): Promise<void> {
    * full-frame plates that cover the run rather than sitting under it, so
    * only one is ever meant to be visible at once. See `dismissStoryCard`.
    */
-  const storyCard = new StoryCard(preferences.locale);
+  const storyCard = new StoryCard();
+  /** Hold-to-skip for `storyCard` — Space, or the gamepad's bottom face button. */
+  const storySkip = new HoldToSkip();
+  /** Space held on the keyboard, as seen by a fresh (non-repeat) keydown while the card is up. */
+  let storySkipKeyHeld = false;
+  let storySkipLastMs = 0;
   /** Set when a story beat pushed the floor's own card behind it — see `showStoryBeat`/`dismissStoryCard`. */
   let floorCardPendingAfterStory = false;
 
@@ -1342,7 +1348,7 @@ async function boot(progress: BootProgress): Promise<void> {
   // aligned with the room even in a letterboxed viewport.
   hudLayer.addChild(minimapHud.overlayView);
 
-  /** A floor's curse (#49): the entry announcement and Sperrstunde's countdown. */
+  /** A floor's curse (#49): the entry announcement. */
   const curseHud = new CurseHud(kit, preferences.locale);
   hudLayer.addChild(curseHud.view);
   /** The mid-run Promille arrival (#236) — its own banner, over the cleared boss room. */
@@ -1735,13 +1741,25 @@ async function boot(progress: BootProgress): Promise<void> {
     if (screenController?.pollGamepad() === true) {
       return;
     }
-    // Same "any button skips it" rule the keydown handler applies — a
-    // one-time intro card is not a menu with a specific confirm button, so
-    // any of `menuNav`'s tracked edges (whichever button the player reaches
-    // for first) dismisses it.
+    // A story card goes on a *held* Space or bottom face button, never on a
+    // stray press — see `HoldToSkip` for why "any button" did not survive a
+    // card that comes up mid-play.
     if (storyCard.visible) {
-      const edges = menuNav.poll(input.gamepad);
-      if (edges.up || edges.down || edges.confirm || edges.cancel) {
+      menuNav.poll(input.gamepad);
+      const now = performance.now();
+      const held = storySkipKeyHeld || input.gamepad.isButtonDown(GamepadButton.South);
+      const progress = storySkip.update(now - storySkipLastMs, held);
+      storySkipLastMs = now;
+      const button =
+        input.activeDevice === 'gamepad'
+          ? gamepadButtonLabel(
+              GamepadButton.South,
+              detectGlyphSet(input.activeDevice, input.gamepad.id),
+            )
+          : keyLabel('Space');
+      storyCard.setHint(t(preferences.locale, 'ui.storyCard.holdHint', { button }));
+      storyCard.setSkipProgress(progress);
+      if (progress >= 1) {
         dismissStoryCard();
       }
       return;
@@ -2980,6 +2998,9 @@ WASD move   arrows aim and fire
       return;
     }
     storyCard.show(beat, t(preferences.locale, text));
+    storySkip.reset();
+    storySkipKeyHeld = false;
+    storySkipLastMs = performance.now();
     floorCardPendingAfterStory = true;
   }
 
@@ -3815,6 +3836,15 @@ WASD move   arrows aim and fire
     }
   }
 
+  window.addEventListener('keyup', (event: KeyboardEvent) => {
+    if (event.code === 'Space') {
+      storySkipKeyHeld = false;
+    }
+  });
+  window.addEventListener('blur', () => {
+    storySkipKeyHeld = false;
+  });
+
   window.addEventListener('keydown', (event: KeyboardEvent) => {
     // The title, pause and credits screens (#158) swallow every key of
     // their own before anything below gets a look — a run cannot be live
@@ -3823,12 +3853,14 @@ WASD move   arrows aim and fire
     if (screenController.handleKeydown(event)) {
       return;
     }
-    // The opening card (#58) swallows every key while it is up — any key
-    // skips it, the same "press anything to continue" convention most games
-    // use for a one-time intro, rather than requiring one specific button.
+    // A story card (#58) swallows every key while it is up. Only a fresh
+    // Space press starts the skip hold — a repeat is a key still held from
+    // play (Space is also fire), which must not count.
     if (storyCard.visible) {
       event.preventDefault();
-      dismissStoryCard();
+      if (event.code === 'Space' && !event.repeat) {
+        storySkipKeyHeld = true;
+      }
       return;
     }
     // `Y` opens the settings from anywhere — the shortcut the DOM panel this
@@ -4371,7 +4403,6 @@ WASD move   arrows aim and fire
     runResults.setLocale(locale);
     machinePicker.setLocale(locale);
     floorTitleCard.setLocale(locale);
-    storyCard.setLocale(locale);
     activeItemHud.setLocale(locale);
     bossHealthHud.setLocale(locale);
     curseHud.setLocale(locale);

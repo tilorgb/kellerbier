@@ -850,17 +850,6 @@ export interface RoomGenTuning {
 export interface CurseTuning {
   /** Chance a generated floor carries a curse at all — see `GameSim`'s floor-start roll. */
   curseChance: number;
-  /** Ticks before Sperrstunde's "last call" timer runs out. Ten seconds is one short floor, not a whole one. */
-  sperrstundeTimerTicks: number;
-  /**
-   * Once Sperrstunde's timer expires, the Ordner's harassment (a poison tick
-   * on the player, reusing `sim/systems/status-effects.ts`) refreshes this
-   * often — never lethal on its own, per #49's own acceptance criterion, just
-   * pressure to keep moving.
-   */
-  sperrstundeHarassmentIntervalTicks: number;
-  /** Duration/magnitude of each Ordner poison application — see `poisonDurationTicks`/`poisonDamagePerTick` in `ProjectileTagTuning` for the shape this mirrors. */
-  sperrstundeHarassmentDurationTicks: number;
   /** Radians the Föhn curse's wind direction turns per tick — same shape as the Föhn item's own constant. */
   foehnRotationRadiansPerTick: number;
   /** How hard the Föhn curse pushes every live projectile each tick. */
@@ -1354,18 +1343,8 @@ export const DEFAULT_ROOM_GEN_TUNING: Readonly<RoomGenTuning> = {
   authoredRoomChance: 0.12,
 };
 
-/**
- * Sperrstunde's timer is deliberately generous — #49's own acceptance
- * criterion is urgency without making exploration pointless, and the Ordner's
- * harassment reuses poison's tick shape (`ProjectileTagTuning`) rather than
- * inventing a second damage-over-time curve: pressure enough to notice,
- * capped low enough that standing still never turns into a death by itself.
- */
 export const DEFAULT_CURSE_TUNING: Readonly<CurseTuning> = {
   curseChance: 0.35,
-  sperrstundeTimerTicks: 1800,
-  sperrstundeHarassmentIntervalTicks: 240,
-  sperrstundeHarassmentDurationTicks: 60,
   foehnRotationRadiansPerTick: 0.01,
   foehnWindStrength: 0.05,
   blaueStundeVisionRadius: 140,

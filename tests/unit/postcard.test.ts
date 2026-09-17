@@ -92,7 +92,7 @@ describe('Postcard', () => {
 
 describe('StoryCard', () => {
   it('leaves the room visible around the card it is holding up', () => {
-    const beat = new StoryCard('en');
+    const beat = new StoryCard();
     beat.setArt('opening', art(STORY_ART.width, STORY_ART.height));
     beat.resize(FRAME_WIDTH, FRAME_HEIGHT);
     beat.show('opening', OPENING);
@@ -108,7 +108,7 @@ describe('StoryCard', () => {
   });
 
   it('shows and hides without needing a resize in between', () => {
-    const beat = new StoryCard('en');
+    const beat = new StoryCard();
     beat.resize(FRAME_WIDTH, FRAME_HEIGHT);
     beat.show('opening', OPENING);
     expect(beat.visible).toBe(true);
@@ -117,7 +117,7 @@ describe('StoryCard', () => {
   });
 
   it('reports which beat is on the card, and nothing once it is down', () => {
-    const beat = new StoryCard('en');
+    const beat = new StoryCard();
     beat.resize(FRAME_WIDTH, FRAME_HEIGHT);
     expect(beat.beat).toBeNull();
     beat.show('chapter-two', CHAPTER_TWO);
@@ -136,7 +136,7 @@ describe('StoryCard', () => {
    * would silently put the Sunday-lunch cellar on the village card.
    */
   it('does not carry one beat’s illustration onto a beat that has none', () => {
-    const beat = new StoryCard('en');
+    const beat = new StoryCard();
     beat.resize(FRAME_WIDTH, FRAME_HEIGHT);
     beat.setArt('opening', art(STORY_ART.width, STORY_ART.height));
 

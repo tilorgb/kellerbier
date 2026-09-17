@@ -483,7 +483,15 @@ export class GameView {
         // it despite it already being fully built.
         this.sceneryCache.set(sim.roomId, adopted);
       }
-      this.scenery = adopted ?? this.buildScenery();
+      let scenery = adopted ?? this.buildScenery();
+      // A prewarmed or cached room can predate a door the sim now shows —
+      // re-entering an already-cleared boss room, whose exit a prewarm off
+      // the floor plan knows nothing about.
+      if (scenery.doors.length !== sim.doors.length) {
+        this.sceneryCache.forget(sim.roomId);
+        scenery = this.buildScenery();
+      }
+      this.scenery = scenery;
       // `attach`, never a bare `scene.add`: it also resets the group to the
       // origin (a cached room last seen sliding *out* still carries that
       // shift) and lights its door glows (`Scenery.attach`).
@@ -539,6 +547,13 @@ export class GameView {
     } else if (sim.doorsLocked !== this.doorsLocked) {
       const justUnlocked = !sim.doorsLocked;
       this.doorsLocked = sim.doorsLocked;
+      // A boss room's "next floor" exit (`GameSim.nextFloorDoor`) only joins
+      // `sim.doors` once the room is cleared, so the scenery built on entry
+      // has no door piece — or wall gap — for it. Rebuild so it shows.
+      if (this.scenery.doors.length !== sim.doors.length) {
+        this.staleRoomIds.add(sim.roomId);
+        this.rebuildCurrentScenery();
+      }
       this.applyDoorStates();
       if (justUnlocked) {
         // The doors swing open rather than vanish: start them shut and let
@@ -558,24 +573,7 @@ export class GameView {
       // Safe here for the same reason `getOrBuildScenery`'s cache-replace is:
       // this runs inside `sync`, and `this.scenery` is reassigned before the
       // next `render`.
-      const rebuilt = this.getOrBuildScenery(
-        sim.roomId,
-        sim.room,
-        sim.currentFloor,
-        sim.doors,
-        sim.roomDecorativeProps,
-      );
-      if (rebuilt !== this.scenery) {
-        this.scenery = rebuilt;
-        this.scenery.attach(this.scene);
-        this.scenery.setLean(this.camera.lean);
-        for (const door of this.scenery.doors) {
-          door.setDouble(this.bossDoorDirections.has(door.door.direction));
-        }
-        this.applyDoorStates();
-        this.relight();
-        this.shadowNeedsRefresh = true;
-      }
+      this.rebuildCurrentScenery();
     }
 
     if (this.doorTransitionTicks > 0) {
@@ -979,6 +977,34 @@ export class GameView {
     );
     this.scene.background = new Color(this.lighting.backgroundColour);
     this.scenery.setSecretHints(this.secretHintDoors);
+  }
+
+  /**
+   * Swaps the current room's scenery for a freshly built one when
+   * `staleRoomIds` has flagged it — the in-place rebuild shared by a blasted
+   * secret wall, a dev reroll and a cleared boss room's new exit.
+   */
+  private rebuildCurrentScenery(): void {
+    const sim = this.sim;
+    const rebuilt = this.getOrBuildScenery(
+      sim.roomId,
+      sim.room,
+      sim.currentFloor,
+      sim.doors,
+      sim.roomDecorativeProps,
+    );
+    if (rebuilt === this.scenery) {
+      return;
+    }
+    this.scenery = rebuilt;
+    this.scenery.attach(this.scene);
+    this.scenery.setLean(this.camera.lean);
+    for (const door of this.scenery.doors) {
+      door.setDouble(this.bossDoorDirections.has(door.door.direction));
+    }
+    this.applyDoorStates();
+    this.relight();
+    this.shadowNeedsRefresh = true;
   }
 
   private applyDoorStates(): void {

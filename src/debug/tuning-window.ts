@@ -452,27 +452,6 @@ const GROUPS: readonly GroupSpec[] = [
     fields: [
       { key: 'curseChance', min: 0, max: 1, step: 0.05, hint: 'chance a floor rolls a curse' },
       {
-        key: 'sperrstundeTimerTicks',
-        min: 300,
-        max: 3600,
-        step: 60,
-        hint: 'Sperrstunde: ticks before last call',
-      },
-      {
-        key: 'sperrstundeHarassmentIntervalTicks',
-        min: 30,
-        max: 600,
-        step: 30,
-        hint: 'Sperrstunde: ticks between Ordner pokes',
-      },
-      {
-        key: 'sperrstundeHarassmentDurationTicks',
-        min: 15,
-        max: 240,
-        step: 15,
-        hint: 'Sperrstunde: each poke’s poison length',
-      },
-      {
         key: 'foehnRotationRadiansPerTick',
         min: 0,
         max: 0.05,

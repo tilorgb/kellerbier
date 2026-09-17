@@ -1,6 +1,4 @@
 import { Container, Graphics, type BitmapText, type Texture } from './gfx/index.js';
-import type { Locale } from '../i18n/locale.js';
-import { t } from '../i18n/translate.js';
 import { EFFECT_PALETTE, UI_PALETTE } from './palette.js';
 import { Postcard } from './postcard.js';
 import { uiText } from './ui/text.js';
@@ -10,11 +8,15 @@ const MARGIN = 24;
 const VERTICAL_INSET = 40;
 /** How dark the room behind the card goes while it is up. */
 const DIM_ALPHA = 0.78;
+/** The hold-to-skip bar under the hint (`app/input/hold-to-skip.ts`). */
+const SKIP_BAR_HEIGHT = 2;
+const SKIP_BAR_GAP = 3;
 
 /**
  * A one-time illustrated story beat (#58): a `Postcard` lying on the dimmed
  * room with its illustration and its text on it, up for as long as the player
- * leaves it — there is no auto-advance timer, only a skip. `app/main.ts` is
+ * leaves it — there is no auto-advance timer, only a hold-to-skip (the bar
+ * under the hint fills while the button is held). `app/main.ts` is
  * the one caller, gated on `app/story/beats.ts`'s `hasSeenStoryBeat` so any
  * given beat shows at most once per save, however many times a run is retried
  * afterwards.
@@ -56,6 +58,8 @@ export class StoryCard {
   private readonly dim = new Graphics();
   private readonly postcard = new Postcard({ seed: 3 });
   private readonly hint: BitmapText;
+  private readonly skipBar = new Graphics();
+  private skipProgress = 0;
 
   /** Illustrations by beat id, filled in as each one's fetch resolves — see `setArt`. */
   private readonly art = new Map<string, Texture>();
@@ -65,13 +69,14 @@ export class StoryCard {
   private width = 0;
   private height = 0;
 
-  constructor(locale: Locale) {
+  constructor() {
     this.view.visible = false;
     this.view.addChild(this.dim);
     this.view.addChild(this.postcard.view);
 
-    this.hint = uiText(t(locale, 'ui.storyCard.skipHint'), { colour: UI_PALETTE.textDim });
+    this.hint = uiText('', { colour: UI_PALETTE.textDim });
     this.view.addChild(this.hint);
+    this.view.addChild(this.skipBar);
   }
 
   /**
@@ -89,6 +94,7 @@ export class StoryCard {
       this.postcard.setArt(art);
     }
     this.postcard.setCaption(text);
+    this.skipProgress = 0;
     this.view.visible = true;
     this.view.alpha = 1;
     this.layOut();
@@ -121,11 +127,24 @@ export class StoryCard {
     return this.shownBeat;
   }
 
-  setLocale(locale: Locale): void {
-    this.hint.text = t(locale, 'ui.storyCard.skipHint');
+  /** The "hold … to continue" line, already resolved — it names the button for the device in use. */
+  setHint(text: string): void {
+    if (this.hint.text === text) {
+      return;
+    }
+    this.hint.text = text;
     if (this.view.visible) {
       this.layOut();
     }
+  }
+
+  /** How far the skip hold has got, `0`–`1`. */
+  setSkipProgress(progress: number): void {
+    if (progress === this.skipProgress) {
+      return;
+    }
+    this.skipProgress = progress;
+    this.drawSkipBar();
   }
 
   /** Call on every resize. Dimensions in UI pixels. */
@@ -153,5 +172,21 @@ export class StoryCard {
       width - MARGIN - this.hint.width,
       height - VERTICAL_INSET / 2 - this.hint.height / 2,
     );
+    this.drawSkipBar();
+  }
+
+  private drawSkipBar(): void {
+    this.skipBar.clear();
+    if (this.skipProgress <= 0) {
+      return;
+    }
+    this.skipBar
+      .rect(
+        this.hint.x,
+        this.hint.y + this.hint.height + SKIP_BAR_GAP,
+        Math.round(this.hint.width * this.skipProgress),
+        SKIP_BAR_HEIGHT,
+      )
+      .fill({ color: UI_PALETTE.textDim });
   }
 }

@@ -1107,10 +1107,6 @@ export class GameSim {
    * method.
    */
   curseFoehnAngle = 0;
-  /** Ticks left on Sperrstunde's "last call" timer, while it is the active curse. 0 once expired. */
-  sperrstundeTicksLeft = 0;
-  /** Ticks until Sperrstunde's next Ordner harassment application, once its timer has expired. */
-  sperrstundeHarassmentCooldown = 0;
 
   /** Biermarken banked, Kellerschlüssel held, and Bierfassl in inventory — see #22. */
   private biermarkenCount = 0;
@@ -3391,22 +3387,18 @@ export class GameSim {
    * one: it starts the same `katerTicksValue` debuff `tickUmgfalln` would,
    * so the floor opens hungover instead of the player waking up that way.
    * Nebel and Blaue Stunde need nothing here — both are read directly off
-   * `curse` by the renderer — and Föhn/Sperrstunde's per-tick effects live in
+   * `curse` by the renderer — and Föhn's per-tick effect lives in
    * `sim/systems/curse.ts`'s `stepCurse`.
    */
   private rollFloorCurse(): void {
     const tuning = this.tuning.curse;
     this.curseFoehnAngle = 0;
-    this.sperrstundeHarassmentCooldown = 0;
     if (!this.random.curse.chance(tuning.curseChance)) {
       this.curseIdValue = null;
-      this.sperrstundeTicksLeft = 0;
       return;
     }
     const definition = this.random.curse.pick(CURSE_DEFINITIONS);
     this.curseIdValue = definition.id;
-    this.sperrstundeTicksLeft =
-      definition.id === 'sperrstunde' ? Math.round(tuning.sperrstundeTimerTicks) : 0;
     if (definition.id === 'kater') {
       this.startKater();
     }
@@ -5915,10 +5907,7 @@ export class GameSim {
     // ordering requirement — it rides along here rather than earning a
     // second call site.
     stepStatusEffects(this);
-    // A curse's per-tick effect (Föhn's wind, Sperrstunde's timer and
-    // harassment) — after status effects so an Ordner poison application
-    // this tick is picked up by the very next `stepStatusEffects` call
-    // rather than sitting unaged for a whole extra tick.
+    // A curse's per-tick effect (Föhn's wind).
     stepCurse(this);
     stepBodies(this);
     // After `stepBodies`, so a corpse-touch check reads this tick's actual
