@@ -118,11 +118,7 @@ check(
   }),
   '640x360',
 );
-check(
-  'debug handle',
-  await page.evaluate(() => '__kellerbier' in window),
-  false,
-);
+check('debug handle', await page.evaluate(() => '__kellerbier' in window), false);
 check(
   'editor dock buttons',
   await page.evaluate(() => document.querySelectorAll('#dock-toggle button').length),
