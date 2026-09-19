@@ -129,6 +129,7 @@ export class Menu {
   private readonly rows: MenuRow[] = [];
   private focusIndex = 0;
   private menuWidth: number;
+  private locked = false;
 
   constructor(kit: UiKit, items: readonly MenuItem[], options: MenuOptions = {}) {
     this.focusRing = new FocusRing(kit);
@@ -212,13 +213,27 @@ export class Menu {
    */
   refresh(): void {
     for (const row of this.rows) {
-      row.disabled = row.item.disabled?.() ?? false;
+      row.disabled = this.locked || (row.item.disabled?.() ?? false);
       row.container.eventMode = row.disabled ? 'none' : 'static';
     }
     if (this.rows[this.focusIndex]?.disabled === true) {
       this.focusIndex = this.firstEnabledIndex();
     }
     this.syncVisualState();
+  }
+
+  /**
+   * Disables every row's pointer hit-testing (and greys them out, same as an
+   * individually-disabled row) without hiding the menu — for a screen that
+   * keeps this column on screen but has handed keyboard/gamepad focus
+   * elsewhere (the title screen while Settings has the pane: arrows/confirm
+   * already can't reach this menu once focus moves to the settings screen,
+   * since `UiLayer.hitTest` lets a mouse click land on any visible row
+   * regardless of who currently owns keyboard/gamepad focus).
+   */
+  setLocked(locked: boolean): void {
+    this.locked = locked;
+    this.refresh();
   }
 
   /** Moves focus to the next enabled row in `delta`'s direction, wrapping. A no-op with nothing enabled. */
