@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kellerbier</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background: #0b0a0d;
+        overflow: hidden;
+      }
+      /*
+       * `#dock-root` is the split-view `app/editor-dock.ts` opens onto: a
+       * flex row with `#game-pane` (the game itself, everything that used to
+       * hang directly off `<body>`) as one child, and a divider + iframe
+       * panel it inserts as siblings when a docked editor is open. `#game`
+       * fills `#game-pane` rather than the window directly now, so shrinking
+       * `#game-pane` for a split view is the only thing that has to happen —
+       * `render/app.ts`'s `trackWindowSize` watches `#game`'s own box via a
+       * `ResizeObserver`, not `window`'s size, so it already reacts to that
+       * on its own.
+       */
+      #dock-root {
+        display: flex;
+        width: 100vw;
+        height: 100vh;
+        overflow: hidden;
+      }
+      #game-pane {
+        position: relative;
+        flex: 1 1 auto;
+        min-width: 0;
+        height: 100%;
+      }
+      #game {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+      }
+      /* Belt and braces: the renderer is nearest-neighbour, and so is any
+         browser-side scaling of the canvas element itself. */
+      #game canvas {
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;
+      }
+      /*
+       * The boot screen (#56): on screen from the browser's very first paint,
+       * because everything below it — parsing the bundle, decoding the atlas
+       * sheets, generating floor one — happens before there is a frame to
+       * show, and a black window for a couple of seconds reads as a broken
+       * download rather than as loading. It is plain HTML and CSS on purpose:
+       * it has to be painted by the markup alone, before a single line of the
+       * game's own JavaScript has run, which rules out drawing it with the
+       * renderer or labelling it from the `src/i18n/` dictionaries.
+       *
+       * `app/boot-progress.ts` drives the bar and takes the screen down; see
+       * that module for why the milestones are where they are.
+       */
+      #boot-screen {
+        position: fixed;
+        inset: 0;
+        z-index: 100;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+        background: #0b0a0d;
+        color: #cfc6bb;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        /* Faded out rather than removed on the same frame the game appears,
+           so the hand-off is not a flash of two different pictures. */
+        transition: opacity 260ms ease-out;
+      }
+      #boot-screen.kb-boot-done {
+        opacity: 0;
+        pointer-events: none;
+      }
+      #boot-title {
+        font-size: 28px;
+        letter-spacing: 0.32em;
+        /* The letter-spacing is applied to the right of every letter,
+           including the last, which visually shifts the word left of centre
+           without this. */
+        text-indent: 0.32em;
+        color: #f0c46a;
+      }
+      #boot-bar {
+        width: min(320px, 60vw);
+        height: 6px;
+        background: #241d2b;
+        border: 1px solid #3a2f45;
+        border-radius: 3px;
+        overflow: hidden;
+      }
+      #boot-bar-fill {
+        width: 0%;
+        height: 100%;
+        background: #f0c46a;
+        transition: width 180ms ease-out;
+      }
+      /*
+       * Hidden until `boot-progress.ts` unhides it. A build that throws on the
+       * way up would otherwise sit on a half-filled bar forever, which is the
+       * single worst thing to hand somebody who is doing you the favour of
+       * trying your game — they cannot tell it from a slow load, so they wait.
+       */
+      #boot-error {
+        display: none;
+        max-width: min(420px, 80vw);
+        text-align: center;
+        font-size: 13px;
+        line-height: 1.6;
+        color: #cfc6bb;
+      }
+      #boot-screen.kb-boot-failed #boot-bar {
+        display: none;
+      }
+      #boot-screen.kb-boot-failed #boot-error {
+        display: block;
+      }
+      #seed-control {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-family: monospace;
+        font-size: 12px;
+        color: #cfc6bb;
+        background: rgba(11, 10, 13, 0.7);
+        border: 1px solid #3a2f45;
+        border-radius: 4px;
+        padding: 4px 6px;
+      }
+      /* A dev tool for pinning/finding seeds — on a touch device there is no
+         keyboard to type a seed into it anyway, and `app/touch-controls.ts`'s
+         pause button already claims this corner. */
+      @media (pointer: coarse) {
+        #seed-control {
+          display: none;
+        }
+      }
+      #seed-control input[type='number'] {
+        width: 8ch;
+        font-family: monospace;
+        font-size: 12px;
+        background: #1c1720;
+        color: #cfc6bb;
+        border: 1px solid #54445f;
+        border-radius: 3px;
+        padding: 2px 4px;
+      }
+      #seed-finder {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding-left: 6px;
+        margin-left: 2px;
+        border-left: 1px solid #3a2f45;
+      }
+      #seed-finder label {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        white-space: nowrap;
+      }
+      #seed-finder button {
+        font-family: monospace;
+        font-size: 12px;
+        background: #241d2b;
+        color: #cfc6bb;
+        border: 1px solid #54445f;
+        border-radius: 3px;
+        padding: 2px 6px;
+        cursor: pointer;
+      }
+      #seed-finder button:hover {
+        background: #2f2636;
+      }
+      #seed-finder button:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+    </style>
+    <script type="module" crossorigin src="./assets/index-BYWN_Z-Y.js"></script>
+    <link rel="modulepreload" crossorigin href="./assets/tokens-DfHTI-_q.js">
+    <link rel="modulepreload" crossorigin href="./assets/validate-lbZkAdtb.js">
+    <link rel="modulepreload" crossorigin href="./assets/loop-DvYMEEmo.js">
+    <link rel="modulepreload" crossorigin href="./assets/sample-player-DaKSdh6F.js">
+  </head>
+  <body>
+    <div id="boot-screen">
+      <div id="boot-title">KELLERBIER</div>
+      <div id="boot-bar"><div id="boot-bar-fill"></div></div>
+      <p id="boot-error">
+        Kellerbier could not start in this browser. It needs WebGL2 — a current Chrome, Firefox,
+        Edge or Safari should all do. The browser console has the actual error.
+      </p>
+    </div>
+    <div id="dock-root">
+      <div id="game-pane">
+        <div id="game"></div>
+        <div id="seed-control">
+          <label for="seed-input">seed</label>
+          <input id="seed-input" type="number" step="1" />
+          <div id="seed-finder">
+            <label><input type="checkbox" id="filter-staircase" /> staircase</label>
+            <label><input type="checkbox" id="filter-all-shapes" /> all shapes</label>
+            <button id="seed-find-button" type="button">find</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
