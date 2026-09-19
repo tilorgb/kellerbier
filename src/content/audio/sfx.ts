@@ -18,6 +18,16 @@ import type { SfxDefinition } from '../../app/audio/types.js';
  */
 
 const hitSquelch: SfxDefinition = {
+  sample: {
+    assetId: 'softhit',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 0.19683333333333333,
+      fadeInSeconds: 0.02,
+      fadeOutSeconds: 0.05,
+      gain: 1,
+    },
+  },
   id: 'hit-squelch',
   description: 'Soft-bodied enemy (woodlouse, rat, mould, foam) takes a hit.',
   noise: {
@@ -27,6 +37,16 @@ const hitSquelch: SfxDefinition = {
   },
 };
 const hitMetal: SfxDefinition = {
+  sample: {
+    assetId: 'metalhit',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 0.11608333333333333,
+      fadeInSeconds: 0.02,
+      fadeOutSeconds: 0.05,
+      gain: 1,
+    },
+  },
   id: 'hit-metal',
   description: 'Barrel, tractor or thrown Böller takes a hit.',
   noise: {
@@ -36,6 +56,16 @@ const hitMetal: SfxDefinition = {
   },
 };
 const hitAnimal: SfxDefinition = {
+  sample: {
+    assetId: 'softhit',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 0.19683333333333333,
+      fadeInSeconds: 0.02,
+      fadeOutSeconds: 0.05,
+      gain: 1,
+    },
+  },
   id: 'hit-animal',
   description: 'Cow, rooster or bull takes a hit.',
   noise: { filter: { type: 'lowpass', frequencyHz: 800, q: 1 }, durationSeconds: 0.09, gain: 0.4 },
@@ -43,6 +73,16 @@ const hitAnimal: SfxDefinition = {
   pitchJitterCents: 200,
 };
 const hitFolk: SfxDefinition = {
+  sample: {
+    assetId: 'softhit',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 0.19683333333333333,
+      fadeInSeconds: 0.02,
+      fadeOutSeconds: 0.05,
+      gain: 1,
+    },
+  },
   id: 'hit-folk',
   description: 'Farmer, gnome, shopkeeper or Maibaum-Dieb takes a hit.',
   noise: {
@@ -53,6 +93,16 @@ const hitFolk: SfxDefinition = {
   tone: { instrument: 'brass-stab', note: 'A3', durationSeconds: 0.06 },
 };
 const hitOompah: SfxDefinition = {
+  sample: {
+    assetId: 'softhit',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 0.19683333333333333,
+      fadeInSeconds: 0.02,
+      fadeOutSeconds: 0.05,
+      gain: 1,
+    },
+  },
   id: 'hit-oompah',
   description: 'The Blaskapellist takes a hit.',
   noise: {
@@ -64,6 +114,16 @@ const hitOompah: SfxDefinition = {
 };
 
 const deathSquelch: SfxDefinition = {
+  sample: {
+    assetId: 'enemydie',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 0.17322916666666666,
+      fadeInSeconds: 0.02,
+      fadeOutSeconds: 0.05,
+      gain: 1,
+    },
+  },
   id: 'death-squelch',
   description: 'Soft-bodied enemy dies.',
   noise: {
@@ -73,6 +133,16 @@ const deathSquelch: SfxDefinition = {
   },
 };
 const deathMetal: SfxDefinition = {
+  sample: {
+    assetId: 'metaldie',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 0.1838125,
+      fadeInSeconds: 0.02,
+      fadeOutSeconds: 0.05,
+      gain: 1,
+    },
+  },
   id: 'death-metal',
   description: 'Barrel, tractor or Böller enemy dies.',
   noise: { filter: { type: 'bandpass', frequencyHz: 1800, q: 4 }, durationSeconds: 0.3, gain: 0.5 },
@@ -90,18 +160,48 @@ const deathAnimal: SfxDefinition = {
   pitchJitterCents: 300,
 };
 const deathFolk: SfxDefinition = {
+  sample: {
+    assetId: 'enemydie',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 0.17322916666666666,
+      fadeInSeconds: 0.02,
+      fadeOutSeconds: 0.05,
+      gain: 1,
+    },
+  },
   id: 'death-folk',
   description: 'Farmer, gnome, shopkeeper or Maibaum-Dieb dies.',
   noise: { filter: { type: 'bandpass', frequencyHz: 900, q: 1 }, durationSeconds: 0.18, gain: 0.4 },
   tone: { instrument: 'brass-stab', note: 'F3', durationSeconds: 0.2 },
 };
 const deathOompah: SfxDefinition = {
+  sample: {
+    assetId: 'enemydie',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 0.17322916666666666,
+      fadeInSeconds: 0.02,
+      fadeOutSeconds: 0.05,
+      gain: 1,
+    },
+  },
   id: 'death-oompah',
   description: 'The Blaskapellist dies — the beat drops with him.',
   tone: { instrument: 'tuba', note: 'G2', durationSeconds: 0.25 },
 };
 
 const playerShot: SfxDefinition = {
+  sample: {
+    assetId: 'playershot',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 0.05329166666666667,
+      fadeInSeconds: 0.02,
+      fadeOutSeconds: 0.05,
+      gain: 1,
+    },
+  },
   id: 'player-shot',
   description:
     "The player's own shot leaving the Schlauch (#234) — up to several times a second on a held trigger, so it has to sit under `hit-*`/`death-*` rather than compete with them. Pitch-jittered so an identical sample three times a second doesn't turn into a headache.",
@@ -113,6 +213,16 @@ const playerShot: SfxDefinition = {
 };
 
 const shotSquelch: SfxDefinition = {
+  sample: {
+    assetId: 'enemyshot',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 0.2955625,
+      fadeInSeconds: 0.02,
+      fadeOutSeconds: 0.05,
+      gain: 1,
+    },
+  },
   id: 'shot-squelch',
   description: 'A soft-bodied enemy (Zapfhahn) launches a shot.',
   noise: {
@@ -122,6 +232,16 @@ const shotSquelch: SfxDefinition = {
   },
 };
 const shotMetal: SfxDefinition = {
+  sample: {
+    assetId: 'enemyshot',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 0.2955625,
+      fadeInSeconds: 0.02,
+      fadeOutSeconds: 0.05,
+      gain: 1,
+    },
+  },
   id: 'shot-metal',
   description: 'A metal enemy (Böllerschmeißer) launches a shot.',
   noise: {
@@ -131,6 +251,16 @@ const shotMetal: SfxDefinition = {
   },
 };
 const shotAnimal: SfxDefinition = {
+  sample: {
+    assetId: 'enemyshot',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 0.2955625,
+      fadeInSeconds: 0.02,
+      fadeOutSeconds: 0.05,
+      gain: 1,
+    },
+  },
   id: 'shot-animal',
   description: 'An animal enemy (Gockel, Der Stier) launches a shot.',
   noise: {
@@ -142,6 +272,16 @@ const shotAnimal: SfxDefinition = {
   pitchJitterCents: 150,
 };
 const shotFolk: SfxDefinition = {
+  sample: {
+    assetId: 'enemyshot',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 0.2955625,
+      fadeInSeconds: 0.02,
+      fadeOutSeconds: 0.05,
+      gain: 1,
+    },
+  },
   id: 'shot-folk',
   description: 'A folk enemy (Bauer, Gartenzwerg) launches a shot.',
   noise: {
@@ -151,6 +291,16 @@ const shotFolk: SfxDefinition = {
   },
 };
 const shotOompah: SfxDefinition = {
+  sample: {
+    assetId: 'enemyshot',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 0.2955625,
+      fadeInSeconds: 0.02,
+      fadeOutSeconds: 0.05,
+      gain: 1,
+    },
+  },
   id: 'shot-oompah',
   description: 'The Blaskapellist launches a shot.',
   noise: {
@@ -162,6 +312,16 @@ const shotOompah: SfxDefinition = {
 };
 
 const attackWindup: SfxDefinition = {
+  sample: {
+    assetId: 'windup',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 0.5067083333333333,
+      fadeInSeconds: 0.02,
+      fadeOutSeconds: 0.05,
+      gain: 1,
+    },
+  },
   id: 'attack-windup',
   description:
     'An enemy telegraph begins (#233/#234) — the audio half of the warning ring, for the player who is not ' +
@@ -228,6 +388,16 @@ const playerDeath: SfxDefinition = {
   tone: { instrument: 'tuba', note: 'C2', durationSeconds: 0.6 },
 };
 const wallHit: SfxDefinition = {
+  sample: {
+    assetId: 'shotland',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 0.182875,
+      fadeInSeconds: 0.02,
+      fadeOutSeconds: 0.05,
+      gain: 1,
+    },
+  },
   id: 'wall-hit',
   description: 'A shot expires against a wall or out of range (EventKind.ProjectileSpent).',
   noise: {
@@ -299,6 +469,16 @@ const footstep: SfxDefinition = {
 };
 
 const uiOpen: SfxDefinition = {
+  sample: {
+    assetId: 'click',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 0.10910416666666667,
+      fadeInSeconds: 0.02,
+      fadeOutSeconds: 0.05,
+      gain: 4,
+    },
+  },
   id: 'ui-open',
   description: 'A menu/results screen opens.',
   tone: { instrument: 'bell', note: 'C5', durationSeconds: 0.08 },
