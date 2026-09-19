@@ -197,9 +197,16 @@ export class TitleScreen implements MenuScreen {
     this.postcard.setArt(texture);
   }
 
-  /** Steps the name and postcard aside (or brings them back) while settings has the pane. */
+  /**
+   * Steps the name and postcard aside (or brings them back) while settings
+   * has the pane, and locks this menu against mouse clicks — Start/Continue/
+   * Credits/Quit stay visible but must not be reachable by mouse while
+   * settings owns keyboard/gamepad focus (see `Menu.setLocked`'s doc
+   * comment for why the mouse needs telling separately).
+   */
   setSettingsOpen(open: boolean): void {
     this.settingsOpen = open;
+    this.menu.setLocked(open);
     if (this.view.visible) {
       this.layOut();
     }
