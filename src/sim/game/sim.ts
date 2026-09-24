@@ -108,6 +108,7 @@ import {
   ENEMY_FLAG_ELITE,
   ENEMY_MOTION_STRIDE,
   ENEMY_STRIDE,
+  enemyAimAngle,
   meleeBladeAngle,
   stepEnemies,
   stepEnemyDeaths,
@@ -1886,12 +1887,10 @@ export class GameSim {
           );
           poleAngle = meleeBladeAngle(arc, aim, ticks);
         } else {
-          // Not committed yet: aim at the player now, sit at the start edge,
-          // and wind further back as the telegraph fills.
-          const aim = Math.atan2(
-            this.positionY(this.playerIndex) - selfY,
-            this.positionX(this.playerIndex) - selfX,
-          );
+          // Not committed yet: aim where the swing will go (the spot its
+          // wind-up locked, or the player), sit at the start edge, and wind
+          // further back as the telegraph fills.
+          const aim = enemyAimAngle(this, index);
           const wind =
             state?.name === 'swing-telegraph'
               ? Math.min(1, ticks / Math.max(1, state.telegraphTicks))

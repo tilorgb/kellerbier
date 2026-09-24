@@ -6056,3 +6056,28 @@ matrix, the feedback channel and the post-launch plan are all still open. Cold l
 measured 3.5–4.1 s in headless Chromium on SwiftShader in a container — above the issue's 3 s
 bar, but software rasterisation on a shared machine is not the mid-range laptop over broadband
 that number is about, so it is a figure to re-measure on real hardware rather than a result.
+
+## 107. An attack behind a wind-up goes where the player was when the wind-up began
+
+Player feedback: enemies read as too hard, and the concrete complaint was that a telegraphed
+attack followed you. Every aimed primitive aimed on the tick it fired — a `chargeAtPlayer` on its
+first tick, `fireAtPlayer`/`fireBurst`/`fireSpread` on each volley, a `meleeArc` on entry — which
+is the tick the wind-up *ended*. Stepping aside during the telegraph, the one thing it asks of the
+player, did nothing; the Line and Arc telegraph shapes even swung to track them while it filled.
+
+**The rule.** The first tick of any telegraphing state stores the player's position and sets
+`ENEMY_FLAG_AIM_LOCKED` (`systems/enemy.ts`'s `updateAimLock`; the point lives in
+`enemyMotion`'s new fields 4-5). Every state that attacks in a direction
+(`CompiledState.aimsAttack`: an aimed shot, a charge, a melee swing) keeps the lock, so a chain
+like Bierratte's `telegraph → snipe → dash` shoots and then dashes at the same spot, and the
+Zapfhahn-Orgel's three fans all converge on it. The first state that attacks nothing releases it
+and aims go back to the player. The telegraph's Line/Arc point along the same angle
+(`enemyAimAngle`), so the warning holds still and is exactly where the attack goes.
+
+A locked *point*, not a direction: a body that moves during its wind-up still attacks the spot.
+`fireOnBeat` is untouched — it aims at nothing.
+
+**`aimCardinal`, for the Zapfhahn.** An optional flag on the aimed firing primitives that snaps
+the aim to the nearest of N/S/E/W before a fan is centred on it. The floor-one tap now sprays down
+the room's axes rather than at the player, which makes its safe ground readable at a glance.
+Rejected on `fireOnBeat` at compile time, since there is nothing there to snap.

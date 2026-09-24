@@ -58,6 +58,13 @@ export const ENEMY_FLAG_BLOCKED = 1 << 1;
  * itself rather than something that happened to it this tick.
  */
 export const ENEMY_FLAG_ELITE = 1 << 2;
+/**
+ * The body is aiming at a spot it locked when its wind-up began, not at where
+ * the player is now — see `updateAimLock`. Set on the first tick of any
+ * telegraphing state, kept through the attack states that follow it, cleared
+ * by the first state that attacks nothing.
+ */
+export const ENEMY_FLAG_AIM_LOCKED = 1 << 3;
 
 /**
  * Ticks a body may sit in one state before the counter stops climbing.
@@ -70,8 +77,11 @@ const MAX_STATE_TICKS = 32000;
 
 /** Fields of the `enemy` component: definition, state, ticks in state, flags. */
 export const ENEMY_STRIDE = 4;
-/** Fields of the `enemyMotion` component: heading x and y, then the spawn point. */
-export const ENEMY_MOTION_STRIDE = 4;
+/**
+ * Fields of the `enemyMotion` component: heading x and y, then the spawn
+ * point, then the locked aim target (`ENEMY_FLAG_AIM_LOCKED`).
+ */
+export const ENEMY_MOTION_STRIDE = 6;
 
 export function stepEnemies(sim: GameSim): void {
   const registry = sim.enemies;
@@ -114,7 +124,7 @@ export function stepEnemies(sim: GameSim): void {
     const compiled = registry.at(enemy[base] ?? 0);
     let stateIndex = enemy[base + 1] ?? 0;
     let ticks = enemy[base + 2] ?? 0;
-    const flags = enemy[base + 3] ?? 0;
+    let flags = enemy[base + 3] ?? 0;
 
     let state = compiled.states[stateIndex];
     if (state === undefined) {
@@ -144,9 +154,6 @@ export function stepEnemies(sim: GameSim): void {
         if (entered.grabProp !== null) {
           grabNearestProp(sim, index, entered.grabProp);
         }
-        if (entered.meleeArc !== null) {
-          lockMeleeAim(sim, index, toPlayerX, toPlayerY, distance);
-        }
         // The audio half of the telegraph ring (#234): fired once, on the
         // tick the state begins, not once per tick spent telegraphing — the
         // ring itself is read continuously (`enemyTelegraphProgress`), but a
@@ -156,6 +163,24 @@ export function stepEnemies(sim: GameSim): void {
           sim.events.push(EventKind.AttackWindup, index, NO_SLOT, selfX, selfY, 0, 0, 0);
         }
       }
+    }
+
+    // On a state's first tick — entered by a transition just now, or the
+    // initial state on the body's first live tick — not only on a transition,
+    // so a boss that *spawns* mid-wind-up (Die Zapfhahn-Orgel) locks too.
+    if (ticks === 0) {
+      flags = updateAimLock(sim, index, state, flags, playerX, playerY);
+    }
+    let aimX = toPlayerX;
+    let aimY = toPlayerY;
+    if ((flags & ENEMY_FLAG_AIM_LOCKED) !== 0) {
+      const motionBase = index * ENEMY_MOTION_STRIDE;
+      aimX = (sim.enemyMotion.data[motionBase + 4] ?? playerX) - selfX;
+      aimY = (sim.enemyMotion.data[motionBase + 5] ?? playerY) - selfY;
+    }
+    const aimDistance = vectorLength(aimX, aimY);
+    if (ticks === 0 && state.meleeArc !== null) {
+      lockMeleeAim(sim, index, aimX, aimY, aimDistance);
     }
 
     // Both signals are consumed whether or not this state listened for them.
@@ -173,9 +198,22 @@ export function stepEnemies(sim: GameSim): void {
       continue;
     }
 
-    applyMovement(sim, index, state, ticks, toPlayerX, toPlayerY, distance, selfX, selfY);
+    applyMovement(
+      sim,
+      index,
+      state,
+      ticks,
+      toPlayerX,
+      toPlayerY,
+      distance,
+      aimX,
+      aimY,
+      aimDistance,
+      selfX,
+      selfY,
+    );
     if (state.firing.length > 0) {
-      applyFiring(sim, index, state, ticks, toPlayerX, toPlayerY, distance);
+      applyFiring(sim, index, state, ticks, aimX, aimY, aimDistance);
     }
     if (state.meleeArc !== null) {
       applyMeleeArc(sim, index, state.meleeArc, ticks, selfX, selfY);
@@ -259,6 +297,66 @@ function chooseTransition(
 }
 
 /**
+ * Locks, keeps or releases the body's aim, on the first tick of `state`.
+ * Returns the new flags.
+ *
+ * Player feedback: an attack behind a wind-up has to land where the player
+ * was when the wind-up *started*. Aiming at where they are when it ends makes
+ * the telegraph useless — stepping aside during it is the one thing it asks
+ * of the player, and the attack followed them anyway. So:
+ *
+ * - a telegraphing state stores the player's position and sets the lock;
+ * - an attacking state (`CompiledState.aimsAttack`) keeps whatever lock is
+ *   there, so a chain like Bierratte's `telegraph → snipe → dash` shoots and
+ *   then dashes at the same locked spot;
+ * - any other state releases it, and the body aims at the player again.
+ *
+ * A locked *point*, not a locked direction: a body that moves during its
+ * wind-up still attacks the spot the player was standing on.
+ */
+function updateAimLock(
+  sim: GameSim,
+  index: number,
+  state: CompiledState,
+  flags: number,
+  playerX: number,
+  playerY: number,
+): number {
+  if (state.telegraphTicks > 0) {
+    const motion = sim.enemyMotion.data;
+    const motionBase = index * ENEMY_MOTION_STRIDE;
+    motion[motionBase + 4] = playerX;
+    motion[motionBase + 5] = playerY;
+    return flags | ENEMY_FLAG_AIM_LOCKED;
+  }
+  if (state.aimsAttack) {
+    return flags;
+  }
+  return flags & ~ENEMY_FLAG_AIM_LOCKED;
+}
+
+/**
+ * The angle the body at `index` will attack along if it attacked now: toward
+ * its locked aim target while `ENEMY_FLAG_AIM_LOCKED` is set, toward the
+ * player otherwise. What a Line or Arc telegraph points along, so the warning
+ * and the attack after it can never disagree.
+ */
+export function enemyAimAngle(sim: GameSim, index: number): number {
+  const selfX = sim.positionX(index);
+  const selfY = sim.positionY(index);
+  let targetX = sim.positionX(sim.playerIndex);
+  let targetY = sim.positionY(sim.playerIndex);
+  if (((sim.enemy.data[index * ENEMY_STRIDE + 3] ?? 0) & ENEMY_FLAG_AIM_LOCKED) !== 0) {
+    const motionBase = index * ENEMY_MOTION_STRIDE;
+    targetX = sim.enemyMotion.data[motionBase + 4] ?? targetX;
+    targetY = sim.enemyMotion.data[motionBase + 5] ?? targetY;
+  }
+  const dx = targetX - selfX;
+  const dy = targetY - selfY;
+  return dx === 0 && dy === 0 ? 0 : Math.atan2(dy, dx);
+}
+
+/**
  * How long a state lasts, after the global telegraph scale.
  *
  * A state that warns the player is stretched along with its warning. Scaling
@@ -305,6 +403,9 @@ function applyMovement(
   toPlayerX: number,
   toPlayerY: number,
   distance: number,
+  aimX: number,
+  aimY: number,
+  aimDistance: number,
   selfX: number,
   selfY: number,
 ): void {
@@ -363,10 +464,13 @@ function applyMovement(
     case 'chargeAtPlayer': {
       // Aimed on the tick the state begins and never again. A charge that
       // follows the player is a charge that cannot be dodged, which makes the
-      // telegraph before it a lie.
+      // telegraph before it a lie. Behind a wind-up it runs at the spot the
+      // player stood when the wind-up *began* (`updateAimLock`), not where
+      // they were when it ended — the telegraph line pointed there the whole
+      // time, and a charge that swerves at the last tick reads as a cheat.
       if (ticks === 0) {
-        motion[motionBase] = distance === 0 ? 1 : toPlayerX / distance;
-        motion[motionBase + 1] = distance === 0 ? 0 : toPlayerY / distance;
+        motion[motionBase] = aimDistance === 0 ? 1 : aimX / aimDistance;
+        motion[motionBase + 1] = aimDistance === 0 ? 0 : aimY / aimDistance;
       }
       const speed = behaviour.speed * scale;
       velocity[base] = (motion[motionBase] ?? 0) * speed;
@@ -421,21 +525,36 @@ function applyMovement(
   }
 }
 
-/** Everything the state puts in the air this tick. */
+/**
+ * `angle` snapped to the nearest of east, south, west, north — for a shooter
+ * authored with `aimCardinal` (the Zapfhahn): whichever axis the target is
+ * most along is the one it fires down.
+ */
+export function snapToCardinal(angle: number): number {
+  const quarter = Math.PI / 2;
+  return Math.round(angle / quarter) * quarter;
+}
+
+/**
+ * Everything the state puts in the air this tick. `aimX`/`aimY` point at
+ * what the body is shooting at — the player, or the spot a wind-up locked
+ * (`updateAimLock`).
+ */
 function applyFiring(
   sim: GameSim,
   index: number,
   state: CompiledState,
   ticks: number,
-  toPlayerX: number,
-  toPlayerY: number,
-  distance: number,
+  aimX: number,
+  aimY: number,
+  aimDistance: number,
 ): void {
   const scale = sim.tuning.enemy.fireIntervalScale;
-  const aim = distance === 0 ? 0 : Math.atan2(toPlayerY, toPlayerX);
+  const freeAim = aimDistance === 0 ? 0 : Math.atan2(aimY, aimX);
 
   for (const shot of state.firing) {
     const interval = Math.max(1, Math.round(shot.everyTicks * scale));
+    const aim = shot.aimCardinal === true ? snapToCardinal(freeAim) : freeAim;
 
     if (shot.behaviour === 'fireOnBeat') {
       // The offset is scaled with the bar it sits inside (#277): an author
@@ -459,23 +578,19 @@ function applyFiring(
     const phase = ticks % interval;
 
     if (shot.behaviour === 'fireAtPlayer') {
-      if (phase === 0 && isSighted(sim, index, toPlayerX, toPlayerY)) {
+      if (phase === 0 && isSighted(sim, index, aimX, aimY)) {
         fireOne(sim, index, aim, shot);
       }
       continue;
     }
     if (shot.behaviour === 'fireBurst') {
       const gap = Math.max(1, Math.round(shot.gapTicks));
-      if (
-        phase % gap === 0 &&
-        phase / gap < shot.shots &&
-        isSighted(sim, index, toPlayerX, toPlayerY)
-      ) {
+      if (phase % gap === 0 && phase / gap < shot.shots && isSighted(sim, index, aimX, aimY)) {
         fireOne(sim, index, aim, shot);
       }
       continue;
     }
-    if (phase === 0 && isSighted(sim, index, toPlayerX, toPlayerY)) {
+    if (phase === 0 && isSighted(sim, index, aimX, aimY)) {
       const shots = Math.max(1, Math.round(shot.shots));
       const step = shot.arc / Math.max(1, shots - 1);
       const start = aim - shot.arc / 2;
@@ -1288,27 +1403,23 @@ export function enemyTelegraphShape(
     return true;
   }
 
+  // Line and Arc point at the spot the wind-up locked (`updateAimLock`), not
+  // at the player: the warning holds still while they step out of it.
   if (follow !== null && follow.meleeArc !== null) {
-    const toPlayerX = sim.positionX(sim.playerIndex) - selfX;
-    const toPlayerY = sim.positionY(sim.playerIndex) - selfY;
-    const distance = vectorLength(toPlayerX, toPlayerY);
     out.shape = TelegraphShape.Arc;
     out.x = selfX;
     out.y = selfY;
-    out.angle = distance === 0 ? 0 : Math.atan2(toPlayerY, toPlayerX);
+    out.angle = enemyAimAngle(sim, index);
     out.arc = follow.meleeArc.arc;
     out.reach = follow.meleeArc.reach;
     return true;
   }
 
   if (follow?.movement.behaviour === 'chargeAtPlayer') {
-    const toPlayerX = sim.positionX(sim.playerIndex) - selfX;
-    const toPlayerY = sim.positionY(sim.playerIndex) - selfY;
-    const distance = vectorLength(toPlayerX, toPlayerY);
     out.shape = TelegraphShape.Line;
     out.x = selfX;
     out.y = selfY;
-    out.angle = distance === 0 ? 0 : Math.atan2(toPlayerY, toPlayerX);
+    out.angle = enemyAimAngle(sim, index);
     out.arc = 0;
     out.reach = 0;
     return true;
