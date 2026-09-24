@@ -585,11 +585,7 @@ function applyFiring(
     }
     if (shot.behaviour === 'fireBurst') {
       const gap = Math.max(1, Math.round(shot.gapTicks));
-      if (
-        phase % gap === 0 &&
-        phase / gap < shot.shots &&
-        isSighted(sim, index, aimX, aimY)
-      ) {
+      if (phase % gap === 0 && phase / gap < shot.shots && isSighted(sim, index, aimX, aimY)) {
         fireOne(sim, index, aim, shot);
       }
       continue;
