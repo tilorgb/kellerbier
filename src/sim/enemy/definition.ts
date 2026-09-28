@@ -170,6 +170,14 @@ export interface FiringBehaviourBase {
    * so a typo fails CI instead of a run.
    */
   readonly art?: string;
+  /**
+   * Fire only straight along one of the four axes — north, south, east or
+   * west — whichever the target is most along, instead of straight at it.
+   * The Zapfhahn: a tap in a wall sprays down the room's axes, which makes
+   * the safe ground readable at a glance. A fan (`fireSpread`) is centred on
+   * the snapped axis. Not allowed on `fireOnBeat`, which aims at nothing.
+   */
+  readonly aimCardinal?: boolean;
 }
 
 /** One shot at the player, on a timer. */

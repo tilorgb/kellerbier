@@ -22,6 +22,7 @@ import {
 import { ParticleKind } from '../../src/sim/particle/store.js';
 import { RoomGeometry } from '../../src/sim/room/geometry.js';
 import {
+  ENEMY_MOTION_STRIDE,
   ENEMY_STRIDE,
   enemyTelegraphProgress,
   enemyTelegraphShape,
@@ -667,6 +668,222 @@ describe('primitives, authored as data', () => {
     expect(sim.velocity.data[enemy * 2]).toBeCloseTo(headingX, 5);
     expect(sim.velocity.data[enemy * 2 + 1]).toBeCloseTo(headingY, 5);
   });
+
+  it('charges at where the player stood when the wind-up began, not where it ended', () => {
+    const sim = emptySim({ enemies: [charger] });
+    const player = sim.playerIndex;
+    const enemy = place(sim, 'stier', sim.positionX(player) + 90, sim.positionY(player));
+
+    // First tick of `wind`: the spot is locked here, due west of the bull.
+    sim.step(IDLE);
+    expect(stateName(sim, enemy)).toBe('wind');
+    // The player steps well aside during the wind-up.
+    const transform = sim.transform.data;
+    transform[player * 4 + 1] = (transform[player * 4 + 1] ?? 0) - 50;
+    transform[player * 4 + 3] = transform[player * 4 + 1] ?? 0;
+
+    while (stateName(sim, enemy) !== 'charge') {
+      sim.step(IDLE);
+    }
+    expect(sim.velocity.data[enemy * 2]).toBeLessThan(0);
+    expect(sim.velocity.data[enemy * 2 + 1]).toBeCloseTo(0, 5);
+  });
+
+  it('points the charge telegraph at the locked spot while the player moves', () => {
+    const sim = emptySim({ enemies: [charger] });
+    const player = sim.playerIndex;
+    const enemy = place(sim, 'stier', sim.positionX(player) + 90, sim.positionY(player));
+    sim.step(IDLE);
+    const transform = sim.transform.data;
+    transform[player * 4 + 1] = (transform[player * 4 + 1] ?? 0) - 50;
+    transform[player * 4 + 3] = transform[player * 4 + 1] ?? 0;
+    sim.step(IDLE);
+
+    const shape: EnemyTelegraphShapeInfo = {
+      shape: TelegraphShape.Ring,
+      progress: 0,
+      x: 0,
+      y: 0,
+      angle: 0,
+      arc: 0,
+      reach: 0,
+    };
+    expect(enemyTelegraphShape(sim, enemy, shape)).toBe(true);
+    expect(shape.shape).toBe(TelegraphShape.Line);
+    expect(shape.angle).toBeCloseTo(Math.PI, 5);
+  });
+});
+
+describe('aim locked at the start of a wind-up', () => {
+  const sniper: EnemyDefinition = {
+    id: 'sniper',
+    name: 'Sniper',
+    size: 'normal',
+    health: 6,
+    contactDamage: 0,
+    initial: 'idle',
+    states: [
+      {
+        name: 'idle',
+        behaviours: [{ behaviour: 'pause' }],
+        transitions: [{ to: 'wind', after: 1 }],
+      },
+      {
+        name: 'wind',
+        behaviours: [{ behaviour: 'pause' }, { behaviour: 'telegraph', ticks: 20 }],
+        transitions: [{ to: 'shoot', after: 20 }],
+      },
+      {
+        name: 'shoot',
+        behaviours: [
+          { behaviour: 'pause' },
+          { behaviour: 'fireAtPlayer', everyTicks: 999, speed: 1, damage: 1, lifetimeTicks: 60 },
+        ],
+        transitions: [{ to: 'rest', after: 2 }],
+      },
+      {
+        name: 'rest',
+        behaviours: [{ behaviour: 'pause' }],
+        transitions: [{ to: 'shoot-again', after: 1 }],
+      },
+      {
+        name: 'shoot-again',
+        behaviours: [
+          { behaviour: 'pause' },
+          { behaviour: 'fireAtPlayer', everyTicks: 999, speed: 1, damage: 1, lifetimeTicks: 60 },
+        ],
+      },
+    ],
+  };
+
+  /** Velocity of the newest live projectile — there is only ever one or two here. */
+  function lastShot(sim: GameSim): { x: number; y: number } {
+    let found = -1;
+    sim.projectiles.forEachLive((index) => {
+      found = Math.max(found, index);
+    });
+    return {
+      x: sim.projectiles.velocityX[found] ?? 0,
+      y: sim.projectiles.velocityY[found] ?? 0,
+    };
+  }
+
+  function stepUntil(sim: GameSim, enemy: number, name: string): void {
+    for (let tick = 0; tick < 200 && stateName(sim, enemy) !== name; tick++) {
+      sim.step(IDLE);
+    }
+    expect(stateName(sim, enemy)).toBe(name);
+  }
+
+  it('shoots at the spot the player stood on when the wind-up started', () => {
+    const sim = emptySim({ enemies: [sniper] });
+    const player = sim.playerIndex;
+    const enemy = place(sim, 'sniper', sim.positionX(player) + 80, sim.positionY(player));
+    stepUntil(sim, enemy, 'wind');
+
+    const transform = sim.transform.data;
+    transform[player * 4 + 1] = (transform[player * 4 + 1] ?? 0) - 40;
+    transform[player * 4 + 3] = transform[player * 4 + 1] ?? 0;
+
+    stepUntil(sim, enemy, 'shoot');
+    const shot = lastShot(sim);
+    expect(shot.x).toBeLessThan(0);
+    expect(shot.y).toBeCloseTo(0, 5);
+  });
+
+  it('releases the lock on a state that attacks nothing, and aims at the player again', () => {
+    const sim = emptySim({ enemies: [sniper] });
+    const player = sim.playerIndex;
+    const enemy = place(sim, 'sniper', sim.positionX(player) + 80, sim.positionY(player));
+    stepUntil(sim, enemy, 'wind');
+
+    const transform = sim.transform.data;
+    transform[player * 4 + 1] = (transform[player * 4 + 1] ?? 0) - 40;
+    transform[player * 4 + 3] = transform[player * 4 + 1] ?? 0;
+
+    stepUntil(sim, enemy, 'shoot-again');
+    // `rest` in between let go of the locked spot: this shot goes up at the
+    // player, while the first one is still flying straight west.
+    let upward = 0;
+    sim.projectiles.forEachLive((index) => {
+      if ((sim.projectiles.velocityY[index] ?? 0) < -0.1) {
+        upward += 1;
+      }
+    });
+    expect(upward).toBe(1);
+  });
+});
+
+describe('aimCardinal (Zapfhahn)', () => {
+  it('fans down the nearest axis rather than straight at the player', () => {
+    const sim = emptySim();
+    const player = sim.playerIndex;
+    // Mostly east of the player, a little below: the fan goes due west.
+    const enemy = place(sim, 'zapfhahn', sim.positionX(player) + 60, sim.positionY(player) + 25);
+    for (let tick = 0; tick < 200 && enemyProjectiles(sim) === 0; tick++) {
+      sim.step(IDLE);
+    }
+    expect(enemyProjectiles(sim)).toBe(3);
+
+    let centred = 0;
+    sim.projectiles.forEachLive((index) => {
+      const vx = sim.projectiles.velocityX[index] ?? 0;
+      const vy = sim.projectiles.velocityY[index] ?? 0;
+      if (vx < 0 && Math.abs(vy) < 1e-4) {
+        centred += 1;
+      }
+    });
+    // The middle ray of the three is the axis itself.
+    expect(centred).toBe(1);
+    expect(stateName(sim, enemy)).toBe('spray');
+  });
+
+  it('switches axis when the player is mostly above or below', () => {
+    const sim = emptySim();
+    const player = sim.playerIndex;
+    place(sim, 'zapfhahn', sim.positionX(player) + 25, sim.positionY(player) + 60);
+    for (let tick = 0; tick < 200 && enemyProjectiles(sim) === 0; tick++) {
+      sim.step(IDLE);
+    }
+    let north = 0;
+    sim.projectiles.forEachLive((index) => {
+      const vx = sim.projectiles.velocityX[index] ?? 0;
+      const vy = sim.projectiles.velocityY[index] ?? 0;
+      if (vy < 0 && Math.abs(vx) < 1e-4) {
+        north += 1;
+      }
+    });
+    expect(north).toBe(1);
+  });
+
+  it('refuses aimCardinal on fireOnBeat, which aims at nothing', () => {
+    const band: EnemyDefinition = {
+      id: 'band',
+      name: 'Band',
+      size: 'normal',
+      health: 3,
+      contactDamage: 0,
+      initial: 'play',
+      states: [
+        {
+          name: 'play',
+          behaviours: [
+            { behaviour: 'pause' },
+            {
+              behaviour: 'fireOnBeat',
+              shots: 8,
+              everyTicks: 30,
+              speed: 1,
+              damage: 1,
+              lifetimeTicks: 60,
+              aimCardinal: true,
+            },
+          ],
+        },
+      ],
+    };
+    expect(() => emptySim({ enemies: [band] })).toThrow(/aimCardinal/);
+  });
 });
 
 /**
@@ -1141,6 +1358,32 @@ describe('enemyTelegraphShape (#233)', () => {
     expect(shape.arc).toBeCloseTo(Math.PI / 2);
     expect(shape.reach).toBe(30);
     expect(shape.angle).toBeCloseTo(Math.PI, 1);
+  });
+
+  it('swings at the spot the player stood on when the wind-up began, and the Arc holds still', () => {
+    const sim = emptySim({ enemies: [swinger] });
+    const player = sim.playerIndex;
+    const enemy = place(sim, 'swinger', sim.positionX(player) + 40, sim.positionY(player));
+    sim.step(IDLE);
+
+    // Step well north during the wind-up: the Arc keeps pointing west.
+    const transform = sim.transform.data;
+    transform[player * 4 + 1] = (transform[player * 4 + 1] ?? 0) - 40;
+    transform[player * 4 + 3] = transform[player * 4 + 1] ?? 0;
+    sim.step(IDLE);
+    const shape = freshShape();
+    expect(enemyTelegraphShape(sim, enemy, shape)).toBe(true);
+    expect(shape.angle).toBeCloseTo(Math.PI, 1);
+
+    for (let tick = 0; tick < 40 && stateName(sim, enemy) !== 'swing'; tick++) {
+      sim.step(IDLE);
+    }
+    expect(stateName(sim, enemy)).toBe('swing');
+    // The swing's aim is the heading `lockMeleeAim` stored: due west, not
+    // up-left at where the player went.
+    const motionBase = enemy * ENEMY_MOTION_STRIDE;
+    expect(sim.enemyMotion.data[motionBase] ?? 0).toBeCloseTo(-1, 3);
+    expect(sim.enemyMotion.data[motionBase + 1] ?? 0).toBeCloseTo(0, 3);
   });
 
   const noAfter: EnemyDefinition = {

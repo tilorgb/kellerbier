@@ -40,6 +40,11 @@ export const zapfhahn: EnemyDefinition = {
           // One fan per visit to this state: the volley leaves on the tick the
           // state begins, and the state is over well before the next one is due.
           everyTicks: 60,
+          // Player feedback: a fan straight at the player was too hard to
+          // step out of. A tap in a wall sprays down the room's axes — N, S,
+          // E or W, whichever the player stood most along when `wind` began —
+          // so the safe ground is readable at a glance.
+          aimCardinal: true,
           speed: 1.6,
           damage: 1,
           lifetimeTicks: 60,
