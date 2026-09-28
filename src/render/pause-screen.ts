@@ -13,6 +13,7 @@ const PANEL_PADDING = 16;
 export interface PauseScreenActions {
   readonly onResume: () => void;
   readonly onSettings: () => void;
+  readonly onCollection: () => void;
   readonly onQuitToTitle: () => void;
 }
 
@@ -56,6 +57,7 @@ export class PauseScreen implements MenuScreen {
     return [
       { label: t(locale, 'ui.pause.resume'), onSelect: actions.onResume },
       { label: t(locale, 'ui.pause.settings'), onSelect: actions.onSettings },
+      { label: t(locale, 'ui.pause.collection'), onSelect: actions.onCollection },
       { label: t(locale, 'ui.pause.quitToTitle'), onSelect: actions.onQuitToTitle },
     ];
   }

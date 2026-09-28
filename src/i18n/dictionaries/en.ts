@@ -44,6 +44,16 @@ export const en = {
   'ui.credits.line2': 'Built with Claude Code',
   'ui.credits.line3': 'Engine: three.js',
 
+  'ui.title.collection': 'Collection',
+  'ui.pause.collection': 'Collection',
+  'ui.collection.headline': 'Collection',
+  'ui.collection.back': 'Back',
+  'ui.collection.progress': '{found} / {total} found',
+  'ui.collection.unknownName': '???',
+  'ui.collection.unknownHint': 'Not found yet. Pick it up on a run to learn what it does.',
+  'ui.collection.held': 'Held this run',
+  'ui.collection.active': 'Active item',
+
   // --- A run ending -----------------------------------------------------
   'ui.gameOver.retry': 'Retry',
   'ui.gameOver.results': 'Results',
@@ -205,6 +215,8 @@ export const en = {
   'ui.settings.accessibility.slowMode': 'Slow-mode',
   'ui.settings.accessibility.slowModeOff': 'Off',
   'ui.settings.accessibility.reduceAudioDistortion': 'Reduce Promille audio distortion',
+  'ui.settings.accessibility.statDisplay': 'Stat display',
+  'ui.settings.accessibility.detailedPickupText': 'Detailed pickup text',
 
   'ui.settings.privacy.copy':
     'Playtest telemetry is off by default. Turning it on records, on this device only, ' +

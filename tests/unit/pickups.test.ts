@@ -329,6 +329,7 @@ describe('pickup toast', () => {
     expect(sim.pickupToast).toEqual({
       name: 'Bierfassl',
       description: 'pickups.bierfassl.description',
+      detail: '',
     });
 
     for (let tick = 0; tick < sim.tuning.pickup.toastTicks; tick++) {
@@ -351,6 +352,7 @@ describe('pickup toast', () => {
     expect(sim.pickupToast).toEqual({
       name: 'Biermarke',
       description: 'pickups.biermarke-1.description',
+      detail: '',
     });
   });
 });

@@ -6081,3 +6081,30 @@ A locked *point*, not a direction: a body that moves during its wind-up still at
 the aim to the nearest of N/S/E/W before a fan is centred on it. The floor-one tap now sprays down
 the room's axes rather than at the player, which makes its safe ground readable at a glance.
 Rejected on `fireOnBeat` at compile time, since there is nothing there to snap.
+
+## 108. Item info: the mystery stays the default, the numbers are opt-in, and the Collection remembers
+
+An item's pickup leads with its flavour text on purpose (`sim.ts`'s `pickUpItem`), and that was
+the only thing a player ever saw: a Kraftbier's "+40% damage" lived in `items.*.description`
+and on no screen at all. Some players want the joke; some want the number. Both get what they
+came for, without either being made the other's default.
+
+- **Two opt-in settings, both off** (`AccessibilitySettings.statDisplay`,
+  `detailedPickupText`, Accessibility tab). The first is Isaac's "Found HUD" — a stat column on
+  the left edge (`render/stat-hud.ts`); the second adds the item's precise description as a
+  second line under the flavour on the toast and the pedestal reveal. Separate toggles because
+  they answer different questions: "what are my stats" and "what did that item just do". Both
+  are render-only; the sim carries the detail line (`toastDetail`/`pedestalRevealDetail`) either
+  way, so the setting never touches determinism.
+- **Stats in player units, higher is always better** (`render/stat-display.ts`): shots per
+  second rather than a tick delay, range in floor tiles travelled, speeds relative to the default
+  tuning. That one rule is what lets every delta be coloured the same way, green up and red down.
+- **A delta flashes on *any* change**, not only on item pickups, and changes inside one ~2 s
+  window add up. A Promille tier or a curse moving damage deserves the same explanation an item
+  does. Timed in sim ticks, so it pauses with the game.
+- **The Collection** (`render/collection-screen.ts`) is always available, from the title and the
+  pause menu, and is not behind a setting: looking something up is not the same act as having it
+  shown on every pickup. Items this save has never held are silhouettes; the discovery set is
+  save schema v9's `discoveredItems`, filled by watching what the live run *holds*
+  (`app/collection.ts`), so every way an item can arrive counts without each one reporting it.
+  No back-fill for existing saves: nothing before v9 recorded an inventory.

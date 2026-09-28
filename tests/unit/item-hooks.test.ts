@@ -242,7 +242,8 @@ describe('GameSim.pickUpItem / removeItem — stat pipeline integration', () => 
 
     expect(sim.pickupToast).toBeNull();
     sim.pickUpItem('krug');
-    expect(sim.pickupToast).toEqual({ name: 'Bierkrug', description: 'Damage up' });
+    // No separate detail line: the headline already is the description.
+    expect(sim.pickupToast).toEqual({ name: 'Bierkrug', description: 'Damage up', detail: '' });
   });
 
   it('picking up an item shows its flavour text on the pickup toast, not its description', () => {
@@ -257,6 +258,8 @@ describe('GameSim.pickUpItem / removeItem — stat pipeline integration', () => 
     expect(sim.pickupToast).toEqual({
       name: 'Bierkrug',
       description: 'One in each hand is not a stack. It is a lifestyle.',
+      // The precise line `detailedPickupText` shows under it.
+      detail: 'Damage up',
     });
   });
 });

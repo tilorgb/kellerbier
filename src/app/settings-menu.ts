@@ -476,6 +476,20 @@ export class SettingsMenu {
           this.deps.settings.reduceAudioDistortion = value;
         },
       ),
+      toggle(
+        t(locale, 'ui.settings.accessibility.statDisplay'),
+        () => this.deps.settings.statDisplay,
+        (value) => {
+          this.deps.settings.statDisplay = value;
+        },
+      ),
+      toggle(
+        t(locale, 'ui.settings.accessibility.detailedPickupText'),
+        () => this.deps.settings.detailedPickupText,
+        (value) => {
+          this.deps.settings.detailedPickupText = value;
+        },
+      ),
     ];
   }
 

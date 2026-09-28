@@ -32,6 +32,7 @@ export interface TitleScreenActions {
   readonly onStart: () => void;
   readonly onContinue: () => void;
   readonly onSettings: () => void;
+  readonly onCollection: () => void;
   readonly onCredits: () => void;
   readonly onQuit: () => void;
   /** Re-checked on every `show()` — whether a save exists to resume into. */
@@ -143,6 +144,7 @@ export class TitleScreen implements MenuScreen {
         disabled: () => !actions.canContinue(),
       },
       { label: t(locale, 'ui.title.settings'), onSelect: actions.onSettings },
+      { label: t(locale, 'ui.title.collection'), onSelect: actions.onCollection },
       { label: t(locale, 'ui.title.credits'), onSelect: actions.onCredits },
       { label: t(locale, 'ui.title.quit'), onSelect: actions.onQuit },
     ];

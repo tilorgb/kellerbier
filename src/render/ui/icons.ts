@@ -209,6 +209,79 @@ export const ICON_CARET: PixelArt = [
   'o...',
 ];
 
+/*
+ * The stat column's icons (`render/stat-hud.ts`), one per stat, signed off
+ * as the "Symbols" set out of three candidates. Sized to sit on a text row
+ * (7-8 tall), and drawn in `iconRoles(accent)` with one accent per stat —
+ * but, like everything here, meant to read by silhouette alone.
+ */
+
+/** A sword — Damage. */
+export const ICON_STAT_DAMAGE: PixelArt = [
+  '......oo',
+  '.....oho',
+  '....oho.',
+  '...oho..',
+  'o.oho...',
+  'oaoo....',
+  '.oao....',
+  'oo.oo...',
+];
+
+/** A double chevron — Fire Rate: shots coming quickly. */
+export const ICON_STAT_FIRE_RATE: PixelArt = [
+  'oo..oo..',
+  'oao.oao.',
+  '.oao.oao',
+  '..oao.oa',
+  '.oao.oao',
+  'oao.oao.',
+  'oo..oo..',
+];
+
+/** A ring round a point — Range: how far out a shot reaches. */
+export const ICON_STAT_RANGE: PixelArt = [
+  '...oo...',
+  '..oaao..',
+  '.oa..ao.',
+  'oa.oo.ao',
+  'oa.oo.ao',
+  '.oa..ao.',
+  '..oaao..',
+  '...oo...',
+];
+
+/** A shot with speed streaks — Shot Speed. The streaks are drawn in the accent role, not the outline, so they still read over a dark floor. */
+export const ICON_STAT_SHOT_SPEED: PixelArt = [
+  '....ooo.',
+  '...ohhao',
+  'aa.ohaao',
+  '...oaaao',
+  'aaa.ooo.',
+];
+
+/** A boot — Move Speed. */
+export const ICON_STAT_MOVE_SPEED: PixelArt = [
+  '.ooo....',
+  '.oao....',
+  '.oao....',
+  '.oaooo..',
+  'oaaaaaoo',
+  'oaaaaaao',
+  'oooooooo',
+];
+
+/** A four-leaf clover — Luck. */
+export const ICON_STAT_LUCK: PixelArt = [
+  '.oo..oo..',
+  'oaao.oaao',
+  'oaaaoaaao',
+  '.ooaaaoo.',
+  'oaaaoaaao',
+  'oaao.oaao',
+  '.oo..oo..',
+];
+
 /** Every icon by name — the kit's own gallery walks this rather than a hand-kept list. */
 export const UI_ICONS: Readonly<Record<string, PixelArt>> = {
   'wurst-full': ICON_WURST_FULL,
@@ -225,4 +298,10 @@ export const UI_ICONS: Readonly<Record<string, PixelArt>> = {
   star: ICON_STAR,
   tick: ICON_TICK,
   caret: ICON_CARET,
+  'stat-damage': ICON_STAT_DAMAGE,
+  'stat-fireRate': ICON_STAT_FIRE_RATE,
+  'stat-range': ICON_STAT_RANGE,
+  'stat-shotSpeed': ICON_STAT_SHOT_SPEED,
+  'stat-moveSpeed': ICON_STAT_MOVE_SPEED,
+  'stat-luck': ICON_STAT_LUCK,
 };

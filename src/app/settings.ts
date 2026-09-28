@@ -131,6 +131,24 @@ export interface AccessibilitySettings {
    * the audio layer.
    */
   reduceAudioDistortion: boolean;
+  /**
+   * The stat column (Isaac's "Found HUD", opt-in): the six resolved stats in
+   * player units down the left edge, each flashing a green/red delta for a
+   * moment whenever it moves — `render/stat-hud.ts`. Off by default, because
+   * the flavour-first pickup is the game's own voice and a spreadsheet down
+   * the side of the room is a choice a player makes, not one made for them.
+   * Render-only, like `colorblindPalette`: it reads `sim.stats`, it never
+   * changes what they are.
+   */
+  statDisplay: boolean;
+  /**
+   * Adds an item's precise effect text (`ItemDefinition.description`) as a
+   * second line under the flavour line on the pickup toast and the pedestal
+   * reveal. Off by default for the same reason as `statDisplay`: the mystery
+   * is the default, and the Collection screen always has the plain text for a
+   * player who wants to look it up rather than see it every time.
+   */
+  detailedPickupText: boolean;
 }
 
 export const DEFAULT_ACCESSIBILITY_SETTINGS: Readonly<AccessibilitySettings> = {
@@ -145,6 +163,8 @@ export const DEFAULT_ACCESSIBILITY_SETTINGS: Readonly<AccessibilitySettings> = {
   textScale: 1,
   slowModeScale: 1,
   reduceAudioDistortion: false,
+  statDisplay: false,
+  detailedPickupText: false,
 };
 
 /** The text scales the settings screen offers — anything else sanitises back to 1. */
@@ -214,6 +234,14 @@ export function sanitizeAccessibilitySettings(candidate: unknown): Accessibility
       typeof source.reduceAudioDistortion === 'boolean'
         ? source.reduceAudioDistortion
         : DEFAULT_ACCESSIBILITY_SETTINGS.reduceAudioDistortion,
+    statDisplay:
+      typeof source.statDisplay === 'boolean'
+        ? source.statDisplay
+        : DEFAULT_ACCESSIBILITY_SETTINGS.statDisplay,
+    detailedPickupText:
+      typeof source.detailedPickupText === 'boolean'
+        ? source.detailedPickupText
+        : DEFAULT_ACCESSIBILITY_SETTINGS.detailedPickupText,
   };
 }
 

@@ -321,6 +321,20 @@ export const HUD_PALETTE = {
   bossBanner: 0xd9a441,
   /** Pickup toast and shop preview text — the same highlight gold. */
   toastText: 0xe8c94a,
+  /**
+   * The stat column (\`render/stat-hud.ts\`): one accent per stat icon, so the
+   * six rows read apart at a glance — though every icon is drawn to read by
+   * its silhouette alone, per \`ui/icons.ts\`'s own rule.
+   */
+  statDamage: 0xd9403a,
+  statFireRate: 0xe8c65a,
+  statRange: 0x6ab0c9,
+  statShotSpeed: 0xd0eef6,
+  statMoveSpeed: 0x8fd06a,
+  statLuck: 0x5fb85a,
+  /** A stat that just went up / down — the delta flashed next to its value. */
+  statDeltaUp: 0x7ee06a,
+  statDeltaDown: 0xe0605a,
   /** Pedestal name plate and reveal panel text. */
   pedestalText: 0xffffff,
   shopPreviewAffordable: 0xffffff,
