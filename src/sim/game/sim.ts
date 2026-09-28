@@ -496,6 +496,19 @@ function machineRollEffectLabel(result: MachineRollResult): string {
   return `${statLabel} ${result.rolled.favourable ? 'up' : 'down'}`;
 }
 
+/**
+ * The precise-effect line an item's pickup can show under its flavour text
+ * (`AccessibilitySettings.detailedPickupText`): its `description` key, but
+ * only when the headline line was the flavour text — an item with no flavour
+ * already leads with its description, and saying it twice is not detail.
+ */
+function itemDetailText(item: {
+  readonly flavourText: string;
+  readonly description: string;
+}): string {
+  return item.flavourText === '' ? '' : item.description;
+}
+
 /** The Losbrunnen's toast text for one applied roll — `GameSim.applyMachineRollResult`'s own `reportCollected` call. */
 function describeMachineRoll(itemName: string, result: MachineRollResult): string {
   const tierLabel = MACHINE_ROLL_TIER_LABELS[result.tier];
@@ -1070,6 +1083,13 @@ export class GameSim {
    */
   private toastName = '';
   private toastDescription = '';
+  /**
+   * The precise effect line under `toastDescription` — an item's
+   * `description` key when the toast led with its flavour text, `''`
+   * otherwise. Always filled; whether it is *drawn* is the player's
+   * `detailedPickupText` setting, a render-side choice.
+   */
+  private toastDetail = '';
   private toastTicks = 0;
 
   /**
@@ -1555,6 +1575,8 @@ export class GameSim {
   private pedestalRevealTicks = 0;
   private pedestalRevealName = '';
   private pedestalRevealDescription = '';
+  /** Same as `toastDetail`, for the pedestal reveal. */
+  private pedestalRevealDetail = '';
   /** Human-readable summary of the Losbrunnen's last roll, surfaced through `machinePreview` until the next one. */
   private machineLastRollSummary: string | undefined = undefined;
   /**
@@ -3268,11 +3290,15 @@ export class GameSim {
    * see `toastTicks`'s doc comment. Read by the render layer once a frame,
    * the same pattern `roomWarmupTicks`/the boss banner already use.
    */
-  get pickupToast(): { readonly name: string; readonly description: string } | null {
+  get pickupToast(): {
+    readonly name: string;
+    readonly description: string;
+    readonly detail: string;
+  } | null {
     if (this.toastTicks <= 0) {
       return null;
     }
-    return { name: this.toastName, description: this.toastDescription };
+    return { name: this.toastName, description: this.toastDescription, detail: this.toastDetail };
   }
 
   /**
@@ -3281,10 +3307,14 @@ export class GameSim {
    * `pickUpItem` for an item. A second collection while one toast is still
    * showing replaces it outright rather than queuing, the same "newest wins"
    * choice `addShake` already makes for screenshake direction.
+   *
+   * `detail` is the optional precise line (`toastDetail`) — only an item
+   * pickup passes one; every other caller's toast has no second line.
    */
-  reportCollected(name: string, description: string): void {
+  reportCollected(name: string, description: string, detail = ''): void {
     this.toastName = name;
     this.toastDescription = description;
+    this.toastDetail = detail;
     this.toastTicks = Math.round(this.tuning.pickup.toastTicks);
   }
 
@@ -4261,7 +4291,7 @@ export class GameSim {
     // Flavour text over the literal effect text here — the pedestal/HUD
     // already show the mechanical description before a pickup, so the toast
     // is where the funny line the item roster promises actually gets read.
-    this.reportCollected(item.name, item.flavourText || item.description);
+    this.reportCollected(item.name, item.flavourText || item.description, itemDetailText(item));
     // After `reportCollected`, not before: a set completing on this exact
     // pickup has to force-clear the ordinary toast that call just started,
     // not race it.
@@ -4777,11 +4807,19 @@ export class GameSim {
    * item held aloft"), not the quick float-past-loot toast every ordinary
    * pickup gets.
    */
-  get pedestalReveal(): { readonly name: string; readonly description: string } | null {
+  get pedestalReveal(): {
+    readonly name: string;
+    readonly description: string;
+    readonly detail: string;
+  } | null {
     if (this.pedestalRevealTicks <= 0) {
       return null;
     }
-    return { name: this.pedestalRevealName, description: this.pedestalRevealDescription };
+    return {
+      name: this.pedestalRevealName,
+      description: this.pedestalRevealDescription,
+      detail: this.pedestalRevealDetail,
+    };
   }
 
   /**
@@ -4911,6 +4949,7 @@ export class GameSim {
     this.toastTicks = 0;
     this.pedestalRevealName = item.name;
     this.pedestalRevealDescription = item.flavourText || item.description;
+    this.pedestalRevealDetail = itemDetailText(item);
     this.pedestalRevealTicks = Math.round(this.tuning.itemPool.revealHoldTicks);
   }
 

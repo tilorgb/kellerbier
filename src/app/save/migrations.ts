@@ -156,6 +156,15 @@ const v6ToV7: SaveMigration = (raw) => ({ ...raw, schemaVersion: 7 });
  */
 const v7ToV8: SaveMigration = (raw) => ({ ...raw, schemaVersion: 8, seenStoryBeats: [] });
 
+/**
+ * v8 -> v9: `discoveredItems` is new storage, and there is nothing to
+ * back-fill it from — no earlier version recorded which items a run held
+ * (`BestRunRecord` keeps a floor and a kill count, not an inventory). So an
+ * existing save starts with an empty Collection, the same as a fresh one,
+ * and fills it in from the next run on.
+ */
+const v8ToV9: SaveMigration = (raw) => ({ ...raw, schemaVersion: 9, discoveredItems: [] });
+
 export const MIGRATIONS: readonly SaveMigration[] = [
   v0ToV1,
   v1ToV2,
@@ -165,6 +174,7 @@ export const MIGRATIONS: readonly SaveMigration[] = [
   v5ToV6,
   v6ToV7,
   v7ToV8,
+  v8ToV9,
 ];
 
 function versionOf(raw: Record<string, unknown>): number {

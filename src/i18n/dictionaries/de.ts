@@ -32,6 +32,17 @@ export const de: Record<DictKey, string> = {
   'ui.credits.line2': 'Gebaut mit Claude Code',
   'ui.credits.line3': 'Engine: three.js',
 
+  'ui.title.collection': 'Sammlung',
+  'ui.pause.collection': 'Sammlung',
+  'ui.collection.headline': 'Sammlung',
+  'ui.collection.back': 'Zurück',
+  'ui.collection.progress': '{found} / {total} gefunden',
+  'ui.collection.unknownName': '???',
+  'ui.collection.unknownHint':
+    'Noch nicht gefunden. Heb es in einem Lauf auf, um zu sehen, was es tut.',
+  'ui.collection.held': 'In diesem Lauf dabei',
+  'ui.collection.active': 'Aktiver Gegenstand',
+
   // --- A run ending -----------------------------------------------------
   'ui.gameOver.retry': 'Nochmal',
   'ui.gameOver.results': 'Ergebnisse',
@@ -189,6 +200,8 @@ export const de: Record<DictKey, string> = {
   'ui.settings.accessibility.slowMode': 'Zeitlupe',
   'ui.settings.accessibility.slowModeOff': 'Aus',
   'ui.settings.accessibility.reduceAudioDistortion': 'Promille-Audioverzerrung reduzieren',
+  'ui.settings.accessibility.statDisplay': 'Werteanzeige',
+  'ui.settings.accessibility.detailedPickupText': 'Genaue Wirkung beim Aufheben',
 
   'ui.settings.privacy.copy':
     'Playtest-Telemetrie ist standardmäßig aus. Wird sie eingeschaltet, wird nur auf ' +

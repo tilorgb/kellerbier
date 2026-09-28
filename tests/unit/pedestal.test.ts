@@ -140,6 +140,7 @@ describe('pedestal pickup (#28)', () => {
     expect(sim.pedestalReveal).toEqual({
       name: 'bierkrug-test',
       description: 'bierkrug-test description',
+      detail: '',
     });
   });
 
@@ -152,6 +153,7 @@ describe('pedestal pickup (#28)', () => {
     expect(sim.pedestalReveal).toEqual({
       name: 'bierkrug-test',
       description: 'One in each hand is a lifestyle.',
+      detail: 'bierkrug-test description',
     });
   });
 

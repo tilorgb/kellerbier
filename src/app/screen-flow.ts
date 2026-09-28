@@ -1,5 +1,6 @@
 import type { UiKit } from '../render/ui/kit.js';
 import type { MenuScreen } from '../render/ui/menu.js';
+import { CollectionScreen } from '../render/collection-screen.js';
 import { CreditsScreen } from '../render/credits-screen.js';
 import { PauseScreen } from '../render/pause-screen.js';
 import { SettingsScreen } from '../render/settings-screen.js';
@@ -24,7 +25,7 @@ import type { SettingsMenu } from './settings-menu.js';
  * is still looking at the run, on the screen it ends on. See
  * `docs/DECISIONS.md` #67 for the full reasoning.
  */
-export type Screen = 'title' | 'run' | 'paused' | 'credits' | 'settings';
+export type Screen = 'title' | 'run' | 'paused' | 'credits' | 'settings' | 'collection';
 
 export class ScreenFlow {
   private screen: Screen = 'title';
@@ -59,6 +60,11 @@ export interface ScreenFlowControllerDeps {
   readonly settingsMenu: SettingsMenu;
   readonly playOpenSound: () => void;
   readonly playCloseSound: () => void;
+  /** What the Collection asks about each item — `app/collection.ts`'s discovery set, and the live run's inventory. */
+  readonly collection: {
+    readonly isDiscovered: (id: string) => boolean;
+    readonly isHeld: (id: string) => boolean;
+  };
 }
 
 /**
@@ -75,12 +81,15 @@ export class ScreenFlowController {
   readonly pause: PauseScreen;
   readonly credits: CreditsScreen;
   readonly settings: SettingsScreen;
+  readonly collection: CollectionScreen;
 
   private readonly flow = new ScreenFlow();
   private readonly deps: ScreenFlowControllerDeps;
   private canContinueFlag = false;
   /** Which screen Settings was opened from, and therefore what closing it goes back to. */
   private settingsOrigin: 'title' | 'paused' = 'title';
+  /** Same as `settingsOrigin`, for the Collection. */
+  private collectionOrigin: 'title' | 'paused' = 'title';
   private width = 0;
   private height = 0;
 
@@ -97,6 +106,9 @@ export class ScreenFlowController {
         },
         onSettings: () => {
           this.openSettings();
+        },
+        onCollection: () => {
+          this.openCollection();
         },
         onCredits: () => {
           this.openCredits();
@@ -120,6 +132,9 @@ export class ScreenFlowController {
         onSettings: () => {
           this.openSettings();
         },
+        onCollection: () => {
+          this.openCollection();
+        },
         onQuitToTitle: () => {
           this.quitToTitle();
         },
@@ -132,6 +147,19 @@ export class ScreenFlowController {
         onBack: () => {
           this.closeCredits();
         },
+      },
+      deps.locale,
+    );
+    this.collection = new CollectionScreen(
+      deps.kit,
+      {
+        onBack: () => {
+          this.closeCollection();
+        },
+        isDiscovered: deps.collection.isDiscovered,
+        // Only a paused run has an inventory worth marking; from the title
+        // screen the run behind it (if any) is not the one being browsed.
+        isHeld: (id) => this.collectionOrigin === 'paused' && deps.collection.isHeld(id),
       },
       deps.locale,
     );
@@ -152,6 +180,7 @@ export class ScreenFlowController {
     this.title.setLocale(locale);
     this.pause.setLocale(locale);
     this.credits.setLocale(locale);
+    this.collection.setLocale(locale);
     this.deps.settingsMenu.setLocale(locale);
     this.settings.setLocale(locale, this.deps.settingsMenu.tabs);
   }
@@ -171,6 +200,7 @@ export class ScreenFlowController {
     this.title.resize(width, height);
     this.pause.resize(width, height);
     this.credits.resize(width, height);
+    this.collection.resize(width, height);
     this.placeSettings();
   }
 
@@ -194,6 +224,7 @@ export class ScreenFlowController {
     this.canContinueFlag = continuable;
     this.pause.hide();
     this.settings.hide();
+    this.collection.hide();
     this.title.setSettingsOpen(false);
     this.title.show();
   }
@@ -307,6 +338,40 @@ export class ScreenFlowController {
     );
   }
 
+  /** The Collection, from the title screen or over a paused run — closing it goes back to whichever. */
+  openCollection(): void {
+    if (this.flow.is('collection')) {
+      return;
+    }
+    if (this.flow.is('run')) {
+      this.openPause();
+    }
+    this.collectionOrigin = this.flow.is('paused') ? 'paused' : 'title';
+    if (this.collectionOrigin === 'paused') {
+      this.pause.hide();
+    } else {
+      this.title.hide();
+    }
+    this.flow.goTo('collection');
+    this.collection.show();
+    this.deps.playOpenSound();
+  }
+
+  closeCollection(): void {
+    if (!this.flow.is('collection')) {
+      return;
+    }
+    this.collection.hide();
+    if (this.collectionOrigin === 'paused') {
+      this.flow.goTo('paused');
+      this.pause.show();
+    } else {
+      this.flow.goTo('title');
+      this.title.show();
+    }
+    this.deps.playCloseSound();
+  }
+
   private openCredits(): void {
     this.flow.goTo('credits');
     this.title.hide();
@@ -344,6 +409,8 @@ export class ScreenFlowController {
         return this.credits;
       case 'settings':
         return this.settings;
+      case 'collection':
+        return this.collection;
       case 'run':
         return null;
     }
@@ -410,6 +477,8 @@ export class ScreenFlowController {
           this.closeCredits();
         } else if (this.flow.is('settings')) {
           this.closeSettings();
+        } else if (this.flow.is('collection')) {
+          this.closeCollection();
         }
         break;
       default:
@@ -469,15 +538,19 @@ export class ScreenFlowController {
         this.closeCredits();
       } else if (this.flow.is('settings')) {
         this.closeSettings();
+      } else if (this.flow.is('collection')) {
+        this.closeCollection();
       }
     }
     return true;
   }
 
-  /** Left/right, which only the settings screen has anything to do with. */
+  /** Left/right: a slider on the settings screen, a column on the Collection's grid. */
   private adjustSettings(delta: 1 | -1): void {
     if (this.flow.is('settings')) {
       this.settings.adjust(delta);
+    } else if (this.flow.is('collection')) {
+      this.collection.moveFocusHorizontal(delta);
     }
   }
 

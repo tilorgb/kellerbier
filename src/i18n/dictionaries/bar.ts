@@ -39,6 +39,16 @@ export const bar: Record<DictKey, string> = {
   'ui.credits.line2': 'Baut mit Claude Code',
   'ui.credits.line3': 'Engine: three.js',
 
+  'ui.title.collection': 'Sammlung',
+  'ui.pause.collection': 'Sammlung',
+  'ui.collection.headline': 'Sammlung',
+  'ui.collection.back': 'Zruck',
+  'ui.collection.progress': '{found} / {total} gfundn',
+  'ui.collection.unknownName': '???',
+  'ui.collection.unknownHint': 'No ned gfundn. Heb’s auf, nacha woaßt, wos duad.',
+  'ui.collection.held': 'Hosd grad dabei',
+  'ui.collection.active': 'Aktive Sach',
+
   // --- A run ending -----------------------------------------------------
   'ui.gameOver.retry': 'No amoi',
   'ui.gameOver.results': 'Ergebnis',
@@ -195,6 +205,8 @@ export const bar: Record<DictKey, string> = {
   'ui.settings.accessibility.slowMode': 'Zeitlupn',
   'ui.settings.accessibility.slowModeOff': 'Aus',
   'ui.settings.accessibility.reduceAudioDistortion': 'Promille-Tonvazerrung runterdrahn',
+  'ui.settings.accessibility.statDisplay': 'Werte ozoang',
+  'ui.settings.accessibility.detailedPickupText': 'Genau hischreim, wos a Sach duad',
 
   'ui.settings.privacy.copy':
     'Playtest-Telemetrie is standardmäßig aus. Wennst des ospringst, wead nur auf dem ' +

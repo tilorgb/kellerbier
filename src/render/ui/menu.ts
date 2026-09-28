@@ -130,6 +130,7 @@ export class Menu {
   private focusIndex = 0;
   private menuWidth: number;
   private locked = false;
+  private focusVisible = true;
 
   constructor(kit: UiKit, items: readonly MenuItem[], options: MenuOptions = {}) {
     this.focusRing = new FocusRing(kit);
@@ -236,6 +237,17 @@ export class Menu {
     this.refresh();
   }
 
+  /**
+   * Shows or hides the focus highlight without changing which row holds it —
+   * for a screen whose keyboard/gamepad focus can leave the menu for
+   * something else on the same screen (the Collection's item grid), where a
+   * ring still drawn on "Back" would claim two things are focused at once.
+   */
+  setFocusVisible(visible: boolean): void {
+    this.focusVisible = visible;
+    this.syncVisualState();
+  }
+
   /** Moves focus to the next enabled row in `delta`'s direction, wrapping. A no-op with nothing enabled. */
   moveFocus(delta: 1 | -1): void {
     if (this.rows.length === 0 || this.rows.every((row) => row.disabled)) {
@@ -284,12 +296,12 @@ export class Menu {
     this.rows.forEach((row, index) => {
       row.label.tint = row.disabled
         ? UI_PALETTE.textDisabled
-        : index === this.focusIndex
+        : index === this.focusIndex && this.focusVisible
           ? UI_PALETTE.accent
           : UI_PALETTE.text;
     });
     const focused = this.rows[this.focusIndex];
-    if (focused === undefined || focused.disabled) {
+    if (focused === undefined || focused.disabled || !this.focusVisible) {
       this.focusRing.sync(null);
       return;
     }

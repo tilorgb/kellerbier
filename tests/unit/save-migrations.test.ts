@@ -143,6 +143,20 @@ describe('save migration chain (#45)', () => {
     expect(migrated.selectedCharacter).toBe('resi');
   });
 
+  it('back-fills a v8 save with an empty Collection', () => {
+    const v8 = {
+      schemaVersion: 8,
+      unlocks: ['promille'],
+      seenStoryBeats: ['opening'],
+    };
+    const migrated = sanitizeSave(migrateSave(v8));
+    expect(migrated.schemaVersion).toBe(SAVE_SCHEMA_VERSION);
+    expect(migrated.discoveredItems).toEqual([]);
+    // Untouched by the new step.
+    expect(migrated.seenStoryBeats).toEqual(['opening']);
+    expect(migrated.unlocks).toEqual(['promille']);
+  });
+
   it('migrates a v2 save with no run in progress without inventing one', () => {
     const migrated = sanitizeSave(migrateSave({ schemaVersion: 2, activeRun: null }));
     expect(migrated.activeRun).toBeNull();

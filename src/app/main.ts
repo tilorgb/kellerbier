@@ -54,6 +54,10 @@ import { RunResultsScreen } from '../render/run-results.js';
 import { MachinePickerScreen, type MachinePickerView } from '../render/machine-picker.js';
 import { HealthHud } from '../render/health-hud.js';
 import { ItemGateHud } from '../render/item-gate-hud.js';
+import { StatHud } from '../render/stat-hud.js';
+import { ItemDiscovery } from './collection.js';
+import { ItemRegistry } from '../sim/item/registry.js';
+import { ITEM_DEFINITIONS } from '../content/items/index.js';
 import { ItemStatusHud } from '../render/item-status-hud.js';
 import { MinimapHud } from '../render/minimap-hud.js';
 import { CurseHud } from '../render/curse-hud.js';
@@ -1196,6 +1200,17 @@ async function boot(progress: BootProgress): Promise<void> {
    * Wiesn's magenta a bare label is a label with no background at all.
    */
   const pickupToast = new TextPlate(kit, { colour: HUD_PALETTE.toastText });
+  /**
+   * The precise-effect second line an item toast or pedestal reveal gains
+   * with `settings.detailedPickupText` on — `''` when the setting is off or
+   * the pickup has no separate detail (`sim.ts`'s `itemDetailText`). Read on
+   * every frame's label build, so flipping the setting mid-toast shows on
+   * the next frame rather than on the next pickup.
+   */
+  const pickupDetailSuffix = (detail: string): string =>
+    settings.detailedPickupText && detail !== ''
+      ? `\n${t(preferences.locale, detail as DictKey)}`
+      : '';
   hudLayer.addChild(pickupToast.view);
   let pickupToastLabel = '';
 
@@ -1330,6 +1345,21 @@ async function boot(progress: BootProgress): Promise<void> {
   const itemStatusHud = new ItemStatusHud();
   hudLayer.addChild(itemStatusHud.view);
 
+  /**
+   * The opt-in stat column (\`settings.statDisplay\`) — Isaac's "Found HUD":
+   * the six stats in player units on the left edge, flashing a delta on
+   * every change. See \`render/stat-hud.ts\`.
+   */
+  const statHud = new StatHud(kit);
+  hudLayer.addChild(statHud.view);
+
+  /**
+   * Which items this save has ever held — the Collection's silhouettes
+   * (\`app/collection.ts\`). Observed once a frame from whatever the live run
+   * holds, so every way an item can arrive counts without being told.
+   */
+  const itemDiscovery = new ItemDiscovery(loadSave().discoveredItems);
+
   /** Item sets (#137): the "N/M held" progress row and the completion banner. */
   const itemSetHud = new ItemSetHud(kit, preferences.locale);
   hudLayer.addChild(itemSetHud.view);
@@ -1439,6 +1469,10 @@ async function boot(progress: BootProgress): Promise<void> {
     y += itemGateHud.height + HUD_ROW_GAP;
     itemStatusHud.view.position.set(HUD_MARGIN, y);
     y += itemStatusHud.height + HUD_ROW_GAP;
+    // Anchored at mid-height on its own rather than stacked, so it does not
+    // jump every time a row above appears — pushed down only if the stack
+    // has grown far enough to reach it.
+    statHud.view.position.set(HUD_MARGIN, Math.max(y, Math.round((height - statHud.height) / 2)));
 
     const centreX = Math.round(width / 2);
     itemSetHud.place(HUD_MARGIN, y, centreX, Math.round(height * 0.32));
@@ -2248,6 +2282,8 @@ async function boot(progress: BootProgress): Promise<void> {
       }
       itemGateHud.sync(sim);
       itemStatusHud.sync(sim);
+      statHud.sync(sim, settings.statDisplay);
+      itemDiscovery.observe(sim);
       itemSetHud.sync(sim);
       // Schlüsselbund picked up (or lost) mid-room: the minimap is only
       // rebuilt on a room change otherwise, and "the secret rooms appear on
@@ -2302,7 +2338,9 @@ async function boot(progress: BootProgress): Promise<void> {
       }
       const toast = sim.pickupToast;
       if (toast !== null) {
-        const label = `${toast.name} — ${t(preferences.locale, toast.description as DictKey)}`;
+        const label =
+          `${toast.name} — ${t(preferences.locale, toast.description as DictKey)}` +
+          pickupDetailSuffix(toast.detail);
         if (label !== pickupToastLabel) {
           pickupToastLabel = label;
           pickupToast.set(label);
@@ -2437,7 +2475,9 @@ async function boot(progress: BootProgress): Promise<void> {
       }
       const reveal = sim.pedestalReveal;
       if (reveal !== null) {
-        const label = `${reveal.name}\n${t(preferences.locale, reveal.description as DictKey)}`;
+        const label =
+          `${reveal.name}\n${t(preferences.locale, reveal.description as DictKey)}` +
+          pickupDetailSuffix(reveal.detail);
         if (label !== pedestalRevealLabel) {
           pedestalRevealLabel = label;
           pedestalReveal.set(label);
@@ -2522,6 +2562,10 @@ async function boot(progress: BootProgress): Promise<void> {
   });
 
   screenController = new ScreenFlowController({
+    collection: {
+      isDiscovered: (id) => itemDiscovery.has(id),
+      isHeld: (id) => sim.hasItem(id),
+    },
     kit,
     locale: preferences.locale,
     loop,
@@ -2552,6 +2596,21 @@ async function boot(progress: BootProgress): Promise<void> {
   hudLayer.addChild(screenController.pause.view);
   hudLayer.addChild(screenController.credits.view);
   hudLayer.addChild(screenController.title.view);
+  hudLayer.addChild(screenController.collection.view);
+  screenController.collection.setEntries(
+    // Its own registry over the full roster rather than \`sim.items\`: no run
+    // exists yet at this point in boot, and the Collection lists the game's
+    // items, not one run's.
+    new ItemRegistry(ITEM_DEFINITIONS).all.map((item) => ({
+      id: item.id,
+      name: item.name,
+      flavourKey: item.flavourText,
+      descriptionKey: item.description,
+      quality: item.quality,
+      active: item.active !== undefined,
+      art: itemArt[item.sprite] ?? null,
+    })),
+  );
   // Over the title screen's own pane and over the pause menu's dim alike, so
   // it is last of the four.
   hudLayer.addChild(screenController.settings.view);

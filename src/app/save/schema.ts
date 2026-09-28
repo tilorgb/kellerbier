@@ -72,8 +72,16 @@ import {
  * than a single `hasSeenOpening: boolean` — the chapter-two ending and any
  * later one-time beat get to reuse this store instead of each growing their
  * own flag.
+ *
+ * v9 adds `discoveredItems`: the id of every item this save has ever held,
+ * for the Collection screen (`render/collection-screen.ts`) — an item never
+ * picked up shows there as a silhouette. An id list for the same reason
+ * `seenStoryBeats` is one, and sanitised the same way; an id the current
+ * roster no longer has (an item cut from `content/items/index.ts`) is kept
+ * rather than pruned, so cutting an item and bringing it back later does not
+ * quietly un-discover it.
  */
-export const SAVE_SCHEMA_VERSION = 8;
+export const SAVE_SCHEMA_VERSION = 9;
 
 /**
  * The character a save with no opinion starts as (#47).
@@ -312,8 +320,14 @@ export interface SaveDataV8 extends Omit<SaveDataV7, 'schemaVersion'> {
   readonly seenStoryBeats: readonly string[];
 }
 
-/** The current schema version. A union the day a v9 lands and something still reads a v8. */
-export type SaveData = SaveDataV8;
+/** v9: `discoveredItems` — see `SAVE_SCHEMA_VERSION`'s own doc comment above. */
+export interface SaveDataV9 extends Omit<SaveDataV8, 'schemaVersion'> {
+  readonly schemaVersion: 9;
+  readonly discoveredItems: readonly string[];
+}
+
+/** The current schema version. A union the day a v10 lands and something still reads a v9. */
+export type SaveData = SaveDataV9;
 
 /** How many `bestRuns` entries a finished run keeps — see `app/meta/progress.ts`'s `withRunOutcome`. */
 export const MAX_BEST_RUNS = 10;
@@ -337,6 +351,7 @@ export function createDefaultSave(): SaveData {
     preferences: createDefaultPreferences(),
     telemetry: createDefaultTelemetryStore(),
     seenStoryBeats: [],
+    discoveredItems: [],
   };
 }
 
@@ -542,5 +557,6 @@ export function sanitizeSave(value: unknown): SaveData {
     preferences: sanitizePreferences(source.preferences),
     telemetry: sanitizeTelemetryStore(source.telemetry),
     seenStoryBeats: sanitizeStringArray(source.seenStoryBeats),
+    discoveredItems: sanitizeStringArray(source.discoveredItems),
   };
 }
