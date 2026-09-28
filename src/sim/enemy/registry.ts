@@ -139,6 +139,12 @@ export interface CompiledState {
   /** Exactly one, guaranteed by validation. */
   readonly movement: EnemyBehaviour;
   readonly firing: readonly FiringBehaviour[];
+  /**
+   * True for a state that attacks in a direction — an aimed shot, a
+   * `chargeAtPlayer`, a `meleeArc`. Such a state keeps an aim locked by the
+   * wind-up before it (`ENEMY_FLAG_AIM_LOCKED`); any other state releases it.
+   */
+  readonly aimsAttack: boolean;
   /** Ticks of telegraph from the moment the state begins. Zero for none. */
   readonly telegraphTicks: number;
   /** Ticks of invulnerability from the moment the state begins. Zero for none. */
@@ -406,6 +412,12 @@ export class EnemyRegistry {
         if (!(shooting.everyTicks >= 1)) {
           throw new Error(`${where}: "${name}" needs everyTicks of at least 1`);
         }
+        if (shooting.behaviour === 'fireOnBeat' && shooting.aimCardinal === true) {
+          throw new Error(
+            `${where}: "fireOnBeat" fires a full ring at nothing in particular — ` +
+              `"aimCardinal" has nothing to snap`,
+          );
+        }
         firing.push(shooting);
         continue;
       }
@@ -584,6 +596,10 @@ export class EnemyRegistry {
       name: state.name,
       movement,
       firing,
+      aimsAttack:
+        movement.behaviour === 'chargeAtPlayer' ||
+        meleeArc !== null ||
+        firing.some((shot) => shot.behaviour !== 'fireOnBeat'),
       telegraphTicks,
       invulnerableTicks,
       capturesLobTarget,

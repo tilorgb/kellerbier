@@ -46,9 +46,10 @@ export const dieZapfhahnOrgel: EnemyDefinition = {
     {
       // `everyTicks` far past the state's own `after`: one fan on the tick the
       // state begins (`FiringBehaviourBase`'s rule), never a second before the
-      // next spray state takes over. Aimed at the player like every Zapfhahn
-      // cone — the "safe lane" is the ground the fan is not crossing, and it
-      // moves because the next fan re-aims at wherever you went.
+      // next spray state takes over. All three fans aim at the spot the
+      // player stood on when `wind` began (the engine's wind-up aim lock) —
+      // each one wider than the last, so the safe lane is getting out from
+      // under that spot before the third fan covers it.
       name: 'spray1',
       behaviours: [
         { behaviour: 'pause' },

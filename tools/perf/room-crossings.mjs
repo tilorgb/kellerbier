@@ -222,22 +222,23 @@ const inventory = () =>
     return out;
   });
 
-// Teleports the player just inside one of the current room's doors and holds
-// the key toward it; returns the key held, or null when the room has no door.
-async function approachDoor() {
-  const door = await page.evaluate(() => {
+// Teleports the player just inside door `turn` (mod the door count) of the
+// current room and holds the key toward it; returns the key held, or null
+// when the room has no door.
+async function approachDoor(turn) {
+  const door = await page.evaluate((turn) => {
     const sim = window.__kellerbier.sim;
     const doors = sim.doors;
     if (doors.length === 0) return null;
-    // Rotate through the doors so a back-and-forth pair is not the only path.
-    const d = doors[Math.floor(sim.tick / 7) % doors.length];
+    const d = doors[turn % doors.length];
     return {
       direction: d.direction,
       cellCol: d.cellCol,
       cellRow: d.cellRow,
       centre: d.centre ?? null,
+      count: doors.length,
     };
-  });
+  }, turn);
   if (door === null) return null;
   await page.evaluate(
     ({ door }) => {
@@ -272,7 +273,12 @@ async function approachDoor() {
           cy = ccy;
         }
       }
-      const inset = 14;
+      // One pixel short of where the wall stops a walking player
+      // (`PLAYER_FOOTPRINT`, 5): right at the threshold, so the held key walks
+      // straight into `doorContact`. Any deeper and a block beside the door
+      // mouth (the cellar hall's barrier row) can overlap the landing spot,
+      // and collision throws the player clear of the door.
+      const inset = 6;
       if (door.direction === 'north') cy += inset;
       if (door.direction === 'south') cy -= inset;
       if (door.direction === 'west') cx += inset;
@@ -288,7 +294,20 @@ async function approachDoor() {
   );
   const key = DIR_KEY[door.direction];
   await page.keyboard.down(key);
-  return key;
+  return { key, count: door.count };
+}
+
+// Holds `held` until the room changes or `ms` runs out; returns the room id.
+async function waitForSwitch(before, held, ms) {
+  let after = before;
+  const deadline = Date.now() + ms;
+  while (Date.now() < deadline) {
+    after = await page.evaluate(() => window.__kellerbier.sim.roomId);
+    if (after !== before) break;
+    await page.waitForTimeout(30);
+  }
+  if (held) await page.keyboard.up(held);
+  return after;
 }
 
 const summarizeGl = (f) =>
@@ -300,32 +319,39 @@ const summarizeGl = (f) =>
 const log = [];
 let totalLinks = 0;
 let totalLinksAfterFirst = 0;
+// Which door the walk takes next. Advanced every crossing so a back-and-forth
+// pair is not the only path, and on every refused door: a key-locked treasure
+// door (the harness holds no Kellerschlüssel) or a gated boss door never
+// opens, and a pick that keeps landing on one would stall the whole walk.
+let doorTurn = 0;
 for (let c = 0; c < crossings; c++) {
   const before = await page.evaluate(() => window.__kellerbier.sim.roomId);
   const killed = await killAll();
   await page.waitForTimeout(400);
   const frameCountBefore = await page.evaluate(() => window.__perf.frames.length);
   const invBefore = diffInventory ? await inventory() : null;
-  const t0 = await page.evaluate(() => performance.now());
-  let held = null;
+  let t0 = await page.evaluate(() => performance.now());
+  let after = before;
   if (mode === 'tour') {
     await page.keyboard.press('n');
+    after = await waitForSwitch(before, null, 9000);
   } else {
-    held = await approachDoor();
-    if (held === null) {
+    // Try each of the room's doors at most once; a refused one costs a few
+    // seconds, not the crossing.
+    let approach = null;
+    for (let attempt = 0; ; attempt++) {
+      if (attempt > 0) t0 = await page.evaluate(() => performance.now());
+      approach = await approachDoor(doorTurn++);
+      if (approach === null) break;
+      after = await waitForSwitch(before, approach.key, 4000);
+      if (after !== before || attempt + 1 >= approach.count) break;
+    }
+    if (approach === null) {
       console.log('no doors in this room');
       break;
     }
   }
-  let after = before;
-  const deadline = Date.now() + 9000;
-  while (Date.now() < deadline) {
-    after = await page.evaluate(() => window.__kellerbier.sim.roomId);
-    if (after !== before) break;
-    await page.waitForTimeout(30);
-  }
   const tSwitch = await page.evaluate(() => performance.now());
-  if (held) await page.keyboard.up(held);
   if (after === before) {
     console.log(`crossing ${c}: no switch happened (mode ${mode})`);
     continue;
