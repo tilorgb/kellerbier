@@ -41,12 +41,13 @@ const SEEDS = Array.from({ length: 12 }, (_, index) => 200 + index);
 
 /**
  * How many of those runs may clear floor 1 without being touched before this
- * fails. One, not zero: the floor generator can produce a genuinely thin
+ * fails. Two, not zero: the floor generator can produce a genuinely thin
  * floor, and "backing away is still a *correct* answer to some rooms" is
  * #229's own acceptance criterion — this is a gate on the dominant strategy,
- * not a ban on retreating.
+ * not a ban on retreating. Raised from one to two when telegraphed attacks began
+ * aiming at where the player stood at wind-up (`docs/DECISIONS.md` #107).
  */
-const MAX_UNTOUCHED = 1;
+const MAX_UNTOUCHED = 2;
 
 describe('the retreat bot no longer walks through floor 1 (#228, #239)', () => {
   it('cannot clear floor 1 without taking a hit', () => {
