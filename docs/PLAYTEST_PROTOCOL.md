@@ -15,7 +15,9 @@ the **current build**:
 
 > `https://<owner>.github.io/<repo>/`
 
-This is what `main` publishes on every merge (`.github/workflows/ci.yml`'s `preview` job, target
+This is what `main` publishes on every merge — the **tester build** (`npm run build:tester`, the
+release-mode game with no editor dock, seed panel or playtest keys), not the reviewer build that
+pull-request previews use (`.github/workflows/ci.yml`'s `preview` job, target
 `.` rather than `pr/<number>`) — a single stable link that is always today's game, needing no
 setup, no build step and no account. Handing someone this link is the whole "distributable
 build" acceptance criterion: **someone who is not on the project can be playing within five

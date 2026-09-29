@@ -64,6 +64,21 @@ jobs:
           path: dist
           retention-days: 7
 
+      # The Pages root is what playtesters are sent to
+      # (docs/PLAYTEST_PROTOCOL.md §1), so `main` publishes this instead of
+      # the reviewer build above: the release-mode game with no editor dock,
+      # seed panel or playtest keys (src/app/build-mode.ts). Built on pull
+      # requests too, so a change that breaks it is caught before merge.
+      - name: Build the tester build
+        run: npm run build:tester
+
+      - name: Upload the tester build
+        uses: actions/upload-artifact@v4
+        with:
+          name: tester-${{ github.sha }}
+          path: dist-tester
+          retention-days: 7
+
   crossings:
     name: room-crossing gate
     needs: gate
@@ -257,10 +272,13 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # Pull requests publish the reviewer build (editors and playtest keys,
+      # so a change can be judged and edited from its own preview); the root
+      # publishes the tester build, which has none of that.
       - name: Download build
         uses: actions/download-artifact@v4
         with:
-          name: build-${{ github.sha }}
+          name: ${{ github.event_name == 'pull_request' && 'build' || 'tester' }}-${{ github.sha }}
           path: build
 
       - name: Publish to GitHub Pages
