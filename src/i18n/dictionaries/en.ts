@@ -239,6 +239,35 @@ export const en = {
   'ui.settings.privacy.clearButton': 'Clear',
   'ui.settings.privacy.shareToggle': 'Share anonymous playtest telemetry',
 
+  // --- Playtest build: welcome screen and post-run questions ---------------
+  'ui.playtest.welcome.title': 'Thanks for testing Kellerbier',
+  'ui.playtest.welcome.body':
+    'This is an early build and you are helping test it. Play however you like — there are ' +
+    'no wrong answers, and nobody is watching.',
+  'ui.playtest.welcome.consent':
+    'If you say yes, the game records anonymous stats about your runs (won or died, which ' +
+    'floor, how long, which items) and, after a run, may ask you one short question. You ' +
+    'choose whether to send anything, and you can turn it off in Settings. No name, no ' +
+    'account, nothing that says who you are.',
+  'ui.playtest.welcome.yes': 'Yes, count me in',
+  'ui.playtest.welcome.no': 'No thanks, just play',
+  'ui.playtest.prompt.heading': 'One quick question',
+  'ui.playtest.prompt.hint':
+    'Skip any time. Please leave out your name and other personal details.',
+  'ui.playtest.prompt.placeholder': 'Type your answer here…',
+  'ui.playtest.prompt.send': 'Send answer and run stats',
+  'ui.playtest.prompt.skip': 'Skip',
+  'ui.playtest.prompt.sending': 'Sending…',
+  'ui.playtest.prompt.thanks': 'Thank you!',
+  'ui.playtest.prompt.failed': 'Could not send — your answer is saved. You can try again.',
+  'ui.playtest.q.whatIsIt': 'In your own words, what is this game?',
+  'ui.playtest.q.confusion':
+    'What is one thing that killed you or slowed you down that you did not understand at the time?',
+  'ui.playtest.q.item': 'What is one thing you picked up or found that you did not understand?',
+  'ui.playtest.q.blocked':
+    'Was there a moment you wanted to do something the game would not let you? What was it?',
+  'ui.playtest.q.again': 'Would you play another run right now? Why or why not?',
+
   // --- Floor flavour lines (name stays Bavarian in every locale) ---------
   'floors.cellar.flavour': 'Watch your *Fiaß*.',
   'floors.rural.flavour': 'Sunny, peaceful, *Blaskapell’n*.',

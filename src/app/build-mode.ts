@@ -35,3 +35,20 @@ declare const __KELLERBIER_RELEASE__: boolean;
 
 export const IS_RELEASE_BUILD: boolean =
   typeof __KELLERBIER_RELEASE__ === 'boolean' ? __KELLERBIER_RELEASE__ : false;
+
+declare const __KELLERBIER_PLAYTEST__: boolean;
+
+/**
+ * True only in the build the Pages root serves to playtesters
+ * (`vite.tester.config.ts`): the welcome screen and the post-run questions
+ * (`app/playtest/`) belong to a test, not to the game a player buys.
+ * `?playtest` on the URL turns it on in any other build, so the flow can be
+ * tried from `npm run dev` or a PR preview without a special build.
+ */
+export const IS_PLAYTEST_BUILD: boolean =
+  typeof __KELLERBIER_PLAYTEST__ === 'boolean' ? __KELLERBIER_PLAYTEST__ : false;
+
+/** Whether this session runs the playtest flow: the tester build, or any build opened with `?playtest`. */
+export function isPlaytestSession(search: string = window.location.search): boolean {
+  return IS_PLAYTEST_BUILD || new URLSearchParams(search).has('playtest');
+}

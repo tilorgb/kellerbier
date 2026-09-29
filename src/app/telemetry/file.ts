@@ -15,6 +15,7 @@ interface TelemetryFile {
   readonly schemaVersion: number;
   readonly sessionId: string | null;
   readonly runs: TelemetryStore['runs'];
+  readonly feedback: TelemetryStore['feedback'];
 }
 
 /** The runs without the local-only `sentAt` bookkeeping — what leaves the device is the run and nothing about how it left. */
@@ -28,6 +29,7 @@ export function exportTelemetryText(store: TelemetryStore, compact = false): str
     schemaVersion: TELEMETRY_FILE_VERSION,
     sessionId: store.sessionId,
     runs: withoutLocalState(store.runs),
+    feedback: store.feedback.map(({ sentAt: _sentAt, ...entry }) => entry),
   };
   return compact ? JSON.stringify(file) : JSON.stringify(file, null, 2);
 }
@@ -48,6 +50,7 @@ export function parseTelemetryText(text: string): TelemetryStore | null {
     optedIn: true,
     sessionId: candidate.sessionId ?? null,
     runs: candidate.runs ?? [],
+    feedback: candidate.feedback ?? [],
   });
 }
 

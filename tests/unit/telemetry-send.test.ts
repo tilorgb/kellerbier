@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { copyTelemetry, sendTelemetry, unsentRuns } from '../../src/app/telemetry/send.js';
 import { exportTelemetryText } from '../../src/app/telemetry/file.js';
-import type { TelemetryRunRecord, TelemetryStore } from '../../src/app/telemetry/schema.js';
+import {
+  createDefaultTelemetryStore,
+  type TelemetryRunRecord,
+  type TelemetryStore,
+} from '../../src/app/telemetry/schema.js';
 
 function run(runId: string, extra: Partial<TelemetryRunRecord> = {}): TelemetryRunRecord {
   return {
@@ -22,7 +26,7 @@ function run(runId: string, extra: Partial<TelemetryRunRecord> = {}): TelemetryR
 }
 
 function store(runs: TelemetryRunRecord[], optedIn = true): TelemetryStore {
-  return { optedIn, sessionId: 'sess', runs };
+  return { ...createDefaultTelemetryStore(), optedIn, sessionId: 'sess', runs };
 }
 
 const ok = (): Promise<Response> => Promise.resolve(new Response('ok', { status: 200 }));
@@ -33,7 +37,7 @@ describe('sendTelemetry', () => {
     const s = store([run('a'), run('b', { sentAt: 5 })]);
     expect(unsentRuns(s).map((r) => r.runId)).toEqual(['a']);
     const sent = await sendTelemetry(s, 'https://x.test', fetchFn as unknown as typeof fetch);
-    expect(sent).toEqual(['a']);
+    expect(sent).toEqual({ runIds: ['a'], feedbackIds: [] });
     const init = fetchFn.mock.calls[0]?.[1];
     expect((init?.headers as Record<string, string>)['Content-Type']).toBe('text/plain');
     const body = JSON.parse(init?.body as string) as { sessionId: string; runs: unknown[] };

@@ -45,6 +45,23 @@ unavailable, **Copy my results** puts the same data on the clipboard for the tes
 into a message, and **Export as file** remains a last resort. Telemetry stays
 opt-in — a tester who would rather not is still a full session, just without that join.
 
+### Remote testers — no observer
+
+The rest of this protocol assumes someone is sitting next to the tester. For a tester who was
+just sent the link, the playtest build (`build:tester`, or any build opened with `?playtest`)
+does the observer's talking itself (`docs/DECISIONS.md` #110):
+
+- **A welcome screen on first launch** — "this is an early test, no wrong answers", what is
+  recorded, yes or no. Yes is the telemetry opt-in of §2; there is no code to read out, the
+  session id travels with everything they send. It says nothing about controls or mechanics,
+  for the reason §3 gives.
+- **One question after each run**, rotating through the five in §6 and skippable. Answering
+  sends the answer together with the run's stats, so nobody has to find a Settings tab.
+  Answers reach the report on #54 (`tools/telemetry/dashboard.mjs`, "Tester answers").
+
+What this cannot replace is the observation in §4: where they got stuck, what they never
+noticed. That is still a person watching, so keep running a few sessions in the room.
+
 ## 3. What the tester is told
 
 As little as possible. The point of a playtest is watching what someone does with *no* framing,

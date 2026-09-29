@@ -17,3 +17,10 @@
 comment on #54 up to date with the dashboard output. One-time setup: add a repository secret
 **`TELEMETRY_ADMIN_KEY`** (Settings → Secrets and variables → Actions) holding the Worker's
 `ADMIN_KEY`. Without it the workflow exits cleanly and reports nothing.
+
+## Updating the Worker
+
+When `worker.mjs` changes (it gained `feedback:` storage for the playtest questions, #110), open the
+Worker in Cloudflare → **Edit code**, paste the new file over the old one and **Deploy**. The
+bindings and secret stay. Old clients keep working: feedback is optional in the request.
+
