@@ -10,3 +10,10 @@
    Until then the Send button is hidden and testers can only Copy or Export.
 4. Read the data: `curl "<worker-url>/export?key=<ADMIN_KEY>" > runs.json`, then
    `node tools/telemetry/dashboard.mjs runs.json`.
+
+## Automatic report on the balance issue
+
+`.github/workflows/telemetry-report.yml` runs daily (and from the Actions tab) and keeps one
+comment on #54 up to date with the dashboard output. One-time setup: add a repository secret
+**`TELEMETRY_ADMIN_KEY`** (Settings → Secrets and variables → Actions) holding the Worker's
+`ADMIN_KEY`. Without it the workflow exits cleanly and reports nothing.
