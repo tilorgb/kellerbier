@@ -229,6 +229,37 @@ export const de: Record<DictKey, string> = {
   'ui.settings.privacy.clearButton': 'Löschen',
   'ui.settings.privacy.shareToggle': 'Anonyme Playtest-Telemetrie teilen',
 
+  // --- Playtest build: welcome screen and post-run questions ---------------
+  'ui.playtest.welcome.title': 'Danke fürs Testen von Kellerbier',
+  'ui.playtest.welcome.body':
+    'Das ist ein früher Stand, und du hilfst beim Testen. Spiel, wie du magst — es gibt ' +
+    'keine falschen Antworten, und niemand schaut dir zu.',
+  'ui.playtest.welcome.consent':
+    'Wenn du Ja sagst, zeichnet das Spiel anonyme Werte zu deinen Läufen auf (gewonnen ' +
+    'oder gestorben, welcher Stock, wie lange, welche Gegenstände) und stellt dir nach ' +
+    'einem Lauf vielleicht eine kurze Frage. Du entscheidest, ob etwas gesendet wird, und ' +
+    'kannst es in den Einstellungen ausschalten. Kein Name, kein Konto, nichts, was verrät, ' +
+    'wer du bist.',
+  'ui.playtest.welcome.yes': 'Ja, ich bin dabei',
+  'ui.playtest.welcome.no': 'Nein danke, ich spiele nur',
+  'ui.playtest.prompt.heading': 'Eine kurze Frage',
+  'ui.playtest.prompt.hint':
+    'Jederzeit überspringbar. Bitte keinen Namen und keine persönlichen Angaben.',
+  'ui.playtest.prompt.placeholder': 'Deine Antwort hier…',
+  'ui.playtest.prompt.send': 'Antwort und Lauf-Werte senden',
+  'ui.playtest.prompt.skip': 'Überspringen',
+  'ui.playtest.prompt.sending': 'Wird gesendet…',
+  'ui.playtest.prompt.thanks': 'Danke!',
+  'ui.playtest.prompt.failed':
+    'Senden hat nicht geklappt — deine Antwort ist gespeichert. Versuch es nochmal.',
+  'ui.playtest.q.whatIsIt': 'Was ist das für ein Spiel, in deinen eigenen Worten?',
+  'ui.playtest.q.confusion':
+    'Was hat dich getötet oder aufgehalten, ohne dass du es damals verstanden hast?',
+  'ui.playtest.q.item': 'Was hast du aufgehoben oder gefunden, ohne es zu verstehen?',
+  'ui.playtest.q.blocked':
+    'Gab es einen Moment, in dem du etwas tun wolltest, was das Spiel nicht zugelassen hat? Was war es?',
+  'ui.playtest.q.again': 'Würdest du jetzt gleich noch einen Lauf spielen? Warum oder warum nicht?',
+
   // --- Floor flavour lines (name stays Bavarian in every locale) ---------
   'floors.cellar.flavour': 'Pass auf deine *Fiaß* auf.',
   'floors.rural.flavour': 'Sonnig, friedlich, *Blaskapell’n*.',

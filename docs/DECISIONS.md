@@ -6143,3 +6143,34 @@ makes no CORS preflight.
 **Constrains:** #70's rule that any new field must answer #54's balance question still holds — this
 changed transport, not content. An automatic (no-click) send would be a new decision and a rewrite
 of the consent copy.
+
+## 110. The playtest build asks its own questions — welcome screen, one question per run
+
+**Decided:** M8, #159; extends #109. #159's protocol assumes an observer: someone reads the intro
+aloud and asks the five questions. A tester who was only sent the Pages link has neither. So the
+build they are sent carries the protocol's talking parts itself.
+
+**The rule.** `__KELLERBIER_PLAYTEST__` (`app/build-mode.ts`) is true only in `vite.tester.config.ts`'s
+build; `?playtest` turns the same flow on in any other build so it can be tried from `npm run dev`
+or a PR preview. Under it: a **welcome screen** on first launch (yes is the telemetry opt-in, no
+leaves a plain game, either way it is asked once), and after each run a **prompt with one question**,
+rotating through `PLAYTEST_QUESTIONS` (the protocol's §6 five) by a cursor in the save, skippable.
+Nothing appears for anyone who said no, and nothing appears in the shipped game.
+
+**Sending is still a click, and now the natural one.** The prompt's button says what it does —
+"Send answer and run stats" — and sends the answer plus every run not yet sent. Skip sends nothing.
+That is why a tester never needs Settings → Privacy; #109's rule that nothing leaves without a
+click is unchanged.
+
+**A DOM overlay, not canvas art.** The canvas UI has no text input, and a free-text answer wants a
+real `<textarea>` (paste, IME, mobile keyboards). The overlay swallows `keydown`/`keyup`/`keypress`
+so typing never reaches the game, which listens on `window`.
+
+**Free text is untrusted.** The prompt asks testers to leave out personal details, answers are capped
+at 1000 characters, the Worker re-caps them, and the dashboard flattens them to one line and defuses
+markup and `@`-mentions before they go into a GitHub comment.
+
+**Constrains:** the questions are the protocol's, not a survey tool — a new one has to be something
+§5 would allow ("ask what they did, not what they would like"). The observation checklist (§4) is
+not replaced; this only covers what a form can.
+

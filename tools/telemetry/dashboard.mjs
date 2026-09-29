@@ -31,6 +31,29 @@ const PROMILLE_TIER_NAMES = {
   6: 'Umgfalln',
 };
 
+/** The post-run questions' wording, by id (`src/app/playtest/questions.ts`) — the data carries only the id. */
+const QUESTION_LABELS = {
+  'what-is-it': 'In your own words, what is this game?',
+  confusion: 'What killed you or slowed you down that you did not understand?',
+  item: 'What did you pick up or find that you did not understand?',
+  blocked: 'A moment you wanted to do something the game would not let you?',
+  again: 'Would you play another run right now? Why or why not?',
+};
+
+/**
+ * Tester text is untrusted and ends up in a GitHub comment: collapse it to one
+ * line, defuse markup and @-mentions so a free-text box cannot ping anyone or
+ * inject a link/image.
+ */
+function safeText(text) {
+  return String(text)
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/[<>]/g, (c) => (c === '<' ? '&lt;' : '&gt;'))
+    .replace(/@/g, '@\u200b')
+    .replace(/[[\]()`*_~|#]/g, (c) => `\\${c}`);
+}
+
 const args = process.argv.slice(2);
 const outFlag = args.indexOf('--out');
 const outPath = outFlag === -1 ? undefined : args[outFlag + 1];
@@ -60,34 +83,38 @@ function resolveFiles(paths) {
   return files;
 }
 
-/** One telemetry export file's `runs`, or `[]` with a warning if it doesn't parse as one. */
-function readRuns(path) {
+/** One telemetry export file's parsed JSON, or `null` with a warning if it isn't one. */
+function readFile(path) {
   let parsed;
   try {
     parsed = JSON.parse(readFileSync(path, 'utf8'));
   } catch (error) {
     console.warn(`[telemetry-dashboard] skipping ${path}: not valid JSON (${error.message})`);
-    return [];
+    return null;
   }
   if (!Array.isArray(parsed?.runs)) {
     console.warn(
       `[telemetry-dashboard] skipping ${path}: no "runs" array — not a telemetry export`,
     );
-    return [];
+    return null;
   }
-  return parsed.runs;
+  return parsed;
 }
 
-const files = resolveFiles(inputs);
-const runs = files.flatMap(readRuns);
+const files = resolveFiles(inputs)
+  .map(readFile)
+  .filter((file) => file !== null);
+const runs = files.flatMap((file) => file.runs);
+// `feedback` is absent from files exported before the playtest build's questions existed.
+const feedback = files.flatMap((file) => (Array.isArray(file.feedback) ? file.feedback : []));
 
-if (runs.length === 0) {
+if (runs.length === 0 && feedback.length === 0) {
   console.log('No telemetry runs found in the given files.');
   process.exit(0);
 }
 
 const wins = runs.filter((run) => run.outcome === 'won').length;
-const winRate = wins / runs.length;
+const winRate = runs.length === 0 ? 0 : wins / runs.length;
 
 const byFloor = new Map();
 for (const run of runs) {
@@ -223,6 +250,29 @@ if (tierTotal === 0) {
   )) {
     const name = PROMILLE_TIER_NAMES[tier] ?? `tier ${tier}`;
     lines.push(`| ${name} | ${((ticks / tierTotal) * 100).toFixed(1)}% |`);
+  }
+}
+lines.push('');
+
+lines.push('#### Tester answers');
+lines.push('');
+if (feedback.length === 0) {
+  lines.push('_No answers yet._');
+} else {
+  const byQuestion = new Map();
+  for (const entry of feedback) {
+    const list = byQuestion.get(entry.questionId) ?? [];
+    list.push(entry);
+    byQuestion.set(entry.questionId, list);
+  }
+  for (const [id, entries] of byQuestion) {
+    lines.push(`**${QUESTION_LABELS[id] ?? safeText(id)}** (${String(entries.length)})`);
+    lines.push('');
+    for (const entry of entries) {
+      lines.push(`> ${safeText(entry.text)}`);
+      lines.push(`> — session \`${safeText(entry.sessionId ?? 'unknown').slice(0, 8)}\``);
+      lines.push('');
+    }
   }
 }
 lines.push('');

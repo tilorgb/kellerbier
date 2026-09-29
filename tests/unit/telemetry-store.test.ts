@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { installFakeLocalStorage } from '../helpers/fake-local-storage.js';
 import {
+  advanceQuestionCursor,
+  markFeedbackSent,
+  markWelcomed,
+  recordFeedback,
   clearTelemetryRuns,
   loadTelemetry,
   optIntoTelemetry,
@@ -9,6 +13,8 @@ import {
 } from '../../src/app/telemetry/store.js';
 import {
   createDefaultTelemetryStore,
+  MAX_FEEDBACK_LENGTH,
+  MAX_TELEMETRY_FEEDBACK,
   MAX_TELEMETRY_RUNS,
   sanitizeTelemetryStore,
   type TelemetryRunRecord,
@@ -133,15 +139,67 @@ describe('telemetry sanitisation (#54, #159)', () => {
 
 describe('telemetry file export (#54)', () => {
   it('parses back what it exported', () => {
-    const store = { optedIn: true, sessionId: 'session-1', runs: [fakeRun()] };
+    const store = {
+      ...createDefaultTelemetryStore(),
+      optedIn: true,
+      sessionId: 'session-1',
+      runs: [fakeRun()],
+      feedback: [{ id: 'f1', questionId: 'confusion', text: 'the Maibaum', answeredAt: 5 }],
+    };
     const text = exportTelemetryText(store);
     const parsed = parseTelemetryText(text);
     expect(parsed?.sessionId).toBe('session-1');
     expect(parsed?.runs).toEqual([fakeRun()]);
+    expect(parsed?.feedback).toEqual(store.feedback);
   });
 
   it('rejects a file that is not telemetry at all', () => {
     expect(parseTelemetryText('not json')).toBeNull();
     expect(parseTelemetryText('42')).toBeNull();
+  });
+});
+
+describe('playtest feedback (#159)', () => {
+  it('records an answer only when opted in, and never a blank one', () => {
+    installFakeLocalStorage();
+    recordFeedback('confusion', 'the Maibaum', 1);
+    expect(loadTelemetry().feedback).toHaveLength(0);
+    optIntoTelemetry();
+    recordFeedback('confusion', '   ', 2);
+    expect(loadTelemetry().feedback).toHaveLength(0);
+    recordFeedback('confusion', '  the Maibaum  ', 3);
+    expect(loadTelemetry().feedback.map((entry) => entry.text)).toEqual(['the Maibaum']);
+  });
+
+  it('caps an answer at MAX_FEEDBACK_LENGTH and the buffer at MAX_TELEMETRY_FEEDBACK', () => {
+    installFakeLocalStorage();
+    optIntoTelemetry();
+    recordFeedback('q', 'x'.repeat(MAX_FEEDBACK_LENGTH + 500), 1);
+    expect(loadTelemetry().feedback[0]?.text).toHaveLength(MAX_FEEDBACK_LENGTH);
+    for (let index = 0; index < MAX_TELEMETRY_FEEDBACK + 5; index += 1) {
+      recordFeedback('q', `answer ${String(index)}`, index);
+    }
+    expect(loadTelemetry().feedback).toHaveLength(MAX_TELEMETRY_FEEDBACK);
+  });
+
+  it('stamps delivered answers and advances the question cursor', () => {
+    installFakeLocalStorage();
+    optIntoTelemetry();
+    recordFeedback('q', 'hello', 1);
+    const id = loadTelemetry().feedback[0]?.id ?? '';
+    markFeedbackSent([id], 9);
+    expect(loadTelemetry().feedback[0]?.sentAt).toBe(9);
+    expect(loadTelemetry().questionCursor).toBe(0);
+    advanceQuestionCursor();
+    expect(loadTelemetry().questionCursor).toBe(1);
+    markWelcomed();
+    expect(loadTelemetry().welcomed).toBe(true);
+  });
+
+  it('defaults an older save that has none of the new fields', () => {
+    const store = sanitizeTelemetryStore({ optedIn: true, sessionId: 's', runs: [] });
+    expect(store.feedback).toEqual([]);
+    expect(store.welcomed).toBe(false);
+    expect(store.questionCursor).toBe(0);
   });
 });

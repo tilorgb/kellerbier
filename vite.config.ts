@@ -23,6 +23,8 @@ export default defineConfig({
     // `src/app/build-mode.ts`. Three builds, not two — see its doc comment.
     // `vite.release.config.ts` is the only thing that flips this.
     __KELLERBIER_RELEASE__: 'false',
+    // `src/app/build-mode.ts`. Only `vite.tester.config.ts` flips this.
+    __KELLERBIER_PLAYTEST__: 'false',
   },
   // Dev-only: `configureServer` middleware never runs under `vite build`, so
   // the room editor's (#24) and pixel editor's (#108) save endpoints never

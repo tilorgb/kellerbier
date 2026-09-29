@@ -22,6 +22,7 @@ export default defineConfig({
   define: {
     ...baseConfig.define,
     __KELLERBIER_RELEASE__: 'true',
+    __KELLERBIER_PLAYTEST__: 'true',
   },
   build: {
     ...baseConfig.build,
