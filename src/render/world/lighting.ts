@@ -24,8 +24,9 @@ import { OCCLUDER_LAYER } from './layers.js';
  *
  * A floor is either a **cellar** — dark, lit by the bulbs that hang in it,
  * every one a real point light with a cord and a glass — or under
- * **daylight**: a sky, a sun that casts the shadows, and a cloud that drifts
- * across the room every fifty seconds and takes the light with it. The
+ * **daylight**: a sky, a sun that casts the shadows, and two clouds that
+ * drift across the room on their own cycles, each crossing on a different
+ * lane and in one of a few shapes, and take the light with them. The
  * tileset says which (`FloorTileset.lighting`), and a room with no authored
  * `bulb` prop in a cellar gets two by default, because a cellar with no light
  * in it is a black screen, not a mood.
@@ -119,8 +120,24 @@ export const MAX_PROP_LIGHTS = 3;
 
 const BULB_HEIGHT = 34;
 const CLOUD_HEIGHT = 90;
-const CLOUD_CYCLE_TICKS = TICKS_PER_SECOND * 50;
-const CLOUD_CROSS_TICKS = TICKS_PER_SECOND * 16;
+/** How long one cloud takes to cross the room, west edge to east edge. */
+export const CLOUD_CROSS_TICKS = TICKS_PER_SECOND * 18;
+/**
+ * The two clouds' cycles: each crosses once per `cycleTicks`, starting
+ * `offsetTicks` into the run. Different, co-prime-ish cycle lengths so the
+ * pair drifts in and out of step — usually one shadow somewhere in the room,
+ * sometimes two, sometimes a stretch of clear sun — instead of a pattern the
+ * player can clock.
+ */
+export const CLOUD_CYCLES: readonly {
+  readonly cycleTicks: number;
+  readonly offsetTicks: number;
+}[] = [
+  { cycleTicks: TICKS_PER_SECOND * 34, offsetTicks: 0 },
+  { cycleTicks: TICKS_PER_SECOND * 47, offsetTicks: TICKS_PER_SECOND * 17 },
+];
+/** How far a crossing's shadow lane may drift north/south over the run, as a fraction of the room's depth. */
+const CLOUD_DRIFT = 0.15;
 const DOOR_GLOW_COLOUR = 0xff9a3c;
 
 interface RigColours {
@@ -189,10 +206,13 @@ export class Lighting {
   /** Fixed pool of bulb rigs — see `MAX_ROOM_BULBS`. Reassigned wholesale by `onRoomChanged`, not acquired/released. */
   private readonly bulbRigs: BulbRig[] = [];
   private warnedBulbOverflow = false;
-  /** One persistent cloud mesh, repositioned and resized per room rather than rebuilt — see `positionCloud`. */
-  private readonly cloud: Mesh | null;
-  private cloudSpanX = 0;
-  private cloudCentreZ = 0;
+  /** One persistent mesh per `CLOUD_CYCLES` entry, re-shaped and re-laned per crossing rather than rebuilt — see `sync`. */
+  private readonly clouds: readonly Mesh[];
+  private frameWidth = 0;
+  private frameHeight = 0;
+  /** Where a cloud at `CLOUD_HEIGHT` throws its shadow, relative to itself — see `positionCloud`. */
+  private shadowOffsetX = 0;
+  private shadowOffsetZ = 0;
   private cloudMovingValue = false;
   private rig: LightingRig = 'cellar';
   private reducedMotion = false;
@@ -243,10 +263,15 @@ export class Lighting {
     for (let i = 0; i < MAX_ROOM_BULBS; i++) {
       this.bulbRigs.push(this.buildBulbRig());
     }
-    this.cloud = buildCloudMesh();
-    if (this.cloud !== null) {
-      scene.add(this.cloud);
+    const clouds: Mesh[] = [];
+    for (const _cycle of CLOUD_CYCLES) {
+      const cloud = buildCloudMesh();
+      if (cloud !== null) {
+        clouds.push(cloud);
+        scene.add(cloud);
+      }
     }
+    this.clouds = clouds;
   }
 
   setReducedMotion(reduced: boolean): void {
@@ -466,46 +491,89 @@ export class Lighting {
   }
 
   private hideCloud(): void {
-    if (this.cloud !== null) {
-      this.cloud.visible = false;
+    for (const cloud of this.clouds) {
+      cloud.visible = false;
     }
     this.cloudMovingValue = false;
   }
 
-  /** Sizes and places the persistent cloud mesh for this room, rather than rebuilding its geometry. */
+  /**
+   * Remembers this room's size and where the key light throws a cloud's
+   * shadow. The cloud hangs `CLOUD_HEIGHT` up and the key comes from high on
+   * the camera's side, so the shadow lands well north of the plane casting it
+   * — about a quarter of the room's depth. Before #11's follow-up the plane
+   * sat over the room's centre and that offset put every crossing's shadow in
+   * the top half; the lane is now chosen for the *shadow*, and the plane is
+   * placed back along the light ray from it.
+   */
   private positionCloud(frameWidth: number, frameHeight: number): void {
-    const cloud = this.cloud;
-    if (cloud === null) {
-      return;
-    }
-    const width = frameWidth * 0.85;
-    const depth = frameHeight * 0.6;
-    cloud.scale.set(width, depth, 1);
-    this.cloudSpanX = frameWidth + width;
-    this.cloudCentreZ = frameHeight / 2;
-    cloud.position.set(-width, CLOUD_HEIGHT, frameHeight / 2);
+    this.frameWidth = frameWidth;
+    this.frameHeight = frameHeight;
+    const key = this.key.position;
+    const target = this.key.target.position;
+    const drop = CLOUD_HEIGHT / Math.max(1, key.y - target.y);
+    this.shadowOffsetX = (target.x - key.x) * drop;
+    this.shadowOffsetZ = (target.z - key.z) * drop;
+    this.hideCloud();
   }
 
-  /** Drives the cloud along its cycle. Pure function of the tick, so a replay clouds over at the same moment. */
+  /**
+   * Drives the clouds along their cycles. Each crossing — cloud `i`'s `n`th —
+   * picks its silhouette, size and shadow lane from a hash of `(i, n)`, so the
+   * sky varies crossing to crossing and is still a pure function of the tick:
+   * a replay clouds over at the same moment, in the same place.
+   */
   sync(tick: number): void {
-    const cloud = this.cloud;
-    if (cloud === null || this.rig !== 'daylight') {
+    if (this.clouds.length === 0 || this.rig !== 'daylight') {
       return;
     }
-    const phase = tick % CLOUD_CYCLE_TICKS;
-    if (phase >= CLOUD_CROSS_TICKS || this.reducedMotion) {
-      cloud.visible = false;
-      this.cloudMovingValue = false;
-      return;
+    let moving = false;
+    for (let i = 0; i < this.clouds.length; i++) {
+      const cloud = this.clouds[i];
+      const cycle = CLOUD_CYCLES[i];
+      if (cloud === undefined || cycle === undefined) {
+        continue;
+      }
+      const shifted = tick + cycle.cycleTicks - cycle.offsetTicks;
+      const phase = shifted % cycle.cycleTicks;
+      if (phase >= CLOUD_CROSS_TICKS || this.reducedMotion) {
+        cloud.visible = false;
+        continue;
+      }
+      moving = true;
+      cloud.visible = true;
+      this.placeCrossing(
+        cloud,
+        crossingOf(i, Math.floor(shifted / cycle.cycleTicks)),
+        phase / CLOUD_CROSS_TICKS,
+      );
     }
-    cloud.visible = true;
-    this.cloudMovingValue = true;
-    const t = phase / CLOUD_CROSS_TICKS;
-    const width = cloud.scale.x;
-    cloud.position.set(-width / 2 + this.cloudSpanX * t, CLOUD_HEIGHT, this.cloudCentreZ);
+    this.cloudMovingValue = moving;
   }
 
-  /** Whether the cloud is currently visible and crossing — the shadow map needs a fresh render while it is. */
+  /** Shapes one cloud for its crossing and puts it `t` of the way across, so that its *shadow* runs along the lane. */
+  private placeCrossing(cloud: Mesh, crossing: CloudCrossing, t: number): void {
+    const silhouette = CLOUD_SILHOUETTES[crossing.silhouette];
+    if (silhouette === undefined) {
+      return;
+    }
+    const texture = cloudTexture(crossing.silhouette);
+    const material = cloud.material as MeshBasicMaterial;
+    if (texture !== null && material.map !== texture) {
+      material.map = texture;
+      (cloud.customDepthMaterial as MeshDepthMaterial).map = texture;
+    }
+    const h = this.frameHeight;
+    const width = silhouette.width * h * crossing.scale;
+    const depth = silhouette.depth * h * crossing.scale;
+    cloud.scale.set(width, depth, 1);
+    // Enter fully off the west edge, leave fully off the east one — measured on the shadow.
+    const shadowX = -width / 2 + (this.frameWidth + width) * t;
+    const shadowZ = h * (crossing.lane + crossing.drift * (t - 0.5));
+    cloud.position.set(shadowX - this.shadowOffsetX, CLOUD_HEIGHT, shadowZ - this.shadowOffsetZ);
+  }
+
+  /** Whether any cloud is currently visible and crossing — the shadow map needs a fresh render while it is. */
   get cloudMoving(): boolean {
     return this.cloudMovingValue;
   }
@@ -555,21 +623,125 @@ function defaultBulbs(
  */
 export const SHADOW_MAP_SIZE = 1024;
 
-/**
- * A soft cloud silhouette painted into a canvas, or null with no DOM (the
- * headless bench). Built once and shared across every `Lighting` instance —
- * but only a *successful* build is cached: a `Lighting` constructed before a
- * DOM exists (this module loading in a worker, a test's own sequencing)
- * leaves the next one free to try again, rather than a transient "no DOM
- * yet" wrongly becoming a permanent "no cloud ever" for the whole process.
- */
-let sharedCloudTexture: CanvasTexture | null = null;
+/** Which silhouette, how big, and which lane one crossing takes — see `crossingOf`. */
+interface CloudCrossing {
+  readonly silhouette: number;
+  /** Size multiplier on the silhouette's own dimensions, 0.8-1.2. */
+  readonly scale: number;
+  /** Where the shadow's centre runs, as a fraction of the room's depth (0 = north wall). */
+  readonly lane: number;
+  /** How far the lane drifts north (-) or south (+) over the crossing, same units. */
+  readonly drift: number;
+}
 
-function cloudTexture(): CanvasTexture | null {
-  if (sharedCloudTexture !== null) {
-    return sharedCloudTexture;
+/**
+ * Cloud `cloud`'s `n`th crossing, deterministically: a small integer hash of
+ * the pair, so every crossing looks different but a replay's are the same.
+ * The lane spans the whole room — north wall to south — which is the point:
+ * a shadow the player can be caught in anywhere, not only up by the back wall.
+ */
+export function crossingOf(cloud: number, n: number): CloudCrossing {
+  let state = (Math.imul(cloud + 1, 0x9e3779b1) ^ Math.imul(n + 1, 0x85ebca77)) >>> 0;
+  const next = (): number => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let x = state;
+    x = Math.imul(x ^ (x >>> 15), x | 1);
+    x ^= x + Math.imul(x ^ (x >>> 7), x | 61);
+    return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+  };
+  return {
+    silhouette: Math.floor(next() * CLOUD_SILHOUETTES.length),
+    scale: 0.8 + next() * 0.4,
+    lane: 0.12 + next() * 0.76,
+    drift: (next() * 2 - 1) * CLOUD_DRIFT,
+  };
+}
+
+interface Puff {
+  readonly x: number;
+  readonly y: number;
+  readonly r: number;
+}
+
+/**
+ * The cloud shapes a crossing picks from. `puffs` are painted into a square
+ * texture (unit coordinates); `width`/`depth` are the plane's size in units of
+ * the room's depth, which stretches that square into the silhouette's
+ * proportions — so a streak's puffs are drawn tall and round and come out
+ * long and low on the floor.
+ */
+const CLOUD_SILHOUETTES: readonly {
+  readonly width: number;
+  readonly depth: number;
+  readonly puffs: readonly Puff[];
+}[] = [
+  // A broad cumulus — the original shape.
+  {
+    width: 1.3,
+    depth: 0.6,
+    puffs: [
+      { x: 0.32, y: 0.48, r: 0.24 },
+      { x: 0.5, y: 0.4, r: 0.27 },
+      { x: 0.68, y: 0.5, r: 0.22 },
+      { x: 0.42, y: 0.6, r: 0.19 },
+      { x: 0.6, y: 0.62, r: 0.18 },
+      { x: 0.24, y: 0.56, r: 0.14 },
+      { x: 0.78, y: 0.42, r: 0.13 },
+      { x: 0.55, y: 0.52, r: 0.2 },
+      { x: 0.37, y: 0.38, r: 0.12 },
+    ],
+  },
+  // A small, round puff.
+  {
+    width: 0.75,
+    depth: 0.6,
+    puffs: [
+      { x: 0.5, y: 0.5, r: 0.28 },
+      { x: 0.33, y: 0.55, r: 0.2 },
+      { x: 0.67, y: 0.55, r: 0.2 },
+      { x: 0.42, y: 0.35, r: 0.18 },
+      { x: 0.6, y: 0.37, r: 0.17 },
+      { x: 0.5, y: 0.68, r: 0.17 },
+      { x: 0.25, y: 0.45, r: 0.12 },
+      { x: 0.76, y: 0.44, r: 0.12 },
+    ],
+  },
+  // A long, low streak with a ragged tail.
+  {
+    width: 1.7,
+    depth: 0.4,
+    puffs: [
+      { x: 0.1, y: 0.6, r: 0.08 },
+      { x: 0.2, y: 0.55, r: 0.14 },
+      { x: 0.32, y: 0.45, r: 0.2 },
+      { x: 0.46, y: 0.5, r: 0.24 },
+      { x: 0.6, y: 0.42, r: 0.2 },
+      { x: 0.72, y: 0.55, r: 0.18 },
+      { x: 0.84, y: 0.5, r: 0.12 },
+      { x: 0.4, y: 0.64, r: 0.16 },
+      { x: 0.56, y: 0.63, r: 0.15 },
+    ],
+  },
+];
+
+/**
+ * Soft cloud silhouettes painted into canvases, one per `CLOUD_SILHOUETTES`
+ * entry, or null with no DOM (the headless bench). Built once and shared
+ * across every `Lighting` instance — but only a *successful* build is cached:
+ * a `Lighting` constructed before a DOM exists (this module loading in a
+ * worker, a test's own sequencing) leaves the next one free to try again,
+ * rather than a transient "no DOM yet" wrongly becoming a permanent "no cloud
+ * ever" for the whole process.
+ */
+const sharedCloudTextures: (CanvasTexture | undefined)[] = [];
+
+function cloudTexture(index: number): CanvasTexture | null {
+  const cached = sharedCloudTextures[index];
+  if (cached !== undefined) {
+    return cached;
   }
-  if (typeof document === 'undefined') {
+  const silhouette = CLOUD_SILHOUETTES[index];
+  if (silhouette === undefined || typeof document === 'undefined') {
     return null;
   }
   const size = 256;
@@ -587,25 +759,34 @@ function cloudTexture(): CanvasTexture | null {
   // the edge on the floor. A faint outer haze (`blur`) rounds the union's
   // concave joins so it never looks like tiled circles either.
   context.filter = 'blur(3px)';
-  for (const puff of CLOUD_PUFFS) {
+  for (const puff of silhouette.puffs) {
     context.beginPath();
     context.arc(puff.x * size, puff.y * size, puff.r * size, 0, Math.PI * 2);
     context.fillStyle = 'rgba(0,0,0,1)';
     context.fill();
   }
   context.filter = 'none';
-  sharedCloudTexture = new CanvasTexture(canvas);
-  return sharedCloudTexture;
+  const texture = new CanvasTexture(canvas);
+  sharedCloudTextures[index] = texture;
+  return texture;
 }
 
-/** A unit-square cloud plane, scaled and positioned per room by `positionCloud` rather than rebuilt. */
+/** A unit-square cloud plane, shaped and positioned per crossing by `Lighting.placeCrossing` rather than rebuilt. */
 function buildCloudMesh(): Mesh | null {
-  const texture = cloudTexture();
+  const texture = cloudTexture(0);
   if (texture === null) {
     return null;
   }
+  // `alphaTest` has to be on the mesh's *own* material, not only on the
+  // custom depth material: three.js's shadow pass copies `material.alphaTest`
+  // (and `map`) onto whatever depth material it uses, custom or not
+  // (`WebGLShadowMap.getDepthMaterial`). With it left at 0 here, the depth
+  // material's 0.5 was overwritten every frame and the whole square plane cast
+  // its shadow — the "cloud is a box" bug. The plane itself is never seen
+  // (opacity 0), so the cut changes nothing on screen, only in the shadow.
   const material = new MeshBasicMaterial({
     map: texture,
+    alphaTest: 0.5,
     transparent: true,
     opacity: 0,
     depthWrite: false,
@@ -619,18 +800,7 @@ function buildCloudMesh(): Mesh | null {
   });
   cloud.castShadow = true;
   cloud.rotation.x = -Math.PI / 2;
+  cloud.position.y = CLOUD_HEIGHT;
   cloud.visible = false;
   return cloud;
 }
-
-const CLOUD_PUFFS: readonly { readonly x: number; readonly y: number; readonly r: number }[] = [
-  { x: 0.32, y: 0.48, r: 0.24 },
-  { x: 0.5, y: 0.4, r: 0.27 },
-  { x: 0.68, y: 0.5, r: 0.22 },
-  { x: 0.42, y: 0.6, r: 0.19 },
-  { x: 0.6, y: 0.62, r: 0.18 },
-  { x: 0.24, y: 0.56, r: 0.14 },
-  { x: 0.78, y: 0.42, r: 0.13 },
-  { x: 0.55, y: 0.52, r: 0.2 },
-  { x: 0.37, y: 0.38, r: 0.12 },
-];
