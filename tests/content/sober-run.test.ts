@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { ITEM_DEFINITIONS } from '../../src/content/items/index.js';
 import {
   BOSS_REWARD_DROP_TABLE,
+  CHEST_DROP_TABLE,
   ENEMY_DROP_TABLES,
+  LOCKED_CHEST_DROP_TABLE,
   PICKUP_DEFINITIONS,
   ROOM_CLEAR_DROP_TABLE,
 } from '../../src/content/pickups/index.js';
@@ -101,6 +103,8 @@ describe('a sober run contains no beer (#85)', () => {
     ['tough enemies', ENEMY_DROP_TABLES.tough],
     ['room clear', ROOM_CLEAR_DROP_TABLE],
     ['boss reward', BOSS_REWARD_DROP_TABLE],
+    ['chest', CHEST_DROP_TABLE],
+    ['locked chest', LOCKED_CHEST_DROP_TABLE],
   ];
 
   it.each(tables)('the %s sober table never names a Promille pickup', (_name, table) => {
@@ -210,6 +214,8 @@ describe('a sober run never says the word (#85)', () => {
       ENEMY_DROP_TABLES.tough,
       ROOM_CLEAR_DROP_TABLE,
       BOSS_REWARD_DROP_TABLE,
+      CHEST_DROP_TABLE,
+      LOCKED_CHEST_DROP_TABLE,
     ]) {
       for (const entry of table.sober) {
         if (entry.pickupId !== null) {

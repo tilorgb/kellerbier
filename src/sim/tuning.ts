@@ -908,6 +908,28 @@ export interface MinibossRewardTuning {
 }
 
 /**
+ * Chest and Locked Chest (#353): the numbers behind what opening one pays and
+ * how often an elite leaves one. Which pickups a chest bursts into is data
+ * (`CHEST_DROP_TABLE`/`LOCKED_CHEST_DROP_TABLE`); these are the rolls around
+ * those tables.
+ */
+export interface ChestTuning {
+  /**
+   * Chance a Locked Chest's whole payout is a `treasure`-pool item pedestal
+   * instead of pickups. Kept low on purpose — an item out of a chest is meant
+   * to feel special, not like the treasure room's second door (#353).
+   */
+  lockedItemChance: number;
+  /**
+   * Chance an elite's guaranteed drop (#156) is a Chest instead of its tier
+   * roll. Rises with depth for free, since the elite chance itself does.
+   */
+  eliteChestChance: number;
+  /** How far (px) from the chest its payout pickups land. */
+  payoutSpread: number;
+}
+
+/**
  * Der Losbrunnen (#218): feed a held item's numeric traits a reroll, for an
  * increasing Biermarken price, with a chance the roll makes the item worse
  * and a chance the machine itself breaks. Its own group rather than folded
@@ -984,6 +1006,7 @@ export interface SimTuning {
   readonly blutwurz: BlutwurzTuning;
   readonly machine: MachineTuning;
   readonly minibossReward: MinibossRewardTuning;
+  readonly chest: ChestTuning;
 }
 
 export const DEFAULT_MOVEMENT_TUNING: Readonly<MovementTuning> = {
@@ -1397,6 +1420,17 @@ export const DEFAULT_MINIBOSS_REWARD_TUNING: Readonly<MinibossRewardTuning> = {
   secondItemChance: 0.2,
 };
 
+/**
+ * About one Locked Chest in twelve holds an item; about one elite in seven
+ * leaves a Chest. Both starting numbers from the #353 design round, not a
+ * balance pass.
+ */
+export const DEFAULT_CHEST_TUNING: Readonly<ChestTuning> = {
+  lockedItemChance: 0.08,
+  eliteChestChance: 0.15,
+  payoutSpread: 14,
+};
+
 export const DEFAULT_MACHINE_TUNING: Readonly<MachineTuning> = {
   spawnChance: 0.85,
   baseCost: 1,
@@ -1433,6 +1467,7 @@ export function createTuning(): SimTuning {
     roomGen: { ...DEFAULT_ROOM_GEN_TUNING },
     machine: { ...DEFAULT_MACHINE_TUNING },
     minibossReward: { ...DEFAULT_MINIBOSS_REWARD_TUNING },
+    chest: { ...DEFAULT_CHEST_TUNING },
   };
 }
 

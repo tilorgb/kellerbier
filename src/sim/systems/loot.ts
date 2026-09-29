@@ -44,5 +44,13 @@ function dropFromEvent(slot: number): void {
   // "nothing" outcome taken out (`GameSim.dropLoot`'s `guaranteed`). The
   // reward half of "hits double, drops loot": the mask check above still
   // holds here because entity teardown is deferred past the loot pass.
-  sim.dropLoot(ENEMY_DROP_TABLES[tier], atX, atY, isEnemyElite(sim, index));
+  const elite = isEnemyElite(sim, index);
+  // An elite's guaranteed drop is sometimes a Chest instead (#353) — never a
+  // Locked Chest, since the elite fight was already the price. Rolled off
+  // the same loot stream `dropLoot` reads.
+  if (elite && sim.random.items.chance(sim.tuning.chest.eliteChestChance)) {
+    sim.dropPickupAt('chest', atX, atY);
+    return;
+  }
+  sim.dropLoot(ENEMY_DROP_TABLES[tier], atX, atY, elite);
 }

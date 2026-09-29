@@ -71,10 +71,10 @@ describe('mini-boss reward roll (#278)', () => {
     expect(sim.activePedestals.length).toBe(1);
     // A hit pays the pedestal only — the consolation bundle is the *miss*
     // case, never both.
-    expect(livePickupKinds(sim)).not.toContain('mass-half');
+    expect(livePickupKinds(sim)).not.toContain('locked-chest');
   });
 
-  it('a forced miss still pays the guaranteed key plus the consolation bundle, never a bare nothing', () => {
+  it('a forced miss still pays the guaranteed key plus a Locked Chest and its key (#353), never a bare nothing', () => {
     const sim = new GameSim({ roomTemplate: cellarMiniboss, floor: 1 });
     sim.tuning.minibossReward.firstItemChance = 0;
 
@@ -82,8 +82,7 @@ describe('mini-boss reward roll (#278)', () => {
 
     const kinds = livePickupKinds(sim);
     expect(kinds).toContain('meisterschluessel');
-    expect(kinds).toContain('mass-half');
-    expect(kinds).toContain('biermarke-5');
+    expect(kinds).toContain('locked-chest');
     expect(kinds).toContain('kellerschluessel');
     expect(sim.activePedestals.length).toBe(0);
   });
