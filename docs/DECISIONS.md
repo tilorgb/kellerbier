@@ -6082,6 +6082,14 @@ the aim to the nearest of N/S/E/W before a fan is centred on it. The floor-one t
 the room's axes rather than at the player, which makes its safe ground readable at a glance.
 Rejected on `fireOnBeat` at compile time, since there is nothing there to snap.
 
+**The cost, and the retreat gate.** Locking the aim makes backing away from an enemy while
+shooting it a stronger answer: the nightly retreat-bot gate (`tests/playtest/retreat-bot.test.ts`,
+#228) went from at most one untouched floor-1 clear in twelve seeds to two (seeds 201, 202). That
+was accepted on purpose — the aim lock is the fix for "enemies read as too hard", so some of the
+pressure pass is traded for readability — and `MAX_UNTOUCHED` was raised from 1 to 2. If the number
+climbs past that, the pressure has to come back from somewhere else (enemy speed, homing, a cost to
+retreating), not from taking the aim lock out again.
+
 ## 108. Item info: the mystery stays the default, the numbers are opt-in, and the Collection remembers
 
 An item's pickup leads with its flavour text on purpose (`sim.ts`'s `pickUpItem`), and that was
