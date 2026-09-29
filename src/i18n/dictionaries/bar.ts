@@ -214,14 +214,51 @@ export const bar: Record<DictKey, string> = {
     'Stock), wia lang jeda Raum zum Räumen braucht hod, wölche Sacha du dabei ghobt ' +
     'hast, und wia lang du auf jeda Promillestufn warst. Sunst nix — koa Nam, koa ' +
     'Konto, koan Standort, koane Möglichkeit rauszfinden, wer gspuit hod. A Lauf bleibt ' +
-    'do gspeichert, bis dass du eam sölm als Datei exportierst; do wead nie automatisch ' +
-    'irgendwas vaschickt.',
+    'do gspeichert, bis dass du auf Senden drückst, eam kopierst oda sölm als Datei ' +
+    'exportierst; do wead nie automatisch irgendwas vaschickt.',
   'ui.settings.privacy.session': 'Sitzung',
   'ui.settings.privacy.runsRecordedOne': '1 Lauf aufgschriebn, wart auf’n Export.',
   'ui.settings.privacy.runsRecordedOther': '{count} Läuf aufgschriebn, wartn auf’n Export.',
   'ui.settings.privacy.exportButton': 'Ois Datei exportiern',
+  'ui.settings.privacy.sendButton': 'Meine Ergebnisse senden',
+  'ui.settings.privacy.copyButton': 'Meine Ergebnisse kopieren',
+  'ui.settings.privacy.sending': 'Wead gsendt…',
+  'ui.settings.privacy.sent': 'Gsendt — dankschön!',
+  'ui.settings.privacy.sendFailed': 'Senden hod net gfunkt. Nomoi probiern oda Kopiern nemma.',
+  'ui.settings.privacy.copied': 'Kopiert. Füg des in a Nachricht an den ei, der den Test leitet.',
+  'ui.settings.privacy.copyFailed': 'Kopiern hod net gfunkt. Nimm liaba „Als Datei exportiern“.',
   'ui.settings.privacy.clearButton': 'Löschn',
   'ui.settings.privacy.shareToggle': 'Anonyme Playtest-Telemetrie teiln',
+
+  // --- Playtest build: welcome screen and post-run questions ---------------
+  'ui.playtest.welcome.title': 'Dankschön fürs Testn vo Kellerbier',
+  'ui.playtest.welcome.body':
+    "Des is a friaher Stand, und du hilfst beim Testn. Spui, wia du magst — do gibt's " +
+    'koane foischn Antwortn, und koa Mensch schaut dir zua.',
+  'ui.playtest.welcome.consent':
+    'Wennst Ja sagst, schreibt des Spui anonyme Wert zu deine Läuf auf (gwunna oda hi ' +
+    'ganga, wölcher Stock, wia lang, wölche Sacha) und fragt di nach am Lauf vielleicht ' +
+    'was Kurzes. Du entscheidst, ob was gsendt wead, und kannst des in de Einstellungen ' +
+    'ausschoitn. Koa Nam, koa Konto, nix, was vaseeht, wer du bist.',
+  'ui.playtest.welcome.yes': 'Ja, i bin dabei',
+  'ui.playtest.welcome.no': 'Na, danke, i spui nur',
+  'ui.playtest.prompt.heading': 'A kurze Frag',
+  'ui.playtest.prompt.hint':
+    'Jederzeit überspringbar. Bittschön koan Nam und koane persönlichn Angabn.',
+  'ui.playtest.prompt.placeholder': 'Dei Antwort do…',
+  'ui.playtest.prompt.send': 'Antwort und Lauf-Wert sendn',
+  'ui.playtest.prompt.skip': 'Überspringa',
+  'ui.playtest.prompt.sending': 'Wead gsendt…',
+  'ui.playtest.prompt.thanks': 'Dankschön!',
+  'ui.playtest.prompt.failed':
+    "Senden hod net gfunkt — dei Antwort is gspeichert. Probier's nomoi.",
+  'ui.playtest.q.whatIsIt': 'Wos is des für a Spui, mit deine eigenen Wort?',
+  'ui.playtest.q.confusion':
+    "Wos hod di daschlong oda aufghoitn, ohne dass du's damois vastandn host?",
+  'ui.playtest.q.item': "Wos host aufghobn oda gfundn, ohne's zum vastehn?",
+  'ui.playtest.q.blocked':
+    "Gob's an Moment, wo du wos toa woitest, wos des Spui net zuglossn hod? Wos wor's?",
+  'ui.playtest.q.again': 'Dast jetzt glei no an Lauf spuin? Warum oda warum net?',
 
   // --- Floor flavour lines (name stays Bavarian in every locale) ---------
   'floors.cellar.flavour': 'Passt auf enkane *Fiaß* auf.',

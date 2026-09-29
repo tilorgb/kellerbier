@@ -209,14 +209,56 @@ export const de: Record<DictKey, string> = {
     'welchem Stock), wie lange jeder Raum zum Räumen brauchte, welche Gegenstände ' +
     'gehalten wurden und wie viel Zeit auf jeder Promille-Stufe verbracht wurde. Sonst ' +
     'nichts — kein Name, kein Konto, kein Standort, keine Möglichkeit herauszufinden, ' +
-    'wer gespielt hat. Ein Lauf bleibt hier gespeichert, bis er selbst als Datei ' +
-    'exportiert wird; es wird nie automatisch irgendetwas verschickt.',
+    'wer gespielt hat. Ein Lauf bleibt hier gespeichert, bis du auf Senden drückst, ihn ' +
+    'kopierst oder selbst als Datei exportierst; es wird nie automatisch irgendetwas ' +
+    'verschickt.',
   'ui.settings.privacy.session': 'Sitzung',
   'ui.settings.privacy.runsRecordedOne': '1 Lauf aufgezeichnet, wartet auf den Export.',
   'ui.settings.privacy.runsRecordedOther': '{count} Läufe aufgezeichnet, warten auf den Export.',
   'ui.settings.privacy.exportButton': 'Als Datei exportieren',
+  'ui.settings.privacy.sendButton': 'Meine Ergebnisse senden',
+  'ui.settings.privacy.copyButton': 'Meine Ergebnisse kopieren',
+  'ui.settings.privacy.sending': 'Wird gesendet…',
+  'ui.settings.privacy.sent': 'Gesendet — danke!',
+  'ui.settings.privacy.sendFailed':
+    'Senden hat nicht geklappt. Nochmal versuchen oder Kopieren nutzen.',
+  'ui.settings.privacy.copied':
+    'Kopiert. Füg es in eine Nachricht an die Person ein, die den Test leitet.',
+  'ui.settings.privacy.copyFailed':
+    'Kopieren hat nicht geklappt. Nutz stattdessen „Als Datei exportieren“.',
   'ui.settings.privacy.clearButton': 'Löschen',
   'ui.settings.privacy.shareToggle': 'Anonyme Playtest-Telemetrie teilen',
+
+  // --- Playtest build: welcome screen and post-run questions ---------------
+  'ui.playtest.welcome.title': 'Danke fürs Testen von Kellerbier',
+  'ui.playtest.welcome.body':
+    'Das ist ein früher Stand, und du hilfst beim Testen. Spiel, wie du magst — es gibt ' +
+    'keine falschen Antworten, und niemand schaut dir zu.',
+  'ui.playtest.welcome.consent':
+    'Wenn du Ja sagst, zeichnet das Spiel anonyme Werte zu deinen Läufen auf (gewonnen ' +
+    'oder gestorben, welcher Stock, wie lange, welche Gegenstände) und stellt dir nach ' +
+    'einem Lauf vielleicht eine kurze Frage. Du entscheidest, ob etwas gesendet wird, und ' +
+    'kannst es in den Einstellungen ausschalten. Kein Name, kein Konto, nichts, was verrät, ' +
+    'wer du bist.',
+  'ui.playtest.welcome.yes': 'Ja, ich bin dabei',
+  'ui.playtest.welcome.no': 'Nein danke, ich spiele nur',
+  'ui.playtest.prompt.heading': 'Eine kurze Frage',
+  'ui.playtest.prompt.hint':
+    'Jederzeit überspringbar. Bitte keinen Namen und keine persönlichen Angaben.',
+  'ui.playtest.prompt.placeholder': 'Deine Antwort hier…',
+  'ui.playtest.prompt.send': 'Antwort und Lauf-Werte senden',
+  'ui.playtest.prompt.skip': 'Überspringen',
+  'ui.playtest.prompt.sending': 'Wird gesendet…',
+  'ui.playtest.prompt.thanks': 'Danke!',
+  'ui.playtest.prompt.failed':
+    'Senden hat nicht geklappt — deine Antwort ist gespeichert. Versuch es nochmal.',
+  'ui.playtest.q.whatIsIt': 'Was ist das für ein Spiel, in deinen eigenen Worten?',
+  'ui.playtest.q.confusion':
+    'Was hat dich getötet oder aufgehalten, ohne dass du es damals verstanden hast?',
+  'ui.playtest.q.item': 'Was hast du aufgehoben oder gefunden, ohne es zu verstehen?',
+  'ui.playtest.q.blocked':
+    'Gab es einen Moment, in dem du etwas tun wolltest, was das Spiel nicht zugelassen hat? Was war es?',
+  'ui.playtest.q.again': 'Würdest du jetzt gleich noch einen Lauf spielen? Warum oder warum nicht?',
 
   // --- Floor flavour lines (name stays Bavarian in every locale) ---------
   'floors.cellar.flavour': 'Pass auf deine *Fiaß* auf.',

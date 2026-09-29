@@ -6082,6 +6082,14 @@ the aim to the nearest of N/S/E/W before a fan is centred on it. The floor-one t
 the room's axes rather than at the player, which makes its safe ground readable at a glance.
 Rejected on `fireOnBeat` at compile time, since there is nothing there to snap.
 
+**The cost, and the retreat gate.** Locking the aim makes backing away from an enemy while
+shooting it a stronger answer: the nightly retreat-bot gate (`tests/playtest/retreat-bot.test.ts`,
+#228) went from at most one untouched floor-1 clear in twelve seeds to two (seeds 201, 202). That
+was accepted on purpose — the aim lock is the fix for "enemies read as too hard", so some of the
+pressure pass is traded for readability — and `MAX_UNTOUCHED` was raised from 1 to 2. If the number
+climbs past that, the pressure has to come back from somewhere else (enemy speed, homing, a cost to
+retreating), not from taking the aim lock out again.
+
 ## 108. Item info: the mystery stays the default, the numbers are opt-in, and the Collection remembers
 
 An item's pickup leads with its flavour text on purpose (`sim.ts`'s `pickUpItem`), and that was
@@ -6109,7 +6117,64 @@ came for, without either being made the other's default.
   (`app/collection.ts`), so every way an item can arrive counts without each one reporting it.
   No back-fill for existing saves: nothing before v9 recorded an inventory.
 
-## 109. Chests are pickups, and they give keys a second use
+## 109. Playtest telemetry gains a Send button — one click, still opt-in, still anonymous
+
+**Decided:** M8, #54 and #159; amends #70. #70 made telemetry file-only ("nothing is ever sent
+anywhere") because a backend was more infrastructure than two floors of balance data justified. In
+use that put a `.json` download-and-forward on every tester, which a stranger on the Pages link will
+not do. The fix keeps everything #70 promised about *what* is collected and changes only *how it
+leaves*.
+
+**The rule.** Settings → Privacy shows **Send my results** once there are recorded runs and an
+endpoint is configured (`app/telemetry/endpoint.ts`; empty until the Worker is deployed, which hides
+the button rather than breaking it). A send happens only on that click — never automatically, never
+at opt-in — and posts the same `{ schemaVersion, sessionId, runs }` shape the export file uses, so
+`tools/telemetry/dashboard.mjs` reads either. Delivered runs get a local `sentAt` stamp and stay
+buffered; the next click uploads only what is new, and the Worker keys on `runId`, so a retry or
+double click cannot double-count. `sentAt` is bookkeeping and is stripped from anything that leaves
+the device. **Copy my results** (same JSON on the clipboard, to paste into a message) and **Export
+as file** remain as fallbacks, for a blocked network or a tester who prefers not to send.
+
+**The server** is `tools/telemetry/worker.mjs`, a Cloudflare Worker over Workers KV. It stores what
+the client sends and nothing else — no IP, headers or user agent — and `GET /export?key=…` returns
+every stored run as one telemetry file for the dashboard. The post is `text/plain` so the browser
+makes no CORS preflight.
+
+**Constrains:** #70's rule that any new field must answer #54's balance question still holds — this
+changed transport, not content. An automatic (no-click) send would be a new decision and a rewrite
+of the consent copy.
+
+## 110. The playtest build asks its own questions — welcome screen, one question per run
+
+**Decided:** M8, #159; extends #109. #159's protocol assumes an observer: someone reads the intro
+aloud and asks the five questions. A tester who was only sent the Pages link has neither. So the
+build they are sent carries the protocol's talking parts itself.
+
+**The rule.** `__KELLERBIER_PLAYTEST__` (`app/build-mode.ts`) is true only in `vite.tester.config.ts`'s
+build; `?playtest` turns the same flow on in any other build so it can be tried from `npm run dev`
+or a PR preview. Under it: a **welcome screen** on first launch (yes is the telemetry opt-in, no
+leaves a plain game, either way it is asked once), and after each run a **prompt with one question**,
+rotating through `PLAYTEST_QUESTIONS` (the protocol's §6 five) by a cursor in the save, skippable.
+Nothing appears for anyone who said no, and nothing appears in the shipped game.
+
+**Sending is still a click, and now the natural one.** The prompt's button says what it does —
+"Send answer and run stats" — and sends the answer plus every run not yet sent. Skip sends nothing.
+That is why a tester never needs Settings → Privacy; #109's rule that nothing leaves without a
+click is unchanged.
+
+**A DOM overlay, not canvas art.** The canvas UI has no text input, and a free-text answer wants a
+real `<textarea>` (paste, IME, mobile keyboards). The overlay swallows `keydown`/`keyup`/`keypress`
+so typing never reaches the game, which listens on `window`.
+
+**Free text is untrusted.** The prompt asks testers to leave out personal details, answers are capped
+at 1000 characters, the Worker re-caps them, and the dashboard flattens them to one line and defuses
+markup and `@`-mentions before they go into a GitHub comment.
+
+**Constrains:** the questions are the protocol's, not a survey tool — a new one has to be something
+§5 would allow ("ask what they did, not what they would like"). The observation checklist (§4) is
+not replaced; this only covers what a form can.
+
+## 111. Chests are pickups, and they give keys a second use
 
 Before #353 a Kellerschlüssel opened exactly one thing, the key-locked treasure door, while every
 drop table kept handing keys out. Chests give keys a second sink and put a decision in front of

@@ -223,14 +223,50 @@ export const en = {
     'how each run ends (won or died, on which floor), how long each room took to clear, ' +
     'which items were held, and how much time was spent at each Promille tier. Nothing ' +
     'else — no name, no account, no location, no way to identify who played. A run is ' +
-    'kept here until you export it as a file yourself; nothing is ever sent anywhere ' +
-    'automatically.',
+    'kept here until you press Send, copy it or export it as a file yourself; nothing ' +
+    'is ever sent anywhere automatically.',
   'ui.settings.privacy.session': 'Session',
   'ui.settings.privacy.runsRecordedOne': '1 run recorded, waiting to be exported.',
   'ui.settings.privacy.runsRecordedOther': '{count} runs recorded, waiting to be exported.',
   'ui.settings.privacy.exportButton': 'Export as file',
+  'ui.settings.privacy.sendButton': 'Send my results',
+  'ui.settings.privacy.copyButton': 'Copy my results',
+  'ui.settings.privacy.sending': 'Sending…',
+  'ui.settings.privacy.sent': 'Sent — thank you!',
+  'ui.settings.privacy.sendFailed': 'Could not send. Try again, or use Copy.',
+  'ui.settings.privacy.copied': 'Copied. Paste it into a message to the person running the test.',
+  'ui.settings.privacy.copyFailed': 'Could not copy. Use Export as file instead.',
   'ui.settings.privacy.clearButton': 'Clear',
   'ui.settings.privacy.shareToggle': 'Share anonymous playtest telemetry',
+
+  // --- Playtest build: welcome screen and post-run questions ---------------
+  'ui.playtest.welcome.title': 'Thanks for testing Kellerbier',
+  'ui.playtest.welcome.body':
+    'This is an early build and you are helping test it. Play however you like — there are ' +
+    'no wrong answers, and nobody is watching.',
+  'ui.playtest.welcome.consent':
+    'If you say yes, the game records anonymous stats about your runs (won or died, which ' +
+    'floor, how long, which items) and, after a run, may ask you one short question. You ' +
+    'choose whether to send anything, and you can turn it off in Settings. No name, no ' +
+    'account, nothing that says who you are.',
+  'ui.playtest.welcome.yes': 'Yes, count me in',
+  'ui.playtest.welcome.no': 'No thanks, just play',
+  'ui.playtest.prompt.heading': 'One quick question',
+  'ui.playtest.prompt.hint':
+    'Skip any time. Please leave out your name and other personal details.',
+  'ui.playtest.prompt.placeholder': 'Type your answer here…',
+  'ui.playtest.prompt.send': 'Send answer and run stats',
+  'ui.playtest.prompt.skip': 'Skip',
+  'ui.playtest.prompt.sending': 'Sending…',
+  'ui.playtest.prompt.thanks': 'Thank you!',
+  'ui.playtest.prompt.failed': 'Could not send — your answer is saved. You can try again.',
+  'ui.playtest.q.whatIsIt': 'In your own words, what is this game?',
+  'ui.playtest.q.confusion':
+    'What is one thing that killed you or slowed you down that you did not understand at the time?',
+  'ui.playtest.q.item': 'What is one thing you picked up or found that you did not understand?',
+  'ui.playtest.q.blocked':
+    'Was there a moment you wanted to do something the game would not let you? What was it?',
+  'ui.playtest.q.again': 'Would you play another run right now? Why or why not?',
 
   // --- Floor flavour lines (name stays Bavarian in every locale) ---------
   'floors.cellar.flavour': 'Watch your *Fiaß*.',

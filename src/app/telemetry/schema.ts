@@ -24,6 +24,28 @@
 /** How many finished runs the store keeps before the oldest is dropped — see `MAX_REPLAYS`'s identical reasoning, sized a little larger since a telemetry entry is much smaller than a replay. */
 export const MAX_TELEMETRY_RUNS = 50;
 
+/** Feedback answers kept before the oldest is dropped. */
+export const MAX_TELEMETRY_FEEDBACK = 50;
+
+/** Longest answer kept, in characters — a free-text box is not an essay. */
+export const MAX_FEEDBACK_LENGTH = 1000;
+
+/**
+ * One answer to a post-run question (`app/playtest/questions.ts`), typed by a
+ * tester in the playtest build. `questionId` names which question it answers
+ * so the report can group by it; the question's wording lives in the game,
+ * not in the data. Free text, so the prompt tells testers to leave out
+ * personal details — nothing here parses or filters it.
+ */
+export interface TelemetryFeedback {
+  readonly id: string;
+  readonly questionId: string;
+  readonly text: string;
+  readonly answeredAt: number;
+  /** Local bookkeeping, like `TelemetryRunRecord.sentAt`; never leaves the device. */
+  readonly sentAt?: number;
+}
+
 /** Ticks a room took, from the tick its door was entered to the tick its last enemy fell. */
 export interface TelemetryRoomClear {
   readonly floor: number;
@@ -69,16 +91,35 @@ export interface TelemetryRunRecord {
   readonly roomClears: readonly TelemetryRoomClear[];
   /** Ticks spent at each Promille tier id (`sim/game/promille.ts#PromilleTier`), as string keys — a plain object round-trips through `JSON.stringify` without a `Map` codec. */
   readonly promilleTierTicks: Readonly<Record<string, number>>;
+  /**
+   * When the player's own "Send" click delivered this run (`send.ts`). Local
+   * bookkeeping only — never part of what is sent or exported — so a second
+   * click uploads just the runs since the last one.
+   */
+  readonly sentAt?: number;
 }
 
 export interface TelemetryStore {
   readonly optedIn: boolean;
   readonly sessionId: string | null;
   readonly runs: readonly TelemetryRunRecord[];
+  /** Answers to the playtest build's post-run questions; empty outside a playtest. */
+  readonly feedback: readonly TelemetryFeedback[];
+  /** Whether the playtest welcome screen has been answered, either way — it is asked once. */
+  readonly welcomed: boolean;
+  /** Which question the next post-run prompt asks — advances by one per prompt shown, wrapping. */
+  readonly questionCursor: number;
 }
 
 export function createDefaultTelemetryStore(): TelemetryStore {
-  return { optedIn: false, sessionId: null, runs: [] };
+  return {
+    optedIn: false,
+    sessionId: null,
+    runs: [],
+    feedback: [],
+    welcomed: false,
+    questionCursor: 0,
+  };
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -173,6 +214,7 @@ export function sanitizeTelemetryRun(value: unknown): TelemetryRunRecord | null 
     itemsHeld: sanitizeStringArray(value.itemsHeld),
     roomClears: sanitizeRoomClears(value.roomClears),
     promilleTierTicks: sanitizePromilleTierTicks(value.promilleTierTicks),
+    ...(isFiniteNumber(value.sentAt) ? { sentAt: value.sentAt } : {}),
   };
 }
 
@@ -190,6 +232,39 @@ function sanitizeTelemetryRuns(value: unknown): TelemetryRunRecord[] {
   return runs.slice(0, MAX_TELEMETRY_RUNS);
 }
 
+function sanitizeFeedbackEntry(value: unknown): TelemetryFeedback | null {
+  if (
+    !isPlainObject(value) ||
+    typeof value.id !== 'string' ||
+    typeof value.questionId !== 'string' ||
+    typeof value.text !== 'string' ||
+    !isFiniteNumber(value.answeredAt)
+  ) {
+    return null;
+  }
+  return {
+    id: value.id,
+    questionId: value.questionId,
+    text: value.text.slice(0, MAX_FEEDBACK_LENGTH),
+    answeredAt: value.answeredAt,
+    ...(isFiniteNumber(value.sentAt) ? { sentAt: value.sentAt } : {}),
+  };
+}
+
+function sanitizeFeedback(value: unknown): TelemetryFeedback[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const entries: TelemetryFeedback[] = [];
+  for (const entry of value) {
+    const feedback = sanitizeFeedbackEntry(entry);
+    if (feedback !== null) {
+      entries.push(feedback);
+    }
+  }
+  return entries.slice(0, MAX_TELEMETRY_FEEDBACK);
+}
+
 /** Coerces an arbitrary parsed value into a full `TelemetryStore`, field-by-field — the same shape every other save-backed sanitiser in this project uses. */
 export function sanitizeTelemetryStore(value: unknown): TelemetryStore {
   if (!isPlainObject(value)) {
@@ -200,5 +275,11 @@ export function sanitizeTelemetryStore(value: unknown): TelemetryStore {
     sessionId:
       typeof value.sessionId === 'string' && value.sessionId.length > 0 ? value.sessionId : null,
     runs: sanitizeTelemetryRuns(value.runs),
+    feedback: sanitizeFeedback(value.feedback),
+    welcomed: typeof value.welcomed === 'boolean' ? value.welcomed : false,
+    questionCursor:
+      isFiniteNumber(value.questionCursor) && value.questionCursor >= 0
+        ? Math.floor(value.questionCursor)
+        : 0,
   };
 }

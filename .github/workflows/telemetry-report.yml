@@ -1,0 +1,75 @@
+name: Telemetry report
+
+# #54: pulls the playtest telemetry testers have sent (the "Send my results"
+# button, `docs/DECISIONS.md` #109) from the Worker, runs
+# `tools/telemetry/dashboard.mjs` over it, and keeps ONE comment on the
+# balance issue up to date with the result — so reading the data is opening
+# the issue, not running curl on a laptop.
+#
+# Needs the repository secret `TELEMETRY_ADMIN_KEY` (the Worker's `ADMIN_KEY`).
+# Without it the job exits cleanly and says so, rather than failing every day.
+
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: 'Issue to keep the report comment on'
+        default: '54'
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: telemetry-report
+  cancel-in-progress: false
+
+jobs:
+  report:
+    name: Pull and report playtest telemetry
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      ADMIN_KEY: ${{ secrets.TELEMETRY_ADMIN_KEY }}
+      ISSUE: ${{ inputs.issue || '54' }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      - name: Pull the collected runs
+        run: |
+          if [ -z "$ADMIN_KEY" ]; then
+            echo "TELEMETRY_ADMIN_KEY is not set; nothing to report." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          endpoint=$(grep -oE "https://[^']+" src/app/telemetry/endpoint.ts | head -1)
+          curl -fsS --get "${endpoint%/}/export" --data-urlencode "key=$ADMIN_KEY" -o runs.json
+          echo "have_data=true" >> "$GITHUB_ENV"
+
+      - name: Build the report
+        if: env.have_data == 'true'
+        run: |
+          {
+            echo '<!-- telemetry-report -->'
+            echo "## Playtest telemetry — $(date -u +'%Y-%m-%d %H:%M UTC')"
+            echo
+            node tools/telemetry/dashboard.mjs runs.json
+          } > report.md
+          cat report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Update the report comment on the issue
+        if: env.have_data == 'true'
+        run: |
+          id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$ISSUE/comments" --paginate \
+            --jq '[.[] | select(.body | contains("<!-- telemetry-report -->"))][0].id // empty')
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F body=@report.md >/dev/null
+          else
+            gh issue comment "$ISSUE" --body-file report.md
+          fi

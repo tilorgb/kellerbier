@@ -1,3 +1,4 @@
+import { createDefaultTelemetryStore } from '../../src/app/telemetry/schema.js';
 import { describe, expect, it } from 'vitest';
 import {
   MIGRATIONS,
@@ -123,7 +124,7 @@ describe('save migration chain (#45)', () => {
     };
     const migrated = sanitizeSave(migrateSave(v6));
     expect(migrated.schemaVersion).toBe(SAVE_SCHEMA_VERSION);
-    expect(migrated.telemetry).toEqual({ optedIn: false, sessionId: null, runs: [] });
+    expect(migrated.telemetry).toEqual(createDefaultTelemetryStore());
     // Untouched by the new step.
     expect(migrated.unlocks).toEqual(['promille']);
     expect(migrated.selectedCharacter).toBe('resi');

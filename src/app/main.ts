@@ -112,15 +112,24 @@ import { downloadReplayFile, parseReplayText } from './replay/file.js';
 import { SettingsMenu } from './settings-menu.js';
 import { TelemetryTracker } from './telemetry/tracker.js';
 import {
+  advanceQuestionCursor,
   clearTelemetryRuns,
   loadTelemetry,
+  markWelcomed,
+  recordFeedback,
+  markFeedbackSent,
+  markRunsSent,
   optIntoTelemetry,
   optOutOfTelemetry,
   recordRunTelemetry,
 } from './telemetry/store.js';
 import { downloadTelemetryFile } from './telemetry/file.js';
+import { TELEMETRY_ENDPOINT } from './telemetry/endpoint.js';
+import { copyTelemetry, sendTelemetry, unsentFeedback, unsentRuns } from './telemetry/send.js';
 import { createTouchControls, isTouchCapable } from './touch-controls.js';
-import { IS_RELEASE_BUILD } from './build-mode.js';
+import { IS_RELEASE_BUILD, isPlaytestSession } from './build-mode.js';
+import { questionAt } from './playtest/questions.js';
+import { showFeedbackPrompt, showWelcome } from './playtest/overlay.js';
 import { type BootProgress, createBootProgress } from './boot-progress.js';
 import { type CameraTuningPanel, createCameraTuningPanel } from './camera-tuning.js';
 import {
@@ -1524,6 +1533,50 @@ async function boot(progress: BootProgress): Promise<void> {
    * simulate, and the screen is showing the frozen tableau underneath it.
    */
   let deathPhase: 'alive' | 'freezing' | 'slowmo' | 'over' = 'alive';
+  /** The playtest build's post-run question while it is up (`app/playtest/overlay.ts`), else `null`. */
+  let feedbackPrompt: { close: () => void } | null = null;
+
+  /**
+   * Playtest builds only, and only for a tester who said yes at the welcome
+   * screen: a moment after a run ends, offers one short question
+   * (`docs/PLAYTEST_PROTOCOL.md` §6, rotating one per run). Answering sends
+   * the answer with the runs not yet sent, so the tester never has to find a
+   * Settings tab; skipping sends nothing. Dropped if they have already
+   * started another run by the time it would appear.
+   */
+  function maybeAskPlaytestQuestion(): void {
+    if (!isPlaytestSession() || !loadTelemetry().optedIn) {
+      return;
+    }
+    window.setTimeout(() => {
+      if (deathPhase !== 'over' || feedbackPrompt !== null || !loadTelemetry().optedIn) {
+        return;
+      }
+      const question = questionAt(loadTelemetry().questionCursor);
+      advanceQuestionCursor();
+      feedbackPrompt = showFeedbackPrompt({
+        locale: preferences.locale,
+        question,
+        onSubmit: async (text) => {
+          recordFeedback(question.id, text, Date.now());
+          const store = loadTelemetry();
+          if (unsentRuns(store).length === 0 && unsentFeedback(store).length === 0) {
+            return true;
+          }
+          const sent = await sendTelemetry(store, TELEMETRY_ENDPOINT);
+          if (sent === null) {
+            return false;
+          }
+          markRunsSent(sent.runIds, Date.now());
+          markFeedbackSent(sent.feedbackIds, Date.now());
+          return true;
+        },
+        onClose: () => {
+          feedbackPrompt = null;
+        },
+      });
+    }, 1500);
+  }
   let deathPhaseTicks = 0;
   /** Edge-detects `sim.blutwurzActive` turning on — see `enterBlutwurzEntrance`. */
   let wasBlutwurzActive = false;
@@ -1924,6 +1977,7 @@ async function boot(progress: BootProgress): Promise<void> {
               ticksSurvived,
             }),
           );
+          maybeAskPlaytestQuestion();
           const save = recordRunOutcome({
             seed: RUN_SEED,
             floor: floorPlan.floor,
@@ -2558,6 +2612,17 @@ async function boot(progress: BootProgress): Promise<void> {
       clear: () => {
         clearTelemetryRuns();
       },
+      canSend: (TELEMETRY_ENDPOINT as string) !== '',
+      send: async () => {
+        const sent = await sendTelemetry(loadTelemetry(), TELEMETRY_ENDPOINT);
+        if (sent === null) {
+          return false;
+        }
+        markRunsSent(sent.runIds, Date.now());
+        markFeedbackSent(sent.feedbackIds, Date.now());
+        return true;
+      },
+      copy: () => copyTelemetry(loadTelemetry()),
     },
   });
 
@@ -2814,6 +2879,7 @@ WASD move   arrows aim and fire
       character?: CharacterTraits;
     } = {},
   ): void {
+    feedbackPrompt?.close();
     RUN_SEED = seed;
     if (seedInput instanceof HTMLInputElement) {
       seedInput.value = String(RUN_SEED);
@@ -3379,6 +3445,19 @@ WASD move   arrows aim and fire
     startRun(RUN_SEED);
   }
   screenController.showTitle(hadResumableRun);
+  // The playtest build's welcome (`app/playtest/overlay.ts`): asked once, over
+  // the title screen. Yes is the telemetry opt-in; no leaves the game plain.
+  if (isPlaytestSession() && !loadTelemetry().welcomed) {
+    showWelcome({
+      locale: preferences.locale,
+      onChoice: (joined) => {
+        if (joined) {
+          optIntoTelemetry();
+        }
+        markWelcomed();
+      },
+    });
+  }
   await progress.advance('world');
 
   if (seedInput instanceof HTMLInputElement) {

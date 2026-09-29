@@ -1,3 +1,4 @@
+import { createDefaultTelemetryStore } from '../../src/app/telemetry/schema.js';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_ACCESSIBILITY_SETTINGS } from '../../src/app/settings.js';
 import { createDefaultPreferences } from '../../src/app/preferences.js';
@@ -95,7 +96,7 @@ describe('save schema sanitisation (#45)', () => {
   });
 
   it('defaults telemetry (#54, #159) to opted-out when absent, and sanitises it field-by-field when present', () => {
-    expect(sanitizeSave({}).telemetry).toEqual({ optedIn: false, sessionId: null, runs: [] });
+    expect(sanitizeSave({}).telemetry).toEqual(createDefaultTelemetryStore());
     const sanitized = sanitizeSave({
       telemetry: { optedIn: true, sessionId: 'abc-123', runs: [{ runId: 'not-a-full-run' }] },
     });

@@ -90,6 +90,12 @@ export interface SettingsMenuDeps {
     readonly optOut: () => void;
     readonly export: () => void;
     readonly clear: () => void;
+    /** Whether a Worker URL is configured (`telemetry/endpoint.ts`) — without one the Send row stays hidden and Copy is the way out. */
+    readonly canSend: boolean;
+    /** Posts the unsent runs; resolves to whether they arrived. Only ever called from the Send row's own click. */
+    readonly send: () => Promise<boolean>;
+    /** Puts the runs on the clipboard; resolves to whether the browser allowed it. */
+    readonly copy: () => Promise<boolean>;
   };
 }
 
@@ -99,6 +105,8 @@ export class SettingsMenu {
   private readonly deps: SettingsMenuDeps;
   private readonly capture: BindingCapture;
   private locale: Locale;
+  /** The Privacy tab's last Send/Copy outcome, as a translation key — shown in a note under the buttons. */
+  private privacyStatus: DictKey | null = null;
   /** Which device the Controls tab's rebind rows are showing. */
   private device: BindingDevice = 'keyboard';
 
@@ -525,6 +533,36 @@ export class SettingsMenu {
             ? t(locale, 'ui.settings.privacy.runsRecordedOne')
             : t(locale, 'ui.settings.privacy.runsRecordedOther', { count });
         },
+      },
+      {
+        kind: 'action',
+        label: t(locale, 'ui.settings.privacy.sendButton'),
+        hidden: () => !this.deps.telemetry.canSend || !hasRuns(),
+        activate: () => {
+          if (this.privacyStatus === 'ui.settings.privacy.sending') {
+            return;
+          }
+          this.privacyStatus = 'ui.settings.privacy.sending';
+          void this.deps.telemetry.send().then((ok) => {
+            this.privacyStatus = ok ? 'ui.settings.privacy.sent' : 'ui.settings.privacy.sendFailed';
+          });
+        },
+      },
+      {
+        kind: 'action',
+        label: t(locale, 'ui.settings.privacy.copyButton'),
+        hidden: () => !hasRuns(),
+        activate: () => {
+          void this.deps.telemetry.copy().then((ok) => {
+            this.privacyStatus = ok
+              ? 'ui.settings.privacy.copied'
+              : 'ui.settings.privacy.copyFailed';
+          });
+        },
+      },
+      {
+        kind: 'note',
+        text: () => (this.privacyStatus === null ? '' : t(locale, this.privacyStatus)),
       },
       {
         kind: 'action',
