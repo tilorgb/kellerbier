@@ -1,6 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { Mesh, PointLight, Scene } from 'three';
-import { Lighting, SHOT_LIGHT_COUNT } from '../../src/render/world/lighting.js';
+import { DirectionalLight, Mesh, type MeshBasicMaterial, PointLight, Scene } from 'three';
+import {
+  CLOUD_CROSS_TICKS,
+  CLOUD_CYCLES,
+  crossingOf,
+  Lighting,
+  SHOT_LIGHT_COUNT,
+} from '../../src/render/world/lighting.js';
 import { TICKS_PER_SECOND } from '../../src/sim/time.js';
 
 /**
@@ -20,10 +26,6 @@ import { TICKS_PER_SECOND } from '../../src/sim/time.js';
  * lights are currently *lit*", not "how many are in the scene" — the total
  * never changes; see `tests/unit/lighting-pool.test.ts` for that invariant.
  */
-
-/** The cloud's cycle, as the class comment describes it: across in sixteen seconds, once every fifty. */
-const CLOUD_CYCLE_TICKS = TICKS_PER_SECOND * 50;
-const CLOUD_CROSS_TICKS = TICKS_PER_SECOND * 16;
 
 function rig(): { scene: Scene; lighting: Lighting } {
   const scene = new Scene();
@@ -53,14 +55,28 @@ function litBulbCount(scene: Scene): number {
   return pointLights(scene).filter((light) => light.intensity > 0 && light.distance === 300).length;
 }
 
-function cloudOf(scene: Scene): Mesh | undefined {
-  let cloud: Mesh | undefined;
+function cloudsOf(scene: Scene): Mesh[] {
+  const clouds: Mesh[] = [];
   scene.traverse((object) => {
     if (object instanceof Mesh && object.castShadow && object.customDepthMaterial !== undefined) {
-      cloud = object;
+      clouds.push(object as Mesh);
     }
   });
-  return cloud;
+  return clouds;
+}
+
+/** The key light — the sun under daylight — whose ray carries a cloud's shadow down to the floor. */
+function keyOf(scene: Scene): DirectionalLight {
+  let key: DirectionalLight | undefined;
+  scene.traverse((object) => {
+    if (object instanceof DirectionalLight && object.castShadow) {
+      key = object;
+    }
+  });
+  if (key === undefined) {
+    throw new Error('no key light');
+  }
+  return key;
 }
 
 describe('Lighting, choosing a rig for the room', () => {
@@ -109,7 +125,7 @@ describe('Lighting, choosing a rig for the room', () => {
   it('has no cloud to drive without a DOM, and says so by doing nothing', () => {
     const { scene, lighting } = rig();
     lighting.onRoomChanged('daylight', 320, 180, []);
-    expect(cloudOf(scene)).toBeUndefined();
+    expect(cloudsOf(scene)).toHaveLength(0);
     expect(() => {
       lighting.sync(0);
       lighting.sync(CLOUD_CROSS_TICKS / 2);
@@ -183,57 +199,151 @@ describe('Lighting, the daylight cloud', () => {
     }
   });
 
-  function daylight(): { scene: Scene; lighting: Lighting; cloud: Mesh } {
+  function daylight(): { scene: Scene; lighting: Lighting; clouds: Mesh[] } {
     const { scene, lighting } = rig();
     lighting.onRoomChanged('daylight', 320, 180, []);
-    const cloud = cloudOf(scene);
-    if (cloud === undefined) {
-      throw new Error('a daylight room with a DOM has a cloud');
+    const clouds = cloudsOf(scene);
+    if (clouds.length !== CLOUD_CYCLES.length) {
+      throw new Error('a daylight room with a DOM has one cloud per cycle');
     }
-    return { scene, lighting, cloud };
+    return { scene, lighting, clouds };
   }
 
-  it('is a shadow caster above the room, not a decal on it', () => {
-    const { cloud } = daylight();
-    expect(cloud.castShadow).toBe(true);
-    expect(cloud.position.y).toBeGreaterThan(0);
+  /** The first tick of cloud `i`'s `n`th crossing. */
+  function crossingStart(i: number, n: number): number {
+    const cycle = CLOUD_CYCLES[i];
+    if (cycle === undefined) {
+      throw new Error(`no cloud ${String(i)}`);
+    }
+    return cycle.offsetTicks + (n - 1) * cycle.cycleTicks;
+  }
+
+  /**
+   * Where cloud `cloud`'s shadow centre lands on the floor — the plane pushed
+   * along the key light's ray down to y = 0.
+   */
+  function shadowOf(scene: Scene, cloud: Mesh): { x: number; z: number } {
+    const light = keyOf(scene);
+    const key = light.position;
+    const target = light.target.position;
+    const drop = cloud.position.y / (key.y - target.y);
+    return {
+      x: cloud.position.x + (target.x - key.x) * drop,
+      z: cloud.position.z + (target.z - key.z) * drop,
+    };
+  }
+
+  it('are shadow casters above the room, not decals on it', () => {
+    const { clouds } = daylight();
+    for (const cloud of clouds) {
+      expect(cloud.castShadow).toBe(true);
+      expect(cloud.position.y).toBeGreaterThan(0);
+    }
   });
 
-  it('crosses the room from west to east over the first sixteen seconds of each cycle', () => {
-    const { lighting, cloud } = daylight();
-    lighting.sync(0);
+  it('cut their shadow on the silhouette, not the plane — the alpha test is on the mesh material three.js reads it from', () => {
+    // WebGLShadowMap copies `material.alphaTest` over the custom depth
+    // material's own; 0 there is what made the cloud's shadow a square box.
+    const { clouds } = daylight();
+    for (const cloud of clouds) {
+      expect((cloud.material as MeshBasicMaterial).alphaTest).toBeGreaterThan(0);
+      expect(cloud.customDepthMaterial?.alphaTest).toBeGreaterThan(0);
+    }
+  });
+
+  it('cross the room from west to east, shadow entering off the west edge and leaving off the east', () => {
+    const { scene, lighting, clouds } = daylight();
+    const cloud = clouds[0];
+    if (cloud === undefined) {
+      throw new Error('no cloud');
+    }
+    const start = crossingStart(0, 1);
+    lighting.sync(start);
     expect(cloud.visible).toBe(true);
-    const start = cloud.position.x;
-    lighting.sync(CLOUD_CROSS_TICKS / 2);
-    const middle = cloud.position.x;
-    lighting.sync(CLOUD_CROSS_TICKS - 1);
-    const end = cloud.position.x;
-    expect(middle).toBeGreaterThan(start);
+    const first = shadowOf(scene, cloud).x;
+    lighting.sync(start + CLOUD_CROSS_TICKS / 2);
+    const middle = shadowOf(scene, cloud).x;
+    lighting.sync(start + CLOUD_CROSS_TICKS - 1);
+    const end = shadowOf(scene, cloud).x;
+    expect(middle).toBeGreaterThan(first);
     expect(end).toBeGreaterThan(middle);
-    // Starts entirely off the west edge and ends off the east one.
-    expect(start).toBeLessThan(0);
+    expect(first).toBeLessThan(0);
     expect(end).toBeGreaterThan(320);
   });
 
-  it('is gone for the rest of the cycle and back at the same moment the next time round', () => {
-    const { lighting, cloud } = daylight();
-    lighting.sync(CLOUD_CROSS_TICKS);
+  it('are gone between crossings and back at the same moment, in the same place, the next time the tick comes round', () => {
+    const { lighting, clouds } = daylight();
+    const cloud = clouds[0];
+    const cycle = CLOUD_CYCLES[0];
+    if (cloud === undefined || cycle === undefined) {
+      throw new Error('no cloud');
+    }
+    lighting.sync(crossingStart(0, 1) + CLOUD_CROSS_TICKS);
     expect(cloud.visible).toBe(false);
-    lighting.sync(CLOUD_CYCLE_TICKS - 1);
+    lighting.sync(crossingStart(0, 2) - 1);
     expect(cloud.visible).toBe(false);
-    // A pure function of the tick, so a replay clouds over at the same moment.
-    lighting.sync(CLOUD_CYCLE_TICKS + 10);
-    lighting.sync(10);
-    const first = cloud.position.x;
-    lighting.sync(CLOUD_CYCLE_TICKS + 10);
+    // A pure function of the tick, so a replay clouds over at the same moment and lane.
+    const tick = crossingStart(0, 3) + 10;
+    lighting.sync(tick);
+    const first = { x: cloud.position.x, z: cloud.position.z };
+    lighting.sync(tick + 1000);
+    lighting.sync(tick);
     expect(cloud.visible).toBe(true);
-    expect(cloud.position.x).toBeCloseTo(first);
+    expect(cloud.position.x).toBeCloseTo(first.x);
+    expect(cloud.position.z).toBeCloseTo(first.z);
   });
 
-  it('stays out of the sky under reduced motion', () => {
-    const { lighting, cloud } = daylight();
+  it('throw their shadow on lanes across the whole room, not only its northern half', () => {
+    const { scene, lighting, clouds } = daylight();
+    const lanes: number[] = [];
+    for (let i = 0; i < clouds.length; i++) {
+      const cloud = clouds[i];
+      if (cloud === undefined) {
+        continue;
+      }
+      for (let n = 1; n <= 20; n++) {
+        lighting.sync(crossingStart(i, n) + CLOUD_CROSS_TICKS / 2);
+        lanes.push(shadowOf(scene, cloud).z);
+      }
+    }
+    expect(Math.min(...lanes)).toBeLessThan(180 * 0.3);
+    expect(Math.max(...lanes)).toBeGreaterThan(180 * 0.7);
+    for (const z of lanes) {
+      expect(z).toBeGreaterThan(0);
+      expect(z).toBeLessThan(180);
+    }
+  });
+
+  it('vary shape and size crossing to crossing, deterministically', () => {
+    const crossings = Array.from({ length: 30 }, (_, n) => crossingOf(0, n));
+    expect(new Set(crossings.map((c) => c.silhouette)).size).toBeGreaterThan(1);
+    expect(new Set(crossings.map((c) => c.scale)).size).toBeGreaterThan(1);
+    expect(crossingOf(1, 7)).toEqual(crossingOf(1, 7));
+    for (const c of crossings) {
+      expect(c.scale).toBeGreaterThanOrEqual(0.8);
+      expect(c.scale).toBeLessThanOrEqual(1.2);
+    }
+  });
+
+  it('sometimes overlap — the two cycles drift in and out of step', () => {
+    const { lighting, clouds } = daylight();
+    let both = 0;
+    for (let tick = 0; tick < TICKS_PER_SECOND * 600; tick += TICKS_PER_SECOND) {
+      lighting.sync(tick);
+      if (clouds.every((cloud) => cloud.visible)) {
+        both++;
+      }
+    }
+    expect(both).toBeGreaterThan(0);
+  });
+
+  it('stay out of the sky under reduced motion', () => {
+    const { lighting, clouds } = daylight();
     lighting.setReducedMotion(true);
-    lighting.sync(CLOUD_CROSS_TICKS / 2);
-    expect(cloud.visible).toBe(false);
+    lighting.sync(crossingStart(0, 1) + CLOUD_CROSS_TICKS / 2);
+    for (const cloud of clouds) {
+      expect(cloud.visible).toBe(false);
+    }
+    expect(lighting.cloudMoving).toBe(false);
   });
 });
