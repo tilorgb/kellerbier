@@ -92,18 +92,19 @@ export const ENEMY_DROP_TABLES: Readonly<Record<LootTier, DropTable>> = {
       { pickupId: 'biermarke-1', weight: 1 },
       { pickupId: 'biermarke-5', weight: 6 },
       { pickupId: 'biermarke-10', weight: 3 },
-      { pickupId: 'mass-full', weight: 22 },
+      { pickupId: 'mass-full', weight: 19 },
       { pickupId: 'weisswurst-full', weight: 8 },
       { pickupId: 'blutwurst-full', weight: 2 },
       { pickupId: 'bratwurst-half', weight: 6 },
       { pickupId: 'bratwurst-full', weight: 8 },
       { pickupId: 'kellerschluessel-ring', weight: 5 },
       { pickupId: 'bierfassl-pack', weight: 5 },
+      { pickupId: 'chest', weight: 3 },
     ],
     sober: [
       { pickupId: null, weight: 240 },
       { pickupId: 'biermarke-1', weight: 2 },
-      { pickupId: 'biermarke-5', weight: 20 },
+      { pickupId: 'biermarke-5', weight: 17 },
       { pickupId: 'biermarke-10', weight: 5 },
       { pickupId: 'weisswurst-full', weight: 8 },
       { pickupId: 'blutwurst-full', weight: 2 },
@@ -111,12 +112,18 @@ export const ENEMY_DROP_TABLES: Readonly<Record<LootTier, DropTable>> = {
       { pickupId: 'bratwurst-full', weight: 8 },
       { pickupId: 'kellerschluessel-ring', weight: 10 },
       { pickupId: 'bierfassl-pack', weight: 5 },
+      { pickupId: 'chest', weight: 3 },
     ],
   },
 };
 
 /**
  * Rolled once when a room's last enemy falls, in addition to that enemy's own drop.
+ *
+ * #353 added `chest` (~7% of clears) and `locked-chest` (~3%), paid for out
+ * of the other non-null weights rather than out of `null` — a clear pays out
+ * exactly as often as it did before, it just sometimes pays a chest instead
+ * of a coin.
  *
  * `null`'s weight is the one place a room is allowed to clear and hand back
  * nothing at all — deliberately still the minority outcome (about 30% of
@@ -127,23 +134,27 @@ export const ENEMY_DROP_TABLES: Readonly<Record<LootTier, DropTable>> = {
 export const ROOM_CLEAR_DROP_TABLE: DropTable = {
   promilled: [
     { pickupId: null, weight: 38 },
-    { pickupId: 'biermarke-1', weight: 10 },
-    { pickupId: 'biermarke-5', weight: 8 },
-    { pickupId: 'mass-half', weight: 26 },
-    { pickupId: 'mass-full', weight: 8 },
+    { pickupId: 'biermarke-1', weight: 8 },
+    { pickupId: 'biermarke-5', weight: 6 },
+    { pickupId: 'mass-half', weight: 22 },
+    { pickupId: 'mass-full', weight: 7 },
     { pickupId: 'bratwurst-half', weight: 10 },
-    { pickupId: 'bratwurst-full', weight: 8 },
-    { pickupId: 'kellerschluessel', weight: 8 },
-    { pickupId: 'bierfassl', weight: 8 },
+    { pickupId: 'bratwurst-full', weight: 6 },
+    { pickupId: 'kellerschluessel', weight: 7 },
+    { pickupId: 'bierfassl', weight: 7 },
+    { pickupId: 'chest', weight: 9 },
+    { pickupId: 'locked-chest', weight: 4 },
   ],
   sober: [
     { pickupId: null, weight: 38 },
-    { pickupId: 'biermarke-1', weight: 15 },
-    { pickupId: 'biermarke-5', weight: 24 },
-    { pickupId: 'bratwurst-half', weight: 16 },
+    { pickupId: 'biermarke-1', weight: 12 },
+    { pickupId: 'biermarke-5', weight: 19 },
+    { pickupId: 'bratwurst-half', weight: 14 },
     { pickupId: 'bratwurst-full', weight: 10 },
-    { pickupId: 'kellerschluessel', weight: 13 },
-    { pickupId: 'bierfassl', weight: 8 },
+    { pickupId: 'kellerschluessel', weight: 11 },
+    { pickupId: 'bierfassl', weight: 7 },
+    { pickupId: 'chest', weight: 9 },
+    { pickupId: 'locked-chest', weight: 4 },
   ],
 };
 
@@ -180,5 +191,63 @@ export const BOSS_REWARD_DROP_TABLE: DropTable = {
     { pickupId: 'blutwurst-half', weight: 6 },
     { pickupId: 'kellerschluessel-ring', weight: 15 },
     { pickupId: 'bierfassl-pack', weight: 10 },
+  ],
+};
+
+/**
+ * What a Chest bursts into when opened (#353) — 2–3 rolls of this table,
+ * `guaranteed` (`GameSim.openChest`), so it has no `null` outcome: a chest
+ * that opens onto nothing reads as the game lying. Small, everyday loot, and
+ * it can roll a Kellerschlüssel — which is what feeds Locked Chests.
+ */
+export const CHEST_DROP_TABLE: DropTable = {
+  promilled: [
+    { pickupId: 'biermarke-1', weight: 20 },
+    { pickupId: 'biermarke-5', weight: 10 },
+    { pickupId: 'bratwurst-half', weight: 14 },
+    { pickupId: 'bratwurst-full', weight: 6 },
+    { pickupId: 'mass-half', weight: 14 },
+    { pickupId: 'mass-full', weight: 5 },
+    { pickupId: 'kellerschluessel', weight: 12 },
+    { pickupId: 'bierfassl', weight: 12 },
+  ],
+  sober: [
+    { pickupId: 'biermarke-1', weight: 24 },
+    { pickupId: 'biermarke-5', weight: 14 },
+    { pickupId: 'bratwurst-half', weight: 16 },
+    { pickupId: 'bratwurst-full', weight: 8 },
+    { pickupId: 'kellerschluessel', weight: 14 },
+    { pickupId: 'bierfassl', weight: 14 },
+  ],
+};
+
+/**
+ * What a Locked Chest bursts into (#353) — 3–4 rolls, `guaranteed`, of
+ * bigger denominations than `CHEST_DROP_TABLE`: the key it cost has to have
+ * been worth spending. It can roll a key too; blocking that would only make
+ * the chest a worse deal. Its item chance is not in here — a Locked Chest
+ * that pays an item pays *only* the item (`tuning.chest.lockedItemChance`).
+ */
+export const LOCKED_CHEST_DROP_TABLE: DropTable = {
+  promilled: [
+    { pickupId: 'biermarke-5', weight: 16 },
+    { pickupId: 'biermarke-10', weight: 6 },
+    { pickupId: 'bratwurst-full', weight: 12 },
+    { pickupId: 'weisswurst-full', weight: 6 },
+    { pickupId: 'blutwurst-half', weight: 2 },
+    { pickupId: 'mass-full', weight: 12 },
+    { pickupId: 'kellerschluessel', weight: 8 },
+    { pickupId: 'bierfassl', weight: 8 },
+    { pickupId: 'bierfassl-pack', weight: 8 },
+  ],
+  sober: [
+    { pickupId: 'biermarke-5', weight: 22 },
+    { pickupId: 'biermarke-10', weight: 8 },
+    { pickupId: 'bratwurst-full', weight: 14 },
+    { pickupId: 'weisswurst-full', weight: 7 },
+    { pickupId: 'blutwurst-half', weight: 2 },
+    { pickupId: 'kellerschluessel', weight: 9 },
+    { pickupId: 'bierfassl', weight: 8 },
+    { pickupId: 'bierfassl-pack', weight: 8 },
   ],
 };

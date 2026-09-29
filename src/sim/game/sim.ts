@@ -5,6 +5,8 @@ import { ENEMY_DEFINITIONS } from '../../content/enemies/index.js';
 import { CURSE_DEFINITIONS } from '../../content/curses/index.js';
 import {
   BOSS_REWARD_DROP_TABLE,
+  CHEST_DROP_TABLE,
+  LOCKED_CHEST_DROP_TABLE,
   PICKUP_DEFINITIONS,
   ROOM_CLEAR_DROP_TABLE,
 } from '../../content/pickups/index.js';
@@ -4742,8 +4744,10 @@ export class GameSim {
    * -1`), which `activePedestals`/rendering already treat as "nothing to
    * show."
    */
-  private spawnPedestal(x: number, y: number): void {
-    const role = this.roomSpecialRole;
+  private spawnPedestal(x: number, y: number, poolOverride?: ItemPoolId): void {
+    // A pool named outright (a Locked Chest's item, #353) is never a shop's
+    // stock, whatever room it happens to be opened in — no stock roll, no price.
+    const role = poolOverride === undefined ? this.roomSpecialRole : undefined;
     // A shop's pedestal is priced, and only stocked on some visits — the roll
     // (deterministic, off `random.items` like the offer itself) happens before
     // the draw so a shop with no item this run also does not consume one.
@@ -4754,7 +4758,7 @@ export class GameSim {
     }
     const offer = selectItemOffer(
       this.items,
-      pedestalPoolForRole(role),
+      poolOverride ?? pedestalPoolForRole(role),
       {
         promilleUnlocked: this.promilleUnlocked,
         floor: this.currentFloorValue,
@@ -4782,15 +4786,59 @@ export class GameSim {
    * the two outcomes never both pay.
    */
   private spawnMinibossConsolationBundle(x: number, y: number): void {
+    // #353: the miss case is a Locked Chest and the key to open it, rather
+    // than loose pickups — the player chooses whether to spend the key here
+    // or carry it to the treasure door.
     const spots: readonly [string, number, number][] = [
-      ['mass-half', x - MINIBOSS_CONSOLATION_SPREAD, y],
-      ['biermarke-5', x + MINIBOSS_CONSOLATION_SPREAD, y],
-      ['kellerschluessel', x, y + MINIBOSS_CONSOLATION_SPREAD],
+      ['locked-chest', x, y],
+      ['kellerschluessel', x, y + MINIBOSS_CONSOLATION_SPREAD * 1.5],
     ];
     for (const [pickupId, spotX, spotY] of spots) {
       const safe = this.safeSpawnPoint(spotX, spotY, this.pickups.get(pickupId).radius);
       this.spawnPickup(pickupId, safe.x, safe.y);
     }
+  }
+
+  /**
+   * Opens a chest at `(x, y)` (#353) — called by `sim/systems/pickup.ts` once
+   * a Chest has been touched, or a Locked Chest touched and its key spent.
+   *
+   * The chest stays behind as its opened counterpart (an inert pickup, so the
+   * room's loot snapshot carries it across a revisit), and its payout lands in
+   * a ring `tuning.chest.payoutSpread` around it: 2–3 pickups from
+   * `CHEST_DROP_TABLE` for a Chest, 3–4 from `LOCKED_CHEST_DROP_TABLE` for a
+   * Locked Chest — rolled `guaranteed`, so a chest never opens onto nothing.
+   * A Locked Chest instead pays a `treasure`-pool item pedestal on a
+   * `tuning.chest.lockedItemChance` roll, and nothing else.
+   *
+   * Every roll draws from `random.items`, the loot stream, so the same seed
+   * and route still opens every chest onto the same thing.
+   */
+  openChest(x: number, y: number, locked: boolean): void {
+    this.spawnPickup(locked ? 'locked-chest-open' : 'chest-open', x, y, undefined, false);
+    const spread = this.tuning.chest.payoutSpread;
+    if (locked && this.random.items.chance(this.tuning.chest.lockedItemChance)) {
+      const spot = this.safeSpawnPoint(x, y + spread * 1.5, PEDESTAL_RADIUS);
+      this.spawnPedestal(spot.x, spot.y, 'treasure');
+      return;
+    }
+    const table = locked ? LOCKED_CHEST_DROP_TABLE : CHEST_DROP_TABLE;
+    const count = (locked ? 3 : 2) + (this.random.items.chance(0.5) ? 1 : 0);
+    const start = this.random.items.nextFloat() * Math.PI * 2;
+    for (let i = 0; i < count; i++) {
+      const angle = start + (i / count) * Math.PI * 2;
+      this.dropLoot(table, x + Math.cos(angle) * spread, y + Math.sin(angle) * spread, true);
+    }
+  }
+
+  /**
+   * Spawns `pickupId` at `(x, y)`, nudged clear of walls the way every drop
+   * is (`safeSpawnPoint`) — for a drop that is not a table roll, such as an
+   * elite's Chest (#353, `sim/systems/loot.ts`).
+   */
+  dropPickupAt(pickupId: string, x: number, y: number): void {
+    const safe = this.safeSpawnPoint(x, y, this.pickups.get(pickupId).radius);
+    this.spawnPickup(pickupId, safe.x, safe.y);
   }
 
   /** Every pedestal in the current room, for rendering. Read-only — mutate through `takePedestalItem`. */

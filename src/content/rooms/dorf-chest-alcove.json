@@ -1,0 +1,50 @@
+{
+  "id": "dorf-chest-alcove",
+  "tileGrid": [
+    "###############",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "###############"
+  ],
+  "obstacles": [
+    { "x": 48, "y": 96, "width": 16, "height": 16 },
+    { "x": 48, "y": 112, "width": 16, "height": 16 },
+    { "x": 48, "y": 128, "width": 16, "height": 16 },
+    { "x": 0, "y": 96, "width": 16, "height": 16 },
+    { "x": 16, "y": 96, "width": 16, "height": 16 },
+    { "x": 32, "y": 96, "width": 16, "height": 16 },
+    { "x": 160, "y": 32, "width": 16, "height": 16 },
+    { "x": 160, "y": 48, "width": 16, "height": 16 }
+  ],
+  "enemySpawns": [
+    { "x": 120, "y": 72, "group": "alcove-charge" },
+    { "x": 200, "y": 104, "group": "alcove-watch" }
+  ],
+  "spawnGroups": [
+    {
+      "id": "alcove-charge",
+      "count": 1,
+      "choices": [{ "enemyId": "kuh", "minFloor": 2, "maxFloor": 2 }]
+    },
+    {
+      "id": "alcove-watch",
+      "count": 1,
+      "choices": [{ "enemyId": "bauer", "minFloor": 2, "maxFloor": 2 }]
+    }
+  ],
+  "pickupSpawns": [{ "x": 24, "y": 128, "type": "chest" }],
+  "hazards": [],
+  "decorativeProps": [{ "x": 216, "y": 24, "type": "hay-bale" }],
+  "metadata": {
+    "floorTags": ["rural"],
+    "shape": "1x1",
+    "doors": { "north": true, "east": true, "south": true, "west": true },
+    "difficultyTier": 1,
+    "weight": 1
+  }
+}

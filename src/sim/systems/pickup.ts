@@ -90,7 +90,26 @@ function collectiblePickup(sim: GameSim, other: number): boolean {
     return true;
   }
   const effect = sim.pickups.at(definitionIndex).effect;
+  // A Locked Chest with no key in hand is refused the same way (#353): it
+  // skitters off the player's feet rather than opening.
+  if (effect.kind === 'chest') {
+    return !effect.locked || sim.keys > 0;
+  }
   return !(effect.kind === 'food' && sim.healthPoolFull(effect.pool));
+}
+
+/**
+ * Whether `other` is a chest of either state (#353). A chest is furniture,
+ * not loot: it never drifts toward the player on the magnet, and an opened
+ * one is ignored outright — no collection, no shove.
+ */
+function chestState(sim: GameSim, other: number): 'none' | 'closed' | 'opened' {
+  const definitionIndex = sim.pickupKind.data[other] ?? -1;
+  if (definitionIndex < 0) {
+    return 'none';
+  }
+  const kind = sim.pickups.at(definitionIndex).effect.kind;
+  return kind === 'chest' ? 'closed' : kind === 'opened-chest' ? 'opened' : 'none';
 }
 
 /** Either queues a touching pickup for collection, or nudges a nearby one toward the player. */
@@ -110,6 +129,10 @@ function candidate(other: number): void {
   const playerY = player[PLAYER_Y] ?? 0;
   const playerRadius = player[PLAYER_RADIUS] ?? 0;
 
+  const chest = chestState(sim, other);
+  if (chest === 'opened') {
+    return;
+  }
   const priced = ((sim.world.masks[other] ?? 0) & sim.pickupPrice.bit) !== 0;
   const collectible = !priced && collectiblePickup(sim, other);
 
@@ -162,8 +185,9 @@ function candidate(other: number): void {
   }
 
   // A pickup the player can't take doesn't drift toward them either — it just
-  // lies there until bumped.
-  if (!collectible) {
+  // lies there until bumped. Nor does a chest: it is opened by walking into
+  // it, not hoovered up (#353).
+  if (!collectible || chest === 'closed') {
     return;
   }
 
@@ -203,8 +227,18 @@ function collect(sim: GameSim, other: number): boolean {
   if (effect.kind === 'food' && sim.healthPoolFull(effect.pool)) {
     return false;
   }
+  if (effect.kind === 'opened-chest') {
+    return false;
+  }
   const priced = ((sim.world.masks[other] ?? 0) & sim.pickupPrice.bit) !== 0;
   if (priced && !sim.spendBiermarken(sim.pickupPrice.data[other] ?? 0)) {
+    return false;
+  }
+  // A Locked Chest spends its key here, before the toast, for the same
+  // reason a price is paid before it: a toast for a chest that stayed shut
+  // would be a lie. `candidate` never queues one without a key in hand, so
+  // this only fails if something else spent it earlier this tick.
+  if (effect.kind === 'chest' && effect.locked && !sim.spendKeys(1)) {
     return false;
   }
   // A Maß is offered to held items *before* the toast, not only before the
@@ -239,6 +273,9 @@ function collect(sim: GameSim, other: number): boolean {
       break;
     case 'masterkey':
       sim.grantMeisterschluessel();
+      break;
+    case 'chest':
+      sim.openChest(sim.positionX(other), sim.positionY(other), effect.locked);
       break;
     case 'food':
       // Inert in a sober run is true of every Wurst pickup, by construction:

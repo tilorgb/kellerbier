@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { ENEMY_DEFINITIONS } from '../../src/content/enemies/index.js';
 import {
   BOSS_REWARD_DROP_TABLE,
+  CHEST_DROP_TABLE,
   ENEMY_DROP_TABLES,
+  LOCKED_CHEST_DROP_TABLE,
   PICKUP_DEFINITIONS,
   ROOM_CLEAR_DROP_TABLE,
 } from '../../src/content/pickups/index.js';
@@ -82,6 +84,41 @@ describe('drop tables', () => {
 
   it('the room-clear table names only real pickups', () => {
     checkTable(registry, ROOM_CLEAR_DROP_TABLE, 'ROOM_CLEAR_DROP_TABLE');
+  });
+
+  it('the chest tables name only real pickups, and never nothing (#353)', () => {
+    checkTable(registry, CHEST_DROP_TABLE, 'CHEST_DROP_TABLE');
+    checkTable(registry, LOCKED_CHEST_DROP_TABLE, 'LOCKED_CHEST_DROP_TABLE');
+    for (const table of [CHEST_DROP_TABLE, LOCKED_CHEST_DROP_TABLE]) {
+      for (const variant of ['sober', 'promilled'] as const) {
+        // A chest opening onto nothing reads as the game lying — and a chest
+        // inside a chest is a loop, not a reward.
+        for (const entry of table[variant]) {
+          expect(entry.pickupId).not.toBeNull();
+          const effect = registry.get(entry.pickupId ?? '').effect.kind;
+          expect(effect).not.toBe('chest');
+        }
+      }
+    }
+  });
+
+  it('never rolls an already-opened chest from any table (#353)', () => {
+    const tables: DropTable[] = [
+      ...LOOT_TIERS.map((tier) => ENEMY_DROP_TABLES[tier]),
+      ROOM_CLEAR_DROP_TABLE,
+      BOSS_REWARD_DROP_TABLE,
+      CHEST_DROP_TABLE,
+      LOCKED_CHEST_DROP_TABLE,
+    ];
+    for (const table of tables) {
+      for (const variant of ['sober', 'promilled'] as const) {
+        for (const entry of table[variant]) {
+          if (entry.pickupId !== null) {
+            expect(registry.get(entry.pickupId).effect.kind).not.toBe('opened-chest');
+          }
+        }
+      }
+    }
   });
 
   it('never rolls Der Meisterschlüssel from any table', () => {

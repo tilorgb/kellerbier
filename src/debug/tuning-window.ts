@@ -1,6 +1,7 @@
 import type { SimTuning } from '../sim/tuning.js';
 import {
   DEFAULT_CHARACTER_TUNING,
+  DEFAULT_CHEST_TUNING,
   DEFAULT_CURSE_TUNING,
   DEFAULT_ENEMY_TUNING,
   DEFAULT_IMPACT_TUNING,
@@ -56,7 +57,8 @@ interface GroupSpec {
     | 'character'
     | 'roomGen'
     | 'curse'
-    | 'machine';
+    | 'machine'
+    | 'chest';
   readonly fields: readonly FieldSpec[];
 }
 
@@ -533,6 +535,15 @@ const GROUPS: readonly GroupSpec[] = [
       },
     ],
   },
+  {
+    title: 'chests',
+    group: 'chest',
+    fields: [
+      { key: 'lockedItemChance', min: 0, max: 0.5, step: 0.01, hint: 'Locked Chest pays an item' },
+      { key: 'eliteChestChance', min: 0, max: 1, step: 0.01, hint: 'elite drops a Chest' },
+      { key: 'payoutSpread', min: 4, max: 40, step: 1, hint: 'px a payout lands from its chest' },
+    ],
+  },
 ];
 
 const DEFAULTS = {
@@ -547,6 +558,7 @@ const DEFAULTS = {
   roomGen: DEFAULT_ROOM_GEN_TUNING,
   curse: DEFAULT_CURSE_TUNING,
   machine: DEFAULT_MACHINE_TUNING,
+  chest: DEFAULT_CHEST_TUNING,
 } as const;
 
 const STYLE = `

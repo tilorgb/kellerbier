@@ -84,7 +84,23 @@ export type PickupEffect =
    * collection time, the same tunable-value pattern the debug tuning window
    * already binds a slider to.
    */
-  | { readonly kind: 'promille'; readonly size: 'full' | 'half' };
+  | { readonly kind: 'promille'; readonly size: 'full' | 'half' }
+  /**
+   * Chest and Locked Chest (#353). Touching one opens it
+   * (`GameSim.openChest`): it bursts into pickups rolled from its own table,
+   * and stays behind in the room as its `opened-chest` counterpart. A
+   * `locked` chest spends one Kellerschlüssel on touch, the same as the
+   * key-locked treasure door (#196) — and without a key it is refused and
+   * shoved aside exactly like a full-pool Wurst.
+   */
+  | { readonly kind: 'chest'; readonly locked: boolean }
+  /**
+   * A chest already opened (#353): inert scenery that is still a pickup
+   * entity only so the room's loot snapshot carries it across a revisit for
+   * free. Never collected, never magnetised, never pushed, never in a drop
+   * table.
+   */
+  | { readonly kind: 'opened-chest' };
 
 /**
  * The description to show for `definition` in a run that is (or is not)

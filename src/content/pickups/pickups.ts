@@ -199,6 +199,56 @@ export const meisterschluessel: PickupDefinition = {
   effect: { kind: 'masterkey' },
 };
 
+/**
+ * Chest and Locked Chest (#353) — names given by the user, used as-is (see
+ * `CLAUDE.md`'s naming rule). Bigger than every other pickup, because the art
+ * is: a 24×18 chest standing in the room rather than a 24×24 canvas holding
+ * a ~15×20 Maß.
+ */
+const CHEST_RADIUS = 8;
+
+export const chest: PickupDefinition = {
+  id: 'chest',
+  name: 'Chest',
+  description: 'pickups.chest.description',
+  radius: CHEST_RADIUS,
+  tint: 0x8a5a24,
+  label: 'C',
+  effect: { kind: 'chest', locked: false },
+};
+
+export const lockedChest: PickupDefinition = {
+  id: 'locked-chest',
+  name: 'Locked Chest',
+  description: 'pickups.locked-chest.description',
+  radius: CHEST_RADIUS,
+  tint: 0xd4af37,
+  label: 'LC',
+  effect: { kind: 'chest', locked: true },
+};
+
+/** A Chest after it has been opened — stays in the room, empty (#353). */
+export const chestOpen: PickupDefinition = {
+  id: 'chest-open',
+  name: 'Chest',
+  description: 'pickups.chest-open.description',
+  radius: CHEST_RADIUS,
+  tint: 0x4a2f18,
+  label: 'C',
+  effect: { kind: 'opened-chest' },
+};
+
+/** A Locked Chest after it has been opened. */
+export const lockedChestOpen: PickupDefinition = {
+  id: 'locked-chest-open',
+  name: 'Locked Chest',
+  description: 'pickups.locked-chest-open.description',
+  radius: CHEST_RADIUS,
+  tint: 0x4a2f18,
+  label: 'LC',
+  effect: { kind: 'opened-chest' },
+};
+
 export const PICKUP_DEFINITIONS: readonly PickupDefinition[] = [
   massFull,
   massHalf,
@@ -216,4 +266,8 @@ export const PICKUP_DEFINITIONS: readonly PickupDefinition[] = [
   kellerschluessel,
   kellerschluesselRing,
   meisterschluessel,
+  chest,
+  lockedChest,
+  chestOpen,
+  lockedChestOpen,
 ];

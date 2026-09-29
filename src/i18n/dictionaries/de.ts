@@ -297,6 +297,10 @@ export const de: Record<DictKey, string> = {
   'pickups.bierfassl-pack.description': 'Bombe +3',
   'pickups.kellerschluessel.description': 'Schlüssel +1',
   'pickups.kellerschluessel-ring.description': 'Schlüssel +3',
+  'pickups.chest.description': 'Öffnet sich bei Berührung',
+  'pickups.locked-chest.description': 'Kostet einen Schlüssel',
+  'pickups.chest-open.description': 'Leer',
+  'pickups.locked-chest-open.description': 'Leer',
   'pickups.meisterschluessel.description': 'Öffnet die Bosstür',
 
   // --- Enemies (name stays Bavarian in every locale) ----------------------

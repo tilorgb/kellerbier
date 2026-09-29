@@ -6174,3 +6174,36 @@ markup and `@`-mentions before they go into a GitHub comment.
 §5 would allow ("ask what they did, not what they would like"). The observation checklist (§4) is
 not replaced; this only covers what a form can.
 
+## 111. Chests are pickups, and they give keys a second use
+
+Before #353 a Kellerschlüssel opened exactly one thing, the key-locked treasure door, while every
+drop table kept handing keys out. Chests give keys a second sink and put a decision in front of
+the player: open this Locked Chest now, or carry the key to the treasure door. The design came out
+of a grill-me round with the user, who also named them — **Chest** and **Locked Chest**, used
+as-is.
+
+- **Pickups, not props.** A chest is a `PickupDefinition` with a new `chest` effect kind, so drop
+  tables, room-authored `pickupSpawns`, `safeSpawnPoint` and the room loot snapshot all carry it
+  with no new plumbing. An opened chest is a second pickup (`opened-chest` kind) that stays in the
+  room, inert: never collected, never magnetised, never pushed, never in a table. It exists as an
+  entity only so the snapshot keeps it across a revisit.
+- **Touch to open, the key is spent on touch** — the same rule as the treasure door. Without a
+  key a Locked Chest is refused exactly like a full-pool Wurst: it skitters off the player's feet.
+  Chests never drift on the magnet; they are furniture you walk into, not loot you hoover up.
+- **Payout is always something.** 2–3 guaranteed rolls of `CHEST_DROP_TABLE`, or 3–4 of the
+  richer `LOCKED_CHEST_DROP_TABLE`. Both can roll a key. A Locked Chest instead pays only a
+  `treasure`-pool item pedestal on `tuning.chest.lockedItemChance` (8%), kept low so an item
+  out of a chest still feels special.
+- **Sources.** `chest`/`locked-chest` entries in `ROOM_CLEAR_DROP_TABLE` taken from the non-null
+  weights (so a clear pays out as often as before); a small `chest` weight on the tough tier;
+  15% of elite kills drop a Chest instead of their tier roll (never a Locked Chest — the fight was
+  the price), which rises with depth because the elite chance does; a missed mini-boss item roll
+  pays a Locked Chest plus its key; and two authored rooms wall a Chest in behind bombable
+  boulders.
+- **Secret rooms stopped always paying an item.** Each is now a weighted pool of layouts —
+  secret: a Chest stash, loose junk, a Locked Chest vault with its key, and the old pedestal as a
+  rare shrine; supersecret: the same idea, bigger. Pure content on `generateFloor`'s existing
+  weighted pick.
+- **Art.** Design A of three (a domed chest; the others were a plank crate and a trimmed trunk),
+  at 24×18 rather than 16×12 — at 16×12 a chest read smaller than a Maß. Authored as block art in
+  `tools/art/authoring/chests.mjs`, held byte-identical by `tests/art/chests-authoring.test.ts`.

@@ -305,6 +305,10 @@ export const en = {
   'pickups.bierfassl-pack.description': 'Bomb +3',
   'pickups.kellerschluessel.description': 'Key +1',
   'pickups.kellerschluessel-ring.description': 'Key +3',
+  'pickups.chest.description': 'Opens on touch',
+  'pickups.locked-chest.description': 'Costs a key to open',
+  'pickups.chest-open.description': 'Empty',
+  'pickups.locked-chest-open.description': 'Empty',
   'pickups.meisterschluessel.description': 'Opens the boss door',
 
   // --- Enemies (name stays Bavarian in every locale) ----------------------
