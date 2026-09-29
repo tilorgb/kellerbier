@@ -114,11 +114,14 @@ import { TelemetryTracker } from './telemetry/tracker.js';
 import {
   clearTelemetryRuns,
   loadTelemetry,
+  markRunsSent,
   optIntoTelemetry,
   optOutOfTelemetry,
   recordRunTelemetry,
 } from './telemetry/store.js';
 import { downloadTelemetryFile } from './telemetry/file.js';
+import { TELEMETRY_ENDPOINT } from './telemetry/endpoint.js';
+import { copyTelemetry, sendTelemetry } from './telemetry/send.js';
 import { createTouchControls, isTouchCapable } from './touch-controls.js';
 import { IS_RELEASE_BUILD } from './build-mode.js';
 import { type BootProgress, createBootProgress } from './boot-progress.js';
@@ -2558,6 +2561,16 @@ async function boot(progress: BootProgress): Promise<void> {
       clear: () => {
         clearTelemetryRuns();
       },
+      canSend: (TELEMETRY_ENDPOINT as string) !== '',
+      send: async () => {
+        const sent = await sendTelemetry(loadTelemetry(), TELEMETRY_ENDPOINT);
+        if (sent === null) {
+          return false;
+        }
+        markRunsSent(sent, Date.now());
+        return true;
+      },
+      copy: () => copyTelemetry(loadTelemetry()),
     },
   });
 

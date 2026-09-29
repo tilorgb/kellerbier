@@ -59,3 +59,15 @@ export function clearTelemetryRuns(): TelemetryStore {
     telemetry: { ...save.telemetry, runs: [] },
   })).telemetry;
 }
+
+/** Stamps the given runs as delivered by a "Send" click, so the next click uploads only what is new. Unknown ids are ignored. */
+export function markRunsSent(runIds: readonly string[], sentAt: number): TelemetryStore {
+  const sent = new Set(runIds);
+  return updateSave((save) => ({
+    ...save,
+    telemetry: {
+      ...save.telemetry,
+      runs: save.telemetry.runs.map((run) => (sent.has(run.runId) ? { ...run, sentAt } : run)),
+    },
+  })).telemetry;
+}

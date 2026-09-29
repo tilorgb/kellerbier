@@ -69,6 +69,12 @@ export interface TelemetryRunRecord {
   readonly roomClears: readonly TelemetryRoomClear[];
   /** Ticks spent at each Promille tier id (`sim/game/promille.ts#PromilleTier`), as string keys — a plain object round-trips through `JSON.stringify` without a `Map` codec. */
   readonly promilleTierTicks: Readonly<Record<string, number>>;
+  /**
+   * When the player's own "Send" click delivered this run (`send.ts`). Local
+   * bookkeeping only — never part of what is sent or exported — so a second
+   * click uploads just the runs since the last one.
+   */
+  readonly sentAt?: number;
 }
 
 export interface TelemetryStore {
@@ -173,6 +179,7 @@ export function sanitizeTelemetryRun(value: unknown): TelemetryRunRecord | null 
     itemsHeld: sanitizeStringArray(value.itemsHeld),
     roomClears: sanitizeRoomClears(value.roomClears),
     promilleTierTicks: sanitizePromilleTierTicks(value.promilleTierTicks),
+    ...(isFiniteNumber(value.sentAt) ? { sentAt: value.sentAt } : {}),
   };
 }
 

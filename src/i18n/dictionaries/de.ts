@@ -209,12 +209,23 @@ export const de: Record<DictKey, string> = {
     'welchem Stock), wie lange jeder Raum zum Räumen brauchte, welche Gegenstände ' +
     'gehalten wurden und wie viel Zeit auf jeder Promille-Stufe verbracht wurde. Sonst ' +
     'nichts — kein Name, kein Konto, kein Standort, keine Möglichkeit herauszufinden, ' +
-    'wer gespielt hat. Ein Lauf bleibt hier gespeichert, bis er selbst als Datei ' +
-    'exportiert wird; es wird nie automatisch irgendetwas verschickt.',
+    'wer gespielt hat. Ein Lauf bleibt hier gespeichert, bis du auf Senden drückst, ihn ' +
+    'kopierst oder selbst als Datei exportierst; es wird nie automatisch irgendetwas ' +
+    'verschickt.',
   'ui.settings.privacy.session': 'Sitzung',
   'ui.settings.privacy.runsRecordedOne': '1 Lauf aufgezeichnet, wartet auf den Export.',
   'ui.settings.privacy.runsRecordedOther': '{count} Läufe aufgezeichnet, warten auf den Export.',
   'ui.settings.privacy.exportButton': 'Als Datei exportieren',
+  'ui.settings.privacy.sendButton': 'Meine Ergebnisse senden',
+  'ui.settings.privacy.copyButton': 'Meine Ergebnisse kopieren',
+  'ui.settings.privacy.sending': 'Wird gesendet…',
+  'ui.settings.privacy.sent': 'Gesendet — danke!',
+  'ui.settings.privacy.sendFailed':
+    'Senden hat nicht geklappt. Nochmal versuchen oder Kopieren nutzen.',
+  'ui.settings.privacy.copied':
+    'Kopiert. Füg es in eine Nachricht an die Person ein, die den Test leitet.',
+  'ui.settings.privacy.copyFailed':
+    'Kopieren hat nicht geklappt. Nutz stattdessen „Als Datei exportieren“.',
   'ui.settings.privacy.clearButton': 'Löschen',
   'ui.settings.privacy.shareToggle': 'Anonyme Playtest-Telemetrie teilen',
 

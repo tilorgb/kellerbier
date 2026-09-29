@@ -214,12 +214,19 @@ export const bar: Record<DictKey, string> = {
     'Stock), wia lang jeda Raum zum Räumen braucht hod, wölche Sacha du dabei ghobt ' +
     'hast, und wia lang du auf jeda Promillestufn warst. Sunst nix — koa Nam, koa ' +
     'Konto, koan Standort, koane Möglichkeit rauszfinden, wer gspuit hod. A Lauf bleibt ' +
-    'do gspeichert, bis dass du eam sölm als Datei exportierst; do wead nie automatisch ' +
-    'irgendwas vaschickt.',
+    'do gspeichert, bis dass du auf Senden drückst, eam kopierst oda sölm als Datei ' +
+    'exportierst; do wead nie automatisch irgendwas vaschickt.',
   'ui.settings.privacy.session': 'Sitzung',
   'ui.settings.privacy.runsRecordedOne': '1 Lauf aufgschriebn, wart auf’n Export.',
   'ui.settings.privacy.runsRecordedOther': '{count} Läuf aufgschriebn, wartn auf’n Export.',
   'ui.settings.privacy.exportButton': 'Ois Datei exportiern',
+  'ui.settings.privacy.sendButton': 'Meine Ergebnisse senden',
+  'ui.settings.privacy.copyButton': 'Meine Ergebnisse kopieren',
+  'ui.settings.privacy.sending': 'Wead gsendt…',
+  'ui.settings.privacy.sent': 'Gsendt — dankschön!',
+  'ui.settings.privacy.sendFailed': 'Senden hod net gfunkt. Nomoi probiern oda Kopiern nemma.',
+  'ui.settings.privacy.copied': 'Kopiert. Füg des in a Nachricht an den ei, der den Test leitet.',
+  'ui.settings.privacy.copyFailed': 'Kopiern hod net gfunkt. Nimm liaba „Als Datei exportiern“.',
   'ui.settings.privacy.clearButton': 'Löschn',
   'ui.settings.privacy.shareToggle': 'Anonyme Playtest-Telemetrie teiln',
 
