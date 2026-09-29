@@ -223,12 +223,19 @@ export const en = {
     'how each run ends (won or died, on which floor), how long each room took to clear, ' +
     'which items were held, and how much time was spent at each Promille tier. Nothing ' +
     'else — no name, no account, no location, no way to identify who played. A run is ' +
-    'kept here until you export it as a file yourself; nothing is ever sent anywhere ' +
-    'automatically.',
+    'kept here until you press Send, copy it or export it as a file yourself; nothing ' +
+    'is ever sent anywhere automatically.',
   'ui.settings.privacy.session': 'Session',
   'ui.settings.privacy.runsRecordedOne': '1 run recorded, waiting to be exported.',
   'ui.settings.privacy.runsRecordedOther': '{count} runs recorded, waiting to be exported.',
   'ui.settings.privacy.exportButton': 'Export as file',
+  'ui.settings.privacy.sendButton': 'Send my results',
+  'ui.settings.privacy.copyButton': 'Copy my results',
+  'ui.settings.privacy.sending': 'Sending…',
+  'ui.settings.privacy.sent': 'Sent — thank you!',
+  'ui.settings.privacy.sendFailed': 'Could not send. Try again, or use Copy.',
+  'ui.settings.privacy.copied': 'Copied. Paste it into a message to the person running the test.',
+  'ui.settings.privacy.copyFailed': 'Could not copy. Use Export as file instead.',
   'ui.settings.privacy.clearButton': 'Clear',
   'ui.settings.privacy.shareToggle': 'Share anonymous playtest telemetry',
 

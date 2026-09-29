@@ -37,8 +37,10 @@ requested (no name, no contact info). Ask the tester, once, near the start of th
 
 Write that code down against this session's notes. It is what lets a later balance pass join
 this session's *qualitative* notes ("died on the third room of floor 2, didn't understand why")
-to the *quantitative* telemetry that run produced, once the tester exports it
-(`app/telemetry/file.ts`'s download, from the same tab) and hands the file over. Telemetry stays
+to the *quantitative* telemetry that run produced, once the tester presses **Send my
+results** on that same tab (`docs/DECISIONS.md` #109) — one click, no file. If Send is
+unavailable, **Copy my results** puts the same data on the clipboard for the tester to paste
+into a message, and **Export as file** remains a last resort. Telemetry stays
 opt-in — a tester who would rather not is still a full session, just without that join.
 
 ## 3. What the tester is told

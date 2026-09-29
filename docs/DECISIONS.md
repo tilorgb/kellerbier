@@ -6116,3 +6116,30 @@ came for, without either being made the other's default.
   save schema v9's `discoveredItems`, filled by watching what the live run *holds*
   (`app/collection.ts`), so every way an item can arrive counts without each one reporting it.
   No back-fill for existing saves: nothing before v9 recorded an inventory.
+
+## 109. Playtest telemetry gains a Send button — one click, still opt-in, still anonymous
+
+**Decided:** M8, #54 and #159; amends #70. #70 made telemetry file-only ("nothing is ever sent
+anywhere") because a backend was more infrastructure than two floors of balance data justified. In
+use that put a `.json` download-and-forward on every tester, which a stranger on the Pages link will
+not do. The fix keeps everything #70 promised about *what* is collected and changes only *how it
+leaves*.
+
+**The rule.** Settings → Privacy shows **Send my results** once there are recorded runs and an
+endpoint is configured (`app/telemetry/endpoint.ts`; empty until the Worker is deployed, which hides
+the button rather than breaking it). A send happens only on that click — never automatically, never
+at opt-in — and posts the same `{ schemaVersion, sessionId, runs }` shape the export file uses, so
+`tools/telemetry/dashboard.mjs` reads either. Delivered runs get a local `sentAt` stamp and stay
+buffered; the next click uploads only what is new, and the Worker keys on `runId`, so a retry or
+double click cannot double-count. `sentAt` is bookkeeping and is stripped from anything that leaves
+the device. **Copy my results** (same JSON on the clipboard, to paste into a message) and **Export
+as file** remain as fallbacks, for a blocked network or a tester who prefers not to send.
+
+**The server** is `tools/telemetry/worker.mjs`, a Cloudflare Worker over Workers KV. It stores what
+the client sends and nothing else — no IP, headers or user agent — and `GET /export?key=…` returns
+every stored run as one telemetry file for the dashboard. The post is `text/plain` so the browser
+makes no CORS preflight.
+
+**Constrains:** #70's rule that any new field must answer #54's balance question still holds — this
+changed transport, not content. An automatic (no-click) send would be a new decision and a rewrite
+of the consent copy.

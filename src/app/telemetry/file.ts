@@ -17,14 +17,19 @@ interface TelemetryFile {
   readonly runs: TelemetryStore['runs'];
 }
 
-/** The buffered telemetry, as JSON text fit for a `.json` download. */
-export function exportTelemetryText(store: TelemetryStore): string {
+/** The runs without the local-only `sentAt` bookkeeping — what leaves the device is the run and nothing about how it left. */
+function withoutLocalState(runs: TelemetryStore['runs']): TelemetryStore['runs'] {
+  return runs.map(({ sentAt: _sentAt, ...run }) => run);
+}
+
+/** The buffered telemetry, as JSON text fit for a `.json` download. `compact` drops the indentation, for the clipboard and the wire. */
+export function exportTelemetryText(store: TelemetryStore, compact = false): string {
   const file: TelemetryFile = {
     schemaVersion: TELEMETRY_FILE_VERSION,
     sessionId: store.sessionId,
-    runs: store.runs,
+    runs: withoutLocalState(store.runs),
   };
-  return JSON.stringify(file, null, 2);
+  return compact ? JSON.stringify(file) : JSON.stringify(file, null, 2);
 }
 
 /** Parses an exported `.json` file's text back into a `TelemetryStore` shape — used by `tools/telemetry/dashboard.mjs`'s own reader and tested here so the two stay in sync. */

@@ -68,6 +68,9 @@ function harness(): {
       clear: () => {
         telemetry = { ...telemetry, runs: [] };
       },
+      canSend: false,
+      send: () => Promise.resolve(true),
+      copy: () => Promise.resolve(true),
     },
   });
   return { menu, settings, preferences, applied, telemetry };
@@ -165,6 +168,15 @@ describe('the settings menu model', () => {
     expect(toggle.get()).toBe(true);
     // Still nothing recorded, so still nothing to export.
     expect(isFocusable(exportRow)).toBe(false);
+  });
+
+  it('offers Copy once runs exist, and Send only when an endpoint is configured', () => {
+    const { menu } = harness();
+    const copyRow = rowOf(menu.tabs, 'Privacy', 'Copy my results');
+    const sendRow = rowOf(menu.tabs, 'Privacy', 'Send my results');
+    expect(isFocusable(copyRow)).toBe(false);
+    // The harness has no endpoint, so Send stays hidden however many runs exist.
+    expect(isFocusable(sendRow)).toBe(false);
   });
 
   it('never puts a focus cursor on a note', () => {
