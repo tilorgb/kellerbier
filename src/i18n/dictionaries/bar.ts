@@ -54,6 +54,9 @@ export const bar: Record<DictKey, string> = {
   'ui.gameOver.results': 'Ergebnis',
   'ui.gameOver.hub': 'Titl',
   'ui.gameOver.summary': '{seconds}s duachghoitn   {kills} dawischt   {floor}',
+  'ui.gameOver.killedBy': 'Dawischt hod di {name}',
+  'ui.gameOver.killedByOwnBomb': 'Dei eigns Bierfassl hod di dawischt',
+  'ui.gameOver.killedByOther': 'A Gfahr hod di dawischt',
 
   'ui.victory.headline': 'Sieg!',
   'ui.victory.epilogue':

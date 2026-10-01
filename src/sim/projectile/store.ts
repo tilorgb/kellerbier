@@ -78,6 +78,12 @@ export class ProjectileStore {
    */
   readonly lastHitTarget: Int32Array;
   /**
+   * The enemy definition that fired this shot, or -1 (the player's own, or
+   * not recorded). Only read to say what killed the player
+   * (`GameSim.killedBy`).
+   */
+  readonly ownerDefinition: Int16Array;
+  /**
    * Which projectile sprite this shot is drawn as (#152) — an index into
    * `EnemyRegistry.projectileArtNames`, 0 for "the default for this team".
    *
@@ -136,6 +142,7 @@ export class ProjectileStore {
     this.splitDepth = new Uint8Array(capacity);
     this.stickyTarget = new Int32Array(capacity);
     this.lastHitTarget = new Int32Array(capacity);
+    this.ownerDefinition = new Int16Array(capacity);
 
     // Recycling the oldest is what keeps the player's own shots appearing in a
     // room already full of bullets: the shot being fired right now is never the
@@ -194,6 +201,7 @@ export class ProjectileStore {
     this.damage[index] = damage;
     this.lifetime[index] = lifetime;
     this.team[index] = team;
+    this.ownerDefinition[index] = -1;
     this.generation[index] = ((this.generation[index] ?? 0) + 1) >>> 0;
     // Tag composition state. `tags` may still change after this — an item's
     // `onProjectileSpawn` hook can add more before the shot is finalised — so

@@ -1,5 +1,6 @@
 import { EventKind } from '../events/queue.js';
 import type { GameSim } from '../game/sim.js';
+import { PLAYER_ATTACKER_OTHER } from '../game/attacker.js';
 import { ParticleKind, type ParticleKindId } from '../particle/store.js';
 import { DEFAULT_DEATH_EFFECT, dragFor, spray } from '../particle/effects.js';
 import { EnemySize } from '../enemy/size.js';
@@ -158,6 +159,9 @@ function applyContact(sim: GameSim, slot: number): void {
     return;
   }
 
+  // Whatever was touched — a body, a swing (`applyMeleeArc` pushes the
+  // swinger), or a hazard.
+  sim.notePlayerAttackerEntity(events.other[slot] ?? -1);
   sim.applyPlayerDamage(damage);
   dispatchItemDamageTaken(sim, damage);
 
@@ -211,6 +215,14 @@ function applyHit(sim: GameSim, slot: number): void {
     // Told to the body before its health changes, so a state machine sees the hit
     // whether or not the hit killed it.
     markEnemyHit(sim, target);
+  } else {
+    // `other` is the projectile's slot: it remembers who fired it.
+    const projectile = events.other[slot] ?? -1;
+    sim.notePlayerAttacker(
+      projectile >= 0
+        ? (sim.projectiles.ownerDefinition[projectile] ?? PLAYER_ATTACKER_OTHER)
+        : PLAYER_ATTACKER_OTHER,
+    );
   }
 
   applyDamageAt(sim, target, damage, hitX, hitY, normalX, normalY, events.other[slot] ?? 0);

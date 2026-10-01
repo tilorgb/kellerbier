@@ -48,6 +48,9 @@ export const de: Record<DictKey, string> = {
   'ui.gameOver.results': 'Ergebnisse',
   'ui.gameOver.hub': 'Titel',
   'ui.gameOver.summary': '{seconds}s überlebt   {kills} getötet   {floor}',
+  'ui.gameOver.killedBy': 'Getötet von {name}',
+  'ui.gameOver.killedByOwnBomb': 'Getötet vom eigenen Bierfassl',
+  'ui.gameOver.killedByOther': 'Getötet von einer Gefahr',
 
   'ui.victory.headline': 'Sieg!',
   'ui.victory.epilogue':

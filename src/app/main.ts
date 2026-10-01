@@ -1955,6 +1955,7 @@ async function boot(progress: BootProgress): Promise<void> {
         } else {
           gameOverScreen.show({
             word: sim.deathWord ?? 'Umgfalln',
+            killer: sim.killedBy,
             seconds: sim.playerDeathTick / TICKS_PER_SECOND,
             kills: summary.kills,
             // `src/debug/panels/run-info.ts` still shows its own placeholder —

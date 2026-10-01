@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { entityIndex } from '../../src/sim/ecs/entity.js';
 import type { EnemyDefinition } from '../../src/sim/enemy/definition.js';
 import { GameSim, type GameSimOptions } from '../../src/sim/game/sim.js';
-import { createInputFrame } from '../../src/sim/input/frame.js';
+import { createInputFrame, quantiseAxis } from '../../src/sim/input/frame.js';
+import cellarPillars from '../../src/content/rooms/cellar-pillars.json';
 import { RoomGeometry } from '../../src/sim/room/geometry.js';
 
 const IDLE = createInputFrame();
@@ -235,5 +236,124 @@ describe('solid obstacles block line of sight', () => {
       sim.step(IDLE);
     }
     expect(stateOf(sim, index)).toBe(1);
+  });
+});
+
+/** Always walks straight at the player. */
+const walker: EnemyDefinition = {
+  id: 'test-walker',
+  name: 'Test Walker',
+  size: 'normal',
+  health: 3,
+  contactDamage: 0,
+  initial: 'walk',
+  states: [{ name: 'walk', behaviours: [{ behaviour: 'walkTowardPlayer', speed: 1 }] }],
+};
+
+describe('walkers lose track of a player behind a solid obstacle', () => {
+  function walkerSim(room: RoomGeometry): { sim: GameSim; index: number } {
+    const sim = emptySim({ room, enemies: [walker] });
+    while (sim.roomWarmupTicks > 0) {
+      sim.step(IDLE);
+    }
+    const player = sim.playerIndex;
+    const transform = sim.transform.data;
+    transform[player * 4] = 280;
+    transform[player * 4 + 1] = 90;
+    transform[player * 4 + 2] = 280;
+    transform[player * 4 + 3] = 90;
+    return { sim, index: place(sim, 'test-walker', 40, 90) };
+  }
+
+  it('walks straight at a player it can see', () => {
+    const { sim, index } = walkerSim(bareRoom());
+    for (let tick = 0; tick < 30; tick++) {
+      sim.step(IDLE);
+    }
+    expect(sim.positionX(index)).toBeGreaterThan(60);
+    expect(Math.abs(sim.positionY(index) - 90)).toBeLessThan(1);
+  });
+
+  it('wanders slowly instead of pressing toward a player hidden behind a rock', () => {
+    const room = bareRoom();
+    room.addBlock(150, 0, 170, 180, true);
+    const { sim, index } = walkerSim(room);
+    const startX = sim.positionX(index);
+    const startY = sim.positionY(index);
+    for (let tick = 0; tick < 30; tick++) {
+      sim.step(IDLE);
+    }
+    const moved = Math.hypot(sim.positionX(index) - startX, sim.positionY(index) - startY);
+    // It moves (it is wandering, not frozen), but at half speed and not
+    // locked onto the player: 30 ticks of a full-speed walk would be ~30 units.
+    expect(moved).toBeGreaterThan(0);
+    expect(moved).toBeLessThan(20);
+  });
+});
+
+describe('walkers search where they last saw the player', () => {
+  it('walks around a wall to the spot the player was last seen', () => {
+    const room = bareRoom();
+    const sim = emptySim({ room, enemies: [walker] });
+    while (sim.roomWarmupTicks > 0) {
+      sim.step(IDLE);
+    }
+    const player = sim.playerIndex;
+    const transform = sim.transform.data;
+    const putPlayer = (x: number, y: number): void => {
+      transform[player * 4] = x;
+      transform[player * 4 + 1] = y;
+      transform[player * 4 + 2] = x;
+      transform[player * 4 + 3] = y;
+    };
+    putPlayer(280, 60);
+    const index = place(sim, 'test-walker', 40, 60);
+    // One look at the player across open floor...
+    sim.step(IDLE);
+    // ...then a wall goes up between them, with a gap at the bottom, and the
+    // player slips out of sight.
+    room.addBlock(150, 0, 170, 140, true);
+    putPlayer(290, 170);
+
+    for (let tick = 0; tick < 600; tick++) {
+      sim.step(IDLE);
+    }
+    // Got past the wall, through the gap — a straight-line walker would
+    // still be pressed against its left face.
+    expect(sim.positionX(index)).toBeGreaterThan(180);
+  });
+});
+
+describe('chasing a player who ducks behind a pillar (real room)', () => {
+  it('keeps after a player who runs behind a pillar, and does not snag on its corner', () => {
+    const sim = new GameSim({ roomTemplate: cellarPillars, suppressRoomContent: true });
+    while (sim.roomWarmupTicks > 0) {
+      sim.step(IDLE);
+    }
+    const player = sim.playerIndex;
+    const transform = sim.transform.data;
+    transform[player * 4] = 110;
+    transform[player * 4 + 1] = 145;
+    transform[player * 4 + 2] = 110;
+    transform[player * 4 + 3] = 145;
+    // Left of the bottom-left pillar (72..88, 114..130 in room space).
+    const index = place(sim, 'kellerassel', 50, 122);
+
+    const up = createInputFrame();
+    up.moveY = quantiseAxis(-1);
+    // The player slips up behind the pillar and stays there.
+    for (let tick = 0; tick < 20; tick++) {
+      sim.step(up);
+    }
+    for (let tick = 0; tick < 120; tick++) {
+      sim.step(IDLE);
+    }
+    // It followed to where the player actually went (not the corner they
+    // vanished at) and routed round the pillar instead of pressing into it.
+    const distance = Math.hypot(
+      sim.positionX(index) - sim.positionX(player),
+      sim.positionY(index) - sim.positionY(player),
+    );
+    expect(distance).toBeLessThan(20);
   });
 });

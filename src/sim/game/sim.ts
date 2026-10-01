@@ -121,6 +121,12 @@ import { stepBombPlacement } from '../systems/bomb-placement.js';
 import { stepMachine } from '../systems/machine.js';
 import { stepBombs } from '../systems/bombs.js';
 import { applyDamageAt, stepImpact, stepParticles } from '../systems/impact.js';
+import {
+  PLAYER_ATTACKER_NONE,
+  PLAYER_ATTACKER_OTHER,
+  PLAYER_ATTACKER_OWN_BOMB,
+  type PlayerKiller,
+} from './attacker.js';
 import { stepLootDrops } from '../systems/loot.js';
 import {
   dispatchItemBeerOffered,
@@ -219,6 +225,12 @@ export const MAYPOLE_MASS = 1e6;
 
 /** Hit points the player starts a run with, in half-heart units. */
 export const PLAYER_HEALTH = 6;
+export {
+  PLAYER_ATTACKER_NONE,
+  PLAYER_ATTACKER_OTHER,
+  PLAYER_ATTACKER_OWN_BOMB,
+  type PlayerKiller,
+} from './attacker.js';
 
 /**
  * The soul pool's ceiling, in half-heart units (5 whole hearts) — what
@@ -1249,6 +1261,8 @@ export class GameSim {
   private playerDeathTick_ = -1;
   private playerHurtTick_ = -1;
   private deathWordValue: string | undefined;
+  /** See `notePlayerAttacker`. */
+  private lastPlayerAttacker = PLAYER_ATTACKER_NONE;
 
   /**
    * This tick's kills, by the slot that died, to the enemy id that died
@@ -3721,6 +3735,53 @@ export class GameSim {
    * makes the soul-before-red-before-eternal order (and the death check)
    * apply the same way regardless of what caused the hit.
    */
+  /**
+   * Records what is about to hurt the player — an enemy definition index, or
+   * one of the `PLAYER_ATTACKER_*` codes — for the death screen
+   * (`killedBy`). Called by every damage source just before
+   * `applyPlayerDamage`; frozen once the player is dead, so whatever landed
+   * the killing blow is what stays.
+   */
+  notePlayerAttacker(source: number): void {
+    if (!this.playerDeadFlag) {
+      this.lastPlayerAttacker = source;
+    }
+  }
+
+  /** `notePlayerAttacker` for an entity: its enemy definition if it is one, otherwise "something else". */
+  notePlayerAttackerEntity(index: number): void {
+    const isEnemy =
+      index >= 0 && ((this.world.masks[index] ?? 0) & this.enemyMask) === this.enemyMask;
+    this.notePlayerAttacker(
+      isEnemy
+        ? (this.enemy.data[index * ENEMY_STRIDE] ?? PLAYER_ATTACKER_OTHER)
+        : PLAYER_ATTACKER_OTHER,
+    );
+  }
+
+  /**
+   * What landed the hit that killed the player, for the death screen: an
+   * enemy (by its display name), the player's own Bierfassl, or anything
+   * else (a hazard, a falling rock). `null` while alive, or when nothing was
+   * recorded.
+   */
+  get killedBy(): PlayerKiller | null {
+    if (!this.playerDeadFlag) {
+      return null;
+    }
+    const source = this.lastPlayerAttacker;
+    if (source >= 0 && source < this.enemies.count) {
+      return { kind: 'enemy', name: this.enemies.at(source).name };
+    }
+    if (source === PLAYER_ATTACKER_OWN_BOMB) {
+      return { kind: 'ownBomb' };
+    }
+    if (source === PLAYER_ATTACKER_OTHER) {
+      return { kind: 'other' };
+    }
+    return null;
+  }
+
   applyPlayerDamage(amount: number): void {
     if (amount <= 0 || this.playerDeadFlag) {
       return;
@@ -4602,6 +4663,9 @@ export class GameSim {
       const distance = vectorLength(dx, dy);
       const normalX = distance > 0 ? dx / distance : 0;
       const normalY = distance > 0 ? dy / distance : -1;
+      if (index === this.playerIndex) {
+        this.notePlayerAttackerEntity(excludeIndex);
+      }
       applyDamageAt(this, index, damage, otherX, otherY, normalX, normalY, excludeIndex);
     });
   }
@@ -6557,6 +6621,11 @@ export class GameSim {
     motion[motionBase] = 1;
     motion[motionBase + 2] = x;
     motion[motionBase + 3] = y;
+    // Slots are recycled: a fresh body has never seen the player, whatever
+    // the last body in this slot remembered (`walkTowardPlayer`'s memory).
+    for (let field = 6; field < ENEMY_MOTION_STRIDE; field++) {
+      motion[motionBase + field] = 0;
+    }
 
     if (this.roomTemplateLoaded && compiled.locksRoom) {
       this.roomEnemyCount += 1;
