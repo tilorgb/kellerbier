@@ -15,6 +15,10 @@ Raisins. Here as well. In Opa's beer.
 it with what's left of the tainted crate, switches it from *trinken* to *schießen*, and heads
 south to find out who is responsible.
 
+**▶ [Play the latest `main` build](https://tilorgb.github.io/kellerbier/)** — rebuilt by CI on
+every merge to `main`; this is the link to hand to playtesters and the one telemetry reports
+against.
+
 Seven floors from that cellar to the Wiesn, via the Bavarian Forest, the Alps, Neuschwanstein
 and a very industrial brewery. Expect Wolpertinger, aggressive swans, a tuba player who shoots
 sound rings, and König Ludwig II in a swan boat.
@@ -116,7 +120,8 @@ something downloaded over a connection, where separate, cacheable, un-base64'd f
 
 Every push and pull request runs typecheck, lint, the full test suite, the performance budget
 and a production build. Pull requests from this repository also get a **playable preview link**
-posted as a comment — a game is judged by feel, and feel cannot be reviewed in a diff.
+posted as a comment — a game is judged by feel, and feel cannot be reviewed in a diff. Merges to
+`main` publish to the Pages root, <https://tilorgb.github.io/kellerbier/>.
 
 The **synergy fuzz harness** — 10,000 randomised item combinations played headless against the
 scripted enemy roster — runs nightly and on demand (`.github/workflows/fuzz.yml`), not on every
