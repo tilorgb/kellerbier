@@ -15,14 +15,33 @@
  * runs in plain Node with no TypeScript step.
  */
 
-import { existsSync, readdirSync, readFileSync, writeFileSync, statSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+  statSync,
+} from 'node:fs';
 import { join, relative, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  BACKGROUND_PALETTES,
+  FLOOR_BUCKETS,
+  FLOOR_PALETTES,
+  NEUTRAL_PALETTE,
+  clampToBackgroundCeiling,
+  shadeRampOf,
+} from './palette.mjs';
+import { encodePng } from './png.mjs';
 
 const REPO = fileURLToPath(new URL('../../', import.meta.url));
 const SPRITES = join(REPO, 'assets/sprites');
 const CONTENT = join(REPO, 'src/content');
 const OUT = join(REPO, 'SPRITE_OVERVIEW.md');
+/** One small solid PNG per palette colour, so the swatches show on GitHub too (it strips inline CSS). */
+const SWATCHES = join(REPO, 'docs/palette-swatches');
 
 function walk(dir) {
   return readdirSync(dir).flatMap((name) => {
@@ -237,7 +256,9 @@ export function writeSpriteOverview() {
       .replace(/ +/g, '-')}) | ${t.done} | ${t.total} | ${t.total - t.done} |\n`;
     bodies.push(`## ${title}\n\n${t.md}\n`);
   }
+  md += `| [Farbpalette](#farbpalette) | – | – | – |\n`;
   md += '\n' + bodies.join('\n');
+  md += paletteSection();
 
   // Everything no object claimed: environment art, VFX, projectiles, orphans.
   const rest = pngs.filter((p) => !claimed.has(p));
@@ -264,6 +285,104 @@ export function writeSpriteOverview() {
   writeFileSync(OUT, md);
   return pngs.length;
 }
+
+const hex = (color) => color.toString(16).padStart(6, '0');
+
+/** Writes the swatch PNG for `color` (once per run) and returns its `<img>`. */
+function swatch(color, written) {
+  const name = `${hex(color)}.png`;
+  if (!written.has(name)) {
+    const size = 16;
+    const pixels = Buffer.alloc(size * size * 4);
+    for (let i = 0; i < pixels.length; i += 4) {
+      pixels[i] = (color >> 16) & 0xff;
+      pixels[i + 1] = (color >> 8) & 0xff;
+      pixels[i + 2] = color & 0xff;
+      pixels[i + 3] = 255;
+    }
+    writeFileSync(join(SWATCHES, name), encodePng({ width: size, height: size, pixels }));
+    written.add(name);
+  }
+  return `<img src="docs/palette-swatches/${name}" width="16" height="16" title="#${hex(color)}">`;
+}
+
+/** One table row: the colour, its hex, and its five legal shading steps darkest to lightest. */
+function paletteRow(label, color, written) {
+  const ramp = shadeRampOf(color)
+    .map((step) => `${swatch(step, written)} \`#${hex(step)}\``)
+    .join(' ');
+  return `| ${label} | ${swatch(color, written)} | \`#${hex(color)}\` | ${ramp} |`;
+}
+
+function paletteTable(rows, written) {
+  return [
+    '| Farbe | Feld | Hex | Schattierungen (dunkel → hell) |',
+    '|---|---|---|---|',
+    ...rows.map(([label, color]) => paletteRow(label, color, written)),
+  ].join('\n');
+}
+
+const NEUTRAL_LABELS = ['Outline (Schwarz)', 'Fast-Schwarz', 'Mittelgrau', 'Weiß (Treffer-Blitz)'];
+
+/**
+ * The palette every sprite is checked against (`tools/art/palette.mjs`):
+ * each floor's own five colours plus the neutrals, each usable in five
+ * shading steps, and the quieter background tier walls, floors and
+ * decoration are drawn from. Swatch PNGs are regenerated from scratch each
+ * run, so a palette change never leaves a stale one behind.
+ */
+function paletteSection() {
+  rmSync(SWATCHES, { recursive: true, force: true });
+  mkdirSync(SWATCHES, { recursive: true });
+  const written = new Set();
+  const neutrals = NEUTRAL_PALETTE.map((color, i) => [NEUTRAL_LABELS[i] ?? '', color]);
+  let md = `
+## Farbpalette
+
+Gegen diese Farben prüft die Art-Pipeline jedes Sprite (\`tools/art/palette.mjs\`).
+
+- Ein Sprite eines **Floors** darf dessen fünf Floor-Farben plus die neutralen Farben verwenden.
+- Ein Sprite in **\`common\`** darf alle Farben aller Floors verwenden.
+- Jede Farbe ist in **fünf Schattierungen** erlaubt (rechte Spalte; die mittlere ist die Farbe selbst).
+- **Hintergrund** (Wände, Böden, Deko ohne Funktion) nutzt gedämpfte Varianten, damit er hinter Gegnern
+  und Items zurücktritt.
+
+### Neutrale Farben (auf jedem Floor erlaubt)
+
+${paletteTable(neutrals, written)}
+
+Im Hintergrund werden die neutralen Farben gedeckelt:
+
+${paletteTable(
+  neutrals.map(([label, color]) => [`${label} · Hintergrund`, clampToBackgroundCeiling(color)]),
+  written,
+)}
+`;
+  for (const bucket of FLOOR_BUCKETS) {
+    const tag = bucket.floorTag;
+    const front = FLOOR_PALETTES[tag] ?? [];
+    const back = BACKGROUND_PALETTES[tag] ?? [];
+    md += `
+### Floor ${bucket.floor} — ${bucket.name} (\`${bucket.id}\`)
+
+**Vordergrund** (Figuren, Items, Pickups, Projektile — alles, womit man interagiert)
+
+${paletteTable(
+  front.map((color, i) => [`Farbe ${i + 1}`, color]),
+  written,
+)}
+
+**Hintergrund** (Wände, Böden, Deko)
+
+${paletteTable(
+  back.map((color, i) => [`Farbe ${i + 1} · Hintergrund`, color]),
+  written,
+)}
+`;
+  }
+  return md;
+}
+
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   console.log(`sprite overview: ${rel(OUT)} (${writeSpriteOverview()} sprites)`);
 }
