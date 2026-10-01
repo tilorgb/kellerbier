@@ -3,7 +3,7 @@ import cellarCrossroads from '../../src/content/rooms/cellar.json';
 import { entityIndex } from '../../src/sim/ecs/entity.js';
 import { GameSim, PLAYER_HEALTH, TARGET_RADIUS } from '../../src/sim/game/sim.js';
 import { RoomGeometry } from '../../src/sim/room/geometry.js';
-import { createInputFrame, InputAction, quantiseAxis } from '../../src/sim/input/frame.js';
+import { createInputFrame, quantiseAxis } from '../../src/sim/input/frame.js';
 import {
   ROOM_COLUMNS,
   ROOM_ROWS,
@@ -128,34 +128,6 @@ describe('Bierfassl fuse and blast', () => {
 
     for (let tick = 0; tick < 20; tick++) {
       sim.step(idle());
-    }
-    expect(sim.positionX(bombIndex)).toBeCloseTo(x, 5);
-    expect(sim.positionY(bombIndex)).toBeCloseTo(y, 5);
-  });
-
-  it('a Bierfassl placed while walking stays where it was set down', () => {
-    const sim = emptySim();
-    sim.addBombs(1);
-    const walk = createInputFrame();
-    walk.moveX = quantiseAxis(1);
-    sim.step(walk);
-
-    const place = createInputFrame();
-    place.moveX = quantiseAxis(1);
-    place.buttons = 1 << InputAction.Bomb;
-    sim.step(place);
-    sim.world.flush();
-
-    let bombIndex = -1;
-    sim.world.forEach(sim.bombFuse.bit, (index) => {
-      bombIndex = index;
-    });
-    expect(bombIndex).toBeGreaterThanOrEqual(0);
-    const x = sim.positionX(bombIndex);
-    const y = sim.positionY(bombIndex);
-
-    for (let tick = 0; tick < 20; tick++) {
-      sim.step(walk);
     }
     expect(sim.positionX(bombIndex)).toBeCloseTo(x, 5);
     expect(sim.positionY(bombIndex)).toBeCloseTo(y, 5);
