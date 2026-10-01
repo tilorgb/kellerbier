@@ -77,8 +77,8 @@ const link = (p) => `[\`${rel(p)}\`](${encodeURI(rel(p))})`;
 
 function table(rows, withFloor) {
   const lines = [
-    `| Status | Name | ID | ${withFloor ? 'Floor | ' : ''}Sprite(s) | Datei(en) | Definition |`,
-    `|---|---|---|${withFloor ? '---|' : ''}---|---|---|`,
+    `| Status | Name | ID | Dateiname | ${withFloor ? 'Floor | ' : ''}Sprite(s) | Datei(en) | Definition |`,
+    `|---|---|---|---|${withFloor ? '---|' : ''}---|---|---|`,
   ];
   for (const r of rows) {
     const status = r.sprites.length ? '✅' : '❌ fehlt';
@@ -93,8 +93,13 @@ function table(rows, withFloor) {
           .map((f) => (f.endsWith('.png') ? `${link(f)} — **${format(f)}**` : link(f)))
           .join('<br>')
       : `erwartet: \`${r.expected}\``;
+    // Just the file name, ready to copy for a file dropped into
+    // `sprites-changed/` (`npm run sprites:replace`).
+    const names = (r.sprites.length ? r.sprites : [r.expected])
+      .map((p) => `\`${basename(p)}\``)
+      .join('<br>');
     lines.push(
-      `| ${status} | ${r.name} | \`${r.id}\` | ${floor}${imgs} | ${files} | ${link(r.file)} |`,
+      `| ${status} | ${r.name} | \`${r.id}\` | ${names} | ${floor}${imgs} | ${files} | ${link(r.file)} |`,
     );
   }
   const done = rows.filter((r) => r.sprites.length).length;
@@ -237,7 +242,7 @@ export function writeSpriteOverview() {
   }
   md += '\n## Weitere Sprites (Tiles, Projektile, VFX, ohne Objekt-Zuordnung)\n';
   for (const [key, list] of [...groups].sort()) {
-    md += `\n### ${key}\n\n| Datei | Sprite |\n|---|---|\n`;
+    md += `\n### ${key}\n\n| Dateiname | Größe | Datei | Sprite |\n|---|---|---|---|\n`;
     md +=
       list.map((p) => `| \`${basename(p)}\` | ${format(p)} | ${link(p)} | ${img(p)} |`).join('\n') +
       '\n';
