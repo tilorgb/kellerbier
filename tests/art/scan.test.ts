@@ -31,10 +31,30 @@ describe('scanSprites', () => {
         bucketId: 'floor-1-cellar',
         category: 'tile',
         name: 'floor',
+        density: 1,
         filePath: path.join(dir, 'floor.png'),
         animation: null,
       },
     ]);
+  });
+
+  it('reads a name@2x sprite as the plain name at density 2', async () => {
+    const dir = path.join(root, 'common', 'characters');
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, 'kuh@2x.png'), solidPng(32, 32, 0x3c3e40));
+
+    const [sprite] = await scanSprites(root);
+    expect(sprite?.name).toBe('kuh');
+    expect(sprite?.density).toBe(2);
+  });
+
+  it('throws for a name authored at two resolutions', async () => {
+    const dir = path.join(root, 'common', 'characters');
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, 'kuh.png'), solidPng(16, 16, 0x3c3e40));
+    await writeFile(path.join(dir, 'kuh@2x.png'), solidPng(32, 32, 0x3c3e40));
+
+    await expect(scanSprites(root)).rejects.toThrow(/two resolutions/);
   });
 
   it('pairs a strip with its sidecar', async () => {

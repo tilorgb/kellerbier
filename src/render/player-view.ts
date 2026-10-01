@@ -224,7 +224,9 @@ export class PlayerView {
     const bodyHeight = this.body.heightUnits;
     const nozzleUp = bodyHeight / 2 - (anchor.y + aimY * reach) / ACTOR_PIXELS_PER_UNIT;
     const nozzleHeight =
-      this.schlauch.texture === null ? 0 : this.schlauch.texture.height / ACTOR_PIXELS_PER_UNIT;
+      this.schlauch.texture === null
+        ? 0
+        : this.schlauch.texture.displayHeight / ACTOR_PIXELS_PER_UNIT;
     // Along the leaning quad: "up" the face is (cos lean, -sin lean) in (y, z).
     const upY = Math.cos(this.lean);
     const upZ = Math.sin(this.lean);

@@ -2084,6 +2084,7 @@ async function boot(progress: BootProgress): Promise<void> {
     host,
     (applied) => {
       layout = applied;
+      app.fitToLayout(applied);
       layoutHud();
       vignette.resize();
     },

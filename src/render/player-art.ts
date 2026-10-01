@@ -65,7 +65,9 @@ export async function loadPlayerArt(): Promise<PlayerArt> {
         // declines to animate is the failure this issue exists to remove.
         throw new Error(`alois-${suffix} has no alois-${suffix}.anim.json sidecar`);
       }
-      const texture = sheet.sub(frame.x, frame.y, frame.width, frame.height);
+      const texture = sheet
+        .sub(frame.x, frame.y, frame.width, frame.height)
+        .withDensity(frame.density ?? 1);
       strips[suffix] = cutStrip(`alois-${suffix}`, texture, frame.animation);
     }
   }

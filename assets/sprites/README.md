@@ -60,6 +60,18 @@ in between — a 24px tile would put an authored pixel on neither grid — so
 is wide (`MAX_TILE_OVERHANG_RATIO`, `docs/DECISIONS.md` #73): the extra rows sit bottom-anchored
 above the cell as an overhang a player walks behind, and never change what collides.
 
+### Higher-resolution art: `name@2x.png`
+
+Any sprite may be authored at two (or three, or four) times the resolution by adding `@2x` (`@3x`,
+`@4x`) to its file name — `kuh@2x.png`, or `alois-walk-side@2x.strip.png` with
+`alois-walk-side@2x.anim.json` next to it (`docs/DECISIONS.md` #112). It stands **exactly as big in
+the room** as the plain file would: a 32×64 `@2x` frame takes the place of a 16×32 one, with twice
+the detail in each direction. The size spec in the table above is checked on that base-grid size,
+both sides must divide evenly by the multiple, and the name everything looks it up by is the name
+without the suffix. A sprite exists at one resolution only — `kuh.png` next to `kuh@2x.png` fails the
+build. Animation timing, clips and the palette rules are unchanged. The pixel editor still saves
+plain 1x files only.
+
 ## Palette
 
 `docs/CONTENT_BIBLE.md` §5 caps the whole game at roughly 40 colours: a small neutral set (black,

@@ -113,8 +113,10 @@ export class Billboard {
    */
   place(x: number, y: number, z: number, lean: number, scale = 1): void {
     const texture = this.textureValue;
-    const w = (texture?.width ?? 1) / ACTOR_PIXELS_PER_UNIT;
-    const h = (texture?.height ?? 1) / ACTOR_PIXELS_PER_UNIT;
+    // Display size, not texel count: a `@2x` frame stands exactly as big as
+    // the 1x frame it replaces (`Texture.density`).
+    const w = (texture?.displayWidth ?? 1) / ACTOR_PIXELS_PER_UNIT;
+    const h = (texture?.displayHeight ?? 1) / ACTOR_PIXELS_PER_UNIT;
     this.mesh.scale.set(w * scale, h * scale, 1);
     this.mesh.position.set(x, y, z);
     this.mesh.rotation.x = lean;

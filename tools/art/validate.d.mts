@@ -11,6 +11,7 @@ export declare function validateSpriteSize(
   width: number,
   height: number,
   frameCount?: number,
+  density?: number,
 ): string | null;
 
 export declare function findOffPalettePixel(

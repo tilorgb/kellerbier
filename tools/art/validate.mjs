@@ -45,8 +45,13 @@ const MAX_TILE_OVERHANG_RATIO = 0.25;
 /**
  * Checks a decoded sprite (or one frame of an animation strip) against its
  * category's size spec. Returns an error string, or `null` if it passes.
+ *
+ * `density` is the `@Nx` multiple (`scan.mjs`'s `parseDensity`): the spec is
+ * about how big a sprite stands in the room, so a `@2x` file is checked at
+ * half its pixel size — and has to divide evenly, or it would stand on no
+ * whole base-grid size at all.
  */
-export function validateSpriteSize(category, width, height, frameCount = 1) {
+export function validateSpriteSize(category, width, height, frameCount = 1, density = 1) {
   const spec = CATEGORY_SPECS[category];
   if (spec === undefined) {
     return `unknown sprite category "${category}"`;
@@ -54,8 +59,15 @@ export function validateSpriteSize(category, width, height, frameCount = 1) {
   if (!Number.isInteger(width / frameCount)) {
     return `strip is ${width}px wide, which does not divide evenly into ${frameCount} frames`;
   }
-  const frameWidth = width / frameCount;
-  const sizeLabel = frameCount > 1 ? `frame size ${frameWidth}x${height}` : `${width}x${height}`;
+  const texelWidth = width / frameCount;
+  if (!Number.isInteger(texelWidth / density) || !Number.isInteger(height / density)) {
+    return `@${density}x frame ${texelWidth}x${height} does not divide evenly by ${density}`;
+  }
+  const frameWidth = texelWidth / density;
+  height = height / density;
+  const sizeLabel =
+    (frameCount > 1 ? `frame size ${frameWidth}x${height}` : `${frameWidth}x${height}`) +
+    (density > 1 ? ` (at @${density}x)` : '');
   if (category === 'tile') {
     const overhang = height - frameWidth;
     if (
