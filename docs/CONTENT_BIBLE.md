@@ -447,16 +447,21 @@ other item.
 
 - **16-bit era**, not 8-bit. Readability with a screen full of projectiles requires more
   colours and more silhouette detail than an NES palette allows.
-- **16×16 tiles, or 32×32 for a tile drawn with more detail** (`docs/DECISIONS.md` #48), characters
+- **16×16 tiles, or 32×32 for a tile drawn with more detail** (`docs/DECISIONS.md` #48) — either
+  may stand up to a quarter taller than it is wide for an obstacle's overhang (#73) — characters
   up to 64×48, bosses up to 160×160 (see `docs/DECISIONS.md` #26 for the ceilings — "16-bit" is a
   colour/shading budget, not a pixel-dimension one).
-- **A sprite's canvas is its size on screen** (`docs/DECISIONS.md` #45). Everything that is a
-  thing — a character, a boss, a pickup — is drawn one authored pixel per internal pixel, so a
-  24×16 canvas is 24×16 of the 640×360 frame and a boss at its ceiling really does fill 160 of
-  its 360 lines. Room tiles default to the coarser of the two grids, and by definition rather than
-  by choice: a 16px tile covers 16 world units, so it is drawn two internal pixels per authored
-  pixel unless it opts into the finer one. A tile authored at 32×32 draws on the same 1:1 grid a
-  character does instead, filling the identical on-screen cell with twice the resolvable detail —
+- **A sprite's canvas is its size in the room** (`docs/DECISIONS.md` #45). Everything that is a
+  thing — a character, a boss, a pickup — is drawn at one fixed scale, two authored pixels per
+  room unit (`ACTOR_PIXELS_PER_UNIT`), so a 24×16 canvas stands 12×8 units in the room and a boss
+  at its ceiling stands 80 units tall — every body at the same scale as every other and as its
+  own collider. Since #74 the room is seen through a perspective camera, so that is no longer an
+  exact count of 640×360 frame pixels: an authored pixel comes out at roughly 0.8 internal pixels
+  at the back of a room to 0.95 at the front (a 160-line boss mid-room is about 140 lines of the
+  360). Room tiles default to the coarser of the two grids, and by definition rather than
+  by choice: a 16px tile covers 16 world units, so it is drawn one room unit per authored
+  pixel — twice an actor's — unless it opts into the finer one. A tile authored at 32×32 draws on
+  the same grid a character does instead, filling the identical cell with twice the resolvable detail —
   a per-asset choice (`docs/DECISIONS.md` #48), not a floor-wide one: a redrawn wall and a
   still-16px block sit in the same room with nothing else to change.
   - The corollary, and the reason the rule is written down: **more detail is more pixels, not a

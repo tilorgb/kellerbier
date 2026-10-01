@@ -23,9 +23,10 @@ import { ACTOR_PIXELS_PER_UNIT } from '../../src/render/resolution.js';
  * reviewed pull request, with a green suite: no check in the tree was looking
  * at the number that changed.
  *
- * Now that a body is drawn at `ACTOR_SPRITE_SCALE` — one authored pixel per
- * internal pixel, always — the comparison is finally a fair one, because
- * authored size *is* on-screen size. So this reads the real sprite tree, the
+ * Now that every body is drawn at `ACTOR_PIXELS_PER_UNIT` — two authored
+ * pixels per room unit, always — the comparison is finally a fair one,
+ * because authored size *is* size in the room (on screen the perspective
+ * camera scales sprite and collider alike, so the ratio still holds). So this reads the real sprite tree, the
  * way `sprite-coverage.test.ts` does, and holds every creature to the body it
  * is authored as.
  */
@@ -37,7 +38,7 @@ const SPRITE_ROOT = fileURLToPath(new URL('../../assets/sprites/', import.meta.u
  *
  * `radius` is in world units and the whole diameter is what a player aims at,
  * so this is `2 * radius` world units expressed at the actor grid's own scale.
- * The three classes come out at 16, 28 and 40.
+ * The four classes come out at 16, 28, 40 and 88 (boss).
  */
 function colliderPixels(sizeName: string): number {
   const id = ENEMY_SIZE_BY_NAME[sizeName as keyof typeof ENEMY_SIZE_BY_NAME];

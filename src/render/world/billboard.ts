@@ -18,8 +18,10 @@ import { ACTOR_LAYER } from './layers.js';
  * size in room units (`docs/DECISIONS.md` #45: a sprite's canvas is its size
  * on screen, and one room unit is `ACTOR_PIXELS_PER_UNIT` of those), leaning
  * back by the camera's elevation so it faces the camera square-on and its
- * projected height is exactly its authored height — the same read the 2D
- * game had, with real lighting falling on it.
+ * height is not foreshortened against its width — the same read the 2D game
+ * had, with real lighting falling on it. Under the perspective camera an
+ * authored pixel projects to roughly 0.8 internal pixels at the back of a
+ * room and 0.95 at the front, the same for every billboard at that depth.
  *
  * The quad owns its UV attribute: showing another frame of a strip moves
  * the UVs to that frame's rectangle of the shared texture rather than

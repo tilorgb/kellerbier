@@ -72,9 +72,9 @@ export const ACTOR_SPRITE_SCALE = 1 / ACTOR_PIXELS_PER_UNIT;
  * that repeats identically and unnoticed carries less detail than the things
  * acting in front of it. Since `docs/DECISIONS.md` #48, that is a per-tile
  * choice rather than a fixed one: `tools/art/spec.mjs` allows a tile to be
- * authored at 32x32 instead, and `render/room.ts`'s `tileRect` puts *that*
- * tile on `ACTOR_SPRITE_SCALE`'s 1:1 grid instead of this one, derived from
- * the texture's own width rather than hardcoded — so this constant still
+ * authored at 32x32 instead, and `render/tiles.ts`'s `tileGridScale` puts
+ * *that* tile on the actor grid instead of this one, derived from the
+ * texture's own width rather than hardcoded — so this constant still
  * describes every tile that stays at 16, which is most of them, without
  * describing all of them any more. Kept here rather than only in `room.ts`
  * so anything else drawing 16px tile art (a destructible barrel, say) can

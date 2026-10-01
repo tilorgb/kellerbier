@@ -1955,6 +1955,8 @@ including headings inside a HUD element, where a raised voice would just be nois
 
 *Mechanism superseded by #74: the Pixi `scale` is now a billboard's world size over `ACTOR_PIXELS_PER_UNIT`. The rule stands unchanged — a canvas height is literally how tall a thing stands.*
 
+*Note, checked against the code after #74: "its size on screen" now holds in room units, not in frame pixels. Every body is still two authored pixels per room unit, so sizes relative to each other and to the collider are exact. But the perspective camera (`render/world/camera.ts`) puts an authored pixel at roughly 0.8 internal pixels at the back of a room to 0.95 at the front, so where this entry equates a canvas with that many internal pixels on screen, it describes the 2D renderer. Mid-room, a 160-tall boss is about 140 of the 360 lines.*
+
 **Decided:** M6, from an art-direction audit asking why sprites kept growing whenever they were
 redrawn with more detail. **Supersedes** the half of #27 that claimed pixel density was decoupled
 from on-screen size: it was decoupled on one axis.
@@ -3816,7 +3818,11 @@ the room read as a *place*. That was the argument, and it was made by looking, n
   carries a small point light of its own.
 - **Everything that stands is a 2D sprite standing up** (`render/world/billboard.ts`): a
   bottom-anchored quad, leaned back by the camera's elevation so its projected height is exactly
-  its authored height, sized from the frame's pixel size over `ACTOR_PIXELS_PER_UNIT`. A frame is
+  its authored height, sized from the frame's pixel size over `ACTOR_PIXELS_PER_UNIT`.
+  *Note, checked against the code: "exactly" holds for proportions, not for pixels.* Leaning the
+  quad square to the camera keeps its height undistorted against its width, but under the
+  perspective camera one authored pixel projects to roughly 0.8 internal pixels at the back of a
+  room and 0.95 at the front (about 0.87 mid-room), not 1. See the note under #45. A frame is
   chosen by moving the quad's UVs on one shared texture, never by binding another. Lit by a standard
   material, and **the hit flash is the emissive term at full white** — the blown-out silhouette
   #43 describes `placeholder-art.ts` faking with a texture swap, now a material property.

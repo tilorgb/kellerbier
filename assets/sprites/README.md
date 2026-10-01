@@ -33,25 +33,32 @@ assets/sprites/
 
 Each of those has four subfolders, one per sprite category:
 
-| Folder | Category | File size (simulation units, not screen pixels) |
+| Folder | Category | Canvas size, in authored pixels (`tools/art/spec.mjs`) |
 |---|---|---|
-| `tiles/` | `tile` | exactly 16×16, or exactly 32×32 (see below) |
-| `characters/` | `character` | 8-32 wide, 16-32 tall (`~12×16` as authored, see `docs/DECISIONS.md` #26) |
-| `bosses/` | `boss` | up to 160×160 (see `docs/DECISIONS.md` #26) |
-| `projectiles/` | `projectile` | up to 16×16 |
-| `vfx/` | `vfx` | up to 48×48 |
+| `tiles/` | `tile` | exactly 16 or exactly 32 wide, up to a quarter taller than wide (see below) |
+| `characters/` | `character` | 8-64 wide, 16-48 tall (`docs/DECISIONS.md` #26, #27, #45) |
+| `bosses/` | `boss` | 17-160 on each axis (see `docs/DECISIONS.md` #26) |
+| `projectiles/` | `projectile` | 2-16 on each axis |
+| `vfx/` | `vfx` | 2-48 on each axis |
 
-Sizes are **file** pixels. The room is drawn at `WORLD_ZOOM` (`src/render/resolution.ts`), so a
-16×16 tile lands on screen at 32×32 — see issue #34's comment thread and
-`docs/CONTENT_BIBLE.md` §5 for the history of that distinction.
+For a strip these are per **frame**, not the whole strip. Sizes are **file** pixels, and a canvas
+is the sprite's size in the room (`docs/DECISIONS.md` #45): a character, boss or pickup stands at
+two authored pixels per room unit (`ACTOR_PIXELS_PER_UNIT`, `src/render/resolution.ts`), so a
+32×32 Alois is 16×16 units and a 140×86 boss frame is 70×43. On screen, the 65° perspective camera
+(`docs/DECISIONS.md` #74, `src/render/world/camera.ts`) puts one authored pixel at roughly 0.8 of
+an internal pixel at the back of a room and 0.95 at the front — the same factor for everything at
+that depth, so the canvas fixes relative size exactly and on-screen pixels only approximately.
 
-**A tile is one of exactly two sizes, not a range**, per `docs/DECISIONS.md` #48: 16×16 draws on
-the coarser room grid every tile used before this, at `TILE_SPRITE_SCALE`; 32×32 draws on the same
-1:1 grid a character does, at `ACTOR_SPRITE_SCALE`, for real added detail at the same on-screen
-size. `render/room.ts`'s `tileRect` picks the right one from the file's own width, so a redrawn
-wall and a still-16px block sit in the same room with nothing else to change. Nothing in between —
-a 24×24 tile would need a fractional sprite scale, which `render/resolution.ts`'s whole-number-scale
-rule rules out — so `tools/art/validate.mjs` rejects anything but exactly 16 or exactly 32.
+**A tile is one of exactly two widths, not a range**, per `docs/DECISIONS.md` #48: a 16px tile
+draws on the coarser room grid, one room unit per authored pixel (`ROOM_TILE_UNITS` cells); a 32px
+tile draws on the same grid a character does, half a unit per authored pixel, for real added detail
+in the same cell. `src/render/tiles.ts`'s `tileGridScale` picks the right one from the file's own
+width (used by `render/world/scenery.ts` for obstacles and `render/entities.ts` for prop targets),
+so a redrawn wall and a still-16px block sit in the same room with nothing else to change. Nothing
+in between — a 24px tile would put an authored pixel on neither grid — so
+`tools/art/validate.mjs` rejects any other width. A tile may be up to a quarter **taller** than it
+is wide (`MAX_TILE_OVERHANG_RATIO`, `docs/DECISIONS.md` #73): the extra rows sit bottom-anchored
+above the cell as an overhang a player walks behind, and never change what collides.
 
 ## Palette
 
