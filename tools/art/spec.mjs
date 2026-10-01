@@ -2,16 +2,18 @@
  * Sprite categories, their file-size spec, and the floor bucket list.
  *
  * Sizes are in *file* pixels, and since `docs/DECISIONS.md` #45 they are also
- * the sprite's size on screen: everything that is a body — a character, a
- * boss, a pickup — is drawn at `render/resolution.ts`'s `ACTOR_SPRITE_SCALE`,
- * one authored pixel per internal pixel, so a 24x16 canvas is 24x16 of the
- * 640x360 frame. `tile` covers a fixed `ROOM_TILE_UNITS` footprint by
- * definition, so — per `docs/DECISIONS.md` #48 — it may be authored at either
- * of exactly two square sizes rather than a size the spec range would
- * otherwise suggest is continuously variable: 16 draws on the coarser room
- * grid (`TILE_SPRITE_SCALE`, two internal pixels per authored pixel, #45's
- * original default), 32 draws on the same 1:1 grid a character does
- * (`ACTOR_SPRITE_SCALE`) for an author who wants more resolvable detail.
+ * the sprite's size in the room: everything that is a body — a character, a
+ * boss, a pickup — is drawn at `render/resolution.ts`'s
+ * `ACTOR_PIXELS_PER_UNIT`, two authored pixels per room unit, so a 24x16
+ * canvas stands 12x8 units tall and wide. (Under #74's perspective camera that
+ * is roughly 0.8-0.95 internal pixels per authored pixel, back of the room to
+ * front.) `tile` covers a fixed `ROOM_TILE_UNITS` footprint by definition,
+ * so — per `docs/DECISIONS.md` #48 — it may be authored at either of exactly
+ * two widths rather than a size the spec range would otherwise suggest is
+ * continuously variable: 16 draws on the coarser room grid (one room unit
+ * per authored pixel, #45's original default), 32 draws on the same grid a
+ * character does for an author who wants more resolvable detail. Either may
+ * be up to a quarter taller than wide for an obstacle's overhang (#73).
  * `tools/art/validate.mjs`'s `validateSpriteSize` enforces the two-sizes-only
  * rule directly; the `min`/`max` here just bound the range for generic
  * consumers (the pixel editor's size presets) that don't need to know tile

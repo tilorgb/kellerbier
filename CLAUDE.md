@@ -108,9 +108,13 @@ even for placeholder-tier art: the *pattern/style choice* is what needs sign-off
 perfect execution of it.
 
 **Size is a design choice now, so it is part of what needs sign-off.** Since `docs/DECISIONS.md`
-#45 a sprite's canvas is literally its size on screen — a 24×16 character is 24×16 of the 640×360
-frame — so picking a canvas is picking how big the creature reads in the room, not just how much
-detail it can carry. Don't infer one from what the old art happened to be, and don't let a canvas
+#45 a sprite's canvas is literally its size in the room — every body is drawn at the same
+`ACTOR_PIXELS_PER_UNIT` (two authored pixels per room unit), so a 24×16 character is 12×8 room
+units, next to Alois's 32×32 at 16×16 — so picking a canvas is picking how big the creature reads
+in the room, not just how much detail it can carry. (It is no longer exactly that many pixels of
+the 640×360 frame: since #74 the perspective camera puts one authored pixel at roughly 0.8 of an
+internal pixel at the back of a room and 0.95 at the front — the same factor for everything
+standing at that depth, so relative size is exact and absolute size is not.) Don't infer one from what the old art happened to be, and don't let a canvas
 grow sideways just because that is where the spare pixels were: show the option on a real floor
 tile next to Alois at true scale, and let the size be chosen along with the design.
 `tests/content/sprite-scale.test.ts` will catch a silhouette that has drifted away from the
@@ -120,9 +124,9 @@ collider it is drawn over, but it is a wide band and a gate, not an art director
 3D room, seen from a fixed 65° camera, lit and casting a real shadow. So "show the option on a real
 floor tile next to Alois at true scale" means a screenshot from the game's camera — a flat mock-up
 on a tile swatch no longer shows what the player sees, since the floor recedes and the sprite does
-not. And a sprite's canvas *height* is what it stands up as: a 24×16 character stands 16 internal
-pixels tall in the room, so widening a canvas still only widens it, and adding rows makes the
-thing taller on its feet. Show the candidates standing in the room, at the sizes proposed, not laid
+not. And a sprite's canvas *height* is what it stands up as: a 24×16 character stands 8 room
+units tall (about 14 internal pixels on screen mid-room), so widening a canvas still only widens
+it, and adding rows makes the thing taller on its feet. Show the candidates standing in the room, at the sizes proposed, not laid
 on a grid.
 
 In practice: render the options at a legible scale (upscaled, nearest-neighbour, no smoothing) and

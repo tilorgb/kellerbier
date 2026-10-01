@@ -27,7 +27,8 @@ const LEGAL_TILE_SIZES = [16, 32];
  * is why a room's obstacles could never be walked *behind*. A blocking tile
  * now overhangs the **top** of the cell it stands in — the cell is still what
  * the simulation blocks, the extra rows are height the player reads and never
- * collides with — and `render/room.ts` derives the overhang from the texture
+ * collides with — and the billboard that stands it up
+ * (`render/world/scenery.ts`'s `standTile`) takes its height from the texture
  * rather than from a constant, so the art is the only place it is stated.
  *
  * A quarter of the cell is a gate, not a house style, in exactly the sense
@@ -35,8 +36,8 @@ const LEGAL_TILE_SIZES = [16, 32];
  * authored pixels the sign-off round picked for a 32px block
  * (`tools/art/authoring/blocks.mjs`'s `BLOCK_LIP`), tight enough that a tile
  * cannot quietly become a mural covering the row above it. Width is still
- * pinned to the two legal sizes — that is what keeps `tileGridScale` a whole
- * number, and it is a *horizontal* footprint rule, which the overhang does
+ * pinned to the two legal sizes — that is what keeps a tile's authored pixel
+ * on one of the two grids (`tileGridScale` 1 or 0.5), and it is a *horizontal* footprint rule, which the overhang does
  * not touch.
  */
 const MAX_TILE_OVERHANG_RATIO = 0.25;
