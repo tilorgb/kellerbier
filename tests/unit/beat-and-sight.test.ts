@@ -166,3 +166,74 @@ describe('hop-trellis line of sight (#37)', () => {
     expect(fired).toBe(true);
   });
 });
+
+/** Sits still until the player comes within reach, then switches to `alert`. */
+const watcher: EnemyDefinition = {
+  id: 'test-watcher',
+  name: 'Test Watcher',
+  size: 'normal',
+  health: 3,
+  contactDamage: 0,
+  initial: 'idle',
+  states: [
+    {
+      name: 'idle',
+      behaviours: [{ behaviour: 'pause' }],
+      transitions: [{ to: 'alert', whenPlayerWithin: 300 }],
+    },
+    {
+      name: 'alert',
+      behaviours: [{ behaviour: 'pause' }],
+      transitions: [{ to: 'idle', whenPlayerBeyond: 300 }],
+    },
+  ],
+};
+
+describe('solid obstacles block line of sight', () => {
+  function setUp(room: RoomGeometry, enemies: EnemyDefinition[]): GameSim {
+    const sim = emptySim({ room, enemies });
+    while (sim.roomWarmupTicks > 0) {
+      sim.step(IDLE);
+    }
+    const player = sim.playerIndex;
+    const transform = sim.transform.data;
+    transform[player * 4] = 200;
+    transform[player * 4 + 1] = 90;
+    transform[player * 4 + 2] = 200;
+    transform[player * 4 + 3] = 90;
+    return sim;
+  }
+
+  const stateOf = (sim: GameSim, index: number): number => sim.enemy.data[index * 4 + 1] ?? -1;
+
+  it('blocks an aimed shot when a rock sits between shooter and player', () => {
+    const room = bareRoom();
+    room.addBlock(90, 0, 110, 180, true);
+    const sim = setUp(room, [sniper]);
+    place(sim, 'test-sniper', 20, 90);
+    for (let tick = 0; tick < 10; tick++) {
+      sim.step(IDLE);
+    }
+    expect(liveProjectileCount(sim)).toBe(0);
+  });
+
+  it('does not react to a player hidden behind a rock', () => {
+    const room = bareRoom();
+    room.addBlock(90, 0, 110, 180, true);
+    const sim = setUp(room, [watcher]);
+    const index = place(sim, 'test-watcher', 20, 90);
+    for (let tick = 0; tick < 10; tick++) {
+      sim.step(IDLE);
+    }
+    expect(stateOf(sim, index)).toBe(0);
+  });
+
+  it('reacts once the line to the player is clear', () => {
+    const sim = setUp(bareRoom(), [watcher]);
+    const index = place(sim, 'test-watcher', 20, 90);
+    for (let tick = 0; tick < 10; tick++) {
+      sim.step(IDLE);
+    }
+    expect(stateOf(sim, index)).toBe(1);
+  });
+});

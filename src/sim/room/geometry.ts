@@ -313,7 +313,9 @@ export class RoomGeometry {
 
   /**
    * True when the segment from `(x0, y0)` to `(x1, y1)` crosses any
-   * sight-blocking zone.
+   * sight-blocking zone, or any solid block — a rock, a pillar, a wall's
+   * void stand-in. Nothing that cannot be moved out of the way is something
+   * an enemy sees or shoots through.
    *
    * Hot path: read by `sim/systems/enemy.ts`'s `applyFiring` every tick an
    * enemy with an aimed firing behaviour is in a room that has any sight
@@ -336,6 +338,24 @@ export class RoomGeometry {
           blocks[base + 1] ?? 0,
           blocks[base + 2] ?? 0,
           blocks[base + 3] ?? 0,
+        )
+      ) {
+        return true;
+      }
+    }
+    const solids = this.blocks;
+    for (let block = 0; block < this.blocks_; block++) {
+      const base = block * BLOCK_STRIDE;
+      if (
+        segmentIntersectsRect(
+          x0,
+          y0,
+          x1,
+          y1,
+          solids[base] ?? 0,
+          solids[base + 1] ?? 0,
+          solids[base + 2] ?? 0,
+          solids[base + 3] ?? 0,
         )
       ) {
         return true;

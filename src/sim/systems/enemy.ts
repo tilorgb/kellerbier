@@ -138,7 +138,18 @@ export function stepEnemies(sim: GameSim): void {
     const selfX = sim.positionX(index);
     const selfY = sim.positionY(index);
 
-    const next = chooseTransition(sim, state, ticks, flags, distance, selfX, selfY);
+    const next = chooseTransition(
+      sim,
+      index,
+      state,
+      ticks,
+      flags,
+      distance,
+      toPlayerX,
+      toPlayerY,
+      selfX,
+      selfY,
+    );
     if (next >= 0) {
       const entered = compiled.states[next];
       if (entered !== undefined) {
@@ -237,13 +248,20 @@ export function stepEnemies(sim: GameSim): void {
  */
 function chooseTransition(
   sim: GameSim,
+  index: number,
   state: CompiledState,
   ticks: number,
   flags: number,
   distance: number,
+  toPlayerX: number,
+  toPlayerY: number,
   selfX: number,
   selfY: number,
 ): number {
+  // A player behind a rock or a pillar is out of sight, and out of sight
+  // reads as out of range: `PlayerWithin` cannot fire, `PlayerBeyond` does.
+  // Looked up at most once, and only by a state that asks about the player.
+  let sighted = -1;
   for (const transition of state.transitions) {
     switch (transition.trigger) {
       case TransitionTrigger.After:
@@ -263,11 +281,22 @@ function chooseTransition(
         break;
       case TransitionTrigger.PlayerWithin:
         if (distance <= transition.value) {
-          return transition.to;
+          if (sighted < 0) {
+            sighted = isSighted(sim, index, toPlayerX, toPlayerY) ? 1 : 0;
+          }
+          if (sighted === 1) {
+            return transition.to;
+          }
         }
         break;
       case TransitionTrigger.PlayerBeyond:
         if (distance > transition.value) {
+          return transition.to;
+        }
+        if (sighted < 0) {
+          sighted = isSighted(sim, index, toPlayerX, toPlayerY) ? 1 : 0;
+        }
+        if (sighted === 0) {
           return transition.to;
         }
         break;
@@ -602,21 +631,24 @@ function applyFiring(
 }
 
 /**
- * False when a hop trellis (#37) sits between the shooter and the player —
+ * False when a hop trellis (#37), or anything solid that cannot be moved —
+ * a rock, a pillar, a wall — sits between the shooter and the player —
  * gates the three aimed firing primitives (`fireAtPlayer`/`fireBurst`/
  * `fireSpread`), not `fireOnBeat`: a sound ring is a room-filling shape, not
  * a shot aimed at where the player is standing.
  *
- * Called only on the tick a shot would actually fire (each caller's own
- * `phase === 0` — or, for `fireBurst`, its own gap check — comes first), not
- * once per enemy per tick: an aimed enemy fires far less often than it
- * thinks about firing, and there is no reason to pay for a sight check on
- * every one of the ticks in between. `sightBlockCount === 0` short-circuits
- * the segment test itself on every floor that has none (every floor but
- * Dorf & Acker, today), so this costs nothing where it doesn't apply.
+ * Also gates `chooseTransition`'s `PlayerWithin`/`PlayerBeyond`: a player
+ * hidden behind cover is treated as out of range, so nothing reacts to them
+ * through a rock either.
+ *
+ * Firing calls this only on the tick a shot would actually fire (each
+ * caller's own `phase === 0` — or, for `fireBurst`, its own gap check —
+ * comes first), and a transition only once a distance check has already
+ * passed. A room with neither sight blocks nor solid blocks short-circuits
+ * the segment test entirely.
  */
 function isSighted(sim: GameSim, index: number, toPlayerX: number, toPlayerY: number): boolean {
-  if (sim.room.sightBlockCount === 0) {
+  if (sim.room.sightBlockCount === 0 && sim.room.blockCount === 0) {
     return true;
   }
   const shooterX = sim.positionX(index);
