@@ -90,7 +90,7 @@ import { EventQueue } from '../events/queue.js';
 import { DamageNumberStore } from '../particle/damage-numbers.js';
 import { DecalStore } from '../particle/decals.js';
 import { ParticleStore } from '../particle/store.js';
-import { boulderDebris, doorPuff, roomClearRing, splashBurst } from '../particle/effects.js';
+import { boulderDebris, doorPuff, roomClearRing, splashBurst, windSwirl } from '../particle/effects.js';
 import { ProjectileStore, ProjectileTeam } from '../projectile/store.js';
 import { finalizeProjectileTags } from '../projectile/behavior.js';
 import {
@@ -4619,6 +4619,11 @@ export class GameSim {
    */
   splashBurst(x: number, y: number, radius: number): void {
     splashBurst(this, x, y, radius);
+  }
+
+  /** One tick of the Karussell's wind around `(x, y)` — see `windSwirl`. */
+  windSwirl(x: number, y: number, radius: number): void {
+    windSwirl(this, x, y, radius);
   }
 
   /**

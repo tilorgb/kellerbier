@@ -267,6 +267,47 @@ const SPLASH_BURST_SPOKES = 12;
 const SPLASH_BURST_TICKS = 16;
 const SPLASH_BURST_FLASH_SIZE = 6;
 
+/**
+ * The Karussell's wind: a pinwheel of dust around the player while the item
+ * is pushing things off them.
+ *
+ * Called once a tick. Each call lays two puffs on opposite sides of a ring,
+ * at an angle that turns with the tick, and throws each mostly sideways along
+ * the ring with a little outward drift — so the trail of puffs reads as a
+ * spiral turning round the player and the outward drift is the push itself.
+ * Deterministic and draws no random numbers, for the same reason `ring` does:
+ * a swirl whose arms wander stops looking like a force.
+ *
+ * Redundant with the push (the enemies are visibly shoved), which is the
+ * constraint every effect in this file is held to — it only makes the cause
+ * visible.
+ */
+export function windSwirl(sim: GameSim, x: number, y: number, radius: number): void {
+  const base = sim.tick * WIND_TURN_PER_TICK;
+  for (let arm = 0; arm < 2; arm++) {
+    const angle = base + arm * Math.PI;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    const rim = radius * WIND_RING_FRACTION;
+    sim.particles.spawn(
+      x + cos * rim,
+      y + sin * rim,
+      -sin * WIND_SIDEWAYS_SPEED + cos * WIND_OUTWARD_SPEED,
+      cos * WIND_SIDEWAYS_SPEED + sin * WIND_OUTWARD_SPEED,
+      WIND_TICKS,
+      WIND_SIZE,
+      ParticleKind.Dust,
+    );
+  }
+}
+
+const WIND_TURN_PER_TICK = 0.45;
+const WIND_RING_FRACTION = 0.55;
+const WIND_SIDEWAYS_SPEED = 1.8;
+const WIND_OUTWARD_SPEED = 0.7;
+const WIND_TICKS = 16;
+const WIND_SIZE = 2.5;
+
 /** Something good was picked up. */
 export function pickupGlint(sim: GameSim, x: number, y: number): void {
   ring(sim, x, y, PICKUP_SPOKES, ParticleKind.Glint, PICKUP_SPEED, PICKUP_TICKS, 2);
