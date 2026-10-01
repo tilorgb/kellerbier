@@ -50,7 +50,11 @@ function definitions(file) {
 }
 
 const rel = (p) => relative(REPO, p).split('\\').join('/');
-const spriteKey = (p) => basename(p).replace(/\.strip\.png$|\.png$/, '');
+// `@2x` is a resolution, not part of the name (`scan.mjs`'s `parseDensity`).
+const spriteKey = (p) =>
+  basename(p)
+    .replace(/\.strip\.png$|\.png$/, '')
+    .replace(/@[2-4]x$/, '');
 const floorOf = (p) => rel(p).split('/')[2];
 
 const img = (p) =>
@@ -65,12 +69,15 @@ function format(p) {
   const header = readFileSync(p).subarray(16, 24);
   const width = header.readUInt32BE(0);
   const height = header.readUInt32BE(4);
+  // A `@2x` sprite stands at its base-grid size; the file's own size follows.
+  const density = Number(/@([2-4])x(\.strip)?\.png$/.exec(p)?.[1] ?? 1);
+  const hiRes = density > 1 ? ` (@${density}x, ${width}×${height} px)` : '';
   const anim = p.replace(/\.strip\.png$/, '.anim.json');
   if (anim !== p && existsSync(anim)) {
     const frames = JSON.parse(readFileSync(anim, 'utf8')).frames ?? 1;
-    return `${width / frames}×${height} · ${frames} Frames (Strip ${width}×${height})`;
+    return `${width / frames / density}×${height / density} · ${frames} Frames${hiRes || ` (Strip ${width}×${height})`}`;
   }
-  return `${width}×${height}`;
+  return `${width / density}×${height / density}${hiRes}`;
 }
 
 const link = (p) => `[\`${rel(p)}\`](${encodeURI(rel(p))})`;
