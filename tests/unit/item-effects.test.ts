@@ -503,6 +503,28 @@ describe('Steinkrug splash', () => {
     expect(sim.health.data[first * 2]).toBe((before[0] ?? 0) - 4);
     expect(sim.health.data[second * 2]).toBe((before[1] ?? 0) - 2);
   });
+
+  it('does not hit the thrower when the enemy is at melee range', async () => {
+    const { steinkrug } = await import('../../src/content/items/steinkrug.js');
+    const sim = new GameSim({ room: bareRoom(), items: [steinkrug], population: 'empty' });
+    sim.pickUpItem('steinkrug');
+    const player = sim.playerIndex;
+    // Well inside the splash radius of the player — where a melee enemy stands.
+    const enemy = entityIndex(
+      sim.spawnEnemyKind(
+        sim.enemies.indexOf('die-zapfhahn-orgel'),
+        sim.positionX(player) + 12,
+        sim.positionY(player),
+      ),
+    );
+    sim.world.flush();
+    sim.step(IDLE);
+    const healthBefore = sim.playerHealth;
+
+    applyDamageAt(sim, enemy, 4, sim.positionX(enemy), sim.positionY(enemy), 1, 0, player);
+
+    expect(sim.playerHealth).toBe(healthBefore);
+  });
 });
 
 describe('#92 acceptance criteria — items that move Trinkfest', () => {

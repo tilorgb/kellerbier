@@ -4590,14 +4590,26 @@ export class GameSim {
    * discriminate who is standing in it, unlike a regular `EnemyProjectile`
    * shot, which already never touches `Enemy` at all
    * (`collision/layers.ts`).
+   *
+   * `sparePlayer` is for the one caller that cannot use `excludeIndex` for
+   * it: a splash that goes off *at an enemy* has to exclude that enemy, which
+   * leaves nothing to exclude the player with. Every splash centred on the
+   * player passes `playerIndex` as the exclusion instead.
    */
-  applySplashDamage(x: number, y: number, radius: number, damage: number, excludeIndex = -1): void {
+  applySplashDamage(
+    x: number,
+    y: number,
+    radius: number,
+    damage: number,
+    excludeIndex = -1,
+    sparePlayer = false,
+  ): void {
     if (damage <= 0 || radius <= 0) {
       return;
     }
     const mask = CollisionLayer.Enemy | CollisionLayer.Obstacle | CollisionLayer.Player;
     this.broadphase.query(x, y, radius, (index) => {
-      if (index === excludeIndex) {
+      if (index === excludeIndex || (sparePlayer && index === this.playerIndex)) {
         return;
       }
       const layer = this.collision.data[index * 2] ?? 0;
