@@ -40,6 +40,19 @@ export interface FloorStats {
   readonly avgRoomsCleared: number;
 }
 
+/** One kind of room on one floor, across the sweep (#368) — where on a floor the time, the damage and the run-enders are. */
+export interface RoomRoleStats {
+  readonly floor: number;
+  readonly role: string;
+  /** Runs that spent any time in a room of this role on this floor. */
+  readonly runs: number;
+  /** Of those, how many ended there without a win. */
+  readonly endedHere: number;
+  /** Mean per run that reached it — all rooms of the role on the floor together. */
+  readonly avgTicks: number;
+  readonly avgDamageTaken: number;
+}
+
 /** One item's showing across the sweep — #54's "item win-rate outliers" balance question. */
 export interface ItemWinRate {
   readonly itemId: string;
@@ -60,7 +73,7 @@ export interface PlaytestReportMeta {
 
 export interface PlaytestReport extends PlaytestReportMeta {
   /** Bumped when the shape changes, so an old report on disk stays readable. */
-  readonly schema: 2;
+  readonly schema: 3;
   readonly totalRuns: number;
   readonly wins: number;
   readonly deaths: number;
@@ -69,6 +82,8 @@ export interface PlaytestReport extends PlaytestReportMeta {
   readonly ranOut: number;
   readonly winRate: number;
   readonly floors: readonly FloorStats[];
+  /** Sorted by floor, then by the order a run meets the roles. */
+  readonly roomRoles: readonly RoomRoleStats[];
   /** By skill profile name. */
   readonly winRateBySkill: Readonly<Record<string, number>>;
   /**
@@ -135,6 +150,59 @@ function floorStats(outcomes: readonly PlaytestOutcome[], floor: number): FloorS
     avgDamageTaken: mean(onThisFloor.map((row) => row.entry.damageTaken)),
     avgRoomsCleared: mean(onThisFloor.map((row) => row.entry.roomsCleared)),
   };
+}
+
+/** The order a run meets them in, so the table reads top to bottom like a floor does. */
+const ROLE_ORDER = [
+  'start',
+  'normal',
+  'treasure',
+  'shop',
+  'secret',
+  'supersecret',
+  'miniboss',
+  'boss',
+];
+
+function roomRoleStats(outcomes: readonly PlaytestOutcome[]): RoomRoleStats[] {
+  const stats = new Map<
+    string,
+    { floor: number; role: string; runs: number; endedHere: number; ticks: number; damage: number }
+  >();
+  for (const outcome of outcomes) {
+    for (const entry of outcome.roomRoles) {
+      const key = `${String(entry.floor)}:${entry.role}`;
+      const row = stats.get(key) ?? {
+        floor: entry.floor,
+        role: entry.role,
+        runs: 0,
+        endedHere: 0,
+        ticks: 0,
+        damage: 0,
+      };
+      row.runs += 1;
+      row.ticks += entry.ticks;
+      row.damage += entry.damageTaken;
+      if (outcome.endedIn?.floor === entry.floor && outcome.endedIn.role === entry.role) {
+        row.endedHere += 1;
+      }
+      stats.set(key, row);
+    }
+  }
+  const order = (role: string): number => {
+    const at = ROLE_ORDER.indexOf(role);
+    return at === -1 ? ROLE_ORDER.length : at;
+  };
+  return Array.from(stats.values())
+    .sort((a, b) => a.floor - b.floor || order(a.role) - order(b.role))
+    .map((row) => ({
+      floor: row.floor,
+      role: row.role,
+      runs: row.runs,
+      endedHere: row.endedHere,
+      avgTicks: row.ticks / row.runs,
+      avgDamageTaken: row.damage / row.runs,
+    }));
 }
 
 /**
@@ -208,7 +276,7 @@ export function buildPlaytestReport(
 
   return {
     ...meta,
-    schema: 2,
+    schema: 3,
     totalRuns: outcomes.length,
     wins,
     deaths: outcomes.filter((outcome) => outcome.result === 'died').length,
@@ -217,6 +285,7 @@ export function buildPlaytestReport(
     ranOut: outcomes.filter((outcome) => outcome.result === 'ranOut').length,
     winRate: outcomes.length === 0 ? 0 : wins / outcomes.length,
     floors,
+    roomRoles: roomRoleStats(outcomes),
     winRateBySkill,
     itemWinRates: itemWinRates(outcomes),
     promilleTierUsage: promilleTierUsage(outcomes),
