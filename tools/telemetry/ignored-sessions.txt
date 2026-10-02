@@ -1,11 +1,13 @@
 # Sessions tools/telemetry/dashboard.mjs leaves out of every report (#364).
 #
 # One session id per line — the code Settings → Privacy shows, or its first
-# eight characters as the report prints them. For the people building the
-# game: a developer's own test runs are not evidence about players, and they
-# skew win rate and item numbers. Everything after a # is a comment.
+# eight characters as the report prints them. For sessions that are not play
+# at all: a debugging session, a bot, a run of deliberate deaths to test the
+# game-over screen. Everything after a # is a comment.
+#
+# Somebody who simply knows the game well — the maintainer playing normally —
+# does not belong here. Their runs are real runs. Name them in
+# known-sessions.txt instead and the report shows them beside everyone else's.
 #
 # Runs from `npm run dev` (a build id ending in -dev) are left out without
 # being listed here.
-
-f3c3a263-b0e1-4fa7-9382-1fa017e0eac1  # tilorgb, the maintainer (added 2026-10-02)

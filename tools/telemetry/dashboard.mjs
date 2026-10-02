@@ -21,10 +21,14 @@
  * stamped. Without it every build is aggregated together, which is only
  * meaningful while nothing about the balance has changed between them.
  *
- * Developer runs are left out (#364): every session listed in
+ * Sessions that are not play are left out (#364): every session listed in
  * `ignored-sessions.txt` next to this file, and every run from the dev server
  * (a build id ending in `-dev`). The report says how many. `--all-sessions`
  * turns that off.
+ *
+ * A session named in `known-sessions.txt` is *not* left out — the maintainer
+ * playing normally is real play. It is counted like any other, and a "Runs by
+ * player" table shows the split so a win rate can be read with that in mind.
  */
 
 import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
@@ -169,7 +173,7 @@ function readIgnoredSessions() {
 }
 const ignoredSessions = allSessions ? [] : readIgnoredSessions();
 
-/** Whether a record belongs to a developer: a listed session, or (for a run) the dev server's build. */
+/** Whether a record is left out as not being play: an ignored session, or (for a run) the dev server's build. */
 function isDeveloper(record, fileSessionId) {
   if (allSessions) {
     return false;
@@ -190,6 +194,48 @@ const allRuns = files.flatMap((file) =>
     return !developer;
   }),
 );
+
+/** `{ prefix, label }` for each line of `known-sessions.txt`; empty if the file is gone. */
+function readKnownSessions() {
+  let text;
+  try {
+    text = readFileSync(fileURLToPath(new URL('./known-sessions.txt', import.meta.url)), 'utf8');
+  } catch {
+    return [];
+  }
+  return text
+    .split('\n')
+    .map((line) => line.replace(/#.*/, '').trim())
+    .map((line) => /^(\S{8,})\s+(.+)$/.exec(line))
+    .filter((match) => match !== null)
+    .map((match) => ({ prefix: match[1].toLowerCase(), label: match[2] }));
+}
+const knownSessions = readKnownSessions();
+const OTHER_PLAYERS = 'everyone else';
+
+/** The label a run's session has in `known-sessions.txt`, or `OTHER_PLAYERS`. */
+function playerOf(run, fileSessionId) {
+  const session = String(run.sessionId ?? fileSessionId ?? '').toLowerCase();
+  const known =
+    session === '' ? undefined : knownSessions.find((k) => session.startsWith(k.prefix));
+  return known?.label ?? OTHER_PLAYERS;
+}
+
+// Named sessions are counted like any other (see known-sessions.txt); this only says who played what.
+const byPlayer = new Map();
+for (const file of files) {
+  for (const run of file.runs) {
+    if (isDeveloper(run, file.sessionId)) {
+      continue;
+    }
+    const label = playerOf(run, file.sessionId);
+    const entry = byPlayer.get(label) ?? { runs: 0, wins: 0, floorOneDeaths: 0 };
+    entry.runs += 1;
+    entry.wins += run.outcome === 'won' ? 1 : 0;
+    entry.floorOneDeaths += run.outcome === 'died' && run.floor === 1 ? 1 : 0;
+    byPlayer.set(label, entry);
+  }
+}
 
 const byBuild = new Map();
 for (const run of allRuns) {
@@ -215,7 +261,7 @@ if (runs.length === 0 && feedback.length === 0) {
   console.log(
     excludedRuns === 0
       ? 'No telemetry runs found in the given files.'
-      : `No telemetry runs found in the given files, apart from ${String(excludedRuns)} developer run(s) left out.`,
+      : `No telemetry runs found in the given files, apart from ${String(excludedRuns)} run(s) left out.`,
   );
   process.exit(0);
 }
@@ -288,7 +334,7 @@ lines.push(
     : `${String(runs.length)} run(s) on build \`${buildFilter}\`, of ${String(allRuns.length)} from ${String(files.length)} file(s).`,
 );
 if (excludedRuns > 0) {
-  lines.push(`${String(excludedRuns)} developer run(s) left out.`);
+  lines.push(`${String(excludedRuns)} run(s) left out (ignored sessions and dev-server runs).`);
 }
 lines.push('');
 lines.push('| | Count |');
@@ -314,6 +360,24 @@ if (byBuild.size > 1 && buildFilter === undefined) {
   lines.push('_Everything below mixes these builds. Pass `--build <id>` to report on one._');
 }
 lines.push('');
+
+// Only worth a table when somebody is named; otherwise it is the totals above again.
+if (Array.from(byPlayer.keys()).some((label) => label !== OTHER_PLAYERS)) {
+  lines.push('#### Runs by player');
+  lines.push('');
+  lines.push('| Player | Runs | Wins | Win rate | Deaths on floor 1 |');
+  lines.push('|---|---|---|---|---|');
+  for (const [label, entry] of Array.from(byPlayer.entries()).sort(
+    (a, b) => b[1].runs - a[1].runs,
+  )) {
+    lines.push(
+      `| ${safeText(label)} | ${String(entry.runs)} | ${String(entry.wins)} | ${((entry.wins / entry.runs) * 100).toFixed(1)}% | ${String(entry.floorOneDeaths)} |`,
+    );
+  }
+  lines.push('');
+  lines.push('_All of these are counted in everything else in this report._');
+  lines.push('');
+}
 
 lines.push('#### Outcomes by floor');
 lines.push('');
