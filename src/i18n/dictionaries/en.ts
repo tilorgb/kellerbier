@@ -253,7 +253,8 @@ export const en = {
   'ui.playtest.welcome.no': 'No thanks, just play',
   'ui.playtest.prompt.heading': 'One quick question',
   'ui.playtest.prompt.hint':
-    'Skip any time. Please leave out your name and other personal details.',
+    'Skip any time. Your answer goes to the developer only. Please leave out your name ' +
+    'and other personal details.',
   'ui.playtest.prompt.placeholder': 'Type your answer here…',
   'ui.playtest.prompt.send': 'Send answer and run stats',
   'ui.playtest.prompt.skip': 'Skip',

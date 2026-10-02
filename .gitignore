@@ -22,6 +22,9 @@ bench/results.json
 # fuzz harness artifacts — same reasoning as bench/results.json
 fuzz/results.json
 
+# `npm run telemetry:report`'s pulled export — every tester's runs and free-text answers (#362)
+/runs.json
+
 # balance simulator (playtest bot) artifacts — same reasoning as bench/results.json
 playtest/results.json
 

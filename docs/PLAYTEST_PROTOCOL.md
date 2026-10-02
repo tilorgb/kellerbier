@@ -58,6 +58,8 @@ does the observer's talking itself (`docs/DECISIONS.md` #110):
 - **One question after each run**, rotating through the five in §6 and skippable. Answering
   sends the answer together with the run's stats, so nobody has to find a Settings tab.
   Answers reach the report on #54 (`tools/telemetry/dashboard.mjs`, "Tester answers").
+  That report is public and shows only how many answers each question got (#362); read what
+  testers wrote with `npm run telemetry:report`.
 
 What this cannot replace is the observation in §4: where they got stuck, what they never
 noticed. That is still a person watching, so keep running a few sessions in the room.

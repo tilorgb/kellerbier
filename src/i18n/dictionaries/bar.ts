@@ -244,7 +244,8 @@ export const bar: Record<DictKey, string> = {
   'ui.playtest.welcome.no': 'Na, danke, i spui nur',
   'ui.playtest.prompt.heading': 'A kurze Frag',
   'ui.playtest.prompt.hint':
-    'Jederzeit überspringbar. Bittschön koan Nam und koane persönlichn Angabn.',
+    'Jederzeit überspringbar. Dei Antwort geht nur an den Entwickler. Bittschön koan Nam ' +
+    'und koane persönlichn Angabn.',
   'ui.playtest.prompt.placeholder': 'Dei Antwort do…',
   'ui.playtest.prompt.send': 'Antwort und Lauf-Wert sendn',
   'ui.playtest.prompt.skip': 'Überspringa',

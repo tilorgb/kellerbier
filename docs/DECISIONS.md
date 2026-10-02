@@ -6176,6 +6176,14 @@ so typing never reaches the game, which listens on `window`.
 at 1000 characters, the Worker re-caps them, and the dashboard flattens them to one line and defuses
 markup and `@`-mentions before they go into a GitHub comment.
 
+**Amended by #362: the answers no longer go into the comment at all.** Defusing markup was enough
+for invited testers; it does nothing about spam, abuse or a stranger's personal details being
+published daily under the project's name once the build is on itch.io. The workflow now builds its
+report with `--public`, which counts answers per question and prints none. Nothing a public
+repository's Actions produce is private — summaries, logs and artifacts are all readable — so the
+full report is built locally by `npm run telemetry:report`. The prompt tells the tester the answer
+goes to the developer.
+
 **Constrains:** the questions are the protocol's, not a survey tool — a new one has to be something
 §5 would allow ("ask what they did, not what they would like"). The observation checklist (§4) is
 not replaced; this only covers what a form can.
