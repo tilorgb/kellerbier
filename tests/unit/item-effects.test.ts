@@ -241,6 +241,21 @@ describe('GameSim.pushEnemiesNear', () => {
   });
 });
 
+describe('GameSim.windSwirl', () => {
+  it('lays dust on a ring around the point, and the ring turns tick to tick', () => {
+    const sim = new GameSim({ room: bareRoom(), population: 'empty' });
+    const before = sim.particles.liveCount;
+
+    sim.windSwirl(100, 100, 40);
+    const first = sim.particles.liveCount;
+    expect(first).toBeGreaterThan(before);
+
+    sim.step(IDLE);
+    sim.windSwirl(100, 100, 40);
+    expect(sim.particles.liveCount).toBeGreaterThan(first);
+  });
+});
+
 describe('GameSim.banItemFromPool', () => {
   it('permanently excludes the id from every future pedestal offer', () => {
     // A single-item pool: with nothing else eligible, a pedestal offer after

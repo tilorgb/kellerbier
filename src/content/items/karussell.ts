@@ -33,12 +33,11 @@ export const karussell: ItemDefinition = {
       if (Math.abs(dx) <= STILL_EPSILON && Math.abs(dy) <= STILL_EPSILON) {
         return;
       }
-      sim.pushEnemiesNear(
-        sim.positionX(playerIndex),
-        sim.positionY(playerIndex),
-        PUSH_RADIUS,
-        PUSH_STRENGTH,
-      );
+      const x = sim.positionX(playerIndex);
+      const y = sim.positionY(playerIndex);
+      sim.pushEnemiesNear(x, y, PUSH_RADIUS, PUSH_STRENGTH);
+      // The push is invisible on its own — the wind that does it is not.
+      sim.windSwirl(x, y, PUSH_RADIUS);
     },
   },
 };
