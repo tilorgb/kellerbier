@@ -53,15 +53,34 @@ if (endpoint === undefined) {
   process.exit(1);
 }
 
-const url = new URL('export', endpoint.endsWith('/') ? endpoint : `${endpoint}/`);
-url.searchParams.set('key', key);
-const response = await fetch(url);
-if (!response.ok) {
-  console.error(`The Worker answered ${String(response.status)} — is the key right?`);
-  process.exit(1);
-}
+// The Worker hands the store over a page at a time (#363) — one invocation can
+// only read so many keys — and says where the next page starts.
+const runs = [];
+const feedback = [];
+let cursor = null;
+do {
+  const url = new URL('export', endpoint.endsWith('/') ? endpoint : `${endpoint}/`);
+  url.searchParams.set('key', key);
+  if (cursor !== null) {
+    url.searchParams.set('cursor', cursor);
+  }
+  const response = await fetch(url);
+  if (!response.ok) {
+    console.error(`The Worker answered ${String(response.status)} — is the key right?`);
+    process.exit(1);
+  }
+  const page = await response.json();
+  runs.push(...(page.runs ?? []));
+  feedback.push(...(page.feedback ?? []));
+  // A Worker from before paging answers with everything and no cursor.
+  cursor = typeof page.cursor === 'string' && page.cursor !== '' ? page.cursor : null;
+} while (cursor !== null);
 const outFile = `${root}runs.json`;
-writeFileSync(outFile, await response.text(), 'utf8');
+writeFileSync(
+  outFile,
+  JSON.stringify({ schemaVersion: 1, sessionId: null, runs, feedback }),
+  'utf8',
+);
 
 const report = spawnSync(
   process.execPath,
