@@ -8,6 +8,7 @@ node_modules/
 # — the release build's own test — the moment one existed.
 /dist/
 /dist-tester/
+/dist-itch/
 /dist-ssr/
 /build/
 *.local
