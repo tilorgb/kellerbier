@@ -23,6 +23,14 @@ import type { EnemyDefinition } from '../../sim/enemy/definition.js';
  * Kellerassel does. A mini-boss that outlasts the floor's real boss is the
  * failure this is measured against.
  *
+ * **#368: the third fan thins out.** Same reason as Der Rattenkönig's own
+ * note — floor 1's gates were ending the runs floor 2 was not. The widest
+ * fan drops from six shots to five over the same arc, so the lane it leaves
+ * is a little wider. A longer `rest` was tried first and put back: it cost
+ * the fight a whole cycle at base damage, under this file's own pacing floor
+ * (`tests/content/boss-pacing.test.ts`). A small first step, not yet tuned
+ * by feel.
+ *
  * `bossBar: true` — it feeds the top-of-screen bar (`GameSim.bossHealth`),
  * which the mini-boss room now shows the same as a boss room.
  */
@@ -87,7 +95,7 @@ export const dieZapfhahnOrgel: EnemyDefinition = {
         { behaviour: 'pause' },
         {
           behaviour: 'fireSpread',
-          shots: 6,
+          shots: 5,
           arc: 2.0,
           everyTicks: 999,
           speed: 1.5,

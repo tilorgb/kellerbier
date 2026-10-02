@@ -59,6 +59,18 @@ import type { EnemyDefinition, SplitOnDeathBehaviour } from '../../sim/enemy/def
  * later re-check on its own) and spawns him at 20 health instead of 45 when
  * it is gone — the disarmed `chase`/`dash` loop that gets fewer, quicker
  * turns before he goes down, rather than the melee one's full run.
+ *
+ * **#368: the last fight of the game was its easiest gate.** First telemetry
+ * had every death on floor 1 and Der Stier falling in a quarter of the time
+ * Die Große Kellerassel took; the simulator had him ending 8 of 120 runs
+ * against her 72 of 252. Health is not the lever — #260 already heard "too
+ * long" — and neither is `contactDamage` (`docs/DECISIONS.md` #65). What
+ * moved is how much room the loop leaves: a shorter warning (26 → 22
+ * ticks), a faster charge (2.6 → 2.9) and a shorter stun to punish him in
+ * (50 → 38), and the disarmed dieb's own stun likewise (46 → 36). A first
+ * step, on purpose a small one, and **not yet tuned by feel** — the bot
+ * cannot tell these numbers apart (`docs/BALANCE_METHODOLOGY.md` §6), so
+ * they want playing.
  */
 
 const PHASE_TWO_SPLIT: SplitOnDeathBehaviour = {
@@ -107,12 +119,12 @@ export const derStier: EnemyDefinition = {
     },
     {
       name: 'telegraph',
-      behaviours: [{ behaviour: 'pause' }, { behaviour: 'telegraph', ticks: 26 }, PHASE_TWO_SPLIT],
-      transitions: [{ to: 'charge', after: 26 }],
+      behaviours: [{ behaviour: 'pause' }, { behaviour: 'telegraph', ticks: 22 }, PHASE_TWO_SPLIT],
+      transitions: [{ to: 'charge', after: 22 }],
     },
     {
       name: 'charge',
-      behaviours: [{ behaviour: 'chargeAtPlayer', speed: 2.6 }, PHASE_TWO_SPLIT],
+      behaviours: [{ behaviour: 'chargeAtPlayer', speed: 2.9 }, PHASE_TWO_SPLIT],
       transitions: [
         { to: 'stunned', onBlocked: true },
         // An open arena never finds a wall — the safety net so a clean field
@@ -123,7 +135,7 @@ export const derStier: EnemyDefinition = {
     {
       name: 'stunned',
       behaviours: [{ behaviour: 'pause' }, PHASE_TWO_SPLIT],
-      transitions: [{ to: 'approach', after: 50 }],
+      transitions: [{ to: 'approach', after: 38 }],
     },
   ],
 };
@@ -247,7 +259,7 @@ export const maibaumDieb: EnemyDefinition = {
       behaviours: [{ behaviour: 'pause' }],
       // Back to `chase`, not `approach`: the maypole is gone for good, so the
       // disarmed branch self-loops without re-checking for it.
-      transitions: [{ to: 'chase', after: 46 }],
+      transitions: [{ to: 'chase', after: 36 }],
     },
   ],
 };

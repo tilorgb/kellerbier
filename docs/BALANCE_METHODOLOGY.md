@@ -97,7 +97,7 @@ for the band above.
 
 | Scope bullet | Status |
 |---|---|
-| The difficulty curve across two floors, no spike | **Failing: the curve falls instead of rising** (#368). Bot and human evidence now agree — see §6. Not yet tuned. |
+| The difficulty curve across two floors, no spike | **Failing: the curve falls instead of rising** (#368). Bot and human evidence agree — see §6. A first tuning step is in; its effect is unmeasured until it has been played. |
 | Item win-rate outliers, across the 120+ pool | Infrastructure ready (`itemWinRates` in the simulator report, `dashboard.mjs`'s item table from real telemetry); §2's confound means the simulator alone cannot close this out yet. Needs either isolation sweeps or real telemetry volume. |
 | Promille tier usage | Infrastructure ready (`promilleTierTicks` end to end, from `app/telemetry/tracker.ts` through the dashboard); the simulator cannot answer this at all (§2) — this is telemetry-only, and needs real runs to have anything to report. |
 | Boss attempt counts and completion rates | Covered by `docs/DECISIONS.md` #66's own boss-pacing work (health tuned against the authored cycle, `tests/content/boss-pacing.test.ts`) — the sim-level half is already done; real attempt/completion rates are what the telemetry dashboard's per-floor table gives once boss-room runs accumulate. |
@@ -126,34 +126,55 @@ Promille reads 77% Nüchtern / 20% Angeheitert / 3% Beduselt off a handful of ru
 **Human runs** (10, see §5): all 8 deaths are on floor 1 and none on floor 2. Floor 1's boss took
 2950 ticks on average, floor 2's 824.
 
-**Simulator** (40 runs, commit `abd1ff5`), per run that reached each kind of room:
+**Simulator** (400 runs — `PLAYTEST_SEEDS=40 npm run playtest` — before the tuning below), per
+run that reached each kind of room:
 
 | Floor | Rooms | Runs | Ended here | Avg ticks | Avg damage taken |
 |---|---|---|---|---|---|
-| 1 | normal | 40 | 5 | 1921 | 1.2 |
-| 1 | miniboss | 37 | 7 | 1059 | 1.6 |
-| 1 | boss | 28 | 8 | 743 | 1.0 |
-| 2 | normal | 20 | 0 | 2041 | 0.4 |
-| 2 | miniboss | 20 | 4 | 482 | 1.5 |
-| 2 | boss | 16 | 0 | 837 | 0.6 |
+| 1 | normal | 400 | 38 (10%) | 1835 | 1.2 |
+| 1 | miniboss | 379 | 107 (28%) | 1020 | 2.0 |
+| 1 | boss | 252 | 72 (29%) | 794 | 1.4 |
+| 2 | normal | 179 | 18 (10%) | 2040 | 0.6 |
+| 2 | miniboss | 168 | 41 (24%) | 601 | 1.9 |
+| 2 | boss | 120 | 8 (7%) | 800 | 0.4 |
 
 What that says:
 
-- **Floor 1's two gates end half of all runs.** The mini-boss stops 7 of 37 and the boss 8 of 28;
-  ordinary rooms account for only 5.
-- **Floor 2's boss stops nobody** — 0 of 16 — and deals less damage than floor 1's (0.6 against 1.0). The
-  last fight of the game is the easiest gate in it.
-- **Floor 2's ordinary rooms do a third of the damage floor 1's do** (0.4 against 1.2) over the
-  same time.
-- **Floor 2's mini-boss is the only part that holds up**: it ends 4 of 20 and hits as hard as
-  floor 1's in half the time.
+- **Floor 1's two gates are where runs end.** The mini-boss stops 28% of the runs that reach it
+  and the boss 29%; ordinary rooms 10%.
+- **Floor 2's boss is the easiest gate in the game** — 7% — and deals a third of the damage floor
+  1's does. The last fight should not be that.
+- **Floor 2's ordinary rooms do half the damage floor 1's do** over the same time.
+- **Floor 2's mini-boss holds up**: 24%, and it hits as hard as floor 1's in less time.
+
+**The nightly sweep's forty runs are too few to read this from.** The first version of this
+table was built on them and said Der Stier ended no run at all and that floor 2's ordinary rooms
+ended none either; at four hundred both are plainly wrong. Forty runs put two or three
+run-enders either way on any row. Read rows off the wide sweep, not the nightly one.
 
 Read it with one caveat: the runs on floor 2 are the ones that survived floor 1, which in this
 sweep means the ones that drew a stronger loadout. Some of floor 2's gentleness is that
 filter, not the floor. It does not explain a boss that ends no run at all, and the human runs —
 which pick items up as they go — show the same shape.
 
-**Not tuned yet, deliberately.** Which way to close the gap is a design choice (ease floor 1's
-gates, harden floor 2's rooms and boss, or both), and ten human runs are not a basis for numbers.
-The next step is a tuning proposal checked with `npm run playtest`, then rechecked against
-telemetry once there are runs from more than two people.
+### The first tuning step, and what the simulator could not say about it
+
+Both directions, a small step each (#368): floor 1's two mini-bosses eased — Der Rattenkönig
+keeps one rat fewer alive, Die Zapfhahn-Orgel's widest fan loses a shot — and Der Stier hardened
+without being lengthened: a shorter warning, a faster charge, a shorter stun, for him and for the
+disarmed Maibaum-Dieb. Floor 2's ordinary rooms were left alone on purpose:
+`content/floors/definition.ts` records that adding bodies there was tried, played and rejected.
+
+**The simulator cannot tell these numbers from the old ones.** On the same 400 runs, floor 1's
+mini-boss row went from 107 run-enders to 106 and Der Stier's from 8 to 10 — noise. Variants
+twice as strong (a charge at 3.3 after a 20-tick warning; a rat every 170 ticks instead of 120)
+moved them to 11 and 101, which is no more than that. The bot kites at range and does not react to a telegraph, so how long a
+warning lasts or how wide a lane is does not change what happens to it. What ends its runs at a
+gate is mostly how much health it arrives with.
+
+So this step is **checked for breakage, not for effect**: the sweep still runs without a crash,
+the retreat bot still cannot walk floor 1 untouched, and `tests/content/boss-pacing.test.ts`
+still holds every fight to its cycle count. Whether floor 1 now feels fairer and Der Stier now
+feels like a last boss is a question for a person playing it, and then for telemetry — the
+"Runs by build" table (`tools/telemetry/README.md`) is what separates runs before this change
+from runs after it.

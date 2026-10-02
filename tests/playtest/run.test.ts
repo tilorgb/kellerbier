@@ -27,7 +27,15 @@ import { buildPlaytestReport, writePlaytestReport } from './lib/report.js';
  * seed" is a nightly job people stop reading.
  */
 
-const RUN_SEEDS = [101, 102, 103, 104];
+/**
+ * Four seeds is what a nightly job can afford, and it is too few to tune by:
+ * forty runs put two or three run-enders either way on any one row of the
+ * report, which is the size of the change a tuning step is trying to see
+ * (#368). `PLAYTEST_SEEDS=40 npm run playtest` widens the sweep to that many
+ * seeds for a tuning session; unset, it is the same four as ever.
+ */
+const SEED_COUNT = Math.max(1, Math.trunc(Number(process.env.PLAYTEST_SEEDS)) || 4);
+const RUN_SEEDS = Array.from({ length: SEED_COUNT }, (_, index) => 101 + index);
 
 /** `0` items (baseline) plus two drawn sizes, two draws each — `tests/fuzz/lib/combinations.ts`'s own generator, reused rather than reinvented. */
 const LOADOUTS: readonly { readonly loadoutSeed: number; readonly itemIds: readonly string[] }[] = [
