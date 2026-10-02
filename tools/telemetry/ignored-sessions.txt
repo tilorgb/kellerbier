@@ -7,3 +7,5 @@
 #
 # Runs from `npm run dev` (a build id ending in -dev) are left out without
 # being listed here.
+
+f3c3a263-b0e1-4fa7-9382-1fa017e0eac1  # tilorgb, the maintainer (added 2026-10-02)
