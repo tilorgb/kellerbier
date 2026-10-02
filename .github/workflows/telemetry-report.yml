@@ -6,6 +6,12 @@ name: Telemetry report
 # balance issue up to date with the result — so reading the data is opening
 # the issue, not running curl on a laptop.
 #
+# The report is built with `--public` (#362): it counts tester answers and
+# never prints them. This repository is public, and so is everything a run
+# of this workflow leaves behind — the comment, the step summary, the log —
+# so the answers are read with `npm run telemetry:report` on a laptop instead.
+# Do not upload runs.json as an artifact: it holds every answer.
+#
 # Needs the repository secret `TELEMETRY_ADMIN_KEY` (the Worker's `ADMIN_KEY`).
 # Without it the job exits cleanly and says so, rather than failing every day.
 
@@ -59,7 +65,7 @@ jobs:
             echo '<!-- telemetry-report -->'
             echo "## Playtest telemetry — $(date -u +'%Y-%m-%d %H:%M UTC')"
             echo
-            node tools/telemetry/dashboard.mjs runs.json
+            node tools/telemetry/dashboard.mjs runs.json --public
           } > report.md
           cat report.md >> "$GITHUB_STEP_SUMMARY"
 

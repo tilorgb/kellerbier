@@ -37,6 +37,7 @@
     "bench": "vitest run --config vitest.bench.config.ts",
     "fuzz": "vitest run --config vitest.fuzz.config.ts",
     "playtest": "vitest run --config vitest.playtest.config.ts",
+    "telemetry:report": "node tools/telemetry/pull.mjs",
     "perf:crossings": "node tools/perf/room-crossings.mjs walk 12 --gate"
   },
   "dependencies": {

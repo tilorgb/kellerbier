@@ -45,9 +45,20 @@ const QUESTION_LABELS = {
 };
 
 /**
- * Tester text is untrusted and ends up in a GitHub comment: collapse it to one
- * line, defuse markup and @-mentions so a free-text box cannot ping anyone or
- * inject a link/image.
+ * `--public` (#362): the report is going somewhere anyone can read — the
+ * comment on the balance issue — so it says how many answers each question
+ * got and none of what they say. A free-text box filled in by strangers is
+ * spam, abuse or somebody's personal details waiting to be published under
+ * the project's name. `npm run telemetry:report` prints the full report locally.
+ */
+const PUBLIC_FLAG = '--public';
+const publicReport = process.argv.includes(PUBLIC_FLAG);
+
+/**
+ * Tester text is untrusted and can end up in a GitHub comment: collapse it to
+ * one line, defuse markup and @-mentions so it cannot ping anyone or inject a
+ * link/image. That goes for ids too — the Worker accepts a POST from anyone,
+ * so an item or enemy "id" is whatever the sender typed.
  */
 function safeText(text) {
   return String(text)
@@ -88,6 +99,9 @@ function buildOf(run) {
 function resolveFiles(paths) {
   const files = [];
   for (const path of paths) {
+    if (path === PUBLIC_FLAG) {
+      continue;
+    }
     const stat = statSync(path);
     if (stat.isDirectory()) {
       for (const entry of readdirSync(path)) {
@@ -168,7 +182,7 @@ for (const run of runs) {
   }
   const enemies =
     run.deathCause?.enemiesPresent && run.deathCause.enemiesPresent.length > 0
-      ? [...run.deathCause.enemiesPresent].sort().join(', ')
+      ? [...run.deathCause.enemiesPresent].map(safeText).sort().join(', ')
       : '(no enemy recorded)';
   const key = `floor ${String(run.floor)} — ${enemies}`;
   deathCauses.set(key, (deathCauses.get(key) ?? 0) + 1);
@@ -189,7 +203,7 @@ for (const run of runs) {
 const roomClearsByRole = new Map();
 for (const run of runs) {
   for (const clear of run.roomClears ?? []) {
-    const key = `floor ${String(clear.floor)} — ${clear.role}`;
+    const key = `floor ${String(clear.floor)} — ${safeText(clear.role)}`;
     const entry = roomClearsByRole.get(key) ?? { count: 0, totalTicks: 0 };
     entry.count += 1;
     entry.totalTicks += clear.ticks;
@@ -273,7 +287,9 @@ if (itemStats.size === 0) {
     (a, b) => b[1].appearances - a[1].appearances,
   )) {
     const rate = entry.wins / entry.appearances;
-    lines.push(`| ${itemId} | ${String(entry.appearances)} | ${(rate * 100).toFixed(1)}% |`);
+    lines.push(
+      `| ${safeText(itemId)} | ${String(entry.appearances)} | ${(rate * 100).toFixed(1)}% |`,
+    );
   }
 }
 lines.push('');
@@ -320,13 +336,25 @@ if (feedback.length === 0) {
     list.push(entry);
     byQuestion.set(entry.questionId, list);
   }
-  for (const [id, entries] of byQuestion) {
-    lines.push(`**${QUESTION_LABELS[id] ?? safeText(id)}** (${String(entries.length)})`);
+  if (publicReport) {
+    lines.push('| Question | Answers |');
+    lines.push('|---|---|');
+    for (const [id, entries] of byQuestion) {
+      lines.push(`| ${QUESTION_LABELS[id] ?? safeText(id)} | ${String(entries.length)} |`);
+    }
     lines.push('');
-    for (const entry of entries) {
-      lines.push(`> ${safeText(entry.text)}`);
-      lines.push(`> — session \`${safeText(entry.sessionId ?? 'unknown').slice(0, 8)}\``);
+    lines.push(
+      '_What testers wrote is left out of this public report. Read it locally with `npm run telemetry:report`._',
+    );
+  } else {
+    for (const [id, entries] of byQuestion) {
+      lines.push(`**${QUESTION_LABELS[id] ?? safeText(id)}** (${String(entries.length)})`);
       lines.push('');
+      for (const entry of entries) {
+        lines.push(`> ${safeText(entry.text)}`);
+        lines.push(`> — session \`${safeText(entry.sessionId ?? 'unknown').slice(0, 8)}\``);
+        lines.push('');
+      }
     }
   }
 }

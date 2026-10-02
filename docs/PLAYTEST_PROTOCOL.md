@@ -60,6 +60,8 @@ does the observer's talking itself (`docs/DECISIONS.md` #110):
   (`docs/DECISIONS.md` #112) — the welcome screen says so before the yes — so a skipped
   question no longer costs the run, and nobody has to find a Settings tab.
   Answers reach the report on #54 (`tools/telemetry/dashboard.mjs`, "Tester answers").
+  That report is public and shows only how many answers each question got (#362); read what
+  testers wrote with `npm run telemetry:report`.
 
 What this cannot replace is the observation in §4: where they got stuck, what they never
 noticed. That is still a person watching, so keep running a few sessions in the room.

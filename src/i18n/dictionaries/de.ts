@@ -245,7 +245,8 @@ export const de: Record<DictKey, string> = {
   'ui.playtest.welcome.no': 'Nein danke, ich spiele nur',
   'ui.playtest.prompt.heading': 'Eine kurze Frage',
   'ui.playtest.prompt.hint':
-    'Jederzeit überspringbar. Bitte keinen Namen und keine persönlichen Angaben.',
+    'Jederzeit überspringbar. Deine Antwort geht nur an den Entwickler. Bitte keinen Namen ' +
+    'und keine persönlichen Angaben.',
   'ui.playtest.prompt.placeholder': 'Deine Antwort hier…',
   'ui.playtest.prompt.send': 'Antwort senden',
   'ui.playtest.prompt.skip': 'Überspringen',
