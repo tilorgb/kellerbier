@@ -6,6 +6,16 @@ line — dropped in here by the audio editor's "Recorded sample" panel (`music`,
 synthesised live from Web Audio oscillators and filtered noise, with no binary asset at all —
 this folder is the one place that changes.
 
+## Where these came from
+
+**Every file in this folder was recorded by the project owner personally** — the theme
+(`01-consolidated.mp3`) and all nine sound effects (stated 2026-10-02, `docs/LEGAL_REVIEW.md`
+Finding 3). None of it is from a sample library or anyone else's work, so there is no licence to
+honour and no credit owed.
+
+Keep it that way, or write it down: a file added here that somebody else made needs its source
+and its licence recorded in this section in the same change.
+
 ## What goes here, and how it gets here
 
 Upload a file through the audio editor (`npm run dev`, then `/audio-editor.html`) rather than

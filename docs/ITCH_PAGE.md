@@ -11,11 +11,13 @@ the game does today, not signed off.
 
 ## Before the page can go up
 
-Two findings in [`LEGAL_REVIEW.md`](LEGAL_REVIEW.md) block it, and the page text below assumes
-both are settled:
+Nothing in [`LEGAL_REVIEW.md`](LEGAL_REVIEW.md) blocks it any more: the two findings that did
+were settled on 2026-10-02 (Spezi keeps its name; the music and sound effects are the owner's own
+recordings). What is left is practical:
 
-- the item named **Spezi** (Finding 1)
-- where the **music and sound effects** came from (Finding 3)
+- upload a build and run the embed checklist (`tools/release/ITCH.md`)
+- redeploy the telemetry Worker (`tools/telemetry/README.md`)
+- a cover image, and screenshots past the second room (below)
 
 ## Page fields
 
