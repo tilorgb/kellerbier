@@ -22,6 +22,13 @@ const SPLASH_DAMAGE_SCALE = 0.5;
  * exchanges (a boss and its add) the dispatcher's own depth guard threw and
  * took the run down. `splashing` makes the shards plain damage: one mug,
  * one splash.
+ *
+ * **The shards do not hit the thrower.** The splash is centred on the enemy
+ * and excludes that enemy, which left Alois inside it whenever the enemy had
+ * closed to melee range — every shot at something next to him cost him
+ * health. Alone, the item ended every simulated run on floor 1
+ * (`docs/BALANCE_METHODOLOGY.md` §7). Each of the game's other splash items
+ * spares the player; this one now does too.
  */
 
 /** Set while a Steinkrug splash is being applied, so the hits it lands do not each splash in turn. */
@@ -51,6 +58,7 @@ export const steinkrug: ItemDefinition = {
           SPLASH_RADIUS,
           Math.max(1, Math.round(ctx.damage * SPLASH_DAMAGE_SCALE)),
           ctx.target,
+          true,
         );
       } finally {
         splashing[0] = 0;
