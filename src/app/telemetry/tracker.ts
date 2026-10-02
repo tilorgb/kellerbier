@@ -1,4 +1,5 @@
 import type { GameSim } from '../../sim/game/sim.js';
+import { BUILD_ID } from '../build-mode.js';
 import type { TelemetryDeathCause, TelemetryRoomClear, TelemetryRunRecord } from './schema.js';
 
 /**
@@ -90,6 +91,7 @@ export class TelemetryTracker {
       itemsHeld: Array.from(this.knownItemIds),
       roomClears: this.roomClears,
       promilleTierTicks,
+      build: BUILD_ID,
     };
   }
 }

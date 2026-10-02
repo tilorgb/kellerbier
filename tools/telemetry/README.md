@@ -11,6 +11,13 @@
 4. Read the data: `curl "<worker-url>/export?key=<ADMIN_KEY>" > runs.json`, then
    `node tools/telemetry/dashboard.mjs runs.json`.
 
+## Builds
+
+Every run carries the build it was played on (`build`, the short commit — #361), and the report
+opens with a "Runs by build" table. Once a balance change has shipped, read one build at a time:
+`node tools/telemetry/dashboard.mjs runs.json --build <id>`. Runs recorded before the stamp existed
+are reported as `unknown`; runs from `npm run dev` end in `-dev`.
+
 ## Automatic report on the balance issue
 
 `.github/workflows/telemetry-report.yml` runs daily (and from the Actions tab) and keeps one

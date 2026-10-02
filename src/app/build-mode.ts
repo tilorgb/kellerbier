@@ -36,6 +36,20 @@ declare const __KELLERBIER_RELEASE__: boolean;
 export const IS_RELEASE_BUILD: boolean =
   typeof __KELLERBIER_RELEASE__ === 'boolean' ? __KELLERBIER_RELEASE__ : false;
 
+declare const __KELLERBIER_COMMIT__: string;
+
+/**
+ * Which build this is, for telemetry (#361): the short commit it was made
+ * from, so runs played before a balance change can be told from runs played
+ * after it. The dev server appends `-dev` — a run from `npm run dev` is on a
+ * working tree that may not match any commit, and should never be mistaken
+ * for a tester's. Same `typeof` guard as above, for the same reason.
+ */
+const BUILD_COMMIT: string =
+  typeof __KELLERBIER_COMMIT__ === 'string' ? __KELLERBIER_COMMIT__ : 'unknown';
+
+export const BUILD_ID: string = import.meta.env.DEV ? `${BUILD_COMMIT}-dev` : BUILD_COMMIT;
+
 declare const __KELLERBIER_PLAYTEST__: boolean;
 
 /**
