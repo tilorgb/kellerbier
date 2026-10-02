@@ -21,7 +21,9 @@ never shops, never reads a Promille meter, never notices a Maibaum is interactiv
 *"does this change break anything, and roughly how hard is each floor for a scripted baseline"*
 cheaply enough to run on every tuning idea. `tools/playtest/report.mjs` formats its
 `playtest/results.json` into a report: win rate overall and by skill, per-floor attempts/deaths/
-avg ticks/avg damage, item win-rate outliers, and Promille tier usage across the sweep.
+avg ticks/avg damage, the same split by kind of room within a floor (#368 — ordinary rooms,
+mini-boss, boss, and where runs ended), item win-rate outliers, and Promille tier usage across
+the sweep.
 
 **Playtest telemetry** (`app/telemetry/`, opt-in, anonymous — `docs/DECISIONS.md` #70) is real
 players' real runs: how each run ended, deaths by floor and best-effort cause, item pickups, room
@@ -85,7 +87,7 @@ document exist to check a real playtest round against, per #54's own acceptance 
 band that was chosen deliberately and written down"), not a claim that floors 1-2 currently land
 in it. §5 below is where that gets checked once real telemetry exists.
 
-The simulator's own sweep win rate (25.0% at commit `d2468e9`, `playtest/results.json`) is
+The simulator's own sweep win rate (40.0% at commit `abd1ff5`, `playtest/results.json`) is
 **not** a read on this band — it deliberately includes a zero-item baseline loadout precisely to
 stress-test the floors at their hardest, which no real run plays through unmodified. It is a
 regression signal (did this change make the floor harder for a bot with nothing), not a proxy
@@ -95,7 +97,7 @@ for the band above.
 
 | Scope bullet | Status |
 |---|---|
-| The difficulty curve across two floors, no spike | No spike in the current sweep (floor 2's per-attempt damage/death rate reads *gentler* than floor 1's — see `playtest/results.json`), but floor 2's sample is small (16 of 40 runs reach it, at commit `d2468e9`) and this is bot evidence, not human evidence. Recheck once §5's round exists. |
+| The difficulty curve across two floors, no spike | **Failing: the curve falls instead of rising** (#368). Bot and human evidence now agree — see §6. Not yet tuned. |
 | Item win-rate outliers, across the 120+ pool | Infrastructure ready (`itemWinRates` in the simulator report, `dashboard.mjs`'s item table from real telemetry); §2's confound means the simulator alone cannot close this out yet. Needs either isolation sweeps or real telemetry volume. |
 | Promille tier usage | Infrastructure ready (`promilleTierTicks` end to end, from `app/telemetry/tracker.ts` through the dashboard); the simulator cannot answer this at all (§2) — this is telemetry-only, and needs real runs to have anything to report. |
 | Boss attempt counts and completion rates | Covered by `docs/DECISIONS.md` #66's own boss-pacing work (health tuned against the authored cycle, `tests/content/boss-pacing.test.ts`) — the sim-level half is already done; real attempt/completion rates are what the telemetry dashboard's per-floor table gives once boss-room runs accumulate. |
@@ -110,6 +112,48 @@ against real numbers.
 
 ## 5. Where the first playtest round stands
 
-Not yet run. `docs/PLAYTEST_PROTOCOL.md` §7 makes this an explicit prerequisite for the rest of
-this document's targeted-tuning rows, not an oversight — update this section (and re-check §4's
-table) the moment a round's findings are triaged.
+**No observed round has been run.** `docs/PLAYTEST_PROTOCOL.md` §7 makes that an explicit
+prerequisite for the rest of this document's targeted-tuning rows, not an oversight — update this
+section (and re-check §4's table) the moment a round's findings are triaged.
+
+What exists instead is the first unobserved telemetry: **10 runs from two sessions** (the report on
+#54, 2026-10-02), some of them the maintainer's own. That is enough to notice one thing (§6) and
+far too little for anything else in §4: 7 of 51 items were ever held, each in one or two runs, and
+Promille reads 77% Nüchtern / 20% Angeheitert / 3% Beduselt off a handful of runs.
+
+## 6. The curve falls where it should rise (#368)
+
+**Human runs** (10, see §5): all 8 deaths are on floor 1 and none on floor 2. Floor 1's boss took
+2950 ticks on average, floor 2's 824.
+
+**Simulator** (40 runs, commit `abd1ff5`), per run that reached each kind of room:
+
+| Floor | Rooms | Runs | Ended here | Avg ticks | Avg damage taken |
+|---|---|---|---|---|---|
+| 1 | normal | 40 | 5 | 1921 | 1.2 |
+| 1 | miniboss | 37 | 7 | 1059 | 1.6 |
+| 1 | boss | 28 | 8 | 743 | 1.0 |
+| 2 | normal | 20 | 0 | 2041 | 0.4 |
+| 2 | miniboss | 20 | 4 | 482 | 1.5 |
+| 2 | boss | 16 | 0 | 837 | 0.6 |
+
+What that says:
+
+- **Floor 1's two gates end half of all runs.** The mini-boss stops 7 of 37 and the boss 8 of 28;
+  ordinary rooms account for only 5.
+- **Floor 2's boss stops nobody** — 0 of 16 — and deals less damage than floor 1's (0.6 against 1.0). The
+  last fight of the game is the easiest gate in it.
+- **Floor 2's ordinary rooms do a third of the damage floor 1's do** (0.4 against 1.2) over the
+  same time.
+- **Floor 2's mini-boss is the only part that holds up**: it ends 4 of 20 and hits as hard as
+  floor 1's in half the time.
+
+Read it with one caveat: the runs on floor 2 are the ones that survived floor 1, which in this
+sweep means the ones that drew a stronger loadout. Some of floor 2's gentleness is that
+filter, not the floor. It does not explain a boss that ends no run at all, and the human runs —
+which pick items up as they go — show the same shape.
+
+**Not tuned yet, deliberately.** Which way to close the gap is a design choice (ease floor 1's
+gates, harden floor 2's rooms and boss, or both), and ten human runs are not a basis for numbers.
+The next step is a tuning proposal checked with `npm run playtest`, then rechecked against
+telemetry once there are runs from more than two people.

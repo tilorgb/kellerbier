@@ -98,6 +98,25 @@ for (const floor of report.floors) {
 }
 lines.push('');
 
+// Absent from a results file written before schema 3 (#368).
+if (Array.isArray(report.roomRoles) && report.roomRoles.length > 0) {
+  lines.push('#### Where on the floor');
+  lines.push('');
+  lines.push(
+    'Per run that reached it, all rooms of that kind on the floor together. "Ended here" is every run that stopped there without winning — died, stuck or out of ticks.',
+  );
+  lines.push('');
+  lines.push('| Floor | Rooms | Runs | Ended here | Avg ticks | Avg damage taken |');
+  lines.push('|---|---|---|---|---|---|');
+  for (const row of report.roomRoles) {
+    lines.push(
+      `| ${String(row.floor)} | ${row.role} | ${String(row.runs)} | ${String(row.endedHere)} | ` +
+        `${row.avgTicks.toFixed(0)} | ${row.avgDamageTaken.toFixed(1)} |`,
+    );
+  }
+  lines.push('');
+}
+
 lines.push('#### Promille tier usage');
 lines.push('');
 const tierTotal = Object.values(report.promilleTierUsage ?? {}).reduce((a, b) => a + b, 0);

@@ -30,6 +30,8 @@ function outcome(overrides: Partial<PlaytestOutcome>): PlaytestOutcome {
     ticksCompleted: 100,
     damageTaken: 10,
     floors: [],
+    roomRoles: [],
+    endedIn: null,
     promilleTierTicks: {},
     peakPromille: 0,
     ...overrides,
@@ -78,5 +80,35 @@ describe('buildPlaytestReport (#54)', () => {
     const report = buildPlaytestReport([outcome({})], META);
     expect(report.itemWinRates).toEqual([]);
     expect(report.promilleTierUsage).toEqual({});
+  });
+
+  it('says where on a floor the time, the damage and the run-enders are (#368)', () => {
+    const report = buildPlaytestReport(
+      [
+        outcome({
+          roomRoles: [
+            { floor: 1, role: 'boss', ticks: 300, damageTaken: 4 },
+            { floor: 1, role: 'normal', ticks: 100, damageTaken: 2 },
+          ],
+          endedIn: { floor: 1, role: 'boss' },
+        }),
+        outcome({
+          result: 'won',
+          roomRoles: [
+            { floor: 1, role: 'normal', ticks: 300, damageTaken: 0 },
+            { floor: 1, role: 'boss', ticks: 100, damageTaken: 2 },
+            { floor: 2, role: 'boss', ticks: 50, damageTaken: 1 },
+          ],
+          endedIn: null,
+        }),
+      ],
+      META,
+    );
+    // Floor by floor, and within a floor in the order a run meets the rooms.
+    expect(report.roomRoles).toEqual([
+      { floor: 1, role: 'normal', runs: 2, endedHere: 0, avgTicks: 200, avgDamageTaken: 1 },
+      { floor: 1, role: 'boss', runs: 2, endedHere: 1, avgTicks: 200, avgDamageTaken: 3 },
+      { floor: 2, role: 'boss', runs: 1, endedHere: 0, avgTicks: 50, avgDamageTaken: 1 },
+    ]);
   });
 });

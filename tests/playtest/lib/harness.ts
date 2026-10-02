@@ -80,6 +80,19 @@ export interface FloorOutcome {
   readonly damageTaken: number;
 }
 
+/**
+ * Time and damage in one kind of room on one floor (#368). The per-floor
+ * totals say *that* floor 1 costs more than floor 2; this says where on the
+ * floor it is spent — its ordinary rooms, the mini-boss gate, or the boss.
+ */
+export interface RoomRoleOutcome {
+  readonly floor: number;
+  /** `RoomRole` from the floor plan: `normal`, `miniboss`, `boss`, … */
+  readonly role: string;
+  readonly ticks: number;
+  readonly damageTaken: number;
+}
+
 export type PlaytestResult = 'won' | 'died' | 'stuck' | 'crashed' | 'ranOut';
 
 export interface PlaytestOutcome {
@@ -93,6 +106,10 @@ export interface PlaytestOutcome {
   readonly ticksCompleted: number;
   readonly damageTaken: number;
   readonly floors: readonly FloorOutcome[];
+  /** One entry per (floor, room role) the run spent any time in. */
+  readonly roomRoles: readonly RoomRoleOutcome[];
+  /** The room the run was in when it ended without a win — `null` for a win, or a crash before the first room. */
+  readonly endedIn: { readonly floor: number; readonly role: string } | null;
   /**
    * Ticks spent at each Promille tier id (`sim/game/promille.ts#PromilleTier`)
    * across the whole run, keyed as strings — #54's "Promille tier usage"
@@ -312,6 +329,8 @@ export function runPlaytest(options: PlaytestOptions): PlaytestOutcome {
       ticksCompleted: 0,
       damageTaken: 0,
       floors: [],
+      roomRoles: [],
+      endedIn: null,
       promilleTierTicks: {},
       peakPromille: 0,
     };
@@ -339,6 +358,10 @@ export function runPlaytest(options: PlaytestOptions): PlaytestOutcome {
   let lastY = sim.positionY(sim.playerIndex);
   const promilleTierTicks = new Map<number, number>();
   let peakPromille = 0;
+  const roomRoles = new Map<
+    string,
+    { floor: number; role: string; ticks: number; damage: number }
+  >();
 
   let result: PlaytestResult = 'ranOut';
   let errorMessage: string | undefined;
@@ -365,6 +388,9 @@ export function runPlaytest(options: PlaytestOptions): PlaytestOutcome {
 
     const healthBefore = sim.playerHealth + sim.playerSoulHealth + sim.playerEternalHealth;
     const enemyHealthBefore = totalEnemyHealth(sim);
+    // Read before the step: a tick that ends by crossing a door was spent in the room it left.
+    const tickFloor = floorPlan.floor;
+    const tickRole = planRoom(floorPlan, currentRoomId).role;
 
     try {
       sim.step(input);
@@ -379,6 +405,15 @@ export function runPlaytest(options: PlaytestOptions): PlaytestOutcome {
       break runLoop;
     }
     floorTicks += 1;
+    const roleKey = `${String(tickFloor)}:${tickRole}`;
+    const roleEntry = roomRoles.get(roleKey) ?? {
+      floor: tickFloor,
+      role: tickRole,
+      ticks: 0,
+      damage: 0,
+    };
+    roleEntry.ticks += 1;
+    roomRoles.set(roleKey, roleEntry);
     const tier = sim.promilleTier;
     promilleTierTicks.set(tier, (promilleTierTicks.get(tier) ?? 0) + 1);
     peakPromille = Math.max(peakPromille, sim.promille);
@@ -388,6 +423,7 @@ export function runPlaytest(options: PlaytestOptions): PlaytestOutcome {
       const damage = healthBefore - healthAfter;
       floorDamageTaken += damage;
       totalDamageTaken += damage;
+      roleEntry.damage += damage;
     }
 
     if (sim.playerDead) {
@@ -530,6 +566,16 @@ export function runPlaytest(options: PlaytestOptions): PlaytestOutcome {
     ticksCompleted: tick,
     damageTaken: totalDamageTaken,
     floors: floorOutcomes,
+    roomRoles: Array.from(roomRoles.values(), (entry) => ({
+      floor: entry.floor,
+      role: entry.role,
+      ticks: entry.ticks,
+      damageTaken: entry.damage,
+    })),
+    endedIn:
+      result === 'won' || tick === 0
+        ? null
+        : { floor: floorPlan.floor, role: planRoom(floorPlan, currentRoomId).role },
     promilleTierTicks: promilleTierTicksOut,
     peakPromille,
   };
