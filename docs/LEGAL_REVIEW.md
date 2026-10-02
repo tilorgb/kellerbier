@@ -15,9 +15,9 @@ lawyer.
 
 | # | Finding | Severity | Owner's decision needed |
 |---|---|---|---|
-| 1 | An item is named **Spezi**, which is a registered drinks brand | High | Rename, or confirm the name is safe to use |
-| 2 | An item is named **Neuschwanstein-Bauplan**; "Neuschwanstein" is a registered mark and the landmark work was deferred to M10 | Medium | Rename, defer the item, or do the deferred check now |
-| 3 | The music and sound-effect recordings have no recorded origin or licence | High | State where each came from |
+| 1 | An item is named **Spezi**, which is a registered drinks brand | High | **Decided 2026-10-02: the name stays.** The risk described in §2.1 is accepted, not removed |
+| 2 | An item is named **Neuschwanstein-Bauplan**; "Neuschwanstein" is a registered mark and the landmark work was deferred to M10 | Medium | **Decided 2026-10-02: the name stays.** The register check in Finding 6 still applies to it |
+| 3 | The music and sound-effect recordings have no recorded origin or licence | — | **Closed 2026-10-02:** all ten are the project owner's own recordings |
 | 4 | The key art is diffusion-generated; the model and LoRA licences are unrecorded, and itch.io asks about generative AI | Medium | Confirm the licences; disclose on the page |
 | 5 | No project licence, no attribution file | Medium | Choose a licence |
 | 6 | Invented brands are not checked against a trademark register | Medium | Run the searches |
@@ -50,12 +50,19 @@ generically in speech, which is the argument for leaving it, but the game uses i
 a drink item, which is the use the mark covers. This is the same category §0 of the content bible
 bans outright, and it is the one name in the build I would not ship without a decision.
 
+**Decision (project owner, 2026-10-02): keep the name.** The finding stands as a description of
+the risk; the choice to carry it is made. If a complaint ever arrives, the item is one file and
+three dictionary entries to rename.
+
 **Finding 2 — "Neuschwanstein-Bauplan"** (and, more mildly, **"Ludwigs Schwan"**).
 `CONTENT_BIBLE.md` §0 treats landmarks as buildings that can be depicted, and #55 deferred
 "landmark provenance for Neuschwanstein" to M10 *with its floor*. But the item ships now, in the
 two-floor build. "Neuschwanstein" is registered as a trademark by the Bavarian state for a range
 of goods; whether that range reaches a video game is exactly the deferred question. *Verify.*
 Ludwig II himself is a historical figure and "Ludwigs Schwan" names no mark I know of.
+
+**Decision (project owner, 2026-10-02): keep the name.** The deferred landmark question is still
+worth answering before a paid release; it no longer blocks the alpha page.
 
 Lower risk, noted so nobody has to rediscover them:
 
@@ -123,7 +130,7 @@ source — `src/render/ui/font-data.ts`, `display-font-data.ts` — and rasteris
 no font file and no third-party font. #55 asked for the pixel font's licence to be confirmed: it
 is the project's own work.
 
-### 3.3 Audio — **Finding 3**
+### 3.3 Audio — Finding 3, closed
 
 Almost all sound is synthesised live (`src/content/audio/`). Ten recorded files are not:
 
@@ -132,11 +139,11 @@ Almost all sound is synthesised live (`src/content/audio/`). Ten recorded files 
 | `assets/audio/01-consolidated.mp3` (5.4 MB) | every recorded music track: both floor themes, both boss themes, title, victory |
 | `click`, `enemydie`, `enemyshot`, `metaldie`, `metalhit`, `playershot`, `shotland`, `softhit`, `windup` (.mp3) | sound effects |
 
-`assets/audio/README.md` describes them as "real recordings" dropped in through the audio editor.
-Git records who committed them, not where they came from. **Nothing in the repository says who
-made them or under what terms.** If they are the owner's own recordings, one line saying so closes
-this. If any came from a sample library or a website, its licence decides whether it can ship and
-what credit it needs.
+**Closed 2026-10-02.** The project owner recorded all ten files personally — the music and every
+sound effect. Nothing here is third-party, no licence applies, and no credit is owed.
+`assets/audio/README.md` now says so, because git records who committed a file and not where
+it came from. A recording added later from anywhere else needs its source and licence written
+down in that README when it lands.
 
 ### 3.4 Art — **Finding 4**
 
@@ -167,8 +174,8 @@ short:
   audio and story text kept all-rights-reserved. Common for games.
 
 `THIRD-PARTY-NOTICES.md` now exists and `npm run build:itch` puts it in the upload. It holds
-three.js's notice and is marked incomplete. Once Findings 3 and 4 are answered it needs:
-the audio credits and the model/LoRA notes.
+three.js's notice and is marked incomplete. Once Finding 4 is answered it needs the model and
+LoRA notes; the audio needs no entry beyond the one already there.
 
 ## 5. Age rating — **Finding 7**
 
@@ -183,9 +190,9 @@ as a description for the page; a formal rating is a Steam-era question.
 
 ## 6. What is left, in order
 
-1. **Decide Spezi** (Finding 1). Blocks the page.
-2. **State where the audio came from** (Finding 3). Blocks the page.
-3. Decide Neuschwanstein-Bauplan (Finding 2).
+1. ~~Decide Spezi~~ — kept (Finding 1).
+2. ~~State where the audio came from~~ — the owner's own recordings (Finding 3).
+3. ~~Decide Neuschwanstein-Bauplan~~ — kept (Finding 2).
 4. Run the register searches for Pfeitinger, Oberniederburg and Kellerbier (Finding 6).
 5. Choose the licence; then the attribution file can be written (Findings 4 and 5).
 6. Fill in the itch.io content fields and the AI disclosure when the page is made (#367).
@@ -197,6 +204,6 @@ as a description for the page; a formal rating is a Steam-era question.
 | A full-text search for real brewery names across the repo returns nothing | Met for what ships; the content bible names them as examples of what not to use |
 | Every invented brand has been checked against existing trademarks, Pfeitinger included | **Open** — Finding 6 |
 | Oberniederburg has been confirmed as not naming a real place | **Open** — Finding 6 |
-| All third-party licences are documented and compatible, the pixel font included | Code and fonts done; audio and art models **open** — Findings 3, 4 |
+| All third-party licences are documented and compatible, the pixel font included | Code, fonts and audio done; the art models **open** — Finding 4 |
 | The age rating is confirmed for itch.io | **Open** — Finding 7 |
 | Every locale, not just English, has been checked | Met — §2.5 |

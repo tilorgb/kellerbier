@@ -3,9 +3,9 @@
 What Kellerbier ships that somebody else made, and the terms it is used under. `npm run
 build:itch` puts this file in the upload, because the notices have to travel with the game.
 
-**Incomplete.** [`docs/LEGAL_REVIEW.md`](docs/LEGAL_REVIEW.md) Findings 3 and 4 are still open:
-the recorded audio's origin, and the licences of the image model and LoRA behind the four
-illustrations. Their entries belong here once they are known.
+**Incomplete.** [`docs/LEGAL_REVIEW.md`](docs/LEGAL_REVIEW.md) Finding 4 is still open: the
+licences of the image model and LoRA behind the four illustrations. Their entry belongs here once
+it is known.
 
 ---
 
@@ -45,3 +45,4 @@ exist.
 - **Fonts** — both faces are authored as source in `src/render/ui/`.
 - **Sprites and UI art** — authored in `tools/art/authoring/` and `src/render/ui/`.
 - **Synthesised music and sound** — `src/content/audio/`, generated at run time.
+- **Recorded music and sound effects** — `assets/audio/`, recorded by the project owner.
