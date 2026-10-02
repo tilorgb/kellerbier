@@ -592,6 +592,14 @@ export interface GameSimOptions {
    * only the room a fresh `GameSim` boots directly into.
    */
   readonly suppressRoomContent?: boolean;
+  /**
+   * The floor plan's own id for `roomTemplate`'s room — see `loadRoom`'s
+   * `roomInstanceId` parameter. A caller with a floor plan must pass it:
+   * every later `transitionTo` back into this room does, and a start room
+   * booted under its template id instead is not recognised as the room that
+   * was left, so it repopulates on the first walk back in.
+   */
+  readonly roomInstanceId?: string;
   /** Projectile pool size. Lowered by tests that want to watch it overflow. */
   readonly projectileCapacity?: number;
   readonly particleCapacity?: number;
@@ -1714,6 +1722,7 @@ export class GameSim {
         options.roomPlacement,
         { col: 0, row: 0 },
         options.suppressRoomContent ?? false,
+        options.roomInstanceId,
       );
     } else {
       const population = options.population ?? 'targets';

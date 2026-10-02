@@ -2912,6 +2912,10 @@ WASD move   arrows aim and fire
       // places it first, unconditionally), so `buildPlacement` always has a
       // real floor-grid cell to work from here.
       roomPlacement: buildPlacement(planRoom(floorPlan, currentRoomId)),
+      // The same id `enterNeighbor` hands `transitionTo` on the way back in —
+      // without it the start room is tracked under its template id here and
+      // its floor-plan id there, and comes back uncleared.
+      roomInstanceId: currentRoomId,
       floor: floorPlan.floor,
       hiddenDoors: hiddenDoorsFor(floorPlan, currentRoomId, revealedEdges),
       // The run's very first room reads as a quick, safe tutorial beat
