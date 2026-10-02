@@ -215,7 +215,8 @@ export const bar: Record<DictKey, string> = {
     'hast, und wia lang du auf jeda Promillestufn warst. Sunst nix — koa Nam, koa ' +
     'Konto, koan Standort, koane Möglichkeit rauszfinden, wer gspuit hod. A Lauf bleibt ' +
     'do gspeichert, bis dass du auf Senden drückst, eam kopierst oda sölm als Datei ' +
-    'exportierst; do wead nie automatisch irgendwas vaschickt.',
+    'exportierst. Automatisch wead nix vaschickt — außer du hast auf dem ' +
+    'Playtest-Willkommensbildschirm Ja gsagt: Dann wead jeda Lauf gsendt, sobald er aus is.',
   'ui.settings.privacy.session': 'Sitzung',
   'ui.settings.privacy.runsRecordedOne': '1 Lauf aufgschriebn, wart auf’n Export.',
   'ui.settings.privacy.runsRecordedOther': '{count} Läuf aufgschriebn, wartn auf’n Export.',
@@ -238,15 +239,16 @@ export const bar: Record<DictKey, string> = {
   'ui.playtest.welcome.consent':
     'Wennst Ja sagst, schreibt des Spui anonyme Wert zu deine Läuf auf (gwunna oda hi ' +
     'ganga, wölcher Stock, wia lang, wölche Sacha) und fragt di nach am Lauf vielleicht ' +
-    'was Kurzes. Du entscheidst, ob was gsendt wead, und kannst des in de Einstellungen ' +
-    'ausschoitn. Koa Nam, koa Konto, nix, was vaseeht, wer du bist.',
+    'was Kurzes, des kannst überspringa. De Wert wean gsendt, sobald a Lauf aus is. Du ' +
+    'kannst des jederzeit in de Einstellungen ausschoitn. Koa Nam, koa Konto, nix, was ' +
+    'vaseeht, wer du bist.',
   'ui.playtest.welcome.yes': 'Ja, i bin dabei',
   'ui.playtest.welcome.no': 'Na, danke, i spui nur',
   'ui.playtest.prompt.heading': 'A kurze Frag',
   'ui.playtest.prompt.hint':
     'Jederzeit überspringbar. Bittschön koan Nam und koane persönlichn Angabn.',
   'ui.playtest.prompt.placeholder': 'Dei Antwort do…',
-  'ui.playtest.prompt.send': 'Antwort und Lauf-Wert sendn',
+  'ui.playtest.prompt.send': 'Antwort sendn',
   'ui.playtest.prompt.skip': 'Überspringa',
   'ui.playtest.prompt.sending': 'Wead gsendt…',
   'ui.playtest.prompt.thanks': 'Dankschön!',

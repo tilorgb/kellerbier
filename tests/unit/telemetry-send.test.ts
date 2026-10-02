@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { copyTelemetry, sendTelemetry, unsentRuns } from '../../src/app/telemetry/send.js';
+import {
+  autoSendAllowed,
+  copyTelemetry,
+  sendTelemetry,
+  unsentRuns,
+  welcomeDue,
+} from '../../src/app/telemetry/send.js';
 import { exportTelemetryText } from '../../src/app/telemetry/file.js';
 import {
   createDefaultTelemetryStore,
@@ -61,6 +67,25 @@ describe('sendTelemetry', () => {
     const down = (() => Promise.reject(new Error('offline'))) as typeof fetch;
     expect(await sendTelemetry(store([run('a')]), 'https://x.test', bad)).toBeNull();
     expect(await sendTelemetry(store([run('a')]), 'https://x.test', down)).toBeNull();
+  });
+});
+
+describe('autoSendAllowed / welcomeDue (#360)', () => {
+  const base = createDefaultTelemetryStore();
+
+  it('sends on its own only in a playtest session, opted in, with auto-send agreed', () => {
+    const agreed = { ...base, optedIn: true, autoSend: true };
+    expect(autoSendAllowed(agreed, true)).toBe(true);
+    expect(autoSendAllowed(agreed, false)).toBe(false);
+    expect(autoSendAllowed({ ...agreed, autoSend: false }, true)).toBe(false);
+    expect(autoSendAllowed({ ...agreed, optedIn: false }, true)).toBe(false);
+  });
+
+  it('asks a new tester, and re-asks one who said yes under the click-to-send wording', () => {
+    expect(welcomeDue(base)).toBe(true);
+    expect(welcomeDue({ ...base, welcomed: true })).toBe(false);
+    expect(welcomeDue({ ...base, welcomed: true, optedIn: true })).toBe(true);
+    expect(welcomeDue({ ...base, welcomed: true, optedIn: true, autoSend: true })).toBe(false);
   });
 });
 

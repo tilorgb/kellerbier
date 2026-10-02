@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { installFakeLocalStorage } from '../helpers/fake-local-storage.js';
 import {
   advanceQuestionCursor,
+  joinPlaytest,
   markFeedbackSent,
   markWelcomed,
   recordFeedback,
@@ -201,5 +202,24 @@ describe('playtest feedback (#159)', () => {
     expect(store.feedback).toEqual([]);
     expect(store.welcomed).toBe(false);
     expect(store.questionCursor).toBe(0);
+    // #360: an opt-in from before auto-send existed never agreed to it.
+    expect(store.autoSend).toBe(false);
+  });
+
+  it('joins the playtest with auto-send on, and opting out withdraws it', () => {
+    installFakeLocalStorage();
+    const joined = joinPlaytest();
+    expect(joined.optedIn).toBe(true);
+    expect(joined.autoSend).toBe(true);
+    expect(joined.sessionId).not.toBeNull();
+    expect(optOutOfTelemetry().autoSend).toBe(false);
+    // Back in through Settings is the click-to-send consent.
+    expect(optIntoTelemetry().autoSend).toBe(false);
+  });
+
+  it('keeps the session id of a tester who was already opted in', () => {
+    installFakeLocalStorage();
+    const before = optIntoTelemetry().sessionId;
+    expect(joinPlaytest().sessionId).toBe(before);
   });
 });
