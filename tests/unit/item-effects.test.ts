@@ -4,6 +4,7 @@ import { GameSim, TARGET_HEALTH, TARGET_RADIUS } from '../../src/sim/game/sim.js
 import type { ItemDefinition } from '../../src/sim/item/definition.js';
 import { RoomGeometry } from '../../src/sim/room/geometry.js';
 import { hasTag, ProjectileTag } from '../../src/sim/projectile/tags.js';
+import { applyDamageAt } from '../../src/sim/systems/impact.js';
 import { ProjectileTeam } from '../../src/sim/projectile/store.js';
 import {
   InputAction,
@@ -473,6 +474,34 @@ describe('#29 acceptance criteria', () => {
     const tags = combo.projectiles.tags[slot] ?? 0;
     expect(hasTag(tags, ProjectileTag.Spectral)).toBe(true);
     expect(hasTag(tags, ProjectileTag.Sticky)).toBe(true);
+  });
+});
+
+describe('Steinkrug splash', () => {
+  it('splashes once: two sturdy bodies side by side do not trade shards until one dies', async () => {
+    const { steinkrug } = await import('../../src/content/items/steinkrug.js');
+    const sim = new GameSim({ room: bareRoom(), items: [steinkrug], population: 'empty' });
+    sim.pickUpItem('steinkrug');
+    const player = sim.playerIndex;
+    // Two bosses' worth of health, close enough for one mug's shards to reach
+    // both — each could outlast far more than the dispatcher's 64 nested hooks.
+    const kind = sim.enemies.indexOf('der-stier');
+    const x = sim.positionX(player) + 90;
+    const y = sim.positionY(player);
+    const first = entityIndex(sim.spawnEnemyKind(kind, x, y));
+    const second = entityIndex(sim.spawnEnemyKind(kind, x + 10, y));
+    sim.world.flush();
+    // One step so the broadphase the splash queries knows about both.
+    sim.step(IDLE);
+    const before = [sim.health.data[first * 2] ?? 0, sim.health.data[second * 2] ?? 0];
+
+    expect(() => {
+      applyDamageAt(sim, first, 4, sim.positionX(first), sim.positionY(first), 1, 0, player);
+    }).not.toThrow();
+
+    // The mug's own 4, and half of it once to the body beside it. Nothing bounces back.
+    expect(sim.health.data[first * 2]).toBe((before[0] ?? 0) - 4);
+    expect(sim.health.data[second * 2]).toBe((before[1] ?? 0) - 2);
   });
 });
 
