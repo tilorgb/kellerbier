@@ -19,6 +19,13 @@ opens with a "Runs by build" table. Once a balance change has shipped, read one 
 `node tools/telemetry/dashboard.mjs runs.json --build <id>`. Runs recorded before the stamp existed
 are reported as `unknown`; runs from `npm run dev` end in `-dev`.
 
+## Leaving your own runs out
+
+Add your session id (Settings → Privacy, or the eight characters the report prints next to an
+answer) to `tools/telemetry/ignored-sessions.txt` and every report skips that session's runs and
+answers, and says how many it skipped (#364). Runs from `npm run dev` are skipped without being
+listed. `--all-sessions` reports on everything.
+
 ## Automatic report on the balance issue
 
 `.github/workflows/telemetry-report.yml` runs daily (and from the Actions tab) and keeps one
