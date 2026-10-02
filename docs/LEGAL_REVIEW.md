@@ -167,8 +167,8 @@ short:
   audio and story text kept all-rights-reserved. Common for games.
 
 `THIRD-PARTY-NOTICES.md` now exists and `npm run build:itch` puts it in the upload. It holds
-three.js's notice and is marked incomplete. Once Findings 3 and 4 are answered it needs: three.js's MIT notice,
-the audio credits, and the model/LoRA notes.
+three.js's notice and is marked incomplete. Once Findings 3 and 4 are answered it needs:
+the audio credits and the model/LoRA notes.
 
 ## 5. Age rating — **Finding 7**
 
