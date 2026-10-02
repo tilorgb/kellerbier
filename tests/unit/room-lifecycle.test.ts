@@ -93,6 +93,33 @@ describe('room lifecycle', () => {
     expect(sim.positionY(player)).toBeCloseTo(sim.room.maxY - PLAYER_FOOTPRINT - 1);
   });
 
+  it('a start room booted with its floor-plan id is still cleared when walked back into', () => {
+    // `app/main.ts` hands every `transitionTo` the floor plan's room id. The
+    // start room has to boot under that same id, or leaving it marks its
+    // *template* id cleared and the walk back in — no longer content-
+    // suppressed — spawns the template's whole roster.
+    const sim = new GameSim({
+      roomTemplate: cellarCrossroads,
+      floor: 1,
+      population: 'empty',
+      suppressRoomContent: true,
+      roomInstanceId: 'plan-start',
+    });
+    expect(sim.liveEnemyCount).toBe(0);
+
+    const emptyNeighbour = { ...cellarCrossroads, enemySpawns: [], spawnGroups: [] };
+    expect(
+      sim.transitionTo(emptyNeighbour, 1, 'north', [], undefined, undefined, true, 'plan-next'),
+    ).toBe(true);
+    expect(
+      sim.transitionTo(cellarCrossroads, 1, 'south', [], undefined, undefined, true, 'plan-start'),
+    ).toBe(true);
+
+    expect(sim.roomId).toBe('plan-start');
+    expect(sim.liveEnemyCount).toBe(0);
+    expect(sim.roomCleared).toBe(true);
+  });
+
   it('only compiles doors the placement actually gives it, not every direction the template authors', () => {
     // `cellarCrossroads`'s own metadata authors all four directions as
     // possible doors — the floor plan's real neighbour graph is what should
