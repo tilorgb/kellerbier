@@ -6164,7 +6164,8 @@ rotating through `PLAYTEST_QUESTIONS` (the protocol's §6 five) by a cursor in t
 Nothing appears for anyone who said no, and nothing appears in the shipped game.
 
 **Sending is still a click, and now the natural one.** The prompt's button says what it does —
-"Send answer and run stats" — and sends the answer plus every run not yet sent. Skip sends nothing.
+"Send answer and run stats" — and sends the answer plus every run not yet sent. Skip sends nothing
+(**superseded by #112**: run stats now go out at run end for a tester who agreed to that).
 That is why a tester never needs Settings → Privacy; #109's rule that nothing leaves without a
 click is unchanged.
 
@@ -6213,3 +6214,24 @@ as-is.
 - **Art.** Design A of three (a domed chest; the others were a plank crate and a trimmed trunk),
   at 24×18 rather than 16×12 — at 16×12 a chest read smaller than a Maß. Authored as block art in
   `tools/art/authoring/chests.mjs`, held byte-identical by `tests/art/chests-authoring.test.ts`.
+
+## 112. A playtester's runs are sent when they end — agreed on the welcome screen, not assumed
+
+**Decided:** M8, #360; amends #109 and #110. #110 made answering the post-run question the moment
+a run was sent, and "Skip sends nothing". That was fine with an observer in the room and is wrong
+for strangers: most people skip a question, so most opted-in runs never arrived — and run volume
+is the whole reason for putting the build in front of strangers (#54's item and Promille criteria).
+
+**The rule.** In a playtest session, a tester who said yes on the welcome screen has every finished
+run sent as it ends. The welcome's wording says that before the choice. A failed send is not lost:
+the run stays unsent and goes out with the next one, or at the next launch.
+
+**Consent is not inherited.** `TelemetryStore.autoSend` is separate from `optedIn` and is set only
+by a yes to the new wording (`joinPlaytest`). Two groups keep #109's click-to-send rule exactly as
+promised: anyone who turns telemetry on through Settings → Privacy, in any build, and any tester
+who said yes under the old welcome text. The second group sees the welcome once more
+(`welcomeDue`); a no there turns telemetry off rather than leaving them opted in under a screen
+that no longer describes what happens.
+
+**Constrains:** nothing may send on its own for a store without `autoSend`. The Settings privacy
+text names the one exception, so it stays true in both cases.

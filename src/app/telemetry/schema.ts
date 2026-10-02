@@ -109,6 +109,15 @@ export interface TelemetryStore {
   readonly welcomed: boolean;
   /** Which question the next post-run prompt asks — advances by one per prompt shown, wrapping. */
   readonly questionCursor: number;
+  /**
+   * Whether this tester agreed, on the playtest welcome screen, to finished
+   * runs being sent as they end (#360). Separate from `optedIn` on purpose:
+   * the Settings toggle promises that nothing leaves without a click, and a
+   * tester who said yes under the welcome's older wording was promised the
+   * same — only a yes to the wording that says "sent when a run ends" sets
+   * this. `false` on every save from before it existed.
+   */
+  readonly autoSend: boolean;
 }
 
 export function createDefaultTelemetryStore(): TelemetryStore {
@@ -119,6 +128,7 @@ export function createDefaultTelemetryStore(): TelemetryStore {
     feedback: [],
     welcomed: false,
     questionCursor: 0,
+    autoSend: false,
   };
 }
 
@@ -281,5 +291,6 @@ export function sanitizeTelemetryStore(value: unknown): TelemetryStore {
       isFiniteNumber(value.questionCursor) && value.questionCursor >= 0
         ? Math.floor(value.questionCursor)
         : 0,
+    autoSend: value.autoSend === true,
   };
 }
