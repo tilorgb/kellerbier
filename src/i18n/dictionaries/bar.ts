@@ -27,6 +27,7 @@ export const bar: Record<DictKey, string> = {
   'ui.title.credits': 'Mitgwirkt ham',
   'ui.title.quit': 'Aufhean',
   'ui.title.tagline': 'A boarisches Kella-Roguelike',
+  'ui.title.alpha': 'Alpha {build}',
 
   'ui.pause.headline': 'Pausn',
   'ui.pause.resume': 'Weiterspün',
@@ -234,8 +235,9 @@ export const bar: Record<DictKey, string> = {
   // --- Playtest build: welcome screen and post-run questions ---------------
   'ui.playtest.welcome.title': 'Dankschön fürs Testn vo Kellerbier',
   'ui.playtest.welcome.body':
-    "Des is a friaher Stand, und du hilfst beim Testn. Spui, wia du magst — do gibt's " +
-    'koane foischn Antwortn, und koa Mensch schaut dir zua.',
+    'Des is a Alpha: a friaher, no ned fertiga Stand, und a Teil vo da Grafik und vom ' +
+    "Sound san Platzhalter. Du hilfst beim Testn. Spui, wia du magst — do gibt's koane " +
+    'foischn Antwortn, und koa Mensch schaut dir zua.',
   'ui.playtest.welcome.consent':
     'Wennst Ja sagst, schreibt des Spui anonyme Wert zu deine Läuf auf (gwunna oda hi ' +
     'ganga, wölcher Stock, wia lang, wölche Sacha) und fragt di nach am Lauf vielleicht ' +

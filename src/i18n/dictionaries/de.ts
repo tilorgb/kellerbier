@@ -20,6 +20,7 @@ export const de: Record<DictKey, string> = {
   'ui.title.credits': 'Mitwirkende',
   'ui.title.quit': 'Beenden',
   'ui.title.tagline': 'Ein bayerisches Keller-Roguelike',
+  'ui.title.alpha': 'Alpha {build}',
 
   'ui.pause.headline': 'Pause',
   'ui.pause.resume': 'Fortsetzen',
@@ -233,8 +234,9 @@ export const de: Record<DictKey, string> = {
   // --- Playtest build: welcome screen and post-run questions ---------------
   'ui.playtest.welcome.title': 'Danke fürs Testen von Kellerbier',
   'ui.playtest.welcome.body':
-    'Das ist ein früher Stand, und du hilfst beim Testen. Spiel, wie du magst — es gibt ' +
-    'keine falschen Antworten, und niemand schaut dir zu.',
+    'Das ist eine Alpha: ein früher, unfertiger Stand, und ein Teil der Grafik und des ' +
+    'Sounds sind Platzhalter. Du hilfst beim Testen. Spiel, wie du magst — es gibt keine ' +
+    'falschen Antworten, und niemand schaut dir zu.',
   'ui.playtest.welcome.consent':
     'Wenn du Ja sagst, zeichnet das Spiel anonyme Werte zu deinen Läufen auf (gewonnen ' +
     'oder gestorben, welcher Stock, wie lange, welche Gegenstände) und stellt dir nach ' +
