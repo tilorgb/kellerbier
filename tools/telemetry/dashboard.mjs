@@ -20,10 +20,16 @@
  * "Runs by build" table prints it, `unknown` for runs from before builds were
  * stamped. Without it every build is aggregated together, which is only
  * meaningful while nothing about the balance has changed between them.
+ *
+ * Developer runs are left out (#364): every session listed in
+ * `ignored-sessions.txt` next to this file, and every run from the dev server
+ * (a build id ending in `-dev`). The report says how many. `--all-sessions`
+ * turns that off.
  */
 
 import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const PROMILLE_TIER_NAMES = {
   0: 'Nüchtern',
@@ -79,13 +85,23 @@ function takeFlag(name) {
   const [, value] = args.splice(at, 2);
   return value;
 }
+/** Removes a bare `--name` from `args`, returning whether it was there. */
+function takeSwitch(name) {
+  const at = args.indexOf(name);
+  if (at === -1) {
+    return false;
+  }
+  args.splice(at, 1);
+  return true;
+}
+const allSessions = takeSwitch('--all-sessions');
 const outPath = takeFlag('--out');
 const buildFilter = takeFlag('--build');
 const inputs = args;
 
 if (inputs.length === 0) {
   console.error(
-    'usage: node tools/telemetry/dashboard.mjs <file-or-dir...> [--out FILE] [--build ID]',
+    'usage: node tools/telemetry/dashboard.mjs <file-or-dir...> [--out FILE] [--build ID] [--all-sessions] [--public]',
   );
   process.exit(1);
 }
@@ -137,7 +153,43 @@ function readFile(path) {
 const files = resolveFiles(inputs)
   .map(readFile)
   .filter((file) => file !== null);
-const allRuns = files.flatMap((file) => file.runs);
+
+/** The session ids (or eight-character prefixes) in `ignored-sessions.txt`; empty if the file is gone. */
+function readIgnoredSessions() {
+  let text;
+  try {
+    text = readFileSync(fileURLToPath(new URL('./ignored-sessions.txt', import.meta.url)), 'utf8');
+  } catch {
+    return [];
+  }
+  return text
+    .split('\n')
+    .map((line) => line.replace(/#.*/, '').trim().toLowerCase())
+    .filter((line) => line.length >= 8);
+}
+const ignoredSessions = allSessions ? [] : readIgnoredSessions();
+
+/** Whether a record belongs to a developer: a listed session, or (for a run) the dev server's build. */
+function isDeveloper(record, fileSessionId) {
+  if (allSessions) {
+    return false;
+  }
+  if (typeof record.build === 'string' && record.build.endsWith('-dev')) {
+    return true;
+  }
+  // The Worker's export stamps each record; a tester's own exported file names its session once, at the top.
+  const session = String(record.sessionId ?? fileSessionId ?? '').toLowerCase();
+  return session !== '' && ignoredSessions.some((ignored) => session.startsWith(ignored));
+}
+
+let excludedRuns = 0;
+const allRuns = files.flatMap((file) =>
+  file.runs.filter((run) => {
+    const developer = isDeveloper(run, file.sessionId);
+    excludedRuns += developer ? 1 : 0;
+    return !developer;
+  }),
+);
 
 const byBuild = new Map();
 for (const run of allRuns) {
@@ -153,10 +205,18 @@ for (const run of allRuns) {
 const runs =
   buildFilter === undefined ? allRuns : allRuns.filter((run) => buildOf(run) === buildFilter);
 // `feedback` is absent from files exported before the playtest build's questions existed.
-const feedback = files.flatMap((file) => (Array.isArray(file.feedback) ? file.feedback : []));
+const feedback = files.flatMap((file) =>
+  (Array.isArray(file.feedback) ? file.feedback : []).filter(
+    (entry) => !isDeveloper(entry, file.sessionId),
+  ),
+);
 
 if (runs.length === 0 && feedback.length === 0) {
-  console.log('No telemetry runs found in the given files.');
+  console.log(
+    excludedRuns === 0
+      ? 'No telemetry runs found in the given files.'
+      : `No telemetry runs found in the given files, apart from ${String(excludedRuns)} developer run(s) left out.`,
+  );
   process.exit(0);
 }
 
@@ -227,6 +287,9 @@ lines.push(
     ? `${String(runs.length)} run(s) from ${String(files.length)} file(s).`
     : `${String(runs.length)} run(s) on build \`${buildFilter}\`, of ${String(allRuns.length)} from ${String(files.length)} file(s).`,
 );
+if (excludedRuns > 0) {
+  lines.push(`${String(excludedRuns)} developer run(s) left out.`);
+}
 lines.push('');
 lines.push('| | Count |');
 lines.push('|---|---|');
