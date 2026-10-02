@@ -13,7 +13,19 @@ const SPLASH_DAMAGE_SCALE = 0.5;
  * than a new tag; #29's own doc notes it. `onHit` fires the splash through
  * `ctx.sim.applySplashDamage`, excluding the target already hit directly so
  * the mug's own hit is never counted twice.
+ *
+ * **A splash does not splash.** Splash damage lands through the same
+ * `applyDamageAt` a shot does, so it fires `onHit` again — on the body the
+ * shards reached, excluding only *that* body, which put the first one back
+ * in range. Two enemies standing together traded shards until one died: an
+ * instant kill on any pair, and on a pair sturdy enough to outlast 64
+ * exchanges (a boss and its add) the dispatcher's own depth guard threw and
+ * took the run down. `splashing` makes the shards plain damage: one mug,
+ * one splash.
  */
+
+/** Set while a Steinkrug splash is being applied, so the hits it lands do not each splash in turn. */
+const splashing = new Uint8Array(1);
 export const steinkrug: ItemDefinition = {
   id: 'steinkrug',
   name: 'Steinkrug',
@@ -28,13 +40,21 @@ export const steinkrug: ItemDefinition = {
       ctx.sim.addProjectileTag(ctx.projectile, 'spectral');
     },
     onHit: (ctx) => {
-      ctx.sim.applySplashDamage(
-        ctx.hitX,
-        ctx.hitY,
-        SPLASH_RADIUS,
-        Math.max(1, Math.round(ctx.damage * SPLASH_DAMAGE_SCALE)),
-        ctx.target,
-      );
+      if (splashing[0] === 1) {
+        return;
+      }
+      splashing[0] = 1;
+      try {
+        ctx.sim.applySplashDamage(
+          ctx.hitX,
+          ctx.hitY,
+          SPLASH_RADIUS,
+          Math.max(1, Math.round(ctx.damage * SPLASH_DAMAGE_SCALE)),
+          ctx.target,
+        );
+      } finally {
+        splashing[0] = 0;
+      }
       // The mug shattering (#243's `splashBurst`), at the size the shards
       // actually reach — a splash a player cannot see is a splash they
       // cannot aim for.
