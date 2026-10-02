@@ -28,6 +28,8 @@ fuzz/results.json
 
 # balance simulator (playtest bot) artifacts — same reasoning as bench/results.json
 playtest/results.json
+playtest/items.json
+playtest/items.md
 
 # generated assets
 assets/atlases/*.png

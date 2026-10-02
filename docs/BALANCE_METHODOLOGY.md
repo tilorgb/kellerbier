@@ -47,8 +47,9 @@ live (`tests/playtest/lib/harness.ts`, `tests/playtest/lib/report.ts`):
   them was doing the carrying. With #54's small, CI-sized sweep (a handful of combinations, not
   a real per-item isolation test), an outlier row is a lead to check by hand, not a verdict. The
   honest fix is either many more combinations than a per-commit CI budget allows, or dedicated
-  single-item isolation runs — both are future work, not something this pass claims to have
-  solved.
+  single-item isolation runs. The second now exists — `PLAYTEST_ITEMS=1 npm run playtest`, §7 —
+  and is the table to read for a single item; the loadout table above stays a crash gate's
+  by-product.
 - **Adding or removing an item re-rolls every loadout, so win rates do not compare across a
   roster change.** `LOADOUTS` is drawn from `ITEM_DEFINITIONS` by a seeded combination generator
   (`tests/playtest/run.test.ts`), so a 62nd item does not add one run to the sweep — it changes
@@ -98,7 +99,7 @@ for the band above.
 | Scope bullet | Status |
 |---|---|
 | The difficulty curve across two floors, no spike | **Failing: the curve falls instead of rising** (#368). Bot and human evidence agree — see §6. A first tuning step is in; its effect is unmeasured until it has been played. |
-| Item win-rate outliers, across the 120+ pool | Infrastructure ready (`itemWinRates` in the simulator report, `dashboard.mjs`'s item table from real telemetry); §2's confound means the simulator alone cannot close this out yet. Needs either isolation sweeps or real telemetry volume. |
+| Item win-rate outliers, across the pool | **Four outliers found by the bot** (§7): Spezi and Colaweizen far above the pack, Steinkrug and Hendlgeruch far below. Bot evidence on 16 runs an item; none has been confirmed or dismissed by a person yet, and real telemetry has too few pickups to say anything. |
 | Promille tier usage | Infrastructure ready (`promilleTierTicks` end to end, from `app/telemetry/tracker.ts` through the dashboard); the simulator cannot answer this at all (§2) — this is telemetry-only, and needs real runs to have anything to report. |
 | Boss attempt counts and completion rates | Covered by `docs/DECISIONS.md` #66's own boss-pacing work (health tuned against the authored cycle, `tests/content/boss-pacing.test.ts`) — the sim-level half is already done; real attempt/completion rates are what the telemetry dashboard's per-floor table gives once boss-room runs accumulate. |
 | Run length and win rate | §3 above sets the deliberate target; not yet checked against real play. |
@@ -178,3 +179,53 @@ still holds every fight to its cycle count. Whether floor 1 now feels fairer and
 feels like a last boss is a question for a person playing it, and then for telemetry — the
 "Runs by build" table (`tools/telemetry/README.md`) is what separates runs before this change
 from runs after it.
+
+## 7. Items, one at a time
+
+`PLAYTEST_ITEMS=1 npm run playtest` plays every item **on its own** against a run with no items
+at all, on the same seeds and both skill profiles (`tests/playtest/items.test.ts`). That is a
+paired comparison: what differs between an item's row and the baseline is the item and nothing
+else, which is what §2's loadout table could never offer. It writes `playtest/items.md`.
+
+The measure is **rooms cleared**, not win rate. A bot holding one item almost never wins and
+neither does a bot holding none, so win rate is mostly a column of zeros. How far a run got moves
+for an item that helps a little and for one that hurts. An item is flagged when it sits two
+standard deviations or more from the rest of the pool — "outside the expected band" measured
+against what the other items do, because nothing else says what an item is meant to be worth.
+
+### First run (commit `78b3834`, 16 runs an item)
+
+Empty-handed, the bot clears 13.7 rooms, reaches floor 2 half the time and wins 6%.
+
+| Item | Rooms vs none | Reach floor 2 | Win | What it is |
+|---|---|---|---|---|
+| Spezi | +9.0 | 94% | 63% | A second shot on every shot |
+| Colaweizen | +8.5 | 94% | 75% | Shots stick and slow; −20% damage |
+| Hendlgeruch | −7.8 | 0% | 0% | Pulls distant enemies toward you |
+| Steinkrug | −9.4 | 0% | 0% | Shots splash on impact |
+
+- **Spezi and Colaweizen each turn a 6% bot into a 60–75% one, alone.** For Spezi that is
+  plausible on its face: it doubles the shots. Colaweizen is the more surprising one — a slow
+  is worth far more to a bot that kites than its −20% damage costs.
+- **Steinkrug kills its own holder.** Every one of its 16 runs died on floor 1, half of them in
+  ordinary rooms. Against a single target at range it deals exactly what no item deals, so the
+  mug itself is not weak. Its splash is centred on the enemy it hits and spares only that enemy —
+  every other splash item in the game spares the player instead — so shooting something that has
+  closed to melee range costs Alois health. Whether that is intended is a design question; the
+  item's description does not mention it.
+- **Hendlgeruch is a pure downside for anything that fights at range**, which is what its
+  description says it does. Whether an item that only hurts belongs in the treasure pool is the
+  question, not whether the number is wrong.
+
+### What this table cannot say
+
+- **It is the bot's opinion.** The bot holds a range and circles (§6). An item that rewards
+  getting close, timing, or a decision — and anything that needs Promille, which the bot never
+  drinks — is undervalued here by construction.
+- **Sixteen runs.** Enough to see ±8 rooms, not ±2. Rows in the middle of the table are not
+  ranked against each other; only the flagged ones mean anything. `PLAYTEST_ITEMS=20` runs twenty
+  seeds for a closer look.
+- **Alone is not how items are met.** The point of the item system is combinations
+  (`docs/GAME_DESIGN.md` §8). An item that is ordinary alone and absurd beside another does not
+  show up here; the fuzz harness looks for crashes in combinations, and nothing yet measures
+  their strength.
