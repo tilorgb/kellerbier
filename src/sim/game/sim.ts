@@ -90,7 +90,13 @@ import { EventQueue } from '../events/queue.js';
 import { DamageNumberStore } from '../particle/damage-numbers.js';
 import { DecalStore } from '../particle/decals.js';
 import { ParticleStore } from '../particle/store.js';
-import { boulderDebris, doorPuff, roomClearRing, splashBurst, windSwirl } from '../particle/effects.js';
+import {
+  boulderDebris,
+  doorPuff,
+  roomClearRing,
+  splashBurst,
+  windSwirl,
+} from '../particle/effects.js';
 import { ProjectileStore, ProjectileTeam } from '../projectile/store.js';
 import { finalizeProjectileTags } from '../projectile/behavior.js';
 import {
