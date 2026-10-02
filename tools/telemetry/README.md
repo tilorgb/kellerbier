@@ -28,9 +28,31 @@ their text (#362). The answers are only ever printed by `npm run telemetry:repor
 **`TELEMETRY_ADMIN_KEY`** (Settings → Secrets and variables → Actions) holding the Worker's
 `ADMIN_KEY`. Without it the workflow exits cleanly and reports nothing.
 
+## Limits
+
+The endpoint is public and takes a POST from anyone, so the Worker trusts nothing it is sent (#363):
+
+- A run or answer is rebuilt from the fields `src/app/telemetry/schema.ts` defines. Ids must look
+  like ids; anything that is not a run is dropped; unknown fields never reach the store.
+- At most 50 runs and 50 answers per request, 200 kB per request.
+- `MAX_RECORDS_PER_DAY` (450) records a day in total, after which it answers 429 and the game
+  keeps the run for another day. That number is sized for the KV **free tier** — 1,000 writes a
+  day, and a run sent on its own costs two (the record and the day's counter). Raise it if the
+  Worker moves to a paid plan.
+- `/export` returns `EXPORT_PAGE_SIZE` (400) keys per request with a `cursor` for the next page;
+  `npm run telemetry:report` and the report workflow follow it. One invocation may only read a
+  bounded number of keys, which is what an unpaged export would run into as the store grows.
+
+There is no per-client limit on purpose: telling clients apart means looking at who they are, and
+the Worker stores and inspects nothing about the sender.
+
+**These Cloudflare limits were written from memory of its documentation — check them against the
+account's current plan before relying on the numbers.**
+
 ## Updating the Worker
 
-When `worker.mjs` changes (it gained `feedback:` storage for the playtest questions, #110), open the
+When `worker.mjs` changes (`feedback:` storage in #110; validation, the daily budget and paged
+export in #363), open the
 Worker in Cloudflare → **Edit code**, paste the new file over the old one and **Deploy**. The
 bindings and secret stay. Old clients keep working: feedback is optional in the request.
 

@@ -54,8 +54,6 @@ jobs:
             echo "TELEMETRY_ADMIN_KEY is not set; nothing to report." | tee -a "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          endpoint=$(grep -oE "https://[^']+" src/app/telemetry/endpoint.ts | head -1)
-          curl -fsS --get "${endpoint%/}/export" --data-urlencode "key=$ADMIN_KEY" -o runs.json
           echo "have_data=true" >> "$GITHUB_ENV"
 
       - name: Build the report
@@ -65,7 +63,8 @@ jobs:
             echo '<!-- telemetry-report -->'
             echo "## Playtest telemetry — $(date -u +'%Y-%m-%d %H:%M UTC')"
             echo
-            node tools/telemetry/dashboard.mjs runs.json --public
+            # pull.mjs fetches every page of the export, then runs the dashboard over it.
+            TELEMETRY_ADMIN_KEY="$ADMIN_KEY" node tools/telemetry/pull.mjs --public
           } > report.md
           cat report.md >> "$GITHUB_STEP_SUMMARY"
 
