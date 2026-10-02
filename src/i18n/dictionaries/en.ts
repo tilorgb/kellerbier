@@ -32,6 +32,7 @@ export const en = {
   // The full-screen title screen's own footer (#321) — the centred menu's
   // old tagline had no locale to worry about; this one does.
   'ui.title.tagline': 'A Bavarian cellar-crawling roguelike',
+  'ui.title.alpha': 'Alpha {build}',
 
   'ui.pause.headline': 'Paused',
   'ui.pause.resume': 'Resume',
@@ -243,8 +244,9 @@ export const en = {
   // --- Playtest build: welcome screen and post-run questions ---------------
   'ui.playtest.welcome.title': 'Thanks for testing Kellerbier',
   'ui.playtest.welcome.body':
-    'This is an early build and you are helping test it. Play however you like — there are ' +
-    'no wrong answers, and nobody is watching.',
+    'This is an alpha: an early, unfinished build, and some of the art and sound are ' +
+    'placeholders. You are helping test it. Play however you like — there are no wrong ' +
+    'answers, and nobody is watching.',
   'ui.playtest.welcome.consent':
     'If you say yes, the game records anonymous stats about your runs (won or died, which ' +
     'floor, how long, which items) and sends them when a run ends. After a run it may also ' +
