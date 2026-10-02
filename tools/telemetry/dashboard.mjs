@@ -14,8 +14,12 @@
  * across every file it is given regardless, since the balance questions it
  * answers are about the player base as a whole, not any one session.
  *
- * Usage: `node tools/telemetry/dashboard.mjs <file-or-dir...> [--out FILE]`
+ * Usage: `node tools/telemetry/dashboard.mjs <file-or-dir...> [--out FILE] [--build ID]`
  * A directory argument is read non-recursively for every `*.json` inside it.
+ * `--build` keeps only the runs played on that build (#361) — the id as the
+ * "Runs by build" table prints it, `unknown` for runs from before builds were
+ * stamped. Without it every build is aggregated together, which is only
+ * meaningful while nothing about the balance has changed between them.
  */
 
 import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
@@ -55,14 +59,29 @@ function safeText(text) {
 }
 
 const args = process.argv.slice(2);
-const outFlag = args.indexOf('--out');
-const outPath = outFlag === -1 ? undefined : args[outFlag + 1];
-const inputs =
-  outFlag === -1 ? args : args.filter((_, index) => index !== outFlag && index !== outFlag + 1);
+/** Pulls `--name VALUE` out of `args`, returning the value (or `undefined`). */
+function takeFlag(name) {
+  const at = args.indexOf(name);
+  if (at === -1) {
+    return undefined;
+  }
+  const [, value] = args.splice(at, 2);
+  return value;
+}
+const outPath = takeFlag('--out');
+const buildFilter = takeFlag('--build');
+const inputs = args;
 
 if (inputs.length === 0) {
-  console.error('usage: node tools/telemetry/dashboard.mjs <file-or-dir...> [--out FILE]');
+  console.error(
+    'usage: node tools/telemetry/dashboard.mjs <file-or-dir...> [--out FILE] [--build ID]',
+  );
   process.exit(1);
+}
+
+/** A run's build id as reported — untrusted like everything else in the file, so kept to what a commit id can contain. */
+function buildOf(run) {
+  return typeof run.build === 'string' && /^[\w.-]{1,40}$/.test(run.build) ? run.build : 'unknown';
 }
 
 /** Every `.json` file named by `inputs`, expanding a directory into the files directly inside it. */
@@ -104,7 +123,21 @@ function readFile(path) {
 const files = resolveFiles(inputs)
   .map(readFile)
   .filter((file) => file !== null);
-const runs = files.flatMap((file) => file.runs);
+const allRuns = files.flatMap((file) => file.runs);
+
+const byBuild = new Map();
+for (const run of allRuns) {
+  const entry = byBuild.get(buildOf(run)) ?? { runs: 0, wins: 0, latest: 0 };
+  entry.runs += 1;
+  if (run.outcome === 'won') {
+    entry.wins += 1;
+  }
+  entry.latest = Math.max(entry.latest, Number(run.recordedAt) || 0);
+  byBuild.set(buildOf(run), entry);
+}
+
+const runs =
+  buildFilter === undefined ? allRuns : allRuns.filter((run) => buildOf(run) === buildFilter);
 // `feedback` is absent from files exported before the playtest build's questions existed.
 const feedback = files.flatMap((file) => (Array.isArray(file.feedback) ? file.feedback : []));
 
@@ -175,12 +208,34 @@ const tierTotal = Array.from(tierTicks.values()).reduce((a, b) => a + b, 0);
 const lines = [];
 lines.push('### 🍺 Playtest telemetry dashboard');
 lines.push('');
-lines.push(`${String(runs.length)} run(s) from ${String(files.length)} file(s).`);
+lines.push(
+  buildFilter === undefined
+    ? `${String(runs.length)} run(s) from ${String(files.length)} file(s).`
+    : `${String(runs.length)} run(s) on build \`${buildFilter}\`, of ${String(allRuns.length)} from ${String(files.length)} file(s).`,
+);
 lines.push('');
 lines.push('| | Count |');
 lines.push('|---|---|');
 lines.push(`| Wins | ${String(wins)} (${(winRate * 100).toFixed(1)}%) |`);
 lines.push(`| Deaths | ${String(runs.length - wins)} |`);
+lines.push('');
+
+lines.push('#### Runs by build');
+lines.push('');
+lines.push('| Build | Runs | Wins | Win rate |');
+lines.push('|---|---|---|---|');
+// Newest build first, by the latest run seen on it.
+for (const [build, entry] of Array.from(byBuild.entries()).sort(
+  (a, b) => b[1].latest - a[1].latest,
+)) {
+  lines.push(
+    `| \`${build}\` | ${String(entry.runs)} | ${String(entry.wins)} | ${((entry.wins / entry.runs) * 100).toFixed(1)}% |`,
+  );
+}
+if (byBuild.size > 1 && buildFilter === undefined) {
+  lines.push('');
+  lines.push('_Everything below mixes these builds. Pass `--build <id>` to report on one._');
+}
 lines.push('');
 
 lines.push('#### Outcomes by floor');

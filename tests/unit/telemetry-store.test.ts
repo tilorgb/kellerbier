@@ -197,6 +197,16 @@ describe('playtest feedback (#159)', () => {
     expect(loadTelemetry().welcomed).toBe(true);
   });
 
+  it("keeps a run's build id, and still loads a run recorded before there was one", () => {
+    const [stamped, old] = sanitizeTelemetryStore({
+      optedIn: true,
+      runs: [fakeRun({ runId: 'new', build: 'abc1234' }), fakeRun({ runId: 'old' })],
+    }).runs;
+    expect(stamped?.build).toBe('abc1234');
+    expect(old?.runId).toBe('old');
+    expect(old?.build).toBeUndefined();
+  });
+
   it('defaults an older save that has none of the new fields', () => {
     const store = sanitizeTelemetryStore({ optedIn: true, sessionId: 's', runs: [] });
     expect(store.feedback).toEqual([]);

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import cellarCrossroads from '../../src/content/rooms/cellar.json';
 import { GameSim } from '../../src/sim/game/sim.js';
 import { createInputFrame } from '../../src/sim/input/frame.js';
+import { BUILD_ID } from '../../src/app/build-mode.js';
 import { TelemetryTracker } from '../../src/app/telemetry/tracker.js';
 
 function roomSim(): GameSim {
@@ -35,6 +36,9 @@ describe('TelemetryTracker (#54, #159)', () => {
     // no way to see tick 0 before its own first call) — 9, not 10, is the
     // correct edge-to-edge count for this test's own call pattern.
     expect(record.roomClears).toEqual([{ floor: 1, role: 'normal', ticks: 9 }]);
+    // #361: every run says which build it was played on.
+    expect(record.build).toBe(BUILD_ID);
+    expect(BUILD_ID).not.toBe('');
   });
 
   it('resets the room-entry tick when the room id changes', () => {

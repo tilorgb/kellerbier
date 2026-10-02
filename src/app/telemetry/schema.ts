@@ -27,6 +27,9 @@ export const MAX_TELEMETRY_RUNS = 50;
 /** Feedback answers kept before the oldest is dropped. */
 export const MAX_TELEMETRY_FEEDBACK = 50;
 
+/** Longest build id kept — a short commit plus a suffix; anything longer is not one. */
+export const MAX_BUILD_ID_LENGTH = 40;
+
 /** Longest answer kept, in characters — a free-text box is not an essay. */
 export const MAX_FEEDBACK_LENGTH = 1000;
 
@@ -91,6 +94,12 @@ export interface TelemetryRunRecord {
   readonly roomClears: readonly TelemetryRoomClear[];
   /** Ticks spent at each Promille tier id (`sim/game/promille.ts#PromilleTier`), as string keys — a plain object round-trips through `JSON.stringify` without a `Map` codec. */
   readonly promilleTierTicks: Readonly<Record<string, number>>;
+  /**
+   * The build the run was played on (`app/build-mode.ts`'s `BUILD_ID`, #361),
+   * so the dashboard can keep runs from before and after a balance change
+   * apart. Absent on runs recorded before it existed.
+   */
+  readonly build?: string;
   /**
    * When the player's own "Send" click delivered this run (`send.ts`). Local
    * bookkeeping only — never part of what is sent or exported — so a second
@@ -224,6 +233,9 @@ export function sanitizeTelemetryRun(value: unknown): TelemetryRunRecord | null 
     itemsHeld: sanitizeStringArray(value.itemsHeld),
     roomClears: sanitizeRoomClears(value.roomClears),
     promilleTierTicks: sanitizePromilleTierTicks(value.promilleTierTicks),
+    ...(typeof value.build === 'string' && value.build.length > 0
+      ? { build: value.build.slice(0, MAX_BUILD_ID_LENGTH) }
+      : {}),
     ...(isFiniteNumber(value.sentAt) ? { sentAt: value.sentAt } : {}),
   };
 }
