@@ -71,6 +71,12 @@ const entries = walk(buildDir).map((path) => ({
   path,
   data: readFileSync(join(buildDir, path)),
 }));
+// The licence notices have to travel with the game (docs/LEGAL_REVIEW.md §3.1): the build
+// minifies them out of the bundle, so the upload carries the file itself.
+entries.push({
+  path: 'THIRD-PARTY-NOTICES.txt',
+  data: readFileSync(join(root, 'THIRD-PARTY-NOTICES.md')),
+});
 
 const problems = [];
 if (entries.length > MAX_FILES) {

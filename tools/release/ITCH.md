@@ -11,7 +11,7 @@ npm run build:itch
 
 That builds the tester build (`dist-tester/`, the release-mode game with the playtest welcome
 screen and questions) and packs it into `dist-itch/kellerbier-<commit>.zip`, with `index.html` at
-the root of the archive. The script refuses to write a zip itch.io would reject: more than 1,000
+the root of the archive and `THIRD-PARTY-NOTICES.txt` beside it. The script refuses to write a zip itch.io would reject: more than 1,000
 files, more than 500 MB extracted, a single file over 200 MB, or a path over 240 characters.
 
 The commit in the file name is the same id every telemetry run from that build carries (#361), so
