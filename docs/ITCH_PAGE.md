@@ -113,12 +113,13 @@ itch.io wants a cover image at **630 × 500** and three to five screenshots.
   compositions (the title screen's own layout, this one, and the whole postcard centred), because
   it is the one where the figure stays readable at thumbnail size. It is built only from art that
   was already signed off: the postcard picture and the title lettering.
-- **Screenshots:** five are in [`docs/itch/`](itch/), all 1280 × 720 (exactly 2×, so the pixels
+- **Screenshots:** seven are in [`docs/itch/`](itch/), all 1280 × 720 (exactly 2×, so the pixels
   stay square).
   - `01`–`03` — the title screen, the start room and a cellar room mid-fight, from the tester
     build of commit `14c9d0b`, taken by a script holding keys down.
-  - `04`–`05` — Die Zapfhahn-Orgel (a floor 1 mini-boss) and a village room on floor 2, from the
-    dev build of commit `be7ed30`. **These two are staged, and it is worth knowing how:** the room
+  - `04`–`07` — Die Zapfhahn-Orgel (a floor 1 mini-boss), a village room on floor 2, an item on
+    its pedestal in a treasure room, and Die Blaskapelle (a floor 2 mini-boss) mid-volley, from the
+    dev build. **These four are staged, and it is worth knowing how:** the room
     was loaded directly rather than walked to, Alois was given two items and kept at full health
     so the script survived long enough to take the picture, and the dev build's debug readout and
     panels were hidden. Loading a room directly also leaves the HUD's floor label out. Everything
@@ -128,7 +129,10 @@ itch.io wants a cover image at **630 × 500** and three to five screenshots.
     the two reveals a new player is playing towards. A mini-boss and a glimpse of the village say
     "there is more down here" without saying what. The same goes for any trailer or GIF made
     later.
-  - **Still wanted, from a played session:** the item pickup card.
+  - `07` is the frame to lead with: #56's own note is that the brass band is the most distinctive
+    thing in the game. It was taken without firing, so nobody is caught mid hit-flash.
+  - **Still wanted, from a played session:** the card that appears when an item is picked up.
+    `06` shows the pedestal and its label, not the card.
 
 ## After it is up
 
