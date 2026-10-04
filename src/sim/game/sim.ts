@@ -146,6 +146,7 @@ import {
   STATUS_BURN,
   STATUS_EFFECT_STRIDE,
   STATUS_FREEZE,
+  STATUS_SLOW,
   STATUS_POISON,
   stepStatusEffects,
 } from '../systems/status-effects.js';
@@ -4669,14 +4670,24 @@ export class GameSim {
    * a self-inflicted burn. Never shortens an existing duration, same as the
    * tag-on-hit path.
    */
-  applyStatusEffect(target: number, status: 'burn' | 'poison' | 'freeze', ticks: number): void {
+  applyStatusEffect(
+    target: number,
+    status: 'burn' | 'poison' | 'freeze' | 'slow',
+    ticks: number,
+  ): void {
     if (ticks <= 0) {
       return;
     }
     const data = this.statusEffect.data;
     const base = target * STATUS_EFFECT_STRIDE;
     const slot =
-      status === 'burn' ? STATUS_BURN : status === 'poison' ? STATUS_POISON : STATUS_FREEZE;
+      status === 'burn'
+        ? STATUS_BURN
+        : status === 'poison'
+          ? STATUS_POISON
+          : status === 'slow'
+            ? STATUS_SLOW
+            : STATUS_FREEZE;
     data[base + slot] = Math.max(data[base + slot] ?? 0, Math.round(ticks));
   }
 
