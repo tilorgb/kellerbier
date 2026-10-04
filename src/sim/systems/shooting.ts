@@ -145,7 +145,14 @@ function fire(sim: GameSim, aimX: number, aimY: number): void {
   // already. Baked in here rather than read live at impact — damage is
   // written once into the projectile at spawn (`ProjectileStore.spawn`) and
   // never re-read, so firing is the only correct hook point.
-  const damage = Math.round(sim.stats.value(StatId.Damage));
+  //
+  // Not rounded. It used to be, and with a base of 1 that turned every
+  // fractional modifier into nothing or everything: an item's "Damage -20%"
+  // gave 0.8, which rounded straight back to 1, so Bierbank, Colaweizen and
+  // the Braumeister-Schürze's -30% all fired at full damage. Health is a
+  // float (`GameSim.health`) so the number a description states is the number
+  // that lands.
+  const damage = sim.stats.value(StatId.Damage);
 
   const slot = sim.projectiles.spawn(
     muzzleX,

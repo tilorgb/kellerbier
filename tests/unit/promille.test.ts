@@ -807,8 +807,9 @@ describe('promille projectile damage', () => {
       }
     }
     expect(found).not.toBe(-1);
-    const expected = Math.round(2 * (1 + sim.tuning.promille.vollrauschDamageBonus));
-    expect(sim.projectiles.damage[found]).toBe(expected);
+    // Unrounded since fractional damage: the tier's bonus lands as written.
+    const expected = 2 * (1 + sim.tuning.promille.vollrauschDamageBonus);
+    expect(sim.projectiles.damage[found]).toBeCloseTo(expected, 5);
   });
 });
 

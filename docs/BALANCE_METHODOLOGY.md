@@ -217,6 +217,30 @@ Empty-handed, the bot clears 13.7 rooms, reaches floor 2 half the time and wins 
   description says it does. Whether an item that only hurts belongs in the treasure pool is the
   question, not whether the number is wrong.
 
+### Second run, and the first item pass (2026-10-04)
+
+At 40 runs an item the top of the table was Steckerlfisch, Colaweizen, Spezi, Bierbank and
+Sauwetter, each winning 50–63% of runs alone against 3% empty-handed. Reading the items for why
+turned up three causes, and all three were changed:
+
+- **Shot damage was rounded to a whole number, and the base is 1.** So a "Damage −20%" gave 0.8
+  and rounded straight back to 1: Bierbank, Colaweizen and the Braumeister-Schürze (−30%) fired at
+  full damage, and the Schürze's three shots were triple damage. Damage is fractional now and
+  health is a float, so a stated penalty is the penalty. The same rounding had been flattening
+  Promille: Angeheitert's +25% rounded to nothing and Beduselt's +60% rounded up to +100%. Both
+  now land as written, which is a real change to how drinking pays and wants playing.
+- **Burn and poison dealt 6 damage per application** against ordinary enemies of 2–5 health, so
+  one burning hit was a kill. Both now deal 3.
+- **The strongest were also the commonest.** Spezi and Steckerlfisch moved from quality 1 to 2.
+
+Colaweizen's slow was halved to 45 ticks as well, which the bot does not notice: it is still
+longer than the gap between two shots, so a target under fire stays slowed.
+
+The same sweep afterwards: Steckerlfisch 55% → 33%, Sauwetter 53% → 40%, the Schürze 38% → 23%.
+Colaweizen stays at 63% and is now the clear top of the table. Bierbank reads 55% and Spezi 35%
+where both were in the fifties — neither is believable as an effect (Spezi was not touched), and
+together they are a fair measure of this table's noise at 40 runs: about ten points either way.
+
 ### What this table cannot say
 
 - **It is the bot's opinion.** The bot holds a range and circles (§6). An item that rewards

@@ -13,6 +13,12 @@ import { WorldLabel } from './world/label.js';
  */
 const NUMBER_HEIGHT = 10;
 
+/** Whole numbers as they are, anything else to one decimal — damage is fractional now, and "1" for a 0.8 hit would be a lie the player could count. */
+export function formatDamage(amount: number): string {
+  const tenths = Math.round(amount * 10) / 10;
+  return Number.isInteger(tenths) ? String(tenths) : tenths.toFixed(1);
+}
+
 export class DamageNumberView {
   private readonly store: DamageNumberStore;
   private readonly labels: WorldLabel[] = [];
@@ -37,7 +43,7 @@ export class DamageNumberView {
       const life = store.life[index] ?? 0;
       const maxLife = store.maxLife[index] ?? 1;
       const remaining = maxLife === 0 ? 0 : life / maxLife;
-      label.text.text = String(Math.round(store.amount[index] ?? 0));
+      label.text.text = formatDamage(store.amount[index] ?? 0);
       label.alpha = Math.min(1, remaining * 2);
       project(
         lerp(store.previousX[index] ?? 0, store.x[index] ?? 0, alpha),

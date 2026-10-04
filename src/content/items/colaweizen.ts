@@ -1,7 +1,11 @@
 import type { ItemDefinition } from '../../sim/item/definition.js';
 
 /** How long a Colaweizen shot's `freeze` slow lasts on whatever it sticks to, in ticks (60/s). */
-const SLOW_TICKS = 90;
+// 45, was 90 (#54). Still longer than the 20 ticks between two shots, so a
+// target kept under fire stays slowed — halving it shortens how long a
+// single stray hit holds something, not the lock itself. If that lock is the
+// problem, the lever is the strength of the slow, not its length.
+const SLOW_TICKS = 45;
 
 /**
  * Colaweizen — wheat beer cut with cola. Impure and everyone knows it. Shots
