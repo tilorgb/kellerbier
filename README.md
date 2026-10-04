@@ -15,9 +15,11 @@ Raisins. Here as well. In Opa's beer.
 it with what's left of the tainted crate, switches it from *trinken* to *schießen*, and heads
 south to find out who is responsible.
 
+**▶ [Play the alpha on itch.io](https://tilorgb.itch.io/kellerbier)** — the build people are
+sent to. It is uploaded by hand, so it can be a few commits behind.
+
 **▶ [Play the latest `main` build](https://tilorgb.github.io/kellerbier/)** — rebuilt by CI on
-every merge to `main`; this is the link to hand to playtesters and the one telemetry reports
-against.
+every merge to `main`. The two are separate sites: a save made on one is not on the other.
 
 Seven floors from that cellar to the Wiesn, via the Bavarian Forest, the Alps, Neuschwanstein
 and a very industrial brewery. Expect Wolpertinger, aggressive swans, a tuba player who shoots
