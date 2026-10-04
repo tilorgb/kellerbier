@@ -17,7 +17,6 @@ recordings). What is left is practical:
 
 - upload a build and run the embed checklist (`tools/release/ITCH.md`)
 - redeploy the telemetry Worker (`tools/telemetry/README.md`)
-- screenshots past the second room (below)
 
 ## Page fields
 
@@ -114,11 +113,22 @@ itch.io wants a cover image at **630 × 500** and three to five screenshots.
   compositions (the title screen's own layout, this one, and the whole postcard centred), because
   it is the one where the figure stays readable at thumbnail size. It is built only from art that
   was already signed off: the postcard picture and the title lettering.
-- **Screenshots:** three are in [`docs/itch/`](itch/), captured at 1280 × 720 (exactly 2×, so
-  the pixels stay square) from the tester build of commit `14c9d0b`: the title screen, the start
-  room, and a cellar room mid-fight. They were taken by a script holding keys down, which gets
-  as far as the second room and no further. **Still wanted, from a played session:** a mini-boss,
-  Die Große Kellerassel, a village room on floor 2, and the item pickup card.
+- **Screenshots:** five are in [`docs/itch/`](itch/), all 1280 × 720 (exactly 2×, so the pixels
+  stay square).
+  - `01`–`03` — the title screen, the start room and a cellar room mid-fight, from the tester
+    build of commit `14c9d0b`, taken by a script holding keys down.
+  - `04`–`05` — Die Zapfhahn-Orgel (a floor 1 mini-boss) and a village room on floor 2, from the
+    dev build of commit `be7ed30`. **These two are staged, and it is worth knowing how:** the room
+    was loaded directly rather than walked to, Alois was given two items and kept at full health
+    so the script survived long enough to take the picture, and the dev build's debug readout and
+    panels were hidden. Loading a room directly also leaves the HUD's floor label out. Everything
+    in frame is the game's own rendering of its own rooms; nothing was composited.
+  - **No boss is shown, on purpose** (decided 2026-10-04). Die Große Kellerassel is what floor 1
+    builds to and Der Stier is the last fight in the game; a store page that shows both has spent
+    the two reveals a new player is playing towards. A mini-boss and a glimpse of the village say
+    "there is more down here" without saying what. The same goes for any trailer or GIF made
+    later.
+  - **Still wanted, from a played session:** the item pickup card.
 
 ## After it is up
 
