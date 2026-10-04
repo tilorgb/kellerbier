@@ -108,6 +108,17 @@ describe('telemetry worker (#363)', () => {
     expect(budget?.[1]).toBe('2');
   });
 
+  it('still stores the run when the counter write is refused', async () => {
+    // KV refuses a second write to one key within a second; the counter is that key.
+    const kv = fakeKv();
+    const put = kv.put.bind(kv);
+    kv.put = (key, value, options) =>
+      key.startsWith('budget:') ? Promise.reject(new Error('429')) : put(key, value, options);
+    const response = await worker.fetch(post({ runs: [run('burst')] }), { RUNS: kv });
+    expect(response.status).toBe(200);
+    expect(kv.store.has('run:burst')).toBe(true);
+  });
+
   it('exports in pages, without the budget counter, and only with the key', async () => {
     const kv = fakeKv();
     const total = EXPORT_PAGE_SIZE + 5;

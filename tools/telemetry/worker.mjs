@@ -219,7 +219,15 @@ export default {
     }
 
     await Promise.all([
-      env.RUNS.put(budgetKey, String(used + records), { expirationTtl: 3 * 86_400 }),
+      // KV allows one write a second to the same key, and every post writes
+      // this one. Two runs ending in the same second would have the second
+      // counter write refused — and, awaited plainly, would fail a request
+      // whose records had already been stored, so the game would send them
+      // again. The counter is approximate anyway; a missed increment is the
+      // cheaper mistake.
+      env.RUNS.put(budgetKey, String(used + records), { expirationTtl: 3 * 86_400 }).catch(
+        () => undefined,
+      ),
       ...runs.map((run) => env.RUNS.put(`run:${run.runId}`, JSON.stringify({ ...run, sessionId }))),
       ...feedback.map((entry) =>
         env.RUNS.put(`feedback:${entry.id}`, JSON.stringify({ ...entry, sessionId })),
