@@ -23,9 +23,16 @@ import { applyDamageAt } from './impact.js';
 export const STATUS_BURN = 0;
 export const STATUS_POISON = 1;
 export const STATUS_FREEZE = 2;
-export const STATUS_EFFECT_STRIDE = 3;
+/**
+ * A slow that is not a freeze (#54): the body keeps moving at
+ * `slowSpeedFactor` of its speed instead of `freezeSlowFactor`'s near-stop.
+ * Its own slot rather than a strength on `freeze`, so the two can run side
+ * by side and the stronger one simply wins while both are active.
+ */
+export const STATUS_SLOW = 3;
+export const STATUS_EFFECT_STRIDE = 4;
 
-/** Advances every body's burn/poison/freeze by one tick. */
+/** Advances every body's burn/poison/freeze/slow by one tick. */
 export function stepStatusEffects(sim: GameSim): void {
   const status = sim.statusEffect.data;
   const velocity = sim.velocity.data;
@@ -47,6 +54,16 @@ export function stepStatusEffects(sim: GameSim): void {
       velocity[index * 2] = (velocity[index * 2] ?? 0) * tuning.freezeSlowFactor;
       velocity[index * 2 + 1] = (velocity[index * 2 + 1] ?? 0) * tuning.freezeSlowFactor;
       status[base + STATUS_FREEZE] = freeze - 1;
+    }
+
+    const slow = status[base + STATUS_SLOW] ?? 0;
+    if (slow > 0) {
+      // Under a freeze the body is already all but stopped; the slow just runs down.
+      if (freeze <= 0) {
+        velocity[index * 2] = (velocity[index * 2] ?? 0) * tuning.slowSpeedFactor;
+        velocity[index * 2 + 1] = (velocity[index * 2 + 1] ?? 0) * tuning.slowSpeedFactor;
+      }
+      status[base + STATUS_SLOW] = slow - 1;
     }
 
     const burn = status[base + STATUS_BURN] ?? 0;
