@@ -27,7 +27,10 @@ On the project's edit page:
   scales by whole factors, so this is exactly 2×
 - **Fullscreen button:** on
 - **Mobile friendly:** leave off until the touch controls have been tried on a real phone (#367)
-- **Visibility:** *Draft* for the checklist below, then *Restricted* or unlisted for the alpha
+- **Visibility:** *Draft* for the checklist below, then *Public* with **Unlisted in search &
+  browse** ticked for the alpha. Anyone with the link can play; itch.io does not surface the page,
+  which keeps its first-release exposure for the real launch. Not *Restricted* — that needs a
+  password or key from every visitor
 
 ## Check it in the embed
 

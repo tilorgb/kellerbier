@@ -37,7 +37,7 @@ recordings). What is left is practical:
 | Languages | English, German |
 | Inputs | Keyboard, gamepad |
 | Accessibility | Configurable controls; subtitles not applicable |
-| Visibility | Draft → Restricted or unlisted for the alpha → Public is #56 |
+| Visibility | Draft while testing → **Public, with "Unlisted in search & browse" ticked** for the alpha → untick it for #56's release. **Not Restricted:** that asks every visitor for a password or key, which is the opposite of what a playtest page wants. An earlier version of this table said "Restricted or unlisted" as though they were the same; they are not |
 | Community | Comments on |
 
 Leave **Mobile friendly** off until the touch controls have been tried on a real phone.
