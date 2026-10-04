@@ -115,6 +115,7 @@ import { TelemetryTracker } from './telemetry/tracker.js';
 import {
   advanceQuestionCursor,
   clearTelemetryRuns,
+  joinPlaytest,
   loadTelemetry,
   markWelcomed,
   recordFeedback,
@@ -126,9 +127,17 @@ import {
 } from './telemetry/store.js';
 import { downloadTelemetryFile } from './telemetry/file.js';
 import { TELEMETRY_ENDPOINT } from './telemetry/endpoint.js';
-import { copyTelemetry, sendTelemetry, unsentFeedback, unsentRuns } from './telemetry/send.js';
+import {
+  autoSendAllowed,
+  copyTelemetry,
+  sendTelemetry,
+  unsentFeedback,
+  unsentRuns,
+  welcomeDue,
+} from './telemetry/send.js';
 import { createTouchControls, isTouchCapable } from './touch-controls.js';
 import { IS_RELEASE_BUILD, isPlaytestSession } from './build-mode.js';
+import { tourCandidates, trailAfter } from './room-tour.js';
 import { questionAt } from './playtest/questions.js';
 import { showFeedbackPrompt, showWelcome } from './playtest/overlay.js';
 import { type BootProgress, createBootProgress } from './boot-progress.js';
@@ -925,6 +934,8 @@ async function boot(progress: BootProgress): Promise<void> {
   let floorPlan: FloorPlan;
   let currentRoomId: string;
   let visitedRoomIds: Set<string>;
+  /** The rooms the dev-only `N` tour came in through, deepest last — see `app/room-tour.ts`. */
+  let tourTrail: string[] = [];
   /**
    * Edges of the floor's room graph a secret/supersecret wall has been
    * bombed open on, keyed by `edgeKey` so either side recognizes it. Lives
@@ -1552,13 +1563,52 @@ async function boot(progress: BootProgress): Promise<void> {
   /** The playtest build's post-run question while it is up (`app/playtest/overlay.ts`), else `null`. */
   let feedbackPrompt: { close: () => void } | null = null;
 
+  /** The send in flight, if any — `flushTelemetry` chains onto it so two never overlap. */
+  let telemetryFlush: Promise<boolean> = Promise.resolve(true);
+
+  /**
+   * Sends every run and answer not yet delivered and stamps what arrived;
+   * resolves to whether nothing is left waiting. One at a time: the run-end
+   * send (#360) and the question's own send land a second or two apart, and
+   * a second request started before the first is stamped would post the same
+   * runs twice.
+   */
+  function flushTelemetry(): Promise<boolean> {
+    telemetryFlush = telemetryFlush.then(async () => {
+      const store = loadTelemetry();
+      if (unsentRuns(store).length === 0 && unsentFeedback(store).length === 0) {
+        return true;
+      }
+      const sent = await sendTelemetry(store, TELEMETRY_ENDPOINT);
+      if (sent === null) {
+        return false;
+      }
+      markRunsSent(sent.runIds, Date.now());
+      markFeedbackSent(sent.feedbackIds, Date.now());
+      return true;
+    });
+    return telemetryFlush;
+  }
+
+  /**
+   * #360: a tester who agreed to it on the welcome screen has each finished
+   * run sent as it ends, so skipping the question no longer loses the run.
+   * A failed send is not retried here — the run stays unsent and goes out
+   * with the next flush (the next run's end, or the next launch).
+   */
+  function autoSendTelemetry(): void {
+    if (autoSendAllowed(loadTelemetry(), isPlaytestSession())) {
+      void flushTelemetry();
+    }
+  }
+
   /**
    * Playtest builds only, and only for a tester who said yes at the welcome
    * screen: a moment after a run ends, offers one short question
    * (`docs/PLAYTEST_PROTOCOL.md` §6, rotating one per run). Answering sends
-   * the answer with the runs not yet sent, so the tester never has to find a
-   * Settings tab; skipping sends nothing. Dropped if they have already
-   * started another run by the time it would appear.
+   * the answer with anything not yet sent, so the tester never has to find a
+   * Settings tab. Dropped if they have already started another run by the
+   * time it would appear.
    */
   function maybeAskPlaytestQuestion(): void {
     if (!isPlaytestSession() || !loadTelemetry().optedIn) {
@@ -1573,19 +1623,9 @@ async function boot(progress: BootProgress): Promise<void> {
       feedbackPrompt = showFeedbackPrompt({
         locale: preferences.locale,
         question,
-        onSubmit: async (text) => {
+        onSubmit: (text) => {
           recordFeedback(question.id, text, Date.now());
-          const store = loadTelemetry();
-          if (unsentRuns(store).length === 0 && unsentFeedback(store).length === 0) {
-            return true;
-          }
-          const sent = await sendTelemetry(store, TELEMETRY_ENDPOINT);
-          if (sent === null) {
-            return false;
-          }
-          markRunsSent(sent.runIds, Date.now());
-          markFeedbackSent(sent.feedbackIds, Date.now());
-          return true;
+          return flushTelemetry();
         },
         onClose: () => {
           feedbackPrompt = null;
@@ -1994,6 +2034,7 @@ async function boot(progress: BootProgress): Promise<void> {
               ticksSurvived,
             }),
           );
+          autoSendTelemetry();
           maybeAskPlaytestQuestion();
           const save = recordRunOutcome({
             seed: RUN_SEED,
@@ -2637,15 +2678,7 @@ async function boot(progress: BootProgress): Promise<void> {
         clearTelemetryRuns();
       },
       canSend: (TELEMETRY_ENDPOINT as string) !== '',
-      send: async () => {
-        const sent = await sendTelemetry(loadTelemetry(), TELEMETRY_ENDPOINT);
-        if (sent === null) {
-          return false;
-        }
-        markRunsSent(sent.runIds, Date.now());
-        markFeedbackSent(sent.feedbackIds, Date.now());
-        return true;
-      },
+      send: flushTelemetry,
       copy: () => copyTelemetry(loadTelemetry()),
     },
   });
@@ -2918,6 +2951,7 @@ WASD move   arrows aim and fire
     );
     currentRoomId = floorPlan.startRoomId;
     visitedRoomIds = new Set([currentRoomId]);
+    tourTrail = [];
     revealedEdges = new Set<string>();
 
     sim = new GameSim({
@@ -2936,6 +2970,10 @@ WASD move   arrows aim and fire
       // places it first, unconditionally), so `buildPlacement` always has a
       // real floor-grid cell to work from here.
       roomPlacement: buildPlacement(planRoom(floorPlan, currentRoomId)),
+      // The same id `enterNeighbor` hands `transitionTo` on the way back in —
+      // without it the start room is tracked under its template id here and
+      // its floor-plan id there, and comes back uncleared.
+      roomInstanceId: currentRoomId,
       floor: floorPlan.floor,
       hiddenDoors: hiddenDoorsFor(floorPlan, currentRoomId, revealedEdges),
       // The run's very first room reads as a quick, safe tutorial beat
@@ -3470,18 +3508,25 @@ WASD move   arrows aim and fire
   }
   screenController.showTitle(hadResumableRun);
   // The playtest build's welcome (`app/playtest/overlay.ts`): asked once, over
-  // the title screen. Yes is the telemetry opt-in; no leaves the game plain.
-  if (isPlaytestSession() && !loadTelemetry().welcomed) {
+  // the title screen. Yes is the telemetry opt-in and the agreement to runs
+  // being sent as they end (#360); no leaves the game plain — and, for a
+  // tester being asked again under the new wording, turns telemetry off
+  // rather than leaving them in a state the screen no longer describes.
+  if (isPlaytestSession() && welcomeDue(loadTelemetry())) {
     showWelcome({
       locale: preferences.locale,
       onChoice: (joined) => {
         if (joined) {
-          optIntoTelemetry();
+          joinPlaytest();
+        } else {
+          optOutOfTelemetry();
         }
         markWelcomed();
       },
     });
   }
+  // Runs a failed send left behind (offline, tab closed mid-request).
+  autoSendTelemetry();
   await progress.advance('world');
 
   if (seedInput instanceof HTMLInputElement) {
@@ -3819,6 +3864,7 @@ WASD move   arrows aim and fire
     rebuildProceduralRooms(floorPlan, RUN_SEED, sim.tuning.roomGen);
     currentRoomId = floorPlan.startRoomId;
     visitedRoomIds = new Set([currentRoomId]);
+    tourTrail = [];
     revealedEdges = new Set<string>();
     // New floor plan, new room ids — a neighbour prewarmed against the old
     // plan must not be matched against the new one. `GameView.sync`'s own
@@ -4241,8 +4287,9 @@ WASD move   arrows aim and fire
           break;
         }
         // Walks the generated floor depth-first: an unvisited door first,
-        // backtracking through an already-seen room only once every door
-        // from here has been used. Now that `sim.doorContact` triggers a
+        // and back the way it came once every door from here has been used
+        // (`app/room-tour.ts` — it used to bounce between a dead end and the
+        // room before it instead). Now that `sim.doorContact` triggers a
         // real transition on its own, this is a dev shortcut for touring the
         // floor without walking it — both go through the same `crossDoor`,
         // `force: true` here since a dev pressing `N` is never also holding
@@ -4255,10 +4302,11 @@ WASD move   arrows aim and fire
         // fall through to the next candidate rather than getting stuck
         // repeatedly failing to walk through a wall.
         const room = planRoom(floorPlan, currentRoomId);
-        const unvisited = room.doors.filter((door) => !visitedRoomIds.has(door.neighborRoomId));
-        const visited = room.doors.filter((door) => visitedRoomIds.has(door.neighborRoomId));
-        for (const door of [...unvisited, ...visited]) {
+        const from = currentRoomId;
+        for (const step of tourCandidates(room.doors, visitedRoomIds, tourTrail)) {
+          const { door } = step;
           if (crossDoor(door.cellIndex, door.direction, door.neighborRoomId, true)) {
+            tourTrail = trailAfter(tourTrail, from, step);
             break;
           }
         }

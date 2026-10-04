@@ -55,9 +55,13 @@ does the observer's talking itself (`docs/DECISIONS.md` #110):
   recorded, yes or no. Yes is the telemetry opt-in of §2; there is no code to read out, the
   session id travels with everything they send. It says nothing about controls or mechanics,
   for the reason §3 gives.
-- **One question after each run**, rotating through the five in §6 and skippable. Answering
-  sends the answer together with the run's stats, so nobody has to find a Settings tab.
+- **One question after each run**, rotating through the five in §6 and skippable. The run's
+  stats are sent when the run ends whether or not the question is answered
+  (`docs/DECISIONS.md` #112) — the welcome screen says so before the yes — so a skipped
+  question no longer costs the run, and nobody has to find a Settings tab.
   Answers reach the report on #54 (`tools/telemetry/dashboard.mjs`, "Tester answers").
+  That report is public and shows only how many answers each question got (#362); read what
+  testers wrote with `npm run telemetry:report`.
 
 What this cannot replace is the observation in §4: where they got stuck, what they never
 noticed. That is still a person watching, so keep running a few sessions in the room.

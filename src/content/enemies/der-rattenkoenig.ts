@@ -27,6 +27,13 @@ import type { EnemyDefinition } from '../../sim/enemy/definition.js';
  * beatable by someone who has never played the genre; the wave rate is what
  * keeps that true.
  *
+ * **#368: one rat fewer.** Floor 1's two gates were where runs ended —
+ * the mini-boss room alone stopped more than a quarter of the simulator's —
+ * while floor 2 stopped almost none. `maxActive` is the fairness knob this
+ * file already names, so that is what eased: 4 → 3 on the throne, 5 → 4
+ * during a screech. The idea of the fight (shoot the king, not the rats) is
+ * untouched. A small first step, not yet tuned by feel.
+ *
  * `bossBar: true` — his health feeds the top bar. His summoned Bierratten do
  * *not* (they `locksRoom` like any add, but a bar that jumped up every time a
  * rat spawned would read as losing ground for doing the right thing).
@@ -51,7 +58,7 @@ export const derRattenkoenig: EnemyDefinition = {
           enemyId: 'bierratte',
           everyTicks: 120,
           countPerWave: 1,
-          maxActive: 4,
+          maxActive: 3,
           spread: 22,
         },
       ],
@@ -70,7 +77,7 @@ export const derRattenkoenig: EnemyDefinition = {
           enemyId: 'bierratte',
           everyTicks: 18,
           countPerWave: 1,
-          maxActive: 5,
+          maxActive: 4,
           spread: 26,
         },
       ],

@@ -15,14 +15,29 @@ Raisins. Here as well. In Opa's beer.
 it with what's left of the tainted crate, switches it from *trinken* to *schießen*, and heads
 south to find out who is responsible.
 
+**▶ [Play the alpha on itch.io](https://tilorgb.itch.io/kellerbier)** — the build people are
+sent to. It is uploaded by hand, so it can be a few commits behind.
+
+**▶ [Play the latest `main` build](https://tilorgb.github.io/kellerbier/)** — rebuilt by CI on
+every merge to `main`. The two are separate sites: a save made on one is not on the other.
+
 Seven floors from that cellar to the Wiesn, via the Bavarian Forest, the Alps, Neuschwanstein
 and a very industrial brewery. Expect Wolpertinger, aggressive swans, a tuba player who shoots
 sound rings, and König Ludwig II in a swan boat.
 
 ## Status
 
-Pre-production. Design docs are in [`docs/`](docs/); the work is tracked in
-[issues](../../issues), grouped by milestone label `M0`–`M10`.
+**Alpha.** Two of the seven floors are playable start to finish — the cellar and the village
+above it, each with a mini-boss and a boss — and a run takes about fifteen minutes. Some art and
+sound are still placeholders, and the balance is being tuned against playtest data
+([`docs/BALANCE_METHODOLOGY.md`](docs/BALANCE_METHODOLOGY.md)). Floors 3–7 are parked until these
+two are finished ([`docs/ROADMAP.md`](docs/ROADMAP.md)).
+
+The build asks once whether you want to take part in the playtest. Saying yes sends anonymous
+run stats; saying no changes nothing about the game.
+
+Design docs are in [`docs/`](docs/); the work is tracked in [issues](../../issues), grouped by
+milestone label `M0`–`M10`.
 
 **Current state and what's next: the [roadmap issue](../../issues?q=is%3Aissue+label%3Aroadmap)**,
 regenerated automatically from the issue list on every issue event.
@@ -116,7 +131,8 @@ something downloaded over a connection, where separate, cacheable, un-base64'd f
 
 Every push and pull request runs typecheck, lint, the full test suite, the performance budget
 and a production build. Pull requests from this repository also get a **playable preview link**
-posted as a comment — a game is judged by feel, and feel cannot be reviewed in a diff.
+posted as a comment — a game is judged by feel, and feel cannot be reviewed in a diff. Merges to
+`main` publish to the Pages root, <https://tilorgb.github.io/kellerbier/>.
 
 The **synergy fuzz harness** — 10,000 randomised item combinations played headless against the
 scripted enemy roster — runs nightly and on demand (`.github/workflows/fuzz.yml`), not on every

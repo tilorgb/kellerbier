@@ -90,7 +90,13 @@ import { EventQueue } from '../events/queue.js';
 import { DamageNumberStore } from '../particle/damage-numbers.js';
 import { DecalStore } from '../particle/decals.js';
 import { ParticleStore } from '../particle/store.js';
-import { boulderDebris, doorPuff, roomClearRing, splashBurst } from '../particle/effects.js';
+import {
+  boulderDebris,
+  doorPuff,
+  roomClearRing,
+  splashBurst,
+  windSwirl,
+} from '../particle/effects.js';
 import { ProjectileStore, ProjectileTeam } from '../projectile/store.js';
 import { finalizeProjectileTags } from '../projectile/behavior.js';
 import {
@@ -146,6 +152,7 @@ import {
   STATUS_BURN,
   STATUS_EFFECT_STRIDE,
   STATUS_FREEZE,
+  STATUS_SLOW,
   STATUS_POISON,
   stepStatusEffects,
 } from '../systems/status-effects.js';
@@ -604,6 +611,14 @@ export interface GameSimOptions {
    * only the room a fresh `GameSim` boots directly into.
    */
   readonly suppressRoomContent?: boolean;
+  /**
+   * The floor plan's own id for `roomTemplate`'s room — see `loadRoom`'s
+   * `roomInstanceId` parameter. A caller with a floor plan must pass it:
+   * every later `transitionTo` back into this room does, and a start room
+   * booted under its template id instead is not recognised as the room that
+   * was left, so it repopulates on the first walk back in.
+   */
+  readonly roomInstanceId?: string;
   /** Projectile pool size. Lowered by tests that want to watch it overflow. */
   readonly projectileCapacity?: number;
   readonly particleCapacity?: number;
@@ -730,8 +745,15 @@ export class GameSim {
   readonly push: Component<Float32Array>;
   /** Collision layer and the mask of layers it interacts with. */
   readonly collision: Component<Uint16Array>;
-  /** Current and maximum hit points. Maximum 0 means the body cannot be hurt. */
-  readonly health: Component<Int16Array>;
+  /**
+   * Current and maximum hit points. Maximum 0 means the body cannot be hurt.
+   *
+   * A float, not an integer: a shot's damage is no longer rounded (see
+   * `systems/shooting.ts`), so an enemy can sit at 2.2. The player's own
+   * health only ever moves by whole half-Wurst — everything that hurts or
+   * heals Alois deals integers — so the HUD still reads whole numbers.
+   */
+  readonly health: Component<Float32Array>;
   /** Damage dealt by touching a body. Zero on everything harmless. */
   readonly contactDamage: Component<Int16Array>;
   /**
@@ -1654,7 +1676,7 @@ export class GameSim {
     this.hurtbox = this.world.defineComponent('hurtbox', Float32Array, 2);
     this.push = this.world.defineComponent('push', Float32Array, 2);
     this.collision = this.world.defineComponent('collision', Uint16Array, 2);
-    this.health = this.world.defineComponent('health', Int16Array, 2);
+    this.health = this.world.defineComponent('health', Float32Array, 2);
     this.flash = this.world.defineComponent('flash', Uint8Array, 1);
     this.hitStun = this.world.defineComponent('hitStun', Uint8Array, 1);
     this.contactDamage = this.world.defineComponent('contactDamage', Int16Array, 1);
@@ -1728,6 +1750,7 @@ export class GameSim {
         options.roomPlacement,
         { col: 0, row: 0 },
         options.suppressRoomContent ?? false,
+        options.roomInstanceId,
       );
     } else {
       const population = options.population ?? 'targets';
@@ -4596,7 +4619,8 @@ export class GameSim {
     const dirX = directionX / length;
     const dirY = directionY / length;
     const speedScale = options.speedScale ?? 1;
-    const damage = options.damage ?? Math.round(this.stats.value(StatId.Damage));
+    // Unrounded, like `fire`'s own shot — see `systems/shooting.ts`.
+    const damage = options.damage ?? this.stats.value(StatId.Damage);
     const slot = this.projectiles.spawn(
       x,
       y,
@@ -4636,14 +4660,26 @@ export class GameSim {
    * discriminate who is standing in it, unlike a regular `EnemyProjectile`
    * shot, which already never touches `Enemy` at all
    * (`collision/layers.ts`).
+   *
+   * `sparePlayer` is for the one caller that cannot use `excludeIndex` for
+   * it: a splash that goes off *at an enemy* has to exclude that enemy, which
+   * leaves nothing to exclude the player with. Every splash centred on the
+   * player passes `playerIndex` as the exclusion instead.
    */
-  applySplashDamage(x: number, y: number, radius: number, damage: number, excludeIndex = -1): void {
+  applySplashDamage(
+    x: number,
+    y: number,
+    radius: number,
+    damage: number,
+    excludeIndex = -1,
+    sparePlayer = false,
+  ): void {
     if (damage <= 0 || radius <= 0) {
       return;
     }
     const mask = CollisionLayer.Enemy | CollisionLayer.Obstacle | CollisionLayer.Player;
     this.broadphase.query(x, y, radius, (index) => {
-      if (index === excludeIndex) {
+      if (index === excludeIndex || (sparePlayer && index === this.playerIndex)) {
         return;
       }
       const layer = this.collision.data[index * 2] ?? 0;
@@ -4685,6 +4721,11 @@ export class GameSim {
     splashBurst(this, x, y, radius);
   }
 
+  /** One tick of the Karussell's wind around `(x, y)` — see `windSwirl`. */
+  windSwirl(x: number, y: number, radius: number): void {
+    windSwirl(this, x, y, radius);
+  }
+
   /**
    * Sets (or refreshes) a status duration directly — burn, poison or freeze
    * — bypassing the tag-on-hit path (`applyStatusTagsOnHit`,
@@ -4693,14 +4734,24 @@ export class GameSim {
    * a self-inflicted burn. Never shortens an existing duration, same as the
    * tag-on-hit path.
    */
-  applyStatusEffect(target: number, status: 'burn' | 'poison' | 'freeze', ticks: number): void {
+  applyStatusEffect(
+    target: number,
+    status: 'burn' | 'poison' | 'freeze' | 'slow',
+    ticks: number,
+  ): void {
     if (ticks <= 0) {
       return;
     }
     const data = this.statusEffect.data;
     const base = target * STATUS_EFFECT_STRIDE;
     const slot =
-      status === 'burn' ? STATUS_BURN : status === 'poison' ? STATUS_POISON : STATUS_FREEZE;
+      status === 'burn'
+        ? STATUS_BURN
+        : status === 'poison'
+          ? STATUS_POISON
+          : status === 'slow'
+            ? STATUS_SLOW
+            : STATUS_FREEZE;
     data[base + slot] = Math.max(data[base + slot] ?? 0, Math.round(ticks));
   }
 

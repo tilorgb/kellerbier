@@ -27,11 +27,35 @@ export function optIntoTelemetry(): TelemetryStore {
   })).telemetry;
 }
 
-/** Turns telemetry off. Deliberately leaves `sessionId` and any buffered `runs` alone — see `clearTelemetry` for the separate, explicit way to discard them. */
+/**
+ * Turns telemetry off. Deliberately leaves `sessionId` and any buffered `runs` alone — see `clearTelemetry` for the separate, explicit way to discard them.
+ * Withdraws `autoSend` with it: opting back in through Settings is the
+ * click-to-send consent, not the welcome screen's.
+ */
 export function optOutOfTelemetry(): TelemetryStore {
   return updateSave((save) => ({
     ...save,
-    telemetry: { ...save.telemetry, optedIn: false },
+    telemetry: { ...save.telemetry, optedIn: false, autoSend: false },
+  })).telemetry;
+}
+
+/**
+ * A yes on the playtest welcome screen (#360): telemetry on, and finished
+ * runs sent as they end. Keeps the session id of a tester who was already
+ * opted in — they are being asked about sending, not starting a new session.
+ */
+export function joinPlaytest(): TelemetryStore {
+  return updateSave((save) => ({
+    ...save,
+    telemetry: {
+      ...save.telemetry,
+      optedIn: true,
+      autoSend: true,
+      sessionId:
+        save.telemetry.optedIn && save.telemetry.sessionId !== null
+          ? save.telemetry.sessionId
+          : crypto.randomUUID(),
+    },
   })).telemetry;
 }
 

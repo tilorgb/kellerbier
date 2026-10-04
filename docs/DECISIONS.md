@@ -6164,7 +6164,8 @@ rotating through `PLAYTEST_QUESTIONS` (the protocol's §6 five) by a cursor in t
 Nothing appears for anyone who said no, and nothing appears in the shipped game.
 
 **Sending is still a click, and now the natural one.** The prompt's button says what it does —
-"Send answer and run stats" — and sends the answer plus every run not yet sent. Skip sends nothing.
+"Send answer and run stats" — and sends the answer plus every run not yet sent. Skip sends nothing
+(**superseded by #112**: run stats now go out at run end for a tester who agreed to that).
 That is why a tester never needs Settings → Privacy; #109's rule that nothing leaves without a
 click is unchanged.
 
@@ -6175,6 +6176,14 @@ so typing never reaches the game, which listens on `window`.
 **Free text is untrusted.** The prompt asks testers to leave out personal details, answers are capped
 at 1000 characters, the Worker re-caps them, and the dashboard flattens them to one line and defuses
 markup and `@`-mentions before they go into a GitHub comment.
+
+**Amended by #362: the answers no longer go into the comment at all.** Defusing markup was enough
+for invited testers; it does nothing about spam, abuse or a stranger's personal details being
+published daily under the project's name once the build is on itch.io. The workflow now builds its
+report with `--public`, which counts answers per question and prints none. Nothing a public
+repository's Actions produce is private — summaries, logs and artifacts are all readable — so the
+full report is built locally by `npm run telemetry:report`. The prompt tells the tester the answer
+goes to the developer.
 
 **Constrains:** the questions are the protocol's, not a survey tool — a new one has to be something
 §5 would allow ("ask what they did, not what they would like"). The observation checklist (§4) is
@@ -6236,3 +6245,23 @@ The user wanted more detail on the characters at today's sizes, with today's art
 - Not done: the pixel editor (`tools/pixel-editor/server.mjs`) still only saves 1x names, and the
   UI kit (`src/render/ui/`) stays on its own 1x grid.
 
+## 113. A playtester's runs are sent when they end — agreed on the welcome screen, not assumed
+
+**Decided:** M8, #360; amends #109 and #110. #110 made answering the post-run question the moment
+a run was sent, and "Skip sends nothing". That was fine with an observer in the room and is wrong
+for strangers: most people skip a question, so most opted-in runs never arrived — and run volume
+is the whole reason for putting the build in front of strangers (#54's item and Promille criteria).
+
+**The rule.** In a playtest session, a tester who said yes on the welcome screen has every finished
+run sent as it ends. The welcome's wording says that before the choice. A failed send is not lost:
+the run stays unsent and goes out with the next one, or at the next launch.
+
+**Consent is not inherited.** `TelemetryStore.autoSend` is separate from `optedIn` and is set only
+by a yes to the new wording (`joinPlaytest`). Two groups keep #109's click-to-send rule exactly as
+promised: anyone who turns telemetry on through Settings → Privacy, in any build, and any tester
+who said yes under the old welcome text. The second group sees the welcome once more
+(`welcomeDue`); a no there turns telemetry off rather than leaving them opted in under a screen
+that no longer describes what happens.
+
+**Constrains:** nothing may send on its own for a store without `autoSend`. The Settings privacy
+text names the one exception, so it stays true in both cases.

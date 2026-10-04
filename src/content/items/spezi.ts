@@ -23,7 +23,10 @@ export const spezi: ItemDefinition = {
   flavourText: 'items.spezi.flavourText',
   sprite: 'spezi',
   pools: ['treasure', 'shop'],
-  quality: 1,
+  // 2, not 1: a second shot on every pull with no drawback is double damage,
+  // and at quality 1 it was one of the most-offered items in the treasure
+  // pool. Alone it took the simulator's bot from 3% of runs won to 57%.
+  quality: 2,
   promilleRequirement: 'any',
   tags: ['impure'],
   hooks: {

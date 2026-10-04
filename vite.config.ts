@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import { fileURLToPath, URL } from 'node:url';
 import { defineConfig } from 'vitest/config';
 import { artPipelineDevPlugin } from './tools/art/dev-plugin.mjs';
@@ -6,6 +7,26 @@ import { pixelEditorServerPlugin } from './tools/pixel-editor/server.mjs';
 import { roomEditorServerPlugin } from './tools/room-editor/server.mjs';
 
 const resolvePath = (relative: string): string => fileURLToPath(new URL(relative, import.meta.url));
+
+/**
+ * The commit this build is made from, short — what `src/app/build-mode.ts`'s
+ * `BUILD_ID` stamps onto every telemetry run (#361). CI knows it without a
+ * shell (`GITHUB_SHA`); a local build asks git; a source tree with no git at
+ * all (a downloaded zip) still builds, as `unknown`.
+ */
+function buildCommit(): string {
+  const fromCi = process.env.GITHUB_SHA;
+  if (fromCi !== undefined && fromCi !== '') {
+    return fromCi.slice(0, 7);
+  }
+  try {
+    return execSync('git rev-parse --short=7 HEAD', { stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString()
+      .trim();
+  } catch {
+    return 'unknown';
+  }
+}
 
 export default defineConfig({
   // Relative asset URLs, so a production build also runs from any static host
@@ -25,6 +46,9 @@ export default defineConfig({
     __KELLERBIER_RELEASE__: 'false',
     // `src/app/build-mode.ts`. Only `vite.tester.config.ts` flips this.
     __KELLERBIER_PLAYTEST__: 'false',
+    // `src/app/build-mode.ts`'s `BUILD_ID`. Every config that spreads this
+    // one inherits it, so the tester and release builds are stamped too.
+    __KELLERBIER_COMMIT__: JSON.stringify(buildCommit()),
   },
   // Dev-only: `configureServer` middleware never runs under `vite build`, so
   // the room editor's (#24) and pixel editor's (#108) save endpoints never

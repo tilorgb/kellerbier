@@ -99,6 +99,14 @@ export class TitleScreen implements MenuScreen {
   private readonly headline: DisplayTitle;
   private readonly postcard = new Postcard({ seed: 9 });
   private readonly footer: BitmapText;
+  /**
+   * "Alpha" and the build, bottom right (#366): the one screen a stranger
+   * judges the game by should say what state it is in before they do, and
+   * the build is what a bug report or a telemetry row is matched against
+   * (`app/build-mode.ts`'s `BUILD_ID`).
+   */
+  private readonly stamp: BitmapText;
+  private readonly buildId: string;
   private readonly menu: Menu;
   private width = 0;
   private height = 0;
@@ -108,8 +116,9 @@ export class TitleScreen implements MenuScreen {
   private wallpaperWidth = -1;
   private wallpaperHeight = -1;
 
-  constructor(kit: UiKit, actions: TitleScreenActions, locale: Locale) {
+  constructor(kit: UiKit, actions: TitleScreenActions, locale: Locale, buildId: string) {
     this.actions = actions;
+    this.buildId = buildId;
     this.view.visible = false;
 
     this.view.addChild(this.wallpaper);
@@ -132,6 +141,11 @@ export class TitleScreen implements MenuScreen {
 
     this.footer = uiText(t(locale, 'ui.title.tagline'), { colour: UI_PALETTE.textDim });
     this.view.addChild(this.footer);
+
+    this.stamp = uiText(t(locale, 'ui.title.alpha', { build: buildId }), {
+      colour: UI_PALETTE.textDim,
+    });
+    this.view.addChild(this.stamp);
   }
 
   private menuItems(locale: Locale): MenuItem[] {
@@ -154,6 +168,7 @@ export class TitleScreen implements MenuScreen {
   setLocale(locale: Locale): void {
     this.menu.setItems(this.menuItems(locale));
     this.footer.text = t(locale, 'ui.title.tagline');
+    this.stamp.text = t(locale, 'ui.title.alpha', { build: this.buildId });
     if (this.view.visible) {
       this.layOut();
     }
@@ -245,6 +260,12 @@ export class TitleScreen implements MenuScreen {
     const menuTop = Math.round(height / 2 - this.menu.height / 2);
     this.menu.view.position.set(MARGIN, menuTop);
     this.footer.position.set(MARGIN, height - MARGIN + 2);
+    // On the tagline's own line, at the other end of it — under the pane, so
+    // it stays put when settings takes the pane over.
+    this.stamp.position.set(
+      Math.round(width - MARGIN - uiTextWidth(this.stamp.text)),
+      height - MARGIN + 2,
+    );
 
     const paneLeft = columnRight + COLUMN_GAP;
     const paneWidth = width - paneLeft - MARGIN;

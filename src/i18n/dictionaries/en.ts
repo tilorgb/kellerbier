@@ -32,6 +32,7 @@ export const en = {
   // The full-screen title screen's own footer (#321) — the centred menu's
   // old tagline had no locale to worry about; this one does.
   'ui.title.tagline': 'A Bavarian cellar-crawling roguelike',
+  'ui.title.alpha': 'Alpha {build}',
 
   'ui.pause.headline': 'Paused',
   'ui.pause.resume': 'Resume',
@@ -226,8 +227,9 @@ export const en = {
     'how each run ends (won or died, on which floor), how long each room took to clear, ' +
     'which items were held, and how much time was spent at each Promille tier. Nothing ' +
     'else — no name, no account, no location, no way to identify who played. A run is ' +
-    'kept here until you press Send, copy it or export it as a file yourself; nothing ' +
-    'is ever sent anywhere automatically.',
+    'kept here until you press Send, copy it or export it as a file yourself. Nothing ' +
+    'is sent automatically — unless you said yes on the playtest welcome screen, in ' +
+    'which case each finished run is sent as it ends.',
   'ui.settings.privacy.session': 'Session',
   'ui.settings.privacy.runsRecordedOne': '1 run recorded, waiting to be exported.',
   'ui.settings.privacy.runsRecordedOther': '{count} runs recorded, waiting to be exported.',
@@ -245,20 +247,22 @@ export const en = {
   // --- Playtest build: welcome screen and post-run questions ---------------
   'ui.playtest.welcome.title': 'Thanks for testing Kellerbier',
   'ui.playtest.welcome.body':
-    'This is an early build and you are helping test it. Play however you like — there are ' +
-    'no wrong answers, and nobody is watching.',
+    'This is an alpha: an early, unfinished build, and some of the art and sound are ' +
+    'placeholders. You are helping test it. Play however you like — there are no wrong ' +
+    'answers, and nobody is watching.',
   'ui.playtest.welcome.consent':
     'If you say yes, the game records anonymous stats about your runs (won or died, which ' +
-    'floor, how long, which items) and, after a run, may ask you one short question. You ' +
-    'choose whether to send anything, and you can turn it off in Settings. No name, no ' +
-    'account, nothing that says who you are.',
+    'floor, how long, which items) and sends them when a run ends. After a run it may also ' +
+    'ask you one short question, which you can skip. You can turn it off in Settings at ' +
+    'any time. No name, no account, nothing that says who you are.',
   'ui.playtest.welcome.yes': 'Yes, count me in',
   'ui.playtest.welcome.no': 'No thanks, just play',
   'ui.playtest.prompt.heading': 'One quick question',
   'ui.playtest.prompt.hint':
-    'Skip any time. Please leave out your name and other personal details.',
+    'Skip any time. Your answer goes to the developer only. Please leave out your name ' +
+    'and other personal details.',
   'ui.playtest.prompt.placeholder': 'Type your answer here…',
-  'ui.playtest.prompt.send': 'Send answer and run stats',
+  'ui.playtest.prompt.send': 'Send answer',
   'ui.playtest.prompt.skip': 'Skip',
   'ui.playtest.prompt.sending': 'Sending…',
   'ui.playtest.prompt.thanks': 'Thank you!',

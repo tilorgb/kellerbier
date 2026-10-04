@@ -5,6 +5,7 @@ import { CreditsScreen } from '../render/credits-screen.js';
 import { PauseScreen } from '../render/pause-screen.js';
 import { SettingsScreen } from '../render/settings-screen.js';
 import { TitleScreen } from '../render/title-screen.js';
+import { BUILD_ID } from './build-mode.js';
 import type { Locale } from '../i18n/locale.js';
 import type { GamepadMenuNav } from './input/menu-nav.js';
 import type { GamepadSource } from './input/gamepad.js';
@@ -122,6 +123,7 @@ export class ScreenFlowController {
         canContinue: () => this.canContinueFlag,
       },
       deps.locale,
+      BUILD_ID,
     );
     this.pause = new PauseScreen(
       deps.kit,

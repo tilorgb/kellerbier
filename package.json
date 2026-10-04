@@ -12,6 +12,7 @@
     "dev": "vite",
     "build": "npm run typecheck && vite build",
     "build:tester": "npm run typecheck && vite build --config vite.tester.config.ts",
+    "build:itch": "npm run build:tester && node tools/release/itch-zip.mjs",
     "build:release": "npm run typecheck && vite build --config vite.release.config.ts",
     "release:smoke": "node tools/release/smoke.mjs",
     "build:atlas": "node tools/art/build-atlas.mjs",
@@ -39,6 +40,7 @@
     "bench": "vitest run --config vitest.bench.config.ts",
     "fuzz": "vitest run --config vitest.fuzz.config.ts",
     "playtest": "vitest run --config vitest.playtest.config.ts",
+    "telemetry:report": "node tools/telemetry/pull.mjs",
     "perf:crossings": "node tools/perf/room-crossings.mjs walk 12 --gate"
   },
   "dependencies": {

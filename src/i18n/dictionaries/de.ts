@@ -20,6 +20,7 @@ export const de: Record<DictKey, string> = {
   'ui.title.credits': 'Mitwirkende',
   'ui.title.quit': 'Beenden',
   'ui.title.tagline': 'Ein bayerisches Keller-Roguelike',
+  'ui.title.alpha': 'Alpha {build}',
 
   'ui.pause.headline': 'Pause',
   'ui.pause.resume': 'Fortsetzen',
@@ -213,8 +214,9 @@ export const de: Record<DictKey, string> = {
     'gehalten wurden und wie viel Zeit auf jeder Promille-Stufe verbracht wurde. Sonst ' +
     'nichts — kein Name, kein Konto, kein Standort, keine Möglichkeit herauszufinden, ' +
     'wer gespielt hat. Ein Lauf bleibt hier gespeichert, bis du auf Senden drückst, ihn ' +
-    'kopierst oder selbst als Datei exportierst; es wird nie automatisch irgendetwas ' +
-    'verschickt.',
+    'kopierst oder selbst als Datei exportierst. Automatisch wird nichts verschickt — ' +
+    'außer du hast auf dem Playtest-Willkommensbildschirm Ja gesagt: Dann wird jeder ' +
+    'beendete Lauf gesendet, sobald er endet.',
   'ui.settings.privacy.session': 'Sitzung',
   'ui.settings.privacy.runsRecordedOne': '1 Lauf aufgezeichnet, wartet auf den Export.',
   'ui.settings.privacy.runsRecordedOther': '{count} Läufe aufgezeichnet, warten auf den Export.',
@@ -235,21 +237,23 @@ export const de: Record<DictKey, string> = {
   // --- Playtest build: welcome screen and post-run questions ---------------
   'ui.playtest.welcome.title': 'Danke fürs Testen von Kellerbier',
   'ui.playtest.welcome.body':
-    'Das ist ein früher Stand, und du hilfst beim Testen. Spiel, wie du magst — es gibt ' +
-    'keine falschen Antworten, und niemand schaut dir zu.',
+    'Das ist eine Alpha: ein früher, unfertiger Stand, und ein Teil der Grafik und des ' +
+    'Sounds sind Platzhalter. Du hilfst beim Testen. Spiel, wie du magst — es gibt keine ' +
+    'falschen Antworten, und niemand schaut dir zu.',
   'ui.playtest.welcome.consent':
     'Wenn du Ja sagst, zeichnet das Spiel anonyme Werte zu deinen Läufen auf (gewonnen ' +
     'oder gestorben, welcher Stock, wie lange, welche Gegenstände) und stellt dir nach ' +
-    'einem Lauf vielleicht eine kurze Frage. Du entscheidest, ob etwas gesendet wird, und ' +
-    'kannst es in den Einstellungen ausschalten. Kein Name, kein Konto, nichts, was verrät, ' +
-    'wer du bist.',
+    'einem Lauf vielleicht eine kurze Frage, die du überspringen kannst. Die Werte werden ' +
+    'gesendet, sobald ein Lauf endet. Du kannst das jederzeit in den Einstellungen ' +
+    'ausschalten. Kein Name, kein Konto, nichts, was verrät, wer du bist.',
   'ui.playtest.welcome.yes': 'Ja, ich bin dabei',
   'ui.playtest.welcome.no': 'Nein danke, ich spiele nur',
   'ui.playtest.prompt.heading': 'Eine kurze Frage',
   'ui.playtest.prompt.hint':
-    'Jederzeit überspringbar. Bitte keinen Namen und keine persönlichen Angaben.',
+    'Jederzeit überspringbar. Deine Antwort geht nur an den Entwickler. Bitte keinen Namen ' +
+    'und keine persönlichen Angaben.',
   'ui.playtest.prompt.placeholder': 'Deine Antwort hier…',
-  'ui.playtest.prompt.send': 'Antwort und Lauf-Werte senden',
+  'ui.playtest.prompt.send': 'Antwort senden',
   'ui.playtest.prompt.skip': 'Überspringen',
   'ui.playtest.prompt.sending': 'Wird gesendet…',
   'ui.playtest.prompt.thanks': 'Danke!',

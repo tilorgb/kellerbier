@@ -27,6 +27,9 @@ export const MAX_TELEMETRY_RUNS = 50;
 /** Feedback answers kept before the oldest is dropped. */
 export const MAX_TELEMETRY_FEEDBACK = 50;
 
+/** Longest build id kept — a short commit plus a suffix; anything longer is not one. */
+export const MAX_BUILD_ID_LENGTH = 40;
+
 /** Longest answer kept, in characters — a free-text box is not an essay. */
 export const MAX_FEEDBACK_LENGTH = 1000;
 
@@ -92,6 +95,12 @@ export interface TelemetryRunRecord {
   /** Ticks spent at each Promille tier id (`sim/game/promille.ts#PromilleTier`), as string keys — a plain object round-trips through `JSON.stringify` without a `Map` codec. */
   readonly promilleTierTicks: Readonly<Record<string, number>>;
   /**
+   * The build the run was played on (`app/build-mode.ts`'s `BUILD_ID`, #361),
+   * so the dashboard can keep runs from before and after a balance change
+   * apart. Absent on runs recorded before it existed.
+   */
+  readonly build?: string;
+  /**
    * When the player's own "Send" click delivered this run (`send.ts`). Local
    * bookkeeping only — never part of what is sent or exported — so a second
    * click uploads just the runs since the last one.
@@ -109,6 +118,15 @@ export interface TelemetryStore {
   readonly welcomed: boolean;
   /** Which question the next post-run prompt asks — advances by one per prompt shown, wrapping. */
   readonly questionCursor: number;
+  /**
+   * Whether this tester agreed, on the playtest welcome screen, to finished
+   * runs being sent as they end (#360). Separate from `optedIn` on purpose:
+   * the Settings toggle promises that nothing leaves without a click, and a
+   * tester who said yes under the welcome's older wording was promised the
+   * same — only a yes to the wording that says "sent when a run ends" sets
+   * this. `false` on every save from before it existed.
+   */
+  readonly autoSend: boolean;
 }
 
 export function createDefaultTelemetryStore(): TelemetryStore {
@@ -119,6 +137,7 @@ export function createDefaultTelemetryStore(): TelemetryStore {
     feedback: [],
     welcomed: false,
     questionCursor: 0,
+    autoSend: false,
   };
 }
 
@@ -214,6 +233,9 @@ export function sanitizeTelemetryRun(value: unknown): TelemetryRunRecord | null 
     itemsHeld: sanitizeStringArray(value.itemsHeld),
     roomClears: sanitizeRoomClears(value.roomClears),
     promilleTierTicks: sanitizePromilleTierTicks(value.promilleTierTicks),
+    ...(typeof value.build === 'string' && value.build.length > 0
+      ? { build: value.build.slice(0, MAX_BUILD_ID_LENGTH) }
+      : {}),
     ...(isFiniteNumber(value.sentAt) ? { sentAt: value.sentAt } : {}),
   };
 }
@@ -281,5 +303,6 @@ export function sanitizeTelemetryStore(value: unknown): TelemetryStore {
       isFiniteNumber(value.questionCursor) && value.questionCursor >= 0
         ? Math.floor(value.questionCursor)
         : 0,
+    autoSend: value.autoSend === true,
   };
 }

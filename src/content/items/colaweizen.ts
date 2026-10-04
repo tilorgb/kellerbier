@@ -1,14 +1,21 @@
 import type { ItemDefinition } from '../../sim/item/definition.js';
 
-/** How long a Colaweizen shot's `freeze` slow lasts on whatever it sticks to, in ticks (60/s). */
-const SLOW_TICKS = 90;
+/**
+ * How long a Colaweizen shot's slow lasts on whatever it sticks to, in ticks
+ * (60/s). Longer than the 20 between two shots, so a target kept under fire
+ * stays slowed — which is the item. What made it the strongest thing in the
+ * pool was not the length but that the slow was `freeze`, a near-stop: a
+ * target hit once never reached the player again. It is `slow` now (#54),
+ * half speed, so what you are shooting still arrives, later.
+ */
+const SLOW_TICKS = 45;
 
 /**
  * Colaweizen — wheat beer cut with cola. Impure and everyone knows it. Shots
  * stick in whatever they hit and slow it there.
  *
  * `sticky` (#27) already embeds the shot in its target; `onHit` layers a
- * `freeze` status on top through `ctx.sim.applyStatusEffect` for the "slows"
+ * `slow` status on top through `ctx.sim.applyStatusEffect` for the "slows"
  * half, since `sticky` alone only decides what the *shot* does, not what it
  * does to what it is stuck in. Tagged `impure` for Reinheitsgebot 1516.
  */
@@ -32,7 +39,7 @@ export const colaweizen: ItemDefinition = {
       ctx.sim.tintProjectile(ctx.projectile, 'cola');
     },
     onHit: (ctx) => {
-      ctx.sim.applyStatusEffect(ctx.target, 'freeze', SLOW_TICKS);
+      ctx.sim.applyStatusEffect(ctx.target, 'slow', SLOW_TICKS);
     },
   },
 };

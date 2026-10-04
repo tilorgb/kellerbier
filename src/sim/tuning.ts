@@ -644,6 +644,8 @@ export interface ProjectileTagTuning {
   poisonDurationTicks: number;
   /** `freezing`: velocity is multiplied by this every tick the status is active. */
   freezeSlowFactor: number;
+  /** The `slow` status (`STATUS_SLOW`): velocity is multiplied by this every tick it is active — a hindrance, where `freezeSlowFactor` is a near-stop. */
+  slowSpeedFactor: number;
   /** `freezing`: ticks the status lasts. */
   freezeDurationTicks: number;
 }
@@ -1307,11 +1309,17 @@ export const DEFAULT_PROJECTILE_TAG_TUNING: Readonly<ProjectileTagTuning> = {
   returningTurnTicks: 18,
   burnTickInterval: 15,
   burnDamagePerTick: 1,
-  burnDurationTicks: 90,
+  // Three applications, not six. Six was sized for nothing in particular and
+  // was a kill on its own against every ordinary enemy on both floors
+  // (2-5 health), which made any burning shot — Steckerlfisch, Sauwetter — a
+  // one-hit weapon. Three still doubles a shot's worth against most of them.
+  burnDurationTicks: 45,
   poisonTickInterval: 20,
   poisonDamagePerTick: 1,
-  poisonDurationTicks: 120,
+  // Three applications, for the same reason as burn's.
+  poisonDurationTicks: 60,
   freezeSlowFactor: 0.15,
+  slowSpeedFactor: 0.5,
   freezeDurationTicks: 45,
 };
 
