@@ -17,7 +17,7 @@ recordings). What is left is practical:
 
 - upload a build and run the embed checklist (`tools/release/ITCH.md`)
 - redeploy the telemetry Worker (`tools/telemetry/README.md`)
-- a cover image, and screenshots past the second room (below)
+- screenshots past the second room (below)
 
 ## Page fields
 
@@ -109,9 +109,11 @@ Leave **Mobile friendly** off until the touch controls have been tried on a real
 
 itch.io wants a cover image at **630 × 500** and three to five screenshots.
 
-- **Cover:** the title postcard (`assets/art/title/postcard.png`) is portrait, 832 × 1216, so it
-  needs a landscape composition made for this — the name over a crop of the postcard is the
-  obvious one. That is new art and needs sign-off before it is used.
+- **Cover:** [`docs/itch/cover.png`](itch/cover.png), 630 × 500 — the title postcard's picture
+  filling the frame, with the game's name across the bottom. Chosen 2026-10-04 from three
+  compositions (the title screen's own layout, this one, and the whole postcard centred), because
+  it is the one where the figure stays readable at thumbnail size. It is built only from art that
+  was already signed off: the postcard picture and the title lettering.
 - **Screenshots:** three are in [`docs/itch/`](itch/), captured at 1280 × 720 (exactly 2×, so
   the pixels stay square) from the tester build of commit `14c9d0b`: the title screen, the start
   room, and a cellar room mid-fight. They were taken by a script holding keys down, which gets
