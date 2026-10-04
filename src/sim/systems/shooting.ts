@@ -59,6 +59,10 @@ export function stepShooting(sim: GameSim, input: Readonly<InputFrame>): void {
     sim.fireCooldown -= 1;
   }
 
+  if (wantsToFire) {
+    sim.fireHeldTick = sim.tick;
+  }
+
   if (wantsToFire && sim.fireCooldown === 0) {
     fire(sim, aimX, aimY);
     // Fire Rate (#25): resolved through the stat pipeline, which is
@@ -138,6 +142,11 @@ function fire(sim: GameSim, aimX: number, aimY: number): void {
 
   // Items react to the shot before it exists (#26) — the same moment the
   // stat pipeline already resolves damage from, one line below.
+  //
+  // `squeezeInProgress` brackets everything this trigger pull spawns (#396).
+  // Not in a `finally`: a hook that throws takes the run down regardless, and
+  // `GameSim`'s constructor starts the next one with the flag clear.
+  sim.squeezeInProgress = true;
   dispatchItemShoot(sim, directionX, directionY);
 
   // Damage (#25): resolved through the stat pipeline — Promille's tier
@@ -169,9 +178,11 @@ function fire(sim: GameSim, aimX: number, aimY: number): void {
     tuning.forcedTags,
   );
   if (slot === NO_SLOT) {
+    sim.squeezeInProgress = false;
     return;
   }
   dispatchItemProjectileSpawn(sim, slot);
+  sim.squeezeInProgress = false;
   // After the hook, not before: an item can still add a tag to this shot from
   // `onProjectileSpawn`, and the counters `finalizeProjectileTags` derives
   // (pierce/bounce budgets, split depth) have to be derived from the mask the

@@ -311,4 +311,7 @@ export const SYNTH_IMPACT_AUDIO: ImpactAudio = {
   onEnemySplit: () => {
     playSfx('enemy-split');
   },
+  onItemCue: (cue) => {
+    playSfx(`item-${cue}`);
+  },
 };

@@ -21,7 +21,7 @@ import {
   type PlayerHeading,
 } from './animation/state.js';
 import type { Texture } from './gfx/index.js';
-import { BLUTWURZ_SPIRIT_TINT, STATUS_POISON_TINT } from './palette.js';
+import { BLUTWURZ_SPIRIT_TINT, SNEEZE_GLOW_TINT, STATUS_POISON_TINT } from './palette.js';
 import { SCHLAUCH_OCTANTS, type PlayerArt, type PlayerBodyKey } from './player-art.js';
 import { ACTOR_PIXELS_PER_UNIT } from './resolution.js';
 import { Billboard } from './world/billboard.js';
@@ -67,6 +67,25 @@ const DRUNK_KEYS: Readonly<Record<PlayerFacingIndex, PlayerBodyKey>> = {
   [PlayerFacing.North]: 'drunk-north',
   [PlayerFacing.Side]: 'drunk-side',
 };
+/**
+ * The sneeze blink (#396): how fast it pulses when a build-up has just begun
+ * and when it is about to go, in radians per millisecond, and how bright the
+ * pulse's trough and peak are. Through the inhale it stops pulsing and holds
+ * the peak — the held breath is the one moment that should not flicker.
+ */
+const SNEEZE_PULSE_SLOW = 0.012;
+const SNEEZE_PULSE_FAST = 0.05;
+const SNEEZE_GLOW_MIN = 0.03;
+const SNEEZE_GLOW_MAX = 0.22;
+/**
+ * Where a strip keeps the lids-shut twin of a frame (#396,
+ * `tools/art/authoring/alois.mjs`): the sober strip's idle and two walk
+ * contacts at 8-10 (its own blink frame, 1, is already shut), the drunk
+ * strip's four poses again at 4-7. A frame with no twin — a flinch, a death —
+ * maps to itself.
+ */
+const SOBER_SNEEZE_FRAMES: readonly number[] = [8, 1, 9, 10];
+const DRUNK_SNEEZE_OFFSET = 4;
 /** How far in front of (or behind) the body the nozzle sits along the view direction, in room units. */
 const SCHLAUCH_DEPTH = 0.8;
 
@@ -85,6 +104,7 @@ export class PlayerView {
   private elapsedMs = 0;
   private lastNowMs: number | null = null;
   private lean = 0;
+  private sneezePhase = 0;
   private x = 0;
   private y = 0;
 
@@ -162,6 +182,11 @@ export class PlayerView {
     this.advance(strip.clips, state, deltaMs);
     const clip = strip.clips.clips[this.playing] ?? strip.clips.idle;
     this.frame = clipFrameAt(clip, this.elapsedMs);
+    if (sim.sneezeBuildUp > 0) {
+      this.frame = this.drunk
+        ? this.frame + DRUNK_SNEEZE_OFFSET
+        : (SOBER_SNEEZE_FRAMES[this.frame] ?? this.frame);
+    }
     const frame = strip.frames[this.frame];
     if (frame !== undefined) {
       this.body.setTexture(frame, this.mirror);
@@ -177,7 +202,15 @@ export class PlayerView {
     this.body.tint = spiritTint;
     this.schlauch.tint = spiritTint;
     const flashing = sim.playerHurtTick >= 0 && sim.tick - sim.playerHurtTick < 3;
-    this.body.flash = flashing;
+    const buildUp = sim.sneezeBuildUp;
+    if (flashing || buildUp <= 0) {
+      this.sneezePhase = 0;
+      this.body.flash = flashing;
+    } else {
+      this.sneezePhase += deltaMs * lerp(SNEEZE_PULSE_SLOW, SNEEZE_PULSE_FAST, buildUp);
+      const pulse = buildUp >= 1 ? 1 : Math.sin(this.sneezePhase) * 0.5 + 0.5;
+      this.body.setGlow(SNEEZE_GLOW_TINT, lerp(SNEEZE_GLOW_MIN, SNEEZE_GLOW_MAX, pulse * buildUp));
+    }
 
     this.syncSchlauch(sim);
   }

@@ -55,6 +55,12 @@ export const EventKind = {
    * world, and that loop caches its component arrays.
    */
   EnemyDropProp: 10,
+  /**
+   * A held item asked for a sound of its own (#396). value: the cue's index
+   * in `ITEM_CUE_NAMES` (`sim/events/item-cues.ts`). Pushed through
+   * `GameSim.playItemCue`, since content may not import this table.
+   */
+  ItemCue: 11,
 } as const;
 
 export type EventKindId = (typeof EventKind)[keyof typeof EventKind];

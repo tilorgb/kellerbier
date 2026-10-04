@@ -355,6 +355,7 @@ Roughly 30 to start; target **120+ by v1**. Every one changes how you play.
 | **Colaweizen** | Shots gain `sticky` and slow enemies. You take a permanent damage penalty. Impure and everyone knows it. |
 | **Radi** | Spiral-cut radish: shots travel in a helix. Awful at close range, superb at long. |
 | **Enzian** | Schnapps. Ten seconds of enormous fire rate on a cooldown, then +1.0 Promille. |
+| **Schnupftabak** | Snuff. Keep firing and a sneeze builds at a random moment: the Schlauch slows, his eyes close, and he sneezes a cone of shots of every size. Let go and it is lost. Every shot of the squeeze becomes its own cone, so it multiplies with every multi-shot item. |
 
 ### Orbitals, familiars and friends
 | Item | Effect |

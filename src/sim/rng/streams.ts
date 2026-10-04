@@ -33,6 +33,15 @@ export const RngStream = {
   Character: 4,
   /** Whether a floor carries a curse (#49), and which one. */
   Curse: 5,
+  /**
+   * What a *held* item rolls while it works (#396) — today only
+   * Schnupftabak's wait before a sneeze and the sizes in its volley. Its own
+   * stream rather than `Items`: how often this is drawn depends on how long
+   * the player holds the trigger, and drawing that from the loot stream would
+   * make every shop and pedestal after the pickup depend on it too
+   * (`docs/DECISIONS.md` #114).
+   */
+  ItemEffects: 6,
 } as const;
 
 export type RngStreamId = (typeof RngStream)[keyof typeof RngStream];
@@ -67,6 +76,7 @@ export interface RunRandom {
   readonly cosmetic: Rng;
   readonly character: Rng;
   readonly curse: Rng;
+  readonly itemEffects: Rng;
 }
 
 export function createRunRandom(runSeed: number): RunRandom {
@@ -77,5 +87,6 @@ export function createRunRandom(runSeed: number): RunRandom {
     cosmetic: createStreamRng(runSeed, RngStream.Cosmetic),
     character: createStreamRng(runSeed, RngStream.Character),
     curse: createStreamRng(runSeed, RngStream.Curse),
+    itemEffects: createStreamRng(runSeed, RngStream.ItemEffects),
   };
 }

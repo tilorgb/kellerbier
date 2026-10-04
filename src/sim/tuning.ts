@@ -881,6 +881,48 @@ export interface BlutwurzTuning {
 }
 
 /**
+ * Schnupftabak (#396): the sneeze. The item's hooks live in
+ * `content/items/schnupftabak.ts`; every number they read lives here, so the
+ * whole cycle can be retuned from the debug overlay while playing.
+ */
+export interface SneezeTuning {
+  /** Shortest and longest wait before a build-up starts, in ticks *with fire held*. Rolled per cycle. */
+  waitMinTicks: number;
+  waitMaxTicks: number;
+  /** Ticks the fire delay ramps up over, once the wait is through. */
+  rampTicks: number;
+  /** Ticks of no firing at all after the ramp — a held breath. 0 for none: the sneeze replaces the next shot. */
+  inhaleTicks: number;
+  /**
+   * Fire delay multiplier on the first shot of the ramp and at its very end.
+   * 1 is no slowdown. The start is well above 1 on purpose: the build-up has
+   * to be felt on the shot it begins with, not discovered a second later.
+   */
+  minDelayScale: number;
+  maxDelayScale: number;
+  /** Ticks fire may be released during a build-up before it is lost. */
+  graceTicks: number;
+  /** Shots in one cone with a single copy held, and how many each extra copy adds. */
+  coneShots: number;
+  coneShotsPerStack: number;
+  /** Full width of the cone, in radians. */
+  coneRadians: number;
+  /** How far a volley shot's speed may sit either side of a normal shot's, as a fraction. */
+  speedJitter: number;
+  /** Chance a volley shot is small or big; the rest are normal. */
+  smallChance: number;
+  bigChance: number;
+  smallRadiusScale: number;
+  smallDamageScale: number;
+  bigRadiusScale: number;
+  bigDamageScale: number;
+  /** Applied to every volley shot's damage on top of its size tier — the one knob for "is the item worth it". */
+  volleyDamageScale: number;
+  /** The sneeze's kickback, as a multiple of an ordinary shot's. */
+  kickbackScale: number;
+}
+
+/**
  * A mini-boss's own reward roll (#278): a pedestal item chance that pays
  * less than a real boss's (and less again for an XL floor's second
  * mini-boss, whose Meisterschlüssel is already redundant) plus a guaranteed
@@ -1009,6 +1051,7 @@ export interface SimTuning {
   readonly machine: MachineTuning;
   readonly minibossReward: MinibossRewardTuning;
   readonly chest: ChestTuning;
+  readonly sneeze: SneezeTuning;
 }
 
 export const DEFAULT_MOVEMENT_TUNING: Readonly<MovementTuning> = {
@@ -1439,6 +1482,46 @@ export const DEFAULT_CHEST_TUNING: Readonly<ChestTuning> = {
   payoutSpread: 14,
 };
 
+/**
+ * The shape agreed in #396's design round — 5-12 s of firing, a slowdown to
+ * 2.5x fire delay, a held breath, seven shots across 50 degrees — with the
+ * build-up cut down after the first playtest. It was a 3 s linear ramp from
+ * no slowdown plus half a second of inhale, and read as "the Schlauch has
+ * been getting worse for a while" rather than "here it comes": the ramp now
+ * starts at 1.6x on its first shot and the whole build-up is a second and a
+ * half: two visibly late shots, and the sneeze in place of the third. There
+ * is no held breath by default (`inhaleTicks` 0) — the user's call, with
+ * Isaac's Kidney Stone as the reference for how long a build-up may be felt,
+ * not for how it is released: this one goes off by itself.
+ *
+ * `volleyDamageScale` is the number the design round did not fix. The short
+ * build-up costs about 2.5 shots out of a ten-second cycle's 30, and the
+ * volley is 7.7 shots' worth at 1 if every shot lands; 1.3 is roughly the
+ * agreed +20% once a realistic share of a 50-degree cone misses. Expected to
+ * move in playtesting.
+ */
+export const DEFAULT_SNEEZE_TUNING: Readonly<SneezeTuning> = {
+  waitMinTicks: 300,
+  waitMaxTicks: 720,
+  rampTicks: 90,
+  inhaleTicks: 0,
+  minDelayScale: 1.6,
+  maxDelayScale: 2.5,
+  graceTicks: 18,
+  coneShots: 7,
+  coneShotsPerStack: 3,
+  coneRadians: 0.87,
+  speedJitter: 0.15,
+  smallChance: 0.4,
+  bigChance: 0.2,
+  smallRadiusScale: 0.6,
+  smallDamageScale: 0.5,
+  bigRadiusScale: 1.8,
+  bigDamageScale: 2.5,
+  volleyDamageScale: 1.3,
+  kickbackScale: 4,
+};
+
 export const DEFAULT_MACHINE_TUNING: Readonly<MachineTuning> = {
   spawnChance: 0.85,
   baseCost: 1,
@@ -1476,6 +1559,7 @@ export function createTuning(): SimTuning {
     machine: { ...DEFAULT_MACHINE_TUNING },
     minibossReward: { ...DEFAULT_MINIBOSS_REWARD_TUNING },
     chest: { ...DEFAULT_CHEST_TUNING },
+    sneeze: { ...DEFAULT_SNEEZE_TUNING },
   };
 }
 

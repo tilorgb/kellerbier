@@ -135,6 +135,14 @@ export class Billboard {
     this.mesh.material.emissive.setScalar(on ? 1 : 0);
   }
 
+  /**
+   * A coloured glow at partial strength, on the same emissive channel `flash`
+   * drives at full white — so set one or the other in a frame, not both.
+   */
+  setGlow(colour: number, strength: number): void {
+    this.mesh.material.emissive.setHex(colour).multiplyScalar(strength);
+  }
+
   /** Fades the body; anything under 1 turns alpha blending on for this mesh. */
   set alpha(value: number) {
     const material = this.mesh.material;

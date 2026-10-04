@@ -1,6 +1,6 @@
 # Kellerbier Item Roster
 
-Full list of all 62 items currently authored in `src/content/items/`. Generated from the
+Full list of all 63 items currently authored in `src/content/items/`. Generated from the
 item definitions themselves (`src/sim/item/definition.ts`), so it reflects exactly what is
 live in the game, not a design doc that can drift from the code.
 
@@ -90,6 +90,7 @@ Columns:
 | rumtopf | Rumtopf | Passive | Damage +80% — but only in Vollrausch or deeper | Lid on since June. Nobody has looked. | 3 | Devil, Secret | Rausch |
 | sauwetter | Sauwetter | Passive | Shots carry a different status effect every shot: burning, freezing, poison | Four seasons in one afternoon. Occasionally in one minute. | 2 | Shop, Boss, Secret, Curse | Any |
 | schluesselbund | Schlüsselbund | Passive | Shows the floor's secret rooms on the map. Clearing a room grants a key | Fits every lock in the Keller. Explaining why is above your pay grade. | 1 | Treasure, Shop, Secret | Any |
+| schnupftabak | Schnupftabak | Passive | Keep firing and a sneeze builds: shots slow, then burst out as a cone of all sizes | Hatschi! | 1 | Treasure, Shop | Any |
 | schuhplattler | Schuhplattler | Passive | Stand still for a moment to release a damaging shockwave | The physics of it are unclear. The enthusiasm is not. | 2 | Shop, Boss | Any |
 | semmelknoedel | Semmelknödel | Passive | Shots hit for 2x and travel heavily. Shot Speed -40% | Heavy enough to be an argument. | 2 | Treasure, Shop, Boss | Any |
 | sixpack | Sixpack | Active (charge 1) | Active: Maß you pick up go in the carrier — press to drink one | Six bottles is not hoarding. Six bottles is planning. | 2 | Treasure, Shop, Boss, Secret | Any |
