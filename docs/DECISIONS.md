@@ -6266,7 +6266,7 @@ that no longer describes what happens.
 **Constrains:** nothing may send on its own for a store without `autoSend`. The Settings privacy
 text names the one exception, so it stays true in both cases.
 
-## 113. A held item may roll: `itemEffects` is its stream, and Schnupftabak is the first to draw
+## 114. A held item may roll: `itemEffects` is its stream, and Schnupftabak is the first to draw
 
 **Decided:** M8, #396. Three items were pitched as "random" before this and all three shipped a
 fixed cycle (Sauwetter, Lebkuchenherz, Wolpertinger im Rucksack), because no stream in

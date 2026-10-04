@@ -45,7 +45,7 @@ function rollWait(sim: Sim): number {
  * out from did.
  *
  * The wait and the sizes are real rolls, from `sim.random.itemEffects`
- * (`docs/DECISIONS.md` #113) — the first item effect that is. Sauwetter and
+ * (`docs/DECISIONS.md` #114) — the first item effect that is. Sauwetter and
  * Lebkuchenherz got away with a fixed cycle because theirs was a choice
  * among options; a sneeze that arrives on schedule is a charge attack.
  *

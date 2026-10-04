@@ -39,7 +39,7 @@ export const RngStream = {
    * stream rather than `Items`: how often this is drawn depends on how long
    * the player holds the trigger, and drawing that from the loot stream would
    * make every shop and pedestal after the pickup depend on it too
-   * (`docs/DECISIONS.md` #113).
+   * (`docs/DECISIONS.md` #114).
    */
   ItemEffects: 6,
 } as const;
