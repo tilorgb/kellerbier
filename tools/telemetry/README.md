@@ -51,6 +51,9 @@ The endpoint is public and takes a POST from anyone, so the Worker trusts nothin
   keeps the run for another day. That number is sized for the KV **free tier** — 1,000 writes a
   day, and a run sent on its own costs two (the record and the day's counter). Raise it if the
   Worker moves to a paid plan.
+- KV takes one write a second to the same key, and the day's counter is one key. When two runs
+  end in the same second the second counter write is refused; the Worker lets that go and stores
+  the run. The counter undercounts a little under bursts, which is the cheaper way to be wrong.
 - `/export` returns `EXPORT_PAGE_SIZE` (400) keys per request with a `cursor` for the next page;
   `npm run telemetry:report` and the report workflow follow it. One invocation may only read a
   bounded number of keys, which is what an unpaged export would run into as the store grows.
@@ -58,8 +61,11 @@ The endpoint is public and takes a POST from anyone, so the Worker trusts nothin
 There is no per-client limit on purpose: telling clients apart means looking at who they are, and
 the Worker stores and inspects nothing about the sender.
 
-**These Cloudflare limits were written from memory of its documentation — check them against the
-account's current plan before relying on the numbers.**
+The Cloudflare numbers above were checked against its
+[Workers KV limits page](https://developers.cloudflare.com/kv/platform/limits/) on 2026-10-04,
+free plan: 1,000 writes a day to different keys, 100,000 reads a day, 1,000 KV operations per
+Worker invocation, one write a second to the same key. An export page costs one list and up to
+400 reads, inside the per-invocation limit.
 
 ## Updating the Worker
 
