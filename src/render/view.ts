@@ -428,6 +428,7 @@ export class GameView {
     this.particles.setLean(lean);
     this.pedestals.setLean(lean);
     this.scenery.setLean(lean);
+    this.lighting.setLean(lean);
   }
 
   get animator(): EntityAnimator {

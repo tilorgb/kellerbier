@@ -10,12 +10,13 @@ import {
   PointLight,
   RGBADepthPacking,
   type Scene,
-  SphereGeometry,
-  CylinderGeometry,
   CanvasTexture,
 } from 'three';
 import { TICKS_PER_SECOND } from '../../sim/time.js';
+import { ACTOR_PIXELS_PER_UNIT } from '../resolution.js';
+import { ELEVATION } from './camera.js';
 import { OCCLUDER_LAYER } from './layers.js';
+import { pixelDisc, pixelShapeGeometry } from './pixel-shape.js';
 
 /**
  * Light. The reason the room is 3D.
@@ -119,6 +120,11 @@ export const MAX_ROOM_BULBS = 3;
 export const MAX_PROP_LIGHTS = 3;
 
 const BULB_HEIGHT = 34;
+/** The glass's radius and the cord's length, in room units. */
+const BULB_RADIUS = 2;
+const BULB_CORD_LENGTH = 40;
+/** One cell of the bulb's baked outline: the same grid a sprite's texels sit on. */
+const BULB_CELL = 1 / ACTOR_PIXELS_PER_UNIT;
 const CLOUD_HEIGHT = 90;
 /** How long one cloud takes to cross the room, west edge to east edge. */
 export const CLOUD_CROSS_TICKS = TICKS_PER_SECOND * 18;
@@ -206,6 +212,8 @@ export class Lighting {
   /** Fixed pool of bulb rigs — see `MAX_ROOM_BULBS`. Reassigned wholesale by `onRoomChanged`, not acquired/released. */
   private readonly bulbRigs: BulbRig[] = [];
   private warnedBulbOverflow = false;
+  /** How far the bulb glass leans back to face the camera — see `setLean`. */
+  private lean = -ELEVATION;
   /** One persistent mesh per `CLOUD_CYCLES` entry, re-shaped and re-laned per crossing rather than rebuilt — see `sync`. */
   private readonly clouds: readonly Mesh[];
   private frameWidth = 0;
@@ -336,6 +344,14 @@ export class Lighting {
     }
   }
 
+  /** The bulb glass turns to a new camera angle, the way a billboard does. */
+  setLean(lean: number): void {
+    this.lean = lean;
+    for (const rig of this.bulbRigs) {
+      rig.glass.rotation.x = lean;
+    }
+  }
+
   /** Lights exactly `placed.length` bulb rigs (clamped to the pool) and dims the rest. */
   private setBulbs(placed: readonly { readonly x: number; readonly y: number }[]): void {
     const count = Math.min(placed.length, MAX_ROOM_BULBS);
@@ -352,7 +368,7 @@ export class Lighting {
       rig.light.intensity = 9000;
       rig.glass.position.copy(rig.light.position);
       rig.glass.visible = true;
-      rig.cord.position.set(bulb.x, BULB_HEIGHT + 22, bulb.y);
+      rig.cord.position.set(bulb.x, BULB_HEIGHT + BULB_RADIUS + BULB_CORD_LENGTH / 2, bulb.y);
       rig.cord.visible = true;
     }
     for (let i = count; i < MAX_ROOM_BULBS; i++) {
@@ -370,15 +386,21 @@ export class Lighting {
     const light = new PointLight(0xffb870, 0, 300, 2);
     light.layers.enableAll();
     this.scene.add(light);
+    // Baked onto the sprite grid rather than left as a sphere and a cylinder:
+    // at display resolution those have a clean edge no pixel art in the room
+    // has (`world/pixel-shape.ts`). The glass is a pixel disc that faces the
+    // camera the way a billboard does; the cord is one cell wide.
+    const cells = Math.round(BULB_RADIUS * 2 * ACTOR_PIXELS_PER_UNIT);
     const glass = new Mesh(
-      new SphereGeometry(2, 10, 8),
-      new MeshBasicMaterial({ color: 0xfff1c8 }),
+      pixelShapeGeometry(cells, cells, pixelDisc(cells), BULB_CELL, BULB_CELL),
+      new MeshBasicMaterial({ color: 0xfff1c8, side: DoubleSide }),
     );
+    glass.rotation.x = this.lean;
     glass.visible = false;
     this.scene.add(glass);
     const cord = new Mesh(
-      new CylinderGeometry(0.4, 0.4, 40, 4),
-      new MeshBasicMaterial({ color: 0x141018 }),
+      new PlaneGeometry(BULB_CELL, BULB_CORD_LENGTH),
+      new MeshBasicMaterial({ color: 0x141018, side: DoubleSide }),
     );
     cord.visible = false;
     this.scene.add(cord);
