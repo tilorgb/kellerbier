@@ -6,6 +6,24 @@ const STRIP_SUFFIX = '.strip.png';
 const ANIM_SUFFIX = '.anim.json';
 
 /**
+ * `name@2x` — a sprite authored at a multiple of the base grid's resolution.
+ * It stands exactly as big in the room as the plain `name` would (the
+ * renderer divides by `density`, `render/gfx/texture.ts`'s `Texture.density`),
+ * so a redraw at higher resolution adds detail without changing size. The
+ * suffix is stripped from `name`, so every lookup by name is unaffected.
+ */
+const DENSITY_PATTERN = /^(.+)@([2-4])x$/;
+
+/** Splits `name@2x` into `{ name, density: 2 }`; a plain name is density 1. */
+export function parseDensity(fileName) {
+  const match = DENSITY_PATTERN.exec(fileName);
+  if (match === null) {
+    return { name: fileName, density: 1 };
+  }
+  return { name: match[1], density: Number(match[2]) };
+}
+
+/**
  * Walks `assets/sprites/<bucket>/<category>/` for every known bucket and
  * category, and returns every sprite found there.
  *
@@ -42,6 +60,21 @@ export async function scanSprites(rootDir) {
           plainNames.add(entry.name.slice(0, -'.png'.length));
         }
       }
+      // One sprite, one resolution: `alois.png` next to `alois@2x.png` would
+      // pack under the same key, the same ambiguity the plain-vs-strip check
+      // below refuses.
+      const seen = new Map();
+      for (const fileName of [...plainNames, ...stripNames]) {
+        const { name } = parseDensity(fileName);
+        const other = seen.get(name);
+        if (other !== undefined && other !== fileName) {
+          throw new Error(
+            `${path.join(dir, fileName)}: "${name}" is authored at two resolutions ` +
+              `(${other} and ${fileName}). Delete whichever one is stale.`,
+          );
+        }
+        seen.set(name, fileName);
+      }
       for (const name of stripNames) {
         if (plainNames.has(name)) {
           // Ambiguous, and silently resolvable in two different directions:
@@ -58,12 +91,14 @@ export async function scanSprites(rootDir) {
           );
         }
       }
-      for (const name of plainNames) {
+      for (const fileName of plainNames) {
+        const { name, density } = parseDensity(fileName);
         sprites.push({
           bucketId,
           category,
           name,
-          filePath: path.join(dir, `${name}.png`),
+          density,
+          filePath: path.join(dir, `${fileName}.png`),
           animation: null,
         });
       }
@@ -84,10 +119,12 @@ export async function scanSprites(rootDir) {
           const reason = error instanceof Error ? error.message : String(error);
           throw new Error(`${animPath}: not valid JSON (${reason})`);
         }
+        const parsed = parseDensity(name);
         sprites.push({
           bucketId,
           category,
-          name,
+          name: parsed.name,
+          density: parsed.density,
           filePath: path.join(dir, `${name}${STRIP_SUFFIX}`),
           animation,
         });

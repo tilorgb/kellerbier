@@ -49,7 +49,13 @@ export async function buildAtlases({ rootDir, outDir, write = true }) {
     const { width, height, pixels } = decodePng(buffer);
     const frameCount = sprite.animation?.frames ?? 1;
 
-    const sizeError = validateSpriteSize(sprite.category, width, height, frameCount);
+    const sizeError = validateSpriteSize(
+      sprite.category,
+      width,
+      height,
+      frameCount,
+      sprite.density ?? 1,
+    );
     if (sizeError !== null) {
       problems.push(`${sprite.filePath}: ${sizeError}`);
     }
@@ -130,6 +136,7 @@ export async function buildAtlases({ rootDir, outDir, write = true }) {
         height,
         pixels,
         animation: sprite.animation,
+        density: sprite.density ?? 1,
       }));
     const atlas = packSprites(bucketSprites);
     if (atlas === null) {
@@ -139,10 +146,16 @@ export async function buildAtlases({ rootDir, outDir, write = true }) {
     const frames = {};
     for (const [key, rect] of Object.entries(atlas.frames)) {
       const match = bucketSprites.find((entry) => entry.key === key);
-      frames[key] =
+      const withAnimation =
         match?.animation !== null && match?.animation !== undefined
           ? { ...rect, animation: match.animation }
           : rect;
+      // Only written when it is not 1, so a manifest with no hi-res art in it
+      // is byte-for-byte what it was before densities existed.
+      frames[key] =
+        match !== undefined && match.density !== 1
+          ? { ...withAnimation, density: match.density }
+          : withAnimation;
     }
 
     if (write) {

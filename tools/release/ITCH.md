@@ -27,21 +27,35 @@ On the project's edit page:
   scales by whole factors, so this is exactly 2×
 - **Fullscreen button:** on
 - **Mobile friendly:** leave off until the touch controls have been tried on a real phone (#367)
-- **Visibility:** *Draft* for the checklist below, then *Restricted* or unlisted for the alpha
+- **Visibility:** *Draft* for the checklist below, then *Public* with **Unlisted in search &
+  browse** ticked for the alpha. Anyone with the link can play; itch.io does not surface the page,
+  which keeps its first-release exposure for the real launch. Not *Restricted* — that needs a
+  password or key from every visitor
 
 ## Check it in the embed
 
 An itch.io page runs the game in an iframe on another origin, which a GitHub Pages link does not.
-None of this has been checked yet — do it once on the draft page and tick it off in #365:
+Run this once on a draft page whenever the way the build is embedded changes:
 
-- [ ] The loading bar finishes and the title screen appears
-- [ ] Keys work after the first click, and arrow keys / Space do not scroll the page behind
-- [ ] The playtest welcome screen appears, and typing in the question box does not move Alois
-- [ ] A finished run arrives: it shows up in `npm run telemetry:report` with this build's commit
-- [ ] Reloading the page keeps the save (settings, progress, the welcome not asked again)
-- [ ] Settings → fullscreen works, and so does itch.io's own fullscreen button
-- [ ] `C` copies the run details (the embed may block the clipboard — note it if so)
-- [ ] A gamepad is picked up
-- [ ] Music and sound start after the first click
+- The loading bar finishes and the title screen appears
+- Keys work after the first click, and arrow keys / Space do not scroll the page behind
+- The playtest welcome screen appears, and typing in the question box does not move Alois
+- A finished run arrives: it shows up in `npm run telemetry:report` with this build's commit
+- Reloading the page keeps the save (settings, progress, the welcome not asked again)
+- Settings → fullscreen works, and so does itch.io's own fullscreen button
+- `C` copies the run details (the embed may block the clipboard — note it if so)
+- A gamepad is picked up
+- Music and sound start after the first click
 
 Anything that fails is either fixed or filed as its own issue.
+
+**First pass: 2026-10-04, build `abacc2d`, on the draft page.** The maintainer went through the
+list and reported that everything worked, with nothing to fix. One item is confirmed from the data
+rather than by eye: the run played on the page arrived in the telemetry store stamped `abacc2d`.
+
+Two things the embed changes that are worth knowing, neither of them a fault:
+
+- **The itch.io page has its own save.** It is a different origin from the GitHub Pages link, so
+  progress, settings and the playtest welcome do not carry over between the two.
+- **So it also has its own telemetry session.** Someone who has played on both shows up as two
+  sessions; `tools/telemetry/known-sessions.txt` takes one line per session to label them alike.

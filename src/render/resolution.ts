@@ -61,6 +61,34 @@ export const WORLD_ZOOM = 2;
  */
 export const ACTOR_PIXELS_PER_UNIT = WORLD_ZOOM;
 
+/**
+ * Whether the 3D world is drawn at the display's own resolution rather than
+ * at the 640x360 internal frame.
+ *
+ * Every size and position is still measured in internal pixels — the camera,
+ * the HUD layout, the room — so nothing moves or grows either way. What this
+ * buys is resolution: a sprite authored at `@2x` (`tools/art/scan.mjs`) only
+ * shows its extra detail if there are screen pixels to put it on. 1x art
+ * looks the same as before, every texel still a whole block of screen pixels
+ * (`NearestFilter`); what changes is the grain of lighting, shadows and the
+ * room's edges, which get finer instead of 640x360-chunky.
+ *
+ * `false` restores the original fixed 640x360 render exactly.
+ */
+export const RENDER_AT_DISPLAY_RESOLUTION = true;
+
+/**
+ * How many device pixels the world is rendered with per internal pixel, for
+ * a layout whose whole-number device scale is `deviceScale`. Always a whole
+ * number, so the canvas still lands on the screen at an integer upscale.
+ */
+export function renderScaleFor(
+  deviceScale: number,
+  atDisplayResolution: boolean = RENDER_AT_DISPLAY_RESOLUTION,
+): number {
+  return atDisplayResolution ? Math.max(1, Math.round(deviceScale)) : 1;
+}
+
 /** What `ACTOR_PIXELS_PER_UNIT` means as a Pixi scale. Whole-pixel by construction. */
 export const ACTOR_SPRITE_SCALE = 1 / ACTOR_PIXELS_PER_UNIT;
 
@@ -142,6 +170,8 @@ export function computeViewport(
 export interface GameLayout {
   /** Scale to apply to the game container, in CSS pixels. */
   readonly scale: number;
+  /** The same scale in device pixels — always a whole number. */
+  readonly deviceScale: number;
   /** Top-left of the game inside the canvas, in CSS pixels. */
   readonly originX: number;
   readonly originY: number;
@@ -164,6 +194,7 @@ export function computeGameLayout(
   );
   return {
     scale: viewport.scale / ratio,
+    deviceScale: viewport.scale,
     originX: Math.round(viewport.letterboxX / 2) / ratio,
     originY: Math.round(viewport.letterboxY / 2) / ratio,
   };

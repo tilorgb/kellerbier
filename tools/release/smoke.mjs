@@ -114,9 +114,15 @@ check(
   'canvas',
   await page.evaluate(() => {
     const canvas = document.querySelector('#game canvas');
-    return canvas === null ? null : `${String(canvas.width)}x${String(canvas.height)}`;
+    // A whole-number multiple of the 640x360 internal frame: the world renders
+    // at the display's own resolution (`RENDER_AT_DISPLAY_RESOLUTION`).
+    if (canvas === null) return null;
+    const scale = canvas.width / 640;
+    return Number.isInteger(scale) && canvas.height === 360 * scale
+      ? '640x360 * n'
+      : `${String(canvas.width)}x${String(canvas.height)}`;
   }),
-  '640x360',
+  '640x360 * n',
 );
 check('debug handle', await page.evaluate(() => '__kellerbier' in window), false);
 check(

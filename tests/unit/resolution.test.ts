@@ -7,6 +7,7 @@ import {
   TILE_SPRITE_SCALE,
   WORLD_ZOOM,
   computeGameLayout,
+  renderScaleFor,
   computeViewport,
 } from '../../src/render/resolution.js';
 import { ROOM_TILE_UNITS } from '../../src/content/rooms/definition.js';
@@ -128,5 +129,20 @@ describe('the pixel grids', () => {
     expect(Number.isInteger(ACTOR_SPRITE_SCALE * WORLD_ZOOM)).toBe(true);
     expect(Number.isInteger(TILE_SPRITE_SCALE * WORLD_ZOOM)).toBe(true);
     expect(ACTOR_PIXELS_PER_UNIT).toBe(WORLD_ZOOM);
+  });
+});
+
+describe('display-resolution rendering', () => {
+  it('reports the whole-number device scale alongside the CSS one', () => {
+    // 1920x1080 at a 1.5 device pixel ratio: 2880x1620 device pixels, 4x.
+    const layout = computeGameLayout(1920, 1080, 1.5);
+    expect(layout.deviceScale).toBe(4);
+    expect(layout.scale).toBeCloseTo(4 / 1.5, 10);
+  });
+
+  it('renders at the device scale, or at the fixed internal frame when switched off', () => {
+    expect(renderScaleFor(3, true)).toBe(3);
+    expect(renderScaleFor(3, false)).toBe(1);
+    expect(renderScaleFor(0, true)).toBe(1);
   });
 });

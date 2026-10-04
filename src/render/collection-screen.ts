@@ -321,8 +321,8 @@ export class CollectionScreen implements MenuScreen {
   private drawArt(sprite: Sprite, entry: CollectionEntry, scale: number): void {
     const texture = entry.art ?? this.starTexture;
     sprite.texture = texture;
-    sprite.width = texture.width * scale;
-    sprite.height = texture.height * scale;
+    sprite.width = texture.displayWidth * scale;
+    sprite.height = texture.displayHeight * scale;
   }
 
   private scrollIntoView(): void {

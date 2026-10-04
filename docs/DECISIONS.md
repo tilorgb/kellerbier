@@ -6223,7 +6223,29 @@ as-is.
   at 24×18 rather than 16×12 — at 16×12 a chest read smaller than a Maß. Authored as block art in
   `tools/art/authoring/chests.mjs`, held byte-identical by `tests/art/chests-authoring.test.ts`.
 
-## 112. A playtester's runs are sent when they end — agreed on the welcome screen, not assumed
+## 112. Sprites may be authored at a higher resolution — and the world renders at the display's
+
+#45 made a sprite's canvas its size on screen, which answered "how big is this creature" with one
+number but left no way to give a creature more detail without also making it bigger: the 3D world
+rendered into a fixed 640×360 frame and CSS blew that up, so a monitor's extra pixels were copies.
+The user wanted more detail on the characters at today's sizes, with today's art still working.
+
+- **A sprite carries a density.** `name@2x.png` (or `@3x`/`@4x`, strips included) is read by
+  `tools/art/scan.mjs` as `name` at density 2; the atlas manifest records it, `Texture.density`
+  carries it, and everything that sizes a sprite in the room (`Billboard.place`, `tileGridScale`,
+  the hose anchor, the collection screen) reads `displayWidth`/`displayHeight` — texels divided by
+  density. So a `@2x` redraw stands exactly where and as big as the 1x art it replaces. #45 still
+  holds on the base grid: the size spec and `sprite-scale.test.ts` measure there.
+- **The world renders at the display's resolution** (`RENDER_AT_DISPLAY_RESOLUTION`,
+  `render/resolution.ts`). The drawing buffer is the internal frame times the whole-number device
+  scale, so it still lands on screen at an integer upscale; the camera, the HUD layout and every
+  coordinate stay in internal pixels. 1x art looks as it did — nearest-filtered, every texel a whole
+  block — but lighting, shadows and room edges lose the 640×360 grain the old fixed buffer gave
+  them. Setting the flag to `false` restores the fixed 640×360 render exactly.
+- Not done: the pixel editor (`tools/pixel-editor/server.mjs`) still only saves 1x names, and the
+  UI kit (`src/render/ui/`) stays on its own 1x grid.
+
+## 113. A playtester's runs are sent when they end — agreed on the welcome screen, not assumed
 
 **Decided:** M8, #360; amends #109 and #110. #110 made answering the post-run question the moment
 a run was sent, and "Skip sends nothing". That was fine with an observer in the room and is wrong

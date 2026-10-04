@@ -14,6 +14,7 @@ import { clamp, vectorLength } from '../math.js';
 import { addPush } from './movement.js';
 import { NO_SLOT } from '../pool/slot-pool.js';
 import { ProjectileTeam } from '../projectile/store.js';
+import { nextWaypoint, straightClear, type Waypoint } from '../room/pathfind.js';
 
 /**
  * What enemies do.
@@ -79,9 +80,37 @@ const MAX_STATE_TICKS = 32000;
 export const ENEMY_STRIDE = 4;
 /**
  * Fields of the `enemyMotion` component: heading x and y, then the spawn
- * point, then the locked aim target (`ENEMY_FLAG_AIM_LOCKED`).
+ * point, then the locked aim target (`ENEMY_FLAG_AIM_LOCKED`), then where the
+ * player was last seen, whether that memory is live (`MEMORY_SEEKING`), the
+ * waypoint the pathfinder last chose on the way there, and how many ticks the
+ * player has been out of sight.
  */
-export const ENEMY_MOTION_STRIDE = 6;
+export const ENEMY_MOTION_STRIDE = 12;
+/** `enemyMotion` offsets of the last-seen memory (see `walkTowardPlayer`). */
+const MOTION_LAST_SEEN_X = 6;
+const MOTION_LAST_SEEN_Y = 7;
+const MOTION_MEMORY = 8;
+const MOTION_WAYPOINT_X = 9;
+const MOTION_WAYPOINT_Y = 10;
+const MOTION_UNSEEN_TICKS = 11;
+/**
+ * Ticks after losing sight during which the remembered spot still follows
+ * the player. Without it, the spot is wherever the player was on the last
+ * visible tick — the corner they just ducked behind — and a player who keeps
+ * moving is long gone from there by the time the body arrives, so it gives
+ * up. Three quarters of a second is "it saw which way you went", not
+ * omniscience.
+ */
+const MEMORY_GRACE_TICKS = 45;
+/** `MOTION_MEMORY`: nothing remembered, or heading for where the player was last seen. */
+const MEMORY_NONE = 0;
+const MEMORY_SEEKING = 1;
+/** How close counts as having reached the last-seen spot (room units). */
+const MEMORY_ARRIVE_DISTANCE = 6;
+/** Ticks between path searches for a body heading to the last-seen spot. */
+const REPATH_TICKS = 12;
+/** Reused for every path search — `nextWaypoint` writes into it. */
+const waypoint: Waypoint = { x: 0, y: 0 };
 
 export function stepEnemies(sim: GameSim): void {
   const registry = sim.enemies;
@@ -138,7 +167,18 @@ export function stepEnemies(sim: GameSim): void {
     const selfX = sim.positionX(index);
     const selfY = sim.positionY(index);
 
-    const next = chooseTransition(sim, state, ticks, flags, distance, selfX, selfY);
+    const next = chooseTransition(
+      sim,
+      index,
+      state,
+      ticks,
+      flags,
+      distance,
+      toPlayerX,
+      toPlayerY,
+      selfX,
+      selfY,
+    );
     if (next >= 0) {
       const entered = compiled.states[next];
       if (entered !== undefined) {
@@ -237,13 +277,20 @@ export function stepEnemies(sim: GameSim): void {
  */
 function chooseTransition(
   sim: GameSim,
+  index: number,
   state: CompiledState,
   ticks: number,
   flags: number,
   distance: number,
+  toPlayerX: number,
+  toPlayerY: number,
   selfX: number,
   selfY: number,
 ): number {
+  // A player behind a rock or a pillar is out of sight, and out of sight
+  // reads as out of range: `PlayerWithin` cannot fire, `PlayerBeyond` does.
+  // Looked up at most once, and only by a state that asks about the player.
+  let sighted = -1;
   for (const transition of state.transitions) {
     switch (transition.trigger) {
       case TransitionTrigger.After:
@@ -263,11 +310,26 @@ function chooseTransition(
         break;
       case TransitionTrigger.PlayerWithin:
         if (distance <= transition.value) {
-          return transition.to;
+          if (sighted < 0) {
+            sighted = isSighted(sim, index, toPlayerX, toPlayerY) ? 1 : 0;
+          }
+          if (sighted === 1) {
+            return transition.to;
+          }
         }
         break;
       case TransitionTrigger.PlayerBeyond:
         if (distance > transition.value) {
+          return transition.to;
+        }
+        if (sighted < 0) {
+          sighted = isSighted(sim, index, toPlayerX, toPlayerY) ? 1 : 0;
+        }
+        // Out of sight is out of range — but not while the body is still on
+        // its way to where it last saw the player: it gives up the chase
+        // once it has looked there (`walkTowardPlayer`), not the moment the
+        // player steps behind a rock.
+        if (sighted === 0 && !isSeeking(sim, index)) {
           return transition.to;
         }
         break;
@@ -394,6 +456,96 @@ function crossesSplitThreshold(sim: GameSim, index: number, state: CompiledState
   return false;
 }
 
+/** How fast a walker that has lost sight of the player wanders, as a fraction of its walking speed. */
+const UNSIGHTED_WANDER_SPEED = 0.5;
+/** Ticks between a lost walker's changes of direction. */
+const UNSIGHTED_WANDER_TURN_TICKS = 40;
+
+/**
+ * A `walkTowardPlayer` body with no line of sight: ambles in a random
+ * direction, picking a new one every `UNSIGHTED_WANDER_TURN_TICKS`. Reuses
+ * the motion slots `wander` uses — a walking state has no other use for them.
+ */
+function wanderWithoutSight(sim: GameSim, index: number, ticks: number, speed: number): void {
+  const motion = sim.enemyMotion.data;
+  const motionBase = index * ENEMY_MOTION_STRIDE;
+  const directionless = (motion[motionBase] ?? 0) === 0 && (motion[motionBase + 1] ?? 0) === 0;
+  if (directionless || ticks % UNSIGHTED_WANDER_TURN_TICKS === 0) {
+    // The enemy stream, for the same reason `wander` uses it.
+    const angle = sim.random.enemies.nextFloat() * Math.PI * 2;
+    motion[motionBase] = Math.cos(angle);
+    motion[motionBase + 1] = Math.sin(angle);
+  }
+  const velocity = sim.velocity.data;
+  velocity[index * 2] = (motion[motionBase] ?? 0) * speed;
+  velocity[index * 2 + 1] = (motion[motionBase + 1] ?? 0) * speed;
+}
+
+/** Whether the body is still heading for where it last saw the player. */
+function isSeeking(sim: GameSim, index: number): boolean {
+  return (
+    (sim.enemyMotion.data[index * ENEMY_MOTION_STRIDE + MOTION_MEMORY] ?? MEMORY_NONE) ===
+    MEMORY_SEEKING
+  );
+}
+
+/**
+ * A walker that has lost sight of the player heads for where it last saw
+ * them, routing around rocks and pillars (`room/pathfind.ts`) rather than
+ * pressing into them. Returns false — and forgets — once it has arrived, or
+ * when there is no way there; the caller then wanders.
+ *
+ * The path is searched every `REPATH_TICKS` (staggered by slot, so a room of
+ * walkers does not all search on the same tick) and whenever the current
+ * waypoint is reached; between searches the body walks straight at the
+ * waypoint, which `nextWaypoint` only picks when that line is clear.
+ */
+function seekLastSeen(
+  sim: GameSim,
+  index: number,
+  selfX: number,
+  selfY: number,
+  speed: number,
+): boolean {
+  const motion = sim.enemyMotion.data;
+  const motionBase = index * ENEMY_MOTION_STRIDE;
+  if ((motion[motionBase + MOTION_MEMORY] ?? MEMORY_NONE) !== MEMORY_SEEKING) {
+    return false;
+  }
+  const targetX = motion[motionBase + MOTION_LAST_SEEN_X] ?? selfX;
+  const targetY = motion[motionBase + MOTION_LAST_SEEN_Y] ?? selfY;
+  if (vectorLength(targetX - selfX, targetY - selfY) <= MEMORY_ARRIVE_DISTANCE) {
+    motion[motionBase + MOTION_MEMORY] = MEMORY_NONE;
+    return false;
+  }
+  let wayX = (motion[motionBase + MOTION_WAYPOINT_X] ?? targetX) - selfX;
+  let wayY = (motion[motionBase + MOTION_WAYPOINT_Y] ?? targetY) - selfY;
+  let wayLength = vectorLength(wayX, wayY);
+  const radius = sim.body.data[index * 2] ?? 0;
+  if (
+    (sim.tick + index) % REPATH_TICKS === 0 ||
+    wayLength <= MEMORY_ARRIVE_DISTANCE / 2 ||
+    // The waypoint is only ever chosen in straight reach, but the body has
+    // moved since (or the waypoint was the target itself): re-plan the
+    // moment walking straight at it would snag.
+    !straightClear(sim.room, selfX, selfY, selfX + wayX, selfY + wayY, radius)
+  ) {
+    if (!nextWaypoint(sim.room, selfX, selfY, targetX, targetY, radius, waypoint)) {
+      motion[motionBase + MOTION_MEMORY] = MEMORY_NONE;
+      return false;
+    }
+    motion[motionBase + MOTION_WAYPOINT_X] = waypoint.x;
+    motion[motionBase + MOTION_WAYPOINT_Y] = waypoint.y;
+    wayX = waypoint.x - selfX;
+    wayY = waypoint.y - selfY;
+    wayLength = vectorLength(wayX, wayY);
+  }
+  const velocity = sim.velocity.data;
+  velocity[index * 2] = wayLength === 0 ? 0 : (wayX / wayLength) * speed;
+  velocity[index * 2 + 1] = wayLength === 0 ? 0 : (wayY / wayLength) * speed;
+  return true;
+}
+
 /** Where the body goes this tick. Exactly one of these runs per state. */
 function applyMovement(
   sim: GameSim,
@@ -424,6 +576,40 @@ function applyMovement(
     }
     case 'walkTowardPlayer': {
       const speed = behaviour.speed * scale;
+      // No pathfinding: a walker only knows the straight line to the player,
+      // so with a rock or a pillar on that line it would just press into it.
+      // Out of sight, it loses track of the player instead and wanders —
+      // the same rule `isSighted` already applies to reacting and shooting.
+      if (!isSighted(sim, index, toPlayerX, toPlayerY)) {
+        const unseen = (motion[motionBase + MOTION_UNSEEN_TICKS] ?? 0) + 1;
+        motion[motionBase + MOTION_UNSEEN_TICKS] = unseen;
+        if (
+          unseen <= MEMORY_GRACE_TICKS &&
+          (motion[motionBase + MOTION_MEMORY] ?? MEMORY_NONE) === MEMORY_SEEKING
+        ) {
+          motion[motionBase + MOTION_LAST_SEEN_X] = selfX + toPlayerX;
+          motion[motionBase + MOTION_LAST_SEEN_Y] = selfY + toPlayerY;
+        }
+        if (!seekLastSeen(sim, index, selfX, selfY, speed)) {
+          wanderWithoutSight(sim, index, ticks, speed * UNSIGHTED_WANDER_SPEED);
+        }
+        return;
+      }
+      // In sight: remember where, for when it is not any more.
+      motion[motionBase + MOTION_UNSEEN_TICKS] = 0;
+      motion[motionBase + MOTION_LAST_SEEN_X] = selfX + toPlayerX;
+      motion[motionBase + MOTION_LAST_SEEN_Y] = selfY + toPlayerY;
+      motion[motionBase + MOTION_MEMORY] = MEMORY_SEEKING;
+      // Seen, but a rock's corner is in the way of the body itself: route
+      // around it rather than pressing into it.
+      const radius = sim.body.data[index * 2] ?? 0;
+      if (!straightClear(sim.room, selfX, selfY, selfX + toPlayerX, selfY + toPlayerY, radius)) {
+        if (seekLastSeen(sim, index, selfX, selfY, speed)) {
+          return;
+        }
+      }
+      motion[motionBase + MOTION_WAYPOINT_X] = selfX + toPlayerX;
+      motion[motionBase + MOTION_WAYPOINT_Y] = selfY + toPlayerY;
       velocity[base] = distance === 0 ? 0 : (toPlayerX / distance) * speed;
       velocity[base + 1] = distance === 0 ? 0 : (toPlayerY / distance) * speed;
       return;
@@ -602,21 +788,24 @@ function applyFiring(
 }
 
 /**
- * False when a hop trellis (#37) sits between the shooter and the player —
+ * False when a hop trellis (#37), or anything solid that cannot be moved —
+ * a rock, a pillar, a wall — sits between the shooter and the player —
  * gates the three aimed firing primitives (`fireAtPlayer`/`fireBurst`/
  * `fireSpread`), not `fireOnBeat`: a sound ring is a room-filling shape, not
  * a shot aimed at where the player is standing.
  *
- * Called only on the tick a shot would actually fire (each caller's own
- * `phase === 0` — or, for `fireBurst`, its own gap check — comes first), not
- * once per enemy per tick: an aimed enemy fires far less often than it
- * thinks about firing, and there is no reason to pay for a sight check on
- * every one of the ticks in between. `sightBlockCount === 0` short-circuits
- * the segment test itself on every floor that has none (every floor but
- * Dorf & Acker, today), so this costs nothing where it doesn't apply.
+ * Also gates `chooseTransition`'s `PlayerWithin`/`PlayerBeyond`: a player
+ * hidden behind cover is treated as out of range, so nothing reacts to them
+ * through a rock either.
+ *
+ * Firing calls this only on the tick a shot would actually fire (each
+ * caller's own `phase === 0` — or, for `fireBurst`, its own gap check —
+ * comes first), and a transition only once a distance check has already
+ * passed. A room with neither sight blocks nor solid blocks short-circuits
+ * the segment test entirely.
  */
 function isSighted(sim: GameSim, index: number, toPlayerX: number, toPlayerY: number): boolean {
-  if (sim.room.sightBlockCount === 0) {
+  if (sim.room.sightBlockCount === 0 && sim.room.blockCount === 0) {
     return true;
   }
   const shooterX = sim.positionX(index);
@@ -664,7 +853,7 @@ function fireOne(sim: GameSim, index: number, angle: number, shot: FiringBehavio
   }
 
   const speed = shot.speed * sim.tuning.enemy.projectileSpeedScale;
-  sim.projectiles.spawn(
+  const projectile = sim.projectiles.spawn(
     muzzleX,
     muzzleY,
     directionX * speed,
@@ -680,6 +869,9 @@ function fireOne(sim: GameSim, index: number, angle: number, shot: FiringBehavio
     // a string, so nothing in the frame loop compares one.
     sim.enemies.artIndexOf(shot.art),
   );
+  if (projectile !== NO_SLOT) {
+    sim.projectiles.ownerDefinition[projectile] = sim.enemy.data[index * ENEMY_STRIDE] ?? -1;
+  }
   // "Something over there just shot" is worth a frame of warning at the edge
   // of vision (#153), and an enemy's muzzle flashing where the player's does
   // not is how a game teaches that enemy shots come from nowhere.

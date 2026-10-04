@@ -59,6 +59,7 @@ import { ItemDiscovery } from './collection.js';
 import { ItemRegistry } from '../sim/item/registry.js';
 import { ITEM_DEFINITIONS } from '../content/items/index.js';
 import { ItemStatusHud } from '../render/item-status-hud.js';
+import { ControlsHud } from '../render/controls-hud.js';
 import { MinimapHud } from '../render/minimap-hud.js';
 import { CurseHud } from '../render/curse-hud.js';
 import { BlutwurzHud } from '../render/blutwurz-hud.js';
@@ -1379,6 +1380,20 @@ async function boot(progress: BootProgress): Promise<void> {
   hudLayer.addChild(itemStatusHud.view);
 
   /**
+   * Which button is Fire, Bomb, Use and Map on the current device — always
+   * shown, bottom-left, and following any rebinding (`ControlsHud.sync`).
+   * Hidden on touch, where the on-screen buttons already carry their names.
+   */
+  const controlsHud = new ControlsHud(preferences.locale);
+  hudLayer.addChild(controlsHud.view);
+  const controlsPrompts = { fire: null, bomb: null, use: null, map: null } as {
+    fire: string | null;
+    bomb: string | null;
+    use: string | null;
+    map: string | null;
+  };
+
+  /**
    * The opt-in stat column (\`settings.statDisplay\`) — Isaac's "Found HUD":
    * the six stats in player units on the left edge, flashing a delta on
    * every change. See \`render/stat-hud.ts\`.
@@ -1506,6 +1521,7 @@ async function boot(progress: BootProgress): Promise<void> {
     // jump every time a row above appears — pushed down only if the stack
     // has grown far enough to reach it.
     statHud.view.position.set(HUD_MARGIN, Math.max(y, Math.round((height - statHud.height) / 2)));
+    controlsHud.view.position.set(HUD_MARGIN, height - HUD_MARGIN - controlsHud.height);
 
     const centreX = Math.round(width / 2);
     itemSetHud.place(HUD_MARGIN, y, centreX, Math.round(height * 0.32));
@@ -1992,6 +2008,7 @@ async function boot(progress: BootProgress): Promise<void> {
         } else {
           gameOverScreen.show({
             word: sim.deathWord ?? 'Umgfalln',
+            killer: sim.killedBy,
             seconds: sim.playerDeathTick / TICKS_PER_SECOND,
             kills: summary.kills,
             // `src/debug/panels/run-info.ts` still shows its own placeholder —
@@ -2122,6 +2139,7 @@ async function boot(progress: BootProgress): Promise<void> {
     host,
     (applied) => {
       layout = applied;
+      app.fitToLayout(applied);
       layoutHud();
       vignette.resize();
     },
@@ -2378,6 +2396,12 @@ async function boot(progress: BootProgress): Promise<void> {
           ? t(preferences.locale, 'ui.hud.tapUse')
           : actionPrompt(input.bindings, Bindable.Use, device, glyphSet);
       activeItemHud.sync(sim, activatePrompt);
+      controlsHud.view.visible = input.activeDevice !== 'touch';
+      controlsPrompts.fire = actionPrompt(input.bindings, Bindable.Fire, device, glyphSet);
+      controlsPrompts.bomb = actionPrompt(input.bindings, Bindable.Bomb, device, glyphSet);
+      controlsPrompts.use = actionPrompt(input.bindings, Bindable.Use, device, glyphSet);
+      controlsPrompts.map = actionPrompt(input.bindings, Bindable.Map, device, glyphSet);
+      controlsHud.sync(controlsPrompts);
       // The carrier's row appears the moment the item is picked up and goes
       // again if it is swapped away, which grows and shrinks the column —
       // same shape (and same reason) as the eternal-heart and Promille rows
@@ -4617,6 +4641,7 @@ WASD move   arrows aim and fire
     machinePicker.setLocale(locale);
     floorTitleCard.setLocale(locale);
     activeItemHud.setLocale(locale);
+    controlsHud.setLocale(locale);
     bossHealthHud.setLocale(locale);
     curseHud.setLocale(locale);
     itemSetHud.setLocale(locale);

@@ -2,6 +2,7 @@ import { ROOM_TILE_UNITS } from '../../content/rooms/definition.js';
 import { CollisionLayer } from '../collision/layers.js';
 import { World } from '../ecs/world.js';
 import type { GameSim } from '../game/sim.js';
+import { PLAYER_ATTACKER_OWN_BOMB } from '../game/attacker.js';
 import { bombBlast } from '../particle/effects.js';
 import { applyDamageAt } from './impact.js';
 
@@ -203,6 +204,9 @@ function blastCandidate(index: number): void {
   const normalX = length > 0 ? dx / length : 0;
   const normalY = length > 0 ? dy / length : -1;
 
+  if (index === sim.playerIndex) {
+    sim.notePlayerAttacker(PLAYER_ATTACKER_OWN_BOMB);
+  }
   applyDamageAt(
     sim,
     index,

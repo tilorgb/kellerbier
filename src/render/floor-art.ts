@@ -297,6 +297,8 @@ interface AtlasFrame {
   readonly width: number;
   readonly height: number;
   readonly animation?: AnimationSidecar;
+  /** Authored pixels per base-grid pixel — present only for a `@2x`-style sprite. */
+  readonly density?: number;
 }
 
 const ATLAS_MANIFESTS: Record<string, AtlasManifest> = import.meta.glob<AtlasManifest>(
@@ -441,7 +443,7 @@ function standaloneTile(texture: Texture): Texture {
     frame.width,
     frame.height,
   );
-  return textureFromImage(canvas);
+  return textureFromImage(canvas).withDensity(texture.density);
 }
 
 const PICKUP_PREFIX = 'pickup-';
@@ -480,7 +482,9 @@ export async function loadFloorArt(): Promise<FloorArt> {
       const slash = key.indexOf('/');
       const category = key.slice(0, slash);
       const name = key.slice(slash + 1);
-      const texture = sheet.sub(frame.x, frame.y, frame.width, frame.height);
+      const texture = sheet
+        .sub(frame.x, frame.y, frame.width, frame.height)
+        .withDensity(frame.density ?? 1);
       spriteOrigins[name] = { bucketId, category: category as SpriteOrigin['category'] };
       if (frame.animation !== undefined) {
         enemyStrips[name] = cutStrip(name, texture, frame.animation);

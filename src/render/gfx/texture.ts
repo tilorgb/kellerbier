@@ -62,10 +62,20 @@ export class TextureSource {
 export class Texture {
   readonly source: TextureSource;
   readonly frame: Rectangle;
+  /**
+   * Authored pixels per base-grid pixel: `1` for ordinary art, `2` for a
+   * sprite drawn at double resolution (`name@2x.png`, see `tools/art/scan.mjs`).
+   * `width`/`height` are the real texel counts; `displayWidth`/`displayHeight`
+   * are what the art stands for on the base grid, which is what every size
+   * in the room is derived from — so a `@2x` redraw is the same size as the
+   * sprite it replaces, with twice the detail.
+   */
+  readonly density: number;
 
-  constructor(source: TextureSource, frame?: Rectangle) {
+  constructor(source: TextureSource, frame?: Rectangle, density = 1) {
     this.source = source;
     this.frame = frame ?? new Rectangle(0, 0, source.width, source.height);
+    this.density = density;
   }
 
   get width(): number {
@@ -74,6 +84,21 @@ export class Texture {
 
   get height(): number {
     return this.frame.height;
+  }
+
+  /** `width` on the base grid — what sizes in the room are measured against. */
+  get displayWidth(): number {
+    return this.frame.width / this.density;
+  }
+
+  /** `height` on the base grid — what sizes in the room are measured against. */
+  get displayHeight(): number {
+    return this.frame.height / this.density;
+  }
+
+  /** The same frame, read at `density` authored pixels per base-grid pixel. */
+  withDensity(density: number): Texture {
+    return density === this.density ? this : new Texture(this.source, this.frame, density);
   }
 
   private uvCache: readonly [number, number, number, number] | null = null;
@@ -106,11 +131,12 @@ export class Texture {
     this.uvCache = null;
   }
 
-  /** A sub-rectangle of the same source. */
+  /** A sub-rectangle of the same source, at the same density. Coordinates are in texels. */
   sub(x: number, y: number, width: number, height: number): Texture {
     return new Texture(
       this.source,
       new Rectangle(this.frame.x + x, this.frame.y + y, width, height),
+      this.density,
     );
   }
 

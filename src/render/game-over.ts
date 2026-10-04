@@ -1,4 +1,5 @@
 import { Container, Graphics, type BitmapText } from './gfx/index.js';
+import type { PlayerKiller } from '../sim/game/attacker.js';
 import type { Locale } from '../i18n/locale.js';
 import { t } from '../i18n/translate.js';
 import { EFFECT_PALETTE, HUD_PALETTE } from './palette.js';
@@ -16,6 +17,24 @@ const PLATE_PADDING = 8;
 
 const GAP_ABOVE_MENU = 10;
 
+/** Space between the summary line and the "killed by" line under it. */
+const KILLER_GAP = 3;
+
+/** The "killed by" line for `killer`, or '' when nothing was recorded. */
+export function killerLine(locale: Locale, killer: PlayerKiller | null): string {
+  if (killer === null) {
+    return '';
+  }
+  switch (killer.kind) {
+    case 'enemy':
+      return t(locale, 'ui.gameOver.killedBy', { name: killer.name });
+    case 'ownBomb':
+      return t(locale, 'ui.gameOver.killedByOwnBomb');
+    case 'other':
+      return t(locale, 'ui.gameOver.killedByOther');
+  }
+}
+
 /** What the screen shows. Assembled by whoever tracks the run, not read from `GameSim` directly. */
 export interface RunSummaryText {
   /** The headline, drawn from `docs/CONTENT_BIBLE.md` §7's pool — shown exactly as authored. */
@@ -24,6 +43,8 @@ export interface RunSummaryText {
   readonly kills: number;
   /** "floor 0" today — see `src/debug/panels/run-info.ts`, the same placeholder until #20. */
   readonly floor: string;
+  /** What landed the killing blow (`GameSim.killedBy`); no line is shown when unknown. */
+  readonly killer?: PlayerKiller | null;
 }
 
 export interface GameOverScreenActions {
@@ -59,6 +80,7 @@ export class GameOverScreen implements MenuScreen {
   private readonly plate = new PostcardPanel();
   private readonly headline: DisplayTitle;
   private readonly summary: BitmapText;
+  private readonly killer: BitmapText;
   private readonly menu: Menu;
   private locale: Locale;
   private lastInfo: RunSummaryText | null = null;
@@ -81,6 +103,9 @@ export class GameOverScreen implements MenuScreen {
 
     this.summary = uiText('', { colour: HUD_PALETTE.gameOverSummary });
     this.view.addChild(this.summary);
+
+    this.killer = uiText('', { colour: HUD_PALETTE.gameOverSummary });
+    this.view.addChild(this.killer);
 
     this.menu = new Menu(kit, this.menuItems());
     this.view.addChild(this.menu.view);
@@ -118,6 +143,8 @@ export class GameOverScreen implements MenuScreen {
       kills: info.kills,
       floor: info.floor,
     });
+    this.killer.text = killerLine(this.locale, info.killer ?? null);
+    this.killer.visible = this.killer.text !== '';
   }
 
   show(info: RunSummaryText): void {
@@ -162,8 +189,12 @@ export class GameOverScreen implements MenuScreen {
     this.headline.place(centreX, Math.round(centreY - this.headline.height * HEADLINE_SCALE - 6));
 
     const summaryWidth = uiTextWidth(this.summary.text);
-    const plateWidth = Math.max(summaryWidth, this.menu.width) + PLATE_PADDING * 2;
-    const plateHeight = PLATE_PADDING * 3 + this.summary.height + GAP_ABOVE_MENU + this.menu.height;
+    const killerWidth = this.killer.visible ? uiTextWidth(this.killer.text) : 0;
+    // The killer line sits under the summary; without one, nothing moves.
+    const killerHeight = this.killer.visible ? this.killer.height + KILLER_GAP : 0;
+    const plateWidth = Math.max(summaryWidth, killerWidth, this.menu.width) + PLATE_PADDING * 2;
+    const plateHeight =
+      PLATE_PADDING * 3 + this.summary.height + killerHeight + GAP_ABOVE_MENU + this.menu.height;
     const plateX = Math.round(centreX - plateWidth / 2);
     const plateY = Math.round(centreY + 4);
 
@@ -171,9 +202,13 @@ export class GameOverScreen implements MenuScreen {
     this.plate.resize(plateWidth, plateHeight);
 
     this.summary.position.set(Math.round(centreX - summaryWidth / 2), plateY + PLATE_PADDING);
+    this.killer.position.set(
+      Math.round(centreX - killerWidth / 2),
+      plateY + PLATE_PADDING + this.summary.height + KILLER_GAP,
+    );
     this.menu.view.position.set(
       Math.round(centreX - this.menu.width / 2),
-      plateY + PLATE_PADDING * 2 + this.summary.height + GAP_ABOVE_MENU,
+      plateY + PLATE_PADDING * 2 + this.summary.height + killerHeight + GAP_ABOVE_MENU,
     );
   }
 }
