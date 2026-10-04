@@ -1,5 +1,7 @@
 # Kellerbier — the alpha itch.io page
 
+**The page: <https://tilorgb.itch.io/kellerbier>** (created 2026-10-04).
+
 What goes on the page, drafted so that making it is filling in a form (#367). The upload and the
 embed settings are in [`tools/release/ITCH.md`](../tools/release/ITCH.md); this is everything a
 visitor reads.
@@ -136,7 +138,7 @@ itch.io wants a cover image at **630 × 500** and three to five screenshots.
 
 ## After it is up
 
-- Put the page link in the README next to the Pages link.
+- ~~Put the page link in the README next to the Pages link.~~ Done.
 - Runs from the page arrive in the telemetry report under the build id in the uploaded zip's
   file name (`tools/telemetry/README.md`).
 - Check the comments when triaging playtest findings (`docs/PLAYTEST_PROTOCOL.md` §8).
