@@ -136,6 +136,7 @@ import {
 } from './telemetry/send.js';
 import { createTouchControls, isTouchCapable } from './touch-controls.js';
 import { IS_RELEASE_BUILD, isPlaytestSession } from './build-mode.js';
+import { tourCandidates, trailAfter } from './room-tour.js';
 import { questionAt } from './playtest/questions.js';
 import { showFeedbackPrompt, showWelcome } from './playtest/overlay.js';
 import { type BootProgress, createBootProgress } from './boot-progress.js';
@@ -932,6 +933,8 @@ async function boot(progress: BootProgress): Promise<void> {
   let floorPlan: FloorPlan;
   let currentRoomId: string;
   let visitedRoomIds: Set<string>;
+  /** The rooms the dev-only `N` tour came in through, deepest last — see `app/room-tour.ts`. */
+  let tourTrail: string[] = [];
   /**
    * Edges of the floor's room graph a secret/supersecret wall has been
    * bombed open on, keyed by `edgeKey` so either side recognizes it. Lives
@@ -2924,6 +2927,7 @@ WASD move   arrows aim and fire
     );
     currentRoomId = floorPlan.startRoomId;
     visitedRoomIds = new Set([currentRoomId]);
+    tourTrail = [];
     revealedEdges = new Set<string>();
 
     sim = new GameSim({
@@ -3836,6 +3840,7 @@ WASD move   arrows aim and fire
     rebuildProceduralRooms(floorPlan, RUN_SEED, sim.tuning.roomGen);
     currentRoomId = floorPlan.startRoomId;
     visitedRoomIds = new Set([currentRoomId]);
+    tourTrail = [];
     revealedEdges = new Set<string>();
     // New floor plan, new room ids — a neighbour prewarmed against the old
     // plan must not be matched against the new one. `GameView.sync`'s own
@@ -4258,8 +4263,9 @@ WASD move   arrows aim and fire
           break;
         }
         // Walks the generated floor depth-first: an unvisited door first,
-        // backtracking through an already-seen room only once every door
-        // from here has been used. Now that `sim.doorContact` triggers a
+        // and back the way it came once every door from here has been used
+        // (`app/room-tour.ts` — it used to bounce between a dead end and the
+        // room before it instead). Now that `sim.doorContact` triggers a
         // real transition on its own, this is a dev shortcut for touring the
         // floor without walking it — both go through the same `crossDoor`,
         // `force: true` here since a dev pressing `N` is never also holding
@@ -4272,10 +4278,11 @@ WASD move   arrows aim and fire
         // fall through to the next candidate rather than getting stuck
         // repeatedly failing to walk through a wall.
         const room = planRoom(floorPlan, currentRoomId);
-        const unvisited = room.doors.filter((door) => !visitedRoomIds.has(door.neighborRoomId));
-        const visited = room.doors.filter((door) => visitedRoomIds.has(door.neighborRoomId));
-        for (const door of [...unvisited, ...visited]) {
+        const from = currentRoomId;
+        for (const step of tourCandidates(room.doors, visitedRoomIds, tourTrail)) {
+          const { door } = step;
           if (crossDoor(door.cellIndex, door.direction, door.neighborRoomId, true)) {
+            tourTrail = trailAfter(tourTrail, from, step);
             break;
           }
         }
