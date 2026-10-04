@@ -25,8 +25,17 @@ sound rings, and König Ludwig II in a swan boat.
 
 ## Status
 
-Pre-production. Design docs are in [`docs/`](docs/); the work is tracked in
-[issues](../../issues), grouped by milestone label `M0`–`M10`.
+**Alpha.** Two of the seven floors are playable start to finish — the cellar and the village
+above it, each with a mini-boss and a boss — and a run takes about fifteen minutes. Some art and
+sound are still placeholders, and the balance is being tuned against playtest data
+([`docs/BALANCE_METHODOLOGY.md`](docs/BALANCE_METHODOLOGY.md)). Floors 3–7 are parked until these
+two are finished ([`docs/ROADMAP.md`](docs/ROADMAP.md)).
+
+The build asks once whether you want to take part in the playtest. Saying yes sends anonymous
+run stats; saying no changes nothing about the game.
+
+Design docs are in [`docs/`](docs/); the work is tracked in [issues](../../issues), grouped by
+milestone label `M0`–`M10`.
 
 **Current state and what's next: the [roadmap issue](../../issues?q=is%3Aissue+label%3Aroadmap)**,
 regenerated automatically from the issue list on every issue event.
