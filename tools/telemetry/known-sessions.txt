@@ -10,3 +10,4 @@
 # for a win rate, not a correction to it.
 
 f3c3a263-b0e1-4fa7-9382-1fa017e0eac1  maintainer
+b6952dfa-3ca8-459a-8d39-501e943cfa6d  maintainer  # the itch.io page: a different origin, so its own session
