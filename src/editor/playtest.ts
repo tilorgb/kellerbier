@@ -129,8 +129,9 @@ export async function createPlaytest(
   });
   app.ui.root.addChild(view.labelLayer);
 
-  const windowSizeTracker = trackWindowSize(app.canvas, overlay, () => {
-    // Nothing to lay out: the frame is fixed and the playtest has no HUD.
+  const windowSizeTracker = trackWindowSize(app.canvas, overlay, (applied) => {
+    // Nothing else to lay out: the frame is fixed and the playtest has no HUD.
+    app.fitToLayout(applied);
   });
   app.ui.attachPointer(app.canvas, (clientX, clientY, out) => {
     canvasToFrame(app.canvas, clientX, clientY, out);

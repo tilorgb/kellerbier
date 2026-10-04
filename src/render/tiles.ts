@@ -24,5 +24,5 @@ export function pickTileVariant(col: number, row: number, variantCount: number):
  * 16px one and the extra pixels are detail, not size.
  */
 export function tileGridScale(texture: Texture): number {
-  return ROOM_TILE_UNITS / texture.width;
+  return ROOM_TILE_UNITS / texture.displayWidth;
 }

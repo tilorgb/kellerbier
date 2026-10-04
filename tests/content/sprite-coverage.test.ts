@@ -12,6 +12,7 @@ import { FLOOR_TILESETS, PROP_TILE_NAMES, MAIBAUM_TOP_TILE } from '../../src/ren
 import { PLAYER_TAG_SPRITE_ORDER } from '../../src/render/projectiles.js';
 import { DESTRUCTIBLE_PROP_KINDS } from '../../src/sim/game/sim.js';
 import { ALL_BUCKET_IDS, CATEGORY_FOLDERS } from '../../tools/art/spec.mjs';
+import { parseDensity } from '../../tools/art/scan.mjs';
 import { BACKGROUND_SPRITE_NAMES, tileTierDeclared } from '../../tools/art/tiers.mjs';
 import { buildParticleArt, TELEGRAPH_RING_SPRITE } from '../../src/render/art-bundle.js';
 import { PARTICLE_KIND_IDS } from '../../src/sim/particle/store.js';
@@ -49,9 +50,9 @@ async function spriteNames(category: keyof typeof CATEGORY_FOLDERS): Promise<Set
     }
     for (const entry of entries) {
       if (entry.endsWith(STRIP_SUFFIX)) {
-        names.add(entry.slice(0, -STRIP_SUFFIX.length));
+        names.add(parseDensity(entry.slice(0, -STRIP_SUFFIX.length)).name);
       } else if (entry.endsWith('.png')) {
-        names.add(entry.slice(0, -'.png'.length));
+        names.add(parseDensity(entry.slice(0, -'.png'.length)).name);
       }
     }
   }

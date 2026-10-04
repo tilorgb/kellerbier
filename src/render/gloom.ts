@@ -151,7 +151,9 @@ export class GloomBlur {
   private readonly camera = new OrthographicCamera(-1, 1, 1, -1, 0, 1);
   private readonly geometry = new PlaneGeometry(2, 2);
   private readonly material: ShaderMaterial;
-  private readonly texture: FramebufferTexture;
+  private texture: FramebufferTexture;
+  private readonly uFrame: { value: FramebufferTexture };
+  private readonly bufferSize = new Vector2();
   /** Held rather than looked up by name each frame — `setGloom` runs every frame. */
   private readonly uAmount = { value: 0 };
   private readonly uRadius = { value: MIN_RADIUS };
@@ -169,7 +171,7 @@ export class GloomBlur {
     this.texture.generateMipmaps = false;
     this.material = new ShaderMaterial({
       uniforms: {
-        uFrame: { value: this.texture },
+        uFrame: (this.uFrame = { value: this.texture }),
         uTexel: { value: new Vector2(1 / INTERNAL_WIDTH, 1 / INTERNAL_HEIGHT) },
         uRadius: this.uRadius,
         uAmount: this.uAmount,
@@ -237,6 +239,25 @@ export class GloomBlur {
   render(renderer: WebGLRenderer): void {
     if (!this.active) {
       return;
+    }
+    // The drawing buffer is the display's size, not a fixed 640x360
+    // (`RENDER_AT_DISPLAY_RESOLUTION`), so the copy target follows it. Rare —
+    // only after a window resize — so a fresh texture is fine here. `uTexel`
+    // stays in internal pixels: the blur reaches as far on screen either way.
+    renderer.getDrawingBufferSize(this.bufferSize);
+    if (
+      this.texture.image.width !== this.bufferSize.x ||
+      this.texture.image.height !== this.bufferSize.y
+    ) {
+      const previous = this.texture;
+      this.texture = new FramebufferTexture(this.bufferSize.x, this.bufferSize.y);
+      this.texture.magFilter = previous.magFilter;
+      this.texture.minFilter = previous.minFilter;
+      this.texture.wrapS = previous.wrapS;
+      this.texture.wrapT = previous.wrapT;
+      this.texture.generateMipmaps = false;
+      this.uFrame.value = this.texture;
+      previous.dispose();
     }
     renderer.copyFramebufferToTexture(this.texture);
     const autoClear = renderer.autoClear;

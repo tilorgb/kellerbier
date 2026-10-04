@@ -6,6 +6,7 @@ import {
   INTERNAL_HEIGHT,
   INTERNAL_WIDTH,
   computeGameLayout,
+  renderScaleFor,
 } from './resolution.js';
 
 /**
@@ -41,6 +42,12 @@ export interface GameRenderer {
   readonly ui: UiLayer;
   /** Draw one frame: the caller's world pass, then the UI pass. */
   render(world: () => void): void;
+  /**
+   * Sizes the drawing buffer for `layout` (`RENDER_AT_DISPLAY_RESOLUTION`).
+   * The UI and the world camera keep measuring in internal pixels; only the
+   * number of device pixels behind each one changes.
+   */
+  fitToLayout(layout: GameLayout): void;
   destroy(): void;
 }
 
@@ -83,6 +90,14 @@ export function createRenderer(host: HTMLElement): GameRenderer {
     renderer,
     canvas,
     ui,
+    fitToLayout(layout) {
+      const scale = renderScaleFor(layout.deviceScale);
+      const width = INTERNAL_WIDTH * scale;
+      const height = INTERNAL_HEIGHT * scale;
+      if (canvas.width !== width || canvas.height !== height) {
+        renderer.setSize(width, height, false);
+      }
+    },
     render(world) {
       renderer.autoClear = true;
       renderer.sortObjects = true;

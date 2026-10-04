@@ -128,11 +128,14 @@ for (const definition of ENEMY_DEFINITIONS) {
   if (bounds === null) {
     throw new Error(`${sprite.filePath}: every pixel is transparent`);
   }
+  // A `@2x` sprite stands as big as its 1x equivalent, so its silhouette is
+  // measured on the base grid too.
+  const density = sprite.density;
   measured.push({
     id: definition.id,
     sizeName: definition.size,
-    silhouette: Math.max(bounds.width, bounds.height),
-    width: bounds.width,
+    silhouette: Math.max(bounds.width, bounds.height) / density,
+    width: bounds.width / density,
     collider: colliderPixels(definition.size),
     canvas: `${String(frameWidth)}x${String(height)}`,
     inked: `${String(bounds.width)}x${String(bounds.height)}`,

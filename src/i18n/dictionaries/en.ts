@@ -60,6 +60,9 @@ export const en = {
   'ui.gameOver.results': 'Results',
   'ui.gameOver.hub': 'Hub',
   'ui.gameOver.summary': '{seconds}s survived   {kills} killed   {floor}',
+  'ui.gameOver.killedBy': 'Killed by {name}',
+  'ui.gameOver.killedByOwnBomb': 'Killed by your own Bierfassl',
+  'ui.gameOver.killedByOther': 'Killed by a hazard',
 
   'ui.victory.headline': 'Victory!',
   'ui.victory.epilogue':
