@@ -11,7 +11,10 @@ export const steckerlfisch: ItemDefinition = {
   flavourText: 'items.steckerlfisch.flavourText',
   sprite: 'steckerlfisch',
   pools: ['treasure', 'shop'],
-  quality: 1,
+  // 2, not 1: alone it took the simulator's bot from 3% of runs won to 55%,
+  // the strongest single item in the pool, and quality 1 is the tier the
+  // treasure room offers most.
+  quality: 2,
   promilleRequirement: 'any',
   hooks: {
     onProjectileSpawn: (ctx) => {

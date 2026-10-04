@@ -732,8 +732,15 @@ export class GameSim {
   readonly push: Component<Float32Array>;
   /** Collision layer and the mask of layers it interacts with. */
   readonly collision: Component<Uint16Array>;
-  /** Current and maximum hit points. Maximum 0 means the body cannot be hurt. */
-  readonly health: Component<Int16Array>;
+  /**
+   * Current and maximum hit points. Maximum 0 means the body cannot be hurt.
+   *
+   * A float, not an integer: a shot's damage is no longer rounded (see
+   * `systems/shooting.ts`), so an enemy can sit at 2.2. The player's own
+   * health only ever moves by whole half-Wurst — everything that hurts or
+   * heals Alois deals integers — so the HUD still reads whole numbers.
+   */
+  readonly health: Component<Float32Array>;
   /** Damage dealt by touching a body. Zero on everything harmless. */
   readonly contactDamage: Component<Int16Array>;
   /**
@@ -1654,7 +1661,7 @@ export class GameSim {
     this.hurtbox = this.world.defineComponent('hurtbox', Float32Array, 2);
     this.push = this.world.defineComponent('push', Float32Array, 2);
     this.collision = this.world.defineComponent('collision', Uint16Array, 2);
-    this.health = this.world.defineComponent('health', Int16Array, 2);
+    this.health = this.world.defineComponent('health', Float32Array, 2);
     this.flash = this.world.defineComponent('flash', Uint8Array, 1);
     this.hitStun = this.world.defineComponent('hitStun', Uint8Array, 1);
     this.contactDamage = this.world.defineComponent('contactDamage', Int16Array, 1);
@@ -4550,7 +4557,8 @@ export class GameSim {
     const dirX = directionX / length;
     const dirY = directionY / length;
     const speedScale = options.speedScale ?? 1;
-    const damage = options.damage ?? Math.round(this.stats.value(StatId.Damage));
+    // Unrounded, like `fire`'s own shot — see `systems/shooting.ts`.
+    const damage = options.damage ?? this.stats.value(StatId.Damage);
     const slot = this.projectiles.spawn(
       x,
       y,

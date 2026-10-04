@@ -229,6 +229,9 @@ function applyHit(sim: GameSim, slot: number): void {
  * not a shot missing, it is an explosion, and nothing in the room is spared
  * one for having its shell up.
  */
+/** Health below this is zero: what is left over when fractional hits should have summed to a whole number. */
+const HEALTH_EPSILON = 1e-3;
+
 export function applyDamageAt(
   sim: GameSim,
   target: number,
@@ -260,9 +263,12 @@ export function applyDamageAt(
     // rumble (#15) have a single event kind to listen for either.
     events.push(EventKind.Damage, target, cause, hitX, hitY, normalX, normalY, damage);
   } else {
-    const remaining = (health[target * 2] ?? 0) - damage;
+    // Fractional damage adds up with float error — five hits of 0.8 on a
+    // body of 4 leave a few billionths, not zero. Anything that small is dead.
+    const after = (health[target * 2] ?? 0) - damage;
+    const remaining = after < HEALTH_EPSILON ? 0 : after;
     killed = (health[target * 2 + 1] ?? 0) > 0 && remaining <= 0;
-    health[target * 2] = Math.max(0, remaining);
+    health[target * 2] = remaining;
     // A player's shot (or blast) landing on something else — #26's onHit,
     // fired whether or not this hit was the kill.
     dispatchItemHit(sim, target, damage, hitX, hitY);

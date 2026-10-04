@@ -131,7 +131,7 @@ describe('GameSim.spawnItemProjectile', () => {
       sim.projectiles.velocityY[slot] ?? 0,
     );
     expect(speed).toBeCloseTo(sim.tuning.shooting.shotSpeed, 5);
-    expect(sim.projectiles.damage[slot]).toBe(Math.round(sim.stats.value('damage')));
+    expect(sim.projectiles.damage[slot]).toBe(sim.stats.value('damage'));
   });
 
   it('a tag granted from onProjectileSpawn is captured by finalizeProjectileTags', () => {
