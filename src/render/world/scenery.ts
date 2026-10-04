@@ -2,11 +2,12 @@ import {
   BoxGeometry,
   BufferAttribute,
   BufferGeometry,
+  DoubleSide,
   Group,
   LineBasicMaterial,
   LineLoop,
-  LineSegments,
   Mesh,
+  MeshBasicMaterial,
   MeshStandardMaterial,
   type Object3D,
   PlaneGeometry,
@@ -24,11 +25,14 @@ import { MAIBAUM_TOP_TILE, PROP_TILE_NAMES, type RoomTileArt } from '../floor-ar
 import { type Texture, textureFromPixels } from '../gfx/index.js';
 import { ROOM_HAZARD_PALETTE, roomThemeForFloor } from '../palette.js';
 import { pickTileVariant, tileGridScale } from '../tiles.js';
+import { ACTOR_PIXELS_PER_UNIT } from '../resolution.js';
 import { Billboard } from './billboard.js';
+import { ELEVATION } from './camera.js';
 import { DECAL_HEIGHT, FloorSprite, tilingTexture } from './flat.js';
 import { ACTOR_LAYER, OCCLUDER_LAYER } from './layers.js';
 import type { Lighting } from './lighting.js';
 import type { MaterialCache } from './material-cache.js';
+import { pixelRuns, pixelShapeGeometry, plotPixelLine } from './pixel-shape.js';
 
 /**
  * The room as a place: floor, walls with height, doorways, obstacles, props,
@@ -132,7 +136,7 @@ export class DoorPiece {
   private state: DoorState = 'closed';
   private opennessValue = 0;
   private double = false;
-  private lock: Mesh | null = null;
+  private lock: Object3D | null = null;
   /** Parallel to `hinges` — kept so `disposeLeaves` can free each leaf's own (uncached) material. */
   private readonly leaves: Mesh[] = [];
 
@@ -187,7 +191,7 @@ export class DoorPiece {
       // The frame: two jambs in dark timber, proud of the wall face, run the
       // full wall height so the open-topped gap reads as a deliberate portal
       // rather than a bite taken out of the wall. No lintel across the top.
-      const timber = materials.flatMaterial(FRAME_TIMBER, { roughness: 0.9 });
+      const timber = materials.tiledMaterial(jambTexture(), JAMB, wallHeight, { roughness: 0.9 });
       for (const side of [-1, 1]) {
         const jamb = new Mesh(new BoxGeometry(JAMB, wallHeight, t + 1), timber);
         jamb.position.set(side * (span / 2 - JAMB / 2), wallHeight / 2, 0);
@@ -322,7 +326,11 @@ export class DoorPiece {
         this.group.remove(hinge);
       }
     }
-    this.lock?.geometry.dispose();
+    this.lock?.traverse((part) => {
+      if (part instanceof Mesh) {
+        (part.geometry as BufferGeometry).dispose();
+      }
+    });
     this.hinges.length = 0;
     this.leaves.length = 0;
     this.lock = null;
@@ -360,17 +368,37 @@ export class DoorPiece {
     }
     // A padlock on the leading edge, shown only while the door is key-locked.
     // Never tinted, so — unlike the leaf — it can safely borrow a shared material.
-    const lock = new Mesh(
-      new BoxGeometry(2, 2.5, 1.2),
-      this.materials.flatMaterial(LOCK_BRASS, { roughness: 0.4, metalness: 0.6 }),
-    );
+    const lock = this.buildPixelLock();
     const firstHinge = this.hinges[0];
     if (firstHinge !== undefined) {
       const edge = this.double ? inner - 1.5 : inner * 2 - 2;
-      lock.position.set(edge, this.doorHeight * 0.45, LEAF_THICKNESS / 2 + 0.6);
+      lock.position.set(edge, this.doorHeight * 0.45, 0);
       firstHinge.add(lock);
     }
     this.lock = lock;
+  }
+
+  /** The padlock baked onto the sprite grid (`world/pixel-shape.ts`), one on each face of the leaf. */
+  private buildPixelLock(): Object3D {
+    const lock = new Group();
+    lock.name = 'padlock';
+    const brass = this.materials.flatMaterial(LOCK_BRASS, { roughness: 0.4, metalness: 0.6 });
+    const iron = this.materials.flatMaterial(LOCK_IRON, { roughness: 0.5, metalness: 0.6 });
+    for (const face of [1, -1]) {
+      for (const [cells, material] of [
+        [LOCK_BODY, brass],
+        [LOCK_SHACKLE, iron],
+      ] as const) {
+        const half = new Mesh(
+          pixelShapeGeometry(LOCK_COLS, LOCK_ROWS, cells, LOCK_CELL, LOCK_CELL),
+          material,
+        );
+        half.position.z = face * (LEAF_THICKNESS / 2 + 0.15);
+        half.rotation.y = face === 1 ? 0 : Math.PI;
+        lock.add(half);
+      }
+    }
+    return lock;
   }
 
   setState(state: DoorState): void {
@@ -446,8 +474,8 @@ export class DoorPiece {
  */
 function disposeMeshes(root: Group): void {
   root.traverse((object) => {
-    // Anything with its own geometry — a `Mesh`, or a `LineSegments`/
-    // `LineLoop` (the secret-wall crack hints, a puddle rim).
+    // Anything with its own geometry — a `Mesh` (the secret-wall crack hints
+    // among them), or a `LineLoop` (a puddle rim).
     const geometry: unknown = (object as { geometry?: unknown }).geometry;
     if (geometry instanceof BufferGeometry) {
       geometry.dispose();
@@ -469,7 +497,6 @@ const LINTEL = 2;
 const JAMB = 2;
 const LEAF_THICKNESS = 1.2;
 const OPEN_ANGLE = (95 / 180) * Math.PI;
-const FRAME_TIMBER = 0x3a2a1e;
 const LOCK_BRASS = 0xd6a53a;
 const LOCKED_TINT = 0xa8a0b8;
 
@@ -551,24 +578,25 @@ let plankTextureCache: Texture | null = null;
  * piece of room architecture with no authored tile, and a texture built from
  * a palette needs no canvas, so the room editor's playtest and a headless
  * test get the same door.
+ *
+ * One texel per room unit, the density of a wall tile, and no grain: at
+ * display resolution anything finer reads as crisp detail the rest of the
+ * room does not have.
  */
 function plankTexture(): Texture {
   if (plankTextureCache !== null) {
     return plankTextureCache;
   }
   const w = 16;
-  const h = 32;
+  const h = 16;
   const colours = new Int32Array(w * h);
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
-      const plank = Math.floor(x / 4);
-      let colour = plank % 2 === 0 ? 0x7a4a2a : 0x6e4226;
+      let colour = Math.floor(x / 4) % 2 === 0 ? 0x7a4a2a : 0x6e4226;
       if (x % 4 === 0) {
         colour = 0x3e2415;
-      } else if ((y * 7 + x * 3) % 11 === 0) {
-        colour = 0x85532f;
       }
-      if (y === 6 || y === 7 || y === 24 || y === 25) {
+      if (y === 3 || y === 12) {
         colour = x % 4 === 2 ? 0x8a8a90 : 0x2a2a30;
       }
       colours[y * w + x] = colour;
@@ -577,6 +605,41 @@ function plankTexture(): Texture {
   plankTextureCache = textureFromPixels(w, h, colours);
   return plankTextureCache;
 }
+
+let jambTextureCache: Texture | null = null;
+
+/** Timber grain for the door frame: a lit edge, a dark edge, the odd knot. One texel per room unit, like a wall tile. */
+function jambTexture(): Texture {
+  if (jambTextureCache !== null) {
+    return jambTextureCache;
+  }
+  const w = 16;
+  const h = 16;
+  const colours = new Int32Array(w * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let colour = x % 2 === 0 ? 0x4a3626 : 0x2e2018;
+      if ((y * 5 + x * 3) % 13 === 0) {
+        colour = 0x241810;
+      }
+      colours[y * w + x] = colour;
+    }
+  }
+  jambTextureCache = textureFromPixels(w, h, colours);
+  return jambTextureCache;
+}
+
+/** The padlock's two halves on a 4x6 grid, row 0 at the bottom: a brass body under an iron shackle. */
+const LOCK_COLS = 4;
+const LOCK_ROWS = 6;
+const LOCK_BODY = new Uint8Array([
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+]);
+const LOCK_SHACKLE = new Uint8Array([
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0,
+]);
+const LOCK_CELL = 1 / ACTOR_PIXELS_PER_UNIT;
+const LOCK_IRON = 0x8a8a90;
 
 function flatBox(
   materials: MaterialCache,
@@ -732,7 +795,7 @@ export class Scenery {
   private readonly materials: MaterialCache;
   private readonly billboards: Billboard[] = [];
   private readonly flats: FloorSprite[] = [];
-  private hints: LineSegments | null = null;
+  private hints: Mesh<BufferGeometry, MeshBasicMaterial> | null = null;
   private lean: number;
   /** Doorway directions that lead to a secret room — a revealed one draws blasted, not hinged (#5). */
   private secretDoorDirections: ReadonlySet<CompiledDoor['direction']> = new Set();
@@ -1294,31 +1357,59 @@ export class Scenery {
     if (doors.length === 0) {
       return;
     }
-    const points: number[] = [];
+    // Baked onto a pixel grid rather than drawn as lines: at display
+    // resolution a line is one hair-thin screen pixel, where every other mark
+    // in the room is pixel art (`world/pixel-shape.ts`). Each cell is about
+    // one internal pixel on screen — `CRACK_CELL_HEIGHT` is taller than it is
+    // wide because the camera looks down the wall face.
+    const positions: number[] = [];
     const room = this.room;
     const height = this.wallHeight;
+    const cols = Math.ceil((CRACK_HALF_WIDTH * 2) / CRACK_CELL_WIDTH) + 1;
+    const rows = Math.ceil(height / CRACK_CELL_HEIGHT);
+    const filled = new Uint8Array(cols * rows);
     for (const door of doors) {
       const centre = doorCentre(room, door);
       const alongX = door.direction === 'north' || door.direction === 'south';
       const inset = door.direction === 'north' ? 0.3 : door.direction === 'south' ? -0.3 : 0;
       const insetX = door.direction === 'west' ? 0.3 : door.direction === 'east' ? -0.3 : 0;
       const steps = 8;
-      let previous: [number, number, number] | null = null;
+      filled.fill(0);
+      let previousCol = 0;
+      let previousRow = 0;
       for (let i = 0; i <= steps; i++) {
         const y = 1 + (height - 2) * (i / steps);
         const wobble = (i % 2 === 0 ? -1 : 1) * CRACK_SPAN * 0.35 + Math.sin(i * 2.3) * 2;
-        const point: [number, number, number] = alongX
-          ? [centre.x + wobble, y, centre.y + inset]
-          : [centre.x + insetX, y, centre.y + wobble];
-        if (previous !== null) {
-          points.push(...previous, ...point);
+        const col = Math.floor((wobble + CRACK_HALF_WIDTH) / CRACK_CELL_WIDTH);
+        const row = Math.floor(y / CRACK_CELL_HEIGHT);
+        if (i > 0) {
+          plotPixelLine(filled, cols, rows, previousCol, previousRow, col, row);
         }
-        previous = point;
+        previousCol = col;
+        previousRow = row;
+      }
+      const runs = pixelRuns(cols, rows, filled);
+      for (let i = 0; i < runs.length; i += 3) {
+        const u0 = (runs[i] ?? 0) * CRACK_CELL_WIDTH - CRACK_HALF_WIDTH;
+        const u1 = (runs[i + 1] ?? 0) * CRACK_CELL_WIDTH - CRACK_HALF_WIDTH;
+        const y0 = (runs[i + 2] ?? 0) * CRACK_CELL_HEIGHT;
+        const y1 = y0 + CRACK_CELL_HEIGHT;
+        if (alongX) {
+          const z = centre.y + inset;
+          const x0 = centre.x + u0;
+          const x1 = centre.x + u1;
+          positions.push(x0, y0, z, x1, y0, z, x1, y1, z, x0, y0, z, x1, y1, z, x0, y1, z);
+        } else {
+          const x = centre.x + insetX;
+          const z0 = centre.y + u0;
+          const z1 = centre.y + u1;
+          positions.push(x, y0, z0, x, y0, z1, x, y1, z1, x, y0, z0, x, y1, z1, x, y1, z0);
+        }
       }
     }
     const geometry = new BufferGeometry();
-    geometry.setAttribute('position', new BufferAttribute(new Float32Array(points), 3));
-    this.hints = new LineSegments(geometry, secretHintMaterial());
+    geometry.setAttribute('position', new BufferAttribute(new Float32Array(positions), 3));
+    this.hints = new Mesh(geometry, secretHintMaterial());
     this.group.add(this.hints);
   }
 
@@ -1339,14 +1430,21 @@ export class Scenery {
 }
 
 const CRACK_SPAN = 10;
+/** How far the zigzag reaches either side of the door's centre, in room units. */
+const CRACK_HALF_WIDTH = CRACK_SPAN * 0.35 + 2;
+/** One cell of the crack's baked outline: a sprite texel wide. */
+const CRACK_CELL_WIDTH = 1 / ACTOR_PIXELS_PER_UNIT;
+/** ...and as tall as it takes to cover the same span on screen, up a wall seen from `ELEVATION`. */
+const CRACK_CELL_HEIGHT = CRACK_CELL_WIDTH / Math.cos(ELEVATION);
 
-let hintMaterialCache: LineBasicMaterial | null = null;
+let hintMaterialCache: MeshBasicMaterial | null = null;
 
 /** The secret-hint crack material — one instance for the run, like every other material `Scenery` now borrows. */
-function secretHintMaterial(): LineBasicMaterial {
-  return (hintMaterialCache ??= new LineBasicMaterial({
+function secretHintMaterial(): MeshBasicMaterial {
+  return (hintMaterialCache ??= new MeshBasicMaterial({
     color: ROOM_HAZARD_PALETTE.crack,
     transparent: true,
     opacity: 0.9,
+    side: DoubleSide,
   }));
 }

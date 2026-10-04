@@ -6305,3 +6305,41 @@ is the bare item's number, and multi-shot builds are expected to exceed it.
 
 **Constrains:** an item that wants a roll draws from `itemEffects` and nothing else. A cosmetic
 roll still belongs to `cosmetic`.
+
+## 115. Display resolution is headroom, not a new look: what is not pixel art gets baked onto a grid
+
+**Decided:** M8; amends #112. #112 moved the world to the display's resolution so `@2x` sprites
+have pixels to show their detail on. It also changed how everything that is *not* pixel art looks.
+Sprites and tiles were unaffected, each texel still a whole block. But the cellar bulbs, the
+secret-wall crack and the door's frame and padlock are plain geometry, and the title and story
+pictures are large generated images scaled down; all of them had only ever looked pixelated
+because the 640×360 frame made them so. At display resolution they came out clean and sharp, and
+read as belonging to a different game.
+
+**The rule.** The higher resolution is there to be used when something needs it. Until then the
+game keeps the look it had, and anything that is not already pixel art is made into pixel art
+*itself* rather than relying on the frame to do it.
+
+- **Geometry is baked onto a grid** (`render/world/pixel-shape.ts`): the outline is decided once,
+  on cells the size of a sprite texel, and each filled cell is drawn as a flat rectangle. The bulb
+  glass is a pixel disc that faces the camera like a billboard, its cord one cell wide; the crack
+  is its old zigzag plotted cell by cell (cells taller than wide, because the camera looks down
+  the wall face); the padlock is a two-colour pixel shape on each face of the leaf.
+- **The door** keeps its swinging, lit box. Its plank texture drops to one texel per room unit,
+  the density of a wall tile, without the grain speckle, and the frame gains a timber grain at the
+  same density. Signed off from three options shown in the room.
+- **Key art is sampled down** (`Postcard.pixelArtFor`): every postcard picture is cut to one texel
+  per UI pixel of its window, nearest-neighbour, which is what the coarse frame did. The pixel
+  look is deliberate there: it hides the small artefacts of generated art and leaves fine detail
+  to the imagination.
+
+**Rejected:** drawing props into a second, coarse pass composited under a fine room. It reproduces
+the old look exactly, but it means two renderers, depth shared between them, and a per-object
+choice of which one draws what.
+
+**Not done:** the straight outer edges of walls, door leaves and frames stay clean, as #112 left
+them. The other geometry props (the maypole, a thrown bomb, the corpse mound, pedestal and machine
+beams, trellis posts, blasted-wall rubble) have the same issue and have not been baked yet.
+
+**Constrains:** new room geometry that is not textured pixel art should be built from
+`pixel-shape.ts`, and a new full-size illustration should go through `Postcard`.

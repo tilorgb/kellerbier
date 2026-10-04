@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BoxGeometry, type Group, Mesh, type PointLight, Raycaster, Scene, Vector3 } from 'three';
+import { type Group, Mesh, type PointLight, Raycaster, Scene, Vector3 } from 'three';
 import { ROOM_TILE_UNITS } from '../../src/content/rooms/definition.js';
 import { RoomGeometry } from '../../src/sim/room/geometry.js';
 import {
@@ -152,18 +152,9 @@ describe('doorways in the wall', () => {
 
   it('shows a padlock only while key-locked', () => {
     const piece = firstDoor(build([NORTH]));
-    const lockVisible = (): boolean => {
-      let visible = false;
-      piece.group.traverse((object) => {
-        if (object instanceof Mesh && object.visible && object.geometry instanceof BoxGeometry) {
-          const mesh = object as Mesh<BoxGeometry>;
-          if (mesh.geometry.parameters.width === 2 && mesh.geometry.parameters.depth === 1.2) {
-            visible = true;
-          }
-        }
-      });
-      return visible;
-    };
+    // The padlock is a pixel shape on each face of the leaf, not a box.
+    const lockVisible = (): boolean => piece.group.getObjectByName('padlock')?.visible === true;
+    expect(piece.group.getObjectByName('padlock')).toBeDefined();
     expect(lockVisible()).toBe(false);
     piece.setState('locked');
     expect(lockVisible()).toBe(true);

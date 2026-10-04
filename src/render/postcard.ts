@@ -1,4 +1,11 @@
-import { Container, Graphics, Sprite, Texture, type BitmapText } from './gfx/index.js';
+import {
+  Container,
+  Graphics,
+  Sprite,
+  Texture,
+  textureFromImage,
+  type BitmapText,
+} from './gfx/index.js';
 import { POSTCARD_PALETTE } from './palette.js';
 import {
   POSTCARD_SHADOW_OFFSET,
@@ -58,6 +65,10 @@ export class Postcard {
   private caption: BitmapText | null = null;
   private captionText = '';
   private captionWrapWidth = -1;
+  /** The illustration as it was loaded — `art` shows `pixelArt`, a copy cut down to the window's size. */
+  private source: Texture | null = null;
+  private pixelArt: Texture | null = null;
+  private pixelArtKey = '';
   private hasArt = false;
   private artAspect: number | undefined;
   private width = 0;
@@ -77,6 +88,8 @@ export class Postcard {
 
   /** Swaps a real illustration in once one has finished loading — safe to call before or after `resize`. */
   setArt(texture: Texture): void {
+    this.source = texture;
+    this.dropPixelArt();
     this.art.texture = texture;
     this.hasArt = true;
     this.art.visible = true;
@@ -95,6 +108,8 @@ export class Postcard {
     if (!this.hasArt) {
       return;
     }
+    this.source = null;
+    this.dropPixelArt();
     this.art.texture = Texture.EMPTY;
     this.hasArt = false;
     this.art.visible = false;
@@ -157,6 +172,7 @@ export class Postcard {
     // every case this class had before a beat existed without its own picture.
     this.mount.clear();
     if (this.hasArt) {
+      this.art.texture = this.pixelArtFor(geometry.picture.width, geometry.picture.height);
       this.art.width = geometry.picture.width;
       this.art.height = geometry.picture.height;
       this.art.position.set(geometry.picture.x, geometry.picture.y);
@@ -172,6 +188,57 @@ export class Postcard {
     }
 
     this.placeCaption(geometry);
+  }
+
+  /**
+   * The illustration cut down to one texel per UI pixel of its window.
+   *
+   * The source is a large generated picture, and its pixelated look is
+   * deliberate: it hides the small artefacts of generated art and leaves the
+   * fine detail to the imagination. That look used to come for free from the
+   * 640x360 frame. Now the frame is the display's size
+   * (`RENDER_AT_DISPLAY_RESOLUTION`), so the picture is sampled down here
+   * instead — nearest-neighbour, the same sampling the coarse frame did — and
+   * each texel is then drawn as a whole block of screen pixels.
+   *
+   * Redone only when the window's size changes. With no DOM (a headless
+   * test) the source is shown as it is.
+   */
+  private pixelArtFor(width: number, height: number): Texture {
+    const source = this.source;
+    if (source === null) {
+      return Texture.EMPTY;
+    }
+    const w = Math.max(1, Math.round(width));
+    const h = Math.max(1, Math.round(height));
+    const key = `${String(w)}:${String(h)}`;
+    if (this.pixelArt !== null && key === this.pixelArtKey) {
+      return this.pixelArt;
+    }
+    const image = source.source.texture.image as CanvasImageSource | null | undefined;
+    if (typeof document === 'undefined' || image === null || image === undefined) {
+      return source;
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const context = canvas.getContext('2d');
+    if (context === null) {
+      return source;
+    }
+    context.imageSmoothingEnabled = false;
+    const frame = source.frame;
+    context.drawImage(image, frame.x, frame.y, frame.width, frame.height, 0, 0, w, h);
+    this.dropPixelArt();
+    this.pixelArt = textureFromImage(canvas);
+    this.pixelArtKey = key;
+    return this.pixelArt;
+  }
+
+  private dropPixelArt(): void {
+    this.pixelArt?.destroy(true);
+    this.pixelArt = null;
+    this.pixelArtKey = '';
   }
 
   /**
