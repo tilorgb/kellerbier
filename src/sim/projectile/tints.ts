@@ -60,6 +60,8 @@ export const PROJECTILE_TINT_NAMES = [
   'schaum',
   /** Bierbank: the second board of the bench, wood-brown. */
   'holz',
+  /** Schnupftabak: the sneeze volley, snuff-brown. */
+  'schnupf',
 ] as const;
 
 export type ProjectileTintName = (typeof PROJECTILE_TINT_NAMES)[number];

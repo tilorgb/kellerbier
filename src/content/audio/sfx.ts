@@ -504,6 +504,30 @@ const uiUnlockFanfare: SfxDefinition = {
   tone: { instrument: 'brass-stab', note: 'C5', durationSeconds: 0.3 },
 };
 
+const itemSneezeInhale: SfxDefinition = {
+  id: 'item-sneeze-inhale',
+  description:
+    'Schnupftabak (#396): the held breath before the sneeze — a thin rising hiss, so the half second with no shots in it is not silent.',
+  noise: {
+    filter: { type: 'highpass', frequencyHz: 2600, q: 0.8 },
+    durationSeconds: 0.42,
+    gain: 0.16,
+  },
+  tone: { instrument: 'clarinet', note: 'A4', durationSeconds: 0.35 },
+};
+const itemSneeze: SfxDefinition = {
+  id: 'item-sneeze',
+  description:
+    'Schnupftabak (#396): the sneeze. Plays over the one `player-shot` the volley is allowed, and has to read as bigger than it.',
+  noise: {
+    filter: { type: 'bandpass', frequencyHz: 1500, q: 0.7 },
+    durationSeconds: 0.28,
+    gain: 0.6,
+  },
+  tone: { instrument: 'brass-stab', note: 'D3', durationSeconds: 0.14 },
+  pitchJitterCents: 150,
+};
+
 export const SFX_DEFINITIONS: readonly SfxDefinition[] = [
   hitSquelch,
   hitMetal,
@@ -525,6 +549,8 @@ export const SFX_DEFINITIONS: readonly SfxDefinition[] = [
   roomClear,
   lowHealth,
   enemySplit,
+  itemSneezeInhale,
+  itemSneeze,
   playerHit,
   playerDeath,
   wallHit,

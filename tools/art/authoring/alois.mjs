@@ -12,7 +12,7 @@ import { grid, shiftGrid, blankCanvas, stamp, finishCanvas } from './compose.mjs
  * Read this file as three layers. The **blocks** below are the drawings: a head
  * per direction and expression, a torso per direction, a set of legs per
  * contact pose, and the keg. `STRIPS` at the bottom is the frame list — which
- * blocks each of the forty-four frames uses, and at what offset. In between is
+ * blocks each of the sixty-five frames uses, and at what offset. In between is
  * `frame`, which is nine lines and does all the composing.
  *
  * Two knobs carry the whole animation, and it is worth saying why they are
@@ -441,7 +441,11 @@ const SIDE_LEGS = Object.fromEntries(
 
 /**
  * The eight sober frames, in the order the sidecars index them: two idles, two
- * walk contacts, a flinch, then the three death beats.
+ * walk contacts, a flinch, then the three death beats — and after them the
+ * three sneeze frames (#396): the idle and both walk contacts again with the
+ * lids shut, which `render/player-view.ts` swaps in by index while a
+ * Schnupftabak sneeze is building. No clip names them; they are the same
+ * poses, so the clip that is playing keeps its timing.
  *
  * The clip lists in `assets/sprites/common/characters/*.anim.json` are what
  * decide which of these plays when — this only has to put them at the indices
@@ -457,6 +461,23 @@ function sober(dir, { head, blink, hurt, torso, legs, rig, down }) {
     frame(`${dir}-death-1`, { head: hurt, torso, legs: legs.wide, bob: 3, lean: 2, overlays: rig }),
     frame(`${dir}-death-2`, { head: hurt, torso, legs: legs.kneel, bob: 5, overlays: rig }),
     down,
+    frame(`${dir}-sneeze-idle`, { head: blink, torso, legs: legs.stand, overlays: rig }),
+    frame(`${dir}-sneeze-step-a`, {
+      head: blink,
+      torso,
+      legs: legs.stepA,
+      bob: 1,
+      lean: -1,
+      overlays: rig,
+    }),
+    frame(`${dir}-sneeze-step-b`, {
+      head: blink,
+      torso,
+      legs: legs.stepB,
+      bob: 1,
+      lean: 1,
+      overlays: rig,
+    }),
   ];
 }
 
@@ -466,11 +487,21 @@ function sober(dir, { head, blink, hurt, torso, legs, rig, down }) {
  * Only `idle` and `move` are authored, on purpose (`assets/sprites/README.md`):
  * a flinch is a flinch, so `render/player-view.ts` asks the sober strip for
  * `hurt` and `death` rather than drawing a drunk one.
+ *
+ * Then the same four again with the lids shut, for a sneeze building while
+ * drunk (#396) — index + 4, swapped in the same way the sober strip's are.
  */
-function drunk(dir, { head, torso, legs, rig }) {
+function drunk(dir, { head, blink, torso, legs, rig }) {
   return [
-    frame(`${dir}-drunk-idle-a`, { head, torso, legs: legs.wide, lean: -1, overlays: rig }),
-    frame(`${dir}-drunk-idle-b`, {
+    ...drunkPoses(dir, 'drunk', { head, torso, legs, rig }),
+    ...drunkPoses(dir, 'drunk-sneeze', { head: blink, torso, legs, rig }),
+  ];
+}
+
+function drunkPoses(dir, tag, { head, torso, legs, rig }) {
+  return [
+    frame(`${dir}-${tag}-idle-a`, { head, torso, legs: legs.wide, lean: -1, overlays: rig }),
+    frame(`${dir}-${tag}-idle-b`, {
       head,
       torso,
       legs: legs.wide,
@@ -478,7 +509,7 @@ function drunk(dir, { head, torso, legs, rig }) {
       lean: 1,
       overlays: rig,
     }),
-    frame(`${dir}-drunk-step-a`, {
+    frame(`${dir}-${tag}-step-a`, {
       head,
       torso,
       legs: legs.stepA,
@@ -486,7 +517,7 @@ function drunk(dir, { head, torso, legs, rig }) {
       lean: -1,
       overlays: rig,
     }),
-    frame(`${dir}-drunk-step-b`, {
+    frame(`${dir}-${tag}-step-b`, {
       head,
       torso,
       legs: legs.stepB,
@@ -531,18 +562,21 @@ export const STRIPS = {
   }),
   'alois-drunk-south': drunk('south', {
     head: headSouthDrunk,
+    blink: headSouthBlink,
     torso: torsoSouth,
     legs: FRONT_LEGS,
     rig: RIG_SOUTH,
   }),
   'alois-drunk-north': drunk('north', {
     head: headNorth,
+    blink: headNorth,
     torso: torsoNorth,
     legs: FRONT_LEGS,
     rig: RIG_NORTH,
   }),
   'alois-drunk-side': drunk('side', {
     head: headSideDrunk,
+    blink: headSideBlink,
     torso: torsoSide,
     legs: SIDE_LEGS,
     rig: RIG_SIDE,

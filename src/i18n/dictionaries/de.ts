@@ -457,6 +457,9 @@ export const de: Record<DictKey, string> = {
     'Zeigt die Geheimräume des Stocks auf der Karte. Einen Raum räumen bringt einen Schlüssel',
   'items.schluesselbund.flavourText':
     'Passt in jedes Schloss im Keller. Warum, das zu erklären übersteigt deine Gehaltsstufe.',
+  'items.schnupftabak.description':
+    'Beim Dauerfeuer baut sich ein Nieser auf: erst langsamer, dann ein Schwall in allen Größen',
+  'items.schnupftabak.flavourText': 'Hatschi!',
   'items.schuhplattler.description':
     'Kurz stillstehen, um eine beschädigende Druckwelle freizusetzen',
   'items.schuhplattler.flavourText': 'Die Physik dahinter ist unklar. Die Begeisterung nicht.',

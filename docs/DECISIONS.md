@@ -6243,3 +6243,43 @@ that no longer describes what happens.
 
 **Constrains:** nothing may send on its own for a store without `autoSend`. The Settings privacy
 text names the one exception, so it stays true in both cases.
+
+## 113. A held item may roll: `itemEffects` is its stream, and Schnupftabak is the first to draw
+
+**Decided:** M8, #396. Three items were pitched as "random" before this and all three shipped a
+fixed cycle (Sauwetter, Lebkuchenherz, Wolpertinger im Rucksack), because no stream in
+`sim/rng/streams.ts` was meant for a gameplay-affecting roll made by an item the player is holding.
+That was the right call for them: each was a choice among a few options, and a rotation reads the
+same in play. Schnupftabak is different. Its whole effect is *when* the sneeze comes; on a fixed
+schedule it is a charge attack with a timer.
+
+**The rule.** `RngStream.ItemEffects` (`sim.random.itemEffects`) is what a held item's hooks draw
+from. Not `Items`: that stream decides pools, pedestals and shop stock, and how often a sneeze draws
+depends on how long the trigger was held, so sharing it would make every shop after the pickup
+depend on that too. The roll is seeded like every other, so the same seed and the same input log
+still sneeze on the same ticks (`tests/content/schnupftabak.test.ts`).
+
+**What the engine gained for it,** each a fact a hook could not see for itself rather than a
+sneeze-shaped special case:
+
+- `sim.fireHeldTick` — the last tick the trigger was held with an aim. No hook is handed the input
+  frame, and "was fire held, and for how long has it not been" is the item's whole state machine.
+- `sim.squeezeInProgress` — true while `fire` runs. This is what makes "every shot of the squeeze
+  becomes a cone" exact: the aimed shot and every shot another item's `onShoot` adds qualify, a
+  familiar's shot spawned on the same tick does not.
+- `sim.playItemCue(name)` and `EventKind.ItemCue` — content may not import `EventKind`, so an item
+  names its sound as a string the way it names a projectile tint.
+- `sim.pushPlayer`, `sim.sneezeBuildUp` — recoil through the existing capped push channel, and the
+  one number the renderer needs for the blink. Nothing in `step` reads the latter.
+
+**The slowdown is not a stat.** It is added to `sim.fireCooldown` per shot, not returned from
+`modifyStats`: it changes every tick of the ramp, and a Fire Rate that crept up and snapped back
+every ten seconds would make the stat readout lie about the build.
+
+**The sneeze counts as a shot fired,** on the user's call: an item that refuses to combine with the
+rest of the roster is against the point of the roster. So multi-shot items multiply the cone and it
+is uncapped; `SlotPool`'s overflow policy (#4) is the only limit. The +20% the item is tuned toward
+is the bare item's number, and multi-shot builds are expected to exceed it.
+
+**Constrains:** an item that wants a roll draws from `itemEffects` and nothing else. A cosmetic
+roll still belongs to `cosmetic`.

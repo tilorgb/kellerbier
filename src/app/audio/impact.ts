@@ -1,3 +1,4 @@
+import { ITEM_CUE_NAMES, type ItemCueName } from '../../sim/events/item-cues.js';
 import { EventKind } from '../../sim/events/queue.js';
 import type { GameSim } from '../../sim/game/sim.js';
 
@@ -30,6 +31,8 @@ export interface ImpactAudio {
   onAttackWindup(enemyId: string | null): void;
   /** A body's on-death `splitOnDeath` behaviour produced children — a boss phase change or similar (#234). */
   onEnemySplit(): void;
+  /** A held item asked for a sound of its own (#396) — see `sim/events/item-cues.ts`. */
+  onItemCue(cue: ItemCueName): void;
 }
 
 /** The implementation until Web Audio is available. Deliberately silent, deliberately present. */
@@ -43,6 +46,7 @@ export const SILENT_AUDIO: ImpactAudio = {
   onEnemyShotFired: () => undefined,
   onAttackWindup: () => undefined,
   onEnemySplit: () => undefined,
+  onItemCue: () => undefined,
 };
 
 /**
@@ -89,6 +93,13 @@ export function playImpactAudio(sim: GameSim, audio: ImpactAudio): void {
       case EventKind.EnemySplit:
         audio.onEnemySplit();
         break;
+      case EventKind.ItemCue: {
+        const cue = ITEM_CUE_NAMES[events.value[slot] ?? -1];
+        if (cue !== undefined) {
+          audio.onItemCue(cue);
+        }
+        break;
+      }
       default:
         break;
     }

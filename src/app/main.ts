@@ -224,6 +224,9 @@ const HUD_MARGIN = 6;
 /** Vertical gap between two rows of the top-left HUD stack, in UI pixels. */
 const HUD_ROW_GAP = 2;
 
+/** Schnupftabak's phases (`content/items/schnupftabak.ts`'s `state.charge`), for the dev readout. */
+const SNEEZE_PHASE_LABELS: readonly string[] = ['wait', 'ramp', 'inhale', 'armed', 'sneezing'];
+
 /** How much bigger than one UI pixel the dev readout draws. Whole, like every other scale here. */
 const DEV_READOUT_SCALE = 1;
 
@@ -901,6 +904,16 @@ async function boot(progress: BootProgress): Promise<void> {
   let RUN_SEED = Number.isFinite(parsedSeed)
     ? Math.trunc(parsedSeed)
     : Math.floor(Math.random() * 1_000_000);
+  // `?item=schnupftabak` (comma-separated for several): dev builds only, the
+  // run starts already holding these. For looking at one item without
+  // hunting a seed whose pedestals offer it; granted before the first tick on
+  // every (re)start, so a resumed run under the same URL replays the same.
+  const devStartItems = import.meta.env.DEV
+    ? (new URLSearchParams(location.search).get('item') ?? '')
+        .split(',')
+        .map((id) => id.trim())
+        .filter((id) => id !== '')
+    : [];
   // Dev-only camera sliders (angle, lens, zoom), live on the current view.
   // Beside the seed control, and for the same reason it is not on touch:
   // there is no keyboard to type into either, and both cover the room.
@@ -2831,9 +2844,16 @@ async function boot(progress: BootProgress): Promise<void> {
         : '';
     // eslint-disable-next-line kellerbier/no-hardcoded-ui-string -- the O-debug bug-report line: dev-only, never localised.
     const resumedHint = wasResumed ? '  (resumed)' : '';
+    // Schnupftabak (#396) deliberately has no HUD row, so this is the only
+    // place its cycle can be read as numbers while tuning it.
+    const sneezeState = sim.hasItem('schnupftabak') ? sim.itemState('schnupftabak') : null;
+    const sneezeLine =
+      sneezeState === null
+        ? ''
+        : `\nsneeze ${SNEEZE_PHASE_LABELS[sneezeState.charge] ?? '?'} ${String(sneezeState.timer)}  build-up ${sim.sneezeBuildUp.toFixed(2)}`;
     hud.text = `seed ${String(RUN_SEED)}  ${character}  ${floorPlan.floorName}  room ${sim.roomId} (${currentRole})  doors ${roomState}${warmup}${keyHint}${bossGateHint}${bossGateState}  enemies ${String(sim.liveEnemyCount)}
   tick ${String(loop.tick)}  ${seconds}s  x${scale}${loop.paused ? '  PAUSED' : ''}
-hp ${String(hearts)}/${String(maxHearts)}  soul ${String(sim.playerSoulHealth)}  eternal ${String(sim.playerEternalHealth)}${invulnerable}${dead}${runState}${override}${promilleLine}
+hp ${String(hearts)}/${String(maxHearts)}  soul ${String(sim.playerSoulHealth)}  eternal ${String(sim.playerEternalHealth)}${invulnerable}${dead}${runState}${override}${promilleLine}${sneezeLine}
 shots ${String(shots.liveCount)}/${String(shots.capacity)}  particles ${String(
       particles.liveCount,
     )}/${String(particles.capacity)}${shots.overflows > 0 ? '  SHOT OVERFLOW' : ''}
@@ -2983,6 +3003,13 @@ WASD move   arrows aim and fire
     // plan and consuming no RNG, so a resumed run's replay reaches the same
     // gate state.
     sim.configureFloorGate(floorPlan.minibossRoomIds.length > 0);
+    for (const id of devStartItems) {
+      if (sim.items.indexOf(id) >= 0) {
+        sim.pickUpItem(id);
+      } else {
+        console.warn(`?item=${id}: no such item`);
+      }
+    }
     // A restart abandons whatever was being recorded for the previous run —
     // persisted immediately (not just reassigned in memory) so a crash right
     // after a restart resumes into the *new* run next time, not the one the

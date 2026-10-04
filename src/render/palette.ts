@@ -169,6 +169,13 @@ export const BLUTWURZ_SPIRIT_TINT = 0x9ec8e8;
  * two are both "the whole body is tinted" states and must never be
  * mistakable for each other on the rare run where both are active.
  */
+/**
+ * Schnupftabak (#396): the yellowish-white blink a building sneeze pulses
+ * Alois with. Warm and pale, so it cannot be read as the pure-white hit flash
+ * or as either status tint.
+ */
+export const SNEEZE_GLOW_TINT = 0xfff0a8;
+
 export const STATUS_POISON_TINT = 0x8fbf3a;
 
 /**
@@ -202,6 +209,7 @@ export const PROJECTILE_TINT_COLOURS: Readonly<Record<ProjectileTintName, number
   zwerg: 0xff6a4a,
   schaum: 0xfff0c0,
   holz: 0xa0703a,
+  schnupf: 0x94784a,
 };
 
 export const EFFECT_PALETTE = {

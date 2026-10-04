@@ -49,6 +49,7 @@ import { ruhigeHand } from './ruhige-hand.js';
 import { rumtopf } from './rumtopf.js';
 import { sauwetter } from './sauwetter.js';
 import { schluesselbund } from './schluesselbund.js';
+import { schnupftabak } from './schnupftabak.js';
 import { schuhplattler } from './schuhplattler.js';
 import { semmelknoedel } from './semmelknoedel.js';
 import { sixpack } from './sixpack.js';
@@ -134,6 +135,7 @@ export const ITEM_DEFINITIONS: readonly ItemDefinition[] = [
   rumtopf,
   sauwetter,
   schluesselbund,
+  schnupftabak,
   schuhplattler,
   semmelknoedel,
   sixpack,
@@ -192,6 +194,7 @@ export {
   ruhigeHand,
   sauwetter,
   schluesselbund,
+  schnupftabak,
   schuhplattler,
   sixpack,
   spezi,

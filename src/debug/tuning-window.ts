@@ -12,6 +12,7 @@ import {
   DEFAULT_PROMILLE_TUNING,
   DEFAULT_ROOM_GEN_TUNING,
   DEFAULT_SHOOTING_TUNING,
+  DEFAULT_SNEEZE_TUNING,
 } from '../sim/tuning.js';
 import { injectDevUiTokens } from '../dev-ui/tokens.js';
 
@@ -57,6 +58,7 @@ interface GroupSpec {
     | 'character'
     | 'roomGen'
     | 'curse'
+    | 'sneeze'
     | 'machine'
     | 'chest';
   readonly fields: readonly FieldSpec[];
@@ -544,6 +546,49 @@ const GROUPS: readonly GroupSpec[] = [
       { key: 'payoutSpread', min: 4, max: 40, step: 1, hint: 'px a payout lands from its chest' },
     ],
   },
+  {
+    title: 'sneeze (Schnupftabak)',
+    group: 'sneeze',
+    fields: [
+      { key: 'waitMinTicks', min: 30, max: 1200, step: 30, hint: 'shortest wait, ticks of firing' },
+      { key: 'waitMaxTicks', min: 30, max: 1800, step: 30, hint: 'longest wait, ticks of firing' },
+      { key: 'rampTicks', min: 10, max: 480, step: 10, hint: 'ticks the slowdown ramps over' },
+      { key: 'inhaleTicks', min: 0, max: 120, step: 5, hint: 'ticks of no firing before it goes' },
+      {
+        key: 'minDelayScale',
+        min: 1,
+        max: 5,
+        step: 0.1,
+        hint: "fire delay on the ramp's first shot",
+      },
+      {
+        key: 'maxDelayScale',
+        min: 1,
+        max: 5,
+        step: 0.1,
+        hint: 'fire delay at the end of the ramp',
+      },
+      { key: 'graceTicks', min: 0, max: 60, step: 1, hint: 'release this long and it is lost' },
+      { key: 'coneShots', min: 1, max: 15, step: 1, hint: 'shots per cone' },
+      { key: 'coneShotsPerStack', min: 0, max: 6, step: 1, hint: 'extra shots per extra copy' },
+      { key: 'coneRadians', min: 0.1, max: 3.14, step: 0.05, hint: 'full width of the cone' },
+      { key: 'speedJitter', min: 0, max: 0.5, step: 0.01, hint: 'shot speed spread' },
+      { key: 'smallChance', min: 0, max: 1, step: 0.05, hint: 'share of small shots' },
+      { key: 'bigChance', min: 0, max: 1, step: 0.05, hint: 'share of big shots' },
+      { key: 'smallRadiusScale', min: 0.2, max: 1, step: 0.05, hint: 'small shot size' },
+      { key: 'smallDamageScale', min: 0.1, max: 1, step: 0.05, hint: 'small shot damage' },
+      { key: 'bigRadiusScale', min: 1, max: 4, step: 0.1, hint: 'big shot size' },
+      { key: 'bigDamageScale', min: 1, max: 6, step: 0.1, hint: 'big shot damage' },
+      {
+        key: 'volleyDamageScale',
+        min: 0.5,
+        max: 5,
+        step: 0.1,
+        hint: 'whole volley, on top of size',
+      },
+      { key: 'kickbackScale', min: 1, max: 12, step: 0.5, hint: 'recoil, in ordinary shots' },
+    ],
+  },
 ];
 
 const DEFAULTS = {
@@ -559,6 +604,7 @@ const DEFAULTS = {
   curse: DEFAULT_CURSE_TUNING,
   machine: DEFAULT_MACHINE_TUNING,
   chest: DEFAULT_CHEST_TUNING,
+  sneeze: DEFAULT_SNEEZE_TUNING,
 } as const;
 
 const STYLE = `

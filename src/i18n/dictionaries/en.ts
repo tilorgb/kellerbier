@@ -450,6 +450,9 @@ export const en = {
     "Shows the floor's secret rooms on the map. Clearing a room grants a key",
   'items.schluesselbund.flavourText':
     'Fits every lock in the Keller. Explaining why is above your pay grade.',
+  'items.schnupftabak.description':
+    'Keep firing and a sneeze builds: shots slow, then burst out as a cone of all sizes',
+  'items.schnupftabak.flavourText': 'Hatschi!',
   'items.schuhplattler.description': 'Stand still for a moment to release a damaging shockwave',
   'items.schuhplattler.flavourText': 'The physics of it are unclear. The enthusiasm is not.',
   'items.semmelknoedel.description': 'Shots hit for 2x and travel heavily. Shot Speed -40%',

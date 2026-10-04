@@ -450,6 +450,9 @@ export const bar: Record<DictKey, string> = {
     'Zoagt de Gheimraum vom Stock auf da Kartn. A Zimma räum bringt an Schlüssl',
   'items.schluesselbund.flavourText':
     'Passt in jeds Schloss im Keller. Warum, des z’erklärn is über dei Gehoitsstufn.',
+  'items.schnupftabak.description':
+    'Beim Dauerfeuer baut sich ein Nieser auf: erst langsamer, dann ein Schwall in allen Größen',
+  'items.schnupftabak.flavourText': 'Hatschi!',
   'items.schuhplattler.description': 'Kurz stostehn und a beschädigade Druckwön losn',
   'items.schuhplattler.flavourText': 'D’Physik dahinta is ned kloar. D’Begeistarung scho.',
   'items.semmelknoedel.description':

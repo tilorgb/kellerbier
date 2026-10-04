@@ -1959,6 +1959,17 @@ function rumtopf(cv) {
   ink(cv);
 }
 
+// Schnupftabak: a round snuff tin, lid on, with its label.
+function schnupfTin(cv) {
+  ellipse(cv, 11.5, 15, 9, 5, sh(STEEL2, -1));
+  rect(cv, 3, 11, 18, 4, STEEL2);
+  ellipse(cv, 11.5, 11, 9, 5, STEEL);
+  ellipse(cv, 11.5, 11, 6, 3, CREAM);
+  hline(cv, 7, 16, 11, RED);
+  hline(cv, 5, 9, 8, W);
+  ink(cv);
+}
+
 export const ITEM_ART = {
   almabtrieb: (cv) => cow(cv, 1.5, 2, 21, false),
   apfelkuchen: (cv) => cake(cv, 1, 4, 22, false, false),
@@ -2010,6 +2021,7 @@ export const ITEM_ART = {
   rumtopf: (cv) => rumtopf(cv),
   sauwetter: (cv) => sauwetter(cv),
   schluesselbund: (cv) => schluesselbund(cv),
+  schnupftabak: (cv) => schnupfTin(cv),
   schuhplattler: (cv) => schuhplattler(cv),
   semmelknoedel: (cv) => semmelknoedel(cv),
   spezi: (cv) => spezi(cv),

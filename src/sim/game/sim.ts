@@ -86,7 +86,7 @@ import { StatId, STAT_LABELS, type BaseStats } from '../stats/definition.js';
 import type { StatModifier } from '../stats/modifiers.js';
 import { type CollisionLayerId, CollisionLayer, collisionMaskFor } from '../collision/layers.js';
 import { SpatialHash } from '../collision/spatial-hash.js';
-import { EventQueue } from '../events/queue.js';
+import { EventKind, EventQueue } from '../events/queue.js';
 import { DamageNumberStore } from '../particle/damage-numbers.js';
 import { DecalStore } from '../particle/decals.js';
 import { ParticleStore } from '../particle/store.js';
@@ -105,6 +105,7 @@ import {
   type ProjectileTagName,
 } from '../projectile/tags.js';
 import { PROJECTILE_TINT_INDEX, type ProjectileTintName } from '../projectile/tints.js';
+import { ITEM_CUE_INDEX, type ItemCueName } from '../events/item-cues.js';
 import { NO_SLOT } from '../pool/slot-pool.js';
 import { vectorLength } from '../math.js';
 import { addPush, stepPlayerMovement } from '../systems/movement.js';
@@ -978,6 +979,34 @@ export class GameSim {
    * down identically whether the button is held or was tapped once.
    */
   lastShotTick = -1;
+
+  /**
+   * The last tick the player was asking to fire on — trigger held with an aim
+   * — whether or not the cooldown let a shot out, or `-1` before the first.
+   * Not stamped while knocked down or frozen by a dialog, when
+   * `stepShooting` never gets as far as reading the trigger. Written by
+   * `systems/shooting.ts`; read by an item that cares how long the trigger
+   * has been held or let go (#396's Schnupftabak), which a hook cannot see
+   * for itself since no hook is handed the input frame.
+   */
+  fireHeldTick = -1;
+
+  /**
+   * True only while `systems/shooting.ts`'s `fire` is running — between the
+   * trigger pull's `onShoot` broadcast and its aimed shot spawning. Lets an
+   * `onProjectileSpawn` hook tell a shot that belongs to the squeeze (the
+   * aimed one, and every extra another item's `onShoot` adds) from one a
+   * familiar or a detonation spawned on the same tick.
+   */
+  squeezeInProgress = false;
+
+  /**
+   * How far along a sneeze is, for the renderer: 0 when nothing is building,
+   * rising to 1 across the ramp and held at 1 through the inhale (#396).
+   * Written by Schnupftabak's hooks through `setSneezeBuildUp`; nothing in
+   * `step` reads it, so it cannot move a replay.
+   */
+  sneezeBuildUp = 0;
 
   /**
    * Ticks the simulation is frozen for.
@@ -4528,6 +4557,38 @@ export class GameSim {
    */
   tintProjectile(projectile: number, tint: ProjectileTintName): void {
     this.projectiles.tint[projectile] = PROJECTILE_TINT_INDEX[tint];
+  }
+
+  /** See `sneezeBuildUp`. Clamped, so a hook cannot hand the renderer a value it has to defend against. */
+  setSneezeBuildUp(progress: number): void {
+    this.sneezeBuildUp = Math.min(1, Math.max(0, progress));
+  }
+
+  /**
+   * Shoves the player, through the same capped push channel a shot's own
+   * kickback uses — the content-safe way for an item to add recoil (#396).
+   */
+  pushPlayer(x: number, y: number): void {
+    addPush(this, this.playerIndex, x, y);
+  }
+
+  /**
+   * Asks for one of `ITEM_CUE_NAMES`' sounds at the player's position. An
+   * event like any other: read by the audio seam after the step, never by
+   * the simulation.
+   */
+  playItemCue(cue: ItemCueName): void {
+    const playerIndex = this.playerIndex;
+    this.events.push(
+      EventKind.ItemCue,
+      playerIndex,
+      NO_SLOT,
+      this.positionX(playerIndex),
+      this.positionY(playerIndex),
+      0,
+      0,
+      ITEM_CUE_INDEX[cue],
+    );
   }
 
   /**
