@@ -57,10 +57,10 @@ reach a player as a frozen game. Floor 2 shipped with its boss room throwing on 
 specifically because its only boss choice was authored `maxFloor: 1`, back when only floor 1
 existed — an uncaught exception inside a
 door-transition stops the frame loop outright, which a player experiences as a freeze, not an
-error message. The schedule still guarantees more of these. Floors 3-7 (#39-#43) are parked in
-M10 and will each spend time with room content in place before their full roster lands whenever
-they unpark — but the nearer case is now floors 1 and 2 themselves, which spend all of M6-M8
-having their content replaced underneath them: sprites swapped for animated ones, rosters
+error message. The schedule still guarantees more of these. Floor 3 (#39, M10) is being built
+now, room content first and its roster sub-issue by sub-issue (#401-#414); floors 4-7 (#40-#43)
+are parked in M11 and will each spend time in the same state whenever they unpark. Floors 1 and 2
+are the other case, having spent all of M6-M8 with their content replaced underneath them: sprites swapped for animated ones, rosters
 extended with elite variants (#156), a run that gains an actual ending (#155). Content churning
 under a shipped floor is exactly the shape this section is about.
 

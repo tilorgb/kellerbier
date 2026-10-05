@@ -5,12 +5,12 @@
 > static index of the planning backlog; the roadmap issue is the thing to check daily.
 
 GitHub milestones are not available through this repo's tooling, so milestones are **labels**
-(`M0`–`M10`) plus a title prefix.
+(`M0`–`M11`) plus a title prefix.
 
 Filter by label: [`M0`](../../labels/M0) · [`M1`](../../labels/M1) · [`M2`](../../labels/M2) ·
 [`M3`](../../labels/M3) · [`M4`](../../labels/M4) · [`M5`](../../labels/M5) ·
 [`M6`](../../labels/M6) · [`M7`](../../labels/M7) · [`M8`](../../labels/M8) ·
-[`M9`](../../labels/M9) · [`M10`](../../labels/M10)
+[`M9`](../../labels/M9) · [`M10`](../../labels/M10) · [`M11`](../../labels/M11)
 
 ---
 
@@ -20,6 +20,10 @@ The plan used to run M5 (floors 1 & 2) → M6 (floors 3–7) → polish. **It no
 stops at two floors and everything after M5 finishes *those two* — look and motion, meta-
 progression, sound and menus, balance — before a third floor is built. Floors 3–7 are **M10,
 parked**, and the reasoning is in [`ROADMAP.md`](ROADMAP.md).
+
+**Floor 3 has since been unparked** (2026-10-05): with M6 and M7 closed it is built now, as
+**M10**, and ships in M9's release. Floors 4–7 stay parked, renumbered **M11**. The last two rows
+below are that move.
 
 What moved, concretely:
 
@@ -33,6 +37,8 @@ What moved, concretely:
 | #52, #54, #58 | seven floors | rescoped | Two-floor curve, chapter-two cliffhanger, pixel font moved to #154 |
 | #57, #70–#72 | M9 | **M10** | Steam and the desktop shell need more game than two floors to be worth doing |
 | #55, #56 | seven-floor launch | rescoped | M9 is the itch.io release of a two-chapter game, priced and described as one |
+| #39, #401–#414 | M10 (parked) | **M10, active** | Floor 3 unparked on 2026-10-05 and ships in M9's release — three chapters, not two (`DECISIONS.md` #117) |
+| #40–#44, #57, #70–#72, #98 | M10 (parked) | **M11 (parked)** | Floors 4–7, secrets, Steam and the desktop shell stay parked under a new number |
 
 ---
 
@@ -123,7 +129,7 @@ What moved, concretely:
 
 *Exit: nothing on screen is a placeholder and everything alive is animated.*
 
-The milestone the original plan never had. It sets the bar M10 inherits.
+The milestone the original plan never had. It sets the bar M10 and M11 inherit.
 
 Also where the premise rewrite (`DECISIONS.md` #24 — Alois, and raisins in Opa's Pfeitinger)
 stops being docs-only. #166 lands the item side of it, and it wants to go **before** #152: the
@@ -226,23 +232,45 @@ criterion for the second treasure room should be read as superseded, not outstan
 
 ## M9 — Release
 
-*itch.io only, free or name-your-price.* The two-floor game ships and strangers play it; Steam
-waits for M10.
+*itch.io only, free or name-your-price.* The three-floor game ships and strangers play it; Steam
+waits for M11. **Waits on M10:** the release carries floor 3, so #56 closes after #414. The alpha
+page (#367) is the exception — it goes up with two floors, to collect #54's telemetry now.
 
 | # | Issue |
 |---|---|
 | 55 | Legal review of names, landmarks and trademarks |
 | 56 | Web release build, itch.io page and trailer |
 
-## M10 — Floors 3–7 *(parked)*
+## M10 — Floor 3: Der Wald
 
-Not cancelled — deferred until the bar these five have to match has stopped moving, and until M9's
-players have said something about what they should be. Epics; break each into sub-issues when they
-unpark. Carries the Steam track, which needs more game than two floors to be worth doing.
+*Exit: floor 3 is reached through the real progression and Der Waldradler is beaten, in the
+build that ships on itch.io.*
+
+Unparked on 2026-10-05, after a design session that retired the original folk-horror pitch. The
+floor teaches poison and the boss tests it; #39 carries the pillars, the dependency graph and the
+rules every sub-issue inherits. Listed in implementation order.
 
 | # | Issue |
 |---|---|
-| 39 | Floor 3 — Der Wald and Der Waldradler *(broken down — see below)* |
+| 39 | Floor 3 — Der Wald and Der Waldradler *(epic)* |
+| 401 | Poison on the player, Maß cleanses, poison clouds |
+| 402 | Wald floor foundation: tileset, room generation, docs |
+| 403 | Waldbach stream hazard |
+| 404 | Lantern-darkness rooms |
+| 405–411 | Enemies: Fliegenpilz, Zecke, Kaninchen, Bachforelle, Boar, Borkenkäfer, Specht |
+| 412 | Boss: Der Waldradler (phase 1) |
+| 413 | Boss: Das Waldradl (phase 2) |
+| 414 | Integration: spawn tables, boss room, `HIGHEST_PLAYABLE_FLOOR = 3` |
+
+## M11 — Floors 4–7 *(parked)*
+
+Not cancelled — deferred until the three-floor game is finished and released, and until M9's
+players have said something about what the rest should be. Epics; break each into sub-issues when
+they unpark, the way #39 was. Carries the Steam track, which needs more game than three floors to
+be worth doing.
+
+| # | Issue |
+|---|---|
 | 40 | Floor 4 — Die Alpen and Der Watzmann |
 | 41 | Floor 5 — Schloss Neuschwanstein and König Ludwig II |
 | 42 | Floor 6 — Die Brauerei and Die Abfüllanlage |
@@ -254,29 +282,11 @@ unpark. Carries the Steam track, which needs more game than two floors to be wor
 | 72 | Steam release: store page, build pipeline and wishlist runway |
 | 98 | Huepfburg: a side-scrolling jump'n'run special room |
 
-### #39 — Floor 3, Der Wald *(epic, broken down)*
-
-The first parked floor to be split into sub-issues, after the 2026-10-05 design session that
-retired the original folk-horror pitch. Still **parked** with the rest of M10 — broken down is not
-unparked. The floor teaches poison and the boss tests it; #39 carries the pillars, the dependency
-graph and the rules every sub-issue inherits. Listed in implementation order.
-
-| # | Issue |
-|---|---|
-| 401 | Poison on the player, Maß cleanses, poison clouds |
-| 402 | Wald floor foundation: tileset, room generation, docs |
-| 403 | Waldbach stream hazard |
-| 404 | Lantern-darkness rooms |
-| 405–411 | Enemies: Fliegenpilz, Zecke, Kaninchen, Bachforelle, Boar, Borkenkäfer, Specht |
-| 412 | Boss: Der Waldradler (phase 1) |
-| 413 | Boss: Das Waldradl (phase 2) |
-| 414 | Integration: spawn tables, boss room, `HIGHEST_PLAYABLE_FLOOR = 3` |
-
 ---
 
 ## Labels
 
-Milestone: `M0`–`M10`.
+Milestone: `M0`–`M11`.
 Type: `engine`, `gameplay`, `content`, `art`, `audio`, `tooling`, `perf`, `infra`, `design`,
 `a11y`, `feel`, `epic`.
 
@@ -290,7 +300,7 @@ and only one open issue should ever carry it.
 event and regenerates the roadmap issue body from the live issue list.
 
 - **Closing** an issue ticks its box and advances its milestone bar.
-- **Opening** an issue adds it automatically. Label it `M0`–`M10` to file it under a milestone;
+- **Opening** an issue adds it automatically. Label it `M0`–`M11` to file it under a milestone;
   without one it appears under **Needs triage** until labelled.
 - **Relabelling** moves an issue between milestones.
 - **Sub-issues** nest under their parent when both carry the same milestone label, in issue-number

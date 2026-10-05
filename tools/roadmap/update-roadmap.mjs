@@ -3,7 +3,7 @@
  * Regenerates the roadmap tracking issue from the current state of the issue list.
  *
  * Run by .github/workflows/roadmap.yml on every issue event. Issues are grouped by
- * their milestone label (M0-M10, defined in plan.json), so a newly created issue lands
+ * their milestone label (M0-M11, defined in plan.json), so a newly created issue lands
  * in the right section automatically as soon as it is labelled, and closing an issue
  * ticks its box.
  *
@@ -214,7 +214,7 @@ export function renderBody(issues, plan = PLAN) {
     out.push('## Needs triage');
     out.push('');
     out.push(
-      'These have no milestone label, so they have nowhere to sit. Add an `M0`–`M10` label and ' +
+      'These have no milestone label, so they have nowhere to sit. Add an `M0`–`M11` label and ' +
         'they move into the right section on the next event.',
     );
     out.push('');
@@ -234,7 +234,7 @@ export function renderBody(issues, plan = PLAN) {
   out.push('');
   out.push('- **Closing an issue** ticks its box and advances its milestone bar.');
   out.push(
-    '- **Opening an issue** adds it automatically — label it `M0`–`M10` to place it in a milestone, ' +
+    '- **Opening an issue** adds it automatically — label it `M0`–`M11` to place it in a milestone, ' +
       'or it appears under **Needs triage** until you do.',
   );
   out.push('- **Relabelling** an issue moves it between milestones.');

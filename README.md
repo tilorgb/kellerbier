@@ -37,7 +37,7 @@ The build asks once whether you want to take part in the playtest. Saying yes se
 run stats; saying no changes nothing about the game.
 
 Design docs are in [`docs/`](docs/); the work is tracked in [issues](../../issues), grouped by
-milestone label `M0`–`M10`.
+milestone label `M0`–`M11`.
 
 **Current state and what's next: the [roadmap issue](../../issues?q=is%3Aissue+label%3Aroadmap)**,
 regenerated automatically from the issue list on every issue event.
@@ -49,7 +49,7 @@ regenerated automatically from the issue list on every issue event.
 | [docs/GAME_DESIGN.md](docs/GAME_DESIGN.md) | Pillars, story, run structure, the Promille mechanic, economy, meta-progression |
 | [docs/CONTENT_BIBLE.md](docs/CONTENT_BIBLE.md) | Floors, enemy rosters, bosses, item seeds, naming and tone rules |
 | [docs/TECH_STACK.md](docs/TECH_STACK.md) | Engine choice, performance architecture and budgets, project layout, testing |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | Milestones M0–M10 and what "done" means for each |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | Milestones M0–M11 and what "done" means for each |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | Architectural decisions and the reasoning behind them |
 | [docs/PERFORMANCE_AUDIT.md](docs/PERFORMANCE_AUDIT.md) | Measured render-side audit: where the room-transition stutter comes from, and the plan |
 | [docs/BOSS_SPRITES.md](docs/BOSS_SPRITES.md) | How a boss sprite is made: key art → cut-out rig → twelve-frame strip, step by step |
