@@ -153,6 +153,11 @@ exist first. Parked until floors 1 & 2 are finished, so that these five are buil
 bar that has stopped moving, with the art and audio pipelines M6–M8 will have proved out, and
 against real evidence from M9's players about what the remaining five floors should be.
 
+Floor 3 is the first of the five to be designed down to issues: #39 was redesigned on 2026-10-05
+and split into #401–#414 (poison, the `wald` foundation, two hazards, seven enemies, a two-phase
+boss, integration). That is planning done early, not the floor unparked — the sub-issues stay in
+M10 and wait with it.
+
 ---
 
 ## Sequencing notes

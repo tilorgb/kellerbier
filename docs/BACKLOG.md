@@ -242,7 +242,7 @@ unpark. Carries the Steam track, which needs more game than two floors to be wor
 
 | # | Issue |
 |---|---|
-| 39 | Floor 3 — Der Wald and Die Wilde Gjoad |
+| 39 | Floor 3 — Der Wald and Der Waldradler *(broken down — see below)* |
 | 40 | Floor 4 — Die Alpen and Der Watzmann |
 | 41 | Floor 5 — Schloss Neuschwanstein and König Ludwig II |
 | 42 | Floor 6 — Die Brauerei and Die Abfüllanlage |
@@ -253,6 +253,24 @@ unpark. Carries the Steam track, which needs more game than two floors to be wor
 | 71 | Steam Deck: controller-first UI, performance and Verified |
 | 72 | Steam release: store page, build pipeline and wishlist runway |
 | 98 | Huepfburg: a side-scrolling jump'n'run special room |
+
+### #39 — Floor 3, Der Wald *(epic, broken down)*
+
+The first parked floor to be split into sub-issues, after the 2026-10-05 design session that
+retired the original folk-horror pitch. Still **parked** with the rest of M10 — broken down is not
+unparked. The floor teaches poison and the boss tests it; #39 carries the pillars, the dependency
+graph and the rules every sub-issue inherits. Listed in implementation order.
+
+| # | Issue |
+|---|---|
+| 401 | Poison on the player, Maß cleanses, poison clouds |
+| 402 | Wald floor foundation: tileset, room generation, docs |
+| 403 | Waldbach stream hazard |
+| 404 | Lantern-darkness rooms |
+| 405–411 | Enemies: Fliegenpilz, Zecke, Kaninchen, Bachforelle, Boar, Borkenkäfer, Specht |
+| 412 | Boss: Der Waldradler (phase 1) |
+| 413 | Boss: Das Waldradl (phase 2) |
+| 414 | Integration: spawn tables, boss room, `HIGHEST_PLAYABLE_FLOOR = 3` |
 
 ---
 
@@ -275,6 +293,9 @@ event and regenerates the roadmap issue body from the live issue list.
 - **Opening** an issue adds it automatically. Label it `M0`–`M10` to file it under a milestone;
   without one it appears under **Needs triage** until labelled.
 - **Relabelling** moves an issue between milestones.
+- **Sub-issues** nest under their parent when both carry the same milestone label, in issue-number
+  order — so open an epic's sub-issues in the order they should be built, as #401–#414 were.
+  Linking a sub-issue fires no issue event; it shows up on the next one, or the weekly reconcile.
 - Milestone names, exit criteria, the critical path and which milestones are **parked** live in
   [`tools/roadmap/plan.json`](../tools/roadmap/plan.json) — edit that to change the page's shape.
   A milestone with a `parked` string renders with a ⏸️ marker, an explanation of why, and is
