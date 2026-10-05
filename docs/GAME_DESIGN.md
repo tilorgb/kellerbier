@@ -81,12 +81,19 @@ saying nothing is wrong — and it means the brand name stays useful the whole r
 lorry, awning and delivery note Alois passes is the same word he grew up with.
 
 **The reveal.** It lands late, on floor 6, in the brewery, once the arc has already stopped
-being folkloric: **the raisins are not raisins.** The game never says what they are instead.
-A chemical explanation is a worse joke than no explanation, and inventing one converts a funny
-premise into homework. What the floor shows is only the consequence — people who drink the new
-Pfeitinger cannot leave it alone. That is why the crates keep going out, why the village square
-is stacked with them, and why the Wiesn takes more people every year than the year before.
-Somebody put them in on purpose, and somebody has made a great deal of money.
+being folkloric: **the raisins are just raisins.** Nothing was swapped and nothing is hidden.
+Ordinary raisins go into the new Pfeitinger by the sackful, on a dosing schedule, on purpose —
+because people who drink it cannot leave it alone. That is why the crates keep going out, why
+the village square is stacked with them, and why the Wiesn takes more people every year than the
+year before. Somebody worked that out, and somebody has made a great deal of money.
+
+The game never says *why* it works, because the joke is that it does not need to. Anyone who has
+ever picked the raisins out of a cake already knows the answer: a thing that tastes like that
+and still has people coming back for more must be doing something to their heads. The brewery
+treats this as an obvious production fact and the floor plays it completely straight, so the
+punchline is the player's own, never said out loud. A chemical explanation is a worse joke than
+no explanation — and so is a hint that the raisin is secretly something else, which would trade
+the joke everybody already shares for a mystery nobody asked for.
 
 The final boss, **Die Bavaria**, is the bronze statue over the Theresienwiese: the one thing on
 that field that grows with the crowd. Six million becomes seven becomes eight, and she is what

@@ -173,7 +173,7 @@ against real evidence from M9's players about what the remaining five floors sho
   more meta-progression — it is unparking M10 sooner. Being a *scheduled* decision is the whole
   point; a bet with no date attached quietly becomes an assumption.
 - **The story ends on a cliffhanger, deliberately.** Der Stier closes chapter two rather than
-  revealing what is upstream — the "the raisins are not raisins" reveal stays in M10 with floor
+  revealing what is upstream — the "the raisins are just raisins" reveal stays in M10 with floor
   6, where it was written to live; chapter two ends on the loaded delivery lorry pulling out of
   the village square, southbound. That puts real weight on execution (#58): a cliffhanger done well
   is a promise, done badly it is indistinguishable from running out of content, and M9 puts it in

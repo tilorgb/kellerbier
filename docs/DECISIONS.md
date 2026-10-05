@@ -973,6 +973,8 @@ still reaches for `requestHitstop`, but combat is never that reason again.
 
 ## 24. The premise is a raisin in one family's beer, not a general adulteration — and the protagonist is Alois
 
+*The reveal is superseded by #116: the raisins are just raisins, and nothing is withheld. The premise, the protagonist and everything under "What this constrains" stand.*
+
 **Decided:** M6, in a story review before #58 (story delivery) was written. **Amends:** #22.
 **Supersedes** the premise as it stood in `GAME_DESIGN.md` §2 and `README.md` since M0.
 
@@ -6343,3 +6345,43 @@ beams, trellis posts, blasted-wall rubble) have the same issue and have not been
 
 **Constrains:** new room geometry that is not textured pixel art should be built from
 `pixel-shape.ts`, and a new full-size illustration should go through `Postcard`.
+
+## 116. The raisins are just raisins — the reveal is that nobody needs it explained
+
+**Decided:** M10 planning, during the floor 3 redesign. **Supersedes** #24's reveal ("the
+raisins are not raisins", a single withheld fact). **Amends** `GAME_DESIGN.md` §2 and
+`CONTENT_BIBLE.md`'s floor 6 entry.
+
+#24 made the floor-6 reveal a fact withheld: the dosing hopper was fed through a pipe that is
+not on the wall diagram, the raisins were not raisins, and the game would never say what they
+were instead. That is a mystery, and a mystery points the player at a hidden substance — the
+one thing the rest of the design (`CONTENT_BIBLE.md` §0: raisins are never explained, never
+analysed, never called a drug) works hard not to point at.
+
+**The new reveal:** they are ordinary raisins. The brewery adds them on purpose, by the sackful,
+on a dosing schedule, because people who drink the new Pfeitinger cannot leave it alone — and
+nobody in the brewery thinks that needs explaining. The punchline is never spoken: raisins are
+so plainly awful that if people keep coming back for them, they must be fogging their brains.
+Everyone who has picked raisins out of a cake is already in on it.
+
+**Why:**
+
+- **A shared grievance beats a secret.** The joke the whole premise runs on is the raisin itself.
+  A hidden substance behind it moves the joke off the raisin and onto something the player never
+  sees; keeping them plain keeps it where it started, on Oma's Apfelkuchen.
+- **It is the straighter reading of §0.** "Played completely straight" and "never explained"
+  hold better when there is nothing to explain than when there is something being kept back.
+- **The reveal got smaller again.** #24 already replaced a thesis with a withheld fact; this
+  replaces the withheld fact with no secret at all. The consequence on the wall (attendance as a
+  production target, going up) does the same work it did before.
+
+**What this constrains:**
+
+- **No content hints that the raisins are something else.** No hidden pipe, no unlabelled
+  canister, no lab, no "what is really in it" line. Floor 6's hopper is fed in plain sight.
+- **The effect is still never named or explained.** The new framing is not a license to call
+  raisins addictive out loud: the brewery's charts and quotas imply it, nobody says it.
+- **Everything else #24 constrains stands:** the corrupted beer is never drunk by the player,
+  the addiction is narrative only with no third meter, the `rosinen` / `impure` tags and the
+  three answers are unchanged.
+
