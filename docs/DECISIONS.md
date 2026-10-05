@@ -854,8 +854,8 @@ attempt above but the last, more likely to be right.
 
 ## 22. Content stops at two floors until those two are finished — floors 3-7 are parked, not cancelled
 
-*Partly superseded by #117: floor 3 is unparked as M10 and ships in M9's release; floors 4-7 stay
-parked as M11. The reasoning below still holds for them.*
+*Partly superseded by #117: floor 3 is unparked as M10 and ships as a content update to the
+itch.io alpha; floors 4-7 stay parked as M11. The reasoning below still holds for them.*
 
 **Decided:** end of M5. **Supersedes:** the M5→M6 sequencing in the original
 [`ROADMAP.md`](ROADMAP.md). **Issues:** #39-#44 and #98 relabelled `M10`.
@@ -6390,7 +6390,7 @@ Everyone who has picked raisins out of a cake is already in on it.
 
 ---
 
-## 117. Floor 3 is built now, and ships in the release — floors 4-7 stay parked as M11
+## 117. Floor 3 is built now, as a content update to the alpha — floors 4-7 stay parked as M11
 
 **Decided:** 2026-10-05, after the floor 3 redesign (#39, split into #401-#414). **Partly
 supersedes** #22 (floor 3 only). **Issues:** #39 and #401-#414 stay `M10`, which is no longer
@@ -6402,27 +6402,25 @@ ending and the meta loop are all settled, and #270 fixed how long a floor is. Wh
 against — building a floor against a bar that then moves — no longer applies to the next floor.
 It still applies to the four after that, which is why they stay parked.
 
-**Floor 3 ships in M9's release rather than as an update after it.** The itch.io game is three
-chapters of seven. The two-floor alpha (#367) still goes up first: it exists to collect #54's
-telemetry from strangers now, and the evidence argument in #22 is unchanged by it.
+**Floor 3 ships as a content update.** The game is already on itch.io as an early alpha, and from
+here it grows step by step until it is finished; floor 3 is the first such step. The store page
+does not count floors or chapters — "early alpha, updated as content lands" describes every
+version of it, so a new floor changes the build, not how the game is described. The evidence
+argument in #22 is unchanged: the alpha's players are what floors 4-7 get built against.
 
 **Why a new number rather than unparking M10:** M10 carried floors 3-7 *and* the Steam track as
 one parked block. Unparking it whole would count four parked floors and Steam as live work in the
 roadmap's headline bar; leaving it parked would hide the work actually being done. Splitting it
-keeps `parked` meaning what #22 made it mean. The cost is that milestone numbers no longer read in
-shipping order: M9 (release) waits on M10 (floor 3). That is written into both milestones rather
-than fixed by renumbering M9, whose issues and title prefixes predate this.
+keeps `parked` meaning what #22 made it mean.
 
 **What this re-opens — each needs its own decision, not a silent carry-over:**
 
 - **Where the chapter ends.** #58's cliffhanger, #155's run ending and #236's Promille unlock were
-  all placed on Der Stier as *the last boss of the shipping game*. That boss is now Der
+  all placed on Der Stier as *the last boss in the game*. That boss is now Der
   Waldradler. Whether the story's chapter break, the win screen and the unlock move with it, or
   stay on floor 2, is a design question, not a find-and-replace.
-- **The balance curve is three floors long.** #54 tunes the game that ships; its curve isn't
+- **The balance curve is three floors long.** #54 tunes the game players have; its curve isn't
   final until #414 has put floor 3 on the end of it.
-- **The store copy** (#56, `docs/ITCH_PAGE.md` once it stops describing the alpha) says three
-  chapters, not two.
 - **Floor 3's music** is out of scope (#39): it reuses an existing track until one is written,
   which #51's two-theme scope does not cover.
 

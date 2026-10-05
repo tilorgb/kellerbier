@@ -24,19 +24,18 @@ The trade this makes: a 15-minute game has to earn its replays from systems rath
 new scenery. That is what M7 is for, and it is why meta-progression stays in scope rather than
 deferring alongside the floors.
 
-And it ships. **M9 releases the two-floor game on itch.io before M10 exists** — free or
-name-your-price, honest on the store page about being two chapters of seven. That is not a
-compromise forced by the refocus; it is the point of it. Every hour of stranger playtime is
+And it ships. **M9 put the game on itch.io as an early alpha before the remaining floors
+exist** — free or name-your-price, and from then on it grows by content updates until it is
+finished. That is not a compromise forced by the refocus; it is the point of it. Every hour of stranger playtime is
 evidence about what the remaining five floors should be, collected before they are built rather
 than after.
 
 **Floor 3 is the exception, taken deliberately (2026-10-05).** With M6 and M7 closed, the bar
 floor 3 has to match is the one those milestones set, and it has stopped moving enough to build
 against. Der Wald was redesigned down to issues (#39, split into #401–#414) and is now **M10,
-active**, and it ships *in* M9's release: the itch.io game is three chapters of seven, not two.
-Floors 4–7 and the Steam track stay parked, now as **M11**. The alpha page (#367) still goes up
-with two floors — it exists to feed #54 data now, not to be the release. `docs/DECISIONS.md` #117
-has the reasoning and what it re-opens.
+active**. It reaches players the same way everything after the first itch.io build will: as a
+content update to the alpha that is already out. Floors 4–7 and the Steam track stay parked, now
+as **M11**. `docs/DECISIONS.md` #117 has the reasoning and what it re-opens.
 
 ---
 
@@ -140,24 +139,21 @@ alternative — shipping a fifteen-minute game whose floors end four rooms in �
 measurement argued against.
 
 ## M9 — Release
-*Exit: strangers are playing it — the three-floor game is out on itch.io and feedback is coming
-back.*
+*Exit: strangers are playing it — the game is out on itch.io as an early alpha and feedback is
+coming back.*
 
-Web build on itch.io, a trailer, store copy honest about the game being two chapters of seven,
-a legal review of every name that actually ships, and a post-launch plan. **Free or
+Web build on itch.io, a trailer, store copy that says plainly it is an early alpha getting content
+updates until it is finished, a legal review of every name that actually ships, and a post-launch plan. **Free or
 name-your-price**, which removes the "is fifteen minutes worth money" question rather than
 answering it.
 
 The Steam track (#70–#72) and the desktop shell (#57) are **not** here. Steam wants a paid store
-page, a wishlist runway and enough game to justify both, and three floors is not that. They move
+page, a wishlist runway and enough game to justify both, and an early alpha is not that. They move
 to M11, where #57's own "revisit if" clause points them anyway.
-
-**M9 now waits on M10.** The release ships floor 3, so #56 cannot close before #414 does — the
-milestone numbers no longer read in shipping order, and this is the one place they don't.
 
 ## M10 — Floor 3: Der Wald
 *Exit: floor 3 is reached through the real progression — clear Der Stier, take the stairs — and
-Der Waldradler is beaten, in the same build that ships on itch.io.*
+Der Waldradler is beaten, in a content update that is live on itch.io.*
 
 The first parked floor to be unparked. #39 carries the design — poison is the floor's lesson and
 the boss tests it; axes are its grammar; the room changes under you; satire, not horror — and is
@@ -176,7 +172,7 @@ written.
 
 Die Alpen, Schloss Neuschwanstein, Die Brauerei, Die Wiesn. Every enemy roster, every boss, every
 floor hazard — plus the Steam release and the desktop build that need them to exist first. Parked
-until the three-floor game is finished and released, so these four are built against a bar that
+until floor 3 is out and its players have been heard, so these four are built against a bar that
 has stopped moving and against real evidence from M9's players about what they should be.
 
 ---
@@ -211,11 +207,11 @@ has stopped moving and against real evidence from M9's players about what they s
   #54 first would tune the game we have into a better version of the game we have — the same
   argument #228 made against itself being scheduled late, applied once more when #270 turned out to
   be its sequel.
-- **Floor 3 lands before the balance pass closes.** #54 tunes the curve of the game that ships,
-  and that game now has three floors: the two-floor alpha (#367) collects the telemetry, but the
-  curve isn't final until #414 has put floor 3 on the end of it.
+- **Floor 3 lands before the balance pass closes.** #54 tunes the curve of the game players
+  have: the alpha's two floors are collecting the telemetry now, but the curve isn't final until
+  #414 has put floor 3 on the end of it.
 - **Where the chapter ends is open again.** The cliffhanger above, the run's ending (#155) and
-  the Promille unlock (#236) were all placed on Der Stier as *the last boss of the shipping game*.
+  the Promille unlock (#236) were all placed on Der Stier as *the last boss in the game*.
   Floor 3 moves that boss to Der Waldradler; each needs a decision, not a silent carry-over —
   `docs/DECISIONS.md` #117 lists them.
 - **M8's balance pass is cheap now and expensive later.** Balancing three floors against real

@@ -323,7 +323,7 @@ Seven floors are planned; floors 1 and 2 are playable (`HIGHEST_PLAYABLE_FLOOR =
 | --- | --- | --- | --- | --- |
 | 1 | Der Keller | Opa's concrete cellar, racks, one bare bulb | Slick puddles carry momentum | Playable; the tutorial floor |
 | 2 | Dorf & Acker | Oberniederburg: square, hop fields, maypole | Hop trellises block sight; livestock | Playable; ends on the southbound lorry cliffhanger |
-| 3 | Der Wald | Bavarian Forest: dark wood, poison-green; satire, not horror | Poison, the Waldbach stream, lantern darkness | In progress (M10, #39); ships in the itch.io release |
+| 3 | Der Wald | Bavarian Forest: dark wood, poison-green; satire, not horror | Poison, the Waldbach stream, lantern darkness | In progress (M10, #39); next content update |
 | 4 | Die Alpen | Rock, snow, Berghütte, cable cars | Avalanches, ice, wind gusts | Parked (M11) |
 | 5 | Schloss Neuschwanstein | Throne rooms, unfinished wing | Falling chandeliers, mirrors, opera | Parked (M11) |
 | 6 | Die Brauerei | Steel, conveyors, floodlights | Conveyors, steam vents, bottling rhythm | Parked (M11); the reveal floor |
@@ -395,7 +395,7 @@ Screenshake and sway sliders down to off; colourblind-safe projectiles; full reb
 
 ## Roadmap and open questions
 
-The plan ships a polished three-floor game on itch.io (M9) before building floors 4–7 (M11). Polish was set on two floors first; floor 3 (M10) is the first floor built against that bar, and ships in the release.
+The game is on itch.io as an early alpha (M9) and grows by content updates until it is finished. Polish was set on two floors first; floor 3 (M10) is the first floor built against that bar and the next update. Floors 4–7 (M11) follow it.
 
 | Milestone | Exit criterion |
 | --- | --- |
@@ -408,8 +408,8 @@ The plan ships a polished three-floor game on itch.io (M9) before building floor
 | M6 Look and motion | Nothing placeholder; everything alive is animated |
 | M7 Meta-progression | Losing a run makes you want another immediately |
 | M8 Sound, menus, balance | Looks and sounds like a finished commercial game; includes the pressure pass and bigger floors |
-| M9 Release | Strangers play the three-floor game on itch.io, free or name-your-price |
-| M10 Floor 3 — Der Wald | Floor 3 reached through real progression; Der Waldradler beaten in the release build |
+| M9 Release | Strangers play the early alpha on itch.io, free or name-your-price |
+| M10 Floor 3 — Der Wald | Floor 3 reached through real progression; Der Waldradler beaten in a live itch.io update |
 | M11 Floors 4–7 (parked) | Cellar to Die Bavaria on Steam, worth charging for |
 
 Out of scope for v1: multiplayer, procedural items, online leaderboards at launch, a mod API.

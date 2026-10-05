@@ -49,18 +49,18 @@
     {
       "id": "M9",
       "name": "Release",
-      "exit": "Strangers are playing it — the three-floor game is out on itch.io and feedback is coming back."
+      "exit": "Strangers are playing it — the game is out on itch.io as an early alpha and feedback is coming back."
     },
     {
       "id": "M10",
       "name": "Floor 3 — Der Wald",
-      "exit": "Floor 3 is reached through the real progression — clear Der Stier, take the stairs — and Der Waldradler is beaten in the same build that ships on itch.io."
+      "exit": "Floor 3 is reached through the real progression — clear Der Stier, take the stairs — and Der Waldradler is beaten, in a content update that is live on itch.io."
     },
     {
       "id": "M11",
       "name": "Floors 4-7",
       "exit": "A complete run from cellar to Die Bavaria, on Steam, worth charging for.",
-      "parked": "deferred until the three-floor game is finished and released on itch.io. Floor 3 was unparked first, against the bar M6-M8 set; the remaining four inherit that bar and M9's player evidence rather than being built ahead of both. Carries the Steam track (#70-#72) and the desktop shell (#57), which need more game than three floors to be worth doing."
+      "parked": "deferred until floor 3 is out on itch.io and its players have been heard. Floor 3 was unparked first, against the bar M6-M8 set; the remaining four inherit that bar and the alpha's player evidence rather than being built ahead of both. Carries the Steam track (#70-#72) and the desktop shell (#57), which need more game than an early alpha to be worth doing."
     }
   ],
   "criticalPath": [1, 2, 3, 9, 10, 11, 13],

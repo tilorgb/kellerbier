@@ -22,7 +22,7 @@ progression, sound and menus, balance — before a third floor is built. Floors 
 parked**, and the reasoning is in [`ROADMAP.md`](ROADMAP.md).
 
 **Floor 3 has since been unparked** (2026-10-05): with M6 and M7 closed it is built now, as
-**M10**, and ships in M9's release. Floors 4–7 stay parked, renumbered **M11**. The last two rows
+**M10**, and ships as a content update to the itch.io alpha. Floors 4–7 stay parked, renumbered **M11**. The last two rows
 below are that move.
 
 What moved, concretely:
@@ -36,8 +36,8 @@ What moved, concretely:
 | #53 | one epic | **#53 + #158** | Screen flow split from settings and accessibility |
 | #52, #54, #58 | seven floors | rescoped | Two-floor curve, chapter-two cliffhanger, pixel font moved to #154 |
 | #57, #70–#72 | M9 | **M10** | Steam and the desktop shell need more game than two floors to be worth doing |
-| #55, #56 | seven-floor launch | rescoped | M9 is the itch.io release of a two-chapter game, priced and described as one |
-| #39, #401–#414 | M10 (parked) | **M10, active** | Floor 3 unparked on 2026-10-05 and ships in M9's release — three chapters, not two (`DECISIONS.md` #117) |
+| #55, #56 | seven-floor launch | rescoped | M9 puts the game on itch.io as an early alpha that grows by content updates |
+| #39, #401–#414 | M10 (parked) | **M10, active** | Floor 3 unparked on 2026-10-05; ships as a content update to the itch.io alpha (`DECISIONS.md` #117) |
 | #40–#44, #57, #70–#72, #98 | M10 (parked) | **M11 (parked)** | Floors 4–7, secrets, Steam and the desktop shell stay parked under a new number |
 
 ---
@@ -232,9 +232,8 @@ criterion for the second treasure room should be read as superseded, not outstan
 
 ## M9 — Release
 
-*itch.io only, free or name-your-price.* The three-floor game ships and strangers play it; Steam
-waits for M11. **Waits on M10:** the release carries floor 3, so #56 closes after #414. The alpha
-page (#367) is the exception — it goes up with two floors, to collect #54's telemetry now.
+*itch.io only, free or name-your-price.* The game is out as an early alpha and strangers are
+playing it; from here it grows by content updates, floor 3 first. Steam waits for M11.
 
 | # | Issue |
 |---|---|
@@ -243,8 +242,8 @@ page (#367) is the exception — it goes up with two floors, to collect #54's te
 
 ## M10 — Floor 3: Der Wald
 
-*Exit: floor 3 is reached through the real progression and Der Waldradler is beaten, in the
-build that ships on itch.io.*
+*Exit: floor 3 is reached through the real progression and Der Waldradler is beaten, in a
+content update that is live on itch.io.*
 
 Unparked on 2026-10-05, after a design session that retired the original folk-horror pitch. The
 floor teaches poison and the boss tests it; #39 carries the pillars, the dependency graph and the
@@ -264,9 +263,9 @@ rules every sub-issue inherits. Listed in implementation order.
 
 ## M11 — Floors 4–7 *(parked)*
 
-Not cancelled — deferred until the three-floor game is finished and released, and until M9's
-players have said something about what the rest should be. Epics; break each into sub-issues when
-they unpark, the way #39 was. Carries the Steam track, which needs more game than three floors to
+Not cancelled — deferred until floor 3 is out and its players have said something about what the
+rest should be. Epics; break each into sub-issues when
+they unpark, the way #39 was. Carries the Steam track, which needs more game than an early alpha to
 be worth doing.
 
 | # | Issue |

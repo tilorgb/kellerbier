@@ -24,7 +24,10 @@
       "color": "a85095",
       "description": "Sound, menus and balance — looks and sounds finished"
     },
-    "M9": { "color": "b8465f", "description": "Release — the three-floor game is out on itch.io" },
+    "M9": {
+      "color": "b8465f",
+      "description": "Release — the game is out on itch.io as an early alpha"
+    },
     "M10": {
       "color": "c8553d",
       "description": "Floor 3 — Der Wald, its roster and Der Waldradler"
