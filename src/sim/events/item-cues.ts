@@ -13,6 +13,8 @@ export const ITEM_CUE_NAMES = [
   'sneeze-inhale',
   /** Schnupftabak: the sneeze itself. */
   'sneeze',
+  /** A Maß drunk while poisoned (#401): the poison is gone. Not an item's sound, but the same seam. */
+  'poison-cleanse',
 ] as const;
 
 export type ItemCueName = (typeof ITEM_CUE_NAMES)[number];

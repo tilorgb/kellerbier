@@ -49,6 +49,8 @@ export const ParticleKind = {
   Glint: 7,
   /** The muzzle, on the tick a shot leaves. One particle, very short. */
   Flash: 8,
+  /** A poison cloud's mote (#401): the Spore art, drawn green so the cloud and its edge read as poison. */
+  Miasma: 9,
 } as const;
 
 export type ParticleKindId = (typeof ParticleKind)[keyof typeof ParticleKind];
@@ -64,6 +66,7 @@ export const PARTICLE_KIND_IDS: readonly ParticleKindId[] = [
   ParticleKind.Ember,
   ParticleKind.Glint,
   ParticleKind.Flash,
+  ParticleKind.Miasma,
 ];
 
 export class ParticleStore {

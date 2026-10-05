@@ -148,6 +148,8 @@ import {
 import { stepPedestal } from '../systems/pedestal.js';
 import { stepPickups } from '../systems/pickup.js';
 import { stepPromille } from '../systems/promille.js';
+import { CloudStore } from '../hazard/cloud-store.js';
+import { spawnPoisonCloud, stepClouds } from '../hazard/clouds.js';
 import { stepProjectiles, stepShooting } from '../systems/shooting.js';
 import {
   STATUS_BURN,
@@ -155,6 +157,8 @@ import {
   STATUS_FREEZE,
   STATUS_SLOW,
   STATUS_POISON,
+  applyPoison,
+  cleansePoison,
   stepStatusEffects,
 } from '../systems/status-effects.js';
 import { DESTRUCTIBLE_PROP_KINDS, type DestructiblePropKind, propKindIndex } from './prop-kinds.js';
@@ -890,6 +894,8 @@ export class GameSim {
 
   /** Everything in flight. Pooled, fixed capacity, never grows. */
   readonly projectiles: ProjectileStore;
+  /** Poison clouds in the room (#401). Cleared on every room load. */
+  readonly clouds = new CloudStore();
 
   /** Foam and splash. Pooled, and drawn from the seeded cosmetic stream. */
   readonly particles: ParticleStore;
@@ -3128,6 +3134,7 @@ export class GameSim {
     }
     this.world.flush();
     this.projectiles.clear();
+    this.clouds.clear();
     this.particles.clear();
     this.damageNumbers.clear();
     this.decals.clear();
@@ -4487,6 +4494,35 @@ export class GameSim {
    */
   claimOfferedBeer(): void {
     this.offeredBeerClaimedFlag = true;
+  }
+
+  /**
+   * Drinks a Maß worth `amount` Promille — the one way to cure poison (#401).
+   * Every route that actually drinks (the pickup, a Sixpack bottle being
+   * poured) goes through here so none can forget the cleanse. The cleanse is
+   * outside `addPromille`'s sober-run gate on purpose: a Maß still cures in a
+   * run with no Promille meter. A Maß a held item *stores* is never drunk and
+   * never reaches this.
+   */
+  drinkBeer(amount: number): void {
+    cleansePoison(this);
+    this.addPromille(amount);
+  }
+
+  /** Spawns a poison cloud that poisons the player — see `sim/hazard/clouds.ts`. Defaults come from `tuning.poisonCloud`. */
+  spawnPoisonCloud(
+    x: number,
+    y: number,
+    radius: number,
+    growTicks: number = this.tuning.poisonCloud.defaultGrowTicks,
+    lifetimeTicks: number = this.tuning.poisonCloud.defaultLifetimeTicks,
+  ): void {
+    spawnPoisonCloud(this, x, y, radius, growTicks, lifetimeTicks);
+  }
+
+  /** Poisons the player (or refreshes it) — what the debug button calls. */
+  poisonPlayer(): void {
+    applyPoison(this, this.playerIndex);
   }
 
   /**
@@ -6168,6 +6204,9 @@ export class GameSim {
     // integration that reads velocity. Burn/poison damage has no such
     // ordering requirement — it rides along here rather than earning a
     // second call site.
+    // Clouds first, so a body standing in one has poison refreshed before
+    // this tick's poison countdown reads it (#401).
+    stepClouds(this);
     stepStatusEffects(this);
     // A curse's per-tick effect (Föhn's wind).
     stepCurse(this);

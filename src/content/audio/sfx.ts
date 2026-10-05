@@ -528,7 +528,20 @@ const itemSneeze: SfxDefinition = {
   pitchJitterCents: 150,
 };
 
+const itemPoisonCleanse: SfxDefinition = {
+  id: 'item-poison-cleanse',
+  description:
+    'A Maß drunk while poisoned (#401): a short clean rising tone over a soft fizz, so the cure reads as relief rather than as another pickup.',
+  noise: {
+    filter: { type: 'highpass', frequencyHz: 3200, q: 0.6 },
+    durationSeconds: 0.22,
+    gain: 0.18,
+  },
+  tone: { instrument: 'clarinet', note: 'E5', durationSeconds: 0.22 },
+};
+
 export const SFX_DEFINITIONS: readonly SfxDefinition[] = [
+  itemPoisonCleanse,
   hitSquelch,
   hitMetal,
   hitAnimal,

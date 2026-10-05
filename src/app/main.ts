@@ -45,6 +45,7 @@ import {
 import { diamondTexture, dotTexture } from '../render/ui/marker-art.js';
 import { INTERNAL_HEIGHT, INTERNAL_WIDTH, computeGameLayout } from '../render/resolution.js';
 import { ActiveItemHud } from '../render/active-item-hud.js';
+import { PoisonHud } from '../render/poison-hud.js';
 import { SixpackHud } from '../render/sixpack-hud.js';
 import { BossHealthHud } from '../render/boss-health-hud.js';
 import { CharacterHud } from '../render/character-hud.js';
@@ -1355,6 +1356,9 @@ async function boot(progress: BootProgress): Promise<void> {
    */
   const activeItemHud = new ActiveItemHud(kit, preferences.locale);
   hudLayer.addChild(activeItemHud.view);
+  // Poison time left (#401). Hidden unless poisoned, like the Sixpack row.
+  const poisonHud = new PoisonHud(kit, preferences.locale);
+  hudLayer.addChild(poisonHud.view);
   /**
    * The Sixpack's banked Maß — its own row under the active-item
    * slot, since it is the thing the player reads to decide whether to press
@@ -1494,6 +1498,10 @@ async function boot(progress: BootProgress): Promise<void> {
     let y = HUD_MARGIN;
     healthHud.view.position.set(HUD_MARGIN, y);
     y += healthHud.height + HUD_ROW_GAP;
+    poisonHud.view.position.set(HUD_MARGIN, y);
+    if (poisonHud.view.visible) {
+      y += poisonHud.height + HUD_ROW_GAP;
+    }
     // A sober run has no meter (#85): `height` is 0 there, and the row's gap
     // goes with it — otherwise the column would keep a blank line where the
     // bar used to be, which reads as a HUD element that failed to draw.
@@ -2396,6 +2404,13 @@ async function boot(progress: BootProgress): Promise<void> {
           ? t(preferences.locale, 'ui.hud.tapUse')
           : actionPrompt(input.bindings, Bindable.Use, device, glyphSet);
       activeItemHud.sync(sim, activatePrompt);
+      // The poison row appears and disappears mid-run; re-stack the column
+      // the frame it flips, the same as the eternal-heart row above.
+      const poisonShownBefore = poisonHud.view.visible;
+      poisonHud.sync(sim);
+      if (poisonHud.view.visible !== poisonShownBefore) {
+        layoutHud();
+      }
       controlsHud.view.visible = input.activeDevice !== 'touch';
       controlsPrompts.fire = actionPrompt(input.bindings, Bindable.Fire, device, glyphSet);
       controlsPrompts.bomb = actionPrompt(input.bindings, Bindable.Bomb, device, glyphSet);
@@ -4641,6 +4656,7 @@ WASD move   arrows aim and fire
     machinePicker.setLocale(locale);
     floorTitleCard.setLocale(locale);
     activeItemHud.setLocale(locale);
+    poisonHud.setLocale(locale);
     controlsHud.setLocale(locale);
     bossHealthHud.setLocale(locale);
     curseHud.setLocale(locale);

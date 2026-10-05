@@ -134,6 +134,11 @@ export class DebugOverlay {
     return this.sim.tuning;
   }
 
+  /** The run being played — what a DOM tool's buttons act on (`projectile-tag-chooser`'s poison buttons). */
+  get currentSim(): GameSim {
+    return this.sim;
+  }
+
   /** Builds this run's world-space line displays and hangs them off the live view's scene. */
   private attachWorldLines(): void {
     this.hitboxes.dispose();

@@ -15,7 +15,7 @@ import { ProjectileTeam, type ProjectileStore } from '../sim/projectile/store.js
 import { ProjectileTag, type ProjectileTagId } from '../sim/projectile/tags.js';
 import { PROJECTILE_TINT_NAMES } from '../sim/projectile/tints.js';
 import type { Texture } from './gfx/index.js';
-import { PROJECTILE_TINT_COLOURS } from './palette.js';
+import { PROJECTILE_TINT_COLOURS, STATUS_POISON_TINT } from './palette.js';
 import { ACTOR_PIXELS_PER_UNIT } from './resolution.js';
 import type { Lighting } from './world/lighting.js';
 
@@ -363,6 +363,11 @@ export class ProjectileView {
       // player drinks would read as the enemy being buffed.
       if (isPlayer) {
         SHOT_COLOR.setHex(TINT_BY_INDEX[store.tint[index] ?? 0] ?? NO_TINT).multiply(HEAT_COLOR);
+      } else if ((store.tags[index] ?? 0) & ProjectileTag.Poison) {
+        // A poisoned enemy shot (#401) is green whatever art it wears: the
+        // enemy's own sprite would otherwise hide the one fact the player
+        // needs about it — that getting hit costs more than the hit.
+        SHOT_COLOR.setHex(STATUS_POISON_TINT);
       } else {
         SHOT_COLOR.setHex(NO_TINT);
       }

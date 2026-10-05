@@ -289,6 +289,8 @@ export const HUD_PALETTE = {
   healthSoul: 0xdce8f2,
   /** "Schwarzbier" — dark rather than literally black, so the outline still reads. */
   healthEternal: 0x3a3a42,
+  /** The poison readout's bar and label (#401) — the same green the poisoned player is tinted. */
+  poison: 0x8fbf3a,
 
   minimapUnvisited: 0x54445f,
   minimapVisited: 0x8a7f74,
