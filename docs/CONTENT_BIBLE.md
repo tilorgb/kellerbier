@@ -149,11 +149,11 @@ yellow, cola brown. Deliberately the ugliest floor.
   on a fixed rhythm.
 - **This is the reveal floor.** Environmental storytelling only, no dialogue: production quotas
   on the walls, a shipping manifest addressed to the Wiesn, the crate line running new-label
-  Pfeitinger and nothing else — and the dosing hopper, which is not fed from the ingredient
-  store along with the malt and the hops but from somewhere further in, through a pipe that
-  does not appear on the wall diagram. **The raisins are not raisins, and the floor never says
-  what they are instead** (`GAME_DESIGN.md` §2). What it shows is the consequence: year-on-year
-  Wiesn attendance posted on the wall as a production target, going up.
+  Pfeitinger and nothing else — and the dosing hopper, fed in plain sight from a wall of
+  ordinary raisin sacks stacked next to the malt and the hops, under a dosing chart that has
+  been revised upward every season. **The raisins are just raisins, and nobody on the floor
+  thinks that needs explaining** (`GAME_DESIGN.md` §2). What it shows is the consequence:
+  year-on-year Wiesn attendance posted on the wall as a production target, going up.
 
 ### Floor 7 — Die Wiesn
 Beer tents, rides, gingerbread hearts, crowds, night, neon. Palette: everything at once,
