@@ -79,9 +79,9 @@ either extreme:
 
 - Below ~20% and most runs end before the player has seen enough of a build to feel like their
   own decisions mattered — losing reads as the game's fault, not a fair fight.
-- Above ~35% and Der Stier stops being the wall M7's own sequencing note wants him to be — the
-  "first unlock is Promille itself, granted for beating Der Stier" design leans on the boss
-  actually gating something.
+- Above ~35% and the last boss stops being a wall — a run that is won most of the time has nothing
+  left to come back for. (This bullet used to lean on Promille being granted for beating Der
+  Stier; #236 moved that unlock to floor 1's boss.)
 
 **This is not yet validated against real play** — it is the deliberate target the tools in this
 document exist to check a real playtest round against, per #54's own acceptance criterion ("a

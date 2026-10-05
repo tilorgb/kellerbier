@@ -107,8 +107,9 @@ camera, with the same 2D sprites standing in it (`DECISIONS.md` #74).
 Save system, a results screen between runs, unlocks, additional characters, achievements, seeded
 runs, the daily run, challenge runs, curses, devil and angel rooms — and the run's actual ending,
 now that floor 2's boss is the last one. The first unlock is Promille itself, granted for beating
-Der Stier, which makes the results screen load-bearing earlier than the rest of this milestone
-implies. Character select, seed entry, the daily run and replays move to M8's title screen and
+floor 1's boss (#236 moved it off Der Stier, so a first run meets the mechanic instead of
+unlocking it at the very end), which makes the results screen load-bearing earlier than the rest
+of this milestone implies. Character select, seed entry, the daily run and replays move to M8's title screen and
 menus rather than living on the results screen — see `docs/DECISIONS.md`'s follow-up to #51.
 
 **This milestone carries more weight than it used to.** With five floors deferred, the reason

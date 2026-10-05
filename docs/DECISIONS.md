@@ -6426,8 +6426,8 @@ keeps `parked` meaning what #22 made it mean.
   goal. The story stays light — enough to give players an idea of what is planned, never a hook
   written to keep them interested. The win screen's epilogue ("This chapter is over…") is
   rewritten when the ending moves, in #414.
-- **Promille's unlock does not move.** It is on floor 1's boss (`content/progression/unlocks.ts`),
-  not on the last boss, so floor 3 changes nothing about it.
+- **Promille's unlock does not move.** #236 already put it on floor 1's boss
+  (`content/progression/unlocks.ts`), so floor 3 changes nothing about it.
 - **The balance curve is three floors long.** #54 tunes the game players have; its curve isn't
   final until #414 has put floor 3 on the end of it.
 - **Floor 3's music** is out of scope (#39): it reuses an existing track until one is written,
