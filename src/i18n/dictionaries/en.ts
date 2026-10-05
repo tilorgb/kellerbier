@@ -132,6 +132,9 @@ export const en = {
   'ui.hud.minimapHeader': '{floor}. Floor — {name}',
   'ui.hud.bossLabel': 'BOSS',
   'ui.hud.poisoned': 'Poisoned {seconds}s — drink a Maß to cure it',
+  'ui.hud.sandboxRun': 'Sandbox run — dealt items, nothing is saved or unlocked',
+  'ui.hud.sandboxClamped':
+    'That floor is not playable yet — sandbox run on the highest one, nothing is saved or unlocked',
   'ui.hud.tapUse': 'Tap Use',
   'ui.hud.confirmLoadReplay': 'Load a replay now? This ends the run in progress.',
   'ui.hud.blutwurzActive': 'Blutwurz — find your corpse',

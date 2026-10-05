@@ -615,6 +615,24 @@ export interface PoisonCloudTuning {
   maxActive: number;
 }
 
+/**
+ * What a run that starts on a later floor (`?floor=N`, a sandbox run) arrives
+ * with, per floor skipped — a stand-in for what a normal run would have found
+ * on the way, so floor 3 is not played by a zero-item player.
+ */
+export interface SkipAheadTuning {
+  /** Items drawn from the treasure pool for each floor skipped. */
+  treasureItemsPerFloor: number;
+  /** Items drawn from the boss pool for each floor skipped. */
+  bossItemsPerFloor: number;
+  /** Biermarken per floor skipped. */
+  biermarkenPerFloor: number;
+  /** Bierfassl per floor skipped. */
+  bombsPerFloor: number;
+  /** Kellerschlüssel per floor skipped — rounded over the total, so 0.5 gives one key after two floors. */
+  keysPerFloor: number;
+}
+
 export interface ProjectileTagTuning {
   /** `piercing`: enemies a shot may fly through before it is finally stopped. */
   pierceMaxTargets: number;
@@ -1064,6 +1082,7 @@ export interface SimTuning {
   readonly pickup: PickupTuning;
   readonly projectileTags: ProjectileTagTuning;
   readonly poisonCloud: PoisonCloudTuning;
+  readonly skipAhead: SkipAheadTuning;
   readonly itemPool: ItemPoolTuning;
   readonly character: CharacterTuning;
   readonly roomGen: RoomGenTuning;
@@ -1391,6 +1410,14 @@ export const DEFAULT_PROJECTILE_TAG_TUNING: Readonly<ProjectileTagTuning> = {
   freezeDurationTicks: 45,
 };
 
+export const DEFAULT_SKIP_AHEAD_TUNING: Readonly<SkipAheadTuning> = {
+  treasureItemsPerFloor: 1,
+  bossItemsPerFloor: 1,
+  biermarkenPerFloor: 5,
+  bombsPerFloor: 1,
+  keysPerFloor: 0.5,
+};
+
 export const DEFAULT_POISON_CLOUD_TUNING: Readonly<PoisonCloudTuning> = {
   defaultGrowTicks: 12,
   defaultLifetimeTicks: 90,
@@ -1583,6 +1610,7 @@ export function createTuning(): SimTuning {
     pickup: { ...DEFAULT_PICKUP_TUNING },
     projectileTags: { ...DEFAULT_PROJECTILE_TAG_TUNING },
     poisonCloud: { ...DEFAULT_POISON_CLOUD_TUNING },
+    skipAhead: { ...DEFAULT_SKIP_AHEAD_TUNING },
     itemPool: { ...DEFAULT_ITEM_POOL_TUNING },
     curse: { ...DEFAULT_CURSE_TUNING },
     blutwurz: { ...DEFAULT_BLUTWURZ_TUNING },

@@ -137,7 +137,8 @@ import {
   welcomeDue,
 } from './telemetry/send.js';
 import { createTouchControls, isTouchCapable } from './touch-controls.js';
-import { IS_RELEASE_BUILD, isPlaytestSession } from './build-mode.js';
+import { FLOOR_SKIP_ENABLED, IS_RELEASE_BUILD, isPlaytestSession } from './build-mode.js';
+import { parseStartFloor } from './start-floor.js';
 import { tourCandidates, trailAfter } from './room-tour.js';
 import { questionAt } from './playtest/questions.js';
 import { showFeedbackPrompt, showWelcome } from './playtest/overlay.js';
@@ -916,6 +917,27 @@ async function boot(progress: BootProgress): Promise<void> {
         .map((id) => id.trim())
         .filter((id) => id !== '')
     : [];
+  // `?floor=3`: dev and reviewer builds only (`FLOOR_SKIP_ENABLED`). Every run
+  // this page starts — first, `R`, the results screen's new run — begins on
+  // that floor with a freshly rolled kit (`GameSim.grantSkipAheadLoadout`), as
+  // a *sandbox* run: no run save, no unlock credit, no telemetry, no results
+  // board entry. A floor that is not playable yet is clamped to the highest
+  // one that is (`docs/DECISIONS.md` #19), loudly.
+  const startFloorRequest = parseStartFloor(
+    location.search,
+    FLOOR_SKIP_ENABLED,
+    HIGHEST_PLAYABLE_FLOOR,
+  );
+  const sandboxStartFloor = startFloorRequest?.floor ?? 1;
+  const sandboxStartClamped =
+    startFloorRequest !== null && startFloorRequest.requested > startFloorRequest.floor;
+  if (sandboxStartClamped) {
+    console.warn(
+      `?floor=${String(startFloorRequest.requested)}: floor ${String(startFloorRequest.requested)} is not playable yet — starting on floor ${String(startFloorRequest.floor)}`,
+    );
+  }
+  /** Whether the run in progress is a sandbox run — see `sandboxStartFloor`. Set by `startRun`. */
+  let sandboxRun = false;
   // Dev-only camera sliders (angle, lens, zoom), live on the current view.
   // Beside the seed control, and for the same reason it is not on touch:
   // there is no keyboard to type into either, and both cover the room.
@@ -1799,7 +1821,7 @@ async function boot(progress: BootProgress): Promise<void> {
    * same state the live run it is reconstructing was in.
    */
   function creditBossDefeat(live: boolean, justCleared: boolean): void {
-    if (!live || !justCleared || planRoom(floorPlan, currentRoomId).role !== 'boss') {
+    if (!live || sandboxRun || !justCleared || planRoom(floorPlan, currentRoomId).role !== 'boss') {
       return;
     }
     const key = `${String(floorPlan.floor)}:${currentRoomId}`;
@@ -2033,7 +2055,13 @@ async function boot(progress: BootProgress): Promise<void> {
         // replay, belongs to whoever's machine recorded it in the first
         // place), and there is no in-progress `activeRun` for a replay to
         // clear or reroll `pendingSeed` out from under.
-        if (replay === null) {
+        if (replay === null && sandboxRun) {
+          // A sandbox run (`?floor=N`) ends without a trace: no save slot to
+          // clear (a real run in progress may still be sitting in it), no
+          // telemetry, no results-board entry, no stored replay, no unlock
+          // check. Only the next run's seed is rolled.
+          pendingSeed = rollSeed();
+        } else if (replay === null) {
           // A finished run — won or dead — has nothing left to resume into:
           // the R key (or a fresh page load) starts a new one either way, so
           // the in-progress log is cleared rather than left around to be
@@ -2296,6 +2324,9 @@ async function boot(progress: BootProgress): Promise<void> {
    * below) cover the gap this leaves on an actual tab close.
    */
   function autosaveActiveRun(): void {
+    if (sandboxRun) {
+      return;
+    }
     ticksSinceAutosave += 1;
     if (ticksSinceAutosave < AUTOSAVE_INTERVAL_TICKS) {
       return;
@@ -2896,7 +2927,7 @@ hp ${String(hearts)}/${String(maxHearts)}  soul ${String(sim.playerSoulHealth)} 
 shots ${String(shots.liveCount)}/${String(shots.capacity)}  particles ${String(
       particles.liveCount,
     )}/${String(particles.capacity)}${shots.overflows > 0 ? '  SHOT OVERFLOW' : ''}
-save ${String(activeRunRecorder.frameCount)} ticks logged${resumedHint}
+save ${String(activeRunRecorder.frameCount)} ticks logged${resumedHint}${sandboxRun ? `  SANDBOX (floor ${String(sandboxStartFloor)} start: no saves, no unlocks)` : ''}
 WASD move   arrows aim and fire
   O debug   T tuning   I shot tags   Y settings   P pause   M ${isMuted() ? 'unmute' : 'mute'}   . step   [ ] time scale
   N next room (after clear)   R restart (new seed)   C copy run   L load replay${overrideKeyHint}${grantKeyHint}`;
@@ -2965,12 +2996,21 @@ WASD move   arrows aim and fire
       promilleUnlocked = nextRunPromilleUnlocked(),
       persist = true,
       character = selectedCharacter(),
+      startFloor = sandboxStartFloor,
     }: {
       promilleUnlocked?: boolean;
       persist?: boolean;
       character?: CharacterTraits;
+      /**
+       * The floor the run begins on. Above 1 it is a sandbox run (`?floor=N`):
+       * dealt a kit for the floors skipped, and never saved, credited or
+       * reported. A resume or a replay passes 1 — those rebuild a recorded
+       * run, which is never a sandbox one.
+       */
+      startFloor?: number;
     } = {},
   ): void {
+    sandboxRun = startFloor > 1;
     feedbackPrompt?.close();
     RUN_SEED = seed;
     if (seedInput instanceof HTMLInputElement) {
@@ -2980,7 +3020,7 @@ WASD move   arrows aim and fire
 
     floorPlan = generateFloor(
       createStreamRng(RUN_SEED, RngStream.Floor),
-      floorOneConfig(),
+      startFloor > 1 ? floorConfig(startFloor) : floorOneConfig(),
       ROOM_TEMPLATE_POOL,
       STAIRCASE_TEMPLATE_POOL,
     );
@@ -3010,6 +3050,7 @@ WASD move   arrows aim and fire
       // its floor-plan id there, and comes back uncleared.
       roomInstanceId: currentRoomId,
       floor: floorPlan.floor,
+      skippedFloors: startFloor - 1,
       hiddenDoors: hiddenDoorsFor(floorPlan, currentRoomId, revealedEdges),
       // The run's very first room reads as a quick, safe tutorial beat
       // rather than the first real encounter — no enemies, no drops,
@@ -3056,7 +3097,16 @@ WASD move   arrows aim and fire
     // rebuild) — see this function's doc comment.
     activeRunRecorder = new ActiveRunRecorder(seed, promilleUnlocked, character.id);
     ticksSinceAutosave = 0;
-    if (persist) {
+    // A sandbox run never touches the save slot: it must not replace a real
+    // run in progress, and it could not be resumed (the log does not carry
+    // the start floor).
+    if (sandboxRun) {
+      sim.reportCollected(
+        floorPlan.floorName,
+        sandboxStartClamped ? 'ui.hud.sandboxClamped' : 'ui.hud.sandboxRun',
+      );
+    }
+    if (persist && !sandboxRun) {
       persistActiveRun(activeRunRecorder);
     }
     wasResumed = false;
@@ -3368,6 +3418,7 @@ WASD move   arrows aim and fire
       startRun(RUN_SEED, {
         promilleUnlocked: activeRun.promilleUnlocked,
         character: characterTraitsById(activeRun.character),
+        startFloor: 1,
       });
       const frames = decodeActiveRunFrames(activeRun);
       for (const frame of frames) {
@@ -3410,6 +3461,7 @@ WASD move   arrows aim and fire
       persist: false,
       promilleUnlocked,
       character: characterTraitsById(character),
+      startFloor: 1,
     });
     const scratch = createInputFrame();
     const clamped = Math.max(0, Math.min(upToTick, frames.length));
@@ -3533,7 +3585,12 @@ WASD move   arrows aim and fire
       summary.kills,
       loadTelemetry().sessionId,
     );
-    void navigator.clipboard.writeText(buildRunDetailsText(details));
+    const text = buildRunDetailsText(details);
+    void navigator.clipboard.writeText(
+      sandboxRun
+        ? `SANDBOX RUN (floor ${String(sandboxStartFloor)} start, dealt items)\n${text}`
+        : text,
+    );
   }
 
   // Boots to the title screen (#158), not straight into a run — but a real
@@ -3544,7 +3601,9 @@ WASD move   arrows aim and fire
   // so the room never actually plays in front of anyone — safe this late,
   // since the animation frame loop that would otherwise render an uncovered
   // frame of it doesn't start until further down still.
-  const hadResumableRun = resumeActiveRun();
+  // `?floor=N` asks for a sandbox run: do not resume into the saved one (it
+  // stays untouched in the save, resumable on the next load without the param).
+  const hadResumableRun = sandboxStartFloor === 1 && resumeActiveRun();
   if (!hadResumableRun) {
     startRun(RUN_SEED);
   }

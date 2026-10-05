@@ -606,6 +606,13 @@ export interface GameSimOptions {
    */
   readonly roomPlacement?: RoomPlacement;
   readonly floor?: number;
+  /**
+   * Floors skipped by a run that starts later than floor 1 (a sandbox run,
+   * `?floor=N`): the run is dealt the items and consumables a normal one
+   * would plausibly hold by now (`tuning.skipAhead`, `grantSkipAheadLoadout`),
+   * before the first room loads. Omitted or 0 is an ordinary run.
+   */
+  readonly skippedFloors?: number;
   /** Doors to load hidden — see `loadRoom`'s `hiddenDoors` parameter. */
   readonly hiddenDoors?: readonly Pick<CompiledDoor, 'direction' | 'cellCol' | 'cellRow'>[];
   /**
@@ -1776,6 +1783,7 @@ export class GameSim {
     for (const id of this.character.items) {
       this.pickUpItem(id);
     }
+    this.grantSkipAheadLoadout(options.skippedFloors ?? 0);
     if (options.roomTemplate !== undefined) {
       this.loadRoom(
         options.roomTemplate,
@@ -4593,6 +4601,61 @@ export class GameSim {
       this.removeItem(id);
     }
     return true;
+  }
+
+  /**
+   * Deals a run that starts `skippedFloors` floors late what a normal run
+   * would plausibly hold by then: per skipped floor, a few treasure-pool and
+   * boss-pool items and some consumables (`tuning.skipAhead`). Returns the
+   * item ids granted, in order.
+   *
+   * Draws through the same `selectItemOffer` a pedestal does, from
+   * `random.items`, with each skipped floor's own depth bias — so the kit is a
+   * pure function of the seed, honours the pool rules (no duplicates, no
+   * Promille item in a sober run) and reads like something a player could
+   * have found. Granted before the first room loads, for the reason the
+   * character's starting items are (`onFloorStart` hooks). Health, Promille
+   * and everything else stay a fresh run's.
+   */
+  grantSkipAheadLoadout(skippedFloors: number): readonly string[] {
+    const granted: string[] = [];
+    const floors = Math.max(0, Math.floor(skippedFloors));
+    if (floors === 0) {
+      return granted;
+    }
+    const tuning = this.tuning.skipAhead;
+    for (let floor = 1; floor <= floors; floor++) {
+      const draws: readonly [ItemPoolId, number][] = [
+        ['treasure', tuning.treasureItemsPerFloor],
+        ['boss', tuning.bossItemsPerFloor],
+      ];
+      for (const [pool, count] of draws) {
+        for (let draw = 0; draw < Math.round(count); draw++) {
+          const offer = selectItemOffer(
+            this.items,
+            pool,
+            {
+              promilleUnlocked: this.promilleUnlockedValue,
+              floor,
+              luck: this.stats.value(StatId.Luck),
+              taken: this.takenItemIds,
+            },
+            this.tuning.itemPool,
+            this.random.items,
+          );
+          if (offer === undefined) {
+            continue;
+          }
+          this.takenItemIds.add(offer.id);
+          this.pickUpItem(offer.id);
+          granted.push(offer.id);
+        }
+      }
+    }
+    this.addBiermarken(Math.round(tuning.biermarkenPerFloor * floors));
+    this.addBombs(Math.round(tuning.bombsPerFloor * floors));
+    this.addKeys(Math.round(tuning.keysPerFloor * floors));
+    return granted;
   }
 
   /**

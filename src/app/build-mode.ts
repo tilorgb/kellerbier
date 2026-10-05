@@ -66,3 +66,13 @@ export const IS_PLAYTEST_BUILD: boolean =
 export function isPlaytestSession(search: string = window.location.search): boolean {
   return IS_PLAYTEST_BUILD || new URLSearchParams(search).has('playtest');
 }
+
+/**
+ * Whether `?floor=N` (start a sandbox run on a later floor, `app/start-floor.ts`)
+ * is honoured: `npm run dev` and the reviewer build the CI publishes for a
+ * pull request, never the tester build or the release build. A playtester
+ * must not be able to skip content by editing a URL, and a release must not
+ * ship a skip-ahead.
+ */
+export const FLOOR_SKIP_ENABLED: boolean =
+  import.meta.env.DEV || (!IS_PLAYTEST_BUILD && !IS_RELEASE_BUILD);
