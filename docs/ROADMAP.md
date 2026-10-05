@@ -1,7 +1,7 @@
 # Kellerbier — Roadmap
 
-Eleven milestones. Each has an exit criterion that is a *demonstration*, not a checklist.
-GitHub issues carry a milestone label `M0`–`M10` and a title prefix.
+Twelve milestones. Each has an exit criterion that is a *demonstration*, not a checklist.
+GitHub issues carry a milestone label `M0`–`M11` and a title prefix.
 
 There is no milestone API available to this repo's tooling, so milestones are labels.
 
@@ -24,11 +24,18 @@ The trade this makes: a 15-minute game has to earn its replays from systems rath
 new scenery. That is what M7 is for, and it is why meta-progression stays in scope rather than
 deferring alongside the floors.
 
-And it ships. **M9 releases the two-floor game on itch.io before M10 exists** — free or
-name-your-price, honest on the store page about being two chapters of seven. That is not a
-compromise forced by the refocus; it is the point of it. Every hour of stranger playtime is
+And it ships. **M9 put the game on itch.io as an early alpha before the remaining floors
+exist** — free or name-your-price, and from then on it grows by content updates until it is
+finished. That is not a compromise forced by the refocus; it is the point of it. Every hour of stranger playtime is
 evidence about what the remaining five floors should be, collected before they are built rather
 than after.
+
+**Floor 3 is the exception, taken deliberately (2026-10-05).** With M6 and M7 closed, the bar
+floor 3 has to match is the one those milestones set, and it has stopped moving enough to build
+against. Der Wald was redesigned down to issues (#39, split into #401–#414) and is now **M10,
+active**. It reaches players the same way everything after the first itch.io build will: as a
+content update to the alpha that is already out. Floors 4–7 and the Steam track stay parked, now
+as **M11**. `docs/DECISIONS.md` #117 has the reasoning and what it re-opens.
 
 ---
 
@@ -100,8 +107,9 @@ camera, with the same 2D sprites standing in it (`DECISIONS.md` #74).
 Save system, a results screen between runs, unlocks, additional characters, achievements, seeded
 runs, the daily run, challenge runs, curses, devil and angel rooms — and the run's actual ending,
 now that floor 2's boss is the last one. The first unlock is Promille itself, granted for beating
-Der Stier, which makes the results screen load-bearing earlier than the rest of this milestone
-implies. Character select, seed entry, the daily run and replays move to M8's title screen and
+floor 1's boss (#236 moved it off Der Stier, so a first run meets the mechanic instead of
+unlocking it at the very end), which makes the results screen load-bearing earlier than the rest
+of this milestone implies. Character select, seed entry, the daily run and replays move to M8's title screen and
 menus rather than living on the results screen — see `docs/DECISIONS.md`'s follow-up to #51.
 
 **This milestone carries more weight than it used to.** With five floors deferred, the reason
@@ -132,26 +140,41 @@ alternative — shipping a fifteen-minute game whose floors end four rooms in �
 measurement argued against.
 
 ## M9 — Release
-*Exit: strangers are playing it — the two-floor game is out on itch.io and feedback is coming
-back.*
+*Exit: strangers are playing it — the game is out on itch.io as an early alpha and feedback is
+coming back.*
 
-Web build on itch.io, a trailer, store copy honest about the game being two chapters of seven,
-a legal review of every name that actually ships, and a post-launch plan. **Free or
+Web build on itch.io, a trailer, store copy that says plainly it is an early alpha getting content
+updates until it is finished, a legal review of every name that actually ships, and a post-launch plan. **Free or
 name-your-price**, which removes the "is fifteen minutes worth money" question rather than
 answering it.
 
 The Steam track (#70–#72) and the desktop shell (#57) are **not** here. Steam wants a paid store
-page, a wishlist runway and enough game to justify both, and two floors is not that. They move to
-M10, where #57's own "revisit if" clause points them anyway.
+page, a wishlist runway and enough game to justify both, and an early alpha is not that. They move
+to M11, where #57's own "revisit if" clause points them anyway.
 
-## M10 — Floors 3–7 *(parked)*
+## M10 — Floor 3: Der Wald
+*Exit: floor 3 is reached through the real progression — clear Der Stier, take the stairs — and
+Der Waldradler is beaten, in a content update that is live on itch.io.*
+
+The first parked floor to be unparked. #39 carries the design — poison is the floor's lesson and
+the boss tests it; axes are its grammar; the room changes under you; satire, not horror — and is
+split into #401–#414: poison on the player, the `wald` foundation, the Waldbach and the
+lantern-darkness rooms, seven enemies, the two-phase Waldradler, and the integration that bumps
+`HIGHEST_PLAYABLE_FLOOR` to 3. #39's dependency graph sets the order: poison and the foundation
+first, integration last.
+
+It is built against the bar M6–M8 set, not a new one: animated sprites through the sign-off gate
+in `CLAUDE.md`, sound through #157's buses, rooms that hold up under #228's pressure and #270's
+floor length. Music is out of scope — floor 3 reuses an existing track until a dedicated one is
+written.
+
+## M11 — Floors 4–7 *(parked)*
 *Exit: a complete run from cellar to Die Bavaria, on Steam, worth charging for.*
 
-Der Wald, Die Alpen, Schloss Neuschwanstein, Die Brauerei, Die Wiesn. Every enemy roster,
-every boss, every floor hazard — plus the Steam release and the desktop build that need them to
-exist first. Parked until floors 1 & 2 are finished, so that these five are built once, against a
-bar that has stopped moving, with the art and audio pipelines M6–M8 will have proved out, and
-against real evidence from M9's players about what the remaining five floors should be.
+Die Alpen, Schloss Neuschwanstein, Die Brauerei, Die Wiesn. Every enemy roster, every boss, every
+floor hazard — plus the Steam release and the desktop build that need them to exist first. Parked
+until floor 3 is out and its players have been heard, so these four are built against a bar that
+has stopped moving and against real evidence from M9's players about what they should be.
 
 ---
 
@@ -161,30 +184,37 @@ against real evidence from M9's players about what the remaining five floors sho
   on bad feel is content that has to be rebuilt.
 - **M3 and M4 overlap heavily** — items and Promille are two halves of one system and should
   be balanced together.
-- **M6 sets the bar that M10 inherits.** This is the same warning M5 used to carry, moved to
+- **M6 sets the bar that M10 and M11 inherit.** This is the same warning M5 used to carry, moved to
   the milestone that actually decides the answer. Every decision here — sprite size, frame
-  count, palette, how much a hit flashes — is a decision five parked floors will have to match.
+  count, palette, how much a hit flashes — is a decision every later floor will have to match.
 - **M6 before M8, deliberately.** Art and animation change what the game needs from its sound
   and its menus; the reverse is much less true. Doing sound against placeholder art means
   scoring a game that does not exist yet.
 - **M7's scope is a bet, and it gets called at the end of M7.** Two floors is roughly fifteen
   minutes. The decision point is fixed rather than metric-triggered: when M7 closes, play it and
   judge whether a second run is genuinely compelling. If it is not, the honest response is not
-  more meta-progression — it is unparking M10 sooner. Being a *scheduled* decision is the whole
-  point; a bet with no date attached quietly becomes an assumption.
-- **The story ends on a cliffhanger, deliberately.** Der Stier closes chapter two rather than
-  revealing what is upstream — the "the raisins are just raisins" reveal stays in M10 with floor
-  6, where it was written to live; chapter two ends on the loaded delivery lorry pulling out of
-  the village square, southbound. That puts real weight on execution (#58): a cliffhanger done well
-  is a promise, done badly it is indistinguishable from running out of content, and M9 puts it in
-  front of strangers who have no roadmap. The acceptance criterion is a playtester describing it
-  as a cliffhanger unprompted.
+  more meta-progression — it is unparking floors sooner, which is what M10 now is. Being a
+  *scheduled* decision is the whole point; a bet with no date attached quietly becomes an
+  assumption.
+- **Gameplay is the hook, not the story** (2026-10-05, `DECISIONS.md` #117). The game is an
+  early alpha and players should be concentrating on how it plays. If the shooting, the items and
+  their synergies are tight and fun, people come back for another run — that is the goal, and no
+  story beat is asked to do that job. The story stays light: enough to hint at what is planned,
+  never a cliffhanger built to keep someone interested. The "raisins are just raisins" reveal
+  still lives with floor 6 in M11.
 - **Pressure and length before balance.** #228 and #270 both land before #54, deliberately. A
   balance pass tunes a curve; those two decide what shape the curve is and how long it runs. Doing
   #54 first would tune the game we have into a better version of the game we have — the same
   argument #228 made against itself being scheduled late, applied once more when #270 turned out to
   be its sequel.
-- **M8's balance pass is cheap now and expensive later.** Balancing two floors against real
+- **Floor 3 lands before the balance pass closes.** #54 tunes the curve of the game players
+  have: the alpha's two floors are collecting the telemetry now, but the curve isn't final until
+  #414 has put floor 3 on the end of it.
+- **The run ends on floor 3 once floor 3 exists.** The win (#155) already follows
+  `HIGHEST_PLAYABLE_FLOOR`, so #414's bump moves it from Der Stier to Der Waldradler, and the win
+  screen's text goes with it — no cliffhanger. Promille's unlock stays where it is, on floor 1's
+  boss.
+- **M8's balance pass is cheap now and expensive later.** Balancing three floors against real
   telemetry, with the simulator from #54, is a tractable problem. The same work across seven
   floors is the thing that eats a schedule.
 - **Performance is checked continuously**, not in M8. The CI benchmark exists from M0.

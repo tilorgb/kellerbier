@@ -854,6 +854,10 @@ attempt above but the last, more likely to be right.
 
 ## 22. Content stops at two floors until those two are finished — floors 3-7 are parked, not cancelled
 
+*Partly superseded by #117: floor 3 is unparked as M10 and ships as a content update to the
+itch.io alpha; floors 4-7 stay parked as M11. The reasoning below still holds for them. #117 also
+drops the chapter-two cliffhanger settled below: gameplay is the hook, not the story.*
+
 **Decided:** end of M5. **Supersedes:** the M5→M6 sequencing in the original
 [`ROADMAP.md`](ROADMAP.md). **Issues:** #39-#44 and #98 relabelled `M10`.
 
@@ -6385,3 +6389,50 @@ Everyone who has picked raisins out of a cake is already in on it.
   the addiction is narrative only with no third meter, the `rosinen` / `impure` tags and the
   three answers are unchanged.
 
+---
+
+## 117. Floor 3 is built now, as a content update to the alpha — floors 4-7 stay parked as M11
+
+**Decided:** 2026-10-05, after the floor 3 redesign (#39, split into #401-#414). **Partly
+supersedes** #22 (floor 3 only). **Issues:** #39 and #401-#414 stay `M10`, which is no longer
+parked; #40-#44, #57, #70-#72 and #98 relabelled `M11`, parked.
+
+#22 parked floors 3-7 until the bar they had to match stopped moving. For floor 3 it has stopped
+enough: M6 and M7 are closed, so sprite size, frame count, palette, the sign-off gate, the run's
+ending and the meta loop are all settled, and #270 fixed how long a floor is. What #22 guarded
+against — building a floor against a bar that then moves — no longer applies to the next floor.
+It still applies to the four after that, which is why they stay parked.
+
+**Floor 3 ships as a content update.** The game is already on itch.io as an early alpha, and from
+here it grows step by step until it is finished; floor 3 is the first such step. The store page
+does not count floors or chapters — "early alpha, updated as content lands" describes every
+version of it, so a new floor changes the build, not how the game is described. The evidence
+argument in #22 is unchanged: the alpha's players are what floors 4-7 get built against.
+
+**Why a new number rather than unparking M10:** M10 carried floors 3-7 *and* the Steam track as
+one parked block. Unparking it whole would count four parked floors and Steam as live work in the
+roadmap's headline bar; leaving it parked would hide the work actually being done. Splitting it
+keeps `parked` meaning what #22 made it mean.
+
+**Settled in the same session:**
+
+- **The run ends on floor 3.** The win (#155) already fires on the boss of
+  `HIGHEST_PLAYABLE_FLOOR`, so it moves from Der Stier to Der Waldradler with #414's bump; nothing
+  else has to move for it.
+- **No cliffhanger — gameplay is the hook.** #22 and #58 put a chapter-two cliffhanger on Der
+  Stier and made "a playtester calls it a cliffhanger unprompted" its acceptance bar. That is
+  dropped. The game is an early alpha; people should be concentrating on how it plays, and if the
+  shooting, items and synergies are tight and fun they come back for another run, which is the
+  goal. The story stays light — enough to give players an idea of what is planned, never a hook
+  written to keep them interested. The win screen's epilogue ("This chapter is over…") is
+  rewritten when the ending moves, in #414.
+- **Promille's unlock does not move.** #236 already put it on floor 1's boss
+  (`content/progression/unlocks.ts`), so floor 3 changes nothing about it.
+- **The balance curve is three floors long.** #54 tunes the game players have; its curve isn't
+  final until #414 has put floor 3 on the end of it.
+- **Floor 3's music** is out of scope (#39): it reuses an existing track until one is written,
+  which #51's two-theme scope does not cover.
+
+**What this constrains:** `HIGHEST_PLAYABLE_FLOOR` goes to 3 in #414 and nowhere earlier — per
+`CLAUDE.md`, floor 3 is done when it is reached by clearing Der Stier, not when it loads directly.
+Content gaps on floor 3 while #401-#413 land degrade gracefully per #19.

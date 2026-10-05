@@ -24,10 +24,17 @@
       "color": "a85095",
       "description": "Sound, menus and balance — looks and sounds finished"
     },
-    "M9": { "color": "b8465f", "description": "Release — the two-floor game is out on itch.io" },
+    "M9": {
+      "color": "b8465f",
+      "description": "Release — the game is out on itch.io as an early alpha"
+    },
     "M10": {
+      "color": "c8553d",
+      "description": "Floor 3 — Der Wald, its roster and Der Waldradler"
+    },
+    "M11": {
       "color": "6e7781",
-      "description": "Floors 3–7 (parked) — cellar to Die Bavaria, on Steam"
+      "description": "Floors 4–7 (parked) — cellar to Die Bavaria, on Steam"
     }
   },
   "types": {

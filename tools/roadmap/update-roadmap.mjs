@@ -3,7 +3,7 @@
  * Regenerates the roadmap tracking issue from the current state of the issue list.
  *
  * Run by .github/workflows/roadmap.yml on every issue event. Issues are grouped by
- * their milestone label (M0-M10, defined in plan.json), so a newly created issue lands
+ * their milestone label (M0-M11, defined in plan.json), so a newly created issue lands
  * in the right section automatically as soon as it is labelled, and closing an issue
  * ticks its box.
  *
@@ -61,10 +61,34 @@ function milestoneOf(issue) {
   return null;
 }
 
-function line(issue) {
+function line(issue, indent = '') {
   const box = issue.state === 'closed' ? 'x' : ' ';
   const epic = issue.labels.includes('epic') ? ' _(epic)_' : '';
-  return `- [${box}] #${issue.number} ${cleanTitle(issue.title)}${epic}`;
+  return `${indent}- [${box}] #${issue.number} ${cleanTitle(issue.title)}${epic}`;
+}
+
+/**
+ * A milestone's issues as checklist lines, with each GitHub sub-issue nested under its
+ * parent when both sit in the same milestone — so an epic that has been broken down
+ * (#39, floor 3, into #401-#414) reads as one block in implementation order instead of
+ * its parts landing after every unrelated issue with a lower number. A sub-issue whose
+ * parent is in another milestone, or not tracked at all, stays at the top level.
+ */
+function milestoneLines(list) {
+  const inList = new Set(list.map((i) => i.number));
+  const children = new Map();
+  for (const issue of list) {
+    if (issue.parent === null || !inList.has(issue.parent)) continue;
+    if (!children.has(issue.parent)) children.set(issue.parent, []);
+    children.get(issue.parent).push(issue);
+  }
+  const out = [];
+  const visit = (issue, depth) => {
+    out.push(line(issue, '  '.repeat(depth)));
+    for (const child of children.get(issue.number) ?? []) visit(child, depth + 1);
+  };
+  for (const issue of list) if (issue.parent === null || !inList.has(issue.parent)) visit(issue, 0);
+  return out;
 }
 
 export function renderBody(issues, plan = PLAN) {
@@ -181,7 +205,7 @@ export function renderBody(issues, plan = PLAN) {
       out.push('');
     }
     if (list.length === 0) out.push('_No issues yet._');
-    else for (const issue of list) out.push(line(issue));
+    else out.push(...milestoneLines(list));
     out.push('');
   }
 
@@ -190,7 +214,7 @@ export function renderBody(issues, plan = PLAN) {
     out.push('## Needs triage');
     out.push('');
     out.push(
-      'These have no milestone label, so they have nowhere to sit. Add an `M0`–`M10` label and ' +
+      'These have no milestone label, so they have nowhere to sit. Add an `M0`–`M11` label and ' +
         'they move into the right section on the next event.',
     );
     out.push('');
@@ -210,10 +234,14 @@ export function renderBody(issues, plan = PLAN) {
   out.push('');
   out.push('- **Closing an issue** ticks its box and advances its milestone bar.');
   out.push(
-    '- **Opening an issue** adds it automatically — label it `M0`–`M10` to place it in a milestone, ' +
+    '- **Opening an issue** adds it automatically — label it `M0`–`M11` to place it in a milestone, ' +
       'or it appears under **Needs triage** until you do.',
   );
   out.push('- **Relabelling** an issue moves it between milestones.');
+  out.push(
+    '- **Sub-issues** render nested under their parent when both share a milestone. Linking one ' +
+      'fires no issue event, so it shows up on the next edit or the weekly reconcile.',
+  );
   out.push(
     '- Milestone names, exit criteria and the critical path live in `tools/roadmap/plan.json`. ' +
       'Edit that file to change the shape of this page.',
@@ -255,14 +283,29 @@ async function fetchIssues(repo) {
     all.push(...batch);
     if (batch.length < 100) break;
   }
-  return all
-    .filter((i) => !i.pull_request)
-    .map((i) => ({
-      number: i.number,
-      title: i.title,
-      state: i.state,
-      labels: i.labels.map((l) => (typeof l === 'string' ? l : l.name)),
-    }));
+  const issues = all.filter((i) => !i.pull_request);
+
+  // Parent links come from each parent's sub-issue list: the issue list reports how many
+  // sub-issues an issue has, but not reliably which issue is its own parent.
+  const parentOf = new Map();
+  for (const i of issues) {
+    if (!(i.sub_issues_summary?.total > 0)) continue;
+    for (let page = 1; ; page += 1) {
+      const subs = await api(
+        `/repos/${repo}/issues/${i.number}/sub_issues?per_page=100&page=${page}`,
+      );
+      for (const sub of subs) parentOf.set(sub.number, i.number);
+      if (subs.length < 100) break;
+    }
+  }
+
+  return issues.map((i) => ({
+    number: i.number,
+    title: i.title,
+    state: i.state,
+    labels: i.labels.map((l) => (typeof l === 'string' ? l : l.name)),
+    parent: parentOf.get(i.number) ?? null,
+  }));
 }
 
 /* --------------------------------------------------------------------- main */
