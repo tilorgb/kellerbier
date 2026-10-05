@@ -13,6 +13,7 @@ import {
 import { lerp } from '../sim/math.js';
 import { ParticleKind, type ParticleStore } from '../sim/particle/store.js';
 import type { Texture } from './gfx/index.js';
+import { STATUS_POISON_TINT } from './palette.js';
 
 /**
  * Every live particle — foam, sparks, dust, embers, the muzzle flash.
@@ -183,7 +184,13 @@ export class ParticleView {
       SCRATCH_SCALE.set(size, size, 1);
       SCRATCH_MATRIX.compose(SCRATCH_POSITION, SCRATCH_QUATERNION, SCRATCH_SCALE);
       layer.mesh.setMatrixAt(layer.count, SCRATCH_MATRIX);
-      layer.mesh.setColorAt(layer.count, SCRATCH_COLOR.setScalar(Math.min(1, remaining * 1.6)));
+      const fade = Math.min(1, remaining * 1.6);
+      layer.mesh.setColorAt(
+        layer.count,
+        kind === ParticleKind.Miasma
+          ? SCRATCH_COLOR.setHex(STATUS_POISON_TINT).multiplyScalar(fade)
+          : SCRATCH_COLOR.setScalar(fade),
+      );
       layer.count += 1;
     });
     for (const layer of this.layers) {

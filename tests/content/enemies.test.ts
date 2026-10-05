@@ -287,6 +287,33 @@ describe('broken content', () => {
     ).toThrow(/not an enemy id/i);
   });
 
+  it.each([
+    [{ behaviour: 'emitCloud', radius: 0 }, /radius above zero/i],
+    [{ behaviour: 'emitCloud', radius: 20, growTicks: -1 }, /growTicks must not be negative/i],
+    [{ behaviour: 'emitCloud', radius: 20, lifetimeTicks: 0 }, /lifetimeTicks of at least 1/i],
+  ] as const)('rejects a malformed emitCloud (#401): %j', (cloud, message) => {
+    expect(
+      build({
+        ...walker,
+        states: [{ name: 'go', behaviours: [{ behaviour: 'pause' }, cloud] }],
+      }),
+    ).toThrow(message);
+  });
+
+  it('accepts a well-formed emitCloud, with or without its optional timings (#401)', () => {
+    for (const cloud of [
+      { behaviour: 'emitCloud', radius: 20 },
+      { behaviour: 'emitCloud', radius: 20, growTicks: 0, lifetimeTicks: 30 },
+    ] as const) {
+      expect(
+        build({
+          ...walker,
+          states: [{ name: 'go', behaviours: [{ behaviour: 'pause' }, cloud] }],
+        }),
+      ).not.toThrow();
+    }
+  });
+
   it('rejects summoning something that is not an enemy (#276)', () => {
     expect(
       build({

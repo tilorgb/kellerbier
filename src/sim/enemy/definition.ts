@@ -18,7 +18,7 @@ import type { EnemySizeName } from './size.js';
  * A primitive runs at one of three moments, decided by which primitive it is
  * rather than by anything the author writes:
  *
- * - **entry** — once, when the state is entered: `telegraph`, `becomeInvulnerable`
+ * - **entry** — once, when the state is entered: `telegraph`, `becomeInvulnerable`, `emitCloud`
  * - **tick** — every tick the state is current: the movement and firing ones
  * - **death** — when the body dies while in that state: `splitOnDeath`
  *
@@ -49,7 +49,8 @@ export type BehaviourName =
   | 'telegraph'
   | 'grabProp'
   | 'lobTarget'
-  | 'detonateLobbedBomb';
+  | 'detonateLobbedBomb'
+  | 'emitCloud';
 
 /** Walks straight at the player, re-aiming every tick. The floor-one default. */
 export interface WalkTowardPlayerBehaviour {
@@ -178,6 +179,15 @@ export interface FiringBehaviourBase {
    * the snapped axis. Not allowed on `fireOnBeat`, which aims at nothing.
    */
   readonly aimCardinal?: boolean;
+  /**
+   * The shot poisons the player on a hit (#401): `ProjectileTag.Poison`, so
+   * the player takes `playerPoisonDamagePerTick` every
+   * `playerPoisonTickInterval` ticks for `playerPoisonDurationTicks`. A second
+   * hit refreshes the duration and never stacks; drinking a Maß is the only
+   * cure. Omitted is a plain shot. Whether it *reads* as poison on screen is
+   * the `art`'s business — the tag alone tints it green.
+   */
+  readonly poison?: boolean;
 }
 
 /** One shot at the player, on a timer. */
@@ -464,6 +474,21 @@ export interface DetonateLobbedBombBehaviour {
   readonly radius: number;
 }
 
+/**
+ * On state entry, leaves a poison cloud (#401) at the body's position: a
+ * circle that grows from nothing to `radius` over `growTicks`, lingers until
+ * `lifetimeTicks` have passed in total, and refreshes poison on the player
+ * every tick they stand inside it. It poisons only the player, never other
+ * enemies. `growTicks` and `lifetimeTicks` default to
+ * `tuning.poisonCloud`'s; `radius` is in room units and has no default.
+ */
+export interface EmitCloudBehaviour {
+  readonly behaviour: 'emitCloud';
+  readonly radius: number;
+  readonly growTicks?: number;
+  readonly lifetimeTicks?: number;
+}
+
 export type EnemyBehaviour =
   | WalkTowardPlayerBehaviour
   | ChargeAtPlayerBehaviour
@@ -485,6 +510,7 @@ export type EnemyBehaviour =
   | GrabPropBehaviour
   | LobTargetBehaviour
   | DetonateLobbedBombBehaviour
+  | EmitCloudBehaviour
   | TelegraphBehaviour;
 
 /**
@@ -617,6 +643,7 @@ export const ENTRY_BEHAVIOURS: readonly BehaviourName[] = [
   'grabProp',
   'lobTarget',
   'detonateLobbedBomb',
+  'emitCloud',
 ];
 
 /** Primitives that run when the body dies in that state. */

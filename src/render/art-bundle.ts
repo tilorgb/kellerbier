@@ -91,6 +91,8 @@ const PARTICLE_SPRITE_NAMES: Readonly<Record<number, string>> = {
   [ParticleKind.Ember]: 'ember',
   [ParticleKind.Glint]: 'glint',
   [ParticleKind.Flash]: 'flash',
+  // The same art as Spore, tinted green by `ParticleView` (#401) — no new sprite.
+  [ParticleKind.Miasma]: 'spore',
 };
 
 /** The name the art-directed telegraph ring is authored under (#153). */

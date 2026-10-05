@@ -7,7 +7,7 @@ import {
   STATUS_BURN,
   STATUS_EFFECT_STRIDE,
   STATUS_FREEZE,
-  STATUS_POISON,
+  applyPoison,
 } from '../systems/status-effects.js';
 import { type ProjectileStore, type ProjectileTeamId, ProjectileTeam } from './store.js';
 import { ProjectileTag, hasTag } from './tags.js';
@@ -350,10 +350,7 @@ function applyStatusTagsOnHit(sim: GameSim, target: number, tags: number): void 
     );
   }
   if (hasTag(tags, ProjectileTag.Poison)) {
-    status[base + STATUS_POISON] = Math.max(
-      status[base + STATUS_POISON] ?? 0,
-      Math.round(tuning.poisonDurationTicks),
-    );
+    applyPoison(sim, target);
   }
   if (hasTag(tags, ProjectileTag.Freezing)) {
     status[base + STATUS_FREEZE] = Math.max(

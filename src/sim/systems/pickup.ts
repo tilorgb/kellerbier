@@ -303,7 +303,9 @@ function collect(sim: GameSim, other: number): boolean {
       // The offer already happened, above the toast — a claimed Maß returned
       // before this switch ran, so reaching here means nothing took it and it
       // is drunk exactly as it always was.
-      sim.addPromille(amount);
+      // `drinkBeer` rather than `addPromille` so the Maß also cures poison
+      // (#401) — including in a sober run, where the Promille raise is inert.
+      sim.drinkBeer(amount);
       // A Maß never clears Kater on its own (that is `food`'s job, above) —
       // Konterbier (#32) is what makes drinking through a hangover work, so
       // every held item gets a look at this exact event rather than the

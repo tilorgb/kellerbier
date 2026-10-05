@@ -122,6 +122,13 @@ export interface CompiledDetonation {
   readonly radius: number;
 }
 
+/** An `emitCloud` validated once, at compile time (#401). `-1` ticks mean "use the tuning default" and are resolved at emit time, so a runtime tuning change applies. */
+export interface CompiledCloud {
+  readonly radius: number;
+  readonly growTicks: number;
+  readonly lifetimeTicks: number;
+}
+
 /** A `meleeArc` validated once, at compile time (#199). */
 export interface CompiledMeleeArc {
   readonly arc: number;
@@ -153,6 +160,8 @@ export interface CompiledState {
   readonly capturesLobTarget: boolean;
   /** Set for a state whose entry deals area damage at an earlier `lobTarget`'s captured position. `null` for every other state. */
   readonly detonate: CompiledDetonation | null;
+  /** Set for a state whose entry leaves a poison cloud (#401). `null` for every other state. */
+  readonly emitCloud: CompiledCloud | null;
   /** Set for a state that swings a wide melee arc (Maibaum-Dieb, #199). `null` otherwise. */
   readonly meleeArc: CompiledMeleeArc | null;
   /**
@@ -358,6 +367,7 @@ export class EnemyRegistry {
     let invulnerableTicks = 0;
     let capturesLobTarget = false;
     let detonate: CompiledDetonation | null = null;
+    let emitCloud: CompiledCloud | null = null;
     let meleeArc: CompiledMeleeArc | null = null;
     let grabProp: { kind: number; reach: number } | null = null;
 
@@ -441,6 +451,22 @@ export class EnemyRegistry {
             throw new Error(`${where}: "detonateLobbedBomb" needs damage and radius above zero`);
           }
           detonate = { damage: behaviour.damage, radius: behaviour.radius };
+        } else if (behaviour.behaviour === 'emitCloud') {
+          if (!(behaviour.radius > 0)) {
+            throw new Error(`${where}: "emitCloud" needs a radius above zero`);
+          }
+          if (behaviour.growTicks !== undefined && !(behaviour.growTicks >= 0)) {
+            throw new Error(`${where}: "emitCloud" growTicks must not be negative`);
+          }
+          if (behaviour.lifetimeTicks !== undefined && !(behaviour.lifetimeTicks >= 1)) {
+            throw new Error(`${where}: "emitCloud" needs lifetimeTicks of at least 1`);
+          }
+          emitCloud = {
+            radius: behaviour.radius,
+            growTicks: behaviour.growTicks === undefined ? -1 : Math.round(behaviour.growTicks),
+            lifetimeTicks:
+              behaviour.lifetimeTicks === undefined ? -1 : Math.round(behaviour.lifetimeTicks),
+          };
         }
         continue;
       }
@@ -604,6 +630,7 @@ export class EnemyRegistry {
       invulnerableTicks,
       capturesLobTarget,
       detonate,
+      emitCloud,
       meleeArc,
       approachPropKind,
       grabProp,

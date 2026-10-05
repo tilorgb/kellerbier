@@ -127,6 +127,10 @@ export const bar: Record<DictKey, string> = {
   'ui.hud.setComplete': '{name} komplett! {description}',
   'ui.hud.minimapHeader': '{floor}. Stock — {name}',
   'ui.hud.bossLabel': 'BOSS',
+  'ui.hud.poisoned': 'Vergiftet {seconds}s — ein Maß heilt es',
+  'ui.hud.sandboxRun': 'Sandbox-Lauf — Items verteilt, nichts wird gespeichert oder freigeschaltet',
+  'ui.hud.sandboxClamped':
+    'Dieses Stockwerk ist noch nicht spielbar — Sandbox-Lauf im höchsten, nichts wird gespeichert oder freigeschaltet',
   'ui.hud.tapUse': 'Antippn',
   'ui.hud.confirmLoadReplay': 'Jetzt a Wiederhoing lodn? Des beendt den laffadn Lauf.',
   'ui.hud.blutwurzActive': 'Blutwurz — findsd dei Leich',
@@ -284,8 +288,8 @@ export const bar: Record<DictKey, string> = {
   'curses.blaue-stunde.description': 'Tiafe Dämmarung. Dei Sicht langt bloß so weit.',
 
   // --- Pickups -----------------------------------------------------
-  'pickups.mass-full.description': 'Hebt Promille',
-  'pickups.mass-half.description': 'Hebt Promille (weniger)',
+  'pickups.mass-full.description': 'Hebt Promille, heilt Gift',
+  'pickups.mass-half.description': 'Hebt Promille (weniger), heilt Gift',
   'pickups.bratwurst-full.description': 'Hoit di, senkt Promille',
   'pickups.bratwurst-full.soberDescription': 'Lebm +2',
   'pickups.bratwurst-half.description': 'Hoit di, senkt Promille',

@@ -45,6 +45,11 @@ export function createDebugOverlay(host: DebugOverlayHost): DebugOverlay {
   // Same reasoning, and its own key (I) rather than folded into the tuning
   // window: this is toggled far more often mid-run than any slider is,
   // while testing one specific combination of #27's tags.
-  overlay.ownDomTool(createProjectileTagChooser(() => overlay.tuning));
+  overlay.ownDomTool(
+    createProjectileTagChooser(
+      () => overlay.tuning,
+      () => overlay.currentSim,
+    ),
+  );
   return overlay;
 }

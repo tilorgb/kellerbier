@@ -1,6 +1,7 @@
 import { World } from '../ecs/world.js';
 import type { GameSim } from '../game/sim.js';
 import { ParticleKind, type ParticleKindId } from '../particle/store.js';
+import { ring } from '../particle/effects.js';
 import { applyDamageAt } from './impact.js';
 
 /**
@@ -42,6 +43,8 @@ export function stepStatusEffects(sim: GameSim): void {
   const tuning = sim.tuning.projectileTags;
   const burnInterval = Math.max(1, Math.round(tuning.burnTickInterval));
   const poisonInterval = Math.max(1, Math.round(tuning.poisonTickInterval));
+  const playerPoisonInterval = Math.max(1, Math.round(tuning.playerPoisonTickInterval));
+  const playerIndex = sim.playerIndex;
 
   for (let index = 0; index < highWater; index++) {
     if (states[index] !== World.ALIVE) {
@@ -77,16 +80,72 @@ export function stepStatusEffects(sim: GameSim): void {
     const poison = status[base + STATUS_POISON] ?? 0;
     if (poison > 0) {
       status[base + STATUS_POISON] = poison - 1;
-      if (poison % poisonInterval === 0) {
+      // The player has a block of their own (#401): enemy poison on them is
+      // balanced separately from the player's poison-shot items on enemies.
+      //
+      // The player's tick keys off the global tick, not off the time left, for
+      // one reason: a cloud refreshes the duration to full every tick the
+      // player stands in it, and "time left is a multiple of the interval"
+      // would then be true on every one of them — a tick of damage per tick.
+      // Any `duration` consecutive ticks still hold exactly
+      // `duration / interval` multiples, so a full poisoning still costs
+      // 3 half-Maß, and a refresh can neither skip nor repeat a tick.
+      const isPlayer = index === playerIndex;
+      const due = isPlayer ? sim.tick % playerPoisonInterval === 0 : poison % poisonInterval === 0;
+      if (due) {
         // Spore, not Foam (#248): the issue's own complaint was that a
         // poison tick reads identically to ordinary contact/projectile
         // damage. A green puff distinct from foam/sparks is what makes the
         // tick itself, not just the ambient poisoned state, legible in the
         // moment it lands.
-        applyStatusDamage(sim, index, tuning.poisonDamagePerTick, ParticleKind.Spore);
+        applyStatusDamage(
+          sim,
+          index,
+          isPlayer ? tuning.playerPoisonDamagePerTick : tuning.poisonDamagePerTick,
+          ParticleKind.Spore,
+        );
       }
     }
   }
+}
+
+/**
+ * Sets (or refreshes) poison on `target` — the one place the duration is
+ * chosen, so a shot, a cloud and an item all agree (#401). Refreshes rather
+ * than stacks: `Math.max` against what is left, never a sum, so a rapid
+ * shooter or a cloud re-applying every tick cannot build an unbounded
+ * poisoning. The player's duration comes from `playerPoisonDurationTicks`,
+ * everyone else's from `poisonDurationTicks`.
+ */
+export function applyPoison(sim: GameSim, target: number): void {
+  const tuning = sim.tuning.projectileTags;
+  const ticks =
+    target === sim.playerIndex ? tuning.playerPoisonDurationTicks : tuning.poisonDurationTicks;
+  const slot = target * STATUS_EFFECT_STRIDE + STATUS_POISON;
+  sim.statusEffect.data[slot] = Math.max(sim.statusEffect.data[slot] ?? 0, Math.round(ticks));
+}
+
+const CLEANSE_SPOKES = 8;
+const CLEANSE_SPEED = 0.8;
+const CLEANSE_TICKS = 20;
+
+/**
+ * Clears the player's poison — what drinking a Maß does (#401). Cues the
+ * cleanse (a green puff, a sound) only if there was poison to remove, so a
+ * Maß drunk while healthy stays exactly as quiet as it was.
+ */
+export function cleansePoison(sim: GameSim): void {
+  const slot = sim.playerIndex * STATUS_EFFECT_STRIDE + STATUS_POISON;
+  if ((sim.statusEffect.data[slot] ?? 0) <= 0) {
+    return;
+  }
+  sim.statusEffect.data[slot] = 0;
+  // The tint snapping off is the visual half (`player-view.ts` reads the slot);
+  // a green puff and a cue are the rest.
+  const x = sim.positionX(sim.playerIndex);
+  const y = sim.positionY(sim.playerIndex);
+  ring(sim, x, y, CLEANSE_SPOKES, ParticleKind.Spore, CLEANSE_SPEED, CLEANSE_TICKS, 2);
+  sim.playItemCue('poison-cleanse');
 }
 
 /**
@@ -113,5 +172,20 @@ function applyStatusDamage(
   if (amount <= 0 || (sim.health.data[index * 2] ?? 0) <= 0) {
     return;
   }
-  applyDamageAt(sim, index, amount, sim.positionX(index), sim.positionY(index), 0, 0, -1, effect);
+  // `grantInvulnerability` false: a status tick is not a hit. It lands even
+  // inside a real hit's i-frames (it never goes through `applyHit`'s check),
+  // and it must not *start* i-frames either, or a poisoned player would be
+  // immune to the next real hit — every second, for the whole poisoning.
+  applyDamageAt(
+    sim,
+    index,
+    amount,
+    sim.positionX(index),
+    sim.positionY(index),
+    0,
+    0,
+    -1,
+    effect,
+    false,
+  );
 }

@@ -605,6 +605,34 @@ export interface PromilleTuning {
  * balance pass over `sim/projectile/behavior.ts`. The comment on each field
  * says which tag reads it.
  */
+/** Poison clouds (#401) — the reusable lingering zone `sim/hazard/clouds.ts` steps. */
+export interface PoisonCloudTuning {
+  /** Ticks a cloud takes to grow from nothing to its full radius, when the emitter names none. */
+  defaultGrowTicks: number;
+  /** Ticks a cloud lives in total (growth included), when the emitter names none. */
+  defaultLifetimeTicks: number;
+  /** Clouds alive at once, capped at the store's capacity. Past it the oldest is recycled (`docs/DECISIONS.md` #4). */
+  maxActive: number;
+}
+
+/**
+ * What a run that starts on a later floor (`?floor=N`, a sandbox run) arrives
+ * with, per floor skipped — a stand-in for what a normal run would have found
+ * on the way, so floor 3 is not played by a zero-item player.
+ */
+export interface SkipAheadTuning {
+  /** Items drawn from the treasure pool for each floor skipped. */
+  treasureItemsPerFloor: number;
+  /** Items drawn from the boss pool for each floor skipped. */
+  bossItemsPerFloor: number;
+  /** Biermarken per floor skipped. */
+  biermarkenPerFloor: number;
+  /** Bierfassl per floor skipped. */
+  bombsPerFloor: number;
+  /** Kellerschlüssel per floor skipped — rounded over the total, so 0.5 gives one key after two floors. */
+  keysPerFloor: number;
+}
+
 export interface ProjectileTagTuning {
   /** `piercing`: enemies a shot may fly through before it is finally stopped. */
   pierceMaxTargets: number;
@@ -642,6 +670,16 @@ export interface ProjectileTagTuning {
   poisonTickInterval: number;
   poisonDamagePerTick: number;
   poisonDurationTicks: number;
+  /**
+   * Poison *on the player* (#401) — a separate block from the three above so an
+   * enemy's poison can be balanced without touching the player's own poison-shot
+   * items (which poison enemies). Applied by `applyStatusTagsOnHit` and the
+   * poison cloud whenever the target is the player, and read by
+   * `stepStatusEffects` for the player's own damage tick.
+   */
+  playerPoisonTickInterval: number;
+  playerPoisonDamagePerTick: number;
+  playerPoisonDurationTicks: number;
   /** `freezing`: velocity is multiplied by this every tick the status is active. */
   freezeSlowFactor: number;
   /** The `slow` status (`STATUS_SLOW`): velocity is multiplied by this every tick it is active — a hindrance, where `freezeSlowFactor` is a near-stop. */
@@ -1043,6 +1081,8 @@ export interface SimTuning {
   readonly promille: PromilleTuning;
   readonly pickup: PickupTuning;
   readonly projectileTags: ProjectileTagTuning;
+  readonly poisonCloud: PoisonCloudTuning;
+  readonly skipAhead: SkipAheadTuning;
   readonly itemPool: ItemPoolTuning;
   readonly character: CharacterTuning;
   readonly roomGen: RoomGenTuning;
@@ -1361,9 +1401,27 @@ export const DEFAULT_PROJECTILE_TAG_TUNING: Readonly<ProjectileTagTuning> = {
   poisonDamagePerTick: 1,
   // Three applications, for the same reason as burn's.
   poisonDurationTicks: 60,
+  // 3 s, one half-Maß a second: three half-Maß per full poisoning (#401).
+  playerPoisonTickInterval: 60,
+  playerPoisonDamagePerTick: 1,
+  playerPoisonDurationTicks: 180,
   freezeSlowFactor: 0.15,
   slowSpeedFactor: 0.5,
   freezeDurationTicks: 45,
+};
+
+export const DEFAULT_SKIP_AHEAD_TUNING: Readonly<SkipAheadTuning> = {
+  treasureItemsPerFloor: 1,
+  bossItemsPerFloor: 1,
+  biermarkenPerFloor: 5,
+  bombsPerFloor: 1,
+  keysPerFloor: 0.5,
+};
+
+export const DEFAULT_POISON_CLOUD_TUNING: Readonly<PoisonCloudTuning> = {
+  defaultGrowTicks: 12,
+  defaultLifetimeTicks: 90,
+  maxActive: 16,
 };
 
 export const DEFAULT_CHARACTER_TUNING: Readonly<CharacterTuning> = {
@@ -1551,6 +1609,8 @@ export function createTuning(): SimTuning {
     promille: { ...DEFAULT_PROMILLE_TUNING },
     pickup: { ...DEFAULT_PICKUP_TUNING },
     projectileTags: { ...DEFAULT_PROJECTILE_TAG_TUNING },
+    poisonCloud: { ...DEFAULT_POISON_CLOUD_TUNING },
+    skipAhead: { ...DEFAULT_SKIP_AHEAD_TUNING },
     itemPool: { ...DEFAULT_ITEM_POOL_TUNING },
     curse: { ...DEFAULT_CURSE_TUNING },
     blutwurz: { ...DEFAULT_BLUTWURZ_TUNING },

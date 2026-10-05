@@ -1,3 +1,4 @@
+import type { GameSim } from '../sim/game/sim.js';
 import { ProjectileTag } from '../sim/projectile/tags.js';
 import type { SimTuning } from '../sim/tuning.js';
 import { injectDevUiTokens } from '../dev-ui/tokens.js';
@@ -37,6 +38,9 @@ const TAG_HINTS: Readonly<Record<string, string>> = {
   Returning: 'flies back to where it was fired from',
   Orbiting: 'circles its spawn point',
 };
+
+/** Room units — a Zecke-sized cloud, big enough to see the edge of. */
+const CLOUD_BUTTON_RADIUS = 28;
 
 const STYLE = `
 .kb-tags-toggle {
@@ -79,7 +83,10 @@ export interface ProjectileTagChooserHandle {
 }
 
 /** Builds the chooser and attaches it to the document, top-right. */
-export function createProjectileTagChooser(getTuning: () => SimTuning): ProjectileTagChooserHandle {
+export function createProjectileTagChooser(
+  getTuning: () => SimTuning,
+  getSim: () => GameSim,
+): ProjectileTagChooserHandle {
   injectDevUiTokens();
 
   const style = document.createElement('style');
@@ -149,7 +156,39 @@ export function createProjectileTagChooser(getTuning: () => SimTuning): Projecti
     status.textContent = 'every shot fires plain again';
   });
 
-  actions.append(clearButton);
+  // Poison on the player (#401), so it can be felt without floor 3: poison
+  // yourself, drop a cloud at your feet, or drink the cure. Resolved through
+  // `getSim` per click for the same reason `shooting()` is.
+  const poisonButton = document.createElement('button');
+  poisonButton.type = 'button';
+  poisonButton.textContent = 'poison me';
+  poisonButton.addEventListener('click', () => {
+    getSim().poisonPlayer();
+    status.textContent = 'poisoned — drink a Maß to cure it';
+  });
+
+  const cloudButton = document.createElement('button');
+  cloudButton.type = 'button';
+  cloudButton.textContent = 'cloud here';
+  cloudButton.addEventListener('click', () => {
+    const sim = getSim();
+    sim.spawnPoisonCloud(
+      sim.positionX(sim.playerIndex),
+      sim.positionY(sim.playerIndex),
+      CLOUD_BUTTON_RADIUS,
+    );
+    status.textContent = 'cloud spawned at your feet';
+  });
+
+  const cureButton = document.createElement('button');
+  cureButton.type = 'button';
+  cureButton.textContent = 'drink Maß';
+  cureButton.addEventListener('click', () => {
+    getSim().drinkBeer(0);
+    status.textContent = 'a Maß drunk — poison cleared';
+  });
+
+  actions.append(clearButton, poisonButton, cloudButton, cureButton);
   panel.append(actions, status);
 
   toggle.addEventListener('click', () => {

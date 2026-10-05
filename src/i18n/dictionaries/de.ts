@@ -121,6 +121,10 @@ export const de: Record<DictKey, string> = {
   'ui.hud.setComplete': '{name} komplett! {description}',
   'ui.hud.minimapHeader': '{floor}. Stock — {name}',
   'ui.hud.bossLabel': 'BOSS',
+  'ui.hud.poisoned': 'Vergiftet {seconds}s — ein Maß heilt es',
+  'ui.hud.sandboxRun': 'Sandbox-Lauf — Items verteilt, nichts wird gespeichert oder freigeschaltet',
+  'ui.hud.sandboxClamped':
+    'Dieses Stockwerk ist noch nicht spielbar — Sandbox-Lauf im höchsten, nichts wird gespeichert oder freigeschaltet',
   'ui.hud.tapUse': 'Antippen',
   'ui.hud.confirmLoadReplay': 'Jetzt eine Wiederholung laden? Das beendet den laufenden Lauf.',
   'ui.hud.blutwurzActive': 'Blutwurz — finde deine Leiche',
@@ -283,8 +287,8 @@ export const de: Record<DictKey, string> = {
   'curses.blaue-stunde.description': 'Tiefe Dämmerung. Deine Sicht reicht nur so weit.',
 
   // --- Pickups -----------------------------------------------------
-  'pickups.mass-full.description': 'Erhöht Promille',
-  'pickups.mass-half.description': 'Erhöht Promille (weniger)',
+  'pickups.mass-full.description': 'Erhöht Promille, heilt Gift',
+  'pickups.mass-half.description': 'Erhöht Promille (weniger), heilt Gift',
   'pickups.bratwurst-full.description': 'Heilt, senkt Promille',
   'pickups.bratwurst-full.soberDescription': 'Leben +2',
   'pickups.bratwurst-half.description': 'Heilt, senkt Promille',

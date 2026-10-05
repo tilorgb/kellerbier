@@ -103,7 +103,9 @@ export const sixpack: ItemDefinition = {
         return;
       }
       state.timer -= poured;
-      ctx.sim.addPromille(poured);
+      // Pouring a stored Maß is drinking it, so it cures poison (#401) — the
+      // one moment a stored bottle does; storing it never did.
+      ctx.sim.drinkBeer(poured);
       // `useActiveItem` zeroed the charge on the way in; put it back the same
       // tick if there is another bottle, so the button is live again
       // immediately rather than on the next `onTick`.

@@ -14,6 +14,7 @@ import { clamp, vectorLength } from '../math.js';
 import { addPush } from './movement.js';
 import { NO_SLOT } from '../pool/slot-pool.js';
 import { ProjectileTeam } from '../projectile/store.js';
+import { ProjectileTag } from '../projectile/tags.js';
 import { nextWaypoint, straightClear, type Waypoint } from '../room/pathfind.js';
 
 /**
@@ -190,6 +191,17 @@ export function stepEnemies(sim: GameSim): void {
         }
         if (entered.detonate !== null) {
           detonateLobbedBomb(sim, index, entered.detonate);
+        }
+        if (entered.emitCloud !== null) {
+          const cloud = entered.emitCloud;
+          const defaults = sim.tuning.poisonCloud;
+          sim.spawnPoisonCloud(
+            selfX,
+            selfY,
+            cloud.radius,
+            cloud.growTicks < 0 ? defaults.defaultGrowTicks : cloud.growTicks,
+            cloud.lifetimeTicks < 0 ? defaults.defaultLifetimeTicks : cloud.lifetimeTicks,
+          );
         }
         if (entered.grabProp !== null) {
           grabNearestProp(sim, index, entered.grabProp);
@@ -862,7 +874,7 @@ function fireOne(sim: GameSim, index: number, angle: number, shot: FiringBehavio
     eliteAttackDamage(sim, index, shot.damage),
     Math.max(1, Math.round(shot.lifetimeTicks)),
     ProjectileTeam.Enemy,
-    0,
+    shot.poison === true ? ProjectileTag.Poison : 0,
     // Which sprite this shot is drawn as, if its behaviour named one (#152).
 
     // Resolved through the roster's interned name table rather than carried as

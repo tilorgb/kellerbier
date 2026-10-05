@@ -148,6 +148,8 @@ import {
 import { stepPedestal } from '../systems/pedestal.js';
 import { stepPickups } from '../systems/pickup.js';
 import { stepPromille } from '../systems/promille.js';
+import { CloudStore } from '../hazard/cloud-store.js';
+import { spawnPoisonCloud, stepClouds } from '../hazard/clouds.js';
 import { stepProjectiles, stepShooting } from '../systems/shooting.js';
 import {
   STATUS_BURN,
@@ -155,6 +157,8 @@ import {
   STATUS_FREEZE,
   STATUS_SLOW,
   STATUS_POISON,
+  applyPoison,
+  cleansePoison,
   stepStatusEffects,
 } from '../systems/status-effects.js';
 import { DESTRUCTIBLE_PROP_KINDS, type DestructiblePropKind, propKindIndex } from './prop-kinds.js';
@@ -602,6 +606,13 @@ export interface GameSimOptions {
    */
   readonly roomPlacement?: RoomPlacement;
   readonly floor?: number;
+  /**
+   * Floors skipped by a run that starts later than floor 1 (a sandbox run,
+   * `?floor=N`): the run is dealt the items and consumables a normal one
+   * would plausibly hold by now (`tuning.skipAhead`, `grantSkipAheadLoadout`),
+   * before the first room loads. Omitted or 0 is an ordinary run.
+   */
+  readonly skippedFloors?: number;
   /** Doors to load hidden — see `loadRoom`'s `hiddenDoors` parameter. */
   readonly hiddenDoors?: readonly Pick<CompiledDoor, 'direction' | 'cellCol' | 'cellRow'>[];
   /**
@@ -890,6 +901,8 @@ export class GameSim {
 
   /** Everything in flight. Pooled, fixed capacity, never grows. */
   readonly projectiles: ProjectileStore;
+  /** Poison clouds in the room (#401). Cleared on every room load. */
+  readonly clouds = new CloudStore();
 
   /** Foam and splash. Pooled, and drawn from the seeded cosmetic stream. */
   readonly particles: ParticleStore;
@@ -1770,6 +1783,7 @@ export class GameSim {
     for (const id of this.character.items) {
       this.pickUpItem(id);
     }
+    this.grantSkipAheadLoadout(options.skippedFloors ?? 0);
     if (options.roomTemplate !== undefined) {
       this.loadRoom(
         options.roomTemplate,
@@ -3128,6 +3142,7 @@ export class GameSim {
     }
     this.world.flush();
     this.projectiles.clear();
+    this.clouds.clear();
     this.particles.clear();
     this.damageNumbers.clear();
     this.decals.clear();
@@ -4490,6 +4505,35 @@ export class GameSim {
   }
 
   /**
+   * Drinks a Maß worth `amount` Promille — the one way to cure poison (#401).
+   * Every route that actually drinks (the pickup, a Sixpack bottle being
+   * poured) goes through here so none can forget the cleanse. The cleanse is
+   * outside `addPromille`'s sober-run gate on purpose: a Maß still cures in a
+   * run with no Promille meter. A Maß a held item *stores* is never drunk and
+   * never reaches this.
+   */
+  drinkBeer(amount: number): void {
+    cleansePoison(this);
+    this.addPromille(amount);
+  }
+
+  /** Spawns a poison cloud that poisons the player — see `sim/hazard/clouds.ts`. Defaults come from `tuning.poisonCloud`. */
+  spawnPoisonCloud(
+    x: number,
+    y: number,
+    radius: number,
+    growTicks: number = this.tuning.poisonCloud.defaultGrowTicks,
+    lifetimeTicks: number = this.tuning.poisonCloud.defaultLifetimeTicks,
+  ): void {
+    spawnPoisonCloud(this, x, y, radius, growTicks, lifetimeTicks);
+  }
+
+  /** Poisons the player (or refreshes it) — what the debug button calls. */
+  poisonPlayer(): void {
+    applyPoison(this, this.playerIndex);
+  }
+
+  /**
    * Offers a Maß worth `amount` Promille to every held item before it is
    * drunk. Returns `true` if one of them took it, in which case the caller
    * must not drink it.
@@ -4557,6 +4601,61 @@ export class GameSim {
       this.removeItem(id);
     }
     return true;
+  }
+
+  /**
+   * Deals a run that starts `skippedFloors` floors late what a normal run
+   * would plausibly hold by then: per skipped floor, a few treasure-pool and
+   * boss-pool items and some consumables (`tuning.skipAhead`). Returns the
+   * item ids granted, in order.
+   *
+   * Draws through the same `selectItemOffer` a pedestal does, from
+   * `random.items`, with each skipped floor's own depth bias — so the kit is a
+   * pure function of the seed, honours the pool rules (no duplicates, no
+   * Promille item in a sober run) and reads like something a player could
+   * have found. Granted before the first room loads, for the reason the
+   * character's starting items are (`onFloorStart` hooks). Health, Promille
+   * and everything else stay a fresh run's.
+   */
+  grantSkipAheadLoadout(skippedFloors: number): readonly string[] {
+    const granted: string[] = [];
+    const floors = Math.max(0, Math.floor(skippedFloors));
+    if (floors === 0) {
+      return granted;
+    }
+    const tuning = this.tuning.skipAhead;
+    for (let floor = 1; floor <= floors; floor++) {
+      const draws: readonly [ItemPoolId, number][] = [
+        ['treasure', tuning.treasureItemsPerFloor],
+        ['boss', tuning.bossItemsPerFloor],
+      ];
+      for (const [pool, count] of draws) {
+        for (let draw = 0; draw < Math.round(count); draw++) {
+          const offer = selectItemOffer(
+            this.items,
+            pool,
+            {
+              promilleUnlocked: this.promilleUnlockedValue,
+              floor,
+              luck: this.stats.value(StatId.Luck),
+              taken: this.takenItemIds,
+            },
+            this.tuning.itemPool,
+            this.random.items,
+          );
+          if (offer === undefined) {
+            continue;
+          }
+          this.takenItemIds.add(offer.id);
+          this.pickUpItem(offer.id);
+          granted.push(offer.id);
+        }
+      }
+    }
+    this.addBiermarken(Math.round(tuning.biermarkenPerFloor * floors));
+    this.addBombs(Math.round(tuning.bombsPerFloor * floors));
+    this.addKeys(Math.round(tuning.keysPerFloor * floors));
+    return granted;
   }
 
   /**
@@ -6168,6 +6267,9 @@ export class GameSim {
     // integration that reads velocity. Burn/poison damage has no such
     // ordering requirement — it rides along here rather than earning a
     // second call site.
+    // Clouds first, so a body standing in one has poison refreshed before
+    // this tick's poison countdown reads it (#401).
+    stepClouds(this);
     stepStatusEffects(this);
     // A curse's per-tick effect (Föhn's wind).
     stepCurse(this);

@@ -1,4 +1,5 @@
 import type { Container } from '../../render/gfx/index.js';
+import type { GameSim } from '../../sim/game/sim.js';
 import {
   type DebugContext,
   type DebugPanel,
@@ -11,7 +12,7 @@ import {
   createPanelFrame,
 } from '../panel.js';
 
-const LINES = 8;
+const LINES = 9;
 const PANEL_HEIGHT = PANEL_CONTENT_TOP + LINES * PANEL_LINE_HEIGHT + PANEL_PADDING;
 
 /**
@@ -75,6 +76,7 @@ export class CountsPanel implements DebugPanel {
       `overflow  shot ${String(shots.overflows)} par ${String(particles.overflows)}`,
       shots.overflows + particles.overflows > 0,
     );
+    this.setLine(8, cloudLine(sim), sim.clouds.overflows > 0);
   }
 
   private setLine(index: number, text: string, warn = false): void {
@@ -90,3 +92,19 @@ export class CountsPanel implements DebugPanel {
 function pad(value: number): string {
   return String(value).padStart(4, ' ');
 }
+
+/** Active poison clouds (#401): how many, and the current radius of the first few. */
+function cloudLine(sim: GameSim): string {
+  const clouds = sim.clouds;
+  let radii = '';
+  let shown = 0;
+  clouds.forEachLive((index) => {
+    if (shown < MAX_SHOWN_RADII) {
+      radii += ` ${clouds.currentRadius(index).toFixed(0)}`;
+    }
+    shown += 1;
+  });
+  return `clouds ${pad(clouds.count)} r${radii}`;
+}
+
+const MAX_SHOWN_RADII = 4;

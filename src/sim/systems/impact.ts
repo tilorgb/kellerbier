@@ -254,6 +254,7 @@ export function applyDamageAt(
   normalY: number,
   cause: number,
   hitEffect: ParticleKindId = ParticleKind.Foam,
+  grantInvulnerability = true,
 ): void {
   const events = sim.events;
   const tuning = sim.tuning.impact;
@@ -269,7 +270,9 @@ export function applyDamageAt(
     // the camera would follow whatever landed there.
     sim.applyPlayerDamage(damage);
     dispatchItemDamageTaken(sim, damage);
-    sim.makePlayerInvulnerable(Math.round(tuning.projectileInvulnerabilityTicks));
+    if (grantInvulnerability) {
+      sim.makePlayerInvulnerable(Math.round(tuning.projectileInvulnerabilityTicks));
+    }
     // One signal for "the player took damage" regardless of source — matches
     // what `applyContact` already pushes for a contact hit, so audio and
     // rumble (#15) have a single event kind to listen for either.
