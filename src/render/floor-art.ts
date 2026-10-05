@@ -199,6 +199,21 @@ export const FLOOR_TILESETS: Readonly<Record<number, FloorTileset>> = {
     wallHeight: 10,
     lighting: 'daylight',
   },
+  // Der Wald (#402). PLACEHOLDER art — plain on-palette tiles so the floor can
+  // be built and played while Tilo's tileset sign-off is pending
+  // (`CLAUDE.md`, "New pixel art needs sign-off"). The names stay; the PNGs
+  // behind them get replaced. Wooden obstacles (logs, a stump, a barricade)
+  // are the floor's destructible cover (`RoomGeometry.blockMaterial`).
+  3: {
+    floorVariants: ['wald-floor-1', 'wald-floor-2', 'wald-floor-3', 'wald-floor-4'],
+    wall: 'wald-wall',
+    wallLip: 'wald-wall-lip',
+    wallLipCorner: 'wald-wall-lip-corner',
+    blockVariants: ['wald-log-1', 'wald-log-2', 'wald-stump', 'wald-barricade'],
+    destructibles: ['wald-barrel'],
+    wallHeight: 12,
+    lighting: 'daylight',
+  },
 };
 
 /** One floor's tileset with its names resolved to `Texture`s — what `render/world/scenery.ts` builds from. */
@@ -248,6 +263,8 @@ export const PROP_TILE_NAMES: Readonly<Record<string, string | null>> = {
   well: 'rural-well',
   'market-stall': 'rural-market-stall',
   bandstand: 'rural-bandstand',
+  fern: 'wald-fern',
+  'glow-mushrooms': 'wald-glow-mushrooms',
   'shopkeeper-stand': 'shopkeeper-stand',
   'boss-plate': 'boss-plate',
   // Drawn elsewhere, on purpose.

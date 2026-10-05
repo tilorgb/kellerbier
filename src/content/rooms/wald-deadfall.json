@@ -1,0 +1,104 @@
+{
+  "id": "wald-deadfall",
+  "tileGrid": [
+    "###############",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "###############"
+  ],
+  "obstacles": [
+    {
+      "x": 32,
+      "y": 32,
+      "width": 32,
+      "height": 16,
+      "material": "wood"
+    },
+    {
+      "x": 64,
+      "y": 48,
+      "width": 16,
+      "height": 16,
+      "material": "wood"
+    },
+    {
+      "x": 160,
+      "y": 80,
+      "width": 16,
+      "height": 16,
+      "material": "wood"
+    },
+    {
+      "x": 176,
+      "y": 96,
+      "width": 32,
+      "height": 16,
+      "material": "wood"
+    },
+    {
+      "x": 176,
+      "y": 32,
+      "width": 16,
+      "height": 16,
+      "material": "wood"
+    },
+    {
+      "x": 32,
+      "y": 96,
+      "width": 16,
+      "height": 16,
+      "material": "wood"
+    }
+  ],
+  "enemySpawns": [
+    {
+      "x": 80,
+      "y": 72,
+      "group": "g"
+    },
+    {
+      "x": 170,
+      "y": 60,
+      "group": "g"
+    }
+  ],
+  "spawnGroups": [
+    {
+      "id": "g",
+      "count": 1,
+      "choices": [
+        {
+          "enemyId": "bierratte",
+          "minFloor": 1,
+          "maxFloor": 7
+        }
+      ]
+    }
+  ],
+  "pickupSpawns": [],
+  "hazards": [],
+  "decorativeProps": [
+    {
+      "x": 120,
+      "y": 112,
+      "type": "fern"
+    }
+  ],
+  "metadata": {
+    "floorTags": ["wald"],
+    "shape": "1x1",
+    "doors": {
+      "north": true,
+      "east": true,
+      "south": true,
+      "west": true
+    },
+    "difficultyTier": 2,
+    "weight": 1
+  }
+}

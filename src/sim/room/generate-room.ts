@@ -65,6 +65,7 @@ import {
   type RoomEnemySpawn,
   type RoomHazard,
   type RoomObstacle,
+  type RoomObstacleMaterial,
   type RoomPickupSpawn,
   type RoomSpawnGroup,
   type RoomSubLayout,
@@ -172,8 +173,21 @@ const ROSTERS: Readonly<Record<string, readonly RosterEntry[]>> = {
 const PROP_KINDS: Readonly<Record<string, readonly string[]>> = {
   cellar: ['barrel', 'barrel', 'barrel', 'crate-opa', 'crate-neu'],
   rural: ['barrel', 'barrel', 'crate-stack', 'hay-bale', 'fence-post'],
+  // Placeholder dressing until the wald tileset's props are signed off (#402):
+  // plain barrels and the shared wooden crate stack, both already have art.
+  wald: ['barrel', 'barrel', 'crate-stack'],
 };
 const FALLBACK_PROP_KINDS: readonly string[] = ['barrel'];
+
+/**
+ * What a floor's generated cover is made of, where it is not stone. Floor 3's
+ * cover is wood — logs and stumps the Boar smashes and the Borkenkäfer eats.
+ * A tag with no entry stays stone (`RoomGeometry`'s default), so floors 1–2
+ * generate exactly what they always did.
+ */
+const COVER_MATERIAL_BY_TAG: Readonly<Record<string, RoomObstacleMaterial>> = {
+  wald: 'wood',
+};
 
 /**
  * The floor-flavour hazard a generated room may carry, per floor tag — Floor
@@ -612,7 +626,12 @@ function fillUnreachedPockets(grid: RoomGrid, distanceFromDoor: Int16Array): voi
  * returned in that cell's own local coordinates. Keeps a room half-full of
  * obstacles well under `MAX_ROOM_BLOCKS`.
  */
-function sliceObstacles(grid: RoomGrid, cellCol: number, cellRow: number): RoomObstacle[] {
+function sliceObstacles(
+  grid: RoomGrid,
+  cellCol: number,
+  cellRow: number,
+  material?: RoomObstacleMaterial,
+): RoomObstacle[] {
   const baseCol = cellCol * ROOM_COLUMNS;
   const baseRow = cellRow * ROOM_ROWS;
   const claimed = new Set<number>();
@@ -656,6 +675,7 @@ function sliceObstacles(grid: RoomGrid, cellCol: number, cellRow: number): RoomO
         y: lr * ROOM_TILE_UNITS,
         width: width * ROOM_TILE_UNITS,
         height: height * ROOM_TILE_UNITS,
+        ...(material === undefined ? {} : { material }),
       });
     }
   }
@@ -1187,6 +1207,7 @@ function subLayoutFor(
   pickup: PlacedTile | null,
   hazards: readonly { readonly col: number; readonly row: number; readonly type: string }[],
   props: readonly PlacedProp[],
+  floorTag: string,
 ): RoomSubLayout {
   const minCol = cell.col * ROOM_COLUMNS;
   const maxCol = minCol + ROOM_COLUMNS;
@@ -1233,7 +1254,7 @@ function subLayoutFor(
 
   return {
     tileGrid: sliceTileGrid(grid, cell.col, cell.row),
-    obstacles: sliceObstacles(grid, cell.col, cell.row),
+    obstacles: sliceObstacles(grid, cell.col, cell.row, COVER_MATERIAL_BY_TAG[floorTag]),
     enemySpawns,
     spawnGroups,
     pickupSpawns,
@@ -1264,7 +1285,15 @@ export function generateRoom(
   const hazards = placeHazards(spec, layout.grid, layout.distance, approaches, 1, params);
   const props = placeProps(spec, layout.grid, candidates, enemies, pickup, approaches, 1, params);
 
-  const sub = subLayoutFor(layout.grid, { col: 0, row: 0 }, enemies, pickup, hazards, props);
+  const sub = subLayoutFor(
+    layout.grid,
+    { col: 0, row: 0 },
+    enemies,
+    pickup,
+    hazards,
+    props,
+    spec.floorTag,
+  );
   return {
     id: `gen-${spec.floorTag}-${spec.roomId}`,
     ...sub,
@@ -1352,7 +1381,7 @@ export function generateMultiCellRoom(
     .slice()
     .sort((a, b) => (a.row === b.row ? a.col - b.col : a.row - b.row));
   const cells = ordered.map((cell) =>
-    subLayoutFor(layout.grid, cell, enemies, pickup, hazards, props),
+    subLayoutFor(layout.grid, cell, enemies, pickup, hazards, props, spec.floorTag),
   );
 
   return {

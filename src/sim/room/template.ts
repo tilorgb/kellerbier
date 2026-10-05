@@ -4,6 +4,7 @@ import {
   MULTI_CELL_COUNT,
   ROOM_COLUMNS,
   ROOM_ROWS,
+  ROOM_OBSTACLE_MATERIALS,
   ROOM_SHAPES,
   ROOM_SPECIAL_ROLES,
   ROOM_TILE_UNITS,
@@ -11,12 +12,13 @@ import {
   type DoorDirection,
   type MultiCellRoomShape,
   type RoomEnemyCatalog,
+  type RoomObstacleMaterial,
   type RoomSpawnChoice,
   type RoomSpawnGroup,
   type RoomSubLayout,
   type RoomTemplate,
 } from '../../content/rooms/definition.js';
-import { RoomGeometry } from './geometry.js';
+import { BLOCK_MATERIAL_STONE, BLOCK_MATERIAL_WOOD, RoomGeometry } from './geometry.js';
 import { computeVoidCells } from './void-cells.js';
 
 export const ROOM_FRAME_WIDTH = 320;
@@ -265,9 +267,11 @@ function validateSubLayout(
     }
   }
 
-  const obstacles = records(record.obstacles, `${source}.obstacles`).map((item, index) =>
-    rectangle(item, `${source}.obstacles[${String(index)}]`),
-  );
+  const obstacles = records(record.obstacles, `${source}.obstacles`).map((item, index) => {
+    const where = `${source}.obstacles[${String(index)}]`;
+    const material = obstacleMaterial(item.material, `${where}.material`);
+    return { ...rectangle(item, where), ...(material === undefined ? {} : { material }) };
+  });
   const groups = records(record.spawnGroups, `${source}.spawnGroups`).map((item, index) =>
     spawnGroup(item, `${source}.spawnGroups[${String(index)}]`, enemyCatalog),
   );
@@ -412,6 +416,7 @@ export function compileRoomTemplate(
         cellOffsetX + obstacle.x + obstacle.width,
         cellOffsetY + obstacle.y + obstacle.height,
         true,
+        obstacle.material === 'wood' ? BLOCK_MATERIAL_WOOD : BLOCK_MATERIAL_STONE,
       );
     }
 
@@ -690,6 +695,20 @@ function pickupSpawns(value: unknown, source: string) {
       ...(price === undefined ? {} : { price }),
     };
   });
+}
+
+/** An obstacle's optional `material`; an unknown value fails loudly (`docs/DECISIONS.md` #7). */
+function obstacleMaterial(value: unknown, source: string): RoomObstacleMaterial | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (
+    typeof value !== 'string' ||
+    !(ROOM_OBSTACLE_MATERIALS as readonly string[]).includes(value)
+  ) {
+    fail(source, `must be one of ${ROOM_OBSTACLE_MATERIALS.join(', ')}`);
+  }
+  return value as RoomObstacleMaterial;
 }
 
 function rectangle(value: Record<string, unknown>, source: string) {

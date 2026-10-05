@@ -128,9 +128,17 @@ white-and-blue bunting.
   no longer ends here.
 
 ### Floor 3 — Der Wald
-Bavarian Forest. Dense, dark, wrong. Palette: deep green, black, sickly luminous fungus.
-- **Hazard:** spore clouds, thorn walls, and lantern-radius darkness in some rooms.
-- **Tone shift:** this is where the game stops being cute for a floor. Folklore horror.
+Bavarian Forest. Satirical in what lives there, dark and uncanny in how it looks. Dark wooden
+floor; palette: deep green, black, a sickly poison-green glow.
+- **Lesson:** poison. Every poison mechanic in the boss fight is introduced earlier on the floor.
+- **Grammar:** axes. The Boar charges along four, the Kaninchen and the Bachforelle work the
+  diagonals, the Specht is the one free-aim body. Reading lines is the skill.
+- **The room changes under you:** logs, stumps and wooden barricades are the floor's destructible
+  cover — the Boar smashes them, the Borkenkäfer eats them (and the floor under them).
+- **Hazards:** the Waldbach (a stream), and lantern-radius darkness in some rooms. The
+  Fliegenpilz carries the spores; there are no spore-cloud room hazards and no thorn walls.
+- **Tone:** satire, not horror. The creatures and the boss are jokes about the Bavarian Forest and
+  the people in it; only the look is uncanny. See `docs/DECISIONS.md` #118.
 
 ### Floor 4 — Die Alpen
 High rock, snow, a Berghütte, cable car pylons. Palette: white, granite, alpenglow pink.
@@ -217,17 +225,20 @@ where this came from and the enemy it happened to first.
   never something you pick up.
 
 **Floor 3 — Der Wald**
-- **Wolpertinger** — the mythical hybrid. Erratic, teleports short distances, drops rare loot.
-- **Waldschrat** — forest ogre, slow, huge, throws logs.
-- **Percht** — masked winter spirit, charges with a bell-ring telegraph, immune to freezing.
-- **Hirsch** — stag, charges in an arc rather than a line.
-- **Pilz** — mushroom, immobile, puffs a spore cloud that inflicts blurred vision.
-- **Zwetschgenmandl** — the little dried-fruit figure off a Nuremberg market stall, walking.
-  Comes apart into its individual fruits when hurt and reassembles unless you have moved the
-  fight away from the pieces. Real folk craft, and the game's first hint that dried fruit is
-  doing something it should not.
-- **Drud** — nightmare spirit, only spawns when the player is on their last half-Maß. Invisible
-  until close. Genuinely unpleasant, deliberately.
+- **Fliegenpilz** — a static fly agaric. When the player comes near it bloats up, turns green and
+  deflates in a poison cloud in all directions. The floor's poison teacher.
+- **Zecke** — a tick. Tiny, slow, hard to spot on the dark floor. Latches on and keeps you
+  poisoned until you shake it off with sharp direction changes.
+- **Kaninchen** — a rabbit that moves like a chess pawn: random hops along the four orthogonal
+  axes, attacks with a diagonal hop only when you are one diagonal step away. One of the easy ones.
+- **Bachforelle** — a brown trout that lives in the Waldbach. Its shadow glides under the water;
+  it pops out at random and fires four shots, one per diagonal.
+- **Boar** — a wild boar that charges along the four orthogonal axes and smashes whatever it
+  runs into: cover, secret walls, even closed doors. The name is English, as given.
+- **Borkenkäfer** — a bark beetle swarm. Eats wooden obstacles and floor planks, leaving pits;
+  the longer it lives, the worse the room gets.
+- **Specht** — a woodpecker perched on the wall. Drums, dives at where you were standing, gets its
+  beak stuck in the floor, flies back.
 
 **Floor 4 — Die Alpen**
 - **Steinbock** — ibex, charges and can climb over obstacles.
@@ -278,7 +289,7 @@ teaches something the floor's enemies were rehearsing.
 |---|---|---|
 | 1 | **Die Große Kellerassel** | Segmented crawler. Phase 2: splits into the segments. Gentle — it is the tutorial boss. |
 | 2 | **Der Stier** | Bull in the village square. Charge-and-stun loop; phase 2 adds the Maibaum-Dieb riding him. |
-| 3 | **Die Wilde Gjoad** | The Wild Hunt. Not one entity — a procession that sweeps the arena on a fixed path while you fight the huntsman in the gaps. |
+| 3 | **Der Waldradler** / **Das Waldradl** | A trail biker who rides wherever he is not allowed, wrecks the hiking paths and throws his poisonous protein-bar wrappers about; he never follows the player. Phase 2: only one wheel of his bike survives — the *Radler* is gone, the *Radl* is left, spinning in place behind a screen-filling pattern with slowly rotating gaps. Fought in `wald-boss`, an open clearing with a hiking path and no obstacles. |
 | 4 | **Der Watzmann** | The mountain itself. Static, enormous, fills one side of the arena. Avalanches, falling rock, a summit you must climb mid-fight. |
 | 5 | **König Ludwig II** | Phase 1: swan boat on the lake, elegant, waltzing bullet patterns on 3/4 time. Phase 2: the drowning — he pulls the arena underwater. Tragic, not cruel. |
 | 6 | **Die Abfüllanlage** | The bottling line. A machine, not a creature. Perfectly rhythmic, entirely fair, utterly relentless. Destroy four subsystems — the capper, the labeller, the conveyor head and **the dosing hopper**, which is where the reveal actually lands: breaking it open is how the player sees what has been going into the beer, with no plate and no line of dialogue. |

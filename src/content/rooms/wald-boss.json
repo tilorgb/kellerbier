@@ -1,0 +1,62 @@
+{
+  "id": "wald-boss",
+  "tileGrid": [
+    "###############",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "###############"
+  ],
+  "obstacles": [],
+  "enemySpawns": [
+    {
+      "x": 120,
+      "y": 60,
+      "group": "boss"
+    }
+  ],
+  "spawnGroups": [
+    {
+      "id": "boss",
+      "count": 1,
+      "choices": [
+        {
+          "enemyId": "der-stier",
+          "minFloor": 2,
+          "maxFloor": 3
+        }
+      ]
+    }
+  ],
+  "pickupSpawns": [],
+  "hazards": [],
+  "decorativeProps": [
+    {
+      "x": 120,
+      "y": 18,
+      "type": "boss-plate"
+    },
+    {
+      "x": 120,
+      "y": 108,
+      "type": "pedestal"
+    }
+  ],
+  "metadata": {
+    "floorTags": ["wald"],
+    "shape": "1x1",
+    "doors": {
+      "north": true,
+      "east": true,
+      "south": true,
+      "west": true
+    },
+    "difficultyTier": 5,
+    "weight": 1,
+    "specialRole": "boss"
+  }
+}

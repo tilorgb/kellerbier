@@ -66,11 +66,19 @@ export interface RoomDoorConfiguration {
   readonly west: boolean;
 }
 
+/** What an authored obstacle is made of. Omitted means `stone`, so floors 1–2 are untouched. */
+export type RoomObstacleMaterial = 'stone' | 'wood';
+
+/** Every `RoomObstacleMaterial`, once — validation reads this instead of a hand-listed copy. */
+export const ROOM_OBSTACLE_MATERIALS: readonly RoomObstacleMaterial[] = ['stone', 'wood'];
+
 export interface RoomObstacle {
   readonly x: number;
   readonly y: number;
   readonly width: number;
   readonly height: number;
+  /** Floor 3's logs, stumps and barricades are `wood` — what the Boar smashes and the beetle eats. */
+  readonly material?: RoomObstacleMaterial;
 }
 
 export interface RoomEnemySpawn {

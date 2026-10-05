@@ -1,0 +1,205 @@
+{
+  "id": "wald-bend",
+  "cells": [
+    {
+      "tileGrid": [
+        "###############",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "###############"
+      ],
+      "obstacles": [
+        {
+          "x": 48,
+          "y": 48,
+          "width": 16,
+          "height": 16,
+          "material": "wood"
+        },
+        {
+          "x": 176,
+          "y": 48,
+          "width": 16,
+          "height": 16,
+          "material": "wood"
+        },
+        {
+          "x": 48,
+          "y": 80,
+          "width": 16,
+          "height": 16,
+          "material": "wood"
+        },
+        {
+          "x": 176,
+          "y": 80,
+          "width": 16,
+          "height": 16,
+          "material": "wood"
+        }
+      ],
+      "enemySpawns": [
+        {
+          "x": 120,
+          "y": 36,
+          "group": "g"
+        }
+      ],
+      "spawnGroups": [
+        {
+          "id": "g",
+          "count": 1,
+          "choices": [
+            {
+              "enemyId": "bierratte",
+              "minFloor": 1,
+              "maxFloor": 7
+            }
+          ]
+        }
+      ],
+      "pickupSpawns": [],
+      "hazards": [],
+      "decorativeProps": [
+        {
+          "x": 200,
+          "y": 112,
+          "type": "fern"
+        }
+      ]
+    },
+    {
+      "tileGrid": [
+        "###############",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "###############"
+      ],
+      "obstacles": [
+        {
+          "x": 32,
+          "y": 32,
+          "width": 48,
+          "height": 16,
+          "material": "wood"
+        },
+        {
+          "x": 160,
+          "y": 32,
+          "width": 48,
+          "height": 16,
+          "material": "wood"
+        }
+      ],
+      "enemySpawns": [
+        {
+          "x": 120,
+          "y": 100,
+          "group": "g"
+        }
+      ],
+      "spawnGroups": [
+        {
+          "id": "g",
+          "count": 1,
+          "choices": [
+            {
+              "enemyId": "bierratte",
+              "minFloor": 1,
+              "maxFloor": 7
+            }
+          ]
+        }
+      ],
+      "pickupSpawns": [],
+      "hazards": [],
+      "decorativeProps": [
+        {
+          "x": 40,
+          "y": 112,
+          "type": "glow-mushrooms"
+        }
+      ]
+    },
+    {
+      "tileGrid": [
+        "###############",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "###############"
+      ],
+      "obstacles": [
+        {
+          "x": 32,
+          "y": 96,
+          "width": 32,
+          "height": 16,
+          "material": "wood"
+        },
+        {
+          "x": 176,
+          "y": 96,
+          "width": 32,
+          "height": 16,
+          "material": "wood"
+        },
+        {
+          "x": 112,
+          "y": 32,
+          "width": 16,
+          "height": 16,
+          "material": "wood"
+        }
+      ],
+      "enemySpawns": [
+        {
+          "x": 60,
+          "y": 72,
+          "group": "g"
+        },
+        {
+          "x": 180,
+          "y": 72,
+          "group": "g"
+        }
+      ],
+      "spawnGroups": [
+        {
+          "id": "g",
+          "count": 1,
+          "choices": [
+            {
+              "enemyId": "bierratte",
+              "minFloor": 1,
+              "maxFloor": 7
+            }
+          ]
+        }
+      ],
+      "pickupSpawns": [],
+      "hazards": [],
+      "decorativeProps": []
+    }
+  ],
+  "metadata": {
+    "floorTags": ["wald"],
+    "shape": "L",
+    "difficultyTier": 3,
+    "weight": 1
+  }
+}
