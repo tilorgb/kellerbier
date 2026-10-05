@@ -121,10 +121,11 @@ white-and-blue bunting.
 - **The corruption is visible here at scale for the first time, and only as scenery.** New-label
   Pfeitinger crates stacked outside the Wirtshaus, on trailers, behind the Marktstand. Nobody
   comments on them. The floor is otherwise the sunniest in the game, which is the entire effect.
-- **Chapter-two cliffhanger.** Beating Der Stier does not reveal what is upstream. What the
-  player gets is a direction: the delivery lorry pulling out of the square, southbound, loaded.
-  See `ROADMAP.md`'s sequencing notes and #58 — the acceptance criterion is a playtester calling
-  it a cliffhanger unprompted, and a lorry leaving is a far more legible promise than a fade.
+- **No cliffhanger.** Beating Der Stier is a fight won, not a story hook — the game is an early
+  alpha and the gameplay is what brings people back (`DECISIONS.md` #117). The story stays light:
+  it may hint at what is planned (the loaded lorry leaving the square, southbound, is that kind of
+  hint), but nothing is written to keep a player interested. Once floor 3 lands (#414), the run
+  no longer ends here.
 
 ### Floor 3 — Der Wald
 Bavarian Forest. Dense, dark, wrong. Palette: deep green, black, sickly luminous fungus.

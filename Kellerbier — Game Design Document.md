@@ -322,7 +322,7 @@ Seven floors are planned; floors 1 and 2 are playable (`HIGHEST_PLAYABLE_FLOOR =
 | # | Floor | Setting | Hazard | Status |
 | --- | --- | --- | --- | --- |
 | 1 | Der Keller | Opa's concrete cellar, racks, one bare bulb | Slick puddles carry momentum | Playable; the tutorial floor |
-| 2 | Dorf & Acker | Oberniederburg: square, hop fields, maypole | Hop trellises block sight; livestock | Playable; ends on the southbound lorry cliffhanger |
+| 2 | Dorf & Acker | Oberniederburg: square, hop fields, maypole | Hop trellises block sight; livestock | Playable; the run ends here until floor 3 lands |
 | 3 | Der Wald | Bavarian Forest: dark wood, poison-green; satire, not horror | Poison, the Waldbach stream, lantern darkness | In progress (M10, #39); next content update |
 | 4 | Die Alpen | Rock, snow, Berghütte, cable cars | Avalanches, ice, wind gusts | Parked (M11) |
 | 5 | Schloss Neuschwanstein | Throne rooms, unfinished wing | Falling chandeliers, mirrors, opera | Parked (M11) |

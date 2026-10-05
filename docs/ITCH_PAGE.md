@@ -1,8 +1,9 @@
 # Kellerbier — the alpha itch.io page
 
-**The page: <https://tilorgb.itch.io/kellerbier>** (created 2026-10-04).
+**The page: <https://tilorgb.itch.io/kellerbier>** (created 2026-10-04, live — #367 is done).
 
-What goes on the page, drafted so that making it is filling in a form (#367). The upload and the
+What is on the page. It was drafted so that making it was filling in a form (#367), and it is
+kept here so each content update only has to change what changed. The upload and the
 embed settings are in [`tools/release/ITCH.md`](../tools/release/ITCH.md); this is everything a
 visitor reads.
 
@@ -11,14 +12,15 @@ the game does today, not signed off.
 
 ---
 
-## Before the page can go up
+## Shipping a content update
 
-Nothing in [`LEGAL_REVIEW.md`](LEGAL_REVIEW.md) blocks it any more: the two findings that did
-were settled on 2026-10-02 (Spezi keeps its name; the music and sound effects are the owner's own
-recordings). What is left is practical:
+The game is an early alpha that gets content updates step by step until it is finished — floor 3
+(M10) is the next one. The page describes the game as that, not as a number of chapters, so an
+update changes **In this build** and the screenshots, not the framing. For each update:
 
-- upload a build and run the embed checklist (`tools/release/ITCH.md`)
-- redeploy the telemetry Worker (`tools/telemetry/README.md`)
+- upload the new build and run the embed checklist (`tools/release/ITCH.md`)
+- update **In this build** below and on the page
+- check the telemetry Worker is still current (`tools/telemetry/README.md`)
 
 ## Page fields
 
@@ -44,8 +46,8 @@ Leave **Mobile friendly** off until the touch controls have been tried on a real
 
 ## Description
 
-> **This is an alpha.** Two chapters of a planned seven are playable, start to finish, and a run
-> takes about fifteen minutes. Some of what you will see and hear is a placeholder — the voice
+> **This is an early alpha.** It gets content updates step by step until it is finished, and a
+> run takes about fifteen minutes. Some of what you will see and hear is a placeholder — the voice
 > barks, and parts of the music and art — and the balance is exactly what this test is for.
 >
 > ---

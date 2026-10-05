@@ -195,13 +195,12 @@ has stopped moving and against real evidence from M9's players about what they s
   more meta-progression — it is unparking floors sooner, which is what M10 now is. Being a
   *scheduled* decision is the whole point; a bet with no date attached quietly becomes an
   assumption.
-- **The story ends on a cliffhanger, deliberately.** Der Stier closes chapter two rather than
-  revealing what is upstream — the "the raisins are just raisins" reveal stays in M11 with floor
-  6, where it was written to live; chapter two ends on the loaded delivery lorry pulling out of
-  the village square, southbound. That puts real weight on execution (#58): a cliffhanger done well
-  is a promise, done badly it is indistinguishable from running out of content, and M9 puts it in
-  front of strangers who have no roadmap. The acceptance criterion is a playtester describing it
-  as a cliffhanger unprompted.
+- **Gameplay is the hook, not the story** (2026-10-05, `DECISIONS.md` #117). The game is an
+  early alpha and players should be concentrating on how it plays. If the shooting, the items and
+  their synergies are tight and fun, people come back for another run — that is the goal, and no
+  story beat is asked to do that job. The story stays light: enough to hint at what is planned,
+  never a cliffhanger built to keep someone interested. The "raisins are just raisins" reveal
+  still lives with floor 6 in M11.
 - **Pressure and length before balance.** #228 and #270 both land before #54, deliberately. A
   balance pass tunes a curve; those two decide what shape the curve is and how long it runs. Doing
   #54 first would tune the game we have into a better version of the game we have — the same
@@ -210,10 +209,10 @@ has stopped moving and against real evidence from M9's players about what they s
 - **Floor 3 lands before the balance pass closes.** #54 tunes the curve of the game players
   have: the alpha's two floors are collecting the telemetry now, but the curve isn't final until
   #414 has put floor 3 on the end of it.
-- **Where the chapter ends is open again.** The cliffhanger above, the run's ending (#155) and
-  the Promille unlock (#236) were all placed on Der Stier as *the last boss in the game*.
-  Floor 3 moves that boss to Der Waldradler; each needs a decision, not a silent carry-over —
-  `docs/DECISIONS.md` #117 lists them.
+- **The run ends on floor 3 once floor 3 exists.** The win (#155) already follows
+  `HIGHEST_PLAYABLE_FLOOR`, so #414's bump moves it from Der Stier to Der Waldradler, and the win
+  screen's text goes with it — no cliffhanger. Promille's unlock stays where it is, on floor 1's
+  boss.
 - **M8's balance pass is cheap now and expensive later.** Balancing three floors against real
   telemetry, with the simulator from #54, is a tractable problem. The same work across seven
   floors is the thing that eats a schedule.

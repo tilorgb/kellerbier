@@ -855,7 +855,8 @@ attempt above but the last, more likely to be right.
 ## 22. Content stops at two floors until those two are finished — floors 3-7 are parked, not cancelled
 
 *Partly superseded by #117: floor 3 is unparked as M10 and ships as a content update to the
-itch.io alpha; floors 4-7 stay parked as M11. The reasoning below still holds for them.*
+itch.io alpha; floors 4-7 stay parked as M11. The reasoning below still holds for them. #117 also
+drops the chapter-two cliffhanger settled below: gameplay is the hook, not the story.*
 
 **Decided:** end of M5. **Supersedes:** the M5→M6 sequencing in the original
 [`ROADMAP.md`](ROADMAP.md). **Issues:** #39-#44 and #98 relabelled `M10`.
@@ -6413,12 +6414,20 @@ one parked block. Unparking it whole would count four parked floors and Steam as
 roadmap's headline bar; leaving it parked would hide the work actually being done. Splitting it
 keeps `parked` meaning what #22 made it mean.
 
-**What this re-opens — each needs its own decision, not a silent carry-over:**
+**Settled in the same session:**
 
-- **Where the chapter ends.** #58's cliffhanger, #155's run ending and #236's Promille unlock were
-  all placed on Der Stier as *the last boss in the game*. That boss is now Der
-  Waldradler. Whether the story's chapter break, the win screen and the unlock move with it, or
-  stay on floor 2, is a design question, not a find-and-replace.
+- **The run ends on floor 3.** The win (#155) already fires on the boss of
+  `HIGHEST_PLAYABLE_FLOOR`, so it moves from Der Stier to Der Waldradler with #414's bump; nothing
+  else has to move for it.
+- **No cliffhanger — gameplay is the hook.** #22 and #58 put a chapter-two cliffhanger on Der
+  Stier and made "a playtester calls it a cliffhanger unprompted" its acceptance bar. That is
+  dropped. The game is an early alpha; people should be concentrating on how it plays, and if the
+  shooting, items and synergies are tight and fun they come back for another run, which is the
+  goal. The story stays light — enough to give players an idea of what is planned, never a hook
+  written to keep them interested. The win screen's epilogue ("This chapter is over…") is
+  rewritten when the ending moves, in #414.
+- **Promille's unlock does not move.** It is on floor 1's boss (`content/progression/unlocks.ts`),
+  not on the last boss, so floor 3 changes nothing about it.
 - **The balance curve is three floors long.** #54 tunes the game players have; its curve isn't
   final until #414 has put floor 3 on the end of it.
 - **Floor 3's music** is out of scope (#39): it reuses an existing track until one is written,
