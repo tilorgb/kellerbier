@@ -79,7 +79,6 @@ export interface FloorConfig {
  * generates that floor's rooms. Empty means "same as Floor 1".
  */
 export const ROOM_GEN_FLOOR_OVERRIDES: Readonly<Record<string, Partial<RoomGenTuning>>> = {
-  // wald: { minCoverTiles: 12, maxCoverTiles: 26, busyChance: 0.2 },
   /**
    * #231: Floor 2's `threatPerFloor` bump (`DEFAULT_ROOM_GEN_TUNING`) moved
    * an ordinary room from 5.42 enemies / 12.99 HP on Floor 1 to 5.64 / 14.50
@@ -120,6 +119,15 @@ export const ROOM_GEN_FLOOR_OVERRIDES: Readonly<Record<string, Partial<RoomGenTu
    * feel didn't.
    */
   rural: { threatBase: 3.5, maxEnemies: 7, hazardChance: 0.2 },
+  /**
+   * #402: Floor 3 starts from `rural`'s numbers (see its comment — same
+   * reasoning: one step harder than the floor before, not a cliff) with one
+   * extra body of headroom and a touch more cover, since a wooden obstacle can
+   * be smashed or eaten and a denser wood still opens up as the run goes on.
+   * `hazardChance` stays at `rural`'s value but no `HAZARD_BY_TAG` entry exists
+   * for `wald` yet (Waldbach's issue adds it), so no hazard is generated.
+   */
+  wald: { threatBase: 3.5, maxEnemies: 8, hazardChance: 0.2, minCoverTiles: 12, maxCoverTiles: 26 },
 };
 
 export const FLOOR_CONFIGS: readonly FloorConfig[] = [

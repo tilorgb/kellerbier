@@ -1,0 +1,77 @@
+{
+  "id": "wald-miniboss",
+  "tileGrid": [
+    "###############",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "###############"
+  ],
+  "obstacles": [],
+  "enemySpawns": [
+    {
+      "x": 120,
+      "y": 72,
+      "group": "miniboss"
+    }
+  ],
+  "spawnGroups": [
+    {
+      "id": "miniboss",
+      "count": 1,
+      "choices": [
+        {
+          "enemyId": "der-ladewagen",
+          "minFloor": 2,
+          "maxFloor": 3
+        }
+      ]
+    }
+  ],
+  "pickupSpawns": [],
+  "hazards": [],
+  "decorativeProps": [
+    {
+      "x": 28,
+      "y": 28,
+      "type": "fern"
+    },
+    {
+      "x": 212,
+      "y": 28,
+      "type": "fern"
+    },
+    {
+      "x": 28,
+      "y": 116,
+      "type": "glow-mushrooms"
+    },
+    {
+      "x": 212,
+      "y": 116,
+      "type": "glow-mushrooms"
+    },
+    {
+      "x": 120,
+      "y": 116,
+      "type": "pedestal"
+    }
+  ],
+  "metadata": {
+    "floorTags": ["wald"],
+    "shape": "1x1",
+    "doors": {
+      "north": true,
+      "east": true,
+      "south": true,
+      "west": true
+    },
+    "difficultyTier": 4,
+    "weight": 1,
+    "specialRole": "miniboss"
+  }
+}

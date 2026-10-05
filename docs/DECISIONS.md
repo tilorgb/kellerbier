@@ -6436,3 +6436,45 @@ keeps `parked` meaning what #22 made it mean.
 **What this constrains:** `HIGHEST_PLAYABLE_FLOOR` goes to 3 in #414 and nowhere earlier — per
 `CLAUDE.md`, floor 3 is done when it is reached by clearing Der Stier, not when it loads directly.
 Content gaps on floor 3 while #401-#413 land degrade gracefully per #19.
+
+## 118. Floor 3 is redesigned: satire and poison, not folk horror — and its cover is wood
+
+**Decided:** 2026-10-05, the floor 3 redesign session (#39), recorded while building the `wald`
+foundation (#402). **Refines** #117 (which unparked floor 3); **replaces** the floor-3 pitch in
+`docs/CONTENT_BIBLE.md` §1/§2/§3 as it stood.
+
+**What was cut:** the folk-horror framing and its cast — Die Wilde Gjoad, Wolpertinger, Waldschrat,
+Percht, Hirsch, Pilz (replaced by the Fliegenpilz), Drud, Zwetschgenmandl — and two of the three
+hazards, thorn walls and spore-cloud rooms. The Fliegenpilz carries the spores now, as an enemy.
+Lantern-darkness rooms stay; the Waldbach stream is new.
+
+**Why:** the pitch asked the game to stop being cute for a floor, and the game is a satire. The
+floor is now the same joke told in a darker room: the look stays uncanny (dark wooden floor, deep
+green and black, a poison-green glow), the creatures and the boss are jokes about the Bavarian
+Forest and the people in it. **Poison is the floor's lesson** — every poison mechanic in the
+Waldradler fight is met earlier on the floor — and **axes are its grammar** (Boar on four, Kaninchen
+and Bachforelle on the diagonals, Specht free-aim).
+
+**The Zwetschgenmandl's dried-fruit hint moved.** The old roster used the Zwetschgenmandl as the
+game's first hint that dried fruit is doing something it should not. With the figure cut, that
+hint is carried by a follow-up issue rather than by floor 3; #116's "the raisins are just raisins"
+is unaffected.
+
+**Mechanically, the foundation (#402) adds:**
+
+- **Block material.** `RoomGeometry.blockMaterial` (`stone` default, `wood`) rides alongside
+  `blockOverflyable`; an authored `RoomObstacle.material` compiles into it and an unknown value
+  throws at validation (#7). A generated room's cover is wood on the `wald` tag only, so floors 1-2
+  are unchanged. `breakBlockAt`/`isWoodAt` go through the same destruction record a bomb uses
+  (`GameSim.destroyedBoulders`), so a block the Boar or the beetle breaks stays broken on a revisit.
+- **A `wald` tileset and 11 `wald-*` room templates**, including `wald-boss`: an open clearing with
+  a hiking path and *no obstacles*, because both the Waldradler's charge lines and the Waldradl's
+  bullet field need it empty. The shared treasure/shop/secret rooms are also tagged `wald` so a
+  floor generates. Spawn groups reference existing enemies only; #414 swaps in the real roster.
+- **The tile art is a placeholder** until the tileset direction is signed off (`CLAUDE.md`). Floor
+  3's music reuses floor 2's until Tilo's own track exists.
+
+**What this constrains:** `HIGHEST_PLAYABLE_FLOOR` stays 2 until #414. The `wald` palette has no
+brown, so the "dark wooden floor" has to be read from its greens and blacks or the palette has to
+grow — a decision for the tileset sign-off, not for the foundation.
+

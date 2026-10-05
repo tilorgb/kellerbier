@@ -22,6 +22,7 @@ import { FLOOR_TILESETS } from '../../src/render/floor-art.js';
 
 const SPRITES = fileURLToPath(new URL('../../assets/sprites/', import.meta.url));
 const entries = Object.entries(BLOCKS);
+const PLACEHOLDER_ART_FLOOR = '3';
 
 function bucketOf(name: string): string {
   const bucket = BLOCK_BUCKETS[name];
@@ -37,8 +38,11 @@ function pathFor(name: string): string {
 
 describe("the block tiles' committed art is what the authoring source produces", () => {
   it('produces the variant sets the tilesets name, and nothing else', () => {
-    const named = Object.values(FLOOR_TILESETS)
-      .flatMap((tileset) => tileset.blockVariants)
+    // Floor 3's logs and stump are flat placeholders (#402) until the tileset
+    // direction is signed off; they get an authored source here when it is.
+    const named = Object.entries(FLOOR_TILESETS)
+      .filter(([floor]) => floor !== PLACEHOLDER_ART_FLOOR)
+      .flatMap(([, tileset]) => tileset.blockVariants)
       .sort();
     expect(Object.keys(BLOCKS).sort()).toEqual(named);
   });

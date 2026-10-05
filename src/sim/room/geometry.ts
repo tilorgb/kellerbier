@@ -27,6 +27,11 @@ export const MAX_ROOM_SIGHT_BLOCKS = 16;
  */
 export const DOOR_SPAN = 24;
 
+/** What a block is made of (`RoomGeometry.blockMaterial`). Stone is the default everywhere. */
+export const BLOCK_MATERIAL_STONE = 0;
+export const BLOCK_MATERIAL_WOOD = 1;
+export type BlockMaterial = typeof BLOCK_MATERIAL_STONE | typeof BLOCK_MATERIAL_WOOD;
+
 /** Numbers per block: minX, minY, maxX, maxY. */
 export const BLOCK_STRIDE = 4;
 
@@ -109,6 +114,15 @@ export class RoomGeometry {
    */
   readonly blockOverflyable = new Uint8Array(MAX_ROOM_BLOCKS);
 
+  /**
+   * What each block is made of — `BLOCK_MATERIAL_STONE` or
+   * `BLOCK_MATERIAL_WOOD`. Parallel to `blocks`, kept in step with
+   * `blockOverflyable` by `addBlock`/`removeBlock`. Floors 1–2 never opt in, so
+   * everything there stays stone; floor 3's logs, stumps and barricades are
+   * wood, which is what the Boar smashes and the Borkenkäfer eats.
+   */
+  readonly blockMaterial = new Uint8Array(MAX_ROOM_BLOCKS);
+
   private blocks_ = 0;
 
   /**
@@ -161,7 +175,14 @@ export class RoomGeometry {
   }
 
   /** Adds a solid box. Setup-time only; the storage is fixed and never grows. */
-  addBlock(minX: number, minY: number, maxX: number, maxY: number, overflyable = false): void {
+  addBlock(
+    minX: number,
+    minY: number,
+    maxX: number,
+    maxY: number,
+    overflyable = false,
+    material: BlockMaterial = BLOCK_MATERIAL_STONE,
+  ): void {
     if (this.blocks_ >= MAX_ROOM_BLOCKS) {
       throw new RangeError(`A room holds at most ${String(MAX_ROOM_BLOCKS)} blocks`);
     }
@@ -171,6 +192,7 @@ export class RoomGeometry {
     this.blocks[base + 2] = maxX;
     this.blocks[base + 3] = maxY;
     this.blockOverflyable[this.blocks_] = overflyable ? 1 : 0;
+    this.blockMaterial[this.blocks_] = material;
     this.blocks_ += 1;
   }
 
@@ -191,7 +213,53 @@ export class RoomGeometry {
       this.blocks[base + i] = this.blocks[lastBase + i] ?? 0;
     }
     this.blockOverflyable[index] = this.blockOverflyable[last] ?? 0;
+    this.blockMaterial[index] = this.blockMaterial[last] ?? BLOCK_MATERIAL_STONE;
     this.blocks_ = last;
+  }
+
+  /** True when the destructible block whose rectangle contains `(x, y)` is wood. */
+  isWoodAt(x: number, y: number): boolean {
+    const block = this.destructibleBlockAt(x, y);
+    return block >= 0 && this.blockMaterial[block] === BLOCK_MATERIAL_WOOD;
+  }
+
+  /**
+   * Breaks the destructible block containing `(x, y)` — the one entry point a
+   * bomb replay, the Boar or the beetle go through. Returns the block's centre
+   * via `outCentre` (`x, y` pushed) so the caller can record it under the
+   * room's destruction record (`GameSim.destroyedBoulders`) and throw debris;
+   * returns false when nothing destructible is there.
+   */
+  breakBlockAt(x: number, y: number, outCentre: number[]): boolean {
+    const block = this.destructibleBlockAt(x, y);
+    if (block < 0) {
+      return false;
+    }
+    const base = block * BLOCK_STRIDE;
+    outCentre.push(
+      ((this.blocks[base] ?? 0) + (this.blocks[base + 2] ?? 0)) / 2,
+      ((this.blocks[base + 1] ?? 0) + (this.blocks[base + 3] ?? 0)) / 2,
+    );
+    this.removeBlock(block);
+    return true;
+  }
+
+  private destructibleBlockAt(x: number, y: number): number {
+    for (let block = this.blocks_ - 1; block >= 0; block--) {
+      if ((this.blockOverflyable[block] ?? 0) !== 1) {
+        continue;
+      }
+      const base = block * BLOCK_STRIDE;
+      if (
+        x >= (this.blocks[base] ?? 0) &&
+        x <= (this.blocks[base + 2] ?? 0) &&
+        y >= (this.blocks[base + 1] ?? 0) &&
+        y <= (this.blocks[base + 3] ?? 0)
+      ) {
+        return block;
+      }
+    }
+    return -1;
   }
 
   /**
@@ -243,20 +311,9 @@ export class RoomGeometry {
    * visit is still gone on the second.
    */
   clearBoulderAt(x: number, y: number): void {
-    for (let block = this.blocks_ - 1; block >= 0; block--) {
-      if ((this.blockOverflyable[block] ?? 0) !== 1) {
-        continue;
-      }
-      const base = block * BLOCK_STRIDE;
-      if (
-        x >= (this.blocks[base] ?? 0) &&
-        x <= (this.blocks[base + 2] ?? 0) &&
-        y >= (this.blocks[base + 1] ?? 0) &&
-        y <= (this.blocks[base + 3] ?? 0)
-      ) {
-        this.removeBlock(block);
-        return;
-      }
+    const block = this.destructibleBlockAt(x, y);
+    if (block >= 0) {
+      this.removeBlock(block);
     }
   }
 

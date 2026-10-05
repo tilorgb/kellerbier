@@ -2186,6 +2186,33 @@ export class GameSim {
   }
 
   /**
+   * Breaks the destructible block at `(x, y)` — the path the Boar and the
+   * Borkenkäfer take (a bomb goes through `breakBouldersInBlast`). Records it
+   * under this room's destruction record exactly as a bomb does, so it stays
+   * gone on a revisit. `wood` restricts the break to wooden blocks (the beetle
+   * eats wood only); returns whether a block fell.
+   */
+  breakBlockAt(x: number, y: number, woodOnly = false): boolean {
+    if (woodOnly && !this.room.isWoodAt(x, y)) {
+      return false;
+    }
+    const scratch = this.boulderBlastScratch;
+    scratch.length = 0;
+    if (!this.room.breakBlockAt(x, y, scratch)) {
+      return false;
+    }
+    let record = this.destroyedBoulders.get(this.roomId);
+    if (record === undefined) {
+      record = [];
+      this.destroyedBoulders.set(this.roomId, record);
+    }
+    record.push(scratch[0] ?? 0, scratch[1] ?? 0);
+    boulderDebris(this, scratch[0] ?? 0, scratch[1] ?? 0);
+    this.bouldersChangedTickValue = this.tick;
+    return true;
+  }
+
+  /**
    * The tick a boulder last fell in the current room, or `-1` — `app/main.ts`
    * polls this and rebuilds the room's scenery (the same in-place path a
    * bombed secret wall uses) when it changes, so the cleared boulders stop
