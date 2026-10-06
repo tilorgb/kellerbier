@@ -50,7 +50,7 @@ export const BACKGROUND_SPRITE_NAMES = new Set([
   'rural-tractor',
   'rural-market-stall',
   'rural-bandstand',
-  // Floor 3 — Der Wald: structure and art-only props (placeholder art, #402).
+  // Floor 3 — Der Wald: structure and art-only props (#402).
   'wald-wall',
   'wald-wall-lip',
   'wald-wall-lip-corner',
@@ -89,7 +89,7 @@ export const FOREGROUND_TILE_NAMES = new Set([
   'rural-fieldstone-2',
   'rural-fieldstone-3',
   'rural-fieldstone-4',
-  // Floor 3's wooden cover and destructible (placeholder art, #402).
+  // Floor 3's wooden cover and destructible (#402).
   'wald-barrel',
   'wald-log-1',
   'wald-log-2',

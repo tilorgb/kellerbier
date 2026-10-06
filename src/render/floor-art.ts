@@ -199,12 +199,12 @@ export const FLOOR_TILESETS: Readonly<Record<number, FloorTileset>> = {
     wallHeight: 10,
     lighting: 'daylight',
   },
-  // Der Wald (#402). The floor, wall and wall top are the signed-off
-  // "needle earth & dry-stone dyke" set, authored by
-  // `tools/art/authoring/build-wald-tiles.mjs`; lit by the `forest` rig, so the
-  // floor reads darker than Dorf & Acker. Wooden obstacles (logs, a stump, a
-  // barricade) are the floor's destructible cover
-  // (`RoomGeometry.blockMaterial`) and still placeholder art.
+  // Der Wald (#402), signed off: the "needle earth & dry-stone dyke" floor,
+  // wall and wall top (`tools/art/authoring/build-wald-tiles.mjs`) and the
+  // "trees" objects — broken and twin trunks, a stump, a root tangle, the
+  // barrel, fern and mushrooms (`build-wald-objects.mjs`). Lit by the `forest`
+  // rig, so the floor reads darker than Dorf & Acker. The block variants are
+  // the floor's wooden, destructible cover (`RoomGeometry.blockMaterial`).
   3: {
     floorVariants: ['wald-floor-1', 'wald-floor-2', 'wald-floor-3', 'wald-floor-4'],
     wall: 'wald-wall',
