@@ -6537,3 +6537,35 @@ thing to read mid-fight, and the straight band looked like a blue bar across the
   tinted warm by its material, and sits on the foreground tier for the whites.
 - `stackWithTunnel` no longer compares radii — the dusk has none. The dusk keeps its strength and
   the Promille tunnel is thinned by it.
+
+## 120. An enemy's body is its telegraph; a floor marking is for what is hard to dodge without one
+
+**Decided** in #429, from review on #428 (the Fliegenpilz, #405).
+
+**The body by default.** Every ordinary enemy used to wind up by growing a thick red ring on the
+floor around itself. The ring grew to 2.6× the body's own radius whatever came next, so it said
+"about to attack" and nothing about where, and it was the loudest thing in a room of mobs. Now
+the body says it. Over the telegraph the sprite crouches, about 14% wider and 16% lower by the
+end, eased in so it reads as a spring loading, and builds a warm emissive glow
+(`ENTITY_PALETTE.windUpGlow`, the same hot red as a boss's flush and a bomb's fuse). Both release
+the tick the attack goes off. The glow is emissive so it reads in a lantern-dark room. A body
+whose strip authors its own `telegraph` clip keeps the glow and skips the crouch, because the
+drawn pose is the animation then. Bosses were already telegraphing this way (#193, entry above)
+and are unchanged. The Fliegenpilz's `telegraphLook: 'bloat'` is the louder variant of the same
+idea.
+
+**Floor markings where the attack is hard to dodge without them.** The charge wedge, a lobbed
+bomb's landing hatch, the Bierfassl cross, a melee arc and a poison cloud's edge all still draw,
+because each shows a direction or a place the body cannot. Tilo's rule: a telegraph does not
+have to say what happens or where the damage is, unless it is something like a dash, an
+explosion or a lob that is hardly dodgeable otherwise.
+
+**The ring is an accessibility setting.** `telegraphRings` (Accessibility tab, off by default)
+draws the old ring on top of the wind-up, for a player who reads a shape on the floor more
+easily than a change on a sprite. It is render-only like every other presentation toggle, so a
+replay plays the same with it on or off. The suppression table above still holds in spirit: the
+countdown is never removed, it just lives in the body's build now rather than the ring's growth.
+
+**Constrains:** a new enemy's wind-up needs no floor marking unless its attack has a reach,
+direction or landing spot the body cannot show. An enemy that wants a different body cue opts
+into a `telegraphLook` (render-side, data-authored) rather than a new floor shape.

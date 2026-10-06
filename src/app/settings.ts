@@ -160,6 +160,19 @@ export interface AccessibilitySettings {
    * is dark.
    */
   darkness: DarknessLevel;
+  /**
+   * The plain telegraph ring (#429): the red circle on the floor around an
+   * ordinary enemy winding up an attack whose reach is no bigger than the
+   * enemy itself — a Zapfhahn's spray, a Bierratte's shot. Off by default:
+   * since #429 the body itself is the telegraph (a load-up colour and a
+   * crouch, `render/entities.ts`), and a floor marking is kept only where an
+   * attack is hard to dodge without one — the charge wedge, a lobbed bomb's
+   * landing zone, a melee arc, a poison cloud's edge, which all draw whatever
+   * this is set to. On, the ring draws as well, for a player who reads a
+   * shape on the floor more easily than a change on a sprite. Render-only,
+   * like `colorblindPalette`.
+   */
+  telegraphRings: boolean;
 }
 
 export const DEFAULT_ACCESSIBILITY_SETTINGS: Readonly<AccessibilitySettings> = {
@@ -177,6 +190,7 @@ export const DEFAULT_ACCESSIBILITY_SETTINGS: Readonly<AccessibilitySettings> = {
   statDisplay: false,
   detailedPickupText: false,
   darkness: 'full',
+  telegraphRings: false,
 };
 
 /** The text scales the settings screen offers — anything else sanitises back to 1. */
@@ -259,6 +273,10 @@ export function sanitizeAccessibilitySettings(candidate: unknown): Accessibility
     darkness: (DARKNESS_LEVELS as readonly unknown[]).includes(source.darkness)
       ? (source.darkness as DarknessLevel)
       : DEFAULT_ACCESSIBILITY_SETTINGS.darkness,
+    telegraphRings:
+      typeof source.telegraphRings === 'boolean'
+        ? source.telegraphRings
+        : DEFAULT_ACCESSIBILITY_SETTINGS.telegraphRings,
   };
 }
 

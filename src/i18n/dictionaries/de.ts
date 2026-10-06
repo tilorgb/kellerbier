@@ -214,6 +214,7 @@ export const de: Record<DictKey, string> = {
   'ui.settings.accessibility.darknessFull': 'Voll',
   'ui.settings.accessibility.darknessReduced': 'Reduziert',
   'ui.settings.accessibility.darknessOff': 'Aus',
+  'ui.settings.accessibility.telegraphRings': 'Angriffsringe',
 
   'ui.settings.privacy.copy':
     'Playtest-Telemetrie ist standardmäßig aus. Wird sie eingeschaltet, wird nur auf ' +

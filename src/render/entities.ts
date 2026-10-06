@@ -17,6 +17,7 @@ import {
   TelegraphShape,
 } from '../sim/systems/enemy.js';
 import { EntityAnimator } from './animation/animator.js';
+import { AnimationState } from './animation/definition.js';
 import { AUTHORED_FACING, resolveAnimationState, resolveFacing } from './animation/state.js';
 import type { AnimatedSpriteSet } from './floor-art.js';
 import { type BitmapText, type Container, type Texture } from './gfx/index.js';
@@ -86,6 +87,14 @@ const CLOUD_EDGE_THICKNESS = 0.05;
 /** A cloud edge fades in from this alpha to `MIN + SWING` over the wind-up — never as loud as an attack ring. */
 const CLOUD_EDGE_MIN_ALPHA = 0.2;
 const CLOUD_EDGE_ALPHA_SWING = 0.35;
+/**
+ * An ordinary enemy's wind-up (#429): how much wider and how much shorter
+ * its sprite stands at the end of the telegraph — a crouch, loading a
+ * spring — and how strongly it glows `ENTITY_PALETTE.windUpGlow` by then.
+ */
+const WIND_UP_WIDEN = 0.14;
+const WIND_UP_SQUASH = 0.16;
+const WIND_UP_GLOW_STRENGTH = 0.7;
 const LABEL_POINT = { x: 0, y: 0 };
 /** How far above the floor a pickup hovers, so its shadow separates it from the ground. */
 const PICKUP_LIFT = 1.5;
@@ -138,6 +147,8 @@ export class EntityView {
   private readonly bombTexture: Texture | undefined;
   private targetTextures: readonly Texture[] = [];
   private ringPulses = true;
+  /** Whether the plain `Ring` telegraph is drawn (#429) — `AccessibilitySettings.telegraphRings`. */
+  private telegraphRings = false;
   private lean = 0;
   private readonly telegraphShape: EnemyTelegraphShapeInfo = {
     shape: TelegraphShape.Ring,
@@ -189,6 +200,11 @@ export class EntityView {
 
   setRingPulses(enabled: boolean): void {
     this.ringPulses = enabled;
+  }
+
+  /** Draws the plain telegraph ring on top of the body wind-up (#429). Off by default. */
+  setTelegraphRings(enabled: boolean): void {
+    this.telegraphRings = enabled;
   }
 
   setLean(lean: number): void {
@@ -274,6 +290,9 @@ export class EntityView {
       const isBoss = enemyId !== null && this.art.bossIds.has(enemyId);
       const telegraph = isEnemyBody ? enemyTelegraphProgress(sim, index) : 0;
       const bloat = compiledEnemy?.telegraphBloat === true ? telegraph : 0;
+      // Every other ordinary enemy winds up on its own body (#429). A boss
+      // has its own flush and pose (#193) and is left alone here.
+      const windUp = !isBoss && bloat === 0 ? telegraph : 0;
       const bossTelegraph = isBoss ? telegraph : 0;
       const bombFuse = isBomb ? bombFuseProgress(sim, index) : 0;
 
@@ -323,6 +342,10 @@ export class EntityView {
         // emissive channel so a lantern-dark room (#404) cannot swallow it.
         const glow = (bloat - BLOAT_GLOW_FROM) / (1 - BLOAT_GLOW_FROM);
         billboard.setGlow(ENTITY_PALETTE.bloatTelegraphGlow, glow * BLOAT_GLOW_STRENGTH);
+      } else if (windUp > 0 && !flashing) {
+        // The load-up colour (#429): a warm glow that builds over the whole
+        // wind-up, emissive for the same lantern-dark reason as the bloat.
+        billboard.setGlow(ENTITY_PALETTE.windUpGlow, windUp * WIND_UP_GLOW_STRENGTH);
       }
       billboard.tint = isPickup
         ? pickupSprite !== undefined
@@ -365,7 +388,23 @@ export class EntityView {
       // A bloating body (#405) swells over its wind-up and snaps back the
       // tick the telegraph ends — the deflate is the burst.
       const swell = 1 + BLOAT_SWELL * bloat;
-      billboard.place(x, 0.2 + lift, footZ, this.lean, gridScale * pop * swell);
+      // The wind-up crouch (#429): wider and lower as the attack loads, eased
+      // in so it reads as a spring compressing, released the tick the
+      // telegraph ends. Skipped for a body whose strip authors its own
+      // telegraph clip — the drawn pose is the animation then.
+      const crouch =
+        windUp > 0 && (animation?.clips.clips[AnimationState.Telegraph] ?? null) === null
+          ? windUp * windUp * (3 - 2 * windUp)
+          : 0;
+      const widen = 1 + WIND_UP_WIDEN * crouch;
+      billboard.place(
+        x,
+        0.2 + lift,
+        footZ,
+        this.lean,
+        gridScale * pop * swell * widen,
+        (1 - WIND_UP_SQUASH * crouch) / widen,
+      );
 
       const priced = isPickup && (mask & sim.pickupPrice.bit) !== 0;
       if (isPickup && (priced || pickupSprite === undefined)) {
@@ -439,6 +478,12 @@ export class EntityView {
             break;
           }
           default: {
+            // The plain ring is an accessibility option now (#429): the
+            // body's wind-up is the telegraph, and this ring adds nothing
+            // about *where* the attack goes that the body does not.
+            if (!this.telegraphRings) {
+              break;
+            }
             const ring = this.ringAt(ringsUsed);
             ringsUsed += 1;
             const ringRadius = hurtRadius * (1 + (TELEGRAPH_SCALE - 1) * info.progress);

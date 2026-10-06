@@ -115,6 +115,8 @@ export interface RenderAccessibility extends ParticleAccessibility {
   readonly colorblindPalette: boolean;
   /** How dark a lantern-dark room (#404) is drawn — `off` draws it like any other room. */
   readonly darkness: DarknessLevel;
+  /** Draw the plain telegraph ring as well as the body's wind-up (#429) — see `AccessibilitySettings.telegraphRings`. */
+  readonly telegraphRings: boolean;
 }
 
 const REDUCED_MOTION_SHAKE = 0.25;
@@ -317,6 +319,7 @@ export class GameView {
     reduceFlashes: false,
     colorblindPalette: false,
     darkness: 'full',
+    telegraphRings: false,
   };
   private readonly point: WorldPoint = { x: 0, y: 0 };
 
@@ -436,6 +439,7 @@ export class GameView {
     this.accessibility = accessibility;
     this.particles.setAccessibility(accessibility);
     this.entities.setRingPulses(!accessibility.reduceFlashes);
+    this.entities.setTelegraphRings(accessibility.telegraphRings);
     this.shakeScale = accessibility.reducedMotion ? REDUCED_MOTION_SHAKE : 1;
     this.lighting.setReducedMotion(accessibility.reducedMotion);
     this.projectiles.setAccessibility({ colorblindPalette: accessibility.colorblindPalette });

@@ -50,6 +50,7 @@ describe('accessibility settings (#33)', () => {
       ...DEFAULT_ACCESSIBILITY_SETTINGS,
       reducedMotion: true,
       reduceFlashes: true,
+      telegraphRings: true,
     });
     expect(suppressed.swayScale).toBe(plain.swayScale);
     expect(suppressed.driftScale).toBe(plain.driftScale);
@@ -110,6 +111,14 @@ describe('sanitizeAccessibilitySettings (#53)', () => {
     for (const junk of [null, undefined, 42, 'nope', [1, 2, 3]]) {
       expect(sanitizeAccessibilitySettings(junk)).toEqual(DEFAULT_ACCESSIBILITY_SETTINGS);
     }
+  });
+
+  it('keeps telegraphRings only when it is a boolean, and defaults it off (#429)', () => {
+    expect(DEFAULT_ACCESSIBILITY_SETTINGS.telegraphRings).toBe(false);
+    expect(sanitizeAccessibilitySettings({ telegraphRings: true }).telegraphRings).toBe(true);
+    expect(sanitizeAccessibilitySettings({ telegraphRings: 'yes' }).telegraphRings).toBe(false);
+    // A save from before #429 has no such field.
+    expect(sanitizeAccessibilitySettings({}).telegraphRings).toBe(false);
   });
 
   it('keeps a valid screenshakeScale and falls back an out-of-range one', () => {
