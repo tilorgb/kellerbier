@@ -87,6 +87,8 @@ export const TransitionTrigger = {
   OnLatched: 7,
   /** The player shook the body off (#406). */
   OnShakenOff: 8,
+  /** The player is one step away on a diagonal (#407). `value` is the step, `tolerance` the slack. */
+  PlayerDiagonalAdjacent: 9,
 } as const;
 
 export type TransitionTriggerId = (typeof TransitionTrigger)[keyof typeof TransitionTrigger];
@@ -99,6 +101,8 @@ export interface CompiledTransition {
   readonly to: number;
   /** For `PropWithin`: the `DESTRUCTIBLE_PROP_KINDS` index to measure to. -1 otherwise. */
   readonly propKind: number;
+  /** For `PlayerDiagonalAdjacent`: room units of slack around the diagonal step. 0 otherwise. */
+  readonly tolerance: number;
 }
 
 /** A `summon` with its child resolved to a definition index (#276). */
@@ -425,6 +429,29 @@ export class EnemyRegistry {
           );
         }
         movement = behaviour;
+        if (behaviour.behaviour === 'hopCardinal') {
+          if (!(behaviour.hopDistance > 0)) {
+            throw new Error(`${where}: "hopCardinal" needs a hopDistance above zero`);
+          }
+          if (!(behaviour.hopTicks >= 1) || !(behaviour.restTicks >= 0)) {
+            throw new Error(
+              `${where}: "hopCardinal" needs hopTicks of at least 1 and restTicks of at least 0`,
+            );
+          }
+        }
+        if (behaviour.behaviour === 'chargeAtPlayer') {
+          // Read through a wider type, as `size` is above: the types say one
+          // of two snaps, and a definition is data, which can say anything.
+          const snap: string | undefined = behaviour.snap;
+          if (snap !== undefined && snap !== 'cardinal' && snap !== 'diagonal') {
+            throw new Error(
+              `${where}: "chargeAtPlayer" snap "${snap}" is not one of cardinal, diagonal`,
+            );
+          }
+          if (behaviour.maxDistance !== undefined && !(behaviour.maxDistance > 0)) {
+            throw new Error(`${where}: "chargeAtPlayer" maxDistance must be above zero`);
+          }
+        }
         if (behaviour.behaviour === 'approachProp') {
           approachPropKind = resolvePropKind(behaviour.propKind, `${where}: "approachProp"`);
         }
@@ -626,19 +653,25 @@ export class EnemyRegistry {
         );
       }
       if ('after' in transition) {
-        return { trigger: TransitionTrigger.After, value: transition.after, to, propKind: -1 };
+        return {
+          trigger: TransitionTrigger.After,
+          value: transition.after,
+          to,
+          propKind: -1,
+          tolerance: 0,
+        };
       }
       if ('onHit' in transition) {
-        return { trigger: TransitionTrigger.OnHit, value: 0, to, propKind: -1 };
+        return { trigger: TransitionTrigger.OnHit, value: 0, to, propKind: -1, tolerance: 0 };
       }
       if ('onBlocked' in transition) {
-        return { trigger: TransitionTrigger.OnBlocked, value: 0, to, propKind: -1 };
+        return { trigger: TransitionTrigger.OnBlocked, value: 0, to, propKind: -1, tolerance: 0 };
       }
       if ('onLatched' in transition) {
-        return { trigger: TransitionTrigger.OnLatched, value: 0, to, propKind: -1 };
+        return { trigger: TransitionTrigger.OnLatched, value: 0, to, propKind: -1, tolerance: 0 };
       }
       if ('onShakenOff' in transition) {
-        return { trigger: TransitionTrigger.OnShakenOff, value: 0, to, propKind: -1 };
+        return { trigger: TransitionTrigger.OnShakenOff, value: 0, to, propKind: -1, tolerance: 0 };
       }
       if ('whenPlayerWithin' in transition) {
         return {
@@ -646,6 +679,22 @@ export class EnemyRegistry {
           value: transition.whenPlayerWithin,
           to,
           propKind: -1,
+          tolerance: 0,
+        };
+      }
+      if ('whenPlayerDiagonalAdjacent' in transition) {
+        const { distance, tolerance } = transition.whenPlayerDiagonalAdjacent;
+        if (!(distance > 0) || !(tolerance >= 0)) {
+          throw new Error(
+            `${where}: "whenPlayerDiagonalAdjacent" needs a distance above zero and a tolerance of at least zero`,
+          );
+        }
+        return {
+          trigger: TransitionTrigger.PlayerDiagonalAdjacent,
+          value: distance,
+          to,
+          propKind: -1,
+          tolerance,
         };
       }
       if ('whenPropWithin' in transition) {
@@ -654,6 +703,7 @@ export class EnemyRegistry {
           value: transition.whenPropWithin,
           to,
           propKind: resolvePropKind(transition.prop, `${where}: "whenPropWithin"`),
+          tolerance: 0,
         };
       }
       if ('whenPropBeyond' in transition) {
@@ -662,6 +712,7 @@ export class EnemyRegistry {
           value: transition.whenPropBeyond,
           to,
           propKind: resolvePropKind(transition.prop, `${where}: "whenPropBeyond"`),
+          tolerance: 0,
         };
       }
       return {
@@ -669,6 +720,7 @@ export class EnemyRegistry {
         value: transition.whenPlayerBeyond,
         to,
         propKind: -1,
+        tolerance: 0,
       };
     });
 

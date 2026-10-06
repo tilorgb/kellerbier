@@ -38,6 +38,9 @@ export const WALD = {
   v: 0x962bb3, // tick: engorged abdomen
   V: 0xb13bd0, // tick: abdomen, lit
   p: 0xcf85e2, // tick: abdomen highlight
+  m: 0x737373, // rabbit: grey fur
+  l: 0x8a8a8a, // rabbit: fur, lit (the backs of the ears)
+  q: 0xddaaeb, // rabbit: inner ear and nose
 };
 
 {
@@ -118,9 +121,34 @@ export const zecke = single('zecke', [
   '....KKK...',
 ]);
 
+// ========================================================== KANINCHEN
+// A grey wild rabbit (#407), sitting side-on and facing left: tall pink-lined
+// ears, a pale belly and chin, a white scut at the back. Option A of three,
+// signed off by Tilo, shown standing in a wald room next to Alois. 15x16
+// against a mini collider's 16.
+export const kaninchen = single('kaninchen', [
+  '....KK.KK......',
+  '...KlmKlmK.....',
+  '...KlqKlqK.....',
+  '...KlqKlqK.....',
+  '...KlmKlmK.....',
+  '..KKmmmmmK.....',
+  '.KmmmmmmmmK....',
+  'KmKmmmmmmmmK...',
+  'KqmmmmmmmmmmK..',
+  'KSmmmmmmmmmmmK.',
+  '.KSmmmmmmmmmmKK',
+  '..KSSmmmmmmmmwK',
+  '..KSSSmmmmmmmwK',
+  '...KSSSmmmmmmK.',
+  '...KmKKKKKKmK..',
+  '...KK.....KK...',
+]);
+
 export const ROSTER = {
   fliegenpilz,
   zecke,
+  kaninchen,
 };
 
 /** Every sprite is authored against Floor 3's palette. */
