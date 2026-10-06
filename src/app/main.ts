@@ -7,6 +7,7 @@ import { ENEMY_DEFINITIONS, enemyDefinitionById } from '../content/enemies/index
 import {
   FLOOR_CONFIGS,
   HIGHEST_PLAYABLE_FLOOR,
+  HIGHEST_SANDBOX_FLOOR,
   ROOM_GEN_FLOOR_OVERRIDES,
   type FloorConfig,
 } from '../content/floors/definition.js';
@@ -923,10 +924,13 @@ async function boot(progress: BootProgress): Promise<void> {
   // a *sandbox* run: no run save, no unlock credit, no telemetry, no results
   // board entry. A floor that is not playable yet is clamped to the highest
   // one that is (`docs/DECISIONS.md` #19), loudly.
+  // Clamped to `HIGHEST_SANDBOX_FLOOR`, not `HIGHEST_PLAYABLE_FLOOR`: a
+  // floor under construction is playable here before a run can progress
+  // into it, which is the point of a sandbox.
   const startFloorRequest = parseStartFloor(
     location.search,
     FLOOR_SKIP_ENABLED,
-    HIGHEST_PLAYABLE_FLOOR,
+    HIGHEST_SANDBOX_FLOOR,
   );
   const sandboxStartFloor = startFloorRequest?.floor ?? 1;
   const sandboxStartClamped =

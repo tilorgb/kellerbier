@@ -17,6 +17,8 @@ if (!token || !repository || !url || !eventPath) {
 }
 
 const { readFile } = await import('node:fs/promises');
+const { choosePreviewFloor, closedIssueNumbers, floorTagsFromSource } =
+  await import('./preview-floor.mjs');
 const event = JSON.parse(await readFile(eventPath, 'utf8'));
 const number = event.pull_request?.number;
 if (number === undefined) {
@@ -46,12 +48,60 @@ const api = async (path, init = {}) => {
   return response.status === 204 ? null : response.json();
 };
 
+/**
+ * Which floor the link starts on — `preview-floor.mjs` decides, from the PR
+ * body, the issues it closes and the files it changes. Every lookup is
+ * best-effort: a failed fetch only ever costs the floor parameter, never the
+ * comment, so a flaky API call degrades to the plain link.
+ */
+async function previewFloor() {
+  const prBody = event.pull_request?.body ?? '';
+  const floorTags = floorTagsFromSource(await readFile('src/content/floors/definition.ts', 'utf8'));
+  const { milestones } = JSON.parse(await readFile('tools/roadmap/plan.json', 'utf8'));
+  const issues = [];
+  for (const issueNumber of closedIssueNumbers(prBody)) {
+    try {
+      issues.push(await api(`/repos/${repository}/issues/${String(issueNumber)}`));
+    } catch (error) {
+      console.error(`could not read #${String(issueNumber)}: ${String(error)}`);
+    }
+  }
+  const files = [];
+  for (let page = 1; page <= 10; page++) {
+    const batch = await api(
+      `/repos/${repository}/pulls/${number}/files?per_page=100&page=${String(page)}`,
+    );
+    files.push(...batch.map((file) => file.filename));
+    if (batch.length < 100) {
+      break;
+    }
+  }
+  return choosePreviewFloor({ body: prBody, issues, files, milestones, floorTags });
+}
+
+let choice = { floor: null, reason: 'the floor could not be worked out' };
+try {
+  choice = await previewFloor();
+} catch (error) {
+  console.error(`preview floor: ${String(error)}`);
+}
+const separator = url.includes('?') ? '&' : '?';
+const link = choice.floor === null ? url : `${url}${separator}floor=${String(choice.floor)}`;
+const startsOn =
+  choice.floor === null
+    ? `Starts a normal run on floor 1 — ${choice.reason}.`
+    : `Starts a sandbox run on **floor ${String(choice.floor)}** — ${choice.reason}. ` +
+      `The whole game from floor 1: ${url}`;
+
 const sha = (event.pull_request?.head?.sha ?? '').slice(0, 7);
 const body = [
   MARKER,
   '### ▶ Playable preview',
   '',
-  `**${url}**`,
+  `**${link}**`,
+  '',
+  startsOn,
+  '_Put `Preview floor: N` (or `none`) on its own line in the PR body to choose._',
   '',
   `Built from \`${sha}\`. A game is judged by feel, and feel cannot be reviewed in a diff —`,
   'click the link and play the change.',

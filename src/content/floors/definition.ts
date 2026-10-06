@@ -259,3 +259,22 @@ export const FLOOR_CONFIGS: readonly FloorConfig[] = [
  * could silently drift out of sync.
  */
 export const HIGHEST_PLAYABLE_FLOOR = 2;
+
+/**
+ * The highest floor a `?floor=N` sandbox run (`app/start-floor.ts`, dev and
+ * reviewer builds only) may start on — which can run ahead of
+ * `HIGHEST_PLAYABLE_FLOOR` while a floor is being built.
+ *
+ * The two gates answer different questions. `HIGHEST_PLAYABLE_FLOOR` is
+ * "may a player's run *progress* here" — it waits until the floor is
+ * finished (Floor 3: its roster #405-#411 and Der Waldradler #412/#413,
+ * bumped by #414). This one is "can the floor be *generated* at all", so the
+ * work in progress can be played and reviewed on its own floor the moment
+ * its room pool is complete enough for `generateFloor` (a start, boss,
+ * treasure, shop, secret and supersecret template for its `floorTag`) —
+ * with whatever roster and boss stand-ins it has so far.
+ * `tests/content/sandbox-floor.test.ts` generates every floor up to this
+ * one, so a bump past what the content supports fails CI rather than
+ * freezing a sandbox run (`docs/DECISIONS.md` #19).
+ */
+export const HIGHEST_SANDBOX_FLOOR = 3;
