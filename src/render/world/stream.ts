@@ -209,6 +209,10 @@ export function advanceStreamFlow(nowMs: number): void {
 const RIBBON_STEP = 2;
 /** How far the drawn edge wanders off the course's own width, in room units — a bank is not ruled. */
 const EDGE_WOBBLE = 1;
+/** Over how many room units before a wall the stream's end is turned to lie along it — see `sections`. */
+const SQUARE_OFF = 14;
+/** How far the end of a stream runs on under the wall it meets, in room units, so no floor shows between them. */
+const WALL_TUCK = 3;
 /** How many times the course is averaged with its neighbours before it is splined — see `sections`. */
 const SMOOTHING_PASSES = 2;
 
@@ -297,17 +301,68 @@ function sections(course: StreamCourse, room: RoomGeometry): Section[] {
 
   const clampX = (x: number): number => Math.max(room.minX, Math.min(room.maxX, x));
   const clampZ = (z: number): number => Math.max(room.minY, Math.min(room.maxY, z));
+  // Where an end of the course is on a wall: the direction along that wall,
+  // and the way out through it. A cut made square to the stream's own
+  // heading leaves a slanted end hanging short of the wall it arrives at on
+  // a bend; a cut made along the wall, tucked just under it, does not.
+  const wallAt = (
+    centre: { x: number; z: number } | undefined,
+  ): { ax: number; az: number; outX: number; outZ: number } | null => {
+    if (centre === undefined) {
+      return null;
+    }
+    if (Math.abs(centre.x - room.minX) < 1) {
+      return { ax: 0, az: 1, outX: -1, outZ: 0 };
+    }
+    if (Math.abs(centre.x - room.maxX) < 1) {
+      return { ax: 0, az: 1, outX: 1, outZ: 0 };
+    }
+    if (Math.abs(centre.z - room.minY) < 1) {
+      return { ax: 1, az: 0, outX: 0, outZ: -1 };
+    }
+    if (Math.abs(centre.z - room.maxY) < 1) {
+      return { ax: 1, az: 0, outX: 0, outZ: 1 };
+    }
+    return null;
+  };
+  const lastIndex = centres.length - 1;
+  const ends = [
+    { wall: wallAt(centres[0]), index: 0 },
+    { wall: wallAt(centres[lastIndex]), index: lastIndex },
+  ];
   const out: Section[] = [];
   let travelled = 0;
   centres.forEach((centre, index) => {
     const before = centres[Math.max(0, index - 1)] ?? centre;
-    const after = centres[Math.min(centres.length - 1, index + 1)] ?? centre;
+    const after = centres[Math.min(lastIndex, index + 1)] ?? centre;
     const tx = after.x - before.x;
     const tz = after.z - before.z;
     const length = Math.hypot(tx, tz) || 1;
     // Across the flow, a quarter turn from along it.
-    const nx = -tz / length;
-    const nz = tx / length;
+    let nx = -tz / length;
+    let nz = tx / length;
+    let tuckX = 0;
+    let tuckZ = 0;
+    for (const end of ends) {
+      if (end.wall === null) {
+        continue;
+      }
+      // Turned toward the wall's own line over the last stretch before it.
+      const near = 1 - (Math.abs(index - end.index) * RIBBON_STEP) / SQUARE_OFF;
+      if (near <= 0) {
+        continue;
+      }
+      const side = nx * end.wall.ax + nz * end.wall.az < 0 ? -1 : 1;
+      const mx = nx * (1 - near) + end.wall.ax * side * near;
+      const mz = nz * (1 - near) + end.wall.az * side * near;
+      const size = Math.hypot(mx, mz) || 1;
+      nx = mx / size;
+      nz = mz / size;
+      if (index === end.index) {
+        tuckX = end.wall.outX * WALL_TUCK;
+        tuckZ = end.wall.outZ * WALL_TUCK;
+      }
+    }
     if (index > 0) {
       travelled += Math.hypot(centre.x - before.x, centre.z - before.z);
     }
@@ -320,10 +375,10 @@ function sections(course: StreamCourse, room: RoomGeometry): Section[] {
       centre.half +
       (Math.sin(key * 0.17 + 2.3) * 0.6 + Math.sin(key * 0.071 + 0.4) * 0.4) * EDGE_WOBBLE;
     out.push({
-      ax: clampX(centre.x - nx * left),
-      az: clampZ(centre.z - nz * left),
-      bx: clampX(centre.x + nx * right),
-      bz: clampZ(centre.z + nz * right),
+      ax: clampX(centre.x - nx * left) + tuckX,
+      az: clampZ(centre.z - nz * left) + tuckZ,
+      bx: clampX(centre.x + nx * right) + tuckX,
+      bz: clampZ(centre.z + nz * right) + tuckZ,
       nx,
       nz,
       travelled,
