@@ -81,6 +81,11 @@ const BLOAT_SWELL = 0.45;
 const BLOAT_GLOW_FROM = 2 / 3;
 /** The emissive strength of that glow at the end of the wind-up. */
 const BLOAT_GLOW_STRENGTH = 0.85;
+/** A cloud edge's line width, as a fraction of its radius — thin, since at 40 units the red ring's 0.14 is a band. */
+const CLOUD_EDGE_THICKNESS = 0.05;
+/** A cloud edge fades in from this alpha to `MIN + SWING` over the wind-up — never as loud as an attack ring. */
+const CLOUD_EDGE_MIN_ALPHA = 0.2;
+const CLOUD_EDGE_ALPHA_SWING = 0.35;
 const LABEL_POINT = { x: 0, y: 0 };
 /** How far above the floor a pickup hovers, so its shadow separates it from the ground. */
 const PICKUP_LIFT = 1.5;
@@ -119,6 +124,8 @@ export class EntityView {
   private bodiesUsed = 0;
   private readonly corpses: Billboard[] = [];
   private readonly rings: FloorRing[] = [];
+  /** The thin green edge a poison cloud will settle at (#405) — see `TelegraphShape.Cloud`. */
+  private readonly cloudEdges: FloorRing[] = [];
   private readonly wedges: FloorWedge[] = [];
   /** The bomb blast telegraph's crossed hatch arms (#3) — see `FloorHazardBar`. */
   private readonly hazardBars: FloorHazardBar[] = [];
@@ -161,6 +168,7 @@ export class EntityView {
     // Bodies and corpses need no such seed: they share the pedestal item's
     // `Billboard` material shape, which `PedestalView` seeds the same way.
     this.ringAt(0).hide();
+    this.cloudEdgeAt(0).hide();
     this.wedgeAt(0).hide();
     this.hazardBarAt(0).hide();
     this.hazardDiscAt(0).hide();
@@ -222,6 +230,7 @@ export class EntityView {
 
     let used = 0;
     let ringsUsed = 0;
+    let cloudEdgesUsed = 0;
     let wedgesUsed = 0;
     let hazardBarsUsed = 0;
     let hazardDiscsUsed = 0;
@@ -414,13 +423,25 @@ export class EntityView {
             );
             break;
           }
+          case TelegraphShape.Cloud: {
+            // The edge a poison cloud will settle at (#405): a thin, faint
+            // line in the cloud's own green at its true radius, not the red
+            // attack ring — it says "this is where the cloud will reach",
+            // and the bloating body says "when".
+            const edge = this.cloudEdgeAt(cloudEdgesUsed);
+            cloudEdgesUsed += 1;
+            edge.place(
+              info.x,
+              info.y,
+              info.reach,
+              CLOUD_EDGE_MIN_ALPHA + CLOUD_EDGE_ALPHA_SWING * info.progress,
+            );
+            break;
+          }
           default: {
             const ring = this.ringAt(ringsUsed);
             ringsUsed += 1;
-            const ringRadius =
-              info.reach > 0
-                ? lerp(hurtRadius, info.reach, info.progress)
-                : hurtRadius * (1 + (TELEGRAPH_SCALE - 1) * info.progress);
+            const ringRadius = hurtRadius * (1 + (TELEGRAPH_SCALE - 1) * info.progress);
             ring.place(info.x, info.y, ringRadius, shapeAlpha);
             break;
           }
@@ -469,6 +490,9 @@ export class EntityView {
     }
     for (let slot = ringsUsed; slot < this.rings.length; slot++) {
       this.rings[slot]?.hide();
+    }
+    for (let slot = cloudEdgesUsed; slot < this.cloudEdges.length; slot++) {
+      this.cloudEdges[slot]?.hide();
     }
     for (let slot = wedgesUsed; slot < this.wedges.length; slot++) {
       this.wedges[slot]?.hide();
@@ -557,6 +581,9 @@ export class EntityView {
     for (const shape of this.rings) {
       shape.mesh.layers.enable(layer);
     }
+    for (const shape of this.cloudEdges) {
+      shape.mesh.layers.enable(layer);
+    }
     for (const shape of this.wedges) {
       shape.mesh.layers.enable(layer);
     }
@@ -575,6 +602,17 @@ export class EntityView {
     }
     const created = new FloorRing(ENTITY_PALETTE.telegraphRing);
     this.rings.push(created);
+    this.group.add(created.mesh);
+    return created;
+  }
+
+  private cloudEdgeAt(slot: number): FloorRing {
+    const existing = this.cloudEdges[slot];
+    if (existing !== undefined) {
+      return existing;
+    }
+    const created = new FloorRing(ENTITY_PALETTE.cloudEdgeTelegraph, CLOUD_EDGE_THICKNESS);
+    this.cloudEdges.push(created);
     this.group.add(created.mesh);
     return created;
   }
@@ -626,7 +664,13 @@ export class EntityView {
     for (const body of [...this.bodies, ...this.corpses]) {
       body.dispose();
     }
-    for (const shape of [...this.rings, ...this.wedges, ...this.hazardBars, ...this.hazardDiscs]) {
+    for (const shape of [
+      ...this.rings,
+      ...this.cloudEdges,
+      ...this.wedges,
+      ...this.hazardBars,
+      ...this.hazardDiscs,
+    ]) {
       shape.dispose();
     }
     for (const label of this.labels) {

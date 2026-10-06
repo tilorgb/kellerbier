@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { type Mesh, type MeshStandardMaterial, RingGeometry } from 'three';
+import { type Mesh, type MeshBasicMaterial, type MeshStandardMaterial, RingGeometry } from 'three';
 import { ENEMY_DEFINITIONS, fliegenpilz } from '../../src/content/enemies/index.js';
 import { EntityView } from '../../src/render/entities.js';
+import { ENTITY_PALETTE } from '../../src/render/palette.js';
 import { BitmapText, Container, Texture } from '../../src/render/gfx/index.js';
 import { installPixelFonts, UI_FONT_FAMILY } from '../../src/render/ui/font.js';
 import { UI_TEXT_HEIGHT } from '../../src/render/ui/text.js';
@@ -198,7 +199,7 @@ describe("telegraphLook: 'bloat' (#405)", () => {
     ) as Mesh | undefined;
   }
 
-  it('swells the body over the wind-up, greens it in the last third, and grows the ring to the cloud', () => {
+  it("swells the body over the wind-up, greens it in the last third, and marks the cloud's edge in faint green", () => {
     const sim = bareSim();
     const enemy = placeFliegenpilz(sim, 60);
     const view = harness(sim);
@@ -225,10 +226,17 @@ describe("telegraphLook: 'bloat' (#405)", () => {
     expect(glow.g).toBeGreaterThan(glow.r);
     expect(glow.g).toBeGreaterThan(glow.b);
     expect(glow.g).toBeGreaterThan(0.3);
-    // The ring is close to the cloud's own 40, well past the body-sized ring.
+    // One marking, at the cloud's true 40 — not the red attack ring, which
+    // would stop at the body's own radius times 2.6.
     const drawn = ring(view);
-    expect(drawn?.scale.x ?? 0).toBeGreaterThan(35);
+    expect(drawn?.scale.x).toBe(40);
     expect(drawn?.scale.x ?? 0).toBeGreaterThan(restRadius * 2.6);
+    const edge = drawn?.material as MeshBasicMaterial | undefined;
+    expect(edge?.color.getHex()).toBe(ENTITY_PALETTE.cloudEdgeTelegraph);
+    expect(edge?.opacity ?? 1).toBeLessThan(0.6);
+    expect(
+      view.group.children.filter((c) => c.visible && (c as Mesh).geometry instanceof RingGeometry),
+    ).toHaveLength(1);
 
     // The deflate: the telegraph ends and the body snaps back to rest size.
     expect(stepUntil(sim, enemy, 'cooldown', 10)).toBeGreaterThanOrEqual(0);

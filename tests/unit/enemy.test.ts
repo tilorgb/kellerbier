@@ -1270,6 +1270,23 @@ describe('enemyTelegraphShape (#233)', () => {
     expect(shape.shape).toBe(TelegraphShape.Ring);
   });
 
+  it("reads a wind-up into a poison cloud as Cloud, at the cloud's own radius (#405)", () => {
+    const sim = emptySim();
+    const player = sim.playerIndex;
+    const enemy = place(sim, 'fliegenpilz', sim.positionX(player) + 50, sim.positionY(player));
+    for (let tick = 0; tick < 10 && stateName(sim, enemy) !== 'bloat'; tick++) {
+      sim.step(IDLE);
+    }
+    expect(stateName(sim, enemy)).toBe('bloat');
+    sim.step(IDLE);
+
+    const shape = freshShape();
+    expect(enemyTelegraphShape(sim, enemy, shape)).toBe(true);
+    expect(shape.shape).toBe(TelegraphShape.Cloud);
+    expect(shape.reach).toBe(40);
+    expect(shape.x).toBe(sim.positionX(enemy));
+  });
+
   it("reads Böllerschmeißer's lob as Ground, at the spot captured when the throw began — not wherever the player is now — sized to the real blast radius", () => {
     const sim = emptySim();
     const player = sim.playerIndex;

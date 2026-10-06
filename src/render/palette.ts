@@ -97,6 +97,8 @@ export const ENTITY_PALETTE = {
    * warning and what it warns about read as one colour.
    */
   bloatTelegraphGlow: 0x8fbf3a,
+  /** The thin edge a poison cloud will settle at, drawn while its emitter winds up (#405) — the same poison green. */
+  cloudEdgeTelegraph: 0x8fbf3a,
   /** Tint for a pickup whose kind failed to resolve. Should never be seen; a loud colour if it is. */
   unknownPickupTint: 0xff00ff,
   /** What a placed Bierfassl reddens toward as its fuse burns down (#208) — the same hot red a boss's own wind-up uses, so "about to go off" reads as one consistent warning across the game. */
