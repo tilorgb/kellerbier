@@ -76,6 +76,8 @@ const WALL_THICKNESS = ROOM_TILE_UNITS;
 const BLEED = ROOM_TILE_UNITS * 6;
 const TRELLIS_HEIGHT = 14;
 const DEFAULT_WALL_HEIGHT = 26;
+/** A Floor 3 puddle's colour: the Waldbach's water (`world/stream.ts`'s `STREAM_STYLE.water`). */
+const FOREST_PUDDLE_FILL = 0x2a6f7c;
 
 /** Props that are floor markings rather than things standing on the floor. */
 const FLAT_PROPS: ReadonlySet<string> = new Set(['boss-plate', 'shopkeeper-stand']);
@@ -1427,12 +1429,19 @@ export class Scenery {
     // fitted to the authored rect, plus a lighter outline loop for the wet
     // edge. The wobble is seeded off the rect's own corner, so two puddles in
     // a room are shaped differently but each one is the same every visit.
-    const fillMaterial = this.materials.flatMaterial(ROOM_HAZARD_PALETTE.puddleFill, {
-      roughness: 0.15,
-      metalness: 0.6,
-      transparent: true,
-      opacity: 0.85,
-    });
+    // Under Floor 3's canopy (#424) a puddle is forest water — the Waldbach's
+    // own teal, standing still — where the cellar's near-black one would be
+    // lost against dark ground in the shade.
+    const forest = this.art.tiles?.lighting === 'forest';
+    const fillMaterial = this.materials.flatMaterial(
+      forest ? FOREST_PUDDLE_FILL : ROOM_HAZARD_PALETTE.puddleFill,
+      {
+        roughness: forest ? 0.3 : 0.15,
+        metalness: forest ? 0.25 : 0.6,
+        transparent: true,
+        opacity: 0.85,
+      },
+    );
     for (let i = 0; i < room.puddleCount; i++) {
       const minX = room.puddles[i * BLOCK_STRIDE] ?? 0;
       const minY = room.puddles[i * BLOCK_STRIDE + 1] ?? 0;

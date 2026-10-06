@@ -75,7 +75,7 @@ export function stepPlayerMovement(sim: GameSim, input: Readonly<InputFrame>): v
   // deceleration still time off the untouched `tuning.maxSpeed` below (via
   // `accelerationOf`/`decelerationOf`) — a temporary top-speed penalty should
   // not also warp how many ticks it takes to reach it.
-  let maxSpeed = sim.stats.value(StatId.MoveSpeed);
+  const maxSpeed = sim.stats.value(StatId.MoveSpeed);
   const driftScale = sim.promilleDriftScale;
   // König Ludwig (#47): furniture and puddles are both things on the floor,
   // and he is not on the floor. Walls still stop him — see
@@ -85,15 +85,12 @@ export function stepPlayerMovement(sim: GameSim, input: Readonly<InputFrame>): v
   // the tick begins is the one their footing answers to this tick, the same
   // "decide against where things already are" rule the rest of the frame
   // loop follows.
-  const puddleSlip =
-    !flying && sim.puddleImmuneTicks <= 0 && sim.room.isOnPuddle(x, y) ? tuning.puddleSlip : 0;
-  // Floor 3's Waldbach (#403): wading caps top speed, read on the same
-  // "where the tick began" footing as the puddle above. A cap rather than a
-  // drag on acceleration, so stepping in reads at once as "the water is
-  // holding me" — the speed clamp below trims the excess the first tick.
-  if (!flying && sim.room.streamCount > 0 && sim.room.isInStream(x, y)) {
-    maxSpeed *= tuning.streamSpeedFactor;
-  }
+  // Floor 3's Waldbach is the same footing (#424): a puddle that crosses
+  // the room. #403 made it a speed cap instead; one rule for standing water
+  // on every floor is easier to read mid-fight than two.
+  const onWater =
+    sim.room.isOnPuddle(x, y) || (sim.room.streamCount > 0 && sim.room.isInStream(x, y));
+  const puddleSlip = !flying && sim.puddleImmuneTicks <= 0 && onWater ? tuning.puddleSlip : 0;
   velocityX = approachAxis(
     velocityX,
     inputX * maxSpeed,

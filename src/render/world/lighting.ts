@@ -10,13 +10,17 @@ import {
   PointLight,
   RGBADepthPacking,
   type Scene,
+  type Texture,
   CanvasTexture,
 } from 'three';
 import { TICKS_PER_SECOND } from '../../sim/time.js';
 import { ACTOR_PIXELS_PER_UNIT } from '../resolution.js';
 import { ELEVATION } from './camera.js';
+import { Canopy, type CanopyKind, canopyLayout } from './canopy.js';
+import { buildLanternSprite, LANTERN_HALF_HEIGHT, setLanternArt } from './lantern-sprite.js';
 import { OCCLUDER_LAYER } from './layers.js';
 import { pixelDisc, pixelShapeGeometry } from './pixel-shape.js';
+import { LANTERN_REACH, type WallLantern } from './wall-lanterns.js';
 
 /**
  * Light. The reason the room is 3D.
@@ -28,9 +32,11 @@ import { pixelDisc, pixelShapeGeometry } from './pixel-shape.js';
  * **daylight**: a sky, a sun that casts the shadows, and two clouds that
  * drift across the room on their own cycles, each crossing on a different
  * lane and in one of a few shapes, and take the light with them — or
- * **forest** (Floor 3, #402): the same sky seen through a canopy, dimmer and
- * greener, so Der Wald reads as the dark floor it is meant to be rather than
- * as Dorf & Acker in a different colour. The
+ * **forest** (Floor 3, #402/#424): the same sun, but the whole room is under
+ * a canopy that shades it the way a cloud would, with a few gaps the light
+ * comes down through (`world/canopy.ts`). Nothing drifts there. One of its
+ * lantern rooms has no gaps at all and is lit by the lanterns on its walls
+ * (`world/wall-lanterns.ts`) instead. The
  * tileset says which (`FloorTileset.lighting`), and a room with no authored
  * `bulb` prop in a cellar gets two by default, because a cellar with no light
  * in it is a black screen, not a mood.
@@ -71,7 +77,7 @@ import { pixelDisc, pixelShapeGeometry } from './pixel-shape.js';
  */
 export type LightingRig = 'cellar' | 'daylight' | 'forest';
 
-/** Rigs lit by a sky — a sun key and drifting clouds — rather than by bulbs. */
+/** Rigs lit by a sky — a sun key whose shadows reach well past the room — rather than by bulbs. */
 function skyLit(rig: LightingRig): boolean {
   return rig !== 'cellar';
 }
@@ -153,12 +159,56 @@ export const CLOUD_CYCLES: readonly {
 /** How far a crossing's shadow lane may drift north/south over the run, as a fraction of the room's depth. */
 const CLOUD_DRIFT = 0.15;
 const DOOR_GLOW_COLOUR = 0xff9a3c;
-/** Alois's lantern per rig: a cellar needs it most; under the canopy it carries more than in open sun. */
+/**
+ * Alois's lantern per rig: a cellar needs it most. Under the canopy it is
+ * fainter than anywhere (#424) — a body in the shade has to *look* shaded, and
+ * a light of his own would lift him back out of it; this is only enough that
+ * his outline holds against dark ground.
+ */
 const LANTERN_INTENSITY: Readonly<Record<LightingRig, number>> = {
   cellar: 420,
   daylight: 120,
-  forest: 220,
+  forest: 45,
 };
+
+/**
+ * A wall lantern (#424): a candle or a small gas lamp, so warmer and far
+ * weaker than a cellar bulb, hung low, and reaching only as far as its pool.
+ */
+const WALL_LANTERN_COLOUR = 0xff9a45;
+const WALL_LANTERN_INTENSITY = 5200;
+const WALL_LANTERN_HEIGHT = 14;
+/** How far into the room from the lantern its light source sits — see `setWallLanterns`. */
+const WALL_LANTERN_THROW = 9;
+const WALL_LANTERN_DISTANCE = LANTERN_REACH * 2.8;
+const BULB_COLOUR = 0xffb870;
+const BULB_INTENSITY = 9000;
+const BULB_DISTANCE = 300;
+/** The key light's shadow filter radius under the canopy, in shadow-map texels — see `onRoomChanged`. */
+const FOREST_SHADOW_RADIUS = 4;
+/** How far a lantern's brightness wavers either side of its own level. */
+export const WALL_LANTERN_FLICKER = 0.12;
+
+/**
+ * Lantern `index`'s brightness at `tick`, around 1: three slow sines with
+ * periods that share no beat, offset per lantern, so each wavers like a
+ * sheltered flame and no two do it together. A pure function of the tick —
+ * a replay's lanterns flicker the same way.
+ */
+export function lanternFlicker(index: number, tick: number): number {
+  const t = tick / TICKS_PER_SECOND + index * 7.31;
+  const wave = Math.sin(t * 2.1) * 0.5 + Math.sin(t * 5.3 + index) * 0.3 + Math.sin(t * 11.7) * 0.2;
+  return 1 + wave * WALL_LANTERN_FLICKER;
+}
+
+/** What a forest room needs beyond its size: see `Lighting.onRoomChanged`. */
+export interface ForestRoom {
+  /** Seeds where the canopy opens — `forestLightSeed`. */
+  readonly seed: number;
+  readonly canopy: CanopyKind;
+  /** The lanterns to light; empty for a room that is not a lantern room. */
+  readonly lanterns: readonly WallLantern[];
+}
 
 interface RigColours {
   readonly ambient: number;
@@ -192,17 +242,18 @@ const RIGS: Readonly<Record<LightingRig, RigColours>> = {
     keyIntensity: 3.4,
     background: 0x2a3a2a,
   },
-  // Daylight through a canopy: about two thirds of the sun, cooler and
-  // greener, a darker sky bounce and a near-black surround. The clouds still
-  // drift over it and read as moving shade under the trees.
+  // Under the trees: the ambient and the sky bounce are what a shaded floor
+  // is lit by, cool and green, since the canopy (`world/canopy.ts`) keeps the
+  // key off nearly all of it. The key is the full sun, warm — it only ever
+  // lands in a gap, and the contrast with the shade is the point.
   forest: {
     ambient: 0x6f8a86,
-    ambientIntensity: 1.05,
+    ambientIntensity: 1.45,
     sky: 0x88aaa0,
     ground: 0x2a2a1a,
-    hemisphereIntensity: 0.7,
-    key: 0xd8f0d0,
-    keyIntensity: 2.2,
+    hemisphereIntensity: 0.95,
+    key: 0xfff0cc,
+    keyIntensity: 4.5,
     background: 0x0a120c,
   },
 };
@@ -211,6 +262,8 @@ interface BulbRig {
   readonly light: PointLight;
   readonly glass: Mesh;
   readonly cord: Mesh;
+  /** What the rig is drawn as when it is a wall lantern rather than a bulb (#424). */
+  readonly lantern: Mesh;
 }
 
 export class Lighting {
@@ -243,6 +296,10 @@ export class Lighting {
   private lean = -ELEVATION;
   /** One persistent mesh per `CLOUD_CYCLES` entry, re-shaped and re-laned per crossing rather than rebuilt — see `sync`. */
   private readonly clouds: readonly Mesh[];
+  /** Floor 3's canopy and the shafts under its gaps (#424) — hidden on every other rig. */
+  private readonly canopy = new Canopy();
+  /** How many of the bulb rigs are wall lanterns this room, and so flicker — see `sync`. */
+  private wallLanternCount = 0;
   private frameWidth = 0;
   private frameHeight = 0;
   /** Where a cloud at `CLOUD_HEIGHT` throws its shadow, relative to itself — see `positionCloud`. */
@@ -307,6 +364,18 @@ export class Lighting {
       }
     }
     this.clouds = clouds;
+    if (this.canopy.plane !== null) {
+      scene.add(this.canopy.plane);
+    }
+    scene.add(this.canopy.shafts);
+    this.canopy.setLean(this.lean);
+  }
+
+  /** The wall lantern's tile (`wald-lantern`) from the art bundle — see `world/lantern-sprite.ts`. */
+  setLanternArt(texture: Texture | undefined): void {
+    for (const rig of this.bulbRigs) {
+      setLanternArt(rig.lantern, texture);
+    }
   }
 
   setReducedMotion(reduced: boolean): void {
@@ -315,13 +384,16 @@ export class Lighting {
 
   /**
    * Re-lights for a room: which rig, where its bulbs hang, how big it is (for
-   * the key light's shadow frustum and the cloud's run).
+   * the key light's shadow frustum and the cloud's run). `forest` is what the
+   * forest rig additionally needs — where its canopy opens and which lanterns
+   * burn; without it a forest room is simply shaded, gaps from seed 0.
    */
   onRoomChanged(
     rig: LightingRig,
     frameWidth: number,
     frameHeight: number,
     bulbs: readonly { readonly x: number; readonly y: number }[],
+    forest: ForestRoom = { seed: 0, canopy: 'ordinary', lanterns: [] },
   ): void {
     this.rig = rig;
     const colours = RIGS[rig];
@@ -360,12 +432,31 @@ export class Lighting {
     shadow.bottom = -frameHeight * 0.9;
     shadow.near = 50;
     shadow.far = 700;
+    // Under the canopy the shadow's edge *is* the picture — the rim of every
+    // gap — so it is filtered wide there, into the soft, leafy edge a gap in
+    // the trees has. Everywhere else a shadow keeps its crisper default.
+    this.key.shadow.radius = rig === 'forest' ? FOREST_SHADOW_RADIUS : 1;
     shadow.updateProjectionMatrix();
 
     if (rig === 'cellar') {
       this.hideCloud();
+      this.canopy.hide();
       this.setBulbs(bulbs.length > 0 ? bulbs : defaultBulbs(frameWidth, frameHeight));
+    } else if (rig === 'forest') {
+      // `positionCloud` for the shadow offset the canopy hangs by; the clouds
+      // themselves stay hidden — `sync` only drives them in daylight.
+      this.positionCloud(frameWidth, frameHeight);
+      this.canopy.apply(
+        canopyLayout(forest.seed, frameWidth, frameHeight, forest.canopy),
+        frameWidth,
+        frameHeight,
+        CLOUD_HEIGHT,
+        this.shadowOffsetX,
+        this.shadowOffsetZ,
+      );
+      this.setWallLanterns(forest.lanterns);
     } else {
+      this.canopy.hide();
       this.setBulbs([]);
       this.positionCloud(frameWidth, frameHeight);
     }
@@ -376,11 +467,17 @@ export class Lighting {
     this.lean = lean;
     for (const rig of this.bulbRigs) {
       rig.glass.rotation.x = lean;
+      rig.lantern.rotation.x = lean;
     }
+    this.canopy.setLean(lean);
   }
 
   /** Lights exactly `placed.length` bulb rigs (clamped to the pool) and dims the rest. */
   private setBulbs(placed: readonly { readonly x: number; readonly y: number }[]): void {
+    this.wallLanternCount = 0;
+    for (const rig of this.bulbRigs) {
+      rig.lantern.visible = false;
+    }
     const count = Math.min(placed.length, MAX_ROOM_BULBS);
     if (placed.length > MAX_ROOM_BULBS) {
       this.warnBulbOverflow(placed.length);
@@ -392,7 +489,9 @@ export class Lighting {
         continue;
       }
       rig.light.position.set(bulb.x, BULB_HEIGHT, bulb.y);
-      rig.light.intensity = 9000;
+      rig.light.color.setHex(BULB_COLOUR);
+      rig.light.distance = BULB_DISTANCE;
+      rig.light.intensity = BULB_INTENSITY;
       rig.glass.position.copy(rig.light.position);
       rig.glass.visible = true;
       rig.cord.position.set(bulb.x, BULB_HEIGHT + BULB_RADIUS + BULB_CORD_LENGTH / 2, bulb.y);
@@ -409,8 +508,38 @@ export class Lighting {
     }
   }
 
+  /**
+   * Lights a lantern room's wall lanterns from the bulb pool — the rigs a
+   * forest room would otherwise leave dark, so the scene's point-light count
+   * is what it always was (see the class comment). A lantern on the south
+   * wall hangs on the face the camera cannot see, so only its light shows.
+   */
+  private setWallLanterns(placed: readonly WallLantern[]): void {
+    this.setBulbs([]);
+    const count = Math.min(placed.length, MAX_ROOM_BULBS);
+    for (let i = 0; i < count; i++) {
+      const lantern = placed[i];
+      const rig = this.bulbRigs[i];
+      if (lantern === undefined || rig === undefined) {
+        continue;
+      }
+      // The light itself sits a little out from the wall, so it falls on the
+      // floor in front of the lantern rather than mostly on the wall behind it.
+      const out = WALL_LANTERN_THROW;
+      const dx = lantern.wall === 'west' ? out : lantern.wall === 'east' ? -out : 0;
+      const dz = lantern.wall === 'north' ? out : lantern.wall === 'south' ? -out : 0;
+      rig.light.position.set(lantern.x + dx, WALL_LANTERN_HEIGHT, lantern.z + dz);
+      rig.light.color.setHex(WALL_LANTERN_COLOUR);
+      rig.light.distance = WALL_LANTERN_DISTANCE;
+      rig.light.intensity = WALL_LANTERN_INTENSITY;
+      rig.lantern.position.set(lantern.x, WALL_LANTERN_HEIGHT - LANTERN_HALF_HEIGHT / 2, lantern.z);
+      rig.lantern.visible = lantern.wall !== 'south';
+    }
+    this.wallLanternCount = count;
+  }
+
   private buildBulbRig(): BulbRig {
-    const light = new PointLight(0xffb870, 0, 300, 2);
+    const light = new PointLight(BULB_COLOUR, 0, BULB_DISTANCE, 2);
     light.layers.enableAll();
     this.scene.add(light);
     // Baked onto the sprite grid rather than left as a sphere and a cylinder:
@@ -441,7 +570,10 @@ export class Lighting {
     // pass-one draw or the head-clip fix changing. See `world/layers.ts`.
     glass.layers.enable(OCCLUDER_LAYER);
     cord.layers.enable(OCCLUDER_LAYER);
-    return { light, glass, cord };
+    const lantern = buildLanternSprite();
+    lantern.rotation.x = this.lean;
+    this.scene.add(lantern);
+    return { light, glass, cord, lantern };
   }
 
   private warnBulbOverflow(requested: number): void {
@@ -573,7 +705,14 @@ export class Lighting {
    * a replay clouds over at the same moment, in the same place.
    */
   sync(tick: number): void {
-    if (this.clouds.length === 0 || !skyLit(this.rig)) {
+    for (let i = 0; i < this.wallLanternCount; i++) {
+      const rig = this.bulbRigs[i];
+      if (rig !== undefined) {
+        rig.light.intensity =
+          WALL_LANTERN_INTENSITY * (this.reducedMotion ? 1 : lanternFlicker(i, tick));
+      }
+    }
+    if (this.clouds.length === 0 || this.rig !== 'daylight') {
       return;
     }
     let moving = false;

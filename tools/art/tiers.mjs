@@ -95,6 +95,9 @@ export const FOREGROUND_TILE_NAMES = new Set([
   'wald-log-2',
   'wald-stump',
   'wald-barricade',
+  // The lantern-room wall lantern (#424): art-only, but a light — its glass
+  // needs the whites the background tier does not have.
+  'wald-lantern',
   // Interactables and markers the player deals with directly.
   'door-closed',
   'door-open',

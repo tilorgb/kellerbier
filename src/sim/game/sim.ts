@@ -3664,6 +3664,11 @@ export class GameSim {
     return this.roomDarkValue;
   }
 
+  /** Whether the loaded room is the floor's boss room. Presentation only, like `roomDark`. */
+  get roomIsBoss(): boolean {
+    return this.roomSpecialRole === 'boss';
+  }
+
   /** The floor the current room was loaded on. Drives the Weißwurst rule. */
   get currentFloor(): number {
     return this.currentFloorValue;

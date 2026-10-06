@@ -19,6 +19,8 @@ import {
   type RoomTemplate,
 } from '../../content/rooms/definition.js';
 import { BLOCK_MATERIAL_STONE, BLOCK_MATERIAL_WOOD, RoomGeometry } from './geometry.js';
+import type { RoomRect } from './geometry.js';
+import { bendStream, meanderStream, streamSeed } from './stream-course.js';
 import { computeVoidCells } from './void-cells.js';
 
 export const ROOM_FRAME_WIDTH = 320;
@@ -329,6 +331,20 @@ function validateSubLayout(
  * ended up with, which is what decides orientation and which walls get a
  * door (#100). Omitting `placement` compiles a `1x1` room exactly as before.
  */
+/** How much dry ground a stream's course keeps between itself and cover, in room units — the drawn bank is wider than the footing. */
+const WATER_CLEARANCE = 3;
+/** The first floor on which a prop the water reaches is dropped at compile time — see `compileRoomTemplate`. */
+const WATER_CLEARS_PROPS_FROM_FLOOR = 3;
+/** How far around a prop's own point the water is looked for: half a prop's width, so one on the bank goes too. */
+const PROP_WATER_CLEARANCE = 7;
+const WATER_PROBES: readonly (readonly [number, number])[] = [
+  [0, 0],
+  [-1, 0],
+  [1, 0],
+  [0, -1],
+  [0, 1],
+];
+
 export function compileRoomTemplate(
   value: unknown,
   floor: number,
@@ -487,6 +503,7 @@ export function compileRoomTemplate(
         ...(pickup.price === undefined ? {} : { price: pickup.price }),
       });
     }
+    const firstProp = decorativeProps.length;
     for (const prop of layout.decorativeProps) {
       decorativeProps.push({
         x: cellOffsetX + prop.x,
@@ -495,6 +512,8 @@ export function compileRoomTemplate(
         ...(prop.rotation === undefined ? {} : { rotation: prop.rotation }),
       });
     }
+    // This cell's Waldbach lanes, turned into water once they are all known.
+    const lanes: RoomRect[] = [];
     for (const hazard of layout.hazards) {
       hazards.push({
         x: cellOffsetX + hazard.x,
@@ -516,12 +535,12 @@ export function compileRoomTemplate(
           cellOffsetY + hazard.y + hazard.height,
         );
       } else if (hazard.type === 'waldbach') {
-        geometry.addStream(
-          cellOffsetX + hazard.x,
-          cellOffsetY + hazard.y,
-          cellOffsetX + hazard.x + hazard.width,
-          cellOffsetY + hazard.y + hazard.height,
-        );
+        lanes.push({
+          minX: cellOffsetX + hazard.x,
+          minY: cellOffsetY + hazard.y,
+          maxX: cellOffsetX + hazard.x + hazard.width,
+          maxY: cellOffsetY + hazard.y + hazard.height,
+        });
       } else if (hazard.type === 'trellis') {
         geometry.addSightBlock(
           cellOffsetX + hazard.x,
@@ -529,6 +548,62 @@ export function compileRoomTemplate(
           cellOffsetX + hazard.x + hazard.width,
           cellOffsetY + hazard.y + hazard.height,
         );
+      }
+    }
+
+    // The authored (or generated) band is only the lane; the water meanders
+    // in and around it (#424, `sim/room/stream-course.ts`), stepping back to
+    // the lane rather than running under this cell's cover. Lanes that meet
+    // end to end — an authored bend — are one stream, and take one course.
+    const underCover = (rect: RoomRect): boolean =>
+      layout.obstacles.some(
+        (obstacle) =>
+          rect.minX < cellOffsetX + obstacle.x + obstacle.width + WATER_CLEARANCE &&
+          rect.maxX > cellOffsetX + obstacle.x - WATER_CLEARANCE &&
+          rect.minY < cellOffsetY + obstacle.y + obstacle.height + WATER_CLEARANCE &&
+          rect.maxY > cellOffsetY + obstacle.y - WATER_CLEARANCE,
+      );
+    const [firstLane] = lanes;
+    const bend =
+      firstLane === undefined || lanes.length < 2
+        ? null
+        : bendStream(
+            lanes,
+            geometry,
+            { x: cellOffsetX, y: cellOffsetY },
+            streamSeed(rank, firstLane),
+            underCover,
+          );
+    const streams =
+      bend !== null
+        ? [bend]
+        : lanes.map((lane) => meanderStream(lane, geometry, streamSeed(rank, lane), underCover));
+    for (const water of streams) {
+      for (const rect of water.rects) {
+        geometry.addStream(rect.minX, rect.minY, rect.maxX, rect.maxY);
+      }
+      geometry.addStreamCourse(water.course);
+    }
+
+    // Nothing stands in Floor 3's water (#424): a barrel in a stream or a
+    // fern in a puddle reads as a bug. Cover is kept out when the water is
+    // laid; a prop that the water — this cell's puddles or its stream —
+    // reaches is simply not placed. From Floor 3 on only: Floors 1 and 2
+    // shipped with props free to sit in a puddle, and their rooms stay as
+    // they were.
+    if (floor >= WATER_CLEARS_PROPS_FROM_FLOOR) {
+      const wet = (x: number, y: number): boolean =>
+        geometry.isOnPuddle(x, y) || geometry.isInStream(x, y);
+      for (let index = decorativeProps.length - 1; index >= firstProp; index--) {
+        const prop = decorativeProps[index];
+        if (
+          prop !== undefined &&
+          WATER_PROBES.some(([dx, dy]) =>
+            wet(prop.x + dx * PROP_WATER_CLEARANCE, prop.y + dy * PROP_WATER_CLEARANCE),
+          )
+        ) {
+          decorativeProps.splice(index, 1);
+        }
       }
     }
   });

@@ -1,11 +1,14 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DirectionalLight, Mesh, type MeshBasicMaterial, PointLight, Scene } from 'three';
+import { CANOPY_NAME } from '../../src/render/world/canopy.js';
 import {
   CLOUD_CROSS_TICKS,
   CLOUD_CYCLES,
   crossingOf,
+  lanternFlicker,
   Lighting,
   SHOT_LIGHT_COUNT,
+  WALL_LANTERN_FLICKER,
 } from '../../src/render/world/lighting.js';
 import { TICKS_PER_SECOND } from '../../src/sim/time.js';
 
@@ -58,7 +61,12 @@ function litBulbCount(scene: Scene): number {
 function cloudsOf(scene: Scene): Mesh[] {
   const clouds: Mesh[] = [];
   scene.traverse((object) => {
-    if (object instanceof Mesh && object.castShadow && object.customDepthMaterial !== undefined) {
+    if (
+      object instanceof Mesh &&
+      object.castShadow &&
+      object.customDepthMaterial !== undefined &&
+      object.name !== CANOPY_NAME
+    ) {
       clouds.push(object as Mesh);
     }
   });
@@ -165,6 +173,63 @@ describe('Lighting, the lantern and the shot lights', () => {
   });
 });
 
+describe('Lighting, under the forest canopy (#424)', () => {
+  const lanterns = [
+    { x: 60, z: 51, wall: 'north' as const },
+    { x: 277, z: 90, wall: 'east' as const },
+  ];
+  /** A wall lantern is a bulb rig relit warmer and shorter-reaching, so it is told from a bulb by its falloff. */
+  const litLanterns = (scene: Scene): PointLight[] =>
+    pointLights(scene).filter(
+      (light) => light.intensity > 0 && light.position.y === 14 && light.distance < 300,
+    );
+
+  it('hangs no bulbs and no lanterns in an ordinary forest room', () => {
+    const { scene, lighting } = rig();
+    lighting.onRoomChanged('forest', 320, 180, []);
+    expect(litBulbCount(scene)).toBe(0);
+    expect(litLanterns(scene)).toHaveLength(0);
+  });
+
+  it('lights one lantern per lantern handed to it, from the bulb pool', () => {
+    const { scene, lighting } = rig();
+    const before = pointLights(scene).length;
+    lighting.onRoomChanged('forest', 320, 180, [], { seed: 5, canopy: 'closed', lanterns });
+    expect(litLanterns(scene)).toHaveLength(2);
+    // The count three.js keys every lit shader on has not moved.
+    expect(pointLights(scene)).toHaveLength(before);
+    lighting.onRoomChanged('cellar', 320, 180, []);
+    expect(litLanterns(scene)).toHaveLength(0);
+    expect(litBulbCount(scene)).toBe(2);
+  });
+
+  it('flickers each lantern gently and out of step, and not at all under reduced motion', () => {
+    const { scene, lighting } = rig();
+    lighting.onRoomChanged('forest', 320, 180, [], { seed: 5, canopy: 'closed', lanterns });
+    const levels = new Set<number>();
+    let apart = 0;
+    for (let tick = 0; tick < TICKS_PER_SECOND * 20; tick += 7) {
+      const a = lanternFlicker(0, tick);
+      const b = lanternFlicker(1, tick);
+      expect(Math.abs(a - 1)).toBeLessThanOrEqual(WALL_LANTERN_FLICKER + 1e-9);
+      levels.add(Math.round(a * 1000));
+      apart = Math.max(apart, Math.abs(a - b));
+    }
+    expect(levels.size).toBeGreaterThan(20);
+    expect(apart).toBeGreaterThan(WALL_LANTERN_FLICKER * 0.5);
+
+    lighting.sync(40);
+    const moving = litLanterns(scene).map((light) => light.intensity);
+    expect(moving[0]).not.toBe(moving[1]);
+    lighting.setReducedMotion(true);
+    lighting.sync(40);
+    const steady = litLanterns(scene).map((light) => light.intensity);
+    expect(steady[0]).toBe(steady[1]);
+    lighting.sync(400);
+    expect(litLanterns(scene).map((light) => light.intensity)).toEqual(steady);
+  });
+});
+
 describe('Lighting, the daylight cloud', () => {
   /** A `document` just able to paint the cloud's alpha into a canvas. */
   const canvasStub = {
@@ -178,6 +243,21 @@ describe('Lighting, the daylight cloud', () => {
       beginPath: () => undefined,
       arc: () => undefined,
       fill: () => undefined,
+      // And the canopy's (`world/canopy.ts`), which cuts gaps and dithers them.
+      clearRect: () => undefined,
+      setTransform: () => undefined,
+      rotate: () => undefined,
+      scale: () => undefined,
+      moveTo: () => undefined,
+      lineTo: () => undefined,
+      stroke: () => undefined,
+      createImageData: (width: number, height: number) => ({
+        data: new Uint8ClampedArray(width * height * 4),
+      }),
+      getImageData: (_x: number, _y: number, width: number, height: number) => ({
+        data: new Uint8ClampedArray(width * height * 4),
+      }),
+      putImageData: () => undefined,
     }),
   };
   let hadDocument = false;
@@ -345,5 +425,20 @@ describe('Lighting, the daylight cloud', () => {
       expect(cloud.visible).toBe(false);
     }
     expect(lighting.cloudMoving).toBe(false);
+  });
+
+  it('never drives a cloud over the forest, and shades it with a canopy instead (#424)', () => {
+    const { scene, lighting } = rig();
+    lighting.onRoomChanged('forest', 320, 180, []);
+    const canopy = scene.getObjectByName(CANOPY_NAME);
+    expect(canopy?.visible).toBe(true);
+    const longest = Math.max(...CLOUD_CYCLES.map((cycle) => cycle.cycleTicks));
+    for (let tick = 0; tick < longest * 3; tick += TICKS_PER_SECOND) {
+      lighting.sync(tick);
+      expect(cloudsOf(scene).some((cloud) => cloud.visible)).toBe(false);
+      expect(lighting.cloudMoving).toBe(false);
+    }
+    lighting.onRoomChanged('daylight', 320, 180, []);
+    expect(canopy?.visible).toBe(false);
   });
 });

@@ -9,7 +9,7 @@ import {
 import { ENEMY_DEFINITIONS } from '../../src/content/enemies/index.js';
 import { FLOOR_CONFIGS, ROOM_GEN_FLOOR_OVERRIDES } from '../../src/content/floors/definition.js';
 import { ROOM_TEMPLATES } from '../../src/content/rooms/index.js';
-import { LANTERNS, stackWithTunnel } from '../../src/render/world/darkness.js';
+import { DUSK, stackWithTunnel } from '../../src/render/world/darkness.js';
 import { GameSim } from '../../src/sim/game/sim.js';
 import { generateFloor } from '../../src/sim/room/floor-plan.js';
 import { generateRoom, roomGenSeed } from '../../src/sim/room/generate-room.js';
@@ -150,18 +150,21 @@ describe('the darkness setting', () => {
     vi.unstubAllGlobals();
   });
 
-  it('defaults to full, and off means no lantern at all', () => {
+  it('defaults to full, and off means no dusk at all', () => {
     expect(DEFAULT_ACCESSIBILITY_SETTINGS.darkness).toBe('full');
-    expect(LANTERNS.off).toBeNull();
-    expect(stackWithTunnel(LANTERNS.off, { radius: 0, alpha: 0 })).toEqual({
-      darknessAlpha: 0,
-      vignetteScale: 1,
-    });
+    expect(DUSK.off).toBeNull();
+    expect(stackWithTunnel(DUSK.off)).toEqual({ darknessAlpha: 0, vignetteScale: 1 });
   });
 
-  it('starts from the issue values: reduced sees further into a lighter dark', () => {
-    expect(LANTERNS.full).toEqual({ radius: 72, alpha: 0.9 });
-    expect(LANTERNS.reduced).toEqual({ radius: 120, alpha: 0.6 });
+  it('is a dusk shapes still read through, and reduced is clearly lighter (#424)', () => {
+    const full = DUSK.full ?? 0;
+    const reduced = DUSK.reduced ?? 0;
+    // #404's near-black was 0.9; with no clear circle around the player the
+    // room itself has to stay readable.
+    expect(full).toBeGreaterThan(0.4);
+    expect(full).toBeLessThan(0.75);
+    expect(reduced).toBeGreaterThan(0);
+    expect(reduced).toBeLessThan(full - 0.15);
   });
 
   it('sanitises an unknown or missing value back to the default', () => {
@@ -177,44 +180,24 @@ describe('the darkness setting', () => {
   });
 });
 
-describe('darkness stacked with the Promille tunnel', () => {
+describe('dusk stacked with the Promille tunnel', () => {
   /** Opacity where both overlays are at full strength, drawn one over the other. */
   const combined = (a: number, b: number): number => 1 - (1 - a) * (1 - b);
 
-  it('lets the lantern win when it is the tighter, without stacking into black', () => {
-    const lantern = LANTERNS.full;
-    expect(lantern).not.toBeNull();
-    if (lantern === null) {
-      return;
-    }
+  it('keeps the dusk whole and thins the tunnel, without stacking into black', () => {
+    const dusk = DUSK.full ?? 0;
     const tunnelAlpha = 0.8;
-    const stacked = stackWithTunnel(lantern, { radius: 200, alpha: tunnelAlpha });
-    expect(stacked.darknessAlpha).toBe(lantern.alpha);
+    const stacked = stackWithTunnel(dusk);
+    expect(stacked.darknessAlpha).toBe(dusk);
     const total = combined(stacked.darknessAlpha, tunnelAlpha * stacked.vignetteScale);
-    // Barely darker than the lantern alone — not the 0.98 two full overlays make.
-    expect(total).toBeLessThan(lantern.alpha + 0.02);
-    expect(combined(lantern.alpha, tunnelAlpha)).toBeGreaterThan(0.97);
+    // No darker than the darker of the two alone — not the 0.92 two full overlays make.
+    expect(total).toBeLessThanOrEqual(Math.max(dusk, tunnelAlpha));
+    expect(combined(dusk, tunnelAlpha)).toBeGreaterThan(0.9);
+    // And the tunnel is still there to be read.
+    expect(stacked.vignetteScale).toBeGreaterThan(0.25);
   });
 
-  it('lets the tunnel win when it is the tighter', () => {
-    const lantern = LANTERNS.reduced;
-    expect(lantern).not.toBeNull();
-    if (lantern === null) {
-      return;
-    }
-    const tunnelAlpha = 0.7;
-    const stacked = stackWithTunnel(lantern, { radius: 80, alpha: tunnelAlpha });
-    expect(stacked.vignetteScale).toBe(1);
-    expect(stacked.darknessAlpha).toBeLessThan(lantern.alpha);
-    expect(combined(stacked.darknessAlpha, tunnelAlpha)).toBeLessThan(
-      Math.max(lantern.alpha, tunnelAlpha) + 0.15,
-    );
-  });
-
-  it('is the plain lantern when sober', () => {
-    expect(stackWithTunnel(LANTERNS.full, { radius: 0, alpha: 0 })).toEqual({
-      darknessAlpha: 0.9,
-      vignetteScale: 1 - 0.9,
-    });
+  it('leaves the tunnel alone in a room with no dusk', () => {
+    expect(stackWithTunnel(null).vignetteScale).toBe(1);
   });
 });

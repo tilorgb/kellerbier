@@ -72,6 +72,7 @@ import {
   type SingleCellRoomTemplate,
 } from '../../content/rooms/definition.js';
 import { MAX_ROOM_BLOCKS } from './geometry.js';
+import { STREAM_REACH_TILES } from './stream-course.js';
 import { splitmix32, type Rng } from '../rng/rng.js';
 import { DEFAULT_ROOM_GEN_TUNING, type RoomGenTuning } from '../tuning.js';
 
@@ -192,19 +193,20 @@ const COVER_MATERIAL_BY_TAG: Readonly<Record<string, RoomObstacleMaterial>> = {
 /**
  * The floor-flavour hazard a generated room may carry, per floor tag — Floor
  * 1's slick puddle (#35), Floor 2's hop-trellis that blocks a shot but not a
- * step (#37), Floor 3's Waldbach stream (#403). All three are walk-through,
+ * step (#37), and the puddle again on Floor 3 (#424). All are walk-through,
  * so none can wall off a route. A tag with no entry gets no generated hazard.
  *
- * The Waldbach is placed differently from the other two — one band edge to
- * edge across the whole room rather than a 2×2 patch (`placeStream`).
+ * Floor 3 can roll a Waldbach instead (#403) — the same slick water, laid as
+ * one lane edge to edge across the whole room rather than a 2×2 patch
+ * (`placeStream`), on its own chance (`RoomGenTuning.streamChance`).
  */
 const HAZARD_BY_TAG: Readonly<Record<string, string>> = {
   cellar: 'puddle',
   rural: 'trellis',
-  wald: 'waldbach',
+  wald: 'puddle',
 };
 
-/** The hazard type `placeHazards` lays as a room-crossing band instead of a patch. */
+/** The hazard type `placeHazards` lays as a room-crossing lane instead of a patch. */
 const STREAM_HAZARD = 'waldbach';
 
 /**
@@ -1063,21 +1065,17 @@ function placeHazards(
   cellCount: number,
   params: RoomGenTuning,
 ): PlacedHazard[] {
+  // A stream is one feature of the whole room, rolled once and before any
+  // patch: a room with a Waldbach has no puddle as well. Only rolled where
+  // the floor turns it on, so every other floor draws the numbers it always did.
+  if (params.streamChance > 0 && ctx.rng.chance(params.streamChance)) {
+    return placeStream(ctx, grid, STREAM_HAZARD);
+  }
   const type = HAZARD_BY_TAG[ctx.floorTag];
   if (type === undefined) {
     return [];
   }
   const wanted = 1 + Math.floor((cellCount - 1) / 2);
-  if (type === STREAM_HAZARD) {
-    // A stream is one feature of the whole room, not a patch per few cells —
-    // the same number of rolls a patch gets, but the first hit is the only one.
-    for (let attempt = 0; attempt < wanted; attempt++) {
-      if (ctx.rng.chance(params.hazardChance)) {
-        return placeStream(ctx, grid, type);
-      }
-    }
-    return [];
-  }
   const patches: PlacedHazard[] = [];
   for (let attempt = 0; attempt < wanted; attempt++) {
     if (!ctx.rng.chance(params.hazardChance)) {
@@ -1124,8 +1122,9 @@ function placeHazards(
 }
 
 /**
- * Floor 3's Waldbach (#403): one band, 1–2 tiles thick, running edge to edge
- * across the room — horizontal across every real cell in one row of the
+ * Floor 3's Waldbach (#403): one lane, 1–2 tiles thick, running edge to edge
+ * across the room (the water itself meanders around it when the room is
+ * compiled — `sim/room/stream-course.ts`, #424) — horizontal across every real cell in one row of the
  * shape's grid, or vertical down every real cell in one column. Emitted as one
  * piece per sub-cell it crosses, each spanning that cell wall to wall, so the
  * glued pieces read as one stream.
@@ -1180,19 +1179,29 @@ function placeStream(ctx: RoomGenContext, grid: RoomGrid, type: string): PlacedH
   return pieces;
 }
 
-/** True when tile `(col, row)` lies under any of `hazards`' stream pieces. */
+/**
+ * True when tile `(col, row)` could lie under the stream one of `hazards`'
+ * lanes becomes: in the lane, or within the reach of its meander either side
+ * (`sim/room/stream-course.ts`, #424).
+ */
 function inStream(hazards: readonly PlacedHazard[], col: number, row: number): boolean {
-  return hazards.some(
-    (hazard) =>
-      hazard.type === STREAM_HAZARD &&
-      col >= hazard.col &&
-      col < hazard.col + hazard.cols &&
-      row >= hazard.row &&
-      row < hazard.row + hazard.rows,
-  );
+  return hazards.some((hazard) => {
+    if (hazard.type !== STREAM_HAZARD) {
+      return false;
+    }
+    const alongCols = hazard.cols >= hazard.rows;
+    const reachCols = alongCols ? 0 : STREAM_REACH_TILES;
+    const reachRows = alongCols ? STREAM_REACH_TILES : 0;
+    return (
+      col >= hazard.col - reachCols &&
+      col < hazard.col + hazard.cols + reachCols &&
+      row >= hazard.row - reachRows &&
+      row < hazard.row + hazard.rows + reachRows
+    );
+  });
 }
 
-/** `candidates` minus any tile under a stream — a barrel stood in the Waldbach reads as a bug. */
+/** `candidates` minus any tile a stream could run over — a barrel stood in the Waldbach reads as a bug. */
 function dryTiles(
   candidates: readonly PlacedTile[],
   hazards: readonly PlacedHazard[],

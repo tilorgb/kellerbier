@@ -6478,3 +6478,62 @@ is unaffected.
 brown, so the "dark wooden floor" has to be read from its greens and blacks or the palette has to
 grow — a decision for the tileset sign-off, not for the foundation.
 
+---
+
+## 119. Floor 3's light belongs to the room, and its water is a puddle that can cross it
+
+**Decided** in #424, reworking #402's forest rig, #403's Waldbach and #404's lantern-darkness.
+
+**The light.** Der Wald used Dorf & Acker's sky: two cloud shadows drifting over a dimmer sun. It
+now has a canopy — one static shadow-casting plane over the whole room, the same shade a cloud
+casts, with four or five gaps cut in it per single-screen cell (about a quarter of the floor lit),
+one room in four trading a gap for a diagonal band, and the boss room staged in one large central
+clearing. A faint shaft stands over each gap. Where the gaps are comes from the run seed and the
+room, so a room is the same on a revisit and in a replay.
+
+**Sprites receive shadows, on every floor.** `Billboard.receiveShadow` was `false` since the 3D
+proof of concept, with no reason recorded, so a body was lit the same wherever it stood and a
+room's light read as a floor texture. It is now `true`: a stump in the shade is dark, a bush in a
+gap is bright, and on Floor 2 a passing cloud darkens the Bauer as `lighting.ts` always claimed it
+did. Sprites still cast nothing onto each other.
+
+**Lantern rooms.** #404 lit a dark room with a clear circle that followed the player. That read
+as a game effect, not a place. The room is now an even deep dusk (`DUSK`: 0.6, reduced 0.35) in
+which every shape still reads, lit by two or three lanterns seeded onto its walls — real point
+lights from the cellar-bulb pool, so the scene's light count is unchanged — each with a soft clear
+pool in the dusk pass. They flicker gently, and hold steady under Reduced Motion. Alois carries no
+light of his own there. The Darkness setting now only sets the dusk's depth; the lanterns burn at
+every level. What must never be hidden — telegraphs, shots, particles, bodies mid-wind-up — still
+draws over the dusk, as in #404.
+
+**The water.** #403's Waldbach was a straight band that capped speed (0.55 for the player, 0.6
+for enemies). It is now the same object as Floor 1's puddle: slick for the player, nothing to an
+enemy. A wald room rolls either a puddle patch (`hazardChance` 0.2, drawn in the stream's teal) or
+a stream (`streamChance` 0.15), never both. A stream is still *placed* as a band — authored or
+generated — but the band is only its lane: `sim/room/stream-course.ts` meanders the water a tile
+or two either side of it, one to two tiles wide, when the room compiles, stepping back to the lane
+rather than run under cover. The simulation stands on tile-wide slices of that course; the
+renderer draws the same course as a smooth ribbon with a bank, so the two can differ by up to
+half a tile. Lanes authored end to end — `wald-grove`'s bend — are one stream and take one course
+through all of them, corners rounded (`bendStream`).
+
+**Nothing stands in Floor 3's water.** Cover is kept out when the water is laid (a generated lane
+clears its band; a course steps back from cover with a few units to spare), and from Floor 3 on a
+decorative prop that a puddle or a stream reaches is dropped when the room compiles. Floors 1 and 2
+are deliberately left alone — they shipped with props free to sit in a puddle.
+
+**Why one rule for water.** Two kinds of standing water with two different effects is one more
+thing to read mid-fight, and the straight band looked like a blue bar across the floor.
+
+**What this constrains.**
+
+- `streamSpeedFactor` is gone from both `MovementTuning` and `EnemyTuning`. Anything that planned
+  to lean on the stream slowing a chaser (#406's Zecke, #408's Bachforelle) has to find that
+  elsewhere.
+- `RoomGeometry.streams` stays separate from `puddles` although the footing is the same: the
+  Bachforelle (#408) lives in streams only, and `streamCourses` is the line it swims.
+- Lantern rooms are capped at `MAX_ROOM_BULBS` (3) lanterns.
+- The `wald` palette still has no warm colour. The lantern is drawn in its greys and whites and
+  tinted warm by its material, and sits on the foreground tier for the whites.
+- `stackWithTunnel` no longer compares radii — the dusk has none. The dusk keeps its strength and
+  the Promille tunnel is thinned by it.
