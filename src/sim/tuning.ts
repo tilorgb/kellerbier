@@ -83,14 +83,6 @@ export interface MovementTuning {
    */
   puddleSlip: number;
   /**
-   * Floor 3's Waldbach (#403): the player's top speed while wading, as a
-   * fraction of their dry-ground top speed. A cap, not a drag — it reads
-   * through `sim.stats`' Move Speed like everything else, so a speed item
-   * still helps in the water by the same proportion. Flying characters skip
-   * it, the same rule as puddles.
-   */
-  streamSpeedFactor: number;
-  /**
    * Ticks a player has to keep walking into an open, unlocked door before the
    * room actually changes.
    *
@@ -331,15 +323,6 @@ export interface EnemyTuning {
   telegraphScale: number;
   /** Multiplier on the gap between volleys. Above 1 is slower firing. */
   fireIntervalScale: number;
-  /**
-   * Floor 3's Waldbach (#403): an enemy's speed while wading, as a fraction
-   * of its own authored speed. The same world rule the player lives by —
-   * water slows what walks in it — kept separate so a balance pass can tune
-   * how much a stream protects the player without retuning how much it
-   * costs them. Applied at integration (`sim/systems/bodies.ts`), so a
-   * knockback push is never slowed.
-   */
-  streamSpeedFactor: number;
   /** Multiplier on the speed of everything enemies fire. */
   projectileSpeedScale: number;
   /**
@@ -885,8 +868,16 @@ export interface RoomGenTuning {
   pickupChance: number;
   /** Decorative / destructible props (barrels, crates, hay bales) scattered as scenery — up to this many. */
   maxProps: number;
-  /** Chance a room gets one floor-flavour hazard patch (Floor 1 puddle, Floor 2 trellis). */
+  /** Chance a room gets one floor-flavour hazard patch (Floor 1 and 3 puddle, Floor 2 trellis). */
   hazardChance: number;
+  /**
+   * Floor 3's Waldbach (#403, #424): chance a generated room has a stream
+   * meandering across it, wall to wall. 0 everywhere but `wald`
+   * (`content/floors/definition.ts`), and rolled only when above 0, so a
+   * floor without streams generates the same rooms it always did. A room that
+   * rolls a stream gets no puddle patch as well — one piece of water a room.
+   */
+  streamChance: number;
   /**
    * Chance a `normal` slot is filled by a hand-authored room instead of a
    * generated one — the route for a one-off room design to pop up on a floor.
@@ -1145,9 +1136,6 @@ export const DEFAULT_MOVEMENT_TUNING: Readonly<MovementTuning> = {
   // strong enough to read as "the floor changed" the instant a player's
   // shoe touches one, short of throwing them somewhere they didn't aim.
   puddleSlip: 2,
-  // Just over half speed: clearly slower the moment a foot is wet, without
-  // turning a room-wide stream into a wall the player cannot cross under fire.
-  streamSpeedFactor: 0.55,
   // A third of a second at 60 ticks/second — long enough to read as a couple
   // of steps into the frame, short enough that it never feels like the door
   // is refusing to open.
@@ -1224,9 +1212,6 @@ export const DEFAULT_ENEMY_TUNING: Readonly<EnemyTuning> = {
   speedScale: 0.9,
   telegraphScale: 1,
   fireIntervalScale: 1,
-  // A touch kinder to enemies than to the player (0.55): the stream should
-  // buy the player a breather from a chaser, not strand the chaser in it.
-  streamSpeedFactor: 0.6,
   projectileSpeedScale: 0.9,
   deflectParticles: 6,
   deflectShake: 0.3,
@@ -1504,6 +1489,7 @@ export const DEFAULT_ROOM_GEN_TUNING: Readonly<RoomGenTuning> = {
   pickupChance: 0.2,
   maxProps: 5,
   hazardChance: 0.18,
+  streamChance: 0,
   authoredRoomChance: 0.12,
   darkRoomChance: 0,
 };

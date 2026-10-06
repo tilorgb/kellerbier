@@ -124,14 +124,16 @@ export const ROOM_GEN_FLOOR_OVERRIDES: Readonly<Record<string, Partial<RoomGenTu
    * reasoning: one step harder than the floor before, not a cliff) with one
    * extra body of headroom and a touch more cover, since a wooden obstacle can
    * be smashed or eaten and a denser wood still opens up as the run goes on.
-   * `hazardChance` stays at `rural`'s value; for `wald` it is the chance per
-   * roll of a Waldbach band crossing the room (#403's `placeStream` — one
-   * stream per room at most, rolled once per ~2 cells like a patch).
+   * Water (#424): about one room in five has a puddle or two, the same
+   * slick patch as Floor 1's (`hazardChance`), and about one in seven has a
+   * Waldbach meandering across it instead (`streamChance`, #403's
+   * `placeStream`) — never both in one room.
    */
   wald: {
     threatBase: 3.5,
     maxEnemies: 8,
     hazardChance: 0.2,
+    streamChance: 0.15,
     minCoverTiles: 12,
     maxCoverTiles: 26,
     // #404: roughly one generated room in seven is lantern-dark — often

@@ -18,12 +18,30 @@ export const MAX_ROOM_PUDDLES = 16;
 export const MAX_ROOM_SIGHT_BLOCKS = 16;
 
 /**
- * Waldbach stream rects one room may hold (#403). A stream is one band edge to
- * edge, or a bend of two or three rects; a multi-cell room carries one rect
- * per sub-cell the band crosses (a `T` is three cells wide), so this leaves
- * room for two streams across the widest shape.
+ * Waldbach stream rects one room may hold (#403, #424). A stream is a chain of
+ * tile-wide slices following its meander (`sim/room/stream-course.ts`) — up to
+ * fifteen across one single-screen cell — and a multi-cell room carries a
+ * chain per sub-cell the stream crosses (a `T` is three cells wide). This is
+ * room for one stream across the widest shape, with a cell's worth to spare.
  */
-export const MAX_ROOM_STREAMS = 8;
+export const MAX_ROOM_STREAMS = 64;
+
+/** One sample of a stream's centreline, in room units, and half the water's width there. */
+export interface StreamCoursePoint {
+  readonly x: number;
+  readonly y: number;
+  readonly halfWidth: number;
+}
+
+/**
+ * A stream as a line rather than as footing: its centreline from one end to
+ * the other, in order, whichever way it runs and however it bends. The
+ * renderer draws the water and its bank from this; the rects in
+ * `RoomGeometry.streams` are the same water, sliced for the simulation.
+ */
+export interface StreamCourse {
+  readonly points: readonly StreamCoursePoint[];
+}
 
 /**
  * How wide a door gap is, in room units, centred on its wall.
@@ -163,20 +181,24 @@ export class RoomGeometry {
   private sightBlocks_ = 0;
 
   /**
-   * Floor 3's Waldbach (#403): a forest stream running edge to edge across a
-   * room. Walkable but slow for anything on its feet; shots fly over it
-   * untouched. Flat `[minX, minY, maxX, maxY]` runs read `streamCount *
-   * BLOCK_STRIDE` deep — public, like `puddles`, because the render layer
-   * draws the water from it and the Bachforelle (#408) needs to know where
-   * the water it lives in actually is.
+   * Floor 3's Waldbach (#403): a forest stream meandering wall to wall
+   * across a room. Since #424 it is a puddle that happens to cross the room
+   * — slick underfoot for the player exactly as a puddle is
+   * (`sim/systems/movement.ts`), where #403 made it a speed cap; shots fly
+   * over it untouched. Flat `[minX, minY, maxX, maxY]` runs read
+   * `streamCount * BLOCK_STRIDE` deep — public, like `puddles`.
    *
-   * Its own array for the reason `puddles` gives: a stream is neither solid
-   * nor slick, it is a speed cap, and folding it into the puddle array would
-   * make every puddle read pay for a discriminant it never wants.
+   * Still its own array rather than more entries in `puddles`, though the
+   * footing is now the same: the render layer draws running water with a
+   * bank here and a still blob there, and the Bachforelle (#408) lives in
+   * streams only, so which water is which has to survive compilation.
    */
   readonly streams = new Float32Array(MAX_ROOM_STREAMS * BLOCK_STRIDE);
 
   private streams_ = 0;
+
+  /** Each stream as a centreline — see `StreamCourse`. One per lane a template placed. */
+  readonly streamCourses: StreamCourse[] = [];
 
   constructor(
     minX: number,
@@ -386,6 +408,11 @@ export class RoomGeometry {
     this.streams[base + 2] = maxX;
     this.streams[base + 3] = maxY;
     this.streams_ += 1;
+  }
+
+  /** Records a stream's centreline alongside the rects `addStream` took. Setup-time only. */
+  addStreamCourse(course: StreamCourse): void {
+    this.streamCourses.push(course);
   }
 
   get streamCount(): number {

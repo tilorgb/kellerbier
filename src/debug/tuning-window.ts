@@ -86,7 +86,6 @@ const GROUPS: readonly GroupSpec[] = [
       { key: 'contactDrag', min: 0, max: 1, step: 0.05, hint: 'how hard bodies hold you' },
       { key: 'pushDamping', min: 0.5, max: 0.98, step: 0.01, hint: 'how long a shove lasts' },
       { key: 'maxPush', min: 1, max: 16, step: 0.5, hint: 'largest shove carried' },
-      { key: 'streamSpeedFactor', min: 0.1, max: 1, step: 0.05, hint: 'top speed wading' },
       {
         key: 'doorCrossingTicks',
         min: 0,
@@ -167,7 +166,6 @@ const GROUPS: readonly GroupSpec[] = [
       { key: 'speedScale', min: 0.25, max: 3, step: 0.05, hint: 'how fast the roster is' },
       { key: 'telegraphScale', min: 0.25, max: 3, step: 0.05, hint: 'how long it warns you' },
       { key: 'fireIntervalScale', min: 0.25, max: 4, step: 0.05, hint: 'gap between volleys' },
-      { key: 'streamSpeedFactor', min: 0.1, max: 1, step: 0.05, hint: 'speed wading' },
       { key: 'projectileSpeedScale', min: 0.25, max: 3, step: 0.05, hint: 'how fast they shoot' },
       { key: 'deflectParticles', min: 0, max: 30, step: 1, hint: 'foam off a shell' },
       { key: 'deflectShake', min: 0, max: 3, step: 0.05, hint: 'shake off a shell' },
@@ -436,6 +434,7 @@ const GROUPS: readonly GroupSpec[] = [
         step: 0.02,
         hint: 'chance a normal slot is a hand-authored room',
       },
+      { key: 'streamChance', min: 0, max: 1, step: 0.05, hint: 'chance a room has a stream' },
       { key: 'darkRoomChance', min: 0, max: 1, step: 0.05, hint: 'chance a room is lantern-dark' },
     ],
   },

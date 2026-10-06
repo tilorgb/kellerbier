@@ -9,15 +9,17 @@ import {
   type Texture as ThreeTexture,
 } from 'three';
 import { ROOM_TILE_UNITS } from '../../content/rooms/definition.js';
-import { BLOCK_STRIDE, type RoomGeometry } from '../../sim/room/geometry.js';
+import type { RoomGeometry, StreamCourse } from '../../sim/room/geometry.js';
 import { textureFromPixels } from '../gfx/index.js';
 import { ACTOR_PIXELS_PER_UNIT } from '../resolution.js';
 import { DECAL_HEIGHT } from './flat.js';
 
 /**
- * Floor 3's Waldbach (#403), drawn: a band of flowing water on the floor plane
- * with a bank along every edge that meets dry ground, so the player sees to
- * the pixel where the slow starts.
+ * Floor 3's Waldbach (#403, #424), drawn: a ribbon of flowing water curving
+ * across the floor along the stream's course (`RoomGeometry.streamCourses`),
+ * with a pebble bank along both edges, so the player sees where the slick
+ * footing starts. The simulation's footing is the same course in tile-wide
+ * steps, so the drawn bank and the slick can differ by up to half a tile.
  *
  * The water is one tiling pixel texture, two authored pixels per room unit
  * (`ACTOR_PIXELS_PER_UNIT`, the density every sprite is drawn at), its UVs
@@ -41,8 +43,6 @@ const BANK_DEPTH = 2;
 const BANK_PIXELS = BANK_DEPTH * ACTOR_PIXELS_PER_UNIT;
 /** Pixels along one repeat of the bank texture. */
 const BANK_REPEAT_PIXELS = 16;
-/** Bank segments are tested and merged at this resolution, in room units. */
-const BANK_STEP = 1;
 /** Water flow, in texture pixels per second. */
 const FLOW_PIXELS_PER_SECOND = 10;
 
@@ -205,152 +205,260 @@ export function advanceStreamFlow(nowMs: number): void {
   }
 }
 
+/** How finely a course is sampled into the ribbon, in room units along the flow. */
+const RIBBON_STEP = 2;
+/** How far the drawn edge wanders off the course's own width, in room units — a bank is not ruled. */
+const EDGE_WOBBLE = 1;
+/** How many times the course is averaged with its neighbours before it is splined — see `sections`. */
+const SMOOTHING_PASSES = 2;
+
+/** Catmull-Rom through four evenly spaced values, at `t` between the middle two. */
+function spline(a: number, b: number, c: number, d: number, t: number): number {
+  const t2 = t * t;
+  const t3 = t2 * t;
+  return (
+    0.5 * (2 * b + (c - a) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (3 * b - a - 3 * c + d) * t3)
+  );
+}
+
 /**
- * A flat quad on the floor plane, normal up, with UVs given per corner — the
- * water's are world position over a tile, so neighbouring quads continue one
- * pattern; a bank's run along its edge and across its depth.
+ * One cross-section of the drawn stream: its two banks (`a` on the left of
+ * the flow, `b` on the right), the unit vector pointing from `a` to `b`, how
+ * far along the course it is, and whether the water runs mostly along x here.
  */
-function floorQuad(
-  minX: number,
-  minZ: number,
-  maxX: number,
-  maxZ: number,
+interface Section {
+  readonly ax: number;
+  readonly az: number;
+  readonly bx: number;
+  readonly bz: number;
+  readonly nx: number;
+  readonly nz: number;
+  readonly travelled: number;
+  readonly alongX: boolean;
+}
+
+/**
+ * A course as a run of cross-sections about `RIBBON_STEP` apart: the
+ * centreline and width splined through the course's points, so the tile-wide
+ * steps the simulation stands on come out as one curving bank, whichever way
+ * the stream runs and wherever it bends. The first and last sections sit
+ * exactly on the course's ends, so the pieces of a multi-cell stream — and a
+ * stream and the wall it meets — join without a gap.
+ */
+function sections(course: StreamCourse, room: RoomGeometry): Section[] {
+  const points = course.points;
+  if (points.length < 2) {
+    return [];
+  }
+  const clamp = (index: number): number => Math.max(0, Math.min(points.length - 1, index));
+  // The course is whole tiles — a slice is one tile over from the last, or
+  // one tile wider — and a spline through that draws every step as a peak.
+  // Two passes of a 1-2-1 average round the steps into bends first; the ends
+  // are left where they are, so a stream still meets a wall on its lane.
+  const relaxed = (read: (index: number) => number): number[] => {
+    let values = points.map((_point, index) => read(index));
+    for (let pass = 0; pass < SMOOTHING_PASSES; pass++) {
+      values = values.map((value, index) =>
+        index === 0 || index === values.length - 1
+          ? value
+          : ((values[index - 1] ?? value) + value * 2 + (values[index + 1] ?? value)) / 4,
+      );
+    }
+    return values;
+  };
+  const xs = relaxed((index) => points[index]?.x ?? 0);
+  const zs = relaxed((index) => points[index]?.y ?? 0);
+  const halves = relaxed((index) => points[index]?.halfWidth ?? 0);
+  const at = (values: readonly number[], index: number, t: number): number =>
+    spline(
+      values[clamp(index - 1)] ?? 0,
+      values[clamp(index)] ?? 0,
+      values[clamp(index + 1)] ?? 0,
+      values[clamp(index + 2)] ?? 0,
+      t,
+    );
+
+  const centres: { x: number; z: number; half: number }[] = [];
+  for (let index = 0; index < points.length - 1; index++) {
+    const length = Math.hypot(
+      (xs[index + 1] ?? 0) - (xs[index] ?? 0),
+      (zs[index + 1] ?? 0) - (zs[index] ?? 0),
+    );
+    const pieces = Math.max(1, Math.round(length / RIBBON_STEP));
+    for (let piece = 0; piece < pieces + (index === points.length - 2 ? 1 : 0); piece++) {
+      const t = piece / pieces;
+      centres.push({
+        x: at(xs, index, t),
+        z: at(zs, index, t),
+        half: Math.max(2, at(halves, index, t)),
+      });
+    }
+  }
+
+  const clampX = (x: number): number => Math.max(room.minX, Math.min(room.maxX, x));
+  const clampZ = (z: number): number => Math.max(room.minY, Math.min(room.maxY, z));
+  const out: Section[] = [];
+  let travelled = 0;
+  centres.forEach((centre, index) => {
+    const before = centres[Math.max(0, index - 1)] ?? centre;
+    const after = centres[Math.min(centres.length - 1, index + 1)] ?? centre;
+    const tx = after.x - before.x;
+    const tz = after.z - before.z;
+    const length = Math.hypot(tx, tz) || 1;
+    // Across the flow, a quarter turn from along it.
+    const nx = -tz / length;
+    const nz = tx / length;
+    if (index > 0) {
+      travelled += Math.hypot(centre.x - before.x, centre.z - before.z);
+    }
+    // Each bank wanders on its own slow wave, keyed to world position so
+    // neighbouring pieces agree where they meet.
+    const key = centre.x + centre.z;
+    const left =
+      centre.half + (Math.sin(key * 0.21) * 0.6 + Math.sin(key * 0.083 + 1.7) * 0.4) * EDGE_WOBBLE;
+    const right =
+      centre.half +
+      (Math.sin(key * 0.17 + 2.3) * 0.6 + Math.sin(key * 0.071 + 0.4) * 0.4) * EDGE_WOBBLE;
+    out.push({
+      ax: clampX(centre.x - nx * left),
+      az: clampZ(centre.z - nz * left),
+      bx: clampX(centre.x + nx * right),
+      bz: clampZ(centre.z + nz * right),
+      nx,
+      nz,
+      travelled,
+      alongX: Math.abs(tx) >= Math.abs(tz),
+    });
+  });
+  return out;
+}
+
+/** A point on the floor plane with its texture coordinates. */
+type Vertex = readonly [x: number, z: number, u: number, v: number];
+
+/**
+ * A strip on the floor plane between two edges that run with the flow:
+ * `near` and `far` give each section's two vertices. Wound to face up
+ * whichever way the stream runs.
+ */
+function strip(
+  run: readonly Section[],
   height: number,
-  uv: readonly [number, number, number, number, number, number, number, number],
+  near: (section: Section) => Vertex,
+  far: (section: Section) => Vertex,
 ): BufferGeometry {
+  const count = run.length;
+  const positions = new Float32Array(count * 6);
+  const normals = new Float32Array(count * 6);
+  const uvs = new Float32Array(count * 4);
+  run.forEach((section, i) => {
+    const a = near(section);
+    const b = far(section);
+    positions.set([a[0], height, a[1], b[0], height, b[1]], i * 6);
+    normals.set([0, 1, 0, 0, 1, 0], i * 6);
+    uvs.set([a[2], a[3], b[2], b[3]], i * 4);
+  });
+  // Which way round faces up depends on the direction of travel, so it is
+  // read off the first quad rather than assumed.
+  const ax = positions[0] ?? 0;
+  const az = positions[2] ?? 0;
+  const up =
+    ((positions[5] ?? 0) - az) * ((positions[6] ?? 0) - ax) -
+      ((positions[3] ?? 0) - ax) * ((positions[8] ?? 0) - az) >
+    0;
+  const index: number[] = [];
+  for (let i = 0; i < count - 1; i++) {
+    const a0 = i * 2;
+    const b0 = a0 + 1;
+    const a1 = a0 + 2;
+    const b1 = a0 + 3;
+    if (up) {
+      index.push(a0, b0, a1, b0, b1, a1);
+    } else {
+      index.push(a0, a1, b0, b0, a1, b1);
+    }
+  }
   const geometry = new BufferGeometry();
-  geometry.setAttribute(
-    'position',
-    new BufferAttribute(
-      new Float32Array([
-        minX,
-        height,
-        minZ,
-        maxX,
-        height,
-        minZ,
-        maxX,
-        height,
-        maxZ,
-        minX,
-        height,
-        maxZ,
-      ]),
-      3,
-    ),
-  );
-  geometry.setAttribute(
-    'normal',
-    new BufferAttribute(new Float32Array([0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0]), 3),
-  );
-  geometry.setAttribute('uv', new BufferAttribute(new Float32Array(uv), 2));
-  // Wound so the front face points up (+y), the same as the puddle fan.
-  geometry.setIndex([0, 2, 1, 0, 3, 2]);
+  geometry.setAttribute('position', new BufferAttribute(positions, 3));
+  geometry.setAttribute('normal', new BufferAttribute(normals, 3));
+  geometry.setAttribute('uv', new BufferAttribute(uvs, 2));
+  geometry.setIndex(index);
   return geometry;
 }
 
-/** True when the point is dry floor inside the room — where a bank belongs. */
-function dryFloor(room: RoomGeometry, x: number, z: number): boolean {
-  return x > room.minX && x < room.maxX && z > room.minY && z < room.maxY && !room.isInStream(x, z);
-}
-
 /**
- * Builds every stream in `room` into `group`: the water, then a bank along
- * each stretch of edge whose far side is dry floor. An edge against the
- * room's own wall, or against another leg of the same stream (a bend's
- * inside corner), gets none — the water simply continues.
+ * Builds every stream in `room` into `group` (#424): the water as one curving
+ * ribbon per course, and a pebble bank along both of its edges. An edge that
+ * would leave the room — a stream squeezed against a wall — is pinned to the
+ * wall, and the water simply runs up to it.
  */
 export function buildStreams(room: RoomGeometry, group: Group): void {
-  if (room.streamCount === 0) {
+  if (room.streamCourses.length === 0) {
     return;
   }
   const { flowX, flowZ, bank } = streamMaterials();
   const tile = ROOM_TILE_UNITS;
-  for (let i = 0; i < room.streamCount; i++) {
-    const minX = room.streams[i * BLOCK_STRIDE] ?? 0;
-    const minZ = room.streams[i * BLOCK_STRIDE + 1] ?? 0;
-    const maxX = room.streams[i * BLOCK_STRIDE + 2] ?? 0;
-    const maxZ = room.streams[i * BLOCK_STRIDE + 3] ?? 0;
-    const alongX = maxX - minX >= maxZ - minZ;
-    const water = new Mesh(
-      floorQuad(minX, minZ, maxX, maxZ, DECAL_HEIGHT, [
-        minX / tile,
-        minZ / tile,
-        maxX / tile,
-        minZ / tile,
-        maxX / tile,
-        maxZ / tile,
-        minX / tile,
-        maxZ / tile,
-      ]),
-      alongX ? flowX : flowZ,
-    );
-    water.receiveShadow = true;
-    group.add(water);
+  const repeatUnits = BANK_REPEAT_PIXELS / ACTOR_PIXELS_PER_UNIT;
+  for (const course of room.streamCourses) {
+    const run = sections(course, room);
+    if (run.length < 2) {
+      continue;
+    }
+    // The water's UVs are world position over a tile, so every piece of a
+    // stream continues one pattern. It scrolls along x or along z, whichever
+    // the stream mostly runs here — so a bend is cut into stretches, each
+    // sharing its end section with the next.
+    let from = 0;
+    for (let i = 1; i <= run.length; i++) {
+      const here = run[i];
+      const start = run[from];
+      if (start === undefined || here?.alongX === start.alongX) {
+        continue;
+      }
+      const stretch = run.slice(from, Math.min(run.length, i + 1));
+      if (stretch.length >= 2) {
+        const water = new Mesh(
+          strip(
+            stretch,
+            DECAL_HEIGHT,
+            (section) => [section.ax, section.az, section.ax / tile, section.az / tile],
+            (section) => [section.bx, section.bz, section.bx / tile, section.bz / tile],
+          ),
+          start.alongX ? flowX : flowZ,
+        );
+        water.receiveShadow = true;
+        group.add(water);
+      }
+      from = i;
+    }
 
-    // North and south edges run along x; west and east along z. `outward`
-    // is which side of the edge the bank lies on.
-    addBankRuns(room, group, bank, minX, maxX, minZ, -1, true);
-    addBankRuns(room, group, bank, minX, maxX, maxZ, 1, true);
-    addBankRuns(room, group, bank, minZ, maxZ, minX, -1, false);
-    addBankRuns(room, group, bank, minZ, maxZ, maxX, 1, false);
-  }
-}
-
-/**
- * Walks one edge of a stream rect in `BANK_STEP` pieces, keeps the pieces
- * whose outside is dry floor, and lays one bank strip per unbroken run of
- * them. `alongX` edges sit at z = `at`; the others at x = `at`.
- */
-function addBankRuns(
-  room: RoomGeometry,
-  group: Group,
-  material: MeshStandardMaterial,
-  from: number,
-  to: number,
-  at: number,
-  outward: number,
-  alongX: boolean,
-): void {
-  const probe = at + outward * 0.5;
-  let runStart = Number.NaN;
-  for (let position = from; position <= to; position += BANK_STEP) {
-    const middle = position + BANK_STEP / 2;
-    const keep =
-      position < to && (alongX ? dryFloor(room, middle, probe) : dryFloor(room, probe, middle));
-    if (keep && Number.isNaN(runStart)) {
-      runStart = position;
-    } else if (!keep && !Number.isNaN(runStart)) {
-      group.add(bankStrip(material, runStart, position, at, outward, alongX));
-      runStart = Number.NaN;
+    // u runs along the bank in repeats of its texture; v is 0 at the water
+    // and 1 at the bank's far side, so the waterline row sits on the edge.
+    for (const side of [-1, 1] as const) {
+      const banks = new Mesh(
+        strip(
+          run,
+          DECAL_HEIGHT + 0.01,
+          (section) => {
+            const x = side < 0 ? section.ax : section.bx;
+            const z = side < 0 ? section.az : section.bz;
+            return [x, z, section.travelled / repeatUnits, 0];
+          },
+          (section) => {
+            const x = (side < 0 ? section.ax : section.bx) + side * section.nx * BANK_DEPTH;
+            const z = (side < 0 ? section.az : section.bz) + side * section.nz * BANK_DEPTH;
+            return [
+              Math.max(room.minX, Math.min(room.maxX, x)),
+              Math.max(room.minY, Math.min(room.maxY, z)),
+              section.travelled / repeatUnits,
+              1,
+            ];
+          },
+        ),
+        bank,
+      );
+      banks.receiveShadow = true;
+      group.add(banks);
     }
   }
-}
-
-function bankStrip(
-  material: MeshStandardMaterial,
-  from: number,
-  to: number,
-  at: number,
-  outward: number,
-  alongX: boolean,
-): Mesh {
-  const near = at;
-  const far = at + outward * BANK_DEPTH;
-  // u runs along the edge in repeats of the bank texture; v runs 0 at the
-  // water to 1 at the bank's far side, so the waterline row sits on the edge.
-  const repeatUnits = BANK_REPEAT_PIXELS / ACTOR_PIXELS_PER_UNIT;
-  const u0 = from / repeatUnits;
-  const u1 = to / repeatUnits;
-  const lowNear = Math.min(near, far) === near;
-  const vLow = lowNear ? 0 : 1;
-  const vHigh = lowNear ? 1 : 0;
-  const lo = Math.min(near, far);
-  const hi = Math.max(near, far);
-  const geometry = alongX
-    ? floorQuad(from, lo, to, hi, DECAL_HEIGHT + 0.01, [u0, vLow, u1, vLow, u1, vHigh, u0, vHigh])
-    : floorQuad(lo, from, hi, to, DECAL_HEIGHT + 0.01, [u0, vLow, u0, vHigh, u1, vHigh, u1, vLow]);
-  const mesh = new Mesh(geometry, material);
-  mesh.receiveShadow = true;
-  return mesh;
 }
