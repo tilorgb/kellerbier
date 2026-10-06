@@ -135,8 +135,12 @@ floor; palette: deep green, black, a sickly poison-green glow.
   diagonals, the Specht is the one free-aim body. Reading lines is the skill.
 - **The room changes under you:** logs, stumps and wooden barricades are the floor's destructible
   cover — the Boar smashes them, the Borkenkäfer eats them (and the floor under them).
-- **Hazards:** the Waldbach (a stream), and lantern-radius darkness in some rooms. The
-  Fliegenpilz carries the spores; there are no spore-cloud room hazards and no thorn walls.
+- **Hazards:** water and dark. Some rooms have a puddle or two — slick, as on Floor 1 — and some
+  have the Waldbach instead: the same slick water as a stream meandering wall to wall. Some rooms
+  are lantern rooms: deep dusk, lit only by the lanterns on their walls. The Fliegenpilz carries
+  the spores; there are no spore-cloud room hazards and no thorn walls. See `docs/DECISIONS.md` #119.
+- **Light:** the floor is under a canopy — shaded everywhere, with a few gaps the sun comes down
+  through, and bodies as dark or as lit as the ground they stand on.
 - **Tone:** satire, not horror. The creatures and the boss are jokes about the Bavarian Forest and
   the people in it; only the look is uncanny. See `docs/DECISIONS.md` #118.
 
