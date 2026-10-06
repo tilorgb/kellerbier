@@ -210,6 +210,10 @@ export const de: Record<DictKey, string> = {
   'ui.settings.accessibility.reduceAudioDistortion': 'Promille-Audioverzerrung reduzieren',
   'ui.settings.accessibility.statDisplay': 'Werteanzeige',
   'ui.settings.accessibility.detailedPickupText': 'Genaue Wirkung beim Aufheben',
+  'ui.settings.accessibility.darkness': 'Dunkelheit',
+  'ui.settings.accessibility.darknessFull': 'Voll',
+  'ui.settings.accessibility.darknessReduced': 'Reduziert',
+  'ui.settings.accessibility.darknessOff': 'Aus',
 
   'ui.settings.privacy.copy':
     'Playtest-Telemetrie ist standardmäßig aus. Wird sie eingeschaltet, wird nur auf ' +

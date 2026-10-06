@@ -97,6 +97,12 @@ export class DebugOverlay {
   private visible = false;
   private showHitboxes = true;
   private showGrid = false;
+  /**
+   * Draws every room as a lantern-dark one (#404) — `GameView.forceDark` — so
+   * the darkness can be judged in any room without hunting for a dark one.
+   * Kept here so it survives a restart's fresh `GameView`.
+   */
+  private forceDark = false;
   private frame = 0;
 
   private detachInput: (() => void) | null = null;
@@ -167,6 +173,7 @@ export class DebugOverlay {
     }
     this.sim = sim;
     this.view = view;
+    view.forceDark = this.forceDark;
     this.attachWorldLines();
     this.animationPanel.setSource(view.animator, view.player);
   }
@@ -255,6 +262,12 @@ export class DebugOverlay {
         case 'KeyG':
           if (this.visible) {
             this.showGrid = !this.showGrid;
+          }
+          return;
+        case 'KeyF':
+          if (this.visible) {
+            this.forceDark = !this.forceDark;
+            this.view.forceDark = this.forceDark;
           }
           return;
         case 'KeyC':

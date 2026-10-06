@@ -225,6 +225,10 @@ export const en = {
   'ui.settings.accessibility.reduceAudioDistortion': 'Reduce Promille audio distortion',
   'ui.settings.accessibility.statDisplay': 'Stat display',
   'ui.settings.accessibility.detailedPickupText': 'Detailed pickup text',
+  'ui.settings.accessibility.darkness': 'Darkness',
+  'ui.settings.accessibility.darknessFull': 'Full',
+  'ui.settings.accessibility.darknessReduced': 'Reduced',
+  'ui.settings.accessibility.darknessOff': 'Off',
 
   'ui.settings.privacy.copy':
     'Playtest telemetry is off by default. Turning it on records, on this device only, ' +

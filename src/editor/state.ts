@@ -44,6 +44,8 @@ export interface EditorDraft {
   weight: number;
   specialRole?: RoomSpecialRole;
   keyLocked?: boolean;
+  /** Floor 3's lantern-darkness (#404) — see `RoomTemplate`'s `metadata.dark`. */
+  dark?: boolean;
 }
 
 export function blankTileGrid(): string[] {
@@ -156,6 +158,7 @@ export function fromRoomTemplate(value: unknown, newId?: string): EditorDraft {
   const doorsRecord = isRecord(metadata.doors) ? metadata.doors : {};
   const specialRole = isSpecialRole(metadata.specialRole) ? metadata.specialRole : undefined;
   const keyLocked = typeof metadata.keyLocked === 'boolean' ? metadata.keyLocked : undefined;
+  const dark = typeof metadata.dark === 'boolean' ? metadata.dark : undefined;
 
   return {
     id: newId ?? (typeof record.id === 'string' ? record.id : ''),
@@ -174,6 +177,7 @@ export function fromRoomTemplate(value: unknown, newId?: string): EditorDraft {
     weight: typeof metadata.weight === 'number' ? metadata.weight : 1,
     ...(specialRole === undefined ? {} : { specialRole }),
     ...(keyLocked === undefined ? {} : { keyLocked }),
+    ...(dark === undefined ? {} : { dark }),
   };
 }
 
@@ -208,6 +212,7 @@ export function toTemplateJSON(draft: EditorDraft): unknown {
     weight: draft.weight,
     ...(draft.specialRole === undefined ? {} : { specialRole: draft.specialRole }),
     ...(draft.keyLocked === undefined ? {} : { keyLocked: draft.keyLocked }),
+    ...(draft.dark === true ? { dark: true } : {}),
   };
 
   if (draft.shape === '1x1') {

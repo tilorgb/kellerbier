@@ -267,6 +267,19 @@ export class Vignette {
   }
 
   /**
+   * The radius, in internal pixels, at which the tunnel is half as dark as
+   * its edge — along the frame's short axis, where it is tightest. 0 while
+   * the tunnel is not drawn. Read by `GameView.setPromilleTunnel` so a dark
+   * room (#404) can stack with the tunnel rather than on top of it.
+   */
+  get tunnelRadius(): number {
+    // The gradient runs transparent at 0.18 of the texture to opaque at 0.5,
+    // so it is half way at 0.34; the sprite spans the frame times `COVERAGE`,
+    // squeezed by the aperture.
+    return 0.34 * INTERNAL_HEIGHT * COVERAGE * this.apertureScale;
+  }
+
+  /**
    * Call on every resize, same as the HUD's own `positionHud`. Takes nothing:
    * the game renders at a fixed internal frame (`INTERNAL_WIDTH` x
    * `INTERNAL_HEIGHT`) and the UI layer is scaled up as a whole, so the

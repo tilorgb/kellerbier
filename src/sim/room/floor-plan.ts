@@ -1453,6 +1453,11 @@ function eligibleTemplates(
     if (template.metadata.keyLocked === true && role === 'treasure' && floor === 1) {
       return false;
     }
+    // A floor never opens in the dark (#404): the start room is where the
+    // floor title card plays and the player gets their bearings.
+    if (template.metadata.dark === true && role === 'start') {
+      return false;
+    }
     // A key-locked room (#196) must never sit on the only path to anywhere
     // else on the floor — reaching it costs a Kellerschlüssel, and a floor
     // that made passing through it mandatory would strand a keyless player

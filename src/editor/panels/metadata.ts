@@ -139,6 +139,9 @@ export function createMetadataPanel(state: EditorState, host: HTMLElement): Meta
       if (value !== 'treasure') {
         delete state.draft.keyLocked;
       }
+      if (value !== 'secret' && value !== 'supersecret') {
+        delete state.draft.dark;
+      }
     }
     state.notify();
   });
@@ -157,6 +160,22 @@ export function createMetadataPanel(state: EditorState, host: HTMLElement): Meta
     document.createTextNode('Key-locked (treasure rooms only)'),
   );
   root.appendChild(keyLockedLabel);
+
+  // Floor 3's lantern-darkness (#404). Validation refuses it on boss,
+  // mini-boss, shop and treasure templates, so the checkbox hides there.
+  const darkLabel = document.createElement('label');
+  const darkCheckbox = document.createElement('input');
+  darkCheckbox.type = 'checkbox';
+  darkCheckbox.addEventListener('change', () => {
+    if (darkCheckbox.checked) {
+      state.draft.dark = true;
+    } else {
+      delete state.draft.dark;
+    }
+    state.notify();
+  });
+  darkLabel.append(darkCheckbox, document.createTextNode('Dark room (lantern only)'));
+  root.appendChild(darkLabel);
 
   function render(): void {
     const draft = state.draft;
@@ -177,6 +196,12 @@ export function createMetadataPanel(state: EditorState, host: HTMLElement): Meta
     roleSelect.value = draft.specialRole ?? '';
     keyLockedLabel.hidden = draft.specialRole !== 'treasure';
     keyLockedCheckbox.checked = draft.keyLocked === true;
+    const darkAllowed =
+      draft.specialRole === undefined ||
+      draft.specialRole === 'secret' ||
+      draft.specialRole === 'supersecret';
+    darkLabel.hidden = !darkAllowed;
+    darkCheckbox.checked = draft.dark === true;
   }
 
   const unsubscribe = state.subscribe(render);
