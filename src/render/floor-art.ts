@@ -160,7 +160,7 @@ export interface FloorTileset {
    * Which light rig the floor is lit by (`render/world/lighting.ts`): a
    * cellar hangs bulbs; a field is under the sky.
    */
-  readonly lighting: 'cellar' | 'daylight';
+  readonly lighting: 'cellar' | 'daylight' | 'forest';
 }
 
 export const FLOOR_TILESETS: Readonly<Record<number, FloorTileset>> = {
@@ -199,11 +199,12 @@ export const FLOOR_TILESETS: Readonly<Record<number, FloorTileset>> = {
     wallHeight: 10,
     lighting: 'daylight',
   },
-  // Der Wald (#402). PLACEHOLDER art — plain on-palette tiles so the floor can
-  // be built and played while Tilo's tileset sign-off is pending
-  // (`CLAUDE.md`, "New pixel art needs sign-off"). The names stay; the PNGs
-  // behind them get replaced. Wooden obstacles (logs, a stump, a barricade)
-  // are the floor's destructible cover (`RoomGeometry.blockMaterial`).
+  // Der Wald (#402). The floor, wall and wall top are the signed-off
+  // "needle earth & dry-stone dyke" set, authored by
+  // `tools/art/authoring/build-wald-tiles.mjs`; lit by the `forest` rig, so the
+  // floor reads darker than Dorf & Acker. Wooden obstacles (logs, a stump, a
+  // barricade) are the floor's destructible cover
+  // (`RoomGeometry.blockMaterial`) and still placeholder art.
   3: {
     floorVariants: ['wald-floor-1', 'wald-floor-2', 'wald-floor-3', 'wald-floor-4'],
     wall: 'wald-wall',
@@ -212,7 +213,7 @@ export const FLOOR_TILESETS: Readonly<Record<number, FloorTileset>> = {
     blockVariants: ['wald-log-1', 'wald-log-2', 'wald-stump', 'wald-barricade'],
     destructibles: ['wald-barrel'],
     wallHeight: 12,
-    lighting: 'daylight',
+    lighting: 'forest',
   },
 };
 
@@ -227,7 +228,7 @@ export interface RoomTileArt {
   /** By `DESTRUCTIBLE_PROP_KINDS` index; a kind past the end draws entry 0. */
   readonly destructibles: readonly Texture[];
   readonly wallHeight: number;
-  readonly lighting: 'cellar' | 'daylight';
+  readonly lighting: 'cellar' | 'daylight' | 'forest';
 }
 
 /**
