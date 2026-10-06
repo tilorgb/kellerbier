@@ -97,6 +97,14 @@ export const ENTITY_PALETTE = {
    * warning and what it warns about read as one colour.
    */
   bloatTelegraphGlow: 0x8fbf3a,
+  /**
+   * The load-up glow an ordinary enemy builds over its wind-up (#429) — the
+   * body-side telegraph that replaced the floor ring as the default. The
+   * same hot red a boss flushes (`bossTelegraphTint`) and a bomb's fuse
+   * burns toward, so "about to go" reads as one warning across the game;
+   * emissive rather than a multiply, so it shows in a lantern-dark room.
+   */
+  windUpGlow: 0xff5a44,
   /** The thin edge a poison cloud will settle at, drawn while its emitter winds up (#405) — the same poison green. */
   cloudEdgeTelegraph: 0x8fbf3a,
   /** Tint for a pickup whose kind failed to resolve. Should never be seen; a loud colour if it is. */

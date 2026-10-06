@@ -502,6 +502,13 @@ export class SettingsMenu {
         },
       },
       toggle(
+        t(locale, 'ui.settings.accessibility.telegraphRings'),
+        () => this.deps.settings.telegraphRings,
+        (value) => {
+          this.deps.settings.telegraphRings = value;
+        },
+      ),
+      toggle(
         t(locale, 'ui.settings.accessibility.reduceAudioDistortion'),
         () => this.deps.settings.reduceAudioDistortion,
         (value) => {

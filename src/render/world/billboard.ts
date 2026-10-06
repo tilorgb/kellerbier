@@ -114,15 +114,17 @@ export class Billboard {
 
   /**
    * Places the quad with its feet at `(x, y, z)`, leaning back by `lean`
-   * radians, drawn at the frame's authored size times `scale`.
+   * radians, drawn at the frame's authored size times `scale` — and its
+   * height times `scaleY` on top, for a squash that keeps the feet planted
+   * (an enemy's wind-up crouch, #429).
    */
-  place(x: number, y: number, z: number, lean: number, scale = 1): void {
+  place(x: number, y: number, z: number, lean: number, scale = 1, scaleY = 1): void {
     const texture = this.textureValue;
     // Display size, not texel count: a `@2x` frame stands exactly as big as
     // the 1x frame it replaces (`Texture.density`).
     const w = (texture?.displayWidth ?? 1) / ACTOR_PIXELS_PER_UNIT;
     const h = (texture?.displayHeight ?? 1) / ACTOR_PIXELS_PER_UNIT;
-    this.mesh.scale.set(w * scale, h * scale, 1);
+    this.mesh.scale.set(w * scale, h * scale * scaleY, 1);
     this.mesh.position.set(x, y, z);
     this.mesh.rotation.x = lean;
   }

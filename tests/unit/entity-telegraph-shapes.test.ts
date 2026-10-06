@@ -129,7 +129,7 @@ describe('EntityView, drawing a telegraph shape (#233)', () => {
     expect(drawn[0]?.mesh.position.z).toBeCloseTo(sim.positionY(enemy), 0);
   });
 
-  it('draws a radial burst as the ring every telegraph used to draw', () => {
+  it('draws no ring for a radial burst by default — the body is the telegraph (#429)', () => {
     const sim = bareSim();
     const player = sim.playerIndex;
     const enemy = place(sim, 'zapfhahn', sim.positionX(player) + 60, sim.positionY(player));
@@ -140,6 +140,22 @@ describe('EntityView, drawing a telegraph shape (#233)', () => {
     sim.step(IDLE);
 
     const view = harness(sim);
+    view.sync(0, 0, project);
+    expect(visibleTelegraphs(view)).toHaveLength(0);
+  });
+
+  it('draws a radial burst as a ring when the telegraph-rings setting is on (#429)', () => {
+    const sim = bareSim();
+    const player = sim.playerIndex;
+    const enemy = place(sim, 'zapfhahn', sim.positionX(player) + 60, sim.positionY(player));
+    for (let tick = 0; tick < 30 && stateName(sim, enemy) !== 'wind'; tick++) {
+      sim.step(IDLE);
+    }
+    expect(stateName(sim, enemy)).toBe('wind');
+    sim.step(IDLE);
+
+    const view = harness(sim);
+    view.setTelegraphRings(true);
     view.sync(0, 0, project);
 
     const drawn = visibleTelegraphs(view);
