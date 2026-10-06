@@ -132,6 +132,8 @@ export const en = {
   'ui.hud.minimapHeader': '{floor}. Floor — {name}',
   'ui.hud.bossLabel': 'BOSS',
   'ui.hud.poisoned': 'Poisoned {seconds}s — drink a Maß to cure it',
+  'ui.hud.latched': 'Zecke on you! Zig-zag to shake it off',
+  'ui.hud.shakeOffHint': 'Shake it off: change direction sharply, again and again',
   'ui.hud.sandboxRun': 'Sandbox run — dealt items, nothing is saved or unlocked',
   'ui.hud.sandboxClamped':
     'That floor is not playable yet — sandbox run on the highest one, nothing is saved or unlocked',

@@ -55,6 +55,11 @@
               "enemyId": "fliegenpilz",
               "minFloor": 3,
               "maxFloor": 3
+            },
+            {
+              "enemyId": "zecke",
+              "minFloor": 3,
+              "maxFloor": 3
             }
           ]
         }
@@ -128,6 +133,11 @@
             },
             {
               "enemyId": "fliegenpilz",
+              "minFloor": 3,
+              "maxFloor": 3
+            },
+            {
+              "enemyId": "zecke",
               "minFloor": 3,
               "maxFloor": 3
             }

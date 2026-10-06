@@ -9,12 +9,13 @@ import {
 } from '../enemy/registry.js';
 import { EventKind } from '../events/queue.js';
 import type { GameSim } from '../game/sim.js';
-import { muzzleFlash } from '../particle/effects.js';
+import { muzzleFlash, ring } from '../particle/effects.js';
 import { clamp, vectorLength } from '../math.js';
 import { addPush } from './movement.js';
 import { NO_SLOT } from '../pool/slot-pool.js';
 import { ProjectileTeam } from '../projectile/store.js';
 import { ProjectileTag } from '../projectile/tags.js';
+import { ParticleKind } from '../particle/store.js';
 import { nextWaypoint, straightClear, type Waypoint } from '../room/pathfind.js';
 
 /**
@@ -67,6 +68,20 @@ export const ENEMY_FLAG_ELITE = 1 << 2;
  * by the first state that attacks nothing.
  */
 export const ENEMY_FLAG_AIM_LOCKED = 1 << 3;
+/**
+ * The body is riding on the player (#406, `latchOnPlayer`). Like
+ * `ENEMY_FLAG_ELITE` it describes the body rather than something that
+ * happened this tick, so it survives the per-tick clear — set by
+ * `latchToPlayer`, cleared only by a shake (`sim/systems/latch.ts`).
+ */
+export const ENEMY_FLAG_LATCHED = 1 << 4;
+/** The body latched on this tick — what an `onLatched` transition reads. Cleared once read, like `ENEMY_FLAG_HIT`. */
+export const ENEMY_FLAG_JUST_LATCHED = 1 << 5;
+/** The player shook the body off since it was last looked at — `onShakenOff`. Cleared once read. */
+export const ENEMY_FLAG_SHAKEN_OFF = 1 << 6;
+/** The flags that are signals rather than conditions: consumed every tick, whether a state listened or not. */
+const ENEMY_SIGNAL_FLAGS =
+  ENEMY_FLAG_HIT | ENEMY_FLAG_BLOCKED | ENEMY_FLAG_JUST_LATCHED | ENEMY_FLAG_SHAKEN_OFF;
 
 /**
  * Ticks a body may sit in one state before the counter stops climbing.
@@ -168,6 +183,17 @@ export function stepEnemies(sim: GameSim): void {
     const selfX = sim.positionX(index);
     const selfY = sim.positionY(index);
 
+    // Before the transitions, so `onLatched` fires on the very tick the body
+    // grabs on rather than one later (#406).
+    if (
+      state.latchesOnPlayer &&
+      (flags & ENEMY_FLAG_LATCHED) === 0 &&
+      touchesPlayer(sim, index, distance)
+    ) {
+      latchToPlayer(sim, index, toPlayerX, distance);
+      flags |= ENEMY_FLAG_LATCHED | ENEMY_FLAG_JUST_LATCHED;
+    }
+
     const next = chooseTransition(
       sim,
       index,
@@ -239,7 +265,7 @@ export function stepEnemies(sim: GameSim): void {
     // A hit remembered across three states fires the next `onHit` transition
     // for a shot that landed a second ago.
     enemy[base + 1] = stateIndex;
-    enemy[base + 3] = flags & ~(ENEMY_FLAG_HIT | ENEMY_FLAG_BLOCKED);
+    enemy[base + 3] = flags & ~ENEMY_SIGNAL_FLAGS;
 
     if (crossesSplitThreshold(sim, index, state)) {
       // Ages the body into its next phase right now rather than waiting for
@@ -282,6 +308,76 @@ export function stepEnemies(sim: GameSim): void {
 }
 
 /**
+ * Whether the body at `index` is close enough to the player to grab on
+ * (#406): footprints touching, give or take `tuning.latch.latchReach`. The
+ * margin matters — `stepContacts` separates the two bodies to exactly
+ * touching every tick, so a strict overlap test would almost never be true
+ * by the time this one runs.
+ */
+function touchesPlayer(sim: GameSim, index: number, distance: number): boolean {
+  if (sim.playerDead) {
+    return false;
+  }
+  const body = sim.body.data;
+  const reach =
+    (body[index * 2] ?? 0) + (body[sim.playerIndex * 2] ?? 0) + sim.tuning.latch.latchReach;
+  return distance <= reach;
+}
+
+/** Spokes in the little spore puff a body latching on throws (#406). */
+const LATCH_PUFF_SPOKES = 6;
+const LATCH_PUFF_SPEED = 0.6;
+const LATCH_PUFF_TICKS = 14;
+
+/**
+ * Attaches the body at `index` to the player (#406, `latchOnPlayer`).
+ *
+ * Where on Alois it sits is decided once, here: left or right by the side it
+ * came from, and always pushed toward the camera. The offset is stored in the
+ * body's `enemyMotion` heading slots — safe, since a latched body's states
+ * `pause` and never read them as a heading. Far enough forward that the tick
+ * is drawn in front of his boots rather than hidden behind his billboard;
+ * `sim/systems/latch.ts` keeps it there.
+ *
+ * Dropping to no collision layer is the "not shootable while latched"
+ * decision `LatchOnPlayerBehaviour`'s doc comment makes: shots, splash and
+ * the player's own body all look the layer up, and none of them find it.
+ */
+function latchToPlayer(sim: GameSim, index: number, toPlayerX: number, distance: number): void {
+  const player = sim.playerIndex;
+  const playerFootprint = sim.body.data[player * 2] ?? 0;
+  const fromX = distance === 0 ? 1 : -toPlayerX / distance;
+  const offsetX = fromX * playerFootprint * 0.7;
+  // Billboards stand at `y + footprint` (`render/entities.ts`), so the tick
+  // only draws in front of Alois when its own foot line is past his. The
+  // first version used half his footprint and was hidden behind his boots
+  // in every screenshot — a tick you cannot see is the one failure #406 asks
+  // never to happen.
+  const offsetY = Math.max(1, playerFootprint - (sim.body.data[index * 2] ?? 0) + 1);
+
+  const motionBase = index * ENEMY_MOTION_STRIDE;
+  const motion = sim.enemyMotion.data;
+  motion[motionBase] = offsetX;
+  motion[motionBase + 1] = offsetY;
+
+  sim.velocity.data[index * 2] = 0;
+  sim.velocity.data[index * 2 + 1] = 0;
+  sim.push.data[index * 2] = 0;
+  sim.push.data[index * 2 + 1] = 0;
+  sim.collision.data[index * 2] = 0;
+  sim.collision.data[index * 2 + 1] = 0;
+
+  const x = sim.positionX(player) + offsetX;
+  const y = sim.positionY(player) + offsetY;
+  sim.transform.data[index * 4] = x;
+  sim.transform.data[index * 4 + 1] = y;
+
+  ring(sim, x, y, LATCH_PUFF_SPOKES, ParticleKind.Spore, LATCH_PUFF_SPEED, LATCH_PUFF_TICKS, 2);
+  sim.playItemCue('zecke-latch');
+  sim.noteLatch();
+}
+
+/**
  * The first transition that matches, or -1.
  *
  * Declaration order decides, so what a state machine does is a function of the
@@ -317,6 +413,16 @@ function chooseTransition(
         break;
       case TransitionTrigger.OnBlocked:
         if ((flags & ENEMY_FLAG_BLOCKED) !== 0) {
+          return transition.to;
+        }
+        break;
+      case TransitionTrigger.OnLatched:
+        if ((flags & ENEMY_FLAG_JUST_LATCHED) !== 0) {
+          return transition.to;
+        }
+        break;
+      case TransitionTrigger.OnShakenOff:
+        if ((flags & ENEMY_FLAG_SHAKEN_OFF) !== 0) {
           return transition.to;
         }
         break;

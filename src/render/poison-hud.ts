@@ -20,6 +20,11 @@ const TICKS_PER_SECOND = 60;
  * darkness room — which dims the world, not the HUD — never hides it. The
  * player's green tint (`player-view.ts`) says *that* they are poisoned; this
  * says for how long and, in its label, what cures it.
+ *
+ * While a Zecke rides on the player (#406) the label says to shake it off
+ * instead: the Maß would cure the poison only for the tick to put it straight
+ * back, and this is the one readout that stays on screen the whole time it
+ * is attached.
  */
 export class PoisonHud {
   readonly view = new Container();
@@ -67,9 +72,12 @@ export class PoisonHud {
     const full = Math.max(1, sim.tuning.projectileTags.playerPoisonDurationTicks);
     const ratio = Math.min(1, ticks / full);
     this.barFill.width = Math.max(0, (BAR_WIDTH - BAR_INSET * 2) * ratio);
-    this.label.text = t(this.locale, 'ui.hud.poisoned', {
-      seconds: Math.ceil(ticks / TICKS_PER_SECOND),
-    });
+    this.label.text =
+      sim.latchedEnemyCount > 0
+        ? t(this.locale, 'ui.hud.latched')
+        : t(this.locale, 'ui.hud.poisoned', {
+            seconds: Math.ceil(ticks / TICKS_PER_SECOND),
+          });
   }
 
   /** Height of the block in UI pixels. */

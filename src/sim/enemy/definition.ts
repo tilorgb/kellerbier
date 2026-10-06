@@ -50,7 +50,8 @@ export type BehaviourName =
   | 'grabProp'
   | 'lobTarget'
   | 'detonateLobbedBomb'
-  | 'emitCloud';
+  | 'emitCloud'
+  | 'latchOnPlayer';
 
 /** Walks straight at the player, re-aiming every tick. The floor-one default. */
 export interface WalkTowardPlayerBehaviour {
@@ -489,6 +490,34 @@ export interface EmitCloudBehaviour {
   readonly lifetimeTicks?: number;
 }
 
+/**
+ * Grabs on to the player on touch and rides along (#406, the Zecke).
+ *
+ * Every tick the state carrying it is current, a body that is touching the
+ * player — footprints within `tuning.latch.latchReach` of each other — attaches:
+ * from then on it sits on Alois's boots at the side it came from, follows him
+ * exactly, refreshes his poison every tick (`tuning.projectileTags`'
+ * `playerPoisonDurationTicks`, the same refresh a cloud gives), and deals no
+ * contact damage beyond that. The latch outlives the state that made it — it
+ * is a property of the body, not of the state — and ends only when the player
+ * shakes it off: `tuning.latch.shakesRequired` sharp reversals of the movement
+ * input inside `shakeWindowTicks` throw off every latched body at once
+ * (`sim/systems/latch.ts`).
+ *
+ * **Not shootable while latched.** A latched body drops to no collision layer
+ * at all, so neither shots, splash, nor the player's own body touch it: the
+ * player's shots would have to hit their own feet, which no aim can do, and a
+ * bomb that cleared a tick off you by blowing you up too is a worse lesson
+ * than "shake it". The answer is to shake it off — and the body that hits the
+ * ground afterwards is the reward.
+ *
+ * Pair it with an `onLatched` transition to a state that `pause`s, and an
+ * `onShakenOff` from there to whatever it does on the floor.
+ */
+export interface LatchOnPlayerBehaviour {
+  readonly behaviour: 'latchOnPlayer';
+}
+
 export type EnemyBehaviour =
   | WalkTowardPlayerBehaviour
   | ChargeAtPlayerBehaviour
@@ -511,6 +540,7 @@ export type EnemyBehaviour =
   | LobTargetBehaviour
   | DetonateLobbedBombBehaviour
   | EmitCloudBehaviour
+  | LatchOnPlayerBehaviour
   | TelegraphBehaviour;
 
 /**
@@ -542,7 +572,18 @@ export type EnemyTransition =
    * treated as infinite). The Maibaum-Dieb drops into his disarmed chase the
    * instant the player destroys the maypole he was walking toward (#199).
    */
-  | { readonly to: string; readonly whenPropBeyond: number; readonly prop: string };
+  | { readonly to: string; readonly whenPropBeyond: number; readonly prop: string }
+  /**
+   * Fires on the tick the body latches on to the player (#406) — see
+   * `latchOnPlayer`. Like `onHit`, cleared once read.
+   */
+  | { readonly to: string; readonly onLatched: true }
+  /**
+   * Fires on the tick after the player shook the body off (#406). Like
+   * `onHit`, cleared once read, so a body shaken off while in a state that
+   * does not listen for it simply stays where the state machine put it.
+   */
+  | { readonly to: string; readonly onShakenOff: true };
 
 export interface EnemyState {
   readonly name: string;
@@ -668,6 +709,9 @@ export const SUMMON_BEHAVIOURS: readonly BehaviourName[] = ['summon'];
 
 /** Primitives that leave solid props behind on a timer while alive (#277). */
 export const PROP_DROP_BEHAVIOURS: readonly BehaviourName[] = ['dropProp'];
+
+/** Primitives that run every tick alongside the movement one, without being one (#406). */
+export const LATCH_BEHAVIOURS: readonly BehaviourName[] = ['latchOnPlayer'];
 
 /** Primitives that put something in the air. `meleeArc` (#199) is handled on its own, not here. */
 export const FIRING_BEHAVIOURS: readonly BehaviourName[] = [

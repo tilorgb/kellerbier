@@ -29,7 +29,7 @@ function pathFor(name: string): string {
 
 describe("Der Wald roster's committed art is what the authoring source produces", () => {
   it('covers the signed-off creatures so far', () => {
-    expect(Object.keys(ROSTER).sort()).toEqual(['fliegenpilz']);
+    expect(Object.keys(ROSTER).sort()).toEqual(['fliegenpilz', 'zecke']);
   });
 
   it.each(entries)('%s.png is byte-identical to a fresh encode', async (name, frame) => {

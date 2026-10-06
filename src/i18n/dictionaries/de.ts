@@ -122,6 +122,8 @@ export const de: Record<DictKey, string> = {
   'ui.hud.minimapHeader': '{floor}. Stock — {name}',
   'ui.hud.bossLabel': 'BOSS',
   'ui.hud.poisoned': 'Vergiftet {seconds}s — ein Maß heilt es',
+  'ui.hud.latched': 'Zecke an dir! Im Zickzack abschütteln',
+  'ui.hud.shakeOffHint': 'Abschütteln: schnell und scharf die Richtung wechseln',
   'ui.hud.sandboxRun': 'Sandbox-Lauf — Items verteilt, nichts wird gespeichert oder freigeschaltet',
   'ui.hud.sandboxClamped':
     'Dieses Stockwerk ist noch nicht spielbar — Sandbox-Lauf im höchsten, nichts wird gespeichert oder freigeschaltet',

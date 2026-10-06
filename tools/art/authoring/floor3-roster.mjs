@@ -14,7 +14,8 @@ import { legalPixelColorsFor } from '../palette.mjs';
  * different rule would quietly change the art that was picked.
  *
  * Palette is Floor 3's five (deep greens, the sickly luminous green, the
- * fungus violet) plus the neutrals and their ramps — there is no red on this
+ * fungus violet) plus the neutrals and their ramps — the Zecke's engorged
+ * abdomen is that fungus violet — there is no red on this
  * floor, which is why a fly agaric here glows green rather than wearing the
  * red cap it would anywhere else.
  */
@@ -31,6 +32,12 @@ export const WALD = {
   S: 0xd1d1d1, // stalk
   s: 0xb8b8b8, // stalk, shade side
   w: 0xe8e8e8, // stalk, lit side
+  a: 0x1c1a1f, // tick: darkest violet-grey — the shield's shadow
+  b: 0x332f38, // tick: head and shield
+  c: 0x494451, // tick: shield, lit
+  v: 0x962bb3, // tick: engorged abdomen
+  V: 0xb13bd0, // tick: abdomen, lit
+  p: 0xcf85e2, // tick: abdomen highlight
 };
 
 {
@@ -84,8 +91,34 @@ export const fliegenpilz = single('fliegenpilz', [
   '.........KKKKKKKKKK.........',
 ]);
 
+// ============================================================== ZECKE
+// An engorged tick (#406): a swollen violet abdomen behind a small dark head
+// and shield, eight legs splayed. Option B of three, signed off by Tilo,
+// shown standing in a wald room and latched on Alois. 14 wide against a
+// mini collider's 16; three empty rows on top only because a character
+// canvas is at least 16 tall — it stands on its bottom row like the rest.
+export const zecke = single('zecke', [
+  '..............',
+  '..............',
+  '..............',
+  '......KK......',
+  '.....KbbK.....',
+  '..K.KbccbK.K..',
+  '...KKKbbKKK...',
+  '.KK.KaabaK.KK.',
+  'K..KcpVVvvK..K',
+  '..KcpVVvvvvK..',
+  '.KKVVvvvvvvKK.',
+  'K.KVvvvvvvbK.K',
+  '..KvvvvvvbbK..',
+  '...KvvvbbbK...',
+  '....KKKKKK....',
+  '..............',
+]);
+
 export const ROSTER = {
   fliegenpilz,
+  zecke,
 };
 
 /** Every sprite is authored against Floor 3's palette. */

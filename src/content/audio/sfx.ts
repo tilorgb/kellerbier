@@ -553,8 +553,34 @@ const itemPoisonCleanse: SfxDefinition = {
   tone: { instrument: 'clarinet', note: 'E5', durationSeconds: 0.22 },
 };
 
+const itemZeckeLatch: SfxDefinition = {
+  id: 'item-zecke-latch',
+  description:
+    'A Zecke latching on (#406): a short wet click and a low sour note, so "something is on you" is heard even with the tick hidden under a crowd.',
+  noise: {
+    filter: { type: 'bandpass', frequencyHz: 2400, q: 2.2 },
+    durationSeconds: 0.08,
+    gain: 0.4,
+  },
+  tone: { instrument: 'clarinet', note: 'A2', durationSeconds: 0.18 },
+};
+
+const itemZeckeShakeOff: SfxDefinition = {
+  id: 'item-zecke-shake-off',
+  description:
+    'Ticks shaken off (#406): a quick flick of dry noise and a bright falling-away note — the release half of the latch click.',
+  noise: {
+    filter: { type: 'highpass', frequencyHz: 2000, q: 0.8 },
+    durationSeconds: 0.14,
+    gain: 0.35,
+  },
+  tone: { instrument: 'clarinet', note: 'E5', durationSeconds: 0.1 },
+};
+
 export const SFX_DEFINITIONS: readonly SfxDefinition[] = [
   itemPoisonCleanse,
+  itemZeckeLatch,
+  itemZeckeShakeOff,
   hitSquelch,
   hitMetal,
   hitAnimal,
@@ -634,4 +660,5 @@ export const ENEMY_SFX_CATEGORY: Readonly<Record<string, EnemySfxCategory>> = {
   'die-blaskapelle-posaune': 'oompah',
   'der-ladewagen': 'metal',
   fliegenpilz: 'squelch',
+  zecke: 'squelch',
 };
