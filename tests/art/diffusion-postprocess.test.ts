@@ -77,9 +77,42 @@ describe('downscaleBoxFilter', () => {
     expect(image.pixels[3]).toBe(255);
   });
 
-  it('rejects a target size that does not evenly divide the source', () => {
+  it('keeps a fully opaque image fully opaque at a size that does not divide the source', () => {
+    // 512 -> 24 is a 21.33px block (#425): the real case, a raw generation
+    // onto a sprite canvas. Dividing the alpha sum by anything other than the
+    // number of samples actually taken pushes it past 255, where it wraps in
+    // the byte buffer and the whole subject goes transparent.
+    const image = downscaleBoxFilter(solidImage(512, 512, [200, 10, 10, 255]), 24, 24);
+    expect(image.width).toBe(24);
+    expect(image.height).toBe(24);
+    for (let i = 0; i < image.pixels.length; i += 4) {
+      expect(image.pixels[i]).toBe(200);
+      expect(image.pixels[i + 1]).toBe(10);
+      expect(image.pixels[i + 2]).toBe(10);
+      expect(image.pixels[i + 3]).toBe(255);
+    }
+  });
+
+  it('keeps a half-transparent image half-transparent at a size that does not divide the source', () => {
+    const image = downscaleBoxFilter(solidImage(512, 512, [200, 10, 10, 128]), 24, 24);
+    for (let i = 0; i < image.pixels.length; i += 4) {
+      expect(image.pixels[i + 3]).toBe(128);
+    }
+  });
+
+  it('averages alpha over the samples each ragged block actually took', () => {
+    // 5 -> 2 splits into a 2px block and a 3px block. Alphas 255,0 | 255,255,0
+    // must come out as 1/2 and 2/3 coverage, each over its own sample count.
+    const pixels = Buffer.from([9, 9, 9, 255, 9, 9, 9, 0, 9, 9, 9, 255, 9, 9, 9, 255, 9, 9, 9, 0]);
+    const image = downscaleBoxFilter({ width: 5, height: 1, pixels }, 2, 1);
+    expect(image.pixels[3]).toBe(128);
+    expect(image.pixels[7]).toBe(170);
+  });
+
+  it('rejects a target size that is not a positive whole number', () => {
     const image = solidImage(10, 10, [1, 2, 3, 255]);
-    expect(() => downscaleBoxFilter(image, 3, 3)).toThrow(/does not divide evenly/);
+    expect(() => downscaleBoxFilter(image, 0, 3)).toThrow(/positive whole number/);
+    expect(() => downscaleBoxFilter(image, 3, 2.5)).toThrow(/positive whole number/);
   });
 
   it('ignores fully-transparent pixels when averaging colour', () => {

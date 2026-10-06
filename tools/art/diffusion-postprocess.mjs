@@ -86,33 +86,42 @@ function sampleCornerBackground(width, height, pixels) {
 }
 
 /**
- * Box-filter downscale: `targetWidth`/`targetHeight` must each evenly divide
- * `width`/`height` (the raw output is one image, not an atlas — asking for a
- * ragged block size would silently blur the grid this whole pipeline exists
- * to produce). Each output pixel is the average of its source block,
- * alpha-weighted so a half-transparent block does not pull in colour from
- * pixels that will end up invisible anyway.
+ * Box-filter downscale to any target size. A raw generation is 512 wide and
+ * no real sprite canvas divides that (24, 48, 24x16 — #425), so a block is
+ * not a fixed size: each output pixel owns the whole source pixels between
+ * `floor(t * size / target)` and the next output pixel's start, which tiles
+ * the source exactly with blocks that differ by at most one pixel. Each
+ * output pixel is the average of its block, alpha-weighted so a
+ * half-transparent block does not pull in colour from pixels that will end
+ * up invisible anyway — and alpha is averaged over the samples that block
+ * actually took, never a nominal block area, or an opaque block sums past
+ * 255 and wraps in the byte buffer.
  */
 export function downscaleBoxFilter({ width, height, pixels }, targetWidth, targetHeight) {
-  if (width % targetWidth !== 0 || height % targetHeight !== 0) {
+  if (
+    !Number.isInteger(targetWidth) ||
+    !Number.isInteger(targetHeight) ||
+    targetWidth < 1 ||
+    targetHeight < 1
+  ) {
     throw new Error(
-      `${String(width)}x${String(height)} does not divide evenly into ${String(targetWidth)}x${String(targetHeight)}`,
+      `target size ${String(targetWidth)}x${String(targetHeight)} must be a positive whole number on each axis`,
     );
   }
-  const blockW = width / targetWidth;
-  const blockH = height / targetHeight;
   const out = Buffer.alloc(targetWidth * targetHeight * 4);
 
   for (let ty = 0; ty < targetHeight; ty++) {
+    const y0 = Math.floor((ty * height) / targetHeight);
+    const y1 = Math.max(y0 + 1, Math.floor(((ty + 1) * height) / targetHeight));
     for (let tx = 0; tx < targetWidth; tx++) {
+      const x0 = Math.floor((tx * width) / targetWidth);
+      const x1 = Math.max(x0 + 1, Math.floor(((tx + 1) * width) / targetWidth));
       let rSum = 0;
       let gSum = 0;
       let bSum = 0;
       let aSum = 0;
-      for (let by = 0; by < blockH; by++) {
-        for (let bx = 0; bx < blockW; bx++) {
-          const sx = tx * blockW + bx;
-          const sy = ty * blockH + by;
+      for (let sy = y0; sy < y1; sy++) {
+        for (let sx = x0; sx < x1; sx++) {
           const i = (sy * width + sx) * 4;
           const a = pixels[i + 3];
           rSum += pixels[i] * a;
@@ -122,11 +131,11 @@ export function downscaleBoxFilter({ width, height, pixels }, targetWidth, targe
         }
       }
       const o = (ty * targetWidth + tx) * 4;
-      const blockPixels = blockW * blockH;
+      const samples = (x1 - x0) * (y1 - y0);
       out[o] = aSum > 0 ? Math.round(rSum / aSum) : 0;
       out[o + 1] = aSum > 0 ? Math.round(gSum / aSum) : 0;
       out[o + 2] = aSum > 0 ? Math.round(bSum / aSum) : 0;
-      out[o + 3] = Math.round(aSum / blockPixels);
+      out[o + 3] = Math.round(aSum / samples);
     }
   }
   return { width: targetWidth, height: targetHeight, pixels: out };
