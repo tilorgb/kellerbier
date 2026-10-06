@@ -42,6 +42,21 @@ function compileDeathEffect(name: string | undefined, where: string): ParticleKi
 }
 
 /**
+ * `telegraphLook` as a name to whether the body bloats (#405). Thrown on an
+ * unknown name for `compileDeathEffect`'s reason: content is loaded from
+ * data, and a typo must not quietly become "no look at all".
+ */
+function compileTelegraphLook(name: string | undefined, where: string): boolean {
+  if (name === undefined) {
+    return false;
+  }
+  if (name !== 'bloat') {
+    throw new Error(`${where} names telegraphLook "${name}", which is not one of bloat`);
+  }
+  return true;
+}
+
+/**
  * Enemy data, checked once and turned into something a system can read fast.
  *
  * The two jobs are separate on purpose. **Validation** is the content test
@@ -207,6 +222,8 @@ export interface CompiledEnemy {
    * `docs/DECISIONS.md` #7 rules out.
    */
   readonly deathEffect: ParticleKindId;
+  /** The definition's `telegraphLook === 'bloat'` (#405), resolved once so the renderer compares no string per frame. */
+  readonly telegraphBloat: boolean;
 }
 
 export class EnemyRegistry {
@@ -347,6 +364,7 @@ export class EnemyRegistry {
       locksRoom: definition.locksRoom ?? true,
       bossBar: definition.bossBar ?? false,
       deathEffect: compileDeathEffect(definition.deathEffect, where),
+      telegraphBloat: compileTelegraphLook(definition.telegraphLook, where),
     };
   }
 

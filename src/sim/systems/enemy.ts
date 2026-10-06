@@ -1533,6 +1533,13 @@ export const TelegraphShape = {
   Arc: 2,
   /** A landing zone away from the body — this state itself captured a `lobTarget` a `detonateLobbedBomb` ahead reads back. */
   Ground: 3,
+  /**
+   * A poison cloud about to be left on the body (#405) — the state ahead
+   * enters with an `emitCloud`. `reach` is the cloud's radius: the marking
+   * is the edge the cloud will settle at, because the cloud is far bigger
+   * than the body that leaves it.
+   */
+  Cloud: 4,
 } as const;
 
 export type TelegraphShapeId = (typeof TelegraphShape)[keyof typeof TelegraphShape];
@@ -1549,7 +1556,7 @@ export interface EnemyTelegraphShapeInfo {
   angle: number;
   /** The swing's full angular width in radians. Arc only. */
   arc: number;
-  /** The real extent at progress 1: the swing's reach for Arc, the blast radius for Ground. Unused for Ring/Line. */
+  /** The real extent at progress 1: the swing's reach for Arc, the blast radius for Ground, the cloud's radius for Cloud. Unused for Ring/Line. */
   reach: number;
 }
 
@@ -1626,6 +1633,17 @@ export function enemyTelegraphShape(
     out.angle = enemyAimAngle(sim, index);
     out.arc = 0;
     out.reach = 0;
+    return true;
+  }
+
+  const cloud = follow?.emitCloud ?? null;
+  if (cloud !== null) {
+    out.shape = TelegraphShape.Cloud;
+    out.x = selfX;
+    out.y = selfY;
+    out.angle = 0;
+    out.arc = 0;
+    out.reach = cloud.radius;
     return true;
   }
 

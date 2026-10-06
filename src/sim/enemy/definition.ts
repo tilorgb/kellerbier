@@ -601,6 +601,20 @@ export interface EnemyDefinition {
    * can never change what a run does.
    */
   readonly deathEffect?: string;
+  /**
+   * How the body itself shows a telegraph, on top of the floor shape every
+   * telegraph draws (#405). Unset: the body looks the same while it winds up,
+   * which is right for nearly everything — the floor shape is the warning.
+   *
+   * `'bloat'` swells the sprite over the countdown and glows it green over
+   * the last third, then lets it snap back as the state ends: the Fliegenpilz
+   * puffing up before it deflates in a poison cloud. A render option rather
+   * than authored frames so it works on the placeholder blob and on any
+   * future cloud-emitter alike, and an emissive glow rather than a multiply
+   * tint so it still reads in a lantern-dark room (#404). Purely
+   * presentational, like `deathEffect`: it can never change what a run does.
+   */
+  readonly telegraphLook?: 'bloat';
   /** Which drop table (`content/pickups/drop-tables.ts`) its death rolls from. Defaults to `'normal'`. */
   readonly lootTier?: 'weak' | 'normal' | 'tough';
   /**
