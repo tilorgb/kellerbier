@@ -27,7 +27,10 @@ import { pixelDisc, pixelShapeGeometry } from './pixel-shape.js';
  * every one a real point light with a cord and a glass — or under
  * **daylight**: a sky, a sun that casts the shadows, and two clouds that
  * drift across the room on their own cycles, each crossing on a different
- * lane and in one of a few shapes, and take the light with them. The
+ * lane and in one of a few shapes, and take the light with them — or
+ * **forest** (Floor 3, #402): the same sky seen through a canopy, dimmer and
+ * greener, so Der Wald reads as the dark floor it is meant to be rather than
+ * as Dorf & Acker in a different colour. The
  * tileset says which (`FloorTileset.lighting`), and a room with no authored
  * `bulb` prop in a cellar gets two by default, because a cellar with no light
  * in it is a black screen, not a mood.
@@ -66,7 +69,12 @@ import { pixelDisc, pixelShapeGeometry } from './pixel-shape.js';
  * sized, and `docs/DECISIONS.md` #74 for the shadow-casting decision that
  * went with this change.
  */
-export type LightingRig = 'cellar' | 'daylight';
+export type LightingRig = 'cellar' | 'daylight' | 'forest';
+
+/** Rigs lit by a sky — a sun key and drifting clouds — rather than by bulbs. */
+function skyLit(rig: LightingRig): boolean {
+  return rig !== 'cellar';
+}
 
 /** Point lights riding along with live player shots. */
 export const SHOT_LIGHT_COUNT = 8;
@@ -145,6 +153,12 @@ export const CLOUD_CYCLES: readonly {
 /** How far a crossing's shadow lane may drift north/south over the run, as a fraction of the room's depth. */
 const CLOUD_DRIFT = 0.15;
 const DOOR_GLOW_COLOUR = 0xff9a3c;
+/** Alois's lantern per rig: a cellar needs it most; under the canopy it carries more than in open sun. */
+const LANTERN_INTENSITY: Readonly<Record<LightingRig, number>> = {
+  cellar: 420,
+  daylight: 120,
+  forest: 220,
+};
 
 interface RigColours {
   readonly ambient: number;
@@ -177,6 +191,19 @@ const RIGS: Readonly<Record<LightingRig, RigColours>> = {
     key: 0xfff2d8,
     keyIntensity: 3.4,
     background: 0x2a3a2a,
+  },
+  // Daylight through a canopy: about two thirds of the sun, cooler and
+  // greener, a darker sky bounce and a near-black surround. The clouds still
+  // drift over it and read as moving shade under the trees.
+  forest: {
+    ambient: 0x6f8a86,
+    ambientIntensity: 1.05,
+    sky: 0x88aaa0,
+    ground: 0x2a2a1a,
+    hemisphereIntensity: 0.7,
+    key: 0xd8f0d0,
+    keyIntensity: 2.2,
+    background: 0x0a120c,
   },
 };
 
@@ -326,7 +353,7 @@ export class Lighting {
     // it read as a box. The daylight rig widens further than the cellar needs
     // because only it has the cloud; the extra span costs a little shadow-map
     // resolution, acceptable for a floor lit by a soft overcast key anyway.
-    const halfWidth = rig === 'daylight' ? frameWidth * 1.4 : frameWidth * 0.75;
+    const halfWidth = skyLit(rig) ? frameWidth * 1.4 : frameWidth * 0.75;
     shadow.left = -halfWidth;
     shadow.right = halfWidth;
     shadow.top = frameHeight * 0.9;
@@ -546,7 +573,7 @@ export class Lighting {
    * a replay clouds over at the same moment, in the same place.
    */
   sync(tick: number): void {
-    if (this.clouds.length === 0 || this.rig !== 'daylight') {
+    if (this.clouds.length === 0 || !skyLit(this.rig)) {
       return;
     }
     let moving = false;
@@ -603,7 +630,7 @@ export class Lighting {
   /** Alois's lantern follows him; out when he is dead. */
   syncLantern(x: number, z: number, lit: boolean): void {
     this.lantern.position.set(x, 16, z);
-    this.lantern.intensity = lit ? (this.rig === 'cellar' ? 420 : 120) : 0;
+    this.lantern.intensity = lit ? LANTERN_INTENSITY[this.rig] : 0;
   }
 
   /** Hands out the shot lights in order; `count` used this frame, the rest go dark. */

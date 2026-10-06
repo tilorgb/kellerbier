@@ -18,6 +18,7 @@ import {
   BLOCK_STRIDE,
   DOOR_SPAN,
   type RoomGeometry,
+  type RoomRect,
   roomFrameSize,
 } from '../../sim/room/geometry.js';
 import { type CompiledDoor, doorCentre } from '../../sim/room/template.js';
@@ -714,6 +715,7 @@ function appendBox(
   depth: number,
   baseUv: readonly [number, number, number, number],
   top: boolean | undefined,
+  facing?: CompiledDoor['direction'],
 ): void {
   const box = new BoxGeometry(width, height, depth);
   const positionAttr = box.getAttribute('position');
@@ -748,10 +750,20 @@ function appendBox(
         positionAttr.getZ(i) + cz,
       );
       build.normals.push(normalAttr.getX(i), normalAttr.getY(i), normalAttr.getZ(i));
-      build.uvs.push(
-        u0 + (u1 - u0) * uvAttr.getX(i) * repeatU,
-        v0 + (v1 - v0) * uvAttr.getY(i) * repeatV,
-      );
+      if (face === 2 && facing !== undefined) {
+        // A wall's top face with a known facing: the lip texture runs *along*
+        // the wall, its top row on the room-side edge — see
+        // `wallTopUv`. Without this the west and east walls laid the lip
+        // across their thickness, so its edge band repeated down their
+        // length as a ladder of stripes.
+        const [u, v] = wallTopUv(positionAttr.getX(i), positionAttr.getZ(i), width, depth, facing);
+        build.uvs.push(u0 + (u1 - u0) * u, v0 + (v1 - v0) * v);
+      } else {
+        build.uvs.push(
+          u0 + (u1 - u0) * uvAttr.getX(i) * repeatU,
+          v0 + (v1 - v0) * uvAttr.getY(i) * repeatV,
+        );
+      }
     }
     if (indexAttr !== null) {
       // Each face's own 6 indices, in the source geometry, index into that
@@ -763,6 +775,184 @@ function appendBox(
     }
   }
   box.dispose();
+}
+
+/**
+ * Texture coordinates, in tile repeats, for a point `(x, z)` on the top face
+ * of a wall box `width × depth` centred on the origin, facing the room from
+ * its `facing` side. `u` runs along the wall's length; `v` is 0 on the
+ * room-side edge and grows away from the room. Through the tile frame's own
+ * flip (`Texture.uvs()`), `v` 0 is the tile image's *top* row — so the top
+ * of the wall-lip image is always the edge a player looks at, on all four
+ * walls, and the tile's long axis always follows the wall instead of
+ * crossing it.
+ *
+ * The north wall maps exactly as before this existed (the box's own UVs
+ * already put the image's top row on its room side); south, west and east
+ * are what change.
+ */
+function wallTopUv(
+  x: number,
+  z: number,
+  width: number,
+  depth: number,
+  facing: CompiledDoor['direction'],
+): [number, number] {
+  const tile = ROOM_TILE_UNITS;
+  switch (facing) {
+    case 'north':
+      // Room side is +z.
+      return [(x + width / 2) / tile, (depth / 2 - z) / tile];
+    case 'south':
+      // Room side is -z.
+      return [(x + width / 2) / tile, (z + depth / 2) / tile];
+    case 'west':
+      // Room side is +x.
+      return [(z + depth / 2) / tile, (width / 2 - x) / tile];
+    case 'east':
+      // Room side is -x.
+      return [(z + depth / 2) / tile, (x + width / 2) / tile];
+  }
+}
+
+/**
+ * The wall-lip tile's layout, which a floor's lip art has to follow: its
+ * top `LIP_EDGE_ROWS` pixel rows are the edge band a player sees along the
+ * room (`wallTopUv` puts them on the room side), and the rows below them are
+ * canopy that tiles seamlessly on its own in both directions — what the
+ * inside of a wide wall top (a void, `appendVoidTop`) is filled with.
+ */
+const LIP_TILE_ROWS = 32;
+const LIP_EDGE_ROWS = 8;
+/**
+ * `v` where the seamless canopy rows start (`v` 0 is the image's top row,
+ * `wallTopUv`), nudged a hair inside them so nearest sampling at the boundary
+ * never picks up the last row of the edge band.
+ */
+const LIP_BODY_V = LIP_EDGE_ROWS / LIP_TILE_ROWS + 1e-3;
+/** Room units one repeat of the canopy rows covers, at the tile's own pixel density. */
+const LIP_BODY_UNITS = (ROOM_TILE_UNITS * (LIP_TILE_ROWS - LIP_EDGE_ROWS)) / LIP_TILE_ROWS;
+
+/**
+ * One upward-facing quad into `build`, corners `(x0, z0)`–`(x1, z1)` at
+ * `height`, `uv` given per corner in the order (x0,z0), (x1,z0), (x1,z1),
+ * (x0,z1) and already in tile-space (`baseUv` applied by the caller).
+ */
+function appendTopQuad(
+  build: MeshBuild,
+  x0: number,
+  z0: number,
+  x1: number,
+  z1: number,
+  height: number,
+  uv: readonly number[],
+): void {
+  const base = build.positions.length / 3;
+  build.positions.push(x0, height, z0, x1, height, z0, x1, height, z1, x0, height, z1);
+  build.normals.push(0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0);
+  build.uvs.push(...uv);
+  // Wound so the front face points up (+y), like `BoxGeometry`'s own top.
+  build.indices.push(base, base + 3, base + 2, base, base + 2, base + 1);
+}
+
+/**
+ * The top of a void box — the slot an `L`/`T` room's footprint never
+ * claimed, drawn as wall. Not one repeating face: a void is up to a whole
+ * screen across, and repeating the wall-lip tile over it repeated the lip's
+ * edge band every tile, the same ladder of stripes the west and east walls
+ * had before `wallTopUv`. Instead, a strip one tile deep along every side
+ * that faces the room gets the full lip, edge towards the room, exactly like
+ * a wall; the rest is filled with the lip's seamless canopy rows only.
+ */
+function appendVoidTop(
+  build: MeshBuild,
+  rect: RoomRect,
+  room: RoomGeometry,
+  height: number,
+  baseUv: readonly [number, number, number, number],
+): void {
+  const tile = ROOM_TILE_UNITS;
+  const [u0, v0, u1, v1] = baseUv;
+  const map = (u: number, v: number): [number, number] => [u0 + (u1 - u0) * u, v0 + (v1 - v0) * v];
+  // A side faces the room when it is not the room's own outer bound.
+  const strip = {
+    north: rect.minY > room.minY ? Math.min(tile, rect.maxY - rect.minY) : 0,
+    south: rect.maxY < room.maxY ? Math.min(tile, rect.maxY - rect.minY) : 0,
+    west: rect.minX > room.minX ? Math.min(tile, rect.maxX - rect.minX) : 0,
+    east: rect.maxX < room.maxX ? Math.min(tile, rect.maxX - rect.minX) : 0,
+  };
+  // One lip run along a side: tile-long pieces, each laid out like a wall
+  // segment of that facing (named for the wall whose room side it shares).
+  const run = (
+    x0: number,
+    z0: number,
+    x1: number,
+    z1: number,
+    facing: CompiledDoor['direction'],
+  ): void => {
+    const alongX = facing === 'north' || facing === 'south';
+    const from = alongX ? x0 : z0;
+    const to = alongX ? x1 : z1;
+    for (let at = from; at < to; at += tile) {
+      const end = Math.min(to, at + tile);
+      const px0 = alongX ? at : x0;
+      const px1 = alongX ? end : x1;
+      const pz0 = alongX ? z0 : at;
+      const pz1 = alongX ? z1 : end;
+      const w = px1 - px0;
+      const d = pz1 - pz0;
+      const cx = (px0 + px1) / 2;
+      const cz = (pz0 + pz1) / 2;
+      const uv: number[] = [];
+      for (const [x, z] of [
+        [px0, pz0],
+        [px1, pz0],
+        [px1, pz1],
+        [px0, pz1],
+      ] as const) {
+        // Each piece is at most one tile long and starts on a tile step from
+        // the run's start, so the lip's repeat carries on across pieces.
+        const [u, v] = wallTopUv(x - cx, z - cz, w, d, facing);
+        uv.push(...map(u, v));
+      }
+      appendTopQuad(build, px0, pz0, px1, pz1, height, uv);
+    }
+  };
+  // North/south strips take the full width, so the corners are theirs.
+  if (strip.south > 0) {
+    run(rect.minX, rect.maxY - strip.south, rect.maxX, rect.maxY, 'north');
+  }
+  if (strip.north > 0) {
+    run(rect.minX, rect.minY, rect.maxX, rect.minY + strip.north, 'south');
+  }
+  const innerZ0 = rect.minY + strip.north;
+  const innerZ1 = rect.maxY - strip.south;
+  if (strip.east > 0 && innerZ1 > innerZ0) {
+    run(rect.maxX - strip.east, innerZ0, rect.maxX, innerZ1, 'west');
+  }
+  if (strip.west > 0 && innerZ1 > innerZ0) {
+    run(rect.minX, innerZ0, rect.minX + strip.west, innerZ1, 'east');
+  }
+  // The inside: canopy rows only, at the tile's own pixel density.
+  const innerX0 = rect.minX + strip.west;
+  const innerX1 = rect.maxX - strip.east;
+  for (let z0 = innerZ0; z0 < innerZ1; z0 += LIP_BODY_UNITS) {
+    const z1 = Math.min(innerZ1, z0 + LIP_BODY_UNITS);
+    for (let x0 = innerX0; x0 < innerX1; x0 += tile) {
+      const x1 = Math.min(innerX1, x0 + tile);
+      // One canopy repeat runs from the image's bottom row (`v` 1) up to the
+      // edge band (`LIP_BODY_V`); seamless, so the repeats butt cleanly.
+      const vTop = 1;
+      const vBottom = vTop - ((vTop - LIP_BODY_V) * (z1 - z0)) / LIP_BODY_UNITS;
+      const uR = (x1 - x0) / tile;
+      appendTopQuad(build, x0, z0, x1, z1, height, [
+        ...map(0, vTop),
+        ...map(uR, vTop),
+        ...map(uR, vBottom),
+        ...map(0, vBottom),
+      ]);
+    }
+  }
 }
 
 /** Turns an accumulated `MeshBuild` into a `Mesh`, or `null` if nothing was ever appended to it. */
@@ -1061,7 +1251,16 @@ export class Scenery {
     // See `world/layers.ts`'s `OCCLUDER_LAYER` doc comment: only the room's
     // own north wall carries the standing-sprite head-clip risk, so every
     // other wall is safe to occlude actors normally.
-    this.addWallBox(centre.x, height / 2, centre.z, width, height, depth, direction !== 'north');
+    this.addWallBox(
+      centre.x,
+      height / 2,
+      centre.z,
+      width,
+      height,
+      depth,
+      direction !== 'north',
+      direction,
+    );
   }
 
   private buildVoids(): void {
@@ -1082,6 +1281,8 @@ export class Scenery {
         this.wallHeight,
         depth,
         rect.minY > this.room.minY,
+        undefined,
+        rect,
       );
     }
   }
@@ -1095,6 +1296,8 @@ export class Scenery {
     height: number,
     depth: number,
     occluder: boolean,
+    facing?: CompiledDoor['direction'],
+    voidRect?: RoomRect,
   ): void {
     const tiles = this.art.tiles;
     const body = occluder ? this.wallBodyOccluder : this.wallBodyNonOccluder;
@@ -1106,7 +1309,11 @@ export class Scenery {
     }
     const top = occluder ? this.wallTopOccluder : this.wallTopNonOccluder;
     appendBox(body, cx, cy, cz, width, height, depth, tiles.wall.uvs(), false);
-    appendBox(top, cx, cy, cz, width, height, depth, tiles.wallLip.uvs(), true);
+    if (voidRect !== undefined) {
+      appendVoidTop(top, voidRect, this.room, height, tiles.wallLip.uvs());
+    } else {
+      appendBox(top, cx, cy, cz, width, height, depth, tiles.wallLip.uvs(), true, facing);
+    }
   }
 
   /** Turns the four accumulated wall/void builds into up to four merged meshes. */
