@@ -12,82 +12,77 @@ import {
 import { INTERNAL_HEIGHT } from '../resolution.js';
 
 /**
- * Floor 3's lantern-darkness rooms (#404): outside a radius around the player
- * the room goes dark. Tense, never unfair — so the darkness is drawn *under*
- * everything that warns the player about something: `GameView.render` draws
- * the world, then this pass, then the see-through layer (`SEE_THROUGH_LAYER`)
- * a second time on top — every telegraph shape, every projectile, every
- * particle (a poison cloud is particles), and the bodies of enemies that are
- * winding up right now. An enemy that is merely standing in the dark is a
- * silhouette; one that is about to hit you is not.
+ * Floor 3's lantern rooms (#404, reworked by #424): the room is in deep dusk,
+ * and the only light in it is the lanterns on its walls. Tense, never unfair —
+ * so the dusk is drawn *under* everything that warns the player about
+ * something: `GameView.render` draws the world, then this pass, then the
+ * see-through layer (`SEE_THROUGH_LAYER`) a second time on top — every
+ * telegraph shape, every projectile, every particle (a poison cloud is
+ * particles), and the bodies of enemies that are winding up right now. An
+ * enemy that is merely standing in the dusk is a dim shape; one that is about
+ * to hit you is not.
  *
- * A screen-space pass, like the Promille vignette, centred on the player's
- * screen position — but in the world's own frame rather than the UI layer's,
- * because the UI layer is drawn over everything and darkness must not be.
+ * #404 cut a clear circle around the player out of a near-black room. #424
+ * took the circle away: the dusk is even across the room, light enough that
+ * every shape in it still reads, and the pass instead leaves a soft-edged
+ * hole over each lantern's pool (`world/wall-lanterns.ts`) so the real point
+ * light there shows at full strength.
+ *
+ * A screen-space pass, like the Promille vignette — but in the world's own
+ * frame rather than the UI layer's, because the UI layer is drawn over
+ * everything and the dusk must not be.
  */
 
-/** The accessibility setting (#404): how dark a dark room is, if at all. */
+/** The accessibility setting (#404): how dark a lantern room is, if at all. */
 export type DarknessLevel = 'full' | 'reduced' | 'off';
 
 /** Every `DarknessLevel`, in the order the settings screen offers them. */
 export const DARKNESS_LEVELS: readonly DarknessLevel[] = ['full', 'reduced', 'off'];
 
-/** A lantern: the clear radius around the player (internal pixels) and how dark it is past it. */
-export interface Lantern {
-  readonly radius: number;
-  readonly alpha: number;
-}
-
 /**
- * The lantern per setting. `Reduced` sees further and leaves the dark a
- * lighter grey you can still read a room through; `Off` is no darkness at
- * all — a dark room draws exactly like any other.
+ * How deep the dusk is per setting, as the pass's alpha. `Reduced` is a
+ * clearly lighter dusk; `Off` is none — the room draws as an ordinary shaded
+ * one. The lanterns hang and burn at every level: the setting is about how
+ * much the player can see, not about whether the room has its character.
  */
-export const LANTERNS: Readonly<Record<DarknessLevel, Lantern | null>> = {
-  full: { radius: 72, alpha: 0.9 },
-  reduced: { radius: 120, alpha: 0.6 },
+export const DUSK: Readonly<Record<DarknessLevel, number | null>> = {
+  full: 0.6,
+  reduced: 0.35,
   off: null,
 };
 
-/**
- * How much of the lantern radius is fully clear before the falloff starts.
- * The rest of it is a smooth ramp to full darkness, so the edge of what the
- * player can see is soft rather than a hard circle cut into the room.
- */
-const CLEAR_FRACTION = 0.55;
+/** How many lantern pools the pass can leave clear — `MAX_WALL_LANTERNS`. */
+export const MAX_DUSK_POOLS = 3;
 
-/** The dark itself — not pure black, a night-forest blue-green so the room still reads as a place. */
+/**
+ * How much of a pool's radius is fully clear before the dusk starts to come
+ * back. The rest is a smooth ramp, so a pool has no edge to step across.
+ */
+const CLEAR_FRACTION = 0.3;
+
+/** The dusk itself — not pure black, a night-forest blue-green so the room still reads as a place. */
 const DARK_COLOUR = new Vector3(0.02, 0.035, 0.04);
 
 /**
- * What a dark room and the Promille tunnel draw when both are on screen.
+ * What a lantern room and the Promille tunnel draw when both are on screen.
  *
- * Both darken everything past a radius around the player, and laying one over
- * the other multiplies them toward black — the one combination #404 rules
- * out. So the tighter of the two wins: it keeps its full strength, and the
- * looser one is thinned by what the tighter already covers, so the far dark
- * comes out about as dark as the tighter one alone and never darker than
- * either could plausibly be together.
+ * Both darken the room, and laying one over the other multiplies them toward
+ * black — the one combination #404 rules out. The dusk is the room and keeps
+ * its strength; the tunnel is thinned by what the dusk already covers, so its
+ * tint still reads at the edge of the screen and the two together are never
+ * much darker than the darker of them alone.
  *
- * `tunnel` is the vignette's 50%-alpha radius and its current alpha (0 when
- * sober). Returns the alpha to draw the darkness at and the scale to multiply
- * the vignette's own alpha by.
+ * Returns the alpha to draw the dusk at and the scale to multiply the
+ * vignette's own alpha by.
  */
-export function stackWithTunnel(
-  lantern: Lantern | null,
-  tunnel: { readonly radius: number; readonly alpha: number },
-): { readonly darknessAlpha: number; readonly vignetteScale: number } {
-  if (lantern === null || lantern.alpha <= 0) {
+export function stackWithTunnel(dusk: number | null): {
+  readonly darknessAlpha: number;
+  readonly vignetteScale: number;
+} {
+  if (dusk === null || dusk <= 0) {
     return { darknessAlpha: 0, vignetteScale: 1 };
   }
-  if (tunnel.alpha <= 0 || lantern.radius <= tunnel.radius) {
-    // The lantern is the tighter: the vignette only shows through what the
-    // dark leaves — its tint still reads, its darkness does not stack.
-    return { darknessAlpha: lantern.alpha, vignetteScale: 1 - lantern.alpha };
-  }
-  // The tunnel is the tighter: it does the darkening, and the room's own
-  // dark only adds what the tunnel leaves uncovered.
-  return { darknessAlpha: lantern.alpha * (1 - tunnel.alpha), vignetteScale: 1 };
+  return { darknessAlpha: dusk, vignetteScale: 1 - dusk };
 }
 
 const VERTEX_SHADER = /* glsl */ `
@@ -98,8 +93,7 @@ void main() {
 `;
 
 const FRAGMENT_SHADER = /* glsl */ `
-uniform vec2 uCentre;
-uniform float uRadius;
+uniform vec3 uPools[${String(MAX_DUSK_POOLS)}];
 uniform float uClear;
 uniform float uAlpha;
 uniform float uPixelScale;
@@ -107,11 +101,16 @@ uniform float uFrameHeight;
 uniform vec3 uColour;
 
 void main() {
-  // gl_FragCoord is in drawing-buffer pixels, origin bottom-left; the
-  // lantern's centre and radius are in internal pixels, origin top-left.
+  // gl_FragCoord is in drawing-buffer pixels, origin bottom-left; a pool's
+  // centre (xy) and radius (z) are in internal pixels, origin top-left.
   vec2 at = vec2(gl_FragCoord.x, uFrameHeight - gl_FragCoord.y) / uPixelScale;
-  float d = distance(at, uCentre);
-  float dark = smoothstep(uRadius * uClear, uRadius, d);
+  float dark = 1.0;
+  for (int i = 0; i < ${String(MAX_DUSK_POOLS)}; i++) {
+    // A pool nobody claimed has radius 0 and clears nothing.
+    float radius = uPools[i].z;
+    float d = distance(at, uPools[i].xy);
+    dark *= radius > 0.0 ? smoothstep(radius * uClear, radius, d) : 1.0;
+  }
   gl_FragColor = vec4(uColour, dark * uAlpha);
 }
 `;
@@ -124,8 +123,9 @@ export class DarknessPass {
   private readonly geometry = new PlaneGeometry(2, 2);
   private readonly material: ShaderMaterial;
   private readonly bufferSize = new Vector2();
-  private readonly uCentre = { value: new Vector2() };
-  private readonly uRadius = { value: 0 };
+  private readonly uPools = {
+    value: Array.from({ length: MAX_DUSK_POOLS }, () => new Vector3()),
+  };
   private readonly uAlpha = { value: 0 };
   private readonly uPixelScale = { value: 1 };
   private readonly uFrameHeight = { value: INTERNAL_HEIGHT };
@@ -133,8 +133,7 @@ export class DarknessPass {
   constructor() {
     this.material = new ShaderMaterial({
       uniforms: {
-        uCentre: this.uCentre,
-        uRadius: this.uRadius,
+        uPools: this.uPools,
         uClear: { value: CLEAR_FRACTION },
         uAlpha: this.uAlpha,
         uPixelScale: this.uPixelScale,
@@ -154,11 +153,14 @@ export class DarknessPass {
     this.scene.add(quad);
   }
 
-  /** Centres the lantern on `(x, y)` in internal pixels; `alpha` 0 switches the pass off. */
-  set(x: number, y: number, radius: number, alpha: number): void {
-    this.uCentre.value.set(x, y);
-    this.uRadius.value = radius;
+  /** How deep the dusk is this frame; 0 switches the pass off. */
+  setAlpha(alpha: number): void {
     this.uAlpha.value = alpha;
+  }
+
+  /** Leaves pool `index` clear around `(x, y)` in internal pixels; `radius` 0 gives the slot back. */
+  setPool(index: number, x: number, y: number, radius: number): void {
+    this.uPools.value[index]?.set(x, y, radius);
   }
 
   /** Whether this frame has any darkness to draw. */

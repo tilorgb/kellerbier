@@ -151,12 +151,13 @@ export interface AccessibilitySettings {
    */
   detailedPickupText: boolean;
   /**
-   * Floor 3's lantern-dark rooms (#404): `full` is the designed experience —
-   * a tight lantern and a deep dark; `reduced` sees further into a lighter
-   * dark; `off` draws a dark room like any other. Telegraphs and enemy shots
-   * show through the dark at every level, so this is about comfort and
-   * legibility, never about whether an attack can be seen at all. Render-only,
-   * like `colorblindPalette`: the simulation does not know a room is dark.
+   * Floor 3's lantern rooms (#404, #424): `full` is the designed experience —
+   * a deep dusk between the lanterns; `reduced` is a clearly lighter one;
+   * `off` draws no dusk at all, the lanterns still burning. Telegraphs and
+   * enemy shots show through the dusk at every level, so this is about comfort
+   * and legibility, never about whether an attack can be seen at all.
+   * Render-only, like `colorblindPalette`: the simulation does not know a room
+   * is dark.
    */
   darkness: DarknessLevel;
 }

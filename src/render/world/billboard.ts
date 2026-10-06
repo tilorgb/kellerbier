@@ -62,7 +62,12 @@ export class Billboard {
     this.mesh = new Mesh(geometry, material);
     this.mesh.customDepthMaterial = this.depth;
     this.mesh.castShadow = true;
-    this.mesh.receiveShadow = false;
+    // A sprite is shaded by what it stands under (#424): under Floor 3's
+    // canopy, a passing cloud, a block's shadow. It was lit the same wherever
+    // it stood before, which made the room's light a floor texture rather
+    // than the room's light. Sprites cast nothing onto each other or
+    // themselves — the shadow map holds the room, not its actors.
+    this.mesh.receiveShadow = true;
     this.mesh.visible = false;
     this.mesh.frustumCulled = false;
     // A billboard is always a standing sprite: drawn in GameView's second pass,

@@ -2,7 +2,8 @@
  * Der Wald's objects (#402) — "trees", picked from three in-room candidates
  * (fallen timber / mossy deadwood / trees): the four block variants the floor
  * mixes per cell (a broken trunk, a twin trunk, a stump, a root tangle), the
- * destructible barrel, and the fern and glowing-mushroom props.
+ * destructible barrel, the fern and glowing-mushroom props, and the storm
+ * lantern that hangs on the wall of a lantern room (#424).
  *
  *   npm run art:wald-objects
  *
@@ -345,6 +346,61 @@ function props(dir) {
   save(dir, 'wald-glow-mushrooms', m, BG);
 }
 
+/**
+ * The wall lantern of a lantern room (#424): a storm lantern, a ring handle
+ * over a round glass — picked from four in-room candidates (box / storm /
+ * sconce / box on an arm). Drawn in the floor's own greys and whites, since
+ * Der Wald has no warm colour: `render/world/lantern-sprite.ts` tints it by
+ * the flame, which turns the iron bronze and the glass the colour of the
+ * light behind it. 9x12 in the middle of a 16x16 canvas, standing on its
+ * bottom edge. Foreground tier although it is art-only — its glass has to be
+ * the brightest thing in a dark room, and the background tier stops at grey.
+ */
+const LANTERN = [
+  '...KKK...',
+  '..K...K..',
+  '..K...K..',
+  '...KMK...',
+  '..KMMMK..',
+  '.KLEWELK.',
+  '.KEWWWEK.',
+  '.KEWWWEK.',
+  '.KLEWELK.',
+  '..KMMMK..',
+  '.KDDDDDK.',
+  '.KKKKKKK.',
+];
+const LANTERN_COLOURS = {
+  K: 0x171717,
+  D: 0x332f38,
+  M: 0x494451,
+  L: 0xa1a1a1,
+  E: 0xe8e8e8,
+  W: 0xffffff,
+};
+function lantern(dir) {
+  // Its own 16x16 PNG rather than the 32-wide `canvas` the blocks share: the
+  // tile spec wants 16 or 32 wide and at least square, and a lantern is small.
+  const size = 16;
+  const png = new PNG({ width: size, height: size });
+  const left = Math.floor((size - LANTERN[0].length) / 2);
+  const top = size - LANTERN.length;
+  LANTERN.forEach((row, y) => {
+    [...row].forEach((ch, x) => {
+      const colour = LANTERN_COLOURS[ch];
+      if (colour === undefined) return;
+      if (!FG.has(colour)) throw new Error(`${dir}/wald-lantern ${x},${y} #${colour.toString(16)}`);
+      const i = ((top + y) * size + left + x) * 4;
+      png.data[i] = colour >> 16;
+      png.data[i + 1] = (colour >> 8) & 255;
+      png.data[i + 2] = colour & 255;
+      png.data[i + 3] = 255;
+    });
+  });
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(`${dir}/wald-lantern.png`, PNG.sync.write(png));
+}
+
 const OUT = fileURLToPath(new URL('../../../assets/sprites/floor-3-wald/tiles', import.meta.url));
 trunk(OUT, 'wald-log-1', GREENWOOD, 11);
 trunk(OUT, 'wald-log-2', GREENWOOD, 23, { twin: true });
@@ -352,4 +408,5 @@ stump(OUT, 'wald-stump', GREENWOOD, 37);
 rootTangle(OUT, 'wald-barricade', GREENWOOD, 41);
 barrel(OUT, 'wald-barrel', GREYWOOD, 0x1c1a1f, 51, { moss: true });
 props(OUT);
+lantern(OUT);
 console.log(`wald objects written to ${OUT}`);

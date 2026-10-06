@@ -20,9 +20,18 @@ import { PlayerView } from './player-view.js';
 import { ProjectileView, type ProjectileArt } from './projectiles.js';
 import { UI_TEXT_HEIGHT } from './ui/text.js';
 import { ELEVATION, WorldCamera, type WorldPoint } from './world/camera.js';
-import { DarknessPass, type DarknessLevel, LANTERNS, stackWithTunnel } from './world/darkness.js';
+import { forestLightSeed } from './world/canopy.js';
+import {
+  DarknessPass,
+  type DarknessLevel,
+  DUSK,
+  MAX_DUSK_POOLS,
+  stackWithTunnel,
+} from './world/darkness.js';
 import { ACTOR_LAYER, OCCLUDER_LAYER, SEE_THROUGH_LAYER } from './world/layers.js';
+import { LANTERN_TILE } from './world/lantern-sprite.js';
 import { Lighting } from './world/lighting.js';
+import { LANTERN_REACH, type WallLantern, wallLanternLayout } from './world/wall-lanterns.js';
 import { MaterialCache } from './world/material-cache.js';
 import { ProgramPins } from './world/program-pins.js';
 import { RoomPrewarm } from './world/room-prewarm.js';
@@ -117,6 +126,8 @@ const DOOR_PULSE_DEPTH = 0.55;
 const DOOR_TRANSITION_FRAMES = 30;
 /** Where the player's "screen position" is taken: mid-body, so the vignette centres on him, not his feet. */
 const PLAYER_ANCHOR_HEIGHT = 8;
+/** How much wider than a lantern's reach on the floor the dusk's clear pool is — its soft rim reaches past the light. */
+const DUSK_POOL_SCALE = 2;
 
 /** Moves an object onto `ACTOR_LAYER` only — off the pass-one layer, into pass two. */
 function toActorLayer(object: Object3D): void {
@@ -317,8 +328,10 @@ export class GameView {
    * answers to the accessibility setting — `off` stays off.
    */
   forceDark = false;
-  /** The Promille tunnel last reported by `setPromilleTunnel`, for `stackWithTunnel`. */
-  private readonly tunnel = { radius: 0, alpha: 0 };
+  /** The lanterns burning in the room on screen (#424) — empty unless it is drawn as a lantern room. */
+  private wallLanterns: readonly WallLantern[] = [];
+  /** Whether the room on screen was last lit as a lantern room — `forceDark` flipping re-lights it. */
+  private litDark = false;
   private vignetteScaleValue = 1;
 
   constructor(sim: GameSim, textures: GameViewTextures, renderer?: WebGLRenderer) {
@@ -332,6 +345,7 @@ export class GameView {
     this.doorsLocked = sim.doorsLocked;
 
     this.lighting = new Lighting(this.scene);
+    this.lighting.setLanternArt(textures.tileTextures?.[LANTERN_TILE]?.source.texture);
     this.scenery = this.buildScenery();
     this.scenery.attach(this.scene);
 
@@ -626,6 +640,10 @@ export class GameView {
       }
     }
 
+    if ((sim.roomDark || this.forceDark) !== this.litDark) {
+      this.relight();
+      this.shadowNeedsRefresh = true;
+    }
     this.lighting.sync(sim.tick);
     advanceStreamFlow(nowMs);
     this.decals.sync();
@@ -651,7 +669,13 @@ export class GameView {
     this.particles.sync(alpha);
     this.playerView.sync(sim, alpha, nowMs);
     this.maibaumView.sync(sim);
-    this.lighting.syncLantern(this.playerView.positionX, this.playerView.footZ, !sim.playerDead);
+    // No light of his own in a lantern room (#424): the lanterns on the walls
+    // are the room's light, and a pool that follows him is the circle #404 had.
+    this.lighting.syncLantern(
+      this.playerView.positionX,
+      this.playerView.footZ,
+      !sim.playerDead && !this.darkness.active,
+    );
 
     const frame = roomFrameSize(this.roomGeometry);
     const slide = this.transitionSlideOffset(alpha);
@@ -676,17 +700,6 @@ export class GameView {
     this.drainWarmQueue();
   }
 
-  /**
-   * The Promille tunnel's 50%-alpha radius (internal pixels) and its current
-   * alpha, from `Vignette` — so a dark room and the tunnel stack as "the
-   * tighter one wins" rather than multiplying into black. Read next frame;
-   * a frame's lag on a value that moves this slowly is invisible.
-   */
-  setPromilleTunnel(radius: number, alpha: number): void {
-    this.tunnel.radius = radius;
-    this.tunnel.alpha = alpha;
-  }
-
   /** What the caller should multiply the Promille vignette's alpha by this frame — see `stackWithTunnel`. */
   get vignetteScale(): number {
     return this.vignetteScaleValue;
@@ -699,23 +712,28 @@ export class GameView {
 
   private syncDarkness(): void {
     const sim = this.sim;
-    const lantern =
-      (sim.roomDark || this.forceDark) && !sim.playerDead
-        ? LANTERNS[this.accessibility.darkness]
-        : null;
-    const stacked = stackWithTunnel(lantern, this.tunnel);
+    const dusk = this.litDark && !sim.playerDead ? DUSK[this.accessibility.darkness] : null;
+    const stacked = stackWithTunnel(dusk);
     this.vignetteScaleValue = stacked.vignetteScale;
-    if (lantern === null) {
-      this.darkness.set(0, 0, 0, 0);
+    this.darkness.setAlpha(stacked.darknessAlpha);
+    if (dusk === null) {
       return;
     }
-    const at = this.camera.project(
-      this.playerView.positionX,
-      PLAYER_ANCHOR_HEIGHT,
-      this.playerView.footZ,
-      this.point,
-    );
-    this.darkness.set(at.x, at.y, lantern.radius, stacked.darknessAlpha);
+    // Each lantern's pool, where the camera currently puts it: the centre a
+    // little into the room from the wall it hangs on, the radius measured on
+    // screen at that depth.
+    for (let i = 0; i < MAX_DUSK_POOLS; i++) {
+      const lantern = this.wallLanterns[i];
+      if (lantern === undefined) {
+        this.darkness.setPool(i, 0, 0, 0);
+        continue;
+      }
+      const at = this.camera.project(lantern.x, 0, lantern.z, this.point);
+      const x = at.x;
+      const y = at.y;
+      const edge = this.camera.project(lantern.x + LANTERN_REACH, 0, lantern.z, this.point);
+      this.darkness.setPool(i, x, y, Math.abs(edge.x - x) * DUSK_POOL_SCALE);
+    }
   }
 
   /** Draws the world pass. The caller draws the UI pass over it. */
@@ -1055,12 +1073,33 @@ export class GameView {
   }
 
   private relight(): void {
-    const tiles = this.textures.roomTiles[this.sim.currentFloor];
+    const sim = this.sim;
+    const tiles = this.textures.roomTiles[sim.currentFloor];
+    const rig = tiles?.lighting ?? 'cellar';
+    // Floor 3's light (#424) is placed from the room and the run's seed, so it
+    // is the same on a revisit and in a replay and different in the next run:
+    // where the canopy opens, and — in a lantern room, which has no gaps —
+    // where the lanterns hang.
+    const seed = forestLightSeed(
+      sim.roomId,
+      sim.seed,
+      sim.currentFloor,
+      this.scenery.frameWidth,
+      this.scenery.frameHeight,
+    );
+    this.litDark = sim.roomDark || this.forceDark;
+    this.wallLanterns =
+      rig === 'forest' && this.litDark ? wallLanternLayout(seed, sim.room, sim.doors) : [];
     this.lighting.onRoomChanged(
-      tiles?.lighting ?? 'cellar',
+      rig,
       this.scenery.frameWidth,
       this.scenery.frameHeight,
       this.scenery.bulbs,
+      {
+        seed,
+        canopy: this.litDark ? 'closed' : sim.roomIsBoss ? 'boss' : 'ordinary',
+        lanterns: this.wallLanterns,
+      },
     );
     this.scene.background = new Color(this.lighting.backgroundColour);
     this.scenery.setSecretHints(this.secretHintDoors);

@@ -2678,10 +2678,10 @@ async function boot(progress: BootProgress): Promise<void> {
       advanceBossIntroPlate(started);
       const playerScreen = view.playerScreenPosition();
       vignette.sync(sim, playerScreen.x, playerScreen.y);
-      // A lantern-dark room (#404) and the Promille tunnel: the tighter one
-      // wins, rather than the two multiplying into black — see
-      // `render/world/darkness.ts`'s `stackWithTunnel`.
-      view.setPromilleTunnel(vignette.tunnelRadius, vignette.view.alpha);
+      // A lantern room's dusk (#404/#424) and the Promille tunnel: the tunnel
+      // is thinned by what the dusk already covers, rather than the two
+      // multiplying into black — see `render/world/darkness.ts`'s
+      // `stackWithTunnel`.
       vignette.view.alpha *= view.vignetteScale;
       blaueStundeOverlay.sync(
         sim,
