@@ -107,6 +107,10 @@ export class EntityView {
   private readonly sim: GameSim;
   private readonly art: EntityArt;
   private readonly bodies: Billboard[] = [];
+  /** Per body slot, 1 when that body is an enemy telegraphing this frame (#404's see-through pass). */
+  private readonly bodyTelegraphing: number[] = [];
+  /** Body slots drawn last `sync` — `enableSeeThrough` reads no further. */
+  private bodiesUsed = 0;
   private readonly corpses: Billboard[] = [];
   private readonly rings: FloorRing[] = [];
   private readonly wedges: FloorWedge[] = [];
@@ -252,7 +256,8 @@ export class EntityView {
         ? sim.enemies.at(sim.enemy.data[index * ENEMY_STRIDE] ?? 0).id
         : null;
       const isBoss = enemyId !== null && this.art.bossIds.has(enemyId);
-      const bossTelegraph = isBoss ? enemyTelegraphProgress(sim, index) : 0;
+      const telegraph = isEnemyBody ? enemyTelegraphProgress(sim, index) : 0;
+      const bossTelegraph = isBoss ? telegraph : 0;
       const bombFuse = isBomb ? bombFuseProgress(sim, index) : 0;
 
       const animation = enemyId === null ? undefined : this.art.enemyAnimation[enemyId];
@@ -290,6 +295,7 @@ export class EntityView {
                 : (this.art.enemyArt[enemyId] ?? this.art.fallback));
 
       const billboard = this.bodyAt(used);
+      this.bodyTelegraphing[used] = telegraph > 0 ? 1 : 0;
       used += 1;
       billboard.visible = true;
       billboard.setTexture(texture, mirror);
@@ -432,6 +438,7 @@ export class EntityView {
 
     this.animator.endFrame();
     this.syncCorpses();
+    this.bodiesUsed = used;
 
     for (let slot = used; slot < this.bodies.length; slot++) {
       const body = this.bodies[slot];
@@ -512,6 +519,32 @@ export class EntityView {
     this.corpses.push(created);
     this.group.add(created.mesh);
     return created;
+  }
+
+  /**
+   * Puts everything a lantern-dark room (#404) must not hide on `layer`:
+   * every telegraph shape (hidden ones draw nothing either way), and the
+   * body of every enemy that is telegraphing this frame. Called by
+   * `GameView.render` after its actor-layer sweep, only in a dark room.
+   */
+  enableSeeThrough(layer: number): void {
+    for (let slot = 0; slot < this.bodiesUsed; slot++) {
+      if (this.bodyTelegraphing[slot] === 1) {
+        this.bodies[slot]?.mesh.layers.enable(layer);
+      }
+    }
+    for (const shape of this.rings) {
+      shape.mesh.layers.enable(layer);
+    }
+    for (const shape of this.wedges) {
+      shape.mesh.layers.enable(layer);
+    }
+    for (const shape of this.hazardBars) {
+      shape.mesh.layers.enable(layer);
+    }
+    for (const shape of this.hazardDiscs) {
+      shape.mesh.layers.enable(layer);
+    }
   }
 
   private ringAt(slot: number): FloorRing {

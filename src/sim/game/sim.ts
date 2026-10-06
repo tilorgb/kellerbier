@@ -1474,6 +1474,8 @@ export class GameSim {
   private readonly bombableWalls = new Map<string, CompiledDoor>();
   /** The loaded room's `metadata.specialRole`, or `undefined` for a normal room. */
   private roomSpecialRole: RoomSpecialRole | undefined = undefined;
+  /** Whether the loaded room is lantern-dark (#404) — see `roomDark`. */
+  private roomDarkValue = false;
   /**
    * A boss room's synthesised "next floor" exit (`nextFloorExitDoor`), or
    * `null` outside a boss room. Recomputed by every `applyCompiledRoom` call,
@@ -2445,6 +2447,7 @@ export class GameSim {
         geometry: compiled.geometry,
         id: roomInstanceId ?? compiled.source.id,
         specialRole: compiled.source.metadata.specialRole,
+        dark: compiled.source.metadata.dark === true,
         doors: compiled.doors,
         enemySpawns: suppressContent ? [] : compiled.enemySpawns,
         pickupSpawns: suppressContent ? [] : compiled.pickupSpawns,
@@ -2586,6 +2589,7 @@ export class GameSim {
         geometry: compiled.geometry,
         id: compiled.source.id,
         specialRole: undefined,
+        dark: false,
         doors: [
           {
             direction: compiled.startDoor.direction,
@@ -2672,6 +2676,7 @@ export class GameSim {
       readonly geometry: RoomGeometry;
       readonly id: string;
       readonly specialRole: RoomSpecialRole | undefined;
+      readonly dark: boolean;
       readonly doors: readonly CompiledDoor[];
       readonly enemySpawns: readonly {
         readonly x: number;
@@ -2744,6 +2749,7 @@ export class GameSim {
       }
     }
     this.roomSpecialRole = compiled.specialRole;
+    this.roomDarkValue = compiled.dark;
     this.bossExitDoor =
       compiled.specialRole === 'boss' ? nextFloorExitDoor(compiled.geometry, compiled.doors) : null;
     this.roomTemplateLoaded = true;
@@ -3646,6 +3652,16 @@ export class GameSim {
     }
     this.bombsCount -= 1;
     return true;
+  }
+
+  /**
+   * Whether the loaded room is one of Floor 3's lantern-dark rooms (#404).
+   * Presentation only — nothing in the simulation reads it; the renderer
+   * draws the darkness, and the accessibility setting can turn it off
+   * without the run stepping any differently.
+   */
+  get roomDark(): boolean {
+    return this.roomDarkValue;
   }
 
   /** The floor the current room was loaded on. Drives the Weißwurst rule. */

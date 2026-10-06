@@ -31,3 +31,11 @@ export const ACTOR_LAYER = 1;
 
 /** See `ACTOR_LAYER`'s doc comment: wall/void geometry safe to occlude a standing sprite. */
 export const OCCLUDER_LAYER = 2;
+
+/**
+ * What a lantern-dark room (#404) must never hide: telegraph shapes,
+ * projectiles, particles and enemies mid-wind-up. Enabled on top of
+ * `ACTOR_LAYER` each frame a dark room is drawn, and drawn a third time by
+ * `GameView.render`, over the darkness — see `world/darkness.ts`.
+ */
+export const SEE_THROUGH_LAYER = 3;

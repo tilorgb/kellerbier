@@ -73,7 +73,7 @@ export class RunInfoPanel implements DebugPanel {
     // fields have been on `GameSim` the whole time.
     this.setLine(2, `floor  ${String(sim.currentFloor)}  room ${sim.roomId}`);
     this.setLine(3, `hitstop ${String(sim.hitstop)}  shake ${sim.shake.toFixed(2)}`);
-    this.setLine(4, 'O hide  H hitboxes  G grid  C copy');
+    this.setLine(4, 'O hide  H hitboxes  G grid  F dark  C copy');
 
     this.summary =
       `kellerbier seed=${sim.seed.toString(16)} tick=${String(sim.tick)} ` +

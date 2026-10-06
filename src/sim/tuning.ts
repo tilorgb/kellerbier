@@ -896,6 +896,15 @@ export interface RoomGenTuning {
    * `sim/room/sprinkle.ts`), falling back to generation rather than a repeat.
    */
   authoredRoomChance: number;
+  /**
+   * Floor 3's lantern-darkness rooms (#404): chance a generated room is dark,
+   * the player seeing only within their lantern's radius. 0 everywhere but
+   * where a floor override turns it on (`wald`, `ROOM_GEN_FLOOR_OVERRIDES`),
+   * and rolled only when above 0, so a floor without darkness generates the
+   * exact rooms it always did. The generator only ever builds `normal` rooms,
+   * which is what keeps darkness off boss, shop, treasure and start rooms.
+   */
+  darkRoomChance: number;
 }
 
 /**
@@ -1496,6 +1505,7 @@ export const DEFAULT_ROOM_GEN_TUNING: Readonly<RoomGenTuning> = {
   maxProps: 5,
   hazardChance: 0.18,
   authoredRoomChance: 0.12,
+  darkRoomChance: 0,
 };
 
 export const DEFAULT_CURSE_TUNING: Readonly<CurseTuning> = {

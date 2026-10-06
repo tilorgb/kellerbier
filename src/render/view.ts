@@ -20,7 +20,8 @@ import { PlayerView } from './player-view.js';
 import { ProjectileView, type ProjectileArt } from './projectiles.js';
 import { UI_TEXT_HEIGHT } from './ui/text.js';
 import { ELEVATION, WorldCamera, type WorldPoint } from './world/camera.js';
-import { ACTOR_LAYER, OCCLUDER_LAYER } from './world/layers.js';
+import { DarknessPass, type DarknessLevel, LANTERNS, stackWithTunnel } from './world/darkness.js';
+import { ACTOR_LAYER, OCCLUDER_LAYER, SEE_THROUGH_LAYER } from './world/layers.js';
 import { Lighting } from './world/lighting.js';
 import { MaterialCache } from './world/material-cache.js';
 import { ProgramPins } from './world/program-pins.js';
@@ -103,6 +104,8 @@ export interface GameViewTextures {
 
 export interface RenderAccessibility extends ParticleAccessibility {
   readonly colorblindPalette: boolean;
+  /** How dark a lantern-dark room (#404) is drawn — `off` draws it like any other room. */
+  readonly darkness: DarknessLevel;
 }
 
 const REDUCED_MOTION_SHAKE = 0.25;
@@ -118,6 +121,10 @@ const PLAYER_ANCHOR_HEIGHT = 8;
 /** Moves an object onto `ACTOR_LAYER` only — off the pass-one layer, into pass two. */
 function toActorLayer(object: Object3D): void {
   object.layers.set(ACTOR_LAYER);
+}
+
+function toSeeThroughLayer(object: Object3D): void {
+  object.layers.enable(SEE_THROUGH_LAYER);
 }
 
 /**
@@ -298,8 +305,21 @@ export class GameView {
     reducedMotion: false,
     reduceFlashes: false,
     colorblindPalette: false,
+    darkness: 'full',
   };
   private readonly point: WorldPoint = { x: 0, y: 0 };
+
+  /** Floor 3's lantern-darkness (#404) — see `world/darkness.ts`. */
+  private readonly darkness = new DarknessPass();
+  /**
+   * Debug: draw every room as a dark room (the debug panel's "force dark
+   * room"), so the effect can be judged in any room on any floor. Still
+   * answers to the accessibility setting — `off` stays off.
+   */
+  forceDark = false;
+  /** The Promille tunnel last reported by `setPromilleTunnel`, for `stackWithTunnel`. */
+  private readonly tunnel = { radius: 0, alpha: 0 };
+  private vignetteScaleValue = 1;
 
   constructor(sim: GameSim, textures: GameViewTextures, renderer?: WebGLRenderer) {
     this.sim = sim;
@@ -645,6 +665,7 @@ export class GameView {
     );
     this.lastAimX = aim.x;
     this.lastAimZ = aim.y;
+    this.syncDarkness();
     // Labels project after the camera has moved, or they lag a frame.
     this.damageNumbers.sync(alpha, this.projectPoint);
     this.labelLayer.prepare(1);
@@ -653,6 +674,48 @@ export class GameView {
     // title card is up. Here, not in `render`, so the off-screen warm render it
     // triggers (which calls `render`) can't recurse into this.
     this.drainWarmQueue();
+  }
+
+  /**
+   * The Promille tunnel's 50%-alpha radius (internal pixels) and its current
+   * alpha, from `Vignette` — so a dark room and the tunnel stack as "the
+   * tighter one wins" rather than multiplying into black. Read next frame;
+   * a frame's lag on a value that moves this slowly is invisible.
+   */
+  setPromilleTunnel(radius: number, alpha: number): void {
+    this.tunnel.radius = radius;
+    this.tunnel.alpha = alpha;
+  }
+
+  /** What the caller should multiply the Promille vignette's alpha by this frame — see `stackWithTunnel`. */
+  get vignetteScale(): number {
+    return this.vignetteScaleValue;
+  }
+
+  /** Whether this frame draws darkness — a dark room (or `forceDark`) with the setting not `off`. */
+  get darknessActive(): boolean {
+    return this.darkness.active;
+  }
+
+  private syncDarkness(): void {
+    const sim = this.sim;
+    const lantern =
+      (sim.roomDark || this.forceDark) && !sim.playerDead
+        ? LANTERNS[this.accessibility.darkness]
+        : null;
+    const stacked = stackWithTunnel(lantern, this.tunnel);
+    this.vignetteScaleValue = stacked.vignetteScale;
+    if (lantern === null) {
+      this.darkness.set(0, 0, 0, 0);
+      return;
+    }
+    const at = this.camera.project(
+      this.playerView.positionX,
+      PLAYER_ANCHOR_HEIGHT,
+      this.playerView.footZ,
+      this.point,
+    );
+    this.darkness.set(at.x, at.y, lantern.radius, stacked.darknessAlpha);
   }
 
   /** Draws the world pass. The caller draws the UI pass over it. */
@@ -674,6 +737,7 @@ export class GameView {
       // The murk's own quad, linked with everything else rather than on the
       // frame the player first crosses into Beduselt — see `GloomBlur.compile`.
       this.gloom.compile(renderer);
+      this.darkness.compile(renderer);
     }
 
     // Everything that stands in the room is on `ACTOR_LAYER` only (set on the
@@ -681,6 +745,17 @@ export class GameView {
     // pooled meshes those groups grow). Pass one draws the room without them.
     for (const group of this.actorGroups) {
       group.traverse(toActorLayer);
+    }
+    // A lantern-dark room (#404): what must show through the dark goes on
+    // the see-through layer as well, for the third pass below. Projectiles
+    // and particles wholesale (a poison cloud is particles); from the
+    // entities, every telegraph shape and every body mid-wind-up.
+    const dark = this.darkness.active && !this.warming;
+    if (dark) {
+      this.projectiles.group.traverse(toSeeThroughLayer);
+      this.particles.group.traverse(toSeeThroughLayer);
+      this.bombFlightView.group.traverse(toSeeThroughLayer);
+      this.entities.enableSeeThrough(SEE_THROUGH_LAYER);
     }
 
     // `renderer.shadowMap.autoUpdate` is off (`app.ts`) — F6's fix for a
@@ -728,6 +803,15 @@ export class GameView {
     // one; nothing here casts anew.
     camera.layers.set(ACTOR_LAYER);
     renderer.render(this.scene, camera);
+
+    // Pass three, dark rooms only (#404): the darkness, then everything on
+    // the see-through layer again on top of it, against the depth pass two
+    // left — so a telegraph or a shot is never something the dark hid.
+    if (dark) {
+      this.darkness.render(renderer);
+      camera.layers.set(SEE_THROUGH_LAYER);
+      renderer.render(this.scene, camera);
+    }
     this.scene.background = previousBackground;
     camera.layers.mask = previousLayerMask;
     renderer.autoClear = previousAutoClear;
@@ -1182,6 +1266,7 @@ export class GameView {
     this.bombFlightView.destroy();
     this.corpseView.destroy();
     this.gloom.dispose();
+    this.darkness.dispose();
     this.labelLayer.destroy({ children: true });
   }
 }

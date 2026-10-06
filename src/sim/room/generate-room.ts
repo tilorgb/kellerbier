@@ -1302,6 +1302,18 @@ function placeProps(
 // Assembly
 // -------------------------------------------------------------------------- //
 
+/**
+ * Floor 3's lantern-darkness (#404): `{ dark: true }` on a `darkRoomChance`
+ * roll, nothing otherwise. Rolled last, after every placement, and only on a
+ * floor that turns the chance on — so a floor without darkness draws exactly
+ * the numbers it always did and generates the same rooms. Only `normal`
+ * rooms are ever generated, which is what keeps it off boss, shop, treasure
+ * and start rooms.
+ */
+function darkField(ctx: RoomGenContext, params: RoomGenTuning): { readonly dark?: true } {
+  return params.darkRoomChance > 0 && ctx.rng.chance(params.darkRoomChance) ? { dark: true } : {};
+}
+
 function difficultyTierFor(ctx: RoomGenContext): number {
   return Math.min(
     5,
@@ -1427,6 +1439,7 @@ export function generateRoom(
       },
       difficultyTier: difficultyTierFor(spec),
       weight: 1,
+      ...darkField(spec, params),
     },
   };
 }
@@ -1511,6 +1524,7 @@ export function generateMultiCellRoom(
       shape: spec.shape,
       difficultyTier: difficultyTierFor(spec),
       weight: 1,
+      ...darkField(spec, params),
     },
   };
 }

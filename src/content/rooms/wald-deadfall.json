@@ -99,6 +99,7 @@
       "west": true
     },
     "difficultyTier": 2,
-    "weight": 1
+    "weight": 1,
+    "dark": true
   }
 }

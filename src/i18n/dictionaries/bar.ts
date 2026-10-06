@@ -215,6 +215,10 @@ export const bar: Record<DictKey, string> = {
   'ui.settings.accessibility.reduceAudioDistortion': 'Promille-Tonvazerrung runterdrahn',
   'ui.settings.accessibility.statDisplay': 'Werte ozoang',
   'ui.settings.accessibility.detailedPickupText': 'Genau hischreim, wos a Sach duad',
+  'ui.settings.accessibility.darkness': 'Dunkelheit',
+  'ui.settings.accessibility.darknessFull': 'Voll',
+  'ui.settings.accessibility.darknessReduced': 'Reduziert',
+  'ui.settings.accessibility.darknessOff': 'Aus',
 
   'ui.settings.privacy.copy':
     'Playtest-Telemetrie is standardmäßig aus. Wennst des ospringst, wead nur auf dem ' +

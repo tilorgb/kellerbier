@@ -1,4 +1,5 @@
 import type { GameSim } from '../sim/game/sim.js';
+import { DARKNESS_LEVELS, type DarknessLevel } from '../render/world/darkness.js';
 import { loadSave, updateSave } from './save/storage.js';
 
 /**
@@ -149,6 +150,15 @@ export interface AccessibilitySettings {
    * player who wants to look it up rather than see it every time.
    */
   detailedPickupText: boolean;
+  /**
+   * Floor 3's lantern-dark rooms (#404): `full` is the designed experience —
+   * a tight lantern and a deep dark; `reduced` sees further into a lighter
+   * dark; `off` draws a dark room like any other. Telegraphs and enemy shots
+   * show through the dark at every level, so this is about comfort and
+   * legibility, never about whether an attack can be seen at all. Render-only,
+   * like `colorblindPalette`: the simulation does not know a room is dark.
+   */
+  darkness: DarknessLevel;
 }
 
 export const DEFAULT_ACCESSIBILITY_SETTINGS: Readonly<AccessibilitySettings> = {
@@ -165,6 +175,7 @@ export const DEFAULT_ACCESSIBILITY_SETTINGS: Readonly<AccessibilitySettings> = {
   reduceAudioDistortion: false,
   statDisplay: false,
   detailedPickupText: false,
+  darkness: 'full',
 };
 
 /** The text scales the settings screen offers — anything else sanitises back to 1. */
@@ -242,6 +253,11 @@ export function sanitizeAccessibilitySettings(candidate: unknown): Accessibility
       typeof source.detailedPickupText === 'boolean'
         ? source.detailedPickupText
         : DEFAULT_ACCESSIBILITY_SETTINGS.detailedPickupText,
+    // A save from before #404 has no `darkness` field and lands on the
+    // default here — no save migration needed, the same as every field above.
+    darkness: (DARKNESS_LEVELS as readonly unknown[]).includes(source.darkness)
+      ? (source.darkness as DarknessLevel)
+      : DEFAULT_ACCESSIBILITY_SETTINGS.darkness,
   };
 }
 

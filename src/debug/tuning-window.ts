@@ -436,6 +436,7 @@ const GROUPS: readonly GroupSpec[] = [
         step: 0.02,
         hint: 'chance a normal slot is a hand-authored room',
       },
+      { key: 'darkRoomChance', min: 0, max: 1, step: 0.05, hint: 'chance a room is lantern-dark' },
     ],
   },
   {

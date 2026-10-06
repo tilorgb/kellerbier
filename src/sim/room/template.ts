@@ -184,9 +184,15 @@ export function validateRoomTemplate(
   if (keyLocked !== undefined && specialRole !== 'treasure') {
     fail(`${source}.metadata.keyLocked`, 'may only be set on a treasure-role template');
   }
+  const dark =
+    metadata.dark === undefined ? undefined : boolean(metadata.dark, `${source}.metadata.dark`);
+  if (dark === true && specialRole !== undefined && DARKNESS_FREE_ROLES.has(specialRole)) {
+    fail(`${source}.metadata.dark`, `may not be set on a ${specialRole}-role template`);
+  }
   const specialRoleFields = {
     ...(specialRole === undefined ? {} : { specialRole }),
     ...(keyLocked === undefined ? {} : { keyLocked }),
+    ...(dark === undefined ? {} : { dark }),
   };
 
   if (shape === '1x1') {
@@ -228,6 +234,14 @@ export function validateRoomTemplate(
     },
   };
 }
+
+/**
+ * Roles a dark room (#404) is never allowed to be: a boss or mini-boss fight
+ * is the room the whole floor builds to and must be read in full, and a shop
+ * or treasure room is somewhere to look at what is on offer, not to fumble
+ * for it with a lantern.
+ */
+const DARKNESS_FREE_ROLES: ReadonlySet<string> = new Set(['boss', 'miniboss', 'shop', 'treasure']);
 
 function optionalSpecialRole(
   value: unknown,

@@ -202,6 +202,14 @@ interface RoomTemplateMetadataBase {
   readonly specialRole?: RoomSpecialRole;
   /** Treasure rooms only: entering spends one Kellerschlüssel, blocked at zero. */
   readonly keyLocked?: boolean;
+  /**
+   * Floor 3's lantern-darkness (#404): the room is dark outside a radius
+   * around the player. Telegraphs and enemy shots still show through it —
+   * see `render/world/darkness.ts`. Never on a boss, mini-boss, shop or
+   * treasure template (validation refuses it), and never picked for a
+   * floor's start room (`floor-plan.ts`'s `eligibleTemplates`).
+   */
+  readonly dark?: boolean;
 }
 
 /**

@@ -4,6 +4,7 @@ import {
   TEXT_SCALE_OPTIONS,
   saveSettings,
 } from './settings.js';
+import { DARKNESS_LEVELS, type DarknessLevel } from '../render/world/darkness.js';
 import { MAX_VIDEO_SCALE, type Preferences, savePreferences } from './preferences.js';
 import {
   ALL_BINDABLE_ACTIONS,
@@ -50,6 +51,13 @@ import type { SettingsRow, SettingsTab } from '../render/ui/settings-model.js';
  */
 
 /** Localisation keys for each bindable action, in the order the Controls tab lists them. */
+/** The Darkness row's (#404) option labels. */
+const DARKNESS_LABEL_KEYS: Readonly<Record<DarknessLevel, DictKey>> = {
+  full: 'ui.settings.accessibility.darknessFull',
+  reduced: 'ui.settings.accessibility.darknessReduced',
+  off: 'ui.settings.accessibility.darknessOff',
+};
+
 const ACTION_LABEL_KEYS: Readonly<Record<BindableAction, DictKey>> = {
   moveUp: 'ui.settings.action.moveUp',
   moveDown: 'ui.settings.action.moveDown',
@@ -475,6 +483,22 @@ export class SettingsMenu {
         set: (id) => {
           this.deps.settings.slowModeScale = Number(id);
           this.saveAndApplySettings();
+        },
+      },
+      {
+        kind: 'choice',
+        label: t(locale, 'ui.settings.accessibility.darkness'),
+        options: DARKNESS_LEVELS.map((level) => ({
+          id: level,
+          label: t(locale, DARKNESS_LABEL_KEYS[level]),
+        })),
+        get: () => this.deps.settings.darkness,
+        set: (id) => {
+          const level = DARKNESS_LEVELS.find((candidate) => candidate === id);
+          if (level !== undefined) {
+            this.deps.settings.darkness = level;
+            this.saveAndApplySettings();
+          }
         },
       },
       toggle(

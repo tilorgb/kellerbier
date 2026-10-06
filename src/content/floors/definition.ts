@@ -128,7 +128,17 @@ export const ROOM_GEN_FLOOR_OVERRIDES: Readonly<Record<string, Partial<RoomGenTu
    * roll of a Waldbach band crossing the room (#403's `placeStream` — one
    * stream per room at most, rolled once per ~2 cells like a patch).
    */
-  wald: { threatBase: 3.5, maxEnemies: 8, hazardChance: 0.2, minCoverTiles: 12, maxCoverTiles: 26 },
+  wald: {
+    threatBase: 3.5,
+    maxEnemies: 8,
+    hazardChance: 0.2,
+    minCoverTiles: 12,
+    maxCoverTiles: 26,
+    // #404: roughly one generated room in seven is lantern-dark — often
+    // enough that the floor is known for it, rare enough that a dark room
+    // still reads as an event rather than as the floor's lighting.
+    darkRoomChance: 0.15,
+  },
 };
 
 export const FLOOR_CONFIGS: readonly FloorConfig[] = [
