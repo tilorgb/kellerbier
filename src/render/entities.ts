@@ -11,6 +11,7 @@ import {
   ENEMY_FLAG_LATCHED,
   ENEMY_STRIDE,
   type EnemyTelegraphShapeInfo,
+  enemyHopProgress,
   enemyTelegraphProgress,
   enemyTelegraphShape,
   isEnemyElite,
@@ -99,6 +100,8 @@ const WIND_UP_GLOW_STRENGTH = 0.7;
 const LABEL_POINT = { x: 0, y: 0 };
 /** How far above the floor a pickup hovers, so its shadow separates it from the ground. */
 const PICKUP_LIFT = 1.5;
+/** Room units a `hopCardinal` body (#407, the Kaninchen) rises at the top of a hop — the sim moves it along the floor, this makes it a hop. */
+const HOP_BOB = 2.5;
 /**
  * How far up Alois's billboard a latched Zecke's feet sit (#406), in room
  * units: his hat's crown is the top six rows of his 32-pixel frame, so 12
@@ -395,7 +398,11 @@ export class EntityView {
       // A pickup hovers a fixed amount so its shadow separates it from the
       // floor — it does not bob. A per-frame sine here made every static
       // sprite in a still room read as "breathing".
-      const lift = isPickup ? PICKUP_LIFT : 0;
+      const lift = isPickup
+        ? PICKUP_LIFT
+        : isEnemyBody
+          ? HOP_BOB * Math.sin(Math.PI * enemyHopProgress(sim, index))
+          : 0;
       // A bloating body (#405) swells over its wind-up and snaps back the
       // tick the telegraph ends — the deflate is the burst.
       const swell = 1 + BLOAT_SWELL * bloat;

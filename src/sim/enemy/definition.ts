@@ -37,6 +37,7 @@ export type BehaviourName =
   | 'rollBounce'
   | 'approachProp'
   | 'pause'
+  | 'hopCardinal'
   | 'fireAtPlayer'
   | 'fireBurst'
   | 'fireSpread'
@@ -71,6 +72,21 @@ export interface WalkTowardPlayerBehaviour {
 export interface ChargeAtPlayerBehaviour {
   readonly behaviour: 'chargeAtPlayer';
   readonly speed: number;
+  /**
+   * Snaps the locked direction to the nearest of the four axes (`'cardinal'`)
+   * or the four diagonals (`'diagonal'`) — the Kaninchen's pawn capture
+   * (#407) leaps only diagonally, the Boar (#409) only along the axes. The
+   * wind-up's telegraph line snaps with it, so the warning and the leap never
+   * disagree. Omitted: straight at the locked aim, as before.
+   */
+  readonly snap?: 'cardinal' | 'diagonal';
+  /**
+   * Room units the charge covers before the body stops for the rest of the
+   * state, measured as speed × ticks (a wall stopping it early is
+   * `onBlocked`'s business). Turns a run-until-the-wall charge into a short
+   * leap (#407). Omitted: no limit.
+   */
+  readonly maxDistance?: number;
 }
 
 /**
@@ -108,6 +124,32 @@ export interface OrbitPointBehaviour {
   /** Pixels from the spawn point the orbit settles at. */
   readonly radius: number;
   readonly clockwise?: boolean;
+}
+
+/**
+ * Small random hops along the four axes — never toward the player, never
+ * diagonally (#407, the Kaninchen: a rabbit that moves like a chess pawn).
+ *
+ * The state's own ticks run in cycles of `hopTicks + restTicks`. At the start
+ * of each cycle a direction is drawn from `random.enemies`; one whose landing
+ * spot would be inside a wall or an obstacle is passed over for the next of
+ * the four in turn, and with none clear the body rests through the cycle.
+ * It then covers `hopDistance` over `hopTicks`, quickest mid-hop (a sine
+ * ease, so the four-way motion reads as hops rather than as sliding), and
+ * stands still for `restTicks`. The renderer bobs the body over the hop
+ * (`enemyHopProgress`).
+ *
+ * `whenPlayerDiagonalAdjacent` only fires while resting, so an attack never
+ * starts in the middle of a hop.
+ */
+export interface HopCardinalBehaviour {
+  readonly behaviour: 'hopCardinal';
+  /** Room units per hop, before the global `enemy.speedScale`. */
+  readonly hopDistance: number;
+  /** Ticks a hop takes. */
+  readonly hopTicks: number;
+  /** Ticks standing still between hops. */
+  readonly restTicks: number;
 }
 
 /** Backs away from the player. Kiting enemies, and anything that repositions. */
@@ -527,6 +569,7 @@ export type EnemyBehaviour =
   | RollBounceBehaviour
   | ApproachPropBehaviour
   | PauseBehaviour
+  | HopCardinalBehaviour
   | FireAtPlayerBehaviour
   | FireBurstBehaviour
   | FireSpreadBehaviour
@@ -583,7 +626,20 @@ export type EnemyTransition =
    * `onHit`, cleared once read, so a body shaken off while in a state that
    * does not listen for it simply stays where the state machine put it.
    */
-  | { readonly to: string; readonly onShakenOff: true };
+  | { readonly to: string; readonly onShakenOff: true }
+  /**
+   * The player stands about one step away on one of the four diagonals —
+   * their offset from the body lies within `tolerance` room units of
+   * `(±distance, ±distance)`. A pawn's capture square (#407, the Kaninchen).
+   * Never fires mid-hop on a `hopCardinal` state, and never through cover.
+   */
+  | {
+      readonly to: string;
+      readonly whenPlayerDiagonalAdjacent: {
+        readonly distance: number;
+        readonly tolerance: number;
+      };
+    };
 
 export interface EnemyState {
   readonly name: string;
@@ -689,6 +745,7 @@ export const MOVEMENT_BEHAVIOURS: readonly BehaviourName[] = [
   'rollBounce',
   'approachProp',
   'pause',
+  'hopCardinal',
 ];
 
 /** Primitives that run once, when the state is entered. */

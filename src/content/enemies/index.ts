@@ -10,6 +10,7 @@ import { blaskapellePosaune, blaskapelleTrompete, blaskapelleTuba } from './die-
 import { dieZapfhahnOrgel } from './die-zapfhahn-orgel.js';
 import { fliegenpilz } from './fliegenpilz.js';
 import { gartenzwerg } from './gartenzwerg.js';
+import { kaninchen } from './kaninchen.js';
 import { gockel } from './gockel.js';
 import { grosseKellerassel, kellerasselSegment } from './grosse-kellerassel.js';
 import { kellerassel } from './kellerassel.js';
@@ -60,6 +61,7 @@ export const ENEMY_DEFINITIONS: readonly EnemyDefinition[] = [
   derLadewagen,
   fliegenpilz,
   zecke,
+  kaninchen,
 ];
 
 /**
@@ -92,6 +94,7 @@ export {
   gartenzwerg,
   gockel,
   grosseKellerassel,
+  kaninchen,
   kellerassel,
   kellerasselSegment,
   kuh,

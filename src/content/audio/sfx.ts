@@ -661,4 +661,5 @@ export const ENEMY_SFX_CATEGORY: Readonly<Record<string, EnemySfxCategory>> = {
   'der-ladewagen': 'metal',
   fliegenpilz: 'squelch',
   zecke: 'squelch',
+  kaninchen: 'animal',
 };

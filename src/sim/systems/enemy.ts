@@ -423,6 +423,26 @@ function chooseTransition(
           return transition.to;
         }
         break;
+      case TransitionTrigger.PlayerDiagonalAdjacent: {
+        // A pawn's capture square (#407): the player's offset, folded into
+        // one quadrant, within `tolerance` of (step, step). Never mid-hop, so
+        // the wind-up only ever starts from a standstill.
+        if (state.movement.behaviour === 'hopCardinal' && !isResting(state.movement, ticks)) {
+          break;
+        }
+        const offX = Math.abs(toPlayerX) - transition.value;
+        const offY = Math.abs(toPlayerY) - transition.value;
+        if (offX * offX + offY * offY > transition.tolerance * transition.tolerance) {
+          break;
+        }
+        if (sighted < 0) {
+          sighted = isSighted(sim, index, toPlayerX, toPlayerY) ? 1 : 0;
+        }
+        if (sighted === 1) {
+          return transition.to;
+        }
+        break;
+      }
       case TransitionTrigger.PlayerWithin:
         if (distance <= transition.value) {
           if (sighted < 0) {
@@ -770,10 +790,48 @@ function applyMovement(
       // they were when it ended — the telegraph line pointed there the whole
       // time, and a charge that swerves at the last tick reads as a cheat.
       if (ticks === 0) {
-        motion[motionBase] = aimDistance === 0 ? 1 : aimX / aimDistance;
-        motion[motionBase + 1] = aimDistance === 0 ? 0 : aimY / aimDistance;
+        if (behaviour.snap === undefined) {
+          motion[motionBase] = aimDistance === 0 ? 1 : aimX / aimDistance;
+          motion[motionBase + 1] = aimDistance === 0 ? 0 : aimY / aimDistance;
+        } else {
+          // Snapped to the four axes or the four diagonals (#407, #409) —
+          // the same snap `enemyTelegraphShape` gives the warning line.
+          const free = aimDistance === 0 ? 0 : Math.atan2(aimY, aimX);
+          const snapped =
+            behaviour.snap === 'diagonal' ? snapToDiagonal(free) : snapToCardinal(free);
+          motion[motionBase] = Math.cos(snapped);
+          motion[motionBase + 1] = Math.sin(snapped);
+        }
       }
-      const speed = behaviour.speed * scale;
+      let speed = behaviour.speed * scale;
+      if (behaviour.maxDistance !== undefined) {
+        // A leap, not a run (#407): this tick covers only what is left of
+        // `maxDistance`, then nothing for the rest of the state.
+        speed = clamp(behaviour.maxDistance - ticks * speed, 0, speed);
+      }
+      velocity[base] = (motion[motionBase] ?? 0) * speed;
+      velocity[base + 1] = (motion[motionBase + 1] ?? 0) * speed;
+      return;
+    }
+    case 'hopCardinal': {
+      const hopTicks = Math.max(1, Math.round(behaviour.hopTicks));
+      const cycle = hopTicks + Math.max(0, Math.round(behaviour.restTicks));
+      const phase = ticks % cycle;
+      const distanceScaled = behaviour.hopDistance * scale;
+      if (phase === 0) {
+        chooseHopDirection(sim, index, selfX, selfY, distanceScaled);
+      }
+      if (phase >= hopTicks) {
+        velocity[base] = 0;
+        velocity[base + 1] = 0;
+        return;
+      }
+      // A sine-eased hop that sums to exactly `hopDistance` over `hopTicks`:
+      // Σ sin(π(i+½)/n) over i < n is 1 / sin(π/2n).
+      const speed =
+        distanceScaled *
+        Math.sin((Math.PI * (phase + 0.5)) / hopTicks) *
+        Math.sin(Math.PI / (2 * hopTicks));
       velocity[base] = (motion[motionBase] ?? 0) * speed;
       velocity[base + 1] = (motion[motionBase + 1] ?? 0) * speed;
       return;
@@ -834,6 +892,90 @@ function applyMovement(
 export function snapToCardinal(angle: number): number {
   const quarter = Math.PI / 2;
   return Math.round(angle / quarter) * quarter;
+}
+
+/**
+ * `angle` snapped to the nearest of the four diagonals — the Kaninchen's
+ * pawn capture (#407): whichever diagonal the target is most along.
+ */
+export function snapToDiagonal(angle: number): number {
+  const quarter = Math.PI / 2;
+  return Math.round((angle - quarter / 2) / quarter) * quarter + quarter / 2;
+}
+
+/** The four axes in turn, as x then y — `chooseHopDirection` walks them from a random start. */
+const HOP_DIRECTIONS = new Int8Array([1, 0, 0, 1, -1, 0, 0, -1]);
+
+/**
+ * Picks this hop's axis (#407): a random one of the four from the enemy
+ * stream, passing over any whose landing spot (or the midpoint on the way)
+ * is inside a wall or an obstacle for the next in turn. With none clear the
+ * heading is zeroed and the body rests through the cycle.
+ */
+function chooseHopDirection(
+  sim: GameSim,
+  index: number,
+  selfX: number,
+  selfY: number,
+  distance: number,
+): void {
+  const motion = sim.enemyMotion.data;
+  const motionBase = index * ENEMY_MOTION_STRIDE;
+  const radius = sim.body.data[index * 2] ?? 0;
+  const start = Math.floor(sim.random.enemies.nextFloat() * 4);
+  for (let step = 0; step < 4; step++) {
+    const slot = ((start + step) % 4) * 2;
+    const dirX = HOP_DIRECTIONS[slot] ?? 0;
+    const dirY = HOP_DIRECTIONS[slot + 1] ?? 0;
+    if (
+      sim.room.isClear(selfX + dirX * distance, selfY + dirY * distance, radius) &&
+      sim.room.isClear(selfX + (dirX * distance) / 2, selfY + (dirY * distance) / 2, radius)
+    ) {
+      motion[motionBase] = dirX;
+      motion[motionBase + 1] = dirY;
+      return;
+    }
+  }
+  motion[motionBase] = 0;
+  motion[motionBase + 1] = 0;
+}
+
+/** Whether a `hopCardinal` body is between hops at `ticks` into its state. */
+function isResting(
+  hop: { readonly hopTicks: number; readonly restTicks: number },
+  ticks: number,
+): boolean {
+  const hopTicks = Math.max(1, Math.round(hop.hopTicks));
+  const cycle = hopTicks + Math.max(0, Math.round(hop.restTicks));
+  return ticks % cycle >= hopTicks;
+}
+
+/**
+ * How far through its current hop a `hopCardinal` body is, 0 to 1 — 0 while
+ * resting, and for every other movement. Read by the renderer for the hop's
+ * bob (#407); derived from the state counter like everything else here.
+ */
+export function enemyHopProgress(sim: GameSim, index: number): number {
+  const base = index * ENEMY_STRIDE;
+  const state = sim.enemies.at(sim.enemy.data[base] ?? 0).states[sim.enemy.data[base + 1] ?? 0];
+  if (state?.movement.behaviour !== 'hopCardinal') {
+    return 0;
+  }
+  const hop = state.movement;
+  const hopTicks = Math.max(1, Math.round(hop.hopTicks));
+  const cycle = hopTicks + Math.max(0, Math.round(hop.restTicks));
+  const phase = (sim.enemy.data[base + 2] ?? 0) % cycle;
+  if (phase >= hopTicks) {
+    return 0;
+  }
+  const motionBase = index * ENEMY_MOTION_STRIDE;
+  if (
+    (sim.enemyMotion.data[motionBase] ?? 0) === 0 &&
+    (sim.enemyMotion.data[motionBase + 1] ?? 0) === 0
+  ) {
+    return 0;
+  }
+  return (phase + 0.5) / hopTicks;
 }
 
 /**
@@ -1730,10 +1872,13 @@ export function enemyTelegraphShape(
   }
 
   if (follow?.movement.behaviour === 'chargeAtPlayer') {
+    const snap = follow.movement.snap;
+    const aim = enemyAimAngle(sim, index);
     out.shape = TelegraphShape.Line;
     out.x = selfX;
     out.y = selfY;
-    out.angle = enemyAimAngle(sim, index);
+    out.angle =
+      snap === 'diagonal' ? snapToDiagonal(aim) : snap === 'cardinal' ? snapToCardinal(aim) : aim;
     out.arc = 0;
     out.reach = 0;
     return true;
