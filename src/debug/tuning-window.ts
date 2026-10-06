@@ -6,6 +6,7 @@ import {
   DEFAULT_ENEMY_TUNING,
   DEFAULT_IMPACT_TUNING,
   DEFAULT_ITEM_POOL_TUNING,
+  DEFAULT_LATCH_TUNING,
   DEFAULT_MACHINE_TUNING,
   DEFAULT_MOVEMENT_TUNING,
   DEFAULT_PICKUP_TUNING,
@@ -59,6 +60,7 @@ interface GroupSpec {
     | 'roomGen'
     | 'curse'
     | 'sneeze'
+    | 'latch'
     | 'machine'
     | 'chest';
   readonly fields: readonly FieldSpec[];
@@ -591,6 +593,18 @@ const GROUPS: readonly GroupSpec[] = [
       { key: 'kickbackScale', min: 1, max: 12, step: 0.5, hint: 'recoil, in ordinary shots' },
     ],
   },
+  {
+    title: 'latch (Zecke)',
+    group: 'latch',
+    fields: [
+      { key: 'latchReach', min: 0, max: 8, step: 0.5, hint: 'px of gap that still latches' },
+      { key: 'shakeAngleDegrees', min: 60, max: 180, step: 5, hint: 'how sharp a turn counts' },
+      { key: 'shakeWindowTicks', min: 10, max: 120, step: 5, hint: 'ticks the shakes must fit in' },
+      { key: 'shakesRequired', min: 1, max: 8, step: 1, hint: 'sharp turns to throw it off' },
+      { key: 'flingDistance', min: 0, max: 24, step: 1, hint: 'px it lands from you' },
+      { key: 'flingPush', min: 0, max: 6, step: 0.25, hint: 'flick outward on shake-off' },
+    ],
+  },
 ];
 
 const DEFAULTS = {
@@ -607,6 +621,7 @@ const DEFAULTS = {
   machine: DEFAULT_MACHINE_TUNING,
   chest: DEFAULT_CHEST_TUNING,
   sneeze: DEFAULT_SNEEZE_TUNING,
+  latch: DEFAULT_LATCH_TUNING,
 } as const;
 
 const STYLE = `

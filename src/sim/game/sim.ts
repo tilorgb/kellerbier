@@ -113,6 +113,7 @@ import { stepBodies } from '../systems/bodies.js';
 import { stepCollision } from '../systems/collision.js';
 import { stepContacts } from '../systems/contact.js';
 import { stepEnemyContacts } from '../systems/enemy-contact.js';
+import { LATCH_SHAKE_HISTORY, stepLatches } from '../systems/latch.js';
 import {
   ENEMY_FLAG_ELITE,
   ENEMY_MOTION_STRIDE,
@@ -903,6 +904,21 @@ export class GameSim {
   readonly projectiles: ProjectileStore;
   /** Poison clouds in the room (#401). Cleared on every room load. */
   readonly clouds = new CloudStore();
+
+  /**
+   * The player's shake-off state (#406, `sim/systems/latch.ts`), as plain
+   * typed arrays so the frame loop never boxes a number: the last non-zero
+   * movement direction a sharp change of direction is measured from, the
+   * ticks of the last few such changes (stored plus one, so zero is "none"), and
+   * `[latched bodies, ring cursor, reversals inside the window]`. Cleared on
+   * every room load — a room change cannot happen with a tick still on.
+   */
+  readonly latchHeading = new Float64Array(2);
+  readonly latchReversalTicks = new Int32Array(LATCH_SHAKE_HISTORY);
+  readonly latchState = new Int32Array(3);
+  /** Ticks the first-latch "shake it off" hint has left (#406). Never re-armed in a run once shown. */
+  private latchHintTicks = 0;
+  private latchHintShown = false;
 
   /** Foam and splash. Pooled, and drawn from the seeded cosmetic stream. */
   readonly particles: ParticleStore;
@@ -3176,6 +3192,9 @@ export class GameSim {
     this.world.flush();
     this.projectiles.clear();
     this.clouds.clear();
+    this.latchHeading.fill(0);
+    this.latchReversalTicks.fill(0);
+    this.latchState.fill(0);
     this.particles.clear();
     this.damageNumbers.clear();
     this.decals.clear();
@@ -3441,6 +3460,35 @@ export class GameSim {
    */
   get newlyEncounteredEnemyIds(): readonly string[] {
     return this.newEnemyTicks > 0 ? this.newEnemyIds : [];
+  }
+
+  /**
+   * Called by `latchOnPlayer` (#406) each time a body grabs on. The first
+   * time in a run it raises the "shake it off" hint for `tuning.latch.hintTicks`
+   * — the one mechanic on Floor 3 that asks for a new input pattern, so the
+   * one that gets told once. Ticked down deterministically like `toastTicks`.
+   */
+  noteLatch(): void {
+    if (this.latchHintShown) {
+      return;
+    }
+    this.latchHintShown = true;
+    this.latchHintTicks = Math.round(this.tuning.latch.hintTicks);
+  }
+
+  /** Whether the first-latch "shake it off" hint should be on screen (#406). */
+  get latchHintVisible(): boolean {
+    return this.latchHintTicks > 0;
+  }
+
+  /** Enemies riding on the player right now (#406) — as of the end of the last tick. */
+  get latchedEnemyCount(): number {
+    return this.latchState[0] ?? 0;
+  }
+
+  /** Sharp changes of direction inside the shake window, toward `tuning.latch.shakesRequired` (#406). */
+  get latchShakeCount(): number {
+    return this.latchState[2] ?? 0;
   }
 
   /**
@@ -6333,6 +6381,10 @@ export class GameSim {
     // each other apart is a separate pass from enemies pushing the player,
     // not a special case inside it.
     stepEnemyContacts(this);
+    // Last of the things that move bodies: a tick riding on the player is put
+    // back on them after every shove this tick, and the shake is read off the
+    // same input frame movement already consumed (#406).
+    stepLatches(this, input);
     // After collision, because a blast query reads this tick's broadphase —
     // the same grid `stepPickups` reuses just below.
     stepBombs(this);
@@ -6496,6 +6548,9 @@ export class GameSim {
     }
     if (this.newEnemyTicks > 0) {
       this.newEnemyTicks -= 1;
+    }
+    if (this.latchHintTicks > 0) {
+      this.latchHintTicks -= 1;
     }
     if (this.pedestalRevealTicks > 0) {
       this.pedestalRevealTicks -= 1;

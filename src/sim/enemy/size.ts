@@ -1,12 +1,17 @@
 /**
  * Enemy size classes.
  *
- * Four of them, because size is the first thing a player reads about something
+ * Five of them, because size is the first thing a player reads about something
  * walking at them and it has to mean something consistent: how hard it is to
  * hit, how far it flies when hit, whether it can be walked through, and what it
- * costs to touch. The names are the reference points — a mini is an Isaac fly,
- * a normal is a worm, a mid is heavy enough to stop you, a boss fills a corner
- * of the screen.
+ * costs to touch. The names are the reference points — a micro is a tick you
+ * can lose on the floor, a mini is an Isaac fly, a normal is a worm, a mid is
+ * heavy enough to stop you, a boss fills a corner of the screen.
+ *
+ * `micro` came last (#406, the Zecke): a body that rides on Alois once it
+ * latches has to be small enough to sit on his hat without hiding him, and a
+ * mini at 16 pixels across is half his width. It was added as id 4 rather
+ * than renumbering, so nothing keyed on the older ids moves.
  *
  * `boss` is its own class rather than a `mid` with a big sprite (`docs/
  * DECISIONS.md` #56): since #45 an authored pixel is an on-screen pixel, so a
@@ -26,14 +31,16 @@ export const EnemySize = {
   Normal: 1,
   Mid: 2,
   Boss: 3,
+  Micro: 4,
 } as const;
 
 export type EnemySizeId = (typeof EnemySize)[keyof typeof EnemySize];
 
 /** How content names a size class. Content is data; it does not import values. */
-export type EnemySizeName = 'mini' | 'normal' | 'mid' | 'boss';
+export type EnemySizeName = 'micro' | 'mini' | 'normal' | 'mid' | 'boss';
 
 export const ENEMY_SIZE_BY_NAME: Readonly<Record<EnemySizeName, EnemySizeId>> = {
+  micro: EnemySize.Micro,
   mini: EnemySize.Mini,
   normal: EnemySize.Normal,
   mid: EnemySize.Mid,
@@ -87,6 +94,10 @@ export interface EnemyProfile {
  * definition. An authored enemy states its own; see `EnemyDefinition`.
  */
 export const ENEMY_PROFILES: Readonly<Record<EnemySizeId, EnemyProfile>> = {
+  // Half a mini: 8 internal pixels across. Still heavier than the player, per
+  // the rule above, and harmless to touch — what a micro does, it does some
+  // other way (the Zecke's latch).
+  [EnemySize.Micro]: { radius: 2, footprint: 1.5, mass: 1.1, health: 1, contactDamage: 0 },
   [EnemySize.Mini]: { radius: 4, footprint: 3, mass: 1.2, health: 1, contactDamage: 1 },
   [EnemySize.Normal]: { radius: 7, footprint: 5, mass: 3, health: 2, contactDamage: 0 },
   [EnemySize.Mid]: { radius: 10, footprint: 7, mass: 6, health: 4, contactDamage: 2 },

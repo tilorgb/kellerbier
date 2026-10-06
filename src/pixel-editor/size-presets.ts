@@ -41,7 +41,7 @@ const SIZE_PRESETS: Readonly<Record<SpriteCategory, readonly SizePreset[]>> = {
   // Named after the thing they are actually for, since `docs/DECISIONS.md`
   // #45: a character canvas is its size on screen, so the useful starting
   // point is the `EnemySize` class the creature will be authored as. The
-  // three collider diameters are 16, 28 and 40 internal pixels
+  // four collider diameters are 8, 16, 28 and 40 internal pixels
   // (`sim/enemy/size.ts`'s `ENEMY_PROFILES`, doubled), and each preset is
   // that diameter as a square-ish body — which is the shape
   // `tests/content/sprite-scale.test.ts` will hold the finished sprite to.
@@ -53,6 +53,9 @@ const SIZE_PRESETS: Readonly<Record<SpriteCategory, readonly SizePreset[]>> = {
   // express neither, and was the reason a flat creature wanting more detail
   // had nowhere to spend it but width.
   character: [
+    // 16 tall rather than 8: a character canvas is never shorter than that
+    // (`tools/art/spec.mjs`), so a micro stands on the bottom rows.
+    { id: 'micro', label: 'Micro body (8×16)', width: 8, height: 16 },
     { id: 'mini', label: 'Mini body (16×16)', width: 16, height: 16 },
     { id: 'normal', label: 'Normal body (20×28)', width: 20, height: 28 },
     { id: 'mid', label: 'Mid body (40×40)', width: 40, height: 40 },

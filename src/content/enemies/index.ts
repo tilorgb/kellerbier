@@ -19,6 +19,7 @@ import { schimmelfleck, schimmelspore } from './schimmelfleck.js';
 import { shopkeeper } from './shopkeeper.js';
 import { traktor } from './traktor.js';
 import { zapfhahn } from './zapfhahn.js';
+import { zecke } from './zecke.js';
 
 /**
  * Every enemy in the game.
@@ -58,6 +59,7 @@ export const ENEMY_DEFINITIONS: readonly EnemyDefinition[] = [
   blaskapellePosaune,
   derLadewagen,
   fliegenpilz,
+  zecke,
 ];
 
 /**
@@ -100,4 +102,5 @@ export {
   shopkeeper,
   traktor,
   zapfhahn,
+  zecke,
 };

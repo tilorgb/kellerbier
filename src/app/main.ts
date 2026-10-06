@@ -1292,6 +1292,16 @@ async function boot(progress: BootProgress): Promise<void> {
   let villagerBarkLabel = '';
 
   /**
+   * The "shake it off" hint (#406), the first time a Zecke latches on in a
+   * run — the one Floor 3 mechanic that asks for an input pattern nothing
+   * else in the game uses. Driven by `sim.latchHintVisible`; sits a line
+   * below the villager bark so the two never stack on the same row.
+   */
+  const latchHint = new TextPlate(kit, { colour: HUD_PALETTE.toastText });
+  hudLayer.addChild(latchHint.view);
+  let latchHintLabel = '';
+
+  /**
    * A shop item's preview — "here is what this is," on touch, not a purchase.
    * Fixed HUD position rather than anchored to the item itself the way the
    * pedestal name plate is: a shop room is a bare floor with a handful of
@@ -1566,6 +1576,7 @@ async function boot(progress: BootProgress): Promise<void> {
     bossIntroPlate.place(centreX, Math.round(height * 0.16));
     pickupToast.place(centreX, Math.round(height * 0.2));
     villagerBark.place(centreX, Math.round(height * 0.12));
+    latchHint.place(centreX, Math.round(height * 0.26));
     shopPreview.place(centreX, Math.round(height * 0.85));
     machinePrompt.place(centreX, Math.round(height * 0.78));
     pedestalReveal.placeCentred(centreX, Math.round(height / 2));
@@ -2552,6 +2563,18 @@ async function boot(progress: BootProgress): Promise<void> {
         villagerBark.visible = false;
         villagerBarkLabel = '';
       }
+      if (sim.latchHintVisible) {
+        const label = t(preferences.locale, 'ui.hud.shakeOffHint');
+        if (label !== latchHintLabel) {
+          latchHintLabel = label;
+          latchHint.set(label);
+          latchHint.place(Math.round(uiFrame.width / 2), Math.round(uiFrame.height * 0.26));
+        }
+        latchHint.visible = true;
+      } else if (latchHint.visible) {
+        latchHint.visible = false;
+        latchHintLabel = '';
+      }
       const preview = sim.shopPreview;
       if (preview !== null) {
         const price = `${String(preview.price)} Biermarken`;
@@ -2930,9 +2953,15 @@ async function boot(progress: BootProgress): Promise<void> {
       sneezeState === null
         ? ''
         : `\nsneeze ${SNEEZE_PHASE_LABELS[sneezeState.charge] ?? '?'} ${String(sneezeState.timer)}  build-up ${sim.sneezeBuildUp.toFixed(2)}`;
+    // Zecke (#406): how many are riding on the player, and how far into the
+    // shake that throws them off — the numbers to watch while tuning it.
+    const latchLine =
+      sim.latchedEnemyCount === 0
+        ? ''
+        : `\nlatched ${String(sim.latchedEnemyCount)}  shakes ${String(sim.latchShakeCount)}/${String(sim.tuning.latch.shakesRequired)}`;
     hud.text = `seed ${String(RUN_SEED)}  ${character}  ${floorPlan.floorName}  room ${sim.roomId} (${currentRole})  doors ${roomState}${warmup}${keyHint}${bossGateHint}${bossGateState}  enemies ${String(sim.liveEnemyCount)}
   tick ${String(loop.tick)}  ${seconds}s  x${scale}${loop.paused ? '  PAUSED' : ''}
-hp ${String(hearts)}/${String(maxHearts)}  soul ${String(sim.playerSoulHealth)}  eternal ${String(sim.playerEternalHealth)}${invulnerable}${dead}${runState}${override}${promilleLine}${sneezeLine}
+hp ${String(hearts)}/${String(maxHearts)}  soul ${String(sim.playerSoulHealth)}  eternal ${String(sim.playerEternalHealth)}${invulnerable}${dead}${runState}${override}${promilleLine}${sneezeLine}${latchLine}
 shots ${String(shots.liveCount)}/${String(shots.capacity)}  particles ${String(
       particles.liveCount,
     )}/${String(particles.capacity)}${shots.overflows > 0 ? '  SHOT OVERFLOW' : ''}
@@ -3230,6 +3259,8 @@ WASD move   arrows aim and fire
     pickupToast.visible = false;
     villagerBarkLabel = '';
     villagerBark.visible = false;
+    latchHintLabel = '';
+    latchHint.visible = false;
     shopPreviewLabel = '';
     shopPreview.visible = false;
     machinePromptLabel = '';

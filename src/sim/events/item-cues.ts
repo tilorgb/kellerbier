@@ -15,6 +15,10 @@ export const ITEM_CUE_NAMES = [
   'sneeze',
   /** A Maß drunk while poisoned (#401): the poison is gone. Not an item's sound, but the same seam. */
   'poison-cleanse',
+  /** A Zecke latched on to the player (#406): something is on you. */
+  'zecke-latch',
+  /** The player shook every latched Zecke off (#406). */
+  'zecke-shake-off',
 ] as const;
 
 export type ItemCueName = (typeof ITEM_CUE_NAMES)[number];

@@ -616,6 +616,31 @@ export interface PoisonCloudTuning {
 }
 
 /**
+ * A body latched on to the player, and shaking it off (#406, the Zecke —
+ * `latchOnPlayer`, `sim/systems/latch.ts`).
+ *
+ * The shake is read off the raw movement input rather than off the player's
+ * velocity, so it is exactly reproducible from a replay's input log and does
+ * not depend on whether a wall or a crowd let the player actually move.
+ */
+export interface LatchTuning {
+  /** Extra room units between two footprints that still count as touching, for a body to latch. */
+  latchReach: number;
+  /** Degrees the movement input has to swing from one held direction to the next to count as one sharp change of direction. */
+  shakeAngleDegrees: number;
+  /** Ticks the reversals have to fall inside, counting back from the latest one. */
+  shakeWindowTicks: number;
+  /** Reversals inside the window that throw off every latched body. At most `LATCH_SHAKE_HISTORY`. */
+  shakesRequired: number;
+  /** Room units a shaken-off body lands from the player's edge. */
+  flingDistance: number;
+  /** Push, in room units per tick, a shaken-off body is flicked outward with on top of landing there. */
+  flingPush: number;
+  /** Ticks the "shake it off" hint stays up, the first time a body latches in a run. */
+  hintTicks: number;
+}
+
+/**
  * What a run that starts on a later floor (`?floor=N`, a sandbox run) arrives
  * with, per floor skipped — a stand-in for what a normal run would have found
  * on the way, so floor 3 is not played by a zero-item player.
@@ -1099,6 +1124,7 @@ export interface SimTuning {
   readonly pickup: PickupTuning;
   readonly projectileTags: ProjectileTagTuning;
   readonly poisonCloud: PoisonCloudTuning;
+  readonly latch: LatchTuning;
   readonly skipAhead: SkipAheadTuning;
   readonly itemPool: ItemPoolTuning;
   readonly character: CharacterTuning;
@@ -1441,6 +1467,16 @@ export const DEFAULT_POISON_CLOUD_TUNING: Readonly<PoisonCloudTuning> = {
   maxActive: 16,
 };
 
+export const DEFAULT_LATCH_TUNING: Readonly<LatchTuning> = {
+  latchReach: 2,
+  shakeAngleDegrees: 120,
+  shakeWindowTicks: 40,
+  shakesRequired: 3,
+  flingDistance: 6,
+  flingPush: 2.5,
+  hintTicks: 180,
+};
+
 export const DEFAULT_CHARACTER_TUNING: Readonly<CharacterTuning> = {
   // A Biermarke every one and a half seconds. Ludwig starts with a purse
   // (`content/characters/koenig-ludwig.ts`) that buys him about a minute of
@@ -1629,6 +1665,7 @@ export function createTuning(): SimTuning {
     pickup: { ...DEFAULT_PICKUP_TUNING },
     projectileTags: { ...DEFAULT_PROJECTILE_TAG_TUNING },
     poisonCloud: { ...DEFAULT_POISON_CLOUD_TUNING },
+    latch: { ...DEFAULT_LATCH_TUNING },
     skipAhead: { ...DEFAULT_SKIP_AHEAD_TUNING },
     itemPool: { ...DEFAULT_ITEM_POOL_TUNING },
     curse: { ...DEFAULT_CURSE_TUNING },

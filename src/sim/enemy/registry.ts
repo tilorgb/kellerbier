@@ -6,6 +6,7 @@ import {
   ENTRY_BEHAVIOURS,
   FIRING_BEHAVIOURS,
   type EnemyState,
+  LATCH_BEHAVIOURS,
   type FireAtPlayerBehaviour,
   type FireBurstBehaviour,
   type FireOnBeatBehaviour,
@@ -82,6 +83,10 @@ export const TransitionTrigger = {
   PlayerBeyond: 4,
   PropWithin: 5,
   PropBeyond: 6,
+  /** The body latched on to the player this tick (#406). */
+  OnLatched: 7,
+  /** The player shook the body off (#406). */
+  OnShakenOff: 8,
 } as const;
 
 export type TransitionTriggerId = (typeof TransitionTrigger)[keyof typeof TransitionTrigger];
@@ -179,6 +184,8 @@ export interface CompiledState {
   readonly emitCloud: CompiledCloud | null;
   /** Set for a state that swings a wide melee arc (Maibaum-Dieb, #199). `null` otherwise. */
   readonly meleeArc: CompiledMeleeArc | null;
+  /** True for a state carrying `latchOnPlayer` (#406): touching the player attaches the body. */
+  readonly latchesOnPlayer: boolean;
   /**
    * For an `approachProp` movement: the `DESTRUCTIBLE_PROP_KINDS` index it
    * heads for. -1 for every other movement, and read only when
@@ -348,6 +355,24 @@ export class EnemyRegistry {
     const states = definition.states.map((state) =>
       this.compileState(definition, state, stateIndexByName),
     );
+    // `onLatched`/`onShakenOff` can only ever fire for a body that latches
+    // somewhere (#406): written on an enemy that never does, it is a state
+    // machine waiting forever on a signal nothing sends.
+    if (!states.some((state) => state.latchesOnPlayer)) {
+      for (const state of states) {
+        for (const transition of state.transitions) {
+          if (
+            transition.trigger === TransitionTrigger.OnLatched ||
+            transition.trigger === TransitionTrigger.OnShakenOff
+          ) {
+            throw new Error(
+              `${where} state "${state.name}" waits on onLatched/onShakenOff, ` +
+                `but no state of it uses "latchOnPlayer"`,
+            );
+          }
+        }
+      }
+    }
 
     return {
       id: definition.id,
@@ -388,6 +413,7 @@ export class EnemyRegistry {
     let emitCloud: CompiledCloud | null = null;
     let meleeArc: CompiledMeleeArc | null = null;
     let grabProp: { kind: number; reach: number } | null = null;
+    let latchesOnPlayer = false;
 
     for (const behaviour of state.behaviours) {
       const name: BehaviourName = behaviour.behaviour;
@@ -433,6 +459,10 @@ export class EnemyRegistry {
           direction: swing.direction === -1 ? -1 : 1,
           weapon: swing.weapon ?? null,
         };
+        continue;
+      }
+      if (LATCH_BEHAVIOURS.includes(name)) {
+        latchesOnPlayer = true;
         continue;
       }
       if (FIRING_BEHAVIOURS.includes(name)) {
@@ -604,6 +634,12 @@ export class EnemyRegistry {
       if ('onBlocked' in transition) {
         return { trigger: TransitionTrigger.OnBlocked, value: 0, to, propKind: -1 };
       }
+      if ('onLatched' in transition) {
+        return { trigger: TransitionTrigger.OnLatched, value: 0, to, propKind: -1 };
+      }
+      if ('onShakenOff' in transition) {
+        return { trigger: TransitionTrigger.OnShakenOff, value: 0, to, propKind: -1 };
+      }
       if ('whenPlayerWithin' in transition) {
         return {
           trigger: TransitionTrigger.PlayerWithin,
@@ -650,6 +686,7 @@ export class EnemyRegistry {
       detonate,
       emitCloud,
       meleeArc,
+      latchesOnPlayer,
       approachPropKind,
       grabProp,
       splits,
