@@ -1549,7 +1549,7 @@ export interface EnemyTelegraphShapeInfo {
   angle: number;
   /** The swing's full angular width in radians. Arc only. */
   arc: number;
-  /** The real extent at progress 1: the swing's reach for Arc, the blast radius for Ground. Unused for Ring/Line. */
+  /** The real extent at progress 1: the swing's reach for Arc, the blast radius for Ground, the cloud's radius for a Ring winding up an `emitCloud` (0 for any other Ring). Unused for Line. */
   reach: number;
 }
 
@@ -1634,6 +1634,10 @@ export function enemyTelegraphShape(
   out.y = selfY;
   out.angle = 0;
   out.arc = 0;
-  out.reach = 0;
+  // A wind-up into a poison cloud (#405) grows its ring out to the cloud's
+  // own radius, so "will that reach me" is answered by the ring rather than
+  // guessed from the body. Zero keeps the body-sized ring every other
+  // telegraph draws.
+  out.reach = follow?.emitCloud?.radius ?? 0;
   return true;
 }

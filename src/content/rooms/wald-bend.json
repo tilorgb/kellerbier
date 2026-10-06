@@ -59,6 +59,11 @@
               "enemyId": "bierratte",
               "minFloor": 1,
               "maxFloor": 7
+            },
+            {
+              "enemyId": "fliegenpilz",
+              "minFloor": 3,
+              "maxFloor": 3
             }
           ]
         }
@@ -117,6 +122,11 @@
               "enemyId": "bierratte",
               "minFloor": 1,
               "maxFloor": 7
+            },
+            {
+              "enemyId": "fliegenpilz",
+              "minFloor": 3,
+              "maxFloor": 3
             }
           ]
         }
@@ -187,6 +197,11 @@
               "enemyId": "bierratte",
               "minFloor": 1,
               "maxFloor": 7
+            },
+            {
+              "enemyId": "fliegenpilz",
+              "minFloor": 3,
+              "maxFloor": 3
             }
           ]
         }

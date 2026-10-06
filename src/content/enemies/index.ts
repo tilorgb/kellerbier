@@ -8,6 +8,7 @@ import { derRattenkoenig } from './der-rattenkoenig.js';
 import { derStier, maibaumDieb } from './der-stier.js';
 import { blaskapellePosaune, blaskapelleTrompete, blaskapelleTuba } from './die-blaskapelle.js';
 import { dieZapfhahnOrgel } from './die-zapfhahn-orgel.js';
+import { fliegenpilz } from './fliegenpilz.js';
 import { gartenzwerg } from './gartenzwerg.js';
 import { gockel } from './gockel.js';
 import { grosseKellerassel, kellerasselSegment } from './grosse-kellerassel.js';
@@ -56,6 +57,7 @@ export const ENEMY_DEFINITIONS: readonly EnemyDefinition[] = [
   blaskapelleTrompete,
   blaskapellePosaune,
   derLadewagen,
+  fliegenpilz,
 ];
 
 /**
@@ -84,6 +86,7 @@ export {
   derStier,
   dieZapfhahnOrgel,
   fasssplitter,
+  fliegenpilz,
   gartenzwerg,
   gockel,
   grosseKellerassel,

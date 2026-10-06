@@ -90,6 +90,13 @@ export const ENTITY_PALETTE = {
    * reddens whatever the boss's own palette is.
    */
   bossTelegraphTint: 0xff5a44,
+  /**
+   * The green a `telegraphLook: 'bloat'` body (#405) glows over the last
+   * third of its wind-up — the Fliegenpilz about to deflate in poison. The
+   * same green `HUD_PALETTE.poison` and the poisoned player use, so the
+   * warning and what it warns about read as one colour.
+   */
+  bloatTelegraphGlow: 0x8fbf3a,
   /** Tint for a pickup whose kind failed to resolve. Should never be seen; a loud colour if it is. */
   unknownPickupTint: 0xff00ff,
   /** What a placed Bierfassl reddens toward as its fuse burns down (#208) — the same hot red a boss's own wind-up uses, so "about to go off" reads as one consistent warning across the game. */

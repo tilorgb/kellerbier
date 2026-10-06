@@ -633,4 +633,5 @@ export const ENEMY_SFX_CATEGORY: Readonly<Record<string, EnemySfxCategory>> = {
   'die-blaskapelle-trompete': 'oompah',
   'die-blaskapelle-posaune': 'oompah',
   'der-ladewagen': 'metal',
+  fliegenpilz: 'squelch',
 };

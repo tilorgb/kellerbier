@@ -75,6 +75,12 @@ function hazardBlinkAlpha(nowMs: number, fuse: number, ringPulses: boolean): num
   const blink = ringPulses ? Math.sin(nowMs * BOMB_BLINK_RATE * (1 + fuse * 2)) * 0.5 + 0.5 : 0.5;
   return BOMB_TELEGRAPH_MIN_ALPHA + blink * BOMB_TELEGRAPH_ALPHA_SWING;
 }
+/** How much bigger a `telegraphLook: 'bloat'` body (#405) stands at the end of its wind-up. */
+const BLOAT_SWELL = 0.45;
+/** The telegraph fraction a bloating body starts glowing green at — its last third. */
+const BLOAT_GLOW_FROM = 2 / 3;
+/** The emissive strength of that glow at the end of the wind-up. */
+const BLOAT_GLOW_STRENGTH = 0.85;
 const LABEL_POINT = { x: 0, y: 0 };
 /** How far above the floor a pickup hovers, so its shadow separates it from the ground. */
 const PICKUP_LIFT = 1.5;
@@ -252,11 +258,13 @@ export class EntityView {
       const y = lerp(sim.previousY(index), sim.positionY(index), alpha);
       const footZ = y + footprint;
 
-      const enemyId = isEnemyBody
-        ? sim.enemies.at(sim.enemy.data[index * ENEMY_STRIDE] ?? 0).id
+      const compiledEnemy = isEnemyBody
+        ? sim.enemies.at(sim.enemy.data[index * ENEMY_STRIDE] ?? 0)
         : null;
+      const enemyId = compiledEnemy === null ? null : compiledEnemy.id;
       const isBoss = enemyId !== null && this.art.bossIds.has(enemyId);
       const telegraph = isEnemyBody ? enemyTelegraphProgress(sim, index) : 0;
+      const bloat = compiledEnemy?.telegraphBloat === true ? telegraph : 0;
       const bossTelegraph = isBoss ? telegraph : 0;
       const bombFuse = isBomb ? bombFuseProgress(sim, index) : 0;
 
@@ -299,7 +307,14 @@ export class EntityView {
       used += 1;
       billboard.visible = true;
       billboard.setTexture(texture, mirror);
-      billboard.flash = !isPickup && (flash[index] ?? 0) > 0;
+      const flashing = !isPickup && (flash[index] ?? 0) > 0;
+      billboard.flash = flashing;
+      if (bloat > BLOAT_GLOW_FROM && !flashing) {
+        // The green comes in over the last third of the swell (#405), on the
+        // emissive channel so a lantern-dark room (#404) cannot swallow it.
+        const glow = (bloat - BLOAT_GLOW_FROM) / (1 - BLOAT_GLOW_FROM);
+        billboard.setGlow(ENTITY_PALETTE.bloatTelegraphGlow, glow * BLOAT_GLOW_STRENGTH);
+      }
       billboard.tint = isPickup
         ? pickupSprite !== undefined
           ? ENTITY_PALETTE.normalTint
@@ -338,7 +353,10 @@ export class EntityView {
       // floor — it does not bob. A per-frame sine here made every static
       // sprite in a still room read as "breathing".
       const lift = isPickup ? PICKUP_LIFT : 0;
-      billboard.place(x, 0.2 + lift, footZ, this.lean, gridScale * pop);
+      // A bloating body (#405) swells over its wind-up and snaps back the
+      // tick the telegraph ends — the deflate is the burst.
+      const swell = 1 + BLOAT_SWELL * bloat;
+      billboard.place(x, 0.2 + lift, footZ, this.lean, gridScale * pop * swell);
 
       const priced = isPickup && (mask & sim.pickupPrice.bit) !== 0;
       if (isPickup && (priced || pickupSprite === undefined)) {
@@ -399,7 +417,10 @@ export class EntityView {
           default: {
             const ring = this.ringAt(ringsUsed);
             ringsUsed += 1;
-            const ringRadius = hurtRadius * (1 + (TELEGRAPH_SCALE - 1) * info.progress);
+            const ringRadius =
+              info.reach > 0
+                ? lerp(hurtRadius, info.reach, info.progress)
+                : hurtRadius * (1 + (TELEGRAPH_SCALE - 1) * info.progress);
             ring.place(info.x, info.y, ringRadius, shapeAlpha);
             break;
           }
