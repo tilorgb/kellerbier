@@ -67,16 +67,24 @@
     }
   ],
   "pickupSpawns": [],
-  "hazards": [],
+  "hazards": [
+    {
+      "x": 0,
+      "y": 60,
+      "width": 240,
+      "height": 24,
+      "type": "waldbach"
+    }
+  ],
   "decorativeProps": [
     {
-      "x": 40,
-      "y": 72,
+      "x": 24,
+      "y": 120,
       "type": "fern"
     },
     {
-      "x": 200,
-      "y": 72,
+      "x": 216,
+      "y": 24,
       "type": "glow-mushrooms"
     }
   ],

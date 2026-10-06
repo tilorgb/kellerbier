@@ -444,6 +444,19 @@ export class DebugOverlay {
         0.6,
       );
     }
+    // Waldbach stream rects (#403) — the exact zone that slows a wading body,
+    // so "why am I slow here" has an answer on screen.
+    for (let stream = 0; stream < room.streamCount; stream++) {
+      const base = stream * BLOCK_STRIDE;
+      lines.rect(
+        room.streams[base] ?? 0,
+        room.streams[base + 1] ?? 0,
+        room.streams[base + 2] ?? 0,
+        room.streams[base + 3] ?? 0,
+        0x5fd0e6,
+        0.7,
+      );
+    }
     lines.end();
   }
 

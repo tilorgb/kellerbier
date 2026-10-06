@@ -27,6 +27,10 @@ export function stepBodies(sim: GameSim): void {
   const body = sim.body.data;
   const collision = sim.collision.data;
   const damping = sim.tuning.movement.pushDamping;
+  const room = sim.room;
+  const streamCount = room.streamCount;
+  const streamFactor = sim.tuning.enemy.streamSpeedFactor;
+  const enemyMask = sim.enemyMask;
 
   const highWater = world.highWater;
   for (let index = 0; index < highWater; index++) {
@@ -49,15 +53,30 @@ export function stepBodies(sim: GameSim): void {
 
     const pushX = push[pairBase] ?? 0;
     const pushY = push[pairBase + 1] ?? 0;
-    const velocityX = velocity[pairBase] ?? 0;
-    const velocityY = velocity[pairBase + 1] ?? 0;
+    let velocityX = velocity[pairBase] ?? 0;
+    let velocityY = velocity[pairBase + 1] ?? 0;
 
     if (pushX === 0 && pushY === 0 && velocityX === 0 && velocityY === 0) {
       continue;
     }
 
+    // Floor 3's Waldbach (#403): an enemy wading moves at a fraction of the
+    // speed its state asked for. Scaled here, at integration, rather than
+    // written back into `velocity` — not every movement primitive rewrites
+    // its velocity every tick (a wander only turns now and then), so scaling
+    // the stored value would compound tick after tick. The push channel is
+    // left alone: a knockback is not something the water should soften.
+    if (
+      streamCount > 0 &&
+      ((masks[index] ?? 0) & enemyMask) === enemyMask &&
+      room.isInStream(transform[transformBase] ?? 0, transform[transformBase + 1] ?? 0)
+    ) {
+      velocityX *= streamFactor;
+      velocityY *= streamFactor;
+    }
+
     const blocked = moveBody(
-      sim.room,
+      room,
       transform,
       index,
       velocityX + pushX,
@@ -74,7 +93,7 @@ export function stepBodies(sim: GameSim): void {
     }
     // Read on the next tick by an `onBlocked` transition, which is how a charge
     // ends against a wall rather than grinding along it until its timer runs out.
-    if (blocked !== 0 && ((masks[index] ?? 0) & sim.enemyMask) === sim.enemyMask) {
+    if (blocked !== 0 && ((masks[index] ?? 0) & enemyMask) === enemyMask) {
       markEnemyBlocked(sim, index);
     }
 

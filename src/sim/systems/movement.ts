@@ -75,7 +75,7 @@ export function stepPlayerMovement(sim: GameSim, input: Readonly<InputFrame>): v
   // deceleration still time off the untouched `tuning.maxSpeed` below (via
   // `accelerationOf`/`decelerationOf`) — a temporary top-speed penalty should
   // not also warp how many ticks it takes to reach it.
-  const maxSpeed = sim.stats.value(StatId.MoveSpeed);
+  let maxSpeed = sim.stats.value(StatId.MoveSpeed);
   const driftScale = sim.promilleDriftScale;
   // König Ludwig (#47): furniture and puddles are both things on the floor,
   // and he is not on the floor. Walls still stop him — see
@@ -87,6 +87,13 @@ export function stepPlayerMovement(sim: GameSim, input: Readonly<InputFrame>): v
   // loop follows.
   const puddleSlip =
     !flying && sim.puddleImmuneTicks <= 0 && sim.room.isOnPuddle(x, y) ? tuning.puddleSlip : 0;
+  // Floor 3's Waldbach (#403): wading caps top speed, read on the same
+  // "where the tick began" footing as the puddle above. A cap rather than a
+  // drag on acceleration, so stepping in reads at once as "the water is
+  // holding me" — the speed clamp below trims the excess the first tick.
+  if (!flying && sim.room.streamCount > 0 && sim.room.isInStream(x, y)) {
+    maxSpeed *= tuning.streamSpeedFactor;
+  }
   velocityX = approachAxis(
     velocityX,
     inputX * maxSpeed,

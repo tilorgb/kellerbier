@@ -48,13 +48,13 @@
       "group": "g"
     },
     {
-      "x": 120,
-      "y": 108,
+      "x": 144,
+      "y": 132,
       "group": "g"
     },
     {
-      "x": 40,
-      "y": 72,
+      "x": 24,
+      "y": 36,
       "group": "g"
     }
   ],
@@ -72,10 +72,32 @@
     }
   ],
   "pickupSpawns": [],
-  "hazards": [],
+  "hazards": [
+    {
+      "x": 0,
+      "y": 64,
+      "width": 128,
+      "height": 16,
+      "type": "waldbach"
+    },
+    {
+      "x": 112,
+      "y": 64,
+      "width": 16,
+      "height": 64,
+      "type": "waldbach"
+    },
+    {
+      "x": 112,
+      "y": 112,
+      "width": 128,
+      "height": 16,
+      "type": "waldbach"
+    }
+  ],
   "decorativeProps": [
     {
-      "x": 120,
+      "x": 216,
       "y": 72,
       "type": "glow-mushrooms"
     }

@@ -43,7 +43,10 @@ export class FootstepTracker {
     this.distanceSinceStep += distance;
     if (this.distanceSinceStep >= STRIDE_DISTANCE) {
       this.distanceSinceStep %= STRIDE_DISTANCE;
-      playSfx('footstep');
+      // Wading in Floor 3's Waldbach (#403) splashes instead — unless the
+      // player is flying over it, the same rule the slow follows.
+      const wading = !sim.playerFlies && sim.room.streamCount > 0 && sim.room.isInStream(x, y);
+      playSfx(wading ? 'footstep-wade' : 'footstep');
     }
   }
 }

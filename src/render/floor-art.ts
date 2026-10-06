@@ -272,6 +272,8 @@ export const PROP_TILE_NAMES: Readonly<Record<string, string | null>> = {
   maypole: null,
   pedestal: null,
   puddle: null,
+  // Floor 3's stream (#403), drawn from the room's `streams` by `Scenery`.
+  waldbach: null,
   trellis: null,
   'hop-trellis': null,
   // A shop's Losbrunnen anchor (#238) — drawn by `MachineView`, the same

@@ -33,6 +33,7 @@ import { ACTOR_LAYER, OCCLUDER_LAYER } from './layers.js';
 import type { Lighting } from './lighting.js';
 import type { MaterialCache } from './material-cache.js';
 import { pixelRuns, pixelShapeGeometry, plotPixelLine } from './pixel-shape.js';
+import { buildStreams } from './stream.js';
 
 /**
  * The room as a place: floor, walls with height, doorways, obstacles, props,
@@ -1248,6 +1249,9 @@ export class Scenery {
       rim.position.set(cx, DECAL_HEIGHT + 0.02, cz);
       this.group.add(rim);
     }
+    // Floor 3's Waldbach (#403): flowing water edge to edge, banked wherever
+    // it meets dry floor — see `stream.ts`.
+    buildStreams(room, this.group);
     // A hop trellis blocks a shot's line but not a body: dense enough to hide
     // behind, so it stands, and green enough to read as hops. Built as a row
     // of posts with a top rail and a bine strung between them — not the solid

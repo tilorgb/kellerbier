@@ -18,6 +18,14 @@ export const MAX_ROOM_PUDDLES = 16;
 export const MAX_ROOM_SIGHT_BLOCKS = 16;
 
 /**
+ * Waldbach stream rects one room may hold (#403). A stream is one band edge to
+ * edge, or a bend of two or three rects; a multi-cell room carries one rect
+ * per sub-cell the band crosses (a `T` is three cells wide), so this leaves
+ * room for two streams across the widest shape.
+ */
+export const MAX_ROOM_STREAMS = 8;
+
+/**
  * How wide a door gap is, in room units, centred on its wall.
  *
  * Single source of truth for both the door's drawn gap (`render/world/scenery.ts`) and
@@ -153,6 +161,22 @@ export class RoomGeometry {
   readonly sightBlocks = new Float32Array(MAX_ROOM_SIGHT_BLOCKS * BLOCK_STRIDE);
 
   private sightBlocks_ = 0;
+
+  /**
+   * Floor 3's Waldbach (#403): a forest stream running edge to edge across a
+   * room. Walkable but slow for anything on its feet; shots fly over it
+   * untouched. Flat `[minX, minY, maxX, maxY]` runs read `streamCount *
+   * BLOCK_STRIDE` deep — public, like `puddles`, because the render layer
+   * draws the water from it and the Bachforelle (#408) needs to know where
+   * the water it lives in actually is.
+   *
+   * Its own array for the reason `puddles` gives: a stream is neither solid
+   * nor slick, it is a speed cap, and folding it into the puddle array would
+   * make every puddle read pay for a discriminant it never wants.
+   */
+  readonly streams = new Float32Array(MAX_ROOM_STREAMS * BLOCK_STRIDE);
+
+  private streams_ = 0;
 
   constructor(
     minX: number,
@@ -344,6 +368,44 @@ export class RoomGeometry {
         x <= (puddles[base + 2] ?? 0) &&
         y >= (puddles[base + 1] ?? 0) &&
         y <= (puddles[base + 3] ?? 0)
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** Adds a Waldbach stream rect. Setup-time only, same contract as `addBlock`. */
+  addStream(minX: number, minY: number, maxX: number, maxY: number): void {
+    if (this.streams_ >= MAX_ROOM_STREAMS) {
+      throw new RangeError(`A room holds at most ${String(MAX_ROOM_STREAMS)} stream rects`);
+    }
+    const base = this.streams_ * BLOCK_STRIDE;
+    this.streams[base] = minX;
+    this.streams[base + 1] = minY;
+    this.streams[base + 2] = maxX;
+    this.streams[base + 3] = maxY;
+    this.streams_ += 1;
+  }
+
+  get streamCount(): number {
+    return this.streams_;
+  }
+
+  /**
+   * True when `(x, y)` stands in the Waldbach. A body's centre, like
+   * `isOnPuddle` — wading is about where your feet are, not whether your
+   * shoulder brushes the bank.
+   */
+  isInStream(x: number, y: number): boolean {
+    const streams = this.streams;
+    for (let stream = 0; stream < this.streams_; stream++) {
+      const base = stream * BLOCK_STRIDE;
+      if (
+        x >= (streams[base] ?? 0) &&
+        x <= (streams[base + 2] ?? 0) &&
+        y >= (streams[base + 1] ?? 0) &&
+        y <= (streams[base + 3] ?? 0)
       ) {
         return true;
       }
