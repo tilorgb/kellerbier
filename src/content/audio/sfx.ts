@@ -468,6 +468,19 @@ const footstep: SfxDefinition = {
   },
 };
 
+// Floor 3's Waldbach (#403): the stride cue while wading — a longer, brighter
+// splash in place of the dull thud, so the ear knows the water before the
+// eye has found the bank.
+const footstepWade: SfxDefinition = {
+  id: 'footstep-wade',
+  description: "The player's foot lands in the Waldbach — a splash per stride.",
+  noise: {
+    filter: { type: 'bandpass', frequencyHz: 1400, q: 0.8 },
+    durationSeconds: 0.12,
+    gain: 0.16,
+  },
+};
+
 const uiOpen: SfxDefinition = {
   sample: {
     assetId: 'click',
@@ -575,6 +588,7 @@ export const SFX_DEFINITIONS: readonly SfxDefinition[] = [
   secretReveal,
   floorCardWhoosh,
   footstep,
+  footstepWade,
   uiOpen,
   uiClose,
   uiConfirm,

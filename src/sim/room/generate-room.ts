@@ -192,14 +192,20 @@ const COVER_MATERIAL_BY_TAG: Readonly<Record<string, RoomObstacleMaterial>> = {
 /**
  * The floor-flavour hazard a generated room may carry, per floor tag — Floor
  * 1's slick puddle (#35), Floor 2's hop-trellis that blocks a shot but not a
- * step (#37). Both are the only two hazard types with sim behaviour today
- * (`sim/room/template.ts`), and both are walk-through, so neither can wall off
- * a route. A tag with no entry gets no generated hazard.
+ * step (#37), Floor 3's Waldbach stream (#403). All three are walk-through,
+ * so none can wall off a route. A tag with no entry gets no generated hazard.
+ *
+ * The Waldbach is placed differently from the other two — one band edge to
+ * edge across the whole room rather than a 2×2 patch (`placeStream`).
  */
 const HAZARD_BY_TAG: Readonly<Record<string, string>> = {
   cellar: 'puddle',
   rural: 'trellis',
+  wald: 'waldbach',
 };
+
+/** The hazard type `placeHazards` lays as a room-crossing band instead of a patch. */
+const STREAM_HAZARD = 'waldbach';
 
 /**
  * Every prop / hazard type the generator can place, deduped — the seam
@@ -1034,6 +1040,20 @@ function pickPickup(
   return null;
 }
 
+/**
+ * One generated hazard rect, in grid tiles. `cols`/`rows` is its size — a
+ * patch is 2×2, a stream piece is a whole cell wide (or tall) and 1–2 thick.
+ * Always starts inside, and stays inside, one single-screen cell, so
+ * `subLayoutFor` can hand it to exactly one sub-layout.
+ */
+interface PlacedHazard {
+  readonly col: number;
+  readonly row: number;
+  readonly cols: number;
+  readonly rows: number;
+  readonly type: string;
+}
+
 /** Maybe one 2×2-tile hazard patch per ~4 cells — walk-through, so no route check. */
 function placeHazards(
   ctx: RoomGenContext,
@@ -1042,13 +1062,23 @@ function placeHazards(
   doors: readonly DoorApproach[],
   cellCount: number,
   params: RoomGenTuning,
-): { readonly col: number; readonly row: number; readonly type: string }[] {
+): PlacedHazard[] {
   const type = HAZARD_BY_TAG[ctx.floorTag];
   if (type === undefined) {
     return [];
   }
   const wanted = 1 + Math.floor((cellCount - 1) / 2);
-  const patches: { col: number; row: number; type: string }[] = [];
+  if (type === STREAM_HAZARD) {
+    // A stream is one feature of the whole room, not a patch per few cells —
+    // the same number of rolls a patch gets, but the first hit is the only one.
+    for (let attempt = 0; attempt < wanted; attempt++) {
+      if (ctx.rng.chance(params.hazardChance)) {
+        return placeStream(ctx, grid, type);
+      }
+    }
+    return [];
+  }
+  const patches: PlacedHazard[] = [];
   for (let attempt = 0; attempt < wanted; attempt++) {
     if (!ctx.rng.chance(params.hazardChance)) {
       continue;
@@ -1087,10 +1117,90 @@ function placeHazards(
     }
     if (spots.length > 0) {
       const spot = ctx.rng.pick(spots);
-      patches.push({ col: spot.col, row: spot.row, type });
+      patches.push({ col: spot.col, row: spot.row, cols: 2, rows: 2, type });
     }
   }
   return patches;
+}
+
+/**
+ * Floor 3's Waldbach (#403): one band, 1–2 tiles thick, running edge to edge
+ * across the room — horizontal across every real cell in one row of the
+ * shape's grid, or vertical down every real cell in one column. Emitted as one
+ * piece per sub-cell it crosses, each spanning that cell wall to wall, so the
+ * glued pieces read as one stream.
+ *
+ * No route check, for the same reason a patch needs none: the stream is
+ * walkable. Cover the band runs over is cleared instead — a stream with a log
+ * pile standing in the middle of it reads as a rendering bug, not a ford, and
+ * clearing tiles can only ever open a route, never close one.
+ */
+function placeStream(ctx: RoomGenContext, grid: RoomGrid, type: string): PlacedHazard[] {
+  const gridCols = grid.cols / ROOM_COLUMNS;
+  const gridRows = grid.rows / ROOM_ROWS;
+  const thickness = ctx.rng.nextInt(1, 3);
+  const horizontal = ctx.rng.chance(0.5);
+  const isReal = (cellCol: number, cellRow: number): boolean =>
+    grid.voidMask[tileIndex(grid, cellCol * ROOM_COLUMNS, cellRow * ROOM_ROWS)] !== true;
+  const pieces: PlacedHazard[] = [];
+  if (horizontal) {
+    const cellRow = ctx.rng.nextInt(0, gridRows);
+    // Two tiles clear of the north and south walls, so the band never hugs
+    // a wall's own margin and always has dry ground on both banks.
+    const localRow = ctx.rng.nextInt(2, ROOM_ROWS - 1 - thickness);
+    const row = cellRow * ROOM_ROWS + localRow;
+    for (let cellCol = 0; cellCol < gridCols; cellCol++) {
+      if (isReal(cellCol, cellRow)) {
+        pieces.push({
+          col: cellCol * ROOM_COLUMNS,
+          row,
+          cols: ROOM_COLUMNS,
+          rows: thickness,
+          type,
+        });
+      }
+    }
+  } else {
+    const cellCol = ctx.rng.nextInt(0, gridCols);
+    const localCol = ctx.rng.nextInt(2, ROOM_COLUMNS - 1 - thickness);
+    const col = cellCol * ROOM_COLUMNS + localCol;
+    for (let cellRow = 0; cellRow < gridRows; cellRow++) {
+      if (isReal(cellCol, cellRow)) {
+        pieces.push({ col, row: cellRow * ROOM_ROWS, cols: thickness, rows: ROOM_ROWS, type });
+      }
+    }
+  }
+  for (const piece of pieces) {
+    for (let row = piece.row; row < piece.row + piece.rows; row++) {
+      for (let col = piece.col; col < piece.col + piece.cols; col++) {
+        setSolid(grid, col, row, false);
+      }
+    }
+  }
+  return pieces;
+}
+
+/** True when tile `(col, row)` lies under any of `hazards`' stream pieces. */
+function inStream(hazards: readonly PlacedHazard[], col: number, row: number): boolean {
+  return hazards.some(
+    (hazard) =>
+      hazard.type === STREAM_HAZARD &&
+      col >= hazard.col &&
+      col < hazard.col + hazard.cols &&
+      row >= hazard.row &&
+      row < hazard.row + hazard.rows,
+  );
+}
+
+/** `candidates` minus any tile under a stream — a barrel stood in the Waldbach reads as a bug. */
+function dryTiles(
+  candidates: readonly PlacedTile[],
+  hazards: readonly PlacedHazard[],
+): PlacedTile[] {
+  if (!hazards.some((hazard) => hazard.type === STREAM_HAZARD)) {
+    return candidates.slice();
+  }
+  return candidates.filter((tile) => !inStream(hazards, tile.col, tile.row));
 }
 
 /** Min px between a prop's tile centre and an enemy / pickup — the prop is a 10px body. */
@@ -1205,7 +1315,7 @@ function subLayoutFor(
   cell: Cell,
   enemies: readonly PlacedEnemy[],
   pickup: PlacedTile | null,
-  hazards: readonly { readonly col: number; readonly row: number; readonly type: string }[],
+  hazards: readonly PlacedHazard[],
   props: readonly PlacedProp[],
   floorTag: string,
 ): RoomSubLayout {
@@ -1243,8 +1353,8 @@ function subLayoutFor(
     .map((hazard) => ({
       x: (hazard.col - minCol) * ROOM_TILE_UNITS,
       y: (hazard.row - minRow) * ROOM_TILE_UNITS,
-      width: 2 * ROOM_TILE_UNITS,
-      height: 2 * ROOM_TILE_UNITS,
+      width: hazard.cols * ROOM_TILE_UNITS,
+      height: hazard.rows * ROOM_TILE_UNITS,
       type: hazard.type,
     }));
 
@@ -1283,7 +1393,16 @@ export function generateRoom(
     ? pickPickup(spec.rng.shuffle(candidates.slice()), enemies)
     : null;
   const hazards = placeHazards(spec, layout.grid, layout.distance, approaches, 1, params);
-  const props = placeProps(spec, layout.grid, candidates, enemies, pickup, approaches, 1, params);
+  const props = placeProps(
+    spec,
+    layout.grid,
+    dryTiles(candidates, hazards),
+    enemies,
+    pickup,
+    approaches,
+    1,
+    params,
+  );
 
   const sub = subLayoutFor(
     layout.grid,
@@ -1367,7 +1486,7 @@ export function generateMultiCellRoom(
   const props = placeProps(
     spec,
     layout.grid,
-    candidates,
+    dryTiles(candidates, hazards),
     enemies,
     pickup,
     approaches,

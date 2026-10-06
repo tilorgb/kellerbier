@@ -27,6 +27,7 @@ import { ProgramPins } from './world/program-pins.js';
 import { RoomPrewarm } from './world/room-prewarm.js';
 import { type DecorativeProp, type DoorState, Scenery } from './world/scenery.js';
 import { SceneryCache } from './world/scenery-cache.js';
+import { advanceStreamFlow } from './world/stream.js';
 
 /**
  * The game as a scene: everything the player sees in the room, and the fixed
@@ -606,6 +607,7 @@ export class GameView {
     }
 
     this.lighting.sync(sim.tick);
+    advanceStreamFlow(nowMs);
     this.decals.sync();
     this.entities.sync(alpha, nowMs, this.projectPoint);
     this.pedestals.sync();

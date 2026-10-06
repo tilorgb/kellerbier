@@ -83,6 +83,14 @@ export interface MovementTuning {
    */
   puddleSlip: number;
   /**
+   * Floor 3's Waldbach (#403): the player's top speed while wading, as a
+   * fraction of their dry-ground top speed. A cap, not a drag — it reads
+   * through `sim.stats`' Move Speed like everything else, so a speed item
+   * still helps in the water by the same proportion. Flying characters skip
+   * it, the same rule as puddles.
+   */
+  streamSpeedFactor: number;
+  /**
    * Ticks a player has to keep walking into an open, unlocked door before the
    * room actually changes.
    *
@@ -323,6 +331,15 @@ export interface EnemyTuning {
   telegraphScale: number;
   /** Multiplier on the gap between volleys. Above 1 is slower firing. */
   fireIntervalScale: number;
+  /**
+   * Floor 3's Waldbach (#403): an enemy's speed while wading, as a fraction
+   * of its own authored speed. The same world rule the player lives by —
+   * water slows what walks in it — kept separate so a balance pass can tune
+   * how much a stream protects the player without retuning how much it
+   * costs them. Applied at integration (`sim/systems/bodies.ts`), so a
+   * knockback push is never slowed.
+   */
+  streamSpeedFactor: number;
   /** Multiplier on the speed of everything enemies fire. */
   projectileSpeedScale: number;
   /**
@@ -1119,6 +1136,9 @@ export const DEFAULT_MOVEMENT_TUNING: Readonly<MovementTuning> = {
   // strong enough to read as "the floor changed" the instant a player's
   // shoe touches one, short of throwing them somewhere they didn't aim.
   puddleSlip: 2,
+  // Just over half speed: clearly slower the moment a foot is wet, without
+  // turning a room-wide stream into a wall the player cannot cross under fire.
+  streamSpeedFactor: 0.55,
   // A third of a second at 60 ticks/second — long enough to read as a couple
   // of steps into the frame, short enough that it never feels like the door
   // is refusing to open.
@@ -1195,6 +1215,9 @@ export const DEFAULT_ENEMY_TUNING: Readonly<EnemyTuning> = {
   speedScale: 0.9,
   telegraphScale: 1,
   fireIntervalScale: 1,
+  // A touch kinder to enemies than to the player (0.55): the stream should
+  // buy the player a breather from a chaser, not strand the chaser in it.
+  streamSpeedFactor: 0.6,
   projectileSpeedScale: 0.9,
   deflectParticles: 6,
   deflectShake: 0.3,

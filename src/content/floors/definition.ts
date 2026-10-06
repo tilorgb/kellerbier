@@ -124,8 +124,9 @@ export const ROOM_GEN_FLOOR_OVERRIDES: Readonly<Record<string, Partial<RoomGenTu
    * reasoning: one step harder than the floor before, not a cliff) with one
    * extra body of headroom and a touch more cover, since a wooden obstacle can
    * be smashed or eaten and a denser wood still opens up as the run goes on.
-   * `hazardChance` stays at `rural`'s value but no `HAZARD_BY_TAG` entry exists
-   * for `wald` yet (Waldbach's issue adds it), so no hazard is generated.
+   * `hazardChance` stays at `rural`'s value; for `wald` it is the chance per
+   * roll of a Waldbach band crossing the room (#403's `placeStream` — one
+   * stream per room at most, rolled once per ~2 cells like a patch).
    */
   wald: { threatBase: 3.5, maxEnemies: 8, hazardChance: 0.2, minCoverTiles: 12, maxCoverTiles: 26 },
 };

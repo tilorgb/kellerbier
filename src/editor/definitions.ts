@@ -84,5 +84,9 @@ export const DECORATIVE_PROP_TYPE_SUGGESTIONS: readonly string[] = [
   'pedestal',
 ];
 
-/** 'puddle' is the one hazard type with sim behaviour today — Floor 1's slick puddles (#35). Still free text: an author may type anything, this is only the suggestion list. */
-export const HAZARD_TYPE_SUGGESTIONS: readonly string[] = ['puddle'];
+/**
+ * The hazard types with sim behaviour today — Floor 1's slick puddles (#35),
+ * Floor 2's hop trellis (#37), Floor 3's Waldbach stream (#403). Still free
+ * text: an author may type anything, this is only the suggestion list.
+ */
+export const HAZARD_TYPE_SUGGESTIONS: readonly string[] = ['puddle', 'trellis', 'waldbach'];
