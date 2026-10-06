@@ -265,6 +265,9 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      # The preview comment reads the issues a PR closes, to pick the floor
+      # its link starts on (`tools/ci/preview-floor.mjs`).
+      issues: read
     # Two runs pushing to gh-pages at once would reject each other. Queue.
     concurrency:
       group: preview-pages
