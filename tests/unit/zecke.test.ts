@@ -95,10 +95,10 @@ function shake(sim: GameSim, count: number, hold: number): void {
 }
 
 describe('Zecke (#406)', () => {
-  it('compiles as a weak mini that latches while it crawls', () => {
+  it('compiles as a weak micro that latches while it crawls', () => {
     const registry = new EnemyRegistry(ENEMY_DEFINITIONS);
     const compiled = registry.get('zecke');
-    expect(zecke.size).toBe('mini');
+    expect(zecke.size).toBe('micro');
     expect(compiled.health).toBe(2);
     expect(compiled.lootTier).toBe('weak');
     expect(compiled.locksRoom).toBe(true);

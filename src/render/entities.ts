@@ -3,11 +3,12 @@ import { ROOM_TILE_UNITS } from '../content/rooms/definition.js';
 import { CollisionLayer } from '../sim/collision/layers.js';
 import { hurtboxRadiusOf } from '../sim/collision/footprint.js';
 import { World } from '../sim/ecs/world.js';
-import type { GameSim } from '../sim/game/sim.js';
+import { PLAYER_FOOTPRINT, type GameSim } from '../sim/game/sim.js';
 import { propKindIndex } from '../sim/game/prop-kinds.js';
 import { lerp } from '../sim/math.js';
 import { bombBlastArmLength, bombFuseProgress } from '../sim/systems/bombs.js';
 import {
+  ENEMY_FLAG_LATCHED,
   ENEMY_STRIDE,
   type EnemyTelegraphShapeInfo,
   enemyTelegraphProgress,
@@ -98,6 +99,16 @@ const WIND_UP_GLOW_STRENGTH = 0.7;
 const LABEL_POINT = { x: 0, y: 0 };
 /** How far above the floor a pickup hovers, so its shadow separates it from the ground. */
 const PICKUP_LIFT = 1.5;
+/**
+ * How far up Alois's billboard a latched Zecke's feet sit (#406), in room
+ * units: his hat's crown is the top six rows of his 32-pixel frame, so 12
+ * units (24 pixels) up sets the tick into the crown, standing in for part of
+ * the hat — where it reads at a glance, instead of at his boots where his own
+ * legs and the poison sparkles hid it.
+ */
+const LATCH_HAT_HEIGHT = 12;
+/** How far in front of Alois's plane a latched tick is drawn, so the depth buffer always puts it over the hat. */
+const LATCH_HAT_FORWARD = 0.3;
 
 export function mixColor(a: number, b: number, t: number): number {
   const k = Math.min(1, Math.max(0, t));
@@ -397,10 +408,30 @@ export class EntityView {
           ? windUp * windUp * (3 - 2 * windUp)
           : 0;
       const widen = 1 + WIND_UP_WIDEN * crouch;
+      let placeX = x;
+      let placeY = 0.2 + lift;
+      let placeZ = footZ;
+      if (
+        isEnemyBody &&
+        ((sim.enemy.data[index * ENEMY_STRIDE + 3] ?? 0) & ENEMY_FLAG_LATCHED) !== 0
+      ) {
+        // Riding on Alois (#406): on his own leaned plane, `LATCH_HAT_HEIGHT`
+        // up it and a hair in front, at his interpolated position so it never
+        // lags a frame behind him. The sim's offset (`latchToPlayer`) only
+        // says which side of the hat.
+        const player = sim.playerIndex;
+        const playerX = lerp(sim.previousX(player), sim.positionX(player), alpha);
+        const playerY = lerp(sim.previousY(player), sim.positionY(player), alpha);
+        const sin = Math.sin(this.lean);
+        const cos = Math.cos(this.lean);
+        placeX = playerX + (sim.positionX(index) - sim.positionX(player));
+        placeY = 0.2 + LATCH_HAT_HEIGHT * cos - LATCH_HAT_FORWARD * sin;
+        placeZ = playerY + PLAYER_FOOTPRINT + LATCH_HAT_HEIGHT * sin + LATCH_HAT_FORWARD * cos;
+      }
       billboard.place(
-        x,
-        0.2 + lift,
-        footZ,
+        placeX,
+        placeY,
+        placeZ,
         this.lean,
         gridScale * pop * swell * widen,
         (1 - WIND_UP_SQUASH * crouch) / widen,

@@ -4,10 +4,11 @@ import type { EnemyDefinition } from '../../sim/enemy/definition.js';
  * Zecke — a tick (#406, `docs/CONTENT_BIBLE.md`'s Floor 3 roster). The
  * Bavarian Forest is a real tick-borne-disease area; the joke is local.
  *
- * Tiny, slow, and easy to lose on the dark wooden floor. It never hits hard:
- * it crawls at the player and, once it touches them, **latches on**
- * (`latchOnPlayer`) and rides along keeping them poisoned until they shake it
- * off with a few sharp changes of direction (`sim/systems/latch.ts`). It
+ * Tiny — the one `micro`-sized body — slow, and easy to lose on the dark
+ * forest floor. It never hits hard: it crawls at the player and, once it
+ * touches them, **latches on** (`latchOnPlayer`) and rides on Alois's hat,
+ * keeping him poisoned until he shakes it off with a few sharp changes of
+ * direction (`sim/systems/latch.ts`). It
  * cannot be shot while it is on you — the answer is to shake it — and the
  * tick that lands on the floor afterwards lies there helpless for a second,
  * which is the reward for shaking it rather than drinking the poison away.
@@ -19,7 +20,8 @@ import type { EnemyDefinition } from '../../sim/enemy/definition.js';
 export const zecke: EnemyDefinition = {
   id: 'zecke',
   name: 'Zecke',
-  size: 'mini',
+  // The one micro (#406): small enough to sit on Alois's hat once it latches.
+  size: 'micro',
   // A small, dry bug: the Kellerassel's dust, not a mushroom's spores.
   deathEffect: 'dust',
   health: 2,

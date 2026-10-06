@@ -92,28 +92,30 @@ export const fliegenpilz = single('fliegenpilz', [
 ]);
 
 // ============================================================== ZECKE
-// An engorged tick (#406): a swollen violet abdomen behind a small dark head
-// and shield, eight legs splayed. Option B of three, signed off by Tilo,
-// shown standing in a wald room and latched on Alois. 14 wide against a
-// mini collider's 16; three empty rows on top only because a character
-// canvas is at least 16 tall — it stands on its bottom row like the rest.
+// An engorged tick (#406): a swollen violet abdomen behind a small dark head,
+// legs splayed. The design is option B of three; the size is the medium of
+// three micro sizes, both signed off by Tilo. Shown standing in a wald room
+// and latched on Alois's hat, where it takes the place of part of the crown.
+// 10 wide against a micro collider's 8; the eight empty rows on top are only
+// there because a character canvas is at least 16 tall. It stands on its
+// bottom row like the rest.
 export const zecke = single('zecke', [
-  '..............',
-  '..............',
-  '..............',
-  '......KK......',
-  '.....KbbK.....',
-  '..K.KbccbK.K..',
-  '...KKKbbKKK...',
-  '.KK.KaabaK.KK.',
-  'K..KcpVVvvK..K',
-  '..KcpVVvvvvK..',
-  '.KKVVvvvvvvKK.',
-  'K.KVvvvvvvbK.K',
-  '..KvvvvvvbbK..',
-  '...KvvvbbbK...',
-  '....KKKKKK....',
-  '..............',
+  '..........',
+  '..........',
+  '..........',
+  '..........',
+  '..........',
+  '..........',
+  '..........',
+  '..........',
+  '....KK....',
+  '...KbbK...',
+  'K.KKccKK.K',
+  '.KKcpVvKK.',
+  'K.KVVvvK.K',
+  '..KVvvvbK.',
+  '...KvvbK..',
+  '....KKK...',
 ]);
 
 export const ROSTER = {

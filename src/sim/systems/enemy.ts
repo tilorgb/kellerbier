@@ -332,12 +332,12 @@ const LATCH_PUFF_TICKS = 14;
 /**
  * Attaches the body at `index` to the player (#406, `latchOnPlayer`).
  *
- * Where on Alois it sits is decided once, here: left or right by the side it
- * came from, and always pushed toward the camera. The offset is stored in the
- * body's `enemyMotion` heading slots — safe, since a latched body's states
- * `pause` and never read them as a heading. Far enough forward that the tick
- * is drawn in front of his boots rather than hidden behind his billboard;
- * `sim/systems/latch.ts` keeps it there.
+ * Where on Alois it sits is decided once, here: left or right on his hat by
+ * the side it came from. The offset is stored in the body's `enemyMotion`
+ * heading slots — safe, since a latched body's states `pause` and never read
+ * them as a heading — and `sim/systems/latch.ts` keeps it there. Drawing it
+ * up on the hat rather than on the floor is the renderer's business
+ * (`render/entities.ts`).
  *
  * Dropping to no collision layer is the "not shootable while latched"
  * decision `LatchOnPlayerBehaviour`'s doc comment makes: shots, splash and
@@ -347,14 +347,11 @@ function latchToPlayer(sim: GameSim, index: number, toPlayerX: number, distance:
   const player = sim.playerIndex;
   const playerFootprint = sim.body.data[player * 2] ?? 0;
   const fromX = distance === 0 ? 1 : -toPlayerX / distance;
-  const offsetX = fromX * playerFootprint * 0.7;
-  // Billboards stand at `y + footprint` (`render/entities.ts`), so the tick
-  // only draws in front of Alois when its own foot line is past his. The
-  // first version used half his footprint and was hidden behind his boots
-  // in every screenshot — a tick you cannot see is the one failure #406 asks
-  // never to happen.
-  const offsetY = Math.max(1, playerFootprint - (sim.body.data[index * 2] ?? 0) + 1);
-
+  // Which side of his hat it rides on: `render/entities.ts` draws a latched
+  // body up on Alois's billboard, over the crown, and reads only this x. Kept
+  // inside the crown's width so two ticks sit side by side on it.
+  const offsetX = fromX * playerFootprint * 0.35;
+  const offsetY = 0;
   const motionBase = index * ENEMY_MOTION_STRIDE;
   const motion = sim.enemyMotion.data;
   motion[motionBase] = offsetX;
