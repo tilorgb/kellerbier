@@ -6613,3 +6613,38 @@ Bombs and the Borkenkäfer still clear whole blocks.
 **Constrains:** a new side-on enemy declares `facing: 'mirror'` until it has direction strips.
 A new push effect is an impulse on a cooldown and is mass-scaled. A new familiar copies the
 `GameSim.ordner` shape rather than becoming an ECS body.
+
+## 122. A sound effect may be generated, and a generated file is listed as one
+
+**Decided** on 2026-10-07 (`feat/sound-bench-generate`), from Tilo finding it tedious to record
+every small sound by microphone.
+
+**There is a sound bench next to the pixel bench.** It is the audio counterpart of #77: a small
+server outside this repo (`D:\repos\ComfyUI\sound-bench`, port 8198) that runs a text prompt
+through Stable Audio Open 1.0 in the same ComfyUI install and then a deterministic cleanup (mono,
+cut to the sound itself, fades, peak level, mp3). It exists on the machine with the GPU and
+nowhere else, so nothing in the build, the tests or the game depends on it.
+
+**The audio editor reaches it; the game never does.** The SFX tab's "Recorded sample" panel has a
+Generate control (`tools/audio-editor/sound-bench.mjs`, dev server only). A chosen take lands
+exactly where a picked file would: loaded, not yet uploaded, then trimmed and saved by the one
+existing path. A generated sound is therefore an ordinary `sample` on an `SfxDefinition`, and the
+runtime cannot tell it from a recording. Only SFX offer it. The model makes foley, not music or
+speech, so tracks and barks keep recordings and synthesis.
+
+**Provenance is written by the code that writes the file.** `assets/audio/README.md` used to say
+every file there is the owner's own recording (`docs/LEGAL_REVIEW.md` Finding 3). It now says
+that of every file *not* in its "Generated files" table, and the upload endpoint maintains the
+table: a generated take gets a row with its prompt and seed, a real recording uploaded over that
+name takes the row out, and a generated take is refused if it would overwrite a real recording,
+which no prompt could make again.
+
+**Unlike the art track, there is no redraw.** A diffusion sprite is reference that gets re-drawn
+as block art (#77), so the shipped pixels are authored. A generated sound ships as generated.
+That is why each one is listed rather than merely allowed.
+
+**Constrains:** a generated audio file enters the repo through the audio editor, never by copying
+it into `assets/audio/`, so that its row exists. The first one to ship reopens the audio half of
+`docs/LEGAL_REVIEW.md` (the model's licence terms, and the storefront's generative-AI
+disclosure, which then covers sound as well as key art). Whether a generated take is good enough
+is decided by ear, by a person: an agent can generate and measure takes but cannot hear them.

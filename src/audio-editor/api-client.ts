@@ -111,12 +111,17 @@ export function fetchAudioAssets(): Promise<AudioAssetSummary[]> {
 export async function uploadAudioAsset(
   fileName: string,
   bytes: ArrayBuffer,
+  generated?: GeneratedOrigin,
 ): Promise<{ assetId: string; fileName: string }> {
   const dataBase64 = arrayBufferToBase64(bytes);
   const res = await fetch(`${API_PREFIX}/audio-assets`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ fileName, dataBase64 }),
+    body: JSON.stringify({
+      fileName,
+      dataBase64,
+      ...(generated === undefined ? {} : { generated }),
+    }),
   });
   const body = (await res.json().catch(() => ({}))) as {
     error?: string;
@@ -127,6 +132,72 @@ export async function uploadAudioAsset(
     throw new Error(body.error ?? `upload failed: ${String(res.status)}`);
   }
   return { assetId: body.assetId, fileName: body.fileName };
+}
+
+/** Where a generated file came from — what the upload records in `assets/audio/README.md` so the file can be told from a recording, and made again. */
+export interface GeneratedOrigin {
+  readonly prompt: string;
+  readonly seed: number;
+  /** Which take of the batch, from 1, and how many the batch had: the seed alone only reproduces the whole batch. */
+  readonly take: number;
+  readonly count: number;
+}
+
+export interface GeneratedTake {
+  readonly take: number;
+  readonly seconds: number;
+  /** How many separate sounds the model's raw take held; the one-shot is cut from one of them. */
+  readonly events: number;
+  /** The sound never stopped for the whole take — a drone or a noise bed rather than a one-shot. */
+  readonly fillsTake: boolean;
+  readonly dataBase64: string;
+}
+
+export interface GeneratedTakes {
+  readonly prompt: string;
+  readonly seed: number;
+  readonly count: number;
+  readonly extension: string;
+  readonly takes: readonly GeneratedTake[];
+  /** Takes the bench threw away itself (silence) — not returned, only counted. */
+  readonly dropped: number;
+}
+
+/**
+ * Asks the local sound bench, by way of the dev server, for takes of a
+ * prompted sound. Nothing is saved by this — a take becomes an asset only
+ * when it is passed to `uploadAudioAsset` with its `GeneratedOrigin`. Throws
+ * with the server's own message, which for a bench that is not running says
+ * how to start it.
+ */
+export async function generateSoundTakes(request: {
+  prompt: string;
+  seconds: number;
+  pick: 'loudest' | 'all';
+}): Promise<GeneratedTakes> {
+  const res = await fetch(`${API_PREFIX}/generated-takes`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ...request, negative: GENERATE_NEGATIVE }),
+  });
+  const body = (await res.json().catch(() => ({}))) as GeneratedTakes & { error?: string };
+  if (!res.ok) {
+    throw new Error(body.error ?? `generate failed: ${String(res.status)}`);
+  }
+  return body;
+}
+
+/** What a sound effect is never meant to be, whatever the prompt asked for. */
+const GENERATE_NEGATIVE =
+  'music, melody, speech, voice, singing, reverb, echo, background noise, hiss';
+
+export function base64ToArrayBuffer(dataBase64: string): ArrayBuffer {
+  const binary = atob(dataBase64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes.buffer;
 }
 
 /** `btoa` only takes a "binary string" — chunked so a several-MB recording doesn't blow the call-stack argument limit `String.fromCharCode(...bytes)` would hit in one shot (the same reasoning `pixel-editor/api-client.ts#bytesToBase64` gives its own copy of this). */
