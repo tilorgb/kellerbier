@@ -12,6 +12,7 @@ import type { GameSim } from '../game/sim.js';
 import { muzzleFlash, ring } from '../particle/effects.js';
 import { clamp, vectorLength } from '../math.js';
 import { addPush } from './movement.js';
+import { CollisionLayer, collisionMaskFor } from '../collision/layers.js';
 import { NO_SLOT } from '../pool/slot-pool.js';
 import { ProjectileTeam } from '../projectile/store.js';
 import { ProjectileTag } from '../projectile/tags.js';
@@ -99,9 +100,19 @@ export const ENEMY_STRIDE = 4;
  * point, then the locked aim target (`ENEMY_FLAG_AIM_LOCKED`), then where the
  * player was last seen, whether that memory is live (`MEMORY_SEEKING`), the
  * waypoint the pathfinder last chose on the way there, and how many ticks the
- * player has been out of sight.
+ * player has been out of sight. Then (#408) the state's rolled duration, and
+ * a swimmer's course, current sample and target sample.
  */
-export const ENEMY_MOTION_STRIDE = 12;
+export const ENEMY_MOTION_STRIDE = 16;
+/**
+ * `enemyMotion` offset of the roll a ranged `after` reads (#408): a fraction
+ * in [0, 1) drawn from `random.enemies` on entry to a state that has one.
+ */
+export const MOTION_DURATION_ROLL = 12;
+/** `enemyMotion` offsets of a `swimInZone` body's place on its stream (#408). */
+export const MOTION_SWIM_COURSE = 13;
+export const MOTION_SWIM_SAMPLE = 14;
+export const MOTION_SWIM_TARGET = 15;
 /** `enemyMotion` offsets of the last-seen memory (see `walkTowardPlayer`). */
 const MOTION_LAST_SEEN_X = 6;
 const MOTION_LAST_SEEN_Y = 7;
@@ -209,6 +220,7 @@ export function stepEnemies(sim: GameSim): void {
     if (next >= 0) {
       const entered = compiled.states[next];
       if (entered !== undefined) {
+        const left = state;
         stateIndex = next;
         state = entered;
         ticks = 0;
@@ -229,6 +241,7 @@ export function stepEnemies(sim: GameSim): void {
             cloud.lifetimeTicks < 0 ? defaults.defaultLifetimeTicks : cloud.lifetimeTicks,
           );
         }
+        enterStateExtras(sim, index, left, entered, selfX, selfY);
         if (entered.grabProp !== null) {
           grabNearestProp(sim, index, entered.grabProp);
         }
@@ -374,6 +387,259 @@ function latchToPlayer(sim: GameSim, index: number, toPlayerX: number, distance:
   sim.noteLatch();
 }
 
+/** Spokes in the splash a fish throws breaking or leaving the surface (#408). */
+const SURFACE_SPLASH_SPOKES = 8;
+const SURFACE_SPLASH_SPEED = 0.9;
+const SURFACE_SPLASH_TICKS = 16;
+
+/**
+ * What entering `entered` from `left` does beyond the entry behaviours (#408):
+ * rolls a ranged `after`'s duration, and moves the body above or below the
+ * water — off every collision layer while submerged, back on `Obstacle`
+ * (every enemy's layer, `GameSim.spawnTarget`) when it surfaces — with a
+ * splash either way.
+ */
+function enterStateExtras(
+  sim: GameSim,
+  index: number,
+  left: CompiledState,
+  entered: CompiledState,
+  selfX: number,
+  selfY: number,
+): void {
+  if (entered.rollsDuration) {
+    sim.enemyMotion.data[index * ENEMY_MOTION_STRIDE + MOTION_DURATION_ROLL] =
+      sim.random.enemies.nextFloat();
+  }
+  if (entered.submerged !== left.submerged) {
+    setSubmerged(sim, index, entered.submerged);
+    ring(
+      sim,
+      selfX,
+      selfY,
+      SURFACE_SPLASH_SPOKES,
+      ParticleKind.Splash,
+      SURFACE_SPLASH_SPEED,
+      SURFACE_SPLASH_TICKS,
+      2,
+    );
+  }
+}
+
+/**
+ * Puts the body at `index` under the water (no collision layer: nothing
+ * finds it) or back above it (#408). A latched body is left alone — it is
+ * on no layer for its own reason (`latchToPlayer`).
+ */
+export function setSubmerged(sim: GameSim, index: number, submerged: boolean): void {
+  if (((sim.enemy.data[index * ENEMY_STRIDE + 3] ?? 0) & ENEMY_FLAG_LATCHED) !== 0) {
+    return;
+  }
+  const layer = submerged ? 0 : CollisionLayer.Obstacle;
+  sim.collision.data[index * 2] = layer;
+  sim.collision.data[index * 2 + 1] = submerged ? 0 : collisionMaskFor(CollisionLayer.Obstacle);
+}
+
+/** Whether the body at `index` is in a `submerge` state right now (#408) — the renderer's shadow, and nothing else, reads this. */
+export function enemySubmerged(sim: GameSim, index: number): boolean {
+  const base = index * ENEMY_STRIDE;
+  const state = sim.enemies.at(sim.enemy.data[base] ?? 0).states[sim.enemy.data[base + 1] ?? 0];
+  return state?.submerged === true;
+}
+
+/**
+ * Settles a fresh water creature (#408) on the nearest sample of its
+ * stream's course — wherever it was put down, in the water or not — and
+ * remembers which course and sample it is on. Returns false when
+ * the room has no stream to put it in — the caller's graceful gap.
+ */
+export function placeInZone(sim: GameSim, index: number): boolean {
+  const courses = sim.room.streamCourses;
+  if (courses.length === 0) {
+    return false;
+  }
+  const x = sim.positionX(index);
+  const y = sim.positionY(index);
+  let bestCourse = 0;
+  let bestSample = 0;
+  let bestSq = Infinity;
+  for (let course = 0; course < courses.length; course++) {
+    const points = courses[course]?.points;
+    if (points === undefined) {
+      continue;
+    }
+    for (let sample = 0; sample < points.length; sample++) {
+      const point = points[sample];
+      if (point === undefined) {
+        continue;
+      }
+      const dx = point.x - x;
+      const dy = point.y - y;
+      const distSq = dx * dx + dy * dy;
+      if (distSq < bestSq) {
+        bestSq = distSq;
+        bestCourse = course;
+        bestSample = sample;
+      }
+    }
+  }
+  const point = courses[bestCourse]?.points[bestSample];
+  if (point === undefined) {
+    return false;
+  }
+  const motion = sim.enemyMotion.data;
+  const motionBase = index * ENEMY_MOTION_STRIDE;
+  motion[motionBase + MOTION_SWIM_COURSE] = bestCourse;
+  motion[motionBase + MOTION_SWIM_SAMPLE] = bestSample;
+  motion[motionBase + MOTION_SWIM_TARGET] = bestSample;
+  // Always onto the course, not merely into the rects: where a bend is
+  // tight the rects reach past the water the renderer draws, and a fish left
+  // there swims as a shadow on the bank.
+  if (nearestStreamPoint(sim, point.x, point.y)) {
+    const transform = sim.transform.data;
+    transform[index * 4] = streamPoint[0] ?? point.x;
+    transform[index * 4 + 1] = streamPoint[1] ?? point.y;
+    transform[index * 4 + 2] = streamPoint[0] ?? point.x;
+    transform[index * 4 + 3] = streamPoint[1] ?? point.y;
+  }
+  return true;
+}
+
+/** How far inside a stream rect's edge a projected point lands, so float rounding never puts it on the bank. */
+const STREAM_INSET = 0.5;
+/** Scratch for `nearestStreamPoint` — written, never allocated. */
+const streamPoint = new Float64Array(2);
+
+/**
+ * The nearest point to `(x, y)` that the simulation counts as in the water
+ * (`RoomGeometry.isInStream`), written into `streamPoint` (#408). Returns
+ * false when the room has no stream.
+ *
+ * Measured against the stream's rects, not its drawn course: the centreline
+ * the renderer draws the water along and the tile-wide rects the sim stands
+ * on are two approximations of one stream, and where a bend is tight a
+ * centreline sample can fall just outside every rect. Projecting into the
+ * rects makes the sim's own footing the definition of "in the water".
+ */
+function nearestStreamPoint(sim: GameSim, x: number, y: number): boolean {
+  const room = sim.room;
+  const streams = room.streams;
+  let bestSq = Infinity;
+  for (let stream = 0; stream < room.streamCount; stream++) {
+    const base = stream * 4;
+    const minX = (streams[base] ?? 0) + STREAM_INSET;
+    const minY = (streams[base + 1] ?? 0) + STREAM_INSET;
+    const maxX = (streams[base + 2] ?? 0) - STREAM_INSET;
+    const maxY = (streams[base + 3] ?? 0) - STREAM_INSET;
+    const px = minX > maxX ? (minX + maxX) / 2 : clamp(x, minX, maxX);
+    const py = minY > maxY ? (minY + maxY) / 2 : clamp(y, minY, maxY);
+    const distSq = (px - x) * (px - x) + (py - y) * (py - y);
+    if (distSq < bestSq) {
+      bestSq = distSq;
+      streamPoint[0] = px;
+      streamPoint[1] = py;
+    }
+  }
+  return bestSq < Infinity;
+}
+
+/** How close, in room units, counts as having reached a course sample (#408). */
+const SWIM_ARRIVE_DISTANCE = 1.5;
+
+/**
+ * One tick of `swimInZone` (#408): toward the current sample of the course;
+ * on reaching it, one sample on toward the target; on reaching the target, a
+ * new target from `random.enemies` anywhere along the course.
+ */
+function swimAlongCourse(
+  sim: GameSim,
+  index: number,
+  speed: number,
+  selfX: number,
+  selfY: number,
+): void {
+  const motion = sim.enemyMotion.data;
+  const motionBase = index * ENEMY_MOTION_STRIDE;
+  const velocity = sim.velocity.data;
+  const points = sim.room.streamCourses[motion[motionBase + MOTION_SWIM_COURSE] ?? 0]?.points;
+  if (points === undefined || points.length === 0) {
+    velocity[index * 2] = 0;
+    velocity[index * 2 + 1] = 0;
+    return;
+  }
+  const last = points.length - 1;
+  let sample = clamp(Math.round(motion[motionBase + MOTION_SWIM_SAMPLE] ?? 0), 0, last);
+  let target = clamp(Math.round(motion[motionBase + MOTION_SWIM_TARGET] ?? 0), 0, last);
+  // Each sample, projected into the water the sim stands on — see
+  // `nearestStreamPoint` for why a centreline sample needs it.
+  let point = points[sample];
+  nearestStreamPoint(sim, point?.x ?? selfX, point?.y ?? selfY);
+  let dx = (streamPoint[0] ?? selfX) - selfX;
+  let dy = (streamPoint[1] ?? selfY) - selfY;
+  if (vectorLength(dx, dy) <= SWIM_ARRIVE_DISTANCE) {
+    if (sample === target) {
+      target = Math.floor(sim.random.enemies.nextFloat() * points.length);
+    }
+    if (sample !== target) {
+      sample += target > sample ? 1 : -1;
+    }
+    motion[motionBase + MOTION_SWIM_SAMPLE] = sample;
+    motion[motionBase + MOTION_SWIM_TARGET] = target;
+    point = points[sample];
+    nearestStreamPoint(sim, point?.x ?? selfX, point?.y ?? selfY);
+    dx = (streamPoint[0] ?? selfX) - selfX;
+    dy = (streamPoint[1] ?? selfY) - selfY;
+  }
+  const length = vectorLength(dx, dy);
+  // Never overshoot the sample: a fast fish on a tight bend would otherwise
+  // cut the corner onto the bank.
+  const step = Math.min(speed, length);
+  velocity[index * 2] = length === 0 ? 0 : (dx / length) * step;
+  velocity[index * 2 + 1] = length === 0 ? 0 : (dy / length) * step;
+  // Facing reads off the heading slots (`render/animation/state.ts`).
+  if (length > 0) {
+    motion[motionBase] = dx / length;
+    motion[motionBase + 1] = dy / length;
+  }
+}
+
+/**
+ * Keeps every water creature in its water (#408), after everything that
+ * moves bodies this tick — a shot's knockback on a surfaced fish, or another
+ * body shouldering it, can push it onto the bank — and a straight swim
+ * between two samples can clip the corner of a stepped bend. One whose
+ * centre has left the stream is put on the nearest point of it.
+ *
+ * @hot — runs in the frame loop. Nothing in here may allocate.
+ */
+export function stepZoneClamp(sim: GameSim): void {
+  if (sim.room.streamCount === 0) {
+    return;
+  }
+  const states = sim.world.states;
+  const masks = sim.world.masks;
+  const required = sim.enemyMask;
+  const enemy = sim.enemy.data;
+  const transform = sim.transform.data;
+  for (let index = 0; index < sim.world.highWater; index++) {
+    if (states[index] !== World.ALIVE || ((masks[index] ?? 0) & required) !== required) {
+      continue;
+    }
+    if (sim.enemies.at(enemy[index * ENEMY_STRIDE] ?? 0).zone === null) {
+      continue;
+    }
+    const x = transform[index * 4] ?? 0;
+    const y = transform[index * 4 + 1] ?? 0;
+    if (sim.room.isInStream(x, y)) {
+      continue;
+    }
+    if (nearestStreamPoint(sim, x, y)) {
+      transform[index * 4] = streamPoint[0] ?? x;
+      transform[index * 4 + 1] = streamPoint[1] ?? y;
+    }
+  }
+}
+
 /**
  * The first transition that matches, or -1.
  *
@@ -398,11 +664,22 @@ function chooseTransition(
   let sighted = -1;
   for (const transition of state.transitions) {
     switch (transition.trigger) {
-      case TransitionTrigger.After:
-        if (ticks >= stateDuration(sim, state, transition.value)) {
+      case TransitionTrigger.After: {
+        let after = transition.value;
+        if (transition.max > transition.value) {
+          // A ranged `after` (#408), placed by the roll its state took on entry.
+          const roll =
+            sim.enemyMotion.data[index * ENEMY_MOTION_STRIDE + MOTION_DURATION_ROLL] ?? 0;
+          after += Math.min(
+            transition.max - transition.value,
+            Math.floor(roll * (transition.max - transition.value + 1)),
+          );
+        }
+        if (ticks >= stateDuration(sim, state, after)) {
           return transition.to;
         }
         break;
+      }
       case TransitionTrigger.OnHit:
         if ((flags & ENEMY_FLAG_HIT) !== 0) {
           return transition.to;
@@ -813,6 +1090,10 @@ function applyMovement(
       velocity[base + 1] = (motion[motionBase + 1] ?? 0) * speed;
       return;
     }
+    case 'swimInZone': {
+      swimAlongCourse(sim, index, behaviour.speed * scale, selfX, selfY);
+      return;
+    }
     case 'hopCardinal': {
       const hopTicks = Math.max(1, Math.round(behaviour.hopTicks));
       const cycle = hopTicks + Math.max(0, Math.round(behaviour.restTicks));
@@ -1019,6 +1300,20 @@ function applyFiring(
     }
 
     const phase = ticks % interval;
+
+    if (shot.behaviour === 'fireRing') {
+      // `fireOnBeat`'s ring on the state's own clock (#408): it aims at
+      // nothing, so like the beat ring it is not gated on sight.
+      if (phase === 0) {
+        const shots = Math.max(1, Math.round(shot.shots));
+        const step = (Math.PI * 2) / shots;
+        const offset = shot.angleOffset ?? 0;
+        for (let ray = 0; ray < shots; ray++) {
+          fireOne(sim, index, offset + step * ray, shot);
+        }
+      }
+      continue;
+    }
 
     if (shot.behaviour === 'fireAtPlayer') {
       if (phase === 0 && isSighted(sim, index, aimX, aimY)) {

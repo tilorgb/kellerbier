@@ -107,6 +107,19 @@ export const ENTITY_PALETTE = {
   windUpGlow: 0xff5a44,
   /** The thin edge a poison cloud will settle at, drawn while its emitter winds up (#405) — the same poison green. */
   cloudEdgeTelegraph: 0x8fbf3a,
+  /**
+   * A submerged creature (#408, the Bachforelle) is drawn as its own
+   * silhouette in this near-black, flattened onto the water: a shadow under
+   * the surface rather than the body above it.
+   */
+  submergedShadow: 0x000000,
+  /**
+   * The faint emissive the shadow carries, so it still separates from the
+   * floor in a lantern-dark room (#404) — the shadow is the fish's only
+   * telegraph. Kept far darker than the water: the first version used a
+   * stream teal, and the shadow vanished into the very water it swims in.
+   */
+  submergedGlow: 0x10181a,
   /** Tint for a pickup whose kind failed to resolve. Should never be seen; a loud colour if it is. */
   unknownPickupTint: 0xff00ff,
   /** What a placed Bierfassl reddens toward as its fuse burns down (#208) — the same hot red a boss's own wind-up uses, so "about to go off" reads as one consistent warning across the game. */

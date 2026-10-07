@@ -41,6 +41,12 @@ export const WALD = {
   m: 0x737373, // rabbit: grey fur
   l: 0x8a8a8a, // rabbit: fur, lit (the backs of the ears)
   q: 0xddaaeb, // rabbit: inner ear and nose
+  1: 0x2c4d2a, // trout: dark olive back
+  2: 0x3d6b3a, // trout: olive
+  3: 0x4e894a, // trout: flank
+  4: 0x5fa65b, // trout: flank, lit
+  5: 0xcfefb2, // trout: belly
+  6: 0x1b2f1a, // trout: dark spots
 };
 
 {
@@ -145,10 +151,59 @@ export const kaninchen = single('kaninchen', [
   '...KK.....KK...',
 ]);
 
+// ======================================================== BACHFORELLE
+// A brown trout (#408), drawn twice. Under the water it swims as its whole
+// side-on figure, facing left (`bachforelle-shadow`: the renderer darkens and
+// flattens it, and mirrors it to the way it swims). When it surfaces to fire,
+// only its head half is out: the front of that same figure turned head-up,
+// with a foam collar at the waterline (`bachforelle`). Option A of three,
+// reworked to Tilo's direction and signed off by him in a wald stream next to
+// Alois. Violet spots stand in for a brown trout's red ones: no red on this
+// floor.
+export const bachforelle = single('bachforelle', [
+  '......K.......',
+  '.....K3K......',
+  '....K53KK.....',
+  '...K553KwK....',
+  '...K5443KK....',
+  '..K5543322K...',
+  '..K554V322K...',
+  '..K55433321K..',
+  '.Kl55433621K..',
+  '..K55443311K..',
+  '..K554362161K.',
+  '..K554332111K.',
+  '..K55V332111K.',
+  '.KwwSwwSwwwSK.',
+  'KwSwwKKKKwwSwK',
+  '.KKKK....KKKK.',
+]);
+
+export const bachforelleShadow = single('bachforelle-shadow', [
+  '..........................',
+  '..........................',
+  '..........................',
+  '..........................',
+  '..........KKKKK...........',
+  '.......KKK11111KK.......KK',
+  '.....KK1116116111KK....K1K',
+  '...KK22221111161111K..K11K',
+  '..KwK22363222222V221KK111K',
+  '.KKK33333363336333333211K.',
+  'K33343V33433334336333321K.',
+  '.K5544444444V44444444311K.',
+  '..K555555555555555543K.K1K',
+  '...KK555555555555KKKK...KK',
+  '.....KKKlKKKKKlKK.........',
+  '........K.....K...........',
+]);
+
 export const ROSTER = {
   fliegenpilz,
   zecke,
   kaninchen,
+  bachforelle,
+  'bachforelle-shadow': bachforelleShadow,
 };
 
 /** Every sprite is authored against Floor 3's palette. */
