@@ -41,6 +41,7 @@ export type BehaviourName =
   | 'hopTowardPlayer'
   | 'swimInZone'
   | 'approachWood'
+  | 'returnToPerch'
   | 'fireAtPlayer'
   | 'fireRing'
   | 'fireBurst'
@@ -57,7 +58,8 @@ export type BehaviourName =
   | 'detonateLobbedBomb'
   | 'emitCloud'
   | 'latchOnPlayer'
-  | 'submerge';
+  | 'submerge'
+  | 'land';
 
 /** Walks straight at the player, re-aiming every tick. The floor-one default. */
 export interface WalkTowardPlayerBehaviour {
@@ -92,6 +94,25 @@ export interface ChargeAtPlayerBehaviour {
    * leap (#407). Omitted: no limit.
    */
   readonly maxDistance?: number;
+  /**
+   * Stops on the point it was aimed at — the player's position as the
+   * charge began (`updateAimLock` keeps that point current through the
+   * wind-up) — and raises `onArrived` there, rather than running on until a
+   * wall stops it (#411, the Specht's dive). A wall met first still stops it
+   * with `onBlocked`. Unlike `maxDistance` the length is not authored: it is
+   * however far away the player was.
+   */
+  readonly untilTargetPoint?: true;
+  /**
+   * What reaching that point does (#411, the Specht's beak hitting the
+   * floor): everything within `radius` room units of it — the player
+   * included, any other body too — takes `damage` (elite-scaled), once. With
+   * `untilTargetPoint` only. The wind-up before such a dive marks this exact
+   * circle on the floor instead of a direction line, following the player
+   * until the dive begins and staying there through it, so where it lands is
+   * the warning — and, with `contactDamage: 0`, the only place it hurts.
+   */
+  readonly landing?: { readonly radius: number; readonly damage: number };
   /**
    * What the charge does to the first thing it runs into (#409, the Boar).
    * Each tick, before moving, it looks one step ahead along its locked
@@ -274,6 +295,33 @@ export interface ApproachWoodBehaviour {
   readonly speed: number;
   /** Ticks of eating it takes to finish a wooden block, and a floor plank. */
   readonly eatTicks: { readonly obstacle: number; readonly plank: number };
+}
+
+/**
+ * Flies back to the room's wall and perches there (#411, the Specht): to the
+ * *nearest* point of the wall from wherever it is now, not necessarily the
+ * perch it started on — unpredictable from one dive to the next, readable
+ * within one. Straight there, over furniture, water and pits alike (it is
+ * a `flying` body), then `onArrived` fires.
+ *
+ * A body with any `returnToPerch` state is a percher from its spawn: it is
+ * put on the nearest wall point the moment it appears, facing into the room.
+ */
+export interface ReturnToPerchBehaviour {
+  readonly behaviour: 'returnToPerch';
+  /** Room units per tick, before the global `enemy.speedScale`. */
+  readonly speed: number;
+}
+
+/**
+ * On the floor while this state is current (#411, the Specht with its beak
+ * stuck in a plank). Means something only for a `flying` body, which is
+ * otherwise drawn up in the air: this is the state it is down on the ground,
+ * within reach — the hit window. Presentational, like the rest of how a
+ * body is drawn; what makes it the hit window is that it is paused there.
+ */
+export interface LandBehaviour {
+  readonly behaviour: 'land';
 }
 
 /**
@@ -730,6 +778,8 @@ export type EnemyBehaviour =
   | SwimInZoneBehaviour
   | ApproachWoodBehaviour
   | SubmergeBehaviour
+  | ReturnToPerchBehaviour
+  | LandBehaviour
   | FireRingBehaviour
   | FireAtPlayerBehaviour
   | FireBurstBehaviour
@@ -771,6 +821,13 @@ export type EnemyTransition =
   | { readonly to: string; readonly onHit: true }
   /** The body ran into a wall or a block. What stops a charge. */
   | { readonly to: string; readonly onBlocked: true }
+  /**
+   * A target-seeking movement reached its target this tick (#411): a
+   * `returnToPerch` landing on the wall, a `chargeAtPlayer` with
+   * `untilTargetPoint` reaching the point it was aimed at. Like `onHit`,
+   * cleared once read.
+   */
+  | { readonly to: string; readonly onArrived: true }
   | { readonly to: string; readonly whenPlayerWithin: number }
   | { readonly to: string; readonly whenPlayerBeyond: number }
   /**
@@ -840,6 +897,15 @@ export interface EnemyDefinition {
   /** Overrides the size class's mass, for a body unusually heavy for its size. */
   readonly mass?: number;
   /**
+   * Flies (#411, the Specht): crosses the room's furniture, its water and its
+   * pits — everything `RoomGeometry` flags `blockOverflyable`, plus every
+   * stream and pit — and is stopped only by the room's walls and the grid
+   * cells its shape never claimed. The rule König Ludwig's crown already
+   * gives the player (#47, `sim/systems/movement.ts`), for an enemy. Drawn up
+   * in the air, except in a state that `land`s.
+   */
+  readonly flying?: boolean;
+  /**
    * A localisation key (`enemies.<id>.title`), same convention
    * `ItemDefinition.flavourText` uses — resolved by the render layer, never
    * read directly here. The boss intro plate's middle line (#58/#327); unset
@@ -889,8 +955,14 @@ export interface EnemyDefinition {
    * future cloud-emitter alike, and an emissive glow rather than a multiply
    * tint so it still reads in a lantern-dark room (#404). Purely
    * presentational, like `deathEffect`: it can never change what a run does.
+   *
+   * `'drum'` is the Specht's drumming (#411): the body hammers back and forth
+   * on the spot and throws wood chips for the whole countdown — the half of
+   * the warning that works with the sound off, drawn through the darkness
+   * like every telegraphing body. Its own wind-up sound comes through the
+   * impact audio seam (`content/audio/sfx.ts`'s `ENEMY_WINDUP_SFX`).
    */
-  readonly telegraphLook?: 'bloat';
+  readonly telegraphLook?: 'bloat' | 'drum';
   /**
    * How a body with no animation strip turns to show where it is going.
    * Purely presentational, like `telegraphLook`.
@@ -944,6 +1016,7 @@ export const MOVEMENT_BEHAVIOURS: readonly BehaviourName[] = [
   'hopTowardPlayer',
   'swimInZone',
   'approachWood',
+  'returnToPerch',
 ];
 
 /** Primitives that run once, when the state is entered. */
@@ -957,7 +1030,7 @@ export const ENTRY_BEHAVIOURS: readonly BehaviourName[] = [
 ];
 
 /** Primitives that mark the whole state rather than doing anything in it (#408). */
-export const STATE_FLAG_BEHAVIOURS: readonly BehaviourName[] = ['submerge'];
+export const STATE_FLAG_BEHAVIOURS: readonly BehaviourName[] = ['submerge', 'land'];
 
 /** Primitives that run when the body dies in that state. */
 export const DEATH_BEHAVIOURS: readonly BehaviourName[] = ['splitOnDeath'];

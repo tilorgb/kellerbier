@@ -3,6 +3,7 @@ import { CollisionLayer } from '../collision/layers.js';
 import { EventKind } from '../events/queue.js';
 import type { GameSim } from '../game/sim.js';
 import { vectorLength } from '../math.js';
+import { enemyAirborne } from './enemy.js';
 import { addPush } from './movement.js';
 
 /**
@@ -91,6 +92,10 @@ function resolveAgainstPlayer(other: number): void {
   const radius = player[PLAYER_RADIUS] ?? 0;
   const layer = sim.collision.data[other * 2] ?? 0;
   if ((layer & SOLID_LAYERS) === 0) {
+    return;
+  }
+  // A flyer up in the air (#411) passes over the player.
+  if (enemyAirborne(sim, other)) {
     return;
   }
 

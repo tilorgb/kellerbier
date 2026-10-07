@@ -44,19 +44,33 @@ function compileDeathEffect(name: string | undefined, where: string): ParticleKi
   return kind;
 }
 
+/** What a `telegraphLook` does to the body (#405, #411) — resolved once, so no frame compares a string. */
+const TelegraphLook = {
+  None: 0,
+  /** Swells and glows green over the countdown (#405, the Fliegenpilz). */
+  Bloat: 1,
+  /** Hammers back and forth and throws wood chips (#411, the Specht). */
+  Drum: 2,
+} as const;
+
+type TelegraphLookId = (typeof TelegraphLook)[keyof typeof TelegraphLook];
+
 /**
- * `telegraphLook` as a name to whether the body bloats (#405). Thrown on an
- * unknown name for `compileDeathEffect`'s reason: content is loaded from
- * data, and a typo must not quietly become "no look at all".
+ * `telegraphLook` as a name to its `TelegraphLook`. Thrown on an unknown name
+ * for `compileDeathEffect`'s reason: content is loaded from data, and a typo
+ * must not quietly become "no look at all".
  */
-function compileTelegraphLook(name: string | undefined, where: string): boolean {
+function compileTelegraphLook(name: string | undefined, where: string): TelegraphLookId {
   if (name === undefined) {
-    return false;
+    return TelegraphLook.None;
   }
-  if (name !== 'bloat') {
-    throw new Error(`${where} names telegraphLook "${name}", which is not one of bloat`);
+  if (name === 'bloat') {
+    return TelegraphLook.Bloat;
   }
-  return true;
+  if (name === 'drum') {
+    return TelegraphLook.Drum;
+  }
+  throw new Error(`${where} names telegraphLook "${name}", which is not one of bloat, drum`);
 }
 
 /** `facing` resolved to a number, so the renderer compares no string per frame. */
@@ -118,6 +132,8 @@ export const TransitionTrigger = {
   PlayerDiagonalAdjacent: 9,
   /** The player is on one of the body's four axes, in sight (#409). `tolerance` is the slack. */
   PlayerOnAxis: 10,
+  /** A target-seeking movement reached its target this tick (#411). */
+  OnArrived: 11,
 } as const;
 
 export type TransitionTriggerId = (typeof TransitionTrigger)[keyof typeof TransitionTrigger];
@@ -231,6 +247,8 @@ export interface CompiledState {
   readonly latchesOnPlayer: boolean;
   /** True for a state carrying `submerge` (#408): out of reach of everything, drawn as a shadow. */
   readonly submerged: boolean;
+  /** True for a state carrying `land` (#411): a flying body down on the floor. */
+  readonly grounded: boolean;
   /** True for a state with a ranged `after` (#408): entering it rolls a duration from `random.enemies`. */
   readonly rollsDuration: boolean;
   /**
@@ -278,6 +296,15 @@ export interface CompiledEnemy {
   readonly deathEffect: ParticleKindId;
   /** The definition's `telegraphLook === 'bloat'` (#405), resolved once so the renderer compares no string per frame. */
   readonly telegraphBloat: boolean;
+  /** The definition's `telegraphLook === 'drum'` (#411) — chips thrown by the sim, the hammering drawn by the renderer. */
+  readonly telegraphDrum: boolean;
+  /** The definition's `flying` (#411): over furniture, water and pits; drawn in the air. */
+  readonly flying: boolean;
+  /**
+   * Set when any of its states `returnToPerch`es (#411): a percher, put on the
+   * nearest point of the room's wall at spawn.
+   */
+  readonly perches: boolean;
   /** The definition's `facing`, resolved once for the same reason as `telegraphBloat`. */
   readonly facing: EnemyFacingId;
   /**
@@ -410,6 +437,23 @@ export class EnemyRegistry {
     const states = definition.states.map((state) =>
       this.compileState(definition, state, stateIndexByName),
     );
+    // `onArrived` fires only from a movement that seeks a target (#411):
+    // written on an enemy with none, it is a wait for a signal nothing sends.
+    const arrives = states.some(
+      (state) =>
+        state.movement.behaviour === 'returnToPerch' ||
+        (state.movement.behaviour === 'chargeAtPlayer' && state.movement.untilTargetPoint === true),
+    );
+    if (!arrives) {
+      for (const state of states) {
+        if (state.transitions.some((t) => t.trigger === TransitionTrigger.OnArrived)) {
+          throw new Error(
+            `${where} state "${state.name}" waits on onArrived, but no state of it ` +
+              `uses "returnToPerch" or a "chargeAtPlayer" with untilTargetPoint`,
+          );
+        }
+      }
+    }
     // `onLatched`/`onShakenOff` can only ever fire for a body that latches
     // somewhere (#406): written on an enemy that never does, it is a state
     // machine waiting forever on a signal nothing sends.
@@ -444,7 +488,10 @@ export class EnemyRegistry {
       locksRoom: definition.locksRoom ?? true,
       bossBar: definition.bossBar ?? false,
       deathEffect: compileDeathEffect(definition.deathEffect, where),
-      telegraphBloat: compileTelegraphLook(definition.telegraphLook, where),
+      telegraphBloat: compileTelegraphLook(definition.telegraphLook, where) === TelegraphLook.Bloat,
+      telegraphDrum: compileTelegraphLook(definition.telegraphLook, where) === TelegraphLook.Drum,
+      flying: definition.flying === true,
+      perches: states.some((state) => state.movement.behaviour === 'returnToPerch'),
       facing: compileFacing(definition.facing, where),
       zone: states.some((state) => state.movement.behaviour === 'swimInZone') ? 'waldbach' : null,
     };
@@ -472,6 +519,7 @@ export class EnemyRegistry {
     let grabProp: { kind: number; reach: number } | null = null;
     let latchesOnPlayer = false;
     let submerged = false;
+    let grounded = false;
 
     for (const behaviour of state.behaviours) {
       const name: BehaviourName = behaviour.behaviour;
@@ -492,6 +540,9 @@ export class EnemyRegistry {
           if (!(behaviour.speed > 0)) {
             throw new Error(`${where}: "swimInZone" needs a speed above zero`);
           }
+        }
+        if (behaviour.behaviour === 'returnToPerch' && !(behaviour.speed > 0)) {
+          throw new Error(`${where}: "returnToPerch" needs a speed above zero`);
         }
         if (behaviour.behaviour === 'approachWood') {
           if (!(behaviour.speed > 0)) {
@@ -533,6 +584,17 @@ export class EnemyRegistry {
             throw new Error(
               `${where}: "chargeAtPlayer" snap "${snap}" is not one of cardinal, diagonal`,
             );
+          }
+          const landing = behaviour.landing;
+          if (landing !== undefined) {
+            if (behaviour.untilTargetPoint !== true) {
+              throw new Error(`${where}: "chargeAtPlayer" landing needs untilTargetPoint`);
+            }
+            if (!(landing.radius > 0) || !(landing.damage > 0)) {
+              throw new Error(
+                `${where}: "chargeAtPlayer" landing needs a radius and damage above zero`,
+              );
+            }
           }
           if (behaviour.maxDistance !== undefined && !(behaviour.maxDistance > 0)) {
             throw new Error(`${where}: "chargeAtPlayer" maxDistance must be above zero`);
@@ -588,7 +650,11 @@ export class EnemyRegistry {
         continue;
       }
       if (STATE_FLAG_BEHAVIOURS.includes(name)) {
-        submerged = true;
+        if (name === 'land') {
+          grounded = true;
+        } else {
+          submerged = true;
+        }
         continue;
       }
       if (FIRING_BEHAVIOURS.includes(name)) {
@@ -808,6 +874,16 @@ export class EnemyRegistry {
           max: 0,
         };
       }
+      if ('onArrived' in transition) {
+        return {
+          trigger: TransitionTrigger.OnArrived,
+          value: 0,
+          to,
+          propKind: -1,
+          tolerance: 0,
+          max: 0,
+        };
+      }
       if ('onLatched' in transition) {
         return {
           trigger: TransitionTrigger.OnLatched,
@@ -914,6 +990,7 @@ export class EnemyRegistry {
       meleeArc,
       latchesOnPlayer,
       submerged,
+      grounded,
       rollsDuration: transitions.some(
         (transition) =>
           transition.trigger === TransitionTrigger.After && transition.max > transition.value,

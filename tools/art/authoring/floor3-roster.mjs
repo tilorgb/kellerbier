@@ -387,12 +387,64 @@ export const borkenkaefer = single('borkenkaefer', [
   '...K.KlKlKKKKKtKtKtKlKKKKKK.K.K.',
 ]);
 
+// ============================================================= SPECHT
+// A green woodpecker (#411), clinging upright to the wall and facing left:
+// olive head and back, pale belly, barred luminous-green wing, the crown in
+// the floor's fungus violet where a real one is red (no red on this floor).
+// Option A of three, signed off by Tilo with its size, shown perched on a
+// wald room's wall next to Alois. 16x20 against a mini collider's 16.
+export const specht = single('specht', [
+  '.......KKK......',
+  '......KVVVK.....',
+  '.....KVVV22K....',
+  '....K2222222K...',
+  '.tttt2a22222K...',
+  '...tt2222222K...',
+  '....Ka2222hhK...',
+  '.....KS222hhhK..',
+  '....KSSS22hGhK..',
+  '....KSSS22hhhK..',
+  '....KSSS22hGhK..',
+  '....KSSS22hhhK..',
+  '....KSSS22hGhK..',
+  '.....KSS22hhhK..',
+  '.....KSS222hhK..',
+  '.....tKS222hK...',
+  '.....ttK22DDK...',
+  '........KDDDK...',
+  '.........KDDK...',
+  '..........KDK...',
+]);
+
+// Its beak stuck in the plank after a dive (#411's hit window): head down,
+// wings up, chips at the beak — drawn while it is in a `land` state.
+export const spechtLanded = single('specht-landed', [
+  '...........K....K...',
+  '..........KhK..KhK..',
+  '.........KhhK.KhhK..',
+  '........KhGhKKhGhK..',
+  '........KhhhhKhhhK..',
+  '.......KKKhhhhhhKKK.',
+  '.....KK2222222222DDK',
+  '....KVV2222SSSS222DD',
+  '...KV22222SSSSSS22KD',
+  '...K22a2222SSSS22K.K',
+  '...K22222K22222KK...',
+  '....K222K.KKKKK.....',
+  '.....KtK............',
+  '......t.............',
+  '.....ttt............',
+  '....t.t..t..........',
+]);
+
 export const ROSTER = {
   fliegenpilz,
   zecke,
   bachforelle,
   'bachforelle-shadow': bachforelleShadow,
   borkenkaefer,
+  specht,
+  'specht-landed': spechtLanded,
 };
 
 /** Every sprite is authored against Floor 3's palette. */

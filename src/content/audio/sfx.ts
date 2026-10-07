@@ -565,6 +565,18 @@ const itemZeckeLatch: SfxDefinition = {
   tone: { instrument: 'clarinet', note: 'A2', durationSeconds: 0.18 },
 };
 
+const windupSpechtDrum: SfxDefinition = {
+  id: 'windup-specht-drum',
+  description:
+    'A Specht drumming before its dive (#411): a dry woody "trrrrr" — short bandpassed knocks in a fast run — in place of the generic wind-up, so the dive is heard coming from the wall.',
+  noise: {
+    filter: { type: 'bandpass', frequencyHz: 1400, q: 4 },
+    durationSeconds: 0.025,
+    gain: 0.5,
+  },
+  repeat: { count: 14, intervalSeconds: 0.045 },
+};
+
 const itemZeckeShakeOff: SfxDefinition = {
   id: 'item-zecke-shake-off',
   description:
@@ -581,6 +593,7 @@ export const SFX_DEFINITIONS: readonly SfxDefinition[] = [
   itemPoisonCleanse,
   itemZeckeLatch,
   itemZeckeShakeOff,
+  windupSpechtDrum,
   hitSquelch,
   hitMetal,
   hitAnimal,
@@ -623,6 +636,16 @@ export const SFX_DEFINITIONS: readonly SfxDefinition[] = [
 ];
 
 /** One of the five enemy timbre families a `hit-*`/`death-*` pair covers. */
+/**
+ * Enemies whose wind-up has a sound of its own (#411), played through the
+ * impact seam's `onAttackWindup` in place of the generic `attack-windup`.
+ * The Specht's drumroll is the first: its telegraph is meant to be heard as
+ * a woodpecker, not as "something is winding up".
+ */
+export const ENEMY_WINDUP_SFX: Readonly<Record<string, string>> = {
+  specht: 'windup-specht-drum',
+};
+
 export type EnemySfxCategory = 'squelch' | 'metal' | 'animal' | 'folk' | 'oompah';
 
 /**
@@ -665,4 +688,5 @@ export const ENEMY_SFX_CATEGORY: Readonly<Record<string, EnemySfxCategory>> = {
   bachforelle: 'squelch',
   boar: 'animal',
   borkenkaefer: 'squelch',
+  specht: 'animal',
 };

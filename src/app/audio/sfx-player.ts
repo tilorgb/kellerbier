@@ -2,6 +2,7 @@ import { INSTRUMENT_DEFINITIONS } from '../../content/audio/instruments.js';
 import { BARK_DEFINITIONS } from '../../content/audio/barks.js';
 import {
   ENEMY_SFX_CATEGORY,
+  ENEMY_WINDUP_SFX,
   SFX_DEFINITIONS,
   type EnemySfxCategory,
 } from '../../content/audio/sfx.js';
@@ -64,7 +65,9 @@ function estimatedDurationSeconds(def: SfxDefinition): number {
     const sampleDuration = trimEndSeconds - trimStartSeconds;
     return sampleDuration > 0 ? sampleDuration : DEFAULT_VOICE_DURATION_SECONDS;
   }
-  const noiseDuration = def.noise?.durationSeconds ?? 0;
+  const repeats =
+    def.repeat === undefined ? 0 : (def.repeat.count - 1) * def.repeat.intervalSeconds;
+  const noiseDuration = (def.noise?.durationSeconds ?? 0) + Math.max(0, repeats);
   const toneDuration = def.tone?.durationSeconds ?? 0;
   const longest = Math.max(noiseDuration, toneDuration);
   return longest > 0 ? longest : DEFAULT_VOICE_DURATION_SECONDS;
@@ -305,8 +308,9 @@ export const SYNTH_IMPACT_AUDIO: ImpactAudio = {
   onEnemyShotFired: (enemyId) => {
     playSfx(`shot-${categoryFor(enemyId)}`);
   },
-  onAttackWindup: () => {
-    playSfx('attack-windup');
+  onAttackWindup: (enemyId) => {
+    // A body with a wind-up of its own (#411's drumroll) plays that instead.
+    playSfx((enemyId === null ? undefined : ENEMY_WINDUP_SFX[enemyId]) ?? 'attack-windup');
   },
   onEnemySplit: () => {
     playSfx('enemy-split');

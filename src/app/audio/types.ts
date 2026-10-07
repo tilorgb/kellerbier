@@ -202,6 +202,12 @@ export interface SfxDefinition {
   };
   /** Random pitch wobble per play, in cents, so a repeated hit doesn't phase-lock. Defaults to 0. */
   readonly pitchJitterCents?: number;
+  /**
+   * Plays the `noise` burst `count` times, `intervalSeconds` apart, instead
+   * of once — a roll rather than a hit (#411, the Specht's drumming). The
+   * `tone`, if any, still plays once, under the first.
+   */
+  readonly repeat?: { readonly count: number; readonly intervalSeconds: number };
   /** A recorded one-shot standing in for `noise`/`tone` — see `SampleRef`'s own doc comment. */
   readonly sample?: SampleRef;
 }

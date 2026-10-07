@@ -15,6 +15,8 @@ import {
   type EnemyEatMarkInfo,
   type EnemyTelegraphShapeInfo,
   enemyEatMark,
+  enemyFlightHeight,
+  enemyGrounded,
   enemyHopProgress,
   enemySubmerged,
   enemyTelegraphProgress,
@@ -126,10 +128,21 @@ const LABEL_POINT = { x: 0, y: 0 };
 const PICKUP_LIFT = 1.5;
 /** Room units a `hopCardinal` body (#407, the Kaninchen) rises at the top of a hop — the sim moves it along the floor, this makes it a hop. */
 const HOP_BOB = 2.5;
+/**
+ * Room units above the floor a flying body (#411, the Specht) is drawn —
+ * clinging high on the wall, gliding back to it — scaled by
+ * `enemyFlightHeight`, which is zero while it is down with its beak stuck.
+ */
+const FLY_HEIGHT = 7;
+/** How far a drumming body (#411's `telegraphLook: 'drum'`) hammers back and forth, in room units, and how fast. */
+const DRUM_SHAKE = 0.6;
+const DRUM_SHAKE_RATE = 0.16;
 /** How flat a submerged body's shadow is drawn, as a fraction of its height (#408). */
 const SUBMERGED_FLATTEN = 0.6;
 /** The sprite-name suffix a creature's under-the-water art is authored with (#408). */
 const SHADOW_SUFFIX = '-shadow';
+/** The sprite-name suffix a flying creature's down-on-the-floor art is authored with (#411's beak stuck in the plank). */
+const LANDED_SUFFIX = '-landed';
 /** Strength of the shadow's glow — enough to find it in the dark, not enough to read as lit. */
 const SUBMERGED_GLOW_STRENGTH = 0.5;
 /**
@@ -188,6 +201,12 @@ export class EntityView {
    * frame builds a name.
    */
   private readonly shadowArt: readonly (Texture | undefined)[];
+  /**
+   * Per enemy definition index, the art a flying body draws while it is
+   * down in a `land` state (#411): `<id>-landed` when the roster has one —
+   * the Specht's beak stuck in the plank, wings up. Unset: its own art.
+   */
+  private readonly landedArt: readonly (Texture | undefined)[];
   private readonly bodies: Billboard[] = [];
   /** Per body slot, 1 when that body is an enemy telegraphing this frame (#404's see-through pass). */
   private readonly bodyTelegraphing: number[] = [];
@@ -243,6 +262,7 @@ export class EntityView {
     this.sim = sim;
     this.art = art;
     this.shadowArt = sim.enemies.all.map((enemy) => art.enemyArt[`${enemy.id}${SHADOW_SUFFIX}`]);
+    this.landedArt = sim.enemies.all.map((enemy) => art.enemyArt[`${enemy.id}${LANDED_SUFFIX}`]);
     this.bombTexture = art.pickupArt[BOMB_PICKUP_ID];
     this.pickupTints = sim.pickups.all.map((definition) => definition.tint);
     this.pickupLabels = sim.pickups.all.map((definition) => definition.label);
@@ -482,6 +502,9 @@ export class EntityView {
           mirror = headingX > 0 ? -1 : 1;
         }
       }
+      if (isEnemyBody && compiledEnemy?.flying === true && enemyGrounded(sim, index)) {
+        texture = this.landedArt[sim.enemy.data[index * ENEMY_STRIDE] ?? 0] ?? texture;
+      }
       billboard.visible = true;
       billboard.setTexture(texture, mirror);
       const flashing = !isPickup && (flash[index] ?? 0) > 0;
@@ -541,7 +564,8 @@ export class EntityView {
       const lift = isPickup
         ? PICKUP_LIFT
         : isEnemyBody
-          ? HOP_BOB * Math.sin(Math.PI * enemyHopProgress(sim, index))
+          ? HOP_BOB * Math.sin(Math.PI * enemyHopProgress(sim, index)) +
+            FLY_HEIGHT * enemyFlightHeight(sim, index)
           : 0;
       // A bloating body (#405) swells over its wind-up and snaps back the
       // tick the telegraph ends — the deflate is the burst.
@@ -555,7 +579,12 @@ export class EntityView {
           ? windUp * windUp * (3 - 2 * windUp)
           : 0;
       const widen = 1 + WIND_UP_WIDEN * crouch;
-      let placeX = x;
+      // Drumming (#411): the head hammers back and forth for the whole
+      // wind-up — the visible half of the drumroll.
+      let placeX =
+        compiledEnemy?.telegraphDrum === true && telegraph > 0
+          ? x + DRUM_SHAKE * Math.sin(nowMs * DRUM_SHAKE_RATE)
+          : x;
       let placeY = 0.2 + lift;
       let placeZ = footZ;
       if (latched) {
