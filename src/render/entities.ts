@@ -16,6 +16,9 @@ import {
   type EnemyTelegraphShapeInfo,
   enemyEatMark,
   enemyFlightHeight,
+  enemyFlightPose,
+  FlightPose,
+  flightHeading,
   enemyGrounded,
   enemyHopProgress,
   enemySubmerged,
@@ -143,6 +146,24 @@ const SUBMERGED_FLATTEN = 0.6;
 const SHADOW_SUFFIX = '-shadow';
 /** The sprite-name suffix a flying creature's down-on-the-floor art is authored with (#411's beak stuck in the plank). */
 const LANDED_SUFFIX = '-landed';
+/** Sprite-name suffixes of a flier's wing-beat strips (#411): side-on, toward the camera, away from it. */
+const FLY_SIDE_SUFFIX = '-fly-side';
+const FLY_FRONT_SUFFIX = '-fly-front';
+const FLY_BACK_SUFFIX = '-fly-back';
+/** Every strip name a `flying` enemy's art may add to its id — what `tests/content/animated-sprites.test.ts` lets through. */
+export const FLIGHT_STRIP_SUFFIXES = [FLY_SIDE_SUFFIX, FLY_FRONT_SUFFIX, FLY_BACK_SUFFIX] as const;
+/** The sprite-name suffix of a flier's dive, head down at the floor (#411). */
+const DIVE_SUFFIX = '-dive';
+/** Milliseconds per wing-beat frame. */
+const FLAP_FRAME_MS = 90;
+/** Wing-beat frame order over a strip of up, level, down: up, level, down, level. */
+const FLAP_ORDER = [0, 1, 2, 1] as const;
+/**
+ * How much more along the screen's up-down than across it a flier must be
+ * heading before it turns to face toward or away from the camera — the
+ * side view holds the diagonals, which read best side-on.
+ */
+const FLY_FACE_CAMERA_RATIO = 1.2;
 /** Strength of the shadow's glow — enough to find it in the dark, not enough to read as lit. */
 const SUBMERGED_GLOW_STRENGTH = 0.5;
 /**
@@ -207,6 +228,15 @@ export class EntityView {
    * the Specht's beak stuck in the plank, wings up. Unset: its own art.
    */
   private readonly landedArt: readonly (Texture | undefined)[];
+  /**
+   * Per enemy definition index, a flier's art in the air (#411): its
+   * wing-beat strips side-on, toward the camera and away from it, and its
+   * dive. Unset: its own art, as before it had any.
+   */
+  private readonly flySideArt: readonly (AnimatedSpriteSet | undefined)[];
+  private readonly flyFrontArt: readonly (AnimatedSpriteSet | undefined)[];
+  private readonly flyBackArt: readonly (AnimatedSpriteSet | undefined)[];
+  private readonly diveArt: readonly (Texture | undefined)[];
   private readonly bodies: Billboard[] = [];
   /** Per body slot, 1 when that body is an enemy telegraphing this frame (#404's see-through pass). */
   private readonly bodyTelegraphing: number[] = [];
@@ -263,6 +293,16 @@ export class EntityView {
     this.art = art;
     this.shadowArt = sim.enemies.all.map((enemy) => art.enemyArt[`${enemy.id}${SHADOW_SUFFIX}`]);
     this.landedArt = sim.enemies.all.map((enemy) => art.enemyArt[`${enemy.id}${LANDED_SUFFIX}`]);
+    this.flySideArt = sim.enemies.all.map(
+      (enemy) => art.enemyAnimation[`${enemy.id}${FLY_SIDE_SUFFIX}`],
+    );
+    this.flyFrontArt = sim.enemies.all.map(
+      (enemy) => art.enemyAnimation[`${enemy.id}${FLY_FRONT_SUFFIX}`],
+    );
+    this.flyBackArt = sim.enemies.all.map(
+      (enemy) => art.enemyAnimation[`${enemy.id}${FLY_BACK_SUFFIX}`],
+    );
+    this.diveArt = sim.enemies.all.map((enemy) => art.enemyArt[`${enemy.id}${DIVE_SUFFIX}`]);
     this.bombTexture = art.pickupArt[BOMB_PICKUP_ID];
     this.pickupTints = sim.pickups.all.map((definition) => definition.tint);
     this.pickupLabels = sim.pickups.all.map((definition) => definition.label);
@@ -504,6 +544,34 @@ export class EntityView {
       }
       if (isEnemyBody && compiledEnemy?.flying === true && enemyGrounded(sim, index)) {
         texture = this.landedArt[sim.enemy.data[index * ENEMY_STRIDE] ?? 0] ?? texture;
+      } else if (isEnemyBody && compiledEnemy?.flying === true && animation === undefined) {
+        // In the air (#411): the wing-beat strip for the way it is going,
+        // side-on (mirrored) unless it is mostly heading toward or away
+        // from the camera, and head down for the dive.
+        const kind = sim.enemy.data[index * ENEMY_STRIDE] ?? 0;
+        const pose = enemyFlightPose(sim, index);
+        const headingX = flightHeading[0] ?? 0;
+        const headingY = flightHeading[1] ?? 0;
+        if (pose === FlightPose.Diving) {
+          const dive = this.diveArt[kind];
+          if (dive !== undefined) {
+            texture = dive;
+            mirror = headingX > 0 ? -1 : 1;
+          }
+        } else if (pose === FlightPose.Flying) {
+          const towardCamera = Math.abs(headingY) > Math.abs(headingX) * FLY_FACE_CAMERA_RATIO;
+          const strip = towardCamera
+            ? headingY > 0
+              ? this.flyFrontArt[kind]
+              : this.flyBackArt[kind]
+            : this.flySideArt[kind];
+          const frame =
+            strip?.frames[FLAP_ORDER[Math.floor(nowMs / FLAP_FRAME_MS) % FLAP_ORDER.length] ?? 0];
+          if (frame !== undefined) {
+            texture = frame;
+            mirror = towardCamera ? 1 : headingX > 0 ? -1 : 1;
+          }
+        }
       }
       billboard.visible = true;
       billboard.setTexture(texture, mirror);

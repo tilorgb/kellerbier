@@ -17,6 +17,9 @@ import {
   enemyTelegraphShape,
   TelegraphShape,
   enemyFlightHeight,
+  enemyFlightPose,
+  FlightPose,
+  flightHeading,
 } from '../../src/sim/systems/enemy.js';
 
 /**
@@ -377,6 +380,38 @@ describe('Specht (#411)', () => {
     expect(
       Math.hypot(sim.positionX(bird) - fromX, sim.positionY(bird) - fromY),
     ).toBeLessThanOrEqual(STRIKE_RANGE + 2);
+  });
+
+  it('tells the renderer what it is doing in the air: perched, on the wing, diving', () => {
+    const sim = emptySim();
+    const bird = spawn(sim, 'specht', 160, sim.room.minY + 10);
+    // On its wall: drawn as the perched sprite.
+    expect(enemyFlightPose(sim, bird)).toBe(FlightPose.None);
+    keepAway(sim, bird);
+    expect(stepUntil(sim, bird, 'circle')).toBeGreaterThanOrEqual(0);
+    keepAway(sim, bird);
+    sim.step(IDLE);
+    expect(enemyFlightPose(sim, bird)).toBe(FlightPose.Flying);
+    // Facing the way it flies: its last step went along its heading.
+    const x = sim.positionX(bird);
+    const y = sim.positionY(bird);
+    keepAway(sim, bird);
+    sim.step(IDLE);
+    expect(enemyFlightPose(sim, bird)).toBe(FlightPose.Flying);
+    const stepX = sim.positionX(bird) - x;
+    const stepY = sim.positionY(bird) - y;
+    expect(Math.hypot(stepX, stepY)).toBeGreaterThan(0.1);
+    expect((flightHeading[0] ?? 0) * stepX + (flightHeading[1] ?? 0) * stepY).toBeGreaterThan(0);
+    expect(engage(sim, bird, 30, 30)).toBeGreaterThanOrEqual(0);
+    // Hanging still while it drums: facing the player.
+    expect(enemyFlightPose(sim, bird)).toBe(FlightPose.Flying);
+    expect(flightHeading[0]).toBeGreaterThan(0);
+    expect(stepUntil(sim, bird, 'dive', 100)).toBeGreaterThanOrEqual(0);
+    sim.step(IDLE);
+    expect(enemyFlightPose(sim, bird)).toBe(FlightPose.Diving);
+    expect(stepUntil(sim, bird, 'stuck', 200)).toBeGreaterThanOrEqual(0);
+    // Beak in the floor: the landed sprite, not the air.
+    expect(enemyFlightPose(sim, bird)).toBe(FlightPose.None);
   });
 
   it('is deterministic', () => {

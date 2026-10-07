@@ -2696,6 +2696,56 @@ export function enemyFlightHeight(sim: GameSim, index: number): number {
   return clamp(left / DIVE_DESCENT, 0, 1);
 }
 
+/** What a flying body is doing in the air, for the renderer to pick its art by. */
+export const FlightPose = {
+  /** Not in the air at all, or sitting on its perch: drawn as authored. */
+  None: 0,
+  /** On the wing; `heading` is the way it is going. */
+  Flying: 1,
+  /** Diving at its point (`chargeAtPlayer` with `untilTargetPoint`); `heading` is the dive's. */
+  Diving: 2,
+} as const;
+export type FlightPoseValue = (typeof FlightPose)[keyof typeof FlightPose];
+
+/** Where `enemyFlightPose` writes the way a flier faces — x, y; read, never kept. */
+export const flightHeading = new Float64Array(2);
+
+/**
+ * What the flying body at `index` is doing in the air (#411, the Specht's
+ * flight art), with the way it faces written to `flightHeading`: its heading
+ * on the wing, or — hanging still in the air, drumming — the way to the player.
+ */
+export function enemyFlightPose(sim: GameSim, index: number): FlightPoseValue {
+  if (!enemyAirborne(sim, index)) {
+    return FlightPose.None;
+  }
+  const base = index * ENEMY_STRIDE;
+  const compiled = sim.enemies.at(sim.enemy.data[base] ?? 0);
+  const selfX = sim.positionX(index);
+  const selfY = sim.positionY(index);
+  if (compiled.perches && onPerch(sim, index, selfX, selfY)) {
+    return FlightPose.None;
+  }
+  const movement = compiled.states[sim.enemy.data[base + 1] ?? 0]?.movement;
+  const motionBase = index * ENEMY_MOTION_STRIDE;
+  const motion = sim.enemyMotion.data;
+  if (movement?.behaviour === 'chargeAtPlayer' && movement.untilTargetPoint === true) {
+    flightHeading[0] = motion[motionBase] ?? 0;
+    flightHeading[1] = motion[motionBase + 1] ?? 0;
+    return FlightPose.Diving;
+  }
+  if (movement?.behaviour === 'pause') {
+    // Hanging in the air, drumming: turned to the one it is about to dive at.
+    flightHeading[0] = sim.positionX(sim.playerIndex) - selfX;
+    flightHeading[1] = sim.positionY(sim.playerIndex) - selfY;
+  } else {
+    // `flyLoops` and `returnToPerch` keep their heading in the heading slots.
+    flightHeading[0] = motion[motionBase] ?? 0;
+    flightHeading[1] = motion[motionBase + 1] ?? 0;
+  }
+  return FlightPose.Flying;
+}
+
 /** Reusable scratch struct for `enemyEatMark`, written in place so a render loop never allocates. */
 export interface EnemyEatMarkInfo {
   /** 0..1 through eating the plank. */

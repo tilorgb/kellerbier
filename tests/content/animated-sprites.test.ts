@@ -12,6 +12,7 @@ import {
 import { ENEMY_DEFINITIONS } from '../../src/content/enemies/index.js';
 import { ORDNER_STRIP_NAMES } from '../../src/render/ordner-view.js';
 import { PLAYER_BODY_KEYS, SCHLAUCH_OCTANTS } from '../../src/render/player-art.js';
+import { FLIGHT_STRIP_SUFFIXES } from '../../src/render/entities.js';
 import { WALK_CYCLE_FRAMES } from '../../tools/art/spec.mjs';
 
 /** Every strip name `render/player-art.ts` asks `common/characters/` for. */
@@ -80,7 +81,13 @@ describe('every animation strip in assets/sprites/', () => {
       // every floor (`shopkeeper`, #194) — same `EnemyDefinition.id` lookup a
       // floor roster uses (`assets/sprites/README.md`'s lookup table) — and
       // Der Ordner, the bouncer familiar, keyed by facing like Alois.
-      const ids = ENEMY_DEFINITIONS.map((definition) => definition.id);
+      // A flier (#411) also has its wing-beat strips, `<id>-fly-side` and the
+      // rest, which `render/entities.ts` asks for by those suffixes.
+      const ids = ENEMY_DEFINITIONS.flatMap((definition) =>
+        definition.flying === true
+          ? [definition.id, ...FLIGHT_STRIP_SUFFIXES.map((suffix) => `${definition.id}${suffix}`)]
+          : [definition.id],
+      );
       if (sprite.bucketId === 'common') {
         expect([...PLAYER_STRIP_NAMES, ...Object.values(ORDNER_STRIP_NAMES), ...ids]).toContain(
           name,

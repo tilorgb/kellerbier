@@ -20,7 +20,8 @@ import { legalPixelColorsFor } from '../../tools/art/palette.mjs';
  * pull request rather than shipping art nobody looked at. Grows by one entry
  * per Floor 3 creature as each is signed off (#405-#411). The Boar and the
  * Kaninchen are strips (a trot, a hop) whose first frame is the signed-off
- * sprite, unchanged.
+ * sprite, unchanged; the Specht's flight is three wing-beat strips (side,
+ * front, back) and a dive.
  */
 
 const SPRITES = fileURLToPath(new URL('../../assets/sprites/', import.meta.url));
@@ -42,6 +43,10 @@ describe("Der Wald roster's committed art is what the authoring source produces"
       'fliegenpilz',
       'kaninchen',
       'specht',
+      'specht-dive',
+      'specht-fly-back',
+      'specht-fly-front',
+      'specht-fly-side',
       'specht-landed',
       'zecke',
     ]);
@@ -96,7 +101,8 @@ describe("Der Wald roster's committed art is what the authoring source produces"
   it('only re-poses the legs: every strip frame matches frame 0 above the feet', () => {
     // The body is the signed-off sprite; animation must not quietly redraw it.
     const legRows = { boar: 26, kaninchen: 14 } as const;
-    for (const [name, strip] of strips) {
+    // The Specht's flight strips are a wing-beat, not a walk: wings move.
+    for (const [name, strip] of strips.filter(([name]) => name in legRows)) {
       const from = legRows[name as keyof typeof legRows];
       const [base, ...rest] = strip.frames;
       for (const frame of rest) {

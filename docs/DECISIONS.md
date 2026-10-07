@@ -6628,6 +6628,13 @@ point that drifts round the room (`flyLoops`), always for at least 45 ticks. It 
 player within 72 units, after drumming in the air. A player who keeps away just watches it
 circle, and after six to nine seconds it goes back to a wall.
 
+**The Specht's flight art faces the way it flies.** Signed off as option B of three: a side-on
+wing-beat (mirrored), a front and a back view for flying toward and away from the camera, and a
+head-down dive (`specht-fly-side`/`-front`/`-back` strips, `specht-dive`). The renderer picks
+them from `enemyFlightPose`. Side-on holds the diagonals; the bird only turns to face or leave
+the camera when it is heading 1.2 times more up-down than across. Perched and stuck in the
+floor, it keeps its two existing sprites.
+
 **Constrains:** a new side-on enemy declares `facing: 'mirror'` until it has direction strips.
 A new push effect is an impulse on a cooldown and is mass-scaled. A new familiar copies the
 `GameSim.ordner` shape rather than becoming an ECS body.
