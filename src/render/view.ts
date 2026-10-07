@@ -9,6 +9,7 @@ import { DamageNumberView } from './damage-numbers.js';
 import { DecalView } from './decals.js';
 import { EntityView } from './entities.js';
 import { ORDNER_STRIP_NAMES, OrdnerView } from './ordner-view.js';
+import { CloudView } from './cloud-view.js';
 import { GloomBlur } from './gloom.js';
 import type { AnimatedSpriteSet, RoomTileArt } from './floor-art.js';
 import { BitmapText, Container, type Texture } from './gfx/index.js';
@@ -312,6 +313,8 @@ export class GameView {
   private readonly maibaumView: MaibaumView;
   /** Der Ordner, the bouncer familiar — drawn only while the item is held. */
   private readonly ordnerView: OrdnerView;
+  /** Poison clouds, drawn as a low poison haze (`render/cloud-view.ts`). */
+  private readonly cloudView: CloudView;
   private readonly bombFlightView: BombFlightView;
   private readonly corpseView: CorpseView;
   private readonly actorGroups: readonly Object3D[];
@@ -417,6 +420,9 @@ export class GameView {
     });
     this.scene.add(this.ordnerView.group);
 
+    this.cloudView = new CloudView();
+    this.scene.add(this.cloudView.group);
+
     this.bombFlightView = new BombFlightView();
     this.scene.add(this.bombFlightView.group);
 
@@ -435,6 +441,7 @@ export class GameView {
       this.machine.group,
       this.maibaumView.group,
       this.ordnerView.group,
+      this.cloudView.group,
       this.bombFlightView.group,
       this.corpseView.group,
     ];
@@ -474,6 +481,7 @@ export class GameView {
     const lean = this.camera.lean;
     this.entities.setLean(lean);
     this.ordnerView.setLean(lean);
+    this.cloudView.setLean(lean);
     this.playerView.setLean(lean);
     this.projectiles.setLean(lean);
     this.particles.setLean(lean);
@@ -686,6 +694,7 @@ export class GameView {
     this.playerView.sync(sim, alpha, nowMs);
     this.maibaumView.sync(sim);
     this.ordnerView.sync(sim, alpha, nowMs);
+    this.cloudView.sync(sim, alpha);
     // No light of his own in a lantern room (#424): the lanterns on the walls
     // are the room's light, and a pool that follows him is the circle #404 had.
     this.lighting.syncLantern(
@@ -1322,6 +1331,7 @@ export class GameView {
     this.machine.destroy();
     this.maibaumView.destroy();
     this.ordnerView.destroy();
+    this.cloudView.destroy();
     this.bombFlightView.destroy();
     this.corpseView.destroy();
     this.gloom.dispose();

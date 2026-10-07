@@ -45,7 +45,9 @@ export const fliegenpilz: EnemyDefinition = {
       name: 'burst',
       behaviours: [
         { behaviour: 'pause' },
-        { behaviour: 'emitCloud', radius: 40, growTicks: 12, lifetimeTicks: 90 },
+        // 28: three and a half tiles across. At 40 it covered most of the
+        // space round the mushroom, and there was nowhere near it to shoot from.
+        { behaviour: 'emitCloud', radius: 28, growTicks: 12, lifetimeTicks: 90 },
       ],
       transitions: [{ to: 'cooldown', after: 1 }],
     },

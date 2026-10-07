@@ -86,7 +86,7 @@ describe('Fliegenpilz (#405)', () => {
     expect(compiled.locksRoom).toBe(true);
     expect(fliegenpilz.deathEffect).toBe('spore');
     const burst = compiled.states.find((state) => state.name === 'burst');
-    expect(burst?.emitCloud).toEqual({ radius: 40, growTicks: 12, lifetimeTicks: 90 });
+    expect(burst?.emitCloud).toEqual({ radius: 28, growTicks: 12, lifetimeTicks: 90 });
   });
 
   it('sits idle while the player is out of range', () => {
@@ -111,7 +111,7 @@ describe('Fliegenpilz (#405)', () => {
     expect(stepUntil(sim, enemy, 'cooldown', 60)).toBeGreaterThanOrEqual(44);
     expect(sim.clouds.count).toBe(1);
     const cloud = sim.clouds.oldest;
-    expect(sim.clouds.radius[cloud]).toBe(40);
+    expect(sim.clouds.radius[cloud]).toBe(28);
     expect(sim.clouds.lifetimeTicks[cloud]).toBe(90);
 
     // Long enough a gap to step in and shoot it, then it winds up again.
@@ -226,10 +226,10 @@ describe("telegraphLook: 'bloat' (#405)", () => {
     expect(glow.g).toBeGreaterThan(glow.r);
     expect(glow.g).toBeGreaterThan(glow.b);
     expect(glow.g).toBeGreaterThan(0.3);
-    // One marking, at the cloud's true 40 — not the red attack ring, which
+    // One marking, at the cloud's true 28 — not the red attack ring, which
     // would stop at the body's own radius times 2.6.
     const drawn = ring(view);
-    expect(drawn?.scale.x).toBe(40);
+    expect(drawn?.scale.x).toBe(28);
     expect(drawn?.scale.x ?? 0).toBeGreaterThan(restRadius * 2.6);
     const edge = drawn?.material as MeshBasicMaterial | undefined;
     expect(edge?.color.getHex()).toBe(ENTITY_PALETTE.cloudEdgeTelegraph);
