@@ -80,8 +80,8 @@
       "count": 1,
       "choices": [
         {
-          "enemyId": "kuh",
-          "minFloor": 2,
+          "enemyId": "zecke",
+          "minFloor": 3,
           "maxFloor": 3
         }
       ]
@@ -91,8 +91,8 @@
       "count": 1,
       "choices": [
         {
-          "enemyId": "bauer",
-          "minFloor": 2,
+          "enemyId": "kaninchen",
+          "minFloor": 3,
           "maxFloor": 3
         }
       ]

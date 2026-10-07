@@ -308,7 +308,7 @@ Every boss has at least two phases, a readable telegraph on every attack, and on
 | 1 | Die Große Kellerassel | Live | Segmented crawler; splits into segments in phase 2. Gentle tutorial boss; unlocks Promille |
 | 2 | Der Stier | Live | Charge-and-stun loop; phase 2 adds the Maibaum-Dieb riding him |
 | 3 | Die Wilde Gjoad | Designed | The Wild Hunt sweeps the arena on a fixed path; fight the huntsman in the gaps |
-| 4 | Der Watzmann | Designed | The mountain itself: avalanches, falling rock, a mid-fight climb |
+| 4 | The First Human | Designed | Ötzi-inspired mummy; pendulum arm swings release sweeping bullet fans; phase 2 he pulls the arrowhead from his shoulder and throws it |
 | 5 | König Ludwig II | Designed | Swan boat and 3/4 waltz bullet patterns; phase 2 pulls the arena underwater |
 | 6 | Die Abfüllanlage | Designed | The bottling line: destroy capper, labeller, conveyor head and the dosing hopper (the reveal) |
 | 7 | Die Bavaria | Designed | Phase 1 her lion; phase 2 she steps down; phase 3 the whole Wiesn fights for her, gladly |

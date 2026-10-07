@@ -270,7 +270,7 @@ be worth doing.
 
 | # | Issue |
 |---|---|
-| 40 | Floor 4 — Die Alpen and Der Watzmann |
+| 40 | Floor 4 — Die Alpen and The First Human |
 | 41 | Floor 5 — Schloss Neuschwanstein and König Ludwig II |
 | 42 | Floor 6 — Die Brauerei and Die Abfüllanlage |
 | 43 | Floor 7 — Die Wiesn and Die Bavaria |

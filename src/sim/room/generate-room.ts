@@ -117,7 +117,7 @@ export interface MultiCellRoomGenSpec extends RoomGenContext {
   readonly doors: readonly { readonly cellIndex: number; readonly direction: DoorDirection }[];
 }
 
-interface RosterEntry {
+export interface RosterEntry {
   readonly id: string;
   readonly weight: number;
   /** Rough threat cost spent from the budget when this body is placed. */
@@ -143,9 +143,16 @@ interface RosterEntry {
 /**
  * Per-floor-tag enemy rosters. Boss-only bodies and spawned children (segments,
  * spores, splitters) are left out; they are not room-roster enemies. A floor
- * tag with no roster generates enemy-free rooms and warns once.
+ * tag with no roster generates enemy-free rooms and warns once — and
+ * `tests/content/generator-rosters.test.ts` fails CI for any floor up to
+ * `HIGHEST_SANDBOX_FLOOR` that has none, so that warning is only ever a
+ * player's safety net, not how a gap gets found.
+ *
+ * Water creatures (a `swimInZone` enemy, the Bachforelle) are not listed
+ * here: they can only stand in a stream, which is rolled after the land
+ * roster is spent. They live in `STREAM_DWELLERS` instead.
  */
-const ROSTERS: Readonly<Record<string, readonly RosterEntry[]>> = {
+export const ROSTERS: Readonly<Record<string, readonly RosterEntry[]>> = {
   cellar: [
     { id: 'bierratte', weight: 3, cost: 1, pursues: true, groupSize: 3 },
     { id: 'kellerassel', weight: 3, cost: 2, pursues: true },
@@ -163,7 +170,44 @@ const ROSTERS: Readonly<Record<string, readonly RosterEntry[]>> = {
     { id: 'boellerschmeisser', weight: 1, cost: 3, pursues: false },
     { id: 'traktor', weight: 1, cost: 4, pursues: true },
   ],
+  /**
+   * Floor 3 (#405-#408). No Bierratte: the Wald is the first floor without
+   * the cellar's rats. The Borkenkäfer joins when it lands.
+   *
+   * - Zecke: the cheapest pursuer, so the body #230's
+   *   `ensurePursuerPresent` swaps in. Placed in pairs: one tick is a
+   *   nuisance, two make the shake-off (which throws every latched tick at
+   *   once) worth learning. Cost 1 — 2 HP, slow, no contact damage.
+   * - Kaninchen: never seeks the player and is "one of the easiest things on
+   *   the floor" by design — cost 1, and as common as the Zecke.
+   * - Fliegenpilz: static area denial with 5 HP, priced like the cellar's
+   *   Schimmelfleck (cost 3, weight 2), the other stand-still spore body.
+   * - Boar (#409): 9 HP, `tough` loot, and a charge that hits for double —
+   *   priced like the Traktor (cost 4), the other heavy body, and rarer than
+   *   the small mobs so one is an event rather than the room's furniture.
+   *   It charges the player once they cross its axis, so it pursues in
+   *   #230's sense, like the Kuh.
+   */
+  wald: [
+    { id: 'zecke', weight: 3, cost: 1, pursues: true, groupSize: 2 },
+    { id: 'kaninchen', weight: 3, cost: 1, pursues: false },
+    { id: 'fliegenpilz', weight: 2, cost: 3, pursues: false },
+    { id: 'boar', weight: 1, cost: 4, pursues: true },
+  ],
 };
+
+/**
+ * Per-floor-tag water creatures, placed only in a generated room that rolled
+ * a stream (`placeStream`) and already has a land fight — never on dry
+ * ground, and never as a room's only enemy: a fish that is untouchable while
+ * submerged and never comes ashore cannot be a room's whole fight. One body
+ * per stream piece, at most `MAX_STREAM_DWELLERS`, on top of the threat
+ * budget (the stream is a ~15% event, not a cost the land roster should pay).
+ */
+export const STREAM_DWELLERS: Readonly<Record<string, readonly string[]>> = {
+  wald: ['bachforelle'],
+};
+const MAX_STREAM_DWELLERS = 2;
 
 /**
  * Decorative-prop kinds per floor tag, drawn with repeats for weighting. Every
@@ -1025,6 +1069,45 @@ function placeEnemies(
   return placed;
 }
 
+/**
+ * Adds this floor's water creatures (`STREAM_DWELLERS`) to a room that rolled
+ * a stream and already has land enemies — one per stream piece, at the
+ * piece's centre tile, which `GameSim`'s spawn puts on the meandered water
+ * itself. Draws from the RNG only when there is a stream, so floors without
+ * one generate exactly what they always did.
+ */
+function placeStreamDwellers(
+  ctx: RoomGenContext,
+  hazards: readonly PlacedHazard[],
+  enemies: PlacedEnemy[],
+): void {
+  const dwellers = STREAM_DWELLERS[ctx.floorTag];
+  if (dwellers === undefined || dwellers.length === 0 || enemies.length === 0) {
+    return;
+  }
+  const pieces = hazards.filter((hazard) => hazard.type === STREAM_HAZARD);
+  if (pieces.length === 0) {
+    return;
+  }
+  const chosen = ctx.rng.shuffle(pieces.slice()).slice(0, MAX_STREAM_DWELLERS);
+  for (const piece of chosen) {
+    const col = piece.col + Math.floor(piece.cols / 2);
+    const row = piece.row + Math.floor(piece.rows / 2);
+    enemies.push({
+      tile: {
+        col,
+        row,
+        x: col * ROOM_TILE_UNITS + ROOM_TILE_UNITS / 2,
+        y: row * ROOM_TILE_UNITS + ROOM_TILE_UNITS / 2,
+      },
+      enemyId: ctx.rng.pick(dwellers),
+      cost: 0,
+      pursues: false,
+      groupSize: 1,
+    });
+  }
+}
+
 function pickPickup(
   candidates: readonly PlacedTile[],
   enemies: readonly PlacedEnemy[],
@@ -1409,7 +1492,7 @@ export function generateRoom(
   }
 
   const candidates = openTiles(layout.grid, layout.distance, approaches, 2);
-  const enemies = placeEnemies(spec, candidates, 1, params);
+  const enemies: PlacedEnemy[] = placeEnemies(spec, candidates, 1, params);
   const pickup = spec.rng.chance(params.pickupChance)
     ? pickPickup(spec.rng.shuffle(candidates.slice()), enemies)
     : null;
@@ -1424,6 +1507,7 @@ export function generateRoom(
     1,
     params,
   );
+  placeStreamDwellers(spec, hazards, enemies);
 
   const sub = subLayoutFor(
     layout.grid,
@@ -1500,7 +1584,7 @@ export function generateMultiCellRoom(
   }
 
   const candidates = openTiles(layout.grid, layout.distance, approaches, 2);
-  const enemies = placeEnemies(spec, candidates, cellCount, params);
+  const enemies: PlacedEnemy[] = placeEnemies(spec, candidates, cellCount, params);
   const pickup = spec.rng.chance(params.pickupChance)
     ? pickPickup(spec.rng.shuffle(candidates.slice()), enemies)
     : null;
@@ -1515,6 +1599,7 @@ export function generateMultiCellRoom(
     cellCount,
     params,
   );
+  placeStreamDwellers(spec, hazards, enemies);
 
   // Row-major order — the same order `compileRoomTemplate` assigns `cells` to
   // the real placement slots.
