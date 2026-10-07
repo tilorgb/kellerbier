@@ -4,6 +4,7 @@ import { roomFrameSize, type RoomGeometry } from '../sim/room/geometry.js';
 import type { CompiledDoor } from '../sim/room/template.js';
 import type { EntityAnimator } from './animation/animator.js';
 import { BombFlightView } from './bomb-flight-view.js';
+import { RampView } from './ramp-view.js';
 import { CorpseView } from './corpse-view.js';
 import { DamageNumberView } from './damage-numbers.js';
 import { DecalView } from './decals.js';
@@ -316,6 +317,7 @@ export class GameView {
   /** Poison clouds, drawn as a low poison haze (`render/cloud-view.ts`). */
   private readonly cloudView: CloudView;
   private readonly bombFlightView: BombFlightView;
+  private readonly rampView: RampView;
   private readonly corpseView: CorpseView;
   private readonly actorGroups: readonly Object3D[];
 
@@ -425,6 +427,8 @@ export class GameView {
 
     this.bombFlightView = new BombFlightView();
     this.scene.add(this.bombFlightView.group);
+    this.rampView = new RampView();
+    this.scene.add(this.rampView.group);
 
     this.corpseView = new CorpseView();
     this.scene.add(this.corpseView.group);
@@ -443,6 +447,7 @@ export class GameView {
       this.ordnerView.group,
       this.cloudView.group,
       this.bombFlightView.group,
+      this.rampView.group,
       this.corpseView.group,
     ];
 
@@ -690,6 +695,7 @@ export class GameView {
     );
     this.projectiles.sync(alpha, sim.currentFloor);
     this.bombFlightView.sync(sim);
+    this.rampView.sync(sim);
     this.particles.sync(alpha);
     this.playerView.sync(sim, alpha, nowMs);
     this.maibaumView.sync(sim);
@@ -799,6 +805,7 @@ export class GameView {
       this.projectiles.group.traverse(toSeeThroughLayer);
       this.particles.group.traverse(toSeeThroughLayer);
       this.bombFlightView.group.traverse(toSeeThroughLayer);
+      this.rampView.group.traverse(toSeeThroughLayer);
       this.entities.enableSeeThrough(SEE_THROUGH_LAYER);
     }
 
@@ -1333,6 +1340,7 @@ export class GameView {
     this.ordnerView.destroy();
     this.cloudView.destroy();
     this.bombFlightView.destroy();
+    this.rampView.destroy();
     this.corpseView.destroy();
     this.gloom.dispose();
     this.darkness.dispose();

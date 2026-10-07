@@ -5,6 +5,7 @@ import {
   type CompiledEnemy,
   type CompiledMeleeArc,
   type CompiledState,
+  type CompiledVolleyBurst,
   type FiringBehaviour,
   TransitionTrigger,
 } from '../enemy/registry.js';
@@ -22,6 +23,20 @@ import { ParticleKind } from '../particle/store.js';
 import { nextWaypoint, straightClear, type Waypoint } from '../room/pathfind.js';
 import { CLEAR_IGNORE_PITS } from '../room/geometry.js';
 import { nearestWallPoint } from '../room/perch.js';
+import { slotAngle, slotInGap } from '../enemy/rotating-ring.js';
+import {
+  captureLine,
+  captureVolley,
+  chooseWeighted,
+  glideToPoint,
+  LineEnd,
+  readLine,
+  rideAlongLine,
+  SCRIPTED_MOTION_SLOTS,
+  stepRide,
+  volleyCount,
+  volleyPoint,
+} from './scripted-moves.js';
 import {
   enemyEatProgress,
   MOTION_WOOD_TARGET,
@@ -125,7 +140,13 @@ export const ENEMY_STRIDE = 4;
  * them a `hopTowardPlayer` body's own hop clock, then (#411) a percher's wall
  * point and the way it faces there.
  */
-export const ENEMY_MOTION_STRIDE = 16 + WOOD_MOTION_SLOTS + 3 + 4;
+export const ENEMY_MOTION_STRIDE = 16 + WOOD_MOTION_SLOTS + 3 + 4 + SCRIPTED_MOTION_SLOTS;
+/**
+ * Where `scripted-moves.ts`'s slots start in a body's row (#412, #413): the
+ * boss moves' own ride clock, captured line, weighted-choice memory and
+ * volley points, after a percher's.
+ */
+const MOTION_SCRIPTED = 16 + WOOD_MOTION_SLOTS + 3 + 4;
 /**
  * `enemyMotion` offsets of a `returnToPerch` body's perch (#411): the wall
  * point it is flying to, and the direction into the room it faces there.
@@ -267,6 +288,15 @@ export function stepEnemies(sim: GameSim): void {
         ticks = 0;
         if (entered.capturesLobTarget) {
           captureLobTarget(sim, index);
+        }
+        if (entered.capturesLine) {
+          captureLine(sim, index, index * ENEMY_MOTION_STRIDE + MOTION_SCRIPTED, selfX, selfY);
+        }
+        if (entered.volley !== null) {
+          captureVolley(sim, index * ENEMY_MOTION_STRIDE + MOTION_SCRIPTED, entered.volley);
+        }
+        if (entered.volleyBurst !== null) {
+          detonateVolley(sim, index, entered.volleyBurst);
         }
         if (entered.detonate !== null) {
           detonateLobbedBomb(sim, index, entered.detonate);
@@ -465,6 +495,10 @@ function enterStateExtras(
   if (entered.rollsDuration) {
     sim.enemyMotion.data[index * ENEMY_MOTION_STRIDE + MOTION_DURATION_ROLL] =
       sim.random.enemies.nextFloat();
+  }
+  // Off the arena (#412): the same removal from every collision layer, no splash.
+  if (entered.hidden !== left.hidden && !entered.submerged && !left.submerged) {
+    setSubmerged(sim, index, entered.hidden);
   }
   if (entered.submerged !== left.submerged) {
     setSubmerged(sim, index, entered.submerged);
@@ -1025,7 +1059,11 @@ function chooseTransition(
           );
         }
         if (ticks >= stateDuration(sim, state, after)) {
-          return transition.to;
+          // A `toOneOf` (#412) rolls which state it goes to only now, so the
+          // draw happens once per transition taken, never per tick waited.
+          return transition.choices === undefined
+            ? transition.to
+            : chooseWeighted(sim, index * ENEMY_MOTION_STRIDE + MOTION_SCRIPTED, transition);
         }
         break;
       }
@@ -1499,6 +1537,62 @@ function applyMovement(
       swimAlongCourse(sim, index, behaviour.speed * scale, selfX, selfY);
       return;
     }
+    case 'ride': {
+      stepRide(
+        sim,
+        index,
+        motionBase,
+        motionBase + MOTION_SCRIPTED,
+        behaviour,
+        ticks,
+        scale,
+        selfX,
+        selfY,
+      );
+      return;
+    }
+    case 'rideToLineStart':
+    case 'rideLine': {
+      // `rideToLineStart` heads for the start end; `rideLine` forward for the
+      // far end and back for the start — the same line, the same ride.
+      const end =
+        behaviour.behaviour === 'rideLine' && behaviour.direction === 1
+          ? LineEnd.Far
+          : LineEnd.Start;
+      if (
+        rideAlongLine(
+          sim,
+          index,
+          motionBase,
+          motionBase + MOTION_SCRIPTED,
+          end,
+          behaviour.speed * scale,
+          selfX,
+          selfY,
+        )
+      ) {
+        raiseArrived(sim, index);
+      }
+      return;
+    }
+    case 'glideToPoint': {
+      const room = sim.room;
+      if (
+        glideToPoint(
+          sim,
+          index,
+          (room.minX + room.maxX) / 2,
+          (room.minY + room.maxY) / 2,
+          ticks,
+          behaviour.ticks,
+          selfX,
+          selfY,
+        )
+      ) {
+        raiseArrived(sim, index);
+      }
+      return;
+    }
     case 'returnToPerch': {
       flyToPerch(sim, index, behaviour.speed * scale, ticks, selfX, selfY);
       return;
@@ -1829,6 +1923,21 @@ function applyFiring(
 
     const phase = ticks % interval;
 
+    if (shot.behaviour === 'fireRotatingRing') {
+      // The Waldradl's ring (#413): a pure function of the volley number, so
+      // the same pattern in every fight — no draw from any RNG stream. The
+      // volley number counts from the state's entry, scaled with the interval.
+      if (phase === 0) {
+        const volley = Math.floor(ticks / interval);
+        for (let slot = 0; slot < shot.shots; slot++) {
+          if (!slotInGap(shot.shots, slot, shot.gaps)) {
+            fireOne(sim, index, slotAngle(shot, slot, volley), shot);
+          }
+        }
+      }
+      continue;
+    }
+
     if (shot.behaviour === 'fireRing') {
       // `fireOnBeat`'s ring on the state's own clock (#408): it aims at
       // nothing, so like the beat ring it is not gated on sight.
@@ -1918,13 +2027,47 @@ export function eliteAttackDamage(sim: GameSim, index: number, base: number): nu
 }
 
 function fireOne(sim: GameSim, index: number, angle: number, shot: FiringBehaviour): void {
+  fireFrom(
+    sim,
+    index,
+    sim.positionX(index),
+    sim.positionY(index),
+    sim.body.data[index * 2] ?? 0,
+    angle,
+    shot,
+  );
+}
+
+/** What a projectile needs authored: every firing behaviour's, and a `detonateVolley` burst's. */
+interface ShotSpec {
+  readonly speed: number;
+  readonly damage: number;
+  readonly lifetimeTicks: number;
+  readonly radius?: number | undefined;
+  readonly art?: string | undefined;
+  readonly poison?: boolean | undefined;
+}
+
+/**
+ * `fireOne` from any point: a shot of `index`'s leaving `(centreX, centreY)`
+ * along `angle`, its muzzle `bodyReach` plus its own radius out — the body's
+ * edge for a body firing, nothing for a burst out of a point on the floor
+ * (#412). Falls back to the centre when the muzzle would be inside a wall.
+ */
+function fireFrom(
+  sim: GameSim,
+  index: number,
+  centreX: number,
+  centreY: number,
+  bodyReach: number,
+  angle: number,
+  shot: ShotSpec,
+): void {
   const directionX = Math.cos(angle);
   const directionY = Math.sin(angle);
   const radius = shot.radius ?? sim.tuning.shooting.shotRadius;
 
-  const centreX = sim.positionX(index);
-  const centreY = sim.positionY(index);
-  const reach = (sim.body.data[index * 2] ?? 0) + radius + 1;
+  const reach = bodyReach + radius + 1;
   let muzzleX = centreX + directionX * reach;
   let muzzleY = centreY + directionY * reach;
   if (!sim.room.isClear(muzzleX, muzzleY, radius, CLEAR_IGNORE_PITS)) {
@@ -2006,6 +2149,53 @@ function detonateLobbedBomb(sim: GameSim, index: number, detonation: CompiledDet
   // side, to actually see.
   sim.splashBurst(x, y, detonation.radius);
   sim.triggerExplosion(x, y, detonation.radius);
+}
+
+/** Spokes in the puff a wrapper throws up as it lands (#412). */
+const WRAPPER_PUFF_SPOKES = 8;
+const WRAPPER_PUFF_SPEED = 0.7;
+const WRAPPER_PUFF_TICKS = 16;
+
+/**
+ * `detonateVolley` (#412): at every landing point the body's last `lobVolley`
+ * captured, a poison cloud and a ring of shots out of it — the wrapper bursting.
+ *
+ * Deliberately **not** `detonateLobbedBomb`: no `applySplashDamage`, and above
+ * all no `triggerExplosion`. A wrapper is litter, not a bomb; if it opened
+ * secret walls the Waldradler's volley would be a free key to every hidden
+ * door in a boss room that has none. The cloud and the ring are all of it.
+ */
+function detonateVolley(sim: GameSim, index: number, detonation: CompiledVolleyBurst): void {
+  const block = index * ENEMY_MOTION_STRIDE + MOTION_SCRIPTED;
+  const defaults = sim.tuning.poisonCloud;
+  const cloud = detonation.cloud;
+  const burst = detonation.burst;
+  const count = volleyCount(sim, block);
+  const step = (Math.PI * 2) / burst.shots;
+  for (let point = 0; point < count; point++) {
+    const x = volleyPoint(sim, block, point, 0);
+    const y = volleyPoint(sim, block, point, 1);
+    sim.spawnPoisonCloud(
+      x,
+      y,
+      cloud.radius,
+      cloud.growTicks < 0 ? defaults.defaultGrowTicks : cloud.growTicks,
+      cloud.lifetimeTicks < 0 ? defaults.defaultLifetimeTicks : cloud.lifetimeTicks,
+    );
+    for (let shot = 0; shot < burst.shots; shot++) {
+      fireFrom(sim, index, x, y, 0, step * shot, burst);
+    }
+    ring(
+      sim,
+      x,
+      y,
+      WRAPPER_PUFF_SPOKES,
+      ParticleKind.Spore,
+      WRAPPER_PUFF_SPEED,
+      WRAPPER_PUFF_TICKS,
+      2,
+    );
+  }
 }
 
 /**
@@ -2210,13 +2400,22 @@ function splitFromEvent(slot: number): void {
   const enemy = sim.enemy.data;
   const compiled = sim.enemies.at(enemy[base] ?? 0);
   const state = compiled.states[enemy[base + 1] ?? 0];
-  if (state === undefined || state.splits.length === 0) {
+  if (state === undefined || (state.splits.length === 0 && state.deathPickups.length === 0)) {
     return;
   }
 
   const atX = sim.events.x[slot] ?? 0;
   const atY = sim.events.y[slot] ?? 0;
   const random = sim.random.enemies;
+
+  // What the body leaves lying where it fell (#412, the Waldradler's Maß):
+  // once per death, because a death event is.
+  for (const pickup of state.deathPickups) {
+    sim.dropPickupAt(pickup, atX, atY);
+  }
+  if (state.splits.length === 0) {
+    return;
+  }
 
   // One cue for the whole split, not one per child spawned below — Der
   // Stier's `PHASE_TWO_SPLIT` and a Fass shattering into `fasssplitter` are
@@ -2561,6 +2760,113 @@ export function enemyFlightHeight(sim: GameSim, index: number): number {
     ((motion[motionBase + 4] ?? 0) - sim.positionX(index)) * (motion[motionBase] ?? 0) +
     ((motion[motionBase + 5] ?? 0) - sim.positionY(index)) * (motion[motionBase + 1] ?? 0);
   return clamp(left / DIVE_DESCENT, 0, 1);
+}
+
+/** Whether the body at `index` is off the arena (#412, `leaveArena`): the renderer does not draw it. */
+export function enemyHidden(sim: GameSim, index: number): boolean {
+  if (((sim.world.masks[index] ?? 0) & sim.enemyMask) !== sim.enemyMask) {
+    return false;
+  }
+  const base = index * ENEMY_STRIDE;
+  const state = sim.enemies.at(sim.enemy.data[base] ?? 0).states[sim.enemy.data[base + 1] ?? 0];
+  return state?.hidden === true;
+}
+
+/** Reusable scratch struct for `enemyRampLine`, written in place so a render loop never allocates. */
+export interface EnemyRampLineInfo {
+  /** The ramp the body starts its pass from, and the one it jumps off. */
+  startX: number;
+  startY: number;
+  farX: number;
+  farY: number;
+  /** 0..1, how far up the ramps are: rising over the capture state's telegraph, then up. */
+  rise: number;
+}
+
+const rampScratch = new Float64Array(4);
+
+/**
+ * The ramps a body's captured line stands (#412): written to `out` and true
+ * while the body's current state belongs to its line (`CompiledState.usesLine`)
+ * — rising through the telegraph of the state that captured it, up for every
+ * state that rides it. The renderer eases them down once this goes false.
+ *
+ * @hot — one call per enemy per frame, from `RampView.sync`.
+ */
+export function enemyRampLine(sim: GameSim, index: number, out: EnemyRampLineInfo): boolean {
+  if (((sim.world.masks[index] ?? 0) & sim.enemyMask) !== sim.enemyMask) {
+    return false;
+  }
+  const base = index * ENEMY_STRIDE;
+  const state = sim.enemies.at(sim.enemy.data[base] ?? 0).states[sim.enemy.data[base + 1] ?? 0];
+  if (state?.usesLine !== true) {
+    return false;
+  }
+  readLine(sim, index * ENEMY_MOTION_STRIDE + MOTION_SCRIPTED, rampScratch);
+  out.startX = rampScratch[0] ?? 0;
+  out.startY = rampScratch[1] ?? 0;
+  out.farX = rampScratch[2] ?? 0;
+  out.farY = rampScratch[3] ?? 0;
+  out.rise = state.capturesLine
+    ? state.telegraphTicks > 0
+      ? clamp(enemyTelegraphProgress(sim, index), 0, 1)
+      : 1
+    : 1;
+  return true;
+}
+
+/** Wrapper `point` of the volley the body is lobbing (#412), for the renderer. */
+export interface LobbedVolleyFlight {
+  startX: number;
+  startY: number;
+  endX: number;
+  endY: number;
+  /** 0..1, through the throw — the same fraction `enemyTelegraphProgress` computes for this state. */
+  progress: number;
+  /** The cloud it will leave: the radius its floor marker is drawn at. */
+  radius: number;
+}
+
+/**
+ * How many wrappers the body at `index` has in the air right now — the points
+ * its current `lobVolley` state captured, while the state's telegraph runs — or
+ * zero (#412). `lobbedVolleyFlight` then describes each.
+ */
+export function lobbedVolleyCount(sim: GameSim, index: number): number {
+  if (((sim.world.masks[index] ?? 0) & sim.enemyMask) !== sim.enemyMask) {
+    return 0;
+  }
+  const base = index * ENEMY_STRIDE;
+  const state = sim.enemies.at(sim.enemy.data[base] ?? 0).states[sim.enemy.data[base + 1] ?? 0];
+  if (state?.volley === null || state?.volley === undefined) {
+    return 0;
+  }
+  if (enemyTelegraphProgress(sim, index) <= 0) {
+    return 0;
+  }
+  return volleyCount(sim, index * ENEMY_MOTION_STRIDE + MOTION_SCRIPTED);
+}
+
+/** Writes wrapper `point`'s flight to `out`; call only below `lobbedVolleyCount`. */
+export function lobbedVolleyFlight(
+  sim: GameSim,
+  index: number,
+  point: number,
+  out: LobbedVolleyFlight,
+): void {
+  const block = index * ENEMY_MOTION_STRIDE + MOTION_SCRIPTED;
+  out.startX = sim.positionX(index);
+  out.startY = sim.positionY(index);
+  out.endX = volleyPoint(sim, block, point, 0);
+  out.endY = volleyPoint(sim, block, point, 1);
+  out.progress = enemyTelegraphProgress(sim, index);
+  const base = index * ENEMY_STRIDE;
+  const compiled = sim.enemies.at(sim.enemy.data[base] ?? 0);
+  const state = compiled.states[sim.enemy.data[base + 1] ?? 0];
+  out.radius =
+    state === undefined
+      ? 0
+      : (stateAfterTelegraph(compiled, state)?.volleyBurst?.cloud.radius ?? 0);
 }
 
 /** Reusable scratch struct for `enemyEatMark`, written in place so a render loop never allocates. */

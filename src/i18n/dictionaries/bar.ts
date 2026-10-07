@@ -328,6 +328,10 @@ export const bar: Record<DictKey, string> = {
   'enemies.der-stier.title': 'Hüata vom Maibam',
   'enemies.der-stier.epithet':
     'Zwoa Hörndln, oa Meinung: Da Maibam bleibt precise do, wo er steht.',
+  // TODO(#412): Der Waldradler's plate text is Tilo's to write, in all three
+  // locales — these are marked placeholders, not drafts.
+  'enemies.waldradler.title': 'TODO(#412) title',
+  'enemies.waldradler.epithet': 'TODO(#412) epithet',
   // Villager one-liner (#58/#330) — the German line, verbatim, until the real
   // Boarisch phrasing is pitched. Left plain rather than guessed at dialect,
   // per this project's "the user names/phrases things" rule.
