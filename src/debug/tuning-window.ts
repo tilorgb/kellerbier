@@ -7,6 +7,7 @@ import {
   DEFAULT_IMPACT_TUNING,
   DEFAULT_ITEM_POOL_TUNING,
   DEFAULT_LATCH_TUNING,
+  DEFAULT_ORDNER_TUNING,
   DEFAULT_MACHINE_TUNING,
   DEFAULT_MOVEMENT_TUNING,
   DEFAULT_PICKUP_TUNING,
@@ -61,6 +62,7 @@ interface GroupSpec {
     | 'curse'
     | 'sneeze'
     | 'latch'
+    | 'ordner'
     | 'machine'
     | 'chest';
   readonly fields: readonly FieldSpec[];
@@ -598,11 +600,34 @@ const GROUPS: readonly GroupSpec[] = [
     group: 'latch',
     fields: [
       { key: 'latchReach', min: 0, max: 8, step: 0.5, hint: 'px of gap that still latches' },
-      { key: 'shakeAngleDegrees', min: 60, max: 180, step: 5, hint: 'how sharp a turn counts' },
-      { key: 'shakeWindowTicks', min: 10, max: 120, step: 5, hint: 'ticks the shakes must fit in' },
-      { key: 'shakesRequired', min: 1, max: 8, step: 1, hint: 'sharp turns to throw it off' },
+      { key: 'shakeTurnDegrees', min: 90, max: 1440, step: 30, hint: 'turning that throws it off' },
+      {
+        key: 'shakeHalfLifeTicks',
+        min: 5,
+        max: 120,
+        step: 5,
+        hint: 'ticks for the meter to halve',
+      },
       { key: 'flingDistance', min: 0, max: 24, step: 1, hint: 'px it lands from you' },
       { key: 'flingPush', min: 0, max: 6, step: 0.25, hint: 'flick outward on shake-off' },
+    ],
+  },
+  {
+    title: 'Der Ordner (familiar)',
+    group: 'ordner',
+    fields: [
+      { key: 'guardRadius', min: 10, max: 120, step: 2, hint: 'his own reach, from him' },
+      {
+        key: 'nearAloisDistance',
+        min: 10,
+        max: 120,
+        step: 2,
+        hint: 'how near Alois to stand guard',
+      },
+      { key: 'walkSpeed', min: 0.5, max: 3, step: 0.1, hint: 'px/tick trailing Alois' },
+      { key: 'strideSpeed', min: 0.5, max: 5, step: 0.1, hint: 'px/tick striding at a mob' },
+      { key: 'shoveStrength', min: 0, max: 12, step: 0.25, hint: 'shove, before mass' },
+      { key: 'cooldownTicks', min: 0, max: 300, step: 5, hint: 'ticks between shoves' },
     ],
   },
 ];
@@ -622,6 +647,7 @@ const DEFAULTS = {
   chest: DEFAULT_CHEST_TUNING,
   sneeze: DEFAULT_SNEEZE_TUNING,
   latch: DEFAULT_LATCH_TUNING,
+  ordner: DEFAULT_ORDNER_TUNING,
 } as const;
 
 const STYLE = `

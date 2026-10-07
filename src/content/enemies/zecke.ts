@@ -4,8 +4,9 @@ import type { EnemyDefinition } from '../../sim/enemy/definition.js';
  * Zecke — a tick (#406, `docs/CONTENT_BIBLE.md`'s Floor 3 roster). The
  * Bavarian Forest is a real tick-borne-disease area; the joke is local.
  *
- * Tiny — the one `micro`-sized body — slow, and easy to lose on the dark
- * forest floor. It never hits hard: it crawls at the player and, once it
+ * Tiny — the one `micro`-sized body — and easy to lose on the dark forest
+ * floor. It never hits hard: it hops at the player in tiny skittish hops,
+ * two toward them and one back, and, once it
  * touches them, **latches on** (`latchOnPlayer`) and rides on Alois's hat,
  * keeping him poisoned until he shakes it off with a few sharp changes of
  * direction (`sim/systems/latch.ts`). It
@@ -24,6 +25,8 @@ export const zecke: EnemyDefinition = {
   size: 'micro',
   // A small, dry bug: the Kellerassel's dust, not a mushroom's spores.
   deathEffect: 'dust',
+  // Drawn lying on the floor, head turned the way it hops.
+  facing: 'crawl',
   health: 2,
   contactDamage: 0,
   lootTier: 'weak',
@@ -31,7 +34,25 @@ export const zecke: EnemyDefinition = {
   states: [
     {
       name: 'crawl',
-      behaviours: [{ behaviour: 'walkTowardPlayer', speed: 0.35 }, { behaviour: 'latchOnPlayer' }],
+      behaviours: [
+        // Tiny hops, two in and one back: a net ~0.2 units a tick at the
+        // global speed scale, slower than the 0.35 crawl it replaced — it
+        // is meant to take its time reaching you, and the hop back is a
+        // shot window. Every rest is rolled (a tick to double) and every
+        // hop wobbles up to 18° (a tenth of a half-turn) off the line, so a
+        // room of them hops about like bugs rather than marching in step.
+        // It latches the moment it touches the player, mid-hop or not.
+        {
+          behaviour: 'hopTowardPlayer',
+          hopDistance: 8,
+          hopTicks: 5,
+          restTicks: 7,
+          restJitter: 1,
+          aimJitterDegrees: 18,
+          backEvery: 3,
+        },
+        { behaviour: 'latchOnPlayer' },
+      ],
       transitions: [{ to: 'latched', onLatched: true }],
     },
     {

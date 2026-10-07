@@ -6569,3 +6569,47 @@ countdown is never removed, it just lives in the body's build now rather than th
 **Constrains:** a new enemy's wind-up needs no floor marking unless its attack has a reach,
 direction or landing spot the body cannot show. An enemy that wants a different body cue opts
 into a `telegraphLook` (render-side, data-authored) rather than a new floor shape.
+
+## 121. Creatures turn the way they move; nothing passive may out-push a walker
+
+**Decided** in the Floor 3 feel pass (`feat/floor3-mob-feel-pass`), from Tilo playing the new
+roster.
+
+**Facing is data.** `EnemyDefinition.facing` says how a body with no direction strips shows
+where it is going: `'mirror'` flips a side-on sprite toward its movement and, standing still,
+toward what it would attack (`enemyAimAngle`), so a wind-up always faces its charge (the Boar,
+the Kaninchen). `'crawl'` lays a top-down sprite flat on the floor and turns its head in quarter
+turns toward its heading (the Zecke). Purely presentational, like `telegraphLook`. The longer
+road is three strips per creature, side, south and north, the way Alois has them. Der Ordner
+got them first (`render/ordner-view.ts`). The engine half is #438 and the art is tracked
+creature by creature under the epic #457.
+
+**Nothing passive may push harder than a mob walks.** The Karussell (a passive that shoved
+everything near a moving player every tick) and Der Ordner (the same, always) both stacked a
+per-tick push faster than it decayed. At pushDamping 0.82 a 0.3-0.35 push settles near 1.7-1.9
+units a tick, which is more than any Floor 3 walker manages. Holding either made the player
+untouchable, and a charging Boar visibly braked before it hit. The Karussell is now an active
+item: one mass-scaled shove on a 5 s recharge. Der Ordner is now a visible familiar
+(`sim/systems/ordner.ts`) that walks over and shoves one mob at a time, on a cooldown long
+enough that a slow mob still walks back in between shoves. A future push effect is a discrete,
+mass-scaled impulse on a cooldown, never a per-tick aura above a walker's speed.
+
+**Familiars are a slot of state, not a body.** Der Ordner lives in `GameSim.ordner`, a
+Float64Array, and not in the ECS. Nothing collides with him, nothing can hurt him, and he never
+counts toward a room's clear. A body would have needed opting out of every one of those
+systems. He keeps his own distance from Alois and finds his own way round blocks with the
+enemies' pathfinder. His guard reach is measured from where he stands, not from Alois.
+
+**A shake is turning, not reversing.** The Zecke used to come off after three turns sharper
+than 120° inside 40 ticks, which a circling player never makes. Now every change of the
+movement input's direction feeds a draining meter (`shakeTurnDegrees`, `shakeHalfLifeTicks`),
+so wiggling and circling both work.
+
+**A charge breaks one cell, not the whole cover row.** Generated cover is merged into
+multi-cell rectangles. The Boar now breaks only the tile it hit (`RoomGeometry.breakCellAt`),
+and the destruction record carries the cell size, so a revisit rebuilds the same remnants.
+Bombs and the Borkenkäfer still clear whole blocks.
+
+**Constrains:** a new side-on enemy declares `facing: 'mirror'` until it has direction strips.
+A new push effect is an impulse on a cooldown and is mass-scaled. A new familiar copies the
+`GameSim.ordner` shape rather than becoming an ECS body.

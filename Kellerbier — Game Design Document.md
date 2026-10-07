@@ -183,7 +183,7 @@ Tag key below: **R** = `rosinen`, **I** = `impure`. Quality runs 0–3.
 | Brezn | Orbiting pretzel damages on contact | 1 | Treasure, Shop |
 | Der Ordner | Familiar that shoves enemies away | 1 | Treasure, Shop, Boss |
 | Hendlgeruch | Constantly pulls distant enemies toward you | 1 | Treasure, Shop, Secret |
-| Karussell | Moving pushes nearby enemies along with you | 1 | Treasure, Shop |
+| Karussell | Active: one spin flings everything close away from you | 1 | Treasure, Shop |
 | Ludwigs Schwan | Familiar fires homing feathers; costs Biermarken per floor | 1 | Treasure, Shop, Secret |
 | Obazda | Slows enemies near you | 1 | Treasure, Shop |
 | Riesenrad | Slow orbiting gondola damages and freezes | 2 | Treasure, Shop, Boss |

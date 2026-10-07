@@ -12,7 +12,7 @@ import type { EnemyDefinition } from '../../sim/enemy/definition.js';
  * diagonal it will take.
  *
  * Deliberately one of the easiest things on the floor: three hits, a short
- * reach, a long clear wind-up. The lesson is the pattern: never stand on its
+ * reach, a quick wind-up that only ever starts from right beside the player. The lesson is the pattern: never stand on its
  * diagonal, and it can never touch you.
  */
 export const kaninchen: EnemyDefinition = {
@@ -21,6 +21,8 @@ export const kaninchen: EnemyDefinition = {
   size: 'mini',
   // An animal, like the Kuh and the Gockel.
   deathEffect: 'dust',
+  // Side-on art: turns to face the way it hops, and the player it winds up at.
+  facing: 'mirror',
   health: 3,
   contactDamage: 1,
   lootTier: 'weak',
@@ -33,8 +35,10 @@ export const kaninchen: EnemyDefinition = {
     },
     {
       name: 'windup',
-      behaviours: [{ behaviour: 'pause' }, { behaviour: 'telegraph', ticks: 20 }],
-      transitions: [{ to: 'strike', after: 20 }],
+      // Quick: it only ever bites from right beside the player, where a bite
+      // is what anyone expects — the crouch is a flash, not a countdown.
+      behaviours: [{ behaviour: 'pause' }, { behaviour: 'telegraph', ticks: 10 }],
+      transitions: [{ to: 'strike', after: 10 }],
     },
     {
       name: 'strike',

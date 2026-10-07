@@ -25,6 +25,8 @@ export const boar: EnemyDefinition = {
   size: 'mid',
   // An animal, like the Kuh.
   deathEffect: 'dust',
+  // Side-on art: turns to face the way it runs, and the player it winds up at.
+  facing: 'mirror',
   health: 9,
   contactDamage: 1,
   lootTier: 'tough',

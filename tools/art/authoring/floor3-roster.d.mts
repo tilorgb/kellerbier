@@ -12,5 +12,20 @@ export declare const WALD: Readonly<Record<string, number | null>>;
 export declare const ROSTER: Readonly<Record<string, RosterFrame>>;
 export declare const ROSTER_BUCKET: string;
 
+/** An animated body: its frames, and the `.anim.json` sidecar committed next to its strip. */
+export interface RosterStrip {
+  readonly frames: readonly RosterFrame[];
+  readonly anim: {
+    readonly frames: number;
+    readonly frameDurationMs: number;
+    readonly loop: boolean;
+    readonly clips: Readonly<Record<string, unknown>>;
+  };
+}
+
+export declare const STRIPS: Readonly<Record<string, RosterStrip>>;
+
 export declare function encodeSingle(frame: RosterFrame): Buffer;
+export declare function encodeStrip(name: string, frames: readonly RosterFrame[]): Buffer;
+export declare function encodeAnim(anim: RosterStrip['anim']): string;
 export declare function assertOnPalette(bucket: string, frames: readonly RosterFrame[]): void;

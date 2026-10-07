@@ -10,7 +10,7 @@ import {
   PICKUP_DEFINITIONS,
   ROOM_CLEAR_DROP_TABLE,
 } from '../../content/pickups/index.js';
-import type { RoomSpecialRole } from '../../content/rooms/definition.js';
+import { ROOM_TILE_UNITS, type RoomSpecialRole } from '../../content/rooms/definition.js';
 import type { EnemyDefinition } from '../enemy/definition.js';
 import { EnemyRegistry, type CompiledEnemy } from '../enemy/registry.js';
 import { ENEMY_PROFILES, EnemySize, type EnemySizeId } from '../enemy/size.js';
@@ -113,7 +113,8 @@ import { stepBodies } from '../systems/bodies.js';
 import { stepCollision } from '../systems/collision.js';
 import { stepContacts } from '../systems/contact.js';
 import { stepEnemyContacts } from '../systems/enemy-contact.js';
-import { LATCH_SHAKE_HISTORY, stepLatches } from '../systems/latch.js';
+import { shakeOff, stepLatches } from '../systems/latch.js';
+import { ORDNER_SNAP, ORDNER_STRIDE, stepOrdner, summonOrdner } from '../systems/ordner.js';
 import {
   ENEMY_FLAG_ELITE,
   ENEMY_MOTION_STRIDE,
@@ -918,14 +919,21 @@ export class GameSim {
   /**
    * The player's shake-off state (#406, `sim/systems/latch.ts`), as plain
    * typed arrays so the frame loop never boxes a number: the last non-zero
-   * movement direction a sharp change of direction is measured from, the
-   * ticks of the last few such changes (stored plus one, so zero is "none"), and
-   * `[latched bodies, ring cursor, reversals inside the window]`. Cleared on
-   * every room load — a room change cannot happen with a tick still on.
+   * movement direction each tick's turn is measured from, the turning meter
+   * (degrees, draining — see `stepLatches`), and `[latched bodies]`.
+   * Cleared on every room load — a room change cannot happen with a tick
+   * still on.
    */
   readonly latchHeading = new Float64Array(2);
-  readonly latchReversalTicks = new Int32Array(LATCH_SHAKE_HISTORY);
-  readonly latchState = new Int32Array(3);
+  readonly latchTurn = new Float64Array(1);
+  readonly latchState = new Int32Array(1);
+  /**
+   * Der Ordner, the bouncer familiar (`sim/systems/ordner.ts`): one slot of
+   * plain numbers — position, what he is doing, whom at — rather than an ECS
+   * body, because nothing ever collides with him. All zero until the item is
+   * picked up.
+   */
+  readonly ordner = new Float64Array(ORDNER_STRIDE);
   /** Ticks the first-latch "shake it off" hint has left (#406). Never re-armed in a run once shown. */
   private latchHintTicks = 0;
   private latchHintShown = false;
@@ -1469,9 +1477,12 @@ export class GameSim {
   private roomClearedIds = new Set<string>();
   /**
    * Boulders a bomb has cleared this run (#4), by authored room id (same key
-   * as `roomClearedIds`) → a flat `[x, y, x, y, …]` of the removed blocks'
-   * centres. Replayed onto the freshly compiled `RoomGeometry` in
-   * `applyCompiledRoom` so a bombed path stays open on a revisit.
+   * as `roomClearedIds`) → a flat `[x, y, cell, x, y, cell, …]`: each removed
+   * block's centre, and `cell` 0 for a whole block (a bomb, the beetle) or
+   * the cell size for one cell of it (a Boar's smash, `smashBlockCellAt`).
+   * Replayed onto the freshly compiled `RoomGeometry` in
+   * `applyCompiledRoom` (`RoomGeometry.clearBoulderAt`) so a broken path
+   * stays open on a revisit.
    */
   private readonly destroyedBoulders = new Map<string, number[]>();
   /** Reused scratch for one blast's cleared-boulder centres — no per-detonation allocation. */
@@ -2278,7 +2289,7 @@ export class GameSim {
     for (let i = 0; i + 1 < scratch.length; i += 2) {
       const bx = scratch[i] ?? 0;
       const by = scratch[i + 1] ?? 0;
-      record.push(bx, by);
+      record.push(bx, by, 0);
       boulderDebris(this, bx, by);
     }
     this.bouldersChangedTickValue = this.tick;
@@ -2305,7 +2316,30 @@ export class GameSim {
       record = [];
       this.destroyedBoulders.set(this.roomId, record);
     }
-    record.push(scratch[0] ?? 0, scratch[1] ?? 0);
+    record.push(scratch[0] ?? 0, scratch[1] ?? 0, 0);
+    boulderDebris(this, scratch[0] ?? 0, scratch[1] ?? 0);
+    this.bouldersChangedTickValue = this.tick;
+    return true;
+  }
+
+  /**
+   * Breaks only the one tile of the destructible block at `(x, y)` — the
+   * Boar's smash: a charge into one log of a merged row takes that log, not
+   * the row (`RoomGeometry.breakCellAt`). Recorded and replayed like
+   * `breakBlockAt`; returns whether anything fell.
+   */
+  smashBlockCellAt(x: number, y: number): boolean {
+    const scratch = this.boulderBlastScratch;
+    scratch.length = 0;
+    if (!this.room.breakCellAt(x, y, ROOM_TILE_UNITS, scratch)) {
+      return false;
+    }
+    let record = this.destroyedBoulders.get(this.roomId);
+    if (record === undefined) {
+      record = [];
+      this.destroyedBoulders.set(this.roomId, record);
+    }
+    record.push(scratch[0] ?? 0, scratch[1] ?? 0, scratch[2] ?? 0);
     boulderDebris(this, scratch[0] ?? 0, scratch[1] ?? 0);
     this.bouldersChangedTickValue = this.tick;
     return true;
@@ -2333,8 +2367,8 @@ export class GameSim {
     if (record === undefined) {
       return;
     }
-    for (let i = 0; i + 1 < record.length; i += 2) {
-      geometry.clearBoulderAt(record[i] ?? 0, record[i + 1] ?? 0);
+    for (let i = 0; i + 2 < record.length; i += 3) {
+      geometry.clearBoulderAt(record[i] ?? 0, record[i + 1] ?? 0, record[i + 2] ?? 0);
     }
   }
 
@@ -2863,8 +2897,8 @@ export class GameSim {
     // template, so the destruction has to be replayed onto it.
     const bombed = this.destroyedBoulders.get(compiled.id);
     if (bombed !== undefined) {
-      for (let i = 0; i + 1 < bombed.length; i += 2) {
-        this.room.clearBoulderAt(bombed[i] ?? 0, bombed[i + 1] ?? 0);
+      for (let i = 0; i + 2 < bombed.length; i += 3) {
+        this.room.clearBoulderAt(bombed[i] ?? 0, bombed[i + 1] ?? 0, bombed[i + 2] ?? 0);
       }
     }
     this.roomSpecialRole = compiled.specialRole;
@@ -3296,7 +3330,9 @@ export class GameSim {
     this.projectiles.clear();
     this.clouds.clear();
     this.latchHeading.fill(0);
-    this.latchReversalTicks.fill(0);
+    this.latchTurn.fill(0);
+    // The bouncer comes through the door with Alois, not from where he stood.
+    this.ordner[ORDNER_SNAP] = 1;
     this.latchState.fill(0);
     this.particles.clear();
     this.damageNumbers.clear();
@@ -3589,9 +3625,9 @@ export class GameSim {
     return this.latchState[0] ?? 0;
   }
 
-  /** Sharp changes of direction inside the shake window, toward `tuning.latch.shakesRequired` (#406). */
-  get latchShakeCount(): number {
-    return this.latchState[2] ?? 0;
+  /** How full the turning meter is, 0 to 1 — at 1 every latched body is thrown off (#406). */
+  get latchShakeProgress(): number {
+    return Math.min(1, (this.latchTurn[0] ?? 0) / Math.max(1, this.tuning.latch.shakeTurnDegrees));
   }
 
   /**
@@ -5150,8 +5186,11 @@ export class GameSim {
    * off the same way and stacks with everything else pushing that enemy.
    *
    * Same `Enemy | Obstacle` mask as `slowEnemiesNear`, for the same reason.
+   * `byMass` divides the shove by each body's mass, the way a hit's
+   * knockback and the Boar's impact are: a Kaninchen flies, a boss barely
+   * shifts (the Karussell).
    */
-  pushEnemiesNear(x: number, y: number, radius: number, strength: number): void {
+  pushEnemiesNear(x: number, y: number, radius: number, strength: number, byMass = false): void {
     if (strength <= 0 || radius <= 0) {
       return;
     }
@@ -5168,8 +5207,30 @@ export class GameSim {
       const distance = vectorLength(dx, dy);
       const dirX = distance > 0 ? dx / distance : 1;
       const dirY = distance > 0 ? dy / distance : 0;
-      addPush(this, index, dirX * strength, dirY * strength);
+      const shove = byMass
+        ? strength / Math.max(0.01, this.body.data[index * 2 + 1] ?? 1)
+        : strength;
+      addPush(this, index, dirX * shove, dirY * shove);
     });
+  }
+
+  /**
+   * Throws every body riding on the player off at once — what a shake does
+   * (`sim/systems/latch.ts`), for anything else that should: the Karussell's
+   * spin flings a latched Zecke off along with everything else it shoves.
+   */
+  throwOffLatched(): void {
+    shakeOff(this);
+  }
+
+  /** Brings Der Ordner, the bouncer familiar, out beside the player (`sim/systems/ordner.ts`). */
+  summonOrdner(): void {
+    summonOrdner(this);
+  }
+
+  /** One tick of Der Ordner — the item's `onTick` while it is held. */
+  stepOrdner(): void {
+    stepOrdner(this);
   }
 
   /**

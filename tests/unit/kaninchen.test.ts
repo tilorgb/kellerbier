@@ -268,3 +268,12 @@ describe('Kaninchen (#407)', () => {
     throw new Error('never wound up');
   });
 });
+
+describe('Kaninchen wind-up', () => {
+  it('is quick — a flash of a crouch from right beside the player, not a countdown', () => {
+    const compiled = new EnemyRegistry(ENEMY_DEFINITIONS).get('kaninchen');
+    const windup = compiled.states.find((state) => state.name === 'windup');
+    expect(windup?.telegraphTicks).toBe(10);
+    expect(kaninchen.facing).toBe('mirror');
+  });
+});
