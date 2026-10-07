@@ -34,7 +34,7 @@ import type {
  * Both are declared on **every** state, as `splitOnDeath` always is: a death
  * while he is off the arena (a poison tick can land one) must still hand over.
  *
- * Every number is a starting point, tuned by feel.
+ * Every number is a starting point, tuned by feel (`docs/DECISIONS.md` #122).
  */
 
 const PHASE_TWO: SplitOnDeathBehaviour = {
