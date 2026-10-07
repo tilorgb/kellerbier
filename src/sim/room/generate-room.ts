@@ -191,6 +191,9 @@ export const ROSTERS: Readonly<Record<string, readonly RosterEntry[]>> = {
    *   lives in gets worse by the second — priced like the Fliegenpilz (cost
    *   3), the other "deal with it before it spreads" body, and as rare as the
    *   Boar so a generated room rarely holds two swarms.
+   * - Specht (#411): 4 HP and only hittable in the moment after its dive —
+   *   priced like the Zecke and Kaninchen's slightly bigger sibling (cost 2),
+   *   and it pursues: every dive is at the player.
    */
   wald: [
     { id: 'zecke', weight: 3, cost: 1, pursues: true, groupSize: 2 },
@@ -198,6 +201,7 @@ export const ROSTERS: Readonly<Record<string, readonly RosterEntry[]>> = {
     { id: 'fliegenpilz', weight: 2, cost: 3, pursues: false },
     { id: 'boar', weight: 1, cost: 4, pursues: true },
     { id: 'borkenkaefer', weight: 1, cost: 3, pursues: false },
+    { id: 'specht', weight: 2, cost: 2, pursues: true },
   ],
 };
 

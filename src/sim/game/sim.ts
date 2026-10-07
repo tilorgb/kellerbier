@@ -121,6 +121,7 @@ import {
   ENEMY_MOTION_STRIDE,
   MOTION_DURATION_ROLL,
   placeInZone,
+  placeOnPerch,
   setSubmerged,
   stepZoneClamp,
   ENEMY_STRIDE,
@@ -7146,6 +7147,10 @@ export class GameSim {
       }
       this.world.destroy(entity);
       return entity;
+    }
+    // A percher (#411) is on the wall from the first tick, facing in.
+    if (compiled.perches) {
+      placeOnPerch(this, index);
     }
     // The state a body spawns in is entered like any other (#408): a ranged
     // `after` takes its roll, and a submerged one starts under the water.

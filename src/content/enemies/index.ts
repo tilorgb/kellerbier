@@ -21,6 +21,7 @@ import { kuh } from './kuh.js';
 import { fasssplitter, rollfass } from './rollfass.js';
 import { schimmelfleck, schimmelspore } from './schimmelfleck.js';
 import { shopkeeper } from './shopkeeper.js';
+import { specht } from './specht.js';
 import { traktor } from './traktor.js';
 import { zapfhahn } from './zapfhahn.js';
 import { zecke } from './zecke.js';
@@ -68,6 +69,7 @@ export const ENEMY_DEFINITIONS: readonly EnemyDefinition[] = [
   bachforelle,
   boar,
   borkenkaefer,
+  specht,
 ];
 
 /**
@@ -112,6 +114,7 @@ export {
   schimmelfleck,
   schimmelspore,
   shopkeeper,
+  specht,
   traktor,
   zapfhahn,
   zecke,

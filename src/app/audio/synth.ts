@@ -380,7 +380,21 @@ export function playNoise(
   if (def.noise === undefined) {
     return NULL_VOICE;
   }
-  return playFilteredNoiseAt(ctx, destination, ctx.currentTime, def.noise);
+  if (def.repeat === undefined || def.repeat.count <= 1) {
+    return playFilteredNoiseAt(ctx, destination, ctx.currentTime, def.noise);
+  }
+  const hits: VoiceHandle[] = [];
+  for (let hit = 0; hit < def.repeat.count; hit++) {
+    hits.push(
+      playFilteredNoiseAt(
+        ctx,
+        destination,
+        ctx.currentTime + hit * def.repeat.intervalSeconds,
+        def.noise,
+      ),
+    );
+  }
+  return combineVoices(hits);
 }
 
 /**

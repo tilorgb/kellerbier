@@ -36,6 +36,8 @@ describe("Der Wald roster's committed art is what the authoring source produces"
       'borkenkaefer',
       'fliegenpilz',
       'kaninchen',
+      'specht',
+      'specht-landed',
       'zecke',
     ]);
   });

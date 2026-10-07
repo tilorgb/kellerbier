@@ -10,7 +10,7 @@ import {
 } from '../enemy/registry.js';
 import { EventKind } from '../events/queue.js';
 import type { GameSim } from '../game/sim.js';
-import { muzzleFlash, ring } from '../particle/effects.js';
+import { drumChips, muzzleFlash, ring } from '../particle/effects.js';
 import { clamp, vectorLength } from '../math.js';
 import { addPush } from './movement.js';
 import { applyDamageAt } from './impact.js';
@@ -21,6 +21,7 @@ import { ProjectileTag } from '../projectile/tags.js';
 import { ParticleKind } from '../particle/store.js';
 import { nextWaypoint, straightClear, type Waypoint } from '../room/pathfind.js';
 import { CLEAR_IGNORE_PITS } from '../room/geometry.js';
+import { nearestWallPoint } from '../room/perch.js';
 import {
   enemyEatProgress,
   MOTION_WOOD_TARGET,
@@ -92,9 +93,15 @@ export const ENEMY_FLAG_LATCHED = 1 << 4;
 export const ENEMY_FLAG_JUST_LATCHED = 1 << 5;
 /** The player shook the body off since it was last looked at — `onShakenOff`. Cleared once read. */
 export const ENEMY_FLAG_SHAKEN_OFF = 1 << 6;
+/** A target-seeking movement reached its target (#411) — `onArrived`. Cleared once read. */
+export const ENEMY_FLAG_ARRIVED = 1 << 7;
 /** The flags that are signals rather than conditions: consumed every tick, whether a state listened or not. */
 const ENEMY_SIGNAL_FLAGS =
-  ENEMY_FLAG_HIT | ENEMY_FLAG_BLOCKED | ENEMY_FLAG_JUST_LATCHED | ENEMY_FLAG_SHAKEN_OFF;
+  ENEMY_FLAG_HIT |
+  ENEMY_FLAG_BLOCKED |
+  ENEMY_FLAG_JUST_LATCHED |
+  ENEMY_FLAG_SHAKEN_OFF |
+  ENEMY_FLAG_ARRIVED;
 
 /**
  * Ticks a body may sit in one state before the counter stops climbing.
@@ -114,9 +121,18 @@ export const ENEMY_STRIDE = 4;
  * waypoint the pathfinder last chose on the way there, and how many ticks the
  * player has been out of sight. Then (#408) the state's rolled duration, and
  * a swimmer's course, current sample and target sample. Then (#410) the
- * slots `approachWood` keeps its plan in (`sim/systems/wood.ts`).
+ * slots `approachWood` keeps its plan in (`sim/systems/wood.ts`), then (#411)
+ * a percher's wall point and the way it faces there.
  */
-export const ENEMY_MOTION_STRIDE = 16 + WOOD_MOTION_SLOTS;
+export const ENEMY_MOTION_STRIDE = 16 + WOOD_MOTION_SLOTS + 4;
+/**
+ * `enemyMotion` offsets of a `returnToPerch` body's perch (#411): the wall
+ * point it is flying to, and the direction into the room it faces there.
+ */
+const MOTION_PERCH_X = 16 + WOOD_MOTION_SLOTS;
+const MOTION_PERCH_Y = MOTION_PERCH_X + 1;
+const MOTION_PERCH_NORMAL_X = MOTION_PERCH_X + 2;
+const MOTION_PERCH_NORMAL_Y = MOTION_PERCH_X + 3;
 /**
  * `enemyMotion` offset of the roll a ranged `after` reads (#408): a fraction
  * in [0, 1) drawn from `random.enemies` on entry to a state that has one.
@@ -274,6 +290,20 @@ export function stepEnemies(sim: GameSim): void {
     // so a boss that *spawns* mid-wind-up (Die Zapfhahn-Orgel) locks too.
     if (ticks === 0) {
       flags = updateAimLock(sim, index, state, flags, playerX, playerY);
+    }
+    if (state.telegraphTicks > 0) {
+      // A wind-up ahead of a dive to a point (#411) keeps its aim on the
+      // player for its whole length, so the dive goes where they stood as it
+      // began — and the warning line, which reads the same lock, follows
+      // them until then rather than pointing at where they used to be.
+      if (divesToPoint(compiled, state)) {
+        const motionBase = index * ENEMY_MOTION_STRIDE;
+        sim.enemyMotion.data[motionBase + 4] = playerX;
+        sim.enemyMotion.data[motionBase + 5] = playerY;
+      }
+      if (compiled.telegraphDrum && ticks % DRUM_CHIP_EVERY_TICKS === 0) {
+        drumChips(sim, selfX, selfY);
+      }
     }
     let aimX = toPlayerX;
     let aimY = toPlayerY;
@@ -458,6 +488,13 @@ export function enemySubmerged(sim: GameSim, index: number): boolean {
   const base = index * ENEMY_STRIDE;
   const state = sim.enemies.at(sim.enemy.data[base] ?? 0).states[sim.enemy.data[base + 1] ?? 0];
   return state?.submerged === true;
+}
+
+/** Whether the body at `index` is in a state that `land`s (#411) — down on the floor. */
+export function enemyGrounded(sim: GameSim, index: number): boolean {
+  const base = index * ENEMY_STRIDE;
+  const state = sim.enemies.at(sim.enemy.data[base] ?? 0).states[sim.enemy.data[base + 1] ?? 0];
+  return state?.grounded === true;
 }
 
 /**
@@ -757,6 +794,103 @@ function firstBodyAhead(sim: GameSim, self: number, radius: number, x: number, y
   return -1;
 }
 
+/** Room units from a target that count as having reached it (#411's `onArrived`). */
+const ARRIVE_DISTANCE = 0.5;
+
+/** Sets `ENEMY_FLAG_ARRIVED` on `index`, read by an `onArrived` transition next tick (#411). */
+function raiseArrived(sim: GameSim, index: number): void {
+  const flagSlot = index * ENEMY_STRIDE + 3;
+  sim.enemy.data[flagSlot] = (sim.enemy.data[flagSlot] ?? 0) | ENEMY_FLAG_ARRIVED;
+}
+
+/** Ticks between two puffs of wood chips while a `telegraphLook: 'drum'` body drums (#411). */
+const DRUM_CHIP_EVERY_TICKS = 6;
+
+/** Where `nearestWallPoint` writes a perch — module scratch, not a returned object. */
+const perchScratch = new Float64Array(4);
+
+/**
+ * One tick of `returnToPerch` (#411): on the state's first tick, pick the
+ * nearest wall point from here; every tick, fly straight at it, landing on it
+ * exactly, and raise `onArrived` once there — facing into the room.
+ */
+function flyToPerch(
+  sim: GameSim,
+  index: number,
+  speed: number,
+  ticks: number,
+  selfX: number,
+  selfY: number,
+): void {
+  const motion = sim.enemyMotion.data;
+  const motionBase = index * ENEMY_MOTION_STRIDE;
+  const velocity = sim.velocity.data;
+  if (ticks === 0) {
+    choosePerch(sim, index, selfX, selfY);
+  }
+  const dx = (motion[motionBase + MOTION_PERCH_X] ?? selfX) - selfX;
+  const dy = (motion[motionBase + MOTION_PERCH_Y] ?? selfY) - selfY;
+  const length = vectorLength(dx, dy);
+  if (length <= ARRIVE_DISTANCE) {
+    // On the perch exactly, not wherever the last step happened to stop.
+    velocity[index * 2] = dx;
+    velocity[index * 2 + 1] = dy;
+    motion[motionBase] = motion[motionBase + MOTION_PERCH_NORMAL_X] ?? 1;
+    motion[motionBase + 1] = motion[motionBase + MOTION_PERCH_NORMAL_Y] ?? 0;
+    raiseArrived(sim, index);
+    return;
+  }
+  const step = Math.min(speed, length);
+  velocity[index * 2] = (dx / length) * step;
+  velocity[index * 2 + 1] = (dy / length) * step;
+  motion[motionBase] = dx / length;
+  motion[motionBase + 1] = dy / length;
+}
+
+/**
+ * Picks the wall point nearest `(selfX, selfY)` as the body's perch (#411) —
+ * where it stands is the perch when no wall point fits, which an ordinary
+ * room never produces. Also what puts a percher on the wall at spawn.
+ */
+export function choosePerch(sim: GameSim, index: number, selfX: number, selfY: number): void {
+  const motion = sim.enemyMotion.data;
+  const motionBase = index * ENEMY_MOTION_STRIDE;
+  const radius = sim.body.data[index * 2] ?? 0;
+  if (nearestWallPoint(sim.room, selfX, selfY, radius, perchScratch)) {
+    motion[motionBase + MOTION_PERCH_X] = perchScratch[0] ?? selfX;
+    motion[motionBase + MOTION_PERCH_Y] = perchScratch[1] ?? selfY;
+    motion[motionBase + MOTION_PERCH_NORMAL_X] = perchScratch[2] ?? 1;
+    motion[motionBase + MOTION_PERCH_NORMAL_Y] = perchScratch[3] ?? 0;
+  } else {
+    motion[motionBase + MOTION_PERCH_X] = selfX;
+    motion[motionBase + MOTION_PERCH_Y] = selfY;
+    motion[motionBase + MOTION_PERCH_NORMAL_X] = 1;
+    motion[motionBase + MOTION_PERCH_NORMAL_Y] = 0;
+  }
+}
+
+/**
+ * Puts a percher on its perch at once (#411) — the spawn half of
+ * `returnToPerch`: no flight in from the middle of the room, it is simply on
+ * the wall when the room appears, facing in.
+ */
+export function placeOnPerch(sim: GameSim, index: number): void {
+  const selfX = sim.positionX(index);
+  const selfY = sim.positionY(index);
+  choosePerch(sim, index, selfX, selfY);
+  const motion = sim.enemyMotion.data;
+  const motionBase = index * ENEMY_MOTION_STRIDE;
+  const transform = sim.transform.data;
+  const x = motion[motionBase + MOTION_PERCH_X] ?? selfX;
+  const y = motion[motionBase + MOTION_PERCH_Y] ?? selfY;
+  transform[index * 4] = x;
+  transform[index * 4 + 1] = y;
+  transform[index * 4 + 2] = x;
+  transform[index * 4 + 3] = y;
+  motion[motionBase] = motion[motionBase + MOTION_PERCH_NORMAL_X] ?? 1;
+  motion[motionBase + 1] = motion[motionBase + MOTION_PERCH_NORMAL_Y] ?? 0;
+}
+
 /** Sets `ENEMY_FLAG_BLOCKED` on `index`, read by an `onBlocked` transition next tick. */
 function raiseBlocked(sim: GameSim, index: number): void {
   const flagSlot = index * ENEMY_STRIDE + 3;
@@ -810,6 +944,11 @@ function chooseTransition(
         break;
       case TransitionTrigger.OnBlocked:
         if ((flags & ENEMY_FLAG_BLOCKED) !== 0) {
+          return transition.to;
+        }
+        break;
+      case TransitionTrigger.OnArrived:
+        if ((flags & ENEMY_FLAG_ARRIVED) !== 0) {
           return transition.to;
         }
         break;
@@ -1221,6 +1360,24 @@ function applyMovement(
         }
       }
       let speed = behaviour.speed * scale;
+      if (behaviour.untilTargetPoint === true) {
+        // A dive to a point (#411): the point it was aimed at, fixed on the
+        // first tick. What is left of the way is measured along the locked
+        // direction, so it never turns back once it is past.
+        if (ticks === 0) {
+          motion[motionBase + 4] = selfX + aimX;
+          motion[motionBase + 5] = selfY + aimY;
+        }
+        const left =
+          ((motion[motionBase + 4] ?? selfX) - selfX) * (motion[motionBase] ?? 0) +
+          ((motion[motionBase + 5] ?? selfY) - selfY) * (motion[motionBase + 1] ?? 0);
+        if (left <= ARRIVE_DISTANCE) {
+          speed = 0;
+          raiseArrived(sim, index);
+        } else {
+          speed = Math.min(speed, left);
+        }
+      }
       if (behaviour.maxDistance !== undefined) {
         // A leap, not a run (#407): this tick covers only what is left of
         // `maxDistance`, then nothing for the rest of the state.
@@ -1248,6 +1405,10 @@ function applyMovement(
     }
     case 'swimInZone': {
       swimAlongCourse(sim, index, behaviour.speed * scale, selfX, selfY);
+      return;
+    }
+    case 'returnToPerch': {
+      flyToPerch(sim, index, behaviour.speed * scale, ticks, selfX, selfY);
       return;
     }
     case 'approachWood': {
@@ -2160,6 +2321,41 @@ export function enemyTelegraphProgress(sim: GameSim, index: number): number {
   return clamp(ticks / total, 0, 1);
 }
 
+/** Room units over which a diving flyer comes down to the floor before its point (#411). */
+const DIVE_DESCENT = 24;
+
+/**
+ * How far up in the air the body at `index` is drawn, `0` (on the floor) to
+ * `1` (flying height) — always `0` for a body that does not fly (#411). A
+ * flyer is up except in a state that `land`s, and a dive to a point brings
+ * it down over its last `DIVE_DESCENT` room units, so the beak meets the
+ * plank as the dive ends rather than the body dropping out of the air.
+ */
+export function enemyFlightHeight(sim: GameSim, index: number): number {
+  if (((sim.world.masks[index] ?? 0) & sim.enemyMask) !== sim.enemyMask) {
+    return 0;
+  }
+  const base = index * ENEMY_STRIDE;
+  const compiled = sim.enemies.at(sim.enemy.data[base] ?? 0);
+  if (!compiled.flying) {
+    return 0;
+  }
+  const state = compiled.states[sim.enemy.data[base + 1] ?? 0];
+  if (state === undefined || state.grounded) {
+    return 0;
+  }
+  const movement = state.movement;
+  if (movement.behaviour !== 'chargeAtPlayer' || movement.untilTargetPoint !== true) {
+    return 1;
+  }
+  const motionBase = index * ENEMY_MOTION_STRIDE;
+  const motion = sim.enemyMotion.data;
+  const left =
+    ((motion[motionBase + 4] ?? 0) - sim.positionX(index)) * (motion[motionBase] ?? 0) +
+    ((motion[motionBase + 5] ?? 0) - sim.positionY(index)) * (motion[motionBase + 1] ?? 0);
+  return clamp(left / DIVE_DESCENT, 0, 1);
+}
+
 /** Reusable scratch struct for `enemyEatMark`, written in place so a render loop never allocates. */
 export interface EnemyEatMarkInfo {
   /** 0..1 through eating the plank. */
@@ -2307,6 +2503,12 @@ export interface EnemyTelegraphShapeInfo {
  * case does — the first `after` transition in declaration order — so a
  * wind-up and the shape warning about it can never name different attacks.
  */
+/** Whether the state after `state`'s wind-up is a `chargeAtPlayer` with `untilTargetPoint` (#411). */
+function divesToPoint(compiled: CompiledEnemy, state: CompiledState): boolean {
+  const movement = stateAfterTelegraph(compiled, state)?.movement;
+  return movement?.behaviour === 'chargeAtPlayer' && movement.untilTargetPoint === true;
+}
+
 function stateAfterTelegraph(compiled: CompiledEnemy, state: CompiledState): CompiledState | null {
   for (const transition of state.transitions) {
     if (transition.trigger === TransitionTrigger.After) {

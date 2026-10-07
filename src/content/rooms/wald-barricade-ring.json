@@ -96,6 +96,11 @@
           "enemyId": "borkenkaefer",
           "minFloor": 3,
           "maxFloor": 3
+        },
+        {
+          "enemyId": "specht",
+          "minFloor": 3,
+          "maxFloor": 3
         }
       ]
     }

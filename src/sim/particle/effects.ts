@@ -209,6 +209,17 @@ export function chewSplinters(sim: GameSim, x: number, y: number): void {
 
 const CHEW_SPLINTER_COUNT = 2;
 
+/**
+ * A Specht drumming (#411): a couple of wood chips flicked up off the wall
+ * it is hammering, every few ticks for the length of the wind-up — the
+ * visible half of the drumroll, for the player with the sound off.
+ */
+export function drumChips(sim: GameSim, x: number, y: number): void {
+  spray(sim, x, y, 0, -1, DRUM_CHIP_COUNT, ParticleKind.Shard, Math.PI * 0.5, 0.8, 0.6, 0.6);
+}
+
+const DRUM_CHIP_COUNT = 2;
+
 /** A floor plank giving way into a pit (#410): splinters and dust where it was. */
 export function plankCollapse(sim: GameSim, x: number, y: number): void {
   sim.particles.spawn(x, y, 0, 0, 14, 7, ParticleKind.Dust);
