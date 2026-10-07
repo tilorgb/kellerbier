@@ -146,6 +146,81 @@ describe('Breaking one cell of a merged block (the Boar)', () => {
     }
   });
 
+  it('cuts the hit tile out on the block’s own tiles, not a grid offset from them', () => {
+    // A room whose floor starts at x = 40 (not a multiple of 16): its cover
+    // tiles run 40-56, 56-72, 72-88. Cutting on the room-wide 16-grid instead
+    // cut 48-64 and left two 8-unit slivers — each drawn as a whole trunk,
+    // so one hit doubled the tree.
+    const room = new RoomGeometry(40, 18, 280, 162);
+    room.addBlock(40, 34, 88, 50, true, BLOCK_MATERIAL_WOOD);
+    const out: number[] = [];
+    expect(room.breakCellAt(60, 42, 16, out)).toBe(true);
+    expect(out).toEqual([64, 42, 16]);
+    expect(blocksOf(room)).toEqual([
+      `40,34,56,50:${String(BLOCK_MATERIAL_WOOD)}`,
+      `72,34,88,50:${String(BLOCK_MATERIAL_WOOD)}`,
+    ]);
+    // Every block left over is whole tiles: nothing for the renderer to draw a sliver of.
+    for (let i = 0; i < room.blockCount; i++) {
+      const [minX = 0, minY = 0, maxX = 0, maxY = 0] = Array.from(
+        room.blocks.subarray(i * 4, i * 4 + 4),
+      );
+      expect((maxX - minX) % 16).toBe(0);
+      expect((maxY - minY) % 16).toBe(0);
+    }
+  });
+
+  it('removes exactly one whole tile and leaves only whole tiles — every origin, size and hit point', () => {
+    const T = 16;
+    /** Which tiles of the grid anchored at (ox, oy) are covered, as "col,row". */
+    const tilesOf = (room: RoomGeometry, ox: number, oy: number): Set<string> => {
+      const tiles = new Set<string>();
+      for (let i = 0; i < room.blockCount; i++) {
+        const [minX = 0, minY = 0, maxX = 0, maxY = 0] = Array.from(
+          room.blocks.subarray(i * 4, i * 4 + 4),
+        );
+        expect((minX - ox) % T).toBe(0);
+        expect((minY - oy) % T).toBe(0);
+        expect((maxX - minX) % T).toBe(0);
+        expect((maxY - minY) % T).toBe(0);
+        for (let y = minY; y < maxY; y += T) {
+          for (let x = minX; x < maxX; x += T) {
+            tiles.add(`${String((x - ox) / T)},${String((y - oy) / T)}`);
+          }
+        }
+      }
+      return tiles;
+    };
+    for (const ox of [0, 8, 40, 5]) {
+      for (const oy of [0, 18, 3]) {
+        for (const [w, h] of [
+          [1, 1],
+          [3, 1],
+          [1, 3],
+          [3, 3],
+          [4, 2],
+        ] as const) {
+          for (let hx = 0; hx < w * T; hx += 3) {
+            for (let hy = 0; hy < h * T; hy += 5) {
+              const room = new RoomGeometry(0, 0, 400, 300);
+              room.addBlock(ox + T, oy + T, ox + T + w * T, oy + T + h * T, true);
+              const before = tilesOf(room, ox, oy);
+              room.breakCellAt(ox + T + hx + 0.5, oy + T + hy + 0.5, T, []);
+              const after = tilesOf(room, ox, oy);
+              const where = `origin ${String(ox)},${String(oy)} ${String(w)}x${String(h)} hit ${String(hx)},${String(hy)}`;
+              expect(after.size, where).toBe(before.size - 1);
+              const hit = `${String(1 + Math.floor(hx / T))},${String(1 + Math.floor(hy / T))}`;
+              expect(after.has(hit), where).toBe(false);
+              for (const tile of after) {
+                expect(before.has(tile), where).toBe(true);
+              }
+            }
+          }
+        }
+      }
+    }
+  });
+
   it('replays to the exact same blocks on a fresh geometry (a room revisit)', () => {
     const build = (): RoomGeometry => {
       const room = new RoomGeometry(0, 0, 320, 180);

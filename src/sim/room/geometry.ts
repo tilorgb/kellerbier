@@ -322,10 +322,15 @@ export class RoomGeometry {
     const maxY = this.blocks[base + 3] ?? 0;
     // Only ever written from a `BlockMaterial` (`addBlock`), so read back as one.
     const material = (this.blockMaterial[block] ?? BLOCK_MATERIAL_STONE) as BlockMaterial;
-    // The cell on the room's grid (where the renderer stands its sprites),
-    // clipped to the block — a block thinner than a cell breaks across it.
-    const cellMinX = Math.max(minX, Math.floor(x / cell) * cell);
-    const cellMinY = Math.max(minY, Math.floor(y / cell) * cell);
+    // The cell on the block's own tiles, counted from its min corner — which
+    // is where the renderer stands one sprite per cell. Not the room-wide
+    // `cell` grid: a room whose floor starts off it (minX 40 is 8 past a
+    // multiple of 16) has every block off it too, and cutting on that grid
+    // cut half a tile from each of two neighbours, leaving two slivers the
+    // renderer drew as two whole trunks. Clipped to the block — one thinner
+    // than a cell breaks across it.
+    const cellMinX = Math.min(maxX, minX + Math.floor((x - minX) / cell) * cell);
+    const cellMinY = Math.min(maxY, minY + Math.floor((y - minY) / cell) * cell);
     const cellMaxX = Math.min(maxX, cellMinX + cell);
     const cellMaxY = Math.min(maxY, cellMinY + cell);
     const left = cellMinX > minX;
