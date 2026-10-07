@@ -26,6 +26,8 @@ export const MAX_ROOM_SIGHT_BLOCKS = 16;
  */
 export const MAX_ROOM_STREAMS = 64;
 
+/** Where `clearBoulderAt`'s cell replay writes what `breakCellAt` reports, unread — written, never allocated per call. */
+const replayScratch: number[] = [];
 /**
  * Pits one room may hold (#410) — the Borkenkäfer's eaten floor planks. The
  * per-room cap a swarm actually stops at is `tuning.pits.maxPerRoom` (12 to
@@ -339,6 +341,74 @@ export class RoomGeometry {
     return true;
   }
 
+  /**
+   * Breaks only the one grid cell, `cell` units square on the room's own
+   * tile grid, of the destructible block that contains `(x, y)` — the Boar's
+   * smash. Generated cover is merged into multi-cell rectangles
+   * (`sliceObstacles`), and the renderer draws one obstacle sprite per cell
+   * of them, so breaking the whole rectangle made a charge into one log take
+   * out the whole row. What is left of the rectangle is re-added as up to
+   * four smaller blocks, same material: the cells either side of the broken
+   * one's row or column, and the rest of that row or column.
+   *
+   * Pushes what broke via `outCentre` as an `x, y, cell` triple — the broken
+   * cell's centre and `cell`, which `clearBoulderAt` replays exactly. A room
+   * already near `MAX_ROOM_BLOCKS` cannot take the remnants, and then the
+   * whole block breaks instead (pushed with a `cell` of 0, "the whole
+   * block") — more cover gone than meant, never a throw mid-fight
+   * (`CLAUDE.md`'s graceful degradation).
+   */
+  breakCellAt(x: number, y: number, cell: number, outCentre: number[]): boolean {
+    const block = this.destructibleBlockAt(x, y);
+    if (block < 0) {
+      return false;
+    }
+    const base = block * BLOCK_STRIDE;
+    const minX = this.blocks[base] ?? 0;
+    const minY = this.blocks[base + 1] ?? 0;
+    const maxX = this.blocks[base + 2] ?? 0;
+    const maxY = this.blocks[base + 3] ?? 0;
+    // Only ever written from a `BlockMaterial` (`addBlock`), so read back as one.
+    const material = (this.blockMaterial[block] ?? BLOCK_MATERIAL_STONE) as BlockMaterial;
+    // The cell on the block's own tiles, counted from its min corner — which
+    // is where the renderer stands one sprite per cell. Not the room-wide
+    // `cell` grid: a room whose floor starts off it (minX 40 is 8 past a
+    // multiple of 16) has every block off it too, and cutting on that grid
+    // cut half a tile from each of two neighbours, leaving two slivers the
+    // renderer drew as two whole trunks. Clipped to the block — one thinner
+    // than a cell breaks across it.
+    const cellMinX = Math.min(maxX, minX + Math.floor((x - minX) / cell) * cell);
+    const cellMinY = Math.min(maxY, minY + Math.floor((y - minY) / cell) * cell);
+    const cellMaxX = Math.min(maxX, cellMinX + cell);
+    const cellMaxY = Math.min(maxY, cellMinY + cell);
+    const left = cellMinX > minX;
+    const right = cellMaxX < maxX;
+    const above = cellMinY > minY;
+    const below = cellMaxY < maxY;
+    const pieces = Number(left) + Number(right) + Number(above) + Number(below);
+    this.removeBlock(block);
+    if (this.blocks_ + pieces > MAX_ROOM_BLOCKS) {
+      outCentre.push((minX + maxX) / 2, (minY + maxY) / 2, 0);
+      return true;
+    }
+    // Full-height strips left and right of the cell's column, then the
+    // column's own remainder above and below the cell.
+    if (left) {
+      this.addBlock(minX, minY, cellMinX, maxY, true, material);
+    }
+    if (right) {
+      this.addBlock(cellMaxX, minY, maxX, maxY, true, material);
+    }
+    if (above) {
+      this.addBlock(cellMinX, minY, cellMaxX, cellMinY, true, material);
+    }
+    if (below) {
+      this.addBlock(cellMinX, cellMaxY, cellMaxX, maxY, true, material);
+    }
+    outCentre.push((cellMinX + cellMaxX) / 2, (cellMinY + cellMaxY) / 2, cell);
+    return true;
+  }
+
   private destructibleBlockAt(x: number, y: number): number {
     for (let block = this.blocks_ - 1; block >= 0; block--) {
       if ((this.blockOverflyable[block] ?? 0) !== 1) {
@@ -403,9 +473,15 @@ export class RoomGeometry {
    * Removes the destructible boulder whose rectangle contains `(x, y)`, if
    * any — the path `GameSim` replays a per-room destruction record through on
    * a room revisit (`applyCompiledRoom`), so a boulder bombed on the first
-   * visit is still gone on the second.
+   * visit is still gone on the second. A non-zero `cell` replays a
+   * `breakCellAt` instead: only that cell of the block, remnants kept.
    */
-  clearBoulderAt(x: number, y: number): void {
+  clearBoulderAt(x: number, y: number, cell = 0): void {
+    if (cell > 0) {
+      this.breakCellAt(x, y, cell, replayScratch);
+      replayScratch.length = 0;
+      return;
+    }
     const block = this.destructibleBlockAt(x, y);
     if (block >= 0) {
       this.removeBlock(block);

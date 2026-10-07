@@ -62,8 +62,11 @@ export interface CanopyLayout {
 
 /** One single-screen cell of room, in room units — what "per room" counts below are per. */
 const CELL_AREA = 320 * 180;
-/** The share of an ordinary room's floor the gaps aim to light. */
-export const CANOPY_LIT_SHARE = 0.26;
+/**
+ * The share of an ordinary room's floor the gaps aim to light. A quarter (the
+ * first pass) played too dark: rooms read as all shade with a few spots.
+ */
+export const CANOPY_LIT_SHARE = 0.42;
 /**
  * Openings per single-cell room: this many, or one more. Two or three (the
  * first pass) left an ordinary room reading almost as dark as a lantern room;

@@ -20,7 +20,7 @@ import { Canopy, type CanopyKind, canopyLayout } from './canopy.js';
 import { buildLanternSprite, LANTERN_HALF_HEIGHT, setLanternArt } from './lantern-sprite.js';
 import { OCCLUDER_LAYER } from './layers.js';
 import { pixelDisc, pixelShapeGeometry } from './pixel-shape.js';
-import { LANTERN_REACH, type WallLantern } from './wall-lanterns.js';
+import { LANTERN_REACH, MAX_WALL_LANTERNS, type WallLantern } from './wall-lanterns.js';
 
 /**
  * Light. The reason the room is 3D.
@@ -110,12 +110,16 @@ export const MAX_DOOR_GLOWS = 10;
 /**
  * How many bulb rigs (light + glass + cord) a cellar room can light at once.
  * Authored content has never used more than one `bulb` prop; the unauthored
- * default (`defaultBulbs`) is two. 3 is that plus one spare — trimmed from 6
- * in #80's follow-up, since every slot is a per-fragment loop iteration in
- * every lit shader whether or not a bulb hangs there (F7). A room that asks
- * for more gets its first three lit and a one-time dev warning.
+ * default (`defaultBulbs`) is two. Trimmed from 6 to 3 in #80's follow-up,
+ * since every slot is a per-fragment loop iteration in every lit shader
+ * whether or not a bulb hangs there (F7); back up to 5 for Floor 3's lantern
+ * rooms, which hang four or five lanterns per screen — the fewest that light
+ * one screen of a lantern room. A bigger room hangs more lanterns than this,
+ * and the five nearest the player get the lights (`focusWallLanterns`). A
+ * cellar room that asks for more bulbs gets its first five lit and a
+ * one-time dev warning.
  */
-export const MAX_ROOM_BULBS = 3;
+export const MAX_ROOM_BULBS = 5;
 
 /**
  * How many prop lights — the white beam over an item pedestal
@@ -176,7 +180,9 @@ const LANTERN_INTENSITY: Readonly<Record<LightingRig, number>> = {
  * weaker than a cellar bulb, hung low, and reaching only as far as its pool.
  */
 const WALL_LANTERN_COLOUR = 0xff9a45;
-const WALL_LANTERN_INTENSITY = 5200;
+// Raised with the pool's reach (#424 follow-up): the same lamp lighting a
+// wider pool has to throw more, or the bigger pool is only a dimmer one.
+const WALL_LANTERN_INTENSITY = 7300;
 const WALL_LANTERN_HEIGHT = 14;
 /** How far into the room from the lantern its light source sits — see `setWallLanterns`. */
 const WALL_LANTERN_THROW = 9;
@@ -262,8 +268,6 @@ interface BulbRig {
   readonly light: PointLight;
   readonly glass: Mesh;
   readonly cord: Mesh;
-  /** What the rig is drawn as when it is a wall lantern rather than a bulb (#424). */
-  readonly lantern: Mesh;
 }
 
 export class Lighting {
@@ -300,6 +304,15 @@ export class Lighting {
   private readonly canopy = new Canopy();
   /** How many of the bulb rigs are wall lanterns this room, and so flicker — see `sync`. */
   private wallLanternCount = 0;
+  /** This room's wall lanterns, all of them — the lights go to the nearest few (`focusWallLanterns`). */
+  private wallLanterns: readonly WallLantern[] = [];
+  /** One lantern sprite per lantern a room can hang (#424), whether or not its light is lit. */
+  private readonly lanternSprites: Mesh[] = [];
+  /** Per bulb rig lighting a lantern, which lantern — so each keeps its own flicker as the lights move. */
+  private readonly lanternOfRig = new Int32Array(MAX_ROOM_BULBS);
+  /** Scratch for picking the nearest lanterns: index and squared distance, best first. */
+  private readonly nearestIndex = new Int32Array(MAX_ROOM_BULBS);
+  private readonly nearestDistance = new Float64Array(MAX_ROOM_BULBS);
   private frameWidth = 0;
   private frameHeight = 0;
   /** Where a cloud at `CLOUD_HEIGHT` throws its shadow, relative to itself — see `positionCloud`. */
@@ -355,6 +368,12 @@ export class Lighting {
     for (let i = 0; i < MAX_ROOM_BULBS; i++) {
       this.bulbRigs.push(this.buildBulbRig());
     }
+    for (let i = 0; i < MAX_WALL_LANTERNS; i++) {
+      const sprite = buildLanternSprite();
+      sprite.rotation.x = this.lean;
+      this.scene.add(sprite);
+      this.lanternSprites.push(sprite);
+    }
     const clouds: Mesh[] = [];
     for (const _cycle of CLOUD_CYCLES) {
       const cloud = buildCloudMesh();
@@ -373,8 +392,8 @@ export class Lighting {
 
   /** The wall lantern's tile (`wald-lantern`) from the art bundle — see `world/lantern-sprite.ts`. */
   setLanternArt(texture: Texture | undefined): void {
-    for (const rig of this.bulbRigs) {
-      setLanternArt(rig.lantern, texture);
+    for (const sprite of this.lanternSprites) {
+      setLanternArt(sprite, texture);
     }
   }
 
@@ -467,7 +486,9 @@ export class Lighting {
     this.lean = lean;
     for (const rig of this.bulbRigs) {
       rig.glass.rotation.x = lean;
-      rig.lantern.rotation.x = lean;
+    }
+    for (const sprite of this.lanternSprites) {
+      sprite.rotation.x = lean;
     }
     this.canopy.setLean(lean);
   }
@@ -475,8 +496,9 @@ export class Lighting {
   /** Lights exactly `placed.length` bulb rigs (clamped to the pool) and dims the rest. */
   private setBulbs(placed: readonly { readonly x: number; readonly y: number }[]): void {
     this.wallLanternCount = 0;
-    for (const rig of this.bulbRigs) {
-      rig.lantern.visible = false;
+    this.wallLanterns = [];
+    for (const sprite of this.lanternSprites) {
+      sprite.visible = false;
     }
     const count = Math.min(placed.length, MAX_ROOM_BULBS);
     if (placed.length > MAX_ROOM_BULBS) {
@@ -509,33 +531,119 @@ export class Lighting {
   }
 
   /**
-   * Lights a lantern room's wall lanterns from the bulb pool — the rigs a
-   * forest room would otherwise leave dark, so the scene's point-light count
-   * is what it always was (see the class comment). A lantern on the south
-   * wall hangs on the face the camera cannot see, so only its light shows.
+   * Hangs a lantern room's wall lanterns: every one gets its sprite (a lantern
+   * on the south wall hangs on the face the camera cannot see, so only its
+   * light shows), and the bulb pool — the rigs a forest room would otherwise
+   * leave dark, so the scene's point-light count never changes (see the class
+   * comment) — lights the ones nearest the player, `focusWallLanterns`. Until
+   * the first focus, the first few in the list.
    */
   private setWallLanterns(placed: readonly WallLantern[]): void {
     this.setBulbs([]);
-    const count = Math.min(placed.length, MAX_ROOM_BULBS);
-    for (let i = 0; i < count; i++) {
+    this.wallLanterns = placed;
+    for (let i = 0; i < this.lanternSprites.length; i++) {
+      const sprite = this.lanternSprites[i];
       const lantern = placed[i];
-      const rig = this.bulbRigs[i];
-      if (lantern === undefined || rig === undefined) {
+      if (sprite === undefined) {
         continue;
       }
-      // The light itself sits a little out from the wall, so it falls on the
-      // floor in front of the lantern rather than mostly on the wall behind it.
-      const out = WALL_LANTERN_THROW;
-      const dx = lantern.wall === 'west' ? out : lantern.wall === 'east' ? -out : 0;
-      const dz = lantern.wall === 'north' ? out : lantern.wall === 'south' ? -out : 0;
-      rig.light.position.set(lantern.x + dx, WALL_LANTERN_HEIGHT, lantern.z + dz);
-      rig.light.color.setHex(WALL_LANTERN_COLOUR);
-      rig.light.distance = WALL_LANTERN_DISTANCE;
-      rig.light.intensity = WALL_LANTERN_INTENSITY;
-      rig.lantern.position.set(lantern.x, WALL_LANTERN_HEIGHT - LANTERN_HALF_HEIGHT / 2, lantern.z);
-      rig.lantern.visible = lantern.wall !== 'south';
+      if (lantern === undefined) {
+        sprite.visible = false;
+        continue;
+      }
+      sprite.position.set(lantern.x, WALL_LANTERN_HEIGHT - LANTERN_HALF_HEIGHT / 2, lantern.z);
+      sprite.visible = lantern.wall !== 'south';
+    }
+    const count = Math.min(placed.length, MAX_ROOM_BULBS);
+    for (let i = 0; i < count; i++) {
+      this.lightLantern(i, i);
     }
     this.wallLanternCount = count;
+  }
+
+  /**
+   * Gives the bulb pool's lights to the wall lanterns nearest `(x, z)` — the
+   * player. A single-screen room has no more lanterns than lights, so this
+   * only ever changes anything in a bigger one, where the camera shows about
+   * one screen of it at a time: the lanterns on screen are the near ones.
+   * Called every frame; picks without allocating.
+   */
+  focusWallLanterns(x: number, z: number): void {
+    const lanterns = this.wallLanterns;
+    if (lanterns.length <= MAX_ROOM_BULBS) {
+      return;
+    }
+    const slots = MAX_ROOM_BULBS;
+    this.nearestDistance.fill(Infinity);
+    this.nearestIndex.fill(-1);
+    for (let i = 0; i < lanterns.length; i++) {
+      const lantern = lanterns[i];
+      if (lantern === undefined) {
+        continue;
+      }
+      const d = (lantern.x - x) * (lantern.x - x) + (lantern.z - z) * (lantern.z - z);
+      // Insertion into a short sorted list, nearest first.
+      let at = slots;
+      while (at > 0 && d < (this.nearestDistance[at - 1] ?? Infinity)) {
+        at -= 1;
+      }
+      if (at >= slots) {
+        continue;
+      }
+      for (let k = slots - 1; k > at; k--) {
+        this.nearestDistance[k] = this.nearestDistance[k - 1] ?? Infinity;
+        this.nearestIndex[k] = this.nearestIndex[k - 1] ?? -1;
+      }
+      this.nearestDistance[at] = d;
+      this.nearestIndex[at] = i;
+    }
+    // Keep a lantern on the rig it already has where it is still near, so a
+    // lit lantern never blinks while the set shifts by one; hand the freed
+    // rigs to the newcomers.
+    for (let rig = 0; rig < slots; rig++) {
+      const current = this.lanternOfRig[rig] ?? -1;
+      let stillNear = false;
+      for (let k = 0; k < slots; k++) {
+        if (this.nearestIndex[k] === current) {
+          stillNear = true;
+          this.nearestIndex[k] = -2;
+        }
+      }
+      if (!stillNear) {
+        this.lanternOfRig[rig] = -1;
+      }
+    }
+    for (let k = 0; k < slots; k++) {
+      const lantern = this.nearestIndex[k] ?? -1;
+      if (lantern < 0) {
+        continue;
+      }
+      for (let rig = 0; rig < slots; rig++) {
+        if ((this.lanternOfRig[rig] ?? -1) === -1) {
+          this.lightLantern(rig, lantern);
+          break;
+        }
+      }
+    }
+  }
+
+  /** Puts bulb rig `rig`'s light on wall lantern `index`. */
+  private lightLantern(rig: number, index: number): void {
+    const lantern = this.wallLanterns[index];
+    const bulb = this.bulbRigs[rig];
+    if (lantern === undefined || bulb === undefined) {
+      return;
+    }
+    // The light itself sits a little out from the wall, so it falls on the
+    // floor in front of the lantern rather than mostly on the wall behind it.
+    const out = WALL_LANTERN_THROW;
+    const dx = lantern.wall === 'west' ? out : lantern.wall === 'east' ? -out : 0;
+    const dz = lantern.wall === 'north' ? out : lantern.wall === 'south' ? -out : 0;
+    bulb.light.position.set(lantern.x + dx, WALL_LANTERN_HEIGHT, lantern.z + dz);
+    bulb.light.color.setHex(WALL_LANTERN_COLOUR);
+    bulb.light.distance = WALL_LANTERN_DISTANCE;
+    bulb.light.intensity = WALL_LANTERN_INTENSITY;
+    this.lanternOfRig[rig] = index;
   }
 
   private buildBulbRig(): BulbRig {
@@ -570,10 +678,7 @@ export class Lighting {
     // pass-one draw or the head-clip fix changing. See `world/layers.ts`.
     glass.layers.enable(OCCLUDER_LAYER);
     cord.layers.enable(OCCLUDER_LAYER);
-    const lantern = buildLanternSprite();
-    lantern.rotation.x = this.lean;
-    this.scene.add(lantern);
-    return { light, glass, cord, lantern };
+    return { light, glass, cord };
   }
 
   private warnBulbOverflow(requested: number): void {
@@ -709,7 +814,8 @@ export class Lighting {
       const rig = this.bulbRigs[i];
       if (rig !== undefined) {
         rig.light.intensity =
-          WALL_LANTERN_INTENSITY * (this.reducedMotion ? 1 : lanternFlicker(i, tick));
+          WALL_LANTERN_INTENSITY *
+          (this.reducedMotion ? 1 : lanternFlicker(this.lanternOfRig[i] ?? i, tick));
       }
     }
     if (this.clouds.length === 0 || this.rig !== 'daylight') {
@@ -768,6 +874,7 @@ export class Lighting {
 
   /** Alois's lantern follows him; out when he is dead. */
   syncLantern(x: number, z: number, lit: boolean): void {
+    this.focusWallLanterns(x, z);
     this.lantern.position.set(x, 16, z);
     this.lantern.intensity = lit ? LANTERN_INTENSITY[this.rig] : 0;
   }

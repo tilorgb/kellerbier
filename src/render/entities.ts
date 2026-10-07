@@ -5,6 +5,7 @@ import { hurtboxRadiusOf } from '../sim/collision/footprint.js';
 import { World } from '../sim/ecs/world.js';
 import { PLAYER_FOOTPRINT, type GameSim } from '../sim/game/sim.js';
 import { propKindIndex } from '../sim/game/prop-kinds.js';
+import { EnemyFacing } from '../sim/enemy/registry.js';
 import { lerp } from '../sim/math.js';
 import { bombBlastArmLength, bombFuseProgress } from '../sim/systems/bombs.js';
 import {
@@ -26,7 +27,12 @@ import {
 } from '../sim/systems/enemy.js';
 import { EntityAnimator } from './animation/animator.js';
 import { AnimationState } from './animation/definition.js';
-import { AUTHORED_FACING, resolveAnimationState, resolveFacing } from './animation/state.js';
+import {
+  AUTHORED_FACING,
+  resolveAnimationState,
+  resolveFacing,
+  resolveMirrorFacing,
+} from './animation/state.js';
 import type { AnimatedSpriteSet } from './floor-art.js';
 import { type BitmapText, type Container, type Texture } from './gfx/index.js';
 import { ENTITY_PALETTE } from './palette.js';
@@ -149,6 +155,15 @@ const SUBMERGED_GLOW_STRENGTH = 0.5;
 const LATCH_HAT_HEIGHT = 12;
 /** How far in front of Alois's plane a latched tick is drawn, so the depth buffer always puts it over the hat. */
 const LATCH_HAT_FORWARD = 0.3;
+/**
+ * Where on a `facing: 'crawl'` canvas the drawn body's middle is, as a
+ * fraction of its height from the bottom edge: the Zecke's 16-row canvas
+ * draws its bug in the bottom eight rows, so a quarter of the way up.
+ */
+const CRAWL_BODY_ANCHOR = 0.25;
+/** Unit headings for a crawler's four quarter turns, by `crawlTurn`: east, south, west, north (room axes, +y south). */
+const CRAWL_HEAD_X = [1, 0, -1, 0] as const;
+const CRAWL_HEAD_Z = [0, 1, 0, -1] as const;
 
 export function mixColor(a: number, b: number, t: number): number {
   const k = Math.min(1, Math.max(0, t));
@@ -219,6 +234,15 @@ export class EntityView {
   /** Whether the plain `Ring` telegraph is drawn (#429) — `AccessibilitySettings.telegraphRings`. */
   private telegraphRings = false;
   private lean = 0;
+  /**
+   * Per entity slot, the facing a `facing` body with no animation strip last
+   * showed — left/right (`-1`/`1`) for a mirror, a quarter turn (0-3,
+   * `CRAWL_HEAD_X`) for a crawler — held while the sim gives no opinion.
+   * Keyed by the entity in the slot, so a body spawned into a dead one's slot
+   * does not inherit its facing.
+   */
+  private readonly heldFacing: number[] = [];
+  private readonly heldFacingEntity: number[] = [];
   private readonly telegraphShape: EnemyTelegraphShapeInfo = {
     shape: TelegraphShape.Ring,
     progress: 0,
@@ -261,6 +285,45 @@ export class EntityView {
     this.labelAt(0);
   }
 
+  /** The held slot value for `index`, or `fallback` when the slot holds another entity's. */
+  private heldFor(index: number, fallback: number): number {
+    const entity = this.sim.world.entityAt(index);
+    if (this.heldFacingEntity[index] !== entity) {
+      this.heldFacingEntity[index] = entity;
+      this.heldFacing[index] = fallback;
+    }
+    return this.heldFacing[index] ?? fallback;
+  }
+
+  /** A `facing: 'mirror'` body's left/right facing this frame (`resolveMirrorFacing`, held). */
+  private mirrorOf(index: number): number {
+    const held = this.heldFor(index, AUTHORED_FACING);
+    const facing = resolveMirrorFacing(this.sim, index);
+    if (facing === 0) {
+      return held;
+    }
+    this.heldFacing[index] = facing;
+    return facing;
+  }
+
+  /**
+   * A `facing: 'crawl'` body's quarter turn this frame: its heading (the
+   * hop it is on, `hopTowardPlayer`) snapped to the nearest of the four,
+   * held while it has none. A fresh one faces south, at the camera.
+   */
+  private crawlTurnOf(index: number): number {
+    const held = this.heldFor(index, 1);
+    const motionBase = index * ENEMY_MOTION_STRIDE;
+    const headingX = this.sim.enemyMotion.data[motionBase] ?? 0;
+    const headingY = this.sim.enemyMotion.data[motionBase + 1] ?? 0;
+    if (headingX === 0 && headingY === 0) {
+      return held;
+    }
+    const turn = (Math.round(Math.atan2(headingY, headingX) / (Math.PI / 2)) + 4) % 4;
+    this.heldFacing[index] = turn;
+    return turn;
+  }
+
   static get telegraphScale(): number {
     return TELEGRAPH_SCALE;
   }
@@ -286,6 +349,7 @@ export class EntityView {
   /** Drops every animation and corpse — a room just changed under them. */
   resetAnimation(): void {
     this.animator.reset();
+    this.heldFacingEntity.length = 0;
     for (const corpse of this.corpses) {
       corpse.visible = false;
     }
@@ -378,12 +442,28 @@ export class EntityView {
           world.entityAt(index),
           animation.clips,
           resolveAnimationState(sim, index),
-          resolveFacing(sim, index),
+          // A `facing: 'mirror'` body turns to the player while it stands
+          // still (the Boar, the Kaninchen); every other strip faces its
+          // stored heading, as it always has.
+          compiledEnemy?.facing === EnemyFacing.Mirror
+            ? resolveMirrorFacing(sim, index)
+            : resolveFacing(sim, index),
           x,
           y,
           footprint,
         );
         mirror = this.animator.facingOf(index) === AUTHORED_FACING ? 1 : -1;
+      }
+      const latched =
+        isEnemyBody && ((sim.enemy.data[index * ENEMY_STRIDE + 3] ?? 0) & ENEMY_FLAG_LATCHED) !== 0;
+      // A crawler lies flat (the Zecke) — but not while riding on Alois's
+      // hat, where it stands up on his billboard as before.
+      const crawlTurn =
+        animation === undefined && compiledEnemy?.facing === EnemyFacing.Crawl && !latched
+          ? this.crawlTurnOf(index)
+          : -1;
+      if (animation === undefined && compiledEnemy?.facing === EnemyFacing.Mirror) {
+        mirror = this.mirrorOf(index) === AUTHORED_FACING ? 1 : -1;
       }
 
       // Under the water (#408): the same silhouette, dark and flattened onto
@@ -507,10 +587,7 @@ export class EntityView {
           : x;
       let placeY = 0.2 + lift;
       let placeZ = footZ;
-      if (
-        isEnemyBody &&
-        ((sim.enemy.data[index * ENEMY_STRIDE + 3] ?? 0) & ENEMY_FLAG_LATCHED) !== 0
-      ) {
+      if (latched) {
         // Riding on Alois (#406): on his own leaned plane, `LATCH_HAT_HEIGHT`
         // up it and a hair in front, at his interpolated position so it never
         // lags a frame behind him. The sim's offset (`latchToPlayer`) only
@@ -524,14 +601,31 @@ export class EntityView {
         placeY = 0.2 + LATCH_HAT_HEIGHT * cos - LATCH_HAT_FORWARD * sin;
         placeZ = playerY + PLAYER_FOOTPRINT + LATCH_HAT_HEIGHT * sin + LATCH_HAT_FORWARD * cos;
       }
-      billboard.place(
-        placeX,
-        placeY,
-        placeZ,
-        this.lean,
-        gridScale * pop * swell * widen,
-        ((1 - WIND_UP_SQUASH * crouch) / widen) * (submerged ? SUBMERGED_FLATTEN : 1),
-      );
+      if (crawlTurn >= 0) {
+        // Flat on the floor at the body's centre, not standing at its feet.
+        billboard.placeFlat(
+          x,
+          placeY,
+          y,
+          CRAWL_HEAD_X[crawlTurn] ?? 0,
+          CRAWL_HEAD_Z[crawlTurn] ?? 0,
+          CRAWL_BODY_ANCHOR,
+          gridScale * pop * swell * widen,
+          (1 - WIND_UP_SQUASH * crouch) / widen,
+        );
+      } else {
+        if (billboard.isFlat) {
+          billboard.standUp();
+        }
+        billboard.place(
+          placeX,
+          placeY,
+          placeZ,
+          this.lean,
+          gridScale * pop * swell * widen,
+          ((1 - WIND_UP_SQUASH * crouch) / widen) * (submerged ? SUBMERGED_FLATTEN : 1),
+        );
+      }
 
       const priced = isPickup && (mask & sim.pickupPrice.bit) !== 0;
       if (isPickup && (priced || pickupSprite === undefined)) {

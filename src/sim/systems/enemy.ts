@@ -121,15 +121,16 @@ export const ENEMY_STRIDE = 4;
  * waypoint the pathfinder last chose on the way there, and how many ticks the
  * player has been out of sight. Then (#408) the state's rolled duration, and
  * a swimmer's course, current sample and target sample. Then (#410) the
- * slots `approachWood` keeps its plan in (`sim/systems/wood.ts`), then (#411)
- * a percher's wall point and the way it faces there.
+ * slots `approachWood` keeps its plan in (`sim/systems/wood.ts`), after
+ * them a `hopTowardPlayer` body's own hop clock, then (#411) a percher's wall
+ * point and the way it faces there.
  */
-export const ENEMY_MOTION_STRIDE = 16 + WOOD_MOTION_SLOTS + 4;
+export const ENEMY_MOTION_STRIDE = 16 + WOOD_MOTION_SLOTS + 3 + 4;
 /**
  * `enemyMotion` offsets of a `returnToPerch` body's perch (#411): the wall
  * point it is flying to, and the direction into the room it faces there.
  */
-const MOTION_PERCH_X = 16 + WOOD_MOTION_SLOTS;
+const MOTION_PERCH_X = 16 + WOOD_MOTION_SLOTS + 3;
 const MOTION_PERCH_Y = MOTION_PERCH_X + 1;
 const MOTION_PERCH_NORMAL_X = MOTION_PERCH_X + 2;
 const MOTION_PERCH_NORMAL_Y = MOTION_PERCH_X + 3;
@@ -142,6 +143,17 @@ export const MOTION_DURATION_ROLL = 12;
 export const MOTION_SWIM_COURSE = 13;
 export const MOTION_SWIM_SAMPLE = 14;
 export const MOTION_SWIM_TARGET = 15;
+/**
+ * `enemyMotion` offsets of a `hopTowardPlayer` body's hop clock (the Zecke):
+ * the state tick its current hop began, the state tick its next one begins,
+ * and how many hops it has made in this state. Its own rather than the
+ * state's `ticks % cycle`, because every rest is rolled — a room of ticks
+ * hopping in lockstep read as one hivemind. After `approachWood`'s slots, so
+ * the two never share one (`ENEMY_MOTION_STRIDE` counts all three).
+ */
+const MOTION_HOP_START = 16 + WOOD_MOTION_SLOTS;
+const MOTION_HOP_NEXT = MOTION_HOP_START + 1;
+const MOTION_HOP_COUNT = MOTION_HOP_START + 2;
 /** `enemyMotion` offsets of the last-seen memory (see `walkTowardPlayer`). */
 const MOTION_LAST_SEEN_X = 6;
 const MOTION_LAST_SEEN_Y = 7;
@@ -715,9 +727,10 @@ const IMPACT_TERRAIN_SLACK = 3;
  * A `chargeAtPlayer` with `impact` (#409, the Boar): looks one step ahead
  * along the locked direction and, if something is there, hits it and ends
  * the charge — raising `ENEMY_FLAG_BLOCKED` so the state machine's
- * `onBlocked` fires next tick. Returns whether it hit anything. Bodies are
- * checked before terrain: a player pinned against a wall is hit, not the
- * wall behind them.
+ * `onBlocked` fires next tick. Returns how far the body still moves this
+ * tick — `speed` when it hit nothing, 0 when it hit a body, and the run up
+ * to contact when it hit terrain. Bodies are checked before terrain: a player
+ * pinned against a wall is hit, not the wall behind them.
  */
 function chargeImpact(
   sim: GameSim,
@@ -728,7 +741,7 @@ function chargeImpact(
   speed: number,
   selfX: number,
   selfY: number,
-): boolean {
+): number {
   const body = sim.body.data;
   const radius = body[index * 2] ?? 0;
   const nextX = selfX + dirX * speed;
@@ -752,26 +765,73 @@ function chargeImpact(
     const mass = Math.max(0.01, body[hit * 2 + 1] ?? 1);
     addPush(sim, hit, (dirX * impact.knockback) / mass, (dirY * impact.knockback) / mass);
     raiseBlocked(sim, index);
-    return true;
+    return 0;
   }
 
   // Terrain is probed a little past one step: `stepBodies` stops a body
   // against a wall a hair before its footprint reaches it, and a probe of
   // exactly one step let that stop — an ordinary `onBlocked`, nothing
   // smashed — win the race by a tick.
-  const probeX = selfX + dirX * (speed + IMPACT_TERRAIN_SLACK);
-  const probeY = selfY + dirY * (speed + IMPACT_TERRAIN_SLACK);
-  if (sim.room.isClear(probeX, probeY, radius)) {
-    return false;
+  const reach = speed + IMPACT_TERRAIN_SLACK;
+  if (sim.room.isClear(selfX + dirX * reach, selfY + dirY * reach, radius)) {
+    return speed;
   }
-  // Something solid just ahead: the point at the very front of the body.
-  const frontX = probeX + dirX * (radius + IMPACT_REACH_SLACK);
-  const frontY = probeY + dirY * (radius + IMPACT_REACH_SLACK);
-  if (!(impact.breaksBlocks && sim.breakBlockAt(frontX, frontY)) && impact.breaksDoors) {
-    sim.smashWallAt(frontX, frontY);
+  // Something solid within reach: run the rest of the way up to it at full
+  // speed, so the hit lands with the body against what it hit rather than a
+  // few units short of it — the charge never visibly brakes before impact.
+  const free = clearRun(sim, selfX, selfY, dirX, dirY, radius, reach);
+  // The front edge, at contact: tried across the body's width, centre first,
+  // so a glancing hit on a block's corner still smashes it — one point on
+  // the centre line missed every block that only overlapped one flank.
+  const contactX = selfX + dirX * (free + radius + IMPACT_REACH_SLACK);
+  const contactY = selfY + dirY * (free + radius + IMPACT_REACH_SLACK);
+  let smashed = false;
+  if (impact.breaksBlocks) {
+    for (let i = 0; i < IMPACT_EDGE_OFFSETS.length && !smashed; i++) {
+      const across = (IMPACT_EDGE_OFFSETS[i] ?? 0) * radius;
+      // Perpendicular to the charge: (-dirY, dirX).
+      smashed = sim.smashBlockCellAt(contactX - dirY * across, contactY + dirX * across);
+    }
+  }
+  if (!smashed && impact.breaksDoors) {
+    sim.smashWallAt(contactX, contactY);
   }
   raiseBlocked(sim, index);
-  return true;
+  return Math.min(speed, free);
+}
+
+/**
+ * Where across its front edge, as a fraction of its radius from the centre
+ * line, a charge looks for the block it hit — nearest the centre first, so
+ * of two cells it straddles the one it hit squarer breaks.
+ */
+const IMPACT_EDGE_OFFSETS = [0, 0.5, -0.5, 0.95, -0.95] as const;
+
+/**
+ * How far a body of `radius` at `(x, y)` can go along `(dirX, dirY)` before
+ * terrain stops it, up to `limit` — bisected on `RoomGeometry.isClear`,
+ * which is only ever asked on the tick a charge is about to hit something.
+ */
+function clearRun(
+  sim: GameSim,
+  x: number,
+  y: number,
+  dirX: number,
+  dirY: number,
+  radius: number,
+  limit: number,
+): number {
+  let low = 0;
+  let high = limit;
+  for (let step = 0; step < 10; step++) {
+    const mid = (low + high) / 2;
+    if (sim.room.isClear(x + dirX * mid, y + dirY * mid, radius)) {
+      low = mid;
+    } else {
+      high = mid;
+    }
+  }
+  return low;
 }
 
 /** The first body (the player, or another enemy on a collision layer) a body at `(x, y)` would overlap — or -1. */
@@ -1419,10 +1479,8 @@ function applyMovement(
         // `maxDistance`, then nothing for the rest of the state.
         speed = clamp(behaviour.maxDistance - ticks * speed, 0, speed);
       }
-      if (
-        behaviour.impact !== undefined &&
-        speed > 0 &&
-        chargeImpact(
+      if (behaviour.impact !== undefined && speed > 0) {
+        speed = chargeImpact(
           sim,
           index,
           behaviour.impact,
@@ -1431,9 +1489,7 @@ function applyMovement(
           speed,
           selfX,
           selfY,
-        )
-      ) {
-        speed = 0;
+        );
       }
       velocity[base] = (motion[motionBase] ?? 0) * speed;
       velocity[base + 1] = (motion[motionBase + 1] ?? 0) * speed;
@@ -1459,17 +1515,54 @@ function applyMovement(
       if (phase === 0) {
         chooseHopDirection(sim, index, selfX, selfY, distanceScaled);
       }
-      if (phase >= hopTicks) {
-        velocity[base] = 0;
-        velocity[base + 1] = 0;
-        return;
+      const speed = hopSpeed(distanceScaled, phase, hopTicks);
+      velocity[base] = (motion[motionBase] ?? 0) * speed;
+      velocity[base + 1] = (motion[motionBase + 1] ?? 0) * speed;
+      return;
+    }
+    case 'hopTowardPlayer': {
+      const hopTicks = Math.max(1, Math.round(behaviour.hopTicks));
+      const distanceScaled = behaviour.hopDistance * scale;
+      if (ticks === 0) {
+        // A fresh state (spawned, or back from being shaken off): a fresh
+        // run of hops, after a rolled wait — so ticks that arrive together
+        // do not take off together.
+        motion[motionBase + MOTION_HOP_COUNT] = 0;
+        motion[motionBase + MOTION_HOP_START] = -hopTicks;
+        motion[motionBase + MOTION_HOP_NEXT] = rollHopRest(sim, behaviour);
+        motion[motionBase] = 0;
+        motion[motionBase + 1] = 0;
       }
-      // A sine-eased hop that sums to exactly `hopDistance` over `hopTicks`:
-      // Σ sin(π(i+½)/n) over i < n is 1 / sin(π/2n).
-      const speed =
-        distanceScaled *
-        Math.sin((Math.PI * (phase + 0.5)) / hopTicks) *
-        Math.sin(Math.PI / (2 * hopTicks));
+      // `>=`, not `===`: a tick this primitive did not run on (a stun, a
+      // freeze) must not strand the clock past its next hop forever.
+      if (ticks >= (motion[motionBase + MOTION_HOP_NEXT] ?? 0)) {
+        // Two in, one back (with `backEvery: 3`), counted from the state's
+        // own first hop.
+        const hop = motion[motionBase + MOTION_HOP_COUNT] ?? 0;
+        const every = Math.max(2, Math.round(behaviour.backEvery));
+        const sign = hop % every === every - 1 ? -1 : 1;
+        // Wobbled off the straight line, so it creeps rather than homes in.
+        const wobble =
+          (sim.random.enemies.nextFloat() * 2 - 1) * ((behaviour.aimJitterDegrees * Math.PI) / 180);
+        const cos = Math.cos(wobble);
+        const sin = Math.sin(wobble);
+        const aimX = sign * toPlayerX;
+        const aimY = sign * toPlayerY;
+        chooseAimedHop(
+          sim,
+          index,
+          selfX,
+          selfY,
+          aimX * cos - aimY * sin,
+          aimX * sin + aimY * cos,
+          distanceScaled,
+        );
+        motion[motionBase + MOTION_HOP_COUNT] = hop + 1;
+        motion[motionBase + MOTION_HOP_START] = ticks;
+        motion[motionBase + MOTION_HOP_NEXT] = ticks + hopTicks + rollHopRest(sim, behaviour);
+      }
+      const phase = ticks - (motion[motionBase + MOTION_HOP_START] ?? 0);
+      const speed = phase >= 0 ? hopSpeed(distanceScaled, phase, hopTicks) : 0;
       velocity[base] = (motion[motionBase] ?? 0) * speed;
       velocity[base + 1] = (motion[motionBase + 1] ?? 0) * speed;
       return;
@@ -1578,6 +1671,75 @@ function chooseHopDirection(
   motion[motionBase + 1] = 0;
 }
 
+/**
+ * This tick's speed along a hop `phase` ticks into its cycle — 0 once the
+ * hop is over and the body rests. A sine ease that sums to exactly
+ * `distance` over `hopTicks`: Σ sin(π(i+½)/n) over i < n is 1 / sin(π/2n).
+ */
+function hopSpeed(distance: number, phase: number, hopTicks: number): number {
+  if (phase >= hopTicks) {
+    return 0;
+  }
+  return (
+    distance * Math.sin((Math.PI * (phase + 0.5)) / hopTicks) * Math.sin(Math.PI / (2 * hopTicks))
+  );
+}
+
+/**
+ * One `hopTowardPlayer` rest: `restTicks` give or take `restJitter` of it,
+ * rolled from `random.enemies` — and never less than a tick, so every hop
+ * visibly lands before the next; two run together read as one long glide.
+ */
+function rollHopRest(
+  sim: GameSim,
+  hop: { readonly restTicks: number; readonly restJitter: number },
+): number {
+  const swing = (sim.random.enemies.nextFloat() * 2 - 1) * hop.restJitter;
+  return Math.max(1, Math.round(hop.restTicks * (1 + swing)));
+}
+
+/** Turns tried, in order, when a `hopTowardPlayer` landing is blocked: straight, then 45° and 90° either side. */
+const AIMED_HOP_TURNS = [0, Math.PI / 4, -Math.PI / 4, Math.PI / 2, -Math.PI / 2] as const;
+
+/**
+ * A `hopTowardPlayer` hop's direction (the Zecke): along `(aimX, aimY)` —
+ * at the player, or away from them — or the first of `AIMED_HOP_TURNS` off
+ * it whose landing and midpoint are clear, written to the heading slots. With
+ * none clear, or nothing to aim at, the heading is zeroed and the body rests
+ * the cycle out. Deterministic: no random draw.
+ */
+function chooseAimedHop(
+  sim: GameSim,
+  index: number,
+  selfX: number,
+  selfY: number,
+  aimX: number,
+  aimY: number,
+  distance: number,
+): void {
+  const motion = sim.enemyMotion.data;
+  const motionBase = index * ENEMY_MOTION_STRIDE;
+  const radius = sim.body.data[index * 2] ?? 0;
+  const length = vectorLength(aimX, aimY);
+  if (length > 0) {
+    const aim = Math.atan2(aimY, aimX);
+    for (const turn of AIMED_HOP_TURNS) {
+      const dirX = Math.cos(aim + turn);
+      const dirY = Math.sin(aim + turn);
+      if (
+        sim.room.isClear(selfX + dirX * distance, selfY + dirY * distance, radius) &&
+        sim.room.isClear(selfX + (dirX * distance) / 2, selfY + (dirY * distance) / 2, radius)
+      ) {
+        motion[motionBase] = dirX;
+        motion[motionBase + 1] = dirY;
+        return;
+      }
+    }
+  }
+  motion[motionBase] = 0;
+  motion[motionBase + 1] = 0;
+}
+
 /** Whether a `hopCardinal` body is between hops at `ticks` into its state. */
 function isResting(
   hop: { readonly hopTicks: number; readonly restTicks: number },
@@ -1589,24 +1751,33 @@ function isResting(
 }
 
 /**
- * How far through its current hop a `hopCardinal` body is, 0 to 1 — 0 while
- * resting, and for every other movement. Read by the renderer for the hop's
- * bob (#407); derived from the state counter like everything else here.
+ * How far through its current hop a `hopCardinal` or `hopTowardPlayer` body
+ * is, 0 to 1 — 0 while resting, and for every other movement. Read by the
+ * renderer for the hop's bob (#407); derived from the state counter like
+ * everything else here.
  */
 export function enemyHopProgress(sim: GameSim, index: number): number {
   const base = index * ENEMY_STRIDE;
   const state = sim.enemies.at(sim.enemy.data[base] ?? 0).states[sim.enemy.data[base + 1] ?? 0];
-  if (state?.movement.behaviour !== 'hopCardinal') {
+  if (
+    state === undefined ||
+    (state.movement.behaviour !== 'hopCardinal' && state.movement.behaviour !== 'hopTowardPlayer')
+  ) {
     return 0;
   }
   const hop = state.movement;
   const hopTicks = Math.max(1, Math.round(hop.hopTicks));
-  const cycle = hopTicks + Math.max(0, Math.round(hop.restTicks));
-  const phase = (sim.enemy.data[base + 2] ?? 0) % cycle;
-  if (phase >= hopTicks) {
+  const counter = sim.enemy.data[base + 2] ?? 0;
+  const motionBase = index * ENEMY_MOTION_STRIDE;
+  // A `hopTowardPlayer` body keeps its own hop clock (its rests are rolled);
+  // a `hopCardinal` one hops on the state counter's fixed beat.
+  const phase =
+    hop.behaviour === 'hopTowardPlayer'
+      ? counter - (sim.enemyMotion.data[motionBase + MOTION_HOP_START] ?? 0)
+      : counter % (hopTicks + Math.max(0, Math.round(hop.restTicks)));
+  if (phase < 0 || phase >= hopTicks) {
     return 0;
   }
-  const motionBase = index * ENEMY_MOTION_STRIDE;
   if (
     (sim.enemyMotion.data[motionBase] ?? 0) === 0 &&
     (sim.enemyMotion.data[motionBase + 1] ?? 0) === 0

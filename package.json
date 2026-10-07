@@ -30,6 +30,7 @@
     "art:floor2": "node tools/art/authoring/build-floor2-roster.mjs",
     "art:minibosses2": "node tools/art/authoring/build-floor2-minibosses.mjs",
     "art:floor3": "node tools/art/authoring/build-floor3-roster.mjs",
+    "art:ordner": "node tools/art/authoring/build-ordner.mjs",
     "art:shopkeeper": "node tools/art/authoring/build-shopkeeper.mjs",
     "art:items": "node tools/art/authoring/build-items.mjs",
     "art:chests": "node tools/art/authoring/build-chests.mjs",

@@ -42,6 +42,8 @@ export class Billboard {
   private readonly uv: BufferAttribute;
   private textureValue: Texture | null = null;
   private mirrorValue = 1;
+  /** Whether `placeFlat` laid the quad down, so `place` knows to turn it back. */
+  private flat = false;
 
   constructor() {
     const geometry = new PlaneGeometry(1, 1);
@@ -70,6 +72,9 @@ export class Billboard {
     this.mesh.receiveShadow = true;
     this.mesh.visible = false;
     this.mesh.frustumCulled = false;
+    // Turn about the vertical last, so `placeFlat` can lay the quad down and
+    // then point it; with y and z at 0 this is the plain lean `place` sets.
+    this.mesh.rotation.order = 'YXZ';
     // A billboard is always a standing sprite: drawn in GameView's second pass,
     // over the room, so a leaning sprite is not clipped by the wall behind it.
     this.mesh.layers.set(ACTOR_LAYER);
@@ -127,6 +132,56 @@ export class Billboard {
     this.mesh.scale.set(w * scale, h * scale * scaleY, 1);
     this.mesh.position.set(x, y, z);
     this.mesh.rotation.x = lean;
+  }
+
+  /** Whether `placeFlat` laid the quad down — a pooled one must be stood back up (`standUp`) before `place` reuses it. */
+  get isFlat(): boolean {
+    return this.flat;
+  }
+
+  /**
+   * Undoes `placeFlat`'s turn about the vertical, so `place`'s lean is the
+   * whole rotation again. Kept out of `place` itself, which every standing
+   * sprite calls every frame and which only a pooled body can ever need this.
+   */
+  standUp(): void {
+    this.mesh.rotation.y = 0;
+    this.flat = false;
+  }
+
+  /**
+   * Lays the quad flat on the floor instead of standing it up — a crawling
+   * body seen from above (the Zecke, `facing: 'crawl'`). The canvas's top
+   * edge is its head, and points along `(headX, headZ)` in room axes (a unit
+   * vector; `+z` is south, toward the camera). `anchor` is the fraction of
+   * the canvas height, from its bottom edge, that sits at `(x, z)` — the
+   * middle of the drawn body, which on a canvas with empty rows above it is
+   * not the middle of the canvas. `y` lifts the whole quad (a hop's bob).
+   */
+  placeFlat(
+    x: number,
+    y: number,
+    z: number,
+    headX: number,
+    headZ: number,
+    anchor: number,
+    scale = 1,
+    scaleY = 1,
+  ): void {
+    const texture = this.textureValue;
+    const w = (texture?.displayWidth ?? 1) / ACTOR_PIXELS_PER_UNIT;
+    const h = (texture?.displayHeight ?? 1) / ACTOR_PIXELS_PER_UNIT;
+    const length = h * scale * scaleY;
+    this.mesh.scale.set(w * scale, length, 1);
+    // The geometry is anchored at its bottom edge, so step back along the
+    // head's direction to put the drawn body's middle on the point.
+    this.mesh.position.set(x - headX * length * anchor, y, z - headZ * length * anchor);
+    // Laid back a quarter turn (its top now points north, -z), then turned
+    // about the vertical so its top points along the heading. `YXZ` applies
+    // the lay-down before the turn.
+    this.mesh.rotation.x = -Math.PI / 2;
+    this.mesh.rotation.y = Math.atan2(-headX, -headZ);
+    this.flat = true;
   }
 
   /** Frame size in room units after `place` — what a label above it needs. */

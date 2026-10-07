@@ -32,6 +32,8 @@ export const specht: EnemyDefinition = {
   lootTier: 'normal',
   flying: true,
   telegraphLook: 'drum',
+  // Side-view art: faces the way it flies, and the player while it sits.
+  facing: 'mirror',
   initial: 'perch',
   states: [
     {

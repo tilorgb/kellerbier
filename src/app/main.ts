@@ -2973,7 +2973,7 @@ async function boot(progress: BootProgress): Promise<void> {
     const latchLine =
       sim.latchedEnemyCount === 0
         ? ''
-        : `\nlatched ${String(sim.latchedEnemyCount)}  shakes ${String(sim.latchShakeCount)}/${String(sim.tuning.latch.shakesRequired)}`;
+        : `\nlatched ${String(sim.latchedEnemyCount)}  shake ${String(Math.round(sim.latchShakeProgress * 100))}%`;
     hud.text = `seed ${String(RUN_SEED)}  ${character}  ${floorPlan.floorName}  room ${sim.roomId} (${currentRole})  doors ${roomState}${warmup}${keyHint}${bossGateHint}${bossGateState}  enemies ${String(sim.liveEnemyCount)}
   tick ${String(loop.tick)}  ${seconds}s  x${scale}${loop.paused ? '  PAUSED' : ''}
 hp ${String(hearts)}/${String(maxHearts)}  soul ${String(sim.playerSoulHealth)}  eternal ${String(sim.playerEternalHealth)}${invulnerable}${dead}${runState}${override}${promilleLine}${sneezeLine}${latchLine}

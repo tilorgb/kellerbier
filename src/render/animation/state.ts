@@ -1,5 +1,9 @@
 import type { GameSim } from '../../sim/game/sim.js';
-import { ENEMY_MOTION_STRIDE, enemyTelegraphProgress } from '../../sim/systems/enemy.js';
+import {
+  ENEMY_MOTION_STRIDE,
+  enemyAimAngle,
+  enemyTelegraphProgress,
+} from '../../sim/systems/enemy.js';
 import { AnimationState, type AnimationStateIndex } from './definition.js';
 
 /**
@@ -34,6 +38,13 @@ const MOVE_EPSILON_PX = 0.02;
 
 /** Below this, a heading is not pointing anywhere in particular. */
 const FACING_EPSILON = 0.001;
+
+/**
+ * How far east or west of straight up/down (as the cosine of the aim) a
+ * still body's target has to be before it turns to it — so a player standing
+ * almost directly above or below does not flip it every few pixels.
+ */
+const AIM_FACING_EPSILON = 0.15;
 
 /**
  * Characters are authored facing **left**.
@@ -98,6 +109,28 @@ export function resolveFacing(sim: GameSim, index: number): number {
   const headingX = sim.enemyMotion.data[index * ENEMY_MOTION_STRIDE] ?? 0;
   if (Math.abs(headingX) > FACING_EPSILON) {
     return headingX < 0 ? -1 : 1;
+  }
+  return 0;
+}
+
+/**
+ * `resolveFacing` for a `facing: 'mirror'` body with no animation strip (the
+ * Boar, the Kaninchen): the tick's own movement first, exactly as there;
+ * standing still, toward what it would attack now (`enemyAimAngle` — the
+ * locked spot through a wind-up, the player otherwise) rather than its stored
+ * heading, so a wind-up always faces the way the charge will go and a body at
+ * rest turns to watch the player. `0` (hold) when that is straight up or down.
+ *
+ * @hot — one call per such body per frame.
+ */
+export function resolveMirrorFacing(sim: GameSim, index: number): number {
+  const dx = sim.positionX(index) - sim.previousX(index);
+  if (Math.abs(dx) > MOVE_EPSILON_PX) {
+    return dx < 0 ? -1 : 1;
+  }
+  const towardX = Math.cos(enemyAimAngle(sim, index));
+  if (Math.abs(towardX) > AIM_FACING_EPSILON) {
+    return towardX < 0 ? -1 : 1;
   }
   return 0;
 }

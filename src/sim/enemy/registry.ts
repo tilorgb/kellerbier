@@ -73,6 +73,31 @@ function compileTelegraphLook(name: string | undefined, where: string): Telegrap
   throw new Error(`${where} names telegraphLook "${name}", which is not one of bloat, drum`);
 }
 
+/** `facing` resolved to a number, so the renderer compares no string per frame. */
+export const EnemyFacing = {
+  /** Drawn as authored. */
+  None: 0,
+  /** Flips left/right toward its movement, else toward the player. */
+  Mirror: 1,
+  /** Lies flat, head turned in quarter turns toward its heading. */
+  Crawl: 2,
+} as const;
+export type EnemyFacingId = (typeof EnemyFacing)[keyof typeof EnemyFacing];
+
+/** `facing` as a name to an `EnemyFacing`, thrown on an unknown name for `compileTelegraphLook`'s reason. */
+function compileFacing(name: string | undefined, where: string): EnemyFacingId {
+  switch (name) {
+    case undefined:
+      return EnemyFacing.None;
+    case 'mirror':
+      return EnemyFacing.Mirror;
+    case 'crawl':
+      return EnemyFacing.Crawl;
+    default:
+      throw new Error(`${where} names facing "${name}", which is not one of mirror, crawl`);
+  }
+}
+
 /**
  * Enemy data, checked once and turned into something a system can read fast.
  *
@@ -280,6 +305,8 @@ export interface CompiledEnemy {
    * nearest point of the room's wall at spawn.
    */
   readonly perches: boolean;
+  /** The definition's `facing`, resolved once for the same reason as `telegraphBloat`. */
+  readonly facing: EnemyFacingId;
   /**
    * The water this creature lives in (#408) — set when any of its states
    * `swimInZone`s, `null` for everything that walks. A water creature is
@@ -465,6 +492,7 @@ export class EnemyRegistry {
       telegraphDrum: compileTelegraphLook(definition.telegraphLook, where) === TelegraphLook.Drum,
       flying: definition.flying === true,
       perches: states.some((state) => state.movement.behaviour === 'returnToPerch'),
+      facing: compileFacing(definition.facing, where),
       zone: states.some((state) => state.movement.behaviour === 'swimInZone') ? 'waldbach' : null,
     };
   }
@@ -524,13 +552,27 @@ export class EnemyRegistry {
             throw new Error(`${where}: "approachWood" needs eatTicks of at least 1 for both`);
           }
         }
-        if (behaviour.behaviour === 'hopCardinal') {
+        if (behaviour.behaviour === 'hopCardinal' || behaviour.behaviour === 'hopTowardPlayer') {
+          const name = behaviour.behaviour;
           if (!(behaviour.hopDistance > 0)) {
-            throw new Error(`${where}: "hopCardinal" needs a hopDistance above zero`);
+            throw new Error(`${where}: "${name}" needs a hopDistance above zero`);
           }
           if (!(behaviour.hopTicks >= 1) || !(behaviour.restTicks >= 0)) {
             throw new Error(
-              `${where}: "hopCardinal" needs hopTicks of at least 1 and restTicks of at least 0`,
+              `${where}: "${name}" needs hopTicks of at least 1 and restTicks of at least 0`,
+            );
+          }
+        }
+        if (behaviour.behaviour === 'hopTowardPlayer') {
+          if (!(behaviour.backEvery >= 2)) {
+            throw new Error(`${where}: "hopTowardPlayer" needs a backEvery of at least 2`);
+          }
+          if (!(behaviour.restJitter >= 0 && behaviour.restJitter <= 1)) {
+            throw new Error(`${where}: "hopTowardPlayer" needs a restJitter from 0 to 1`);
+          }
+          if (!(behaviour.aimJitterDegrees >= 0 && behaviour.aimJitterDegrees < 90)) {
+            throw new Error(
+              `${where}: "hopTowardPlayer" needs an aimJitterDegrees from 0 to under 90`,
             );
           }
         }

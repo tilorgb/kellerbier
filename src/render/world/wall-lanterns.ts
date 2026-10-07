@@ -7,8 +7,10 @@ import { type CompiledDoor, doorCentre } from '../../sim/room/template.js';
  *
  * #404 lit a dark room with a circle that followed the player. That read as a
  * game effect rather than as a place, so the light now belongs to the room:
- * two or three lanterns on its walls, each a warm pool the fight moves in and
- * out of. Placed from a seed, like the canopy's gaps (`world/canopy.ts`), so a
+ * lanterns on its walls, each a warm pool the fight moves in and out of —
+ * four or five in a single-screen room, and as many more again for every
+ * further screen of a bigger one, so an `L`, `T` or double room is as well
+ * lit as a small one rather than three lanterns spread thin round it. Placed from a seed, like the canopy's gaps (`world/canopy.ts`), so a
  * room's lanterns are where they were on a revisit and in a replay.
  */
 
@@ -21,12 +23,21 @@ export interface WallLantern {
   readonly wall: LanternWall;
 }
 
-/** How many lanterns a room can have: the bulb pool they are lit from (`MAX_ROOM_BULBS`). */
-export const MAX_WALL_LANTERNS = 3;
+/** Most lanterns any room hangs — a big room's worth; only the ones nearest the player are real lights (`Lighting`). */
+export const MAX_WALL_LANTERNS = 16;
+/** Lanterns per single-screen cell of room, on average: this, or this plus one, in a single room. */
+export const LANTERNS_PER_CELL = 4;
+/** One single-screen cell of room, in room units. */
+const CELL_AREA = 320 * 180;
 /** How far in from the wall's inner face a lantern hangs. */
 export const LANTERN_INSET = 3;
-/** How far a lantern's pool of light reaches across the floor — a pool about four tiles wide. */
-export const LANTERN_REACH = ROOM_TILE_UNITS * 2;
+/**
+ * How far a lantern's pool of light reaches across the floor — a pool about
+ * eight tiles wide, so the middle of a single room is lit from the walls
+ * round it. Four tiles (the first pass) left the floor between lanterns
+ * black; six still left the middle of the room close and dark.
+ */
+export const LANTERN_REACH = ROOM_TILE_UNITS * 4;
 /** Clear of a doorway by this much past the door's own half-span. */
 const DOOR_CLEARANCE = ROOM_TILE_UNITS;
 /** And of a corner, where two walls would share the pool. */
@@ -48,8 +59,9 @@ function inside(rect: RoomRect, x: number, z: number): boolean {
 }
 
 /**
- * Two or three lanterns for a single-cell room, three for anything bigger,
- * spread around the walls of the room's bounding box. A spot is refused if it
+ * `LANTERNS_PER_CELL` or one more for a single-cell room, and that many per
+ * cell for anything bigger (up to `MAX_WALL_LANTERNS`), spread around the
+ * walls of the room's bounding box. A spot is refused if it
  * is in a doorway, in a corner, too close to a lantern already hung, or on a
  * stretch of the bounding box that is not really a wall of this room (an `L`
  * or `T` room's missing cell). A room too cramped to take them all gets fewer.
@@ -63,8 +75,8 @@ export function wallLanternLayout(
   const width = room.maxX - room.minX;
   const depth = room.maxY - room.minY;
   const perimeter = (width + depth) * 2;
-  const single = width <= 320 && depth <= 180;
-  const count = single ? 2 + Math.floor(next() * 2) : MAX_WALL_LANTERNS;
+  const cells = Math.max(1, (width * depth) / CELL_AREA);
+  const count = Math.min(MAX_WALL_LANTERNS, Math.round(cells * (LANTERNS_PER_CELL + next())));
   const separation = perimeter / (count * 2.2);
   const doorways = doors.map((door) => ({
     direction: door.direction,
@@ -73,7 +85,7 @@ export function wallLanternLayout(
   }));
 
   const lanterns: WallLantern[] = [];
-  for (let attempt = 0; attempt < 200 && lanterns.length < count; attempt++) {
+  for (let attempt = 0; attempt < 800 && lanterns.length < count; attempt++) {
     // A point along the perimeter, clockwise from the north-west corner.
     const along = next() * perimeter;
     let wall: LanternWall;

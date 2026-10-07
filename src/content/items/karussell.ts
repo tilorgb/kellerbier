@@ -1,19 +1,24 @@
 import type { ItemDefinition } from '../../sim/item/definition.js';
 
-/** How still counts as "still" (pixels/tick), push radius, and push strength while moving. */
-const STILL_EPSILON = 0.05;
-const PUSH_RADIUS = 40;
-const PUSH_STRENGTH = 0.3;
+/** Recharge (60/s), the spin's reach, and its shove before each body's mass divides it. */
+const COOLDOWN_TICKS = 300;
+const PUSH_RADIUS = 50;
+const PUSH_STRENGTH = 4;
 
 /**
  * Karussell — Floor 7's room-scale rotating hazard (`docs/CONTENT_BIBLE.md`
- * §2), ridden instead of dodged. Moving carries everything nearby along
- * with you; stop, and the ride stops too.
+ * §2), taken for one spin. Use it and everything close is flung outward:
+ * enemies and anything else that can be shoved, a latched Zecke thrown off
+ * the hat with them. No damage — it buys room to breathe, not a kill.
  *
- * The stillness check is `ritterschild.ts`'s exact inverse — that item
- * rewards holding still, this one only works while moving — the same
- * `positionX`/`previousX` delta read `almabtrieb.ts` uses for its own
- * moving-shot bonus, for a different effect.
+ * Active, on a five-second recharge, because it used to be a passive that
+ * shoved everything near the player away *whenever they moved*: always on,
+ * it read as a bug rather than an item — the room's barrels sliding off on
+ * their own, a charging Boar mysteriously braking a body-length before it
+ * hit. As a button it is a choice the player makes and can see the result of.
+ *
+ * Mass-scaled (`pushEnemiesNear`'s `byMass`): a Kaninchen flies, a Boar
+ * shifts a step, a boss barely notices.
  */
 export const karussell: ItemDefinition = {
   id: 'karussell',
@@ -24,20 +29,20 @@ export const karussell: ItemDefinition = {
   pools: ['treasure', 'shop'],
   quality: 1,
   promilleRequirement: 'any',
+  active: { maxCharge: COOLDOWN_TICKS },
   hooks: {
-    onTick: (ctx) => {
+    onActivate: (ctx) => {
       const sim = ctx.sim;
       const playerIndex = sim.playerIndex;
-      const dx = sim.positionX(playerIndex) - sim.previousX(playerIndex);
-      const dy = sim.positionY(playerIndex) - sim.previousY(playerIndex);
-      if (Math.abs(dx) <= STILL_EPSILON && Math.abs(dy) <= STILL_EPSILON) {
-        return;
-      }
       const x = sim.positionX(playerIndex);
       const y = sim.positionY(playerIndex);
-      sim.pushEnemiesNear(x, y, PUSH_RADIUS, PUSH_STRENGTH);
+      sim.throwOffLatched();
+      sim.pushEnemiesNear(x, y, PUSH_RADIUS, PUSH_STRENGTH, true);
       // The push is invisible on its own — the wind that does it is not.
       sim.windSwirl(x, y, PUSH_RADIUS);
+    },
+    onTick: (ctx) => {
+      ctx.sim.chargeActiveItem(ctx.itemId, 1);
     },
   },
 };

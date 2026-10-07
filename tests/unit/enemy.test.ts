@@ -1283,7 +1283,7 @@ describe('enemyTelegraphShape (#233)', () => {
     const shape = freshShape();
     expect(enemyTelegraphShape(sim, enemy, shape)).toBe(true);
     expect(shape.shape).toBe(TelegraphShape.Cloud);
-    expect(shape.reach).toBe(40);
+    expect(shape.reach).toBe(28);
     expect(shape.x).toBe(sim.positionX(enemy));
   });
 

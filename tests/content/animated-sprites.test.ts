@@ -10,6 +10,7 @@ import {
   type AnimationSidecar,
 } from '../../src/render/animation/definition.js';
 import { ENEMY_DEFINITIONS } from '../../src/content/enemies/index.js';
+import { ORDNER_STRIP_NAMES } from '../../src/render/ordner-view.js';
 import { PLAYER_BODY_KEYS, SCHLAUCH_OCTANTS } from '../../src/render/player-art.js';
 import { WALK_CYCLE_FRAMES } from '../../tools/art/spec.mjs';
 
@@ -77,10 +78,13 @@ describe('every animation strip in assets/sprites/', () => {
       // (`render/floor-art.ts`). `common/` is both Alois, keyed by facing and
       // drunkenness (`render/player-art.ts`), and an enemy that appears on
       // every floor (`shopkeeper`, #194) — same `EnemyDefinition.id` lookup a
-      // floor roster uses (`assets/sprites/README.md`'s lookup table).
+      // floor roster uses (`assets/sprites/README.md`'s lookup table) — and
+      // Der Ordner, the bouncer familiar, keyed by facing like Alois.
       const ids = ENEMY_DEFINITIONS.map((definition) => definition.id);
       if (sprite.bucketId === 'common') {
-        expect([...PLAYER_STRIP_NAMES, ...ids]).toContain(name);
+        expect([...PLAYER_STRIP_NAMES, ...Object.values(ORDNER_STRIP_NAMES), ...ids]).toContain(
+          name,
+        );
         return;
       }
       expect(ids).toContain(name);

@@ -408,7 +408,8 @@ export const de: Record<DictKey, string> = {
     'Schüsse zerteilen sich beim Einschlag in zwei Brocken. Reichweite +15%',
   'items.kartoffelsalat.flavourText':
     'Jedes Familienrezept ist das einzig richtige, und sie können nicht alle recht haben.',
-  'items.karussell.description': 'Bewegen schiebt nahe Gegner mit dir mit',
+  'items.karussell.description':
+    'Aktiv: eine Drehung schleudert alles in der Nähe von dir weg — kein Schaden, nur Luft',
   'items.karussell.flavourText':
     'Der Betreiber hat noch nie einen Sicherheitsbügel geprüft. Die Schlange wird nie kürzer.',
   'items.kletzenbrot.description': 'Schüsse vergiften, was sie treffen. Schaden -15%',
