@@ -664,4 +664,5 @@ export const ENEMY_SFX_CATEGORY: Readonly<Record<string, EnemySfxCategory>> = {
   kaninchen: 'animal',
   bachforelle: 'squelch',
   boar: 'animal',
+  borkenkaefer: 'squelch',
 };

@@ -1716,6 +1716,8 @@ async function boot(progress: BootProgress): Promise<void> {
   let lastBouldersChangedTick = -1;
   /** Edge-detects `sim.brokenDoorsChangedTick` — a Boar smashing a door (#409), the same in-place redraw. */
   let lastBrokenDoorsChangedTick = -1;
+  /** Edge-detects `sim.pitsChangedTick` (#410) — a pit opening mid-fight. */
+  let lastPitsChangedTick = -1;
 
   /**
    * Boss rooms already paid for this run, keyed floor + floor-plan room.
@@ -2307,6 +2309,11 @@ async function boot(progress: BootProgress): Promise<void> {
     // stands open while the room around it is still locked.
     if (sim.brokenDoorsChangedTick !== lastBrokenDoorsChangedTick) {
       lastBrokenDoorsChangedTick = sim.brokenDoorsChangedTick;
+      view.markCurrentRoomStale();
+    }
+    // A Borkenkäfer eating a plank through into a pit (#410) — same redraw.
+    if (sim.pitsChangedTick !== lastPitsChangedTick) {
+      lastPitsChangedTick = sim.pitsChangedTick;
       view.markCurrentRoomStale();
     }
     // Der Meisterschlüssel (#275) can be picked up mid-room, and the gate
@@ -3811,6 +3818,7 @@ WASD move   arrows aim and fire
     // fresh here (boulders intact) — replay the destruction so a prewarmed
     // or shader-warmed build matches the live one (#4).
     sim.reapplyDestroyedBoulders(compiled.source.id, compiled.geometry);
+    sim.reapplyPits(compiled.source.id, compiled.geometry);
     return { geometry: compiled.geometry, doors, props: compiled.decorativeProps };
   }
 

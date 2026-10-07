@@ -360,11 +360,39 @@ export const STRIPS = {
   },
 };
 
+// ======================================================== BORKENKÄFER
+// A bark-beetle swarm (#410): a heaped mound of glossy grey beetles, one body
+// on the floor, with sawdust at its foot and a couple of stragglers at the
+// edges. Option B of three, signed off by Tilo, shown in a wald room next to
+// Alois sitting on the plank it eats. 32x18 against a normal collider's 28 —
+// a swarm is wider than it is tall.
+export const borkenkaefer = single('borkenkaefer', [
+  '................................',
+  '.............KKKKK..............',
+  '............KmSSmmK.............',
+  '............KmmmmKK.............',
+  '............KcccccKK............',
+  '.........KKKKKKKKKmmKKKKK.......',
+  '........KmSSmKKKmKmKmSSmmK......',
+  '........KmmmmKKccccKmmmmKK......',
+  '........KcccccKKKKKKcccccK......',
+  '......KKKKKKKKKKKKmKKKKKKKKK....',
+  '.....KmSSKmKmKSmmKmmKmKmKSmmK...',
+  '.....KmmmmKKmmmmKKccccKmmmmKK...',
+  '...KKKcccccKcccccKKKKKKcccccKKK.',
+  '..KmSSKKKKKKKKKKKSKmKKKKKKKKSmmK',
+  '..KmmmKKKmKSKmKmKmmKKmSKmKmKmmKK',
+  '..KcccccKmmmmKKcccccKmmmmKcccccK',
+  '...KKKKKKcccccKKKKKKKcccccKKKKK.',
+  '...K.KlKlKKKKKtKtKtKlKKKKKK.K.K.',
+]);
+
 export const ROSTER = {
   fliegenpilz,
   zecke,
   bachforelle,
   'bachforelle-shadow': bachforelleShadow,
+  borkenkaefer,
 };
 
 /** Every sprite is authored against Floor 3's palette. */

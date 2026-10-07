@@ -2,6 +2,7 @@ import { footprintRadius, hurtboxOffsetY, hurtboxRadiusOf } from '../collision/f
 import { type Component, World } from '../ecs/world.js';
 import { type Entity, entityIndex } from '../ecs/entity.js';
 import { ENEMY_DEFINITIONS } from '../../content/enemies/index.js';
+import { FLOOR_CONFIGS } from '../../content/floors/definition.js';
 import { CURSE_DEFINITIONS } from '../../content/curses/index.js';
 import {
   BOSS_REWARD_DROP_TABLE,
@@ -93,6 +94,7 @@ import { ParticleStore } from '../particle/store.js';
 import {
   boulderDebris,
   doorPuff,
+  plankCollapse,
   roomClearRing,
   splashBurst,
   windSwirl,
@@ -1519,6 +1521,21 @@ export class GameSim {
   private readonly brokenDoors = new Map<string, Set<string>>();
   /** The tick a door last broke in the current room, or -1 — polled by `app/main.ts` to redraw. */
   private brokenDoorsChangedTickValue = -1;
+  /**
+   * Floor planks a Borkenkäfer has eaten into pits (#410), per room, keyed
+   * the same way `destroyedBoulders` is → a flat `[column, row, …]` on the
+   * room's tile grid. Replayed onto the freshly compiled geometry on every
+   * load, so an eaten floor is still eaten on the way back through.
+   */
+  private readonly eatenPlanks = new Map<string, number[]>();
+  /** The tick a pit last opened in the current room, or -1 — polled by `app/main.ts` to redraw. */
+  private pitsChangedTickValue = -1;
+  /**
+   * Per tile of the current room, the tick until which a Borkenkäfer will
+   * not ask about eating it again (#410, `sim/systems/wood.ts`) — the guard
+   * or the pathfinder said no. Cleared on every room load.
+   */
+  readonly plankRefusedUntil = new Int32Array(1 << 12);
   /** The loaded room's `metadata.specialRole`, or `undefined` for a normal room. */
   private roomSpecialRole: RoomSpecialRole | undefined = undefined;
   /** Whether the loaded room is lantern-dark (#404) — see `roomDark`. */
@@ -1900,6 +1917,15 @@ export class GameSim {
    * through to the normal floor-plan door lookup, and calls `loadRoom`
    * directly with a freshly generated floor rather than `transitionTo`.
    */
+  /**
+   * Every door the room has, hidden ones included, with no copy made — the
+   * pit softlock guard (#410) keeps clear of a bombable wall too, since it
+   * becomes a door the moment a bomb finds it.
+   */
+  get allRoomDoors(): readonly CompiledDoor[] {
+    return this.roomDoors;
+  }
+
   get nextFloorDoor(): CompiledDoor | null {
     return this.roomSpecialRole === 'boss' && !this.doorsLocked ? this.bossExitDoor : null;
   }
@@ -2356,6 +2382,58 @@ export class GameSim {
   }
 
   /**
+   * Whether the current floor's floor is wooden planks a Borkenkäfer eats
+   * through (#410) — `FloorConfig.woodenFloor`, floor 3's Wald today.
+   */
+  get floorIsWood(): boolean {
+    return (
+      FLOOR_CONFIGS.find((config) => config.floor === this.currentFloorValue)?.woodenFloor === true
+    );
+  }
+
+  /**
+   * Opens a pit at tile `(column, row)` of the current room and records it,
+   * so it is still there on a revisit (#410). The caller — the beetle's
+   * eating, through `sim/systems/pits.ts`'s softlock guard — has already
+   * decided the pit is safe; this only makes it so. Returns whether a pit
+   * opened.
+   */
+  openPit(column: number, row: number): boolean {
+    if (!this.room.addPit(column, row)) {
+      return false;
+    }
+    let record = this.eatenPlanks.get(this.roomId);
+    if (record === undefined) {
+      record = [];
+      this.eatenPlanks.set(this.roomId, record);
+    }
+    record.push(column, row);
+    plankCollapse(this, this.room.pitCentreX(column), this.room.pitCentreY(row));
+    this.pitsChangedTickValue = this.tick;
+    return true;
+  }
+
+  /** The tick a pit last opened in the current room, or -1 (#410) — `app/main.ts` polls it to redraw. */
+  get pitsChangedTick(): number {
+    return this.pitsChangedTickValue;
+  }
+
+  /**
+   * Replays this run's eaten planks for the room authored as `templateId`
+   * onto `geometry` — `reapplyDestroyedBoulders`' twin for pits (#410), so a
+   * prewarmed build of a room matches the live one.
+   */
+  reapplyPits(templateId: string, geometry: RoomGeometry): void {
+    const record = this.eatenPlanks.get(templateId);
+    if (record === undefined) {
+      return;
+    }
+    for (let i = 0; i + 1 < record.length; i += 2) {
+      geometry.addPit(record[i] ?? 0, record[i + 1] ?? 0);
+    }
+  }
+
+  /**
    * Replays this run's boulder destruction for the room authored as
    * `templateId` onto `geometry` — the hook `app/main.ts` uses so a room
    * *prewarmed* while the player walks back to it is built with the same
@@ -2395,8 +2473,10 @@ export class GameSim {
    */
   clearFloorProgress(): void {
     this.roomClearedIds.clear();
-    // A smashed door belongs to a physical room of this floor (#409).
+    // A smashed door belongs to a physical room of this floor (#409), and
+    // so does an eaten floor (#410).
     this.brokenDoors.clear();
+    this.eatenPlanks.clear();
     // Same reasoning as `roomClearedIds` above, and the same key — leftover
     // loot from a room on the *previous* floor's draw of this template must
     // not leak into a different physical room that happens to reuse it.
@@ -2901,6 +2981,9 @@ export class GameSim {
         this.room.clearBoulderAt(bombed[i] ?? 0, bombed[i + 1] ?? 0, bombed[i + 2] ?? 0);
       }
     }
+    // Pits a Borkenkäfer ate here stay eaten (#410), the same way.
+    this.reapplyPits(compiled.id, this.room);
+    this.plankRefusedUntil.fill(0);
     this.roomSpecialRole = compiled.specialRole;
     this.roomDarkValue = compiled.dark;
     this.bossExitDoor =

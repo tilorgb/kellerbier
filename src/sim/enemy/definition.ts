@@ -40,6 +40,7 @@ export type BehaviourName =
   | 'hopCardinal'
   | 'hopTowardPlayer'
   | 'swimInZone'
+  | 'approachWood'
   | 'fireAtPlayer'
   | 'fireRing'
   | 'fireBurst'
@@ -244,6 +245,35 @@ export interface SwimInZoneBehaviour {
   readonly zone: 'waldbach';
   /** Room units per tick, before the global `enemy.speedScale`. */
   readonly speed: number;
+}
+
+/**
+ * Goes for wood and eats it (#410, the Borkenkäfer — a bark-beetle swarm). It
+ * ignores the player entirely: contact damage is what makes it dangerous, the
+ * room getting worse is what makes it urgent.
+ *
+ * Each time it needs something to eat it picks the nearest wooden thing: a
+ * wooden destructible block (a log, a stump, a barricade — `blockMaterial`)
+ * while any remain, otherwise — on a wooden floor only (`FloorConfig
+ * .woodenFloor`) and under the room's pit cap — the nearest floor plank that
+ * passes the pit softlock guard (`sim/systems/pits.ts`). With nothing
+ * eligible it wanders.
+ *
+ * Arrived, it eats for `eatTicks` — `obstacle` against a block, `plank`
+ * sitting on a floor tile — and the renderer darkens the target and throws
+ * chewing splinters for the length of it (`enemyEatProgress`), so the plank
+ * about to go is the one the swarm is sitting on, visibly going. A block
+ * eaten is broken the same way a bomb breaks one and stays gone on a revisit;
+ * a plank eaten is a pit, which stays too. The guard is asked again on the
+ * last tick (a pickup or a body may have moved in meanwhile); a plank it
+ * refuses there is left whole and the swarm looks for another.
+ */
+export interface ApproachWoodBehaviour {
+  readonly behaviour: 'approachWood';
+  /** Room units per tick, before the global `enemy.speedScale`. */
+  readonly speed: number;
+  /** Ticks of eating it takes to finish a wooden block, and a floor plank. */
+  readonly eatTicks: { readonly obstacle: number; readonly plank: number };
 }
 
 /**
@@ -698,6 +728,7 @@ export type EnemyBehaviour =
   | HopCardinalBehaviour
   | HopTowardPlayerBehaviour
   | SwimInZoneBehaviour
+  | ApproachWoodBehaviour
   | SubmergeBehaviour
   | FireRingBehaviour
   | FireAtPlayerBehaviour
@@ -912,6 +943,7 @@ export const MOVEMENT_BEHAVIOURS: readonly BehaviourName[] = [
   'hopCardinal',
   'hopTowardPlayer',
   'swimInZone',
+  'approachWood',
 ];
 
 /** Primitives that run once, when the state is entered. */

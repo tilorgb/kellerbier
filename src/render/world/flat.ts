@@ -154,6 +154,38 @@ export class FloorRing {
 }
 
 /**
+ * A flat square on the floor in one colour — the plank a Borkenkäfer is
+ * eating through (#410), darkening as it goes. Unit size; scale to the tile.
+ */
+export class FloorShade {
+  readonly mesh: Mesh<PlaneGeometry, MeshBasicMaterial>;
+
+  constructor(colour: number) {
+    this.mesh = new Mesh(new PlaneGeometry(1, 1), flatColourMaterial(colour));
+    this.mesh.rotation.x = -Math.PI / 2;
+    this.mesh.frustumCulled = false;
+    this.mesh.visible = false;
+  }
+
+  place(x: number, z: number, size: number, alpha: number): void {
+    this.mesh.position.set(x, TELEGRAPH_HEIGHT, z);
+    this.mesh.scale.set(size, size, 1);
+    this.mesh.material.opacity = alpha;
+    this.mesh.visible = true;
+  }
+
+  hide(): void {
+    this.mesh.visible = false;
+  }
+
+  dispose(): void {
+    this.mesh.geometry.dispose();
+    this.mesh.material.dispose();
+    this.mesh.removeFromParent();
+  }
+}
+
+/**
  * A flat sector on the floor — the line and arc telegraphs. Built as a fan
  * from the apex along +x, `reach` long and `halfAngle` wide each side, and
  * turned about the vertical to face the attack.

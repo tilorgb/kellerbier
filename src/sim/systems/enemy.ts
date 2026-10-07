@@ -20,6 +20,16 @@ import { ProjectileTeam } from '../projectile/store.js';
 import { ProjectileTag } from '../projectile/tags.js';
 import { ParticleKind } from '../particle/store.js';
 import { nextWaypoint, straightClear, type Waypoint } from '../room/pathfind.js';
+import { CLEAR_IGNORE_PITS } from '../room/geometry.js';
+import {
+  enemyEatProgress,
+  MOTION_WOOD_TARGET,
+  MOTION_WOOD_X,
+  MOTION_WOOD_Y,
+  stepApproachWood,
+  WOOD_MOTION_SLOTS,
+  WOOD_TARGET_PLANK,
+} from './wood.js';
 
 /**
  * What enemies do.
@@ -103,10 +113,11 @@ export const ENEMY_STRIDE = 4;
  * player was last seen, whether that memory is live (`MEMORY_SEEKING`), the
  * waypoint the pathfinder last chose on the way there, and how many ticks the
  * player has been out of sight. Then (#408) the state's rolled duration, and
- * a swimmer's course, current sample and target sample. Then a
- * `hopTowardPlayer` body's own hop clock.
+ * a swimmer's course, current sample and target sample. Then (#410) the
+ * slots `approachWood` keeps its plan in (`sim/systems/wood.ts`), and after
+ * them a `hopTowardPlayer` body's own hop clock.
  */
-export const ENEMY_MOTION_STRIDE = 19;
+export const ENEMY_MOTION_STRIDE = 16 + WOOD_MOTION_SLOTS + 3;
 /**
  * `enemyMotion` offset of the roll a ranged `after` reads (#408): a fraction
  * in [0, 1) drawn from `random.enemies` on entry to a state that has one.
@@ -121,11 +132,12 @@ export const MOTION_SWIM_TARGET = 15;
  * the state tick its current hop began, the state tick its next one begins,
  * and how many hops it has made in this state. Its own rather than the
  * state's `ticks % cycle`, because every rest is rolled — a room of ticks
- * hopping in lockstep read as one hivemind.
+ * hopping in lockstep read as one hivemind. After `approachWood`'s slots, so
+ * the two never share one (`ENEMY_MOTION_STRIDE` counts all three).
  */
-const MOTION_HOP_START = 16;
-const MOTION_HOP_NEXT = 17;
-const MOTION_HOP_COUNT = 18;
+const MOTION_HOP_START = 16 + WOOD_MOTION_SLOTS;
+const MOTION_HOP_NEXT = MOTION_HOP_START + 1;
+const MOTION_HOP_COUNT = MOTION_HOP_START + 2;
 /** `enemyMotion` offsets of the last-seen memory (see `walkTowardPlayer`). */
 const MOTION_LAST_SEEN_X = 6;
 const MOTION_LAST_SEEN_Y = 7;
@@ -1294,6 +1306,10 @@ function applyMovement(
       swimAlongCourse(sim, index, behaviour.speed * scale, selfX, selfY);
       return;
     }
+    case 'approachWood': {
+      stepApproachWood(sim, index, behaviour, behaviour.speed * scale, motionBase, selfX, selfY);
+      return;
+    }
     case 'hopCardinal': {
       const hopTicks = Math.max(1, Math.round(behaviour.hopTicks));
       const cycle = hopTicks + Math.max(0, Math.round(behaviour.restTicks));
@@ -1714,7 +1730,7 @@ function fireOne(sim: GameSim, index: number, angle: number, shot: FiringBehavio
   const reach = (sim.body.data[index * 2] ?? 0) + radius + 1;
   let muzzleX = centreX + directionX * reach;
   let muzzleY = centreY + directionY * reach;
-  if (!sim.room.isClear(muzzleX, muzzleY, radius)) {
+  if (!sim.room.isClear(muzzleX, muzzleY, radius, CLEAR_IGNORE_PITS)) {
     muzzleX = centreX;
     muzzleY = centreY;
   }
@@ -2313,6 +2329,47 @@ export function enemyTelegraphProgress(sim: GameSim, index: number): number {
     return 0;
   }
   return clamp(ticks / total, 0, 1);
+}
+
+/** Reusable scratch struct for `enemyEatMark`, written in place so a render loop never allocates. */
+export interface EnemyEatMarkInfo {
+  /** 0..1 through eating the plank. */
+  progress: number;
+  /** The plank's centre. */
+  x: number;
+  y: number;
+}
+
+/**
+ * The floor plank the body at `index` is eating (#410's telegraph): written to
+ * `out`, true while it is part-way through one. The renderer darkens the
+ * plank by `progress`, so the one about to give way is the one going dark
+ * under the swarm. A wooden block being eaten shows its splinters only — it
+ * stands over its own floor, where a mark could not be seen.
+ */
+export function enemyEatMark(sim: GameSim, index: number, out: EnemyEatMarkInfo): boolean {
+  if (((sim.world.masks[index] ?? 0) & sim.enemyMask) !== sim.enemyMask) {
+    return false;
+  }
+  const base = index * ENEMY_STRIDE;
+  const state = sim.enemies.at(sim.enemy.data[base] ?? 0).states[sim.enemy.data[base + 1] ?? 0];
+  const movement = state?.movement;
+  if (movement?.behaviour !== 'approachWood') {
+    return false;
+  }
+  const motionBase = index * ENEMY_MOTION_STRIDE;
+  const motion = sim.enemyMotion.data;
+  if ((motion[motionBase + MOTION_WOOD_TARGET] ?? 0) !== WOOD_TARGET_PLANK) {
+    return false;
+  }
+  const progress = enemyEatProgress(sim, motionBase, movement.eatTicks);
+  if (progress <= 0) {
+    return false;
+  }
+  out.progress = progress;
+  out.x = motion[motionBase + MOTION_WOOD_X] ?? 0;
+  out.y = motion[motionBase + MOTION_WOOD_Y] ?? 0;
+  return true;
 }
 
 /** Reusable scratch struct for `lobbedBombFlight`, written in place so a render loop's per-frame call never allocates. */

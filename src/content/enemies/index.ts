@@ -1,6 +1,7 @@
 import type { EnemyDefinition } from '../../sim/enemy/definition.js';
 import { bauer } from './bauer.js';
 import { boar } from './boar.js';
+import { borkenkaefer } from './borkenkaefer.js';
 import { bierratte } from './bierratte.js';
 import { blaskapellist } from './blaskapellist.js';
 import { boellerschmeisser } from './boellerschmeisser.js';
@@ -66,6 +67,7 @@ export const ENEMY_DEFINITIONS: readonly EnemyDefinition[] = [
   kaninchen,
   bachforelle,
   boar,
+  borkenkaefer,
 ];
 
 /**
@@ -91,6 +93,7 @@ export {
   blaskapellist,
   boar,
   boellerschmeisser,
+  borkenkaefer,
   derLadewagen,
   derRattenkoenig,
   derStier,
