@@ -33,10 +33,11 @@ const CELL_AREA = 320 * 180;
 export const LANTERN_INSET = 3;
 /**
  * How far a lantern's pool of light reaches across the floor — a pool about
- * six tiles wide. Four (the first pass) left the floor between lanterns
- * black.
+ * eight tiles wide, so the middle of a single room is lit from the walls
+ * round it. Four tiles (the first pass) left the floor between lanterns
+ * black; six still left the middle of the room close and dark.
  */
-export const LANTERN_REACH = ROOM_TILE_UNITS * 3;
+export const LANTERN_REACH = ROOM_TILE_UNITS * 4;
 /** Clear of a doorway by this much past the door's own half-span. */
 const DOOR_CLEARANCE = ROOM_TILE_UNITS;
 /** And of a corner, where two walls would share the pool. */

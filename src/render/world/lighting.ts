@@ -180,7 +180,9 @@ const LANTERN_INTENSITY: Readonly<Record<LightingRig, number>> = {
  * weaker than a cellar bulb, hung low, and reaching only as far as its pool.
  */
 const WALL_LANTERN_COLOUR = 0xff9a45;
-const WALL_LANTERN_INTENSITY = 5200;
+// Raised with the pool's reach (#424 follow-up): the same lamp lighting a
+// wider pool has to throw more, or the bigger pool is only a dimmer one.
+const WALL_LANTERN_INTENSITY = 7300;
 const WALL_LANTERN_HEIGHT = 14;
 /** How far into the room from the lantern its light source sits — see `setWallLanterns`. */
 const WALL_LANTERN_THROW = 9;

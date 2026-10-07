@@ -59,7 +59,7 @@ export const MAX_DUSK_POOLS = MAX_WALL_LANTERNS;
  * How much of a pool's radius is fully clear before the dusk starts to come
  * back. The rest is a smooth ramp, so a pool has no edge to step across.
  */
-const CLEAR_FRACTION = 0.3;
+const CLEAR_FRACTION = 0.4;
 
 /** The dusk itself — not pure black, a night-forest blue-green so the room still reads as a place. */
 const DARK_COLOUR = new Vector3(0.02, 0.035, 0.04);
