@@ -26,6 +26,38 @@ export const MAX_ROOM_SIGHT_BLOCKS = 16;
  */
 export const MAX_ROOM_STREAMS = 64;
 
+/**
+ * Pits one room may hold (#410) — the Borkenkäfer's eaten floor planks. The
+ * per-room cap a swarm actually stops at is `tuning.pits.maxPerRoom` (12 to
+ * start); this is the storage behind it, with headroom for that to be tuned
+ * up without touching the geometry.
+ */
+export const MAX_ROOM_PITS = 32;
+
+/**
+ * Size of one pit, in room units: one floor tile (`ROOM_TILE_UNITS`), not one
+ * `PATH_CELL` (#410 asks for one or the other, justified). A pit is an eaten
+ * floor *plank*, and a plank is a tile of the floor art — a half-tile hole
+ * would cut the drawn boards in half. Every authored obstacle is tile-aligned
+ * too, so a pit lines up with the cover around it, and the pathfinder's
+ * 8-unit cells nest exactly two-by-two inside one, so a pit never leaves a
+ * half-blocked path cell. Restated here rather than imported so this module
+ * stays free of `content/` (the same 16 as `ROOM_TILE_UNITS`; the pit test
+ * pins them together).
+ */
+export const PIT_SIZE = 16;
+
+// `isClear` flags (#410). `0`, the default, is a walker's question.
+
+/** Pits are floor, as far as the caller is concerned: a shot flies over a hole. */
+export const CLEAR_IGNORE_PITS = 1;
+/**
+ * Destructible blocks (`blockOverflyable === 1`) are floor too — the pit
+ * softlock guard asks what is reachable *once the cover is gone*, so a pit can
+ * never seal off a corner a bomb would otherwise open.
+ */
+export const CLEAR_IGNORE_DESTRUCTIBLE = 2;
+
 /** One sample of a stream's centreline, in room units, and half the water's width there. */
 export interface StreamCoursePoint {
   readonly x: number;
@@ -200,6 +232,23 @@ export class RoomGeometry {
   /** Each stream as a centreline — see `StreamCourse`. One per lane a template placed. */
   readonly streamCourses: StreamCourse[] = [];
 
+  /**
+   * Floor 3's pits (#410): floor planks the Borkenkäfer has eaten through.
+   * Flat `[minX, minY, maxX, maxY]` runs, `pitCount * BLOCK_STRIDE` deep, each
+   * one tile (`PIT_SIZE`) on the room's tile grid.
+   *
+   * A pit is not a block. It stops anything that walks — the player, every
+   * ground enemy, the pathfinder (`isClear`, `sim/systems/motion.ts`) — but a
+   * flying body crosses it (`overfly`), a shot flies over it
+   * (`CLEAR_IGNORE_PITS`) and nobody's line of sight cares about it
+   * (`blocksSight` never reads it). A block does all three of those wrong, and
+   * a bomb would "break" one, so pits get their own array the same way the
+   * other non-block zones above do.
+   */
+  readonly pits = new Float32Array(MAX_ROOM_PITS * BLOCK_STRIDE);
+
+  private pits_ = 0;
+
   constructor(
     minX: number,
     minY: number,
@@ -363,6 +412,110 @@ export class RoomGeometry {
     }
   }
 
+  get pitCount(): number {
+    return this.pits_;
+  }
+
+  /** The tile column `x` falls in, on the grid pits sit on — counted from `minX`. */
+  pitColumnAt(x: number): number {
+    return Math.floor((x - this.minX) / PIT_SIZE);
+  }
+
+  /** The tile row `y` falls in — see `pitColumnAt`. */
+  pitRowAt(y: number): number {
+    return Math.floor((y - this.minY) / PIT_SIZE);
+  }
+
+  /** The centre of tile `column` in room units — the inverse of `pitColumnAt`. */
+  pitCentreX(column: number): number {
+    return this.minX + (column + 0.5) * PIT_SIZE;
+  }
+
+  /** The centre of tile `row` in room units — the inverse of `pitRowAt`. */
+  pitCentreY(row: number): number {
+    return this.minY + (row + 0.5) * PIT_SIZE;
+  }
+
+  /**
+   * Opens a pit at tile `(column, row)`. Returns false when there is one
+   * already, the tile lies outside the room, or storage is full — a pit is a
+   * thing that happens to a room mid-fight, so running out is a no-op, not a
+   * throw (`SlotPool`'s overflow policy, `docs/DECISIONS.md` #4).
+   */
+  addPit(column: number, row: number): boolean {
+    if (this.pits_ >= MAX_ROOM_PITS || this.isPitTile(column, row)) {
+      return false;
+    }
+    const minX = this.minX + column * PIT_SIZE;
+    const minY = this.minY + row * PIT_SIZE;
+    if (
+      column < 0 ||
+      row < 0 ||
+      minX + PIT_SIZE > this.maxX + 0.001 ||
+      minY + PIT_SIZE > this.maxY + 0.001
+    ) {
+      return false;
+    }
+    const base = this.pits_ * BLOCK_STRIDE;
+    this.pits[base] = minX;
+    this.pits[base + 1] = minY;
+    this.pits[base + 2] = minX + PIT_SIZE;
+    this.pits[base + 3] = minY + PIT_SIZE;
+    this.pits_ += 1;
+    return true;
+  }
+
+  /**
+   * Takes back the pit `addPit` most recently opened — the softlock guard's
+   * "try it, flood-fill, undo" (`sim/systems/pits.ts`). Nothing else ever
+   * removes a pit: an eaten plank stays eaten.
+   */
+  removeLastPit(): void {
+    if (this.pits_ > 0) {
+      this.pits_ -= 1;
+    }
+  }
+
+  /** True when tile `(column, row)` is a pit. */
+  isPitTile(column: number, row: number): boolean {
+    const x = this.minX + (column + 0.5) * PIT_SIZE;
+    const y = this.minY + (row + 0.5) * PIT_SIZE;
+    return this.isPit(x, y);
+  }
+
+  /** True when the point `(x, y)` is over a pit. */
+  isPit(x: number, y: number): boolean {
+    const pits = this.pits;
+    for (let pit = 0; pit < this.pits_; pit++) {
+      const base = pit * BLOCK_STRIDE;
+      if (
+        x >= (pits[base] ?? 0) &&
+        x < (pits[base + 2] ?? 0) &&
+        y >= (pits[base + 1] ?? 0) &&
+        y < (pits[base + 3] ?? 0)
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** True when a circle overlaps any pit — "would a walker of this size fall in." */
+  overlapsPit(centreX: number, centreY: number, radius: number): boolean {
+    const pits = this.pits;
+    for (let pit = 0; pit < this.pits_; pit++) {
+      const base = pit * BLOCK_STRIDE;
+      const nearestX = clampTo(centreX, pits[base] ?? 0, pits[base + 2] ?? 0);
+      const nearestY = clampTo(centreY, pits[base + 1] ?? 0, pits[base + 3] ?? 0);
+      const dx = centreX - nearestX;
+      const dy = centreY - nearestY;
+      if (dx * dx + dy * dy < radius * radius) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   /** Adds a slick-puddle zone. Setup-time only, same contract as `addBlock`. */
   addPuddle(minX: number, minY: number, maxX: number, maxY: number): void {
     if (this.puddles_ >= MAX_ROOM_PUDDLES) {
@@ -510,8 +663,13 @@ export class RoomGeometry {
     return false;
   }
 
-  /** True when a circle is inside the interior bounds and clear of every block. */
-  isClear(centreX: number, centreY: number, radius: number): boolean {
+  /**
+   * True when a circle is inside the interior bounds and clear of every block
+   * — and, unless `flags` says otherwise (`CLEAR_IGNORE_PITS`,
+   * `CLEAR_IGNORE_DESTRUCTIBLE`), of every pit: the default is a walker's
+   * question, since nearly every caller is asking where a body can stand.
+   */
+  isClear(centreX: number, centreY: number, radius: number, flags = 0): boolean {
     if (this.stepRects.length > 0) {
       // A staircase's interior bound is the *union* of its step rects, not
       // one rectangle (#112) — checking the circle sits fully within any
@@ -546,8 +704,12 @@ export class RoomGeometry {
     ) {
       return false;
     }
+    const ignoreDestructible = (flags & CLEAR_IGNORE_DESTRUCTIBLE) !== 0;
     const blocks = this.blocks;
     for (let block = 0; block < this.blocks_; block++) {
+      if (ignoreDestructible && (this.blockOverflyable[block] ?? 0) === 1) {
+        continue;
+      }
       const base = block * BLOCK_STRIDE;
       const nearestX = clampTo(centreX, blocks[base] ?? 0, blocks[base + 2] ?? 0);
       const nearestY = clampTo(centreY, blocks[base + 1] ?? 0, blocks[base + 3] ?? 0);
@@ -556,6 +718,9 @@ export class RoomGeometry {
       if (dx * dx + dy * dy < radius * radius) {
         return false;
       }
+    }
+    if ((flags & CLEAR_IGNORE_PITS) === 0 && this.overlapsPit(centreX, centreY, radius)) {
+      return false;
     }
     return true;
   }

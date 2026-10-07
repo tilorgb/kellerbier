@@ -10,6 +10,7 @@ import {
   finalizeProjectileTags,
   reflectVelocity,
 } from '../projectile/behavior.js';
+import { CLEAR_IGNORE_PITS } from '../room/geometry.js';
 import { ProjectileTeam } from '../projectile/store.js';
 import { ProjectileTag, hasTag } from '../projectile/tags.js';
 import { StatId } from '../stats/definition.js';
@@ -109,7 +110,7 @@ function fire(sim: GameSim, aimX: number, aimY: number): void {
   const centreY = sim.positionY(playerIndex);
   let muzzleX = centreX + directionX * tuning.muzzleOffset;
   let muzzleY = centreY + directionY * tuning.muzzleOffset;
-  if (!sim.room.isClear(muzzleX, muzzleY, tuning.shotRadius)) {
+  if (!sim.room.isClear(muzzleX, muzzleY, tuning.shotRadius, CLEAR_IGNORE_PITS)) {
     muzzleX = centreX;
     muzzleY = centreY;
   }
@@ -295,7 +296,7 @@ function advanceProjectile(index: number): void {
   for (let substep = 0; substep < substeps; substep++) {
     const stepX = currentX + velocityX / substeps;
     const stepY = currentY + velocityY / substeps;
-    if (!spectral && !room.isClear(stepX, stepY, wallRadius)) {
+    if (!spectral && !room.isClear(stepX, stepY, wallRadius, CLEAR_IGNORE_PITS)) {
       // The impact normal points back the way the shot came, which is the
       // direction a spray of foam should leave the wall in — and, per
       // `reflectVelocity`'s doc comment, exactly the normal a wall bounce

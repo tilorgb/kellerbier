@@ -7,6 +7,7 @@ import {
   DEFAULT_IMPACT_TUNING,
   DEFAULT_ITEM_POOL_TUNING,
   DEFAULT_LATCH_TUNING,
+  DEFAULT_PIT_TUNING,
   DEFAULT_MACHINE_TUNING,
   DEFAULT_MOVEMENT_TUNING,
   DEFAULT_PICKUP_TUNING,
@@ -61,6 +62,7 @@ interface GroupSpec {
     | 'curse'
     | 'sneeze'
     | 'latch'
+    | 'pits'
     | 'machine'
     | 'chest';
   readonly fields: readonly FieldSpec[];
@@ -605,6 +607,14 @@ const GROUPS: readonly GroupSpec[] = [
       { key: 'flingPush', min: 0, max: 6, step: 0.25, hint: 'flick outward on shake-off' },
     ],
   },
+  {
+    title: 'pits (Borkenkäfer)',
+    group: 'pits',
+    fields: [
+      { key: 'maxPerRoom', min: 0, max: 32, step: 1, hint: 'eaten planks a room can take' },
+      { key: 'doorClearance', min: 16, max: 64, step: 4, hint: 'px around a door kept whole' },
+    ],
+  },
 ];
 
 const DEFAULTS = {
@@ -622,6 +632,7 @@ const DEFAULTS = {
   chest: DEFAULT_CHEST_TUNING,
   sneeze: DEFAULT_SNEEZE_TUNING,
   latch: DEFAULT_LATCH_TUNING,
+  pits: DEFAULT_PIT_TUNING,
 } as const;
 
 const STYLE = `

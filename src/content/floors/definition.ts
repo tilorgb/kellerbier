@@ -67,6 +67,14 @@ export interface FloorConfig {
    * word, not a sentence" rule (#221) applies per locale, not only to English.
    */
   readonly flavour: string;
+  /**
+   * Whether this floor's floor is wooden planks (#410) — the one thing a
+   * Borkenkäfer can eat through into a pit. A floor, not a room, decides it:
+   * the shared shop/secret/treasure templates are tagged for several floors
+   * and are wooden only where the floor they were drawn for is. Absent means
+   * stone, packed earth, anything a beetle does not eat.
+   */
+  readonly woodenFloor?: boolean;
 }
 
 /**
@@ -187,6 +195,7 @@ export const FLOOR_CONFIGS: readonly FloorConfig[] = [
     xlChance: 0.25,
     xlRoomMultiplier: 1.7,
     flavour: 'floors.wald.flavour',
+    woodenFloor: true,
   },
   {
     floor: 4,

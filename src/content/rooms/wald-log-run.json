@@ -84,6 +84,11 @@
           "maxFloor": 3
         },
         {
+          "enemyId": "borkenkaefer",
+          "minFloor": 3,
+          "maxFloor": 3
+        },
+        {
           "enemyId": "bachforelle",
           "minFloor": 3,
           "maxFloor": 3

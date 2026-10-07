@@ -11,7 +11,9 @@ import {
   ENEMY_FLAG_LATCHED,
   ENEMY_MOTION_STRIDE,
   ENEMY_STRIDE,
+  type EnemyEatMarkInfo,
   type EnemyTelegraphShapeInfo,
+  enemyEatMark,
   enemyHopProgress,
   enemySubmerged,
   enemyTelegraphProgress,
@@ -28,7 +30,13 @@ import { type BitmapText, type Container, type Texture } from './gfx/index.js';
 import { ENTITY_PALETTE } from './palette.js';
 import { tileGridScale } from './tiles.js';
 import { Billboard } from './world/billboard.js';
-import { FloorHazardBar, FloorHazardDisc, FloorRing, FloorWedge } from './world/flat.js';
+import {
+  FloorHazardBar,
+  FloorHazardDisc,
+  FloorRing,
+  FloorShade,
+  FloorWedge,
+} from './world/flat.js';
 import { WorldLabel } from './world/label.js';
 
 /**
@@ -80,6 +88,14 @@ function hazardBlinkAlpha(nowMs: number, fuse: number, ringPulses: boolean): num
   const blink = ringPulses ? Math.sin(nowMs * BOMB_BLINK_RATE * (1 + fuse * 2)) * 0.5 + 0.5 : 0.5;
   return BOMB_TELEGRAPH_MIN_ALPHA + blink * BOMB_TELEGRAPH_ALPHA_SWING;
 }
+/**
+ * The plank a Borkenkäfer is eating (#410): black, from faint the moment it
+ * starts to nearly a hole on its last bite.
+ */
+const EAT_SHADE_COLOUR = 0x000000;
+const EAT_SHADE_MIN_ALPHA = 0.15;
+const EAT_SHADE_MAX_ALPHA = 0.85;
+
 /** How much bigger a `telegraphLook: 'bloat'` body (#405) stands at the end of its wind-up. */
 const BLOAT_SWELL = 0.45;
 /** The telegraph fraction a bloating body starts glowing green at — its last third. */
@@ -171,6 +187,9 @@ export class EntityView {
   private readonly hazardBars: FloorHazardBar[] = [];
   /** The radial-blast hatch disc — a lobbed Böller, the player's own item (#12). */
   private readonly hazardDiscs: FloorHazardDisc[] = [];
+  /** The floor plank a Borkenkäfer is eating, darkening as it goes (#410). */
+  private readonly eatShades: FloorShade[] = [];
+  private readonly eatMark: EnemyEatMarkInfo = { progress: 0, x: 0, y: 0 };
   private readonly labels: WorldLabel[] = [];
   private readonly pickupTints: readonly number[];
   private readonly pickupLabels: readonly string[];
@@ -215,6 +234,7 @@ export class EntityView {
     this.wedgeAt(0).hide();
     this.hazardBarAt(0).hide();
     this.hazardDiscAt(0).hide();
+    this.eatShadeAt(0).hide();
     // Likewise one world label (a shop price, a pickup name) — `WorldLabel`
     // constructs hidden — so the first priced pickup does not link the label
     // text's program on the way into the shop.
@@ -282,6 +302,7 @@ export class EntityView {
     let wedgesUsed = 0;
     let hazardBarsUsed = 0;
     let hazardDiscsUsed = 0;
+    let eatShadesUsed = 0;
     let labelsUsed = 0;
     const highWater = world.highWater;
     for (let index = 0; index < highWater; index++) {
@@ -570,6 +591,18 @@ export class EntityView {
         }
       }
 
+      if (isEnemyBody && enemyEatMark(sim, index, this.eatMark)) {
+        // The plank going dark under the swarm (#410): the one that is about
+        // to be a hole, readable before it is one.
+        this.eatShadeAt(eatShadesUsed).place(
+          this.eatMark.x,
+          this.eatMark.y,
+          ROOM_TILE_UNITS,
+          EAT_SHADE_MIN_ALPHA + (EAT_SHADE_MAX_ALPHA - EAT_SHADE_MIN_ALPHA) * this.eatMark.progress,
+        );
+        eatShadesUsed += 1;
+      }
+
       if (isBomb && bombFuse > 0) {
         // The exact cross `blastCandidate` damages: two arms `armSpan` long,
         // one tile wide. Shown at full size from the moment the Bierfassl is
@@ -624,6 +657,9 @@ export class EntityView {
     }
     for (let slot = hazardDiscsUsed; slot < this.hazardDiscs.length; slot++) {
       this.hazardDiscs[slot]?.hide();
+    }
+    for (let slot = eatShadesUsed; slot < this.eatShades.length; slot++) {
+      this.eatShades[slot]?.hide();
     }
     for (let slot = labelsUsed; slot < this.labels.length; slot++) {
       this.labels[slot]?.hide();
@@ -715,6 +751,9 @@ export class EntityView {
     for (const shape of this.hazardDiscs) {
       shape.mesh.layers.enable(layer);
     }
+    for (const shape of this.eatShades) {
+      shape.mesh.layers.enable(layer);
+    }
   }
 
   private ringAt(slot: number): FloorRing {
@@ -772,6 +811,17 @@ export class EntityView {
     return created;
   }
 
+  private eatShadeAt(slot: number): FloorShade {
+    const existing = this.eatShades[slot];
+    if (existing !== undefined) {
+      return existing;
+    }
+    const created = new FloorShade(EAT_SHADE_COLOUR);
+    this.eatShades.push(created);
+    this.group.add(created.mesh);
+    return created;
+  }
+
   private labelAt(slot: number): WorldLabel {
     const existing = this.labels[slot];
     if (existing !== undefined) {
@@ -792,6 +842,7 @@ export class EntityView {
       ...this.wedges,
       ...this.hazardBars,
       ...this.hazardDiscs,
+      ...this.eatShades,
     ]) {
       shape.dispose();
     }
