@@ -1,4 +1,5 @@
 import { World } from '../ecs/world.js';
+import type { ChargeAtPlayerBehaviour } from '../enemy/definition.js';
 import {
   type CompiledDetonation,
   type CompiledEnemy,
@@ -12,6 +13,7 @@ import type { GameSim } from '../game/sim.js';
 import { muzzleFlash, ring } from '../particle/effects.js';
 import { clamp, vectorLength } from '../math.js';
 import { addPush } from './movement.js';
+import { applyDamageAt } from './impact.js';
 import { CollisionLayer, collisionMaskFor } from '../collision/layers.js';
 import { NO_SLOT } from '../pool/slot-pool.js';
 import { ProjectileTeam } from '../projectile/store.js';
@@ -640,6 +642,116 @@ export function stepZoneClamp(sim: GameSim): void {
   }
 }
 
+/** Room units of slack a charge's look-ahead allows before two bodies count as touching (#409). */
+const IMPACT_REACH_SLACK = 1;
+/** Room units past one step a charge's terrain probe looks (#409) — see `chargeImpact`. */
+const IMPACT_TERRAIN_SLACK = 3;
+
+/**
+ * A `chargeAtPlayer` with `impact` (#409, the Boar): looks one step ahead
+ * along the locked direction and, if something is there, hits it and ends
+ * the charge — raising `ENEMY_FLAG_BLOCKED` so the state machine's
+ * `onBlocked` fires next tick. Returns whether it hit anything. Bodies are
+ * checked before terrain: a player pinned against a wall is hit, not the
+ * wall behind them.
+ */
+function chargeImpact(
+  sim: GameSim,
+  index: number,
+  impact: NonNullable<ChargeAtPlayerBehaviour['impact']>,
+  dirX: number,
+  dirY: number,
+  speed: number,
+  selfX: number,
+  selfY: number,
+): boolean {
+  const body = sim.body.data;
+  const radius = body[index * 2] ?? 0;
+  const nextX = selfX + dirX * speed;
+  const nextY = selfY + dirY * speed;
+
+  const hit = firstBodyAhead(sim, index, radius, nextX, nextY);
+  if (hit >= 0) {
+    const damage = eliteAttackDamage(
+      sim,
+      index,
+      (sim.contactDamage.data[index] ?? 0) * impact.bodyDamageMultiplier,
+    );
+    const hitX = sim.positionX(hit);
+    const hitY = sim.positionY(hit);
+    const spared = hit === sim.playerIndex && sim.playerInvulnerableTicks > 0;
+    if (damage > 0 && !spared) {
+      // The normal points back at the Boar, so `applyDamageAt` throws the
+      // victim along the charge — the way it was running.
+      applyDamageAt(sim, hit, damage, hitX, hitY, -dirX, -dirY, -1);
+    }
+    const mass = Math.max(0.01, body[hit * 2 + 1] ?? 1);
+    addPush(sim, hit, (dirX * impact.knockback) / mass, (dirY * impact.knockback) / mass);
+    raiseBlocked(sim, index);
+    return true;
+  }
+
+  // Terrain is probed a little past one step: `stepBodies` stops a body
+  // against a wall a hair before its footprint reaches it, and a probe of
+  // exactly one step let that stop — an ordinary `onBlocked`, nothing
+  // smashed — win the race by a tick.
+  const probeX = selfX + dirX * (speed + IMPACT_TERRAIN_SLACK);
+  const probeY = selfY + dirY * (speed + IMPACT_TERRAIN_SLACK);
+  if (sim.room.isClear(probeX, probeY, radius)) {
+    return false;
+  }
+  // Something solid just ahead: the point at the very front of the body.
+  const frontX = probeX + dirX * (radius + IMPACT_REACH_SLACK);
+  const frontY = probeY + dirY * (radius + IMPACT_REACH_SLACK);
+  if (!(impact.breaksBlocks && sim.breakBlockAt(frontX, frontY)) && impact.breaksDoors) {
+    sim.smashWallAt(frontX, frontY);
+  }
+  raiseBlocked(sim, index);
+  return true;
+}
+
+/** The first body (the player, or another enemy on a collision layer) a body at `(x, y)` would overlap — or -1. */
+function firstBodyAhead(sim: GameSim, self: number, radius: number, x: number, y: number): number {
+  const body = sim.body.data;
+  const player = sim.playerIndex;
+  if (!sim.playerDead) {
+    const reach = radius + (body[player * 2] ?? 0) + IMPACT_REACH_SLACK;
+    const dx = sim.positionX(player) - x;
+    const dy = sim.positionY(player) - y;
+    if (dx * dx + dy * dy <= reach * reach) {
+      return player;
+    }
+  }
+  const states = sim.world.states;
+  const masks = sim.world.masks;
+  const required = sim.enemyMask;
+  for (let other = 0; other < sim.world.highWater; other++) {
+    if (other === self || states[other] !== World.ALIVE) {
+      continue;
+    }
+    if (((masks[other] ?? 0) & required) !== required) {
+      continue;
+    }
+    // A submerged fish or a latched tick is not there to be hit.
+    if ((sim.collision.data[other * 2] ?? 0) === 0) {
+      continue;
+    }
+    const reach = radius + (body[other * 2] ?? 0) + IMPACT_REACH_SLACK;
+    const dx = sim.positionX(other) - x;
+    const dy = sim.positionY(other) - y;
+    if (dx * dx + dy * dy <= reach * reach) {
+      return other;
+    }
+  }
+  return -1;
+}
+
+/** Sets `ENEMY_FLAG_BLOCKED` on `index`, read by an `onBlocked` transition next tick. */
+function raiseBlocked(sim: GameSim, index: number): void {
+  const flagSlot = index * ENEMY_STRIDE + 3;
+  sim.enemy.data[flagSlot] = (sim.enemy.data[flagSlot] ?? 0) | ENEMY_FLAG_BLOCKED;
+}
+
 /**
  * The first transition that matches, or -1.
  *
@@ -700,6 +812,23 @@ function chooseTransition(
           return transition.to;
         }
         break;
+      case TransitionTrigger.PlayerOnAxis: {
+        // The Boar's trigger (#409): the player crossed one of its four axis
+        // lines. The cheap test first; sight only once it passes.
+        if (
+          Math.abs(toPlayerX) > transition.tolerance &&
+          Math.abs(toPlayerY) > transition.tolerance
+        ) {
+          break;
+        }
+        if (sighted < 0) {
+          sighted = isSighted(sim, index, toPlayerX, toPlayerY) ? 1 : 0;
+        }
+        if (sighted === 1) {
+          return transition.to;
+        }
+        break;
+      }
       case TransitionTrigger.PlayerDiagonalAdjacent: {
         // A pawn's capture square (#407): the player's offset, folded into
         // one quadrant, within `tolerance` of (step, step). Never mid-hop, so
@@ -1085,6 +1214,22 @@ function applyMovement(
         // A leap, not a run (#407): this tick covers only what is left of
         // `maxDistance`, then nothing for the rest of the state.
         speed = clamp(behaviour.maxDistance - ticks * speed, 0, speed);
+      }
+      if (
+        behaviour.impact !== undefined &&
+        speed > 0 &&
+        chargeImpact(
+          sim,
+          index,
+          behaviour.impact,
+          motion[motionBase] ?? 0,
+          motion[motionBase + 1] ?? 0,
+          speed,
+          selfX,
+          selfY,
+        )
+      ) {
+        speed = 0;
       }
       velocity[base] = (motion[motionBase] ?? 0) * speed;
       velocity[base + 1] = (motion[motionBase + 1] ?? 0) * speed;
