@@ -172,9 +172,9 @@ export const ROSTERS: Readonly<Record<string, readonly RosterEntry[]>> = {
   ],
   /**
    * Floor 3 (#405-#408). No Bierratte: the Wald is the first floor without
-   * the cellar's rats. The Boar and the Borkenkäfer join as they land.
+   * the cellar's rats. The Borkenkäfer joins when it lands.
    *
-   * - Zecke: the floor's only pursuer for now, and the body #230's
+   * - Zecke: the cheapest pursuer, so the body #230's
    *   `ensurePursuerPresent` swaps in. Placed in pairs: one tick is a
    *   nuisance, two make the shake-off (which throws every latched tick at
    *   once) worth learning. Cost 1 — 2 HP, slow, no contact damage.
@@ -182,11 +182,17 @@ export const ROSTERS: Readonly<Record<string, readonly RosterEntry[]>> = {
    *   the floor" by design — cost 1, and as common as the Zecke.
    * - Fliegenpilz: static area denial with 5 HP, priced like the cellar's
    *   Schimmelfleck (cost 3, weight 2), the other stand-still spore body.
+   * - Boar (#409): 9 HP, `tough` loot, and a charge that hits for double —
+   *   priced like the Traktor (cost 4), the other heavy body, and rarer than
+   *   the small mobs so one is an event rather than the room's furniture.
+   *   It charges the player once they cross its axis, so it pursues in
+   *   #230's sense, like the Kuh.
    */
   wald: [
     { id: 'zecke', weight: 3, cost: 1, pursues: true, groupSize: 2 },
     { id: 'kaninchen', weight: 3, cost: 1, pursues: false },
     { id: 'fliegenpilz', weight: 2, cost: 3, pursues: false },
+    { id: 'boar', weight: 1, cost: 4, pursues: true },
   ],
 };
 

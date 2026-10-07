@@ -29,8 +29,17 @@ const knownIds = new Set(registry.all.map((enemy) => enemy.id));
 const waterCreatures = new Set(
   registry.all.filter((enemy) => enemy.zone !== null).map((enemy) => enemy.id),
 );
-/** Floor 3's whole room roster for now (#405-#408): no Bierratte, Kuh or Bauer carried over. */
-const FLOOR_3_MOBS = new Set(['zecke', 'kaninchen', 'fliegenpilz', 'bachforelle']);
+/**
+ * Floor 3's mobs are exactly what its generator roster lists — no Bierratte,
+ * Kuh or Bauer carried over. Read from the roster rather than restated here,
+ * so a new Floor 3 mob added only to the authored `wald-*` rooms (the gap
+ * that left most of the floor empty) fails below with its own id, pointing
+ * at `ROSTERS.wald`.
+ */
+const FLOOR_3_MOBS = new Set([
+  ...(ROSTERS.wald ?? []).map((entry) => entry.id),
+  ...(STREAM_DWELLERS.wald ?? []),
+]);
 const reachableFloors = FLOOR_CONFIGS.filter((config) => config.floor <= HIGHEST_SANDBOX_FLOOR);
 
 describe('room generator rosters', () => {
@@ -91,6 +100,13 @@ describe('Floor 3 generated rooms', () => {
   const enemiesOf = (room: (typeof rooms)[number]): string[] =>
     room.spawnGroups.flatMap((group) => group.choices.map((choice) => choice.enemyId));
 
+  it('has the Floor 3 mobs this was written against', () => {
+    for (const id of ['zecke', 'kaninchen', 'fliegenpilz', 'bachforelle', 'boar']) {
+      expect(FLOOR_3_MOBS.has(id), id).toBe(true);
+    }
+    expect(FLOOR_3_MOBS.has('bierratte')).toBe(false);
+  });
+
   it('fills rooms with enemies, and only Floor 3 mobs', () => {
     const seen = new Set(rooms.flatMap(enemiesOf));
     expect(rooms.filter((room) => enemiesOf(room).length > 0).length).toBeGreaterThan(250);
@@ -134,7 +150,9 @@ describe('Floor 3 authored rooms', () => {
       for (const choice of groups.flatMap((group) => group.choices)) {
         // The shared shop rooms' shopkeeper is an NPC, not a mob.
         const allowed = FLOOR_3_MOBS.has(choice.enemyId) || choice.enemyId === 'shopkeeper';
-        expect(allowed, choice.enemyId).toBe(true);
+        expect(allowed, `${choice.enemyId} is not in ROSTERS.wald / STREAM_DWELLERS.wald`).toBe(
+          true,
+        );
       }
     },
   );
