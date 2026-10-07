@@ -20,12 +20,16 @@ import {
 } from '../../src/sim/systems/enemy.js';
 
 /**
- * Specht (#411): a woodpecker perched on the wall. It drums (the telegraph),
- * dives straight at where the player stood as the drumming stopped, sticks
- * its beak in the floor for a moment — the hit window — and flies back to
- * the nearest wall. It flies: over cover, water and pits, never through a
- * wall.
+ * Specht (#411): a woodpecker perched on the wall. It takes off and flies
+ * small wavy loops about the room; only a player who comes near draws the
+ * attack — it drums in the air (the telegraph), dives straight at where the
+ * player stood as the drumming stopped, sticks its beak in the floor for a
+ * moment — the hit window — and flies back to the nearest wall. It flies:
+ * over cover, water and pits, never through a wall.
  */
+
+/** Room units within which the player draws a dive — `specht.ts`'s `STRIKE_RANGE`. */
+const STRIKE_RANGE = 72;
 
 const IDLE = createInputFrame();
 
@@ -89,15 +93,45 @@ function stepUntil(sim: GameSim, index: number, state: string, limit = 600): num
   return -1;
 }
 
+/**
+ * Lets the bird take off, then keeps the player at `(dx, dy)` from it (inside
+ * the room) until it starts drumming. Returns the ticks that took, or -1.
+ */
+function engage(sim: GameSim, bird: number, dx: number, dy: number, limit = 900): number {
+  if (stepUntil(sim, bird, 'circle', limit) < 0) {
+    return -1;
+  }
+  const room = sim.room;
+  for (let tick = 0; tick < limit; tick++) {
+    if (stateName(sim, bird) === 'drum') {
+      return tick;
+    }
+    const x = Math.min(room.maxX - 12, Math.max(room.minX + 12, sim.positionX(bird) + dx));
+    const y = Math.min(room.maxY - 12, Math.max(room.minY + 12, sim.positionY(bird) + dy));
+    place(sim, sim.playerIndex, x, y);
+    sim.step(IDLE);
+  }
+  return -1;
+}
+
+/** Keeps the player in the room corner farthest from the bird. */
+function keepAway(sim: GameSim, bird: number): void {
+  const room = sim.room;
+  const x = sim.positionX(bird) < (room.minX + room.maxX) / 2 ? room.maxX - 12 : room.minX + 12;
+  const y = sim.positionY(bird) < (room.minY + room.maxY) / 2 ? room.maxY - 12 : room.minY + 12;
+  place(sim, sim.playerIndex, x, y);
+}
+
 describe('Specht (#411)', () => {
-  it('compiles as a flying mini that perches, drums, dives and lands', () => {
+  it('compiles as a flying mini that perches, circles, drums, dives and lands', () => {
     const compiled = new EnemyRegistry(ENEMY_DEFINITIONS).get('specht');
     expect(compiled.health).toBe(4);
     expect(compiled.flying).toBe(true);
     expect(compiled.perches).toBe(true);
     expect(compiled.telegraphDrum).toBe(true);
     const byName = new Map(compiled.states.map((state) => [state.name, state]));
-    expect(byName.get('drum')?.telegraphTicks).toBe(50);
+    expect(byName.get('drum')?.telegraphTicks).toBe(40);
+    expect(byName.get('circle')?.movement.behaviour).toBe('flyLoops');
     expect(byName.get('stuck')?.grounded).toBe(true);
     expect(byName.get('dive')?.grounded).toBe(false);
   });
@@ -146,13 +180,14 @@ describe('Specht (#411)', () => {
     const room = sim.room;
     const player = sim.playerIndex;
     const bird = spawn(sim, 'specht', 80, room.minY + 10);
-    place(sim, player, 200, 120);
-    expect(stepUntil(sim, bird, 'drum')).toBeGreaterThanOrEqual(0);
+    expect(engage(sim, bird, 40, 25)).toBeGreaterThanOrEqual(0);
     const firstAim = enemyAimAngle(sim, bird);
+    const startX = sim.positionX(player);
+    const startY = sim.positionY(player);
     // The player walks during the drumming: the warning follows them.
     let lastSpot = { x: 0, y: 0 };
     for (let tick = 0; tick < 200 && stateName(sim, bird) === 'drum'; tick++) {
-      place(sim, player, 200 - tick * 0.2, 100);
+      place(sim, player, startX - tick * 0.3, startY);
       lastSpot = { x: sim.positionX(player), y: sim.positionY(player) };
       sim.step(IDLE);
     }
@@ -187,8 +222,9 @@ describe('Specht (#411)', () => {
     const sim = emptySim();
     const player = sim.playerIndex;
     const bird = spawn(sim, 'specht', 120, sim.room.minY + 10);
-    place(sim, player, 150, 110);
-    expect(stepUntil(sim, bird, 'drum')).toBeGreaterThanOrEqual(0);
+    expect(engage(sim, bird, 20, 30)).toBeGreaterThanOrEqual(0);
+    const baseX = sim.positionX(player);
+    const baseY = sim.positionY(player);
     const shape: EnemyTelegraphShapeInfo = {
       shape: TelegraphShape.Ring,
       progress: 0,
@@ -198,14 +234,14 @@ describe('Specht (#411)', () => {
       arc: 0,
       reach: 0,
     };
-    for (const x of [150, 170, 190]) {
-      place(sim, player, x, 110);
+    for (const step of [0, 6, 12]) {
+      place(sim, player, baseX + step, baseY);
       sim.step(IDLE);
       expect(enemyTelegraphShape(sim, bird, shape)).toBe(true);
       expect(shape.shape).toBe(TelegraphShape.Ground);
       expect(shape.reach).toBe(10);
-      expect(shape.x).toBeCloseTo(x, 3);
-      expect(shape.y).toBeCloseTo(110, 3);
+      expect(shape.x).toBeCloseTo(baseX + step, 3);
+      expect(shape.y).toBeCloseTo(baseY, 3);
     }
   });
 
@@ -213,9 +249,9 @@ describe('Specht (#411)', () => {
     const sim = emptySim();
     const player = sim.playerIndex;
     const bird = spawn(sim, 'specht', 120, sim.room.minY + 10);
-    place(sim, player, 120, 100);
     const full = sim.playerHealth;
     // Standing still: the landing circle is on them, and the landing hurts.
+    expect(engage(sim, bird, 10, 40)).toBeGreaterThanOrEqual(0);
     expect(stepUntil(sim, bird, 'stuck')).toBeGreaterThanOrEqual(0);
     expect(sim.playerHealth).toBe(full - 1);
     // Standing in the stuck bird's face for the whole window: nothing more.
@@ -230,12 +266,12 @@ describe('Specht (#411)', () => {
   it('a dodged landing does no harm', () => {
     const sim = emptySim();
     const room = sim.room;
-    const player = sim.playerIndex;
     const bird = spawn(sim, 'specht', 120, room.minY + 10);
-    place(sim, player, 120, 100);
     const full = sim.playerHealth;
+    expect(engage(sim, bird, 10, 40)).toBeGreaterThanOrEqual(0);
     expect(stepUntil(sim, bird, 'dive')).toBeGreaterThanOrEqual(0);
-    place(sim, player, room.maxX - 20, room.maxY - 20);
+    // Into the corner farthest from the landing spot.
+    keepAway(sim, bird);
     expect(stepUntil(sim, bird, 'stuck', 200)).toBeGreaterThanOrEqual(0);
     expect(sim.playerHealth).toBe(full);
   });
@@ -243,13 +279,12 @@ describe('Specht (#411)', () => {
   it('sits still on the floor for the whole hit window, then flies to the nearest wall', () => {
     const sim = emptySim();
     const room = sim.room;
-    const player = sim.playerIndex;
     const bird = spawn(sim, 'specht', 160, room.minY + 10);
-    place(sim, player, 100, 100);
+    expect(engage(sim, bird, -30, 30)).toBeGreaterThanOrEqual(0);
     expect(stepUntil(sim, bird, 'dive')).toBeGreaterThanOrEqual(0);
     // A clean dodge: out of the way as the dive starts, so it lands on
     // nothing and the window is measured with no push from a hit.
-    place(sim, player, room.maxX - 20, room.maxY - 20);
+    keepAway(sim, bird);
     expect(stepUntil(sim, bird, 'stuck', 200)).toBeGreaterThanOrEqual(0);
     const stuckX = sim.positionX(bird);
     const stuckY = sim.positionY(bird);
@@ -270,16 +305,78 @@ describe('Specht (#411)', () => {
     expect(enemyFlightHeight(sim, bird)).toBe(1);
   });
 
-  it('throws wood chips while it drums', () => {
+  it('throws no wood chips while it drums in the air: there is no wood to hammer', () => {
     const sim = emptySim();
     const bird = spawn(sim, 'specht', 160, sim.room.minY + 10);
-    expect(stepUntil(sim, bird, 'drum')).toBeGreaterThanOrEqual(0);
+    expect(engage(sim, bird, 30, 30)).toBeGreaterThanOrEqual(0);
     const before = sim.particles.liveCount;
-    sim.step(IDLE);
-    for (let tick = 0; tick < 12; tick++) {
+    for (let tick = 0; tick < 13; tick++) {
       sim.step(IDLE);
     }
-    expect(sim.particles.liveCount).toBeGreaterThan(before);
+    expect(sim.particles.liveCount).toBeLessThanOrEqual(before);
+  });
+
+  it('circles in the air, never diving, while the player keeps away — then goes back to a wall', () => {
+    const sim = emptySim();
+    const room = sim.room;
+    const bird = spawn(sim, 'specht', 160, room.minY + 10);
+    keepAway(sim, bird);
+    expect(stepUntil(sim, bird, 'circle')).toBeGreaterThanOrEqual(0);
+    let travelled = 0;
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let ticks = 0;
+    while (stateName(sim, bird) === 'circle' && ticks < 1000) {
+      keepAway(sim, bird);
+      const x = sim.positionX(bird);
+      const y = sim.positionY(bird);
+      sim.step(IDLE);
+      travelled += Math.hypot(sim.positionX(bird) - x, sim.positionY(bird) - y);
+      minX = Math.min(minX, sim.positionX(bird));
+      maxX = Math.max(maxX, sim.positionX(bird));
+      expect(enemyFlightHeight(sim, bird)).toBe(1);
+      ticks += 1;
+    }
+    // Round and round for six to nine seconds, never diving.
+    expect(ticks).toBeGreaterThanOrEqual(360);
+    expect(ticks).toBeLessThanOrEqual(541);
+    expect(stateName(sim, bird)).toBe('return');
+    // Loops: a lot of flying for not much ground covered.
+    expect(travelled).toBeGreaterThan(ticks * 0.8);
+    expect(maxX - minX).toBeLessThan(travelled / 4);
+    expect(stepUntil(sim, bird, 'perch', 400)).toBeGreaterThanOrEqual(0);
+  });
+
+  it('always flies a little before it may strike, even with the player right under its wall', () => {
+    const sim = emptySim();
+    const room = sim.room;
+    const bird = spawn(sim, 'specht', 160, room.minY + 10);
+    place(sim, sim.playerIndex, 160, room.minY + 40);
+    expect(stepUntil(sim, bird, 'takeoff')).toBeGreaterThanOrEqual(0);
+    let flying = 0;
+    while (stateName(sim, bird) !== 'drum' && flying < 600) {
+      place(sim, sim.playerIndex, sim.positionX(bird), sim.positionY(bird) + 30);
+      sim.step(IDLE);
+      flying += 1;
+    }
+    expect(stateName(sim, bird)).toBe('drum');
+    expect(flying).toBeGreaterThanOrEqual(45);
+  });
+
+  it('only dives at a player within range, and no further than they could walk in the wind-up', () => {
+    const sim = emptySim();
+    const bird = spawn(sim, 'specht', 160, sim.room.minY + 10);
+    expect(engage(sim, bird, 45, 40)).toBeGreaterThanOrEqual(0);
+    const fromX = sim.positionX(bird);
+    const fromY = sim.positionY(bird);
+    const player = sim.playerIndex;
+    expect(
+      Math.hypot(sim.positionX(player) - fromX, sim.positionY(player) - fromY),
+    ).toBeLessThanOrEqual(STRIKE_RANGE);
+    expect(stepUntil(sim, bird, 'stuck', 300)).toBeGreaterThanOrEqual(0);
+    expect(
+      Math.hypot(sim.positionX(bird) - fromX, sim.positionY(bird) - fromY),
+    ).toBeLessThanOrEqual(STRIKE_RANGE + 2);
   });
 
   it('is deterministic', () => {

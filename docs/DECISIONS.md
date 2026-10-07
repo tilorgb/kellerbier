@@ -6617,6 +6617,17 @@ Wald room, and it never lived that long in play, so nobody saw a hole. Now it al
 first pit opens about 4-5 s in. A plank turn with no plank to be had (stone floor, pit cap, all
 refused) falls back to cover; a cover turn with the cover walled off falls back to a plank.
 
+**Rooted bodies are not shoved.** The Fliegenpilz, the Bachforelle and the Specht are `rooted`:
+in the ground, in the stream, on the wall. `addPush` drops every shove aimed at a rooted body —
+a shot's knockback, a blast, the Boar, Der Ordner — so a hit hurts it and moves nothing. Its own
+movement is untouched. Mass was not the tool: a huge mass also makes a body shove the player.
+
+**The Specht flies before it strikes, and only strikes up close.** It used to drum on the wall
+and dive at the player from anywhere in the room. Now it takes off into small wavy loops about a
+point that drifts round the room (`flyLoops`), always for at least 45 ticks. It dives only at a
+player within 72 units, after drumming in the air. A player who keeps away just watches it
+circle, and after six to nine seconds it goes back to a wall.
+
 **Constrains:** a new side-on enemy declares `facing: 'mirror'` until it has direction strips.
 A new push effect is an impulse on a cooldown and is mass-scaled. A new familiar copies the
 `GameSim.ordner` shape rather than becoming an ECS body.

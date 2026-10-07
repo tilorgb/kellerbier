@@ -42,6 +42,7 @@ export type BehaviourName =
   | 'swimInZone'
   | 'approachWood'
   | 'returnToPerch'
+  | 'flyLoops'
   | 'fireAtPlayer'
   | 'fireRing'
   | 'fireBurst'
@@ -313,6 +314,30 @@ export interface ReturnToPerchBehaviour {
   readonly behaviour: 'returnToPerch';
   /** Room units per tick, before the global `enemy.speedScale`. */
   readonly speed: number;
+}
+
+/**
+ * Flies small wavy loops about a point that drifts through the room (the
+ * Specht, between leaving its wall and diving). The loop is `radius` across
+ * give or take `wobble`, which swells and shrinks it three times a turn so the
+ * path waves rather than draws a clean ring; the point it loops about drifts
+ * at `drift` room units a tick in a direction re-rolled now and then, turning
+ * back off walls. It does not follow the player — a transition such as
+ * `whenPlayerWithin` is what turns a flyer's loops into an attack.
+ *
+ * Entered off a wall, the loop starts a little way into the room; entered
+ * from another `flyLoops` state, it carries on the loop it was on.
+ */
+export interface FlyLoopsBehaviour {
+  readonly behaviour: 'flyLoops';
+  /** Room units per tick along the loop, before the global `enemy.speedScale`. */
+  readonly speed: number;
+  /** The loop's radius, in room units. */
+  readonly radius: number;
+  /** How far the radius swells and shrinks either way, in room units. */
+  readonly wobble: number;
+  /** Room units per tick the loop's centre drifts. */
+  readonly drift: number;
 }
 
 /**
@@ -771,6 +796,7 @@ export type EnemyBehaviour =
   | ChargeAtPlayerBehaviour
   | WanderBehaviour
   | OrbitPointBehaviour
+  | FlyLoopsBehaviour
   | FleeFromPlayerBehaviour
   | RollBounceBehaviour
   | ApproachPropBehaviour
@@ -908,6 +934,14 @@ export interface EnemyDefinition {
    */
   readonly flying?: boolean;
   /**
+   * Rooted to its spot — the Fliegenpilz in the ground, the Bachforelle in its
+   * stream, the Specht on its wall: no shove moves it. A shot's knockback, a
+   * blast, the Boar's impact, Der Ordner's shove all go through `addPush`, and
+   * `addPush` drops them for a rooted body. Its own movement is untouched — a
+   * rooted Specht still flies and dives, it just isn't knocked about doing it.
+   */
+  readonly rooted?: boolean;
+  /**
    * A localisation key (`enemies.<id>.title`), same convention
    * `ItemDefinition.flavourText` uses — resolved by the render layer, never
    * read directly here. The boss intro plate's middle line (#58/#327); unset
@@ -1019,6 +1053,7 @@ export const MOVEMENT_BEHAVIOURS: readonly BehaviourName[] = [
   'swimInZone',
   'approachWood',
   'returnToPerch',
+  'flyLoops',
 ];
 
 /** Primitives that run once, when the state is entered. */

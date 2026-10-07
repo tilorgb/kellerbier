@@ -241,8 +241,9 @@ where this came from and the enemy it happened to first.
   runs into: cover, secret walls, even closed doors. The name is English, as given.
 - **Borkenkäfer** — a bark beetle swarm. Eats wooden obstacles and floor planks, leaving pits;
   the longer it lives, the worse the room gets.
-- **Specht** — a woodpecker perched on the wall. Drums, dives at where you were standing, gets its
-  beak stuck in the floor, flies back.
+- **Specht** — a woodpecker perched on the wall. Takes off and circles the room in small wavy
+  loops; only when you come close does it drum in the air and dive at where you were standing. Gets
+  its beak stuck in the floor, flies back.
 
 **Floor 4 — Die Alpen**
 - **Steinbock** — ibex, charges and can climb over obstacles.

@@ -162,6 +162,10 @@ export function stepPlayerMovement(sim: GameSim, input: Readonly<InputFrame>): v
  * shove reads as a shove rather than as a change of intent.
  */
 export function addPush(sim: GameSim, index: number, x: number, y: number): void {
+  // Rooted in the ground, the water or the wall: nothing shoves it.
+  if (sim.enemyRooted(index)) {
+    return;
+  }
   const push = sim.push.data;
   const base = index * 2;
   let pushX = (push[base] ?? 0) + x;

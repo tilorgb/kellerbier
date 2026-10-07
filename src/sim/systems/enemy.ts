@@ -20,7 +20,7 @@ import { ProjectileTeam } from '../projectile/store.js';
 import { ProjectileTag } from '../projectile/tags.js';
 import { ParticleKind } from '../particle/store.js';
 import { nextWaypoint, straightClear, type Waypoint } from '../room/pathfind.js';
-import { CLEAR_IGNORE_PITS } from '../room/geometry.js';
+import { CLEAR_IGNORE_DESTRUCTIBLE, CLEAR_IGNORE_PITS } from '../room/geometry.js';
 import { nearestWallPoint } from '../room/perch.js';
 import {
   enemyEatProgress,
@@ -123,9 +123,9 @@ export const ENEMY_STRIDE = 4;
  * a swimmer's course, current sample and target sample. Then (#410) the
  * slots `approachWood` keeps its plan in (`sim/systems/wood.ts`), after
  * them a `hopTowardPlayer` body's own hop clock, then (#411) a percher's wall
- * point and the way it faces there.
+ * point and the way it faces there, then a `flyLoops` body's loop.
  */
-export const ENEMY_MOTION_STRIDE = 16 + WOOD_MOTION_SLOTS + 3 + 4;
+export const ENEMY_MOTION_STRIDE = 16 + WOOD_MOTION_SLOTS + 3 + 4 + 6;
 /**
  * `enemyMotion` offsets of a `returnToPerch` body's perch (#411): the wall
  * point it is flying to, and the direction into the room it faces there.
@@ -134,6 +134,17 @@ const MOTION_PERCH_X = 16 + WOOD_MOTION_SLOTS + 3;
 const MOTION_PERCH_Y = MOTION_PERCH_X + 1;
 const MOTION_PERCH_NORMAL_X = MOTION_PERCH_X + 2;
 const MOTION_PERCH_NORMAL_Y = MOTION_PERCH_X + 3;
+/**
+ * `enemyMotion` offsets of a `flyLoops` body's loop: the point it loops about,
+ * the way that point is drifting, the angle round the loop, and which way
+ * round (+1 or -1).
+ */
+const MOTION_LOOP_X = MOTION_PERCH_X + 4;
+const MOTION_LOOP_Y = MOTION_LOOP_X + 1;
+const MOTION_LOOP_DRIFT_X = MOTION_LOOP_X + 2;
+const MOTION_LOOP_DRIFT_Y = MOTION_LOOP_X + 3;
+const MOTION_LOOP_ANGLE = MOTION_LOOP_X + 4;
+const MOTION_LOOP_SPIN = MOTION_LOOP_X + 5;
 /**
  * `enemyMotion` offset of the roll a ranged `after` reads (#408): a fraction
  * in [0, 1) drawn from `random.enemies` on entry to a state that has one.
@@ -313,7 +324,13 @@ export function stepEnemies(sim: GameSim): void {
         sim.enemyMotion.data[motionBase + 4] = playerX;
         sim.enemyMotion.data[motionBase + 5] = playerY;
       }
-      if (compiled.telegraphDrum && ticks % DRUM_CHIP_EVERY_TICKS === 0) {
+      // Chips only off the wall it sits on: a drumroll in the air (the
+      // Specht winding up over the floor) has no wood to hammer.
+      if (
+        compiled.telegraphDrum &&
+        ticks % DRUM_CHIP_EVERY_TICKS === 0 &&
+        onPerch(sim, index, selfX, selfY)
+      ) {
         drumChips(sim, selfX, selfY);
       }
     }
@@ -983,6 +1000,118 @@ export function placeOnPerch(sim: GameSim, index: number): void {
   motion[motionBase + 1] = motion[motionBase + MOTION_PERCH_NORMAL_Y] ?? 0;
 }
 
+/** Whether a percher at `(selfX, selfY)` is sitting on its perch point. */
+function onPerch(sim: GameSim, index: number, selfX: number, selfY: number): boolean {
+  const motion = sim.enemyMotion.data;
+  const motionBase = index * ENEMY_MOTION_STRIDE;
+  return (
+    vectorLength(
+      (motion[motionBase + MOTION_PERCH_X] ?? Infinity) - selfX,
+      (motion[motionBase + MOTION_PERCH_Y] ?? Infinity) - selfY,
+    ) <= ARRIVE_DISTANCE
+  );
+}
+
+/** Ticks between two re-rolls of a `flyLoops` body's drift. */
+const LOOP_DRIFT_TURN_TICKS = 90;
+/** Times a `flyLoops` loop swells and shrinks per turn: the waves in it. */
+const LOOP_WAVES = 3;
+/** How much faster than its loop speed a `flyLoops` body may fly to catch its loop up. */
+const LOOP_CATCH_UP = 1.8;
+/** Room units of clear air kept between a `flyLoops` loop and a wall. */
+const LOOP_WALL_MARGIN = 6;
+/** What a flyer's air is clear of: walls and the grid cells a shape never claimed, nothing else. */
+const AIR_CLEAR = CLEAR_IGNORE_DESTRUCTIBLE | CLEAR_IGNORE_PITS;
+
+/**
+ * One tick of `flyLoops`: the point it loops about drifts, and the body flies
+ * at its place on the loop — round it at `speed`, the radius waving by
+ * `wobble`. See `FlyLoopsBehaviour`.
+ */
+function flyLoops(
+  sim: GameSim,
+  index: number,
+  behaviour: {
+    readonly speed: number;
+    readonly radius: number;
+    readonly wobble: number;
+    readonly drift: number;
+  },
+  scale: number,
+  ticks: number,
+  selfX: number,
+  selfY: number,
+): void {
+  const motion = sim.enemyMotion.data;
+  const motionBase = index * ENEMY_MOTION_STRIDE;
+  const velocity = sim.velocity.data;
+  const room = sim.room;
+  const speed = behaviour.speed * scale;
+  const radius = behaviour.radius;
+  const bodyRadius = sim.body.data[index * 2] ?? 0;
+  // The whole loop, with the body on it and a margin, must fit in the air.
+  const reach = radius + behaviour.wobble + bodyRadius + LOOP_WALL_MARGIN;
+
+  if (ticks === 0) {
+    const angle = motion[motionBase + MOTION_LOOP_ANGLE] ?? 0;
+    let centreX = selfX - Math.cos(angle) * radius;
+    let centreY = selfY - Math.sin(angle) * radius;
+    if (!room.isClear(centreX, centreY, reach, AIR_CLEAR)) {
+      // Off a wall (or a loop that no longer fits): start the loop into the
+      // room, the way the perch faces, with the body on its near side.
+      const inX = motion[motionBase + MOTION_PERCH_NORMAL_X] ?? 0;
+      const inY = motion[motionBase + MOTION_PERCH_NORMAL_Y] ?? 0;
+      const inLength = vectorLength(inX, inY);
+      const normalX = inLength === 0 ? 0 : inX / inLength;
+      const normalY = inLength === 0 ? 1 : inY / inLength;
+      centreX = selfX + normalX * reach;
+      centreY = selfY + normalY * reach;
+      motion[motionBase + MOTION_LOOP_ANGLE] = Math.atan2(-normalY, -normalX);
+      motion[motionBase + MOTION_LOOP_SPIN] = sim.random.enemies.nextFloat() < 0.5 ? -1 : 1;
+    }
+    motion[motionBase + MOTION_LOOP_X] = centreX;
+    motion[motionBase + MOTION_LOOP_Y] = centreY;
+    if ((motion[motionBase + MOTION_LOOP_SPIN] ?? 0) === 0) {
+      motion[motionBase + MOTION_LOOP_SPIN] = 1;
+    }
+  }
+
+  // The drift: a direction re-rolled now and then, turned back off walls.
+  if (ticks % LOOP_DRIFT_TURN_TICKS === 0) {
+    const heading = sim.random.enemies.nextFloat() * Math.PI * 2;
+    motion[motionBase + MOTION_LOOP_DRIFT_X] = Math.cos(heading);
+    motion[motionBase + MOTION_LOOP_DRIFT_Y] = Math.sin(heading);
+  }
+  const centreX = motion[motionBase + MOTION_LOOP_X] ?? selfX;
+  const centreY = motion[motionBase + MOTION_LOOP_Y] ?? selfY;
+  const driftX = (motion[motionBase + MOTION_LOOP_DRIFT_X] ?? 0) * behaviour.drift * scale;
+  const driftY = (motion[motionBase + MOTION_LOOP_DRIFT_Y] ?? 0) * behaviour.drift * scale;
+  if (room.isClear(centreX + driftX, centreY + driftY, reach, AIR_CLEAR)) {
+    motion[motionBase + MOTION_LOOP_X] = centreX + driftX;
+    motion[motionBase + MOTION_LOOP_Y] = centreY + driftY;
+  } else {
+    motion[motionBase + MOTION_LOOP_DRIFT_X] = -(motion[motionBase + MOTION_LOOP_DRIFT_X] ?? 0);
+    motion[motionBase + MOTION_LOOP_DRIFT_Y] = -(motion[motionBase + MOTION_LOOP_DRIFT_Y] ?? 0);
+  }
+
+  const spin = motion[motionBase + MOTION_LOOP_SPIN] ?? 1;
+  const angle = (motion[motionBase + MOTION_LOOP_ANGLE] ?? 0) + (spin * speed) / radius;
+  motion[motionBase + MOTION_LOOP_ANGLE] = angle;
+  const waved = radius + behaviour.wobble * Math.sin(angle * LOOP_WAVES);
+  const goalX = (motion[motionBase + MOTION_LOOP_X] ?? selfX) + Math.cos(angle) * waved;
+  const goalY = (motion[motionBase + MOTION_LOOP_Y] ?? selfY) + Math.sin(angle) * waved;
+  const dx = goalX - selfX;
+  const dy = goalY - selfY;
+  const length = vectorLength(dx, dy);
+  const step = Math.min(length, speed * LOOP_CATCH_UP);
+  velocity[index * 2] = length === 0 ? 0 : (dx / length) * step;
+  velocity[index * 2 + 1] = length === 0 ? 0 : (dy / length) * step;
+  if (length > 0) {
+    motion[motionBase] = dx / length;
+    motion[motionBase + 1] = dy / length;
+  }
+}
+
 /** Sets `ENEMY_FLAG_BLOCKED` on `index`, read by an `onBlocked` transition next tick. */
 function raiseBlocked(sim: GameSim, index: number): void {
   const flagSlot = index * ENEMY_STRIDE + 3;
@@ -1501,6 +1630,10 @@ function applyMovement(
     }
     case 'returnToPerch': {
       flyToPerch(sim, index, behaviour.speed * scale, ticks, selfX, selfY);
+      return;
+    }
+    case 'flyLoops': {
+      flyLoops(sim, index, behaviour, scale, ticks, selfX, selfY);
       return;
     }
     case 'approachWood': {

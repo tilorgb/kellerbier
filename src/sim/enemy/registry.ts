@@ -300,6 +300,8 @@ export interface CompiledEnemy {
   readonly telegraphDrum: boolean;
   /** The definition's `flying` (#411): over furniture, water and pits; drawn in the air. */
   readonly flying: boolean;
+  /** The definition's `rooted`: shoves (`addPush`) never move it. */
+  readonly rooted: boolean;
   /**
    * Set when any of its states `returnToPerch`es (#411): a percher, put on the
    * nearest point of the room's wall at spawn.
@@ -491,6 +493,7 @@ export class EnemyRegistry {
       telegraphBloat: compileTelegraphLook(definition.telegraphLook, where) === TelegraphLook.Bloat,
       telegraphDrum: compileTelegraphLook(definition.telegraphLook, where) === TelegraphLook.Drum,
       flying: definition.flying === true,
+      rooted: definition.rooted === true,
       perches: states.some((state) => state.movement.behaviour === 'returnToPerch'),
       facing: compileFacing(definition.facing, where),
       zone: states.some((state) => state.movement.behaviour === 'swimInZone') ? 'waldbach' : null,
@@ -539,6 +542,19 @@ export class EnemyRegistry {
           }
           if (!(behaviour.speed > 0)) {
             throw new Error(`${where}: "swimInZone" needs a speed above zero`);
+          }
+        }
+        if (behaviour.behaviour === 'flyLoops') {
+          if (!(behaviour.speed > 0) || !(behaviour.radius > 0)) {
+            throw new Error(`${where}: "flyLoops" needs a speed and a radius above zero`);
+          }
+          if (!(behaviour.wobble >= 0) || !(behaviour.wobble < behaviour.radius)) {
+            throw new Error(
+              `${where}: "flyLoops" needs a wobble of at least zero, below its radius`,
+            );
+          }
+          if (!(behaviour.drift >= 0)) {
+            throw new Error(`${where}: "flyLoops" needs a drift of at least zero`);
           }
         }
         if (behaviour.behaviour === 'returnToPerch' && !(behaviour.speed > 0)) {
