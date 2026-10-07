@@ -48,7 +48,7 @@ export function createSampleEditorPanel(
     getCurrentSample: () => SampleRef | undefined;
     saveSample: (sample: SampleRef | null) => Promise<void>;
     /** Present to offer "Generate"; `suggestedName` is the asset name a chosen take is saved under when "Save as" is left empty. */
-    generate?: { suggestedName: () => string };
+    generate?: { suggestedName: () => string; suggestedPrompt: () => string };
   },
 ): SampleEditorPanelHandle {
   const root = document.createElement('div');
@@ -410,6 +410,7 @@ export function createSampleEditorPanel(
       // Takes made for the previously selected sound are not candidates for this one.
       generator.takeList.replaceChildren();
       generator.nameInput.value = '';
+      generator.promptInput.value = opts.generate?.suggestedPrompt() ?? '';
     }
     const sample = opts.getCurrentSample();
     if (sample === undefined) {

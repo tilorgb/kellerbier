@@ -1,5 +1,6 @@
 import { fetchSfx, saveSfx, saveSfxSample } from './api-client.js';
 import { createSampleEditorPanel } from './sample-editor-panel.js';
+import { suggestSfxPrompt } from './sfx-prompt.js';
 import { getAudioContext, getMasterGain, resumeAudioContext } from '../app/audio/context.js';
 import { playSfxSound } from '../app/audio/synth.js';
 import type { InstrumentDefinition, InstrumentFilter, SfxDefinition } from '../app/audio/types.js';
@@ -114,7 +115,13 @@ export function createSfxPanel(
       await saveSfxSample(idSelect.value, sample);
       sfxList = await fetchSfx();
     },
-    generate: { suggestedName: () => idSelect.value },
+    generate: {
+      suggestedName: () => idSelect.value,
+      suggestedPrompt: () => {
+        const sfx = sfxList.find((s) => s.id === idSelect.value);
+        return sfx === undefined ? '' : suggestSfxPrompt(sfx);
+      },
+    },
   });
 
   function currentDefinition(): Omit<SfxDefinition, 'id'> {
@@ -226,6 +233,8 @@ export function createSfxPanel(
   void (async () => {
     sfxList = await fetchSfx();
     renderOptions();
+    // The sample editor built its prompt before the list existed.
+    sampleEditor.refresh();
   })();
 
   return {
