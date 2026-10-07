@@ -6,6 +6,7 @@ import { boellerschmeisser } from './boellerschmeisser.js';
 import { derLadewagen } from './der-ladewagen.js';
 import { derRattenkoenig } from './der-rattenkoenig.js';
 import { derStier, maibaumDieb } from './der-stier.js';
+import { bachforelle } from './bachforelle.js';
 import { blaskapellePosaune, blaskapelleTrompete, blaskapelleTuba } from './die-blaskapelle.js';
 import { dieZapfhahnOrgel } from './die-zapfhahn-orgel.js';
 import { fliegenpilz } from './fliegenpilz.js';
@@ -62,6 +63,7 @@ export const ENEMY_DEFINITIONS: readonly EnemyDefinition[] = [
   fliegenpilz,
   zecke,
   kaninchen,
+  bachforelle,
 ];
 
 /**
@@ -78,6 +80,7 @@ export function enemyDefinitionById(id: string): EnemyDefinition | undefined {
 }
 
 export {
+  bachforelle,
   bauer,
   bierratte,
   blaskapellePosaune,

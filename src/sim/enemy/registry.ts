@@ -7,9 +7,11 @@ import {
   FIRING_BEHAVIOURS,
   type EnemyState,
   LATCH_BEHAVIOURS,
+  STATE_FLAG_BEHAVIOURS,
   type FireAtPlayerBehaviour,
   type FireBurstBehaviour,
   type FireOnBeatBehaviour,
+  type FireRingBehaviour,
   type FireSpreadBehaviour,
   type MeleeArcBehaviour,
   MOVEMENT_BEHAVIOURS,
@@ -103,6 +105,12 @@ export interface CompiledTransition {
   readonly propKind: number;
   /** For `PlayerDiagonalAdjacent`: room units of slack around the diagonal step. 0 otherwise. */
   readonly tolerance: number;
+  /**
+   * For `After`: the top of a ranged `after` (#408), `value` being its
+   * bottom. Equal to `value` for a fixed `after`, and unused by every other
+   * trigger.
+   */
+  readonly max: number;
 }
 
 /** A `summon` with its child resolved to a definition index (#276). */
@@ -138,7 +146,11 @@ export interface CompiledSplit {
 }
 
 export type FiringBehaviour =
-  FireAtPlayerBehaviour | FireBurstBehaviour | FireSpreadBehaviour | FireOnBeatBehaviour;
+  | FireAtPlayerBehaviour
+  | FireBurstBehaviour
+  | FireSpreadBehaviour
+  | FireOnBeatBehaviour
+  | FireRingBehaviour;
 
 /** A `detonateLobbedBomb` resolved and validated once, at compile time. */
 export interface CompiledDetonation {
@@ -190,6 +202,10 @@ export interface CompiledState {
   readonly meleeArc: CompiledMeleeArc | null;
   /** True for a state carrying `latchOnPlayer` (#406): touching the player attaches the body. */
   readonly latchesOnPlayer: boolean;
+  /** True for a state carrying `submerge` (#408): out of reach of everything, drawn as a shadow. */
+  readonly submerged: boolean;
+  /** True for a state with a ranged `after` (#408): entering it rolls a duration from `random.enemies`. */
+  readonly rollsDuration: boolean;
   /**
    * For an `approachProp` movement: the `DESTRUCTIBLE_PROP_KINDS` index it
    * heads for. -1 for every other movement, and read only when
@@ -235,6 +251,12 @@ export interface CompiledEnemy {
   readonly deathEffect: ParticleKindId;
   /** The definition's `telegraphLook === 'bloat'` (#405), resolved once so the renderer compares no string per frame. */
   readonly telegraphBloat: boolean;
+  /**
+   * The water this creature lives in (#408) — set when any of its states
+   * `swimInZone`s, `null` for everything that walks. A water creature is
+   * placed in its water at spawn and kept there (`stepZoneClamp`).
+   */
+  readonly zone: 'waldbach' | null;
 }
 
 export class EnemyRegistry {
@@ -394,6 +416,7 @@ export class EnemyRegistry {
       bossBar: definition.bossBar ?? false,
       deathEffect: compileDeathEffect(definition.deathEffect, where),
       telegraphBloat: compileTelegraphLook(definition.telegraphLook, where),
+      zone: states.some((state) => state.movement.behaviour === 'swimInZone') ? 'waldbach' : null,
     };
   }
 
@@ -418,6 +441,7 @@ export class EnemyRegistry {
     let meleeArc: CompiledMeleeArc | null = null;
     let grabProp: { kind: number; reach: number } | null = null;
     let latchesOnPlayer = false;
+    let submerged = false;
 
     for (const behaviour of state.behaviours) {
       const name: BehaviourName = behaviour.behaviour;
@@ -429,6 +453,16 @@ export class EnemyRegistry {
           );
         }
         movement = behaviour;
+        if (behaviour.behaviour === 'swimInZone') {
+          // Read wide for the same reason `size` is: content is data.
+          const zone: string = behaviour.zone;
+          if (zone !== 'waldbach') {
+            throw new Error(`${where}: "swimInZone" zone "${zone}" is not one of waldbach`);
+          }
+          if (!(behaviour.speed > 0)) {
+            throw new Error(`${where}: "swimInZone" needs a speed above zero`);
+          }
+        }
         if (behaviour.behaviour === 'hopCardinal') {
           if (!(behaviour.hopDistance > 0)) {
             throw new Error(`${where}: "hopCardinal" needs a hopDistance above zero`);
@@ -492,10 +526,25 @@ export class EnemyRegistry {
         latchesOnPlayer = true;
         continue;
       }
+      if (STATE_FLAG_BEHAVIOURS.includes(name)) {
+        submerged = true;
+        continue;
+      }
       if (FIRING_BEHAVIOURS.includes(name)) {
         const shooting = behaviour as FiringBehaviour;
         if (!(shooting.everyTicks >= 1)) {
           throw new Error(`${where}: "${name}" needs everyTicks of at least 1`);
+        }
+        if (shooting.behaviour === 'fireRing') {
+          if (!(shooting.shots >= 1)) {
+            throw new Error(`${where}: "fireRing" needs at least one shot`);
+          }
+          if (shooting.aimCardinal === true) {
+            throw new Error(
+              `${where}: "fireRing" fires a full ring at nothing in particular — ` +
+                `"aimCardinal" has nothing to snap`,
+            );
+          }
         }
         if (shooting.behaviour === 'fireOnBeat' && shooting.aimCardinal === true) {
           throw new Error(
@@ -653,25 +702,70 @@ export class EnemyRegistry {
         );
       }
       if ('after' in transition) {
+        const after = transition.after;
+        if (typeof after === 'number') {
+          return {
+            trigger: TransitionTrigger.After,
+            value: after,
+            to,
+            propKind: -1,
+            tolerance: 0,
+            max: after,
+          };
+        }
+        if (!(after.min >= 0) || !(after.max >= after.min)) {
+          throw new Error(
+            `${where}: a ranged "after" needs 0 <= min <= max, got ${String(after.min)}..${String(after.max)}`,
+          );
+        }
         return {
           trigger: TransitionTrigger.After,
-          value: transition.after,
+          value: Math.round(after.min),
           to,
           propKind: -1,
           tolerance: 0,
+          max: Math.round(after.max),
         };
       }
       if ('onHit' in transition) {
-        return { trigger: TransitionTrigger.OnHit, value: 0, to, propKind: -1, tolerance: 0 };
+        return {
+          trigger: TransitionTrigger.OnHit,
+          value: 0,
+          to,
+          propKind: -1,
+          tolerance: 0,
+          max: 0,
+        };
       }
       if ('onBlocked' in transition) {
-        return { trigger: TransitionTrigger.OnBlocked, value: 0, to, propKind: -1, tolerance: 0 };
+        return {
+          trigger: TransitionTrigger.OnBlocked,
+          value: 0,
+          to,
+          propKind: -1,
+          tolerance: 0,
+          max: 0,
+        };
       }
       if ('onLatched' in transition) {
-        return { trigger: TransitionTrigger.OnLatched, value: 0, to, propKind: -1, tolerance: 0 };
+        return {
+          trigger: TransitionTrigger.OnLatched,
+          value: 0,
+          to,
+          propKind: -1,
+          tolerance: 0,
+          max: 0,
+        };
       }
       if ('onShakenOff' in transition) {
-        return { trigger: TransitionTrigger.OnShakenOff, value: 0, to, propKind: -1, tolerance: 0 };
+        return {
+          trigger: TransitionTrigger.OnShakenOff,
+          value: 0,
+          to,
+          propKind: -1,
+          tolerance: 0,
+          max: 0,
+        };
       }
       if ('whenPlayerWithin' in transition) {
         return {
@@ -680,6 +774,7 @@ export class EnemyRegistry {
           to,
           propKind: -1,
           tolerance: 0,
+          max: 0,
         };
       }
       if ('whenPlayerDiagonalAdjacent' in transition) {
@@ -695,6 +790,7 @@ export class EnemyRegistry {
           to,
           propKind: -1,
           tolerance,
+          max: 0,
         };
       }
       if ('whenPropWithin' in transition) {
@@ -704,6 +800,7 @@ export class EnemyRegistry {
           to,
           propKind: resolvePropKind(transition.prop, `${where}: "whenPropWithin"`),
           tolerance: 0,
+          max: 0,
         };
       }
       if ('whenPropBeyond' in transition) {
@@ -713,6 +810,7 @@ export class EnemyRegistry {
           to,
           propKind: resolvePropKind(transition.prop, `${where}: "whenPropBeyond"`),
           tolerance: 0,
+          max: 0,
         };
       }
       return {
@@ -721,6 +819,7 @@ export class EnemyRegistry {
         to,
         propKind: -1,
         tolerance: 0,
+        max: 0,
       };
     });
 
@@ -731,7 +830,7 @@ export class EnemyRegistry {
       aimsAttack:
         movement.behaviour === 'chargeAtPlayer' ||
         meleeArc !== null ||
-        firing.some((shot) => shot.behaviour !== 'fireOnBeat'),
+        firing.some((shot) => shot.behaviour !== 'fireOnBeat' && shot.behaviour !== 'fireRing'),
       telegraphTicks,
       invulnerableTicks,
       capturesLobTarget,
@@ -739,6 +838,11 @@ export class EnemyRegistry {
       emitCloud,
       meleeArc,
       latchesOnPlayer,
+      submerged,
+      rollsDuration: transitions.some(
+        (transition) =>
+          transition.trigger === TransitionTrigger.After && transition.max > transition.value,
+      ),
       approachPropKind,
       grabProp,
       splits,

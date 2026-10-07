@@ -117,6 +117,10 @@ import { LATCH_SHAKE_HISTORY, stepLatches } from '../systems/latch.js';
 import {
   ENEMY_FLAG_ELITE,
   ENEMY_MOTION_STRIDE,
+  MOTION_DURATION_ROLL,
+  placeInZone,
+  setSubmerged,
+  stepZoneClamp,
   ENEMY_STRIDE,
   enemyAimAngle,
   meleeBladeAngle,
@@ -679,6 +683,9 @@ export interface GameSimOptions {
  * tick and nothing else — no clock, no DOM, no renderer — which is what makes a
  * run reproducible from a seed and an input log.
  */
+/** Water creatures already warned about spawning in a dry room (#408) — once each per process, like `nearestFloorChoice`'s warning. */
+const warnedZonelessSpawns = new Set<string>();
+
 export class GameSim {
   readonly world: World;
   readonly random: RunRandom;
@@ -6381,6 +6388,8 @@ export class GameSim {
     // each other apart is a separate pass from enemies pushing the player,
     // not a special case inside it.
     stepEnemyContacts(this);
+    // A water creature knocked onto the bank goes back in (#408).
+    stepZoneClamp(this);
     // Last of the things that move bodies: a tick riding on the player is put
     // back on them after every shove this tick, and the shake is read off the
     // same input frame movement already consumed (#406).
@@ -6942,6 +6951,31 @@ export class GameSim {
     // the last body in this slot remembered (`walkTowardPlayer`'s memory).
     for (let field = 6; field < ENEMY_MOTION_STRIDE; field++) {
       motion[motionBase + field] = 0;
+    }
+
+    // A water creature (#408) lives in its stream from the first tick: put on
+    // the nearest point of it, or — in a room with no stream at all, a
+    // content gap rather than a bug (`CLAUDE.md`) — not spawned, never
+    // counted toward the room's clear, and logged once in a dev build.
+    if (compiled.zone !== null && !placeInZone(this, index)) {
+      if (import.meta.env.DEV && !warnedZonelessSpawns.has(compiled.id)) {
+        warnedZonelessSpawns.add(compiled.id);
+        console.warn(
+          `"${compiled.id}" lives in the ${compiled.zone}, and room ${this.roomId} has none — ` +
+            `not spawned. Author it only into rooms with a stream.`,
+        );
+      }
+      this.world.destroy(entity);
+      return entity;
+    }
+    // The state a body spawns in is entered like any other (#408): a ranged
+    // `after` takes its roll, and a submerged one starts under the water.
+    const initial = compiled.states[compiled.initialState];
+    if (initial?.rollsDuration === true) {
+      motion[motionBase + MOTION_DURATION_ROLL] = this.random.enemies.nextFloat();
+    }
+    if (initial?.submerged === true) {
+      setSubmerged(this, index, true);
     }
 
     if (this.roomTemplateLoaded && compiled.locksRoom) {

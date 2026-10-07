@@ -38,7 +38,9 @@ export type BehaviourName =
   | 'approachProp'
   | 'pause'
   | 'hopCardinal'
+  | 'swimInZone'
   | 'fireAtPlayer'
+  | 'fireRing'
   | 'fireBurst'
   | 'fireSpread'
   | 'fireOnBeat'
@@ -52,7 +54,8 @@ export type BehaviourName =
   | 'lobTarget'
   | 'detonateLobbedBomb'
   | 'emitCloud'
-  | 'latchOnPlayer';
+  | 'latchOnPlayer'
+  | 'submerge';
 
 /** Walks straight at the player, re-aiming every tick. The floor-one default. */
 export interface WalkTowardPlayerBehaviour {
@@ -150,6 +153,47 @@ export interface HopCardinalBehaviour {
   readonly hopTicks: number;
   /** Ticks standing still between hops. */
   readonly restTicks: number;
+}
+
+/**
+ * Swims along the water it lives in, and never leaves it (#408, the
+ * Bachforelle). `zone` names which water: `'waldbach'` is Floor 3's stream
+ * (#403), and is the only zone today, so a future water creature reuses this
+ * by naming its own.
+ *
+ * It follows the stream's own centreline (`RoomGeometry.streamCourses`, the
+ * line the renderer draws the water along): pick a random point further up or
+ * down the course from the `random.enemies` stream, swim there sample by
+ * sample, pick again. Walking the centreline rather than straight at a point
+ * is what keeps a meandering stream's fish in the water round its bends. A
+ * body knocked out of the water anyway is put back on the nearest point of
+ * the course the same tick (`stepZoneClamp`).
+ *
+ * An enemy with any `swimInZone` state is a water creature from its spawn:
+ * it is placed at the nearest point of the stream, and in a room with no
+ * stream at all it is not spawned — logged once in a dev build, never
+ * counted toward the room's clear (`CLAUDE.md`'s graceful content gap; the
+ * content suite holds authored rooms to always having the water).
+ */
+export interface SwimInZoneBehaviour {
+  readonly behaviour: 'swimInZone';
+  readonly zone: 'waldbach';
+  /** Room units per tick, before the global `enemy.speedScale`. */
+  readonly speed: number;
+}
+
+/**
+ * Under the surface while this state is current (#408, the Bachforelle):
+ * nothing can touch it — no shot, no splash, no contact, no body pushes
+ * against it — and it is drawn as a shadow under the water.
+ *
+ * Not `becomeInvulnerable`, which keeps the body there and makes shots splash
+ * off it loudly: a submerged fish is simply not there to hit, and shots pass
+ * over the water as though nothing is. Leaving a submerged state for one
+ * without it is the fish breaking the surface, and throws a splash.
+ */
+export interface SubmergeBehaviour {
+  readonly behaviour: 'submerge';
 }
 
 /** Backs away from the player. Kiting enemies, and anything that repositions. */
@@ -290,6 +334,24 @@ export interface FireOnBeatBehaviour extends FiringBehaviourBase {
    * *hole* in the bar rather than slowing the bar down.
    */
   readonly beatOffset?: number;
+}
+
+/**
+ * A full ring of shots, timed from the moment its state began (#408).
+ *
+ * `fireOnBeat`'s ring without the beat: `fireOnBeat` fires on the global
+ * clock so a room of Blaskapellisten ring together; this fires when its own
+ * state says so, which is what a creature reacting to something needs. The
+ * Bachforelle breaks the surface and fires four, one down each diagonal
+ * (`shots: 4, angleOffset: π/4`); Das Waldradl (#413) reuses it. Aims at
+ * nothing, so it is not gated on sight and `aimCardinal` has no meaning on it.
+ */
+export interface FireRingBehaviour extends FiringBehaviourBase {
+  readonly behaviour: 'fireRing';
+  /** Shots evenly spaced around a full circle. */
+  readonly shots: number;
+  /** Radians the whole ring is turned by; the first shot leaves at this angle (east is 0). Defaults to 0. */
+  readonly angleOffset?: number;
 }
 
 /**
@@ -570,6 +632,9 @@ export type EnemyBehaviour =
   | ApproachPropBehaviour
   | PauseBehaviour
   | HopCardinalBehaviour
+  | SwimInZoneBehaviour
+  | SubmergeBehaviour
+  | FireRingBehaviour
   | FireAtPlayerBehaviour
   | FireBurstBehaviour
   | FireSpreadBehaviour
@@ -594,8 +659,18 @@ export type EnemyBehaviour =
  * anything the engine decided for it.
  */
 export type EnemyTransition =
-  /** After this many ticks in the state. */
-  | { readonly to: string; readonly after: number }
+  /**
+   * After this many ticks in the state — or, given `{ min, max }`, after a
+   * whole number of ticks between the two (inclusive), rolled from
+   * `random.enemies` each time the state is entered (#408: the Bachforelle
+   * surfaces at random). Every ranged `after` on one state reads the same
+   * roll, placed within its own range, so two of them cannot disagree about
+   * which comes first by luck alone.
+   */
+  | {
+      readonly to: string;
+      readonly after: number | { readonly min: number; readonly max: number };
+    }
   /** The body took a hit. Cleared once read, so it fires once per hit. */
   | { readonly to: string; readonly onHit: true }
   /** The body ran into a wall or a block. What stops a charge. */
@@ -746,6 +821,7 @@ export const MOVEMENT_BEHAVIOURS: readonly BehaviourName[] = [
   'approachProp',
   'pause',
   'hopCardinal',
+  'swimInZone',
 ];
 
 /** Primitives that run once, when the state is entered. */
@@ -757,6 +833,9 @@ export const ENTRY_BEHAVIOURS: readonly BehaviourName[] = [
   'detonateLobbedBomb',
   'emitCloud',
 ];
+
+/** Primitives that mark the whole state rather than doing anything in it (#408). */
+export const STATE_FLAG_BEHAVIOURS: readonly BehaviourName[] = ['submerge'];
 
 /** Primitives that run when the body dies in that state. */
 export const DEATH_BEHAVIOURS: readonly BehaviourName[] = ['splitOnDeath'];
@@ -776,4 +855,5 @@ export const FIRING_BEHAVIOURS: readonly BehaviourName[] = [
   'fireBurst',
   'fireSpread',
   'fireOnBeat',
+  'fireRing',
 ];

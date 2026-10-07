@@ -9,9 +9,11 @@ import { lerp } from '../sim/math.js';
 import { bombBlastArmLength, bombFuseProgress } from '../sim/systems/bombs.js';
 import {
   ENEMY_FLAG_LATCHED,
+  ENEMY_MOTION_STRIDE,
   ENEMY_STRIDE,
   type EnemyTelegraphShapeInfo,
   enemyHopProgress,
+  enemySubmerged,
   enemyTelegraphProgress,
   enemyTelegraphShape,
   isEnemyElite,
@@ -102,6 +104,12 @@ const LABEL_POINT = { x: 0, y: 0 };
 const PICKUP_LIFT = 1.5;
 /** Room units a `hopCardinal` body (#407, the Kaninchen) rises at the top of a hop — the sim moves it along the floor, this makes it a hop. */
 const HOP_BOB = 2.5;
+/** How flat a submerged body's shadow is drawn, as a fraction of its height (#408). */
+const SUBMERGED_FLATTEN = 0.6;
+/** The sprite-name suffix a creature's under-the-water art is authored with (#408). */
+const SHADOW_SUFFIX = '-shadow';
+/** Strength of the shadow's glow — enough to find it in the dark, not enough to read as lit. */
+const SUBMERGED_GLOW_STRENGTH = 0.5;
 /**
  * How far up Alois's billboard a latched Zecke's feet sit (#406), in room
  * units: his hat's crown is the top six rows of his 32-pixel frame, so 12
@@ -140,6 +148,15 @@ export class EntityView {
 
   private readonly sim: GameSim;
   private readonly art: EntityArt;
+  /**
+   * Per enemy definition index, the art a submerged body draws instead of
+   * its own (#408): `<id>-shadow` when the roster has one, so a creature can
+   * look different under the water than out of it — the Bachforelle swims as
+   * its whole silhouette and surfaces as only its head and shoulders. Unset:
+   * the body's own art, darkened, is its shadow. Resolved once, here, so no
+   * frame builds a name.
+   */
+  private readonly shadowArt: readonly (Texture | undefined)[];
   private readonly bodies: Billboard[] = [];
   /** Per body slot, 1 when that body is an enemy telegraphing this frame (#404's see-through pass). */
   private readonly bodyTelegraphing: number[] = [];
@@ -182,6 +199,7 @@ export class EntityView {
   ) {
     this.sim = sim;
     this.art = art;
+    this.shadowArt = sim.enemies.all.map((enemy) => art.enemyArt[`${enemy.id}${SHADOW_SUFFIX}`]);
     this.bombTexture = art.pickupArt[BOMB_PICKUP_ID];
     this.pickupTints = sim.pickups.all.map((definition) => definition.tint);
     this.pickupLabels = sim.pickups.all.map((definition) => definition.label);
@@ -327,10 +345,14 @@ export class EntityView {
         mirror = this.animator.facingOf(index) === AUTHORED_FACING ? 1 : -1;
       }
 
+      // Under the water (#408): the same silhouette, dark and flattened onto
+      // the stream, with a faint glow so a lantern-dark room cannot hide it.
+      const submerged = isEnemyBody && enemySubmerged(sim, index);
+
       const isPropTarget = !isPickup && enemyId === null && !isBomb;
       const pickupKindIndex = sim.pickupKind.data[index] ?? -1;
       const pickupSprite = isPickup ? this.pickupSprites[pickupKindIndex] : undefined;
-      const texture: Texture =
+      let texture: Texture =
         pickupSprite ??
         (isPickup
           ? this.art.fallback
@@ -347,6 +369,18 @@ export class EntityView {
       const billboard = this.bodyAt(used);
       this.bodyTelegraphing[used] = telegraph > 0 ? 1 : 0;
       used += 1;
+      if (submerged) {
+        const shadow = this.shadowArt[sim.enemy.data[index * ENEMY_STRIDE] ?? 0];
+        if (shadow !== undefined) {
+          texture = shadow;
+        }
+        // A swimmer faces the way it swims: its heading is in the motion slots
+        // (`swimInZone`), and creature art is authored facing left.
+        const headingX = sim.enemyMotion.data[index * ENEMY_MOTION_STRIDE] ?? 0;
+        if (animation === undefined && headingX !== 0) {
+          mirror = headingX > 0 ? -1 : 1;
+        }
+      }
       billboard.visible = true;
       billboard.setTexture(texture, mirror);
       const flashing = !isPickup && (flash[index] ?? 0) > 0;
@@ -387,6 +421,11 @@ export class EntityView {
                     ),
                   )
                 : ENTITY_PALETTE.normalTint;
+
+      if (submerged && !flashing) {
+        billboard.tint = ENTITY_PALETTE.submergedShadow;
+        billboard.setGlow(ENTITY_PALETTE.submergedGlow, SUBMERGED_GLOW_STRENGTH);
+      }
 
       // A prop tile draws on the tile grid (a 32px barrel covers one cell), a
       // creature on the actor grid — the same two rules the 2D renderer had.
@@ -441,7 +480,7 @@ export class EntityView {
         placeZ,
         this.lean,
         gridScale * pop * swell * widen,
-        (1 - WIND_UP_SQUASH * crouch) / widen,
+        ((1 - WIND_UP_SQUASH * crouch) / widen) * (submerged ? SUBMERGED_FLATTEN : 1),
       );
 
       const priced = isPickup && (mask & sim.pickupPrice.bit) !== 0;
