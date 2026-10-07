@@ -1,4 +1,4 @@
-import{t as e}from"./index-DtfJEQwo.js";var t=[{id:`rooms`,label:`🚪 Rooms`,src:`editor.html`},{id:`sprites`,label:`🎨 Sprites`,src:`pixel-editor.html`},{id:`audio`,label:`🎵 Audio`,src:`audio-editor.html`}],n=480,r=280,i=320,a=6,o=`
+import{t as e}from"./index-ObAdnx9v.js";var t=[{id:`rooms`,label:`🚪 Rooms`,src:`editor.html`},{id:`sprites`,label:`🎨 Sprites`,src:`pixel-editor.html`},{id:`audio`,label:`🎵 Audio`,src:`audio-editor.html`}],n=480,r=280,i=320,a=6,o=`
 /* Top-left is the one corner nothing else claims: seed-control and
    projectile-tag-chooser sit top-right, tuning-window sits bottom-right, and
    the accessibility panel sits bottom-left — this button ships in every
