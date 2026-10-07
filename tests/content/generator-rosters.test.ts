@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ENEMY_DEFINITIONS } from '../../src/content/enemies/index.js';
 import { FLOOR_CONFIGS, HIGHEST_SANDBOX_FLOOR } from '../../src/content/floors/definition.js';
+import { ROOM_TEMPLATES } from '../../src/content/rooms/index.js';
 import { EnemyRegistry } from '../../src/sim/enemy/registry.js';
 import {
   DEFAULT_ROOM_GEN_TUNING,
@@ -28,6 +29,8 @@ const knownIds = new Set(registry.all.map((enemy) => enemy.id));
 const waterCreatures = new Set(
   registry.all.filter((enemy) => enemy.zone !== null).map((enemy) => enemy.id),
 );
+/** Floor 3's whole room roster for now (#405-#408): no Bierratte, Kuh or Bauer carried over. */
+const FLOOR_3_MOBS = new Set(['zecke', 'kaninchen', 'fliegenpilz', 'bachforelle']);
 const reachableFloors = FLOOR_CONFIGS.filter((config) => config.floor <= HIGHEST_SANDBOX_FLOOR);
 
 describe('room generator rosters', () => {
@@ -88,11 +91,10 @@ describe('Floor 3 generated rooms', () => {
   const enemiesOf = (room: (typeof rooms)[number]): string[] =>
     room.spawnGroups.flatMap((group) => group.choices.map((choice) => choice.enemyId));
 
-  it('fills rooms with enemies, and never a Bierratte', () => {
+  it('fills rooms with enemies, and only Floor 3 mobs', () => {
     const seen = new Set(rooms.flatMap(enemiesOf));
     expect(rooms.filter((room) => enemiesOf(room).length > 0).length).toBeGreaterThan(250);
-    expect(seen).toEqual(new Set(['zecke', 'kaninchen', 'fliegenpilz', 'bachforelle']));
-    expect(seen.has('bierratte')).toBe(false);
+    expect(seen).toEqual(FLOOR_3_MOBS);
   });
 
   it('puts a Bachforelle only in a room with a Waldbach', () => {
@@ -102,4 +104,38 @@ describe('Floor 3 generated rooms', () => {
       }
     }
   });
+});
+
+describe('Floor 3 authored rooms', () => {
+  interface Template {
+    id?: string;
+    metadata?: { floorTags?: string[]; specialRole?: string };
+    spawnGroups?: { choices: { enemyId: string }[] }[];
+    cells?: { spawnGroups?: { choices: { enemyId: string }[] }[] }[];
+  }
+  const rooms = (ROOM_TEMPLATES as Template[]).filter(
+    (room) =>
+      room.metadata?.floorTags?.includes('wald') === true &&
+      room.metadata.specialRole !== 'boss' &&
+      room.metadata.specialRole !== 'miniboss',
+  );
+
+  it('finds the wald rooms', () => {
+    expect(rooms.length).toBeGreaterThan(5);
+  });
+
+  it.each(rooms.map((room) => [room.id ?? '?', room] as const))(
+    '%s spawns only Floor 3 mobs',
+    (_id, room) => {
+      const groups = [
+        ...(room.spawnGroups ?? []),
+        ...(room.cells ?? []).flatMap((cell) => cell.spawnGroups ?? []),
+      ];
+      for (const choice of groups.flatMap((group) => group.choices)) {
+        // The shared shop rooms' shopkeeper is an NPC, not a mob.
+        const allowed = FLOOR_3_MOBS.has(choice.enemyId) || choice.enemyId === 'shopkeeper';
+        expect(allowed, choice.enemyId).toBe(true);
+      }
+    },
+  );
 });
