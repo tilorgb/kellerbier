@@ -1,3 +1,4 @@
+import { MAX_WALL_LANTERNS } from './wall-lanterns.js';
 import {
   Mesh,
   NormalBlending,
@@ -52,7 +53,7 @@ export const DUSK: Readonly<Record<DarknessLevel, number | null>> = {
 };
 
 /** How many lantern pools the pass can leave clear — `MAX_WALL_LANTERNS`. */
-export const MAX_DUSK_POOLS = 3;
+export const MAX_DUSK_POOLS = MAX_WALL_LANTERNS;
 
 /**
  * How much of a pool's radius is fully clear before the dusk starts to come

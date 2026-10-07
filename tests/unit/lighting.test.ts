@@ -7,6 +7,7 @@ import {
   crossingOf,
   lanternFlicker,
   Lighting,
+  MAX_ROOM_BULBS,
   SHOT_LIGHT_COUNT,
   WALL_LANTERN_FLICKER,
 } from '../../src/render/world/lighting.js';
@@ -201,6 +202,42 @@ describe('Lighting, under the forest canopy (#424)', () => {
     lighting.onRoomChanged('cellar', 320, 180, []);
     expect(litLanterns(scene)).toHaveLength(0);
     expect(litBulbCount(scene)).toBe(2);
+  });
+
+  it('in a big room, lights the lanterns nearest the player, and moves the lights as he walks', () => {
+    const { scene, lighting } = rig();
+    const before = pointLights(scene).length;
+    // A room twice as wide: twelve lanterns along the north and south walls.
+    const many = Array.from({ length: 12 }, (_, i) => ({
+      x: 40 + (i % 6) * 100,
+      z: i < 6 ? 21 : 339,
+      wall: i < 6 ? ('north' as const) : ('south' as const),
+    }));
+    lighting.onRoomChanged('forest', 640, 360, [], { seed: 5, canopy: 'closed', lanterns: many });
+    expect(pointLights(scene)).toHaveLength(before);
+    const litXs = (): number[] => litLanterns(scene).map((light) => light.position.x);
+    // Standing at the west end: every lit lantern is in the west half.
+    lighting.syncLantern(40, 180, true);
+    expect(litXs()).toHaveLength(MAX_ROOM_BULBS);
+    expect(Math.max(...litXs())).toBeLessThan(320);
+    // Walk to the east end: the lights follow.
+    lighting.syncLantern(600, 180, true);
+    expect(litXs()).toHaveLength(MAX_ROOM_BULBS);
+    expect(Math.min(...litXs())).toBeGreaterThan(320);
+    // And every lantern still has its sprite, lit or not.
+    let sprites = 0;
+    scene.traverse((object) => {
+      if (
+        object instanceof Mesh &&
+        object.visible &&
+        object.position.y > 0 &&
+        object.position.y < 14
+      ) {
+        sprites += 1;
+      }
+    });
+    // Twelve lanterns, the six on the south wall hidden (their face is away from the camera).
+    expect(sprites).toBeGreaterThanOrEqual(6);
   });
 
   it('flickers each lantern gently and out of step, and not at all under reduced motion', () => {
