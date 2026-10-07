@@ -90,6 +90,32 @@ export interface ChargeAtPlayerBehaviour {
    * leap (#407). Omitted: no limit.
    */
   readonly maxDistance?: number;
+  /**
+   * What the charge does to the first thing it runs into (#409, the Boar).
+   * Each tick, before moving, it looks one step ahead along its locked
+   * direction; the first thing there takes the hit and the charge ends
+   * (`onBlocked` fires next tick), never ploughing through a second:
+   *
+   * - **a body** — the player *or another enemy* — takes `contactDamage ×
+   *   bodyDamageMultiplier` (elite-scaled) and is thrown `knockback` room
+   *   units per tick along the charge. The one place enemies hurt each
+   *   other: baiting a charge into the crowd is meant to be a tactic.
+   * - **a destructible block**, with `breaksBlocks`: smashed, through the
+   *   same path a bomb takes, so it stays gone on a revisit.
+   * - **the room's edge at a door**, with `breaksDoors`: a secret wall opens
+   *   exactly as a bomb opens it; a closed door is smashed open — passable
+   *   for the rest of the floor even while the room is uncleared. Never in a
+   *   boss or mini-boss room.
+   * - **anything else** (a plain wall): just stops it.
+   *
+   * Omitted: the charge runs into things the way it always has.
+   */
+  readonly impact?: {
+    readonly bodyDamageMultiplier: number;
+    readonly knockback: number;
+    readonly breaksBlocks: boolean;
+    readonly breaksDoors: boolean;
+  };
 }
 
 /**
@@ -714,7 +740,15 @@ export type EnemyTransition =
         readonly distance: number;
         readonly tolerance: number;
       };
-    };
+    }
+  /**
+   * The player's centre is within `tolerance` room units of one of the
+   * body's four axis lines — straight north, east, south or west of it — and
+   * in sight along it (#409, the Boar's trigger: you crossed its line). Sight
+   * is the same test `whenPlayerWithin` uses, run only once the cheap axis
+   * test has passed.
+   */
+  | { readonly to: string; readonly whenPlayerOnAxis: { readonly tolerance: number } };
 
 export interface EnemyState {
   readonly name: string;

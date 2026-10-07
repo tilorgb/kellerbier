@@ -32,6 +32,7 @@ describe("Der Wald roster's committed art is what the authoring source produces"
     expect(Object.keys(ROSTER).sort()).toEqual([
       'bachforelle',
       'bachforelle-shadow',
+      'boar',
       'fliegenpilz',
       'kaninchen',
       'zecke',
