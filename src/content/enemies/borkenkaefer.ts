@@ -6,9 +6,9 @@ import type { EnemyDefinition } from '../../sim/enemy/definition.js';
  * damage; the joke is local, and the damage is the point.
  *
  * One swarm is one body with one health bar. It does not care about the
- * player: it goes for wood (`approachWood`) — the nearest log, stump or
- * barricade first, and once those are gone the floor planks themselves, each
- * one eaten through into a pit nobody can walk across. The longer it lives,
+ * player: it goes for wood (`approachWood`) — a tile of the nearest log, stump
+ * or barricade, then a floor plank, eaten through into a pit nobody can walk
+ * across, then cover again, taking turns. The longer it lives,
  * the worse the room gets, so the threat is the clock rather than the bite.
  * Shots fly over the pits; the softlock guard (`sim/systems/pits.ts`) makes
  * sure no pit ever cuts the room off.

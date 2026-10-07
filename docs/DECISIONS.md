@@ -6608,7 +6608,14 @@ so wiggling and circling both work.
 **A charge breaks one cell, not the whole cover row.** Generated cover is merged into
 multi-cell rectangles. The Boar now breaks only the tile it hit (`RoomGeometry.breakCellAt`),
 and the destruction record carries the cell size, so a revisit rebuilds the same remnants.
-Bombs and the Borkenkäfer still clear whole blocks.
+Bombs still clear whole blocks. The Borkenkäfer eats one tile at a time too
+(`smashBlockCellAt`): eating a whole merged run made a row of trunks vanish at one bite.
+
+**The Borkenkäfer takes turns: a tile of cover, then a plank.** It used to eat planks only once
+every wooden block in the room was gone. A lone swarm took 16-30 s to get there in a generated
+Wald room, and it never lived that long in play, so nobody saw a hole. Now it alternates, and the
+first pit opens about 4-5 s in. A plank turn with no plank to be had (stone floor, pit cap, all
+refused) falls back to cover; a cover turn with the cover walled off falls back to a plank.
 
 **Constrains:** a new side-on enemy declares `facing: 'mirror'` until it has direction strips.
 A new push effect is an impulse on a cooldown and is mass-scaled. A new familiar copies the

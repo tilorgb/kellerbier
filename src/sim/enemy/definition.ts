@@ -273,18 +273,20 @@ export interface SwimInZoneBehaviour {
  * ignores the player entirely: contact damage is what makes it dangerous, the
  * room getting worse is what makes it urgent.
  *
- * Each time it needs something to eat it picks the nearest wooden thing: a
- * wooden destructible block (a log, a stump, a barricade — `blockMaterial`)
- * while any remain, otherwise — on a wooden floor only (`FloorConfig
- * .woodenFloor`) and under the room's pit cap — the nearest floor plank that
- * passes the pit softlock guard (`sim/systems/pits.ts`). With nothing
- * eligible it wanders.
+ * It takes turns between two kinds of meal. One is the nearest tile of a
+ * wooden destructible block (a log, a stump, a barricade — `blockMaterial`):
+ * one tile, never the whole merged run it is part of. The other is the
+ * nearest floor plank that passes the pit softlock guard
+ * (`sim/systems/pits.ts`) — on a wooden floor only (`FloorConfig
+ * .woodenFloor`) and under the room's pit cap. Cover first, then a plank,
+ * then cover again; when the kind whose turn it is has nothing to offer, it
+ * eats the other. With nothing eligible at all it wanders.
  *
  * Arrived, it eats for `eatTicks` — `obstacle` against a block, `plank`
  * sitting on a floor tile — and the renderer darkens the target and throws
  * chewing splinters for the length of it (`enemyEatProgress`), so the plank
- * about to go is the one the swarm is sitting on, visibly going. A block
- * eaten is broken the same way a bomb breaks one and stays gone on a revisit;
+ * about to go is the one the swarm is sitting on, visibly going. A tile of
+ * cover eaten is broken the way the Boar breaks one and stays gone on a revisit;
  * a plank eaten is a pit, which stays too. The guard is asked again on the
  * last tick (a pickup or a body may have moved in meanwhile); a plank it
  * refuses there is left whole and the swarm looks for another.

@@ -2,6 +2,7 @@ import type { ApproachWoodBehaviour } from '../enemy/definition.js';
 import type { GameSim } from '../game/sim.js';
 import { chewSplinters } from '../particle/effects.js';
 import { vectorLength } from '../math.js';
+import { ROOM_TILE_UNITS } from '../../content/rooms/definition.js';
 import { BLOCK_MATERIAL_WOOD, BLOCK_STRIDE, PIT_SIZE } from '../room/geometry.js';
 import { nextWaypoint, straightClear, type Waypoint } from '../room/pathfind.js';
 import { landing, pitIsSafe, plankEligible, relocateOffPit } from './pits.js';
@@ -28,12 +29,23 @@ export const MOTION_WOOD_EATEN = 19;
 const MOTION_WOOD_WAY_X = 20;
 const MOTION_WOOD_WAY_Y = 21;
 const MOTION_WOOD_THINK = 22;
+/**
+ * `1` when the body's next meal is a plank: it alternates, one tile of wooden
+ * cover, then one plank, then cover again — so a swarm makes holes in the
+ * floor from its second meal on rather than only once every log in the room
+ * is gone, which in play it never lived to see.
+ */
+const MOTION_WOOD_PLANK_NEXT = 23;
 /** Slots `approachWood` adds to `ENEMY_MOTION_STRIDE`. */
-export const WOOD_MOTION_SLOTS = 7;
+export const WOOD_MOTION_SLOTS = 8;
 
 /** `MOTION_WOOD_TARGET`: what the body is after. */
 export const WOOD_TARGET_NONE = 0;
-/** A wooden block; `MOTION_WOOD_X/Y` is a point inside it (its centre). */
+/**
+ * One tile of a wooden block; `MOTION_WOOD_X/Y` is that tile's centre.
+ * Generated cover is merged into multi-tile rectangles (`sliceObstacles`), but
+ * the swarm eats a tile at a time, like the Boar smashes one.
+ */
 export const WOOD_TARGET_BLOCK = 1;
 /** A floor plank; `MOTION_WOOD_X/Y` is the tile's centre. */
 export const WOOD_TARGET_PLANK = 2;
@@ -63,6 +75,8 @@ const REFUSE_TICKS = 180;
 const waypoint: Waypoint = { x: 0, y: 0 };
 /** The nearest point outside a block a body can stand at to eat it — module scratch. */
 const standAt = new Float64Array(2);
+/** One tile of a wooden block, `minX, minY, maxX, maxY` — module scratch for `woodTileAt`. */
+const tileBox = new Float64Array(4);
 
 /** One tick of `approachWood` for the body at `index`. Writes its velocity. */
 export function stepApproachWood(
@@ -150,8 +164,10 @@ export function stepApproachWood(
   }
   if (target === WOOD_TARGET_BLOCK) {
     if (eaten >= behaviour.eatTicks.obstacle) {
-      sim.breakBlockAt(wantX, wantY, true);
+      // The one tile, not the merged rectangle it belongs to.
+      sim.smashBlockCellAt(wantX, wantY);
       forget(motion, motionBase);
+      motion[motionBase + MOTION_WOOD_PLANK_NEXT] = 1;
     }
     return;
   }
@@ -178,6 +194,7 @@ export function stepApproachWood(
   sim.transform.data[index * 4] = landing[0] ?? selfX;
   sim.transform.data[index * 4 + 1] = landing[1] ?? selfY;
   sim.openPit(column, row);
+  motion[motionBase + MOTION_WOOD_PLANK_NEXT] = 0;
 }
 
 /**
@@ -225,11 +242,13 @@ function tileIndex(sim: GameSim, column: number, row: number): number {
 }
 
 /**
- * Picks what to eat: the nearest wooden block, else the nearest plank the
- * guard allows, else wandering. Returns the new `MOTION_WOOD_TARGET`, having
- * written the target's point — or `WOOD_TARGET_NONE` when the nearest plank
- * was just refused, which the caller waits out (`RETRY_TICKS`) before the
- * next one is asked about.
+ * Picks what to eat. Cover and planks take turns (`MOTION_WOOD_PLANK_NEXT`):
+ * on a cover turn the nearest reachable tile of wooden cover, else a plank;
+ * on a plank turn the nearest plank the guard allows, else cover. With
+ * neither, wandering. Returns the new `MOTION_WOOD_TARGET`, having written the
+ * target's point — or `WOOD_TARGET_NONE` when the nearest plank was just
+ * refused, which the caller waits out (`RETRY_TICKS`) before the next one is
+ * asked about.
  */
 function chooseTarget(
   sim: GameSim,
@@ -240,12 +259,41 @@ function chooseTarget(
   radius: number,
 ): number {
   const motion = sim.enemyMotion.data;
-  const room = sim.room;
   motion[motionBase + MOTION_WOOD_EATEN] = 0;
   motion[motionBase + MOTION_WOOD_THINK] = 0;
+  if ((motion[motionBase + MOTION_WOOD_PLANK_NEXT] ?? 0) === 1) {
+    const plank = choosePlank(sim, index, motionBase, selfX, selfY, radius);
+    if (plank !== WOOD_TARGET_WANDER) {
+      return plank;
+    }
+    // No plank to be had (a stone floor, the cap, every one refused): cover.
+    return chooseBlockTile(sim, motionBase, selfX, selfY, radius)
+      ? WOOD_TARGET_BLOCK
+      : WOOD_TARGET_WANDER;
+  }
+  if (chooseBlockTile(sim, motionBase, selfX, selfY, radius)) {
+    return WOOD_TARGET_BLOCK;
+  }
+  return choosePlank(sim, index, motionBase, selfX, selfY, radius);
+}
 
+/**
+ * Targets the tile of wooden cover nearest the body, if the body can walk to
+ * it. A tile behind a ring of rocks is out of reach: false, and the caller
+ * eats planks meanwhile.
+ */
+function chooseBlockTile(
+  sim: GameSim,
+  motionBase: number,
+  selfX: number,
+  selfY: number,
+  radius: number,
+): boolean {
+  const room = sim.room;
   let bestBlock = -1;
   let bestSq = Infinity;
+  let bestX = 0;
+  let bestY = 0;
   for (let block = 0; block < room.blockCount; block++) {
     if (
       (room.blockOverflyable[block] ?? 0) !== 1 ||
@@ -253,39 +301,64 @@ function chooseTarget(
     ) {
       continue;
     }
+    // Nearest point of the block, not its centre: the swarm eats the tile it
+    // reaches first, so a long merged run is near wherever any of it is.
     const base = block * BLOCK_STRIDE;
-    const dx = ((room.blocks[base] ?? 0) + (room.blocks[base + 2] ?? 0)) / 2 - selfX;
-    const dy = ((room.blocks[base + 1] ?? 0) + (room.blocks[base + 3] ?? 0)) / 2 - selfY;
+    const nearestX = Math.min(Math.max(selfX, room.blocks[base] ?? 0), room.blocks[base + 2] ?? 0);
+    const nearestY = Math.min(
+      Math.max(selfY, room.blocks[base + 1] ?? 0),
+      room.blocks[base + 3] ?? 0,
+    );
+    const dx = nearestX - selfX;
+    const dy = nearestY - selfY;
     const distSq = dx * dx + dy * dy;
     if (distSq < bestSq) {
       bestSq = distSq;
       bestBlock = block;
+      bestX = nearestX;
+      bestY = nearestY;
     }
   }
-  if (bestBlock >= 0) {
-    const base = bestBlock * BLOCK_STRIDE;
-    const centreX = ((room.blocks[base] ?? 0) + (room.blocks[base + 2] ?? 0)) / 2;
-    const centreY = ((room.blocks[base + 1] ?? 0) + (room.blocks[base + 3] ?? 0)) / 2;
-    blockStandPoint(sim, centreX, centreY, selfX, selfY, radius);
-    // Walled off (a log behind a ring of rocks): eat planks meanwhile.
-    if (
-      nextWaypoint(
-        room,
-        selfX,
-        selfY,
-        standAt[0] ?? centreX,
-        standAt[1] ?? centreY,
-        radius,
-        waypoint,
-      )
-    ) {
-      motion[motionBase + MOTION_WOOD_TARGET] = WOOD_TARGET_BLOCK;
-      motion[motionBase + MOTION_WOOD_X] = centreX;
-      motion[motionBase + MOTION_WOOD_Y] = centreY;
-      return WOOD_TARGET_BLOCK;
-    }
+  if (bestBlock < 0) {
+    return false;
   }
+  blockTile(sim, bestBlock, bestX, bestY);
+  const centreX = ((tileBox[0] ?? 0) + (tileBox[2] ?? 0)) / 2;
+  const centreY = ((tileBox[1] ?? 0) + (tileBox[3] ?? 0)) / 2;
+  blockStandPoint(sim, centreX, centreY, selfX, selfY, radius);
+  if (
+    !nextWaypoint(
+      room,
+      selfX,
+      selfY,
+      standAt[0] ?? centreX,
+      standAt[1] ?? centreY,
+      radius,
+      waypoint,
+    )
+  ) {
+    return false;
+  }
+  const motion = sim.enemyMotion.data;
+  motion[motionBase + MOTION_WOOD_TARGET] = WOOD_TARGET_BLOCK;
+  motion[motionBase + MOTION_WOOD_X] = centreX;
+  motion[motionBase + MOTION_WOOD_Y] = centreY;
+  return true;
+}
 
+/**
+ * Targets the nearest plank the guard allows. `WOOD_TARGET_WANDER` when there
+ * is none to ask about, `WOOD_TARGET_NONE` when the nearest was just refused.
+ */
+function choosePlank(
+  sim: GameSim,
+  index: number,
+  motionBase: number,
+  selfX: number,
+  selfY: number,
+  radius: number,
+): number {
+  const room = sim.room;
   if (!sim.floorIsWood || room.pitCount >= sim.tuning.pits.maxPerRoom) {
     return WOOD_TARGET_WANDER;
   }
@@ -293,7 +366,7 @@ function chooseTarget(
   const rows = Math.floor((room.maxY - room.minY) / PIT_SIZE);
   let bestColumn = -1;
   let bestRow = -1;
-  bestSq = Infinity;
+  let bestSq = Infinity;
   for (let row = 0; row < rows; row++) {
     for (let column = 0; column < columns; column++) {
       const tile = tileIndex(sim, column, row);
@@ -324,6 +397,7 @@ function chooseTarget(
     refuse(sim, bestColumn, bestRow);
     return WOOD_TARGET_NONE;
   }
+  const motion = sim.enemyMotion.data;
   motion[motionBase + MOTION_WOOD_TARGET] = WOOD_TARGET_PLANK;
   motion[motionBase + MOTION_WOOD_X] = plankX;
   motion[motionBase + MOTION_WOOD_Y] = plankY;
@@ -399,22 +473,59 @@ function woodBlockAt(sim: GameSim, x: number, y: number): number {
   return -1;
 }
 
-/** Distance from `(selfX, selfY)` to the face of the wooden block containing `(x, y)`. */
-function blockGap(sim: GameSim, x: number, y: number, selfX: number, selfY: number): number {
-  const block = woodBlockAt(sim, x, y);
-  if (block < 0) {
-    return Infinity;
-  }
+/**
+ * Writes to `tileBox` the tile of `block` containing `(x, y)` — on the block's
+ * own tile grid, counted from its min corner and clipped to it, exactly the
+ * cell `RoomGeometry.breakCellAt` cuts out (and the renderer draws one log
+ * per).
+ */
+function blockTile(sim: GameSim, block: number, x: number, y: number): void {
   const base = block * BLOCK_STRIDE;
   const blocks = sim.room.blocks;
-  const nearestX = Math.min(Math.max(selfX, blocks[base] ?? 0), blocks[base + 2] ?? 0);
-  const nearestY = Math.min(Math.max(selfY, blocks[base + 1] ?? 0), blocks[base + 3] ?? 0);
+  const minX = blocks[base] ?? 0;
+  const minY = blocks[base + 1] ?? 0;
+  const maxX = blocks[base + 2] ?? 0;
+  const maxY = blocks[base + 3] ?? 0;
+  // A point on the max edge belongs to the last tile, not a zero-wide one past it.
+  const pointX = Math.min(Math.max(x, minX), maxX - 0.001);
+  const pointY = Math.min(Math.max(y, minY), maxY - 0.001);
+  const tileMinX = Math.max(
+    minX,
+    minX + Math.floor((pointX - minX) / ROOM_TILE_UNITS) * ROOM_TILE_UNITS,
+  );
+  const tileMinY = Math.max(
+    minY,
+    minY + Math.floor((pointY - minY) / ROOM_TILE_UNITS) * ROOM_TILE_UNITS,
+  );
+  tileBox[0] = tileMinX;
+  tileBox[1] = tileMinY;
+  tileBox[2] = Math.min(maxX, tileMinX + ROOM_TILE_UNITS);
+  tileBox[3] = Math.min(maxY, tileMinY + ROOM_TILE_UNITS);
+}
+
+/** Writes the wooden tile containing `(x, y)` to `tileBox`; false when there is none. */
+function woodTileAt(sim: GameSim, x: number, y: number): boolean {
+  const block = woodBlockAt(sim, x, y);
+  if (block < 0) {
+    return false;
+  }
+  blockTile(sim, block, x, y);
+  return true;
+}
+
+/** Distance from `(selfX, selfY)` to the face of the wooden tile containing `(x, y)`. */
+function blockGap(sim: GameSim, x: number, y: number, selfX: number, selfY: number): number {
+  if (!woodTileAt(sim, x, y)) {
+    return Infinity;
+  }
+  const nearestX = Math.min(Math.max(selfX, tileBox[0] ?? 0), tileBox[2] ?? 0);
+  const nearestY = Math.min(Math.max(selfY, tileBox[1] ?? 0), tileBox[3] ?? 0);
   return vectorLength(selfX - nearestX, selfY - nearestY);
 }
 
 /**
- * Where a body of `radius` stands to eat the wooden block containing
- * `(x, y)`: just off the face nearest it. Written to `standAt`.
+ * Where a body of `radius` stands to eat the wooden tile containing
+ * `(x, y)`: just off the face of it nearest the body. Written to `standAt`.
  */
 function blockStandPoint(
   sim: GameSim,
@@ -424,18 +535,15 @@ function blockStandPoint(
   selfY: number,
   radius: number,
 ): void {
-  const block = woodBlockAt(sim, x, y);
   standAt[0] = x;
   standAt[1] = y;
-  if (block < 0) {
+  if (!woodTileAt(sim, x, y)) {
     return;
   }
-  const base = block * BLOCK_STRIDE;
-  const blocks = sim.room.blocks;
-  const minX = blocks[base] ?? 0;
-  const minY = blocks[base + 1] ?? 0;
-  const maxX = blocks[base + 2] ?? 0;
-  const maxY = blocks[base + 3] ?? 0;
+  const minX = tileBox[0] ?? 0;
+  const minY = tileBox[1] ?? 0;
+  const maxX = tileBox[2] ?? 0;
+  const maxY = tileBox[3] ?? 0;
   const nearestX = Math.min(Math.max(selfX, minX), maxX);
   const nearestY = Math.min(Math.max(selfY, minY), maxY);
   let outX = selfX - nearestX;
