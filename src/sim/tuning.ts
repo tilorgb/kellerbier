@@ -641,6 +641,18 @@ export interface LatchTuning {
 }
 
 /**
+ * Pits in the floor (#410, the Borkenkäfer's eaten planks — `sim/systems/pits.ts`).
+ * Room-wide rules rather than per-enemy numbers: two swarms in one room share
+ * one cap, and a door is a door whoever is chewing near it.
+ */
+export interface PitTuning {
+  /** Pits a room may have before every swarm in it stops eating planks (it still eats wooden cover). */
+  maxPerRoom: number;
+  /** Room units around a door's centre no pit may reach into — two tiles to start. */
+  doorClearance: number;
+}
+
+/**
  * What a run that starts on a later floor (`?floor=N`, a sandbox run) arrives
  * with, per floor skipped — a stand-in for what a normal run would have found
  * on the way, so floor 3 is not played by a zero-item player.
@@ -1125,6 +1137,7 @@ export interface SimTuning {
   readonly projectileTags: ProjectileTagTuning;
   readonly poisonCloud: PoisonCloudTuning;
   readonly latch: LatchTuning;
+  readonly pits: PitTuning;
   readonly skipAhead: SkipAheadTuning;
   readonly itemPool: ItemPoolTuning;
   readonly character: CharacterTuning;
@@ -1477,6 +1490,11 @@ export const DEFAULT_LATCH_TUNING: Readonly<LatchTuning> = {
   hintTicks: 180,
 };
 
+export const DEFAULT_PIT_TUNING: Readonly<PitTuning> = {
+  maxPerRoom: 12,
+  doorClearance: 32,
+};
+
 export const DEFAULT_CHARACTER_TUNING: Readonly<CharacterTuning> = {
   // A Biermarke every one and a half seconds. Ludwig starts with a purse
   // (`content/characters/koenig-ludwig.ts`) that buys him about a minute of
@@ -1666,6 +1684,7 @@ export function createTuning(): SimTuning {
     projectileTags: { ...DEFAULT_PROJECTILE_TAG_TUNING },
     poisonCloud: { ...DEFAULT_POISON_CLOUD_TUNING },
     latch: { ...DEFAULT_LATCH_TUNING },
+    pits: { ...DEFAULT_PIT_TUNING },
     skipAhead: { ...DEFAULT_SKIP_AHEAD_TUNING },
     itemPool: { ...DEFAULT_ITEM_POOL_TUNING },
     curse: { ...DEFAULT_CURSE_TUNING },

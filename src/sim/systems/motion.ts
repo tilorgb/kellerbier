@@ -32,7 +32,8 @@ export const BLOCKED_Y = 2;
  * every `RoomGeometry` block flagged `overflyable` is skipped, the room's own
  * walls and its unclaimed grid cells are not. A parameter rather than
  * something read off the body, because this module knows about rectangles and
- * radii and deliberately nothing about who is moving. Every other resolver
+ * radii and deliberately nothing about who is moving. The same flag carries
+ * a flyer over a pit (#410): walking into a hole is a walker's problem. Every other resolver
  * below takes it for the same reason and defaults it off, so nothing that
  * walks changed.
  */
@@ -104,6 +105,22 @@ export function resolveAxisX(
     }
     resolved = resolveCircleAabbX(resolved, centreY, radius, minX, minY, maxX, maxY, movingRight);
   }
+  // Pits (#410): the same rectangles to anything that walks, nothing at all
+  // to anything that flies.
+  if (!overfly) {
+    const pits = room.pits;
+    for (let pit = 0; pit < room.pitCount; pit++) {
+      const base = pit * BLOCK_STRIDE;
+      const minX = pits[base] ?? 0;
+      const minY = pits[base + 1] ?? 0;
+      const maxX = pits[base + 2] ?? 0;
+      const maxY = pits[base + 3] ?? 0;
+      if (!circleOverlapsAabb(resolved, centreY, radius, minX, minY, maxX, maxY)) {
+        continue;
+      }
+      resolved = resolveCircleAabbX(resolved, centreY, radius, minX, minY, maxX, maxY, movingRight);
+    }
+  }
   return resolved;
 }
 
@@ -142,6 +159,22 @@ export function resolveAxisY(
       continue;
     }
     resolved = resolveCircleAabbY(centreX, resolved, radius, minX, minY, maxX, maxY, movingDown);
+  }
+  // Pits (#410): the same rectangles to anything that walks, nothing at all
+  // to anything that flies.
+  if (!overfly) {
+    const pits = room.pits;
+    for (let pit = 0; pit < room.pitCount; pit++) {
+      const base = pit * BLOCK_STRIDE;
+      const minX = pits[base] ?? 0;
+      const minY = pits[base + 1] ?? 0;
+      const maxX = pits[base + 2] ?? 0;
+      const maxY = pits[base + 3] ?? 0;
+      if (!circleOverlapsAabb(centreX, resolved, radius, minX, minY, maxX, maxY)) {
+        continue;
+      }
+      resolved = resolveCircleAabbY(centreX, resolved, radius, minX, minY, maxX, maxY, movingDown);
+    }
   }
   return resolved;
 }
@@ -187,6 +220,25 @@ export function findBlockingEdgeY(
     edge[EDGE_MAX] = maxY;
     return true;
   }
+  if (overfly) {
+    return false;
+  }
+  // A pit's corner is a corner like any other to a walker (#410).
+  const pits = room.pits;
+  for (let pit = 0; pit < room.pitCount; pit++) {
+    const base = pit * BLOCK_STRIDE;
+    if (probeX < (pits[base] ?? 0) || probeX > (pits[base + 2] ?? 0)) {
+      continue;
+    }
+    const minY = pits[base + 1] ?? 0;
+    const maxY = pits[base + 3] ?? 0;
+    if (centreY + radius <= minY || centreY - radius >= maxY) {
+      continue;
+    }
+    edge[EDGE_MIN] = minY;
+    edge[EDGE_MAX] = maxY;
+    return true;
+  }
   return false;
 }
 
@@ -211,6 +263,24 @@ export function findBlockingEdgeX(
     }
     const minX = blocks[base] ?? 0;
     const maxX = blocks[base + 2] ?? 0;
+    if (centreX + radius <= minX || centreX - radius >= maxX) {
+      continue;
+    }
+    edge[EDGE_MIN] = minX;
+    edge[EDGE_MAX] = maxX;
+    return true;
+  }
+  if (overfly) {
+    return false;
+  }
+  const pits = room.pits;
+  for (let pit = 0; pit < room.pitCount; pit++) {
+    const base = pit * BLOCK_STRIDE;
+    if (probeY < (pits[base + 1] ?? 0) || probeY > (pits[base + 3] ?? 0)) {
+      continue;
+    }
+    const minX = pits[base] ?? 0;
+    const maxX = pits[base + 2] ?? 0;
     if (centreX + radius <= minX || centreX - radius >= maxX) {
       continue;
     }

@@ -33,6 +33,7 @@ describe("Der Wald roster's committed art is what the authoring source produces"
       'bachforelle',
       'bachforelle-shadow',
       'boar',
+      'borkenkaefer',
       'fliegenpilz',
       'kaninchen',
       'zecke',

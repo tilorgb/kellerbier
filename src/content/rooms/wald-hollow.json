@@ -74,6 +74,11 @@
               "enemyId": "boar",
               "minFloor": 3,
               "maxFloor": 3
+            },
+            {
+              "enemyId": "borkenkaefer",
+              "minFloor": 3,
+              "maxFloor": 3
             }
           ]
         }
@@ -164,6 +169,11 @@
             },
             {
               "enemyId": "boar",
+              "minFloor": 3,
+              "maxFloor": 3
+            },
+            {
+              "enemyId": "borkenkaefer",
               "minFloor": 3,
               "maxFloor": 3
             }

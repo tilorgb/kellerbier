@@ -465,6 +465,14 @@ export class EnemyRegistry {
             throw new Error(`${where}: "swimInZone" needs a speed above zero`);
           }
         }
+        if (behaviour.behaviour === 'approachWood') {
+          if (!(behaviour.speed > 0)) {
+            throw new Error(`${where}: "approachWood" needs a speed above zero`);
+          }
+          if (!(behaviour.eatTicks.obstacle >= 1) || !(behaviour.eatTicks.plank >= 1)) {
+            throw new Error(`${where}: "approachWood" needs eatTicks of at least 1 for both`);
+          }
+        }
         if (behaviour.behaviour === 'hopCardinal') {
           if (!(behaviour.hopDistance > 0)) {
             throw new Error(`${where}: "hopCardinal" needs a hopDistance above zero`);

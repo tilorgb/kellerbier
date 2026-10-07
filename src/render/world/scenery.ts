@@ -17,6 +17,7 @@ import { ROOM_TILE_UNITS } from '../../content/rooms/definition.js';
 import {
   BLOCK_STRIDE,
   DOOR_SPAN,
+  PIT_SIZE,
   type RoomGeometry,
   type RoomRect,
   roomFrameSize,
@@ -35,6 +36,7 @@ import type { Lighting } from './lighting.js';
 import type { MaterialCache } from './material-cache.js';
 import { pixelRuns, pixelShapeGeometry, plotPixelLine } from './pixel-shape.js';
 import { buildStreams } from './stream.js';
+import { PIT_TEXELS, pitPixels } from './pit-art.js';
 
 /**
  * The room as a place: floor, walls with height, doorways, obstacles, props,
@@ -573,6 +575,20 @@ function puddleBlobGeometry(
   geometry.setAttribute('normal', new BufferAttribute(normals, 3));
   geometry.setIndex(index);
   return geometry;
+}
+
+/** Pit textures (#410), one per splinter seed — four are plenty for a room's twelve. */
+const PIT_VARIANTS = 4;
+const pitTextureCache: (Texture | undefined)[] = [];
+
+function pitTexture(seed: number): Texture {
+  const variant = ((seed % PIT_VARIANTS) + PIT_VARIANTS) % PIT_VARIANTS;
+  let texture = pitTextureCache[variant];
+  if (texture === undefined) {
+    texture = textureFromPixels(PIT_TEXELS, PIT_TEXELS, pitPixels(variant + 1));
+    pitTextureCache[variant] = texture;
+  }
+  return texture;
 }
 
 let plankTextureCache: Texture | null = null;
@@ -1468,6 +1484,19 @@ export class Scenery {
     // Floor 3's Waldbach (#403): flowing water edge to edge, banked wherever
     // it meets dry floor — see `stream.ts`.
     buildStreams(room, this.group);
+    // Pits a Borkenkäfer ate (#410): a hole in the floor, splintered at the
+    // rim. Unlit, so the hole stays black under any light and the rim reads
+    // in the darkest wald room.
+    for (let i = 0; i < room.pitCount; i++) {
+      const minX = room.pits[i * BLOCK_STRIDE] ?? 0;
+      const minY = room.pits[i * BLOCK_STRIDE + 1] ?? 0;
+      const flat = new FloorSprite(false);
+      flat.setTexture(pitTexture(Math.round(minX * 7 + minY * 13)));
+      flat.place(minX + PIT_SIZE / 2, minY + PIT_SIZE / 2, PIT_SIZE, PIT_SIZE);
+      flat.visible = true;
+      this.group.add(flat.mesh);
+      this.flats.push(flat);
+    }
     // A hop trellis blocks a shot's line but not a body: dense enough to hide
     // behind, so it stands, and green enough to read as hops. Built as a row
     // of posts with a top rail and a bine strung between them — not the solid

@@ -199,6 +199,27 @@ export function boulderDebris(sim: GameSim, x: number, y: number): void {
 }
 
 /**
+ * A Borkenkäfer chewing (#410) — a couple of splinters off the wood it is
+ * eating, thrown every few ticks for as long as it eats, so the plank or log
+ * about to go is the one visibly being chewed.
+ */
+export function chewSplinters(sim: GameSim, x: number, y: number): void {
+  spray(sim, x, y, 0, -1, CHEW_SPLINTER_COUNT, ParticleKind.Shard, Math.PI * 0.6, 0.5, 0.7, 0.5);
+}
+
+const CHEW_SPLINTER_COUNT = 2;
+
+/** A floor plank giving way into a pit (#410): splinters and dust where it was. */
+export function plankCollapse(sim: GameSim, x: number, y: number): void {
+  sim.particles.spawn(x, y, 0, 0, 14, 7, ParticleKind.Dust);
+  spray(sim, x, y, 0, 0, PLANK_COLLAPSE_SHARDS, ParticleKind.Shard, Math.PI, 1, 1.2, 0.8);
+  spray(sim, x, y, 0, 0, PLANK_COLLAPSE_DUST, ParticleKind.Dust, Math.PI, 0.8, 1.4, 1.2);
+}
+
+const PLANK_COLLAPSE_SHARDS = 10;
+const PLANK_COLLAPSE_DUST = 6;
+
+/**
  * A Bierfassl's own detonation (#210) — a Bomberman cross, not a ring:
  * everything the blast reaches already gets its own hit flash or death
  * effect, but the epicentre itself was otherwise invisible, and a radial

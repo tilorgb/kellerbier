@@ -187,12 +187,17 @@ export const ROSTERS: Readonly<Record<string, readonly RosterEntry[]>> = {
    *   the small mobs so one is an event rather than the room's furniture.
    *   It charges the player once they cross its axis, so it pursues in
    *   #230's sense, like the Kuh.
+   * - Borkenkäfer (#410): 7 HP and a body that never chases, but a room it
+   *   lives in gets worse by the second — priced like the Fliegenpilz (cost
+   *   3), the other "deal with it before it spreads" body, and as rare as the
+   *   Boar so a generated room rarely holds two swarms.
    */
   wald: [
     { id: 'zecke', weight: 3, cost: 1, pursues: true, groupSize: 2 },
     { id: 'kaninchen', weight: 3, cost: 1, pursues: false },
     { id: 'fliegenpilz', weight: 2, cost: 3, pursues: false },
     { id: 'boar', weight: 1, cost: 4, pursues: true },
+    { id: 'borkenkaefer', weight: 1, cost: 3, pursues: false },
   ],
 };
 
