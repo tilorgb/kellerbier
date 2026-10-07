@@ -670,30 +670,12 @@ export class RoomGeometry {
    * question, since nearly every caller is asking where a body can stand.
    */
   isClear(centreX: number, centreY: number, radius: number, flags = 0): boolean {
+    // Kept small on purpose: every projectile substep calls this, and past
+    // V8's inlining budget each caller would box the doubles it hands in
+    // (#410 found that line — 280 KB a tick on the stress scene). The rare
+    // cases, a staircase's step rects and pits, live in their own methods.
     if (this.stepRects.length > 0) {
-      // A staircase's interior bound is the *union* of its step rects, not
-      // one rectangle (#112) — checking the circle sits fully within any
-      // single step is sufficient (that step alone already contains it, so
-      // the union does too), even though it is conservative right at a
-      // seam: a circle straddling two steps without fitting fully inside
-      // either is rejected here even where the union actually covers it.
-      // That only ever costs a sliver of a step-and-a-half's overlap right
-      // at the transition, never lets a circle poke through where there is
-      // no floor at all, so it stays on the safe side of "no collision
-      // gaps."
-      let inAnyStep = false;
-      for (const step of this.stepRects) {
-        if (
-          centreX - radius >= step.minX &&
-          centreX + radius <= step.maxX &&
-          centreY - radius >= step.minY &&
-          centreY + radius <= step.maxY
-        ) {
-          inAnyStep = true;
-          break;
-        }
-      }
-      if (!inAnyStep) {
+      if (!this.insideAnyStep(centreX, centreY, radius)) {
         return false;
       }
     } else if (
@@ -707,7 +689,7 @@ export class RoomGeometry {
     const ignoreDestructible = (flags & CLEAR_IGNORE_DESTRUCTIBLE) !== 0;
     const blocks = this.blocks;
     for (let block = 0; block < this.blocks_; block++) {
-      if (ignoreDestructible && (this.blockOverflyable[block] ?? 0) === 1) {
+      if (ignoreDestructible && this.blockOverflyable[block] === 1) {
         continue;
       }
       const base = block * BLOCK_STRIDE;
@@ -719,10 +701,36 @@ export class RoomGeometry {
         return false;
       }
     }
-    if ((flags & CLEAR_IGNORE_PITS) === 0 && this.overlapsPit(centreX, centreY, radius)) {
-      return false;
+    return (
+      this.pits_ === 0 ||
+      (flags & CLEAR_IGNORE_PITS) !== 0 ||
+      !this.overlapsPit(centreX, centreY, radius)
+    );
+  }
+
+  /**
+   * A staircase's interior bound is the *union* of its step rects, not one
+   * rectangle (#112) — checking the circle sits fully within any single step
+   * is sufficient (that step alone already contains it, so the union does
+   * too), even though it is conservative right at a seam: a circle
+   * straddling two steps without fitting fully inside either is rejected
+   * here even where the union actually covers it. That only ever costs a
+   * sliver of a step-and-a-half's overlap right at the transition, never lets
+   * a circle poke through where there is no floor at all, so it stays on the
+   * safe side of "no collision gaps."
+   */
+  private insideAnyStep(centreX: number, centreY: number, radius: number): boolean {
+    for (const step of this.stepRects) {
+      if (
+        centreX - radius >= step.minX &&
+        centreX + radius <= step.maxX &&
+        centreY - radius >= step.minY &&
+        centreY + radius <= step.maxY
+      ) {
+        return true;
+      }
     }
-    return true;
+    return false;
   }
 }
 
