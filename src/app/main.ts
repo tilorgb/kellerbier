@@ -1714,6 +1714,8 @@ async function boot(progress: BootProgress): Promise<void> {
   let wasBossDoorLocked = false;
   /** Edge-detects `sim.bouldersChangedTick` — a bombed boulder mutates the room with no transition. See `advanceOneTick`. */
   let lastBouldersChangedTick = -1;
+  /** Edge-detects `sim.brokenDoorsChangedTick` — a Boar smashing a door (#409), the same in-place redraw. */
+  let lastBrokenDoorsChangedTick = -1;
 
   /**
    * Boss rooms already paid for this run, keyed floor + floor-plan room.
@@ -2299,6 +2301,12 @@ async function boot(progress: BootProgress): Promise<void> {
     // room's scenery in place, the same path `checkSecretReveals` uses.
     if (sim.bouldersChangedTick !== lastBouldersChangedTick) {
       lastBouldersChangedTick = sim.bouldersChangedTick;
+      view.markCurrentRoomStale();
+    }
+    // A Boar smashing a door open (#409) mid-fight — same redraw, so the door
+    // stands open while the room around it is still locked.
+    if (sim.brokenDoorsChangedTick !== lastBrokenDoorsChangedTick) {
+      lastBrokenDoorsChangedTick = sim.brokenDoorsChangedTick;
       view.markCurrentRoomStale();
     }
     // Der Meisterschlüssel (#275) can be picked up mid-room, and the gate

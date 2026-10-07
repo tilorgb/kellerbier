@@ -1146,7 +1146,9 @@ export class GameView {
 
   private doorStateFor(door: CompiledDoor): DoorState {
     if (this.doorsLocked) {
-      return 'closed';
+      // A door a Boar smashed (#409) stands open in a room that is still
+      // fighting — that is the whole point of smashing it.
+      return this.sim.isDoorBroken(door) ? 'open' : 'closed';
     }
     return this.lockedDoorDirections.has(door.direction) ? 'locked' : 'open';
   }

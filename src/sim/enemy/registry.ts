@@ -91,6 +91,8 @@ export const TransitionTrigger = {
   OnShakenOff: 8,
   /** The player is one step away on a diagonal (#407). `value` is the step, `tolerance` the slack. */
   PlayerDiagonalAdjacent: 9,
+  /** The player is on one of the body's four axes, in sight (#409). `tolerance` is the slack. */
+  PlayerOnAxis: 10,
 } as const;
 
 export type TransitionTriggerId = (typeof TransitionTrigger)[keyof typeof TransitionTrigger];
@@ -485,6 +487,15 @@ export class EnemyRegistry {
           if (behaviour.maxDistance !== undefined && !(behaviour.maxDistance > 0)) {
             throw new Error(`${where}: "chargeAtPlayer" maxDistance must be above zero`);
           }
+          const impact = behaviour.impact;
+          if (
+            impact !== undefined &&
+            (!(impact.bodyDamageMultiplier >= 0) || !(impact.knockback >= 0))
+          ) {
+            throw new Error(
+              `${where}: "chargeAtPlayer" impact needs a bodyDamageMultiplier and knockback of at least zero`,
+            );
+          }
         }
         if (behaviour.behaviour === 'approachProp') {
           approachPropKind = resolvePropKind(behaviour.propKind, `${where}: "approachProp"`);
@@ -787,6 +798,20 @@ export class EnemyRegistry {
         return {
           trigger: TransitionTrigger.PlayerDiagonalAdjacent,
           value: distance,
+          to,
+          propKind: -1,
+          tolerance,
+          max: 0,
+        };
+      }
+      if ('whenPlayerOnAxis' in transition) {
+        const { tolerance } = transition.whenPlayerOnAxis;
+        if (!(tolerance >= 0)) {
+          throw new Error(`${where}: "whenPlayerOnAxis" needs a tolerance of at least zero`);
+        }
+        return {
+          trigger: TransitionTrigger.PlayerOnAxis,
+          value: 0,
           to,
           propKind: -1,
           tolerance,

@@ -60,6 +60,11 @@
               "enemyId": "kaninchen",
               "minFloor": 3,
               "maxFloor": 3
+            },
+            {
+              "enemyId": "boar",
+              "minFloor": 3,
+              "maxFloor": 3
             }
           ]
         }
@@ -138,6 +143,11 @@
             },
             {
               "enemyId": "kaninchen",
+              "minFloor": 3,
+              "maxFloor": 3
+            },
+            {
+              "enemyId": "boar",
               "minFloor": 3,
               "maxFloor": 3
             }

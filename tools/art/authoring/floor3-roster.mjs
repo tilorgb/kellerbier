@@ -47,6 +47,7 @@ export const WALD = {
   4: 0x5fa65b, // trout: flank, lit
   5: 0xcfefb2, // trout: belly
   6: 0x1b2f1a, // trout: dark spots
+  7: 0x5c5c5c, // boar: coat
 };
 
 {
@@ -198,12 +199,54 @@ export const bachforelleShadow = single('bachforelle-shadow', [
   '........K.....K...........',
 ]);
 
+// =============================================================== BOAR
+// A wild boar (#409), side-on and facing left: a tank of a body — a high
+// shoulder hump under a bristly dark mane, a heavy wedge head, thick legs on
+// dark hooves — and the tusks as its signature, two pale crescents curving up
+// from the jaw past a deliberately muted snout. Grey (option A's coat) after
+// three rounds with Tilo: first bulkier, then tusks over snout. 49x31 on a
+// mid collider. No brown on this floor's palette, so the coat is grey.
+export const boar = single('boar', [
+  '...................K.K.K.K.......................',
+  '.................KKaKaKaKaKK.....................',
+  '...............KKaaaaaaaaaKaKK...................',
+  '..............KaaaaaaaaaaaaaKaK..................',
+  '.............Kmaaa77777777aaaaKK.K...............',
+  '............Km7a777777777777aaaaKaKK.............',
+  '...........Km77777777777777777aaaaaaKKK..........',
+  '...........Kc777777777777777777aaaaaammKKK.......',
+  '.........KKccc777777777777777777777aa77mmmKK.....',
+  '.......KKmmccc7777777777777777777777777777mmK....',
+  '.....KKmm77ccc777777777777777777777777777777mK..K',
+  '....Kmm77777777777777777777777777777777777777mKKc',
+  '...Km77777777777777777777777777777777777777777KcK',
+  '...K7777777wK777777777777777777777777777777777mcK',
+  '.KKm7777777777777777777777777777777777777777777K.',
+  'Kcccc7777w7777777777777777777777777777777777777K.',
+  'Kcccc777ws7777777777777777777777777777777777777K.',
+  'KcKcc77ww77777777777777777777777777777777777777K.',
+  'Kcccc7wws777s777777777777777777777777777777777cK.',
+  'KcKccwws777s7777777777777777777777777777777777K..',
+  'Kccccwws777s777777777777777777777777777777777cK..',
+  'Kccccwws77sccccccccccccccccccccccccccccccccccK...',
+  '.KKK77wws7sccccccccccccccccccccccccccccccccccK...',
+  '....KKKww77scccccccccccccccccccccccccccccccccK...',
+  '.......KK7ccccccccKcccccKccccccccccccccKcccccK...',
+  '.........KKKKcccccKcccccKKKKKKKKKKcccccKcccccK...',
+  '............KcccccKcccccK........KcccccKcccccK...',
+  '............KcccccKcccccK........KcccccKcccccK...',
+  '............KcccccKcccccK........KcccccKcccccK...',
+  '............KaaaaaKaaaaaK........KaaaaaKaaaaaK...',
+  '.............KKKKK.KKKKK..........KKKKK.KKKKK....',
+]);
+
 export const ROSTER = {
   fliegenpilz,
   zecke,
   kaninchen,
   bachforelle,
   'bachforelle-shadow': bachforelleShadow,
+  boar,
 };
 
 /** Every sprite is authored against Floor 3's palette. */

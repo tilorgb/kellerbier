@@ -364,6 +364,9 @@ const OPPOSITE_ROOM_DIRECTION: Readonly<Record<RoomDirection, RoomDirection>> = 
  * halves can each border a different neighbour to, say, the north); keying
  * by direction alone would treat both as the same door.
  */
+/** How far out from a door's line, in room units, a Boar's charge still counts as hitting that door (#409). */
+const DOOR_SMASH_REACH = 8;
+
 function doorKey(door: Pick<CompiledDoor, 'direction' | 'cellCol' | 'cellRow'>): string {
   return `${door.direction}:${String(door.cellCol)},${String(door.cellRow)}`;
 }
@@ -1495,6 +1498,16 @@ export class GameSim {
    * bombable is per-instance (decided by the caller, not the template).
    */
   private readonly bombableWalls = new Map<string, CompiledDoor>();
+  /**
+   * Doors a Boar's charge has smashed open (#409), per room, keyed the same
+   * way `destroyedBoulders` is and by `doorKey`. A smashed door is passable
+   * while the room is still locked — the player can escape an uncleared room
+   * through it — and stays smashed for the rest of the floor, so walking back
+   * in can never lock them in again.
+   */
+  private readonly brokenDoors = new Map<string, Set<string>>();
+  /** The tick a door last broke in the current room, or -1 — polled by `app/main.ts` to redraw. */
+  private brokenDoorsChangedTickValue = -1;
   /** The loaded room's `metadata.specialRole`, or `undefined` for a normal room. */
   private roomSpecialRole: RoomSpecialRole | undefined = undefined;
   /** Whether the loaded room is lantern-dark (#404) — see `roomDark`. */
@@ -2183,6 +2196,67 @@ export class GameSim {
   }
 
   /**
+   * What a Boar's charge does to the room's edge at `(x, y)` (#409): a
+   * secret wall there opens exactly as a bomb opens it; a closed door there
+   * is smashed open for the rest of the floor. Never a door in a boss or
+   * mini-boss room — those fights are not meant to be walked out of. Returns
+   * whether anything gave way; a plain wall just stops the charge.
+   */
+  smashWallAt(x: number, y: number): boolean {
+    if (!this.roomTemplateLoaded) {
+      return false;
+    }
+    for (const door of this.roomDoors) {
+      const centre = doorCentre(this.room, door);
+      const half = (door.span ?? DOOR_SPAN) / 2;
+      const vertical = door.direction === 'north' || door.direction === 'south';
+      const along = vertical ? Math.abs(x - centre.x) : Math.abs(y - centre.y);
+      const across = vertical ? Math.abs(y - centre.y) : Math.abs(x - centre.x);
+      if (along > half || across > DOOR_SMASH_REACH) {
+        continue;
+      }
+      const key = doorKey(door);
+      if (this.bombableWalls.has(key)) {
+        this.revealBombableWalls(centre.x, centre.y, 0);
+        boulderDebris(this, centre.x, centre.y);
+        return true;
+      }
+      if (this.roomSpecialRole === 'boss' || this.roomSpecialRole === 'miniboss') {
+        return false;
+      }
+      let broken = this.brokenDoors.get(this.roomId);
+      if (broken === undefined) {
+        broken = new Set();
+        this.brokenDoors.set(this.roomId, broken);
+      }
+      if (broken.has(key)) {
+        return false;
+      }
+      broken.add(key);
+      this.brokenDoorsChangedTickValue = this.tick;
+      boulderDebris(this, centre.x, centre.y);
+      return true;
+    }
+    return false;
+  }
+
+  /** Whether a Boar has smashed `door` open in the current room (#409). */
+  isDoorBroken(door: Pick<CompiledDoor, 'direction' | 'cellCol' | 'cellRow'>): boolean {
+    return this.brokenDoors.get(this.roomId)?.has(doorKey(door)) === true;
+  }
+
+  /** The tick a door was last smashed in the current room, or -1 (#409) — `app/main.ts` polls it to redraw. */
+  get brokenDoorsChangedTick(): number {
+    return this.brokenDoorsChangedTickValue;
+  }
+
+  /** Whether the door the player is at, going `direction`, is a smashed one (#409). */
+  private brokenDoorToward(direction: RoomDirection): boolean {
+    const door = this.doorContact;
+    return door !== null && door.direction === direction && this.isDoorBroken(door);
+  }
+
+  /**
    * Clears the destructible boulders a Bierfassl blast cross covers (#4) —
    * called once per detonation by `stepBombs`. Each fallen boulder throws a
    * dust burst and is recorded under this room's id (`destroyedBoulders`) so
@@ -2287,6 +2361,8 @@ export class GameSim {
    */
   clearFloorProgress(): void {
     this.roomClearedIds.clear();
+    // A smashed door belongs to a physical room of this floor (#409).
+    this.brokenDoors.clear();
     // Same reasoning as `roomClearedIds` above, and the same key — leftover
     // loot from a room on the *previous* floor's draw of this template must
     // not leak into a different physical room that happens to reuse it.
@@ -2362,7 +2438,12 @@ export class GameSim {
    * movement input to check.
    */
   get doorContact(): CompiledDoor | null {
-    if (!this.roomTemplateLoaded || this.doorsLocked) {
+    if (!this.roomTemplateLoaded) {
+      return null;
+    }
+    // A locked room still lets the player out through a door a Boar smashed (#409).
+    const locked = this.doorsLocked;
+    if (locked && !this.brokenDoors.has(this.roomId)) {
       return null;
     }
     const index = this.playerIndex;
@@ -2370,6 +2451,9 @@ export class GameSim {
     const y = this.positionY(index);
 
     for (const door of this.doors) {
+      if (locked && !this.isDoorBroken(door)) {
+        continue;
+      }
       const centre = doorCentre(this.room, door);
       const half = (door.span ?? DOOR_SPAN) / 2;
       switch (door.direction) {
@@ -2526,7 +2610,10 @@ export class GameSim {
     force = false,
     roomInstanceId?: string,
   ): boolean {
-    if (!this.roomTemplateLoaded || this.doorsLocked || !this.hasDoor(direction)) {
+    if (!this.roomTemplateLoaded || !this.hasDoor(direction)) {
+      return false;
+    }
+    if (this.doorsLocked && !this.brokenDoorToward(direction)) {
       return false;
     }
     const destination = compileRoomTemplate(
@@ -2573,7 +2660,11 @@ export class GameSim {
       this.meisterschluesselHeld = false;
       this.bossDoorGated = false;
     }
-    this.roomClearedIds.add(this.roomId);
+    // Only a room actually emptied counts as cleared: leaving one through a
+    // smashed door (#409) leaves it to reload at full strength on return.
+    if (!this.doorsLocked) {
+      this.roomClearedIds.add(this.roomId);
+    }
     this.loadRoom(
       template,
       floor,
@@ -2653,7 +2744,10 @@ export class GameSim {
     hiddenDoors: readonly Pick<CompiledDoor, 'direction' | 'cellCol' | 'cellRow'>[] = [],
     force = false,
   ): boolean {
-    if (!this.roomTemplateLoaded || this.doorsLocked || !this.hasDoor(direction)) {
+    if (!this.roomTemplateLoaded || !this.hasDoor(direction)) {
+      return false;
+    }
+    if (this.doorsLocked && !this.brokenDoorToward(direction)) {
       return false;
     }
     if (!force && !this.pressingToward(direction)) {
@@ -2666,7 +2760,9 @@ export class GameSim {
     }
     this.doorCrossingDirection = null;
     this.doorCrossingTicks = 0;
-    this.roomClearedIds.add(this.roomId);
+    if (!this.doorsLocked) {
+      this.roomClearedIds.add(this.roomId);
+    }
     this.loadStaircaseRoom(template, floor, direction, hiddenDoors);
     return true;
   }
