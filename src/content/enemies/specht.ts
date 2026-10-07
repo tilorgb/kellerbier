@@ -8,9 +8,13 @@ import type { EnemyDefinition } from '../../sim/enemy/definition.js';
  * wood chips flying, a drumroll you can hear (`telegraphLook: 'drum'`) — and
  * dives straight at where the player stood as the drumming stopped
  * (`chargeAtPlayer` with `untilTargetPoint`): any angle, the one body on the
- * floor not held to the axes. Its beak sticks in the floor where it lands
- * (`land`) — the hit window a clean dodge earns — and then it flies back to
- * the nearest wall and starts over.
+ * floor not held to the axes. The drumming marks where it will land, not the
+ * way it will fly: a circle on the floor that follows the player until the
+ * dive begins, then stays put. That circle is the only thing that hurts —
+ * the beak hitting the floor (`landing`); touching the bird itself does
+ * nothing (`contactDamage: 0`). Its beak sticks where it lands (`land`) —
+ * the hit window a clean dodge earns — and then it flies back to the
+ * nearest wall and starts over.
  *
  * It flies (`flying`): logs, the Waldbach and the Borkenkäfer's pits are no
  * obstacle, only the room's walls are. A dive that meets a wall before its
@@ -23,7 +27,8 @@ export const specht: EnemyDefinition = {
   // A bird comes apart as a puff of feathers, which the dust reads as.
   deathEffect: 'dust',
   health: 4,
-  contactDamage: 1,
+  // The landing is the attack; the bird itself is harmless to touch.
+  contactDamage: 0,
   lootTier: 'normal',
   flying: true,
   telegraphLook: 'drum',
@@ -41,7 +46,14 @@ export const specht: EnemyDefinition = {
     },
     {
       name: 'dive',
-      behaviours: [{ behaviour: 'chargeAtPlayer', speed: 3.6, untilTargetPoint: true }],
+      behaviours: [
+        {
+          behaviour: 'chargeAtPlayer',
+          speed: 3.6,
+          untilTargetPoint: true,
+          landing: { radius: 10, damage: 1 },
+        },
+      ],
       transitions: [
         { to: 'stuck', onArrived: true },
         { to: 'stuck', onBlocked: true },

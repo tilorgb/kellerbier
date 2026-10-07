@@ -10,7 +10,7 @@ import {
 } from '../enemy/registry.js';
 import { EventKind } from '../events/queue.js';
 import type { GameSim } from '../game/sim.js';
-import { drumChips, muzzleFlash, ring } from '../particle/effects.js';
+import { boulderDebris, drumChips, muzzleFlash, ring } from '../particle/effects.js';
 import { clamp, vectorLength } from '../math.js';
 import { addPush } from './movement.js';
 import { applyDamageAt } from './impact.js';
@@ -490,6 +490,22 @@ export function enemySubmerged(sim: GameSim, index: number): boolean {
   return state?.submerged === true;
 }
 
+/**
+ * Whether the body at `index` is a flyer up in the air (#411) — a `flying`
+ * enemy in any state that does not `land`. Up there it passes over every
+ * body on the ground: nothing shoves it and it shoves nothing (`contact.ts`,
+ * `enemy-contact.ts`), so a dive reaches its point even with the player
+ * standing on it. Shots still hit it — the Specht can be shot off its perch.
+ */
+export function enemyAirborne(sim: GameSim, index: number): boolean {
+  if (((sim.world.masks[index] ?? 0) & sim.enemyMask) !== sim.enemyMask) {
+    return false;
+  }
+  const base = index * ENEMY_STRIDE;
+  const compiled = sim.enemies.at(sim.enemy.data[base] ?? 0);
+  return compiled.flying && compiled.states[sim.enemy.data[base + 1] ?? 0]?.grounded !== true;
+}
+
 /** Whether the body at `index` is in a state that `land`s (#411) — down on the floor. */
 export function enemyGrounded(sim: GameSim, index: number): boolean {
   const base = index * ENEMY_STRIDE;
@@ -801,6 +817,22 @@ const ARRIVE_DISTANCE = 0.5;
 function raiseArrived(sim: GameSim, index: number): void {
   const flagSlot = index * ENEMY_STRIDE + 3;
   sim.enemy.data[flagSlot] = (sim.enemy.data[flagSlot] ?? 0) | ENEMY_FLAG_ARRIVED;
+}
+
+/**
+ * A dive reaching its point with a `landing` (#411): everything within the
+ * landing circle takes the hit, and the spot throws dust and chips so a dodged
+ * landing is still seen to land.
+ */
+function land(
+  sim: GameSim,
+  index: number,
+  landing: { readonly radius: number; readonly damage: number },
+  x: number,
+  y: number,
+): void {
+  sim.applySplashDamage(x, y, landing.radius, eliteAttackDamage(sim, index, landing.damage), index);
+  boulderDebris(sim, x, y);
 }
 
 /** Ticks between two puffs of wood chips while a `telegraphLook: 'drum'` body drums (#411). */
@@ -1374,6 +1406,10 @@ function applyMovement(
         if (left <= ARRIVE_DISTANCE) {
           speed = 0;
           raiseArrived(sim, index);
+          // Arrival is read next tick, which leaves the state: this runs once.
+          if (behaviour.landing !== undefined) {
+            land(sim, index, behaviour.landing, selfX, selfY);
+          }
         } else {
           speed = Math.min(speed, left);
         }
@@ -2503,6 +2539,16 @@ export interface EnemyTelegraphShapeInfo {
  * case does — the first `after` transition in declaration order — so a
  * wind-up and the shape warning about it can never name different attacks.
  */
+/** The `landing` of a dive-to-a-point state (#411), or `null` for any other state. */
+function landingOf(
+  state: CompiledState | null,
+): { readonly radius: number; readonly damage: number } | null {
+  const movement = state?.movement;
+  return movement?.behaviour === 'chargeAtPlayer' && movement.untilTargetPoint === true
+    ? (movement.landing ?? null)
+    : null;
+}
+
 /** Whether the state after `state`'s wind-up is a `chargeAtPlayer` with `untilTargetPoint` (#411). */
 function divesToPoint(compiled: CompiledEnemy, state: CompiledState): boolean {
   const movement = stateAfterTelegraph(compiled, state)?.movement;
@@ -2531,13 +2577,28 @@ export function enemyTelegraphShape(
   out: EnemyTelegraphShapeInfo,
 ): boolean {
   const progress = enemyTelegraphProgress(sim, index);
-  if (progress <= 0) {
-    return false;
-  }
   const base = index * ENEMY_STRIDE;
   const compiled = sim.enemies.at(sim.enemy.data[base] ?? 0);
   const state = compiled.states[sim.enemy.data[base + 1] ?? 0];
   if (state === undefined) {
+    return false;
+  }
+  // A dive with a landing (#411) is warned as its landing circle — where it
+  // will hit, not which way it will fly — over the wind-up, tracking the
+  // player, and then held on the spot through the dive itself.
+  const landing = progress > 0 ? landingOf(stateAfterTelegraph(compiled, state)) : landingOf(state);
+  if (landing !== null) {
+    const motionBase = index * ENEMY_MOTION_STRIDE;
+    out.shape = TelegraphShape.Ground;
+    out.progress = progress > 0 ? progress : 1;
+    out.x = sim.enemyMotion.data[motionBase + 4] ?? 0;
+    out.y = sim.enemyMotion.data[motionBase + 5] ?? 0;
+    out.angle = 0;
+    out.arc = 0;
+    out.reach = landing.radius;
+    return true;
+  }
+  if (progress <= 0) {
     return false;
   }
   out.progress = progress;

@@ -103,6 +103,16 @@ export interface ChargeAtPlayerBehaviour {
    */
   readonly untilTargetPoint?: true;
   /**
+   * What reaching that point does (#411, the Specht's beak hitting the
+   * floor): everything within `radius` room units of it — the player
+   * included, any other body too — takes `damage` (elite-scaled), once. With
+   * `untilTargetPoint` only. The wind-up before such a dive marks this exact
+   * circle on the floor instead of a direction line, following the player
+   * until the dive begins and staying there through it, so where it lands is
+   * the warning — and, with `contactDamage: 0`, the only place it hurts.
+   */
+  readonly landing?: { readonly radius: number; readonly damage: number };
+  /**
    * What the charge does to the first thing it runs into (#409, the Boar).
    * Each tick, before moving, it looks one step ahead along its locked
    * direction; the first thing there takes the hit and the charge ends

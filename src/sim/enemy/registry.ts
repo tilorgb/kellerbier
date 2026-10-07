@@ -543,6 +543,17 @@ export class EnemyRegistry {
               `${where}: "chargeAtPlayer" snap "${snap}" is not one of cardinal, diagonal`,
             );
           }
+          const landing = behaviour.landing;
+          if (landing !== undefined) {
+            if (behaviour.untilTargetPoint !== true) {
+              throw new Error(`${where}: "chargeAtPlayer" landing needs untilTargetPoint`);
+            }
+            if (!(landing.radius > 0) || !(landing.damage > 0)) {
+              throw new Error(
+                `${where}: "chargeAtPlayer" landing needs a radius and damage above zero`,
+              );
+            }
+          }
           if (behaviour.maxDistance !== undefined && !(behaviour.maxDistance > 0)) {
             throw new Error(`${where}: "chargeAtPlayer" maxDistance must be above zero`);
           }

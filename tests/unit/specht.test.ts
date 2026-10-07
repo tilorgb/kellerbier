@@ -12,7 +12,10 @@ import { nearestWallPoint } from '../../src/sim/room/perch.js';
 import {
   ENEMY_MOTION_STRIDE,
   ENEMY_STRIDE,
+  type EnemyTelegraphShapeInfo,
   enemyAimAngle,
+  enemyTelegraphShape,
+  TelegraphShape,
   enemyFlightHeight,
 } from '../../src/sim/systems/enemy.js';
 
@@ -155,6 +158,19 @@ describe('Specht (#411)', () => {
     }
     expect(stateName(sim, bird)).toBe('dive');
     expect(enemyAimAngle(sim, bird)).not.toBeCloseTo(firstAim, 2);
+    // Its warning through the dive is the landing circle on that spot.
+    const shape: EnemyTelegraphShapeInfo = {
+      shape: TelegraphShape.Ring,
+      progress: 0,
+      x: 0,
+      y: 0,
+      angle: 0,
+      arc: 0,
+      reach: 0,
+    };
+    expect(enemyTelegraphShape(sim, bird, shape)).toBe(true);
+    expect(shape.shape).toBe(TelegraphShape.Ground);
+    expect(Math.hypot(shape.x - lastSpot.x, shape.y - lastSpot.y)).toBeLessThan(1);
     // Off-axis: neither a cardinal nor a diagonal.
     const angle = Math.abs(enemyAimAngle(sim, bird)) % (Math.PI / 4);
     expect(angle).toBeGreaterThan(0.05);
@@ -165,6 +181,63 @@ describe('Specht (#411)', () => {
     expect(
       Math.hypot(sim.positionX(bird) - lastSpot.x, sim.positionY(bird) - lastSpot.y),
     ).toBeLessThan(2);
+  });
+
+  it('marks its landing spot, not its direction, while it drums — following the player', () => {
+    const sim = emptySim();
+    const player = sim.playerIndex;
+    const bird = spawn(sim, 'specht', 120, sim.room.minY + 10);
+    place(sim, player, 150, 110);
+    expect(stepUntil(sim, bird, 'drum')).toBeGreaterThanOrEqual(0);
+    const shape: EnemyTelegraphShapeInfo = {
+      shape: TelegraphShape.Ring,
+      progress: 0,
+      x: 0,
+      y: 0,
+      angle: 0,
+      arc: 0,
+      reach: 0,
+    };
+    for (const x of [150, 170, 190]) {
+      place(sim, player, x, 110);
+      sim.step(IDLE);
+      expect(enemyTelegraphShape(sim, bird, shape)).toBe(true);
+      expect(shape.shape).toBe(TelegraphShape.Ground);
+      expect(shape.reach).toBe(10);
+      expect(shape.x).toBeCloseTo(x, 3);
+      expect(shape.y).toBeCloseTo(110, 3);
+    }
+  });
+
+  it('hurts only by landing on the player — never by being touched', () => {
+    const sim = emptySim();
+    const player = sim.playerIndex;
+    const bird = spawn(sim, 'specht', 120, sim.room.minY + 10);
+    place(sim, player, 120, 100);
+    const full = sim.playerHealth;
+    // Standing still: the landing circle is on them, and the landing hurts.
+    expect(stepUntil(sim, bird, 'stuck')).toBeGreaterThanOrEqual(0);
+    expect(sim.playerHealth).toBe(full - 1);
+    // Standing in the stuck bird's face for the whole window: nothing more.
+    const hurt = sim.playerHealth;
+    for (let tick = 0; tick < 40; tick++) {
+      place(sim, player, sim.positionX(bird) + 4, sim.positionY(bird));
+      sim.step(IDLE);
+    }
+    expect(sim.playerHealth).toBe(hurt);
+  });
+
+  it('a dodged landing does no harm', () => {
+    const sim = emptySim();
+    const room = sim.room;
+    const player = sim.playerIndex;
+    const bird = spawn(sim, 'specht', 120, room.minY + 10);
+    place(sim, player, 120, 100);
+    const full = sim.playerHealth;
+    expect(stepUntil(sim, bird, 'dive')).toBeGreaterThanOrEqual(0);
+    place(sim, player, room.maxX - 20, room.maxY - 20);
+    expect(stepUntil(sim, bird, 'stuck', 200)).toBeGreaterThanOrEqual(0);
+    expect(sim.playerHealth).toBe(full);
   });
 
   it('sits still on the floor for the whole hit window, then flies to the nearest wall', () => {

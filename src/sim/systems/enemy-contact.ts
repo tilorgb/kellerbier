@@ -1,5 +1,6 @@
 import { World } from '../ecs/world.js';
 import type { GameSim } from '../game/sim.js';
+import { enemyAirborne } from './enemy.js';
 
 /**
  * Enemies against each other.
@@ -152,6 +153,10 @@ export function stepEnemyContacts(sim: GameSim): void {
     if (((masks[index] ?? 0) & mask) !== mask) {
       continue;
     }
+    // A flyer up in the air (#411) passes over the bodies below it.
+    if (enemyAirborne(sim, index)) {
+      continue;
+    }
 
     const base = index * 4;
     const x = transform[base] ?? 0;
@@ -192,7 +197,7 @@ export function stepEnemyContacts(sim: GameSim): void {
     if (states[index] !== World.ALIVE) {
       continue;
     }
-    if (((masks[index] ?? 0) & mask) !== mask) {
+    if (((masks[index] ?? 0) & mask) !== mask || enemyAirborne(sim, index)) {
       continue;
     }
     const cell = cellOf[index] ?? 0;
