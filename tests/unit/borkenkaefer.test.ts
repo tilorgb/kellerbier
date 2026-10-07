@@ -147,8 +147,20 @@ describe('pits (#410)', () => {
 });
 
 describe('eating (#410)', () => {
+  /** The grove with nothing in it but the player: the swarm's behaviour, alone. */
   function grove(floor: number): GameSim {
-    return new GameSim({ seed: 3, roomTemplate: waldGrove, floor, population: 'empty' });
+    const sim = new GameSim({ seed: 3, roomTemplate: waldGrove, floor, population: 'empty' });
+    const doomed: number[] = [];
+    sim.world.forEach(sim.collidableMask, (index) => {
+      if (index !== sim.playerIndex) {
+        doomed.push(index);
+      }
+    });
+    for (const index of doomed) {
+      sim.world.destroy(sim.world.entityAt(index));
+    }
+    sim.world.flush();
+    return sim;
   }
 
   function woodBlocks(room: RoomGeometry): number {
