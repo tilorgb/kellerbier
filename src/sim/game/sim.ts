@@ -2382,6 +2382,14 @@ export class GameSim {
     return this.bouldersChangedTickValue;
   }
 
+  /** Whether the body at `index` is a `rooted` enemy, which no shove moves (`addPush`). */
+  enemyRooted(index: number): boolean {
+    if (((this.world.masks[index] ?? 0) & this.enemyMask) !== this.enemyMask) {
+      return false;
+    }
+    return this.enemies.at(this.enemy.data[index * ENEMY_STRIDE] ?? 0).rooted;
+  }
+
   /**
    * Whether the current floor's floor is wooden planks a Borkenkäfer eats
    * through (#410) — `FloorConfig.woodenFloor`, floor 3's Wald today.

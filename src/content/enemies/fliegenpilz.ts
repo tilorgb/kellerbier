@@ -29,6 +29,8 @@ export const fliegenpilz: EnemyDefinition = {
   // Schimmelfleck's reasoning: a body that never moves must not be shoved
   // around the room by the player walking into it.
   mass: 12,
+  // Rooted (in the ground, the stream, on the wall): shots do not push it.
+  rooted: true,
   initial: 'idle',
   states: [
     {

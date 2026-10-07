@@ -26,6 +26,8 @@ export const bachforelle: EnemyDefinition = {
   deathEffect: 'splash',
   health: 4,
   contactDamage: 1,
+  // Rooted (in the ground, the stream, on the wall): shots do not push it.
+  rooted: true,
   initial: 'swim',
   states: [
     {

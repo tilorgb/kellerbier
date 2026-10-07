@@ -568,7 +568,7 @@ const itemZeckeLatch: SfxDefinition = {
 const windupSpechtDrum: SfxDefinition = {
   id: 'windup-specht-drum',
   description:
-    'A Specht drumming before its dive (#411): a dry woody "trrrrr" — short bandpassed knocks in a fast run — in place of the generic wind-up, so the dive is heard coming from the wall.',
+    'A Specht drumming before its dive (#411): a dry woody "trrrrr" — short bandpassed knocks in a fast run — in place of the generic wind-up, so the dive is heard coming from wherever the bird hangs in the air.',
   noise: {
     filter: { type: 'bandpass', frequencyHz: 1400, q: 4 },
     durationSeconds: 0.025,

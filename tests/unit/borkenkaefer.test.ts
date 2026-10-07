@@ -173,21 +173,57 @@ describe('eating (#410)', () => {
     return count;
   }
 
-  it('eats the wooden cover before it touches a plank', () => {
-    const sim = grove(3);
-    expect(sim.floorIsWood).toBe(true);
-    const wood = woodBlocks(sim.room);
-    expect(wood).toBeGreaterThan(0);
-    spawn(sim, 'borkenkaefer', 100, 80);
-    let firstPitWithWoodLeft = false;
-    for (let tick = 0; tick < 6000 && woodBlocks(sim.room) > 0; tick++) {
-      sim.step(IDLE);
-      if (sim.room.pitCount > 0 && woodBlocks(sim.room) > 0) {
-        firstPitWithWoodLeft = true;
+  /** Wooden cover counted in tiles, not blocks: a merged run of four logs is four. */
+  function woodTiles(room: RoomGeometry): number {
+    let tiles = 0;
+    for (let block = 0; block < room.blockCount; block++) {
+      if (room.blockOverflyable[block] === 1 && room.blockMaterial[block] === BLOCK_MATERIAL_WOOD) {
+        const base = block * 4;
+        tiles +=
+          (((room.blocks[base + 2] ?? 0) - (room.blocks[base] ?? 0)) *
+            ((room.blocks[base + 3] ?? 0) - (room.blocks[base + 1] ?? 0))) /
+          (ROOM_TILE_UNITS * ROOM_TILE_UNITS);
       }
     }
-    expect(woodBlocks(sim.room)).toBe(0);
-    expect(firstPitWithWoodLeft).toBe(false);
+    return Math.round(tiles);
+  }
+
+  it('eats one tile of a merged log run at a time, not the whole run', () => {
+    const sim = grove(3);
+    // The grove's cover is merged into multi-tile rectangles.
+    expect(woodTiles(sim.room)).toBeGreaterThan(woodBlocks(sim.room));
+    const before = woodTiles(sim.room);
+    spawn(sim, 'borkenkaefer', 100, 80);
+    for (let tick = 0; tick < 3000 && woodTiles(sim.room) === before; tick++) {
+      sim.step(IDLE);
+    }
+    expect(woodTiles(sim.room)).toBe(before - 1);
+  });
+
+  it('takes turns: a tile of cover, then a plank, then cover again', () => {
+    const sim = grove(3);
+    expect(sim.floorIsWood).toBe(true);
+    spawn(sim, 'borkenkaefer', 100, 80);
+    const meals: string[] = [];
+    let tiles = woodTiles(sim.room);
+    let pits = sim.room.pitCount;
+    for (let tick = 0; tick < 6000 && meals.length < 8; tick++) {
+      sim.step(IDLE);
+      if (woodTiles(sim.room) < tiles) {
+        meals.push('cover');
+      }
+      if (sim.room.pitCount > pits) {
+        meals.push('plank');
+      }
+      tiles = woodTiles(sim.room);
+      pits = sim.room.pitCount;
+    }
+    expect(meals.slice(0, 4)).toEqual(['cover', 'plank', 'cover', 'plank']);
+    // A plank turn only falls back to cover when no plank can be had, and the
+    // grove never runs out. (A cover turn may fall back to a plank: cover
+    // walled off — by the swarm's own pits, say — is eaten around.)
+    expect(meals.join(' ')).not.toContain('cover cover');
+    expect(meals.filter((meal) => meal === 'cover').length).toBeGreaterThanOrEqual(3);
   });
 
   it('then eats the floor into pits, up to the room cap, and the room visibly gets worse', () => {

@@ -327,6 +327,211 @@ export const kaninchenHop = single('kaninchen-hop', [
  * either, on purpose — the renderer's wind-up crouch (#429) is their
  * telegraph, and it only runs for a body whose strip does not author one.
  */
+// ------------------------------------------------- SPECHT, IN FLIGHT
+// Option B of three, signed off by Tilo: a side view that flaps (wings up,
+// level, down), mirrored for the other way, plus a front and a back view for
+// flying toward and away from the camera, and a head-down dive. 20x16, the
+// landed sprite's canvas. Same colours as the perched bird.
+const spechtFlySideUp = single('specht-fly-side-0', [
+  '..........KK........',
+  '.........KhhK.......',
+  '........KhGhK.......',
+  '........KhhhK.......',
+  '.......KhGhK........',
+  '....KKKKhhhK........',
+  '...KVVVhhGhK........',
+  'KKKV222hhhhKKKKK....',
+  'tt2a2222hh2222DDKK..',
+  'KK222SS22222222DDDK.',
+  '..K2SSSSS22222KKKDDK',
+  '...KSSSSS22KKK...KK.',
+  '....KKKKKKK.........',
+  '....................',
+  '....................',
+  '....................',
+]);
+
+const spechtFlySideMid = single('specht-fly-side-1', [
+  '....................',
+  '....................',
+  '....................',
+  '....................',
+  '....................',
+  '....KKK.............',
+  '...KVVVKKKKKKKKK....',
+  'KKKV222hhhhhhhhhK...',
+  'tt2a22hGhGhGhhhhKK..',
+  'KK222SShhhhhh22DDDK.',
+  '..K2SSSSS22222KKKDDK',
+  '...KSSSSS22KKK...KK.',
+  '....KKKKKKK.........',
+  '....................',
+  '....................',
+  '....................',
+]);
+
+const spechtFlySideDown = single('specht-fly-side-2', [
+  '....................',
+  '....................',
+  '....................',
+  '....................',
+  '....................',
+  '....KKK.............',
+  '...KVVVK............',
+  'KKKV2222KKKKKKKK....',
+  'tt2a2222222222DDKK..',
+  'KK222SS22222222DDDK.',
+  '..K2SSShhhh222KKKDDK',
+  '...KSSShGhhKKK...KK.',
+  '....KKKKhhhK........',
+  '.......KhGhK........',
+  '........KhhK........',
+  '.........KK.........',
+]);
+
+// Toward the camera: crown and eyes on top, pale breast, wings spread.
+const spechtFlyFrontUp = single('specht-fly-front-0', [
+  '....................',
+  '....................',
+  '....................',
+  '....................',
+  'KK.......KK.......KK',
+  'hhK.....KVVK.....Khh',
+  'hGhK...KV22VK...KhGh',
+  'KhhhK..Ka22aK..KhhhK',
+  '.KhGhKK.KttK.KKhGhK.',
+  '..KhhhhK2SS2KhhhhK..',
+  '...KKKKK2SS2KKKKK...',
+  '........KSSK........',
+  '........KDDK........',
+  '.........KK.........',
+  '....................',
+  '....................',
+]);
+
+const spechtFlyFrontMid = single('specht-fly-front-1', [
+  '....................',
+  '....................',
+  '....................',
+  '....................',
+  '.........KK.........',
+  '........KVVK........',
+  '.......KV22VK.......',
+  '.......Ka22aK.......',
+  'KKKKKKK.KttK.KKKKKKK',
+  'hhhhhhhK2SS2Khhhhhhh',
+  'KhGhGhhK2SS2KhhGhGhK',
+  '.KKKKKK.KSSK.KKKKKK.',
+  '........KDDK........',
+  '.........KK.........',
+  '....................',
+  '....................',
+]);
+
+const spechtFlyFrontDown = single('specht-fly-front-2', [
+  '....................',
+  '....................',
+  '....................',
+  '....................',
+  '.........KK.........',
+  '........KVVK........',
+  '.......KV22VK.......',
+  '.......Ka22aK.......',
+  '...KKKK.KttK.KKKK...',
+  '..KhhhhK2SS2KhhhhK..',
+  '.KhGhKKK2SS2KKKhGhK.',
+  'KhhhK...KSSK...KhhhK',
+  'hGhK....KDDK....KhGh',
+  'KKK......KK......KKK',
+  '....................',
+  '....................',
+]);
+
+// Away from the camera: crown, olive back, deep-green tail.
+const spechtFlyBackUp = single('specht-fly-back-0', [
+  '....................',
+  '....................',
+  '....................',
+  '....................',
+  'KK.......KK.......KK',
+  'hhK.....KVVK.....Khh',
+  'hGhK...KVVVVK...KhGh',
+  'KhhhK..K2222K..KhhhK',
+  '.KhGhKKK2222KKKhGhK.',
+  '..KhhhhK2222KhhhhK..',
+  '...KKKKK2222KKKKK...',
+  '.......KDDDDK.......',
+  '........KDDK........',
+  '.........KK.........',
+  '....................',
+  '....................',
+]);
+
+const spechtFlyBackMid = single('specht-fly-back-1', [
+  '....................',
+  '....................',
+  '....................',
+  '....................',
+  '.........KK.........',
+  '........KVVK........',
+  '.......KVVVVK.......',
+  '.......K2222K.......',
+  'KKKKKKKK2222KKKKKKKK',
+  'hhhhhhhK2222Khhhhhhh',
+  'KhGhGhhK2222KhhGhGhK',
+  '.KKKKKKKDDDDKKKKKKK.',
+  '........KDDK........',
+  '.........KK.........',
+  '....................',
+  '....................',
+]);
+
+const spechtFlyBackDown = single('specht-fly-back-2', [
+  '....................',
+  '....................',
+  '....................',
+  '....................',
+  '.........KK.........',
+  '........KVVK........',
+  '.......KVVVVK.......',
+  '.......K2222K.......',
+  '...KKKKK2222KKKKK...',
+  '..KhhhhK2222KhhhhK..',
+  '.KhGhKKK2222KKKhGhK.',
+  'KhhhK..KDDDDK..KhhhK',
+  'hGhK....KDDK....KhGh',
+  'KKK......KK......KKK',
+  '....................',
+  '....................',
+]);
+
+// The dive: head down at the floor, wings folded back along the body.
+const spechtDive = single('specht-dive', [
+  '...............KK...',
+  '..............KDDK..',
+  '.............KDDDK..',
+  '............K22DK...',
+  '...........Khh22K...',
+  '..........KhGh2SK...',
+  '.........Khhh2SSK...',
+  '........KhGh22SSK...',
+  '......KKhhh22SSK....',
+  '.....KVV2222SSK.....',
+  '....KV22a22SSK......',
+  '.....K2222SSK.......',
+  '......Kt22KK........',
+  '.......KtK..........',
+  '........K...........',
+  '....................',
+]);
+
+const SPECHT_FLAP = {
+  frames: 3,
+  frameDurationMs: 90,
+  loop: true,
+  clips: { idle: { frames: [0, 1, 2, 1], frameDurationMs: 90, mode: 'loop' } },
+};
+
 export const STRIPS = {
   boar: {
     frames: [boar, boarStepA, boarStepB],
@@ -357,6 +562,20 @@ export const STRIPS = {
         hurt: { frames: [0], frameDurationMs: 90, mode: 'once', onEnd: 'idle' },
       },
     },
+  },
+  // Wing-beat: up, level, down, level. One `idle` clip, since what the bird
+  // is doing picks the strip (`render/entities.ts`), not the animator.
+  'specht-fly-side': {
+    frames: [spechtFlySideUp, spechtFlySideMid, spechtFlySideDown],
+    anim: SPECHT_FLAP,
+  },
+  'specht-fly-front': {
+    frames: [spechtFlyFrontUp, spechtFlyFrontMid, spechtFlyFrontDown],
+    anim: SPECHT_FLAP,
+  },
+  'specht-fly-back': {
+    frames: [spechtFlyBackUp, spechtFlyBackMid, spechtFlyBackDown],
+    anim: SPECHT_FLAP,
   },
 };
 
@@ -445,6 +664,7 @@ export const ROSTER = {
   borkenkaefer,
   specht,
   'specht-landed': spechtLanded,
+  'specht-dive': spechtDive,
 };
 
 /** Every sprite is authored against Floor 3's palette. */

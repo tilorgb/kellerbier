@@ -6608,7 +6608,32 @@ so wiggling and circling both work.
 **A charge breaks one cell, not the whole cover row.** Generated cover is merged into
 multi-cell rectangles. The Boar now breaks only the tile it hit (`RoomGeometry.breakCellAt`),
 and the destruction record carries the cell size, so a revisit rebuilds the same remnants.
-Bombs and the Borkenkäfer still clear whole blocks.
+Bombs still clear whole blocks. The Borkenkäfer eats one tile at a time too
+(`smashBlockCellAt`): eating a whole merged run made a row of trunks vanish at one bite.
+
+**The Borkenkäfer takes turns: a tile of cover, then a plank.** It used to eat planks only once
+every wooden block in the room was gone. A lone swarm took 16-30 s to get there in a generated
+Wald room, and it never lived that long in play, so nobody saw a hole. Now it alternates, and the
+first pit opens about 4-5 s in. A plank turn with no plank to be had (stone floor, pit cap, all
+refused) falls back to cover; a cover turn with the cover walled off falls back to a plank.
+
+**Rooted bodies are not shoved.** The Fliegenpilz, the Bachforelle and the Specht are `rooted`:
+in the ground, in the stream, on the wall. `addPush` drops every shove aimed at a rooted body —
+a shot's knockback, a blast, the Boar, Der Ordner — so a hit hurts it and moves nothing. Its own
+movement is untouched. Mass was not the tool: a huge mass also makes a body shove the player.
+
+**The Specht flies before it strikes, and only strikes up close.** It used to drum on the wall
+and dive at the player from anywhere in the room. Now it takes off into small wavy loops about a
+point that drifts round the room (`flyLoops`), always for at least 45 ticks. It dives only at a
+player within 72 units, after drumming in the air. A player who keeps away just watches it
+circle, and after six to nine seconds it goes back to a wall.
+
+**The Specht's flight art faces the way it flies.** Signed off as option B of three: a side-on
+wing-beat (mirrored), a front and a back view for flying toward and away from the camera, and a
+head-down dive (`specht-fly-side`/`-front`/`-back` strips, `specht-dive`). The renderer picks
+them from `enemyFlightPose`. Side-on holds the diagonals; the bird only turns to face or leave
+the camera when it is heading 1.2 times more up-down than across. Perched and stuck in the
+floor, it keeps its two existing sprites.
 
 **Constrains:** a new side-on enemy declares `facing: 'mirror'` until it has direction strips.
 A new push effect is an impulse on a cooldown and is mass-scaled. A new familiar copies the
