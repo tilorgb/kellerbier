@@ -8,13 +8,28 @@ this folder is the one place that changes.
 
 ## Where these came from
 
-**Every file in this folder was recorded by the project owner personally** — the theme
-(`01-consolidated.mp3`) and all nine sound effects (stated 2026-10-02, `docs/LEGAL_REVIEW.md`
-Finding 3). None of it is from a sample library or anyone else's work, so there is no licence to
-honour and no credit owed.
+**Every file in this folder that is not listed under "Generated files" below was recorded by the
+project owner personally** — the theme (`01-consolidated.mp3`) and all nine sound effects (stated
+2026-10-02, `docs/LEGAL_REVIEW.md` Finding 3). None of those is from a sample library or anyone
+else's work, so there is no licence to honour and no credit owed.
 
 Keep it that way, or write it down: a file added here that somebody else made needs its source
 and its licence recorded in this section in the same change.
+
+## Generated files
+
+A sound effect can also be made from a text prompt: the audio editor's "Recorded sample" panel has
+a Generate control on the `sfx` tab, which asks the local sound bench (Stable Audio Open 1.0, run
+through ComfyUI on the machine that has the GPU) for a few takes. The model is under the Stability
+AI Community License. A generated file is not a recording, and the storefront's generative-AI
+disclosure has to cover it, so each one is listed here.
+
+Nobody has to remember to: choosing a take writes its row in the same request that writes the file
+(`tools/audio-editor/sound-bench.mjs`), with the prompt and seed that would make it again. A real
+recording uploaded over one of these names takes its row back out.
+
+| File | Prompt | Seed | Added |
+|---|---|---|---|
 
 ## What goes here, and how it gets here
 

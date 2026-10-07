@@ -114,6 +114,7 @@ export function createSfxPanel(
       await saveSfxSample(idSelect.value, sample);
       sfxList = await fetchSfx();
     },
+    generate: { suggestedName: () => idSelect.value },
   });
 
   function currentDefinition(): Omit<SfxDefinition, 'id'> {

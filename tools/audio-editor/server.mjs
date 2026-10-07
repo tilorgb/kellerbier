@@ -15,6 +15,7 @@
  * - `POST /enemy-categories`     — replaces the whole `ENEMY_SFX_CATEGORY` map and writes the file
  * - `GET  /audio-assets`         — every recorded file under `assets/audio/`, with its size
  * - `POST /audio-assets`         — writes a browser-uploaded recording to `assets/audio/`
+ * - `POST /generated-takes`      — asks the local sound bench for takes of a prompted sound (`sound-bench.mjs`)
  * - `POST /tracks|sfx|barks/:id/sample` — sets or clears (body `null`) that item's `sample` field
  *
  * `configureServer` middleware only ever runs under `vite`/`vite dev`, never
@@ -45,6 +46,14 @@ import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import ts from 'typescript';
 import * as prettier from 'prettier';
+import {
+  SoundBenchOfflineError,
+  forgetGeneratedFile,
+  generateTakes,
+  isRecordedAsGenerated,
+  recordGeneratedFile,
+  validateGeneratedOrigin,
+} from './sound-bench.mjs';
 
 const API_PREFIX = '/__audio-editor-api/';
 const TRACKS_FILE = 'src/content/audio/tracks.ts';
@@ -190,6 +199,10 @@ export function audioEditorServerPlugin() {
           }
           if (req.method === 'POST' && route === 'audio-assets') {
             await handleUploadAudioAsset(server, res, JSON.parse(await readBody(req)));
+            return;
+          }
+          if (req.method === 'POST' && route === 'generated-takes') {
+            await handleGenerateTakes(res, JSON.parse(await readBody(req)));
             return;
           }
           const sampleMatch = /^(tracks|sfx|barks)\/([^/]+)\/sample$/.exec(route);
@@ -590,6 +603,13 @@ async function handleUploadAudioAsset(server, res, body) {
     respondJson(res, 422, { error: 'the file name has no usable characters once slugified' });
     return;
   }
+  if (body.generated !== undefined) {
+    const originError = validateGeneratedOrigin(body.generated);
+    if (originError !== null) {
+      respondJson(res, 422, { error: originError });
+      return;
+    }
+  }
 
   let bytes;
   try {
@@ -612,8 +632,74 @@ async function handleUploadAudioAsset(server, res, body) {
   const fileName = `${stem}.${ext}`;
   const dir = path.join(server.config.root, AUDIO_ASSETS_DIR);
   await mkdir(dir, { recursive: true });
+  // "Same name overwrites" is right for re-exporting a take from the DAW, and
+  // for trying another generated take in a generated file's place. It is not
+  // right for a generated take landing on a real recording: that one cannot
+  // be made again from a prompt and a seed.
+  if (body.generated !== undefined && (await isOwnRecording(dir, fileName))) {
+    respondJson(res, 409, {
+      error: `"${fileName}" is an existing recording — save the generated take under another name`,
+    });
+    return;
+  }
   await writeFile(path.join(dir, fileName), bytes);
+  await recordAssetOrigin(dir, fileName, body.generated);
   respondJson(res, 200, { ok: true, assetId: stem, fileName });
+}
+
+/** A file that is on disk and that the README does not list as generated. */
+async function isOwnRecording(dir, fileName) {
+  try {
+    await stat(path.join(dir, fileName));
+  } catch {
+    return false;
+  }
+  return !isRecordedAsGenerated(await readFile(path.join(dir, 'README.md'), 'utf8'), fileName);
+}
+
+/**
+ * Keeps `assets/audio/README.md`'s "Generated files" table true of the file
+ * just written: a take from the sound bench gets its row (prompt, seed), and
+ * a real recording uploaded over a name a generated file held loses the row
+ * that would now be describing the wrong sound. The README says everything
+ * *not* in that table is the owner's own recording (`docs/LEGAL_REVIEW.md`
+ * Finding 3), so the table has to be maintained by the code path that writes
+ * the files, not by memory.
+ */
+async function recordAssetOrigin(dir, fileName, generated) {
+  const readmePath = path.join(dir, 'README.md');
+  const before = await readFile(readmePath, 'utf8');
+  const after =
+    generated === undefined
+      ? forgetGeneratedFile(before, fileName)
+      : recordGeneratedFile(before, {
+          fileName,
+          origin: generated,
+          date: new Date().toISOString().slice(0, 10),
+        });
+  if (after !== before) {
+    await writeFile(readmePath, after, 'utf8');
+  }
+}
+
+/**
+ * `POST /generated-takes` — body `{ prompt, negative?, seconds?, count?,
+ * pick? }`. Replies with the usable takes, each carrying its own mp3 bytes
+ * as base64, for the "Recorded sample" panel to audition. Nothing is written
+ * to the repo here: a take only becomes an asset when one is chosen and goes
+ * through `POST /audio-assets` like any upload. A bench that is not running
+ * is a 503 with the instruction to start it.
+ */
+async function handleGenerateTakes(res, body) {
+  try {
+    respondJson(res, 200, await generateTakes(body));
+  } catch (error) {
+    if (error instanceof SoundBenchOfflineError) {
+      respondJson(res, 503, { error: error.message });
+      return;
+    }
+    throw error;
+  }
 }
 
 /** Same shape `app/audio/types.ts`'s `SampleEdit` describes. */

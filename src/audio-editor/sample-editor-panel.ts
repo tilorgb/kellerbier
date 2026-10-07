@@ -2,7 +2,8 @@ import { getAudioContext, getMasterGain, resumeAudioContext } from '../app/audio
 import { decodeArrayBuffer, playSampleBuffer } from '../app/audio/sample-player.js';
 import { getAudioAssetUrl } from '../app/audio/sample-assets.js';
 import type { InstrumentFilter, SampleEdit, SampleRef } from '../app/audio/types.js';
-import { uploadAudioAsset } from './api-client.js';
+import { base64ToArrayBuffer, generateSoundTakes, uploadAudioAsset } from './api-client.js';
+import type { GeneratedOrigin } from './api-client.js';
 
 export interface SampleEditorPanelHandle {
   /** Re-reads `getCurrentSample()` and reloads the form/waveform from it — call after switching which track/SFX/bark is selected, or after a save elsewhere changes it. */
@@ -32,12 +33,22 @@ const WAVEFORM_HEIGHT = 72;
  * `sample-assets.ts`'s `import.meta.glob` index is resolved once at page
  * load, so a brand-new file on disk needs a reload to appear in it — which
  * is why `refresh()` says so plainly instead of pretending nothing changed.
+ *
+ * `opts.generate` adds a third source next to those two: a take prompted out
+ * of the local sound bench (`tools/audio-editor/sound-bench.mjs`). Choosing
+ * one puts it exactly where a picked file would be — decoded, pending, not
+ * yet uploaded — so trimming it, previewing it and "Upload & use recording"
+ * are the one code path, and the only thing a generated take carries extra
+ * is where it came from. Only the SFX panel passes it: the model behind the
+ * bench makes foley, not music or a voice line.
  */
 export function createSampleEditorPanel(
   host: HTMLElement,
   opts: {
     getCurrentSample: () => SampleRef | undefined;
     saveSample: (sample: SampleRef | null) => Promise<void>;
+    /** Present to offer "Generate"; `suggestedName` is the asset name a chosen take is saved under when "Save as" is left empty. */
+    generate?: { suggestedName: () => string };
   },
 ): SampleEditorPanelHandle {
   const root = document.createElement('div');
@@ -63,6 +74,8 @@ export function createSampleEditorPanel(
   fileInput.type = 'file';
   fileInput.accept = '.wav,.mp3,.ogg,audio/*';
   root.appendChild(fileInput);
+
+  const generator = opts.generate === undefined ? null : buildGenerator(root);
 
   const canvas = document.createElement('canvas');
   canvas.width = WAVEFORM_WIDTH;
@@ -103,6 +116,118 @@ export function createSampleEditorPanel(
   let currentBuffer: AudioBuffer | null = null;
   /** Set only when a *new* file was picked and hasn't been uploaded yet — `save()` uploads it first; otherwise it re-saves the edit against the already-saved `assetId`. */
   let pendingFile: File | null = null;
+  /** Set alongside `pendingFile` when that file is a generated take rather than a picked one — `save()` passes it on so the upload records the take's origin. */
+  let pendingGenerated: GeneratedOrigin | null = null;
+
+  if (generator !== null) {
+    generator.runButton.addEventListener('click', () => {
+      void generate(generator);
+    });
+  }
+
+  async function generate(controls: GeneratorControls): Promise<void> {
+    const prompt = controls.promptInput.value.trim();
+    if (prompt.length === 0) {
+      setStatus('Describe the sound first.', true);
+      return;
+    }
+    resumeAudioContext();
+    const ctx = getAudioContext();
+    if (ctx === null) {
+      setStatus('Web Audio is unavailable in this browser.', true);
+      return;
+    }
+    controls.runButton.disabled = true;
+    controls.takeList.replaceChildren();
+    setStatus(
+      'Generating… the first run of a session loads the model and can take minutes.',
+      false,
+    );
+    try {
+      const result = await generateSoundTakes({
+        prompt,
+        seconds: Number.parseFloat(controls.secondsInput.value) || 3,
+        pick: controls.pickSelect.value === 'all' ? 'all' : 'loudest',
+      });
+      for (const take of result.takes) {
+        const bytes = base64ToArrayBuffer(take.dataBase64);
+        // `decodeAudioData` detaches the buffer it is given; the copy is what gets uploaded.
+        const buffer = await decodeArrayBuffer(ctx, bytes.slice(0));
+        const origin: GeneratedOrigin = {
+          prompt: result.prompt,
+          seed: result.seed,
+          take: take.take,
+          count: result.count,
+        };
+        const notes = [`${take.seconds.toFixed(2)}s`];
+        if (take.fillsTake) {
+          notes.push('never goes quiet');
+        } else if (take.events > 1) {
+          notes.push(
+            controls.pickSelect.value === 'all'
+              ? `${String(take.events)} sounds`
+              : `1 of ${String(take.events)} sounds`,
+          );
+        }
+        addTakeRow(controls, `Take ${String(take.take)} · ${notes.join(' · ')}`, buffer, () => {
+          const typed = controls.nameInput.value.trim();
+          const name = typed.length > 0 ? typed : (opts.generate?.suggestedName() ?? 'take');
+          adoptFile(new File([bytes], `${name}.${result.extension}`), buffer, origin);
+        });
+      }
+      const dropped = result.dropped > 0 ? ` (${String(result.dropped)} silent, dropped)` : '';
+      setStatus(
+        result.takes.length === 0
+          ? `No usable take${dropped} — reword the sound and try again.`
+          : `${String(result.takes.length)} takes${dropped}. Listen, then "Use this" on one.`,
+        result.takes.length === 0,
+      );
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error), true);
+    } finally {
+      controls.runButton.disabled = false;
+    }
+  }
+
+  function addTakeRow(
+    controls: GeneratorControls,
+    label: string,
+    buffer: AudioBuffer,
+    use: () => void,
+  ): void {
+    const row = document.createElement('div');
+    row.className = 'kb-audio-button-row';
+    row.style.alignItems = 'center';
+    row.style.marginBottom = '4px';
+    const text = document.createElement('span');
+    text.textContent = label;
+    text.style.flex = '1 1 auto';
+    row.appendChild(text);
+    makeButton('▶', row).addEventListener('click', () => {
+      resumeAudioContext();
+      const ctx = getAudioContext();
+      const destination = getMasterGain();
+      if (ctx !== null && destination !== null) {
+        playSampleBuffer(ctx, destination, buffer, wholeBufferEdit(buffer), ctx.currentTime, false);
+      }
+    });
+    makeButton('Use this', row).addEventListener('click', use);
+    controls.takeList.appendChild(row);
+  }
+
+  /** A file that is loaded but not uploaded yet, whichever way it got here: the one state both the file picker and a chosen take end in. */
+  function adoptFile(file: File, buffer: AudioBuffer, generated: GeneratedOrigin | null): void {
+    currentBuffer = buffer;
+    pendingFile = file;
+    pendingGenerated = generated;
+    trimStartInput.value = '0';
+    trimEndInput.value = String(buffer.duration);
+    drawWaveform();
+    setStatus(
+      `Loaded "${file.name}" — ${buffer.duration.toFixed(2)}s. Adjust below, then "Upload & use recording".`,
+      false,
+    );
+  }
 
   function currentEdit(): SampleEdit {
     const type = filterTypeSelect.value;
@@ -197,15 +322,7 @@ export function createSampleEditorPanel(
     try {
       const bytes = await file.arrayBuffer();
       const buffer = await decodeArrayBuffer(ctx, bytes);
-      currentBuffer = buffer;
-      pendingFile = file;
-      trimStartInput.value = '0';
-      trimEndInput.value = String(buffer.duration);
-      drawWaveform();
-      setStatus(
-        `Loaded "${file.name}" — ${buffer.duration.toFixed(2)}s. Adjust below, then "Upload & use recording".`,
-        false,
-      );
+      adoptFile(file, buffer, null);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error), true);
     }
@@ -237,7 +354,8 @@ export function createSampleEditorPanel(
       let assetId: string;
       if (pendingFile !== null) {
         const bytes = await pendingFile.arrayBuffer();
-        assetId = (await uploadAudioAsset(pendingFile.name, bytes)).assetId;
+        assetId = (await uploadAudioAsset(pendingFile.name, bytes, pendingGenerated ?? undefined))
+          .assetId;
       } else {
         const existing = opts.getCurrentSample();
         if (existing === undefined) {
@@ -248,6 +366,7 @@ export function createSampleEditorPanel(
       }
       await opts.saveSample({ assetId, edit: currentEdit() });
       pendingFile = null;
+      pendingGenerated = null;
       setStatus(`Saved — now plays "${assetId}".`, false);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error), true);
@@ -267,6 +386,7 @@ export function createSampleEditorPanel(
       await opts.saveSample(null);
       currentBuffer = null;
       pendingFile = null;
+      pendingGenerated = null;
       fileInput.value = '';
       drawWaveform();
       setStatus('Recording removed — back to the synthesised sound above.', false);
@@ -284,7 +404,13 @@ export function createSampleEditorPanel(
 
   async function refresh(): Promise<void> {
     pendingFile = null;
+    pendingGenerated = null;
     fileInput.value = '';
+    if (generator !== null) {
+      // Takes made for the previously selected sound are not candidates for this one.
+      generator.takeList.replaceChildren();
+      generator.nameInput.value = '';
+    }
     const sample = opts.getCurrentSample();
     if (sample === undefined) {
       currentBuffer = null;
@@ -340,6 +466,80 @@ export function createSampleEditorPanel(
       root.remove();
     },
   };
+}
+
+interface GeneratorControls {
+  readonly promptInput: HTMLTextAreaElement;
+  readonly secondsInput: HTMLInputElement;
+  readonly pickSelect: HTMLSelectElement;
+  readonly nameInput: HTMLInputElement;
+  readonly runButton: HTMLButtonElement;
+  readonly takeList: HTMLElement;
+}
+
+const PICK_ONE_SHOT = 'the loudest sound (a one-shot)';
+const PICK_ALL = 'everything (a sequence)';
+
+/** The "or generate one" block under the file picker — DOM only; `createSampleEditorPanel` owns what the controls do. */
+function buildGenerator(host: HTMLElement): GeneratorControls {
+  const hint = document.createElement('p');
+  hint.className = 'kb-audio-hint';
+  hint.style.marginTop = '10px';
+  hint.textContent =
+    'Or generate one: describe the source, the action and how it is recorded. Needs the local sound bench running (start-sound-bench.bat).';
+  host.appendChild(hint);
+
+  const promptInput = document.createElement('textarea');
+  promptInput.rows = 2;
+  promptInput.placeholder =
+    'heavy glass beer mug set down hard on a wooden table, single impact, close microphone, dry';
+  promptInput.style.width = '100%';
+  promptInput.style.font = 'inherit';
+  promptInput.style.marginBottom = '8px';
+  host.appendChild(promptInput);
+
+  const secondsInput = numberField('Take length (s)', host, 1, 20, 0.5);
+  secondsInput.value = '3';
+  const pickSelect = selectField('Keep', [PICK_ONE_SHOT, PICK_ALL], host);
+  // `selectField` uses its label as the value; the request wants the bench's own words.
+  for (const option of pickSelect.options) {
+    option.value = option.textContent === PICK_ALL ? 'all' : 'loudest';
+  }
+  const nameInput = textField('Save as', host);
+  nameInput.placeholder = "the sound's own id";
+
+  const buttonRow = document.createElement('div');
+  buttonRow.className = 'kb-audio-button-row';
+  buttonRow.style.marginBottom = '8px';
+  host.appendChild(buttonRow);
+  const runButton = makeButton('Generate takes', buttonRow);
+
+  const takeList = document.createElement('div');
+  host.appendChild(takeList);
+
+  return { promptInput, secondsInput, pickSelect, nameInput, runButton, takeList };
+}
+
+/** The edit that plays a buffer exactly as it is — for auditioning a take before it has an edit of its own. */
+function wholeBufferEdit(buffer: AudioBuffer): SampleEdit {
+  return {
+    trimStartSeconds: 0,
+    trimEndSeconds: buffer.duration,
+    fadeInSeconds: 0,
+    fadeOutSeconds: 0,
+    gain: 1,
+  };
+}
+
+function textField(labelText: string, host: HTMLElement): HTMLInputElement {
+  const label = document.createElement('label');
+  label.textContent = labelText;
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.style.width = '200px';
+  label.appendChild(input);
+  host.appendChild(label);
+  return input;
 }
 
 function makeButton(label: string, host: HTMLElement): HTMLButtonElement {
