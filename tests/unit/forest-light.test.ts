@@ -11,10 +11,11 @@ import {
 } from '../../src/render/world/canopy.js';
 import {
   LANTERN_INSET,
+  LANTERNS_PER_CELL,
   MAX_WALL_LANTERNS,
   wallLanternLayout,
 } from '../../src/render/world/wall-lanterns.js';
-import { DOOR_SPAN } from '../../src/sim/room/geometry.js';
+import { DOOR_SPAN, RoomGeometry } from '../../src/sim/room/geometry.js';
 import {
   compileRoomTemplate,
   doorCentre,
@@ -120,15 +121,15 @@ describe('where the lanterns hang', () => {
     return metadata.floorTags.includes('wald') && metadata.shape === '1x1';
   }).map((room) => compileRoomTemplate(room, 3, 'wald room', ENEMY_DEFINITIONS));
 
-  it('hangs two or three, on the walls, in every wald room and for every seed tried', () => {
+  it('hangs four or five, on the walls, in every wald room and for every seed tried', () => {
     expect(wald.length).toBeGreaterThan(0);
     for (const compiled of wald) {
       const room = compiled.geometry;
       for (let seed = 0; seed < 40; seed++) {
         const lanterns = wallLanternLayout(seed * 2654435761, room, compiled.doors);
         const where = `${compiled.source.id} seed ${String(seed)}`;
-        expect(lanterns.length, where).toBeGreaterThanOrEqual(2);
-        expect(lanterns.length, where).toBeLessThanOrEqual(MAX_WALL_LANTERNS);
+        expect(lanterns.length, where).toBeGreaterThanOrEqual(LANTERNS_PER_CELL);
+        expect(lanterns.length, where).toBeLessThanOrEqual(LANTERNS_PER_CELL + 1);
         for (const lantern of lanterns) {
           const onWall =
             Math.abs(lantern.z - (room.minY + LANTERN_INSET)) < 1e-6 ||
@@ -148,6 +149,25 @@ describe('where the lanterns hang', () => {
             expect(along, where).toBeGreaterThan((door.span ?? DOOR_SPAN) / 2);
           }
         }
+      }
+    }
+  });
+
+  it('hangs proportionally more in a bigger room, so it is no darker than a small one', () => {
+    // A double-wide room and a four-cell one, doors aside.
+    for (const [cellsX, cellsY] of [
+      [2, 1],
+      [2, 2],
+    ] as const) {
+      const room = new RoomGeometry(0, 0, WIDTH * cellsX, DEPTH * cellsY);
+      for (let seed = 0; seed < 40; seed++) {
+        const lanterns = wallLanternLayout(seed * 2654435761, room, []);
+        const cells = cellsX * cellsY;
+        const where = `${String(cellsX)}x${String(cellsY)} seed ${String(seed)}`;
+        expect(lanterns.length, where).toBeGreaterThanOrEqual(
+          Math.min(MAX_WALL_LANTERNS, cells * LANTERNS_PER_CELL - 1),
+        );
+        expect(lanterns.length, where).toBeLessThanOrEqual(MAX_WALL_LANTERNS);
       }
     }
   });

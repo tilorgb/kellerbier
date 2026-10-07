@@ -406,7 +406,8 @@ export const bar: Record<DictKey, string> = {
     'Gschoss zertoaln si beim Einschlog in zwoa Brockn. Reichweitn +15%',
   'items.kartoffelsalat.flavourText':
     'Jeds Familienrezept is des oanzig richtige, und olle mitanand kenna’s ned recht ham.',
-  'items.karussell.description': 'Wenn d’ di bewegst, schubst d’ nahe Gegna mit',
+  'items.karussell.description':
+    'Aktiv: oa Drahra schleidert ois in da Näh vo dir weg — koa Schadn, bloß Luft',
   'items.karussell.flavourText':
     'Da Betreiba hod no nia an Sicherheitsbügel gprüft. D’Schlang wead nia kürza.',
   'items.kletzenbrot.description': 'Gschoss vagiftn, wos’ treffn. Schadn -15%',

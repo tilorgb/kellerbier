@@ -240,6 +240,126 @@ export const boar = single('boar', [
   '.............KKKKK.KKKKK..........KKKKK.KKKKK....',
 ]);
 
+// ====================================================== WALK AND HOP
+// The bare minimum of motion for the two side-on walkers, so they stop
+// gliding: frame 0 of each strip is the signed-off sprite above, untouched,
+// and the other frames re-pose only the legs.
+
+/** The Boar's four legs, as the outline columns either side of each (front pair, back pair). */
+const BOAR_LEGS = [
+  [12, 18],
+  [18, 24],
+  [33, 39],
+  [39, 45],
+];
+/** The rows the Boar's legs are redrawn over: the shins down to the ground row. */
+const BOAR_LEG_TOP = 26;
+const BOAR_GROUND = 30;
+/**
+ * How many rows a lifted hoof clears the ground by. Two, signed off by Tilo
+ * over one: a single row all but vanishes at the in-room scale.
+ */
+const BOAR_LIFT = 2;
+
+/**
+ * The Boar with the legs in `raised` (indices into `BOAR_LEGS`) lifted
+ * `BOAR_LIFT` rows off the ground — a diagonal pair at a time is a trot. A
+ * planted leg is shin, hoof on row 29, sole on row 30; a lifted one is the
+ * same that much higher. A shared outline column is inked as far down as either leg beside
+ * it still reaches.
+ */
+function boarStep(name, raised) {
+  const rows = boar.px.map((row) => row.slice());
+  const hoofRow = (leg) => BOAR_GROUND - 1 - (raised.includes(leg) ? BOAR_LIFT : 0);
+  for (let y = BOAR_LEG_TOP; y <= BOAR_GROUND; y++) {
+    const row = rows[y];
+    // Clear the legs' span first: everything from the first leg's left edge
+    // to the last one's right edge on these rows is legs or gap.
+    for (let x = BOAR_LEGS[0][0]; x <= BOAR_LEGS[3][1]; x++) {
+      row[x] = WALD['.'];
+    }
+    BOAR_LEGS.forEach(([left, right], leg) => {
+      const hoof = hoofRow(leg);
+      for (let x = left + 1; x < right; x++) {
+        row[x] = y < hoof ? WALD.c : y === hoof ? WALD.a : y === hoof + 1 ? WALD.K : WALD['.'];
+      }
+    });
+    BOAR_LEGS.forEach(([left, right], leg) => {
+      for (const x of [left, right]) {
+        if (y <= hoofRow(leg)) {
+          row[x] = WALD.K;
+        }
+      }
+    });
+  }
+  return { name, width: boar.width, height: boar.height, px: rows };
+}
+
+export const boarStepA = boarStep('boar-step-a', [0, 3]);
+export const boarStepB = boarStep('boar-step-b', [1, 2]);
+
+/**
+ * The Kaninchen mid-hop: front paws reaching forward, hind feet kicked back —
+ * the sitting sprite's own body, only the bottom two rows re-posed.
+ */
+export const kaninchenHop = single('kaninchen-hop', [
+  '....KK.KK......',
+  '...KlmKlmK.....',
+  '...KlqKlqK.....',
+  '...KlqKlqK.....',
+  '...KlmKlmK.....',
+  '..KKmmmmmK.....',
+  '.KmmmmmmmmK....',
+  'KmKmmmmmmmmK...',
+  'KqmmmmmmmmmmK..',
+  'KSmmmmmmmmmmmK.',
+  '.KSmmmmmmmmmmKK',
+  '..KSSmmmmmmmmwK',
+  '..KSSSmmmmmmmwK',
+  '...KSSSmmmmmmK.',
+  '..KmKKKKKKKmmK.',
+  '.KK........KKK.',
+]);
+
+/**
+ * The animated bodies: a horizontal strip per creature plus its
+ * `.anim.json` sidecar (`assets/sprites/README.md`). No `telegraph` clip on
+ * either, on purpose — the renderer's wind-up crouch (#429) is their
+ * telegraph, and it only runs for a body whose strip does not author one.
+ */
+export const STRIPS = {
+  boar: {
+    frames: [boar, boarStepA, boarStepB],
+    anim: {
+      frames: 3,
+      frameDurationMs: 120,
+      loop: true,
+      clips: {
+        idle: { frames: [0], frameDurationMs: 400, mode: 'loop' },
+        // Trot: one diagonal pair up, down, the other pair up, down. Quick
+        // enough that the charge reads as legs going flat out.
+        move: { frames: [1, 0, 2, 0], frameDurationMs: 90, mode: 'loop' },
+        hurt: { frames: [0], frameDurationMs: 90, mode: 'once', onEnd: 'idle' },
+      },
+    },
+  },
+  kaninchen: {
+    frames: [kaninchen, kaninchenHop],
+    anim: {
+      frames: 2,
+      frameDurationMs: 120,
+      loop: true,
+      clips: {
+        idle: { frames: [0], frameDurationMs: 400, mode: 'loop' },
+        // Stretched out for as long as the hop is moving it, sat back down
+        // the moment it lands.
+        move: { frames: [1], frameDurationMs: 120, mode: 'loop' },
+        hurt: { frames: [0], frameDurationMs: 90, mode: 'once', onEnd: 'idle' },
+      },
+    },
+  },
+};
+
 // ======================================================== BORKENKÄFER
 // A bark-beetle swarm (#410): a heaped mound of glossy grey beetles, one body
 // on the floor, with sawdust at its foot and a couple of stragglers at the
@@ -270,10 +390,8 @@ export const borkenkaefer = single('borkenkaefer', [
 export const ROSTER = {
   fliegenpilz,
   zecke,
-  kaninchen,
   bachforelle,
   'bachforelle-shadow': bachforelleShadow,
-  boar,
   borkenkaefer,
 };
 
@@ -297,19 +415,45 @@ export function assertOnPalette(_bucket, framesIn) {
   }
 }
 
-/** One frame as PNG bytes. */
-export function encodeSingle(f) {
-  const pixels = Buffer.alloc(f.width * f.height * 4);
+function putFrame(pixels, stripWidth, f, ox) {
   for (let y = 0; y < f.height; y++) {
     for (let x = 0; x < f.width; x++) {
       const c = f.px[y][x];
       if (c === null) continue;
-      const at = (y * f.width + x) * 4;
+      const at = (y * stripWidth + ox + x) * 4;
       pixels[at] = (c >> 16) & 0xff;
       pixels[at + 1] = (c >> 8) & 0xff;
       pixels[at + 2] = c & 0xff;
       pixels[at + 3] = 0xff;
     }
   }
+}
+
+/** One frame as PNG bytes. */
+export function encodeSingle(f) {
+  const pixels = Buffer.alloc(f.width * f.height * 4);
+  putFrame(pixels, f.width, f, 0);
   return encodePng({ width: f.width, height: f.height, pixels });
+}
+
+/** A horizontal frame strip as PNG bytes (`assets/sprites/README.md` layout). */
+export function encodeStrip(name, frames) {
+  const first = frames[0];
+  if (first === undefined) throw new Error(`${name}: no frames`);
+  for (const f of frames) {
+    if (f.width !== first.width || f.height !== first.height) {
+      throw new Error(
+        `${name}: frame ${f.name} is not ${String(first.width)}x${String(first.height)}`,
+      );
+    }
+  }
+  const width = first.width * frames.length;
+  const pixels = Buffer.alloc(width * first.height * 4);
+  frames.forEach((f, i) => putFrame(pixels, width, f, i * first.width));
+  return encodePng({ width, height: first.height, pixels });
+}
+
+/** A strip's sidecar, as the bytes committed next to it. */
+export function encodeAnim(anim) {
+  return `${JSON.stringify(anim, null, 2)}\n`;
 }

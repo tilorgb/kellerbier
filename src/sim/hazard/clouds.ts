@@ -1,7 +1,6 @@
 import { circlesOverlap } from '../collision/circle-circle.js';
 import { CollisionLayer } from '../collision/layers.js';
 import type { GameSim } from '../game/sim.js';
-import { ParticleKind } from '../particle/store.js';
 import { NO_SLOT } from '../pool/slot-pool.js';
 import { applyPoison } from '../systems/status-effects.js';
 import { CLOUD_CAPACITY, CloudTeam, type CloudTeamId } from './cloud-store.js';
@@ -83,7 +82,6 @@ function stepCloud(index: number): void {
   if (radius <= 0) {
     return;
   }
-  emitCloudParticles(sim, index, x, y, radius, age);
 
   if ((clouds.team[index] ?? CloudTeam.Enemy) === CloudTeam.Enemy) {
     const player = sim.playerIndex;
@@ -106,57 +104,6 @@ function stepCloud(index: number): void {
   circle[CIRCLE_Y] = y;
   circle[CIRCLE_RADIUS] = radius;
   sim.broadphase.query(x, y, radius, poisonEnemy);
-}
-
-const GOLDEN_ANGLE = 2.399963229728653;
-/** Edge motes per tick: with `EDGE_LIFE_TICKS` of life they overlap into a dotted ring the player can read the limit of. */
-const EDGE_MOTES = 3;
-const EDGE_LIFE_TICKS = 10;
-const BODY_LIFE_TICKS = 26;
-const MOTE_SIZE = 3;
-
-/**
- * The cloud's look: a handful of drifting Miasma motes through its body and a
- * ring of still ones on its current edge (#401). Particles rather than a
- * sprite because world sprites are hard-edged cutouts (`docs/DECISIONS.md`
- * #74) and a cloud should not be; the *edge* ring is what says where it
- * ends. Positions come from the golden angle of the cloud's age and slot —
- * no RNG, so a replay's particles match and the cloud costs the sim nothing
- * to stay deterministic. Miasma is neither a decorative nor a flashing kind
- * (`render/particles.ts`), so no accessibility setting hides the edge.
- */
-function emitCloudParticles(
-  sim: GameSim,
-  index: number,
-  x: number,
-  y: number,
-  radius: number,
-  age: number,
-): void {
-  const seed = age * EDGE_MOTES + index * 7;
-  for (let mote = 0; mote < EDGE_MOTES; mote++) {
-    const angle = (seed + mote) * GOLDEN_ANGLE;
-    sim.particles.spawn(
-      x + Math.cos(angle) * radius,
-      y + Math.sin(angle) * radius,
-      0,
-      0,
-      EDGE_LIFE_TICKS,
-      MOTE_SIZE,
-      ParticleKind.Miasma,
-    );
-  }
-  const angle = seed * GOLDEN_ANGLE * 1.7;
-  const reach = radius * Math.sqrt(((seed * 0.618) % 1) + 0.0001);
-  sim.particles.spawn(
-    x + Math.cos(angle) * reach,
-    y + Math.sin(angle) * reach,
-    Math.cos(angle) * 0.05,
-    Math.sin(angle) * 0.05,
-    BODY_LIFE_TICKS,
-    MOTE_SIZE * 1.5,
-    ParticleKind.Miasma,
-  );
 }
 
 /** The cloud being stepped, as typed scratch rather than module `let`s (`no-hot-allocation`). */

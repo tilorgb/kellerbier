@@ -1,13 +1,15 @@
 import type { ItemDefinition } from '../../sim/item/definition.js';
 
-/** Push radius and per-tick push strength — small, because it stacks every tick an enemy is inside it. */
-const PUSH_RADIUS = 40;
-const PUSH_STRENGTH = 0.35;
-
 /**
- * Der Ordner — a bouncer familiar. Does no damage; shoves anything that gets
- * close back out of the player's space, every tick, for as long as it is
- * held.
+ * Der Ordner — a bouncer familiar you can see: he walks at Alois's side,
+ * strides over to the nearest mob that comes too close and shoves *that one*
+ * back out of the player's space — no damage, mass-scaled — then walks back
+ * and catches his breath before the next. All of it is
+ * `sim/systems/ordner.ts`, tuned under `tuning.ordner`.
+ *
+ * It used to be an invisible aura shoving everything within 40 units away
+ * every tick, which stacked into more push than any Floor 3 mob could walk
+ * against: holding it was invulnerability.
  */
 export const derOrdner: ItemDefinition = {
   id: 'der-ordner',
@@ -19,15 +21,11 @@ export const derOrdner: ItemDefinition = {
   quality: 1,
   promilleRequirement: 'any',
   hooks: {
+    onPickup: (ctx) => {
+      ctx.sim.summonOrdner();
+    },
     onTick: (ctx) => {
-      const sim = ctx.sim;
-      const playerIndex = sim.playerIndex;
-      sim.pushEnemiesNear(
-        sim.positionX(playerIndex),
-        sim.positionY(playerIndex),
-        PUSH_RADIUS,
-        PUSH_STRENGTH,
-      );
+      ctx.sim.stepOrdner();
     },
   },
 };

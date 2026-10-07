@@ -23,17 +23,18 @@ import {
  * every system that moves the player or pushes bodies around has had its say:
  *
  * - **Shake detection.** The game has no dash (`systems/movement.ts`), so
- *   sharp changes of direction are the one way to throw a tick. A *reversal*
- *   is the movement input pointing more than `tuning.latch.shakeAngleDegrees`
- *   away from the last direction it pointed in — the last *non-zero* one, so
- *   letting go between two key presses, or a stick passing through its dead
- *   zone, does not hide the flip. Comparing tick to tick is what makes it
- *   "sharp": a stick swept round in a circle never turns that far in one
- *   step, while a stick wiggled left and right crosses the middle with its
- *   sign flipping. (A first version measured against a reference heading that
- *   only moved on a reversal; after walking down, left-right flips were only
- *   90° from it and never counted.) `shakesRequired` reversals inside
- *   `shakeWindowTicks` throw off **every** latched body at once.
+ *   changing direction is the one way to throw a tick — *any* change of
+ *   direction, not only a flip back: a turning meter. Every tick, the angle
+ *   the movement input turned through since the last direction it pointed in
+ *   (the last *non-zero* one, so letting go between two key presses, or a
+ *   stick passing through its dead zone, does not hide the turn) is added to
+ *   it, and the meter drains by half every `shakeHalfLifeTicks`. Reaching
+ *   `shakeTurnDegrees` throws off **every** latched body at once.
+ *   A left-right wiggle fills it in three flips; running circles (W, D, S, A,
+ *   or a stick swirled round) fills it in about two laps; ordinary
+ *   steering, a quarter turn now and then, drains away long before. (It used
+ *   to count only turns sharper than 120°, which a circle never makes — so
+ *   the one wiggle players reach for first did nothing.)
  *   Read from the raw `InputFrame`, never from velocity: a replay's input log
  *   alone reproduces it, and a player pinned against a wall can still shake.
  * - **Riding.** Each latched body is put back on the player at the offset it
@@ -46,9 +47,6 @@ import {
  * `no-hot-allocation` rule in tools/eslint/.
  */
 
-/** Reversals remembered at once — and so the most `shakesRequired` can usefully ask for. */
-export const LATCH_SHAKE_HISTORY = 8;
-
 /** `GameSim.latchHeading` slots: the last non-zero movement direction, as a unit vector. */
 export const SHAKE_HEADING_X = 0;
 export const SHAKE_HEADING_Y = 1;
@@ -60,17 +58,19 @@ const FLICK_TICKS = 12;
 export function stepLatches(sim: GameSim, input: Readonly<InputFrame>): void {
   const latched = countLatched(sim);
   sim.latchState[0] = latched;
-  const reversed = readReversal(sim, input);
+  const turned = readTurn(sim, input);
+  const meter = sim.latchTurn;
   if (latched === 0) {
-    // Nothing to shake: reversals from before a tick latched never count
+    // Nothing to shake: turning from before a tick latched never counts
     // toward throwing it, or a player who happened to be zig-zagging would
     // shed it the instant it landed.
-    if ((sim.latchState[1] ?? 0) !== 0) {
-      clearReversals(sim);
-    }
+    meter[0] = 0;
     return;
   }
-  if (reversed && recordReversal(sim)) {
+  const tuning = sim.tuning.latch;
+  const drain = 0.5 ** (1 / Math.max(1, tuning.shakeHalfLifeTicks));
+  meter[0] = (meter[0] ?? 0) * drain + turned;
+  if (meter[0] >= tuning.shakeTurnDegrees) {
     shakeOff(sim);
     return;
   }
@@ -140,7 +140,7 @@ export function shakeOff(sim: GameSim): void {
     );
     thrown += 1;
   }
-  clearReversals(sim);
+  sim.latchTurn[0] = 0;
   sim.latchState[0] = 0;
   if (thrown > 0) {
     sim.playItemCue('zecke-shake-off');
@@ -196,15 +196,14 @@ function ride(sim: GameSim): void {
 }
 
 /**
- * Whether this tick's movement input is a sharp change of direction from the
- * last direction held. A centred stick or no key held is neither a reversal
- * nor a new heading.
+ * Degrees the movement input turned this tick, from the last direction it
+ * pointed in — 0 with nothing held, and on the first direction ever held.
  */
-function readReversal(sim: GameSim, input: Readonly<InputFrame>): boolean {
+function readTurn(sim: GameSim, input: Readonly<InputFrame>): number {
   const moveX = input.moveX;
   const moveY = input.moveY;
   if (moveX === 0 && moveY === 0) {
-    return false;
+    return 0;
   }
   const length = vectorLength(moveX, moveY);
   const unitX = moveX / length;
@@ -212,42 +211,11 @@ function readReversal(sim: GameSim, input: Readonly<InputFrame>): boolean {
   const heading = sim.latchHeading;
   const headingX = heading[SHAKE_HEADING_X] ?? 0;
   const headingY = heading[SHAKE_HEADING_Y] ?? 0;
-  if (headingX === 0 && headingY === 0) {
-    heading[SHAKE_HEADING_X] = unitX;
-    heading[SHAKE_HEADING_Y] = unitY;
-    return false;
-  }
   heading[SHAKE_HEADING_X] = unitX;
   heading[SHAKE_HEADING_Y] = unitY;
-  const threshold = Math.cos((sim.tuning.latch.shakeAngleDegrees * Math.PI) / 180);
-  return unitX * headingX + unitY * headingY < threshold;
-}
-
-/**
- * Notes a reversal on this tick and reports whether enough of them now fall
- * inside the window. Ticks are stored plus one, so a zeroed slot is "none".
- */
-function recordReversal(sim: GameSim): boolean {
-  const ticks = sim.latchReversalTicks;
-  const cursor = sim.latchState[1] ?? 0;
-  ticks[cursor % LATCH_SHAKE_HISTORY] = sim.tick + 1;
-  sim.latchState[1] = cursor + 1;
-  const tuning = sim.tuning.latch;
-  const required = Math.min(LATCH_SHAKE_HISTORY, Math.max(1, Math.round(tuning.shakesRequired)));
-  const window = Math.max(1, Math.round(tuning.shakeWindowTicks));
-  let inside = 0;
-  for (let slot = 0; slot < LATCH_SHAKE_HISTORY; slot++) {
-    const stored = ticks[slot] ?? 0;
-    if (stored !== 0 && sim.tick + 1 - stored < window) {
-      inside += 1;
-    }
+  if (headingX === 0 && headingY === 0) {
+    return 0;
   }
-  sim.latchState[2] = inside;
-  return inside >= required;
-}
-
-function clearReversals(sim: GameSim): void {
-  sim.latchReversalTicks.fill(0);
-  sim.latchState[1] = 0;
-  sim.latchState[2] = 0;
+  const cos = Math.max(-1, Math.min(1, unitX * headingX + unitY * headingY));
+  return (Math.acos(cos) * 180) / Math.PI;
 }

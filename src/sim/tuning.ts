@@ -626,18 +626,50 @@ export interface PoisonCloudTuning {
 export interface LatchTuning {
   /** Extra room units between two footprints that still count as touching, for a body to latch. */
   latchReach: number;
-  /** Degrees the movement input has to swing from one held direction to the next to count as one sharp change of direction. */
-  shakeAngleDegrees: number;
-  /** Ticks the reversals have to fall inside, counting back from the latest one. */
-  shakeWindowTicks: number;
-  /** Reversals inside the window that throw off every latched body. At most `LATCH_SHAKE_HISTORY`. */
-  shakesRequired: number;
+  /**
+   * Degrees of turning — any change of the movement input's direction, summed
+   * — that throw off every latched body. A left-right flip is 180, a quarter
+   * of a circle 90.
+   */
+  shakeTurnDegrees: number;
+  /** Ticks for the turning meter to drain by half — how quickly turning has to come to count as a shake. */
+  shakeHalfLifeTicks: number;
   /** Room units a shaken-off body lands from the player's edge. */
   flingDistance: number;
   /** Push, in room units per tick, a shaken-off body is flicked outward with on top of landing there. */
   flingPush: number;
   /** Ticks the "shake it off" hint stays up, the first time a body latches in a run. */
   hintTicks: number;
+}
+
+/**
+ * Der Ordner, the bouncer familiar (`sim/systems/ordner.ts`): walks at
+ * Alois's side, strides over to whatever comes too close, shoves just that
+ * one away, walks back. It used to be an invisible aura that shoved
+ * everything within reach every tick, which built up to more push than any
+ * Floor 3 mob could walk against — holding it made the player untouchable.
+ */
+export interface OrdnerTuning {
+  /** Room units from *the bouncer* — not from Alois — inside which a mob draws him over. */
+  guardRadius: number;
+  /** Room units from Alois he has to be within before he looks out for mobs at all. */
+  nearAloisDistance: number;
+  /** Room units from Alois he settles at, trailing him, rather than walking on top of him. */
+  comfortDistance: number;
+  /** Room units from Alois past which he drops a chase, and hurries to catch up. */
+  leashDistance: number;
+  /** Room units per tick trailing Alois — slower than Alois walks, so he lags behind. */
+  walkSpeed: number;
+  /** Room units per tick striding at a mob — a bit faster than Alois walks. */
+  strideSpeed: number;
+  /** Push, before the mob's mass divides it, a shove throws a mob away with. */
+  shoveStrength: number;
+  /** Ticks between shoves. */
+  cooldownTicks: number;
+  /** Ticks a stride may take before the bouncer gives up on that mob. */
+  giveUpTicks: number;
+  /** Ticks the shove pose is held. */
+  shovePoseTicks: number;
 }
 
 /**
@@ -1137,6 +1169,7 @@ export interface SimTuning {
   readonly projectileTags: ProjectileTagTuning;
   readonly poisonCloud: PoisonCloudTuning;
   readonly latch: LatchTuning;
+  readonly ordner: OrdnerTuning;
   readonly pits: PitTuning;
   readonly skipAhead: SkipAheadTuning;
   readonly itemPool: ItemPoolTuning;
@@ -1482,12 +1515,31 @@ export const DEFAULT_POISON_CLOUD_TUNING: Readonly<PoisonCloudTuning> = {
 
 export const DEFAULT_LATCH_TUNING: Readonly<LatchTuning> = {
   latchReach: 2,
-  shakeAngleDegrees: 120,
-  shakeWindowTicks: 40,
-  shakesRequired: 3,
+  // Three quick flips (180 each) or about two laps of circling;
+  // a quarter turn every half-second of ordinary steering stays far under.
+  shakeTurnDegrees: 450,
+  shakeHalfLifeTicks: 30,
   flingDistance: 6,
   flingPush: 2.5,
   hintTicks: 180,
+};
+
+export const DEFAULT_ORDNER_TUNING: Readonly<OrdnerTuning> = {
+  guardRadius: 32,
+  nearAloisDistance: 36,
+  comfortDistance: 18,
+  leashDistance: 80,
+  // Alois tops out at 1.62: trailing, the bouncer falls a little behind;
+  // striding at a mob, he gets there first.
+  walkSpeed: 1.3,
+  strideSpeed: 2.2,
+  // Mass-scaled: a Kaninchen (1.2) is thrown ~14 units, a Boar (6) a few.
+  shoveStrength: 3,
+  // Three seconds: long enough that a lone slow mob (a Zecke at ~0.2 a
+  // tick) still walks back in between shoves — breathing room, not a wall.
+  cooldownTicks: 180,
+  giveUpTicks: 60,
+  shovePoseTicks: 12,
 };
 
 export const DEFAULT_PIT_TUNING: Readonly<PitTuning> = {
@@ -1684,6 +1736,7 @@ export function createTuning(): SimTuning {
     projectileTags: { ...DEFAULT_PROJECTILE_TAG_TUNING },
     poisonCloud: { ...DEFAULT_POISON_CLOUD_TUNING },
     latch: { ...DEFAULT_LATCH_TUNING },
+    ordner: { ...DEFAULT_ORDNER_TUNING },
     pits: { ...DEFAULT_PIT_TUNING },
     skipAhead: { ...DEFAULT_SKIP_AHEAD_TUNING },
     itemPool: { ...DEFAULT_ITEM_POOL_TUNING },

@@ -68,7 +68,7 @@ Columns:
 | haferlschuh | Haferlschuh | Passive | Move Speed +15%, immune to slick puddles | Every nail hand-driven by someone who takes this far too seriously. | 0 | Treasure, Shop | Any |
 | hendlgeruch | Hendlgeruch | Passive | Constantly pulls distant enemies toward you | Carries for a kilometre. Everyone within a kilometre now has plans. | 1 | Treasure, Shop, Secret | Any |
 | kartoffelsalat | Kartoffelsalat | Passive | Shots split into two chunks on impact. Range +15% | Every family recipe is the only correct one and they cannot all be right. | 1 | Treasure, Shop | Any |
-| karussell | Karussell | Passive | Moving pushes nearby enemies along with you | The operator has not once checked a safety harness. The line never gets shorter. | 1 | Treasure, Shop | Any |
+| karussell | Karussell | Active (5 s) | One spin flings everything close away from you, throwing off a latched Zecke — no damage | The operator has not once checked a safety harness. The line never gets shorter. | 1 | Treasure, Shop | Any |
 | kletzenbrot | Kletzenbrot | Passive | Shots poison what they hit. Damage -15% | Keeps for a month. Tastes like it has. | 2 | Shop, Boss, Secret | Any |
 | konterbier | Konterbier | Passive | Drinking while hungover instantly clears the Kater | Hair of the dog. The dog remembers you fondly. | 1 | Treasure, Shop | Any |
 | kraftbier | Kraftbier | Passive | Damage +40%, Move Speed -20% | The label does not say 9% for decoration. | 1 | Treasure, Shop | Any |

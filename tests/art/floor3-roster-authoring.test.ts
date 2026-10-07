@@ -4,8 +4,10 @@ import { describe, expect, it } from 'vitest';
 import {
   ROSTER,
   ROSTER_BUCKET,
+  STRIPS,
   assertOnPalette,
   encodeSingle,
+  encodeStrip,
 } from '../../tools/art/authoring/floor3-roster.mjs';
 import { decodePng } from '../../tools/art/png.mjs';
 import { validateSpriteSize, findOffPalettePixel } from '../../tools/art/validate.mjs';
@@ -16,20 +18,23 @@ import { legalPixelColorsFor } from '../../tools/art/palette.mjs';
  * committed PNG *is* what `tools/art/authoring/floor3-roster.mjs` produces,
  * byte for byte, so editing the source without `npm run art:floor3` fails a
  * pull request rather than shipping art nobody looked at. Grows by one entry
- * per Floor 3 creature as each is signed off (#405-#411).
+ * per Floor 3 creature as each is signed off (#405-#411). The Boar and the
+ * Kaninchen are strips (a trot, a hop) whose first frame is the signed-off
+ * sprite, unchanged.
  */
 
 const SPRITES = fileURLToPath(new URL('../../assets/sprites/', import.meta.url));
 const entries = Object.entries(ROSTER);
+const strips = Object.entries(STRIPS);
 const LEGAL = legalPixelColorsFor('floor-3-wald');
 
-function pathFor(name: string): string {
-  return `${SPRITES}floor-3-wald/characters/${name}.png`;
+function pathFor(name: string, suffix = '.png'): string {
+  return `${SPRITES}floor-3-wald/characters/${name}${suffix}`;
 }
 
 describe("Der Wald roster's committed art is what the authoring source produces", () => {
   it('covers the signed-off creatures so far', () => {
-    expect(Object.keys(ROSTER).sort()).toEqual([
+    expect([...Object.keys(ROSTER), ...Object.keys(STRIPS)].sort()).toEqual([
       'bachforelle',
       'bachforelle-shadow',
       'boar',
@@ -62,5 +67,39 @@ describe("Der Wald roster's committed art is what the authoring source produces"
       findOffPalettePixel(pixels, width, height, LEGAL),
       `${name} has an off-palette pixel`,
     ).toBeNull();
+  });
+
+  it.each(strips)('%s.strip.png and its sidecar match a fresh encode', async (name, strip) => {
+    const committed = await readFile(pathFor(name, '.strip.png'));
+    expect(
+      encodeStrip(name, strip.frames).equals(committed),
+      `${name}.strip.png differs from tools/art/authoring/floor3-roster.mjs — run \`npm run art:floor3\``,
+    ).toBe(true);
+    const sidecar: unknown = JSON.parse(await readFile(pathFor(name, '.anim.json'), 'utf8'));
+    expect(sidecar).toEqual(strip.anim);
+    expect(strip.anim.frames).toBe(strip.frames.length);
+  });
+
+  it.each(strips)('%s strip stays on-palette, every frame its canvas', (_name, strip) => {
+    expect(() => {
+      assertOnPalette(ROSTER_BUCKET, strip.frames);
+    }).not.toThrow();
+    const first = strip.frames[0];
+    for (const frame of strip.frames) {
+      expect([frame.width, frame.height]).toEqual([first?.width, first?.height]);
+      expect(validateSpriteSize('character', frame.width, frame.height)).toBeNull();
+    }
+  });
+
+  it('only re-poses the legs: every strip frame matches frame 0 above the feet', () => {
+    // The body is the signed-off sprite; animation must not quietly redraw it.
+    const legRows = { boar: 26, kaninchen: 14 } as const;
+    for (const [name, strip] of strips) {
+      const from = legRows[name as keyof typeof legRows];
+      const [base, ...rest] = strip.frames;
+      for (const frame of rest) {
+        expect(frame.px.slice(0, from)).toEqual(base?.px.slice(0, from));
+      }
+    }
   });
 });

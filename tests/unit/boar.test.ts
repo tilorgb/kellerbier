@@ -180,6 +180,65 @@ describe('Boar (#409)', () => {
     expect(sim.positionX(boar)).toBeLessThan(150);
   });
 
+  it('runs at full speed right up to what it hits — no braking a body-length short', () => {
+    const room = new RoomGeometry(0, 0, 320, 180);
+    room.addBlock(160, 80, 176, 96, true);
+    const sim = openSim(room);
+    const boar = spawn(sim, 'boar', 60, 88);
+    place(sim, sim.playerIndex, 140, 88);
+    stepUntil(sim, boar, 'windup', 10);
+    place(sim, sim.playerIndex, 140, 160);
+    expect(stepUntil(sim, boar, 'charge', 60)).toBeGreaterThan(0);
+    const fullSpeed = 3.2 * sim.tuning.enemy.speedScale;
+    const steps: number[] = [];
+    for (let tick = 0; tick < 120 && stateName(sim, boar) === 'charge'; tick++) {
+      const before = sim.positionX(boar);
+      sim.step(IDLE);
+      steps.push(sim.positionX(boar) - before);
+    }
+    expect(room.blockCount).toBe(0);
+    // Every step up to the smash is a full-speed one; only the step that
+    // lands the hit may be shorter (the run up to contact), and then it stops.
+    const moving = steps.filter((step) => step > 1e-6);
+    expect(moving.length).toBeGreaterThan(5);
+    for (const step of moving.slice(0, -1)) {
+      expect(step).toBeCloseTo(fullSpeed, 5);
+    }
+    const radius = sim.body.data[boar * 2] ?? 0;
+    // It stopped with its front edge at the block it smashed, within a unit.
+    expect(160 - (sim.positionX(boar) + radius)).toBeLessThan(1.5);
+  });
+
+  it('smashes a block it only clips with one flank', () => {
+    const room = new RoomGeometry(0, 0, 320, 180);
+    // The Boar runs along y = 92 with a 7-unit radius; the block's top edge
+    // is at 97, so only its lower flank meets it — the centre line misses.
+    room.addBlock(160, 97, 176, 113, true);
+    const sim = openSim(room);
+    const boar = spawn(sim, 'boar', 60, 92);
+    place(sim, sim.playerIndex, 140, 92);
+    stepUntil(sim, boar, 'windup', 10);
+    place(sim, sim.playerIndex, 140, 160);
+    expect(stepUntil(sim, boar, 'stunned', 200)).toBeGreaterThan(0);
+    expect(room.blockCount).toBe(0);
+  });
+
+  it('breaks only the one tile of a merged row it hits, and the rest stays cover', () => {
+    const room = new RoomGeometry(0, 0, 320, 180);
+    // Three logs stacked north–south, merged into one rect — what generated
+    // Floor 3 cover looks like (`sliceObstacles`). The Boar runs into the middle one.
+    room.addBlock(160, 80, 176, 128, true);
+    const sim = openSim(room);
+    const boar = spawn(sim, 'boar', 60, 104);
+    place(sim, sim.playerIndex, 140, 104);
+    stepUntil(sim, boar, 'windup', 10);
+    place(sim, sim.playerIndex, 140, 170);
+    expect(stepUntil(sim, boar, 'stunned', 200)).toBeGreaterThan(0);
+    expect(room.isClear(168, 104, 2)).toBe(true);
+    expect(room.isClear(168, 88, 2)).toBe(false);
+    expect(room.isClear(168, 120, 2)).toBe(false);
+  });
+
   it('stops at a plain wall without breaking anything', () => {
     const sim = openSim();
     const boar = spawn(sim, 'boar', 60, 90);

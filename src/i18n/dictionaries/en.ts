@@ -410,7 +410,8 @@ export const en = {
   'items.kartoffelsalat.description': 'Shots split into two chunks on impact. Range +15%',
   'items.kartoffelsalat.flavourText':
     'Every family recipe is the only correct one and they cannot all be right.',
-  'items.karussell.description': 'Moving pushes nearby enemies along with you',
+  'items.karussell.description':
+    'Active: one spin flings everything close away from you — no damage, just room',
   'items.karussell.flavourText':
     'The operator has not once checked a safety harness. The line never gets shorter.',
   'items.kletzenbrot.description': 'Shots poison what they hit. Damage -15%',

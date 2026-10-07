@@ -38,6 +38,7 @@ export type BehaviourName =
   | 'approachProp'
   | 'pause'
   | 'hopCardinal'
+  | 'hopTowardPlayer'
   | 'swimInZone'
   | 'approachWood'
   | 'fireAtPlayer'
@@ -180,6 +181,43 @@ export interface HopCardinalBehaviour {
   readonly hopTicks: number;
   /** Ticks standing still between hops. */
   readonly restTicks: number;
+}
+
+/**
+ * Tiny hops straight at the player, with every `backEvery`-th hop straight
+ * away from them instead — the Zecke: two hops in, one hop back, a skittish
+ * creep that still closes the distance, with a shot window on every hop back.
+ *
+ * A sine-eased hop like `hopCardinal`'s (the same renderer bob), but aimed
+ * at any angle and never in step with its neighbours — a room of them must
+ * read as bugs hopping about, not a hivemind:
+ *
+ * - **Rests are rolled.** Each rest, and the wait before the first hop, is
+ *   `restTicks` give or take `restJitter` of it, from `random.enemies`, so
+ *   no two ticks keep the same beat for long.
+ * - **Aim wobbles.** Each hop's direction is the line to (or from) the
+ *   player on the tick it starts, turned by up to `aimJitterDegrees` either
+ *   way — so it never curves mid-air, and never quite beelines either.
+ *
+ * A hop whose landing would be in a wall or an obstacle tries 45° and then
+ * 90° either side of its line before resting a hop out. The hop's direction
+ * goes into the heading slots, which is what a `facing: 'crawl'` body turns
+ * its head to.
+ */
+export interface HopTowardPlayerBehaviour {
+  readonly behaviour: 'hopTowardPlayer';
+  /** Room units per hop, before the global `enemy.speedScale`. */
+  readonly hopDistance: number;
+  /** Ticks a hop takes. */
+  readonly hopTicks: number;
+  /** Ticks standing still between hops, on average. */
+  readonly restTicks: number;
+  /** How far a rest is rolled either side of `restTicks`, as a fraction of it: `1` is anywhere from 0 to double. 0 to 1. */
+  readonly restJitter: number;
+  /** The most a hop's direction turns off the straight line, either way. */
+  readonly aimJitterDegrees: number;
+  /** Which hop of each run goes away from the player: `3` is toward, toward, away. At least 2. */
+  readonly backEvery: number;
 }
 
 /**
@@ -660,9 +698,9 @@ export interface EmitCloudBehaviour {
  * `playerPoisonDurationTicks`, the same refresh a cloud gives), and deals no
  * contact damage beyond that. The latch outlives the state that made it — it
  * is a property of the body, not of the state — and ends only when the player
- * shakes it off: `tuning.latch.shakesRequired` sharp reversals of the movement
- * input inside `shakeWindowTicks` throw off every latched body at once
- * (`sim/systems/latch.ts`).
+ * shakes it off: `tuning.latch.shakeTurnDegrees` of quick turning of the
+ * movement input — any direction change counts, a wiggle or a circle — throw
+ * off every latched body at once (`sim/systems/latch.ts`).
  *
  * **Not shootable while latched.** A latched body drops to no collision layer
  * at all, so neither shots, splash, nor the player's own body touch it: the
@@ -688,6 +726,7 @@ export type EnemyBehaviour =
   | ApproachPropBehaviour
   | PauseBehaviour
   | HopCardinalBehaviour
+  | HopTowardPlayerBehaviour
   | SwimInZoneBehaviour
   | ApproachWoodBehaviour
   | SubmergeBehaviour
@@ -852,6 +891,22 @@ export interface EnemyDefinition {
    * presentational, like `deathEffect`: it can never change what a run does.
    */
   readonly telegraphLook?: 'bloat';
+  /**
+   * How a body with no animation strip turns to show where it is going.
+   * Purely presentational, like `telegraphLook`.
+   *
+   * - `'mirror'` — a side-view sprite (authored facing left, like all
+   *   character art) flips to face the way it moves, and toward the player
+   *   while it stands still: the Boar and the Kaninchen, so a wind-up always
+   *   points at whom it is about to hit.
+   * - `'crawl'` — a top-down sprite (head at the top of the canvas) lies flat
+   *   on the floor, turned in quarter turns so its head points the way it is
+   *   heading: the Zecke.
+   *
+   * Omitted: drawn as authored, never turned. A body with an animation strip
+   * faces through its animator regardless.
+   */
+  readonly facing?: 'mirror' | 'crawl';
   /** Which drop table (`content/pickups/drop-tables.ts`) its death rolls from. Defaults to `'normal'`. */
   readonly lootTier?: 'weak' | 'normal' | 'tough';
   /**
@@ -886,6 +941,7 @@ export const MOVEMENT_BEHAVIOURS: readonly BehaviourName[] = [
   'approachProp',
   'pause',
   'hopCardinal',
+  'hopTowardPlayer',
   'swimInZone',
   'approachWood',
 ];
