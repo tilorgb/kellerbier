@@ -31,7 +31,13 @@ export const STATUS_FREEZE = 2;
  * by side and the stronger one simply wins while both are active.
  */
 export const STATUS_SLOW = 3;
-export const STATUS_EFFECT_STRIDE = 4;
+/**
+ * Ticks left before a body that has just thawed can be frozen again (the
+ * freeze's cooldown): counted down alongside the freeze itself, started when
+ * one ends. Its own slot because it must outlive the freeze it follows.
+ */
+export const STATUS_FREEZE_COOLDOWN = 4;
+export const STATUS_EFFECT_STRIDE = 5;
 
 /** Advances every body's burn/poison/freeze/slow by one tick. */
 export function stepStatusEffects(sim: GameSim): void {
@@ -54,9 +60,22 @@ export function stepStatusEffects(sim: GameSim): void {
 
     const freeze = status[base + STATUS_FREEZE] ?? 0;
     if (freeze > 0) {
-      velocity[index * 2] = (velocity[index * 2] ?? 0) * tuning.freezeSlowFactor;
-      velocity[index * 2 + 1] = (velocity[index * 2 + 1] ?? 0) * tuning.freezeSlowFactor;
+      // A boss or mini-boss is only ever slowed by a freeze, never all but
+      // stopped: a body that has to keep attacking cannot be locked.
+      const factor = sim.isStunResistant(index) ? tuning.slowSpeedFactor : tuning.freezeSlowFactor;
+      velocity[index * 2] = (velocity[index * 2] ?? 0) * factor;
+      velocity[index * 2 + 1] = (velocity[index * 2 + 1] ?? 0) * factor;
       status[base + STATUS_FREEZE] = freeze - 1;
+      if (freeze === 1) {
+        // Thawed: the cooldown starts now, so a stream of freezing hits is a
+        // freeze and a breather, not a lock.
+        status[base + STATUS_FREEZE_COOLDOWN] = Math.max(0, Math.round(tuning.freezeCooldownTicks));
+      }
+    } else {
+      const cooldown = status[base + STATUS_FREEZE_COOLDOWN] ?? 0;
+      if (cooldown > 0) {
+        status[base + STATUS_FREEZE_COOLDOWN] = cooldown - 1;
+      }
     }
 
     const slow = status[base + STATUS_SLOW] ?? 0;
@@ -123,6 +142,26 @@ export function applyPoison(sim: GameSim, target: number): void {
     target === sim.playerIndex ? tuning.playerPoisonDurationTicks : tuning.poisonDurationTicks;
   const slot = target * STATUS_EFFECT_STRIDE + STATUS_POISON;
   sim.statusEffect.data[slot] = Math.max(sim.statusEffect.data[slot] ?? 0, Math.round(ticks));
+}
+
+/**
+ * Freezes `target` for `ticks` — the one place a freeze starts, so a shot and an
+ * item agree. A body already frozen is *not* extended and one that has just
+ * thawed is immune for `freezeCooldownTicks`: freezing is a window the player
+ * earns, not a state a rapid shooter (or an aura that re-applies every tick)
+ * can hold a body in for good. Returns whether a freeze began.
+ */
+export function applyFreeze(sim: GameSim, target: number, ticks: number): boolean {
+  if (ticks <= 0) {
+    return false;
+  }
+  const base = target * STATUS_EFFECT_STRIDE;
+  const data = sim.statusEffect.data;
+  if ((data[base + STATUS_FREEZE] ?? 0) > 0 || (data[base + STATUS_FREEZE_COOLDOWN] ?? 0) > 0) {
+    return false;
+  }
+  data[base + STATUS_FREEZE] = Math.round(ticks);
+  return true;
 }
 
 const CLEANSE_SPOKES = 8;

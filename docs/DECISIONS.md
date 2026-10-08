@@ -6813,3 +6813,27 @@ straight line against the wall, a log after a log, 16 apart. Bieber walks to a s
 front of the log (`approachProp.standoff`) rather than at its centre: with the logs solid and in one
 line, walking at a log's centre walked into its neighbours and stuck. Consequence: cover is permanent
 unless exploded, and what settles in the player's row is the next log he rolls back.
+
+---
+
+## 125. Only small mobs can be stunlocked; a freeze is a window, then a breather
+
+**Decided** after Bieber was stunlocked in the first playtest. Two things held a body in place:
+Sauwetter's every-third-shot freeze (and any other freezing hit) *refreshed* the freeze each time,
+so a rapid shooter kept a body at 15% speed indefinitely; and every landed hit staggered the body
+(`hitStun`, which skips its whole state machine), so a fast stream of hits chained.
+
+- **Freeze has a cooldown** (`applyFreeze`, `tuning.projectileTags.freezeCooldownTicks`, 120). A hit
+  starts a freeze only on a body that is not frozen and not in its breather; a hit while frozen no
+  longer extends it. When a freeze ends the breather starts. A stream of freezing hits therefore
+  freezes a small mob for under half the time (45 ticks of every 165), not for good. Items that apply
+  a freeze directly (`applyStatusEffect`, the Obazda aura) are not routed through it: an aura the
+  player holds on purpose is a different thing from a shot that lands, and was left alone.
+- **A boss or mini-boss is never locked** (`GameSim.isStunResistant`, `bossBar`): a landed hit still
+  flashes and knocks back but does not stagger it, and a freeze only slows it to `slowSpeedFactor`
+  (0.5), never to `freezeSlowFactor` (0.15). Small mobs, which have no `bossBar`, are unchanged.
+
+**Cost, measured.** A boss that no longer freezes in place on every hit keeps riding while it is
+shot, so a player who stands still lands fewer shots: Der Waldradler's bare-run fight went from about
+9800 to about 12000 ticks at shot damage 1, and `boss-pacing.test.ts`'s cap for him is now 16000. The
+numbers are Tilo's to retune; this change only stops them being shortened by a lock.

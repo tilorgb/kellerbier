@@ -755,6 +755,13 @@ export interface ProjectileTagTuning {
   slowSpeedFactor: number;
   /** `freezing`: ticks the status lasts. */
   freezeDurationTicks: number;
+  /**
+   * `freezing`: ticks after a freeze ends before the same body can be frozen
+   * again. A freeze that could be refreshed forever (Sauwetter's every third
+   * shot, an aura every tick) held small mobs in place for good; this is the
+   * breather that makes it a window.
+   */
+  freezeCooldownTicks: number;
 }
 
 /** The pickup economy (#22): magnetism, spawn juice, need-weighting and the Bierfassl. */
@@ -1497,6 +1504,8 @@ export const DEFAULT_PROJECTILE_TAG_TUNING: Readonly<ProjectileTagTuning> = {
   freezeSlowFactor: 0.15,
   slowSpeedFactor: 0.5,
   freezeDurationTicks: 45,
+  // A breather of two seconds after each 0.75 s freeze.
+  freezeCooldownTicks: 120,
 };
 
 export const DEFAULT_SKIP_AHEAD_TUNING: Readonly<SkipAheadTuning> = {

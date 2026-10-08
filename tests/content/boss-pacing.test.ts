@@ -499,6 +499,12 @@ function waldBossSim(seed: number): GameSim {
  */
 const WALD_DAMAGE_POINTS = [1, 2, 4, 6];
 
+/**
+ * The Waldradler's cap is 16000 ticks, not 12000: a boss is no longer
+ * hit-staggered (`GameSim.isStunResistant`), so it keeps riding while it is
+ * shot, and a player who stands still lands fewer shots than when every hit
+ * held him in place.
+ */
 function measureWaldradler(shotDamage: number, seed: number): { ticks: number; attacks: number } {
   const sim = waldBossSim(seed);
   sim.tuning.shooting.shotDamage = shotDamage;
@@ -506,7 +512,7 @@ function measureWaldradler(shotDamage: number, seed: number): { ticks: number; a
   const boss = place(sim, 'waldradler', sim.positionX(player) + 70, sim.positionY(player));
   let attacks = 0;
   let previous = stateName(sim, boss);
-  for (let tick = 0; tick < 12000; tick++) {
+  for (let tick = 0; tick < 16000; tick++) {
     sim.step(aimAt(sim, player, boss));
     if (!isAlive(sim, boss)) {
       return { ticks: tick + 1, attacks };
@@ -517,7 +523,7 @@ function measureWaldradler(shotDamage: number, seed: number): { ticks: number; a
     }
     previous = current;
   }
-  return { ticks: 12000, attacks };
+  return { ticks: 16000, attacks };
 }
 
 function measureWaldradl(shotDamage: number): number {
@@ -565,7 +571,7 @@ describe('Floor 3 boss pacing (#412, #413)', () => {
       for (const seed of [1, 2, 3]) {
         const result = measureWaldradler(shotDamage, seed);
         expect(result.ticks, `shotDamage=${String(shotDamage)} seed=${String(seed)}`).toBeLessThan(
-          12000,
+          16000,
         );
         expect(
           result.attacks,

@@ -2423,6 +2423,18 @@ export class GameSim {
     return this.isLogProp(index);
   }
 
+  /**
+   * Whether the body at `index` is too important to be locked down: a boss or
+   * mini-boss (`bossBar`). Hit-stagger skips it and a freeze only slows it, so
+   * it can always attack; only small mobs can be stunlocked.
+   */
+  isStunResistant(index: number): boolean {
+    if (((this.world.masks[index] ?? 0) & this.enemyMask) !== this.enemyMask) {
+      return false;
+    }
+    return this.enemies.at(this.enemy.data[index * ENEMY_STRIDE] ?? 0).bossBar;
+  }
+
   /** Whether the enemy at `index` skips enemy-to-enemy separation (#467's rolling log). */
   enemyIgnoresBodies(index: number): boolean {
     return this.enemies.at(this.enemy.data[index * ENEMY_STRIDE] ?? 0).ignoresBodies;

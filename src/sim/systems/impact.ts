@@ -308,7 +308,7 @@ export function applyDamageAt(
   // stunning someone's own controls) and for a kill (the body is about to
   // leave the world; the bigger flash/shake/particles below already say
   // "that one mattered more" without needing anything to hold still).
-  if (!isPlayer && !killed) {
+  if (!isPlayer && !killed && !sim.isStunResistant(target)) {
     const hitstun = Math.min(
       tuning.maxHitstunTicks,
       tuning.hitstunTicks + damage * tuning.hitstunPerDamage,
