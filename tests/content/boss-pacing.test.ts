@@ -620,17 +620,27 @@ function measureBieber(shotDamage: number): { ticks: number; rolls: number; swis
   const sim = bieberSim();
   sim.tuning.shooting.shotDamage = shotDamage;
   const player = sim.playerIndex;
-  const standX = sim.room.maxX - 50;
-  const standY = (sim.room.minY + sim.room.maxY) / 2;
-  const bieber = place(sim, 'bieber', (sim.room.minX + sim.room.maxX) / 2, standY);
+  const bieber = place(
+    sim,
+    'bieber',
+    (sim.room.minX + sim.room.maxX) / 2,
+    (sim.room.minY + sim.room.maxY) / 2,
+  );
   let rolls = 0;
   let swishes = 0;
   let previous = stateName(sim, bieber);
   for (let tick = 0; tick < 12000; tick++) {
-    sim.transform.data[player * 4] = standX;
-    sim.transform.data[player * 4 + 1] = standY;
-    sim.transform.data[player * 4 + 2] = standX;
-    sim.transform.data[player * 4 + 3] = standY;
+    // The player works through the arena's lanes, a few seconds in each, as a
+    // person dodging would: a log that has come to rest in one lane is proof
+    // against every shot, so a player who held a lane forever would never land
+    // another, and one who is *always* moving would never be rolled at.
+    const lane = Math.floor(tick / 150) % 7;
+    const x = sim.room.maxX - 40;
+    const y = sim.room.minY + 24 + lane * 16;
+    sim.transform.data[player * 4] = x;
+    sim.transform.data[player * 4 + 1] = y;
+    sim.transform.data[player * 4 + 2] = x;
+    sim.transform.data[player * 4 + 3] = y;
     sim.velocity.data[player * 2] = 0;
     sim.velocity.data[player * 2 + 1] = 0;
     sim.step(aimAt(sim, player, bieber));

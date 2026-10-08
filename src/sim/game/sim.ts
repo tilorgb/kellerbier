@@ -174,6 +174,7 @@ import {
   DESTRUCTIBLE_PROP_KINDS,
   type DestructiblePropKind,
   LOG_HEALTH,
+  LOG_MASS,
   propKindIndex,
 } from './prop-kinds.js';
 
@@ -2387,6 +2388,46 @@ export class GameSim {
     return this.bouldersChangedTickValue;
   }
 
+  /**
+   * Whether the body at `index` is a `log` prop (#467) — Bieber's woodpile and
+   * whatever he has rolled to rest. Enemy bodies carry the `propKind`
+   * component too (kind 0), so they are skipped.
+   */
+  isLogProp(index: number): boolean {
+    const mask = this.world.masks[index] ?? 0;
+    if ((mask & this.propKind.bit) === 0 || (mask & this.enemyMask) === this.enemyMask) {
+      return false;
+    }
+    return (this.propKind.data[index] ?? 0) === propKindIndex('log');
+  }
+
+  /**
+   * Nothing moves it (#467): a `rooted` enemy, a log prop, a rolling log. Read
+   * by `addPush` — shots, blasts, items, a Boar's impact — and by the contact
+   * separation, where the player gives way for it instead of the other way
+   * round.
+   */
+  isImmovable(index: number): boolean {
+    return this.enemyRooted(index) || this.isLogProp(index);
+  }
+
+  /**
+   * Whether shots do nothing to the body at `index` (#467): a log prop or a
+   * `shotProof` enemy. A blast still hurts it — an explosion goes through
+   * `applyDamageAt`, which does not ask.
+   */
+  isShotProof(index: number): boolean {
+    if (((this.world.masks[index] ?? 0) & this.enemyMask) === this.enemyMask) {
+      return this.enemies.at(this.enemy.data[index * ENEMY_STRIDE] ?? 0).shotProof;
+    }
+    return this.isLogProp(index);
+  }
+
+  /** Whether the enemy at `index` skips enemy-to-enemy separation (#467's rolling log). */
+  enemyIgnoresBodies(index: number): boolean {
+    return this.enemies.at(this.enemy.data[index * ENEMY_STRIDE] ?? 0).ignoresBodies;
+  }
+
   /** Whether the body at `index` is a `rooted` enemy, which no shove moves (`addPush`). */
   enemyRooted(index: number): boolean {
     if (((this.world.masks[index] ?? 0) & this.enemyMask) !== this.enemyMask) {
@@ -3173,6 +3214,7 @@ export class GameSim {
           TARGET_RADIUS,
           propKind,
           prop.type === 'log' ? LOG_HEALTH : TARGET_HEALTH,
+          prop.type === 'log' ? LOG_MASS : 3,
         );
       }
     }

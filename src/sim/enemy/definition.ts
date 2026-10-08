@@ -184,6 +184,13 @@ export interface ApproachPropBehaviour {
    * player's lane. Unset: the nearest prop, as the Maibaum-Dieb wants.
    */
   readonly nearestToPlayerRow?: boolean;
+  /**
+   * Stop this many pixels short of the prop, on the side facing the room's
+   * middle, instead of walking into it (#467): with the logs now solid and in
+   * one line along the wall, walking at a log's centre meant walking into the
+   * logs beside it. Unset: straight at the prop's centre, as the Maibaum-Dieb.
+   */
+  readonly standoff?: number;
 }
 
 /** Drifts, picking a new direction on a timer. */
@@ -594,6 +601,13 @@ export interface RollBounceBehaviour {
    * dash, and ends the roll against it). Omitted: Rollfass's plain bounce.
    */
   readonly impact?: NonNullable<ChargeAtPlayerBehaviour['impact']>;
+  /**
+   * Holds the body on the row (`axis: 'x'`) or column it started the state on,
+   * every tick (#467): whatever shoves it — a contact, a blast, another body —
+   * the lane it was shoved along is not left. Rollfass, which is shoved off its
+   * line by design, leaves it unset.
+   */
+  readonly fixedLane?: boolean;
 }
 
 /**
@@ -1217,6 +1231,20 @@ export interface EnemyDefinition {
    * rooted Specht still flies and dives, it just isn't knocked about doing it.
    */
   readonly rooted?: boolean;
+  /**
+   * Shots do nothing to it (#467, Bieber's rolling log): every projectile — the
+   * player's or an enemy's — splashes off, loudly, exactly as off a curled-up
+   * shell, and only an explosion (a bomb, a splash blast) hurts it. Unlike
+   * `becomeInvulnerable` it has no window: it is the body's nature, not a state.
+   */
+  readonly shotProof?: boolean;
+  /**
+   * Other enemies neither push it nor are pushed by it (#467, Bieber's rolling
+   * log): the separation between enemy bodies skips it, so a log shoved from
+   * beside its own beaver rolls through the room's other bodies instead of
+   * ploughing them across it. The player is not an enemy and still gets hit.
+   */
+  readonly ignoresBodies?: boolean;
   /**
    * A localisation key (`enemies.<id>.title`), same convention
    * `ItemDefinition.flavourText` uses — resolved by the render layer, never

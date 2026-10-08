@@ -10,6 +10,7 @@ import {
   TransitionTrigger,
 } from '../enemy/registry.js';
 import { EventKind } from '../events/queue.js';
+import { LOG_MASS, propKindIndex } from '../game/prop-kinds.js';
 import type { GameSim } from '../game/sim.js';
 import { boulderDebris, drumChips, muzzleFlash, ring } from '../particle/effects.js';
 import { clamp, vectorLength } from '../math.js';
@@ -1603,9 +1604,18 @@ function applyMovement(
       let dirY = toPlayerY;
       let length = distance;
       if (prop >= 0) {
-        dirX = sim.positionX(prop) - selfX;
+        // With a standoff (#467) the goal is a point in front of the prop, on
+        // the side facing the middle of the room, so a line of logs is
+        // approached from its open side rather than along it.
+        const propX = sim.positionX(prop);
+        const toward = propX < (sim.room.minX + sim.room.maxX) / 2 ? 1 : -1;
+        dirX = propX + toward * state.approachStandoff - selfX;
         dirY = sim.positionY(prop) - selfY;
         length = vectorLength(dirX, dirY);
+        // Arrived: hold still rather than jitter about the point.
+        if (state.approachStandoff > 0 && length < 1.5) {
+          length = 0;
+        }
       }
       velocity[base] = length === 0 ? 0 : (dirX / length) * speed;
       velocity[base + 1] = length === 0 ? 0 : (dirY / length) * speed;
@@ -1621,6 +1631,14 @@ function applyMovement(
       // Fixed direction, every tick, no re-aim — a bounce is the *state*
       // changing (via an `onBlocked` transition to the opposite direction's
       // state), not this primitive noticing a wall itself.
+      if (behaviour.fixedLane === true) {
+        // The lane is the row it started the state on (#467); held every tick,
+        // so nothing that shoves it can move it off.
+        const lane = ticks === 0 ? selfY : (motion[motionBase + 1] ?? selfY);
+        motion[motionBase + 1] = lane;
+        sim.transform.data[index * 4 + 1] = lane;
+        sim.transform.data[index * 4 + 3] = lane;
+      }
       const signed = behaviour.speed * behaviour.direction * scale;
       let rolled = signed;
       if (behaviour.impact !== undefined) {
@@ -2939,8 +2957,11 @@ function becomePropFromEvent(sim: GameSim, slot: number): void {
   const atX = sim.events.x[slot] ?? 0;
   const atY = sim.events.y[slot] ?? 0;
   sim.world.destroy(sim.world.entityAt(index));
-  sim.spawnTarget(atX, atY, radius, kind, health, PROP_DROP_MASS);
+  sim.spawnTarget(atX, atY, radius, kind, health, kind === LOG_KIND ? LOG_MASS : PROP_DROP_MASS);
 }
+
+/** The `log` prop kind's index (#467), resolved once. */
+const LOG_KIND = propKindIndex('log');
 
 /** What a dropped prop weighs — see `propDropFromEvent`. */
 const PROP_DROP_MASS = 24;

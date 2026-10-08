@@ -154,7 +154,7 @@ export function stepEnemyContacts(sim: GameSim): void {
       continue;
     }
     // A flyer up in the air (#411) passes over the bodies below it.
-    if (enemyAirborne(sim, index)) {
+    if (enemyAirborne(sim, index) || sim.enemyIgnoresBodies(index)) {
       continue;
     }
 
@@ -197,7 +197,11 @@ export function stepEnemyContacts(sim: GameSim): void {
     if (states[index] !== World.ALIVE) {
       continue;
     }
-    if (((masks[index] ?? 0) & mask) !== mask || enemyAirborne(sim, index)) {
+    if (
+      ((masks[index] ?? 0) & mask) !== mask ||
+      enemyAirborne(sim, index) ||
+      sim.enemyIgnoresBodies(index)
+    ) {
       continue;
     }
     const cell = cellOf[index] ?? 0;

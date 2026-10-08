@@ -6794,8 +6794,22 @@ this change.
 resting log, and a new rolling log lying along the way it travels. The rolling log's quarter-turn
 animation is the weakest piece of the art; iterating it is inside the signed-off direction.
 
-**Numbers.** 110 health, about 37% of the Waldradler's 300 (`boss-pacing.test.ts` measures him at
-shot damage 1, 2, 4 and 6: three to ten log rolls and swishes, always shorter than the rider).
+**Numbers.** 70 health, about a quarter of the Waldradler's 300 (`boss-pacing.test.ts` measures him at
+shot damage 1, 2, 4 and 6, against a player who changes lane every 150 ticks: 7 to 17 log rolls and
+swishes, a third of the rider's length at the bottom, close to it at the top). At high damage the
+length is the cover and the walking, not the health: logs only shots can't clear are a floor under it.
 
 **Constrains:** a log is the only thing `becomeProp` is used for so far. A later enemy that leaves
 terrain behind where it dies down should use it rather than `dropProp`, which spawns on a timer.
+
+**The logs are terrain, not enemies to be shot (Tilo, after the first playtest).** Every log, standing
+or rolling, is proof against every shot — the player's and Bieber's own — and nothing moves it:
+`GameSim.isShotProof` (`applyHit` deflects, a blast still hurts through `applyDamageAt`) and
+`isImmovable` (`addPush`, so shots, blasts, items and a Boar's impact; and the player's contact,
+where the player gives way for it). A rolling log is `rooted`, `shotProof` and `ignoresBodies`
+(enemy separation skips it, so Bieber is not ploughed across the room by the log he just shoved) and
+holds its lane (`rollBounce.fixedLane`): the row it started on, every tick. The woodpile is one
+straight line against the wall, a log after a log, 16 apart. Bieber walks to a standoff point in
+front of the log (`approachProp.standoff`) rather than at its centre: with the logs solid and in one
+line, walking at a log's centre walked into its neighbours and stuck. Consequence: cover is permanent
+unless exploded, and what settles in the player's row is the next log he rolls back.

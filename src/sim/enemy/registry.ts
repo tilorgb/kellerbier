@@ -321,6 +321,8 @@ export interface CompiledState {
   } | null;
   /** True for an `approachProp` with `nearestToPlayerRow` (#467). */
   readonly approachesPlayerRow: boolean;
+  /** An `approachProp`'s `standoff` in pixels, or 0 for none (#467). */
+  readonly approachStandoff: number;
   readonly splits: readonly CompiledSplit[];
   /** `summon` behaviours on this state, children resolved to definition indices (#276). */
   readonly summons: readonly CompiledSummon[];
@@ -364,6 +366,10 @@ export interface CompiledEnemy {
   readonly flying: boolean;
   /** The definition's `rooted`: shoves (`addPush`) never move it. */
   readonly rooted: boolean;
+  /** The definition's `shotProof` (#467): projectiles splash off it, only explosions hurt it. */
+  readonly shotProof: boolean;
+  /** The definition's `ignoresBodies` (#467): enemy-to-enemy separation skips it. */
+  readonly ignoresBodies: boolean;
   /**
    * Set when any of its states `returnToPerch`es (#411): a percher, put on the
    * nearest point of the room's wall at spawn.
@@ -580,6 +586,8 @@ export class EnemyRegistry {
       telegraphDrum: compileTelegraphLook(definition.telegraphLook, where) === TelegraphLook.Drum,
       flying: definition.flying === true,
       rooted: definition.rooted === true,
+      shotProof: definition.shotProof === true,
+      ignoresBodies: definition.ignoresBodies === true,
       perches: states.some((state) => state.movement.behaviour === 'returnToPerch'),
       facing: compileFacing(definition.facing, where),
       zone: states.some((state) => state.movement.behaviour === 'swimInZone') ? 'waldbach' : null,
@@ -609,6 +617,7 @@ export class EnemyRegistry {
     let rollLog: { kind: number; reach: number; east: number; west: number } | null = null;
     let becomeProp: { kind: number; health: number; radius: number } | null = null;
     let approachesPlayerRow = false;
+    let approachStandoff = 0;
     let latchesOnPlayer = false;
     let submerged = false;
     let grounded = false;
@@ -757,6 +766,7 @@ export class EnemyRegistry {
         if (behaviour.behaviour === 'approachProp') {
           approachPropKind = resolvePropKind(behaviour.propKind, `${where}: "approachProp"`);
           approachesPlayerRow = behaviour.nearestToPlayerRow === true;
+          approachStandoff = behaviour.standoff ?? 0;
         }
         continue;
       }
@@ -1299,6 +1309,7 @@ export class EnemyRegistry {
       ),
       approachPropKind,
       approachesPlayerRow,
+      approachStandoff,
       grabProp,
       rollLog,
       becomeProp,

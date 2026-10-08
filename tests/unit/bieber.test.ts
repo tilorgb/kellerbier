@@ -6,7 +6,8 @@ import { entityIndex } from '../../src/sim/ecs/entity.js';
 import { World } from '../../src/sim/ecs/world.js';
 import { GameSim } from '../../src/sim/game/sim.js';
 import { LOG_HEALTH, propKindIndex } from '../../src/sim/game/prop-kinds.js';
-import { createInputFrame } from '../../src/sim/input/frame.js';
+import { InputAction, createInputFrame, setActionDown } from '../../src/sim/input/frame.js';
+import { addPush } from '../../src/sim/systems/movement.js';
 import { ENEMY_STRIDE } from '../../src/sim/systems/enemy.js';
 
 /**
@@ -46,6 +47,15 @@ function placeBieber(sim: GameSim, x: number, y: number): number {
   const entity = sim.spawnEnemyKind(sim.enemies.indexOf('bieber'), x, y);
   sim.world.flush();
   return entityIndex(entity);
+}
+
+/** A locked-down Bieber far from the action, so the room is not cleared (and its logs removed) mid-test. */
+function keepRoomLocked(sim: GameSim): void {
+  const entity = sim.spawnEnemyKind(sim.enemies.indexOf('bieber'), sim.room.minX + 12, 30);
+  sim.world.flush();
+  const index = entityIndex(entity);
+  sim.health.data[index * 2] = 1e9;
+  sim.health.data[index * 2 + 1] = 1e9;
 }
 
 function stateName(sim: GameSim, index: number): string {
@@ -96,8 +106,8 @@ describe('Bieber (#467)', () => {
   it('stands in an arena with a row of logs against the wall opposite a door-free side', () => {
     const west = arena(waldMiniboss);
     const east = arena(waldMinibossEast);
-    expect(west.countProps(LOG)).toBe(5);
-    expect(east.countProps(LOG)).toBe(5);
+    expect(west.countProps(LOG)).toBe(7);
+    expect(east.countProps(LOG)).toBe(7);
     expect(waldMiniboss.metadata.doors.west).toBe(false);
     expect(waldMinibossEast.metadata.doors.east).toBe(false);
   });
@@ -130,7 +140,7 @@ describe('Bieber (#467)', () => {
     expect(stepUntilState(sim, bieber, 'shove')).toBeGreaterThanOrEqual(0);
     // One tick into the shove: the log has left the pile and is rolling.
     sim.step(createInputFrame());
-    expect(sim.countProps(LOG)).toBe(4);
+    expect(sim.countProps(LOG)).toBe(6);
     const rollers = rollersAlive(sim);
     expect(rollers).toHaveLength(1);
     const roller = rollers[0] ?? -1;
@@ -150,7 +160,7 @@ describe('Bieber (#467)', () => {
     // It travelled east, and came to rest as a prop again — five logs once more
     // (checked the tick it stopped, before he fetches the next one).
     expect(startX).toBeGreaterThan(sim.room.maxX - 60);
-    expect(sim.countProps(LOG)).toBe(5);
+    expect(sim.countProps(LOG)).toBe(7);
   });
 
   it('a rolled log hurts nothing once it has settled, and never leaves loot when shot to pieces', () => {
@@ -241,7 +251,7 @@ describe('Bieber (#467)', () => {
       sim.step(createInputFrame());
     }
     // It has settled against the east wall, still standing as cover.
-    expect(sim.countProps(LOG)).toBeGreaterThanOrEqual(4);
+    expect(sim.countProps(LOG)).toBeGreaterThanOrEqual(6);
     sim.kill(bieber);
     sim.world.flush();
     sim.step(createInputFrame());
@@ -272,5 +282,98 @@ describe('Bieber (#467)', () => {
       'wald-miniboss',
     );
     expect(sim.countProps(LOG)).toBe(0);
+  });
+
+  const logIndices = (sim: GameSim): number[] => {
+    const found: number[] = [];
+    for (let index = 0; index < sim.world.highWater; index++) {
+      if (sim.world.states[index] === World.ALIVE && sim.isLogProp(index)) {
+        found.push(index);
+      }
+    }
+    return found;
+  };
+
+  it('the woodpile is one straight line on the wall, a log after a log', () => {
+    for (const template of [waldMiniboss, waldMinibossEast]) {
+      const sim = arena(template);
+      const logs = logIndices(sim).sort((a, b) => sim.positionY(a) - sim.positionY(b));
+      expect(logs).toHaveLength(7);
+      const x = sim.positionX(logs[0] ?? 0);
+      logs.forEach((log, i) => {
+        expect(sim.positionX(log)).toBe(x);
+        if (i > 0) {
+          expect(sim.positionY(log) - sim.positionY(logs[i - 1] ?? 0)).toBe(16);
+        }
+      });
+    }
+  });
+
+  it('shots do nothing to a log, standing or rolling; an explosion hurts both', () => {
+    const sim = arena();
+    keepRoomLocked(sim);
+    const target = logIndices(sim).find((index) => Math.abs(sim.positionY(index) - 90) < 2) ?? -1;
+    expect(target).toBeGreaterThanOrEqual(0);
+    const logX = sim.positionX(target);
+    stand(sim, logX + 60, sim.positionY(target));
+    const fire = createInputFrame();
+    fire.aimX = -127;
+    setActionDown(fire, InputAction.Fire, true);
+    for (let tick = 0; tick < 90; tick++) {
+      stand(sim, logX + 60, sim.positionY(target));
+      sim.step(fire);
+    }
+    expect(sim.health.data[target * 2]).toBe(LOG_HEALTH);
+    expect(sim.world.states[target]).toBe(World.ALIVE);
+
+    const roller = entityIndex(
+      sim.spawnEnemyKind(sim.enemies.indexOf('bieber-log-east'), logX + 20, 140),
+    );
+    sim.world.flush();
+    const rollerHealth = sim.health.data[roller * 2] ?? 0;
+    stand(sim, logX + 60, 140);
+    for (let tick = 0; tick < 5; tick++) {
+      stand(sim, logX + 60, 140);
+      sim.step(fire);
+    }
+    expect(sim.health.data[roller * 2]).toBe(rollerHealth);
+
+    sim.applySplashDamage(logX, sim.positionY(target), 12, 5);
+    expect(sim.health.data[target * 2]).toBe(LOG_HEALTH - 5);
+  });
+
+  it('nothing moves a log: not a shove, not the player leaning on it', () => {
+    const sim = arena();
+    keepRoomLocked(sim);
+    const target = logIndices(sim)[3] ?? -1;
+    const x = sim.positionX(target);
+    const y = sim.positionY(target);
+    addPush(sim, target, 40, 40);
+    stand(sim, x + 12, y);
+    const walk = createInputFrame();
+    walk.moveX = -127;
+    for (let tick = 0; tick < 60; tick++) {
+      sim.step(walk);
+    }
+    expect(sim.positionX(target)).toBe(x);
+    expect(sim.positionY(target)).toBe(y);
+  });
+
+  it('a rolling log holds its lane whatever shoves it', () => {
+    const sim = arena();
+    keepRoomLocked(sim);
+    const roller = entityIndex(
+      sim.spawnEnemyKind(sim.enemies.indexOf('bieber-log-east'), 120, 100),
+    );
+    sim.world.flush();
+    sim.step(createInputFrame());
+    const lane = sim.positionY(roller);
+    stand(sim, 200, 40);
+    for (let tick = 0; tick < 20; tick++) {
+      addPush(sim, roller, 0, 6);
+      sim.transform.data[roller * 4 + 1] = lane + 5;
+      sim.step(createInputFrame());
+      expect(sim.positionY(roller)).toBe(lane);
+    }
   });
 });

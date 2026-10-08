@@ -41,7 +41,7 @@ export const bieber: EnemyDefinition = {
   deathEffect: 'dust',
   // Side-on art, drawn facing left like all character art.
   facing: 'mirror',
-  health: 110,
+  health: 70,
   contactDamage: 1,
   mass: 14,
   bossBar: true,
@@ -53,7 +53,13 @@ export const bieber: EnemyDefinition = {
       // the fight never stalls on a log.
       name: 'fetch',
       behaviours: [
-        { behaviour: 'approachProp', propKind: 'log', speed: 0.9, nearestToPlayerRow: true },
+        {
+          behaviour: 'approachProp',
+          propKind: 'log',
+          speed: 0.9,
+          nearestToPlayerRow: true,
+          standoff: 20,
+        },
       ],
       transitions: [
         { to: 'brace', whenPropWithin: 24, prop: 'log' },
@@ -133,7 +139,12 @@ function rollingLog(id: string, direction: 1 | -1): EnemyDefinition {
     // whether the body's contact or the roll's `impact` lands first — contact
     // usually does, a footprint's width ahead of the impact probe.
     contactDamage: 2,
-    mass: 40,
+    // Nothing moves it and nothing but an explosion hurts it (#467): it is a
+    // lane of danger, not a body to deal with. `fixedLane` below holds the row.
+    rooted: true,
+    shotProof: true,
+    ignoresBodies: true,
+    mass: 1000,
     locksRoom: false,
     lootTier: 'none',
     initial: 'roll',
@@ -146,6 +157,7 @@ function rollingLog(id: string, direction: 1 | -1): EnemyDefinition {
             speed: 2.4,
             axis: 'x',
             direction,
+            fixedLane: true,
             // Only the player: the beaver stands beside the log he shoves.
             impact: {
               bodyDamageMultiplier: 1,

@@ -42,3 +42,10 @@ export function propKindIndex(name: string): number {
  * and a woodpile that ran out in two volleys would end the fight's one idea.
  */
 export const LOG_HEALTH = 14;
+
+/**
+ * What a `log` weighs (#467): so much that no contact separates it from the
+ * player, and no body of any other mass moves it. `GameSim.isImmovable` is
+ * the rule; this is only the number the mass-split arithmetic reads.
+ */
+export const LOG_MASS = 1000;

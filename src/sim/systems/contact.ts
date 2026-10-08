@@ -132,7 +132,11 @@ function resolveAgainstPlayer(other: number): void {
   // is shoved aside entirely, and one much heavier than the player moves the
   // player instead of moving.
   const otherMass = Math.max(0.01, body[other * 2 + 1] ?? 1);
-  const playerShare = otherMass / ((player[PLAYER_MASS] ?? 0) + otherMass);
+  // A body nothing moves (a log, #467) is never given a share: the player gives
+  // way for all of it, and what a wall would not let them take is theirs to
+  // owe, not the log's.
+  const immovable = sim.isImmovable(other);
+  const playerShare = immovable ? 1 : otherMass / ((player[PLAYER_MASS] ?? 0) + otherMass);
 
   const playerWanted = overlap * playerShare;
   let owed = playerWanted - moveClear(sim, index, radius, x, y, awayX, awayY, playerWanted);
@@ -141,8 +145,9 @@ function resolveAgainstPlayer(other: number): void {
 
   // Whatever a wall would not let the player take, the other body owes instead.
   const otherWanted = overlap - playerWanted + owed;
-  owed =
-    otherWanted - moveClear(sim, other, otherRadius, otherX, otherY, -awayX, -awayY, otherWanted);
+  owed = immovable
+    ? otherWanted
+    : otherWanted - moveClear(sim, other, otherRadius, otherX, otherY, -awayX, -awayY, otherWanted);
 
   // And if it is against a wall too, back to the player, who at least has an
   // input telling them why they are not moving.
