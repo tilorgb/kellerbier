@@ -6,6 +6,10 @@ import { GameSim } from '../../src/sim/game/sim.js';
 import { createInputFrame } from '../../src/sim/input/frame.js';
 import { RoomGeometry } from '../../src/sim/room/geometry.js';
 import { ROOM_TILE_UNITS } from '../../src/content/rooms/definition.js';
+import { ENEMY_MOTION_STRIDE } from '../../src/sim/systems/enemy.js';
+import { ENEMY_DEFINITIONS } from '../../src/content/enemies/index.js';
+import { ROOM_TEMPLATES } from '../../src/content/rooms/index.js';
+import { compileRoomTemplate } from '../../src/sim/room/template.js';
 import { EntityView } from '../../src/render/entities.js';
 import { cutStrip, type AnimatedSpriteSet } from '../../src/render/floor-art.js';
 import {
@@ -102,7 +106,7 @@ describe('cutStrip', () => {
 });
 
 /** A sim holding exactly one Kellerassel, so the view's loop has one animated body in it. */
-function oneEnemySim(): { sim: GameSim; index: number } {
+function oneEnemySim(kind = 'kellerassel'): { sim: GameSim; index: number } {
   const sim = new GameSim({ seed: 7, room: new RoomGeometry(0, 0, 320, 180) });
   const player = sim.playerIndex;
   const doomed: number[] = [];
@@ -115,7 +119,7 @@ function oneEnemySim(): { sim: GameSim; index: number } {
     sim.world.destroy(sim.world.entityAt(slot));
   }
   sim.world.flush();
-  const entity = sim.spawnEnemyKind(sim.enemies.indexOf('kellerassel'), 120, 90);
+  const entity = sim.spawnEnemyKind(sim.enemies.indexOf(kind), 120, 90);
   sim.world.flush();
   return { sim, index: entityIndex(entity) };
 }
@@ -270,6 +274,71 @@ describe('EntityView, drawing an animated enemy', () => {
       }
       view.sync(0, 0, project);
       expect(shown(view, set)).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  describe("a swimmer's shadow turned toward or away from the camera (#450)", () => {
+    /** A lone Bachforelle in the wald grove's stream — the only room kind it will spawn in. */
+    function troutSim(): { sim: GameSim; index: number } {
+      const grove = ROOM_TEMPLATES.find((room) => (room as { id?: string }).id === 'wald-grove');
+      const room = compileRoomTemplate(grove, 3, 'wald-grove', ENEMY_DEFINITIONS).geometry;
+      const sim = new GameSim({ seed: 3, room });
+      const doomed: number[] = [];
+      sim.world.forEach(sim.collidableMask, (slot) => {
+        if (slot !== sim.playerIndex) doomed.push(slot);
+      });
+      for (const slot of doomed) sim.world.destroy(sim.world.entityAt(slot));
+      sim.world.flush();
+      const entity = sim.spawnEnemyKind(sim.enemies.indexOf('bachforelle'), 160, 90);
+      sim.world.flush();
+      return { sim, index: entityIndex(entity) };
+    }
+
+    // Three shadows told apart by width: 20, 22 and 24 pixels.
+    const WIDTHS = [20, 22, 24];
+
+    function troutView(sim: GameSim): EntityView {
+      const [side, south, north] = WIDTHS.map((width) => blank(width, 16)) as [
+        Texture,
+        Texture,
+        Texture,
+      ];
+      return new EntityView(
+        sim,
+        {
+          fallback: Texture.EMPTY,
+          enemyArt: {
+            'bachforelle-shadow': side,
+            'bachforelle-shadow-south': south,
+            'bachforelle-shadow-north': north,
+          },
+          enemyAnimation: {},
+          pickupArt: {},
+          bossIds: new Set(),
+        },
+        new Container(),
+        makeLabel,
+      );
+    }
+
+    it('draws the south shadow for a heading down the room and the north one for up', () => {
+      const { sim, index } = troutSim();
+      const view = troutView(sim);
+      const motion = index * ENEMY_MOTION_STRIDE;
+      const widthShown = (): number =>
+        Math.round((billboardMeshes(view.group)[0]?.scale.x ?? 0) * ACTOR_PIXELS_PER_UNIT);
+      // Held still: only the stored heading says which way it faces.
+      sim.enemyMotion.data[motion] = 0;
+      sim.enemyMotion.data[motion + 1] = 1;
+      view.sync(0, 0, project);
+      expect(widthShown()).toBe(WIDTHS[1]);
+      sim.enemyMotion.data[motion + 1] = -1;
+      view.sync(0, 16, project);
+      expect(widthShown()).toBe(WIDTHS[2]);
+      sim.enemyMotion.data[motion] = 1;
+      sim.enemyMotion.data[motion + 1] = 0;
+      view.sync(0, 32, project);
+      expect(widthShown()).toBe(WIDTHS[0]);
     });
   });
 

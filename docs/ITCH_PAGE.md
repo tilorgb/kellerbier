@@ -19,6 +19,7 @@ The game is an early alpha that gets content updates step by step until it is fi
 update changes **In this build** and the screenshots, not the framing. For each update:
 
 - upload the new build and run the embed checklist (`tools/release/ITCH.md`)
+- write the release notes (docs/releases/README.md) and post them as the page's devlog entry
 - update **In this build** below and on the page
 - check the telemetry Worker is still current (`tools/telemetry/README.md`)
 
