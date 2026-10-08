@@ -38,6 +38,7 @@ describe('Floor 2 side-on creatures: committed views match the authoring source'
       `${name}.strip.png differs from the authoring source — run \`node tools/art/authoring/build-floor2-side-views.mjs\``,
     ).toBe(true);
     const sidecar = sidecars[name];
+    if (sidecar === undefined) throw new Error(`no sidecar for ${name}`);
     expect(await readFile(`${dir}${name}.anim.json`, 'utf8')).toBe(await encodeSidecar(sidecar));
     expect(frames.length).toBe(sidecar.frames);
   });
@@ -64,7 +65,7 @@ describe('Floor 2 side-on creatures: committed views match the authoring source'
       const kind = id === 'der-stier' ? 'boss' : 'character';
       expect(validateSpriteSize(kind, w, h)).toBeNull();
       for (const v of ['side', 'south', 'north']) {
-        for (const f of strips[`${id}-${v}`]) {
+        for (const f of strips[`${id}-${v}`] ?? []) {
           expect([f.width, f.height]).toEqual([w, h]);
         }
       }

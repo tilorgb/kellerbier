@@ -83,16 +83,14 @@ describe('every animation strip in assets/sprites/', () => {
       // Der Ordner, the bouncer familiar, keyed by facing like Alois.
       // A flier (#411) also has its wing-beat strips, `<id>-fly-side` and the
       // rest, which `render/entities.ts` asks for by those suffixes.
-      const ids = ENEMY_DEFINITIONS.flatMap((definition) =>
-        [
-          definition.id,
-          // A per-heading strip (#438): `<id>-side`, `-south`, `-north`.
-          ...DIRECTION_STRIP_SUFFIXES.map((suffix) => `${definition.id}${suffix}`),
-          ...(definition.flying === true
-            ? FLIGHT_STRIP_SUFFIXES.map((suffix) => `${definition.id}${suffix}`)
-            : []),
-        ],
-      );
+      const ids = ENEMY_DEFINITIONS.flatMap((definition) => [
+        definition.id,
+        // A per-heading strip (#438): `<id>-side`, `-south`, `-north`.
+        ...DIRECTION_STRIP_SUFFIXES.map((suffix) => `${definition.id}${suffix}`),
+        ...(definition.flying === true
+          ? FLIGHT_STRIP_SUFFIXES.map((suffix) => `${definition.id}${suffix}`)
+          : []),
+      ]);
       if (sprite.bucketId === 'common') {
         expect([...PLAYER_STRIP_NAMES, ...Object.values(ORDNER_STRIP_NAMES), ...ids]).toContain(
           name,

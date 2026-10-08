@@ -191,7 +191,9 @@ export function encodeViewStrip(frames) {
   const pixels = Buffer.alloc(width * height * 4);
   frames.forEach((f, i) => {
     if (f.width !== fw || f.height !== height) {
-      throw new Error(`${f.name}: ${String(f.width)}x${String(f.height)} is not ${String(fw)}x${String(height)}`);
+      throw new Error(
+        `${f.name}: ${String(f.width)}x${String(f.height)} is not ${String(fw)}x${String(height)}`,
+      );
     }
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < fw; x++) {
@@ -221,11 +223,15 @@ export async function writeViewStrips(dir, strips, sidecars = {}) {
   for (const [name, frames] of Object.entries(strips)) {
     const anim = sidecars[name] ?? VIEW_ANIM;
     if (anim.frames !== frames.length) {
-      throw new Error(`${name}: sidecar says ${String(anim.frames)} frames, strip has ${String(frames.length)}`);
+      throw new Error(
+        `${name}: sidecar says ${String(anim.frames)} frames, strip has ${String(frames.length)}`,
+      );
     }
     await writeFile(`${dir}${name}.strip.png`, encodeViewStrip(frames));
     await writeFile(`${dir}${name}.anim.json`, await encodeSidecar(anim));
-    console.log(`${name}.strip.png  ${String(frames.length)} x ${String(frames[0].width)}x${String(frames[0].height)}`);
+    console.log(
+      `${name}.strip.png  ${String(frames.length)} x ${String(frames[0].width)}x${String(frames[0].height)}`,
+    );
   }
 }
 

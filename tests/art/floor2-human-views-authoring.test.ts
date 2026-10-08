@@ -40,7 +40,7 @@ describe("Floor 2's per-heading creature views match the authoring source", () =
     ).toBe(true);
     const sidecar: unknown = JSON.parse(await readFile(`${DIR}${name}.anim.json`, 'utf8'));
     expect(sidecar).toEqual(sidecars[name]);
-    expect(frames.length).toBe(sidecars[name].frames);
+    expect(frames.length).toBe(sidecars[name]?.frames);
   });
 
   it('is on the floor-2-rural palette', () => {
@@ -54,7 +54,7 @@ describe("Floor 2's per-heading creature views match the authoring source", () =
     (id, size) => {
       expect(validateSpriteSize('character', size.width, size.height)).toBeNull();
       for (const dir of ['side', 'south', 'north']) {
-        for (const f of strips[`${id}-${dir}`]) {
+        for (const f of strips[`${id}-${dir}`] ?? []) {
           expect([f.width, f.height]).toEqual([size.width, size.height]);
         }
       }
