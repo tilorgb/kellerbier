@@ -34,6 +34,7 @@
     "art:ordner": "node tools/art/authoring/build-ordner.mjs",
     "art:floor1-views": "node tools/art/authoring/build-floor1-views.mjs",
     "art:floor2-side-views": "node tools/art/authoring/build-floor2-side-views.mjs",
+    "art:floor3-views": "node tools/art/authoring/build-floor3-views.mjs",
     "art:floor2-human-views": "node tools/art/authoring/build-floor2-human-views.mjs",
     "art:shopkeeper": "node tools/art/authoring/build-shopkeeper.mjs",
     "art:items": "node tools/art/authoring/build-items.mjs",

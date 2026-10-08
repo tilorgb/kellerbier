@@ -1,0 +1,15 @@
+{
+  "frames": 2,
+  "frameDurationMs": 120,
+  "loop": true,
+  "clips": {
+    "idle": { "frames": [0], "frameDurationMs": 400, "mode": "loop" },
+    "move": { "frames": [1], "frameDurationMs": 120, "mode": "loop" },
+    "hurt": {
+      "frames": [0],
+      "frameDurationMs": 90,
+      "mode": "once",
+      "onEnd": "idle"
+    }
+  }
+}

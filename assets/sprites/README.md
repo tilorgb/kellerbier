@@ -142,7 +142,8 @@ mostly-horizontal motion is `-side` (authored facing left, mirrored for right), 
 set, so a boss's view strips carry the boss's full clip set (a telegraph pose has to read from
 every side). A heading with no strip draws the creature's own art, so views can land one creature
 at a time. Authored with `tools/art/authoring/views-kit.mjs`; the view scripts are
-`floor1-views.mjs`, `floor2-side-views.mjs` and `floor2-human-views.mjs`.
+`floor1-views.mjs`, `floor2-side-views.mjs`, `floor2-human-views.mjs` and `floor3-views.mjs`.
+A `facing: 'mirror'` animal (the Boar, the Kaninchen) ships only `-south` and `-north`: its side view stays its base strip, so it keeps turning to what it is about to charge or hop at. A swimmer's shadow gets `<id>-shadow-south` / `-north` single frames.
 
 ### Directions, and the player's strips
 

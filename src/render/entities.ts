@@ -150,6 +150,9 @@ const DRUM_SHAKE_RATE = 0.16;
 const SUBMERGED_FLATTEN = 0.6;
 /** The sprite-name suffix a creature's under-the-water art is authored with (#408). */
 const SHADOW_SUFFIX = '-shadow';
+/** A submerged body's toward-the-camera and away shadows (#450): `<id>-shadow-south` / `-north`. */
+const SHADOW_SOUTH_SUFFIX = '-shadow-south';
+const SHADOW_NORTH_SUFFIX = '-shadow-north';
 /** The sprite-name suffix a flying creature's down-on-the-floor art is authored with (#411's beak stuck in the plank). */
 const LANDED_SUFFIX = '-landed';
 /** Sprite-name suffixes of a flier's wing-beat strips (#411): side-on, toward the camera, away from it. */
@@ -248,6 +251,9 @@ export class EntityView {
    * the Specht's beak stuck in the plank, wings up. Unset: its own art.
    */
   private readonly landedArt: readonly (Texture | undefined)[];
+  /** `shadowArt`'s toward-the-camera and away views, where the roster has them (#450). */
+  private readonly shadowSouthArt: readonly (Texture | undefined)[];
+  private readonly shadowNorthArt: readonly (Texture | undefined)[];
   /**
    * Per enemy definition index, a flier's art in the air (#411): its
    * wing-beat strips side-on, toward the camera and away from it, and its
@@ -327,6 +333,12 @@ export class EntityView {
     this.sim = sim;
     this.art = art;
     this.shadowArt = sim.enemies.all.map((enemy) => art.enemyArt[`${enemy.id}${SHADOW_SUFFIX}`]);
+    this.shadowSouthArt = sim.enemies.all.map(
+      (enemy) => art.enemyArt[`${enemy.id}${SHADOW_SOUTH_SUFFIX}`],
+    );
+    this.shadowNorthArt = sim.enemies.all.map(
+      (enemy) => art.enemyArt[`${enemy.id}${SHADOW_NORTH_SUFFIX}`],
+    );
     this.landedArt = sim.enemies.all.map((enemy) => art.enemyArt[`${enemy.id}${LANDED_SUFFIX}`]);
     this.flySideArt = sim.enemies.all.map(
       (enemy) => art.enemyAnimation[`${enemy.id}${FLY_SIDE_SUFFIX}`],
@@ -620,7 +632,8 @@ export class EntityView {
       this.bodyTelegraphing[used] = telegraph > 0 ? 1 : 0;
       used += 1;
       if (submerged) {
-        const shadow = this.shadowArt[sim.enemy.data[index * ENEMY_STRIDE] ?? 0];
+        const shadowKind = sim.enemy.data[index * ENEMY_STRIDE] ?? 0;
+        const shadow = this.shadowArt[shadowKind];
         if (shadow !== undefined) {
           texture = shadow;
         }
@@ -629,6 +642,20 @@ export class EntityView {
         const headingX = sim.enemyMotion.data[index * ENEMY_MOTION_STRIDE] ?? 0;
         if (animation === undefined && headingX !== 0) {
           mirror = headingX > 0 ? -1 : 1;
+        }
+        // Swimming up or down the stream, toward the camera or away from it
+        // (#450), draws the shadow turned that way when the roster has one.
+        const towardShadow = this.shadowSouthArt[shadowKind];
+        const awayShadow = this.shadowNorthArt[shadowKind];
+        if (towardShadow !== undefined || awayShadow !== undefined) {
+          const turn = this.turnOf(index);
+          if (turn === HeadingTurn.South && towardShadow !== undefined) {
+            texture = towardShadow;
+            mirror = 1;
+          } else if (turn === HeadingTurn.North && awayShadow !== undefined) {
+            texture = awayShadow;
+            mirror = 1;
+          }
         }
       }
       if (isEnemyBody && compiledEnemy?.flying === true && enemyGrounded(sim, index)) {
