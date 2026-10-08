@@ -531,6 +531,37 @@ const ladeBase = readFrames(`${CHAR}der-ladewagen.png`, 1, 'der-ladewagen')[0];
  * strip is the committed art mirrored. (Der Ladewagen's cab is at the left,
  * hauling the wagon behind it to the right: that one already faces left.)
  */
+/**
+ * The squeeze leaves a ghost of the side view's far horn beside the real
+ * one in the dive frame (10): a sliver of horn and outline at the left of
+ * the head. Cleared, with the head's own outline left alone.
+ */
+function dropGhostHorn(frame, i) {
+  if (i !== 10) return frame;
+  const out = renamed(frame, frame.name);
+  for (let y = 23; y <= 34; y++) {
+    for (let x = 35; x <= 39; x++) out.px[y][x] = null;
+  }
+  for (let y = 24; y <= 30; y++) {
+    for (let x = 39; x <= 41; x++) out.px[y][x] = null;
+  }
+  out.px[23][39] = null;
+  out.px[23][40] = null;
+  // Re-ink only around real (non-ink) pixels, so the existing outline is not thickened.
+  const lit = (x, y) =>
+    out.px[y]?.[x] !== null && out.px[y]?.[x] !== undefined && out.px[y][x] !== 0;
+  for (let y = 22; y <= 36; y++) {
+    for (let x = 34; x <= 44; x++) {
+      if (out.px[y][x] !== null) continue;
+      let near = false;
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -1; dx <= 1; dx++) if (lit(x + dx, y + dy)) near = true;
+      if (near) out.px[y][x] = 0;
+    }
+  }
+  return out;
+}
+
 export const strips = {
   ...creatureStrips(
     'gockel',
@@ -558,8 +589,8 @@ export const strips = {
     bobSteps(ladeBack('der-ladewagen-north'), 'der-ladewagen-north'),
   ),
   'der-stier-side': STIER_SIDE.map((f, i) => renamed(f, `der-stier-side-${String(i)}`)),
-  'der-stier-south': STIER_SIDE.map(stierSouthFrame),
-  'der-stier-north': STIER_SIDE.map(stierNorthFrame),
+  'der-stier-south': STIER_SIDE.map(stierSouthFrame).map(dropGhostHorn),
+  'der-stier-north': STIER_SIDE.map(stierNorthFrame).map(dropGhostHorn),
 };
 
 /** Every strip's sidecar: the three-frame walk, except the boss's own twelve-frame clips. */
