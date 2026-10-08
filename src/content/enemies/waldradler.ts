@@ -65,8 +65,7 @@ export const waldradler: EnemyDefinition = {
   health: 300,
   contactDamage: 1,
   bossBar: true,
-  // TODO(#412): intro plate title and epithet — Tilo's to write, all three
-  // locales. The keys are wired; the strings are placeholders.
+  // Intro plate text is a draft in all three locales, pending sign-off.
   title: 'enemies.waldradler.title',
   epithet: 'enemies.waldradler.epithet',
   initial: 'ride',

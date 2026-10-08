@@ -8,6 +8,7 @@ import type { EnemyDefinition, EnemyState } from '../../src/sim/enemy/definition
 import { EnemyRegistry } from '../../src/sim/enemy/registry.js';
 import { GameSim } from '../../src/sim/game/sim.js';
 import { createInputFrame } from '../../src/sim/input/frame.js';
+import { applyDamageAt } from '../../src/sim/systems/impact.js';
 import { ProjectileTag } from '../../src/sim/projectile/tags.js';
 import {
   ENEMY_MOTION_STRIDE,
@@ -435,6 +436,30 @@ describe('Der Waldradler (#412)', () => {
         });
         expect(wheels, attack).toBe(1);
       }
+    });
+  });
+
+  describe('two lethal hits on the same tick', () => {
+    // A multi-shot (or a shot and a poison tick) can land two killing blows on
+    // one body before the world flushes: the second must not be a second death.
+    it('split into one Waldradl and drop one Maß, not two', () => {
+      const sim = emptySim(6, ENEMY_DEFINITIONS);
+      hardenPlayer(sim);
+      const boss = spawn(sim, 'waldradler', 160, 90);
+      sim.health.data[boss * 2] = 1;
+      const before = massPickups(sim);
+      applyDamageAt(sim, boss, 5, 160, 90, 1, 0, 0);
+      applyDamageAt(sim, boss, 5, 160, 90, 1, 0, 0);
+      stepEnemyDeaths(sim);
+      sim.world.flush();
+      expect(massPickups(sim) - before).toBe(1);
+      let wheels = 0;
+      sim.world.forEach(sim.enemyMask, (index) => {
+        if (sim.enemies.at(sim.enemy.data[index * ENEMY_STRIDE] ?? 0).id === 'waldradl') {
+          wheels += 1;
+        }
+      });
+      expect(wheels).toBe(1);
     });
   });
 
