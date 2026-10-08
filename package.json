@@ -25,6 +25,7 @@
     "art:blocks": "node tools/art/authoring/build-blocks.mjs",
     "art:wald-tiles": "node tools/art/authoring/build-wald-tiles.mjs",
     "art:wald-objects": "node tools/art/authoring/build-wald-objects.mjs",
+    "art:alpen-tiles": "node tools/art/authoring/build-alpen-tiles.mjs",
     "art:floor1": "node tools/art/authoring/build-floor1-roster.mjs",
     "art:minibosses": "node tools/art/authoring/build-floor1-minibosses.mjs",
     "art:floor2": "node tools/art/authoring/build-floor2-roster.mjs",

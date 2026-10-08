@@ -40,6 +40,8 @@ describe("the block tiles' committed art is what the authoring source produces",
   it('produces the variant sets the tilesets name, and nothing else', () => {
     // Floor 3's logs and stump are flat placeholders (#402) until the tileset
     // direction is signed off; they get an authored source here when it is.
+    // Floor 4's boulders and snowdrift (#40) are authored here like floors
+    // 1 and 2's.
     const named = Object.entries(FLOOR_TILESETS)
       .filter(([floor]) => floor !== PLACEHOLDER_ART_FLOOR)
       .flatMap(([, tileset]) => tileset.blockVariants)

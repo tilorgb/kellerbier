@@ -94,6 +94,23 @@ const RURAL = {
   mossLit: 0x7fbf6a,
 };
 
+// Die Alpen (#40): granite under snow. The rock is the floor's dark granite
+// ramp; the snow lying on every upward face is the real white the foreground
+// tier allows — which is the whole reason the boulders are the brightest
+// thing on a floor whose tiles sit on the quiet background tier.
+const ALPEN = {
+  bucket: 'floor-4-alpen',
+  deep: 0x1c1a1f,
+  d2: shadeOf(0x6e7680, -2),
+  d: shadeOf(0x6e7680, -1),
+  m: 0x6e7680,
+  l: shadeOf(0x6e7680, 1),
+  h: shadeOf(0x6e7680, 2),
+  snow: 0xeef2f5,
+  snowShade: shadeOf(0xeef2f5, -1),
+  snowDeep: shadeOf(0xeef2f5, -2),
+};
+
 // ------------------------------------------------------------- raster canvas
 // `px` is opaque hex-or-null. `sh` is the cast shadow: a translucent pass
 // that only shows where `px` is empty, so a boulder throws a soft shape onto
@@ -450,6 +467,119 @@ const RURAL_STONES = [
     ),
 ];
 
+// =============================================================== FLOOR 4 — Die Alpen
+/**
+ * Snow lying on a rock: every column's topmost `min..max` rows of the
+ * silhouette, plus any pixel whose upward neighbour is empty (a ledge), in
+ * the snow ramp — bright on top, a shade down where it meets the rock. The
+ * same shape as `build-wald-objects.mjs`'s moss cap, which is what a cap of
+ * anything on a rock is.
+ */
+function snowCap(cv, P, seed, min, max) {
+  const snap = cv.px.map((r) => [...r]);
+  const has = (x, y) => (snap[y]?.[x] ?? null) !== null;
+  for (let x = 0; x < W; x++) {
+    let top = -1;
+    for (let y = 0; y < H; y++) {
+      if (has(x, y)) {
+        top = y;
+        break;
+      }
+    }
+    if (top < 0) continue;
+    const depth = min + Math.floor((Math.sin(x * 0.9 + seed) * 0.5 + 0.5) * (max - min + 1));
+    for (let k = 0; k < depth; k++) {
+      if (!has(x, top + k)) break;
+      set(cv, x, top + k, k === depth - 1 ? P.snowDeep : k === 0 ? P.snow : P.snowShade);
+    }
+    // Ledges further down catch snow too.
+    for (let y = top + depth + 1; y < H - 3; y++) {
+      if (has(x, y) && !has(x, y - 1) && hash2(x, y, seed) < 0.8) {
+        set(cv, x, y, P.snow);
+        if (has(x, y + 1)) set(cv, x, y + 1, P.snowShade);
+      }
+    }
+  }
+}
+
+const ALPEN_BOULDERS = [
+  // a split granite block, two faces
+  (s) => {
+    const cv = canvas();
+    castShadow(cv, 21, 27, 14, 5);
+    rock(cv, ALPEN, 17, 19, 14, 13, s, { tone: -0.1 });
+    rock(cv, ALPEN, 11, 14, 8, 9, s + 1, { tone: 0.35 });
+    rock(cv, ALPEN, 23, 20, 9, 10, s + 2, { tone: -0.4 });
+    rim(cv, ALPEN);
+    crack(cv, ALPEN, [
+      [16, 9],
+      [16, 12],
+      [15, 15],
+      [15, 18],
+      [16, 21],
+    ]);
+    snowCap(cv, ALPEN, s, 2, 4);
+    contact(cv, ALPEN);
+    return finish('alpen-boulder-1', cv);
+  },
+  // a tall standing stone
+  (s) => {
+    const cv = canvas();
+    castShadow(cv, 20, 27, 12, 5);
+    rock(cv, ALPEN, 16, 18, 12, 14, s, { tone: -0.05 });
+    rock(cv, ALPEN, 14, 10, 8, 8, s + 1, { tone: 0.4 });
+    rock(cv, ALPEN, 21, 24, 9, 8, s + 2, { tone: -0.45 });
+    rim(cv, ALPEN);
+    crack(cv, ALPEN, [
+      [19, 10],
+      [18, 13],
+      [18, 16],
+      [17, 19],
+    ]);
+    snowCap(cv, ALPEN, s, 2, 3);
+    contact(cv, ALPEN);
+    return finish('alpen-boulder-2', cv);
+  },
+  // a low wide slab, snowed over almost entirely
+  (s) => {
+    const cv = canvas();
+    castShadow(cv, 20, 28, 15, 4);
+    rock(cv, ALPEN, 16, 18, 15, 14, s, { tone: -0.15 });
+    rock(cv, ALPEN, 11, 13, 9, 9, s + 1, { tone: 0.3 });
+    rock(cv, ALPEN, 23, 18, 9, 8, s + 2, { tone: -0.3 });
+    rim(cv, ALPEN);
+    crack(cv, ALPEN, [
+      [10, 21],
+      [14, 22],
+      [18, 22],
+      [22, 21],
+    ]);
+    snowCap(cv, ALPEN, s, 4, 7);
+    contact(cv, ALPEN);
+    return finish('alpen-boulder-3', cv);
+  },
+  // a snowdrift: a soft mound with a lip of windblown crust and a dark base
+  (s) => {
+    const cv = canvas();
+    castShadow(cv, 19, 28, 14, 4);
+    const drift = {
+      ...ALPEN,
+      d2: shadeOf(0xb9c4cc, -2),
+      d: shadeOf(0xb9c4cc, -1),
+      m: 0xb9c4cc,
+      l: shadeOf(0xb9c4cc, 1),
+      h: shadeOf(0xb9c4cc, 2),
+    };
+    rock(cv, drift, 16, 20, 15, 12, s, { tone: 0.1 });
+    rock(cv, drift, 12, 15, 9, 8, s + 1, { tone: 0.45 });
+    rock(cv, drift, 22, 22, 9, 8, s + 2, { tone: -0.25 });
+    rim(cv, drift);
+    snowCap(cv, ALPEN, s, 3, 6);
+    contact(cv, drift);
+    return finish('alpen-snowdrift', cv);
+  },
+];
+
 // ---------------------------------------------------------------------------
 /**
  * `name -> frame` for every block tile, both floors, at an overhang of `lip`
@@ -469,6 +599,7 @@ export function buildBlocks(lip = BLOCK_LIP) {
     [
       ...CELLAR_BOULDERS.map((make, i) => make(101 + i * 7)),
       ...RURAL_STONES.map((make, i) => make(401 + i * 9)),
+      ...ALPEN_BOULDERS.map((make, i) => make(701 + i * 5)),
     ].map((frame) => [frame.name, frame]),
   );
 }
@@ -479,7 +610,11 @@ export const BLOCKS = buildBlocks(BLOCK_LIP);
 export const BLOCK_BUCKETS = Object.fromEntries(
   Object.keys(BLOCKS).map((name) => [
     name,
-    name.startsWith('cellar-') ? 'floor-1-cellar' : 'floor-2-rural',
+    name.startsWith('cellar-')
+      ? 'floor-1-cellar'
+      : name.startsWith('alpen-')
+        ? 'floor-4-alpen'
+        : 'floor-2-rural',
   ]),
 );
 

@@ -22,6 +22,7 @@ const SPRITES = fileURLToPath(new URL('../../../assets/sprites/', import.meta.ur
 const DIR = {
   'floor-1-cellar': `${SPRITES}floor-1-cellar/tiles/`,
   'floor-2-rural': `${SPRITES}floor-2-rural/tiles/`,
+  'floor-4-alpen': `${SPRITES}floor-4-alpen/tiles/`,
 };
 
 await rm(`${SPRITES}floor-1-cellar/tiles/cellar-plank.png`, { force: true });

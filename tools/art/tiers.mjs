@@ -60,6 +60,19 @@ export const BACKGROUND_SPRITE_NAMES = new Set([
   'wald-floor-4',
   'wald-fern',
   'wald-glow-mushrooms',
+  // Floor 4 — Die Alpen: structure and art-only props (#40).
+  'alpen-wall',
+  'alpen-wall-lip',
+  'alpen-wall-lip-corner',
+  'alpen-floor-1',
+  'alpen-floor-2',
+  'alpen-floor-3',
+  'alpen-floor-4',
+  'alpen-huette',
+  'alpen-pylon',
+  'alpen-fir',
+  'alpen-gipfelkreuz',
+  'alpen-cairn',
   // common — shared scenery that appears on every floor.
   'crate-opa',
   'crate-neu',
@@ -95,6 +108,12 @@ export const FOREGROUND_TILE_NAMES = new Set([
   'wald-log-2',
   'wald-stump',
   'wald-barricade',
+  // Floor 4's granite cover, snowdrift and destructible (#40).
+  'alpen-boulder-1',
+  'alpen-boulder-2',
+  'alpen-boulder-3',
+  'alpen-snowdrift',
+  'alpen-barrel',
   // The lantern-room wall lantern (#424): art-only, but a light — its glass
   // needs the whites the background tier does not have.
   'wald-lantern',
