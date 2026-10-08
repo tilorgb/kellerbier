@@ -12,7 +12,7 @@ not a maintainer, and is posted as the page's devlog entry for that build.
 3. `npm run build:itch`, and put the zip's commit id (`kellerbier-<id>.zip`) on the `Build:`
    line, so the next release starts its range from there.
 4. Upload the zip (`tools/release/ITCH.md`) and run the embed checklist.
-5. `npm run release:post` prints the post title and copies the body to the clipboard, ready for the devlog editor (Markdown; it drops the `Build:` line, comments and empty sections). Paste it into **Create new post**, put the title in the title field and publish.
+5. `npm run release:post` prints the post title and copies the body to the clipboard, ready for the devlog editor (as HTML, because itch.io's Markdown mode renders the notes badly; it drops the `Build:` line, comments and empty sections). Paste it into **Create new post**, put the title in the title field and publish.
 6. Commit the file. Nothing else in the repo needs to change.
 
 ## Rules

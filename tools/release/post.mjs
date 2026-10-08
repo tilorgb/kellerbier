@@ -6,7 +6,7 @@
  *   npm run release:post -- 2026-10-08.md     a named one
  *   npm run release:post -- --no-copy         print only, leave the clipboard alone
  *
- * itch.io's devlog takes the title in its own field and the body as Markdown, so
+ * itch.io's devlog takes the title in its own field and the body as HTML (its Markdown mode renders these notes badly), so
  * this splits the file that way: the `# headline` becomes the title (printed
  * first, on stderr), and everything else becomes the body (printed on stdout and
  * copied to the clipboard) minus what a reader must not see — the `Build:` line,
@@ -47,7 +47,50 @@ export function devlogPost(source) {
     .join('\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
-  return { title, body };
+  return { title, body, html: toHtml(body) };
+}
+
+const escapeHtml = (text) =>
+  text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+/** The Markdown subset the notes use — paragraphs, `##` headings, `-` lists, **bold**, `code` — as HTML. */
+function toHtml(markdown) {
+  const inline = (text) =>
+    escapeHtml(text)
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>');
+  const out = [];
+  let list = false;
+  let paragraph = [];
+  const flush = () => {
+    if (paragraph.length > 0) out.push(`<p>${paragraph.map(inline).join('<br>')}</p>`);
+    paragraph = [];
+  };
+  const closeList = () => {
+    if (list) out.push('</ul>');
+    list = false;
+  };
+  for (const line of markdown.split('\n')) {
+    if (line.trim() === '') {
+      flush();
+      closeList();
+    } else if (/^## /.test(line)) {
+      flush();
+      closeList();
+      out.push(`<h2>${inline(line.slice(3).trim())}</h2>`);
+    } else if (/^- /.test(line)) {
+      flush();
+      if (!list) out.push('<ul>');
+      list = true;
+      out.push(`<li>${inline(line.slice(2))}</li>`);
+    } else {
+      closeList();
+      paragraph.push(line);
+    }
+  }
+  flush();
+  closeList();
+  return out.join('\n');
 }
 
 function copy(text) {
@@ -79,9 +122,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     console.error('no release notes in docs/releases/');
     process.exit(1);
   }
-  const { title, body } = devlogPost(readFileSync(join(dir, file), 'utf8'));
+  const { title, html } = devlogPost(readFileSync(join(dir, file), 'utf8'));
   console.error(
-    `${file}\nTitle: ${title}\n${noCopy ? '' : copy(body) ? '(body copied to the clipboard)' : '(clipboard unavailable; copy the text below)'}\n`,
+    `${file}\nTitle: ${title}\n${noCopy ? '' : copy(html) ? '(body copied to the clipboard)' : '(clipboard unavailable; copy the text below)'}\n`,
   );
-  process.stdout.write(body + '\n');
+  process.stdout.write(html + '\n');
 }
