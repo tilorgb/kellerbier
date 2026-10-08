@@ -90,6 +90,10 @@ describe('every animation strip in assets/sprites/', () => {
         ...(definition.flying === true
           ? FLIGHT_STRIP_SUFFIXES.map((suffix) => `${definition.id}${suffix}`)
           : []),
+        // A body that swaps its art past a health fraction (#437,
+        // `phaseArtBelow`) asks for `<id>-phase-two` — `render/entities.ts`'s
+        // `PHASE_TWO_SUFFIX`.
+        ...(definition.phaseArtBelow !== undefined ? [`${definition.id}-phase-two`] : []),
       ]);
       if (sprite.bucketId === 'common') {
         expect([...PLAYER_STRIP_NAMES, ...Object.values(ORDNER_STRIP_NAMES), ...ids]).toContain(

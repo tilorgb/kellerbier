@@ -197,7 +197,7 @@ const FEET = [40, 78];
  * hip; `legDy` drops the legs with a collapsing body; `tint` is the hurt
  * flash; `fall` is a whole-body rotation about the feet, with `dx`/`dy`.
  */
-function pose(name, o = {}) {
+function pose(name, o = {}, { arrowhead = true } = {}) {
   const t = o.tint ?? 0;
   const bob = o.bob ?? 0;
   const lean = o.lean ?? 0;
@@ -215,51 +215,64 @@ function pose(name, o = {}) {
       lay(CAPE, upper),
       lay(HEAD, { dy: bob, rotate: lean + (o.head ?? 0), pivot: NECK }),
       lay(ARM_CROSS, { ...upper, pivot: ARM_CROSS.pivot, rotate: lean + (o.armCross ?? 18) }),
-      lay(ARROWHEAD, { ...upper, ink: false }),
+      ...(arrowhead ? [lay(ARROWHEAD, { ...upper, ink: false })] : []),
     ],
     { rotate: o.fall ?? 0, dx: o.dx ?? 0, dy: o.dy ?? 0, pivot: FEET },
     BUCKET,
   );
 }
 
-export const FIRST_HUMAN_FRAMES = [
-  // idle: a breath, the held-out arm drifting.
-  pose('human-idle-a'),
-  pose('human-idle-b', { bob: 1, armOut: -9, head: 2 }),
-  // move: a slow stride — the sim adds the stops that make it jerky.
-  pose('human-move-1', { leg: 17, farLeg: -17, armOut: -2 }),
-  pose('human-move-2', { leg: 5, farLeg: -5, bob: -1, armOut: -6 }),
-  pose('human-move-3', { leg: -17, farLeg: 17, armOut: -10 }),
-  pose('human-move-4', { leg: -5, farLeg: 5, bob: -1, armOut: -6 }),
-  // telegraph: the arm pulled up and back for the sweep, the body leaning into it.
-  pose('human-telegraph-a', { armOut: 48, lean: -5, head: -4, armCross: 26 }),
-  pose('human-telegraph-b', { armOut: 74, lean: -9, head: -7, armCross: 32 }),
-  // hurt: knocked back, a shade lighter.
-  pose('human-hurt', { tint: 1, lean: 9, head: 10, armOut: -18, armCross: 8 }),
-  // death: the knees go, he folds, he lies on his back in the snow.
-  pose('human-death-1', { leg: 28, farLeg: 24, lean: 8, head: 8, armOut: -30, dy: 5, legDy: 3 }),
-  pose('human-death-2', {
-    leg: 52,
-    farLeg: 48,
-    lean: 26,
-    head: 22,
-    armOut: -58,
-    armCross: -10,
-    dy: 12,
-    legDy: 4,
-  }),
-  pose('human-death-3', {
-    leg: 14,
-    farLeg: 22,
-    lean: 4,
-    head: 12,
-    armOut: -70,
-    armCross: 30,
-    fall: 86,
-    dx: -46,
-    dy: 1,
-  }),
-];
+/**
+ * The twelve poses, built twice: with the arrowhead in the shoulder, and for
+ * phase two (#437, `phaseArtBelow`) without it.
+ */
+function frames(arrowhead) {
+  const p = (name, o = {}) => pose(arrowhead ? name : `${name}-phase-two`, o, { arrowhead });
+  return [
+    // idle: a breath, the held-out arm drifting.
+    p('human-idle-a'),
+    p('human-idle-b', { bob: 1, armOut: -9, head: 2 }),
+    // move: a slow stride — the sim adds the stops that make it jerky.
+    p('human-move-1', { leg: 17, farLeg: -17, armOut: -2 }),
+    p('human-move-2', { leg: 5, farLeg: -5, bob: -1, armOut: -6 }),
+    p('human-move-3', { leg: -17, farLeg: 17, armOut: -10 }),
+    p('human-move-4', { leg: -5, farLeg: 5, bob: -1, armOut: -6 }),
+    // telegraph: the arm pulled up and back for the sweep, the body leaning into it.
+    p('human-telegraph-a', { armOut: 48, lean: -5, head: -4, armCross: 26 }),
+    p('human-telegraph-b', { armOut: 74, lean: -9, head: -7, armCross: 32 }),
+    // hurt: knocked back, a shade lighter.
+    p('human-hurt', { tint: 1, lean: 9, head: 10, armOut: -18, armCross: 8 }),
+    // death: the knees go, he folds, he lies on his back in the snow.
+    p('human-death-1', { leg: 28, farLeg: 24, lean: 8, head: 8, armOut: -30, dy: 5, legDy: 3 }),
+    p('human-death-2', {
+      leg: 52,
+      farLeg: 48,
+      lean: 26,
+      head: 22,
+      armOut: -58,
+      armCross: -10,
+      dy: 12,
+      legDy: 4,
+    }),
+    p('human-death-3', {
+      leg: 14,
+      farLeg: 22,
+      lean: 4,
+      head: 12,
+      armOut: -70,
+      armCross: 30,
+      fall: 86,
+      dx: -46,
+      dy: 1,
+    }),
+  ];
+}
+
+export const FIRST_HUMAN_FRAMES = frames(true);
+export const FIRST_HUMAN_PHASE_TWO_FRAMES = frames(false);
 
 /** What `bosses.mjs` merges into its `STRIPS`. */
-export const ALPEN_FRAMES = { 'the-first-human': FIRST_HUMAN_FRAMES };
+export const ALPEN_FRAMES = {
+  'the-first-human': FIRST_HUMAN_FRAMES,
+  'the-first-human-phase-two': FIRST_HUMAN_PHASE_TWO_FRAMES,
+};

@@ -78,6 +78,16 @@ describe('every registered enemy has art', () => {
   });
 });
 
+describe('every enemy with phase-two art has the strip it names (#437)', () => {
+  it.each(
+    ENEMY_DEFINITIONS.filter((definition) => definition.phaseArtBelow !== undefined).map(
+      (definition) => definition.id,
+    ),
+  )('%s-phase-two', (id) => {
+    expect(creatureNames).toContain(`${id}-phase-two`);
+  });
+});
+
 describe('every registered pickup has art', () => {
   it.each(PICKUP_DEFINITIONS.map((definition) => definition.id))('%s', (id) => {
     expect(characterNames).toContain(`pickup-${id}`);

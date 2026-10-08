@@ -1421,6 +1421,16 @@ export interface EnemyDefinition {
    */
   readonly deathEffect?: string;
   /**
+   * Draws `<id>-phase-two` art instead of its own once health is at or
+   * below this fraction (0 exclusive, 1 inclusive) of max (#437): The First
+   * Human's strip without the arrowhead in his shoulder, from the moment he
+   * pulls it out. The same frame count and clips as the body's own strip,
+   * since the animator keeps indexing frames across the swap. Purely
+   * presentational, like `deathEffect`: it can never change what a run does,
+   * and an enemy without the suffixed strip keeps its own art.
+   */
+  readonly phaseArtBelow?: number;
+  /**
    * How the body itself shows a telegraph, on top of the floor shape every
    * telegraph draws (#405). Unset: the body looks the same while it winds up,
    * which is right for nearly everything — the floor shape is the warning.

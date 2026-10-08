@@ -76,6 +76,9 @@ export const theFirstHuman: EnemyDefinition = {
   // backwards out of his own stance.
   mass: 32,
   bossBar: true,
+  // From the arrowhead pull on, the strip without the arrowhead in his
+  // shoulder (`the-first-human-phase-two`) — the same threshold as PHASE_TWO.
+  phaseArtBelow: 0.5,
   title: 'enemies.the-first-human.title',
   epithet: 'enemies.the-first-human.epithet',
   initial: 'stalk',

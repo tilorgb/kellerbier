@@ -88,6 +88,19 @@ export const EnemyFacing = {
 } as const;
 export type EnemyFacingId = (typeof EnemyFacing)[keyof typeof EnemyFacing];
 
+/** `phaseArtBelow` checked once (#437): unset is 0 (never), otherwise a fraction in (0, 1]. */
+function compilePhaseArtBelow(fraction: number | undefined, where: string): number {
+  if (fraction === undefined) {
+    return 0;
+  }
+  if (!(fraction > 0) || fraction > 1) {
+    throw new Error(
+      `${where} has phaseArtBelow of ${String(fraction)}, which is not a fraction above 0 and at most 1`,
+    );
+  }
+  return fraction;
+}
+
 /** `facing` as a name to an `EnemyFacing`, thrown on an unknown name for `compileTelegraphLook`'s reason. */
 function compileFacing(name: string | undefined, where: string): EnemyFacingId {
   switch (name) {
@@ -402,6 +415,8 @@ export interface CompiledEnemy {
   readonly perches: boolean;
   /** The definition's `facing`, resolved once for the same reason as `telegraphBloat`. */
   readonly facing: EnemyFacingId;
+  /** The definition's `phaseArtBelow` (#437), or 0 for a body that never swaps its art. */
+  readonly phaseArtBelow: number;
   /**
    * The water this creature lives in (#408) — set when any of its states
    * `swimInZone`s, `null` for everything that walks. A water creature is
@@ -615,6 +630,7 @@ export class EnemyRegistry {
       ignoresBodies: definition.ignoresBodies === true,
       perches: states.some((state) => state.movement.behaviour === 'returnToPerch'),
       facing: compileFacing(definition.facing, where),
+      phaseArtBelow: compilePhaseArtBelow(definition.phaseArtBelow, where),
       zone: states.some((state) => state.movement.behaviour === 'swimInZone') ? 'waldbach' : null,
     };
   }

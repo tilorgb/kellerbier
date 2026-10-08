@@ -1059,4 +1059,5 @@ export const BOSS_BUCKETS = {
   waldradler: 'floor-3-wald',
   waldradl: 'floor-3-wald',
   'the-first-human': 'floor-4-alpen',
+  'the-first-human-phase-two': 'floor-4-alpen',
 };

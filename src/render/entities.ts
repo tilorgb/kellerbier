@@ -151,6 +151,8 @@ const DRUM_SHAKE_RATE = 0.16;
 const SUBMERGED_FLATTEN = 0.6;
 /** The sprite-name suffix a creature's under-the-water art is authored with (#408). */
 const SHADOW_SUFFIX = '-shadow';
+/** A body's art once its health is under its `phaseArtBelow` fraction (#437): the arrowhead pulled out. */
+const PHASE_TWO_SUFFIX = '-phase-two';
 /** The sprite-name suffix a flying creature's down-on-the-floor art is authored with (#411's beak stuck in the plank). */
 const LANDED_SUFFIX = '-landed';
 /** Sprite-name suffixes of a flier's wing-beat strips (#411): side-on, toward the camera, away from it. */
@@ -259,6 +261,12 @@ export class EntityView {
   private readonly flyBackArt: readonly (AnimatedSpriteSet | undefined)[];
   private readonly diveArt: readonly (Texture | undefined)[];
   /**
+   * Per enemy definition index, the strip a body draws once its health is
+   * under its `phaseArtBelow` (#437): `<id>-phase-two` when the roster has
+   * one. Unset: its own art throughout.
+   */
+  private readonly phaseArt: readonly (AnimatedSpriteSet | undefined)[];
+  /**
    * Per enemy definition index, the per-heading strips (#438) — `undefined`
    * for a creature with none, which draws exactly as it always has.
    */
@@ -347,6 +355,9 @@ export class EntityView {
         : { side, south, north };
     });
     this.diveArt = sim.enemies.all.map((enemy) => art.enemyArt[`${enemy.id}${DIVE_SUFFIX}`]);
+    this.phaseArt = sim.enemies.all.map(
+      (enemy) => art.enemyAnimation[`${enemy.id}${PHASE_TWO_SUFFIX}`],
+    );
     this.bombTexture = art.pickupArt[BOMB_PICKUP_ID];
     this.pickupTints = sim.pickups.all.map((definition) => definition.tint);
     this.pickupLabels = sim.pickups.all.map((definition) => definition.label);
@@ -541,6 +552,15 @@ export class EntityView {
       const bombFuse = isBomb ? bombFuseProgress(sim, index) : 0;
 
       let animation = enemyId === null ? undefined : this.art.enemyAnimation[enemyId];
+      // Past its phase threshold (#437), a body with phase-two art draws that
+      // instead: The First Human without the arrowhead in his shoulder.
+      if (compiledEnemy !== null && compiledEnemy.phaseArtBelow > 0) {
+        const current = sim.health.data[index * 2] ?? 0;
+        const max = sim.health.data[index * 2 + 1] ?? 1;
+        if (current <= compiledEnemy.phaseArtBelow * max) {
+          animation = this.phaseArt[sim.enemy.data[index * ENEMY_STRIDE] ?? 0] ?? animation;
+        }
+      }
       // A creature with per-heading strips (#438) draws the one for the way
       // it is going — side-on (mirrored for right), toward the camera or
       // away — and its own art for a heading it has no strip for.
