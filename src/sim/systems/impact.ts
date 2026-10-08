@@ -204,6 +204,15 @@ function applyHit(sim: GameSim, slot: number): void {
   }
 
   if (!isPlayer) {
+    // A placed Bierfassl is never destroyed by a shot: it is only knocked
+    // along the way the shot was travelling. Only its fuse sets it off.
+    if (sim.isBomb(target)) {
+      const mass = Math.max(0.01, sim.body.data[target * 2 + 1] ?? 1);
+      const impulse = (damage * sim.tuning.impact.knockback) / mass;
+      addPush(sim, target, -normalX * impulse, -normalY * impulse);
+      return;
+    }
+
     // Bieber's logs (#467) are proof against every shot: it splashes off like a
     // curled-up shell, and nothing changes. A blast does not come through here.
     if (sim.isShotProof(target)) {

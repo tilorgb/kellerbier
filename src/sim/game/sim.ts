@@ -2414,6 +2414,15 @@ export class GameSim {
   }
 
   /**
+   * A live Bierfassl (anything with a fuse). A shot only knocks it along — it
+   * is never damaged by one — and bodies leaning on it never shove it; only
+   * a shot, the player's roll on placement, or a blast moves it.
+   */
+  isBomb(index: number): boolean {
+    return ((this.world.masks[index] ?? 0) & this.bombFuse.bit) !== 0;
+  }
+
+  /**
    * Whether shots do nothing to the body at `index` (#467): a log prop or a
    * `shotProof` enemy. A blast still hurts it — an explosion goes through
    * `applyDamageAt`, which does not ask.
@@ -5383,7 +5392,7 @@ export class GameSim {
     const mask = CollisionLayer.Enemy | CollisionLayer.Obstacle;
     this.broadphase.query(x, y, radius, (index) => {
       const layer = this.collision.data[index * 2] ?? 0;
-      if ((layer & mask) === 0) {
+      if ((layer & mask) === 0 || this.isBomb(index)) {
         return;
       }
       const otherX = this.positionX(index);
@@ -5434,7 +5443,7 @@ export class GameSim {
     const mask = CollisionLayer.Enemy | CollisionLayer.Obstacle;
     this.broadphase.query(x, y, radius, (index) => {
       const layer = this.collision.data[index * 2] ?? 0;
-      if ((layer & mask) === 0) {
+      if ((layer & mask) === 0 || this.isBomb(index)) {
         return;
       }
       const otherX = this.positionX(index);
