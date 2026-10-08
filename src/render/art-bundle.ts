@@ -19,6 +19,8 @@ import { PARTICLE_KIND_IDS, ParticleKind } from '../sim/particle/store.js';
 const FLOOR_ENEMY_SHOT: Readonly<Record<number, string>> = {
   1: 'tap-drip',
   2: 'boeller',
+  // Die Alpen (#40): anything up there that fires without naming its own art throws snow.
+  4: 'snow-clod',
 };
 
 /** Alois's own untagged shot. */

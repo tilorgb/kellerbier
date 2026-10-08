@@ -33,7 +33,10 @@ export const theGondola: EnemyDefinition = {
   deathEffect: 'shard',
   flying: true,
   rooted: true,
-  health: 90,
+  // Measured in `boss-pacing.test.ts` against The First Human: a tin box
+  // that rides past a pinned player's shots half the time, so it needs far
+  // less than a boss to last long enough for three or four docks.
+  health: 60,
   contactDamage: 1,
   mass: 40,
   bossBar: true,

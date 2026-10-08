@@ -46,8 +46,8 @@ export interface VictoryScreenActions {
  * appears — so a win reads as a different feeling from a death rather than a
  * re-skinned loss screen.
  *
- * The epilogue follows Der Waldradler, the last boss of the run since #414
- * moved the win to floor 3 (`docs/DECISIONS.md` #117). It names the fight
+ * The epilogue follows The First Human, the last boss of the run since #40
+ * moved the win to floor 4 (`docs/DECISIONS.md` #117, #127). It names the fight
  * that was won and says the road ends here for now — no cliffhanger, nothing
  * written to keep a player interested: the gameplay is the hook. It stays plain text rather than a
  * dedicated illustrated card (the `StoryCard` shape `startRun`'s opening

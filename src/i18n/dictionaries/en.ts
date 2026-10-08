@@ -66,7 +66,7 @@ export const en = {
 
   'ui.victory.headline': 'Victory!',
   'ui.victory.epilogue':
-    "Der Waldradler's last wheel stops turning. The path is quiet again, for the first time in a long while.\nThat is as far as the road goes for now.",
+    'The First Human lies back down in the snow, and the glacier is quiet in the way it was for five thousand years.\nThat is as far as the mountain goes for now.',
   'ui.victory.retry': 'Retry',
   'ui.victory.results': 'Results',
   'ui.victory.hub': 'Hub',
@@ -124,6 +124,8 @@ export const en = {
     "Up the steps, and Oberniederburg is having a lovely afternoon. The new crates are stacked outside the Wirtshaus, on the trailers, behind the Marktstand — in broad daylight, and nobody in the square has thought to mention them.\n\nSo it was never just Opa's crate. Somebody is sending these, by the lorryload, and they come from further up the valley than Alois has ever had a reason to go.",
   'ui.story.chapterThree':
     'Beyond the village the road turns to gravel, then to a hiking path, then to something that only claims to be one. Alois follows the tyre marks into the Wald. Everything here is green, and not all of it is supposed to be.',
+  'ui.story.chapterFour':
+    'Above the treeline the path stops pretending. Snow, rock, a cable car that has not run in years, and the crates still going up — on sledges now, over the glacier. Something up there has been waiting a very long time, and it is not the Brauerei.',
 
   // --- HUD -----------------------------------------------------
   'ui.hud.bossBanner': 'Boss Room',

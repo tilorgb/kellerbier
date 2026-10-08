@@ -206,3 +206,19 @@ Both are rigs in `tools/art/authoring/bosses-wald.mjs`, on their old 62×48 and 
 
 - **Key art in the game's own look.** The bench's painterly default fights the sprite; pass `styleSuffix` to `keyart-bench`'s `/generate` for flat cel shading with a thick outline on a plain grey ground, and the sprite and the postcard then match. The Waldradler's art is also his intro plate; the Radl's is rig source only and has no plate.
 - **`key: 'sat'`** keeps only saturated source pixels (`keyThreshold` 0-1), for a green frame on grey ground where luminance cannot separate them. A tyre or a wheel's spokes that are painted too finely to survive 38 px are rebuilt as flat strokes (`stroke`), not cut.
+
+## 10. Floor 4's boss (The First Human), without key art
+
+`tools/art/authoring/bosses-alpen.mjs` is the third shape a boss strip can take: no postcard to cut
+from (the floor was built in the cloud, where `docs/DECISIONS.md` #77 has no diffusion step), so the
+parts are **hand-drawn** — `drawnPart` grids and small programmatic rectangles — and posed through
+the same `composeFrame` the rigs use. The pose dials, the twelve-frame order, the bottom-row feet
+and the byte-for-byte test are all unchanged; only step 1 (key art) and step 4 (materials) are
+skipped, and the postcard the intro plate shows (`build-first-human-key-art.mjs`) is composed from
+the idle frame rather than the other way round. When a signed-off postcard exists, cut the parts
+from it as §2-§4 describe and keep the poses: `pose()`'s dials are the rig's, not the drawing's.
+
+The canvas is **80×80** — about two and a half Alois, the size #437 asks for — and the stance is the
+fight's (one arm across the chest, one held out); the telegraph frames pull the held-out arm up and
+back, which is where the `fireSweep` begins. Both the design and the size are pending sign-off.
+

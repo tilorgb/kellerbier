@@ -14,8 +14,8 @@ the game does today, not signed off.
 
 ## Shipping a content update
 
-The game is an early alpha that gets content updates step by step until it is finished — floor 3
-(M10) is the next one. The page describes the game as that, not as a number of chapters, so an
+The game is an early alpha that gets content updates step by step until it is finished — floor 5
+(M11) is the next one. The page describes the game as that, not as a number of chapters, so an
 update changes **In this build** and the screenshots, not the framing. For each update:
 
 - upload the new build and run the embed checklist (`tools/release/ITCH.md`)
@@ -70,7 +70,7 @@ Leave **Mobile friendly** off until the touch controls have been tried on a real
 >
 > ### In this build
 >
-> - Three floors: the cellar, the village above it and the forest beyond, each with a mini-boss and a boss
+> - Four floors: the cellar, the village above it, the forest beyond and the mountains above that, each with a mini-boss and a boss
 > - About sixty items
 > - Keyboard and gamepad, fully rebindable
 > - English, German and Bavarian

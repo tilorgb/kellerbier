@@ -750,3 +750,31 @@ describe('Floor 3 mini-boss pacing (#467)', () => {
     expect(bieber.ticks).toBeGreaterThan(boar.ticksToOutcome);
   });
 });
+
+/**
+ * #40 — Die Alpen's mini-boss, The Gondola (an English placeholder name),
+ * held to the bar #276/#277 set: it dies to a pinned player, it is fought for
+ * less time than the floor's boss, and it shows its idea — unloading
+ * tourists at every dock — more than once before it goes. The First Human
+ * keeps one body across both phases (`whenHealthBelow`, #437), so his
+ * comparable figure is the whole fight to the death.
+ */
+describe('Die Alpen mini-boss pacing (#40)', () => {
+  it('The Gondola dies, is shorter than The First Human, and docks to unload tourists at least twice', () => {
+    for (const shotDamage of [1, 2]) {
+      const boss = measureFight('the-first-human', ['sweep-wide', 'sweep-wide-2'], shotDamage, {
+        maxTicks: 9000,
+      });
+      const gondola = measurePinnedFight('the-gondola', 'unloadEast', shotDamage);
+      expect(gondola.died, `shotDamage=${String(shotDamage)}: the Gondola never died`).toBe(true);
+      expect(
+        gondola.ticks,
+        `shotDamage=${String(shotDamage)}: the Gondola lasts ${String(gondola.ticks)} ticks vs the boss's ${String(boss.ticksToOutcome)}`,
+      ).toBeLessThan(boss.ticksToOutcome);
+      expect(
+        gondola.waves,
+        `shotDamage=${String(shotDamage)}: only ${String(gondola.waves)} tourist wave(s) before the Gondola died`,
+      ).toBeGreaterThanOrEqual(2);
+    }
+  });
+});

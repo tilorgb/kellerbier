@@ -287,7 +287,7 @@ export const FLOOR_CONFIGS: readonly FloorConfig[] = [
  * bot can import the same number instead of carrying its own copy that
  * could silently drift out of sync.
  */
-export const HIGHEST_PLAYABLE_FLOOR = 3;
+export const HIGHEST_PLAYABLE_FLOOR = 4;
 
 /**
  * The highest floor a `?floor=N` sandbox run (`app/start-floor.ts`, dev and
@@ -297,7 +297,8 @@ export const HIGHEST_PLAYABLE_FLOOR = 3;
  * The two gates answer different questions. `HIGHEST_PLAYABLE_FLOOR` is
  * "may a player's run *progress* here" — it waits until the floor is
  * finished (Floor 3: its roster #405-#411 and Der Waldradler #412/#413,
- * bumped by #414). This one is "can the floor be *generated* at all", so the
+ * bumped by #414; Floor 4: its roster, The Gondola and The First Human,
+ * #40/#437). This one is "can the floor be *generated* at all", so the
  * work in progress can be played and reviewed on its own floor the moment
  * its room pool is complete enough for `generateFloor` (a start, boss,
  * treasure, shop, secret and supersecret template for its `floorTag`) —
