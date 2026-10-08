@@ -15,7 +15,11 @@ describe('suggestSfxPrompt', () => {
     const prompt = suggestSfxPrompt({
       id: 'hit-new',
       description: 'A new thing (#999) takes a hit.',
-      noise: { filter: { type: 'lowpass', frequencyHz: 300, q: 1 }, durationSeconds: 0.05, gain: 0.4 },
+      noise: {
+        filter: { type: 'lowpass', frequencyHz: 300, q: 1 },
+        durationSeconds: 0.05,
+        gain: 0.4,
+      },
       tone: { instrument: 'brass-stab', note: 'C4', durationSeconds: 0.1 },
       repeat: { count: 3, intervalSeconds: 0.05 },
     });
