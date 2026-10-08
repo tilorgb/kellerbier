@@ -55,7 +55,7 @@ export const de: Record<DictKey, string> = {
 
   'ui.victory.headline': 'Sieg!',
   'ui.victory.epilogue':
-    'Der Stier fällt. Draußen rollt ein beladener Lieferwagen vom Marktplatz — Richtung Süden.\nDieses Kapitel ist vorbei. Der Weg geht weiter.',
+    'Das letzte Rad des Waldradlers steht still. Der Weg ist wieder ruhig, zum ersten Mal seit langem.\nWeiter reicht die Straße vorerst nicht.',
   'ui.victory.retry': 'Nochmal',
   'ui.victory.results': 'Ergebnisse',
   'ui.victory.hub': 'Titel',
@@ -111,6 +111,8 @@ export const de: Record<DictKey, string> = {
     'Opas letztes Pfeitinger ist leer. Die volle Kiste daneben ist dasselbe Bier, aber das Etikett ist neu: Wasser, Malz, Hopfen — und Rosinen.\n\nAlois nimmt Opas Trink-Rucksack vom Haken, füllt ihn mit der verdorbenen Kiste und stellt ihn von trinken auf schießen.',
   'ui.story.chapterTwo':
     'Die Kellertreppe hinauf, und Oberniederburg hat einen schönen Nachmittag. Die neuen Kisten stapeln sich vor dem Wirtshaus, auf den Anhängern, hinter dem Marktstand — am helllichten Tag, und keiner am Platz hat es für nötig gehalten, etwas dazu zu sagen.\n\nEs war also nie nur Opas Kiste. Irgendwer schickt die hier, lasterweise, und sie kommen von weiter oben aus dem Tal, als Alois je einen Grund hatte hinzufahren.',
+  'ui.story.chapterThree':
+    'Hinter dem Dorf wird die Straße zu Schotter, dann zu einem Wanderweg, dann zu etwas, das nur so tut. Alois folgt den Reifenspuren in den Wald. Hier ist alles grün, und nicht alles davon soll es sein.',
 
   // --- HUD -----------------------------------------------------
   'ui.hud.bossBanner': 'Bossraum',

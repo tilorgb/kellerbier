@@ -171,6 +171,7 @@ import { ActiveRunRecorder, decodeActiveRunFrames, persistActiveRun } from './sa
 import type { CharacterTraits } from '../sim/character/definition.js';
 import { loadSave } from './save/storage.js';
 import {
+  STORY_BEAT_CHAPTER_THREE,
   STORY_BEAT_CHAPTER_TWO,
   STORY_BEAT_OPENING,
   hasSeenStoryBeat,
@@ -281,6 +282,9 @@ const FLOOR_CARD_FADE_MS = 700;
  * expected shape once they unpark (`docs/ROADMAP.md` M10).
  */
 const CHAPTER_TWO_FLOOR = 2;
+
+/** Floor 3, the Wald — chapter three's card (#414), same reasoning as `CHAPTER_TWO_FLOOR`. */
+const CHAPTER_THREE_FLOOR = 3;
 
 /**
  * How long the boss intro plate (#58/#327) stays fully up, once faded in —
@@ -4081,6 +4085,8 @@ WASD move   arrows aim and fire
     // `seenStoryBeats` stops it at one anyway.
     if (nextFloor === CHAPTER_TWO_FLOOR) {
       showStoryBeatOrFloorCard(STORY_BEAT_CHAPTER_TWO, 'ui.story.chapterTwo');
+    } else if (nextFloor === CHAPTER_THREE_FLOOR) {
+      showStoryBeatOrFloorCard(STORY_BEAT_CHAPTER_THREE, 'ui.story.chapterThree');
     } else {
       showFloorCard();
     }

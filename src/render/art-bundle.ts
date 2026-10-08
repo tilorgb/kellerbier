@@ -27,13 +27,11 @@ const PLAYER_SHOT = 'beer';
 /**
  * `fallback` is the generated disc every projectile used to draw as.
  *
- * It survives for floors 3-7. Floor 3 is now reachable (`HIGHEST_PLAYABLE_FLOOR`
- * is 3, #414) and has no authored projectile sprite yet, so its enemy shots
- * still draw as this disc until that art is signed off; floors 4-7 are
- * parked (#40-#43). That is what would keep
- * #152's "`placeholder-art.ts` draws nothing a player sees" true rather than
- * nearly true, and it is why the fallback is a parameter here instead of
- * something this module quietly reaches for.
+ * Shots depend on the enemy that fires them, not on the floor: a floor
+ * without its own shot sprite (floor 3 today, by decision in #414) simply
+ * draws this disc, and an enemy may still name an art of its own. The
+ * fallback is a parameter here instead of something this module quietly
+ * reaches for.
  */
 export function buildProjectileArt(
   projectileTextures: Readonly<Record<string, Texture>>,
