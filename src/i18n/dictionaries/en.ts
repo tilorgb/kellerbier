@@ -333,6 +333,10 @@ export const en = {
   // Boss intro plate (#58/#327) — draft, pending sign-off.
   'enemies.der-stier.title': 'Guardian of the Maypole',
   'enemies.der-stier.epithet': 'Two horns, one grudge: the maypole stays exactly where it is.',
+  // TODO(#412): Der Waldradler's plate text is Tilo's to write, in all three
+  // locales — these are marked placeholders, not drafts.
+  'enemies.waldradler.title': 'TODO(#412) title',
+  'enemies.waldradler.epithet': 'TODO(#412) epithet',
   // Villager one-liner (#58/#330) — draft, pending sign-off.
   'enemies.bauer.line': "New batch's smoother, if you ask me.",
 

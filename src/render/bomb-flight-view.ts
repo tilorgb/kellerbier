@@ -2,7 +2,13 @@ import { Group, Mesh, MeshStandardMaterial, SphereGeometry } from 'three';
 import { World } from '../sim/ecs/world.js';
 import type { GameSim } from '../sim/game/sim.js';
 import { lerp } from '../sim/math.js';
-import { lobbedBombFlight, type LobbedBombFlight } from '../sim/systems/enemy.js';
+import {
+  lobbedBombFlight,
+  type LobbedBombFlight,
+  lobbedVolleyCount,
+  lobbedVolleyFlight,
+  type LobbedVolleyFlight,
+} from '../sim/systems/enemy.js';
 
 /**
  * A Böllerschmeißer's lobbed keg in flight.
@@ -17,6 +23,8 @@ import { lobbedBombFlight, type LobbedBombFlight } from '../sim/systems/enemy.js
  */
 const BOMB_BODY = 0x1c1a20;
 const FUSE_SPARK = 0xffb347;
+/** A protein bar wrapper (#412): placeholder colour until its sprite is signed off. */
+const WRAPPER_BODY = 0x8fb43a;
 const BOMB_RADIUS = 4;
 const ARC_HEIGHT = 22;
 
@@ -30,6 +38,14 @@ export class BombFlightView {
     endX: 0,
     endY: 0,
     progress: 0,
+  };
+  private readonly volleyScratch: LobbedVolleyFlight = {
+    startX: 0,
+    startY: 0,
+    endX: 0,
+    endY: 0,
+    progress: 0,
+    radius: 0,
   };
 
   sync(sim: GameSim): void {
@@ -47,12 +63,31 @@ export class BombFlightView {
       if (((masks[index] ?? 0) & required) !== required) {
         continue;
       }
+      // A thrown protein bar wrapper (#412): the same arc, a flat tumbling
+      // scrap instead of a keg. Drawn as one of the same meshes — the pool
+      // does not care what it is carrying.
+      const wrappers = lobbedVolleyCount(sim, index);
+      for (let point = 0; point < wrappers; point++) {
+        lobbedVolleyFlight(sim, index, point, this.volleyScratch);
+        const wrapper = this.bombAt(used);
+        used += 1;
+        wrapper.visible = true;
+        const t = this.volleyScratch.progress;
+        wrapper.position.set(
+          lerp(this.volleyScratch.startX, this.volleyScratch.endX, t),
+          BOMB_RADIUS + Math.sin(Math.PI * t) * ARC_HEIGHT,
+          lerp(this.volleyScratch.startY, this.volleyScratch.endY, t),
+        );
+        wrapper.material.color.setHex(WRAPPER_BODY);
+        wrapper.material.emissiveIntensity = 0.1;
+      }
       if (!lobbedBombFlight(sim, index, scratch)) {
         continue;
       }
       const bomb = this.bombAt(used);
       used += 1;
       bomb.visible = true;
+      bomb.material.color.setHex(BOMB_BODY);
       const t = scratch.progress;
       bomb.position.set(
         lerp(scratch.startX, scratch.endX, t),

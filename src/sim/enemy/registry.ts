@@ -12,12 +12,15 @@ import {
   type FireBurstBehaviour,
   type FireOnBeatBehaviour,
   type FireRingBehaviour,
+  type FireRotatingRingBehaviour,
   type FireSpreadBehaviour,
   type MeleeArcBehaviour,
   MOVEMENT_BEHAVIOURS,
   PROP_DROP_BEHAVIOURS,
   SUMMON_BEHAVIOURS,
+  VOLLEY_MAX_POINTS,
 } from './definition.js';
+import { validateRotatingRing } from './rotating-ring.js';
 import { ENEMY_PROFILES, ENEMY_SIZE_BY_NAME, type EnemySizeId } from './size.js';
 import { propKindIndex } from '../game/prop-kinds.js';
 import { DEATH_EFFECT_KINDS, DEFAULT_DEATH_EFFECT } from '../particle/effects.js';
@@ -154,6 +157,16 @@ export interface CompiledTransition {
    * trigger.
    */
   readonly max: number;
+  /**
+   * For a `toOneOf` (#412): the states it chooses between, as indices into the
+   * enemy's own state list, with their weights. Absent on every other
+   * transition — which keeps the one-target case exactly as it was; `to` is
+   * the first choice, for the code that reads a transition's target without
+   * rolling it.
+   */
+  readonly choices?: readonly { readonly to: number; readonly weight: number }[];
+  /** For a `toOneOf`: the most times in a row one choice may be taken. `0`/absent: no limit. */
+  readonly maxInARow?: number;
 }
 
 /** A `summon` with its child resolved to a definition index (#276). */
@@ -193,7 +206,8 @@ export type FiringBehaviour =
   | FireBurstBehaviour
   | FireSpreadBehaviour
   | FireOnBeatBehaviour
-  | FireRingBehaviour;
+  | FireRingBehaviour
+  | FireRotatingRingBehaviour;
 
 /** A `detonateLobbedBomb` resolved and validated once, at compile time. */
 export interface CompiledDetonation {
@@ -206,6 +220,27 @@ export interface CompiledCloud {
   readonly radius: number;
   readonly growTicks: number;
   readonly lifetimeTicks: number;
+}
+
+/** A `lobVolley` validated once, at compile time (#412). `countMax === countMin` for a fixed count. */
+export interface CompiledVolley {
+  readonly countMin: number;
+  readonly countMax: number;
+  readonly ringRadius: number;
+}
+
+/** A `detonateVolley` resolved once (#412): the cloud left at each point and the ring thrown out of it. */
+export interface CompiledVolleyBurst {
+  readonly cloud: CompiledCloud;
+  readonly burst: {
+    readonly shots: number;
+    readonly speed: number;
+    readonly damage: number;
+    readonly lifetimeTicks: number;
+    readonly radius: number | undefined;
+    readonly art: string | undefined;
+    readonly poison: boolean;
+  };
 }
 
 /** A `meleeArc` validated once, at compile time (#199). */
@@ -243,6 +278,18 @@ export interface CompiledState {
   readonly emitCloud: CompiledCloud | null;
   /** Set for a state that swings a wide melee arc (Maibaum-Dieb, #199). `null` otherwise. */
   readonly meleeArc: CompiledMeleeArc | null;
+  /** True for a state whose entry stores a line across the room (#412, `captureLine`). */
+  readonly capturesLine: boolean;
+  /** True for a state that belongs to a captured line — captures it, rides it, or is off the arena on it — and so has its ramps up (#412). */
+  readonly usesLine: boolean;
+  /** True for a state carrying `leaveArena` (#412): untargetable, not drawn. */
+  readonly hidden: boolean;
+  /** Set for a state whose entry captures landing points around the player (#412, `lobVolley`). */
+  readonly volley: CompiledVolley | null;
+  /** Set for a state whose entry bursts at the points an earlier `lobVolley` captured (#412). */
+  readonly volleyBurst: CompiledVolleyBurst | null;
+  /** The pickup ids a body dying in this state drops (#412, `dropPickupOnDeath`). */
+  readonly deathPickups: readonly string[];
   /** True for a state carrying `latchOnPlayer` (#406): touching the player attaches the body. */
   readonly latchesOnPlayer: boolean;
   /** True for a state carrying `submerge` (#408): out of reach of everything, drawn as a shadow. */
@@ -444,6 +491,9 @@ export class EnemyRegistry {
     const arrives = states.some(
       (state) =>
         state.movement.behaviour === 'returnToPerch' ||
+        state.movement.behaviour === 'rideToLineStart' ||
+        state.movement.behaviour === 'rideLine' ||
+        state.movement.behaviour === 'glideToPoint' ||
         (state.movement.behaviour === 'chargeAtPlayer' && state.movement.untilTargetPoint === true),
     );
     if (!arrives) {
@@ -451,9 +501,30 @@ export class EnemyRegistry {
         if (state.transitions.some((t) => t.trigger === TransitionTrigger.OnArrived)) {
           throw new Error(
             `${where} state "${state.name}" waits on onArrived, but no state of it ` +
-              `uses "returnToPerch" or a "chargeAtPlayer" with untilTargetPoint`,
+              `uses "returnToPerch", "rideToLineStart", "rideLine", "glideToPoint" or a ` +
+              `"chargeAtPlayer" with untilTargetPoint`,
           );
         }
+      }
+    }
+    // A ride along a captured line, or a volley's burst, reads what an earlier
+    // state of the same machine stored (#412): written with nothing storing it,
+    // it would ride to wherever the slots last held (the body's own spawn point)
+    // or burst at nothing, quietly. Fail the build instead.
+    const capturesLine = states.some((state) => state.capturesLine);
+    const lobsVolley = states.some((state) => state.volley !== null);
+    for (const state of states) {
+      const rides =
+        state.movement.behaviour === 'rideToLineStart' || state.movement.behaviour === 'rideLine';
+      if ((rides || state.hidden) && !capturesLine) {
+        throw new Error(
+          `${where} state "${state.name}" rides or waits on a captured line, but no state of it uses "captureLine"`,
+        );
+      }
+      if (state.volleyBurst !== null && !lobsVolley) {
+        throw new Error(
+          `${where} state "${state.name}" uses "detonateVolley", but no state of it uses "lobVolley"`,
+        );
       }
     }
     // `onLatched`/`onShakenOff` can only ever fire for a body that latches
@@ -523,6 +594,11 @@ export class EnemyRegistry {
     let latchesOnPlayer = false;
     let submerged = false;
     let grounded = false;
+    let hidden = false;
+    let capturesLine = false;
+    let volley: CompiledVolley | null = null;
+    let volleyBurst: CompiledVolleyBurst | null = null;
+    const deathPickups: string[] = [];
 
     for (const behaviour of state.behaviours) {
       const name: BehaviourName = behaviour.behaviour;
@@ -559,6 +635,41 @@ export class EnemyRegistry {
         }
         if (behaviour.behaviour === 'returnToPerch' && !(behaviour.speed > 0)) {
           throw new Error(`${where}: "returnToPerch" needs a speed above zero`);
+        }
+        if (behaviour.behaviour === 'ride') {
+          if (!(behaviour.speed > 0)) {
+            throw new Error(`${where}: "ride" needs a speed above zero`);
+          }
+          const turn = behaviour.turnEveryTicks;
+          const turnMin = typeof turn === 'number' ? turn : turn.min;
+          const turnMax = typeof turn === 'number' ? turn : turn.max;
+          if (!(turnMin >= 1) || !(turnMax >= turnMin)) {
+            throw new Error(
+              `${where}: "ride" needs 1 <= turnEveryTicks min <= max, got ${String(turnMin)}..${String(turnMax)}`,
+            );
+          }
+        }
+        if (
+          (behaviour.behaviour === 'rideToLineStart' || behaviour.behaviour === 'rideLine') &&
+          !(behaviour.speed > 0)
+        ) {
+          throw new Error(`${where}: "${behaviour.behaviour}" needs a speed above zero`);
+        }
+        if (behaviour.behaviour === 'rideLine') {
+          // Read wide: content is data, and any other number would ride nowhere.
+          const direction: number = behaviour.direction;
+          if (direction !== 1 && direction !== -1) {
+            throw new Error(`${where}: "rideLine" direction must be 1 or -1`);
+          }
+        }
+        if (behaviour.behaviour === 'glideToPoint') {
+          const point: string = behaviour.point;
+          if (point !== 'roomCentre') {
+            throw new Error(`${where}: "glideToPoint" point "${point}" is not one of roomCentre`);
+          }
+          if (!(behaviour.ticks >= 1)) {
+            throw new Error(`${where}: "glideToPoint" needs ticks of at least 1`);
+          }
         }
         if (behaviour.behaviour === 'approachWood') {
           if (!(behaviour.speed > 0)) {
@@ -668,6 +779,8 @@ export class EnemyRegistry {
       if (STATE_FLAG_BEHAVIOURS.includes(name)) {
         if (name === 'land') {
           grounded = true;
+        } else if (name === 'leaveArena') {
+          hidden = true;
         } else {
           submerged = true;
         }
@@ -695,6 +808,9 @@ export class EnemyRegistry {
               `"aimCardinal" has nothing to snap`,
           );
         }
+        if (shooting.behaviour === 'fireRotatingRing') {
+          validateRotatingRing(shooting, where);
+        }
         firing.push(shooting);
         continue;
       }
@@ -710,6 +826,64 @@ export class EnemyRegistry {
           grabProp = {
             kind: resolvePropKind(behaviour.propKind, `${where}: "grabProp"`),
             reach: behaviour.reach,
+          };
+        } else if (behaviour.behaviour === 'captureLine') {
+          capturesLine = true;
+        } else if (behaviour.behaviour === 'lobVolley') {
+          const count = behaviour.count;
+          const countMin = typeof count === 'number' ? count : count.min;
+          const countMax = typeof count === 'number' ? count : count.max;
+          if (
+            !Number.isInteger(countMin) ||
+            !Number.isInteger(countMax) ||
+            countMin < 1 ||
+            countMax < countMin ||
+            countMax > VOLLEY_MAX_POINTS
+          ) {
+            throw new Error(
+              `${where}: "lobVolley" needs whole counts with 1 <= min <= max <= ${String(VOLLEY_MAX_POINTS)}, ` +
+                `got ${String(countMin)}..${String(countMax)}`,
+            );
+          }
+          if (!(behaviour.ringRadius > 0)) {
+            throw new Error(`${where}: "lobVolley" needs a ringRadius above zero`);
+          }
+          volley = { countMin, countMax, ringRadius: behaviour.ringRadius };
+        } else if (behaviour.behaviour === 'detonateVolley') {
+          const { cloud, burst } = behaviour;
+          if (!(cloud.radius > 0)) {
+            throw new Error(`${where}: "detonateVolley" needs a cloud radius above zero`);
+          }
+          if (cloud.growTicks !== undefined && !(cloud.growTicks >= 0)) {
+            throw new Error(`${where}: "detonateVolley" cloud growTicks must not be negative`);
+          }
+          if (cloud.lifetimeTicks !== undefined && !(cloud.lifetimeTicks >= 1)) {
+            throw new Error(`${where}: "detonateVolley" needs cloud lifetimeTicks of at least 1`);
+          }
+          if (!(burst.shots >= 1) || !(burst.speed > 0) || !(burst.lifetimeTicks >= 1)) {
+            throw new Error(
+              `${where}: "detonateVolley" needs burst shots, speed and lifetimeTicks above zero`,
+            );
+          }
+          if (!(burst.damage > 0)) {
+            throw new Error(`${where}: "detonateVolley" needs burst damage above zero`);
+          }
+          volleyBurst = {
+            cloud: {
+              radius: cloud.radius,
+              growTicks: cloud.growTicks === undefined ? -1 : Math.round(cloud.growTicks),
+              lifetimeTicks:
+                cloud.lifetimeTicks === undefined ? -1 : Math.round(cloud.lifetimeTicks),
+            },
+            burst: {
+              shots: Math.round(burst.shots),
+              speed: burst.speed,
+              damage: burst.damage,
+              lifetimeTicks: Math.round(burst.lifetimeTicks),
+              radius: burst.radius,
+              art: burst.art,
+              poison: burst.poison === true,
+            },
           };
         } else if (behaviour.behaviour === 'lobTarget') {
           capturesLobTarget = true;
@@ -785,6 +959,13 @@ export class EnemyRegistry {
         });
         continue;
       }
+      if (DEATH_BEHAVIOURS.includes(name) && behaviour.behaviour === 'dropPickupOnDeath') {
+        if (behaviour.pickup.trim() === '') {
+          throw new Error(`${where}: "dropPickupOnDeath" needs a pickup id`);
+        }
+        deathPickups.push(behaviour.pickup);
+        continue;
+      }
       if (DEATH_BEHAVIOURS.includes(name) && behaviour.behaviour === 'splitOnDeath') {
         const into = this.byId.get(behaviour.into);
         if (into === undefined) {
@@ -838,6 +1019,51 @@ export class EnemyRegistry {
     }
 
     const transitions: CompiledTransition[] = (state.transitions ?? []).map((transition) => {
+      if ('toOneOf' in transition) {
+        const choices = transition.toOneOf.map((choice) => {
+          const target = stateIndexByName.get(choice.to);
+          if (target === undefined) {
+            throw new Error(
+              `${where} transitions to "${choice.to}", which is not one of its states`,
+            );
+          }
+          if (!(choice.weight > 0)) {
+            throw new Error(`${where}: a "toOneOf" choice needs a weight above zero`);
+          }
+          return { to: target, weight: choice.weight };
+        });
+        const first = choices[0];
+        if (first === undefined || choices.length < 2) {
+          throw new Error(`${where}: "toOneOf" needs at least two choices`);
+        }
+        if (new Set(choices.map((choice) => choice.to)).size !== choices.length) {
+          throw new Error(`${where}: "toOneOf" names the same state twice`);
+        }
+        const maxInARow = transition.maxInARow ?? 0;
+        if (!Number.isInteger(maxInARow) || maxInARow < 0) {
+          throw new Error(
+            `${where}: "toOneOf" maxInARow must be a whole number, zero for no limit`,
+          );
+        }
+        const after = transition.after;
+        const min = typeof after === 'number' ? after : after.min;
+        const max = typeof after === 'number' ? after : after.max;
+        if (!(min >= 0) || !(max >= min)) {
+          throw new Error(
+            `${where}: a "toOneOf" after needs 0 <= min <= max, got ${String(min)}..${String(max)}`,
+          );
+        }
+        return {
+          trigger: TransitionTrigger.After,
+          value: Math.round(min),
+          to: first.to,
+          propKind: -1,
+          tolerance: 0,
+          max: Math.round(max),
+          choices,
+          maxInARow,
+        };
+      }
       const to = stateIndexByName.get(transition.to);
       if (to === undefined) {
         throw new Error(
@@ -997,13 +1223,28 @@ export class EnemyRegistry {
       aimsAttack:
         movement.behaviour === 'chargeAtPlayer' ||
         meleeArc !== null ||
-        firing.some((shot) => shot.behaviour !== 'fireOnBeat' && shot.behaviour !== 'fireRing'),
+        firing.some(
+          (shot) =>
+            shot.behaviour !== 'fireOnBeat' &&
+            shot.behaviour !== 'fireRing' &&
+            shot.behaviour !== 'fireRotatingRing',
+        ),
       telegraphTicks,
       invulnerableTicks,
       capturesLobTarget,
       detonate,
       emitCloud,
       meleeArc,
+      capturesLine,
+      usesLine:
+        capturesLine ||
+        hidden ||
+        movement.behaviour === 'rideToLineStart' ||
+        movement.behaviour === 'rideLine',
+      hidden,
+      volley,
+      volleyBurst,
+      deathPickups,
       latchesOnPlayer,
       submerged,
       grounded,

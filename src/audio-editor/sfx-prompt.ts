@@ -33,6 +33,7 @@ const IDEAS: Readonly<Record<string, string>> = {
   'shot-folk': 'snappy wooden twang of a slingshot release',
   'shot-oompah': 'short brass toot with a popping burst of air',
   'attack-windup': 'tense short rising whoosh of air being drawn in, building quickly, no impact',
+  'windup-waldradler-bell': 'two bright dings of a bicycle bell, ring ring, short and cheerful',
   'room-clear': 'bright short reward chime of two clinking beer glasses, a sparkling finish',
   'low-health': 'two dull heartbeat thumps, low and muffled, with a faint warning tone',
   'enemy-split': 'wet tearing crack and several small pieces scattering across a floor',
@@ -44,7 +45,8 @@ const IDEAS: Readonly<Record<string, string>> = {
   'shop-purchase': 'coins dropped into a metal till with a ring of a cash drawer bell',
   'door-open': 'heavy wooden cellar door swinging open, creaking hinge and a latch click',
   'door-locked': 'rattle of a locked wooden door handle and a dull knock, no creak',
-  'secret-reveal': 'stone wall grinding aside with falling dust and a low rumble, then a hollow echo',
+  'secret-reveal':
+    'stone wall grinding aside with falling dust and a low rumble, then a hollow echo',
   'floor-card-whoosh': 'broad smooth whoosh of a banner sweeping past, airy, medium length',
   footstep: 'single footstep of a boot on a damp cellar stone floor, dull and close',
   'footstep-wade': 'single boot step into shallow water, a quick splash with trickling drops',
@@ -53,9 +55,11 @@ const IDEAS: Readonly<Record<string, string>> = {
   'ui-confirm': 'crisp short positive click, two quick bright wood-block taps',
   'ui-cancel': 'short low dull click, a single soft descending wooden tap',
   'ui-unlock-fanfare': 'short bright triumphant brass fanfare with a glass clink, cheerful',
-  'item-sneeze-inhale': 'thin rising sharp sniff, a held breath drawn through the nose, no sneeze yet',
+  'item-sneeze-inhale':
+    'thin rising sharp sniff, a held breath drawn through the nose, no sneeze yet',
   'item-sneeze': 'one big explosive sneeze, wet and loud, a sudden burst of air',
-  'item-poison-cleanse': 'short clean rising chime over a soft fizz, like a tablet dissolving in water',
+  'item-poison-cleanse':
+    'short clean rising chime over a soft fizz, like a tablet dissolving in water',
   'item-zecke-latch': 'small wet click of a tick biting skin with a low sour hum',
   'windup-specht-drum': 'woodpecker drumming on a dry tree trunk, fast woody rattle, trrrrr',
   'item-zecke-shake-off': 'quick flick of dry air with a bright falling-away ping',

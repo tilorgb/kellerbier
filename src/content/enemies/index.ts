@@ -23,6 +23,8 @@ import { schimmelfleck, schimmelspore } from './schimmelfleck.js';
 import { shopkeeper } from './shopkeeper.js';
 import { specht } from './specht.js';
 import { traktor } from './traktor.js';
+import { waldradl } from './waldradl.js';
+import { waldradler } from './waldradler.js';
 import { zapfhahn } from './zapfhahn.js';
 import { zecke } from './zecke.js';
 
@@ -70,6 +72,8 @@ export const ENEMY_DEFINITIONS: readonly EnemyDefinition[] = [
   boar,
   borkenkaefer,
   specht,
+  waldradler,
+  waldradl,
 ];
 
 /**
@@ -116,6 +120,8 @@ export {
   shopkeeper,
   specht,
   traktor,
+  waldradl,
+  waldradler,
   zapfhahn,
   zecke,
 };

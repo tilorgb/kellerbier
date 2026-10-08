@@ -20,8 +20,12 @@ import {
   FlightPose,
   flightHeading,
   enemyGrounded,
+  enemyHidden,
   enemyHopProgress,
   enemySubmerged,
+  type LobbedVolleyFlight,
+  lobbedVolleyCount,
+  lobbedVolleyFlight,
   enemyTelegraphProgress,
   enemyTelegraphShape,
   isEnemyElite,
@@ -282,6 +286,14 @@ export class EntityView {
     arc: 0,
     reach: 0,
   };
+  private readonly volleyScratch: LobbedVolleyFlight = {
+    startX: 0,
+    startY: 0,
+    endX: 0,
+    endY: 0,
+    progress: 0,
+    radius: 0,
+  };
 
   constructor(
     sim: GameSim,
@@ -444,6 +456,11 @@ export class EntityView {
       const isEnemyBody = (mask & sim.enemyMask) === sim.enemyMask;
       const isPickup = (layer & CollisionLayer.Pickup) !== 0;
       const isBomb = (mask & sim.bombFuse.bit) !== 0;
+      // Off the arena (#412, the Waldradler between his two passes): not drawn.
+      // Its ramps (`RampView`) are the telegraph of where it comes back.
+      if (isEnemyBody && enemyHidden(sim, index)) {
+        continue;
+      }
       // The arena maypole is `MaibaumView`'s to draw (#199) — skip it here.
       if (
         !isEnemyBody &&
@@ -780,6 +797,22 @@ export class EntityView {
             break;
           }
         }
+      }
+
+      // A volley's landing markers (#412), a boss's included — the one
+      // telegraph that is not drawn from the body: the poison cloud's own edge
+      // at every point a wrapper will land, brightening through the flight.
+      const wrappers = isEnemyBody ? lobbedVolleyCount(sim, index) : 0;
+      for (let point = 0; point < wrappers; point++) {
+        lobbedVolleyFlight(sim, index, point, this.volleyScratch);
+        const edge = this.cloudEdgeAt(cloudEdgesUsed);
+        cloudEdgesUsed += 1;
+        edge.place(
+          this.volleyScratch.endX,
+          this.volleyScratch.endY,
+          this.volleyScratch.radius,
+          CLOUD_EDGE_MIN_ALPHA + CLOUD_EDGE_ALPHA_SWING * this.volleyScratch.progress,
+        );
       }
 
       if (isEnemyBody && enemyEatMark(sim, index, this.eatMark)) {

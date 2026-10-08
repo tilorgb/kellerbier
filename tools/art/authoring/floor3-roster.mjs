@@ -48,6 +48,9 @@ export const WALD = {
   5: 0xcfefb2, // trout: belly
   6: 0x1b2f1a, // trout: dark spots
   7: 0x5c5c5c, // boar: coat
+  k: 0xe8c28c, // skin (the Waldradler, #412)
+  j: 0x316d3d, // helmet
+  J: 0x408c4e, // helmet, lit; jersey; the Waldradl's hub
 };
 
 {
@@ -656,6 +659,165 @@ export const spechtLanded = single('specht-landed', [
   '....t.t..t..........',
 ]);
 
+// ================================================== WALDRADLER / WALDRADL
+// Sprites of the Floor 3 boss (#412, #413): the rider and his bike's wheel. Neither is a
+// rig cut from key art (`docs/BOSS_SPRITES.md`) yet — these are signed-off
+// block-art stand-ins that settle the design, the colours and the canvas size.
+
+/** A blank character grid, `w` x `h`, for the little drawing helpers below. */
+function canvas(w, h) {
+  return Array.from({ length: h }, () => Array.from({ length: w }, () => '.'));
+}
+
+function plot(g, x, y, ch) {
+  const row = g[Math.round(y)];
+  if (row !== undefined && Math.round(x) >= 0 && Math.round(x) < row.length) {
+    row[Math.round(x)] = ch;
+  }
+}
+
+function disc(g, cx, cy, r, ch) {
+  for (let y = Math.floor(cy - r); y <= Math.ceil(cy + r); y++) {
+    for (let x = Math.floor(cx - r); x <= Math.ceil(cx + r); x++) {
+      if ((x - cx) ** 2 + (y - cy) ** 2 <= r * r) plot(g, x, y, ch);
+    }
+  }
+}
+
+function ring(g, cx, cy, r, thickness, ch) {
+  for (let y = Math.floor(cy - r); y <= Math.ceil(cy + r); y++) {
+    for (let x = Math.floor(cx - r); x <= Math.ceil(cx + r); x++) {
+      const d = Math.hypot(x - cx, y - cy);
+      if (d <= r && d > r - thickness) plot(g, x, y, ch);
+    }
+  }
+}
+
+function line(g, x0, y0, x1, y1, ch, thickness = 1) {
+  const steps = Math.ceil(Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)) * 2);
+  for (let i = 0; i <= steps; i++) {
+    const t = steps === 0 ? 0 : i / steps;
+    const x = x0 + (x1 - x0) * t;
+    const y = y0 + (y1 - y0) * t;
+    for (let dy = 0; dy < thickness; dy++) {
+      for (let dx = 0; dx < thickness; dx++) plot(g, x + dx, y + dy, ch);
+    }
+  }
+}
+
+/** Ink round everything painted: the outline the signed-off sprites carry in their grids. */
+function inked(g) {
+  const out = g.map((row) => [...row]);
+  for (let y = 0; y < g.length; y++) {
+    for (let x = 0; x < g[y].length; x++) {
+      if (g[y][x] !== '.') continue;
+      const near = [g[y - 1]?.[x], g[y + 1]?.[x], g[y]?.[x - 1], g[y]?.[x + 1]];
+      if (near.some((n) => n !== undefined && n !== '.' && n !== 'K')) out[y][x] = 'K';
+    }
+  }
+  return out.map((row) => row.join(''));
+}
+
+/** `n` spokes through the centre, at even angles over a half turn. */
+function spokes(g, cx, cy, r, n, ch) {
+  for (let a = 0; a < n; a++) {
+    const t = (a * Math.PI) / n;
+    line(
+      g,
+      cx - Math.cos(t) * r,
+      cy - Math.sin(t) * r,
+      cx + Math.cos(t) * r,
+      cy + Math.sin(t) * r,
+      ch,
+    );
+  }
+}
+
+/** A bike wheel: tyre, rim, spokes, hub. */
+function bikeWheel(g, cx, cy, r, thickness, spokeCount) {
+  disc(g, cx, cy, r, 'b');
+  ring(g, cx, cy, r, thickness, 'a');
+  spokes(g, cx, cy, r - thickness - 1, spokeCount, 'S');
+  disc(g, cx, cy, 2, 'w');
+}
+
+// 62x48, facing left like all character art. A chibi trail biker — signed off
+// by Tilo as option A of three (big round head, eyes with a glint, green
+// helmet, small body on a small bike): readable as a guy, which the first two
+// rounds (a neon lycra figure, then a pink one) were not. Standing 24 room
+// units tall next to Alois's 16.
+const waldradler = single(
+  'waldradler',
+  (() => {
+    const g = canvas(62, 48);
+    const frontX = 12;
+    const rearX = 48;
+    const wheelY = 36;
+    const radius = 11;
+    bikeWheel(g, frontX, wheelY, radius, 3, 4);
+    bikeWheel(g, rearX, wheelY, radius, 3, 4);
+    // Frame, fork, bars and saddle.
+    const seatX = frontX + (rearX - frontX) * 0.45;
+    const seatY = wheelY - radius - 2;
+    const barsX = frontX + 3;
+    const barsY = wheelY - radius - 3;
+    const crankX = frontX + (rearX - frontX) * 0.5;
+    line(g, frontX, wheelY, barsX + 1, barsY + 2, 'c', 2);
+    line(g, seatX, seatY, barsX + 3, barsY, 'c', 2);
+    line(g, seatX, seatY, rearX, wheelY, 'c', 2);
+    line(g, seatX, seatY, crankX, wheelY, 'c', 2);
+    line(g, crankX, wheelY, rearX, wheelY, 'c', 2);
+    line(g, barsX - 1, barsY, barsX + 4, barsY, 'a', 2);
+    line(g, seatX - 3, seatY, seatX + 3, seatY, 'a', 2);
+    // Rider: small body, arm to the bars, short leg to the pedal.
+    const headX = 24;
+    const headY = 14;
+    const hipX = seatX + 2;
+    const hipY = seatY - 1;
+    line(g, hipX, hipY, headX + 4, headY + 7, 'J', 6);
+    line(g, headX + 2, headY + 8, barsX + 3, barsY, 'k', 2);
+    line(g, hipX, hipY, crankX, wheelY - 5, 'c', 4);
+    line(g, crankX, wheelY - 5, crankX + 1, wheelY - 1, 'k', 2);
+    line(g, crankX - 1, wheelY, crankX + 2, wheelY, 'a', 2);
+    // Head: round, skin, two dark eyes with a glint, a small mouth.
+    disc(g, headX, headY, 7, 'k');
+    for (const eyeX of [headX - 4, headX + 1]) {
+      line(g, eyeX, headY - 1, eyeX, headY + 1, 'a', 2);
+      plot(g, eyeX, headY - 1, 'w');
+    }
+    line(g, headX - 3, headY + 4, headX - 1, headY + 4, 'a');
+    // Green helmet over the top, with a pale visor edge.
+    for (let dx = -8; dx <= 8; dx++) {
+      for (let dy = -9; dy <= -3; dy++) {
+        if (dx * dx + (dy + 1) ** 2 * 1.1 <= 68) plot(g, headX + dx, headY + dy, 'j');
+      }
+    }
+    line(g, headX - 9, headY - 3, headX + 8, headY - 3, 'J', 1);
+    line(g, headX - 8, headY - 4, headX - 4, headY - 4, 'w');
+    return inked(g);
+  })(),
+);
+
+// 40x40: one chunky bike wheel standing upright (signed off, option B): a wide
+// grey tyre, a dense spoke star and reflector studs round the rim, a green hub.
+const waldradl = single(
+  'waldradl',
+  (() => {
+    const g = canvas(40, 40);
+    disc(g, 20, 20, 18, 'b');
+    ring(g, 20, 20, 18, 5, 'c');
+    ring(g, 20, 20, 13, 1, 'a');
+    spokes(g, 20, 20, 13, 8, 'S');
+    disc(g, 20, 20, 4, 'J');
+    disc(g, 20, 20, 2, 'w');
+    for (let a = 0; a < 12; a++) {
+      const t = (a * Math.PI) / 6;
+      disc(g, 20 + Math.cos(t) * 16, 20 + Math.sin(t) * 16, 1, 'S');
+    }
+    return inked(g);
+  })(),
+);
+
 export const ROSTER = {
   fliegenpilz,
   zecke,
@@ -665,6 +827,8 @@ export const ROSTER = {
   specht,
   'specht-landed': spechtLanded,
   'specht-dive': spechtDive,
+  waldradler,
+  waldradl,
 };
 
 /** Every sprite is authored against Floor 3's palette. */

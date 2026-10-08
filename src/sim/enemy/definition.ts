@@ -60,7 +60,17 @@ export type BehaviourName =
   | 'emitCloud'
   | 'latchOnPlayer'
   | 'submerge'
-  | 'land';
+  | 'land'
+  | 'ride'
+  | 'rideToLineStart'
+  | 'rideLine'
+  | 'glideToPoint'
+  | 'fireRotatingRing'
+  | 'captureLine'
+  | 'lobVolley'
+  | 'detonateVolley'
+  | 'leaveArena'
+  | 'dropPickupOnDeath';
 
 /** Walks straight at the player, re-aiming every tick. The floor-one default. */
 export interface WalkTowardPlayerBehaviour {
@@ -363,6 +373,183 @@ export interface LandBehaviour {
  */
 export interface SubmergeBehaviour {
   readonly behaviour: 'submerge';
+}
+
+/**
+ * Rides fast, erratic straight lines and never steers toward the player
+ * (#412, Der Waldradler: a trail biker who goes where he likes).
+ *
+ * Not `wander`: a ride keeps its heading, turns abruptly every
+ * `turnEveryTicks` — a fixed count, or `{ min, max }` rolled from
+ * `random.enemies` at each turn, so the rhythm cannot be learnt — and
+ * **bounces**: a step that would end inside a wall or an obstacle reflects the
+ * blocked component of the heading instead. The new heading is a uniformly
+ * random angle: nothing about it reads the player's position, which is the
+ * whole point.
+ */
+export interface RideBehaviour {
+  readonly behaviour: 'ride';
+  /** Room units per tick, before the global `enemy.speedScale`. */
+  readonly speed: number;
+  /** Ticks between abrupt turns. */
+  readonly turnEveryTicks: number | { readonly min: number; readonly max: number };
+}
+
+/**
+ * Rides in a straight line to the start end of the line a `captureLine`
+ * stored (#412), ignoring the player, and raises `onArrived` there. The start
+ * end is whichever of the line's two ends was nearer the body at capture.
+ */
+export interface RideToLineStartBehaviour {
+  readonly behaviour: 'rideToLineStart';
+  /** Room units per tick, before the global `enemy.speedScale`. */
+  readonly speed: number;
+}
+
+/**
+ * Rides the captured line edge to edge (#412) and raises `onArrived` on
+ * reaching the end it is heading for: `direction: 1` runs from the start end
+ * to the far end, `-1` back the other way. The pass the body makes *through*
+ * the room — whoever stands on the line is hit by contact damage as usual.
+ * Needs a `captureLine` earlier in the same state machine.
+ */
+export interface RideLineBehaviour {
+  readonly behaviour: 'rideLine';
+  readonly speed: number;
+  readonly direction: 1 | -1;
+}
+
+/**
+ * Glides to a point over exactly `ticks` ticks of the state (#413): each tick
+ * the body covers a share of what is left of the way, so it arrives on the last
+ * tick whatever distance it started at, and raises `onArrived` there. A fixed
+ * *duration* rather than a speed, because the Waldradl rolls to the arena
+ * centre from wherever the Waldradler died and its invulnerable intro has to be
+ * the same length every fight.
+ */
+export interface GlideToPointBehaviour {
+  readonly behaviour: 'glideToPoint';
+  /** `'roomCentre'`: the middle of the room's interior bounds. */
+  readonly point: 'roomCentre';
+  readonly ticks: number;
+}
+
+/**
+ * A ring of shots whose gaps turn slowly (#413, Das Waldradl): the same ring
+ * `fireRing` fires, with `gaps` left out of it and the whole pattern — ring and
+ * gaps together — turning `rotationPerVolley` radians every volley.
+ *
+ * **Fully deterministic, no RNG**: volley *n* of a state is the ring turned by
+ * exactly `n × rotationPerVolley`, counted from the state's entry, so the
+ * pattern is the same in every fight and can be learnt. A gap is `width`
+ * consecutive slots of the `shots` evenly spaced ones left unfired, centred on
+ * the slot nearest `at` (radians, east 0, clockwise on screen) — a constant
+ * number of slots whatever the rotation, which a gap defined as an angular
+ * window would not be.
+ *
+ * `minSafeDistance` is where the corridor is narrowest that matters: the
+ * registry rejects a pattern whose gap, measured between the two shots either
+ * side of it at that distance from the body, is narrower than the player's
+ * diameter plus the shot's own plus a margin (`registry.ts`). A pattern nobody
+ * can stand in fails the build, not a run.
+ */
+export interface FireRotatingRingBehaviour extends FiringBehaviourBase {
+  readonly behaviour: 'fireRotatingRing';
+  /** Shots evenly spaced around a full circle, before the gaps take theirs out. */
+  readonly shots: number;
+  /** Radians the whole pattern turns by each volley. Positive is clockwise on screen. */
+  readonly rotationPerVolley: number;
+  readonly gaps: readonly { readonly at: number; readonly width: number }[];
+  /** Room units from the body's centre at which a gap must still be passable. */
+  readonly minSafeDistance: number;
+}
+
+/**
+ * On entry, stores a straight line across the room through the player's
+ * position, randomly horizontal or vertical (`random.enemies`), edge to edge
+ * (#412). The body's own radius is kept off the walls: the line runs between
+ * the two spots its centre can reach. The state that carries it also shows the
+ * line's two ramps, rising over its telegraph; the states that ride it keep them
+ * up (`rideToLineStart`, `rideLine`, `leaveArena`) and the first state without
+ * any of those sinks them.
+ *
+ * The line is built for an arena without obstacles on it (`wald-boss` is an
+ * open clearing): a block across it stops the ride, and the content's
+ * `onBlocked` fallbacks are what keep that from being a softlock.
+ */
+export interface CaptureLineBehaviour {
+  readonly behaviour: 'captureLine';
+}
+
+/**
+ * On entry, picks landing points *around* the player and remembers them
+ * (#412, the wrapper volley): `count` of them (a number, or `{ min, max }` rolled
+ * from `random.enemies`), evenly spaced on a ring of `ringRadius` room units
+ * about the player's position, the whole ring turned by a random angle. A
+ * point that would land in a wall or off the room is replaced by its
+ * reflection through the player, and failing that clamped inside — so the
+ * volley is always inside the room and never on top of the player. At most
+ * `VOLLEY_MAX_POINTS` points. The state's own telegraph is the flight: a marker
+ * on the floor at every point, and an arc to it, until the state ends.
+ * `detonateVolley` reads the points back.
+ */
+export interface LobVolleyBehaviour {
+  readonly behaviour: 'lobVolley';
+  readonly count: number | { readonly min: number; readonly max: number };
+  readonly ringRadius: number;
+}
+
+/** What each point of a `detonateVolley` throws out. */
+export interface VolleyBurst {
+  readonly shots: number;
+  readonly speed: number;
+  readonly damage: number;
+  readonly lifetimeTicks: number;
+  readonly radius?: number;
+  readonly art?: string;
+  readonly poison?: boolean;
+}
+
+/**
+ * On entry, at every point an earlier `lobVolley` captured: a poison cloud
+ * (`cloud`, as `emitCloud`) and a ring of `burst.shots` projectiles flying
+ * outward in all directions, poisoned if `burst.poison` (#412).
+ *
+ * It does **not** call `triggerExplosion`: a wrapper is litter, not a bomb, and
+ * must never open a secret wall the way a Böller does. It is not splash damage
+ * either — the cloud and the ring are the whole of it.
+ */
+export interface DetonateVolleyBehaviour {
+  readonly behaviour: 'detonateVolley';
+  readonly cloud: {
+    readonly radius: number;
+    readonly growTicks?: number;
+    readonly lifetimeTicks?: number;
+  };
+  readonly burst: VolleyBurst;
+}
+
+/**
+ * Off the arena while this state is current (#412, the Waldradler jumping off
+ * his ramp): untargetable — no shot, no splash, no contact, no shove — and not
+ * drawn. The state flag `submerge` is for a fish under the water; this is the
+ * same removal without the water. Like the line it belongs to, it keeps the
+ * ramps up: they are the telegraph of where he comes back.
+ */
+export interface LeaveArenaBehaviour {
+  readonly behaviour: 'leaveArena';
+}
+
+/**
+ * When the body dies in this state, a pickup appears at the death point (#412):
+ * the Maß dropped at the Waldradler's transition so the player can cleanse
+ * before the bullet-hell phase. Declared on every state the body might die in,
+ * as `splitOnDeath` is. `pickup` is a pickup id; one that is not a pickup fails
+ * the content test, not a run.
+ */
+export interface DropPickupOnDeathBehaviour {
+  readonly behaviour: 'dropPickupOnDeath';
+  readonly pickup: string;
 }
 
 /** Backs away from the player. Kiting enemies, and anything that repositions. */
@@ -809,6 +996,7 @@ export type EnemyBehaviour =
   | ReturnToPerchBehaviour
   | LandBehaviour
   | FireRingBehaviour
+  | FireRotatingRingBehaviour
   | FireAtPlayerBehaviour
   | FireBurstBehaviour
   | FireSpreadBehaviour
@@ -823,6 +1011,15 @@ export type EnemyBehaviour =
   | DetonateLobbedBombBehaviour
   | EmitCloudBehaviour
   | LatchOnPlayerBehaviour
+  | RideBehaviour
+  | RideToLineStartBehaviour
+  | RideLineBehaviour
+  | GlideToPointBehaviour
+  | CaptureLineBehaviour
+  | LobVolleyBehaviour
+  | DetonateVolleyBehaviour
+  | LeaveArenaBehaviour
+  | DropPickupOnDeathBehaviour
   | TelegraphBehaviour;
 
 /**
@@ -844,6 +1041,20 @@ export type EnemyTransition =
   | {
       readonly to: string;
       readonly after: number | { readonly min: number; readonly max: number };
+    }
+  /**
+   * After `after` ticks — as above — to **one of several** states, chosen at
+   * random by weight from `random.enemies` (#412: the Waldradler picks an attack).
+   * `maxInARow`, when set, stops the same choice being taken more than that many
+   * times in a row: a per-body counter of the last state this kind of transition
+   * chose and how often running, shared by every `toOneOf` of the body, so a
+   * choice already taken `maxInARow` times is simply left out of the draw. Every
+   * weight above zero; at least two choices.
+   */
+  | {
+      readonly toOneOf: readonly { readonly to: string; readonly weight: number }[];
+      readonly after: number | { readonly min: number; readonly max: number };
+      readonly maxInARow?: number;
     }
   /** The body took a hit. Cleared once read, so it fires once per hit. */
   | { readonly to: string; readonly onHit: true }
@@ -1054,6 +1265,10 @@ export const MOVEMENT_BEHAVIOURS: readonly BehaviourName[] = [
   'approachWood',
   'returnToPerch',
   'flyLoops',
+  'ride',
+  'rideToLineStart',
+  'rideLine',
+  'glideToPoint',
 ];
 
 /** Primitives that run once, when the state is entered. */
@@ -1064,13 +1279,19 @@ export const ENTRY_BEHAVIOURS: readonly BehaviourName[] = [
   'lobTarget',
   'detonateLobbedBomb',
   'emitCloud',
+  'captureLine',
+  'lobVolley',
+  'detonateVolley',
 ];
 
 /** Primitives that mark the whole state rather than doing anything in it (#408). */
-export const STATE_FLAG_BEHAVIOURS: readonly BehaviourName[] = ['submerge', 'land'];
+export const STATE_FLAG_BEHAVIOURS: readonly BehaviourName[] = ['submerge', 'land', 'leaveArena'];
 
 /** Primitives that run when the body dies in that state. */
-export const DEATH_BEHAVIOURS: readonly BehaviourName[] = ['splitOnDeath'];
+export const DEATH_BEHAVIOURS: readonly BehaviourName[] = ['splitOnDeath', 'dropPickupOnDeath'];
+
+/** Most landing points one `lobVolley` can capture: the body's fixed per-body storage (#412). */
+export const VOLLEY_MAX_POINTS = 4;
 
 /** Primitives that spawn more bodies on a timer while alive (#276). */
 export const SUMMON_BEHAVIOURS: readonly BehaviourName[] = ['summon'];
@@ -1088,4 +1309,5 @@ export const FIRING_BEHAVIOURS: readonly BehaviourName[] = [
   'fireSpread',
   'fireOnBeat',
   'fireRing',
+  'fireRotatingRing',
 ];

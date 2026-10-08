@@ -6673,3 +6673,74 @@ it into `assets/audio/`, so that its row exists. The first one to ship reopens t
 `docs/LEGAL_REVIEW.md` (the model's licence terms, and the storefront's generative-AI
 disclosure, which then covers sound as well as key art). Whether a generated take is good enough
 is decided by ear, by a person: an agent can generate and measure takes but cannot hear them.
+
+## 123. Floor 3's boss: a rider who never follows, and a wheel whose gaps are the lesson
+
+**Decided** while building Der Waldradler (#412) and Das Waldradl (#413). Every mechanic below is a
+generic primitive, none is an `if (id === 'waldradler')`.
+
+**Riding is not wandering.** `ride` keeps its heading, turns abruptly on a rolled timer and
+reflects the blocked component of the heading off a wall. The new heading is a uniformly random
+angle: nothing about it reads the player, which is the whole of "he never follows". A measured test
+holds the mean alignment with the player to near zero.
+
+**The charge is a captured line.** `captureLine` stores a horizontal or vertical line through the
+player, edge to edge between the two spots the body's centre can reach; `rideToLineStart` and
+`rideLine` ride it, `leaveArena` takes him off the arena between the two passes (untargetable, not
+drawn, the same removal from every collision layer `submerge` uses, without the water). The ramps
+are a render of the line, rising over the telegraph and kept up through both passes: where he will
+come back in is the ramp he left by. A player standing on the line at the start of a pass is hit and
+shoves the charge; the dodge is the 75 ticks of ramps and bell. The line assumes an arena without
+obstacles, which `wald-boss` is; every ride state has `onBlocked` and `after` fallbacks, so a block
+across it ends the attack rather than the game.
+
+**A volley lands around the player and is the Fliegenpilz's big brother.** `lobVolley` captures up
+to `VOLLEY_MAX_POINTS` (4) points on a ring about the player, replacing a point outside the room by
+its reflection through the player; `detonateVolley` leaves a cloud and a ring of shots at each. It
+does not call `triggerExplosion`: a wrapper is litter, and a boss room that opened secret walls
+for a thrown wrapper would be a bug nobody asked for.
+
+**Choosing is a weighted draw that remembers.** `{ toOneOf: [{ to, weight }], after, maxInARow }`
+draws once, when the transition is taken, from `random.enemies`, leaving out a choice already taken
+`maxInARow` times in a row. The memory is per body, shared by every `toOneOf` of it, keyed by the
+target state.
+
+**The wheel's pattern is a pure function of the volley number.** `fireRotatingRing` fires a ring
+with `gaps` (a gap is `width` consecutive slots) and turns the whole pattern `rotationPerVolley`
+per volley, counted from the state's entry. There is no RNG in it, so it is the same in every fight.
+A gap is a whole number of slots whatever the rotation: defined as an angular window it would be
+two slots wide at one phase and three at the next. The registry refuses a pattern whose corridor, the
+chord between the two shots flanking a gap at `minSafeDistance`, is narrower than the player's drawn
+diameter plus the shot's plus a margin. `rotating-ring.ts` copies `PLAYER_RADIUS` because the
+registry cannot import `sim.ts`; a test holds the two equal. Measured with a player tracking a gap at
+36, 60, 90 and 120 units over a full rotation, nothing hits him, and the line from the gap to the
+wheel stays open. By the arithmetic a gap stays safe out to about 120 units, where the older rings
+the rotation sweeps in begin to close it. That is about how far a corner of the arena sits from the
+wheel, so there is no ground in the room where it stops holding, but it is not a wide margin:
+slowing the pattern down widens it, speeding it up narrows it.
+
+**Numbers scale to the player's power, not to a bare run.** The first tuning (80 and 32 health) was
+gone in seconds against a player with random upgrades and a Cola Weizen, so Der Waldradler is 300
+health and Das Waldradl 120, and `boss-pacing.test.ts` now measures four attacks at shot damage 1, 2,
+4 and 6 (3 to 18 DPS). A boss that is tuned for the bare run is too short by the time the player is
+carrying items; later floors' bosses start from this bar. Das Waldradl is `rooted`: no shot shoves it
+off the centre its gap pattern is read from. At peak the ring puts about 120 shots in the air
+against a pool of 5000.
+
+**The boss art is signed-off block art, and skin is a neutral.** Tilo picked the chibi rider (a big
+round head with eyes, green helmet, small body on a small bike, 62x48) and the chunky-tyre wheel
+(40x40) from three rounds of candidates, the first two rejected as reading as an alien or a racing
+driver. They are stand-ins for the rig that `docs/BOSS_SPRITES.md` describes, not a replacement for
+it. A person needs a skin tone on any floor, so `0xe8c28c` joined `NEUTRAL_PALETTE` instead of
+being borrowed from Floor 3's five.
+
+**Implementer defaults, confirmed by Tilo 2026-10-08:** the wheel rolls to the arena centre for a gap pattern to read
+fairly (one state, `roll`, to drop); it is `mid`-sized as a placeholder until its art is signed off;
+the wind-up bell rings on both of the Waldradler's attacks, since the audio seam is per enemy, not
+per state; the boss intro plate's title and epithet are marked placeholders in all three locales,
+because they are Tilo's to write.
+
+**Constrains:** a new boss that needs a position-independent pattern copies `fireRotatingRing`'s
+"pure function of the volley number" shape and its validator. A new attack that lands near the
+player uses `lobVolley`, not a second capture field. A new weighted choice is `toOneOf`, never an
+`if`.

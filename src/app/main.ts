@@ -138,7 +138,12 @@ import {
   welcomeDue,
 } from './telemetry/send.js';
 import { createTouchControls, isTouchCapable } from './touch-controls.js';
-import { FLOOR_SKIP_ENABLED, IS_RELEASE_BUILD, isPlaytestSession } from './build-mode.js';
+import {
+  FLOOR_SKIP_ENABLED,
+  IS_RELEASE_BUILD,
+  isPlaytestSession,
+  skipsIntroCards,
+} from './build-mode.js';
 import { parseStartFloor } from './start-floor.js';
 import { tourCandidates, trailAfter } from './room-tour.js';
 import { questionAt } from './playtest/questions.js';
@@ -1174,6 +1179,8 @@ async function boot(progress: BootProgress): Promise<void> {
    * full-frame plates that cover the run rather than sitting under it, so
    * only one is ever meant to be visible at once. See `dismissStoryCard`.
    */
+  /** `?nocards` (dev builds only): no story card, floor card or boss plate, to get to the play sooner. */
+  const noIntroCards = skipsIntroCards();
   const storyCard = new StoryCard();
   /** Hold-to-skip for `storyCard` — Space, or the gamepad's bottom face button. */
   const storySkip = new HoldToSkip();
@@ -2522,7 +2529,7 @@ async function boot(progress: BootProgress): Promise<void> {
         sim.roomWarmupTicks > 0 && planRoom(floorPlan, currentRoomId).role === 'boss';
       if (enteringBossRoom !== bossBannerShown) {
         bossBannerShown = enteringBossRoom;
-        if (enteringBossRoom) {
+        if (enteringBossRoom && !noIntroCards) {
           const compiled = sim.bossDefinition;
           const content = compiled === null ? undefined : enemyDefinitionById(compiled.id);
           const name = compiled?.name ?? t(preferences.locale, 'ui.hud.bossBanner');
@@ -3327,6 +3334,9 @@ WASD move   arrows aim and fire
    * in-memory flag would replay the opening on every restart of a fresh save.
    */
   function showStoryBeatOrFloorCard(beat: string, text: DictKey): void {
+    if (noIntroCards) {
+      return;
+    }
     if (hasSeenStoryBeat(loadSave(), beat)) {
       showFloorCard();
       return;
@@ -3364,6 +3374,9 @@ WASD move   arrows aim and fire
    * would stop being an announcement by the third room.
    */
   function showFloorCard(): void {
+    if (noIntroCards) {
+      return;
+    }
     const config = floorConfig(floorPlan.floor);
     // `config.flavour` is a localisation key (`content-is-data` bars content
     // from calling `t()` itself) — resolved here, in the render/app layer.
