@@ -327,6 +327,23 @@ export function stepEnemies(sim: GameSim): void {
         if (entered.grabProp !== null) {
           grabNearestProp(sim, index, entered.grabProp);
         }
+        if (entered.rollLog !== null) {
+          rollNearestLog(sim, index, entered.rollLog, selfX, selfY, playerX);
+        }
+        if (entered.becomeProp !== null) {
+          const prop = entered.becomeProp;
+          const radius = prop.radius > 0 ? prop.radius : (sim.hurtbox.data[index * 2] ?? 6);
+          sim.events.push(
+            EventKind.EnemyBecomeProp,
+            index,
+            prop.kind,
+            selfX,
+            selfY,
+            0,
+            radius,
+            prop.health,
+          );
+        }
         // The audio half of the telegraph ring (#234): fired once, on the
         // tick the state begins, not once per tick spent telegraphing — the
         // ring itself is read continuously (`enemyTelegraphProgress`), but a
@@ -1569,7 +1586,9 @@ function applyMovement(
       // the room, fall back to exactly `walkTowardPlayer` (#199). The prop
       // index is resolved once at compile time onto the state.
       const speed = behaviour.speed * scale;
-      const prop = nearestPropIndex(sim, selfX, selfY, state.approachPropKind);
+      const prop = state.approachesPlayerRow
+        ? propNearestToRow(sim, sim.positionY(sim.playerIndex), state.approachPropKind)
+        : nearestPropIndex(sim, selfX, selfY, state.approachPropKind);
       let dirX = toPlayerX;
       let dirY = toPlayerY;
       let length = distance;
@@ -2369,6 +2388,101 @@ function nearestPropIndex(sim: GameSim, x: number, y: number, kind: number): num
   return best;
 }
 
+/**
+ * The live prop of `kind` whose row (y) is closest to `y`, or -1 (#467).
+ *
+ * Bieber's pick of log: the one whose roll lies along the player's row. With
+ * a `reach`, only props inside it of (`aroundX`, `aroundY`) are considered. Ties go to
+ * the lower entity index, so the choice is stable across ticks and a replay
+ * reproduces it.
+ */
+function propNearestToRow(
+  sim: GameSim,
+  y: number,
+  kind: number,
+  aroundX = 0,
+  aroundY = 0,
+  reach = Infinity,
+): number {
+  if (kind < 0) {
+    return -1;
+  }
+  const states = sim.world.states;
+  const masks = sim.world.masks;
+  const propBit = sim.propKind.bit;
+  const propData = sim.propKind.data;
+  let best = -1;
+  let bestGap = Infinity;
+  for (let i = 0; i < sim.world.highWater; i++) {
+    if (states[i] !== World.ALIVE || ((masks[i] ?? 0) & propBit) === 0) {
+      continue;
+    }
+    if ((propData[i] ?? 0) !== kind) {
+      continue;
+    }
+    if (
+      reach !== Infinity &&
+      vectorLength(sim.positionX(i) - aroundX, sim.positionY(i) - aroundY) > reach
+    ) {
+      continue;
+    }
+    const gap = Math.abs(sim.positionY(i) - y);
+    if (gap < bestGap) {
+      bestGap = gap;
+      best = i;
+    }
+  }
+  return best;
+}
+
+/**
+ * On entering a `rollLog` state: take the prop within `reach` of the body that
+ * lies nearest the player's row and spawn the rolling body in its place, going
+ * whichever way the player is (#467). The spawn is queued as an ordinary
+ * `summon` event, so the world never grows inside this loop.
+ */
+function rollNearestLog(
+  sim: GameSim,
+  index: number,
+  roll: {
+    readonly kind: number;
+    readonly reach: number;
+    readonly east: number;
+    readonly west: number;
+  },
+  selfX: number,
+  selfY: number,
+  playerX: number,
+): void {
+  const prop = propNearestToRow(
+    sim,
+    sim.positionY(sim.playerIndex),
+    roll.kind,
+    selfX,
+    selfY,
+    roll.reach,
+  );
+  if (prop < 0) {
+    return;
+  }
+  const propX = sim.positionX(prop);
+  const propY = sim.positionY(prop);
+  sim.consumeProp(prop);
+  sim.events.push(
+    EventKind.EnemySummon,
+    index,
+    playerX >= propX ? roll.east : roll.west,
+    propX,
+    propY,
+    ROLL_LOG_MAX_ACTIVE,
+    0,
+    1,
+  );
+}
+
+/** A log rolls only while fewer than this many are already rolling: the fight never stacks them. */
+const ROLL_LOG_MAX_ACTIVE = 2;
+
 /** Distance to the nearest live prop of `kind`, or `Infinity` when there is none. */
 function nearestPropDistance(sim: GameSim, x: number, y: number, kind: number): number {
   const index = nearestPropIndex(sim, x, y, kind);
@@ -2752,6 +2866,10 @@ export function stepEnemyPropDrops(sim: GameSim): void {
 
 function propDropFromEvent(slot: number): void {
   const sim = propDropSim;
+  if (sim?.events.kind[slot] === EventKind.EnemyBecomeProp) {
+    becomePropFromEvent(sim, slot);
+    return;
+  }
   if (sim?.events.kind[slot] !== EventKind.EnemyDropProp) {
     return;
   }
@@ -2779,6 +2897,29 @@ function propDropFromEvent(slot: number): void {
   // Heavy: a hay bale is cover, and cover a body could shove around the room
   // would stop reading as terrain. `PROP_DROP_MASS` is well above the `mid`
   // class's own 6.
+  sim.spawnTarget(atX, atY, radius, kind, health, PROP_DROP_MASS);
+}
+
+/**
+ * A body turning into a prop where it stands (#467): the body goes first, so
+ * its own circle is not in the way of the prop that replaces it, then the prop
+ * is spawned where it stood. There is deliberately no "is that spot clear"
+ * check: the body came to rest there under the room's own collision, so the
+ * spot was legal a tick ago, and a check that disagreed with that by a
+ * rounding error would make the log vanish instead of settle. A body that is
+ * already gone (killed this tick) is left alone.
+ */
+function becomePropFromEvent(sim: GameSim, slot: number): void {
+  const index = sim.events.subject[slot] ?? -1;
+  if (index < 0 || sim.world.states[index] !== World.ALIVE) {
+    return;
+  }
+  const kind = sim.events.other[slot] ?? 0;
+  const radius = sim.events.normalY[slot] ?? 0;
+  const health = sim.events.value[slot] ?? 0;
+  const atX = sim.events.x[slot] ?? 0;
+  const atY = sim.events.y[slot] ?? 0;
+  sim.world.destroy(sim.world.entityAt(index));
   sim.spawnTarget(atX, atY, radius, kind, health, PROP_DROP_MASS);
 }
 

@@ -353,6 +353,14 @@ Kept for a possible third floor-2 mini-boss: **Der Gartenzwerg-Reigen**, a ring 
 plays dead, where kill order matters — good idea, worst art-cost-to-novelty ratio of the three
 considered, so it waits.
 
+**Floor 3 — Der Wald**
+- **Bieber** — a beaver, upright, with a woodpile that has no business being this far from a river.
+  The arena has a row of logs against the wall opposite its door. He walks to the log lying on the
+  player's row, shoves it, and it rolls across the room and comes to rest as cover again; between
+  logs he slaps out a three-shot cone with his tail. One idea: **cover that cuts both ways** — the
+  logs block the player's shots and his own, and the fight rearranges them. The name is Tilo's, as
+  given (`docs/DECISIONS.md` #124).
+
 ---
 
 ## 4. Item seeds

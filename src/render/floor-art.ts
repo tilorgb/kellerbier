@@ -211,7 +211,9 @@ export const FLOOR_TILESETS: Readonly<Record<number, FloorTileset>> = {
     wallLip: 'wald-wall-lip',
     wallLipCorner: 'wald-wall-lip-corner',
     blockVariants: ['wald-log-1', 'wald-log-2', 'wald-stump', 'wald-barricade'],
-    destructibles: ['wald-barrel'],
+    // `log` (#467) is Bieber's resting and settled log — placeholder: the
+    // floor's own wooden cover tile, until the log sprite is signed off.
+    destructibles: ['wald-barrel', 'wald-barrel', 'wald-barrel', 'wald-log-1'],
     wallHeight: 12,
     lighting: 'forest',
   },
@@ -271,6 +273,8 @@ export const PROP_TILE_NAMES: Readonly<Record<string, string | null>> = {
   // Drawn elsewhere, on purpose.
   barrel: null,
   maypole: null,
+  // Bieber's logs (#467) are real destructible bodies, drawn from `destructibles`.
+  log: null,
   pedestal: null,
   puddle: null,
   // Floor 3's stream (#403), drawn from the room's `streams` by `Scenery`.

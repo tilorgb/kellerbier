@@ -61,6 +61,13 @@ export const EventKind = {
    * `GameSim.playItemCue`, since content may not import this table.
    */
   ItemCue: 11,
+  /**
+   * A `becomeProp` behaviour's state was entered (#467, Bieber's log coming to
+   * rest). a: the body that becomes the prop, b: the `DESTRUCTIBLE_PROP_KINDS`
+   * index, x/y: where it lands, value: its health, normalY: its radius. Read by
+   * `stepEnemyPropDrops`, deferred for the same reason `EnemyDropProp` is.
+   */
+  EnemyBecomeProp: 12,
 } as const;
 
 export type EventKindId = (typeof EventKind)[keyof typeof EventKind];

@@ -70,7 +70,9 @@ export type BehaviourName =
   | 'lobVolley'
   | 'detonateVolley'
   | 'leaveArena'
-  | 'dropPickupOnDeath';
+  | 'dropPickupOnDeath'
+  | 'rollLog'
+  | 'becomeProp';
 
 /** Walks straight at the player, re-aiming every tick. The floor-one default. */
 export interface WalkTowardPlayerBehaviour {
@@ -170,6 +172,12 @@ export interface ApproachPropBehaviour {
   readonly propKind: string;
   /** Pixels per tick, before the global `enemy.speedScale`. */
   readonly speed: number;
+  /**
+   * Head for the prop standing *closest to the player's row* instead of the one
+   * nearest the body (#467, Bieber): the log whose roll will actually cross the
+   * player's lane. Unset: the nearest prop, as the Maibaum-Dieb wants.
+   */
+  readonly nearestToPlayerRow?: boolean;
 }
 
 /** Drifts, picking a new direction on a timer. */
@@ -905,6 +913,49 @@ export interface GrabPropBehaviour {
 }
 
 /**
+ * On state entry, takes the nearest live prop of `propKind` within `reach` and
+ * sets a rolling body going from where it lay (#467, Bieber): the log he
+ * shoves across the room.
+ *
+ * The prop is removed exactly as `grabProp` removes one, and `east` or `west`
+ * (another enemy's `id`, resolved at construction) is spawned in its place,
+ * whichever lies on the player's side of it. Two definitions rather than one
+ * with a direction because a body's rolling direction is its state's, not its
+ * spawner's (`rollBounce`). A no-op when no such prop is in range.
+ */
+export interface RollLogBehaviour {
+  readonly behaviour: 'rollLog';
+  /** Which destructible prop to roll — a `DESTRUCTIBLE_PROP_KINDS` name. */
+  readonly propKind: string;
+  /** How close the prop has to be, in pixels, to be rolled. */
+  readonly reach: number;
+  /** The rolling body spawned when the player is east of the prop. */
+  readonly east: string;
+  /** The rolling body spawned when the player is west of the prop. */
+  readonly west: string;
+}
+
+/**
+ * On state entry, the body stops being an enemy and becomes a destructible
+ * prop where it stands (#467, Bieber's log coming to rest against the wall).
+ *
+ * The inverse of `grabProp`: no death, no loot, nothing for `splitOnDeath` to
+ * react to. Meant for a body with `locksRoom: false`, which was never counted
+ * into the room, so removing it needs no bookkeeping. The prop appears where
+ * the body stood, with no clearance check: the body came to rest there under
+ * the room's own collision.
+ */
+export interface BecomePropBehaviour {
+  readonly behaviour: 'becomeProp';
+  /** Which destructible prop to become — a `DESTRUCTIBLE_PROP_KINDS` name. */
+  readonly propKind: string;
+  /** The prop's own health. */
+  readonly health: number;
+  /** The prop's drawn radius, in pixels. Defaults to the body's own. */
+  readonly radius?: number;
+}
+
+/**
  * Remembers where the player is standing, right now, for a
  * `detonateLobbedBomb` later in the same state machine to read.
  *
@@ -1007,6 +1058,8 @@ export type EnemyBehaviour =
   | DropPropBehaviour
   | BecomeInvulnerableBehaviour
   | GrabPropBehaviour
+  | RollLogBehaviour
+  | BecomePropBehaviour
   | LobTargetBehaviour
   | DetonateLobbedBombBehaviour
   | EmitCloudBehaviour
@@ -1227,7 +1280,7 @@ export interface EnemyDefinition {
    */
   readonly facing?: 'mirror' | 'crawl';
   /** Which drop table (`content/pickups/drop-tables.ts`) its death rolls from. Defaults to `'normal'`. */
-  readonly lootTier?: 'weak' | 'normal' | 'tough';
+  readonly lootTier?: 'weak' | 'normal' | 'tough' | 'none';
   /**
    * Whether its presence counts toward `GameSim.roomEnemyCount` — and so
    * toward sealing the room's doors. Defaults to `true`; the shopkeeper
@@ -1276,6 +1329,8 @@ export const ENTRY_BEHAVIOURS: readonly BehaviourName[] = [
   'telegraph',
   'becomeInvulnerable',
   'grabProp',
+  'rollLog',
+  'becomeProp',
   'lobTarget',
   'detonateLobbedBomb',
   'emitCloud',

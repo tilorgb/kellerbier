@@ -11,6 +11,7 @@ import {
   waldradl,
 } from '../../src/content/enemies/index.js';
 import waldBoss from '../../src/content/rooms/wald-boss.json';
+import waldMiniboss from '../../src/content/rooms/wald-miniboss.json';
 import { entityIndex } from '../../src/sim/ecs/entity.js';
 import { World } from '../../src/sim/ecs/world.js';
 import { EventKind } from '../../src/sim/events/queue.js';
@@ -584,5 +585,97 @@ describe('Floor 3 boss pacing (#412, #413)', () => {
         `the wheel (${String(wheel)}) outlasts the rider (${String(rider)})`,
       ).toBeLessThan(rider);
     }
+  });
+});
+
+/**
+ * #467 — Floor 3's mini-boss, held to the bar the other floors' are: it dies
+ * inside its own cycle, shows its one idea, and sits between the floor's
+ * ordinary roster and its boss in length. Measured in the real arena
+ * (`wald-miniboss`: the woodpile is the template's own logs), against a player
+ * who stands level with the middle log and only aims and fires — the losing
+ * line for dodging, and the one that shows the length.
+ */
+function bieberSim(): GameSim {
+  const sim = new GameSim({ seed: 1, roomTemplate: waldMiniboss, floor: 3, population: 'empty' });
+  for (let tick = 0; tick < 200 && sim.roomWarmupTicks > 0; tick++) {
+    sim.step(createInputFrame());
+  }
+  // The template's own Bieber is cleared; the harness places the one it measures.
+  for (let index = 0; index < sim.world.highWater; index++) {
+    if (
+      sim.world.states[index] === World.ALIVE &&
+      ((sim.world.masks[index] ?? 0) & sim.enemyMask) === sim.enemyMask
+    ) {
+      sim.kill(index);
+    }
+  }
+  sim.world.flush();
+  sim.health.data[sim.playerIndex * 2] = 1_000_000;
+  sim.health.data[sim.playerIndex * 2 + 1] = 1_000_000;
+  return sim;
+}
+
+function measureBieber(shotDamage: number): { ticks: number; rolls: number; swishes: number } {
+  const sim = bieberSim();
+  sim.tuning.shooting.shotDamage = shotDamage;
+  const player = sim.playerIndex;
+  const standX = sim.room.maxX - 50;
+  const standY = (sim.room.minY + sim.room.maxY) / 2;
+  const bieber = place(sim, 'bieber', (sim.room.minX + sim.room.maxX) / 2, standY);
+  let rolls = 0;
+  let swishes = 0;
+  let previous = stateName(sim, bieber);
+  for (let tick = 0; tick < 12000; tick++) {
+    sim.transform.data[player * 4] = standX;
+    sim.transform.data[player * 4 + 1] = standY;
+    sim.transform.data[player * 4 + 2] = standX;
+    sim.transform.data[player * 4 + 3] = standY;
+    sim.velocity.data[player * 2] = 0;
+    sim.velocity.data[player * 2 + 1] = 0;
+    sim.step(aimAt(sim, player, bieber));
+    if (!isAlive(sim, bieber)) {
+      return { ticks: tick + 1, rolls, swishes };
+    }
+    const current = stateName(sim, bieber);
+    if (current !== previous) {
+      if (current === 'shove') {
+        rolls += 1;
+      }
+      if (current === 'swish') {
+        swishes += 1;
+      }
+    }
+    previous = current;
+  }
+  return { ticks: 12000, rolls, swishes };
+}
+
+describe('Floor 3 mini-boss pacing (#467)', () => {
+  it('Bieber dies, shows both of his attacks, and is shorter than Der Waldradler', () => {
+    for (const shotDamage of WALD_DAMAGE_POINTS) {
+      const bieber = measureBieber(shotDamage);
+      const rider = measureWaldradler(shotDamage, 1).ticks;
+      const tag = `shotDamage=${String(shotDamage)}`;
+      expect(bieber.ticks, `${tag}: Bieber never died`).toBeLessThan(12000);
+      expect(
+        bieber.rolls,
+        `${tag}: only ${String(bieber.rolls)} log roll(s)`,
+      ).toBeGreaterThanOrEqual(2);
+      expect(
+        bieber.swishes,
+        `${tag}: only ${String(bieber.swishes)} swish(es)`,
+      ).toBeGreaterThanOrEqual(2);
+      expect(
+        bieber.ticks,
+        `${tag}: Bieber (${String(bieber.ticks)}) outlasts Der Waldradler (${String(rider)})`,
+      ).toBeLessThan(rider);
+    }
+  });
+
+  it("is longer than anything on the floor's ordinary roster", () => {
+    const boar = measureFight('boar', 'charge', 1);
+    const bieber = measureBieber(1);
+    expect(bieber.ticks).toBeGreaterThan(boar.ticksToOutcome);
   });
 });

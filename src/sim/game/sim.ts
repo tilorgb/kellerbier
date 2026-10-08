@@ -170,7 +170,12 @@ import {
   cleansePoison,
   stepStatusEffects,
 } from '../systems/status-effects.js';
-import { DESTRUCTIBLE_PROP_KINDS, type DestructiblePropKind, propKindIndex } from './prop-kinds.js';
+import {
+  DESTRUCTIBLE_PROP_KINDS,
+  type DestructiblePropKind,
+  LOG_HEALTH,
+  propKindIndex,
+} from './prop-kinds.js';
 
 /** Entity slots reserved up front. Sized well above M1's population. */
 const DEFAULT_CAPACITY = 8192;
@@ -3156,7 +3161,13 @@ export class GameSim {
           }
           continue;
         }
-        this.spawnTarget(prop.x, prop.y, TARGET_RADIUS, propKind);
+        this.spawnTarget(
+          prop.x,
+          prop.y,
+          TARGET_RADIUS,
+          propKind,
+          prop.type === 'log' ? LOG_HEALTH : TARGET_HEALTH,
+        );
       }
     }
     this.restoreOrSpawnRoomLoot(compiled);

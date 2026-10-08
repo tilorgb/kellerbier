@@ -6744,3 +6744,58 @@ because they are Tilo's to write.
 "pure function of the volley number" shape and its validator. A new attack that lands near the
 player uses `lobVolley`, not a second capture field. A new weighted choice is `toOneOf`, never an
 `if`.
+
+---
+
+## 124. Floor 3's mini-boss: Bieber, and a woodpile that is cover for both sides
+
+**Decided** while building #467. Tilo named him: **Bieber**, a beaver that is nowhere near a river
+and has brought a woodpile. The name is English-adjacent and given, not coined (`CLAUDE.md`).
+
+**The fight.** A row of logs lies against the wall opposite a door. He walks to the log lying
+nearest the player's row, braces, and shoves it; it rolls straight along its own row toward the
+player's side and comes to rest against the far wall as cover again. Between logs he raises his
+tail and slaps out a three-shot cone at where the player stood as it went up. Plain bullets, flat
+difficulty, no phases, no scaling. The one idea is **cover that cuts both ways**: the logs block the
+player's shots and his own cone, and the fight keeps rearranging them. He fetches whichever log is
+now nearest the player's row, so a log he rolled across the room is the next one he walks to.
+
+**Three engine pieces, all small and all data-driven** (`sim/enemy/definition.ts`):
+
+- `rollLog` (entry): takes the prop within reach that is nearest the player's row and queues an
+  ordinary `summon` of the rolling body, east- or west-going by the player's side. Two definitions
+  (`bieber-log-east`, `-west`) rather than one with a direction, because a body's roll direction is
+  its *state's* (`rollBounce`), not its spawner's.
+- `becomeProp` (entry): the inverse of `grabProp`. The rolling log turns back into a `log` prop where
+  it stopped. There is deliberately **no clearance check** at that spot: the body came to rest
+  there under the room's own collision, and a check that disagreed by a rounding error made the log
+  vanish instead of settle (found in the first headless run).
+- `approachProp` gains `nearestToPlayerRow`; the `log` prop kind (`LOG_HEALTH` 14, sturdier than a
+  barrel so his own cone does not strip the pile in two volleys); and `lootTier: 'none'` so a rolling
+  log shot to pieces leaves nothing. The rolling bodies are `locksRoom: false`: the room clears on
+  Bieber alone.
+
+**Two arenas, because doors are the plan's, not the template's.** A template's `doors` metadata is
+only a filter (`eligibleTemplates`): a slot is given a template with a door wherever it needs one.
+So the "logs on the side with no door" rule is two mirrored templates, `wald-miniboss` (logs west,
+no west door) and `wald-miniboss-east`. 600 generated floor-3 plans produced no failure and never
+put a door on a log side. The cost is that a mini-boss slot needing *both* an east and a west door
+has no eligible template and the generator retries — measured at zero failures in 600 seeds.
+
+**He is never an elite.** A real mini-boss (`bossBar`) is spawned plain by `applyCompiledRoom`, so
+there is no elite variant to author; the issue's "elite behaviour" line is satisfied by the
+existing rule, not by new content.
+
+**Palette.** Floor 3's palette has no brown. The fur is the amber from the skin ramp and the tail the
+floor's violet-grey. Whether the palette grows a brown is a decision for the floor's art, not for
+this change.
+
+**Art.** Tilo picked option B of three (an upright beaver, 34x36), the floor's own `wald-log-1` as the
+resting log, and a new rolling log lying along the way it travels. The rolling log's quarter-turn
+animation is the weakest piece of the art; iterating it is inside the signed-off direction.
+
+**Numbers.** 110 health, about 37% of the Waldradler's 300 (`boss-pacing.test.ts` measures him at
+shot damage 1, 2, 4 and 6: three to ten log rolls and swishes, always shorter than the rider).
+
+**Constrains:** a log is the only thing `becomeProp` is used for so far. A later enemy that leaves
+terrain behind where it dies down should use it rather than `dropProp`, which spawns on a timer.

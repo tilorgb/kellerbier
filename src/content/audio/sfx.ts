@@ -709,4 +709,7 @@ export const ENEMY_SFX_CATEGORY: Readonly<Record<string, EnemySfxCategory>> = {
   specht: 'animal',
   waldradler: 'folk',
   waldradl: 'metal',
+  bieber: 'animal',
+  'bieber-log-east': 'metal',
+  'bieber-log-west': 'metal',
 };
