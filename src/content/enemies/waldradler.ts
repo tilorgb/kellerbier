@@ -60,7 +60,9 @@ export const waldradler: EnemyDefinition = {
   deathEffect: 'dust',
   // Tuned against `tests/content/boss-pacing.test.ts`: the attack loop plays at
   // least four times against a player at 6 DPS.
-  health: 80,
+  // Scaled for a player who has found damage upgrades and a Cola Weizen: the
+  // first value (80) was gone in seconds. `boss-pacing.test.ts` holds it.
+  health: 300,
   contactDamage: 1,
   bossBar: true,
   // TODO(#412): intro plate title and epithet — Tilo's to write, all three

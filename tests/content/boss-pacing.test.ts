@@ -492,6 +492,12 @@ function waldBossSim(seed: number): GameSim {
   return sim;
 }
 
+/**
+ * 1 and 2 are a bare run and one Bierkrug; 4 and 6 are a player with several
+ * damage upgrades and a Cola Weizen, who killed the first tuning in seconds.
+ */
+const WALD_DAMAGE_POINTS = [1, 2, 4, 6];
+
 function measureWaldradler(shotDamage: number, seed: number): { ticks: number; attacks: number } {
   const sim = waldBossSim(seed);
   sim.tuning.shooting.shotDamage = shotDamage;
@@ -499,7 +505,7 @@ function measureWaldradler(shotDamage: number, seed: number): { ticks: number; a
   const boss = place(sim, 'waldradler', sim.positionX(player) + 70, sim.positionY(player));
   let attacks = 0;
   let previous = stateName(sim, boss);
-  for (let tick = 0; tick < 8000; tick++) {
+  for (let tick = 0; tick < 12000; tick++) {
     sim.step(aimAt(sim, player, boss));
     if (!isAlive(sim, boss)) {
       return { ticks: tick + 1, attacks };
@@ -510,7 +516,7 @@ function measureWaldradler(shotDamage: number, seed: number): { ticks: number; a
     }
     previous = current;
   }
-  return { ticks: 8000, attacks };
+  return { ticks: 12000, attacks };
 }
 
 function measureWaldradl(shotDamage: number): number {
@@ -554,11 +560,11 @@ function measureWaldradl(shotDamage: number): number {
 
 describe('Floor 3 boss pacing (#412, #413)', () => {
   it('Der Waldradler plays at least four attacks before he splits, at both DPS', () => {
-    for (const shotDamage of [1, 2]) {
+    for (const shotDamage of WALD_DAMAGE_POINTS) {
       for (const seed of [1, 2, 3]) {
         const result = measureWaldradler(shotDamage, seed);
         expect(result.ticks, `shotDamage=${String(shotDamage)} seed=${String(seed)}`).toBeLessThan(
-          8000,
+          12000,
         );
         expect(
           result.attacks,
@@ -569,7 +575,7 @@ describe('Floor 3 boss pacing (#412, #413)', () => {
   });
 
   it('Das Waldradl falls to a player standing in a gap, in about half the time of phase one', () => {
-    for (const shotDamage of [1, 2]) {
+    for (const shotDamage of WALD_DAMAGE_POINTS) {
       const wheel = measureWaldradl(shotDamage);
       const rider = measureWaldradler(shotDamage, 1).ticks;
       expect(wheel, `shotDamage=${String(shotDamage)}: the wheel never fell`).toBeLessThan(6000);

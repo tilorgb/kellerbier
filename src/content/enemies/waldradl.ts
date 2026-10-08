@@ -31,8 +31,12 @@ export const waldradl: EnemyDefinition = {
   name: 'Waldradl',
   size: 'mid',
   deathEffect: 'dust',
-  // ~40% of phase one's, tuned against `tests/content/boss-pacing.test.ts`.
-  health: 32,
+  // ~40% of phase one's, tuned against `tests/content/boss-pacing.test.ts`,
+  // which now measures up to a player with several damage upgrades.
+  health: 120,
+  // Rooted: no shot's knockback moves the wheel off the centre its gap pattern
+  // is read from. Its own roll to the centre (`roll`) is unaffected.
+  rooted: true,
   contactDamage: 1,
   // The bar continues from phase one.
   bossBar: true,

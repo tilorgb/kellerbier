@@ -7,7 +7,7 @@ import { applyDamageAt } from '../../src/sim/systems/impact.js';
 
 /**
  * Rooted enemies: the Fliegenpilz in the ground, the Bachforelle in its stream,
- * the Specht on its wall. A shot hurts them and does not shove them.
+ * the Specht on its wall, the Waldradl on its spot. A shot hurts them and does not shove them.
  */
 
 const IDLE = createInputFrame();
@@ -36,11 +36,11 @@ function drift(id: string): number {
 }
 
 describe('rooted enemies', () => {
-  it('are the Fliegenpilz, the Bachforelle and the Specht', () => {
+  it('are the Fliegenpilz, the Bachforelle, the Specht and the Waldradl', () => {
     const rooted = ENEMY_DEFINITIONS.filter((definition) => definition.rooted === true)
       .map((definition) => definition.id)
       .sort();
-    expect(rooted).toEqual(['bachforelle', 'fliegenpilz', 'specht']);
+    expect(rooted).toEqual(['bachforelle', 'fliegenpilz', 'specht', 'waldradl']);
   });
 
   it('are not pushed by a shot, where the same body unrooted is', () => {

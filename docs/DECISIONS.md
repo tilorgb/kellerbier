@@ -6719,10 +6719,13 @@ the rotation sweeps in begin to close it. That is about how far a corner of the 
 wheel, so there is no ground in the room where it stops holding, but it is not a wide margin:
 slowing the pattern down widens it, speeding it up narrows it.
 
-**Starting numbers, tuned by feel.** Der Waldradler 80 health: four attacks at 6 DPS, six to eight at
-3 DPS against a player who only aims and shoots. Das Waldradl 32 health, a player in a gap kills it
-in about half the time of phase one. At peak the ring puts about 120 shots in the air against a
-pool of 5000.
+**Numbers scale to the player's power, not to a bare run.** The first tuning (80 and 32 health) was
+gone in seconds against a player with random upgrades and a Cola Weizen, so Der Waldradler is 300
+health and Das Waldradl 120, and `boss-pacing.test.ts` now measures four attacks at shot damage 1, 2,
+4 and 6 (3 to 18 DPS). A boss that is tuned for the bare run is too short by the time the player is
+carrying items; later floors' bosses start from this bar. Das Waldradl is `rooted`: no shot shoves it
+off the centre its gap pattern is read from. At peak the ring puts about 120 shots in the air
+against a pool of 5000.
 
 **Implementer defaults, confirmed by Tilo 2026-10-08:** the wheel rolls to the arena centre for a gap pattern to read
 fairly (one state, `roll`, to drop); it is `mid`-sized as a placeholder until its art is signed off;
