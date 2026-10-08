@@ -2,6 +2,7 @@ import type {
   BarkDefinition,
   InstrumentDefinition,
   NoteEvent,
+  SampleEdit,
   SampleRef,
   SfxDefinition,
   TrackDefinition,
@@ -219,6 +220,60 @@ export async function saveTrackSample(trackId: string, sample: SampleRef | null)
 /** Sets (or, passing `null`, clears) an SFX's `sample` field. */
 export async function saveSfxSample(sfxId: string, sample: SampleRef | null): Promise<void> {
   await postSample('sfx', sfxId, sample);
+}
+
+export interface SfxSampleBatchChange {
+  readonly sfxId: string;
+  readonly remove: boolean;
+  readonly edit?: SampleEdit;
+  /** An already-saved recording to point at; ignored when `file` is present. */
+  readonly assetId?: string;
+  readonly file?: {
+    readonly fileName: string;
+    readonly bytes: ArrayBuffer;
+    readonly generated?: GeneratedOrigin;
+  };
+}
+
+/**
+ * Applies many SFX sample changes in one request: the recordings are written,
+ * then `sfx.ts` once — so the game reloads once for the whole batch. Resolves
+ * to the files that were written (their server-side `assetId`/`fileName`).
+ */
+export async function applySfxSampleBatch(
+  changes: readonly SfxSampleBatchChange[],
+): Promise<{ sfxId: string; assetId: string; fileName: string }[]> {
+  const res = await fetch(`${API_PREFIX}/sfx-sample-batch`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      changes: changes.map((change) => ({
+        sfxId: change.sfxId,
+        remove: change.remove,
+        ...(change.edit === undefined ? {} : { edit: change.edit }),
+        ...(change.assetId === undefined ? {} : { assetId: change.assetId }),
+        ...(change.file === undefined
+          ? {}
+          : {
+              file: {
+                fileName: change.file.fileName,
+                dataBase64: arrayBufferToBase64(change.file.bytes),
+                ...(change.file.generated === undefined
+                  ? {}
+                  : { generated: change.file.generated }),
+              },
+            }),
+      })),
+    }),
+  });
+  const body = (await res.json().catch(() => ({}))) as {
+    error?: string;
+    written?: { sfxId: string; assetId: string; fileName: string }[];
+  };
+  if (!res.ok) {
+    throw new Error(body.error ?? `apply failed: ${String(res.status)}`);
+  }
+  return body.written ?? [];
 }
 
 /** Sets (or, passing `null`, clears) a bark's `sample` field. */

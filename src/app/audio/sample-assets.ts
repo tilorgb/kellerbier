@@ -31,9 +31,20 @@ const URL_BY_ASSET_ID: ReadonlyMap<string, string> = new Map(
   }),
 );
 
+/**
+ * Assets written after this page loaded (the audio editor's "Apply staged"),
+ * which `import.meta.glob` above cannot know about without a reload.
+ */
+const LATE_URL_BY_ASSET_ID = new Map<string, string>();
+
+/** Teaches the index a file that appeared on disk after page load (dev server only; the URL is root-relative). */
+export function registerLateAudioAsset(assetId: string, url: string): void {
+  LATE_URL_BY_ASSET_ID.set(assetId, url);
+}
+
 /** A recorded asset's playable URL, or `undefined` if `assetId` names no file under `assets/audio/`. */
 export function getAudioAssetUrl(assetId: string): string | undefined {
-  return URL_BY_ASSET_ID.get(assetId);
+  return LATE_URL_BY_ASSET_ID.get(assetId) ?? URL_BY_ASSET_ID.get(assetId);
 }
 
 /** Every recorded asset id currently on disk — the audio editor's upload panel uses this to warn before silently overwriting one. */
