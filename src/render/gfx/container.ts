@@ -57,7 +57,15 @@ export interface PointLike {
   y: number;
 }
 
-export type PointerEventName = 'pointerover' | 'pointerout' | 'pointertap' | 'pointerdown';
+export type PointerEventName =
+  | 'pointerover'
+  | 'pointerout'
+  | 'pointertap'
+  | 'pointerdown'
+  /** Sent to the pressed node for every move until release, even once the pointer has left its bounds — a drag. */
+  | 'pointermove'
+  /** Sent to the pressed node on release wherever the pointer is, before any `pointertap`. */
+  | 'pointerup';
 
 const SCRATCH_VECTOR = new Vector3();
 const SCRATCH_MATRIX = new Matrix4();

@@ -105,7 +105,7 @@ describe('key labels', () => {
 describe('prompts', () => {
   it('labels every binding on an action', () => {
     const bindings = createDefaultBindings();
-    expect(bindingLabels(bindings, 'fire', 'keyboard', 'keyboard')).toEqual(['Space']);
+    expect(bindingLabels(bindings, 'use', 'keyboard', 'keyboard')).toEqual(['Q']);
     expect(bindingLabels(bindings, 'bomb', 'gamepad', 'playstation')).toEqual(['L2', 'Square']);
   });
 

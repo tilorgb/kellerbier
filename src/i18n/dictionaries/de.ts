@@ -136,6 +136,17 @@ export const de: Record<DictKey, string> = {
   'ui.hud.purseEmpty': 'Geldbeutel leer — keine Kraft',
   'ui.hud.promilleUnlocked': '{meter} freigeschaltet',
   'ui.hud.promilleUnlockHint': 'Die Maß trifft härter. Zu viel, und du fällst um.',
+  'ui.promille.effectBonus': '+{damage} % Schaden, +{rate} % Feuerrate',
+  'ui.promille.effectNone': 'kein Bonus',
+  'ui.promille.effectVision': 'Tunnelblick',
+  'ui.promille.effectDrift': 'Bewegung driftet',
+  'ui.promille.effectWobble': 'Zielen wackelt',
+  'ui.promille.effectGloom': 'verschwommene Sicht',
+  'ui.promille.effectKnockdown': 'du fällst {seconds} s lang um, danach {kater}',
+  'ui.promille.katerLine':
+    '{name}: -{damage} % Schaden, -{speed} % Lauftempo für {seconds} s. Essen hilft.',
+  'ui.promille.toast': '{tier}: {effects}',
+  'ui.promille.panelFrom': 'ab {value}{unit}',
   'ui.hud.promilleUnlockHintNeutral': 'Aufladen trifft härter. Zu viel, und du gehst zu Boden.',
   'ui.hud.unbound': 'nicht belegt',
   'ui.hud.activeItemDormant': '{name} ({requirement})',
@@ -145,7 +156,9 @@ export const de: Record<DictKey, string> = {
   // --- Settings screen -----------------------------------------------------
   'ui.settings.toggle': 'Einstellungen',
   'ui.settings.title': 'Einstellungen',
-  'ui.settings.hint': 'Links/Rechts ändern   Enter bestätigen   Tab wechselt Reiter   Esc zurück',
+  'ui.settings.hint':
+    'Links/Rechts ändern   Enter bestätigen   Tab wechselt Reiter   Esc/Backspace zurück',
+  'ui.settings.back': 'Zurück',
 
   'ui.settings.tab.video': 'Video',
   'ui.settings.tab.audio': 'Audio',
@@ -198,7 +211,6 @@ export const de: Record<DictKey, string> = {
   'ui.settings.action.aimDown': 'Zielen: runter',
   'ui.settings.action.aimLeft': 'Zielen: links',
   'ui.settings.action.aimRight': 'Zielen: rechts',
-  'ui.settings.action.fire': 'Schießen',
   'ui.settings.action.bomb': 'Bombe',
   'ui.settings.action.use': 'Benutzen',
   'ui.settings.action.map': 'Karte',

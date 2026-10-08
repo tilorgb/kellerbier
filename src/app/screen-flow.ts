@@ -7,6 +7,7 @@ import { SettingsScreen } from '../render/settings-screen.js';
 import { TitleScreen } from '../render/title-screen.js';
 import { BUILD_ID } from './build-mode.js';
 import type { Locale } from '../i18n/locale.js';
+import { HoldRepeater } from './input/hold-repeat.js';
 import type { GamepadMenuNav } from './input/menu-nav.js';
 import type { GamepadSource } from './input/gamepad.js';
 import type { FixedTimestepLoop } from './loop.js';
@@ -93,6 +94,10 @@ export class ScreenFlowController {
   private collectionOrigin: 'title' | 'paused' = 'title';
   private width = 0;
   private height = 0;
+  /** Left/right as the keyboard holds them (arrows and A/D) — fed by keydown/keyup, read each frame by `stepHeldDirection`. */
+  private readonly keysHeld = { left: false, right: false };
+  private readonly repeater = new HoldRepeater();
+  private lastRepeatMs: number | null = null;
 
   constructor(deps: ScreenFlowControllerDeps) {
     this.deps = deps;
@@ -447,15 +452,18 @@ export class ScreenFlowController {
       case 'S':
         menuScreen?.moveFocus(1);
         break;
+      // Left and right are only recorded here: the step itself, and its
+      // auto-repeat with acceleration, come from `stepHeldDirection` once per
+      // frame, shared with the pad. The OS's own key repeat is ignored.
       case 'ArrowLeft':
       case 'a':
       case 'A':
-        this.adjustSettings(-1);
+        this.keysHeld.left = true;
         break;
       case 'ArrowRight':
       case 'd':
       case 'D':
-        this.adjustSettings(1);
+        this.keysHeld.right = true;
         break;
       case 'Tab':
         this.cycleSettingsTab(event.shiftKey ? -1 : 1);
@@ -472,7 +480,10 @@ export class ScreenFlowController {
       case ' ':
         menuScreen?.activate();
         break;
+      // Backspace closes too (#460): in fullscreen the browser spends the
+      // first Escape leaving it, so Escape alone was not a way out.
       case 'Escape':
+      case 'Backspace':
         if (this.flow.is('paused')) {
           this.closePause();
         } else if (this.flow.is('credits')) {
@@ -488,6 +499,52 @@ export class ScreenFlowController {
     }
     event.preventDefault();
     return true;
+  }
+
+  /** Clears a held left/right the moment its key comes up. */
+  handleKeyup(event: KeyboardEvent): void {
+    switch (event.key) {
+      case 'ArrowLeft':
+      case 'a':
+      case 'A':
+        this.keysHeld.left = false;
+        break;
+      case 'ArrowRight':
+      case 'd':
+      case 'D':
+        this.keysHeld.right = false;
+        break;
+      default:
+        break;
+    }
+  }
+
+  /** The window lost focus: whatever was held will never send its keyup. */
+  releaseKeys(): void {
+    this.keysHeld.left = false;
+    this.keysHeld.right = false;
+  }
+
+  /**
+   * Turns whatever left/right is held — by key or by pad — into steps, once
+   * per rendered frame: one on press, then auto-repeat that accelerates, but
+   * only where holding means something (a slider, the Collection's grid). A
+   * choice or toggle that spun at 20Hz under a held key would just be a
+   * flicker.
+   */
+  private stepHeldDirection(padLeft: boolean, padRight: boolean): void {
+    const now = performance.now();
+    const deltaMs = this.lastRepeatMs === null ? 0 : Math.min(250, now - this.lastRepeatMs);
+    this.lastRepeatMs = now;
+    const left = this.keysHeld.left || padLeft;
+    const right = this.keysHeld.right || padRight;
+    const direction = left === right ? 0 : left ? -1 : 1;
+    const repeats =
+      this.flow.is('collection') || (this.flow.is('settings') && this.settings.focusedSlider);
+    const steps = this.repeater.update(deltaMs, direction, repeats);
+    for (let remaining = Math.abs(steps); remaining > 0; remaining--) {
+      this.adjustSettings(steps < 0 ? -1 : 1);
+    }
   }
 
   /**
@@ -518,12 +575,7 @@ export class ScreenFlowController {
     if (edges.down) {
       menuScreen?.moveFocus(1);
     }
-    if (edges.left) {
-      this.adjustSettings(-1);
-    }
-    if (edges.right) {
-      this.adjustSettings(1);
-    }
+    this.stepHeldDirection(edges.leftDown, edges.rightDown);
     if (edges.prevTab) {
       this.cycleSettingsTab(-1);
     }

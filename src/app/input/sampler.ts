@@ -163,7 +163,6 @@ export class InputSampler {
   }
 
   private sampleButtons(gamepadDevice: boolean): void {
-    this.setButton(InputAction.Fire, 'fire', gamepadDevice);
     this.setButton(InputAction.Bomb, 'bomb', gamepadDevice);
     this.setButton(InputAction.Use, 'use', gamepadDevice);
     this.setButton(InputAction.Map, 'map', gamepadDevice);
@@ -215,7 +214,7 @@ export class InputSampler {
     this.sampleButtons(true);
 
     // A right stick pushed off centre is a fire command, the way twin-stick
-    // shooters have always worked. The bound fire button still works too.
+    // shooters have always worked.
     if (this.current.aimX !== 0 || this.current.aimY !== 0) {
       this.current.buttons |= 1 << InputAction.Fire;
     }

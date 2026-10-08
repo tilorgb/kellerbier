@@ -352,7 +352,7 @@ describe('Große Kellerassel boss (#36 follow-up)', () => {
     expect(reachedSpit).toBe(true);
   });
 
-  it('does not re-curl while advancing after a curl — only `crawl` listens for a hit', () => {
+  it('does not re-curl while rolling or advancing after a curl — only `crawl` listens for a hit', () => {
     const sim = emptySim();
     const player = sim.playerIndex;
     const enemy = place(
@@ -368,9 +368,16 @@ describe('Große Kellerassel boss (#36 follow-up)', () => {
     }
     expect(stateName(sim, enemy)).toBe('curl');
 
-    // Ride out the curl into `advance`, still firing continuously.
+    // Ride out the curl into the roll (#460) and the roll into `advance`,
+    // still firing continuously — neither listens for a hit, so neither can
+    // bounce back to `curl`.
     for (let tick = 0; tick < 60 && stateName(sim, enemy) === 'curl'; tick++) {
       sim.step(aiming(1, 0));
+    }
+    expect(stateName(sim, enemy)).toBe('roll');
+    for (let tick = 0; tick < 60 && stateName(sim, enemy) === 'roll'; tick++) {
+      sim.step(aiming(1, 0));
+      expect(stateName(sim, enemy)).not.toBe('curl');
     }
     expect(stateName(sim, enemy)).toBe('advance');
 

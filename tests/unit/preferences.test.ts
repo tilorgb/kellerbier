@@ -27,8 +27,8 @@ describe('createDefaultPreferences', () => {
   it('hands back an independent Bindings object each call', () => {
     const a = createDefaultPreferences();
     const b = createDefaultPreferences();
-    a.controls.bindings.keyboard.fire.push('KeyF');
-    expect(b.controls.bindings.keyboard.fire).toEqual(['Space']);
+    a.controls.bindings.keyboard.use.push('KeyF');
+    expect(b.controls.bindings.keyboard.use).toEqual(['KeyQ']);
   });
 });
 
@@ -89,9 +89,9 @@ describe('sanitizePreferences', () => {
 
     it('sanitises bindings action-by-action rather than discarding a good rebind', () => {
       const bindings = createDefaultBindings();
-      bindings.keyboard.fire = ['KeyF'];
+      bindings.keyboard.use = ['KeyF'];
       const sanitized = sanitizePreferences({ controls: { bindings } });
-      expect(sanitized.controls.bindings.keyboard.fire).toEqual(['KeyF']);
+      expect(sanitized.controls.bindings.keyboard.use).toEqual(['KeyF']);
     });
   });
 });

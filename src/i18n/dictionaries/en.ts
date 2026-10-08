@@ -146,6 +146,17 @@ export const en = {
   'ui.hud.purseEmpty': 'Purse empty — no power',
   'ui.hud.promilleUnlocked': '{meter} unlocked',
   'ui.hud.promilleUnlockHint': 'The Maß hits harder. Too much and you fall over.',
+  'ui.promille.effectBonus': '+{damage}% damage, +{rate}% fire rate',
+  'ui.promille.effectNone': 'no bonus',
+  'ui.promille.effectVision': 'tunnel vision',
+  'ui.promille.effectDrift': 'movement drifts',
+  'ui.promille.effectWobble': 'aim wobbles',
+  'ui.promille.effectGloom': 'blurred view',
+  'ui.promille.effectKnockdown': 'you fall over for {seconds}s, then {kater}',
+  'ui.promille.katerLine':
+    '{name}: -{damage}% damage, -{speed}% move speed for {seconds}s. Eating clears it.',
+  'ui.promille.toast': '{tier}: {effects}',
+  'ui.promille.panelFrom': 'from {value}{unit}',
   'ui.hud.promilleUnlockHintNeutral': 'Charging up hits harder. Too much and you go down.',
   'ui.hud.unbound': 'unbound',
   'ui.hud.activeItemDormant': '{name} ({requirement})',
@@ -158,7 +169,8 @@ export const en = {
   // The canvas settings screen's own footer (#321) — the DOM panel it
   // replaced needed no such line; a gamepad's controls aren't self-evident
   // the way a mouse over a `<input type="range">` is.
-  'ui.settings.hint': 'Left/Right change   Enter select   Tab switches tabs   Esc back',
+  'ui.settings.hint': 'Left/Right change   Enter select   Tab switches tabs   Esc/Backspace back',
+  'ui.settings.back': 'Back',
 
   'ui.settings.tab.video': 'Video',
   'ui.settings.tab.audio': 'Audio',
@@ -213,7 +225,6 @@ export const en = {
   'ui.settings.action.aimDown': 'Aim down',
   'ui.settings.action.aimLeft': 'Aim left',
   'ui.settings.action.aimRight': 'Aim right',
-  'ui.settings.action.fire': 'Fire',
   'ui.settings.action.bomb': 'Bomb',
   'ui.settings.action.use': 'Use',
   'ui.settings.action.map': 'Map',

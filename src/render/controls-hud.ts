@@ -6,21 +6,20 @@ import { uiText, UI_TEXT_HEIGHT } from './ui/text.js';
 const ROW_HEIGHT = UI_TEXT_HEIGHT + 1;
 
 /** The actions this readout lists, top to bottom. */
-export const CONTROLS_HUD_ACTIONS = ['fire', 'bomb', 'use', 'map'] as const;
+export const CONTROLS_HUD_ACTIONS = ['bomb', 'use', 'map'] as const;
 export type ControlsHudAction = (typeof CONTROLS_HUD_ACTIONS)[number];
 
 /** One button label per listed action, or `null` when nothing is bound. */
 export type ControlsHudPrompts = Readonly<Record<ControlsHudAction, string | null>>;
 
 const ACTION_KEYS = {
-  fire: 'ui.settings.action.fire',
   bomb: 'ui.settings.action.bomb',
   use: 'ui.settings.action.use',
   map: 'ui.settings.action.map',
 } as const;
 
 /**
- * A permanent "which button does what" list for Fire, Bomb, Use and Map,
+ * A permanent "which button does what" list for Bomb, Use and Map,
  * following the player's current bindings and active device.
  *
  * Like `ActiveItemHud`, the button labels come in through `sync` from

@@ -67,7 +67,6 @@ const ACTION_LABEL_KEYS: Readonly<Record<BindableAction, DictKey>> = {
   aimDown: 'ui.settings.action.aimDown',
   aimLeft: 'ui.settings.action.aimLeft',
   aimRight: 'ui.settings.action.aimRight',
-  fire: 'ui.settings.action.fire',
   bomb: 'ui.settings.action.bomb',
   use: 'ui.settings.action.use',
   map: 'ui.settings.action.map',

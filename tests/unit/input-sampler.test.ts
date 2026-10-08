@@ -256,11 +256,17 @@ describe('gamepad sampling', () => {
 
   it('reads the bound pad buttons, including analog triggers', () => {
     const { sampler, pad } = harness();
-    pad.pressed = [GamepadButton.RightTrigger, GamepadButton.Start];
+    pad.pressed = [GamepadButton.LeftTrigger, GamepadButton.Start];
 
     const frame = sampler.sample();
-    expect(isActionDown(frame, InputAction.Fire)).toBe(true);
+    expect(isActionDown(frame, InputAction.Bomb)).toBe(true);
     expect(isActionDown(frame, InputAction.Pause)).toBe(true);
+  });
+
+  it('does not fire from a trigger or Space alone — only aiming fires (#460)', () => {
+    const { sampler, pad } = harness();
+    pad.pressed = [GamepadButton.RightTrigger];
+    expect(isActionDown(sampler.sample(), InputAction.Fire)).toBe(false);
   });
 
   it('fires from the aim stick alone', () => {

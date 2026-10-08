@@ -49,6 +49,29 @@ import type { EnemyDefinition, SplitOnDeathBehaviour } from '../../sim/enemy/def
  * 4 — the floor itself — at 6 DPS, with room either side before the next
  * loop count boundary) while visibly trimming the fight.
  *
+ * **#460: an external playtester found it "a bit too light next to the big
+ * rooms before it".** Health was the wrong lever — it had already been
+ * tuned twice (#232 too short, #260 a drag) — so the fight kept its 160 and
+ * gained pressure instead, three ways:
+ *
+ * - **A rolling charge.** Coming out of `curl` the boss no longer just waddles
+ *   on: the curl now carries a telegraph (the shell is the warning, and the
+ *   ring grows through it), then `roll` runs it in a straight line at where
+ *   the player stood when the curl began — a locked aim, not a homing one, so
+ *   a sidestep beats it. Hits land on it while it rolls (only `curl` is
+ *   invulnerable), so the fight's damage budget is untouched: the roll replaces
+ *   the walk it used to spend that time on rather than adding to the loop.
+ * - **A wider, denser spit.** Five shots across 0.9 rad instead of three
+ *   across 0.5: the same aimed cone, but standing still in it now costs more
+ *   than strafing out of it.
+ * - **A shorter walk between attacks** (`advance` 110 -> 70 ticks, `crawl`'s
+ *   fallback 150 -> 110), which is most of what made the loop a lull.
+ *
+ * The loop is about as long as before (the roll takes the time the walk gave
+ * up), so `tests/content/boss-pacing.test.ts`'s four-spits-before-the-split
+ * floor is unchanged and still holds. Phase two's segments gained a spit of
+ * their own (see `kellerasselSegment`).
+ *
  * The 50% split threshold no longer means "phase two gets whatever's left
  * of an even budget" the way it did pre-#260: phase two's own tankiness is
  * tuned independently now (see `kellerasselSegment`'s own comment) rather
@@ -94,8 +117,9 @@ export const grosseKellerassel: EnemyDefinition = {
         // can curl it again, once per cycle, not once per shot.
         { to: 'curl', onHit: true },
         // A fallback ceiling for the (rare) case nothing ever hits it at
-        // all, so an untouched fight still eventually reaches `wind`.
-        { to: 'wind', after: 150 },
+        // all, so an untouched fight still eventually reaches `wind`. #460:
+        // was 150.
+        { to: 'wind', after: 110 },
       ],
     },
     {
@@ -103,12 +127,31 @@ export const grosseKellerassel: EnemyDefinition = {
       // Same shell, same lesson, just a bigger body: the window is unchanged
       // from the ordinary Kellerassel's own, because the fight this is
       // teaching is the same fight.
+      //
+      // #460: also the rolling charge's wind-up. The telegraph locks the aim
+      // at the player's position as the curl begins and the `roll` after it
+      // runs along that line, so the ring is the warning and the shell is the
+      // body language: it has pulled itself into a ball, and then it rolls.
       behaviours: [
         { behaviour: 'pause' },
         { behaviour: 'becomeInvulnerable', ticks: 40 },
+        { behaviour: 'telegraph', ticks: 40 },
         PHASE_TWO_SPLIT,
       ],
-      transitions: [{ to: 'advance', after: 40 }],
+      transitions: [{ to: 'roll', after: 40 }],
+    },
+    {
+      // #460: the second attack. A fast straight run along the aim the curl
+      // locked, ended by a wall or by running out of road. Not invulnerable
+      // and not curl-able — see the file comment for why the fight's length
+      // does not change — and its only hurt is the body itself
+      // (`contactDamage`), the same one a player already knows to keep out of.
+      name: 'roll',
+      behaviours: [{ behaviour: 'chargeAtPlayer', speed: 2.4 }, PHASE_TWO_SPLIT],
+      transitions: [
+        { to: 'advance', onBlocked: true },
+        { to: 'advance', after: 36 },
+      ],
     },
     {
       // Curl-immune, deliberately: no `onHit` transition at all, so a shot
@@ -117,7 +160,7 @@ export const grosseKellerassel: EnemyDefinition = {
       // continuously the player is firing.
       name: 'advance',
       behaviours: [{ behaviour: 'walkTowardPlayer', speed: 0.5 }, PHASE_TWO_SPLIT],
-      transitions: [{ to: 'wind', after: 110 }],
+      transitions: [{ to: 'wind', after: 70 }],
     },
     {
       name: 'wind',
@@ -130,8 +173,9 @@ export const grosseKellerassel: EnemyDefinition = {
         { behaviour: 'pause' },
         {
           behaviour: 'fireSpread',
-          shots: 3,
-          arc: 0.5,
+          // #460: was 3 shots across 0.5 rad.
+          shots: 5,
+          arc: 0.9,
           everyTicks: 60,
           // #229: narrow enough (a 0.5 rad cone, not a 360° ring like
           // `kellerasselSegment`'s siblings on this floor) that it reads as
@@ -159,9 +203,10 @@ export const grosseKellerassel: EnemyDefinition = {
 
 /**
  * What phase two actually is: three of these, spawned by `PHASE_TWO_SPLIT`.
- * Deliberately just the ordinary Kellerassel's own crawl/curl loop again,
- * slightly quicker — the lesson does not change, only that there are three
- * of them now and the player has to pick one.
+ * The ordinary Kellerassel's own crawl/curl loop again, slightly quicker, with
+ * a spit of its own on the end (#460) — the lesson does not change, only that
+ * there are three of them now, the player has to pick one, and the ones they
+ * are not shooting shoot back.
  */
 export const kellerasselSegment: EnemyDefinition = {
   id: 'kellerassel-segment',
@@ -186,12 +231,49 @@ export const kellerasselSegment: EnemyDefinition = {
     {
       name: 'crawl',
       behaviours: [{ behaviour: 'walkTowardPlayer', speed: 0.65 }],
-      transitions: [{ to: 'curl', onHit: true }],
+      transitions: [
+        { to: 'curl', onHit: true },
+        // #460: an untouched segment still spits, eventually — the same
+        // fallback ceiling the boss's own `crawl` has.
+        { to: 'wind', after: 140 },
+      ],
     },
     {
       name: 'curl',
       behaviours: [{ behaviour: 'pause' }, { behaviour: 'becomeInvulnerable', ticks: 30 }],
-      transitions: [{ to: 'crawl', after: 30 }],
+      // #460: out of the shell into `press`, not back to `crawl`. `crawl` has
+      // an `onHit`, so a player holding the trigger would re-curl a segment
+      // forever and never see it spit — the exact hole the boss's `advance`
+      // was added to close (#36), for the same reason.
+      transitions: [{ to: 'press', after: 30 }],
+    },
+    {
+      // Curl-immune, like the boss's `advance`: hits damage it, none re-curl it.
+      name: 'press',
+      behaviours: [{ behaviour: 'walkTowardPlayer', speed: 0.65 }],
+      transitions: [{ to: 'wind', after: 60 }],
+    },
+    {
+      name: 'wind',
+      behaviours: [{ behaviour: 'pause' }, { behaviour: 'telegraph', ticks: 20 }],
+      transitions: [{ to: 'spit', after: 20 }],
+    },
+    {
+      // One aimed spore — three segments make a three-way crossfire, but each
+      // shot alone is slower and smaller than the boss's cone.
+      name: 'spit',
+      behaviours: [
+        { behaviour: 'pause' },
+        {
+          behaviour: 'fireAtPlayer',
+          everyTicks: 60,
+          speed: 1.8,
+          damage: 1,
+          lifetimeTicks: 70,
+          art: 'spore',
+        },
+      ],
+      transitions: [{ to: 'crawl', after: 20 }],
     },
   ],
 };
