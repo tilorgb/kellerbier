@@ -51,6 +51,13 @@ export const ParticleKind = {
   Flash: 8,
   /** A poison cloud's mote (#401): the Spore art, drawn green so the cloud and its edge read as poison. */
   Miasma: 9,
+  /**
+   * Snow (#40): Floor 4's weather — the dust an avalanche throws ahead of
+   * itself, the streaks a gust blows across the room. The Dust art, drawn
+   * white by `ParticleView`, so a snow-covered floor's weather is its own
+   * kind (and layer) without a new sprite, the way Miasma rides on Spore.
+   */
+  Snow: 10,
 } as const;
 
 export type ParticleKindId = (typeof ParticleKind)[keyof typeof ParticleKind];
@@ -67,6 +74,7 @@ export const PARTICLE_KIND_IDS: readonly ParticleKindId[] = [
   ParticleKind.Glint,
   ParticleKind.Flash,
   ParticleKind.Miasma,
+  ParticleKind.Snow,
 ];
 
 export class ParticleStore {

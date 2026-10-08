@@ -83,6 +83,26 @@ export interface MovementTuning {
    */
   puddleSlip: number;
   /**
+   * Floor 4's glacier ice (#40): `puddleSlip`'s shape — `rate / (1 + slip)`
+   * — turned up until the floor all but stops answering the stick. The
+   * bible's "ice floors remove friction": letting go on ice keeps the
+   * player sliding for roughly `ticksToStop * (1 + iceSlip)`, and turning
+   * round takes as long. Dodging a sweep on ice means committing to where
+   * the slide ends, which is what The First Human's arena (#437) is built
+   * to test.
+   */
+  iceSlip: number;
+  /**
+   * The most the player's acceleration and braking may be divided by, all
+   * footing penalties together — Promille drift, a puddle, ice — as one
+   * divisor (#40's "cap the combined effect explicitly rather than letting
+   * it emerge"). Each penalty alone stays under it; it only bites where
+   * two compound, so a drunk player on ice is slower to answer than a sober
+   * one, but never uncontrollable: `(1 + maxDrift) * (1 + iceSlip)` is
+   * roughly 13 with the defaults, and this holds it well under that.
+   */
+  footingDivisorCap: number;
+  /**
    * Ticks a player has to keep walking into an open, unlocked door before the
    * room actually changes.
    *
@@ -623,6 +643,46 @@ export interface PoisonCloudTuning {
  * velocity, so it is exactly reproducible from a replay's input log and does
  * not depend on whether a wall or a crowd let the player actually move.
  */
+/**
+ * Floor 4's weather (#40, `sim/hazard/weather.ts`): the avalanche's and the
+ * wind gust's clocks and weight. Ticks at 60 a second; a room's interior is
+ * 208 × 112 room units, and the player's top speed 1.62 a tick, so crossing a
+ * single screen north to south takes ~70 ticks and east to west ~130.
+ */
+export interface WeatherTuning {
+  /** Ticks of calm before the rumble starts, counted from the room loading and from each slide ending. */
+  avalancheQuietTicks: number;
+  /**
+   * Ticks of rumble before the snow comes down. #40's acceptance criterion:
+   * "enough warning to cross a full room" — at least the ~130 ticks a
+   * single screen is wide, with a beat to read the warning first.
+   */
+  avalancheTelegraphTicks: number;
+  /** Ticks the front takes to cross its lane north to south. */
+  avalancheSweepTicks: number;
+  /** Half-Maß a body caught in the front loses. */
+  avalancheDamage: number;
+  /** Room units per tick a caught body is shoved south, through `addPush`. */
+  avalancheKnockback: number;
+  /** Room units downhill of a block's foot that still count as sheltered behind it. */
+  avalancheShelterDepth: number;
+  /** Ticks of calm before the wind picks up, counted from the room loading and from each gust ending. */
+  windQuietTicks: number;
+  /** Ticks of visible wind — snow streaking across — before it starts to push. */
+  windTelegraphTicks: number;
+  /** Ticks a gust blows for. */
+  windGustTicks: number;
+  /**
+   * Room units per tick of push on every body in the lane while a gust blows.
+   * `addPush` decays a push by `movement.pushDamping` a tick, so a steady lean
+   * settles at about 5.6× this per tick of drift — 0.18 is ~1 unit a tick,
+   * which a player walking into it (1.62) still beats, slowly.
+   */
+  windStrength: number;
+  /** Room units per tick added to each player shot's sideways velocity while a gust blows. */
+  windShotStrength: number;
+}
+
 export interface LatchTuning {
   /** Extra room units between two footprints that still count as touching, for a body to latch. */
   latchReach: number;
@@ -955,6 +1015,15 @@ export interface RoomGenTuning {
    */
   streamChance: number;
   /**
+   * Floor 4's weather (#40, `sim/hazard/weather.ts`): chance a generated
+   * room has an avalanche lane down the whole of it, and chance it has a
+   * wind lane across it — rolled separately, so a room can have both. 0
+   * everywhere but `alpen` (`content/floors/definition.ts`), and rolled only
+   * when above 0, so every other floor generates the rooms it always did.
+   */
+  avalancheChance: number;
+  windChance: number;
+  /**
    * Chance a `normal` slot is filled by a hand-authored room instead of a
    * generated one — the route for a one-off room design to pop up on a floor.
    * The authored pool is every template of the slot's own shape with no
@@ -1175,6 +1244,7 @@ export interface SimTuning {
   readonly pickup: PickupTuning;
   readonly projectileTags: ProjectileTagTuning;
   readonly poisonCloud: PoisonCloudTuning;
+  readonly weather: WeatherTuning;
   readonly latch: LatchTuning;
   readonly ordner: OrdnerTuning;
   readonly pits: PitTuning;
@@ -1215,6 +1285,18 @@ export const DEFAULT_MOVEMENT_TUNING: Readonly<MovementTuning> = {
   // strong enough to read as "the floor changed" the instant a player's
   // shoe touches one, short of throwing them somewhere they didn't aim.
   puddleSlip: 2,
+  // Eight times the run-up and the slide: a release at top speed carries
+  // ~90 ticks across the room, which is a whole glacier patch and then
+  // some. Strong enough that stepping onto ice mid-dodge is a mistake the
+  // player feels, short of turning the sheet into a conveyor belt — the top
+  // speed itself is untouched, so what changes is only how long a choice
+  // lasts.
+  iceSlip: 7,
+  // Ice alone divides by 8; ice under full Promille drift would be 12.8.
+  // Nine means the drunk-on-ice case is a step worse than the sober one and
+  // no more — tuned against `tests/unit/ice.test.ts`'s "still turns round
+  // inside the arena" bar rather than derived.
+  footingDivisorCap: 9,
   // A third of a second at 60 ticks/second — long enough to read as a couple
   // of steps into the frame, short enough that it never feels like the door
   // is refusing to open.
@@ -1522,6 +1604,30 @@ export const DEFAULT_POISON_CLOUD_TUNING: Readonly<PoisonCloudTuning> = {
   maxActive: 16,
 };
 
+export const DEFAULT_WEATHER_TUNING: Readonly<WeatherTuning> = {
+  // Eight seconds of calm: long enough that a room is fought, not only
+  // survived, between slides.
+  avalancheQuietTicks: 480,
+  // ~2.7 s. A single screen is ~130 ticks wide at top speed, so a player
+  // who starts crossing when the rumble starts is across with a second to
+  // spare — `tests/unit/weather.test.ts` holds this against `movement`.
+  avalancheTelegraphTicks: 165,
+  // The front crosses the screen in just over a second: faster than the
+  // player walks (~70 ticks for the same distance), so it cannot be outrun
+  // south — it is dodged by cover or by having crossed already.
+  avalancheSweepTicks: 66,
+  avalancheDamage: 1,
+  avalancheKnockback: 4.5,
+  // A body and a half downhill of a boulder: enough to stand behind one,
+  // not enough to hide a crowd.
+  avalancheShelterDepth: 22,
+  windQuietTicks: 360,
+  windTelegraphTicks: 60,
+  windGustTicks: 110,
+  windStrength: 0.18,
+  windShotStrength: 0.035,
+};
+
 export const DEFAULT_LATCH_TUNING: Readonly<LatchTuning> = {
   latchReach: 2,
   // Three quick flips (180 each) or about two laps of circling;
@@ -1605,6 +1711,8 @@ export const DEFAULT_ROOM_GEN_TUNING: Readonly<RoomGenTuning> = {
   maxProps: 5,
   hazardChance: 0.18,
   streamChance: 0,
+  avalancheChance: 0,
+  windChance: 0,
   authoredRoomChance: 0.12,
   darkRoomChance: 0,
 };
@@ -1744,6 +1852,7 @@ export function createTuning(): SimTuning {
     pickup: { ...DEFAULT_PICKUP_TUNING },
     projectileTags: { ...DEFAULT_PROJECTILE_TAG_TUNING },
     poisonCloud: { ...DEFAULT_POISON_CLOUD_TUNING },
+    weather: { ...DEFAULT_WEATHER_TUNING },
     latch: { ...DEFAULT_LATCH_TUNING },
     ordner: { ...DEFAULT_ORDNER_TUNING },
     pits: { ...DEFAULT_PIT_TUNING },

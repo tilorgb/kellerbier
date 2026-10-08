@@ -17,6 +17,9 @@ export const MAX_ROOM_PUDDLES = 16;
 /** Sight-blocking zones one room may hold. Same headroom as puddles. */
 export const MAX_ROOM_SIGHT_BLOCKS = 16;
 
+/** Ice sheets one room may hold (#40). Same headroom as puddles: a boss arena has two or three. */
+export const MAX_ROOM_ICE = 16;
+
 /**
  * Waldbach stream rects one room may hold (#403, #424). A stream is a chain of
  * tile-wide slices following its meander (`sim/room/stream-course.ts`) — up to
@@ -213,6 +216,20 @@ export class RoomGeometry {
   readonly sightBlocks = new Float32Array(MAX_ROOM_SIGHT_BLOCKS * BLOCK_STRIDE);
 
   private sightBlocks_ = 0;
+
+  /**
+   * Floor 4's glacier ice (#40): rectangles a body cannot get a grip on.
+   * Where a puddle *stretches* the player's acceleration and braking, ice
+   * all but removes them (`sim/systems/movement.ts`'s `iceSlip`, under the
+   * combined footing cap) — committing to a direction on ice means
+   * arriving wherever it points. Flat `[minX, minY, maxX, maxY]` runs, its
+   * own array for the reason `puddles` gives: the renderer draws a sheet of
+   * ice and a wet blob differently, and the footing numbers differ, so
+   * which is which has to survive compilation.
+   */
+  readonly ice = new Float32Array(MAX_ROOM_ICE * BLOCK_STRIDE);
+
+  private ice_ = 0;
 
   /**
    * Floor 3's Waldbach (#403): a forest stream meandering wall to wall
@@ -619,6 +636,40 @@ export class RoomGeometry {
         x <= (puddles[base + 2] ?? 0) &&
         y >= (puddles[base + 1] ?? 0) &&
         y <= (puddles[base + 3] ?? 0)
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** Adds an ice sheet (#40). Setup-time only, same contract as `addBlock`. */
+  addIce(minX: number, minY: number, maxX: number, maxY: number): void {
+    if (this.ice_ >= MAX_ROOM_ICE) {
+      throw new RangeError(`A room holds at most ${String(MAX_ROOM_ICE)} ice sheets`);
+    }
+    const base = this.ice_ * BLOCK_STRIDE;
+    this.ice[base] = minX;
+    this.ice[base + 1] = minY;
+    this.ice[base + 2] = maxX;
+    this.ice[base + 3] = maxY;
+    this.ice_ += 1;
+  }
+
+  get iceCount(): number {
+    return this.ice_;
+  }
+
+  /** True when `(x, y)` stands on ice. A body's centre, like `isOnPuddle`: footing is where the feet are. */
+  isOnIce(x: number, y: number): boolean {
+    const ice = this.ice;
+    for (let sheet = 0; sheet < this.ice_; sheet++) {
+      const base = sheet * BLOCK_STRIDE;
+      if (
+        x >= (ice[base] ?? 0) &&
+        x <= (ice[base + 2] ?? 0) &&
+        y >= (ice[base + 1] ?? 0) &&
+        y <= (ice[base + 3] ?? 0)
       ) {
         return true;
       }

@@ -6,6 +6,7 @@ import {
   Group,
   LineBasicMaterial,
   LineLoop,
+  LineSegments,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
@@ -574,6 +575,103 @@ function puddleBlobGeometry(
   geometry.setAttribute('position', new BufferAttribute(positions, 3));
   geometry.setAttribute('normal', new BufferAttribute(normals, 3));
   geometry.setIndex(index);
+  return geometry;
+}
+
+/**
+ * Floor 4's glacier ice (#40). A sheet, not a blob: a flat polygon with its
+ * corners cut back, pale and glassy — the one bright thing on a floor whose
+ * tiles sit on the quiet background tier (`tools/art/tiers.mjs`), so a patch
+ * reads as "the floor changed here" from the doorway. The cracks are a few
+ * seeded hairlines across it, drawn with the same material a puddle's rim is.
+ */
+const ICE_FILL = 0xd1dce4;
+const ICE_CRACK_MATERIAL = new LineBasicMaterial({
+  color: 0x9eaeb9,
+  transparent: true,
+  opacity: 0.7,
+});
+/** How far an ice sheet's corner is cut back, as a fraction of its shorter side. */
+const ICE_CORNER = 0.22;
+
+/** `(x, z)` corners of an octagonal sheet `halfWidth` × `halfHeight`, clockwise from the top-left cut. */
+function iceSheetOutline(halfWidth: number, halfHeight: number): number[] {
+  const cut = Math.min(halfWidth, halfHeight) * 2 * ICE_CORNER;
+  return [
+    -halfWidth + cut,
+    -halfHeight,
+    halfWidth - cut,
+    -halfHeight,
+    halfWidth,
+    -halfHeight + cut,
+    halfWidth,
+    halfHeight - cut,
+    halfWidth - cut,
+    halfHeight,
+    -halfWidth + cut,
+    halfHeight,
+    -halfWidth,
+    halfHeight - cut,
+    -halfWidth,
+    -halfHeight + cut,
+  ];
+}
+
+/** The sheet's fill: a fan from the centre over `iceSheetOutline`, normals up, like `puddleBlobGeometry`. */
+function iceSheetGeometry(halfWidth: number, halfHeight: number): BufferGeometry {
+  const outline = iceSheetOutline(halfWidth, halfHeight);
+  const n = outline.length / 2;
+  const geometry = new BufferGeometry();
+  const positions = new Float32Array((n + 1) * 3);
+  const normals = new Float32Array((n + 1) * 3);
+  for (let v = 0; v < n + 1; v++) {
+    normals[v * 3 + 1] = 1;
+  }
+  for (let i = 0; i < n; i++) {
+    positions[(i + 1) * 3] = outline[i * 2] ?? 0;
+    positions[(i + 1) * 3 + 2] = outline[i * 2 + 1] ?? 0;
+  }
+  const index: number[] = [];
+  for (let i = 0; i < n; i++) {
+    index.push(0, ((i + 1) % n) + 1, i + 1);
+  }
+  geometry.setAttribute('position', new BufferAttribute(positions, 3));
+  geometry.setAttribute('normal', new BufferAttribute(normals, 3));
+  geometry.setIndex(index);
+  return geometry;
+}
+
+/**
+ * Three seeded cracks across a sheet, each a short zig-zag of three segments,
+ * as a `LineSegments` position buffer. Seeded off the sheet's own corner so a
+ * sheet is the same every visit and two sheets differ.
+ */
+function iceCrackGeometry(halfWidth: number, halfHeight: number, seed: number): BufferGeometry {
+  const cracks = 3;
+  const positions = new Float32Array(cracks * 3 * 2 * 3);
+  let at = 0;
+  for (let c = 0; c < cracks; c++) {
+    const phase = seed + c * 2.4;
+    let x = Math.sin(phase * 1.3) * halfWidth * 0.55;
+    let z = Math.cos(phase * 0.7) * halfHeight * 0.55;
+    const dx = Math.cos(phase) * halfWidth * 0.3;
+    const dz = Math.sin(phase) * halfHeight * 0.3;
+    for (let k = 0; k < 3; k++) {
+      const jog = (k % 2 === 0 ? 1 : -1) * 0.18;
+      const nx = x + dx + dz * jog;
+      const nz = z + dz - dx * jog;
+      positions[at++] = x;
+      positions[at++] = 0;
+      positions[at++] = z;
+      positions[at++] = nx;
+      positions[at++] = 0;
+      positions[at++] = nz;
+      x = nx;
+      z = nz;
+    }
+  }
+  const geometry = new BufferGeometry();
+  geometry.setAttribute('position', new BufferAttribute(positions, 3));
   return geometry;
 }
 
@@ -1480,6 +1578,34 @@ export class Scenery {
       const rim = new LineLoop(puddleBlobGeometry(halfW, halfH, seed, true), PUDDLE_RIM_MATERIAL);
       rim.position.set(cx, DECAL_HEIGHT + 0.02, cz);
       this.group.add(rim);
+    }
+    // Floor 4's glacier ice (#40): a pale, glassy sheet with hairline cracks,
+    // the brightest thing on the floor on purpose — see `ICE_FILL`.
+    if (room.iceCount > 0) {
+      const iceMaterial = this.materials.flatMaterial(ICE_FILL, {
+        roughness: 0.08,
+        metalness: 0.45,
+        transparent: true,
+        opacity: 0.8,
+      });
+      for (let i = 0; i < room.iceCount; i++) {
+        const minX = room.ice[i * BLOCK_STRIDE] ?? 0;
+        const minY = room.ice[i * BLOCK_STRIDE + 1] ?? 0;
+        const maxX = room.ice[i * BLOCK_STRIDE + 2] ?? 0;
+        const maxY = room.ice[i * BLOCK_STRIDE + 3] ?? 0;
+        const cx = (minX + maxX) / 2;
+        const cz = (minY + maxY) / 2;
+        const halfW = (maxX - minX) / 2;
+        const halfH = (maxY - minY) / 2;
+        const seed = ((minX * 11 + minY * 5) % 628) / 100;
+        const sheet = new Mesh(iceSheetGeometry(halfW, halfH), iceMaterial);
+        sheet.position.set(cx, DECAL_HEIGHT, cz);
+        sheet.receiveShadow = true;
+        this.group.add(sheet);
+        const cracks = new LineSegments(iceCrackGeometry(halfW, halfH, seed), ICE_CRACK_MATERIAL);
+        cracks.position.set(cx, DECAL_HEIGHT + 0.02, cz);
+        this.group.add(cracks);
+      }
     }
     // Floor 3's Waldbach (#403): flowing water edge to edge, banked wherever
     // it meets dry floor — see `stream.ts`.

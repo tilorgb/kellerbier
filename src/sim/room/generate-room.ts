@@ -263,6 +263,15 @@ const HAZARD_BY_TAG: Readonly<Record<string, string>> = {
 const STREAM_HAZARD = 'waldbach';
 
 /**
+ * Floor 4's room-wide weather (#40, `sim/hazard/weather.ts`): a lane the
+ * size of a whole cell, one per real cell, laid by `placeWeather` on its own
+ * chance (`RoomGenTuning.avalancheChance` / `windChance`) on top of whatever
+ * patch the room rolled. Walk-through, so neither can wall off a route.
+ */
+const AVALANCHE_HAZARD = 'avalanche';
+const WIND_HAZARD = 'wind';
+
+/**
  * Every prop / hazard type the generator can place, deduped — the seam
  * `tests/content/sprite-coverage.test.ts` reads so a generated room's scenery
  * is held to the same "has art" bar as an authored one.
@@ -272,6 +281,9 @@ export const GENERATED_SCENERY_TYPES: readonly string[] = [
     ...Object.values(PROP_KINDS).flat(),
     ...FALLBACK_PROP_KINDS,
     ...Object.values(HAZARD_BY_TAG),
+    STREAM_HAZARD,
+    AVALANCHE_HAZARD,
+    WIND_HAZARD,
   ]),
 ];
 
@@ -1272,6 +1284,46 @@ function placeStream(ctx: RoomGenContext, grid: RoomGrid, type: string): PlacedH
 }
 
 /**
+ * Floor 4's weather (#40): rolls an avalanche lane and a wind lane for the
+ * room, each covering every real cell whole — the slide comes down the whole
+ * screen, the gust blows across all of it. Rolled only where a floor turns
+ * them on (`avalancheChance`/`windChance` above 0), so every other floor
+ * draws the numbers it always did; both may land on one room, which is the
+ * Alps being the Alps.
+ */
+function placeWeather(ctx: RoomGenContext, grid: RoomGrid, params: RoomGenTuning): PlacedHazard[] {
+  const lanes: PlacedHazard[] = [];
+  const avalanche = params.avalancheChance > 0 && ctx.rng.chance(params.avalancheChance);
+  const wind = params.windChance > 0 && ctx.rng.chance(params.windChance);
+  if (!avalanche && !wind) {
+    return lanes;
+  }
+  const gridCols = grid.cols / ROOM_COLUMNS;
+  const gridRows = grid.rows / ROOM_ROWS;
+  for (let cellRow = 0; cellRow < gridRows; cellRow++) {
+    for (let cellCol = 0; cellCol < gridCols; cellCol++) {
+      if (grid.voidMask[tileIndex(grid, cellCol * ROOM_COLUMNS, cellRow * ROOM_ROWS)] === true) {
+        continue;
+      }
+      // The cell's interior: inside its one-tile wall on every side.
+      const lane = {
+        col: cellCol * ROOM_COLUMNS + 1,
+        row: cellRow * ROOM_ROWS + 1,
+        cols: ROOM_COLUMNS - 2,
+        rows: ROOM_ROWS - 2,
+      };
+      if (avalanche) {
+        lanes.push({ ...lane, type: AVALANCHE_HAZARD });
+      }
+      if (wind) {
+        lanes.push({ ...lane, type: WIND_HAZARD });
+      }
+    }
+  }
+  return lanes;
+}
+
+/**
  * True when tile `(col, row)` could lie under the stream one of `hazards`'
  * lanes becomes: in the lane, or within the reach of its meander either side
  * (`sim/room/stream-course.ts`, #424).
@@ -1505,7 +1557,10 @@ export function generateRoom(
   const pickup = spec.rng.chance(params.pickupChance)
     ? pickPickup(spec.rng.shuffle(candidates.slice()), enemies)
     : null;
-  const hazards = placeHazards(spec, layout.grid, layout.distance, approaches, 1, params);
+  const hazards = [
+    ...placeHazards(spec, layout.grid, layout.distance, approaches, 1, params),
+    ...placeWeather(spec, layout.grid, params),
+  ];
   const props = placeProps(
     spec,
     layout.grid,
@@ -1597,7 +1652,10 @@ export function generateMultiCellRoom(
   const pickup = spec.rng.chance(params.pickupChance)
     ? pickPickup(spec.rng.shuffle(candidates.slice()), enemies)
     : null;
-  const hazards = placeHazards(spec, layout.grid, layout.distance, approaches, cellCount, params);
+  const hazards = [
+    ...placeHazards(spec, layout.grid, layout.distance, approaches, cellCount, params),
+    ...placeWeather(spec, layout.grid, params),
+  ];
   const props = placeProps(
     spec,
     layout.grid,

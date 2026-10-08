@@ -279,6 +279,11 @@ export const PROP_TILE_NAMES: Readonly<Record<string, string | null>> = {
   puddle: null,
   // Floor 3's stream (#403), drawn from the room's `streams` by `Scenery`.
   waldbach: null,
+  // Floor 4's glacier ice (#40), drawn from the room's `ice` by `Scenery`.
+  ice: null,
+  // Floor 4's weather lanes (#40), drawn from `sim.weather` by `WeatherView`.
+  avalanche: null,
+  wind: null,
   trellis: null,
   'hop-trellis': null,
   // A shop's Losbrunnen anchor (#238) — drawn by `MachineView`, the same

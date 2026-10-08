@@ -413,7 +413,7 @@ export const bar: Record<DictKey, string> = {
     'Gschoss kreisn zruck zu dia und treffn af da Rückreis no amoi. Gschossgschwindigkeit -25%',
   'items.gugelhupf.flavourText':
     'A Kuacha mit am Loch drin, dass a durchgart. Des is da gonze Trick.',
-  'items.haferlschuh.description': 'Lauftempo +15%, immun gegn rutschade Pfütz’n',
+  'items.haferlschuh.description': 'Lauftempo +15%, immun gegn rutschade Pfütz’n und Eis',
   'items.haferlschuh.flavourText':
     'Jeda Nagl vo Hand ineighaut, vo iagendwem, der des vui z’earnst nimmt.',
   'items.hendlgeruch.description': 'Zieht dauand entfernte Gegna zu dia her',

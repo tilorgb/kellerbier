@@ -3,7 +3,8 @@ import type { ItemDefinition } from '../../sim/item/definition.js';
 /**
  * Haferlschuh — a nailed leather shoe, built for grip. Flat move speed, plus
  * the traction the seed text always meant: immune to Floor 1's slick-puddle
- * hazard (#35).
+ * hazard (#35) — and, since a nailed sole grips a glacier as well as a wet
+ * floor, to Floor 4's ice (#40); both read `puddleImmuneTicks`.
  *
  * `onTick` refreshes the immunity every tick it is held rather than granting
  * it once on pickup — the same "held near, not owned once" shape

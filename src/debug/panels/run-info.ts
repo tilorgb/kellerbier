@@ -9,10 +9,36 @@ import {
   createLabel,
   createPanelFrame,
 } from '../panel.js';
+import type { GameSim } from '../../sim/game/sim.js';
 import { encodeSeed } from '../../sim/rng/seed.js';
 import { TICKS_PER_SECOND } from '../../sim/time.js';
 
 const LINES = 5;
+
+const PHASE_LETTER = ['-', 'T', 'A'] as const;
+
+/**
+ * Floor 4's weather (#40), when the room has any: the avalanche's and the
+ * gust's phase (`-` quiet, `T` telegraph, `A` active) and ticks into it, so
+ * the slide's clock can be read off the overlay while its tuning is dragged.
+ */
+function weatherReadout(sim: GameSim): string {
+  const weather = sim.weather;
+  if (!weather.active) {
+    return '';
+  }
+  const parts: string[] = [];
+  if (weather.avalanche.count > 0) {
+    const lanes = weather.avalanche;
+    parts.push(`av ${PHASE_LETTER[lanes.phase]}${String(lanes.ticks)}`);
+  }
+  if (weather.wind.count > 0) {
+    const lanes = weather.wind;
+    const arrow = weather.windDirection > 0 ? '>' : '<';
+    parts.push(`wind ${PHASE_LETTER[lanes.phase]}${String(lanes.ticks)}${arrow}`);
+  }
+  return `  ${parts.join('  ')}`;
+}
 const PANEL_HEIGHT = PANEL_CONTENT_TOP + LINES * PANEL_LINE_HEIGHT + PANEL_PADDING;
 
 /**
@@ -72,7 +98,10 @@ export class RunInfoPanel implements DebugPanel {
     // reproducible has been naming the wrong room for every run since. Both
     // fields have been on `GameSim` the whole time.
     this.setLine(2, `floor  ${String(sim.currentFloor)}  room ${sim.roomId}`);
-    this.setLine(3, `hitstop ${String(sim.hitstop)}  shake ${sim.shake.toFixed(2)}`);
+    this.setLine(
+      3,
+      `hitstop ${String(sim.hitstop)}  shake ${sim.shake.toFixed(2)}${weatherReadout(sim)}`,
+    );
     this.setLine(4, 'O hide  H hitboxes  G grid  F dark  C copy');
 
     this.summary =

@@ -33,11 +33,13 @@ describe('buildParticleArt', () => {
     // is the one deliberate exception: a poison cloud's mote wears the Spore
     // art, tinted green by `ParticleView`, so that it is its own kind (and
     // layer) without a new sprite.
-    const drawn = PARTICLE_KIND_IDS.filter((kind) => kind !== ParticleKind.Miasma).map(
-      (kind) => art.byKind[kind],
-    );
+    // Snow (#40) is the same arrangement over Dust, tinted white.
+    const drawn = PARTICLE_KIND_IDS.filter(
+      (kind) => kind !== ParticleKind.Miasma && kind !== ParticleKind.Snow,
+    ).map((kind) => art.byKind[kind]);
     expect(new Set(drawn).size).toBe(drawn.length);
     expect(art.byKind[ParticleKind.Miasma]).toBe(art.byKind[ParticleKind.Spore]);
+    expect(art.byKind[ParticleKind.Snow]).toBe(art.byKind[ParticleKind.Dust]);
   });
 
   it('falls back for a kind whose sprite is not loaded, rather than drawing nothing', () => {

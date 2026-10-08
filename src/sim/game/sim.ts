@@ -160,6 +160,7 @@ import { stepPickups } from '../systems/pickup.js';
 import { stepPromille } from '../systems/promille.js';
 import { CloudStore } from '../hazard/cloud-store.js';
 import { spawnPoisonCloud, stepClouds } from '../hazard/clouds.js';
+import { WeatherStore, stepWeather } from '../hazard/weather.js';
 import { stepProjectiles, stepShooting } from '../systems/shooting.js';
 import {
   STATUS_BURN,
@@ -928,6 +929,14 @@ export class GameSim {
   readonly clouds = new CloudStore();
 
   /**
+   * Floor 4's room-wide weather (#40): the avalanche and wind-gust lanes a
+   * room's template authored, and their clocks. Loaded per room by
+   * `applyCompiledRoom`, stepped by `stepWeather`. Public for the same
+   * reason `clouds` is: a system and the renderer read it, not a method.
+   */
+  readonly weather: WeatherStore;
+
+  /**
    * The player's shake-off state (#406, `sim/systems/latch.ts`), as plain
    * typed arrays so the frame loop never boxes a number: the last non-zero
    * movement direction each tick's turn is measured from, the turning meter
@@ -1009,7 +1018,8 @@ export class GameSim {
   private doorCrossingTicks = 0;
 
   /**
-   * Ticks left of immunity to Floor 1's slick-puddle hazard (#35) —
+   * Ticks left of immunity to Floor 1's slick-puddle hazard (#35) and to
+   * Floor 4's ice (#40) —
    * Haferlschuh's grip, refreshed every tick it is held
    * (`content/items/haferlschuh.ts`'s `onTick`) rather than granted once, the
    * same "held near, not owned once" shape `slowEnemiesNear`'s aura already
@@ -1769,6 +1779,7 @@ export class GameSim {
     resetItemDispatchState();
     this.seed = options.seed ?? 0;
     this.world = new World({ capacity: options.capacity ?? DEFAULT_CAPACITY });
+    this.weather = new WeatherStore(options.capacity ?? DEFAULT_CAPACITY);
     this.random = createRunRandom(this.seed);
     this.room = options.room ?? createPlaygroundRoom();
     this.tuning = createTuning();
@@ -2751,6 +2762,7 @@ export class GameSim {
         enemySpawns: suppressContent ? [] : compiled.enemySpawns,
         pickupSpawns: suppressContent ? [] : compiled.pickupSpawns,
         decorativeProps: compiled.decorativeProps,
+        hazards: compiled.hazards,
       },
       floor,
       direction,
@@ -2913,6 +2925,8 @@ export class GameSim {
         enemySpawns: compiled.enemySpawns,
         pickupSpawns: compiled.pickupSpawns,
         decorativeProps: compiled.decorativeProps,
+        // A staircase (#112) has no weather: it is a flight of steps between rooms.
+        hazards: [],
       },
       floor,
       direction,
@@ -3006,6 +3020,14 @@ export class GameSim {
         readonly type: string;
         readonly rotation?: number;
       }[];
+      /** The room's authored hazard rects — only the weather lanes (#40) are read here; everything else is already in `geometry`. */
+      readonly hazards: readonly {
+        readonly x: number;
+        readonly y: number;
+        readonly width: number;
+        readonly height: number;
+        readonly type: string;
+      }[];
     },
     floor: number,
     direction: RoomDirection | null,
@@ -3064,6 +3086,7 @@ export class GameSim {
     this.plankRefusedUntil.fill(0);
     this.roomSpecialRole = compiled.specialRole;
     this.roomDarkValue = compiled.dark;
+    this.weather.load(compiled.hazards);
     this.bossExitDoor =
       compiled.specialRole === 'boss' ? nextFloorExitDoor(compiled.geometry, compiled.doors) : null;
     this.roomTemplateLoaded = true;
@@ -3503,6 +3526,7 @@ export class GameSim {
     this.world.flush();
     this.projectiles.clear();
     this.clouds.clear();
+    this.weather.clear();
     this.latchHeading.fill(0);
     this.latchTurn.fill(0);
     // The bouncer comes through the door with Alois, not from where he stood.
@@ -6747,6 +6771,10 @@ export class GameSim {
     // Clouds first, so a body standing in one has poison refreshed before
     // this tick's poison countdown reads it (#401).
     stepClouds(this);
+    // Floor 4's avalanche and wind (#40): a shove on the bodies before they
+    // integrate, so a gust leans on this tick's movement — the same reason
+    // the status pass runs here.
+    stepWeather(this);
     stepStatusEffects(this);
     // A curse's per-tick effect (Föhn's wind).
     stepCurse(this);

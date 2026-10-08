@@ -416,7 +416,7 @@ export const en = {
     'Shots ring back to you, hitting again on the way. Shot Speed -25%',
   'items.gugelhupf.flavourText':
     'A cake with a hole in it, so it cooks through. That is the whole trick.',
-  'items.haferlschuh.description': 'Move Speed +15%, immune to slick puddles',
+  'items.haferlschuh.description': 'Move Speed +15%, immune to slick puddles and ice',
   'items.haferlschuh.flavourText':
     'Every nail hand-driven by someone who takes this far too seriously.',
   'items.hendlgeruch.description': 'Constantly pulls distant enemies toward you',

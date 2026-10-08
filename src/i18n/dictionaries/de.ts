@@ -414,7 +414,7 @@ export const de: Record<DictKey, string> = {
     'Schüsse kreisen zurück und treffen auf dem Rückweg erneut. Schussgeschwindigkeit -25%',
   'items.gugelhupf.flavourText':
     'Ein Kuchen mit Loch in der Mitte, damit er durchgart. Das ist der ganze Trick.',
-  'items.haferlschuh.description': 'Lauftempo +15%, immun gegen rutschige Pfützen',
+  'items.haferlschuh.description': 'Lauftempo +15%, immun gegen rutschige Pfützen und Eis',
   'items.haferlschuh.flavourText':
     'Jeder Nagel von Hand geschlagen, von jemandem, der das viel zu ernst nimmt.',
   'items.hendlgeruch.description': 'Zieht ständig entfernte Gegner zu dir heran',
