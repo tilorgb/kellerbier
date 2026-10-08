@@ -20,6 +20,7 @@ export const NEUTRAL_PALETTE = [
   0x1c1a1f, // near-black shade
   0x8a8a8a, // mid grey
   0xffffff, // hit-flash white (see src/render/placeholder-art.ts's entityFlash)
+  0xe8c28c, // skin (docs/DECISIONS.md #123): a person has to be drawn on any floor
 ];
 
 export const FLOOR_PALETTES = {

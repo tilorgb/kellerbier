@@ -48,6 +48,9 @@ export const WALD = {
   5: 0xcfefb2, // trout: belly
   6: 0x1b2f1a, // trout: dark spots
   7: 0x5c5c5c, // boar: coat
+  k: 0xe8c28c, // skin (the Waldradler, #412)
+  j: 0x316d3d, // helmet
+  J: 0x408c4e, // helmet, lit; jersey; the Waldradl's hub
 };
 
 {
@@ -657,12 +660,9 @@ export const spechtLanded = single('specht-landed', [
 ]);
 
 // ================================================== WALDRADLER / WALDRADL
-// PLACEHOLDERS (#412, #413). The boss designs are not signed off yet: the key
-// art is still being picked (`CLAUDE.md`, "New pixel art needs sign-off"), and
-// the real sprites are rigs cut from it (`docs/BOSS_SPRITES.md`). These two are
-// plain pictograms — a rider on a bike, a wheel — drawn from code so the fight
-// is playable and the art-coverage tests have something to hold. They are
-// meant to be deleted, not iterated on.
+// Sprites of the Floor 3 boss (#412, #413): the rider and his bike's wheel. Neither is a
+// rig cut from key art (`docs/BOSS_SPRITES.md`) yet — these are signed-off
+// block-art stand-ins that settle the design, the colours and the canvas size.
 
 /** A blank character grid, `w` x `h`, for the little drawing helpers below. */
 function canvas(w, h) {
@@ -705,16 +705,6 @@ function line(g, x0, y0, x1, y1, ch, thickness = 1) {
   }
 }
 
-/** Nearest-neighbour fit of a drawing onto a smaller `w` x `h` grid. */
-function fit(g, w, h) {
-  return Array.from({ length: h }, (_, y) =>
-    Array.from(
-      { length: w },
-      (_, x) => g[Math.floor((y * g.length) / h)][Math.floor((x * g[0].length) / w)],
-    ),
-  );
-}
-
 /** Ink round everything painted: the outline the signed-off sprites carry in their grids. */
 function inked(g) {
   const out = g.map((row) => [...row]);
@@ -728,73 +718,102 @@ function inked(g) {
   return out.map((row) => row.join(''));
 }
 
-// 76x60, facing left like all character art: a rider in luminous green lycra
-// crouched over a bike, the front wheel on the left.
+/** `n` spokes through the centre, at even angles over a half turn. */
+function spokes(g, cx, cy, r, n, ch) {
+  for (let a = 0; a < n; a++) {
+    const t = (a * Math.PI) / n;
+    line(
+      g,
+      cx - Math.cos(t) * r,
+      cy - Math.sin(t) * r,
+      cx + Math.cos(t) * r,
+      cy + Math.sin(t) * r,
+      ch,
+    );
+  }
+}
+
+/** A bike wheel: tyre, rim, spokes, hub. */
+function bikeWheel(g, cx, cy, r, thickness, spokeCount) {
+  disc(g, cx, cy, r, 'b');
+  ring(g, cx, cy, r, thickness, 'a');
+  spokes(g, cx, cy, r - thickness - 1, spokeCount, 'S');
+  disc(g, cx, cy, 2, 'w');
+}
+
+// 62x48, facing left like all character art. A chibi trail biker — signed off
+// by Tilo as option A of three (big round head, eyes with a glint, green
+// helmet, small body on a small bike): readable as a guy, which the first two
+// rounds (a neon lycra figure, then a pink one) were not. Standing 24 room
+// units tall next to Alois's 16.
 const waldradler = single(
   'waldradler',
   (() => {
-    const g = canvas(76, 60);
-    const frontX = 17;
-    const rearX = 59;
-    const wheelY = 43;
-    for (const cx of [frontX, rearX]) {
-      disc(g, cx, wheelY, 15, 'b');
-      ring(g, cx, wheelY, 15, 3, 'a');
-      for (const a of [0, 1, 2, 3]) {
-        const t = (a * Math.PI) / 4;
-        line(
-          g,
-          cx - Math.cos(t) * 11,
-          wheelY - Math.sin(t) * 11,
-          cx + Math.cos(t) * 11,
-          wheelY + Math.sin(t) * 11,
-          'S',
-        );
-      }
-      disc(g, cx, wheelY, 2, 'w');
+    const g = canvas(62, 48);
+    const frontX = 12;
+    const rearX = 48;
+    const wheelY = 36;
+    const radius = 11;
+    bikeWheel(g, frontX, wheelY, radius, 3, 4);
+    bikeWheel(g, rearX, wheelY, radius, 3, 4);
+    // Frame, fork, bars and saddle.
+    const seatX = frontX + (rearX - frontX) * 0.45;
+    const seatY = wheelY - radius - 2;
+    const barsX = frontX + 3;
+    const barsY = wheelY - radius - 3;
+    const crankX = frontX + (rearX - frontX) * 0.5;
+    line(g, frontX, wheelY, barsX + 1, barsY + 2, 'c', 2);
+    line(g, seatX, seatY, barsX + 3, barsY, 'c', 2);
+    line(g, seatX, seatY, rearX, wheelY, 'c', 2);
+    line(g, seatX, seatY, crankX, wheelY, 'c', 2);
+    line(g, crankX, wheelY, rearX, wheelY, 'c', 2);
+    line(g, barsX - 1, barsY, barsX + 4, barsY, 'a', 2);
+    line(g, seatX - 3, seatY, seatX + 3, seatY, 'a', 2);
+    // Rider: small body, arm to the bars, short leg to the pedal.
+    const headX = 24;
+    const headY = 14;
+    const hipX = seatX + 2;
+    const hipY = seatY - 1;
+    line(g, hipX, hipY, headX + 4, headY + 7, 'J', 6);
+    line(g, headX + 2, headY + 8, barsX + 3, barsY, 'k', 2);
+    line(g, hipX, hipY, crankX, wheelY - 5, 'c', 4);
+    line(g, crankX, wheelY - 5, crankX + 1, wheelY - 1, 'k', 2);
+    line(g, crankX - 1, wheelY, crankX + 2, wheelY, 'a', 2);
+    // Head: round, skin, two dark eyes with a glint, a small mouth.
+    disc(g, headX, headY, 7, 'k');
+    for (const eyeX of [headX - 4, headX + 1]) {
+      line(g, eyeX, headY - 1, eyeX, headY + 1, 'a', 2);
+      plot(g, eyeX, headY - 1, 'w');
     }
-    // Frame and fork.
-    line(g, frontX, wheelY, 30, 28, 'c', 2);
-    line(g, 30, 28, 48, 30, 'c', 2);
-    line(g, 48, 30, rearX, wheelY, 'c', 2);
-    line(g, 30, 28, 44, 42, 'c', 2);
-    line(g, 44, 42, rearX, wheelY, 'c', 2);
-    line(g, 26, 22, 31, 29, 'c', 2);
-    // Rider: hips over the saddle, torso leaning on the bars, arms, head.
-    line(g, 48, 30, 38, 17, 'G', 7);
-    line(g, 40, 17, 28, 19, 'H', 3);
-    line(g, 28, 19, 25, 24, 'H', 3);
-    line(g, 48, 32, 44, 43, 'v', 4);
-    disc(g, 30, 13, 6, 'w');
-    disc(g, 30, 10, 6, 'V');
-    line(g, 25, 14, 31, 14, 'a', 2);
-    // Drawn on a roomier grid, then fitted to the largest character canvas
-    // (`tools/art/spec.mjs`: 64x48) — a boss strip is the real art's job.
-    return inked(fit(g, 60, 48));
+    line(g, headX - 3, headY + 4, headX - 1, headY + 4, 'a');
+    // Green helmet over the top, with a pale visor edge.
+    for (let dx = -8; dx <= 8; dx++) {
+      for (let dy = -9; dy <= -3; dy++) {
+        if (dx * dx + (dy + 1) ** 2 * 1.1 <= 68) plot(g, headX + dx, headY + dy, 'j');
+      }
+    }
+    line(g, headX - 9, headY - 3, headX + 8, headY - 3, 'J', 1);
+    line(g, headX - 8, headY - 4, headX - 4, headY - 4, 'w');
+    return inked(g);
   })(),
 );
 
-// 44x44: one wheel standing upright with a scrap of neon lycra caught in it.
+// 40x40: one chunky bike wheel standing upright (signed off, option B): a wide
+// grey tyre, a dense spoke star and reflector studs round the rim, a green hub.
 const waldradl = single(
   'waldradl',
   (() => {
-    const g = canvas(44, 44);
-    disc(g, 22, 22, 20, 'b');
-    ring(g, 22, 22, 20, 4, 'a');
-    for (const a of [0, 1, 2, 3, 4, 5]) {
+    const g = canvas(40, 40);
+    disc(g, 20, 20, 18, 'b');
+    ring(g, 20, 20, 18, 5, 'c');
+    ring(g, 20, 20, 13, 1, 'a');
+    spokes(g, 20, 20, 13, 8, 'S');
+    disc(g, 20, 20, 4, 'J');
+    disc(g, 20, 20, 2, 'w');
+    for (let a = 0; a < 12; a++) {
       const t = (a * Math.PI) / 6;
-      line(
-        g,
-        22 - Math.cos(t) * 16,
-        22 - Math.sin(t) * 16,
-        22 + Math.cos(t) * 16,
-        22 + Math.sin(t) * 16,
-        'S',
-      );
+      disc(g, 20 + Math.cos(t) * 16, 20 + Math.sin(t) * 16, 1, 'S');
     }
-    disc(g, 22, 22, 3, 'G');
-    line(g, 22, 22, 34, 12, 'H', 3);
-    line(g, 22, 22, 12, 32, 'V', 2);
     return inked(g);
   })(),
 );

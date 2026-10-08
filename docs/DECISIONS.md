@@ -6727,6 +6727,13 @@ carrying items; later floors' bosses start from this bar. Das Waldradl is `roote
 off the centre its gap pattern is read from. At peak the ring puts about 120 shots in the air
 against a pool of 5000.
 
+**The boss art is signed-off block art, and skin is a neutral.** Tilo picked the chibi rider (a big
+round head with eyes, green helmet, small body on a small bike, 62x48) and the chunky-tyre wheel
+(40x40) from three rounds of candidates, the first two rejected as reading as an alien or a racing
+driver. They are stand-ins for the rig that `docs/BOSS_SPRITES.md` describes, not a replacement for
+it. A person needs a skin tone on any floor, so `0xe8c28c` joined `NEUTRAL_PALETTE` instead of
+being borrowed from Floor 3's five.
+
 **Implementer defaults, confirmed by Tilo 2026-10-08:** the wheel rolls to the arena centre for a gap pattern to read
 fairly (one state, `roll`, to drop); it is `mid`-sized as a placeholder until its art is signed off;
 the wind-up bell rings on both of the Waldradler's attacks, since the audio seam is per enemy, not
