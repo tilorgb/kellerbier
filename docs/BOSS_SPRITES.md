@@ -199,3 +199,10 @@ checks the two agree and that the committed PNG is byte-identical to a fresh bui
   not.
 - **Rotating a whole frozen raster for a death pose** (#100): reads as the same picture tipped
   over. Fold the legs and drop the body instead.
+
+## 9. Floor 3's boss (Waldradler, Waldradl)
+
+Both are rigs in `tools/art/authoring/bosses-wald.mjs`, on their old 62×48 and 40×40 canvases. Two things differ from the Kellerassel and Stier:
+
+- **Key art in the game's own look.** The bench's painterly default fights the sprite; pass `styleSuffix` to `keyart-bench`'s `/generate` for flat cel shading with a thick outline on a plain grey ground, and the sprite and the postcard then match. The Waldradler's art is also his intro plate; the Radl's is rig source only and has no plate.
+- **`key: 'sat'`** keeps only saturated source pixels (`keyThreshold` 0-1), for a green frame on grey ground where luminance cannot separate them. A tyre or a wheel's spokes that are painted too finely to survive 38 px are rebuilt as flat strokes (`stroke`), not cut.
