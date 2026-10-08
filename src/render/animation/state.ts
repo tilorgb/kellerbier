@@ -114,6 +114,51 @@ export function resolveFacing(sim: GameSim, index: number): number {
 }
 
 /**
+ * Which of a creature's three strips (`<id>-side`, `-south`, `-north`, the
+ * filing Alois has — `assets/sprites/README.md`, "Directions") its heading
+ * calls for. `None` is "no opinion, hold the last one".
+ */
+export const HeadingTurn = {
+  None: 0,
+  SideLeft: 1,
+  SideRight: 2,
+  South: 3,
+  North: 4,
+} as const;
+
+/**
+ * `HeadingTurn` for the way a body is going: the tick's own movement first
+ * (that is what the player sees), the enemy's stored heading second, so a
+ * body held still by hit-stun or a telegraph keeps facing where it was
+ * headed. Mostly-horizontal motion is a side view (mirrored for right,
+ * `AUTHORED_FACING` being left); otherwise south (toward the camera, +y) or
+ * north.
+ *
+ * @hot — one call per directional body per frame.
+ */
+export function resolveHeadingTurn(sim: GameSim, index: number): number {
+  const dx = sim.positionX(index) - sim.previousX(index);
+  const dy = sim.positionY(index) - sim.previousY(index);
+  if (Math.abs(dx) > MOVE_EPSILON_PX || Math.abs(dy) > MOVE_EPSILON_PX) {
+    return turnOf(dx, dy);
+  }
+  const base = index * ENEMY_MOTION_STRIDE;
+  const headingX = sim.enemyMotion.data[base] ?? 0;
+  const headingY = sim.enemyMotion.data[base + 1] ?? 0;
+  if (Math.abs(headingX) > FACING_EPSILON || Math.abs(headingY) > FACING_EPSILON) {
+    return turnOf(headingX, headingY);
+  }
+  return HeadingTurn.None;
+}
+
+function turnOf(x: number, y: number): number {
+  if (Math.abs(x) >= Math.abs(y)) {
+    return x < 0 ? HeadingTurn.SideLeft : HeadingTurn.SideRight;
+  }
+  return y > 0 ? HeadingTurn.South : HeadingTurn.North;
+}
+
+/**
  * `resolveFacing` for a `facing: 'mirror'` body with no animation strip (the
  * Boar, the Kaninchen): the tick's own movement first, exactly as there;
  * standing still, toward what it would attack now (`enemyAimAngle` — the

@@ -38,6 +38,8 @@ import {
   AUTHORED_FACING,
   resolveAnimationState,
   resolveFacing,
+  resolveHeadingTurn,
+  HeadingTurn,
   resolveMirrorFacing,
 } from './animation/state.js';
 import type { AnimatedSpriteSet } from './floor-art.js';
@@ -158,6 +160,13 @@ const FLY_BACK_SUFFIX = '-fly-back';
 export const FLIGHT_STRIP_SUFFIXES = [FLY_SIDE_SUFFIX, FLY_FRONT_SUFFIX, FLY_BACK_SUFFIX] as const;
 /** The sprite-name suffix of a flier's dive, head down at the floor (#411). */
 const DIVE_SUFFIX = '-dive';
+/**
+ * Sprite-name suffixes of a creature's per-heading strips (#438): `-side`
+ * (authored facing left, mirrored for right), `-south` (toward the camera)
+ * and `-north` (away) — the filing Alois has. Any of the three may be
+ * missing; a heading without a strip draws the creature's own art.
+ */
+export const DIRECTION_STRIP_SUFFIXES = ['-side', '-south', '-north'] as const;
 /** Milliseconds per wing-beat frame. */
 const FLAP_FRAME_MS = 90;
 /** Wing-beat frame order over a strip of up, level, down: up, level, down, level. */
@@ -201,6 +210,13 @@ export function mixColor(a: number, b: number, t: number): number {
   return (r << 16) | (g << 8) | bl;
 }
 
+/** A creature's per-heading strips (#438); any may be missing. */
+interface HeadingStrips {
+  readonly side: AnimatedSpriteSet | undefined;
+  readonly south: AnimatedSpriteSet | undefined;
+  readonly north: AnimatedSpriteSet | undefined;
+}
+
 export interface EntityArt {
   /** What a body with no art of its own draws as. */
   readonly fallback: Texture;
@@ -241,6 +257,13 @@ export class EntityView {
   private readonly flyFrontArt: readonly (AnimatedSpriteSet | undefined)[];
   private readonly flyBackArt: readonly (AnimatedSpriteSet | undefined)[];
   private readonly diveArt: readonly (Texture | undefined)[];
+  /**
+   * Per enemy definition index, the per-heading strips (#438) — `undefined`
+   * for a creature with none, which draws exactly as it always has.
+   */
+  private readonly headingArt: readonly (HeadingStrips | undefined)[];
+  private readonly heldTurn: number[] = [];
+  private readonly heldTurnEntity: number[] = [];
   private readonly bodies: Billboard[] = [];
   /** Per body slot, 1 when that body is an enemy telegraphing this frame (#404's see-through pass). */
   private readonly bodyTelegraphing: number[] = [];
@@ -314,6 +337,14 @@ export class EntityView {
     this.flyBackArt = sim.enemies.all.map(
       (enemy) => art.enemyAnimation[`${enemy.id}${FLY_BACK_SUFFIX}`],
     );
+    this.headingArt = sim.enemies.all.map((enemy) => {
+      const side = art.enemyAnimation[`${enemy.id}-side`];
+      const south = art.enemyAnimation[`${enemy.id}-south`];
+      const north = art.enemyAnimation[`${enemy.id}-north`];
+      return side === undefined && south === undefined && north === undefined
+        ? undefined
+        : { side, south, north };
+    });
     this.diveArt = sim.enemies.all.map((enemy) => art.enemyArt[`${enemy.id}${DIVE_SUFFIX}`]);
     this.bombTexture = art.pickupArt[BOMB_PICKUP_ID];
     this.pickupTints = sim.pickups.all.map((definition) => definition.tint);
@@ -345,6 +376,24 @@ export class EntityView {
       this.heldFacing[index] = fallback;
     }
     return this.heldFacing[index] ?? fallback;
+  }
+
+  /**
+   * A directional body's `HeadingTurn` this frame (#438), held while it has
+   * no heading; a fresh one faces the camera.
+   */
+  private turnOf(index: number): number {
+    const entity = this.sim.world.entityAt(index);
+    if (this.heldTurnEntity[index] !== entity) {
+      this.heldTurnEntity[index] = entity;
+      this.heldTurn[index] = HeadingTurn.South;
+    }
+    const turn = resolveHeadingTurn(this.sim, index);
+    if (turn === HeadingTurn.None) {
+      return this.heldTurn[index] ?? HeadingTurn.South;
+    }
+    this.heldTurn[index] = turn;
+    return turn;
   }
 
   /** A `facing: 'mirror'` body's left/right facing this frame (`resolveMirrorFacing`, held). */
@@ -490,7 +539,28 @@ export class EntityView {
       const bossTelegraph = isBoss ? telegraph : 0;
       const bombFuse = isBomb ? bombFuseProgress(sim, index) : 0;
 
-      const animation = enemyId === null ? undefined : this.art.enemyAnimation[enemyId];
+      let animation = enemyId === null ? undefined : this.art.enemyAnimation[enemyId];
+      // A creature with per-heading strips (#438) draws the one for the way
+      // it is going — side-on (mirrored for right), toward the camera or
+      // away — and its own art for a heading it has no strip for.
+      const headings =
+        compiledEnemy === null
+          ? undefined
+          : this.headingArt[sim.enemy.data[index * ENEMY_STRIDE] ?? 0];
+      let headingFacing = 0;
+      if (headings !== undefined) {
+        const turn = this.turnOf(index);
+        const strip =
+          turn === HeadingTurn.South
+            ? headings.south
+            : turn === HeadingTurn.North
+              ? headings.north
+              : headings.side;
+        if (strip !== undefined) {
+          animation = strip;
+          headingFacing = turn === HeadingTurn.SideRight ? 1 : AUTHORED_FACING;
+        }
+      }
       let animationFrame = 0;
       let mirror = 1;
       if (animation !== undefined) {
@@ -502,9 +572,11 @@ export class EntityView {
           // A `facing: 'mirror'` body turns to the player while it stands
           // still (the Boar, the Kaninchen); every other strip faces its
           // stored heading, as it always has.
-          compiledEnemy?.facing === EnemyFacing.Mirror
-            ? resolveMirrorFacing(sim, index)
-            : resolveFacing(sim, index),
+          headingFacing !== 0
+            ? headingFacing
+            : compiledEnemy?.facing === EnemyFacing.Mirror
+              ? resolveMirrorFacing(sim, index)
+              : resolveFacing(sim, index),
           x,
           y,
           footprint,
