@@ -1,6 +1,10 @@
-import { fetchSfx, saveSfx, saveSfxSample } from './api-client.js';
+import { applySfxSampleBatch, fetchSfx, saveSfx, saveSfxSample } from './api-client.js';
+import { holdEditorReload } from './reload-guard.js';
 import { createSampleEditorPanel } from './sample-editor-panel.js';
+import { createSfxStagingStore } from './sfx-staging.js';
+import type { SfxStagingStore } from './sfx-staging.js';
 import { suggestSfxPrompt } from './sfx-prompt.js';
+import { registerLateAudioAsset } from '../app/audio/sample-assets.js';
 import { getAudioContext, getMasterGain, resumeAudioContext } from '../app/audio/context.js';
 import { playSfxSound } from '../app/audio/synth.js';
 import type { InstrumentDefinition, InstrumentFilter, SfxDefinition } from '../app/audio/types.js';
@@ -33,9 +37,37 @@ export function createSfxPanel(
   root.appendChild(heading);
 
   let sfxList: SfxDefinition[] = [];
+  /** Filled once IndexedDB has answered; until then nothing is staged. */
+  let staging: SfxStagingStore | null = null;
+
+  const onlySynthInput = checkboxField('Only synth (missing a recording)', root);
+  const onlySynthLabel = onlySynthInput.parentElement?.firstChild as Text;
+  onlySynthInput.checked = readOnlySynthSetting();
+  onlySynthInput.addEventListener('change', () => {
+    writeOnlySynthSetting(onlySynthInput.checked);
+    renderOptions(idSelect.value);
+    selectionChanged();
+  });
 
   const idSelect = document.createElement('select');
   root.appendChild(idSelect);
+
+  const stagedRow = document.createElement('div');
+  stagedRow.className = 'kb-audio-button-row';
+  stagedRow.style.marginBottom = '8px';
+  root.appendChild(stagedRow);
+  const applyButton = document.createElement('button');
+  applyButton.type = 'button';
+  stagedRow.appendChild(applyButton);
+  const discardButton = document.createElement('button');
+  discardButton.type = 'button';
+  discardButton.textContent = 'Discard staged';
+  stagedRow.appendChild(discardButton);
+  const stagedHint = document.createElement('p');
+  stagedHint.className = 'kb-audio-hint';
+  stagedHint.textContent =
+    'Recordings are staged here, not written to the repo, so the game does not reload while you work. "Apply staged" writes them all at once.';
+  root.appendChild(stagedHint);
 
   const descriptionLabel = document.createElement('label');
   descriptionLabel.textContent = 'Description';
@@ -115,6 +147,30 @@ export function createSfxPanel(
       await saveSfxSample(idSelect.value, sample);
       sfxList = await fetchSfx();
     },
+    staging: {
+      getStaged: () => staging?.get(idSelect.value),
+      stage: async (change) => {
+        if (staging === null) {
+          throw new Error('Staging storage is not ready yet — try again in a moment.');
+        }
+        const sfxId = idSelect.value;
+        const previousIndex = visibleSfx().findIndex((sfx) => sfx.id === sfxId);
+        await staging.put({ sfxId, ...change });
+        // With the filter on, the sound just staged leaves the list: land on the one after it.
+        const remaining = visibleSfx();
+        const stillListed = remaining.some((sfx) => sfx.id === sfxId);
+        renderOptions(
+          stillListed
+            ? sfxId
+            : (remaining[Math.min(Math.max(previousIndex, 0), remaining.length - 1)]?.id ?? sfxId),
+        );
+        selectionChanged();
+        setStatus(
+          `Staged "${sfxId}" — ${String(staging.all().length)} waiting for "Apply staged".`,
+          false,
+        );
+      },
+    },
     generate: {
       suggestedName: () => idSelect.value,
       suggestedPrompt: () => {
@@ -172,27 +228,111 @@ export function createSfxPanel(
     pitchJitter.value = String(def.pitchJitterCents ?? 0);
   }
 
-  function renderOptions(): void {
-    idSelect.innerHTML = '';
-    for (const sfx of sfxList) {
-      const option = document.createElement('option');
-      option.value = sfx.id;
-      option.textContent = `${sfx.id} — ${sfx.description}`;
-      idSelect.appendChild(option);
-    }
-    const first = sfxList[0];
-    if (first !== undefined) {
-      loadIntoForm(first);
-    }
+  /** Whether the game will play a recording for this sound once staged changes are applied. */
+  function hasRecording(sfx: SfxDefinition): boolean {
+    const staged = staging?.get(sfx.id);
+    return staged === undefined ? sfx.sample !== undefined : !staged.remove;
   }
 
-  idSelect.addEventListener('change', () => {
+  function visibleSfx(): SfxDefinition[] {
+    return onlySynthInput.checked ? sfxList.filter((sfx) => !hasRecording(sfx)) : sfxList;
+  }
+
+  /** Fills the dropdown from the current list/filter, selecting `selectId` if it is listed (else the first entry). */
+  function renderOptions(selectId?: string): void {
+    idSelect.innerHTML = '';
+    const visible = visibleSfx();
+    for (const sfx of visible) {
+      const option = document.createElement('option');
+      option.value = sfx.id;
+      const marks = staging?.get(sfx.id) === undefined ? '' : '● staged · ';
+      option.textContent = `${marks}${sfx.id} — ${sfx.description}`;
+      idSelect.appendChild(option);
+    }
+    if (selectId !== undefined && visible.some((sfx) => sfx.id === selectId)) {
+      idSelect.value = selectId;
+    }
+    updateStagedControls();
+  }
+
+  /** Loads whatever the dropdown now points at into the form and the sample editor. */
+  function selectionChanged(): void {
     const sfx = sfxList.find((s) => s.id === idSelect.value);
     if (sfx !== undefined) {
       loadIntoForm(sfx);
     }
     sampleEditor.refresh();
+  }
+
+  function updateStagedControls(): void {
+    const count = staging?.all().length ?? 0;
+    applyButton.textContent = `Apply ${String(count)} staged`;
+    applyButton.disabled = count === 0;
+    discardButton.disabled = count === 0;
+    const synthLeft = sfxList.filter((sfx) => !hasRecording(sfx)).length;
+    onlySynthLabel.data = `Only synth (missing a recording) — ${String(synthLeft)} of ${String(sfxList.length)}`;
+  }
+
+  idSelect.addEventListener('change', selectionChanged);
+
+  applyButton.addEventListener('click', () => {
+    void applyStaged();
   });
+  discardButton.addEventListener('click', () => {
+    void discardStaged();
+  });
+
+  async function applyStaged(): Promise<void> {
+    if (staging === null || staging.all().length === 0) {
+      return;
+    }
+    const items = staging.all();
+    applyButton.disabled = true;
+    setStatus(`Writing ${String(items.length)} change(s)…`, false);
+    // The game reloads when the files land; keep this page alive through it.
+    holdEditorReload();
+    try {
+      const written = await applySfxSampleBatch(
+        items.map((item) => ({
+          sfxId: item.sfxId,
+          remove: item.remove,
+          ...(item.edit === undefined ? {} : { edit: item.edit }),
+          ...(item.assetId === undefined ? {} : { assetId: item.assetId }),
+          ...(item.file === undefined
+            ? {}
+            : {
+                file: {
+                  fileName: item.file.name,
+                  bytes: item.file.bytes,
+                  ...(item.file.generated === undefined ? {} : { generated: item.file.generated }),
+                },
+              }),
+        })),
+      );
+      const stamp = String(Date.now());
+      for (const file of written) {
+        registerLateAudioAsset(file.assetId, `/assets/audio/${file.fileName}?v=${stamp}`);
+      }
+      await staging.clear();
+      sfxList = await fetchSfx();
+      renderOptions(idSelect.value);
+      selectionChanged();
+      setStatus(`Applied ${String(items.length)} change(s) — the game reloads once.`, false);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error), true);
+      updateStagedControls();
+    }
+  }
+
+  async function discardStaged(): Promise<void> {
+    if (staging === null) {
+      return;
+    }
+    await staging.clear();
+    renderOptions(idSelect.value);
+    selectionChanged();
+    setStatus('Staged changes discarded.', false);
+  }
 
   previewButton.addEventListener('click', () => {
     resumeAudioContext();
@@ -215,8 +355,7 @@ export function createSfxPanel(
     try {
       await saveSfx(sfxId, currentDefinition());
       sfxList = await fetchSfx();
-      renderOptions();
-      idSelect.value = sfxId;
+      renderOptions(sfxId);
       setStatus(`Saved "${sfxId}".`, false);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error), true);
@@ -231,10 +370,10 @@ export function createSfxPanel(
   }
 
   void (async () => {
-    sfxList = await fetchSfx();
+    [sfxList, staging] = await Promise.all([fetchSfx(), createSfxStagingStore()]);
     renderOptions();
     // The sample editor built its prompt before the list existed.
-    sampleEditor.refresh();
+    selectionChanged();
   })();
 
   return {
@@ -243,6 +382,24 @@ export function createSfxPanel(
       root.remove();
     },
   };
+}
+
+const ONLY_SYNTH_KEY = 'kellerbier.audio-editor.sfx-only-synth';
+
+function readOnlySynthSetting(): boolean {
+  try {
+    return localStorage.getItem(ONLY_SYNTH_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeOnlySynthSetting(value: boolean): void {
+  try {
+    localStorage.setItem(ONLY_SYNTH_KEY, value ? '1' : '0');
+  } catch {
+    /* a per-viewer convenience only */
+  }
 }
 
 function checkboxField(labelText: string, host: HTMLElement): HTMLInputElement {

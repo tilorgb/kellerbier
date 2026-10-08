@@ -4,6 +4,17 @@ import { getAudioAssetUrl } from '../app/audio/sample-assets.js';
 import type { InstrumentFilter, SampleEdit, SampleRef } from '../app/audio/types.js';
 import { base64ToArrayBuffer, generateSoundTakes, uploadAudioAsset } from './api-client.js';
 import type { GeneratedOrigin } from './api-client.js';
+import type { StagedFile, StagedSample } from './sfx-staging.js';
+
+/** What the sample editor hands to `opts.staging.stage`. */
+export type StagedChange =
+  | { readonly remove: true }
+  | {
+      readonly remove: false;
+      readonly edit: SampleEdit;
+      readonly file?: StagedFile;
+      readonly assetId?: string;
+    };
 
 export interface SampleEditorPanelHandle {
   /** Re-reads `getCurrentSample()` and reloads the form/waveform from it — call after switching which track/SFX/bark is selected, or after a save elsewhere changes it. */
@@ -49,6 +60,16 @@ export function createSampleEditorPanel(
     saveSample: (sample: SampleRef | null) => Promise<void>;
     /** Present to offer "Generate"; `suggestedName` is the asset name a chosen take is saved under when "Save as" is left empty. */
     generate?: { suggestedName: () => string; suggestedPrompt: () => string };
+    /**
+     * Present to stage instead of save: "Upload & use recording" and "Remove"
+     * hand their result to `stage` (nothing is written to the repo, so the
+     * dev server has nothing to reload on), and `getStaged` is what a
+     * selected sound shows and previews while a change is waiting.
+     */
+    staging?: {
+      getStaged: () => StagedSample | undefined;
+      stage: (change: StagedChange) => Promise<void>;
+    };
   },
 ): SampleEditorPanelHandle {
   const root = document.createElement('div');
@@ -351,6 +372,31 @@ export function createSampleEditorPanel(
     saveButton.disabled = true;
     setStatus('Saving…', false);
     try {
+      if (opts.staging !== undefined) {
+        const staged = opts.staging.getStaged();
+        const edit = currentEdit();
+        if (pendingFile !== null) {
+          const file: StagedFile = {
+            name: pendingFile.name,
+            bytes: await pendingFile.arrayBuffer(),
+            ...(pendingGenerated === null ? {} : { generated: pendingGenerated }),
+          };
+          await opts.staging.stage({ remove: false, edit, file });
+        } else if (staged?.file !== undefined) {
+          await opts.staging.stage({ remove: false, edit, file: staged.file });
+        } else {
+          const assetId = staged?.assetId ?? opts.getCurrentSample()?.assetId;
+          if (assetId === undefined) {
+            setStatus('Pick a file first.', true);
+            return;
+          }
+          await opts.staging.stage({ remove: false, edit, assetId });
+        }
+        pendingFile = null;
+        pendingGenerated = null;
+        // The host re-selects and calls `refresh()`, which reports the staged state.
+        return;
+      }
       let assetId: string;
       if (pendingFile !== null) {
         const bytes = await pendingFile.arrayBuffer();
@@ -383,6 +429,10 @@ export function createSampleEditorPanel(
     removeButton.disabled = true;
     setStatus('Removing…', false);
     try {
+      if (opts.staging !== undefined) {
+        await opts.staging.stage({ remove: true });
+        return;
+      }
       await opts.saveSample(null);
       currentBuffer = null;
       pendingFile = null;
@@ -412,7 +462,38 @@ export function createSampleEditorPanel(
       generator.nameInput.value = '';
       generator.promptInput.value = opts.generate?.suggestedPrompt() ?? '';
     }
-    const sample = opts.getCurrentSample();
+    const staged = opts.staging?.getStaged();
+    if (staged !== undefined && !staged.remove && staged.edit !== undefined) {
+      const ctx = getAudioContext();
+      const { edit } = staged;
+      trimStartInput.value = String(edit.trimStartSeconds);
+      trimEndInput.value = String(edit.trimEndSeconds);
+      fadeInInput.value = String(edit.fadeInSeconds);
+      fadeOutInput.value = String(edit.fadeOutSeconds);
+      gainInput.value = String(edit.gain);
+      filterTypeSelect.value = edit.filter?.type ?? NONE;
+      filterFreqInput.value = String(edit.filter?.frequencyHz ?? 1000);
+      filterQInput.value = String(edit.filter?.q ?? 1);
+      try {
+        if (staged.file !== undefined && ctx !== null) {
+          currentBuffer = await decodeArrayBuffer(ctx, staged.file.bytes.slice(0));
+        } else {
+          const url = staged.assetId === undefined ? undefined : getAudioAssetUrl(staged.assetId);
+          currentBuffer =
+            url === undefined || ctx === null
+              ? null
+              : await decodeArrayBuffer(ctx, await (await fetch(url)).arrayBuffer());
+        }
+      } catch (error) {
+        currentBuffer = null;
+        setStatus(error instanceof Error ? error.message : String(error), true);
+        return;
+      }
+      drawWaveform();
+      setStatus('Staged — plays in the game after "Apply staged".', false);
+      return;
+    }
+    const sample = staged?.remove === true ? undefined : opts.getCurrentSample();
     if (sample === undefined) {
       currentBuffer = null;
       trimStartInput.value = '0';
@@ -422,7 +503,12 @@ export function createSampleEditorPanel(
       gainInput.value = '1';
       filterTypeSelect.value = NONE;
       drawWaveform();
-      setStatus('No recording yet — playing the synthesised sound above.', false);
+      setStatus(
+        staged?.remove === true
+          ? 'Removal staged — back to the synthesised sound after "Apply staged".'
+          : 'No recording yet — playing the synthesised sound above.',
+        false,
+      );
       return;
     }
     trimStartInput.value = String(sample.edit.trimStartSeconds);

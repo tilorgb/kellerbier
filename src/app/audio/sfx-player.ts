@@ -202,30 +202,11 @@ export function playBark(id: string): void {
   }
 }
 
-const BARK_IDS = BARK_DEFINITIONS.map((bark) => bark.id);
-const BARK_COOLDOWN_MS = 4000;
-const BARK_CHANCE = 0.12;
-let lastBarkAtMs = -Infinity;
-
-/**
- * A rare, rate-limited voice bark on a kill — "Sauber!" landing on a hit
- * that mattered rather than on every last one, which is what
- * `docs/CONTENT_BIBLE.md` §6's "short and heavily compressed" barks are
- * for. Not a design any one enemy or room can lean on: it fires from
- * `SYNTH_IMPACT_AUDIO.onDeath` below, independent of what died.
- */
-function maybeBarkOnKill(): void {
-  const now = Date.now();
-  if (now - lastBarkAtMs < BARK_COOLDOWN_MS || Math.random() > BARK_CHANCE) {
-    return;
-  }
-  const id = BARK_IDS[Math.floor(Math.random() * BARK_IDS.length)];
-  if (id === undefined) {
-    return;
-  }
-  lastBarkAtMs = now;
-  playBark(id);
-}
+// No bark is triggered anywhere right now. A rare "Sauber!" on a kill (12%
+// chance, 4 s cooldown, fired from `SYNTH_IMPACT_AUDIO.onDeath`) used to play
+// here, but the three barks are still synthesised motifs next to a game of
+// recorded sounds, so it was switched off until they are recorded. Bring it
+// back by calling `playBark` from `onDeath` again.
 
 /**
  * Kicks off decoding every recorded sample any track/SFX/bark currently
@@ -291,7 +272,6 @@ export const SYNTH_IMPACT_AUDIO: ImpactAudio = {
   },
   onDeath: (_x, _y, enemyId) => {
     playSfx(`death-${categoryFor(enemyId)}`);
-    maybeBarkOnKill();
   },
   onPlayerHit: () => {
     playSfx('player-hit');

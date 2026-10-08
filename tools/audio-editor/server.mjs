@@ -15,7 +15,8 @@
  * - `POST /enemy-categories`     — replaces the whole `ENEMY_SFX_CATEGORY` map and writes the file
  * - `GET  /audio-assets`         — every recorded file under `assets/audio/`, with its size
  * - `POST /audio-assets`         — writes a browser-uploaded recording to `assets/audio/`
- * - `POST /generated-takes`      — asks the local sound bench for takes of a prompted sound (`sound-bench.mjs`)
+ * - `POST /sfx-sample-batch`     — applies many staged SFX sample changes (files + one `sfx.ts` write) at once
+ * - `POST /generated-takes`     — asks the local sound bench for takes of a prompted sound (`sound-bench.mjs`)
  * - `POST /tracks|sfx|barks/:id/sample` — sets or clears (body `null`) that item's `sample` field
  *
  * `configureServer` middleware only ever runs under `vite`/`vite dev`, never
@@ -199,6 +200,15 @@ export function audioEditorServerPlugin() {
           }
           if (req.method === 'POST' && route === 'audio-assets') {
             await handleUploadAudioAsset(server, res, JSON.parse(await readBody(req)));
+            return;
+          }
+          if (req.method === 'POST' && route === 'sfx-sample-batch') {
+            await handleSfxSampleBatch(
+              server,
+              res,
+              JSON.parse(await readBody(req)),
+              pendingOwnWrites,
+            );
             return;
           }
           if (req.method === 'POST' && route === 'generated-takes') {
@@ -583,50 +593,53 @@ async function listAudioAssets(server) {
  * `take-2`, `take-3`, ...
  */
 async function handleUploadAudioAsset(server, res, body) {
-  if (typeof body?.fileName !== 'string' || body.fileName.length === 0) {
-    respondJson(res, 400, { error: '"fileName" must be a non-empty string' });
+  const result = await writeAudioAssetFile(server, body);
+  if (result.error !== undefined) {
+    respondJson(res, result.status, { error: result.error });
     return;
   }
+  respondJson(res, 200, { ok: true, assetId: result.assetId, fileName: result.fileName });
+}
+
+/**
+ * Validates and writes one uploaded recording. Returns `{ assetId, fileName }`
+ * on success or `{ status, error }` — it never touches the response, so both
+ * `POST /audio-assets` and the staged-SFX batch can use it.
+ */
+async function writeAudioAssetFile(server, body) {
+  if (typeof body?.fileName !== 'string' || body.fileName.length === 0) {
+    return { status: 400, error: '"fileName" must be a non-empty string' };
+  }
   if (typeof body?.dataBase64 !== 'string' || body.dataBase64.length === 0) {
-    respondJson(res, 400, { error: '"dataBase64" must be a non-empty string' });
-    return;
+    return { status: 400, error: '"dataBase64" must be a non-empty string' };
   }
   const ext = body.fileName.split('.').pop()?.toLowerCase();
   if (ext === undefined || !ALLOWED_AUDIO_EXTENSIONS.has(ext)) {
-    respondJson(res, 422, {
+    return {
+      status: 422,
       error: `unsupported file extension — must be one of ${[...ALLOWED_AUDIO_EXTENSIONS].join(', ')}`,
-    });
-    return;
+    };
   }
   const stem = slugify(body.fileName.slice(0, -(ext.length + 1)));
   if (stem.length === 0) {
-    respondJson(res, 422, { error: 'the file name has no usable characters once slugified' });
-    return;
+    return { status: 422, error: 'the file name has no usable characters once slugified' };
   }
   if (body.generated !== undefined) {
     const originError = validateGeneratedOrigin(body.generated);
     if (originError !== null) {
-      respondJson(res, 422, { error: originError });
-      return;
+      return { status: 422, error: originError };
     }
   }
 
-  let bytes;
-  try {
-    bytes = Buffer.from(body.dataBase64, 'base64');
-  } catch {
-    respondJson(res, 400, { error: '"dataBase64" is not valid base64' });
-    return;
-  }
+  const bytes = Buffer.from(body.dataBase64, 'base64');
   if (bytes.length === 0) {
-    respondJson(res, 422, { error: 'the uploaded file is empty' });
-    return;
+    return { status: 422, error: 'the uploaded file is empty' };
   }
   if (bytes.length > MAX_AUDIO_ASSET_BYTES) {
-    respondJson(res, 422, {
+    return {
+      status: 422,
       error: `file is ${String(Math.round(bytes.length / 1024 / 1024))}MB — the limit is ${String(MAX_AUDIO_ASSET_BYTES / 1024 / 1024)}MB`,
-    });
-    return;
+    };
   }
 
   const fileName = `${stem}.${ext}`;
@@ -637,14 +650,97 @@ async function handleUploadAudioAsset(server, res, body) {
   // right for a generated take landing on a real recording: that one cannot
   // be made again from a prompt and a seed.
   if (body.generated !== undefined && (await isOwnRecording(dir, fileName))) {
-    respondJson(res, 409, {
+    return {
+      status: 409,
       error: `"${fileName}" is an existing recording — save the generated take under another name`,
-    });
-    return;
+    };
   }
   await writeFile(path.join(dir, fileName), bytes);
   await recordAssetOrigin(dir, fileName, body.generated);
-  respondJson(res, 200, { ok: true, assetId: stem, fileName });
+  return { assetId: stem, fileName };
+}
+
+/**
+ * `POST /sfx-sample-batch` — applies every staged SFX sample change at once.
+ * Body: `{ changes: [{ sfxId, remove: true } | { sfxId, edit, assetId? , file?:
+ * { fileName, dataBase64, generated? } }] }`. Every recording is written
+ * first, then `sfx.ts` is rewritten in a single write, so the dev server
+ * sees one burst of file changes (one reload of the game) rather than one per
+ * sound. All changes are validated before anything is written; a failing
+ * upload part-way through leaves the earlier files on disk but `sfx.ts`
+ * untouched, and the reply says which change failed.
+ */
+async function handleSfxSampleBatch(server, res, body, pendingOwnWrites) {
+  if (!Array.isArray(body?.changes) || body.changes.length === 0) {
+    respondJson(res, 400, { error: '"changes" must be a non-empty array' });
+    return;
+  }
+  for (const change of body.changes) {
+    if (typeof change?.sfxId !== 'string' || kebabToCamel(change.sfxId).length === 0) {
+      respondJson(res, 422, { error: 'every change needs an "sfxId"' });
+      return;
+    }
+    if (change.remove !== true) {
+      const error = validateSampleEdit(change.edit);
+      if (error !== null) {
+        respondJson(res, 422, { error: `${change.sfxId}: ${error}` });
+        return;
+      }
+      if (
+        change.file === undefined &&
+        (typeof change.assetId !== 'string' || change.assetId === '')
+      ) {
+        respondJson(res, 422, { error: `${change.sfxId}: needs a "file" or an "assetId"` });
+        return;
+      }
+    }
+  }
+
+  const refs = new Map();
+  const written = [];
+  for (const change of body.changes) {
+    if (change.remove === true) {
+      refs.set(change.sfxId, null);
+      continue;
+    }
+    let assetId = change.assetId;
+    if (change.file !== undefined) {
+      const result = await writeAudioAssetFile(server, change.file);
+      if (result.error !== undefined) {
+        respondJson(res, result.status, { error: `${change.sfxId}: ${result.error}`, written });
+        return;
+      }
+      assetId = result.assetId;
+      written.push({ sfxId: change.sfxId, assetId: result.assetId, fileName: result.fileName });
+    }
+    refs.set(change.sfxId, { assetId, edit: change.edit });
+  }
+
+  const filePath = path.join(server.config.root, SFX_FILE);
+  let sourceText = await readFile(filePath, 'utf8');
+  for (const [sfxId, ref] of refs) {
+    const exportName = kebabToCamel(sfxId);
+    const sourceFile = ts.createSourceFile('sfx.ts', sourceText, ts.ScriptTarget.Latest, true);
+    const initializer = findTopLevelConstInitializer(sourceFile, exportName);
+    if (initializer === null || !ts.isObjectLiteralExpression(initializer)) {
+      respondJson(res, 404, {
+        error: `no "const ${exportName}" in ${SFX_FILE} (derived from sfx id "${sfxId}")`,
+        written,
+      });
+      return;
+    }
+    sourceText = spliceSampleProperty(
+      sourceText,
+      sourceFile,
+      initializer,
+      ref === null ? null : renderSampleRef(ref),
+    );
+  }
+  const config = (await prettier.resolveConfig(filePath)) ?? {};
+  const formatted = await prettier.format(sourceText, { ...config, filepath: filePath });
+  pendingOwnWrites.add(filePath);
+  await writeFile(filePath, formatted, 'utf8');
+  respondJson(res, 200, { ok: true, written });
 }
 
 /** A file that is on disk and that the README does not list as generated. */
