@@ -30,6 +30,8 @@ recording uploaded over one of these names takes its row back out.
 
 | File | Prompt | Seed | Added |
 |---|---|---|---|
+| `item-poison-cleanse.mp3` | short clean rising chime over a soft fizz, like a tablet dissolving in water, single sound, close microphone, dry, no music, no reverb | 815596472, take 1 of 4 | 2026-10-07 |
+| `death-animal.mp3` | low drawn-out animal groan trailing off, then a heavy body thump on straw, single sound, close microphone, dry, no music, no reverb | 2012419546, take 3 of 4 | 2026-10-07 |
 
 ## What goes here, and how it gets here
 

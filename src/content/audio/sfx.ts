@@ -149,6 +149,16 @@ const deathMetal: SfxDefinition = {
   tone: { instrument: 'tuba', note: 'C2', durationSeconds: 0.3 },
 };
 const deathAnimal: SfxDefinition = {
+  sample: {
+    assetId: 'death-animal',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 0.23,
+      fadeInSeconds: 0,
+      fadeOutSeconds: 0.5,
+      gain: 0.76,
+    },
+  },
   id: 'death-animal',
   description: 'Cow, rooster or bull dies.',
   noise: {
@@ -542,6 +552,17 @@ const itemSneeze: SfxDefinition = {
 };
 
 const itemPoisonCleanse: SfxDefinition = {
+  sample: {
+    assetId: 'item-poison-cleanse',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 0.93,
+      fadeInSeconds: 0,
+      fadeOutSeconds: 0.98,
+      gain: 1.18,
+      filter: { type: 'lowpass', frequencyHz: 100, q: 12 },
+    },
+  },
   id: 'item-poison-cleanse',
   description:
     'A Maß drunk while poisoned (#401): a short clean rising tone over a soft fizz, so the cure reads as relief rather than as another pickup.',
