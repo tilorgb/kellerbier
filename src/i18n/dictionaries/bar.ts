@@ -131,6 +131,7 @@ export const bar: Record<DictKey, string> = {
   'ui.hud.bossLabel': 'BOSS',
   'ui.hud.poisoned': 'Vergiftet {seconds}s — ein Maß heilt es',
   'ui.hud.latched': 'Zecke an dir! Im Zickzack abschütteln',
+  'ui.hud.marked': 'Markiert {seconds}s — da ganze Raum siagt di',
   'ui.hud.shakeOffHint': 'Abschütteln: schnell und scharf die Richtung wechseln',
   'ui.hud.sandboxRun': 'Sandbox-Lauf — Items verteilt, nichts wird gespeichert oder freigeschaltet',
   'ui.hud.sandboxClamped':
@@ -344,6 +345,8 @@ export const bar: Record<DictKey, string> = {
   // Boss intro plate (#412) — draft, pending sign-off. NOT reviewed by a native speaker.
   'enemies.waldradler.title': 'Zwoa Radl - Koa Hirn',
   'enemies.waldradler.epithet': 'Immer a Müsli Packl mehr im Sackl',
+  'enemies.the-first-human.title': 'Aus’m Eis',
+  'enemies.the-first-human.epithet': 'Fünftausend Winta. Oa Pfeil.',
   // Villager one-liner (#58/#330) — the German line, verbatim, until the real
   // Boarisch phrasing is pitched. Left plain rather than guessed at dialect,
   // per this project's "the user names/phrases things" rule.

@@ -125,6 +125,7 @@ export const de: Record<DictKey, string> = {
   'ui.hud.bossLabel': 'BOSS',
   'ui.hud.poisoned': 'Vergiftet {seconds}s — ein Maß heilt es',
   'ui.hud.latched': 'Zecke an dir! Im Zickzack abschütteln',
+  'ui.hud.marked': 'Markiert {seconds}s — der ganze Raum sieht dich',
   'ui.hud.shakeOffHint': 'Abschütteln: schnell und scharf die Richtung wechseln',
   'ui.hud.sandboxRun': 'Sandbox-Lauf — Items verteilt, nichts wird gespeichert oder freigeschaltet',
   'ui.hud.sandboxClamped':
@@ -342,6 +343,8 @@ export const de: Record<DictKey, string> = {
   // Boss intro plate (#412) — draft, pending sign-off.
   'enemies.waldradler.title': 'Zwei Räder - kein Hirn',
   'enemies.waldradler.epithet': 'Hat immer einen Müsliriegel mehr als du',
+  'enemies.the-first-human.title': 'Aus dem Eis',
+  'enemies.the-first-human.epithet': 'Fünftausend Winter. Ein Pfeil.',
   // Villager one-liner (#58/#330) — draft, pending sign-off.
   'enemies.bauer.line': 'Die neue Charge ist milder, wenn du mich fragst.',
 

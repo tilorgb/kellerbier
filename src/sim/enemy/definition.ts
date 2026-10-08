@@ -72,7 +72,9 @@ export type BehaviourName =
   | 'leaveArena'
   | 'dropPickupOnDeath'
   | 'rollLog'
-  | 'becomeProp';
+  | 'becomeProp'
+  | 'shoal'
+  | 'burrow';
 
 /** Walks straight at the player, re-aiming every tick. The floor-one default. */
 export interface WalkTowardPlayerBehaviour {
@@ -100,6 +102,15 @@ export interface ChargeAtPlayerBehaviour {
    * disagree. Omitted: straight at the locked aim, as before.
    */
   readonly snap?: 'cardinal' | 'diagonal';
+  /**
+   * The charge goes *over* the room's blocks instead of stopping at them
+   * (#40, the Steinbock: an ibex climbs what is in its way). Furniture,
+   * water and pits are crossed the way a `flying` body crosses them; only
+   * the room's walls stop it (`onBlocked`). The renderer lifts the body
+   * while it is over a block, so the climb reads as a bound rather than a
+   * clip. Omitted: a block stops the charge, as every other charger's does.
+   */
+  readonly climbsBlocks?: true;
   /**
    * Room units the charge covers before the body stops for the rest of the
    * state, measured as speed × ticks (a wall stopping it early is
@@ -673,6 +684,24 @@ export interface FiringBehaviourBase {
    * the `art`'s business — the tag alone tints it green.
    */
   readonly poison?: boolean;
+  /**
+   * The shot bounces off walls and off what it hits (#40, the Sennerin's
+   * cheese wheel): `ProjectileTag.Bouncing`, with the same bounce budget the
+   * player's own bouncing shots get (`tuning.projectileTags.bounceMaxCount`).
+   * A rolling wheel that comes back off the wall is a second thing to dodge
+   * from the one throw. Omitted is a plain shot.
+   */
+  readonly bounce?: boolean;
+  /**
+   * The shot *marks* the player on a hit (#40, the Bergwacht's flare):
+   * `ProjectileTag.Marking`, so for `tuning.projectileTags.playerMarkDurationTicks`
+   * every enemy in the room sees them through cover (`isSighted` is true)
+   * and fires that much faster (`tuning.enemy.markedFireIntervalScale`). A
+   * second hit refreshes the duration and never stacks. The flare's whole
+   * job is the mark — authored with little damage of its own. Omitted is a
+   * plain shot.
+   */
+  readonly mark?: boolean;
 }
 
 /** One shot at the player, on a timer. */
@@ -1063,8 +1092,53 @@ export interface LatchOnPlayerBehaviour {
   readonly behaviour: 'latchOnPlayer';
 }
 
+/**
+ * Moves as one of a shoal (#40, the Kuhglocke: a floating swarm of cowbells).
+ *
+ * Each tick the body's heading turns toward a blend of three pulls: the
+ * centre of every live body of its own kind in the room (`cohesion`), the
+ * player (`pull`), and away from any shoal-mate closer than `spacing` room
+ * units — then it moves at `speed`. The heading carries over between ticks
+ * (`inertia`, 0..1, how much of last tick's heading survives), so a shoal
+ * swings and wheels rather than snapping, and a lone bell left over simply
+ * drifts at the player. Deterministic, no RNG: the shoal is a function of
+ * where everyone is. Meant for a `flying` body, so a shoal crosses furniture;
+ * contact damage is what makes it dangerous.
+ */
+export interface ShoalBehaviour {
+  readonly behaviour: 'shoal';
+  /** Room units per tick, before the global `enemy.speedScale`. */
+  readonly speed: number;
+  /** Weight of the pull toward the shoal's centre. At least 0. */
+  readonly cohesion: number;
+  /** Weight of the pull toward the player. At least 0. */
+  readonly pull: number;
+  /** Room units below which two shoal-mates push apart. At least 0. */
+  readonly spacing: number;
+  /** How much of last tick's heading survives into this one, 0 (none) to 1 (never turns). */
+  readonly inertia: number;
+}
+
+/**
+ * Under the ground while this state is current (#40, the Murmeltier):
+ * nothing can touch it — no shot, no splash, no contact — it crosses the
+ * room's furniture as a flyer does (it is *under* it), and it is drawn as a
+ * moving mound of snow, the `<id>-shadow` art if the creature ships one.
+ * Leaving a burrowed state for one without it is the body breaking the
+ * surface, and throws a puff of snow.
+ *
+ * `submerge`'s shape without the water: a fish needs a stream to be under,
+ * a marmot digs wherever it stands. Pair the surfacing with a `telegraph`
+ * before it — the whistle — so where it comes up is a warning, not a trap.
+ */
+export interface BurrowBehaviour {
+  readonly behaviour: 'burrow';
+}
+
 export type EnemyBehaviour =
   | WalkTowardPlayerBehaviour
+  | ShoalBehaviour
+  | BurrowBehaviour
   | ChargeAtPlayerBehaviour
   | WanderBehaviour
   | OrbitPointBehaviour
@@ -1370,6 +1444,7 @@ export const MOVEMENT_BEHAVIOURS: readonly BehaviourName[] = [
   'rideToLineStart',
   'rideLine',
   'glideToPoint',
+  'shoal',
 ];
 
 /** Primitives that run once, when the state is entered. */
@@ -1388,7 +1463,12 @@ export const ENTRY_BEHAVIOURS: readonly BehaviourName[] = [
 ];
 
 /** Primitives that mark the whole state rather than doing anything in it (#408). */
-export const STATE_FLAG_BEHAVIOURS: readonly BehaviourName[] = ['submerge', 'land', 'leaveArena'];
+export const STATE_FLAG_BEHAVIOURS: readonly BehaviourName[] = [
+  'submerge',
+  'land',
+  'leaveArena',
+  'burrow',
+];
 
 /** Primitives that run when the body dies in that state. */
 export const DEATH_BEHAVIOURS: readonly BehaviourName[] = ['splitOnDeath', 'dropPickupOnDeath'];

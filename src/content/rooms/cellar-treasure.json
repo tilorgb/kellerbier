@@ -18,7 +18,7 @@
   "hazards": [],
   "decorativeProps": [{ "x": 120, "y": 72, "type": "pedestal" }],
   "metadata": {
-    "floorTags": ["cellar", "rural", "wald"],
+    "floorTags": ["cellar", "rural", "wald", "alpen"],
     "shape": "1x1",
     "doors": { "north": true, "east": true, "south": true, "west": true },
     "difficultyTier": 1,

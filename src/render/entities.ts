@@ -23,6 +23,7 @@ import {
   enemyHidden,
   enemyHopProgress,
   enemySubmerged,
+  enemyBurrowed,
   type LobbedVolleyFlight,
   lobbedVolleyCount,
   lobbedVolleyFlight,
@@ -597,7 +598,12 @@ export class EntityView {
 
       // Under the water (#408): the same silhouette, dark and flattened onto
       // the stream, with a faint glow so a lantern-dark room cannot hide it.
+      // Under the snow (#40, the Murmeltier): its `-shadow` art is the mound,
+      // drawn as authored — a heap of snow is lit like the floor, not sunk
+      // into it — and it faces the way it digs.
       const submerged = isEnemyBody && enemySubmerged(sim, index);
+      const burrowed = isEnemyBody && enemyBurrowed(sim, index);
+      const underground = submerged || burrowed;
 
       const isPropTarget = !isPickup && enemyId === null && !isBomb;
       const pickupKindIndex = sim.pickupKind.data[index] ?? -1;
@@ -619,7 +625,7 @@ export class EntityView {
       const billboard = this.bodyAt(used);
       this.bodyTelegraphing[used] = telegraph > 0 ? 1 : 0;
       used += 1;
-      if (submerged) {
+      if (underground) {
         const shadow = this.shadowArt[sim.enemy.data[index * ENEMY_STRIDE] ?? 0];
         if (shadow !== undefined) {
           texture = shadow;

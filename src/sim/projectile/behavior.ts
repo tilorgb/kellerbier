@@ -355,6 +355,11 @@ function applyStatusTagsOnHit(sim: GameSim, target: number, tags: number): void 
   if (hasTag(tags, ProjectileTag.Freezing)) {
     applyFreeze(sim, target, tuning.freezeDurationTicks);
   }
+  // The flare (#40): only the player can be marked, and a later flare
+  // refreshes the mark rather than stacking it, like every status above.
+  if (hasTag(tags, ProjectileTag.Marking) && target === sim.playerIndex) {
+    sim.markPlayer(Math.round(tuning.playerMarkDurationTicks));
+  }
 }
 
 /**

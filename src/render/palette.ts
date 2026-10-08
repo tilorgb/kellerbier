@@ -207,6 +207,8 @@ export const BLUTWURZ_SPIRIT_TINT = 0x9ec8e8;
 export const SNEEZE_GLOW_TINT = 0xfff0a8;
 
 export const STATUS_POISON_TINT = 0x8fbf3a;
+/** The glow on a player marked by a flare (#40): a flare's own pink-red, on the emissive channel. */
+export const STATUS_MARK_GLOW = 0xff6a8a;
 
 /**
  * What each named `ProjectileTint` (`sim/projectile/tints.ts`) multiplies a
@@ -321,6 +323,8 @@ export const HUD_PALETTE = {
   healthEternal: 0x3a3a42,
   /** The poison readout's bar and label (#401) — the same green the poisoned player is tinted. */
   poison: 0x8fbf3a,
+  /** The flare's mark on the player (#40): the alpenglow pink, so it reads as Floor 4's. */
+  marked: 0xe893a8,
 
   minimapUnvisited: 0x54445f,
   minimapVisited: 0x8a7f74,

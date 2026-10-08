@@ -135,6 +135,7 @@ export const en = {
   'ui.hud.bossLabel': 'BOSS',
   'ui.hud.poisoned': 'Poisoned {seconds}s — drink a Maß to cure it',
   'ui.hud.latched': 'Zecke on you! Zig-zag to shake it off',
+  'ui.hud.marked': 'Marked {seconds}s — the whole room can see you',
   'ui.hud.shakeOffHint': 'Shake it off: change direction sharply, again and again',
   'ui.hud.sandboxRun': 'Sandbox run — dealt items, nothing is saved or unlocked',
   'ui.hud.sandboxClamped':
@@ -348,6 +349,8 @@ export const en = {
   // Boss intro plate (#412) — draft, pending sign-off.
   'enemies.waldradler.title': 'Two Wheels - No Brains',
   'enemies.waldradler.epithet': 'Always has one cereal bar more than you',
+  'enemies.the-first-human.title': 'Out of the ice',
+  'enemies.the-first-human.epithet': 'Five thousand winters. One arrow.',
   // Villager one-liner (#58/#330) — draft, pending sign-off.
   'enemies.bauer.line': "New batch's smoother, if you ask me.",
 

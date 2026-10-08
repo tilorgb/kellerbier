@@ -343,6 +343,11 @@ export interface EnemyTuning {
   telegraphScale: number;
   /** Multiplier on the gap between volleys. Above 1 is slower firing. */
   fireIntervalScale: number;
+  /**
+   * Multiplier on every enemy's `everyTicks` while the player is marked by a
+   * flare (#40) — below 1 is faster. On top of `fireIntervalScale`.
+   */
+  markedFireIntervalScale: number;
   /** Multiplier on the speed of everything enemies fire. */
   projectileSpeedScale: number;
   /**
@@ -809,6 +814,12 @@ export interface ProjectileTagTuning {
   playerPoisonTickInterval: number;
   playerPoisonDamagePerTick: number;
   playerPoisonDurationTicks: number;
+  /**
+   * `marking` (#40, the Bergwacht's flare): ticks the player stays marked
+   * after a hit — seen through cover by every enemy, and fired at faster
+   * (`EnemyTuning.markedFireIntervalScale`). A second flare refreshes it.
+   */
+  playerMarkDurationTicks: number;
   /** `freezing`: velocity is multiplied by this every tick the status is active. */
   freezeSlowFactor: number;
   /** The `slow` status (`STATUS_SLOW`): velocity is multiplied by this every tick it is active — a hindrance, where `freezeSlowFactor` is a near-stop. */
@@ -1373,6 +1384,9 @@ export const DEFAULT_ENEMY_TUNING: Readonly<EnemyTuning> = {
   speedScale: 0.9,
   telegraphScale: 1,
   fireIntervalScale: 1,
+  // A third faster: noticeable in the shot pattern's rhythm, not a bullet hell
+  // switched on by one hit.
+  markedFireIntervalScale: 0.7,
   projectileSpeedScale: 0.9,
   deflectParticles: 6,
   deflectShake: 0.3,
@@ -1583,6 +1597,10 @@ export const DEFAULT_PROJECTILE_TAG_TUNING: Readonly<ProjectileTagTuning> = {
   playerPoisonTickInterval: 60,
   playerPoisonDamagePerTick: 1,
   playerPoisonDurationTicks: 180,
+  // Five seconds: long enough that the room's shooters get a real volley in
+  // while the mark is up, short enough that shaking it off is a matter of
+  // breaking line of sight for a moment once it fades, not a whole fight.
+  playerMarkDurationTicks: 300,
   freezeSlowFactor: 0.15,
   slowSpeedFactor: 0.5,
   freezeDurationTicks: 45,

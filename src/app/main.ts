@@ -48,6 +48,7 @@ import { diamondTexture, dotTexture } from '../render/ui/marker-art.js';
 import { INTERNAL_HEIGHT, INTERNAL_WIDTH, computeGameLayout } from '../render/resolution.js';
 import { ActiveItemHud } from '../render/active-item-hud.js';
 import { PoisonHud } from '../render/poison-hud.js';
+import { MarkHud } from '../render/mark-hud.js';
 import { SixpackHud } from '../render/sixpack-hud.js';
 import { BossHealthHud } from '../render/boss-health-hud.js';
 import { CharacterHud } from '../render/character-hud.js';
@@ -1408,6 +1409,9 @@ async function boot(progress: BootProgress): Promise<void> {
   // Poison time left (#401). Hidden unless poisoned, like the Sixpack row.
   const poisonHud = new PoisonHud(kit, preferences.locale);
   hudLayer.addChild(poisonHud.view);
+  // The flare's mark (#40). Hidden unless marked, like the poison row.
+  const markHud = new MarkHud(kit, preferences.locale);
+  hudLayer.addChild(markHud.view);
   /**
    * The Sixpack's banked Maß — its own row under the active-item
    * slot, since it is the thing the player reads to decide whether to press
@@ -1549,6 +1553,10 @@ async function boot(progress: BootProgress): Promise<void> {
     poisonHud.view.position.set(HUD_MARGIN, y);
     if (poisonHud.view.visible) {
       y += poisonHud.height + HUD_ROW_GAP;
+    }
+    markHud.view.position.set(HUD_MARGIN, y);
+    if (markHud.view.visible) {
+      y += markHud.height + HUD_ROW_GAP;
     }
     // A sober run has no meter (#85): `height` is 0 there, and the row's gap
     // goes with it — otherwise the column would keep a blank line where the
@@ -2481,6 +2489,7 @@ async function boot(progress: BootProgress): Promise<void> {
       // the frame it flips, the same as the eternal-heart row above.
       const poisonShownBefore = poisonHud.view.visible;
       poisonHud.sync(sim);
+      markHud.sync(sim);
       if (poisonHud.view.visible !== poisonShownBefore) {
         layoutHud();
       }
@@ -4812,6 +4821,7 @@ WASD move   arrows aim and fire
     floorTitleCard.setLocale(locale);
     activeItemHud.setLocale(locale);
     poisonHud.setLocale(locale);
+    markHud.setLocale(locale);
     controlsHud.setLocale(locale);
     bossHealthHud.setLocale(locale);
     curseHud.setLocale(locale);

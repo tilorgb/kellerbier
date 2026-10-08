@@ -294,6 +294,8 @@ export interface CompiledState {
   readonly latchesOnPlayer: boolean;
   /** True for a state carrying `submerge` (#408): out of reach of everything, drawn as a shadow. */
   readonly submerged: boolean;
+  /** True for a state carrying `burrow` (#40): under the ground — untouchable, over furniture, drawn as a mound. */
+  readonly burrowed: boolean;
   /** True for a state carrying `land` (#411): a flying body down on the floor. */
   readonly grounded: boolean;
   /** True for a state with a ranged `after` (#408): entering it rolls a duration from `random.enemies`. */
@@ -620,6 +622,7 @@ export class EnemyRegistry {
     let approachStandoff = 0;
     let latchesOnPlayer = false;
     let submerged = false;
+    let burrowed = false;
     let grounded = false;
     let hidden = false;
     let capturesLine = false;
@@ -763,6 +766,17 @@ export class EnemyRegistry {
             );
           }
         }
+        if (behaviour.behaviour === 'shoal') {
+          if (!(behaviour.speed > 0)) {
+            throw new Error(`${where}: "shoal" needs a speed above zero`);
+          }
+          if (!(behaviour.cohesion >= 0) || !(behaviour.pull >= 0) || !(behaviour.spacing >= 0)) {
+            throw new Error(`${where}: "shoal" needs cohesion, pull and spacing of at least zero`);
+          }
+          if (!(behaviour.inertia >= 0 && behaviour.inertia <= 1)) {
+            throw new Error(`${where}: "shoal" needs an inertia from 0 to 1`);
+          }
+        }
         if (behaviour.behaviour === 'approachProp') {
           approachPropKind = resolvePropKind(behaviour.propKind, `${where}: "approachProp"`);
           approachesPlayerRow = behaviour.nearestToPlayerRow === true;
@@ -810,6 +824,8 @@ export class EnemyRegistry {
           grounded = true;
         } else if (name === 'leaveArena') {
           hidden = true;
+        } else if (name === 'burrow') {
+          burrowed = true;
         } else {
           submerged = true;
         }
@@ -1302,6 +1318,7 @@ export class EnemyRegistry {
       deathPickups,
       latchesOnPlayer,
       submerged,
+      burrowed,
       grounded,
       rollsDuration: transitions.some(
         (transition) =>

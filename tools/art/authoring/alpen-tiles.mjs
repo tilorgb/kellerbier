@@ -63,7 +63,6 @@ const NIGHT = {
   d: 0x233341,
   d2: shadeOf(0x233341, -1), // 131c23
 };
-const INK = 0x000000;
 // Foreground tier, for the barrel: the skin ramp is the one warm wood the
 // floor's five allow, and the snow on its lid is the real white.
 const STAVE = {

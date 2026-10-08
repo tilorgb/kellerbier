@@ -1,0 +1,75 @@
+{
+  "id": "alpen-miniboss",
+  "tileGrid": [
+    "###############",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "###############"
+  ],
+  "obstacles": [],
+  "enemySpawns": [
+    {
+      "x": 120,
+      "y": 72,
+      "group": "miniboss"
+    }
+  ],
+  "spawnGroups": [
+    {
+      "id": "miniboss",
+      "count": 1,
+      "choices": [
+        {
+          "enemyId": "the-gondola",
+          "minFloor": 4,
+          "maxFloor": 4
+        }
+      ]
+    }
+  ],
+  "pickupSpawns": [],
+  "hazards": [
+    {
+      "x": 64,
+      "y": 56,
+      "width": 112,
+      "height": 32,
+      "type": "ice"
+    }
+  ],
+  "decorativeProps": [
+    {
+      "x": 24,
+      "y": 72,
+      "type": "pylon"
+    },
+    {
+      "x": 216,
+      "y": 72,
+      "type": "pylon"
+    },
+    {
+      "x": 120,
+      "y": 116,
+      "type": "pedestal"
+    }
+  ],
+  "metadata": {
+    "floorTags": ["alpen"],
+    "shape": "1x1",
+    "doors": {
+      "north": true,
+      "east": false,
+      "south": true,
+      "west": false
+    },
+    "difficultyTier": 4,
+    "weight": 1,
+    "specialRole": "miniboss"
+  }
+}

@@ -1,0 +1,110 @@
+{
+  "id": "alpen-glacier",
+  "tileGrid": [
+    "###############",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "###############"
+  ],
+  "obstacles": [
+    {
+      "x": 32,
+      "y": 32,
+      "width": 16,
+      "height": 16
+    },
+    {
+      "x": 192,
+      "y": 32,
+      "width": 16,
+      "height": 16
+    },
+    {
+      "x": 32,
+      "y": 96,
+      "width": 16,
+      "height": 16
+    },
+    {
+      "x": 192,
+      "y": 96,
+      "width": 16,
+      "height": 16
+    }
+  ],
+  "enemySpawns": [
+    {
+      "x": 120,
+      "y": 32,
+      "group": "maid"
+    },
+    {
+      "x": 120,
+      "y": 112,
+      "group": "bells"
+    }
+  ],
+  "spawnGroups": [
+    {
+      "id": "maid",
+      "count": 1,
+      "choices": [
+        {
+          "enemyId": "sennerin",
+          "minFloor": 4,
+          "maxFloor": 4
+        },
+        {
+          "enemyId": "bergwacht",
+          "minFloor": 4,
+          "maxFloor": 4
+        }
+      ]
+    },
+    {
+      "id": "bells",
+      "count": 4,
+      "choices": [
+        {
+          "enemyId": "kuhglocke",
+          "minFloor": 4,
+          "maxFloor": 4
+        }
+      ]
+    }
+  ],
+  "pickupSpawns": [],
+  "hazards": [
+    {
+      "x": 48,
+      "y": 48,
+      "width": 144,
+      "height": 48,
+      "type": "ice"
+    }
+  ],
+  "decorativeProps": [
+    {
+      "x": 24,
+      "y": 120,
+      "type": "fir"
+    }
+  ],
+  "metadata": {
+    "floorTags": ["alpen"],
+    "shape": "1x1",
+    "doors": {
+      "north": true,
+      "east": true,
+      "south": true,
+      "west": true
+    },
+    "difficultyTier": 2,
+    "weight": 1
+  }
+}

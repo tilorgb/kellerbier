@@ -40,12 +40,14 @@ const FLOOR_3_MOBS = new Set([
   ...(ROSTERS.wald ?? []).map((entry) => entry.id),
   ...(STREAM_DWELLERS.wald ?? []),
 ]);
+/** Floor 4's mobs (#40), read off its roster the same way. */
+const FLOOR_4_MOBS = new Set((ROSTERS.alpen ?? []).map((entry) => entry.id));
 const reachableFloors = FLOOR_CONFIGS.filter((config) => config.floor <= HIGHEST_SANDBOX_FLOOR);
 
 describe('room generator rosters', () => {
-  it('covers at least floors 1 to 3', () => {
+  it('covers at least floors 1 to 4', () => {
     expect(reachableFloors.map((config) => config.floor)).toEqual(
-      expect.arrayContaining([1, 2, 3]),
+      expect.arrayContaining([1, 2, 3, 4]),
     );
   });
 
@@ -153,6 +155,76 @@ describe('Floor 3 authored rooms', () => {
         expect(allowed, `${choice.enemyId} is not in ROSTERS.wald / STREAM_DWELLERS.wald`).toBe(
           true,
         );
+      }
+    },
+  );
+});
+
+describe('Floor 4 generated rooms (#40)', () => {
+  const config = FLOOR_CONFIGS.find((entry) => entry.floor === 4);
+  if (config === undefined) throw new Error('missing Floor 4 config');
+  const params = { ...DEFAULT_ROOM_GEN_TUNING, ...ROOM_GEN_FLOOR_OVERRIDES[config.floorTag] };
+
+  const rooms = Array.from({ length: 300 }, (_, seed) =>
+    generateRoom(
+      {
+        roomId: `r${String(seed)}`,
+        floor: 4,
+        floorTag: config.floorTag,
+        doors: ['north', 'south'],
+        distanceFromStart: seed % 6,
+        bossDistance: 6,
+        rng: new Rng(roomGenSeed(7, 4, `r${String(seed)}`, seed)),
+      },
+      params,
+    ),
+  );
+  const enemiesOf = (room: (typeof rooms)[number]): string[] =>
+    room.spawnGroups.flatMap((group) => group.choices.map((choice) => choice.enemyId));
+
+  it('has the Floor 4 mobs this was written against, and none of the Wald’s', () => {
+    for (const id of ['steinbock', 'murmeltier', 'bergwacht', 'kuhglocke', 'sennerin']) {
+      expect(FLOOR_4_MOBS.has(id), id).toBe(true);
+    }
+    expect(FLOOR_4_MOBS.has('zecke')).toBe(false);
+    expect(FLOOR_4_MOBS.has('bierratte')).toBe(false);
+  });
+
+  it('fills rooms with enemies, and only Floor 4 mobs', () => {
+    const seen = new Set(rooms.flatMap(enemiesOf));
+    expect(rooms.filter((room) => enemiesOf(room).length > 0).length).toBeGreaterThan(250);
+    expect(seen).toEqual(FLOOR_4_MOBS);
+  });
+});
+
+describe('Floor 4 authored rooms (#40)', () => {
+  interface Template {
+    id?: string;
+    metadata?: { floorTags?: string[]; specialRole?: string };
+    spawnGroups?: { choices: { enemyId: string }[] }[];
+    cells?: { spawnGroups?: { choices: { enemyId: string }[] }[] }[];
+  }
+  const rooms = (ROOM_TEMPLATES as Template[]).filter(
+    (room) =>
+      room.metadata?.floorTags?.includes('alpen') === true &&
+      room.metadata.specialRole !== 'boss' &&
+      room.metadata.specialRole !== 'miniboss',
+  );
+
+  it('finds the alpen rooms', () => {
+    expect(rooms.length).toBeGreaterThan(5);
+  });
+
+  it.each(rooms.map((room) => [room.id ?? '?', room] as const))(
+    '%s spawns only Floor 4 mobs',
+    (_id, room) => {
+      const groups = [
+        ...(room.spawnGroups ?? []),
+        ...(room.cells ?? []).flatMap((cell) => cell.spawnGroups ?? []),
+      ];
+      for (const choice of groups.flatMap((group) => group.choices)) {
+        const allowed = FLOOR_4_MOBS.has(choice.enemyId) || choice.enemyId === 'shopkeeper';
+        expect(allowed, `${choice.enemyId} is not in ROSTERS.alpen`).toBe(true);
       }
     },
   );

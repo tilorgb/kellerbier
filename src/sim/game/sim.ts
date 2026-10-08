@@ -1028,6 +1028,14 @@ export class GameSim {
    */
   puddleImmuneTicks = 0;
 
+  /**
+   * Ticks left of the flare's mark on the player (#40, `ProjectileTag.Marking`):
+   * every enemy sees them through cover and fires faster while it runs. Set
+   * by `markPlayer`, read by `systems/enemy.ts`'s `isSighted`/`applyFiring`
+   * and by the HUD and the player's own glow.
+   */
+  private playerMarkedTicks = 0;
+
   /** Ticks until the player may fire again. */
   fireCooldown = 0;
 
@@ -3708,6 +3716,16 @@ export class GameSim {
    * by `sim/systems/movement.ts`. Never lets anyone through a wall: see
    * `RoomGeometry.blockOverflyable`.
    */
+  /** Ticks left of the flare's mark (#40), 0 when unmarked. */
+  get playerMarked(): number {
+    return this.playerMarkedTicks;
+  }
+
+  /** Marks the player for `ticks` (#40): refreshed to the longer of the two, never stacked. */
+  markPlayer(ticks: number): void {
+    this.playerMarkedTicks = Math.max(this.playerMarkedTicks, Math.max(0, ticks));
+  }
+
   get playerFlies(): boolean {
     return this.characterFlies;
   }
@@ -6915,6 +6933,9 @@ export class GameSim {
     }
     if (this.roomWarmupTicks > 0) {
       this.roomWarmupTicks -= 1;
+    }
+    if (this.playerMarkedTicks > 0) {
+      this.playerMarkedTicks -= 1;
     }
     if (this.puddleImmuneTicks > 0) {
       this.puddleImmuneTicks -= 1;

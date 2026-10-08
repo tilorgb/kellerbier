@@ -43,10 +43,14 @@ describe('the sandbox floor gate', () => {
     }
   });
 
-  it('lets ?floor=3 start on floor 3 while normal runs still stop at floor 2', () => {
+  it('lets ?floor=4 start on Die Alpen, whatever floor a normal run stops at', () => {
     expect(parseStartFloor('?floor=3', true, HIGHEST_SANDBOX_FLOOR)).toEqual({
       floor: 3,
       requested: 3,
+    });
+    expect(parseStartFloor('?floor=4', true, HIGHEST_SANDBOX_FLOOR)).toEqual({
+      floor: 4,
+      requested: 4,
     });
     // Past the sandbox gate it still clamps rather than freezing.
     expect(parseStartFloor('?floor=7', true, HIGHEST_SANDBOX_FLOOR)?.floor).toBe(

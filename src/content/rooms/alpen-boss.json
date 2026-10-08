@@ -1,0 +1,97 @@
+{
+  "id": "alpen-boss",
+  "tileGrid": [
+    "###############",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "###############"
+  ],
+  "obstacles": [
+    {
+      "x": 48,
+      "y": 48,
+      "width": 32,
+      "height": 32
+    },
+    {
+      "x": 160,
+      "y": 80,
+      "width": 32,
+      "height": 32
+    }
+  ],
+  "enemySpawns": [
+    {
+      "x": 120,
+      "y": 60,
+      "group": "boss"
+    }
+  ],
+  "spawnGroups": [
+    {
+      "id": "boss",
+      "count": 1,
+      "choices": [
+        {
+          "enemyId": "the-first-human",
+          "minFloor": 4,
+          "maxFloor": 4
+        }
+      ]
+    }
+  ],
+  "pickupSpawns": [],
+  "hazards": [
+    {
+      "x": 16,
+      "y": 96,
+      "width": 48,
+      "height": 32,
+      "type": "ice"
+    },
+    {
+      "x": 176,
+      "y": 16,
+      "width": 48,
+      "height": 32,
+      "type": "ice"
+    },
+    {
+      "x": 96,
+      "y": 32,
+      "width": 48,
+      "height": 32,
+      "type": "ice"
+    }
+  ],
+  "decorativeProps": [
+    {
+      "x": 120,
+      "y": 18,
+      "type": "boss-plate"
+    },
+    {
+      "x": 120,
+      "y": 108,
+      "type": "pedestal"
+    }
+  ],
+  "metadata": {
+    "floorTags": ["alpen"],
+    "shape": "1x1",
+    "doors": {
+      "north": true,
+      "east": true,
+      "south": true,
+      "west": true
+    },
+    "difficultyTier": 5,
+    "weight": 1,
+    "specialRole": "boss"
+  }
+}

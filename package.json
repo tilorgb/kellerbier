@@ -32,6 +32,7 @@
     "art:minibosses2": "node tools/art/authoring/build-floor2-minibosses.mjs",
     "art:minibosses3": "node tools/art/authoring/build-floor3-minibosses.mjs",
     "art:floor3": "node tools/art/authoring/build-floor3-roster.mjs",
+    "art:floor4": "node tools/art/authoring/build-floor4-roster.mjs",
     "art:ordner": "node tools/art/authoring/build-ordner.mjs",
     "art:floor1-views": "node tools/art/authoring/build-floor1-views.mjs",
     "art:floor2-side-views": "node tools/art/authoring/build-floor2-side-views.mjs",

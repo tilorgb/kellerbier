@@ -40,7 +40,7 @@ describe("Die Alpen's committed tiles are what the authoring source produces", (
       tileset.wallLipCorner,
       ...tileset.destructibles,
       ...Object.values(PROP_TILE_NAMES).filter(
-        (tile): tile is string => tile !== null && tile.startsWith('alpen-'),
+        (tile): tile is string => tile?.startsWith('alpen-') === true,
       ),
     ]);
     expect(Object.keys(ALPEN_TILES).sort()).toEqual([...named].sort());
