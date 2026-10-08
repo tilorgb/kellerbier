@@ -157,6 +157,14 @@ export interface ChargeAtPlayerBehaviour {
      * does not stop dead against him. Omitted: any body, as the Boar.
      */
     readonly playerOnly?: boolean;
+    /**
+     * The hit does not end the roll (#467): the body takes its damage and its
+     * knockback and keeps going, wall to wall. The player is carried along by
+     * the contact separation and, pinned against the wall at the end of the
+     * lane, is popped out sideways (`contact.ts`). Omitted: the hit ends it, as
+     * the Boar's dash does.
+     */
+    readonly continues?: boolean;
   };
 }
 

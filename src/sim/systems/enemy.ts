@@ -833,6 +833,9 @@ function chargeImpact(
     }
     const mass = Math.max(0.01, body[hit * 2 + 1] ?? 1);
     addPush(sim, hit, (dirX * impact.knockback) / mass, (dirY * impact.knockback) / mass);
+    if (impact.continues === true) {
+      return speed;
+    }
     raiseBlocked(sim, index);
     return 0;
   }

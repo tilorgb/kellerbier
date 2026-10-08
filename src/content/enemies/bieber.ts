@@ -165,6 +165,8 @@ function rollingLog(id: string, direction: 1 | -1): EnemyDefinition {
               breaksBlocks: false,
               breaksDoors: false,
               playerOnly: true,
+              // Wall to wall: a hit does not stop the roll.
+              continues: true,
             },
           },
         ],

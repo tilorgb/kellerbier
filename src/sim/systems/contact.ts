@@ -157,6 +157,30 @@ function resolveAgainstPlayer(other: number): void {
     y = sim.positionY(index);
   }
 
+  // Pinned between a body nothing moves and a wall — Bieber's rolling log
+  // carrying the player to the end of its lane (#467): the way along the lane
+  // is refused, so the player is popped out *sideways*, toward the middle of
+  // the arena, rather than left wedged against the wall or inside the log.
+  if (immovable && owed > 0) {
+    let perpX = -awayY;
+    let perpY = awayX;
+    const centreX = (sim.room.minX + sim.room.maxX) / 2 - x;
+    const centreY = (sim.room.minY + sim.room.maxY) / 2 - y;
+    if (perpX * centreX + perpY * centreY < 0) {
+      perpX = -perpX;
+      perpY = -perpY;
+    }
+    const need = reach;
+    let moved = moveClear(sim, index, radius, x, y, perpX, perpY, need);
+    if (moved < need) {
+      x = sim.positionX(index);
+      y = sim.positionY(index);
+      moved += moveClear(sim, index, radius, x, y, -perpX, -perpY, need - moved);
+    }
+    x = sim.positionX(index);
+    y = sim.positionY(index);
+  }
+
   slowPlayerInto(sim, awayX, awayY, playerShare);
 
   // A shove on top of the separation, so shouldering something light reads as

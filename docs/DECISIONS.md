@@ -6837,3 +6837,13 @@ so a rapid shooter kept a body at 15% speed indefinitely; and every landed hit s
 shot, so a player who stands still lands fewer shots: Der Waldradler's bare-run fight went from about
 9800 to about 12000 ticks at shot damage 1, and `boss-pacing.test.ts`'s cap for him is now 16000. The
 numbers are Tilo's to retune; this change only stops them being shortened by a lock.
+
+**Wall to wall (Tilo, second playtest).** The woodpile is nine logs, flush against the wall for its
+whole length (`x` 7 / 233 in template units, the footprint's own radius off the wall, `y` 8 + 16k): no
+walking space behind it and none along it. A rolling log runs the whole width and a hit does not
+stop it (`impact.continues`): the player is carried along the lane by the contact separation and,
+pinned at the far wall, is popped out sideways toward the middle of the arena (`contact.ts`), never
+left wedged against the wall or inside the log. The nine lanes also mean any row the player stands
+in has a log to roll. At the top damage point the pacing test no longer compares Bieber with the
+Waldradler (the rider is then under 1500 ticks and Bieber cannot be faster than the lanes it takes
+to work through); it asks that he does not drag.

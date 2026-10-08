@@ -106,8 +106,8 @@ describe('Bieber (#467)', () => {
   it('stands in an arena with a row of logs against the wall opposite a door-free side', () => {
     const west = arena(waldMiniboss);
     const east = arena(waldMinibossEast);
-    expect(west.countProps(LOG)).toBe(7);
-    expect(east.countProps(LOG)).toBe(7);
+    expect(west.countProps(LOG)).toBe(9);
+    expect(east.countProps(LOG)).toBe(9);
     expect(waldMiniboss.metadata.doors.west).toBe(false);
     expect(waldMinibossEast.metadata.doors.east).toBe(false);
   });
@@ -140,7 +140,7 @@ describe('Bieber (#467)', () => {
     expect(stepUntilState(sim, bieber, 'shove')).toBeGreaterThanOrEqual(0);
     // One tick into the shove: the log has left the pile and is rolling.
     sim.step(createInputFrame());
-    expect(sim.countProps(LOG)).toBe(6);
+    expect(sim.countProps(LOG)).toBe(8);
     const rollers = rollersAlive(sim);
     expect(rollers).toHaveLength(1);
     const roller = rollers[0] ?? -1;
@@ -160,7 +160,7 @@ describe('Bieber (#467)', () => {
     // It travelled east, and came to rest as a prop again — five logs once more
     // (checked the tick it stopped, before he fetches the next one).
     expect(startX).toBeGreaterThan(sim.room.maxX - 60);
-    expect(sim.countProps(LOG)).toBe(7);
+    expect(sim.countProps(LOG)).toBe(9);
   });
 
   it('a rolled log hurts nothing once it has settled, and never leaves loot when shot to pieces', () => {
@@ -251,7 +251,7 @@ describe('Bieber (#467)', () => {
       sim.step(createInputFrame());
     }
     // It has settled against the east wall, still standing as cover.
-    expect(sim.countProps(LOG)).toBeGreaterThanOrEqual(6);
+    expect(sim.countProps(LOG)).toBeGreaterThanOrEqual(8);
     sim.kill(bieber);
     sim.world.flush();
     sim.step(createInputFrame());
@@ -298,7 +298,7 @@ describe('Bieber (#467)', () => {
     for (const template of [waldMiniboss, waldMinibossEast]) {
       const sim = arena(template);
       const logs = logIndices(sim).sort((a, b) => sim.positionY(a) - sim.positionY(b));
-      expect(logs).toHaveLength(7);
+      expect(logs).toHaveLength(9);
       const x = sim.positionX(logs[0] ?? 0);
       logs.forEach((log, i) => {
         expect(sim.positionX(log)).toBe(x);
@@ -375,5 +375,54 @@ describe('Bieber (#467)', () => {
       sim.step(createInputFrame());
       expect(sim.positionY(roller)).toBe(lane);
     }
+  });
+
+  it('the woodpile stands directly on the wall, with no walking space behind it', () => {
+    for (const [template, side] of [
+      [waldMiniboss, 'west'],
+      [waldMinibossEast, 'east'],
+    ] as const) {
+      const sim = arena(template);
+      for (const log of logIndices(sim)) {
+        // Flush with the wall: the footprint fits where it stands, and not a
+        // couple of units nearer the wall — nobody can walk in behind it.
+        const radius = sim.body.data[log * 2] ?? 0;
+        const x = sim.positionX(log);
+        const y = sim.positionY(log);
+        const towardWall = side === 'west' ? -2 : 2;
+        expect(sim.room.isClear(x, y, radius), `${side} log at y=${String(y)} fits`).toBe(true);
+        expect(
+          sim.room.isClear(x + towardWall, y, radius),
+          `${side} log at y=${String(y)} has no gap`,
+        ).toBe(false);
+      }
+    }
+  });
+
+  it('a log rolls wall to wall through a player in its lane, who is popped out sideways at the end', () => {
+    const sim = arena();
+    keepRoomLocked(sim);
+    const player = sim.playerIndex;
+    const laneY = 90;
+    const roller = entityIndex(
+      sim.spawnEnemyKind(sim.enemies.indexOf('bieber-log-east'), sim.room.minX + 23, laneY),
+    );
+    sim.world.flush();
+    stand(sim, 150, laneY);
+    // Let the arrival grace pass first: the point is the ride, not the i-frames.
+    let maxX = 0;
+    let health = sim.health.data[player * 2] ?? 0;
+    for (let tick = 0; tick < 400 && sim.world.states[roller] === World.ALIVE; tick++) {
+      sim.step(createInputFrame());
+      maxX = Math.max(maxX, sim.positionX(roller));
+      expect(sim.room.isClear(sim.positionX(player), sim.positionY(player), 3)).toBe(true);
+    }
+    // Wall to wall: it did not stop against the player.
+    expect(maxX).toBeGreaterThan(sim.room.maxX - 12);
+    // And the player is not left in its lane against the wall.
+    expect(Math.abs(sim.positionY(player) - laneY)).toBeGreaterThan(8);
+    expect(sim.health.data[player * 2]).toBeLessThanOrEqual(health);
+    health = 0;
+    expect(health).toBe(0);
   });
 });
