@@ -61,7 +61,7 @@ export const bar: Record<DictKey, string> = {
 
   'ui.victory.headline': 'Sieg!',
   'ui.victory.epilogue':
-    'Der Stier foit. Draußn roit a Liefawong vom Marktplatz — voi belodn und Richtung Südn.\nDes Kapitl is aus. Der Weg geht no weiter.',
+    "Des letzte Radl vom Waldradler steht still. Da Weg is wieda ruhig, zum erstn Moi seit lang.\nWeita geht d'Straß fürs Erste ned.",
   'ui.victory.retry': 'No amoi',
   'ui.victory.results': 'Ergebnis',
   'ui.victory.hub': 'Titl',
@@ -118,6 +118,8 @@ export const bar: Record<DictKey, string> = {
     "Opas letzts Pfeitinger is leer. De volle Kistn daneb is 's gleiche Bier, aba's Etikett is neu: Wasser, Malz, Hopfn — und Rosinen.\n\nDer Alois nimmt eahm sein Trink-Rucksack vom Hakn, füllt eahm mit der versautn Kistn und stellt'n vo trinkn auf schiaßn.",
   'ui.story.chapterTwo':
     "D'Kellertreppn nauf, und Oberniederburg hat an schäna Nachmittag. De neichn Kistn staplt si vorm Wirtshaus, auf de Anhänger, hinterm Marktstand — am hellichtn Tag, und koaner am Platz hat's für nötig ghoitn, wos dazua z'sogn.\n\nEs war also nia bloaß dem Opa sei Kistn. Irgendwer schickt de do, lasterweis, und de kemma von weiter obn im Tal, ois wo da Alois je an Grund ghabt hätt hinzfahrn.",
+  'ui.story.chapterThree':
+    "Hinterm Dorf wird de Straß zu Schotter, dann zu am Wanderweg, dann zu was, des bloß so duat. Da Alois folgt de Reifnspurn in 'n Wald. Do is ois grea, und ned ois davo soi's song.",
 
   // --- HUD -----------------------------------------------------
   'ui.hud.bossBanner': 'Bossraum',

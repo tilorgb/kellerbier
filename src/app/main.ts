@@ -171,6 +171,7 @@ import { ActiveRunRecorder, decodeActiveRunFrames, persistActiveRun } from './sa
 import type { CharacterTraits } from '../sim/character/definition.js';
 import { loadSave } from './save/storage.js';
 import {
+  STORY_BEAT_CHAPTER_THREE,
   STORY_BEAT_CHAPTER_TWO,
   STORY_BEAT_OPENING,
   hasSeenStoryBeat,
@@ -281,6 +282,9 @@ const FLOOR_CARD_FADE_MS = 700;
  * expected shape once they unpark (`docs/ROADMAP.md` M10).
  */
 const CHAPTER_TWO_FLOOR = 2;
+
+/** Floor 3, the Wald — chapter three's card (#414), same reasoning as `CHAPTER_TWO_FLOOR`. */
+const CHAPTER_THREE_FLOOR = 3;
 
 /**
  * How long the boss intro plate (#58/#327) stays fully up, once faded in —
@@ -4005,8 +4009,8 @@ WASD move   arrows aim and fire
    * passes `HIGHEST_PLAYABLE_FLOOR` — the highest floor `generateFloor` can
    * actually build a plan for today. `FLOOR_CONFIGS` already lists floors up
    * to 7 (#37's doc comment), but a floor's config being *present* isn't the
-   * same as its room pool being non-empty: floors 3-7 have zero templates
-   * tagged for their `floorTag` (`wald`/`alpen`/`schloss`/`brauerei`/`wiesn`),
+   * same as its room pool being non-empty: floors 4-7 have zero templates
+   * tagged for their `floorTag` (`alpen`/`schloss`/`brauerei`/`wiesn`),
    * so `generateFloor` would throw the moment it tried to place a start or
    * boss room. Bump `HIGHEST_PLAYABLE_FLOOR` as each new floor's content
    * lands — this is what keeps the loop endless rather than a dead end the
@@ -4081,6 +4085,8 @@ WASD move   arrows aim and fire
     // `seenStoryBeats` stops it at one anyway.
     if (nextFloor === CHAPTER_TWO_FLOOR) {
       showStoryBeatOrFloorCard(STORY_BEAT_CHAPTER_TWO, 'ui.story.chapterTwo');
+    } else if (nextFloor === CHAPTER_THREE_FLOOR) {
+      showStoryBeatOrFloorCard(STORY_BEAT_CHAPTER_THREE, 'ui.story.chapterThree');
     } else {
       showFloorCard();
     }

@@ -46,11 +46,10 @@ export interface VictoryScreenActions {
  * appears — so a win reads as a different feeling from a death rather than a
  * re-skinned loss screen.
  *
- * The epilogue carries #58's chapter-two cliffhanger and its "more to come"
- * frame: Der Stier falling and the delivery lorry pulling out of the square
- * are the direction the ending promises, without saying what is upstream —
- * `docs/CONTENT_BIBLE.md`'s own acceptance bar for it is a playtester
- * calling it a cliffhanger unprompted. It stays plain text rather than a
+ * The epilogue follows Der Waldradler, the last boss of the run since #414
+ * moved the win to floor 3 (`docs/DECISIONS.md` #117). It names the fight
+ * that was won and says the road ends here for now — no cliffhanger, nothing
+ * written to keep a player interested: the gameplay is the hook. It stays plain text rather than a
  * dedicated illustrated card (the `StoryCard` shape `startRun`'s opening
  * beat uses): the win screen already is the "moment of quiet" #155 asks
  * for, and stacking a second full-frame card behind it would cost the

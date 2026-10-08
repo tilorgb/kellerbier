@@ -27,8 +27,8 @@ describe('progression content', () => {
   });
 
   it("grants Promille on floor 1's boss, inside the shipping run (#236)", () => {
-    // The floors that exist are 1 and 2 (`app/main.ts`'s
-    // HIGHEST_PLAYABLE_FLOOR), so floor 2's boss is the *last* boss of the
+    // The floors that exist are 1 to 3 (`HIGHEST_PLAYABLE_FLOOR`), so floor 3's
+    // boss is the *last* boss of the
     // shipping game — the gate that used to sit there handed the mechanic
     // over after the only playthrough most players will take. Floor 1's boss
     // is the gate now, and this is the test that says so.

@@ -97,9 +97,8 @@ describe('spriteFor', () => {
 
   it('falls back for a floor with no authored projectile art', () => {
     const { art: set, named } = art();
-    // Floors 3-7 (#39-#43, parked in M10). Unreachable in the dev build today
-    // — `HIGHEST_PLAYABLE_FLOOR` is 2 — which is what keeps the generated disc
-    // out of a player's view rather than merely rare.
+    // Floors 4-7 (#40-#43, parked in M11). Unreachable today —
+    // `HIGHEST_PLAYABLE_FLOOR` is 3.
     expect(spriteFor(set, ProjectileTeam.Enemy, 0, null, 5)).toBe(named.fallback);
   });
 
