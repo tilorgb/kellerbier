@@ -6724,7 +6724,7 @@ slowing the pattern down widens it, speeding it up narrows it.
 in about half the time of phase one. At peak the ring puts about 120 shots in the air against a
 pool of 5000.
 
-**Implementer defaults, to confirm:** the wheel rolls to the arena centre for a gap pattern to read
+**Implementer defaults, confirmed by Tilo 2026-10-08:** the wheel rolls to the arena centre for a gap pattern to read
 fairly (one state, `roll`, to drop); it is `mid`-sized as a placeholder until its art is signed off;
 the wind-up bell rings on both of the Waldradler's attacks, since the audio seam is per enemy, not
 per state; the boss intro plate's title and epithet are marked placeholders in all three locales,
