@@ -12,7 +12,7 @@ import {
 import { ENEMY_DEFINITIONS } from '../../src/content/enemies/index.js';
 import { ORDNER_STRIP_NAMES } from '../../src/render/ordner-view.js';
 import { PLAYER_BODY_KEYS, SCHLAUCH_OCTANTS } from '../../src/render/player-art.js';
-import { FLIGHT_STRIP_SUFFIXES } from '../../src/render/entities.js';
+import { DIRECTION_STRIP_SUFFIXES, FLIGHT_STRIP_SUFFIXES } from '../../src/render/entities.js';
 import { WALK_CYCLE_FRAMES } from '../../tools/art/spec.mjs';
 
 /** Every strip name `render/player-art.ts` asks `common/characters/` for. */
@@ -84,9 +84,14 @@ describe('every animation strip in assets/sprites/', () => {
       // A flier (#411) also has its wing-beat strips, `<id>-fly-side` and the
       // rest, which `render/entities.ts` asks for by those suffixes.
       const ids = ENEMY_DEFINITIONS.flatMap((definition) =>
-        definition.flying === true
-          ? [definition.id, ...FLIGHT_STRIP_SUFFIXES.map((suffix) => `${definition.id}${suffix}`)]
-          : [definition.id],
+        [
+          definition.id,
+          // A per-heading strip (#438): `<id>-side`, `-south`, `-north`.
+          ...DIRECTION_STRIP_SUFFIXES.map((suffix) => `${definition.id}${suffix}`),
+          ...(definition.flying === true
+            ? FLIGHT_STRIP_SUFFIXES.map((suffix) => `${definition.id}${suffix}`)
+            : []),
+        ],
       );
       if (sprite.bucketId === 'common') {
         expect([...PLAYER_STRIP_NAMES, ...Object.values(ORDNER_STRIP_NAMES), ...ids]).toContain(
