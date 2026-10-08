@@ -1,5 +1,5 @@
 import type { GameSim } from '../game/sim.js';
-import type { ProjectileStore } from '../projectile/store.js';
+import { ProjectileTeam, type ProjectileStore } from '../projectile/store.js';
 
 /**
  * Wind-push scratch state for `applyWind`'s per-projectile callback — a
@@ -19,6 +19,12 @@ const WIND_Y = 1;
 function pushProjectile(slot: number): void {
   const projectiles = windProjectiles;
   if (projectiles === null) {
+    return;
+  }
+  // Enemy shots fly true: wind that bends a boss pattern sideways makes it
+  // undodgeable (the Radler stage 2 report), and Föhn is meant to disturb the
+  // player's aim, not to be an unfair dodge check.
+  if (projectiles.team[slot] !== ProjectileTeam.Player) {
     return;
   }
   projectiles.velocityX[slot] = (projectiles.velocityX[slot] ?? 0) + (windScratch[WIND_X] ?? 0);

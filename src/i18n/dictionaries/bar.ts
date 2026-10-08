@@ -151,7 +151,6 @@ export const bar: Record<DictKey, string> = {
   'ui.promille.effectKnockdown': 'du foisd {seconds} s lang um, dann {kater}',
   'ui.promille.katerLine':
     '{name}: -{damage} % Schodn, -{speed} % Lauftempo für {seconds} s. Essn hilft.',
-  'ui.promille.toast': '{tier}: {effects}',
   'ui.promille.panelFrom': 'ab {value}{unit}',
   'ui.hud.promilleUnlockHintNeutral': 'Aufladn haut härta. Z’vui, und du legst di hi.',
   'ui.hud.unbound': 'ned bleg',

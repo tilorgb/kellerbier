@@ -67,7 +67,6 @@ import { CurseHud } from '../render/curse-hud.js';
 import { BlutwurzHud } from '../render/blutwurz-hud.js';
 import { ItemSetHud } from '../render/item-set-hud.js';
 import { PromilleHud } from '../render/promille-hud.js';
-import { promilleToastText } from '../render/promille-text.js';
 import { WalletHud } from '../render/wallet-hud.js';
 import { EFFECT_PALETTE, HUD_PALETTE, PARTICLE_PALETTE, UI_PALETTE } from '../render/palette.js';
 import { FloorTitleCard } from '../render/floor-title-card.js';
@@ -1288,18 +1287,6 @@ async function boot(progress: BootProgress): Promise<void> {
   let pickupToastLabel = '';
 
   /**
-   * What the Promille tier you just crossed does (#460) — "Angeheitert: +25%
-   * damage, +12% fire rate, tunnel vision". The bar only ever said the tier's
-   * name and a number; this is the line that says what changed. Driven by
-   * `sim.promilleTierChange` and timed in sim ticks, so a pause holds it
-   * rather than letting it expire behind the menu.
-   */
-  const promilleToast = new TextPlate(kit, { colour: HUD_PALETTE.toastText, wrapWidth: 280 });
-  hudLayer.addChild(promilleToast.view);
-  let promilleToastLabel = '';
-  const PROMILLE_TOAST_TICKS = 240;
-
-  /**
    * A villager's one-liner (#58/#330), the first time this run spawns an
    * enemy type carrying `EnemyDefinition.line` — the "commits both ways"
    * NPCs `docs/CONTENT_BIBLE.md` §0 asks for. Same `TextPlate`, same
@@ -1598,7 +1585,6 @@ async function boot(progress: BootProgress): Promise<void> {
     bossIntroPlate.resize(width);
     bossIntroPlate.place(centreX, Math.round(height * 0.16));
     pickupToast.place(centreX, Math.round(height * 0.2));
-    promilleToast.place(centreX, Math.round(height * 0.3));
     villagerBark.place(centreX, Math.round(height * 0.12));
     latchHint.place(centreX, Math.round(height * 0.26));
     shopPreview.place(centreX, Math.round(height * 0.85));
@@ -2583,28 +2569,6 @@ async function boot(progress: BootProgress): Promise<void> {
         pickupToast.visible = false;
         pickupToastLabel = '';
       }
-      const tierChange = sim.promilleUnlocked ? sim.promilleTierChange : null;
-      if (
-        tierChange !== null &&
-        sim.tick >= tierChange.tick &&
-        sim.tick - tierChange.tick < PROMILLE_TOAST_TICKS
-      ) {
-        const label = promilleToastText(
-          preferences.locale,
-          tierChange.tier,
-          sim.tuning.promille,
-          settings.neutralReskin,
-        );
-        if (label !== promilleToastLabel) {
-          promilleToastLabel = label;
-          promilleToast.set(label);
-          promilleToast.place(Math.round(uiFrame.width / 2), Math.round(uiFrame.height * 0.3));
-        }
-        promilleToast.visible = true;
-      } else if (promilleToast.visible) {
-        promilleToast.visible = false;
-        promilleToastLabel = '';
-      }
       // The pause menu's Promille panel (#460): handed the run's tier every
       // frame, `null` while the meter is locked so a sober run's pause menu
       // is exactly what it was.
@@ -3330,8 +3294,6 @@ WASD move   arrows aim and fire
     bossIntroPlate.hide();
     pickupToastLabel = '';
     pickupToast.visible = false;
-    promilleToastLabel = '';
-    promilleToast.visible = false;
     villagerBarkLabel = '';
     villagerBark.visible = false;
     latchHintLabel = '';

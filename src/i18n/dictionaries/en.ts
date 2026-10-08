@@ -155,7 +155,6 @@ export const en = {
   'ui.promille.effectKnockdown': 'you fall over for {seconds}s, then {kater}',
   'ui.promille.katerLine':
     '{name}: -{damage}% damage, -{speed}% move speed for {seconds}s. Eating clears it.',
-  'ui.promille.toast': '{tier}: {effects}',
   'ui.promille.panelFrom': 'from {value}{unit}',
   'ui.hud.promilleUnlockHintNeutral': 'Charging up hits harder. Too much and you go down.',
   'ui.hud.unbound': 'unbound',
