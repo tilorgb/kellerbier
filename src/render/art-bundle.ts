@@ -27,11 +27,10 @@ const PLAYER_SHOT = 'beer';
 /**
  * `fallback` is the generated disc every projectile used to draw as.
  *
- * It survives for floors 3-7, whose projectile art is M10's job (#39-#43,
- * parked) — and only there: `app/main.ts`'s `HIGHEST_PLAYABLE_FLOOR` is 2, so
- * no player can currently reach a floor that would draw it. (A `?floor=3`
- * sandbox run can — `HIGHEST_SANDBOX_FLOOR` — but that is a dev and
- * reviewer build only, playing a floor that is knowingly unfinished.) That is what keeps
+ * It survives for floors 3-7. Floor 3 is now reachable (`HIGHEST_PLAYABLE_FLOOR`
+ * is 3, #414) and has no authored projectile sprite yet, so its enemy shots
+ * still draw as this disc until that art is signed off; floors 4-7 are
+ * parked (#40-#43). That is what would keep
  * #152's "`placeholder-art.ts` draws nothing a player sees" true rather than
  * nearly true, and it is why the fallback is a parameter here instead of
  * something this module quietly reaches for.

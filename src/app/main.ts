@@ -4005,8 +4005,8 @@ WASD move   arrows aim and fire
    * passes `HIGHEST_PLAYABLE_FLOOR` — the highest floor `generateFloor` can
    * actually build a plan for today. `FLOOR_CONFIGS` already lists floors up
    * to 7 (#37's doc comment), but a floor's config being *present* isn't the
-   * same as its room pool being non-empty: floors 3-7 have zero templates
-   * tagged for their `floorTag` (`wald`/`alpen`/`schloss`/`brauerei`/`wiesn`),
+   * same as its room pool being non-empty: floors 4-7 have zero templates
+   * tagged for their `floorTag` (`alpen`/`schloss`/`brauerei`/`wiesn`),
    * so `generateFloor` would throw the moment it tried to place a start or
    * boss room. Bump `HIGHEST_PLAYABLE_FLOOR` as each new floor's content
    * lands — this is what keeps the loop endless rather than a dead end the

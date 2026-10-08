@@ -70,7 +70,7 @@ Leave **Mobile friendly** off until the touch controls have been tried on a real
 >
 > ### In this build
 >
-> - Two floors: the cellar and the village above it, each with a mini-boss and a boss
+> - Three floors: the cellar, the village above it and the forest beyond, each with a mini-boss and a boss
 > - About sixty items
 > - Keyboard and gamepad, fully rebindable
 > - English, German and Bavarian
