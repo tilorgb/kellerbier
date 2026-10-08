@@ -656,6 +656,149 @@ export const spechtLanded = single('specht-landed', [
   '....t.t..t..........',
 ]);
 
+// ================================================== WALDRADLER / WALDRADL
+// PLACEHOLDERS (#412, #413). The boss designs are not signed off yet: the key
+// art is still being picked (`CLAUDE.md`, "New pixel art needs sign-off"), and
+// the real sprites are rigs cut from it (`docs/BOSS_SPRITES.md`). These two are
+// plain pictograms — a rider on a bike, a wheel — drawn from code so the fight
+// is playable and the art-coverage tests have something to hold. They are
+// meant to be deleted, not iterated on.
+
+/** A blank character grid, `w` x `h`, for the little drawing helpers below. */
+function canvas(w, h) {
+  return Array.from({ length: h }, () => Array.from({ length: w }, () => '.'));
+}
+
+function plot(g, x, y, ch) {
+  const row = g[Math.round(y)];
+  if (row !== undefined && Math.round(x) >= 0 && Math.round(x) < row.length) {
+    row[Math.round(x)] = ch;
+  }
+}
+
+function disc(g, cx, cy, r, ch) {
+  for (let y = Math.floor(cy - r); y <= Math.ceil(cy + r); y++) {
+    for (let x = Math.floor(cx - r); x <= Math.ceil(cx + r); x++) {
+      if ((x - cx) ** 2 + (y - cy) ** 2 <= r * r) plot(g, x, y, ch);
+    }
+  }
+}
+
+function ring(g, cx, cy, r, thickness, ch) {
+  for (let y = Math.floor(cy - r); y <= Math.ceil(cy + r); y++) {
+    for (let x = Math.floor(cx - r); x <= Math.ceil(cx + r); x++) {
+      const d = Math.hypot(x - cx, y - cy);
+      if (d <= r && d > r - thickness) plot(g, x, y, ch);
+    }
+  }
+}
+
+function line(g, x0, y0, x1, y1, ch, thickness = 1) {
+  const steps = Math.ceil(Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)) * 2);
+  for (let i = 0; i <= steps; i++) {
+    const t = steps === 0 ? 0 : i / steps;
+    const x = x0 + (x1 - x0) * t;
+    const y = y0 + (y1 - y0) * t;
+    for (let dy = 0; dy < thickness; dy++) {
+      for (let dx = 0; dx < thickness; dx++) plot(g, x + dx, y + dy, ch);
+    }
+  }
+}
+
+/** Nearest-neighbour fit of a drawing onto a smaller `w` x `h` grid. */
+function fit(g, w, h) {
+  return Array.from({ length: h }, (_, y) =>
+    Array.from(
+      { length: w },
+      (_, x) => g[Math.floor((y * g.length) / h)][Math.floor((x * g[0].length) / w)],
+    ),
+  );
+}
+
+/** Ink round everything painted: the outline the signed-off sprites carry in their grids. */
+function inked(g) {
+  const out = g.map((row) => [...row]);
+  for (let y = 0; y < g.length; y++) {
+    for (let x = 0; x < g[y].length; x++) {
+      if (g[y][x] !== '.') continue;
+      const near = [g[y - 1]?.[x], g[y + 1]?.[x], g[y]?.[x - 1], g[y]?.[x + 1]];
+      if (near.some((n) => n !== undefined && n !== '.' && n !== 'K')) out[y][x] = 'K';
+    }
+  }
+  return out.map((row) => row.join(''));
+}
+
+// 76x60, facing left like all character art: a rider in luminous green lycra
+// crouched over a bike, the front wheel on the left.
+const waldradler = single(
+  'waldradler',
+  (() => {
+    const g = canvas(76, 60);
+    const frontX = 17;
+    const rearX = 59;
+    const wheelY = 43;
+    for (const cx of [frontX, rearX]) {
+      disc(g, cx, wheelY, 15, 'b');
+      ring(g, cx, wheelY, 15, 3, 'a');
+      for (const a of [0, 1, 2, 3]) {
+        const t = (a * Math.PI) / 4;
+        line(
+          g,
+          cx - Math.cos(t) * 11,
+          wheelY - Math.sin(t) * 11,
+          cx + Math.cos(t) * 11,
+          wheelY + Math.sin(t) * 11,
+          'S',
+        );
+      }
+      disc(g, cx, wheelY, 2, 'w');
+    }
+    // Frame and fork.
+    line(g, frontX, wheelY, 30, 28, 'c', 2);
+    line(g, 30, 28, 48, 30, 'c', 2);
+    line(g, 48, 30, rearX, wheelY, 'c', 2);
+    line(g, 30, 28, 44, 42, 'c', 2);
+    line(g, 44, 42, rearX, wheelY, 'c', 2);
+    line(g, 26, 22, 31, 29, 'c', 2);
+    // Rider: hips over the saddle, torso leaning on the bars, arms, head.
+    line(g, 48, 30, 38, 17, 'G', 7);
+    line(g, 40, 17, 28, 19, 'H', 3);
+    line(g, 28, 19, 25, 24, 'H', 3);
+    line(g, 48, 32, 44, 43, 'v', 4);
+    disc(g, 30, 13, 6, 'w');
+    disc(g, 30, 10, 6, 'V');
+    line(g, 25, 14, 31, 14, 'a', 2);
+    // Drawn on a roomier grid, then fitted to the largest character canvas
+    // (`tools/art/spec.mjs`: 64x48) — a boss strip is the real art's job.
+    return inked(fit(g, 60, 48));
+  })(),
+);
+
+// 44x44: one wheel standing upright with a scrap of neon lycra caught in it.
+const waldradl = single(
+  'waldradl',
+  (() => {
+    const g = canvas(44, 44);
+    disc(g, 22, 22, 20, 'b');
+    ring(g, 22, 22, 20, 4, 'a');
+    for (const a of [0, 1, 2, 3, 4, 5]) {
+      const t = (a * Math.PI) / 6;
+      line(
+        g,
+        22 - Math.cos(t) * 16,
+        22 - Math.sin(t) * 16,
+        22 + Math.cos(t) * 16,
+        22 + Math.sin(t) * 16,
+        'S',
+      );
+    }
+    disc(g, 22, 22, 3, 'G');
+    line(g, 22, 22, 34, 12, 'H', 3);
+    line(g, 22, 22, 12, 32, 'V', 2);
+    return inked(g);
+  })(),
+);
+
 export const ROSTER = {
   fliegenpilz,
   zecke,
@@ -665,6 +808,8 @@ export const ROSTER = {
   specht,
   'specht-landed': spechtLanded,
   'specht-dive': spechtDive,
+  waldradler,
+  waldradl,
 };
 
 /** Every sprite is authored against Floor 3's palette. */

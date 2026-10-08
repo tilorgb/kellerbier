@@ -8,7 +8,9 @@ import {
   dieZapfhahnOrgel,
   grosseKellerassel,
   maibaumDieb,
+  waldradl,
 } from '../../src/content/enemies/index.js';
+import waldBoss from '../../src/content/rooms/wald-boss.json';
 import { entityIndex } from '../../src/sim/ecs/entity.js';
 import { World } from '../../src/sim/ecs/world.js';
 import { EventKind } from '../../src/sim/events/queue.js';
@@ -453,5 +455,128 @@ describe('floor 2 mini-boss pacing (#277)', () => {
     // ...and neither is anywhere near the floor's boss.
     expect(band).toBeLessThan(derStier.health);
     expect(derLadewagen.health).toBeLessThan(derStier.health);
+  });
+});
+
+/**
+ * #412 / #413 — Floor 3's boss, held to the same bar: tuned against a real sim,
+ * not picked as a number (`docs/DECISIONS.md` #66).
+ *
+ * Der Waldradler never walks into the player, so the harness aims at where he
+ * is each tick and holds the trigger — shots miss while he rides about, which
+ * is part of what is being measured. His loop is the attack he picks, so "at
+ * least four cycles" counts both (`rampTelegraph` and `aim`).
+ *
+ * Das Waldradl is stationary and a ring of shots would knock the harness's
+ * still player out of range (`measureFight` does not dodge), so the player here
+ * does what the fight asks: stands in a gap, the way a person would. It is the
+ * shorter half of the fight — "~40% of phase 1's" health — and has to stay so.
+ */
+function waldBossSim(seed: number): GameSim {
+  const sim = new GameSim({ seed, roomTemplate: waldBoss, floor: 3, population: 'empty' });
+  const doomed: number[] = [];
+  sim.world.forEach(sim.collidableMask, (index) => {
+    if (index !== sim.playerIndex) {
+      doomed.push(index);
+    }
+  });
+  for (const index of doomed) {
+    sim.world.destroy(sim.world.entityAt(index));
+  }
+  sim.world.flush();
+  for (let tick = 0; tick < 200 && sim.roomWarmupTicks > 0; tick++) {
+    sim.step(createInputFrame());
+  }
+  sim.health.data[sim.playerIndex * 2] = 1_000_000;
+  sim.health.data[sim.playerIndex * 2 + 1] = 1_000_000;
+  return sim;
+}
+
+function measureWaldradler(shotDamage: number, seed: number): { ticks: number; attacks: number } {
+  const sim = waldBossSim(seed);
+  sim.tuning.shooting.shotDamage = shotDamage;
+  const player = sim.playerIndex;
+  const boss = place(sim, 'waldradler', sim.positionX(player) + 70, sim.positionY(player));
+  let attacks = 0;
+  let previous = stateName(sim, boss);
+  for (let tick = 0; tick < 8000; tick++) {
+    sim.step(aimAt(sim, player, boss));
+    if (!isAlive(sim, boss)) {
+      return { ticks: tick + 1, attacks };
+    }
+    const current = stateName(sim, boss);
+    if (current !== previous && (current === 'rampTelegraph' || current === 'aim')) {
+      attacks += 1;
+    }
+    previous = current;
+  }
+  return { ticks: 8000, attacks };
+}
+
+function measureWaldradl(shotDamage: number): number {
+  const sim = waldBossSim(1);
+  sim.tuning.shooting.shotDamage = shotDamage;
+  const player = sim.playerIndex;
+  const centreX = (sim.room.minX + sim.room.maxX) / 2;
+  const centreY = (sim.room.minY + sim.room.maxY) / 2;
+  const wheel = place(sim, 'waldradl', centreX, centreY);
+  const ring = waldradl.states
+    .find((state) => state.name === 'spin')
+    ?.behaviours.find((behaviour) => behaviour.behaviour === 'fireRotatingRing');
+  if (ring?.behaviour !== 'fireRotatingRing') {
+    throw new Error('no rotating ring');
+  }
+  let spinTicks = -1;
+  for (let tick = 0; tick < 6000; tick++) {
+    if (spinTicks < 0 && stateName(sim, wheel) === 'spin') {
+      spinTicks = 0;
+    }
+    if (spinTicks >= 0) {
+      // In a gap, 70 units out, following it round.
+      const angle = (ring.rotationPerVolley * spinTicks) / ring.everyTicks;
+      const x = centreX + Math.cos(angle) * 70;
+      const y = centreY + Math.sin(angle) * 70;
+      sim.transform.data[player * 4] = x;
+      sim.transform.data[player * 4 + 1] = y;
+      sim.transform.data[player * 4 + 2] = x;
+      sim.transform.data[player * 4 + 3] = y;
+      sim.velocity.data[player * 2] = 0;
+      sim.velocity.data[player * 2 + 1] = 0;
+      spinTicks += 1;
+    }
+    sim.step(aimAt(sim, player, wheel));
+    if (!isAlive(sim, wheel)) {
+      return tick + 1;
+    }
+  }
+  return 6000;
+}
+
+describe('Floor 3 boss pacing (#412, #413)', () => {
+  it('Der Waldradler plays at least four attacks before he splits, at both DPS', () => {
+    for (const shotDamage of [1, 2]) {
+      for (const seed of [1, 2, 3]) {
+        const result = measureWaldradler(shotDamage, seed);
+        expect(result.ticks, `shotDamage=${String(shotDamage)} seed=${String(seed)}`).toBeLessThan(
+          8000,
+        );
+        expect(
+          result.attacks,
+          `shotDamage=${String(shotDamage)} seed=${String(seed)}: only ${String(result.attacks)} attack(s)`,
+        ).toBeGreaterThanOrEqual(4);
+      }
+    }
+  });
+
+  it('Das Waldradl falls to a player standing in a gap, in about half the time of phase one', () => {
+    for (const shotDamage of [1, 2]) {
+      const wheel = measureWaldradl(shotDamage);
+      const rider = measureWaldradler(shotDamage, 1).ticks;
+      expect(wheel, `shotDamage=${String(shotDamage)}: the wheel never fell`).toBeLessThan(6000);
+      expect(
+        wheel,
+        `the wheel (${String(wheel)}) outlasts the rider (${String(rider)})`,
+      ).toBeLessThan(rider);
+    }
   });
 });

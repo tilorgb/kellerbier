@@ -25,8 +25,8 @@
       "count": 1,
       "choices": [
         {
-          "enemyId": "der-stier",
-          "minFloor": 2,
+          "enemyId": "waldradler",
+          "minFloor": 3,
           "maxFloor": 3
         }
       ]

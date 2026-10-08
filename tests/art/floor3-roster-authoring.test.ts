@@ -48,6 +48,9 @@ describe("Der Wald roster's committed art is what the authoring source produces"
       'specht-fly-front',
       'specht-fly-side',
       'specht-landed',
+      // Placeholders until the boss art is signed off (#412, #413).
+      'waldradl',
+      'waldradler',
       'zecke',
     ]);
   });

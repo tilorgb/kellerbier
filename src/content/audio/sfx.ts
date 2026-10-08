@@ -577,6 +577,19 @@ const windupSpechtDrum: SfxDefinition = {
   repeat: { count: 14, intervalSeconds: 0.045 },
 };
 
+const windupWaldradlerBell: SfxDefinition = {
+  id: 'windup-waldradler-bell',
+  description:
+    'Der Waldradler ringing his bike bell as the ramps rise (#412): two bright dings, "ring ring" — in place of the generic wind-up, so the charge is heard coming before the ramps are looked at.',
+  noise: {
+    filter: { type: 'highpass', frequencyHz: 5200, q: 1.2 },
+    durationSeconds: 0.05,
+    gain: 0.25,
+  },
+  tone: { instrument: 'clarinet', note: 'A5', durationSeconds: 0.16 },
+  repeat: { count: 2, intervalSeconds: 0.2 },
+};
+
 const itemZeckeShakeOff: SfxDefinition = {
   id: 'item-zecke-shake-off',
   description:
@@ -594,6 +607,7 @@ export const SFX_DEFINITIONS: readonly SfxDefinition[] = [
   itemZeckeLatch,
   itemZeckeShakeOff,
   windupSpechtDrum,
+  windupWaldradlerBell,
   hitSquelch,
   hitMetal,
   hitAnimal,
@@ -644,6 +658,10 @@ export const SFX_DEFINITIONS: readonly SfxDefinition[] = [
  */
 export const ENEMY_WINDUP_SFX: Readonly<Record<string, string>> = {
   specht: 'windup-specht-drum',
+  // The bell is the ramp charge's telegraph. His wrapper volley's wind-up
+  // rings it too — one ring per attack is a cue the player can learn to
+  // distinguish by the ramps rising, not by the sound alone.
+  waldradler: 'windup-waldradler-bell',
 };
 
 export type EnemySfxCategory = 'squelch' | 'metal' | 'animal' | 'folk' | 'oompah';
@@ -689,4 +707,6 @@ export const ENEMY_SFX_CATEGORY: Readonly<Record<string, EnemySfxCategory>> = {
   boar: 'animal',
   borkenkaefer: 'squelch',
   specht: 'animal',
+  waldradler: 'folk',
+  waldradl: 'metal',
 };

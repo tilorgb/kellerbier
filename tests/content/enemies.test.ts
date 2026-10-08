@@ -7,6 +7,7 @@ import {
   grosseKellerassel,
   kellerassel,
 } from '../../src/content/enemies/index.js';
+import { PICKUP_DEFINITIONS } from '../../src/content/pickups/pickups.js';
 import type { EnemyDefinition } from '../../src/sim/enemy/definition.js';
 import { EnemyRegistry } from '../../src/sim/enemy/registry.js';
 
@@ -54,13 +55,35 @@ describe('the enemy roster', () => {
       const reached = new Set<string>([definition.initial]);
       for (const state of definition.states) {
         for (const transition of state.transitions ?? []) {
-          reached.add(transition.to);
+          if ('toOneOf' in transition) {
+            for (const choice of transition.toOneOf) {
+              reached.add(choice.to);
+            }
+          } else {
+            reached.add(transition.to);
+          }
         }
       }
       for (const state of definition.states) {
         // A state nothing can enter is content somebody wrote and wired up
         // wrong, and it is invisible in play: the enemy simply never does it.
         expect(reached.has(state.name), `${definition.id} cannot reach "${state.name}"`).toBe(true);
+      }
+    }
+  });
+
+  it('only drops pickups that exist (#412)', () => {
+    const pickups = new Set(PICKUP_DEFINITIONS.map((pickup) => pickup.id));
+    for (const definition of ENEMY_DEFINITIONS) {
+      for (const state of definition.states) {
+        for (const behaviour of state.behaviours) {
+          if (behaviour.behaviour === 'dropPickupOnDeath') {
+            expect(
+              pickups.has(behaviour.pickup),
+              `${definition.id} "${state.name}" drops "${behaviour.pickup}", which is not a pickup`,
+            ).toBe(true);
+          }
+        }
       }
     }
   });
