@@ -12,6 +12,9 @@ export interface MenuNavEdges {
    */
   readonly left: boolean;
   readonly right: boolean;
+  /** Whether left/right is held right now, edge or not — what a held slider's auto-repeat (`HoldRepeater`) runs on. */
+  readonly leftDown: boolean;
+  readonly rightDown: boolean;
   readonly confirm: boolean;
   readonly cancel: boolean;
   /** The shoulder buttons — a tabbed screen's page turn, the pad's own convention for it. */
@@ -62,6 +65,8 @@ export class GamepadMenuNav {
       down: downNow && !this.downHeld,
       left: leftNow && !this.leftHeld,
       right: rightNow && !this.rightHeld,
+      leftDown: leftNow,
+      rightDown: rightNow,
       confirm: confirmNow && !this.confirmHeld,
       cancel: cancelNow && !this.cancelHeld,
       prevTab: prevTabNow && !this.prevTabHeld,

@@ -13,6 +13,12 @@
  * Directions are separate bindable actions rather than an axis, because on a
  * keyboard they *are* separate keys. Analog sticks bypass this list and feed
  * the axes directly.
+ *
+ * There is deliberately no Fire: aiming is what fires (the Isaac convention,
+ * `InputSampler` sets the Fire bit itself), and the sim only shoots with a
+ * non-zero aim, so a Fire button on its own did nothing (#460). Saved
+ * bindings that still carry a `fire` entry load fine — `sanitizeBindings`
+ * only reads the actions listed here and drops the rest.
  */
 export const Bindable = {
   MoveUp: 'moveUp',
@@ -23,7 +29,6 @@ export const Bindable = {
   AimDown: 'aimDown',
   AimLeft: 'aimLeft',
   AimRight: 'aimRight',
-  Fire: 'fire',
   Bomb: 'bomb',
   Use: 'use',
   Map: 'map',
@@ -84,7 +89,6 @@ export function createDefaultBindings(): Bindings {
       aimDown: ['ArrowDown'],
       aimLeft: ['ArrowLeft'],
       aimRight: ['ArrowRight'],
-      fire: ['Space'],
       bomb: ['KeyE'],
       use: ['KeyQ'],
       map: ['Tab'],
@@ -99,7 +103,6 @@ export function createDefaultBindings(): Bindings {
       aimDown: [],
       aimLeft: [],
       aimRight: [],
-      fire: [GamepadButton.RightTrigger],
       bomb: [GamepadButton.LeftTrigger, GamepadButton.West],
       use: [GamepadButton.South],
       map: [GamepadButton.Select],

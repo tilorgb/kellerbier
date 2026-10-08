@@ -22,6 +22,14 @@ export const PromilleTier = {
 
 export type PromilleTierId = (typeof PromilleTier)[keyof typeof PromilleTier];
 
+/** A crossing from one tier into another (#460) — see `GameSim.promilleTierChange`. */
+export interface PromilleTierChange {
+  readonly from: PromilleTierId;
+  readonly tier: PromilleTierId;
+  /** The sim tick the crossing was noticed on. */
+  readonly tick: number;
+}
+
 /**
  * The pre-#92 Promille ceiling — still exactly what `trinkfest === 0`
  * reproduces. With Trinkfest raised, the real reachable ceiling is
@@ -389,4 +397,97 @@ export function promilleTunnelVision(value: number, tuning: PromilleTuning): num
  */
 export function promilleGloom(value: number, tuning: PromilleTuning): number {
   return rampFrom(value, BEDUSELT_AT) * tuning.maxGloom;
+}
+
+/**
+ * What a tier does to the player, as data (#460) — the numbers the pause
+ * panel and the tier-change toast tell the player, read from the same
+ * tuning the sim spends so the words cannot drift from the game.
+ *
+ * Booleans for the qualitative penalties, because that is all they are:
+ * their strength is a continuous ramp (`promilleDriftScale` and friends), and
+ * what a *tier* can honestly say is which of them have started. Each flag
+ * mirrors the boundary its ramp starts at above — tunnel vision at the first
+ * sip, drift/wobble/gloom at Beduselt — so changing one of those boundaries
+ * and not this is the bug `tests/unit/promille-effects.test.ts` is there to
+ * catch.
+ */
+export interface PromilleTierEffects {
+  /** Whole percent over sober: `25` for `+25%`. */
+  readonly damagePercent: number;
+  readonly fireRatePercent: number;
+  readonly tunnelVision: boolean;
+  readonly drift: boolean;
+  readonly wobble: boolean;
+  readonly gloom: boolean;
+  /** Umgfalln itself: the knockdown, not a stat line. */
+  readonly knockdown: boolean;
+}
+
+export function promilleTierEffects(
+  tier: PromilleTierId,
+  tuning: PromilleTuning,
+): PromilleTierEffects {
+  const knockdown = tier === PromilleTier.Umgfalln;
+  const beduselt = tier >= PromilleTier.Beduselt;
+  return {
+    // Umgfalln shows no stat line: the player cannot fire, and the fallback
+    // numbers `promilleDamageMultiplier` returns for it are an implementation
+    // detail.
+    damagePercent: knockdown ? 0 : Math.round((promilleDamageMultiplier(tier, tuning) - 1) * 100),
+    fireRatePercent: knockdown
+      ? 0
+      : Math.round((promilleFireRateMultiplier(tier, tuning) - 1) * 100),
+    tunnelVision: tier >= PromilleTier.Angeheitert,
+    drift: beduselt,
+    wobble: beduselt,
+    gloom: beduselt,
+    knockdown,
+  };
+}
+
+/** The tiers a player can actually reach at `trinkfest`, sober first and Umgfalln last. */
+export function reachablePromilleTiers(trinkfest: number): PromilleTierId[] {
+  const tiers: PromilleTierId[] = [
+    PromilleTier.Nuchtern,
+    PromilleTier.Angeheitert,
+    PromilleTier.Beduselt,
+    PromilleTier.Vollrausch,
+  ];
+  if (trinkfest >= 1) {
+    tiers.push(PromilleTier.Sturzbesoffen);
+  }
+  if (trinkfest >= 2) {
+    tiers.push(PromilleTier.Filmriss);
+  }
+  tiers.push(PromilleTier.Umgfalln);
+  return tiers;
+}
+
+/**
+ * The Promille value a tier begins at, for a given Trinkfest — the number the
+ * pause panel prints next to each tier (#460). Derived from the same
+ * boundaries `promilleTierOf` tests, so the two cannot disagree.
+ */
+export function promilleTierStart(
+  tier: PromilleTierId,
+  trinkfest: number,
+  tuning: PromilleTuning,
+): number {
+  switch (tier) {
+    case PromilleTier.Angeheitert:
+      return ANGEHEITERT_AT;
+    case PromilleTier.Beduselt:
+      return BEDUSELT_AT;
+    case PromilleTier.Vollrausch:
+      return VOLLRAUSCH_AT;
+    case PromilleTier.Sturzbesoffen:
+      return UMGFALLN_AT;
+    case PromilleTier.Filmriss:
+      return UMGFALLN_AT + tuning.trinkfestStageWidth;
+    case PromilleTier.Umgfalln:
+      return umgfallnThresholdFor(trinkfest, tuning);
+    default:
+      return 0;
+  }
 }

@@ -92,3 +92,17 @@ export function isFocusable(row: SettingsRow): boolean {
   }
   return true;
 }
+
+/**
+ * The slider value for a pointer at `ratio` (0-1) along its track, snapped to
+ * the row's own `step` so a click or drag lands on the same 5% grid the
+ * keyboard does (#460).
+ */
+export function sliderValueAt(
+  row: Pick<SettingsSliderRow, 'min' | 'max' | 'step'>,
+  ratio: number,
+): number {
+  const clamped = Math.min(1, Math.max(0, ratio));
+  const steps = Math.round(((row.max - row.min) * clamped) / row.step);
+  return Math.min(row.max, Math.max(row.min, row.min + steps * row.step));
+}

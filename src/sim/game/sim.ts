@@ -52,6 +52,7 @@ import {
 import { drawDeathWord } from './death-word.js';
 import {
   PromilleTier,
+  type PromilleTierChange,
   type PromilleTierId,
   clampTrinkfest,
   promilleCapFor,
@@ -715,6 +716,7 @@ export class GameSim {
   readonly stats: StatPipeline;
   /** The Promille tier `stats` last had modifiers built for. See `syncPromilleModifiers`. */
   private lastPromilleTier: PromilleTierId | null = null;
+  private promilleTierChangeValue: PromilleTierChange | null = null;
   /** Whether `stats` last had Kater's modifiers built in. See `syncKaterModifiers`. */
   private lastKaterActive = false;
   /**
@@ -4350,6 +4352,18 @@ export class GameSim {
     return promilleTierOf(this.promille, this.trinkfest, this.tuning.promille);
   }
 
+  /**
+   * The most recent Promille tier crossing — up or down — or `null` until the
+   * first one (#460). A fresh object per crossing, so a presentation layer
+   * tells "a new one" from "the one I already showed" by identity, the same
+   * way it would watch any other edge it has no event queue for. It names the
+   * tier and nothing about wording: what to tell the player lives in
+   * `render/promille-text.ts`, which has the locale and the neutral reskin.
+   */
+  get promilleTierChange(): PromilleTierChange | null {
+    return this.promilleTierChangeValue;
+  }
+
   /** Ticks left of the Umgfalln knockdown. Zero means the player can move and fire. */
   get umgfallnTicks(): number {
     return this.umgfallnTicksValue;
@@ -4447,6 +4461,15 @@ export class GameSim {
     const tier = this.promilleTier;
     if (tier === this.lastPromilleTier) {
       return;
+    }
+    // The first sync of a run only learns where the meter starts; a crossing
+    // needs a tier to have been left (#460).
+    if (this.lastPromilleTier !== null) {
+      this.promilleTierChangeValue = {
+        from: this.lastPromilleTier,
+        tier,
+        tick: this.currentTick,
+      };
     }
     this.lastPromilleTier = tier;
 

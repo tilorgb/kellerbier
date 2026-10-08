@@ -6847,3 +6847,27 @@ left wedged against the wall or inside the log. The nine lanes also mean any row
 in has a log to roll. At the top damage point the pacing test no longer compares Bieber with the
 Waldradler (the rider is then under 1500 ticks and Bieber cannot be faster than the lanes it takes
 to work through); it asks that he does not drag.
+
+## 126. Playtest pass (#460): no Fire binding, a way out of Settings, and Promille says what it does
+
+**Decided** from one external playtester's feedback, point by point.
+
+- **There is no Fire binding.** Aiming is what fires — arrows and the right stick set the Fire input
+  bit themselves and the sim only shoots with Fire *and* a non-zero aim — so Space and RT alone did
+  nothing while Controls listed them as rebindable and the HUD prompted them. `Bindable.Fire` is gone;
+  the input bit stays. A saved `fire` entry needs no migration: `sanitizeBindings` reads only the
+  actions that exist and drops the rest. The story card's Space-to-skip never went through bindings.
+- **Settings has a Back row on every tab, and Backspace closes it.** In fullscreen the browser spends
+  the first Escape leaving it, so Escape alone is not a way out. `fullscreenchange` redraws the
+  Settings screen so the Fullscreen row cannot go stale.
+- **Sliders keep their 5% step; the rate accelerates** (`input/hold-repeat.ts`): one step on press,
+  repeats after 380 ms, closing from 140 ms to 35 ms over 1.4 s, about two seconds for 0 to 100%.
+  Keyboard and pad share it, and it only repeats on a slider (or the Collection's grid), where
+  holding means something. A mouse click or drag sets the value under the pointer — a click used to
+  step *up*, so a volume could not be turned down with a mouse.
+- **Promille announces its tiers.** `GameSim.promilleTierChange` is a fresh object per crossing; the
+  HUD turns it into a toast and the pause menu carries a panel listing every reachable tier. Both read
+  the numbers out of tuning (`promilleTierEffects`), so retuning a bonus retunes the words.
+- **Die Große Kellerassel keeps 160 HP** (#232, #260) and gains pressure instead: a rolling charge out
+  of every curl along a locked line, a 5-shot 0.9 rad spit, a shorter walk between attacks, and
+  segments that spit. The loop is about as long as before, so `boss-pacing.test.ts` is unchanged.

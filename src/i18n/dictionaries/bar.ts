@@ -142,6 +142,17 @@ export const bar: Record<DictKey, string> = {
   'ui.hud.purseEmpty': 'Geldbeutel leer — koa Kraft',
   'ui.hud.promilleUnlocked': '{meter} freigschoit',
   'ui.hud.promilleUnlockHint': 'D’Maß haut härta. Z’vui, und du foisd um.',
+  'ui.promille.effectBonus': '+{damage} % Schodn, +{rate} % Feuerrate',
+  'ui.promille.effectNone': 'koa Bonus',
+  'ui.promille.effectVision': 'Tunnelblick',
+  'ui.promille.effectDrift': 'Bewegung driftet',
+  'ui.promille.effectWobble': 'Zuin wackelt',
+  'ui.promille.effectGloom': 'verschwommene Sicht',
+  'ui.promille.effectKnockdown': 'du foisd {seconds} s lang um, dann {kater}',
+  'ui.promille.katerLine':
+    '{name}: -{damage} % Schodn, -{speed} % Lauftempo für {seconds} s. Essn hilft.',
+  'ui.promille.toast': '{tier}: {effects}',
+  'ui.promille.panelFrom': 'ab {value}{unit}',
   'ui.hud.promilleUnlockHintNeutral': 'Aufladn haut härta. Z’vui, und du legst di hi.',
   'ui.hud.unbound': 'ned bleg',
   'ui.hud.activeItemDormant': '{name} ({requirement})',
@@ -151,7 +162,9 @@ export const bar: Record<DictKey, string> = {
   // --- Settings screen -----------------------------------------------------
   'ui.settings.toggle': 'Einstellunga',
   'ui.settings.title': 'Einstellunga',
-  'ui.settings.hint': 'Links/Rechts ändern   Enter bstätign   Tab wechslt Reiter   Esc zruck',
+  'ui.settings.hint':
+    'Links/Rechts ändern   Enter bstätign   Tab wechslt Reiter   Esc/Backspace zruck',
+  'ui.settings.back': 'Zruck',
 
   'ui.settings.tab.video': 'Buidl',
   'ui.settings.tab.audio': 'Ton',
@@ -203,7 +216,6 @@ export const bar: Record<DictKey, string> = {
   'ui.settings.action.aimDown': 'Ziel: obi',
   'ui.settings.action.aimLeft': 'Ziel: links',
   'ui.settings.action.aimRight': 'Ziel: rechts',
-  'ui.settings.action.fire': 'Schiaßn',
   'ui.settings.action.bomb': 'Bombn',
   'ui.settings.action.use': 'Benutzn',
   'ui.settings.action.map': 'Kartn',

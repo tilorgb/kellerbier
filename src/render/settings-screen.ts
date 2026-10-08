@@ -5,7 +5,12 @@ import { UI_PALETTE } from './palette.js';
 import { PostcardPanel } from './postcard-panel.js';
 import { FocusRing, iconRoles, type UiKit } from './ui/kit.js';
 import type { MenuScreen } from './ui/menu.js';
-import { isFocusable, type SettingsRow, type SettingsTab } from './ui/settings-model.js';
+import {
+  isFocusable,
+  sliderValueAt,
+  type SettingsRow,
+  type SettingsTab,
+} from './ui/settings-model.js';
 import { UI_LINE_HEIGHT, UI_TEXT_HEIGHT, uiText, uiTextHeight, uiTextWidth } from './ui/text.js';
 import { DisplayTitle, TITLE_STYLES } from './ui/title.js';
 
@@ -74,6 +79,8 @@ interface RowView {
   readonly leftCaret: Sprite | null;
   readonly rightCaret: Sprite | null;
   height: number;
+  /** Where the slider's track starts inside the row, as of the last layout — a pointer position becomes a value against this. */
+  trackX: number;
 }
 
 interface TabView {
@@ -103,6 +110,8 @@ export class SettingsScreen implements MenuScreen {
   private tabIndex = 0;
   private focusIndex = 0;
   private scrollIndex = 0;
+  /** The slider a pointer is currently dragging, if any. */
+  private dragging: RowView | null = null;
   /** Whether this open has its own card (a pause-menu takeover) or sits inside a pane that is already opaque (the title screen). */
   private dimmed = false;
   private box = { x: 0, y: 0, width: 0, height: 0 };
@@ -173,7 +182,21 @@ export class SettingsScreen implements MenuScreen {
       });
       this.tabStrip.addChild(label);
       const view: TabView = { tab, label, rows: [] };
-      for (const row of tab.rows) {
+      // Every tab ends in a Back row (#460): in fullscreen the browser takes
+      // the first Escape for itself, so a key was never a way out that could
+      // be relied on. It is a real row, so keyboard focus, a click and a
+      // pad's confirm all reach it the same way as any other action.
+      const rows: readonly SettingsRow[] = [
+        ...tab.rows,
+        {
+          kind: 'action',
+          label: t(this.locale, 'ui.settings.back'),
+          activate: () => {
+            this.close();
+          },
+        },
+      ];
+      for (const row of rows) {
         view.rows.push(this.buildRow(row, view.rows.length));
       }
       this.tabs.push(view);
@@ -251,6 +274,11 @@ export class SettingsScreen implements MenuScreen {
     this.refresh();
   }
 
+  /** Whether the focused row is a slider — the one row where holding left/right should keep going. */
+  get focusedSlider(): boolean {
+    return this.rows()[this.focusIndex]?.row.kind === 'slider';
+  }
+
   /** Left/right: a slider steps, a choice cycles, a toggle flips. */
   adjust(delta: 1 | -1): void {
     const row = this.rows()[this.focusIndex]?.row;
@@ -310,6 +338,7 @@ export class SettingsScreen implements MenuScreen {
   }
 
   close(): void {
+    this.dragging = null;
     this.actions.onClose();
   }
 
@@ -361,28 +390,77 @@ export class SettingsScreen implements MenuScreen {
       container.eventMode = 'static';
       container.cursor = 'pointer';
       container.on('pointerover', () => {
-        if (isFocusable(row)) {
+        if (this.dragging === null && isFocusable(row)) {
           this.focusIndex = index;
           this.refresh();
         }
       });
+      if (row.kind === 'slider') {
+        // A slider takes the value under the pointer, on press and while
+        // dragging (#460). Clicking used to step it up, which made turning a
+        // volume *down* impossible with a mouse.
+        const view = (): RowView | undefined => this.rows()[index];
+        const setFromPointer = (point: { x: number; y: number }): void => {
+          const rowView = view();
+          if (rowView === undefined) {
+            return;
+          }
+          const local = container.toLocal(point);
+          const ratio = (local.x - rowView.trackX - 2) / (TRACK_WIDTH - 4);
+          row.set(sliderValueAt(row, ratio));
+          this.refresh();
+        };
+        container.on('pointerdown', (point) => {
+          const rowView = view();
+          if (rowView === undefined) {
+            return;
+          }
+          this.focusIndex = index;
+          const local = container.toLocal(point);
+          if (local.x >= rowView.trackX - 3 && local.x <= rowView.trackX + TRACK_WIDTH + 3) {
+            this.dragging = rowView;
+            setFromPointer(point);
+          } else {
+            this.refresh();
+          }
+        });
+        container.on('pointermove', (point) => {
+          if (this.dragging !== null && this.dragging === view()) {
+            setFromPointer(point);
+          }
+        });
+        container.on('pointerup', () => {
+          this.dragging = null;
+        });
+      }
       container.on('pointertap', () => {
         if (!isFocusable(row)) {
           return;
         }
         this.focusIndex = index;
         // A pointer has nowhere to put "left" and "right", so a click on a
-        // stepped row steps it up and wraps — the same gesture a mouse user
+        // choice row steps it up and wraps — the same gesture a mouse user
         // already expects from a settings row that is not a text field.
-        if (row.kind === 'slider' || row.kind === 'choice') {
+        if (row.kind === 'choice') {
           this.adjust(1);
-        } else {
+        } else if (row.kind !== 'slider') {
           this.activate();
         }
       });
     }
     this.rowsLayer.addChild(container);
-    return { row, container, label, value, track, fill, leftCaret, rightCaret, height: ROW_HEIGHT };
+    return {
+      row,
+      container,
+      label,
+      value,
+      track,
+      fill,
+      leftCaret,
+      rightCaret,
+      height: ROW_HEIGHT,
+      trackX: 0,
+    };
   }
 
   /** Greedy word wrap in the text face — a note is the one row with more than one line. */
@@ -558,6 +636,7 @@ export class SettingsScreen implements MenuScreen {
     }
     if (row.kind === 'slider' && view.track !== null && view.fill !== null) {
       const trackX = width - VALUE_WIDTH - TRACK_WIDTH - 4;
+      view.trackX = trackX;
       const trackY = Math.round((ROW_HEIGHT - TRACK_HEIGHT) / 2);
       view.track.position.set(trackX, trackY);
       const span = Math.max(1e-6, row.max - row.min);

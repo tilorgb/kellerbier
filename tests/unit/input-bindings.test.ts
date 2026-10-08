@@ -73,53 +73,53 @@ describe('cloning', () => {
   it('copies the arrays rather than sharing them', () => {
     const original = createDefaultBindings();
     const copy = cloneBindings(original);
-    copy.keyboard.fire.push('KeyF');
-    copy.gamepad.fire.push(GamepadButton.North);
-    expect(original.keyboard.fire).toEqual(['Space']);
-    expect(original.gamepad.fire).toEqual([GamepadButton.RightTrigger]);
+    copy.keyboard.bomb.push('KeyF');
+    copy.gamepad.bomb.push(GamepadButton.North);
+    expect(original.keyboard.bomb).toEqual(['KeyE']);
+    expect(original.gamepad.bomb).toEqual([GamepadButton.LeftTrigger, GamepadButton.West]);
   });
 });
 
 describe('editing bindings', () => {
   it('adds a second binding for one action', () => {
     const bindings = createDefaultBindings();
-    addBinding(bindings, 'fire', 'keyboard', 'KeyF');
-    expect(bindings.keyboard.fire).toEqual(['Space', 'KeyF']);
+    addBinding(bindings, 'bomb', 'keyboard', 'KeyF');
+    expect(bindings.keyboard.bomb).toEqual(['KeyE', 'KeyF']);
   });
 
   it('ignores a binding the action already has', () => {
     const bindings = createDefaultBindings();
-    addBinding(bindings, 'fire', 'keyboard', 'Space');
-    expect(bindings.keyboard.fire).toEqual(['Space']);
+    addBinding(bindings, 'bomb', 'keyboard', 'KeyE');
+    expect(bindings.keyboard.bomb).toEqual(['KeyE']);
   });
 
   it('applies a conflicting binding and reports the conflict', () => {
     // A player who deliberately puts two actions on one key is allowed to.
     // They get told; they do not get overruled.
     const bindings = createDefaultBindings();
-    const result = addBinding(bindings, 'bomb', 'keyboard', 'Space');
-    expect(result.conflicts).toEqual(['fire']);
-    expect(bindings.keyboard.bomb).toContain('Space');
-    expect(bindings.keyboard.fire).toContain('Space');
+    const result = addBinding(bindings, 'use', 'keyboard', 'KeyE');
+    expect(result.conflicts).toEqual(['bomb']);
+    expect(bindings.keyboard.use).toContain('KeyE');
+    expect(bindings.keyboard.bomb).toContain('KeyE');
   });
 
   it('does not report an action conflicting with itself', () => {
     const bindings = createDefaultBindings();
-    expect(findConflicts(bindings, 'keyboard', 'Space', 'fire')).toEqual([]);
-    expect(findConflicts(bindings, 'keyboard', 'Space')).toEqual(['fire']);
+    expect(findConflicts(bindings, 'keyboard', 'KeyE', 'bomb')).toEqual([]);
+    expect(findConflicts(bindings, 'keyboard', 'KeyE')).toEqual(['bomb']);
   });
 
   it('lists every shared input across both devices', () => {
     const bindings = createDefaultBindings();
-    addBinding(bindings, 'bomb', 'keyboard', 'Space');
+    addBinding(bindings, 'map', 'keyboard', 'KeyE');
     addBinding(bindings, 'use', 'gamepad', GamepadButton.Start);
 
     const conflicts = listConflicts(bindings);
     expect(conflicts).toHaveLength(2);
     expect(conflicts).toContainEqual({
       device: 'keyboard',
-      input: 'Space',
-      actions: ['fire', 'bomb'],
+      input: 'KeyE',
+      actions: ['bomb', 'map'],
     });
     expect(conflicts).toContainEqual({
       device: 'gamepad',
@@ -130,9 +130,9 @@ describe('editing bindings', () => {
 
   it('removes and clears bindings', () => {
     const bindings = createDefaultBindings();
-    expect(removeBinding(bindings, 'fire', 'keyboard', 'Space')).toBe(true);
-    expect(removeBinding(bindings, 'fire', 'keyboard', 'Space')).toBe(false);
-    expect(bindings.keyboard.fire).toEqual([]);
+    expect(removeBinding(bindings, 'bomb', 'keyboard', 'KeyE')).toBe(true);
+    expect(removeBinding(bindings, 'bomb', 'keyboard', 'KeyE')).toBe(false);
+    expect(bindings.keyboard.bomb).toEqual([]);
 
     clearBindings(bindings, 'bomb', 'gamepad');
     expect(bindings.gamepad.bomb).toEqual([]);
@@ -140,10 +140,10 @@ describe('editing bindings', () => {
 
   it('rejects an input of the wrong shape for the device', () => {
     const bindings = createDefaultBindings();
-    expect(() => addBinding(bindings, 'fire', 'keyboard', 3)).toThrow(TypeError);
-    expect(() => addBinding(bindings, 'fire', 'gamepad', 'KeyF')).toThrow(TypeError);
-    expect(() => addBinding(bindings, 'fire', 'gamepad', -1)).toThrow(TypeError);
-    expect(() => addBinding(bindings, 'fire', 'gamepad', 1.5)).toThrow(TypeError);
+    expect(() => addBinding(bindings, 'use', 'keyboard', 3)).toThrow(TypeError);
+    expect(() => addBinding(bindings, 'use', 'gamepad', 'KeyF')).toThrow(TypeError);
+    expect(() => addBinding(bindings, 'use', 'gamepad', -1)).toThrow(TypeError);
+    expect(() => addBinding(bindings, 'use', 'gamepad', 1.5)).toThrow(TypeError);
   });
 });
 
@@ -152,12 +152,12 @@ describe('rebinding capture', () => {
     const bindings = createDefaultBindings();
     const capture = new BindingCapture(bindings);
 
-    capture.begin('fire', 'keyboard');
+    capture.begin('use', 'keyboard');
     expect(capture.capturing).toBe(true);
     const result = capture.captureKey('KeyF');
 
     expect(result?.input).toBe('KeyF');
-    expect(bindings.keyboard.fire).toEqual(['KeyF']);
+    expect(bindings.keyboard.use).toEqual(['KeyF']);
     expect(capture.capturing).toBe(false);
   });
 
@@ -165,10 +165,10 @@ describe('rebinding capture', () => {
     const bindings = createDefaultBindings();
     const capture = new BindingCapture(bindings);
 
-    capture.begin('fire', 'keyboard', 'add');
+    capture.begin('use', 'keyboard', 'add');
     capture.captureKey('KeyF');
 
-    expect(bindings.keyboard.fire).toEqual(['Space', 'KeyF']);
+    expect(bindings.keyboard.use).toEqual(['KeyQ', 'KeyF']);
   });
 
   it('rebinds every action, including onto a key another action uses', () => {
@@ -193,37 +193,37 @@ describe('rebinding capture', () => {
     const bindings = createDefaultBindings();
     const capture = new BindingCapture(bindings);
 
-    capture.begin('fire', 'keyboard');
+    capture.begin('use', 'keyboard');
     expect(capture.captureKey('Escape')?.input).toBe('Escape');
-    expect(bindings.keyboard.fire).toEqual(['Escape']);
+    expect(bindings.keyboard.use).toEqual(['Escape']);
   });
 
   it('ignores input for the other device', () => {
     const bindings = createDefaultBindings();
     const capture = new BindingCapture(bindings);
 
-    capture.begin('fire', 'gamepad');
+    capture.begin('use', 'gamepad');
     expect(capture.captureKey('KeyF')).toBeNull();
     expect(capture.capturing).toBe(true);
-    expect(bindings.keyboard.fire).toEqual(['Space']);
+    expect(bindings.keyboard.use).toEqual(['KeyQ']);
   });
 
   it('ignores input when nothing is armed', () => {
     const bindings = createDefaultBindings();
     const capture = new BindingCapture(bindings);
     expect(capture.captureKey('KeyF')).toBeNull();
-    expect(bindings.keyboard.fire).toEqual(['Space']);
+    expect(bindings.keyboard.use).toEqual(['KeyQ']);
   });
 
   it('moves the capture when a second row is armed', () => {
     const bindings = createDefaultBindings();
     const capture = new BindingCapture(bindings);
 
-    capture.begin('fire', 'keyboard');
+    capture.begin('use', 'keyboard');
     capture.begin('bomb', 'keyboard');
     capture.captureKey('KeyF');
 
-    expect(bindings.keyboard.fire).toEqual(['Space']);
+    expect(bindings.keyboard.use).toEqual(['KeyQ']);
     expect(bindings.keyboard.bomb).toEqual(['KeyF']);
   });
 
@@ -231,12 +231,12 @@ describe('rebinding capture', () => {
     const bindings = createDefaultBindings();
     const capture = new BindingCapture(bindings);
 
-    capture.begin('fire', 'keyboard');
+    capture.begin('use', 'keyboard');
     capture.cancel();
 
     expect(capture.capturing).toBe(false);
     expect(capture.captureKey('KeyF')).toBeNull();
-    expect(bindings.keyboard.fire).toEqual(['Space']);
+    expect(bindings.keyboard.use).toEqual(['KeyQ']);
   });
 
   it('does not bind the button that was held when the capture opened', () => {
@@ -295,26 +295,40 @@ describe('sanitizeBindings (#53)', () => {
 
   it('keeps a valid custom binding', () => {
     const bindings = createDefaultBindings();
-    addBinding(bindings, 'fire', 'keyboard', 'KeyF');
+    addBinding(bindings, 'use', 'keyboard', 'KeyF');
     expect(sanitizeBindings(bindings)).toEqual(bindings);
+  });
+
+  it('has no Fire action, and loads a save that still carries one (#460)', () => {
+    expect(ALL_BINDABLE_ACTIONS).not.toContain('fire');
+    const defaults = createDefaultBindings();
+    const raw = {
+      keyboard: { ...defaults.keyboard, fire: ['KeyF'], bomb: ['KeyB'] },
+      gamepad: { ...defaults.gamepad, fire: [3] },
+    };
+    const sanitized = sanitizeBindings(raw);
+    expect(sanitized.keyboard).not.toHaveProperty('fire');
+    expect(sanitized.gamepad).not.toHaveProperty('fire');
+    // The rest of the save is untouched.
+    expect(sanitized.keyboard.bomb).toEqual(['KeyB']);
   });
 
   it('falls back only the one malformed action, action by action', () => {
     const raw = {
-      keyboard: { ...createDefaultBindings().keyboard, fire: 'not-an-array' },
+      keyboard: { ...createDefaultBindings().keyboard, use: 'not-an-array' },
       gamepad: createDefaultBindings().gamepad,
     };
     const sanitized = sanitizeBindings(raw);
-    expect(sanitized.keyboard.fire).toEqual(createDefaultBindings().keyboard.fire);
+    expect(sanitized.keyboard.use).toEqual(createDefaultBindings().keyboard.use);
     expect(sanitized.keyboard.bomb).toEqual(createDefaultBindings().keyboard.bomb);
   });
 
   it('drops a keyboard array containing a non-string entry entirely, falling back to default', () => {
     const raw = {
-      keyboard: { ...createDefaultBindings().keyboard, fire: ['KeyF', 42] },
+      keyboard: { ...createDefaultBindings().keyboard, use: ['KeyF', 42] },
       gamepad: createDefaultBindings().gamepad,
     };
-    expect(sanitizeBindings(raw).keyboard.fire).toEqual(createDefaultBindings().keyboard.fire);
+    expect(sanitizeBindings(raw).keyboard.use).toEqual(createDefaultBindings().keyboard.use);
   });
 
   it('drops a gamepad array containing a negative or fractional entry, falling back to default', () => {
@@ -336,7 +350,7 @@ describe('sanitizeBindings (#53)', () => {
 describe('resetBindings (#53)', () => {
   it('overwrites a rebound layout back to the default, in place', () => {
     const bindings = createDefaultBindings();
-    addBinding(bindings, 'fire', 'keyboard', 'KeyF');
+    addBinding(bindings, 'use', 'keyboard', 'KeyF');
     clearBindings(bindings, 'bomb', 'keyboard');
     resetBindings(bindings);
     expect(bindings).toEqual(createDefaultBindings());
@@ -345,7 +359,7 @@ describe('resetBindings (#53)', () => {
   it('mutates the same object rather than replacing it', () => {
     const bindings = createDefaultBindings();
     const capture = new BindingCapture(bindings);
-    capture.begin('fire', 'keyboard');
+    capture.begin('use', 'keyboard');
     capture.captureKey('KeyF');
 
     resetBindings(bindings);
@@ -355,6 +369,6 @@ describe('resetBindings (#53)', () => {
     capture.begin('bomb', 'keyboard');
     capture.captureKey('KeyG');
     expect(bindings.keyboard.bomb).toEqual(['KeyG']);
-    expect(bindings.keyboard.fire).toEqual(createDefaultBindings().keyboard.fire);
+    expect(bindings.keyboard.use).toEqual(createDefaultBindings().keyboard.use);
   });
 });

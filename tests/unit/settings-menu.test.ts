@@ -124,12 +124,20 @@ describe('the settings menu model', () => {
 
   it('swallows every key while a rebind is armed, so navigation cannot steal it', () => {
     const { menu } = harness();
-    const row = rowOf(menu.tabs, 'Controls', 'Fire');
-    if (row.kind !== 'action') throw new Error('Fire is not an action row');
+    const row = rowOf(menu.tabs, 'Controls', 'Bomb');
+    if (row.kind !== 'action') throw new Error('Bomb is not an action row');
     expect(menu.handleKeydown({ code: 'ArrowDown' } as KeyboardEvent)).toBe(false);
     row.activate();
     expect(menu.handleKeydown({ code: 'ArrowDown' } as KeyboardEvent)).toBe(true);
     expect(menu.capturing).toBe(false);
+  });
+
+  it('does not offer a Fire binding — aiming is what fires (#460)', () => {
+    const { menu } = harness();
+    const controls = menu.tabs.find((tab) => tab.label === 'Controls');
+    const labels = controls?.rows.flatMap((row) => (row.kind === 'note' ? [] : [row.label]));
+    expect(labels).toContain('Bomb');
+    expect(labels).not.toContain('Fire');
   });
 
   it('cancels a capture on Escape without binding it', () => {

@@ -10,7 +10,7 @@ import { Container, type PointLike } from './container.js';
  * what draws later draws on top, exactly like the 2D scene graph the HUD was
  * written against.
  *
- * Pointer events are the minimum a menu needs: hover and tap on any node
+ * Pointer events are the minimum a menu needs: hover, tap and drag on any node
  * with `eventMode = 'static'`, hit-tested against its local bounds, front
  * to back.
  */
@@ -77,6 +77,7 @@ export class UiLayer {
     const point: PointLike = { x: 0, y: 0 };
     const onMove = (event: PointerEvent): void => {
       toLayer(event.clientX, event.clientY, point);
+      this.pressed?.emit('pointermove', point);
       const target = this.hitTest(point);
       if (target !== this.hovered) {
         this.hovered?.emit('pointerout', point);
@@ -88,15 +89,25 @@ export class UiLayer {
     const onDown = (event: PointerEvent): void => {
       toLayer(event.clientX, event.clientY, point);
       this.pressed = this.hitTest(point);
+      if (this.pressed !== null) {
+        // So a drag that leaves the canvas still delivers its moves and its release.
+        try {
+          canvas.setPointerCapture(event.pointerId);
+        } catch {
+          // Not every synthetic event has an active pointer to capture.
+        }
+      }
       this.pressed?.emit('pointerdown', point);
     };
     const onUp = (event: PointerEvent): void => {
       toLayer(event.clientX, event.clientY, point);
       const target = this.hitTest(point);
-      if (target !== null && target === this.pressed) {
+      const pressed = this.pressed;
+      this.pressed = null;
+      pressed?.emit('pointerup', point);
+      if (target !== null && target === pressed) {
         target.emit('pointertap', point);
       }
-      this.pressed = null;
     };
     canvas.addEventListener('pointermove', onMove);
     canvas.addEventListener('pointerdown', onDown);

@@ -173,6 +173,25 @@ describe('boss pacing (#232)', () => {
     }
   });
 
+  it('Die Große Kellerassel rolls at the player out of every curl, not just once (#460)', () => {
+    // The playtester's "too light" was a boss with one attack. The roll is the
+    // second one, and it is only a second attack if the player meets it in
+    // every loop, so count it the way the spit is counted above.
+    for (const shotDamage of [1, 2]) {
+      const rolls = measureFight('grosse-kellerassel', 'roll', shotDamage, {
+        splitHealthFraction: 0.5,
+      });
+      const spits = measureFight('grosse-kellerassel', 'spit', shotDamage, {
+        splitHealthFraction: 0.5,
+      });
+      expect(rolls.outcomeReached).toBe(true);
+      expect(
+        rolls.cycles,
+        `shotDamage=${String(shotDamage)}: ${String(rolls.cycles)} roll(s) against ${String(spits.cycles)} spit(s)`,
+      ).toBeGreaterThanOrEqual(spits.cycles - 1);
+    }
+  });
+
   it('Der Stier plays its approach/telegraph/charge/stunned loop at least four times before dying', () => {
     for (const shotDamage of [1, 2]) {
       const result = measureFight('der-stier', 'charge', shotDamage);
