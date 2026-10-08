@@ -3161,6 +3161,12 @@ export class GameSim {
           }
           continue;
         }
+        // Bieber's woodpile (#467) is cleared away with the fight: on a revisit
+        // of a cleared room there is nothing left to roll, and a log standing
+        // in a doorway would only be in the way.
+        if (prop.type === 'log' && this.roomClearedIds.has(this.roomId)) {
+          continue;
+        }
         this.spawnTarget(
           prop.x,
           prop.y,
@@ -6538,6 +6544,28 @@ export class GameSim {
   }
 
   /**
+   * Removes every `log` prop in the room, as a room clear does (#467): the
+   * woodpile and whatever Bieber rolled onto a door are cover for the fight,
+   * not furniture for what comes after. Enemy bodies carry the `propKind`
+   * component too, so they are skipped.
+   */
+  private clearLogs(): void {
+    const kind = propKindIndex('log');
+    for (let index = 0; index < this.world.highWater; index++) {
+      if (
+        this.world.states[index] !== World.ALIVE ||
+        ((this.world.masks[index] ?? 0) & this.propKind.bit) === 0 ||
+        isEnemyBody(this.world.masks[index] ?? 0, this.enemyMask)
+      ) {
+        continue;
+      }
+      if ((this.propKind.data[index] ?? 0) === kind) {
+        this.consumeProp(index);
+      }
+    }
+  }
+
+  /**
    * Removes a destructible prop the way something *picking it up* would — no
    * splash, no loot, no death event, nothing for `splitOnDeath` or the loot
    * table to react to.
@@ -6669,6 +6697,8 @@ export class GameSim {
       this.roomEnemyCount === 0 &&
       !this.roomClearedIds.has(this.roomId)
     ) {
+      // Every log Bieber rolled, in a doorway or not, goes with the fight (#467).
+      this.clearLogs();
       const rewardLocations: { x: number; y: number }[] = [];
       const loot = this.rollRoomClearLoot();
       if (loot !== null) {

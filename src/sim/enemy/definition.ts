@@ -151,6 +151,12 @@ export interface ChargeAtPlayerBehaviour {
     readonly knockback: number;
     readonly breaksBlocks: boolean;
     readonly breaksDoors: boolean;
+    /**
+     * Only the player is hit (#467, Bieber's rolling log): another enemy in the
+     * way is left to the physics, so a log shoved from beside its own beaver
+     * does not stop dead against him. Omitted: any body, as the Boar.
+     */
+    readonly playerOnly?: boolean;
   };
 }
 
@@ -582,6 +588,12 @@ export interface RollBounceBehaviour {
   readonly axis: 'x' | 'y';
   /** Which way along `axis` this state rolls: positive is east/south. */
   readonly direction: 1 | -1;
+  /**
+   * What the roll does to the first thing it runs into — `chargeAtPlayer`'s
+   * `impact`, unchanged (#467: a pushed log hits the player as hard as a Boar's
+   * dash, and ends the roll against it). Omitted: Rollfass's plain bounce.
+   */
+  readonly impact?: NonNullable<ChargeAtPlayerBehaviour['impact']>;
 }
 
 /**

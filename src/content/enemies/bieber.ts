@@ -129,7 +129,10 @@ function rollingLog(id: string, direction: 1 | -1): EnemyDefinition {
     size: 'mid',
     deathEffect: 'shard',
     health: 10,
-    contactDamage: 1,
+    // A shove, not a graze: it hits for what a Boar's dash does (1 × 2 = 2),
+    // whether the body's contact or the roll's `impact` lands first — contact
+    // usually does, a footprint's width ahead of the impact probe.
+    contactDamage: 2,
     mass: 40,
     locksRoom: false,
     lootTier: 'none',
@@ -137,7 +140,22 @@ function rollingLog(id: string, direction: 1 | -1): EnemyDefinition {
     states: [
       {
         name: 'roll',
-        behaviours: [{ behaviour: 'rollBounce', speed: 2.4, axis: 'x', direction }],
+        behaviours: [
+          {
+            behaviour: 'rollBounce',
+            speed: 2.4,
+            axis: 'x',
+            direction,
+            // Only the player: the beaver stands beside the log he shoves.
+            impact: {
+              bodyDamageMultiplier: 1,
+              knockback: 5,
+              breaksBlocks: false,
+              breaksDoors: false,
+              playerOnly: true,
+            },
+          },
+        ],
         transitions: [
           { to: 'settle', onBlocked: true },
           // A roll always meets a wall; this is only the floor under it.

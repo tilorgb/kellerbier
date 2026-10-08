@@ -815,7 +815,7 @@ function chargeImpact(
   const nextX = selfX + dirX * speed;
   const nextY = selfY + dirY * speed;
 
-  const hit = firstBodyAhead(sim, index, radius, nextX, nextY);
+  const hit = firstBodyAhead(sim, index, radius, nextX, nextY, impact.playerOnly === true);
   if (hit >= 0) {
     const damage = eliteAttackDamage(
       sim,
@@ -903,7 +903,14 @@ function clearRun(
 }
 
 /** The first body (the player, or another enemy on a collision layer) a body at `(x, y)` would overlap — or -1. */
-function firstBodyAhead(sim: GameSim, self: number, radius: number, x: number, y: number): number {
+function firstBodyAhead(
+  sim: GameSim,
+  self: number,
+  radius: number,
+  x: number,
+  y: number,
+  playerOnly = false,
+): number {
   const body = sim.body.data;
   const player = sim.playerIndex;
   if (!sim.playerDead) {
@@ -913,6 +920,9 @@ function firstBodyAhead(sim: GameSim, self: number, radius: number, x: number, y
     if (dx * dx + dy * dy <= reach * reach) {
       return player;
     }
+  }
+  if (playerOnly) {
+    return -1;
   }
   const states = sim.world.states;
   const masks = sim.world.masks;
@@ -1611,9 +1621,18 @@ function applyMovement(
       // Fixed direction, every tick, no re-aim — a bounce is the *state*
       // changing (via an `onBlocked` transition to the opposite direction's
       // state), not this primitive noticing a wall itself.
-      const speed = behaviour.speed * behaviour.direction * scale;
-      velocity[base] = behaviour.axis === 'x' ? speed : 0;
-      velocity[base + 1] = behaviour.axis === 'y' ? speed : 0;
+      const signed = behaviour.speed * behaviour.direction * scale;
+      let rolled = signed;
+      if (behaviour.impact !== undefined) {
+        // A pushed log hits like a Boar's dash (#467) and ends the roll on it.
+        const dirX = behaviour.axis === 'x' ? behaviour.direction : 0;
+        const dirY = behaviour.axis === 'y' ? behaviour.direction : 0;
+        rolled =
+          behaviour.direction *
+          chargeImpact(sim, index, behaviour.impact, dirX, dirY, Math.abs(signed), selfX, selfY);
+      }
+      velocity[base] = behaviour.axis === 'x' ? rolled : 0;
+      velocity[base + 1] = behaviour.axis === 'y' ? rolled : 0;
       return;
     }
     case 'chargeAtPlayer': {

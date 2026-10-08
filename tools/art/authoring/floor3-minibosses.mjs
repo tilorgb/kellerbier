@@ -13,9 +13,8 @@ import { canvas, ellipse, fillRect, line, outline, poly, px, roundRect } from '.
  *
  * The design and the canvas size were signed off by Tilo after an options round
  * (A walker 40x24, **B upright 34x36**, C chunky 32x28 for the beaver; end-on
- * disc, small disc and a side-lying log for the log). Picked: B, and the
- * rolling log *rotated a quarter turn from the standing trunk* so it lies along
- * the way it travels. The resting log is the floor's own `wald-log-1`, not new
+ * disc, small disc and a side-lying log for the log). Picked: B, and a rolling
+ * log that is the standing trunk turned to roll left and right. The resting log is the floor's own `wald-log-1`, not new
  * art. Floor 3's palette has no brown, so the fur is the amber from the skin
  * ramp, and the tail is the floor's violet-grey.
  *
@@ -134,34 +133,38 @@ export const bieberStepB = beaver('bieber-step-b', { lift: 0, bob: 1 });
 export const bieberBrace = beaver('bieber-brace', { brace: true });
 
 // ============================================================ THE LOG
-// Lying along the way it travels, mossy bark with a grey cut end — the
-// floor's stump (`wald-stump`) laid on its side. Four phases of a quarter turn
-// about its own long axis: three bark ridges ride round it, visible only on
-// the side facing the camera.
-const LOG_W = 40;
-const LOG_H = 20;
+// A trunk standing on its end on the floor, like the floor's own `wald-log-1`
+// — the picked direction was that log turned to roll left and right. A cylinder
+// that rolls sideways turns about the vertical, so its bark ridges run up and
+// down and travel *across* it; lying it along the way it travels (the first
+// cut) read as a log that rolls up and down the screen. Moss-green bark, a
+// grey cut face on top. Four phases of a third of a turn: three bark ridges
+// ride round it, visible only on the side facing the camera, so the strip
+// loops seamlessly.
+const LOG_W = 26;
+const LOG_H = 32;
 
 function rollingLog(name, phase) {
   const c = canvas(LOG_W, LOG_H);
-  const cy = (LOG_H - 1) / 2;
-  const radius = LOG_H / 2 - 2;
-  roundRect(c, 3, 2, LOG_W - 4, LOG_H - 3, 3, 'D');
-  fillRect(c, 4, 3, LOG_W - 6, 3, 'j'); // lit top
+  const cx = (LOG_W - 1) / 2;
+  const radius = LOG_W / 2 - 3;
+  roundRect(c, 2, 4, LOG_W - 4, LOG_H - 5, 4, 'D');
+  fillRect(c, 3, 6, 4, LOG_H - 9, 'j'); // lit left side
   for (let ridge = 0; ridge < 3; ridge++) {
     const angle = phase * (Math.PI / 6) + (ridge * 2 * Math.PI) / 3;
     if (Math.cos(angle) <= 0) continue; // round the back
-    const y = Math.round(cy + radius * Math.sin(angle));
-    line(c, 8, y, LOG_W - 4, y, 'u');
+    const x = Math.round(cx + radius * Math.sin(angle));
+    line(c, x, 9, x, LOG_H - 3, 'u');
   }
   for (const [x, y] of [
-    [11, 5],
-    [24, 4],
-    [33, 6],
+    [6, 14],
+    [18, 20],
+    [9, 26],
   ])
-    px(c, x, y + (phase % 2), 'J'); // moss
-  ellipse(c, 4, cy, 3, LOG_H / 2 - 1, 's'); // cut end
-  ellipse(c, 4, cy, 1.5, LOG_H / 2 - 3, 'l');
-  px(c, 3, Math.round(cy), 'S');
+    px(c, x + (phase % 2), y, 'J'); // moss
+  ellipse(c, cx, 5, LOG_W / 2 - 2, 4, 's'); // cut face
+  ellipse(c, cx, 5, LOG_W / 2 - 6, 2, 'l');
+  px(c, Math.round(cx) - 2, 4, 'S');
   outline(c);
   return frame(name, c);
 }

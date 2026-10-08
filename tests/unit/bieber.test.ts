@@ -190,4 +190,87 @@ describe('Bieber (#467)', () => {
     stand(sim, sim.room.maxX - 50, 90);
     expect(stepUntilState(sim, bieber, 'raise', 600)).toBeGreaterThanOrEqual(0);
   });
+
+  it('a rolled log hurts the player exactly as a Boar dash does, and is thrown the same way', () => {
+    // Both are measured against a player standing still in the lane.
+    const hurt = (
+      spawn: (sim: GameSim, player: number) => void,
+    ): { damage: number; push: number } => {
+      const sim = arena();
+      const player = sim.playerIndex;
+      sim.health.data[player * 2] = 100;
+      stand(sim, sim.room.maxX - 60, 90);
+      const startX = sim.positionX(player);
+      // Let the arrival grace run out first: a hit it spares is not a hit.
+      for (let tick = 0; tick < 60; tick++) {
+        stand(sim, startX, 90);
+        sim.step(createInputFrame());
+      }
+      spawn(sim, player);
+      for (let tick = 0; tick < 120 && (sim.health.data[player * 2] ?? 0) === 100; tick++) {
+        stand(sim, startX, 90);
+        sim.step(createInputFrame());
+      }
+      const damage = 100 - (sim.health.data[player * 2] ?? 0);
+      return { damage, push: Math.abs(sim.velocity.data[player * 2] ?? 0) };
+    };
+    const log = hurt((sim) => {
+      const entity = sim.spawnEnemyKind(
+        sim.enemies.indexOf('bieber-log-east'),
+        sim.room.maxX - 130,
+        90,
+      );
+      sim.world.flush();
+      expect(entityIndex(entity)).toBeGreaterThan(0);
+    });
+    const boar = hurt((sim) => {
+      sim.spawnEnemyKind(sim.enemies.indexOf('boar'), sim.room.maxX - 130, 90);
+      sim.world.flush();
+    });
+    expect(log.damage).toBeGreaterThan(0);
+    expect(log.damage).toBe(boar.damage);
+  });
+
+  it('a log rolled to the far wall in a door row stays until the room clears, then every log goes', () => {
+    const sim = arena();
+    const bieber = placeBieber(sim, 120, 90);
+    stand(sim, sim.room.maxX - 50, 90);
+    stepUntilState(sim, bieber, 'shove');
+    for (let tick = 0; tick < 200; tick++) {
+      stand(sim, sim.room.maxX - 50, 140);
+      sim.step(createInputFrame());
+    }
+    // It has settled against the east wall, still standing as cover.
+    expect(sim.countProps(LOG)).toBeGreaterThanOrEqual(4);
+    sim.kill(bieber);
+    sim.world.flush();
+    sim.step(createInputFrame());
+    expect(sim.countProps(LOG)).toBe(0);
+  });
+
+  it('a revisited, already cleared arena has no woodpile', () => {
+    const sim = arena();
+    for (let index = 0; index < sim.world.highWater; index++) {
+      if (
+        sim.world.states[index] === World.ALIVE &&
+        ((sim.world.masks[index] ?? 0) & sim.enemyMask) === sim.enemyMask
+      ) {
+        sim.kill(index);
+      }
+    }
+    sim.world.flush();
+    sim.step(createInputFrame());
+    expect(sim.countProps(LOG)).toBe(0);
+    sim.loadRoom(
+      waldMiniboss,
+      3,
+      'east',
+      [],
+      undefined,
+      { col: 0, row: 0 },
+      false,
+      'wald-miniboss',
+    );
+    expect(sim.countProps(LOG)).toBe(0);
+  });
 });
