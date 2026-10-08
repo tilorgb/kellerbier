@@ -76,3 +76,19 @@ export function isPlaytestSession(search: string = window.location.search): bool
  */
 export const FLOOR_SKIP_ENABLED: boolean =
   import.meta.env.DEV || (!IS_PLAYTEST_BUILD && !IS_RELEASE_BUILD);
+
+/**
+ * Whether `?nocards` is honoured: `npm run dev` only. It leaves out the story
+ * card, the floor title card and the boss intro plate, so a hands-on test of a
+ * fight or a floor starts at the fight, not three screens before it. It never
+ * marks a story beat seen, and nothing in a built game reads it.
+ */
+export const INTRO_CARDS_SKIPPABLE: boolean = import.meta.env.DEV;
+
+/** Whether this session leaves the intro cards out: dev builds opened with `?nocards`. */
+export function skipsIntroCards(
+  search: string = window.location.search,
+  enabled: boolean = INTRO_CARDS_SKIPPABLE,
+): boolean {
+  return enabled && new URLSearchParams(search).has('nocards');
+}
