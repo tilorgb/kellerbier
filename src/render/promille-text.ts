@@ -2,7 +2,6 @@ import type { Locale } from '../i18n/locale.js';
 import { t } from '../i18n/translate.js';
 import {
   promilleKaterLabel,
-  promilleTierDisplayName,
   promilleTierEffects,
   type PromilleTierId,
 } from '../sim/game/promille.js';
@@ -10,9 +9,8 @@ import { TICKS_PER_SECOND } from '../sim/time.js';
 import type { PromilleTuning } from '../sim/tuning.js';
 
 /**
- * What a Promille tier does, in words (#460) — shared by the tier-change toast
- * and the pause menu's Promille panel, so the two cannot describe the same
- * tier differently.
+ * What a Promille tier does, in words (#460) — the pause menu's Promille panel.
+ * (The in-room tier-change cue is icons only, `PromilleHud`.)
  *
  * Every number comes out of `tuning` (through `promilleTierEffects`) rather
  * than being typed into a dictionary string: retuning `vollrauschDamageBonus`
@@ -61,19 +59,6 @@ export function promilleEffectsText(
     parts.push(t(locale, 'ui.promille.effectGloom'));
   }
   return parts.join(', ');
-}
-
-/** `'Angeheitert: +25% damage, +12% fire rate, tunnel vision'` — the tier-change toast. */
-export function promilleToastText(
-  locale: Locale,
-  tier: PromilleTierId,
-  tuning: PromilleTuning,
-  neutralReskin: boolean,
-): string {
-  return t(locale, 'ui.promille.toast', {
-    tier: promilleTierDisplayName(tier, neutralReskin),
-    effects: promilleEffectsText(locale, tier, tuning, neutralReskin),
-  });
 }
 
 /** The Kater (hangover) line: what it costs, for how long, and that eating ends it. */

@@ -121,7 +121,17 @@ describe('floor curses (#49)', () => {
     expect(sim.hasKater).toBe(true);
   });
 
-  it('Föhn pushes every live projectile every tick', () => {
+  it('Föhn leaves enemy projectiles flying true', () => {
+    const sim = seedRollingCurse('foehn');
+    const slot = sim.projectiles.spawn(160, 90, 1, 0, 3, 1, 500, ProjectileTeam.Enemy);
+    const beforeX = sim.projectiles.velocityX[slot];
+    const beforeY = sim.projectiles.velocityY[slot];
+    sim.step(idle());
+    expect(sim.projectiles.velocityX[slot]).toBe(beforeX);
+    expect(sim.projectiles.velocityY[slot]).toBe(beforeY);
+  });
+
+  it('Föhn pushes every live player projectile every tick', () => {
     const sim = seedRollingCurse('foehn');
     const slot = sim.projectiles.spawn(160, 90, 1, 0, 3, 1, 500, ProjectileTeam.Player);
     const beforeX = sim.projectiles.velocityX[slot];

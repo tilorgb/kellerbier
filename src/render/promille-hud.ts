@@ -4,6 +4,7 @@ import {
   promilleCapFor,
   promilleKaterLabel,
   promilleTierDisplayName,
+  promilleTierEffects,
   promilleUnitSuffix,
 } from '../sim/game/promille.js';
 import { HUD_PALETTE, UI_PALETTE } from './palette.js';
@@ -16,6 +17,18 @@ const BAR_HEIGHT = 9;
 const BAR_INSET = 2;
 const ICON_GAP = 2;
 const LABEL_GAP = 4;
+const FLASH_GAP = 4;
+/** One second: two blinks, then a fade. */
+const FLASH_TICKS = 60;
+/** Age (ticks since the crossing) at which the second blink has ended and the fade begins. */
+const FLASH_FADE_START = 36;
+const FLASH_UP = 0x5fb85a;
+const FLASH_DOWN = 0xd9403a;
+
+interface FlashPart {
+  readonly icon: Sprite;
+  readonly sign: BitmapText;
+}
 
 /**
  * The Promille meter: a drop icon, a fill in a sunken well, and the tier name.
@@ -39,6 +52,8 @@ export class PromilleHud {
   private readonly fill: Sprite;
   private readonly label: BitmapText;
   private readonly iconWidth: number;
+  /** Damage, then fire rate — see `syncFlash`. */
+  private readonly flashParts: [FlashPart, FlashPart];
 
   constructor(kit: UiKit) {
     this.kit = kit;
@@ -62,6 +77,17 @@ export class PromilleHud {
     this.label = uiText('');
     this.label.position.set(barX + BAR_WIDTH + LABEL_GAP, 0);
     this.view.addChild(this.label);
+
+    const makePart = (stat: 'stat-damage' | 'stat-fireRate'): FlashPart => {
+      const icon = new Sprite(kit.icon(stat, iconRoles(UI_PALETTE.accent)));
+      const sign = uiText('+');
+      icon.visible = false;
+      sign.visible = false;
+      this.view.addChild(icon);
+      this.view.addChild(sign);
+      return { icon, sign };
+    };
+    this.flashParts = [makePart('stat-damage'), makePart('stat-fireRate')];
   }
 
   /**
@@ -106,6 +132,63 @@ export class PromilleHud {
     this.label.text = sim.hasKater
       ? `${tierText} ${promilleKaterLabel(neutralReskin)}${trinkfestText}`
       : `${tierText}${trinkfestText}`;
+    this.syncFlash(sim);
+  }
+
+  /**
+   * The tier-change cue: a damage and/or fire-rate icon with a `+` or `-`,
+   * after the label, only for the stats that actually moved. Replaces the
+   * tier-change text toast — the effects text lives in the pause menu's
+   * Promille panel.
+   *
+   * Driven by the sim's tick age of the crossing rather than a timer of its
+   * own, so it holds still while paused and needs no state to reset on a new
+   * run.
+   */
+  private syncFlash(sim: GameSim): void {
+    const change = sim.promilleTierChange;
+    const age = change === null ? -1 : sim.tick - change.tick;
+    if (change === null || age < 0 || age >= FLASH_TICKS) {
+      this.flashParts[0].icon.visible = false;
+      this.flashParts[0].sign.visible = false;
+      this.flashParts[1].icon.visible = false;
+      this.flashParts[1].sign.visible = false;
+      return;
+    }
+    const tuning = sim.tuning.promille;
+    const from = promilleTierEffects(change.from, tuning);
+    const to = promilleTierEffects(change.tier, tuning);
+    const deltas = [to.damagePercent - from.damagePercent, to.fireRatePercent - from.fireRatePercent];
+
+    // Two blinks (lit, dark, lit, dark), then lit again while it fades out.
+    const blinkOn = age < 10 || (age >= 18 && age < 28) || age >= FLASH_FADE_START;
+    const alpha =
+      age < FLASH_FADE_START ? 1 : (FLASH_TICKS - age) / (FLASH_TICKS - FLASH_FADE_START);
+
+    let x = this.label.position.x + this.label.width + FLASH_GAP;
+    for (let index = 0; index < this.flashParts.length; index++) {
+      const part = this.flashParts[index];
+      const delta = deltas[index] ?? 0;
+      if (part === undefined || delta === 0 || !blinkOn) {
+        if (part !== undefined) {
+          part.icon.visible = false;
+          part.sign.visible = false;
+        }
+        continue;
+      }
+      const up = delta > 0;
+      const roles = iconRoles(index === 0 ? HUD_PALETTE.statDamage : HUD_PALETTE.statFireRate);
+      part.icon.texture = this.kit.icon(index === 0 ? 'stat-damage' : 'stat-fireRate', roles);
+      part.sign.text = up ? '+' : '-';
+      part.sign.style.fill = up ? FLASH_UP : FLASH_DOWN;
+      part.icon.position.set(x, 0);
+      part.sign.position.set(x + part.icon.width + 1, 0);
+      part.icon.alpha = alpha;
+      part.sign.alpha = alpha;
+      part.icon.visible = true;
+      part.sign.visible = true;
+      x += part.icon.width + 1 + part.sign.width + FLASH_GAP;
+    }
   }
 
   /**

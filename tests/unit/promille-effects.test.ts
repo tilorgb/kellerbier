@@ -18,7 +18,6 @@ import { DEFAULT_PROMILLE_TUNING } from '../../src/sim/tuning.js';
 import {
   promilleEffectsText,
   promilleKaterText,
-  promilleToastText,
 } from '../../src/render/promille-text.js';
 
 /**
@@ -167,9 +166,8 @@ describe('promilleTierEffects (#460)', () => {
 describe('promille text (#460)', () => {
   const tuning = DEFAULT_PROMILLE_TUNING;
 
-  it('puts the tier name and its bonuses in the toast', () => {
-    const text = promilleToastText('en', PromilleTier.Angeheitert, tuning, false);
-    expect(text).toContain('Angeheitert');
+  it('spells out a tier\'s bonuses', () => {
+    const text = promilleEffectsText('en', PromilleTier.Angeheitert, tuning, false);
     expect(text).toContain('+25% damage');
     expect(text).toContain('+12% fire rate');
   });
@@ -193,12 +191,6 @@ describe('promille text (#460)', () => {
     expect(text).toContain('+99% damage');
   });
 
-  it('uses the neutral reskin names when asked', () => {
-    const text = promilleToastText('en', PromilleTier.Angeheitert, tuning, true);
-    expect(text).toContain('Wach');
-    expect(text).not.toContain('Angeheitert');
-  });
-
   it('describes Umgfalln and Kater from the tuning', () => {
     expect(promilleEffectsText('en', PromilleTier.Umgfalln, tuning, false)).toContain('Kater');
     const kater = promilleKaterText('en', tuning, false);
@@ -209,7 +201,7 @@ describe('promille text (#460)', () => {
 
   it('is available in every locale', () => {
     for (const locale of ['en', 'de', 'bar'] as const) {
-      expect(promilleToastText(locale, PromilleTier.Vollrausch, tuning, false)).not.toMatch(
+      expect(promilleEffectsText(locale, PromilleTier.Vollrausch, tuning, false)).not.toMatch(
         /\{\w+\}/,
       );
     }

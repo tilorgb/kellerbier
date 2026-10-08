@@ -145,7 +145,6 @@ export const de: Record<DictKey, string> = {
   'ui.promille.effectKnockdown': 'du fällst {seconds} s lang um, danach {kater}',
   'ui.promille.katerLine':
     '{name}: -{damage} % Schaden, -{speed} % Lauftempo für {seconds} s. Essen hilft.',
-  'ui.promille.toast': '{tier}: {effects}',
   'ui.promille.panelFrom': 'ab {value}{unit}',
   'ui.hud.promilleUnlockHintNeutral': 'Aufladen trifft härter. Zu viel, und du gehst zu Boden.',
   'ui.hud.unbound': 'nicht belegt',
