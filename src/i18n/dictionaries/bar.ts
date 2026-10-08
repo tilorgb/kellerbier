@@ -343,8 +343,8 @@ export const bar: Record<DictKey, string> = {
   'enemies.der-stier.epithet':
     'Zwoa Hörndln, oa Meinung: Da Maibam bleibt precise do, wo er steht.',
   // Boss intro plate (#412) — draft, pending sign-off. NOT reviewed by a native speaker.
-  'enemies.waldradler.title': 'Schreck vom Wanderweg',
-  'enemies.waldradler.epithet': 'Er fahrt, wo er ned derf – und dir foigt er nia.',
+  'enemies.waldradler.title': 'Zwoa Radl - Koa Hirn',
+  'enemies.waldradler.epithet': 'Immer a Müsli Packl mehr im Sackl',
   // Villager one-liner (#58/#330) — the German line, verbatim, until the real
   // Boarisch phrasing is pitched. Left plain rather than guessed at dialect,
   // per this project's "the user names/phrases things" rule.

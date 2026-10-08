@@ -341,8 +341,8 @@ export const de: Record<DictKey, string> = {
   'enemies.der-stier.epithet':
     'Zwei Hörner, eine Meinung: Der Maibaum bleibt genau da, wo er steht.',
   // Boss intro plate (#412) — draft, pending sign-off.
-  'enemies.waldradler.title': 'Schrecken der Wanderwege',
-  'enemies.waldradler.epithet': 'Er fährt, wo er nicht darf – und folgt dir niemals.',
+  'enemies.waldradler.title': 'Zwei Räder - kein Hirn',
+  'enemies.waldradler.epithet': 'Hat immer einen Müsliriegel mehr als du',
   // Villager one-liner (#58/#330) — draft, pending sign-off.
   'enemies.bauer.line': 'Die neue Charge ist milder, wenn du mich fragst.',
 

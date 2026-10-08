@@ -347,8 +347,8 @@ export const en = {
   'enemies.der-stier.title': 'Guardian of the Maypole',
   'enemies.der-stier.epithet': 'Two horns, one grudge: the maypole stays exactly where it is.',
   // Boss intro plate (#412) — draft, pending sign-off.
-  'enemies.waldradler.title': 'Terror of the Trails',
-  'enemies.waldradler.epithet': 'He rides where he is not allowed, and he never, ever follows you.',
+  'enemies.waldradler.title': 'Two Wheels - No Brains',
+  'enemies.waldradler.epithet': 'Always has one cereal bar more than you',
   // Villager one-liner (#58/#330) — draft, pending sign-off.
   'enemies.bauer.line': "New batch's smoother, if you ask me.",
 
