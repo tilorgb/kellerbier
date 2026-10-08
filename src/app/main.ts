@@ -4,6 +4,7 @@ import openingCardArtUrl from '../../assets/art/story/opening.png';
 import derStierArtUrl from '../../assets/art/bosses/der-stier.png';
 import grosseKellerasselArtUrl from '../../assets/art/bosses/grosse-kellerassel.png';
 import waldradlerArtUrl from '../../assets/art/bosses/waldradler.png';
+import theFirstHumanArtUrl from '../../assets/art/bosses/the-first-human.png';
 import { ENEMY_DEFINITIONS, enemyDefinitionById } from '../content/enemies/index.js';
 import {
   FLOOR_CONFIGS,
@@ -1238,6 +1239,7 @@ async function boot(progress: BootProgress): Promise<void> {
     ['der-stier', derStierArtUrl],
     ['grosse-kellerassel', grosseKellerasselArtUrl],
     ['waldradler', waldradlerArtUrl],
+    ['the-first-human', theFirstHumanArtUrl],
   ] as const) {
     loadTexture(url)
       .then((texture) => {

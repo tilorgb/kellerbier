@@ -3,6 +3,7 @@ import type { ChargeAtPlayerBehaviour, ShoalBehaviour } from '../enemy/definitio
 import {
   type CompiledDetonation,
   type CompiledEnemy,
+  type CompiledFireSweep,
   type CompiledMeleeArc,
   type CompiledState,
   type CompiledVolleyBurst,
@@ -391,7 +392,7 @@ export function stepEnemies(sim: GameSim): void {
       aimY = (sim.enemyMotion.data[motionBase + 5] ?? playerY) - selfY;
     }
     const aimDistance = vectorLength(aimX, aimY);
-    if (ticks === 0 && state.meleeArc !== null) {
+    if (ticks === 0 && (state.meleeArc !== null || state.fireSweep !== null)) {
       lockMeleeAim(sim, index, aimX, aimY, aimDistance);
     }
 
@@ -429,6 +430,9 @@ export function stepEnemies(sim: GameSim): void {
     }
     if (state.meleeArc !== null) {
       applyMeleeArc(sim, index, state.meleeArc, ticks, selfX, selfY);
+    }
+    if (state.fireSweep !== null) {
+      applyFireSweep(sim, index, state.fireSweep, ticks, selfX, selfY);
     }
     if (state.summons.length > 0) {
       queueSummonWaves(sim, index, state, ticks, selfX, selfY);
@@ -1394,6 +1398,16 @@ function chooseTransition(
           return transition.to;
         }
         break;
+      case TransitionTrigger.HealthBelow: {
+        // A phase change on a health threshold (#437): the body itself
+        // carries on — position, bar, elite roll — only its state moves.
+        const current = sim.health.data[index * 2] ?? 0;
+        const max = sim.health.data[index * 2 + 1] ?? 1;
+        if (current <= transition.value * max) {
+          return transition.to;
+        }
+        break;
+      }
       case TransitionTrigger.OnLatched:
         if ((flags & ENEMY_FLAG_JUST_LATCHED) !== 0) {
           return transition.to;
@@ -2753,7 +2767,11 @@ function lockMeleeAim(
  * Shared by the hit check and by the renderer that swings the weapon sprite,
  * so the two can never disagree about where the blade is (#199).
  */
-export function meleeBladeAngle(swing: CompiledMeleeArc, aimAngle: number, ticks: number): number {
+export function meleeBladeAngle(
+  swing: Pick<CompiledMeleeArc, 'arc' | 'sweepTicks' | 'direction'>,
+  aimAngle: number,
+  ticks: number,
+): number {
   const t = clamp(ticks / swing.sweepTicks, 0, 1);
   return aimAngle + swing.direction * (-swing.arc / 2 + swing.arc * t);
 }
@@ -3137,6 +3155,40 @@ function becomePropFromEvent(sim: GameSim, slot: number): void {
 }
 
 /** The `log` prop kind's index (#467), resolved once. */
+/**
+ * The ranged swing (#437, `fireSweep`): the arm runs the same arc the blade
+ * does, and every `shotEveryTicks` from the swing's first tick a shot leaves
+ * along the arm's bearing right now. Deterministic — the aim was locked on
+ * entry (`lockMeleeAim`), the bearing is a pure function of ticks — and never
+ * re-aimed, so the ground the arm has already passed is safe for the rest of
+ * the swing. Not gated on sight: a committed swing goes where it was aimed,
+ * and the arena's boulders are what the shots run into.
+ */
+function applyFireSweep(
+  sim: GameSim,
+  index: number,
+  sweep: CompiledFireSweep,
+  ticks: number,
+  selfX: number,
+  selfY: number,
+): void {
+  if (ticks > sweep.sweepTicks || ticks % sweep.shotEveryTicks !== 0) {
+    return;
+  }
+  const motion = sim.enemyMotion.data;
+  const motionBase = index * ENEMY_MOTION_STRIDE;
+  const aimAngle = Math.atan2(motion[motionBase + 1] ?? 0, motion[motionBase] ?? 1);
+  fireFrom(
+    sim,
+    index,
+    selfX,
+    selfY,
+    sim.body.data[index * 2] ?? 0,
+    meleeBladeAngle(sweep, aimAngle, ticks),
+    sweep,
+  );
+}
+
 const LOG_KIND = propKindIndex('log');
 
 /** What a dropped prop weighs — see `propDropFromEvent`. */
@@ -3656,6 +3708,17 @@ export function enemyTelegraphShape(
     out.angle = enemyAimAngle(sim, index);
     out.arc = follow.meleeArc.arc;
     out.reach = follow.meleeArc.reach;
+    return true;
+  }
+  // A ranged sweep (#437) warns with the same arc: the fan the shots will
+  // fill, drawn out to its authored `telegraphReach`.
+  if (follow !== null && follow.fireSweep !== null) {
+    out.shape = TelegraphShape.Arc;
+    out.x = selfX;
+    out.y = selfY;
+    out.angle = enemyAimAngle(sim, index);
+    out.arc = follow.fireSweep.arc;
+    out.reach = follow.fireSweep.telegraphReach;
     return true;
   }
 

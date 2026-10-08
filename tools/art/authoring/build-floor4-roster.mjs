@@ -2,7 +2,6 @@ import { writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { format } from 'prettier';
 import {
-  BOSSES,
   PROJECTILES,
   ROSTER,
   ROSTER_BUCKET,
@@ -15,7 +14,8 @@ import {
 
 /**
  * Writes Die Alpen's roster into `assets/sprites/floor-4-alpen/characters/`
- * and its projectiles into `.../projectiles/`.
+ * and its projectiles into `.../projectiles/`. The boss is not here: The
+ * First Human is a rig in `bosses-alpen.mjs`, built by `npm run art:bosses`.
  *
  *   npm run art:floor4
  *
@@ -27,14 +27,6 @@ import {
 const ART = fileURLToPath(new URL('../../../assets/sprites/floor-4-alpen/', import.meta.url));
 const CHAR = `${ART}characters/`;
 const PROJ = `${ART}projectiles/`;
-const BOSS = `${ART}bosses/`;
-
-for (const [name, frame] of Object.entries(BOSSES)) {
-  assertOnPalette(ROSTER_BUCKET, [frame]);
-  await writeFile(`${BOSS}${name}.png`, encodeSingle(frame));
-  console.log(`bosses/${name}.png  ${String(frame.width)}x${String(frame.height)}`);
-}
-
 for (const [name, frame] of Object.entries(ROSTER)) {
   assertOnPalette(ROSTER_BUCKET, [frame]);
   await writeFile(`${CHAR}${name}.png`, encodeSingle(frame));

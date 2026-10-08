@@ -53,7 +53,13 @@ describe("Die Alpen roster's committed art is what the authoring source produces
       'the-gondola',
       'tourist',
     ]);
-    expect(Object.keys(PROJECTILES).sort()).toEqual(['cheese-wheel', 'flare', 'snow-clod']);
+    expect(Object.keys(PROJECTILES).sort()).toEqual([
+      'arrow',
+      'cheese-wheel',
+      'flare',
+      'flint',
+      'snow-clod',
+    ]);
   });
 
   it.each(entries)('%s.png is byte-identical to a fresh encode', async (name, frame) => {

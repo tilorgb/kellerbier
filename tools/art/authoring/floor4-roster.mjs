@@ -415,6 +415,55 @@ function flare(name) {
   ellipse(c, 3.5, 3.5, 1, 1, 'W');
   return frameFromRows(name, ALPEN, toRows(c), { ink: false });
 }
+/**
+ * A flint flake (6×6), The First Human's sweep shot (#437): a grey chip with
+ * one lit facet and a pink edge, so it reads as *his* against the floor's
+ * default snow shot. Symmetric enough to fly any direction unrotated.
+ */
+function flint(name) {
+  const c = canvas(6, 6);
+  poly(
+    c,
+    [
+      [2.5, 0],
+      [5, 2.5],
+      [2.5, 5],
+      [0, 2.5],
+    ],
+    'q',
+  );
+  px(c, 2, 2, 'r');
+  px(c, 3, 3, 'o');
+  px(c, 2, 0, 'R');
+  px(c, 5, 2, 'R');
+  return finish(name, c);
+}
+/**
+ * The arrow (8×8) he throws between phase-two sweeps: a dark shaft seen
+ * end-on as a diamond, a pale flint head, a pink fletch — a point coming at
+ * you, whichever way it flies.
+ */
+function arrow(name) {
+  const c = canvas(8, 8);
+  poly(
+    c,
+    [
+      [3.5, 0],
+      [7, 3.5],
+      [3.5, 7],
+      [0, 3.5],
+    ],
+    '1',
+  );
+  ellipse(c, 3.5, 3.5, 1.6, 1.6, 'a');
+  px(c, 3, 3, 'y');
+  px(c, 4, 3, 'u');
+  px(c, 0, 3, 'R');
+  px(c, 7, 3, 'R');
+  px(c, 3, 0, 'R');
+  px(c, 3, 7, 'R');
+  return finish(name, c);
+}
 /** A wheel of cheese (10×10), rolling: a tan disc with holes and a pale rind. */
 function cheeseWheel(name) {
   const c = canvas(10, 10);
@@ -459,37 +508,6 @@ function gondola(name) {
   return finish(name, c);
 }
 
-// ======================================================= THE FIRST HUMAN
-/**
- * A stand-in for the boss (#437) while the rig is built: a tall, gaunt,
- * leather-brown figure in the Ötzi pose — one arm across the chest, one
- * held out — so the arena reads from the first build. 56×112.
- */
-function firstHumanPlaceholder(name) {
-  const c = canvas(56, 112);
-  // Legs.
-  fillRect(c, 20, 70, 6, 38, '1');
-  fillRect(c, 30, 70, 6, 38, '1');
-  fillRect(c, 19, 108, 8, 2, 'a');
-  fillRect(c, 29, 108, 8, 2, 'a');
-  // Torso, narrow and long.
-  fillRect(c, 18, 30, 20, 42, '2');
-  fillRect(c, 22, 34, 12, 34, '1');
-  // Arm across the chest (toward the far shoulder).
-  line(c, 38, 36, 20, 48, '2', 5);
-  // Arm held out to the side.
-  line(c, 18, 34, 2, 46, '2', 5);
-  // Head.
-  ellipse(c, 28, 20, 8, 10, '2');
-  ellipse(c, 27, 22, 5, 5, '1');
-  px(c, 24, 18, 'a');
-  px(c, 31, 18, 'a');
-  // The arrowhead in the shoulder.
-  line(c, 44, 28, 40, 34, 'c', 1);
-  px(c, 40, 34, 'u');
-  return finish(name, c);
-}
-
 // ------------------------------------------------------------------ assembly
 const steinbockStand = steinbockSide('steinbock');
 const steinbockStepA = steinbockSide('steinbock-step-a', { lift: 1, raiseFront: true });
@@ -515,16 +533,13 @@ export const ROSTER = {
   }),
 };
 
-/** The boss's placeholder, written to `bosses/` as a single frame. */
-export const BOSSES = {
-  'the-first-human': firstHumanPlaceholder('the-first-human'),
-};
-
 /** The floor's projectile sprites, written to `projectiles/`. */
 export const PROJECTILES = {
   'snow-clod': snowClod('snow-clod'),
   flare: flare('flare'),
   'cheese-wheel': cheeseWheel('cheese-wheel'),
+  flint: flint('flint'),
+  arrow: arrow('arrow'),
 };
 
 /** The side-on trot of the ibex: one diagonal pair up, down, the other, down. */

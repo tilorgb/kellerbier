@@ -66,6 +66,7 @@ export type BehaviourName =
   | 'rideLine'
   | 'glideToPoint'
   | 'fireRotatingRing'
+  | 'fireSweep'
   | 'captureLine'
   | 'lobVolley'
   | 'detonateVolley'
@@ -819,6 +820,49 @@ export interface MeleeArcBehaviour {
   readonly weapon?: string;
 }
 
+/**
+ * A swept *ranged* attack (#437, The First Human): an arm travels a fixed arc
+ * over `sweepTicks`, exactly as `meleeArc`'s blade does, and every
+ * `shotEveryTicks` a bullet leaves along the arm's current bearing. The
+ * result is a fan of shots laid down one bearing at a time rather than all at
+ * once — so the safe ground is *behind* the sweep: a player who has already
+ * been passed by the arm has nothing more coming their way from this swing,
+ * and one ahead of it can see where the next shot will be before it leaves.
+ *
+ * Same commitment as the blade: the aim is locked on the tick the state is
+ * entered (and, with a `telegraph` state before it, on the tick that wind-up
+ * began), the arm then runs from `-arc/2` to `+arc/2` around that aim, and
+ * nothing re-aims mid-swing. `direction` is the pendulum: a boss alternating
+ * `-1` and `1` from swing to swing reads as a left-right-left stalk, and the
+ * telegraph before each swing is the stance that says which way is next.
+ * Not gated on sight — a committed swing goes where it was aimed, and the
+ * arena's cover is what the shots run into.
+ *
+ * Shots carry `FiringBehaviourBase`'s projectile fields (speed, damage,
+ * lifetime, radius, art, poison/bounce/mark). `everyTicks` is replaced by
+ * `shotEveryTicks`, counted from the swing's first tick, which also fires.
+ */
+export interface FireSweepBehaviour extends Omit<
+  FiringBehaviourBase,
+  'everyTicks' | 'aimCardinal'
+> {
+  readonly behaviour: 'fireSweep';
+  /** Total angle the arm travels, in radians. */
+  readonly arc: number;
+  /** Ticks the arm takes to travel the whole arc. */
+  readonly sweepTicks: number;
+  /** Ticks between shots along the arc. The first leaves on the swing's first tick. */
+  readonly shotEveryTicks: number;
+  /** `-1` sweeps anticlockwise, `1` clockwise (screen space). Defaults to `1`. */
+  readonly direction?: -1 | 1;
+  /**
+   * How far out the `telegraph` before this state draws its warning arc, in
+   * pixels. Presentational only — the shots fly `speed × lifetimeTicks`
+   * regardless. Defaults to three body radii.
+   */
+  readonly telegraphReach?: number;
+}
+
 /** Leaves smaller things behind. The state it is declared on is the one that splits. */
 export interface SplitOnDeathBehaviour {
   readonly behaviour: 'splitOnDeath';
@@ -1161,6 +1205,7 @@ export type EnemyBehaviour =
   | FireSpreadBehaviour
   | FireOnBeatBehaviour
   | MeleeArcBehaviour
+  | FireSweepBehaviour
   | SplitOnDeathBehaviour
   | SummonBehaviour
   | DropPropBehaviour
@@ -1275,7 +1320,17 @@ export type EnemyTransition =
    * is the same test `whenPlayerWithin` uses, run only once the cheap axis
    * test has passed.
    */
-  | { readonly to: string; readonly whenPlayerOnAxis: { readonly tolerance: number } };
+  | { readonly to: string; readonly whenPlayerOnAxis: { readonly tolerance: number } }
+  /**
+   * The body's health is at or below this fraction (0 exclusive, 1
+   * inclusive) of its max (#437): a phase change on a health threshold that
+   * does not kill and respawn the body the way `splitOnDeath.atHealthBelow`
+   * does, so the boss bar, the elite roll and the position carry over. Like
+   * `atHealthBelow`, declare it on every state the body might be in when the
+   * threshold is crossed. It is read before any other trigger on the same
+   * state only if written first — declaration order still decides.
+   */
+  | { readonly to: string; readonly whenHealthBelow: number };
 
 export interface EnemyState {
   readonly name: string;

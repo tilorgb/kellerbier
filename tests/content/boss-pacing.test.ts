@@ -8,6 +8,7 @@ import {
   dieZapfhahnOrgel,
   grosseKellerassel,
   maibaumDieb,
+  theFirstHuman,
   waldradl,
 } from '../../src/content/enemies/index.js';
 import waldBoss from '../../src/content/rooms/wald-boss.json';
@@ -113,7 +114,7 @@ interface FightResult {
  */
 function measureFight(
   bossId: string,
-  attackState: string,
+  attackStateOrStates: string | readonly string[],
   shotDamage: number,
   options: { readonly splitHealthFraction?: number; readonly maxTicks?: number } = {},
 ): FightResult {
@@ -125,6 +126,11 @@ function measureFight(
   const splitAt =
     options.splitHealthFraction !== undefined ? options.splitHealthFraction * maxHealth : 0;
   const maxTicks = options.maxTicks ?? 6000;
+  // One attack state, or the same attack under several names — a two-phase
+  // boss that keeps its body (#437) names its phase-two swing differently.
+  const attackStates =
+    typeof attackStateOrStates === 'string' ? [attackStateOrStates] : attackStateOrStates;
+  const isAttack = (name: string): boolean => attackStates.includes(name);
 
   let cycles = 0;
   let previousState = stateName(sim, boss);
@@ -147,7 +153,7 @@ function measureFight(
     }
 
     const currentState = stateName(sim, boss);
-    if (currentState === attackState && previousState !== attackState) {
+    if (isAttack(currentState) && !isAttack(previousState)) {
       cycles += 1;
     }
     previousState = currentState;
@@ -205,11 +211,33 @@ describe('boss pacing (#232)', () => {
     }
   });
 
+  it('The First Human swings its pendulum at least four times, in both phases, before dying (#437)', () => {
+    for (const shotDamage of [1, 2]) {
+      const wide = measureFight('the-first-human', ['sweep-wide', 'sweep-wide-2'], shotDamage, {
+        maxTicks: 9000,
+      });
+      expect(wide.outcomeReached, `shotDamage=${String(shotDamage)} never killed him`).toBe(true);
+      expect(
+        wide.cycles,
+        `shotDamage=${String(shotDamage)}: only ${String(wide.cycles)} wide sweep(s) before death`,
+      ).toBeGreaterThanOrEqual(4);
+      // Phase two is reached and shows its own idea — the arrow — more than once.
+      const arrows = measureFight('the-first-human', ['loose-1', 'loose-2'], shotDamage, {
+        maxTicks: 9000,
+      });
+      expect(
+        arrows.cycles,
+        `shotDamage=${String(shotDamage)}: only ${String(arrows.cycles)} arrow(s) in phase two`,
+      ).toBeGreaterThanOrEqual(2);
+    }
+  });
+
   it('two boss contacts never remove more than half the player max health', () => {
     for (const contactDamage of [
       grosseKellerassel.contactDamage,
       derStier.contactDamage,
       maibaumDieb.contactDamage,
+      theFirstHuman.contactDamage,
     ]) {
       expect(contactDamage * 2).toBeLessThanOrEqual(PLAYER_HEALTH / 2);
     }

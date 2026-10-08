@@ -4,6 +4,7 @@ import { encodePng } from '../png.mjs';
 import { legalPixelColorsFor } from '../palette.mjs';
 import { loadKeyArt, mapping, cutParts, drawnPart, pixelPart, composeFrame } from './boss-rig.mjs';
 import { WALD_FRAMES, WALD_RIGS } from './bosses-wald.mjs';
+import { ALPEN_FRAMES } from './bosses-alpen.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const KEY_ART = path.join(HERE, '../../../assets/art/bosses');
@@ -1029,6 +1030,7 @@ export const STRIPS = {
   'der-stier': STIER_FRAMES,
   'der-stier-maibaum-dieb': DIEB_FRAMES,
   ...WALD_FRAMES,
+  ...ALPEN_FRAMES,
 };
 export const SINGLES = {};
 
@@ -1036,7 +1038,8 @@ export const SINGLES = {};
  * The rigs themselves — key art, part specs and a default overlay crop
  * (`[x0, y0, x1, y1, scale]` in key-art pixels) — for
  * `boss-rig-preview.mjs`, which draws the polygons over the art. The
- * Maibaum-Dieb is hand-drawn and has no rig.
+ * Maibaum-Dieb and The First Human (`bosses-alpen.mjs`) are hand-drawn and
+ * have no rig.
  */
 export const BOSS_RIGS = {
   'grosse-kellerassel': {
@@ -1055,4 +1058,5 @@ export const BOSS_BUCKETS = {
   'der-stier-maibaum-dieb': 'floor-2-rural',
   waldradler: 'floor-3-wald',
   waldradl: 'floor-3-wald',
+  'the-first-human': 'floor-4-alpen',
 };

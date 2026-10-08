@@ -13,6 +13,7 @@ import {
   type FireOnBeatBehaviour,
   type FireRingBehaviour,
   type FireRotatingRingBehaviour,
+  type FireSweepBehaviour,
   type FireSpreadBehaviour,
   type MeleeArcBehaviour,
   MOVEMENT_BEHAVIOURS,
@@ -137,6 +138,8 @@ export const TransitionTrigger = {
   PlayerOnAxis: 10,
   /** A target-seeking movement reached its target this tick (#411). */
   OnArrived: 11,
+  /** The body's health is at or below `value` (a fraction of max) (#437). */
+  HealthBelow: 12,
 } as const;
 
 export type TransitionTriggerId = (typeof TransitionTrigger)[keyof typeof TransitionTrigger];
@@ -255,6 +258,24 @@ export interface CompiledMeleeArc {
   readonly weapon: string | null;
 }
 
+/** A `fireSweep` validated once, at compile time (#437). */
+export interface CompiledFireSweep {
+  readonly arc: number;
+  readonly sweepTicks: number;
+  readonly shotEveryTicks: number;
+  readonly direction: -1 | 1;
+  /** How far out the wind-up's warning arc is drawn, in pixels. */
+  readonly telegraphReach: number;
+  readonly speed: number;
+  readonly damage: number;
+  readonly lifetimeTicks: number;
+  readonly radius: number | undefined;
+  readonly art: string | undefined;
+  readonly poison: boolean;
+  readonly bounce: boolean;
+  readonly mark: boolean;
+}
+
 export interface CompiledState {
   readonly name: string;
   /** Exactly one, guaranteed by validation. */
@@ -278,6 +299,8 @@ export interface CompiledState {
   readonly emitCloud: CompiledCloud | null;
   /** Set for a state that swings a wide melee arc (Maibaum-Dieb, #199). `null` otherwise. */
   readonly meleeArc: CompiledMeleeArc | null;
+  /** Set for a state that sweeps an arm firing shots along it (The First Human, #437). `null` otherwise. */
+  readonly fireSweep: CompiledFireSweep | null;
   /** True for a state whose entry stores a line across the room (#412, `captureLine`). */
   readonly capturesLine: boolean;
   /** True for a state that belongs to a captured line — captures it, rides it, or is off the arena on it — and so has its ramps up (#412). */
@@ -507,7 +530,7 @@ export class EnemyRegistry {
     }
 
     const states = definition.states.map((state) =>
-      this.compileState(definition, state, stateIndexByName),
+      this.compileState(definition, state, stateIndexByName, profile.radius),
     );
     // `onArrived` fires only from a movement that seeks a target (#411):
     // written on an enemy with none, it is a wait for a signal nothing sends.
@@ -600,6 +623,7 @@ export class EnemyRegistry {
     definition: EnemyDefinition,
     state: EnemyState,
     stateIndexByName: ReadonlyMap<string, number>,
+    bodyRadius: number,
   ): CompiledState {
     const where = `enemy "${definition.id}" state "${state.name}"`;
 
@@ -615,6 +639,7 @@ export class EnemyRegistry {
     let detonate: CompiledDetonation | null = null;
     let emitCloud: CompiledCloud | null = null;
     let meleeArc: CompiledMeleeArc | null = null;
+    let fireSweep: CompiledFireSweep | null = null;
     let grabProp: { kind: number; reach: number } | null = null;
     let rollLog: { kind: number; reach: number; east: number; west: number } | null = null;
     let becomeProp: { kind: number; health: number; radius: number } | null = null;
@@ -812,6 +837,48 @@ export class EnemyRegistry {
           // `-1 | 1` in the authored type; anything else just sweeps oddly, not a crash.
           direction: swing.direction === -1 ? -1 : 1,
           weapon: swing.weapon ?? null,
+        };
+        continue;
+      }
+      if (name === 'fireSweep') {
+        const sweep = behaviour as FireSweepBehaviour;
+        if (!(sweep.arc > 0) || sweep.arc > Math.PI * 2) {
+          throw new Error(
+            `${where}: "fireSweep" needs an arc between 0 and 2π, got ${String(sweep.arc)}`,
+          );
+        }
+        if (!(sweep.sweepTicks >= 1)) {
+          throw new Error(`${where}: "fireSweep" needs sweepTicks of at least 1`);
+        }
+        if (!(sweep.shotEveryTicks >= 1)) {
+          throw new Error(`${where}: "fireSweep" needs shotEveryTicks of at least 1`);
+        }
+        if (!(sweep.speed > 0)) {
+          throw new Error(`${where}: "fireSweep" needs a speed above zero`);
+        }
+        if (!(sweep.damage > 0)) {
+          throw new Error(`${where}: "fireSweep" needs damage above zero`);
+        }
+        if (!(sweep.lifetimeTicks >= 1)) {
+          throw new Error(`${where}: "fireSweep" needs lifetimeTicks of at least 1`);
+        }
+        if (sweep.telegraphReach !== undefined && !(sweep.telegraphReach > 0)) {
+          throw new Error(`${where}: "fireSweep" telegraphReach must be above zero`);
+        }
+        fireSweep = {
+          arc: sweep.arc,
+          sweepTicks: Math.round(sweep.sweepTicks),
+          shotEveryTicks: Math.round(sweep.shotEveryTicks),
+          direction: sweep.direction === -1 ? -1 : 1,
+          telegraphReach: sweep.telegraphReach ?? bodyRadius * 3,
+          speed: sweep.speed,
+          damage: sweep.damage,
+          lifetimeTicks: sweep.lifetimeTicks,
+          radius: sweep.radius,
+          art: sweep.art,
+          poison: sweep.poison === true,
+          bounce: sweep.bounce === true,
+          mark: sweep.mark === true,
         };
         continue;
       }
@@ -1217,6 +1284,22 @@ export class EnemyRegistry {
           max: 0,
         };
       }
+      if ('whenHealthBelow' in transition) {
+        const fraction = transition.whenHealthBelow;
+        if (!(fraction > 0) || fraction > 1) {
+          throw new Error(
+            `${where}: "whenHealthBelow" needs a fraction above 0 and at most 1, got ${String(fraction)}`,
+          );
+        }
+        return {
+          trigger: TransitionTrigger.HealthBelow,
+          value: fraction,
+          to,
+          propKind: -1,
+          tolerance: 0,
+          max: 0,
+        };
+      }
       if ('whenPlayerWithin' in transition) {
         return {
           trigger: TransitionTrigger.PlayerWithin,
@@ -1294,6 +1377,7 @@ export class EnemyRegistry {
       aimsAttack:
         movement.behaviour === 'chargeAtPlayer' ||
         meleeArc !== null ||
+        fireSweep !== null ||
         firing.some(
           (shot) =>
             shot.behaviour !== 'fireOnBeat' &&
@@ -1306,6 +1390,7 @@ export class EnemyRegistry {
       detonate,
       emitCloud,
       meleeArc,
+      fireSweep,
       capturesLine,
       usesLine:
         capturesLine ||

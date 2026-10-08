@@ -11,7 +11,6 @@ export interface RosterFrame {
 export declare const ALPEN: Readonly<Record<string, number | null>>;
 export declare const ROSTER: Readonly<Record<string, RosterFrame>>;
 export declare const PROJECTILES: Readonly<Record<string, RosterFrame>>;
-export declare const BOSSES: Readonly<Record<string, RosterFrame>>;
 export declare const ROSTER_BUCKET: string;
 
 /** An animated body: its frames, and the `.anim.json` sidecar committed next to its strip. */
