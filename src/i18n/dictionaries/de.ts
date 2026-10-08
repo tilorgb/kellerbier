@@ -339,10 +339,9 @@ export const de: Record<DictKey, string> = {
   'enemies.der-stier.title': 'Wächter des Maibaums',
   'enemies.der-stier.epithet':
     'Zwei Hörner, eine Meinung: Der Maibaum bleibt genau da, wo er steht.',
-  // TODO(#412): Der Waldradler's plate text is Tilo's to write, in all three
-  // locales — these are marked placeholders, not drafts.
-  'enemies.waldradler.title': 'TODO(#412) title',
-  'enemies.waldradler.epithet': 'TODO(#412) epithet',
+  // Boss intro plate (#412) — draft, pending sign-off.
+  'enemies.waldradler.title': 'Zwei Räder - kein Hirn',
+  'enemies.waldradler.epithet': 'Hat immer einen Müsliriegel mehr als du',
   // Villager one-liner (#58/#330) — draft, pending sign-off.
   'enemies.bauer.line': 'Die neue Charge ist milder, wenn du mich fragst.',
 

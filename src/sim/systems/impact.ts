@@ -277,6 +277,13 @@ export function applyDamageAt(
   const isPlayer = target === sim.playerIndex;
 
   const health = sim.health.data;
+  // A body that already died this tick is still in the world until the flush,
+  // with its health at zero. A second killing blow (a multi-shot, a shot and a
+  // poison tick) must not be a second death: it would split it and drop its
+  // loot twice — two Waldradls and two Maß off one Waldradler.
+  if (!isPlayer && (health[target * 2 + 1] ?? 0) > 0 && (health[target * 2] ?? 0) <= 0) {
+    return;
+  }
   let killed = false;
   if (isPlayer) {
     // Soul, then red, then an eternal heart if one is banked — see

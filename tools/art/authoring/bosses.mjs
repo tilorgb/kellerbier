@@ -2,7 +2,8 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { encodePng } from '../png.mjs';
 import { legalPixelColorsFor } from '../palette.mjs';
-import { loadKeyArt, mapping, cutPart, drawnPart, pixelPart, composeFrame } from './boss-rig.mjs';
+import { loadKeyArt, mapping, cutParts, drawnPart, pixelPart, composeFrame } from './boss-rig.mjs';
+import { WALD_FRAMES, WALD_RIGS } from './bosses-wald.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const KEY_ART = path.join(HERE, '../../../assets/art/bosses');
@@ -162,18 +163,6 @@ function stroke([ax, ay], [bx, by], wa, wb) {
     [bx - (nx * wb) / 2, by - (ny * wb) / 2],
     [ax - (nx * wa) / 2, ay - (ny * wa) / 2],
   ];
-}
-
-/** Cuts every part in `specs` (see `cutPart`) and attaches its pivot in sprite pixels. */
-function cutParts(art, map, specs) {
-  const parts = {};
-  for (const [name, spec] of Object.entries(specs)) {
-    parts[name] = {
-      ...cutPart(art, map, { name, ...spec }),
-      pivot: spec.pivot ? map.toSprite(...spec.pivot) : undefined,
-    };
-  }
-  return parts;
 }
 
 // ============================================================ KELLERASSEL
@@ -1039,6 +1028,7 @@ export const STRIPS = {
   'grosse-kellerassel': KELLERASSEL_FRAMES,
   'der-stier': STIER_FRAMES,
   'der-stier-maibaum-dieb': DIEB_FRAMES,
+  ...WALD_FRAMES,
 };
 export const SINGLES = {};
 
@@ -1055,6 +1045,7 @@ export const BOSS_RIGS = {
     previewCrop: [40, 60, 1200, 720, 0.75],
   },
   'der-stier': { art: STIER_ART, specs: STIER_SPECS, previewCrop: [520, 120, 1220, 720, 1.2] },
+  ...WALD_RIGS,
 };
 
 /** Which floor bucket each strip/single is authored against. */
@@ -1062,4 +1053,6 @@ export const BOSS_BUCKETS = {
   'grosse-kellerassel': 'floor-1-cellar',
   'der-stier': 'floor-2-rural',
   'der-stier-maibaum-dieb': 'floor-2-rural',
+  waldradler: 'floor-3-wald',
+  waldradl: 'floor-3-wald',
 };

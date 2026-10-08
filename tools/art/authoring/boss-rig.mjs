@@ -77,7 +77,8 @@ export function mapping({ scale, originX, originY, dstX, dstY }) {
  *   `key` does the precise work, tight where it does not).
  * - `key`: `'dark'` keeps only source pixels darker than `keyThreshold`
  *   (a near-black bull against a bright field), `'light'` only those lighter
- *   (a grey leg against the shadow under a shell), `'none'` keeps everything
+ *   (a grey leg against the shadow under a shell), `'sat'` only those more
+ *   saturated than `keyThreshold` (a green frame against grey ground), `'none'` keeps everything
  *   inside the polygon.
  * - `coverage`: the fraction of a sprite pixel's source block that must be
  *   kept for the pixel to be opaque. Lower it for a part only 2-3 sprite
@@ -141,6 +142,11 @@ export function cutPart(art, map, spec) {
           const l = luma(pixels[i], pixels[i + 1], pixels[i + 2]);
           if (key === 'dark' && l > keyThreshold) continue;
           if (key === 'light' && l < keyThreshold) continue;
+          if (key === 'sat') {
+            const hi = Math.max(pixels[i], pixels[i + 1], pixels[i + 2]);
+            const lo = Math.min(pixels[i], pixels[i + 1], pixels[i + 2]);
+            if (hi === 0 || (hi - lo) / hi < keyThreshold) continue;
+          }
           kept++;
           rs += pixels[i];
           gs += pixels[i + 1];
@@ -207,6 +213,18 @@ export function cutPart(art, map, spec) {
       px[y][x] = tones[Math.min(band, tones.length - 1)];
     }
   return { name, w, h, px, ox: sx0, oy: sy0 };
+}
+
+/** Cuts every part in `specs` (see `cutPart`) and attaches its pivot in sprite pixels. */
+export function cutParts(art, map, specs) {
+  const parts = {};
+  for (const [name, spec] of Object.entries(specs)) {
+    parts[name] = {
+      ...cutPart(art, map, { name, ...spec }),
+      pivot: spec.pivot ? map.toSprite(...spec.pivot) : undefined,
+    };
+  }
+  return parts;
 }
 
 /** A hand-drawn part: `rows` of single-character keys over `palette`, placed with its top-left at sprite `(ox, oy)`. */

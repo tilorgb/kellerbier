@@ -252,6 +252,8 @@ describe('the animation sidecars a boss ships author the states its fight uses',
   it.each([
     ['floor-1-cellar', 'grosse-kellerassel'],
     ['floor-2-rural', 'der-stier'],
+    ['floor-3-wald', 'waldradler'],
+    ['floor-3-wald', 'waldradl'],
   ])('%s/%s', async (bucketId, name) => {
     const raw = await readFile(
       path.join(SPRITE_ROOT, bucketId, 'bosses', `${name}.anim.json`),

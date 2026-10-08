@@ -20,6 +20,7 @@ const SPRITES = fileURLToPath(new URL('../../../assets/sprites/', import.meta.ur
 const DIR = {
   'floor-1-cellar': `${SPRITES}floor-1-cellar/bosses/`,
   'floor-2-rural': `${SPRITES}floor-2-rural/bosses/`,
+  'floor-3-wald': `${SPRITES}floor-3-wald/bosses/`,
 };
 
 // The Maibaum-Dieb used to live in characters/ (#193), then as a single PNG
