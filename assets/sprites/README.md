@@ -133,6 +133,17 @@ to `idle` and warns once in a dev build (`docs/DECISIONS.md` #19), so it is the 
 cannot itself be missing. A sidecar with no `clips` at all is still legal and still animates —
 the whole strip becomes one looping `idle` clip at the strip's own timing.
 
+### Creatures that turn the way they walk (#438)
+
+Any enemy may ship `<id>-side`, `<id>-south` and `<id>-north` strips beside (or instead of) its
+one drawing — the same filing Alois has. `render/entities.ts` picks one from the body's heading:
+mostly-horizontal motion is `-side` (authored facing left, mirrored for right), otherwise `-south`
+(toward the camera) or `-north`; standing still holds the last one. Each strip is its own animation
+set, so a boss's view strips carry the boss's full clip set (a telegraph pose has to read from
+every side). A heading with no strip draws the creature's own art, so views can land one creature
+at a time. Authored with `tools/art/authoring/views-kit.mjs`; the view scripts are
+`floor1-views.mjs`, `floor2-side-views.mjs` and `floor2-human-views.mjs`.
+
 ### Directions, and the player's strips
 
 The state list is also what decides how a character facing more than one way is filed. "The same

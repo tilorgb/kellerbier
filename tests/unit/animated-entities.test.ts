@@ -206,6 +206,73 @@ describe('EntityView, drawing an animated enemy', () => {
     expect(body !== undefined && isMirrored(body)).toBe(true);
   });
 
+  describe('with per-heading strips (#438)', () => {
+    function headingView(sim: GameSim): {
+      view: EntityView;
+      side: AnimatedSpriteSet;
+      south: AnimatedSpriteSet;
+      north: AnimatedSpriteSet;
+    } {
+      const side = cutStrip('kellerassel-side', stripTexture(), SIDECAR);
+      const south = cutStrip('kellerassel-south', stripTexture(), SIDECAR);
+      const north = cutStrip('kellerassel-north', stripTexture(), SIDECAR);
+      const view = bareView(sim, {
+        'kellerassel-side': side,
+        'kellerassel-south': south,
+        'kellerassel-north': north,
+      });
+      return { view, side, south, north };
+    }
+
+    function shown(view: EntityView, set: AnimatedSpriteSet): number {
+      const body = billboardMeshes(view.group)[0];
+      return body === undefined ? -1 : frameShown(body, set.frames);
+    }
+
+    it('turns to the strip for the way it is walking, mirroring only the side one', () => {
+      const idle = createInputFrame();
+      const toRight = oneEnemySim();
+      toRight.sim.transform.data[toRight.index * 4] = 20;
+      toRight.sim.transform.data[toRight.index * 4 + 2] = 20;
+      const a = headingView(toRight.sim);
+      for (let tick = 0; tick < 5; tick++) {
+        toRight.sim.step(idle);
+      }
+      a.view.sync(0, 0, project);
+      expect(shown(a.view, a.side)).toBeGreaterThanOrEqual(0);
+      expect(shown(a.view, a.south)).toBe(-1);
+      const sideBody = billboardMeshes(a.view.group)[0];
+      expect(sideBody !== undefined && isMirrored(sideBody)).toBe(true);
+
+      // Straight above the player: it comes down the room, toward the camera.
+      const fromAbove = oneEnemySim();
+      const playerX = fromAbove.sim.positionX(fromAbove.sim.playerIndex);
+      fromAbove.sim.transform.data[fromAbove.index * 4] = playerX;
+      fromAbove.sim.transform.data[fromAbove.index * 4 + 1] = 10;
+      fromAbove.sim.transform.data[fromAbove.index * 4 + 2] = playerX;
+      fromAbove.sim.transform.data[fromAbove.index * 4 + 3] = 10;
+      const b = headingView(fromAbove.sim);
+      for (let tick = 0; tick < 5; tick++) {
+        fromAbove.sim.step(idle);
+      }
+      b.view.sync(0, 0, project);
+      expect(shown(b.view, b.south)).toBeGreaterThanOrEqual(0);
+      const southBody = billboardMeshes(b.view.group)[0];
+      expect(southBody !== undefined && isMirrored(southBody)).toBe(false);
+    });
+
+    it('draws a creature with no per-heading strips exactly as before', () => {
+      const idle = createInputFrame();
+      const { sim } = oneEnemySim();
+      const { view, set } = animatedView(sim);
+      for (let tick = 0; tick < 5; tick++) {
+        sim.step(idle);
+      }
+      view.sync(0, 0, project);
+      expect(shown(view, set)).toBeGreaterThanOrEqual(0);
+    });
+  });
+
   /**
    * The regression this whole area exists for (`docs/DECISIONS.md` #45).
    *
