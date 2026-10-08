@@ -5,6 +5,7 @@ import { borkenkaefer } from './borkenkaefer.js';
 import { bierratte } from './bierratte.js';
 import { blaskapellist } from './blaskapellist.js';
 import { boellerschmeisser } from './boellerschmeisser.js';
+import { bieber, bieberLogEast, bieberLogWest } from './bieber.js';
 import { derLadewagen } from './der-ladewagen.js';
 import { derRattenkoenig } from './der-rattenkoenig.js';
 import { derStier, maibaumDieb } from './der-stier.js';
@@ -74,6 +75,9 @@ export const ENEMY_DEFINITIONS: readonly EnemyDefinition[] = [
   specht,
   waldradler,
   waldradl,
+  bieber,
+  bieberLogEast,
+  bieberLogWest,
 ];
 
 /**
@@ -92,6 +96,9 @@ export function enemyDefinitionById(id: string): EnemyDefinition | undefined {
 export {
   bachforelle,
   bauer,
+  bieber,
+  bieberLogEast,
+  bieberLogWest,
   bierratte,
   blaskapellePosaune,
   blaskapelleTrompete,

@@ -11,6 +11,7 @@ import {
   waldradl,
 } from '../../src/content/enemies/index.js';
 import waldBoss from '../../src/content/rooms/wald-boss.json';
+import waldMiniboss from '../../src/content/rooms/wald-miniboss.json';
 import { entityIndex } from '../../src/sim/ecs/entity.js';
 import { World } from '../../src/sim/ecs/world.js';
 import { EventKind } from '../../src/sim/events/queue.js';
@@ -498,6 +499,12 @@ function waldBossSim(seed: number): GameSim {
  */
 const WALD_DAMAGE_POINTS = [1, 2, 4, 6];
 
+/**
+ * The Waldradler's cap is 16000 ticks, not 12000: a boss is no longer
+ * hit-staggered (`GameSim.isStunResistant`), so it keeps riding while it is
+ * shot, and a player who stands still lands fewer shots than when every hit
+ * held him in place.
+ */
 function measureWaldradler(shotDamage: number, seed: number): { ticks: number; attacks: number } {
   const sim = waldBossSim(seed);
   sim.tuning.shooting.shotDamage = shotDamage;
@@ -505,7 +512,7 @@ function measureWaldradler(shotDamage: number, seed: number): { ticks: number; a
   const boss = place(sim, 'waldradler', sim.positionX(player) + 70, sim.positionY(player));
   let attacks = 0;
   let previous = stateName(sim, boss);
-  for (let tick = 0; tick < 12000; tick++) {
+  for (let tick = 0; tick < 16000; tick++) {
     sim.step(aimAt(sim, player, boss));
     if (!isAlive(sim, boss)) {
       return { ticks: tick + 1, attacks };
@@ -516,7 +523,7 @@ function measureWaldradler(shotDamage: number, seed: number): { ticks: number; a
     }
     previous = current;
   }
-  return { ticks: 12000, attacks };
+  return { ticks: 16000, attacks };
 }
 
 function measureWaldradl(shotDamage: number): number {
@@ -564,7 +571,7 @@ describe('Floor 3 boss pacing (#412, #413)', () => {
       for (const seed of [1, 2, 3]) {
         const result = measureWaldradler(shotDamage, seed);
         expect(result.ticks, `shotDamage=${String(shotDamage)} seed=${String(seed)}`).toBeLessThan(
-          12000,
+          16000,
         );
         expect(
           result.attacks,
@@ -584,5 +591,115 @@ describe('Floor 3 boss pacing (#412, #413)', () => {
         `the wheel (${String(wheel)}) outlasts the rider (${String(rider)})`,
       ).toBeLessThan(rider);
     }
+  });
+});
+
+/**
+ * #467 — Floor 3's mini-boss, held to the bar the other floors' are: it dies
+ * inside its own cycle, shows its one idea, and sits between the floor's
+ * ordinary roster and its boss in length. Measured in the real arena
+ * (`wald-miniboss`: the woodpile is the template's own logs), against a player
+ * who stands level with the middle log and only aims and fires — the losing
+ * line for dodging, and the one that shows the length.
+ */
+function bieberSim(): GameSim {
+  const sim = new GameSim({ seed: 1, roomTemplate: waldMiniboss, floor: 3, population: 'empty' });
+  for (let tick = 0; tick < 200 && sim.roomWarmupTicks > 0; tick++) {
+    sim.step(createInputFrame());
+  }
+  // The template's own Bieber is cleared; the harness places the one it measures.
+  for (let index = 0; index < sim.world.highWater; index++) {
+    if (
+      sim.world.states[index] === World.ALIVE &&
+      ((sim.world.masks[index] ?? 0) & sim.enemyMask) === sim.enemyMask
+    ) {
+      sim.kill(index);
+    }
+  }
+  sim.world.flush();
+  sim.health.data[sim.playerIndex * 2] = 1_000_000;
+  sim.health.data[sim.playerIndex * 2 + 1] = 1_000_000;
+  return sim;
+}
+
+function measureBieber(shotDamage: number): { ticks: number; rolls: number; swishes: number } {
+  const sim = bieberSim();
+  sim.tuning.shooting.shotDamage = shotDamage;
+  const player = sim.playerIndex;
+  const bieber = place(
+    sim,
+    'bieber',
+    (sim.room.minX + sim.room.maxX) / 2,
+    (sim.room.minY + sim.room.maxY) / 2,
+  );
+  let rolls = 0;
+  let swishes = 0;
+  let previous = stateName(sim, bieber);
+  for (let tick = 0; tick < 12000; tick++) {
+    // The player works through the arena's lanes, a few seconds in each, as a
+    // person dodging would: a log that has come to rest in one lane is proof
+    // against every shot, so a player who held a lane forever would never land
+    // another, and one who is *always* moving would never be rolled at.
+    const lane = Math.floor(tick / 150) % 9;
+    const x = sim.room.maxX - 40;
+    const y = sim.room.minY + 8 + lane * 16;
+    sim.transform.data[player * 4] = x;
+    sim.transform.data[player * 4 + 1] = y;
+    sim.transform.data[player * 4 + 2] = x;
+    sim.transform.data[player * 4 + 3] = y;
+    sim.velocity.data[player * 2] = 0;
+    sim.velocity.data[player * 2 + 1] = 0;
+    sim.step(aimAt(sim, player, bieber));
+    if (!isAlive(sim, bieber)) {
+      return { ticks: tick + 1, rolls, swishes };
+    }
+    const current = stateName(sim, bieber);
+    if (current !== previous) {
+      if (current === 'shove') {
+        rolls += 1;
+      }
+      if (current === 'swish') {
+        swishes += 1;
+      }
+    }
+    previous = current;
+  }
+  return { ticks: 12000, rolls, swishes };
+}
+
+describe('Floor 3 mini-boss pacing (#467)', () => {
+  it('Bieber dies, shows both of his attacks, and is shorter than Der Waldradler', () => {
+    for (const shotDamage of WALD_DAMAGE_POINTS) {
+      const bieber = measureBieber(shotDamage);
+      const rider = measureWaldradler(shotDamage, 1).ticks;
+      const tag = `shotDamage=${String(shotDamage)}`;
+      expect(bieber.ticks, `${tag}: Bieber never died`).toBeLessThan(12000);
+      expect(
+        bieber.rolls,
+        `${tag}: only ${String(bieber.rolls)} log roll(s)`,
+      ).toBeGreaterThanOrEqual(2);
+      expect(
+        bieber.swishes,
+        `${tag}: only ${String(bieber.swishes)} swish(es)`,
+      ).toBeGreaterThanOrEqual(2);
+      // At the top damage point the rider is over in about 1400 ticks while Bieber
+      // cannot be shorter than the lanes the player has to work through (shots do
+      // not clear a log), so there the bar is that he never drags, not that he
+      // beats a fight that has become very short.
+      if (shotDamage < 6) {
+        expect(
+          bieber.ticks,
+          `${tag}: Bieber (${String(bieber.ticks)}) outlasts Der Waldradler (${String(rider)})`,
+        ).toBeLessThan(rider);
+      } else {
+        expect(bieber.ticks, `${tag}: Bieber drags (${String(bieber.ticks)})`).toBeLessThan(2500);
+      }
+    }
+  });
+
+  it("is longer than anything on the floor's ordinary roster", () => {
+    const boar = measureFight('boar', 'charge', 1);
+    const bieber = measureBieber(1);
+    expect(bieber.ticks).toBeGreaterThan(boar.ticksToOutcome);
   });
 });

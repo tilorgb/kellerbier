@@ -6744,3 +6744,106 @@ because they are Tilo's to write.
 "pure function of the volley number" shape and its validator. A new attack that lands near the
 player uses `lobVolley`, not a second capture field. A new weighted choice is `toOneOf`, never an
 `if`.
+
+---
+
+## 124. Floor 3's mini-boss: Bieber, and a woodpile that is cover for both sides
+
+**Decided** while building #467. Tilo named him: **Bieber**, a beaver that is nowhere near a river
+and has brought a woodpile. The name is English-adjacent and given, not coined (`CLAUDE.md`).
+
+**The fight.** A row of logs lies against the wall opposite a door. He walks to the log lying
+nearest the player's row, braces, and shoves it; it rolls straight along its own row toward the
+player's side and comes to rest against the far wall as cover again. Between logs he raises his
+tail and slaps out a three-shot cone at where the player stood as it went up. Plain bullets, flat
+difficulty, no phases, no scaling. The one idea is **cover that cuts both ways**: the logs block the
+player's shots and his own cone, and the fight keeps rearranging them. He fetches whichever log is
+now nearest the player's row, so a log he rolled across the room is the next one he walks to.
+
+**Three engine pieces, all small and all data-driven** (`sim/enemy/definition.ts`):
+
+- `rollLog` (entry): takes the prop within reach that is nearest the player's row and queues an
+  ordinary `summon` of the rolling body, east- or west-going by the player's side. Two definitions
+  (`bieber-log-east`, `-west`) rather than one with a direction, because a body's roll direction is
+  its *state's* (`rollBounce`), not its spawner's.
+- `becomeProp` (entry): the inverse of `grabProp`. The rolling log turns back into a `log` prop where
+  it stopped. There is deliberately **no clearance check** at that spot: the body came to rest
+  there under the room's own collision, and a check that disagreed by a rounding error made the log
+  vanish instead of settle (found in the first headless run).
+- `approachProp` gains `nearestToPlayerRow`; the `log` prop kind (`LOG_HEALTH` 14, sturdier than a
+  barrel so his own cone does not strip the pile in two volleys); and `lootTier: 'none'` so a rolling
+  log shot to pieces leaves nothing. The rolling bodies are `locksRoom: false`: the room clears on
+  Bieber alone.
+
+**Two arenas, because doors are the plan's, not the template's.** A template's `doors` metadata is
+only a filter (`eligibleTemplates`): a slot is given a template with a door wherever it needs one.
+So the "logs on the side with no door" rule is two mirrored templates, `wald-miniboss` (logs west,
+no west door) and `wald-miniboss-east`. 600 generated floor-3 plans produced no failure and never
+put a door on a log side. The cost is that a mini-boss slot needing *both* an east and a west door
+has no eligible template and the generator retries — measured at zero failures in 600 seeds.
+
+**He is never an elite.** A real mini-boss (`bossBar`) is spawned plain by `applyCompiledRoom`, so
+there is no elite variant to author; the issue's "elite behaviour" line is satisfied by the
+existing rule, not by new content.
+
+**Palette.** Floor 3's palette has no brown. The fur is the amber from the skin ramp and the tail the
+floor's violet-grey. Whether the palette grows a brown is a decision for the floor's art, not for
+this change.
+
+**Art.** Tilo picked option B of three (an upright beaver, 34x36), the floor's own `wald-log-1` as the
+resting log, and a new rolling log lying along the way it travels. The rolling log's quarter-turn
+animation is the weakest piece of the art; iterating it is inside the signed-off direction.
+
+**Numbers.** 70 health, about a quarter of the Waldradler's 300 (`boss-pacing.test.ts` measures him at
+shot damage 1, 2, 4 and 6, against a player who changes lane every 150 ticks: 7 to 17 log rolls and
+swishes, a third of the rider's length at the bottom, close to it at the top). At high damage the
+length is the cover and the walking, not the health: logs only shots can't clear are a floor under it.
+
+**Constrains:** a log is the only thing `becomeProp` is used for so far. A later enemy that leaves
+terrain behind where it dies down should use it rather than `dropProp`, which spawns on a timer.
+
+**The logs are terrain, not enemies to be shot (Tilo, after the first playtest).** Every log, standing
+or rolling, is proof against every shot — the player's and Bieber's own — and nothing moves it:
+`GameSim.isShotProof` (`applyHit` deflects, a blast still hurts through `applyDamageAt`) and
+`isImmovable` (`addPush`, so shots, blasts, items and a Boar's impact; and the player's contact,
+where the player gives way for it). A rolling log is `rooted`, `shotProof` and `ignoresBodies`
+(enemy separation skips it, so Bieber is not ploughed across the room by the log he just shoved) and
+holds its lane (`rollBounce.fixedLane`): the row it started on, every tick. The woodpile is one
+straight line against the wall, a log after a log, 16 apart. Bieber walks to a standoff point in
+front of the log (`approachProp.standoff`) rather than at its centre: with the logs solid and in one
+line, walking at a log's centre walked into its neighbours and stuck. Consequence: cover is permanent
+unless exploded, and what settles in the player's row is the next log he rolls back.
+
+---
+
+## 125. Only small mobs can be stunlocked; a freeze is a window, then a breather
+
+**Decided** after Bieber was stunlocked in the first playtest. Two things held a body in place:
+Sauwetter's every-third-shot freeze (and any other freezing hit) *refreshed* the freeze each time,
+so a rapid shooter kept a body at 15% speed indefinitely; and every landed hit staggered the body
+(`hitStun`, which skips its whole state machine), so a fast stream of hits chained.
+
+- **Freeze has a cooldown** (`applyFreeze`, `tuning.projectileTags.freezeCooldownTicks`, 120). A hit
+  starts a freeze only on a body that is not frozen and not in its breather; a hit while frozen no
+  longer extends it. When a freeze ends the breather starts. A stream of freezing hits therefore
+  freezes a small mob for under half the time (45 ticks of every 165), not for good. Items that apply
+  a freeze directly (`applyStatusEffect`, the Obazda aura) are not routed through it: an aura the
+  player holds on purpose is a different thing from a shot that lands, and was left alone.
+- **A boss or mini-boss is never locked** (`GameSim.isStunResistant`, `bossBar`): a landed hit still
+  flashes and knocks back but does not stagger it, and a freeze only slows it to `slowSpeedFactor`
+  (0.5), never to `freezeSlowFactor` (0.15). Small mobs, which have no `bossBar`, are unchanged.
+
+**Cost, measured.** A boss that no longer freezes in place on every hit keeps riding while it is
+shot, so a player who stands still lands fewer shots: Der Waldradler's bare-run fight went from about
+9800 to about 12000 ticks at shot damage 1, and `boss-pacing.test.ts`'s cap for him is now 16000. The
+numbers are Tilo's to retune; this change only stops them being shortened by a lock.
+
+**Wall to wall (Tilo, second playtest).** The woodpile is nine logs, flush against the wall for its
+whole length (`x` 7 / 233 in template units, the footprint's own radius off the wall, `y` 8 + 16k): no
+walking space behind it and none along it. A rolling log runs the whole width and a hit does not
+stop it (`impact.continues`): the player is carried along the lane by the contact separation and,
+pinned at the far wall, is popped out sideways toward the middle of the arena (`contact.ts`), never
+left wedged against the wall or inside the log. The nine lanes also mean any row the player stands
+in has a log to roll. At the top damage point the pacing test no longer compares Bieber with the
+Waldradler (the rider is then under 1500 ticks and Bieber cannot be faster than the lanes it takes
+to work through); it asks that he does not drag.

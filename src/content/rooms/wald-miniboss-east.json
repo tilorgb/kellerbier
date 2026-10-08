@@ -1,5 +1,5 @@
 {
-  "id": "wald-miniboss",
+  "id": "wald-miniboss-east",
   "tileGrid": [
     "###############",
     "#.............#",
@@ -36,57 +36,57 @@
   "hazards": [],
   "decorativeProps": [
     {
-      "x": 7,
+      "x": 233,
       "y": 8,
       "type": "log"
     },
     {
-      "x": 7,
+      "x": 233,
       "y": 24,
       "type": "log"
     },
     {
-      "x": 7,
+      "x": 233,
       "y": 40,
       "type": "log"
     },
     {
-      "x": 7,
+      "x": 233,
       "y": 56,
       "type": "log"
     },
     {
-      "x": 7,
+      "x": 233,
       "y": 72,
       "type": "log"
     },
     {
-      "x": 7,
+      "x": 233,
       "y": 88,
       "type": "log"
     },
     {
-      "x": 7,
+      "x": 233,
       "y": 104,
       "type": "log"
     },
     {
-      "x": 7,
+      "x": 233,
       "y": 120,
       "type": "log"
     },
     {
-      "x": 7,
+      "x": 233,
       "y": 136,
       "type": "log"
     },
     {
-      "x": 212,
+      "x": 28,
       "y": 28,
       "type": "fern"
     },
     {
-      "x": 212,
+      "x": 28,
       "y": 116,
       "type": "glow-mushrooms"
     },
@@ -101,9 +101,9 @@
     "shape": "1x1",
     "doors": {
       "north": true,
-      "east": true,
+      "east": false,
       "south": true,
-      "west": false
+      "west": true
     },
     "difficultyTier": 4,
     "weight": 1,

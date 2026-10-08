@@ -36,11 +36,18 @@ function drift(id: string): number {
 }
 
 describe('rooted enemies', () => {
-  it('are the Fliegenpilz, the Bachforelle, the Specht and the Waldradl', () => {
+  it("are the Fliegenpilz, the Bachforelle, the Specht, the Waldradl and Bieber's rolling logs", () => {
     const rooted = ENEMY_DEFINITIONS.filter((definition) => definition.rooted === true)
       .map((definition) => definition.id)
       .sort();
-    expect(rooted).toEqual(['bachforelle', 'fliegenpilz', 'specht', 'waldradl']);
+    expect(rooted).toEqual([
+      'bachforelle',
+      'bieber-log-east',
+      'bieber-log-west',
+      'fliegenpilz',
+      'specht',
+      'waldradl',
+    ]);
   });
 
   it('are not pushed by a shot, where the same body unrooted is', () => {

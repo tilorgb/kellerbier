@@ -21,8 +21,13 @@
  * which `CONTRIBUTING.md` asks changes not to do. Same hay, same sprite
  * (`render/floor-art.ts` names `rural-hay-bale` for both), two different
  * things: one is drawn, one is in the way.
+ *
+ * `log` (#467) is Bieber's: authored as a resting log along one wall of his
+ * arena, taken and rolled by `rollLog`, and left again by `becomeProp` where it
+ * comes to rest. Floor 3 only — `render/floor-art.ts` draws it as the floor's
+ * own `wald-log` art.
  */
-export const DESTRUCTIBLE_PROP_KINDS = ['barrel', 'maypole', 'bale'] as const;
+export const DESTRUCTIBLE_PROP_KINDS = ['barrel', 'maypole', 'bale', 'log'] as const;
 
 export type DestructiblePropKind = (typeof DESTRUCTIBLE_PROP_KINDS)[number];
 
@@ -30,3 +35,17 @@ export type DestructiblePropKind = (typeof DESTRUCTIBLE_PROP_KINDS)[number];
 export function propKindIndex(name: string): number {
   return (DESTRUCTIBLE_PROP_KINDS as readonly string[]).indexOf(name);
 }
+
+/**
+ * What a `log` stands as (#467), authored or settled: sturdier than a barrel,
+ * because Bieber's own tail cone chews at the logs between him and the player
+ * and a woodpile that ran out in two volleys would end the fight's one idea.
+ */
+export const LOG_HEALTH = 14;
+
+/**
+ * What a `log` weighs (#467): so much that no contact separates it from the
+ * player, and no body of any other mass moves it. `GameSim.isImmovable` is
+ * the rule; this is only the number the mass-split arithmetic reads.
+ */
+export const LOG_MASS = 1000;

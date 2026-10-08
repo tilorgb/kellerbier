@@ -142,9 +142,10 @@ describe('drop tables', () => {
   it('every enemy in the roster resolves to a known loot tier', () => {
     for (const definition of ENEMY_DEFINITIONS) {
       const tier = definition.lootTier ?? 'normal';
-      expect(LOOT_TIERS as readonly string[], `${definition.id} has an unknown lootTier`).toContain(
-        tier,
-      );
+      expect(
+        [...LOOT_TIERS, 'none'] as readonly string[],
+        `${definition.id} has an unknown lootTier`,
+      ).toContain(tier);
     }
   });
 });

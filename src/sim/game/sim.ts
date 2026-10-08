@@ -170,7 +170,13 @@ import {
   cleansePoison,
   stepStatusEffects,
 } from '../systems/status-effects.js';
-import { DESTRUCTIBLE_PROP_KINDS, type DestructiblePropKind, propKindIndex } from './prop-kinds.js';
+import {
+  DESTRUCTIBLE_PROP_KINDS,
+  type DestructiblePropKind,
+  LOG_HEALTH,
+  LOG_MASS,
+  propKindIndex,
+} from './prop-kinds.js';
 
 /** Entity slots reserved up front. Sized well above M1's population. */
 const DEFAULT_CAPACITY = 8192;
@@ -2382,6 +2388,58 @@ export class GameSim {
     return this.bouldersChangedTickValue;
   }
 
+  /**
+   * Whether the body at `index` is a `log` prop (#467) — Bieber's woodpile and
+   * whatever he has rolled to rest. Enemy bodies carry the `propKind`
+   * component too (kind 0), so they are skipped.
+   */
+  isLogProp(index: number): boolean {
+    const mask = this.world.masks[index] ?? 0;
+    if ((mask & this.propKind.bit) === 0 || (mask & this.enemyMask) === this.enemyMask) {
+      return false;
+    }
+    return (this.propKind.data[index] ?? 0) === propKindIndex('log');
+  }
+
+  /**
+   * Nothing moves it (#467): a `rooted` enemy, a log prop, a rolling log. Read
+   * by `addPush` — shots, blasts, items, a Boar's impact — and by the contact
+   * separation, where the player gives way for it instead of the other way
+   * round.
+   */
+  isImmovable(index: number): boolean {
+    return this.enemyRooted(index) || this.isLogProp(index);
+  }
+
+  /**
+   * Whether shots do nothing to the body at `index` (#467): a log prop or a
+   * `shotProof` enemy. A blast still hurts it — an explosion goes through
+   * `applyDamageAt`, which does not ask.
+   */
+  isShotProof(index: number): boolean {
+    if (((this.world.masks[index] ?? 0) & this.enemyMask) === this.enemyMask) {
+      return this.enemies.at(this.enemy.data[index * ENEMY_STRIDE] ?? 0).shotProof;
+    }
+    return this.isLogProp(index);
+  }
+
+  /**
+   * Whether the body at `index` is too important to be locked down: a boss or
+   * mini-boss (`bossBar`). Hit-stagger skips it and a freeze only slows it, so
+   * it can always attack; only small mobs can be stunlocked.
+   */
+  isStunResistant(index: number): boolean {
+    if (((this.world.masks[index] ?? 0) & this.enemyMask) !== this.enemyMask) {
+      return false;
+    }
+    return this.enemies.at(this.enemy.data[index * ENEMY_STRIDE] ?? 0).bossBar;
+  }
+
+  /** Whether the enemy at `index` skips enemy-to-enemy separation (#467's rolling log). */
+  enemyIgnoresBodies(index: number): boolean {
+    return this.enemies.at(this.enemy.data[index * ENEMY_STRIDE] ?? 0).ignoresBodies;
+  }
+
   /** Whether the body at `index` is a `rooted` enemy, which no shove moves (`addPush`). */
   enemyRooted(index: number): boolean {
     if (((this.world.masks[index] ?? 0) & this.enemyMask) !== this.enemyMask) {
@@ -3156,7 +3214,20 @@ export class GameSim {
           }
           continue;
         }
-        this.spawnTarget(prop.x, prop.y, TARGET_RADIUS, propKind);
+        // Bieber's woodpile (#467) is cleared away with the fight: on a revisit
+        // of a cleared room there is nothing left to roll, and a log standing
+        // in a doorway would only be in the way.
+        if (prop.type === 'log' && this.roomClearedIds.has(this.roomId)) {
+          continue;
+        }
+        this.spawnTarget(
+          prop.x,
+          prop.y,
+          TARGET_RADIUS,
+          propKind,
+          prop.type === 'log' ? LOG_HEALTH : TARGET_HEALTH,
+          prop.type === 'log' ? LOG_MASS : 3,
+        );
       }
     }
     this.restoreOrSpawnRoomLoot(compiled);
@@ -6527,6 +6598,28 @@ export class GameSim {
   }
 
   /**
+   * Removes every `log` prop in the room, as a room clear does (#467): the
+   * woodpile and whatever Bieber rolled onto a door are cover for the fight,
+   * not furniture for what comes after. Enemy bodies carry the `propKind`
+   * component too, so they are skipped.
+   */
+  private clearLogs(): void {
+    const kind = propKindIndex('log');
+    for (let index = 0; index < this.world.highWater; index++) {
+      if (
+        this.world.states[index] !== World.ALIVE ||
+        ((this.world.masks[index] ?? 0) & this.propKind.bit) === 0 ||
+        isEnemyBody(this.world.masks[index] ?? 0, this.enemyMask)
+      ) {
+        continue;
+      }
+      if ((this.propKind.data[index] ?? 0) === kind) {
+        this.consumeProp(index);
+      }
+    }
+  }
+
+  /**
    * Removes a destructible prop the way something *picking it up* would — no
    * splash, no loot, no death event, nothing for `splitOnDeath` or the loot
    * table to react to.
@@ -6658,6 +6751,8 @@ export class GameSim {
       this.roomEnemyCount === 0 &&
       !this.roomClearedIds.has(this.roomId)
     ) {
+      // Every log Bieber rolled, in a doorway or not, goes with the fight (#467).
+      this.clearLogs();
       const rewardLocations: { x: number; y: number }[] = [];
       const loot = this.rollRoomClearLoot();
       if (loot !== null) {

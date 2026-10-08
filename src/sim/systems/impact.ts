@@ -204,6 +204,13 @@ function applyHit(sim: GameSim, slot: number): void {
   }
 
   if (!isPlayer) {
+    // Bieber's logs (#467) are proof against every shot: it splashes off like a
+    // curled-up shell, and nothing changes. A blast does not come through here.
+    if (sim.isShotProof(target)) {
+      deflect(sim, hitX, hitY, normalX, normalY);
+      return;
+    }
+
     // A shot that arrives while the body is curled up splashes off it. The player
     // has to be able to tell that from a miss and from a hit that did nothing:
     // foam comes off it, the screen barely moves, and no health changes.
@@ -301,7 +308,7 @@ export function applyDamageAt(
   // stunning someone's own controls) and for a kill (the body is about to
   // leave the world; the bigger flash/shake/particles below already say
   // "that one mattered more" without needing anything to hold still).
-  if (!isPlayer && !killed) {
+  if (!isPlayer && !killed && !sim.isStunResistant(target)) {
     const hitstun = Math.min(
       tuning.maxHitstunTicks,
       tuning.hitstunTicks + damage * tuning.hitstunPerDamage,

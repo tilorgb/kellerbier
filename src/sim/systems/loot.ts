@@ -37,6 +37,11 @@ function dropFromEvent(slot: number): void {
   const base = index * ENEMY_STRIDE;
   const definitionIndex = sim.enemy.data[base] ?? 0;
   const tier = sim.enemies.at(definitionIndex).lootTier;
+  // A body that is terrain rather than a creature — Bieber's rolling log
+  // (#467) — leaves nothing behind when it is shot to pieces.
+  if (tier === 'none') {
+    return;
+  }
 
   const atX = sim.events.x[slot] ?? 0;
   const atY = sim.events.y[slot] ?? 0;

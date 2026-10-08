@@ -306,6 +306,23 @@ export interface CompiledState {
   readonly approachPropKind: number;
   /** For a `grabProp` entry: `{ kind, reach }`. `null` for every other state (#199). */
   readonly grabProp: { readonly kind: number; readonly reach: number } | null;
+  /** For a `rollLog` entry (#467): the prop, its reach, and the two rolling bodies by definition index. */
+  readonly rollLog: {
+    readonly kind: number;
+    readonly reach: number;
+    readonly east: number;
+    readonly west: number;
+  } | null;
+  /** For a `becomeProp` entry (#467): the prop the body turns into where it stands. */
+  readonly becomeProp: {
+    readonly kind: number;
+    readonly health: number;
+    readonly radius: number;
+  } | null;
+  /** True for an `approachProp` with `nearestToPlayerRow` (#467). */
+  readonly approachesPlayerRow: boolean;
+  /** An `approachProp`'s `standoff` in pixels, or 0 for none (#467). */
+  readonly approachStandoff: number;
   readonly splits: readonly CompiledSplit[];
   /** `summon` behaviours on this state, children resolved to definition indices (#276). */
   readonly summons: readonly CompiledSummon[];
@@ -326,7 +343,7 @@ export interface CompiledEnemy {
   readonly contactDamage: number;
   readonly initialState: number;
   readonly states: readonly CompiledState[];
-  readonly lootTier: 'weak' | 'normal' | 'tough';
+  readonly lootTier: 'weak' | 'normal' | 'tough' | 'none';
   readonly locksRoom: boolean;
   /** Whether this body's health feeds the boss/mini-boss bar (#276). */
   readonly bossBar: boolean;
@@ -349,6 +366,10 @@ export interface CompiledEnemy {
   readonly flying: boolean;
   /** The definition's `rooted`: shoves (`addPush`) never move it. */
   readonly rooted: boolean;
+  /** The definition's `shotProof` (#467): projectiles splash off it, only explosions hurt it. */
+  readonly shotProof: boolean;
+  /** The definition's `ignoresBodies` (#467): enemy-to-enemy separation skips it. */
+  readonly ignoresBodies: boolean;
   /**
    * Set when any of its states `returnToPerch`es (#411): a percher, put on the
    * nearest point of the room's wall at spawn.
@@ -565,6 +586,8 @@ export class EnemyRegistry {
       telegraphDrum: compileTelegraphLook(definition.telegraphLook, where) === TelegraphLook.Drum,
       flying: definition.flying === true,
       rooted: definition.rooted === true,
+      shotProof: definition.shotProof === true,
+      ignoresBodies: definition.ignoresBodies === true,
       perches: states.some((state) => state.movement.behaviour === 'returnToPerch'),
       facing: compileFacing(definition.facing, where),
       zone: states.some((state) => state.movement.behaviour === 'swimInZone') ? 'waldbach' : null,
@@ -591,6 +614,10 @@ export class EnemyRegistry {
     let emitCloud: CompiledCloud | null = null;
     let meleeArc: CompiledMeleeArc | null = null;
     let grabProp: { kind: number; reach: number } | null = null;
+    let rollLog: { kind: number; reach: number; east: number; west: number } | null = null;
+    let becomeProp: { kind: number; health: number; radius: number } | null = null;
+    let approachesPlayerRow = false;
+    let approachStandoff = 0;
     let latchesOnPlayer = false;
     let submerged = false;
     let grounded = false;
@@ -738,6 +765,8 @@ export class EnemyRegistry {
         }
         if (behaviour.behaviour === 'approachProp') {
           approachPropKind = resolvePropKind(behaviour.propKind, `${where}: "approachProp"`);
+          approachesPlayerRow = behaviour.nearestToPlayerRow === true;
+          approachStandoff = behaviour.standoff ?? 0;
         }
         continue;
       }
@@ -826,6 +855,32 @@ export class EnemyRegistry {
           grabProp = {
             kind: resolvePropKind(behaviour.propKind, `${where}: "grabProp"`),
             reach: behaviour.reach,
+          };
+        } else if (behaviour.behaviour === 'rollLog') {
+          if (!(behaviour.reach > 0)) {
+            throw new Error(`${where}: "rollLog" needs a reach above zero`);
+          }
+          const east = this.byId.get(behaviour.east);
+          const west = this.byId.get(behaviour.west);
+          if (east === undefined || west === undefined) {
+            throw new Error(
+              `${where}: "rollLog" names an enemy that does not exist ("${behaviour.east}" / "${behaviour.west}")`,
+            );
+          }
+          rollLog = {
+            kind: resolvePropKind(behaviour.propKind, `${where}: "rollLog"`),
+            reach: behaviour.reach,
+            east,
+            west,
+          };
+        } else if (behaviour.behaviour === 'becomeProp') {
+          if (!(behaviour.health > 0)) {
+            throw new Error(`${where}: "becomeProp" needs health above zero`);
+          }
+          becomeProp = {
+            kind: resolvePropKind(behaviour.propKind, `${where}: "becomeProp"`),
+            health: behaviour.health,
+            radius: behaviour.radius ?? 0,
           };
         } else if (behaviour.behaviour === 'captureLine') {
           capturesLine = true;
@@ -1253,7 +1308,11 @@ export class EnemyRegistry {
           transition.trigger === TransitionTrigger.After && transition.max > transition.value,
       ),
       approachPropKind,
+      approachesPlayerRow,
+      approachStandoff,
       grabProp,
+      rollLog,
+      becomeProp,
       splits,
       summons,
       propDrops,

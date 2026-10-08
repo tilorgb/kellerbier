@@ -6,7 +6,7 @@ import { NO_SLOT } from '../pool/slot-pool.js';
 import {
   STATUS_BURN,
   STATUS_EFFECT_STRIDE,
-  STATUS_FREEZE,
+  applyFreeze,
   applyPoison,
 } from '../systems/status-effects.js';
 import { type ProjectileStore, type ProjectileTeamId, ProjectileTeam } from './store.js';
@@ -353,10 +353,7 @@ function applyStatusTagsOnHit(sim: GameSim, target: number, tags: number): void 
     applyPoison(sim, target);
   }
   if (hasTag(tags, ProjectileTag.Freezing)) {
-    status[base + STATUS_FREEZE] = Math.max(
-      status[base + STATUS_FREEZE] ?? 0,
-      Math.round(tuning.freezeDurationTicks),
-    );
+    applyFreeze(sim, target, tuning.freezeDurationTicks);
   }
 }
 
