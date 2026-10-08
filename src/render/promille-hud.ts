@@ -158,7 +158,10 @@ export class PromilleHud {
     const tuning = sim.tuning.promille;
     const from = promilleTierEffects(change.from, tuning);
     const to = promilleTierEffects(change.tier, tuning);
-    const deltas = [to.damagePercent - from.damagePercent, to.fireRatePercent - from.fireRatePercent];
+    const deltas = [
+      to.damagePercent - from.damagePercent,
+      to.fireRatePercent - from.fireRatePercent,
+    ];
 
     // Two blinks (lit, dark, lit, dark), then lit again while it fades out.
     const blinkOn = age < 10 || (age >= 18 && age < 28) || age >= FLASH_FADE_START;

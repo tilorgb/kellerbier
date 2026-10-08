@@ -15,10 +15,7 @@ import { GameSim } from '../../src/sim/game/sim.js';
 import { RoomGeometry } from '../../src/sim/room/geometry.js';
 import { createInputFrame } from '../../src/sim/input/frame.js';
 import { DEFAULT_PROMILLE_TUNING } from '../../src/sim/tuning.js';
-import {
-  promilleEffectsText,
-  promilleKaterText,
-} from '../../src/render/promille-text.js';
+import { promilleEffectsText, promilleKaterText } from '../../src/render/promille-text.js';
 
 /**
  * #460: the player was never told what a Promille tier does. These pin the
@@ -166,7 +163,7 @@ describe('promilleTierEffects (#460)', () => {
 describe('promille text (#460)', () => {
   const tuning = DEFAULT_PROMILLE_TUNING;
 
-  it('spells out a tier\'s bonuses', () => {
+  it("spells out a tier's bonuses", () => {
     const text = promilleEffectsText('en', PromilleTier.Angeheitert, tuning, false);
     expect(text).toContain('+25% damage');
     expect(text).toContain('+12% fire rate');
