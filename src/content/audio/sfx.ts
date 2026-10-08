@@ -345,6 +345,16 @@ const attackWindup: SfxDefinition = {
 };
 
 const roomClear: SfxDefinition = {
+  sample: {
+    assetId: 'room-clear',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 0.26,
+      fadeInSeconds: 0.02,
+      fadeOutSeconds: 0.05,
+      gain: 1,
+    },
+  },
   id: 'room-clear',
   description:
     "The room's last enemy is handled (#234) — a reward sting distinct from `door-open`, which is a door " +
@@ -358,6 +368,16 @@ const roomClear: SfxDefinition = {
 };
 
 const lowHealth: SfxDefinition = {
+  sample: {
+    assetId: 'low-health',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 1.93,
+      fadeInSeconds: 0.05,
+      fadeOutSeconds: 0.29,
+      gain: 0.5,
+    },
+  },
   id: 'low-health',
   description:
     'The player drops to 1 or 2 half-Maß of red health (#234) — a state change with no cue before this.',
@@ -370,6 +390,16 @@ const lowHealth: SfxDefinition = {
 };
 
 const enemySplit: SfxDefinition = {
+  sample: {
+    assetId: 'enemy-split',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 0.88,
+      fadeInSeconds: 0,
+      fadeOutSeconds: 0.5,
+      gain: 1,
+    },
+  },
   id: 'enemy-split',
   description:
     "A body's `splitOnDeath` behaviour produces children (#234) — Der Stier's and Grosse Kellerassel's " +
@@ -383,6 +413,16 @@ const enemySplit: SfxDefinition = {
 };
 
 const playerHit: SfxDefinition = {
+  sample: {
+    assetId: 'player-hit',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 0.36,
+      fadeInSeconds: 0.02,
+      fadeOutSeconds: 0.05,
+      gain: 1,
+    },
+  },
   id: 'player-hit',
   description: 'The player takes damage, from any source.',
   noise: {
@@ -392,6 +432,16 @@ const playerHit: SfxDefinition = {
   },
 };
 const playerDeath: SfxDefinition = {
+  sample: {
+    assetId: 'player-death',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 2.0173958333333335,
+      fadeInSeconds: 0.02,
+      fadeOutSeconds: 0.16,
+      gain: 1,
+    },
+  },
   id: 'player-death',
   description: "The player's last half-Maß goes with no eternal heart left to spend it.",
   noise: { filter: { type: 'lowpass', frequencyHz: 250, q: 0.5 }, durationSeconds: 0.5, gain: 0.6 },
@@ -418,16 +468,46 @@ const wallHit: SfxDefinition = {
 };
 
 const pickupGeneric: SfxDefinition = {
+  sample: {
+    assetId: 'pickup-generic',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 0.56,
+      fadeInSeconds: 0,
+      fadeOutSeconds: 0.63,
+      gain: 0.82,
+    },
+  },
   id: 'pickup-generic',
   description: 'An item, food or drink is picked up (sim.pickupToast).',
   tone: { instrument: 'bell', note: 'E5', durationSeconds: 0.12 },
 };
 const pickupPedestal: SfxDefinition = {
+  sample: {
+    assetId: 'pickup-pedestal',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 1.76,
+      fadeInSeconds: 0.17,
+      fadeOutSeconds: 0.62,
+      gain: 1,
+    },
+  },
   id: 'pickup-pedestal',
   description: 'A pedestal item is taken or swapped (sim.pedestalReveal).',
   tone: { instrument: 'bell', note: 'C6', durationSeconds: 0.3 },
 };
 const shopPurchase: SfxDefinition = {
+  sample: {
+    assetId: 'shop-purchase',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 0.72,
+      fadeInSeconds: 0.02,
+      fadeOutSeconds: 0.7,
+      gain: 1,
+    },
+  },
   id: 'shop-purchase',
   description: 'A Biermarken purchase completes.',
   noise: {
@@ -439,6 +519,16 @@ const shopPurchase: SfxDefinition = {
 };
 
 const doorOpen: SfxDefinition = {
+  sample: {
+    assetId: 'door-open',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 0.48,
+      fadeInSeconds: 0.02,
+      fadeOutSeconds: 0.05,
+      gain: 1,
+    },
+  },
   id: 'door-open',
   description: 'The player crosses an unlocked door (sim.doorContact).',
   noise: {
@@ -448,17 +538,48 @@ const doorOpen: SfxDefinition = {
   },
 };
 const doorLocked: SfxDefinition = {
+  sample: {
+    assetId: 'door-locked',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 1.0216666666666667,
+      fadeInSeconds: 0.02,
+      fadeOutSeconds: 0.05,
+      gain: 1,
+    },
+  },
   id: 'door-locked',
   description: 'A locked door is bumped — enemies still standing, or no key.',
   noise: { filter: { type: 'bandpass', frequencyHz: 200, q: 2 }, durationSeconds: 0.1, gain: 0.4 },
 };
 const secretReveal: SfxDefinition = {
+  sample: {
+    assetId: 'secret-reveal',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 1.9656041666666666,
+      fadeInSeconds: 0.02,
+      fadeOutSeconds: 0.25,
+      gain: 1,
+    },
+  },
   id: 'secret-reveal',
   description: 'A bombed wall opens onto a secret room.',
   noise: { filter: { type: 'lowpass', frequencyHz: 400, q: 0.6 }, durationSeconds: 0.3, gain: 0.4 },
   tone: { instrument: 'accordion', note: 'A4', durationSeconds: 0.4 },
 };
 const floorCardWhoosh: SfxDefinition = {
+  sample: {
+    assetId: 'floor-card-whoosh',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 1.0216666666666667,
+      fadeInSeconds: 0.15,
+      fadeOutSeconds: 0.29,
+      gain: 1,
+      filter: { type: 'lowpass', frequencyHz: 50, q: 50 },
+    },
+  },
   id: 'floor-card-whoosh',
   description: 'The floor title card sweeps on.',
   noise: {
@@ -469,6 +590,16 @@ const floorCardWhoosh: SfxDefinition = {
 };
 
 const footstep: SfxDefinition = {
+  sample: {
+    assetId: 'footstep',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 0.09,
+      fadeInSeconds: 0.02,
+      fadeOutSeconds: 0.05,
+      gain: 1,
+    },
+  },
   id: 'footstep',
   description: "The player's foot lands — one per stride, distance-driven.",
   noise: {
@@ -482,6 +613,16 @@ const footstep: SfxDefinition = {
 // splash in place of the dull thud, so the ear knows the water before the
 // eye has found the bank.
 const footstepWade: SfxDefinition = {
+  sample: {
+    assetId: 'footstep-wade',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 0.11,
+      fadeInSeconds: 0.02,
+      fadeOutSeconds: 0.05,
+      gain: 1,
+    },
+  },
   id: 'footstep-wade',
   description: "The player's foot lands in the Waldbach — a splash per stride.",
   noise: {
@@ -507,27 +648,77 @@ const uiOpen: SfxDefinition = {
   tone: { instrument: 'bell', note: 'C5', durationSeconds: 0.08 },
 };
 const uiClose: SfxDefinition = {
+  sample: {
+    assetId: 'ui-close',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 0.02,
+      fadeInSeconds: 0.02,
+      fadeOutSeconds: 0.05,
+      gain: 1,
+    },
+  },
   id: 'ui-close',
   description: 'A menu/results screen closes.',
   tone: { instrument: 'bell', note: 'A4', durationSeconds: 0.08 },
 };
 const uiConfirm: SfxDefinition = {
+  sample: {
+    assetId: 'ui-confirm',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 0.05,
+      fadeInSeconds: 0,
+      fadeOutSeconds: 0.05,
+      gain: 1,
+    },
+  },
   id: 'ui-confirm',
   description: 'A confirming action — restart, accept.',
   tone: { instrument: 'bell', note: 'E5', durationSeconds: 0.1 },
 };
 const uiCancel: SfxDefinition = {
+  sample: {
+    assetId: 'ui-cancel',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 0.02,
+      fadeInSeconds: 0,
+      fadeOutSeconds: 0.05,
+      gain: 1,
+    },
+  },
   id: 'ui-cancel',
   description: 'A cancelling action — escape, back.',
   tone: { instrument: 'bell', note: 'C4', durationSeconds: 0.1 },
 };
 const uiUnlockFanfare: SfxDefinition = {
+  sample: {
+    assetId: 'ui-unlock-fanfare',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 1,
+      fadeInSeconds: 0,
+      fadeOutSeconds: 0.05,
+      gain: 1,
+    },
+  },
   id: 'ui-unlock-fanfare',
   description: 'A new unlock is announced on the results screen.',
   tone: { instrument: 'brass-stab', note: 'C5', durationSeconds: 0.3 },
 };
 
 const itemSneezeInhale: SfxDefinition = {
+  sample: {
+    assetId: 'item-sneeze-inhale',
+    edit: {
+      trimStartSeconds: 0.23,
+      trimEndSeconds: 1.47,
+      fadeInSeconds: 0.08,
+      fadeOutSeconds: 0.57,
+      gain: 1,
+    },
+  },
   id: 'item-sneeze-inhale',
   description:
     'Schnupftabak (#396): the held breath before the sneeze — a thin rising hiss, so the half second with no shots in it is not silent.',
@@ -539,6 +730,16 @@ const itemSneezeInhale: SfxDefinition = {
   tone: { instrument: 'clarinet', note: 'A4', durationSeconds: 0.35 },
 };
 const itemSneeze: SfxDefinition = {
+  sample: {
+    assetId: 'item-sneeze',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 0.13977083333333334,
+      fadeInSeconds: 0.02,
+      fadeOutSeconds: 0.05,
+      gain: 1,
+    },
+  },
   id: 'item-sneeze',
   description:
     'Schnupftabak (#396): the sneeze. Plays over the one `player-shot` the volley is allowed, and has to read as bigger than it.',
@@ -575,6 +776,16 @@ const itemPoisonCleanse: SfxDefinition = {
 };
 
 const itemZeckeLatch: SfxDefinition = {
+  sample: {
+    assetId: 'item-zecke-latch',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 0.06,
+      fadeInSeconds: 0.02,
+      fadeOutSeconds: 0.09,
+      gain: 1,
+    },
+  },
   id: 'item-zecke-latch',
   description:
     'A Zecke latching on (#406): a short wet click and a low sour note, so "something is on you" is heard even with the tick hidden under a crowd.',
@@ -587,6 +798,16 @@ const itemZeckeLatch: SfxDefinition = {
 };
 
 const windupSpechtDrum: SfxDefinition = {
+  sample: {
+    assetId: 'windup-specht-drum',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 0.35,
+      fadeInSeconds: 0.02,
+      fadeOutSeconds: 0.05,
+      gain: 1,
+    },
+  },
   id: 'windup-specht-drum',
   description:
     'A Specht drumming before its dive (#411): a dry woody "trrrrr" — short bandpassed knocks in a fast run — in place of the generic wind-up, so the dive is heard coming from wherever the bird hangs in the air.',
@@ -599,6 +820,16 @@ const windupSpechtDrum: SfxDefinition = {
 };
 
 const windupWaldradlerBell: SfxDefinition = {
+  sample: {
+    assetId: 'windup-waldradler-bell',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 1.55,
+      fadeInSeconds: 0,
+      fadeOutSeconds: 0.8,
+      gain: 1,
+    },
+  },
   id: 'windup-waldradler-bell',
   description:
     'Der Waldradler ringing his bike bell as the ramps rise (#412): two bright dings, "ring ring" — in place of the generic wind-up, so the charge is heard coming before the ramps are looked at.',
@@ -612,6 +843,16 @@ const windupWaldradlerBell: SfxDefinition = {
 };
 
 const itemZeckeShakeOff: SfxDefinition = {
+  sample: {
+    assetId: 'item-zecke-shake-off',
+    edit: {
+      trimStartSeconds: 0,
+      trimEndSeconds: 0.21,
+      fadeInSeconds: 0.02,
+      fadeOutSeconds: 0.05,
+      gain: 1,
+    },
+  },
   id: 'item-zecke-shake-off',
   description:
     'Ticks shaken off (#406): a quick flick of dry noise and a bright falling-away note — the release half of the latch click.',
