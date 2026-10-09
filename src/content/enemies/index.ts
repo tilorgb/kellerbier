@@ -19,7 +19,12 @@ import { gockel } from './gockel.js';
 import { grosseKellerassel, kellerasselSegment } from './grosse-kellerassel.js';
 import { kellerassel } from './kellerassel.js';
 import { kuh } from './kuh.js';
+import { mountainHare } from './mountain-hare.js';
 import { murmeltier } from './murmeltier.js';
+import { rescueDog } from './rescue-dog.js';
+import { skier } from './skier.js';
+import { snowCannon } from './snow-cannon.js';
+import { summitCross } from './summit-cross.js';
 import { fasssplitter, rollfass } from './rollfass.js';
 import { schimmelfleck, schimmelspore } from './schimmelfleck.js';
 import { theFirstHuman } from './the-first-human.js';
@@ -83,6 +88,11 @@ export const ENEMY_DEFINITIONS: readonly EnemyDefinition[] = [
   bieberLogWest,
   // Floor 4 (#40).
   murmeltier,
+  mountainHare,
+  rescueDog,
+  skier,
+  summitCross,
+  snowCannon,
   theGondola,
   tourist,
   theFirstHuman,
@@ -129,12 +139,17 @@ export {
   kellerasselSegment,
   kuh,
   maibaumDieb,
+  mountainHare,
   murmeltier,
+  rescueDog,
   rollfass,
   schimmelfleck,
   schimmelspore,
   shopkeeper,
+  skier,
+  snowCannon,
   specht,
+  summitCross,
   theFirstHuman,
   theGondola,
   tourist,

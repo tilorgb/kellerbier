@@ -37,7 +37,7 @@ function drift(id: string): number {
 }
 
 describe('rooted enemies', () => {
-  it("are the Fliegenpilz, the Bachforelle, the Specht, the Waldradl, Bieber's rolling logs and the Gondola", () => {
+  it("are the Fliegenpilz, the Bachforelle, the Specht, the Waldradl, Bieber's rolling logs, the Gondola, the Summit cross and the Snow cannon", () => {
     const rooted = ENEMY_DEFINITIONS.filter((definition) => definition.rooted === true)
       .map((definition) => definition.id)
       .sort();
@@ -46,7 +46,9 @@ describe('rooted enemies', () => {
       'bieber-log-east',
       'bieber-log-west',
       'fliegenpilz',
+      'snow-cannon',
       'specht',
+      'summit-cross',
       'the-gondola',
       'waldradl',
     ]);

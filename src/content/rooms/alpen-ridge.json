@@ -84,6 +84,21 @@
               "enemyId": "murmeltier",
               "minFloor": 4,
               "maxFloor": 4
+            },
+            {
+              "enemyId": "rescue-dog",
+              "minFloor": 4,
+              "maxFloor": 4
+            },
+            {
+              "enemyId": "skier",
+              "minFloor": 4,
+              "maxFloor": 4
+            },
+            {
+              "enemyId": "summit-cross",
+              "minFloor": 4,
+              "maxFloor": 4
             }
           ]
         }
@@ -189,6 +204,11 @@
               "enemyId": "murmeltier",
               "minFloor": 4,
               "maxFloor": 4
+            },
+            {
+              "enemyId": "rescue-dog",
+              "minFloor": 4,
+              "maxFloor": 4
             }
           ]
         },
@@ -198,6 +218,11 @@
           "choices": [
             {
               "enemyId": "murmeltier",
+              "minFloor": 4,
+              "maxFloor": 4
+            },
+            {
+              "enemyId": "rescue-dog",
               "minFloor": 4,
               "maxFloor": 4
             }

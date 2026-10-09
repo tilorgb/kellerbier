@@ -205,12 +205,30 @@ export const ROSTERS: Readonly<Record<string, readonly RosterEntry[]>> = {
   ],
   /**
    * Floor 4 (#40). Nothing carried up from the Wald. The Steinbock, Bergwacht,
-   * Sennerin and Kuhglocke were cut after the first playtest, so the roster is
-   * the Murmeltier alone until the floor's next mobs are pitched: it never hurts
-   * to touch and only surfaces where it whistled — cost 2, and it does come to
-   * the player, underground.
+   * Sennerin and Kuhglocke were cut after the first playtest; the roster is what
+   * was pitched in their place.
+   *
+   * - Rescue dog: the cheap filler — small, two hits, one weak clod a cycle, and
+   *   it does run up to the player (cost 1, common).
+   * - Mountain hare: the Kaninchen's upgrade — hops at random, bites from a
+   *   diagonal, and fires a small laser along a line the player stands on
+   *   (cost 2, never seeks).
+   * - Murmeltier: never hurts to touch and only surfaces where it whistled —
+   *   cost 2, and it does come to the player, underground.
+   * - Skier: fast and unaimed, a spray off the side of a drift-stop — the
+   *   floor's pressure mover (cost 3, rarer).
+   * - Summit cross and Snow cannon: rooted, so each is placed where it will be
+   *   walked past — a laser along its row, a slow freezing ball (cost 3 and 4,
+   *   the rarest).
    */
-  alpen: [{ id: 'murmeltier', weight: 3, cost: 2, pursues: true }],
+  alpen: [
+    { id: 'rescue-dog', weight: 3, cost: 1, pursues: true },
+    { id: 'mountain-hare', weight: 3, cost: 2, pursues: false },
+    { id: 'murmeltier', weight: 3, cost: 2, pursues: true },
+    { id: 'skier', weight: 2, cost: 3, pursues: false },
+    { id: 'summit-cross', weight: 1, cost: 3, pursues: false },
+    { id: 'snow-cannon', weight: 1, cost: 4, pursues: false },
+  ],
 };
 
 /**

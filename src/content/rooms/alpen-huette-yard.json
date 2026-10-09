@@ -51,6 +51,16 @@
           "enemyId": "murmeltier",
           "minFloor": 4,
           "maxFloor": 4
+        },
+        {
+          "enemyId": "mountain-hare",
+          "minFloor": 4,
+          "maxFloor": 4
+        },
+        {
+          "enemyId": "snow-cannon",
+          "minFloor": 4,
+          "maxFloor": 4
         }
       ]
     },
@@ -62,6 +72,11 @@
           "enemyId": "murmeltier",
           "minFloor": 4,
           "maxFloor": 4
+        },
+        {
+          "enemyId": "mountain-hare",
+          "minFloor": 4,
+          "maxFloor": 4
         }
       ]
     },
@@ -71,6 +86,11 @@
       "choices": [
         {
           "enemyId": "murmeltier",
+          "minFloor": 4,
+          "maxFloor": 4
+        },
+        {
+          "enemyId": "mountain-hare",
           "minFloor": 4,
           "maxFloor": 4
         }

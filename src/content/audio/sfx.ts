@@ -971,6 +971,11 @@ export const ENEMY_SFX_CATEGORY: Readonly<Record<string, EnemySfxCategory>> = {
   specht: 'animal',
   // Floor 4 (#40): a marmot, a cabin, and the people it carries.
   murmeltier: 'animal',
+  'mountain-hare': 'animal',
+  'rescue-dog': 'animal',
+  skier: 'folk',
+  'summit-cross': 'metal',
+  'snow-cannon': 'metal',
   'the-gondola': 'metal',
   tourist: 'folk',
   'the-first-human': 'folk',

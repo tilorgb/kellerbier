@@ -1,5 +1,5 @@
 {
-  "id": "alpen-scree",
+  "id": "alpen-cannon-yard",
   "tileGrid": [
     "###############",
     "#.............#",
@@ -13,57 +13,55 @@
   ],
   "obstacles": [
     {
-      "x": 32,
+      "x": 96,
       "y": 32,
       "width": 16,
       "height": 16
     },
     {
-      "x": 48,
-      "y": 48,
-      "width": 16,
-      "height": 16
-    },
-    {
-      "x": 64,
-      "y": 64,
-      "width": 16,
-      "height": 16
-    },
-    {
-      "x": 160,
-      "y": 80,
-      "width": 16,
-      "height": 16
-    },
-    {
-      "x": 176,
+      "x": 96,
       "y": 96,
       "width": 16,
       "height": 16
     },
     {
-      "x": 192,
-      "y": 112,
+      "x": 144,
+      "y": 64,
       "width": 16,
       "height": 16
     }
   ],
   "enemySpawns": [
     {
-      "x": 120,
-      "y": 40,
-      "group": "g"
+      "x": 208,
+      "y": 72,
+      "group": "cannon"
     },
     {
-      "x": 96,
-      "y": 104,
-      "group": "g"
+      "x": 40,
+      "y": 72,
+      "group": "filler"
+    },
+    {
+      "x": 120,
+      "y": 112,
+      "group": "filler"
     }
   ],
   "spawnGroups": [
     {
-      "id": "g",
+      "id": "cannon",
+      "count": 1,
+      "choices": [
+        {
+          "enemyId": "snow-cannon",
+          "minFloor": 4,
+          "maxFloor": 4
+        }
+      ]
+    },
+    {
+      "id": "filler",
       "count": 1,
       "choices": [
         {
@@ -77,7 +75,7 @@
           "maxFloor": 4
         },
         {
-          "enemyId": "skier",
+          "enemyId": "rescue-dog",
           "minFloor": 4,
           "maxFloor": 4
         }
@@ -88,17 +86,22 @@
   "hazards": [
     {
       "x": 16,
-      "y": 16,
-      "width": 208,
-      "height": 112,
-      "type": "wind"
+      "y": 48,
+      "width": 64,
+      "height": 48,
+      "type": "ice"
     }
   ],
   "decorativeProps": [
     {
-      "x": 208,
-      "y": 24,
-      "type": "gipfelkreuz"
+      "x": 200,
+      "y": 32,
+      "type": "cairn"
+    },
+    {
+      "x": 24,
+      "y": 112,
+      "type": "fir"
     }
   ],
   "metadata": {
@@ -110,7 +113,7 @@
       "south": true,
       "west": true
     },
-    "difficultyTier": 2,
+    "difficultyTier": 1,
     "weight": 1
   }
 }

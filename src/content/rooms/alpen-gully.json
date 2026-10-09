@@ -52,6 +52,16 @@
           "enemyId": "murmeltier",
           "minFloor": 4,
           "maxFloor": 4
+        },
+        {
+          "enemyId": "rescue-dog",
+          "minFloor": 4,
+          "maxFloor": 4
+        },
+        {
+          "enemyId": "skier",
+          "minFloor": 4,
+          "maxFloor": 4
         }
       ]
     }

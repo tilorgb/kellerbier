@@ -1,5 +1,5 @@
 {
-  "id": "alpen-scree",
+  "id": "alpen-cross-yard",
   "tileGrid": [
     "###############",
     "#.............#",
@@ -13,38 +13,20 @@
   ],
   "obstacles": [
     {
-      "x": 32,
-      "y": 32,
-      "width": 16,
-      "height": 16
-    },
-    {
-      "x": 48,
+      "x": 64,
       "y": 48,
       "width": 16,
       "height": 16
     },
     {
-      "x": 64,
-      "y": 64,
-      "width": 16,
-      "height": 16
-    },
-    {
       "x": 160,
-      "y": 80,
+      "y": 48,
       "width": 16,
       "height": 16
     },
     {
-      "x": 176,
+      "x": 112,
       "y": 96,
-      "width": 16,
-      "height": 16
-    },
-    {
-      "x": 192,
-      "y": 112,
       "width": 16,
       "height": 16
     }
@@ -52,18 +34,34 @@
   "enemySpawns": [
     {
       "x": 120,
-      "y": 40,
-      "group": "g"
+      "y": 72,
+      "group": "cross"
     },
     {
-      "x": 96,
-      "y": 104,
-      "group": "g"
+      "x": 48,
+      "y": 108,
+      "group": "filler"
+    },
+    {
+      "x": 192,
+      "y": 36,
+      "group": "filler"
     }
   ],
   "spawnGroups": [
     {
-      "id": "g",
+      "id": "cross",
+      "count": 1,
+      "choices": [
+        {
+          "enemyId": "summit-cross",
+          "minFloor": 4,
+          "maxFloor": 4
+        }
+      ]
+    },
+    {
+      "id": "filler",
       "count": 1,
       "choices": [
         {
@@ -77,7 +75,7 @@
           "maxFloor": 4
         },
         {
-          "enemyId": "skier",
+          "enemyId": "rescue-dog",
           "minFloor": 4,
           "maxFloor": 4
         }
@@ -85,20 +83,17 @@
     }
   ],
   "pickupSpawns": [],
-  "hazards": [
-    {
-      "x": 16,
-      "y": 16,
-      "width": 208,
-      "height": 112,
-      "type": "wind"
-    }
-  ],
+  "hazards": [],
   "decorativeProps": [
     {
-      "x": 208,
-      "y": 24,
-      "type": "gipfelkreuz"
+      "x": 200,
+      "y": 32,
+      "type": "cairn"
+    },
+    {
+      "x": 24,
+      "y": 112,
+      "type": "fir"
     }
   ],
   "metadata": {
@@ -110,7 +105,7 @@
       "south": true,
       "west": true
     },
-    "difficultyTier": 2,
+    "difficultyTier": 1,
     "weight": 1
   }
 }

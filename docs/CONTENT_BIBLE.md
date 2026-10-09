@@ -254,7 +254,11 @@ where this came from and the enemy it happened to first.
 
 **Floor 4 — Die Alpen** *(roster reworked after the first playtest: the Steinbock, Bergwacht, Sennerin and Kuhglocke were cut as boring or too humanoid; the Wiesn floor gets the people)*
 - **Murmeltier** — marmot, burrows, resurfaces under the player, whistles a warning first.
-- *Pitched, to be built (English names, not coined):* **Summit cross** (rooted, loads its crossbars, fires a big laser along its whole row when the player crosses it), **Snow cannon** (rooted, slow big snowball that freezes and bursts into four clods), **Mountain hare** (the Kaninchen upgraded: pawn bite plus a small laser along a line the player crosses), **Skier** (fast slalom, random drift-stop spraying clods to the side), **Rescue dog** (runs up, sits, barks one clod, runs off).
+- **Mountain hare** *(English name, as pitched)* — the Kaninchen upgraded and recoloured snow white: the same hops and pawn bite, plus a small laser along a line the player stands on.
+- **Rescue dog** *(English name)* — small; runs up, sits, barks one snow clod, runs off at random. An annoyance by design.
+- **Skier** *(English name)* — fast slalom, never steers at the player, stops at random with a drift that sprays a fan of clods off to the side.
+- **Summit cross** *(English name)* — rooted; loads its crossbar when the player crosses its row, then lights a big laser along the whole row.
+- **Snow cannon** *(English name; a snow-making snow gun on a tripod)* — rooted; lobs one big slow ball that freezes and bursts into four freezing clods.
 
 **Floor 5 — Schloss Neuschwanstein**
 - **Ritter** — knight with a directional shield; must be hit from behind or flanked.

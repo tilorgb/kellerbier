@@ -35,8 +35,22 @@ function pathFor(name: string, suffix = '.png'): string {
 describe("Die Alpen roster's committed art is what the authoring source produces", () => {
   it('covers every creature, its views, the mound and the projectiles', () => {
     expect([...Object.keys(ROSTER), ...Object.keys(STRIPS)].sort()).toEqual([
+      'mountain-hare',
+      'mountain-hare-north',
+      'mountain-hare-side',
+      'mountain-hare-south',
       'murmeltier',
       'murmeltier-shadow',
+      'rescue-dog',
+      'rescue-dog-north',
+      'rescue-dog-side',
+      'rescue-dog-south',
+      'skier',
+      'skier-north',
+      'skier-side',
+      'skier-south',
+      'snow-cannon',
+      'summit-cross',
       'the-gondola',
       'tourist',
     ]);
