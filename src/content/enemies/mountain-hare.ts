@@ -54,7 +54,14 @@ export const mountainHare: EnemyDefinition = {
       name: 'zap',
       behaviours: [
         { behaviour: 'pause' },
-        { behaviour: 'fireBeam', mode: 'axis', beamTicks: 10, halfWidth: 2.5, damage: 1 },
+        {
+          behaviour: 'fireBeam',
+          mode: 'axis',
+          beamTicks: 10,
+          halfWidth: 2.5,
+          damage: 1,
+          height: 3,
+        },
       ],
       transitions: [{ to: 'rest', after: 14 }],
     },

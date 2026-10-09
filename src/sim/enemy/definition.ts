@@ -717,6 +717,14 @@ export interface FiringBehaviourBase {
    */
   readonly burst?: boolean;
   /**
+   * The shot flies to the spot it was aimed at and ends there, rather than on
+   * a timer (#40, the Snow cannon): its flight is cut to exactly the distance to
+   * the aim, so with `burst` the splash lands where the player stood when the
+   * wind-up locked — dangerous on that spot, and only that spot. `lifetimeTicks`
+   * is still the cap. Only on `fireAtPlayer`.
+   */
+  readonly landAtTarget?: boolean;
+  /**
    * The shot *marks* the player on a hit (#40, the Bergwacht's flare):
    * `ProjectileTag.Marking`, so for `tuning.projectileTags.playerMarkDurationTicks`
    * every enemy in the room sees them through cover (`isSighted` is true)
@@ -868,6 +876,18 @@ export interface FireBeamBehaviour {
   /** Half the beam's thickness, in room units: the player is hit within this plus their own radius. */
   readonly halfWidth: number;
   readonly damage: number;
+  /**
+   * How high above the floor the beam is *drawn*, in room units — where on the body
+   * it comes out of (the Summit cross\'s crossbar, a skull\'s eyes). Presentation only:
+   * the hit test is on the floor line under it, so keep it modest. Omitted: 6, hip height.
+   */
+  readonly height?: number;
+  /**
+   * Over how many room units, from the body, the beam *comes down* from `height` to the
+   * floor line it actually hits along (#40): a beam from a skull\'s eyes is angled down
+   * onto the player rather than hovering over their head. 0 (the default) keeps it level.
+   */
+  readonly landUnits?: number;
   /** The hit freezes the player (`tuning.projectileTags.playerFreezeDurationTicks`). Omitted: it does not. */
   readonly freeze?: boolean;
 }
@@ -1567,10 +1587,14 @@ export interface EnemyDefinition {
    *   on the floor, turned in quarter turns so its head points the way it is
    *   heading: the Zecke.
    *
+   * - `'fixed'` — drawn as authored and never mirrored, *even with an
+   *   animation strip*: a body with one view that does not turn to left or
+   *   right (The First Human, seen from the front; only his arms swing).
+   *
    * Omitted: drawn as authored, never turned. A body with an animation strip
    * faces through its animator regardless.
    */
-  readonly facing?: 'mirror' | 'crawl';
+  readonly facing?: 'mirror' | 'crawl' | 'fixed';
   /** Which drop table (`content/pickups/drop-tables.ts`) its death rolls from. Defaults to `'normal'`. */
   readonly lootTier?: 'weak' | 'normal' | 'tough' | 'none';
   /**

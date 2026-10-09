@@ -125,6 +125,11 @@ export interface FloorTileset {
    */
   readonly wallLipCorner: string;
   /**
+   * What the dark base under and beyond the walls is tiled with. Omitted: the wall tile
+   * itself, which is right for a cellar and read as cobblestones round an alpine room.
+   */
+  readonly surround?: string;
+  /**
    * The obstacle tile — an authored wall block (`RoomObstacle`) — as a set of
    * 2–4 variants `render/world/scenery.ts` mixes across a room per cell, the same way
    * `floorVariants` mixes the ground (#37's "living floor"). A single
@@ -228,6 +233,7 @@ export const FLOOR_TILESETS: Readonly<Record<number, FloorTileset>> = {
     wall: 'alpen-wall',
     wallLip: 'alpen-wall-lip',
     wallLipCorner: 'alpen-wall-lip-corner',
+    surround: 'alpen-surround',
     blockVariants: ['alpen-boulder-1', 'alpen-boulder-2', 'alpen-boulder-3', 'alpen-snowdrift'],
     destructibles: ['alpen-barrel'],
     wallHeight: 14,
@@ -241,6 +247,8 @@ export interface RoomTileArt {
   readonly wall: Texture;
   readonly wallLip: Texture;
   readonly wallLipCorner: Texture;
+  /** What the base beyond the walls is tiled with; absent: the wall tile (`FloorTileset.surround`). */
+  readonly surround?: Texture;
   /** The obstacle variants, in `FloorTileset.blockVariants` order — `render/world/scenery.ts` picks one per cell. */
   readonly blockVariants: readonly Texture[];
   /** By `DESTRUCTIBLE_PROP_KINDS` index; a kind past the end draws entry 0. */
@@ -556,7 +564,7 @@ export async function loadFloorArt(): Promise<FloorArt> {
     }
   }
 
-  // A wall/wallLip tile is the one thing in `tileTextures` ever repeat-tiled
+  // A wall/wallLip/surround tile is the one thing in `tileTextures` ever repeat-tiled
   // by wrapping (`MaterialCache.repeatingMaterial`, `world/flat.ts`'s
   // `tilingTexture`) rather than looked up by its own frame — see
   // `standaloneTile`'s doc comment for why that needs its own un-shared
@@ -567,6 +575,11 @@ export async function loadFloorArt(): Promise<FloorArt> {
   for (const tileset of Object.values(FLOOR_TILESETS)) {
     wallTileNames.add(tileset.wall);
     wallTileNames.add(tileset.wallLip);
+    // The surround is repeat-tiled the same way (the dark base beyond the walls); left as a
+    // sub-rectangle of the shared sheet it repeats the *whole sheet*, neighbours and all.
+    if (tileset.surround !== undefined) {
+      wallTileNames.add(tileset.surround);
+    }
   }
   for (const name of wallTileNames) {
     const texture = tileTextures[name];
@@ -641,6 +654,7 @@ function resolveTileset(
     wall: need(tileset.wall),
     wallLip: need(tileset.wallLip),
     wallLipCorner: need(tileset.wallLipCorner),
+    ...(tileset.surround === undefined ? {} : { surround: need(tileset.surround) }),
     blockVariants: tileset.blockVariants.map(need),
     destructibles: tileset.destructibles.map(need),
     wallHeight: tileset.wallHeight,

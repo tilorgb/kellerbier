@@ -130,7 +130,23 @@ const CANNON: EnemyDefinition = {
   ],
 };
 
-const FIXTURES = [CROSS, AXIS, CANNON];
+/** The cannon again, its ball cut to land where the player stood when the wind-up locked. */
+const LOB: EnemyDefinition = {
+  ...CANNON,
+  id: 'test-lob',
+  states: CANNON.states.map((state) =>
+    state.name === 'fire'
+      ? {
+          ...state,
+          behaviours: state.behaviours.map((b) =>
+            b.behaviour === 'fireAtPlayer' ? { ...b, speed: 2, landAtTarget: true } : b,
+          ),
+        }
+      : state,
+  ),
+};
+
+const FIXTURES = [CROSS, AXIS, CANNON, LOB];
 
 function openSim(room = new RoomGeometry(0, 0, 320, 180)): GameSim {
   const sim = new GameSim({ seed: 3, room, enemies: [...ENEMY_DEFINITIONS, ...FIXTURES] });
@@ -203,6 +219,8 @@ function newBeamInfo(): EnemyBeamInfo {
     by: [0, 0],
     halfWidth: 0,
     damage: 0,
+    height: 0,
+    landUnits: 0,
     progress: 0,
   };
 }
@@ -453,6 +471,41 @@ describe('a freezing, bursting shot (#40)', () => {
       maxShots = Math.max(maxShots, enemyShots(sim).length);
     }
     expect(maxShots).toBeLessThanOrEqual(4);
+  });
+});
+
+describe('a ball that lands where the player stood (#40)', () => {
+  it('bursts on the spot the wind-up locked, not at the wall behind it', () => {
+    const sim = openSim();
+    spawn(sim, 'test-lob', 40, 90);
+    let atX = -1;
+    let atY = -1;
+    for (let tick = 0; tick < 200; tick++) {
+      // Locked at (200, 90) through the wind-up, then gone before the ball arrives.
+      const pinned = tick < 12;
+      place(sim, sim.playerIndex, pinned ? 200 : 120, pinned ? 90 : 20);
+      sim.step(IDLE);
+      const shots = sim.projectiles;
+      let count = 0;
+      let sx = 0;
+      let sy = 0;
+      shots.forEachLive((slot) => {
+        if (shots.team[slot] === ProjectileTeam.Enemy) {
+          count += 1;
+          sx += shots.x[slot] ?? 0;
+          sy += shots.y[slot] ?? 0;
+        }
+      });
+      if (count === 4) {
+        atX = sx / count;
+        atY = sy / count;
+        break;
+      }
+    }
+    expect(atX).toBeGreaterThan(-1);
+    // Within a few units of where the player stood, nowhere near the far wall.
+    expect(Math.abs(atX - 200)).toBeLessThan(12);
+    expect(Math.abs(atY - 90)).toBeLessThan(12);
   });
 });
 

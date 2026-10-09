@@ -249,6 +249,48 @@ function wall() {
   return finish('alpen-wall', cv, 'background');
 }
 /**
+ * What lies *beyond* the walls (`FloorTileset.surround`): open snow, not masonry.
+ * Reusing the granite wall face out there read as cobblestones round an alpine
+ * room, and a dark rubble slope (the first answer) was the wrong mood — it
+ * should be bright and icy (Tilo's call after seeing the first one in the game). Windswept snow: long wind-carved ridges in cold
+ * light and blue shadow, a few stones showing through (Tilo's option B).
+ * Tiles seamlessly in both directions.
+ */
+function surround() {
+  const cv = canvas(W, SNOW.base);
+  for (let y = 0; y < W; y++)
+    for (let x = 0; x < W; x++) set(cv, x, y, hash(x, y, 40) < 0.1 ? SNOW.light : SNOW.base);
+  // Wind-carved ridges: a lit crest, a light flank, a blue shadow, eaten away in places.
+  for (let r = 0; r < 7; r++) {
+    const y0 = Math.floor(hash(r, 0, 41) * W);
+    const x0 = Math.floor(hash(r, 1, 41) * W);
+    const len = 10 + Math.floor(hash(r, 2, 41) * 14);
+    for (let i = 0; i < len; i++) {
+      const wob = Math.round(Math.sin((i + r * 3) / 3.1));
+      setWrap(cv, x0 + i, y0 + wob, SNOW.bright);
+      setWrap(cv, x0 + i, y0 + wob + 1, SNOW.light);
+      setWrap(cv, x0 + i, y0 + wob + 2, SNOW.shade);
+      if (i % 3 !== 2) setWrap(cv, x0 + i, y0 + wob + 3, SNOW.deep);
+    }
+  }
+  // A few stones showing through the drift.
+  for (let i = 0; i < 3; i++) {
+    const cx = Math.floor(hash(i, 9, 42) * W);
+    const cy = Math.floor(hash(i, 8, 42) * W);
+    for (const [dx, dy, c] of [
+      [0, 0, GRANITE.h],
+      [1, 0, GRANITE.l],
+      [-1, 1, GRANITE.m],
+      [0, 1, GRANITE.m],
+      [1, 1, GRANITE.d],
+      [2, 1, GRANITE.d2],
+      [0, 2, SNOW.deep],
+    ])
+      setWrap(cv, cx + dx, cy + dy, c);
+  }
+  return finish('alpen-surround', cv, 'background');
+}
+/**
  * The wall top (`render/world/scenery.ts`'s lip layout): rows 0-23 tile
  * seamlessly on their own — snow lying on the top of the wall, a drift or
  * two, a granite chip showing — and rows 24-31 are the edge band the room
@@ -501,6 +543,7 @@ export const ALPEN_TILES = Object.fromEntries(
   [
     ...floorTiles(),
     wall(),
+    surround(),
     finish('alpen-wall-lip', lip(), 'background'),
     finish('alpen-wall-lip-corner', lip(), 'background'),
     huette(),

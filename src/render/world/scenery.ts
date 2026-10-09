@@ -1212,9 +1212,14 @@ export class Scenery {
       new PlaneGeometry(bleedWidth, bleedHeight),
       tiles === undefined
         ? this.materials.flatMaterial(wallColour, { roughness: 1 })
-        : this.materials.tiledMaterial(tiles.wall, bleedWidth, bleedHeight, {
+        : this.materials.tiledMaterial(tiles.surround ?? tiles.wall, bleedWidth, bleedHeight, {
             roughness: 1,
-            color: 0x555555,
+            // The wall tile is dimmed to a dark base; the snow surround is left bright, and a
+            // touch cool so the warm alpenglow key leaves it icy rather than cream (#40).
+            color: tiles.surround === undefined ? 0x555555 : 0xd8e4ff,
+            // Far off and busy: mipmaps (and a tile twice the size) keep the scree from
+            // aliasing to speckle where plain nearest sampling minifies it.
+            ...(tiles.surround === undefined ? {} : { mipmapped: true, tileScale: 2 }),
           }),
     );
     base.rotation.x = -Math.PI / 2;

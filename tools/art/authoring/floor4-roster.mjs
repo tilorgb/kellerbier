@@ -2,6 +2,7 @@ import { encodePng } from '../png.mjs';
 import { legalPixelColorsFor } from '../palette.mjs';
 import { canvas, ellipse, fillRect, outline, poly, px, toRows } from './draw.mjs';
 import { frameFromRows, mirrored, shifted } from './views-kit.mjs';
+import { buildMobs } from './floor4-mobs.mjs';
 
 /**
  * Die Alpen's roster (#40): the Murmeltier and its mound, the Gondola, the
@@ -287,7 +288,7 @@ export const PROJECTILES = {
  * `<id>` strip is what a body with no heading strip draws; `-side`, `-south`
  * and `-north` are the heading views `render/entities.ts` picks between.
  */
-export const STRIPS = {};
+export const STRIPS = buildMobs(ALPEN).STRIPS;
 
 // `mirrored`/`shifted` are re-exported for a specimen script that wants to lay a right-facing copy out.
 export { mirrored, shifted };

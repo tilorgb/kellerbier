@@ -1,0 +1,24 @@
+{
+  "frames": 3,
+  "frameDurationMs": 200,
+  "loop": true,
+  "clips": {
+    "idle": {
+      "frames": [0],
+      "frameDurationMs": 400,
+      "mode": "loop"
+    },
+    "telegraph": {
+      "frames": [1, 2],
+      "frameDurationMs": 300,
+      "mode": "once",
+      "onEnd": "hold"
+    },
+    "hurt": {
+      "frames": [0],
+      "frameDurationMs": 90,
+      "mode": "once",
+      "onEnd": "idle"
+    }
+  }
+}

@@ -360,6 +360,8 @@ describe('The First Human (#437)', () => {
       by: [0, 0],
       halfWidth: 0,
       damage: 0,
+      height: 0,
+      landUnits: 0,
       progress: 0,
     };
     expect(enemyBeamTelegraph(sim, boss, beam)).toBe(true);

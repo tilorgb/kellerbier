@@ -358,7 +358,19 @@ export function stepEnemies(sim: GameSim): void {
         // "rising tone under a wind-up" only makes sense as a cue with a
         // start.
         if (entered.telegraphTicks > 0) {
-          sim.events.push(EventKind.AttackWindup, index, NO_SLOT, selfX, selfY, 0, 0, 0);
+          // `value` 1 marks the wind-up of a laser (#40), which has its own charging sound.
+          const follow = stateAfterTelegraph(compiled, entered);
+          const beamAhead = follow !== null && follow.fireBeam !== null;
+          sim.events.push(
+            EventKind.AttackWindup,
+            index,
+            NO_SLOT,
+            selfX,
+            selfY,
+            0,
+            0,
+            beamAhead ? 1 : 0,
+          );
         }
       }
     }
@@ -2374,7 +2386,21 @@ function applyFiring(
 
     if (shot.behaviour === 'fireAtPlayer') {
       if (phase === 0 && isSighted(sim, index, aimX, aimY)) {
-        fireOne(sim, index, aim, shot);
+        if (shot.landAtTarget === true) {
+          // Cut the flight to the distance to the aim, so the shot ends — and, with
+          // `burst`, splashes — exactly where the player stood when it locked.
+          const speed = Math.max(0.01, shot.speed * sim.tuning.enemy.projectileSpeedScale);
+          const reach = Math.max(0, aimDistance - (sim.body.data[index * 2] ?? 0));
+          fireOne(
+            sim,
+            index,
+            aim,
+            shot,
+            Math.min(shot.lifetimeTicks, Math.max(1, Math.round(reach / speed))),
+          );
+        } else {
+          fireOne(sim, index, aim, shot);
+        }
       }
       continue;
     }
@@ -2470,7 +2496,13 @@ export function eliteAttackDamage(sim: GameSim, index: number, base: number): nu
     : base;
 }
 
-function fireOne(sim: GameSim, index: number, angle: number, shot: FiringBehaviour): void {
+function fireOne(
+  sim: GameSim,
+  index: number,
+  angle: number,
+  shot: FiringBehaviour,
+  lifetimeTicks: number = shot.lifetimeTicks,
+): void {
   fireFrom(
     sim,
     index,
@@ -2479,6 +2511,7 @@ function fireOne(sim: GameSim, index: number, angle: number, shot: FiringBehavio
     sim.body.data[index * 2] ?? 0,
     angle,
     shot,
+    lifetimeTicks,
   );
 }
 
@@ -2510,6 +2543,7 @@ function fireFrom(
   bodyReach: number,
   angle: number,
   shot: ShotSpec,
+  lifetimeTicks: number = shot.lifetimeTicks,
 ): void {
   const directionX = Math.cos(angle);
   const directionY = Math.sin(angle);
@@ -2531,7 +2565,7 @@ function fireFrom(
     directionY * speed,
     radius,
     eliteAttackDamage(sim, index, shot.damage),
-    Math.max(1, Math.round(shot.lifetimeTicks)),
+    Math.max(1, Math.round(lifetimeTicks)),
     ProjectileTeam.Enemy,
     (shot.poison === true ? ProjectileTag.Poison : 0) |
       (shot.bounce === true ? ProjectileTag.Bouncing : 0) |
@@ -3250,6 +3284,10 @@ export interface EnemyBeamInfo {
   halfWidth: number;
   /** The beam's damage — what tells a big laser from a small one. */
   damage: number;
+  /** How high above the floor it is drawn, room units (`fireBeam.height`). */
+  height: number;
+  /** Units over which it comes down to the floor, 0 for level (`fireBeam.landUnits`). */
+  landUnits: number;
   /** 0..1 through the lit window (0 on the first lit tick). */
   progress: number;
 }
@@ -3293,6 +3331,8 @@ function beamGeometry(
 ): void {
   out.halfWidth = beam.halfWidth;
   out.damage = beam.damage;
+  out.height = beam.height;
+  out.landUnits = beam.landUnits;
   if (beam.mode === 'row') {
     out.count = 2;
     traceBeamRay(sim, out, 0, selfX, selfY, 0);
@@ -3337,6 +3377,41 @@ export function enemyBeam(sim: GameSim, index: number, out: EnemyBeamInfo): bool
   beamGeometry(sim, beam, aimAngle, sim.positionX(index), sim.positionY(index), out);
   out.progress = (ticks - 1) / beam.beamTicks;
   return true;
+}
+
+/**
+ * How far through its sweep `index` is, 0 to 1 — or `-1` while it is in no
+ * `fireSweep` state. What a sprite's `attack` clip is indexed by (#437).
+ */
+export function enemySweepProgress(sim: GameSim, index: number): number {
+  const base = index * ENEMY_STRIDE;
+  const state = sim.enemies.at(sim.enemy.data[base] ?? 0).states[sim.enemy.data[base + 1] ?? 0];
+  const sweep = state?.fireSweep ?? null;
+  if (sweep === null) {
+    return -1;
+  }
+  return clamp((sim.enemy.data[base + 2] ?? 0) / sweep.sweepTicks, 0, 0.9999);
+}
+
+/**
+ * Which way the sweep `index` is making — or winding up to make — turns: `-1`
+ * anticlockwise, `1` clockwise (`fireSweep.direction`), `0` when its state is
+ * neither a sweep nor the wind-up before one. The renderer turns a body with
+ * `facing: 'fixed'` to the stance of its next swing off this (#437): The First
+ * Human has one view, and his arms swing from one pose to the other.
+ */
+export function enemySweepDirection(sim: GameSim, index: number): -1 | 0 | 1 {
+  const base = index * ENEMY_STRIDE;
+  const compiled = sim.enemies.at(sim.enemy.data[base] ?? 0);
+  const state = compiled.states[sim.enemy.data[base + 1] ?? 0];
+  if (state === undefined) {
+    return 0;
+  }
+  if (state.fireSweep !== null) {
+    return state.fireSweep.direction;
+  }
+  const follow = state.telegraphTicks > 0 ? stateAfterTelegraph(compiled, state) : null;
+  return follow?.fireSweep?.direction ?? 0;
 }
 
 /**
@@ -3392,6 +3467,8 @@ const beamScratch: EnemyBeamInfo = {
   by: [0, 0],
   halfWidth: 0,
   damage: 0,
+  height: 0,
+  landUnits: 0,
   progress: 0,
 };
 
@@ -3409,6 +3486,11 @@ function applyFireBeam(
   selfX: number,
   selfY: number,
 ): void {
+  if (ticks === 1) {
+    // The beam lighting is a shot leaving the barrel (#234), and `value` carries its
+    // damage, which tells a big laser's sound from a small one's.
+    sim.events.push(EventKind.ShotFired, index, NO_SLOT, selfX, selfY, 0, 0, beam.damage);
+  }
   if (ticks < 1 || ticks > beam.beamTicks || sim.playerInvulnerableTicks > 0) {
     return;
   }

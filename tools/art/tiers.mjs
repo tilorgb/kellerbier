@@ -62,6 +62,7 @@ export const BACKGROUND_SPRITE_NAMES = new Set([
   'wald-glow-mushrooms',
   // Floor 4 — Die Alpen: structure and art-only props (#40).
   'alpen-wall',
+  'alpen-surround',
   'alpen-wall-lip',
   'alpen-wall-lip-corner',
   'alpen-floor-1',

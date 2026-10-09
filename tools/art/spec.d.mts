@@ -23,7 +23,7 @@ export declare const COMMON_BUCKET_ID: string;
 export declare const ALL_BUCKET_IDS: readonly string[];
 export declare function floorTagForBucket(bucketId: string): string | null;
 
-export type AnimationStateId = 'idle' | 'move' | 'telegraph' | 'hurt' | 'death';
+export type AnimationStateId = 'idle' | 'move' | 'telegraph' | 'hurt' | 'death' | 'attack';
 export type ClipMode = 'loop' | 'once' | 'pingPong';
 export type ClipEndAction = 'hold' | 'idle';
 

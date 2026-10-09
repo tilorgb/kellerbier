@@ -147,7 +147,7 @@ export function floorTagForBucket(bucketId) {
  * the ride — this module and `validate.mjs` are pure functions over plain
  * objects, which is why they were split out of `build.mjs` in the first place.
  */
-export const ANIMATION_STATES = ['idle', 'move', 'telegraph', 'hurt', 'death'];
+export const ANIMATION_STATES = ['idle', 'move', 'telegraph', 'hurt', 'death', 'attack'];
 
 /** The state every other one falls back to. */
 export const DEFAULT_ANIMATION_STATE = 'idle';

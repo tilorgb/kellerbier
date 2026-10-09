@@ -1,0 +1,119 @@
+{
+  "id": "alpen-cannon-yard",
+  "tileGrid": [
+    "###############",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "###############"
+  ],
+  "obstacles": [
+    {
+      "x": 96,
+      "y": 32,
+      "width": 16,
+      "height": 16
+    },
+    {
+      "x": 96,
+      "y": 96,
+      "width": 16,
+      "height": 16
+    },
+    {
+      "x": 144,
+      "y": 64,
+      "width": 16,
+      "height": 16
+    }
+  ],
+  "enemySpawns": [
+    {
+      "x": 208,
+      "y": 72,
+      "group": "cannon"
+    },
+    {
+      "x": 40,
+      "y": 72,
+      "group": "filler"
+    },
+    {
+      "x": 120,
+      "y": 112,
+      "group": "filler"
+    }
+  ],
+  "spawnGroups": [
+    {
+      "id": "cannon",
+      "count": 1,
+      "choices": [
+        {
+          "enemyId": "snow-cannon",
+          "minFloor": 4,
+          "maxFloor": 4
+        }
+      ]
+    },
+    {
+      "id": "filler",
+      "count": 1,
+      "choices": [
+        {
+          "enemyId": "murmeltier",
+          "minFloor": 4,
+          "maxFloor": 4
+        },
+        {
+          "enemyId": "mountain-hare",
+          "minFloor": 4,
+          "maxFloor": 4
+        },
+        {
+          "enemyId": "rescue-dog",
+          "minFloor": 4,
+          "maxFloor": 4
+        }
+      ]
+    }
+  ],
+  "pickupSpawns": [],
+  "hazards": [
+    {
+      "x": 16,
+      "y": 48,
+      "width": 64,
+      "height": 48,
+      "type": "ice"
+    }
+  ],
+  "decorativeProps": [
+    {
+      "x": 200,
+      "y": 32,
+      "type": "cairn"
+    },
+    {
+      "x": 24,
+      "y": 112,
+      "type": "fir"
+    }
+  ],
+  "metadata": {
+    "floorTags": ["alpen"],
+    "shape": "1x1",
+    "doors": {
+      "north": true,
+      "east": true,
+      "south": true,
+      "west": true
+    },
+    "difficultyTier": 1,
+    "weight": 1
+  }
+}

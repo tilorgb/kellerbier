@@ -70,6 +70,11 @@
           "enemyId": "murmeltier",
           "minFloor": 4,
           "maxFloor": 4
+        },
+        {
+          "enemyId": "rescue-dog",
+          "minFloor": 4,
+          "maxFloor": 4
         }
       ]
     },
@@ -79,6 +84,11 @@
       "choices": [
         {
           "enemyId": "murmeltier",
+          "minFloor": 4,
+          "maxFloor": 4
+        },
+        {
+          "enemyId": "rescue-dog",
           "minFloor": 4,
           "maxFloor": 4
         }

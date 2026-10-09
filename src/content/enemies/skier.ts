@@ -4,7 +4,8 @@ import type { EnemyDefinition } from '../../sim/enemy/definition.js';
  * Skier (#40, `docs/CONTENT_BIBLE.md`'s Floor 4 roster; English name, pitched as
  * written) — fast, never after you, and unreadable on purpose.
  *
- * He carves long S-turns across the room (`slalom`) and never steers at Alois;
+ * He zig-zags down the room like a piste (`slalom`: sharp turns every half second, a new
+ * general direction every second or so) and never steers at Alois;
  * his body is no weapon (`contactDamage` 0 — he only shoves you aside as he
  * goes past). At random moments he stops with a hockey-stop: a short crouch with
  * a puff of snow on the side he is about to throw his skis to (the slight tell),
@@ -33,10 +34,8 @@ export const skier: EnemyDefinition = {
   states: [
     {
       name: 'carve',
-      behaviours: [
-        { behaviour: 'slalom', speed: 2.4, swing: 0.75, periodTicks: 72, legTicks: 120 },
-      ],
-      transitions: [{ to: 'crouch', after: { min: 70, max: 230 } }],
+      behaviours: [{ behaviour: 'slalom', speed: 2.4, swing: 0.95, periodTicks: 30, legTicks: 75 }],
+      transitions: [{ to: 'crouch', after: { min: 35, max: 105 } }],
     },
     {
       name: 'crouch',

@@ -1,5 +1,5 @@
 {
-  "frames": 12,
+  "frames": 14,
   "frameDurationMs": 150,
   "loop": true,
   "clips": {
@@ -29,6 +29,11 @@
       "frameDurationMs": 170,
       "mode": "once",
       "onEnd": "hold"
+    },
+    "attack": {
+      "frames": [0, 12, 13, 12, 0],
+      "frameDurationMs": 100,
+      "mode": "once"
     }
   }
 }

@@ -62,6 +62,9 @@ const EYE_LASER = {
   beamTicks: EYE_BEAM_TICKS,
   halfWidth: 6,
   damage: 2,
+  // Out of his eyes, high on the body, angled down onto the floor line it actually hits along.
+  height: 44,
+  landUnits: 80,
 } as const;
 
 export const theFirstHuman: EnemyDefinition = {
@@ -69,6 +72,9 @@ export const theFirstHuman: EnemyDefinition = {
   name: 'The First Human',
   size: 'boss',
   deathEffect: 'dust',
+  // One view, never turned to the player: only his arms swing, and the renderer mirrors
+  // the art to the stance of the swing he is about to make (`enemySweepDirection`).
+  facing: 'fixed',
   // Measured, not picked (#232's rule): see `boss-pacing.test.ts`. 150 at
   // 6 DPS is roughly three pendulum cycles a phase; at a run's starting 3 DPS,
   // about twice that.

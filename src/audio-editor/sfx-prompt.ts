@@ -32,6 +32,11 @@ const IDEAS: Readonly<Record<string, string>> = {
   'shot-animal': 'short animal squawk with a sharp spitting burst',
   'shot-folk': 'snappy wooden twang of a slingshot release',
   'shot-oompah': 'short brass toot with a popping burst of air',
+  'windup-laser-charge':
+    'rising electrical whine of a laser charging, crackling sparks and a corroded buzz building to a peak, no impact',
+  'shot-laser': 'short dry buzzing zap of a small laser, a crackling stutter, sharp and thin',
+  'shot-laser-big':
+    'heavy corroded roar of a big laser firing, a rattling crackle with a deep burning growl underneath',
   'attack-windup': 'tense short rising whoosh of air being drawn in, building quickly, no impact',
   'windup-waldradler-bell': 'two bright dings of a bicycle bell, ring ring, short and cheerful',
   'room-clear': 'bright short reward chime of two clinking beer glasses, a sparkling finish',

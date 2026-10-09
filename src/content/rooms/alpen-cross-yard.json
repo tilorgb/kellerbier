@@ -1,0 +1,111 @@
+{
+  "id": "alpen-cross-yard",
+  "tileGrid": [
+    "###############",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "###############"
+  ],
+  "obstacles": [
+    {
+      "x": 64,
+      "y": 48,
+      "width": 16,
+      "height": 16
+    },
+    {
+      "x": 160,
+      "y": 48,
+      "width": 16,
+      "height": 16
+    },
+    {
+      "x": 112,
+      "y": 96,
+      "width": 16,
+      "height": 16
+    }
+  ],
+  "enemySpawns": [
+    {
+      "x": 120,
+      "y": 72,
+      "group": "cross"
+    },
+    {
+      "x": 48,
+      "y": 108,
+      "group": "filler"
+    },
+    {
+      "x": 192,
+      "y": 36,
+      "group": "filler"
+    }
+  ],
+  "spawnGroups": [
+    {
+      "id": "cross",
+      "count": 1,
+      "choices": [
+        {
+          "enemyId": "summit-cross",
+          "minFloor": 4,
+          "maxFloor": 4
+        }
+      ]
+    },
+    {
+      "id": "filler",
+      "count": 1,
+      "choices": [
+        {
+          "enemyId": "murmeltier",
+          "minFloor": 4,
+          "maxFloor": 4
+        },
+        {
+          "enemyId": "mountain-hare",
+          "minFloor": 4,
+          "maxFloor": 4
+        },
+        {
+          "enemyId": "rescue-dog",
+          "minFloor": 4,
+          "maxFloor": 4
+        }
+      ]
+    }
+  ],
+  "pickupSpawns": [],
+  "hazards": [],
+  "decorativeProps": [
+    {
+      "x": 200,
+      "y": 32,
+      "type": "cairn"
+    },
+    {
+      "x": 24,
+      "y": 112,
+      "type": "fir"
+    }
+  ],
+  "metadata": {
+    "floorTags": ["alpen"],
+    "shape": "1x1",
+    "doors": {
+      "north": true,
+      "east": true,
+      "south": true,
+      "west": true
+    },
+    "difficultyTier": 1,
+    "weight": 1
+  }
+}

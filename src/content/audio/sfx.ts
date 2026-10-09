@@ -864,7 +864,52 @@ const itemZeckeShakeOff: SfxDefinition = {
   tone: { instrument: 'clarinet', note: 'E5', durationSeconds: 0.1 },
 };
 
+const windupLaserCharge: SfxDefinition = {
+  id: 'windup-laser-charge',
+  description:
+    "A laser charging (#40, the Summit cross, the hare, The First Human's eyes): a rising electrical whine under crackle — a held tone with a run of fast, bright noise ticks over it, so the warning has a sound as well as a line on the snow.",
+  noise: {
+    filter: { type: 'bandpass', frequencyHz: 3200, q: 5 },
+    durationSeconds: 0.03,
+    gain: 0.3,
+  },
+  tone: { instrument: 'clarinet', note: 'E3', durationSeconds: 0.7 },
+  repeat: { count: 18, intervalSeconds: 0.035 },
+  pitchJitterCents: 60,
+};
+
+const shotLaser: SfxDefinition = {
+  id: 'shot-laser',
+  description:
+    'A small laser lighting (#40, the Mountain hare): a short, dry, buzzing zap — sharp noise in a quick stutter over a high thin tone.',
+  noise: {
+    filter: { type: 'bandpass', frequencyHz: 4200, q: 2 },
+    durationSeconds: 0.05,
+    gain: 0.45,
+  },
+  tone: { instrument: 'clarinet', note: 'A5', durationSeconds: 0.12 },
+  repeat: { count: 3, intervalSeconds: 0.03 },
+  pitchJitterCents: 120,
+};
+
+const shotLaserBig: SfxDefinition = {
+  id: 'shot-laser-big',
+  description:
+    "A big laser lighting (#40, the Summit cross, The First Human's eyes): a heavy, corroded roar — low-mid noise in a rattling run over a deep tone, so the two-damage line sounds like what it costs.",
+  noise: {
+    filter: { type: 'bandpass', frequencyHz: 1100, q: 1.4 },
+    durationSeconds: 0.07,
+    gain: 0.55,
+  },
+  tone: { instrument: 'clarinet', note: 'A2', durationSeconds: 0.4 },
+  repeat: { count: 6, intervalSeconds: 0.05 },
+  pitchJitterCents: 80,
+};
+
 export const SFX_DEFINITIONS: readonly SfxDefinition[] = [
+  windupLaserCharge,
+  shotLaser,
+  shotLaserBig,
   itemPoisonCleanse,
   itemZeckeLatch,
   itemZeckeShakeOff,
@@ -971,6 +1016,11 @@ export const ENEMY_SFX_CATEGORY: Readonly<Record<string, EnemySfxCategory>> = {
   specht: 'animal',
   // Floor 4 (#40): a marmot, a cabin, and the people it carries.
   murmeltier: 'animal',
+  'mountain-hare': 'animal',
+  'rescue-dog': 'animal',
+  skier: 'folk',
+  'summit-cross': 'metal',
+  'snow-cannon': 'metal',
   'the-gondola': 'metal',
   tourist: 'folk',
   'the-first-human': 'folk',

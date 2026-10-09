@@ -70,6 +70,16 @@
           "enemyId": "murmeltier",
           "minFloor": 4,
           "maxFloor": 4
+        },
+        {
+          "enemyId": "mountain-hare",
+          "minFloor": 4,
+          "maxFloor": 4
+        },
+        {
+          "enemyId": "skier",
+          "minFloor": 4,
+          "maxFloor": 4
         }
       ]
     }

@@ -29,6 +29,8 @@ import {
   lobbedVolleyFlight,
   enemyTelegraphProgress,
   enemyBeam,
+  enemySweepDirection,
+  enemySweepProgress,
   enemyBeamTelegraph,
   type EnemyBeamInfo,
   enemyTelegraphShape,
@@ -94,10 +96,10 @@ import { WorldLabel } from './world/label.js';
 const TELEGRAPH_SCALE = 2.6;
 const LINE_TELEGRAPH_SCALE = 6;
 const LINE_TELEGRAPH_HALF_ANGLE = 0.12;
-/** How high above the floor a lit laser hangs, room units: about hip height. */
-const BEAM_HEIGHT = 6;
 /** Room units across a wind-up's warning line. */
 const BEAM_WARNING_THICKNESS = 1.5;
+/** Where a beam that lands comes to rest above the floor, room units: just above the snow. */
+const BEAM_FLOOR_HEIGHT = 3;
 const MAYPOLE_PROP_KIND = propKindIndex('maypole');
 const BOMB_PICKUP_ID = 'bierfassl';
 const RING_PULSE_RATE = 0.011;
@@ -290,6 +292,8 @@ export class EntityView {
   private readonly headingArt: readonly (HeadingStrips | undefined)[];
   private readonly heldTurn: number[] = [];
   private readonly heldTurnEntity: number[] = [];
+  private readonly heldFixed: number[] = [];
+  private readonly heldFixedEntity: number[] = [];
   private readonly bodies: Billboard[] = [];
   /** Per body slot, 1 when that body is an enemy telegraphing this frame (#404's see-through pass). */
   private readonly bodyTelegraphing: number[] = [];
@@ -310,6 +314,8 @@ export class EntityView {
     by: [0, 0],
     halfWidth: 0,
     damage: 0,
+    height: 0,
+    landUnits: 0,
     progress: 0,
   };
   /** The bomb blast telegraph's crossed hatch arms (#3) — see `FloorHazardBar`. */
@@ -444,6 +450,32 @@ export class EntityView {
     return turn;
   }
 
+  /**
+   * A `facing: 'fixed'` body's mirror this frame (#437): the stance of the swing it is
+   * making or winding up to make — art as authored for a clockwise sweep, mirrored for
+   * an anticlockwise one — held through the stalk between swings.
+   */
+  private fixedMirrorOf(index: number): number {
+    const entity = this.sim.world.entityAt(index);
+    if (this.heldFixedEntity[index] !== entity) {
+      this.heldFixedEntity[index] = entity;
+      this.heldFixed[index] = 1;
+    }
+    const direction = enemySweepDirection(this.sim, index);
+    if (direction !== 0) {
+      const stance = direction === 1 ? 1 : -1;
+      const progress = enemySweepProgress(this.sim, index);
+      if (progress >= 0) {
+        // The arms swing a half circle to the other side: the stance flips half way through,
+        // and the swing leaves him mirrored, which is the stance of the swing after it.
+        this.heldFixed[index] = -stance;
+        return progress < 0.5 ? stance : -stance;
+      }
+      this.heldFixed[index] = stance;
+    }
+    return this.heldFixed[index] ?? 1;
+  }
+
   /** A `facing: 'mirror'` body's left/right facing this frame (`resolveMirrorFacing`, held). */
   private mirrorOf(index: number): number {
     const held = this.heldFor(index, AUTHORED_FACING);
@@ -534,6 +566,8 @@ export class EntityView {
     let cloudEdgesUsed = 0;
     let wedgesUsed = 0;
     let beamsUsed = 0;
+    // The lasers' pixel pattern is re-rolled every 60 ms (#40): it sizzles, it does not glide.
+    const beamScroll = (Math.floor(nowMs / 60) * 0.37) % 1;
     let hazardBarsUsed = 0;
     let hazardDiscsUsed = 0;
     let eatShadesUsed = 0;
@@ -639,7 +673,23 @@ export class EntityView {
           y,
           footprint,
         );
-        mirror = this.animator.facingOf(index) === AUTHORED_FACING ? 1 : -1;
+        mirror =
+          compiledEnemy?.facing === EnemyFacing.Fixed
+            ? this.fixedMirrorOf(index)
+            : this.animator.facingOf(index) === AUTHORED_FACING
+              ? 1
+              : -1;
+        // A swing in progress (#437) plays its `attack` clip across the sweep: frame by how far
+        // through it is, not by time, so the arms are where the shots are.
+        const sweepProgress =
+          compiledEnemy?.facing === EnemyFacing.Fixed ? enemySweepProgress(sim, index) : -1;
+        const attackClip =
+          sweepProgress >= 0 ? animation.clips.clips[AnimationState.Attack] : undefined;
+        if (attackClip !== undefined && attackClip !== null) {
+          animationFrame =
+            attackClip.sequence[Math.floor(sweepProgress * attackClip.sequence.length)] ??
+            animationFrame;
+        }
       }
       const latched =
         isEnemyBody && ((sim.enemy.data[index * ENEMY_STRIDE + 3] ?? 0) & ENEMY_FLAG_LATCHED) !== 0;
@@ -932,9 +982,12 @@ export class EntityView {
                   beam.bx[segment] ?? 0,
                   beam.by[segment] ?? 0,
                   BEAM_WARNING_THICKNESS,
-                  TELEGRAPH_HEIGHT,
+                  // The wind-up line sits where the beam will, so it is plainly the same line.
+                  beam.landUnits > 0 ? TELEGRAPH_HEIGHT : Math.max(TELEGRAPH_HEIGHT, beam.height),
                   shapeAlpha,
                   ENTITY_PALETTE.telegraphRing,
+                  'warn',
+                  beamScroll,
                 );
                 beamsUsed += 1;
               }
@@ -987,8 +1040,10 @@ export class EntityView {
         }
       }
 
-      // A lit laser (#40): a glow in the beam's own colour under a white core,
-      // hanging at hip height — pink for the big one, ice blue for the small.
+      // A lit laser (#40): a glow in the beam's own colour under a broken white-hot core,
+      // pink for the big one, ice blue for the small. It comes out of the body at the
+      // beam's `height` (a crossbar, a skull's eyes) and, if it `landUnits`, comes down
+      // onto the floor line it actually hits along.
       if (isEnemyBody && enemyBeam(sim, index, this.beamScratch)) {
         const beam = this.beamScratch;
         const glow = beam.damage > 1 ? ENTITY_PALETTE.beamBig : ENTITY_PALETTE.beamSmall;
@@ -998,27 +1053,50 @@ export class EntityView {
           const ay = beam.ay[segment] ?? 0;
           const bx = beam.bx[segment] ?? 0;
           const by = beam.by[segment] ?? 0;
-          this.beamAt(beamsUsed).place(
-            ax,
-            ay,
-            bx,
-            by,
-            beam.halfWidth * 2.4,
-            BEAM_HEIGHT,
-            0.55 * fade,
-            glow,
-          );
-          this.beamAt(beamsUsed + 1).place(
-            ax,
-            ay,
-            bx,
-            by,
-            Math.max(1.2, beam.halfWidth * 0.9),
-            BEAM_HEIGHT + 0.05,
-            fade,
-            ENTITY_PALETTE.beamCore,
-          );
-          beamsUsed += 2;
+          const length = Math.hypot(bx - ax, by - ay);
+          const land = Math.min(beam.landUnits, length);
+          // Where the slope meets the floor, along the segment.
+          const t = length === 0 ? 0 : land / length;
+          const mx = ax + (bx - ax) * t;
+          const my = ay + (by - ay) * t;
+          const floor = Math.min(beam.height, BEAM_FLOOR_HEIGHT);
+          const sloped = land > 0 && beam.height > floor;
+          // The slope (if any), then the level run to the end.
+          for (let part = 0; part < (sloped ? 2 : 1); part++) {
+            const fromX = part === 0 ? ax : mx;
+            const fromY = part === 0 ? ay : my;
+            const toX = sloped && part === 0 ? mx : bx;
+            const toY = sloped && part === 0 ? my : by;
+            const h0 = sloped ? (part === 0 ? beam.height : floor) : beam.height;
+            const h1 = sloped ? floor : beam.height;
+            this.beamAt(beamsUsed).place(
+              fromX,
+              fromY,
+              toX,
+              toY,
+              beam.halfWidth * 2.4,
+              h0,
+              0.8 * fade,
+              glow,
+              'glow',
+              beamScroll,
+              h1,
+            );
+            this.beamAt(beamsUsed + 1).place(
+              fromX,
+              fromY,
+              toX,
+              toY,
+              Math.max(1.2, beam.halfWidth * 0.9),
+              h0 + 0.05,
+              fade,
+              ENTITY_PALETTE.beamCore,
+              'core',
+              beamScroll + 0.31,
+              h1 + 0.05,
+            );
+            beamsUsed += 2;
+          }
         }
       }
 

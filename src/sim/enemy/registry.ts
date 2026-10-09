@@ -102,6 +102,8 @@ export const EnemyFacing = {
   Mirror: 1,
   /** Lies flat, head turned in quarter turns toward its heading. */
   Crawl: 2,
+  /** Never mirrored, strip or no strip (#437). */
+  Fixed: 3,
 } as const;
 export type EnemyFacingId = (typeof EnemyFacing)[keyof typeof EnemyFacing];
 
@@ -127,8 +129,10 @@ function compileFacing(name: string | undefined, where: string): EnemyFacingId {
       return EnemyFacing.Mirror;
     case 'crawl':
       return EnemyFacing.Crawl;
+    case 'fixed':
+      return EnemyFacing.Fixed;
     default:
-      throw new Error(`${where} names facing "${name}", which is not one of mirror, crawl`);
+      throw new Error(`${where} names facing "${name}", which is not one of mirror, crawl, fixed`);
   }
 }
 
@@ -297,6 +301,10 @@ export interface CompiledFireBeam {
   readonly halfWidth: number;
   readonly damage: number;
   readonly freeze: boolean;
+  /** Where on the body the beam is drawn from, room units above the floor (#40). */
+  readonly height: number;
+  /** Units over which it comes down from `height` to the floor; 0 stays level (#40). */
+  readonly landUnits: number;
 }
 
 /** A `fireSweep` validated once, at compile time (#437). */
@@ -930,6 +938,8 @@ export class EnemyRegistry {
           halfWidth: beam.halfWidth,
           damage: beam.damage,
           freeze: beam.freeze === true,
+          height: beam.height ?? 6,
+          landUnits: Math.max(0, beam.landUnits ?? 0),
         };
         continue;
       }

@@ -43,7 +43,22 @@
       "count": 2,
       "choices": [
         {
-          "enemyId": "murmeltier",
+          "enemyId": "mountain-hare",
+          "minFloor": 4,
+          "maxFloor": 4
+        },
+        {
+          "enemyId": "rescue-dog",
+          "minFloor": 4,
+          "maxFloor": 4
+        },
+        {
+          "enemyId": "skier",
+          "minFloor": 4,
+          "maxFloor": 4
+        },
+        {
+          "enemyId": "summit-cross",
           "minFloor": 4,
           "maxFloor": 4
         }
@@ -54,7 +69,12 @@
       "count": 2,
       "choices": [
         {
-          "enemyId": "murmeltier",
+          "enemyId": "mountain-hare",
+          "minFloor": 4,
+          "maxFloor": 4
+        },
+        {
+          "enemyId": "rescue-dog",
           "minFloor": 4,
           "maxFloor": 4
         }

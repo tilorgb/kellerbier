@@ -26,9 +26,11 @@ export interface ImpactAudio {
   /** The player's own shot left the barrel (#234) — fires up to several times a second. */
   onPlayerShotFired(): void;
   /** An enemy's shot left the barrel (#234). */
-  onEnemyShotFired(enemyId: string | null): void;
+  /** `beamDamage` is above 0 when the "shot" is a laser lighting (#40): 1 a small one, 2 a big one. */
+  onEnemyShotFired(enemyId: string | null, beamDamage?: number): void;
   /** An enemy entered a telegraphed wind-up — the audio half of the warning ring (#234). */
-  onAttackWindup(enemyId: string | null): void;
+  /** `beam` is true when the wind-up is a laser charging (#40). */
+  onAttackWindup(enemyId: string | null, beam?: boolean): void;
   /** A body's on-death `splitOnDeath` behaviour produced children — a boss phase change or similar (#234). */
   onEnemySplit(): void;
   /** A held item asked for a sound of its own (#396) — see `sim/events/item-cues.ts`. */
@@ -84,11 +86,17 @@ export function playImpactAudio(sim: GameSim, audio: ImpactAudio): void {
         if (events.subject[slot] === player) {
           audio.onPlayerShotFired();
         } else {
-          audio.onEnemyShotFired(sim.enemyIdAt(events.subject[slot] ?? -1));
+          audio.onEnemyShotFired(
+            sim.enemyIdAt(events.subject[slot] ?? -1),
+            events.value[slot] ?? 0,
+          );
         }
         break;
       case EventKind.AttackWindup:
-        audio.onAttackWindup(sim.enemyIdAt(events.subject[slot] ?? -1));
+        audio.onAttackWindup(
+          sim.enemyIdAt(events.subject[slot] ?? -1),
+          (events.value[slot] ?? 0) > 0,
+        );
         break;
       case EventKind.EnemySplit:
         audio.onEnemySplit();
