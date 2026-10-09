@@ -27,6 +27,22 @@ import { ENEMY_PROFILES, ENEMY_SIZE_BY_NAME, type EnemySizeId } from './size.js'
 import { propKindIndex } from '../game/prop-kinds.js';
 import { DEATH_EFFECT_KINDS, DEFAULT_DEATH_EFFECT } from '../particle/effects.js';
 import type { ParticleKindId } from '../particle/store.js';
+import { DecalKind, REMAINS_KINDS, type DecalKindId } from '../particle/decals.js';
+
+/** `remains` as a name to a `DecalKind`; unknown names throw, like `compileDeathEffect`. */
+function compileRemains(name: string | undefined, where: string): DecalKindId {
+  if (name === undefined) {
+    return DecalKind.Blood;
+  }
+  const kind = REMAINS_KINDS[name];
+  if (kind === undefined) {
+    throw new Error(
+      `${where} names remains "${name}", which is not one of ` +
+        Object.keys(REMAINS_KINDS).join(', '),
+    );
+  }
+  return kind;
+}
 
 /**
  * `deathEffect` as a name to `deathEffect` as a `ParticleKind`.
@@ -414,6 +430,8 @@ export interface CompiledEnemy {
    * `docs/DECISIONS.md` #7 rules out.
    */
   readonly deathEffect: ParticleKindId;
+  /** What its death leaves on the floor (`EnemyDefinition.remains`). */
+  readonly remains: DecalKindId;
   /** The definition's `telegraphLook === 'bloat'` (#405), resolved once so the renderer compares no string per frame. */
   readonly telegraphBloat: boolean;
   /** The definition's `telegraphLook === 'drum'` (#411) — chips thrown by the sim, the hammering drawn by the renderer. */
@@ -640,6 +658,7 @@ export class EnemyRegistry {
       locksRoom: definition.locksRoom ?? true,
       bossBar: definition.bossBar ?? false,
       deathEffect: compileDeathEffect(definition.deathEffect, where),
+      remains: compileRemains(definition.remains, where),
       telegraphBloat: compileTelegraphLook(definition.telegraphLook, where) === TelegraphLook.Bloat,
       telegraphDrum: compileTelegraphLook(definition.telegraphLook, where) === TelegraphLook.Drum,
       flying: definition.flying === true,

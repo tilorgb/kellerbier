@@ -8,6 +8,7 @@ import { RampView } from './ramp-view.js';
 import { WeatherView } from './weather-view.js';
 import { CorpseView } from './corpse-view.js';
 import { DamageNumberView } from './damage-numbers.js';
+import type { DecalArt } from './decal-art.js';
 import { DecalView } from './decals.js';
 import { EntityView } from './entities.js';
 import { ORDNER_STRIP_NAMES, OrdnerView } from './ordner-view.js';
@@ -103,7 +104,7 @@ export interface GameViewTextures {
   /** What an un-drawn body falls back to. */
   readonly entity: Texture;
   readonly particleArt: ParticleTextures;
-  readonly decal: Texture;
+  readonly decalArt: DecalArt;
   /** The bitmap font family for damage numbers and pickup labels. */
   readonly numberFont: string;
   /** What a pedestal shows for an item with no authored art yet — see `PedestalView`. */
@@ -405,7 +406,7 @@ export class GameView {
     this.particles = new ParticleView(sim.particles, textures.particleArt);
     this.scene.add(this.particles.group);
 
-    this.decals = new DecalView(sim.decals, textures.decal);
+    this.decals = new DecalView(sim.decals, textures.decalArt);
     this.scene.add(this.decals.group);
 
     this.damageNumbers = new DamageNumberView(sim.damageNumbers, this.labelLayer, makeLabel);

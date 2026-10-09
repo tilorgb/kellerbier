@@ -24,6 +24,12 @@ import { type Texture, textureFromPixels } from '../gfx/index.js';
 /** Height above the floor plane flat things draw at, in room units. Stacked so overlaps order predictably. */
 export const FLOOR_EPSILON = 0.12;
 export const DECAL_HEIGHT = FLOOR_EPSILON;
+/**
+ * Death spatter lies above the floor's own flat dressing — puddle (0.12, rim
+ * 0.14), ice, stream (0.12-0.13) — so a kill on water is drawn over it, not
+ * z-fighting with it, and under plinths.
+ */
+export const SPATTER_HEIGHT = FLOOR_EPSILON * 1.6;
 export const PLINTH_HEIGHT = FLOOR_EPSILON * 2;
 export const TELEGRAPH_HEIGHT = FLOOR_EPSILON * 3;
 

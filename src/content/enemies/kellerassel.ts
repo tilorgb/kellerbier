@@ -15,6 +15,7 @@ import type { EnemyDefinition } from '../../sim/enemy/definition.js';
  */
 export const kellerassel: EnemyDefinition = {
   id: 'kellerassel',
+  remains: 'ichor',
   name: 'Kellerassel',
   size: 'normal',
   // An insect: cellar dust, not a drink.

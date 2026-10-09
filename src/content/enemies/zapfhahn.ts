@@ -11,6 +11,7 @@ import type { EnemyDefinition } from '../../sim/enemy/definition.js';
  */
 export const zapfhahn: EnemyDefinition = {
   id: 'zapfhahn',
+  remains: 'metal',
   name: 'Zapfhahn',
   size: 'normal',
   health: 3,

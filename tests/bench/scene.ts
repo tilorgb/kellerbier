@@ -268,7 +268,7 @@ export function buildHeadlessView(sim: GameSim): GameView {
       byKind: PARTICLE_KIND_IDS.map(() => textureFromPixels(1, 1, new Int32Array([0xffffff]))),
       fallback: Texture.EMPTY,
     },
-    decal: Texture.EMPTY,
+    decalArt: [[Texture.EMPTY]],
     numberFont: UI_FONT_FAMILY,
     pedestalItem: Texture.EMPTY,
     // The room the game actually builds, not a bare one: a real tileset means

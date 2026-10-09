@@ -10,6 +10,7 @@ import type { EnemyDefinition } from '../../sim/enemy/definition.js';
  */
 export const schimmelfleck: EnemyDefinition = {
   id: 'schimmelfleck',
+  remains: 'spores',
   name: 'Schimmelfleck',
   size: 'normal',
   // A mould patch does not have beer in it.
@@ -34,6 +35,7 @@ export const schimmelfleck: EnemyDefinition = {
 /** What is left behind. Slow, harmless to shoot at, unpleasant to ignore. */
 export const schimmelspore: EnemyDefinition = {
   id: 'schimmelspore',
+  remains: 'spores',
   name: 'Schimmelspore',
   size: 'mini',
   // Neither does its spore.

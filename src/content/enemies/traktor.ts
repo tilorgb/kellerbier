@@ -15,6 +15,7 @@ import type { EnemyDefinition } from '../../sim/enemy/definition.js';
  */
 export const traktor: EnemyDefinition = {
   id: 'traktor',
+  remains: 'metal',
   name: 'Traktor',
   size: 'mid',
   // A machine stopping, not a body.

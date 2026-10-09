@@ -28,6 +28,7 @@ import type { EnemyDefinition } from '../../sim/enemy/definition.js';
  */
 export const theGondola: EnemyDefinition = {
   id: 'the-gondola',
+  remains: 'metal',
   name: 'The Gondola',
   size: 'mid',
   deathEffect: 'shard',

@@ -36,6 +36,7 @@ import type { EnemyDefinition } from '../../sim/enemy/definition.js';
  */
 export const dieZapfhahnOrgel: EnemyDefinition = {
   id: 'die-zapfhahn-orgel',
+  remains: 'metal',
   name: 'Die Zapfhahn-Orgel',
   size: 'mid',
   health: 34,

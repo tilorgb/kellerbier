@@ -17,6 +17,7 @@ import type { EnemyDefinition } from '../../sim/enemy/definition.js';
  */
 export const rollfass: EnemyDefinition = {
   id: 'rollfass',
+  remains: 'wood',
   name: 'Rollfass',
   size: 'mid',
   // A barrel, so: staves.
@@ -55,6 +56,7 @@ export const rollfass: EnemyDefinition = {
  */
 export const fasssplitter: EnemyDefinition = {
   id: 'fasssplitter',
+  remains: 'wood',
   name: 'Fasssplitter',
   size: 'mini',
   // It is already a splinter.

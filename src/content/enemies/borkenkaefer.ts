@@ -18,6 +18,7 @@ import type { EnemyDefinition } from '../../sim/enemy/definition.js';
  */
 export const borkenkaefer: EnemyDefinition = {
   id: 'borkenkaefer',
+  remains: 'ichor',
   name: 'Borkenkäfer',
   size: 'normal',
   // Small dry bugs, a lot of them: the Kellerassel's dust.

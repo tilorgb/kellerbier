@@ -51,6 +51,7 @@ import type { EnemyDefinition } from '../../sim/enemy/definition.js';
  */
 export const derLadewagen: EnemyDefinition = {
   id: 'der-ladewagen',
+  remains: 'metal',
   name: 'Der Ladewagen',
   size: 'mid',
   // A machine stopping, not a body — the same call the roster Traktor makes.

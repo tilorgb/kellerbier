@@ -23,6 +23,7 @@ import type { EnemyDefinition } from '../../sim/enemy/definition.js';
  */
 export const gartenzwerg: EnemyDefinition = {
   id: 'gartenzwerg',
+  remains: 'shards',
   name: 'Gartenzwerg',
   size: 'normal',
   // Painted plaster, and it shatters.

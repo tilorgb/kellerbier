@@ -4,6 +4,7 @@ import type { RoomPlacement } from '../sim/room/template.js';
 import { MULTI_CELL_LAYOUT } from './definitions.js';
 import { installPixelFonts, UI_FONT_FAMILY } from '../render/ui/font.js';
 import { canvasToFrame, createRenderer, trackWindowSize } from '../render/app.js';
+import { buildDecalArt } from '../render/decal-art.js';
 import { GameView } from '../render/view.js';
 import { loadFloorArt } from '../render/floor-art.js';
 import { bossIdsFrom, buildParticleArt, buildProjectileArt } from '../render/art-bundle.js';
@@ -111,7 +112,7 @@ export async function createPlaytest(
       vfxArt,
       dotTexture(2, PARTICLE_PALETTE.foamFill, PARTICLE_PALETTE.foamRim),
     ),
-    decal: dotTexture(8, PARTICLE_PALETTE.decalFill, PARTICLE_PALETTE.decalRim),
+    decalArt: buildDecalArt(),
     numberFont: UI_FONT_FAMILY,
     pedestalItem: dotTexture(
       5,
