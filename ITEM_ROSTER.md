@@ -1,6 +1,6 @@
 # Kellerbier Item Roster
 
-Full list of all 73 items currently authored in `src/content/items/`. Generated from the
+Full list of all 79 items currently authored in `src/content/items/`. Generated from the
 item definitions themselves (`src/sim/item/definition.ts`), so it reflects exactly what is
 live in the game, not a design doc that can drift from the code.
 
@@ -110,6 +110,12 @@ Columns:
 | the-patriot | The Patriot | Passive | Damage +1 | You know the lyrics | 1 | Treasure, Shop | Any |
 | traktor-auspuff | Traktor-Auspuff | Passive | Moving leaves a trail of poison exhaust clouds behind you. Move Speed +15% | You can hear it two fields over. So can everything with a choice in the matter. | 1 | Shop, Boss, Secret, Curse | Any |
 | waller-kopf | Waller-Kopf | Passive | A catfish head replaces Alois's. A 60° cone on the floor points the way he last walked (never the way he shoots); enemies in it within range get scared for 2 s — they run and stop attacking. Bosses are immune | Terror of the River | 2 | Treasure, Shop, Boss | Any |
+| pot-roast | Pot Roast | Passive | +1 heart container, filled | Sunday dinner. It sticks. | 2 | Treasure, Shop, Boss | Any |
+| diet-plate | Diet Plate | Passive | +3 empty containers; filled red drops to one heart | Room for more. Nothing in it. | 2 | Treasure, Devil | Any |
+| soul-platter | Soul Platter | Passive | +3 soul hearts | White sausages, before noon. | 2 | Treasure, Angel, Shop | Any |
+| black-pudding | Black Pudding | Passive | +3 eternal hearts | Heavy. It keeps. | 3 | Angel, Secret, Boss | Any |
+| cream-soup | Cream Soup | Passive | All red containers become soul hearts; no red health until a container is gained | Smooth, white, and nothing left to bleed. | 1 | Treasure, Angel | Any |
+| homebrew | Homebrew | Passive | Promille bar twice as long; life = Promille (damage drains it, empty ends the run, eternal heart refills once); all drops are beer. Not offered in sober runs | Hauptsach ned blind | 3 | Devil, Secret | Any |
 | watschn | Watschn | Passive | Getting hit sends a damaging shockwave out from you | The Bavarian conflict-resolution method. Surprisingly effective. | 2 | Shop, Boss, Secret | Rausch |
 | weisswurst | Weißwurst | Passive | Damage +30% before floor 4. Nothing after | The tradition says before the noon bell. The run says before the Brauerei. | 1 | Treasure, Shop | Any |
 | zwetschgendatschi | Zwetschgendatschi | Passive | Clearing a room without being hit heals 1. Range -15% | The plums are the point. The raisins are an opinion. | 1 | Treasure, Shop | Any |

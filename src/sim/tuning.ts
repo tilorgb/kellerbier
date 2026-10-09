@@ -503,6 +503,13 @@ export interface PromilleTuning {
    * is a tier added to `PromilleTier`, not a new tuning field.
    */
   trinkfestStageWidth: number;
+  /**
+   * Multiplies the whole Promille scale's headroom — the Umgfalln threshold
+   * and the ceiling — without moving any tier boundary below it. 1 is the
+   * ordinary meter; the Homebrew (#484) sets 2, which is its "the bar gets
+   * twice as long and you can drink twice as much before you fall over".
+   */
+  capScale: number;
 
   angeheitertDamageBonus: number;
   angeheitertFireRateBonus: number;
@@ -1463,6 +1470,7 @@ export const DEFAULT_PROMILLE_TUNING: Readonly<PromilleTuning> = {
   // for, so raising Trinkfest reads as a real decision rather than a free
   // stat stick.
   trinkfestStageWidth: 1.0,
+  capScale: 1,
 
   // Raised across the board by #311. The old numbers (0.15/0.35/0.7 damage)
   // were written for a meter nobody could reach, and read as nothing when

@@ -25,4 +25,5 @@ export function stepPromille(sim: GameSim): void {
     return;
   }
   sim.decayPromille();
+  sim.checkHomebrewDeath();
 }

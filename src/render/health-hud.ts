@@ -1,7 +1,7 @@
 import { Container, Sprite, type Texture } from './gfx/index.js';
 import {
   ETERNAL_HEALTH_MAX,
-  PLAYER_HEALTH,
+  PLAYER_MAX_HEALTH_CAP,
   SOUL_HEALTH_MAX,
   type GameSim,
 } from '../sim/game/sim.js';
@@ -12,7 +12,10 @@ const WURST_GAP = 1;
 /** Half-heart units per icon. Fixed by the health model — see `applyPlayerDamage`. */
 const HALF_UNITS_PER_ICON = 2;
 
-const RED_WURST_COUNT = PLAYER_HEALTH / HALF_UNITS_PER_ICON;
+/** Most icons one row holds before the next ones wrap under it (a max-health item can pile up containers). */
+const ROW_LIMIT = 8;
+
+const RED_WURST_COUNT = PLAYER_MAX_HEALTH_CAP / HALF_UNITS_PER_ICON;
 const SOUL_WURST_COUNT = SOUL_HEALTH_MAX / HALF_UNITS_PER_ICON;
 const ETERNAL_WURST_COUNT = ETERNAL_HEALTH_MAX / HALF_UNITS_PER_ICON;
 
@@ -78,8 +81,6 @@ export class HealthHud {
   private redSeenHalves = 0;
   private soulSeenHalves = 0;
   private eternalSeenHalves = 0;
-  /** Whether the eternal row is currently drawn — flips `height`, which `app/main.ts`'s layout watches. */
-  private eternalRowShown = false;
 
   constructor(kit: UiKit) {
     this.kit = kit;
@@ -120,15 +121,26 @@ export class HealthHud {
     return Math.ceil(seenHalves / HALF_UNITS_PER_ICON);
   }
 
+  /** Rows drawn last sync — height, which pp/main.ts's layout watches. */
+  private rows = 1;
+
+  /** Next free slot, in icons: column within the row, and the row itself. */
+  private column = 0;
+  private row = 0;
+
+  private startRow(): void {
+    if (this.column > 0) {
+      this.row += 1;
+      this.column = 0;
+    }
+  }
+
   private layoutRow(
     sprites: readonly Sprite[],
     pool: Pool,
     halves: number,
     visibleIcons: number,
-    startX: number,
-    y: number,
-  ): number {
-    let x = startX;
+  ): void {
     for (let index = 0; index < sprites.length; index++) {
       const wurst = sprites[index];
       if (wurst === undefined) {
@@ -138,12 +150,18 @@ export class HealthHud {
         wurst.visible = false;
         continue;
       }
+      if (this.column >= ROW_LIMIT) {
+        this.row += 1;
+        this.column = 0;
+      }
       wurst.visible = true;
       wurst.texture = this.texture(pool, fillFor(halves, index));
-      wurst.position.set(x, y);
-      x += this.wurstWidth + WURST_GAP;
+      wurst.position.set(
+        this.column * (this.wurstWidth + WURST_GAP),
+        this.row * (this.wurstHeight + WURST_GAP),
+      );
+      this.column += 1;
     }
-    return x;
   }
 
   sync(sim: GameSim): void {
@@ -154,32 +172,31 @@ export class HealthHud {
     this.soulSeenHalves = Math.max(this.soulSeenHalves, sim.playerSoulHealth);
     this.eternalSeenHalves = Math.max(this.eternalSeenHalves, sim.playerEternalHealth);
 
+    // Homebrew (#484): the glass is the health, so the red row is not drawn at
+    // all while it is held. The Promille bar is the life.
+    const redIcons = sim.lifeIsPromille ? 0 : HealthHud.iconsFor(this.redSeenHalves);
     const soulIcons = HealthHud.iconsFor(this.soulSeenHalves);
-    const redIcons = HealthHud.iconsFor(this.redSeenHalves);
     const eternalIcons = HealthHud.iconsFor(this.eternalSeenHalves);
 
-    // Soul then red share the top row; eternal sits under them, and only if
-    // the player has ever banked one.
-    const afterSoul = this.layoutRow(this.soulWurst, 'soul', sim.playerSoulHealth, soulIcons, 0, 0);
-    this.layoutRow(this.redWurst, 'red', sim.playerHealth, redIcons, afterSoul, 0);
-    this.layoutRow(
-      this.eternalWurst,
-      'eternal',
-      sim.playerEternalHealth,
-      eternalIcons,
-      0,
-      this.wurstHeight + WURST_GAP,
-    );
+    // Soul then red share the top row (wrapping past `ROW_LIMIT`); eternal
+    // starts a fresh row under them, and only if the player has ever banked one.
+    this.column = 0;
+    this.row = 0;
+    this.layoutRow(this.soulWurst, 'soul', sim.playerSoulHealth, soulIcons);
+    this.layoutRow(this.redWurst, 'red', sim.playerHealth, redIcons);
+    if (eternalIcons > 0) {
+      this.startRow();
+    }
+    this.layoutRow(this.eternalWurst, 'eternal', sim.playerEternalHealth, eternalIcons);
 
-    this.eternalRowShown = eternalIcons > 0;
+    this.rows = Math.max(1, this.column > 0 ? this.row + 1 : this.row);
   }
-
   /**
    * Height of the row stack in UI pixels, so `main.ts` can stack the next HUD
    * under it. Drops to a single row until the player has banked an eternal
    * heart — `app/main.ts` re-runs its HUD layout when this changes.
    */
   get height(): number {
-    return this.eternalRowShown ? this.wurstHeight * 2 + WURST_GAP : this.wurstHeight;
+    return this.rows * this.wurstHeight + (this.rows - 1) * WURST_GAP;
   }
 }
