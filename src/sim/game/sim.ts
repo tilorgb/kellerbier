@@ -5441,6 +5441,11 @@ export class GameSim {
       if ((this.health.data[index * 2] ?? 0) <= 0) {
         return;
       }
+      // The broadphase matches on the collider's reach, not its centre: a body
+      // still on its way in would be dazed before it arrived. Centre inside, or not at all.
+      if (vectorLength(this.positionX(index) - x, this.positionY(index) - y) > radius) {
+        return;
+      }
       this.applyStatusEffect(index, 'daze', ticks);
     });
   }

@@ -83,6 +83,14 @@ describe('Hendlgeruch', () => {
     expect(isDazed(sim, near)).toBe(true);
     expect(isDazed(sim, out)).toBe(false);
   });
+
+  it('does not daze an enemy whose centre is still outside the ring, even if its body reaches in', () => {
+    const { sim, px, py } = world();
+    const edge = entityIndex(sim.spawnTarget(px + DAZE_RADIUS + 4, py, TARGET_RADIUS));
+    sim.world.flush();
+    sim.step(IDLE);
+    expect(isDazed(sim, edge)).toBe(false);
+  });
 });
 
 describe('hat items', () => {

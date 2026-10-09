@@ -3,14 +3,14 @@ import type { ItemDefinition } from '../../sim/item/definition.js';
 /** Far ring: a pulse draws enemies in from here. */
 const PULL_RADIUS = 100;
 /** Near ring: the smell is tastable. Enemies inside are dazed, and the pull never drags them further in. */
-export const DAZE_RADIUS = 40;
+export const DAZE_RADIUS = 30;
 /** Per-tick pull strength while a pulse runs — brief, so stronger than the old always-on 0.15. */
 const PULL_STRENGTH = 0.3;
 /** One pulse every five seconds, running for the first second of each. */
 export const PULSE_PERIOD_TICKS = 300;
 export const PULSE_TICKS = 60;
-/** A body keeps the daze for a second after it leaves the ring. */
-const DAZE_LINGER_TICKS = 60;
+/** The daze runs on for a quarter second after a body leaves the ring — just enough that the edge does not flicker. */
+const DAZE_LINGER_TICKS = 15;
 
 /**
  * Hendlgeruch — the smell of a rotisserie chicken, carrying for a kilometre
