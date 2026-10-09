@@ -85,6 +85,7 @@ import { uiScaleFor, uiText, UI_TEXT_HEIGHT } from '../render/ui/text.js';
 import { PromilleUnlockHud } from '../render/promille-unlock-hud.js';
 import { Vignette } from '../render/vignette.js';
 import { BlaueStundeOverlay } from '../render/blaue-stunde-overlay.js';
+import { NebelVeil } from '../render/nebel-veil.js';
 import { GameView } from '../render/view.js';
 import { FLOOR_TILESETS, loadFloorArt } from '../render/floor-art.js';
 import { bossIdsFrom, buildParticleArt, buildProjectileArt } from '../render/art-bundle.js';
@@ -147,6 +148,7 @@ import {
   IS_RELEASE_BUILD,
   isPlaytestSession,
   skipsIntroCards,
+  forcesNebelVeil,
 } from './build-mode.js';
 import { parseStartFloor } from './start-floor.js';
 import { tourCandidates, trailAfter } from './room-tour.js';
@@ -1080,6 +1082,9 @@ async function boot(progress: BootProgress): Promise<void> {
   /** Blaue Stunde's darkening (#49) — same layer/positioning as `vignette`, its own sprite. */
   const blaueStundeOverlay = new BlaueStundeOverlay();
   uiLayer.addChild(blaueStundeOverlay.view);
+  /** Nebel's white cloud veil (#49) — same layer, under the HUD. `?nebel` forces it on in dev. */
+  const nebelVeil = new NebelVeil(forcesNebelVeil());
+  uiLayer.addChild(nebelVeil.view);
 
   /**
    * Everything drawn on the UI's own pixel grid (#154).
@@ -1235,6 +1240,13 @@ async function boot(progress: BootProgress): Promise<void> {
   const bossIntroPlate = new BossIntroPlate();
   bossIntroPlate.hide();
   let bossBannerShown = false;
+  /**
+   * Boss rooms whose intro plate already ran this run, as `floor:roomId`
+   * (room ids repeat from floor to floor). Walking back out of a boss room
+   * and in again — the boss beaten, or not — does not replay the plate;
+   * with the boss dead it used to come up as a bare, art-less banner.
+   */
+  const bossPlatesSeen = new Set<string>();
   /**
    * Fades the whole frame to black around the plate (see `BOSS_PLATE_MS`'s
    * doc comment for why): drawn once here and resized in `layoutHud`, same
@@ -2580,7 +2592,12 @@ async function boot(progress: BootProgress): Promise<void> {
         sim.roomWarmupTicks > 0 && planRoom(floorPlan, currentRoomId).role === 'boss';
       if (enteringBossRoom !== bossBannerShown) {
         bossBannerShown = enteringBossRoom;
-        if (enteringBossRoom && !noIntroCards) {
+        const plateKey = `${String(floorPlan.floor)}:${currentRoomId}`;
+        const plateSeen = bossPlatesSeen.has(plateKey);
+        if (enteringBossRoom) {
+          bossPlatesSeen.add(plateKey);
+        }
+        if (enteringBossRoom && !plateSeen && !noIntroCards) {
           const compiled = sim.bossDefinition;
           const content = compiled === null ? undefined : enemyDefinitionById(compiled.id);
           const name = compiled?.name ?? t(preferences.locale, 'ui.hud.bossBanner');
@@ -2799,6 +2816,7 @@ async function boot(progress: BootProgress): Promise<void> {
         view.screenLengthAtPlayer(sim.tuning.curse.blaueStundeVisionRadius),
         settings.reducedMotion,
       );
+      nebelVeil.sync(sim, performance.now(), settings.reducedMotion);
       if (replay !== null) {
         replayViewer.show();
         replayViewer.sync(
@@ -3340,6 +3358,7 @@ WASD move   arrows aim and fire
     prewarmedNeighborId = null;
     wasBossDoorLocked = false;
     bossBannerShown = false;
+    bossPlatesSeen.clear();
     bossIntroPlate.hide();
     pickupToastLabel = '';
     pickupToast.visible = false;

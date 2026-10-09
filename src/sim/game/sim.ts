@@ -70,6 +70,7 @@ import {
   promilleWobbleAmplitude,
 } from './promille.js';
 import { DOOR_SPAN, type RoomGeometry } from '../room/geometry.js';
+import { spreadStationarySpawns } from '../room/spread-stationary.js';
 import { createPlaygroundRoom } from '../room/playground.js';
 import { compileStaircaseRoom, validateStaircaseTemplate } from '../room/staircase.js';
 import {
@@ -3178,7 +3179,16 @@ export class GameSim {
       const tracksNewEnemies =
         compiled.specialRole !== 'boss' && compiled.specialRole !== 'miniboss';
       const newEnemyIdsThisLoad: string[] = [];
-      for (const spawn of compiled.enemySpawns) {
+      // Bodies that never move are pulled apart before they spawn, so two
+      // turrets or two mushrooms never stand shoulder to shoulder for the
+      // whole fight — see `spreadStationarySpawns`.
+      const roomGeometry = this.room;
+      const enemySpawns = spreadStationarySpawns(
+        compiled.enemySpawns,
+        (enemyId) => this.isStationarySpawn(enemyId),
+        (x, y, radius) => roomGeometry.isClear(x, y, radius) && !roomGeometry.isInStream(x, y),
+      );
+      for (const spawn of enemySpawns) {
         if (entry !== null) {
           const dx = spawn.x - entry.x;
           const dy = spawn.y - entry.y;
@@ -3941,6 +3951,25 @@ export class GameSim {
     return definition === undefined
       ? null
       : { name: definition.name, description: definition.description };
+  }
+
+  /**
+   * Whether `enemyId` is a body that never leaves its spawn point — every
+   * state's movement is `pause` — and is an ordinary room enemy, not a boss
+   * or mini-boss (`bossBar`) or a non-combatant like the shopkeeper (does
+   * not lock the room), whose spots are authored to the unit.
+   */
+  private isStationarySpawn(enemyId: string): boolean {
+    const index = this.enemies.indexOf(enemyId);
+    if (index < 0) {
+      return false;
+    }
+    const definition = this.enemies.at(index);
+    return (
+      !definition.bossBar &&
+      definition.locksRoom &&
+      definition.states.every((state) => state.movement.behaviour === 'pause')
+    );
   }
 
   /**
