@@ -9,8 +9,8 @@ const PULL_STRENGTH = 0.3;
 /** One pulse every five seconds, running for the first second of each. */
 export const PULSE_PERIOD_TICKS = 300;
 export const PULSE_TICKS = 60;
-/** The daze runs on for a quarter second after a body leaves the ring — just enough that the edge does not flicker. */
-const DAZE_LINGER_TICKS = 15;
+/** Daze sticks like poison does: two seconds from the last tick spent in the ring, refreshed while inside. */
+const DAZE_LINGER_TICKS = 120;
 
 /**
  * Hendlgeruch — the smell of a rotisserie chicken, carrying for a kilometre

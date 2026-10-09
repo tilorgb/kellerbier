@@ -84,6 +84,22 @@ describe('Hendlgeruch', () => {
     expect(isDazed(sim, out)).toBe(false);
   });
 
+  it('the daze sticks to an enemy that is out of the ring, then wears off', () => {
+    const { sim, px, py } = world();
+    const body = entityIndex(sim.spawnTarget(px + 200, py, TARGET_RADIUS));
+    sim.world.flush();
+    sim.step(IDLE);
+    sim.applyStatusEffect(body, 'daze', 120);
+    for (let i = 0; i < 60; i++) {
+      sim.step(IDLE);
+    }
+    expect(isDazed(sim, body)).toBe(true);
+    for (let i = 0; i < 70; i++) {
+      sim.step(IDLE);
+    }
+    expect(isDazed(sim, body)).toBe(false);
+  });
+
   it('does not daze an enemy whose centre is still outside the ring, even if its body reaches in', () => {
     const { sim, px, py } = world();
     const edge = entityIndex(sim.spawnTarget(px + DAZE_RADIUS + 4, py, TARGET_RADIUS));

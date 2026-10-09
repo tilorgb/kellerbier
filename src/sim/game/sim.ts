@@ -5446,7 +5446,8 @@ export class GameSim {
       if (vectorLength(this.positionX(index) - x, this.positionY(index) - y) > radius) {
         return;
       }
-      this.applyStatusEffect(index, 'daze', ticks);
+      // A boss shrugs it off sooner: half the duration, on top of its milder slow.
+      this.applyStatusEffect(index, 'daze', this.isStunResistant(index) ? ticks / 2 : ticks);
     });
   }
 
