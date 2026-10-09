@@ -32,10 +32,10 @@
   "spawnGroups": [
     {
       "id": "bells",
-      "count": 4,
+      "count": 2,
       "choices": [
         {
-          "enemyId": "kuhglocke",
+          "enemyId": "murmeltier",
           "minFloor": 4,
           "maxFloor": 4
         }
@@ -47,11 +47,6 @@
       "choices": [
         {
           "enemyId": "murmeltier",
-          "minFloor": 4,
-          "maxFloor": 4
-        },
-        {
-          "enemyId": "sennerin",
           "minFloor": 4,
           "maxFloor": 4
         }

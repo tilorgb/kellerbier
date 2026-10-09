@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { ENEMY_DEFINITIONS } from '../../src/content/enemies/index.js';
+import { ENEMY_DEFINITIONS as SHIPPED_DEFINITIONS } from '../../src/content/enemies/index.js';
+import { CUT_ALPEN_MOBS } from './fixtures/cut-alpen-mobs.js';
 import { entityIndex } from '../../src/sim/ecs/entity.js';
 import type { EnemyDefinition } from '../../src/sim/enemy/definition.js';
 import { EnemyRegistry } from '../../src/sim/enemy/registry.js';
@@ -22,6 +23,9 @@ import {
  * shoal (Kuhglocke), a shot that marks the player (Bergwacht) and one that
  * bounces (Sennerin).
  */
+
+/** The shipped roster plus the cut Floor 4 mobs, which stay as the primitives' fixtures. */
+const ENEMY_DEFINITIONS: readonly EnemyDefinition[] = [...SHIPPED_DEFINITIONS, ...CUT_ALPEN_MOBS];
 
 const IDLE = createInputFrame();
 

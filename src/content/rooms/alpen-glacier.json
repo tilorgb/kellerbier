@@ -55,12 +55,7 @@
       "count": 1,
       "choices": [
         {
-          "enemyId": "sennerin",
-          "minFloor": 4,
-          "maxFloor": 4
-        },
-        {
-          "enemyId": "bergwacht",
+          "enemyId": "murmeltier",
           "minFloor": 4,
           "maxFloor": 4
         }
@@ -68,10 +63,10 @@
     },
     {
       "id": "bells",
-      "count": 4,
+      "count": 2,
       "choices": [
         {
-          "enemyId": "kuhglocke",
+          "enemyId": "murmeltier",
           "minFloor": 4,
           "maxFloor": 4
         }

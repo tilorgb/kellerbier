@@ -252,12 +252,9 @@ where this came from and the enemy it happened to first.
   loops; only when you come close does it drum in the air and dive at where you were standing. Gets
   its beak stuck in the floor, flies back.
 
-**Floor 4 — Die Alpen**
-- **Steinbock** — ibex, charges and can climb over obstacles.
+**Floor 4 — Die Alpen** *(roster reworked after the first playtest: the Steinbock, Bergwacht, Sennerin and Kuhglocke were cut as boring or too humanoid; the Wiesn floor gets the people)*
 - **Murmeltier** — marmot, burrows, resurfaces under the player, whistles a warning first.
-- **Bergwacht** — mountain rescue, fires a flare that illuminates and marks you for others.
-- **Kuhglocke** — floating swarm enemy, moves in a shoal, damages by contact.
-- **Sennerin** — throws cheese wheels that roll and ricochet.
+- *Pitched, to be built (English names, not coined):* **Summit cross** (rooted, loads its crossbars, fires a big laser along its whole row when the player crosses it), **Snow cannon** (rooted, slow big snowball that freezes and bursts into four clods), **Mountain hare** (the Kaninchen upgraded: pawn bite plus a small laser along a line the player crosses), **Skier** (fast slalom, random drift-stop spraying clods to the side), **Rescue dog** (runs up, sits, barks one clod, runs off).
 
 **Floor 5 — Schloss Neuschwanstein**
 - **Ritter** — knight with a directional shield; must be hit from behind or flanked.

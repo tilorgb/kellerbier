@@ -6908,3 +6908,6 @@ real progression and beat its boss.
   two arrows against a 6 DPS player; The Gondola at 60 dies before him and docks twice. Both are
   assertions in `boss-pacing.test.ts`, not estimates.
 
+## 128. Floor 4 roster cut to the Murmeltier, new laser-and-freeze mobs pitched
+
+**Decided** after the first playtest of Floor 4: the Steinbock, Bergwacht, Sennerin and Kuhglocke were boring or too humanoid and are removed from content (sprites, authoring, rooms, roster); their engine primitives (`climbsBlocks`, `shoal`, `mark`, `bounce`) stay and are tested through fixtures in `tests/unit/fixtures/cut-alpen-mobs.ts`. Spawn groups left empty by the cut fall back to the Murmeltier (capped at 2) until the pitched mobs land; the per-floor encounter-diversity test is skipped for floor 4 only until it has a second mob again. Pitched next (see the bible): Summit cross, Snow cannon, Mountain hare, Skier, Rescue dog, a laser primitive (instant line, ~12-tick linger, boulders block it) and a freeze status (brief root), and a reworked First Human phase two with eye lasers. Every new mob ships with an animation strip and side/south/north views.

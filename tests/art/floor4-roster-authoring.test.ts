@@ -35,31 +35,12 @@ function pathFor(name: string, suffix = '.png'): string {
 describe("Die Alpen roster's committed art is what the authoring source produces", () => {
   it('covers every creature, its views, the mound and the projectiles', () => {
     expect([...Object.keys(ROSTER), ...Object.keys(STRIPS)].sort()).toEqual([
-      'bergwacht',
-      'bergwacht-north',
-      'bergwacht-side',
-      'bergwacht-south',
-      'kuhglocke',
       'murmeltier',
       'murmeltier-shadow',
-      'sennerin',
-      'sennerin-north',
-      'sennerin-side',
-      'sennerin-south',
-      'steinbock',
-      'steinbock-north',
-      'steinbock-side',
-      'steinbock-south',
       'the-gondola',
       'tourist',
     ]);
-    expect(Object.keys(PROJECTILES).sort()).toEqual([
-      'arrow',
-      'cheese-wheel',
-      'flare',
-      'flint',
-      'snow-clod',
-    ]);
+    expect(Object.keys(PROJECTILES).sort()).toEqual(['arrow', 'flint', 'snow-clod']);
   });
 
   it.each(entries)('%s.png is byte-identical to a fresh encode', async (name, frame) => {
