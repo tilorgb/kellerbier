@@ -67,17 +67,7 @@
       "count": 1,
       "choices": [
         {
-          "enemyId": "steinbock",
-          "minFloor": 4,
-          "maxFloor": 4
-        },
-        {
           "enemyId": "murmeltier",
-          "minFloor": 4,
-          "maxFloor": 4
-        },
-        {
-          "enemyId": "sennerin",
           "minFloor": 4,
           "maxFloor": 4
         }

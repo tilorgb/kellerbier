@@ -52,16 +52,6 @@
           "enemyId": "murmeltier",
           "minFloor": 4,
           "maxFloor": 4
-        },
-        {
-          "enemyId": "bergwacht",
-          "minFloor": 4,
-          "maxFloor": 4
-        },
-        {
-          "enemyId": "steinbock",
-          "minFloor": 4,
-          "maxFloor": 4
         }
       ]
     }

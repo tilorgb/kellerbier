@@ -6908,6 +6908,10 @@ real progression and beat its boss.
   two arrows against a 6 DPS player; The Gondola at 60 dies before him and docks twice. Both are
   assertions in `boss-pacing.test.ts`, not estimates.
 
+## 128. Floor 4 roster cut to the Murmeltier, new laser-and-freeze mobs pitched
+
+**Decided** after the first playtest of Floor 4: the Steinbock, Bergwacht, Sennerin and Kuhglocke were boring or too humanoid and are removed from content (sprites, authoring, rooms, roster); their engine primitives (`climbsBlocks`, `shoal`, `mark`, `bounce`) stay and are tested through fixtures in `tests/unit/fixtures/cut-alpen-mobs.ts`. Spawn groups left empty by the cut fall back to the Murmeltier (capped at 2) until the pitched mobs land; the per-floor encounter-diversity test is skipped for floor 4 only until it has a second mob again. Pitched next (see the bible): Summit cross, Snow cannon, Mountain hare, Skier, Rescue dog, a laser primitive (instant line, ~12-tick linger, boulders block it) and a freeze status (brief root), and a reworked First Human phase two with eye lasers. Every new mob ships with an animation strip and side/south/north views.
+
 ## 129. Lasers, freeze on the player, bursting shots (#40)
 
 **Decided** with the Floor 4 roster rework (see the bible): a laser is **an instant line, not a projectile** — `fireBeam` lights a line from the body for `beamTicks` after its state is entered, and a player on it takes `damage` once (the same `Contact` event a melee swing lands, so the contact i-frames make it once per beam). There is nothing to outrun; the dodge is being off the line while it is lit, which the `telegraph` state before it draws on the floor. Modes: `aim` (the bearing locked on entry), `row` (both ways along the body's horizontal line) and `axis` (the cardinal line nearest the locked aim, toward the player). **Terrain stops a beam** the way it stops a shot (boulders are shelter), and the hit test and the renderer read one geometry (`beamGeometry`), so they cannot disagree. The trigger `whenPlayerCrossesRow` is a one-tick event off the player's previous position, so a rest state is a cooldown.
