@@ -9,7 +9,7 @@ import {
 import type { GameSim } from '../sim/game/sim.js';
 import type { Texture } from './gfx/index.js';
 import { ENTITY_PALETTE } from './palette.js';
-import { Billboard } from './world/billboard.js';
+import { Billboard, OVER_SCENERY_RENDER_ORDER } from './world/billboard.js';
 import { FloorSprite, PLINTH_HEIGHT } from './world/flat.js';
 import type { Lighting } from './world/lighting.js';
 
@@ -169,6 +169,7 @@ export class PedestalView {
     group.add(beam);
     const light = this.lighting.acquirePropLight();
     const item = new Billboard();
+    item.mesh.renderOrder = OVER_SCENERY_RENDER_ORDER;
     item.setTexture(this.itemTexture);
     item.visible = true;
     item.castShadow = false;

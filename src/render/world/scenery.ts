@@ -29,7 +29,7 @@ import { type Texture, textureFromPixels } from '../gfx/index.js';
 import { ROOM_HAZARD_PALETTE, roomThemeForFloor } from '../palette.js';
 import { pickTileVariant, tileGridScale } from '../tiles.js';
 import { ACTOR_PIXELS_PER_UNIT } from '../resolution.js';
-import { Billboard } from './billboard.js';
+import { Billboard, OVER_SCENERY_RENDER_ORDER, SCENERY_PROP_RENDER_ORDER } from './billboard.js';
 import { ELEVATION } from './camera.js';
 import { DECAL_HEIGHT, FloorSprite, tilingTexture } from './flat.js';
 import { ACTOR_LAYER, OCCLUDER_LAYER } from './layers.js';
@@ -1512,7 +1512,8 @@ export class Scenery {
             tiles.blockVariants[pickTileVariant(col, row, tiles.blockVariants.length)] ??
             tiles.blockVariants[0];
           if (texture !== undefined) {
-            this.standTile(texture, x + ROOM_TILE_UNITS / 2, y + ROOM_TILE_UNITS);
+            const block = this.standTile(texture, x + ROOM_TILE_UNITS / 2, y + ROOM_TILE_UNITS);
+            block.mesh.renderOrder = OVER_SCENERY_RENDER_ORDER;
           }
         }
       }
@@ -1702,13 +1703,14 @@ export class Scenery {
         continue;
       }
       const footZ = prop.y + ROOM_TILE_UNITS / 2;
-      this.standTile(texture, prop.x, footZ);
+      behindItems(this.standTile(texture, prop.x, footZ));
       if (prop.type === 'maibaum') {
         // A maypole is two tiles tall or it is a stick: the crown stands on the base.
         const top = this.art.tileTextures[MAIBAUM_TOP_TILE];
         if (top !== undefined) {
           const crown = this.standTile(top, prop.x, footZ, ROOM_TILE_UNITS);
           crown.castShadow = false;
+          behindItems(crown);
         }
       }
     }
@@ -1802,6 +1804,12 @@ export class Scenery {
     disposeMeshes(this.group);
     this.group.removeFromParent();
   }
+}
+
+/** A walk-through scenery prop: drawn under items and boulders (`SCENERY_PROP_RENDER_ORDER`). */
+function behindItems(billboard: Billboard): void {
+  billboard.mesh.renderOrder = SCENERY_PROP_RENDER_ORDER;
+  billboard.mesh.material.depthWrite = false;
 }
 
 const CRACK_SPAN = 10;

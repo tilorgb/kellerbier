@@ -51,7 +51,7 @@ import { type BitmapText, type Container, type Texture } from './gfx/index.js';
 import { ENTITY_PALETTE } from './palette.js';
 import { createStatusLook, readStatusLook } from './status-look.js';
 import { tileGridScale } from './tiles.js';
-import { Billboard } from './world/billboard.js';
+import { Billboard, OVER_SCENERY_RENDER_ORDER } from './world/billboard.js';
 import {
   FloorHazardBar,
   FloorHazardDisc,
@@ -680,6 +680,10 @@ export class EntityView {
                 : (this.art.enemyArt[enemyId] ?? this.art.fallback));
 
       const billboard = this.bodyAt(used);
+      // Slots are shared by every kind of body, so set every frame: a pickup
+      // sits on top of walk-through scenery (`OVER_SCENERY_RENDER_ORDER`),
+      // anything else depth-sorts normally.
+      billboard.mesh.renderOrder = isPickup ? OVER_SCENERY_RENDER_ORDER : 0;
       this.bodyTelegraphing[used] = telegraph > 0 ? 1 : 0;
       used += 1;
       if (underground) {

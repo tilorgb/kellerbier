@@ -118,6 +118,37 @@ export const ENEMY_DROP_TABLES: Readonly<Record<LootTier, DropTable>> = {
 };
 
 /**
+ * What a broken barrel spills (`sim/systems/loot.ts`) — very rarely anything,
+ * and never more than small change: a Biermarke worth 1, half a Bratwurst, or
+ * (rarer still, and only once Promille is unlocked) half a Maß. About 8% of
+ * barrels drop something; the `null` weight sets that rate, and both columns
+ * pay out equally often, the same rule the enemy tables keep.
+ */
+export const BARREL_DROP_TABLE: DropTable = {
+  promilled: [
+    { pickupId: null, weight: 920 },
+    { pickupId: 'biermarke-1', weight: 35 },
+    { pickupId: 'bratwurst-half', weight: 35 },
+    { pickupId: 'mass-half', weight: 10 },
+  ],
+  sober: [
+    { pickupId: null, weight: 920 },
+    { pickupId: 'biermarke-1', weight: 40 },
+    { pickupId: 'bratwurst-half', weight: 40 },
+  ],
+};
+
+/**
+ * The chance a broken barrel has something living in it instead of loot — a
+ * Schimmelfleck or a Bierratte, even odds — rarer than its loot. Rolled
+ * before the loot table; a barrel that let out a critter drops nothing else.
+ */
+export const BARREL_CRITTER_CHANCE = 0.03;
+
+/** What can crawl out of a barrel, picked evenly. */
+export const BARREL_CRITTER_IDS: readonly string[] = ['schimmelfleck', 'bierratte'];
+
+/**
  * Rolled once when a room's last enemy falls, in addition to that enemy's own drop.
  *
  * #353 added `chest` (~7% of clears) and `locked-chest` (~3%), paid for out
