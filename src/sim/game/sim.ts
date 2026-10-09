@@ -160,6 +160,8 @@ import { stepPickups } from '../systems/pickup.js';
 import { stepPromille } from '../systems/promille.js';
 import { CloudStore } from '../hazard/cloud-store.js';
 import { spawnPoisonCloud, stepClouds } from '../hazard/clouds.js';
+import { CheeseStore } from '../hazard/cheese-store.js';
+import { stepCheese } from '../hazard/cheese.js';
 import { WeatherStore, stepWeather } from '../hazard/weather.js';
 import { stepProjectiles, stepShooting } from '../systems/shooting.js';
 import {
@@ -928,6 +930,8 @@ export class GameSim {
   readonly projectiles: ProjectileStore;
   /** Poison clouds in the room (#401). Cleared on every room load. */
   readonly clouds = new CloudStore();
+  /** The Obazda's cheese puddles. Cleared on every room load. */
+  readonly cheese = new CheeseStore();
 
   /**
    * Floor 4's room-wide weather (#40): the avalanche and wind-gust lanes a
@@ -3535,6 +3539,7 @@ export class GameSim {
     this.world.flush();
     this.projectiles.clear();
     this.clouds.clear();
+    this.cheese.clear();
     this.weather.clear();
     this.latchHeading.fill(0);
     this.latchTurn.fill(0);
@@ -4996,6 +5001,11 @@ export class GameSim {
   drinkBeer(amount: number): void {
     cleansePoison(this);
     this.addPromille(amount);
+  }
+
+  /** Drops a cheese puddle that slows enemies standing in it — see `sim/hazard/cheese.ts`. */
+  dropCheesePuddle(x: number, y: number, radius: number, lifetimeTicks: number): void {
+    this.cheese.spawn(x, y, radius, Math.max(1, Math.round(lifetimeTicks)));
   }
 
   /** Spawns a poison cloud that poisons the player — see `sim/hazard/clouds.ts`. Defaults come from `tuning.poisonCloud`. */
@@ -6829,6 +6839,7 @@ export class GameSim {
     // Clouds first, so a body standing in one has poison refreshed before
     // this tick's poison countdown reads it (#401).
     stepClouds(this);
+    stepCheese(this);
     // Floor 4's avalanche and wind (#40): a shove on the bodies before they
     // integrate, so a gust leans on this tick's movement — the same reason
     // the status pass runs here.

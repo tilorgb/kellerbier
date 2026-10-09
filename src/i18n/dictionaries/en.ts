@@ -455,7 +455,8 @@ export const en = {
   'items.mass.flavourText': 'One litre. One decision. No refills mid-fight.',
   'items.neuschwanstein-bauplan.description': 'Large stat boost. Costs more Biermarken every floor',
   'items.neuschwanstein-bauplan.flavourText': 'An unfinished wing, drawn in impressive detail.',
-  'items.obazda.description': 'Slows enemies near you',
+  'items.obazda.description':
+    'Every 2.5 s drops a cheese puddle that stays and slows enemies standing in it',
   'items.obazda.flavourText': 'Technically a dip. Structurally closer to mortar.',
   'items.platzangst.description': 'Damage +50%, Range -50%',
   'items.platzangst.flavourText':

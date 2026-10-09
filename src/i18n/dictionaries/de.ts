@@ -460,7 +460,8 @@ export const de: Record<DictKey, string> = {
     'Großer Statusschub. Kostet jeden Stock mehr Biermarken',
   'items.neuschwanstein-bauplan.flavourText':
     'Ein unfertiger Flügel, in beeindruckendem Detail gezeichnet.',
-  'items.obazda.description': 'Verlangsamt Gegner in deiner Nähe',
+  'items.obazda.description':
+    'Lässt alle 2,5 s eine Käsepfütze fallen, die liegen bleibt und Gegner darin verlangsamt',
   'items.obazda.flavourText': 'Streng genommen ein Aufstrich. Von der Konsistenz eher Mörtel.',
   'items.platzangst.description': 'Schaden +50%, Reichweite -50%',
   'items.platzangst.flavourText':
