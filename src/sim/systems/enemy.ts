@@ -365,6 +365,11 @@ export function stepEnemies(sim: GameSim): void {
     // so a boss that *spawns* mid-wind-up (Die Zapfhahn-Orgel) locks too.
     if (ticks === 0) {
       flags = updateAimLock(sim, index, state, flags, playerX, playerY);
+      if (state.phaseShiftShake > 0) {
+        // A boss changing phase (#437): the sting, and the camera shudders.
+        sim.events.push(EventKind.EnemySplit, index, NO_SLOT, selfX, selfY, 0, 0, 0);
+        sim.addShake(0, 1, state.phaseShiftShake);
+      }
     }
     if (state.telegraphTicks > 0) {
       // A wind-up ahead of a dive to a point (#411) keeps its aim on the

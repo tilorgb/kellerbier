@@ -221,13 +221,13 @@ describe('boss pacing (#232)', () => {
         wide.cycles,
         `shotDamage=${String(shotDamage)}: only ${String(wide.cycles)} wide sweep(s) before death`,
       ).toBeGreaterThanOrEqual(4);
-      // Phase two is reached and shows its own idea — the arrow — more than once.
-      const arrows = measureFight('the-first-human', ['loose-1', 'loose-2'], shotDamage, {
+      // Phase two is reached and shows its own idea — the eye laser — more than once.
+      const lasers = measureFight('the-first-human', ['laser-1', 'laser-2'], shotDamage, {
         maxTicks: 9000,
       });
       expect(
-        arrows.cycles,
-        `shotDamage=${String(shotDamage)}: only ${String(arrows.cycles)} arrow(s) in phase two`,
+        lasers.cycles,
+        `shotDamage=${String(shotDamage)}: only ${String(lasers.cycles)} laser(s) in phase two`,
       ).toBeGreaterThanOrEqual(2);
     }
   });

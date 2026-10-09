@@ -876,7 +876,12 @@ export class EntityView {
         label.show();
       }
 
-      if (!isBoss && enemyTelegraphShape(sim, index, this.telegraphShape)) {
+      // A boss draws no shape telegraph of its own — its wind-up is its body — except
+      // a laser's line (#40): that is where the beam will be, which a body cannot say.
+      if (
+        enemyTelegraphShape(sim, index, this.telegraphShape) &&
+        (!isBoss || this.telegraphShape.shape === TelegraphShape.Beam)
+      ) {
         const info = this.telegraphShape;
         const pulse = this.ringPulses ? Math.sin(nowMs * RING_PULSE_RATE) * 0.12 : 0;
         const shapeAlpha = Math.min(1, 0.35 + info.progress * 0.5 + pulse);

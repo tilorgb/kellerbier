@@ -53,6 +53,7 @@ export type BehaviourName =
   | 'summon'
   | 'dropProp'
   | 'becomeInvulnerable'
+  | 'phaseShift'
   | 'telegraph'
   | 'grabProp'
   | 'lobTarget'
@@ -1032,6 +1033,20 @@ export interface BecomeInvulnerableBehaviour {
 }
 
 /**
+ * A boss changing phase, made impossible to miss (#437): on the tick the
+ * state is entered the room hears the split sting (`EventKind.EnemySplit`,
+ * the same cue a body coming apart makes) and the camera shudders for
+ * `shake` pixels. Presentation only — it changes nothing a run does. Put it on
+ * the state a `whenHealthBelow` transition leads to, beside its invulnerable
+ * beat, so the shift and the quiet moment arrive together.
+ */
+export interface PhaseShiftBehaviour {
+  readonly behaviour: 'phaseShift';
+  /** Screen shake in pixels. Omitted: 4. */
+  readonly shake?: number;
+}
+
+/**
  * Says out loud that something is about to happen.
  *
  * Draws a growing ring for the duration, so the state before an attack is
@@ -1253,6 +1268,7 @@ export type EnemyBehaviour =
   | SummonBehaviour
   | DropPropBehaviour
   | BecomeInvulnerableBehaviour
+  | PhaseShiftBehaviour
   | GrabPropBehaviour
   | RollLogBehaviour
   | BecomePropBehaviour
@@ -1567,6 +1583,7 @@ export const MOVEMENT_BEHAVIOURS: readonly BehaviourName[] = [
 export const ENTRY_BEHAVIOURS: readonly BehaviourName[] = [
   'telegraph',
   'becomeInvulnerable',
+  'phaseShift',
   'grabProp',
   'rollLog',
   'becomeProp',

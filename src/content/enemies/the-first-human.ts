@@ -18,12 +18,15 @@ import type { EnemyDefinition, EnemyTransition } from '../../sim/enemy/definitio
  *
  * **Phase two** at half health (`whenHealthBelow`, declared on every phase-one
  * state so the threshold is read wherever he happens to be): he stops,
- * invulnerable, and pulls the arrowhead out of his own shoulder — a long
- * telegraph with nothing behind it, the one quiet beat of the fight — and
- * then swings faster, with an aimed arrow throw between the sweeps
- * (`fireAtPlayer`, art `arrow`): a single fast shot at the locked spot,
- * which punishes standing still behind a sweep the way the sweeps punish
- * running into one.
+ * invulnerable, and pulls the arrowhead out of his own shoulder and sticks it
+ * to his forehead — a long beat with a sting and a shudder, the one quiet
+ * moment of the fight — and his eyes open, red and glowing. Then he swings
+ * faster, with an eye laser between the sweeps (`fireBeam`, mode `aim`): the
+ * eyes glow for `EYES_GLOW` ticks (the telegraph, and the line it will light is
+ * drawn on the snow), then one big laser — two half-Maß — along the bearing
+ * locked as the glow began. It punishes standing still behind a sweep the way
+ * the sweeps punish running into one, and it is a line, so a boulder is cover
+ * from it.
  *
  * Pacing (`tests/content/boss-pacing.test.ts`): health is set so the pendulum
  * plays several times in each phase against a player holding the trigger
@@ -47,18 +50,18 @@ const FLINT = {
 const NARROW_ARC = 1.1;
 const WIDE_ARC = 2.6;
 
-/**
- * The aimed arrow between phase-two sweeps: one fast shot at the spot the
- * `draw` wind-up locked. `everyTicks` outlasts the state, so it fires once.
- */
-const ARROW_THROW = {
-  behaviour: 'fireAtPlayer',
-  everyTicks: 999,
-  speed: 2.8,
-  damage: 1,
-  lifetimeTicks: 110,
-  radius: 3,
-  art: 'arrow',
+/** Ticks his eyes glow before the laser: long enough to step off the line the warning draws. */
+const EYES_GLOW = 40;
+/** Ticks the laser stays lit. */
+const EYE_BEAM_TICKS = 16;
+
+/** The eye laser between phase-two sweeps: one big beam along the bearing the glow locked. */
+const EYE_LASER = {
+  behaviour: 'fireBeam',
+  mode: 'aim',
+  beamTicks: EYE_BEAM_TICKS,
+  halfWidth: 6,
+  damage: 2,
 } as const;
 
 export const theFirstHuman: EnemyDefinition = {
@@ -154,6 +157,7 @@ export const theFirstHuman: EnemyDefinition = {
         { behaviour: 'pause' },
         { behaviour: 'telegraph', ticks: 72 },
         { behaviour: 'becomeInvulnerable', ticks: 72 },
+        { behaviour: 'phaseShift', shake: 5 },
       ],
       transitions: [{ to: 'stalk-2', after: 72 }],
     },
@@ -192,17 +196,17 @@ export const theFirstHuman: EnemyDefinition = {
           ...FLINT,
         },
       ],
-      transitions: [{ to: 'draw-1', after: 34 }],
+      transitions: [{ to: 'eyes-1', after: 34 }],
     },
     {
-      name: 'draw-1',
-      behaviours: [{ behaviour: 'pause' }, { behaviour: 'telegraph', ticks: 24 }],
-      transitions: [{ to: 'loose-1', after: 24 }],
+      name: 'eyes-1',
+      behaviours: [{ behaviour: 'pause' }, { behaviour: 'telegraph', ticks: EYES_GLOW }],
+      transitions: [{ to: 'laser-1', after: EYES_GLOW }],
     },
     {
-      name: 'loose-1',
-      behaviours: [{ behaviour: 'pause' }, ARROW_THROW],
-      transitions: [{ to: 'windup-right-2', after: 18 }],
+      name: 'laser-1',
+      behaviours: [{ behaviour: 'pause' }, EYE_LASER],
+      transitions: [{ to: 'windup-right-2', after: EYE_BEAM_TICKS + 6 }],
     },
     {
       name: 'windup-right-2',
@@ -223,17 +227,17 @@ export const theFirstHuman: EnemyDefinition = {
           ...FLINT,
         },
       ],
-      transitions: [{ to: 'draw-2', after: 62 }],
+      transitions: [{ to: 'eyes-2', after: 62 }],
     },
     {
-      name: 'draw-2',
-      behaviours: [{ behaviour: 'pause' }, { behaviour: 'telegraph', ticks: 24 }],
-      transitions: [{ to: 'loose-2', after: 24 }],
+      name: 'eyes-2',
+      behaviours: [{ behaviour: 'pause' }, { behaviour: 'telegraph', ticks: EYES_GLOW }],
+      transitions: [{ to: 'laser-2', after: EYES_GLOW }],
     },
     {
-      name: 'loose-2',
-      behaviours: [{ behaviour: 'pause' }, ARROW_THROW],
-      transitions: [{ to: 'stalk-2', after: 18 }],
+      name: 'laser-2',
+      behaviours: [{ behaviour: 'pause' }, EYE_LASER],
+      transitions: [{ to: 'stalk-2', after: EYE_BEAM_TICKS + 6 }],
     },
   ],
 };

@@ -318,6 +318,8 @@ export interface CompiledState {
   readonly telegraphTicks: number;
   /** Ticks of invulnerability from the moment the state begins. Zero for none. */
   readonly invulnerableTicks: number;
+  /** Screen shake, in pixels, to throw when the state is entered as a boss phase change (#437). Zero for none. */
+  readonly phaseShiftShake: number;
   /** True for a state whose entry stores the player's position for a later `detonateLobbedBomb` to read (Böllerschmeißer, #156). */
   readonly capturesLobTarget: boolean;
   /** Set for a state whose entry deals area damage at an earlier `lobTarget`'s captured position. `null` for every other state. */
@@ -667,6 +669,7 @@ export class EnemyRegistry {
     const propDrops: CompiledPropDrop[] = [];
     let telegraphTicks = 0;
     let invulnerableTicks = 0;
+    let phaseShiftShake = 0;
     let capturesLobTarget = false;
     let detonate: CompiledDetonation | null = null;
     let emitCloud: CompiledCloud | null = null;
@@ -988,6 +991,8 @@ export class EnemyRegistry {
       if (ENTRY_BEHAVIOURS.includes(name)) {
         if (behaviour.behaviour === 'telegraph') {
           telegraphTicks = Math.max(telegraphTicks, behaviour.ticks);
+        } else if (behaviour.behaviour === 'phaseShift') {
+          phaseShiftShake = behaviour.shake ?? 4;
         } else if (behaviour.behaviour === 'becomeInvulnerable') {
           invulnerableTicks = Math.max(invulnerableTicks, behaviour.ticks);
         } else if (behaviour.behaviour === 'grabProp') {
@@ -1456,6 +1461,7 @@ export class EnemyRegistry {
         ),
       telegraphTicks,
       invulnerableTicks,
+      phaseShiftShake,
       capturesLobTarget,
       detonate,
       emitCloud,
