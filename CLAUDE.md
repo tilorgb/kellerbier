@@ -49,6 +49,17 @@ it lands there — not just confirming the new tiles/enemies render when loaded 
 version of this for anything else gated behind its own unlock/progression logic: check that the
 gate itself was updated, not only that the content behind it works once reached.
 
+## Open the dev app with `?nocards`
+
+When you drive `npm run dev` in a browser (to check a feature, take a screenshot, script an
+interaction), **always load it as `http://localhost:PORT/?nocards`** unless the thing you are
+testing is the story card, floor title card or boss intro plate themselves. The param leaves all
+three out (`src/app/build-mode.ts`, `skipsIntroCards`; dev builds only), so the run starts in the
+room instead of behind a hold-to-continue card — the sim keeps ticking behind those cards, and a
+run can even end there. Its siblings are worth knowing too: `?item=id1,id2` starts the run
+holding those items, `?floor=N` starts on a later floor, `?seed=N` fixes the seed. Never click or
+key-hold through a story card as a workaround.
+
 ## A content gap degrades gracefully at runtime — and still fails loudly in CI
 
 `docs/DECISIONS.md` #19, from the same "floor 2 froze" incident the "reachable" section above

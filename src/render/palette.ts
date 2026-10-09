@@ -642,3 +642,17 @@ export const ROOM_HAZARD_PALETTE = {
   doorOpen: 0xd9a441,
   crack: 0x8a6a4a,
 } as const;
+
+/**
+ * What each body status paints onto the body that carries it — enemy or
+ * Alois alike (`render/status-look.ts`). One colour per status, picked to
+ * stay apart: frost is cold blue, fire is a hot flickering orange, poison the
+ * sickly green `STATUS_POISON_TINT` already is, slow a dull lilac (a drag, not
+ * a hurt), and daze (Hendlgeruch) its own yellow-green `ENTITY_PALETTE.dazedTint`.
+ */
+export const STATUS_LOOK_PALETTE = {
+  freezeTint: STATUS_FREEZE_TINT,
+  burnTint: 0xff7a2e,
+  burnGlow: 0xff5a1a,
+  slowTint: 0xa99bd6,
+} as const;
