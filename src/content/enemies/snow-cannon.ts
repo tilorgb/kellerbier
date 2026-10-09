@@ -2,8 +2,9 @@ import type { EnemyDefinition } from '../../sim/enemy/definition.js';
 
 /**
  * Snow cannon (#40, `docs/CONTENT_BIBLE.md`'s Floor 4 roster; English name,
- * pitched as written) — a rooted cannon that lobs one big, slow snowball at
- * where the player stood when it started winding up.
+ * pitched as written) — a rooted cannon that lobs one big snowball at where the
+ * player stood when it started winding up, and the ball comes down *there*
+ * (`landAtTarget`): the splash is dangerous on exactly the spot it was aimed at.
  *
  * A direct hit is double damage and freezes Alois (all but rooted for 0.7 s,
  * he can still shoot). Wherever the ball ends — on him, on a wall, on a
@@ -40,13 +41,14 @@ export const snowCannon: EnemyDefinition = {
         {
           behaviour: 'fireAtPlayer',
           everyTicks: 999,
-          speed: 0.9,
+          speed: 1.5,
           damage: 2,
           lifetimeTicks: 300,
           radius: 7,
           art: 'snow-clod',
           freeze: true,
           burst: true,
+          landAtTarget: true,
         },
       ],
       transitions: [{ to: 'idle', after: 150 }],

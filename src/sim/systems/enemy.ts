@@ -2374,7 +2374,18 @@ function applyFiring(
 
     if (shot.behaviour === 'fireAtPlayer') {
       if (phase === 0 && isSighted(sim, index, aimX, aimY)) {
-        fireOne(sim, index, aim, shot);
+        if (shot.landAtTarget === true) {
+          // Cut the flight to the distance to the aim, so the shot ends — and, with
+          // `burst`, splashes — exactly where the player stood when it locked.
+          const speed = Math.max(0.01, shot.speed * sim.tuning.enemy.projectileSpeedScale);
+          const reach = Math.max(0, aimDistance - (sim.body.data[index * 2] ?? 0));
+          fireOne(sim, index, aim, {
+            ...shot,
+            lifetimeTicks: Math.min(shot.lifetimeTicks, Math.max(1, Math.round(reach / speed))),
+          });
+        } else {
+          fireOne(sim, index, aim, shot);
+        }
       }
       continue;
     }

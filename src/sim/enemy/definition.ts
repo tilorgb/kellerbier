@@ -717,6 +717,14 @@ export interface FiringBehaviourBase {
    */
   readonly burst?: boolean;
   /**
+   * The shot flies to the spot it was aimed at and ends there, rather than on
+   * a timer (#40, the Snow cannon): its flight is cut to exactly the distance to
+   * the aim, so with `burst` the splash lands where the player stood when the
+   * wind-up locked — dangerous on that spot, and only that spot. `lifetimeTicks`
+   * is still the cap. Only on `fireAtPlayer`.
+   */
+  readonly landAtTarget?: boolean;
+  /**
    * The shot *marks* the player on a hit (#40, the Bergwacht's flare):
    * `ProjectileTag.Marking`, so for `tuning.projectileTags.playerMarkDurationTicks`
    * every enemy in the room sees them through cover (`isSighted` is true)
