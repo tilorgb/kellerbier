@@ -369,8 +369,8 @@ describe('The First Human (#437)', () => {
     expect(beam.damage).toBe(2);
     expect(beam.count).toBe(1);
     // It runs east, toward where the player stood when the glow began.
-    expect((beam.bx[0]) - (beam.ax[0])).toBeGreaterThan(40);
-    expect(Math.abs((beam.by[0]) - (beam.ay[0]))).toBeLessThan(15);
+    expect(beam.bx[0] - beam.ax[0]).toBeGreaterThan(40);
+    expect(Math.abs(beam.by[0] - beam.ay[0])).toBeLessThan(15);
   });
 
   it('is named in English in every locale, and its plate carries no joke', async () => {
