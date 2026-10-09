@@ -1214,8 +1214,12 @@ export class Scenery {
         ? this.materials.flatMaterial(wallColour, { roughness: 1 })
         : this.materials.tiledMaterial(tiles.surround ?? tiles.wall, bleedWidth, bleedHeight, {
             roughness: 1,
-            // The wall tile is dimmed to a dark base; the scree already is one.
-            color: 0x555555,
+            // The wall tile is dimmed neutral. The scree is tinted cool instead: the alpine key's
+            // alpenglow is warm, and under it a neutral dark blue-grey goes brown (#40).
+            color: tiles.surround === undefined ? 0x555555 : 0x6c86b8,
+            // Far off and busy: mipmaps (and a tile twice the size) keep the scree from
+            // aliasing to speckle where plain nearest sampling minifies it.
+            ...(tiles.surround === undefined ? {} : { mipmapped: true, tileScale: 2 }),
           }),
     );
     base.rotation.x = -Math.PI / 2;

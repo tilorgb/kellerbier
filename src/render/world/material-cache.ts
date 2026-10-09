@@ -1,4 +1,4 @@
-import { MeshStandardMaterial, RepeatWrapping } from 'three';
+import { MeshStandardMaterial, NearestMipmapLinearFilter, RepeatWrapping } from 'three';
 import type { Texture } from '../gfx/index.js';
 import { tilingTexture } from './flat.js';
 
@@ -45,23 +45,38 @@ export class MaterialCache {
     texture: Texture,
     width: number,
     height: number,
-    options: { readonly roughness?: number; readonly color?: number } = {},
+    options: {
+      readonly roughness?: number;
+      readonly color?: number;
+      /**
+       * Sample the texture with mipmaps (still nearest within a level) and tile it at
+       * `tileScale` times its normal size. For a big, far-off surface like the dark
+       * base beyond the walls: a busy tile minified with plain nearest sampling
+       * aliases to speckle, and mipmaps average it into coherent patches (#40).
+       */
+      readonly mipmapped?: boolean;
+      readonly tileScale?: number;
+    } = {},
   ): MeshStandardMaterial {
     const roughness = options.roughness ?? 0.95;
     const color = options.color ?? 0xffffff;
+    const mipmapped = options.mipmapped === true;
+    const tileScale = options.tileScale ?? 1;
     let byShape = this.tiled.get(texture);
     if (byShape === undefined) {
       byShape = new Map();
       this.tiled.set(texture, byShape);
     }
-    const key = `${String(width)}:${String(height)}:${String(roughness)}:${String(color)}`;
+    const key = `${String(width)}:${String(height)}:${String(roughness)}:${String(color)}:${String(mipmapped)}:${String(tileScale)}`;
     let material = byShape.get(key);
     if (material === undefined) {
-      material = new MeshStandardMaterial({
-        map: tilingTexture(texture, width, height),
-        roughness,
-        color,
-      });
+      const map = tilingTexture(texture, width / tileScale, height / tileScale);
+      if (mipmapped) {
+        map.generateMipmaps = true;
+        map.minFilter = NearestMipmapLinearFilter;
+        map.needsUpdate = true;
+      }
+      material = new MeshStandardMaterial({ map, roughness, color });
       byShape.set(key, material);
     }
     return material;
