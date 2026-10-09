@@ -1,13 +1,12 @@
 import { encodePng } from '../png.mjs';
 import { legalPixelColorsFor } from '../palette.mjs';
-import { canvas, ellipse, fillRect, line, outline, poly, px, toRows } from './draw.mjs';
-import { VIEW_ANIM, bobSteps, frameFromRows, mirrored, shifted } from './views-kit.mjs';
+import { canvas, ellipse, fillRect, outline, poly, px, toRows } from './draw.mjs';
+import { frameFromRows, mirrored, shifted } from './views-kit.mjs';
 
 /**
- * Die Alpen's roster (#40): the Steinbock, the Murmeltier and its mound, the
- * Bergwacht, the Kuhglocke and the Sennerin, with the three heading views
- * (`-side`, `-south`, `-north`) for the walkers and the floor's three
- * projectiles. The same contract as `floor3-roster.mjs`: the committed PNGs
+ * Die Alpen's roster (#40): the Murmeltier and its mound, the Gondola, the
+ * Tourist and the floor's projectiles (the Steinbock, Bergwacht, Kuhglocke and
+ * Sennerin were cut after the first playtest). The same contract as `floor3-roster.mjs`: the committed PNGs
  * are exactly what this file encodes, and `tests/art/floor4-roster-authoring.test.ts`
  * holds them to it byte for byte.
  *
@@ -87,120 +86,6 @@ export const ROSTER_BUCKET = 'floor-4-alpen';
 function finish(name, c) {
   outline(c);
   return frameFromRows(name, ALPEN, toRows(c), { ink: false });
-}
-
-// ========================================================== STEINBOCK
-/**
- * An ibex, side-on and facing left (#40): a deep-chested grey-brown body on
- * four legs, a short neck up to a long face with a tuft of beard, and the
- * two great ridged horns sweeping back over its shoulders — the one shape
- * that says "ibex" from across a room. 40×30 against a mid collider's 40.
- * `legA`/`legB` lift one diagonal pair for the trot.
- */
-function steinbockSide(name, { lift = 0, raiseFront = false, raiseBack = false } = {}) {
-  const c = canvas(40, 30);
-  const bodyY = 15 - lift;
-  // Legs: front pair at x 11/16, back pair at x 27/32; a planted hoof on row 28.
-  const legs = [
-    [10, raiseFront],
-    [15, !raiseFront && raiseBack],
-    [26, raiseBack],
-    [31, !raiseBack && raiseFront],
-  ];
-  for (const [x, up] of legs) {
-    const foot = up ? 26 : 28;
-    fillRect(c, x, bodyY + 5, 3, foot - (bodyY + 5), 'o');
-    fillRect(c, x + 1, bodyY + 5, 1, foot - (bodyY + 5), 'q');
-    fillRect(c, x, foot, 3, 1, 'a');
-  }
-  // Body and rump.
-  ellipse(c, 22, bodyY + 1, 12, 7, 'p');
-  ellipse(c, 24, bodyY - 1, 9, 4, 'q');
-  ellipse(c, 22, bodyY + 4, 11, 3, 'o');
-  ellipse(c, 21, bodyY + 3, 6, 2, 'r'); // belly light
-  // Tail.
-  fillRect(c, 34, bodyY - 2, 2, 3, 'n');
-  // Neck and head, forward and a little down.
-  poly(
-    c,
-    [
-      [12, bodyY - 4],
-      [16, bodyY - 6],
-      [18, bodyY + 2],
-      [13, bodyY + 3],
-    ],
-    'p',
-  );
-  ellipse(c, 9, bodyY - 5, 5, 3, 'q');
-  poly(
-    c,
-    [
-      [4, bodyY - 5],
-      [9, bodyY - 7],
-      [10, bodyY - 1],
-      [5, bodyY - 1],
-    ],
-    'q',
-  );
-  px(c, 4, bodyY - 2, 'a'); // nose
-  px(c, 8, bodyY - 5, 'a'); // eye
-  // Beard.
-  fillRect(c, 6, bodyY, 2, 3, 'r');
-  // Horns: two ridged arcs sweeping back from the brow over the shoulders.
-  for (const [dx, key] of [
-    [0, 'c'],
-    [1, 'd'],
-  ]) {
-    line(c, 8 + dx, bodyY - 8, 13 + dx, bodyY - 13, key, 2);
-    line(c, 13 + dx, bodyY - 13, 21 + dx, bodyY - 14, key, 2);
-    line(c, 21 + dx, bodyY - 14, 27 + dx, bodyY - 10, key, 2);
-  }
-  for (let k = 0; k < 6; k++) {
-    px(c, 10 + k * 3, bodyY - 11 - (k < 3 ? k : 5 - k), 'b');
-  }
-  return finish(name, c);
-}
-
-/** The ibex head-on: chest, the face between the two horns curving out and up. 22×30. */
-function steinbockSouth(name) {
-  const c = canvas(22, 30);
-  // Legs.
-  for (const x of [5, 14]) {
-    fillRect(c, x, 20, 3, 8, 'o');
-    fillRect(c, x + 1, 20, 1, 8, 'q');
-    fillRect(c, x, 28, 3, 1, 'a');
-  }
-  ellipse(c, 11, 17, 8, 6, 'p');
-  ellipse(c, 11, 19, 6, 3, 'r');
-  // Face.
-  ellipse(c, 11, 9, 4, 6, 'q');
-  fillRect(c, 10, 13, 3, 2, 'r');
-  px(c, 9, 8, 'a');
-  px(c, 13, 8, 'a');
-  px(c, 11, 12, 'a');
-  // Horns out and up.
-  line(c, 8, 4, 4, 1, 'c', 2);
-  line(c, 14, 4, 18, 1, 'c', 2);
-  line(c, 4, 1, 3, 0, 'd', 1);
-  line(c, 18, 1, 19, 0, 'd', 1);
-  return finish(name, c);
-}
-
-/** The ibex from behind: rump, tail, the horns' tips showing over the back. 22×30. */
-function steinbockNorth(name) {
-  const c = canvas(22, 30);
-  for (const x of [5, 14]) {
-    fillRect(c, x, 20, 3, 8, 'o');
-    fillRect(c, x + 1, 20, 1, 8, 'n');
-    fillRect(c, x, 28, 3, 1, 'a');
-  }
-  ellipse(c, 11, 17, 8, 7, 'p');
-  ellipse(c, 11, 15, 6, 3, 'q');
-  fillRect(c, 10, 21, 3, 3, 'n'); // tail
-  ellipse(c, 11, 8, 4, 5, 'o');
-  line(c, 8, 4, 4, 1, 'c', 2);
-  line(c, 14, 4, 18, 1, 'c', 2);
-  return finish(name, c);
 }
 
 // ========================================================= MURMELTIER
@@ -284,122 +169,6 @@ function personSide(
   return finish(name, c);
 }
 
-function personSouth(
-  name,
-  { jacket, trousers, hat, hatShade, hair, apron = false, braids = false, cross = false },
-) {
-  const c = canvas(18, 30);
-  fillRect(c, 5, 20, 3, 7, trousers);
-  fillRect(c, 10, 20, 3, 7, trousers);
-  fillRect(c, 4, 27, 4, 1, 'a');
-  fillRect(c, 10, 27, 4, 1, 'a');
-  fillRect(c, 4, 11, 10, 10, jacket);
-  fillRect(c, 2, 12, 2, 7, jacket);
-  fillRect(c, 14, 12, 2, 7, jacket);
-  if (apron) {
-    fillRect(c, 6, 14, 6, 8, 'u');
-  }
-  if (cross) {
-    fillRect(c, 8, 13, 2, 5, 'u');
-    fillRect(c, 7, 14, 4, 2, 'u');
-  }
-  ellipse(c, 9, 6, 4, 4, '3');
-  px(c, 7, 6, 'a');
-  px(c, 11, 6, 'a');
-  if (hair !== null) {
-    fillRect(c, 5, 2, 8, 2, hair);
-  }
-  if (braids) {
-    fillRect(c, 4, 6, 2, 8, '1');
-    fillRect(c, 12, 6, 2, 8, '1');
-    px(c, 4, 14, 'P');
-    px(c, 13, 14, 'P');
-  }
-  if (hat !== null) {
-    ellipse(c, 9, 3, 5, 2.5, hat);
-    fillRect(c, 4, 4, 10, 1, hatShade);
-  }
-  return finish(name, c);
-}
-
-function personNorth(
-  name,
-  { jacket, trousers, hat, hatShade, hair, apron = false, braids = false },
-) {
-  const c = canvas(18, 30);
-  fillRect(c, 5, 20, 3, 7, trousers);
-  fillRect(c, 10, 20, 3, 7, trousers);
-  fillRect(c, 4, 27, 4, 1, 'a');
-  fillRect(c, 10, 27, 4, 1, 'a');
-  fillRect(c, 4, 11, 10, 10, jacket);
-  fillRect(c, 2, 12, 2, 7, jacket);
-  fillRect(c, 14, 12, 2, 7, jacket);
-  if (apron) {
-    // The apron's bow at the back.
-    fillRect(c, 7, 13, 4, 2, 'u');
-  }
-  ellipse(c, 9, 6, 4, 4, hair ?? '3');
-  if (braids) {
-    fillRect(c, 6, 6, 2, 9, '1');
-    fillRect(c, 10, 6, 2, 9, '1');
-  }
-  if (hat !== null) {
-    ellipse(c, 9, 3, 5, 2.5, hat);
-    fillRect(c, 4, 4, 10, 1, hatShade);
-  }
-  return finish(name, c);
-}
-
-const BERGWACHT = { jacket: '1', trousers: 'n', hat: 'u', hatShade: 's', hair: null };
-const SENNERIN = {
-  jacket: 'D',
-  trousers: 'C',
-  hat: null,
-  hatShade: null,
-  hair: '1',
-  apron: true,
-  braids: true,
-};
-
-// ========================================================== KUHGLOCKE
-/**
- * A cowbell with no cow under it (#40): the flared bell in grey iron, a
- * leather strap folded over a ring above, the clapper showing below. 14×16
- * against a mini collider's 16.
- */
-function kuhglocke(name) {
-  const c = canvas(14, 16);
-  // Strap.
-  fillRect(c, 5, 0, 4, 3, '1');
-  fillRect(c, 6, 0, 2, 3, '2');
-  // Bell: narrow at the shoulder, flaring to the lip.
-  poly(
-    c,
-    [
-      [4, 3],
-      [9, 3],
-      [12, 13],
-      [1, 13],
-    ],
-    'f',
-  );
-  poly(
-    c,
-    [
-      [5, 4],
-      [7, 4],
-      [7, 12],
-      [3, 12],
-    ],
-    'g',
-  );
-  fillRect(c, 1, 13, 12, 1, 'd');
-  // Clapper.
-  fillRect(c, 6, 14, 2, 2, 'c');
-  return finish(name, c);
-}
-
-// ======================================================== PROJECTILES
 /** A snow clod (6×6): white, a grey shadow side. */
 function snowClod(name) {
   const c = canvas(6, 6);
@@ -407,14 +176,7 @@ function snowClod(name) {
   ellipse(c, 3.2, 3.2, 1.5, 1.5, 't');
   return finish(name, c);
 }
-/** A flare (8×8): a white-hot core in a pink glow, a short tail. */
-function flare(name) {
-  const c = canvas(8, 8);
-  ellipse(c, 3.5, 3.5, 3.5, 3.5, 'Q');
-  ellipse(c, 3.5, 3.5, 2.2, 2.2, 'S');
-  ellipse(c, 3.5, 3.5, 1, 1, 'W');
-  return frameFromRows(name, ALPEN, toRows(c), { ink: false });
-}
+
 /**
  * A flint flake (6×6), The First Human's sweep shot (#437): a grey chip with
  * one lit facet and a pink edge, so it reads as *his* against the floor's
@@ -464,17 +226,6 @@ function arrow(name) {
   px(c, 3, 7, 'R');
   return finish(name, c);
 }
-/** A wheel of cheese (10×10), rolling: a tan disc with holes and a pale rind. */
-function cheeseWheel(name) {
-  const c = canvas(10, 10);
-  ellipse(c, 4.5, 4.5, 4.5, 4.5, '4');
-  ellipse(c, 4.5, 4.5, 3.4, 3.4, '2');
-  px(c, 3, 3, '1');
-  px(c, 6, 4, '1');
-  px(c, 4, 6, '1');
-  return finish(name, c);
-}
-
 // =========================================================== THE GONDOLA
 /**
  * A cable-car cabin (#40), the mini-boss, hanging from its hanger arm: a
@@ -509,20 +260,11 @@ function gondola(name) {
 }
 
 // ------------------------------------------------------------------ assembly
-const steinbockStand = steinbockSide('steinbock');
-const steinbockStepA = steinbockSide('steinbock-step-a', { lift: 1, raiseFront: true });
-const steinbockStepB = steinbockSide('steinbock-step-b', { lift: 1, raiseBack: true });
-
 const murmeltier = murmeltierSide('murmeltier');
-const bergwachtSide = personSide('bergwacht', { ...BERGWACHT, pistol: true });
-const sennerinSide = personSide('sennerin', SENNERIN);
-const kuhglockeFrame = kuhglocke('kuhglocke');
-
 /** The one-frame bodies, and the mound. */
 export const ROSTER = {
   murmeltier,
   'murmeltier-shadow': murmeltierMound('murmeltier-shadow'),
-  kuhglocke: kuhglockeFrame,
   'the-gondola': gondola('the-gondola'),
   tourist: personSide('tourist', {
     jacket: 'E',
@@ -536,22 +278,8 @@ export const ROSTER = {
 /** The floor's projectile sprites, written to `projectiles/`. */
 export const PROJECTILES = {
   'snow-clod': snowClod('snow-clod'),
-  flare: flare('flare'),
-  'cheese-wheel': cheeseWheel('cheese-wheel'),
   flint: flint('flint'),
   arrow: arrow('arrow'),
-};
-
-/** The side-on trot of the ibex: one diagonal pair up, down, the other, down. */
-const STEINBOCK_ANIM = {
-  frames: 3,
-  frameDurationMs: 120,
-  loop: true,
-  clips: {
-    idle: { frames: [0], frameDurationMs: 400, mode: 'loop' },
-    move: { frames: [1, 0, 2, 0], frameDurationMs: 90, mode: 'loop' },
-    hurt: { frames: [0], frameDurationMs: 90, mode: 'once', onEnd: 'idle' },
-  },
 };
 
 /**
@@ -559,44 +287,7 @@ const STEINBOCK_ANIM = {
  * `<id>` strip is what a body with no heading strip draws; `-side`, `-south`
  * and `-north` are the heading views `render/entities.ts` picks between.
  */
-export const STRIPS = {
-  steinbock: { frames: [steinbockStand, steinbockStepA, steinbockStepB], anim: STEINBOCK_ANIM },
-  'steinbock-side': {
-    frames: [steinbockStand, steinbockStepA, steinbockStepB],
-    anim: STEINBOCK_ANIM,
-  },
-  'steinbock-south': {
-    frames: bobSteps(steinbockSouth('steinbock-south'), 'steinbock-south'),
-    anim: VIEW_ANIM,
-  },
-  'steinbock-north': {
-    frames: bobSteps(steinbockNorth('steinbock-north'), 'steinbock-north'),
-    anim: VIEW_ANIM,
-  },
-  bergwacht: { frames: bobSteps(bergwachtSide, 'bergwacht'), anim: VIEW_ANIM },
-  'bergwacht-side': { frames: bobSteps(bergwachtSide, 'bergwacht-side'), anim: VIEW_ANIM },
-  'bergwacht-south': {
-    frames: bobSteps(
-      personSouth('bergwacht-south', { ...BERGWACHT, cross: true }),
-      'bergwacht-south',
-    ),
-    anim: VIEW_ANIM,
-  },
-  'bergwacht-north': {
-    frames: bobSteps(personNorth('bergwacht-north', BERGWACHT), 'bergwacht-north'),
-    anim: VIEW_ANIM,
-  },
-  sennerin: { frames: bobSteps(sennerinSide, 'sennerin'), anim: VIEW_ANIM },
-  'sennerin-side': { frames: bobSteps(sennerinSide, 'sennerin-side'), anim: VIEW_ANIM },
-  'sennerin-south': {
-    frames: bobSteps(personSouth('sennerin-south', SENNERIN), 'sennerin-south'),
-    anim: VIEW_ANIM,
-  },
-  'sennerin-north': {
-    frames: bobSteps(personNorth('sennerin-north', SENNERIN), 'sennerin-north'),
-    anim: VIEW_ANIM,
-  },
-};
+export const STRIPS = {};
 
 // `mirrored`/`shifted` are re-exported for a specimen script that wants to lay a right-facing copy out.
 export { mirrored, shifted };

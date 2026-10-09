@@ -183,7 +183,7 @@ describe('Floor 4 generated rooms (#40)', () => {
     room.spawnGroups.flatMap((group) => group.choices.map((choice) => choice.enemyId));
 
   it('has the Floor 4 mobs this was written against, and none of the Wald’s', () => {
-    for (const id of ['steinbock', 'murmeltier', 'bergwacht', 'kuhglocke', 'sennerin']) {
+    for (const id of ['murmeltier']) {
       expect(FLOOR_4_MOBS.has(id), id).toBe(true);
     }
     expect(FLOOR_4_MOBS.has('zecke')).toBe(false);

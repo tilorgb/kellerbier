@@ -204,29 +204,13 @@ export const ROSTERS: Readonly<Record<string, readonly RosterEntry[]>> = {
     { id: 'specht', weight: 2, cost: 2, pursues: true },
   ],
   /**
-   * Floor 4 (#40). Nothing carried up from the Wald.
-   *
-   * - Kuhglocke: the cheapest body and the floor's crowd — placed in fours,
-   *   since one bell is nothing and four are a shoal. It drifts at the
-   *   player, so it pursues in #230's sense.
-   * - Murmeltier: never hurts to touch and only surfaces where it whistled —
-   *   cost 2, and it does come to the player, underground.
-   * - Sennerin: a stand-and-throw body whose wheel comes back; priced like
-   *   the Bauer (cost 2) and as common.
-   * - Steinbock: 8 HP, `tough` loot, a double-damage charge that cover does
-   *   not stop — priced like the Boar (cost 4) and rarer than the small mobs,
-   *   so one is an event.
-   * - Bergwacht: a support body — alone a nuisance, behind the others a hunt
-   *   — priced like a shooter (cost 3) and the rarest, so a room rarely has
-   *   two flares in it.
+   * Floor 4 (#40). Nothing carried up from the Wald. The Steinbock, Bergwacht,
+   * Sennerin and Kuhglocke were cut after the first playtest, so the roster is
+   * the Murmeltier alone until the floor's next mobs are pitched: it never hurts
+   * to touch and only surfaces where it whistled — cost 2, and it does come to
+   * the player, underground.
    */
-  alpen: [
-    { id: 'kuhglocke', weight: 3, cost: 1, pursues: true, groupSize: 4 },
-    { id: 'murmeltier', weight: 3, cost: 2, pursues: true },
-    { id: 'sennerin', weight: 3, cost: 2, pursues: false },
-    { id: 'steinbock', weight: 1, cost: 4, pursues: true },
-    { id: 'bergwacht', weight: 1, cost: 3, pursues: false },
-  ],
+  alpen: [{ id: 'murmeltier', weight: 3, cost: 2, pursues: true }],
 };
 
 /**

@@ -10,7 +10,6 @@ import { derLadewagen } from './der-ladewagen.js';
 import { derRattenkoenig } from './der-rattenkoenig.js';
 import { derStier, maibaumDieb } from './der-stier.js';
 import { bachforelle } from './bachforelle.js';
-import { bergwacht } from './bergwacht.js';
 import { blaskapellePosaune, blaskapelleTrompete, blaskapelleTuba } from './die-blaskapelle.js';
 import { dieZapfhahnOrgel } from './die-zapfhahn-orgel.js';
 import { fliegenpilz } from './fliegenpilz.js';
@@ -20,12 +19,9 @@ import { gockel } from './gockel.js';
 import { grosseKellerassel, kellerasselSegment } from './grosse-kellerassel.js';
 import { kellerassel } from './kellerassel.js';
 import { kuh } from './kuh.js';
-import { kuhglocke } from './kuhglocke.js';
 import { murmeltier } from './murmeltier.js';
 import { fasssplitter, rollfass } from './rollfass.js';
 import { schimmelfleck, schimmelspore } from './schimmelfleck.js';
-import { sennerin } from './sennerin.js';
-import { steinbock } from './steinbock.js';
 import { theFirstHuman } from './the-first-human.js';
 import { theGondola, tourist } from './the-gondola.js';
 import { shopkeeper } from './shopkeeper.js';
@@ -86,11 +82,7 @@ export const ENEMY_DEFINITIONS: readonly EnemyDefinition[] = [
   bieberLogEast,
   bieberLogWest,
   // Floor 4 (#40).
-  steinbock,
   murmeltier,
-  bergwacht,
-  kuhglocke,
-  sennerin,
   theGondola,
   tourist,
   theFirstHuman,
@@ -112,7 +104,6 @@ export function enemyDefinitionById(id: string): EnemyDefinition | undefined {
 export {
   bachforelle,
   bauer,
-  bergwacht,
   bieber,
   bieberLogEast,
   bieberLogWest,
@@ -137,16 +128,13 @@ export {
   kellerassel,
   kellerasselSegment,
   kuh,
-  kuhglocke,
   maibaumDieb,
   murmeltier,
   rollfass,
   schimmelfleck,
   schimmelspore,
-  sennerin,
   shopkeeper,
   specht,
-  steinbock,
   theFirstHuman,
   theGondola,
   tourist,

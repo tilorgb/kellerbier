@@ -67,7 +67,7 @@
       "count": 1,
       "choices": [
         {
-          "enemyId": "steinbock",
+          "enemyId": "murmeltier",
           "minFloor": 4,
           "maxFloor": 4
         }
@@ -78,12 +78,7 @@
       "count": 1,
       "choices": [
         {
-          "enemyId": "bergwacht",
-          "minFloor": 4,
-          "maxFloor": 4
-        },
-        {
-          "enemyId": "sennerin",
+          "enemyId": "murmeltier",
           "minFloor": 4,
           "maxFloor": 4
         }

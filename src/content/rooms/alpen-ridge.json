@@ -81,22 +81,7 @@
           "count": 1,
           "choices": [
             {
-              "enemyId": "steinbock",
-              "minFloor": 4,
-              "maxFloor": 4
-            },
-            {
               "enemyId": "murmeltier",
-              "minFloor": 4,
-              "maxFloor": 4
-            },
-            {
-              "enemyId": "bergwacht",
-              "minFloor": 4,
-              "maxFloor": 4
-            },
-            {
-              "enemyId": "sennerin",
               "minFloor": 4,
               "maxFloor": 4
             }
@@ -201,22 +186,7 @@
           "count": 1,
           "choices": [
             {
-              "enemyId": "steinbock",
-              "minFloor": 4,
-              "maxFloor": 4
-            },
-            {
               "enemyId": "murmeltier",
-              "minFloor": 4,
-              "maxFloor": 4
-            },
-            {
-              "enemyId": "bergwacht",
-              "minFloor": 4,
-              "maxFloor": 4
-            },
-            {
-              "enemyId": "sennerin",
               "minFloor": 4,
               "maxFloor": 4
             }
@@ -224,10 +194,10 @@
         },
         {
           "id": "bells",
-          "count": 4,
+          "count": 2,
           "choices": [
             {
-              "enemyId": "kuhglocke",
+              "enemyId": "murmeltier",
               "minFloor": 4,
               "maxFloor": 4
             }
