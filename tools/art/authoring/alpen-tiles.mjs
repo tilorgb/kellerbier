@@ -249,43 +249,44 @@ function wall() {
   return finish('alpen-wall', cv, 'background');
 }
 /**
- * What lies *beyond* the walls (`FloorTileset.surround`): scree, not masonry.
- * Reusing the granite wall face out there read as cobblestones round an
- * alpine room, so the dark base under and past the walls gets its own tile —
- * broken rock with scattered stones, snow lying in the hollows (Tilo's
- * option A of three). Tiles seamlessly in both directions.
+ * What lies *beyond* the walls (`FloorTileset.surround`): open snow, not masonry.
+ * Reusing the granite wall face out there read as cobblestones round an alpine
+ * room, and a dark rubble slope (the first answer) was the wrong mood — it
+ * should be bright and icy (Tilo's call after seeing the first one in the game). Windswept snow: long wind-carved ridges in cold
+ * light and blue shadow, a few stones showing through (Tilo's option B).
+ * Tiles seamlessly in both directions.
  */
 function surround() {
-  const cv = canvas(W, GRANITE.d);
-  // Broken ground in coherent patches (a speck-per-pixel field aliases to noise at a distance).
+  const cv = canvas(W, SNOW.base);
   for (let y = 0; y < W; y++)
-    for (let x = 0; x < W; x++) {
-      const n = hash(Math.floor(x / 4), Math.floor(y / 4), 40);
-      set(cv, x, y, n < 0.25 ? GRANITE.d2 : n < 0.7 ? GRANITE.d : GRANITE.m);
+    for (let x = 0; x < W; x++) set(cv, x, y, hash(x, y, 40) < 0.1 ? SNOW.light : SNOW.base);
+  // Wind-carved ridges: a lit crest, a light flank, a blue shadow, eaten away in places.
+  for (let r = 0; r < 7; r++) {
+    const y0 = Math.floor(hash(r, 0, 41) * W);
+    const x0 = Math.floor(hash(r, 1, 41) * W);
+    const len = 10 + Math.floor(hash(r, 2, 41) * 14);
+    for (let i = 0; i < len; i++) {
+      const wob = Math.round(Math.sin((i + r * 3) / 3.1));
+      setWrap(cv, x0 + i, y0 + wob, SNOW.bright);
+      setWrap(cv, x0 + i, y0 + wob + 1, SNOW.light);
+      setWrap(cv, x0 + i, y0 + wob + 2, SNOW.shade);
+      if (i % 3 !== 2) setWrap(cv, x0 + i, y0 + wob + 3, SNOW.deep);
     }
-  // Stones: a lit top, a dark underside, a deep contact shadow below.
-  for (let i = 0; i < 6; i++) {
-    const cx = Math.floor(hash(i, 0, 41) * W);
-    const cy = Math.floor(hash(i, 1, 41) * W);
-    const rx = 4 + Math.floor(hash(i, 2, 41) * 3);
-    const ry = 2 + Math.floor(hash(i, 3, 41) * 2);
-    for (let y = -ry - 1; y <= ry + 1; y++)
-      for (let x = -rx - 1; x <= rx + 1; x++) {
-        const d = (x * x) / (rx * rx + 0.3) + (y * y) / (ry * ry + 0.3);
-        if (d <= 1)
-          setWrap(cv, cx + x, cy + y, y < 0 ? GRANITE.h : y === ry ? GRANITE.d2 : GRANITE.l);
-        else if (d <= 1.9 && y >= 0) setWrap(cv, cx + x, cy + y, GRANITE.deep);
-      }
   }
-  // Snow in the hollows.
-  for (let i = 0; i < 4; i++) {
-    const cx = Math.floor(hash(i, 5, 42) * W);
-    const cy = Math.floor(hash(i, 6, 42) * W);
-    const r = 3 + Math.floor(hash(i, 7, 42) * 3);
-    for (let y = -1; y <= 1; y++)
-      for (let x = -r; x <= r; x++)
-        if (Math.abs(x) + Math.abs(y) * 2 <= r)
-          setWrap(cv, cx + x, cy + y, y < 0 ? SNOW.base : SNOW.shade);
+  // A few stones showing through the drift.
+  for (let i = 0; i < 3; i++) {
+    const cx = Math.floor(hash(i, 9, 42) * W);
+    const cy = Math.floor(hash(i, 8, 42) * W);
+    for (const [dx, dy, c] of [
+      [0, 0, GRANITE.h],
+      [1, 0, GRANITE.l],
+      [-1, 1, GRANITE.m],
+      [0, 1, GRANITE.m],
+      [1, 1, GRANITE.d],
+      [2, 1, GRANITE.d2],
+      [0, 2, SNOW.deep],
+    ])
+      setWrap(cv, cx + dx, cy + dy, c);
   }
   return finish('alpen-surround', cv, 'background');
 }

@@ -564,7 +564,7 @@ export async function loadFloorArt(): Promise<FloorArt> {
     }
   }
 
-  // A wall/wallLip tile is the one thing in `tileTextures` ever repeat-tiled
+  // A wall/wallLip/surround tile is the one thing in `tileTextures` ever repeat-tiled
   // by wrapping (`MaterialCache.repeatingMaterial`, `world/flat.ts`'s
   // `tilingTexture`) rather than looked up by its own frame — see
   // `standaloneTile`'s doc comment for why that needs its own un-shared
@@ -575,6 +575,11 @@ export async function loadFloorArt(): Promise<FloorArt> {
   for (const tileset of Object.values(FLOOR_TILESETS)) {
     wallTileNames.add(tileset.wall);
     wallTileNames.add(tileset.wallLip);
+    // The surround is repeat-tiled the same way (the dark base beyond the walls); left as a
+    // sub-rectangle of the shared sheet it repeats the *whole sheet*, neighbours and all.
+    if (tileset.surround !== undefined) {
+      wallTileNames.add(tileset.surround);
+    }
   }
   for (const name of wallTileNames) {
     const texture = tileTextures[name];
