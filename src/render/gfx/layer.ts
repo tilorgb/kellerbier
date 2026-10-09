@@ -1,4 +1,4 @@
-import { OrthographicCamera, Scene, type WebGLRenderer } from 'three';
+import { type Object3D, OrthographicCamera, Scene, type WebGLRenderer } from 'three';
 import { Container, type PointLike } from './container.js';
 
 /**
@@ -27,6 +27,9 @@ export class UiLayer {
 
   constructor() {
     this.scene.add(this.root.object);
+    // `render` updates world matrices itself, visible subtrees only — see
+    // `updateVisibleMatrices`.
+    this.scene.matrixWorldAutoUpdate = false;
     this.camera.position.z = 10;
   }
 
@@ -57,6 +60,7 @@ export class UiLayer {
     const sortObjects = renderer.sortObjects;
     renderer.autoClear = false;
     renderer.sortObjects = false;
+    updateVisibleMatrices(this.scene);
     renderer.render(this.scene, this.camera);
     renderer.autoClear = autoClear;
     renderer.sortObjects = sortObjects;
@@ -145,5 +149,30 @@ export class UiLayer {
   destroy(): void {
     this.detachPointer?.();
     this.root.destroy({ children: true });
+  }
+}
+
+/**
+ * The UI tree holds every menu and overlay, shown or not — nearly 2,800
+ * nodes in a run, of which ~170 are visible — and three's own
+ * `updateMatrixWorld` walks hidden subtrees too, every frame. Only what
+ * draws needs a current matrix; anything that reads one off a hidden node
+ * (`Container.toLocal` and friends) calls `updateWorldMatrix` first.
+ */
+function updateVisibleMatrices(object: Object3D): void {
+  if (!object.visible) {
+    return;
+  }
+  if (object.matrixAutoUpdate) {
+    object.updateMatrix();
+  }
+  if (object.parent === null) {
+    object.matrixWorld.copy(object.matrix);
+  } else {
+    object.matrixWorld.multiplyMatrices(object.parent.matrixWorld, object.matrix);
+  }
+  object.matrixWorldNeedsUpdate = false;
+  for (const child of object.children) {
+    updateVisibleMatrices(child);
   }
 }

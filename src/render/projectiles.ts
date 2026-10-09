@@ -195,6 +195,7 @@ class InstancedSprites {
       map: texture.source.texture,
       alphaTest: 0.5,
       side: DoubleSide,
+      forceSinglePass: true,
       toneMapped: false,
       ...(additive
         ? { blending: AdditiveBlending, transparent: true, depthWrite: false }

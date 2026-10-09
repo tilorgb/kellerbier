@@ -107,7 +107,7 @@ function material(map: DataTexture, color: number, side?: typeof DoubleSide): Me
     color,
     transparent: true,
     depthWrite: false,
-    ...(side === undefined ? {} : { side }),
+    ...(side === undefined ? {} : { side, forceSinglePass: true }),
   });
 }
 

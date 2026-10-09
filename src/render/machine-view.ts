@@ -41,6 +41,7 @@ export class MachineView {
         opacity: 0.35,
         depthWrite: false,
         side: DoubleSide,
+        forceSinglePass: true,
         toneMapped: false,
       }),
     );

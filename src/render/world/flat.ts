@@ -48,6 +48,7 @@ export class FloorSprite {
           alphaTest: 0.01,
           depthWrite: false,
           side: DoubleSide,
+          forceSinglePass: true,
           roughness: 0.9,
         }) as unknown as MeshBasicMaterial)
       : new MeshBasicMaterial({
@@ -55,6 +56,7 @@ export class FloorSprite {
           alphaTest: 0.01,
           depthWrite: false,
           side: DoubleSide,
+          forceSinglePass: true,
           toneMapped: false,
         });
     this.mesh = new Mesh(new PlaneGeometry(1, 1), material);
@@ -129,6 +131,7 @@ function flatColourMaterial(colour: number): MeshBasicMaterial {
     transparent: true,
     depthWrite: false,
     side: DoubleSide,
+    forceSinglePass: true,
     toneMapped: false,
   });
 }
@@ -455,6 +458,7 @@ function hazardHatch(tint: number): { stripe: ThreeTexture; material: MeshBasicM
     transparent: true,
     depthWrite: false,
     side: DoubleSide,
+    forceSinglePass: true,
     toneMapped: false,
     alphaTest: 0.05,
   });

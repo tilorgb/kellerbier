@@ -47,6 +47,7 @@ export class Graphics extends Container {
     depthTest: false,
     depthWrite: false,
     side: DoubleSide,
+    forceSinglePass: true,
     toneMapped: false,
   });
   private readonly mesh: Mesh;

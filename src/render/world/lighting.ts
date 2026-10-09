@@ -1109,6 +1109,7 @@ function buildCloudMesh(): Mesh | null {
     opacity: 0,
     depthWrite: false,
     side: DoubleSide,
+    forceSinglePass: true,
   });
   const cloud = new Mesh(new PlaneGeometry(1, 1), material);
   cloud.customDepthMaterial = new MeshDepthMaterial({

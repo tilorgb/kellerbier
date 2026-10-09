@@ -1834,5 +1834,6 @@ function secretHintMaterial(): MeshBasicMaterial {
     transparent: true,
     opacity: 0.9,
     side: DoubleSide,
+    forceSinglePass: true,
   }));
 }

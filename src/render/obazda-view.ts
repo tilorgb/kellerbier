@@ -75,6 +75,7 @@ function material(map: DataTexture, color: number): MeshBasicMaterial {
     transparent: true,
     depthWrite: false,
     side: DoubleSide,
+    forceSinglePass: true,
   });
 }
 
