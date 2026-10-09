@@ -491,16 +491,33 @@ function edgeKey(roomA: string, roomB: string): string {
   return roomA < roomB ? `${roomA}|${roomB}` : `${roomB}|${roomA}`;
 }
 
+function isSecretRole(role: FloorPlanRoom['role']): boolean {
+  return role === 'secret' || role === 'supersecret';
+}
+
+/**
+ * Whether the edge between two rooms is a wall to be bombed rather than a
+ * doorway — true when *either* room is a secret or supersecret. Asked the
+ * same from both sides, so every way into or out of a secret room is its own
+ * wall: bombing one open opens that one, not the secret room's other exits.
+ */
+function isSecretEdge(plan: FloorPlan, roomA: string, roomB: string): boolean {
+  return isSecretRole(planRoom(plan, roomA).role) || isSecretRole(planRoom(plan, roomB).role);
+}
+
 /**
  * Which of the *currently loading* room's doors should load hidden — a wall,
  * not a doorway, until a nearby Bierfassl blast reveals it
  * (`GameSim.revealBombableWalls`).
  *
- * Only ever computed for the plain-room side of a secret/supersecret edge —
- * a secret room's own way back out is never itself hidden (see the module
- * doc on `revealedEdges` below) — and only for an edge `revealedEdges`
- * doesn't already know about, so a wall found once stays open for the rest
- * of the run, on both sides, everywhere the floor plan is asked again.
+ * Every edge with a secret or supersecret room on either side
+ * (`isSecretEdge`) is hidden, from both of its rooms — so a secret room's
+ * other exits stay walls until each is bombed open separately — and only
+ * for an edge `revealedEdges` doesn't already know about, so a wall found
+ * once stays open for the rest of the run, on both sides, everywhere the
+ * floor plan is asked again. The edge the player walked in through is always
+ * in there (`enterNeighbor` records it), so a secret room never hides its way
+ * back out.
  *
  * Returns specific doors — `(cellCol, cellRow, direction)`, same shape as
  * `crackHintsFor` below — not bare directions: a multi-cell room (#100) can
@@ -514,9 +531,6 @@ function hiddenDoorsFor(
   revealedEdges: ReadonlySet<string>,
 ): CompiledDoor[] {
   const room = planRoom(plan, roomId);
-  if (room.role === 'secret' || room.role === 'supersecret') {
-    return [];
-  }
   // A staircase (#112) has no real floor-grid cell for `buildPlacement`'s
   // col/row math to place a door against — its two doors are always
   // `(cellCol: 0, cellRow: 0)` in `GameSim.loadStaircaseRoom`'s synthesised
@@ -528,9 +542,10 @@ function hiddenDoorsFor(
     room.staircaseTemplateId === undefined ? null : staircaseDoorCentres(room);
   const hidden: CompiledDoor[] = [];
   for (const door of room.doors) {
-    const neighbor = planRoom(plan, door.neighborRoomId);
-    const isSecretEdge = neighbor.role === 'secret' || neighbor.role === 'supersecret';
-    if (!isSecretEdge || revealedEdges.has(edgeKey(roomId, door.neighborRoomId))) {
+    if (
+      !isSecretEdge(plan, roomId, door.neighborRoomId) ||
+      revealedEdges.has(edgeKey(roomId, door.neighborRoomId))
+    ) {
       continue;
     }
     if (staircaseCentres !== null) {
@@ -562,8 +577,7 @@ function hiddenDoorsFor(
 function secretDoorsFor(plan: FloorPlan, roomId: string): RoomDirection[] {
   const out: RoomDirection[] = [];
   for (const door of planRoom(plan, roomId).doors) {
-    const role = planRoom(plan, door.neighborRoomId).role;
-    if (role === 'secret' || role === 'supersecret') {
+    if (isSecretEdge(plan, roomId, door.neighborRoomId)) {
       out.push(door.direction);
     }
   }
@@ -591,8 +605,13 @@ function crackHintsFor(
   const staircaseCentres =
     room.staircaseTemplateId === undefined ? null : staircaseDoorCentres(room);
   const hints: CompiledDoor[] = [];
+  // From inside a secret or supersecret room every hidden exit gets a crack —
+  // the player is already in, and the way on should be findable. From
+  // outside, a supersecret still gets none (#23).
+  const insideSecret = isSecretRole(room.role);
   for (const door of room.doors) {
-    if (planRoom(plan, door.neighborRoomId).role !== 'secret') {
+    const neighborRole = planRoom(plan, door.neighborRoomId).role;
+    if (!(insideSecret || neighborRole === 'secret')) {
       continue;
     }
     if (revealedEdges.has(edgeKey(roomId, door.neighborRoomId))) {
@@ -1542,6 +1561,8 @@ async function boot(progress: BootProgress): Promise<void> {
    * the one below it, which is exactly what a column of hand-written screen
    * offsets could not promise.
    */
+  /** The item rows' combined height `layoutHud` last stacked — see the frame loop's re-stack check. */
+  let laidOutItemRowsHeight = -1;
   const layoutHud = (): void => {
     // #53's text-scale setting: a whole-number multiplier on the UI's own
     // pixel grid, so a bigger UI is always the same crisp pixel font at a
@@ -2515,8 +2536,18 @@ async function boot(progress: BootProgress): Promise<void> {
       if (sixpackHud.view.visible !== sixpackRowShown) {
         layoutHud();
       }
+      // Item rows (Watsch's, Lebkuchenherz's status, a gate's row) come and go
+      // as the items change state, not only on pickup — and the set readout
+      // ("Braumeister: 2/3") is placed under them. Re-stack the column the
+      // frame any of them changes height, or a new row draws on top of the
+      // one below it until something else happens to call `layoutHud`.
       itemGateHud.sync(sim);
       itemStatusHud.sync(sim);
+      const itemRowsHeight = itemGateHud.height + itemStatusHud.height + activeItemHud.height;
+      if (itemRowsHeight !== laidOutItemRowsHeight) {
+        laidOutItemRowsHeight = itemRowsHeight;
+        layoutHud();
+      }
       statHud.sync(sim, settings.statDisplay);
       itemDiscovery.observe(sim);
       itemSetHud.sync(sim);
@@ -3863,8 +3894,12 @@ WASD move   arrows aim and fire
     // A room the player bombed a boulder in on an earlier visit is compiled
     // fresh here (boulders intact) — replay the destruction so a prewarmed
     // or shader-warmed build matches the live one (#4).
-    sim.reapplyDestroyedBoulders(compiled.source.id, compiled.geometry);
-    sim.reapplyPits(compiled.source.id, compiled.geometry);
+    // Keyed by the floor-plan room id, the same id the sim records a blast
+    // under (`roomInstanceId`) — not the template's, which a generated room
+    // shares with nothing and an authored one shares with every room drawn
+    // from it.
+    sim.reapplyDestroyedBoulders(roomId, compiled.geometry);
+    sim.reapplyPits(roomId, compiled.geometry);
     return { geometry: compiled.geometry, doors, props: compiled.decorativeProps };
   }
 
@@ -3954,6 +3989,17 @@ WASD move   arrows aim and fire
       prewarmedNeighborId = neighborRoomId;
     }
 
+    // The edge being walked through is open on the far side too: recorded
+    // before the neighbour's hidden doors are computed, so a secret room never
+    // walls up the way back out. Taken back out below if the transition is
+    // refused — the sim, not this, decides whether the wall was really open.
+    const crossedKey = edgeKey(currentRoomId, neighborRoomId);
+    const recordedCrossing =
+      isSecretEdge(floorPlan, currentRoomId, neighborRoomId) && !revealedEdges.has(crossedKey);
+    if (recordedCrossing) {
+      revealedEdges.add(crossedKey);
+    }
+
     const succeeded = isStaircase
       ? sim.transitionToStaircase(
           planStaircaseTemplate(neighborRoom),
@@ -3982,6 +4028,9 @@ WASD move   arrows aim and fire
             neighborRoomId,
           );
         })();
+    if (!succeeded && recordedCrossing) {
+      revealedEdges.delete(crossedKey);
+    }
     if (!succeeded) {
       // A heuristic, not a reason code out of `transitionTo`: the current
       // room's own enemies are the only other thing that blocks a
@@ -4093,7 +4142,11 @@ WASD move   arrows aim and fire
       floorPlan.floor,
       null,
       hiddenDoorsFor(floorPlan, currentRoomId, revealedEdges),
-      undefined,
+      // The floor plan's real doors — without a placement the start room
+      // compiles a door on every side its template allows, and the ones
+      // with no room behind them are drawn but lead nowhere (`startRun`'s
+      // `roomPlacement` explains the same fallback).
+      buildPlacement(planRoom(floorPlan, currentRoomId)),
       { col: 0, row: 0 },
       // Same "quick, safe tutorial beat" as the run's real first room
       // (`startRun`) — a freshly reset floor starts safe too.
@@ -4146,7 +4199,11 @@ WASD move   arrows aim and fire
       floorPlan.floor,
       null,
       hiddenDoorsFor(floorPlan, currentRoomId, revealedEdges),
-      undefined,
+      // The floor plan's real doors — without a placement the start room
+      // compiles a door on every side its template allows, and the ones
+      // with no room behind them are drawn but lead nowhere (`startRun`'s
+      // `roomPlacement` explains the same fallback).
+      buildPlacement(planRoom(floorPlan, currentRoomId)),
       { col: 0, row: 0 },
       false,
       currentRoomId,
@@ -4229,11 +4286,9 @@ WASD move   arrows aim and fire
     const room = planRoom(floorPlan, currentRoomId);
     let changed = false;
     for (const door of room.doors) {
-      const neighbor = planRoom(floorPlan, door.neighborRoomId);
-      const isSecretEdge = neighbor.role === 'secret' || neighbor.role === 'supersecret';
       const key = edgeKey(currentRoomId, door.neighborRoomId);
       if (
-        isSecretEdge &&
+        isSecretEdge(floorPlan, currentRoomId, door.neighborRoomId) &&
         !revealedEdges.has(key) &&
         sim.doors.some((visible) => visible.direction === door.direction)
       ) {

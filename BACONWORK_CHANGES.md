@@ -1,3 +1,134 @@
+# Branch `Bacon` — Änderungen gegenüber `main`
+
+Stand: 09.10.2026 · Basis: `main` bei `a17fcc08`. Fehlerbehebungen und kleine Spielmechaniken aus
+dem Playtesting. Jede Änderung wurde im laufenden Spiel (Headless-Browser) oder per Unit-Test
+gegengeprüft; wo beides fehlt, steht es dabei.
+
+## Auf einen Blick
+
+| Bereich | Änderung | Spürbar im Spiel? |
+|---|---|---|
+| Räume | Rauchwolke beim Betreten an der richtigen Tür statt an der gegenüberliegenden Wand | ja |
+| Räume | Rauchwolke beim Leeren auch an versteckten Geheimwänden, als Hinweis | ja |
+| Bierfassl | Sprengt Steine jetzt zuverlässig, feldweise statt ganzer Blöcke | ja |
+| Bierfassl | Gesprengte Steine bleiben auch optisch weg, wenn man zurückkommt | ja |
+| Fässer | Selten Beute (Biermarke 1, halbe Bratwurst, halbe Maß), noch seltener Schimmelfleck/Bierratte | ja |
+| Geheimräume | Jeder Ausgang eines Geheimraums muss einzeln gesprengt werden | ja |
+| Rendering | Kisten und andere Deko liegen hinter Items und Felsen | ja |
+| Ebenenwechsel | Startraum ohne Scheintüren; gesprengte Steine werden pro Ebene vergessen | ja |
+| Statuseffekte | Brennen, Gift, Eis usw. gehen nicht mehr auf neu erscheinende Gegner und Items über | ja |
+| HUD | Item-Zeilen links (Watschn, Lebkuchenherz, Set-Anzeige) überlappen nicht mehr | ja |
+
+---
+
+## 1. Räume und Türen
+
+### Rauchwolke beim Betreten (`src/sim/game/sim.ts`)
+- **Vorher:** Die Wolke entstand an der Spielerposition, bevor der Spieler an die Eingangstür
+  gesetzt wurde, also dort, wo er den alten Raum verlassen hatte. Im neuen Raum ist das die
+  gegenüberliegende Wand.
+- **Jetzt:** Die Wolke entsteht erst nach dem Positionieren, an der Tür, durch die man hereinkommt.
+
+### Rauchwolke beim Leeren eines Raums (`src/sim/game/sim.ts`)
+- Beim Leeren staubt es an jeder Tür, die sich öffnet. **Absichtlich auch an noch versteckten
+  Geheimwänden**: Die Wolke ist ein Hinweis, dass dort etwas ist; die Wand bleibt bis zum Sprengen zu.
+- Gilt auch für Super-Geheimräume, die Simulation unterscheidet hier nicht.
+- Test: `tests/unit/room-clear-puff.test.ts`.
+
+### Geheimräume: jeder Ausgang einzeln (`src/app/main.ts`)
+- **Vorher:** Versteckte Wände gab es nur auf der Seite des normalen Raums. Ein Geheimraum hat seine
+  eigenen Türen nie versteckt, drinnen standen alle weiteren Ausgänge offen.
+- **Jetzt:** Jeder Übergang mit einem Geheim- oder Super-Geheimraum auf *irgendeiner* Seite ist eine
+  eigene Wand, die separat gesprengt werden muss.
+  - Gesprengt bleibt gesprengt, für den Rest des Laufs und von beiden Seiten.
+  - Die Wand, durch die man hereingekommen ist, gilt als offen; man kann sich nicht einsperren.
+  - Im Geheimraum zeigen Risse die versteckten Ausgänge. Von außen bleibt ein Super-Geheimraum
+    weiterhin ohne Riss.
+- Im Spiel geprüft: Geheimraum mit 3 Ausgängen → 1 offen, 2 Wand; nach einer Sprengung 2 offen,
+  1 Wand; nach Verlassen und Zurückkommen unverändert.
+
+### Scheintüren nach dem Ebenenwechsel (`src/app/main.ts`)
+- **Vorher:** Beim Wechsel auf die nächste Ebene wurde der Startraum ohne den Grundriss geladen und
+  bekam auf jeder Seite eine Tür, auch ohne Nachbarraum. Diese Türen waren sichtbar, aber nicht
+  begehbar, und verschwanden beim Wiederbetreten. Dasselbe beim Zurückversetzen durch die
+  Blutwurz-Geisterwanderung.
+- **Jetzt:** Beide Stellen laden den Startraum mit dem Grundriss der Ebene.
+- Im Spiel geprüft (Ebene 1 → Boss → Ebene 2): gezeichnete, echte und wiederbetretene Türen stimmen
+  überein, jede ist begehbar.
+
+## 2. Bierfassl und Steine
+
+### Steine sprengen (`src/sim/room/geometry.ts`, `src/sim/game/sim.ts`)
+- **Vorher:** Der Raumgenerator fasst Steine zu großen Rechtecken zusammen. Die Explosion prüfte nur,
+  ob der *Mittelpunkt* eines solchen Rechtecks im Explosionskreuz liegt. Längere Steinreihen und leicht
+  versetzte Steine wurden dadurch nie getroffen, auf allen Ebenen.
+- **Jetzt:** Jedes Steinfeld, das das Kreuz berührt, bricht einzeln weg; der Rest bleibt stehen (wie
+  beim Wildschwein). Gespeichert und beim Wiederbetreten wiederhergestellt wird pro Feld.
+- Tests: `tests/unit/boulder-blast.test.ts` (lange Reihe, versetzter Stein, exakte Wiederherstellung).
+
+### Gesprengte Steine tauchen wieder auf (`src/app/main.ts`)
+- **Vorher:** Der Nachbarraum wird beim Durchgehen vorab gebaut. Diese Vorab-Ansicht suchte die
+  gesprengten Steine unter dem Namen der Raumvorlage statt unter dem Raumnamen aus dem Grundriss, fand
+  nichts und zeichnete alle Steine neu. Begehbar war die Stelle trotzdem. Dasselbe galt für von
+  Borkenkäfern gefressene Bodenstellen.
+- **Jetzt:** Gleicher Schlüssel wie in der Simulation.
+- Im Spiel geprüft: ohne Fix 22 Steinfelder in der Simulation, 25 gezeichnet; mit Fix identisch.
+
+### Gesprengte Steine über Ebenen hinweg (`src/sim/game/sim.ts`)
+- Raumnamen (`r0`, `r1`, …) wiederholen sich auf jeder Ebene. Die Liste gesprengter Steine wird beim
+  Ebenenwechsel jetzt geleert, sonst fehlten Steine im gleichnamigen Raum der nächsten Ebene.
+
+## 3. Fässer im Raum (`src/content/pickups/drop-tables.ts`, `src/sim/systems/loot.ts`)
+Zerstörte Fässer geben jetzt selten etwas her. Nur `barrel`; Maibaum, Strohballen und Baumstamm bleiben leer.
+
+| Ergebnis | Chance pro Fass |
+|---|---|
+| Schimmelfleck oder Bierratte (je halb) | 3 % |
+| Biermarke 1 | ca. 3,4 % |
+| halbe Bratwurst | ca. 3,4 % |
+| halbe Maß (nur mit Promille) | ca. 1 % |
+
+- Ohne Promille fällt die Maß weg; Biermarke und Bratwurst werden entsprechend häufiger, damit Fässer
+  gleich oft etwas hergeben (wie bei den Gegner-Tabellen).
+- Ein Tier aus einem Fass in einem geleerten Raum schließt die Türen nicht wieder.
+- Gewürfelt wird über den Beute-Zufallsstrom; ein Lauf mit gleichem Seed bleibt reproduzierbar.
+- Werte an einer Stelle: `BARREL_DROP_TABLE`, `BARREL_CRITTER_CHANCE`, `BARREL_CRITTER_IDS`.
+- Test: `tests/unit/barrel-loot.test.ts`.
+
+## 4. Rendering und HUD
+
+### Kisten hinter Items und Felsen (`src/render/world/billboard.ts`, `scenery.ts`, `entities.ts`, `pedestal-view.ts`)
+- **Vorher:** Deko-Requisiten (Kisten, Strohballen, Zaunpfosten, Tannen …) haben keine Kollision. Items
+  und Felsen konnten auf derselben Stelle liegen, und die Kiste stand einen Hauch näher an der Kamera und
+  verdeckte sie.
+- **Jetzt:** Deko schreibt keine Tiefe mehr und wird vor Items und Felsen gezeichnet. Items, Items auf
+  Podesten und Felsen liegen immer darüber. Figuren und Wände sortieren weiterhin normal.
+
+### Item-Zeilen links überlappen (`src/app/main.ts`)
+- **Vorher:** Die linke HUD-Spalte wurde nur bei Laufstart, Fenstergröße und Gift- oder Sixpack-Zeile
+  neu angeordnet. Item-Status- und Set-Zeilen, die mitten im Raum dazukommen, lagen übereinander, bis ein
+  anderer Auslöser kam.
+- **Jetzt:** Ändert sich die Höhe der Item-Zeilen (Status, Gate, aktives Item), wird sofort neu angeordnet.
+- Im Spiel geprüft: Watschn, Braumeister-Visier, Lebkuchenherz und „Braumeister: 2/3“ stehen untereinander.
+
+## 5. Statuseffekte (`src/sim/game/sim.ts`)
+- **Vorher:** Brennen, Gift, Einfrieren, Verlangsamung, Einfrier-Abklingzeit und Benommenheit werden pro
+  Speicherplatz gespeichert und beim Entfernen eines Objekts nicht gelöscht. Neue Gegner und Items im
+  nächsten Raum übernahmen so Reste, zum Beispiel den Brand des Steckerlfischs.
+- **Jetzt:** Alle Statuseffekte werden beim Erzeugen jedes Objekts zurückgesetzt (Spieler, Gegner und
+  Requisiten, Items, gelegte Bierfassl).
+- Test: `tests/unit/status-slot-reuse.test.ts`.
+
+## Untersucht, ohne Änderung
+- **Bierfassl folgt dem Spieler:** Kein Item beeinflusst gelegte Fässer. Wer beim Drücken von `E` läuft,
+  *rollt* das Fassl in Laufrichtung; das ist eine gewollte Mechanik.
+- **Zwei Blaskapellen auf Ebene 2:** XL-Ebenen (25 %) haben absichtlich zwei Minibossräume, und Ebene 2
+  hat nur eine Minibossraum-Vorlage.
+- **Minimap nach Esc weg:** Nicht nachstellbar (Esc, Resume, Einstellungen, Tab, Fenstergröße). Die
+  einzige dauerhafte Ausblendung ist der Fluch „Nebel“.
+
+---
+
 # Branch `BaconWork` — Änderungen gegenüber `main`
 
 Stand: 01.10.2026 · 10 Commits · Basis: `main` bei `671e60c` (#357). `main` hat seitdem nur einen

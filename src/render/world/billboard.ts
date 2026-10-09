@@ -36,6 +36,20 @@ import { ACTOR_LAYER } from './layers.js';
  * `depth`, alpha-tested like the body, so the shadow on the floor is the
  * sprite's silhouette and not its quad.
  */
+/**
+ * Draw order for standing sprites that must never be hidden by walk-through
+ * scenery. Decorative props (crates, bales, fence posts…) have no collider, so
+ * an item or a boulder can lie right where one stands — and a crate standing a
+ * hair nearer the camera then won the depth test and covered it. Scenery
+ * props draw at `SCENERY_PROP_RENDER_ORDER` without writing depth, after the
+ * floor, walls and actors (order 0) have; items and boulders draw after that,
+ * at `OVER_SCENERY_RENDER_ORDER`, so they always sit on top of a crate. A
+ * crate is still hidden by anything in front of it, characters included,
+ * because it still tests depth.
+ */
+export const SCENERY_PROP_RENDER_ORDER = 1;
+export const OVER_SCENERY_RENDER_ORDER = 2;
+
 export class Billboard {
   readonly mesh: Mesh<PlaneGeometry, MeshStandardMaterial>;
   private readonly depth: MeshDepthMaterial;
