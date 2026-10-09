@@ -86,6 +86,8 @@ export const EnemyFacing = {
   Mirror: 1,
   /** Lies flat, head turned in quarter turns toward its heading. */
   Crawl: 2,
+  /** Never mirrored, strip or no strip (#437). */
+  Fixed: 3,
 } as const;
 export type EnemyFacingId = (typeof EnemyFacing)[keyof typeof EnemyFacing];
 
@@ -111,8 +113,10 @@ function compileFacing(name: string | undefined, where: string): EnemyFacingId {
       return EnemyFacing.Mirror;
     case 'crawl':
       return EnemyFacing.Crawl;
+    case 'fixed':
+      return EnemyFacing.Fixed;
     default:
-      throw new Error(`${where} names facing "${name}", which is not one of mirror, crawl`);
+      throw new Error(`${where} names facing "${name}", which is not one of mirror, crawl, fixed`);
   }
 }
 

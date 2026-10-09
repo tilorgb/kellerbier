@@ -2,6 +2,7 @@ import type { GameSim } from '../../sim/game/sim.js';
 import {
   ENEMY_MOTION_STRIDE,
   enemyAimAngle,
+  enemySweepProgress,
   enemyTelegraphProgress,
 } from '../../sim/systems/enemy.js';
 import { AnimationState, type AnimationStateIndex } from './definition.js';
@@ -74,6 +75,10 @@ export function resolveAnimationState(sim: GameSim, index: number): AnimationSta
   // has to dodge.
   if (enemyTelegraphProgress(sim, index) > 0) {
     return AnimationState.Telegraph;
+  }
+  // A swing in progress (#437): the strip's `attack` clip, indexed by how far through the sweep it is.
+  if (enemySweepProgress(sim, index) >= 0) {
+    return AnimationState.Attack;
   }
   const dx = sim.positionX(index) - sim.previousX(index);
   const dy = sim.positionY(index) - sim.previousY(index);

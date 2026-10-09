@@ -1560,10 +1560,14 @@ export interface EnemyDefinition {
    *   on the floor, turned in quarter turns so its head points the way it is
    *   heading: the Zecke.
    *
+   * - `'fixed'` — drawn as authored and never mirrored, *even with an
+   *   animation strip*: a body with one view that does not turn to left or
+   *   right (The First Human, seen from the front; only his arms swing).
+   *
    * Omitted: drawn as authored, never turned. A body with an animation strip
    * faces through its animator regardless.
    */
-  readonly facing?: 'mirror' | 'crawl';
+  readonly facing?: 'mirror' | 'crawl' | 'fixed';
   /** Which drop table (`content/pickups/drop-tables.ts`) its death rolls from. Defaults to `'normal'`. */
   readonly lootTier?: 'weak' | 'normal' | 'tough' | 'none';
   /**

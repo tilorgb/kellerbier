@@ -53,6 +53,8 @@ export const AnimationState = {
   Telegraph: 2,
   Hurt: 3,
   Death: 4,
+  /** A swing in progress (#437, a `fireSweep` state): its frames are driven by the sweep's own progress, not by time. */
+  Attack: 5,
 } as const;
 
 export type AnimationStateIndex = (typeof AnimationState)[keyof typeof AnimationState];

@@ -3340,6 +3340,41 @@ export function enemyBeam(sim: GameSim, index: number, out: EnemyBeamInfo): bool
 }
 
 /**
+ * How far through its sweep `index` is, 0 to 1 — or `-1` while it is in no
+ * `fireSweep` state. What a sprite's `attack` clip is indexed by (#437).
+ */
+export function enemySweepProgress(sim: GameSim, index: number): number {
+  const base = index * ENEMY_STRIDE;
+  const state = sim.enemies.at(sim.enemy.data[base] ?? 0).states[sim.enemy.data[base + 1] ?? 0];
+  const sweep = state?.fireSweep ?? null;
+  if (sweep === null) {
+    return -1;
+  }
+  return clamp((sim.enemy.data[base + 2] ?? 0) / sweep.sweepTicks, 0, 0.9999);
+}
+
+/**
+ * Which way the sweep `index` is making — or winding up to make — turns: `-1`
+ * anticlockwise, `1` clockwise (`fireSweep.direction`), `0` when its state is
+ * neither a sweep nor the wind-up before one. The renderer turns a body with
+ * `facing: 'fixed'` to the stance of its next swing off this (#437): The First
+ * Human has one view, and his arms swing from one pose to the other.
+ */
+export function enemySweepDirection(sim: GameSim, index: number): -1 | 0 | 1 {
+  const base = index * ENEMY_STRIDE;
+  const compiled = sim.enemies.at(sim.enemy.data[base] ?? 0);
+  const state = compiled.states[sim.enemy.data[base + 1] ?? 0];
+  if (state === undefined) {
+    return 0;
+  }
+  if (state.fireSweep !== null) {
+    return state.fireSweep.direction;
+  }
+  const follow = state.telegraphTicks > 0 ? stateAfterTelegraph(compiled, state) : null;
+  return follow?.fireSweep?.direction ?? 0;
+}
+
+/**
  * The line `index`'s wind-up is warning of — the beam of the state its
  * telegraph leads to, at the aim it has locked (or is tracking), written into
  * `out`. `false` when the state ahead has no beam.

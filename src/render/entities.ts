@@ -29,6 +29,8 @@ import {
   lobbedVolleyFlight,
   enemyTelegraphProgress,
   enemyBeam,
+  enemySweepDirection,
+  enemySweepProgress,
   enemyBeamTelegraph,
   type EnemyBeamInfo,
   enemyTelegraphShape,
@@ -291,6 +293,8 @@ export class EntityView {
   private readonly headingArt: readonly (HeadingStrips | undefined)[];
   private readonly heldTurn: number[] = [];
   private readonly heldTurnEntity: number[] = [];
+  private readonly heldFixed: number[] = [];
+  private readonly heldFixedEntity: number[] = [];
   private readonly bodies: Billboard[] = [];
   /** Per body slot, 1 when that body is an enemy telegraphing this frame (#404's see-through pass). */
   private readonly bodyTelegraphing: number[] = [];
@@ -443,6 +447,32 @@ export class EntityView {
     }
     this.heldTurn[index] = turn;
     return turn;
+  }
+
+  /**
+   * A `facing: 'fixed'` body's mirror this frame (#437): the stance of the swing it is
+   * making or winding up to make — art as authored for a clockwise sweep, mirrored for
+   * an anticlockwise one — held through the stalk between swings.
+   */
+  private fixedMirrorOf(index: number): number {
+    const entity = this.sim.world.entityAt(index);
+    if (this.heldFixedEntity[index] !== entity) {
+      this.heldFixedEntity[index] = entity;
+      this.heldFixed[index] = 1;
+    }
+    const direction = enemySweepDirection(this.sim, index);
+    if (direction !== 0) {
+      const stance = direction === 1 ? 1 : -1;
+      const progress = enemySweepProgress(this.sim, index);
+      if (progress >= 0) {
+        // The arms swing a half circle to the other side: the stance flips half way through,
+        // and the swing leaves him mirrored, which is the stance of the swing after it.
+        this.heldFixed[index] = -stance;
+        return progress < 0.5 ? stance : -stance;
+      }
+      this.heldFixed[index] = stance;
+    }
+    return this.heldFixed[index] ?? 1;
   }
 
   /** A `facing: 'mirror'` body's left/right facing this frame (`resolveMirrorFacing`, held). */
@@ -640,7 +670,23 @@ export class EntityView {
           y,
           footprint,
         );
-        mirror = this.animator.facingOf(index) === AUTHORED_FACING ? 1 : -1;
+        mirror =
+          compiledEnemy?.facing === EnemyFacing.Fixed
+            ? this.fixedMirrorOf(index)
+            : this.animator.facingOf(index) === AUTHORED_FACING
+              ? 1
+              : -1;
+        // A swing in progress (#437) plays its `attack` clip across the sweep: frame by how far
+        // through it is, not by time, so the arms are where the shots are.
+        const sweepProgress =
+          compiledEnemy?.facing === EnemyFacing.Fixed ? enemySweepProgress(sim, index) : -1;
+        const attackClip =
+          sweepProgress >= 0 ? animation.clips.clips[AnimationState.Attack] : undefined;
+        if (attackClip !== undefined && attackClip !== null) {
+          animationFrame =
+            attackClip.sequence[Math.floor(sweepProgress * attackClip.sequence.length)] ??
+            animationFrame;
+        }
       }
       const latched =
         isEnemyBody && ((sim.enemy.data[index * ENEMY_STRIDE + 3] ?? 0) & ENEMY_FLAG_LATCHED) !== 0;

@@ -274,12 +274,11 @@ describe('the animation sidecars a boss ships author the states its fight uses',
     // A boss is the one creature that uses the whole state list: it walks, it
     // winds up, it flinches, and it dies on screen rather than under a
     // game-over screen.
-    expect(Object.keys(sidecar.clips ?? {}).sort()).toEqual([
-      'death',
-      'hurt',
-      'idle',
-      'move',
-      'telegraph',
-    ]);
+    // The First Human also has the `attack` clip his half-circle sweep plays across (#437).
+    const states = ['death', 'hurt', 'idle', 'move', 'telegraph'];
+    if (name === 'the-first-human') {
+      states.unshift('attack');
+    }
+    expect(Object.keys(sidecar.clips ?? {}).sort()).toEqual(states);
   });
 });
