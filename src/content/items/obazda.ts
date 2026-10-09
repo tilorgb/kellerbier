@@ -1,17 +1,17 @@
 import type { ItemDefinition } from '../../sim/item/definition.js';
 
-/** Radius of the cheese around the player, and how long each tick's freeze grants — refreshed every tick the aura is held. */
-const AURA_RADIUS = 32;
-const SLOW_TICKS = 12;
+/** Ticks between puddles (2.5 s), a puddle's radius, and how long it lasts (10 s) — about four down at once. */
+export const DROP_INTERVAL_TICKS = 150;
+export const PUDDLE_RADIUS = 16;
+export const PUDDLE_LIFETIME_TICKS = 600;
 
 /**
- * Obazda — a cheese spread, thick and clinging. Floor 1's slick-puddle
- * hazard (#35) is a room-authored rectangle, not something a body leaves
- * behind as it walks — there is still no system for a *trail* that grows and
- * fades wherever the player has been, which is what the seed text describes.
- * So this ships as a continuous slowing aura around the player instead of a
- * trail left in their wake — the honest version of the seed text the engine
- * can actually run today, not a faked one.
+ * Obazda — a cheese spread, thick and clinging. Every couple of seconds Alois
+ * lets a dollop of it fall where he stands, and it stays there: enemies that
+ * wade through the puddles are slowed (`sim/hazard/cheese.ts`). Walk a route
+ * and you leave a trail they have to cross.
+ *
+ * `state.timer` is the ticks until the next drop.
  */
 export const obazda: ItemDefinition = {
   id: 'obazda',
@@ -23,14 +23,23 @@ export const obazda: ItemDefinition = {
   quality: 1,
   promilleRequirement: 'any',
   hooks: {
+    onPickup: (ctx) => {
+      ctx.state.timer = DROP_INTERVAL_TICKS;
+    },
     onTick: (ctx) => {
+      const state = ctx.state;
+      state.timer -= 1;
+      if (state.timer > 0) {
+        return;
+      }
+      state.timer = DROP_INTERVAL_TICKS;
       const sim = ctx.sim;
-      const playerIndex = sim.playerIndex;
-      sim.slowEnemiesNear(
-        sim.positionX(playerIndex),
-        sim.positionY(playerIndex),
-        AURA_RADIUS,
-        SLOW_TICKS,
+      const player = sim.playerIndex;
+      sim.dropCheesePuddle(
+        sim.positionX(player),
+        sim.positionY(player),
+        PUDDLE_RADIUS,
+        PUDDLE_LIFETIME_TICKS,
       );
     },
   },

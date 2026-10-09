@@ -49,7 +49,7 @@ import {
 import type { AnimatedSpriteSet } from './floor-art.js';
 import { type BitmapText, type Container, type Texture } from './gfx/index.js';
 import { ENTITY_PALETTE } from './palette.js';
-import { isDazed } from '../sim/systems/status-effects.js';
+import { createStatusLook, readStatusLook } from './status-look.js';
 import { tileGridScale } from './tiles.js';
 import { Billboard } from './world/billboard.js';
 import {
@@ -62,8 +62,6 @@ import {
   FloorWedge,
 } from './world/flat.js';
 import { WorldLabel } from './world/label.js';
-/** How far a dazed body's tint is mixed toward `ENTITY_PALETTE.dazedTint`. */
-const DAZED_TINT_MIX = 0.6;
 
 /**
  * Every collidable body that is not the player: enemies, bosses, pickups,
@@ -250,6 +248,7 @@ export class EntityView {
   readonly animator = new EntityAnimator();
 
   private readonly sim: GameSim;
+  private readonly statusLook = createStatusLook();
   private readonly art: EntityArt;
   /**
    * Per enemy definition index, the art a submerged body draws instead of
@@ -782,10 +781,17 @@ export class EntityView {
                   )
                 : ENTITY_PALETTE.normalTint;
 
-      billboard.tint =
-        !isPickup && !flashing && isDazed(sim, index)
-          ? mixColor(baseTint, ENTITY_PALETTE.dazedTint, DAZED_TINT_MIX)
-          : baseTint;
+      billboard.tint = baseTint;
+      if (!isPickup && !flashing) {
+        const look = readStatusLook(sim, index, nowMs, this.statusLook);
+        if (look.tint >= 0) {
+          billboard.tint = mixColor(baseTint, look.tint, look.mix);
+        }
+        // A burning body glows, unless a wind-up or bloat glow already owns the channel.
+        if (look.glowStrength > 0 && windUp <= 0 && bloat <= BLOAT_GLOW_FROM) {
+          billboard.setGlow(look.glow, look.glowStrength);
+        }
+      }
 
       if (submerged && !flashing) {
         billboard.tint = ENTITY_PALETTE.submergedShadow;

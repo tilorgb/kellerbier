@@ -160,6 +160,8 @@ import { stepPickups } from '../systems/pickup.js';
 import { stepPromille } from '../systems/promille.js';
 import { CloudStore } from '../hazard/cloud-store.js';
 import { spawnPoisonCloud, stepClouds } from '../hazard/clouds.js';
+import { CheeseStore } from '../hazard/cheese-store.js';
+import { stepCheese } from '../hazard/cheese.js';
 import { WeatherStore, stepWeather } from '../hazard/weather.js';
 import { stepProjectiles, stepShooting } from '../systems/shooting.js';
 import {
@@ -928,6 +930,8 @@ export class GameSim {
   readonly projectiles: ProjectileStore;
   /** Poison clouds in the room (#401). Cleared on every room load. */
   readonly clouds = new CloudStore();
+  /** The Obazda's cheese puddles. Cleared on every room load. */
+  readonly cheese = new CheeseStore();
 
   /**
    * Floor 4's room-wide weather (#40): the avalanche and wind-gust lanes a
@@ -3535,6 +3539,7 @@ export class GameSim {
     this.world.flush();
     this.projectiles.clear();
     this.clouds.clear();
+    this.cheese.clear();
     this.weather.clear();
     this.latchHeading.fill(0);
     this.latchTurn.fill(0);
@@ -4998,6 +5003,11 @@ export class GameSim {
     this.addPromille(amount);
   }
 
+  /** Drops a cheese puddle that slows enemies standing in it — see `sim/hazard/cheese.ts`. */
+  dropCheesePuddle(x: number, y: number, radius: number, lifetimeTicks: number): void {
+    this.cheese.spawn(x, y, radius, Math.max(1, Math.round(lifetimeTicks)));
+  }
+
   /** Spawns a poison cloud that poisons the player — see `sim/hazard/clouds.ts`. Defaults come from `tuning.poisonCloud`. */
   spawnPoisonCloud(
     x: number,
@@ -5399,9 +5409,9 @@ export class GameSim {
   }
 
   /**
-   * Applies `freeze` (#27's slow) to every enemy within `radius` of a point
-   * — an item's continuous aura (#29's Obazda) rather than the one-shot
-   * duration a hit's own tag sets.
+   * Applies `slow` (`STATUS_SLOW`: half speed, not a freeze's near-stop) to
+   * every enemy within `radius` of a point — an item's continuous aura (#29's
+   * Obazda) rather than the one-shot duration a hit's own tag sets.
    *
    * Matches on `Enemy | Obstacle`, not `Enemy` alone — the same mask
    * `systems/bombs.ts`'s blast and `findNearestTarget`
@@ -5423,7 +5433,7 @@ export class GameSim {
       if ((this.health.data[index * 2] ?? 0) <= 0) {
         return;
       }
-      this.applyStatusEffect(index, 'freeze', ticks);
+      this.applyStatusEffect(index, 'slow', ticks);
     });
   }
 
@@ -6829,6 +6839,7 @@ export class GameSim {
     // Clouds first, so a body standing in one has poison refreshed before
     // this tick's poison countdown reads it (#401).
     stepClouds(this);
+    stepCheese(this);
     // Floor 4's avalanche and wind (#40): a shove on the bodies before they
     // integrate, so a gust leans on this tick's movement — the same reason
     // the status pass runs here.

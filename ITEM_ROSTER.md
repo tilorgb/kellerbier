@@ -78,7 +78,7 @@ Columns:
 | luftballon | Luftballon | Passive | Shots return to you after traveling their full range | Filled with helium. The shots do not need it, but morale does. | 1 | Treasure, Shop | Any |
 | mass | Maß | Passive | One huge, slow shot instead of a stream. Damage +200%, Fire Rate -66% | One litre. One decision. No refills mid-fight. | 2 | Shop, Boss | Any |
 | neuschwanstein-bauplan | Neuschwanstein-Bauplan | Passive | Large stat boost. Costs more Biermarken every floor | An unfinished wing, drawn in impressive detail. | 2 | Shop, Boss, Devil | Any |
-| obazda | Obazda | Passive | Slows enemies near you | Technically a dip. Structurally closer to mortar. | 1 | Treasure, Shop | Any |
+| obazda | Obazda | Passive | Every 2.5 s drops a cheese puddle that stays and slows enemies standing in it | Technically a dip. Structurally closer to mortar. | 1 | Treasure, Shop | Any |
 | platzangst | Platzangst | Passive | Damage +50%, Range -50% | Every festival tent, elbow to elbow. You made your peace with this a while ago. | 2 | Shop, Boss, Secret, Curse | Any |
 | radler | Radler | Passive | Damage -50%, Fire Rate +100% | Half a beer. Twice the argument about whether it counts as one. | 0 | Treasure, Shop | Any |
 | reinheitsgebot-1516 | Reinheitsgebot 1516 | Passive | Locks out every rosinen item. Damage +35% | Water, barley, hops. Written before anyone thought to mention raisins. | 3 | Shop, Boss, Devil | Any |

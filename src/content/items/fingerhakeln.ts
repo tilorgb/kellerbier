@@ -1,15 +1,20 @@
 import type { ItemDefinition } from '../../sim/item/definition.js';
 
 /** Ticks between bites (60/s), the contact radius, the bite's damage scale off Damage, and the pull strength applied every tick. */
-const CONTACT_INTERVAL_TICKS = 20;
-const CONTACT_RADIUS = 16;
+export const CONTACT_INTERVAL_TICKS = 20;
+export const CONTACT_RADIUS = 16;
 const DAMAGE_SCALE = 0.4;
 const PULL_STRENGTH = 0.2;
+/** How far the drag reaches; the view draws a tug-line to every enemy inside it. */
+export const PULL_REACH = CONTACT_RADIUS * 3;
 
 /**
  * Fingerhakeln — Bavarian finger-wrestling, dragging your opponent across
  * the table by one crooked finger. Contact damage, and it drags enemies in
  * rather than letting them keep their distance.
+ *
+ * `state.timer` is the bite clock (ticks to the next bite), which the view
+ * (`render/fingerhakeln-view.ts`) reads to draw the wind-up ring and the bite.
  *
  * The drag is `GameSim.pullEnemiesNear` (#59), the exact mirror of Der
  * Ordner's `pushEnemiesNear` added for this item — the seed text asks for
@@ -37,7 +42,7 @@ export const fingerhakeln: ItemDefinition = {
       const playerIndex = sim.playerIndex;
       const playerX = sim.positionX(playerIndex);
       const playerY = sim.positionY(playerIndex);
-      sim.pullEnemiesNear(playerX, playerY, CONTACT_RADIUS * 3, PULL_STRENGTH);
+      sim.pullEnemiesNear(playerX, playerY, PULL_REACH, PULL_STRENGTH);
 
       const state = ctx.state;
       state.timer -= 1;

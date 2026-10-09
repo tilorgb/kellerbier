@@ -16,7 +16,7 @@ import {
 import {
   STATUS_BURN,
   STATUS_EFFECT_STRIDE,
-  STATUS_FREEZE,
+  STATUS_SLOW,
 } from '../../src/sim/systems/status-effects.js';
 
 /**
@@ -206,7 +206,7 @@ describe('GameSim.applyStatusEffect', () => {
 });
 
 describe('GameSim.slowEnemiesNear', () => {
-  it('freezes enemies in radius, and leaves ones outside it alone', () => {
+  it('slows enemies in radius, and leaves ones outside it alone', () => {
     const sim = new GameSim({ room: bareRoom(), population: 'empty' });
     const near = entityIndex(sim.spawnTarget(0, 0, TARGET_RADIUS));
     const far = entityIndex(sim.spawnTarget(1000, 1000, TARGET_RADIUS));
@@ -215,16 +215,16 @@ describe('GameSim.slowEnemiesNear', () => {
 
     sim.slowEnemiesNear(0, 0, 40, 20);
 
-    expect(sim.statusEffect.data[near * STATUS_EFFECT_STRIDE + STATUS_FREEZE]).toBe(20);
-    expect(sim.statusEffect.data[far * STATUS_EFFECT_STRIDE + STATUS_FREEZE]).toBe(0);
+    expect(sim.statusEffect.data[near * STATUS_EFFECT_STRIDE + STATUS_SLOW]).toBe(20);
+    expect(sim.statusEffect.data[far * STATUS_EFFECT_STRIDE + STATUS_SLOW]).toBe(0);
   });
 
-  it('never freezes the player — only the Enemy collision layer', () => {
+  it('never slows the player — only the Enemy collision layer', () => {
     const sim = new GameSim({ room: bareRoom(), population: 'empty' });
     const playerIndex = sim.playerIndex;
     sim.step(IDLE); // builds the broadphase — see `applySplashDamage`'s test above
     sim.slowEnemiesNear(sim.positionX(playerIndex), sim.positionY(playerIndex), 40, 20);
-    expect(sim.statusEffect.data[playerIndex * STATUS_EFFECT_STRIDE + STATUS_FREEZE]).toBe(0);
+    expect(sim.statusEffect.data[playerIndex * STATUS_EFFECT_STRIDE + STATUS_SLOW]).toBe(0);
   });
 });
 

@@ -12,7 +12,9 @@ import { DecalView } from './decals.js';
 import { EntityView } from './entities.js';
 import { ORDNER_STRIP_NAMES, OrdnerView } from './ordner-view.js';
 import { CloudView } from './cloud-view.js';
+import { FingerhakelnView } from './fingerhakeln-view.js';
 import { HendlSmellView } from './hendl-smell-view.js';
+import { ObazdaView } from './obazda-view.js';
 import { SnowfallView } from './snowfall-view.js';
 import { GloomBlur } from './gloom.js';
 import type { AnimatedSpriteSet, RoomTileArt } from './floor-art.js';
@@ -320,6 +322,8 @@ export class GameView {
   /** Poison clouds, drawn as a low poison haze (`render/cloud-view.ts`). */
   private readonly cloudView: CloudView;
   private readonly hendlSmellView: HendlSmellView;
+  private readonly fingerhakelnView: FingerhakelnView;
+  private readonly obazdaView: ObazdaView;
   private readonly snowfallView: SnowfallView;
   private readonly bombFlightView: BombFlightView;
   private readonly rampView: RampView;
@@ -432,6 +436,10 @@ export class GameView {
     this.scene.add(this.cloudView.group);
     this.hendlSmellView = new HendlSmellView();
     this.scene.add(this.hendlSmellView.group);
+    this.fingerhakelnView = new FingerhakelnView();
+    this.scene.add(this.fingerhakelnView.group);
+    this.obazdaView = new ObazdaView();
+    this.scene.add(this.obazdaView.group);
     this.snowfallView = new SnowfallView();
     this.scene.add(this.snowfallView.group);
 
@@ -459,6 +467,8 @@ export class GameView {
       this.ordnerView.group,
       this.cloudView.group,
       this.hendlSmellView.group,
+      this.fingerhakelnView.group,
+      this.obazdaView.group,
       this.snowfallView.group,
       this.bombFlightView.group,
       this.rampView.group,
@@ -504,6 +514,7 @@ export class GameView {
     this.ordnerView.setLean(lean);
     this.cloudView.setLean(lean);
     this.hendlSmellView.setLean(lean);
+    this.obazdaView.setLean(lean);
     this.snowfallView.setLean(lean);
     this.playerView.setLean(lean);
     this.projectiles.setLean(lean);
@@ -721,6 +732,8 @@ export class GameView {
     this.ordnerView.sync(sim, alpha, nowMs);
     this.cloudView.sync(sim, alpha);
     this.hendlSmellView.sync(sim, alpha, nowMs);
+    this.fingerhakelnView.sync(sim, alpha, nowMs);
+    this.obazdaView.sync(sim, alpha, nowMs);
     this.snowfallView.sync(sim, alpha);
     // No light of his own in a lantern room (#424): the lanterns on the walls
     // are the room's light, and a pool that follows him is the circle #404 had.
@@ -1364,6 +1377,8 @@ export class GameView {
     this.ordnerView.destroy();
     this.cloudView.destroy();
     this.hendlSmellView.destroy();
+    this.fingerhakelnView.destroy();
+    this.obazdaView.destroy();
     this.snowfallView.destroy();
     this.bombFlightView.destroy();
     this.rampView.destroy();

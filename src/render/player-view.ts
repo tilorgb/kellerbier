@@ -2,11 +2,8 @@ import { Group } from 'three';
 import { PLAYER_FOOTPRINT, type GameSim } from '../sim/game/sim.js';
 import { PromilleTier } from '../sim/game/promille.js';
 import { lerp } from '../sim/math.js';
-import {
-  STATUS_EFFECT_STRIDE,
-  STATUS_FREEZE,
-  STATUS_POISON,
-} from '../sim/systems/status-effects.js';
+import { createStatusLook, readStatusLook } from './status-look.js';
+import { mixColor } from './entities.js';
 import {
   AnimationState,
   ClipStateResolver,
@@ -25,13 +22,7 @@ import {
   type PlayerHeading,
 } from './animation/state.js';
 import type { Texture } from './gfx/index.js';
-import {
-  BLUTWURZ_SPIRIT_TINT,
-  SNEEZE_GLOW_TINT,
-  STATUS_FREEZE_TINT,
-  STATUS_MARK_GLOW,
-  STATUS_POISON_TINT,
-} from './palette.js';
+import { BLUTWURZ_SPIRIT_TINT, SNEEZE_GLOW_TINT, STATUS_MARK_GLOW } from './palette.js';
 import { HAT_ANCHORS } from './hat-anchors.js';
 import { SCHLAUCH_OCTANTS, type PlayerArt, type PlayerBodyKey } from './player-art.js';
 import { ACTOR_PIXELS_PER_UNIT } from './resolution.js';
@@ -112,6 +103,7 @@ export class PlayerView {
 
   private readonly art: PlayerArt;
   private readonly body = new Billboard();
+  private readonly statusLook = createStatusLook();
   private readonly schlauch = new Billboard();
   /** The worn hat item (`ItemDefinition.hat`), drawn over wherever Alois's own hat is in this frame. */
   private readonly hat = new Billboard();
@@ -216,15 +208,12 @@ export class PlayerView {
     }
     this.body.place(this.x, 0.2, this.footZ, this.lean);
 
-    const poisoned = (sim.statusEffect.data[index * STATUS_EFFECT_STRIDE + STATUS_POISON] ?? 0) > 0;
-    const frozen = (sim.statusEffect.data[index * STATUS_EFFECT_STRIDE + STATUS_FREEZE] ?? 0) > 0;
+    const look = readStatusLook(sim, index, nowMs, this.statusLook);
     const spiritTint = sim.blutwurzActive
       ? BLUTWURZ_SPIRIT_TINT
-      : frozen
-        ? STATUS_FREEZE_TINT
-        : poisoned
-          ? STATUS_POISON_TINT
-          : 0xffffff;
+      : look.tint >= 0
+        ? mixColor(0xffffff, look.tint, look.mix)
+        : 0xffffff;
     this.body.tint = spiritTint;
     this.schlauch.tint = spiritTint;
     const flashing = sim.playerHurtTick >= 0 && sim.tick - sim.playerHurtTick < 3;
@@ -236,6 +225,8 @@ export class PlayerView {
       // burns, emissive so a dark room cannot hide what every enemy can see.
       if (!flashing && sim.playerMarked > 0) {
         this.body.setGlow(STATUS_MARK_GLOW, MARK_GLOW_STRENGTH);
+      } else if (!flashing && !sim.blutwurzActive && look.glowStrength > 0) {
+        this.body.setGlow(look.glow, look.glowStrength);
       }
     } else {
       this.sneezePhase += deltaMs * lerp(SNEEZE_PULSE_SLOW, SNEEZE_PULSE_FAST, buildUp);
