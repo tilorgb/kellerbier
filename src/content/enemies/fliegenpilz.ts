@@ -19,6 +19,7 @@ import type { EnemyDefinition } from '../../sim/enemy/definition.js';
  */
 export const fliegenpilz: EnemyDefinition = {
   id: 'fliegenpilz',
+  remains: 'spores',
   name: 'Fliegenpilz',
   size: 'normal',
   // A mushroom comes apart the way the Schimmelfleck does.

@@ -90,7 +90,7 @@ import { type CollisionLayerId, CollisionLayer, collisionMaskFor } from '../coll
 import { SpatialHash } from '../collision/spatial-hash.js';
 import { EventKind, EventQueue } from '../events/queue.js';
 import { DamageNumberStore } from '../particle/damage-numbers.js';
-import { DecalStore } from '../particle/decals.js';
+import { DECAL_VARIANTS, DecalKind, DecalStore } from '../particle/decals.js';
 import { ParticleStore } from '../particle/store.js';
 import {
   boulderDebris,
@@ -6680,6 +6680,11 @@ export class GameSim {
       hurtboxRadiusOf(this.hurtbox.data[index * 2] ?? 0, this.body.data[index * 2] ?? 8) *
         (0.7 + random.nextFloat() * 0.4),
       random.nextFloat() * Math.PI * 2,
+      // Not an authored enemy (a destructible barrel, #22): splinters.
+      enemyMasked && definitionIndex >= 0
+        ? this.enemies.at(definitionIndex).remains
+        : DecalKind.Wood,
+      Math.floor(random.nextFloat() * DECAL_VARIANTS),
     );
     if (this.world.destroy(this.world.entityAt(index))) {
       if (this.roomTemplateLoaded) {

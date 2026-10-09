@@ -1519,6 +1519,13 @@ export interface EnemyDefinition {
    */
   readonly deathEffect?: string;
   /**
+   * What the body leaves on the floor when it dies, by what it was made of:
+   * `blood` (the default — anything alive), `ichor` (insects), `spores`
+   * (fungus), `metal` (machines), `wood` (barrels, logs), `shards` (ceramic).
+   * Presentational, like `deathEffect`: a typo throws at construction.
+   */
+  readonly remains?: string;
+  /**
    * Draws `<id>-phase-two` art instead of its own once health is at or
    * below this fraction (0 exclusive, 1 inclusive) of max (#437): The First
    * Human's strip without the arrowhead in his shoulder, from the moment he

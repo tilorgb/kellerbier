@@ -89,6 +89,7 @@ const PHASE_TWO_SPLIT: SplitOnDeathBehaviour = {
 
 export const grosseKellerassel: EnemyDefinition = {
   id: 'grosse-kellerassel',
+  remains: 'ichor',
   name: 'Die Große Kellerassel',
   // `boss` since #193: a quarter-frame chibi silhouette over a collider to
   // match (`sim/enemy/size.ts`, `docs/DECISIONS.md` #56). Phase two's segments
@@ -210,6 +211,7 @@ export const grosseKellerassel: EnemyDefinition = {
  */
 export const kellerasselSegment: EnemyDefinition = {
   id: 'kellerassel-segment',
+  remains: 'ichor',
   name: 'Kellerassel-Segment',
   size: 'normal',
   // One plate of the same insect.

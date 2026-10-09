@@ -28,6 +28,7 @@ import type { EnemyDefinition } from '../../sim/enemy/definition.js';
  */
 export const waldradl: EnemyDefinition = {
   id: 'waldradl',
+  remains: 'metal',
   name: 'Waldradl',
   size: 'mid',
   deathEffect: 'dust',

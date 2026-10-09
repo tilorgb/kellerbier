@@ -14,6 +14,7 @@ import type { EnemyDefinition } from '../../sim/enemy/definition.js';
  */
 export const snowCannon: EnemyDefinition = {
   id: 'snow-cannon',
+  remains: 'metal',
   name: 'Snow cannon',
   size: 'mid',
   deathEffect: 'dust',

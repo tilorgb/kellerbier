@@ -21,6 +21,7 @@ const REST = 150;
 
 export const summitCross: EnemyDefinition = {
   id: 'summit-cross',
+  remains: 'wood',
   name: 'Summit cross',
   size: 'mid',
   deathEffect: 'dust',

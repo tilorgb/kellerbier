@@ -45,6 +45,7 @@ import {
   createRenderer,
   trackWindowSize,
 } from '../render/app.js';
+import { buildDecalArt } from '../render/decal-art.js';
 import { diamondTexture, dotTexture } from '../render/ui/marker-art.js';
 import { INTERNAL_HEIGHT, INTERNAL_WIDTH, computeGameLayout } from '../render/resolution.js';
 import { ActiveItemHud } from '../render/active-item-hud.js';
@@ -3232,10 +3233,10 @@ WASD move   arrows aim and fire
         vfxArt,
         dotTexture(2, PARTICLE_PALETTE.foamFill, PARTICLE_PALETTE.foamRim),
       ),
-      // Dark and wet, not another body. A splash the same brown as a target
-      // reads as "something is still standing there", which is the one
-      // thing a corpse marker must not do.
-      decal: dotTexture(8, PARTICLE_PALETTE.decalFill, PARTICLE_PALETTE.decalRim),
+      // Spatter by what died (`render/decal-art.ts`) — never body-brown, which
+      // would read as "something is still standing there", the one thing a
+      // corpse marker must not do.
+      decalArt: buildDecalArt(),
       numberFont: UI_FONT_FAMILY,
       // Placeholder art (#34) — a plain bright disc in a beam of light is
       // enough to read as "an item floating on light" until real sprites

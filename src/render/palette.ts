@@ -279,9 +279,6 @@ export const PARTICLE_PALETTE = {
   foamRim: 0xffffff,
   splashFill: 0xd9a441,
   splashRim: 0xf6d08a,
-  /** Dark and wet, not another body — a splash the same brown as a target would read as "something is still standing there." */
-  decalFill: 0x3a2a12,
-  decalRim: 0x4a3618,
   pedestalItemFill: 0xffffff,
 } as const;
 
