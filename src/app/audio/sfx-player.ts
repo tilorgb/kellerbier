@@ -282,8 +282,14 @@ export const SYNTH_IMPACT_AUDIO: ImpactAudio = {
   onWallHit: () => {
     playSfx('wall-hit');
   },
-  onPlayerShotFired: () => {
-    playSfx('player-shot');
+  onPlayerShotFired: (kind = 'default') => {
+    playSfx(
+      kind === 'laser'
+        ? 'shot-laser-big'
+        : kind === 'rolling-r'
+          ? 'player-shot-rolling-r'
+          : 'player-shot',
+    );
   },
   onEnemyShotFired: (enemyId, beamDamage = 0) => {
     if (beamDamage > 0) {

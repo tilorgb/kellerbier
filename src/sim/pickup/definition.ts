@@ -100,7 +100,13 @@ export type PickupEffect =
    * free. Never collected, never magnetised, never pushed, never in a drop
    * table.
    */
-  | { readonly kind: 'opened-chest' };
+  | { readonly kind: 'opened-chest' }
+  /**
+   * A Leberkas-Semmel (the Leberkas item's drop): collecting it throws a lob
+   * at the nearest enemy (`GameSim.launchLeberkasLob`). Only the Leberkas
+   * item spawns one — never in a drop table, room or shop.
+   */
+  | { readonly kind: 'leberkas' };
 
 /**
  * The description to show for `definition` in a run that is (or is not)

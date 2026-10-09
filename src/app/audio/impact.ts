@@ -13,6 +13,9 @@ import type { GameSim } from '../../sim/game/sim.js';
  * simulation, for the same reason everything else does: `sim/` has no idea an
  * audio system exists, and a headless test runs the same code path.
  */
+/** What the player's shot sounds like: the plain pop, the Rolling R's trill, or the Pfeitinger's laser. */
+export type PlayerShotSound = 'default' | 'rolling-r' | 'laser';
+
 export interface ImpactAudio {
   /** `enemyId` is `null` for a hit whose victim resolved to nothing living by the time this ran. */
   onHit(x: number, y: number, damage: number, enemyId: string | null): void;
@@ -23,8 +26,11 @@ export interface ImpactAudio {
   onPlayerDeath(): void;
   /** A shot expired against a wall or out of range, hitting nothing (`EventKind.ProjectileSpent`). */
   onWallHit(x: number, y: number): void;
-  /** The player's own shot left the barrel (#234) — fires up to several times a second. */
-  onPlayerShotFired(): void;
+  /**
+   * The player's own shot left the barrel (#234) — fires up to several times a second. `kind`
+   * is which held item colours it: the Rolling R's trill, the Pfeitinger's laser.
+   */
+  onPlayerShotFired(kind?: PlayerShotSound): void;
   /** An enemy's shot left the barrel (#234). */
   /** `beamDamage` is above 0 when the "shot" is a laser lighting (#40): 1 a small one, 2 a big one. */
   onEnemyShotFired(enemyId: string | null, beamDamage?: number): void;
@@ -84,7 +90,13 @@ export function playImpactAudio(sim: GameSim, audio: ImpactAudio): void {
         break;
       case EventKind.ShotFired:
         if (events.subject[slot] === player) {
-          audio.onPlayerShotFired();
+          audio.onPlayerShotFired(
+            sim.hasItem('pfeitinger-ultrabraeu')
+              ? 'laser'
+              : sim.hasItem('rolling-r')
+                ? 'rolling-r'
+                : 'default',
+          );
         } else {
           audio.onEnemyShotFired(
             sim.enemyIdAt(events.subject[slot] ?? -1),

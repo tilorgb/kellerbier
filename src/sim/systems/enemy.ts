@@ -17,7 +17,7 @@ import type { GameSim } from '../game/sim.js';
 import { boulderDebris, drumChips, muzzleFlash, ring } from '../particle/effects.js';
 import { clamp, vectorLength } from '../math.js';
 import { addPush } from './movement.js';
-import { dazeAllowsAdvance, isDazed } from './status-effects.js';
+import { dazeAllowsAdvance, isDazed, isScared } from './status-effects.js';
 import { applyDamageAt } from './impact.js';
 import { CollisionLayer, collisionMaskFor } from '../collision/layers.js';
 import { NO_SLOT } from '../pool/slot-pool.js';
@@ -256,6 +256,13 @@ export function stepEnemies(sim: GameSim): void {
     if ((sim.hitStun.data[index] ?? 0) > 0) {
       continue;
     }
+    // Scared by the Waller-Kopf: runs from the player and does nothing else —
+    // no transitions, no firing, no state clock — so it picks up the attack it
+    // was in once the fright ends.
+    if (isScared(sim, index)) {
+      scareFlee(sim, index, playerX, playerY);
+      continue;
+    }
 
     const base = index * ENEMY_STRIDE;
     const compiled = registry.at(enemy[base] ?? 0);
@@ -474,6 +481,20 @@ export function stepEnemies(sim: GameSim): void {
     const dazeHolds = isDazed(sim, index) && !dazeAllowsAdvance(sim, index);
     enemy[base + 2] = ticks < MAX_STATE_TICKS && !dazeHolds ? ticks + 1 : ticks;
   }
+}
+
+/** Pixels per tick a scared body runs at, before the global `enemy.speedScale`. */
+const SCARED_FLEE_SPEED = 1.2;
+
+/** One tick of running from the player: straight away, at a fixed pace. */
+function scareFlee(sim: GameSim, index: number, playerX: number, playerY: number): void {
+  const awayX = sim.positionX(index) - playerX;
+  const awayY = sim.positionY(index) - playerY;
+  const length = vectorLength(awayX, awayY);
+  const speed = SCARED_FLEE_SPEED * sim.tuning.enemy.speedScale;
+  const base = index * 2;
+  sim.velocity.data[base] = length === 0 ? speed : (awayX / length) * speed;
+  sim.velocity.data[base + 1] = length === 0 ? 0 : (awayY / length) * speed;
 }
 
 /**

@@ -5,6 +5,7 @@ import type { GameSim } from '../game/sim.js';
 import { vectorLength } from '../math.js';
 import { enemyAirborne } from './enemy.js';
 import { addPush } from './movement.js';
+import { isScared } from './status-effects.js';
 
 /**
  * Bodies against bodies.
@@ -92,6 +93,10 @@ function resolveAgainstPlayer(other: number): void {
   const radius = player[PLAYER_RADIUS] ?? 0;
   const layer = sim.collision.data[other * 2] ?? 0;
   if ((layer & SOLID_LAYERS) === 0) {
+    return;
+  }
+  // Mid-roll (the Dotsch) the player slips through bodies: no separation, no shove.
+  if (sim.rollTicksLeft > 0) {
     return;
   }
   // A flyer up in the air (#411) passes over the player.
@@ -190,7 +195,7 @@ function resolveAgainstPlayer(other: number): void {
   addPush(sim, other, -awayX * otherShare, -awayY * otherShare);
 
   const damage = sim.contactDamage.data[other] ?? 0;
-  if (damage > 0 && sim.playerInvulnerableTicks === 0) {
+  if (damage > 0 && sim.playerInvulnerableTicks === 0 && !isScared(sim, other)) {
     // The normal points back at whatever was touched, matching the convention
     // every other impact event uses: away from the thing that caused it.
     sim.events.push(EventKind.Contact, index, other, x, y, awayX, awayY, damage);

@@ -46,7 +46,13 @@ export const STATUS_FREEZE_COOLDOWN = 4;
  * from frost's slow.
  */
 export const STATUS_DAZE = 5;
-export const STATUS_EFFECT_STRIDE = 6;
+/**
+ * Scared by the Waller-Kopf's gaze: ticks left. A scared body runs from the
+ * player and attacks nothing (`stepEnemies`, `isScared`), and its state
+ * counter holds so it resumes the attack it was in when the fright ends.
+ */
+export const STATUS_SCARED = 6;
+export const STATUS_EFFECT_STRIDE = 7;
 
 /** Velocity multiplier per tick while dazed; a stun-resistant body (boss) gets the milder one. */
 export const DAZE_SPEED_FACTOR = 0.6;
@@ -59,6 +65,11 @@ export const DAZE_STATE_ADVANCE_RESISTANT = 4;
 /** Whether the body in `index` is dazed. */
 export function isDazed(sim: GameSim, index: number): boolean {
   return (sim.statusEffect.data[index * STATUS_EFFECT_STRIDE + STATUS_DAZE] ?? 0) > 0;
+}
+
+/** Whether the body in `index` is scared (the Waller-Kopf's gaze). */
+export function isScared(sim: GameSim, index: number): boolean {
+  return (sim.statusEffect.data[index * STATUS_EFFECT_STRIDE + STATUS_SCARED] ?? 0) > 0;
 }
 
 /** Whether a dazed body's state counter advances this tick (a deterministic 3-in-5 pattern, staggered per body). */
@@ -122,6 +133,11 @@ export function stepStatusEffects(sim: GameSim): void {
       velocity[index * 2] = (velocity[index * 2] ?? 0) * factor;
       velocity[index * 2 + 1] = (velocity[index * 2 + 1] ?? 0) * factor;
       status[base + STATUS_DAZE] = daze - 1;
+    }
+
+    const scared = status[base + STATUS_SCARED] ?? 0;
+    if (scared > 0) {
+      status[base + STATUS_SCARED] = scared - 1;
     }
 
     const burn = status[base + STATUS_BURN] ?? 0;

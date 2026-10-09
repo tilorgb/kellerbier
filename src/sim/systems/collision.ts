@@ -161,6 +161,14 @@ function buildBroadphase(sim: GameSim): void {
   hash.build();
 }
 
+/**
+ * Hits one shot can land in a single tick. A slow shot meets one body a tick; a fast piercing one
+ * (the Pfeitinger Ultrabräu's beam crosses a whole room in a tick) meets every body on its line,
+ * so after a hit that the shot survives the rest of its sweep is tested again from the impact
+ * point. The cap is only a guard against a shot that never stops surviving.
+ */
+const MAX_HITS_PER_TICK = 16;
+
 function resolveProjectile(slot: number): void {
   const sim = activeSim;
   if (sim === null) {
@@ -169,13 +177,11 @@ function resolveProjectile(slot: number): void {
   const projectiles = sim.projectiles;
 
   slots[PROJECTILE_SLOT] = slot;
-  const fromX = projectiles.previousX[slot] ?? 0;
-  const fromY = projectiles.previousY[slot] ?? 0;
+  let fromX = projectiles.previousX[slot] ?? 0;
+  let fromY = projectiles.previousY[slot] ?? 0;
   const toX = projectiles.x[slot] ?? 0;
   const toY = projectiles.y[slot] ?? 0;
   const radius = projectiles.radius[slot] ?? 0;
-  state[FROM_X] = fromX;
-  state[FROM_Y] = fromY;
   state[TO_X] = toX;
   state[TO_Y] = toY;
   state[RADIUS] = radius;
@@ -185,58 +191,79 @@ function resolveProjectile(slot: number): void {
       : CollisionLayer.Player | CollisionLayer.Obstacle;
   slots[PROJECTILE_EXCLUDES_ENEMIES] = projectiles.team[slot] === ProjectileTeam.Enemy ? 1 : 0;
 
-  state[BEST_HIT_TIME] = Number.POSITIVE_INFINITY;
-  slots[BEST_HIT_TARGET] = -1;
+  for (let pass = 0; pass < MAX_HITS_PER_TICK; pass++) {
+    state[FROM_X] = fromX;
+    state[FROM_Y] = fromY;
+    state[BEST_HIT_TIME] = Number.POSITIVE_INFINITY;
+    slots[BEST_HIT_TARGET] = -1;
 
-  sim.broadphase.querySwept(fromX, fromY, toX, toY, radius, testCandidate);
+    sim.broadphase.querySwept(fromX, fromY, toX, toY, radius, testCandidate);
 
-  const target = slots[BEST_HIT_TARGET];
-  if (target === -1) {
-    // Nothing found this tick — the shot has physically cleared whatever it
-    // hit last, so a `piercing`/`bouncing` shot's exclusion on re-hitting the
-    // same body (see `testCandidate`) is free to lapse. Without this a shot
-    // that pierces the same body twice, ticks apart (an orbiting one lapping
-    // past it, say), would stay excluded from it forever.
-    projectiles.lastHitTarget[slot] = -1;
-    return;
+    const target = slots[BEST_HIT_TARGET];
+    if (target === -1) {
+      // Nothing found this tick — the shot has physically cleared whatever it
+      // hit last, so a `piercing`/`bouncing` shot's exclusion on re-hitting the
+      // same body (see `testCandidate`) is free to lapse. Without this a shot
+      // that pierces the same body twice, ticks apart (an orbiting one lapping
+      // past it, say), would stay excluded from it forever. Only on the first
+      // pass: on a later one the shot has just hit something this tick.
+      if (pass === 0) {
+        projectiles.lastHitTarget[slot] = -1;
+      }
+      return;
+    }
+
+    // The impact point is where the shot actually met the target, not where the
+    // tick happened to leave it. Everything downstream — the foam, the knockback
+    // direction, the damage number — is placed from this, and placing it at the
+    // end of the step puts the effect visibly inside the enemy.
+    const hitTime = state[BEST_HIT_TIME];
+    const hitX = fromX + (toX - fromX) * hitTime;
+    const hitY = fromY + (toY - fromY) * hitTime;
+
+    // From the centre of the circle that was actually hit — the hurtbox (#73),
+    // which sits above the footprint's centre. Taking the normal from the
+    // footprint instead would tilt every impact downward: the foam would spray
+    // from under the body and knockback would push it up the screen on a shot
+    // that struck it square in the side.
+    const targetBase = target * 4;
+    const towardsX = hitX - (activeTransform[targetBase] ?? 0);
+    const towardsY =
+      hitY - ((activeTransform[targetBase + 1] ?? 0) + (activeHurtbox[target * 2 + 1] ?? 0));
+    const length = vectorLength(towardsX, towardsY);
+    const normalX = length === 0 ? 0 : towardsX / length;
+    const normalY = length === 0 ? 0 : towardsY / length;
+
+    sim.events.push(
+      EventKind.ProjectileHit,
+      target,
+      slots[PROJECTILE_SLOT],
+      hitX,
+      hitY,
+      normalX,
+      normalY,
+      projectiles.damage[slot] ?? 0,
+    );
+    // Whether the shot despawns here, pierces through, bounces off, embeds
+    // itself, and/or spawns split children is #27's business, not this file's
+    // — see `resolveProjectileHit`'s own doc comment for the priority a mask
+    // with more than one of those tags resolves through.
+    resolveProjectileHit(sim, slot, target, hitX, hitY, normalX, normalY);
+
+    // Only a shot that went straight on can meet something else this tick: one that
+    // despawned, stuck, or bounced off (its velocity is no longer the sweep's) is done.
+    if (
+      !projectiles.isLive(slot) ||
+      (projectiles.stickyTarget[slot] ?? -1) !== -1 ||
+      projectiles.x[slot] !== toX ||
+      projectiles.y[slot] !== toY ||
+      projectiles.lastHitTarget[slot] !== target
+    ) {
+      return;
+    }
+    fromX = hitX;
+    fromY = hitY;
   }
-
-  // The impact point is where the shot actually met the target, not where the
-  // tick happened to leave it. Everything downstream — the foam, the knockback
-  // direction, the damage number — is placed from this, and placing it at the
-  // end of the step puts the effect visibly inside the enemy.
-  const hitTime = state[BEST_HIT_TIME];
-  const hitX = fromX + (toX - fromX) * hitTime;
-  const hitY = fromY + (toY - fromY) * hitTime;
-
-  // From the centre of the circle that was actually hit — the hurtbox (#73),
-  // which sits above the footprint's centre. Taking the normal from the
-  // footprint instead would tilt every impact downward: the foam would spray
-  // from under the body and knockback would push it up the screen on a shot
-  // that struck it square in the side.
-  const targetBase = target * 4;
-  const towardsX = hitX - (activeTransform[targetBase] ?? 0);
-  const towardsY =
-    hitY - ((activeTransform[targetBase + 1] ?? 0) + (activeHurtbox[target * 2 + 1] ?? 0));
-  const length = vectorLength(towardsX, towardsY);
-  const normalX = length === 0 ? 0 : towardsX / length;
-  const normalY = length === 0 ? 0 : towardsY / length;
-
-  sim.events.push(
-    EventKind.ProjectileHit,
-    target,
-    slots[PROJECTILE_SLOT],
-    hitX,
-    hitY,
-    normalX,
-    normalY,
-    projectiles.damage[slot] ?? 0,
-  );
-  // Whether the shot despawns here, pierces through, bounces off, embeds
-  // itself, and/or spawns split children is #27's business, not this file's
-  // — see `resolveProjectileHit`'s own doc comment for the priority a mask
-  // with more than one of those tags resolves through.
-  resolveProjectileHit(sim, slot, target, hitX, hitY, normalX, normalY);
 }
 
 /** Exact test for one broadphase candidate. Keeps the earliest hit found. */

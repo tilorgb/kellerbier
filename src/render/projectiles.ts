@@ -269,6 +269,8 @@ export class ProjectileView {
   private lighting: Lighting | null = null;
   /** `GameSim.promilleShotHeat`, clamped — see `setShotHeat`. */
   private shotHeat = 0;
+  /** The Müll item's trash, by `ProjectileStore.look` - 1 (`setLooks`). */
+  private looks: readonly Texture[] = [];
 
   constructor(
     store: ProjectileStore,
@@ -291,6 +293,11 @@ export class ProjectileView {
 
   setLean(lean: number): void {
     this.lean = lean;
+  }
+
+  /** The drawings a shot with a non-zero `look` wears in place of the beer sprite. */
+  setLooks(textures: readonly Texture[]): void {
+    this.looks = textures;
   }
 
   /** Where the shot lights come from; without one, shots are unlit. */
@@ -344,13 +351,16 @@ export class ProjectileView {
     store.forEachLive((index) => {
       const team = store.team[index] ?? 0;
       const isPlayer = team === ProjectileTeam.Player;
-      const texture = spriteFor(
-        this.art,
-        team,
-        store.tags[index] ?? 0,
-        this.artNames[store.art[index] ?? 0] ?? null,
-        floor,
-      );
+      const look = isPlayer ? (store.look[index] ?? 0) : 0;
+      const texture =
+        (look > 0 ? this.looks[look - 1] : undefined) ??
+        spriteFor(
+          this.art,
+          team,
+          store.tags[index] ?? 0,
+          this.artNames[store.art[index] ?? 0] ?? null,
+          floor,
+        );
       const radius = store.radius[index] ?? 1;
       const x = lerp(store.previousX[index] ?? 0, store.x[index] ?? 0, alpha);
       const z = lerp(store.previousY[index] ?? 0, store.y[index] ?? 0, alpha);

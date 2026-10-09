@@ -62,6 +62,8 @@ export const PROJECTILE_TINT_NAMES = [
   'holz',
   /** Schnupftabak: the sneeze volley, snuff-brown. */
   'schnupf',
+  /** Pfeitinger Ultrabräu: the laser, a hot white-gold. */
+  'laser',
 ] as const;
 
 export type ProjectileTintName = (typeof PROJECTILE_TINT_NAMES)[number];

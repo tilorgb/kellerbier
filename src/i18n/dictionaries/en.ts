@@ -520,4 +520,30 @@ export const en = {
     'The tradition says before the noon bell. The run says before the Brauerei.',
   'items.zwetschgendatschi.description': 'Clearing a room without being hit heals 1. Range -15%',
   'items.zwetschgendatschi.flavourText': 'The plums are the point. The raisins are an opinion.',
+  'items.roter-stier.description': 'Move Speed +25%. Wings: fly over furniture, puddles and pits',
+  'items.roter-stier.flavourText': 'Gummiberdlsaft',
+  'items.waller-kopf.description': 'Enemies in the cone ahead of your walk are scared and run away',
+  'items.waller-kopf.flavourText': 'Terror of the River',
+  'items.the-patriot.description': 'Damage +1',
+  'items.the-patriot.flavourText': 'You know the lyrics',
+  'items.dotsch.description':
+    'Active: a dodge roll the way you are walking, invulnerable while rolling',
+  'items.dotsch.flavourText': 'Dotsch? Dodge!',
+  'items.muell.description':
+    'Shots turn into rubbish and stay on the floor of the room. Nothing else changes',
+  'items.muell.flavourText': '(No) Littering!',
+  'items.rolling-r.description': 'Shot speed way up, shots smaller, Damage -40%',
+  'items.rolling-r.flavourText': 'Immigration Test',
+  'items.bratwurst.description':
+    'Active: fill a heart container. Recharged by a Bratwurst pickup at full health',
+  'items.bratwurst.flavourText': 'Bratwurst is Life',
+  'items.krapfen.description': 'Every shot fires in all four directions',
+  'items.krapfen.flavourText': 'Berliner, Pfannkuchen, Küchle',
+  'items.leberkas.description':
+    'Leberkas-Semmeln appear in fights; collect one to lob a splash shot at an enemy',
+  'items.leberkas.flavourText': 'Every lunchtime without fail.',
+  'items.pfeitinger-ultrabraeu.description':
+    'Laser shots: hold to charge, release to fire. Fire Rate shortens the charge',
+  'items.pfeitinger-ultrabraeu.flavourText': 'Schied ei!',
+  'pickups.leberkas-semmel.description': 'Lobs at the nearest enemy',
 } as const;

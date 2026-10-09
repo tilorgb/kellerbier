@@ -16,6 +16,7 @@ import { ProjectileTeam } from '../projectile/store.js';
 import { ProjectileTag, hasTag } from '../projectile/tags.js';
 import { StatId } from '../stats/definition.js';
 import { dispatchItemProjectileSpawn, dispatchItemShoot } from './items.js';
+import { LASER_ITEM_ID, stepLaserCharge } from './laser-shot.js';
 import { addPush } from './movement.js';
 
 /**
@@ -59,6 +60,12 @@ export function stepShooting(sim: GameSim, input: Readonly<InputFrame>): void {
   // happened to notice the button.
   if (sim.fireCooldown > 0) {
     sim.fireCooldown -= 1;
+  }
+
+  // The Pfeitinger Ultrabräu swaps the stream for a charged beam (`laser-shot.ts`).
+  if (sim.hasItem(LASER_ITEM_ID)) {
+    stepLaserCharge(sim, wantsToFire);
+    return;
   }
 
   if (wantsToFire) {

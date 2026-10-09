@@ -5,6 +5,7 @@ import {
   STATUS_EFFECT_STRIDE,
   STATUS_FREEZE,
   STATUS_POISON,
+  STATUS_SCARED,
   STATUS_SLOW,
 } from '../sim/systems/status-effects.js';
 import { ENTITY_PALETTE, STATUS_LOOK_PALETTE, STATUS_POISON_TINT } from './palette.js';
@@ -14,6 +15,7 @@ const FREEZE_MIX = 0.65;
 const POISON_MIX = 0.6;
 const DAZE_MIX = 0.6;
 const SLOW_MIX = 0.5;
+const SCARED_MIX = 0.6;
 /** Fire flickers between these two mixes, so it reads as alive rather than as a paint job. */
 const BURN_MIX_LOW = 0.35;
 const BURN_MIX_HIGH = 0.7;
@@ -68,6 +70,11 @@ export function readStatusLook(
     out.tint = STATUS_POISON_TINT;
     out.mix = POISON_MIX;
     out.glow = STATUS_POISON_TINT;
+    out.glowStrength = GLOW_STRENGTH;
+  } else if ((data[base + STATUS_SCARED] ?? 0) > 0) {
+    out.tint = STATUS_LOOK_PALETTE.scaredTint;
+    out.mix = SCARED_MIX;
+    out.glow = STATUS_LOOK_PALETTE.scaredTint;
     out.glowStrength = GLOW_STRENGTH;
   } else if ((data[base + STATUS_DAZE] ?? 0) > 0) {
     out.tint = ENTITY_PALETTE.dazedTint;

@@ -8,6 +8,16 @@ const MIN_SIDE = 16;
 const MAX_SIDE = 48;
 
 /**
+ * How a store other than the kill splashes draws: a fixed opacity and a size in
+ * room units straight from the store's `size`, with no spatter-scale stretching
+ * (the Müll item's litter, `render/litter-art.ts`).
+ */
+export interface DecalStyle {
+  readonly alpha: number;
+  readonly unitsPerSize: number;
+}
+
+/**
  * Splashes on the floor. Each decal is a flat quad lying where the store put
  * it, at the store's rotation and size, placed once — decals do not move, so
  * there is nothing to interpolate.
@@ -19,10 +29,12 @@ export class DecalView {
   private readonly art: DecalArt;
   private readonly fallback: Texture;
   private readonly sprites: FloorSprite[] = [];
+  private readonly style: DecalStyle | null;
 
-  constructor(store: DecalStore, art: DecalArt) {
+  constructor(store: DecalStore, art: DecalArt, style: DecalStyle | null = null) {
     this.store = store;
     this.art = art;
+    this.style = style;
     this.fallback = art[0]?.[0] ?? Texture.EMPTY;
     // One sprite up front, hidden, so the decal material is in the scene for
     // `GameView.render`'s first-frame `renderer.compile` rather than linking
@@ -39,10 +51,13 @@ export class DecalView {
       sprite.visible = true;
       // 16 units is the authored density (two pixels a unit) for the canvas;
       // only a body bigger than that stretches it.
-      const side = Math.min(MAX_SIDE, Math.max(MIN_SIDE, (store.size[index] ?? 8) * 2.5));
+      const side =
+        this.style === null
+          ? Math.min(MAX_SIDE, Math.max(MIN_SIDE, (store.size[index] ?? 8) * 2.5))
+          : (store.size[index] ?? 8) * this.style.unitsPerSize;
       const kind = (store.kind[index] ?? 0) as DecalKindId;
       sprite.setTexture(this.art[kind]?.[store.variant[index] ?? 0] ?? this.fallback);
-      sprite.alpha = DECAL_ALPHA[kind];
+      sprite.alpha = this.style === null ? DECAL_ALPHA[kind] : this.style.alpha;
       sprite.place(
         store.x[index] ?? 0,
         store.y[index] ?? 0,
