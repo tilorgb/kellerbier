@@ -1,0 +1,179 @@
+{
+  "id": "alpen-pylon-row",
+  "cells": [
+    {
+      "tileGrid": [
+        "###############",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "###############"
+      ],
+      "obstacles": [
+        {
+          "x": 48,
+          "y": 96,
+          "width": 16,
+          "height": 16
+        },
+        {
+          "x": 64,
+          "y": 96,
+          "width": 16,
+          "height": 16
+        }
+      ],
+      "enemySpawns": [
+        {
+          "x": 120,
+          "y": 72,
+          "group": "g"
+        }
+      ],
+      "spawnGroups": [
+        {
+          "id": "g",
+          "count": 1,
+          "choices": [
+            {
+              "enemyId": "steinbock",
+              "minFloor": 4,
+              "maxFloor": 4
+            },
+            {
+              "enemyId": "sennerin",
+              "minFloor": 4,
+              "maxFloor": 4
+            }
+          ]
+        }
+      ],
+      "pickupSpawns": [],
+      "hazards": [
+        {
+          "x": 16,
+          "y": 16,
+          "width": 208,
+          "height": 112,
+          "type": "wind"
+        },
+        {
+          "x": 144,
+          "y": 32,
+          "width": 48,
+          "height": 32,
+          "type": "ice"
+        }
+      ],
+      "decorativeProps": [
+        {
+          "x": 120,
+          "y": 24,
+          "type": "pylon"
+        }
+      ]
+    },
+    {
+      "tileGrid": [
+        "###############",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "###############"
+      ],
+      "obstacles": [
+        {
+          "x": 176,
+          "y": 32,
+          "width": 16,
+          "height": 16
+        },
+        {
+          "x": 192,
+          "y": 32,
+          "width": 16,
+          "height": 16
+        }
+      ],
+      "enemySpawns": [
+        {
+          "x": 120,
+          "y": 72,
+          "group": "bells"
+        },
+        {
+          "x": 64,
+          "y": 104,
+          "group": "g"
+        }
+      ],
+      "spawnGroups": [
+        {
+          "id": "bells",
+          "count": 4,
+          "choices": [
+            {
+              "enemyId": "kuhglocke",
+              "minFloor": 4,
+              "maxFloor": 4
+            }
+          ]
+        },
+        {
+          "id": "g",
+          "count": 1,
+          "choices": [
+            {
+              "enemyId": "murmeltier",
+              "minFloor": 4,
+              "maxFloor": 4
+            },
+            {
+              "enemyId": "bergwacht",
+              "minFloor": 4,
+              "maxFloor": 4
+            }
+          ]
+        }
+      ],
+      "pickupSpawns": [],
+      "hazards": [
+        {
+          "x": 16,
+          "y": 16,
+          "width": 208,
+          "height": 112,
+          "type": "wind"
+        },
+        {
+          "x": 32,
+          "y": 80,
+          "width": 48,
+          "height": 32,
+          "type": "ice"
+        }
+      ],
+      "decorativeProps": [
+        {
+          "x": 120,
+          "y": 24,
+          "type": "pylon"
+        }
+      ]
+    }
+  ],
+  "metadata": {
+    "floorTags": ["alpen"],
+    "shape": "1x2",
+    "difficultyTier": 3,
+    "weight": 1
+  }
+}

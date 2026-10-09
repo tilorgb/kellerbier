@@ -1,0 +1,98 @@
+{
+  "id": "alpen-gully",
+  "tileGrid": [
+    "###############",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "###############"
+  ],
+  "obstacles": [
+    {
+      "x": 96,
+      "y": 64,
+      "width": 16,
+      "height": 16
+    },
+    {
+      "x": 128,
+      "y": 64,
+      "width": 16,
+      "height": 16
+    },
+    {
+      "x": 64,
+      "y": 96,
+      "width": 16,
+      "height": 16
+    }
+  ],
+  "enemySpawns": [
+    {
+      "x": 120,
+      "y": 40,
+      "group": "g"
+    },
+    {
+      "x": 184,
+      "y": 104,
+      "group": "g"
+    }
+  ],
+  "spawnGroups": [
+    {
+      "id": "g",
+      "count": 1,
+      "choices": [
+        {
+          "enemyId": "murmeltier",
+          "minFloor": 4,
+          "maxFloor": 4
+        },
+        {
+          "enemyId": "bergwacht",
+          "minFloor": 4,
+          "maxFloor": 4
+        },
+        {
+          "enemyId": "steinbock",
+          "minFloor": 4,
+          "maxFloor": 4
+        }
+      ]
+    }
+  ],
+  "pickupSpawns": [],
+  "hazards": [
+    {
+      "x": 16,
+      "y": 16,
+      "width": 208,
+      "height": 112,
+      "type": "avalanche"
+    }
+  ],
+  "decorativeProps": [
+    {
+      "x": 200,
+      "y": 112,
+      "type": "cairn"
+    }
+  ],
+  "metadata": {
+    "floorTags": ["alpen"],
+    "shape": "1x1",
+    "doors": {
+      "north": true,
+      "east": true,
+      "south": true,
+      "west": true
+    },
+    "difficultyTier": 3,
+    "weight": 1
+  }
+}

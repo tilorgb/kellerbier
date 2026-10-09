@@ -18,7 +18,7 @@ import { alois } from '../../src/content/characters/alois.js';
  * is exactly the "the gate itself was not updated" failure `CLAUDE.md` calls
  * out. When floor 3 ships, this number and that constant move together.
  */
-const HIGHEST_PLAYABLE_FLOOR = 3;
+const HIGHEST_PLAYABLE_FLOOR = 4;
 
 describe('character roster (#47)', () => {
   it('gives every character a distinct id, and traits that agree about it', () => {

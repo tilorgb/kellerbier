@@ -6871,3 +6871,40 @@ to work through); it asks that he does not drag.
 - **Die Große Kellerassel keeps 160 HP** (#232, #260) and gains pressure instead: a rolling charge out
   of every curl along a locked line, a 5-shot 0.9 rad spit, a shorter walk between attacks, and
   segments that spit. The loop is about as long as before, so `boss-pacing.test.ts` is unchanged.
+
+## 127. Floor 4 (#40, #437): ice as footing, weather as a room-sized clock, a boss built from one new primitive
+
+**Decided** while building Die Alpen end to end in one change — hazards, tileset, roster, rooms,
+mini-boss, boss, story beat — the way #123/#124 built Floor 3, so a player can reach it through the
+real progression and beat its boss.
+
+- **Ice is footing, not a status.** `RoomGeometry` carries `ice` rects next to `puddles`, and
+  `movement.ts`'s `footingDivisorOf` multiplies the puddle, drift and ice factors into one divisor,
+  capped by `footingDivisorCap`, so a drunk Alois on ice in a puddle is slippery, not uncontrollable.
+  Flying bodies and Haferlschuh grip ice as they grip puddles — one immunity, two surfaces.
+- **Weather is a lane with a clock** (`sim/hazard/weather.ts`): an avalanche or a gust occupies a
+  whole generated cell, telegraphs, acts once, rests. The avalanche is a sweeping front rather than
+  a room-wide hit so a boulder directly uphill is shelter and the dodge is "get behind rock", and it
+  hits each body once per round (`sweptRound`) however fast the shove outruns the front. A gust
+  pushes the player's own shots too, which is the one place wind is felt as more than drift. Neither
+  is placed in an arena, and both are off (`avalancheChance`/`windChance` 0) on every other floor.
+- **One new ranged primitive, not a boss script.** `fireSweep` is `meleeArc`'s blade with shots
+  leaving along it (#437's "behind the sweep is safe"), aim-locked by the telegraph before it; the
+  pendulum, the narrow/wide alternation and the arrow throw are all authored as states. The phase
+  change is `whenHealthBelow`, a transition rather than `splitOnDeath.atHealthBelow`, because The
+  First Human keeps his body, bar and position across phases where Der Stier dismounts into a new
+  one. Four other generic additions carried the roster: a charge that climbs cover (Steinbock), a
+  `burrow` state flag (Murmeltier), a `shoal` movement (Kuhglocke), and the `Marking` projectile tag
+  (Bergwacht's flare) plus `bounce` on any firing behaviour (Sennerin). Enemy shots now go through
+  `finalizeProjectileTags` like the player's, which is what made the bounce budget real.
+- **Boss art without a postcard** (`docs/BOSS_SPRITES.md` §10): hand-drawn parts posed through the
+  rig composer, on an 80×80 canvas, with the intro plate's postcard composed from the idle frame.
+  It is the cloud track of #77 applied to a boss, and it is a stand-in: design, canvas and
+  postcard are pending sign-off, and the rig is meant to be re-cut from key art once chosen.
+- **Names.** "The First Human" is English by #437's own decision; "The Gondola" and "Tourist" are
+  English placeholders for the same reason §0 of the bible gives — nothing Bavarian is coined by an
+  agent. The mini-boss waits for its name.
+- **Pacing stays measured** (#232, #66): The First Human at 150 health shows four wide sweeps and
+  two arrows against a 6 DPS player; The Gondola at 60 dies before him and docks twice. Both are
+  assertions in `boss-pacing.test.ts`, not estimates.
+

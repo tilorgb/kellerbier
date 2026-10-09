@@ -77,7 +77,7 @@ describe('Lighting/Scenery, a constant point-light count (#292)', () => {
     const load = (
       doors: readonly CompiledDoor[],
       props: readonly { readonly x: number; readonly y: number; readonly type: string }[],
-      rig: 'cellar' | 'daylight',
+      rig: 'cellar' | 'daylight' | 'alpine',
     ): void => {
       const scenery = new Scenery(
         room(240, 144),

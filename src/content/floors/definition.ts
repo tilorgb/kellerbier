@@ -3,8 +3,8 @@
  * it draws from.
  *
  * `floorTag` matches `RoomTemplate.metadata.floorTags` — the generator only
- * considers templates tagged for the floor it is building. Floors 3–7 have no
- * authored templates yet (that's #39–#43); their configs exist so the
+ * considers templates tagged for the floor it is building. Floors 5–7 have no
+ * authored templates yet (that's #41–#43); their configs exist so the
  * generator and its tests are already right for seven floors, not one.
  */
 
@@ -149,6 +149,24 @@ export const ROOM_GEN_FLOOR_OVERRIDES: Readonly<Record<string, Partial<RoomGenTu
     // still reads as an event rather than as the floor's lighting.
     darkRoomChance: 0.15,
   },
+  /**
+   * #40: Floor 4 starts from `wald`'s threat numbers (one step harder than
+   * the floor before, not a cliff) with *less* cover — a snowfield is open
+   * ground, and the Steinbock's charge goes over what cover there is — and
+   * the floor's own weather. About one room in four has a sheet of ice
+   * (`hazardChance`); roughly one in six has an avalanche lane and one in
+   * five a wind lane (`sim/hazard/weather.ts`), rolled separately. No dark
+   * rooms: the mountain is lit by its sky.
+   */
+  alpen: {
+    threatBase: 3.5,
+    maxEnemies: 8,
+    hazardChance: 0.25,
+    minCoverTiles: 6,
+    maxCoverTiles: 18,
+    avalancheChance: 0.16,
+    windChance: 0.2,
+  },
 };
 
 export const FLOOR_CONFIGS: readonly FloorConfig[] = [
@@ -256,8 +274,8 @@ export const FLOOR_CONFIGS: readonly FloorConfig[] = [
  * The highest floor number with a real room pool to draw from, today —
  * `FLOOR_CONFIGS` above already lists floors up to 7 (#37's doc comment),
  * but a floor's config being *present* isn't the same as its room pool
- * being non-empty: floors 4-7 have zero templates tagged for their
- * `floorTag` (`alpen`/`schloss`/`brauerei`/`wiesn`), so
+ * being non-empty: floors 5-7 have zero templates tagged for their
+ * `floorTag` (`schloss`/`brauerei`/`wiesn`), so
  * `generateFloor` would throw the moment it tried to place a start or boss
  * room. Bump this the moment a floor's room templates land (its
  * `floorTag` shows up in at least a start/boss/treasure/shop/secret/
@@ -269,7 +287,7 @@ export const FLOOR_CONFIGS: readonly FloorConfig[] = [
  * bot can import the same number instead of carrying its own copy that
  * could silently drift out of sync.
  */
-export const HIGHEST_PLAYABLE_FLOOR = 3;
+export const HIGHEST_PLAYABLE_FLOOR = 4;
 
 /**
  * The highest floor a `?floor=N` sandbox run (`app/start-floor.ts`, dev and
@@ -279,7 +297,8 @@ export const HIGHEST_PLAYABLE_FLOOR = 3;
  * The two gates answer different questions. `HIGHEST_PLAYABLE_FLOOR` is
  * "may a player's run *progress* here" — it waits until the floor is
  * finished (Floor 3: its roster #405-#411 and Der Waldradler #412/#413,
- * bumped by #414). This one is "can the floor be *generated* at all", so the
+ * bumped by #414; Floor 4: its roster, The Gondola and The First Human,
+ * #40/#437). This one is "can the floor be *generated* at all", so the
  * work in progress can be played and reviewed on its own floor the moment
  * its room pool is complete enough for `generateFloor` (a start, boss,
  * treasure, shop, secret and supersecret template for its `floorTag`) —
@@ -288,4 +307,4 @@ export const HIGHEST_PLAYABLE_FLOOR = 3;
  * one, so a bump past what the content supports fails CI rather than
  * freezing a sandbox run (`docs/DECISIONS.md` #19).
  */
-export const HIGHEST_SANDBOX_FLOOR = 3;
+export const HIGHEST_SANDBOX_FLOOR = 4;

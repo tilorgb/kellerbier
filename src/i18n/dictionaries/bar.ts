@@ -61,7 +61,7 @@ export const bar: Record<DictKey, string> = {
 
   'ui.victory.headline': 'Sieg!',
   'ui.victory.epilogue':
-    "Des letzte Radl vom Waldradler steht still. Da Weg is wieda ruhig, zum erstn Moi seit lang.\nWeita geht d'Straß fürs Erste ned.",
+    "The First Human legt si zruck in 'n Schnee, und da Gletscher is so stad wia fünftausend Jahr lang.\nWeita geht da Berg fürs Erste ned.",
   'ui.victory.retry': 'No amoi',
   'ui.victory.results': 'Ergebnis',
   'ui.victory.hub': 'Titl',
@@ -120,6 +120,8 @@ export const bar: Record<DictKey, string> = {
     "D'Kellertreppn nauf, und Oberniederburg hat an schäna Nachmittag. De neichn Kistn staplt si vorm Wirtshaus, auf de Anhänger, hinterm Marktstand — am hellichtn Tag, und koaner am Platz hat's für nötig ghoitn, wos dazua z'sogn.\n\nEs war also nia bloaß dem Opa sei Kistn. Irgendwer schickt de do, lasterweis, und de kemma von weiter obn im Tal, ois wo da Alois je an Grund ghabt hätt hinzfahrn.",
   'ui.story.chapterThree':
     "Hinterm Dorf wird de Straß zu Schotter, dann zu am Wanderweg, dann zu was, des bloß so duat. Da Alois folgt de Reifnspurn in 'n Wald. Do is ois grea, und ned ois davo soi's song.",
+  'ui.story.chapterFour':
+    "Über da Baumgrenz hört da Weg auf, so z'doa. Schnee, Fels, a Seilbahn, de seit Jahr ned fahrt, und de Kistn gengan weiter nauf — jetzt auf Schlittn, über'n Gletscher. Do obn wart wos scho arg lang, und d'Brauerei is es ned.",
 
   // --- HUD -----------------------------------------------------
   'ui.hud.bossBanner': 'Bossraum',
@@ -131,6 +133,7 @@ export const bar: Record<DictKey, string> = {
   'ui.hud.bossLabel': 'BOSS',
   'ui.hud.poisoned': 'Vergiftet {seconds}s — ein Maß heilt es',
   'ui.hud.latched': 'Zecke an dir! Im Zickzack abschütteln',
+  'ui.hud.marked': 'Markiert {seconds}s — da ganze Raum siagt di',
   'ui.hud.shakeOffHint': 'Abschütteln: schnell und scharf die Richtung wechseln',
   'ui.hud.sandboxRun': 'Sandbox-Lauf — Items verteilt, nichts wird gespeichert oder freigeschaltet',
   'ui.hud.sandboxClamped':
@@ -344,6 +347,8 @@ export const bar: Record<DictKey, string> = {
   // Boss intro plate (#412) — draft, pending sign-off. NOT reviewed by a native speaker.
   'enemies.waldradler.title': 'Zwoa Radl - Koa Hirn',
   'enemies.waldradler.epithet': 'Immer a Müsli Packl mehr im Sackl',
+  'enemies.the-first-human.title': 'Aus’m Eis',
+  'enemies.the-first-human.epithet': 'Fünftausend Winta. Oa Pfeil.',
   // Villager one-liner (#58/#330) — the German line, verbatim, until the real
   // Boarisch phrasing is pitched. Left plain rather than guessed at dialect,
   // per this project's "the user names/phrases things" rule.
@@ -413,7 +418,7 @@ export const bar: Record<DictKey, string> = {
     'Gschoss kreisn zruck zu dia und treffn af da Rückreis no amoi. Gschossgschwindigkeit -25%',
   'items.gugelhupf.flavourText':
     'A Kuacha mit am Loch drin, dass a durchgart. Des is da gonze Trick.',
-  'items.haferlschuh.description': 'Lauftempo +15%, immun gegn rutschade Pfütz’n',
+  'items.haferlschuh.description': 'Lauftempo +15%, immun gegn rutschade Pfütz’n und Eis',
   'items.haferlschuh.flavourText':
     'Jeda Nagl vo Hand ineighaut, vo iagendwem, der des vui z’earnst nimmt.',
   'items.hendlgeruch.description': 'Zieht dauand entfernte Gegna zu dia her',

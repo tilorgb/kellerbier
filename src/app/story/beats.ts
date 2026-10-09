@@ -14,9 +14,12 @@ import { updateSave } from '../save/storage.js';
  *   first chapter, which is a different job.
  * - `'chapter-three'` — the card on the way from the village into the Wald,
  *   `advanceFloor`'s first real arrival on floor 3.
+ * - `'chapter-four'` — the card where the forest gives out and the mountain
+ *   begins, `advanceFloor`'s first real arrival on floor 4 (#40).
  *
- * The run's *ending* is not in here: it is `VictoryScreen`'s epilogue (Der
- * Waldradler, since #414 moved the win to floor 3), which a player is meant to see every time they win, not once ever.
+ * The run's *ending* is not in here: it is `VictoryScreen`'s epilogue (The
+ * First Human, since #40 moved the win to floor 4), which a player is meant
+ * to see every time they win, not once ever.
  *
  * Kept as pure functions over a `SaveData` (`hasSeenStoryBeat`/
  * `withStoryBeatSeen`), the same split `app/meta/progress.ts` uses, so the
@@ -26,6 +29,7 @@ import { updateSave } from '../save/storage.js';
 export const STORY_BEAT_OPENING = 'opening';
 export const STORY_BEAT_CHAPTER_TWO = 'chapter-two';
 export const STORY_BEAT_CHAPTER_THREE = 'chapter-three';
+export const STORY_BEAT_CHAPTER_FOUR = 'chapter-four';
 
 export function hasSeenStoryBeat(save: SaveData, id: string): boolean {
   return save.seenStoryBeats.includes(id);

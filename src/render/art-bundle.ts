@@ -19,6 +19,8 @@ import { PARTICLE_KIND_IDS, ParticleKind } from '../sim/particle/store.js';
 const FLOOR_ENEMY_SHOT: Readonly<Record<number, string>> = {
   1: 'tap-drip',
   2: 'boeller',
+  // Die Alpen (#40): anything up there that fires without naming its own art throws snow.
+  4: 'snow-clod',
 };
 
 /** Alois's own untagged shot. */
@@ -92,6 +94,8 @@ const PARTICLE_SPRITE_NAMES: Readonly<Record<number, string>> = {
   [ParticleKind.Flash]: 'flash',
   // The same art as Spore, tinted green by `ParticleView` (#401) — no new sprite.
   [ParticleKind.Miasma]: 'spore',
+  // The same art as Dust, tinted white by `ParticleView` (#40) — no new sprite.
+  [ParticleKind.Snow]: 'dust',
 };
 
 /** The name the art-directed telegraph ring is authored under (#153). */

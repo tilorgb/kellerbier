@@ -1,0 +1,113 @@
+{
+  "id": "alpen-snowfield",
+  "tileGrid": [
+    "###############",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "###############"
+  ],
+  "obstacles": [
+    {
+      "x": 48,
+      "y": 48,
+      "width": 16,
+      "height": 16
+    },
+    {
+      "x": 176,
+      "y": 80,
+      "width": 16,
+      "height": 16
+    }
+  ],
+  "enemySpawns": [
+    {
+      "x": 120,
+      "y": 40,
+      "group": "g"
+    },
+    {
+      "x": 120,
+      "y": 104,
+      "group": "bells"
+    }
+  ],
+  "spawnGroups": [
+    {
+      "id": "g",
+      "count": 2,
+      "choices": [
+        {
+          "enemyId": "steinbock",
+          "minFloor": 4,
+          "maxFloor": 4
+        },
+        {
+          "enemyId": "murmeltier",
+          "minFloor": 4,
+          "maxFloor": 4
+        },
+        {
+          "enemyId": "bergwacht",
+          "minFloor": 4,
+          "maxFloor": 4
+        },
+        {
+          "enemyId": "sennerin",
+          "minFloor": 4,
+          "maxFloor": 4
+        }
+      ]
+    },
+    {
+      "id": "bells",
+      "count": 4,
+      "choices": [
+        {
+          "enemyId": "kuhglocke",
+          "minFloor": 4,
+          "maxFloor": 4
+        }
+      ]
+    }
+  ],
+  "pickupSpawns": [],
+  "hazards": [
+    {
+      "x": 80,
+      "y": 64,
+      "width": 48,
+      "height": 32,
+      "type": "ice"
+    }
+  ],
+  "decorativeProps": [
+    {
+      "x": 200,
+      "y": 32,
+      "type": "cairn"
+    },
+    {
+      "x": 24,
+      "y": 112,
+      "type": "fir"
+    }
+  ],
+  "metadata": {
+    "floorTags": ["alpen"],
+    "shape": "1x1",
+    "doors": {
+      "north": true,
+      "east": true,
+      "south": true,
+      "west": true
+    },
+    "difficultyTier": 1,
+    "weight": 1
+  }
+}

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createDefaultSave } from '../../src/app/save/schema.js';
 import {
+  STORY_BEAT_CHAPTER_FOUR,
   STORY_BEAT_CHAPTER_THREE,
   STORY_BEAT_CHAPTER_TWO,
   STORY_BEAT_OPENING,
@@ -48,8 +49,13 @@ describe('story beats (#58)', () => {
     expect(hasSeenStoryBeat(both, STORY_BEAT_CHAPTER_TWO)).toBe(true);
   });
 
-  it('gives the two beats distinct ids', () => {
-    expect(STORY_BEAT_OPENING).not.toBe(STORY_BEAT_CHAPTER_TWO);
-    expect(STORY_BEAT_CHAPTER_THREE).not.toBe(STORY_BEAT_CHAPTER_TWO);
+  it('gives the beats distinct ids', () => {
+    const ids = [
+      STORY_BEAT_OPENING,
+      STORY_BEAT_CHAPTER_TWO,
+      STORY_BEAT_CHAPTER_THREE,
+      STORY_BEAT_CHAPTER_FOUR,
+    ];
+    expect(new Set(ids).size).toBe(ids.length);
   });
 });

@@ -89,4 +89,11 @@ export const DECORATIVE_PROP_TYPE_SUGGESTIONS: readonly string[] = [
  * Floor 2's hop trellis (#37), Floor 3's Waldbach stream (#403). Still free
  * text: an author may type anything, this is only the suggestion list.
  */
-export const HAZARD_TYPE_SUGGESTIONS: readonly string[] = ['puddle', 'trellis', 'waldbach'];
+export const HAZARD_TYPE_SUGGESTIONS: readonly string[] = [
+  'puddle',
+  'trellis',
+  'waldbach',
+  'ice',
+  'avalanche',
+  'wind',
+];

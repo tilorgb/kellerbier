@@ -1,8 +1,9 @@
 import { World } from '../ecs/world.js';
-import type { ChargeAtPlayerBehaviour } from '../enemy/definition.js';
+import type { ChargeAtPlayerBehaviour, ShoalBehaviour } from '../enemy/definition.js';
 import {
   type CompiledDetonation,
   type CompiledEnemy,
+  type CompiledFireSweep,
   type CompiledMeleeArc,
   type CompiledState,
   type CompiledVolleyBurst,
@@ -20,6 +21,7 @@ import { CollisionLayer, collisionMaskFor } from '../collision/layers.js';
 import { NO_SLOT } from '../pool/slot-pool.js';
 import { ProjectileTeam } from '../projectile/store.js';
 import { ProjectileTag } from '../projectile/tags.js';
+import { finalizeProjectileTags } from '../projectile/behavior.js';
 import { ParticleKind } from '../particle/store.js';
 import { nextWaypoint, straightClear, type Waypoint } from '../room/pathfind.js';
 import { CLEAR_IGNORE_DESTRUCTIBLE, CLEAR_IGNORE_PITS } from '../room/geometry.js';
@@ -390,7 +392,7 @@ export function stepEnemies(sim: GameSim): void {
       aimY = (sim.enemyMotion.data[motionBase + 5] ?? playerY) - selfY;
     }
     const aimDistance = vectorLength(aimX, aimY);
-    if (ticks === 0 && state.meleeArc !== null) {
+    if (ticks === 0 && (state.meleeArc !== null || state.fireSweep !== null)) {
       lockMeleeAim(sim, index, aimX, aimY, aimDistance);
     }
 
@@ -428,6 +430,9 @@ export function stepEnemies(sim: GameSim): void {
     }
     if (state.meleeArc !== null) {
       applyMeleeArc(sim, index, state.meleeArc, ticks, selfX, selfY);
+    }
+    if (state.fireSweep !== null) {
+      applyFireSweep(sim, index, state.fireSweep, ticks, selfX, selfY);
     }
     if (state.summons.length > 0) {
       queueSummonWaves(sim, index, state, ticks, selfX, selfY);
@@ -548,6 +553,152 @@ function enterStateExtras(
       2,
     );
   }
+  // Under the ground (#40, the Murmeltier): the same removal from every
+  // collision layer a dive takes, and a puff of snow where it goes under or
+  // comes up.
+  if (entered.burrowed !== left.burrowed && !entered.submerged && !left.submerged) {
+    setSubmerged(sim, index, entered.burrowed);
+    ring(
+      sim,
+      selfX,
+      selfY,
+      SURFACE_SPLASH_SPOKES,
+      ParticleKind.Snow,
+      SURFACE_SPLASH_SPEED,
+      SURFACE_SPLASH_TICKS,
+      2,
+    );
+  }
+}
+
+/** Whether the body at `index` is in a `burrow` state right now (#40) — the renderer's mound, and the bodies pass, read this. */
+export function enemyBurrowed(sim: GameSim, index: number): boolean {
+  const base = index * ENEMY_STRIDE;
+  const state = sim.enemies.at(sim.enemy.data[base] ?? 0).states[sim.enemy.data[base + 1] ?? 0];
+  return state?.burrowed === true;
+}
+
+/**
+ * Whether the enemy body at `index` crosses the room's furniture, water and
+ * pits this tick (`moveBody`'s `overfly`): a `flying` body always (#411), a
+ * burrowed one (#40, under it all), and a charge that `climbsBlocks` (#40,
+ * the Steinbock) for as long as the charge lasts.
+ */
+export function enemyOverflies(sim: GameSim, index: number): boolean {
+  const base = index * ENEMY_STRIDE;
+  const compiled = sim.enemies.at(sim.enemy.data[base] ?? 0);
+  if (compiled.flying) {
+    return true;
+  }
+  const state = compiled.states[sim.enemy.data[base + 1] ?? 0];
+  if (state === undefined) {
+    return false;
+  }
+  return (
+    state.burrowed ||
+    (state.movement.behaviour === 'chargeAtPlayer' && state.movement.climbsBlocks === true)
+  );
+}
+
+/** How hard two touching shoal-mates push apart, against a cohesion and pull of about 1 each. */
+const SHOAL_SEPARATION = 3;
+
+/**
+ * One tick of `shoal` (#40): the heading turns toward the shoal's centre, the
+ * player and away from a too-close shoal-mate, keeps `inertia` of itself,
+ * and the body moves along it at `speed`. The heading lives in the motion
+ * row's heading slots, which is what the body's art turns to face.
+ */
+function shoalStep(
+  sim: GameSim,
+  index: number,
+  behaviour: ShoalBehaviour,
+  selfX: number,
+  selfY: number,
+  toPlayerX: number,
+  toPlayerY: number,
+  distance: number,
+  scale: number,
+): void {
+  const motion = sim.enemyMotion.data;
+  const motionBase = index * ENEMY_MOTION_STRIDE;
+  const kind = sim.enemy.data[index * ENEMY_STRIDE] ?? 0;
+  const states = sim.world.states;
+  const masks = sim.world.masks;
+  const required = sim.enemyMask;
+  const enemy = sim.enemy.data;
+  let sumX = 0;
+  let sumY = 0;
+  let mates = 0;
+  let awayX = 0;
+  let awayY = 0;
+  const spacing = behaviour.spacing;
+  for (let other = 0; other < sim.world.highWater; other++) {
+    if (other === index || states[other] !== World.ALIVE) {
+      continue;
+    }
+    if (((masks[other] ?? 0) & required) !== required) {
+      continue;
+    }
+    if ((enemy[other * ENEMY_STRIDE] ?? -1) !== kind) {
+      continue;
+    }
+    const otherX = sim.positionX(other);
+    const otherY = sim.positionY(other);
+    sumX += otherX;
+    sumY += otherY;
+    mates += 1;
+    const dx = selfX - otherX;
+    const dy = selfY - otherY;
+    const apart = vectorLength(dx, dy);
+    if (apart > 0 && apart < spacing) {
+      // The closer, the harder the push: `SHOAL_SEPARATION` at touching,
+      // none at `spacing` — weighted above the pulls, or a tight shoal's
+      // cohesion simply wins and the bells stack.
+      const weight = ((spacing - apart) / spacing) * SHOAL_SEPARATION;
+      awayX += (dx / apart) * weight;
+      awayY += (dy / apart) * weight;
+    }
+  }
+  let wantX = 0;
+  let wantY = 0;
+  if (mates > 0) {
+    const centreX = sumX / mates - selfX;
+    const centreY = sumY / mates - selfY;
+    const toCentre = vectorLength(centreX, centreY);
+    if (toCentre > 0) {
+      wantX += (centreX / toCentre) * behaviour.cohesion;
+      wantY += (centreY / toCentre) * behaviour.cohesion;
+    }
+  }
+  if (distance > 0) {
+    wantX += (toPlayerX / distance) * behaviour.pull;
+    wantY += (toPlayerY / distance) * behaviour.pull;
+  }
+  wantX += awayX;
+  wantY += awayY;
+  const wantLength = vectorLength(wantX, wantY);
+  let headingX = motion[motionBase] ?? 0;
+  let headingY = motion[motionBase + 1] ?? 0;
+  if (wantLength > 0) {
+    const keep = behaviour.inertia;
+    headingX = headingX * keep + (wantX / wantLength) * (1 - keep);
+    headingY = headingY * keep + (wantY / wantLength) * (1 - keep);
+  }
+  const headingLength = vectorLength(headingX, headingY);
+  if (headingLength === 0) {
+    // Nothing pulls and nothing was going: face the player and start.
+    headingX = distance === 0 ? 1 : toPlayerX / distance;
+    headingY = distance === 0 ? 0 : toPlayerY / distance;
+  } else {
+    headingX /= headingLength;
+    headingY /= headingLength;
+  }
+  motion[motionBase] = headingX;
+  motion[motionBase + 1] = headingY;
+  const speed = behaviour.speed * scale;
+  sim.velocity.data[index * 2] = headingX * speed;
+  sim.velocity.data[index * 2 + 1] = headingY * speed;
 }
 
 /**
@@ -810,7 +961,11 @@ function chargeImpact(
   speed: number,
   selfX: number,
   selfY: number,
+  climbs = false,
 ): number {
+  // A climbing charge (#40) asks the air's question of the terrain: cover is
+  // not in its way, only a wall is.
+  const clearFlags = climbs ? AIR_CLEAR : 0;
   const body = sim.body.data;
   const radius = body[index * 2] ?? 0;
   const nextX = selfX + dirX * speed;
@@ -845,13 +1000,13 @@ function chargeImpact(
   // exactly one step let that stop — an ordinary `onBlocked`, nothing
   // smashed — win the race by a tick.
   const reach = speed + IMPACT_TERRAIN_SLACK;
-  if (sim.room.isClear(selfX + dirX * reach, selfY + dirY * reach, radius)) {
+  if (sim.room.isClear(selfX + dirX * reach, selfY + dirY * reach, radius, clearFlags)) {
     return speed;
   }
   // Something solid within reach: run the rest of the way up to it at full
   // speed, so the hit lands with the body against what it hit rather than a
   // few units short of it — the charge never visibly brakes before impact.
-  const free = clearRun(sim, selfX, selfY, dirX, dirY, radius, reach);
+  const free = clearRun(sim, selfX, selfY, dirX, dirY, radius, reach, clearFlags);
   // The front edge, at contact: tried across the body's width, centre first,
   // so a glancing hit on a block's corner still smashes it — one point on
   // the centre line missed every block that only overlapped one flank.
@@ -892,12 +1047,13 @@ function clearRun(
   dirY: number,
   radius: number,
   limit: number,
+  clearFlags = 0,
 ): number {
   let low = 0;
   let high = limit;
   for (let step = 0; step < 10; step++) {
     const mid = (low + high) / 2;
-    if (sim.room.isClear(x + dirX * mid, y + dirY * mid, radius)) {
+    if (sim.room.isClear(x + dirX * mid, y + dirY * mid, radius, clearFlags)) {
       low = mid;
     } else {
       high = mid;
@@ -1242,6 +1398,16 @@ function chooseTransition(
           return transition.to;
         }
         break;
+      case TransitionTrigger.HealthBelow: {
+        // A phase change on a health threshold (#437): the body itself
+        // carries on — position, bar, elite roll — only its state moves.
+        const current = sim.health.data[index * 2] ?? 0;
+        const max = sim.health.data[index * 2 + 1] ?? 1;
+        if (current <= transition.value * max) {
+          return transition.to;
+        }
+        break;
+      }
       case TransitionTrigger.OnLatched:
         if ((flags & ENEMY_FLAG_JUST_LATCHED) !== 0) {
           return transition.to;
@@ -1715,6 +1881,7 @@ function applyMovement(
           speed,
           selfX,
           selfY,
+          behaviour.climbsBlocks === true,
         );
       }
       velocity[base] = (motion[motionBase] ?? 0) * speed;
@@ -1851,6 +2018,10 @@ function applyMovement(
       const speed = phase >= 0 ? hopSpeed(distanceScaled, phase, hopTicks) : 0;
       velocity[base] = (motion[motionBase] ?? 0) * speed;
       velocity[base + 1] = (motion[motionBase + 1] ?? 0) * speed;
+      return;
+    }
+    case 'shoal': {
+      shoalStep(sim, index, behaviour, selfX, selfY, toPlayerX, toPlayerY, distance, scale);
       return;
     }
     case 'wander': {
@@ -2087,7 +2258,10 @@ function applyFiring(
   aimY: number,
   aimDistance: number,
 ): void {
-  const scale = sim.tuning.enemy.fireIntervalScale;
+  const scale =
+    sim.tuning.enemy.fireIntervalScale *
+    // A marked player (#40) is fired at faster by everything in the room.
+    (sim.playerMarked > 0 ? sim.tuning.enemy.markedFireIntervalScale : 1);
   const freeAim = aimDistance === 0 ? 0 : Math.atan2(aimY, aimX);
 
   for (const shot of state.firing) {
@@ -2189,6 +2363,11 @@ function isSighted(sim: GameSim, index: number, toPlayerX: number, toPlayerY: nu
   if (sim.room.sightBlockCount === 0 && sim.room.blockCount === 0) {
     return true;
   }
+  // Marked by a flare (#40): the whole room knows where the player is, cover
+  // or no cover, for as long as the mark burns.
+  if (sim.playerMarked > 0) {
+    return true;
+  }
   const shooterX = sim.positionX(index);
   const shooterY = sim.positionY(index);
   return !sim.room.blocksSight(shooterX, shooterY, shooterX + toPlayerX, shooterY + toPlayerY);
@@ -2238,6 +2417,8 @@ interface ShotSpec {
   readonly radius?: number | undefined;
   readonly art?: string | undefined;
   readonly poison?: boolean | undefined;
+  readonly bounce?: boolean | undefined;
+  readonly mark?: boolean | undefined;
 }
 
 /**
@@ -2277,7 +2458,9 @@ function fireFrom(
     eliteAttackDamage(sim, index, shot.damage),
     Math.max(1, Math.round(shot.lifetimeTicks)),
     ProjectileTeam.Enemy,
-    shot.poison === true ? ProjectileTag.Poison : 0,
+    (shot.poison === true ? ProjectileTag.Poison : 0) |
+      (shot.bounce === true ? ProjectileTag.Bouncing : 0) |
+      (shot.mark === true ? ProjectileTag.Marking : 0),
     // Which sprite this shot is drawn as, if its behaviour named one (#152).
 
     // Resolved through the roster's interned name table rather than carried as
@@ -2286,6 +2469,10 @@ function fireFrom(
   );
   if (projectile !== NO_SLOT) {
     sim.projectiles.ownerDefinition[projectile] = sim.enemy.data[index * ENEMY_STRIDE] ?? -1;
+    // An enemy shot's tags are final the moment it leaves (no item hook adds
+    // to them), so its bounce budget is derived here (#40, the Sennerin's
+    // wheel) — the same call the player's shot makes once its hooks are done.
+    finalizeProjectileTags(sim, projectile);
   }
   // "Something over there just shot" is worth a frame of warning at the edge
   // of vision (#153), and an enemy's muzzle flashing where the player's does
@@ -2580,7 +2767,11 @@ function lockMeleeAim(
  * Shared by the hit check and by the renderer that swings the weapon sprite,
  * so the two can never disagree about where the blade is (#199).
  */
-export function meleeBladeAngle(swing: CompiledMeleeArc, aimAngle: number, ticks: number): number {
+export function meleeBladeAngle(
+  swing: Pick<CompiledMeleeArc, 'arc' | 'sweepTicks' | 'direction'>,
+  aimAngle: number,
+  ticks: number,
+): number {
   const t = clamp(ticks / swing.sweepTicks, 0, 1);
   return aimAngle + swing.direction * (-swing.arc / 2 + swing.arc * t);
 }
@@ -2964,6 +3155,40 @@ function becomePropFromEvent(sim: GameSim, slot: number): void {
 }
 
 /** The `log` prop kind's index (#467), resolved once. */
+/**
+ * The ranged swing (#437, `fireSweep`): the arm runs the same arc the blade
+ * does, and every `shotEveryTicks` from the swing's first tick a shot leaves
+ * along the arm's bearing right now. Deterministic — the aim was locked on
+ * entry (`lockMeleeAim`), the bearing is a pure function of ticks — and never
+ * re-aimed, so the ground the arm has already passed is safe for the rest of
+ * the swing. Not gated on sight: a committed swing goes where it was aimed,
+ * and the arena's boulders are what the shots run into.
+ */
+function applyFireSweep(
+  sim: GameSim,
+  index: number,
+  sweep: CompiledFireSweep,
+  ticks: number,
+  selfX: number,
+  selfY: number,
+): void {
+  if (ticks > sweep.sweepTicks || ticks % sweep.shotEveryTicks !== 0) {
+    return;
+  }
+  const motion = sim.enemyMotion.data;
+  const motionBase = index * ENEMY_MOTION_STRIDE;
+  const aimAngle = Math.atan2(motion[motionBase + 1] ?? 0, motion[motionBase] ?? 1);
+  fireFrom(
+    sim,
+    index,
+    selfX,
+    selfY,
+    sim.body.data[index * 2] ?? 0,
+    meleeBladeAngle(sweep, aimAngle, ticks),
+    sweep,
+  );
+}
+
 const LOG_KIND = propKindIndex('log');
 
 /** What a dropped prop weighs — see `propDropFromEvent`. */
@@ -3046,6 +3271,8 @@ export function enemyTelegraphProgress(sim: GameSim, index: number): number {
 
 /** Room units over which a diving flyer comes down to the floor before its point (#411). */
 const DIVE_DESCENT = 24;
+/** How high, as a fraction of flying height, a climbing charge (#40) is drawn while over a block. */
+const CLIMB_LIFT = 0.55;
 
 /**
  * How far up in the air the body at `index` is drawn, `0` (on the floor) to
@@ -3060,10 +3287,20 @@ export function enemyFlightHeight(sim: GameSim, index: number): number {
   }
   const base = index * ENEMY_STRIDE;
   const compiled = sim.enemies.at(sim.enemy.data[base] ?? 0);
+  const state = compiled.states[sim.enemy.data[base + 1] ?? 0];
   if (!compiled.flying) {
+    // A climbing charge (#40, the Steinbock) is lifted while its body is over
+    // a block, so going over a rock reads as a bound rather than a clip.
+    const movement = state?.movement;
+    if (
+      movement?.behaviour === 'chargeAtPlayer' &&
+      movement.climbsBlocks === true &&
+      !sim.room.isClear(sim.positionX(index), sim.positionY(index), 0.5, CLEAR_IGNORE_PITS)
+    ) {
+      return CLIMB_LIFT;
+    }
     return 0;
   }
-  const state = compiled.states[sim.enemy.data[base + 1] ?? 0];
   if (state === undefined || state.grounded) {
     return 0;
   }
@@ -3471,6 +3708,17 @@ export function enemyTelegraphShape(
     out.angle = enemyAimAngle(sim, index);
     out.arc = follow.meleeArc.arc;
     out.reach = follow.meleeArc.reach;
+    return true;
+  }
+  // A ranged sweep (#437) warns with the same arc: the fan the shots will
+  // fill, drawn out to its authored `telegraphReach`.
+  if (follow !== null && follow.fireSweep !== null) {
+    out.shape = TelegraphShape.Arc;
+    out.x = selfX;
+    out.y = selfY;
+    out.angle = enemyAimAngle(sim, index);
+    out.arc = follow.fireSweep.arc;
+    out.reach = follow.fireSweep.telegraphReach;
     return true;
   }
 

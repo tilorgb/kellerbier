@@ -1,0 +1,217 @@
+{
+  "id": "alpen-col",
+  "cells": [
+    {
+      "tileGrid": [
+        "###############",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "###############"
+      ],
+      "obstacles": [
+        {
+          "x": 64,
+          "y": 64,
+          "width": 16,
+          "height": 16
+        },
+        {
+          "x": 160,
+          "y": 64,
+          "width": 16,
+          "height": 16
+        }
+      ],
+      "enemySpawns": [
+        {
+          "x": 120,
+          "y": 40,
+          "group": "g"
+        }
+      ],
+      "spawnGroups": [
+        {
+          "id": "g",
+          "count": 1,
+          "choices": [
+            {
+              "enemyId": "murmeltier",
+              "minFloor": 4,
+              "maxFloor": 4
+            },
+            {
+              "enemyId": "steinbock",
+              "minFloor": 4,
+              "maxFloor": 4
+            }
+          ]
+        }
+      ],
+      "pickupSpawns": [],
+      "hazards": [
+        {
+          "x": 16,
+          "y": 16,
+          "width": 208,
+          "height": 112,
+          "type": "avalanche"
+        }
+      ],
+      "decorativeProps": [
+        {
+          "x": 200,
+          "y": 112,
+          "type": "cairn"
+        }
+      ]
+    },
+    {
+      "tileGrid": [
+        "###############",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "###############"
+      ],
+      "obstacles": [
+        {
+          "x": 48,
+          "y": 32,
+          "width": 16,
+          "height": 16
+        },
+        {
+          "x": 176,
+          "y": 112,
+          "width": 16,
+          "height": 16
+        }
+      ],
+      "enemySpawns": [
+        {
+          "x": 120,
+          "y": 72,
+          "group": "maid"
+        }
+      ],
+      "spawnGroups": [
+        {
+          "id": "maid",
+          "count": 1,
+          "choices": [
+            {
+              "enemyId": "sennerin",
+              "minFloor": 4,
+              "maxFloor": 4
+            },
+            {
+              "enemyId": "bergwacht",
+              "minFloor": 4,
+              "maxFloor": 4
+            }
+          ]
+        }
+      ],
+      "pickupSpawns": [],
+      "hazards": [
+        {
+          "x": 64,
+          "y": 48,
+          "width": 112,
+          "height": 48,
+          "type": "ice"
+        }
+      ],
+      "decorativeProps": [
+        {
+          "x": 24,
+          "y": 24,
+          "type": "fir"
+        }
+      ]
+    },
+    {
+      "tileGrid": [
+        "###############",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "###############"
+      ],
+      "obstacles": [
+        {
+          "x": 112,
+          "y": 48,
+          "width": 16,
+          "height": 16
+        },
+        {
+          "x": 128,
+          "y": 48,
+          "width": 16,
+          "height": 16
+        },
+        {
+          "x": 112,
+          "y": 96,
+          "width": 16,
+          "height": 16
+        },
+        {
+          "x": 128,
+          "y": 96,
+          "width": 16,
+          "height": 16
+        }
+      ],
+      "enemySpawns": [
+        {
+          "x": 120,
+          "y": 72,
+          "group": "bells"
+        }
+      ],
+      "spawnGroups": [
+        {
+          "id": "bells",
+          "count": 4,
+          "choices": [
+            {
+              "enemyId": "kuhglocke",
+              "minFloor": 4,
+              "maxFloor": 4
+            }
+          ]
+        }
+      ],
+      "pickupSpawns": [],
+      "hazards": [],
+      "decorativeProps": [
+        {
+          "x": 208,
+          "y": 120,
+          "type": "gipfelkreuz"
+        }
+      ]
+    }
+  ],
+  "metadata": {
+    "floorTags": ["alpen"],
+    "shape": "L",
+    "difficultyTier": 3,
+    "weight": 1
+  }
+}

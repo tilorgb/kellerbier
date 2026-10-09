@@ -1,7 +1,7 @@
 import { CollisionLayer } from '../collision/layers.js';
 import { World } from '../ecs/world.js';
 import type { GameSim } from '../game/sim.js';
-import { ENEMY_STRIDE, markEnemyBlocked } from './enemy.js';
+import { enemyOverflies, markEnemyBlocked } from './enemy.js';
 import { BLOCKED_X, BLOCKED_Y, moveBody } from './motion.js';
 
 /**
@@ -29,8 +29,6 @@ export function stepBodies(sim: GameSim): void {
   const damping = sim.tuning.movement.pushDamping;
   const room = sim.room;
   const enemyMask = sim.enemyMask;
-  const enemy = sim.enemy.data;
-  const enemies = sim.enemies;
 
   const highWater = world.highWater;
   for (let index = 0; index < highWater; index++) {
@@ -61,9 +59,10 @@ export function stepBodies(sim: GameSim): void {
     }
 
     // A flying enemy (#411) crosses furniture, water and pits: the player's
-    // own flight rule (#47), through the same resolver flag.
+    // own flight rule (#47), through the same resolver flag. So does one
+    // under the ground, or mid-climb over a rock (#40) — `enemyOverflies`.
     const isEnemy = ((masks[index] ?? 0) & enemyMask) === enemyMask;
-    const flying = isEnemy && enemies.at(enemy[index * ENEMY_STRIDE] ?? 0).flying;
+    const flying = isEnemy && enemyOverflies(sim, index);
     const blocked = moveBody(
       room,
       transform,

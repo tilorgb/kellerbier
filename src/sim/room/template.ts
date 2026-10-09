@@ -522,13 +522,20 @@ export function compileRoomTemplate(
         height: hazard.height,
         type: hazard.type,
       });
-      // "puddle" (#35), "trellis" (#37) and "waldbach" (#403) are the hazard
-      // types with sim behaviour today — see `RoomGeometry.puddles`/
-      // `.sightBlocks`/`.streams`. Anything
+      // "puddle" (#35), "trellis" (#37), "waldbach" (#403) and "ice" (#40)
+      // are the hazard types with sim behaviour today — see
+      // `RoomGeometry.puddles`/`.sightBlocks`/`.streams`/`.ice`. Anything
       // else round-trips through `hazards` above for the editor and render
       // layer, and waits for its own system.
       if (hazard.type === 'puddle') {
         geometry.addPuddle(
+          cellOffsetX + hazard.x,
+          cellOffsetY + hazard.y,
+          cellOffsetX + hazard.x + hazard.width,
+          cellOffsetY + hazard.y + hazard.height,
+        );
+      } else if (hazard.type === 'ice') {
+        geometry.addIce(
           cellOffsetX + hazard.x,
           cellOffsetY + hazard.y,
           cellOffsetX + hazard.x + hazard.width,
@@ -592,8 +599,10 @@ export function compileRoomTemplate(
     // shipped with props free to sit in a puddle, and their rooms stay as
     // they were.
     if (floor >= WATER_CLEARS_PROPS_FROM_FLOOR) {
+      // Floor 4's ice (#40) clears props the same way: a hut standing on a
+      // glacier sheet reads as a bug just as a fern in a puddle does.
       const wet = (x: number, y: number): boolean =>
-        geometry.isOnPuddle(x, y) || geometry.isInStream(x, y);
+        geometry.isOnPuddle(x, y) || geometry.isInStream(x, y) || geometry.isOnIce(x, y);
       for (let index = decorativeProps.length - 1; index >= firstProp; index--) {
         const prop = decorativeProps[index];
         if (

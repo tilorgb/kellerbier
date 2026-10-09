@@ -1,0 +1,112 @@
+{
+  "id": "alpen-cairn-field",
+  "tileGrid": [
+    "###############",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "###############"
+  ],
+  "obstacles": [],
+  "enemySpawns": [
+    {
+      "x": 120,
+      "y": 72,
+      "group": "bells"
+    },
+    {
+      "x": 48,
+      "y": 40,
+      "group": "g"
+    },
+    {
+      "x": 192,
+      "y": 104,
+      "group": "g"
+    }
+  ],
+  "spawnGroups": [
+    {
+      "id": "bells",
+      "count": 4,
+      "choices": [
+        {
+          "enemyId": "kuhglocke",
+          "minFloor": 4,
+          "maxFloor": 4
+        }
+      ]
+    },
+    {
+      "id": "g",
+      "count": 1,
+      "choices": [
+        {
+          "enemyId": "murmeltier",
+          "minFloor": 4,
+          "maxFloor": 4
+        },
+        {
+          "enemyId": "sennerin",
+          "minFloor": 4,
+          "maxFloor": 4
+        }
+      ]
+    }
+  ],
+  "pickupSpawns": [],
+  "hazards": [
+    {
+      "x": 32,
+      "y": 80,
+      "width": 48,
+      "height": 32,
+      "type": "ice"
+    },
+    {
+      "x": 160,
+      "y": 32,
+      "width": 48,
+      "height": 32,
+      "type": "ice"
+    }
+  ],
+  "decorativeProps": [
+    {
+      "x": 72,
+      "y": 32,
+      "type": "cairn"
+    },
+    {
+      "x": 168,
+      "y": 112,
+      "type": "cairn"
+    },
+    {
+      "x": 120,
+      "y": 24,
+      "type": "cairn"
+    },
+    {
+      "x": 216,
+      "y": 72,
+      "type": "cairn"
+    }
+  ],
+  "metadata": {
+    "floorTags": ["alpen"],
+    "shape": "1x1",
+    "doors": {
+      "north": true,
+      "east": true,
+      "south": true,
+      "west": true
+    },
+    "difficultyTier": 1,
+    "weight": 1
+  }
+}

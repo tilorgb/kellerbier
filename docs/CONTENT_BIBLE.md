@@ -148,6 +148,13 @@ floor; palette: deep green, black, a sickly poison-green glow.
 High rock, snow, a Berghütte, cable car pylons. Palette: white, granite, alpenglow pink.
 - **Hazard:** avalanches sweep whole rooms on a telegraph; ice floors remove friction;
   wind gusts push everything sideways.
+- **As built (#40):** ice is a floor rect the player and ground enemies slide on (acceleration
+  divided like a puddle's, capped by `footingDivisorCap`); an avalanche is a whole-cell lane that
+  rumbles for a telegraph, then a snow front sweeps it north to south once, hitting and shoving
+  everything whose centre it crosses unless a boulder stands directly uphill of it; a gust is a
+  whole-cell lane that pushes bodies and the player's shots sideways, alternating direction each
+  time. Snow falls in every room (render-only), the light is a cold alpine rig with an alpenglow
+  key. Boulders are the floor's cover. The secret room is an Almhütte that holds food, never beer.
 
 ### Floor 5 — Schloss Neuschwanstein
 Absurd fairytale opulence. Throne rooms, murals, an unfinished wing full of scaffolding.
@@ -360,6 +367,16 @@ considered, so it waits.
   logs he slaps out a three-shot cone with his tail. One idea: **cover that cuts both ways** — the
   logs block the player's shots and his own, and the fight rearranges them. The name is Tilo's, as
   given (`docs/DECISIONS.md` #124).
+
+**Floor 4 — Die Alpen**
+- **The Gondola** *(English placeholder — the name is not coined here, see §0; it waits for one)* — a
+  cable-car cabin that has slipped its brake and rides the cable strung between the two pylons of
+  its arena, a car's width above a lane of ice. At each pylon it docks: the doors open (the
+  telegraph), two **Tourists** step out and walk at the player to take a photo (one aimed flash
+  each), a spray of luggage comes off the roof rack, and it rides back. One idea: **a hazard on
+  rails that keeps producing bodies** — the cabin is the lane you must not stand in, and the clock
+  is how fast each dock's tourists are cleared before the next. Rooted, flying, no phases; shorter
+  than the floor's boss (`tests/content/boss-pacing.test.ts`).
 
 ---
 

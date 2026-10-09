@@ -66,7 +66,7 @@ export const en = {
 
   'ui.victory.headline': 'Victory!',
   'ui.victory.epilogue':
-    "Der Waldradler's last wheel stops turning. The path is quiet again, for the first time in a long while.\nThat is as far as the road goes for now.",
+    'The First Human lies back down in the snow, and the glacier is quiet in the way it was for five thousand years.\nThat is as far as the mountain goes for now.',
   'ui.victory.retry': 'Retry',
   'ui.victory.results': 'Results',
   'ui.victory.hub': 'Hub',
@@ -124,6 +124,8 @@ export const en = {
     "Up the steps, and Oberniederburg is having a lovely afternoon. The new crates are stacked outside the Wirtshaus, on the trailers, behind the Marktstand — in broad daylight, and nobody in the square has thought to mention them.\n\nSo it was never just Opa's crate. Somebody is sending these, by the lorryload, and they come from further up the valley than Alois has ever had a reason to go.",
   'ui.story.chapterThree':
     'Beyond the village the road turns to gravel, then to a hiking path, then to something that only claims to be one. Alois follows the tyre marks into the Wald. Everything here is green, and not all of it is supposed to be.',
+  'ui.story.chapterFour':
+    'Above the treeline the path stops pretending. Snow, rock, a cable car that has not run in years, and the crates still going up — on sledges now, over the glacier. Something up there has been waiting a very long time, and it is not the Brauerei.',
 
   // --- HUD -----------------------------------------------------
   'ui.hud.bossBanner': 'Boss Room',
@@ -135,6 +137,7 @@ export const en = {
   'ui.hud.bossLabel': 'BOSS',
   'ui.hud.poisoned': 'Poisoned {seconds}s — drink a Maß to cure it',
   'ui.hud.latched': 'Zecke on you! Zig-zag to shake it off',
+  'ui.hud.marked': 'Marked {seconds}s — the whole room can see you',
   'ui.hud.shakeOffHint': 'Shake it off: change direction sharply, again and again',
   'ui.hud.sandboxRun': 'Sandbox run — dealt items, nothing is saved or unlocked',
   'ui.hud.sandboxClamped':
@@ -348,6 +351,8 @@ export const en = {
   // Boss intro plate (#412) — draft, pending sign-off.
   'enemies.waldradler.title': 'Two Wheels - No Brains',
   'enemies.waldradler.epithet': 'Always has one cereal bar more than you',
+  'enemies.the-first-human.title': 'Out of the ice',
+  'enemies.the-first-human.epithet': 'Five thousand winters. One arrow.',
   // Villager one-liner (#58/#330) — draft, pending sign-off.
   'enemies.bauer.line': "New batch's smoother, if you ask me.",
 
@@ -416,7 +421,7 @@ export const en = {
     'Shots ring back to you, hitting again on the way. Shot Speed -25%',
   'items.gugelhupf.flavourText':
     'A cake with a hole in it, so it cooks through. That is the whole trick.',
-  'items.haferlschuh.description': 'Move Speed +15%, immune to slick puddles',
+  'items.haferlschuh.description': 'Move Speed +15%, immune to slick puddles and ice',
   'items.haferlschuh.flavourText':
     'Every nail hand-driven by someone who takes this far too seriously.',
   'items.hendlgeruch.description': 'Constantly pulls distant enemies toward you',

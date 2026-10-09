@@ -67,6 +67,12 @@ export const ProjectileTag = {
   Spectral: 1 << 9,
   Returning: 1 << 10,
   Orbiting: 1 << 11,
+  /**
+   * Marks the player on a hit (#40, the Bergwacht's flare): for a while every
+   * enemy sees them through cover and fires faster. On the player's own shots
+   * it does nothing — an enemy has nothing to be marked *for*.
+   */
+  Marking: 1 << 12,
 } as const;
 
 export type ProjectileTagId = (typeof ProjectileTag)[keyof typeof ProjectileTag];
@@ -85,6 +91,7 @@ export const PROJECTILE_TAG_IDS: readonly ProjectileTagId[] = [
   ProjectileTag.Spectral,
   ProjectileTag.Returning,
   ProjectileTag.Orbiting,
+  ProjectileTag.Marking,
 ];
 
 /** One past the highest bit `ProjectileTag` uses — every valid mask is below `1 << PROJECTILE_TAG_COUNT`. */

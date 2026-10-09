@@ -9,6 +9,7 @@ import {
   DEFAULT_LATCH_TUNING,
   DEFAULT_ORDNER_TUNING,
   DEFAULT_PIT_TUNING,
+  DEFAULT_WEATHER_TUNING,
   DEFAULT_MACHINE_TUNING,
   DEFAULT_MOVEMENT_TUNING,
   DEFAULT_PICKUP_TUNING,
@@ -65,6 +66,7 @@ interface GroupSpec {
     | 'latch'
     | 'ordner'
     | 'pits'
+    | 'weather'
     | 'machine'
     | 'chest';
   readonly fields: readonly FieldSpec[];
@@ -92,6 +94,15 @@ const GROUPS: readonly GroupSpec[] = [
       { key: 'contactDrag', min: 0, max: 1, step: 0.05, hint: 'how hard bodies hold you' },
       { key: 'pushDamping', min: 0.5, max: 0.98, step: 0.01, hint: 'how long a shove lasts' },
       { key: 'maxPush', min: 1, max: 16, step: 0.5, hint: 'largest shove carried' },
+      { key: 'puddleSlip', min: 0, max: 12, step: 0.5, hint: 'puddle: rate / (1 + slip)' },
+      { key: 'iceSlip', min: 0, max: 20, step: 0.5, hint: 'ice: rate / (1 + slip)' },
+      {
+        key: 'footingDivisorCap',
+        min: 1,
+        max: 30,
+        step: 0.5,
+        hint: 'most drift × puddle × ice may divide by',
+      },
       {
         key: 'doorCrossingTicks',
         min: 0,
@@ -441,6 +452,8 @@ const GROUPS: readonly GroupSpec[] = [
         hint: 'chance a normal slot is a hand-authored room',
       },
       { key: 'streamChance', min: 0, max: 1, step: 0.05, hint: 'chance a room has a stream' },
+      { key: 'avalancheChance', min: 0, max: 1, step: 0.05, hint: 'chance of an avalanche lane' },
+      { key: 'windChance', min: 0, max: 1, step: 0.05, hint: 'chance of a wind lane' },
       { key: 'darkRoomChance', min: 0, max: 1, step: 0.05, hint: 'chance a room is lantern-dark' },
     ],
   },
@@ -633,6 +646,35 @@ const GROUPS: readonly GroupSpec[] = [
     ],
   },
   {
+    title: 'weather (Alpen)',
+    group: 'weather',
+    fields: [
+      { key: 'avalancheQuietTicks', min: 60, max: 1200, step: 10, hint: 'calm between slides' },
+      {
+        key: 'avalancheTelegraphTicks',
+        min: 30,
+        max: 400,
+        step: 5,
+        hint: 'rumble before it comes down',
+      },
+      { key: 'avalancheSweepTicks', min: 10, max: 240, step: 2, hint: 'ticks to cross the lane' },
+      { key: 'avalancheDamage', min: 0, max: 4, step: 0.5, hint: 'half-Maß to a caught body' },
+      { key: 'avalancheKnockback', min: 0, max: 10, step: 0.5, hint: 'shove south' },
+      {
+        key: 'avalancheShelterDepth',
+        min: 0,
+        max: 60,
+        step: 2,
+        hint: 'px behind a rock that is safe',
+      },
+      { key: 'windQuietTicks', min: 60, max: 1200, step: 10, hint: 'calm between gusts' },
+      { key: 'windTelegraphTicks', min: 10, max: 240, step: 5, hint: 'streaks before the push' },
+      { key: 'windGustTicks', min: 10, max: 400, step: 5, hint: 'how long a gust blows' },
+      { key: 'windStrength', min: 0, max: 0.6, step: 0.01, hint: 'push/tick on bodies' },
+      { key: 'windShotStrength', min: 0, max: 0.2, step: 0.005, hint: 'bend/tick on your shots' },
+    ],
+  },
+  {
     title: 'pits (Borkenkäfer)',
     group: 'pits',
     fields: [
@@ -659,6 +701,7 @@ const DEFAULTS = {
   latch: DEFAULT_LATCH_TUNING,
   ordner: DEFAULT_ORDNER_TUNING,
   pits: DEFAULT_PIT_TUNING,
+  weather: DEFAULT_WEATHER_TUNING,
 } as const;
 
 const STYLE = `

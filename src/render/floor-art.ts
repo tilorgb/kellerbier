@@ -160,7 +160,7 @@ export interface FloorTileset {
    * Which light rig the floor is lit by (`render/world/lighting.ts`): a
    * cellar hangs bulbs; a field is under the sky.
    */
-  readonly lighting: 'cellar' | 'daylight' | 'forest';
+  readonly lighting: 'cellar' | 'daylight' | 'forest' | 'alpine';
 }
 
 export const FLOOR_TILESETS: Readonly<Record<number, FloorTileset>> = {
@@ -217,6 +217,22 @@ export const FLOOR_TILESETS: Readonly<Record<number, FloorTileset>> = {
     wallHeight: 12,
     lighting: 'forest',
   },
+  // Die Alpen (#40): the snowfield floor, granite wall and snowed-over wall
+  // top (`tools/art/authoring/alpen-tiles.mjs`), three granite boulders with
+  // snow caps and a snowdrift as the floor's cover (`blocks.mjs`), the barrel
+  // with snow on its lid. Lit by the `alpine` rig: a cold sky, snow bouncing
+  // light back up, the alpenglow in the key. The walls are rock ledges a
+  // player looks over, like Floor 2's hedges, so the mountain beyond reads.
+  4: {
+    floorVariants: ['alpen-floor-1', 'alpen-floor-2', 'alpen-floor-3', 'alpen-floor-4'],
+    wall: 'alpen-wall',
+    wallLip: 'alpen-wall-lip',
+    wallLipCorner: 'alpen-wall-lip-corner',
+    blockVariants: ['alpen-boulder-1', 'alpen-boulder-2', 'alpen-boulder-3', 'alpen-snowdrift'],
+    destructibles: ['alpen-barrel'],
+    wallHeight: 14,
+    lighting: 'alpine',
+  },
 };
 
 /** One floor's tileset with its names resolved to `Texture`s — what `render/world/scenery.ts` builds from. */
@@ -230,7 +246,7 @@ export interface RoomTileArt {
   /** By `DESTRUCTIBLE_PROP_KINDS` index; a kind past the end draws entry 0. */
   readonly destructibles: readonly Texture[];
   readonly wallHeight: number;
-  readonly lighting: 'cellar' | 'daylight' | 'forest';
+  readonly lighting: 'cellar' | 'daylight' | 'forest' | 'alpine';
 }
 
 /**
@@ -268,6 +284,13 @@ export const PROP_TILE_NAMES: Readonly<Record<string, string | null>> = {
   bandstand: 'rural-bandstand',
   fern: 'wald-fern',
   'glow-mushrooms': 'wald-glow-mushrooms',
+  // Floor 4's dressing (#40): the Berghütte, the cable-car pylon, a fir, the
+  // summit cross and a cairn — all art-only, on the background tier.
+  huette: 'alpen-huette',
+  pylon: 'alpen-pylon',
+  fir: 'alpen-fir',
+  gipfelkreuz: 'alpen-gipfelkreuz',
+  cairn: 'alpen-cairn',
   'shopkeeper-stand': 'shopkeeper-stand',
   'boss-plate': 'boss-plate',
   // Drawn elsewhere, on purpose.
@@ -279,6 +302,11 @@ export const PROP_TILE_NAMES: Readonly<Record<string, string | null>> = {
   puddle: null,
   // Floor 3's stream (#403), drawn from the room's `streams` by `Scenery`.
   waldbach: null,
+  // Floor 4's glacier ice (#40), drawn from the room's `ice` by `Scenery`.
+  ice: null,
+  // Floor 4's weather lanes (#40), drawn from `sim.weather` by `WeatherView`.
+  avalanche: null,
+  wind: null,
   trellis: null,
   'hop-trellis': null,
   // A shop's Losbrunnen anchor (#238) — drawn by `MachineView`, the same

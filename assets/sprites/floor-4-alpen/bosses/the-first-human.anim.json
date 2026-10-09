@@ -1,0 +1,34 @@
+{
+  "frames": 12,
+  "frameDurationMs": 150,
+  "loop": true,
+  "clips": {
+    "idle": {
+      "frames": [0, 1],
+      "frameDurationMs": 600,
+      "mode": "pingPong"
+    },
+    "move": {
+      "frames": [2, 3, 4, 5],
+      "frameDurationMs": 150,
+      "mode": "loop"
+    },
+    "telegraph": {
+      "frames": [6, 7],
+      "frameDurationMs": 130,
+      "mode": "pingPong"
+    },
+    "hurt": {
+      "frames": [8],
+      "frameDurationMs": 90,
+      "mode": "once",
+      "onEnd": "idle"
+    },
+    "death": {
+      "frames": [9, 10, 11],
+      "frameDurationMs": 170,
+      "mode": "once",
+      "onEnd": "hold"
+    }
+  }
+}

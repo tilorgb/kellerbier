@@ -40,7 +40,19 @@ export interface ParticleTextures {
   readonly fallback: Texture;
 }
 
-const DECORATIVE_KINDS = kindFlags([ParticleKind.Dust, ParticleKind.Glint, ParticleKind.Ember]);
+/**
+ * Snow (#40) is weather, not a hit: under reduced motion it goes the way Dust
+ * does. The avalanche it rides ahead of keeps its hatched floor warning, which
+ * is the copy of that information a player with motion off reads.
+ */
+const DECORATIVE_KINDS = kindFlags([
+  ParticleKind.Dust,
+  ParticleKind.Glint,
+  ParticleKind.Ember,
+  ParticleKind.Snow,
+]);
+/** Snow's white: a little cool, so it reads as snow against snow and not as the hit-flash. */
+const SNOW_TINT = 0xe6f0fa;
 const FLASHING_KINDS = kindFlags([ParticleKind.Flash]);
 
 function kindFlags(kinds: readonly number[]): readonly boolean[] {
@@ -189,7 +201,9 @@ export class ParticleView {
         layer.count,
         kind === ParticleKind.Miasma
           ? SCRATCH_COLOR.setHex(STATUS_POISON_TINT).multiplyScalar(fade)
-          : SCRATCH_COLOR.setScalar(fade),
+          : kind === ParticleKind.Snow
+            ? SCRATCH_COLOR.setHex(SNOW_TINT).multiplyScalar(fade)
+            : SCRATCH_COLOR.setScalar(fade),
       );
       layer.count += 1;
     });

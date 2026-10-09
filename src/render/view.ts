@@ -5,12 +5,14 @@ import type { CompiledDoor } from '../sim/room/template.js';
 import type { EntityAnimator } from './animation/animator.js';
 import { BombFlightView } from './bomb-flight-view.js';
 import { RampView } from './ramp-view.js';
+import { WeatherView } from './weather-view.js';
 import { CorpseView } from './corpse-view.js';
 import { DamageNumberView } from './damage-numbers.js';
 import { DecalView } from './decals.js';
 import { EntityView } from './entities.js';
 import { ORDNER_STRIP_NAMES, OrdnerView } from './ordner-view.js';
 import { CloudView } from './cloud-view.js';
+import { SnowfallView } from './snowfall-view.js';
 import { GloomBlur } from './gloom.js';
 import type { AnimatedSpriteSet, RoomTileArt } from './floor-art.js';
 import { BitmapText, Container, type Texture } from './gfx/index.js';
@@ -316,8 +318,10 @@ export class GameView {
   private readonly ordnerView: OrdnerView;
   /** Poison clouds, drawn as a low poison haze (`render/cloud-view.ts`). */
   private readonly cloudView: CloudView;
+  private readonly snowfallView: SnowfallView;
   private readonly bombFlightView: BombFlightView;
   private readonly rampView: RampView;
+  private readonly weatherView: WeatherView;
   private readonly corpseView: CorpseView;
   private readonly actorGroups: readonly Object3D[];
 
@@ -424,11 +428,15 @@ export class GameView {
 
     this.cloudView = new CloudView();
     this.scene.add(this.cloudView.group);
+    this.snowfallView = new SnowfallView();
+    this.scene.add(this.snowfallView.group);
 
     this.bombFlightView = new BombFlightView();
     this.scene.add(this.bombFlightView.group);
     this.rampView = new RampView();
     this.scene.add(this.rampView.group);
+    this.weatherView = new WeatherView();
+    this.scene.add(this.weatherView.group);
 
     this.corpseView = new CorpseView();
     this.scene.add(this.corpseView.group);
@@ -446,8 +454,10 @@ export class GameView {
       this.maibaumView.group,
       this.ordnerView.group,
       this.cloudView.group,
+      this.snowfallView.group,
       this.bombFlightView.group,
       this.rampView.group,
+      this.weatherView.group,
       this.corpseView.group,
     ];
 
@@ -465,6 +475,7 @@ export class GameView {
     this.entities.setTelegraphRings(accessibility.telegraphRings);
     this.shakeScale = accessibility.reducedMotion ? REDUCED_MOTION_SHAKE : 1;
     this.lighting.setReducedMotion(accessibility.reducedMotion);
+    this.snowfallView.setReducedMotion(accessibility.reducedMotion);
     this.projectiles.setAccessibility({ colorblindPalette: accessibility.colorblindPalette });
   }
 
@@ -487,6 +498,7 @@ export class GameView {
     this.entities.setLean(lean);
     this.ordnerView.setLean(lean);
     this.cloudView.setLean(lean);
+    this.snowfallView.setLean(lean);
     this.playerView.setLean(lean);
     this.projectiles.setLean(lean);
     this.particles.setLean(lean);
@@ -696,11 +708,13 @@ export class GameView {
     this.projectiles.sync(alpha, sim.currentFloor);
     this.bombFlightView.sync(sim);
     this.rampView.sync(sim);
+    this.weatherView.sync(sim);
     this.particles.sync(alpha);
     this.playerView.sync(sim, alpha, nowMs);
     this.maibaumView.sync(sim);
     this.ordnerView.sync(sim, alpha, nowMs);
     this.cloudView.sync(sim, alpha);
+    this.snowfallView.sync(sim, alpha);
     // No light of his own in a lantern room (#424): the lanterns on the walls
     // are the room's light, and a pool that follows him is the circle #404 had.
     this.lighting.syncLantern(
@@ -806,6 +820,7 @@ export class GameView {
       this.particles.group.traverse(toSeeThroughLayer);
       this.bombFlightView.group.traverse(toSeeThroughLayer);
       this.rampView.group.traverse(toSeeThroughLayer);
+      this.weatherView.group.traverse(toSeeThroughLayer);
       this.entities.enableSeeThrough(SEE_THROUGH_LAYER);
     }
 
@@ -1109,6 +1124,8 @@ export class GameView {
     const sim = this.sim;
     const tiles = this.textures.roomTiles[sim.currentFloor];
     const rig = tiles?.lighting ?? 'cellar';
+    // The floor's ambient snow (#40) follows the light rig the same way.
+    this.snowfallView.setRig(rig);
     // Floor 3's light (#424) is placed from the room and the run's seed, so it
     // is the same on a revisit and in a replay and different in the next run:
     // where the canopy opens, and — in a lantern room, which has no gaps —
@@ -1339,8 +1356,10 @@ export class GameView {
     this.maibaumView.destroy();
     this.ordnerView.destroy();
     this.cloudView.destroy();
+    this.snowfallView.destroy();
     this.bombFlightView.destroy();
     this.rampView.destroy();
+    this.weatherView.destroy();
     this.corpseView.destroy();
     this.gloom.dispose();
     this.darkness.dispose();

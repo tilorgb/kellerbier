@@ -60,8 +60,9 @@ export const SILENT_AMBIENCE: AmbienceAudio = {
 const FLOOR_TRACK = new Map<number, typeof floor1DerKeller>([
   [1, floor1DerKeller],
   [2, floor2DorfUndAcker],
-  // Floor 3 reuses Floor 2's theme until its own is composed (#402).
+  // Floors 3 and 4 reuse Floor 2's theme until their own are composed (#402, #40).
   [3, floor2DorfUndAcker],
+  [4, floor2DorfUndAcker],
 ]);
 
 /** Floor number → its boss's theme, same fallback reasoning as `FLOOR_TRACK`. */
@@ -69,6 +70,7 @@ const BOSS_TRACK = new Map<number, typeof bossKellerassel>([
   [1, bossKellerassel],
   [2, bossDerStier],
   [3, bossDerStier],
+  [4, bossDerStier],
 ]);
 
 /**

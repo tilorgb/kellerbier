@@ -90,23 +90,14 @@ export function stepPlayerMovement(sim: GameSim, input: Readonly<InputFrame>): v
   // on every floor is easier to read mid-fight than two.
   const onWater =
     sim.room.isOnPuddle(x, y) || (sim.room.streamCount > 0 && sim.room.isInStream(x, y));
-  const puddleSlip = !flying && sim.puddleImmuneTicks <= 0 && onWater ? tuning.puddleSlip : 0;
-  velocityX = approachAxis(
-    velocityX,
-    inputX * maxSpeed,
-    inputX !== 0,
-    tuning,
-    driftScale,
-    puddleSlip,
-  );
-  velocityY = approachAxis(
-    velocityY,
-    inputY * maxSpeed,
-    inputY !== 0,
-    tuning,
-    driftScale,
-    puddleSlip,
-  );
+  // Haferlschuh's grip (`puddleImmuneTicks`) is a shoe with nails in it:
+  // it holds on Floor 4's ice (#40) exactly as it holds on a wet floor.
+  const gripped = flying || sim.puddleImmuneTicks > 0;
+  const puddleSlip = !gripped && onWater ? tuning.puddleSlip : 0;
+  const iceSlip = !gripped && sim.room.iceCount > 0 && sim.room.isOnIce(x, y) ? tuning.iceSlip : 0;
+  const footingDivisor = footingDivisorOf(tuning, driftScale, puddleSlip, iceSlip);
+  velocityX = approachAxis(velocityX, inputX * maxSpeed, inputX !== 0, tuning, footingDivisor);
+  velocityY = approachAxis(velocityY, inputY * maxSpeed, inputY !== 0, tuning, footingDivisor);
 
   // The sampler already scales a diagonal stick or key pair to unit length, so
   // this only trims the overshoot a mid-turn direction change can produce.
@@ -196,6 +187,41 @@ function decayPush(push: Float32Array, base: number, damping: number): void {
 }
 
 /**
+ * What the player's acceleration and braking are divided by this tick, every
+ * footing penalty together.
+ *
+ * Promille drift (#17): both rates slow down, which is what "momentum and
+ * steering degrade" means — a sluggish, sliding feel rather than a lower top
+ * speed. 0 at Nüchtern/Angeheitert, ramping from Beduselt — see
+ * `sim.promilleDriftScale`. Floor 1's slick puddle (#35) is the same shape
+ * and stacks with it rather than replacing it — a drunk player crossing a
+ * puddle gets both penalties, because nothing about being drunk makes a wet
+ * floor less slick. Floor 4's ice (#40) is the same shape again, much
+ * stronger — and it is where stacking stops being a texture and becomes two
+ * control-removing systems multiplying, so the product is held under
+ * `footingDivisorCap` rather than left to emerge. Each penalty alone sits
+ * under the cap; only a combination ever reaches it.
+ */
+export function footingDivisorOf(
+  tuning: Readonly<MovementTuning>,
+  driftScale: number,
+  puddleSlip: number,
+  iceSlip: number,
+): number {
+  let divisor = 1;
+  if (driftScale > 0) {
+    divisor *= 1 + driftScale;
+  }
+  if (puddleSlip > 0) {
+    divisor *= 1 + puddleSlip;
+  }
+  if (iceSlip > 0) {
+    divisor *= 1 + iceSlip;
+  }
+  return Math.min(divisor, Math.max(1, tuning.footingDivisorCap));
+}
+
+/**
  * Moves one velocity component toward its target.
  *
  * Accelerates while a direction is held and decelerates when it is not, both at
@@ -208,27 +234,13 @@ function approachAxis(
   target: number,
   held: boolean,
   tuning: Readonly<MovementTuning>,
-  driftScale: number,
-  puddleSlip: number,
+  footingDivisor: number,
 ): number {
   let rate = held ? accelerationOf(tuning) : decelerationOf(tuning);
   if (held && current * target < 0) {
     rate *= tuning.turnBoost;
   }
-  // Promille drift (#17): both acceleration and deceleration slow down, which
-  // is what "momentum and steering degrade" means — a sluggish, sliding feel
-  // rather than a lower top speed. 0 at Nüchtern/Angeheitert, ramping from
-  // Beduselt — see `sim.promilleDriftScale`.
-  if (driftScale > 0) {
-    rate /= 1 + driftScale;
-  }
-  // Floor 1's slick puddle (#35): the same shape as drift above, and stacks
-  // with it rather than replacing it — a drunk player crossing a puddle gets
-  // both penalties, because nothing about being drunk makes a wet floor less
-  // slick.
-  if (puddleSlip > 0) {
-    rate /= 1 + puddleSlip;
-  }
+  rate /= footingDivisor;
 
   const delta = target - current;
   if (Math.abs(delta) <= rate) {

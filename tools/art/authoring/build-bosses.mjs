@@ -21,6 +21,7 @@ const DIR = {
   'floor-1-cellar': `${SPRITES}floor-1-cellar/bosses/`,
   'floor-2-rural': `${SPRITES}floor-2-rural/bosses/`,
   'floor-3-wald': `${SPRITES}floor-3-wald/bosses/`,
+  'floor-4-alpen': `${SPRITES}floor-4-alpen/bosses/`,
 };
 
 // The Maibaum-Dieb used to live in characters/ (#193), then as a single PNG

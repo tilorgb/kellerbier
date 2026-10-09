@@ -66,13 +66,16 @@ export type BehaviourName =
   | 'rideLine'
   | 'glideToPoint'
   | 'fireRotatingRing'
+  | 'fireSweep'
   | 'captureLine'
   | 'lobVolley'
   | 'detonateVolley'
   | 'leaveArena'
   | 'dropPickupOnDeath'
   | 'rollLog'
-  | 'becomeProp';
+  | 'becomeProp'
+  | 'shoal'
+  | 'burrow';
 
 /** Walks straight at the player, re-aiming every tick. The floor-one default. */
 export interface WalkTowardPlayerBehaviour {
@@ -100,6 +103,15 @@ export interface ChargeAtPlayerBehaviour {
    * disagree. Omitted: straight at the locked aim, as before.
    */
   readonly snap?: 'cardinal' | 'diagonal';
+  /**
+   * The charge goes *over* the room's blocks instead of stopping at them
+   * (#40, the Steinbock: an ibex climbs what is in its way). Furniture,
+   * water and pits are crossed the way a `flying` body crosses them; only
+   * the room's walls stop it (`onBlocked`). The renderer lifts the body
+   * while it is over a block, so the climb reads as a bound rather than a
+   * clip. Omitted: a block stops the charge, as every other charger's does.
+   */
+  readonly climbsBlocks?: true;
   /**
    * Room units the charge covers before the body stops for the rest of the
    * state, measured as speed × ticks (a wall stopping it early is
@@ -673,6 +685,24 @@ export interface FiringBehaviourBase {
    * the `art`'s business — the tag alone tints it green.
    */
   readonly poison?: boolean;
+  /**
+   * The shot bounces off walls and off what it hits (#40, the Sennerin's
+   * cheese wheel): `ProjectileTag.Bouncing`, with the same bounce budget the
+   * player's own bouncing shots get (`tuning.projectileTags.bounceMaxCount`).
+   * A rolling wheel that comes back off the wall is a second thing to dodge
+   * from the one throw. Omitted is a plain shot.
+   */
+  readonly bounce?: boolean;
+  /**
+   * The shot *marks* the player on a hit (#40, the Bergwacht's flare):
+   * `ProjectileTag.Marking`, so for `tuning.projectileTags.playerMarkDurationTicks`
+   * every enemy in the room sees them through cover (`isSighted` is true)
+   * and fires that much faster (`tuning.enemy.markedFireIntervalScale`). A
+   * second hit refreshes the duration and never stacks. The flare's whole
+   * job is the mark — authored with little damage of its own. Omitted is a
+   * plain shot.
+   */
+  readonly mark?: boolean;
 }
 
 /** One shot at the player, on a timer. */
@@ -788,6 +818,49 @@ export interface MeleeArcBehaviour {
   readonly direction?: -1 | 1;
   /** Which held-weapon sprite the renderer swings, e.g. `'maibaum'`. Omitted: telegraph only. */
   readonly weapon?: string;
+}
+
+/**
+ * A swept *ranged* attack (#437, The First Human): an arm travels a fixed arc
+ * over `sweepTicks`, exactly as `meleeArc`'s blade does, and every
+ * `shotEveryTicks` a bullet leaves along the arm's current bearing. The
+ * result is a fan of shots laid down one bearing at a time rather than all at
+ * once — so the safe ground is *behind* the sweep: a player who has already
+ * been passed by the arm has nothing more coming their way from this swing,
+ * and one ahead of it can see where the next shot will be before it leaves.
+ *
+ * Same commitment as the blade: the aim is locked on the tick the state is
+ * entered (and, with a `telegraph` state before it, on the tick that wind-up
+ * began), the arm then runs from `-arc/2` to `+arc/2` around that aim, and
+ * nothing re-aims mid-swing. `direction` is the pendulum: a boss alternating
+ * `-1` and `1` from swing to swing reads as a left-right-left stalk, and the
+ * telegraph before each swing is the stance that says which way is next.
+ * Not gated on sight — a committed swing goes where it was aimed, and the
+ * arena's cover is what the shots run into.
+ *
+ * Shots carry `FiringBehaviourBase`'s projectile fields (speed, damage,
+ * lifetime, radius, art, poison/bounce/mark). `everyTicks` is replaced by
+ * `shotEveryTicks`, counted from the swing's first tick, which also fires.
+ */
+export interface FireSweepBehaviour extends Omit<
+  FiringBehaviourBase,
+  'everyTicks' | 'aimCardinal'
+> {
+  readonly behaviour: 'fireSweep';
+  /** Total angle the arm travels, in radians. */
+  readonly arc: number;
+  /** Ticks the arm takes to travel the whole arc. */
+  readonly sweepTicks: number;
+  /** Ticks between shots along the arc. The first leaves on the swing's first tick. */
+  readonly shotEveryTicks: number;
+  /** `-1` sweeps anticlockwise, `1` clockwise (screen space). Defaults to `1`. */
+  readonly direction?: -1 | 1;
+  /**
+   * How far out the `telegraph` before this state draws its warning arc, in
+   * pixels. Presentational only — the shots fly `speed × lifetimeTicks`
+   * regardless. Defaults to three body radii.
+   */
+  readonly telegraphReach?: number;
 }
 
 /** Leaves smaller things behind. The state it is declared on is the one that splits. */
@@ -1063,8 +1136,53 @@ export interface LatchOnPlayerBehaviour {
   readonly behaviour: 'latchOnPlayer';
 }
 
+/**
+ * Moves as one of a shoal (#40, the Kuhglocke: a floating swarm of cowbells).
+ *
+ * Each tick the body's heading turns toward a blend of three pulls: the
+ * centre of every live body of its own kind in the room (`cohesion`), the
+ * player (`pull`), and away from any shoal-mate closer than `spacing` room
+ * units — then it moves at `speed`. The heading carries over between ticks
+ * (`inertia`, 0..1, how much of last tick's heading survives), so a shoal
+ * swings and wheels rather than snapping, and a lone bell left over simply
+ * drifts at the player. Deterministic, no RNG: the shoal is a function of
+ * where everyone is. Meant for a `flying` body, so a shoal crosses furniture;
+ * contact damage is what makes it dangerous.
+ */
+export interface ShoalBehaviour {
+  readonly behaviour: 'shoal';
+  /** Room units per tick, before the global `enemy.speedScale`. */
+  readonly speed: number;
+  /** Weight of the pull toward the shoal's centre. At least 0. */
+  readonly cohesion: number;
+  /** Weight of the pull toward the player. At least 0. */
+  readonly pull: number;
+  /** Room units below which two shoal-mates push apart. At least 0. */
+  readonly spacing: number;
+  /** How much of last tick's heading survives into this one, 0 (none) to 1 (never turns). */
+  readonly inertia: number;
+}
+
+/**
+ * Under the ground while this state is current (#40, the Murmeltier):
+ * nothing can touch it — no shot, no splash, no contact — it crosses the
+ * room's furniture as a flyer does (it is *under* it), and it is drawn as a
+ * moving mound of snow, the `<id>-shadow` art if the creature ships one.
+ * Leaving a burrowed state for one without it is the body breaking the
+ * surface, and throws a puff of snow.
+ *
+ * `submerge`'s shape without the water: a fish needs a stream to be under,
+ * a marmot digs wherever it stands. Pair the surfacing with a `telegraph`
+ * before it — the whistle — so where it comes up is a warning, not a trap.
+ */
+export interface BurrowBehaviour {
+  readonly behaviour: 'burrow';
+}
+
 export type EnemyBehaviour =
   | WalkTowardPlayerBehaviour
+  | ShoalBehaviour
+  | BurrowBehaviour
   | ChargeAtPlayerBehaviour
   | WanderBehaviour
   | OrbitPointBehaviour
@@ -1087,6 +1205,7 @@ export type EnemyBehaviour =
   | FireSpreadBehaviour
   | FireOnBeatBehaviour
   | MeleeArcBehaviour
+  | FireSweepBehaviour
   | SplitOnDeathBehaviour
   | SummonBehaviour
   | DropPropBehaviour
@@ -1201,7 +1320,17 @@ export type EnemyTransition =
    * is the same test `whenPlayerWithin` uses, run only once the cheap axis
    * test has passed.
    */
-  | { readonly to: string; readonly whenPlayerOnAxis: { readonly tolerance: number } };
+  | { readonly to: string; readonly whenPlayerOnAxis: { readonly tolerance: number } }
+  /**
+   * The body's health is at or below this fraction (0 exclusive, 1
+   * inclusive) of its max (#437): a phase change on a health threshold that
+   * does not kill and respawn the body the way `splitOnDeath.atHealthBelow`
+   * does, so the boss bar, the elite roll and the position carry over. Like
+   * `atHealthBelow`, declare it on every state the body might be in when the
+   * threshold is crossed. It is read before any other trigger on the same
+   * state only if written first — declaration order still decides.
+   */
+  | { readonly to: string; readonly whenHealthBelow: number };
 
 export interface EnemyState {
   readonly name: string;
@@ -1292,6 +1421,16 @@ export interface EnemyDefinition {
    */
   readonly deathEffect?: string;
   /**
+   * Draws `<id>-phase-two` art instead of its own once health is at or
+   * below this fraction (0 exclusive, 1 inclusive) of max (#437): The First
+   * Human's strip without the arrowhead in his shoulder, from the moment he
+   * pulls it out. The same frame count and clips as the body's own strip,
+   * since the animator keeps indexing frames across the swap. Purely
+   * presentational, like `deathEffect`: it can never change what a run does,
+   * and an enemy without the suffixed strip keeps its own art.
+   */
+  readonly phaseArtBelow?: number;
+  /**
    * How the body itself shows a telegraph, on top of the floor shape every
    * telegraph draws (#405). Unset: the body looks the same while it winds up,
    * which is right for nearly everything — the floor shape is the warning.
@@ -1370,6 +1509,7 @@ export const MOVEMENT_BEHAVIOURS: readonly BehaviourName[] = [
   'rideToLineStart',
   'rideLine',
   'glideToPoint',
+  'shoal',
 ];
 
 /** Primitives that run once, when the state is entered. */
@@ -1388,7 +1528,12 @@ export const ENTRY_BEHAVIOURS: readonly BehaviourName[] = [
 ];
 
 /** Primitives that mark the whole state rather than doing anything in it (#408). */
-export const STATE_FLAG_BEHAVIOURS: readonly BehaviourName[] = ['submerge', 'land', 'leaveArena'];
+export const STATE_FLAG_BEHAVIOURS: readonly BehaviourName[] = [
+  'submerge',
+  'land',
+  'leaveArena',
+  'burrow',
+];
 
 /** Primitives that run when the body dies in that state. */
 export const DEATH_BEHAVIOURS: readonly BehaviourName[] = ['splitOnDeath', 'dropPickupOnDeath'];

@@ -21,7 +21,12 @@ import {
   type PlayerHeading,
 } from './animation/state.js';
 import type { Texture } from './gfx/index.js';
-import { BLUTWURZ_SPIRIT_TINT, SNEEZE_GLOW_TINT, STATUS_POISON_TINT } from './palette.js';
+import {
+  BLUTWURZ_SPIRIT_TINT,
+  SNEEZE_GLOW_TINT,
+  STATUS_MARK_GLOW,
+  STATUS_POISON_TINT,
+} from './palette.js';
 import { SCHLAUCH_OCTANTS, type PlayerArt, type PlayerBodyKey } from './player-art.js';
 import { ACTOR_PIXELS_PER_UNIT } from './resolution.js';
 import { Billboard } from './world/billboard.js';
@@ -76,6 +81,8 @@ const DRUNK_KEYS: Readonly<Record<PlayerFacingIndex, PlayerBodyKey>> = {
 const SNEEZE_PULSE_SLOW = 0.012;
 const SNEEZE_PULSE_FAST = 0.05;
 const SNEEZE_GLOW_MIN = 0.03;
+/** How hard the flare's mark glows (#40) — plainly visible, under the sneeze's peak. */
+const MARK_GLOW_STRENGTH = 0.45;
 const SNEEZE_GLOW_MAX = 0.22;
 /**
  * Where a strip keeps the lids-shut twin of a frame (#396,
@@ -206,6 +213,11 @@ export class PlayerView {
     if (flashing || buildUp <= 0) {
       this.sneezePhase = 0;
       this.body.flash = flashing;
+      // Marked by a flare (#40): a steady pink glow for as long as the mark
+      // burns, emissive so a dark room cannot hide what every enemy can see.
+      if (!flashing && sim.playerMarked > 0) {
+        this.body.setGlow(STATUS_MARK_GLOW, MARK_GLOW_STRENGTH);
+      }
     } else {
       this.sneezePhase += deltaMs * lerp(SNEEZE_PULSE_SLOW, SNEEZE_PULSE_FAST, buildUp);
       const pulse = buildUp >= 1 ? 1 : Math.sin(this.sneezePhase) * 0.5 + 0.5;

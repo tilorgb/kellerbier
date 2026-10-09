@@ -55,7 +55,7 @@ export const de: Record<DictKey, string> = {
 
   'ui.victory.headline': 'Sieg!',
   'ui.victory.epilogue':
-    'Das letzte Rad des Waldradlers steht still. Der Weg ist wieder ruhig, zum ersten Mal seit langem.\nWeiter reicht die Straße vorerst nicht.',
+    'The First Human legt sich zurück in den Schnee, und der Gletscher ist so still wie fünftausend Jahre lang.\nWeiter reicht der Berg vorerst nicht.',
   'ui.victory.retry': 'Nochmal',
   'ui.victory.results': 'Ergebnisse',
   'ui.victory.hub': 'Titel',
@@ -113,6 +113,8 @@ export const de: Record<DictKey, string> = {
     'Die Kellertreppe hinauf, und Oberniederburg hat einen schönen Nachmittag. Die neuen Kisten stapeln sich vor dem Wirtshaus, auf den Anhängern, hinter dem Marktstand — am helllichten Tag, und keiner am Platz hat es für nötig gehalten, etwas dazu zu sagen.\n\nEs war also nie nur Opas Kiste. Irgendwer schickt die hier, lasterweise, und sie kommen von weiter oben aus dem Tal, als Alois je einen Grund hatte hinzufahren.',
   'ui.story.chapterThree':
     'Hinter dem Dorf wird die Straße zu Schotter, dann zu einem Wanderweg, dann zu etwas, das nur so tut. Alois folgt den Reifenspuren in den Wald. Hier ist alles grün, und nicht alles davon soll es sein.',
+  'ui.story.chapterFour':
+    'Über der Baumgrenze hört der Weg auf, so zu tun. Schnee, Fels, eine Seilbahn, die seit Jahren nicht fährt, und die Kisten gehen weiter hinauf — jetzt auf Schlitten, über den Gletscher. Da oben wartet etwas schon sehr lange, und die Brauerei ist es nicht.',
 
   // --- HUD -----------------------------------------------------
   'ui.hud.bossBanner': 'Bossraum',
@@ -125,6 +127,7 @@ export const de: Record<DictKey, string> = {
   'ui.hud.bossLabel': 'BOSS',
   'ui.hud.poisoned': 'Vergiftet {seconds}s — ein Maß heilt es',
   'ui.hud.latched': 'Zecke an dir! Im Zickzack abschütteln',
+  'ui.hud.marked': 'Markiert {seconds}s — der ganze Raum sieht dich',
   'ui.hud.shakeOffHint': 'Abschütteln: schnell und scharf die Richtung wechseln',
   'ui.hud.sandboxRun': 'Sandbox-Lauf — Items verteilt, nichts wird gespeichert oder freigeschaltet',
   'ui.hud.sandboxClamped':
@@ -342,6 +345,8 @@ export const de: Record<DictKey, string> = {
   // Boss intro plate (#412) — draft, pending sign-off.
   'enemies.waldradler.title': 'Zwei Räder - kein Hirn',
   'enemies.waldradler.epithet': 'Hat immer einen Müsliriegel mehr als du',
+  'enemies.the-first-human.title': 'Aus dem Eis',
+  'enemies.the-first-human.epithet': 'Fünftausend Winter. Ein Pfeil.',
   // Villager one-liner (#58/#330) — draft, pending sign-off.
   'enemies.bauer.line': 'Die neue Charge ist milder, wenn du mich fragst.',
 
@@ -414,7 +419,7 @@ export const de: Record<DictKey, string> = {
     'Schüsse kreisen zurück und treffen auf dem Rückweg erneut. Schussgeschwindigkeit -25%',
   'items.gugelhupf.flavourText':
     'Ein Kuchen mit Loch in der Mitte, damit er durchgart. Das ist der ganze Trick.',
-  'items.haferlschuh.description': 'Lauftempo +15%, immun gegen rutschige Pfützen',
+  'items.haferlschuh.description': 'Lauftempo +15%, immun gegen rutschige Pfützen und Eis',
   'items.haferlschuh.flavourText':
     'Jeder Nagel von Hand geschlagen, von jemandem, der das viel zu ernst nimmt.',
   'items.hendlgeruch.description': 'Zieht ständig entfernte Gegner zu dir heran',

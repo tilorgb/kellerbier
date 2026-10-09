@@ -23,6 +23,7 @@ import {
   enemyHidden,
   enemyHopProgress,
   enemySubmerged,
+  enemyBurrowed,
   type LobbedVolleyFlight,
   lobbedVolleyCount,
   lobbedVolleyFlight,
@@ -150,6 +151,8 @@ const DRUM_SHAKE_RATE = 0.16;
 const SUBMERGED_FLATTEN = 0.6;
 /** The sprite-name suffix a creature's under-the-water art is authored with (#408). */
 const SHADOW_SUFFIX = '-shadow';
+/** A body's art once its health is under its `phaseArtBelow` fraction (#437): the arrowhead pulled out. */
+const PHASE_TWO_SUFFIX = '-phase-two';
 /** A submerged body's toward-the-camera and away shadows (#450): `<id>-shadow-south` / `-north`. */
 const SHADOW_SOUTH_SUFFIX = '-shadow-south';
 const SHADOW_NORTH_SUFFIX = '-shadow-north';
@@ -264,6 +267,12 @@ export class EntityView {
   private readonly flyBackArt: readonly (AnimatedSpriteSet | undefined)[];
   private readonly diveArt: readonly (Texture | undefined)[];
   /**
+   * Per enemy definition index, the strip a body draws once its health is
+   * under its `phaseArtBelow` (#437): `<id>-phase-two` when the roster has
+   * one. Unset: its own art throughout.
+   */
+  private readonly phaseArt: readonly (AnimatedSpriteSet | undefined)[];
+  /**
    * Per enemy definition index, the per-heading strips (#438) — `undefined`
    * for a creature with none, which draws exactly as it always has.
    */
@@ -358,6 +367,9 @@ export class EntityView {
         : { side, south, north };
     });
     this.diveArt = sim.enemies.all.map((enemy) => art.enemyArt[`${enemy.id}${DIVE_SUFFIX}`]);
+    this.phaseArt = sim.enemies.all.map(
+      (enemy) => art.enemyAnimation[`${enemy.id}${PHASE_TWO_SUFFIX}`],
+    );
     this.bombTexture = art.pickupArt[BOMB_PICKUP_ID];
     this.pickupTints = sim.pickups.all.map((definition) => definition.tint);
     this.pickupLabels = sim.pickups.all.map((definition) => definition.label);
@@ -552,6 +564,15 @@ export class EntityView {
       const bombFuse = isBomb ? bombFuseProgress(sim, index) : 0;
 
       let animation = enemyId === null ? undefined : this.art.enemyAnimation[enemyId];
+      // Past its phase threshold (#437), a body with phase-two art draws that
+      // instead: The First Human without the arrowhead in his shoulder.
+      if (compiledEnemy !== null && compiledEnemy.phaseArtBelow > 0) {
+        const current = sim.health.data[index * 2] ?? 0;
+        const max = sim.health.data[index * 2 + 1] ?? 1;
+        if (current <= compiledEnemy.phaseArtBelow * max) {
+          animation = this.phaseArt[sim.enemy.data[index * ENEMY_STRIDE] ?? 0] ?? animation;
+        }
+      }
       // A creature with per-heading strips (#438) draws the one for the way
       // it is going — side-on (mirrored for right), toward the camera or
       // away — and its own art for a heading it has no strip for.
@@ -609,7 +630,12 @@ export class EntityView {
 
       // Under the water (#408): the same silhouette, dark and flattened onto
       // the stream, with a faint glow so a lantern-dark room cannot hide it.
+      // Under the snow (#40, the Murmeltier): its `-shadow` art is the mound,
+      // drawn as authored — a heap of snow is lit like the floor, not sunk
+      // into it — and it faces the way it digs.
       const submerged = isEnemyBody && enemySubmerged(sim, index);
+      const burrowed = isEnemyBody && enemyBurrowed(sim, index);
+      const underground = submerged || burrowed;
 
       const isPropTarget = !isPickup && enemyId === null && !isBomb;
       const pickupKindIndex = sim.pickupKind.data[index] ?? -1;
@@ -631,7 +657,7 @@ export class EntityView {
       const billboard = this.bodyAt(used);
       this.bodyTelegraphing[used] = telegraph > 0 ? 1 : 0;
       used += 1;
-      if (submerged) {
+      if (underground) {
         const shadowKind = sim.enemy.data[index * ENEMY_STRIDE] ?? 0;
         const shadow = this.shadowArt[shadowKind];
         if (shadow !== undefined) {

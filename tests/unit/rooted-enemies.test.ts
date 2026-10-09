@@ -7,7 +7,8 @@ import { applyDamageAt } from '../../src/sim/systems/impact.js';
 
 /**
  * Rooted enemies: the Fliegenpilz in the ground, the Bachforelle in its stream,
- * the Specht on its wall, the Waldradl on its spot. A shot hurts them and does not shove them.
+ * the Specht on its wall, the Waldradl on its spot, the Gondola on its cable. A shot hurts
+ * them and does not shove them.
  */
 
 const IDLE = createInputFrame();
@@ -36,7 +37,7 @@ function drift(id: string): number {
 }
 
 describe('rooted enemies', () => {
-  it("are the Fliegenpilz, the Bachforelle, the Specht, the Waldradl and Bieber's rolling logs", () => {
+  it("are the Fliegenpilz, the Bachforelle, the Specht, the Waldradl, Bieber's rolling logs and the Gondola", () => {
     const rooted = ENEMY_DEFINITIONS.filter((definition) => definition.rooted === true)
       .map((definition) => definition.id)
       .sort();
@@ -46,6 +47,7 @@ describe('rooted enemies', () => {
       'bieber-log-west',
       'fliegenpilz',
       'specht',
+      'the-gondola',
       'waldradl',
     ]);
   });

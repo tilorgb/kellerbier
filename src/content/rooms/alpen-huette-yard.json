@@ -1,0 +1,124 @@
+{
+  "id": "alpen-huette-yard",
+  "tileGrid": [
+    "###############",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "###############"
+  ],
+  "obstacles": [
+    {
+      "x": 64,
+      "y": 48,
+      "width": 16,
+      "height": 16
+    },
+    {
+      "x": 176,
+      "y": 48,
+      "width": 16,
+      "height": 16
+    }
+  ],
+  "enemySpawns": [
+    {
+      "x": 120,
+      "y": 56,
+      "group": "maid"
+    },
+    {
+      "x": 48,
+      "y": 96,
+      "group": "marmot"
+    },
+    {
+      "x": 192,
+      "y": 100,
+      "group": "g"
+    }
+  ],
+  "spawnGroups": [
+    {
+      "id": "maid",
+      "count": 1,
+      "choices": [
+        {
+          "enemyId": "sennerin",
+          "minFloor": 4,
+          "maxFloor": 4
+        }
+      ]
+    },
+    {
+      "id": "marmot",
+      "count": 1,
+      "choices": [
+        {
+          "enemyId": "murmeltier",
+          "minFloor": 4,
+          "maxFloor": 4
+        }
+      ]
+    },
+    {
+      "id": "g",
+      "count": 1,
+      "choices": [
+        {
+          "enemyId": "steinbock",
+          "minFloor": 4,
+          "maxFloor": 4
+        },
+        {
+          "enemyId": "bergwacht",
+          "minFloor": 4,
+          "maxFloor": 4
+        }
+      ]
+    }
+  ],
+  "pickupSpawns": [],
+  "hazards": [
+    {
+      "x": 96,
+      "y": 80,
+      "width": 48,
+      "height": 32,
+      "type": "ice"
+    }
+  ],
+  "decorativeProps": [
+    {
+      "x": 120,
+      "y": 28,
+      "type": "huette"
+    },
+    {
+      "x": 56,
+      "y": 112,
+      "type": "barrel"
+    },
+    {
+      "x": 184,
+      "y": 112,
+      "type": "barrel"
+    }
+  ],
+  "metadata": {
+    "floorTags": ["alpen"],
+    "shape": "1x1",
+    "doors": {
+      "north": true,
+      "east": true,
+      "south": true,
+      "west": true
+    },
+    "difficultyTier": 2,
+    "weight": 1
+  }
+}

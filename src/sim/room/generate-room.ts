@@ -203,6 +203,30 @@ export const ROSTERS: Readonly<Record<string, readonly RosterEntry[]>> = {
     { id: 'borkenkaefer', weight: 1, cost: 3, pursues: false },
     { id: 'specht', weight: 2, cost: 2, pursues: true },
   ],
+  /**
+   * Floor 4 (#40). Nothing carried up from the Wald.
+   *
+   * - Kuhglocke: the cheapest body and the floor's crowd — placed in fours,
+   *   since one bell is nothing and four are a shoal. It drifts at the
+   *   player, so it pursues in #230's sense.
+   * - Murmeltier: never hurts to touch and only surfaces where it whistled —
+   *   cost 2, and it does come to the player, underground.
+   * - Sennerin: a stand-and-throw body whose wheel comes back; priced like
+   *   the Bauer (cost 2) and as common.
+   * - Steinbock: 8 HP, `tough` loot, a double-damage charge that cover does
+   *   not stop — priced like the Boar (cost 4) and rarer than the small mobs,
+   *   so one is an event.
+   * - Bergwacht: a support body — alone a nuisance, behind the others a hunt
+   *   — priced like a shooter (cost 3) and the rarest, so a room rarely has
+   *   two flares in it.
+   */
+  alpen: [
+    { id: 'kuhglocke', weight: 3, cost: 1, pursues: true, groupSize: 4 },
+    { id: 'murmeltier', weight: 3, cost: 2, pursues: true },
+    { id: 'sennerin', weight: 3, cost: 2, pursues: false },
+    { id: 'steinbock', weight: 1, cost: 4, pursues: true },
+    { id: 'bergwacht', weight: 1, cost: 3, pursues: false },
+  ],
 };
 
 /**
@@ -230,6 +254,9 @@ const PROP_KINDS: Readonly<Record<string, readonly string[]>> = {
   // Placeholder dressing until the wald tileset's props are signed off (#402):
   // plain barrels and the shared wooden crate stack, both already have art.
   wald: ['barrel', 'barrel', 'crate-stack'],
+  // Floor 4 (#40): the floor's own dressing — cairns most, a fir, a summit
+  // cross now and then; the hut and the pylon are authored rooms' set pieces.
+  alpen: ['barrel', 'barrel', 'cairn', 'cairn', 'fir', 'fir', 'gipfelkreuz'],
 };
 const FALLBACK_PROP_KINDS: readonly string[] = ['barrel'];
 
@@ -257,10 +284,21 @@ const HAZARD_BY_TAG: Readonly<Record<string, string>> = {
   cellar: 'puddle',
   rural: 'trellis',
   wald: 'puddle',
+  // Floor 4 (#40): a sheet of glacier ice, the same 2×2 patch a puddle is.
+  alpen: 'ice',
 };
 
 /** The hazard type `placeHazards` lays as a room-crossing lane instead of a patch. */
 const STREAM_HAZARD = 'waldbach';
+
+/**
+ * Floor 4's room-wide weather (#40, `sim/hazard/weather.ts`): a lane the
+ * size of a whole cell, one per real cell, laid by `placeWeather` on its own
+ * chance (`RoomGenTuning.avalancheChance` / `windChance`) on top of whatever
+ * patch the room rolled. Walk-through, so neither can wall off a route.
+ */
+const AVALANCHE_HAZARD = 'avalanche';
+const WIND_HAZARD = 'wind';
 
 /**
  * Every prop / hazard type the generator can place, deduped — the seam
@@ -272,6 +310,9 @@ export const GENERATED_SCENERY_TYPES: readonly string[] = [
     ...Object.values(PROP_KINDS).flat(),
     ...FALLBACK_PROP_KINDS,
     ...Object.values(HAZARD_BY_TAG),
+    STREAM_HAZARD,
+    AVALANCHE_HAZARD,
+    WIND_HAZARD,
   ]),
 ];
 
@@ -1272,6 +1313,46 @@ function placeStream(ctx: RoomGenContext, grid: RoomGrid, type: string): PlacedH
 }
 
 /**
+ * Floor 4's weather (#40): rolls an avalanche lane and a wind lane for the
+ * room, each covering every real cell whole — the slide comes down the whole
+ * screen, the gust blows across all of it. Rolled only where a floor turns
+ * them on (`avalancheChance`/`windChance` above 0), so every other floor
+ * draws the numbers it always did; both may land on one room, which is the
+ * Alps being the Alps.
+ */
+function placeWeather(ctx: RoomGenContext, grid: RoomGrid, params: RoomGenTuning): PlacedHazard[] {
+  const lanes: PlacedHazard[] = [];
+  const avalanche = params.avalancheChance > 0 && ctx.rng.chance(params.avalancheChance);
+  const wind = params.windChance > 0 && ctx.rng.chance(params.windChance);
+  if (!avalanche && !wind) {
+    return lanes;
+  }
+  const gridCols = grid.cols / ROOM_COLUMNS;
+  const gridRows = grid.rows / ROOM_ROWS;
+  for (let cellRow = 0; cellRow < gridRows; cellRow++) {
+    for (let cellCol = 0; cellCol < gridCols; cellCol++) {
+      if (grid.voidMask[tileIndex(grid, cellCol * ROOM_COLUMNS, cellRow * ROOM_ROWS)] === true) {
+        continue;
+      }
+      // The cell's interior: inside its one-tile wall on every side.
+      const lane = {
+        col: cellCol * ROOM_COLUMNS + 1,
+        row: cellRow * ROOM_ROWS + 1,
+        cols: ROOM_COLUMNS - 2,
+        rows: ROOM_ROWS - 2,
+      };
+      if (avalanche) {
+        lanes.push({ ...lane, type: AVALANCHE_HAZARD });
+      }
+      if (wind) {
+        lanes.push({ ...lane, type: WIND_HAZARD });
+      }
+    }
+  }
+  return lanes;
+}
+
+/**
  * True when tile `(col, row)` could lie under the stream one of `hazards`'
  * lanes becomes: in the lane, or within the reach of its meander either side
  * (`sim/room/stream-course.ts`, #424).
@@ -1505,7 +1586,10 @@ export function generateRoom(
   const pickup = spec.rng.chance(params.pickupChance)
     ? pickPickup(spec.rng.shuffle(candidates.slice()), enemies)
     : null;
-  const hazards = placeHazards(spec, layout.grid, layout.distance, approaches, 1, params);
+  const hazards = [
+    ...placeHazards(spec, layout.grid, layout.distance, approaches, 1, params),
+    ...placeWeather(spec, layout.grid, params),
+  ];
   const props = placeProps(
     spec,
     layout.grid,
@@ -1597,7 +1681,10 @@ export function generateMultiCellRoom(
   const pickup = spec.rng.chance(params.pickupChance)
     ? pickPickup(spec.rng.shuffle(candidates.slice()), enemies)
     : null;
-  const hazards = placeHazards(spec, layout.grid, layout.distance, approaches, cellCount, params);
+  const hazards = [
+    ...placeHazards(spec, layout.grid, layout.distance, approaches, cellCount, params),
+    ...placeWeather(spec, layout.grid, params),
+  ];
   const props = placeProps(
     spec,
     layout.grid,

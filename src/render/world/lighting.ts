@@ -75,11 +75,16 @@ import { LANTERN_REACH, MAX_WALL_LANTERNS, type WallLantern } from './wall-lante
  * sized, and `docs/DECISIONS.md` #74 for the shadow-casting decision that
  * went with this change.
  */
-export type LightingRig = 'cellar' | 'daylight' | 'forest';
+export type LightingRig = 'cellar' | 'daylight' | 'forest' | 'alpine';
 
 /** Rigs lit by a sky — a sun key whose shadows reach well past the room — rather than by bulbs. */
 function skyLit(rig: LightingRig): boolean {
   return rig !== 'cellar';
+}
+
+/** Rigs with clouds crossing an open sky: Dorf & Acker's, and the Alps' (#40) — thinner, higher-looking, the same drift. */
+export function cloudy(rig: LightingRig): boolean {
+  return rig === 'daylight' || rig === 'alpine';
 }
 
 /** Point lights riding along with live player shots. */
@@ -173,6 +178,9 @@ const LANTERN_INTENSITY: Readonly<Record<LightingRig, number>> = {
   cellar: 420,
   daylight: 120,
   forest: 45,
+  // Snow throws the sky's light back up at him; the lantern only has to hold
+  // his outline against a bright floor.
+  alpine: 80,
 };
 
 /**
@@ -261,6 +269,21 @@ const RIGS: Readonly<Record<LightingRig, RigColours>> = {
     key: 0xfff0cc,
     keyIntensity: 4.5,
     background: 0x0a120c,
+  },
+  // High and cold (#40): a bright blue-white sky, a *ground* bounce that is
+  // snow rather than earth — light coming up from under everything, which is
+  // what a snowfield does to a face — and a key with the alpenglow in it, the
+  // pink a low sun puts on snow. The background past the room is the deep
+  // alpine blue of the floor's palette, darkened to read as distance.
+  alpine: {
+    ambient: 0xc4d2e6,
+    ambientIntensity: 1.9,
+    sky: 0xd8e8ff,
+    ground: 0x8e97a4,
+    hemisphereIntensity: 1.3,
+    key: 0xffd4dc,
+    keyIntensity: 3.6,
+    background: 0x16283a,
   },
 };
 
@@ -818,7 +841,7 @@ export class Lighting {
           (this.reducedMotion ? 1 : lanternFlicker(this.lanternOfRig[i] ?? i, tick));
       }
     }
-    if (this.clouds.length === 0 || this.rig !== 'daylight') {
+    if (this.clouds.length === 0 || !cloudy(this.rig)) {
       return;
     }
     let moving = false;

@@ -37,6 +37,7 @@ const TAG_HINTS: Readonly<Record<string, string>> = {
   Spectral: 'passes through walls',
   Returning: 'flies back to where it was fired from',
   Orbiting: 'circles its spawn point',
+  Marking: 'marks the player for the room (enemy shots only)',
 };
 
 /** Room units — a Zecke-sized cloud, big enough to see the edge of. */

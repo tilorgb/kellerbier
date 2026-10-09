@@ -54,6 +54,8 @@ const DRAG_SCALE: readonly number[] = [
   1.02, // Ember
   1.01, // Glint
   1, // Flash — spawned with no velocity, so this never applies
+  1, // Miasma — a cloud's mote, hangs like a spore
+  1.04, // Snow — light, carries on the wind it was thrown by
 ];
 
 /** `impact.particleDrag`, adjusted for what kind of particle this is. */
