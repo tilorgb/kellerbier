@@ -77,6 +77,7 @@ export type BehaviourName =
   | 'rollLog'
   | 'becomeProp'
   | 'shoal'
+  | 'slalom'
   | 'burrow';
 
 /** Walks straight at the player, re-aiming every tick. The floor-one default. */
@@ -679,6 +680,14 @@ export interface FiringBehaviourBase {
    */
   readonly aimCardinal?: boolean;
   /**
+   * Aim a fan *off the side* of the way the body was last moving instead of at
+   * the player (#40, the Skier's drift-stop): `'left'`/`'right'` a quarter turn
+   * off the remembered heading, `'random'` either, drawn from the enemy stream
+   * when the shot leaves. Not gated on sight — it is aimed at nothing. Only on
+   * `fireSpread`.
+   */
+  readonly aimSide?: 'left' | 'right' | 'random';
+  /**
    * The shot poisons the player on a hit (#401): `ProjectileTag.Poison`, so
    * the player takes `playerPoisonDamagePerTick` every
    * `playerPoisonTickInterval` ticks for `playerPoisonDurationTicks`. A second
@@ -1221,6 +1230,27 @@ export interface ShoalBehaviour {
 }
 
 /**
+ * Carves down the room in long S-turns (#40, the Skier): a base heading,
+ * re-rolled every `legTicks` toward the room's middle (± a wide random
+ * spread, so a skier crosses the room rather than hugging a wall), with the
+ * actual heading swinging up to `swing` radians either side of it on a sine of
+ * `periodTicks` — a slalom, not a random walk. It never steers at the player.
+ * The heading it leaves is what a `pause`d state after it still remembers,
+ * which is how a drift-stop knows which way it was going.
+ */
+export interface SlalomBehaviour {
+  readonly behaviour: 'slalom';
+  /** Room units per tick, before the global `enemy.speedScale`. */
+  readonly speed: number;
+  /** Peak angle either side of the base heading, in radians. */
+  readonly swing: number;
+  /** Ticks for one full S (left and back). */
+  readonly periodTicks: number;
+  /** Ticks between new base headings. */
+  readonly legTicks: number;
+}
+
+/**
  * Under the ground while this state is current (#40, the Murmeltier):
  * nothing can touch it — no shot, no splash, no contact — it crosses the
  * room's furniture as a flyer does (it is *under* it), and it is drawn as a
@@ -1239,6 +1269,7 @@ export interface BurrowBehaviour {
 export type EnemyBehaviour =
   | WalkTowardPlayerBehaviour
   | ShoalBehaviour
+  | SlalomBehaviour
   | BurrowBehaviour
   | ChargeAtPlayerBehaviour
   | WanderBehaviour
@@ -1577,6 +1608,7 @@ export const MOVEMENT_BEHAVIOURS: readonly BehaviourName[] = [
   'rideLine',
   'glideToPoint',
   'shoal',
+  'slalom',
 ];
 
 /** Primitives that run once, when the state is entered. */

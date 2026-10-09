@@ -838,6 +838,20 @@ export class EnemyRegistry {
             throw new Error(`${where}: "shoal" needs an inertia from 0 to 1`);
           }
         }
+        if (behaviour.behaviour === 'slalom') {
+          if (!(behaviour.speed > 0)) {
+            throw new Error(`${where}: "slalom" needs a speed above zero`);
+          }
+          if (
+            !(behaviour.swing >= 0) ||
+            !(behaviour.periodTicks >= 2) ||
+            !(behaviour.legTicks >= 1)
+          ) {
+            throw new Error(
+              `${where}: "slalom" needs a swing of at least zero, a periodTicks of at least 2 and a legTicks of at least 1`,
+            );
+          }
+        }
         if (behaviour.behaviour === 'approachProp') {
           approachPropKind = resolvePropKind(behaviour.propKind, `${where}: "approachProp"`);
           approachesPlayerRow = behaviour.nearestToPlayerRow === true;

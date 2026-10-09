@@ -145,7 +145,9 @@ export const ENEMY_STRIDE = 4;
  * them a `hopTowardPlayer` body's own hop clock, then (#411) a percher's wall
  * point and the way it faces there, then a `flyLoops` body's loop.
  */
-export const ENEMY_MOTION_STRIDE = 16 + WOOD_MOTION_SLOTS + 3 + 4 + 6 + SCRIPTED_MOTION_SLOTS;
+export const ENEMY_MOTION_STRIDE = 16 + WOOD_MOTION_SLOTS + 3 + 4 + 6 + SCRIPTED_MOTION_SLOTS + 1;
+/** A `slalom` body's base heading, in radians (#40) — the last slot of the row. */
+const MOTION_SLALOM_BASE = ENEMY_MOTION_STRIDE - 1;
 /**
  * Where `scripted-moves.ts`'s slots start in a body's row (#412, #413): the
  * boss moves' own ride clock, captured line, weighted-choice memory and
@@ -2049,6 +2051,29 @@ function applyMovement(
       shoalStep(sim, index, behaviour, selfX, selfY, toPlayerX, toPlayerY, distance, scale);
       return;
     }
+    case 'slalom': {
+      // The base heading is re-rolled every leg toward the middle of the room
+      // (so a skier crosses it), the actual heading swings round it on a sine.
+      const leg = Math.max(1, Math.round(behaviour.legTicks));
+      if (ticks % leg === 0) {
+        const room = sim.room;
+        const toMiddle = Math.atan2(
+          (room.minY + room.maxY) / 2 - selfY,
+          (room.minX + room.maxX) / 2 - selfX,
+        );
+        const rolled = toMiddle + (sim.random.enemies.nextFloat() - 0.5) * Math.PI * 0.9;
+        motion[motionBase + MOTION_SLALOM_BASE] = rolled;
+      }
+      const slalomBase = motion[motionBase + MOTION_SLALOM_BASE] ?? 0;
+      const period = Math.max(2, Math.round(behaviour.periodTicks));
+      const heading = slalomBase + Math.sin((ticks / period) * Math.PI * 2) * behaviour.swing;
+      motion[motionBase] = Math.cos(heading);
+      motion[motionBase + 1] = Math.sin(heading);
+      const speed = behaviour.speed * scale;
+      velocity[base] = (motion[motionBase] ?? 0) * speed;
+      velocity[base + 1] = (motion[motionBase + 1] ?? 0) * speed;
+      return;
+    }
     case 'wander': {
       const turnEvery = Math.max(1, Math.round(behaviour.turnEveryTicks));
       if (ticks % turnEvery === 0) {
@@ -2356,15 +2381,34 @@ function applyFiring(
       }
       continue;
     }
-    if (phase === 0 && isSighted(sim, index, aimX, aimY)) {
+    // A fan thrown off the side of the way the body was moving is aimed at
+    // nothing, so it is not gated on sight (#40, the Skier's drift-stop).
+    if (phase === 0 && (shot.aimSide !== undefined || isSighted(sim, index, aimX, aimY))) {
+      const centre = shot.aimSide === undefined ? aim : sideAim(sim, index, shot.aimSide);
       const shots = Math.max(1, Math.round(shot.shots));
       const step = shot.arc / Math.max(1, shots - 1);
-      const start = aim - shot.arc / 2;
+      const start = centre - shot.arc / 2;
       for (let ray = 0; ray < shots; ray++) {
-        fireOne(sim, index, shots === 1 ? aim : start + step * ray, shot);
+        fireOne(sim, index, shots === 1 ? centre : start + step * ray, shot);
       }
     }
   }
+}
+
+/**
+ * A quarter turn off the way `index` was last moving (its heading in
+ * `enemyMotion`): the left or the right, or — for `'random'` — whichever the
+ * enemy stream says (#40, the Skier). A body that has never moved faces east.
+ */
+function sideAim(sim: GameSim, index: number, side: 'left' | 'right' | 'random'): number {
+  const motionBase = index * ENEMY_MOTION_STRIDE;
+  const heading = Math.atan2(
+    sim.enemyMotion.data[motionBase + 1] ?? 0,
+    sim.enemyMotion.data[motionBase] ?? 1,
+  );
+  const turn =
+    side === 'random' ? (sim.random.enemies.nextFloat() < 0.5 ? -1 : 1) : side === 'left' ? -1 : 1;
+  return heading + (turn * Math.PI) / 2;
 }
 
 /**
