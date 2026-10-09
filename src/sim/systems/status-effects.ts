@@ -3,6 +3,7 @@ import type { GameSim } from '../game/sim.js';
 import { ParticleKind, type ParticleKindId } from '../particle/store.js';
 import { ring } from '../particle/effects.js';
 import { applyDamageAt } from './impact.js';
+import { emitStatusParticles } from './status-particles.js';
 
 /**
  * Burning, freezing and poison — the three `ProjectileTag`s (#27) that act on
@@ -160,6 +161,16 @@ export function stepStatusEffects(sim: GameSim): void {
         );
       }
     }
+
+    emitStatusParticles(
+      sim,
+      index,
+      (status[base + STATUS_BURN] ?? 0) > 0,
+      (status[base + STATUS_FREEZE] ?? 0) > 0,
+      (status[base + STATUS_POISON] ?? 0) > 0,
+      (status[base + STATUS_SLOW] ?? 0) > 0,
+      (status[base + STATUS_DAZE] ?? 0) > 0,
+    );
   }
 }
 
