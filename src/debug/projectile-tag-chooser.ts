@@ -38,6 +38,7 @@ const TAG_HINTS: Readonly<Record<string, string>> = {
   Returning: 'flies back to where it was fired from',
   Orbiting: 'circles its spawn point',
   Marking: 'marks the player for the room (enemy shots only)',
+  Bursting: 'bursts into freezing fragments where it ends (enemy shots only)',
 };
 
 /** Room units — a Zecke-sized cloud, big enough to see the edge of. */

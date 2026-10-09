@@ -3,6 +3,7 @@ import type { ChargeAtPlayerBehaviour, ShoalBehaviour } from '../enemy/definitio
 import {
   type CompiledDetonation,
   type CompiledEnemy,
+  type CompiledFireBeam,
   type CompiledFireSweep,
   type CompiledMeleeArc,
   type CompiledState,
@@ -22,6 +23,7 @@ import { NO_SLOT } from '../pool/slot-pool.js';
 import { ProjectileTeam } from '../projectile/store.js';
 import { ProjectileTag } from '../projectile/tags.js';
 import { finalizeProjectileTags } from '../projectile/behavior.js';
+import { applyFreeze } from './status-effects.js';
 import { ParticleKind } from '../particle/store.js';
 import { nextWaypoint, straightClear, type Waypoint } from '../room/pathfind.js';
 import { CLEAR_IGNORE_DESTRUCTIBLE, CLEAR_IGNORE_PITS } from '../room/geometry.js';
@@ -392,7 +394,10 @@ export function stepEnemies(sim: GameSim): void {
       aimY = (sim.enemyMotion.data[motionBase + 5] ?? playerY) - selfY;
     }
     const aimDistance = vectorLength(aimX, aimY);
-    if (ticks === 0 && (state.meleeArc !== null || state.fireSweep !== null)) {
+    if (
+      ticks === 0 &&
+      (state.meleeArc !== null || state.fireSweep !== null || state.fireBeam !== null)
+    ) {
       lockMeleeAim(sim, index, aimX, aimY, aimDistance);
     }
 
@@ -433,6 +438,9 @@ export function stepEnemies(sim: GameSim): void {
     }
     if (state.fireSweep !== null) {
       applyFireSweep(sim, index, state.fireSweep, ticks, selfX, selfY);
+    }
+    if (state.fireBeam !== null) {
+      applyFireBeam(sim, index, state.fireBeam, ticks, selfX, selfY);
     }
     if (state.summons.length > 0) {
       queueSummonWaves(sim, index, state, ticks, selfX, selfY);
@@ -1435,6 +1443,18 @@ function chooseTransition(
         }
         break;
       }
+      case TransitionTrigger.PlayerCrossesRow: {
+        // The player went from one side of the body's horizontal line to the
+        // other since last tick (#40, the Summit cross). Standing exactly on
+        // the line counts as one side.
+        const playerIndex = sim.playerIndex;
+        const before = sim.previousY(playerIndex) > sim.positionY(index);
+        const after = sim.positionY(playerIndex) > sim.positionY(index);
+        if (before !== after) {
+          return transition.to;
+        }
+        break;
+      }
       case TransitionTrigger.PlayerDiagonalAdjacent: {
         // A pawn's capture square (#407): the player's offset, folded into
         // one quadrant, within `tolerance` of (step, step). Never mid-hop, so
@@ -2419,6 +2439,8 @@ interface ShotSpec {
   readonly poison?: boolean | undefined;
   readonly bounce?: boolean | undefined;
   readonly mark?: boolean | undefined;
+  readonly freeze?: boolean | undefined;
+  readonly burst?: boolean | undefined;
 }
 
 /**
@@ -2460,7 +2482,9 @@ function fireFrom(
     ProjectileTeam.Enemy,
     (shot.poison === true ? ProjectileTag.Poison : 0) |
       (shot.bounce === true ? ProjectileTag.Bouncing : 0) |
-      (shot.mark === true ? ProjectileTag.Marking : 0),
+      (shot.mark === true ? ProjectileTag.Marking : 0) |
+      (shot.freeze === true ? ProjectileTag.Freezing : 0) |
+      (shot.burst === true ? ProjectileTag.Bursting : 0),
     // Which sprite this shot is drawn as, if its behaviour named one (#152).
 
     // Resolved through the roster's interned name table rather than carried as
@@ -3155,6 +3179,225 @@ function becomePropFromEvent(sim: GameSim, slot: number): void {
 }
 
 /** The `log` prop kind's index (#467), resolved once. */
+/** Longest a beam is traced, in room units: longer than any room is wide. */
+const BEAM_MAX_LENGTH = 800;
+/** Spacing of the terrain probe along a beam, in room units — finer than any wall is thick. */
+const BEAM_PROBE_STEP = 3;
+
+/** A beam's lit line or lines, written in place by `enemyBeam` so a render loop's per-frame call never allocates. */
+export interface EnemyBeamInfo {
+  /** 1 or 2 segments (a `row` beam is two, one each way). */
+  count: number;
+  /** Segment `i` runs `(ax[i], ay[i])` to `(bx[i], by[i])`: the body's centre out to where terrain stops it. */
+  ax: [number, number];
+  ay: [number, number];
+  bx: [number, number];
+  by: [number, number];
+  /** Half the beam's thickness, room units. */
+  halfWidth: number;
+  /** The beam's damage — what tells a big laser from a small one. */
+  damage: number;
+  /** 0..1 through the lit window (0 on the first lit tick). */
+  progress: number;
+}
+
+/** Traces one beam ray from `(fromX, fromY)` along `angle` until terrain stops it, writing segment `slot`. */
+function traceBeamRay(
+  sim: GameSim,
+  out: EnemyBeamInfo,
+  slot: 0 | 1,
+  fromX: number,
+  fromY: number,
+  angle: number,
+): void {
+  const dirX = Math.cos(angle);
+  const dirY = Math.sin(angle);
+  let reached = 0;
+  for (let distance = BEAM_PROBE_STEP; distance <= BEAM_MAX_LENGTH; distance += BEAM_PROBE_STEP) {
+    if (!sim.room.isClear(fromX + dirX * distance, fromY + dirY * distance, 1, CLEAR_IGNORE_PITS)) {
+      break;
+    }
+    reached = distance;
+  }
+  out.ax[slot] = fromX;
+  out.ay[slot] = fromY;
+  out.bx[slot] = fromX + dirX * reached;
+  out.by[slot] = fromY + dirY * reached;
+}
+
+/**
+ * Where a beam of `beam` lies for a body at `(selfX, selfY)` whose locked aim
+ * is `aimAngle`: the one place its geometry is worked out, so the hit test and
+ * the renderer's drawing of it can never disagree about where it is.
+ */
+function beamGeometry(
+  sim: GameSim,
+  beam: CompiledFireBeam,
+  aimAngle: number,
+  selfX: number,
+  selfY: number,
+  out: EnemyBeamInfo,
+): void {
+  out.halfWidth = beam.halfWidth;
+  out.damage = beam.damage;
+  if (beam.mode === 'row') {
+    out.count = 2;
+    traceBeamRay(sim, out, 0, selfX, selfY, 0);
+    traceBeamRay(sim, out, 1, selfX, selfY, Math.PI);
+    return;
+  }
+  out.count = 1;
+  traceBeamRay(
+    sim,
+    out,
+    0,
+    selfX,
+    selfY,
+    beam.mode === 'axis' ? snapToCardinal(aimAngle) : aimAngle,
+  );
+}
+
+/**
+ * The lit beam of `index`'s current state, written into `out`, or `false` while
+ * it is not lit — the ticks after the state is entered, the same ticks the hit
+ * test reads.
+ *
+ * @hot — one call per beam-bearing enemy per frame, from the renderer.
+ */
+export function enemyBeam(sim: GameSim, index: number, out: EnemyBeamInfo): boolean {
+  const base = index * ENEMY_STRIDE;
+  const compiled = sim.enemies.at(sim.enemy.data[base] ?? 0);
+  const state = compiled.states[sim.enemy.data[base + 1] ?? 0];
+  const beam = state?.fireBeam ?? null;
+  if (beam === null) {
+    return false;
+  }
+  const ticks = sim.enemy.data[base + 2] ?? 0;
+  if (ticks < 1 || ticks > beam.beamTicks) {
+    return false;
+  }
+  const motionBase = index * ENEMY_MOTION_STRIDE;
+  const aimAngle = Math.atan2(
+    sim.enemyMotion.data[motionBase + 1] ?? 0,
+    sim.enemyMotion.data[motionBase] ?? 1,
+  );
+  beamGeometry(sim, beam, aimAngle, sim.positionX(index), sim.positionY(index), out);
+  out.progress = (ticks - 1) / beam.beamTicks;
+  return true;
+}
+
+/**
+ * The line `index`'s wind-up is warning of — the beam of the state its
+ * telegraph leads to, at the aim it has locked (or is tracking), written into
+ * `out`. `false` when the state ahead has no beam.
+ *
+ * @hot — one call per winding-up beam-bearer per frame, from the renderer.
+ */
+export function enemyBeamTelegraph(sim: GameSim, index: number, out: EnemyBeamInfo): boolean {
+  const base = index * ENEMY_STRIDE;
+  const compiled = sim.enemies.at(sim.enemy.data[base] ?? 0);
+  const state = compiled.states[sim.enemy.data[base + 1] ?? 0];
+  const follow = state === undefined ? null : stateAfterTelegraph(compiled, state);
+  const beam = follow?.fireBeam ?? null;
+  if (beam === null) {
+    return false;
+  }
+  beamGeometry(
+    sim,
+    beam,
+    enemyAimAngle(sim, index),
+    sim.positionX(index),
+    sim.positionY(index),
+    out,
+  );
+  out.progress = enemyTelegraphProgress(sim, index);
+  return true;
+}
+
+/** Shortest distance from `(px, py)` to the segment `a`–`b`. */
+function distanceToSegment(
+  px: number,
+  py: number,
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+): number {
+  const abx = bx - ax;
+  const aby = by - ay;
+  const lengthSquared = abx * abx + aby * aby;
+  const t =
+    lengthSquared === 0 ? 0 : clamp(((px - ax) * abx + (py - ay) * aby) / lengthSquared, 0, 1);
+  return vectorLength(px - (ax + abx * t), py - (ay + aby * t));
+}
+
+const beamScratch: EnemyBeamInfo = {
+  count: 0,
+  ax: [0, 0],
+  ay: [0, 0],
+  bx: [0, 0],
+  by: [0, 0],
+  halfWidth: 0,
+  damage: 0,
+  progress: 0,
+};
+
+/**
+ * A laser (#40, `fireBeam`): while the beam is lit, a player whose body touches
+ * the line takes `beam.damage` through the same `Contact` event a melee swing
+ * lands (flash, shake, knockback and contact i-frames all follow from it — which
+ * is also what makes the hit once per beam), and is frozen if the beam freezes.
+ */
+function applyFireBeam(
+  sim: GameSim,
+  index: number,
+  beam: CompiledFireBeam,
+  ticks: number,
+  selfX: number,
+  selfY: number,
+): void {
+  if (ticks < 1 || ticks > beam.beamTicks || sim.playerInvulnerableTicks > 0) {
+    return;
+  }
+  if (!enemyBeam(sim, index, beamScratch)) {
+    return;
+  }
+  const playerIndex = sim.playerIndex;
+  const playerX = sim.positionX(playerIndex);
+  const playerY = sim.positionY(playerIndex);
+  const reach = beam.halfWidth + (sim.body.data[playerIndex * 2] ?? 0);
+  for (let segment = 0; segment < beamScratch.count; segment++) {
+    const ax = beamScratch.ax[segment] ?? 0;
+    const ay = beamScratch.ay[segment] ?? 0;
+    const bx = beamScratch.bx[segment] ?? 0;
+    const by = beamScratch.by[segment] ?? 0;
+    if (distanceToSegment(playerX, playerY, ax, ay, bx, by) > reach) {
+      continue;
+    }
+    // The normal points from the beam to the player — away from what hit them.
+    const alongX = bx - ax;
+    const alongY = by - ay;
+    const along = vectorLength(alongX, alongY) || 1;
+    const side = (playerX - ax) * (alongY / along) - (playerY - ay) * (alongX / along);
+    const nx = side >= 0 ? alongY / along : -alongY / along;
+    const ny = side >= 0 ? -alongX / along : alongX / along;
+    sim.events.push(
+      EventKind.Contact,
+      playerIndex,
+      index,
+      selfX,
+      selfY,
+      nx,
+      ny,
+      eliteAttackDamage(sim, index, beam.damage),
+    );
+    if (beam.freeze) {
+      applyFreeze(sim, playerIndex, sim.tuning.projectileTags.playerFreezeDurationTicks);
+    }
+    return;
+  }
+}
+
 /**
  * The ranged swing (#437, `fireSweep`): the arm runs the same arc the blade
  * does, and every `shotEveryTicks` from the swing's first tick a shot leaves
@@ -3594,6 +3837,8 @@ export const TelegraphShape = {
    * than the body that leaves it.
    */
   Cloud: 4,
+  /** The line a laser is about to light (#40): read the geometry back with `enemyBeamTelegraph`. */
+  Beam: 5,
 } as const;
 
 export type TelegraphShapeId = (typeof TelegraphShape)[keyof typeof TelegraphShape];
@@ -3708,6 +3953,16 @@ export function enemyTelegraphShape(
     out.angle = enemyAimAngle(sim, index);
     out.arc = follow.meleeArc.arc;
     out.reach = follow.meleeArc.reach;
+    return true;
+  }
+  // A laser (#40) warns with the line it is about to light.
+  if (follow !== null && follow.fireBeam !== null) {
+    out.shape = TelegraphShape.Beam;
+    out.x = selfX;
+    out.y = selfY;
+    out.angle = enemyAimAngle(sim, index);
+    out.arc = 0;
+    out.reach = 0;
     return true;
   }
   // A ranged sweep (#437) warns with the same arc: the fan the shots will

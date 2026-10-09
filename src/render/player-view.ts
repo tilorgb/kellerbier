@@ -2,7 +2,11 @@ import { Group } from 'three';
 import { PLAYER_FOOTPRINT, type GameSim } from '../sim/game/sim.js';
 import { PromilleTier } from '../sim/game/promille.js';
 import { lerp } from '../sim/math.js';
-import { STATUS_EFFECT_STRIDE, STATUS_POISON } from '../sim/systems/status-effects.js';
+import {
+  STATUS_EFFECT_STRIDE,
+  STATUS_FREEZE,
+  STATUS_POISON,
+} from '../sim/systems/status-effects.js';
 import {
   AnimationState,
   ClipStateResolver,
@@ -24,6 +28,7 @@ import type { Texture } from './gfx/index.js';
 import {
   BLUTWURZ_SPIRIT_TINT,
   SNEEZE_GLOW_TINT,
+  STATUS_FREEZE_TINT,
   STATUS_MARK_GLOW,
   STATUS_POISON_TINT,
 } from './palette.js';
@@ -201,11 +206,14 @@ export class PlayerView {
     this.body.place(this.x, 0.2, this.footZ, this.lean);
 
     const poisoned = (sim.statusEffect.data[index * STATUS_EFFECT_STRIDE + STATUS_POISON] ?? 0) > 0;
+    const frozen = (sim.statusEffect.data[index * STATUS_EFFECT_STRIDE + STATUS_FREEZE] ?? 0) > 0;
     const spiritTint = sim.blutwurzActive
       ? BLUTWURZ_SPIRIT_TINT
-      : poisoned
-        ? STATUS_POISON_TINT
-        : 0xffffff;
+      : frozen
+        ? STATUS_FREEZE_TINT
+        : poisoned
+          ? STATUS_POISON_TINT
+          : 0xffffff;
     this.body.tint = spiritTint;
     this.schlauch.tint = spiritTint;
     const flashing = sim.playerHurtTick >= 0 && sim.tick - sim.playerHurtTick < 3;

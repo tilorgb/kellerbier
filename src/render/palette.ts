@@ -76,6 +76,12 @@ export const GROUND_SHADOW = {
 export const ENTITY_PALETTE = {
   /** Colour of a telegraph ring. The same red the debug overlay draws enemy colliders in. */
   telegraphRing: 0xf2566f,
+  /** A big laser's glow (#40, two damage): hot alpenglow pink. */
+  beamBig: 0xff3d6e,
+  /** A small laser's glow (#40, one damage): cold ice blue. */
+  beamSmall: 0x8fe6ff,
+  /** The white-hot core of every laser. */
+  beamCore: 0xffffff,
   /** What an invulnerable body is tinted. Cold and dull: nothing is getting in. */
   invulnerableShellTint: 0x8fa2b8,
   /** What an elite (#156) is tinted — a warm gold, as far from `invulnerableShellTint`'s cold blue-grey as the palette allows. */
@@ -207,6 +213,8 @@ export const BLUTWURZ_SPIRIT_TINT = 0x9ec8e8;
 export const SNEEZE_GLOW_TINT = 0xfff0a8;
 
 export const STATUS_POISON_TINT = 0x8fbf3a;
+/** The tint on a player frozen by a snow cannon (#40): ice blue, over the body and the Schlauch. */
+export const STATUS_FREEZE_TINT = 0x8fd0ff;
 /** The glow on a player marked by a flare (#40): a flare's own pink-red, on the emissive channel. */
 export const STATUS_MARK_GLOW = 0xff6a8a;
 

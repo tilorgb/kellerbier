@@ -73,6 +73,12 @@ export const ProjectileTag = {
    * it does nothing — an enemy has nothing to be marked *for*.
    */
   Marking: 1 << 12,
+  /**
+   * Bursts into a ring of fragments where it ends — on a hit, against a wall
+   * or when its flight runs out (#40, the Snow cannon). Enemy shots only; the
+   * fragments are plain freezing clods and never burst again.
+   */
+  Bursting: 1 << 13,
 } as const;
 
 export type ProjectileTagId = (typeof ProjectileTag)[keyof typeof ProjectileTag];
@@ -92,6 +98,7 @@ export const PROJECTILE_TAG_IDS: readonly ProjectileTagId[] = [
   ProjectileTag.Returning,
   ProjectileTag.Orbiting,
   ProjectileTag.Marking,
+  ProjectileTag.Bursting,
 ];
 
 /** One past the highest bit `ProjectileTag` uses — every valid mask is below `1 << PROJECTILE_TAG_COUNT`. */

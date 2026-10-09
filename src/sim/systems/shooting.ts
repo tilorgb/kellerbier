@@ -7,6 +7,7 @@ import { NO_SLOT } from '../pool/slot-pool.js';
 import {
   advanceStuckProjectile,
   applyProjectileMotionTags,
+  burstProjectile,
   finalizeProjectileTags,
   reflectVelocity,
 } from '../projectile/behavior.js';
@@ -335,5 +336,6 @@ function spend(
   normalY: number,
 ): void {
   sim.events.push(EventKind.ProjectileSpent, index, NO_SLOT, x, y, normalX, normalY, 0);
+  burstProjectile(sim, index, x, y);
   sim.projectiles.despawn(index);
 }

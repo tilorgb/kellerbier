@@ -6908,3 +6908,10 @@ real progression and beat its boss.
   two arrows against a 6 DPS player; The Gondola at 60 dies before him and docks twice. Both are
   assertions in `boss-pacing.test.ts`, not estimates.
 
+## 129. Lasers, freeze on the player, bursting shots (#40)
+
+**Decided** with the Floor 4 roster rework (see the bible): a laser is **an instant line, not a projectile** — `fireBeam` lights a line from the body for `beamTicks` after its state is entered, and a player on it takes `damage` once (the same `Contact` event a melee swing lands, so the contact i-frames make it once per beam). There is nothing to outrun; the dodge is being off the line while it is lit, which the `telegraph` state before it draws on the floor. Modes: `aim` (the bearing locked on entry), `row` (both ways along the body's horizontal line) and `axis` (the cardinal line nearest the locked aim, toward the player). **Terrain stops a beam** the way it stops a shot (boulders are shelter), and the hit test and the renderer read one geometry (`beamGeometry`), so they cannot disagree. The trigger `whenPlayerCrossesRow` is a one-tick event off the player's previous position, so a rest state is a cooldown.
+
+**Freeze on Alois reuses the existing freeze status** (`applyFreeze`, near-stop plus a cooldown) with its own duration, `playerFreezeDurationTicks` (42 ticks, 0.7 s): he cannot dodge while it lasts, so it is shorter than an enemy's. Enemy firing behaviours gain `freeze` and `burst`; a bursting shot (`ProjectileTag.Bursting`) ends in a ring of freezing fragments on a hit, a wall or the end of its flight, and the fragments never burst again. The ice-blue tint on the player is the freeze's cue.
+
+No mob uses these yet: the Summit cross, Snow cannon and Mountain hare land with their art, which goes through the usual options round. The unit tests carry fixture definitions of all three shapes.

@@ -67,6 +67,7 @@ export type BehaviourName =
   | 'glideToPoint'
   | 'fireRotatingRing'
   | 'fireSweep'
+  | 'fireBeam'
   | 'captureLine'
   | 'lobVolley'
   | 'detonateVolley'
@@ -694,6 +695,18 @@ export interface FiringBehaviourBase {
    */
   readonly bounce?: boolean;
   /**
+   * The shot freezes the player on a hit (#40, the Snow cannon): `ProjectileTag.Freezing`,
+   * so Alois is all but rooted for `tuning.projectileTags.playerFreezeDurationTicks`
+   * (he can still shoot) and then immune for the freeze cooldown. Omitted is a plain shot.
+   */
+  readonly freeze?: boolean;
+  /**
+   * The shot bursts into `tuning.projectileTags.burstFragments` freezing clods where it
+   * ends — on a hit, a wall, or the end of its flight (#40, the Snow cannon).
+   * `ProjectileTag.Bursting`. Omitted is a plain shot.
+   */
+  readonly burst?: boolean;
+  /**
    * The shot *marks* the player on a hit (#40, the Bergwacht's flare):
    * `ProjectileTag.Marking`, so for `tuning.projectileTags.playerMarkDurationTicks`
    * every enemy in the room sees them through cover (`isSighted` is true)
@@ -818,6 +831,35 @@ export interface MeleeArcBehaviour {
   readonly direction?: -1 | 1;
   /** Which held-weapon sprite the renderer swings, e.g. `'maibaum'`. Omitted: telegraph only. */
   readonly weapon?: string;
+}
+
+/**
+ * A laser (#40, the Summit cross, the Mountain hare, The First Human's eyes): an
+ * instant line from the body, dangerous for `beamTicks` after the state is
+ * entered. There is no projectile to outrun — the dodge is being off the line
+ * while it is lit, which is what the `telegraph` state before it is for.
+ *
+ * `mode` says which line: `'aim'` along the bearing locked on entry (the wind-up
+ * before it locks it, exactly as a `meleeArc` blade's aim is locked); `'row'`
+ * both ways along the body's own horizontal line, aim ignored; `'axis'` along
+ * whichever of the four cardinal lines the locked aim is nearest to — the
+ * crossed line, toward the player. Every beam runs on until a wall or a block
+ * stops it (the same terrain a shot dies on), so a boulder is real shelter.
+ *
+ * A hit costs `damage` once (the player's contact i-frames cover the rest of the
+ * beam) and, with `freeze`, freezes them. Not gated on sight: a committed beam
+ * goes where it was aimed.
+ */
+export interface FireBeamBehaviour {
+  readonly behaviour: 'fireBeam';
+  readonly mode: 'aim' | 'row' | 'axis';
+  /** Ticks the line stays lit after the state is entered. */
+  readonly beamTicks: number;
+  /** Half the beam's thickness, in room units: the player is hit within this plus their own radius. */
+  readonly halfWidth: number;
+  readonly damage: number;
+  /** The hit freezes the player (`tuning.projectileTags.playerFreezeDurationTicks`). Omitted: it does not. */
+  readonly freeze?: boolean;
 }
 
 /**
@@ -1206,6 +1248,7 @@ export type EnemyBehaviour =
   | FireOnBeatBehaviour
   | MeleeArcBehaviour
   | FireSweepBehaviour
+  | FireBeamBehaviour
   | SplitOnDeathBehaviour
   | SummonBehaviour
   | DropPropBehaviour
@@ -1321,6 +1364,14 @@ export type EnemyTransition =
    * test has passed.
    */
   | { readonly to: string; readonly whenPlayerOnAxis: { readonly tolerance: number } }
+  /**
+   * The player's centre crossed the body's horizontal line since the last tick —
+   * went from the north of it to the south, or back (#40, the Summit cross).
+   * A one-tick event: a state that is not listening that tick misses it, which
+   * is what makes a rest state a cooldown. Not gated on sight; the beam it
+   * starts is stopped by cover on its own.
+   */
+  | { readonly to: string; readonly whenPlayerCrossesRow: true }
   /**
    * The body's health is at or below this fraction (0 exclusive, 1
    * inclusive) of its max (#437): a phase change on a health threshold that

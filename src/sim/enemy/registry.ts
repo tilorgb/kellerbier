@@ -13,6 +13,7 @@ import {
   type FireOnBeatBehaviour,
   type FireRingBehaviour,
   type FireRotatingRingBehaviour,
+  type FireBeamBehaviour,
   type FireSweepBehaviour,
   type FireSpreadBehaviour,
   type MeleeArcBehaviour,
@@ -153,6 +154,8 @@ export const TransitionTrigger = {
   OnArrived: 11,
   /** The body's health is at or below `value` (a fraction of max) (#437). */
   HealthBelow: 12,
+  /** The player crossed the body's horizontal line since the last tick (#40). */
+  PlayerCrossesRow: 13,
 } as const;
 
 export type TransitionTriggerId = (typeof TransitionTrigger)[keyof typeof TransitionTrigger];
@@ -271,6 +274,15 @@ export interface CompiledMeleeArc {
   readonly weapon: string | null;
 }
 
+/** A `fireBeam` validated once, at compile time (#40). */
+export interface CompiledFireBeam {
+  readonly mode: 'aim' | 'row' | 'axis';
+  readonly beamTicks: number;
+  readonly halfWidth: number;
+  readonly damage: number;
+  readonly freeze: boolean;
+}
+
 /** A `fireSweep` validated once, at compile time (#437). */
 export interface CompiledFireSweep {
   readonly arc: number;
@@ -287,6 +299,8 @@ export interface CompiledFireSweep {
   readonly poison: boolean;
   readonly bounce: boolean;
   readonly mark: boolean;
+  readonly freeze: boolean;
+  readonly burst: boolean;
 }
 
 export interface CompiledState {
@@ -314,6 +328,8 @@ export interface CompiledState {
   readonly meleeArc: CompiledMeleeArc | null;
   /** Set for a state that sweeps an arm firing shots along it (The First Human, #437). `null` otherwise. */
   readonly fireSweep: CompiledFireSweep | null;
+  /** Set for a state that lights a laser line from the body (#40). `null` otherwise. */
+  readonly fireBeam: CompiledFireBeam | null;
   /** True for a state whose entry stores a line across the room (#412, `captureLine`). */
   readonly capturesLine: boolean;
   /** True for a state that belongs to a captured line — captures it, rides it, or is off the arena on it — and so has its ramps up (#412). */
@@ -656,6 +672,7 @@ export class EnemyRegistry {
     let emitCloud: CompiledCloud | null = null;
     let meleeArc: CompiledMeleeArc | null = null;
     let fireSweep: CompiledFireSweep | null = null;
+    let fireBeam: CompiledFireBeam | null = null;
     let grabProp: { kind: number; reach: number } | null = null;
     let rollLog: { kind: number; reach: number; east: number; west: number } | null = null;
     let becomeProp: { kind: number; health: number; radius: number } | null = null;
@@ -856,6 +873,30 @@ export class EnemyRegistry {
         };
         continue;
       }
+      if (name === 'fireBeam') {
+        const beam = behaviour as FireBeamBehaviour;
+        const mode: string = beam.mode;
+        if (mode !== 'aim' && mode !== 'row' && mode !== 'axis') {
+          throw new Error(`${where}: "fireBeam" needs a mode of 'aim', 'row' or 'axis'`);
+        }
+        if (!(beam.beamTicks >= 1)) {
+          throw new Error(`${where}: "fireBeam" needs beamTicks of at least 1`);
+        }
+        if (!(beam.halfWidth > 0)) {
+          throw new Error(`${where}: "fireBeam" needs a halfWidth above zero`);
+        }
+        if (!(beam.damage > 0)) {
+          throw new Error(`${where}: "fireBeam" needs damage above zero`);
+        }
+        fireBeam = {
+          mode: beam.mode,
+          beamTicks: Math.round(beam.beamTicks),
+          halfWidth: beam.halfWidth,
+          damage: beam.damage,
+          freeze: beam.freeze === true,
+        };
+        continue;
+      }
       if (name === 'fireSweep') {
         const sweep = behaviour as FireSweepBehaviour;
         if (!(sweep.arc > 0) || sweep.arc > Math.PI * 2) {
@@ -895,6 +936,8 @@ export class EnemyRegistry {
           poison: sweep.poison === true,
           bounce: sweep.bounce === true,
           mark: sweep.mark === true,
+          freeze: sweep.freeze === true,
+          burst: sweep.burst === true,
         };
         continue;
       }
@@ -1326,6 +1369,16 @@ export class EnemyRegistry {
           max: 0,
         };
       }
+      if ('whenPlayerCrossesRow' in transition) {
+        return {
+          trigger: TransitionTrigger.PlayerCrossesRow,
+          value: 0,
+          to,
+          propKind: -1,
+          tolerance: 0,
+          max: 0,
+        };
+      }
       if ('whenPlayerDiagonalAdjacent' in transition) {
         const { distance, tolerance } = transition.whenPlayerDiagonalAdjacent;
         if (!(distance > 0) || !(tolerance >= 0)) {
@@ -1394,6 +1447,7 @@ export class EnemyRegistry {
         movement.behaviour === 'chargeAtPlayer' ||
         meleeArc !== null ||
         fireSweep !== null ||
+        fireBeam !== null ||
         firing.some(
           (shot) =>
             shot.behaviour !== 'fireOnBeat' &&
@@ -1407,6 +1461,7 @@ export class EnemyRegistry {
       emitCloud,
       meleeArc,
       fireSweep,
+      fireBeam,
       capturesLine,
       usesLine:
         capturesLine ||
