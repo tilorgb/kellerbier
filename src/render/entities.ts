@@ -98,10 +98,10 @@ const DAZED_TINT_MIX = 0.6;
 const TELEGRAPH_SCALE = 2.6;
 const LINE_TELEGRAPH_SCALE = 6;
 const LINE_TELEGRAPH_HALF_ANGLE = 0.12;
-/** How high above the floor a lit laser hangs, room units: about hip height. */
-const BEAM_HEIGHT = 6;
 /** Room units across a wind-up's warning line. */
 const BEAM_WARNING_THICKNESS = 1.5;
+/** Where a beam that lands comes to rest above the floor, room units: just above the snow. */
+const BEAM_FLOOR_HEIGHT = 3;
 const MAYPOLE_PROP_KIND = propKindIndex('maypole');
 const BOMB_PICKUP_ID = 'bierfassl';
 const RING_PULSE_RATE = 0.011;
@@ -315,6 +315,8 @@ export class EntityView {
     by: [0, 0],
     halfWidth: 0,
     damage: 0,
+    height: 0,
+    landUnits: 0,
     progress: 0,
   };
   /** The bomb blast telegraph's crossed hatch arms (#3) — see `FloorHazardBar`. */
@@ -974,7 +976,8 @@ export class EntityView {
                   beam.bx[segment] ?? 0,
                   beam.by[segment] ?? 0,
                   BEAM_WARNING_THICKNESS,
-                  TELEGRAPH_HEIGHT,
+                  // The wind-up line sits where the beam will, so it is plainly the same line.
+                  beam.landUnits > 0 ? TELEGRAPH_HEIGHT : Math.max(TELEGRAPH_HEIGHT, beam.height),
                   shapeAlpha,
                   ENTITY_PALETTE.telegraphRing,
                   'warn',
@@ -1031,8 +1034,10 @@ export class EntityView {
         }
       }
 
-      // A lit laser (#40): a glow in the beam's own colour under a white core,
-      // hanging at hip height — pink for the big one, ice blue for the small.
+      // A lit laser (#40): a glow in the beam's own colour under a broken white-hot core,
+      // pink for the big one, ice blue for the small. It comes out of the body at the
+      // beam's `height` (a crossbar, a skull's eyes) and, if it `landUnits`, comes down
+      // onto the floor line it actually hits along.
       if (isEnemyBody && enemyBeam(sim, index, this.beamScratch)) {
         const beam = this.beamScratch;
         const glow = beam.damage > 1 ? ENTITY_PALETTE.beamBig : ENTITY_PALETTE.beamSmall;
@@ -1042,31 +1047,50 @@ export class EntityView {
           const ay = beam.ay[segment] ?? 0;
           const bx = beam.bx[segment] ?? 0;
           const by = beam.by[segment] ?? 0;
-          this.beamAt(beamsUsed).place(
-            ax,
-            ay,
-            bx,
-            by,
-            beam.halfWidth * 2.4,
-            BEAM_HEIGHT,
-            0.8 * fade,
-            glow,
-            'glow',
-            beamScroll,
-          );
-          this.beamAt(beamsUsed + 1).place(
-            ax,
-            ay,
-            bx,
-            by,
-            Math.max(1.2, beam.halfWidth * 0.9),
-            BEAM_HEIGHT + 0.05,
-            fade,
-            ENTITY_PALETTE.beamCore,
-            'core',
-            beamScroll + 0.31,
-          );
-          beamsUsed += 2;
+          const length = Math.hypot(bx - ax, by - ay);
+          const land = Math.min(beam.landUnits, length);
+          // Where the slope meets the floor, along the segment.
+          const t = length === 0 ? 0 : land / length;
+          const mx = ax + (bx - ax) * t;
+          const my = ay + (by - ay) * t;
+          const floor = Math.min(beam.height, BEAM_FLOOR_HEIGHT);
+          const sloped = land > 0 && beam.height > floor;
+          // The slope (if any), then the level run to the end.
+          for (let part = 0; part < (sloped ? 2 : 1); part++) {
+            const fromX = part === 0 ? ax : mx;
+            const fromY = part === 0 ? ay : my;
+            const toX = sloped && part === 0 ? mx : bx;
+            const toY = sloped && part === 0 ? my : by;
+            const h0 = sloped ? (part === 0 ? beam.height : floor) : beam.height;
+            const h1 = sloped ? floor : beam.height;
+            this.beamAt(beamsUsed).place(
+              fromX,
+              fromY,
+              toX,
+              toY,
+              beam.halfWidth * 2.4,
+              h0,
+              0.8 * fade,
+              glow,
+              'glow',
+              beamScroll,
+              h1,
+            );
+            this.beamAt(beamsUsed + 1).place(
+              fromX,
+              fromY,
+              toX,
+              toY,
+              Math.max(1.2, beam.halfWidth * 0.9),
+              h0 + 0.05,
+              fade,
+              ENTITY_PALETTE.beamCore,
+              'core',
+              beamScroll + 0.31,
+              h1 + 0.05,
+            );
+            beamsUsed += 2;
+          }
         }
       }
 

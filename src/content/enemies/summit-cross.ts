@@ -44,7 +44,15 @@ export const summitCross: EnemyDefinition = {
       name: 'fire',
       behaviours: [
         { behaviour: 'pause' },
-        { behaviour: 'fireBeam', mode: 'row', beamTicks: BEAM_TICKS, halfWidth: 4, damage: 2 },
+        {
+          behaviour: 'fireBeam',
+          mode: 'row',
+          beamTicks: BEAM_TICKS,
+          halfWidth: 4,
+          damage: 2,
+          // Out of the crossbar, not the foot of the cross.
+          height: 14,
+        },
       ],
       transitions: [{ to: 'rest', after: BEAM_TICKS + 4 }],
     },

@@ -285,6 +285,10 @@ export interface CompiledFireBeam {
   readonly halfWidth: number;
   readonly damage: number;
   readonly freeze: boolean;
+  /** Where on the body the beam is drawn from, room units above the floor (#40). */
+  readonly height: number;
+  /** Units over which it comes down from `height` to the floor; 0 stays level (#40). */
+  readonly landUnits: number;
 }
 
 /** A `fireSweep` validated once, at compile time (#437). */
@@ -915,6 +919,8 @@ export class EnemyRegistry {
           halfWidth: beam.halfWidth,
           damage: beam.damage,
           freeze: beam.freeze === true,
+          height: beam.height ?? 6,
+          landUnits: Math.max(0, beam.landUnits ?? 0),
         };
         continue;
       }

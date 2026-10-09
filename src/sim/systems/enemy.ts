@@ -3284,6 +3284,10 @@ export interface EnemyBeamInfo {
   halfWidth: number;
   /** The beam's damage — what tells a big laser from a small one. */
   damage: number;
+  /** How high above the floor it is drawn, room units (`fireBeam.height`). */
+  height: number;
+  /** Units over which it comes down to the floor, 0 for level (`fireBeam.landUnits`). */
+  landUnits: number;
   /** 0..1 through the lit window (0 on the first lit tick). */
   progress: number;
 }
@@ -3327,6 +3331,8 @@ function beamGeometry(
 ): void {
   out.halfWidth = beam.halfWidth;
   out.damage = beam.damage;
+  out.height = beam.height;
+  out.landUnits = beam.landUnits;
   if (beam.mode === 'row') {
     out.count = 2;
     traceBeamRay(sim, out, 0, selfX, selfY, 0);
@@ -3461,6 +3467,8 @@ const beamScratch: EnemyBeamInfo = {
   by: [0, 0],
   halfWidth: 0,
   damage: 0,
+  height: 0,
+  landUnits: 0,
   progress: 0,
 };
 

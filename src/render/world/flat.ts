@@ -4,12 +4,14 @@ import {
   CircleGeometry,
   ClampToEdgeWrapping,
   DoubleSide,
+  Matrix4,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
   NearestFilter,
   PlaneGeometry,
   RepeatWrapping,
+  Vector3,
   RingGeometry,
   type Texture as ThreeTexture,
 } from 'three';
@@ -264,6 +266,12 @@ function beamHash(x: number, y: number, seed: number): number {
 
 const beamTextures = new Map<BeamPattern, ThreeTexture>();
 
+/** Scratch for a sloped beam's orientation, so a per-frame call never allocates. */
+const BEAM_ALONG = new Vector3();
+const BEAM_ACROSS = new Vector3();
+const BEAM_NORMAL = new Vector3();
+const BEAM_BASIS = new Matrix4();
+
 /**
  * One repeat of a beam pattern, white so the material's colour tints it. Corroded
  * on purpose (#40): the glow is a dither that thins to nothing at its edges and
@@ -352,10 +360,12 @@ export class FloorBeam {
     colour: number,
     pattern: BeamPattern = 'glow',
     scroll = 0,
+    heightEnd: number = height,
   ): void {
     const dx = bx - ax;
     const dz = bz - az;
-    const length = Math.hypot(dx, dz);
+    const dh = heightEnd - height;
+    const length = Math.hypot(dx, dz, dh);
     if (this.pattern !== pattern) {
       this.pattern = pattern;
       this.mesh.material.map = beamTexture(pattern);
@@ -366,10 +376,20 @@ export class FloorBeam {
       map.repeat.set(Math.max(0.01, length / BEAM_PATTERN_WIDTH), 1);
       map.offset.set(scroll, 0);
     }
-    this.mesh.position.set((ax + bx) / 2, height, (az + bz) / 2);
-    // A sim bearing runs in the floor plane with +y south; about the plane's
-    // own normal that is a negative turn, then the plane lies down.
-    this.mesh.rotation.set(-Math.PI / 2, 0, -Math.atan2(dz, dx));
+    this.mesh.position.set((ax + bx) / 2, (height + heightEnd) / 2, (az + bz) / 2);
+    if (dh === 0) {
+      // A sim bearing runs in the floor plane with +y south; about the plane's
+      // own normal that is a negative turn, then the plane lies down.
+      this.mesh.rotation.set(-Math.PI / 2, 0, -Math.atan2(dz, dx));
+    } else {
+      // A beam angled down onto its target: the ribbon's length runs along the slope and its
+      // width stays horizontal, so it still reads as a flat strip from the camera above.
+      BEAM_ALONG.set(dx, dh, dz).normalize();
+      BEAM_ACROSS.set(0, 1, 0).cross(BEAM_ALONG).normalize();
+      BEAM_NORMAL.crossVectors(BEAM_ALONG, BEAM_ACROSS);
+      BEAM_BASIS.makeBasis(BEAM_ALONG, BEAM_ACROSS, BEAM_NORMAL);
+      this.mesh.setRotationFromMatrix(BEAM_BASIS);
+    }
     this.mesh.scale.set(Math.max(0.001, length), thickness, 1);
     this.mesh.material.opacity = alpha;
     this.mesh.material.color.setHex(colour);

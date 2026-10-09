@@ -62,6 +62,9 @@ const EYE_LASER = {
   beamTicks: EYE_BEAM_TICKS,
   halfWidth: 6,
   damage: 2,
+  // Out of his eyes, high on the body, angled down onto the floor line it actually hits along.
+  height: 44,
+  landUnits: 80,
 } as const;
 
 export const theFirstHuman: EnemyDefinition = {

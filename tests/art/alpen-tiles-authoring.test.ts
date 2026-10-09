@@ -38,6 +38,7 @@ describe("Die Alpen's committed tiles are what the authoring source produces", (
       tileset.wall,
       tileset.wallLip,
       tileset.wallLipCorner,
+      ...(tileset.surround === undefined ? [] : [tileset.surround]),
       ...tileset.destructibles,
       ...Object.values(PROP_TILE_NAMES).filter(
         (tile): tile is string => tile?.startsWith('alpen-') === true,

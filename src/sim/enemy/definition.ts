@@ -876,6 +876,18 @@ export interface FireBeamBehaviour {
   /** Half the beam's thickness, in room units: the player is hit within this plus their own radius. */
   readonly halfWidth: number;
   readonly damage: number;
+  /**
+   * How high above the floor the beam is *drawn*, in room units — where on the body
+   * it comes out of (the Summit cross\'s crossbar, a skull\'s eyes). Presentation only:
+   * the hit test is on the floor line under it, so keep it modest. Omitted: 6, hip height.
+   */
+  readonly height?: number;
+  /**
+   * Over how many room units, from the body, the beam *comes down* from `height` to the
+   * floor line it actually hits along (#40): a beam from a skull\'s eyes is angled down
+   * onto the player rather than hovering over their head. 0 (the default) keeps it level.
+   */
+  readonly landUnits?: number;
   /** The hit freezes the player (`tuning.projectileTags.playerFreezeDurationTicks`). Omitted: it does not. */
   readonly freeze?: boolean;
 }

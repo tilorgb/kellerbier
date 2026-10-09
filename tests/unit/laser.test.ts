@@ -219,6 +219,8 @@ function newBeamInfo(): EnemyBeamInfo {
     by: [0, 0],
     halfWidth: 0,
     damage: 0,
+    height: 0,
+    landUnits: 0,
     progress: 0,
   };
 }

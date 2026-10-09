@@ -1212,8 +1212,9 @@ export class Scenery {
       new PlaneGeometry(bleedWidth, bleedHeight),
       tiles === undefined
         ? this.materials.flatMaterial(wallColour, { roughness: 1 })
-        : this.materials.tiledMaterial(tiles.wall, bleedWidth, bleedHeight, {
+        : this.materials.tiledMaterial(tiles.surround ?? tiles.wall, bleedWidth, bleedHeight, {
             roughness: 1,
+            // The wall tile is dimmed to a dark base; the scree already is one.
             color: 0x555555,
           }),
     );
