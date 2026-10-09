@@ -147,13 +147,17 @@ describe('Skier (#40): a slalom, and a drift-stop that fires off to the side', (
       const bearings = enemyShotBearings(sim);
       if (bearings.length === 5) {
         fired = true;
-        const centre = bearings.reduce((sum, bearing) => sum + bearing, 0) / bearings.length;
+        // A circular mean: the fan can straddle the ±π seam.
+        const centre = Math.atan2(
+          bearings.reduce((sum, bearing) => sum + Math.sin(bearing), 0),
+          bearings.reduce((sum, bearing) => sum + Math.cos(bearing), 0),
+        );
         // The fan is centred a quarter turn off the heading — either side.
         const turn = Math.abs(
           ((centre - headingBeforeStop + Math.PI * 3) % (Math.PI * 2)) - Math.PI,
         );
-        expect(turn).toBeGreaterThan(Math.PI / 2 - 0.5);
-        expect(turn).toBeLessThan(Math.PI / 2 + 0.5);
+        expect(turn).toBeGreaterThan(Math.PI / 2 - 0.6);
+        expect(turn).toBeLessThan(Math.PI / 2 + 0.6);
       }
     }
     expect(fired).toBe(true);

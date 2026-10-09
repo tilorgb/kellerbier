@@ -565,6 +565,8 @@ export class EntityView {
     let cloudEdgesUsed = 0;
     let wedgesUsed = 0;
     let beamsUsed = 0;
+    // The lasers' pixel pattern is re-rolled every 60 ms (#40): it sizzles, it does not glide.
+    const beamScroll = (Math.floor(nowMs / 60) * 0.37) % 1;
     let hazardBarsUsed = 0;
     let hazardDiscsUsed = 0;
     let eatShadesUsed = 0;
@@ -975,6 +977,8 @@ export class EntityView {
                   TELEGRAPH_HEIGHT,
                   shapeAlpha,
                   ENTITY_PALETTE.telegraphRing,
+                  'warn',
+                  beamScroll,
                 );
                 beamsUsed += 1;
               }
@@ -1045,8 +1049,10 @@ export class EntityView {
             by,
             beam.halfWidth * 2.4,
             BEAM_HEIGHT,
-            0.55 * fade,
+            0.8 * fade,
             glow,
+            'glow',
+            beamScroll,
           );
           this.beamAt(beamsUsed + 1).place(
             ax,
@@ -1057,6 +1063,8 @@ export class EntityView {
             BEAM_HEIGHT + 0.05,
             fade,
             ENTITY_PALETTE.beamCore,
+            'core',
+            beamScroll + 0.31,
           );
           beamsUsed += 2;
         }

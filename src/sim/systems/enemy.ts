@@ -358,7 +358,19 @@ export function stepEnemies(sim: GameSim): void {
         // "rising tone under a wind-up" only makes sense as a cue with a
         // start.
         if (entered.telegraphTicks > 0) {
-          sim.events.push(EventKind.AttackWindup, index, NO_SLOT, selfX, selfY, 0, 0, 0);
+          // `value` 1 marks the wind-up of a laser (#40), which has its own charging sound.
+          const follow = stateAfterTelegraph(compiled, entered);
+          const beamAhead = follow !== null && follow.fireBeam !== null;
+          sim.events.push(
+            EventKind.AttackWindup,
+            index,
+            NO_SLOT,
+            selfX,
+            selfY,
+            0,
+            0,
+            beamAhead ? 1 : 0,
+          );
         }
       }
     }
@@ -2379,10 +2391,13 @@ function applyFiring(
           // `burst`, splashes — exactly where the player stood when it locked.
           const speed = Math.max(0.01, shot.speed * sim.tuning.enemy.projectileSpeedScale);
           const reach = Math.max(0, aimDistance - (sim.body.data[index * 2] ?? 0));
-          fireOne(sim, index, aim, {
-            ...shot,
-            lifetimeTicks: Math.min(shot.lifetimeTicks, Math.max(1, Math.round(reach / speed))),
-          });
+          fireOne(
+            sim,
+            index,
+            aim,
+            shot,
+            Math.min(shot.lifetimeTicks, Math.max(1, Math.round(reach / speed))),
+          );
         } else {
           fireOne(sim, index, aim, shot);
         }
@@ -2481,7 +2496,13 @@ export function eliteAttackDamage(sim: GameSim, index: number, base: number): nu
     : base;
 }
 
-function fireOne(sim: GameSim, index: number, angle: number, shot: FiringBehaviour): void {
+function fireOne(
+  sim: GameSim,
+  index: number,
+  angle: number,
+  shot: FiringBehaviour,
+  lifetimeTicks: number = shot.lifetimeTicks,
+): void {
   fireFrom(
     sim,
     index,
@@ -2490,6 +2511,7 @@ function fireOne(sim: GameSim, index: number, angle: number, shot: FiringBehavio
     sim.body.data[index * 2] ?? 0,
     angle,
     shot,
+    lifetimeTicks,
   );
 }
 
@@ -2521,6 +2543,7 @@ function fireFrom(
   bodyReach: number,
   angle: number,
   shot: ShotSpec,
+  lifetimeTicks: number = shot.lifetimeTicks,
 ): void {
   const directionX = Math.cos(angle);
   const directionY = Math.sin(angle);
@@ -2542,7 +2565,7 @@ function fireFrom(
     directionY * speed,
     radius,
     eliteAttackDamage(sim, index, shot.damage),
-    Math.max(1, Math.round(shot.lifetimeTicks)),
+    Math.max(1, Math.round(lifetimeTicks)),
     ProjectileTeam.Enemy,
     (shot.poison === true ? ProjectileTag.Poison : 0) |
       (shot.bounce === true ? ProjectileTag.Bouncing : 0) |
@@ -3455,6 +3478,11 @@ function applyFireBeam(
   selfX: number,
   selfY: number,
 ): void {
+  if (ticks === 1) {
+    // The beam lighting is a shot leaving the barrel (#234), and `value` carries its
+    // damage, which tells a big laser's sound from a small one's.
+    sim.events.push(EventKind.ShotFired, index, NO_SLOT, selfX, selfY, 0, 0, beam.damage);
+  }
   if (ticks < 1 || ticks > beam.beamTicks || sim.playerInvulnerableTicks > 0) {
     return;
   }

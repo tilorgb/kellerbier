@@ -2,6 +2,7 @@ import {
   BufferAttribute,
   BufferGeometry,
   CircleGeometry,
+  ClampToEdgeWrapping,
   DoubleSide,
   Mesh,
   MeshBasicMaterial,
@@ -247,23 +248,99 @@ export class FloorWedge {
 
 const WEDGE_STEPS = 12;
 
+/** What a beam layer is drawn as: the dithered glow, the broken white-hot core, or the wind-up's dashed line. */
+export type BeamPattern = 'glow' | 'core' | 'warn';
+
+/** Pixels along one repeat of a beam pattern, and room units that repeat covers — one authored pixel is one room unit. */
+const BEAM_PATTERN_WIDTH = 32;
+const BEAM_PATTERN_HEIGHT = 8;
+
+/** A deterministic 0-1 hash of two integers — a rebuild is the same beam, and nothing here touches Math.random. */
+function beamHash(x: number, y: number, seed: number): number {
+  let h = (x * 374761393 + y * 668265263 + seed * 2246822519) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+const beamTextures = new Map<BeamPattern, ThreeTexture>();
+
 /**
- * A laser lying along the floor (#40): a thin flat quad from one point to
- * another, `height` room units above the floor plane so a lit beam reads as
- * hovering at hip height and the wind-up's warning line as lying on the snow.
- * Unlit and untoned so the colour is the colour whatever the room's light.
+ * One repeat of a beam pattern, white so the material's colour tints it. Corroded
+ * on purpose (#40): the glow is a dither that thins to nothing at its edges and
+ * is eaten away along its length, the core is broken into runs with burnt-out
+ * gaps, and a few dark specks pit the glow — a beam that looks like it is
+ * burning through something, not a clean neon tube.
+ */
+function beamTexture(pattern: BeamPattern): ThreeTexture {
+  const cached = beamTextures.get(pattern);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const w = BEAM_PATTERN_WIDTH;
+  const h = pattern === 'warn' ? 2 : BEAM_PATTERN_HEIGHT;
+  const pixels = new Int32Array(w * h).fill(-1);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let keep = false;
+      let colour = 0xffffff;
+      if (pattern === 'warn') {
+        // Dashes with a few missing, like a line scratched into the snow.
+        keep = x % 8 < 5 && beamHash(x, y, 7) > 0.18;
+      } else {
+        const d = Math.abs(y - (h - 1) / 2);
+        if (pattern === 'core') {
+          // Two hot rows, a ragged skin either side, a run of the core burnt out now and then.
+          const burnt = beamHash(Math.floor(x / 3), 0, 11) < 0.22;
+          const p = d < 1 ? 0.9 : d < 2 ? 0.4 : 0;
+          keep = !burnt && beamHash(x, y, 3) < p;
+        } else {
+          const edge = d / ((h - 1) / 2);
+          const eaten = beamHash(Math.floor(x / 2), 0, 5) * 0.5 * edge;
+          keep = beamHash(x, y, 1) < 1 - edge * 0.85 - eaten;
+          if (keep && beamHash(x, y, 9) < 0.07) {
+            // A pit: a speck of dark where the glow has burnt through.
+            colour = 0x2e2e2e;
+          }
+        }
+      }
+      if (keep) {
+        pixels[y * w + x] = colour;
+      }
+    }
+  }
+  const texture = textureFromPixels(w, h, pixels).source.texture.clone();
+  texture.wrapS = RepeatWrapping;
+  texture.wrapT = ClampToEdgeWrapping;
+  texture.magFilter = NearestFilter;
+  texture.minFilter = NearestFilter;
+  texture.generateMipmaps = false;
+  texture.needsUpdate = true;
+  beamTextures.set(pattern, texture);
+  return texture;
+}
+
+/**
+ * A laser lying along the floor (#40): a flat quad from one point to another,
+ * `height` room units above the floor plane so a lit beam reads as hovering at
+ * hip height and the wind-up's warning line as lying on the snow. Drawn with a
+ * pixel pattern (`BeamPattern`) that crawls along its length with `scroll`, so it
+ * flickers rather than glows. Unlit and untoned so the colour is the colour
+ * whatever the room's light.
  */
 export class FloorBeam {
   readonly mesh: Mesh<PlaneGeometry, MeshBasicMaterial>;
+  private pattern: BeamPattern | null = null;
 
   constructor(colour: number) {
-    this.mesh = new Mesh(new PlaneGeometry(1, 1), flatColourMaterial(colour));
+    const material = flatColourMaterial(colour);
+    material.alphaTest = 0.05;
+    this.mesh = new Mesh(new PlaneGeometry(1, 1), material);
     this.mesh.rotation.order = 'XYZ';
     this.mesh.frustumCulled = false;
     this.mesh.visible = false;
   }
 
-  /** The beam from `(ax, az)` to `(bx, bz)`, `thickness` across, drawn at `alpha` in `colour`. */
+  /** The beam from `(ax, az)` to `(bx, bz)`, `thickness` across, drawn at `alpha` in `colour` with `pattern`, crawled `scroll` repeats. */
   place(
     ax: number,
     az: number,
@@ -273,10 +350,22 @@ export class FloorBeam {
     height: number,
     alpha: number,
     colour: number,
+    pattern: BeamPattern = 'glow',
+    scroll = 0,
   ): void {
     const dx = bx - ax;
     const dz = bz - az;
     const length = Math.hypot(dx, dz);
+    if (this.pattern !== pattern) {
+      this.pattern = pattern;
+      this.mesh.material.map = beamTexture(pattern);
+      this.mesh.material.needsUpdate = true;
+    }
+    const map = this.mesh.material.map;
+    if (map !== null) {
+      map.repeat.set(Math.max(0.01, length / BEAM_PATTERN_WIDTH), 1);
+      map.offset.set(scroll, 0);
+    }
     this.mesh.position.set((ax + bx) / 2, height, (az + bz) / 2);
     // A sim bearing runs in the floor plane with +y south; about the plane's
     // own normal that is a negative turn, then the plane lies down.

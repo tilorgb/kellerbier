@@ -285,10 +285,19 @@ export const SYNTH_IMPACT_AUDIO: ImpactAudio = {
   onPlayerShotFired: () => {
     playSfx('player-shot');
   },
-  onEnemyShotFired: (enemyId) => {
+  onEnemyShotFired: (enemyId, beamDamage = 0) => {
+    if (beamDamage > 0) {
+      // A laser lighting (#40) has its own report, big for the two-damage ones.
+      playSfx(beamDamage > 1 ? 'shot-laser-big' : 'shot-laser');
+      return;
+    }
     playSfx(`shot-${categoryFor(enemyId)}`);
   },
-  onAttackWindup: (enemyId) => {
+  onAttackWindup: (enemyId, beam = false) => {
+    if (beam) {
+      playSfx('windup-laser-charge');
+      return;
+    }
     // A body with a wind-up of its own (#411's drumroll) plays that instead.
     playSfx((enemyId === null ? undefined : ENEMY_WINDUP_SFX[enemyId]) ?? 'attack-windup');
   },
