@@ -78,7 +78,6 @@ export class HealthHud {
   private readonly eternalWurst: Sprite[] = [];
 
   /** Highest half-heart count each pool has held this run — how many containers to draw. See the class doc comment. */
-  private redSeenHalves = 0;
   private soulSeenHalves = 0;
   private eternalSeenHalves = 0;
 
@@ -111,7 +110,6 @@ export class HealthHud {
 
   /** Clears the per-run high-water marks — `app/main.ts` calls this on every `startRun`. */
   reset(): void {
-    this.redSeenHalves = 0;
     this.soulSeenHalves = 0;
     this.eternalSeenHalves = 0;
   }
@@ -168,14 +166,13 @@ export class HealthHud {
     // A container the player has had once stays drawn (emptied, ready to
     // refill); one never earned is not drawn at all — see the class comment.
     // Red also tracks the pool ceiling, which a heart-container item raises.
-    this.redSeenHalves = Math.max(this.redSeenHalves, sim.playerHealth, sim.playerMaxHealth);
     this.soulSeenHalves = Math.max(this.soulSeenHalves, sim.playerSoulHealth);
     this.eternalSeenHalves = Math.max(this.eternalSeenHalves, sim.playerEternalHealth);
 
     // Homebrew (#484): the glass is the health, so no hearts are drawn at all
     // while it is held. The Promille bar is the life.
     const noHearts = sim.lifeIsPromille;
-    const redIcons = noHearts ? 0 : HealthHud.iconsFor(this.redSeenHalves);
+    const redIcons = noHearts ? 0 : HealthHud.iconsFor(sim.playerMaxHealth);
     const soulIcons = noHearts ? 0 : HealthHud.iconsFor(this.soulSeenHalves);
     const eternalIcons = noHearts ? 0 : HealthHud.iconsFor(this.eternalSeenHalves);
 
