@@ -172,11 +172,12 @@ export class HealthHud {
     this.soulSeenHalves = Math.max(this.soulSeenHalves, sim.playerSoulHealth);
     this.eternalSeenHalves = Math.max(this.eternalSeenHalves, sim.playerEternalHealth);
 
-    // Homebrew (#484): the glass is the health, so the red row is not drawn at
-    // all while it is held. The Promille bar is the life.
-    const redIcons = sim.lifeIsPromille ? 0 : HealthHud.iconsFor(this.redSeenHalves);
-    const soulIcons = HealthHud.iconsFor(this.soulSeenHalves);
-    const eternalIcons = HealthHud.iconsFor(this.eternalSeenHalves);
+    // Homebrew (#484): the glass is the health, so no hearts are drawn at all
+    // while it is held. The Promille bar is the life.
+    const noHearts = sim.lifeIsPromille;
+    const redIcons = noHearts ? 0 : HealthHud.iconsFor(this.redSeenHalves);
+    const soulIcons = noHearts ? 0 : HealthHud.iconsFor(this.soulSeenHalves);
+    const eternalIcons = noHearts ? 0 : HealthHud.iconsFor(this.eternalSeenHalves);
 
     // Soul then red share the top row (wrapping past `ROW_LIMIT`); eternal
     // starts a fresh row under them, and only if the player has ever banked one.
@@ -189,7 +190,7 @@ export class HealthHud {
     }
     this.layoutRow(this.eternalWurst, 'eternal', sim.playerEternalHealth, eternalIcons);
 
-    this.rows = Math.max(1, this.column > 0 ? this.row + 1 : this.row);
+    this.rows = noHearts ? 0 : Math.max(1, this.column > 0 ? this.row + 1 : this.row);
   }
   /**
    * Height of the row stack in UI pixels, so `main.ts` can stack the next HUD
@@ -197,6 +198,6 @@ export class HealthHud {
    * heart — `app/main.ts` re-runs its HUD layout when this changes.
    */
   get height(): number {
-    return this.rows * this.wurstHeight + (this.rows - 1) * WURST_GAP;
+    return this.rows === 0 ? 0 : this.rows * this.wurstHeight + (this.rows - 1) * WURST_GAP;
   }
 }

@@ -115,7 +115,7 @@ Columns:
 | soul-platter | Soul Platter | Passive | +3 soul hearts | White sausages, before noon. | 2 | Treasure, Angel, Shop | Any |
 | black-pudding | Black Pudding | Passive | +3 eternal hearts | Heavy. It keeps. | 3 | Angel, Secret, Boss | Any |
 | cream-soup | Cream Soup | Passive | All red containers become soul hearts; no red health until a container is gained | Smooth, white, and nothing left to bleed. | 1 | Treasure, Angel | Any |
-| homebrew | Homebrew | Passive | Promille bar twice as long; life = Promille (damage drains it, empty ends the run, eternal heart refills once); all drops are beer. Not offered in sober runs | Hauptsach ned blind | 3 | Devil, Secret | Any |
+| homebrew | Homebrew | Passive | Promille bar twice as long; no hearts at all: life = Promille (damage drains it, empty ends the run); all drops are beer. Not offered in sober runs | Hauptsach ned blind | 3 | Devil, Secret | Any |
 | watschn | Watschn | Passive | Getting hit sends a damaging shockwave out from you | The Bavarian conflict-resolution method. Surprisingly effective. | 2 | Shop, Boss, Secret | Rausch |
 | weisswurst | Weißwurst | Passive | Damage +30% before floor 4. Nothing after | The tradition says before the noon bell. The run says before the Brauerei. | 1 | Treasure, Shop | Any |
 | zwetschgendatschi | Zwetschgendatschi | Passive | Clearing a room without being hit heals 1. Range -15% | The plums are the point. The raisins are an opinion. | 1 | Treasure, Shop | Any |

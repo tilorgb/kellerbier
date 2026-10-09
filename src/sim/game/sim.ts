@@ -4030,20 +4030,14 @@ export class GameSim {
   }
 
   /**
-   * Homebrew's death: Promille at zero outside a knockdown ends the run, with
-   * a banked eternal heart as the one save (it refills the glass to a single
-   * point). Called once a tick by `stepPromille` and after every hit.
+   * Homebrew's death: Promille at zero outside a knockdown ends the run — no
+   * hearts to fall back on. Called once a tick by `stepPromille` and after every hit.
    */
   checkHomebrewDeath(): void {
     if (this.playerDeadFlag || !this.lifeIsPromille || this.umgfallnTicksValue > 0) {
       return;
     }
     if (this.tuning.promille.current > 0) {
-      return;
-    }
-    if (this.eternalHp >= ETERNAL_HALF_UNIT) {
-      this.eternalHp -= ETERNAL_HALF_UNIT;
-      this.tuning.promille.current = 1;
       return;
     }
     this.killPlayer();
@@ -4595,12 +4589,10 @@ export class GameSim {
     // of the mechanism beats it being true of most of the paths through it.
     this.lowerPromille(this.tuning.promille.hitPromilleLoss);
 
-    // Homebrew (#484): the glass is the health. Soul hearts still soak first;
-    // whatever is left is paid in Promille, on top of the usual hit loss above.
+    // Homebrew (#484): the glass is the health, there are no hearts at all.
+    // The damage is paid in Promille, on top of the usual hit loss above.
     if (this.lifeIsPromille) {
-      const spend = Math.min(this.soulHp, amount);
-      this.soulHp -= spend;
-      this.lowerPromille((amount - spend) * HOMEBREW_PROMILLE_PER_HALF);
+      this.lowerPromille(amount * HOMEBREW_PROMILLE_PER_HALF);
       this.checkHomebrewDeath();
       return;
     }
