@@ -72,6 +72,45 @@ describe('a Bierfassl blast clears boulders (#4)', () => {
     expect(sim.room.isClear(268, 28, 4)).toBe(false);
   });
 
+  it('breaks the cells of a long merged run next to the bomb, not nothing', () => {
+    // Generated cover is merged into rectangles (`sliceObstacles`): this is a
+    // 6×3 wall of stones whose centre lies far outside the blast cross. A bomb
+    // laid against its left edge used to leave it whole.
+    const room = new RoomGeometry(0, 0, 320, 180);
+    room.addBlock(112, 48, 208, 96, true);
+    const sim = emptySim(room);
+
+    detonateAt(sim, 100, 72);
+
+    // The cells the horizontal arm reaches are gone…
+    expect(sim.room.isClear(120, 72, 2)).toBe(true);
+    // …and the far end of the run is still standing.
+    expect(sim.room.isClear(200, 72, 2)).toBe(false);
+  });
+
+  it('breaks a boulder the cross only partly overlaps (bomb a little off-axis)', () => {
+    const room = new RoomGeometry(0, 0, 320, 180);
+    room.addBlock(120, 84, 136, 100, true);
+    const sim = emptySim(room);
+
+    // 12 units off the boulder's row: its centre is outside the 8-unit band,
+    // its body is not.
+    detonateAt(sim, 100, 80);
+
+    expect(sim.room.isClear(128, 92, 4)).toBe(true);
+  });
+
+  it('replays a partly broken run exactly on a revisit', () => {
+    const sim = new GameSim({ roomTemplate: cellarCrossroads, floor: 1, population: 'empty' });
+    const centre = boulderCentre(sim.room);
+    expect(centre).not.toBeNull();
+    detonateAt(sim, centre?.x ?? 0, centre?.y ?? 0);
+    const blocks = Array.from(sim.room.blocks.slice(0, sim.room.blockCount * 4)).sort();
+
+    sim.loadRoom(cellarCrossroads, 1);
+    expect(Array.from(sim.room.blocks.slice(0, sim.room.blockCount * 4)).sort()).toEqual(blocks);
+  });
+
   it('keeps the boulder cleared when the room is loaded again this run', () => {
     const sim = new GameSim({ roomTemplate: cellarCrossroads, floor: 1, population: 'empty' });
     const player = sim.playerIndex;
@@ -84,15 +123,17 @@ describe('a Bierfassl blast clears boulders (#4)', () => {
 
     const centre = boulderCentre(sim.room);
     expect(centre).not.toBeNull();
-    const before = sim.room.blockCount;
+    const cx = centre?.x ?? 0;
+    const cy = centre?.y ?? 0;
+    expect(sim.room.isClear(cx, cy, 2)).toBe(false);
 
-    detonateAt(sim, centre?.x ?? 0, centre?.y ?? 0);
-    expect(sim.room.blockCount).toBeLessThan(before);
+    detonateAt(sim, cx, cy);
+    expect(sim.room.isClear(cx, cy, 2)).toBe(true);
     const afterBlast = sim.room.blockCount;
 
     // Walk out and back — reload the same template.
     sim.loadRoom(cellarCrossroads, 1);
     expect(sim.room.blockCount).toBe(afterBlast);
-    expect(boulderCentre(sim.room)).toBeNull();
+    expect(sim.room.isClear(cx, cy, 2)).toBe(true);
   });
 });

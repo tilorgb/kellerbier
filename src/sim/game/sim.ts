@@ -2378,7 +2378,7 @@ export class GameSim {
   breakBouldersInBlast(x: number, y: number, halfWidth: number, armLength: number): void {
     const scratch = this.boulderBlastScratch;
     scratch.length = 0;
-    const broken = this.room.breakBoulders(x, y, halfWidth, armLength, scratch);
+    const broken = this.room.breakBoulders(x, y, halfWidth, armLength, ROOM_TILE_UNITS, scratch);
     if (broken === 0) {
       return;
     }
@@ -2387,10 +2387,11 @@ export class GameSim {
       record = [];
       this.destroyedBoulders.set(this.roomId, record);
     }
-    for (let i = 0; i + 1 < scratch.length; i += 2) {
+    // `x, y, cell` triples — the cell-sized break `clearBoulderAt` replays.
+    for (let i = 0; i + 2 < scratch.length; i += 3) {
       const bx = scratch[i] ?? 0;
       const by = scratch[i + 1] ?? 0;
-      record.push(bx, by, 0);
+      record.push(bx, by, scratch[i + 2] ?? 0);
       boulderDebris(this, bx, by);
     }
     this.bouldersChangedTickValue = this.tick;
@@ -2621,6 +2622,10 @@ export class GameSim {
     // so does an eaten floor (#410).
     this.brokenDoors.clear();
     this.eatenPlanks.clear();
+    // Bombed boulders too (#4): a generated room's id is a floor-plan slot
+    // (`r3`), so the next floor's `r3` would otherwise come up with this
+    // floor's holes cut into it.
+    this.destroyedBoulders.clear();
     // Same reasoning as `roomClearedIds` above, and the same key — leftover
     // loot from a room on the *previous* floor's draw of this template must
     // not leak into a different physical room that happens to reuse it.
@@ -3148,14 +3153,6 @@ export class GameSim {
     this.roomTransitionTicks = direction === null ? 0 : ROOM_TRANSITION_TICKS;
     this.roomTransitionDirection = direction;
     this.roomWarmupTicks = ROOM_WARMUP_TICKS;
-    // A puff at the door the player just came through (#153) — the transition
-    // itself is #96's camera slide, and this is what makes the arrival land
-    // somewhere rather than simply appearing there. Only on a real transition:
-    // `direction === null` is the first room of a run, which nobody walked
-    // into.
-    if (direction !== null) {
-      doorPuff(this, this.positionX(this.playerIndex), this.positionY(this.playerIndex));
-    }
     if (floor !== this.lastFloorStartDispatched) {
       this.lastFloorStartDispatched = floor;
       this.rollFloorCurse();
@@ -3195,6 +3192,16 @@ export class GameSim {
       this.roomClearedIds.has(this.roomId) &&
       !(this.blutwurzActiveFlag && compiled.specialRole !== 'boss');
     this.positionPlayerAtDoor(direction, entryCell);
+    // A puff at the door the player just came through (#153) — the transition
+    // itself is #96's camera slide, and this is what makes the arrival land
+    // somewhere rather than simply appearing there. Only on a real transition:
+    // `direction === null` is the first room of a run, which nobody walked
+    // into. It has to come after `positionPlayerAtDoor`: before it, the player
+    // still stands where they left the previous room, which in this room's
+    // coordinates is the opposite wall.
+    if (direction !== null) {
+      doorPuff(this, this.positionX(this.playerIndex), this.positionY(this.playerIndex));
+    }
     if (!alreadyCleared) {
       // A room entered through a door (not the run's very first room) never
       // spawns something already touching the player at the door they just
@@ -3350,6 +3357,10 @@ export class GameSim {
     for (const location of rewardLocations) {
       roomClearRing(this, location.x, location.y);
     }
+    // `roomDoors`, not `doors`, on purpose: a secret room's still-hidden wall
+    // puffs too. Dust settling off a stretch of plain wall as the room goes
+    // quiet is the hint that something is behind it — the crack drawn on it
+    // is the other one.
     for (const door of this.roomDoors) {
       const centre = doorCentre(room, door);
       doorPuff(this, centre.x, centre.y);
@@ -7352,6 +7363,11 @@ export class GameSim {
   private spawnPlayer(): Entity {
     const entity = this.world.create();
     this.world.add(entity, this.transform);
+    // Attached only so `add` zeroes it: status durations are read by slot,
+    // and a recycled slot otherwise keeps burning/poisoned/frozen from
+    // whatever died there — a fresh room's enemies and pickups caught fire
+    // the moment they spawned into a slot a burning enemy had just left.
+    this.world.add(entity, this.statusEffect);
     this.world.add(entity, this.velocity);
     this.world.add(entity, this.body);
     this.world.add(entity, this.hurtbox);
@@ -7713,6 +7729,11 @@ export class GameSim {
   ): Entity {
     const entity = this.world.create();
     this.world.add(entity, this.transform);
+    // Attached only so `add` zeroes it: status durations are read by slot,
+    // and a recycled slot otherwise keeps burning/poisoned/frozen from
+    // whatever died there — a fresh room's enemies and pickups caught fire
+    // the moment they spawned into a slot a burning enemy had just left.
+    this.world.add(entity, this.statusEffect);
     this.world.add(entity, this.velocity);
     this.world.add(entity, this.body);
     this.world.add(entity, this.hurtbox);
@@ -7797,6 +7818,11 @@ export class GameSim {
 
     const entity = this.world.create();
     this.world.add(entity, this.transform);
+    // Attached only so `add` zeroes it: status durations are read by slot,
+    // and a recycled slot otherwise keeps burning/poisoned/frozen from
+    // whatever died there — a fresh room's enemies and pickups caught fire
+    // the moment they spawned into a slot a burning enemy had just left.
+    this.world.add(entity, this.statusEffect);
     this.world.add(entity, this.body);
     this.world.add(entity, this.hurtbox);
     this.world.add(entity, this.collision);
@@ -7869,6 +7895,11 @@ export class GameSim {
   ): Entity {
     const entity = this.world.create();
     this.world.add(entity, this.transform);
+    // Attached only so `add` zeroes it: status durations are read by slot,
+    // and a recycled slot otherwise keeps burning/poisoned/frozen from
+    // whatever died there — a fresh room's enemies and pickups caught fire
+    // the moment they spawned into a slot a burning enemy had just left.
+    this.world.add(entity, this.statusEffect);
     this.world.add(entity, this.body);
     this.world.add(entity, this.hurtbox);
     this.world.add(entity, this.collision);

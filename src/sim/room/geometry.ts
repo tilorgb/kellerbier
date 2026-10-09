@@ -29,6 +29,36 @@ export const MAX_ROOM_ICE = 16;
  */
 export const MAX_ROOM_STREAMS = 64;
 
+/** The cell centres a blast collects before breaking them (`breakBoulders`) — reused, never allocated per call. */
+const blastCellScratch: number[] = [];
+
+/**
+ * Whether the rectangle `(minX, minY)–(maxX, maxY)` overlaps a blast cross
+ * centred on `(cx, cy)` by a positive area — touching an arm's edge is not a hit.
+ */
+function crossOverlaps(
+  cx: number,
+  cy: number,
+  halfWidth: number,
+  armLength: number,
+  minX: number,
+  minY: number,
+  maxX: number,
+  maxY: number,
+): boolean {
+  const horizontal =
+    maxX > cx - armLength &&
+    minX < cx + armLength &&
+    maxY > cy - halfWidth &&
+    minY < cy + halfWidth;
+  const vertical =
+    maxX > cx - halfWidth &&
+    minX < cx + halfWidth &&
+    maxY > cy - armLength &&
+    minY < cy + armLength;
+  return horizontal || vertical;
+}
+
 /** Where `clearBoulderAt`'s cell replay writes what `breakCellAt` reports, unread — written, never allocated per call. */
 const replayScratch: number[] = [];
 /**
@@ -445,44 +475,63 @@ export class RoomGeometry {
   }
 
   /**
-   * Clears every destructible boulder (`blockOverflyable === 1`) whose centre
-   * lies inside a Bomberman blast cross centred on `(cx, cy)` — `halfWidth`
-   * to each side of an arm, `armLength` along it. Each removed block's centre
-   * is pushed onto `outCentres` as an `x, y` pair (the caller reuses one
-   * array across detonations, so nothing here allocates). Returns how many
-   * fell.
+   * Clears every cell of destructible cover (`blockOverflyable === 1`) that a
+   * Bomberman blast cross centred on `(cx, cy)` overlaps — `halfWidth` to each
+   * side of an arm, `armLength` along it. `cell` is the tile size the cover is
+   * cut on (`breakCellAt`). Each broken cell is pushed onto `outCentres` as an
+   * `x, y, cell` triple, the shape `clearBoulderAt` replays (the caller reuses
+   * one array across detonations). Returns how many fell.
    *
-   * Whole-block, not per-cell: a merged boulder run the blast lands on the
-   * middle of goes entirely, which reads as "the bomb cleared that" rather
-   * than leaving a ragged half-wall a per-cell carve would. Structural walls
-   * and void stand-ins (`overflyable === 0`) are never touched.
+   * Per cell, not per block: generated cover is merged into multi-tile
+   * rectangles (`sliceObstacles`), so testing a whole block's centre against
+   * the cross missed any run longer than the blast arm, and any boulder sitting
+   * a little off the bomb's axis — a bomb laid right against a wall of stones
+   * did nothing. Structural walls and void stand-ins (`overflyable === 0`) are
+   * never touched.
    */
   breakBoulders(
     cx: number,
     cy: number,
     halfWidth: number,
     armLength: number,
+    cell: number,
     outCentres: number[],
   ): number {
-    let broken = 0;
+    const pending = blastCellScratch;
+    pending.length = 0;
     for (let block = this.blocks_ - 1; block >= 0; block--) {
       if ((this.blockOverflyable[block] ?? 0) !== 1) {
         continue;
       }
       const base = block * BLOCK_STRIDE;
-      const bx = ((this.blocks[base] ?? 0) + (this.blocks[base + 2] ?? 0)) / 2;
-      const by = ((this.blocks[base + 1] ?? 0) + (this.blocks[base + 3] ?? 0)) / 2;
-      const dx = Math.abs(bx - cx);
-      const dy = Math.abs(by - cy);
-      const inHorizontalArm = dy <= halfWidth && dx <= armLength;
-      const inVerticalArm = dx <= halfWidth && dy <= armLength;
-      if (!inHorizontalArm && !inVerticalArm) {
+      const minX = this.blocks[base] ?? 0;
+      const minY = this.blocks[base + 1] ?? 0;
+      const maxX = this.blocks[base + 2] ?? 0;
+      const maxY = this.blocks[base + 3] ?? 0;
+      if (!crossOverlaps(cx, cy, halfWidth, armLength, minX, minY, maxX, maxY)) {
         continue;
       }
-      outCentres.push(bx, by);
-      this.removeBlock(block);
-      broken += 1;
+      // The block's own tile grid, counted from its min corner — the grid
+      // `breakCellAt` cuts on and the renderer draws one sprite per cell of.
+      for (let y0 = minY; y0 < maxY; y0 += cell) {
+        const y1 = Math.min(maxY, y0 + cell);
+        for (let x0 = minX; x0 < maxX; x0 += cell) {
+          const x1 = Math.min(maxX, x0 + cell);
+          if (crossOverlaps(cx, cy, halfWidth, armLength, x0, y0, x1, y1)) {
+            pending.push((x0 + x1) / 2, (y0 + y1) / 2);
+          }
+        }
+      }
     }
+    // Broken only after collecting: `breakCellAt` reshuffles the block list
+    // (remnants re-added at the end), which the scan above must not see.
+    let broken = 0;
+    for (let i = 0; i + 1 < pending.length; i += 2) {
+      if (this.breakCellAt(pending[i] ?? 0, pending[i + 1] ?? 0, cell, outCentres)) {
+        broken += 1;
+      }
+    }
+    pending.length = 0;
     return broken;
   }
 
