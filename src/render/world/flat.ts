@@ -247,6 +247,57 @@ export class FloorWedge {
 
 const WEDGE_STEPS = 12;
 
+/**
+ * A laser lying along the floor (#40): a thin flat quad from one point to
+ * another, `height` room units above the floor plane so a lit beam reads as
+ * hovering at hip height and the wind-up's warning line as lying on the snow.
+ * Unlit and untoned so the colour is the colour whatever the room's light.
+ */
+export class FloorBeam {
+  readonly mesh: Mesh<PlaneGeometry, MeshBasicMaterial>;
+
+  constructor(colour: number) {
+    this.mesh = new Mesh(new PlaneGeometry(1, 1), flatColourMaterial(colour));
+    this.mesh.rotation.order = 'XYZ';
+    this.mesh.frustumCulled = false;
+    this.mesh.visible = false;
+  }
+
+  /** The beam from `(ax, az)` to `(bx, bz)`, `thickness` across, drawn at `alpha` in `colour`. */
+  place(
+    ax: number,
+    az: number,
+    bx: number,
+    bz: number,
+    thickness: number,
+    height: number,
+    alpha: number,
+    colour: number,
+  ): void {
+    const dx = bx - ax;
+    const dz = bz - az;
+    const length = Math.hypot(dx, dz);
+    this.mesh.position.set((ax + bx) / 2, height, (az + bz) / 2);
+    // A sim bearing runs in the floor plane with +y south; about the plane's
+    // own normal that is a negative turn, then the plane lies down.
+    this.mesh.rotation.set(-Math.PI / 2, 0, -Math.atan2(dz, dx));
+    this.mesh.scale.set(Math.max(0.001, length), thickness, 1);
+    this.mesh.material.opacity = alpha;
+    this.mesh.material.color.setHex(colour);
+    this.mesh.visible = true;
+  }
+
+  hide(): void {
+    this.mesh.visible = false;
+  }
+
+  dispose(): void {
+    this.mesh.geometry.dispose();
+    this.mesh.material.dispose();
+    this.mesh.removeFromParent();
+  }
+}
+
 /** Room-unit pixels one repeat of the hazard stripe covers on the floor. */
 const HAZARD_STRIPE_UNITS = 4;
 

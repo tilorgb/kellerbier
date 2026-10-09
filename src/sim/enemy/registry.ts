@@ -13,6 +13,7 @@ import {
   type FireOnBeatBehaviour,
   type FireRingBehaviour,
   type FireRotatingRingBehaviour,
+  type FireBeamBehaviour,
   type FireSweepBehaviour,
   type FireSpreadBehaviour,
   type MeleeArcBehaviour,
@@ -153,6 +154,8 @@ export const TransitionTrigger = {
   OnArrived: 11,
   /** The body's health is at or below `value` (a fraction of max) (#437). */
   HealthBelow: 12,
+  /** The player crossed the body's horizontal line since the last tick (#40). */
+  PlayerCrossesRow: 13,
 } as const;
 
 export type TransitionTriggerId = (typeof TransitionTrigger)[keyof typeof TransitionTrigger];
@@ -271,6 +274,15 @@ export interface CompiledMeleeArc {
   readonly weapon: string | null;
 }
 
+/** A `fireBeam` validated once, at compile time (#40). */
+export interface CompiledFireBeam {
+  readonly mode: 'aim' | 'row' | 'axis';
+  readonly beamTicks: number;
+  readonly halfWidth: number;
+  readonly damage: number;
+  readonly freeze: boolean;
+}
+
 /** A `fireSweep` validated once, at compile time (#437). */
 export interface CompiledFireSweep {
   readonly arc: number;
@@ -287,6 +299,8 @@ export interface CompiledFireSweep {
   readonly poison: boolean;
   readonly bounce: boolean;
   readonly mark: boolean;
+  readonly freeze: boolean;
+  readonly burst: boolean;
 }
 
 export interface CompiledState {
@@ -304,6 +318,8 @@ export interface CompiledState {
   readonly telegraphTicks: number;
   /** Ticks of invulnerability from the moment the state begins. Zero for none. */
   readonly invulnerableTicks: number;
+  /** Screen shake, in pixels, to throw when the state is entered as a boss phase change (#437). Zero for none. */
+  readonly phaseShiftShake: number;
   /** True for a state whose entry stores the player's position for a later `detonateLobbedBomb` to read (Böllerschmeißer, #156). */
   readonly capturesLobTarget: boolean;
   /** Set for a state whose entry deals area damage at an earlier `lobTarget`'s captured position. `null` for every other state. */
@@ -314,6 +330,8 @@ export interface CompiledState {
   readonly meleeArc: CompiledMeleeArc | null;
   /** Set for a state that sweeps an arm firing shots along it (The First Human, #437). `null` otherwise. */
   readonly fireSweep: CompiledFireSweep | null;
+  /** Set for a state that lights a laser line from the body (#40). `null` otherwise. */
+  readonly fireBeam: CompiledFireBeam | null;
   /** True for a state whose entry stores a line across the room (#412, `captureLine`). */
   readonly capturesLine: boolean;
   /** True for a state that belongs to a captured line — captures it, rides it, or is off the arena on it — and so has its ramps up (#412). */
@@ -651,11 +669,13 @@ export class EnemyRegistry {
     const propDrops: CompiledPropDrop[] = [];
     let telegraphTicks = 0;
     let invulnerableTicks = 0;
+    let phaseShiftShake = 0;
     let capturesLobTarget = false;
     let detonate: CompiledDetonation | null = null;
     let emitCloud: CompiledCloud | null = null;
     let meleeArc: CompiledMeleeArc | null = null;
     let fireSweep: CompiledFireSweep | null = null;
+    let fireBeam: CompiledFireBeam | null = null;
     let grabProp: { kind: number; reach: number } | null = null;
     let rollLog: { kind: number; reach: number; east: number; west: number } | null = null;
     let becomeProp: { kind: number; health: number; radius: number } | null = null;
@@ -818,6 +838,20 @@ export class EnemyRegistry {
             throw new Error(`${where}: "shoal" needs an inertia from 0 to 1`);
           }
         }
+        if (behaviour.behaviour === 'slalom') {
+          if (!(behaviour.speed > 0)) {
+            throw new Error(`${where}: "slalom" needs a speed above zero`);
+          }
+          if (
+            !(behaviour.swing >= 0) ||
+            !(behaviour.periodTicks >= 2) ||
+            !(behaviour.legTicks >= 1)
+          ) {
+            throw new Error(
+              `${where}: "slalom" needs a swing of at least zero, a periodTicks of at least 2 and a legTicks of at least 1`,
+            );
+          }
+        }
         if (behaviour.behaviour === 'approachProp') {
           approachPropKind = resolvePropKind(behaviour.propKind, `${where}: "approachProp"`);
           approachesPlayerRow = behaviour.nearestToPlayerRow === true;
@@ -853,6 +887,30 @@ export class EnemyRegistry {
           // `-1 | 1` in the authored type; anything else just sweeps oddly, not a crash.
           direction: swing.direction === -1 ? -1 : 1,
           weapon: swing.weapon ?? null,
+        };
+        continue;
+      }
+      if (name === 'fireBeam') {
+        const beam = behaviour as FireBeamBehaviour;
+        const mode: string = beam.mode;
+        if (mode !== 'aim' && mode !== 'row' && mode !== 'axis') {
+          throw new Error(`${where}: "fireBeam" needs a mode of 'aim', 'row' or 'axis'`);
+        }
+        if (!(beam.beamTicks >= 1)) {
+          throw new Error(`${where}: "fireBeam" needs beamTicks of at least 1`);
+        }
+        if (!(beam.halfWidth > 0)) {
+          throw new Error(`${where}: "fireBeam" needs a halfWidth above zero`);
+        }
+        if (!(beam.damage > 0)) {
+          throw new Error(`${where}: "fireBeam" needs damage above zero`);
+        }
+        fireBeam = {
+          mode: beam.mode,
+          beamTicks: Math.round(beam.beamTicks),
+          halfWidth: beam.halfWidth,
+          damage: beam.damage,
+          freeze: beam.freeze === true,
         };
         continue;
       }
@@ -895,6 +953,8 @@ export class EnemyRegistry {
           poison: sweep.poison === true,
           bounce: sweep.bounce === true,
           mark: sweep.mark === true,
+          freeze: sweep.freeze === true,
+          burst: sweep.burst === true,
         };
         continue;
       }
@@ -945,6 +1005,8 @@ export class EnemyRegistry {
       if (ENTRY_BEHAVIOURS.includes(name)) {
         if (behaviour.behaviour === 'telegraph') {
           telegraphTicks = Math.max(telegraphTicks, behaviour.ticks);
+        } else if (behaviour.behaviour === 'phaseShift') {
+          phaseShiftShake = behaviour.shake ?? 4;
         } else if (behaviour.behaviour === 'becomeInvulnerable') {
           invulnerableTicks = Math.max(invulnerableTicks, behaviour.ticks);
         } else if (behaviour.behaviour === 'grabProp') {
@@ -1326,6 +1388,16 @@ export class EnemyRegistry {
           max: 0,
         };
       }
+      if ('whenPlayerCrossesRow' in transition) {
+        return {
+          trigger: TransitionTrigger.PlayerCrossesRow,
+          value: 0,
+          to,
+          propKind: -1,
+          tolerance: 0,
+          max: 0,
+        };
+      }
       if ('whenPlayerDiagonalAdjacent' in transition) {
         const { distance, tolerance } = transition.whenPlayerDiagonalAdjacent;
         if (!(distance > 0) || !(tolerance >= 0)) {
@@ -1394,6 +1466,7 @@ export class EnemyRegistry {
         movement.behaviour === 'chargeAtPlayer' ||
         meleeArc !== null ||
         fireSweep !== null ||
+        fireBeam !== null ||
         firing.some(
           (shot) =>
             shot.behaviour !== 'fireOnBeat' &&
@@ -1402,11 +1475,13 @@ export class EnemyRegistry {
         ),
       telegraphTicks,
       invulnerableTicks,
+      phaseShiftShake,
       capturesLobTarget,
       detonate,
       emitCloud,
       meleeArc,
       fireSweep,
+      fireBeam,
       capturesLine,
       usesLine:
         capturesLine ||

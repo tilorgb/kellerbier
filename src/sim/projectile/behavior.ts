@@ -353,7 +353,13 @@ function applyStatusTagsOnHit(sim: GameSim, target: number, tags: number): void 
     applyPoison(sim, target);
   }
   if (hasTag(tags, ProjectileTag.Freezing)) {
-    applyFreeze(sim, target, tuning.freezeDurationTicks);
+    applyFreeze(
+      sim,
+      target,
+      // Alois gets a shorter root than an enemy gets a slow (#40): he cannot
+      // dodge while it lasts.
+      target === sim.playerIndex ? tuning.playerFreezeDurationTicks : tuning.freezeDurationTicks,
+    );
   }
   // The flare (#40): only the player can be marked, and a later flare
   // refreshes the mark rather than stacking it, like every status above.
@@ -488,5 +494,46 @@ export function resolveProjectileHit(
     }
   }
 
+  burstProjectile(sim, slot, hitX, hitY);
   projectiles.despawn(slot);
+}
+
+/**
+ * `bursting` (#40, the Snow cannon): a ring of freezing fragments where a shot
+ * ends — a hit, a wall or the end of its flight. Called by every path that
+ * despawns a shot, just before it does. The fragments are plain freezing clods
+ * (no `Bursting` of their own, so the ring never recurses), the team and
+ * owner of the shot they came from.
+ */
+export function burstProjectile(sim: GameSim, slot: number, atX: number, atY: number): void {
+  const projectiles = sim.projectiles;
+  if (!hasTag(projectiles.tags[slot] ?? 0, ProjectileTag.Bursting)) {
+    return;
+  }
+  const tuning = sim.tuning.projectileTags;
+  const count = Math.max(0, Math.round(tuning.burstFragments));
+  const team = (projectiles.team[slot] ?? 0) as ProjectileTeamId;
+  const owner = projectiles.ownerDefinition[slot] ?? -1;
+  const art = sim.enemies.artIndexOf('snow-clod');
+  // A ring of fragments leaves the point the shot ended at, offset by half a
+  // spoke so a head-on shot does not fire one straight back at its shooter.
+  const offset = Math.PI / count;
+  for (let spoke = 0; spoke < count; spoke++) {
+    const angle = offset + (spoke * Math.PI * 2) / count;
+    const child = projectiles.spawn(
+      atX,
+      atY,
+      Math.cos(angle) * tuning.burstFragmentSpeed,
+      Math.sin(angle) * tuning.burstFragmentSpeed,
+      tuning.burstFragmentRadius,
+      tuning.burstFragmentDamage,
+      Math.max(1, Math.round(tuning.burstFragmentLifetimeTicks)),
+      team,
+      ProjectileTag.Freezing,
+      art,
+    );
+    if (child !== NO_SLOT) {
+      projectiles.ownerDefinition[child] = owner;
+    }
+  }
 }

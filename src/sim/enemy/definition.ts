@@ -53,6 +53,7 @@ export type BehaviourName =
   | 'summon'
   | 'dropProp'
   | 'becomeInvulnerable'
+  | 'phaseShift'
   | 'telegraph'
   | 'grabProp'
   | 'lobTarget'
@@ -67,6 +68,7 @@ export type BehaviourName =
   | 'glideToPoint'
   | 'fireRotatingRing'
   | 'fireSweep'
+  | 'fireBeam'
   | 'captureLine'
   | 'lobVolley'
   | 'detonateVolley'
@@ -75,6 +77,7 @@ export type BehaviourName =
   | 'rollLog'
   | 'becomeProp'
   | 'shoal'
+  | 'slalom'
   | 'burrow';
 
 /** Walks straight at the player, re-aiming every tick. The floor-one default. */
@@ -677,6 +680,14 @@ export interface FiringBehaviourBase {
    */
   readonly aimCardinal?: boolean;
   /**
+   * Aim a fan *off the side* of the way the body was last moving instead of at
+   * the player (#40, the Skier's drift-stop): `'left'`/`'right'` a quarter turn
+   * off the remembered heading, `'random'` either, drawn from the enemy stream
+   * when the shot leaves. Not gated on sight — it is aimed at nothing. Only on
+   * `fireSpread`.
+   */
+  readonly aimSide?: 'left' | 'right' | 'random';
+  /**
    * The shot poisons the player on a hit (#401): `ProjectileTag.Poison`, so
    * the player takes `playerPoisonDamagePerTick` every
    * `playerPoisonTickInterval` ticks for `playerPoisonDurationTicks`. A second
@@ -693,6 +704,18 @@ export interface FiringBehaviourBase {
    * from the one throw. Omitted is a plain shot.
    */
   readonly bounce?: boolean;
+  /**
+   * The shot freezes the player on a hit (#40, the Snow cannon): `ProjectileTag.Freezing`,
+   * so Alois is all but rooted for `tuning.projectileTags.playerFreezeDurationTicks`
+   * (he can still shoot) and then immune for the freeze cooldown. Omitted is a plain shot.
+   */
+  readonly freeze?: boolean;
+  /**
+   * The shot bursts into `tuning.projectileTags.burstFragments` freezing clods where it
+   * ends — on a hit, a wall, or the end of its flight (#40, the Snow cannon).
+   * `ProjectileTag.Bursting`. Omitted is a plain shot.
+   */
+  readonly burst?: boolean;
   /**
    * The shot *marks* the player on a hit (#40, the Bergwacht's flare):
    * `ProjectileTag.Marking`, so for `tuning.projectileTags.playerMarkDurationTicks`
@@ -818,6 +841,35 @@ export interface MeleeArcBehaviour {
   readonly direction?: -1 | 1;
   /** Which held-weapon sprite the renderer swings, e.g. `'maibaum'`. Omitted: telegraph only. */
   readonly weapon?: string;
+}
+
+/**
+ * A laser (#40, the Summit cross, the Mountain hare, The First Human's eyes): an
+ * instant line from the body, dangerous for `beamTicks` after the state is
+ * entered. There is no projectile to outrun — the dodge is being off the line
+ * while it is lit, which is what the `telegraph` state before it is for.
+ *
+ * `mode` says which line: `'aim'` along the bearing locked on entry (the wind-up
+ * before it locks it, exactly as a `meleeArc` blade's aim is locked); `'row'`
+ * both ways along the body's own horizontal line, aim ignored; `'axis'` along
+ * whichever of the four cardinal lines the locked aim is nearest to — the
+ * crossed line, toward the player. Every beam runs on until a wall or a block
+ * stops it (the same terrain a shot dies on), so a boulder is real shelter.
+ *
+ * A hit costs `damage` once (the player's contact i-frames cover the rest of the
+ * beam) and, with `freeze`, freezes them. Not gated on sight: a committed beam
+ * goes where it was aimed.
+ */
+export interface FireBeamBehaviour {
+  readonly behaviour: 'fireBeam';
+  readonly mode: 'aim' | 'row' | 'axis';
+  /** Ticks the line stays lit after the state is entered. */
+  readonly beamTicks: number;
+  /** Half the beam's thickness, in room units: the player is hit within this plus their own radius. */
+  readonly halfWidth: number;
+  readonly damage: number;
+  /** The hit freezes the player (`tuning.projectileTags.playerFreezeDurationTicks`). Omitted: it does not. */
+  readonly freeze?: boolean;
 }
 
 /**
@@ -987,6 +1039,20 @@ export interface DropPropBehaviour {
 export interface BecomeInvulnerableBehaviour {
   readonly behaviour: 'becomeInvulnerable';
   readonly ticks: number;
+}
+
+/**
+ * A boss changing phase, made impossible to miss (#437): on the tick the
+ * state is entered the room hears the split sting (`EventKind.EnemySplit`,
+ * the same cue a body coming apart makes) and the camera shudders for
+ * `shake` pixels. Presentation only — it changes nothing a run does. Put it on
+ * the state a `whenHealthBelow` transition leads to, beside its invulnerable
+ * beat, so the shift and the quiet moment arrive together.
+ */
+export interface PhaseShiftBehaviour {
+  readonly behaviour: 'phaseShift';
+  /** Screen shake in pixels. Omitted: 4. */
+  readonly shake?: number;
 }
 
 /**
@@ -1164,6 +1230,27 @@ export interface ShoalBehaviour {
 }
 
 /**
+ * Carves down the room in long S-turns (#40, the Skier): a base heading,
+ * re-rolled every `legTicks` toward the room's middle (± a wide random
+ * spread, so a skier crosses the room rather than hugging a wall), with the
+ * actual heading swinging up to `swing` radians either side of it on a sine of
+ * `periodTicks` — a slalom, not a random walk. It never steers at the player.
+ * The heading it leaves is what a `pause`d state after it still remembers,
+ * which is how a drift-stop knows which way it was going.
+ */
+export interface SlalomBehaviour {
+  readonly behaviour: 'slalom';
+  /** Room units per tick, before the global `enemy.speedScale`. */
+  readonly speed: number;
+  /** Peak angle either side of the base heading, in radians. */
+  readonly swing: number;
+  /** Ticks for one full S (left and back). */
+  readonly periodTicks: number;
+  /** Ticks between new base headings. */
+  readonly legTicks: number;
+}
+
+/**
  * Under the ground while this state is current (#40, the Murmeltier):
  * nothing can touch it — no shot, no splash, no contact — it crosses the
  * room's furniture as a flyer does (it is *under* it), and it is drawn as a
@@ -1182,6 +1269,7 @@ export interface BurrowBehaviour {
 export type EnemyBehaviour =
   | WalkTowardPlayerBehaviour
   | ShoalBehaviour
+  | SlalomBehaviour
   | BurrowBehaviour
   | ChargeAtPlayerBehaviour
   | WanderBehaviour
@@ -1206,10 +1294,12 @@ export type EnemyBehaviour =
   | FireOnBeatBehaviour
   | MeleeArcBehaviour
   | FireSweepBehaviour
+  | FireBeamBehaviour
   | SplitOnDeathBehaviour
   | SummonBehaviour
   | DropPropBehaviour
   | BecomeInvulnerableBehaviour
+  | PhaseShiftBehaviour
   | GrabPropBehaviour
   | RollLogBehaviour
   | BecomePropBehaviour
@@ -1321,6 +1411,14 @@ export type EnemyTransition =
    * test has passed.
    */
   | { readonly to: string; readonly whenPlayerOnAxis: { readonly tolerance: number } }
+  /**
+   * The player's centre crossed the body's horizontal line since the last tick —
+   * went from the north of it to the south, or back (#40, the Summit cross).
+   * A one-tick event: a state that is not listening that tick misses it, which
+   * is what makes a rest state a cooldown. Not gated on sight; the beam it
+   * starts is stopped by cover on its own.
+   */
+  | { readonly to: string; readonly whenPlayerCrossesRow: true }
   /**
    * The body's health is at or below this fraction (0 exclusive, 1
    * inclusive) of its max (#437): a phase change on a health threshold that
@@ -1510,12 +1608,14 @@ export const MOVEMENT_BEHAVIOURS: readonly BehaviourName[] = [
   'rideLine',
   'glideToPoint',
   'shoal',
+  'slalom',
 ];
 
 /** Primitives that run once, when the state is entered. */
 export const ENTRY_BEHAVIOURS: readonly BehaviourName[] = [
   'telegraph',
   'becomeInvulnerable',
+  'phaseShift',
   'grabProp',
   'rollLog',
   'becomeProp',

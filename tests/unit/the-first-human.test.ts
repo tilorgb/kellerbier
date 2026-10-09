@@ -11,6 +11,9 @@ import {
   ENEMY_STRIDE,
   TelegraphShape,
   enemyTelegraphShape,
+  enemyBeam,
+  enemyBeamTelegraph,
+  type EnemyBeamInfo,
   isEnemyInvulnerable,
   type EnemyTelegraphShapeInfo,
 } from '../../src/sim/systems/enemy.js';
@@ -320,7 +323,7 @@ describe('The First Human (#437)', () => {
 
   it('declares the phase change on every phase-one state', () => {
     const phaseOne = theFirstHuman.states.filter(
-      (state) => !state.name.endsWith('-2') && !/^(arrow-pull|draw-|loose-)/.test(state.name),
+      (state) => !state.name.endsWith('-2') && !/^(arrow-pull|eyes-|laser-)/.test(state.name),
     );
     expect(phaseOne.length).toBeGreaterThan(0);
     for (const state of phaseOne) {
@@ -331,7 +334,7 @@ describe('The First Human (#437)', () => {
     }
   });
 
-  it('pulls the arrowhead out at half health — a long, invulnerable beat — and then throws arrows', () => {
+  it('pulls the arrowhead out at half health — a long, invulnerable beat — and then fires eye lasers', () => {
     const sim = openSim();
     const boss = spawn(sim, 'the-first-human', 200, 120);
     const pin: readonly [number, number] = [280, 120];
@@ -342,20 +345,32 @@ describe('The First Human (#437)', () => {
     expect(stepUntil(sim, boss, 'arrow-pull', 5, pin)).toBeGreaterThanOrEqual(0);
     sim.step(IDLE);
     expect(isEnemyInvulnerable(sim, boss)).toBe(true);
+    // The shift is loud: the sting went out and the camera is shaking.
+    expect(sim.shake).toBeGreaterThan(0);
     expect(stepUntil(sim, boss, 'stalk-2', 100, pin)).toBeGreaterThanOrEqual(0);
     expect(isEnemyInvulnerable(sim, boss)).toBe(false);
-    // The arrow leaves on the `loose` state's first tick — the same tick the
-    // transition into it is taken. It is the one fast shot in the room: the
-    // flints fly at 1.45, the arrow at 2.8.
-    expect(stepUntil(sim, boss, 'loose-1', 300, pin)).toBeGreaterThanOrEqual(0);
-    const shots = sim.projectiles;
-    let arrows = 0;
-    shots.forEachLive((slot) => {
-      if (Math.hypot(shots.velocityX[slot] ?? 0, shots.velocityY[slot] ?? 0) > 2) {
-        arrows += 1;
-      }
-    });
-    expect(arrows).toBe(1);
+    // His eyes glow (the telegraph, and the line it will light is drawn),
+    // then one big laser — two half-Maß — along the bearing the glow locked.
+    expect(stepUntil(sim, boss, 'eyes-1', 300, pin)).toBeGreaterThanOrEqual(0);
+    const beam: EnemyBeamInfo = {
+      count: 0,
+      ax: [0, 0],
+      ay: [0, 0],
+      bx: [0, 0],
+      by: [0, 0],
+      halfWidth: 0,
+      damage: 0,
+      progress: 0,
+    };
+    expect(enemyBeamTelegraph(sim, boss, beam)).toBe(true);
+    expect(stepUntil(sim, boss, 'laser-1', 100, pin)).toBeGreaterThanOrEqual(0);
+    sim.step(IDLE);
+    expect(enemyBeam(sim, boss, beam)).toBe(true);
+    expect(beam.damage).toBe(2);
+    expect(beam.count).toBe(1);
+    // It runs east, toward where the player stood when the glow began.
+    expect(beam.bx[0] - beam.ax[0]).toBeGreaterThan(40);
+    expect(Math.abs(beam.by[0] - beam.ay[0])).toBeLessThan(15);
   });
 
   it('is named in English in every locale, and its plate carries no joke', async () => {

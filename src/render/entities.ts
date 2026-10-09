@@ -28,6 +28,9 @@ import {
   lobbedVolleyCount,
   lobbedVolleyFlight,
   enemyTelegraphProgress,
+  enemyBeam,
+  enemyBeamTelegraph,
+  type EnemyBeamInfo,
   enemyTelegraphShape,
   isEnemyElite,
   isEnemyInvulnerable,
@@ -53,6 +56,8 @@ import {
   FloorHazardDisc,
   FloorRing,
   FloorShade,
+  FloorBeam,
+  TELEGRAPH_HEIGHT,
   FloorWedge,
 } from './world/flat.js';
 import { WorldLabel } from './world/label.js';
@@ -88,6 +93,10 @@ import { WorldLabel } from './world/label.js';
 const TELEGRAPH_SCALE = 2.6;
 const LINE_TELEGRAPH_SCALE = 6;
 const LINE_TELEGRAPH_HALF_ANGLE = 0.12;
+/** How high above the floor a lit laser hangs, room units: about hip height. */
+const BEAM_HEIGHT = 6;
+/** Room units across a wind-up's warning line. */
+const BEAM_WARNING_THICKNESS = 1.5;
 const MAYPOLE_PROP_KIND = propKindIndex('maypole');
 const BOMB_PICKUP_ID = 'bierfassl';
 const RING_PULSE_RATE = 0.011;
@@ -289,6 +298,18 @@ export class EntityView {
   /** The thin green edge a poison cloud will settle at (#405) — see `TelegraphShape.Cloud`. */
   private readonly cloudEdges: FloorRing[] = [];
   private readonly wedges: FloorWedge[] = [];
+  /** Lasers (#40): a lit beam is two of these (glow and core), a wind-up's warning one. */
+  private readonly beams: FloorBeam[] = [];
+  private readonly beamScratch: EnemyBeamInfo = {
+    count: 0,
+    ax: [0, 0],
+    ay: [0, 0],
+    bx: [0, 0],
+    by: [0, 0],
+    halfWidth: 0,
+    damage: 0,
+    progress: 0,
+  };
   /** The bomb blast telegraph's crossed hatch arms (#3) — see `FloorHazardBar`. */
   private readonly hazardBars: FloorHazardBar[] = [];
   /** The radial-blast hatch disc — a lobbed Böller, the player's own item (#12). */
@@ -383,6 +404,7 @@ export class EntityView {
     this.ringAt(0).hide();
     this.cloudEdgeAt(0).hide();
     this.wedgeAt(0).hide();
+    this.beamAt(0).hide();
     this.hazardBarAt(0).hide();
     this.hazardDiscAt(0).hide();
     this.eatShadeAt(0).hide();
@@ -509,6 +531,7 @@ export class EntityView {
     let ringsUsed = 0;
     let cloudEdgesUsed = 0;
     let wedgesUsed = 0;
+    let beamsUsed = 0;
     let hazardBarsUsed = 0;
     let hazardDiscsUsed = 0;
     let eatShadesUsed = 0;
@@ -853,7 +876,12 @@ export class EntityView {
         label.show();
       }
 
-      if (!isBoss && enemyTelegraphShape(sim, index, this.telegraphShape)) {
+      // A boss draws no shape telegraph of its own — its wind-up is its body — except
+      // a laser's line (#40): that is where the beam will be, which a body cannot say.
+      if (
+        enemyTelegraphShape(sim, index, this.telegraphShape) &&
+        (!isBoss || this.telegraphShape.shape === TelegraphShape.Beam)
+      ) {
         const info = this.telegraphShape;
         const pulse = this.ringPulses ? Math.sin(nowMs * RING_PULSE_RATE) * 0.12 : 0;
         const shapeAlpha = Math.min(1, 0.35 + info.progress * 0.5 + pulse);
@@ -876,6 +904,27 @@ export class EntityView {
               info.arc / 2,
               shapeAlpha,
             );
+            break;
+          }
+          case TelegraphShape.Beam: {
+            // A laser's wind-up (#40): the line it is about to light, thin and
+            // lying on the snow, strengthening as the beam gets closer.
+            if (enemyBeamTelegraph(sim, index, this.beamScratch)) {
+              const beam = this.beamScratch;
+              for (let segment = 0; segment < beam.count; segment++) {
+                this.beamAt(beamsUsed).place(
+                  beam.ax[segment] ?? 0,
+                  beam.ay[segment] ?? 0,
+                  beam.bx[segment] ?? 0,
+                  beam.by[segment] ?? 0,
+                  BEAM_WARNING_THICKNESS,
+                  TELEGRAPH_HEIGHT,
+                  shapeAlpha,
+                  ENTITY_PALETTE.telegraphRing,
+                );
+                beamsUsed += 1;
+              }
+            }
             break;
           }
           case TelegraphShape.Ground: {
@@ -921,6 +970,41 @@ export class EntityView {
             ring.place(info.x, info.y, ringRadius, shapeAlpha);
             break;
           }
+        }
+      }
+
+      // A lit laser (#40): a glow in the beam's own colour under a white core,
+      // hanging at hip height — pink for the big one, ice blue for the small.
+      if (isEnemyBody && enemyBeam(sim, index, this.beamScratch)) {
+        const beam = this.beamScratch;
+        const glow = beam.damage > 1 ? ENTITY_PALETTE.beamBig : ENTITY_PALETTE.beamSmall;
+        const fade = 1 - beam.progress * 0.35;
+        for (let segment = 0; segment < beam.count; segment++) {
+          const ax = beam.ax[segment] ?? 0;
+          const ay = beam.ay[segment] ?? 0;
+          const bx = beam.bx[segment] ?? 0;
+          const by = beam.by[segment] ?? 0;
+          this.beamAt(beamsUsed).place(
+            ax,
+            ay,
+            bx,
+            by,
+            beam.halfWidth * 2.4,
+            BEAM_HEIGHT,
+            0.55 * fade,
+            glow,
+          );
+          this.beamAt(beamsUsed + 1).place(
+            ax,
+            ay,
+            bx,
+            by,
+            Math.max(1.2, beam.halfWidth * 0.9),
+            BEAM_HEIGHT + 0.05,
+            fade,
+            ENTITY_PALETTE.beamCore,
+          );
+          beamsUsed += 2;
         }
       }
 
@@ -1000,6 +1084,9 @@ export class EntityView {
     }
     for (let slot = wedgesUsed; slot < this.wedges.length; slot++) {
       this.wedges[slot]?.hide();
+    }
+    for (let slot = beamsUsed; slot < this.beams.length; slot++) {
+      this.beams[slot]?.hide();
     }
     for (let slot = hazardBarsUsed; slot < this.hazardBars.length; slot++) {
       this.hazardBars[slot]?.hide();
@@ -1094,6 +1181,9 @@ export class EntityView {
     for (const shape of this.wedges) {
       shape.mesh.layers.enable(layer);
     }
+    for (const shape of this.beams) {
+      shape.mesh.layers.enable(layer);
+    }
     for (const shape of this.hazardBars) {
       shape.mesh.layers.enable(layer);
     }
@@ -1134,6 +1224,17 @@ export class EntityView {
     }
     const created = new FloorWedge(ENTITY_PALETTE.telegraphRing);
     this.wedges.push(created);
+    this.group.add(created.mesh);
+    return created;
+  }
+
+  private beamAt(slot: number): FloorBeam {
+    const existing = this.beams[slot];
+    if (existing !== undefined) {
+      return existing;
+    }
+    const created = new FloorBeam(ENTITY_PALETTE.beamBig);
+    this.beams.push(created);
     this.group.add(created.mesh);
     return created;
   }
@@ -1189,6 +1290,7 @@ export class EntityView {
       ...this.rings,
       ...this.cloudEdges,
       ...this.wedges,
+      ...this.beams,
       ...this.hazardBars,
       ...this.hazardDiscs,
       ...this.eatShades,

@@ -820,6 +820,22 @@ export interface ProjectileTagTuning {
    * (`EnemyTuning.markedFireIntervalScale`). A second flare refreshes it.
    */
   playerMarkDurationTicks: number;
+  /**
+   * `freezing` *on the player* (#40, the Snow cannon): ticks Alois is all but
+   * rooted by a freezing enemy shot — shorter than `freezeDurationTicks`, since
+   * he cannot dodge while it lasts. The same cooldown applies after it.
+   */
+  playerFreezeDurationTicks: number;
+  /** `bursting` (#40, the Snow cannon): how many fragments a bursting shot ends in, spread evenly round a full ring. */
+  burstFragments: number;
+  /** `bursting`: each fragment's speed. */
+  burstFragmentSpeed: number;
+  /** `bursting`: each fragment's damage — a plain hit, where the parent's direct hit is double. */
+  burstFragmentDamage: number;
+  /** `bursting`: ticks a fragment flies. */
+  burstFragmentLifetimeTicks: number;
+  /** `bursting`: each fragment's hit radius. */
+  burstFragmentRadius: number;
   /** `freezing`: velocity is multiplied by this every tick the status is active. */
   freezeSlowFactor: number;
   /** The `slow` status (`STATUS_SLOW`): velocity is multiplied by this every tick it is active — a hindrance, where `freezeSlowFactor` is a near-stop. */
@@ -1601,6 +1617,13 @@ export const DEFAULT_PROJECTILE_TAG_TUNING: Readonly<ProjectileTagTuning> = {
   // while the mark is up, short enough that shaking it off is a matter of
   // breaking line of sight for a moment once it fades, not a whole fight.
   playerMarkDurationTicks: 300,
+  // 0.7 s: a root he feels and can shoot through, not a stun.
+  playerFreezeDurationTicks: 42,
+  burstFragments: 4,
+  burstFragmentSpeed: 1.3,
+  burstFragmentDamage: 1,
+  burstFragmentLifetimeTicks: 40,
+  burstFragmentRadius: 3,
   freezeSlowFactor: 0.15,
   slowSpeedFactor: 0.5,
   freezeDurationTicks: 45,
