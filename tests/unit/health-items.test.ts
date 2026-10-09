@@ -6,7 +6,7 @@ import { createInputFrame } from '../../src/sim/input/frame.js';
 import { RoomGeometry } from '../../src/sim/room/geometry.js';
 import { ENEMY_DROP_TABLES } from '../../src/content/pickups/drop-tables.js';
 
-/** #484: Pot Roast, Diet Plate, Soul Platter, Black Pudding, Cream Soup and the Homebrew. */
+/** #484: Schweinsbraten, Radi, Semmel, Rosswurst, Käsekuchen and the Homebrew. */
 
 const IDLE = createInputFrame();
 
@@ -23,38 +23,38 @@ function world(...items: string[]): GameSim {
 }
 
 describe('max-health items', () => {
-  it('Pot Roast adds a filled container', () => {
+  it('Schweinsbraten adds a filled container', () => {
     const sim = world();
     sim.applyPlayerDamage(2);
-    sim.pickUpItem('pot-roast');
+    sim.pickUpItem('schweinsbraten');
     expect(sim.playerMaxHealth).toBe(PLAYER_HEALTH + 2);
     expect(sim.playerHealth).toBe(PLAYER_HEALTH);
   });
 
-  it('Diet Plate leaves one filled heart and three new empty containers', () => {
+  it('Radi leaves one filled heart and three new empty containers', () => {
     const sim = world();
-    sim.pickUpItem('diet-plate');
+    sim.pickUpItem('radi');
     expect(sim.playerMaxHealth).toBe(PLAYER_HEALTH + 6);
     expect(sim.playerHealth).toBe(2);
   });
 
-  it('Soul Platter banks three soul hearts and Black Pudding three eternal ones', () => {
+  it('Semmel banks three soul hearts and Rosswurst three eternal ones', () => {
     const sim = world();
-    sim.pickUpItem('soul-platter');
+    sim.pickUpItem('semmel');
     expect(sim.playerSoulHealth).toBe(6);
-    sim.pickUpItem('black-pudding');
+    sim.pickUpItem('rosswurst');
     expect(sim.playerEternalHealth).toBe(6);
   });
 
-  it('Cream Soup turns every red heart into soul, until a container comes back', () => {
+  it('Käsekuchen turns every red heart into soul, until a container comes back', () => {
     const sim = world();
-    sim.pickUpItem('cream-soup');
+    sim.pickUpItem('kaesekuchen');
     expect(sim.playerMaxHealth).toBe(0);
     expect(sim.playerHealth).toBe(0);
     expect(sim.playerSoulHealth).toBe(PLAYER_HEALTH);
     sim.addPlayerHealth(2);
     expect(sim.playerHealth).toBe(0);
-    sim.pickUpItem('pot-roast');
+    sim.pickUpItem('schweinsbraten');
     expect(sim.playerMaxHealth).toBe(2);
     expect(sim.playerHealth).toBe(2);
   });

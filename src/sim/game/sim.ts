@@ -298,7 +298,6 @@ function homebrewBeerFor(pickupId: string): string {
   return /full|pack|ring|chest|-10$/.test(pickupId) ? 'mass-full' : 'mass-half';
 }
 
-
 export { ENEMY_PROFILES, EnemySize, type EnemyProfile, type EnemySizeId } from '../enemy/size.js';
 
 /** Ticks before a killed body on a spawn post comes back. Two and a half seconds. */

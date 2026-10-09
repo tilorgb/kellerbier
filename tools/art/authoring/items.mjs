@@ -2162,11 +2162,11 @@ export const ITEM_ART = {
   'roter-stier': pick('roter-stier'),
   'the-patriot': (cv) => patriotWave(cv),
   'waller-kopf': pick('waller-kopf'),
-  'pot-roast': pick('pot-roast'),
-  'diet-plate': pick('diet-plate'),
-  'soul-platter': pick('soul-platter'),
-  'black-pudding': pick('black-pudding'),
-  'cream-soup': pick('cream-soup'),
+  schweinsbraten: pick('schweinsbraten'),
+  radi: pick('radi'),
+  semmel: pick('semmel'),
+  rosswurst: pick('rosswurst'),
+  kaesekuchen: pick('kaesekuchen'),
   homebrew: pick('homebrew'),
 };
 
