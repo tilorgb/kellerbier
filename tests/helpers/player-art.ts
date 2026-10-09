@@ -26,7 +26,7 @@ export function stubPlayerArt(): PlayerArt {
   const body = Object.fromEntries(
     PLAYER_BODY_KEYS.map((key) => [key, stubStrip(key, key.startsWith('drunk') ? DRUNK : SOBER)]),
   ) as PlayerArt['body'];
-  return { body, schlauch: stubStrip('alois-schlauch', SCHLAUCH, 16, 16) };
+  return { body, schlauch: stubStrip('alois-schlauch', SCHLAUCH, 16, 16), hats: {} };
 }
 
 const SOBER: AnimationSidecar = {

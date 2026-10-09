@@ -292,6 +292,12 @@ export interface ItemDefinition {
   readonly flavourText?: string;
   /** Placeholder-art key until real icons exist (#34), same convention as `PickupDefinition.label`. */
   readonly sprite: string;
+  /**
+   * A hat sprite key (`render/hat-art.ts`) that replaces Alois's own hat for
+   * as long as the item is held. Several held at once: the most recently
+   * picked up wins (`GameSim.activeHat`).
+   */
+  readonly hat?: string;
   /** Which pools (`docs/GAME_DESIGN.md` §8) this item can be offered from. At least one. */
   readonly pools: readonly ItemPoolId[];
   readonly quality: ItemQuality;

@@ -182,7 +182,7 @@ Tag key below: **R** = `rosinen`, **I** = `impure`. Quality runs 0–3.
 | Braumeister-Hammer | A kill sends a shockwave through nearby enemies | 2 | Boss, Secret |
 | Brezn | Orbiting pretzel damages on contact | 1 | Treasure, Shop |
 | Der Ordner | Familiar that shoves enemies away | 1 | Treasure, Shop, Boss |
-| Hendlgeruch | Constantly pulls distant enemies toward you | 1 | Treasure, Shop, Secret |
+| Hendlgeruch | Pulses a smell that draws enemies in and dazes those close; Alois wears a Hendl hat | 2 | Treasure, Shop, Secret |
 | Karussell | Active: one spin flings everything close away from you | 1 | Treasure, Shop |
 | Ludwigs Schwan | Familiar fires homing feathers; costs Biermarken per floor | 1 | Treasure, Shop, Secret |
 | Obazda | Slows enemies near you | 1 | Treasure, Shop |
