@@ -5399,9 +5399,9 @@ export class GameSim {
   }
 
   /**
-   * Applies `freeze` (#27's slow) to every enemy within `radius` of a point
-   * — an item's continuous aura (#29's Obazda) rather than the one-shot
-   * duration a hit's own tag sets.
+   * Applies `slow` (`STATUS_SLOW`: half speed, not a freeze's near-stop) to
+   * every enemy within `radius` of a point — an item's continuous aura (#29's
+   * Obazda) rather than the one-shot duration a hit's own tag sets.
    *
    * Matches on `Enemy | Obstacle`, not `Enemy` alone — the same mask
    * `systems/bombs.ts`'s blast and `findNearestTarget`
@@ -5423,7 +5423,7 @@ export class GameSim {
       if ((this.health.data[index * 2] ?? 0) <= 0) {
         return;
       }
-      this.applyStatusEffect(index, 'freeze', ticks);
+      this.applyStatusEffect(index, 'slow', ticks);
     });
   }
 

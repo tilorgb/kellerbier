@@ -1,7 +1,7 @@
 import type { ItemDefinition } from '../../sim/item/definition.js';
 
-/** Radius of the cheese around the player, and how long each tick's freeze grants — refreshed every tick the aura is held. */
-const AURA_RADIUS = 32;
+/** Radius of the cheese around the player, and how long each tick's slow grants — refreshed every tick the aura is held. */
+export const AURA_RADIUS = 32;
 const SLOW_TICKS = 12;
 
 /**
