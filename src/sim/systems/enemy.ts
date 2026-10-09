@@ -17,6 +17,7 @@ import type { GameSim } from '../game/sim.js';
 import { boulderDebris, drumChips, muzzleFlash, ring } from '../particle/effects.js';
 import { clamp, vectorLength } from '../math.js';
 import { addPush } from './movement.js';
+import { dazeAllowsAdvance, isDazed } from './status-effects.js';
 import { applyDamageAt } from './impact.js';
 import { CollisionLayer, collisionMaskFor } from '../collision/layers.js';
 import { NO_SLOT } from '../pool/slot-pool.js';
@@ -456,7 +457,10 @@ export function stepEnemies(sim: GameSim): void {
       queuePropDrops(sim, index, state, ticks, selfX, selfY);
     }
 
-    enemy[base + 2] = ticks < MAX_STATE_TICKS ? ticks + 1 : ticks;
+    // A dazed body's state counter crawls (`dazeAllowsAdvance`): telegraphs,
+    // rests and bursts all stretch, which is what "shoots slower" is.
+    const dazeHolds = isDazed(sim, index) && !dazeAllowsAdvance(sim, index);
+    enemy[base + 2] = ticks < MAX_STATE_TICKS && !dazeHolds ? ticks + 1 : ticks;
   }
 }
 

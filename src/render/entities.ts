@@ -49,6 +49,7 @@ import {
 import type { AnimatedSpriteSet } from './floor-art.js';
 import { type BitmapText, type Container, type Texture } from './gfx/index.js';
 import { ENTITY_PALETTE } from './palette.js';
+import { isDazed } from '../sim/systems/status-effects.js';
 import { tileGridScale } from './tiles.js';
 import { Billboard } from './world/billboard.js';
 import {
@@ -61,6 +62,8 @@ import {
   FloorWedge,
 } from './world/flat.js';
 import { WorldLabel } from './world/label.js';
+/** How far a dazed body's tint is mixed toward `ENTITY_PALETTE.dazedTint`. */
+const DAZED_TINT_MIX = 0.6;
 
 /**
  * Every collidable body that is not the player: enemies, bosses, pickups,
@@ -752,7 +755,7 @@ export class EntityView {
         // wind-up, emissive for the same lantern-dark reason as the bloat.
         billboard.setGlow(ENTITY_PALETTE.windUpGlow, windUp * WIND_UP_GLOW_STRENGTH);
       }
-      billboard.tint = isPickup
+      const baseTint = isPickup
         ? pickupSprite !== undefined
           ? ENTITY_PALETTE.normalTint
           : (this.pickupTints[pickupKindIndex] ?? ENTITY_PALETTE.unknownPickupTint)
@@ -778,6 +781,11 @@ export class EntityView {
                     ),
                   )
                 : ENTITY_PALETTE.normalTint;
+
+      billboard.tint =
+        !isPickup && !flashing && isDazed(sim, index)
+          ? mixColor(baseTint, ENTITY_PALETTE.dazedTint, DAZED_TINT_MIX)
+          : baseTint;
 
       if (submerged && !flashing) {
         billboard.tint = ENTITY_PALETTE.submergedShadow;

@@ -25,8 +25,12 @@ export class ItemInventory {
   private heldCount = 0;
   private readonly isHeld: Uint8Array;
   private readonly states: ItemRuntimeState[];
+  /** Pickup sequence number of each item's most recent first-copy pickup — what "latest picked up wins" compares. */
+  private readonly acquiredSeq: Int32Array;
+  private nextSeq = 1;
 
   constructor(registry: ItemRegistry) {
+    this.acquiredSeq = new Int32Array(registry.count);
     this.heldOrder = new Int32Array(registry.count);
     this.isHeld = new Uint8Array(registry.count);
     this.states = [];
@@ -38,6 +42,21 @@ export class ItemInventory {
   /** Distinct items currently held. Does not count stacks. */
   get count(): number {
     return this.heldCount;
+  }
+
+  /** Registry index of the held item with the highest pickup sequence among those `accepts` says yes to, or -1. */
+  latestHeld(accepts: (index: number) => boolean): number {
+    let best = -1;
+    let bestSeq = 0;
+    for (let position = 0; position < this.heldCount; position++) {
+      const index = this.heldOrder[position] ?? 0;
+      const seq = this.acquiredSeq[index] ?? 0;
+      if (seq > bestSeq && accepts(index)) {
+        best = index;
+        bestSeq = seq;
+      }
+    }
+    return best;
   }
 
   has(index: number): boolean {
@@ -62,6 +81,7 @@ export class ItemInventory {
   pickUp(index: number): ItemRuntimeState {
     const state = this.stateOf(index);
     state.count += 1;
+    this.acquiredSeq[index] = this.nextSeq++;
     if ((this.isHeld[index] ?? 0) === 0) {
       this.isHeld[index] = 1;
       let insertAt = this.heldCount;

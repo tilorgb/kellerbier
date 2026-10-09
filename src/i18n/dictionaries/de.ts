@@ -422,7 +422,8 @@ export const de: Record<DictKey, string> = {
   'items.haferlschuh.description': 'Lauftempo +15%, immun gegen rutschige Pfützen und Eis',
   'items.haferlschuh.flavourText':
     'Jeder Nagel von Hand geschlagen, von jemandem, der das viel zu ernst nimmt.',
-  'items.hendlgeruch.description': 'Zieht ständig entfernte Gegner zu dir heran',
+  'items.hendlgeruch.description':
+    'Ein Geruchsschwall zieht Gegner heran; wer nah genug ist, wird benommen',
   'items.hendlgeruch.flavourText':
     'Trägt einen Kilometer weit. Alle im Umkreis eines Kilometers haben jetzt Pläne.',
   'items.kartoffelsalat.description':

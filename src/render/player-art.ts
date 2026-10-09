@@ -1,5 +1,6 @@
 import { cutStrip, loadAtlasSheets, type LoadedStrip } from './floor-art.js';
 import { PLAYER_FACING_IDS, type PlayerFacingId } from './animation/state.js';
+import type { Texture } from './gfx/index.js';
 
 /**
  * Alois's own art (#151), loaded out of `assets/sprites/common/characters/`.
@@ -34,6 +35,8 @@ export interface PlayerArt {
   readonly body: Readonly<Record<PlayerBodyKey, LoadedStrip>>;
   /** The Schlauch's eight aim directions, resting (0-7) then firing (8-15). */
   readonly schlauch: LoadedStrip;
+  /** Hat sprites by key (`ItemDefinition.hat`), cut from `common/characters/hat-<key>.png`. */
+  readonly hats: Readonly<Record<string, Texture>>;
 }
 
 /** `south`, `north`, `side`, and each of those again as `drunk-...`. */
@@ -48,12 +51,21 @@ export const PLAYER_BODY_KEYS: readonly PlayerBodyKey[] = [
 export const SCHLAUCH_OCTANTS = 8;
 
 const ALOIS_FRAME_PATTERN = /^character\/alois-([a-z-]+)$/;
+const HAT_FRAME_PATTERN = /^character\/(hat-[a-z-]+)$/;
 
 export async function loadPlayerArt(): Promise<PlayerArt> {
   const strips: Record<string, LoadedStrip> = {};
+  const hats: Record<string, Texture> = {};
   const sheets = await loadAtlasSheets();
   for (const { manifest, sheet } of sheets) {
     for (const [key, frame] of Object.entries(manifest.frames)) {
+      const hatKey = HAT_FRAME_PATTERN.exec(key)?.[1];
+      if (hatKey !== undefined) {
+        hats[hatKey] = sheet
+          .sub(frame.x, frame.y, frame.width, frame.height)
+          .withDensity(frame.density ?? 1);
+        continue;
+      }
       const suffix = ALOIS_FRAME_PATTERN.exec(key)?.[1];
       if (suffix === undefined) {
         continue;
@@ -97,5 +109,5 @@ export async function loadPlayerArt(): Promise<PlayerArt> {
     );
   }
 
-  return { body: body as Record<PlayerBodyKey, LoadedStrip>, schlauch };
+  return { body: body as Record<PlayerBodyKey, LoadedStrip>, schlauch, hats };
 }

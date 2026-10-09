@@ -17,6 +17,8 @@ export interface CompiledItem {
   readonly description: string;
   readonly flavourText: string;
   readonly sprite: string;
+  /** See `ItemDefinition.hat`. `undefined` when the item leaves Alois's hat alone. */
+  readonly hat: string | undefined;
   readonly pools: readonly ItemPoolId[];
   readonly quality: ItemQuality;
   readonly promilleRequirement: PromilleRequirement;
@@ -154,6 +156,7 @@ export class ItemRegistry {
       description: definition.description,
       flavourText: definition.flavourText ?? '',
       sprite: definition.sprite,
+      hat: definition.hat,
       pools: definition.pools,
       quality: definition.quality,
       promilleRequirement: definition.promilleRequirement,
