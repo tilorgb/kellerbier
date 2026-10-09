@@ -15,6 +15,8 @@ import { ORDNER_STRIP_NAMES, OrdnerView } from './ordner-view.js';
 import { CloudView } from './cloud-view.js';
 import { FingerhakelnView } from './fingerhakeln-view.js';
 import { HendlSmellView } from './hendl-smell-view.js';
+import { ItemFxView } from './item-fx-view.js';
+import { buildLitterArt, buildLitterTextures } from './litter-art.js';
 import { ObazdaView } from './obazda-view.js';
 import { SnowfallView } from './snowfall-view.js';
 import { GloomBlur } from './gloom.js';
@@ -314,6 +316,9 @@ export class GameView {
   private readonly projectiles: ProjectileView;
   private readonly particles: ParticleView;
   private readonly decals: DecalView;
+  /** The Müll item's litter, kept for the room — drawn like the death decals but at its own size and opacity. */
+  private readonly litter: DecalView;
+  private readonly itemFxView: ItemFxView;
   private readonly damageNumbers: DamageNumberView;
   private readonly pedestals: PedestalView;
   private readonly machine: MachineView;
@@ -408,6 +413,13 @@ export class GameView {
 
     this.decals = new DecalView(sim.decals, textures.decalArt);
     this.scene.add(this.decals.group);
+    const litterTextures = buildLitterTextures();
+    this.litter = new DecalView(sim.litter, buildLitterArt(litterTextures), {
+      alpha: 1,
+      unitsPerSize: 1,
+    });
+    this.scene.add(this.litter.group);
+    this.projectiles.setLooks(litterTextures);
 
     this.damageNumbers = new DamageNumberView(sim.damageNumbers, this.labelLayer, makeLabel);
 
@@ -441,6 +453,8 @@ export class GameView {
     this.scene.add(this.fingerhakelnView.group);
     this.obazdaView = new ObazdaView();
     this.scene.add(this.obazdaView.group);
+    this.itemFxView = new ItemFxView();
+    this.scene.add(this.itemFxView.group);
     this.snowfallView = new SnowfallView();
     this.scene.add(this.snowfallView.group);
 
@@ -470,6 +484,7 @@ export class GameView {
       this.hendlSmellView.group,
       this.fingerhakelnView.group,
       this.obazdaView.group,
+      this.itemFxView.group,
       this.snowfallView.group,
       this.bombFlightView.group,
       this.rampView.group,
@@ -516,6 +531,7 @@ export class GameView {
     this.cloudView.setLean(lean);
     this.hendlSmellView.setLean(lean);
     this.obazdaView.setLean(lean);
+    this.itemFxView.setLean(lean);
     this.snowfallView.setLean(lean);
     this.playerView.setLean(lean);
     this.projectiles.setLean(lean);
@@ -706,6 +722,7 @@ export class GameView {
     this.lighting.sync(sim.tick);
     advanceStreamFlow(nowMs);
     this.decals.sync();
+    this.litter.sync();
     this.entities.sync(alpha, nowMs, this.projectPoint);
     this.pedestals.sync();
     this.machine.sync();
@@ -735,6 +752,7 @@ export class GameView {
     this.hendlSmellView.sync(sim, alpha, nowMs);
     this.fingerhakelnView.sync(sim, alpha, nowMs);
     this.obazdaView.sync(sim, alpha, nowMs);
+    this.itemFxView.sync(sim, alpha, nowMs);
     this.snowfallView.sync(sim, alpha);
     // No light of his own in a lantern room (#424): the lanterns on the walls
     // are the room's light, and a pool that follows him is the circle #404 had.
@@ -1380,6 +1398,8 @@ export class GameView {
     this.hendlSmellView.destroy();
     this.fingerhakelnView.destroy();
     this.obazdaView.destroy();
+    this.itemFxView.destroy();
+    this.litter.destroy();
     this.snowfallView.destroy();
     this.bombFlightView.destroy();
     this.rampView.destroy();

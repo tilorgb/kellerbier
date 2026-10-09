@@ -1,6 +1,6 @@
 # Kellerbier Item Roster
 
-Full list of all 63 items currently authored in `src/content/items/`. Generated from the
+Full list of all 73 items currently authored in `src/content/items/`. Generated from the
 item definitions themselves (`src/sim/item/definition.ts`), so it reflects exactly what is
 live in the game, not a design doc that can drift from the code.
 
@@ -52,6 +52,7 @@ Columns:
 | blaskapelle | Blaskapelle | Passive | A sound ring damages everything around you every few seconds | Tröööööt.                                         | 2 | Treasure, Shop, Boss | Any |
 | blutwurz | Blutwurz | Passive | A death does not end the run — if you can walk back for the corpse | They say a sip can wake up the dead.                                    | 3 | Treasure, Shop, Boss | Any |
 | boellerschmeisser | Böllerschmeißer | Active (charge 420) | Active: drop a lit Böller — it goes off where you stand, one second later | Don't throw at others!                                            | 2 | Shop, Boss, Secret | Any |
+| bratwurst | Bratwurst | Active (single use) | Active: fills one heart container, then is spent. Re-armed by picking up a Bratwurst while every container is already full (the pickup is otherwise refused). Does nothing at full health | Bratwurst is Life | 1 | Treasure, Shop | Any |
 | braumeister-hammer | Braumeister-Hammer | Passive | A kill sends a shockwave through whatever else is nearby | The one with the oomph.                                  | 2 | Boss, Secret | Any |
 | braumeister-schuerze | Braumeister-Schürze | Passive | Fires a fan of three shots. Damage -30% | Strong and sexy                            | 2 | Treasure, Shop, Boss | Any |
 | braumeister-visier | Braumeister-Visier | Passive | Every 5th shot fires an extra, piercing volley | A good shot needs a good eye.                                            | 2 | Shop, Boss | Any |
@@ -60,6 +61,7 @@ Columns:
 | colaweizen | Colaweizen | Passive | Shots stick and slow enemies. Damage -20% | Sticky, sugary, disgusting.                              | 1 | Treasure, Shop | Any |
 | der-ordner | Der Ordner | Passive | Familiar that shoves enemies away from you | Let him through!               | 1 | Treasure, Shop, Boss | Any |
 | der-rosinenklauber | Der Rosinenklauber | Passive | Rosinen items lose their drawback. Locks out both purity pacts | Saves you from those disgusting raisins.                 | 3 | Devil, Secret | Any |
+| dotsch | Dotsch | Active (4 s cooldown) | Active: a dodge roll the way you last walked; invulnerable and through enemies for the whole roll. Recharges on a clock, not on rooms | Dotsch? Dodge! | 2 | Treasure, Shop | Any |
 | feierabendbier | Feierabendbier | Passive | Heals a little at the start of every floor. Costs a little Promille | Earned the second the shift ends. Not one second before. | 1 | Treasure, Shop | Any |
 | feuerwehrhelm | Feuerwehrhelm | Passive | Shots are hose water: every hit shoves its target back. Shot Speed +25% | Rated to withstand heat, impact, and at least one Böllerschmeißer. | 1 | Treasure, Shop | Any |
 | fingerhakeln | Fingerhakeln | Passive | Contact damage, and drags nearby enemies toward you | The loser buys the next round. There is always a next round. | 2 | Shop, Boss, Secret | Rausch |
@@ -72,20 +74,26 @@ Columns:
 | kletzenbrot | Kletzenbrot | Passive | Shots poison what they hit. Damage -15% | Keeps for a month. Tastes like it has. | 2 | Shop, Boss, Secret | Any |
 | konterbier | Konterbier | Passive | Drinking while hungover instantly clears the Kater | Hair of the dog. The dog remembers you fondly. | 1 | Treasure, Shop | Any |
 | kraftbier | Kraftbier | Passive | Damage +40%, Move Speed -20% | The label does not say 9% for decoration. | 1 | Treasure, Shop | Any |
+| krapfen | Krapfen | Passive | Every shot fires four: along the aim and at each quarter turn from it, all at full damage | Berliner, Pfannkuchen, Küchle | 2 | Treasure, Shop | Any |
+| leberkas | Leberkas | Passive | While enemies remain, a Leberkas-Semmel appears every 8 s (3 at most). Picking one up lobs a splash shot at the nearest enemy: 3x damage where it lands, four more 1.5x blasts on the diagonals | Every lunchtime without fail. | 2 | Treasure, Shop | Any |
 | lebkuchenherz | Lebkuchenherz | Passive | A slogan overhead with a small stat effect that changes floor to floor | "Ein Prosit" was already taken by the mug next to it. | 1 | Treasure, Shop, Boss | Any |
 | lederhosn | Lederhosn | Passive | Absorbs one hit per room | Stiff enough to stand up on its own. Some say it already does. | 2 | Treasure, Shop | Any |
 | ludwigs-schwan | Ludwigs Schwan | Passive | Familiar fires a homing feather every couple of seconds. Costs Biermarken per floor | Paddles in perfect circles. Sends you the bill. | 1 | Treasure, Shop, Secret | Any |
 | luftballon | Luftballon | Passive | Shots return to you after traveling their full range | Filled with helium. The shots do not need it, but morale does. | 1 | Treasure, Shop | Any |
 | mass | Maß | Passive | One huge, slow shot instead of a stream. Damage +200%, Fire Rate -66% | One litre. One decision. No refills mid-fight. | 2 | Shop, Boss | Any |
+| muell | Müll | Passive | Shots turn into rubbish (banana peel, nail, apple core, paper) and stay on the floor of the room, up to 40 pieces. Nothing else changes | (No) Littering! | 0 | Treasure, Shop | Any |
 | neuschwanstein-bauplan | Neuschwanstein-Bauplan | Passive | Large stat boost. Costs more Biermarken every floor | An unfinished wing, drawn in impressive detail. | 2 | Shop, Boss, Devil | Any |
 | obazda | Obazda | Passive | Every 2.5 s drops a cheese puddle that stays and slows enemies standing in it | Technically a dip. Structurally closer to mortar. | 1 | Treasure, Shop | Any |
+| pfeitinger-ultrabraeu | Pfeitinger Ultrabräu | Passive | Replaces the stream with a charged laser: hold to wind up (0.8 s, shortened by Fire Rate), release to fire a beam through everything in line for 2.5x damage. Release early and it fizzles | Schied ei! | 3 | Treasure, Shop, Boss | Any |
 | platzangst | Platzangst | Passive | Damage +50%, Range -50% | Every festival tent, elbow to elbow. You made your peace with this a while ago. | 2 | Shop, Boss, Secret, Curse | Any |
 | radler | Radler | Passive | Damage -50%, Fire Rate +100% | Half a beer. Twice the argument about whether it counts as one. | 0 | Treasure, Shop | Any |
 | reinheitsgebot-1516 | Reinheitsgebot 1516 | Passive | Locks out every rosinen item. Damage +35% | Water, barley, hops. Written before anyone thought to mention raisins. | 3 | Shop, Boss, Devil | Any |
 | riesenrad | Riesenrad | Passive | A slow-orbiting gondola that damages and freezes on contact | Officially rated for six people. You are, at this point, the only one who fits. | 2 | Treasure, Shop, Boss | Any |
+| rolling-r | Rolling R | Passive | Shot speed x2, shots half the size, Damage -40%. Range unchanged. The shot sound is a rolled R | Immigration Test | 1 | Treasure, Shop | Any |
 | rosinenbrot | Rosinenbrot | Passive | Shots pierce one extra enemy. Range -20% | Somebody picks them out. Somebody always picks them out. | 1 | Treasure, Shop | Any |
 | rosinenschnaps | Rosinenschnaps | Passive | Damage +45%. Every kill adds 0.1 Promille | Grandmother made it. Grandmother is not sorry. | 3 | Shop, Boss, Devil | Any |
 | rosinenschnecke | Rosinenschnecke | Passive | Shots curl toward whatever is nearest. Damage -20% | Wound tight enough that nobody can find the end of it. | 2 | Treasure, Shop, Boss | Any |
+| roter-stier | Roter Stier | Passive | Alois grows wings and flies (over furniture, puddles, ice and pits; walls and enemies still stop him). Move Speed +25%. Shots unchanged | Gummiberdlsaft | 3 | Treasure, Shop, Boss | Any |
 | ruhige-hand | Ruhige Hand | Passive | Damage +40% while under 0.5 Promille | The only item in the tent trying to talk you out of another round. | 2 | Shop, Boss, Secret | Sober |
 | rumtopf | Rumtopf | Passive | Damage +80% — but only in Vollrausch or deeper | Lid on since June. Nobody has looked. | 3 | Devil, Secret | Rausch |
 | sauwetter | Sauwetter | Passive | Shots carry a different status effect every shot: burning, freezing, poison | Four seasons in one afternoon. Occasionally in one minute. | 2 | Shop, Boss, Secret, Curse | Any |
@@ -99,7 +107,9 @@ Columns:
 | steinkrug | Steinkrug | Passive | Shots fly over obstacles and splash on impact | Not aerodynamic. Not meant to be. | 1 | Treasure, Shop | Any |
 | studentenfutter | Studentenfutter | Passive | Damage +8% per kill in a room, up to +48%. Resets on clear. Move Speed -10% | One handful. Every time. One handful. | 2 | Treasure, Shop, Boss | Any |
 | sudordnung-1493 | Sudordnung 1493 | Passive | Locks out every rosinen and impure item. Damage +50% | Twenty-three years earlier and stricter. Nobody remembers why it lost. | 3 | Shop, Boss, Devil | Any |
+| the-patriot | The Patriot | Passive | Damage +1 | You know the lyrics | 1 | Treasure, Shop | Any |
 | traktor-auspuff | Traktor-Auspuff | Passive | Moving leaves a trail of poison exhaust clouds behind you. Move Speed +15% | You can hear it two fields over. So can everything with a choice in the matter. | 1 | Shop, Boss, Secret, Curse | Any |
+| waller-kopf | Waller-Kopf | Passive | A catfish head replaces Alois's. A 60° cone on the floor points the way he last walked (never the way he shoots); enemies in it within range get scared for 2 s — they run and stop attacking. Bosses are immune | Terror of the River | 2 | Treasure, Shop, Boss | Any |
 | watschn | Watschn | Passive | Getting hit sends a damaging shockwave out from you | The Bavarian conflict-resolution method. Surprisingly effective. | 2 | Shop, Boss, Secret | Rausch |
 | weisswurst | Weißwurst | Passive | Damage +30% before floor 4. Nothing after | The tradition says before the noon bell. The run says before the Brauerei. | 1 | Treasure, Shop | Any |
 | zwetschgendatschi | Zwetschgendatschi | Passive | Clearing a room without being hit heals 1. Range -15% | The plums are the point. The raisins are an opinion. | 1 | Treasure, Shop | Any |

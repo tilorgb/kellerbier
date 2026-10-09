@@ -62,6 +62,16 @@ import { traktorAuspuff } from './traktor-auspuff.js';
 import { watschn } from './watschn.js';
 import { weisswurst } from './weisswurst.js';
 import { zwetschgendatschi } from './zwetschgendatschi.js';
+import { bratwurst } from './bratwurst.js';
+import { dotsch } from './dotsch.js';
+import { krapfen } from './krapfen.js';
+import { leberkas } from './leberkas.js';
+import { muell } from './muell.js';
+import { pfeitingerUltrabraeu } from './pfeitinger-ultrabraeu.js';
+import { rollingR } from './rolling-r.js';
+import { roterStier } from './roter-stier.js';
+import { thePatriot } from './the-patriot.js';
+import { wallerKopf } from './waller-kopf.js';
 
 /**
  * Every item in the game.
@@ -148,6 +158,16 @@ export const ITEM_DEFINITIONS: readonly ItemDefinition[] = [
   watschn,
   weisswurst,
   zwetschgendatschi,
+  bratwurst,
+  dotsch,
+  krapfen,
+  leberkas,
+  muell,
+  pfeitingerUltrabraeu,
+  rollingR,
+  roterStier,
+  thePatriot,
+  wallerKopf,
 ];
 
 export {

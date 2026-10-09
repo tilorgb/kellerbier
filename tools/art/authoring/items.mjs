@@ -1,5 +1,6 @@
 import { legalPixelColorsFor, shadeOf } from '../palette.mjs';
-import { encodePng } from '../png.mjs';
+import { readFileSync } from 'node:fs';
+import { decodePng, encodePng } from '../png.mjs';
 
 /**
  * Item pedestal art (#34's "until real icons exist"), authored as programmatic
@@ -1970,6 +1971,123 @@ function schnupfTin(cv) {
   ink(cv);
 }
 
+// ----------------------------------------------- the ten-item batch (art round, 2026-10)
+// Most of this batch started as a pixel-bench candidate (`picks/<name>.png`, already snapped to the
+// common palette) that Tilo picked from a board of options: it is cropped, fitted onto the 24×24
+// canvas and given the hard ink edge every icon carries. The two with letters or patterns the bench
+// cannot draw (the Rolling R, The Patriot's lozenges) are block art, from the same board.
+
+/** A pick, cropped to its own bounds, fitted into `fit`×`fit` and centred; `ink` is applied by the caller. */
+export function stampPick(cv, name, fitW = 22, fitH = 22, tweak = undefined) {
+  const { width, height, pixels } = decodePng(
+    readFileSync(new URL(`./picks/${name}.png`, import.meta.url)),
+  );
+  let x0 = width,
+    y0 = height,
+    x1 = -1,
+    y1 = -1;
+  for (let y = 0; y < height; y++)
+    for (let x = 0; x < width; x++)
+      if (pixels[(y * width + x) * 4 + 3] > 0) {
+        x0 = Math.min(x0, x);
+        x1 = Math.max(x1, x);
+        y0 = Math.min(y0, y);
+        y1 = Math.max(y1, y);
+      }
+  const bw = x1 - x0 + 1;
+  const bh = y1 - y0 + 1;
+  const scale = Math.min(fitW / bw, fitH / bh);
+  const tw = Math.max(1, Math.round(bw * scale));
+  const th = Math.max(1, Math.round(bh * scale));
+  const ox = Math.floor((cv.w - tw) / 2);
+  const oy = Math.floor((cv.h - th) / 2);
+  for (let y = 0; y < th; y++)
+    for (let x = 0; x < tw; x++) {
+      const sx = x0 + Math.min(bw - 1, Math.floor(x / scale));
+      const sy = y0 + Math.min(bh - 1, Math.floor(y / scale));
+      const at = (sy * width + sx) * 4;
+      if (pixels[at + 3] === 0) continue;
+      put(cv, ox + x, oy + y, (pixels[at] << 16) | (pixels[at + 1] << 8) | pixels[at + 2]);
+    }
+  if (tweak !== undefined) tweak(cv);
+  return cv;
+}
+
+function pick(name, tweak) {
+  return (cv) => {
+    stampPick(cv, name, 22, 22, tweak);
+    ink(cv);
+  };
+}
+
+// Krapfen is a doughnut without the hole: the dark centre the bench painted is closed with sugar.
+function closeHole(cv) {
+  const sugar =
+    cv.px
+      .flat()
+      .filter((c) => c !== null && c > 0xdddddd)
+      .sort((a, b) => b - a)[0] ?? W;
+  let left = cv.w,
+    right = -1,
+    top = cv.h,
+    bottom = -1;
+  cv.px.forEach((row, y) =>
+    row.forEach((c, x) => {
+      if (c === null) return;
+      left = Math.min(left, x);
+      right = Math.max(right, x);
+      top = Math.min(top, y);
+      bottom = Math.max(bottom, y);
+    }),
+  );
+  const cx = (left + right) / 2;
+  const cy = top + (bottom - top) * 0.34;
+  for (let y = 0; y < cv.h; y++)
+    for (let x = 0; x < cv.w; x++) {
+      const c = cv.px[y][x];
+      if (c === null || Math.hypot(x - cx, (y - cy) * 1.2) > 5.2) continue;
+      cv.px[y][x] = sugar;
+    }
+}
+
+// The Patriot: the flag in a wave, white-and-blue lozenges, a fold in the cloth.
+function patriotWave(cv) {
+  rect(cv, 3, 4, 2, 19, WOOD);
+  for (let x = 5; x < 22; x++) {
+    const wave = Math.round(Math.sin((x - 5) * 0.55) * 1.6);
+    for (let y = 5; y < 16; y++) {
+      const dx = Math.abs(((x - 5) % 6) - 3);
+      const dy = Math.abs(((y - 5) % 6) - 3);
+      const base = dx + dy <= 2 ? BLUE : W;
+      put(cv, x, y + wave, Math.sin((x - 5) * 0.55) < -0.5 ? sh(base, -1) : base);
+    }
+  }
+  disc(cv, 4, 3, 1.5, GOLD2);
+  ink(cv);
+}
+
+// Rolling R: a huge bold R with a drop shadow and speed lines behind it.
+function rollingBigR(cv) {
+  const glyph = [
+    'RRRRRRRR..',
+    'RRRRRRRRR.',
+    'RR.....RRR',
+    'RR......RR',
+    'RR.....RRR',
+    'RRRRRRRRR.',
+    'RRRRRRR...',
+    'RR.RRR....',
+    'RR..RRR...',
+    'RR...RRR..',
+    'RR....RRR.',
+    'RR.....RRR',
+  ];
+  stamp(cv, 8, 7, glyph, { R: sh(RED, -2) });
+  stamp(cv, 7, 6, glyph, { R: RED });
+  for (const y of [8, 12, 16]) hline(cv, 1, 4, y, G);
+  ink(cv);
+}
+
 export const ITEM_ART = {
   almabtrieb: (cv) => cow(cv, 1.5, 2, 21, false),
   apfelkuchen: (cv) => cake(cv, 1, 4, 22, false, false),
@@ -2034,7 +2152,34 @@ export const ITEM_ART = {
   watschn: (cv) => watschn(cv),
   weisswurst: (cv) => weisswurst(cv),
   zwetschgendatschi: (cv) => zwetschgendatschi(cv),
+  bratwurst: pick('bratwurst'),
+  dotsch: pick('dotsch'),
+  krapfen: pick('krapfen', closeHole),
+  leberkas: pick('leberkas'),
+  muell: pick('muell'),
+  'pfeitinger-ultrabraeu': pick('pfeitinger-ultrabraeu'),
+  'rolling-r': (cv) => rollingBigR(cv),
+  'roter-stier': pick('roter-stier'),
+  'the-patriot': (cv) => patriotWave(cv),
+  'waller-kopf': pick('waller-kopf'),
 };
+
+/**
+ * Pickup art authored here rather than in `chests.mjs`: the Leberkas-Semmel is the Leberkas icon's
+ * own drawing, lying on the floor to be picked up (`pickup-<id>.png`).
+ */
+export const PICKUP_ART = {
+  'leberkas-semmel': pick('leberkas'),
+};
+
+/** One finished 24×24 pickup frame for `id`, named `pickup-<id>`. */
+export function pickupFrame(id) {
+  const draw = PICKUP_ART[id];
+  if (draw === undefined) throw new Error(`no pickup art authored for "${id}"`);
+  const cv = canvas();
+  draw(cv);
+  return { name: `pickup-${id}`, width: cv.w, height: cv.h, px: cv.px };
+}
 
 /** One finished 24×24 frame for `id`, in the `{ name, width, height, px }` shape the other authoring modules use. */
 export function itemFrame(id) {

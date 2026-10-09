@@ -30,6 +30,11 @@ import { Billboard } from './world/billboard.js';
 
 /** Authored pixels a worn hat sprite sinks below the old hat's bottom edge, so nothing of the felt peeks out. */
 const HAT_SINK = 1;
+/**
+ * Authored pixels a hat sits *lower* than the felt hat does, for the hats that are really a head
+ * (the Waller-Kopf's catfish covers the face too, not just the crown). Counted from the same anchor.
+ */
+const HAT_DROP: Readonly<Record<string, number>> = { 'hat-waller': 11 };
 /** Room units the hat sits in front of the body quad. */
 const HAT_FORWARD = 0.06;
 
@@ -207,6 +212,7 @@ export class PlayerView {
       this.body.setTexture(frame, this.mirror);
     }
     this.body.place(this.x, 0.2, this.footZ, this.lean);
+    this.tumble(sim, alpha);
 
     const look = readStatusLook(sim, index, nowMs, this.statusLook);
     const spiritTint = sim.blutwurzActive
@@ -235,7 +241,34 @@ export class PlayerView {
     }
 
     this.syncSchlauch(sim);
+    if (sim.playerRolling) {
+      this.schlauch.visible = false;
+    }
     this.syncHat(sim, strip.frames[this.frame], spiritTint, flashing);
+  }
+
+  /**
+   * The Dotsch's roll: the body somersaults about its own middle through the roll, turning the
+   * way it is going (a roll to the right turns clockwise), and is cleared again the moment the
+   * roll ends. The nozzle and any hat are hidden meanwhile — they would hang in the air.
+   */
+  private tumble(sim: GameSim, alpha: number): void {
+    const mesh = this.body.mesh;
+    if (!sim.playerRolling) {
+      mesh.rotation.z = 0;
+      return;
+    }
+    const total = Math.max(1, sim.rollTicksTotal);
+    const progress = Math.min(1, (total - sim.rollTicksLeft + alpha) / total);
+    const turns = sim.rollDirectionX < 0 ? 1 : -1;
+    const angle = turns * progress * Math.PI * 2;
+    const half = this.body.heightUnits / 2;
+    // Keep the middle where it was: the quad turns about its feet.
+    const along = half * (1 - Math.cos(angle));
+    mesh.rotation.z = angle;
+    mesh.position.x += half * Math.sin(angle);
+    mesh.position.y += along * Math.cos(this.lean);
+    mesh.position.z += along * Math.sin(this.lean);
   }
 
   /** Table lookup, not a template string: this runs every frame and a fresh string is garbage. */
@@ -269,7 +302,13 @@ export class PlayerView {
     const key = sim.activeHat();
     const texture = key === undefined ? undefined : this.art.hats[key];
     const anchor = HAT_ANCHORS[this.keyFor(this.facing, this.drunk)]?.[this.frame];
-    if (texture === undefined || anchor === undefined || frame === undefined || sim.playerDead) {
+    if (
+      texture === undefined ||
+      anchor === undefined ||
+      frame === undefined ||
+      sim.playerDead ||
+      sim.playerRolling
+    ) {
       this.hat.visible = false;
       return;
     }
@@ -281,7 +320,8 @@ export class PlayerView {
     const frameHeight = frame.displayHeight;
     const sideways = ((anchor[0] - frameWidth / 2) * this.mirror) / ACTOR_PIXELS_PER_UNIT;
     // Up the face of the body quad from its feet: the anchor row is counted from the frame's top.
-    const up = (frameHeight - anchor[1] - HAT_SINK) / ACTOR_PIXELS_PER_UNIT;
+    const up =
+      (frameHeight - anchor[1] - HAT_SINK - (HAT_DROP[key ?? ''] ?? 0)) / ACTOR_PIXELS_PER_UNIT;
     const upY = Math.cos(this.lean);
     const upZ = Math.sin(this.lean);
     // A hair in front of the body, along the quad's normal, so the hat always wins the depth test.

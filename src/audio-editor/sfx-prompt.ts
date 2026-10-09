@@ -26,6 +26,8 @@ const IDEAS: Readonly<Record<string, string>> = {
   'death-animal': 'low drawn-out animal groan trailing off, then a heavy body thump on straw',
   'death-folk': 'short surprised grunt, a clatter of wooden tools dropped on a stone floor',
   'death-oompah': 'a brass band note sliding down and out of tune, ending with a bass drum thud',
+  'player-shot-rolling-r':
+    'a quick rolled letter R, a tongue trill rrrr on the roof of the mouth, short and voiced',
   'player-shot': 'short soft pop of a beer tap spurting a quick jet of liquid, light and snappy',
   'shot-squelch': 'wet blorp of a bubble bursting, slimy spit, short',
   'shot-metal': 'metallic thunk and hiss of a pressure valve launching a small canister',

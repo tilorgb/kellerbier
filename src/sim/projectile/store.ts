@@ -115,6 +115,15 @@ export class ProjectileStore {
    * are still the same item's shot.
    */
   readonly tint: Uint8Array;
+  /**
+   * Which drawing a player shot wears in place of the beer sprite: 0 for the
+   * beer, 1+ for the Müll item's trash (`GameSim.setProjectileLook`).
+   * Presentational and written by `spawn` like every other field. A shot that
+   * has one leaves litter where it ends (`onDespawn`).
+   */
+  readonly look: Uint8Array;
+  /** Called with the slot just before a shot with a non-zero `look` is released. */
+  onLookDespawn: ((index: number) => void) | null = null;
 
   private readonly pool: SlotPool;
 
@@ -134,6 +143,7 @@ export class ProjectileStore {
     this.tags = new Uint32Array(capacity);
     this.art = new Uint8Array(capacity);
     this.tint = new Uint8Array(capacity);
+    this.look = new Uint8Array(capacity);
     this.spawnX = new Float32Array(capacity);
     this.spawnY = new Float32Array(capacity);
     this.ticksAlive = new Int16Array(capacity);
@@ -221,10 +231,14 @@ export class ProjectileStore {
     this.lastHitTarget[index] = -1;
     this.art[index] = art;
     this.tint[index] = tint;
+    this.look[index] = 0;
     return index;
   }
 
   despawn(index: number): void {
+    if ((this.look[index] ?? 0) !== 0 && this.onLookDespawn !== null) {
+      this.onLookDespawn(index);
+    }
     this.pool.release(index);
   }
 

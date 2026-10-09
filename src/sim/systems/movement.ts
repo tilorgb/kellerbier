@@ -63,6 +63,30 @@ export function stepPlayerMovement(sim: GameSim, input: Readonly<InputFrame>): v
   // walk into it, not a graze while running along the wall it sits on.
   sim.setLastMoveInput(inputX, inputY);
 
+  // The Dotsch's roll (`GameSim.startPlayerRoll`): steering, momentum and
+  // knockback are all off for its few ticks — the body goes where it was sent,
+  // at the roll's speed, and comes out of it at running pace.
+  if (sim.rollTicksLeft > 0) {
+    const rollSpeed = sim.rollSpeed;
+    const dirX = sim.rollDirectionX;
+    const dirY = sim.rollDirectionY;
+    moveBody(
+      sim.room,
+      transform,
+      index,
+      dirX * rollSpeed,
+      dirY * rollSpeed,
+      radius,
+      sim.playerFlies,
+    );
+    velocity[pairBase] = dirX * sim.stats.value(StatId.MoveSpeed);
+    velocity[pairBase + 1] = dirY * sim.stats.value(StatId.MoveSpeed);
+    push[pairBase] = 0;
+    push[pairBase + 1] = 0;
+    sim.rollTicksLeft -= 1;
+    return;
+  }
+
   let velocityX = velocity[pairBase] ?? 0;
   let velocityY = velocity[pairBase + 1] ?? 0;
 

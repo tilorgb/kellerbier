@@ -906,7 +906,22 @@ const shotLaserBig: SfxDefinition = {
   pitchJitterCents: 80,
 };
 
+const playerShotRollingR: SfxDefinition = {
+  id: 'player-shot-rolling-r',
+  description:
+    "The player's shot while the Rolling R is held: the shot sound is a rolled rrrr — a short voiced buzz under four quick taps of noise, the tongue trilling on the roof of the mouth. Quicker and lighter than `player-shot` so a held trigger stays a trill and not a growl.",
+  noise: {
+    filter: { type: 'bandpass', frequencyHz: 900, q: 3 },
+    durationSeconds: 0.016,
+    gain: 0.4,
+  },
+  tone: { instrument: 'clarinet', note: 'C3', durationSeconds: 0.1 },
+  repeat: { count: 4, intervalSeconds: 0.026 },
+  pitchJitterCents: 40,
+};
+
 export const SFX_DEFINITIONS: readonly SfxDefinition[] = [
+  playerShotRollingR,
   windupLaserCharge,
   shotLaser,
   shotLaserBig,

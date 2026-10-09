@@ -91,6 +91,7 @@ import { SpatialHash } from '../collision/spatial-hash.js';
 import { EventKind, EventQueue } from '../events/queue.js';
 import { DamageNumberStore } from '../particle/damage-numbers.js';
 import { DECAL_VARIANTS, DecalKind, DecalStore } from '../particle/decals.js';
+import { LITTER_CAPACITY, LITTER_SIZE, LITTER_VARIANTS } from '../particle/litter.js';
 import { ParticleStore } from '../particle/store.js';
 import {
   boulderDebris,
@@ -163,10 +164,12 @@ import { spawnPoisonCloud, stepClouds } from '../hazard/clouds.js';
 import { CheeseStore } from '../hazard/cheese-store.js';
 import { stepCheese } from '../hazard/cheese.js';
 import { WeatherStore, stepWeather } from '../hazard/weather.js';
+import { LobStore, launchLob, nearestEnemyTo, stepLobs } from '../systems/lobs.js';
 import { stepProjectiles, stepShooting } from '../systems/shooting.js';
 import {
   STATUS_BURN,
   STATUS_DAZE,
+  STATUS_SCARED,
   STATUS_EFFECT_STRIDE,
   STATUS_FREEZE,
   STATUS_SLOW,
@@ -928,6 +931,9 @@ export class GameSim {
 
   /** Everything in flight. Pooled, fixed capacity, never grows. */
   readonly projectiles: ProjectileStore;
+
+  /** Lobbed shots in flight (the Leberkas-Semmel) — see `systems/lobs.ts`. */
+  readonly lobs = new LobStore();
   /** Poison clouds in the room (#401). Cleared on every room load. */
   readonly clouds = new CloudStore();
   /** The Obazda's cheese puddles. Cleared on every room load. */
@@ -971,6 +977,9 @@ export class GameSim {
 
   /** Splashes left where something died. They persist for the room. */
   readonly decals: DecalStore;
+
+  /** Trash the Müll item's shots leave where they end — kept for the room, capped (`LITTER_CAPACITY`). */
+  readonly litter = new DecalStore(LITTER_CAPACITY);
 
   /**
    * This tick's events.
@@ -1063,6 +1072,36 @@ export class GameSim {
    */
   aimDirectionX = 0;
   aimDirectionY = 1;
+
+  /**
+   * The Pfeitinger Ultrabräu: ticks the trigger has been charging (0 when not),
+   * and the last beam it fired — start and end point, and the tick — for
+   * `render/laser-beam-view.ts`. See `systems/laser-shot.ts`.
+   */
+  laserCharge = 0;
+  readonly laserBeam = new Float32Array(4);
+  laserBeamTick = -1000;
+
+  /**
+   * The direction the player last walked in (unit vector, south at the start of
+   * a run), held through standing still. What the Waller-Kopf's gaze and the
+   * Dotsch's roll point along: movement, never the aim. Written by
+   * `setLastMoveInput`.
+   */
+  walkDirectionX = 0;
+  walkDirectionY = 1;
+
+  /**
+   * The Dotsch's dodge roll: ticks left (0 when not rolling), how long it
+   * began with, the unit direction it runs along and its speed in room units
+   * per tick. Driven by `systems/movement.ts`; `render/player-view.ts` reads
+   * the first two to tumble the body.
+   */
+  rollTicksLeft = 0;
+  rollTicksTotal = 0;
+  rollDirectionX = 0;
+  rollDirectionY = 1;
+  rollSpeed = 0;
 
   /**
    * The tick the last shot left the Schlauch on, or `-1` before the first
@@ -1869,6 +1908,9 @@ export class GameSim {
     this.particles = new ParticleStore(options.particleCapacity);
     this.damageNumbers = new DamageNumberStore();
     this.decals = new DecalStore();
+    this.projectiles.onLookDespawn = (index) => {
+      this.dropLitter(index);
+    };
     this.events = new EventQueue();
 
     this.biermarkenCount = this.character.startingBiermarken;
@@ -3486,6 +3528,11 @@ export class GameSim {
   setLastMoveInput(x: number, y: number): void {
     this.lastMoveInputX = x;
     this.lastMoveInputY = y;
+    if (x !== 0 || y !== 0) {
+      const length = Math.hypot(x, y);
+      this.walkDirectionX = x / length;
+      this.walkDirectionY = y / length;
+    }
   }
 
   /**
@@ -3549,6 +3596,7 @@ export class GameSim {
     }
     this.world.flush();
     this.projectiles.clear();
+    this.lobs.clear();
     this.clouds.clear();
     this.cheese.clear();
     this.weather.clear();
@@ -3560,6 +3608,7 @@ export class GameSim {
     this.particles.clear();
     this.damageNumbers.clear();
     this.decals.clear();
+    this.litter.clear();
     this.events.clear();
     this.postX.length = 0;
     this.postY.length = 0;
@@ -3743,8 +3792,135 @@ export class GameSim {
     this.playerMarkedTicks = Math.max(this.playerMarkedTicks, Math.max(0, ticks));
   }
 
+  /** How many uncollected pickups of one kind are lying in the room. */
+  countPickupsOfKind(kindId: string): number {
+    const definitionIndex = this.pickups.indexOf(kindId);
+    if (definitionIndex < 0) {
+      return 0;
+    }
+    let count = 0;
+    for (let index = 0; index < this.world.highWater; index++) {
+      if (
+        this.world.states[index] === World.ALIVE &&
+        this.pickupKind.data[index] === definitionIndex
+      ) {
+        if (((this.world.masks[index] ?? 0) & this.pickupKind.bit) !== 0) {
+          count += 1;
+        }
+      }
+    }
+    return count;
+  }
+
+  /**
+   * Drops a pickup of `kindId` on a random clear spot of the room, from the
+   * item-effects stream. Gives up (false) after a dozen tries rather than
+   * place one inside a wall.
+   */
+  spawnPickupAtRandomSpot(kindId: string): boolean {
+    const definitionIndex = this.pickups.indexOf(kindId);
+    if (definitionIndex < 0) {
+      return false;
+    }
+    const radius = this.pickups.at(definitionIndex).radius;
+    const random = this.random.itemEffects;
+    for (let attempt = 0; attempt < 12; attempt++) {
+      const x =
+        this.room.minX +
+        radius +
+        random.nextFloat() * (this.room.maxX - this.room.minX - radius * 2);
+      const y =
+        this.room.minY +
+        radius +
+        random.nextFloat() * (this.room.maxY - this.room.minY - radius * 2);
+      if (this.room.isClear(x, y, radius)) {
+        this.spawnPickup(kindId, x, y);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** Gives a shot a drawing other than the beer: `look` 1+ indexes the trash art (`render/litter-art.ts`). */
+  setProjectileLook(projectile: number, look: number): void {
+    this.projectiles.look[projectile] = look;
+  }
+
+  /** How many different pieces of trash there are to draw. */
+  get litterVariants(): number {
+    return LITTER_VARIANTS;
+  }
+
+  /** A Müll shot ends: its trash lands on the floor where it stopped. */
+  private dropLitter(projectile: number): void {
+    const look = this.projectiles.look[projectile] ?? 0;
+    if (look === 0) {
+      return;
+    }
+    this.litter.spawn(
+      this.projectiles.x[projectile] ?? 0,
+      this.projectiles.y[projectile] ?? 0,
+      LITTER_SIZE,
+      this.random.cosmetic.nextFloat() * Math.PI * 2,
+      0,
+      look - 1,
+    );
+  }
+
+  /** Whether any enemy body is still alive and in play (not hidden, submerged or latched). */
+  hasLivingEnemies(): boolean {
+    return nearestEnemyTo(this, 0, 0) >= 0;
+  }
+
+  /** Throws a Leberkas lob from the player at the nearest enemy. False when there is none to throw at. */
+  launchLeberkasLob(): boolean {
+    return launchLob(this, this.positionX(this.playerIndex), this.positionY(this.playerIndex));
+  }
+
+  /** Whether the held Bratwurst item is spent, so a Wurst a full health pool would refuse can re-arm it. */
+  canRearmBratwurst(): boolean {
+    const index = this.items.indexOf('bratwurst');
+    if (index < 0 || !this.inventory.has(index)) {
+      return false;
+    }
+    return this.inventory.stateOf(index).charge < this.effectiveMaxCharge(this.items.at(index));
+  }
+
+  /** Re-arms the held Bratwurst item (see `canRearmBratwurst`). Returns whether it was spent. */
+  rearmBratwurst(): boolean {
+    if (!this.canRearmBratwurst()) {
+      return false;
+    }
+    const index = this.items.indexOf('bratwurst');
+    this.inventory.stateOf(index).charge = this.effectiveMaxCharge(this.items.at(index));
+    return true;
+  }
+
+  /**
+   * Starts a dodge roll along the last walked direction (`walkDirectionX/Y`):
+   * invulnerable and through enemies for `ticks`, at `speed` room units a tick.
+   * Ignored while a roll is already running or the player is down.
+   */
+  startPlayerRoll(ticks: number, speed: number): boolean {
+    if (this.rollTicksLeft > 0 || this.umgfallnTicks > 0 || this.playerDead) {
+      return false;
+    }
+    this.rollTicksLeft = Math.max(1, Math.round(ticks));
+    this.rollTicksTotal = this.rollTicksLeft;
+    this.rollDirectionX = this.walkDirectionX;
+    this.rollDirectionY = this.walkDirectionY;
+    this.rollSpeed = speed;
+    this.makePlayerInvulnerable(this.rollTicksLeft + 1);
+    return true;
+  }
+
+  /** Whether the Dotsch's roll is running right now. */
+  get playerRolling(): boolean {
+    return this.rollTicksLeft > 0;
+  }
+
   get playerFlies(): boolean {
-    return this.characterFlies;
+    return this.characterFlies || this.hasItem('roter-stier');
   }
 
   /** Whether Ludwig's purse still has something in it — his damage rides on this. */
@@ -5398,7 +5574,7 @@ export class GameSim {
    */
   applyStatusEffect(
     target: number,
-    status: 'burn' | 'poison' | 'freeze' | 'slow' | 'daze',
+    status: 'burn' | 'poison' | 'freeze' | 'slow' | 'daze' | 'scared',
     ticks: number,
   ): void {
     if (ticks <= 0) {
@@ -5415,7 +5591,9 @@ export class GameSim {
             ? STATUS_SLOW
             : status === 'daze'
               ? STATUS_DAZE
-              : STATUS_FREEZE;
+              : status === 'scared'
+                ? STATUS_SCARED
+                : STATUS_FREEZE;
     data[base + slot] = Math.max(data[base + slot] ?? 0, Math.round(ticks));
   }
 
@@ -5469,6 +5647,46 @@ export class GameSim {
       }
       // A boss shrugs it off sooner: half the duration, on top of its milder slow.
       this.applyStatusEffect(index, 'daze', this.isStunResistant(index) ? ticks / 2 : ticks);
+    });
+  }
+
+  /**
+   * Scares (`STATUS_SCARED`) every living, non-boss enemy inside a cone: within
+   * `range` of `(x, y)` and within `halfAngleCos` of the unit direction
+   * `(dirX, dirY)` (the Waller-Kopf's gaze). Bosses never scare. Same mask as
+   * `slowEnemiesNear`.
+   */
+  scareEnemiesInCone(
+    x: number,
+    y: number,
+    dirX: number,
+    dirY: number,
+    range: number,
+    halfAngleCos: number,
+    ticks: number,
+  ): void {
+    if (ticks <= 0 || range <= 0) {
+      return;
+    }
+    const mask = CollisionLayer.Enemy | CollisionLayer.Obstacle;
+    this.broadphase.query(x, y, range, (index) => {
+      const layer = this.collision.data[index * 2] ?? 0;
+      if ((layer & mask) === 0 || this.isBomb(index) || this.isStunResistant(index)) {
+        return;
+      }
+      if ((this.health.data[index * 2] ?? 0) <= 0) {
+        return;
+      }
+      const dx = this.positionX(index) - x;
+      const dy = this.positionY(index) - y;
+      const distance = vectorLength(dx, dy);
+      if (distance > range) {
+        return;
+      }
+      if (distance > 0 && (dx * dirX + dy * dirY) / distance < halfAngleCos) {
+        return;
+      }
+      this.applyStatusEffect(index, 'scared', ticks);
     });
   }
 
@@ -6869,6 +7087,7 @@ export class GameSim {
     stepBlutwurz(this);
     stepShooting(this, input);
     stepProjectiles(this);
+    stepLobs(this);
     stepCollision(this);
     stepContacts(this);
     // Same broadphase, same reasoning as `stepContacts` — enemies pushing

@@ -521,4 +521,29 @@ export const bar: Record<DictKey, string> = {
     'D’Tradition sogt vorm Zwöfe-Läutn. Da Lauf sogt vor da Brauerei.',
   'items.zwetschgendatschi.description': 'A Raum ohne Treffa räum hoit 1. Reichweitn -15%',
   'items.zwetschgendatschi.flavourText': 'D’Zwetschgn san da Punkt. D’Rosinen san a Moanung.',
+  'items.roter-stier.description': 'Lauftempo +25%. Flügel: fliegt über Möbel, Pfützen und Gruben',
+  'items.roter-stier.flavourText': 'Gummiberdlsaft',
+  'items.waller-kopf.description': 'Gegner im Kegel deiner Laufrichtung erschrecken und rennen weg',
+  'items.waller-kopf.flavourText': 'Der Schrecken des Flusses',
+  'items.the-patriot.description': 'Schaden +1',
+  'items.the-patriot.flavourText': 'Du kennst den Text',
+  'items.dotsch.description': 'Aktiv: Ausweichrolle in Laufrichtung, unverwundbar beim Rollen',
+  'items.dotsch.flavourText': 'Dotsch? Dodge!',
+  'items.muell.description': 'Schüsse werden zu Abfall und bleiben im Raum liegen. Sonst nichts',
+  'items.muell.flavourText': '(Kein) Müll auf den Boden!',
+  'items.rolling-r.description':
+    'Schussgeschwindigkeit stark erhöht, kleinere Schüsse, Schaden -40%',
+  'items.rolling-r.flavourText': 'Einbürgerungstest',
+  'items.bratwurst.description':
+    'Aktiv: füllt einen Herzbehälter. Bratwurst bei vollen Herzen lädt auf',
+  'items.bratwurst.flavourText': 'Bratwurst ist Leben',
+  'items.krapfen.description': 'Jeder Schuss fliegt in alle vier Richtungen',
+  'items.krapfen.flavourText': 'Berliner, Pfannkuchen, Küchle',
+  'items.leberkas.description':
+    'Im Kampf erscheinen Leberkas-Semmeln; aufheben wirft einen Flächenschuss',
+  'items.leberkas.flavourText': 'Jeden Mittag, ohne Ausnahme.',
+  'items.pfeitinger-ultrabraeu.description':
+    'Laserschüsse: halten zum Aufladen, loslassen zum Feuern. Feuerrate verkürzt',
+  'items.pfeitinger-ultrabraeu.flavourText': 'Schied ei!',
+  'pickups.leberkas-semmel.description': 'Wirft auf den nächsten Gegner',
 };

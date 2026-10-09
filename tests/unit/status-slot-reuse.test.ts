@@ -28,7 +28,7 @@ function emptySim(): GameSim {
 
 function statusOf(sim: GameSim, index: number): number[] {
   // Every status the row holds — burn, poison, freeze, slow, the freeze
-  // cooldown and daze — not just the ones a test happens to name.
+  // cooldown, daze and scared — not just the ones a test happens to name.
   const base = index * STATUS_EFFECT_STRIDE;
   return Array.from(sim.statusEffect.data.slice(base, base + STATUS_EFFECT_STRIDE));
 }
@@ -55,6 +55,7 @@ describe('a recycled slot starts with no status effects', () => {
       sim.applyStatusEffect(slot, 'freeze', 300);
       sim.applyStatusEffect(slot, 'slow', 300);
       sim.applyStatusEffect(slot, 'daze', 300);
+      sim.applyStatusEffect(slot, 'scared', 300);
       sim.statusEffect.data[slot * STATUS_EFFECT_STRIDE + STATUS_FREEZE_COOLDOWN] = 300;
       expect(statusOf(sim, slot).every((ticks) => ticks > 0)).toBe(true);
       sim.world.destroy(victim);

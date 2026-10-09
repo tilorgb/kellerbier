@@ -34,6 +34,7 @@ const PLAYER_RADIUS = 2;
  * that named one of them would go stale the moment a second one existed.
  */
 const STORED_DESCRIPTION = 'Stored, not drunk';
+const REARM_DESCRIPTION = 'Bratwurst ready again';
 const PLAYER_SLOTS = 3;
 const player = new Float64Array(PLAYER_SLOTS);
 
@@ -95,7 +96,11 @@ function collectiblePickup(sim: GameSim, other: number): boolean {
   if (effect.kind === 'chest') {
     return !effect.locked || sim.keys > 0;
   }
-  return !(effect.kind === 'food' && sim.healthPoolFull(effect.pool));
+  if (effect.kind === 'food' && sim.healthPoolFull(effect.pool)) {
+    // The Bratwurst item eats the Wurst a full pool would refuse, to re-arm.
+    return effect.pool === 'red' && sim.canRearmBratwurst();
+  }
+  return true;
 }
 
 /**
@@ -225,7 +230,19 @@ function collect(sim: GameSim, other: number): boolean {
   // Use button buys one from a shop. Checked before the price is paid below,
   // not after, so those Biermarken are not spent on something unusable.
   if (effect.kind === 'food' && sim.healthPoolFull(effect.pool)) {
-    return false;
+    // ...except for a spent Bratwurst item, which takes it as its refill.
+    if (effect.pool === 'red' && !sim.canRearmBratwurst()) {
+      return false;
+    }
+    if (effect.pool !== 'red') {
+      return false;
+    }
+    const priced = ((sim.world.masks[other] ?? 0) & sim.pickupPrice.bit) !== 0;
+    if (priced && !sim.spendBiermarken(sim.pickupPrice.data[other] ?? 0)) {
+      return false;
+    }
+    sim.reportCollected(definition.name, REARM_DESCRIPTION);
+    return sim.rearmBratwurst();
   }
   if (effect.kind === 'opened-chest') {
     return false;
@@ -291,6 +308,9 @@ function collect(sim: GameSim, other: number): boolean {
       }
       sim.lowerPromille(effect.promille);
       sim.clearKater();
+      break;
+    case 'leberkas':
+      sim.launchLeberkasLob();
       break;
     case 'promille': {
       // Reads the live tunable rather than a value baked into content — see

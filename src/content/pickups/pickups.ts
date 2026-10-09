@@ -249,6 +249,17 @@ export const lockedChestOpen: PickupDefinition = {
   effect: { kind: 'opened-chest' },
 };
 
+/** The Semmel the Leberkas item scatters about the room; collecting one throws a lob (`pickup.ts`). */
+export const leberkasSemmel: PickupDefinition = {
+  id: 'leberkas-semmel',
+  name: 'Leberkas-Semmel',
+  description: 'pickups.leberkas-semmel.description',
+  radius: RADIUS,
+  tint: 0xd9a05b,
+  label: 'Lk',
+  effect: { kind: 'leberkas' },
+};
+
 export const PICKUP_DEFINITIONS: readonly PickupDefinition[] = [
   massFull,
   massHalf,
@@ -270,4 +281,5 @@ export const PICKUP_DEFINITIONS: readonly PickupDefinition[] = [
   lockedChest,
   chestOpen,
   lockedChestOpen,
+  leberkasSemmel,
 ];

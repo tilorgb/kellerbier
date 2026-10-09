@@ -252,6 +252,7 @@ export const PROJECTILE_TINT_COLOURS: Readonly<Record<ProjectileTintName, number
   schaum: 0xfff0c0,
   holz: 0xa0703a,
   schnupf: 0x94784a,
+  laser: 0xfff0b0,
 };
 
 export const EFFECT_PALETTE = {
@@ -652,4 +653,6 @@ export const STATUS_LOOK_PALETTE = {
   burnTint: 0xff7a2e,
   burnGlow: 0xff5a1a,
   slowTint: 0xa99bd6,
+  /** Scared by the Waller-Kopf: the pale, drained look of something that has just seen a catfish. */
+  scaredTint: 0xcfeee0,
 } as const;
