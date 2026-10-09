@@ -78,9 +78,9 @@ describe('Homebrew', () => {
     const red = sim.playerHealth;
     sim.applyPlayerDamage(2);
     expect(sim.playerHealth).toBe(red);
-    expect(sim.promille).toBeLessThan(before - 1);
+    expect(sim.promille).toBeCloseTo(before - sim.tuning.promille.hitPromilleLoss);
     expect(sim.playerDead).toBe(false);
-    sim.tuning.promille.current = 0.1;
+    sim.tuning.promille.current = sim.tuning.promille.hitPromilleLoss - 0.1;
     sim.applyPlayerDamage(1);
     expect(sim.playerDead).toBe(true);
   });

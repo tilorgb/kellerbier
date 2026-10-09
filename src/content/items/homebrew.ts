@@ -10,9 +10,8 @@ export const HOMEBREW_START_PROMILLE = 2.5;
  * blind."
  *
  * The Promille bar is twice as long (and drawn red), and so is the room to
- * drink before Umgfalln. Life *is* Promille: there are no hearts, damage is
- * paid out of the glass on top of the usual per-hit loss, and an empty glass
- * ends the run. Everything that
+ * drink before Umgfalln. Life *is* Promille: there are no hearts, a hit
+ * costs the Promille it always does, and an empty glass ends the run. Everything that
  * would drop is beer instead.
  *
  * `needsPromille`: with no meter there is no glass, so a sober run never

@@ -298,8 +298,6 @@ function homebrewBeerFor(pickupId: string): string {
   return /full|pack|ring|chest|-10$/.test(pickupId) ? 'mass-full' : 'mass-half';
 }
 
-/** Promille a point of damage costs the Homebrew's owner once soul hearts are spent (#484). */
-export const HOMEBREW_PROMILLE_PER_HALF = 0.5;
 
 export { ENEMY_PROFILES, EnemySize, type EnemyProfile, type EnemySizeId } from '../enemy/size.js';
 
@@ -4590,9 +4588,8 @@ export class GameSim {
     this.lowerPromille(this.tuning.promille.hitPromilleLoss);
 
     // Homebrew (#484): the glass is the health, there are no hearts at all.
-    // The damage is paid in Promille, on top of the usual hit loss above.
+    // A hit costs exactly the Promille it always does (above); nothing more.
     if (this.lifeIsPromille) {
-      this.lowerPromille(amount * HOMEBREW_PROMILLE_PER_HALF);
       this.checkHomebrewDeath();
       return;
     }
