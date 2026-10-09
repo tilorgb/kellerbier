@@ -537,6 +537,7 @@ export class GameView {
     this.projectiles.setLean(lean);
     this.particles.setLean(lean);
     this.pedestals.setLean(lean);
+    this.rampView.setLean(lean);
     this.scenery.setLean(lean);
     this.lighting.setLean(lean);
   }
