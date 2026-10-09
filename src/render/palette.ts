@@ -80,6 +80,8 @@ export const ENTITY_PALETTE = {
   invulnerableShellTint: 0x8fa2b8,
   /** What an elite (#156) is tinted — a warm gold, as far from `invulnerableShellTint`'s cold blue-grey as the palette allows. */
   eliteTint: 0xf2c14e,
+  /** What a body dazed by the Hendlgeruch (`STATUS_DAZE`) is mixed toward — a sickly yellow-green, apart from frost's blue and elite gold. */
+  dazedTint: 0xb9c24a,
   /**
    * What a boss reddens toward while it winds up an attack (#193).
    *

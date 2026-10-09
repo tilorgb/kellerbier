@@ -66,7 +66,7 @@ Columns:
 | gartenzwerg-hut | Gartenzwerg-Hut | Passive | Every 5s without a hit adds an extra shot (up to 3). One hit resets it | Face down in the flower bed. Somehow this is still the lucky pose. | 2 | Treasure, Shop, Boss | Any |
 | gugelhupf | Gugelhupf | Passive | Shots ring back to you, hitting again on the way. Shot Speed -25% | A cake with a hole in it, so it cooks through. That is the whole trick. | 2 | Treasure, Shop, Boss | Any |
 | haferlschuh | Haferlschuh | Passive | Move Speed +15%, immune to slick puddles | Every nail hand-driven by someone who takes this far too seriously. | 0 | Treasure, Shop | Any |
-| hendlgeruch | Hendlgeruch | Passive | Constantly pulls distant enemies toward you | Carries for a kilometre. Everyone within a kilometre now has plans. | 1 | Treasure, Shop, Secret | Any |
+| hendlgeruch | Hendlgeruch | Passive | Every five seconds a one-second smell pulse draws enemies in to a close ring; anyone inside it is dazed (slower to move and shoot). Alois wears a roast chicken as a hat | Carries for a kilometre. Everyone within a kilometre now has plans. | 2 | Treasure, Shop, Secret | Any |
 | kartoffelsalat | Kartoffelsalat | Passive | Shots split into two chunks on impact. Range +15% | Every family recipe is the only correct one and they cannot all be right. | 1 | Treasure, Shop | Any |
 | karussell | Karussell | Active (5 s) | One spin flings everything close away from you, throwing off a latched Zecke — no damage | The operator has not once checked a safety harness. The line never gets shorter. | 1 | Treasure, Shop | Any |
 | kletzenbrot | Kletzenbrot | Passive | Shots poison what they hit. Damage -15% | Keeps for a month. Tastes like it has. | 2 | Shop, Boss, Secret | Any |

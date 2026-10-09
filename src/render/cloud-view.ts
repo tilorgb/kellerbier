@@ -47,7 +47,7 @@ function hash(x: number, y: number): number {
 }
 
 /** Smoothed value noise at (x, y), cell size `cell`. */
-function noise(x: number, y: number, cell: number): number {
+export function noise(x: number, y: number, cell: number): number {
   const gx = Math.floor(x / cell);
   const gy = Math.floor(y / cell);
   const fx = x / cell - gx;
@@ -62,7 +62,7 @@ function noise(x: number, y: number, cell: number): number {
 }
 
 /** A white texture whose alpha is `alpha(x, y)`, so a material colour tints it. */
-function alphaTexture(size: number, alpha: (x: number, y: number) => number): DataTexture {
+export function alphaTexture(size: number, alpha: (x: number, y: number) => number): DataTexture {
   const data = new Uint8Array(size * size * 4);
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
@@ -92,7 +92,7 @@ function fogDisc(): DataTexture {
 }
 
 /** A soft round puff with a lumpy edge. */
-function softPuff(): DataTexture {
+export function softPuff(): DataTexture {
   const size = 64;
   return alphaTexture(size, (x, y) => {
     const d = Math.hypot((x + 0.5) / size - 0.5, (y + 0.5) / size - 0.5) * 2;

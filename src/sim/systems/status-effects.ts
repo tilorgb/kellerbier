@@ -37,7 +37,34 @@ export const STATUS_SLOW = 3;
  * one ends. Its own slot because it must outlive the freeze it follows.
  */
 export const STATUS_FREEZE_COOLDOWN = 4;
-export const STATUS_EFFECT_STRIDE = 5;
+/**
+ * Dazed by the Hendlgeruch's smell: ticks left. A body in the cloud moves at
+ * `DAZE_SPEED_FACTOR` of its speed and its attack state counter advances at
+ * `DAZE_STATE_ADVANCE` of the normal rate (see `stepEnemies`) — slower to
+ * move, slower to shoot. Its own slot so it reads (and renders) differently
+ * from frost's slow.
+ */
+export const STATUS_DAZE = 5;
+export const STATUS_EFFECT_STRIDE = 6;
+
+/** Velocity multiplier per tick while dazed; a stun-resistant body (boss) gets the milder one. */
+export const DAZE_SPEED_FACTOR = 0.6;
+export const DAZE_SPEED_FACTOR_RESISTANT = 0.8;
+/** Of every `DAZE_STATE_PERIOD` ticks a dazed body's state counter advances on this many: 3/5 = 60% fire rate. */
+export const DAZE_STATE_PERIOD = 5;
+export const DAZE_STATE_ADVANCE = 3;
+export const DAZE_STATE_ADVANCE_RESISTANT = 4;
+
+/** Whether the body in `index` is dazed. */
+export function isDazed(sim: GameSim, index: number): boolean {
+  return (sim.statusEffect.data[index * STATUS_EFFECT_STRIDE + STATUS_DAZE] ?? 0) > 0;
+}
+
+/** Whether a dazed body's state counter advances this tick (a deterministic 3-in-5 pattern, staggered per body). */
+export function dazeAllowsAdvance(sim: GameSim, index: number): boolean {
+  const advance = sim.isStunResistant(index) ? DAZE_STATE_ADVANCE_RESISTANT : DAZE_STATE_ADVANCE;
+  return (sim.tick + index) % DAZE_STATE_PERIOD < advance;
+}
 
 /** Advances every body's burn/poison/freeze/slow by one tick. */
 export function stepStatusEffects(sim: GameSim): void {
@@ -86,6 +113,14 @@ export function stepStatusEffects(sim: GameSim): void {
         velocity[index * 2 + 1] = (velocity[index * 2 + 1] ?? 0) * tuning.slowSpeedFactor;
       }
       status[base + STATUS_SLOW] = slow - 1;
+    }
+
+    const daze = status[base + STATUS_DAZE] ?? 0;
+    if (daze > 0) {
+      const factor = sim.isStunResistant(index) ? DAZE_SPEED_FACTOR_RESISTANT : DAZE_SPEED_FACTOR;
+      velocity[index * 2] = (velocity[index * 2] ?? 0) * factor;
+      velocity[index * 2 + 1] = (velocity[index * 2 + 1] ?? 0) * factor;
+      status[base + STATUS_DAZE] = daze - 1;
     }
 
     const burn = status[base + STATUS_BURN] ?? 0;

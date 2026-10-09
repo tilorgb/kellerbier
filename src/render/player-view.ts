@@ -27,9 +27,15 @@ import {
   STATUS_MARK_GLOW,
   STATUS_POISON_TINT,
 } from './palette.js';
+import { HAT_ANCHORS } from './hat-anchors.js';
 import { SCHLAUCH_OCTANTS, type PlayerArt, type PlayerBodyKey } from './player-art.js';
 import { ACTOR_PIXELS_PER_UNIT } from './resolution.js';
 import { Billboard } from './world/billboard.js';
+
+/** Authored pixels a worn hat sprite sinks below the old hat's bottom edge, so nothing of the felt peeks out. */
+const HAT_SINK = 1;
+/** Room units the hat sits in front of the body quad. */
+const HAT_FORWARD = 0.06;
 
 /**
  * Alois: a four-way body and the Schlauch he shoots from, two billboards
@@ -102,6 +108,8 @@ export class PlayerView {
   private readonly art: PlayerArt;
   private readonly body = new Billboard();
   private readonly schlauch = new Billboard();
+  /** The worn hat item (`ItemDefinition.hat`), drawn over wherever Alois's own hat is in this frame. */
+  private readonly hat = new Billboard();
   private readonly clipStates = new ClipStateResolver();
   private facing: PlayerFacingIndex = PlayerFacing.South;
   private mirror = 1;
@@ -130,9 +138,12 @@ export class PlayerView {
       this.schlauch.setTexture(nozzle);
     }
     this.schlauch.castShadow = false;
+    this.hat.castShadow = false;
+    // The body's own quad sits a hair behind the hat and would shade it black.
+    this.hat.mesh.receiveShadow = false;
     this.body.visible = true;
     this.schlauch.visible = true;
-    this.group.add(this.body.mesh, this.schlauch.mesh);
+    this.group.add(this.body.mesh, this.schlauch.mesh, this.hat.mesh);
   }
 
   setLean(lean: number): void {
@@ -225,6 +236,7 @@ export class PlayerView {
     }
 
     this.syncSchlauch(sim);
+    this.syncHat(sim, strip.frames[this.frame], spiritTint, flashing);
   }
 
   /** Table lookup, not a template string: this runs every frame and a fresh string is garbage. */
@@ -246,6 +258,42 @@ export class PlayerView {
       this.elapsedMs -= clip.totalMs;
       this.playing = AnimationState.Idle;
     }
+  }
+
+  /**
+   * Covers Alois's own hat with the held hat item's sprite. Where the felt sits in
+   * each frame is `HAT_ANCHORS` (generated from the strips, `tools/art/hat-anchors.mjs`):
+   * the sprite's bottom-centre goes there, sunk `HAT_SINK` pixels so a brim's corner
+   * never peeks out underneath.
+   */
+  private syncHat(sim: GameSim, frame: Texture | undefined, tint: number, flashing: boolean): void {
+    const key = sim.activeHat();
+    const texture = key === undefined ? undefined : this.art.hats[key];
+    const anchor = HAT_ANCHORS[this.keyFor(this.facing, this.drunk)]?.[this.frame];
+    if (texture === undefined || anchor === undefined || frame === undefined || sim.playerDead) {
+      this.hat.visible = false;
+      return;
+    }
+    this.hat.setTexture(texture, this.mirror);
+    this.hat.visible = true;
+    this.hat.tint = tint;
+    this.hat.flash = flashing;
+    const frameWidth = frame.displayWidth;
+    const frameHeight = frame.displayHeight;
+    const sideways = ((anchor[0] - frameWidth / 2) * this.mirror) / ACTOR_PIXELS_PER_UNIT;
+    // Up the face of the body quad from its feet: the anchor row is counted from the frame's top.
+    const up = (frameHeight - anchor[1] - HAT_SINK) / ACTOR_PIXELS_PER_UNIT;
+    const upY = Math.cos(this.lean);
+    const upZ = Math.sin(this.lean);
+    // A hair in front of the body, along the quad's normal, so the hat always wins the depth test.
+    const normalY = -Math.sin(this.lean);
+    const normalZ = Math.cos(this.lean);
+    this.hat.place(
+      this.x + sideways,
+      0.2 + up * upY + HAT_FORWARD * normalY,
+      this.footZ + up * upZ + HAT_FORWARD * normalZ,
+      this.lean,
+    );
   }
 
   private syncSchlauch(sim: GameSim): void {
@@ -291,6 +339,7 @@ export class PlayerView {
   destroy(): void {
     this.body.dispose();
     this.schlauch.dispose();
+    this.hat.dispose();
     this.group.removeFromParent();
   }
 }

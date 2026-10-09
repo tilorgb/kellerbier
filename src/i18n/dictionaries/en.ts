@@ -424,7 +424,8 @@ export const en = {
   'items.haferlschuh.description': 'Move Speed +15%, immune to slick puddles and ice',
   'items.haferlschuh.flavourText':
     'Every nail hand-driven by someone who takes this far too seriously.',
-  'items.hendlgeruch.description': 'Constantly pulls distant enemies toward you',
+  'items.hendlgeruch.description':
+    'Every few seconds a wave of smell draws enemies in; those close enough are dazed',
   'items.hendlgeruch.flavourText':
     'Carries for a kilometre. Everyone within a kilometre now has plans.',
   'items.kartoffelsalat.description': 'Shots split into two chunks on impact. Range +15%',

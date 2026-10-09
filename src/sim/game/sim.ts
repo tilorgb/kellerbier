@@ -164,6 +164,7 @@ import { WeatherStore, stepWeather } from '../hazard/weather.js';
 import { stepProjectiles, stepShooting } from '../systems/shooting.js';
 import {
   STATUS_BURN,
+  STATUS_DAZE,
   STATUS_EFFECT_STRIDE,
   STATUS_FREEZE,
   STATUS_SLOW,
@@ -4864,6 +4865,14 @@ export class GameSim {
     return index >= 0 && this.inventory.has(index);
   }
 
+  private readonly itemHasHat = (index: number): boolean => this.items.at(index).hat !== undefined;
+
+  /** The hat sprite key Alois wears (`ItemDefinition.hat`): the most recently picked-up hat item's, or `undefined` for his own. */
+  activeHat(): string | undefined {
+    const index = this.inventory.latestHeld(this.itemHasHat);
+    return index < 0 ? undefined : this.items.at(index).hat;
+  }
+
   /** An item's runtime state (stack count, active charge). Throws for an unknown id. */
   itemState(id: string): ItemRuntimeState {
     const index = this.items.indexOf(id);
@@ -5368,7 +5377,7 @@ export class GameSim {
    */
   applyStatusEffect(
     target: number,
-    status: 'burn' | 'poison' | 'freeze' | 'slow',
+    status: 'burn' | 'poison' | 'freeze' | 'slow' | 'daze',
     ticks: number,
   ): void {
     if (ticks <= 0) {
@@ -5383,7 +5392,9 @@ export class GameSim {
           ? STATUS_POISON
           : status === 'slow'
             ? STATUS_SLOW
-            : STATUS_FREEZE;
+            : status === 'daze'
+              ? STATUS_DAZE
+              : STATUS_FREEZE;
     data[base + slot] = Math.max(data[base + slot] ?? 0, Math.round(ticks));
   }
 
@@ -5413,6 +5424,24 @@ export class GameSim {
         return;
       }
       this.applyStatusEffect(index, 'freeze', ticks);
+    });
+  }
+
+  /** Dazes (`STATUS_DAZE`) every living enemy within `radius` of a point, for `ticks`. Same mask as `slowEnemiesNear`. */
+  dazeEnemiesNear(x: number, y: number, radius: number, ticks: number): void {
+    if (ticks <= 0 || radius <= 0) {
+      return;
+    }
+    const mask = CollisionLayer.Enemy | CollisionLayer.Obstacle;
+    this.broadphase.query(x, y, radius, (index) => {
+      const layer = this.collision.data[index * 2] ?? 0;
+      if ((layer & mask) === 0 || this.isBomb(index)) {
+        return;
+      }
+      if ((this.health.data[index * 2] ?? 0) <= 0) {
+        return;
+      }
+      this.applyStatusEffect(index, 'daze', ticks);
     });
   }
 
@@ -5478,7 +5507,7 @@ export class GameSim {
    * direction sign flips, so a pull bleeds off and stacks with other pushes
    * on the same enemy exactly the way a push does.
    */
-  pullEnemiesNear(x: number, y: number, radius: number, strength: number): void {
+  pullEnemiesNear(x: number, y: number, radius: number, strength: number, stopRadius = 0): void {
     if (strength <= 0 || radius <= 0) {
       return;
     }
@@ -5493,6 +5522,11 @@ export class GameSim {
       const dx = otherX - x;
       const dy = otherY - y;
       const distance = vectorLength(dx, dy);
+      // Already inside `stopRadius` (the Hendlgeruch's daze ring): drawn in
+      // as far as wanted, never onto the point itself.
+      if (distance <= stopRadius) {
+        return;
+      }
       const dirX = distance > 0 ? dx / distance : 1;
       const dirY = distance > 0 ? dy / distance : 0;
       addPush(this, index, -dirX * strength, -dirY * strength);
