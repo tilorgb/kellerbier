@@ -2162,6 +2162,12 @@ export const ITEM_ART = {
   'roter-stier': pick('roter-stier'),
   'the-patriot': (cv) => patriotWave(cv),
   'waller-kopf': pick('waller-kopf'),
+  schweinsbraten: pick('schweinsbraten'),
+  radi: pick('radi'),
+  semmel: pick('semmel'),
+  rosswurst: pick('rosswurst'),
+  kaesekuchen: pick('kaesekuchen'),
+  homebrew: pick('homebrew'),
 };
 
 /**

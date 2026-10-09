@@ -12,7 +12,11 @@ import { iconRoles, type UiKit } from './ui/kit.js';
 import { uiText, UI_TEXT_HEIGHT } from './ui/text.js';
 
 const BAR_WIDTH = 60;
+/** The Homebrew's bar (#484) is twice as long. */
+const LONG_BAR_WIDTH = BAR_WIDTH * 2;
 const BAR_HEIGHT = 9;
+/** Red the Homebrew's bar is pushed towards. */
+const HOMEBREW_RED = 0xc4202a;
 /** The well's own border, inside which the fill is drawn. */
 const BAR_INSET = 2;
 const ICON_GAP = 2;
@@ -24,6 +28,13 @@ const FLASH_TICKS = 60;
 const FLASH_FADE_START = 36;
 const FLASH_UP = 0x5fb85a;
 const FLASH_DOWN = 0xd9403a;
+
+/** A colour pulled most of the way to the Homebrew's red, so the bar reads red whatever the tier. */
+function redden(colour: number): number {
+  const mix = (shift: number): number =>
+    Math.round((((colour >> shift) & 0xff) + ((HOMEBREW_RED >> shift) & 0xff) * 2) / 3);
+  return (mix(16) << 16) | (mix(8) << 8) | mix(0);
+}
 
 interface FlashPart {
   readonly icon: Sprite;
@@ -50,6 +61,8 @@ export class PromilleHud {
   private readonly kit: UiKit;
   private readonly icon: Sprite;
   private readonly fill: Sprite;
+  private readonly well: ReturnType<UiKit['wellSprite']>;
+  private readonly longWell: ReturnType<UiKit['wellSprite']>;
   private readonly label: BitmapText;
   private readonly iconWidth: number;
   /** Damage, then fire rate — see `syncFlash`. */
@@ -65,9 +78,13 @@ export class PromilleHud {
     this.view.addChild(this.icon);
 
     const barX = this.iconWidth + ICON_GAP;
-    const well = kit.wellSprite(BAR_WIDTH, BAR_HEIGHT);
-    well.position.set(barX, 0);
-    this.view.addChild(well);
+    this.well = kit.wellSprite(BAR_WIDTH, BAR_HEIGHT);
+    this.well.position.set(barX, 0);
+    this.view.addChild(this.well);
+    this.longWell = kit.wellSprite(LONG_BAR_WIDTH, BAR_HEIGHT);
+    this.longWell.position.set(barX, 0);
+    this.longWell.visible = false;
+    this.view.addChild(this.longWell);
 
     this.fill = new Sprite(kit.solid);
     this.fill.position.set(barX + BAR_INSET, BAR_INSET);
@@ -113,10 +130,16 @@ export class PromilleHud {
     // high tolerance has pushed the ceiling.
     const cap = promilleCapFor(sim.trinkfest, sim.tuning.promille);
     const ratio = Math.min(1, Math.max(0, sim.promille / cap));
-    this.fill.width = Math.max(0, (BAR_WIDTH - BAR_INSET * 2) * ratio);
+    const homebrew = sim.hasItem('homebrew');
+    const barWidth = homebrew ? LONG_BAR_WIDTH : BAR_WIDTH;
+    this.well.visible = !homebrew;
+    this.longWell.visible = homebrew;
+    this.label.position.x = this.iconWidth + ICON_GAP + barWidth + LABEL_GAP;
+    this.fill.width = Math.max(0, (barWidth - BAR_INSET * 2) * ratio);
     const tierColor = neutralReskin ? HUD_PALETTE.promilleTierNeutral : HUD_PALETTE.promilleTier;
     const katerColor = neutralReskin ? HUD_PALETTE.promilleKaterNeutral : HUD_PALETTE.promilleKater;
-    const colour = sim.hasKater ? katerColor : tierColor[sim.promilleTier];
+    const baseColour = sim.hasKater ? katerColor : tierColor[sim.promilleTier];
+    const colour = homebrew ? redden(baseColour) : baseColour;
     this.fill.tint = colour;
     this.icon.texture = this.kit.icon('promille', iconRoles(colour));
 

@@ -287,6 +287,17 @@ export const ETERNAL_HEALTH_MAX = 12;
 /** Half-heart units that make up one whole eternal heart — what `applyPlayerDamage` spends on a save. */
 export const ETERNAL_HALF_UNIT = 2;
 
+/** The red pool's ceiling no max-health item can lift past, in half-heart units (12 containers). */
+export const PLAYER_MAX_HEALTH_CAP = 24;
+
+/**
+ * What the Homebrew turns a drop into (#484): a full Maß for anything big
+ * (a full dose, a pack, a ring, a chest, a ten), half a Maß for the rest.
+ */
+function homebrewBeerFor(pickupId: string): string {
+  return /full|pack|ring|chest|-10$/.test(pickupId) ? 'mass-full' : 'mass-half';
+}
+
 export { ENEMY_PROFILES, EnemySize, type EnemyProfile, type EnemySizeId } from '../enemy/size.js';
 
 /** Ticks before a killed body on a spawn post comes back. Two and a half seconds. */
@@ -3968,6 +3979,68 @@ export class GameSim {
   }
 
   /**
+   * Raises the red pool's ceiling by `containers` heart containers (#484),
+   * clamped to `PLAYER_MAX_HEALTH_CAP`, and heals `fill` half-Maß into it.
+   * Lowering it (negative) is not supported — the Blutwurz penalty writes
+   * the pool directly.
+   */
+  raisePlayerMaxHealth(containers: number, fill = 0): void {
+    const health = this.health.data;
+    const index = this.playerIndex;
+    const max = Math.min(
+      PLAYER_MAX_HEALTH_CAP,
+      (health[index * 2 + 1] ?? 0) + Math.max(0, containers) * 2,
+    );
+    health[index * 2 + 1] = max;
+    health[index * 2] = Math.min(max, (health[index * 2] ?? 0) + Math.max(0, fill));
+  }
+
+  /** Cuts the filled red Maß down to `filled` half-Maß without touching the ceiling (#484). */
+  setPlayerHealthAtMost(filled: number): void {
+    const health = this.health.data;
+    const index = this.playerIndex;
+    health[index * 2] = Math.min(health[index * 2] ?? 0, Math.max(0, filled));
+  }
+
+  /**
+   * Turns every red container into soul hearts (#484): the red pool drops to
+   * nothing — no ceiling, nothing filled — and the same number of half-hearts
+   * is banked as soul, up to `SOUL_HEALTH_MAX`. Red health stays gone until a
+   * max-health item raises the ceiling again.
+   */
+  convertRedToSoul(): void {
+    const health = this.health.data;
+    const index = this.playerIndex;
+    const max = health[index * 2 + 1] ?? 0;
+    health[index * 2 + 1] = 0;
+    health[index * 2] = 0;
+    this.addSoulHealth(max);
+  }
+
+  /**
+   * Homebrew (#484): life *is* Promille. True while the item is held in a run
+   * that has the meter — in a sober run the item is never offered, and the
+   * guard keeps a console-granted copy from killing the player at once.
+   */
+  get lifeIsPromille(): boolean {
+    return this.promilleUnlocked && this.hasItem('homebrew');
+  }
+
+  /**
+   * Homebrew's death: Promille at zero outside a knockdown ends the run — no
+   * hearts to fall back on. Called once a tick by `stepPromille` and after every hit.
+   */
+  checkHomebrewDeath(): void {
+    if (this.playerDeadFlag || !this.lifeIsPromille || this.umgfallnTicksValue > 0) {
+      return;
+    }
+    if (this.tuning.promille.current > 0) {
+      return;
+    }
+    this.killPlayer();
+  }
+
+  /**
    * The pickup toast currently on screen, or `null` once it has aged out —
    * see `toastTicks`'s doc comment. Read by the render layer once a frame,
    * the same pattern `roomWarmupTicks`/the boss banner already use.
@@ -4512,6 +4585,13 @@ export class GameSim {
     // the meter after that, but "every landed hit costs Promille" being true
     // of the mechanism beats it being true of most of the paths through it.
     this.lowerPromille(this.tuning.promille.hitPromilleLoss);
+
+    // Homebrew (#484): the glass is the health, there are no hearts at all.
+    // A hit costs exactly the Promille it always does (above); nothing more.
+    if (this.lifeIsPromille) {
+      this.checkHomebrewDeath();
+      return;
+    }
 
     // Reaching exactly zero is lethal, same as going below it — a hit does
     // not need to overkill to end a run, it only needs to use up what is left.
@@ -8058,6 +8138,10 @@ export class GameSim {
     }
     if (chosen === null) {
       return null;
+    }
+    if (this.lifeIsPromille) {
+      // Homebrew (#484): everything the room would have dropped is beer.
+      chosen = homebrewBeerFor(chosen);
     }
     const radius = this.pickups.get(chosen).radius;
     const safe = this.safeSpawnPoint(x, y, radius);

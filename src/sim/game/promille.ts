@@ -63,7 +63,7 @@ const UMGFALLN_AT = 4.5;
  * lowering Trinkfest shortens a tier rather than skipping one entirely.
  */
 export function umgfallnThresholdFor(trinkfest: number, tuning: PromilleTuning): number {
-  return UMGFALLN_AT + trinkfest * tuning.trinkfestStageWidth;
+  return (UMGFALLN_AT + trinkfest * tuning.trinkfestStageWidth) * tuning.capScale;
 }
 
 /**
@@ -75,7 +75,7 @@ export function umgfallnThresholdFor(trinkfest: number, tuning: PromilleTuning):
  * (lower) threshold is crossed.
  */
 export function promilleCapFor(trinkfest: number, tuning: PromilleTuning): number {
-  return PROMILLE_MAX + Math.max(0, trinkfest) * tuning.trinkfestStageWidth;
+  return (PROMILLE_MAX + Math.max(0, trinkfest) * tuning.trinkfestStageWidth) * tuning.capScale;
 }
 
 /**

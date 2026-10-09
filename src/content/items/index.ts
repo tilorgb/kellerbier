@@ -72,6 +72,12 @@ import { rollingR } from './rolling-r.js';
 import { roterStier } from './roter-stier.js';
 import { thePatriot } from './the-patriot.js';
 import { wallerKopf } from './waller-kopf.js';
+import { rosswurst } from './rosswurst.js';
+import { kaesekuchen } from './kaesekuchen.js';
+import { radi } from './radi.js';
+import { homebrew } from './homebrew.js';
+import { schweinsbraten } from './schweinsbraten.js';
+import { semmel } from './semmel.js';
 
 /**
  * Every item in the game.
@@ -168,6 +174,12 @@ export const ITEM_DEFINITIONS: readonly ItemDefinition[] = [
   roterStier,
   thePatriot,
   wallerKopf,
+  rosswurst,
+  kaesekuchen,
+  radi,
+  homebrew,
+  schweinsbraten,
+  semmel,
 ];
 
 export {
@@ -224,4 +236,10 @@ export {
   traktorAuspuff,
   watschn,
   weisswurst,
+  rosswurst,
+  kaesekuchen,
+  radi,
+  homebrew,
+  schweinsbraten,
+  semmel,
 };
