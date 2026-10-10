@@ -20,6 +20,11 @@ export function flatMaterial(texture: Texture | null): MeshBasicMaterial {
     depthTest: false,
     depthWrite: false,
     side: DoubleSide,
+    // Transparent + DoubleSide otherwise makes three draw every quad twice
+    // (back faces, then front) and flag the material for a program re-check
+    // on each half — ~100 `getProgram` calls a frame for the HUD alone.
+    // One pass is identical for a flat, depth-test-free quad.
+    forceSinglePass: true,
     toneMapped: false,
   });
 }

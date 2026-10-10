@@ -32,6 +32,7 @@ export function buildLanternSprite(): Mesh {
       transparent: true,
       opacity: 0,
       side: DoubleSide,
+      forceSinglePass: true,
       toneMapped: false,
     }),
   );

@@ -101,6 +101,7 @@ class ParticleLayer {
         depthWrite: false,
         blending: AdditiveBlending,
         side: DoubleSide,
+        forceSinglePass: true,
         toneMapped: false,
       }),
       capacity,

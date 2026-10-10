@@ -115,6 +115,7 @@ export class FingerhakelnView {
           transparent: true,
           depthWrite: false,
           side: DoubleSide,
+          forceSinglePass: true,
         }),
       );
       this.add(rope);

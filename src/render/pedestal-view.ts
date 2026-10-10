@@ -162,6 +162,7 @@ export class PedestalView {
         opacity: BEAM_ALPHA,
         depthWrite: false,
         side: DoubleSide,
+        forceSinglePass: true,
         toneMapped: false,
       }),
     );

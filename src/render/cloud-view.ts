@@ -143,6 +143,7 @@ export class CloudView {
             transparent: true,
             depthWrite: false,
             side: DoubleSide,
+            forceSinglePass: true,
           }),
         );
         this.add(rising);

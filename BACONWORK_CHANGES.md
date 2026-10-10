@@ -1,5 +1,81 @@
 # Branch `Bacon` — Änderungen gegenüber `main`
 
+Stand: 09.10.2026 · Basis: `main` bei `67211575` (nach dem Merge von #485). Performance,
+Nebel-Fluch, Boss-Intro und Gegner-Spawns. Jede Änderung wurde im laufenden Spiel
+(Headless-Browser) oder per Unit-Test gegengeprüft; wo beides fehlt, steht es dabei.
+
+## Auf einen Blick
+
+| Bereich | Änderung | Spürbar im Spiel? |
+|---|---|---|
+| Performance | Transparente, beidseitige Materialien werden nur noch einmal gezeichnet | ja, flüssiger |
+| Performance | Ausgeblendete Menüs und Overlays kosten pro Frame nichts mehr | ja, flüssiger |
+| Nebel-Fluch | Weißer, treibender Wolkenschleier über dem Spiel statt nur fehlender Minimap | ja |
+| Boss-Intro | Erscheint pro Boss-Raum nur einmal, nicht bei jedem Wiederbetreten | ja |
+| Gegner | Gegner, die sich nicht bewegen, spawnen nicht mehr direkt nebeneinander | ja |
+
+---
+
+## 1. Performance
+
+Gemessen in Chrome mit echter GPU, ohne Frame-Limit, Seed 1:
+
+| | Vorher | Nachher |
+|---|---|---|
+| JS pro Frame (Median), leerer Raum | 2,8 ms | 0,6 ms |
+| JS pro Frame (Median), 30 Gegner + Schießen | 3,0 ms | 0,8 ms |
+| Draw-Calls | 116 | 76 |
+
+### Doppeltes Zeichnen (`src/render/gfx/sprite.ts`, `graphics.ts` und Welt-Effekte)
+- **Vorher:** three.js zeichnet ein Material, das `transparent` und `side: DoubleSide` ist, in
+  zwei Durchgängen (Rück-, dann Vorderseite) und setzt dabei jedes Mal `needsUpdate`. Das HUD
+  allein löste so rund 100 Shader-Parameter-Neuberechnungen pro Frame aus, dazu 40 überflüssige
+  Draw-Calls.
+- **Jetzt:** Alle diese Materialien haben `forceSinglePass: true`. Für flache Quads sieht ein
+  Durchgang gleich aus. Betrifft HUD, Partikel, Projektile, Giftwolke, Obazda, Schnee, Canopy,
+  Laternen, Bodensprites, Risse, Podest-Strahl, Fingerhakeln, Hendl-Duft und die Figuren
+  (kein Neuberechnen mehr beim Ausblenden).
+
+### Ausgeblendete UI (`src/render/gfx/layer.ts`)
+- **Vorher:** Der UI-Baum hat im Lauf rund 2800 Objekte (alle Menüs und Overlays), sichtbar sind
+  etwa 170. three.js hat in jedem Frame die Matrizen aller Objekte neu berechnet.
+- **Jetzt:** Vor dem Zeichnen werden nur sichtbare Teilbäume aktualisiert. Code, der Matrizen
+  ausgeblendeter Knoten liest (`Container.toLocal` u. a.), aktualisiert sie vorher selbst.
+
+## 2. Nebel-Fluch sichtbar (`src/render/nebel-veil.ts`, neu)
+- **Vorher:** Den Nebel-Fluch merkte man nur daran, dass die Minimap fehlt.
+- **Jetzt:** Ein weißer Schleier liegt über der Spielwelt, unter dem HUD:
+  - Randdunst, zum Bildrand hin dichter, in der Mitte frei, damit der Kampf lesbar bleibt.
+  - Eine Wolkenschicht, die langsam seitwärts treibt, in Stufen gezeichnet (2×2-Pixelblöcke).
+  - Bei reduzierter Bewegung stehen die Wolken still und sind etwas durchsichtiger.
+- Dev-Vorschau: `?nebel` zeigt den Schleier ohne den Fluch (`src/app/build-mode.ts`, nur im
+  Dev-Build).
+- Im Spiel geprüft (Keller und Ebene 2, Screenshots). Werte als Konstanten oben in der Datei.
+
+## 3. Boss-Intro nur einmal (`src/app/main.ts`)
+- **Vorher:** Das Intro lief bei jedem Betreten eines Boss-Raums. War der Boss schon besiegt,
+  erschien es ohne Bild, nur als Banner.
+- **Jetzt:** Pro Lauf wird gemerkt, in welchen Boss-Räumen (Ebene + Raum) das Intro schon lief.
+  Auf der nächsten Ebene kommt es normal wieder.
+- Im Spiel geprüft: Große Kellerassel besiegt, raus, wieder rein → kein Intro. Wiederbetreten mit
+  lebendem Boss nicht eigens getestet (gleicher Mechanismus).
+
+## 4. Stationäre Gegner nicht nebeneinander (`src/sim/room/spread-stationary.ts`, neu)
+- **Betrifft:** Gegner, deren Zustände sich alle nicht bewegen (`pause`): Schimmelfleck,
+  Zapfhahn, Gartenzwerg, Blaskapellist, Fliegenpilz, Gipfelkreuz, Schneekanone. Bosse, Minibosse
+  und der Ladenbesitzer bleiben, wo sie stehen.
+- **Regel:** Mindestens 48 Einheiten (3 Kacheln) Abstand. Ein zu naher Gegner wird auf den
+  nächsten freien Punkt (kein Hindernis, kein Bach) mit genug Abstand verschoben, gesucht in
+  Ringen um die ursprüngliche Stelle. Ohne Zufall, ein Seed bleibt reproduzierbar. Passt in
+  Reichweite nichts, bleibt die ursprüngliche Stelle.
+- Häufigkeit über je 400 generierte Räume: Ebene 1 und 2 je 8 Verschiebungen, Ebene 3 zwei,
+  Ebene 4 drei; danach kein Paar mehr zu nah.
+- Test: `tests/unit/stationary-spawn-spread.test.ts`. Nicht per Screenshot im Spiel geprüft.
+
+---
+
+# Branch `Bacon` (erste Runde, gemergt mit #485)
+
 Stand: 09.10.2026 · Basis: `main` bei `a17fcc08`. Fehlerbehebungen und kleine Spielmechaniken aus
 dem Playtesting. Jede Änderung wurde im laufenden Spiel (Headless-Browser) oder per Unit-Test
 gegengeprüft; wo beides fehlt, steht es dabei.

@@ -65,6 +65,7 @@ export class Billboard {
     const material = new MeshStandardMaterial({
       alphaTest: 0.5,
       side: DoubleSide,
+      forceSinglePass: true,
       roughness: 0.9,
       metalness: 0,
       emissive: 0x000000,
@@ -74,6 +75,7 @@ export class Billboard {
       depthPacking: RGBADepthPacking,
       alphaTest: 0.5,
       side: DoubleSide,
+      forceSinglePass: true,
     });
     this.mesh = new Mesh(geometry, material);
     this.mesh.customDepthMaterial = this.depth;

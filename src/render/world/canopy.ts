@@ -285,6 +285,7 @@ export class Canopy {
       blending: AdditiveBlending,
       depthWrite: false,
       side: DoubleSide,
+      forceSinglePass: true,
       toneMapped: false,
     });
     const geometry = shaftGeometry();
@@ -465,6 +466,7 @@ function buildPlane(texture: CanvasTexture): Mesh {
     opacity: 0,
     depthWrite: false,
     side: DoubleSide,
+    forceSinglePass: true,
   });
   const plane = new Mesh(new PlaneGeometry(1, 1), material);
   plane.customDepthMaterial = new MeshDepthMaterial({

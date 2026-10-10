@@ -62,6 +62,7 @@ export class SnowfallView {
     opacity: 0.8,
     depthWrite: false,
     side: DoubleSide,
+    forceSinglePass: true,
   });
   private alpine = false;
   private reducedMotion = false;

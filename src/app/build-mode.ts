@@ -92,3 +92,15 @@ export function skipsIntroCards(
 ): boolean {
   return enabled && new URLSearchParams(search).has('nocards');
 }
+
+/**
+ * Whether `?nebel` forces the Nebel veil on (`render/nebel-veil.ts`) whatever
+ * the floor's curse — a dev-only preview, so the look can be judged without
+ * waiting for the curse roll. Nothing in a built game reads it.
+ */
+export function forcesNebelVeil(
+  search: string = window.location.search,
+  enabled: boolean = import.meta.env.DEV,
+): boolean {
+  return enabled && new URLSearchParams(search).has('nebel');
+}
