@@ -33,6 +33,8 @@ export interface TitleScreenActions {
   readonly onContinue: () => void;
   readonly onSettings: () => void;
   readonly onCollection: () => void;
+  /** The medal shelf (#506). */
+  readonly onMedals: () => void;
   readonly onCredits: () => void;
   readonly onQuit: () => void;
   /** Re-checked on every `show()` — whether a save exists to resume into. */
@@ -159,6 +161,7 @@ export class TitleScreen implements MenuScreen {
       },
       { label: t(locale, 'ui.title.settings'), onSelect: actions.onSettings },
       { label: t(locale, 'ui.title.collection'), onSelect: actions.onCollection },
+      { label: t(locale, 'ui.title.medals'), onSelect: actions.onMedals },
       { label: t(locale, 'ui.title.credits'), onSelect: actions.onCredits },
       { label: t(locale, 'ui.title.quit'), onSelect: actions.onQuit },
     ];
