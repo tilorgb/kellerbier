@@ -59,11 +59,9 @@ export const apfelkuchenMitRosinen: ItemDefinition = {
     },
     onPickup: (ctx) => {
       ctx.sim.addPlayerHealth(HEAL_AMOUNT);
-      // `GameSim.pickUpItem` resolves `modifyStats` *before* `onPickup` runs,
-      // against the freshly-allocated state's default charge (0) — so without
-      // this, "Klauber already held" would only take effect a tick late.
+      // `GameSim.pickUpItem` re-resolves `modifyStats` after this hook
+      // (#524), so "Klauber already held" takes effect on this very pickup.
       ctx.state.charge = ctx.sim.hasItem(KLAUBER_ID) ? 1 : 0;
-      ctx.sim.refreshItemStats(ctx.itemId);
     },
   },
 };
