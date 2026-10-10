@@ -88,16 +88,32 @@ describe('a Bierfassl blast clears boulders (#4)', () => {
     expect(sim.room.isClear(200, 72, 2)).toBe(false);
   });
 
-  it('breaks a boulder the cross only partly overlaps (bomb a little off-axis)', () => {
+  it('breaks exactly the tiles its snapped cross touches, however off-grid the bomb sits', () => {
+    // A 5×5 field of one-tile boulders on the room's tile grid. The bomb is
+    // set down at a raw position straddling four tiles; the blast is the one
+    // tile-wide cross over the tile the bomb's centre is in — nothing else.
     const room = new RoomGeometry(0, 0, 320, 180);
-    room.addBlock(120, 84, 136, 100, true);
+    for (let row = 0; row < 5; row++) {
+      for (let col = 0; col < 5; col++) {
+        room.addBlock(64 + col * 16, 32 + row * 16, 80 + col * 16, 48 + row * 16, true);
+      }
+    }
     const sim = emptySim(room);
 
-    // 12 units off the boulder's row: its centre is outside the 8-unit band,
-    // its body is not.
-    detonateAt(sim, 100, 80);
+    // Tile (col 2, row 2) spans x 96–112, y 64–80; the bomb sits near its
+    // bottom-right corner, 14 units into the tile on both axes.
+    detonateAt(sim, 110, 78);
 
-    expect(sim.room.isClear(128, 92, 4)).toBe(true);
+    const standing = (col: number, row: number): boolean =>
+      !sim.room.isClear(72 + col * 16, 40 + row * 16, 2);
+    for (let row = 0; row < 5; row++) {
+      for (let col = 0; col < 5; col++) {
+        // The cross is row 2 and column 2 (arms reach past the field).
+        expect(standing(col, row), `tile ${String(col)},${String(row)}`).toBe(
+          col !== 2 && row !== 2,
+        );
+      }
+    }
   });
 
   it('replays a partly broken run exactly on a revisit', () => {

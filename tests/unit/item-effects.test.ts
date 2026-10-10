@@ -3,6 +3,7 @@ import { entityIndex } from '../../src/sim/ecs/entity.js';
 import { GameSim, TARGET_HEALTH, TARGET_RADIUS } from '../../src/sim/game/sim.js';
 import type { ItemDefinition } from '../../src/sim/item/definition.js';
 import { RoomGeometry } from '../../src/sim/room/geometry.js';
+import { snapBlastAxis } from '../../src/sim/systems/bombs.js';
 import { hasTag, ProjectileTag } from '../../src/sim/projectile/tags.js';
 import { applyDamageAt } from '../../src/sim/systems/impact.js';
 import { ProjectileTeam } from '../../src/sim/projectile/store.js';
@@ -323,7 +324,10 @@ describe('onBombDetonate', () => {
       sim.step(IDLE);
     }
 
-    expect(seen).toEqual([{ x: bombX, y: bombY }]);
+    // The blast centres on the tile the bomb sits in, not its raw position.
+    expect(seen).toEqual([
+      { x: snapBlastAxis(sim.room.minX, bombX), y: snapBlastAxis(sim.room.minY, bombY) },
+    ]);
   });
 
   it('never fires for an item that is not held', () => {
