@@ -290,6 +290,16 @@ export const bar: Record<DictKey, string> = {
   'ui.settings.privacy.shareToggle': 'Anonyme Playtest-Telemetrie teiln',
 
   // --- Playtest build: welcome screen and post-run questions ---------------
+  'ui.crash.title': 'Do is wos schiefganga',
+  'ui.crash.runBody':
+    'Des Spiel is über an Fehler gstolpert und steht. Dei Lauf is bis kurz davor gspeichert — lad nei, dann geht’s do weida.',
+  'ui.crash.resumeBody':
+    'Dei gspeicherter Lauf hod se ned fortsetzn lassn. Er bleibt, wia er war: probier’s nomoi oder fang frisch o.',
+  'ui.crash.reload': 'Nei ladn und weidaspuin',
+  'ui.crash.discard': 'Lauf wegschmeißn',
+  'ui.crash.copy': 'Fehlerbericht kopiern',
+  'ui.crash.copied': 'Kopiert — eifügn in an Fehlerbericht.',
+  'ui.crash.copyFailed': 'D’ Zwischenablag is ned erreichbar.',
   'ui.playtest.welcome.title': 'Dankschön fürs Testn vo Kellerbier',
   'ui.playtest.welcome.body':
     'Des is a Alpha: a friaher, no ned fertiga Stand, und a Teil vo da Grafik und vom ' +

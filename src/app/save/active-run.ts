@@ -48,6 +48,15 @@ export class ActiveRunRecorder {
     this.frames.push(frame.moveX, frame.moveY, frame.aimX, frame.aimY, frame.buttons);
   }
 
+  /**
+   * Takes back the last recorded frame — for a tick that threw (#520). The
+   * frame is recorded before its tick runs; left in the log, a resume would
+   * replay straight into the same exception.
+   */
+  dropLastFrame(): void {
+    this.frames.length = Math.max(0, this.frames.length - FRAME_LOG_STRIDE);
+  }
+
   toSave(): ActiveRunSave {
     return {
       seed: this.seed,
