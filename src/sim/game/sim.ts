@@ -5352,6 +5352,15 @@ export class GameSim implements FeatSource {
     // not race it.
     this.syncItemSetModifiers();
     item.hooks.onPickup?.({ sim: this, itemId: id, state });
+    // Again after `onPickup` (#524): a hook that sets the state its own
+    // `modifyStats` reads (Weißwurst's "still before noon", Lebkuchenherz's
+    // slogan) was resolved against the state *before* it ran, and nothing
+    // re-resolved it until that state next changed — for Weißwurst, never.
+    // A no-op for every item whose `onPickup` leaves its stats alone.
+    if (item.hooks.onPickup !== undefined && item.hooks.modifyStats !== undefined) {
+      this.markItemStatsDirty(index);
+      this.syncItemStatModifiers();
+    }
     return state;
   }
 
