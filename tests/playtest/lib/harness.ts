@@ -498,6 +498,9 @@ export function runPlaytest(options: PlaytestOptions): PlaytestOutcome {
               crossing.floor,
               crossing.direction,
               crossing.hiddenDoors,
+              false,
+              crossing.staircaseContent,
+              crossing.neighborRoomId,
             )
           : sim.transitionTo(
               crossing.template,

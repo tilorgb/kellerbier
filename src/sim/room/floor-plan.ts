@@ -293,21 +293,78 @@ function shapeFootprints(shape: RoomShape): readonly (readonly Cell[])[] {
 }
 
 /**
- * The single room is the core of a floor; a multi-cell "big" room is a rare
- * landmark, not a shape a player expects to see every floor. Weighted low
- * enough that most floors roll none at all, and `MAX_BIG_ROOMS_PER_FLOOR`
- * (`buildSkeleton`) backstops the rest — a run of luck on this roll can never
- * turn a floor into a string of landmarks. `T` stays the rarest of the big
- * shapes: a 3x3 landmark room should read as a genuine find (#107).
+ * The single room is the core of a floor; a multi-cell "big" room is a
+ * landmark. How often one turns up is a property of the floor
+ * (`FloorConfig.bigRoomChance`): a rare find on floor 1, a regular feature of
+ * the late floors, so a run asks the player to cover more ground per room as
+ * it goes on. `T` stays the rarest of the big shapes on the early floors — a
+ * 3x3 landmark room should read as a genuine find (#107) — and the mix tilts
+ * toward the large shapes (`2x2`, `T`) on later floors.
+ *
+ * Floor 1 reproduces the original flat weights exactly (94% `1x1`, then
+ * `1x2` 3%, `L` 1.5%, `2x2` 1%, `T` 0.5%).
+ *
+ * `availableShapes` is the set of big shapes this floor has an ordinary
+ * template for — `tryGenerateFloor` throws a whole attempt away when a slot's
+ * shape has none (`eligibleTemplates`), so rolling one would only burn a
+ * retry. A floor missing a shape's content (floors 3-4 have no `2x2`/`T`
+ * yet) simply never rolls it, and its share goes to `1x1`.
  */
-function chooseShape(rng: Rng): RoomShape {
-  return rng.weightedPick<RoomShape>([
-    { value: '1x1', weight: 0.94 },
-    { value: '1x2', weight: 0.03 },
-    { value: 'L', weight: 0.015 },
-    { value: '2x2', weight: 0.01 },
-    { value: 'T', weight: 0.005 },
-  ]);
+const BIG_SHAPE_MIX_FLOOR_1: Readonly<Record<Exclude<RoomShape, '1x1'>, number>> = {
+  '1x2': 0.5,
+  L: 0.25,
+  '2x2': 1 / 6,
+  T: 1 / 12,
+};
+const BIG_SHAPE_MIX_FLOOR_7: Readonly<Record<Exclude<RoomShape, '1x1'>, number>> = {
+  '1x2': 0.25,
+  L: 0.3,
+  '2x2': 0.25,
+  T: 0.2,
+};
+const LAST_FLOOR_FOR_BIG_SHAPE_MIX = 7;
+
+function chooseShape(
+  rng: Rng,
+  config: FloorConfig,
+  availableShapes: ReadonlySet<RoomShape>,
+): RoomShape {
+  const t = Math.min(Math.max((config.floor - 1) / (LAST_FLOOR_FOR_BIG_SHAPE_MIX - 1), 0), 1);
+  const choices: { value: RoomShape; weight: number }[] = [];
+  let bigWeight = 0;
+  for (const shape of ['1x2', 'L', '2x2', 'T'] as const) {
+    if (!availableShapes.has(shape)) {
+      continue;
+    }
+    const mix =
+      BIG_SHAPE_MIX_FLOOR_1[shape] +
+      (BIG_SHAPE_MIX_FLOOR_7[shape] - BIG_SHAPE_MIX_FLOOR_1[shape]) * t;
+    const weight = config.bigRoomChance * mix;
+    bigWeight += weight;
+    choices.push({ value: shape, weight });
+  }
+  return rng.weightedPick<RoomShape>([{ value: '1x1', weight: 1 - bigWeight }, ...choices]);
+}
+
+/**
+ * The multi-cell shapes `templatePool` can actually fill on `floorTag` with an
+ * ordinary (no `specialRole`) room — see `chooseShape`'s `availableShapes`.
+ */
+function bigShapesWithContent(
+  templatePool: readonly RoomTemplate[],
+  floorTag: string,
+): ReadonlySet<RoomShape> {
+  const shapes = new Set<RoomShape>();
+  for (const template of templatePool) {
+    if (
+      template.metadata.shape !== '1x1' &&
+      template.metadata.specialRole === undefined &&
+      template.metadata.floorTags.includes(floorTag)
+    ) {
+      shapes.add(template.metadata.shape);
+    }
+  }
+  return shapes;
 }
 
 /**
@@ -735,19 +792,12 @@ function placeStaircase(
  * on #20 that a floor has "a recognisable shape rather than always sprawling
  * into a blob".
  */
-/**
- * A big (multi-cell, non-staircase) room is a rare landmark (#big-rooms) —
- * this is the hard backstop behind `chooseShape`'s low weights, so an unlucky
- * run of rolls can never turn a floor into a string of them. One per floor
- * is enough for the shape to still read as special.
- */
-const MAX_BIG_ROOMS_PER_FLOOR = 1;
-
 function buildSkeleton(
   rng: Rng,
   config: FloorConfig,
   targetCount: number,
   staircasePool: readonly StaircaseContentTemplate[],
+  bigShapes: ReadonlySet<RoomShape>,
 ): Skeleton | null {
   const occupied = new Map<string, number>();
   const rooms: PlacedRoom[] = [];
@@ -862,7 +912,10 @@ function buildSkeleton(
       continue;
     }
 
-    const shape = bigRoomsPlaced >= MAX_BIG_ROOMS_PER_FLOOR ? '1x1' : chooseShape(rng);
+    const shape =
+      bigRoomsPlaced >= config.maxBigRooms || bigShapes.size === 0
+        ? '1x1'
+        : chooseShape(rng, config, bigShapes);
     const footprint = placeShape(rng, occupied, anchor, shape, config.gridRadius);
     if (footprint !== null) {
       place(footprint, shape);
@@ -1529,6 +1582,7 @@ function tryGenerateFloor(
     config,
     Math.max(targetCount, MIN_ROOMS_FOR_ROLES),
     staircasePool,
+    bigShapesWithContent(templatePool, config.floorTag),
   );
   if (skeleton === null) {
     return null;

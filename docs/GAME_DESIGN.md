@@ -211,6 +211,9 @@ Isaac's skeleton, kept deliberately familiar:
   doesn't say so reads as the game dragging, not as a lucky roll. Floor 1 is suppressed to 0%
   for a save that has never beaten a boss, so a first-time player's tutorial floor is never the
   unlucky big one.
+- **Floors grow with the run.** `minRooms`/`maxRooms` rise from floor to floor (never shrinking), and
+  so does the chance of a multi-cell room: rare on floor 1, a regular feature by floor 7, with
+  the large shapes (`2x2`, `T`) getting a bigger share later (`bigRoomChance`/`maxBigRooms`, `DECISIONS.md` #134).
 - Treasure and Shop are dead-ends where possible.
 - An ordinary room of any shape (`1x1` through `T`) is **procedurally generated**
   (`sim/room/generate-room.ts`): obstacle cover aimed at a tuned band, a per-floor enemy roster

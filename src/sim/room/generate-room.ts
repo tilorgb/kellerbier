@@ -72,6 +72,7 @@ import {
   type SingleCellRoomTemplate,
 } from '../../content/rooms/definition.js';
 import { MAX_ROOM_BLOCKS } from './geometry.js';
+import type { StaircaseContent } from './staircase.js';
 import { STREAM_REACH_TILES } from './stream-course.js';
 import { splitmix32, type Rng } from '../rng/rng.js';
 import { DEFAULT_ROOM_GEN_TUNING, type RoomGenTuning } from '../tuning.js';
@@ -1719,6 +1720,54 @@ export function generateMultiCellRoom(
       ...darkField(spec, params),
     },
   };
+}
+
+export interface StaircaseGenSpec extends Omit<RoomGenContext, 'rng'> {
+  readonly stepCount: number;
+  readonly startDoor: DoorDirection;
+  readonly endDoor: DoorDirection;
+  /** One independent stream per step, so a step's layout never depends on how many draws another took. */
+  readonly rngForStep: (step: number) => Rng;
+}
+
+/**
+ * Fills a staircase (#112) with what any ordinary room gets: cover, enemies,
+ * pickups and props. Each step is a full single-screen room generated on its
+ * own, with a door on the first and last step only — the two wall edges the
+ * staircase actually opens. `compileStaircaseRoom` then lays each step's
+ * layout on that step's rect and drops whatever lands in the patch two
+ * steps share, which is what keeps the generator's per-step reachability
+ * proof valid for the whole flight.
+ */
+export function generateStaircaseContent(
+  spec: StaircaseGenSpec,
+  params: RoomGenTuning = DEFAULT_ROOM_GEN_TUNING,
+): StaircaseContent {
+  const steps: RoomSubLayout[] = [];
+  for (let step = 0; step < spec.stepCount; step++) {
+    const doors: DoorDirection[] = [];
+    if (step === 0) {
+      doors.push(spec.startDoor);
+    }
+    if (step === spec.stepCount - 1) {
+      doors.push(spec.endDoor);
+    }
+    steps.push(
+      generateRoom(
+        {
+          roomId: `${spec.roomId}-step${String(step)}`,
+          floor: spec.floor,
+          floorTag: spec.floorTag,
+          distanceFromStart: spec.distanceFromStart,
+          bossDistance: spec.bossDistance,
+          rng: spec.rngForStep(step),
+          doors,
+        },
+        params,
+      ),
+    );
+  }
+  return { steps };
 }
 
 function warnFallback(spec: RoomGenContext): void {

@@ -18,10 +18,15 @@ import { ROOM_TEMPLATES, STAIRCASE_TEMPLATES, type DoorDirection } from '../cont
 import { type RoomDirection, GameSim, MAX_COLLIDER_RADIUS } from '../sim/game/sim.js';
 import { promilleMeterLabel, promilleTierDisplayName } from '../sim/game/promille.js';
 import { type FloorPlan, type FloorPlanRoom, generateFloor } from '../sim/room/floor-plan.js';
-import { generateMultiCellRoom, generateRoom, roomGenSeed } from '../sim/room/generate-room.js';
+import {
+  generateMultiCellRoom,
+  generateRoom,
+  generateStaircaseContent,
+  roomGenSeed,
+} from '../sim/room/generate-room.js';
 import { chooseSprinkle } from '../sim/room/sprinkle.js';
 import type { RoomGenTuning } from '../sim/tuning.js';
-import { validateStaircaseTemplate } from '../sim/room/staircase.js';
+import { validateStaircaseTemplate, type StaircaseContent } from '../sim/room/staircase.js';
 import { Rng } from '../sim/rng/rng.js';
 import {
   type CompiledDoor,
@@ -386,10 +391,13 @@ function planTemplate(room: FloorPlanRoom): unknown {
  * dev can walk through fresh layouts without touching the run seed.
  */
 let proceduralRooms = new Map<string, unknown>();
+/** What stands on each staircase room's steps (`generateStaircaseContent`), by floor-plan room id. */
+let proceduralStaircases = new Map<string, StaircaseContent>();
 let roomGenSalt = 0;
 
 function rebuildProceduralRooms(plan: FloorPlan, runSeed: number, baseTuning: RoomGenTuning): void {
   const next = new Map<string, unknown>();
+  const nextStaircases = new Map<string, StaircaseContent>();
   const config = FLOOR_CONFIGS.find((candidate) => candidate.floor === plan.floor);
   if (config !== undefined) {
     const params: RoomGenTuning = {
@@ -403,7 +411,33 @@ function rebuildProceduralRooms(plan: FloorPlan, runSeed: number, baseTuning: Ro
     // generation rather than placing the same authored room twice.
     const sprinkledTemplateIds = new Set<string>();
     for (const room of plan.rooms) {
-      if (room.role !== 'normal' || room.staircaseTemplateId !== undefined) {
+      if (room.staircaseTemplateId !== undefined) {
+        const staircase = STAIRCASE_TEMPLATES_BY_ID.get(room.staircaseTemplateId);
+        if (staircase !== undefined) {
+          nextStaircases.set(
+            room.id,
+            generateStaircaseContent(
+              {
+                roomId: room.id,
+                floor: plan.floor,
+                floorTag: config.floorTag,
+                distanceFromStart: room.distanceFromStart,
+                bossDistance,
+                stepCount: staircase.stepCount,
+                startDoor: staircase.startDoor,
+                endDoor: staircase.endDoor,
+                rngForStep: (step) =>
+                  new Rng(
+                    roomGenSeed(runSeed, plan.floor, `${room.id}#${String(step)}`, roomGenSalt),
+                  ),
+              },
+              params,
+            ),
+          );
+        }
+        continue;
+      }
+      if (room.role !== 'normal') {
         continue;
       }
       const rng = new Rng(roomGenSeed(runSeed, plan.floor, room.id, roomGenSalt));
@@ -451,6 +485,7 @@ function rebuildProceduralRooms(plan: FloorPlan, runSeed: number, baseTuning: Ro
     }
   }
   proceduralRooms = next;
+  proceduralStaircases = nextStaircases;
 }
 
 /** The template for a room — the procedurally generated one when there is one, else the authored pick. */
@@ -4202,6 +4237,8 @@ WASD move   arrows aim and fire
           direction,
           hiddenDoorsFor(floorPlan, neighborRoomId, revealedEdges),
           force,
+          proceduralStaircases.get(neighborRoomId),
+          neighborRoomId,
         )
       : (() => {
           const neighborPlacement = buildPlacement(neighborRoom);
