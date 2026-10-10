@@ -104,6 +104,8 @@ export const EnemyFacing = {
   Crawl: 2,
   /** Never mirrored, strip or no strip (#437). */
   Fixed: 3,
+  /** Turns its per-heading strips to the axis it aims down, and plays `attack` while it fires. */
+  Aim: 4,
 } as const;
 export type EnemyFacingId = (typeof EnemyFacing)[keyof typeof EnemyFacing];
 
@@ -131,8 +133,12 @@ function compileFacing(name: string | undefined, where: string): EnemyFacingId {
       return EnemyFacing.Crawl;
     case 'fixed':
       return EnemyFacing.Fixed;
+    case 'aim':
+      return EnemyFacing.Aim;
     default:
-      throw new Error(`${where} names facing "${name}", which is not one of mirror, crawl, fixed`);
+      throw new Error(
+        `${where} names facing "${name}", which is not one of mirror, crawl, fixed, aim`,
+      );
   }
 }
 
@@ -459,6 +465,8 @@ export interface CompiledEnemy {
   readonly perches: boolean;
   /** The definition's `facing`, resolved once for the same reason as `telegraphBloat`. */
   readonly facing: EnemyFacingId;
+  /** `mould` as a number: 0 none, 1 spore, 2 patch. */
+  readonly mould: 0 | 1 | 2;
   /** The definition's `phaseArtBelow` (#437), or 0 for a body that never swaps its art. */
   readonly phaseArtBelow: number;
   /**
@@ -675,6 +683,7 @@ export class EnemyRegistry {
       ignoresBodies: definition.ignoresBodies === true,
       perches: states.some((state) => state.movement.behaviour === 'returnToPerch'),
       facing: compileFacing(definition.facing, where),
+      mould: definition.mould === 'patch' ? 2 : definition.mould === 'spore' ? 1 : 0,
       phaseArtBelow: compilePhaseArtBelow(definition.phaseArtBelow, where),
       zone: states.some((state) => state.movement.behaviour === 'swimInZone') ? 'waldbach' : null,
     };

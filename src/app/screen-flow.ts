@@ -81,6 +81,8 @@ export interface ScreenFlowControllerDeps {
     readonly isHeld: (id: string) => boolean;
     /** What still earns a locked item (#503), or `null` — `app/meta`'s `itemUnlockGoal`. */
     readonly lockedGoal: (id: string) => string | null;
+    /** The enemy tab's discovery set (`app/collection.ts`'s `EnemyDiscovery`). */
+    readonly isEnemyDiscovered?: (id: string) => boolean;
   };
   /**
    * The run-setup screen's side of the save (#493/#505): the roster and
@@ -221,6 +223,9 @@ export class ScreenFlowController {
           this.closeCollection();
         },
         isDiscovered: deps.collection.isDiscovered,
+        ...(deps.collection.isEnemyDiscovered === undefined
+          ? {}
+          : { isEnemyDiscovered: deps.collection.isEnemyDiscovered }),
         // Only a paused run has an inventory worth marking; from the title
         // screen the run behind it (if any) is not the one being browsed.
         isHeld: (id) => this.collectionOrigin === 'paused' && deps.collection.isHeld(id),
@@ -785,6 +790,9 @@ export class ScreenFlowController {
   private cycleSettingsTab(delta: 1 | -1): void {
     if (this.flow.is('settings')) {
       this.settings.cycleTab(delta);
+    } else if (this.flow.is('collection')) {
+      // The same tab buttons page the Collection between items and enemies.
+      this.collection.switchTab(delta > 0 ? 'enemies' : 'items');
     }
   }
 }

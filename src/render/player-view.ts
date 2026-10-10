@@ -22,7 +22,7 @@ import {
   type PlayerHeading,
 } from './animation/state.js';
 import type { Texture } from './gfx/index.js';
-import { BLUTWURZ_SPIRIT_TINT, SNEEZE_GLOW_TINT, STATUS_MARK_GLOW } from './palette.js';
+import { BLUTWURZ_SPIRIT_TINT, STATUS_MARK_GLOW } from './palette.js';
 import { HAT_ANCHORS } from './hat-anchors.js';
 import { SCHLAUCH_OCTANTS, type PlayerArt, type PlayerBodyKey } from './player-art.js';
 import { ACTOR_PIXELS_PER_UNIT } from './resolution.js';
@@ -79,18 +79,11 @@ const DRUNK_KEYS: Readonly<Record<PlayerFacingIndex, PlayerBodyKey>> = {
   [PlayerFacing.North]: 'drunk-north',
   [PlayerFacing.Side]: 'drunk-side',
 };
-/**
- * The sneeze blink (#396): how fast it pulses when a build-up has just begun
- * and when it is about to go, in radians per millisecond, and how bright the
- * pulse's trough and peak are. Through the inhale it stops pulsing and holds
- * the peak — the held breath is the one moment that should not flicker.
- */
-const SNEEZE_PULSE_SLOW = 0.012;
-const SNEEZE_PULSE_FAST = 0.05;
-const SNEEZE_GLOW_MIN = 0.03;
+/** The face band `enableHeadTint` blushes, as fractions of the frame from the bottom: rows 16 to 7 of 32. */
+const HEAD_BAND_FROM = 16 / 32;
+const HEAD_BAND_TO = 25 / 32;
 /** How hard the flare's mark glows (#40) — plainly visible, under the sneeze's peak. */
 const MARK_GLOW_STRENGTH = 0.45;
-const SNEEZE_GLOW_MAX = 0.22;
 /**
  * Where a strip keeps the lids-shut twin of a frame (#396,
  * `tools/art/authoring/alois.mjs`): the sober strip's idle and two walk
@@ -121,7 +114,6 @@ export class PlayerView {
   private elapsedMs = 0;
   private lastNowMs: number | null = null;
   private lean = 0;
-  private sneezePhase = 0;
   private x = 0;
   private y = 0;
 
@@ -131,6 +123,8 @@ export class PlayerView {
 
   constructor(art: PlayerArt) {
     this.art = art;
+    // His face: rows 7 to 15 of the 32-row frame, under the hat and above the collar.
+    this.body.enableHeadTint(HEAD_BAND_FROM, HEAD_BAND_TO);
     const south = art.body.south.frames[0];
     if (south !== undefined) {
       this.body.setTexture(south);
@@ -225,7 +219,6 @@ export class PlayerView {
     const flashing = sim.playerHurtTick >= 0 && sim.tick - sim.playerHurtTick < 3;
     const buildUp = sim.sneezeBuildUp;
     if (flashing || buildUp <= 0) {
-      this.sneezePhase = 0;
       this.body.flash = flashing;
       // Marked by a flare (#40): a steady pink glow for as long as the mark
       // burns, emissive so a dark room cannot hide what every enemy can see.
@@ -235,10 +228,11 @@ export class PlayerView {
         this.body.setGlow(look.glow, look.glowStrength);
       }
     } else {
-      this.sneezePhase += deltaMs * lerp(SNEEZE_PULSE_SLOW, SNEEZE_PULSE_FAST, buildUp);
-      const pulse = buildUp >= 1 ? 1 : Math.sin(this.sneezePhase) * 0.5 + 0.5;
-      this.body.setGlow(SNEEZE_GLOW_TINT, lerp(SNEEZE_GLOW_MIN, SNEEZE_GLOW_MAX, pulse * buildUp));
+      // No glow while the sneeze builds: the red face (below) is the whole of the tell.
+      this.body.flash = false;
     }
+    // The held sneeze rises into his face: red by degrees through the build-up, full when it goes.
+    this.body.headRed = buildUp;
 
     this.syncSchlauch(sim);
     if (sim.playerRolling) {

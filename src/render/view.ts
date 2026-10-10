@@ -17,6 +17,7 @@ import { FingerhakelnView } from './fingerhakeln-view.js';
 import { HendlSmellView } from './hendl-smell-view.js';
 import { ItemFxView } from './item-fx-view.js';
 import { buildLitterArt, buildLitterTextures } from './litter-art.js';
+import { MouldGlowView } from './mould-glow-view.js';
 import { ObazdaView } from './obazda-view.js';
 import { SnowfallView } from './snowfall-view.js';
 import { GloomBlur } from './gloom.js';
@@ -328,6 +329,8 @@ export class GameView {
   /** Poison clouds, drawn as a low poison haze (`render/cloud-view.ts`). */
   private readonly cloudView: CloudView;
   private readonly hendlSmellView: HendlSmellView;
+  /** The green shimmer over every living Schimmelfleck, so the mould can be found in a big room. */
+  private readonly mouldGlowView: MouldGlowView;
   private readonly fingerhakelnView: FingerhakelnView;
   private readonly obazdaView: ObazdaView;
   private readonly snowfallView: SnowfallView;
@@ -449,6 +452,8 @@ export class GameView {
     this.scene.add(this.cloudView.group);
     this.hendlSmellView = new HendlSmellView();
     this.scene.add(this.hendlSmellView.group);
+    this.mouldGlowView = new MouldGlowView();
+    this.scene.add(this.mouldGlowView.group);
     this.fingerhakelnView = new FingerhakelnView();
     this.scene.add(this.fingerhakelnView.group);
     this.obazdaView = new ObazdaView();
@@ -482,6 +487,7 @@ export class GameView {
       this.ordnerView.group,
       this.cloudView.group,
       this.hendlSmellView.group,
+      this.mouldGlowView.group,
       this.fingerhakelnView.group,
       this.obazdaView.group,
       this.itemFxView.group,
@@ -530,6 +536,7 @@ export class GameView {
     this.ordnerView.setLean(lean);
     this.cloudView.setLean(lean);
     this.hendlSmellView.setLean(lean);
+    this.mouldGlowView.setLean(lean);
     this.obazdaView.setLean(lean);
     this.itemFxView.setLean(lean);
     this.snowfallView.setLean(lean);
@@ -751,6 +758,7 @@ export class GameView {
     this.ordnerView.sync(sim, alpha, nowMs);
     this.cloudView.sync(sim, alpha);
     this.hendlSmellView.sync(sim, alpha, nowMs);
+    this.mouldGlowView.sync(sim, alpha, nowMs);
     this.fingerhakelnView.sync(sim, alpha, nowMs);
     this.obazdaView.sync(sim, alpha, nowMs);
     this.itemFxView.sync(sim, alpha, nowMs);
@@ -1397,6 +1405,7 @@ export class GameView {
     this.ordnerView.destroy();
     this.cloudView.destroy();
     this.hendlSmellView.destroy();
+    this.mouldGlowView.destroy();
     this.fingerhakelnView.destroy();
     this.obazdaView.destroy();
     this.itemFxView.destroy();

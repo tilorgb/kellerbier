@@ -19,6 +19,8 @@ export const ITEM_CUE_NAMES = [
   'zecke-latch',
   /** The player shook every latched Zecke off (#406). */
   'zecke-shake-off',
+  /** Anything went off (`GameSim.triggerExplosion`): a Bierfassl, a Böller, a body that detonates. */
+  'explosion',
 ] as const;
 
 export type ItemCueName = (typeof ITEM_CUE_NAMES)[number];

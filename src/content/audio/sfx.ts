@@ -920,8 +920,17 @@ const playerShotRollingR: SfxDefinition = {
   pitchJitterCents: 40,
 };
 
+const itemExplosion: SfxDefinition = {
+  id: 'item-explosion',
+  description: 'A Bierfassl, a Böller or a detonating body goes off (GameSim.triggerExplosion).',
+  noise: { filter: { type: 'lowpass', frequencyHz: 350, q: 0.7 }, durationSeconds: 0.7, gain: 0.9 },
+  tone: { instrument: 'tuba', note: 'C2', durationSeconds: 0.35 },
+  pitchJitterCents: 150,
+};
+
 export const SFX_DEFINITIONS: readonly SfxDefinition[] = [
   playerShotRollingR,
+  itemExplosion,
   windupLaserCharge,
   shotLaser,
   shotLaserBig,

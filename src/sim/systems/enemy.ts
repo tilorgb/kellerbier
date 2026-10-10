@@ -3401,6 +3401,16 @@ export function enemyBeam(sim: GameSim, index: number, out: EnemyBeamInfo): bool
 }
 
 /**
+ * True while `index` is in a state that fires and is not winding up — what a
+ * `facing: 'aim'` body plays its `attack` clip through (the Zapfhahn's pour).
+ */
+export function enemyFiring(sim: GameSim, index: number): boolean {
+  const base = index * ENEMY_STRIDE;
+  const state = sim.enemies.at(sim.enemy.data[base] ?? 0).states[sim.enemy.data[base + 1] ?? 0];
+  return state !== undefined && state.firing.length > 0 && state.telegraphTicks <= 0;
+}
+
+/**
  * How far through its sweep `index` is, 0 to 1 — or `-1` while it is in no
  * `fireSweep` state. What a sprite's `attack` clip is indexed by (#437).
  */

@@ -1679,7 +1679,9 @@ export class Scenery {
   // ------------------------------------------------------------- props
 
   private buildProps(props: readonly DecorativeProp[]): void {
-    for (const prop of props) {
+    const placed: number[] = [];
+    for (const authored of props) {
+      let prop = authored;
       if (prop.type === 'bulb') {
         this.bulbs.push({ x: prop.x, y: prop.y });
         continue;
@@ -1707,6 +1709,11 @@ export class Scenery {
         this.flats.push(flat);
         continue;
       }
+      if (this.propBlocked(prop.x, prop.y, placed)) {
+        // Purely visual, so it moves aside: a crate half inside a boulder reads as a glitch.
+        prop = { ...prop, ...this.freePropSpot(prop.x, prop.y, placed) };
+      }
+      placed.push(prop.x, prop.y);
       const footZ = prop.y + ROOM_TILE_UNITS / 2;
       behindItems(this.standTile(texture, prop.x, footZ));
       if (prop.type === 'maibaum') {
@@ -1719,6 +1726,72 @@ export class Scenery {
         }
       }
     }
+  }
+
+  /**
+   * Whether a prop's tile, centred on (`x`, `y`), would overlap a block, a
+   * void, a pit or another prop already standing (`placed`, x/y pairs), or —
+   * with `inRoom`, for a spot it is moved to — stick out of the room.
+   */
+  private propBlocked(x: number, y: number, placed: readonly number[], inRoom = false): boolean {
+    const room = this.room;
+    const half = ROOM_TILE_UNITS / 2;
+    if (
+      inRoom &&
+      (x - half < room.minX || x + half > room.maxX || y - half < room.minY || y + half > room.maxY)
+    ) {
+      return true;
+    }
+    for (let i = 0; i < room.blockCount; i++) {
+      const base = i * BLOCK_STRIDE;
+      if (
+        x + half > (room.blocks[base] ?? 0) &&
+        x - half < (room.blocks[base + 2] ?? 0) &&
+        y + half > (room.blocks[base + 1] ?? 0) &&
+        y - half < (room.blocks[base + 3] ?? 0)
+      ) {
+        return true;
+      }
+    }
+    if (room.overlapsPit(x, y, half)) {
+      return true;
+    }
+    for (let i = 0; i < placed.length; i += 2) {
+      if (
+        Math.abs((placed[i] ?? 0) - x) < ROOM_TILE_UNITS &&
+        Math.abs((placed[i + 1] ?? 0) - y) < ROOM_TILE_UNITS
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * The nearest free spot for a prop whose authored one is taken, searched
+   * outward in whole tiles so it stays on the room's grid; deterministic, so
+   * a room looks the same every visit. Falls back to the authored spot if the
+   * room has none (never seen — rooms are mostly floor).
+   */
+  private freePropSpot(x: number, y: number, placed: readonly number[]): { x: number; y: number } {
+    for (let ring = 1; ring <= 12; ring++) {
+      let best: { x: number; y: number } | null = null;
+      let bestDistance = Infinity;
+      for (let dy = -ring; dy <= ring; dy++) {
+        for (let dx = -ring; dx <= ring; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== ring) continue;
+          const cx = x + dx * ROOM_TILE_UNITS;
+          const cy = y + dy * ROOM_TILE_UNITS;
+          const distance = dx * dx + dy * dy;
+          if (distance < bestDistance && !this.propBlocked(cx, cy, placed, true)) {
+            best = { x: cx, y: cy };
+            bestDistance = distance;
+          }
+        }
+      }
+      if (best !== null) return best;
+    }
+    return { x, y };
   }
 
   private warnProp(type: string, why: string): void {

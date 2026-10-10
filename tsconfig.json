@@ -39,6 +39,7 @@
     "tools",
     "vite.config.ts",
     "vite.release.config.ts",
+    "vite.debug.config.ts",
     "vite.tester.config.ts",
     "vitest.bench.config.ts",
     "vitest.fuzz.config.ts",

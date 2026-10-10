@@ -60,6 +60,12 @@ export const bar: Record<DictKey, string> = {
   'ui.collection.lockedGoal': 'Freischalten: {goal}',
   'ui.collection.held': 'Hosd grad dabei',
   'ui.collection.active': 'Aktive Sach',
+  'ui.collection.tabItems': 'Gegenstände',
+  'ui.collection.tabEnemies': 'Gegner',
+  'ui.collection.boss': 'Boss',
+  'ui.collection.enemyStats': 'Leben {health} · Berührungsschaden {damage}',
+  'ui.collection.unknownEnemyHint':
+    'Noch nicht begegnet. Triff ihn in einem Lauf, um mehr zu erfahren.',
 
   // --- A run ending -----------------------------------------------------
   'ui.gameOver.retry': 'No amoi',

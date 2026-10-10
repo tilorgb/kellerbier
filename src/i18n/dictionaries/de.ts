@@ -54,6 +54,12 @@ export const de: Record<DictKey, string> = {
   'ui.collection.lockedGoal': 'Freischalten: {goal}',
   'ui.collection.held': 'In diesem Lauf dabei',
   'ui.collection.active': 'Aktiver Gegenstand',
+  'ui.collection.tabItems': 'Gegenstände',
+  'ui.collection.tabEnemies': 'Gegner',
+  'ui.collection.boss': 'Boss',
+  'ui.collection.enemyStats': 'Leben {health} · Berührungsschaden {damage}',
+  'ui.collection.unknownEnemyHint':
+    'Noch nicht begegnet. Triff ihn in einem Lauf, um mehr zu erfahren.',
 
   // --- A run ending -----------------------------------------------------
   'ui.gameOver.retry': 'Nochmal',

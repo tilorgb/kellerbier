@@ -36,6 +36,16 @@ declare const __KELLERBIER_RELEASE__: boolean;
 export const IS_RELEASE_BUILD: boolean =
   typeof __KELLERBIER_RELEASE__ === 'boolean' ? __KELLERBIER_RELEASE__ : false;
 
+declare const __KELLERBIER_DEBUG__: boolean;
+
+/**
+ * The debug build (`vite.debug.config.ts`, written by `npm run build:release`
+ * next to the release as `Kellerbier-debug.html`): the release, plus the spawn
+ * panel (`debug/spawn-panel.ts`). Same `typeof` guard as above.
+ */
+export const IS_DEBUG_BUILD: boolean =
+  typeof __KELLERBIER_DEBUG__ === 'boolean' ? __KELLERBIER_DEBUG__ : false;
+
 declare const __KELLERBIER_COMMIT__: string;
 
 /**

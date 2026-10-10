@@ -65,6 +65,11 @@ export const en = {
   'ui.collection.lockedGoal': 'To earn it: {goal}',
   'ui.collection.held': 'Held this run',
   'ui.collection.active': 'Active item',
+  'ui.collection.tabItems': 'Items',
+  'ui.collection.tabEnemies': 'Enemies',
+  'ui.collection.boss': 'Boss',
+  'ui.collection.enemyStats': 'Health {health} · Contact damage {damage}',
+  'ui.collection.unknownEnemyHint': 'Not met yet. Find it on a run to learn more about it.',
 
   // --- A run ending -----------------------------------------------------
   'ui.gameOver.retry': 'Retry',

@@ -12,7 +12,7 @@ import type { StatId } from './definition.js';
  * itself does not require that — the key is just a string it is handed.
  */
 export interface ModifierSource {
-  readonly kind: 'item' | 'set' | 'promille' | 'kater' | 'curse' | 'character';
+  readonly kind: 'item' | 'set' | 'promille' | 'kater' | 'curse' | 'character' | 'mould';
   readonly id: string;
   readonly label: string;
 }

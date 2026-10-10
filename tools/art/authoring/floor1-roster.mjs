@@ -1,3 +1,4 @@
+import { zapfhahnRest } from './zapfhahn-views.mjs';
 import { encodePng } from '../png.mjs';
 import { legalPixelColorsFor } from '../palette.mjs';
 
@@ -450,38 +451,10 @@ export const schimmelspore = single('schimmelspore', [
 ]);
 
 // ============================================================ ZAPFHAHN
-// A brass tap bolted to the wall (`normal`, contact damage 0). No face — the
-// spout and the cross handle are the read, and the handle winding up is the
-// telegraph. The one amber note on the floor is legal here as the brass
-// catching the cellar's single warm bulb — a rim, not a fill.
-export const zapfhahn = single('zapfhahn', [
-  '..KKKKKK..',
-  '.KGGGGGGK.',
-  'KGGHHHHGGK',
-  'KGHHGGHHGK',
-  'KGHGGGGHGK',
-  'KGHGGGGHGK',
-  'KGHHGGHHGK',
-  'KGGHHHHGGK',
-  '.KGGGGGGK.',
-  '..KGGGGK..',
-  '..KGAAGK..',
-  '..KGGGGK..',
-  '..KGGGGK..',
-  '.KGGHHGGK.',
-  'KGGHHHHGGK',
-  'KGHHGGHHGK',
-  'KGHGGGGHGK',
-  'KGGHGGHGGK',
-  '.KGGHHGGK.',
-  '..KGGGGK..',
-  '...KGGK...',
-  '...KGGK...',
-  '..KGGGGK..',
-  '..KAAAAK..',
-  '..KGGGGK..',
-  '...KKKK...',
-]);
+// A tap column on a foot (`normal`, contact damage 0), drawn by the user and
+// recoloured onto this palette. Its rest pose, side-on; the views, the lever
+// pull and the pour are `zapfhahn-views.mjs`'s.
+export const zapfhahn = zapfhahnRest;
 
 /** The single-frame sprites `build-floor1-roster` writes. */
 export const ROSTER = {

@@ -194,6 +194,13 @@ import {
   propKindIndex,
 } from './prop-kinds.js';
 
+/** How long the mould takes to slow the player to `MOULD_MIN_SPEED`. */
+const MOULD_SLOW_RAMP_TICKS = 10 * TICKS_PER_SECOND;
+/** The mould's floor on the player's move speed, as a factor. */
+const MOULD_MIN_SPEED = 0.5;
+/** At that floor, a living Schimmelfleck drains one health segment this often. */
+const MOULD_DRAIN_TICKS = 5 * TICKS_PER_SECOND;
+
 /** Entity slots reserved up front. Sized well above M1's population. */
 const DEFAULT_CAPACITY = 8192;
 
@@ -760,6 +767,16 @@ export class GameSim implements FeatSource {
   private promilleTierChangeValue: PromilleTierChange | null = null;
   /** Whether `stats` last had Kater's modifiers built in. See `syncKaterModifiers`. */
   private lastKaterActive = false;
+  /** Ticks the player has spent in a mouldy room, capped at `MOULD_SLOW_RAMP_TICKS` (`stepMould`). */
+  private mouldTicks = 0;
+  /** Ticks toward the next drain while the patch holds the player at the floor of the slow. */
+  private mouldDrainTicks = 0;
+  /** Health the mould has drained, given back once the room's mould is all dead. */
+  private mouldBorrowedHealth = 0;
+  /** The move-speed factor last registered under the `'mould'` source. */
+  private lastMouldMultiplier = 1;
+  /** Living Schimmelflecken in the room this tick — what the green air is drawn off. */
+  private mouldPatches = 0;
   /**
    * Whether the `sober`/`rausch` item gate (#32) was open last tick — `null`
    * forces the first `syncItemPromilleGate` call to always run its check,
@@ -2343,6 +2360,8 @@ export class GameSim implements FeatSource {
     this.revealBombableWalls(x, y, radius, crossHalfWidth);
     this.breakMachineFromBlast(x, y, radius);
     dispatchItemBombDetonate(this, x, y);
+    // Every explosion is heard, whatever set it off.
+    this.playItemCue('explosion');
   }
 
   /**
@@ -5061,6 +5080,98 @@ export class GameSim implements FeatSource {
    * be true or false in any combination (hungover and freshly sober is the
    * whole point of the debuff).
    */
+  /** Whether a living Schimmelfleck is in the room — read by `render/mould-miasma.ts`. */
+  get mouldPatchPresent(): boolean {
+    return this.mouldPatches > 0;
+  }
+
+  /** How far the mould has slowed the player, 0 (not at all) to 1 (half speed). */
+  get mouldSlowProgress(): number {
+    return this.mouldTicks / MOULD_SLOW_RAMP_TICKS;
+  }
+
+  /** Health segments the mould holds right now, to be given back. */
+  get mouldBorrowedHealthSegments(): number {
+    return this.mouldBorrowedHealth;
+  }
+
+  /**
+   * The mould's hold on the player (Schimmelfleck, Schimmelspore). While any
+   * mould lives in the room the player slows, over `MOULD_SLOW_RAMP_TICKS`,
+   * to `MOULD_MIN_SPEED`; once there, a living patch drains one segment of
+   * health every `MOULD_DRAIN_TICKS` — never the last one, and only lent:
+   * when the last patch and spore die (or the player leaves the room) the
+   * speed and every drained segment come back at once.
+   *
+   * Run with the other stat syncs, before movement reads `MoveSpeed`.
+   */
+  private stepMould(): void {
+    let patches = 0;
+    let spores = 0;
+    const masks = this.world.masks;
+    for (let index = 0; index < masks.length; index++) {
+      if (((masks[index] ?? 0) & this.enemyMask) !== this.enemyMask) {
+        continue;
+      }
+      const mould = this.enemies.at(this.enemy.data[index * ENEMY_STRIDE] ?? 0).mould;
+      if (mould === 2) {
+        patches += 1;
+      } else if (mould === 1) {
+        spores += 1;
+      }
+    }
+    this.mouldPatches = patches;
+
+    const health = this.health.data;
+    const at = this.playerIndex * 2;
+    if (patches + spores === 0) {
+      if (this.mouldBorrowedHealth > 0) {
+        health[at] = Math.min(health[at + 1] ?? 0, (health[at] ?? 0) + this.mouldBorrowedHealth);
+        this.mouldBorrowedHealth = 0;
+      }
+      this.mouldTicks = 0;
+      this.mouldDrainTicks = 0;
+      this.setMouldMultiplier(1);
+      return;
+    }
+
+    this.mouldTicks = Math.min(MOULD_SLOW_RAMP_TICKS, this.mouldTicks + 1);
+    const progress = this.mouldTicks / MOULD_SLOW_RAMP_TICKS;
+    // In whole percent, so the pipeline is rebuilt a hundred times over the ramp, not every tick.
+    this.setMouldMultiplier(Math.round((1 - (1 - MOULD_MIN_SPEED) * progress) * 100) / 100);
+
+    if (patches === 0 || progress < 1) {
+      this.mouldDrainTicks = 0;
+      return;
+    }
+    this.mouldDrainTicks += 1;
+    if (this.mouldDrainTicks < MOULD_DRAIN_TICKS) {
+      return;
+    }
+    this.mouldDrainTicks = 0;
+    const current = health[at] ?? 0;
+    if (current > 1) {
+      health[at] = current - 1;
+      this.mouldBorrowedHealth += 1;
+      this.playerHurtTick_ = this.currentTick;
+    }
+  }
+
+  private setMouldMultiplier(multiplier: number): void {
+    if (multiplier === this.lastMouldMultiplier) {
+      return;
+    }
+    this.lastMouldMultiplier = multiplier;
+    if (multiplier === 1) {
+      this.stats.clearSource('mould');
+      return;
+    }
+    const source = { kind: 'mould' as const, id: 'mould', label: 'Schimmel' };
+    this.stats.setSourceModifiers('mould', [
+      { stat: StatId.MoveSpeed, op: 'multiply', value: multiplier, source },
+    ]);
+  }
+
   private syncKaterModifiers(): void {
     const active = this.hasKater;
     if (active === this.lastKaterActive) {
@@ -7289,6 +7400,7 @@ export class GameSim implements FeatSource {
     this.holdPromilleFloor();
     this.syncPromilleModifiers();
     this.syncKaterModifiers();
+    this.stepMould();
     // The character's own per-tick rules (#47) — Ludwig's purse — settled
     // here for the same reason Promille is: movement and shooting both read
     // the stats they change, later in this same tick.

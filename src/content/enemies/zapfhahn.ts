@@ -18,6 +18,9 @@ export const zapfhahn: EnemyDefinition = {
   // It is fixed to the wall. Touching it is rude, not dangerous.
   contactDamage: 0,
   mass: 20,
+  // Turns to the axis it is about to spray down, pulls its lever through the
+  // wind-up and pours while it fires.
+  facing: 'aim',
   initial: 'idle',
   states: [
     {

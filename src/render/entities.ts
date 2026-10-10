@@ -45,6 +45,7 @@ import {
   resolveAnimationState,
   resolveFacing,
   resolveHeadingTurn,
+  resolveAimTurn,
   HeadingTurn,
   resolveMirrorFacing,
 } from './animation/state.js';
@@ -442,7 +443,11 @@ export class EntityView {
       this.heldTurnEntity[index] = entity;
       this.heldTurn[index] = HeadingTurn.South;
     }
-    const turn = resolveHeadingTurn(this.sim, index);
+    const kind = this.sim.enemy.data[index * ENEMY_STRIDE] ?? 0;
+    const turn =
+      this.sim.enemies.at(kind).facing === EnemyFacing.Aim
+        ? resolveAimTurn(this.sim, index)
+        : resolveHeadingTurn(this.sim, index);
     if (turn === HeadingTurn.None) {
       return this.heldTurn[index] ?? HeadingTurn.South;
     }

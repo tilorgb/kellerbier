@@ -226,6 +226,13 @@ const v12ToV13: SaveMigration = (raw) => {
   return { ...upgraded, activeRun: { ...(active as Record<string, unknown>), challenge: null } };
 };
 
+/**
+ * v13 -> v14: `discoveredEnemies`, for the Collection's enemy tab. Nothing
+ * earlier recorded which enemies a run met, so it starts empty, exactly as
+ * `discoveredItems` did.
+ */
+const v13ToV14: SaveMigration = (raw) => ({ ...raw, schemaVersion: 14, discoveredEnemies: [] });
+
 export const MIGRATIONS: readonly SaveMigration[] = [
   v0ToV1,
   v1ToV2,
@@ -240,6 +247,7 @@ export const MIGRATIONS: readonly SaveMigration[] = [
   v10ToV11,
   v11ToV12,
   v12ToV13,
+  v13ToV14,
 ];
 
 function versionOf(raw: Record<string, unknown>): number {

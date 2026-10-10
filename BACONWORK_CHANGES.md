@@ -1,5 +1,99 @@
 # Branch `Bacon` — Änderungen gegenüber `main`
 
+Stand: 10.10.2026 · Basis: `main` bei `5f1d11ec` (nach dem Merge von #486). Neue Grafiken
+(Zapfhahn, Bierfassl), Schimmel-Mechanik, Gegner-Tab in der Sammlung, Debug-Build und kleinere
+Effekte. Jede Änderung wurde im laufenden Spiel (Headless-Browser) oder per Unit-Test
+gegengeprüft; wo beides fehlt, steht es dabei.
+
+## Auf einen Blick
+
+| Bereich | Änderung | Spürbar im Spiel? |
+|---|---|---|
+| Zapfhahn | Neue Grafik, dreht sich zur Schussrichtung, Hebel und Bierstrahl animiert | ja |
+| Bierfassl | Einzel- und Doppelfass als 5-Liter-Metallfass mit „B“/„K“ | ja |
+| Schimmel | Fleck verlangsamt Alois, zieht Leben ab (geliehen), grüner Schimmer | ja |
+| Schnupftabak | Alois' Gesicht wird beim Aufbau des Niesens rot | ja |
+| Bombe | Eigener Explosions-Sound für jede Explosion | ja |
+| Raumdeko | Deko unter Steinen wird verschoben statt überlagert | ja |
+| Sammlung | Neuer Tab „Gegner“ (Spielstand v14) | ja |
+| Debug | `release/Kellerbier-debug.html` mit Spawn-Menü (F8) | nur im Debug-Build |
+
+---
+
+## 1. Zapfhahn (`tools/art/authoring/zapfhahn-views.mjs`, neu)
+- Grafik vom Nutzer gezeichnet, auf die Keller-Palette gesetzt (rotes Knauf → Braun, da der
+  Keller kein Rot hat). Seitenansicht aus dem Entwurf, Vorder- und Rückansicht abgeleitet.
+  Leinwand 36×40 (Säule gegenüber dem Entwurf zweimal gekürzt), Säule mittig auf dem Collider.
+- Fünf Bilder pro Ansicht: Ruhe, Hebel halb/ganz unten (`telegraph`), zwei Gieß-Bilder
+  (`attack`). Der Bierstrahl kommt unter dem hellgrauen Hahn heraus.
+- Neue Ausrichtung `facing: 'aim'` (`sim/enemy/definition.ts`, `registry.ts`): ein stehender
+  Schütze dreht seine Ansicht zu der Achse, auf die er zielt (gesperrter Punkt im Telegraph,
+  sonst der Spieler), und spielt `attack`, solange er in einem feuernden Zustand ist
+  (`enemyFiring`, `render/animation/state.ts`, `render/entities.ts`).
+- Im Spiel geprüft (vier Zapfhähne um Alois, alle vier Richtungen, Hebel und Strahl).
+
+## 2. Bierfassl-Pickups (`assets/sprites/common/characters/pickup-bierfassl*@3x.png`)
+- 5-Liter-Partyfass aus Metall, bauchig, durchgehende 1-Pixel-Kontur. Vorne das „B“ aus dem
+  Entwurf des Nutzers, beim Doppelfass trägt das hintere Fass ein „K“.
+- In Bildschirmgröße gezeichnet (13×16, als `@3x` gespeichert): feinere Linien fielen durch die
+  Kamera-Verkleinerung stellenweise weg.
+- Alte Grafiken und der Holzfass-Entwurf liegen in `sprites-archive/2026-10-10_15-01-01/`.
+- Im Spiel geprüft (neben Alois).
+
+## 3. Schimmel (`GameSim.stepMould`, `render/mould-miasma.ts`, `render/mould-glow-view.ts`, neu)
+- Neues Gegnerfeld `mould: 'patch' | 'spore'` (Schimmelfleck / Schimmelspore).
+- Solange Schimmel im Raum lebt, sinkt Alois' Tempo in 10 s auf 50 % (Stat-Quelle „Schimmel“).
+- Bei 50 % und lebendem Fleck: alle 5 s ein Lebenssegment weniger, nie das letzte.
+- Nur noch Sporen: kein Schaden mehr, Verlangsamung bleibt.
+- Aller Schimmel tot (oder Raum verlassen): Tempo und alle abgezogenen Segmente kommen zurück.
+- Grüner, leicht wabernder Schleier über dem Raum, solange ein Fleck lebt; über jedem Fleck ein
+  grünes Bodenglühen mit aufsteigenden Schwaden als Orientierung in großen Räumen.
+- Test: `tests/unit/mould.test.ts`. Schleier und Schimmer im Spiel geprüft; Verlangsamung und
+  Schaden nur per Test (der Testbrowser lief zu langsam für 15 s Spielzeit).
+
+## 4. Schnupftabak: roter Kopf (`render/world/billboard.ts`, `render/player-view.ts`)
+- Alois' Gesicht färbt sich mit dem Niesen-Aufbau rot, voll rot beim Luftanhalten, nach dem
+  Niesen sofort normal. Neue `Billboard.enableHeadTint` (Shader-Streifen nur für Alois).
+- Das bisherige gelblich-weiße Pulsieren des ganzen Körpers ist entfernt
+  (`SNEEZE_GLOW_TINT` gelöscht).
+- Im Spiel geprüft (Aufbau-Stufen per Screenshot).
+
+## 5. Explosions-Sound (`content/audio/sfx.ts`, `sim/events/item-cues.ts`)
+- Bisher hatte keine Explosion einen eigenen Sound. Neu: `item-explosion`, ausgelöst in
+  `GameSim.triggerExplosion` (Bierfassl, Böller, explodierende Gegner).
+- Nur per Code geprüft, nicht angehört.
+
+## 6. Raumdeko unter Steinen (`render/world/scenery.ts`)
+- Reine Deko (Kisten, Fässer …), deren Feld einen Block, eine Leerfläche, eine Grube oder andere
+  Deko überlappt, wird auf den nächsten freien Platz verschoben (Ringsuche in ganzen Kacheln,
+  ohne Zufall). Frei stehende Deko bleibt, wo sie angelegt ist.
+- Nicht eigens im Spiel geprüft.
+
+## 7. Sammlung: Tab „Gegner“ (`render/collection-screen.ts`, `app/collection.ts`)
+- Zwei Tabs, Items und Gegner. Wechsel über die Tab-Leiste (vom obersten Rasterplatz nach
+  oben, dann links/rechts oder Enter), Q/E bzw. Schultertasten, oder Mausklick.
+- Noch nicht getroffene Gegner als Silhouette; Details: Name, Leben, Berührungsschaden, bei
+  Bossen „Boss“, Titel und Beiname. Bilder werden auf die Zelle verkleinert.
+- Ausgeblendet: Ladenbesitzer, Asselsegment, Bieber-Stämme.
+- Spielstand v14: `discoveredEnemies` (Migration v13 → v14, startet leer). Ein Gegner gilt als
+  getroffen, sobald er lebend im Raum ist (`EnemyDiscovery`).
+- Bairische Texte der neuen Schlüssel sind vorerst deutsch.
+- Test: `tests/unit/collection-enemies.test.ts`; Tab-Wechsel und Raster im Spiel geprüft.
+
+## 8. Debug-Build (`vite.debug.config.ts`, `src/debug/spawn-panel.ts`, neu)
+- `npm run build:release` baut zusätzlich `release/Kellerbier-debug.html` (Release plus
+  `__KELLERBIER_DEBUG__`, Hilfsordner `release-debug/`, `tools/release/copy-debug.mjs`).
+- Spawn-Menü über F8 oder den Hinweis oben rechts: Gegner spawnen, Item geben, Pickup ablegen,
+  alle Gegner töten, volles Leben. Bedienung steht im Menü; Esc schließt es.
+- Auch im Dev-Server verfügbar, nicht im Release (geprüft).
+
+## 9. Sonstiges
+- `SPRITE_OVERVIEW.md` neu erzeugt (`npm run docs:sprites`).
+
+---
+
+# Branch `Bacon` (zweite Runde, gemergt mit #486)
+
 Stand: 09.10.2026 · Basis: `main` bei `67211575` (nach dem Merge von #485). Performance,
 Nebel-Fluch, Boss-Intro und Gegner-Spawns. Jede Änderung wurde im laufenden Spiel
 (Headless-Browser) oder per Unit-Test gegengeprüft; wo beides fehlt, steht es dabei.

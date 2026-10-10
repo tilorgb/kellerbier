@@ -66,7 +66,7 @@ import { MachinePickerScreen, type MachinePickerView } from '../render/machine-p
 import { HealthHud } from '../render/health-hud.js';
 import { ItemGateHud } from '../render/item-gate-hud.js';
 import { StatHud } from '../render/stat-hud.js';
-import { ItemDiscovery } from './collection.js';
+import { EnemyDiscovery, ItemDiscovery } from './collection.js';
 import { ItemRegistry } from '../sim/item/registry.js';
 import { ITEM_DEFINITIONS } from '../content/items/index.js';
 import { ItemStatusHud } from '../render/item-status-hud.js';
@@ -92,6 +92,7 @@ import { UnlockToastHud } from '../render/unlock-toast-hud.js';
 import { Vignette } from '../render/vignette.js';
 import { BlaueStundeOverlay } from '../render/blaue-stunde-overlay.js';
 import { NebelVeil } from '../render/nebel-veil.js';
+import { MouldMiasma } from '../render/mould-miasma.js';
 import { GameView } from '../render/view.js';
 import { FLOOR_TILESETS, loadFloorArt } from '../render/floor-art.js';
 import { bossIdsFrom, buildParticleArt, buildProjectileArt } from '../render/art-bundle.js';
@@ -151,6 +152,7 @@ import {
 import { createTouchControls, isTouchCapable } from './touch-controls.js';
 import {
   FLOOR_SKIP_ENABLED,
+  IS_DEBUG_BUILD,
   IS_RELEASE_BUILD,
   isPlaytestSession,
   skipsIntroCards,
@@ -230,6 +232,17 @@ import {
   writePromilleOverride,
 } from './promille-gate.js';
 import { readEndlessFloors, writeEndlessFloors } from './endless-floor-debug.js';
+
+/**
+ * Bodies the enemy roster carries that are not creatures to look up in the
+ * Collection: the shopkeeper, a boss's body segment, Bieber's rolling logs.
+ */
+const COLLECTION_HIDDEN_ENEMIES: ReadonlySet<string> = new Set([
+  'shopkeeper',
+  'kellerassel-segment',
+  'bieber-log-east',
+  'bieber-log-west',
+]);
 
 /**
  * The authored pool, run through the same typed boundary the sim uses to load
@@ -1141,6 +1154,9 @@ async function boot(progress: BootProgress): Promise<void> {
   /** Nebel's white cloud veil (#49) — same layer, under the HUD. `?nebel` forces it on in dev. */
   const nebelVeil = new NebelVeil(forcesNebelVeil());
   uiLayer.addChild(nebelVeil.view);
+  /** The Schimmelfleck's faint swaying green, while a patch lives in the room — same layer. */
+  const mouldMiasma = new MouldMiasma();
+  uiLayer.addChild(mouldMiasma.view);
 
   /**
    * Everything drawn on the UI's own pixel grid (#154).
@@ -1557,6 +1573,7 @@ async function boot(progress: BootProgress): Promise<void> {
    * holds, so every way an item can arrive counts without being told.
    */
   const itemDiscovery = new ItemDiscovery(loadSave().discoveredItems);
+  const enemyDiscovery = new EnemyDiscovery(loadSave().discoveredEnemies);
 
   /** Item sets (#137): the "N/M held" progress row and the completion banner. */
   const itemSetHud = new ItemSetHud(kit, preferences.locale);
@@ -2801,6 +2818,7 @@ async function boot(progress: BootProgress): Promise<void> {
       }
       statHud.sync(sim, settings.statDisplay);
       itemDiscovery.observe(sim);
+      enemyDiscovery.observe(sim);
       itemSetHud.sync(sim);
       // Schlüsselbund picked up (or lost) mid-room: the minimap is only
       // rebuilt on a room change otherwise, and "the secret rooms appear on
@@ -3058,6 +3076,7 @@ async function boot(progress: BootProgress): Promise<void> {
         settings.reducedMotion,
       );
       nebelVeil.sync(sim, performance.now(), settings.reducedMotion);
+      mouldMiasma.sync(sim, performance.now(), settings.reducedMotion);
       if (replay !== null) {
         replayViewer.show();
         replayViewer.sync(
@@ -3122,6 +3141,7 @@ async function boot(progress: BootProgress): Promise<void> {
   screenController = new ScreenFlowController({
     collection: {
       isDiscovered: (id) => itemDiscovery.has(id),
+      isEnemyDiscovered: (id) => enemyDiscovery.has(id),
       isHeld: (id) => sim.hasItem(id),
       lockedGoal: (id) => itemUnlockGoal(id),
     },
@@ -3191,6 +3211,22 @@ async function boot(progress: BootProgress): Promise<void> {
       quality: item.quality,
       active: item.active !== undefined,
       art: itemArt[item.sprite] ?? null,
+    })),
+  );
+  screenController.collection.setEnemyEntries(
+    ENEMY_DEFINITIONS.filter((enemy) => !COLLECTION_HIDDEN_ENEMIES.has(enemy.id)).map((enemy) => ({
+      id: enemy.id,
+      name: enemy.name,
+      flavourKey: enemy.epithet ?? '',
+      descriptionKey: enemy.title ?? '',
+      quality: 0,
+      active: false,
+      art: enemyArt[enemy.id] ?? null,
+      enemy: {
+        health: enemy.health,
+        contactDamage: enemy.contactDamage,
+        boss: enemy.bossBar === true,
+      },
     })),
   );
   // Over the title screen's own pane and over the pause menu's dim alike, so
@@ -5299,6 +5335,11 @@ WASD move   arrows aim and fire
   }
 
   overlay = await mountDebugOverlay(sim, view, app, uiLayer, () => layout.scale);
+  // The spawn panel: the debug build's reason to exist, and handy in dev too.
+  if (IS_DEBUG_BUILD || import.meta.env.DEV) {
+    const { mountSpawnPanel } = await import('../debug/spawn-panel.js');
+    mountSpawnPanel(() => sim);
+  }
   exposeDebugHandle(
     loop,
     app,

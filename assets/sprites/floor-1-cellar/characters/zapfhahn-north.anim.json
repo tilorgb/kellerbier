@@ -1,0 +1,21 @@
+{
+  "frames": 5,
+  "frameDurationMs": 120,
+  "loop": true,
+  "clips": {
+    "idle": { "frames": [0], "frameDurationMs": 400, "mode": "loop" },
+    "move": { "frames": [0], "frameDurationMs": 400, "mode": "loop" },
+    "telegraph": {
+      "frames": [0, 1, 2],
+      "frameDurationMs": 160,
+      "mode": "once"
+    },
+    "attack": { "frames": [3, 4], "frameDurationMs": 90, "mode": "loop" },
+    "hurt": {
+      "frames": [1],
+      "frameDurationMs": 120,
+      "mode": "once",
+      "onEnd": "idle"
+    }
+  }
+}

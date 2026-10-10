@@ -1,8 +1,11 @@
 import type { GameSim } from '../../sim/game/sim.js';
+import { EnemyFacing } from '../../sim/enemy/registry.js';
 import {
   ENEMY_MOTION_STRIDE,
+  ENEMY_STRIDE,
   enemyAimAngle,
   enemySweepProgress,
+  enemyFiring,
   enemyTelegraphProgress,
 } from '../../sim/systems/enemy.js';
 import { AnimationState, type AnimationStateIndex } from './definition.js';
@@ -80,6 +83,14 @@ export function resolveAnimationState(sim: GameSim, index: number): AnimationSta
   if (enemySweepProgress(sim, index) >= 0) {
     return AnimationState.Attack;
   }
+  // A `facing: 'aim'` shooter (the Zapfhahn) plays `attack` for as long as it fires.
+  if (
+    ((sim.world.masks[index] ?? 0) & sim.enemyMask) === sim.enemyMask &&
+    sim.enemies.at(sim.enemy.data[index * ENEMY_STRIDE] ?? 0).facing === EnemyFacing.Aim &&
+    enemyFiring(sim, index)
+  ) {
+    return AnimationState.Attack;
+  }
   const dx = sim.positionX(index) - sim.previousX(index);
   const dy = sim.positionY(index) - sim.previousY(index);
   if (Math.abs(dx) > MOVE_EPSILON_PX || Math.abs(dy) > MOVE_EPSILON_PX) {
@@ -154,6 +165,18 @@ export function resolveHeadingTurn(sim: GameSim, index: number): number {
     return turnOf(headingX, headingY);
   }
   return HeadingTurn.None;
+}
+
+/**
+ * A `facing: 'aim'` body's heading turn: the axis it is aiming down
+ * (`enemyAimAngle` — the locked spot through its wind-up and volley, the
+ * player otherwise), never `None`.
+ *
+ * @hot — one call per such body per frame.
+ */
+export function resolveAimTurn(sim: GameSim, index: number): number {
+  const angle = enemyAimAngle(sim, index);
+  return turnOf(Math.cos(angle), Math.sin(angle));
 }
 
 function turnOf(x: number, y: number): number {

@@ -104,8 +104,12 @@ import {
  * the id of the challenge run it is, or `null`. A run parameter like
  * `tier` — the challenge's rules are rebuilt from it on a resume or a
  * replay. `null` before v13.
+ *
+ * v14 adds `discoveredEnemies`: the id of every enemy this save has ever met
+ * in a room, for the Collection's enemy tab — the same id list, sanitised and
+ * kept the same way as `discoveredItems`.
  */
-export const SAVE_SCHEMA_VERSION = 13;
+export const SAVE_SCHEMA_VERSION = 14;
 
 /**
  * The character a save with no opinion starts as (#47).
@@ -408,8 +412,14 @@ export interface SaveDataV13 extends Omit<SaveDataV12, 'schemaVersion'> {
   readonly schemaVersion: 13;
 }
 
-/** The current schema version. A union the day a v14 lands and something still reads a v13. */
-export type SaveData = SaveDataV13;
+/** v14: `discoveredEnemies` — see `SAVE_SCHEMA_VERSION`'s own doc comment above. */
+export interface SaveDataV14 extends Omit<SaveDataV13, 'schemaVersion'> {
+  readonly schemaVersion: 14;
+  readonly discoveredEnemies: readonly string[];
+}
+
+/** The current schema version. A union the day a v15 lands and something still reads a v14. */
+export type SaveData = SaveDataV14;
 
 /** How many `bestRuns` entries a finished run keeps — see `app/meta/progress.ts`'s `withRunOutcome`. */
 export const MAX_BEST_RUNS = 10;
@@ -434,6 +444,7 @@ export function createDefaultSave(): SaveData {
     telemetry: createDefaultTelemetryStore(),
     seenStoryBeats: [],
     discoveredItems: [],
+    discoveredEnemies: [],
   };
 }
 
@@ -661,5 +672,6 @@ export function sanitizeSave(value: unknown): SaveData {
     telemetry: sanitizeTelemetryStore(source.telemetry),
     seenStoryBeats: sanitizeStringArray(source.seenStoryBeats),
     discoveredItems: sanitizeStringArray(source.discoveredItems),
+    discoveredEnemies: sanitizeStringArray(source.discoveredEnemies),
   };
 }

@@ -20,6 +20,8 @@ export const schimmelfleck: EnemyDefinition = {
   // Heavier than its size class, because a body that cannot move must not be
   // shoved around the room by the player walking into it.
   mass: 12,
+  // Slows the player, greens the air and drains health while it lives (`mould`).
+  mould: 'patch',
   initial: 'sit',
   states: [
     {
@@ -43,6 +45,8 @@ export const schimmelspore: EnemyDefinition = {
   health: 1,
   contactDamage: 1,
   lootTier: 'weak',
+  // Keeps the player slowed after the patch is gone, but drains nothing.
+  mould: 'spore',
   initial: 'creep',
   states: [
     {

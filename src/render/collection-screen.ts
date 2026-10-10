@@ -19,7 +19,17 @@ export interface CollectionEntry {
   readonly active: boolean;
   /** The item's authored icon, or `null` while its art is not drawn yet — the kit's star stands in. */
   readonly art: Texture | null;
+  /** Set on the enemy tab's entries: what the detail pane says about the creature instead of an item's effect. */
+  readonly enemy?: {
+    readonly health: number;
+    readonly contactDamage: number;
+    readonly boss: boolean;
+  };
 }
+
+/** The Collection's two pages: the items, and the enemies. */
+export type CollectionTab = 'items' | 'enemies';
+const TABS: readonly CollectionTab[] = ['items', 'enemies'];
 
 export interface CollectionScreenActions {
   readonly onBack: () => void;
@@ -34,7 +44,14 @@ export interface CollectionScreenActions {
    * cannot follow while the item is never offered.
    */
   readonly lockedGoal: (id: string) => string | null;
+  /** Whether this save has ever met enemy `id` — `app/collection.ts`'s `EnemyDiscovery`. Unset: every enemy shows. */
+  readonly isEnemyDiscovered?: (id: string) => boolean;
 }
+
+/** `focus` while the tab bar holds it. */
+const TAB_BAR = -2;
+const TAB_GAP = 18;
+const GAP_BELOW_TABS = 3;
 
 /** One grid cell's footprint: a 24×24 item icon in a slot with a pixel of air round it. */
 const CELL = 28;
@@ -48,6 +65,8 @@ const GAP_ABOVE_MENU = 8;
 const DETAIL_GAP = 14;
 /** The detail pane's icon is drawn at twice its size — it is the one place a player gets to look at it. */
 const DETAIL_ART_SCALE = 2;
+/** The largest the detail pane draws a picture, so a boss does not push its text off the panel. */
+const DETAIL_ART_BOX = 64;
 const STAR_GAP = 1;
 /** A silhouette, not a blank: the shape is a hint, the name and text are what stays hidden. */
 const SILHOUETTE_TINT = 0x000000;
@@ -92,6 +111,8 @@ export class CollectionScreen implements MenuScreen {
   private readonly panel = new PostcardPanel();
   private readonly headline = new DisplayTitle(TITLE_STYLES.heading);
   private readonly progress: BitmapText;
+  private readonly tabLabels: BitmapText[] = [];
+  private readonly tabFocus: FocusRing;
   private readonly grid = new Container();
   private readonly gridFocus: FocusRing;
   private readonly cells: Cell[] = [];
@@ -106,13 +127,16 @@ export class CollectionScreen implements MenuScreen {
   private readonly starTexture: Texture;
 
   private entries: readonly CollectionEntry[] = [];
+  private itemEntries: readonly CollectionEntry[] = [];
+  private enemyEntries: readonly CollectionEntry[] = [];
+  private tab: CollectionTab = 'items';
   private locale: Locale;
   private width = 0;
   private height = 0;
   private columns = 1;
   private visibleRows = 1;
   private scrollRow = 0;
-  /** Focused cell index; `-1` while focus is on "Back". */
+  /** Focused cell index; `-1` while focus is on "Back", `TAB_BAR` on the tabs. */
   private focus = 0;
   /** The cell to return to when focus comes back up off "Back". */
   private lastCell = 0;
@@ -130,6 +154,18 @@ export class CollectionScreen implements MenuScreen {
     this.view.addChild(this.headline.view);
     this.progress = uiText('', { colour: UI_PALETTE.textDim });
     this.view.addChild(this.progress);
+    for (const tab of TABS) {
+      const label = uiText('', { colour: UI_PALETTE.text });
+      label.eventMode = 'static';
+      label.cursor = 'pointer';
+      label.on('pointertap', () => {
+        this.switchTab(tab);
+      });
+      this.tabLabels.push(label);
+      this.view.addChild(label);
+    }
+    this.tabFocus = new FocusRing(kit);
+    this.view.addChild(this.tabFocus.view);
     this.view.addChild(this.grid);
     this.gridFocus = new FocusRing(kit);
     this.view.addChild(this.gridFocus.view);
@@ -153,6 +189,53 @@ export class CollectionScreen implements MenuScreen {
 
   /** Replaces the item list — once at boot, from the item registry and the loaded art. */
   setEntries(entries: readonly CollectionEntry[]): void {
+    this.itemEntries = entries;
+    if (this.tab === 'items') {
+      this.useEntries(entries);
+    }
+  }
+
+  /** Replaces the enemy list — once at boot, from the enemy roster and the loaded art. */
+  setEnemyEntries(entries: readonly CollectionEntry[]): void {
+    this.enemyEntries = entries;
+    if (this.tab === 'enemies') {
+      this.useEntries(entries);
+    }
+  }
+
+  /** Which page is showing — for tests and the dev console. */
+  get activeTab(): CollectionTab {
+    return this.tab;
+  }
+
+  /** Shows `tab`'s page, focus on the tab bar so the other direction comes straight back. */
+  switchTab(tab: CollectionTab): void {
+    if (tab !== this.tab) {
+      this.tab = tab;
+      this.focus = TAB_BAR;
+      this.lastCell = 0;
+      this.scrollRow = 0;
+      this.useEntries(tab === 'items' ? this.itemEntries : this.enemyEntries);
+    }
+    this.focusTabs();
+  }
+
+  private discovered(id: string): boolean {
+    return this.tab === 'items'
+      ? this.actions.isDiscovered(id)
+      : (this.actions.isEnemyDiscovered?.(id) ?? true);
+  }
+
+  /** What still earns a locked item (#503) — items only; an enemy is never locked. */
+  private lockedGoal(id: string): string | null {
+    return this.tab === 'items' ? this.actions.lockedGoal(id) : null;
+  }
+
+  private held(id: string): boolean {
+    return this.tab === 'items' && this.actions.isHeld(id);
+  }
+
+  private useEntries(entries: readonly CollectionEntry[]): void {
     this.entries = entries;
     this.grid.removeChildren();
     this.cells.length = 0;
@@ -177,8 +260,10 @@ export class CollectionScreen implements MenuScreen {
       this.grid.addChild(view);
       this.cells.push({ view, art, held });
     });
-    this.focus = Math.min(this.focus, Math.max(0, entries.length - 1));
-    this.lastCell = Math.max(0, this.focus);
+    if (this.focus >= 0) {
+      this.focus = Math.min(this.focus, Math.max(0, entries.length - 1));
+    }
+    this.lastCell = Math.min(this.lastCell, Math.max(0, entries.length - 1));
     if (this.view.visible) {
       this.refreshCells();
       this.layOut();
@@ -193,6 +278,15 @@ export class CollectionScreen implements MenuScreen {
   setLocale(locale: Locale): void {
     this.locale = locale;
     this.headline.set(t(locale, 'ui.collection.headline'));
+    TABS.forEach((tab, index) => {
+      const label = this.tabLabels[index];
+      if (label !== undefined) {
+        label.text = t(
+          locale,
+          tab === 'items' ? 'ui.collection.tabItems' : 'ui.collection.tabEnemies',
+        );
+      }
+    });
     this.menu.setItems(this.menuItems());
     this.menu.setFocusVisible(this.focus < 0);
     if (this.view.visible) {
@@ -207,6 +301,10 @@ export class CollectionScreen implements MenuScreen {
   /** Opens on the first cell, with discovery and held-state re-read — both can have changed since it was last open. */
   show(): void {
     this.view.visible = true;
+    if (this.tab !== 'items') {
+      this.tab = 'items';
+      this.useEntries(this.itemEntries);
+    }
     this.focus = this.entries.length > 0 ? 0 : -1;
     this.lastCell = 0;
     this.scrollRow = 0;
@@ -219,9 +317,22 @@ export class CollectionScreen implements MenuScreen {
     this.view.visible = false;
   }
 
-  /** Up/down: a grid row at a time, and off the bottom onto "Back". */
+  /** Up/down: a grid row at a time, off the top onto the tabs and off the bottom onto "Back". */
   moveFocus(delta: 1 | -1): void {
+    if (this.focus === TAB_BAR) {
+      if (delta > 0) {
+        if (this.entries.length > 0) {
+          this.focusCell(this.lastCell);
+        } else {
+          this.focusBack();
+        }
+      }
+      return;
+    }
     if (this.entries.length === 0) {
+      if (delta < 0) {
+        this.focusTabs();
+      }
       return;
     }
     if (this.focus < 0) {
@@ -238,11 +349,17 @@ export class CollectionScreen implements MenuScreen {
       this.focusBack();
     } else if (next >= 0) {
       this.focusCell(next);
+    } else {
+      this.focusTabs();
     }
   }
 
   /** Left/right: a cell at a time, stopping at either end rather than wrapping onto the next row. */
   moveFocusHorizontal(delta: 1 | -1): void {
+    if (this.focus === TAB_BAR) {
+      this.switchTab(delta > 0 ? 'enemies' : 'items');
+      return;
+    }
     if (this.focus < 0) {
       return;
     }
@@ -258,6 +375,10 @@ export class CollectionScreen implements MenuScreen {
   }
 
   activate(): void {
+    if (this.focus === TAB_BAR) {
+      this.switchTab(this.tab === 'items' ? 'enemies' : 'items');
+      return;
+    }
     if (this.focus < 0) {
       this.menu.activate();
     }
@@ -295,6 +416,15 @@ export class CollectionScreen implements MenuScreen {
     this.syncFocus();
   }
 
+  private focusTabs(): void {
+    if (this.focus >= 0) {
+      this.lastCell = this.focus;
+    }
+    this.focus = TAB_BAR;
+    this.menu.setFocusVisible(false);
+    this.syncFocus();
+  }
+
   private focusBack(): void {
     if (this.focus >= 0) {
       this.lastCell = this.focus;
@@ -310,29 +440,36 @@ export class CollectionScreen implements MenuScreen {
       if (cell === undefined) {
         return;
       }
-      const discovered = this.actions.isDiscovered(entry.id);
-      this.drawArt(cell.art, entry, 1);
+      const discovered = this.discovered(entry.id);
+      this.drawArt(cell.art, entry, 1, CELL - 4);
       cell.art.position.set(
         Math.round((CELL - cell.art.width) / 2),
         Math.round((CELL - cell.art.height) / 2),
       );
-      const locked = this.actions.lockedGoal(entry.id) !== null;
+      const locked = this.lockedGoal(entry.id) !== null;
       cell.art.tint = discovered && !locked ? 0xffffff : SILHOUETTE_TINT;
       cell.art.alpha = locked ? LOCKED_ALPHA : discovered ? 1 : SILHOUETTE_ALPHA;
-      cell.held.visible = this.actions.isHeld(entry.id);
+      cell.held.visible = this.held(entry.id);
     });
-    const found = this.entries.filter((entry) => this.actions.isDiscovered(entry.id)).length;
+    const found = this.entries.filter((entry) => this.discovered(entry.id)).length;
     this.progress.text = t(this.locale, 'ui.collection.progress', {
       found,
       total: this.entries.length,
     });
   }
 
-  private drawArt(sprite: Sprite, entry: CollectionEntry, scale: number): void {
+  /**
+   * Draws `entry`'s art at `scale`, shrunk to fit a `box`-pixel square when it
+   * would not: an item icon is 24 pixels, but a creature is its size in the
+   * room, and a boss would spill across half the grid.
+   */
+  private drawArt(sprite: Sprite, entry: CollectionEntry, scale: number, box: number): void {
     const texture = entry.art ?? this.starTexture;
     sprite.texture = texture;
-    sprite.width = texture.displayWidth * scale;
-    sprite.height = texture.displayHeight * scale;
+    const largest = Math.max(texture.displayWidth, texture.displayHeight, 1);
+    const fit = Math.min(scale, box / largest);
+    sprite.width = Math.round(texture.displayWidth * fit);
+    sprite.height = Math.round(texture.displayHeight * fit);
   }
 
   private scrollIntoView(): void {
@@ -357,7 +494,29 @@ export class CollectionScreen implements MenuScreen {
     });
   }
 
+  /** The active tab in the accent colour, the other plain; the ring round the active one while the bar has focus. */
+  private syncTabs(): void {
+    TABS.forEach((tab, index) => {
+      const label = this.tabLabels[index];
+      if (label !== undefined) {
+        label.tint = tab === this.tab ? UI_PALETTE.accent : UI_PALETTE.textDim;
+      }
+    });
+    const active = this.tabLabels[TABS.indexOf(this.tab)];
+    this.tabFocus.sync(
+      this.focus === TAB_BAR && active !== undefined
+        ? {
+            x: active.position.x - 3,
+            y: active.position.y - 2,
+            width: uiTextWidth(active.text) + 6,
+            height: UI_LINE_HEIGHT + 3,
+          }
+        : null,
+    );
+  }
+
   private syncFocus(): void {
+    this.syncTabs();
     const entry = this.focus >= 0 ? this.entries[this.focus] : undefined;
     const cell = this.focus >= 0 ? this.cells[this.focus] : undefined;
     if (cell?.view.visible !== true) {
@@ -380,12 +539,12 @@ export class CollectionScreen implements MenuScreen {
       return;
     }
     this.detail.visible = true;
-    const discovered = this.actions.isDiscovered(entry.id);
-    const lockedGoal = this.actions.lockedGoal(entry.id);
+    const discovered = this.discovered(entry.id);
+    const lockedGoal = this.lockedGoal(entry.id);
     const locale = this.locale;
     const wrap = this.detailWidth;
 
-    this.drawArt(this.detailArt, entry, DETAIL_ART_SCALE);
+    this.drawArt(this.detailArt, entry, DETAIL_ART_SCALE, DETAIL_ART_BOX);
     this.detailArt.tint = discovered && lockedGoal === null ? 0xffffff : SILHOUETTE_TINT;
     this.detailArt.alpha = lockedGoal !== null ? LOCKED_ALPHA : discovered ? 1 : SILHOUETTE_ALPHA;
     this.detailArt.position.set(0, 0);
@@ -413,7 +572,10 @@ export class CollectionScreen implements MenuScreen {
     if (discovered && entry.active) {
       tags.push(t(locale, 'ui.collection.active'));
     }
-    if (this.actions.isHeld(entry.id)) {
+    if (discovered && entry.enemy?.boss === true) {
+      tags.push(t(locale, 'ui.collection.boss'));
+    }
+    if (this.held(entry.id)) {
       tags.push(t(locale, 'ui.collection.held'));
     }
     if (lockedGoal !== null) {
@@ -436,11 +598,26 @@ export class CollectionScreen implements MenuScreen {
       this.detailDescription,
       lockedGoal !== null
         ? t(locale, 'ui.collection.lockedGoal', { goal: lockedGoal })
-        : discovered
-          ? entry.descriptionKey === ''
-            ? ''
-            : t(locale, entry.descriptionKey as DictKey)
-          : t(locale, 'ui.collection.unknownHint'),
+        : !discovered
+          ? t(
+              locale,
+              entry.enemy === undefined
+                ? 'ui.collection.unknownHint'
+                : 'ui.collection.unknownEnemyHint',
+            )
+          : entry.enemy !== undefined
+            ? [
+                entry.descriptionKey === '' ? '' : t(locale, entry.descriptionKey as DictKey),
+                t(locale, 'ui.collection.enemyStats', {
+                  health: entry.enemy.health,
+                  damage: entry.enemy.contactDamage,
+                }),
+              ]
+                .filter((line) => line !== '')
+                .join('\n')
+            : entry.descriptionKey === ''
+              ? ''
+              : t(locale, entry.descriptionKey as DictKey),
       wrap,
     );
     this.detailDescription.position.set(0, y);
@@ -473,6 +650,15 @@ export class CollectionScreen implements MenuScreen {
     let top = PANEL_MARGIN + PANEL_PADDING;
     this.headline.place(centreX, top);
     top += this.headline.height + GAP_BELOW_HEADLINE;
+    const tabWidths = this.tabLabels.map((label) => uiTextWidth(label.text));
+    const tabsWidth =
+      tabWidths.reduce((sum, w) => sum + w, 0) + TAB_GAP * Math.max(0, tabWidths.length - 1);
+    let tabX = Math.round(centreX - tabsWidth / 2);
+    this.tabLabels.forEach((label, index) => {
+      label.position.set(tabX, top);
+      tabX += (tabWidths[index] ?? 0) + TAB_GAP;
+    });
+    top += UI_LINE_HEIGHT + GAP_BELOW_TABS;
     this.progress.position.set(Math.round(centreX - uiTextWidth(this.progress.text) / 2), top);
     top += UI_LINE_HEIGHT + GAP_ABOVE_GRID;
 

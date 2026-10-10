@@ -14,6 +14,7 @@ import {
   shifted,
   shiftedRows,
 } from './views-kit.mjs';
+import { ZAPFHAHN_ANIM, ZAPFHAHN_STRIPS } from './zapfhahn-views.mjs';
 
 /**
  * The per-heading views of the Floor 1 creatures (#439 #440 #441 #442 #456,
@@ -570,6 +571,7 @@ const stripNames = (frames, name) => frames.map((f, i) => ({ ...f, name: `${name
 
 const ratSide0 = readFrames(`${CHARACTER_DIR}bierratte.png`, 1, 'bierratte')[0];
 const rollfass0 = readFrames(`${CHARACTER_DIR}rollfass.png`, 1, 'rollfass')[0];
+const zapfhahn0 = readFrames(`${CHARACTER_DIR}zapfhahn.png`, 1, 'zapfhahn')[0];
 const rattenkoenig0 = readFrames(`${CHARACTER_DIR}der-rattenkoenig.png`, 1, 'der-rattenkoenig')[0];
 const asselFrames = asselBase();
 const bossSide = readFrames(`${BOSS_DIR}grosse-kellerassel.strip.png`, 12, 'grosse-kellerassel');
@@ -610,6 +612,8 @@ export const CHARACTER_STRIPS = {
   'der-rattenkoenig-south': wobble(rattenkoenig0, 'der-rattenkoenig-south', 6),
   'der-rattenkoenig-side': bobSteps(rkSide(), 'der-rattenkoenig-side'),
   'der-rattenkoenig-north': bobSteps(rkNorth(), 'der-rattenkoenig-north'),
+
+  ...ZAPFHAHN_STRIPS,
 };
 
 export const BOSS_STRIPS = {
@@ -622,7 +626,9 @@ export const BOSS_STRIPS = {
 };
 
 /** Sidecars by strip name; strips not listed use `VIEW_ANIM`. */
-export const CHARACTER_SIDECARS = {};
+export const CHARACTER_SIDECARS = Object.fromEntries(
+  Object.keys(ZAPFHAHN_STRIPS).map((n) => [n, ZAPFHAHN_ANIM]),
+);
 export const BOSS_SIDECARS = Object.fromEntries(Object.keys(BOSS_STRIPS).map((n) => [n, bossAnim]));
 
 export { VIEW_ANIM, encodeSidecar, encodeViewStrip };
@@ -633,6 +639,7 @@ export const BASE_CANVAS = {
   kellerassel: [asselFrames[0].width, asselFrames[0].height],
   rollfass: [rollfass0.width, rollfass0.height],
   'der-rattenkoenig': [rattenkoenig0.width, rattenkoenig0.height],
+  zapfhahn: [zapfhahn0.width, zapfhahn0.height],
   'grosse-kellerassel': [bossSide[0].width, bossSide[0].height],
 };
 

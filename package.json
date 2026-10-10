@@ -13,7 +13,7 @@
     "build": "npm run typecheck && vite build",
     "build:tester": "npm run typecheck && vite build --config vite.tester.config.ts",
     "build:itch": "npm run build:tester && node tools/release/itch-zip.mjs",
-    "build:release": "npm run typecheck && vite build --config vite.release.config.ts",
+    "build:release": "npm run typecheck && vite build --config vite.release.config.ts && vite build --config vite.debug.config.ts && node tools/release/copy-debug.mjs",
     "release:smoke": "node tools/release/smoke.mjs",
     "release:notes": "node tools/release/notes.mjs",
     "release:post": "node tools/release/post.mjs",

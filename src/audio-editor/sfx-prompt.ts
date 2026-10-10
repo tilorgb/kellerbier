@@ -70,6 +70,8 @@ const IDEAS: Readonly<Record<string, string>> = {
   'item-zecke-latch': 'small wet click of a tick biting skin with a low sour hum',
   'windup-specht-drum': 'woodpecker drumming on a dry tree trunk, fast woody rattle, trrrrr',
   'item-zecke-shake-off': 'quick flick of dry air with a bright falling-away ping',
+  'item-explosion':
+    'deep cellar blast, a dull thump with rumbling debris and a short low brass boom',
 };
 
 export function suggestSfxPrompt(def: SfxDefinition): string {

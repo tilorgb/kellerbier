@@ -48,6 +48,11 @@ import { ACTOR_LAYER } from './layers.js';
  * because it still tests depth.
  */
 export const SCENERY_PROP_RENDER_ORDER = 1;
+
+/** The three.js shader chunks `enableHeadTint` hooks its lines in after. */
+const GLSL_COMMON = /* glsl */ `#include <common>`;
+const GLSL_BEGIN_VERTEX = /* glsl */ `#include <begin_vertex>`;
+const GLSL_ALPHATEST = /* glsl */ `#include <alphatest_fragment>`;
 export const OVER_SCENERY_RENDER_ORDER = 2;
 
 export class Billboard {
@@ -56,6 +61,8 @@ export class Billboard {
   private readonly uv: BufferAttribute;
   private textureValue: Texture | null = null;
   private mirrorValue = 1;
+  /** `enableHeadTint`'s uniforms, once it has been called. */
+  private headTint: { value: number } | null = null;
   /** Whether `placeFlat` laid the quad down, so `place` knows to turn it back. */
   private flat = false;
 
@@ -219,6 +226,48 @@ export class Billboard {
    */
   setGlow(colour: number, strength: number): void {
     this.mesh.material.emissive.setHex(colour).multiplyScalar(strength);
+  }
+
+  /**
+   * Lets one horizontal band of the sprite — `fromY` to `toY`, as fractions of
+   * its height from the bottom — be blushed red by `headRed` (Alois going red
+   * in the face before a Schnupftabak sneeze). Black stays black: the red
+   * scales the colour rather than adding to it, so the outline is untouched.
+   * Patches this billboard's own material, so only a body that asked pays for
+   * the extra shader variant.
+   */
+  enableHeadTint(fromY: number, toY: number): void {
+    const amount = { value: 0 };
+    this.headTint = amount;
+    const material = this.mesh.material;
+    material.onBeforeCompile = (shader) => {
+      shader.uniforms.uHeadRed = amount;
+      shader.vertexShader = shader.vertexShader
+        .replace(GLSL_COMMON, /* glsl */ `${GLSL_COMMON}\nvarying float vBandY;`)
+        .replace(GLSL_BEGIN_VERTEX, /* glsl */ `${GLSL_BEGIN_VERTEX}\nvBandY = position.y;`);
+      shader.fragmentShader = shader.fragmentShader
+        .replace(
+          GLSL_COMMON,
+          /* glsl */ `${GLSL_COMMON}\nvarying float vBandY;\nuniform float uHeadRed;`,
+        )
+        .replace(
+          GLSL_ALPHATEST,
+          /* glsl */ `${GLSL_ALPHATEST}
+          if (uHeadRed > 0.0 && vBandY > ${fromY.toFixed(4)} && vBandY < ${toY.toFixed(4)}) {
+            vec3 blushed = vec3(min(1.0, diffuseColor.r * 1.15), diffuseColor.g * 0.22, diffuseColor.b * 0.2);
+            diffuseColor.rgb = mix(diffuseColor.rgb, blushed, uHeadRed);
+          }`,
+        );
+    };
+    material.customProgramCacheKey = () => `head-tint-${fromY.toFixed(4)}-${toY.toFixed(4)}`;
+    material.needsUpdate = true;
+  }
+
+  /** How red the `enableHeadTint` band is, 0 (not at all) to 1. */
+  set headRed(value: number) {
+    if (this.headTint !== null) {
+      this.headTint.value = Math.min(1, Math.max(0, value));
+    }
   }
 
   /** Fades the body; anything under 1 turns alpha blending on for this mesh. */

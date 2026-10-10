@@ -1591,10 +1591,23 @@ export interface EnemyDefinition {
    *   animation strip*: a body with one view that does not turn to left or
    *   right (The First Human, seen from the front; only his arms swing).
    *
+   * - `'aim'` — a stationary shooter with per-heading strips (the Zapfhahn)
+   *   turns to the axis it is aiming down (the locked spot through a wind-up
+   *   and the volley, the player otherwise) rather than the way it moves, and
+   *   plays its strip's `attack` clip while it is in a state that fires.
+   *
    * Omitted: drawn as authored, never turned. A body with an animation strip
    * faces through its animator regardless.
    */
-  readonly facing?: 'mirror' | 'crawl' | 'fixed';
+  readonly facing?: 'mirror' | 'crawl' | 'fixed' | 'aim';
+  /**
+   * Mould (the Schimmelfleck and its spores): while any mould lives in the
+   * room the player slows, down to half speed; while a `'patch'` lives the
+   * air turns green and, at that floor, it drains a segment of health every
+   * few seconds — lent, not lost: it comes back, with the speed, once every
+   * `'patch'` and `'spore'` in the room is dead (`GameSim.stepMould`).
+   */
+  readonly mould?: 'patch' | 'spore';
   /** Which drop table (`content/pickups/drop-tables.ts`) its death rolls from. Defaults to `'normal'`. */
   readonly lootTier?: 'weak' | 'normal' | 'tough' | 'none';
   /**
