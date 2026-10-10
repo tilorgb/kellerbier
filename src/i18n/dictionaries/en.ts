@@ -298,6 +298,11 @@ export const en = {
   'ui.settings.privacy.shareToggle': 'Share anonymous playtest telemetry',
 
   // --- Playtest build: welcome screen and post-run questions ---------------
+  'ui.confirm.newRun.headline': 'Start a new run?',
+  'ui.confirm.newRun.body': 'Your current run will be lost.',
+  'ui.confirm.newRun.confirm': 'Start new run',
+  'ui.confirm.newRun.back': 'Back',
+  'ui.hud.restartHold': 'Restarting…',
   'ui.crash.title': 'Something went wrong',
   'ui.crash.runBody':
     'The game hit an error and stopped. Your run is saved up to the moment before it — reload to carry on from there.',

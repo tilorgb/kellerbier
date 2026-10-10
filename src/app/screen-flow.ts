@@ -4,6 +4,7 @@ import { CollectionScreen } from '../render/collection-screen.js';
 import { CreditsScreen } from '../render/credits-screen.js';
 import { PauseScreen } from '../render/pause-screen.js';
 import { ChallengeScreen } from '../render/challenge-screen.js';
+import { ConfirmScreen } from '../render/confirm-screen.js';
 import { MedalScreen } from '../render/medal-screen.js';
 import { RunSetupScreen } from '../render/run-setup-screen.js';
 import type { ChallengeView, MedalShelfView, RunSetupView } from './meta/progress.js';
@@ -40,7 +41,8 @@ export type Screen =
   | 'collection'
   | 'setup'
   | 'medals'
-  | 'challenges';
+  | 'challenges'
+  | 'confirm';
 
 export class ScreenFlow {
   private screen: Screen = 'title';
@@ -125,10 +127,14 @@ export class ScreenFlowController {
   readonly runSetup: RunSetupScreen;
   readonly medals: MedalScreen;
   readonly challenges: ChallengeScreen;
+  /** "Start a new run?" (#521) — between a run-starting choice and a run that would replace one still to continue. */
+  readonly confirm: ConfirmScreen;
 
   private readonly flow = new ScreenFlow();
   private readonly deps: ScreenFlowControllerDeps;
   private canContinueFlag = false;
+  /** The run start the confirm screen is asking about, and the screen its Back returns to. */
+  private pendingStart: { readonly start: () => void; readonly from: Screen } | null = null;
   /** Which screen Settings was opened from, and therefore what closing it goes back to. */
   private settingsOrigin: 'title' | 'paused' = 'title';
   /** Same as `settingsOrigin`, for the Collection. */
@@ -162,8 +168,9 @@ export class ScreenFlowController {
         },
         onDaily: () => {
           this.title.hide();
-          this.flow.goTo('run');
-          this.deps.daily.start();
+          this.startNewRun('title', () => {
+            this.deps.daily.start();
+          });
         },
         dailyPlayedToday: deps.daily.playedToday,
         onChallenges: () => {
@@ -234,11 +241,24 @@ export class ScreenFlowController {
         list: deps.challenges.list,
         onStart: (id) => {
           this.challenges.hide();
-          this.flow.goTo('run');
-          this.deps.challenges.start(id);
+          this.startNewRun('challenges', () => {
+            this.deps.challenges.start(id);
+          });
         },
         onBack: () => {
           this.closeChallenges();
+        },
+      },
+      deps.locale,
+    );
+    this.confirm = new ConfirmScreen(
+      deps.kit,
+      {
+        onConfirm: () => {
+          this.confirmNewRun();
+        },
+        onBack: () => {
+          this.closeConfirm();
         },
       },
       deps.locale,
@@ -288,6 +308,7 @@ export class ScreenFlowController {
     this.runSetup.setLocale(locale);
     this.medals.setLocale(locale);
     this.challenges.setLocale(locale);
+    this.confirm.setLocale(locale);
     this.deps.settingsMenu.setLocale(locale);
     this.settings.setLocale(locale, this.deps.settingsMenu.tabs);
   }
@@ -311,6 +332,7 @@ export class ScreenFlowController {
     this.runSetup.resize(width, height);
     this.medals.resize(width, height);
     this.challenges.resize(width, height);
+    this.confirm.resize(width, height);
     this.placeSettings();
   }
 
@@ -338,8 +360,14 @@ export class ScreenFlowController {
     this.runSetup.hide();
     this.medals.hide();
     this.challenges.hide();
+    this.confirm.hide();
+    this.pendingStart = null;
     this.title.setSettingsOpen(false);
     this.title.show();
+    // A run to continue is the likely choice (#521): open on it, not on Start.
+    if (continuable) {
+      this.title.focusContinue();
+    }
   }
 
   /**
@@ -549,8 +577,64 @@ export class ScreenFlowController {
 
   private startFromSetup(tier: number): void {
     this.runSetup.hide();
+    this.startNewRun('setup', () => {
+      this.deps.runSetup.start(tier);
+    });
+  }
+
+  /**
+   * Every run the title starts goes through here (#521): straight in, unless
+   * there is a run to continue — then the confirm screen asks first, so two
+   * presses of Enter never throw a run away. `from` is where its Back goes.
+   */
+  private startNewRun(from: Screen, start: () => void): void {
+    if (!this.canContinueFlag) {
+      this.flow.goTo('run');
+      start();
+      return;
+    }
+    this.pendingStart = { start, from };
+    this.flow.goTo('confirm');
+    this.confirm.show();
+    this.deps.playOpenSound();
+  }
+
+  private confirmNewRun(): void {
+    const pending = this.pendingStart;
+    if (!this.flow.is('confirm') || pending === null) {
+      return;
+    }
+    this.pendingStart = null;
+    this.canContinueFlag = false;
+    this.confirm.hide();
     this.flow.goTo('run');
-    this.deps.runSetup.start(tier);
+    pending.start();
+  }
+
+  private closeConfirm(): void {
+    const pending = this.pendingStart;
+    if (!this.flow.is('confirm') || pending === null) {
+      return;
+    }
+    this.pendingStart = null;
+    this.confirm.hide();
+    this.flow.goTo(pending.from);
+    this.screenFor(pending.from)?.show();
+    this.deps.playCloseSound();
+  }
+
+  /** The screen object behind a title-side `Screen` id — for the confirm screen's Back. */
+  private screenFor(screen: Screen): { show: () => void } | null {
+    switch (screen) {
+      case 'setup':
+        return this.runSetup;
+      case 'challenges':
+        return this.challenges;
+      case 'title':
+        return this.title;
+      default:
+        return null;
+    }
   }
 
   /** Resumes whichever run is already sitting there — the one boot loaded, or one merely paused-and-quit-to-title this session. */
@@ -578,6 +662,8 @@ export class ScreenFlowController {
         return this.medals;
       case 'challenges':
         return this.challenges;
+      case 'confirm':
+        return this.confirm;
       case 'run':
         return null;
     }
@@ -658,6 +744,8 @@ export class ScreenFlowController {
           this.closeMedals();
         } else if (this.flow.is('challenges')) {
           this.closeChallenges();
+        } else if (this.flow.is('confirm')) {
+          this.closeConfirm();
         }
         break;
       default:
@@ -766,6 +854,8 @@ export class ScreenFlowController {
         this.closeMedals();
       } else if (this.flow.is('challenges')) {
         this.closeChallenges();
+      } else if (this.flow.is('confirm')) {
+        this.closeConfirm();
       }
     }
     return true;

@@ -192,6 +192,7 @@ import { loadSave } from './save/storage.js';
 import { dailyDateKey, dailyRunParameters } from './daily.js';
 import { challengeById, challengeRules, challengeRunParameters } from './challenges.js';
 import { RunTimerHud } from '../render/run-timer-hud.js';
+import { RestartHoldHud } from '../render/restart-hold-hud.js';
 import { NO_CHALLENGE } from '../sim/game/challenge.js';
 import {
   STORY_BEAT_CHAPTER_FOUR,
@@ -1296,6 +1297,15 @@ async function boot(progress: BootProgress): Promise<void> {
   const storySkip = new HoldToSkip();
   /** Space held on the keyboard, as seen by a fresh (non-repeat) keydown while the card is up. */
   let storySkipKeyHeld = false;
+  /**
+   * R restarts the run only once held (#521) — a stray tap used to throw a
+   * run away in every build. Same hold as a story card's skip, including
+   * having to be seen released first. See `pollRestartHold`.
+   */
+  const restartHold = new HoldToSkip();
+  const RESTART_HOLD_MAX_FRAME_MS = 50;
+  let restartKeyHeld = false;
+  let restartHoldLastMs = 0;
   let storySkipLastMs = 0;
   /** Set when a story beat pushed the floor's own card behind it — see `showStoryBeat`/`dismissStoryCard`. */
   let floorCardPendingAfterStory = false;
@@ -1605,6 +1615,8 @@ async function boot(progress: BootProgress): Promise<void> {
   /** Sperrstunde's clock (#507) — hidden in every run without a time limit. */
   const runTimerHud = new RunTimerHud(kit, preferences.locale);
   hudLayer.addChild(runTimerHud.view);
+  const restartHoldHud = new RestartHoldHud(kit, preferences.locale);
+  hudLayer.addChild(restartHoldHud.view);
 
   /** The spirit walk (#84): a small persistent "you are doing this" readout. */
   const blutwurzHud = new BlutwurzHud(kit, preferences.locale);
@@ -1726,6 +1738,7 @@ async function boot(progress: BootProgress): Promise<void> {
     promilleUnlockHud.resize(width, height);
     unlockToastHud.resize(width, height);
     runTimerHud.resize(width, height);
+    restartHoldHud.resize(width, height);
     blutwurzHud.place(centreX, Math.round(height * 0.06));
 
     replayViewer.view.position.set(
@@ -2195,6 +2208,39 @@ async function boot(progress: BootProgress): Promise<void> {
   function retryRun(): void {
     screenController?.enterRun();
     startRun(Math.floor(Math.random() * 1_000_000));
+  }
+
+  /**
+   * Advances the hold-R restart (#521) once per rendered frame. Only a live,
+   * unpaused run counts: anywhere else the hold resets, so it cannot carry a
+   * half-finished hold into the next run or out of a menu.
+   */
+  function pollRestartHold(nowMs: number): void {
+    const live =
+      deathPhase === 'alive' &&
+      !loop.paused &&
+      replay === null &&
+      !storyCard.visible &&
+      !runResults.visible;
+    let progress = 0;
+    if (live) {
+      // Capped per frame: a hitch must not finish the hold in one go, or a
+      // stalled frame turns a tap back into an instant restart.
+      progress = restartHold.update(
+        Math.min(nowMs - restartHoldLastMs, RESTART_HOLD_MAX_FRAME_MS),
+        restartKeyHeld,
+      );
+    } else {
+      restartHold.reset();
+    }
+    restartHoldLastMs = nowMs;
+    restartHoldHud.set(progress);
+    if (progress >= 1) {
+      restartHold.reset();
+      restartKeyHeld = false;
+      restartHoldHud.set(0);
+      retryRun();
+    }
   }
 
   /**
@@ -2759,6 +2805,7 @@ async function boot(progress: BootProgress): Promise<void> {
       // rather than every tick, since it is exactly what keeps working while
       // `loop.paused` has stopped ticks from running at all.
       pollMenuGamepad();
+      pollRestartHold(started);
       // `started` doubles as the render clock animation clips advance on
       // (#150) — the same reading this frame is already being timed from,
       // rather than a second `performance.now()` a fraction of a millisecond
@@ -3215,6 +3262,7 @@ async function boot(progress: BootProgress): Promise<void> {
   hudLayer.addChild(screenController.runSetup.view);
   hudLayer.addChild(screenController.medals.view);
   hudLayer.addChild(screenController.challenges.view);
+  hudLayer.addChild(screenController.confirm.view);
   screenController.collection.setEntries(
     // Its own registry over the full roster rather than \`sim.items\`: no run
     // exists yet at this point in boot, and the Collection lists the game's
@@ -3377,7 +3425,7 @@ shots ${String(shots.liveCount)}/${String(shots.capacity)}  particles ${String(
 save ${String(activeRunRecorder.frameCount)} ticks logged${resumedHint}${sandboxRun ? `  SANDBOX (floor ${String(sandboxStartFloor)} start: no saves, no unlocks)` : ''}
 WASD move   arrows aim and fire
   O debug   T tuning   I shot tags   Y settings   P pause   M ${isMuted() ? 'unmute' : 'mute'}   . step   [ ] time scale
-  N next room (after clear)   R restart (new seed)   C copy run   L load replay${overrideKeyHint}${grantKeyHint}`;
+  N next room (after clear)   hold R restart (new seed)   C copy run   L load replay${overrideKeyHint}${grantKeyHint}`;
   };
 
   /**
@@ -4760,10 +4808,14 @@ WASD move   arrows aim and fire
     if (event.code === 'Space') {
       storySkipKeyHeld = false;
     }
+    if (event.code === 'KeyR') {
+      restartKeyHeld = false;
+    }
   });
   window.addEventListener('blur', () => {
     screenController.releaseKeys();
     storySkipKeyHeld = false;
+    restartKeyHeld = false;
   });
 
   window.addEventListener('keydown', (event: KeyboardEvent) => {
@@ -4893,10 +4945,15 @@ WASD move   arrows aim and fire
         break;
       case 'r':
       case 'R':
-        // A fresh random seed every press, same as Isaac's own restart key —
-        // `#seed-input` is what pins a specific one instead. Same function
-        // the game-over/victory screens' own "Retry" button calls.
-        retryRun();
+        // A fresh random seed, same as Isaac's own restart key — and held, as
+        // Isaac's is (#521): mid-run, a tap only starts the hold
+        // `pollRestartHold` counts. On the game-over/victory screen the run
+        // is already over, so R retries at once, like its "Retry" button.
+        if (deathPhase === 'over') {
+          retryRun();
+        } else {
+          restartKeyHeld = true;
+        }
         break;
       case 'ArrowUp':
       case 'ArrowDown':
@@ -5367,6 +5424,7 @@ WASD move   arrows aim and fire
     promilleUnlockHud.setLocale(locale);
     unlockToastHud.setLocale(locale);
     runTimerHud.setLocale(locale);
+    restartHoldHud.setLocale(locale);
     blutwurzHud.setLocale(locale);
     if (runResults.visible) {
       runResults.update(currentRunResultsView(locale));

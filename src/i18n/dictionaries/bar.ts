@@ -290,6 +290,11 @@ export const bar: Record<DictKey, string> = {
   'ui.settings.privacy.shareToggle': 'Anonyme Playtest-Telemetrie teiln',
 
   // --- Playtest build: welcome screen and post-run questions ---------------
+  'ui.confirm.newRun.headline': 'An neia Lauf ofanga?',
+  'ui.confirm.newRun.body': 'Dei aktueller Lauf is dann weg.',
+  'ui.confirm.newRun.confirm': 'Neia Lauf',
+  'ui.confirm.newRun.back': 'Zruck',
+  'ui.hud.restartHold': 'Neistart…',
   'ui.crash.title': 'Do is wos schiefganga',
   'ui.crash.runBody':
     'Des Spiel is über an Fehler gstolpert und steht. Dei Lauf is bis kurz davor gspeichert — lad nei, dann geht’s do weida.',
