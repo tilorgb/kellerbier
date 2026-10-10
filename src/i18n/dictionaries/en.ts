@@ -147,6 +147,7 @@ export const en = {
   'ui.hud.blutwurzActive': 'Blutwurz — find your corpse',
   'ui.hud.purseFlying': 'Purse: {biermarken} — flying',
   'ui.hud.purseEmpty': 'Purse empty — no power',
+  'ui.hud.unlockEarned': 'Unlocked: {name}',
   'ui.hud.promilleUnlocked': '{meter} unlocked',
   'ui.hud.promilleUnlockHint': 'The Maß hits harder. Too much and you fall over.',
   'ui.promille.effectBonus': '+{damage}% damage, +{rate}% fire rate',

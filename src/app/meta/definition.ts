@@ -34,10 +34,72 @@ export function bossStatKey(floor: number): string {
   return `boss.floor${String(floor)}`;
 }
 
+/**
+ * Run feats (#502): the run-wide bests, each the best a single run has ever
+ * reached — so `statAtLeast` over them reads "in one run". Merged as maxima
+ * (`withRunBests`), never summed, which is what makes committing them again
+ * and again over a run harmless.
+ */
+export const STAT_DEEPEST_TIER = 'feat.run.deepestTier';
+export const STAT_MOST_BEERS = 'feat.run.mostBeers';
+export const STAT_MOST_PASSIVES = 'feat.run.mostPassives';
+
+/** Whether item set `id` has ever been completed — `1` once it has. */
+export function itemSetStatKey(id: string): string {
+  return `feat.set.${id}`;
+}
+
+/**
+ * The best a run has ever done at holding the meter up across floor `floor`:
+ * the highest "lowest tier between arriving on the floor and beating its
+ * boss". `statAtLeast` at tier T reads "clear floor N without dropping below
+ * tier T".
+ */
+export function floorHeldTierStatKey(floor: number): string {
+  return `feat.floor${String(floor)}.heldTier`;
+}
+
+/**
+ * How a boss fight has to go (#502). Measured from the boss room's lock to
+ * the kill, and only on fights the player won.
+ *
+ * The threshold kinds (`maxHits`, `maxHealthLeft`, `maxSeconds`,
+ * `minPromilleTier`, `maxItemQuality`) are judged against the best fight on
+ * record, so they are met once and stay met; the counted kinds (`sober`,
+ * `asCharacter`, `withoutTags`) are tallied per fight and take a `times`.
+ */
+export type BossFeat =
+  /** Took at most `hits` hits in the fight — `0` is a no-damage kill. */
+  | { readonly kind: 'maxHits'; readonly hits: number }
+  /** Had at most `halfHearts` half-Maß (red plus Weißbier) left at the kill. */
+  | { readonly kind: 'maxHealthLeft'; readonly halfHearts: number }
+  /** Won within `seconds` of the doors locking. */
+  | { readonly kind: 'maxSeconds'; readonly seconds: number }
+  /** Won at a Promille tier of at least `tier` (`sim/game/promille.ts`'s `PromilleTier`). */
+  | { readonly kind: 'minPromilleTier'; readonly tier: number }
+  /** Won holding nothing above quality `quality`. */
+  | { readonly kind: 'maxItemQuality'; readonly quality: number }
+  /** Won at exactly 0 Promille in a run where the meter existed. */
+  | { readonly kind: 'sober' }
+  /** Won as character `character`. */
+  | { readonly kind: 'asCharacter'; readonly character: string }
+  /** Won holding no item carrying any of `tags`. */
+  | { readonly kind: 'withoutTags'; readonly tags: readonly string[] };
+
 /** What earns an unlock, or a character. */
 export type UnlockCondition =
   | { readonly kind: 'bossDefeated'; readonly floor: number }
-  | { readonly kind: 'statAtLeast'; readonly stat: string; readonly value: number };
+  | { readonly kind: 'statAtLeast'; readonly stat: string; readonly value: number }
+  /**
+   * A boss fight that went a particular way (#502). `floor: null` is any
+   * boss; `times` (counted feats only, default 1) asks for it more than once.
+   */
+  | {
+      readonly kind: 'bossFeat';
+      readonly floor: number | null;
+      readonly feat: BossFeat;
+      readonly times?: number;
+    };
 
 /** What kind of thing an unlock hands over — used to group and to colour it. */
 export type UnlockCategory = 'mechanic' | 'character' | 'items' | 'challenge' | 'hub';

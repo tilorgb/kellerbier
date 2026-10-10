@@ -137,6 +137,7 @@ export const de: Record<DictKey, string> = {
   'ui.hud.blutwurzActive': 'Blutwurz — finde deine Leiche',
   'ui.hud.purseFlying': 'Geldbeutel: {biermarken} — fliegt',
   'ui.hud.purseEmpty': 'Geldbeutel leer — keine Kraft',
+  'ui.hud.unlockEarned': 'Freigeschaltet: {name}',
   'ui.hud.promilleUnlocked': '{meter} freigeschaltet',
   'ui.hud.promilleUnlockHint': 'Die Maß trifft härter. Zu viel, und du fällst um.',
   'ui.promille.effectBonus': '+{damage} % Schaden, +{rate} % Feuerrate',

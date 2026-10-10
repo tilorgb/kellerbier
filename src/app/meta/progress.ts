@@ -2,6 +2,7 @@ import { FLOOR_CONFIGS } from '../../content/floors/definition.js';
 import type { Locale } from '../../i18n/locale.js';
 import { t } from '../../i18n/translate.js';
 import { type CharacterTraits, NEUTRAL_TRAITS } from '../../sim/character/definition.js';
+import type { BossFightRecord, RunBests } from '../../sim/game/feats.js';
 import { dailySeed } from '../../sim/rng/daily.js';
 import { TICKS_PER_SECOND } from '../../sim/time.js';
 import {
@@ -21,6 +22,7 @@ import {
   STAT_TICKS,
   bossStatKey,
 } from './definition.js';
+import { bossFeatProgress, foldBossFight, foldRunBests, satisfyBossFeat } from './feats.js';
 
 /**
  * Meta-progression's rules, as pure functions over a `SaveData`.
@@ -91,6 +93,8 @@ export function conditionProgress(save: SaveData, condition: UnlockCondition): C
         current: Math.min(condition.value, statistic(save, condition.stat)),
         goal: condition.value,
       };
+    case 'bossFeat':
+      return bossFeatProgress(save, condition.floor, condition.feat, condition.times);
   }
 }
 
@@ -146,6 +150,59 @@ export function withBossDefeat(
   statistics[bossStatKey(floor)] = statistic(save, bossStatKey(floor)) + 1;
   statistics[STAT_DEEPEST_FLOOR] = Math.max(statistic(save, STAT_DEEPEST_FLOOR), floor);
   return grantEarnedUnlocks({ ...save, statistics }, content);
+}
+
+/**
+ * Records one won boss fight's run feats (#502) — how it went, folded into
+ * the save's statistics (`app/meta/feats.ts`). Committed once per fight, on
+ * the same edge `withBossDefeat` is.
+ */
+export function withBossFight(
+  save: SaveData,
+  record: BossFightRecord,
+  content: ProgressionContent,
+): SaveData {
+  return grantEarnedUnlocks(
+    { ...save, statistics: foldBossFight(save.statistics, record) },
+    content,
+  );
+}
+
+/**
+ * Records a run's bests so far (#502) — the deepest tier, the most Maß, the
+ * most passives held, the sets completed. Merged as maxima, so committing
+ * the same run again as its bests move is harmless; returns the very same
+ * save when nothing improved, so a caller can skip the write.
+ */
+export function withRunBests(
+  save: SaveData,
+  bests: RunBests,
+  content: ProgressionContent,
+): SaveData {
+  const statistics = foldRunBests(save.statistics, bests);
+  const changed = Object.keys(statistics).some((key) => statistics[key] !== save.statistics[key]);
+  return changed ? grantEarnedUnlocks({ ...save, statistics }, content) : save;
+}
+
+/**
+ * Everything `save` has earned, by name — the unlocks granted and the
+ * characters whose conditions are met. Compared before and after a mid-run
+ * commit (`app/main.ts`) to announce what just arrived.
+ */
+export function earnedNames(save: SaveData, content: ProgressionContent): Map<string, string> {
+  const earned = new Map<string, string>();
+  const granted = new Set(save.unlocks);
+  for (const unlock of content.unlocks) {
+    if (granted.has(unlock.id)) {
+      earned.set(`unlock:${unlock.id}`, unlock.name);
+    }
+  }
+  for (const character of content.characters) {
+    if (character.requires !== null && characterUnlocked(save, character)) {
+      earned.set(`character:${character.id}`, character.name);
+    }
+  }
+  return earned;
 }
 
 /**
@@ -254,6 +311,8 @@ export function withEverythingUnlocked(save: SaveData, content: ProgressionConte
     if (condition.kind === 'bossDefeated') {
       const key = bossStatKey(condition.floor);
       statistics[key] = Math.max(statistics[key] ?? 0, 1);
+    } else if (condition.kind === 'bossFeat') {
+      satisfyBossFeat(statistics, condition.floor, condition.feat, condition.times);
     } else {
       statistics[condition.stat] = Math.max(statistics[condition.stat] ?? 0, condition.value);
     }

@@ -90,6 +90,8 @@ describe('character roster (#47)', () => {
       expect(character.goal.length, `${character.id} states its goal`).toBeGreaterThan(0);
       if (requires.kind === 'bossDefeated') {
         expect(requires.floor, character.id).toBeLessThanOrEqual(HIGHEST_PLAYABLE_FLOOR);
+      } else if (requires.kind === 'bossFeat') {
+        expect(requires.floor ?? 1, character.id).toBeLessThanOrEqual(HIGHEST_PLAYABLE_FLOOR);
       } else {
         expect(countable, `${character.id} counts ${requires.stat}`).toContain(requires.stat);
         expect(requires.value, character.id).toBeGreaterThan(0);

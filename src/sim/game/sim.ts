@@ -166,6 +166,7 @@ import { stepCheese } from '../hazard/cheese.js';
 import { WeatherStore, stepWeather } from '../hazard/weather.js';
 import { LobStore, launchLob, nearestEnemyTo, stepLobs } from '../systems/lobs.js';
 import { stepProjectiles, stepShooting } from '../systems/shooting.js';
+import { type FeatSource, RunFeatTracker, itemTagUniverse } from './feats.js';
 import {
   STATUS_BURN,
   STATUS_DAZE,
@@ -718,7 +719,7 @@ export interface GameSimOptions {
 /** Water creatures already warned about spawning in a dry room (#408) — once each per process, like `nearestFloorChoice`'s warning. */
 const warnedZonelessSpawns = new Set<string>();
 
-export class GameSim {
+export class GameSim implements FeatSource {
   readonly world: World;
   readonly random: RunRandom;
   room: RoomGeometry;
@@ -913,6 +914,13 @@ export class GameSim {
 
   /** Which items this run holds, and their per-item runtime state. */
   readonly inventory: ItemInventory;
+
+  /**
+   * How this run went, for meta-progression's run feats (#502) — boss fights
+   * won and how, and the run-wide bests. Read-only with respect to the
+   * simulation: see `sim/game/feats.ts`.
+   */
+  readonly feats: RunFeatTracker;
 
   /**
    * Registry indices whose `modifyStats` contribution needs to be re-folded
@@ -1901,6 +1909,7 @@ export class GameSim {
       this.items,
     );
     this.inventory = new ItemInventory(this.items);
+    this.feats = new RunFeatTracker(itemTagUniverse(this.items.all));
     this.itemStatsDirty = new Uint8Array(this.items.count);
     this.dirtyItemIndices = new Int32Array(this.items.count);
     this.promilleUnlockedValue = options.promilleUnlocked ?? true;
@@ -3341,6 +3350,12 @@ export class GameSim {
     if (this.roomEnemyCount === 0) {
       this.roomClearedIds.add(this.roomId);
     }
+    // A boss room with something still alive in it is a fight starting (#502)
+    // — timed and counted from here, the moment its doors lock.
+    this.feats.noteRoomLoaded(
+      this,
+      this.roomSpecialRole === 'boss' && !this.roomClearedIds.has(this.roomId),
+    );
     this.world.flush();
   }
 
@@ -3771,6 +3786,29 @@ export class GameSim {
   /** Red Maß, current and max — the pool every other entity's `health` also carries. */
   get playerHealth(): number {
     return this.health.data[this.playerIndex * 2] ?? 0;
+  }
+
+  /** The character this run is played as — `CharacterTraits.id`, what a run feat credits (#502). */
+  get characterId(): string {
+    return this.character.id;
+  }
+
+  /**
+   * Red plus Weißbier, in half-Maß — what "a boss beaten on half a heart"
+   * measures (#502). `null` under Homebrew, where life is the Promille glass
+   * and there are no hearts for the feat to be about.
+   */
+  get featHealth(): number | null {
+    return this.lifeIsPromille ? null : this.playerHealth + this.soulHp;
+  }
+
+  /** Every held item's compiled definition, in the inventory's deterministic order (#502). */
+  heldItems(): CompiledItem[] {
+    const held: CompiledItem[] = [];
+    this.inventory.forEachHeld((index) => {
+      held.push(this.items.at(index));
+    });
+    return held;
   }
 
   /** Weißbier, in half-Maß. Spent before red. */
@@ -4574,6 +4612,7 @@ export class GameSim {
     const health = this.health.data;
     const index = this.playerIndex;
     const red = health[index * 2] ?? 0;
+    this.feats.notePlayerHit();
     // Every hit that actually lands passes through here — see this method's
     // own doc comment on being the one place player health changes — so this
     // is the one stamp the flinch clip can trust.
@@ -5169,6 +5208,7 @@ export class GameSim {
     const state = this.inventory.pickUp(index);
     this.markItemStatsDirty(index);
     this.syncItemStatModifiers();
+    this.feats.noteInventory(this);
     const item = this.items.at(index);
     // Flavour text over the literal effect text here — the pedestal/HUD
     // already show the mechanical description before a pickup, so the toast
@@ -5266,6 +5306,7 @@ export class GameSim {
    * never reaches this.
    */
   drinkBeer(amount: number): void {
+    this.feats.noteBeerDrunk();
     cleansePoison(this);
     this.addPromille(amount);
   }
@@ -6817,6 +6858,7 @@ export class GameSim {
         if (modifiers.length > 0) {
           this.stats.setSourceModifiers(key, modifiers);
         }
+        this.feats.noteSetCompleted(set.id);
         this.setRevealName = set.name;
         // A localisation key, not literal text — `render/item-set-hud.ts`
         // resolves it with `set.name` as the `{name}` interpolation var. Sim
@@ -7195,6 +7237,12 @@ export class GameSim {
       this.roomEnemyCount === 0 &&
       !this.roomClearedIds.has(this.roomId)
     ) {
+      // Before any reward below: a boss fight is judged on how it ended, not
+      // on what the clear pays out — the Promille that switches on at this
+      // very tick (#236) must not turn a sober kill into a promilled one.
+      if (this.roomSpecialRole === 'boss') {
+        this.feats.noteRoomCleared(this, !this.playerDeadFlag && !this.blutwurzActiveFlag);
+      }
       // Every log Bieber rolled, in a doorway or not, goes with the fight (#467).
       this.clearLogs();
       const rewardLocations: { x: number; y: number }[] = [];
@@ -7307,6 +7355,7 @@ export class GameSim {
       this.puddleImmuneTicks -= 1;
     }
 
+    this.feats.tick(this);
     this.previousButtons = input.buttons;
     this.world.flush();
     this.currentTick += 1;
