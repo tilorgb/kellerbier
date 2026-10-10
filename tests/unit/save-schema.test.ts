@@ -48,6 +48,7 @@ describe('save schema sanitisation (#45)', () => {
       character: 'alois',
       lockedItems: [],
       tier: 0,
+      dailyDate: null,
     });
   });
 
