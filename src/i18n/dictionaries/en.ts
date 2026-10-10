@@ -80,6 +80,7 @@ export const en = {
   'ui.results.backToRun': 'Back to Run',
   'ui.results.newInPool': 'New in the pool',
   'ui.setup.headline': 'New Run',
+  'ui.setup.bosses': 'Bosses:',
   'ui.setup.character': 'Character: {name}',
   'ui.setup.tier': 'Difficulty: {tier}',
   'ui.setup.tierNormal': 'Normal',

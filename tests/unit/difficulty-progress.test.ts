@@ -1,10 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { type ProgressionContent, tierWonStatKey } from '../../src/app/meta/definition.js';
 import {
+  type ProgressionContent,
+  bossStatKey,
+  tierWonStatKey,
+} from '../../src/app/meta/definition.js';
+import { FLOOR_CONFIGS, HIGHEST_PLAYABLE_FLOOR } from '../../src/content/floors/definition.js';
+import {
+  bossMarks,
   buildRunSetupView,
   earnedNames,
   highestTierOpen,
   withEverythingUnlocked,
+  withBossFight,
   withRunWon,
 } from '../../src/app/meta/progress.js';
 import { migrateSave } from '../../src/app/save/migrations.js';
@@ -170,5 +177,61 @@ describe('save v11 (#505)', () => {
     });
     expect(saved.activeRun?.tier).toBe(3);
     expect(saved.replays[0]?.tier).toBe(4);
+  });
+});
+
+describe('boss marks (#504)', () => {
+  const fight = (floor: number, character: string): Parameters<typeof withBossFight>[1] => ({
+    floor,
+    character,
+    hitsTaken: 2,
+    ticks: 3000,
+    healthLeft: 4,
+    promilleUnlocked: true,
+    promille: 1,
+    promilleTier: 1,
+    topQuality: 1,
+    absentTags: [],
+    floorLowestTier: 0,
+  });
+
+  it('marks only the character who won the fight, and only that floor', () => {
+    const save = withBossFight(createDefaultSave(), fight(1, 'resi'), CONTENT);
+    expect(bossMarks(save, 'resi').map((mark) => mark.beaten)).toEqual([
+      true,
+      ...Array.from({ length: HIGHEST_PLAYABLE_FLOOR - 1 }, () => false),
+    ]);
+    expect(bossMarks(save, 'alois').some((mark) => mark.beaten)).toBe(false);
+  });
+
+  it('does not credit anyone with a kill from before the game recorded who was playing', () => {
+    const old = {
+      ...createDefaultSave(),
+      statistics: { [bossStatKey(1)]: 4, [bossStatKey(2)]: 2 },
+    };
+    expect(bossMarks(old, 'alois').some((mark) => mark.beaten)).toBe(false);
+  });
+
+  it('has one mark per playable floor, each named by a real floor config', () => {
+    const marks = bossMarks(createDefaultSave(), 'alois');
+    expect(marks.map((mark) => mark.floor)).toEqual(
+      Array.from({ length: HIGHEST_PLAYABLE_FLOOR }, (_, index) => index + 1),
+    );
+    for (const mark of marks) {
+      // `floorName` falls back to "Stock N" for a floor with no config — a
+      // floor made playable without its content would show that here.
+      expect(
+        FLOOR_CONFIGS.some((config) => config.name === mark.name),
+        mark.name,
+      ).toBe(true);
+    }
+  });
+
+  it('is what the run-setup view carries for the selected character', () => {
+    const save = {
+      ...withBossFight(createDefaultSave(), fight(2, 'alois'), CONTENT),
+      selectedCharacter: 'alois',
+    };
+    expect(buildRunSetupView(save, CONTENT).marks[1]?.beaten).toBe(true);
   });
 });

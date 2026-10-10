@@ -69,6 +69,7 @@ export const de: Record<DictKey, string> = {
   'ui.results.backToRun': 'Zurück zum Lauf',
   'ui.results.newInPool': 'Neu im Pool',
   'ui.setup.headline': 'Neuer Lauf',
+  'ui.setup.bosses': 'Bosse:',
   'ui.setup.character': 'Figur: {name}',
   'ui.setup.tier': 'Schwierigkeit: {tier}',
   'ui.setup.tierNormal': 'Normal',

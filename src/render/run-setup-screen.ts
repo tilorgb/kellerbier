@@ -7,7 +7,7 @@ import type { UiKit } from './ui/kit.js';
 import { Menu, type MenuItem, type MenuScreen } from './ui/menu.js';
 import { PostcardPanel } from './postcard-panel.js';
 import { DisplayTitle, TITLE_STYLES } from './ui/title.js';
-import { UI_LINE_HEIGHT, uiText } from './ui/text.js';
+import { UI_LINE_HEIGHT, uiText, uiTextWidth } from './ui/text.js';
 
 const GAP_BELOW_HEADLINE = 12;
 const GAP_ABOVE_DETAIL = 10;
@@ -234,12 +234,52 @@ export class RunSetupScreen implements MenuScreen {
       }
     }
     let y = 0;
-    for (const line of lines) {
+    lines.forEach((line, index) => {
       const label: BitmapText = uiText(line.text, { colour: line.colour, wrapWidth: DETAIL_WIDTH });
       label.position.set(0, y);
       this.detail.addChild(label);
       y += Math.max(UI_LINE_HEIGHT, Math.ceil(label.height));
+      // The boss marks sit right under the character's own line (#504).
+      if (index === 0 && selected !== undefined && selected.note !== '') {
+        y = this.addMarks(y);
+      }
+    });
+    if (selected === undefined || selected.note === '') {
+      this.addMarks(y);
     }
+  }
+
+  /**
+   * The selected character's boss marks (#504): "Bosses:" then one floor
+   * name per boss, lit in the accent colour once this character has beaten
+   * it and greyed out until then — text, not an icon, so it needs no new art.
+   * Flows onto a second line if the names outgrow the detail width. Returns
+   * the y below the row.
+   */
+  private addMarks(top: number): number {
+    if (this.state.marks.length === 0) {
+      return top;
+    }
+    const gap = uiTextWidth(' ');
+    let x = 0;
+    let y = top;
+    const place = (text: string, colour: number): void => {
+      const width = uiTextWidth(text);
+      if (x > 0 && x + width > DETAIL_WIDTH) {
+        x = 0;
+        y += UI_LINE_HEIGHT;
+      }
+      const label = uiText(text, { colour });
+      label.position.set(x, y);
+      this.detail.addChild(label);
+      x += width + gap;
+    };
+    place(t(this.locale, 'ui.setup.bosses'), UI_PALETTE.textDim);
+    this.state.marks.forEach((mark, index) => {
+      const separator = index < this.state.marks.length - 1 ? ' ·' : '';
+      place(`${mark.name}${separator}`, mark.beaten ? UI_PALETTE.accent : UI_PALETTE.textDisabled);
+    });
+    return y + UI_LINE_HEIGHT;
   }
 
   private layOut(): void {

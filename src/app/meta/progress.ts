@@ -1,4 +1,4 @@
-import { FLOOR_CONFIGS } from '../../content/floors/definition.js';
+import { FLOOR_CONFIGS, HIGHEST_PLAYABLE_FLOOR } from '../../content/floors/definition.js';
 import type { Locale } from '../../i18n/locale.js';
 import { t } from '../../i18n/translate.js';
 import { type CharacterTraits, NEUTRAL_TRAITS } from '../../sim/character/definition.js';
@@ -23,7 +23,13 @@ import {
   bossStatKey,
   tierWonStatKey,
 } from './definition.js';
-import { bossFeatProgress, foldBossFight, foldRunBests, satisfyBossFeat } from './feats.js';
+import {
+  bossAsCharacterStatKey,
+  bossFeatProgress,
+  foldBossFight,
+  foldRunBests,
+  satisfyBossFeat,
+} from './feats.js';
 
 /**
  * Meta-progression's rules, as pure functions over a `SaveData`.
@@ -507,6 +513,36 @@ export interface TierView {
   readonly adds: string;
 }
 
+/** One boss mark on the run-setup screen (#504): has this character beaten this floor's boss? */
+export interface BossMarkView {
+  readonly floor: number;
+  /** The floor's name — the marks are labelled by where the boss lives, not by its body. */
+  readonly name: string;
+  readonly beaten: boolean;
+}
+
+/**
+ * The selected character's boss marks (#504) — one per floor a player can
+ * reach (`HIGHEST_PLAYABLE_FLOOR`), so the floor that raises it adds a mark
+ * for everyone without anybody remembering to.
+ *
+ * Read from the per-character tally run feats already keep
+ * (`bossAsCharacterStatKey`, #502), counted only on fights the player won.
+ * Kills from before #502 carry no character, so they mark nobody: a save
+ * cannot prove who beat a boss before it recorded who was playing.
+ */
+export function bossMarks(save: SaveData, character: string): BossMarkView[] {
+  const marks: BossMarkView[] = [];
+  for (let floor = 1; floor <= HIGHEST_PLAYABLE_FLOOR; floor++) {
+    marks.push({
+      floor,
+      name: floorName(floor),
+      beaten: statistic(save, bossAsCharacterStatKey(floor, character)) > 0,
+    });
+  }
+  return marks;
+}
+
 /**
  * Everything the run-setup screen (#493) draws: the roster, who is selected,
  * and the tiers open to them (#505). Built here so the screen holds no rules.
@@ -518,6 +554,8 @@ export interface RunSetupView {
   readonly highestOpen: number;
   /** Rungs 1..`highestOpen` of the selected character's ladder, in order. */
   readonly tiers: readonly TierView[];
+  /** The selected character's boss marks (#504), floor 1 first. */
+  readonly marks: readonly BossMarkView[];
 }
 
 export function buildRunSetupView(save: SaveData, content: ProgressionContent): RunSetupView {
@@ -531,6 +569,7 @@ export function buildRunSetupView(save: SaveData, content: ProgressionContent): 
       .filter((rung) => rung.tier >= 1 && rung.tier <= highestOpen)
       .sort((a, b) => a.tier - b.tier)
       .map((rung) => ({ tier: rung.tier, label: tierLabel(rung.tier), adds: rung.description })),
+    marks: bossMarks(save, selected),
   };
 }
 
