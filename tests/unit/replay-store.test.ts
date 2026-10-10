@@ -23,6 +23,7 @@ const OUTCOME = {
   kind: 'normal' as const,
   promilleUnlocked: true,
   character: 'barnabas',
+  lockedItems: ['roter-stier'],
   recordedAt: 1000,
 };
 

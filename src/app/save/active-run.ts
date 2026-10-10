@@ -30,6 +30,8 @@ export class ActiveRunRecorder {
     readonly seed: number,
     readonly promilleUnlocked = true,
     readonly character = DEFAULT_CHARACTER_ID,
+    /** The items this run's pools leave out (#503) — see `ActiveRunSave.lockedItems`. */
+    readonly lockedItems: readonly string[] = [],
   ) {}
 
   get frameCount(): number {
@@ -46,6 +48,7 @@ export class ActiveRunRecorder {
       frames: this.frames.slice(),
       promilleUnlocked: this.promilleUnlocked,
       character: this.character,
+      lockedItems: this.lockedItems,
     };
   }
 }
@@ -56,7 +59,12 @@ export class ActiveRunRecorder {
  * rather than starting a second, disconnected recorder.
  */
 export function recorderFrom(active: ActiveRunSave): ActiveRunRecorder {
-  const recorder = new ActiveRunRecorder(active.seed, active.promilleUnlocked, active.character);
+  const recorder = new ActiveRunRecorder(
+    active.seed,
+    active.promilleUnlocked,
+    active.character,
+    active.lockedItems,
+  );
   for (const frame of decodeActiveRunFrames(active)) {
     recorder.record(frame);
   }

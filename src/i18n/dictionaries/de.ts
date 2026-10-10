@@ -41,6 +41,8 @@ export const de: Record<DictKey, string> = {
   'ui.collection.unknownName': '???',
   'ui.collection.unknownHint':
     'Noch nicht gefunden. Heb es in einem Lauf auf, um zu sehen, was es tut.',
+  'ui.collection.locked': 'Noch nicht im Pool',
+  'ui.collection.lockedGoal': 'Freischalten: {goal}',
   'ui.collection.held': 'In diesem Lauf dabei',
   'ui.collection.active': 'Aktiver Gegenstand',
 
@@ -65,6 +67,7 @@ export const de: Record<DictKey, string> = {
   'ui.results.newRun': 'Neuer Lauf',
   'ui.results.close': 'Schließen',
   'ui.results.backToRun': 'Zurück zum Lauf',
+  'ui.results.newInPool': 'Neu im Pool',
   'ui.results.unlocked': 'Freigeschaltet',
   'ui.results.theBoard': 'Die Bestenliste',
   'ui.results.boardEmptyLine1': 'Die Bestenliste ist noch leer —',

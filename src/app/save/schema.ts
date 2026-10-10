@@ -80,8 +80,15 @@ import {
  * roster no longer has (an item cut from `content/items/index.ts`) is kept
  * rather than pruned, so cutting an item and bringing it back later does not
  * quietly un-discover it.
+ *
+ * v10 (#503) adds `lockedItems` to the in-progress run and to every replay:
+ * the items the save had not earned when the run started, kept out of every
+ * pool for that whole run. A run parameter, for `promilleUnlocked`'s exact
+ * reason — an item earned mid-run joins the pool from the *next* run, so
+ * rebuilding a run from the save's current unlocks would offer it items the
+ * recorded run never could have seen. Nothing at the top level changes.
  */
-export const SAVE_SCHEMA_VERSION = 9;
+export const SAVE_SCHEMA_VERSION = 10;
 
 /**
  * The character a save with no opinion starts as (#47).
@@ -159,6 +166,11 @@ export interface ReplayRecord {
    * health, speed and shot behaviour.
    */
   readonly character: string;
+  /**
+   * The items this run's pools left out (#503) — a run parameter for the same
+   * reason as the two above: see `ActiveRunSave.lockedItems`.
+   */
+  readonly lockedItems: readonly string[];
   /** `Date.now()` when the run ended. */
   readonly recordedAt: number;
 }
@@ -220,6 +232,16 @@ export interface ActiveRunSave {
    * shape of bug.
    */
   readonly character: string;
+  /**
+   * The items this save had not earned when the run started (#503), out of
+   * every pool for the whole run. Recorded with the log because the save's
+   * own answer moves *during* the run — an item is earned the moment its
+   * feat is met — and a resume that rebuilt the run against the newer,
+   * shorter list would offer items the recorded run never had in its pools.
+   * Empty for a run recorded before v10, which is exactly what those runs
+   * had: nothing was locked yet.
+   */
+  readonly lockedItems: readonly string[];
 }
 
 /** The v1 shape, kept for the migration that reads it. Nothing loads a save at this version any more. */
@@ -326,8 +348,13 @@ export interface SaveDataV9 extends Omit<SaveDataV8, 'schemaVersion'> {
   readonly discoveredItems: readonly string[];
 }
 
-/** The current schema version. A union the day a v10 lands and something still reads a v9. */
-export type SaveData = SaveDataV9;
+/** v10 (#503): `lockedItems` on `activeRun` and every replay — nothing at the top level. */
+export interface SaveDataV10 extends Omit<SaveDataV9, 'schemaVersion'> {
+  readonly schemaVersion: 10;
+}
+
+/** The current schema version. A union the day a v11 lands and something still reads a v10. */
+export type SaveData = SaveDataV10;
 
 /** How many `bestRuns` entries a finished run keeps — see `app/meta/progress.ts`'s `withRunOutcome`. */
 export const MAX_BEST_RUNS = 10;
@@ -474,6 +501,9 @@ function sanitizeActiveRun(value: unknown): ActiveRunSave | null {
       typeof value.character === 'string' && value.character.length > 0
         ? value.character
         : DEFAULT_CHARACTER_ID,
+    // Nothing was locked before v10 (#503), so a log without the field
+    // replays against the full pool — which is what it was recorded with.
+    lockedItems: sanitizeStringArray(value.lockedItems),
   };
 }
 
@@ -510,6 +540,9 @@ export function sanitizeReplay(value: unknown): ReplayRecord | null {
       typeof value.character === 'string' && value.character.length > 0
         ? value.character
         : DEFAULT_CHARACTER_ID,
+    // Nothing was locked before v10 (#503), so a log without the field
+    // replays against the full pool — which is what it was recorded with.
+    lockedItems: sanitizeStringArray(value.lockedItems),
     recordedAt: value.recordedAt,
   };
 }

@@ -202,7 +202,40 @@ export function earnedNames(save: SaveData, content: ProgressionContent): Map<st
       earned.set(`character:${character.id}`, character.name);
     }
   }
+  // An item stays a surprise until it is offered (#503): announced, never named.
+  for (const item of content.items ?? []) {
+    if (conditionMet(save, item.condition)) {
+      earned.set(`item:${item.itemId}`, EARNED_ITEM_NAME);
+    }
+  }
   return earned;
+}
+
+/** What `earnedNames` calls an earned item — the toast reads "Unlocked: ???". */
+export const EARNED_ITEM_NAME = '???';
+
+/**
+ * The items this save has not earned yet (#503) — what the next run is told
+ * to leave out of every pool (`GameSimOptions.lockedItems`). In roster
+ * order, so the same save always produces the same list.
+ */
+export function lockedItemIds(save: SaveData, content: ProgressionContent): string[] {
+  return (content.items ?? [])
+    .filter((item) => !conditionMet(save, item.condition))
+    .map((item) => item.itemId);
+}
+
+/**
+ * What still earns `itemId`, for the Collection's locked silhouette — `null`
+ * when the item is not on the unlock roster or has already been earned.
+ */
+export function lockedItemGoal(
+  save: SaveData,
+  content: ProgressionContent,
+  itemId: string,
+): string | null {
+  const entry = (content.items ?? []).find((item) => item.itemId === itemId);
+  return entry === undefined || conditionMet(save, entry.condition) ? null : entry.goal;
 }
 
 /**
@@ -306,6 +339,7 @@ export function withEverythingUnlocked(save: SaveData, content: ProgressionConte
     ...content.characters
       .map((character) => character.requires)
       .filter((requires): requires is UnlockCondition => requires !== null),
+    ...(content.items ?? []).map((item) => item.condition),
   ];
   for (const condition of conditions) {
     if (condition.kind === 'bossDefeated') {
@@ -461,12 +495,15 @@ export interface RunResultsView {
   readonly board: readonly string[] | null;
   readonly runsPlayed: number;
   readonly totalKills: number;
+  /** Names of the items the last run earned into the pool (#503), in roster order. */
+  readonly newItems: readonly string[];
 }
 
 export function buildRunResultsView(
   save: SaveData,
   content: ProgressionContent,
   locale: Locale,
+  newItems: readonly string[] = [],
 ): RunResultsView {
   const lastRun = save.lastRun === null ? null : runFactsFrom(save.lastRun);
   const unlocked = new Set(save.unlocks);
@@ -479,6 +516,7 @@ export function buildRunResultsView(
       : null,
     runsPlayed: statistic(save, STAT_RUNS),
     totalKills: statistic(save, STAT_KILLS),
+    newItems,
   };
 }
 

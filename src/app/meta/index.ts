@@ -8,6 +8,8 @@ import {
   characterById,
   cycleCharacter,
   earnedNames,
+  lockedItemGoal,
+  lockedItemIds,
   withBossDefeat,
   withBossFight,
   withDailyRunOutcome,
@@ -92,6 +94,16 @@ export function characterTraitsById(id: string): CharacterTraits {
   return characterById(PROGRESSION, id)?.traits ?? NEUTRAL_TRAITS;
 }
 
+/** The items the next run leaves out of every pool (#503) — handed to `GameSim` at run start. */
+export function nextRunLockedItems(save: SaveData = loadSave()): string[] {
+  return lockedItemIds(save, PROGRESSION);
+}
+
+/** What still earns `itemId`, or `null` — the Collection's line under a locked item (#503). */
+export function itemUnlockGoal(itemId: string, save: SaveData = loadSave()): string | null {
+  return lockedItemGoal(save, PROGRESSION, itemId);
+}
+
 /** How the currently selected character plays — handed to `GameSim` at run start. */
 export function selectedCharacter(save: SaveData = loadSave()): CharacterTraits {
   return selectedCharacterTraits(save, PROGRESSION);
@@ -103,8 +115,12 @@ export function recordDailyRunOutcome(record: DailyRunRecord): SaveData {
 }
 
 /** Everything the results screen draws, from the save on disk (or the one handed in, for a test). */
-export function runResultsView(locale: Locale, save: SaveData = loadSave()): RunResultsView {
-  return buildRunResultsView(save, PROGRESSION, locale);
+export function runResultsView(
+  locale: Locale,
+  save: SaveData = loadSave(),
+  newItems: readonly string[] = [],
+): RunResultsView {
+  return buildRunResultsView(save, PROGRESSION, locale, newItems);
 }
 
 export { PROGRESSION } from '../../content/progression/index.js';

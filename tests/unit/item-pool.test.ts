@@ -25,6 +25,7 @@ function context(overrides: Partial<Parameters<typeof selectItemOffer>[2]> = {})
     floor: 1,
     luck: 0,
     taken: new Set<string>(),
+    locked: new Set<string>(),
     ...overrides,
   };
 }

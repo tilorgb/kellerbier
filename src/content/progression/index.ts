@@ -1,5 +1,6 @@
 import type { ProgressionContent } from '../../app/meta/definition.js';
 import { PROGRESSION_CHARACTERS } from './characters.js';
+import { ITEM_UNLOCKS } from './item-unlocks.js';
 import { PROGRESSION_UNLOCKS } from './unlocks.js';
 
 /**
@@ -12,6 +13,7 @@ import { PROGRESSION_UNLOCKS } from './unlocks.js';
 export const PROGRESSION: ProgressionContent = {
   unlocks: PROGRESSION_UNLOCKS,
   characters: PROGRESSION_CHARACTERS,
+  items: ITEM_UNLOCKS,
 };
 
-export { PROGRESSION_CHARACTERS, PROGRESSION_UNLOCKS };
+export { ITEM_UNLOCKS, PROGRESSION_CHARACTERS, PROGRESSION_UNLOCKS };

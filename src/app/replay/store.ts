@@ -14,6 +14,8 @@ export interface ReplayOutcome {
   readonly promilleUnlocked: boolean;
   /** Who it was played as (#47) — see `ReplayRecord.character`. */
   readonly character: string;
+  /** The items its pools left out (#503) — see `ReplayRecord.lockedItems`. */
+  readonly lockedItems: readonly string[];
   readonly recordedAt: number;
 }
 
@@ -42,6 +44,7 @@ export async function buildReplayRecord(
     kind: outcome.kind,
     promilleUnlocked: outcome.promilleUnlocked,
     character: outcome.character,
+    lockedItems: outcome.lockedItems,
     recordedAt: outcome.recordedAt,
   };
 }

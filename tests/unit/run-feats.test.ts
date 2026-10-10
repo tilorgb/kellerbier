@@ -240,6 +240,15 @@ describe('run bests (#502)', () => {
     expect(sim.feats.bests.mostPassives).toBe(3);
   });
 
+  it('keeps the most items per tag held at once (#503)', () => {
+    const sim = bossSim();
+    sim.pickUpItem('rosinenbrot');
+    sim.pickUpItem('zwetschgendatschi');
+    sim.pickUpItem('colaweizen');
+    sim.removeItem('rosinenbrot');
+    expect(sim.feats.bests.mostTagged).toEqual({ rosinen: 2, impure: 1 });
+  });
+
   it('remembers a set completed, once', () => {
     const sim = bossSim();
     for (const id of ['braumeister-hammer', 'braumeister-schuerze', 'braumeister-visier']) {

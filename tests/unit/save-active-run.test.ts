@@ -41,6 +41,7 @@ describe('active-run recording and replay (#45)', () => {
       frames: [1, 2, 3, 4, 5, 9, 9],
       promilleUnlocked: true,
       character: 'alois',
+      lockedItems: [],
     });
     expect(decoded).toHaveLength(1);
   });
@@ -55,6 +56,21 @@ describe('active-run recording and replay (#45)', () => {
     expect(recorderFrom(barnabas.toSave()).character).toBe('barnabas');
     // The default is the Alois run every pre-#47 recorder produced.
     expect(new ActiveRunRecorder(12).character).toBe('alois');
+  });
+
+  it('carries the run’s locked items through the save and back, so a resume offers the same pools (#503)', () => {
+    installFakeLocalStorage();
+    const recorder = new ActiveRunRecorder(12, true, 'alois', ['roter-stier', 'krapfen']);
+    recorder.record(frame({ moveX: 1 }));
+    persistActiveRun(recorder);
+    const saved = loadSave().activeRun;
+    expect(saved?.lockedItems).toEqual(['roter-stier', 'krapfen']);
+    expect(saved === null ? null : recorderFrom(saved).lockedItems).toEqual([
+      'roter-stier',
+      'krapfen',
+    ]);
+    // The default is the full pool every pre-#503 recorder produced.
+    expect(new ActiveRunRecorder(12).lockedItems).toEqual([]);
   });
 
   it('carries the run’s Promille state beside its log, so a resume rebuilds the same run (#85)', () => {
@@ -98,6 +114,7 @@ describe('active-run recording and replay (#45)', () => {
       frames: [1, 0, 0, 0, 0],
       promilleUnlocked: true,
       character: 'alois',
+      lockedItems: [],
     });
 
     persistActiveRun(null);

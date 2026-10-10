@@ -24,7 +24,13 @@ function obtainableFrom(id: string): string[] {
       const offer = selectItemOffer(
         REGISTRY,
         pool,
-        { promilleUnlocked: true, floor: 2, luck: 0, taken: new Set<string>() },
+        {
+          promilleUnlocked: true,
+          floor: 2,
+          luck: 0,
+          taken: new Set<string>(),
+          locked: new Set<string>(),
+        },
         DEFAULT_ITEM_POOL_TUNING,
         rng,
       );

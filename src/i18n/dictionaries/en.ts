@@ -52,6 +52,8 @@ export const en = {
   'ui.collection.progress': '{found} / {total} found',
   'ui.collection.unknownName': '???',
   'ui.collection.unknownHint': 'Not found yet. Pick it up on a run to learn what it does.',
+  'ui.collection.locked': 'Not in the pool yet',
+  'ui.collection.lockedGoal': 'To earn it: {goal}',
   'ui.collection.held': 'Held this run',
   'ui.collection.active': 'Active item',
 
@@ -76,6 +78,7 @@ export const en = {
   'ui.results.newRun': 'New Run',
   'ui.results.close': 'Close',
   'ui.results.backToRun': 'Back to Run',
+  'ui.results.newInPool': 'New in the pool',
   'ui.results.unlocked': 'Unlocked',
   'ui.results.theBoard': 'The Board',
   'ui.results.boardEmptyLine1': 'The board is still empty —',

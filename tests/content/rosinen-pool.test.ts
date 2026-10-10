@@ -61,7 +61,7 @@ function offerRate(seeds: number): number {
       const offer = selectItemOffer(
         registry,
         pool,
-        { promilleUnlocked: true, floor: 2, luck: 0, taken },
+        { promilleUnlocked: true, floor: 2, luck: 0, taken, locked: new Set<string>() },
         TUNING.itemPool,
         rng,
       );
@@ -96,6 +96,7 @@ describe('the rosinen pool (#237)', () => {
           floor: 2,
           luck: 0,
           taken: new Set<string>(),
+          locked: new Set<string>(),
         }),
       );
       expect(inPool.length, `no rosinen item can be offered from "${pool}"`).toBeGreaterThanOrEqual(
@@ -151,6 +152,7 @@ describe('the rosinen pool (#237)', () => {
               floor: 2,
               luck: 0,
               taken: new Set<string>(),
+              locked: new Set<string>(),
             })
           ) {
             continue;
