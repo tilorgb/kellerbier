@@ -178,6 +178,9 @@ import { ActiveRunRecorder, decodeActiveRunFrames, persistActiveRun } from './sa
 import type { CharacterTraits } from '../sim/character/definition.js';
 import { loadSave } from './save/storage.js';
 import { dailyDateKey, dailyRunParameters } from './daily.js';
+import { challengeById, challengeRules, challengeRunParameters } from './challenges.js';
+import { RunTimerHud } from '../render/run-timer-hud.js';
+import { NO_CHALLENGE } from '../sim/game/challenge.js';
 import {
   STORY_BEAT_CHAPTER_FOUR,
   STORY_BEAT_CHAPTER_THREE,
@@ -193,6 +196,8 @@ import {
   recordRunOutcome,
   characterTraitsById,
   hasBeatenABoss,
+  challengeList,
+  challengesAreOpen,
   difficultyFor,
   earnedMedalIds,
   recordDailyRunOutcome,
@@ -1544,6 +1549,9 @@ async function boot(progress: BootProgress): Promise<void> {
   hudLayer.addChild(promilleUnlockHud.view);
   const unlockToastHud = new UnlockToastHud(kit, preferences.locale);
   hudLayer.addChild(unlockToastHud.view);
+  /** Sperrstunde's clock (#507) — hidden in every run without a time limit. */
+  const runTimerHud = new RunTimerHud(kit, preferences.locale);
+  hudLayer.addChild(runTimerHud.view);
 
   /** The spirit walk (#84): a small persistent "you are doing this" readout. */
   const blutwurzHud = new BlutwurzHud(kit, preferences.locale);
@@ -1664,6 +1672,7 @@ async function boot(progress: BootProgress): Promise<void> {
     curseHud.resize(width, height);
     promilleUnlockHud.resize(width, height);
     unlockToastHud.resize(width, height);
+    runTimerHud.resize(width, height);
     blutwurzHud.place(centreX, Math.round(height * 0.06));
 
     replayViewer.view.position.set(
@@ -1830,6 +1839,8 @@ async function boot(progress: BootProgress): Promise<void> {
     readonly lockedItems: readonly string[];
     /** And the difficulty tier it was played on (#505) — see `ActiveRunSave.tier`. */
     readonly tier: number;
+    /** And the challenge run it was (#507) — see `ActiveRunSave.challenge`. */
+    readonly challenge: string | null;
   } | null = null;
   const replayViewer = new ReplayViewer(kit);
   hudLayer.addChild(replayViewer.view);
@@ -2106,6 +2117,28 @@ async function boot(progress: BootProgress): Promise<void> {
     });
   }
 
+  /**
+   * A challenge run (#507): a fresh seed, and every other parameter fixed by
+   * the challenge (`challengeRunParameters`). A retry from its end screen is
+   * an ordinary run again, the same as a daily's.
+   */
+  function startChallengeRun(id: string): void {
+    const definition = challengeById(id);
+    if (definition === undefined) {
+      return;
+    }
+    const run = challengeRunParameters(definition);
+    screenController?.enterRun();
+    startRun(Math.floor(Math.random() * 1_000_000), {
+      challenge: run.challenge,
+      character: characterTraitsById(run.character),
+      tier: run.tier,
+      lockedItems: run.lockedItems,
+      promilleUnlocked: run.promilleUnlocked,
+      startFloor: 1,
+    });
+  }
+
   function retryRun(): void {
     screenController?.enterRun();
     startRun(Math.floor(Math.random() * 1_000_000));
@@ -2329,11 +2362,16 @@ async function boot(progress: BootProgress): Promise<void> {
           // ...and is judged on how it went for the medals (#506): its length,
           // every hit a boss landed, and the items picked up during play.
           tiersEarnedLastRun = sim.playerWon
-            ? recordRunWon(activeRunRecorder.character, activeRunRecorder.tier, {
-                ticks: ticksSurvived,
-                bossHits: sim.feats.bossFights.reduce((sum, fight) => sum + fight.hitsTaken, 0),
-                itemsPickedUp: sim.feats.bests.itemsPickedUp,
-              })
+            ? recordRunWon(
+                activeRunRecorder.character,
+                activeRunRecorder.tier,
+                {
+                  ticks: ticksSurvived,
+                  bossHits: sim.feats.bossFights.reduce((sum, fight) => sum + fight.hitsTaken, 0),
+                  itemsPickedUp: sim.feats.bests.itemsPickedUp,
+                },
+                activeRunRecorder.challenge,
+              )
             : [];
           medalsEarnedLastRun = [...earnedMedalIds()]
             .filter((id) => !medalsAtRunStart.has(id))
@@ -2372,6 +2410,7 @@ async function boot(progress: BootProgress): Promise<void> {
     const finishedCharacter = activeRunRecorder.character;
     const finishedLockedItems = activeRunRecorder.lockedItems;
     const finishedTier = activeRunRecorder.tier;
+    const finishedChallenge = activeRunRecorder.challenge;
     const recording = new InputRecording(Math.max(1, activeRunRecorder.frameCount));
     for (const frame of decodeActiveRunFrames(activeRunRecorder.toSave())) {
       recording.push(frame);
@@ -2388,6 +2427,7 @@ async function boot(progress: BootProgress): Promise<void> {
       character: finishedCharacter,
       lockedItems: finishedLockedItems,
       tier: finishedTier,
+      challenge: finishedChallenge,
       recordedAt: Date.now(),
     })
       .then(saveReplay)
@@ -2733,6 +2773,7 @@ async function boot(progress: BootProgress): Promise<void> {
       curseHud.sync(sim);
       promilleUnlockHud.sync(sim, settings.neutralReskin);
       unlockToastHud.sync(sim.tick);
+      runTimerHud.sync(sim);
       blutwurzHud.sync(sim);
       minimapHud.setMapOpen(isActionDown(input.frame, InputAction.Map));
       // Nebel (#49): no minimap for the floor — render-only, the same
@@ -3059,6 +3100,11 @@ async function boot(progress: BootProgress): Promise<void> {
       playedToday: () => dailyPlayedOn(dailyDateKey()),
       start: startDailyRun,
     },
+    challenges: {
+      open: () => challengesAreOpen(),
+      list: () => challengeList(),
+      start: startChallengeRun,
+    },
     kit,
     locale: preferences.locale,
     loop,
@@ -3092,6 +3138,7 @@ async function boot(progress: BootProgress): Promise<void> {
   hudLayer.addChild(screenController.collection.view);
   hudLayer.addChild(screenController.runSetup.view);
   hudLayer.addChild(screenController.medals.view);
+  hudLayer.addChild(screenController.challenges.view);
   screenController.collection.setEntries(
     // Its own registry over the full roster rather than \`sim.items\`: no run
     // exists yet at this point in boot, and the Collection lists the game's
@@ -3323,6 +3370,7 @@ WASD move   arrows aim and fire
       lockedItems = nextRunLockedItems(),
       tier = Math.min(runTier, tierOpenFor(character.id)),
       dailyDate = null,
+      challenge = null,
       startFloor = sandboxStartFloor,
     }: {
       promilleUnlocked?: boolean;
@@ -3344,6 +3392,11 @@ WASD move   arrows aim and fire
        * parameters are fixed by `startDailyRun`, and recorded like any run's.
        */
       dailyDate?: string | null;
+      /**
+       * The challenge run this is (#507) — its id — or `null`. Its rules are
+       * rebuilt from the id, here and on a resume or a replay alike.
+       */
+      challenge?: string | null;
       /**
        * The floor the run begins on. Above 1 it is a sandbox run (`?floor=N`):
        * dealt a kit for the floors skipped, and never saved, credited or
@@ -3410,7 +3463,11 @@ WASD move   arrows aim and fire
       // `promilleUnlocked` alone, so a resumed or replayed run reaches the
       // same answer without the flag having to ride along in the log — see
       // `resolvePromilleUnlockFloor`.
-      promilleUnlockFloor: resolvePromilleUnlockFloor(promilleUnlocked),
+      // A challenge sets its own Promille footing (#507) and never gets the
+      // mid-run unlock: Trocken is sober for the whole run, not until the
+      // cellar boss falls.
+      promilleUnlockFloor: challenge === null ? resolvePromilleUnlockFloor(promilleUnlocked) : null,
+      challenge: challenge === null ? NO_CHALLENGE : challengeRules(challengeById(challenge)),
       // Fixed for the run (#503): an item earned mid-run waits for the next one.
       lockedItems,
       // The tier's modifiers (#505), resolved from the ladder in content.
@@ -3450,6 +3507,7 @@ WASD move   arrows aim and fire
       lockedItems,
       tier,
       dailyDate,
+      challenge,
     );
     ticksSinceAutosave = 0;
     // A sandbox run never touches the save slot: it must not replace a real
@@ -3460,6 +3518,9 @@ WASD move   arrows aim and fire
         floorPlan.floorName,
         sandboxStartClamped ? 'ui.hud.sandboxClamped' : 'ui.hud.sandboxRun',
       );
+    } else if (challenge !== null) {
+      // A challenge says which one it is as it starts (#507).
+      sim.reportCollected(challengeById(challenge)?.name ?? challenge, 'ui.hud.challengeRun');
     } else if (dailyDate !== null) {
       // The daily says which day it is, and whether it still counts (#494).
       sim.reportCollected(
@@ -3800,6 +3861,7 @@ WASD move   arrows aim and fire
         lockedItems: activeRun.lockedItems,
         tier: activeRun.tier,
         dailyDate: activeRun.dailyDate,
+        challenge: activeRun.challenge,
         startFloor: 1,
       });
       const frames = decodeActiveRunFrames(activeRun);
@@ -3840,6 +3902,7 @@ WASD move   arrows aim and fire
     character: string,
     lockedItems: readonly string[],
     tier: number,
+    challenge: string | null,
   ): void {
     startRun(seed, {
       persist: false,
@@ -3847,6 +3910,7 @@ WASD move   arrows aim and fire
       character: characterTraitsById(character),
       lockedItems,
       tier,
+      challenge,
       startFloor: 1,
     });
     const scratch = createInputFrame();
@@ -3873,6 +3937,7 @@ WASD move   arrows aim and fire
     character: string,
     lockedItems: readonly string[],
     tier: number,
+    challenge: string | null,
   ): void {
     const recording = InputRecording.fromBytes(frameBytes);
     closeRunResults();
@@ -3884,8 +3949,9 @@ WASD move   arrows aim and fire
       character,
       lockedItems,
       tier,
+      challenge,
     };
-    replayTo(seed, recording, 0, promilleUnlocked, character, lockedItems, tier);
+    replayTo(seed, recording, 0, promilleUnlocked, character, lockedItems, tier, challenge);
     loop.paused = false;
     loop.timeScale = settings.slowModeScale;
     refreshHud();
@@ -3912,6 +3978,7 @@ WASD move   arrows aim and fire
       replay.character,
       replay.lockedItems,
       replay.tier,
+      replay.challenge,
     );
     replay.playback.rewind();
     for (let skipped = 0; skipped < clamped; skipped++) {
@@ -3971,6 +4038,7 @@ WASD move   arrows aim and fire
               record.character,
               record.lockedItems,
               record.tier,
+              record.challenge,
             );
           });
         })
@@ -5166,6 +5234,7 @@ WASD move   arrows aim and fire
     characterHud.setLocale(locale);
     promilleUnlockHud.setLocale(locale);
     unlockToastHud.setLocale(locale);
+    runTimerHud.setLocale(locale);
     blutwurzHud.setLocale(locale);
     if (runResults.visible) {
       runResults.update(currentRunResultsView(locale));

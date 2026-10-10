@@ -199,7 +199,35 @@ export type MedalCondition =
   /** Every item on the roster held at least once — the Collection complete. */
   | { readonly kind: 'collectionComplete' }
   /** Won within `seconds` of the run starting. */
-  | { readonly kind: 'winWithin'; readonly seconds: number };
+  | { readonly kind: 'winWithin'; readonly seconds: number }
+  /** Every challenge run (#507) won at least once. */
+  | { readonly kind: 'allChallenges' };
+
+/**
+ * A challenge run (#507): a hand-authored run with fixed rules, played from
+ * its own title entry once the game has been won. Every challenge is Alois,
+ * tier 0, the full item pool — the same fixed footing as the daily (#494) —
+ * plus the rules below. Winning one is what it asks; the reward is a medal.
+ */
+export interface ChallengeDefinition {
+  /** Permanent, like a medal id — the medal and the save's statistic are keyed by it. */
+  readonly id: string;
+  /** The owner's name for it (#50/#507). */
+  readonly name: string;
+  /** What the rule is, as one line for the challenge list. */
+  readonly description: string;
+  /** Whether the Promille mechanic exists in this run at all — `false` is a run that stays sober. */
+  readonly promille: boolean;
+  /** The meter never reads below this (`ChallengeRules.promilleFloor`); `0` for none. */
+  readonly promilleFloor: number;
+  /** The whole run ends after this long (`ChallengeRules.timeLimitTicks`); `0` for none. */
+  readonly timeLimitSeconds: number;
+}
+
+/** How many times challenge `id` (#507) has been won. */
+export function challengeWonStatKey(id: string): string {
+  return `challenge.won.${id}`;
+}
 
 /**
  * A medal (#506): a goal worth bragging about, with no reward. Its id is
@@ -231,4 +259,6 @@ export interface ProgressionContent {
    * a function of what it is given.
    */
   readonly itemIds?: readonly string[];
+  /** The challenge runs (#507). Optional so a fixture can leave it out. */
+  readonly challenges?: readonly ChallengeDefinition[];
 }

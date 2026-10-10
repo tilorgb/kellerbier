@@ -44,6 +44,7 @@ describe('active-run recording and replay (#45)', () => {
       lockedItems: [],
       tier: 0,
       dailyDate: null,
+      challenge: null,
     });
     expect(decoded).toHaveLength(1);
   });
@@ -119,6 +120,7 @@ describe('active-run recording and replay (#45)', () => {
       lockedItems: [],
       tier: 0,
       dailyDate: null,
+      challenge: null,
     });
 
     persistActiveRun(null);

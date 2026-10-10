@@ -99,8 +99,13 @@ import {
  * already) but what the run counts towards: a daily resumed after a reload,
  * or finished after midnight, still has to land in the day it was started
  * on. Replays already carry `kind`.
+ *
+ * v13 (#507) adds `challenge` to the in-progress run and to every replay:
+ * the id of the challenge run it is, or `null`. A run parameter like
+ * `tier` — the challenge's rules are rebuilt from it on a resume or a
+ * replay. `null` before v13.
  */
-export const SAVE_SCHEMA_VERSION = 12;
+export const SAVE_SCHEMA_VERSION = 13;
 
 /**
  * The character a save with no opinion starts as (#47).
@@ -185,6 +190,8 @@ export interface ReplayRecord {
   readonly lockedItems: readonly string[];
   /** The difficulty tier it was played on (#505) — see `ActiveRunSave.tier`. */
   readonly tier: number;
+  /** The challenge run it was (#507), or `null` — see `ActiveRunSave.challenge`. */
+  readonly challenge: string | null;
   /** `Date.now()` when the run ended. */
   readonly recordedAt: number;
 }
@@ -269,6 +276,12 @@ export interface ActiveRunSave {
    * resumed daily still records into the day it was started on.
    */
   readonly dailyDate: string | null;
+  /**
+   * The challenge run this is (#507) — its id — or `null`. A run parameter:
+   * the challenge's rules (a Promille floor, a time limit, a sober run) are
+   * rebuilt from it on a resume, exactly as they were when the run started.
+   */
+  readonly challenge: string | null;
 }
 
 /** The v1 shape, kept for the migration that reads it. Nothing loads a save at this version any more. */
@@ -390,8 +403,13 @@ export interface SaveDataV12 extends Omit<SaveDataV11, 'schemaVersion'> {
   readonly schemaVersion: 12;
 }
 
-/** The current schema version. A union the day a v13 lands and something still reads a v12. */
-export type SaveData = SaveDataV12;
+/** v13 (#507): `challenge` on `activeRun` and every replay — nothing at the top level. */
+export interface SaveDataV13 extends Omit<SaveDataV12, 'schemaVersion'> {
+  readonly schemaVersion: 13;
+}
+
+/** The current schema version. A union the day a v14 lands and something still reads a v13. */
+export type SaveData = SaveDataV13;
 
 /** How many `bestRuns` entries a finished run keeps — see `app/meta/progress.ts`'s `withRunOutcome`. */
 export const MAX_BEST_RUNS = 10;
@@ -543,6 +561,9 @@ function sanitizeActiveRun(value: unknown): ActiveRunSave | null {
     lockedItems: sanitizeStringArray(value.lockedItems),
     // Tier 0 before v11 (#505) — the only tier there was.
     tier: isFiniteNumber(value.tier) && value.tier > 0 ? Math.floor(value.tier) : 0,
+    // No challenge before v13 (#507).
+    challenge:
+      typeof value.challenge === 'string' && value.challenge.length > 0 ? value.challenge : null,
     // An ordinary run before v12 (#494): no daily existed to be one of.
     dailyDate:
       typeof value.dailyDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value.dailyDate)
@@ -589,6 +610,9 @@ export function sanitizeReplay(value: unknown): ReplayRecord | null {
     lockedItems: sanitizeStringArray(value.lockedItems),
     // Tier 0 before v11 (#505) — the only tier there was.
     tier: isFiniteNumber(value.tier) && value.tier > 0 ? Math.floor(value.tier) : 0,
+    // No challenge before v13 (#507).
+    challenge:
+      typeof value.challenge === 'string' && value.challenge.length > 0 ? value.challenge : null,
     recordedAt: value.recordedAt,
   };
 }

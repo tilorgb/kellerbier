@@ -49,6 +49,7 @@ describe('save schema sanitisation (#45)', () => {
       lockedItems: [],
       tier: 0,
       dailyDate: null,
+      challenge: null,
     });
   });
 
@@ -125,6 +126,7 @@ describe('save schema sanitisation (#45)', () => {
       character: 'resi',
       lockedItems: ['roter-stier'],
       tier: 2,
+      challenge: 'trocken',
       recordedAt: 5,
     };
     expect(sanitizeSave({ replays: [replay] }).replays).toEqual([replay]);

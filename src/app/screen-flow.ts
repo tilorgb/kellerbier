@@ -3,9 +3,10 @@ import type { MenuScreen } from '../render/ui/menu.js';
 import { CollectionScreen } from '../render/collection-screen.js';
 import { CreditsScreen } from '../render/credits-screen.js';
 import { PauseScreen } from '../render/pause-screen.js';
+import { ChallengeScreen } from '../render/challenge-screen.js';
 import { MedalScreen } from '../render/medal-screen.js';
 import { RunSetupScreen } from '../render/run-setup-screen.js';
-import type { MedalShelfView, RunSetupView } from './meta/progress.js';
+import type { ChallengeView, MedalShelfView, RunSetupView } from './meta/progress.js';
 import { SettingsScreen } from '../render/settings-screen.js';
 import { TitleScreen } from '../render/title-screen.js';
 import { BUILD_ID } from './build-mode.js';
@@ -31,7 +32,15 @@ import type { SettingsMenu } from './settings-menu.js';
  * `docs/DECISIONS.md` #67 for the full reasoning.
  */
 export type Screen =
-  'title' | 'run' | 'paused' | 'credits' | 'settings' | 'collection' | 'setup' | 'medals';
+  | 'title'
+  | 'run'
+  | 'paused'
+  | 'credits'
+  | 'settings'
+  | 'collection'
+  | 'setup'
+  | 'medals'
+  | 'challenges';
 
 export class ScreenFlow {
   private screen: Screen = 'title';
@@ -90,6 +99,12 @@ export interface ScreenFlowControllerDeps {
     readonly playedToday: () => boolean;
     readonly start: () => void;
   };
+  /** The challenge runs (#507): whether they are open, the list, and starting one. */
+  readonly challenges: {
+    readonly open: () => boolean;
+    readonly list: () => readonly ChallengeView[];
+    readonly start: (id: string) => void;
+  };
 }
 
 /**
@@ -109,6 +124,7 @@ export class ScreenFlowController {
   readonly collection: CollectionScreen;
   readonly runSetup: RunSetupScreen;
   readonly medals: MedalScreen;
+  readonly challenges: ChallengeScreen;
 
   private readonly flow = new ScreenFlow();
   private readonly deps: ScreenFlowControllerDeps;
@@ -150,6 +166,13 @@ export class ScreenFlowController {
           this.deps.daily.start();
         },
         dailyPlayedToday: deps.daily.playedToday,
+        onChallenges: () => {
+          this.flow.goTo('challenges');
+          this.title.hide();
+          this.challenges.show();
+          this.deps.playOpenSound();
+        },
+        challengesOpen: deps.challenges.open,
         onCredits: () => {
           this.openCredits();
         },
@@ -205,6 +228,21 @@ export class ScreenFlowController {
       },
       deps.locale,
     );
+    this.challenges = new ChallengeScreen(
+      deps.kit,
+      {
+        list: deps.challenges.list,
+        onStart: (id) => {
+          this.challenges.hide();
+          this.flow.goTo('run');
+          this.deps.challenges.start(id);
+        },
+        onBack: () => {
+          this.closeChallenges();
+        },
+      },
+      deps.locale,
+    );
     this.medals = new MedalScreen(
       deps.kit,
       {
@@ -249,6 +287,7 @@ export class ScreenFlowController {
     this.collection.setLocale(locale);
     this.runSetup.setLocale(locale);
     this.medals.setLocale(locale);
+    this.challenges.setLocale(locale);
     this.deps.settingsMenu.setLocale(locale);
     this.settings.setLocale(locale, this.deps.settingsMenu.tabs);
   }
@@ -271,6 +310,7 @@ export class ScreenFlowController {
     this.collection.resize(width, height);
     this.runSetup.resize(width, height);
     this.medals.resize(width, height);
+    this.challenges.resize(width, height);
     this.placeSettings();
   }
 
@@ -297,6 +337,7 @@ export class ScreenFlowController {
     this.collection.hide();
     this.runSetup.hide();
     this.medals.hide();
+    this.challenges.hide();
     this.title.setSettingsOpen(false);
     this.title.show();
   }
@@ -476,6 +517,16 @@ export class ScreenFlowController {
     this.deps.playOpenSound();
   }
 
+  private closeChallenges(): void {
+    if (!this.flow.is('challenges')) {
+      return;
+    }
+    this.challenges.hide();
+    this.flow.goTo('title');
+    this.title.show();
+    this.deps.playCloseSound();
+  }
+
   private closeMedals(): void {
     if (!this.flow.is('medals')) {
       return;
@@ -525,6 +576,8 @@ export class ScreenFlowController {
         return this.runSetup;
       case 'medals':
         return this.medals;
+      case 'challenges':
+        return this.challenges;
       case 'run':
         return null;
     }
@@ -603,6 +656,8 @@ export class ScreenFlowController {
           this.closeSetup();
         } else if (this.flow.is('medals')) {
           this.closeMedals();
+        } else if (this.flow.is('challenges')) {
+          this.closeChallenges();
         }
         break;
       default:
@@ -709,6 +764,8 @@ export class ScreenFlowController {
         this.closeSetup();
       } else if (this.flow.is('medals')) {
         this.closeMedals();
+      } else if (this.flow.is('challenges')) {
+        this.closeChallenges();
       }
     }
     return true;

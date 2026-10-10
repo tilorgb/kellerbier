@@ -212,6 +212,20 @@ const v11ToV12: SaveMigration = (raw) => {
   return { ...upgraded, activeRun: { ...(active as Record<string, unknown>), dailyDate: null } };
 };
 
+/**
+ * v12 -> v13 (#507): the in-progress run gains `challenge`, back-filled
+ * `null` — no run before v13 could have been one. Same shape as `v11ToV12`;
+ * replays get the same default from `sanitizeReplay`.
+ */
+const v12ToV13: SaveMigration = (raw) => {
+  const active = raw.activeRun;
+  const upgraded = { ...raw, schemaVersion: 13 };
+  if (typeof active !== 'object' || active === null || Array.isArray(active)) {
+    return upgraded;
+  }
+  return { ...upgraded, activeRun: { ...(active as Record<string, unknown>), challenge: null } };
+};
+
 export const MIGRATIONS: readonly SaveMigration[] = [
   v0ToV1,
   v1ToV2,
@@ -225,6 +239,7 @@ export const MIGRATIONS: readonly SaveMigration[] = [
   v9ToV10,
   v10ToV11,
   v11ToV12,
+  v12ToV13,
 ];
 
 function versionOf(raw: Record<string, unknown>): number {

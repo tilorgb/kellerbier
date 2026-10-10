@@ -32,6 +32,10 @@ describe('medal roster (#506)', () => {
       medal.condition.kind === 'statAtLeast' ? [medal.condition.stat] : [],
     );
     for (const stat of stats) {
+      // Challenge medals are pinned against their roster in challenges.test.ts.
+      if (stat.startsWith('challenge.won.')) {
+        continue;
+      }
       expect([STAT_WIN_NO_BOSS_HITS, STAT_WIN_NO_ITEMS], stat).toContain(stat);
     }
   });

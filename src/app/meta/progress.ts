@@ -22,8 +22,10 @@ import {
   STAT_TICKS,
   bossStatKey,
   tierWonStatKey,
+  type ChallengeDefinition,
   type MedalCondition,
   type MedalDefinition,
+  challengeWonStatKey,
   STAT_WIN_FASTEST_TICKS,
   STAT_WIN_NO_BOSS_HITS,
   STAT_WIN_NO_ITEMS,
@@ -177,6 +179,13 @@ export function medalMet(
       const ids = content.itemIds ?? [];
       return ids.length > 0 && ids.every((id) => found.has(id));
     }
+    case 'allChallenges': {
+      const challenges = content.challenges ?? [];
+      return (
+        challenges.length > 0 &&
+        challenges.every((challenge) => statistic(save, challengeWonStatKey(challenge.id)) > 0)
+      );
+    }
     case 'winWithin': {
       const fastest = save.statistics[STAT_WIN_FASTEST_TICKS];
       return fastest !== undefined && fastest <= condition.seconds * TICKS_PER_SECOND;
@@ -322,6 +331,7 @@ export function withRunWon(
   tier: number,
   content: ProgressionContent,
   win: WinFacts = { ticks: Number.POSITIVE_INFINITY, bossHits: 1, itemsPickedUp: 1 },
+  challenge: string | null = null,
 ): SaveData {
   const key = tierWonStatKey(character);
   const statistics: Record<string, number> = {
@@ -340,6 +350,11 @@ export function withRunWon(
   if (win.itemsPickedUp === 0) {
     statistics[STAT_WIN_NO_ITEMS] = statistic(save, STAT_WIN_NO_ITEMS) + 1;
   }
+  // A challenge run won (#507) — what its medal asks.
+  if (challenge !== null) {
+    const won = challengeWonStatKey(challenge);
+    statistics[won] = statistic(save, won) + 1;
+  }
   return grantEarnedUnlocks({ ...save, statistics }, content);
 }
 
@@ -352,6 +367,38 @@ export interface WinFacts {
   readonly ticks: number;
   readonly bossHits: number;
   readonly itemsPickedUp: number;
+}
+
+/**
+ * Whether the challenge runs (#507) are open: the game has been won at
+ * least once, by anyone, on anything. Before that the title has no entry
+ * for them at all. Read off the tier ladder's per-character win record
+ * (#505) and the fastest-win record (#506), so a win from before either
+ * still counts as long as one of them saw it.
+ */
+export function challengesOpen(save: SaveData, content: ProgressionContent): boolean {
+  if (save.statistics[STAT_WIN_FASTEST_TICKS] !== undefined) {
+    return true;
+  }
+  return content.characters.some((character) => statistic(save, tierWonStatKey(character.id)) > 0);
+}
+
+/** One challenge as the challenge list shows it (#507). */
+export interface ChallengeView {
+  readonly id: string;
+  readonly name: string;
+  readonly description: string;
+  /** Won at least once. */
+  readonly completed: boolean;
+}
+
+export function buildChallengeList(save: SaveData, content: ProgressionContent): ChallengeView[] {
+  return (content.challenges ?? []).map((challenge: ChallengeDefinition) => ({
+    id: challenge.id,
+    name: challenge.name,
+    description: challenge.description,
+    completed: statistic(save, challengeWonStatKey(challenge.id)) > 0,
+  }));
 }
 
 /** One medal on the shelf (#506). */
