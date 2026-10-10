@@ -11,8 +11,8 @@ import type { MedalDefinition } from '../../app/meta/definition.js';
  *
  * **Left out until their feature ships**, the same rule the item and
  * character goals follow — a medal nobody can earn is a promise, not a goal:
- * "win a daily run" waits for #494, "complete a challenge run / every
- * challenge run" for #507.
+ * "win a daily run" was waiting for #494, which has now shipped, so it can
+ * be added; the challenge medals arrived with #507.
  *
  * Statistic keys are literals for `content-is-data`'s reason (see
  * `item-unlocks.ts`); `tests/content/medals.test.ts` pins them.
@@ -57,6 +57,27 @@ export const MEDALS: readonly MedalDefinition[] = [
     id: 'quick-win',
     goal: 'Win in under 15 minutes',
     condition: { kind: 'winWithin', seconds: 15 * 60 },
+  },
+  // The challenge runs (#507): one medal each, and one for all of them.
+  {
+    id: 'challenge-trocken',
+    goal: 'Win the Trocken challenge',
+    condition: { kind: 'statAtLeast', stat: 'challenge.won.trocken', value: 1 },
+  },
+  {
+    id: 'challenge-vollrausch',
+    goal: 'Win the Vollrausch challenge',
+    condition: { kind: 'statAtLeast', stat: 'challenge.won.vollrausch', value: 1 },
+  },
+  {
+    id: 'challenge-sperrstunde',
+    goal: 'Win the Sperrstunde challenge',
+    condition: { kind: 'statAtLeast', stat: 'challenge.won.sperrstunde', value: 1 },
+  },
+  {
+    id: 'challenges-all',
+    goal: 'Win every challenge run',
+    condition: { kind: 'allChallenges' },
   },
   {
     id: 'empty-handed',

@@ -18,6 +18,8 @@ export interface ReplayOutcome {
   readonly lockedItems: readonly string[];
   /** The difficulty tier it was played on (#505) — see `ReplayRecord.tier`. */
   readonly tier: number;
+  /** The challenge run it was (#507), or `null` — see `ReplayRecord.challenge`. */
+  readonly challenge: string | null;
   readonly recordedAt: number;
 }
 
@@ -48,6 +50,7 @@ export async function buildReplayRecord(
     character: outcome.character,
     lockedItems: outcome.lockedItems,
     tier: outcome.tier,
+    challenge: outcome.challenge,
     recordedAt: outcome.recordedAt,
   };
 }

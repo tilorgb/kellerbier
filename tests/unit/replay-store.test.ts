@@ -25,6 +25,7 @@ const OUTCOME = {
   character: 'barnabas',
   lockedItems: ['roter-stier'],
   tier: 3,
+  challenge: 'vollrausch',
   recordedAt: 1000,
 };
 

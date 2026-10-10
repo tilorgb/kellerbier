@@ -20,6 +20,9 @@ import {
   type RunSetupView,
   buildMedalShelf,
   type MedalShelfView,
+  buildChallengeList,
+  challengesOpen,
+  type ChallengeView,
   type WinFacts,
   selectedCharacterTraits,
   withEverythingUnlocked,
@@ -132,13 +135,28 @@ export function difficultyFor(tier: number): DifficultyModifiers {
  * A run was won as `character` on `tier` (#505). Hands back what that
  * earned — the next rung of their ladder, if there was one left.
  */
-export function recordRunWon(character: string, tier: number, win: WinFacts): string[] {
+export function recordRunWon(
+  character: string,
+  tier: number,
+  win: WinFacts,
+  challenge: string | null = null,
+): string[] {
   // Tiers only: a medal the win earned is listed on the results screen by its
   // own diff (`earnedMedalIds`), not here.
   return committingEarned(
-    (save) => withRunWon(save, character, tier, PROGRESSION, win),
+    (save) => withRunWon(save, character, tier, PROGRESSION, win, challenge),
     (key) => key.startsWith('tier:'),
   );
+}
+
+/** Whether the challenge runs are open yet (#507) — the title only has the entry once they are. */
+export function challengesAreOpen(save: SaveData = loadSave()): boolean {
+  return challengesOpen(save, PROGRESSION);
+}
+
+/** The challenge list (#507), from the save on disk. */
+export function challengeList(save: SaveData = loadSave()): ChallengeView[] {
+  return buildChallengeList(save, PROGRESSION);
 }
 
 /** The medal shelf (#506), from the save on disk. */

@@ -1,6 +1,7 @@
 import type { ProgressionContent } from '../../app/meta/definition.js';
 import { PROGRESSION_CHARACTERS } from './characters.js';
 import { ITEM_DEFINITIONS } from '../items/index.js';
+import { CHALLENGES } from './challenges.js';
 import { ITEM_UNLOCKS } from './item-unlocks.js';
 import { MEDALS } from './medals.js';
 import { DIFFICULTY_TIERS } from './tiers.js';
@@ -19,7 +20,15 @@ export const PROGRESSION: ProgressionContent = {
   items: ITEM_UNLOCKS,
   tiers: DIFFICULTY_TIERS,
   medals: MEDALS,
+  challenges: CHALLENGES,
   itemIds: ITEM_DEFINITIONS.map((item) => item.id),
 };
 
-export { DIFFICULTY_TIERS, ITEM_UNLOCKS, MEDALS, PROGRESSION_CHARACTERS, PROGRESSION_UNLOCKS };
+export {
+  CHALLENGES,
+  DIFFICULTY_TIERS,
+  ITEM_UNLOCKS,
+  MEDALS,
+  PROGRESSION_CHARACTERS,
+  PROGRESSION_UNLOCKS,
+};

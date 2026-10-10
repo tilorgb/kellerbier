@@ -39,6 +39,10 @@ export interface TitleScreenActions {
   readonly onDaily: () => void;
   /** Re-checked on every `show()` — whether today's daily has already been played. */
   readonly dailyPlayedToday: () => boolean;
+  /** The challenge runs (#507). */
+  readonly onChallenges: () => void;
+  /** Re-checked on every `show()` — the entry only exists once the game has been won. */
+  readonly challengesOpen: () => boolean;
   readonly onCredits: () => void;
   readonly onQuit: () => void;
   /** Re-checked on every `show()` — whether a save exists to resume into. */
@@ -159,12 +163,18 @@ export class TitleScreen implements MenuScreen {
 
   private menuItems(locale: Locale): MenuItem[] {
     const actions = this.actions;
+    // The challenge runs (#507) are not shown at all until the game has been
+    // won once — not greyed out: a new player has no use for them yet.
+    const challenges: MenuItem[] = actions.challengesOpen()
+      ? [{ label: t(locale, 'ui.title.challenges'), onSelect: actions.onChallenges }]
+      : [];
     return [
       { label: t(locale, 'ui.title.start'), onSelect: actions.onStart },
       {
         label: t(locale, actions.dailyPlayedToday() ? 'ui.title.dailyDone' : 'ui.title.daily'),
         onSelect: actions.onDaily,
       },
+      ...challenges,
       {
         label: t(locale, 'ui.title.continue'),
         onSelect: actions.onContinue,

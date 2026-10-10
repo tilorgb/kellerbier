@@ -173,6 +173,7 @@ import { LobStore, launchLob, nearestEnemyTo, stepLobs } from '../systems/lobs.j
 import { stepProjectiles, stepShooting } from '../systems/shooting.js';
 import { type FeatSource, RunFeatTracker, itemTagUniverse } from './feats.js';
 import { type DifficultyModifiers, NO_DIFFICULTY, scaledPrice } from './difficulty.js';
+import { type ChallengeRules, NO_CHALLENGE } from './challenge.js';
 import {
   STATUS_BURN,
   STATUS_DAZE,
@@ -713,6 +714,8 @@ export interface GameSimOptions {
    * `NO_DIFFICULTY` — tier 0, exactly the game without tiers.
    */
   readonly difficulty?: DifficultyModifiers;
+  /** A challenge run's own rules (#507). Defaults to `NO_CHALLENGE`. */
+  readonly challenge?: ChallengeRules;
   /**
    * The floor whose boss switches Promille on mid-run for a run that started
    * without it (#236). Defaults to `null` — no mid-run unlock, which is what
@@ -1816,6 +1819,8 @@ export class GameSim implements FeatSource {
   private readonly lockedItemIds: ReadonlySet<string>;
   /** `GameSimOptions.difficulty` (#505) — the tier's modifiers, fixed for the run. */
   readonly difficulty: DifficultyModifiers;
+  /** `GameSimOptions.challenge` (#507) — fixed for the run. */
+  readonly challenge: ChallengeRules;
   /** Treasure-room pedestals still to hold back this floor under `difficulty.treasurePedestalsFewer`. */
   private treasurePedestalsToSkip = 0;
   /**
@@ -1886,6 +1891,7 @@ export class GameSim implements FeatSource {
     // changes: the tuning row it scales is this run's own copy, and the
     // character's pool is set before `spawnPlayer` sizes the health bar.
     this.difficulty = options.difficulty ?? NO_DIFFICULTY;
+    this.challenge = options.challenge ?? NO_CHALLENGE;
     this.tuning.enemy.projectileSpeedScale *= this.difficulty.enemyShotSpeedScale;
     const traits = options.character ?? NEUTRAL_TRAITS;
     this.character =
@@ -1947,6 +1953,8 @@ export class GameSim implements FeatSource {
     this.itemStatsDirty = new Uint8Array(this.items.count);
     this.dirtyItemIndices = new Int32Array(this.items.count);
     this.promilleUnlockedValue = options.promilleUnlocked ?? true;
+    // Vollrausch (#507) starts the run at its floor, not only from tick 1.
+    this.holdPromilleFloor();
     this.lockedItemIds = new Set(options.lockedItems ?? []);
     this.promilleUnlockFloorValue = options.promilleUnlockFloor ?? null;
 
@@ -5226,7 +5234,29 @@ export class GameSim implements FeatSource {
       return;
     }
     const tuning = this.tuning.promille;
-    tuning.current = Math.max(0, tuning.current - amount);
+    tuning.current = Math.max(this.challenge.promilleFloor, tuning.current - amount);
+  }
+
+  /**
+   * Vollrausch (#507): the meter back up to the challenge's floor. Called
+   * once a tick after everything that moves the meter has moved it, so the
+   * floor holds whichever path lowered it — a hit, the drift, Umgfalln's
+   * wake-up. A no-op without a floor, or in a run with no meter at all.
+   */
+  private holdPromilleFloor(): void {
+    const floor = this.challenge.promilleFloor;
+    if (floor > 0 && this.promilleUnlocked && this.tuning.promille.current < floor) {
+      this.tuning.promille.current = floor;
+    }
+  }
+
+  /**
+   * Sperrstunde (#507): ticks left before the run is over, or `null` for a
+   * run with no time limit. Never below zero.
+   */
+  get timeLeftTicks(): number | null {
+    const limit = this.challenge.timeLimitTicks;
+    return limit > 0 ? Math.max(0, limit - this.currentTick) : null;
   }
 
   /** Ages the Umgfalln knockdown by one tick. Called once a tick by `stepPromille`. */
@@ -7256,6 +7286,7 @@ export class GameSim implements FeatSource {
     // Promille first: movement and shooting both read this tick's tier/drift/
     // wobble, so it has to be settled before either runs.
     stepPromille(this);
+    this.holdPromilleFloor();
     this.syncPromilleModifiers();
     this.syncKaterModifiers();
     // The character's own per-tick rules (#47) — Ludwig's purse — settled
@@ -7467,6 +7498,11 @@ export class GameSim implements FeatSource {
     }
 
     this.feats.tick(this);
+    // Sperrstunde (#507): closing time ends the run like any other death.
+    const limit = this.challenge.timeLimitTicks;
+    if (limit > 0 && this.currentTick + 1 >= limit && !this.playerDeadFlag && !this.playerWonFlag) {
+      this.killPlayer();
+    }
     this.previousButtons = input.buttons;
     this.world.flush();
     this.currentTick += 1;
