@@ -7,14 +7,19 @@ import {
   buildRunResultsView,
   characterById,
   cycleCharacter,
+  earnedNames,
   withBossDefeat,
+  withBossFight,
   withDailyRunOutcome,
+  withRunBests,
   selectedCharacterTraits,
   withEverythingUnlocked,
   withRunOutcome,
   withSelectedCharacter,
+  UNLOCK_PROMILLE,
 } from './progress.js';
 import { type CharacterTraits, NEUTRAL_TRAITS } from '../../sim/character/definition.js';
+import type { BossFightRecord, RunBests } from '../../sim/game/feats.js';
 
 /**
  * Meta-progression's write side: the three moments its state changes, each
@@ -25,9 +30,37 @@ import { type CharacterTraits, NEUTRAL_TRAITS } from '../../sim/character/defini
  * exists. `app/main.ts` calls these; nothing else does.
  */
 
-/** A boss went down on `floor`. Committed immediately — see `withBossDefeat`. */
-export function recordBossDefeat(floor: number): SaveData {
-  return updateSave((save) => withBossDefeat(save, floor, PROGRESSION));
+/**
+ * A boss went down on `floor`. Committed immediately — see `withBossDefeat`.
+ * Hands back the names of whatever that earned, like `recordBossFight`.
+ */
+export function recordBossDefeat(floor: number): string[] {
+  return committingEarned((save) => withBossDefeat(save, floor, PROGRESSION));
+}
+
+/**
+ * A boss fight was won, and how (#502). Hands back the names of whatever the
+ * fight just earned — the mid-run toast's whole input.
+ */
+export function recordBossFight(record: BossFightRecord): string[] {
+  return committingEarned((save) => withBossFight(save, record, PROGRESSION));
+}
+
+/** The run's bests moved (#502). Same return as `recordBossFight`. */
+export function recordRunBests(bests: RunBests): string[] {
+  return committingEarned((save) => withRunBests(save, bests, PROGRESSION));
+}
+
+/** Commits `change`, and names everything earned by it that the save did not have before. */
+function committingEarned(change: (save: SaveData) => SaveData): string[] {
+  const before = earnedNames(loadSave(), PROGRESSION);
+  const after = earnedNames(updateSave(change), PROGRESSION);
+  return (
+    [...after]
+      // The Promille unlock arrives with its own banner (`PromilleUnlockHud`).
+      .filter(([key]) => !before.has(key) && key !== `unlock:${UNLOCK_PROMILLE}`)
+      .map(([, name]) => name)
+  );
 }
 
 /** A run ended. Rolls the totals, keeps the summary the results screen leads with, grants what that earned. */

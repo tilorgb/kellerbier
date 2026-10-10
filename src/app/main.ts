@@ -83,6 +83,7 @@ import { TextPlate } from '../render/ui/text-plate.js';
 import { UiKitGallery } from '../render/ui/gallery.js';
 import { uiScaleFor, uiText, UI_TEXT_HEIGHT } from '../render/ui/text.js';
 import { PromilleUnlockHud } from '../render/promille-unlock-hud.js';
+import { UnlockToastHud } from '../render/unlock-toast-hud.js';
 import { Vignette } from '../render/vignette.js';
 import { BlaueStundeOverlay } from '../render/blaue-stunde-overlay.js';
 import { GameView } from '../render/view.js';
@@ -184,6 +185,8 @@ import {
 } from './story/beats.js';
 import {
   recordBossDefeat,
+  recordBossFight,
+  recordRunBests,
   recordRunOutcome,
   characterTraitsById,
   hasBeatenABoss,
@@ -1514,6 +1517,8 @@ async function boot(progress: BootProgress): Promise<void> {
   /** The mid-run Promille arrival (#236) — its own banner, over the cleared boss room. */
   const promilleUnlockHud = new PromilleUnlockHud(kit, preferences.locale);
   hudLayer.addChild(promilleUnlockHud.view);
+  const unlockToastHud = new UnlockToastHud(kit, preferences.locale);
+  hudLayer.addChild(unlockToastHud.view);
 
   /** The spirit walk (#84): a small persistent "you are doing this" readout. */
   const blutwurzHud = new BlutwurzHud(kit, preferences.locale);
@@ -1633,6 +1638,7 @@ async function boot(progress: BootProgress): Promise<void> {
     minimapHud.overlayView.position.set(centreX, Math.round(height / 2));
     curseHud.resize(width, height);
     promilleUnlockHud.resize(width, height);
+    unlockToastHud.resize(width, height);
     blutwurzHud.place(centreX, Math.round(height * 0.06));
 
     replayViewer.view.position.set(
@@ -1896,7 +1902,47 @@ async function boot(progress: BootProgress): Promise<void> {
       return;
     }
     creditedBossRooms.add(key);
-    recordBossDefeat(floorPlan.floor);
+    unlockToastHud.announce(recordBossDefeat(floorPlan.floor));
+  }
+
+  /** How many of `sim.feats.bossFights` have been committed to the save — see `commitRunFeats`. */
+  let committedBossFights = 0;
+  /** `sim.feats.revision` as of the last commit, so an unchanged tracker costs nothing. */
+  let committedFeatRevision = 0;
+
+  /**
+   * Commits the run's feats (#502) to the save as they happen, and announces
+   * whatever they earned.
+   *
+   * Every won boss fight is committed exactly once — it is *tallied*, so a
+   * second commit would count it twice — and the run's bests are merged as
+   * maxima whenever the tracker moves, which is harmless to repeat. Gated on
+   * `live` for `creditBossDefeat`'s reason: a resumed run's fast-forward
+   * replays fights and bests that were already committed when they actually
+   * happened. The counters still follow along when not live, so the
+   * fast-forward leaves them where the live run had them. A sandbox run
+   * (`?floor=N`) earns nothing, same as everywhere else.
+   */
+  function commitRunFeats(live: boolean): void {
+    const feats = sim.feats;
+    if (feats.revision === committedFeatRevision) {
+      return;
+    }
+    committedFeatRevision = feats.revision;
+    const fights = feats.bossFights;
+    if (!live || sandboxRun) {
+      committedBossFights = fights.length;
+      return;
+    }
+    const earned: string[] = [];
+    for (; committedBossFights < fights.length; committedBossFights++) {
+      const fight = fights[committedBossFights];
+      if (fight !== undefined) {
+        earned.push(...recordBossFight(fight));
+      }
+    }
+    earned.push(...recordRunBests(feats.bests));
+    unlockToastHud.announce(earned);
   }
 
   /** Whether the meter was already on last tick — the edge `checkPromilleUnlockSting` keys off. */
@@ -2325,6 +2371,7 @@ async function boot(progress: BootProgress): Promise<void> {
       justCleared,
     );
     creditBossDefeat(live, justCleared);
+    commitRunFeats(live);
     checkPromilleUnlockSting(live);
     checkLowHealthSting(live);
     advanceDeathSequence();
@@ -2561,6 +2608,7 @@ async function boot(progress: BootProgress): Promise<void> {
       bossHealthHud.sync(sim);
       curseHud.sync(sim);
       promilleUnlockHud.sync(sim, settings.neutralReskin);
+      unlockToastHud.sync(sim.tick);
       blutwurzHud.sync(sim);
       minimapHud.setMapOpen(isActionDown(input.frame, InputAction.Map));
       // Nebel (#49): no minimap for the floor — render-only, the same
@@ -3329,6 +3377,9 @@ WASD move   arrows aim and fire
     ambience.stop();
     ambienceTracker.reset();
     creditedBossRooms = new Set<string>();
+    committedBossFights = 0;
+    committedFeatRevision = 0;
+    unlockToastHud.clear();
     roomClearedLastTick = false;
     promilleWasUnlockedLastTick = promilleUnlocked;
     playerWasLowHealthLastTick = false;
@@ -4892,6 +4943,7 @@ WASD move   arrows aim and fire
     itemSetHud.setLocale(locale);
     characterHud.setLocale(locale);
     promilleUnlockHud.setLocale(locale);
+    unlockToastHud.setLocale(locale);
     blutwurzHud.setLocale(locale);
     if (runResults.visible) {
       runResults.update(runResultsView(locale));

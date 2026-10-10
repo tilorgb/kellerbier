@@ -143,6 +143,7 @@ export const bar: Record<DictKey, string> = {
   'ui.hud.blutwurzActive': 'Blutwurz — findsd dei Leich',
   'ui.hud.purseFlying': 'Geldbeutel: {biermarken} — fliagt',
   'ui.hud.purseEmpty': 'Geldbeutel leer — koa Kraft',
+  'ui.hud.unlockEarned': 'Freigeschaltet: {name}',
   'ui.hud.promilleUnlocked': '{meter} freigschoit',
   'ui.hud.promilleUnlockHint': 'D’Maß haut härta. Z’vui, und du foisd um.',
   'ui.promille.effectBonus': '+{damage} % Schodn, +{rate} % Feuerrate',

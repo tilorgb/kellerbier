@@ -11,6 +11,7 @@ import { type DebugContext, type DebugPanel, PANEL_WIDTH } from './panel.js';
 import { AnimationPanel } from './panels/animation.js';
 import { ArtPipelinePanel } from './panels/art-pipeline.js';
 import { CountsPanel } from './panels/counts.js';
+import { FeatsPanel } from './panels/feats.js';
 import { FrameGraphPanel } from './panels/frame-graph.js';
 import { PickupsPanel } from './panels/pickups.js';
 import { RunInfoPanel } from './panels/run-info.js';
@@ -124,6 +125,7 @@ export class DebugOverlay {
     this.addPanel(new CountsPanel());
     this.addPanel(this.runInfo);
     this.addPanel(new PickupsPanel());
+    this.addPanel(new FeatsPanel());
     this.addPanel(new StatsPanel());
     this.addPanel(this.animationPanel);
     this.addPanel(new ArtPipelinePanel());
