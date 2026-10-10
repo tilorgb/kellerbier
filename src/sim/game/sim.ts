@@ -2327,8 +2327,8 @@ export class GameSim implements FeatSource {
    * every source, cross-shaped blast included (`revealBombableWalls` and
    * `breakMachineFromBlast` always were), so one radius covers all of them.
    */
-  triggerExplosion(x: number, y: number, radius: number): void {
-    this.revealBombableWalls(x, y, radius);
+  triggerExplosion(x: number, y: number, radius: number, crossHalfWidth?: number): void {
+    this.revealBombableWalls(x, y, radius, crossHalfWidth);
     this.breakMachineFromBlast(x, y, radius);
     dispatchItemBombDetonate(this, x, y);
   }
@@ -2344,7 +2344,7 @@ export class GameSim implements FeatSource {
    * point), not to the room's centre — a boss-sized room makes the far wall
    * of a `2x2` slot unreachable by a blast measured from the middle.
    */
-  revealBombableWalls(x: number, y: number, radius: number): void {
+  revealBombableWalls(x: number, y: number, radius: number, crossHalfWidth?: number): void {
     if (this.bombableWalls.size === 0) {
       return;
     }
@@ -2352,7 +2352,24 @@ export class GameSim implements FeatSource {
       const point = doorCentre(this.room, door);
       const dx = point.x - x;
       const dy = point.y - y;
-      if (dx * dx + dy * dy <= radius * radius) {
+      if (crossHalfWidth === undefined) {
+        if (dx * dx + dy * dy <= radius * radius) {
+          this.bombableWalls.delete(key);
+        }
+        continue;
+      }
+      // A Bierfassl's cross (`radius` = arm length): the door's gap, not just
+      // its centre point, has to touch an arm — so a bomb a little off the
+      // gap's axis still opens it, but a diagonal never does.
+      const gapHalf = (door.span ?? DOOR_SPAN) / 2;
+      const alongX = door.direction === 'north' || door.direction === 'south';
+      const halfX = alongX ? gapHalf : 0;
+      const halfY = alongX ? 0 : gapHalf;
+      const inHorizontalArm =
+        Math.abs(dy) <= crossHalfWidth + halfY && Math.abs(dx) <= radius + halfX;
+      const inVerticalArm =
+        Math.abs(dx) <= crossHalfWidth + halfX && Math.abs(dy) <= radius + halfY;
+      if (inHorizontalArm || inVerticalArm) {
         this.bombableWalls.delete(key);
       }
     }

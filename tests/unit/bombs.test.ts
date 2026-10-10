@@ -284,6 +284,49 @@ describe('bombable (hidden) walls', () => {
     expect(sim.doors.some((door) => door.direction === 'north')).toBe(false);
   });
 
+  it('a Bierfassl on a diagonal from the hidden wall leaves it hidden, even inside the old circle', () => {
+    const sim = new GameSim({
+      roomTemplate: template,
+      floor: 1,
+      population: 'empty',
+      hiddenDoors: [{ direction: 'north', cellCol: 0, cellRow: 0 }],
+    });
+    const arm = bombBlastArmLength(sim);
+    const centreX = (sim.room.minX + sim.room.maxX) / 2;
+    // Well off the gap's axis but still within `arm` of its centre: the old
+    // circle opened the wall, the cross never touches it.
+    const offAxis = arm * 0.75;
+    sim.spawnBierfassl(centreX + offAxis, sim.room.minY + arm * 0.62, 0, 0, false);
+    sim.world.flush();
+
+    const fuseTicks = Math.round(sim.tuning.pickup.bombFuseTicks);
+    for (let tick = 0; tick <= fuseTicks; tick++) {
+      sim.step(createInputFrame());
+    }
+
+    expect(sim.doors.some((door) => door.direction === 'north')).toBe(false);
+  });
+
+  it('a Bierfassl whose vertical arm reaches the hidden wall opens it', () => {
+    const sim = new GameSim({
+      roomTemplate: template,
+      floor: 1,
+      population: 'empty',
+      hiddenDoors: [{ direction: 'north', cellCol: 0, cellRow: 0 }],
+    });
+    const arm = bombBlastArmLength(sim);
+    const centreX = (sim.room.minX + sim.room.maxX) / 2;
+    sim.spawnBierfassl(centreX, sim.room.minY + arm * 0.9, 0, 0, false);
+    sim.world.flush();
+
+    const fuseTicks = Math.round(sim.tuning.pickup.bombFuseTicks);
+    for (let tick = 0; tick <= fuseTicks; tick++) {
+      sim.step(createInputFrame());
+    }
+
+    expect(sim.doors.some((door) => door.direction === 'north')).toBe(true);
+  });
+
   /**
    * Regression for a real bug found while testing #107's `T`/`L` rooms: a
    * multi-cell room (#100) can have two doors sharing a direction on

@@ -157,13 +157,10 @@ function explode(sim: GameSim, index: number): void {
   // Same blast, same reach as the damage above — everything else an
   // explosion affects (a secret room's wall, the Losbrunnen, an item that
   // changes what a detonation does) goes through the one shared chokepoint
-  // every explosion source calls, `GameSim.triggerExplosion`. Circular
-  // rather than cross-shaped: a door dead-centre on a diagonal from the bomb
-  // is a rarer miss than the corners `broadphase` already over-fetches
-  // above, and a wall opening slightly too generously is a friendlier
-  // failure than a bomb dropped one pixel off-axis leaving a player unable
-  // to open a route they can plainly see the blast reached.
-  sim.triggerExplosion(x, y, armLength);
+  // every explosion source calls, `GameSim.triggerExplosion`. The cross
+  // half-width makes secret walls open only where the drawn cross touches
+  // them, not on a diagonal the telegraph never covered.
+  sim.triggerExplosion(x, y, armLength, BLAST_HALF_WIDTH);
 
   // Boulders in the cross are cleared — a bomb opens a path through
   // destructible cover (#4). The exact cross `blastCandidate` damages
