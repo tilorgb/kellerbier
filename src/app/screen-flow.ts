@@ -3,6 +3,8 @@ import type { MenuScreen } from '../render/ui/menu.js';
 import { CollectionScreen } from '../render/collection-screen.js';
 import { CreditsScreen } from '../render/credits-screen.js';
 import { PauseScreen } from '../render/pause-screen.js';
+import { RunSetupScreen } from '../render/run-setup-screen.js';
+import type { RunSetupView } from './meta/progress.js';
 import { SettingsScreen } from '../render/settings-screen.js';
 import { TitleScreen } from '../render/title-screen.js';
 import { BUILD_ID } from './build-mode.js';
@@ -27,7 +29,7 @@ import type { SettingsMenu } from './settings-menu.js';
  * is still looking at the run, on the screen it ends on. See
  * `docs/DECISIONS.md` #67 for the full reasoning.
  */
-export type Screen = 'title' | 'run' | 'paused' | 'credits' | 'settings' | 'collection';
+export type Screen = 'title' | 'run' | 'paused' | 'credits' | 'settings' | 'collection' | 'setup';
 
 export class ScreenFlow {
   private screen: Screen = 'title';
@@ -69,6 +71,16 @@ export interface ScreenFlowControllerDeps {
     /** What still earns a locked item (#503), or `null` — `app/meta`'s `itemUnlockGoal`. */
     readonly lockedGoal: (id: string) => string | null;
   };
+  /**
+   * The run-setup screen's side of the save (#493/#505): the roster and
+   * ladder to draw, stepping the stored character choice, and starting the
+   * run on the chosen tier.
+   */
+  readonly runSetup: {
+    readonly view: () => RunSetupView;
+    readonly cycleCharacter: (delta: 1 | -1) => void;
+    readonly start: (tier: number) => void;
+  };
 }
 
 /**
@@ -86,6 +98,7 @@ export class ScreenFlowController {
   readonly credits: CreditsScreen;
   readonly settings: SettingsScreen;
   readonly collection: CollectionScreen;
+  readonly runSetup: RunSetupScreen;
 
   private readonly flow = new ScreenFlow();
   private readonly deps: ScreenFlowControllerDeps;
@@ -173,6 +186,20 @@ export class ScreenFlowController {
       },
       deps.locale,
     );
+    this.runSetup = new RunSetupScreen(
+      deps.kit,
+      {
+        view: deps.runSetup.view,
+        cycleCharacter: deps.runSetup.cycleCharacter,
+        onStart: (tier) => {
+          this.startFromSetup(tier);
+        },
+        onBack: () => {
+          this.closeSetup();
+        },
+      },
+      deps.locale,
+    );
     this.settings = new SettingsScreen(
       deps.kit,
       deps.settingsMenu.tabs,
@@ -191,6 +218,7 @@ export class ScreenFlowController {
     this.pause.setLocale(locale);
     this.credits.setLocale(locale);
     this.collection.setLocale(locale);
+    this.runSetup.setLocale(locale);
     this.deps.settingsMenu.setLocale(locale);
     this.settings.setLocale(locale, this.deps.settingsMenu.tabs);
   }
@@ -211,6 +239,7 @@ export class ScreenFlowController {
     this.pause.resize(width, height);
     this.credits.resize(width, height);
     this.collection.resize(width, height);
+    this.runSetup.resize(width, height);
     this.placeSettings();
   }
 
@@ -235,6 +264,7 @@ export class ScreenFlowController {
     this.pause.hide();
     this.settings.hide();
     this.collection.hide();
+    this.runSetup.hide();
     this.title.setSettingsOpen(false);
     this.title.show();
   }
@@ -396,10 +426,31 @@ export class ScreenFlowController {
     this.deps.playCloseSound();
   }
 
+  /**
+   * "Start" on the title screen opens the run-setup screen (#493) rather
+   * than a run: who to play as, and on which tier.
+   */
   private startFromTitle(): void {
     this.title.hide();
+    this.flow.goTo('setup');
+    this.runSetup.show();
+    this.deps.playOpenSound();
+  }
+
+  private closeSetup(): void {
+    if (!this.flow.is('setup')) {
+      return;
+    }
+    this.runSetup.hide();
+    this.flow.goTo('title');
+    this.title.show();
+    this.deps.playCloseSound();
+  }
+
+  private startFromSetup(tier: number): void {
+    this.runSetup.hide();
     this.flow.goTo('run');
-    this.deps.startNewRun();
+    this.deps.runSetup.start(tier);
   }
 
   /** Resumes whichever run is already sitting there — the one boot loaded, or one merely paused-and-quit-to-title this session. */
@@ -421,6 +472,8 @@ export class ScreenFlowController {
         return this.settings;
       case 'collection':
         return this.collection;
+      case 'setup':
+        return this.runSetup;
       case 'run':
         return null;
     }
@@ -495,6 +548,8 @@ export class ScreenFlowController {
           this.closeSettings();
         } else if (this.flow.is('collection')) {
           this.closeCollection();
+        } else if (this.flow.is('setup')) {
+          this.closeSetup();
         }
         break;
       default:
@@ -597,6 +652,8 @@ export class ScreenFlowController {
         this.closeSettings();
       } else if (this.flow.is('collection')) {
         this.closeCollection();
+      } else if (this.flow.is('setup')) {
+        this.closeSetup();
       }
     }
     return true;
@@ -608,6 +665,8 @@ export class ScreenFlowController {
       this.settings.adjust(delta);
     } else if (this.flow.is('collection')) {
       this.collection.moveFocusHorizontal(delta);
+    } else if (this.flow.is('setup')) {
+      this.runSetup.adjust(delta);
     }
   }
 

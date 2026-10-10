@@ -87,8 +87,13 @@ import {
  * reason — an item earned mid-run joins the pool from the *next* run, so
  * rebuilding a run from the save's current unlocks would offer it items the
  * recorded run never could have seen. Nothing at the top level changes.
+ *
+ * v11 (#505) adds `tier` beside it, on the same two records: the difficulty
+ * tier the run was played on. The third run parameter of the same shape —
+ * a replay of a tier-3 run has to rebuild at tier 3 whatever the save's
+ * current ladder says. Logs from before v11 were tier 0.
  */
-export const SAVE_SCHEMA_VERSION = 10;
+export const SAVE_SCHEMA_VERSION = 11;
 
 /**
  * The character a save with no opinion starts as (#47).
@@ -171,6 +176,8 @@ export interface ReplayRecord {
    * reason as the two above: see `ActiveRunSave.lockedItems`.
    */
   readonly lockedItems: readonly string[];
+  /** The difficulty tier it was played on (#505) — see `ActiveRunSave.tier`. */
+  readonly tier: number;
   /** `Date.now()` when the run ended. */
   readonly recordedAt: number;
 }
@@ -242,6 +249,13 @@ export interface ActiveRunSave {
    * had: nothing was locked yet.
    */
   readonly lockedItems: readonly string[];
+  /**
+   * The difficulty tier the run is played on (#505) — a run parameter for
+   * the same reason as the three above: the run-setup screen can change the
+   * player's choice while this run is still in the save, and a resume has to
+   * rebuild the run's own tier, not the next one's. `0` before v11.
+   */
+  readonly tier: number;
 }
 
 /** The v1 shape, kept for the migration that reads it. Nothing loads a save at this version any more. */
@@ -353,8 +367,13 @@ export interface SaveDataV10 extends Omit<SaveDataV9, 'schemaVersion'> {
   readonly schemaVersion: 10;
 }
 
-/** The current schema version. A union the day a v11 lands and something still reads a v10. */
-export type SaveData = SaveDataV10;
+/** v11 (#505): `tier` on `activeRun` and every replay — nothing at the top level. */
+export interface SaveDataV11 extends Omit<SaveDataV10, 'schemaVersion'> {
+  readonly schemaVersion: 11;
+}
+
+/** The current schema version. A union the day a v12 lands and something still reads a v11. */
+export type SaveData = SaveDataV11;
 
 /** How many `bestRuns` entries a finished run keeps — see `app/meta/progress.ts`'s `withRunOutcome`. */
 export const MAX_BEST_RUNS = 10;
@@ -504,6 +523,8 @@ function sanitizeActiveRun(value: unknown): ActiveRunSave | null {
     // Nothing was locked before v10 (#503), so a log without the field
     // replays against the full pool — which is what it was recorded with.
     lockedItems: sanitizeStringArray(value.lockedItems),
+    // Tier 0 before v11 (#505) — the only tier there was.
+    tier: isFiniteNumber(value.tier) && value.tier > 0 ? Math.floor(value.tier) : 0,
   };
 }
 
@@ -543,6 +564,8 @@ export function sanitizeReplay(value: unknown): ReplayRecord | null {
     // Nothing was locked before v10 (#503), so a log without the field
     // replays against the full pool — which is what it was recorded with.
     lockedItems: sanitizeStringArray(value.lockedItems),
+    // Tier 0 before v11 (#505) — the only tier there was.
+    tier: isFiniteNumber(value.tier) && value.tier > 0 ? Math.floor(value.tier) : 0,
     recordedAt: value.recordedAt,
   };
 }

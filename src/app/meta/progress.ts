@@ -21,6 +21,7 @@ import {
   STAT_RUNS,
   STAT_TICKS,
   bossStatKey,
+  tierWonStatKey,
 } from './definition.js';
 import { bossFeatProgress, foldBossFight, foldRunBests, satisfyBossFeat } from './feats.js';
 
@@ -202,6 +203,14 @@ export function earnedNames(save: SaveData, content: ProgressionContent): Map<st
       earned.set(`character:${character.id}`, character.name);
     }
   }
+  // Each rung of each character's ladder (#505), named by its placeholder
+  // label until the owner names the ladder.
+  for (const character of content.characters) {
+    const open = highestTierOpen(save, content, character.id);
+    for (let tier = 1; tier <= open; tier++) {
+      earned.set(`tier:${character.id}:${String(tier)}`, `${tierLabel(tier)} (${character.name})`);
+    }
+  }
   // An item stays a surprise until it is offered (#503): announced, never named.
   for (const item of content.items ?? []) {
     if (conditionMet(save, item.condition)) {
@@ -209,6 +218,40 @@ export function earnedNames(save: SaveData, content: ProgressionContent): Map<st
     }
   }
   return earned;
+}
+
+/** The top rung of `content`'s difficulty ladder (#505) — `0` with no ladder at all. */
+export function highestTier(content: ProgressionContent): number {
+  return Math.max(0, ...(content.tiers ?? []).map((rung) => rung.tier));
+}
+
+/**
+ * The highest difficulty tier open to `character` (#505): one above the best
+ * tier they have won on, capped at the top of the ladder — `0` until their
+ * first win. Per character: Resi's ladder is not Alois's.
+ */
+export function highestTierOpen(
+  save: SaveData,
+  content: ProgressionContent,
+  character: string,
+): number {
+  return Math.min(highestTier(content), statistic(save, tierWonStatKey(character)));
+}
+
+/**
+ * Records a won run — the current last boss beaten (#505) — as `character`
+ * on `tier`, which opens the next rung for them. Winning a lower tier again
+ * never closes a higher one.
+ */
+export function withRunWon(
+  save: SaveData,
+  character: string,
+  tier: number,
+  content: ProgressionContent,
+): SaveData {
+  const key = tierWonStatKey(character);
+  const statistics = { ...save.statistics, [key]: Math.max(statistic(save, key), tier + 1) };
+  return grantEarnedUnlocks({ ...save, statistics }, content);
 }
 
 /** What `earnedNames` calls an earned item — the toast reads "Unlocked: ???". */
@@ -351,6 +394,11 @@ export function withEverythingUnlocked(save: SaveData, content: ProgressionConte
       statistics[condition.stat] = Math.max(statistics[condition.stat] ?? 0, condition.value);
     }
   }
+  // Every rung of every character's ladder (#505).
+  for (const character of content.characters) {
+    const key = tierWonStatKey(character.id);
+    statistics[key] = Math.max(statistics[key] ?? 0, highestTier(content));
+  }
   return grantEarnedUnlocks({ ...save, statistics }, content);
 }
 
@@ -451,6 +499,41 @@ export function characterById(
   return content.characters.find((character) => character.id === id);
 }
 
+/** One rung of the selected character's ladder, as the run-setup screen lists it (#505). */
+export interface TierView {
+  readonly tier: number;
+  readonly label: string;
+  /** What this rung adds on top of the ones below it. */
+  readonly adds: string;
+}
+
+/**
+ * Everything the run-setup screen (#493) draws: the roster, who is selected,
+ * and the tiers open to them (#505). Built here so the screen holds no rules.
+ */
+export interface RunSetupView {
+  readonly characters: readonly CharacterView[];
+  readonly selected: string;
+  /** The highest tier open to the selected character — `0` until their first win. */
+  readonly highestOpen: number;
+  /** Rungs 1..`highestOpen` of the selected character's ladder, in order. */
+  readonly tiers: readonly TierView[];
+}
+
+export function buildRunSetupView(save: SaveData, content: ProgressionContent): RunSetupView {
+  const selected = selectedCharacterId(save, content);
+  const highestOpen = highestTierOpen(save, content, selected);
+  return {
+    characters: content.characters.map((character) => characterView(save, character)),
+    selected,
+    highestOpen,
+    tiers: (content.tiers ?? [])
+      .filter((rung) => rung.tier >= 1 && rung.tier <= highestOpen)
+      .sort((a, b) => a.tier - b.tier)
+      .map((rung) => ({ tier: rung.tier, label: tierLabel(rung.tier), adds: rung.description })),
+  };
+}
+
 /** One unlock, as the results screen needs it. */
 export interface UnlockView {
   readonly id: string;
@@ -480,6 +563,14 @@ function unlockView(save: SaveData, unlock: UnlockDefinition, unlocked: Set<stri
   };
 }
 
+/**
+ * A difficulty tier's on-screen name (#505). "Tier N" is a placeholder the
+ * owner will replace — one function, so the rename is one line.
+ */
+export function tierLabel(tier: number): string {
+  return `Tier ${String(tier)}`;
+}
+
 /** The unlock id the Promille mechanic itself is gated behind (#85) — read at run start, see `app/promille-gate.ts`. */
 export const UNLOCK_PROMILLE = 'promille';
 /** The unlock id the run board is gated behind — see `content/progression/unlocks.ts`. */
@@ -497,6 +588,8 @@ export interface RunResultsView {
   readonly totalKills: number;
   /** Names of the items the last run earned into the pool (#503), in roster order. */
   readonly newItems: readonly string[];
+  /** Difficulty tiers the last run opened (#505), as "Tier 1 (Alois)". */
+  readonly newTiers: readonly string[];
 }
 
 export function buildRunResultsView(
@@ -504,6 +597,7 @@ export function buildRunResultsView(
   content: ProgressionContent,
   locale: Locale,
   newItems: readonly string[] = [],
+  newTiers: readonly string[] = [],
 ): RunResultsView {
   const lastRun = save.lastRun === null ? null : runFactsFrom(save.lastRun);
   const unlocked = new Set(save.unlocks);
@@ -517,6 +611,7 @@ export function buildRunResultsView(
     runsPlayed: statistic(save, STAT_RUNS),
     totalKills: statistic(save, STAT_KILLS),
     newItems,
+    newTiers,
   };
 }
 

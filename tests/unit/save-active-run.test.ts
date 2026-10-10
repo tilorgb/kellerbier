@@ -42,6 +42,7 @@ describe('active-run recording and replay (#45)', () => {
       promilleUnlocked: true,
       character: 'alois',
       lockedItems: [],
+      tier: 0,
     });
     expect(decoded).toHaveLength(1);
   });
@@ -115,6 +116,7 @@ describe('active-run recording and replay (#45)', () => {
       promilleUnlocked: true,
       character: 'alois',
       lockedItems: [],
+      tier: 0,
     });
 
     persistActiveRun(null);

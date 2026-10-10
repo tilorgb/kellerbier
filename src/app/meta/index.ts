@@ -14,6 +14,10 @@ import {
   withBossFight,
   withDailyRunOutcome,
   withRunBests,
+  withRunWon,
+  highestTierOpen,
+  buildRunSetupView,
+  type RunSetupView,
   selectedCharacterTraits,
   withEverythingUnlocked,
   withRunOutcome,
@@ -22,6 +26,7 @@ import {
 } from './progress.js';
 import { type CharacterTraits, NEUTRAL_TRAITS } from '../../sim/character/definition.js';
 import type { BossFightRecord, RunBests } from '../../sim/game/feats.js';
+import { type DifficultyModifiers, resolveDifficulty } from '../../sim/game/difficulty.js';
 
 /**
  * Meta-progression's write side: the three moments its state changes, each
@@ -104,6 +109,29 @@ export function itemUnlockGoal(itemId: string, save: SaveData = loadSave()): str
   return lockedItemGoal(save, PROGRESSION, itemId);
 }
 
+/** The highest difficulty tier open to `character` (#505). */
+export function tierOpenFor(character: string, save: SaveData = loadSave()): number {
+  return highestTierOpen(save, PROGRESSION, character);
+}
+
+/** The combined modifiers a run on `tier` is built with (#505) — `GameSimOptions.difficulty`. */
+export function difficultyFor(tier: number): DifficultyModifiers {
+  return resolveDifficulty(PROGRESSION.tiers ?? [], tier);
+}
+
+/**
+ * A run was won as `character` on `tier` (#505). Hands back what that
+ * earned — the next rung of their ladder, if there was one left.
+ */
+export function recordRunWon(character: string, tier: number): string[] {
+  return committingEarned((save) => withRunWon(save, character, tier, PROGRESSION));
+}
+
+/** Everything the run-setup screen draws (#493), from the save on disk. */
+export function runSetupView(save: SaveData = loadSave()): RunSetupView {
+  return buildRunSetupView(save, PROGRESSION);
+}
+
 /** How the currently selected character plays — handed to `GameSim` at run start. */
 export function selectedCharacter(save: SaveData = loadSave()): CharacterTraits {
   return selectedCharacterTraits(save, PROGRESSION);
@@ -119,12 +147,20 @@ export function runResultsView(
   locale: Locale,
   save: SaveData = loadSave(),
   newItems: readonly string[] = [],
+  newTiers: readonly string[] = [],
 ): RunResultsView {
-  return buildRunResultsView(save, PROGRESSION, locale, newItems);
+  return buildRunResultsView(save, PROGRESSION, locale, newItems, newTiers);
 }
 
 export { PROGRESSION } from '../../content/progression/index.js';
-export type { DailyStatus, RunFacts, UnlockView, RunResultsView } from './progress.js';
+export type {
+  DailyStatus,
+  RunFacts,
+  UnlockView,
+  RunResultsView,
+  RunSetupView,
+  TierView,
+} from './progress.js';
 export {
   characterById,
   characterUnlocked,
@@ -132,6 +168,7 @@ export {
   lastRunLine,
   runFactsFrom,
   selectedCharacterId,
+  tierLabel,
   UNLOCK_BOARD,
   UNLOCK_PROMILLE,
 } from './progress.js';
