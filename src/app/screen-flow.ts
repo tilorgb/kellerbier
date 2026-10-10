@@ -85,6 +85,11 @@ export interface ScreenFlowControllerDeps {
   };
   /** The medal shelf's view of the save (#506). */
   readonly medals: () => MedalShelfView;
+  /** The daily run (#494): whether today's is spent, and starting it. */
+  readonly daily: {
+    readonly playedToday: () => boolean;
+    readonly start: () => void;
+  };
 }
 
 /**
@@ -139,6 +144,12 @@ export class ScreenFlowController {
         onMedals: () => {
           this.openMedals();
         },
+        onDaily: () => {
+          this.title.hide();
+          this.flow.goTo('run');
+          this.deps.daily.start();
+        },
+        dailyPlayedToday: deps.daily.playedToday,
         onCredits: () => {
           this.openCredits();
         },

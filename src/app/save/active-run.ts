@@ -34,6 +34,8 @@ export class ActiveRunRecorder {
     readonly lockedItems: readonly string[] = [],
     /** The difficulty tier the run is played on (#505) — see `ActiveRunSave.tier`. */
     readonly tier = 0,
+    /** The daily this run is (#494), or `null` — see `ActiveRunSave.dailyDate`. */
+    readonly dailyDate: string | null = null,
   ) {}
 
   get frameCount(): number {
@@ -52,6 +54,7 @@ export class ActiveRunRecorder {
       character: this.character,
       lockedItems: this.lockedItems,
       tier: this.tier,
+      dailyDate: this.dailyDate,
     };
   }
 }
@@ -68,6 +71,7 @@ export function recorderFrom(active: ActiveRunSave): ActiveRunRecorder {
     active.character,
     active.lockedItems,
     active.tier,
+    active.dailyDate,
   );
   for (const frame of decodeActiveRunFrames(active)) {
     recorder.record(frame);

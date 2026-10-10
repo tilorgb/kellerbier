@@ -6969,3 +6969,12 @@ The Summit cross, Snow cannon and Mountain hare use them, joined by the Skier (`
 - **Medal-only conditions** look across the roster rather than at one statistic: a tier won by any or every character, every boss mark lit, no item locked, the Collection complete, a win within a time. Everything else is an ordinary `UnlockCondition`.
 - **Three new win records**, committed only on a won run (`withRunWon`): the fastest win (a best), wins no boss landed a hit in, and wins without an item picked up during play (the tracker counts pickups after tick 0, so a starting kit or a dev `?item=` does not count). Read off the run's own `GameSim` at the end.
 - **Text-only shelf** (`render/medal-screen.ts`) from a "Medals" entry on the title menu: earned first in the accent colour, the rest dimmed, a hidden one as "???". Medal art is its own follow-up through the pixel-art sign-off. The results screen lists medals a run earned under "Medal earned".
+
+## 135. The daily run is one fixed set of parameters per UTC date, and the first attempt counts
+
+**Decided** with #494, which gave the daily (#48) its way back in after #63 removed the Stammtisch's `D` key: a "Daily Run" row on the title menu, second only to Start.
+
+- **The same run for everyone that day.** `app/daily.ts`'s `dailyRunParameters(date)` fixes everything the save would otherwise decide: the day's seed, Alois, tier 0, the full item pool (nothing locked, #503) and the Promille mechanic on. The owner chose Alois and the full pool; Promille on follows from the same aim — a new player's daily and a veteran's would otherwise be different runs. Nothing about it reads the save, so two players' dailies differ only in how they are played.
+- **One attempt counts.** The first result on a date goes into `dailyRunHistory` (`withDailyRunOutcome` already kept the first); playing it again is allowed and says so as it starts ("Practice — today's daily result is already in"), and the title row reads "Daily Run (played)". A retry from a daily's end screen is an ordinary run.
+- **The day travels with the run.** `ActiveRunSave.dailyDate` (save v12, back-filled `null`) records which daily a run is, so one resumed after a reload, or finished after midnight UTC, records into the day it started on. Replays record as `kind: 'daily'`.
+- A daily is otherwise a real run: feats, item unlocks, tiers and medals are all earned on it.
