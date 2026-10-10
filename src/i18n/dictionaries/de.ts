@@ -289,6 +289,11 @@ export const de: Record<DictKey, string> = {
   'ui.settings.privacy.shareToggle': 'Anonyme Playtest-Telemetrie teilen',
 
   // --- Playtest build: welcome screen and post-run questions ---------------
+  'ui.confirm.newRun.headline': 'Neuen Lauf starten?',
+  'ui.confirm.newRun.body': 'Dein aktueller Lauf geht dabei verloren.',
+  'ui.confirm.newRun.confirm': 'Neuen Lauf starten',
+  'ui.confirm.newRun.back': 'Zurück',
+  'ui.hud.restartHold': 'Neustart…',
   'ui.crash.title': 'Etwas ist schiefgegangen',
   'ui.crash.runBody':
     'Das Spiel ist auf einen Fehler gestoßen und hat angehalten. Dein Lauf ist bis kurz davor gespeichert — lade neu, um dort weiterzumachen.',

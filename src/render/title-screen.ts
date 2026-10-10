@@ -215,6 +215,11 @@ export class TitleScreen implements MenuScreen {
     this.view.visible = false;
   }
 
+  /** Puts the focus on Continue (#521) — where the title opens when there is a run to resume. */
+  focusContinue(): void {
+    this.menu.focusRow(this.actions.challengesOpen() ? 3 : 2);
+  }
+
   moveFocus(delta: 1 | -1): void {
     this.menu.moveFocus(delta);
   }
