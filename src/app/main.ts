@@ -192,9 +192,15 @@ import {
   recordRunOutcome,
   characterTraitsById,
   hasBeatenABoss,
+  difficultyFor,
   itemUnlockGoal,
   nextRunLockedItems,
+  recordRunWon,
   resetProgress,
+  runSetupView,
+  selectNextCharacter,
+  tierLabel as difficultyTierLabel,
+  tierOpenFor,
   selectCharacter,
   selectedCharacter,
   runResultsView,
@@ -1817,6 +1823,8 @@ async function boot(progress: BootProgress): Promise<void> {
     readonly character: string;
     /** And the items its pools left out (#503) — see `ActiveRunSave.lockedItems`. */
     readonly lockedItems: readonly string[];
+    /** And the difficulty tier it was played on (#505) — see `ActiveRunSave.tier`. */
+    readonly tier: number;
   } | null = null;
   const replayViewer = new ReplayViewer(kit);
   hudLayer.addChild(replayViewer.view);
@@ -1871,10 +1879,19 @@ async function boot(progress: BootProgress): Promise<void> {
    * title has no run to describe.
    */
   let itemsEarnedLastRun: readonly string[] = [];
+  /** The difficulty tiers the run that just ended opened (#505) — "Difficulty unlocked" on the results screen. */
+  let tiersEarnedLastRun: readonly string[] = [];
+  /**
+   * The tier a fresh run starts on (#505): whatever the run-setup screen
+   * last started, so a retry from the death or victory screen — which never
+   * goes back through setup — keeps the player's choice. Clamped to what is
+   * open whenever a run starts, so a reset save cannot start a locked tier.
+   */
+  let runTier = 0;
 
   /** The results screen's view, carrying the last run's new items. */
   function currentRunResultsView(locale: Locale): ReturnType<typeof runResultsView> {
-    return runResultsView(locale, loadSave(), itemsEarnedLastRun);
+    return runResultsView(locale, loadSave(), itemsEarnedLastRun, tiersEarnedLastRun);
   }
 
   /** Whether the room read as cleared last tick — shared by the room-clear sting below and `creditBossDefeat`. */
@@ -2258,9 +2275,14 @@ async function boot(progress: BootProgress): Promise<void> {
               const index = sim.items.indexOf(id);
               return index < 0 ? id : sim.items.at(index).name;
             });
+          // A won run opens the next difficulty tier for whoever won it (#505).
+          tiersEarnedLastRun = sim.playerWon
+            ? recordRunWon(activeRunRecorder.character, activeRunRecorder.tier)
+            : [];
           if (
             save.unlocks.some((id) => !unlocksAtRunStart.has(id)) ||
-            itemsEarnedLastRun.length > 0
+            itemsEarnedLastRun.length > 0 ||
+            tiersEarnedLastRun.length > 0
           ) {
             openRunResults();
             playSfx('ui-unlock-fanfare');
@@ -2289,6 +2311,7 @@ async function boot(progress: BootProgress): Promise<void> {
     const finishedPromilleUnlocked = activeRunRecorder.promilleUnlocked;
     const finishedCharacter = activeRunRecorder.character;
     const finishedLockedItems = activeRunRecorder.lockedItems;
+    const finishedTier = activeRunRecorder.tier;
     const recording = new InputRecording(Math.max(1, activeRunRecorder.frameCount));
     for (const frame of decodeActiveRunFrames(activeRunRecorder.toSave())) {
       recording.push(frame);
@@ -2307,6 +2330,7 @@ async function boot(progress: BootProgress): Promise<void> {
       promilleUnlocked: finishedPromilleUnlocked,
       character: finishedCharacter,
       lockedItems: finishedLockedItems,
+      tier: finishedTier,
       recordedAt: Date.now(),
     })
       .then(saveReplay)
@@ -2963,6 +2987,16 @@ async function boot(progress: BootProgress): Promise<void> {
       isHeld: (id) => sim.hasItem(id),
       lockedGoal: (id) => itemUnlockGoal(id),
     },
+    runSetup: {
+      view: () => runSetupView(),
+      cycleCharacter: (delta) => {
+        selectNextCharacter(delta);
+      },
+      start: (tier) => {
+        runTier = tier;
+        retryRun();
+      },
+    },
     kit,
     locale: preferences.locale,
     loop,
@@ -2994,6 +3028,7 @@ async function boot(progress: BootProgress): Promise<void> {
   hudLayer.addChild(screenController.credits.view);
   hudLayer.addChild(screenController.title.view);
   hudLayer.addChild(screenController.collection.view);
+  hudLayer.addChild(screenController.runSetup.view);
   screenController.collection.setEntries(
     // Its own registry over the full roster rather than \`sim.items\`: no run
     // exists yet at this point in boot, and the Collection lists the game's
@@ -3113,7 +3148,11 @@ async function boot(progress: BootProgress): Promise<void> {
     const promilleLine = sim.promilleUnlocked
       ? `\n${meterLabel} ${sim.promille.toFixed(2)} ${tierLabel}${trinkfest}  heat ${sim.promilleShotHeat.toFixed(2)}  tunnel ${sim.promilleTunnelVision.toFixed(2)}  gloom ${sim.promilleGloom.toFixed(2)}${knockedDown}`
       : '';
-    const runState = sim.promilleUnlocked ? '' : '  SOBER RUN';
+    const runState =
+      (sim.promilleUnlocked ? '' : '  SOBER RUN') +
+      (activeRunRecorder.tier > 0
+        ? `  ${difficultyTierLabel(activeRunRecorder.tier).toUpperCase()}`
+        : '');
     const override = promilleOverride === 'auto' ? '' : `  [${promilleOverride} forced]`;
     // Dev builds only, like the key itself — and not only for symmetry: this
     // line is reachable with `O` in a shipped build, and a key list naming
@@ -3219,6 +3258,7 @@ WASD move   arrows aim and fire
       persist = true,
       character = selectedCharacter(),
       lockedItems = nextRunLockedItems(),
+      tier = Math.min(runTier, tierOpenFor(character.id)),
       startFloor = sandboxStartFloor,
     }: {
       promilleUnlocked?: boolean;
@@ -3230,6 +3270,11 @@ WASD move   arrows aim and fire
        * the same run-parameter shape as `promilleUnlocked` and `character`.
        */
       lockedItems?: readonly string[];
+      /**
+       * The difficulty tier (#505): the run-setup screen's choice for a fresh
+       * run, the *recorded* tier for a resume or a replay.
+       */
+      tier?: number;
       /**
        * The floor the run begins on. Above 1 it is a sandbox run (`?floor=N`):
        * dealt a kit for the floors skipped, and never saved, credited or
@@ -3298,6 +3343,8 @@ WASD move   arrows aim and fire
       promilleUnlockFloor: resolvePromilleUnlockFloor(promilleUnlocked),
       // Fixed for the run (#503): an item earned mid-run waits for the next one.
       lockedItems,
+      // The tier's modifiers (#505), resolved from the ladder in content.
+      difficulty: difficultyFor(tier),
     });
     // The start room is hand-authored (loaded just above); the procedural
     // `normal` rooms are built now that `sim` — and its live `tuning.roomGen`
@@ -3326,7 +3373,13 @@ WASD move   arrows aim and fire
     // after a restart resumes into the *new* run next time, not the one the
     // player just left behind. Skipped for `persist: false` (a replay's own
     // rebuild) — see this function's doc comment.
-    activeRunRecorder = new ActiveRunRecorder(seed, promilleUnlocked, character.id, lockedItems);
+    activeRunRecorder = new ActiveRunRecorder(
+      seed,
+      promilleUnlocked,
+      character.id,
+      lockedItems,
+      tier,
+    );
     ticksSinceAutosave = 0;
     // A sandbox run never touches the save slot: it must not replace a real
     // run in progress, and it could not be resumed (the log does not carry
@@ -3336,6 +3389,10 @@ WASD move   arrows aim and fire
         floorPlan.floorName,
         sandboxStartClamped ? 'ui.hud.sandboxClamped' : 'ui.hud.sandboxRun',
       );
+    } else if (tier > 0) {
+      // A harder run says so as it starts (#505) — the modifiers themselves
+      // are felt, but which rung this is should not have to be remembered.
+      sim.reportCollected(difficultyTierLabel(tier), 'ui.hud.tierRun');
     }
     if (persist && !sandboxRun) {
       persistActiveRun(activeRunRecorder);
@@ -3664,6 +3721,7 @@ WASD move   arrows aim and fire
         // And the pool it was recorded against (#503): items earned since
         // must not appear in a run that could not have offered them.
         lockedItems: activeRun.lockedItems,
+        tier: activeRun.tier,
         startFloor: 1,
       });
       const frames = decodeActiveRunFrames(activeRun);
@@ -3703,12 +3761,14 @@ WASD move   arrows aim and fire
     promilleUnlocked: boolean,
     character: string,
     lockedItems: readonly string[],
+    tier: number,
   ): void {
     startRun(seed, {
       persist: false,
       promilleUnlocked,
       character: characterTraitsById(character),
       lockedItems,
+      tier,
       startFloor: 1,
     });
     const scratch = createInputFrame();
@@ -3734,6 +3794,7 @@ WASD move   arrows aim and fire
     promilleUnlocked: boolean,
     character: string,
     lockedItems: readonly string[],
+    tier: number,
   ): void {
     const recording = InputRecording.fromBytes(frameBytes);
     closeRunResults();
@@ -3744,8 +3805,9 @@ WASD move   arrows aim and fire
       promilleUnlocked,
       character,
       lockedItems,
+      tier,
     };
-    replayTo(seed, recording, 0, promilleUnlocked, character, lockedItems);
+    replayTo(seed, recording, 0, promilleUnlocked, character, lockedItems, tier);
     loop.paused = false;
     loop.timeScale = settings.slowModeScale;
     refreshHud();
@@ -3771,6 +3833,7 @@ WASD move   arrows aim and fire
       replay.promilleUnlocked,
       replay.character,
       replay.lockedItems,
+      replay.tier,
     );
     replay.playback.rewind();
     for (let skipped = 0; skipped < clamped; skipped++) {
@@ -3829,6 +3892,7 @@ WASD move   arrows aim and fire
               record.promilleUnlocked,
               record.character,
               record.lockedItems,
+              record.tier,
             );
           });
         })

@@ -16,6 +16,8 @@ export interface ReplayOutcome {
   readonly character: string;
   /** The items its pools left out (#503) — see `ReplayRecord.lockedItems`. */
   readonly lockedItems: readonly string[];
+  /** The difficulty tier it was played on (#505) — see `ReplayRecord.tier`. */
+  readonly tier: number;
   readonly recordedAt: number;
 }
 
@@ -45,6 +47,7 @@ export async function buildReplayRecord(
     promilleUnlocked: outcome.promilleUnlocked,
     character: outcome.character,
     lockedItems: outcome.lockedItems,
+    tier: outcome.tier,
     recordedAt: outcome.recordedAt,
   };
 }

@@ -171,7 +171,9 @@ await page.addInitScript(initScript);
 await page.goto(url);
 await page.waitForFunction(() => Boolean(window.__kellerbier), null, { timeout: 60000 });
 await page.waitForTimeout(1500);
-// Title screen → Start.
+// Title screen → Start → the run-setup screen (#493), which opens on its own Start.
+await page.keyboard.press('Enter');
+await page.waitForTimeout(500);
 await page.keyboard.press('Enter');
 await page.waitForFunction(
   () => {

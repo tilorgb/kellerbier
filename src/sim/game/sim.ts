@@ -168,6 +168,7 @@ import { WeatherStore, stepWeather } from '../hazard/weather.js';
 import { LobStore, launchLob, nearestEnemyTo, stepLobs } from '../systems/lobs.js';
 import { stepProjectiles, stepShooting } from '../systems/shooting.js';
 import { type FeatSource, RunFeatTracker, itemTagUniverse } from './feats.js';
+import { type DifficultyModifiers, NO_DIFFICULTY, scaledPrice } from './difficulty.js';
 import {
   STATUS_BURN,
   STATUS_DAZE,
@@ -702,6 +703,12 @@ export interface GameSimOptions {
    * to none locked.
    */
   readonly lockedItems?: readonly string[];
+  /**
+   * The difficulty tier's modifiers (#505), already combined
+   * (`resolveDifficulty`). A run parameter like the two above; defaults to
+   * `NO_DIFFICULTY` — tier 0, exactly the game without tiers.
+   */
+  readonly difficulty?: DifficultyModifiers;
   /**
    * The floor whose boss switches Promille on mid-run for a run that started
    * without it (#236). Defaults to `null` — no mid-run unlock, which is what
@@ -1803,6 +1810,10 @@ export class GameSim implements FeatSource {
   private readonly takenItemIds = new Set<string>();
   /** `GameSimOptions.lockedItems` — read by every item draw through `ItemOfferContext.locked`. */
   private readonly lockedItemIds: ReadonlySet<string>;
+  /** `GameSimOptions.difficulty` (#505) — the tier's modifiers, fixed for the run. */
+  readonly difficulty: DifficultyModifiers;
+  /** Treasure-room pedestals still to hold back this floor under `difficulty.treasurePedestalsFewer`. */
+  private treasurePedestalsToSkip = 0;
   /**
    * Where a charged active item's pending blast will land and how far through
    * its fuse it is (#12) — set every tick by the item's own `onTick` while
@@ -1867,7 +1878,16 @@ export class GameSim implements FeatSource {
     this.stats = new StatPipeline(() => this.baseStats(), DEFAULT_STAT_CAPS);
     this.previousDeathWord = options.previousDeathWord;
 
-    this.character = options.character ?? NEUTRAL_TRAITS;
+    // The tier (#505) is applied here, before anything reads what it
+    // changes: the tuning row it scales is this run's own copy, and the
+    // character's pool is set before `spawnPlayer` sizes the health bar.
+    this.difficulty = options.difficulty ?? NO_DIFFICULTY;
+    this.tuning.enemy.projectileSpeedScale *= this.difficulty.enemyShotSpeedScale;
+    const traits = options.character ?? NEUTRAL_TRAITS;
+    this.character =
+      this.difficulty.maxHealthDelta === 0
+        ? traits
+        : { ...traits, maxHealth: Math.max(2, traits.maxHealth + this.difficulty.maxHealthDelta) };
     this.characterFlies = hasCharacterRule(this.character, CharacterRule.Flies);
     this.characterPurse = hasCharacterRule(this.character, CharacterRule.Purse);
     // The innate half of a shot's behaviour (#47) — Resi's arcing, returning
@@ -3186,7 +3206,7 @@ export class GameSim implements FeatSource {
     this.roomWarmupTicks = ROOM_WARMUP_TICKS;
     if (floor !== this.lastFloorStartDispatched) {
       this.lastFloorStartDispatched = floor;
-      this.rollFloorCurse();
+      this.rollFloorCurse(floor);
       dispatchItemFloorStart(this, floor);
       // Der Losbrunnen (#218): fixed for the floor the instant it starts,
       // the same footing as the curse roll right above — never re-rolled by
@@ -3464,7 +3484,12 @@ export class GameSim implements FeatSource {
         throw new Error(`room template pickup "${pickup.type}" is not registered`);
       }
       const safe = this.safeSpawnPoint(pickup.x, pickup.y, this.pickups.at(definition).radius);
-      this.spawnPickup(pickup.type, safe.x, safe.y, pickup.price);
+      this.spawnPickup(
+        pickup.type,
+        safe.x,
+        safe.y,
+        pickup.price === undefined ? undefined : scaledPrice(pickup.price, this.difficulty),
+      );
     }
     // A pedestal (#28) draws a real item from a pool chosen by the room's
     // own special role (`pedestalPoolForRole`) rather than sitting inert —
@@ -3524,6 +3549,11 @@ export class GameSim implements FeatSource {
         // a chance encounter into furniture) — only `pendingBossLosbrunnen`
         // above ever claims `floorHasLosbrunnen`.
         this.pendingMinibossPedestal = { x: safe.x, y: safe.y };
+      } else if (this.roomSpecialRole === 'treasure' && this.treasurePedestalsToSkip > 0) {
+        // A tier's "one fewer pedestal" (#505): the floor's treasure room
+        // holds one back, on the first visit only — a revisit restores the
+        // room's own snapshot, which never had it.
+        this.treasurePedestalsToSkip -= 1;
       } else {
         this.spawnPedestal(safe.x, safe.y);
       }
@@ -4281,10 +4311,15 @@ export class GameSim implements FeatSource {
    * `curse` by the renderer — and Föhn's per-tick effect lives in
    * `sim/systems/curse.ts`'s `stepCurse`.
    */
-  private rollFloorCurse(): void {
+  private rollFloorCurse(floor: number): void {
     const tuning = this.tuning.curse;
     this.curseFoehnAngle = 0;
-    if (!this.random.curse.chance(tuning.curseChance)) {
+    // A tier's forced curse (#505) still spends the chance draw, so which
+    // curse lands is drawn from the same stream position it would have been.
+    // The treasure-pedestal tier is per floor too, so it is re-armed here.
+    this.treasurePedestalsToSkip = this.difficulty.treasurePedestalsFewer;
+    const rolled = this.random.curse.chance(tuning.curseChance);
+    if (!rolled && !this.difficulty.forcedCurseFloors.includes(floor)) {
       this.curseIdValue = null;
       return;
     }
@@ -5985,7 +6020,13 @@ export class GameSim implements FeatSource {
       x,
       y,
       itemIndex: offer === undefined ? -1 : this.items.indexOf(offer.id),
-      price: role === 'shop' ? Math.max(0, Math.round(this.tuning.itemPool.shopItemPrice)) : 0,
+      price:
+        role === 'shop'
+          ? scaledPrice(
+              Math.max(0, Math.round(this.tuning.itemPool.shopItemPrice)),
+              this.difficulty,
+            )
+          : 0,
     });
   }
 

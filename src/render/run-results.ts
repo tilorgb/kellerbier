@@ -206,7 +206,8 @@ export class RunResultsScreen implements MenuScreen {
     const bandCentre = Math.round((bandTop + bandBottom) / 2);
 
     const unlockEntries = [
-      ...state.newItems.map((name) => this.buildNewItemEntry(name)),
+      ...state.newTiers.map((name) => this.buildNewEntry('ui.results.newTier', name)),
+      ...state.newItems.map((name) => this.buildNewEntry('ui.results.newInPool', name)),
       ...state.unlocks.map((unlock) => this.buildUnlockEntry(unlock)),
     ];
     const unlocksHeight =
@@ -258,8 +259,11 @@ export class RunResultsScreen implements MenuScreen {
    * the standing unlocks, since it is the news. Named here and only here: the
    * mid-run toast kept it a surprise ("Unlocked: ???").
    */
-  private buildNewItemEntry(name: string): UnlockEntry {
-    const header = uiText(t(this.locale, 'ui.results.newInPool'), { colour: UI_PALETTE.accent });
+  private buildNewEntry(
+    headerKey: 'ui.results.newInPool' | 'ui.results.newTier',
+    name: string,
+  ): UnlockEntry {
+    const header = uiText(t(this.locale, headerKey), { colour: UI_PALETTE.accent });
     const detail = uiText(name, { colour: UI_PALETTE.text, wrapWidth: UNLOCKS_WIDTH - PAD * 2 });
     return { header, detail, height: UI_LINE_HEIGHT + Math.max(UI_LINE_HEIGHT, detail.height) };
   }

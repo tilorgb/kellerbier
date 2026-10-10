@@ -1,4 +1,5 @@
 import type { CharacterTraits } from '../../sim/character/definition.js';
+import type { TierDefinition } from '../../sim/game/difficulty.js';
 
 /**
  * The shapes meta-progression content is authored in.
@@ -160,10 +161,23 @@ export interface ItemUnlockDefinition {
   readonly goal: string;
 }
 
+/**
+ * The best difficulty tier (#505) `character` has won on, plus one — `0`
+ * while they have never won at all, so the plain `statistic` default of 0
+ * means "nothing won" and the stored value is exactly the highest tier now
+ * open to them (capped at the top of the ladder). A tier-0 win stores 1:
+ * tier 1 unlocked.
+ */
+export function tierWonStatKey(character: string): string {
+  return `tier.won.${character}`;
+}
+
 /** Everything progression is built from, handed in as one bundle so a test can substitute its own. */
 export interface ProgressionContent {
   readonly unlocks: readonly UnlockDefinition[];
   readonly characters: readonly CharacterDefinition[];
   /** Items a fresh save does not have in its pool yet (#503). Optional so a fixture can leave it out. */
   readonly items?: readonly ItemUnlockDefinition[];
+  /** The difficulty ladder (#505). Optional so a fixture can leave it out — no ladder, tier 0 only. */
+  readonly tiers?: readonly TierDefinition[];
 }

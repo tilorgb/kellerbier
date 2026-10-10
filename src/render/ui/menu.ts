@@ -140,8 +140,14 @@ export class Menu {
     this.setItems(items);
   }
 
-  /** Rebuilds the whole row list — a screen with menus that change shape (none do yet) would call this. */
-  setItems(items: readonly MenuItem[]): void {
+  /**
+   * Rebuilds the whole row list. `keepFocus` holds the focus on the same row
+   * index (if it still exists and is enabled) instead of jumping back to the
+   * first — for a screen whose labels carry values that change in place, the
+   * run-setup screen's "Character: …"/"Tier: …" rows (#493).
+   */
+  setItems(items: readonly MenuItem[], keepFocus = false): void {
+    const previousFocus = this.focusIndex;
     this.view.removeChildren();
     this.rows.length = 0;
     const { rowHeight, rowGap, padX, padY, measure, make } = this.metrics;
@@ -186,7 +192,8 @@ export class Menu {
     this.view.addChild(this.dividers);
 
     this.view.addChild(this.focusRing.view);
-    this.focusIndex = this.firstEnabledIndex();
+    this.focusIndex =
+      keepFocus && previousFocus < this.rows.length ? previousFocus : this.firstEnabledIndex();
     this.refresh();
   }
 
@@ -199,6 +206,19 @@ export class Menu {
     return this.rows.length === 0
       ? 0
       : this.rows.length * (this.metrics.rowHeight + this.metrics.rowGap) - this.metrics.rowGap;
+  }
+
+  /** Puts the focus on row `index`, if it exists and is enabled — a screen opening on its most likely choice. */
+  focusRow(index: number): void {
+    if (this.rows[index]?.disabled === false) {
+      this.focusIndex = index;
+      this.syncVisualState();
+    }
+  }
+
+  /** Which row holds the focus — for a screen whose rows each mean something different on left/right. */
+  get focusedIndex(): number {
+    return this.focusIndex;
   }
 
   /** The height of one row, for a caller lining something else up with it. */

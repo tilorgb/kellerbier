@@ -32,6 +32,8 @@ export class ActiveRunRecorder {
     readonly character = DEFAULT_CHARACTER_ID,
     /** The items this run's pools leave out (#503) — see `ActiveRunSave.lockedItems`. */
     readonly lockedItems: readonly string[] = [],
+    /** The difficulty tier the run is played on (#505) — see `ActiveRunSave.tier`. */
+    readonly tier = 0,
   ) {}
 
   get frameCount(): number {
@@ -49,6 +51,7 @@ export class ActiveRunRecorder {
       promilleUnlocked: this.promilleUnlocked,
       character: this.character,
       lockedItems: this.lockedItems,
+      tier: this.tier,
     };
   }
 }
@@ -64,6 +67,7 @@ export function recorderFrom(active: ActiveRunSave): ActiveRunRecorder {
     active.promilleUnlocked,
     active.character,
     active.lockedItems,
+    active.tier,
   );
   for (const frame of decodeActiveRunFrames(active)) {
     recorder.record(frame);

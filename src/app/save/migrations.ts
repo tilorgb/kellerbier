@@ -184,6 +184,20 @@ const v9ToV10: SaveMigration = (raw) => {
   };
 };
 
+/**
+ * v10 -> v11 (#505): the in-progress run gains `tier`, back-filled 0 — every
+ * run recorded before tiers existed was played on the plain game. Same shape
+ * as `v9ToV10`. Replays get the same default from `sanitizeReplay`.
+ */
+const v10ToV11: SaveMigration = (raw) => {
+  const active = raw.activeRun;
+  const upgraded = { ...raw, schemaVersion: 11 };
+  if (typeof active !== 'object' || active === null || Array.isArray(active)) {
+    return upgraded;
+  }
+  return { ...upgraded, activeRun: { ...(active as Record<string, unknown>), tier: 0 } };
+};
+
 export const MIGRATIONS: readonly SaveMigration[] = [
   v0ToV1,
   v1ToV2,
@@ -195,6 +209,7 @@ export const MIGRATIONS: readonly SaveMigration[] = [
   v7ToV8,
   v8ToV9,
   v9ToV10,
+  v10ToV11,
 ];
 
 function versionOf(raw: Record<string, unknown>): number {

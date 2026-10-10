@@ -47,6 +47,7 @@ describe('save schema sanitisation (#45)', () => {
       promilleUnlocked: true,
       character: 'alois',
       lockedItems: [],
+      tier: 0,
     });
   });
 
@@ -122,6 +123,7 @@ describe('save schema sanitisation (#45)', () => {
       promilleUnlocked: false,
       character: 'resi',
       lockedItems: ['roter-stier'],
+      tier: 2,
       recordedAt: 5,
     };
     expect(sanitizeSave({ replays: [replay] }).replays).toEqual([replay]);

@@ -24,6 +24,7 @@ const OUTCOME = {
   promilleUnlocked: true,
   character: 'barnabas',
   lockedItems: ['roter-stier'],
+  tier: 3,
   recordedAt: 1000,
 };
 

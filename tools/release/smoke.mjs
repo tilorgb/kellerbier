@@ -153,7 +153,10 @@ check(
 );
 
 await shot(page, '02-title');
-// Title -> Start, then past the opening card and the floor card.
+// Title -> Start -> the run-setup screen's Start (#493), then past the
+// opening card and the floor card.
+await page.keyboard.press('Enter');
+await page.waitForTimeout(800);
 await page.keyboard.press('Enter');
 await page.waitForTimeout(2500);
 await page.keyboard.press('Enter');
