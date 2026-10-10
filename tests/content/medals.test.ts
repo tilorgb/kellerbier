@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { STAT_WIN_NO_BOSS_HITS, STAT_WIN_NO_ITEMS } from '../../src/app/meta/definition.js';
+import {
+  STAT_WIN_DAILY,
+  STAT_WIN_NO_BOSS_HITS,
+  STAT_WIN_NO_ITEMS,
+} from '../../src/app/meta/definition.js';
 import { MEDALS } from '../../src/content/progression/medals.js';
 import { HIGHEST_TIER } from '../../src/content/progression/tiers.js';
 
@@ -36,7 +40,7 @@ describe('medal roster (#506)', () => {
       if (stat.startsWith('challenge.won.')) {
         continue;
       }
-      expect([STAT_WIN_NO_BOSS_HITS, STAT_WIN_NO_ITEMS], stat).toContain(stat);
+      expect([STAT_WIN_DAILY, STAT_WIN_NO_BOSS_HITS, STAT_WIN_NO_ITEMS], stat).toContain(stat);
     }
   });
 });

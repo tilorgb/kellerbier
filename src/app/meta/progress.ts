@@ -29,6 +29,7 @@ import {
   STAT_WIN_FASTEST_TICKS,
   STAT_WIN_NO_BOSS_HITS,
   STAT_WIN_NO_ITEMS,
+  STAT_WIN_DAILY,
 } from './definition.js';
 import {
   bossAsCharacterStatKey,
@@ -350,6 +351,9 @@ export function withRunWon(
   if (win.itemsPickedUp === 0) {
     statistics[STAT_WIN_NO_ITEMS] = statistic(save, STAT_WIN_NO_ITEMS) + 1;
   }
+  if (win.countedDaily === true) {
+    statistics[STAT_WIN_DAILY] = statistic(save, STAT_WIN_DAILY) + 1;
+  }
   // A challenge run won (#507) — what its medal asks.
   if (challenge !== null) {
     const won = challengeWonStatKey(challenge);
@@ -367,6 +371,11 @@ export interface WinFacts {
   readonly ticks: number;
   readonly bossHits: number;
   readonly itemsPickedUp: number;
+  /**
+   * The run was today's daily, on the attempt that counts (#494) — not a
+   * practice rerun of a day already in `dailyRunHistory`.
+   */
+  readonly countedDaily?: boolean;
 }
 
 /**

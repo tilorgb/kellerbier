@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   type ProgressionContent,
+  STAT_WIN_DAILY,
   STAT_WIN_FASTEST_TICKS,
   STAT_WIN_NO_BOSS_HITS,
   STAT_WIN_NO_ITEMS,
@@ -129,6 +130,16 @@ describe('medal conditions, met and missed (#506)', () => {
     const none = withRunWon(one, 'alois', 0, CONTENT, { ...WIN, itemsPickedUp: 0 });
     expect(none.statistics[STAT_WIN_NO_ITEMS]).toBe(1);
     expect(met(none, 'empty-handed')).toBe(true);
+  });
+
+  it('daily win: only a daily on the attempt that counts', () => {
+    const ordinary = withRunWon(createDefaultSave(), 'alois', 0, CONTENT, WIN);
+    expect(met(ordinary, 'daily-win')).toBe(false);
+    const practice = withRunWon(ordinary, 'alois', 0, CONTENT, { ...WIN, countedDaily: false });
+    expect(met(practice, 'daily-win')).toBe(false);
+    const daily = withRunWon(practice, 'alois', 0, CONTENT, { ...WIN, countedDaily: true });
+    expect(daily.statistics[STAT_WIN_DAILY]).toBe(1);
+    expect(met(daily, 'daily-win')).toBe(true);
   });
 
   it('a lost run earns nothing — the win facts are only ever recorded on a win', () => {

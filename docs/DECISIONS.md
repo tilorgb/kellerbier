@@ -6978,6 +6978,7 @@ The Summit cross, Snow cannon and Mountain hare use them, joined by the Skier (`
 - **One attempt counts.** The first result on a date goes into `dailyRunHistory` (`withDailyRunOutcome` already kept the first); playing it again is allowed and says so as it starts ("Practice — today's daily result is already in"), and the title row reads "Daily Run (played)". A retry from a daily's end screen is an ordinary run.
 - **The day travels with the run.** `ActiveRunSave.dailyDate` (save v12, back-filled `null`) records which daily a run is, so one resumed after a reload, or finished after midnight UTC, records into the day it started on. Replays record as `kind: 'daily'`.
 - A daily is otherwise a real run: feats, item unlocks, tiers and medals are all earned on it.
+- **The "Win a daily run" medal** (`daily-win`, added after #507) reads `feat.win.daily`, counted only when the won run was the attempt that counts — a practice rerun of a day already recorded does not earn it, for the same reason it does not replace the day's result.
 
 ## 136. Floors grow, and big rooms get commoner, as a run goes on
 

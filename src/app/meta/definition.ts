@@ -182,6 +182,8 @@ export const STAT_WIN_FASTEST_TICKS = 'feat.win.fastestTicks';
 export const STAT_WIN_NO_BOSS_HITS = 'feat.win.noBossHits';
 /** Wins without picking up an item during play. */
 export const STAT_WIN_NO_ITEMS = 'feat.win.noItems';
+/** Daily runs won on the attempt that counts (#494) — a practice rerun is not one. */
+export const STAT_WIN_DAILY = 'feat.win.daily';
 
 /**
  * What earns a medal (#506): any unlock condition, or one of the medal-only
