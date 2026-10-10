@@ -208,6 +208,14 @@ export class Menu {
       : this.rows.length * (this.metrics.rowHeight + this.metrics.rowGap) - this.metrics.rowGap;
   }
 
+  /** Puts the focus on row `index`, if it exists and is enabled — a screen opening on its most likely choice. */
+  focusRow(index: number): void {
+    if (this.rows[index]?.disabled === false) {
+      this.focusIndex = index;
+      this.syncVisualState();
+    }
+  }
+
   /** Which row holds the focus — for a screen whose rows each mean something different on left/right. */
   get focusedIndex(): number {
     return this.focusIndex;

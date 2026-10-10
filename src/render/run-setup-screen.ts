@@ -15,6 +15,8 @@ const PANEL_PADDING = 16;
 const MENU_MIN_WIDTH = 180;
 /** The detail block's wrap width — the panel is at least this plus its padding. */
 const DETAIL_WIDTH = 260;
+/** The menu's rows, by index — see `menuItems`. */
+const START_ROW = 2;
 
 export interface RunSetupScreenActions {
   /** The roster and ladder as they stand right now — re-read on every change. */
@@ -92,9 +94,16 @@ export class RunSetupScreen implements MenuScreen {
     return this.view.visible;
   }
 
+  /**
+   * Opens on Start rather than on the character row: the most common thing
+   * to do here is play with what is already chosen, so title-then-setup is
+   * still Enter, Enter — the muscle memory a single title "Start" had, and
+   * what `tools/perf/room-crossings.mjs` and the release smoke test press.
+   */
   show(): void {
     this.view.visible = true;
     this.rebuild(false);
+    this.menu.focusRow(START_ROW);
   }
 
   hide(): void {

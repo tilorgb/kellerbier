@@ -107,14 +107,14 @@ describe('the run-setup screen (#493/#505)', () => {
     const save = withRunWon(createDefaultSave(), 'alois', 1, CONTENT);
     const { screen: setup, started } = screen(save);
     expect(setup.selectedTier).toBe(2);
-    setup.moveFocus(1); // the tier row
+    setup.moveFocus(-1); // up from Start, where it opens, to the tier row
     setup.adjust(1);
     expect(setup.selectedTier).toBe(0); // wraps past the top back to the plain game
     setup.adjust(-1);
     expect(setup.selectedTier).toBe(2);
     setup.adjust(-1);
     expect(setup.selectedTier).toBe(1);
-    setup.moveFocus(1); // Start
+    setup.moveFocus(1); // back down to Start
     setup.activate();
     expect(started).toEqual([1]);
   });
@@ -122,10 +122,14 @@ describe('the run-setup screen (#493/#505)', () => {
   it('starts on tier 0 when nothing is open, and the tier row cannot be chosen', () => {
     const { screen: setup, started } = screen(createDefaultSave());
     expect(setup.selectedTier).toBe(0);
-    // The tier row is disabled, so one step down from the character row lands on Start.
-    setup.moveFocus(1);
+    // The screen opens on Start, so Enter, Enter from the title still plays.
     setup.activate();
     expect(started).toEqual([0]);
+    // The tier row is disabled: up from Start skips it to the character row.
+    setup.moveFocus(-1);
+    setup.moveFocus(1);
+    setup.activate();
+    expect(started).toEqual([0, 0]);
   });
 });
 
