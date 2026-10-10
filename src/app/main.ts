@@ -2366,6 +2366,10 @@ async function boot(progress: BootProgress): Promise<void> {
           // Today's daily (#494): the first attempt on a date is the one that
           // counts — `withDailyRunOutcome` keeps the earlier one if a practice
           // run on the same day ends later.
+          // Read before the outcome below is recorded: only the attempt that
+          // counts can earn the daily medal (#506), not a practice rerun.
+          const countedDaily =
+            activeRunRecorder.dailyDate !== null && !dailyPlayedOn(activeRunRecorder.dailyDate);
           if (activeRunRecorder.dailyDate !== null) {
             recordDailyRunOutcome({
               date: activeRunRecorder.dailyDate,
@@ -2404,6 +2408,7 @@ async function boot(progress: BootProgress): Promise<void> {
                   ticks: ticksSurvived,
                   bossHits: sim.feats.bossFights.reduce((sum, fight) => sum + fight.hitsTaken, 0),
                   itemsPickedUp: sim.feats.bests.itemsPickedUp,
+                  countedDaily,
                 },
                 activeRunRecorder.challenge,
               )
