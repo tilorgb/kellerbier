@@ -19,7 +19,12 @@ import {
   type RoomPlacement,
   validateRoomTemplate,
 } from '../../../src/sim/room/template.js';
-import { validateStaircaseTemplate } from '../../../src/sim/room/staircase.js';
+import {
+  validateStaircaseTemplate,
+  type StaircaseContent,
+} from '../../../src/sim/room/staircase.js';
+import { generateStaircaseContent, roomGenSeed } from '../../../src/sim/room/generate-room.js';
+import { Rng as ContentRng } from '../../../src/sim/rng/rng.js';
 
 /**
  * The floor/room-navigation glue `app/main.ts`'s `crossDoor`/`enterNeighbor`/
@@ -311,6 +316,32 @@ export function doorToward(
   return planRoom(plan, fromRoomId).doors.find((door) => door.neighborRoomId === toRoomId);
 }
 
+/**
+ * A staircase's generated content, as `app/main.ts`'s `rebuildProceduralRooms`
+ * makes it (default room-gen tuning, run seed 0): the bot plays authored
+ * rooms elsewhere, but a staircase has no authored content to fall back to,
+ * so without this it would walk a staircase no human ever sees.
+ */
+function staircaseContentFor(plan: FloorPlan, room: FloorPlanRoom): StaircaseContent | undefined {
+  const template = STAIRCASE_TEMPLATES_BY_ID.get(room.staircaseTemplateId ?? '');
+  if (template === undefined) {
+    return undefined;
+  }
+  const config = floorConfig(plan.floor);
+  return generateStaircaseContent({
+    roomId: room.id,
+    floor: plan.floor,
+    floorTag: config.floorTag,
+    distanceFromStart: room.distanceFromStart,
+    bossDistance: planRoom(plan, plan.bossRoomId).distanceFromStart,
+    stepCount: template.stepCount,
+    startDoor: template.startDoor,
+    endDoor: template.endDoor,
+    rngForStep: (step) =>
+      new ContentRng(roomGenSeed(0, plan.floor, `${room.id}#${String(step)}`, 0)),
+  });
+}
+
 /** `sim.transitionTo`'s exact input shape for crossing `door` out of `fromRoomId` into `door.neighborRoomId` — mirrors `app/main.ts`'s `crossDoor`. */
 export interface DoorCrossing {
   readonly staircase: boolean;
@@ -321,6 +352,8 @@ export interface DoorCrossing {
   readonly placement?: RoomPlacement;
   readonly entryCell?: { readonly col: number; readonly row: number };
   readonly neighborRoomId: string;
+  /** What stands on a staircase's steps — set only when `staircase`. */
+  readonly staircaseContent?: StaircaseContent | undefined;
   /** The *exiting* room's own door — `cellCol`/`cellRow`/`direction` — to match against `sim.doorContact`/`sim.doors`. */
   readonly exitDoor: {
     readonly cellCol: number;
@@ -351,6 +384,7 @@ export function planDoorCrossing(
       direction: door.direction,
       hiddenDoors,
       neighborRoomId: door.neighborRoomId,
+      staircaseContent: staircaseContentFor(plan, neighborRoom),
       exitDoor: {
         cellCol: exitPlacementCell.col,
         cellRow: exitPlacementCell.row,

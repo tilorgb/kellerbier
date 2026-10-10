@@ -694,7 +694,11 @@ const warnedAboutMissingFloorChoice = new Set<string>();
  * never ships unnoticed, quiet enough that a room a player keeps
  * revisiting doesn't spam the console every load.
  */
-function nearestFloorChoice(source: string, group: RoomSpawnGroup, floor: number): RoomSpawnChoice {
+export function nearestFloorChoice(
+  source: string,
+  group: RoomSpawnGroup,
+  floor: number,
+): RoomSpawnChoice {
   // `reduce` with no seed uses `choices[0]` as the initial accumulator,
   // which is exactly the fallback this needs if nothing beats it — and
   // needs no null-check, since `validateRoomTemplate` already rejects an

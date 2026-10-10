@@ -72,7 +72,11 @@ import {
 import { DOOR_SPAN, type RoomGeometry } from '../room/geometry.js';
 import { spreadStationarySpawns } from '../room/spread-stationary.js';
 import { createPlaygroundRoom } from '../room/playground.js';
-import { compileStaircaseRoom, validateStaircaseTemplate } from '../room/staircase.js';
+import {
+  compileStaircaseRoom,
+  validateStaircaseTemplate,
+  type StaircaseContent,
+} from '../room/staircase.js';
 import {
   SCREEN_HEIGHT,
   SCREEN_WIDTH,
@@ -3034,14 +3038,20 @@ export class GameSim implements FeatSource {
     floor = 1,
     direction: RoomDirection | null = null,
     hiddenDoors: readonly Pick<CompiledDoor, 'direction' | 'cellCol' | 'cellRow'>[] = [],
+    content?: StaircaseContent,
+    roomInstanceId?: string,
   ): void {
     const compiled = compileStaircaseRoom(
       validateStaircaseTemplate(template, 'staircase template'),
+      content,
+      floor,
     );
     this.applyCompiledRoom(
       {
         geometry: compiled.geometry,
-        id: compiled.source.id,
+        // The floor plan's per-slot id, like `loadRoom`: two staircases of
+        // one template must not share cleared/loot state now they hold enemies.
+        id: roomInstanceId ?? compiled.source.id,
         specialRole: undefined,
         dark: false,
         doors: [
@@ -3073,8 +3083,7 @@ export class GameSim implements FeatSource {
 
   /**
    * `transitionTo`'s staircase counterpart — see `loadStaircaseRoom`. No
-   * staircase is ever key-locked (none is authored with any content yet),
-   * so there is no unlock-on-touch step here — but the same
+   * staircase is ever key-locked, so there is no unlock-on-touch step here — but the same
    * `pressingToward` crossing gate applies, and the same `force` escape
    * hatch for the same non-player callers. See `transitionTo`'s own doc
    * comment for why both exist.
@@ -3085,6 +3094,8 @@ export class GameSim implements FeatSource {
     direction: RoomDirection,
     hiddenDoors: readonly Pick<CompiledDoor, 'direction' | 'cellCol' | 'cellRow'>[] = [],
     force = false,
+    content?: StaircaseContent,
+    roomInstanceId?: string,
   ): boolean {
     if (!this.roomTemplateLoaded || !this.hasDoor(direction)) {
       return false;
@@ -3105,7 +3116,7 @@ export class GameSim implements FeatSource {
     if (!this.doorsLocked) {
       this.roomClearedIds.add(this.roomId);
     }
-    this.loadStaircaseRoom(template, floor, direction, hiddenDoors);
+    this.loadStaircaseRoom(template, floor, direction, hiddenDoors, content, roomInstanceId);
     return true;
   }
 
