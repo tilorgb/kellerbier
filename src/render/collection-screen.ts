@@ -27,6 +27,13 @@ export interface CollectionScreenActions {
   readonly isDiscovered: (id: string) => boolean;
   /** Whether the run behind the pause menu holds `id` right now. Always false from the title screen. */
   readonly isHeld: (id: string) => boolean;
+  /**
+   * What still earns `id` if it is not in the pool yet (#503), else `null`.
+   * A locked item is drawn fainter than one merely not found yet, and its
+   * detail says what earns it instead of "pick it up on a run" — advice it
+   * cannot follow while the item is never offered.
+   */
+  readonly lockedGoal: (id: string) => string | null;
 }
 
 /** One grid cell's footprint: a 24×24 item icon in a slot with a pixel of air round it. */
@@ -45,6 +52,8 @@ const STAR_GAP = 1;
 /** A silhouette, not a blank: the shape is a hint, the name and text are what stays hidden. */
 const SILHOUETTE_TINT = 0x000000;
 const SILHOUETTE_ALPHA = 0.75;
+/** A locked item (#503) — fainter than a silhouette, so "not earned" reads apart from "not found". */
+const LOCKED_ALPHA = 0.3;
 
 interface Cell {
   readonly view: Container;
@@ -307,8 +316,9 @@ export class CollectionScreen implements MenuScreen {
         Math.round((CELL - cell.art.width) / 2),
         Math.round((CELL - cell.art.height) / 2),
       );
-      cell.art.tint = discovered ? 0xffffff : SILHOUETTE_TINT;
-      cell.art.alpha = discovered ? 1 : SILHOUETTE_ALPHA;
+      const locked = this.actions.lockedGoal(entry.id) !== null;
+      cell.art.tint = discovered && !locked ? 0xffffff : SILHOUETTE_TINT;
+      cell.art.alpha = locked ? LOCKED_ALPHA : discovered ? 1 : SILHOUETTE_ALPHA;
       cell.held.visible = this.actions.isHeld(entry.id);
     });
     const found = this.entries.filter((entry) => this.actions.isDiscovered(entry.id)).length;
@@ -371,12 +381,13 @@ export class CollectionScreen implements MenuScreen {
     }
     this.detail.visible = true;
     const discovered = this.actions.isDiscovered(entry.id);
+    const lockedGoal = this.actions.lockedGoal(entry.id);
     const locale = this.locale;
     const wrap = this.detailWidth;
 
     this.drawArt(this.detailArt, entry, DETAIL_ART_SCALE);
-    this.detailArt.tint = discovered ? 0xffffff : SILHOUETTE_TINT;
-    this.detailArt.alpha = discovered ? 1 : SILHOUETTE_ALPHA;
+    this.detailArt.tint = discovered && lockedGoal === null ? 0xffffff : SILHOUETTE_TINT;
+    this.detailArt.alpha = lockedGoal !== null ? LOCKED_ALPHA : discovered ? 1 : SILHOUETTE_ALPHA;
     this.detailArt.position.set(0, 0);
 
     const textX = this.detailArt.width + 6;
@@ -405,6 +416,9 @@ export class CollectionScreen implements MenuScreen {
     if (this.actions.isHeld(entry.id)) {
       tags.push(t(locale, 'ui.collection.held'));
     }
+    if (lockedGoal !== null) {
+      tags.push(t(locale, 'ui.collection.locked'));
+    }
     this.detailTags.text = tags.join(' · ');
     this.detailTags.position.set(textX, y);
 
@@ -420,11 +434,13 @@ export class CollectionScreen implements MenuScreen {
     }
     this.setWrapped(
       this.detailDescription,
-      discovered
-        ? entry.descriptionKey === ''
-          ? ''
-          : t(locale, entry.descriptionKey as DictKey)
-        : t(locale, 'ui.collection.unknownHint'),
+      lockedGoal !== null
+        ? t(locale, 'ui.collection.lockedGoal', { goal: lockedGoal })
+        : discovered
+          ? entry.descriptionKey === ''
+            ? ''
+            : t(locale, entry.descriptionKey as DictKey)
+          : t(locale, 'ui.collection.unknownHint'),
       wrap,
     );
     this.detailDescription.position.set(0, y);

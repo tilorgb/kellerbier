@@ -85,6 +85,7 @@ const SOBER_CONTEXT = {
   floor: 1,
   luck: 0,
   taken: new Set<string>(),
+  locked: new Set<string>(),
 };
 
 function soberPool(pool: ItemPoolId): readonly { id: string; description: string }[] {

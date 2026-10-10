@@ -205,6 +205,7 @@ describe('CollectionScreen', () => {
         onBack: () => (backs += 1),
         isDiscovered: (id) => discovered.includes(id),
         isHeld: () => false,
+        lockedGoal: () => null,
       },
       'en',
     );

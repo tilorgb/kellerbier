@@ -38,12 +38,15 @@ describe('save schema sanitisation (#45)', () => {
     // active run that reaches here without it was recorded before the field
     // existed, and every one of those was a promilled run (#85). `character`
     // back-fills the same way and for the same reason: a log recorded before
-    // there was a roster can only have been an Alois run (#47).
+    // there was a roster can only have been an Alois run (#47). And
+    // `lockedItems` back-fills empty: nothing was locked before #503, so the
+    // log was recorded against the full pool.
     expect(sanitized.activeRun).toEqual({
       seed: 7,
       frames: [1, 2, 3, 4, 5],
       promilleUnlocked: true,
       character: 'alois',
+      lockedItems: [],
     });
   });
 
@@ -118,6 +121,7 @@ describe('save schema sanitisation (#45)', () => {
       kind: 'daily',
       promilleUnlocked: false,
       character: 'resi',
+      lockedItems: ['roter-stier'],
       recordedAt: 5,
     };
     expect(sanitizeSave({ replays: [replay] }).replays).toEqual([replay]);

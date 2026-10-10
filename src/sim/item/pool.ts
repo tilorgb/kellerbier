@@ -31,6 +31,11 @@ export interface ItemOfferContext {
    * (#28) means at the pool level: nothing about a refusal is recorded.
    */
   readonly taken: ReadonlySet<string>;
+  /**
+   * Item ids the save has not earned yet (#503) — out of every pool for the
+   * whole run. A run parameter, fixed at run start (`GameSimOptions.lockedItems`).
+   */
+  readonly locked: ReadonlySet<string>;
 }
 
 /** Whether `item` could be offered from `pool` under `ctx`, ignoring weight. */
@@ -42,7 +47,7 @@ export function itemEligibleForOffer(
   if (!item.pools.includes(pool)) {
     return false;
   }
-  if (ctx.taken.has(item.id)) {
+  if (ctx.taken.has(item.id) || ctx.locked.has(item.id)) {
     return false;
   }
   // An item whose Promille requirement can never be evaluated is a stat

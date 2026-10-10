@@ -205,7 +205,10 @@ export class RunResultsScreen implements MenuScreen {
     const bandBottom = menuTop - 10;
     const bandCentre = Math.round((bandTop + bandBottom) / 2);
 
-    const unlockEntries = state.unlocks.map((unlock) => this.buildUnlockEntry(unlock));
+    const unlockEntries = [
+      ...state.newItems.map((name) => this.buildNewItemEntry(name)),
+      ...state.unlocks.map((unlock) => this.buildUnlockEntry(unlock)),
+    ];
     const unlocksHeight =
       PAD * 2 + UI_LINE_HEIGHT + unlockEntries.reduce((sum, entry) => sum + entry.height, 0);
     const boardRowsData = this.boardRows(state);
@@ -247,6 +250,17 @@ export class RunResultsScreen implements MenuScreen {
       colour: unlock.unlocked ? UI_PALETTE.text : UI_PALETTE.textDim,
       wrapWidth: wrap,
     });
+    return { header, detail, height: UI_LINE_HEIGHT + Math.max(UI_LINE_HEIGHT, detail.height) };
+  }
+
+  /**
+   * An item the run just earned into the pool (#503) — listed first, above
+   * the standing unlocks, since it is the news. Named here and only here: the
+   * mid-run toast kept it a surprise ("Unlocked: ???").
+   */
+  private buildNewItemEntry(name: string): UnlockEntry {
+    const header = uiText(t(this.locale, 'ui.results.newInPool'), { colour: UI_PALETTE.accent });
+    const detail = uiText(name, { colour: UI_PALETTE.text, wrapWidth: UNLOCKS_WIDTH - PAD * 2 });
     return { header, detail, height: UI_LINE_HEIGHT + Math.max(UI_LINE_HEIGHT, detail.height) };
   }
 

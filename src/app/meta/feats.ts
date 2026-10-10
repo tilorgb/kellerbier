@@ -9,6 +9,7 @@ import {
   STAT_MOST_PASSIVES,
   floorHeldTierStatKey,
   itemSetStatKey,
+  mostTaggedStatKey,
 } from './definition.js';
 
 /**
@@ -133,6 +134,9 @@ export function foldRunBests(
   raise(next, STAT_DEEPEST_TIER, bests.deepestTier);
   raise(next, STAT_MOST_BEERS, bests.beersDrunk);
   raise(next, STAT_MOST_PASSIVES, bests.mostPassives);
+  for (const [tag, count] of Object.entries(bests.mostTagged)) {
+    raise(next, mostTaggedStatKey(tag), count);
+  }
   for (const id of bests.completedSets) {
     raise(next, itemSetStatKey(id), 1);
   }

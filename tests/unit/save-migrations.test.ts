@@ -158,6 +158,24 @@ describe('save migration chain (#45)', () => {
     expect(migrated.unlocks).toEqual(['promille']);
   });
 
+  it('back-fills a v9 run in progress with nothing locked, and keeps the statistics (#503)', () => {
+    const v9 = {
+      schemaVersion: 9,
+      unlocks: ['promille'],
+      statistics: { kills: 40, 'feat.boss.floor1.fewestHits': 0 },
+      discoveredItems: ['bierkrug'],
+      activeRun: { seed: 3, frames: [0, 0, 0, 0, 0], promilleUnlocked: true, character: 'alois' },
+    };
+    const migrated = sanitizeSave(migrateSave(v9));
+    expect(migrated.schemaVersion).toBe(SAVE_SCHEMA_VERSION);
+    // Recorded against the full pool — nothing was locked before v10.
+    expect(migrated.activeRun?.lockedItems).toEqual([]);
+    // Untouched by the new step.
+    expect(migrated.statistics).toEqual(v9.statistics);
+    expect(migrated.unlocks).toEqual(['promille']);
+    expect(migrated.discoveredItems).toEqual(['bierkrug']);
+  });
+
   it('migrates a v2 save with no run in progress without inventing one', () => {
     const migrated = sanitizeSave(migrateSave({ schemaVersion: 2, activeRun: null }));
     expect(migrated.activeRun).toBeNull();

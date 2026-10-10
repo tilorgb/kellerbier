@@ -695,6 +695,13 @@ export interface GameSimOptions {
    */
   readonly promilleUnlocked?: boolean;
   /**
+   * Item ids this save has not earned yet (#503) — never offered by any pool
+   * this run. Fixed for the whole run, like `promilleUnlocked`: an item
+   * earned mid-run joins the pool from the next run, not this one. Defaults
+   * to none locked.
+   */
+  readonly lockedItems?: readonly string[];
+  /**
    * The floor whose boss switches Promille on mid-run for a run that started
    * without it (#236). Defaults to `null` — no mid-run unlock, which is what
    * every caller written before the gate moved meant.
@@ -1793,6 +1800,8 @@ export class GameSim implements FeatSource {
    * `inventory`.
    */
   private readonly takenItemIds = new Set<string>();
+  /** `GameSimOptions.lockedItems` — read by every item draw through `ItemOfferContext.locked`. */
+  private readonly lockedItemIds: ReadonlySet<string>;
   /**
    * Where a charged active item's pending blast will land and how far through
    * its fuse it is (#12) — set every tick by the item's own `onTick` while
@@ -1913,6 +1922,7 @@ export class GameSim implements FeatSource {
     this.itemStatsDirty = new Uint8Array(this.items.count);
     this.dirtyItemIndices = new Int32Array(this.items.count);
     this.promilleUnlockedValue = options.promilleUnlocked ?? true;
+    this.lockedItemIds = new Set(options.lockedItems ?? []);
     this.promilleUnlockFloorValue = options.promilleUnlockFloor ?? null;
 
     this.broadphase = new SpatialHash({
@@ -5438,6 +5448,7 @@ export class GameSim implements FeatSource {
               floor,
               luck: this.stats.value(StatId.Luck),
               taken: this.takenItemIds,
+              locked: this.lockedItemIds,
             },
             this.tuning.itemPool,
             this.random.items,
@@ -5936,6 +5947,7 @@ export class GameSim implements FeatSource {
         floor: this.currentFloorValue,
         luck: this.stats.value(StatId.Luck),
         taken: this.takenItemIds,
+        locked: this.lockedItemIds,
       },
       this.tuning.itemPool,
       this.random.items,

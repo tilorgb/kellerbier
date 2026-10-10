@@ -44,6 +44,11 @@ export const STAT_DEEPEST_TIER = 'feat.run.deepestTier';
 export const STAT_MOST_BEERS = 'feat.run.mostBeers';
 export const STAT_MOST_PASSIVES = 'feat.run.mostPassives';
 
+/** The most items tagged `tag` (`ItemDefinition.tags`) one run has held at once (#503). */
+export function mostTaggedStatKey(tag: string): string {
+  return `feat.run.mostTagged.${tag}`;
+}
+
 /** Whether item set `id` has ever been completed — `1` once it has. */
 export function itemSetStatKey(id: string): string {
   return `feat.set.${id}`;
@@ -138,8 +143,27 @@ export interface CharacterDefinition {
   readonly traits: CharacterTraits;
 }
 
+/**
+ * An item that starts out of the pool and is earned (#503).
+ *
+ * Like a character, it carries its own condition rather than an entry in
+ * `unlocks`, and like a character it is *computed* — unlocked exactly while
+ * its condition is met — rather than stored as a granted id. Statistics only
+ * ever grow, so in practice nothing re-locks; a condition re-tuned upward is
+ * the one way it can, and that is the honest reading of a re-tune.
+ */
+export interface ItemUnlockDefinition {
+  /** An `ItemDefinition.id` — `tests/content/item-unlocks.test.ts` checks it exists. */
+  readonly itemId: string;
+  readonly condition: UnlockCondition;
+  /** The condition as a sentence, shown under the item's silhouette in the Collection. */
+  readonly goal: string;
+}
+
 /** Everything progression is built from, handed in as one bundle so a test can substitute its own. */
 export interface ProgressionContent {
   readonly unlocks: readonly UnlockDefinition[];
   readonly characters: readonly CharacterDefinition[];
+  /** Items a fresh save does not have in its pool yet (#503). Optional so a fixture can leave it out. */
+  readonly items?: readonly ItemUnlockDefinition[];
 }

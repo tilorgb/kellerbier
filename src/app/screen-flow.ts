@@ -66,6 +66,8 @@ export interface ScreenFlowControllerDeps {
   readonly collection: {
     readonly isDiscovered: (id: string) => boolean;
     readonly isHeld: (id: string) => boolean;
+    /** What still earns a locked item (#503), or `null` — `app/meta`'s `itemUnlockGoal`. */
+    readonly lockedGoal: (id: string) => string | null;
   };
 }
 
@@ -167,6 +169,7 @@ export class ScreenFlowController {
         // Only a paused run has an inventory worth marking; from the title
         // screen the run behind it (if any) is not the one being browsed.
         isHeld: (id) => this.collectionOrigin === 'paused' && deps.collection.isHeld(id),
+        lockedGoal: deps.collection.lockedGoal,
       },
       deps.locale,
     );

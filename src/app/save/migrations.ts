@@ -165,6 +165,25 @@ const v7ToV8: SaveMigration = (raw) => ({ ...raw, schemaVersion: 8, seenStoryBea
  */
 const v8ToV9: SaveMigration = (raw) => ({ ...raw, schemaVersion: 9, discoveredItems: [] });
 
+/**
+ * v9 -> v10 (#503): the in-progress run gains `lockedItems`, back-filled
+ * empty — nothing was locked before this version, so the log was recorded
+ * against the full pool and has to be replayed against it. Same shape as
+ * `v3ToV4`'s `character` back-fill. Replays get the same default from
+ * `sanitizeReplay`.
+ */
+const v9ToV10: SaveMigration = (raw) => {
+  const active = raw.activeRun;
+  const upgraded = { ...raw, schemaVersion: 10 };
+  if (typeof active !== 'object' || active === null || Array.isArray(active)) {
+    return upgraded;
+  }
+  return {
+    ...upgraded,
+    activeRun: { ...(active as Record<string, unknown>), lockedItems: [] },
+  };
+};
+
 export const MIGRATIONS: readonly SaveMigration[] = [
   v0ToV1,
   v1ToV2,
@@ -175,6 +194,7 @@ export const MIGRATIONS: readonly SaveMigration[] = [
   v6ToV7,
   v7ToV8,
   v8ToV9,
+  v9ToV10,
 ];
 
 function versionOf(raw: Record<string, unknown>): number {

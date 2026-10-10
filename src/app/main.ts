@@ -190,6 +190,8 @@ import {
   recordRunOutcome,
   characterTraitsById,
   hasBeatenABoss,
+  itemUnlockGoal,
+  nextRunLockedItems,
   resetProgress,
   selectCharacter,
   selectedCharacter,
@@ -1801,6 +1803,8 @@ async function boot(progress: BootProgress): Promise<void> {
     readonly promilleUnlocked: boolean;
     /** And the character it was played as (#47), for exactly the same reason. */
     readonly character: string;
+    /** And the items its pools left out (#503) — see `ActiveRunSave.lockedItems`. */
+    readonly lockedItems: readonly string[];
   } | null = null;
   const replayViewer = new ReplayViewer(kit);
   hudLayer.addChild(replayViewer.view);
@@ -1848,6 +1852,18 @@ async function boot(progress: BootProgress): Promise<void> {
    * it commits immediately — see `creditBossDefeat`).
    */
   let unlocksAtRunStart = new Set<string>();
+  /**
+   * Names of the items the run that just ended earned into the pool (#503) —
+   * what the results screen lists as "New in the pool". In memory only: it
+   * describes the last run, and the results screen opened later from the
+   * title has no run to describe.
+   */
+  let itemsEarnedLastRun: readonly string[] = [];
+
+  /** The results screen's view, carrying the last run's new items. */
+  function currentRunResultsView(locale: Locale): ReturnType<typeof runResultsView> {
+    return runResultsView(locale, loadSave(), itemsEarnedLastRun);
+  }
 
   /** Whether the room read as cleared last tick — shared by the room-clear sting below and `creditBossDefeat`. */
   let roomClearedLastTick = false;
@@ -1995,7 +2011,7 @@ async function boot(progress: BootProgress): Promise<void> {
     }
     pausedBeforeRunResults = loop.paused;
     loop.paused = true;
-    runResults.show(runResultsView(preferences.locale), deathPhase === 'over');
+    runResults.show(currentRunResultsView(preferences.locale), deathPhase === 'over');
     playSfx('ui-open');
   }
 
@@ -2220,7 +2236,20 @@ async function boot(progress: BootProgress): Promise<void> {
           // Promille unlock. Any other run end leaves the results screen
           // where it is — one keypress away, per the hint the summary screen
           // shows.
-          if (save.unlocks.some((id) => !unlocksAtRunStart.has(id))) {
+          // Items the run earned into the pool (#503): locked when it started,
+          // open now. Named here, from the run's own registry — the toast that
+          // announced them mid-run kept them a surprise.
+          const stillLocked = new Set(nextRunLockedItems(save));
+          itemsEarnedLastRun = activeRunRecorder.lockedItems
+            .filter((id) => !stillLocked.has(id))
+            .map((id) => {
+              const index = sim.items.indexOf(id);
+              return index < 0 ? id : sim.items.at(index).name;
+            });
+          if (
+            save.unlocks.some((id) => !unlocksAtRunStart.has(id)) ||
+            itemsEarnedLastRun.length > 0
+          ) {
             openRunResults();
             playSfx('ui-unlock-fanfare');
           }
@@ -2247,6 +2276,7 @@ async function boot(progress: BootProgress): Promise<void> {
     const finishedDeathWord = sim.playerWon ? null : (sim.deathWord ?? null);
     const finishedPromilleUnlocked = activeRunRecorder.promilleUnlocked;
     const finishedCharacter = activeRunRecorder.character;
+    const finishedLockedItems = activeRunRecorder.lockedItems;
     const recording = new InputRecording(Math.max(1, activeRunRecorder.frameCount));
     for (const frame of decodeActiveRunFrames(activeRunRecorder.toSave())) {
       recording.push(frame);
@@ -2264,6 +2294,7 @@ async function boot(progress: BootProgress): Promise<void> {
       kind: 'normal',
       promilleUnlocked: finishedPromilleUnlocked,
       character: finishedCharacter,
+      lockedItems: finishedLockedItems,
       recordedAt: Date.now(),
     })
       .then(saveReplay)
@@ -2912,6 +2943,7 @@ async function boot(progress: BootProgress): Promise<void> {
     collection: {
       isDiscovered: (id) => itemDiscovery.has(id),
       isHeld: (id) => sim.hasItem(id),
+      lockedGoal: (id) => itemUnlockGoal(id),
     },
     kit,
     locale: preferences.locale,
@@ -3168,11 +3200,18 @@ WASD move   arrows aim and fire
       promilleUnlocked = nextRunPromilleUnlocked(),
       persist = true,
       character = selectedCharacter(),
+      lockedItems = nextRunLockedItems(),
       startFloor = sandboxStartFloor,
     }: {
       promilleUnlocked?: boolean;
       persist?: boolean;
       character?: CharacterTraits;
+      /**
+       * The items this run's pools leave out (#503): the save's not-yet-earned
+       * items for a fresh run, the *recorded* list for a resume or a replay —
+       * the same run-parameter shape as `promilleUnlocked` and `character`.
+       */
+      lockedItems?: readonly string[];
       /**
        * The floor the run begins on. Above 1 it is a sandbox run (`?floor=N`):
        * dealt a kit for the floors skipped, and never saved, credited or
@@ -3239,6 +3278,8 @@ WASD move   arrows aim and fire
       // same answer without the flag having to ride along in the log — see
       // `resolvePromilleUnlockFloor`.
       promilleUnlockFloor: resolvePromilleUnlockFloor(promilleUnlocked),
+      // Fixed for the run (#503): an item earned mid-run waits for the next one.
+      lockedItems,
     });
     // The start room is hand-authored (loaded just above); the procedural
     // `normal` rooms are built now that `sim` — and its live `tuning.roomGen`
@@ -3267,7 +3308,7 @@ WASD move   arrows aim and fire
     // after a restart resumes into the *new* run next time, not the one the
     // player just left behind. Skipped for `persist: false` (a replay's own
     // rebuild) — see this function's doc comment.
-    activeRunRecorder = new ActiveRunRecorder(seed, promilleUnlocked, character.id);
+    activeRunRecorder = new ActiveRunRecorder(seed, promilleUnlocked, character.id, lockedItems);
     ticksSinceAutosave = 0;
     // A sandbox run never touches the save slot: it must not replace a real
     // run in progress, and it could not be resumed (the log does not carry
@@ -3601,6 +3642,9 @@ WASD move   arrows aim and fire
       startRun(RUN_SEED, {
         promilleUnlocked: activeRun.promilleUnlocked,
         character: characterTraitsById(activeRun.character),
+        // And the pool it was recorded against (#503): items earned since
+        // must not appear in a run that could not have offered them.
+        lockedItems: activeRun.lockedItems,
         startFloor: 1,
       });
       const frames = decodeActiveRunFrames(activeRun);
@@ -3639,11 +3683,13 @@ WASD move   arrows aim and fire
     upToTick: number,
     promilleUnlocked: boolean,
     character: string,
+    lockedItems: readonly string[],
   ): void {
     startRun(seed, {
       persist: false,
       promilleUnlocked,
       character: characterTraitsById(character),
+      lockedItems,
       startFloor: 1,
     });
     const scratch = createInputFrame();
@@ -3668,6 +3714,7 @@ WASD move   arrows aim and fire
     frameBytes: Int8Array,
     promilleUnlocked: boolean,
     character: string,
+    lockedItems: readonly string[],
   ): void {
     const recording = InputRecording.fromBytes(frameBytes);
     closeRunResults();
@@ -3677,8 +3724,9 @@ WASD move   arrows aim and fire
       playback: new InputPlayback(recording),
       promilleUnlocked,
       character,
+      lockedItems,
     };
-    replayTo(seed, recording, 0, promilleUnlocked, character);
+    replayTo(seed, recording, 0, promilleUnlocked, character, lockedItems);
     loop.paused = false;
     loop.timeScale = settings.slowModeScale;
     refreshHud();
@@ -3697,7 +3745,14 @@ WASD move   arrows aim and fire
     const wasPaused = loop.paused;
     const timeScale = loop.timeScale;
     const clamped = Math.max(0, Math.min(targetTick, replay.recording.length));
-    replayTo(replay.seed, replay.recording, clamped, replay.promilleUnlocked, replay.character);
+    replayTo(
+      replay.seed,
+      replay.recording,
+      clamped,
+      replay.promilleUnlocked,
+      replay.character,
+      replay.lockedItems,
+    );
     replay.playback.rewind();
     for (let skipped = 0; skipped < clamped; skipped++) {
       replay.playback.next();
@@ -3749,7 +3804,13 @@ WASD move   arrows aim and fire
             return null;
           }
           return loadReplayFrames(record).then((bytes) => {
-            enterReplay(record.seed, bytes, record.promilleUnlocked, record.character);
+            enterReplay(
+              record.seed,
+              bytes,
+              record.promilleUnlocked,
+              record.character,
+              record.lockedItems,
+            );
           });
         })
         .catch((error: unknown) => {
@@ -4946,7 +5007,7 @@ WASD move   arrows aim and fire
     unlockToastHud.setLocale(locale);
     blutwurzHud.setLocale(locale);
     if (runResults.visible) {
-      runResults.update(runResultsView(locale));
+      runResults.update(currentRunResultsView(locale));
     }
     if (bossIntroPlate.visible) {
       const compiled = sim.bossDefinition;
@@ -4988,13 +5049,13 @@ WASD move   arrows aim and fire
       unlockEverything: () => {
         unlockEverything();
         if (runResults.visible) {
-          runResults.update(runResultsView(preferences.locale));
+          runResults.update(currentRunResultsView(preferences.locale));
         }
       },
       selectCharacter: (id: string) => {
         selectCharacter(id);
         if (runResults.visible) {
-          runResults.update(runResultsView(preferences.locale));
+          runResults.update(currentRunResultsView(preferences.locale));
         }
       },
     },

@@ -7,12 +7,16 @@ import {
   STAT_MOST_PASSIVES,
   floorHeldTierStatKey,
   itemSetStatKey,
+  mostTaggedStatKey,
 } from '../../src/app/meta/definition.js';
 import { bossAsCharacterStatKey, foldRunBests } from '../../src/app/meta/feats.js';
 import {
+  EARNED_ITEM_NAME,
   conditionMet,
   conditionProgress,
   earnedNames,
+  lockedItemGoal,
+  lockedItemIds,
   withBossFight,
   withEverythingUnlocked,
   withRunBests,
@@ -226,6 +230,7 @@ describe('run bests (#502)', () => {
     deepestTier: PromilleTier.Vollrausch,
     beersDrunk: 9,
     mostPassives: 5,
+    mostTagged: {},
     completedSets: ['braumeister'],
   };
 
@@ -233,7 +238,7 @@ describe('run bests (#502)', () => {
     const save = withRunBests(createDefaultSave(), bests, NONE);
     const worse = withRunBests(
       save,
-      { deepestTier: 0, beersDrunk: 2, mostPassives: 1, completedSets: [] },
+      { deepestTier: 0, beersDrunk: 2, mostPassives: 1, mostTagged: {}, completedSets: [] },
       NONE,
     );
     expect(worse.statistics).toEqual(save.statistics);
@@ -294,7 +299,7 @@ describe('feats earn unlocks (#502)', () => {
     expect(
       withRunBests(
         createDefaultSave(),
-        { deepestTier: 0, beersDrunk: 0, mostPassives: 5, completedSets: [] },
+        { deepestTier: 0, beersDrunk: 0, mostPassives: 5, mostTagged: {}, completedSets: [] },
         content,
       ).unlocks,
     ).toEqual([]);
@@ -310,10 +315,100 @@ describe('save round-trip (#502)', () => {
   it('keeps every feat statistic, negative ones included, through the save sanitiser', () => {
     const save = withRunBests(
       after(fight({ topQuality: -1, absentTags: ['impure', 'rosinen'] })),
-      { deepestTier: 3, beersDrunk: 4, mostPassives: 2, completedSets: ['braumeister'] },
+      {
+        deepestTier: 3,
+        beersDrunk: 4,
+        mostPassives: 2,
+        mostTagged: {},
+        completedSets: ['braumeister'],
+      },
       NONE,
     );
     const restored = sanitizeSave(JSON.parse(JSON.stringify(save)));
     expect(restored.statistics).toEqual(save.statistics);
+  });
+});
+
+describe('item unlocks (#503)', () => {
+  const content: ProgressionContent = {
+    unlocks: [],
+    characters: [],
+    items: [
+      {
+        itemId: 'roter-stier',
+        condition: { kind: 'bossFeat', floor: 2, feat: { kind: 'maxHits', hits: 0 } },
+        goal: 'Beat Der Stier without taking damage in the fight',
+      },
+      {
+        itemId: 'der-rosinenklauber',
+        condition: { kind: 'statAtLeast', stat: mostTaggedStatKey('rosinen'), value: 4 },
+        goal: 'Hold 4 rosinen items at once',
+      },
+    ],
+  };
+
+  it('locks every item whose goal is unmet, in roster order', () => {
+    expect(lockedItemIds(createDefaultSave(), content)).toEqual([
+      'roter-stier',
+      'der-rosinenklauber',
+    ]);
+  });
+
+  it('opens an item the moment its feat is met, and a near miss opens nothing', () => {
+    const missed = withBossFight(createDefaultSave(), fight({ floor: 2, hitsTaken: 1 }), content);
+    expect(lockedItemIds(missed, content)).toContain('roter-stier');
+    const met = withBossFight(missed, fight({ floor: 2, hitsTaken: 0 }), content);
+    expect(lockedItemIds(met, content)).toEqual(['der-rosinenklauber']);
+  });
+
+  it('reads the per-tag run best for "hold N tagged items at once"', () => {
+    const three = withRunBests(
+      createDefaultSave(),
+      {
+        deepestTier: 0,
+        beersDrunk: 0,
+        mostPassives: 3,
+        mostTagged: { rosinen: 3 },
+        completedSets: [],
+      },
+      content,
+    );
+    expect(lockedItemIds(three, content)).toContain('der-rosinenklauber');
+    const four = withRunBests(
+      three,
+      {
+        deepestTier: 0,
+        beersDrunk: 0,
+        mostPassives: 4,
+        mostTagged: { rosinen: 4 },
+        completedSets: [],
+      },
+      content,
+    );
+    expect(lockedItemIds(four, content)).not.toContain('der-rosinenklauber');
+  });
+
+  it('gives the Collection the goal while locked, and nothing once earned or off the roster', () => {
+    const save = createDefaultSave();
+    expect(lockedItemGoal(save, content, 'roter-stier')).toBe(
+      'Beat Der Stier without taking damage in the fight',
+    );
+    expect(lockedItemGoal(save, content, 'bierkrug')).toBeNull();
+    const met = withBossFight(save, fight({ floor: 2, hitsTaken: 0 }), content);
+    expect(lockedItemGoal(met, content, 'roter-stier')).toBeNull();
+  });
+
+  it('announces an earned item without naming it', () => {
+    const met = withBossFight(createDefaultSave(), fight({ floor: 2, hitsTaken: 0 }), content);
+    expect([...earnedNames(met, content).entries()]).toEqual([
+      ['item:roter-stier', EARNED_ITEM_NAME],
+    ]);
+    expect(EARNED_ITEM_NAME).toBe('???');
+  });
+
+  it('"unlock everything" opens every item', () => {
+    expect(lockedItemIds(withEverythingUnlocked(createDefaultSave(), content), content)).toEqual(
+      [],
+    );
   });
 });

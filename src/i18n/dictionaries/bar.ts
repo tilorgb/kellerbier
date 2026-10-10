@@ -47,6 +47,8 @@ export const bar: Record<DictKey, string> = {
   'ui.collection.progress': '{found} / {total} gfundn',
   'ui.collection.unknownName': '???',
   'ui.collection.unknownHint': 'No ned gfundn. Heb’s auf, nacha woaßt, wos duad.',
+  'ui.collection.locked': 'Noch nicht im Pool',
+  'ui.collection.lockedGoal': 'Freischalten: {goal}',
   'ui.collection.held': 'Hosd grad dabei',
   'ui.collection.active': 'Aktive Sach',
 
@@ -71,6 +73,7 @@ export const bar: Record<DictKey, string> = {
   'ui.results.newRun': 'Neier Lauf',
   'ui.results.close': 'Zua',
   'ui.results.backToRun': 'Zruck zum Lauf',
+  'ui.results.newInPool': 'Neu im Pool',
   'ui.results.unlocked': 'Freigschoit',
   'ui.results.theBoard': 'D’Bestnliste',
   'ui.results.boardEmptyLine1': 'D’Bestnliste is no leer —',

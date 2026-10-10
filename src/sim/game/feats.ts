@@ -58,6 +58,8 @@ export interface RunBests {
   readonly deepestTier: number;
   readonly beersDrunk: number;
   readonly mostPassives: number;
+  /** Per item tag, the most items carrying it held at once — "hold 4 rosinen items" (#503). */
+  readonly mostTagged: Readonly<Record<string, number>>;
   /** Ids of every item set completed at some point this run, in completion order. */
   readonly completedSets: readonly string[];
 }
@@ -77,6 +79,7 @@ export class RunFeatTracker {
   private deepestTier = 0;
   private beers = 0;
   private mostPassives = 0;
+  private readonly mostTagged: Record<string, number> = {};
   private readonly sets: string[] = [];
   private revisionValue = 0;
 
@@ -118,6 +121,7 @@ export class RunFeatTracker {
       deepestTier: this.deepestTier,
       beersDrunk: this.beers,
       mostPassives: this.mostPassives,
+      mostTagged: this.mostTagged,
       completedSets: this.sets,
     };
   }
@@ -141,17 +145,27 @@ export class RunFeatTracker {
     }
   }
 
-  /** The inventory changed — re-counts the passives held right now. */
+  /** The inventory changed — re-counts the passives, and the items per tag, held right now. */
   noteInventory(source: FeatSource): void {
     let passives = 0;
+    const tagged: Record<string, number> = {};
     for (const item of source.heldItems()) {
       if (item.active === undefined) {
         passives += 1;
+      }
+      for (const tag of item.tags) {
+        tagged[tag] = (tagged[tag] ?? 0) + 1;
       }
     }
     if (passives > this.mostPassives) {
       this.mostPassives = passives;
       this.revisionValue += 1;
+    }
+    for (const [tag, count] of Object.entries(tagged)) {
+      if (count > (this.mostTagged[tag] ?? 0)) {
+        this.mostTagged[tag] = count;
+        this.revisionValue += 1;
+      }
     }
   }
 
