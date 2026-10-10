@@ -7,7 +7,7 @@ import { PLAYER_FOOTPRINT, type GameSim } from '../sim/game/sim.js';
 import { propKindIndex } from '../sim/game/prop-kinds.js';
 import { EnemyFacing } from '../sim/enemy/registry.js';
 import { lerp } from '../sim/math.js';
-import { bombBlastArmLength, bombFuseProgress } from '../sim/systems/bombs.js';
+import { bombBlastArmLength, bombFuseProgress, snapBlastAxis } from '../sim/systems/bombs.js';
 import {
   ENEMY_FLAG_LATCHED,
   ENEMY_MOTION_STRIDE,
@@ -1141,9 +1141,11 @@ export class EntityView {
         // that is about to be hit is legible the entire time.
         const armSpan = bombBlastArmLength(sim) * 2;
         const barAlpha = hazardBlinkAlpha(nowMs, bombFuse, this.ringPulses);
-        this.hazardBarAt(hazardBarsUsed).place(x, y, armSpan, ROOM_TILE_UNITS, barAlpha);
+        const blastX = snapBlastAxis(sim.room.minX, x);
+        const blastY = snapBlastAxis(sim.room.minY, y);
+        this.hazardBarAt(hazardBarsUsed).place(blastX, blastY, armSpan, ROOM_TILE_UNITS, barAlpha);
         hazardBarsUsed += 1;
-        this.hazardBarAt(hazardBarsUsed).place(x, y, ROOM_TILE_UNITS, armSpan, barAlpha);
+        this.hazardBarAt(hazardBarsUsed).place(blastX, blastY, ROOM_TILE_UNITS, armSpan, barAlpha);
         hazardBarsUsed += 1;
       }
     }
