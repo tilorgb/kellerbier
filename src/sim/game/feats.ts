@@ -62,6 +62,11 @@ export interface RunBests {
   readonly mostTagged: Readonly<Record<string, number>>;
   /** Ids of every item set completed at some point this run, in completion order. */
   readonly completedSets: readonly string[];
+  /**
+   * Items picked up during play (#506) — not the character's starting kit or
+   * a dev `?item=`, both of which are handed over before the first tick.
+   */
+  readonly itemsPickedUp: number;
 }
 
 interface ActiveFight {
@@ -79,6 +84,7 @@ export class RunFeatTracker {
   private deepestTier = 0;
   private beers = 0;
   private mostPassives = 0;
+  private itemsPickedUp = 0;
   private readonly mostTagged: Record<string, number> = {};
   private readonly sets: string[] = [];
   private revisionValue = 0;
@@ -123,6 +129,7 @@ export class RunFeatTracker {
       mostPassives: this.mostPassives,
       mostTagged: this.mostTagged,
       completedSets: this.sets,
+      itemsPickedUp: this.itemsPickedUp,
     };
   }
 
@@ -141,6 +148,14 @@ export class RunFeatTracker {
   noteSetCompleted(id: string): void {
     if (!this.sets.includes(id)) {
       this.sets.push(id);
+      this.revisionValue += 1;
+    }
+  }
+
+  /** An item was picked up. Only counted once play has begun — see `RunBests.itemsPickedUp`. */
+  noteItemPickedUp(source: FeatSource): void {
+    if (source.tick > 0) {
+      this.itemsPickedUp += 1;
       this.revisionValue += 1;
     }
   }

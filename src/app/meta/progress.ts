@@ -1,4 +1,4 @@
-import { FLOOR_CONFIGS } from '../../content/floors/definition.js';
+import { FLOOR_CONFIGS, HIGHEST_PLAYABLE_FLOOR } from '../../content/floors/definition.js';
 import type { Locale } from '../../i18n/locale.js';
 import { t } from '../../i18n/translate.js';
 import { type CharacterTraits, NEUTRAL_TRAITS } from '../../sim/character/definition.js';
@@ -22,8 +22,19 @@ import {
   STAT_TICKS,
   bossStatKey,
   tierWonStatKey,
+  type MedalCondition,
+  type MedalDefinition,
+  STAT_WIN_FASTEST_TICKS,
+  STAT_WIN_NO_BOSS_HITS,
+  STAT_WIN_NO_ITEMS,
 } from './definition.js';
-import { bossFeatProgress, foldBossFight, foldRunBests, satisfyBossFeat } from './feats.js';
+import {
+  bossAsCharacterStatKey,
+  bossFeatProgress,
+  foldBossFight,
+  foldRunBests,
+  satisfyBossFeat,
+} from './feats.js';
 
 /**
  * Meta-progression's rules, as pure functions over a `SaveData`.
@@ -117,7 +128,62 @@ export function grantEarnedUnlocks(save: SaveData, content: ProgressionContent):
       known.add(unlock.id);
     }
   }
-  return earned.length === save.unlocks.length ? save : { ...save, unlocks: earned };
+  const withUnlocks = earned.length === save.unlocks.length ? save : { ...save, unlocks: earned };
+  return grantEarnedMedals(withUnlocks, content);
+}
+
+/**
+ * Grants every medal (#506) the save now meets into `achievements`, by the
+ * same re-walk as unlocks — so a medal is retroactive, and an id the roster
+ * no longer has is kept rather than pruned (a cut medal stays earned).
+ */
+function grantEarnedMedals(save: SaveData, content: ProgressionContent): SaveData {
+  const earned = save.achievements.slice();
+  const known = new Set(earned);
+  for (const medal of content.medals ?? []) {
+    if (!known.has(medal.id) && medalMet(save, content, medal.condition)) {
+      earned.push(medal.id);
+      known.add(medal.id);
+    }
+  }
+  return earned.length === save.achievements.length ? save : { ...save, achievements: earned };
+}
+
+/** Whether `save` meets a medal's condition (#506). Deterministic — a function of the save alone. */
+export function medalMet(
+  save: SaveData,
+  content: ProgressionContent,
+  condition: MedalCondition,
+): boolean {
+  const characters = content.characters;
+  const across = (every: boolean, test: (id: string) => boolean): boolean =>
+    characters.length > 0 &&
+    (every
+      ? characters.every((character) => test(character.id))
+      : characters.some((character) => test(character.id)));
+  switch (condition.kind) {
+    case 'tierWon':
+      // `tier.won.<id>` is the best tier won plus one (`tierWonStatKey`).
+      return across(
+        condition.every,
+        (id) => statistic(save, tierWonStatKey(id)) >= condition.tier + 1,
+      );
+    case 'allBossMarks':
+      return across(condition.every, (id) => bossMarks(save, id).every((mark) => mark.beaten));
+    case 'allItemsUnlocked':
+      return (content.items ?? []).length > 0 && lockedItemIds(save, content).length === 0;
+    case 'collectionComplete': {
+      const found = new Set(save.discoveredItems);
+      const ids = content.itemIds ?? [];
+      return ids.length > 0 && ids.every((id) => found.has(id));
+    }
+    case 'winWithin': {
+      const fastest = save.statistics[STAT_WIN_FASTEST_TICKS];
+      return fastest !== undefined && fastest <= condition.seconds * TICKS_PER_SECOND;
+    }
+    default:
+      return conditionMet(save, condition);
+  }
 }
 
 /**
@@ -211,6 +277,13 @@ export function earnedNames(save: SaveData, content: ProgressionContent): Map<st
       earned.set(`tier:${character.id}:${String(tier)}`, `${tierLabel(tier)} (${character.name})`);
     }
   }
+  // Medals (#506), announced by their goal.
+  const medals = new Set(save.achievements);
+  for (const medal of content.medals ?? []) {
+    if (medals.has(medal.id)) {
+      earned.set(`medal:${medal.id}`, `Medal: ${medal.goal}`);
+    }
+  }
   // An item stays a surprise until it is offered (#503): announced, never named.
   for (const item of content.items ?? []) {
     if (conditionMet(save, item.condition)) {
@@ -248,11 +321,73 @@ export function withRunWon(
   character: string,
   tier: number,
   content: ProgressionContent,
+  win: WinFacts = { ticks: Number.POSITIVE_INFINITY, bossHits: 1, itemsPickedUp: 1 },
 ): SaveData {
   const key = tierWonStatKey(character);
-  const statistics = { ...save.statistics, [key]: Math.max(statistic(save, key), tier + 1) };
+  const statistics: Record<string, number> = {
+    ...save.statistics,
+    [key]: Math.max(statistic(save, key), tier + 1),
+  };
+  // How the win went (#506), for the medals that ask.
+  if (Number.isFinite(win.ticks)) {
+    const fastest = statistics[STAT_WIN_FASTEST_TICKS];
+    statistics[STAT_WIN_FASTEST_TICKS] =
+      fastest === undefined ? win.ticks : Math.min(fastest, win.ticks);
+  }
+  if (win.bossHits === 0) {
+    statistics[STAT_WIN_NO_BOSS_HITS] = statistic(save, STAT_WIN_NO_BOSS_HITS) + 1;
+  }
+  if (win.itemsPickedUp === 0) {
+    statistics[STAT_WIN_NO_ITEMS] = statistic(save, STAT_WIN_NO_ITEMS) + 1;
+  }
   return grantEarnedUnlocks({ ...save, statistics }, content);
 }
+
+/**
+ * How a won run went (#506) — read off the run's own `GameSim` at the end:
+ * its length, every hit a boss landed across all of its boss fights, and the
+ * items picked up during play.
+ */
+export interface WinFacts {
+  readonly ticks: number;
+  readonly bossHits: number;
+  readonly itemsPickedUp: number;
+}
+
+/** One medal on the shelf (#506). */
+export interface MedalView {
+  readonly id: string;
+  /** The goal, or "???" for a hidden medal not yet earned. */
+  readonly text: string;
+  readonly earned: boolean;
+}
+
+/** Everything the medal shelf draws (#506), earned ones first. */
+export interface MedalShelfView {
+  readonly earned: number;
+  readonly total: number;
+  readonly medals: readonly MedalView[];
+}
+
+export function buildMedalShelf(save: SaveData, content: ProgressionContent): MedalShelfView {
+  const earned = new Set(save.achievements);
+  const medals = (content.medals ?? []).map((medal: MedalDefinition) => {
+    const has = earned.has(medal.id);
+    return {
+      id: medal.id,
+      text: has || medal.hidden !== true ? medal.goal : HIDDEN_MEDAL,
+      earned: has,
+    };
+  });
+  return {
+    earned: medals.filter((medal) => medal.earned).length,
+    total: medals.length,
+    medals: [...medals.filter((medal) => medal.earned), ...medals.filter((medal) => !medal.earned)],
+  };
+}
+
+/** What a hidden, unearned medal says on the shelf. */
+export const HIDDEN_MEDAL = '???';
 
 /** What `earnedNames` calls an earned item — the toast reads "Unlocked: ???". */
 export const EARNED_ITEM_NAME = '???';
@@ -507,6 +642,36 @@ export interface TierView {
   readonly adds: string;
 }
 
+/** One boss mark on the run-setup screen (#504): has this character beaten this floor's boss? */
+export interface BossMarkView {
+  readonly floor: number;
+  /** The floor's name — the marks are labelled by where the boss lives, not by its body. */
+  readonly name: string;
+  readonly beaten: boolean;
+}
+
+/**
+ * The selected character's boss marks (#504) — one per floor a player can
+ * reach (`HIGHEST_PLAYABLE_FLOOR`), so the floor that raises it adds a mark
+ * for everyone without anybody remembering to.
+ *
+ * Read from the per-character tally run feats already keep
+ * (`bossAsCharacterStatKey`, #502), counted only on fights the player won.
+ * Kills from before #502 carry no character, so they mark nobody: a save
+ * cannot prove who beat a boss before it recorded who was playing.
+ */
+export function bossMarks(save: SaveData, character: string): BossMarkView[] {
+  const marks: BossMarkView[] = [];
+  for (let floor = 1; floor <= HIGHEST_PLAYABLE_FLOOR; floor++) {
+    marks.push({
+      floor,
+      name: floorName(floor),
+      beaten: statistic(save, bossAsCharacterStatKey(floor, character)) > 0,
+    });
+  }
+  return marks;
+}
+
 /**
  * Everything the run-setup screen (#493) draws: the roster, who is selected,
  * and the tiers open to them (#505). Built here so the screen holds no rules.
@@ -518,6 +683,8 @@ export interface RunSetupView {
   readonly highestOpen: number;
   /** Rungs 1..`highestOpen` of the selected character's ladder, in order. */
   readonly tiers: readonly TierView[];
+  /** The selected character's boss marks (#504), floor 1 first. */
+  readonly marks: readonly BossMarkView[];
 }
 
 export function buildRunSetupView(save: SaveData, content: ProgressionContent): RunSetupView {
@@ -531,6 +698,7 @@ export function buildRunSetupView(save: SaveData, content: ProgressionContent): 
       .filter((rung) => rung.tier >= 1 && rung.tier <= highestOpen)
       .sort((a, b) => a.tier - b.tier)
       .map((rung) => ({ tier: rung.tier, label: tierLabel(rung.tier), adds: rung.description })),
+    marks: bossMarks(save, selected),
   };
 }
 
@@ -590,6 +758,8 @@ export interface RunResultsView {
   readonly newItems: readonly string[];
   /** Difficulty tiers the last run opened (#505), as "Tier 1 (Alois)". */
   readonly newTiers: readonly string[];
+  /** Medals the last run earned (#506), by goal. */
+  readonly newMedals: readonly string[];
 }
 
 export function buildRunResultsView(
@@ -598,6 +768,7 @@ export function buildRunResultsView(
   locale: Locale,
   newItems: readonly string[] = [],
   newTiers: readonly string[] = [],
+  newMedals: readonly string[] = [],
 ): RunResultsView {
   const lastRun = save.lastRun === null ? null : runFactsFrom(save.lastRun);
   const unlocked = new Set(save.unlocks);
@@ -612,6 +783,7 @@ export function buildRunResultsView(
     totalKills: statistic(save, STAT_KILLS),
     newItems,
     newTiers,
+    newMedals,
   };
 }
 

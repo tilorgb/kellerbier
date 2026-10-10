@@ -198,6 +198,20 @@ const v10ToV11: SaveMigration = (raw) => {
   return { ...upgraded, activeRun: { ...(active as Record<string, unknown>), tier: 0 } };
 };
 
+/**
+ * v11 -> v12 (#494): the in-progress run gains `dailyDate`, back-filled
+ * `null` — no run before v12 could have been a daily, since the daily had
+ * no way in. Same shape as `v10ToV11`.
+ */
+const v11ToV12: SaveMigration = (raw) => {
+  const active = raw.activeRun;
+  const upgraded = { ...raw, schemaVersion: 12 };
+  if (typeof active !== 'object' || active === null || Array.isArray(active)) {
+    return upgraded;
+  }
+  return { ...upgraded, activeRun: { ...(active as Record<string, unknown>), dailyDate: null } };
+};
+
 export const MIGRATIONS: readonly SaveMigration[] = [
   v0ToV1,
   v1ToV2,
@@ -210,6 +224,7 @@ export const MIGRATIONS: readonly SaveMigration[] = [
   v8ToV9,
   v9ToV10,
   v10ToV11,
+  v11ToV12,
 ];
 
 function versionOf(raw: Record<string, unknown>): number {

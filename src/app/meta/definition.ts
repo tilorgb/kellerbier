@@ -172,6 +172,49 @@ export function tierWonStatKey(character: string): string {
   return `tier.won.${character}`;
 }
 
+/**
+ * Won runs (#506), as the medals read them. `fastestTicks` is a best (the
+ * lowest on record, absent until the first win); the other two are tallies
+ * of wins that went that way.
+ */
+export const STAT_WIN_FASTEST_TICKS = 'feat.win.fastestTicks';
+/** Wins in which no boss landed a single hit. */
+export const STAT_WIN_NO_BOSS_HITS = 'feat.win.noBossHits';
+/** Wins without picking up an item during play. */
+export const STAT_WIN_NO_ITEMS = 'feat.win.noItems';
+
+/**
+ * What earns a medal (#506): any unlock condition, or one of the medal-only
+ * questions that look across the whole roster rather than at one statistic.
+ * `every` means every offered character; otherwise any one of them.
+ */
+export type MedalCondition =
+  | UnlockCondition
+  /** Won on difficulty `tier` or higher (#505). */
+  | { readonly kind: 'tierWon'; readonly tier: number; readonly every: boolean }
+  /** Every boss mark lit (#504). */
+  | { readonly kind: 'allBossMarks'; readonly every: boolean }
+  /** No item left locked (#503). */
+  | { readonly kind: 'allItemsUnlocked' }
+  /** Every item on the roster held at least once — the Collection complete. */
+  | { readonly kind: 'collectionComplete' }
+  /** Won within `seconds` of the run starting. */
+  | { readonly kind: 'winWithin'; readonly seconds: number };
+
+/**
+ * A medal (#506): a goal worth bragging about, with no reward. Its id is
+ * stable — Steam achievements (#70) map onto these 1:1 — and its goal line
+ * is the whole of what it says on the shelf; there is no separate name to
+ * coin.
+ */
+export interface MedalDefinition {
+  readonly id: string;
+  readonly goal: string;
+  readonly condition: MedalCondition;
+  /** Shown as "???" until earned — a surprise, not a to-do. */
+  readonly hidden?: boolean;
+}
+
 /** Everything progression is built from, handed in as one bundle so a test can substitute its own. */
 export interface ProgressionContent {
   readonly unlocks: readonly UnlockDefinition[];
@@ -180,4 +223,12 @@ export interface ProgressionContent {
   readonly items?: readonly ItemUnlockDefinition[];
   /** The difficulty ladder (#505). Optional so a fixture can leave it out — no ladder, tier 0 only. */
   readonly tiers?: readonly TierDefinition[];
+  /** The medals (#506). Optional so a fixture can leave it out. */
+  readonly medals?: readonly MedalDefinition[];
+  /**
+   * Every item id the Collection counts (#506's "discover every item") — the
+   * item roster's ids, handed in rather than imported so the meta layer stays
+   * a function of what it is given.
+   */
+  readonly itemIds?: readonly string[];
 }

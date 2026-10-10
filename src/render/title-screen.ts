@@ -33,6 +33,12 @@ export interface TitleScreenActions {
   readonly onContinue: () => void;
   readonly onSettings: () => void;
   readonly onCollection: () => void;
+  /** The medal shelf (#506). */
+  readonly onMedals: () => void;
+  /** Today's daily run (#494). */
+  readonly onDaily: () => void;
+  /** Re-checked on every `show()` — whether today's daily has already been played. */
+  readonly dailyPlayedToday: () => boolean;
   readonly onCredits: () => void;
   readonly onQuit: () => void;
   /** Re-checked on every `show()` — whether a save exists to resume into. */
@@ -107,6 +113,8 @@ export class TitleScreen implements MenuScreen {
    */
   private readonly stamp: BitmapText;
   private readonly buildId: string;
+  /** Kept so `show()` can rebuild the labels — the daily row's says whether today's is done. */
+  private locale: Locale;
   private readonly menu: Menu;
   private width = 0;
   private height = 0;
@@ -119,6 +127,7 @@ export class TitleScreen implements MenuScreen {
   constructor(kit: UiKit, actions: TitleScreenActions, locale: Locale, buildId: string) {
     this.actions = actions;
     this.buildId = buildId;
+    this.locale = locale;
     this.view.visible = false;
 
     this.view.addChild(this.wallpaper);
@@ -153,12 +162,17 @@ export class TitleScreen implements MenuScreen {
     return [
       { label: t(locale, 'ui.title.start'), onSelect: actions.onStart },
       {
+        label: t(locale, actions.dailyPlayedToday() ? 'ui.title.dailyDone' : 'ui.title.daily'),
+        onSelect: actions.onDaily,
+      },
+      {
         label: t(locale, 'ui.title.continue'),
         onSelect: actions.onContinue,
         disabled: () => !actions.canContinue(),
       },
       { label: t(locale, 'ui.title.settings'), onSelect: actions.onSettings },
       { label: t(locale, 'ui.title.collection'), onSelect: actions.onCollection },
+      { label: t(locale, 'ui.title.medals'), onSelect: actions.onMedals },
       { label: t(locale, 'ui.title.credits'), onSelect: actions.onCredits },
       { label: t(locale, 'ui.title.quit'), onSelect: actions.onQuit },
     ];
@@ -166,6 +180,7 @@ export class TitleScreen implements MenuScreen {
 
   /** Rebuilds the menu's labels and the footer tagline in `locale` — call whenever the player changes the language. */
   setLocale(locale: Locale): void {
+    this.locale = locale;
     this.menu.setItems(this.menuItems(locale));
     this.footer.text = t(locale, 'ui.title.tagline');
     this.stamp.text = t(locale, 'ui.title.alpha', { build: this.buildId });
@@ -180,7 +195,9 @@ export class TitleScreen implements MenuScreen {
 
   show(): void {
     this.view.visible = true;
-    this.menu.refresh();
+    // Rebuilt rather than only refreshed: the daily row's label changes the
+    // moment today's attempt is spent (#494), not only its enabled state.
+    this.menu.setItems(this.menuItems(this.locale), true);
     this.layOut();
   }
 

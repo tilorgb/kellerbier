@@ -71,6 +71,19 @@ export function bombBlastArmLength(sim: GameSim): number {
 }
 
 /**
+ * The centre of the floor tile `value` falls in, on an axis whose tile grid
+ * starts at `origin` (the room's `minX`/`minY`). A bomb is placed at the
+ * player's raw position, but a blast is a tile-wide cross: left unsnapped it
+ * straddles two rows or columns and breaks every cell it partly overlaps. The
+ * one place the blast's centre is decided — `explode`, the telegraph
+ * (`render/entities.ts`) and the detonation animation all use it, so what
+ * blinks is exactly what breaks.
+ */
+export function snapBlastAxis(origin: number, value: number): number {
+  return origin + (Math.floor((value - origin) / ROOM_TILE_UNITS) + 0.5) * ROOM_TILE_UNITS;
+}
+
+/**
  * How far a placed Bierfassl is through its fuse, `0` (just set down) to `1`
  * (exploding this tick) — what `render/entities.ts` reads to redden the body
  * as the countdown runs out (#208), the same "progress drives a visual ramp"
@@ -125,8 +138,8 @@ export function stepBombs(sim: GameSim): void {
 }
 
 function explode(sim: GameSim, index: number): void {
-  const x = sim.positionX(index);
-  const y = sim.positionY(index);
+  const x = snapBlastAxis(sim.room.minX, sim.positionX(index));
+  const y = snapBlastAxis(sim.room.minY, sim.positionY(index));
   const tuning = sim.tuning.pickup;
   const armLength = bombBlastArmLength(sim);
 
@@ -144,13 +157,10 @@ function explode(sim: GameSim, index: number): void {
   // Same blast, same reach as the damage above — everything else an
   // explosion affects (a secret room's wall, the Losbrunnen, an item that
   // changes what a detonation does) goes through the one shared chokepoint
-  // every explosion source calls, `GameSim.triggerExplosion`. Circular
-  // rather than cross-shaped: a door dead-centre on a diagonal from the bomb
-  // is a rarer miss than the corners `broadphase` already over-fetches
-  // above, and a wall opening slightly too generously is a friendlier
-  // failure than a bomb dropped one pixel off-axis leaving a player unable
-  // to open a route they can plainly see the blast reached.
-  sim.triggerExplosion(x, y, armLength);
+  // every explosion source calls, `GameSim.triggerExplosion`. The cross
+  // half-width makes secret walls open only where the drawn cross touches
+  // them, not on a diagonal the telegraph never covered.
+  sim.triggerExplosion(x, y, armLength, BLAST_HALF_WIDTH);
 
   // Boulders in the cross are cleared — a bomb opens a path through
   // destructible cover (#4). The exact cross `blastCandidate` damages

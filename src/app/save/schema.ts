@@ -92,8 +92,15 @@ import {
  * tier the run was played on. The third run parameter of the same shape —
  * a replay of a tier-3 run has to rebuild at tier 3 whatever the save's
  * current ladder says. Logs from before v11 were tier 0.
+ *
+ * v12 (#494) adds `dailyDate` to the in-progress run: the UTC date of the
+ * daily run it is, or `null` for an ordinary run. Not a run *parameter* like
+ * the four before it (a daily's parameters are all fixed, and recorded
+ * already) but what the run counts towards: a daily resumed after a reload,
+ * or finished after midnight, still has to land in the day it was started
+ * on. Replays already carry `kind`.
  */
-export const SAVE_SCHEMA_VERSION = 11;
+export const SAVE_SCHEMA_VERSION = 12;
 
 /**
  * The character a save with no opinion starts as (#47).
@@ -256,6 +263,12 @@ export interface ActiveRunSave {
    * rebuild the run's own tier, not the next one's. `0` before v11.
    */
   readonly tier: number;
+  /**
+   * The daily run this is (#494) — its UTC date (`app/daily.ts`'s
+   * `dailyDateKey`) — or `null` for an ordinary run. Kept with the log so a
+   * resumed daily still records into the day it was started on.
+   */
+  readonly dailyDate: string | null;
 }
 
 /** The v1 shape, kept for the migration that reads it. Nothing loads a save at this version any more. */
@@ -372,8 +385,13 @@ export interface SaveDataV11 extends Omit<SaveDataV10, 'schemaVersion'> {
   readonly schemaVersion: 11;
 }
 
-/** The current schema version. A union the day a v12 lands and something still reads a v11. */
-export type SaveData = SaveDataV11;
+/** v12 (#494): `dailyDate` on `activeRun` — nothing at the top level. */
+export interface SaveDataV12 extends Omit<SaveDataV11, 'schemaVersion'> {
+  readonly schemaVersion: 12;
+}
+
+/** The current schema version. A union the day a v13 lands and something still reads a v12. */
+export type SaveData = SaveDataV12;
 
 /** How many `bestRuns` entries a finished run keeps — see `app/meta/progress.ts`'s `withRunOutcome`. */
 export const MAX_BEST_RUNS = 10;
@@ -525,6 +543,11 @@ function sanitizeActiveRun(value: unknown): ActiveRunSave | null {
     lockedItems: sanitizeStringArray(value.lockedItems),
     // Tier 0 before v11 (#505) — the only tier there was.
     tier: isFiniteNumber(value.tier) && value.tier > 0 ? Math.floor(value.tier) : 0,
+    // An ordinary run before v12 (#494): no daily existed to be one of.
+    dailyDate:
+      typeof value.dailyDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value.dailyDate)
+        ? value.dailyDate
+        : null,
   };
 }
 

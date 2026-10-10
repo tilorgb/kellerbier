@@ -6960,7 +6960,26 @@ The Summit cross, Snow cannon and Mountain hare use them, joined by the Skier (`
 - **Per character, one rung per win.** `tier.won.<character>` stores the best tier won plus one, which is exactly the highest tier open (capped at the top) and makes the statistic default of 0 mean "never won". "Won" is the run being won — `sim.playerWon`, which the app sets on the current last boss — so the finish line moves with content updates without a change here. A won run's new rung is shown on the results screen ("Difficulty unlocked").
 - **One run-setup screen** (`render/run-setup-screen.ts`): title "Start" opens it; a character row and a tier row cycle in place (left/right, or select — which is also a tap), then Start. The tier defaults to the character's highest open rung; a retry keeps whatever the last run started on. With only Alois offered (#205) the character row has one entry; it is the same row the other characters will land in. Boss marks (#504) attach to it later.
 
-## 134. Floors grow, and big rooms get commoner, as a run goes on
+## 134. Medals: goals with no reward, granted by the unlock re-walk, worded by their goal alone
+
+**Decided** with #506. Nine medals in `content/progression/medals.ts`, from #506's draft list as written, minus the two whose feature does not exist yet (win a daily run — #494; complete a challenge run / every one — #507): the same "nothing nobody can reach" rule the item and character goals follow. They are added on the day those ship.
+
+- **Granted by the same re-walk as unlocks.** `grantEarnedUnlocks` now also walks the medal roster into `save.achievements` (the field existed, unused, since #45), so medals are retroactive and every commit path grants them without knowing they exist. An earned id the roster has since cut is kept, never pruned.
+- **No name to coin.** A medal is an id and a goal line; the goal is what the shelf shows. Ids are permanent and map 1:1 onto Steam achievements (#70); re-wording changes the goal, never the id.
+- **Medal-only conditions** look across the roster rather than at one statistic: a tier won by any or every character, every boss mark lit, no item locked, the Collection complete, a win within a time. Everything else is an ordinary `UnlockCondition`.
+- **Three new win records**, committed only on a won run (`withRunWon`): the fastest win (a best), wins no boss landed a hit in, and wins without an item picked up during play (the tracker counts pickups after tick 0, so a starting kit or a dev `?item=` does not count). Read off the run's own `GameSim` at the end.
+- **Text-only shelf** (`render/medal-screen.ts`) from a "Medals" entry on the title menu: earned first in the accent colour, the rest dimmed, a hidden one as "???". Medal art is its own follow-up through the pixel-art sign-off. The results screen lists medals a run earned under "Medal earned".
+
+## 135. The daily run is one fixed set of parameters per UTC date, and the first attempt counts
+
+**Decided** with #494, which gave the daily (#48) its way back in after #63 removed the Stammtisch's `D` key: a "Daily Run" row on the title menu, second only to Start.
+
+- **The same run for everyone that day.** `app/daily.ts`'s `dailyRunParameters(date)` fixes everything the save would otherwise decide: the day's seed, Alois, tier 0, the full item pool (nothing locked, #503) and the Promille mechanic on. The owner chose Alois and the full pool; Promille on follows from the same aim — a new player's daily and a veteran's would otherwise be different runs. Nothing about it reads the save, so two players' dailies differ only in how they are played.
+- **One attempt counts.** The first result on a date goes into `dailyRunHistory` (`withDailyRunOutcome` already kept the first); playing it again is allowed and says so as it starts ("Practice — today's daily result is already in"), and the title row reads "Daily Run (played)". A retry from a daily's end screen is an ordinary run.
+- **The day travels with the run.** `ActiveRunSave.dailyDate` (save v12, back-filled `null`) records which daily a run is, so one resumed after a reload, or finished after midnight UTC, records into the day it started on. Replays record as `kind: 'daily'`.
+- A daily is otherwise a real run: feats, item unlocks, tiers and medals are all earned on it.
+
+## 136. Floors grow, and big rooms get commoner, as a run goes on
 
 **Decided** from a playtest note: later floors should give the player more to do. Two knobs, both per floor in `FloorConfig`.
 
@@ -6968,7 +6987,7 @@ The Summit cross, Snow cannon and Mountain hare use them, joined by the Skier (`
 - **Big rooms ramp.** `bigRoomChance` (0.06 on floor 1, exactly the old flat weights, up to 0.24 on floor 7) is the chance a grown slot is a multi-cell room, and `maxBigRooms` (1, 1, 2, 2, 3, 3, 4) replaces the old one-per-floor constant as the backstop. Which big shape it is tilts from the old mix (mostly `1x2`) toward `L`/`2x2`/`T` by floor 7 (`chooseShape`, linear over floors 1-7). Measured on real content, mean big rooms per floor go from ~0.4 on floor 1 to ~1.1 on floor 4.
 - **A floor only rolls big shapes it has an ordinary template for** (`bigShapesWithContent`). A slot whose shape has no template makes `tryGenerateFloor` throw the whole attempt away, so before this a rare shape just cost a retry; with the rate raised it would cost many. Floors 3 and 4 have no `2x2`/`T` template yet, so they roll only `1x2`/`L` until those are authored; the missing share goes to `1x1`. That is a content gap degrading quietly (#19), and the late floors' big-room feel is capped by it until the templates land.
 
-## 135. Staircase rooms are populated like any other room
+## 137. Staircase rooms are populated like any other room
 
 **Decided** from the same playtest: a staircase (#112) had no mobs, cover or props. `compileStaircaseRoom` returned hardcoded empty `enemySpawns`/`pickupSpawns`/`decorativeProps`, and nothing ever generated content for one — `rebuildProceduralRooms` skipped them, and a staircase has no authored layout to fall back to (by #11/#12 it is not a `RoomTemplate`).
 

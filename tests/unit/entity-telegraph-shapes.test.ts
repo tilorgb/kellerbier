@@ -4,6 +4,7 @@ import { entityIndex } from '../../src/sim/ecs/entity.js';
 import { GameSim } from '../../src/sim/game/sim.js';
 import { createInputFrame } from '../../src/sim/input/frame.js';
 import { RoomGeometry } from '../../src/sim/room/geometry.js';
+import { snapBlastAxis } from '../../src/sim/systems/bombs.js';
 import { EntityView } from '../../src/render/entities.js';
 import { BitmapText, Container, Texture } from '../../src/render/gfx/index.js';
 import { installPixelFonts, UI_FONT_FAMILY } from '../../src/render/ui/font.js';
@@ -227,10 +228,10 @@ describe('EntityView, drawing a telegraph shape (#233)', () => {
     view.sync(0, 0, project);
     const early = hazardArms();
     expect(early).toHaveLength(2);
-    // Centred on the bomb, and one arm long the other way.
+    // Centred on the tile the bomb sits in, and one arm long the other way.
     for (const arm of early) {
-      expect(arm.position.x).toBeCloseTo(bx, 0);
-      expect(arm.position.z).toBeCloseTo(by, 0);
+      expect(arm.position.x).toBeCloseTo(snapBlastAxis(sim.room.minX, bx), 0);
+      expect(arm.position.z).toBeCloseTo(snapBlastAxis(sim.room.minY, by), 0);
     }
     const armSpan = Math.max(...early.map((a) => Math.max(a.scale.x, a.scale.y)));
     const width = Math.min(...early.map((a) => Math.min(a.scale.x, a.scale.y)));

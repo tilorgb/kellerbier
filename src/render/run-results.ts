@@ -206,6 +206,7 @@ export class RunResultsScreen implements MenuScreen {
     const bandCentre = Math.round((bandTop + bandBottom) / 2);
 
     const unlockEntries = [
+      ...state.newMedals.map((goal) => this.buildNewEntry('ui.results.newMedal', goal)),
       ...state.newTiers.map((name) => this.buildNewEntry('ui.results.newTier', name)),
       ...state.newItems.map((name) => this.buildNewEntry('ui.results.newInPool', name)),
       ...state.unlocks.map((unlock) => this.buildUnlockEntry(unlock)),
@@ -260,7 +261,7 @@ export class RunResultsScreen implements MenuScreen {
    * mid-run toast kept it a surprise ("Unlocked: ???").
    */
   private buildNewEntry(
-    headerKey: 'ui.results.newInPool' | 'ui.results.newTier',
+    headerKey: 'ui.results.newInPool' | 'ui.results.newTier' | 'ui.results.newMedal',
     name: string,
   ): UnlockEntry {
     const header = uiText(t(this.locale, headerKey), { colour: UI_PALETTE.accent });

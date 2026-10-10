@@ -182,6 +182,7 @@ import type { Locale } from '../i18n/locale.js';
 import { ActiveRunRecorder, decodeActiveRunFrames, persistActiveRun } from './save/active-run.js';
 import type { CharacterTraits } from '../sim/character/definition.js';
 import { loadSave } from './save/storage.js';
+import { dailyDateKey, dailyRunParameters } from './daily.js';
 import {
   STORY_BEAT_CHAPTER_FOUR,
   STORY_BEAT_CHAPTER_THREE,
@@ -198,7 +199,11 @@ import {
   characterTraitsById,
   hasBeatenABoss,
   difficultyFor,
+  earnedMedalIds,
+  recordDailyRunOutcome,
   itemUnlockGoal,
+  medalGoal,
+  medalShelfView,
   nextRunLockedItems,
   recordRunWon,
   resetProgress,
@@ -1916,6 +1921,10 @@ async function boot(progress: BootProgress): Promise<void> {
   let itemsEarnedLastRun: readonly string[] = [];
   /** The difficulty tiers the run that just ended opened (#505) — "Difficulty unlocked" on the results screen. */
   let tiersEarnedLastRun: readonly string[] = [];
+  /** Medals the run that just ended earned (#506), by goal — "Medal earned" on the results screen. */
+  let medalsEarnedLastRun: readonly string[] = [];
+  /** The medals the save held when the run started — what `medalsEarnedLastRun` is the difference from. */
+  let medalsAtRunStart: ReadonlySet<string> = new Set();
   /**
    * The tier a fresh run starts on (#505): whatever the run-setup screen
    * last started, so a retry from the death or victory screen — which never
@@ -1926,7 +1935,13 @@ async function boot(progress: BootProgress): Promise<void> {
 
   /** The results screen's view, carrying the last run's new items. */
   function currentRunResultsView(locale: Locale): ReturnType<typeof runResultsView> {
-    return runResultsView(locale, loadSave(), itemsEarnedLastRun, tiersEarnedLastRun);
+    return runResultsView(
+      locale,
+      loadSave(),
+      itemsEarnedLastRun,
+      tiersEarnedLastRun,
+      medalsEarnedLastRun,
+    );
   }
 
   /** Whether the room read as cleared last tick — shared by the room-clear sting below and `creditBossDefeat`. */
@@ -2102,6 +2117,30 @@ async function boot(progress: BootProgress): Promise<void> {
   }
 
   /** The global `R` key and every "Retry" button: a fresh random seed, same as Isaac's own restart key. */
+  /** Whether the daily for `date` already has a result in the save (#494). */
+  function dailyPlayedOn(date: string): boolean {
+    return loadSave().dailyRunHistory.some((entry) => entry.date === date);
+  }
+
+  /**
+   * Today's daily run (#494): the day's seed, and every other parameter
+   * fixed so the run is the same one for every player that day — Alois,
+   * tier 0, the full item pool and the Promille mechanic on, whatever this
+   * save has earned. A retry from its end screen is an ordinary run again.
+   */
+  function startDailyRun(): void {
+    const daily = dailyRunParameters(dailyDateKey());
+    screenController?.enterRun();
+    startRun(daily.seed, {
+      dailyDate: daily.date,
+      character: characterTraitsById(daily.character),
+      tier: daily.tier,
+      lockedItems: daily.lockedItems,
+      promilleUnlocked: daily.promilleUnlocked,
+      startFloor: 1,
+    });
+  }
+
   function retryRun(): void {
     screenController?.enterRun();
     startRun(Math.floor(Math.random() * 1_000_000));
@@ -2291,6 +2330,17 @@ async function boot(progress: BootProgress): Promise<void> {
             deathWord: sim.playerWon ? null : (sim.deathWord ?? null),
             recordedAt: Date.now(),
           });
+          // Today's daily (#494): the first attempt on a date is the one that
+          // counts — `withDailyRunOutcome` keeps the earlier one if a practice
+          // run on the same day ends later.
+          if (activeRunRecorder.dailyDate !== null) {
+            recordDailyRunOutcome({
+              date: activeRunRecorder.dailyDate,
+              seed: RUN_SEED,
+              ticksSurvived,
+              kills: summary.kills,
+            });
+          }
           persistFinishedRunReplay();
           pendingSeed = rollSeed();
           // A new unlock is an event, so it interrupts: something earned
@@ -2311,13 +2361,23 @@ async function boot(progress: BootProgress): Promise<void> {
               return index < 0 ? id : sim.items.at(index).name;
             });
           // A won run opens the next difficulty tier for whoever won it (#505).
+          // ...and is judged on how it went for the medals (#506): its length,
+          // every hit a boss landed, and the items picked up during play.
           tiersEarnedLastRun = sim.playerWon
-            ? recordRunWon(activeRunRecorder.character, activeRunRecorder.tier)
+            ? recordRunWon(activeRunRecorder.character, activeRunRecorder.tier, {
+                ticks: ticksSurvived,
+                bossHits: sim.feats.bossFights.reduce((sum, fight) => sum + fight.hitsTaken, 0),
+                itemsPickedUp: sim.feats.bests.itemsPickedUp,
+              })
             : [];
+          medalsEarnedLastRun = [...earnedMedalIds()]
+            .filter((id) => !medalsAtRunStart.has(id))
+            .map(medalGoal);
           if (
             save.unlocks.some((id) => !unlocksAtRunStart.has(id)) ||
             itemsEarnedLastRun.length > 0 ||
-            tiersEarnedLastRun.length > 0
+            tiersEarnedLastRun.length > 0 ||
+            medalsEarnedLastRun.length > 0
           ) {
             openRunResults();
             playSfx('ui-unlock-fanfare');
@@ -2357,11 +2417,8 @@ async function boot(progress: BootProgress): Promise<void> {
       ticksSurvived: finishedTicks,
       kills: finishedKills,
       deathWord: finishedDeathWord,
-      // The daily run's own entry point (`D` at the Stammtisch) is gone for
-      // now along with it — main-menu scope, not built yet — so every replay
-      // recorded today is 'normal'. `ReplayRecord.kind` stays `'normal' |
-      // 'daily'` for when it comes back.
-      kind: 'normal',
+      // The title menu's daily run (#494) records as one.
+      kind: activeRunRecorder.dailyDate === null ? 'normal' : 'daily',
       promilleUnlocked: finishedPromilleUnlocked,
       character: finishedCharacter,
       lockedItems: finishedLockedItems,
@@ -3032,6 +3089,11 @@ async function boot(progress: BootProgress): Promise<void> {
         retryRun();
       },
     },
+    medals: () => medalShelfView(),
+    daily: {
+      playedToday: () => dailyPlayedOn(dailyDateKey()),
+      start: startDailyRun,
+    },
     kit,
     locale: preferences.locale,
     loop,
@@ -3064,6 +3126,7 @@ async function boot(progress: BootProgress): Promise<void> {
   hudLayer.addChild(screenController.title.view);
   hudLayer.addChild(screenController.collection.view);
   hudLayer.addChild(screenController.runSetup.view);
+  hudLayer.addChild(screenController.medals.view);
   screenController.collection.setEntries(
     // Its own registry over the full roster rather than \`sim.items\`: no run
     // exists yet at this point in boot, and the Collection lists the game's
@@ -3294,6 +3357,7 @@ WASD move   arrows aim and fire
       character = selectedCharacter(),
       lockedItems = nextRunLockedItems(),
       tier = Math.min(runTier, tierOpenFor(character.id)),
+      dailyDate = null,
       startFloor = sandboxStartFloor,
     }: {
       promilleUnlocked?: boolean;
@@ -3311,6 +3375,11 @@ WASD move   arrows aim and fire
        */
       tier?: number;
       /**
+       * The daily run this is (#494) — its UTC date — or `null`. Its other
+       * parameters are fixed by `startDailyRun`, and recorded like any run's.
+       */
+      dailyDate?: string | null;
+      /**
        * The floor the run begins on. Above 1 it is a sandbox run (`?floor=N`):
        * dealt a kit for the floors skipped, and never saved, credited or
        * reported. A resume or a replay passes 1 — those rebuild a recorded
@@ -3326,6 +3395,7 @@ WASD move   arrows aim and fire
       seedInput.value = String(RUN_SEED);
     }
     unlocksAtRunStart = new Set(loadSave().unlocks);
+    medalsAtRunStart = earnedMedalIds();
 
     floorPlan = generateFloor(
       createStreamRng(RUN_SEED, RngStream.Floor),
@@ -3414,6 +3484,7 @@ WASD move   arrows aim and fire
       character.id,
       lockedItems,
       tier,
+      dailyDate,
     );
     ticksSinceAutosave = 0;
     // A sandbox run never touches the save slot: it must not replace a real
@@ -3423,6 +3494,12 @@ WASD move   arrows aim and fire
       sim.reportCollected(
         floorPlan.floorName,
         sandboxStartClamped ? 'ui.hud.sandboxClamped' : 'ui.hud.sandboxRun',
+      );
+    } else if (dailyDate !== null) {
+      // The daily says which day it is, and whether it still counts (#494).
+      sim.reportCollected(
+        dailyDate,
+        dailyPlayedOn(dailyDate) ? 'ui.hud.dailyPractice' : 'ui.hud.dailyRun',
       );
     } else if (tier > 0) {
       // A harder run says so as it starts (#505) — the modifiers themselves
@@ -3757,6 +3834,7 @@ WASD move   arrows aim and fire
         // must not appear in a run that could not have offered them.
         lockedItems: activeRun.lockedItems,
         tier: activeRun.tier,
+        dailyDate: activeRun.dailyDate,
         startFloor: 1,
       });
       const frames = decodeActiveRunFrames(activeRun);

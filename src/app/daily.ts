@@ -1,4 +1,5 @@
 import { dailySeed } from '../sim/rng/daily.js';
+import { DEFAULT_CHARACTER_ID } from './save/schema.js';
 
 /**
  * "Today", for the daily run (#48) — the one piece of wall-clock reading
@@ -17,6 +18,34 @@ export function dailyDateKey(now: Date = new Date()): string {
   const month = String(now.getUTCMonth() + 1).padStart(2, '0');
   const day = String(now.getUTCDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+/**
+ * Every parameter of the daily run for `date` (#494) — the whole of what
+ * makes it the same run for every player that day. Nothing here reads the
+ * save: not the character they picked (always Alois), not the tier they have
+ * reached (always 0), not the items they have earned (the full pool), not
+ * whether they have Promille yet (on). Two players' dailies differ only in
+ * how they play them.
+ */
+export interface DailyRunParameters {
+  readonly date: string;
+  readonly seed: number;
+  readonly character: string;
+  readonly tier: number;
+  readonly lockedItems: readonly string[];
+  readonly promilleUnlocked: boolean;
+}
+
+export function dailyRunParameters(date: string): DailyRunParameters {
+  return {
+    date,
+    seed: dailySeed(date),
+    character: DEFAULT_CHARACTER_ID,
+    tier: 0,
+    lockedItems: [],
+    promilleUnlocked: true,
+  };
 }
 
 /** Today's daily-run seed. */
