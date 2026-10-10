@@ -3,8 +3,9 @@ import type { MenuScreen } from '../render/ui/menu.js';
 import { CollectionScreen } from '../render/collection-screen.js';
 import { CreditsScreen } from '../render/credits-screen.js';
 import { PauseScreen } from '../render/pause-screen.js';
+import { MedalScreen } from '../render/medal-screen.js';
 import { RunSetupScreen } from '../render/run-setup-screen.js';
-import type { RunSetupView } from './meta/progress.js';
+import type { MedalShelfView, RunSetupView } from './meta/progress.js';
 import { SettingsScreen } from '../render/settings-screen.js';
 import { TitleScreen } from '../render/title-screen.js';
 import { BUILD_ID } from './build-mode.js';
@@ -29,7 +30,8 @@ import type { SettingsMenu } from './settings-menu.js';
  * is still looking at the run, on the screen it ends on. See
  * `docs/DECISIONS.md` #67 for the full reasoning.
  */
-export type Screen = 'title' | 'run' | 'paused' | 'credits' | 'settings' | 'collection' | 'setup';
+export type Screen =
+  'title' | 'run' | 'paused' | 'credits' | 'settings' | 'collection' | 'setup' | 'medals';
 
 export class ScreenFlow {
   private screen: Screen = 'title';
@@ -81,6 +83,8 @@ export interface ScreenFlowControllerDeps {
     readonly cycleCharacter: (delta: 1 | -1) => void;
     readonly start: (tier: number) => void;
   };
+  /** The medal shelf's view of the save (#506). */
+  readonly medals: () => MedalShelfView;
 }
 
 /**
@@ -99,6 +103,7 @@ export class ScreenFlowController {
   readonly settings: SettingsScreen;
   readonly collection: CollectionScreen;
   readonly runSetup: RunSetupScreen;
+  readonly medals: MedalScreen;
 
   private readonly flow = new ScreenFlow();
   private readonly deps: ScreenFlowControllerDeps;
@@ -130,6 +135,9 @@ export class ScreenFlowController {
         },
         onCollection: () => {
           this.openCollection();
+        },
+        onMedals: () => {
+          this.openMedals();
         },
         onCredits: () => {
           this.openCredits();
@@ -186,6 +194,16 @@ export class ScreenFlowController {
       },
       deps.locale,
     );
+    this.medals = new MedalScreen(
+      deps.kit,
+      {
+        view: deps.medals,
+        onBack: () => {
+          this.closeMedals();
+        },
+      },
+      deps.locale,
+    );
     this.runSetup = new RunSetupScreen(
       deps.kit,
       {
@@ -219,6 +237,7 @@ export class ScreenFlowController {
     this.credits.setLocale(locale);
     this.collection.setLocale(locale);
     this.runSetup.setLocale(locale);
+    this.medals.setLocale(locale);
     this.deps.settingsMenu.setLocale(locale);
     this.settings.setLocale(locale, this.deps.settingsMenu.tabs);
   }
@@ -240,6 +259,7 @@ export class ScreenFlowController {
     this.credits.resize(width, height);
     this.collection.resize(width, height);
     this.runSetup.resize(width, height);
+    this.medals.resize(width, height);
     this.placeSettings();
   }
 
@@ -265,6 +285,7 @@ export class ScreenFlowController {
     this.settings.hide();
     this.collection.hide();
     this.runSetup.hide();
+    this.medals.hide();
     this.title.setSettingsOpen(false);
     this.title.show();
   }
@@ -437,6 +458,23 @@ export class ScreenFlowController {
     this.deps.playOpenSound();
   }
 
+  private openMedals(): void {
+    this.flow.goTo('medals');
+    this.title.hide();
+    this.medals.show();
+    this.deps.playOpenSound();
+  }
+
+  private closeMedals(): void {
+    if (!this.flow.is('medals')) {
+      return;
+    }
+    this.medals.hide();
+    this.flow.goTo('title');
+    this.title.show();
+    this.deps.playCloseSound();
+  }
+
   private closeSetup(): void {
     if (!this.flow.is('setup')) {
       return;
@@ -474,6 +512,8 @@ export class ScreenFlowController {
         return this.collection;
       case 'setup':
         return this.runSetup;
+      case 'medals':
+        return this.medals;
       case 'run':
         return null;
     }
@@ -550,6 +590,8 @@ export class ScreenFlowController {
           this.closeCollection();
         } else if (this.flow.is('setup')) {
           this.closeSetup();
+        } else if (this.flow.is('medals')) {
+          this.closeMedals();
         }
         break;
       default:
@@ -654,6 +696,8 @@ export class ScreenFlowController {
         this.closeCollection();
       } else if (this.flow.is('setup')) {
         this.closeSetup();
+      } else if (this.flow.is('medals')) {
+        this.closeMedals();
       }
     }
     return true;

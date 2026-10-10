@@ -45,6 +45,10 @@ export const en = {
   'ui.credits.line2': 'Built with Claude Code',
   'ui.credits.line3': 'Engine: three.js',
 
+  'ui.title.medals': 'Medals',
+  'ui.medals.headline': 'Medals',
+  'ui.medals.count': '{earned} / {total} earned',
+  'ui.results.newMedal': 'Medal earned',
   'ui.title.collection': 'Collection',
   'ui.pause.collection': 'Collection',
   'ui.collection.headline': 'Collection',

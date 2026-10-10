@@ -232,13 +232,21 @@ describe('run bests (#502)', () => {
     mostPassives: 5,
     mostTagged: {},
     completedSets: ['braumeister'],
+    itemsPickedUp: 0,
   };
 
   it('folds as maxima — a worse run never lowers a best', () => {
     const save = withRunBests(createDefaultSave(), bests, NONE);
     const worse = withRunBests(
       save,
-      { deepestTier: 0, beersDrunk: 2, mostPassives: 1, mostTagged: {}, completedSets: [] },
+      {
+        deepestTier: 0,
+        beersDrunk: 2,
+        mostPassives: 1,
+        mostTagged: {},
+        completedSets: [],
+        itemsPickedUp: 0,
+      },
       NONE,
     );
     expect(worse.statistics).toEqual(save.statistics);
@@ -299,7 +307,14 @@ describe('feats earn unlocks (#502)', () => {
     expect(
       withRunBests(
         createDefaultSave(),
-        { deepestTier: 0, beersDrunk: 0, mostPassives: 5, mostTagged: {}, completedSets: [] },
+        {
+          deepestTier: 0,
+          beersDrunk: 0,
+          mostPassives: 5,
+          mostTagged: {},
+          completedSets: [],
+          itemsPickedUp: 0,
+        },
         content,
       ).unlocks,
     ).toEqual([]);
@@ -321,6 +336,7 @@ describe('save round-trip (#502)', () => {
         mostPassives: 2,
         mostTagged: {},
         completedSets: ['braumeister'],
+        itemsPickedUp: 0,
       },
       NONE,
     );
@@ -370,6 +386,7 @@ describe('item unlocks (#503)', () => {
         mostPassives: 3,
         mostTagged: { rosinen: 3 },
         completedSets: [],
+        itemsPickedUp: 0,
       },
       content,
     );
@@ -382,6 +399,7 @@ describe('item unlocks (#503)', () => {
         mostPassives: 4,
         mostTagged: { rosinen: 4 },
         completedSets: [],
+        itemsPickedUp: 0,
       },
       content,
     );

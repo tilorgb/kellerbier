@@ -5299,6 +5299,7 @@ export class GameSim implements FeatSource {
     const state = this.inventory.pickUp(index);
     this.markItemStatsDirty(index);
     this.syncItemStatModifiers();
+    this.feats.noteItemPickedUp(this);
     this.feats.noteInventory(this);
     const item = this.items.at(index);
     // Flavour text over the literal effect text here — the pedestal/HUD

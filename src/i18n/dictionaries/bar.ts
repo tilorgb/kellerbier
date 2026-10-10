@@ -40,6 +40,10 @@ export const bar: Record<DictKey, string> = {
   'ui.credits.line2': 'Baut mit Claude Code',
   'ui.credits.line3': 'Engine: three.js',
 
+  'ui.title.medals': 'Medaillen',
+  'ui.medals.headline': 'Medaillen',
+  'ui.medals.count': '{earned} / {total} verdient',
+  'ui.results.newMedal': 'Medaille verdient',
   'ui.title.collection': 'Sammlung',
   'ui.pause.collection': 'Sammlung',
   'ui.collection.headline': 'Sammlung',

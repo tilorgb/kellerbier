@@ -18,6 +18,9 @@ import {
   highestTierOpen,
   buildRunSetupView,
   type RunSetupView,
+  buildMedalShelf,
+  type MedalShelfView,
+  type WinFacts,
   selectedCharacterTraits,
   withEverythingUnlocked,
   withRunOutcome,
@@ -58,14 +61,20 @@ export function recordRunBests(bests: RunBests): string[] {
   return committingEarned((save) => withRunBests(save, bests, PROGRESSION));
 }
 
-/** Commits `change`, and names everything earned by it that the save did not have before. */
-function committingEarned(change: (save: SaveData) => SaveData): string[] {
+/**
+ * Commits `change`, and names everything earned by it that the save did not
+ * have before — only the kinds `keep` accepts, when given.
+ */
+function committingEarned(
+  change: (save: SaveData) => SaveData,
+  keep: (key: string) => boolean = () => true,
+): string[] {
   const before = earnedNames(loadSave(), PROGRESSION);
   const after = earnedNames(updateSave(change), PROGRESSION);
   return (
     [...after]
       // The Promille unlock arrives with its own banner (`PromilleUnlockHud`).
-      .filter(([key]) => !before.has(key) && key !== `unlock:${UNLOCK_PROMILLE}`)
+      .filter(([key]) => !before.has(key) && key !== `unlock:${UNLOCK_PROMILLE}` && keep(key))
       .map(([, name]) => name)
   );
 }
@@ -123,8 +132,28 @@ export function difficultyFor(tier: number): DifficultyModifiers {
  * A run was won as `character` on `tier` (#505). Hands back what that
  * earned — the next rung of their ladder, if there was one left.
  */
-export function recordRunWon(character: string, tier: number): string[] {
-  return committingEarned((save) => withRunWon(save, character, tier, PROGRESSION));
+export function recordRunWon(character: string, tier: number, win: WinFacts): string[] {
+  // Tiers only: a medal the win earned is listed on the results screen by its
+  // own diff (`earnedMedalIds`), not here.
+  return committingEarned(
+    (save) => withRunWon(save, character, tier, PROGRESSION, win),
+    (key) => key.startsWith('tier:'),
+  );
+}
+
+/** The medal shelf (#506), from the save on disk. */
+export function medalShelfView(save: SaveData = loadSave()): MedalShelfView {
+  return buildMedalShelf(save, PROGRESSION);
+}
+
+/** Every medal id the save has earned (#506) — compared before and after a run for the results screen. */
+export function earnedMedalIds(save: SaveData = loadSave()): ReadonlySet<string> {
+  return new Set(save.achievements);
+}
+
+/** A medal's goal line, for the results screen's "Medal earned" entry. */
+export function medalGoal(id: string): string {
+  return PROGRESSION.medals?.find((medal) => medal.id === id)?.goal ?? id;
 }
 
 /** Everything the run-setup screen draws (#493), from the save on disk. */
@@ -148,8 +177,9 @@ export function runResultsView(
   save: SaveData = loadSave(),
   newItems: readonly string[] = [],
   newTiers: readonly string[] = [],
+  newMedals: readonly string[] = [],
 ): RunResultsView {
-  return buildRunResultsView(save, PROGRESSION, locale, newItems, newTiers);
+  return buildRunResultsView(save, PROGRESSION, locale, newItems, newTiers, newMedals);
 }
 
 export { PROGRESSION } from '../../content/progression/index.js';

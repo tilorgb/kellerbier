@@ -193,7 +193,10 @@ import {
   characterTraitsById,
   hasBeatenABoss,
   difficultyFor,
+  earnedMedalIds,
   itemUnlockGoal,
+  medalGoal,
+  medalShelfView,
   nextRunLockedItems,
   recordRunWon,
   resetProgress,
@@ -1881,6 +1884,10 @@ async function boot(progress: BootProgress): Promise<void> {
   let itemsEarnedLastRun: readonly string[] = [];
   /** The difficulty tiers the run that just ended opened (#505) — "Difficulty unlocked" on the results screen. */
   let tiersEarnedLastRun: readonly string[] = [];
+  /** Medals the run that just ended earned (#506), by goal — "Medal earned" on the results screen. */
+  let medalsEarnedLastRun: readonly string[] = [];
+  /** The medals the save held when the run started — what `medalsEarnedLastRun` is the difference from. */
+  let medalsAtRunStart: ReadonlySet<string> = new Set();
   /**
    * The tier a fresh run starts on (#505): whatever the run-setup screen
    * last started, so a retry from the death or victory screen — which never
@@ -1891,7 +1898,13 @@ async function boot(progress: BootProgress): Promise<void> {
 
   /** The results screen's view, carrying the last run's new items. */
   function currentRunResultsView(locale: Locale): ReturnType<typeof runResultsView> {
-    return runResultsView(locale, loadSave(), itemsEarnedLastRun, tiersEarnedLastRun);
+    return runResultsView(
+      locale,
+      loadSave(),
+      itemsEarnedLastRun,
+      tiersEarnedLastRun,
+      medalsEarnedLastRun,
+    );
   }
 
   /** Whether the room read as cleared last tick — shared by the room-clear sting below and `creditBossDefeat`. */
@@ -2276,13 +2289,23 @@ async function boot(progress: BootProgress): Promise<void> {
               return index < 0 ? id : sim.items.at(index).name;
             });
           // A won run opens the next difficulty tier for whoever won it (#505).
+          // ...and is judged on how it went for the medals (#506): its length,
+          // every hit a boss landed, and the items picked up during play.
           tiersEarnedLastRun = sim.playerWon
-            ? recordRunWon(activeRunRecorder.character, activeRunRecorder.tier)
+            ? recordRunWon(activeRunRecorder.character, activeRunRecorder.tier, {
+                ticks: ticksSurvived,
+                bossHits: sim.feats.bossFights.reduce((sum, fight) => sum + fight.hitsTaken, 0),
+                itemsPickedUp: sim.feats.bests.itemsPickedUp,
+              })
             : [];
+          medalsEarnedLastRun = [...earnedMedalIds()]
+            .filter((id) => !medalsAtRunStart.has(id))
+            .map(medalGoal);
           if (
             save.unlocks.some((id) => !unlocksAtRunStart.has(id)) ||
             itemsEarnedLastRun.length > 0 ||
-            tiersEarnedLastRun.length > 0
+            tiersEarnedLastRun.length > 0 ||
+            medalsEarnedLastRun.length > 0
           ) {
             openRunResults();
             playSfx('ui-unlock-fanfare');
@@ -2997,6 +3020,7 @@ async function boot(progress: BootProgress): Promise<void> {
         retryRun();
       },
     },
+    medals: () => medalShelfView(),
     kit,
     locale: preferences.locale,
     loop,
@@ -3029,6 +3053,7 @@ async function boot(progress: BootProgress): Promise<void> {
   hudLayer.addChild(screenController.title.view);
   hudLayer.addChild(screenController.collection.view);
   hudLayer.addChild(screenController.runSetup.view);
+  hudLayer.addChild(screenController.medals.view);
   screenController.collection.setEntries(
     // Its own registry over the full roster rather than \`sim.items\`: no run
     // exists yet at this point in boot, and the Collection lists the game's
@@ -3291,6 +3316,7 @@ WASD move   arrows aim and fire
       seedInput.value = String(RUN_SEED);
     }
     unlocksAtRunStart = new Set(loadSave().unlocks);
+    medalsAtRunStart = earnedMedalIds();
 
     floorPlan = generateFloor(
       createStreamRng(RUN_SEED, RngStream.Floor),
