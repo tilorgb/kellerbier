@@ -289,6 +289,16 @@ export const de: Record<DictKey, string> = {
   'ui.settings.privacy.shareToggle': 'Anonyme Playtest-Telemetrie teilen',
 
   // --- Playtest build: welcome screen and post-run questions ---------------
+  'ui.crash.title': 'Etwas ist schiefgegangen',
+  'ui.crash.runBody':
+    'Das Spiel ist auf einen Fehler gestoßen und hat angehalten. Dein Lauf ist bis kurz davor gespeichert — lade neu, um dort weiterzumachen.',
+  'ui.crash.resumeBody':
+    'Dein gespeicherter Lauf ließ sich nicht fortsetzen. Er bleibt, wie er war: versuch es noch einmal oder fang neu an.',
+  'ui.crash.reload': 'Neu laden und weiterspielen',
+  'ui.crash.discard': 'Lauf verwerfen',
+  'ui.crash.copy': 'Fehlerbericht kopieren',
+  'ui.crash.copied': 'Kopiert — füg ihn in einen Fehlerbericht ein.',
+  'ui.crash.copyFailed': 'Die Zwischenablage ist nicht erreichbar.',
   'ui.playtest.welcome.title': 'Danke fürs Testen von Kellerbier',
   'ui.playtest.welcome.body':
     'Das ist eine Alpha: ein früher, unfertiger Stand, und ein Teil der Grafik und des ' +

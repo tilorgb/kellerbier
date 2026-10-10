@@ -150,6 +150,7 @@ import {
 } from './telemetry/send.js';
 import { createTouchControls, isTouchCapable } from './touch-controls.js';
 import {
+  BUILD_ID,
   FLOOR_SKIP_ENABLED,
   IS_RELEASE_BUILD,
   isPlaytestSession,
@@ -179,7 +180,13 @@ import {
 import { loadPreferences } from './preferences.js';
 import { t, type DictKey } from '../i18n/translate.js';
 import type { Locale } from '../i18n/locale.js';
-import { ActiveRunRecorder, decodeActiveRunFrames, persistActiveRun } from './save/active-run.js';
+import {
+  ActiveRunRecorder,
+  FRAME_LOG_STRIDE,
+  decodeActiveRunFrames,
+  persistActiveRun,
+} from './save/active-run.js';
+import { crashReport, showCrashScreen } from './crash-screen.js';
 import type { CharacterTraits } from '../sim/character/definition.js';
 import { loadSave } from './save/storage.js';
 import { dailyDateKey, dailyRunParameters } from './daily.js';
@@ -1114,6 +1121,17 @@ async function boot(progress: BootProgress): Promise<void> {
   let wasResumed = false;
   /** Ticks since `activeRunRecorder` was last written to `localStorage` — see `autosaveActiveRun`. */
   let ticksSinceAutosave = 0;
+  /**
+   * Set once something has thrown (#520): the save slot then holds either the
+   * run up to its last good tick, or a saved run that would not resume and is
+   * kept for the player to decide about. Either way nothing may write over it
+   * until the page reloads or the player discards it — see `saveActiveRun`.
+   */
+  let activeRunSaveHeld = false;
+  /** Whether the crash screen is already up — a render that throws every frame reports once. */
+  let crashed = false;
+  /** What `resumeActiveRun` threw, if the saved run would not replay (#520). */
+  let resumeError: unknown = null;
   /** Once a second: frequent enough that a crash loses under a second of input, rare enough not to stringify the whole log every tick. */
   const AUTOSAVE_INTERVAL_TICKS = TICKS_PER_SECOND;
   /**
@@ -2331,7 +2349,7 @@ async function boot(progress: BootProgress): Promise<void> {
           // the R key (or a fresh page load) starts a new one either way, so
           // the in-progress log is cleared rather than left around to be
           // resumed into a tableau that is already over.
-          persistActiveRun(null);
+          saveActiveRun(null);
           const ticksSurvived = runEndTick();
           // #54/#159: a no-op unless the player opted in
           // (`telemetry/store.ts#recordRunTelemetry`'s own gate) — built
@@ -2643,6 +2661,13 @@ async function boot(progress: BootProgress): Promise<void> {
     }
   }
 
+  /** `persistActiveRun`, unless a crash is holding the save slot (`activeRunSaveHeld`, #520). */
+  function saveActiveRun(recorder: ActiveRunRecorder | null): void {
+    if (!activeRunSaveHeld) {
+      persistActiveRun(recorder);
+    }
+  }
+
   /**
    * Writes the in-progress run's input log to `localStorage` roughly once a
    * second, rather than every tick — `JSON.stringify`-ing a growing frame log
@@ -2661,7 +2686,7 @@ async function boot(progress: BootProgress): Promise<void> {
       return;
     }
     ticksSinceAutosave = 0;
-    persistActiveRun(activeRunRecorder);
+    saveActiveRun(activeRunRecorder);
   }
 
   const loop = new FixedTimestepLoop({
@@ -2709,8 +2734,19 @@ async function boot(progress: BootProgress): Promise<void> {
                 }
               : undefined,
           );
-          activeRunRecorder.record(frame);
-          advanceOneTick(frame, true);
+          const recorder = activeRunRecorder;
+          recorder.record(frame);
+          try {
+            advanceOneTick(frame, true);
+          } catch (error) {
+            // A tick that threw must not stay in the log (#520): a resume
+            // would replay straight into the same exception. The recorder is
+            // compared because a tick can start a new run.
+            if (activeRunRecorder === recorder) {
+              recorder.dropLastFrame();
+            }
+            throw error;
+          }
           autosaveActiveRun();
         }
       }
@@ -3394,6 +3430,8 @@ WASD move   arrows aim and fire
    * `activeRun` save slot would either clobber a real in-progress run (if one
    * were still live, which replay's own `deathPhase === 'over'` guard rules
    * out) or, harmlessly but pointlessly, overwrite it with an empty one.
+   * `resumeActiveRun` passes it too (#520), and writes the run itself once
+   * its replay has worked — so a resume that throws leaves the save as it was.
    *
    * `promilleUnlocked` defaults to `nextRunPromilleUnlocked()` — the save's
    * current unlock state — for a genuinely new run, but a replay passes the
@@ -3573,7 +3611,7 @@ WASD move   arrows aim and fire
       sim.reportCollected(difficultyTierLabel(tier), 'ui.hud.tierRun');
     }
     if (persist && !sandboxRun) {
-      persistActiveRun(activeRunRecorder);
+      saveActiveRun(activeRunRecorder);
     }
     wasResumed = false;
     viewTextures ??= {
@@ -3868,11 +3906,12 @@ WASD move   arrows aim and fire
    *
    * Returns whether a resume actually happened. A saved run that fails to
    * replay cleanly (a shape it depended on has since changed; any other
-   * exception) must not leave the game unplayable — this discards it and
-   * reports "no resume" rather than propagating the exception, the same
-   * "a content gap degrades gracefully, but still fails loudly enough to
-   * notice" shape `CLAUDE.md` asks of an authored-content gap, applied here
-   * to a save that no longer replays.
+   * exception) must not leave the game unplayable — this reports "no resume"
+   * rather than propagating the exception, the same "a content gap degrades
+   * gracefully" shape `CLAUDE.md` asks of an authored-content gap. It no
+   * longer throws the run away (#520): the save slot is held as it was
+   * (`activeRunSaveHeld`), `resumeError` keeps what went wrong, and the boot
+   * code below lets the player choose between trying again and discarding.
    */
   function resumeActiveRun(): boolean {
     const activeRun = loadSave().activeRun;
@@ -3903,6 +3942,9 @@ WASD move   arrows aim and fire
         dailyDate: activeRun.dailyDate,
         challenge: activeRun.challenge,
         startFloor: 1,
+        // Not written until the replay has worked: an empty recorder saved
+        // up front would already have replaced the run being resumed.
+        persist: false,
       });
       const frames = decodeActiveRunFrames(activeRun);
       for (const frame of frames) {
@@ -3915,12 +3957,16 @@ WASD move   arrows aim and fire
       // readout would restart from zero under a `sim` that is already well
       // past it.
       loop.fastForward(frames.length);
-      persistActiveRun(activeRunRecorder);
+      saveActiveRun(activeRunRecorder);
       wasResumed = true;
       return true;
     } catch (error) {
-      console.warn('[save] a saved run failed to resume; starting a fresh one instead', error);
-      persistActiveRun(null);
+      console.warn(
+        '[save] a saved run failed to resume; it is kept until the player decides',
+        error,
+      );
+      resumeError = error;
+      activeRunSaveHeld = true;
       return false;
     }
   }
@@ -4121,6 +4167,26 @@ WASD move   arrows aim and fire
     startRun(RUN_SEED);
   }
   screenController.showTitle(hadResumableRun);
+  if (resumeError !== null) {
+    const failedRun = loadSave().activeRun;
+    showCrashScreen({
+      locale: preferences.locale,
+      kind: 'resume',
+      report: crashReport(resumeError, {
+        build: BUILD_ID,
+        seed: failedRun?.seed ?? RUN_SEED,
+        tick: failedRun === null ? 0 : failedRun.frames.length / FRAME_LOG_STRIDE,
+        floor: 'resume',
+      }),
+      onReload: () => {
+        window.location.reload();
+      },
+      onDiscard: () => {
+        activeRunSaveHeld = false;
+        saveActiveRun(activeRunRecorder);
+      },
+    });
+  }
   // The playtest build's welcome (`app/playtest/overlay.ts`): asked once, over
   // the title screen. Yes is the telemetry opt-in and the agreement to runs
   // being sent as they end (#360); no leaves the game plain — and, for a
@@ -5022,7 +5088,7 @@ WASD move   arrows aim and fire
   // actual tab close or backgrounding — `visibilitychange` fires reliably on
   // mobile browsers that don't always run `beforeunload`.
   window.addEventListener('beforeunload', () => {
-    persistActiveRun(activeRunRecorder);
+    saveActiveRun(activeRunRecorder);
   });
   // The Video tab's Fullscreen row reads `document.fullscreenElement` when it
   // is drawn, so it only goes stale if nothing redraws it when the browser
@@ -5032,11 +5098,35 @@ WASD move   arrows aim and fire
   });
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
-      persistActiveRun(activeRunRecorder);
+      saveActiveRun(activeRunRecorder);
     }
   });
 
-  runAnimationFrameLoop(loop);
+  runAnimationFrameLoop(loop, (error) => {
+    console.error('[loop] a frame threw', error);
+    if (crashed) {
+      return;
+    }
+    crashed = true;
+    loop.paused = true;
+    // The log already stops at the last tick that worked (the step takes back
+    // the frame of a tick that threw), so this is the run a reload resumes.
+    saveActiveRun(activeRunRecorder);
+    activeRunSaveHeld = true;
+    showCrashScreen({
+      locale: preferences.locale,
+      kind: 'run',
+      report: crashReport(error, {
+        build: BUILD_ID,
+        seed: RUN_SEED,
+        tick: sim.tick,
+        floor: floorPlan.floorName,
+      }),
+      onReload: () => {
+        window.location.reload();
+      },
+    });
+  });
   window.setInterval(refreshHud, 100);
 
   // The room editor (#24) / pixel editor (#108) split-view toggle. Ships on

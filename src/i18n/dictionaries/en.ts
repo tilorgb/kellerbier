@@ -298,6 +298,16 @@ export const en = {
   'ui.settings.privacy.shareToggle': 'Share anonymous playtest telemetry',
 
   // --- Playtest build: welcome screen and post-run questions ---------------
+  'ui.crash.title': 'Something went wrong',
+  'ui.crash.runBody':
+    'The game hit an error and stopped. Your run is saved up to the moment before it — reload to carry on from there.',
+  'ui.crash.resumeBody':
+    'Your saved run could not be resumed. It is kept as it was: try again, or let it go and start fresh.',
+  'ui.crash.reload': 'Reload and continue',
+  'ui.crash.discard': 'Discard the run',
+  'ui.crash.copy': 'Copy error report',
+  'ui.crash.copied': 'Copied — paste it into a bug report.',
+  'ui.crash.copyFailed': 'Could not reach the clipboard.',
   'ui.playtest.welcome.title': 'Thanks for testing Kellerbier',
   'ui.playtest.welcome.body':
     'This is an alpha: an early, unfinished build, and some of the art and sound are ' +

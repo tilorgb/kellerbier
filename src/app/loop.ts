@@ -191,8 +191,20 @@ export class FixedTimestepLoop {
  *
  * A backgrounded tab stops receiving animation frames; on return the loop is
  * resynced rather than asked to simulate the minutes that passed.
+ *
+ * **An exception never stops the loop** (#520). The next frame is requested
+ * whatever this one did, and the error goes to `onError` — without this, one
+ * throw anywhere in a step or a render left the game on a frozen frame for
+ * good, which `docs/DECISIONS.md` #19 calls the worst way a game can fail.
+ * What to do about it (pause, tell the player) is the caller's call; the loop
+ * only guarantees it is still there to do it.
  */
-export function runAnimationFrameLoop(loop: FixedTimestepLoop): () => void {
+export function runAnimationFrameLoop(
+  loop: FixedTimestepLoop,
+  onError: (error: unknown) => void = (error) => {
+    console.error(error);
+  },
+): () => void {
   let handle = 0;
   let running = true;
 
@@ -200,8 +212,12 @@ export function runAnimationFrameLoop(loop: FixedTimestepLoop): () => void {
     if (!running) {
       return;
     }
-    loop.advance(nowMs);
     handle = requestAnimationFrame(frame);
+    try {
+      loop.advance(nowMs);
+    } catch (error) {
+      onError(error);
+    }
   };
 
   const onVisibilityChange = (): void => {

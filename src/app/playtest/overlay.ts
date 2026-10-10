@@ -53,7 +53,7 @@ function ensureStyle(): void {
   document.head.appendChild(style);
 }
 
-function element<K extends keyof HTMLElementTagNameMap>(
+export function element<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   className?: string,
   text?: string,
@@ -68,8 +68,13 @@ function element<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
-/** A backdrop + card that swallows keyboard input, so the game underneath never sees it. */
-function mount(): { backdrop: HTMLDivElement; card: HTMLDivElement } {
+/**
+ * A backdrop + card that swallows keyboard input, so the game underneath never
+ * sees it. Also the crash screen's (`app/crash-screen.ts`), which wants a DOM
+ * card for the same reason plus one more: it has to show when the renderer is
+ * what broke.
+ */
+export function mount(): { backdrop: HTMLDivElement; card: HTMLDivElement } {
   ensureStyle();
   const backdrop = element('div', 'pt-backdrop');
   backdrop.setAttribute('role', 'dialog');
