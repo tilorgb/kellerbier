@@ -18,9 +18,21 @@
  *   `START_FREE_DOORS`/`END_FREE_DOORS`.
  */
 
-import type { DoorDirection } from '../../content/rooms/definition.js';
-import { ROOM_MARGIN_X, ROOM_MARGIN_Y, SCREEN_HEIGHT, SCREEN_WIDTH } from './template.js';
-import { RoomGeometry, type RoomRect } from './geometry.js';
+import type { DoorDirection, RoomSubLayout } from '../../content/rooms/definition.js';
+import {
+  ROOM_MARGIN_X,
+  ROOM_MARGIN_Y,
+  SCREEN_HEIGHT,
+  SCREEN_WIDTH,
+  nearestFloorChoice,
+} from './template.js';
+import {
+  BLOCK_MATERIAL_STONE,
+  BLOCK_MATERIAL_WOOD,
+  MAX_ROOM_BLOCKS,
+  RoomGeometry,
+  type RoomRect,
+} from './geometry.js';
 
 /**
  * Which way each step moves from the previous one. `up`/`down` are screen
@@ -165,6 +177,25 @@ export function validateStaircaseTemplate(
   return { ...template, floorTags: floorTags as readonly string[], weight };
 }
 
+/**
+ * What stands on a staircase's steps (generated per run by
+ * `generate-room.ts`'s `generateStaircaseContent`; a staircase template has
+ * no authored content of its own): one ordinary single-screen layout per
+ * step, each in that step's own local coordinates, `steps[0]` being the
+ * start step.
+ */
+export interface StaircaseContent {
+  readonly steps: readonly RoomSubLayout[];
+}
+
+function rectsOverlap(a: RoomRect, b: RoomRect): boolean {
+  return a.minX < b.maxX && a.maxX > b.minX && a.minY < b.maxY && a.maxY > b.minY;
+}
+
+function pointInRect(x: number, y: number, rect: RoomRect): boolean {
+  return x >= rect.minX && x <= rect.maxX && y >= rect.minY && y <= rect.maxY;
+}
+
 export interface CompiledStaircaseDoor {
   readonly direction: DoorDirection;
   readonly x: number;
@@ -177,11 +208,9 @@ export interface CompiledStaircaseRoom {
   readonly startDoor: CompiledStaircaseDoor;
   readonly endDoor: CompiledStaircaseDoor;
   /**
-   * Always empty for now — no staircase content has been authored with any
-   * of this yet (#112's own scope note). Present purely so `GameSim.loadRoom`
-   * can iterate a staircase's compiled room the same way it iterates a
-   * `CompiledRoomTemplate`'s, without a separate code path for "has no
-   * content."
+   * Empty unless `compileStaircaseRoom` was handed `StaircaseContent` —
+   * same shape as a `CompiledRoomTemplate`'s, so `GameSim` iterates a
+   * staircase's compiled room without a separate code path.
    */
   readonly enemySpawns: readonly {
     readonly x: number;
@@ -257,7 +286,20 @@ function seamVoidRects(a: RoomRect, b: RoomRect): RoomRect[] {
   return voids;
 }
 
-export function compileStaircaseRoom(template: StaircaseRoomTemplate): CompiledStaircaseRoom {
+/**
+ * Compiles a staircase. With `content`, each step's layout is laid onto that
+ * step's own rect — but consecutive steps overlap, and the overlap belongs to
+ * nobody: anything of step k's that touches another step's rect is dropped,
+ * so the shared patch stays an open lane and the doors-to-doors path the
+ * generator proved inside each step still holds (dropping an obstacle can
+ * only open ground up). Hazards are not carried over — a staircase has no
+ * weather, water or ice, as before.
+ */
+export function compileStaircaseRoom(
+  template: StaircaseRoomTemplate,
+  content?: StaircaseContent,
+  floor = 1,
+): CompiledStaircaseRoom {
   if (!Number.isInteger(template.stepCount) || template.stepCount < 2) {
     throw new Error(`staircase room ${template.id}: stepCount must be an integer >= 2`);
   }
@@ -333,14 +375,90 @@ export function compileStaircaseRoom(template: StaircaseRoomTemplate): CompiledS
     throw new Error(`staircase room ${template.id}: no steps compiled`);
   }
 
+  const enemySpawns: { x: number; y: number; enemyId: string }[] = [];
+  const pickupSpawns: { x: number; y: number; type: string }[] = [];
+  const decorativeProps: { x: number; y: number; type: string }[] = [];
+  content?.steps.forEach((layout, stepIndex) => {
+    const step = stepRects[stepIndex];
+    if (step === undefined) {
+      return;
+    }
+    const others = stepRects.filter((_rect, index) => index !== stepIndex);
+    const owned = (x: number, y: number): boolean =>
+      !others.some((other) => pointInRect(x, y, other));
+
+    for (const obstacle of layout.obstacles) {
+      const rect: RoomRect = {
+        minX: step.minX + obstacle.x,
+        minY: step.minY + obstacle.y,
+        maxX: step.minX + obstacle.x + obstacle.width,
+        maxY: step.minY + obstacle.y + obstacle.height,
+      };
+      // Past the block budget the rest of the cover is simply left out: the
+      // seams already spent some of it, and fewer obstacles never closes a path.
+      if (
+        geometry.blockCount >= MAX_ROOM_BLOCKS ||
+        others.some((other) => rectsOverlap(rect, other))
+      ) {
+        continue;
+      }
+      geometry.addBlock(
+        rect.minX,
+        rect.minY,
+        rect.maxX,
+        rect.maxY,
+        true,
+        obstacle.material === 'wood' ? BLOCK_MATERIAL_WOOD : BLOCK_MATERIAL_STONE,
+      );
+    }
+
+    for (const spawn of layout.enemySpawns) {
+      const group = layout.spawnGroups.find((candidate) => candidate.id === spawn.group);
+      if (group === undefined) {
+        throw new Error(`staircase room ${template.id}: unknown spawn group "${spawn.group}"`);
+      }
+      const eligible = group.choices.filter(
+        (choice) => floor >= choice.minFloor && floor <= choice.maxFloor,
+      );
+      const resolved =
+        eligible.length > 0 ? eligible : [nearestFloorChoice(template.id, group, floor)];
+      for (let index = 0; index < group.count; index++) {
+        const choice = resolved[index % resolved.length];
+        const x = step.minX + spawn.x + (index - (group.count - 1) / 2) * 8;
+        const y = step.minY + spawn.y;
+        if (choice === undefined || !owned(x, y)) {
+          continue;
+        }
+        enemySpawns.push({ x, y, enemyId: choice.enemyId });
+        for (const escort of choice.escorts ?? []) {
+          enemySpawns.push({ x: x + escort.dx, y: y + escort.dy, enemyId: escort.enemyId });
+        }
+      }
+    }
+    for (const pickup of layout.pickupSpawns) {
+      const x = step.minX + pickup.x;
+      const y = step.minY + pickup.y;
+      if (owned(x, y)) {
+        pickupSpawns.push({ x, y, type: pickup.type });
+      }
+    }
+    for (const prop of layout.decorativeProps) {
+      const x = step.minX + prop.x;
+      const y = step.minY + prop.y;
+      if (owned(x, y)) {
+        decorativeProps.push({ x, y, type: prop.type });
+      }
+    }
+  });
+
   return {
     source: template,
     geometry,
     startDoor: { direction: template.startDoor, ...stepDoorCentre(firstStep, template.startDoor) },
     endDoor: { direction: template.endDoor, ...stepDoorCentre(lastStep, template.endDoor) },
-    enemySpawns: [],
-    pickupSpawns: [],
-    decorativeProps: [],
+    enemySpawns,
+    pickupSpawns,
+    decorativeProps,
     hazards: [],
   };
 }

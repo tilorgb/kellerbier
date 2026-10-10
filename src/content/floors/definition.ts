@@ -49,6 +49,15 @@ export interface FloorConfig {
    */
   readonly xlChance: number;
   /**
+   * Chance, per room slot the generator grows, that the slot is a multi-cell
+   * "big" room (`1x2`/`L`/`2x2`/`T`) instead of a `1x1` — a rare find on floor
+   * 1, a regular feature of the late floors. Which big shape it is tilts
+   * toward the large ones as the floors go up (`chooseShape`).
+   */
+  readonly bigRoomChance: number;
+  /** Hard cap on big rooms per floor, the backstop behind `bigRoomChance`'s luck. */
+  readonly maxBigRooms: number;
+  /**
    * Multiplier applied to `minRooms`/`maxRooms` (directly) and
    * `minBossDistance` (by its square root — see
    * `effectiveGenerationTargets`'s own doc comment) when a floor rolls XL.
@@ -185,6 +194,8 @@ export const FLOOR_CONFIGS: readonly FloorConfig[] = [
     // `app/meta/progress.ts`'s `hasBeatenABoss`), not here: this is the
     // steady-state chance once that condition is met.
     xlChance: 0.15,
+    bigRoomChance: 0.06,
+    maxBigRooms: 1,
     xlRoomMultiplier: 1.7,
     flavour: 'floors.cellar.flavour',
   },
@@ -198,6 +209,8 @@ export const FLOOR_CONFIGS: readonly FloorConfig[] = [
     gridRadius: 5,
     minBossDistance: 5,
     xlChance: 0.25,
+    bigRoomChance: 0.08,
+    maxBigRooms: 1,
     xlRoomMultiplier: 1.7,
     flavour: 'floors.rural.flavour',
   },
@@ -206,11 +219,13 @@ export const FLOOR_CONFIGS: readonly FloorConfig[] = [
     // `docs/CONTENT_BIBLE.md` §1: "Floor 3 — Der Wald".
     name: 'Der Wald',
     floorTag: 'wald',
-    minRooms: 12,
-    maxRooms: 16,
+    minRooms: 14,
+    maxRooms: 18,
     gridRadius: 6,
-    minBossDistance: 5,
+    minBossDistance: 6,
     xlChance: 0.25,
+    bigRoomChance: 0.11,
+    maxBigRooms: 2,
     xlRoomMultiplier: 1.7,
     flavour: 'floors.wald.flavour',
     woodenFloor: true,
@@ -220,11 +235,13 @@ export const FLOOR_CONFIGS: readonly FloorConfig[] = [
     // `docs/CONTENT_BIBLE.md` §1: "Floor 4 — Die Alpen".
     name: 'Die Alpen',
     floorTag: 'alpen',
-    minRooms: 12,
-    maxRooms: 16,
+    minRooms: 15,
+    maxRooms: 19,
     gridRadius: 6,
-    minBossDistance: 5,
+    minBossDistance: 6,
     xlChance: 0.25,
+    bigRoomChance: 0.14,
+    maxBigRooms: 2,
     xlRoomMultiplier: 1.7,
     flavour: 'floors.alpen.flavour',
   },
@@ -233,11 +250,13 @@ export const FLOOR_CONFIGS: readonly FloorConfig[] = [
     // `docs/CONTENT_BIBLE.md` §1: "Floor 5 — Schloss Neuschwanstein".
     name: 'Schloss Neuschwanstein',
     floorTag: 'schloss',
-    minRooms: 13,
-    maxRooms: 17,
-    gridRadius: 6,
+    minRooms: 16,
+    maxRooms: 20,
+    gridRadius: 7,
     minBossDistance: 6,
     xlChance: 0.25,
+    bigRoomChance: 0.17,
+    maxBigRooms: 3,
     xlRoomMultiplier: 1.7,
     flavour: 'floors.schloss.flavour',
   },
@@ -246,11 +265,13 @@ export const FLOOR_CONFIGS: readonly FloorConfig[] = [
     // `docs/CONTENT_BIBLE.md` §1: "Floor 6 — Die Brauerei".
     name: 'Die Brauerei',
     floorTag: 'brauerei',
-    minRooms: 13,
-    maxRooms: 17,
+    minRooms: 17,
+    maxRooms: 21,
     gridRadius: 7,
-    minBossDistance: 6,
+    minBossDistance: 7,
     xlChance: 0.25,
+    bigRoomChance: 0.2,
+    maxBigRooms: 3,
     xlRoomMultiplier: 1.7,
     flavour: 'floors.brauerei.flavour',
   },
@@ -260,11 +281,13 @@ export const FLOOR_CONFIGS: readonly FloorConfig[] = [
     // every locale, per `docs/CONTENT_BIBLE.md` §0.
     name: 'Die Wiesn',
     floorTag: 'wiesn',
-    minRooms: 14,
-    maxRooms: 18,
-    gridRadius: 7,
-    minBossDistance: 6,
+    minRooms: 18,
+    maxRooms: 23,
+    gridRadius: 8,
+    minBossDistance: 7,
     xlChance: 0.25,
+    bigRoomChance: 0.24,
+    maxBigRooms: 4,
     xlRoomMultiplier: 1.7,
     flavour: 'floors.wiesn.flavour',
   },

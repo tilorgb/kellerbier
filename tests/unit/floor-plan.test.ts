@@ -249,7 +249,7 @@ describe('floor generation', () => {
   it('rolls every shape somewhere across many floors, without ever rolling more than one big room on the same floor', () => {
     // A big (non-`1x1`) room is a rare, at-most-one-per-floor landmark
     // (#big-rooms) — `chooseShape`'s weights are low and `buildSkeleton`'s
-    // `MAX_BIG_ROOMS_PER_FLOOR` backstops them, so no single floor should
+    // ``maxBigRooms` backstops them, so no single floor should
     // ever roll two, but every shape should still turn up given enough
     // floors, proving `chooseShape`'s weighted pick still reaches every
     // branch rather than one going quietly dead.
@@ -266,6 +266,56 @@ describe('floor generation', () => {
       }
     }
     expect([...seenShapes].sort()).toEqual([...ROOM_SHAPES].sort());
+  });
+
+  it('grows floors and big-room frequency with progression, never shrinking from one floor to the next', () => {
+    for (let index = 1; index < FLOOR_CONFIGS.length; index++) {
+      const previous = floorConfig(index - 1);
+      const config = floorConfig(index);
+      const context = `floor ${String(config.floor)} vs ${String(previous.floor)}`;
+      expect(config.minRooms, context).toBeGreaterThanOrEqual(previous.minRooms);
+      expect(config.maxRooms, context).toBeGreaterThanOrEqual(previous.maxRooms);
+      expect(config.bigRoomChance, context).toBeGreaterThanOrEqual(previous.bigRoomChance);
+      expect(config.maxBigRooms, context).toBeGreaterThanOrEqual(previous.maxBigRooms);
+    }
+    expect(floorConfig(FLOOR_CONFIGS.length - 1).bigRoomChance).toBeGreaterThan(
+      floorConfig(0).bigRoomChance,
+    );
+  });
+
+  it('rolls more big rooms on a later floor than on floor 1, within its own cap, and only shapes it has content for', () => {
+    const countBigRooms = (config: FloorConfig): number => {
+      let total = 0;
+      for (let seed = 0; seed < 150; seed++) {
+        const plan = generateFloor(new Rng(seed), config, CELLAR_TEMPLATES);
+        const big = plan.rooms.filter((room) => room.shape !== '1x1' && room.shape !== 'staircase');
+        expect(big.length, `${config.name}, seed ${String(seed)}`).toBeLessThanOrEqual(
+          config.maxBigRooms,
+        );
+        total += big.length;
+      }
+      return total;
+    };
+    const floorOne = floorConfig(0);
+    const floorFour = floorConfig(3);
+    expect(countBigRooms(floorFour)).toBeGreaterThan(countBigRooms(floorOne));
+
+    // Floor 4's authored pool has no `2x2`/`T` ordinary room: rolling one
+    // would only burn a generation retry, so it must never be picked.
+    for (let seed = 0; seed < 150; seed++) {
+      const plan = generateFloor(new Rng(seed), floorFour, CELLAR_TEMPLATES);
+      for (const room of plan.rooms) {
+        const hasContent = CELLAR_TEMPLATES.some(
+          (template) =>
+            template.metadata.shape === room.shape &&
+            template.metadata.specialRole === undefined &&
+            template.metadata.floorTags.includes(floorFour.floorTag),
+        );
+        if (room.shape !== '1x1' && room.shape !== 'staircase') {
+          expect(hasContent, `seed ${String(seed)}, room ${room.id} (${room.shape})`).toBe(true);
+        }
+      }
+    }
   });
 
   it('validates a real floor 1 layout against the authored template pool', () => {
